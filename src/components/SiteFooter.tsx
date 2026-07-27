@@ -19,19 +19,19 @@ export default function SiteFooter() {
           <div className="home-footer-cols">
             <div className="home-footer-col">
               <div className="home-footer-col-head">Product</div>
-              <Link to="/use-cases">Use Cases</Link>
               <Link to="/delegate">Delegate</Link>
               <Link to="/premium">Pricing</Link>
+              <Link to="/build-braino">Build Yours</Link>
               <Link to="/changelog">Changelog</Link>
             </div>
             <div className="home-footer-col">
               <div className="home-footer-col-head">Resources</div>
-              <Link to="/chat">Braino Chat</Link>
               <Link to="/integrations">Integrations</Link>
               <Link to="/remote-agent">Remote Agent</Link>
               <Link to="/straight-talk">Straight talk on the agent</Link>
               <Link to="/why-the-wait">Why Braino takes a beat</Link>
               <Link to="/contact">Contact</Link>
+              <Link to="/chat">Braino Chat</Link>
             </div>
             <div className="home-footer-col">
               <div className="home-footer-col-head">Legal</div>

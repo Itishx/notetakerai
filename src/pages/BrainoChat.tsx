@@ -3,345 +3,83 @@ import { Link } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Braino, BrainoDefs } from "@/components/BrainoChar";
+import { BRAINO_WALKER_SVG } from "@/components/brainoWalkerSvg";
 import { useBrainoVoice } from "@/hooks/useBrainoVoice";
 
-/* ============================================================================
-   Braino Chat — the full-screen website chat, rebuilt to the imported
-   "Braino Chat" Claude Design idiom: clean light/dark, brand serif reading text,
-   no bubbles (Claude/ChatGPT feel). Replies still come from the real
-   `chat-about-notes` edge function, so the FULL system prompt + emotional engine
-   + memory engine all run server-side, unchanged.
-
-   New: a Delegate-mode toggle. When on, a sent message is enqueued into the
-   shared `agent_commands` queue (same table the Remote Agent page uses). The
-   browser extension picks it up over Supabase realtime (+ a poll fallback),
-   runs it, and writes progress back — so a task fired from the website (or a
-   phone) hits the same queue that invokes the extension's delegate agent. The
-   thread shows the task running live.
-
-   Logging: every chat + delegate step is logged under the `[braino-chat]`
-   namespace, and failures surface visibly in the thread, so errors are never
-   silent.
-   ============================================================================ */
-
-/* ---------- namespaced logging (console + visible UI) ---------- */
-const log = {
-  info: (scope: string, msg: string, data?: unknown) =>
-    data !== undefined
-      ? console.info(`%c[braino-chat]%c ${scope}:`, "color:#C9544A;font-weight:700", "color:inherit", msg, data)
-      : console.info(`%c[braino-chat]%c ${scope}:`, "color:#C9544A;font-weight:700", "color:inherit", msg),
-  warn: (scope: string, msg: string, data?: unknown) =>
-    data !== undefined ? console.warn(`[braino-chat] ${scope}:`, msg, data) : console.warn(`[braino-chat] ${scope}:`, msg),
-  error: (scope: string, msg: string, data?: unknown) =>
-    data !== undefined ? console.error(`[braino-chat] ${scope}:`, msg, data) : console.error(`[braino-chat] ${scope}:`, msg),
-};
-
-const STORAGE_KEY = "braino-site-chat-thread-v2";
-const DRAFT_KEY = "braino-site-chat-draft-v2";
-const THEME_KEY = "braino-site-chat-theme-v1";
-const DELEGATE_KEY = "braino-site-chat-delegate-v1";
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 const SUPABASE_KEY = (import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY) as string;
 
+const THREADS_KEY = "braino-site-chat-threads-v2";
+const CURRENT_THREAD_KEY = "braino-site-chat-current-thread-v2";
+const DRAFT_KEY = "braino-site-chat-draft-v2";
+const DELEGATE_KEY = "braino-site-chat-delegate-v1";
+
 const BRAINO_SITE_CONTEXT = `You are Braino inside the full-screen website chat on trybraino.com.
 
-What this chat is for:
-- This is the place where users can talk to Braino normally, in full-screen, like a serious desktop AI workspace.
-- Be useful first. Answer clearly, think carefully, and don't talk like a landing page widget.
-- Signed-in users may ask about their Braino usage, realtime voice costs, workflows, automations, notes, emails, and planning.
-- If the user asks about cost or spend, answer with the exact summary returned by the system whenever one is available.
+Be useful first. Sound like Braino: direct, warm, alive, and never corporate. This chat can answer normally, and obvious browser/action tasks can route to Delegate through the user's extension.
 
-Product context:
-- Braino is an AI companion that sits with the user as they browse, work, think, and build.
-- Core capabilities include page chat, writing help, summarisation, Google Docs generation, workflow planning, and realtime voice cost visibility.
-- If Google Drive is connected, Braino may be able to create Google Docs directly from a prompt.
-- This chat has a Delegate mode. When the user turns it on, their message is dispatched to their browser extension as an autonomous task (the remote agent) which runs it on their browser and reports back. When Delegate mode is off, just reply normally. If a user asks you to *do* something on the web (open a site, search, fill a form, send an email), tell them to flip on Delegate so you can actually run it.
-- If the user is not signed in, explain that account-specific memory, spend answers, and Delegate require sign-in, but general chat still works.
+Context discipline:
+- Treat the provided chat history as the active conversation. Short follow-ups like "bargad", "yes", "that one", or "tell me more" are usually answers to the immediately previous turn, not brand-new topics.
+- Use the saved-chat memory block when the user asks what you discussed earlier or references something from another Braino chat.
+- Do not pretend you remember something that is not in the provided history or memory block.`;
 
-Tone:
-- Sound like Braino, not a corporate support rep.
-- Direct, calm, smart, and a little sharp when it helps.
-- Be concise by default, but go deeper when the user clearly wants depth.`;
-
-/* ---------- types ---------- */
 type ChatRole = "user" | "assistant";
 type DelegateStatus = "pending" | "running" | "done" | "error";
-type AgentStep = { type: string; description: string; ok: boolean; snapshot?: { title: string; url: string } };
+type AgentStep = { type?: string; description?: string; ok?: boolean; snapshot?: { title?: string; url?: string } };
 
 type ChatMessage = {
   id: string;
   role: ChatRole;
   text: string;
   createdAt: string;
-  docUrl?: string;
-  docName?: string;
-  // delegate turns are an assistant-side card tracking a queued agent_commands row
   kind?: "chat" | "delegate";
   commandId?: string;
   status?: DelegateStatus;
   steps?: AgentStep[];
   result?: string | null;
+  docUrl?: string;
+  docName?: string;
 };
 
-// the agent_commands row shape (same as RemoteAgent.tsx)
+type ChatThread = {
+  id: string;
+  title: string;
+  updatedAt: string;
+  messages: ChatMessage[];
+  customTitle?: boolean;
+};
+
 type Command = {
   id: string;
   task: string;
   status: DelegateStatus;
   steps: AgentStep[];
   result: string | null;
-  created_at: string;
 };
 
-type Theme = "light" | "dark";
-
-/* ---------- theme tokens (verbatim from the design) ---------- */
-const THEMES: Record<Theme, Record<string, string>> = {
-  light: { "--bg": "#FBF7F1", "--panel": "#FFFDF9", "--ink": "#1B1713", "--ink-2": "#4B413A", "--ink-3": "#8A7F75", "--line": "#EAE1D4", "--line-2": "#F0E9DE", "--accent": "#C9544A", "--btn": "#1B1713", "--btn-ink": "#FBF7F1", "--user-rule": "#D9C9B6" },
-  dark: { "--bg": "#0B0807", "--panel": "#141110", "--ink": "#F5F1EA", "--ink-2": "rgba(245,241,234,.72)", "--ink-3": "rgba(245,241,234,.42)", "--line": "rgba(245,241,234,.13)", "--line-2": "rgba(245,241,234,.08)", "--accent": "#E8786E", "--btn": "#F5F1EA", "--btn-ink": "#0B0807", "--user-rule": "rgba(245,241,234,.28)" },
+type Attachment = { id: string; name: string; size: string };
+type ExtensionDelegateResult = {
+  ok: boolean;
+  noBridge?: boolean;
+  error?: string | null;
+  duplicate?: boolean;
+  tabId?: number | null;
+  moved?: boolean;
+  created?: boolean;
+  quotaExceeded?: boolean;
+  surface?: string | null;
 };
 
-const SUGGESTIONS: { icon: string; label: string; prompt: string }[] = [
-  { icon: "write", label: "Write", prompt: "Help me write something" },
-  { icon: "explain", label: "Explain", prompt: "Explain a tricky concept simply" },
-  { icon: "spark", label: "Brainstorm", prompt: "Brainstorm some ideas with me" },
-  { icon: "plan", label: "Plan", prompt: "Help me plan my day" },
-];
+const log = {
+  info: (scope: string, msg: string, data?: unknown) =>
+    data !== undefined ? console.info(`[braino-chat] ${scope}:`, msg, data) : console.info(`[braino-chat] ${scope}:`, msg),
+  warn: (scope: string, msg: string, data?: unknown) =>
+    data !== undefined ? console.warn(`[braino-chat] ${scope}:`, msg, data) : console.warn(`[braino-chat] ${scope}:`, msg),
+  error: (scope: string, msg: string, data?: unknown) =>
+    data !== undefined ? console.error(`[braino-chat] ${scope}:`, msg, data) : console.error(`[braino-chat] ${scope}:`, msg),
+};
 
-const CHAT_PAGE_CSS = `
-  .bchat{
-    position:fixed; inset:0; z-index:50;
-    display:flex; flex-direction:column; overflow:hidden;
-    background:var(--bg); color:var(--ink);
-    --serif:'Newsreader',Georgia,'Times New Roman',serif;
-    --helv:'Helvetica Neue',Helvetica,'SF Pro Display',-apple-system,Arial,sans-serif;
-    --mono:'JetBrains Mono',ui-monospace,monospace;
-    font-family:var(--serif); -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
-    transition:background .35s ease, color .35s ease;
-  }
-  .bchat *{box-sizing:border-box;}
-  .bchat button{font-family:inherit; color:inherit;}
-  .bchat ::selection{background:color-mix(in srgb,var(--accent) 26%,transparent);}
-
-  .bchat .avatar{display:inline-flex; align-items:flex-end; justify-content:center; flex:none;}
-  .bchat .braino-avatar svg{display:block; overflow:visible;}
-
-  /* ============ TOP BAR ============ */
-  .bchat .topbar{flex:none; display:flex; align-items:center; justify-content:space-between; gap:18px;
-    padding:14px 22px; border-bottom:1px solid var(--line-2); z-index:5; background:var(--bg);}
-  .bchat .tb-left{display:flex; align-items:center; gap:11px; min-width:0;}
-  .bchat .tb-name{font-family:var(--helv); font-weight:700; letter-spacing:-.02em; font-size:17px;}
-  .bchat .tb-right{display:flex; align-items:center; gap:8px; flex:none;}
-  .bchat .tb-btn{font-family:var(--mono); font-size:11.5px; letter-spacing:.06em; text-transform:uppercase;
-    color:var(--ink-2); background:none; border:1px solid var(--line); border-radius:9px;
-    padding:7px 13px; cursor:pointer; transition:border-color .2s, color .2s; text-decoration:none;
-    display:inline-flex; align-items:center;}
-  .bchat .tb-btn:hover{color:var(--ink); border-color:var(--ink-3);}
-  .bchat .tb-icon{width:36px; height:36px; display:grid; place-items:center; border-radius:9px;
-    border:1px solid var(--line); background:none; cursor:pointer; transition:border-color .2s, background .2s; text-decoration:none;}
-  .bchat .tb-icon:hover{border-color:var(--ink-3);}
-  .bchat .ti{width:18px; height:18px; fill:none; stroke:var(--ink); stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round;}
-
-  /* ============ LANDING ============ */
-  .bchat .landing{flex:1; display:grid; place-items:center; padding:32px; overflow:auto;}
-  .bchat .landing-col{width:min(640px,100%); display:flex; flex-direction:column; align-items:center; text-align:center;}
-  @media (prefers-reduced-motion:no-preference){ .bchat .landing-col{animation:bchatFade .55s cubic-bezier(.2,.7,.2,1) both;} }
-  @keyframes bchatFade{from{transform:translateY(9px);}to{transform:none;}}
-  .bchat .landing .braino-avatar{margin-bottom:8px;}
-  .bchat .eyebrow{font-family:var(--mono); font-size:11.5px; letter-spacing:.34em; text-transform:uppercase;
-    color:var(--ink-3); margin:14px 0 16px;}
-  .bchat .greeting{font-family:var(--serif); font-weight:400; font-size:clamp(30px,4.4vw,46px); line-height:1.1;
-    letter-spacing:-.014em; margin:0; color:var(--ink); white-space:nowrap;}
-  .bchat .g-em{font-style:italic; color:var(--accent);}
-  .bchat .sub{font-family:var(--serif); font-size:18px; line-height:1.5; color:var(--ink-2);
-    max-width:440px; margin:24px auto 30px;}
-  .bchat .chips{display:flex; flex-wrap:wrap; gap:10px; justify-content:center; margin-top:18px;}
-  .bchat .chip{display:inline-flex; align-items:center; gap:8px; cursor:pointer;
-    font-family:var(--helv); font-weight:500; font-size:14px; color:var(--ink-2);
-    background:var(--panel); border:1px solid var(--line); border-radius:11px; padding:8px 14px;
-    transition:color .18s, border-color .18s, background .18s;}
-  .bchat .chip:hover{color:var(--ink); border-color:var(--ink-3); background:color-mix(in srgb,var(--panel) 80%, var(--ink) 5%);}
-  .bchat .chip:disabled{opacity:.45; cursor:default;}
-  .bchat .chip .ci{width:16px; height:16px; flex:none; fill:none; stroke:currentColor; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; opacity:.8;}
-
-  /* ============ CONVERSATION ============ */
-  .bchat .convo{flex:1; min-height:0; display:flex; flex-direction:column;}
-  .bchat .scroller{flex:1; overflow-y:auto; overflow-x:hidden; padding:40px 24px 190px;
-    scrollbar-width:thin; scrollbar-color:var(--line) transparent;}
-  .bchat .scroller::-webkit-scrollbar{width:9px;}
-  .bchat .scroller::-webkit-scrollbar-thumb{background:var(--line); border-radius:5px;}
-  .bchat .thread{width:min(680px,100%); margin:0 auto; display:flex; flex-direction:column; gap:34px;}
-  .bchat .thread-foot{height:4px;}
-
-  .bchat .turn{display:flex; flex-direction:column; gap:9px;}
-  @media (prefers-reduced-motion:no-preference){ .bchat .turn{animation:bchatRise .45s cubic-bezier(.2,.7,.2,1) both;} }
-  @keyframes bchatRise{from{transform:translateY(11px);}to{transform:none;}}
-  .bchat .turn-head{display:flex; align-items:center; gap:9px;}
-  .bchat .who{font-family:var(--mono); font-size:11px; letter-spacing:.2em; text-transform:uppercase; color:var(--ink-3);}
-  .bchat .turn-user .who{color:var(--accent);}
-  .bchat .turn-body{font-family:var(--serif); color:var(--ink);}
-
-  /* USER turn — right side, no bubble */
-  .bchat .turn-user{align-items:flex-end; text-align:right;}
-  .bchat .turn-user .turn-body{max-width:80%; font-size:var(--read); line-height:1.5; color:var(--ink-2); font-style:italic;}
-
-  /* BRAINO turn — left side, flowing reading text */
-  .bchat .turn-braino{align-items:flex-start;}
-  .bchat .turn-braino .turn-body.read{font-size:var(--read); line-height:1.72; color:var(--ink); max-width:100%;}
-  .bchat .read .ln{margin:0 0 .9em;}
-  .bchat .read .ln:last-child{margin-bottom:0;}
-  .bchat .read em{font-style:italic;}
-  .bchat .read strong{font-weight:600;}
-  .bchat .read code{font-family:var(--mono); font-size:.86em; background:color-mix(in srgb,var(--ink) 8%, transparent); padding:1px 5px; border-radius:6px;}
-  .bchat .read a{color:var(--accent); text-decoration:underline; text-underline-offset:2px;}
-
-  .bchat .caret{display:inline-block; width:2px; height:1.04em; vertical-align:-2px; margin-left:1px;
-    background:var(--accent); animation:bchatBlink 1s steps(2) infinite;}
-  @keyframes bchatBlink{50%{opacity:0;}}
-
-  .bchat .think{display:inline-flex; gap:6px; align-items:center; padding:6px 0;}
-  .bchat .think i{width:7px; height:7px; border-radius:50%; background:var(--ink-3); animation:bchatBob 1.1s ease-in-out infinite;}
-  .bchat .think i:nth-child(2){animation-delay:.15s;}
-  .bchat .think i:nth-child(3){animation-delay:.3s;}
-  @keyframes bchatBob{0%,100%{transform:translateY(0); opacity:.35;}40%{transform:translateY(-5px); opacity:.95;}}
-
-  /* doc link Braino can attach to a reply */
-  .bchat .doc-link{margin-top:12px; display:inline-flex; align-items:center; gap:8px; padding:9px 12px;
-    border-radius:11px; background:color-mix(in srgb,var(--accent) 12%, transparent);
-    border:1px solid color-mix(in srgb,var(--accent) 30%, transparent); color:var(--ink);
-    font-family:var(--helv); font-size:13px; font-weight:600; text-decoration:none;}
-  .bchat .doc-link .ci{width:15px;height:15px;fill:none;stroke:var(--accent);stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;}
-
-  /* ============ DELEGATE TASK CARD ============ */
-  .bchat .dtag{font-family:var(--mono); font-size:9.5px; letter-spacing:.18em; text-transform:uppercase;
-    color:var(--accent); border:1px solid color-mix(in srgb,var(--accent) 40%, transparent);
-    border-radius:6px; padding:2px 6px;}
-  .bchat .dtask{margin-top:2px; border:1px solid var(--line); border-radius:14px; background:var(--panel);
-    padding:13px 15px; max-width:100%;}
-  .bchat .dtask.is-error{border-color:color-mix(in srgb,var(--accent) 45%, var(--line));}
-  .bchat .dtask-head{display:flex; align-items:center; gap:9px;}
-  .bchat .dtask-status{font-family:var(--helv); font-size:13.5px; font-weight:600; color:var(--ink-2); display:inline-flex; align-items:center; gap:7px;}
-  .bchat .dtask-dot{width:8px; height:8px; border-radius:50%; flex:none;}
-  .bchat .dot-pending{background:var(--ink-3); opacity:.45;}
-  .bchat .dot-running{background:var(--accent); animation:bchatPulseDot 1.1s ease-in-out infinite;}
-  .bchat .dot-done{background:#3FA66A;}
-  .bchat .dot-error{background:var(--accent);}
-  @keyframes bchatPulseDot{0%,100%{opacity:.55; transform:scale(1);}50%{opacity:1; transform:scale(1.25);}}
-  .bchat .dtask-stop{margin-left:auto; width:28px; height:28px; border-radius:8px; border:1px solid var(--line);
-    background:none; cursor:pointer; display:grid; place-items:center; color:var(--ink-3); transition:color .15s, border-color .15s;}
-  .bchat .dtask-stop:hover{color:var(--accent); border-color:color-mix(in srgb,var(--accent) 50%, var(--line));}
-  .bchat .dtask-stop svg{width:12px;height:12px;}
-  .bchat .dtask-steps{margin:11px 0 0; display:flex; flex-direction:column; gap:7px;}
-  .bchat .dstep{display:flex; align-items:flex-start; gap:8px; font-family:var(--helv); font-size:13px; line-height:1.45; color:var(--ink-2);}
-  .bchat .dstep-mark{flex:none; font-size:12px; line-height:1.5;}
-  .bchat .dstep-ok{color:#3FA66A;}
-  .bchat .dstep-bad{color:var(--accent);}
-  .bchat .dstep-snap{display:block; color:var(--ink-3); font-size:11.5px; margin-top:1px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:480px;}
-  .bchat .dtask-result{margin:11px 0 0; font-family:var(--serif); font-size:15px; line-height:1.6; color:var(--ink);}
-  .bchat .dtask-hint{margin:10px 0 0; font-family:var(--mono); font-size:10.5px; letter-spacing:.03em; color:var(--ink-3);}
-
-  /* ============ ERROR BANNER ============ */
-  .bchat .err-banner{width:min(680px,100%); margin:14px auto 0; padding:11px 14px; border-radius:12px;
-    background:color-mix(in srgb,var(--accent) 12%, transparent);
-    border:1px solid color-mix(in srgb,var(--accent) 32%, transparent);
-    color:var(--ink); font-family:var(--helv); font-size:13px; display:flex; gap:10px; align-items:flex-start;}
-  .bchat .err-banner svg{width:15px;height:15px;flex:none;margin-top:1px;stroke:var(--accent);fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;}
-
-  /* ============ COMPOSER ============ */
-  .bchat .composer-wrap{width:100%; display:flex; flex-direction:column;}
-  .bchat .composer{display:flex; align-items:flex-end; gap:8px; width:100%;
-    background:var(--panel); border:1px solid var(--line); border-radius:22px;
-    padding:7px 7px 7px 8px; transition:border-color .2s ease, box-shadow .2s ease;
-    box-shadow:0 1px 2px rgba(0,0,0,.03);}
-  .bchat[data-theme="dark"] .composer{box-shadow:none;}
-  .bchat .composer:focus-within{border-color:var(--ink-3);}
-  .bchat .composer.hero{border-radius:26px; padding:9px 9px 9px 10px; box-shadow:0 8px 30px -16px rgba(0,0,0,.18);}
-  .bchat[data-theme="dark"] .composer.hero{box-shadow:0 8px 30px -14px rgba(0,0,0,.6);}
-  .bchat .composer textarea{flex:1; background:transparent; border:0; outline:0; resize:none;
-    font-family:var(--serif); font-size:18px; line-height:1.5; color:var(--ink); padding:11px 0; max-height:200px;}
-  .bchat .composer.hero textarea{font-size:19px; padding:13px 0;}
-  .bchat .composer textarea::placeholder{color:var(--ink-3);}
-  .bchat .send{flex:none; width:42px; height:42px; border-radius:50%; border:0; cursor:pointer;
-    background:var(--btn); color:var(--btn-ink); display:grid; place-items:center;
-    transition:transform .15s ease, opacity .2s ease;}
-  .bchat .composer.hero .send{width:46px; height:46px;}
-  .bchat .send:hover:not(:disabled){transform:scale(1.06);}
-  .bchat .send:disabled{opacity:.32; cursor:default;}
-  .bchat .send svg{width:20px; height:20px; fill:none; stroke:var(--btn-ink); stroke-width:2.3; stroke-linecap:round; stroke-linejoin:round;}
-
-  .bchat .attach{flex:none; width:38px; height:38px; border-radius:50%; border:0; background:none; cursor:pointer;
-    display:grid; place-items:center; color:var(--ink-3); transition:color .18s, background .18s;}
-  .bchat .attach:hover{color:var(--ink); background:color-mix(in srgb,var(--ink) 7%, transparent);}
-  .bchat .composer.hero .attach{width:42px; height:42px;}
-  .bchat .attach .ci{width:19px; height:19px; fill:none; stroke:currentColor; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round;}
-
-  /* delegate toggle lives in the composer row */
-  .bchat .delegate-toggle{flex:none; align-self:center; display:inline-flex; align-items:center; gap:6px;
-    font-family:var(--helv); font-weight:600; font-size:12.5px; color:var(--ink-3);
-    background:none; border:1px solid var(--line); border-radius:13px; padding:7px 11px; cursor:pointer;
-    transition:color .18s, border-color .18s, background .18s; white-space:nowrap;}
-  .bchat .delegate-toggle:hover{color:var(--ink); border-color:var(--ink-3);}
-  .bchat .delegate-toggle.on{color:#fff; background:var(--accent); border-color:var(--accent);}
-  .bchat .delegate-toggle .ci{width:15px; height:15px; flex:none; fill:none; stroke:currentColor; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round;}
-
-  .bchat .attachments{display:flex; flex-wrap:wrap; gap:8px; margin-bottom:10px;}
-  .bchat .att-chip{display:inline-flex; align-items:center; gap:8px; background:var(--panel);
-    border:1px solid var(--line); border-radius:10px; padding:7px 7px 7px 11px;
-    animation:bchatAttChip .28s cubic-bezier(.2,.7,.2,1);}
-  @keyframes bchatAttChip{from{transform:translateY(7px) scale(.96);}to{transform:none;}}
-  .bchat .att-ic{width:15px; height:15px; flex:none; fill:none; stroke:var(--accent); stroke-width:1.6; stroke-linecap:round; stroke-linejoin:round;}
-  .bchat .att-name{font-family:var(--helv); font-weight:500; font-size:13px; color:var(--ink);
-    max-width:170px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
-  .bchat .att-size{font-family:var(--mono); font-size:10.5px; color:var(--ink-3);}
-  .bchat .att-x{flex:none; display:grid; place-items:center; width:20px; height:20px; border:0; background:none;
-    cursor:pointer; color:var(--ink-3); border-radius:6px; transition:color .15s, background .15s;}
-  .bchat .att-x:hover{color:var(--ink); background:color-mix(in srgb,var(--ink) 8%, transparent);}
-  .bchat .att-x svg{width:13px; height:13px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round;}
-
-  .bchat .dock{flex:none; padding:12px 24px 20px; background:linear-gradient(180deg, transparent, var(--bg) 38%);
-    margin-top:-90px; position:relative; z-index:4;}
-  .bchat .dock-inner{width:min(680px,100%); margin:0 auto;}
-  .bchat .dock-hint{text-align:center; font-family:var(--mono); font-size:11px; letter-spacing:.04em;
-    color:var(--ink-3); margin-top:10px;}
-  .bchat .dock-hint kbd{font-family:var(--mono); border:1px solid var(--line); border-radius:5px; padding:1px 6px; color:var(--ink-2);}
-  .bchat .dock-hint a{color:var(--accent); text-decoration:underline; text-underline-offset:2px;}
-  .bchat .signin-hint{text-align:center; font-family:var(--mono); font-size:10.5px; letter-spacing:.03em; color:var(--ink-3); margin-top:8px;}
-  .bchat .signin-hint a{color:var(--accent); text-decoration:underline; text-underline-offset:2px;}
-
-  /* ── Voice mode (Ctrl ×2): the whole screen perimeter glows, no mascot, just a transcript ── */
-  .bchat .tb-mic{width:34px; height:34px; display:grid; place-items:center; border-radius:9px; border:1px solid var(--line); background:none; cursor:pointer; color:var(--ink-2); transition:border-color .2s, color .2s, background .2s;}
-  .bchat .tb-mic:hover{color:var(--ink); border-color:var(--ink-3);}
-  .bchat .tb-mic.on{color:#fff; background:var(--accent); border-color:var(--accent);}
-  .bchat .tb-mic svg{width:16px; height:16px; fill:none; stroke:currentColor; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round;}
-  .bchat-voice{position:fixed; inset:0; z-index:60; display:grid; place-items:center; background:color-mix(in srgb, var(--bg) 80%, transparent); backdrop-filter:blur(3px); -webkit-backdrop-filter:blur(3px); animation:bchatVoiceIn .3s ease;}
-  @keyframes bchatVoiceIn{from{opacity:0;}to{opacity:1;}}
-  .bchat-voice-veil{position:fixed; inset:0; pointer-events:none; box-shadow:inset 0 0 0 2px color-mix(in srgb, var(--accent) 55%, transparent), inset 0 0 90px 10px color-mix(in srgb, var(--accent) 20%, transparent); animation:bchatVeilPulse 2.6s ease-in-out infinite;}
-  .bchat-voice.speaking .bchat-voice-veil{box-shadow:inset 0 0 0 3px var(--accent), inset 0 0 130px 22px color-mix(in srgb, var(--accent) 38%, transparent); animation-duration:1.1s;}
-  .bchat-voice.thinking .bchat-voice-veil{animation-duration:1.5s;}
-  .bchat-voice.connecting .bchat-voice-veil{opacity:.6; animation-duration:1.2s;}
-  .bchat-voice.error .bchat-voice-veil{box-shadow:inset 0 0 0 2px #C9544A, inset 0 0 90px 10px rgba(201,84,74,0.24);}
-  @keyframes bchatVeilPulse{0%,100%{opacity:.5;}50%{opacity:1;}}
-  .bchat-voice-inner{position:relative; z-index:1; width:min(680px, 90vw); text-align:center; padding:24px;}
-  .bchat-voice-status{font-family:var(--mono); font-size:11px; letter-spacing:.22em; text-transform:uppercase; color:var(--accent); display:inline-flex; align-items:center; gap:9px; margin-bottom:26px;}
-  .bchat-voice-dot{width:8px; height:8px; border-radius:50%; background:var(--accent); box-shadow:0 0 12px var(--accent); animation:bchatVeilPulse 1.3s ease-in-out infinite;}
-  .bchat-voice-transcript{min-height:120px; display:flex; flex-direction:column; gap:16px; justify-content:center;}
-  .bchat-voice-you{font-family:var(--serif); font-style:italic; font-size:22px; line-height:1.4; color:var(--ink-2); margin:0;}
-  .bchat-voice-braino{font-family:var(--serif); font-size:26px; line-height:1.45; color:var(--ink); margin:0;}
-  .bchat-voice-hint{font-family:var(--serif); font-size:20px; color:var(--ink-3); font-style:italic; margin:0;}
-  .bchat-voice-err{font-family:var(--helv); font-size:15px; color:#C9544A;}
-  .bchat-voice-err a{color:var(--accent);}
-  .bchat-voice-exit{margin-top:30px; font-family:var(--mono); font-size:10.5px; letter-spacing:.08em; color:var(--ink-3);}
-
-  @media (max-width:640px){
-    .bchat .greeting{white-space:normal; font-size:clamp(28px,8vw,40px);}
-    .bchat .scroller{padding:28px 16px 180px;}
-    .bchat .delegate-toggle span{display:none;}
-    .bchat .topbar{padding:12px 16px;}
-  }
-`;
-
-/* ---------- helpers ---------- */
-function createMessageId() {
+function createId() {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) return crypto.randomUUID();
   return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
@@ -349,85 +87,226 @@ function createMessageId() {
 function isChatMessage(value: unknown): value is ChatMessage {
   if (!value || typeof value !== "object") return false;
   const item = value as Record<string, unknown>;
-  return (
-    typeof item.id === "string" &&
-    (item.role === "user" || item.role === "assistant") &&
-    typeof item.text === "string" &&
-    typeof item.createdAt === "string"
-  );
+  return typeof item.id === "string" && (item.role === "user" || item.role === "assistant") && typeof item.text === "string";
 }
 
-function readStoredMessages(): ChatMessage[] {
+function isChatThread(value: unknown): value is ChatThread {
+  if (!value || typeof value !== "object") return false;
+  const item = value as Record<string, unknown>;
+  return typeof item.id === "string" && typeof item.title === "string" && Array.isArray(item.messages) && item.messages.every(isChatMessage);
+}
+
+function readThreads(): ChatThread[] {
   if (typeof window === "undefined") return [];
   try {
-    const raw = window.sessionStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.filter(isChatMessage) : [];
+    const parsed = JSON.parse(window.localStorage.getItem(THREADS_KEY) || "[]");
+    return Array.isArray(parsed) ? parsed.filter(isChatThread) : [];
   } catch {
     return [];
   }
 }
 
-function readStoredDraft(): string {
+function readCurrentThreadId() {
+  if (typeof window === "undefined") return createId();
+  return window.localStorage.getItem(CURRENT_THREAD_KEY) || createId();
+}
+
+function readDraft() {
   if (typeof window === "undefined") return "";
-  try {
-    return window.sessionStorage.getItem(DRAFT_KEY) || "";
-  } catch {
-    return "";
-  }
+  return window.sessionStorage.getItem(DRAFT_KEY) || "";
 }
 
-function readStoredTheme(): Theme {
-  if (typeof window === "undefined") return "light";
-  try {
-    const v = window.localStorage.getItem(THEME_KEY);
-    return v === "dark" ? "dark" : "light";
-  } catch {
-    return "light";
-  }
-}
-
-function readStoredDelegate(): boolean {
+function readDelegateMode() {
   if (typeof window === "undefined") return false;
-  try {
-    return window.localStorage.getItem(DELEGATE_KEY) === "1";
-  } catch {
-    return false;
-  }
+  return window.localStorage.getItem(DELEGATE_KEY) === "1";
 }
 
-function greetWord() {
-  const h = new Date().getHours();
-  if (h < 12) return "Good morning";
-  if (h < 18) return "Good afternoon";
-  return "Good evening";
-}
-
-function getDisplayName(displayName?: string | null, email?: string | null) {
-  const source = (displayName || email || "there").trim();
-  const token = source.replace(/@.*/, "").split(/[\s._-]+/).filter(Boolean)[0];
-  if (!token) return "there";
-  return token.charAt(0).toUpperCase() + token.slice(1);
+function makeTitle(messages: ChatMessage[]) {
+  const text = messages.find((m) => m.role === "user" && m.text.trim())?.text || "New chat";
+  return text.replace(/\s+/g, " ").trim().slice(0, 48) || "New chat";
 }
 
 function fmtSize(b: number) {
-  if (b < 1024) return b + " B";
-  if (b < 1024 * 1024) return (b / 1024).toFixed(0) + " KB";
-  return (b / 1024 / 1024).toFixed(1) + " MB";
+  if (b < 1024) return `${b} B`;
+  if (b < 1024 * 1024) return `${(b / 1024).toFixed(0)} KB`;
+  return `${(b / 1024 / 1024).toFixed(1)} MB`;
 }
 
-/* inline formatter: **bold**, *italic*, `code`, [label](url) */
+function displayNameFromUser(user: { email?: string | null; user_metadata?: { full_name?: string; name?: string } } | null | undefined) {
+  const raw = user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email?.split("@")[0];
+  if (!raw) return "there";
+  const first = raw.replace(/[._-]+/g, " ").trim().split(/\s+/)[0] || "there";
+  return first.charAt(0).toUpperCase() + first.slice(1);
+}
+
+function buildEmptyGreeting(user: { email?: string | null; user_metadata?: { full_name?: string; name?: string } } | null | undefined) {
+  const name = displayNameFromUser(user);
+  const hour = new Date().getHours();
+  const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+  const inIndia = /Kolkata|Calcutta/i.test(timeZone);
+  if (hour >= 23 || hour < 5) return inIndia ? `Late night hai, ${name}. Soja.` : `It's late, ${name}. What are we doing?`;
+  if (hour < 12) return inIndia ? `Morning, ${name}. Aaj kya karna hai?` : `Morning, ${name}. What are we doing?`;
+  if (hour < 18) return `Hey ${name}, what are we doing?`;
+  return inIndia ? `Shaam ho gayi, ${name}. Kya karna hai?` : `Welcome back, ${name}. What are we doing?`;
+}
+
+const CHAT_MEMORY_STOP_WORDS = new Set([
+  "about", "after", "again", "also", "because", "braino", "chat", "could", "details", "does", "from", "give",
+  "have", "just", "know", "like", "more", "need", "please", "tell", "that", "their", "there", "these", "thing",
+  "this", "what", "when", "where", "which", "with", "would", "your",
+]);
+
+function compactText(text: string, max = 420) {
+  const clean = String(text || "").replace(/\s+/g, " ").trim();
+  return clean.length > max ? `${clean.slice(0, max - 1)}…` : clean;
+}
+
+function extractMemoryTerms(message: string) {
+  return Array.from(new Set(
+    String(message || "")
+      .toLowerCase()
+      .replace(/https?:\/\/\S+/g, " ")
+      .replace(/[^a-z0-9\s'-]/g, " ")
+      .split(/\s+/)
+      .map((word) => word.replace(/^'+|'+$/g, ""))
+      .filter((word) => word.length > 2 && !CHAT_MEMORY_STOP_WORDS.has(word))
+  )).slice(0, 12);
+}
+
+function wantsSavedChatRecall(message: string) {
+  return /\b(remember|previous|earlier|last time|old chat|older chat|another chat|other chat|our chat|we talked|did we discuss|conversation|history)\b/i.test(message);
+}
+
+function formatChatDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "recently";
+  return date.toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+
+function scoreThreadForMemory(thread: ChatThread, terms: string[], recencyIndex: number, forceRecall: boolean) {
+  const haystack = `${thread.title}\n${thread.messages.map((message) => message.text).join("\n")}`.toLowerCase();
+  const title = thread.title.toLowerCase();
+  const termScore = terms.reduce((score, term) => {
+    if (!term) return score;
+    let next = score;
+    if (title.includes(term)) next += 6;
+    if (haystack.includes(term)) next += 2;
+    return next;
+  }, 0);
+  const recencyScore = forceRecall ? Math.max(0, 5 - recencyIndex) : 0;
+  return termScore + recencyScore;
+}
+
+function renderThreadMemory(thread: ChatThread, messages: ChatMessage[]) {
+  const turns = messages
+    .filter((message) => message.kind !== "delegate" && message.text.trim())
+    .slice(-8)
+    .map((message) => `- ${message.role}: ${compactText(message.text, 360)}`)
+    .join("\n");
+  return `Saved chat: "${compactText(thread.title, 80)}" (${formatChatDate(thread.updatedAt)})\n${turns}`;
+}
+
+function buildChatMemoryContext(args: {
+  threads: ChatThread[];
+  currentThreadId: string;
+  currentMessages: ChatMessage[];
+  message: string;
+}) {
+  const { threads, currentThreadId, currentMessages, message } = args;
+  const activeTurns = currentMessages.filter((item) => item.kind !== "delegate" && item.text.trim()).slice(-10);
+  const terms = extractMemoryTerms(message);
+  const forceRecall = wantsSavedChatRecall(message);
+  const sortedThreads = [...threads]
+    .filter((thread) => thread.messages.some((item) => item.kind !== "delegate" && item.text.trim()))
+    .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+
+  const relevantThreads = sortedThreads
+    .filter((thread) => thread.id !== currentThreadId)
+    .map((thread, index) => ({ thread, score: scoreThreadForMemory(thread, terms, index, forceRecall) }))
+    .filter((item) => forceRecall || item.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, forceRecall ? 8 : 5)
+    .map((item) => renderThreadMemory(item.thread, item.thread.messages));
+
+  const blocks = [
+    "Saved Braino chat context. Use this as recall, not as a transcript to repeat verbatim.",
+    activeTurns.length
+      ? `Immediate active thread before the latest user message:\n${activeTurns.map((item) => `- ${item.role}: ${compactText(item.text, 360)}`).join("\n")}`
+      : "",
+    relevantThreads.length
+      ? `Relevant saved chats from this browser:\n\n${relevantThreads.join("\n\n")}`
+      : forceRecall
+        ? "No older saved chats matched beyond the active thread."
+        : "",
+  ].filter(Boolean).join("\n\n");
+
+  return blocks.length > 6500 ? `${blocks.slice(0, 6500)}…` : blocks;
+}
+
+function looksLikeDelegateTask(text: string) {
+  return /\b(open|go to|navigate|search|google|click|press|type|fill|submit|send|reply|email|gmail|book|buy|add to cart|order|schedule|create a doc|make a doc|edit|delete|archive|unsubscribe)\b/i.test(text);
+}
+
+function runDelegateThroughExtension(task: string, history: ChatMessage[]): Promise<ExtensionDelegateResult> {
+  if (typeof window === "undefined") return Promise.resolve({ ok: false, noBridge: true });
+
+  return new Promise((resolve) => {
+    const requestId = createId();
+    let settled = false;
+    const cleanup = () => {
+      settled = true;
+      window.removeEventListener("message", onMessage);
+      clearTimeout(timer);
+    };
+    const finish = (result: ExtensionDelegateResult) => {
+      if (settled) return;
+      cleanup();
+      resolve(result);
+    };
+    const onMessage = (event: MessageEvent) => {
+      if (event.source !== window) return;
+      const data = event.data as Partial<ExtensionDelegateResult> & { type?: string; requestId?: string };
+      if (!data || data.type !== "BRAINO_CHAT_DELEGATE_RESULT" || data.requestId !== requestId) return;
+      finish({
+        ok: data.ok === true,
+        error: typeof data.error === "string" ? data.error : null,
+        duplicate: data.duplicate === true,
+        tabId: typeof data.tabId === "number" ? data.tabId : null,
+        moved: data.moved === true,
+        created: data.created === true,
+        quotaExceeded: data.quotaExceeded === true,
+        surface: typeof data.surface === "string" ? data.surface : null,
+      });
+    };
+    const timer = window.setTimeout(() => {
+      finish({ ok: false, noBridge: true, error: "Braino extension bridge did not answer." });
+    }, 1400);
+
+    window.addEventListener("message", onMessage);
+    window.postMessage({
+      type: "BRAINO_CHAT_DELEGATE_RUN",
+      requestId,
+      task,
+      chatHistory: history
+        .filter((message) => message.text.trim())
+        .slice(-8)
+        .map((message) => ({ role: message.role, content: message.text.slice(0, 600) })),
+    }, window.location.origin);
+  });
+}
+
 function fmtInline(text: string): React.ReactNode[] {
   const out: React.ReactNode[] = [];
-  let key = 0, last = 0, m: RegExpExecArray | null;
+  let key = 0;
+  let last = 0;
+  let match: RegExpExecArray | null;
   const re = /(\*\*([^*]+)\*\*|\*([^*]+)\*|`([^`]+)`|\[([^\]]+)\]\((https?:\/\/[^)]+)\))/g;
-  while ((m = re.exec(text))) {
-    if (m.index > last) out.push(text.slice(last, m.index));
-    if (m[2] != null) out.push(<strong key={key++}>{m[2]}</strong>);
-    else if (m[3] != null) out.push(<em key={key++}>{m[3]}</em>);
-    else if (m[4] != null) out.push(<code key={key++}>{m[4]}</code>);
-    else if (m[5] != null) out.push(<a key={key++} href={m[6]} target="_blank" rel="noreferrer">{m[5]}</a>);
+  while ((match = re.exec(text))) {
+    if (match.index > last) out.push(text.slice(last, match.index));
+    if (match[2]) out.push(<strong key={key++}>{match[2]}</strong>);
+    else if (match[3]) out.push(<em key={key++}>{match[3]}</em>);
+    else if (match[4]) out.push(<code key={key++}>{match[4]}</code>);
+    else if (match[5]) out.push(<a key={key++} href={match[6]} target="_blank" rel="noreferrer">{match[5]}</a>);
     last = re.lastIndex;
   }
   if (last < text.length) out.push(text.slice(last));
@@ -437,10 +316,10 @@ function fmtInline(text: string): React.ReactNode[] {
 function Paragraphs({ text }: { text: string }) {
   return (
     <>
-      {text.split(/\n{2,}/).map((p, i) => (
-        <p key={i} className="ln">
-          {p.split(/\n/).map((l, j, a) => (
-            <span key={j}>{fmtInline(l)}{j < a.length - 1 ? <br /> : null}</span>
+      {text.split(/\n{2,}/).map((para, index) => (
+        <p key={index}>
+          {para.split(/\n/).map((line, lineIndex, lines) => (
+            <span key={lineIndex}>{fmtInline(line)}{lineIndex < lines.length - 1 ? <br /> : null}</span>
           ))}
         </p>
       ))}
@@ -448,190 +327,205 @@ function Paragraphs({ text }: { text: string }) {
   );
 }
 
-/* full Braino character mark (body + hands + legs, per project rule) */
-function BrainoMark({ size = 30, expr = "happy", arm = "none" as string }) {
+function Icon({ name }: { name: "new" | "search" | "library" | "menu" | "plus" | "mic" | "voice" | "send" | "bolt" | "x" | "edit" | "trash" }) {
+  const paths: Record<typeof name, React.ReactNode> = {
+    new: <><path d="M12 5v14M5 12h14" /></>,
+    search: <><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></>,
+    library: <><path d="M4 6h16M4 12h16M4 18h10" /></>,
+    menu: <><path d="M4 7h16M4 12h16M4 17h16" /></>,
+    plus: <><path d="M12 5v14M5 12h14" /></>,
+    mic: <><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5 11a7 7 0 0 0 14 0M12 18v3" /></>,
+    voice: <><path d="M5 12v0M9 8v8M13 5v14M17 8v8M21 12v0" /></>,
+    send: <><path d="M12 19V5M5 12l7-7 7 7" /></>,
+    bolt: <><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8z" /></>,
+    x: <><path d="M6 6l12 12M18 6 6 18" /></>,
+    edit: <><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" /></>,
+    trash: <><path d="M3 6h18" /><path d="M8 6V4h8v2" /><path d="M19 6l-1 14H6L5 6" /><path d="M10 11v5M14 11v5" /></>,
+  };
+  return <svg viewBox="0 0 24 24" aria-hidden="true">{paths[name]}</svg>;
+}
+
+function BrainoMark({ size = 30, expr = "happy", talking = false }: { size?: number; expr?: string; talking?: boolean }) {
   return (
-    <span className="avatar braino-avatar">
-      <Braino size={size} expr={expr} arm={arm} legs gloves idle bobAmp={0.5} />
+    <span className={`braino-avatar${talking ? " is-talking" : ""}`}>
+      <Braino size={size} expr={expr} arm="none" talk={talking} legs gloves idle bobAmp={talking ? 0.75 : 0.45} />
     </span>
   );
 }
 
-/* ---------- icons (verbatim shapes from the design) ---------- */
-function ActionIcon({ name }: { name: string }) {
-  const paths: Record<string, React.ReactNode> = {
-    write: <><path d="M4 20.5h4L19 9.5a2 2 0 0 0-2.8-2.8L5 17.7v2.8z" /><line x1="13.5" y1="6.5" x2="17.5" y2="10.5" /></>,
-    explain: <><circle cx="12" cy="12" r="9" /><path d="M9.4 9.3a2.7 2.7 0 1 1 3.4 2.7c-.7.2-1.1.8-1.1 1.5v.3" /><circle cx="11.7" cy="16.6" r="0.4" /></>,
-    spark: <><path d="M12 3l1.7 5.6L19 10l-5.3 1.4L12 17l-1.7-5.6L5 10l5.3-1.4z" /></>,
-    plan: <><circle cx="5" cy="6" r="1.2" /><line x1="9" y1="6" x2="20" y2="6" /><circle cx="5" cy="12" r="1.2" /><line x1="9" y1="12" x2="20" y2="12" /><circle cx="5" cy="18" r="1.2" /><line x1="9" y1="18" x2="20" y2="18" /></>,
-  };
-  return <svg className="ci" viewBox="0 0 24 24" aria-hidden="true">{paths[name]}</svg>;
-}
+function GreetingWalker() {
+  const trackRef = useRef<HTMLDivElement>(null);
+  const walkerRef = useRef<HTMLSpanElement>(null);
 
-function SunMoon({ dark }: { dark: boolean }) {
-  return dark
-    ? <svg viewBox="0 0 24 24" className="ti"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z" /></svg>
-    : <svg viewBox="0 0 24 24" className="ti"><circle cx="12" cy="12" r="4.2" /><path d="M12 2v2.4M12 19.6V22M2 12h2.4M19.6 12H22M4.9 4.9l1.7 1.7M17.4 17.4l1.7 1.7M19.1 4.9l-1.7 1.7M6.6 17.4l-1.7 1.7" /></svg>;
-}
-
-const BoltIcon = () => <svg className="ci" viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8z" /></svg>;
-
-/* ---------- composer ---------- */
-type Attachment = { id: string; name: string; size: string };
-
-function Composer({
-  variant, value, setValue, onSend, disabled, placeholder,
-  attachments, onPick, onRemove, delegateMode, onToggleDelegate,
-}: {
-  variant: "hero" | "dock";
-  value: string;
-  setValue: (v: string) => void;
-  onSend: () => void;
-  disabled: boolean;
-  placeholder: string;
-  attachments: Attachment[];
-  onPick: (files: FileList) => void;
-  onRemove: (id: string) => void;
-  delegateMode: boolean;
-  onToggleDelegate: () => void;
-}) {
-  const ref = useRef<HTMLTextAreaElement>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    el.style.height = "auto";
-    el.style.height = Math.min(el.scrollHeight, 200) + "px";
-  }, [value]);
+    const track = trackRef.current;
+    const walker = walkerRef.current;
+    const root = walker?.querySelector("#__sbwk_root__");
+    const flip = walker?.querySelector("#__sbwk_flip__") as HTMLElement | null;
+    if (!track || !walker || !root || !flip) return;
+
+    const q = (selector: string) => root.querySelector(selector) as SVGElement | null;
+    const legL = q("#__sbwk_ll__");
+    const legR = q("#__sbwk_rl__");
+    const eyeL = q("#__sbwk_eye_l__");
+    const eyeR = q("#__sbwk_eye_r__");
+    const pupL = q("#__sbwk_pupil_l__");
+    const pupR = q("#__sbwk_pupil_r__");
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    let raf = 0;
+    let last = performance.now();
+    let start = last;
+    let dir = -1;
+    let x = Math.max(6, track.clientWidth - 64 - 6);
+    const speed = 74;
+
+    const place = (now: number, moving: boolean) => {
+      const t = (now - start) / 1000;
+      walker.style.transform = `translateX(${x}px)`;
+      flip.style.transform = `scaleX(${dir})`;
+
+      const s = t * 4.5;
+      const lp = Math.sin(s);
+      const rp = Math.sin(s + Math.PI);
+      const ll = moving ? Math.max(0, lp) * 5 : 0;
+      const rl = moving ? Math.max(0, rp) * 5 : 0;
+      const ls = moving ? Math.max(0, lp) * 8 : 0;
+      const rs = moving ? Math.max(0, rp) * 8 : 0;
+      const waddle = moving ? Math.sin(s) * 3.4 : 0;
+      const walkBob = moving ? (-Math.abs(Math.sin(s)) * 2 - 0.4) : 0;
+      const breath = 1 + 0.014 * Math.sin(t * 1.7);
+      const bob = Math.sin(t * 1.7 + 0.6) * 0.8;
+      root.setAttribute("transform", `rotate(${waddle} 50 50) translate(0 ${bob + walkBob}) scale(${breath})`);
+
+      legL?.setAttribute("transform", `translate(0 ${-ll}) rotate(${ls} 44 74)`);
+      legR?.setAttribute("transform", `translate(0 ${-rl}) rotate(${rs} 56 74)`);
+
+      const blinkPhase = t % 3.4;
+      const blink = blinkPhase < 0.13 ? Math.sin((blinkPhase / 0.13) * Math.PI) : 0;
+      const eyeSy = Math.max(0.06, 1 - blink);
+      eyeL?.setAttribute("transform", `translate(38,48) scale(1,${eyeSy}) translate(-38,-48)`);
+      eyeR?.setAttribute("transform", `translate(62,48) scale(1,${eyeSy}) translate(-62,-48)`);
+
+      const gaze = moving ? 2.4 : 0;
+      pupL?.setAttribute("transform", `translate(${gaze} 0)`);
+      pupR?.setAttribute("transform", `translate(${gaze} 0)`);
+    };
+
+    const tick = (now: number) => {
+      const dt = Math.min(0.05, (now - last) / 1000);
+      last = now;
+      const maxX = Math.max(6, track.clientWidth - 64 - 6);
+      x += dir * speed * dt;
+      if (x <= 6) { x = 6; dir = 1; }
+      else if (x >= maxX) { x = maxX; dir = -1; }
+      place(now, true);
+      raf = requestAnimationFrame(tick);
+    };
+
+    if (reduce) {
+      place(performance.now(), false);
+      return;
+    }
+
+    place(last, true);
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
   return (
-    <div className="composer-wrap">
-      {attachments.length > 0 && (
-        <div className="attachments">
-          {attachments.map((a) => (
-            <div className="att-chip" key={a.id}>
-              <svg className="att-ic" viewBox="0 0 24 24"><path d="M14 3v5h5" /><path d="M6 3h9l5 5v12a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z" /></svg>
-              <span className="att-name">{a.name}</span>
-              <span className="att-size">{a.size}</span>
-              <button className="att-x" aria-label="Remove" onClick={() => onRemove(a.id)}>
-                <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" /></svg>
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-      <div className={`composer ${variant}`}>
-        <button className="attach" aria-label="Attach a file" onClick={() => fileRef.current?.click()}>
-          <svg className="ci" viewBox="0 0 24 24"><path d="M21 11.6l-8.9 8.9a5 5 0 0 1-7.1-7.1l8.9-8.9a3.3 3.3 0 0 1 4.7 4.7l-8.9 8.9a1.7 1.7 0 0 1-2.4-2.4l8.2-8.2" /></svg>
-        </button>
-        <button
-          className={`delegate-toggle${delegateMode ? " on" : ""}`}
-          type="button"
-          aria-pressed={delegateMode}
-          onClick={onToggleDelegate}
-          title="Delegate mode — your message is dispatched to your browser extension to run as a task"
-        >
-          <BoltIcon /><span>Delegate</span>
-        </button>
-        <textarea
-          ref={ref} rows={1} value={value} placeholder={placeholder}
-          onChange={(e) => setValue(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); onSend(); } }}
-        />
-        <button
-          className="send" aria-label="Send"
-          disabled={disabled || (!value.trim() && attachments.length === 0)}
-          onClick={onSend}
-        >
-          <svg viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7" /></svg>
-        </button>
-      </div>
-      <input ref={fileRef} type="file" multiple hidden onChange={(e) => { if (e.target.files) onPick(e.target.files); e.target.value = ""; }} />
+    <div className="bc-empty-walk-track" ref={trackRef} aria-hidden="true">
+      <span className="bc-empty-walker" ref={walkerRef}>
+        <div id="__sbwk_flip__" dangerouslySetInnerHTML={{ __html: BRAINO_WALKER_SVG }} />
+      </span>
     </div>
   );
 }
 
-/* ---------- one conversation turn ---------- */
-function Turn({ m, reveal, onStop }: { m: ChatMessage; reveal: number | null; onStop: (commandId: string) => void }) {
-  if (m.role === "user") {
+async function callBrainoSiteChat(args: {
+  message: string;
+  history: ChatMessage[];
+  chatMemoryContext?: string;
+  userId?: string;
+  accessToken?: string;
+  driveConnected?: boolean;
+}) {
+  const authHeader = args.accessToken ? `Bearer ${args.accessToken}` : `Bearer ${SUPABASE_KEY}`;
+  const notes = [BRAINO_SITE_CONTEXT, args.chatMemoryContext].filter(Boolean).join("\n\n");
+  const response = await fetch(`${SUPABASE_URL}/functions/v1/chat-about-notes`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", apikey: SUPABASE_KEY, Authorization: authHeader },
+    body: JSON.stringify({
+      message: args.message,
+      chatHistory: args.history.slice(-18).filter((m) => m.kind !== "delegate").map((m) => ({ role: m.role, content: m.text })),
+      notes,
+      userId: args.userId,
+      driveConnected: args.driveConnected ?? false,
+      clientTimeZone: typeof Intl !== "undefined" ? Intl.DateTimeFormat().resolvedOptions().timeZone : null,
+      clientUtcOffsetMinutes: new Date().getTimezoneOffset() * -1,
+      pageContext: {
+        title: "Braino full-screen chat",
+        url: typeof window !== "undefined" ? window.location.href : "https://trybraino.com/chat",
+        text: "The user is talking to Braino inside the dedicated website chat page. Relevant saved chat recall is included in notes when available.",
+      },
+    }),
+  });
+
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    if (response.status === 429) throw new Error("Braino hit a rate limit for a minute. Try again in a moment.");
+    if (response.status === 402) throw new Error("Braino ran out of AI credits for this route. Top it up and try again.");
+    throw new Error(typeof payload?.error === "string" ? payload.error : `Chat request failed (${response.status})`);
+  }
+
+  return {
+    reply: (payload.reply as string) || "Braino blanked for a second. Try that again.",
+    docUrl: payload.docUrl as string | undefined,
+    docName: payload.docName as string | undefined,
+  };
+}
+
+function Turn({ message, reveal, onStop }: { message: ChatMessage; reveal: number | null; onStop: (id: string) => void }) {
+  if (message.role === "user") {
     return (
-      <div className="turn turn-user">
-        <div className="turn-head"><span className="who">You</span></div>
-        <div className="turn-body">{m.text}</div>
+      <div className="bc-turn bc-turn-user">
+        <div className="bc-user-bubble">{message.text}</div>
       </div>
     );
   }
 
-  // delegate task card
-  if (m.kind === "delegate") {
-    const status = m.status || "pending";
-    // Marker steps (__context conversation payload, __meta duration) are data, not progress rows.
-    const steps = (m.steps || []).filter((s) => s && s.description);
-    const isActive = status === "pending" || status === "running";
-    const stopped = m.result === "Stopped by user";
-    const expr = status === "done" ? "grin" : status === "error" ? "ohh" : status === "running" ? "think" : "happy";
-    const statusText =
-      status === "pending" ? "Waiting for your browser…" :
-      status === "running" ? `Running${steps.length > 0 ? ` · step ${steps.length}` : "…"}` :
-      status === "done" ? "Done" :
-      stopped ? "Stopped" : "Failed";
+  if (message.kind === "delegate") {
+    const status = message.status || "pending";
+    const steps = (message.steps || []).filter((s) => s.description);
     return (
-      <div className="turn turn-braino">
-        <div className="turn-head">
-          <BrainoMark size={26} expr={expr} />
-          <span className="who">Braino</span>
-          <span className="dtag">Delegate</span>
-        </div>
-        <div className="turn-body">
-          <div className={`dtask${status === "error" ? " is-error" : ""}`}>
-            <div className="dtask-head">
-              <span className="dtask-status">
-                <span className={`dtask-dot dot-${status}`} />
-                {statusText}
-              </span>
-              {isActive && m.commandId && (
-                <button className="dtask-stop" title="Stop task" onClick={() => onStop(m.commandId!)}>
-                  <svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" /></svg>
-                </button>
-              )}
-            </div>
-            {steps.length > 0 && (
-              <div className="dtask-steps">
-                {steps.map((s, i) => (
-                  <div className="dstep" key={i}>
-                    <span className={`dstep-mark ${s.ok ? "dstep-ok" : "dstep-bad"}`}>{s.ok ? "✓" : "✗"}</span>
-                    <span>
-                      {s.description}
-                      {s.snapshot?.title && <span className="dstep-snap">{s.snapshot.title}</span>}
-                    </span>
-                  </div>
-                ))}
-              </div>
+      <div className="bc-turn bc-turn-braino">
+        <BrainoMark size={30} expr={status === "error" ? "ohh" : status === "done" ? "grin" : "think"} />
+        <div className="bc-answer">
+          <div className="bc-delegate-head">
+            <span>Delegate</span>
+            <span>{status}</span>
+            {(status === "pending" || status === "running") && message.commandId && (
+              <button type="button" onClick={() => onStop(message.commandId!)}>Stop</button>
             )}
-            {m.result && status !== "running" && <p className="dtask-result">{m.result}</p>}
-            {status === "pending" && <p className="dtask-hint">Make sure the Braino extension is signed in on your desktop — it picks this up automatically.</p>}
           </div>
+          <p>{message.text}</p>
+          {steps.map((step, index) => <p className="bc-step" key={index}>{step.ok ? "Done" : "Check"} · {step.description}</p>)}
+          {message.result && <p>{message.result}</p>}
         </div>
       </div>
     );
   }
 
-  // normal Braino reply (flowing serif, optional typed reveal)
-  const shown = reveal == null ? m.text : m.text.slice(0, reveal);
-  const typing = reveal != null && reveal < m.text.length;
+  const shown = reveal == null ? message.text : message.text.slice(0, reveal);
+  const typing = reveal != null && reveal < message.text.length;
   return (
-    <div className="turn turn-braino">
-      <div className="turn-head">
-        <BrainoMark size={26} expr={typing ? "happy" : "grin"} />
-        <span className="who">Braino</span>
-      </div>
-      <div className="turn-body read">
+    <div className="bc-turn bc-turn-braino">
+      <BrainoMark size={30} expr={typing ? "happy" : "grin"} />
+      <div className="bc-answer">
         <Paragraphs text={shown} />
-        {typing ? <span className="caret" /> : null}
-        {!typing && m.docUrl && (
-          <a className="doc-link" href={m.docUrl} target="_blank" rel="noreferrer">
-            <svg className="ci" viewBox="0 0 24 24"><path d="M14 3v5h5" /><path d="M6 3h9l5 5v12a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z" /></svg>
-            {m.docName || "Open Google Doc"}
-          </a>
+        {typing && <span className="bc-caret" />}
+        {!typing && message.docUrl && (
+          <a className="bc-doc" href={message.docUrl} target="_blank" rel="noreferrer">{message.docName || "Open Google Doc"}</a>
         )}
       </div>
     </div>
@@ -640,106 +534,173 @@ function Turn({ m, reveal, onStop }: { m: ChatMessage; reveal: number | null; on
 
 function Thinking() {
   return (
-    <div className="turn turn-braino">
-      <div className="turn-head">
-        <BrainoMark size={26} expr="think" />
-        <span className="who">Braino</span>
-      </div>
-      <div className="turn-body"><span className="think"><i /><i /><i /></span></div>
+    <div className="bc-turn bc-turn-braino">
+      <BrainoMark size={30} expr="think" />
+      <div className="bc-thinking"><i /><i /><i /></div>
     </div>
   );
 }
 
-/* ---------- the real backend call (full system prompt + emotional engine) ---------- */
-async function callBrainoSiteChat(args: {
-  message: string;
-  history: ChatMessage[];
-  userId?: string;
-  accessToken?: string;
-  driveConnected?: boolean;
+function Composer({
+  value,
+  setValue,
+  onSend,
+  disabled,
+  placeholder,
+  attachments,
+  onPick,
+  onRemove,
+  delegateMode,
+  onToggleDelegate,
+  voiceActive,
+  onVoiceToggle,
+}: {
+  value: string;
+  setValue: (value: string) => void;
+  onSend: () => void;
+  disabled: boolean;
+  placeholder: string;
+  attachments: Attachment[];
+  onPick: (files: FileList) => void;
+  onRemove: (id: string) => void;
+  delegateMode: boolean;
+  onToggleDelegate: () => void;
+  voiceActive: boolean;
+  onVoiceToggle: () => void;
 }) {
-  const authHeader = args.accessToken ? `Bearer ${args.accessToken}` : `Bearer ${SUPABASE_KEY}`;
-  log.info("chat", "request", { len: args.message.length, signedIn: !!args.userId });
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
 
-  const response = await fetch(`${SUPABASE_URL}/functions/v1/chat-about-notes`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", apikey: SUPABASE_KEY, Authorization: authHeader },
-    body: JSON.stringify({
-      message: args.message,
-      chatHistory: args.history.slice(-10).filter((e) => e.kind !== "delegate").map((e) => ({ role: e.role, content: e.text })),
-      notes: BRAINO_SITE_CONTEXT,
-      userId: args.userId,
-      driveConnected: args.driveConnected ?? false,
-      clientTimeZone: typeof Intl !== "undefined" ? Intl.DateTimeFormat().resolvedOptions().timeZone : null,
-      clientUtcOffsetMinutes: new Date().getTimezoneOffset() * -1,
-      pageContext: {
-        title: "Braino full-screen chat",
-        url: typeof window !== "undefined" ? window.location.href : "https://trybraino.com/chat",
-        text: "The user is talking to Braino inside the dedicated website chat page.",
-      },
-    }),
-  });
+  useEffect(() => {
+    const input = inputRef.current;
+    if (!input) return;
+    input.style.height = "auto";
+    input.style.height = `${Math.min(input.scrollHeight, 180)}px`;
+  }, [value]);
 
-  const payload = await response.json().catch(() => ({}));
-
-  if (!response.ok) {
-    log.error("chat", `response not ok (${response.status})`, payload);
-    if (response.status === 429) throw new Error("Braino hit a rate limit for a minute. Try again in a moment.");
-    if (response.status === 402) throw new Error("Braino ran out of AI credits for this route. Top it up and try again.");
-    throw new Error(
-      typeof payload?.error === "string" && payload.error.trim().length > 0 ? payload.error : `Chat request failed (${response.status})`,
-    );
-  }
-
-  log.info("chat", "reply ok", { docUrl: !!payload.docUrl });
-  return {
-    reply: (payload.reply as string) || "Braino blanked for a second. Try that again.",
-    docUrl: payload.docUrl as string | undefined,
-    docName: payload.docName as string | undefined,
-  };
+  return (
+    <div className="bc-composer-wrap">
+      {attachments.length > 0 && (
+        <div className="bc-attachments">
+          {attachments.map((item) => (
+            <span className="bc-attachment" key={item.id}>
+              {item.name} <small>{item.size}</small>
+              <button type="button" onClick={() => onRemove(item.id)}><Icon name="x" /></button>
+            </span>
+          ))}
+        </div>
+      )}
+      <div className={`bc-composer${voiceActive ? " is-voice" : ""}`}>
+        <button className="bc-icon-btn" type="button" aria-label="Attach" title="Attach" onClick={() => fileRef.current?.click()}>
+          <Icon name="plus" />
+        </button>
+        <textarea
+          ref={inputRef}
+          rows={1}
+          value={value}
+          placeholder={placeholder}
+          onChange={(event) => setValue(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && !event.shiftKey) {
+              event.preventDefault();
+              onSend();
+            }
+          }}
+        />
+        <button className={`bc-route-btn${delegateMode ? " is-on" : ""}`} type="button" onClick={onToggleDelegate}>
+          <Icon name="bolt" /> {delegateMode ? "Delegate" : "Instant"}
+        </button>
+        <button className="bc-voice-orb" type="button" aria-label="Voice conversation" title="Voice conversation" onClick={onVoiceToggle}>
+          <Icon name="voice" />
+        </button>
+        <button className="bc-send" type="button" aria-label="Send" disabled={disabled || (!value.trim() && attachments.length === 0)} onClick={onSend}>
+          <Icon name="send" />
+        </button>
+      </div>
+      <input ref={fileRef} type="file" multiple hidden onChange={(event) => {
+        if (event.target.files) onPick(event.target.files);
+        event.target.value = "";
+      }} />
+    </div>
+  );
 }
 
-/* ============================================================================
-   App
-   ============================================================================ */
+function VoiceOverlay({
+  status,
+  error,
+  signedIn,
+  onStop,
+}: {
+  status: string;
+  error: string;
+  signedIn: boolean;
+  onStop: () => void;
+}) {
+  const talking = status === "speaking";
+  const expr = status === "error" ? "ohh" : status === "thinking" ? "think" : talking ? "grin" : "happy";
+  return (
+    <div className={`bc-voice-stage is-${status}`} role="dialog" aria-label="Braino voice mode">
+      <button className="bc-voice-close" type="button" aria-label="Close voice mode" onClick={onStop}>
+        <Icon name="x" />
+      </button>
+      <div className="bc-voice-glow" />
+      <div className={`bc-big-braino${status === "listening" ? " is-listening" : ""}`}>
+        <div className="bc-voice-sonar" aria-hidden="true"><span /><span /></div>
+        <BrainoMark size={190} expr={expr} talking={talking} />
+      </div>
+      <div className="bc-voice-state">
+        {status === "connecting" ? "Waking up"
+          : status === "thinking" ? "Thinking"
+          : status === "speaking" ? "Braino is speaking"
+          : status === "error" ? "Voice needs attention"
+          : "Listening"}
+      </div>
+      {error && (
+        <div className="bc-voice-error">
+          {error}{!signedIn && <> · <Link to="/auth?redirect=/chat">sign in</Link></>}
+        </div>
+      )}
+      <div className="bc-voice-hint">Press Control twice or Esc to exit</div>
+    </div>
+  );
+}
+
 export default function BrainoChat() {
-  const { user, session, profile } = useAuth();
-  const [theme, setTheme] = useState<Theme>(() => readStoredTheme());
-  const [messages, setMessages] = useState<ChatMessage[]>(() => readStoredMessages());
-  const [draft, setDraft] = useState<string>(() => readStoredDraft());
-  const [attachments, setAttachments] = useState<Attachment[]>([]);
-  const [isSending, setIsSending] = useState(false);
-  const [reveal, setReveal] = useState<{ id: string; n: number } | null>(null);
-  const [delegateMode, setDelegateMode] = useState<boolean>(() => readStoredDelegate());
-  const [error, setError] = useState("");
-  const [driveConnected, setDriveConnected] = useState(false);
-
-  const scroller = useRef<HTMLDivElement>(null);
-  const revealTimer = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  const dark = theme === "dark";
-  const phase = messages.length === 0 ? "landing" : "chat";
-
-  useEffect(() => { document.title = "Braino Chat"; }, []);
-
-  // load brand fonts once (Newsreader + JetBrains Mono)
-  useEffect(() => {
-    const id = "braino-chat-fonts";
-    if (document.getElementById(id)) return;
-    const link = document.createElement("link");
-    link.id = id;
-    link.rel = "stylesheet";
-    link.href = "https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400;1,6..72,500&family=JetBrains+Mono:wght@400;500&display=swap";
-    document.head.appendChild(link);
+  const { user, session } = useAuth();
+  const initial = useMemo(() => {
+    const threads = readThreads();
+    const id = readCurrentThreadId();
+    const existing = threads.find((thread) => thread.id === id);
+    return {
+      threads,
+      currentThreadId: existing?.id || id,
+      messages: existing?.messages || [],
+    };
   }, []);
 
-  // persist
-  useEffect(() => { try { window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(messages)); } catch { /* ignore */ } }, [messages]);
-  useEffect(() => { try { window.sessionStorage.setItem(DRAFT_KEY, draft); } catch { /* ignore */ } }, [draft]);
-  useEffect(() => { try { window.localStorage.setItem(THEME_KEY, theme); } catch { /* ignore */ } }, [theme]);
-  useEffect(() => { try { window.localStorage.setItem(DELEGATE_KEY, delegateMode ? "1" : "0"); } catch { /* ignore */ } }, [delegateMode]);
+  const [threads, setThreads] = useState<ChatThread[]>(initial.threads);
+  const [currentThreadId, setCurrentThreadId] = useState(initial.currentThreadId);
+  const [messages, setMessages] = useState<ChatMessage[]>(initial.messages);
+  const [draft, setDraft] = useState(readDraft);
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [delegateMode, setDelegateMode] = useState(readDelegateMode);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [search, setSearch] = useState("");
+  const [error, setError] = useState("");
+  const [isSending, setIsSending] = useState(false);
+  const [reveal, setReveal] = useState<{ id: string; n: number } | null>(null);
+  const [driveConnected, setDriveConnected] = useState(false);
 
-  // does the signed-in user have Google Drive connected (so Braino can offer docs)?
+  const scrollerRef = useRef<HTMLElement>(null);
+  const revealTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => { document.title = "Braino Chat"; }, []);
+  useEffect(() => { window.sessionStorage.setItem(DRAFT_KEY, draft); }, [draft]);
+  useEffect(() => { window.localStorage.setItem(DELEGATE_KEY, delegateMode ? "1" : "0"); }, [delegateMode]);
+  useEffect(() => { window.localStorage.setItem(CURRENT_THREAD_KEY, currentThreadId); }, [currentThreadId]);
+  useEffect(() => { window.localStorage.setItem(THREADS_KEY, JSON.stringify(threads.slice(0, 80))); }, [threads]);
+  useEffect(() => () => { if (revealTimer.current) clearInterval(revealTimer.current); }, []);
+
   useEffect(() => {
     if (!user) { setDriveConnected(false); return; }
     supabase
@@ -750,378 +711,904 @@ export default function BrainoChat() {
       .then(({ data }) => setDriveConnected(!!data));
   }, [user]);
 
-  const scrollDown = useCallback(() => {
-    const el = scroller.current;
-    if (!el) return;
-    requestAnimationFrame(() => { el.scrollTop = el.scrollHeight; });
-  }, []);
+  useEffect(() => {
+    const node = scrollerRef.current;
+    if (!node) return;
+    requestAnimationFrame(() => { node.scrollTop = node.scrollHeight; });
+  }, [messages, isSending]);
 
-  useEffect(() => { scrollDown(); }, [messages, isSending, scrollDown]);
-  useEffect(() => () => { if (revealTimer.current) clearInterval(revealTimer.current); }, []);
+  useEffect(() => {
+    if (messages.length === 0) return;
+    const now = new Date().toISOString();
+    setThreads((prev) => {
+      const existing = prev.find((thread) => thread.id === currentThreadId);
+      const nextThread: ChatThread = {
+        id: currentThreadId,
+        title: existing?.customTitle ? existing.title : makeTitle(messages),
+        updatedAt: now,
+        messages,
+        customTitle: existing?.customTitle,
+      };
+      const rest = prev.filter((thread) => thread.id !== currentThreadId);
+      if (
+        existing &&
+        JSON.stringify(existing.messages) === JSON.stringify(messages) &&
+        existing.title === nextThread.title &&
+        existing.customTitle === nextThread.customTitle
+      ) return prev;
+      return [nextThread, ...rest].slice(0, 80);
+    });
+  }, [currentThreadId, messages]);
 
-  /* ----- delegate queue: apply a command row onto its in-thread turn ----- */
   const applyCommandUpdate = useCallback((cmd: Command) => {
     if (!cmd?.id) return;
-    setMessages((prev) => {
-      let changed = false;
-      const next = prev.map((m) => {
-        if (m.commandId !== cmd.id) return m;
-        const merged: ChatMessage = {
-          ...m,
-          status: cmd.status,
-          steps: Array.isArray(cmd.steps) ? cmd.steps : [],
-          result: cmd.result ?? null,
-          text: cmd.task ?? m.text,
-        };
-        if (JSON.stringify(merged) !== JSON.stringify(m)) changed = true;
-        return merged;
-      });
-      return changed ? next : prev;
-    });
+    setMessages((prev) => prev.map((message) => (
+      message.commandId === cmd.id
+        ? { ...message, status: cmd.status, steps: cmd.steps || [], result: cmd.result ?? null }
+        : message
+    )));
   }, []);
 
-  /* ----- delegate queue: realtime subscription + poll fallback + reconcile ----- */
   useEffect(() => {
     if (!user) return;
-    log.info("delegate", "subscribing to agent_commands", { userId: user.id });
-
-    // one-time reconcile so a task that finished while away still shows its result
-    supabase
-      .from("agent_commands" as never)
-      .select("*")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false })
-      .limit(30)
-      .then(({ data, error: e }) => {
-        if (e) { log.warn("delegate", "reconcile fetch failed", e); return; }
-        (data as Command[] | null)?.forEach(applyCommandUpdate);
-      });
-
     const channel = supabase
       .channel(`braino_chat_cmds_${user.id}`)
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "agent_commands", filter: `user_id=eq.${user.id}` },
-        (payload) => { log.info("delegate", "realtime update", payload.new); applyCommandUpdate(payload.new as Command); },
-      )
-      .subscribe((status) => {
-        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") log.warn("delegate", "channel status", status);
-        else log.info("delegate", "channel status", status);
-      });
+      .on("postgres_changes", { event: "*", schema: "public", table: "agent_commands", filter: `user_id=eq.${user.id}` }, (payload) => {
+        applyCommandUpdate(payload.new as Command);
+      })
+      .subscribe((status) => log.info("delegate", "channel status", status));
 
     const poll = setInterval(async () => {
-      const { data, error: e } = await supabase
+      const { data, error: pollError } = await supabase
         .from("agent_commands" as never)
         .select("*")
         .eq("user_id", user.id)
         .in("status", ["pending", "running"])
         .order("created_at", { ascending: false })
         .limit(10);
-      if (e) { log.warn("delegate", "poll failed", e); return; }
-      (data as Command[] | null)?.forEach(applyCommandUpdate);
+      if (pollError) { log.warn("delegate", "poll failed", pollError); return; }
+      (data as unknown as Command[] | null)?.forEach(applyCommandUpdate);
     }, 3000);
 
     return () => { supabase.removeChannel(channel); clearInterval(poll); };
   }, [user, applyCommandUpdate]);
 
-  /* ----- streamed reveal of a normal Braino reply ----- */
-  const streamReply = useCallback((full: string, docUrl?: string, docName?: string) => {
-    const id = createMessageId();
+  const streamReply = useCallback((reply: string, docUrl?: string, docName?: string) => {
+    const id = createId();
     setIsSending(false);
-    setMessages((ms) => [...ms, { id, role: "assistant", text: full, createdAt: new Date().toISOString(), kind: "chat", docUrl, docName }]);
+    setMessages((prev) => [...prev, { id, role: "assistant", text: reply, createdAt: new Date().toISOString(), kind: "chat", docUrl, docName }]);
     setReveal({ id, n: 0 });
     let n = 0;
     if (revealTimer.current) clearInterval(revealTimer.current);
     revealTimer.current = setInterval(() => {
-      n += Math.max(2, Math.round(full.length / 200));
-      if (n >= full.length) { n = full.length; if (revealTimer.current) clearInterval(revealTimer.current); setReveal(null); }
-      else setReveal({ id, n });
-      scrollDown();
+      n += Math.max(2, Math.round(reply.length / 200));
+      if (n >= reply.length) {
+        if (revealTimer.current) clearInterval(revealTimer.current);
+        setReveal(null);
+      } else {
+        setReveal({ id, n });
+      }
     }, 18);
-  }, [scrollDown]);
+  }, []);
 
-  /* ----- normal chat path ----- */
   const ask = useCallback(async (text: string, history: ChatMessage[]) => {
     setIsSending(true);
     setError("");
-    scrollDown();
     try {
-      const res = await callBrainoSiteChat({
+      const response = await callBrainoSiteChat({
         message: text,
         history,
+        chatMemoryContext: buildChatMemoryContext({
+          threads,
+          currentThreadId,
+          currentMessages: history,
+          message: text,
+        }),
         userId: user?.id,
         accessToken: session?.access_token,
         driveConnected,
       });
-      streamReply(res.reply, res.docUrl, res.docName);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "Something went sideways while Braino was replying.";
-      log.error("chat", "send failed", e);
-      setError(msg);
+      streamReply(response.reply, response.docUrl, response.docName);
+      return response.reply;
+    } catch (askError) {
+      const message = askError instanceof Error ? askError.message : "Something went sideways while Braino was replying.";
       setIsSending(false);
-      setMessages((ms) => [...ms, { id: createMessageId(), role: "assistant", text: msg, createdAt: new Date().toISOString(), kind: "chat" }]);
+      setError(message);
+      setMessages((prev) => [...prev, { id: createId(), role: "assistant", text: message, createdAt: new Date().toISOString(), kind: "chat" }]);
+      throw askError;
     }
-  }, [user, session, driveConnected, streamReply, scrollDown]);
+  }, [currentThreadId, driveConnected, session?.access_token, streamReply, threads, user?.id]);
 
-  /* ----- delegate path: enqueue into the shared agent_commands queue ----- */
   const delegate = useCallback(async (task: string, history: ChatMessage[] = []) => {
-    setError("");
-    if (!user) {
-      log.warn("delegate", "blocked — not signed in");
-      setMessages((ms) => [...ms, {
-        id: createMessageId(), role: "assistant", createdAt: new Date().toISOString(), kind: "chat",
-        text: "Delegate runs the task on your browser through the extension, so I need you to be **signed in** first. Sign in and flip Delegate back on — then tell me what to run.",
-      }]);
-      return;
+    const tempId = createId();
+    setMessages((prev) => [...prev, {
+      id: tempId,
+      role: "assistant",
+      text: "Starting Delegate...",
+      createdAt: new Date().toISOString(),
+      kind: "delegate",
+      status: "pending",
+      steps: [],
+      result: null,
+    }]);
+
+    const extensionStart = await runDelegateThroughExtension(task, history);
+    if (extensionStart.ok) {
+      const detail = extensionStart.duplicate
+        ? "Delegate is already running this task in your browser."
+        : extensionStart.created
+          ? "Started Delegate in a new browser tab."
+          : extensionStart.moved
+            ? "Started Delegate on the best browser tab I could use."
+            : "Started Delegate in your browser.";
+      const spoken = extensionStart.duplicate ? "Delegate is already running that." : "On it. I started Delegate.";
+      setMessages((prev) => prev.map((message) => message.id === tempId
+        ? {
+            ...message,
+            text: "Delegate is running.",
+            status: "done",
+            steps: [{ description: detail, ok: true }],
+            result: "Watch Braino on the target tab for the live run.",
+          }
+        : message));
+      return spoken;
     }
 
-    log.info("delegate", "enqueue", { task });
-    const tempId = createMessageId();
-    setMessages((ms) => [...ms, {
-      id: tempId, role: "assistant", text: task, createdAt: new Date().toISOString(),
-      kind: "delegate", status: "pending", steps: [], result: null,
-    }]);
-    scrollDown();
+    if (!extensionStart.noBridge) {
+      const message = extensionStart.quotaExceeded
+        ? "Delegate is blocked by your current plan limit."
+        : extensionStart.error || "The Braino extension could not start Delegate.";
+      setError(`Delegate failed: ${message}`);
+      setMessages((prev) => prev.map((item) => item.id === tempId ? { ...item, status: "error", result: message } : item));
+      return message;
+    }
 
-    // Ride the recent conversation along as a marker step (the extension reads and strips it),
-    // so a follow-up like "open that website" reaches the agent with the context it refers to.
+    if (!user) {
+      const message = "I could not reach the installed extension from this page. Sign in and keep the extension running, then try again.";
+      setMessages((prev) => prev.map((item) => item.id === tempId ? { ...item, status: "error", result: message } : item));
+      return message;
+    }
+
     const contextTurns = history
-      .filter((m) => (m.text || "").trim() && (m.role === "user" || m.role === "assistant"))
+      .filter((message) => message.text.trim())
       .slice(-8)
-      .map((m) => ({
-        role: m.role,
-        content: (m.kind === "delegate" ? `Ran delegate task: ${m.text}${m.result ? ` — ${m.result}` : ""}` : m.text).slice(0, 500),
+      .map((message) => ({
+        role: message.role,
+        content: (message.kind === "delegate" ? `Ran delegate task: ${message.text}${message.result ? ` - ${message.result}` : ""}` : message.text).slice(0, 500),
       }));
-    const steps = contextTurns.length ? [{ __context: true, chatHistory: contextTurns }] : [];
 
     try {
-      const { data, error: e } = await supabase
+      const { data, error: queueError } = await supabase
         .from("agent_commands" as never)
-        .insert({ user_id: user.id, task, status: "pending", steps } as never)
+        .insert({
+          user_id: user.id,
+          task,
+          status: "pending",
+          steps: contextTurns.length ? [{ __context: true, chatHistory: contextTurns }] : [],
+        } as never)
         .select()
         .single();
-      if (e) throw e;
+      if (queueError) throw queueError;
       const row = data as unknown as Command;
-      log.info("delegate", "enqueued", { id: row.id });
-      setMessages((ms) => ms.map((m) => m.id === tempId
-        ? { ...m, commandId: row.id, status: row.status, steps: row.steps || [], result: row.result ?? null }
-        : m));
-    } catch (e) {
-      const msg = (e as { message?: string })?.message || "Couldn't reach the task queue.";
-      log.error("delegate", "enqueue failed", e);
-      setError(`Delegate failed: ${msg}`);
-      setMessages((ms) => ms.map((m) => m.id === tempId ? { ...m, status: "error", result: msg } : m));
+      setMessages((prev) => prev.map((message) => message.id === tempId
+        ? { ...message, text: "Delegate is queued.", commandId: row.id, status: row.status, steps: row.steps || [], result: row.result ?? null }
+        : message));
+      return "I queued Delegate for your browser.";
+    } catch (queueError) {
+      const message = queueError instanceof Error ? queueError.message : "Couldn't reach the task queue.";
+      setError(`Delegate failed: ${message}`);
+      setMessages((prev) => prev.map((item) => item.id === tempId ? { ...item, status: "error", result: message } : item));
+      return message;
     }
-  }, [user, scrollDown]);
+  }, [user]);
 
-  /* ----- stop a running/pending delegate task ----- */
-  const stopTask = useCallback(async (commandId: string) => {
-    log.info("delegate", "stop", { commandId });
-    setMessages((ms) => ms.map((m) => m.commandId === commandId ? { ...m, status: "error", result: "Stopped by user" } : m));
-    const { error: e } = await supabase
-      .from("agent_commands" as never)
-      .update({ status: "error", result: "Stopped by user" } as never)
-      .eq("id", commandId);
-    if (e) log.warn("delegate", "stop update failed", e);
-  }, []);
-
-  /* ----- attachments (display-only, mirrors the design) ----- */
-  const pickFiles = useCallback((fileList: FileList) => {
-    const arr = [...fileList].map((f, i) => ({ id: `${Date.now()}-${i}-${f.name}`, name: f.name, size: fmtSize(f.size) }));
-    if (arr.length) setAttachments((a) => [...a, ...arr]);
-  }, []);
-  const removeAttach = useCallback((id: string) => setAttachments((a) => a.filter((x) => x.id !== id)), []);
-
-  /* ----- send (routes to chat or delegate) ----- */
   const send = useCallback((preset?: string) => {
-    const typed = (preset != null ? preset : draft).trim();
-    const atts = preset != null ? [] : attachments;
+    const typed = (preset ?? draft).trim();
+    const activeAttachments = preset ? [] : attachments;
     let text = typed;
-    if (atts.length) {
-      const names = atts.map((a) => a.name).join(", ");
+    if (activeAttachments.length) {
+      const names = activeAttachments.map((item) => item.name).join(", ");
       text = typed ? `${typed}\n\n(Attached: ${names})` : `(Attached: ${names})`;
     }
     if (!text || isSending) return;
 
-    setMessages((ms) => [...ms, { id: createMessageId(), role: "user", text, createdAt: new Date().toISOString() }]);
+    const userMessage: ChatMessage = { id: createId(), role: "user", text, createdAt: new Date().toISOString(), kind: "chat" };
     const history = messages.slice();
+    setMessages((prev) => [...prev, userMessage]);
     setDraft("");
     setAttachments([]);
-    scrollDown();
 
-    if (delegateMode) void delegate(text, history);
+    if (delegateMode || looksLikeDelegateTask(text)) void delegate(text, history);
     else void ask(text, history);
-  }, [draft, attachments, isSending, messages, delegateMode, delegate, ask, scrollDown]);
+  }, [ask, attachments, delegate, delegateMode, draft, isSending, messages]);
 
-  const newChat = useCallback(() => {
-    setMessages([]);
-    setReveal(null);
-    setIsSending(false);
-    setError("");
-    setDraft("");
-    if (revealTimer.current) clearInterval(revealTimer.current);
-    try { window.sessionStorage.removeItem(STORAGE_KEY); window.sessionStorage.removeItem(DRAFT_KEY); } catch { /* ignore */ }
+  const voiceTurn = useCallback(async (text: string) => {
+    const userMessage: ChatMessage = { id: createId(), role: "user", text, createdAt: new Date().toISOString(), kind: "chat" };
+    const history = messages.slice();
+    setMessages((prev) => [...prev, userMessage]);
+    if (delegateMode || looksLikeDelegateTask(text)) return await delegate(text, history);
+    return await ask(text, history);
+  }, [ask, delegate, delegateMode, messages]);
+
+  const handleVoiceLog = useCallback((scope: string, message: string, data?: unknown) => {
+    log.info(scope, message, data);
   }, []);
 
-  const displayName = useMemo(() => getDisplayName(profile?.display_name, user?.email), [profile?.display_name, user?.email]);
-
-  // ── Voice mode (Ctrl ×2) — real-time, same backend + system prompt as the extension ──
-  const buildVoiceConfigBody = useCallback(() => ({
-    notes: BRAINO_SITE_CONTEXT,
-    languagePolicy: "english",
-    voiceSurface: "website_chat",
-    clientTimeZone: typeof Intl !== "undefined" ? Intl.DateTimeFormat().resolvedOptions().timeZone : null,
-    pageContext: {
-      title: "Braino full-screen chat",
-      url: typeof window !== "undefined" ? window.location.href : "https://trybraino.com/chat",
-      text: "The user is talking to Braino by voice inside the dedicated website chat page.",
-    },
-  }), []);
   const {
-    active: voiceActive, status: voiceStatus, userText: voiceUserText,
-    brainoText: voiceBrainoText, error: voiceError, toggle: voiceToggle, stop: voiceStop,
+    active: voiceActive,
+    status: voiceStatus,
+    error: voiceError,
+    toggle: voiceToggle,
+    stop: voiceStop,
   } = useBrainoVoice({
     accessToken: session?.access_token,
-    buildConfigBody: buildVoiceConfigBody,
-    onLog: (scope, msg, data) => log.info(scope, msg, data),
+    onTranscript: voiceTurn,
+    onLog: handleVoiceLog,
   });
 
-  // Double-tap Control toggles voice; Esc exits.
   useEffect(() => {
     let taps = 0;
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && voiceActive) { voiceStop(); return; }
-      if (e.key !== "Control") return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && voiceActive) { voiceStop(); return; }
+      if (event.key !== "Control" || event.repeat) return;
       taps += 1;
       if (timer) clearTimeout(timer);
-      if (taps >= 2) { taps = 0; voiceToggle(); return; }
+      if (taps >= 2) {
+        taps = 0;
+        voiceToggle();
+        return;
+      }
       timer = setTimeout(() => { taps = 0; }, 400);
     };
     window.addEventListener("keydown", onKey);
     return () => { window.removeEventListener("keydown", onKey); if (timer) clearTimeout(timer); };
-  }, [voiceActive, voiceToggle, voiceStop]);
+  }, [voiceActive, voiceStop, voiceToggle]);
 
-  const wrapperStyle = { ...THEMES[theme], "--read": "19px" } as React.CSSProperties;
-  const placeholder = delegateMode
-    ? "Tell Braino what to do — he'll run it on your browser…"
-    : phase === "landing" ? "Ask Braino anything…" : "Message Braino…";
+  const newChat = useCallback(() => {
+    const id = createId();
+    setCurrentThreadId(id);
+    setMessages([]);
+    setDraft("");
+    setError("");
+    setReveal(null);
+    setIsSending(false);
+    setAttachments([]);
+    if (revealTimer.current) clearInterval(revealTimer.current);
+  }, []);
+
+  const selectThread = useCallback((thread: ChatThread) => {
+    setCurrentThreadId(thread.id);
+    setMessages(thread.messages);
+    setDraft("");
+    setError("");
+    setReveal(null);
+  }, []);
+
+  const renameThread = useCallback((thread: ChatThread) => {
+    const nextTitle = window.prompt("Rename chat", thread.title)?.trim();
+    if (!nextTitle || nextTitle === thread.title) return;
+    setThreads((prev) => prev.map((item) => (
+      item.id === thread.id
+        ? { ...item, title: nextTitle.slice(0, 80), customTitle: true, updatedAt: new Date().toISOString() }
+        : item
+    )));
+  }, []);
+
+  const deleteThread = useCallback((thread: ChatThread) => {
+    if (!window.confirm(`Delete "${thread.title}"?`)) return;
+    const remaining = threads.filter((item) => item.id !== thread.id);
+    setThreads(remaining);
+    if (thread.id !== currentThreadId) return;
+
+    const nextThread = remaining[0];
+    if (nextThread) {
+      setCurrentThreadId(nextThread.id);
+      setMessages(nextThread.messages);
+    } else {
+      setCurrentThreadId(createId());
+      setMessages([]);
+    }
+    setDraft("");
+    setError("");
+    setReveal(null);
+    setAttachments([]);
+    setIsSending(false);
+    if (revealTimer.current) clearInterval(revealTimer.current);
+  }, [currentThreadId, threads]);
+
+  const stopTask = useCallback(async (commandId: string) => {
+    setMessages((prev) => prev.map((message) => message.commandId === commandId ? { ...message, status: "error", result: "Stopped by user" } : message));
+    await supabase
+      .from("agent_commands" as never)
+      .update({ status: "error", result: "Stopped by user" } as never)
+      .eq("id", commandId);
+  }, []);
+
+  const pickFiles = useCallback((files: FileList) => {
+    setAttachments((prev) => [...prev, ...Array.from(files).map((file, index) => ({
+      id: `${Date.now()}-${index}-${file.name}`,
+      name: file.name,
+      size: fmtSize(file.size),
+    }))]);
+  }, []);
+
+  const removeAttach = useCallback((id: string) => {
+    setAttachments((prev) => prev.filter((item) => item.id !== id));
+  }, []);
+
+  const filteredThreads = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return threads;
+    return threads.filter((thread) => thread.title.toLowerCase().includes(q));
+  }, [search, threads]);
+
+  const currentTitle = useMemo(() => {
+    const currentThread = threads.find((thread) => thread.id === currentThreadId);
+    return currentThread?.title || (messages.length ? makeTitle(messages) : "New chat");
+  }, [currentThreadId, messages, threads]);
+
+  const placeholder = delegateMode ? "Tell Braino what to do..." : "Message Braino";
+  const emptyGreeting = useMemo(() => buildEmptyGreeting(user), [user]);
 
   return (
-    <div className="bchat" data-theme={theme} style={wrapperStyle}>
-      <style>{CHAT_PAGE_CSS}</style>
+    <div className={`bchat ${sidebarCollapsed ? "is-collapsed" : ""}`}>
+      <style>{CHAT_CSS}</style>
       <BrainoDefs />
-
-      {/* Voice mode (Ctrl ×2): the whole screen perimeter glows, no mascot, just a live transcript. */}
       {voiceActive && (
-        <div className={`bchat-voice ${voiceStatus}`} role="dialog" aria-label="Braino voice mode">
-          <div className="bchat-voice-veil" aria-hidden="true" />
-          <div className="bchat-voice-inner">
-            <div className="bchat-voice-status">
-              <span className="bchat-voice-dot" />
-              {voiceStatus === "connecting" ? "Connecting…"
-                : voiceStatus === "thinking" ? "Thinking…"
-                : voiceStatus === "speaking" ? "Braino"
-                : voiceStatus === "error" ? "Voice error"
-                : "Listening"}
-            </div>
-            {voiceError ? (
-              <div className="bchat-voice-err">
-                {voiceError}{!user && <> · <Link to="/auth?redirect=/chat">sign in</Link></>}
-              </div>
-            ) : (
-              <div className="bchat-voice-transcript">
-                {voiceUserText && <p className="bchat-voice-you">{voiceUserText}</p>}
-                {voiceBrainoText && <p className="bchat-voice-braino">{voiceBrainoText}</p>}
-                {!voiceUserText && !voiceBrainoText && <p className="bchat-voice-hint">Just talk. Braino is listening.</p>}
-              </div>
-            )}
-            <div className="bchat-voice-exit">Ctrl ×2 or Esc to exit</div>
-          </div>
-        </div>
+        <VoiceOverlay status={voiceStatus} error={voiceError} signedIn={!!user} onStop={voiceStop} />
       )}
 
-      {/* top bar */}
-      <header className="topbar">
-        <div className="tb-left">
-          <BrainoMark size={28} expr="happy" />
-          <span className="tb-name">Braino</span>
-        </div>
-        <div className="tb-right">
-          <button className={`tb-mic${voiceActive ? " on" : ""}`} type="button" aria-label="Voice mode (Ctrl ×2)" title="Voice mode — Ctrl ×2" onClick={() => voiceToggle()}>
-            <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5 11a7 7 0 0 0 14 0M12 18v3" /></svg>
-          </button>
-          {messages.length > 0 && <button className="tb-btn" onClick={newChat}>New chat</button>}
-          <Link className="tb-btn" to={user ? "/dashboard" : "/auth?redirect=/chat"}>{user ? "Dashboard" : "Sign in"}</Link>
-          <button className="tb-icon" aria-label="Toggle theme" onClick={() => setTheme(dark ? "light" : "dark")}>
-            <SunMoon dark={dark} />
+      <aside className="bc-sidebar">
+        <div className="bc-side-top">
+          <div className="bc-brand">
+            <BrainoMark size={28} expr="happy" />
+            {!sidebarCollapsed && <strong>Braino</strong>}
+          </div>
+          <button className="bc-side-icon" type="button" aria-label="Toggle sidebar" onClick={() => setSidebarCollapsed((value) => !value)}>
+            <Icon name="menu" />
           </button>
         </div>
-      </header>
 
-      {/* LANDING */}
-      {phase === "landing" && (
-        <section className="landing">
-          <div className="landing-col">
-            <BrainoMark size={78} expr="happy" arm="wave" />
-            <div className="eyebrow">BRAINO · YOUR AI BROWSER SIDEKICK</div>
-            <h1 className="greeting">{greetWord()}, <span className="g-em">{displayName}.</span></h1>
-            <p className="sub">What can I help you with? Ask me anything — or flip on Delegate and hand me a task to run.</p>
-            <Composer
-              variant="hero" value={draft} setValue={setDraft} onSend={() => send()} disabled={isSending}
-              placeholder={placeholder} attachments={attachments} onPick={pickFiles} onRemove={removeAttach}
-              delegateMode={delegateMode} onToggleDelegate={() => setDelegateMode((v) => !v)}
-            />
-            {delegateMode && !user && (
-              <div className="signin-hint"><Link to="/auth?redirect=/chat">Sign in</Link> to delegate — tasks run on your browser via the extension.</div>
-            )}
-            <div className="chips">
-              {SUGGESTIONS.map((s, i) => (
-                <button key={i} className="chip" onClick={() => send(s.prompt)} disabled={isSending}>
-                  <ActionIcon name={s.icon} /><span>{s.label}</span>
+        <nav className="bc-nav">
+          <button type="button" onClick={newChat}><Icon name="new" /><span>New chat</span></button>
+          <label className="bc-search"><Icon name="search" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search" /></label>
+          <button type="button"><Icon name="library" /><span>Library</span></button>
+        </nav>
+
+        <div className="bc-thread-section">
+          <p>Chats</p>
+          <div className="bc-thread-list">
+            {filteredThreads.length === 0 && <span className="bc-empty-chat">No chats yet</span>}
+            {filteredThreads.map((thread) => (
+              <div className={`bc-thread-row${thread.id === currentThreadId ? " is-active" : ""}`} key={thread.id}>
+                <button
+                  className="bc-thread-open"
+                  type="button"
+                  onClick={() => selectThread(thread)}
+                  title={thread.title}
+                >
+                  {thread.title}
                 </button>
-              ))}
-            </div>
-          </div>
-        </section>
-      )}
-
-      {/* CONVERSATION */}
-      {phase === "chat" && (
-        <section className="convo">
-          <div className="scroller" ref={scroller}>
-            <div className="thread">
-              {messages.map((m) => (
-                <Turn key={m.id} m={m} reveal={reveal && reveal.id === m.id ? reveal.n : null} onStop={stopTask} />
-              ))}
-              {isSending ? <Thinking /> : null}
-              <div className="thread-foot" />
-            </div>
-          </div>
-          <div className="dock">
-            <div className="dock-inner">
-              {error && (
-                <div className="err-banner" role="alert">
-                  <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" /><path d="M12 8v5M12 16.5v.01" /></svg>
-                  <span>{error}</span>
+                <div className="bc-thread-actions" aria-label={`${thread.title} actions`}>
+                  <button type="button" aria-label={`Rename ${thread.title}`} title="Rename chat" onClick={() => renameThread(thread)}>
+                    <Icon name="edit" />
+                  </button>
+                  <button type="button" aria-label={`Delete ${thread.title}`} title="Delete chat" onClick={() => deleteThread(thread)}>
+                    <Icon name="trash" />
+                  </button>
                 </div>
-              )}
-              <Composer
-                variant="dock" value={draft} setValue={setDraft} onSend={() => send()} disabled={isSending}
-                placeholder={placeholder} attachments={attachments} onPick={pickFiles} onRemove={removeAttach}
-                delegateMode={delegateMode} onToggleDelegate={() => setDelegateMode((v) => !v)}
-              />
-              <div className="dock-hint">
-                {delegateMode
-                  ? (user
-                      ? <>Delegate is on — your message runs as a task on your browser via the extension</>
-                      : <><Link to="/auth?redirect=/chat">Sign in</Link> to delegate tasks to your browser</>)
-                  : <>Braino can write, explain, and run tasks · <kbd>Enter</kbd> to send</>}
               </div>
-            </div>
+            ))}
           </div>
-        </section>
-      )}
+        </div>
+
+        <div className="bc-account">
+          <span>{user?.email?.slice(0, 1).toUpperCase() || "B"}</span>
+          {!sidebarCollapsed && (
+            <div>
+              <strong>{user?.email?.split("@")[0] || "Braino"}</strong>
+              <Link to={user ? "/dashboard" : "/auth?redirect=/chat"}>{user ? "Dashboard" : "Sign in"}</Link>
+            </div>
+          )}
+        </div>
+      </aside>
+
+      <main className="bc-main" ref={scrollerRef}>
+        <header className="bc-topbar">
+          <div>
+            <span className="bc-kicker">Braino Chat</span>
+            <h1>{currentTitle}</h1>
+          </div>
+        </header>
+
+        <div className="bc-scroll">
+          <div className="bc-thread">
+            {messages.length === 0 && (
+              <div className="bc-empty">
+                <div className="bc-empty-greeting-stage">
+                  <GreetingWalker />
+                  <h2>{emptyGreeting}</h2>
+                </div>
+              </div>
+            )}
+            {messages.map((message) => (
+              <Turn key={message.id} message={message} reveal={reveal?.id === message.id ? reveal.n : null} onStop={stopTask} />
+            ))}
+            {isSending && <Thinking />}
+          </div>
+        </div>
+
+        <div className="bc-dock">
+          {error && <div className="bc-error">{error}</div>}
+          <Composer
+            value={draft}
+            setValue={setDraft}
+            onSend={() => send()}
+            disabled={isSending}
+            placeholder={placeholder}
+            attachments={attachments}
+            onPick={pickFiles}
+            onRemove={removeAttach}
+            delegateMode={delegateMode}
+            onToggleDelegate={() => setDelegateMode((value) => !value)}
+            voiceActive={voiceActive}
+            onVoiceToggle={voiceToggle}
+          />
+        </div>
+      </main>
     </div>
   );
 }
+
+const CHAT_CSS = `
+.bchat{
+  position:fixed;
+  inset:0;
+  z-index:50;
+  display:grid;
+  grid-template-columns:300px minmax(0,1fr);
+  height:100dvh;
+  min-height:0;
+  background:#000;
+  color:#ececec;
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  overflow:hidden;
+}
+.bchat *{box-sizing:border-box}
+.bchat button{font:inherit;color:inherit}
+.bchat button svg,.bc-search svg,.bc-nav svg,.bc-route-btn svg,.bc-attachment svg{
+  width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round
+}
+.braino-avatar{display:inline-flex;align-items:center;justify-content:center;flex:none}
+.braino-avatar svg{overflow:visible;width:auto;height:auto}
+.braino-avatar.is-talking{animation:bcTalkBob 1s ease-in-out infinite}
+@keyframes bcTalkBob{0%,100%{transform:translateY(0)}50%{transform:translateY(-3px)}}
+
+.bc-sidebar{
+  min-width:0;
+  min-height:0;
+  height:100dvh;
+  background:#050505;
+  border-right:1px solid #242424;
+  padding:18px 10px 12px;
+  display:flex;
+  flex-direction:column;
+  gap:16px;
+}
+.bchat.is-collapsed{grid-template-columns:72px minmax(0,1fr)}
+.bchat.is-collapsed .bc-sidebar{align-items:center;padding-inline:8px}
+.bchat.is-collapsed .bc-nav span,
+.bchat.is-collapsed .bc-thread-section,
+.bchat.is-collapsed .bc-search input{display:none}
+.bc-side-top,.bc-brand{display:flex;align-items:center;gap:10px}
+.bc-side-top{justify-content:space-between}
+.bc-brand strong{font-size:18px}
+.bc-side-icon,.bc-nav button,.bc-icon-btn,.bc-send,.bc-voice-orb,.bc-route-btn{
+  border:0;
+  background:transparent;
+  cursor:pointer;
+}
+.bc-side-icon,.bc-icon-btn{
+  width:38px;height:38px;border-radius:12px;display:grid;place-items:center;color:#f2f2f2;
+}
+.bc-icon-btn{
+  background:#383838;
+  border:1px solid #505050;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.06);
+}
+.bc-composer .bc-icon-btn{
+  width:46px;
+  height:46px;
+  border-radius:50%;
+  flex:none;
+  align-self:center;
+}
+.bc-side-icon:hover,.bc-nav button:hover{background:#1d1d1d}
+.bc-icon-btn:hover{background:#464646;border-color:#666}
+.bc-nav{display:flex;flex-direction:column;gap:8px}
+.bc-nav button,.bc-search{
+  width:100%;
+  min-height:40px;
+  border-radius:10px;
+  display:flex;
+  align-items:center;
+  gap:12px;
+  padding:0 12px;
+  color:#e8e8e8;
+}
+.bc-search{background:transparent}
+.bc-search input{
+  width:100%;
+  border:0;
+  outline:0;
+  background:transparent;
+  color:#e8e8e8;
+  font:inherit;
+}
+.bc-thread-section{min-height:0;display:flex;flex:1;flex-direction:column;gap:8px}
+.bc-thread-section p{
+  margin:8px 12px 4px;
+  font-size:13px;
+  font-weight:700;
+  color:#f1f1f1;
+}
+.bc-thread-list{min-height:0;overflow:auto;display:flex;flex-direction:column;gap:4px;padding-right:2px}
+.bc-thread-row{
+  display:flex;
+  align-items:center;
+  gap:4px;
+  border-radius:10px;
+  color:#d7d7d7;
+}
+.bc-thread-row:hover,.bc-thread-row.is-active{background:#202020;color:#fff}
+.bc-thread-open{
+  border:0;
+  background:transparent;
+  min-width:0;
+  flex:1;
+  text-align:left;
+  color:inherit;
+  border-radius:10px;
+  padding:10px 8px 10px 12px;
+  overflow:hidden;
+  white-space:nowrap;
+  text-overflow:ellipsis;
+  cursor:pointer;
+}
+.bc-thread-actions{
+  display:flex;
+  align-items:center;
+  gap:2px;
+  flex:none;
+  opacity:0;
+  padding-right:4px;
+  transition:opacity .16s ease;
+}
+.bc-thread-row:hover .bc-thread-actions,.bc-thread-row:focus-within .bc-thread-actions,.bc-thread-row.is-active .bc-thread-actions{opacity:1}
+.bc-thread-actions button{
+  width:30px;
+  height:30px;
+  border:0;
+  border-radius:8px;
+  background:transparent;
+  color:#bdbdbd;
+  display:grid;
+  place-items:center;
+  cursor:pointer;
+}
+.bc-thread-actions button:hover{background:#303030;color:#fff}
+.bc-thread-actions svg{width:16px;height:16px}
+.bc-empty-chat{color:#777;font-size:13px;padding:10px 12px}
+.bc-account{
+  border-top:1px solid #222;
+  padding-top:12px;
+  display:flex;
+  align-items:center;
+  gap:10px;
+}
+.bc-account>span{
+  width:32px;height:32px;border-radius:50%;display:grid;place-items:center;background:#2488d8;color:#fff;font-size:13px;font-weight:700;
+}
+.bc-account div{display:flex;flex-direction:column;min-width:0}
+.bc-account strong{font-size:14px;overflow:hidden;text-overflow:ellipsis}
+.bc-account a{font-size:12px;color:#aaa;text-decoration:none}
+
+.bc-main{
+  min-width:0;
+  min-height:0;
+  height:100dvh;
+  position:relative;
+  display:flex;
+  flex-direction:column;
+  background:#000;
+  overflow-y:auto;
+  overflow-x:hidden;
+  scrollbar-gutter:stable;
+  overscroll-behavior:contain;
+}
+.bc-topbar{
+  height:70px;
+  display:flex;
+  align-items:center;
+  justify-content:flex-start;
+  padding:0 28px;
+  flex:none;
+  position:sticky;
+  top:0;
+  z-index:3;
+  background:#000;
+}
+.bc-kicker{font-size:12px;color:#8c8c8c}
+.bc-topbar h1{font-size:18px;line-height:1.2;margin:2px 0 0;font-weight:650}
+.bc-scroll{min-height:0;flex:1 0 auto;overflow:visible;padding:20px 20px 180px}
+.bc-thread{width:min(1020px,100%);margin:0 auto;display:flex;flex-direction:column;gap:30px}
+.bc-empty{
+  min-height:54vh;
+  display:grid;
+  place-items:center;
+  text-align:center;
+  color:#dcdcdc;
+  align-content:center;
+  gap:18px;
+  padding-top:42px;
+}
+.bc-empty-greeting-stage{
+  position:relative;
+  display:inline-block;
+  width:fit-content;
+  max-width:min(92vw,900px);
+  min-width:min(360px,92vw);
+  padding:78px 14px 18px;
+}
+.bc-empty-walk-track{
+  position:absolute;
+  top:0;
+  left:14px;
+  right:14px;
+  height:78px;
+  overflow:hidden;
+  pointer-events:none;
+}
+.bc-empty-walker{
+  position:absolute;
+  left:0;
+  bottom:0;
+  width:64px;
+  display:block;
+  will-change:transform;
+}
+.bc-empty-walker #__sbwk_flip__{transform-origin:center;display:block}
+.bc-empty-walker svg{width:64px!important;height:auto!important;overflow:visible}
+.bc-empty h2{
+  font-family:"Instrument Serif",Georgia,serif;
+  font-size:clamp(34px,4.8vw,58px);
+  line-height:1.04;
+  letter-spacing:0;
+  font-weight:400;
+  margin:0;
+}
+.bc-turn{display:flex;gap:16px;align-items:flex-start}
+.bc-turn-user{justify-content:flex-end}
+.bc-user-bubble{
+  max-width:min(660px,72%);
+  padding:14px 18px;
+  border-radius:22px;
+  background:#2f2f2f;
+  color:#ececec;
+  font-size:16px;
+  line-height:1.45;
+}
+.bc-answer{
+  max-width:760px;
+  color:#ececec;
+  font-size:16px;
+  line-height:1.65;
+}
+.bc-answer p{margin:0 0 14px}
+.bc-answer p:last-child{margin-bottom:0}
+.bc-answer code{background:#1f1f1f;border-radius:6px;padding:2px 5px}
+.bc-answer a{color:#ff9c92}
+.bc-caret{display:inline-block;width:2px;height:1em;background:#ececec;animation:bcBlink 1s steps(2) infinite}
+@keyframes bcBlink{50%{opacity:0}}
+.bc-thinking{display:flex;gap:6px;padding-top:8px}
+.bc-thinking i{width:7px;height:7px;border-radius:50%;background:#aaa;animation:bcDot 1.1s infinite ease-in-out}
+.bc-thinking i:nth-child(2){animation-delay:.15s}
+.bc-thinking i:nth-child(3){animation-delay:.3s}
+@keyframes bcDot{0%,100%{opacity:.35;transform:translateY(0)}45%{opacity:1;transform:translateY(-5px)}}
+.bc-doc{display:inline-flex;margin-top:8px;color:#ff9c92;text-decoration:none}
+.bc-delegate-head{display:flex;align-items:center;gap:10px;color:#aaa;font-size:13px;margin-bottom:8px}
+.bc-delegate-head button{border:1px solid #444;background:#191919;border-radius:999px;padding:4px 10px;cursor:pointer}
+.bc-step{color:#aaa;font-size:14px}
+
+.bc-dock{
+  position:sticky;
+  left:0;
+  right:0;
+  bottom:0;
+  z-index:4;
+  flex:none;
+  margin-top:auto;
+  padding:24px 24px 30px;
+  background:linear-gradient(180deg,rgba(0,0,0,0),#000 34%);
+  pointer-events:none;
+}
+.bc-composer-wrap{width:min(1020px,100%);margin:0 auto}
+.bc-composer-wrap,.bc-error{pointer-events:auto}
+.bc-attachments{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 8px 14px}
+.bc-attachment{display:inline-flex;align-items:center;gap:8px;border:1px solid #3a3a3a;background:#1f1f1f;border-radius:999px;padding:6px 8px 6px 12px;font-size:13px}
+.bc-attachment small{color:#999}
+.bc-attachment button{width:22px;height:22px;border:0;background:transparent;display:grid;place-items:center;cursor:pointer}
+.bc-attachment svg{width:14px;height:14px}
+.bc-composer{
+  min-height:68px;
+  display:flex;
+  align-items:center;
+  gap:8px;
+  border-radius:28px;
+  background:#2a2a2a;
+  border:1px solid #3a3a3a;
+  padding:10px;
+  box-shadow:0 16px 50px rgba(0,0,0,.35);
+}
+.bc-composer.is-voice{border-color:#f4f4f4;box-shadow:0 0 0 1px #f4f4f4,0 0 38px rgba(255,255,255,.18)}
+.bc-composer textarea{
+  flex:1;
+  min-width:0;
+  max-height:180px;
+  resize:none;
+  border:0;
+  outline:0;
+  background:transparent;
+  color:#f4f4f4;
+  font-size:17px;
+  line-height:1.45;
+  padding:12px 4px;
+}
+.bc-composer textarea::placeholder{color:#a5a5a5}
+.bc-route-btn{
+  height:42px;
+  border-radius:999px;
+  padding:0 12px;
+  display:flex;
+  align-items:center;
+  gap:7px;
+  align-self:center;
+  background:#383838;
+  border:1px solid #505050;
+  color:#f2f2f2;
+  font-weight:600;
+}
+.bc-route-btn.is-on{background:#4a2522;color:#ffc1bb}
+.bc-send,.bc-voice-orb{
+  width:46px;height:46px;border-radius:50%;display:grid;place-items:center;flex:none;
+  align-self:center;
+  border:1px solid #f7f7f7;
+  box-shadow:0 3px 12px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.45);
+}
+.bc-send svg,.bc-voice-orb svg,.bc-icon-btn svg,.bc-route-btn svg{opacity:1;stroke:currentColor}
+.bc-composer .bc-send{background:#f4f4f4;color:#050505}
+.bc-send:disabled{
+  opacity:1;
+  cursor:default;
+  background:#515151;
+  color:#dcdcdc;
+  border-color:#696969;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.08);
+}
+.bc-composer .bc-voice-orb{background:#f7f7f7;color:#050505}
+.bc-composer.is-voice .bc-voice-orb{
+  background:#fff;
+  color:#050505;
+  box-shadow:0 0 0 3px #f3a92a,0 0 24px rgba(243,169,42,.48);
+}
+.bc-icon-btn.is-on{background:#f4f4f4;color:#000;border-color:#fff}
+.bc-error{width:min(1020px,100%);margin:0 auto 10px;padding:10px 14px;border-radius:12px;background:#3a1f1d;color:#ffb3ad}
+
+.bc-voice-stage{
+  position:fixed;
+  top:0;
+  right:0;
+  bottom:0;
+  left:300px;
+  z-index:1000;
+  display:grid;
+  place-items:center;
+  background:#000;
+  overflow:hidden;
+}
+.bchat.is-collapsed .bc-voice-stage{left:72px}
+.bc-voice-glow{
+  position:absolute;
+  width:480px;height:480px;border-radius:50%;
+  background:radial-gradient(circle,rgba(232,120,110,.24),rgba(232,120,110,.08) 42%,transparent 70%);
+  animation:bcVoicePulse 2.2s ease-in-out infinite;
+}
+.bc-voice-stage.is-speaking .bc-voice-glow{animation-duration:.8s}
+@keyframes bcVoicePulse{0%,100%{transform:scale(.92);opacity:.7}50%{transform:scale(1.08);opacity:1}}
+.bc-big-braino{position:relative;z-index:1;filter:drop-shadow(0 18px 28px rgba(232,120,110,.22))}
+.bc-voice-sonar{
+  position:absolute;
+  left:50%;
+  top:42%;
+  width:170px;
+  height:170px;
+  transform:translate(-50%,-50%);
+  pointer-events:none;
+  z-index:-1;
+  opacity:0;
+}
+.bc-big-braino.is-listening .bc-voice-sonar{opacity:1}
+.bc-voice-sonar span{
+  position:absolute;
+  inset:0;
+  border-radius:50%;
+  border:2px solid rgba(232,120,110,.42);
+  transform:scale(.45);
+  opacity:0;
+  animation:bcVoiceSonar 2.4s ease-out infinite;
+}
+.bc-voice-sonar span:nth-child(2){animation-delay:1.2s}
+@keyframes bcVoiceSonar{
+  0%{transform:scale(.45);opacity:0}
+  14%{opacity:.65}
+  100%{transform:scale(2.7);opacity:0}
+}
+.bc-voice-state{
+  position:absolute;
+  bottom:116px;
+  z-index:2;
+  font-size:15px;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+  color:#e8e8e8;
+}
+.bc-voice-hint{
+  position:absolute;
+  bottom:76px;
+  z-index:2;
+  color:#888;
+  font-size:13px;
+}
+.bc-voice-error{
+  position:absolute;
+  bottom:150px;
+  z-index:2;
+  max-width:520px;
+  padding:10px 14px;
+  border-radius:12px;
+  background:#3a1f1d;
+  color:#ffb3ad;
+  text-align:center;
+}
+.bc-voice-error a{color:#fff}
+.bc-voice-close{
+  position:absolute;
+  top:22px;
+  right:22px;
+  width:42px;
+  height:42px;
+  border:0;
+  border-radius:50%;
+  background:#1f1f1f;
+  color:#f4f4f4;
+  display:grid;
+  place-items:center;
+  cursor:pointer;
+  z-index:2;
+}
+
+@media (max-width:760px){
+  .bchat{grid-template-columns:1fr}
+  .bc-sidebar{position:absolute;z-index:4;width:300px;inset:0 auto 0 0;transform:translateX(-100%);transition:transform .2s}
+  .bchat:not(.is-collapsed) .bc-sidebar{transform:translateX(0)}
+  .bchat.is-collapsed{grid-template-columns:1fr}
+  .bc-voice-stage,.bchat.is-collapsed .bc-voice-stage{left:0}
+  .bc-topbar{padding-left:76px}
+  .bc-scroll{padding-inline:14px}
+  .bc-user-bubble{max-width:88%}
+  .bc-dock{padding:18px 12px}
+  .bc-route-btn{display:none}
+  .bc-big-braino .braino-avatar svg{max-width:72vw}
+}
+`;

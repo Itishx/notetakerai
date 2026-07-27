@@ -35,47 +35,49 @@
 /* ── Design tokens ────────────────────────────────────────────────── */
 @layer base {
   :root {
-    /* Warm cream palette */
-    --sb-bg:          #F6F1EA;
-    --sb-bg-2:        #F1EADF;
-    --sb-panel:       #FBF7F1;
-    --sb-panel-2:     #FFFDF9;
-    --sb-ink:         #1B1713;
-    --sb-ink-2:       #4B413A;
-    --sb-ink-3:       #8A7F75;
-    --sb-ink-4:       #B8AFA4;
-    --sb-line:        #E8DFD3;
-    --sb-line-2:      #EFE7DB;
+    /* Pure black. The site is dark now — the cream palette moved to the dark
+       values so ink stays LIGHT on black; flipping only --sb-bg would have put
+       dark ink on a black page. */
+    --sb-bg:          #000000;
+    --sb-bg-2:        #0A0A0A;
+    --sb-panel:       #0E0E0E;
+    --sb-panel-2:     #141414;
+    --sb-ink:         #F2EDE6;
+    --sb-ink-2:       #B8ADA3;
+    --sb-ink-3:       #8A8078;
+    --sb-ink-4:       #4E463E;
+    --sb-line:        #23201C;
+    --sb-line-2:      #1A1815;
     --sb-accent:      #E27D39;
     --sb-accent-2:    #F0A86B;
-    --sb-accent-deep: #C4602A;
-    --sb-accent-soft: #FAF0E6;
+    --sb-accent-deep: #F0A86B;
+    --sb-accent-soft: #241a12;
     --sb-ok:          #4CAF7D;
-    --sb-on-ink:      #FBF7F1;
-    --sb-shadow-sm:   0 1px 2px rgba(40,28,18,.04), 0 4px 12px -4px rgba(40,28,18,.08);
-    --sb-shadow:      0 1px 2px rgba(40,28,18,.04), 0 20px 50px -20px rgba(40,28,18,.18);
-    --sb-shadow-lg:   0 1px 2px rgba(40,28,18,.04), 0 40px 80px -30px rgba(40,28,18,.25);
+    --sb-on-ink:      #0A0A0A;
+    --sb-shadow-sm:   0 1px 2px rgba(0,0,0,.5), 0 4px 12px -4px rgba(0,0,0,.6);
+    --sb-shadow:      0 1px 2px rgba(0,0,0,.5), 0 20px 50px -20px rgba(0,0,0,.8);
+    --sb-shadow-lg:   0 1px 2px rgba(0,0,0,.5), 0 40px 80px -30px rgba(0,0,0,.85);
     --sb-r-sm: 8px; --sb-r: 12px; --sb-r-lg: 18px; --sb-r-xl: 24px;
 
     /* Tailwind compat */
-    --background: 36 33% 92%;
-    --foreground: 20 10% 10%;
-    --card: 36 40% 96%;
-    --card-foreground: 20 10% 10%;
-    --popover: 36 40% 98%;
-    --popover-foreground: 20 10% 10%;
+    --background: 0 0% 0%;
+    --foreground: 36 20% 92%;
+    --card: 0 0% 5%;
+    --card-foreground: 36 20% 92%;
+    --popover: 0 0% 6%;
+    --popover-foreground: 36 20% 92%;
     --primary: 24 70% 54%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 36 25% 90%;
-    --secondary-foreground: 20 10% 20%;
-    --muted: 36 25% 90%;
-    --muted-foreground: 24 8% 52%;
-    --accent: 36 25% 93%;
-    --accent-foreground: 20 10% 10%;
+    --secondary: 0 0% 9%;
+    --secondary-foreground: 36 20% 92%;
+    --muted: 0 0% 9%;
+    --muted-foreground: 30 8% 62%;
+    --accent: 0 0% 10%;
+    --accent-foreground: 36 20% 92%;
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
-    --border: 33 25% 87%;
-    --input: 33 25% 87%;
+    --border: 30 8% 14%;
+    --input: 30 8% 14%;
     --ring: 24 70% 54%;
     --radius: 0.375rem;
   }

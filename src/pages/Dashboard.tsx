@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
+import "./braino-dash.css";
 import SpotifyPanel, { type SpotifyConnectionSummary } from "@/components/SpotifyPanel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -35,7 +36,9 @@ import {
   Plus,
   Search,
   Settings,
+  Shield,
   Sparkles,
+  Trash2,
   Zap,
   XCircle,
 } from "lucide-react";
@@ -103,6 +106,32 @@ type BrainoMemory = {
   category: string;
   salience: number;
   created_at: string;
+};
+
+type VoiceCommandUrl = {
+  id: string;
+  command_id: string;
+  url: string;
+  position: number;
+};
+
+type VoiceCommand = {
+  id: string;
+  mode_id: string;
+  phrase: string;
+  open_mode: "tab" | "incognito";
+  position: number;
+  urls: VoiceCommandUrl[];
+};
+
+type VoiceMode = {
+  id: string;
+  name: string;
+  notch_color: string;
+  is_active: boolean;
+  is_hidden: boolean;
+  position: number;
+  commands: VoiceCommand[];
 };
 
 type BrainoContactDraft = {
@@ -241,7 +270,7 @@ type XSessionSortKey =
   | "replies_received"
   | "total_views";
 
-type DashboardTab = "overview" | "notes" | "tasks" | "xAutomation" | "settings" | "memory" | "highlights";
+type DashboardTab = "overview" | "notes" | "tasks" | "xAutomation" | "settings" | "memory" | "highlights" | "voiceCommands";
 type NoteView = "list" | "grid";
 
 type ActivityPoint = {
@@ -252,7 +281,7 @@ type ActivityPoint = {
   totalCount: number;
 };
 
-const serifStyle = { fontFamily: "Instrument Serif, Georgia, serif" } as const;
+const serifStyle = { fontFamily: "Newsreader, Georgia, serif" } as const;
 const monoStyle = { fontFamily: "JetBrains Mono, monospace" } as const;
 const BRAINO_CONTACT_PHOTO_BUCKET = "braino-contact-photos";
 const BRAINO_CONTACT_PHOTO_MAX_BYTES = 5 * 1024 * 1024;
@@ -262,6 +291,7 @@ function dashboardTabLabel(tab: DashboardTab) {
   if (tab === "tasks") return "Agent Tasks";
   if (tab === "xAutomation") return "X Automation";
   if (tab === "highlights") return "Highlights";
+  if (tab === "voiceCommands") return "Voice Commands";
   return tab.charAt(0).toUpperCase() + tab.slice(1);
 }
 
@@ -969,20 +999,198 @@ function SidebarItem({
       type="button"
       onClick={onClick}
       title={collapsed ? label : undefined}
-      className={cn(
-        "flex items-center gap-2.5 rounded-lg py-2 text-left text-[13px] transition-colors",
-        collapsed ? "w-full justify-center px-0" : "w-full px-3",
-        active
-          ? "bg-[var(--sb-ink)] text-[var(--sb-on-ink)]"
-          : muted
-            ? "text-[var(--sb-ink-3)] hover:bg-[var(--sb-bg-2)] hover:text-[var(--sb-ink-2)]"
-            : "text-[var(--sb-ink-2)] hover:bg-[var(--sb-bg-2)] hover:text-[var(--sb-ink)]",
-      )}
+      className={cn("bd-nav-item", active && "active", muted && "muted", collapsed && "justify-center")}
     >
-      <span className="flex h-4 w-4 flex-shrink-0 items-center justify-center">{icon}</span>
-      {!collapsed && <span>{label}</span>}
-      {!collapsed && badge ? <span className="ml-auto">{badge}</span> : null}
+      <span className="bd-ic">{icon}</span>
+      {!collapsed && <span className="bd-nm">{label}</span>}
+      {!collapsed && badge ? <span className="bd-ct">{badge}</span> : null}
     </button>
+  );
+}
+
+function VoiceModeCard({
+  mode,
+  draggable,
+  onDragStart,
+  onDragEnd,
+  onRename,
+  onColorChange,
+  onDelete,
+  onHide,
+  hideLabel = "Hide",
+  onDeleteCommand,
+  onToggleOpenMode,
+  onAddUrl,
+  onDeleteUrl,
+  draft,
+  onDraftChange,
+  onAddCommand,
+}: {
+  mode: VoiceMode;
+  draggable?: boolean;
+  onDragStart?: () => void;
+  onDragEnd?: () => void;
+  onRename: (name: string) => void;
+  onColorChange: (color: string) => void;
+  onDelete: () => void;
+  onHide: () => void;
+  hideLabel?: string;
+  onDeleteCommand: (commandId: string) => void;
+  onToggleOpenMode: (commandId: string, openMode: "tab" | "incognito") => void;
+  onAddUrl: (commandId: string, url: string) => void;
+  onDeleteUrl: (commandId: string, urlId: string) => void;
+  draft: { phrase: string; url: string; openMode: "tab" | "incognito" };
+  onDraftChange: (draft: { phrase: string; url: string; openMode: "tab" | "incognito" }) => void;
+  onAddCommand: () => void;
+}) {
+  const [nameDraft, setNameDraft] = useState(mode.name);
+  const [urlDrafts, setUrlDrafts] = useState<Record<string, string>>({});
+
+  return (
+    <div
+      draggable={draggable}
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
+      className="bd-mode-card"
+    >
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="cursor-grab select-none text-[var(--sb-ink-4)]" title="Drag to move">&#10287;</span>
+          <span className="bd-mode-swatch" style={{ backgroundColor: mode.notch_color, color: mode.notch_color }} />
+          <input
+            value={nameDraft}
+            onChange={(event) => setNameDraft(event.target.value)}
+            onBlur={() => {
+              if (nameDraft.trim() && nameDraft !== mode.name) onRename(nameDraft.trim());
+            }}
+            className="bd-mode-name max-w-[220px] flex-1"
+          />
+          {mode.is_active ? <span className="bd-tag accent">live</span> : null}
+        </div>
+        <div className="flex flex-shrink-0 items-center gap-2">
+          <input
+            type="color"
+            value={mode.notch_color}
+            onChange={(event) => onColorChange(event.target.value)}
+            className="bd-color-input"
+            title="Notch color"
+          />
+          <button type="button" onClick={onHide} className="bd-btn ghost !px-3 !py-1.5 !text-[12px]">
+            {hideLabel}
+          </button>
+          <button
+            type="button"
+            onClick={onDelete}
+            title="Delete mode"
+            className="grid h-7 w-7 place-items-center rounded-lg text-[var(--sb-ink-4)] transition hover:bg-[var(--sb-bg-2)] hover:text-[var(--sb-ink-2)]"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      </div>
+
+      <div className="space-y-2.5">
+        {mode.commands.length === 0 ? (
+          <div className="rounded-[12px] border border-dashed border-[var(--sb-line-2)] px-4 py-3 text-[12.5px] text-[var(--sb-ink-4)]">
+            No commands in this mode yet.
+          </div>
+        ) : (
+          mode.commands.map((command) => (
+            <div key={command.id} className="bd-cmd group">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="bd-cmd-phrase">&ldquo;{command.phrase}&rdquo;</div>
+                <div className="flex items-center gap-2">
+                  <div className="bd-seg">
+                    <button type="button" className={command.open_mode === "tab" ? "on" : ""} onClick={() => onToggleOpenMode(command.id, "tab")}>
+                      Tab
+                    </button>
+                    <button type="button" className={command.open_mode === "incognito" ? "on" : ""} onClick={() => onToggleOpenMode(command.id, "incognito")}>
+                      Incognito
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => onDeleteCommand(command.id)}
+                    className="rounded-md p-1 text-[var(--sb-ink-4)] opacity-0 transition hover:text-[var(--sb-ink-2)] group-hover:opacity-100"
+                  >
+                    <XCircle className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+
+              <div className="mt-2.5 space-y-1">
+                {command.urls.map((u) => (
+                  <div key={u.id} className="bd-url-row">
+                    <span className="truncate">{u.url}</span>
+                    <button type="button" onClick={() => onDeleteUrl(command.id, u.id)} className="flex-shrink-0 text-[var(--sb-ink-4)] hover:text-[var(--sb-ink-2)]">
+                      <XCircle className="h-3 w-3" />
+                    </button>
+                  </div>
+                ))}
+                {command.urls.length > 1 ? (
+                  <div className="bd-eyebrow !text-[9px]">Opens a random 1&ndash;{command.urls.length} of these each time</div>
+                ) : null}
+                <div className="flex items-center gap-1.5 pt-1.5">
+                  <input
+                    value={urlDrafts[command.id] || ""}
+                    onChange={(event) => setUrlDrafts((prev) => ({ ...prev, [command.id]: event.target.value }))}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        onAddUrl(command.id, urlDrafts[command.id] || "");
+                        setUrlDrafts((prev) => ({ ...prev, [command.id]: "" }));
+                      }
+                    }}
+                    placeholder="Add another URL…"
+                    className="bd-input h-7 flex-1 !py-0 !text-[11.5px]"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onAddUrl(command.id, urlDrafts[command.id] || "");
+                      setUrlDrafts((prev) => ({ ...prev, [command.id]: "" }));
+                    }}
+                    className="bd-btn ghost !px-2.5 !py-1 !text-[11px]"
+                  >
+                    Add
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))
+        )}
+
+        <div className="flex flex-wrap items-center gap-1.5 rounded-[12px] border border-dashed border-[var(--sb-line-2)] px-3 py-2.5">
+          <input
+            value={draft.phrase}
+            onChange={(event) => onDraftChange({ ...draft, phrase: event.target.value })}
+            placeholder="Phrase, e.g. open my inbox"
+            className="bd-input h-8 min-w-[150px] flex-1 !py-0 !text-[12px]"
+          />
+          <input
+            value={draft.url}
+            onChange={(event) => onDraftChange({ ...draft, url: event.target.value })}
+            placeholder="https://…"
+            className="bd-input h-8 min-w-[150px] flex-1 !py-0 !text-[12px]"
+          />
+          <select
+            value={draft.openMode}
+            onChange={(event) => onDraftChange({ ...draft, openMode: event.target.value as "tab" | "incognito" })}
+            className="bd-input h-8 !py-0 !text-[12px]"
+          >
+            <option value="tab">Tab</option>
+            <option value="incognito">Incognito</option>
+          </select>
+          <button
+            type="button"
+            onClick={onAddCommand}
+            disabled={!draft.phrase.trim() || !draft.url.trim()}
+            className="bd-btn dark !py-1.5"
+          >
+            <Plus className="h-3.5 w-3.5" /> Add command
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -1113,7 +1321,17 @@ export default function Dashboard() {
   // Memory Engine: auto-remembered facts + the master on/off toggle.
   const [brainoMemories, setBrainoMemories] = useState<BrainoMemory[]>([]);
   const [memoryEnabled, setMemoryEnabled] = useState(true);
+  const [swearingEnabled, setSwearingEnabled] = useState(false);
+  const [swearingSaving, setSwearingSaving] = useState(false);
   const [memoryToggleSaving, setMemoryToggleSaving] = useState(false);
+  // Voice Commands: modes (with notch color) each holding phrase -> URL(s) shortcuts.
+  const [voiceModes, setVoiceModes] = useState<VoiceMode[]>([]);
+  const [newModeName, setNewModeName] = useState("");
+  const [hiddenFolderUnlocked, setHiddenFolderUnlocked] = useState(false);
+  const [hiddenFolderUnlocking, setHiddenFolderUnlocking] = useState(false);
+  const [draggedModeId, setDraggedModeId] = useState<string | null>(null);
+  const [newCommandDraft, setNewCommandDraft] = useState<Record<string, { phrase: string; url: string; openMode: "tab" | "incognito" }>>({});
+  const [hiddenModesCredentialId, setHiddenModesCredentialId] = useState<string | null>(null);
   const [editingMemoryId, setEditingMemoryId] = useState<string | null>(null);
   const [editingMemoryDraft, setEditingMemoryDraft] = useState("");
   const [contactDraft, setContactDraft] = useState<BrainoContactDraft>(emptyContactDraft());
@@ -1410,7 +1628,7 @@ export default function Dashboard() {
     setDisplayName(profile?.display_name || "");
 
     const load = async () => {
-      const [notesRes, commandsRes, notionRes, driveRes, calendarRes, contactsRes, spotifyRes, profileMemoryRes, xStatsRes, xConnRes, scheduledXRes, xPersonaRes, xSessionsRes, xReplyLogsRes, brainoMemoriesRes] = await Promise.all([
+      const [notesRes, commandsRes, notionRes, driveRes, calendarRes, contactsRes, spotifyRes, profileMemoryRes, xStatsRes, xConnRes, scheduledXRes, xPersonaRes, xSessionsRes, xReplyLogsRes, brainoMemoriesRes, voiceModesRes, voiceCommandsRes, voiceCommandUrlsRes] = await Promise.all([
         supabase
           .from("notes")
           .select("id,title,source_title,source_url,structured_notes,use_case,created_at")
@@ -1442,7 +1660,7 @@ export default function Dashboard() {
           .maybeSingle(),
         supabase
           .from("profiles")
-          .select("overall_memory,memory_enabled")
+          .select("overall_memory,memory_enabled,personality_settings,hidden_modes_credential_id")
           .eq("user_id", user.id)
           .maybeSingle(),
         (supabase as any)
@@ -1482,6 +1700,20 @@ export default function Dashboard() {
           .order("salience", { ascending: false })
           .order("created_at", { ascending: false })
           .limit(300),
+        (supabase as any)
+          .from("voice_modes")
+          .select("id,name,notch_color,is_active,is_hidden,position")
+          .eq("user_id", user.id)
+          .order("position", { ascending: true }),
+        (supabase as any)
+          .from("voice_commands")
+          .select("id,mode_id,phrase,open_mode,position")
+          .eq("user_id", user.id)
+          .order("position", { ascending: true }),
+        (supabase as any)
+          .from("voice_command_urls")
+          .select("id,command_id,url,position")
+          .order("position", { ascending: true }),
       ]);
 
       if (notesRes.data) setNotes(notesRes.data as Note[]);
@@ -1495,7 +1727,29 @@ export default function Dashboard() {
       setOverallMemory(loadedOverallMemory);
       setOverallMemoryDraft(loadedOverallMemory);
       setBrainoMemories(((brainoMemoriesRes?.data as BrainoMemory[] | null) || []));
+      {
+        const rawModes = ((voiceModesRes?.data as Omit<VoiceMode, "commands">[] | null) || []);
+        const rawCommands = ((voiceCommandsRes?.data as Omit<VoiceCommand, "urls">[] | null) || []);
+        const rawUrls = ((voiceCommandUrlsRes?.data as VoiceCommandUrl[] | null) || []);
+        const urlsByCommand = new Map<string, VoiceCommandUrl[]>();
+        for (const u of rawUrls) {
+          const list = urlsByCommand.get(u.command_id) || [];
+          list.push(u);
+          urlsByCommand.set(u.command_id, list);
+        }
+        const commandsByMode = new Map<string, VoiceCommand[]>();
+        for (const c of rawCommands) {
+          const list = commandsByMode.get(c.mode_id) || [];
+          list.push({ ...c, urls: urlsByCommand.get(c.id) || [] });
+          commandsByMode.set(c.mode_id, list);
+        }
+        setVoiceModes(rawModes.map((m) => ({ ...m, commands: commandsByMode.get(m.id) || [] })));
+      }
+      setHiddenModesCredentialId(
+        (profileMemoryRes.data as { hidden_modes_credential_id?: string | null } | null)?.hidden_modes_credential_id || null,
+      );
       setMemoryEnabled((profileMemoryRes.data as { memory_enabled?: boolean } | null)?.memory_enabled !== false);
+      setSwearingEnabled(((profileMemoryRes.data as { personality_settings?: { swearing?: boolean } } | null)?.personality_settings?.swearing) === true);
       setXConn((xConnRes as XConnection) || null);
       setScheduledXPosts((scheduledXRes.data as ScheduledXPost[] | null) || []);
       setXAutomationStats((xStatsRes.data as XAutomationStats) || null);
@@ -2667,6 +2921,23 @@ export default function Dashboard() {
     toast({ title: next ? "Memory on" : "Memory off", description: next ? "Braino will keep learning about you." : "Braino won't save new memories." });
   };
 
+  // Personality — "let Braino swear" toggle (merges into personality_settings jsonb).
+  const handleToggleSwearing = async (next: boolean) => {
+    if (!user) return;
+    setSwearingEnabled(next);
+    setSwearingSaving(true);
+    const { data: cur } = await supabase.from("profiles").select("personality_settings").eq("user_id", user.id).maybeSingle();
+    const merged = { ...((cur as { personality_settings?: Record<string, unknown> } | null)?.personality_settings || {}), swearing: next };
+    const { error } = await supabase.from("profiles").update({ personality_settings: merged }).eq("user_id", user.id);
+    setSwearingSaving(false);
+    if (error) {
+      setSwearingEnabled(!next);
+      toast({ title: "Could not update setting", description: error.message || "Please try again.", variant: "destructive" });
+      return;
+    }
+    toast({ title: next ? "Swearing on" : "Swearing off", description: next ? "Braino can talk like a friend now." : "Braino keeps it clean." });
+  };
+
   // Memory Engine — delete one auto-remembered fact.
   const handleDeleteBrainoMemory = async (id: string) => {
     setBrainoMemories((prev) => prev.filter((m) => m.id !== id));
@@ -2681,6 +2952,187 @@ export default function Dashboard() {
     if (!next) return;
     setBrainoMemories((prev) => prev.map((m) => (m.id === id ? { ...m, content: next } : m)));
     await supabase.from("braino_memories").update({ content: next, source: "user", updated_at: new Date().toISOString() }).eq("id", id);
+  };
+
+  // Voice Commands — create a new mode ("group"). Position = end of list.
+  const handleCreateVoiceMode = async () => {
+    if (!user) return;
+    const name = newModeName.trim();
+    if (!name) return;
+    setNewModeName("");
+    const position = voiceModes.length;
+    const { data, error } = await (supabase as any)
+      .from("voice_modes")
+      .insert({ user_id: user.id, name, position })
+      .select("id,name,notch_color,is_active,is_hidden,position")
+      .single();
+    if (error || !data) {
+      toast({ title: "Could not create mode", description: error?.message || "Please try again.", variant: "destructive" });
+      return;
+    }
+    setVoiceModes((prev) => [...prev, { ...(data as Omit<VoiceMode, "commands">), commands: [] }]);
+  };
+
+  // Voice Commands — rename a mode inline.
+  const handleRenameVoiceMode = async (modeId: string, name: string) => {
+    setVoiceModes((prev) => prev.map((m) => (m.id === modeId ? { ...m, name } : m)));
+    await (supabase as any).from("voice_modes").update({ name, updated_at: new Date().toISOString() }).eq("id", modeId);
+  };
+
+  // Voice Commands — change a mode's notch boot-up color.
+  const handleChangeModeColor = async (modeId: string, notch_color: string) => {
+    setVoiceModes((prev) => prev.map((m) => (m.id === modeId ? { ...m, notch_color } : m)));
+    await (supabase as any).from("voice_modes").update({ notch_color, updated_at: new Date().toISOString() }).eq("id", modeId);
+  };
+
+  // Voice Commands — move a mode in/out of the hidden folder.
+  const handleToggleModeHidden = async (modeId: string, is_hidden: boolean) => {
+    setVoiceModes((prev) => prev.map((m) => (m.id === modeId ? { ...m, is_hidden } : m)));
+    await (supabase as any).from("voice_modes").update({ is_hidden, updated_at: new Date().toISOString() }).eq("id", modeId);
+  };
+
+  // Voice Commands — delete a mode (cascades to its commands + urls).
+  const handleDeleteVoiceMode = async (modeId: string) => {
+    setVoiceModes((prev) => prev.filter((m) => m.id !== modeId));
+    await (supabase as any).from("voice_modes").delete().eq("id", modeId);
+  };
+
+  // Voice Commands — add a command (phrase + first URL) to a mode.
+  const handleAddVoiceCommand = async (modeId: string) => {
+    if (!user) return;
+    const draft = newCommandDraft[modeId];
+    const phrase = draft?.phrase?.trim();
+    const url = draft?.url?.trim();
+    if (!phrase || !url) return;
+    const mode = voiceModes.find((m) => m.id === modeId);
+    const position = mode?.commands.length || 0;
+    const { data: cmdData, error: cmdError } = await (supabase as any)
+      .from("voice_commands")
+      .insert({ user_id: user.id, mode_id: modeId, phrase, open_mode: draft.openMode || "tab", position })
+      .select("id,mode_id,phrase,open_mode,position")
+      .single();
+    if (cmdError || !cmdData) {
+      toast({ title: "Could not add command", description: cmdError?.message || "Please try again.", variant: "destructive" });
+      return;
+    }
+    const { data: urlData } = await (supabase as any)
+      .from("voice_command_urls")
+      .insert({ command_id: cmdData.id, url, position: 0 })
+      .select("id,command_id,url,position")
+      .single();
+    setNewCommandDraft((prev) => ({ ...prev, [modeId]: { phrase: "", url: "", openMode: "tab" } }));
+    setVoiceModes((prev) =>
+      prev.map((m) =>
+        m.id === modeId
+          ? { ...m, commands: [...m.commands, { ...(cmdData as Omit<VoiceCommand, "urls">), urls: urlData ? [urlData as VoiceCommandUrl] : [] }] }
+          : m,
+      ),
+    );
+  };
+
+  // Voice Commands — delete a command entirely.
+  const handleDeleteVoiceCommand = async (modeId: string, commandId: string) => {
+    setVoiceModes((prev) => prev.map((m) => (m.id === modeId ? { ...m, commands: m.commands.filter((c) => c.id !== commandId) } : m)));
+    await (supabase as any).from("voice_commands").delete().eq("id", commandId);
+  };
+
+  // Voice Commands — toggle a command's tab / incognito open mode.
+  const handleToggleCommandOpenMode = async (modeId: string, commandId: string, open_mode: "tab" | "incognito") => {
+    setVoiceModes((prev) =>
+      prev.map((m) => (m.id === modeId ? { ...m, commands: m.commands.map((c) => (c.id === commandId ? { ...c, open_mode } : c)) } : m)),
+    );
+    await (supabase as any).from("voice_commands").update({ open_mode, updated_at: new Date().toISOString() }).eq("id", commandId);
+  };
+
+  // Voice Commands — add another URL to a command; Braino opens a random subset (1..N) of these on trigger.
+  const handleAddCommandUrl = async (modeId: string, commandId: string, url: string) => {
+    const clean = url.trim();
+    if (!clean) return;
+    const mode = voiceModes.find((m) => m.id === modeId);
+    const command = mode?.commands.find((c) => c.id === commandId);
+    const position = command?.urls.length || 0;
+    const { data, error } = await (supabase as any)
+      .from("voice_command_urls")
+      .insert({ command_id: commandId, url: clean, position })
+      .select("id,command_id,url,position")
+      .single();
+    if (error || !data) return;
+    setVoiceModes((prev) =>
+      prev.map((m) =>
+        m.id === modeId
+          ? { ...m, commands: m.commands.map((c) => (c.id === commandId ? { ...c, urls: [...c.urls, data as VoiceCommandUrl] } : c)) }
+          : m,
+      ),
+    );
+  };
+
+  // Voice Commands — remove one URL from a command.
+  const handleDeleteCommandUrl = async (modeId: string, commandId: string, urlId: string) => {
+    setVoiceModes((prev) =>
+      prev.map((m) =>
+        m.id === modeId
+          ? { ...m, commands: m.commands.map((c) => (c.id === commandId ? { ...c, urls: c.urls.filter((u) => u.id !== urlId) } : c)) }
+          : m,
+      ),
+    );
+    await (supabase as any).from("voice_command_urls").delete().eq("id", urlId);
+  };
+
+  // Voice Commands — register this device's fingerprint/biometric as the hidden-folder key.
+  const handleRegisterHiddenModesFingerprint = async () => {
+    if (!user) return;
+    if (!window.PublicKeyCredential) {
+      toast({ title: "Not supported", description: "This browser/device doesn't support fingerprint unlock.", variant: "destructive" });
+      return;
+    }
+    try {
+      const challenge = crypto.getRandomValues(new Uint8Array(32));
+      const userIdBytes = new TextEncoder().encode(user.id);
+      const credential = (await navigator.credentials.create({
+        publicKey: {
+          challenge,
+          rp: { name: "Braino", id: window.location.hostname },
+          user: { id: userIdBytes, name: user.email || "braino-user", displayName: displayName || "Braino user" },
+          pubKeyCredParams: [{ type: "public-key", alg: -7 }, { type: "public-key", alg: -257 }],
+          authenticatorSelection: { authenticatorAttachment: "platform", userVerification: "required" },
+          timeout: 60000,
+        },
+      })) as PublicKeyCredential | null;
+      if (!credential) throw new Error("No credential returned");
+      const credentialId = btoa(String.fromCharCode(...new Uint8Array(credential.rawId))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+      await supabase.from("profiles").update({ hidden_modes_credential_id: credentialId }).eq("user_id", user.id);
+      setHiddenModesCredentialId(credentialId);
+      setHiddenFolderUnlocked(true);
+      toast({ title: "Fingerprint set", description: "This device can now unlock your hidden modes." });
+    } catch (err) {
+      toast({ title: "Could not register fingerprint", description: (err as Error)?.message || "Please try again.", variant: "destructive" });
+    }
+  };
+
+  // Voice Commands — prompt the registered fingerprint/biometric to unlock the hidden folder for this session.
+  const handleUnlockHiddenFolder = async () => {
+    if (!hiddenModesCredentialId) return;
+    setHiddenFolderUnlocking(true);
+    try {
+      const challenge = crypto.getRandomValues(new Uint8Array(32));
+      const padded = hiddenModesCredentialId.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((hiddenModesCredentialId.length + 3) % 4);
+      const rawId = Uint8Array.from(atob(padded), (c) => c.charCodeAt(0));
+      const assertion = await navigator.credentials.get({
+        publicKey: {
+          challenge,
+          rpId: window.location.hostname,
+          allowCredentials: [{ id: rawId, type: "public-key" }],
+          userVerification: "required",
+          timeout: 60000,
+        },
+      });
+      if (!assertion) throw new Error("No assertion returned");
+      setHiddenFolderUnlocked(true);
+    } catch (err) {
+      toast({ title: "Unlock failed", description: (err as Error)?.message || "Fingerprint didn't match.", variant: "destructive" });
+    } finally {
+      setHiddenFolderUnlocking(false);
+    }
   };
 
   const handleToggleAutoMode = async (field: "auto_posting_enabled" | "auto_reply_enabled", value: boolean) => {
@@ -2765,8 +3217,8 @@ export default function Dashboard() {
 
   if (loading || !user) {
     return (
-      <div className="min-h-screen bg-[var(--sb-bg)]">
-        <div className="grid min-h-screen lg:grid-cols-[240px_minmax(0,1fr)]">
+      <div className="bd-root min-h-screen bg-[var(--sb-bg)]">
+        <div className="grid min-h-screen lg:grid-cols-[244px_minmax(0,1fr)]">
           <div className="hidden border-r border-[var(--sb-line)] bg-[var(--sb-panel)] p-5 lg:block">
             <Skeleton className="mb-6 h-7 w-32 rounded-full bg-[var(--sb-bg-2)]" />
             <Skeleton className="mb-6 h-11 w-full rounded-xl bg-[var(--sb-bg-2)]" />
@@ -2791,14 +3243,14 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-[var(--sb-bg)] text-[var(--sb-ink)]">
+    <div className="bd-root min-h-screen bg-[var(--sb-bg)] text-[var(--sb-ink)]">
       <div
         className="grid min-h-screen transition-[grid-template-columns] duration-300"
-        style={{ gridTemplateColumns: sidebarCollapsed ? "64px minmax(0,1fr)" : "240px minmax(0,1fr)" }}
+        style={{ gridTemplateColumns: sidebarCollapsed ? "64px minmax(0,1fr)" : "244px minmax(0,1fr)" }}
       >
         <aside className={cn(
-          "sticky top-0 hidden h-screen flex-col border-r border-[var(--sb-line)] bg-[var(--sb-panel)] py-4 lg:flex overflow-hidden transition-all duration-300",
-          sidebarCollapsed ? "px-2 items-center" : "px-3.5",
+          "bd-sidebar hidden py-[22px] lg:flex transition-all duration-300",
+          sidebarCollapsed ? "px-2 items-center" : "px-4",
         )}>
           <div className={cn("flex items-center pb-5", sidebarCollapsed ? "justify-center" : "justify-between")}>
             {sidebarCollapsed ? (
@@ -2894,7 +3346,7 @@ export default function Dashboard() {
 
           <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
           {!sidebarCollapsed && (
-            <div style={monoStyle} className="px-2 pb-1 text-[9.5px] uppercase tracking-[0.14em] text-[var(--sb-ink-3)]">
+            <div className="bd-nav-grp">
               Workspace
             </div>
           )}
@@ -2962,7 +3414,7 @@ export default function Dashboard() {
           </div>
 
           {!sidebarCollapsed && (
-            <div style={monoStyle} className="px-2 pb-1 pt-4 text-[9.5px] uppercase tracking-[0.14em] text-[var(--sb-ink-3)]">
+            <div className="bd-nav-grp">
               Library
             </div>
           )}
@@ -2997,10 +3449,24 @@ export default function Dashboard() {
                 ) : undefined
               }
             />
+            <SidebarItem
+              collapsed={sidebarCollapsed}
+              label="Voice Commands"
+              active={activeTab === "voiceCommands"}
+              onClick={() => setActiveTab("voiceCommands")}
+              icon={<Zap className="h-3.5 w-3.5" />}
+              badge={
+                voiceModes.length > 0 ? (
+                  <span style={monoStyle} className={cn("rounded-full px-2 py-0.5 text-[10px]", activeTab === "voiceCommands" ? "bg-white/12 text-white/80" : "bg-[var(--sb-accent-soft)] text-[var(--sb-accent-deep)]")}>
+                    {voiceModes.length}
+                  </span>
+                ) : undefined
+              }
+            />
           </div>
 
           {!sidebarCollapsed && (
-            <div style={monoStyle} className="px-2 pb-1 pt-4 text-[9.5px] uppercase tracking-[0.14em] text-[var(--sb-ink-3)]">
+            <div className="bd-nav-grp">
               Account
             </div>
           )}
@@ -3015,10 +3481,10 @@ export default function Dashboard() {
           </div>
           </div>
 
-          <div className="mt-auto w-full border-t border-[var(--sb-line-2)] pt-3">
+          <div className="bd-side-foot mt-auto w-full">
             {!sidebarCollapsed && (
-              <div className="mb-3 overflow-hidden rounded-xl bg-[var(--sb-ink)] p-4 text-[var(--sb-on-ink)]">
-                <div style={monoStyle} className="mb-2 text-[10px] uppercase tracking-[0.12em] text-[var(--sb-accent-2)]">
+              <div className="bd-invert mb-3 overflow-hidden rounded-xl p-4">
+                <div style={monoStyle} className="bd-invert-accent mb-2 text-[10px] uppercase tracking-[0.12em]">
                   {isPremium ? "PREMIUM ACTIVE" : "FREE PLAN"}
                 </div>
                 <h4 style={serifStyle} className="mb-3 max-w-[170px] text-[20px] leading-[1.15] tracking-[-0.02em]">
@@ -3058,21 +3524,16 @@ export default function Dashboard() {
               type="button"
               onClick={() => setActiveTab("settings")}
               title={sidebarCollapsed ? (profile?.display_name || firstName) : undefined}
-              className={cn(
-                "flex w-full items-center gap-2.5 rounded-lg py-2 text-left transition hover:bg-[var(--sb-bg-2)]",
-                sidebarCollapsed ? "justify-center px-0" : "px-2.5",
-              )}
+              className={cn("bd-profile w-full", sidebarCollapsed && "justify-center")}
             >
-              <div className="grid h-7 w-7 flex-shrink-0 place-items-center rounded-full bg-[linear-gradient(135deg,#6B4E32,#8C5A3D)] text-xs font-semibold text-white">
+              <div className="bd-avatar">
                 {getInitials(profile?.display_name || user.email || "SB")}
               </div>
               {!sidebarCollapsed && (
                 <>
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-[13px] font-medium text-[var(--sb-ink)]">{profile?.display_name || firstName}</div>
-                    <div style={monoStyle} className="text-[10px] uppercase tracking-[0.04em] text-[var(--sb-ink-3)]">
-                      BETA
-                    </div>
+                    <div className="bd-pn truncate">{profile?.display_name || firstName}</div>
+                    <div className="bd-pb">{isPremium ? "Premium" : "Free"}</div>
                   </div>
                   <ChevronRight className="h-4 w-4 text-[var(--sb-ink-3)]" />
                 </>
@@ -3083,35 +3544,28 @@ export default function Dashboard() {
         </aside>
 
         <main className="min-w-0">
-          <div className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b border-[var(--sb-line-2)] bg-[color-mix(in_srgb,var(--sb-bg)_86%,transparent)] px-4 backdrop-blur md:px-8">
-            <div style={monoStyle} className="hidden items-center gap-2 text-[11px] text-[var(--sb-ink-3)] md:flex">
-              <span>Braino</span>
-              <span className="text-[var(--sb-ink-4)]">/</span>
-              <b className="font-medium text-[var(--sb-ink)]">{dashboardTabLabel(activeTab)}</b>
-            </div>
+          <div className="bd-topbar px-4 md:!px-10">
+            <span className="bd-tt hidden md:inline">{dashboardTabLabel(activeTab)}</span>
 
-            <div className="flex max-w-[540px] flex-1 items-center gap-2 rounded-[10px] border border-[var(--sb-line-2)] bg-[var(--sb-panel)] px-3 py-2 text-[13px] text-[var(--sb-ink-3)]">
-              <Search className="h-3.5 w-3.5" />
+            <label className="bd-search">
+              <Search className="h-[15px] w-[15px] flex-shrink-0" />
               <input
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
                 placeholder={topSearchPlaceholder}
-                className="w-full border-0 bg-transparent text-[13.5px] text-[var(--sb-ink)] outline-none placeholder:text-[var(--sb-ink-3)]"
               />
-              <span style={monoStyle} className="hidden rounded border border-[var(--sb-line-2)] bg-[var(--sb-bg-2)] px-1.5 py-0.5 text-[10px] md:inline-flex">
-                CMD K
-              </span>
-            </div>
+              <span className="bd-kbd hidden md:inline-flex">CMD K</span>
+            </label>
 
-            <div className="ml-auto flex items-center gap-2">
-              <button className="grid h-9 w-9 place-items-center rounded-[10px] text-[var(--sb-ink-2)] transition hover:bg-[var(--sb-panel)] hover:text-[var(--sb-ink)]">
+            <div className="flex items-center gap-1.5">
+              <button className="grid h-8 w-8 place-items-center rounded-lg text-[var(--sb-ink-3)] transition hover:bg-[var(--sb-panel)] hover:text-[var(--sb-ink)]">
                 <Bell className="h-4 w-4" />
               </button>
-              <button className="grid h-9 w-9 place-items-center rounded-[10px] text-[var(--sb-ink-2)] transition hover:bg-[var(--sb-panel)] hover:text-[var(--sb-ink)]">
+              <button className="grid h-8 w-8 place-items-center rounded-lg text-[var(--sb-ink-3)] transition hover:bg-[var(--sb-panel)] hover:text-[var(--sb-ink)]">
                 <HelpCircle className="h-4 w-4" />
               </button>
               <Link to="/remote-agent">
-                <button className="hidden items-center gap-2 rounded-[10px] bg-[var(--sb-ink)] px-4 py-2 text-[13px] font-medium text-[var(--sb-on-ink)] transition hover:opacity-90 md:inline-flex">
+                <button className="bd-btn dark hidden md:inline-flex">
                   <Plus className="h-3.5 w-3.5" />
                   New task
                 </button>
@@ -3119,7 +3573,9 @@ export default function Dashboard() {
             </div>
           </div>
 
-          <div className="mx-auto w-full max-w-[1320px] px-4 pb-20 pt-8 md:px-8 lg:px-10">
+          <div className="bd-pane">
+            {activeTab === "overview" && (
+            <>
             <div className="mb-8 flex flex-wrap items-end justify-between gap-6">
               <div>
                 <h1 style={serifStyle} className="mb-2 text-[clamp(36px,4.4vw,56px)] leading-[1.02] tracking-[-0.03em]">
@@ -3135,7 +3591,7 @@ export default function Dashboard() {
               </div>
 
               <div className="min-w-[220px] rounded-[14px] border border-[var(--sb-line-2)] bg-[var(--sb-panel-2)] px-4 py-3">
-                <div style={monoStyle} className="mb-2 flex items-center justify-between text-[11px] uppercase tracking-[0.06em] text-[var(--sb-ink-3)]">
+                <div style={monoStyle} className="mb-2 flex items-center justify-between gap-3 text-[11px] uppercase tracking-[0.06em] text-[var(--sb-ink-3)]">
                   <span>Delegate this month</span>
                   <span className="text-[var(--sb-ink)]">
                     <b>{tasksThisMonth}</b>
@@ -3197,21 +3653,23 @@ export default function Dashboard() {
                 );
               })}
             </div>
+            </>
+            )}
 
             {activeTab === "overview" && (
               <div>
                 <div className="mb-8 grid gap-3 md:grid-cols-2 xl:grid-cols-[1.4fr_1fr_1fr_1fr]">
-                  <div className="relative overflow-hidden rounded-[18px] border border-[var(--sb-ink)] bg-[linear-gradient(180deg,var(--sb-ink)_0%,#2A211A_100%)] p-5 text-[var(--sb-on-ink)]">
+                  <div className="bd-invert relative overflow-hidden rounded-[18px] p-5">
                     <div className="mb-3 flex items-center justify-between">
-                      <span style={monoStyle} className="text-[10.5px] uppercase tracking-[0.14em] text-[var(--sb-accent-2)]">
+                      <span style={monoStyle} className="bd-invert-accent text-[10.5px] uppercase tracking-[0.14em]">
                         Tasks done
                       </span>
-                      <span className="grid h-[22px] w-[22px] place-items-center rounded-md bg-white/10 text-[var(--sb-accent-2)]">
+                      <span className="bd-invert-accent grid h-[22px] w-[22px] place-items-center rounded-md bg-white/10">
                         <CheckCircle2 className="h-3.5 w-3.5" />
                       </span>
                     </div>
                     <div style={serifStyle} className="mb-1 flex items-end gap-1 text-5xl leading-none tracking-[-0.03em]">
-                      <span className="italic text-[var(--sb-accent-2)]">{doneTasks}</span>
+                      <span className="bd-invert-accent italic">{doneTasks}</span>
                       <span className="pb-1 text-lg font-sans text-white/50">/ {commands.length}</span>
                     </div>
                     <div className="text-[13.5px] text-white/65">{successRate}% success rate</div>
@@ -3777,6 +4235,10 @@ export default function Dashboard() {
 
             {activeTab === "notes" && (
               <div>
+                <div className="bd-phead">
+                  <h1>Everything, <span className="bd-serif-i">remembered.</span></h1>
+                  <div className="bd-sub">{notes.length} notes captured across your workspaces. Searchable, and yours.</div>
+                </div>
                 <div className="mb-5 flex flex-wrap items-center gap-3">
                   <div className="flex min-w-[240px] max-w-[420px] flex-1 items-center gap-2 rounded-[10px] border border-[var(--sb-line-2)] bg-[var(--sb-panel-2)] px-3 py-2">
                     <Search className="h-3.5 w-3.5 text-[var(--sb-ink-3)]" />
@@ -3903,6 +4365,10 @@ export default function Dashboard() {
 
             {activeTab === "tasks" && (
               <div>
+                <div className="bd-phead">
+                  <h1>Delegate to the <span className="bd-serif-i">agent.</span></h1>
+                  <div className="bd-sub">Tell Braino what to do in the browser and it runs the steps for you.</div>
+                </div>
                 <div className="mb-5 flex flex-wrap items-center gap-3">
                   <div className="flex min-w-[240px] max-w-[420px] flex-1 items-center gap-2 rounded-[10px] border border-[var(--sb-line-2)] bg-[var(--sb-panel-2)] px-3 py-2">
                     <Search className="h-3.5 w-3.5 text-[var(--sb-ink-3)]" />
@@ -3963,6 +4429,10 @@ export default function Dashboard() {
 
             {activeTab === "xAutomation" && (
               <div className="space-y-5">
+                <div className="bd-phead">
+                  <h1>X on <span className="bd-serif-i">autopilot.</span></h1>
+                  <div className="bd-sub">Braino drafts replies and schedules posts. You stay in control.</div>
+                </div>
                 {/* X sub-tab nav */}
                 <div className="flex gap-1 rounded-xl border border-[var(--sb-line-2)] bg-[var(--sb-panel-2)] p-1">
                   {(["settings", "activity"] as const).map((tab) => (
@@ -5055,6 +5525,28 @@ export default function Dashboard() {
 
             {activeTab === "settings" && (
               <div className="grid gap-5 xl:grid-cols-2">
+                <div className="bd-phead xl:col-span-2">
+                  <h1>Settings.</h1>
+                  <div className="bd-sub">Account, connections, and how Braino sounds.</div>
+                </div>
+                <div className="rounded-[18px] border border-[var(--sb-line-2)] bg-[var(--sb-panel-2)] p-6 xl:col-span-2">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <h3 style={serifStyle} className="mb-1 text-[24px] leading-none tracking-[-0.02em]">
+                        Let Braino <em className="text-[var(--sb-accent-deep)]">swear.</em>
+                      </h3>
+                      <p className="max-w-[560px] text-[13px] leading-relaxed text-[var(--sb-ink-2)]">
+                        Off by default. When on, Braino talks like a close friend and is allowed the occasional salty word (for example, he&apos;ll say &quot;fucking around&quot; when you&apos;re joking with him). Off keeps every reply clean.
+                      </p>
+                    </div>
+                    <div className="flex flex-shrink-0 items-center gap-2.5">
+                      <span style={monoStyle} className="text-[11px] uppercase tracking-[0.14em] text-[var(--sb-ink-3)]">
+                        {swearingEnabled ? "Swearing on" : "Swearing off"}
+                      </span>
+                      <Switch checked={swearingEnabled} disabled={swearingSaving} onCheckedChange={handleToggleSwearing} />
+                    </div>
+                  </div>
+                </div>
                 <div className="rounded-[18px] border border-[var(--sb-line-2)] bg-[var(--sb-panel-2)] p-6">
                   <h3 style={serifStyle} className="mb-1 text-[26px] leading-none tracking-[-0.02em]">
                     Profile
@@ -5466,13 +5958,9 @@ export default function Dashboard() {
 
             {activeTab === "memory" && (
               <div>
-                <div className="mb-6">
-                  <h2 style={serifStyle} className="text-[28px] leading-none tracking-[-0.02em] text-[var(--sb-ink)]">
-                    Memory
-                  </h2>
-                  <p className="mt-1.5 text-[13.5px] text-[var(--sb-ink-2)]">
-                    Braino should always know who you are. Your overall memory lives here, and X automation persona data gets merged in automatically when it exists.
-                  </p>
+                <div className="bd-phead">
+                  <h1>What Braino <span className="bd-serif-i">knows.</span></h1>
+                  <div className="bd-sub">Long-term memory across everything you do. Edit or forget any of it.</div>
                 </div>
 
                 <div className="grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
@@ -5480,10 +5968,10 @@ export default function Dashboard() {
                     <div className="mb-4 flex items-start justify-between gap-4">
                       <div>
                         <h3 style={serifStyle} className="text-[24px] leading-none tracking-[-0.02em] text-[var(--sb-ink)]">
-                          Overall <em className="text-[var(--sb-accent-deep)]">memory.</em>
+                          What Braino should <em className="text-[var(--sb-accent-deep)]">know about you.</em>
                         </h3>
                         <p className="mt-2 max-w-[520px] text-[13px] leading-relaxed text-[var(--sb-ink-2)]">
-                          This is Braino&apos;s always-on understanding of who you are outside of any single integration.
+                          Tell him as much or as little as you want. The more real it is, the more he feels like yours: he will reference it, tease you with it, and keep you accountable to it.
                         </p>
                       </div>
                       <Badge
@@ -5501,9 +5989,16 @@ export default function Dashboard() {
                         if (overallMemorySaved) setOverallMemorySaved(false);
                         if (overallMemoryError) setOverallMemoryError(null);
                       }}
-                      placeholder={"Who are you? What should Braino consistently know about you?\n\nExample:\nI’m a CS student building AI products. I prefer concise answers, direct feedback, and practical examples. I care about startups, product design, and growth. If X automation is enabled, treat that persona as an extension of this broader identity."}
+                      placeholder={"Who are you, really? What are you building, what are you afraid of, what should he hold you to?\n\nYou can keep it practical (“I prefer concise answers and direct feedback”) or go deeper (“I struggle to ship, call me out when I start rebuilding instead of launching”). He works with whatever you give him."}
                       className="min-h-[240px] rounded-[16px] border-[var(--sb-line-2)] bg-[var(--sb-panel)] text-[13.5px] leading-relaxed"
                     />
+
+                    <div className="mt-3 rounded-[14px] border border-dashed border-[var(--sb-line)] bg-[var(--sb-panel)] px-4 py-3">
+                      <p className="text-[12.5px] leading-relaxed text-[var(--sb-ink-3)]">
+                        <span className="font-medium text-[var(--sb-ink-2)]">We don&apos;t care about your data.</span>{" "}
+                        Truly. Nobody here reads this and nobody ever will; it exists so Braino knows you and you feel a little lighter having said it somewhere. This is not about forming a dependency on an app. It is about a companion who actually knows the person he sits with. The founder filled his in first.
+                      </p>
+                    </div>
 
                     <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
                       <div style={monoStyle} className="text-[11px] text-[var(--sb-ink-4)]">
@@ -5779,13 +6274,9 @@ export default function Dashboard() {
 
             {activeTab === "highlights" && (
               <div>
-                <div className="mb-6">
-                  <h2 style={serifStyle} className="text-[28px] leading-none tracking-[-0.02em] text-[var(--sb-ink)]">
-                    Highlights
-                  </h2>
-                  <p className="mt-1.5 text-[13.5px] text-[var(--sb-ink-2)]">
-                    Text you've saved from pages across the web. Select any passage and ask SideBrain to highlight it.
-                  </p>
+                <div className="bd-phead">
+                  <h1>Passages worth <span className="bd-serif-i">keeping.</span></h1>
+                  <div className="bd-sub">Text you&apos;ve saved from pages across the web. Select any passage and ask Braino to highlight it.</div>
                 </div>
 
                 {dataLoading ? (
@@ -5859,6 +6350,164 @@ export default function Dashboard() {
                     ))}
                   </div>
                 )}
+              </div>
+            )}
+
+            {activeTab === "voiceCommands" && (
+              <div>
+                <div className="bd-phead">
+                  <h1>Say it, <span className="bd-serif-i">open it.</span></h1>
+                  <div className="bd-sub">
+                    Group your shortcuts into modes. Say &quot;Braino, start &lt;mode&gt;&quot; to activate one: its commands go live and
+                    Braino&apos;s notch takes on its color. Each command opens the URL you configured directly, no searching, no thinking.
+                    Attach more than one URL and Braino opens a random handful each time.
+                  </div>
+                </div>
+
+                <div className="bd-ask">
+                  <input
+                    value={newModeName}
+                    onChange={(event) => setNewModeName(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") handleCreateVoiceMode();
+                    }}
+                    placeholder="Name a new mode, e.g. Work…"
+                  />
+                  <button type="button" className="bd-send" onClick={handleCreateVoiceMode} title="Create mode">
+                    <Plus className="h-[17px] w-[17px]" />
+                  </button>
+                </div>
+
+                <div className="bd-shead">
+                  <h2>Your modes</h2>
+                  {voiceModes.length > 0 ? (
+                    <span className="bd-mono text-[11px] text-[var(--sb-ink-3)]">
+                      {voiceModes.reduce((n, m) => n + m.commands.length, 0)} commands
+                    </span>
+                  ) : null}
+                </div>
+
+                {dataLoading ? (
+                  <div className="space-y-3">
+                    {Array.from({ length: 3 }).map((_, i) => (
+                      <Skeleton key={i} className="h-24 rounded-[18px] bg-[var(--sb-bg-2)]" />
+                    ))}
+                  </div>
+                ) : (
+                  <div
+                    className="space-y-4"
+                    onDragOver={(event) => event.preventDefault()}
+                    onDrop={() => {
+                      if (draggedModeId) handleToggleModeHidden(draggedModeId, false);
+                      setDraggedModeId(null);
+                    }}
+                  >
+                    {voiceModes.filter((m) => !m.is_hidden).length === 0 ? (
+                      <div className="bd-empty">
+                        <h3>No modes yet</h3>
+                        <p>Name one above, then teach it what to open. Say the phrase, Braino opens the link.</p>
+                      </div>
+                    ) : (
+                      voiceModes
+                        .filter((m) => !m.is_hidden)
+                        .map((mode) => (
+                          <VoiceModeCard
+                            key={mode.id}
+                            mode={mode}
+                            draggable
+                            onDragStart={() => setDraggedModeId(mode.id)}
+                            onDragEnd={() => setDraggedModeId(null)}
+                            onRename={(name) => handleRenameVoiceMode(mode.id, name)}
+                            onColorChange={(color) => handleChangeModeColor(mode.id, color)}
+                            onDelete={() => handleDeleteVoiceMode(mode.id)}
+                            onHide={() => handleToggleModeHidden(mode.id, true)}
+                            onDeleteCommand={(commandId) => handleDeleteVoiceCommand(mode.id, commandId)}
+                            onToggleOpenMode={(commandId, openMode) => handleToggleCommandOpenMode(mode.id, commandId, openMode)}
+                            onAddUrl={(commandId, url) => handleAddCommandUrl(mode.id, commandId, url)}
+                            onDeleteUrl={(commandId, urlId) => handleDeleteCommandUrl(mode.id, commandId, urlId)}
+                            draft={newCommandDraft[mode.id] || { phrase: "", url: "", openMode: "tab" }}
+                            onDraftChange={(draft) => setNewCommandDraft((prev) => ({ ...prev, [mode.id]: draft }))}
+                            onAddCommand={() => handleAddVoiceCommand(mode.id)}
+                          />
+                        ))
+                    )}
+                  </div>
+                )}
+
+                <div className="bd-shead"><h2>Hidden</h2></div>
+                <div>
+                  <div
+                    className={cn("bd-dropzone", draggedModeId && "over")}
+                    onDragOver={(event) => event.preventDefault()}
+                    onDrop={() => {
+                      if (draggedModeId) handleToggleModeHidden(draggedModeId, true);
+                      setDraggedModeId(null);
+                    }}
+                  >
+                    <div className="mb-3 flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2.5">
+                        <FolderOpen className="h-4 w-4 text-[var(--sb-ink-3)]" />
+                        <h3 style={serifStyle} className="text-[19px] leading-none tracking-[-0.01em] text-[var(--sb-ink)]">
+                          Hidden modes
+                        </h3>
+                        <span className="bd-tag">{voiceModes.filter((m) => m.is_hidden).length}</span>
+                      </div>
+                      {!hiddenModesCredentialId ? (
+                        <button type="button" onClick={handleRegisterHiddenModesFingerprint} className="bd-btn ghost !py-1.5 !text-[12px]">
+                          <Shield className="h-3.5 w-3.5" /> Set up fingerprint
+                        </button>
+                      ) : !hiddenFolderUnlocked ? (
+                        <button type="button" onClick={handleUnlockHiddenFolder} disabled={hiddenFolderUnlocking} className="bd-btn ghost !py-1.5 !text-[12px]">
+                          <Shield className="h-3.5 w-3.5" />
+                          {hiddenFolderUnlocking ? "Waiting…" : "Unlock"}
+                        </button>
+                      ) : (
+                        <button type="button" onClick={() => setHiddenFolderUnlocked(false)} className="bd-btn ghost !py-1.5 !text-[12px]">
+                          Lock
+                        </button>
+                      )}
+                    </div>
+
+                    <p className="mb-4 max-w-[560px] text-[12.5px] leading-relaxed text-[var(--sb-ink-3)]">
+                      Drag a mode here to hide it from the list above. Reopening this folder asks for your fingerprint. Visibility
+                      only: a hidden mode still activates by voice exactly as before.
+                    </p>
+
+                    {!hiddenFolderUnlocked ? (
+                      <div className="bd-locked">
+                        {voiceModes.filter((m) => m.is_hidden).length} mode{voiceModes.filter((m) => m.is_hidden).length === 1 ? "" : "s"} locked
+                      </div>
+                    ) : voiceModes.filter((m) => m.is_hidden).length === 0 ? (
+                      <div className="bd-locked !border-dashed">Nothing hidden yet</div>
+                    ) : (
+                      <div className="space-y-4">
+                        {voiceModes
+                          .filter((m) => m.is_hidden)
+                          .map((mode) => (
+                            <VoiceModeCard
+                              key={mode.id}
+                              mode={mode}
+                              draggable
+                              onDragStart={() => setDraggedModeId(mode.id)}
+                              onDragEnd={() => setDraggedModeId(null)}
+                              onRename={(name) => handleRenameVoiceMode(mode.id, name)}
+                              onColorChange={(color) => handleChangeModeColor(mode.id, color)}
+                              onDelete={() => handleDeleteVoiceMode(mode.id)}
+                              onHide={() => handleToggleModeHidden(mode.id, false)}
+                              hideLabel="Unhide"
+                              onDeleteCommand={(commandId) => handleDeleteVoiceCommand(mode.id, commandId)}
+                              onToggleOpenMode={(commandId, openMode) => handleToggleCommandOpenMode(mode.id, commandId, openMode)}
+                              onAddUrl={(commandId, url) => handleAddCommandUrl(mode.id, commandId, url)}
+                              onDeleteUrl={(commandId, urlId) => handleDeleteCommandUrl(mode.id, commandId, urlId)}
+                              draft={newCommandDraft[mode.id] || { phrase: "", url: "", openMode: "tab" }}
+                              onDraftChange={(draft) => setNewCommandDraft((prev) => ({ ...prev, [mode.id]: draft }))}
+                              onAddCommand={() => handleAddVoiceCommand(mode.id)}
+                            />
+                          ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
             )}
           </div>

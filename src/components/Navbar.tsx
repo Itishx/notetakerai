@@ -5,14 +5,11 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { EXTENSION_DOWNLOAD_URL } from "@/lib/extensionDownload";
 
 const NAV_LINKS = [
-  { href: "/chat", label: "Chat" },
-  { href: "/use-cases", label: "Use Cases" },
   { href: "/automations", label: "Automations" },
-  { href: "/integrations", label: "Integrations" },
-  { href: "/skills", label: "Skills" },
   { href: "/delegate", label: "Delegate" },
   { href: "/premium", label: "Pricing" },
   { href: "/build-braino", label: "Build Yours" },
+  { href: "/chat", label: "Chat" },
 ];
 
 const MoonIcon = () => (

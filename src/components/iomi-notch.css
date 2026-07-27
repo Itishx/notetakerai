@@ -1,0 +1,74 @@
+/* iomi-notch.css — the ONE unified notch nav, ported from /brainos's own
+   notch (brainos.css .bos-notch*). Self-contained color variables so it
+   renders identically on every page, not just /brainos (which defined
+   --ink/--ink-2/--ink-3/--line on its own .bos wrapper). */
+
+.iomi-notch-dock {
+  --iomi-ink: #f5f5f7;
+  --iomi-ink-2: #a1a1a6;
+  --iomi-ink-3: #6e6e73;
+  --iomi-line: rgba(255, 255, 255, 0.11);
+  position: fixed; top: 0; left: 0; right: 0; z-index: 90;
+  display: flex; justify-content: center;
+  pointer-events: none;
+  font-family: "SF Pro Display", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+}
+.iomi-notch {
+  pointer-events: auto;
+  background: #000;
+  border-radius: 0 0 22px 22px;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.07), 0 20px 50px -20px rgba(0, 0, 0, 0.9);
+  overflow: hidden;
+  width: 210px; height: 34px;
+  transition: width 0.55s cubic-bezier(0.32, 0.72, 0, 1), height 0.55s cubic-bezier(0.32, 0.72, 0, 1),
+              border-radius 0.55s cubic-bezier(0.32, 0.72, 0, 1);
+}
+.iomi-notch.open { width: min(660px, calc(100vw - 32px)); height: 268px; border-radius: 0 0 30px 30px; }
+
+.iomi-notch-bar {
+  cursor: pointer; user-select: none;
+  height: 34px; display: flex; align-items: center; justify-content: center; gap: 9px;
+  color: var(--iomi-ink-2); font-size: 12px; letter-spacing: 0.01em;
+}
+/* the "plain" variant's real eyes — every page except /brainos */
+.iomi-notch-realeyes { width: 30px; height: 20px; overflow: visible; }
+
+.iomi-notch-eyes { display: flex; gap: 5px; }
+.iomi-notch-eye {
+  width: 7px; height: 7px; border-radius: 50%; background: #f5f5f7;
+  animation: iomiBlink 5.2s infinite;
+}
+.iomi-notch-eye:nth-child(2) { animation-delay: 0.08s; }
+@keyframes iomiBlink { 0%, 92%, 100% { transform: scaleY(1); } 95% { transform: scaleY(0.1); } }
+.iomi-notch.open .iomi-notch-eye { animation: none; }
+
+.iomi-notch-panel {
+  opacity: 0; transform: translateY(-6px);
+  transition: opacity 0.3s ease 0.12s, transform 0.3s ease 0.12s;
+  padding: 4px 24px 24px;
+}
+.iomi-notch.open .iomi-notch-panel { opacity: 1; transform: none; }
+.iomi-notch-label {
+  font-size: 10.5px; letter-spacing: 0.16em; text-transform: uppercase;
+  color: var(--iomi-ink-3); padding: 6px 0 12px;
+}
+.iomi-notch-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 26px; }
+.iomi-notch-link {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+  padding: 11px 0; border-bottom: 1px solid var(--iomi-line);
+  color: var(--iomi-ink); text-decoration: none; font-size: 16px; font-weight: 500;
+  transition: color 0.15s ease, padding-left 0.15s ease;
+}
+.iomi-notch-link:hover { color: #fff; padding-left: 5px; }
+.iomi-notch-link span { font-size: 11.5px; color: var(--iomi-ink-3); font-weight: 400; }
+
+.iomi-notch-bar:focus { outline: none; }
+.iomi-notch-bar:focus-visible { outline: 2px solid #0a84ff; outline-offset: -2px; }
+
+@media (max-width: 620px) {
+  .iomi-notch.open { height: 380px; }
+  .iomi-notch-grid { grid-template-columns: 1fr; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .iomi-notch, .iomi-notch-panel { transition: none; }
+}

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { Download } from "lucide-react";
+import { Download, Play } from "lucide-react";
 import { EXTENSION_DOWNLOAD_URL } from "@/lib/extensionDownload";
 import Navbar from "@/components/Navbar";
 import SiteFooter from "@/components/SiteFooter";
@@ -133,7 +133,6 @@ const TRICKS: { key: Trick | null; emoji: string; name: string; read: string; wa
 ];
 
 const MORE = [
-  { title: "Use cases", to: "/use-cases", read: "Students, founders, ops, finance. The same brain, a hundred jobs.", walk: "Students, founders, ops people. I'm the same brain doing a hundred different jobs." },
   { title: "Automations", to: "/automations", read: "Recurring tasks Braino runs on a schedule, so you stop doing them.", walk: "The repeat chores? Put me on a schedule and I'll just keep doing them." },
   { title: "Integrations", to: "/integrations", read: "Notion, Spotify, Google, X and more, wired in, not bolted on.", walk: "Notion, Spotify, Google, X. I'm wired into the tools you already live in." },
 ];
@@ -344,6 +343,9 @@ export default function Home() {
             <a className="home-install" href={EXTENSION_DOWNLOAD_URL} download style={heroCta}>
               <Download size={16} /> Install for Chrome
             </a>
+            <Link to="/interactive-tour" style={ghostBtnLink}>
+              <Play size={15} /> Take the interactive tour
+            </Link>
             <Link to="/auth" style={ghostBtnLink}>Get started →</Link>
           </div>
 

@@ -1,0 +1,89 @@
+/* journal.css — the Braino Journal (/journal + articles). Minimal black
+   documentation-blog on the .hos token system. */
+
+.jr { min-height: 100vh; }
+.jr-wrap { max-width: 760px; margin: 0 auto; padding: 0 24px; }
+.jr-head { padding: 150px 0 30px; }
+.jr-title {
+  font-family: "NeueHaas", "Helvetica Neue", sans-serif; font-weight: 700;
+  font-size: clamp(38px, 5.6vw, 66px); line-height: .98; letter-spacing: -.035em; margin-top: 14px;
+}
+.jr-dek { margin: 16px 0 0; color: var(--sb-ink-2); font-size: 17px; line-height: 1.65; max-width: 56ch; }
+
+.jr-entry {
+  display: flex; flex-direction: column; gap: 10px;
+  padding: 34px 0; border-top: 1px solid var(--sb-line);
+  text-decoration: none; color: inherit;
+}
+.jr-entry:last-of-type { border-bottom: 1px solid var(--sb-line); margin-bottom: 110px; }
+.jr-meta { display: flex; gap: 14px; font-family: "SF Mono", ui-monospace, Menlo, monospace; font-size: 10.5px; letter-spacing: .16em; text-transform: uppercase; color: var(--sb-ink-3); }
+.jr-tag { color: var(--coral); }
+.jr-entry-title {
+  font-family: "NeueHaas", "Helvetica Neue", sans-serif; font-weight: 700;
+  font-size: clamp(22px, 3vw, 32px); letter-spacing: -.025em; line-height: 1.1;
+}
+.jr-entry:hover .jr-entry-title { color: var(--coral-hi); }
+.jr-entry p { margin: 0; color: var(--sb-ink-2); font-size: 15.5px; line-height: 1.65; max-width: 60ch; }
+
+.jr-article { max-width: 680px; margin: 0 auto; padding: 150px 24px 90px; }
+.jr-art-head { margin-bottom: 26px; }
+.jr-article h2 {
+  font-family: "NeueHaas", "Helvetica Neue", sans-serif; font-weight: 700;
+  font-size: clamp(22px, 3vw, 30px); letter-spacing: -.022em; margin: 58px 0 0; color: var(--sb-ink);
+}
+.jr-article p { font-size: 18px; line-height: 1.8; color: var(--sb-ink-2); margin: 20px 0 0; }
+.jr-article p strong { color: var(--sb-ink); font-weight: 400; }
+.jr-article p em { color: var(--sb-ink); }
+.jr-traits { list-style: none; padding: 0; margin: 24px 0 0; display: grid; grid-template-columns: 1fr 1fr; gap: 12px 28px; }
+@media (max-width: 640px) { .jr-traits { grid-template-columns: 1fr; } }
+.jr-traits li { display: flex; flex-direction: column; gap: 2px; border-top: 1px solid var(--sb-line-2); padding-top: 10px; }
+.jr-traits b { font-family: "SF Mono", ui-monospace, Menlo, monospace; font-size: 11px; letter-spacing: .16em; text-transform: uppercase; color: var(--coral); font-weight: 400; }
+.jr-traits span { color: var(--sb-ink-2); font-size: 14.5px; }
+.jr-next { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-top: 64px; }
+
+.qa-link {
+  font-family: "SF Mono", ui-monospace, Menlo, monospace; font-size: 11px;
+  letter-spacing: .18em; text-transform: uppercase; color: var(--coral); text-decoration: none;
+}
+.qa-link:hover { color: var(--coral-hi); }
+
+/* Tabs — Writing / Teasers. Same hairline language as the entries: no chrome,
+   just a live underline on the section you are in. */
+.jr-tabs {
+  display: flex;
+  gap: 22px;
+  margin-top: 28px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+.jr-tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 0 12px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font: inherit;
+  font-size: 14px;
+  letter-spacing: 0.01em;
+  color: rgba(255, 255, 255, 0.42);
+  transition: color 0.15s ease;
+}
+.jr-tab:hover { color: rgba(255, 255, 255, 0.72); }
+.jr-tab.on { color: #fff; }
+.jr-tab.on::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 1px;
+  background: #fff;
+}
+.jr-tab-n {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.32);
+}
+.jr-tab.on .jr-tab-n { color: rgba(255, 255, 255, 0.55); }

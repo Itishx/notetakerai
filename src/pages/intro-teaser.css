@@ -1,0 +1,162 @@
+/* intro-teaser.css — extras specific to /intro on top of notch-teaser.css. */
+
+/* ── base kinetic-line styling for Acts 1-6 — identical to /notch's own
+   shared selector (.nt-open, .nt-intro, ...) in notch-teaser.css, just
+   scoped to the new .it- classes so they don't collide with /notch's own
+   scene divs if these two films are ever mounted in the same bundle. ── */
+.it-act1, .it-dontblink, .it-act2, .it-act3, .it-act4, .it-turn, .it-deepbreaths {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  display: flex; flex-wrap: nowrap; justify-content: center; align-items: center;
+  gap: 0 .2em; opacity: 0; color: #fff; text-align: center; white-space: nowrap;
+  font-weight: 600; letter-spacing: -.025em; line-height: 1; z-index: 2;
+  font-size: clamp(28px, 4.6vw, 58px);
+}
+/* match cuts on Acts 1-5 reuse /notch's own convention exactly: invert to
+   white bg / black text, and suppress the stomp animation while the invert
+   is active (see docs/braino-design.md §10 — this IS the effect, a
+   competing stamp-flash on top of it reads as two effects, not one cut). */
+.it-act1.invert-flash, .it-dontblink.invert-flash, .it-act2.invert-flash, .it-act3.invert-flash,
+.it-act4.invert-flash, .it-turn.invert-flash, .nt-open.invert-flash { color: #000000; z-index: 11; }
+/* .nt-open deliberately excluded below — same as /notch's own thatsbraino
+   exclusion (see notch-teaser.css): "+Notch" needs its shimmer sweep to
+   actually play through the match cut, not get killed by this suppression. */
+.it-act1.invert-flash .nt-word.in, .it-dontblink.invert-flash .nt-word.in, .it-act2.invert-flash .nt-word.in,
+.it-act3.invert-flash .nt-word.in, .it-act4.invert-flash .nt-word.in,
+.it-turn.invert-flash .nt-word.in { animation: none !important; }
+/* "As"+"+k." (Act 3's closing fuse) needs its shimmer to survive the same
+   suppression rule above — same specificity, placed after it, so source
+   order lets this win for just the fused word; every other Act 3 cut still
+   gets suppressed normally. */
+.it-act3.invert-flash .nt-fuse.nt-shimmer-play {
+  background-image: linear-gradient(100deg, #0B0B0C 30%, #FFFFFF 48%, #F0A86B 52%, #0B0B0C 70%);
+  background-size: 240% auto;
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  animation: ntGlitterSweep 1s linear both !important;
+}
+
+/* "Notch" glitters once as it fuses onto "Braino" — same convention /notch
+   itself uses for its own thatsBraino scene, just scoped to .nt-open since
+   that's this film's host for the line (see notch-teaser.css for the
+   original — this is the exact same rule, /notch's own file stays untouched). */
+.nt-open .nt-fuse.nt-shimmer-play {
+  background-image: linear-gradient(100deg, #0B0B0C 30%, #FFFFFF 48%, #F0A86B 52%, #0B0B0C 70%);
+  background-size: 240% auto;
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  animation: ntGlitterSweep 1s linear both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .nt-open .nt-fuse { animation: none; background-position: 0% center; }
+}
+
+/* "Anything." breaks the app-name run — off-white, held, its own silent beat. */
+.it-anything { background: #F5EFE7; color: #1B0F0D; }
+
+/* "As"+"+k." — the closing fuse — gets its own 3x-size held beat. */
+.it-act3.it-ask-big { font-size: clamp(84px, 13.8vw, 174px); }
+
+/* "Blink." lands bigger than "Don't" — its own beat, right at the start. */
+.it-blink-big { font-size: clamp(84px, 13.8vw, 174px); }
+
+/* "IOMI" — after every letter cuts in, it jumps to the biggest text in the
+   whole film, gradient-filled — Braino's own coral/gold, not the site's grey
+   wordmark treatment — with a one-shot shimmer sweep across it. Host is
+   .nt-bigger (shared with /notch, untouched there) —
+   .nt-bigger.invert-flash .nt-word.in {animation:none!important} would
+   otherwise kill this shimmer, same trap as the BrainoNotch fuse; the
+   second rule below wins on source order at equal specificity, same fix
+   pattern used there. */
+.nt-bigger.it-iomi-reveal { font-size: clamp(140px, 22vw, 320px); }
+.nt-bigger.invert-flash .nt-word.it-iomi-shimmer {
+  background-image: linear-gradient(96deg, #7A2E22 0%, #E8786E 20%, #F0A86B 42%, #FFD9A0 58%, #F0A86B 74%, #E8786E 90%, #7A2E22 100%);
+  background-size: 220% auto;
+  -webkit-background-clip: text; background-clip: text; color: transparent !important;
+  animation: itIomiSweep 1.1s ease-in-out both !important;
+}
+@keyframes itIomiSweep { 0% { background-position: 200% center; } 100% { background-position: -40% center; } }
+@media (prefers-reduced-motion: reduce) { .it-iomi-shimmer { animation: none; background-position: 0% center; } }
+
+/* subtle blue glow tracing the screen edges, macOS-Siri-style — a "Braino is
+   listening" indicator, right after "Just ask, fam." lands. Inset box-shadow
+   (not a border) so it reads as a soft glow bleeding in from the frame's
+   edge, not a hard line; breathes gently while active (it-listening) so it
+   reads as "live", not just a static tint. */
+.it-screenglow {
+  position: absolute; inset: 0; z-index: 8; opacity: 0; pointer-events: none;
+  box-shadow: inset 0 0 70px 6px rgba(90,150,255,.55), inset 0 0 140px 30px rgba(90,150,255,.22);
+}
+.it-screenglow.it-listening { animation: itListenBreathe 1.3s ease-in-out infinite; }
+@keyframes itListenBreathe {
+  0%, 100% { box-shadow: inset 0 0 70px 6px rgba(90,150,255,.5), inset 0 0 140px 30px rgba(90,150,255,.18); }
+  50%      { box-shadow: inset 0 0 90px 12px rgba(90,150,255,.75), inset 0 0 170px 40px rgba(90,150,255,.3); }
+}
+@media (prefers-reduced-motion: reduce) { .it-screenglow.it-listening { animation: none; } }
+
+/* the shared match-cut overlay for Acts 1-6 — same white full-frame flash
+   /notch's own .nt-invert2 uses, just its own instance for this section. */
+.it-invert {
+  position: absolute; inset: 0; background: #FFFFFF; opacity: 0; z-index: 9;
+  pointer-events: none;
+}
+/* the 2-frame hard cut to black right after "Don't Blink." lands */
+.it-black {
+  position: absolute; inset: 0; background: #000000; opacity: 0; z-index: 10;
+  pointer-events: none;
+}
+
+/* "You've got 50 seconds?" — a separate style from the stomp: the whole
+   sentence fades in TOGETHER as one unit instead of word-by-word. Higher
+   specificity than the base .nt-word.in rule, so it wins regardless of
+   source order. */
+.it-fade-whole .nt-word.in { animation: itFadeWhole .6s ease both; }
+@keyframes itFadeWhole {
+  0%   { opacity: 0; }
+  100% { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) { .it-fade-whole .nt-word.in { animation: none; } }
+
+/* ── editor controls — scoped to Acts 1-6 only (see docs/braino-design.md
+   for the /notch match-cut convention this reuses). Everything except the
+   edit-mode toggle button itself stays hidden until edit mode is on. ── */
+.nt-editbtn {
+  width: auto !important; height: 32px !important; padding: 0 12px; border-radius: 999px !important;
+  font-size: 11px !important; letter-spacing: .04em; color: rgba(245,239,231,.75) !important;
+  background: rgba(255,255,255,.08) !important; opacity: 1 !important;
+}
+.nt-editbtn:hover { background: rgba(255,255,255,.16) !important; transform: none !important; color: #fff !important; }
+body.nt-editmode .nt-editbtn { background: #E8786E !important; color: #1B0F0D !important; }
+
+.nt-fontscale-wrap, .nt-bgcolor { display: none; align-items: center; gap: 4px; font-size: 10px; color: rgba(245,239,231,.6); }
+body.nt-editmode .nt-fontscale-wrap { display: inline-flex; }
+body.nt-editmode .nt-bgcolor { display: inline-block; }
+.nt-fontscale { width: 70px; height: 4px; accent-color: #E8786E; }
+.nt-bgcolor {
+  width: 26px; height: 26px; border: none; border-radius: 6px; padding: 0;
+  background: transparent; cursor: pointer;
+}
+
+.nt-timeline-wrap { position: relative; flex: 1; }
+.nt-timeline-marks {
+  position: absolute; left: 0; right: 0; top: 100%; height: 20px; margin-top: 2px;
+  pointer-events: none; opacity: 0; transition: opacity .2s ease;
+}
+body.nt-editmode .nt-timeline-marks { opacity: 1; pointer-events: auto; }
+.nt-tick {
+  position: absolute; top: 0; width: 1px; height: 6px; background: rgba(255,255,255,.35);
+}
+.nt-cutmark {
+  position: absolute; top: 6px; width: 9px; height: 9px; margin-left: -4.5px;
+  border-radius: 50%; border: 1.5px solid #fff; background: transparent; cursor: pointer;
+  padding: 0; pointer-events: auto;
+}
+.nt-cutmark.on { background: #E8786E; border-color: #E8786E; }
+.nt-cutmark.off { background: transparent; border-color: rgba(255,255,255,.5); }
+.nt-cutmark:hover { transform: scale(1.3); }
+
+/* always-on burned-in frame counter, top-left of the frame — so feedback
+   can reference an exact frame number instead of "somewhere around..." */
+.nt-framecounter {
+  position: absolute; left: 10px; top: 8px; z-index: 20; pointer-events: none;
+  font: 11px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .02em;
+  color: rgba(255,255,255,.82); background: rgba(0,0,0,.35); border-radius: 4px;
+  padding: 2px 6px; text-shadow: 0 1px 2px rgba(0,0,0,.6);
+}

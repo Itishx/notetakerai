@@ -13,6 +13,8 @@ export const DEFAULT_PERSONALITY_SETTINGS: PersonalitySettings = {
   // Dad jokes are OFF by default — they're a delight in small doses but not everyone's taste,
   // so the user opts in. humor.ts only tells the occasional lame pun when this is true.
   dadJokes: false,
+  // Salty language is OFF by default; the user opts in from the dashboard.
+  swearing: false,
   // Braino's baseline comedic register. "dry" = subtle, well-timed wit (his natural voice).
   humor: "dry",
   // How hard he challenges a bad idea. "direct" is his default — kind, but he says it.
@@ -29,6 +31,7 @@ export function resolvePersonalitySettings(
   if (!partial || typeof partial !== "object") return { ...DEFAULT_PERSONALITY_SETTINGS };
   return {
     dadJokes: typeof partial.dadJokes === "boolean" ? partial.dadJokes : DEFAULT_PERSONALITY_SETTINGS.dadJokes,
+    swearing: typeof partial.swearing === "boolean" ? partial.swearing : DEFAULT_PERSONALITY_SETTINGS.swearing,
     humor: partial.humor === "off" || partial.humor === "dry" || partial.humor === "playful"
       ? partial.humor
       : DEFAULT_PERSONALITY_SETTINGS.humor,

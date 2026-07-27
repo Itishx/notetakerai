@@ -1,0 +1,41 @@
+/* notch-reveal.css — styles for the shared NotchReveal component (the boot
+   reveal loop). Class names keep their fl- prefixes from the letter, where
+   this sequence was born. */
+
+/* ── THE REVEAL: sticky black stage where the notch forms out of light ── */
+.fl-reveal { position: relative; min-height: 100vh; display: grid; place-items: center; padding: 12vh 0; }
+.fl-reveal .stage { width: 100%; }
+.fl-reveal .center { position: relative; text-align: center; }
+.fl-reveal .rv-bloom {
+  position: absolute; left: 50%; top: 30%; transform: translate(-50%, -50%);
+  width: min(1100px, 96vw); height: 560px; opacity: 0; pointer-events: none;
+  background:
+    radial-gradient(ellipse 50% 40% at 50% 50%, rgba(207, 224, 255, .16), transparent 65%),
+    radial-gradient(ellipse 70% 55% at 50% 60%, rgba(122, 162, 255, .1), transparent 70%),
+    radial-gradient(ellipse 40% 30% at 46% 64%, rgba(240, 168, 107, .07), transparent 70%);
+}
+.fl-reveal .rv-notchwrap { position: relative; width: min(760px, 94vw); height: 230px; margin: 0 auto; opacity: 0; transform: scale(2.7); transform-origin: top center; }
+@media (max-width: 760px) { .fl-reveal .rv-notchwrap { transform: scale(1.7); height: 150px; } }
+.fl-reveal .rv-notchwrap .nf-face { top: 0; left: 50%; opacity: 1; }
+/* reined-in caption stretch for the big reveal notch — the app's full 560px
+   at 2.7x scale swallowed the stage */
+.fl-reveal .rv-notchwrap .nf-face.captioning .nf-pill { width: 400px; }
+/* black island on a black page: a hairline rim + faint glow keeps the notch
+   silhouette readable, especially when it spreads for captions */
+.fl-reveal .rv-notchwrap .nf-pill {
+  box-shadow: 0 0 0 1px rgba(243, 235, 225, .16), 0 0 26px rgba(232, 120, 110, .14), 0 14px 44px rgba(0, 0, 0, .6);
+}
+.fl-reveal .rv-shimmer { position: absolute; top: 0; left: 50%; transform: translateX(-50%); width: 190px; overflow: visible; opacity: 0; }
+.fl-reveal .rv-p { stroke-linecap: round; }
+.fl-reveal .rv-p-core { stroke-width: 1.4; }
+.fl-reveal .rv-p-glow { stroke-width: 5; opacity: .55; filter: blur(4px); }
+.fl-hello {
+  margin-top: 64px; opacity: 0;
+  font-family: "TNRStd", "Times New Roman", serif; font-style: italic;
+  font-size: clamp(34px, 5.6vw, 58px); color: #F5EFE7;
+  text-shadow: 0 0 30px rgba(232, 120, 110, .35);
+}
+@media (prefers-reduced-motion: reduce) {
+  .fl-reveal .rv-notchwrap { opacity: 1; }
+}
+

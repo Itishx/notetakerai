@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
 import { buildBrainoSystemPrompt, buildUserContextText } from "../../_shared/braino-prompt.ts";
+import type { ClassId } from "../../_shared/emotional-engine/types.ts";
 import {
   formatRealtimeCostSummaryForBraino,
   loadRealtimeCostSummaryForRequest,
@@ -343,6 +344,32 @@ async function synthesizeDesignPrompt(
   }
 }
 
+// Voice-persona override: the persona prompt is the WHOLE system prompt. Page/notes/selection are
+// attached ONLY as factual source material — the voice/style in the persona prompt is absolute and
+// no Braino personality is included.
+function buildPersonaSystemPrompt(
+  personaSystem: string,
+  ctx: { notes?: unknown; pageContext?: any; selectedText?: string | null; userContext?: string },
+): string {
+  const parts: string[] = [String(personaSystem).trim()];
+  const ref: string[] = [];
+  const title = ctx.pageContext?.title;
+  const url = ctx.pageContext?.url;
+  if (title || url) ref.push(`Current page: "${title || "Untitled"}"${url ? ` (${url})` : ""}`);
+  const pageText = typeof ctx.pageContext?.text === "string" ? ctx.pageContext.text : "";
+  if (pageText) ref.push(`Page content:\n${pageText.slice(0, 7000)}`);
+  if (ctx.selectedText) ref.push(`Selected text:\n${String(ctx.selectedText).slice(0, 2000)}`);
+  if (typeof ctx.notes === "string" && ctx.notes.trim()) ref.push(`User notes:\n${ctx.notes.slice(0, 3000)}`);
+  if (ctx.userContext) ref.push(String(ctx.userContext));
+  if (ref.length) {
+    parts.push(
+      "=== SOURCE MATERIAL — use ONLY for facts. Answer accurately, but ALWAYS in the exact voice and style described above. ===\n" +
+        ref.join("\n\n"),
+    );
+  }
+  return parts.join("\n\n");
+}
+
 // --- Main handler ---
 
 serve(async (req) => {
@@ -366,10 +393,17 @@ serve(async (req) => {
       movieDiscoveryPrompt,
       userId,
       driveConnected,
+      responseMedium,
       clientTimeZone,
       clientUtcOffsetMinutes,
       clientLocalTime,
       clientLocation,
+      // Voice-persona full override ("talk like Donald Trump"): when set, this string REPLACES the
+      // entire Braino system prompt (no emotional engine, no base personality) — page/notes ride
+      // along only as factual source material. See buildPersonaSystemPrompt.
+      personaSystem,
+      // Which Braino class is answering (Saburi, Iomi, Telos…). See _shared/emotional-engine/classes.ts.
+      classId,
     } = await req.json();
     const requestAuthHeader = req.headers.get("Authorization");
 
@@ -492,6 +526,13 @@ the full updated markdown notes with {{IMAGE_PLACEHOLDER}} inserted at the right
 
 Current notes:
 ${notes || "(no notes yet)"}`
+      : (typeof personaSystem === "string" && personaSystem.trim())
+      ? buildPersonaSystemPrompt(personaSystem, {
+          notes,
+          pageContext,
+          selectedText: typeof pageContext?.selectedText === "string" ? pageContext.selectedText : null,
+          userContext: buildUserContextText({ clientTimeZone, clientLocalTime, clientLocation }),
+        })
       : buildBrainoSystemPrompt({
           notes,
           pageContext,
@@ -501,13 +542,14 @@ ${notes || "(no notes yet)"}`
           xAutoSessionContext,
           movieContext,
           movieDiscoveryPrompt,
-          responseMedium: "text",
+          responseMedium: responseMedium === "voice" ? "voice" : "text",
           languagePolicy: "mirror_user",
           devPulse: devPulseResult?.formatted || null,
           // Emotional Engine: detect the emotional moment from this message so the right traits
           // lead the reply, and apply the user's personality toggles.
           moment: detectMoment(typeof message === "string" ? message : "").moment,
           personalitySettings: userKnowledge?.personalitySettings ?? null,
+          classId: (["saburi", "iomi", "telos"].includes(classId) ? classId : undefined) as ClassId | undefined,
         });
 
     // Build messages array

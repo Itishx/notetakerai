@@ -21,10 +21,36 @@ import { supabase } from "@/integrations/supabase/client";
 
 type Phase = "greeting" | "features" | "askUsecases" | "usecases" | "askPersonality" | "personality" | "askSignup" | "signup" | "authing" | "welcome";
 type ContentKind = "features" | "usecases" | "personality";
+type TourVariant = "onboarding" | "homepage";
 const SET = { features: CARD_DATA, usecases: SCENARIOS, personality: PERSONALITY };
 const LINES = { features: CARD_LINES, usecases: SCENARIO_LINES, personality: PERSONALITY_LINES };
 
 const GREETING = "Hello. I'm Braino. Are you ready to see all that I can do?";
+const HOMEPAGE_GREETING = "I just got a quick idea. Let me walk you through it.";
+const HOMEPAGE_BRIDGE_LINES: Record<"askUsecases" | "askPersonality", string> = {
+  askUsecases: "Okay so those are the tools. Now, point being, where does this help in real life?",
+  askPersonality: "And one more pointer, because this is the part I actually care about.",
+};
+const HOMEPAGE_DONE_LINE = "That is the quick walkthrough. Now the website is yours.";
+const HOMEPAGE_LINES: Record<ContentKind, string[]> = {
+  features: [
+    "First pointer: open me on any page and just ask. Article, PDF, GitHub, weird documentation, whatever. Point being, I read it right there, so you do not have to copy paste your life away.",
+    "Second pointer: if something is playing, I can capture it. Lecture, podcast, training video. I turn the whole thing into notes, because obviously the brain cannot be trusted at 2 am.",
+    "Third: meetings. I sit there quietly, catch the important bits, pull action items, and help with the follow-up. Correct, the part nobody wants to do.",
+    "And then delegate. This is where it gets fun. You say what you want done in normal language, and I do the clicking while still checking with you on important stuff.",
+  ],
+  usecases: [
+    "Let's say you are studying. You give me the lecture and the PDF, and I turn it into notes, flashcards, and a small panic-reduction system.",
+    "Let's say it is a meeting. I prep you before, listen during, and hand you decisions and follow-ups after. Clean, simple, useful.",
+    "Job hunting is where this becomes serious. I can read roles, compare them with your profile, fill repetitive forms, and keep you focused on the good ones.",
+    "Or shopping. You open five tabs, I read the specs and reviews, then give you one clear answer. Because tabs are not a personality.",
+  ],
+  personality: [
+    "Now here's the actual point. I am not trying to be another chatbot tab. I sit with you in the browser, like a presence, while you work.",
+    "I also do not just nod along. If something is off, I will say it properly. Warm, but not useless. That's the standard.",
+    "And emotionally, that matters. I was built by someone who cares a lot about words, timing, and the feeling underneath the thing.",
+  ],
+};
 const ASK_LINES: Record<string, string> = {
   askUsecases: "That was it for what I can do! Want to see how people actually use me?",
   askPersonality: "Would you like to see what makes me unique?",
@@ -36,6 +62,8 @@ const GATE_WALKER_SVG = BRAINO_WALKER_SVG
   .replaceAll("sbwk-fill", "sbig-fill").replaceAll("sbwk-dark", "sbig-dark").replaceAll("sbwk-glow", "sbig-glow");
 
 const GLASS_FILTER_SVG = `<defs><filter id="__sb_glass_filter__" x="0%" y="0%" width="100%" height="100%" filterUnits="objectBoundingBox"><feTurbulence type="fractalNoise" baseFrequency="0.001 0.005" numOctaves="1" seed="17" result="turbulence"/><feComponentTransfer in="turbulence" result="mapped"><feFuncR type="gamma" amplitude="1" exponent="10" offset="0.5"/><feFuncG type="gamma" amplitude="0" exponent="1" offset="0"/><feFuncB type="gamma" amplitude="0" exponent="1" offset="0.5"/></feComponentTransfer><feGaussianBlur in="turbulence" stdDeviation="3" result="softMap"/><feSpecularLighting in="softMap" surfaceScale="5" specularConstant="1" specularExponent="100" lightingColor="white" result="specLight"><fePointLight x="-200" y="-200" z="300"/></feSpecularLighting><feComposite in="specLight" operator="arithmetic" k1="0" k2="1" k3="1" k4="0" result="litImage"/><feDisplacementMap in="SourceGraphic" in2="softMap" scale="200" xChannelSelector="R" yChannelSelector="G"/></filter></defs>`;
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+const SUPABASE_KEY = (import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY) as string | undefined;
 
 const GATE_CSS = `
 .bg-overlay {
@@ -99,12 +127,22 @@ const GATE_CSS = `
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; transition: opacity 0.3s ease;
 }
 .bg-overlay #__sb_input__::placeholder { color: #4A3D34; }
+.bg-overlay.bg-home-tour #__sb_input__ { display: none; }
 .bg-overlay .sb-bar-icon-btn {
-  width: 42px; height: 42px; border-radius: 50%; border: none; background: #E8786E; color: #fff;
+  min-width: 86px; height: 42px; border-radius: 999px; border: none; background: #E8786E; color: #fff;
   cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0;
-  transition: background 0.15s, opacity 0.3s ease; padding: 0; margin-left: auto;
+  transition: background 0.15s, opacity 0.3s ease, transform 0.15s ease;
+  padding: 0 18px; margin-left: auto;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 13px; font-weight: 800; letter-spacing: 0.01em;
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.34), 0 0 22px rgba(232,120,110,0.72), 0 8px 24px rgba(200,84,74,0.36);
+  animation: bg-next-glow 1.45s ease-in-out infinite;
 }
-.bg-overlay .sb-bar-icon-btn:hover { background: #C9544A; }
+.bg-overlay .sb-bar-icon-btn:hover { background: #C9544A; transform: translateY(-1px); }
+@keyframes bg-next-glow {
+  0%, 100% { box-shadow: 0 0 0 1px rgba(255,255,255,0.34), 0 0 18px rgba(232,120,110,0.58), 0 8px 24px rgba(200,84,74,0.32); }
+  50% { box-shadow: 0 0 0 1px rgba(255,255,255,0.46), 0 0 34px rgba(255,190,130,0.95), 0 10px 30px rgba(232,120,110,0.48); }
+}
 
 /* feature/use-case card (liquid glass) — draggable + resizable */
 .bg-card {
@@ -139,8 +177,14 @@ const GATE_CSS = `
 }
 `;
 
-export default function BrainoIntroGate({ onFinish }: { onFinish?: () => void }) {
-  void onFinish;
+export default function BrainoIntroGate({
+  onFinish,
+  variant = "onboarding",
+}: {
+  onFinish?: () => void;
+  variant?: TourVariant;
+}) {
+  const isHomeTour = variant === "homepage";
   const walkerRef = useRef<HTMLDivElement>(null);
   const barRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -151,12 +195,74 @@ export default function BrainoIntroGate({ onFinish }: { onFinish?: () => void })
   const talkingRef = useRef(false);
   const talkTimerRef = useRef<number | undefined>(undefined);
   const eyesClosedRef = useRef(false);
+  const autoTourStartedRef = useRef(false);
+  const homeTourFinishedRef = useRef(false);
+  const homeAudioRef = useRef<HTMLAudioElement | null>(null);
+  const homeAudioUrlRef = useRef<string | null>(null);
+  const homeSpeechAbortRef = useRef<AbortController | null>(null);
+  const homeSpeechTokenRef = useRef(0);
 
-  const resumingRef = useRef<boolean>((() => { try { return localStorage.getItem("sb_onb") === "signup"; } catch { return false; } })());
+  const resumingRef = useRef<boolean>(!isHomeTour && (() => { try { return localStorage.getItem("sb_onb") === "signup"; } catch { return false; } })());
   const { user, profile, loading } = useAuth();
 
   const [phase, setPhase] = useState<Phase>(resumingRef.current ? "authing" : "greeting");
   const [view, setView] = useState<{ kind: ContentKind; step: number }>({ kind: "features", step: 0 });
+  const [perchedReady, setPerchedReady] = useState(false);
+
+  const estimateHomeSpeechMs = (text: string) => {
+    const words = String(text || "").split(/\s+/).filter(Boolean).length;
+    return Math.max(3600, Math.min(18000, words * 560 + 1400));
+  };
+  const getNarrationLine = (kind: ContentKind, step: number) => (
+    (isHomeTour ? HOMEPAGE_LINES[kind]?.[step] : undefined) || LINES[kind][step] || ""
+  );
+  const stopHomeVoice = () => {
+    homeSpeechTokenRef.current += 1;
+    try { homeSpeechAbortRef.current?.abort(); } catch { /* ignore */ }
+    homeSpeechAbortRef.current = null;
+    if (homeAudioRef.current) {
+      try { homeAudioRef.current.pause(); } catch { /* ignore */ }
+      homeAudioRef.current.src = "";
+      homeAudioRef.current = null;
+    }
+    if (homeAudioUrlRef.current) {
+      try { URL.revokeObjectURL(homeAudioUrlRef.current); } catch { /* ignore */ }
+      homeAudioUrlRef.current = null;
+    }
+  };
+  const stripForHomeSpeech = (text: string) => (
+    String(text || "")
+      .replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, "$1")
+      .replace(/[*_`>#]+/g, "")
+      .replace(/\s+/g, " ")
+      .trim()
+  );
+  const speakHomeLine = async (text: string) => {
+    if (!isHomeTour || !SUPABASE_URL || !SUPABASE_KEY) return;
+    const clean = String(text || "").replace(/\s+/g, " ").trim();
+    if (!clean) return;
+    stopHomeVoice();
+    const token = homeSpeechTokenRef.current;
+    const controller = new AbortController();
+    homeSpeechAbortRef.current = controller;
+    try {
+      const response = await fetch(`${SUPABASE_URL}/functions/v1/fish-audio-tts`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", apikey: SUPABASE_KEY },
+        body: JSON.stringify({ text: stripForHomeSpeech(clean), latency: "normal" }),
+        signal: controller.signal,
+      });
+      if (!response.ok || token !== homeSpeechTokenRef.current) return;
+      const blob = await response.blob();
+      if (token !== homeSpeechTokenRef.current) return;
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      homeAudioUrlRef.current = url;
+      homeAudioRef.current = audio;
+      audio.volume = 1;
+      await audio.play();
+    } catch { /* Fish voice is best-effort on public landing playback. */ }
+  };
 
   const speak = (ms: number) => {
     talkingRef.current = true;
@@ -165,12 +271,21 @@ export default function BrainoIntroGate({ onFinish }: { onFinish?: () => void })
   };
   const sayLine = (text: string, ms = 2900) => {
     const say = sayRef.current; if (!say) return;
+    const speechMs = isHomeTour ? Math.max(ms, estimateHomeSpeechMs(text)) : ms;
     say.classList.remove("show"); say.textContent = text;
-    window.setTimeout(() => { sayRef.current?.classList.add("show"); speak(ms); }, 170);
+    window.setTimeout(() => {
+      sayRef.current?.classList.add("show");
+      speak(speechMs);
+      void speakHomeLine(text);
+    }, 170);
   };
   const showBarInput = (placeholder: string) => {
     const bar = barRef.current, input = inputRef.current; if (!bar) return;
     bar.classList.remove("bg-tour", "sb-climb");
+    if (isHomeTour) {
+      bar.classList.add("bg-tour");
+      return;
+    }
     if (input) { input.placeholder = placeholder; input.value = ""; window.setTimeout(() => input.focus(), 120); }
   };
 
@@ -252,8 +367,18 @@ export default function BrainoIntroGate({ onFinish }: { onFinish?: () => void })
       if (perched) return;
       perched = true;
       walker.classList.add("bg-glow");
-      window.setTimeout(() => { say.classList.add("show"); speak(2600); }, 280);
-      window.setTimeout(() => { walker.classList.remove("bg-glow"); bar.classList.remove("sb-climb"); inputRef.current?.focus(); }, 1000);
+      setPerchedReady(true);
+      window.setTimeout(() => {
+        say.classList.add("show");
+        speak(isHomeTour ? estimateHomeSpeechMs(HOMEPAGE_GREETING) : 2600);
+        if (isHomeTour) void speakHomeLine(HOMEPAGE_GREETING);
+      }, 280);
+      window.setTimeout(() => {
+        walker.classList.remove("bg-glow");
+        bar.classList.remove("sb-climb");
+        if (isHomeTour) bar.classList.add("bg-tour");
+        else inputRef.current?.focus();
+      }, 1000);
     };
 
     if (resuming) {
@@ -305,7 +430,11 @@ export default function BrainoIntroGate({ onFinish }: { onFinish?: () => void })
 
     if (reduce && !resuming) { place(perchX, 0); setArms(0, 0); setLegs(0, 0); setEyes(1); setGaze(0, 0); ph = "perch"; pStart = performance.now(); onPerched(); }
     raf = requestAnimationFrame(step);
-    return () => { cancelAnimationFrame(raf); window.clearTimeout(talkTimerRef.current); };
+    return () => {
+      cancelAnimationFrame(raf);
+      window.clearTimeout(talkTimerRef.current);
+      stopHomeVoice();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -336,15 +465,44 @@ export default function BrainoIntroGate({ onFinish }: { onFinish?: () => void })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, loading]);
 
+  const finishHomeTour = () => {
+    if (homeTourFinishedRef.current) return;
+    homeTourFinishedRef.current = true;
+    stopHomeVoice();
+    sayRef.current?.classList.remove("show");
+    overlayRef.current?.classList.add("bg-exit");
+    window.setTimeout(() => onFinish?.(), 620);
+  };
+
   // ── phase transitions ──
   const enterContent = (kind: ContentKind) => {
     setPhase(kind);
     setView({ kind, step: 0 });
     barRef.current?.classList.add("bg-tour");          // hide input, arrow = Next
-    sayLine(LINES[kind][0]);
+    sayLine(getNarrationLine(kind, 0));
   };
   // A chapter just ended: close the card, hold a beat, then introduce the next part.
   const pauseThenAsk = (p: "askUsecases" | "askPersonality" | "askSignup") => {
+    if (isHomeTour) {
+      setPhase(p);
+      sayRef.current?.classList.remove("show");
+      if (p === "askSignup") {
+        window.setTimeout(() => {
+          const doneMs = estimateHomeSpeechMs(HOMEPAGE_DONE_LINE);
+          sayLine(HOMEPAGE_DONE_LINE, doneMs);
+          window.setTimeout(finishHomeTour, doneMs + 900);
+        }, 650);
+        return;
+      }
+      const nextKind: ContentKind = p === "askUsecases" ? "usecases" : "personality";
+      window.setTimeout(() => {
+        const bridgeLine = HOMEPAGE_BRIDGE_LINES[p];
+        const bridgeMs = estimateHomeSpeechMs(bridgeLine);
+        sayLine(bridgeLine, bridgeMs);
+        window.setTimeout(() => enterContent(nextKind), bridgeMs + 650);
+      }, 750);
+      return;
+    }
     setPhase(p);                                        // cardOpen → false, card fades closed
     sayRef.current?.classList.remove("show");
     window.setTimeout(() => { showBarInput("Type yes…"); sayLine(ASK_LINES[p]); }, 1000);
@@ -355,7 +513,7 @@ export default function BrainoIntroGate({ onFinish }: { onFinish?: () => void })
     walkerRef.current?.classList.add("bg-pulse");       // glow + clickable
     sayLine(SIGNUP_LINE, 6000);
   };
-  const goToStep = (i: number) => { setView(v => ({ ...v, step: i })); sayLine(LINES[view.kind][i]); };
+  const goToStep = (i: number) => { setView(v => ({ ...v, step: i })); sayLine(getNarrationLine(view.kind, i)); };
 
   const advanceContent = () => {
     if (view.step < SET[view.kind].length - 1) goToStep(view.step + 1);
@@ -365,6 +523,13 @@ export default function BrainoIntroGate({ onFinish }: { onFinish?: () => void })
   };
 
   const onBarBtn = () => {
+    if (isHomeTour) {
+      if (phase === "features" || phase === "usecases" || phase === "personality") { advanceContent(); return; }
+      if (phase === "greeting") { enterContent("features"); return; }
+      if (phase === "askUsecases") { enterContent("usecases"); return; }
+      if (phase === "askPersonality") { enterContent("personality"); return; }
+      if (phase === "askSignup") { finishHomeTour(); return; }
+    }
     if (phase === "features" || phase === "usecases" || phase === "personality") { advanceContent(); return; }
     // ask phases — require a typed answer
     if ((inputRef.current?.value || "").trim().length === 0) { inputRef.current?.focus(); return; }
@@ -398,8 +563,26 @@ export default function BrainoIntroGate({ onFinish }: { onFinish?: () => void })
 
   const cardOpen = phase === "features" || phase === "usecases" || phase === "personality";
 
+  useEffect(() => {
+    if (!isHomeTour || !perchedReady || phase !== "greeting" || autoTourStartedRef.current) return;
+    autoTourStartedRef.current = true;
+    const timer = window.setTimeout(() => enterContent("features"), estimateHomeSpeechMs(HOMEPAGE_GREETING) + 900);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isHomeTour, perchedReady, phase]);
+
+  useEffect(() => {
+    if (!isHomeTour || !cardOpen || homeTourFinishedRef.current) return;
+    const line = getNarrationLine(view.kind, view.step);
+    const words = line.split(/\s+/).filter(Boolean).length;
+    const waitMs = Math.max(11000, Math.min(23000, words * 620 + 4800));
+    const timer = window.setTimeout(() => advanceContent(), waitMs);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isHomeTour, cardOpen, phase, view.kind, view.step]);
+
   return (
-    <div ref={overlayRef} className="bg-overlay" role="dialog" aria-label="Braino onboarding">
+    <div ref={overlayRef} className={`bg-overlay${isHomeTour ? " bg-home-tour" : ""}`} role="dialog" aria-label="Braino onboarding">
       <GradientBackground />
       <style>{TOUR_SCENE_CSS}</style>
       <style>{GATE_CSS}</style>
@@ -418,7 +601,7 @@ export default function BrainoIntroGate({ onFinish }: { onFinish?: () => void })
 
       <div className="bg-lane">
         <div ref={walkerRef} className="bg-walker" onClick={onBrainoClick}>
-          <div ref={sayRef} id="__sbwk_say__">{GREETING}</div>
+          <div ref={sayRef} id="__sbwk_say__">{isHomeTour ? HOMEPAGE_GREETING : GREETING}</div>
           <div id="__sbwk_flip__" dangerouslySetInnerHTML={{ __html: GATE_WALKER_SVG }} />
         </div>
       </div>
@@ -427,7 +610,7 @@ export default function BrainoIntroGate({ onFinish }: { onFinish?: () => void })
         <input ref={inputRef} id="__sb_input__" placeholder="Type yes…" autoComplete="off" spellCheck={false}
           onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); onBarBtn(); } }} />
         <button className="sb-bar-icon-btn" title="Continue" onClick={onBarBtn} aria-label="Continue">
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="19" x2="12" y2="5" /><polyline points="5 12 12 5 19 12" /></svg>
+          Next
         </button>
       </div>
     </div>

@@ -345,6 +345,103 @@ background: radial-gradient(circle at 33% 30%, #FFE0B0 0%, #F7A84A 40%, #E07820 
 box-shadow: 0 0 80px rgba(243,154,66,0.55), 0 0 160px rgba(243,154,66,0.22), inset 0 -20px 40px rgba(140,50,5,0.22);
 ```
 
-## 10. Motion-Designer Handoff Kit
+## 10. Kinetic Typography — Match Cut (verbatim definition, reuse in every teaser)
+
+Established across `/notch` and `/aware` (`src/pages/NotchTeaser.tsx` + `notch-teaser.css`, `src/pages/EmotionTeaser.tsx` + `emotion-teaser.css`). Use this exact definition for any future kinetic-type video — don't reinvent it per page.
+
+**The stomp (base word reveal, every word, every video):**
+A word does not fade or slide in. It HITS at full size instantly, with a hot brightness flash that decays — like a stamp striking paper. Zero motion, zero scale change. This is the baseline for every single word in the film, no exceptions, no "softer" variant for slower/breathier scenes — pacing (word-to-word timing) and reveal style (the stomp) are two separate knobs; slowing a scene down means widening the GAP/SW timing constants, never swapping out the stomp animation for a fade.
+
+```css
+.word.in { display: inline-block; animation: wordIn .16s cubic-bezier(0.16, 1, 0.3, 1) both; }
+@keyframes wordIn {
+  0%   { opacity: 1; filter: brightness(2.2); text-shadow: 0 0 22px rgba(255,255,255,.9); }
+  100% { opacity: 1; filter: brightness(1); text-shadow: none; }
+}
+```
+
+**The match cut (the escalation — a stomp big enough to flip the whole frame):**
+A match cut is the moment a word/phrase landing is important enough that the ENTIRE FRAME inverts (bg ↔ text color swap) on that exact landing, instead of just the word itself flashing. It reads as a hard camera cut, not a text animation.
+
+Three ingredients, always together:
+1. **Full-frame invert overlay** — a fixed `inset: 0` div, `opacity: 0` by default, flips to `opacity: 1` bg-colored-as-text the instant the target word/phrase lands, `pointer-events: none`, sits above the text (`z-index: 9`+). The scene's own text color also flips (to the page's base bg color) so text stays legible against the inverted background.
+2. **No animation during the flip** — the stomp's brightness-flash is suppressed while a match-cut is active, globally: `.invert-flash .word.in { animation: none !important; }`. The invert flip itself IS the effect; a competing stamp-flash on top of it reads as two effects fighting, not one clean cut.
+3. **Ring-burst graphic** — 2–3 concentric circles centered on the frame, expanding + fading out (`scale(1)` → `scale(48)`, `opacity: .9` → `0`, ~0.85s, staggered ~90ms per ring), fired once per match-cut landing (guard with a `fired*` boolean so it only bursts once per landing, not every frame).
+
+**Landing detection** (self-bounding, no separate timer): read the kinetic engine's own cache — `seqIdx.get(host) === targetPhraseIndex && kinCache.get(host)?.last === lastWordIndexOfThatPhrase`. This is automatically false again the instant the NEXT phrase starts (seqIdx moves on), so it can never latch stuck — no manual time-window math needed.
+
+**Fused match cuts** — when the cut lands on a fused two-part word (e.g. "Hu" + "+man." → "Human"), the `+` fuse convention IS the match cut: the word only completes (and the invert fires) once both parts have landed. This is the cleanest version of the effect — the reveal and the cut are the same beat, not two separate mechanics glued together.
+
+**Rule of use:** not every scene is a match cut — reserve it for real narrative punctuation (a reveal, a pivot, a punchline). Snapping every scene to a match cut cheapens it; 2–3 per film is right.
+
+---
+
+## 11. Motion-Designer Handoff Kit
 
 `public/design-kit.html` (live at `trybraino.com/design-kit.html`) rebuilds the extension's core UI elements from `extension/content.js` with untouched values — dock bar (idle + task-working with step strip, spinner, tick pop, shimmer), chat card (glass + readable, `.sb-card-q` / `.sb-card-a`), step-row anatomy, and a full-viewport placement map. Each block exports as 3× PNG (on-backdrop or transparent) plus a download-all ZIP; animation timings are listed under each element. The kit also runs the character live — bar-rise open animation (replayable), walker walk/stop/wave on the bar, docked-brain idle, standing pose, and the 8-reaction face grid — each animation exportable as a 30fps transparent PNG frame sequence (ZIPs include the ffmpeg ProRes-4444 command for true alpha video). The pose math is a 1:1 port of `__sbWkTick`; update the kit when bar / card / step-strip / walker code changes in content.js.
+
+---
+
+## 12. Dashboard — "Minimal" (Newsreader / warm paper)
+
+The dashboard (`/dashboard`) runs its own design system, ported verbatim from the **Braino Dashboard Minimal** Claude Design project. It is intentionally NOT the marketing site's look: calm, monochrome, generous whitespace, hairline structure.
+
+**Type.** Newsreader (display/serif, incl. the italic accent word), Helvetica Neue / system (UI), JetBrains Mono (labels, counts, eyebrows). Every page head is a serif `h1` whose last phrase is italic — "Everything, *remembered.*", "X on *autopilot.*", "Say it, *open it.*"
+
+**Palette.** Warm paper `#FBF7F1` on white surfaces, ink `#1B1713`, hairlines `#EAE2D6`, coral accent `#C9544A`. Dark theme flips to `#0C0906` paper with a lighter coral `#E8786E`.
+
+**Where it lives.** `src/pages/braino-dash.css`, scoped to a single `.bd-root` wrapper on the dashboard shell. That scope is load-bearing: the file *retokenizes* the shared `--sb-*` variables, so every existing dashboard surface adopts the new palette while the marketing site — which paints with the same token names — is untouched. Do not lift these rules to `:root`.
+
+**Component classes.** `.bd-sidebar` / `.bd-nav-item` / `.bd-profile` (shell), `.bd-topbar` + `.bd-search`, `.bd-pane` (880px column, staggered fade-in), `.bd-phead` / `.bd-shead`, `.bd-ask`, `.bd-row` / `.bd-list`, `.bd-card`, `.bd-stats`, `.bd-note`, `.bd-chip`, `.bd-tag` (+ `.ok` / `.bad` / `.accent`), `.bd-field` / `.bd-conn`, `.bd-btn` (`.dark` / `.ghost`), `.bd-empty`. Voice Commands adds `.bd-mode-card`, `.bd-cmd`, `.bd-seg`, `.bd-dropzone`, `.bd-locked`.
+
+**Two gotchas, both learned the hard way:**
+- `--sb-ink` **inverts per theme**. A panel meant to be dark in *both* themes cannot use `bg-[var(--sb-ink)]` — in dark mode it flips near-white while its text stays dark. Use `.bd-invert` (fixed dark gradient + `.bd-invert-accent` for its coral) instead.
+- The design resets bare `<button>`; without the scoped reset in `braino-dash.css` the browser's default border outlines every nav item and chip.
+
+**IA.** The greeting hero, delegate meter, and sub-tab strip render on the Overview tab only. Every other tab opens with its own `.bd-phead`, and the topbar carries the page title.
+
+### Notch state colours (Mac)
+
+The notch carries voice state as colour, so it reads at a glance without text:
+
+- **Listening — coral, radiating.** `#notch-face.listen` runs `nfListenRadiate`
+  (1.9s, infinite): a coral ring breathing between a hairline and a 38px bloom,
+  the same rhythm as the wake-up sequence. It is the one unambiguous "he is
+  hearing you" signal, so it never goes quiet while the mic is live.
+- **Speaking — unchanged.** The mouth already carries that state; adding a
+  second signal on top of it just competes with itself.
+- **Voice Command mode — the mode's own colour wins.** While a mode runs, its
+  tint overrides the coral rather than animating underneath it, so "which mode
+  am I in" stays readable even mid-sentence.
+
+Reduced motion gets the coral as a static ring, not a pulse.
+
+---
+
+## 13. Site nav — the IOMI notch (one shared component, site-wide)
+
+Every marketing page that has a notch nav (`/`, `/browser`, `/brainos`, `/jarvis`, `/journal`, `/journal/emotional-engine`) shares **one** component: `src/components/IomiNotch.tsx` + `src/components/iomi-notch.css`. This is a deliberate consolidation — HomeOS.tsx used to define its own elaborate boot-sequence eyes-notch (`NotchNav`, still in `HomeOS.tsx` but unused now) while `/brainos` had a second, different, simpler notch (`.bos-notch*` in `brainos.css`). The `/brainos` version — the "IOMI" identity — is now the canonical one; the HomeOS variant was retired from active use.
+
+**What it looks like.** A small black pill fixed to the top-center of the viewport, `210×34px` closed. The bar reads **IOMI** when closed, **BrainOS** when open (this swap is the whole personality of the component — closed, it's the product name; open, it's the OS). Two small blinking dots stand in for eyes. Clicking/tapping/Enter/Space toggles it open into a `min(660px, 100vw-32px) × 268px` dynamic-island panel (`cubic-bezier(0.32,0.72,0,1)`, 0.55s) holding a "Go anywhere" nav grid.
+
+**Where it lives.** `src/components/IomiNotch.tsx` (component + the shared `IOMI_NAV` default nav list) and `src/components/iomi-notch.css` (self-contained — its own `--iomi-ink`/`--iomi-ink-2`/`--iomi-ink-3`/`--iomi-line` vars scoped to `.iomi-notch-dock`, so it doesn't depend on whatever palette variables the host page happens to define, unlike the old `.bos-notch*` rules which read `--ink`/`--line` off `.bos`).
+
+**Usage.** `import IomiNotch from "@/components/IomiNotch"`, then `<IomiNotch />` (default nav) or `<IomiNotch nav={customList} />` to override the grid for a specific page. Every current usage renders the default `IOMI_NAV`: Welcome (`/`), Chat (`/chat`), IOMI (`/brainos`), Don't Blink (`/dontblink`), Blog (`/journal`), Dashboard (`/dashboard`).
+
+**Retired, not deleted:** `NotchNav`/`NN_ISLAND` in `HomeOS.tsx` and the `.bos-notch*` block that used to live in `brainos.css`. Left in place in case something still needs the old boot-sequence look, but nothing imports them anymore — new notch work should extend `IomiNotch`, not resurrect either of the old ones.
+
+**Animation reference.** The notch's own idle look (dozing → wink → awake) and the site's kinetic word-stamp typography are documented separately in the `/dontblink` teaser build (`src/pages/IntroTeaser.tsx` + `intro-teaser.css`) — that film is the canonical reference for both the notch boot sequence and the SF Pro Display "Don't Blink" kinetic-reveal type system (bold weights, `-.025em` tracking, brightness-flash word stamps). Reuse those exact values before inventing new motion for anything notch- or type-related.
+
+## 14. /Vig — Visual Emotional Engine (interactive, real logic not mockup)
+
+`src/pages/VisualEmotionalEngine.tsx` + `visual-emotional-engine.css`, on the shared `.bos` dark shell (`braino-classes.css`) with `IomiNotch`. Route `/Vig`.
+
+**What it is.** Not documentation of the emotional engine — a live diagram of it. A moment picker (`neutral`/`grief`/`heartbreak`/`venting`/`anxiety`/`celebration`/`conflict`/`banter`/`focused_task`/`building`/`crisis`) drives three animated steps: (1) the plain-English word cues that moment would trigger, (2) the twelve real traits reordering with a `leading`/`always`/`opt-in` badge state, (3) a terminal-styled preview of the assembled steering line + trait summaries.
+
+**Why it's "real."** `src/lib/emotional-engine-viz.ts` is a hand-mirrored copy of the actual backend data and algorithm — trait ids/names/summaries/`leadsOn` from `manifest.ts`, `MOMENT_EMPHASIS`/`MOMENT_LABEL` from `moments.ts`, and `orderTraitsForMoment()`/`steeringLine()` ported from `engine.ts`. It's a duplicate on purpose (the frontend can't import Deno edge-function code directly) — if the backend engine's trait set or moment logic changes, update this file to match or the visualization drifts from the truth it's showing.
+
+## 15. Braino classes fork point — `classId` (Saburi / Iomi / Telos)
+
+The three-class split (`/saburi`, `/iomi`, `/telos`) started as marketing pages sharing one backend personality. `supabase/functions/_shared/emotional-engine/classes.ts` is the fork point: `ClassId = "braino" | "saburi" | "iomi" | "telos"` (added in `types.ts`), a `CLASS_MANIFESTS` registry mapping each class to its own `Trait[]`, and `buildEmotionalCore({ classId })` / `buildBrainoSystemPrompt({ classId })` reading it. Every class today still points at the shared `ORDERED_TRAITS` — nothing has diverged yet, so this is scaffolding, not a behavior change. `classId` is optional everywhere and defaults to `"braino"`, so no existing caller needs to change.
+
+**Saburi is first in line.** Its manifest entry is marked with a `TODO(saburi-book)` comment: once the founder's companion-class book is read in full, distill it into Saburi-only trait prose (a new `traits/` set, not edits to the shared files) and swap `CLASS_MANIFESTS.saburi.traits` to point at it. Do not paste raw book pages into a system prompt — a system prompt should be a tight set of behavioral rules, not source material; the book informs the prose, it isn't the prose.

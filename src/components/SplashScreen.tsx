@@ -2,13 +2,20 @@ import { useEffect, useState } from "react";
 import SideBrainLogo from "@/components/SideBrainLogo";
 
 const SplashScreen = ({ onDone }: { onDone: () => void }) => {
+  const shouldSkip = typeof window !== "undefined" && window.location.pathname.replace(/\/+$/, "") === "/chat";
   const [fading, setFading] = useState(false);
 
   useEffect(() => {
+    if (shouldSkip) {
+      onDone();
+      return;
+    }
     const fadeTimer = setTimeout(() => setFading(true), 1400);
     const doneTimer = setTimeout(() => onDone(), 1800);
     return () => { clearTimeout(fadeTimer); clearTimeout(doneTimer); };
-  }, [onDone]);
+  }, [onDone, shouldSkip]);
+
+  if (shouldSkip) return null;
 
   return (
     <div

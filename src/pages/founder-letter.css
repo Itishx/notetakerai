@@ -1,0 +1,384 @@
+/* founder-letter.css — /founder-letter. Medium-style article (heavy NeueHaas
+   headings, Charter body) that doubles as a live demo: the real NotchFace runs
+   large and frameless inside the article. Rides the .hos dark tokens. */
+
+/* True-black article mode (Medium dark): pure #000 ground, brighter body ink
+   for contrast, hairlines barely-there. Fonts unchanged. */
+.hos.fl {
+  --sb-bg: #000000;
+  --sb-bg-2: #050404;
+  --sb-panel: #0D0B0A;
+  --sb-panel-2: #100E0C;
+  --sb-ink: #F5EFE7;
+  --sb-ink-2: #C9BEB3;
+  --sb-ink-3: #877A6E;
+  --sb-line: #251F1A;
+  --sb-line-2: #191411;
+  background: #000;
+}
+/* the Navbar pills style themselves inline from the site theme — on pure
+   black they can vanish, so pin a visible treatment for this page */
+.fl nav > div {
+  background: rgba(18, 15, 13, .92) !important;
+  border: 1px solid rgba(243, 235, 225, .16) !important;
+  box-shadow: 0 2px 18px rgba(0, 0, 0, .6) !important;
+}
+
+.fl-article { max-width: 680px; margin: 0 auto; padding: 0 24px; }
+
+.fl-head { text-align: left; padding: 118px 0 22px; position: relative; }
+.fl-title {
+  font-family: "NeueHaas", "Helvetica Neue", -apple-system, sans-serif; font-weight: 700;
+  font-size: clamp(34px, 5.4vw, 60px); line-height: 1.04; letter-spacing: -.032em;
+  max-width: 19ch; margin: 18px 0 0;
+}
+.fl-sub {
+  font-family: "Charter", Georgia, serif; font-style: italic;
+  font-size: clamp(17px, 2.2vw, 21px); line-height: 1.5; color: var(--sb-ink-2);
+  max-width: 52ch; margin: 18px 0 0;
+}
+
+.fl-byline {
+  display: flex; align-items: center; justify-content: flex-start; gap: 14px;
+  margin: 34px auto 0; padding: 0 24px 34px; border-bottom: 1px solid var(--sb-line);
+  max-width: 680px;
+}
+.fl-byline img { width: 44px; height: 44px; border-radius: 50%; object-fit: cover; border: 1px solid var(--sb-line); }
+.fl-byline .who { text-align: left; }
+.fl-byline .who a { color: var(--sb-ink); text-decoration: none; font-size: 15px; font-weight: 600; font-family: "NeueHaas", sans-serif; }
+.fl-byline .who a:hover { color: var(--coral-hi); }
+.fl-byline .who span { display: block; font-family: "SF Mono", ui-monospace, Menlo, monospace; font-size: 11px; letter-spacing: .1em; color: var(--sb-ink-3); margin-top: 3px; }
+
+.fl-article p { font-size: 19px; line-height: 1.8; color: var(--sb-ink-2); margin: 26px 0 0; }
+.fl-article p strong { color: var(--sb-ink); font-weight: 400; }
+.fl-article p em { color: var(--sb-ink); }
+.fl-article .opener::first-letter {
+  font-family: "NeueHaas", sans-serif; font-weight: 700;
+  font-size: 3.2em; line-height: .82; float: left;
+  padding: 8px 12px 0 0; color: var(--coral);
+}
+.fl-article h2 {
+  font-family: "NeueHaas", "Helvetica Neue", -apple-system, sans-serif; font-weight: 700;
+  font-size: clamp(24px, 3.2vw, 34px); line-height: 1.12; letter-spacing: -.022em;
+  margin: 72px 0 0; color: var(--sb-ink);
+}
+
+.fl-pull {
+  font-family: "TNRStd", "Times New Roman", serif; font-style: italic;
+  font-size: clamp(24px, 3.4vw, 34px); line-height: 1.35; color: var(--sb-ink);
+  margin: 54px 0 0; padding-left: 26px; border-left: 2px solid var(--coral);
+  text-wrap: balance;
+}
+
+/* live demo figures — no card, no frame, just the notch on the page.
+   Each demo is its own ACT: a full section of breathing room, not a gap
+   between paragraphs. */
+.fl-fig {
+  margin: 18vh 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  min-height: 60vh;
+}
+/* the article column is 680px; the wide (theater) figure breaks out and
+   owns a full viewport so the lid-opening scroll has a whole scene to play in */
+.fl-fig.wide {
+  width: min(94vw, 960px); margin-left: calc(50% - min(47vw, 480px));
+  min-height: 105vh; margin-top: 10vh; margin-bottom: 10vh;
+}
+.fl-fig .fl-stage { position: relative; width: 100%; }
+.fl-fig .fl-stage.big { height: 280px; }
+/* notch instances: frameless and enlarged */
+.fl-fig .nf-face { top: 0; left: 50%; opacity: 1; }
+.fl-fig .fl-stage.big .nf-face { transform: translateX(-50%) scale(2.3); transform-origin: top center; }
+
+/* ── the Mac theater: a MacBook that opens as you scroll ── */
+.fl-mactheater { width: 100%; perspective: 1500px; will-change: transform; }
+.fl-mac-screen {
+  position: relative; width: 100%; aspect-ratio: 16 / 9.6;
+  border-radius: 20px; border: 2px solid #2A2522;
+  background: #0A0807; overflow: hidden;
+  transform-origin: bottom center; will-change: transform;
+  box-shadow: 0 50px 140px rgba(0, 0, 0, .65), 0 0 60px rgba(232, 120, 110, .08);
+}
+/* Tahoe-style wallpaper: sky, mountain ridge, glacier lake.
+   When public/founder-wallpaper.jpg exists (preloaded in JS), the photo
+   replaces the painted scene. */
+.fl-mac-wall.has-img { background: url("/founder-wallpaper.jpg") center / cover no-repeat; }
+.fl-mac-wall.has-img::before, .fl-mac-wall.has-img::after { display: none; }
+.fl-mac-wall {
+  position: absolute; inset: 0;
+  background: linear-gradient(180deg, #7FB0D6 0%, #A5CBE0 30%, #C5DCE4 44%, #7FC4CE 50%, #3BA8BE 58%, #1F91AC 76%, #16789A 100%);
+}
+.fl-mac-wall::before {
+  /* the far ridge with snow haze */
+  content: ""; position: absolute; left: -4%; right: -4%; top: 34%; height: 15%;
+  background: linear-gradient(180deg, #8CA3B8, #6E8BA3 70%, #5F7E97);
+  clip-path: polygon(0 78%, 7% 48%, 14% 66%, 22% 30%, 30% 62%, 38% 42%, 47% 70%, 55% 34%, 64% 58%, 72% 26%, 80% 56%, 88% 40%, 100% 66%, 100% 100%, 0 100%);
+  filter: blur(.4px); opacity: .95;
+}
+.fl-mac-wall::after {
+  /* horizon haze + a soft brand glow up near the notch */
+  content: ""; position: absolute; inset: 0;
+  background:
+    linear-gradient(180deg, transparent 40%, rgba(238, 246, 248, .35) 48%, transparent 56%),
+    radial-gradient(ellipse 60% 30% at 50% 0%, rgba(232, 120, 110, .1), transparent 70%);
+}
+/* the macOS menu bar the notch cuts into */
+.fl-menubar {
+  position: absolute; top: 0; left: 0; right: 0; height: 24px; z-index: 4;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 14px;
+  background: rgba(235, 240, 246, .42);
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  font-family: -apple-system, "Helvetica Neue", sans-serif; font-size: 10.5px;
+  color: rgba(18, 22, 30, .88);
+}
+.fl-menubar .l, .fl-menubar .r { display: flex; align-items: center; gap: 13px; }
+.fl-menubar b { font-weight: 700; }
+.fl-menubar .apple { font-size: 13px; margin-right: -2px; }
+.fl-menubar .r { font-size: 11px; }
+.fl-menubar .mic { width: 19px; height: 12px; border-radius: 7px; background: #E8883A; display: inline-block; }
+@media (max-width: 700px) { .fl-menubar .l span, .fl-menubar .r span:first-of-type { display: none; } }
+/* desktop folders, top right like the real desk */
+.fl-desk { position: absolute; top: 42px; right: 18px; z-index: 3; display: flex; gap: 18px; }
+.fl-folder { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 74px; }
+.fl-folder i {
+  position: relative; width: 34px; height: 25px; border-radius: 4px;
+  background: linear-gradient(180deg, #6FB9F0, #4A99DD);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, .25);
+}
+.fl-folder i::before {
+  content: ""; position: absolute; top: -4px; left: 0; width: 15px; height: 6px;
+  border-radius: 3px 3px 0 0; background: #5FAAE8;
+}
+.fl-folder span {
+  font-family: -apple-system, sans-serif; font-size: 9px; color: #fff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, .55); text-align: center; line-height: 1.2;
+}
+/* the dock */
+.fl-dock {
+  position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); z-index: 3;
+  display: flex; gap: 8px; padding: 7px 10px;
+  background: rgba(255, 255, 255, .26); border: 1px solid rgba(255, 255, 255, .3);
+  border-radius: 16px; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+}
+.fl-dock span { width: 27px; height: 27px; border-radius: 8px; box-shadow: 0 3px 8px rgba(0, 0, 0, .28); }
+@media (max-width: 700px) { .fl-dock span { width: 18px; height: 18px; } }
+.fl-mac-screen .nf-face { top: 0; left: 50%; opacity: 1; transform: translateX(-50%) scale(.62); transform-origin: top center; z-index: 8; }
+/* black cover while the lid is closed; fades as it opens */
+.fl-mac-dark { position: absolute; inset: 0; background: #000; opacity: .92; z-index: 6; pointer-events: none; }
+/* the light shimmer that sweeps the glass once the lid is up */
+.fl-mac-shimmer { position: absolute; inset: 0; z-index: 7; pointer-events: none; opacity: 0; }
+.fl-mactheater.lit .fl-mac-shimmer { opacity: 1; }
+.fl-mac-shimmer i {
+  position: absolute; top: -20%; bottom: -20%; width: 22%; left: -30%;
+  background: linear-gradient(100deg, transparent, rgba(255, 236, 228, .12), rgba(255, 214, 203, .28), rgba(255, 236, 228, .12), transparent);
+  transform: skewX(-16deg); filter: blur(6px);
+}
+.fl-mactheater.lit .fl-mac-shimmer i { animation: flMacShine 1.7s cubic-bezier(.3, .6, .3, 1) .12s 1 both; }
+@keyframes flMacShine { from { left: -30%; } to { left: 120%; } }
+/* the aluminum deck the lid hinges on */
+.fl-mac-deck {
+  position: relative; z-index: 2;
+  height: 15px; width: 106%; margin-left: -3%;
+  border-radius: 0 0 18px 18px;
+  background: linear-gradient(#3E3833, #262019);
+  border: 1px solid #2A2522; border-top: none;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, .5);
+}
+/* musical notes drifting out from under the notch (music mode) — noteFloat
+   values ported from the app's #notch-notes */
+.fl-notes { position: absolute; top: 48px; left: 50%; width: 0; height: 0; z-index: 5; pointer-events: none; }
+.fl-notes span {
+  position: absolute; top: 0; left: 0; font-size: 17px;
+  color: rgba(232, 120, 110, .9); text-shadow: 0 0 8px rgba(232, 120, 110, .55);
+  animation: flNoteFloat 3.4s ease-out forwards;
+}
+.fl-notes span.blue { color: rgba(122, 162, 255, .9); text-shadow: 0 0 8px rgba(122, 162, 255, .55); }
+@keyframes flNoteFloat {
+  0% { opacity: 0; transform: translate(var(--dx0), 4px) scale(.7) rotate(0deg); }
+  14% { opacity: .95; }
+  100% { opacity: 0; transform: translate(var(--dx), 90px) scale(1.08) rotate(var(--rot)); }
+}
+.fl-phase {
+  margin-top: 10px; text-align: center;
+  font-family: "SF Mono", ui-monospace, Menlo, monospace; font-size: 10.5px;
+  letter-spacing: .18em; text-transform: uppercase; color: var(--sb-ink-3);
+  min-height: 16px;
+}
+.fl-phase b { color: var(--coral); font-weight: 400; }
+.fl-figcap {
+  margin-top: 14px; text-align: center;
+  font-family: "SF Mono", ui-monospace, Menlo, monospace; font-size: 10.5px;
+  letter-spacing: .18em; text-transform: uppercase; color: var(--sb-ink-3);
+}
+.fl-figcap b { color: var(--coral); font-weight: 400; }
+
+/* ── the Spotify scene: notch on top, Spotify window lights up below ── */
+.fl-spotwrap { width: 100%; display: flex; flex-direction: column; align-items: center; }
+.fl-spotscene { position: relative; width: min(560px, 92vw); }
+.fl-spotnotch { position: relative; height: 150px; }
+.fl-spotnotch .nf-face { top: 0; left: 50%; opacity: 1; transform: translateX(-50%) scale(1.35); transform-origin: top center; }
+.fl-notes.spot { top: 110px; }
+.fl-spotify {
+  width: min(440px, 100%); margin: 0 auto;
+  background: #121212; border: 1px solid #2A2A2A; border-radius: 14px;
+  overflow: hidden; opacity: .22; transform: translateY(16px) scale(.97);
+  transition: opacity .6s ease, transform .6s cubic-bezier(.2, .8, .3, 1), box-shadow .6s;
+}
+.fl-spotify.playing {
+  opacity: 1; transform: translateY(0) scale(1);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, .55), 0 0 44px rgba(29, 185, 84, .16);
+}
+.sp-bar { display: flex; align-items: center; gap: 6px; padding: 9px 12px; background: #181818; border-bottom: 1px solid #252525; }
+.sp-bar i { width: 10px; height: 10px; border-radius: 50%; }
+.sp-bar i:nth-child(1) { background: #EE6A5F; }
+.sp-bar i:nth-child(2) { background: #F5BD4F; }
+.sp-bar i:nth-child(3) { background: #61C455; }
+.sp-bar span { margin-left: 8px; font-family: -apple-system, sans-serif; font-size: 11px; color: #9A9A9A; }
+.sp-body { display: flex; align-items: center; gap: 16px; padding: 16px; }
+.sp-art {
+  flex: none; width: 74px; height: 74px; border-radius: 8px;
+  display: grid; place-items: center; font-size: 30px; color: rgba(255, 255, 255, .9);
+  background: linear-gradient(140deg, #E8786E, #8E6FE8);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, .5);
+}
+.fl-spotify.playing .sp-art { animation: spArtPulse 1.05s ease-in-out infinite; }
+@keyframes spArtPulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.035); } }
+.sp-meta { flex: 1; min-width: 0; font-family: -apple-system, sans-serif; }
+.sp-meta b { display: block; color: #fff; font-size: 15px; font-weight: 700; }
+.sp-meta > span { display: block; color: #9A9A9A; font-size: 12px; margin-top: 2px; }
+.sp-progress { position: relative; height: 4px; border-radius: 2px; background: #2E2E2E; margin-top: 12px; overflow: hidden; }
+.sp-progress i { position: absolute; inset: 0 100% 0 0; background: #1DB954; border-radius: 2px; }
+.fl-spotify.playing .sp-progress i { animation: spProgress 7.4s linear infinite; }
+@keyframes spProgress { from { inset: 0 100% 0 0; } to { inset: 0 0% 0 0; } }
+.sp-times { display: flex; justify-content: space-between; font-size: 10px; color: #7A7A7A; margin-top: 5px; font-variant-numeric: tabular-nums; }
+.sp-eq { flex: none; display: flex; align-items: flex-end; gap: 3px; height: 30px; }
+.sp-eq span { width: 4px; height: 6px; border-radius: 2px; background: #1DB954; }
+.fl-spotify.playing .sp-eq span { animation: spEq .62s ease-in-out infinite; }
+.fl-spotify.playing .sp-eq span:nth-child(2) { animation-delay: .1s; animation-duration: .55s; }
+.fl-spotify.playing .sp-eq span:nth-child(3) { animation-delay: .2s; }
+.fl-spotify.playing .sp-eq span:nth-child(4) { animation-delay: .28s; animation-duration: .7s; }
+.fl-spotify.playing .sp-eq span:nth-child(5) { animation-delay: .38s; }
+@keyframes spEq { 0%, 100% { height: 6px; } 50% { height: 26px; } }
+
+/* ── the background song button: small, pinned, glowing when playing ── */
+.fl-song {
+  position: fixed; right: 22px; bottom: 22px; z-index: 70;
+  width: 46px; height: 46px; border-radius: 50%; cursor: pointer;
+  background: rgba(16, 13, 12, .88); color: #F3EBE1; font-size: 18px;
+  border: 1px solid rgba(243, 235, 225, .2);
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  transition: box-shadow .3s, color .3s, border-color .3s;
+}
+.fl-song:hover { border-color: var(--coral); color: var(--coral-hi); }
+.fl-song.on {
+  color: var(--coral-hi); border-color: rgba(232, 120, 110, .55);
+  animation: flSongGlow 2.2s ease-in-out infinite;
+}
+@keyframes flSongGlow {
+  0%, 100% { box-shadow: 0 0 10px rgba(232, 120, 110, .25); }
+  50% { box-shadow: 0 0 26px rgba(232, 120, 110, .6); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .fl-song.on { animation: none; box-shadow: 0 0 14px rgba(232, 120, 110, .4); }
+  .fl-spotify.playing .sp-eq span, .fl-spotify.playing .sp-art, .fl-spotify.playing .sp-progress i { animation: none; }
+}
+
+/* the walker lane above the signature */
+.fl-walklane { position: relative; height: 92px; margin: 70px 0 0; }
+.fl-walklane .lane { position: absolute; left: 0; right: 0; bottom: 0; height: 1px; background: var(--sb-line); }
+.fl-walklane .walker { position: absolute; bottom: 1px; left: 0; width: 58px; will-change: transform; }
+.fl-walklane .walker svg { width: 100%; height: auto; display: block; filter: drop-shadow(0 6px 12px rgba(0, 0, 0, .35)); }
+
+.fl-sig {
+  font-family: "TNRStd", "Times New Roman", serif; font-style: italic;
+  font-size: 30px; color: var(--sb-ink); margin-top: 40px;
+}
+.fl-cta { display: flex; gap: 14px; flex-wrap: wrap; margin: 44px 0 0; padding-bottom: 110px; }
+
+@media (max-width: 700px) {
+  .fl-fig .fl-stage.big .nf-face { transform: translateX(-50%) scale(1.4); }
+  .fl-fig .fl-stage.flow .nf-face { transform: translateX(-50%) scale(1); }
+  .fl-fig .fl-stage.big { height: 160px; }
+  .fl-fig .fl-stage.flow { height: 170px; }
+}
+
+/* the global BrainoWalker is mounted app-wide; on the letter he stays home */
+body.fl-no-walker #sb-brain-mascot-wrapper { display: none; }
+
+/* ── The live log ──────────────────────────────────────────────────────────
+   A resume of ideas, not a changelog: a single rail down the left, each entry
+   a role. The current one is marked "now" the way a live position is. */
+.fl-loglink {
+  display: inline-block;
+  margin-top: 22px;
+  font-size: 14px;
+  color: var(--fl-accent, #c9544a);
+  text-decoration: none;
+  border-bottom: 1px solid currentColor;
+  padding-bottom: 2px;
+  transition: opacity 0.15s ease;
+}
+.fl-loglink:hover { opacity: 0.7; }
+
+.fl-log {
+  list-style: none;
+  margin: 34px 0 0;
+  padding: 0 0 0 26px;
+  border-left: 1px solid rgba(128, 128, 128, 0.28);
+}
+.fl-log-item { position: relative; padding: 0 0 34px; }
+.fl-log-item:last-child { padding-bottom: 0; }
+.fl-log-item::before {
+  content: "";
+  position: absolute;
+  left: -31px;
+  top: 6px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.32;
+}
+.fl-log-item.now::before {
+  opacity: 1;
+  color: var(--fl-accent, #c9544a);
+  box-shadow: 0 0 0 4px rgba(201, 84, 74, 0.16);
+}
+.fl-log-when {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  opacity: 0.5;
+  margin-bottom: 7px;
+}
+.fl-log-when b {
+  font-family: inherit;
+  font-weight: 500;
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--fl-accent, #c9544a);
+  color: #fff;
+  opacity: 1;
+}
+.fl-log-body h3 {
+  margin: 0 0 8px;
+  font-size: 20px;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+}
+.fl-log-body p { margin: 0; opacity: 0.78; }
+
+@media (max-width: 620px) {
+  .fl-log { padding-left: 20px; }
+  .fl-log-item::before { left: -25px; }
+}
+
+/* Anchor jumps must clear the sticky nav, or #log lands underneath it. */
+#log { scroll-margin-top: 96px; }
