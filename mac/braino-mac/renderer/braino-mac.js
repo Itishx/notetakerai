@@ -2946,9 +2946,25 @@ function extractRealtimeDoneText(event) {
   return parts.join(" ").replace(/\s+/g, " ").trim();
 }
 
+// Voice Command traffic MUST reach main.cjs's gates. Without this the renderer
+// classified "enter mode 18" as chit-chat and handed it to the realtime model,
+// which happily SAID "entering mode now" while nothing actually ran — no
+// toggle, no boot animation, and the next command fell through to Spotify.
+// Two cases: talking about/entering a mode, and anything at all while a mode
+// is already running (the mode lock lives on the main side).
+function isVoiceModeUtterance(text) {
+  if (activeVoiceMode) return true;            // locked: main.cjs decides, not the model
+  const t = normalizeForVoiceMatch(text);
+  if (!t) return false;
+  if (/^(what|which)\s+mode\b/.test(t)) return true;
+  if (/\bare (you|we)\s+in\b.*\bmode\b|\bam i\s+in\b.*\bmode\b/.test(t)) return true;
+  return /\b(enter|activate|deactivate|switch to|go into|start|stop|exit|leave|quit|turn on|turn off|enable|disable)\b.*\bmode\b|\bmode\b\s*\d/.test(t);
+}
+
 function isLikelyMacActionTranscript(text) {
   const normalized = normalizeForVoiceMatch(text);
   if (!normalized) return false;
+  if (isVoiceModeUtterance(text)) return true;
   if (/\bwhat can you do\b/.test(normalized) && /\b(mac|macbook|desktop|files?|locally|computer|system)\b/.test(normalized)) return true;
   if (/\b(what can you do|who are you|how are you|hello|hi|hey)\b/.test(normalized)) return false;
   return /\b(open|launch|start|close|quit|organize|organise|clean|sort|rename|move|delete|trash|create|make|new|create folder|make folder|new folder|undo|find|locate|look for|search for|show me|play|playing|pause|resume|spotify|playlist|volume|vol|sound|louder|quieter|mute|reduce|raise|increase|decrease|lower|percent|seconds?|minutes?|shuffle|repeat|loop|queue|rewind|restart|seek|album|artist|listening to|youtube|song|music|chrome|browser|website|tab|gmail|mail|email|notes|note|maps|calendar|drive|docs|pdf|image|video|file|folder|app|application|send|draft|compose|click|point|where is|reply|write|whatsapp|whats app|remember|remind|timer|countdown|touch id|verify|authenticate|come out|come here|show yourself|step out|join me|go back|go home|get back|head back|head home|tuck in|return home|mesa|coursework|assignment|deadline|ram|cpu|memory|task manager|activity monitor|processes|hogging|eating my|slowing|worth deleting|how many|recover|redundant|bring back|maximize|minimize|snap|half|selected|selection|highlighted|rephrase|rewrite|fix this|mentions|followers|tweet|clip|caption|ship it|x account|ex account|my ex|disturb|bother|check on me|advise|advice|record|recording|meeting|the call|stop recording|wallpaper|desktop background|maps|distance|how far|directions|navigate|route|amazon|shop|options for|research|compare|difference between|send to|my phone|wake word|always listen|call|facetime|face time|dial|watch|tutorial|channel|creator|recommend|read|screen|explain|translate|look at|watching|help me with|summarize|summarise|scroll|download|upload|copy|paste)\b/.test(normalized);
@@ -2956,6 +2972,8 @@ function isLikelyMacActionTranscript(text) {
 
 function shouldUseRealtimeDirectChat(text) {
   if (!realtimeActive || !rtDc || rtDc.readyState !== "open") return false;
+  // a mode command, or anything while a mode runs, is never small talk
+  if (isVoiceModeUtterance(text)) return false;
   if (herMode) return normalizeForVoiceMatch(text).length > 0;
   if (hasPendingDelegateFollowup()) return false;
   if (isLikelyMacActionTranscript(text)) return false;
