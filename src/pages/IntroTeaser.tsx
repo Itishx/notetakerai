@@ -210,6 +210,68 @@ const TURN_GAPS: number[] = []; TURN_GAPS[0] = 380; TURN_GAPS[1] = 160;
 const DEEPBREATHS_WORDS = ["Deep", "Breaths."];
 const DEEPBREATHS_SW = 380;
 
+// ── Syllable chunking (Part A — "This is Braino." onward) ───────────────────
+// A beat is only ALIVE while something is stamping in, so a long word sitting
+// whole on one beat goes static and the film reads like pasted frames. Split
+// every long word at its median letter and the second half becomes a "+"
+// fused chunk: each half gets its own stamp, and they still render flush as
+// one word ("Th"+"is" reads as "This", no seam).
+//
+// REVERSIBLE: flip CHUNK_WORDS to false and Part A goes back to whole words.
+// Nothing else needs touching — every index that depends on span counts is
+// derived from the map below, not hardcoded.
+const CHUNK_WORDS = true;
+// Under 4 letters stays whole: "is", "a", "to", "do", "and", "you", "was",
+// "the", "for" — the two-letter words and function words. 4+ splits, so
+// "This" -> "Th"+"is" and "Braino" -> "Bra"+"ino".
+const CHUNK_MIN_LEN = 4;
+// Function words stay whole even at 4+ letters. Chunking earns its keep on
+// words that carry weight; splitting the connective tissue ("yo/ur", "ju/st",
+// "el/se") just reads as a stutter. Short words are already percussive, which
+// is why the static-frame problem was never about them.
+const CHUNK_SKIP = new Set([
+  "your", "yours", "that", "with", "from", "they", "them", "their", "there",
+  "have", "been", "were", "will", "just", "else", "what", "when", "than",
+  "then", "these", "those", "some", "such", "into", "onto", "over",
+  "only", "also", "both", "each", "same", "very", "much", "more", "most",
+]);
+
+// One word -> its chunks. Preserves a leading "+" (fuse) / "*" (shimmer)
+// marker, any leading bracket, and trailing punctuation. "*" words are left
+// whole — the shimmer sweep is a single-span effect and splitting kills it.
+function chunkWord(word: string): string[] {
+  if (!CHUNK_WORDS) return [word];
+  const marker = word.startsWith("+") || word.startsWith("*") ? word[0] : "";
+  if (marker === "*") return [word];
+  const m = word.slice(marker.length).match(/^([^A-Za-z0-9]*)([A-Za-z0-9’']+)(.*)$/);
+  if (!m) return [word];
+  const [, pre, core, post] = m;
+  if (core.length < CHUNK_MIN_LEN || CHUNK_SKIP.has(core.toLowerCase())) return [word];
+  const cut = Math.floor(core.length / 2);
+  return [`${marker}${pre}${core.slice(0, cut)}`, `+${core.slice(cut)}${post}`];
+}
+
+// Chunks a phrase and hands back the map that keeps downstream index math
+// honest: wordToChunks[originalWordIdx] = [chunk indices], and
+// chunkToWord[chunkIdx] = originalWordIdx (used by the every-other-word
+// invert strobes, which must alternate per WORD, not per chunk).
+type Chunked = { words: string[]; wordToChunks: number[][]; chunkToWord: number[] };
+function chunkPhrase(words: string[]): Chunked {
+  const out: string[] = [];
+  const wordToChunks: number[][] = [];
+  const chunkToWord: number[] = [];
+  words.forEach((w, wi) => {
+    const idxs: number[] = [];
+    for (const c of chunkWord(w)) { idxs.push(out.length); chunkToWord.push(wi); out.push(c); }
+    wordToChunks.push(idxs);
+  });
+  return { words: out, wordToChunks, chunkToWord };
+}
+const chunkScript = (phrases: string[][]) => phrases.map(chunkPhrase);
+const chunkedWords = (cs: Chunked[]) => cs.map((c) => c.words);
+// last chunk index of an original word — what the match-cut landings compare against
+const lastChunkOf = (c: Chunked, wordIdx: number) => c.wordToChunks[wordIdx][c.wordToChunks[wordIdx].length - 1];
+
 // ── /notch's own script, copied verbatim (Acts 7-12) ────────────────────────
 // "This is Braino." lands (RHYME MATCH, same position/size as Act 2's
 // "Braino."). "Braino." itself never moves and is never re-stamped — it's
@@ -218,23 +280,27 @@ const DEEPBREATHS_SW = 380;
 // disappear — leaving "Braino Notch" alone, centred. One continuous phrase,
 // not a phrase transition. "For your Mac." + LetsFuckingGo (INTRO_WORDS
 // below) are untouched — same mechanic, same timing math as always.
-const OPEN_PHRASES = [["This", "is", "Braino", "+Notch"], ["For", "your", "Mac."]];
+const OPEN_SRC = [["This", "is", "Braino", "+Notch"], ["For", "your", "Mac."]];
+const OPEN_CHUNKS = chunkScript(OPEN_SRC);
+const OPEN_PHRASES = chunkedWords(OPEN_CHUNKS);
 const OPEN_SW = [270, 270];
 const OPEN_GAPS: number[] = []; OPEN_GAPS[0] = 550;   // hold after the fuse so the shimmer reads before "For your Mac."
 const INTRO_WORDS = ["Lets", "Fucking", "Go"];
-const SCREEN_MAIN_PHRASES = [["He", "sees", "your", "screen."]];
+const SCREEN_MAIN_PHRASES = chunkedWords(chunkScript([["He", "sees", "your", "screen."]]));
 const NOTE1_WORDS = ["Only", "when", "you", "ask"];
-const TAG_PHRASES = [["Speak."], ["Watch"], ["It"], ["Happen."]];
+const TAG_PHRASES = chunkedWords(chunkScript([["Speak."], ["Watch"], ["It"], ["Happen."]]));
 const TAG_SW = 180;   // ramp continues — was 230
 const TAG_GAPS: number[] = []; TAG_GAPS[0] = 340;
-const ONEMORE_PHRASES = [["Oh..."], ["and", "one", "more", "thing."]];
-const BIGGER_PHRASES = [
+const ONEMORE_PHRASES = chunkedWords(chunkScript([["Oh..."], ["and", "one", "more", "thing."]]));
+const BIGGER_SRC = [
   ["This", "is", "part", "of"],
   ["Ready?", "Lock", "in."],
   ["Braino", "+OS"],
   ["(Version", "1)"],
   ["(Coming", "+Very", "+Fucking", "+Soon)"],   // flush, LetsFuckingGo energy — one word: (ComingVeryFuckingSoon)
 ];
+const BIGGER_CHUNKS = chunkScript(BIGGER_SRC);
+const BIGGER_PHRASES = chunkedWords(BIGGER_CHUNKS);
 // deliberately NOT part of the speed ramp — "Ready?/Lock in." is the film's
 // biggest match cut, same energy as LetsFuckingGo but slower and heavier,
 // each word gets a full beat. Everything else trends faster; this is the
@@ -272,10 +338,13 @@ const HYPE_OPEN_DUR = HYPE_OPEN_SWAP_AT + 700;
 
 // "chat ngl," breaks onto its own beat, "even I was surprised." right after
 // it — nonstop match-cut rhythm across the break (see hypeInv in render()).
-const HYPE_PHRASES = [["Like", "*crazy", "fast."], ["chat", "ngl,"], ["even", "I", "was", "surprised."], ["What", "else", "can", "he", "do?"], ["Let's", "just", "ask", "him."], ["Eyes", "open."]];
+const HYPE_SRC = [["Like", "*crazy", "fast."], ["chat", "ngl,"], ["even", "I", "was", "surprised."], ["What", "else", "can", "he", "do?"], ["Let's", "just", "ask", "him."], ["Eyes", "open."]];
+const HYPE_CHUNKS = chunkScript(HYPE_SRC);
+const HYPE_PHRASES = chunkedWords(HYPE_CHUNKS);
 const HYPE_SW = 250;   // ramp continues — was 340
 const HYPE_GAPS: number[] = []; HYPE_GAPS[0] = 500; HYPE_GAPS[1] = 60; HYPE_GAPS[2] = 90; HYPE_GAPS[3] = 340; HYPE_GAPS[4] = 380;
-const READY_PHRASES = [["Ready?"], ["Don't", "Blink."]];
+const READY_CHUNKS = chunkScript([["Ready?"], ["Don't", "Blink."]]);
+const READY_PHRASES = chunkedWords(READY_CHUNKS);
 const READY_SW = 210;   // ramp continues — was 280
 const READY_GAPS: number[] = []; READY_GAPS[0] = 500; READY_GAPS[1] = 350;
 const CUT_PRE_TEXT = "What can you do?";
@@ -811,7 +880,12 @@ export default function IntroTeaser() {
       sequence(oneMore, ONEMORE_PHRASES, oneMoreStarts, T.oneMore, 300, t);
       bigger.style.opacity = String(ramp(t, T.bigger, T.bigger + 120) * (1 - ramp(t, T.wink - 250, T.wink - 60)));
       sequence(bigger, BIGGER_PHRASES, biggerStarts, T.bigger, BIGGER_SW, t);
-      const biggerWordIdx = kinCache.get(bigger)?.last ?? -1;
+      // %2 must alternate per ORIGINAL WORD — with chunking on, a raw chunk
+      // index would strobe twice as fast and read as a flicker.
+      const biggerChunkIdx = kinCache.get(bigger)?.last ?? -1;
+      const biggerPhraseIdx = seqIdx.get(bigger) ?? -1;
+      const biggerWordIdx = biggerChunkIdx >= 0 && biggerPhraseIdx >= 0
+        ? (BIGGER_CHUNKS[biggerPhraseIdx]?.chunkToWord[biggerChunkIdx] ?? -1) : -1;
       const biggerInv = t < T.wink && biggerWordIdx >= 0 && biggerWordIdx % 2 === 0;
       bigger.classList.toggle("invert-flash", biggerInv);
       glitch.style.opacity = biggerInv ? "1" : "0";
@@ -821,25 +895,31 @@ export default function IntroTeaser() {
       // host class as every other kinetic line). "Braino" itself is never
       // re-stamped and never moves from here on — same DOM span, same
       // screen position, all the way through the fuse below.
-      const openBrainoLanded = t < T.see && seqIdx.get(openLine) === 0 && (kinCache.get(openLine)?.last ?? -1) === 2 && cutOn("thisIsBraino");
+      const openBrainoLanded = t < T.see && seqIdx.get(openLine) === 0 && (kinCache.get(openLine)?.last ?? -1) === lastChunkOf(OPEN_CHUNKS[0], 2) && cutOn("thisIsBraino");
       // "+Notch" (word idx 3, same phrase) fuses onto "Braino" — that IS
       // the match cut — and in the SAME instant, "This"/"is" go invisible.
       // visibility:hidden, NOT display:none: they still occupy their space,
       // so the row's width (and therefore "Braino"'s centred position)
       // never changes — "Braino" doesn't shift/jump when they vanish.
-      const brainoNotchLanded = t < T.see && seqIdx.get(openLine) === 0 && (kinCache.get(openLine)?.last ?? -1) === 3 && cutOn("brainoNotch");
+      const brainoNotchLanded = t < T.see && seqIdx.get(openLine) === 0 && (kinCache.get(openLine)?.last ?? -1) === lastChunkOf(OPEN_CHUNKS[0], 3) && cutOn("brainoNotch");
       openLine.classList.toggle("invert-flash", openBrainoLanded || brainoNotchLanded);
       if (seqIdx.get(openLine) === 0) {
         // explicit both ways (not just on-landing) so scrubbing backward
         // past the fuse correctly brings "This"/"is" back into view.
         const c = kinCache.get(openLine);
         const hideThem = brainoNotchLanded ? "hidden" : "";
-        if (c?.spans[0]) c.spans[0].style.visibility = hideThem;
-        if (c?.spans[1]) c.spans[1].style.visibility = hideThem;
+        // every chunk of "This" and "is" — with chunking on that is more
+        // than the first two spans.
+        for (const wi of [0, 1]) for (const ci of OPEN_CHUNKS[0].wordToChunks[wi]) {
+          if (c?.spans[ci]) c.spans[ci].style.visibility = hideThem;
+        }
       }
       if (brainoNotchLanded && !firedNotchShimmer) {
         firedNotchShimmer = true;
-        const fuseEl = openLine.querySelector<HTMLElement>(".nt-fuse");
+        // the "+Notch" span specifically — with chunking on this phrase holds
+        // several .nt-fuse chunks, and querySelector would grab the first one.
+        const fuseEl = kinCache.get(openLine)?.spans[lastChunkOf(OPEN_CHUNKS[0], 3)]
+          ?? openLine.querySelector<HTMLElement>(".nt-fuse");
         if (fuseEl) { fuseEl.classList.remove("nt-shimmer-play"); void fuseEl.offsetWidth; fuseEl.classList.add("nt-shimmer-play"); }
       }
       if (!brainoNotchLanded) firedNotchShimmer = false;
@@ -852,10 +932,14 @@ export default function IntroTeaser() {
       // local word index by phrase 1's word count so the %2 pattern doesn't
       // reset at the break.
       const hypePhraseIdx = seqIdx.get(hype) ?? -1;
-      const hypeLocalIdx = kinCache.get(hype)?.last ?? -1;
+      const hypeLocalChunk = kinCache.get(hype)?.last ?? -1;
+      // per ORIGINAL WORD (see the bigger strobe above); the +2 offset that
+      // carries the rhythm across the "chat ngl," break is a WORD count too.
+      const hypeLocalIdx = hypeLocalChunk >= 0 && hypePhraseIdx >= 0
+        ? (HYPE_CHUNKS[hypePhraseIdx]?.chunkToWord[hypeLocalChunk] ?? -1) : -1;
       const hypeWordIdx = hypePhraseIdx === 1 ? hypeLocalIdx : hypePhraseIdx === 2 && hypeLocalIdx >= 0 ? hypeLocalIdx + 2 : -1;
       const hypeInv = t < T.ready && hypeWordIdx >= 0 && hypeWordIdx % 2 === 0;
-      const readyInv = t < T.button && (kinCache.get(ready)?.last ?? -1) === 1;
+      const readyInv = t < T.button && (kinCache.get(ready)?.last ?? -1) === lastChunkOf(READY_CHUNKS[1], 1);
       const boomInv = t < T.tag + 66 && (kinCache.get(boom)?.last ?? -1) === 1;
       intro.classList.toggle("invert-flash", introInv);
       hype.classList.toggle("invert-flash", hypeInv);
