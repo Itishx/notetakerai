@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
+import "./braino-dash.css";
 import SpotifyPanel, { type SpotifyConnectionSummary } from "@/components/SpotifyPanel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -35,7 +36,9 @@ import {
   Plus,
   Search,
   Settings,
+  Shield,
   Sparkles,
+  Trash2,
   Zap,
   XCircle,
 } from "lucide-react";
@@ -278,7 +281,7 @@ type ActivityPoint = {
   totalCount: number;
 };
 
-const serifStyle = { fontFamily: "Instrument Serif, Georgia, serif" } as const;
+const serifStyle = { fontFamily: "Newsreader, Georgia, serif" } as const;
 const monoStyle = { fontFamily: "JetBrains Mono, monospace" } as const;
 const BRAINO_CONTACT_PHOTO_BUCKET = "braino-contact-photos";
 const BRAINO_CONTACT_PHOTO_MAX_BYTES = 5 * 1024 * 1024;
@@ -996,19 +999,11 @@ function SidebarItem({
       type="button"
       onClick={onClick}
       title={collapsed ? label : undefined}
-      className={cn(
-        "flex items-center gap-2.5 rounded-lg py-2 text-left text-[13px] transition-colors",
-        collapsed ? "w-full justify-center px-0" : "w-full px-3",
-        active
-          ? "bg-[var(--sb-ink)] text-[var(--sb-on-ink)]"
-          : muted
-            ? "text-[var(--sb-ink-3)] hover:bg-[var(--sb-bg-2)] hover:text-[var(--sb-ink-2)]"
-            : "text-[var(--sb-ink-2)] hover:bg-[var(--sb-bg-2)] hover:text-[var(--sb-ink)]",
-      )}
+      className={cn("bd-nav-item", active && "active", muted && "muted", collapsed && "justify-center")}
     >
-      <span className="flex h-4 w-4 flex-shrink-0 items-center justify-center">{icon}</span>
-      {!collapsed && <span>{label}</span>}
-      {!collapsed && badge ? <span className="ml-auto">{badge}</span> : null}
+      <span className="bd-ic">{icon}</span>
+      {!collapsed && <span className="bd-nm">{label}</span>}
+      {!collapsed && badge ? <span className="bd-ct">{badge}</span> : null}
     </button>
   );
 }
@@ -1056,47 +1051,40 @@ function VoiceModeCard({
       draggable={draggable}
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
-      className="rounded-[18px] border border-[var(--sb-line-2)] bg-[var(--sb-panel-2)] p-5"
+      className="bd-mode-card"
     >
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
-          <span className="cursor-grab select-none text-[var(--sb-ink-4)]" title="Drag to move">
-            ⠿
-          </span>
-          <span
-            className="h-3.5 w-3.5 flex-shrink-0 rounded-full border border-black/10"
-            style={{ backgroundColor: mode.notch_color }}
-          />
+          <span className="cursor-grab select-none text-[var(--sb-ink-4)]" title="Drag to move">&#10287;</span>
+          <span className="bd-mode-swatch" style={{ backgroundColor: mode.notch_color, color: mode.notch_color }} />
           <input
             value={nameDraft}
             onChange={(event) => setNameDraft(event.target.value)}
             onBlur={() => {
               if (nameDraft.trim() && nameDraft !== mode.name) onRename(nameDraft.trim());
             }}
-            style={serifStyle}
-            className="min-w-0 max-w-[220px] border-none bg-transparent text-[20px] leading-none tracking-[-0.02em] text-[var(--sb-ink)] outline-none"
+            className="bd-mode-name max-w-[220px] flex-1"
           />
-          {mode.is_active ? (
-            <Badge className="rounded-full border-none bg-[var(--sb-accent)] px-2.5 py-0.5 text-[9.5px] uppercase tracking-[0.08em] text-white">
-              Active
-            </Badge>
-          ) : null}
+          {mode.is_active ? <span className="bd-tag accent">live</span> : null}
         </div>
         <div className="flex flex-shrink-0 items-center gap-2">
-          <label className="flex items-center gap-1.5 text-[11px] text-[var(--sb-ink-3)]">
-            Notch color
-            <input
-              type="color"
-              value={mode.notch_color}
-              onChange={(event) => onColorChange(event.target.value)}
-              className="h-6 w-8 cursor-pointer rounded border border-[var(--sb-line)] bg-transparent p-0"
-            />
-          </label>
-          <Button type="button" variant="ghost" onClick={onHide} className="h-7 rounded-lg px-2 text-[11px] text-[var(--sb-ink-3)] hover:bg-[var(--sb-bg-2)]">
+          <input
+            type="color"
+            value={mode.notch_color}
+            onChange={(event) => onColorChange(event.target.value)}
+            className="bd-color-input"
+            title="Notch color"
+          />
+          <button type="button" onClick={onHide} className="bd-btn ghost !px-3 !py-1.5 !text-[12px]">
             {hideLabel}
-          </Button>
-          <button type="button" onClick={onDelete} className="rounded-md p-1 text-[var(--sb-ink-4)] transition hover:bg-[var(--sb-bg-2)] hover:text-[var(--sb-ink-2)]">
-            <XCircle className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={onDelete}
+            title="Delete mode"
+            className="grid h-7 w-7 place-items-center rounded-lg text-[var(--sb-ink-4)] transition hover:bg-[var(--sb-bg-2)] hover:text-[var(--sb-ink-2)]"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
           </button>
         </div>
       </div>
@@ -1108,45 +1096,31 @@ function VoiceModeCard({
           </div>
         ) : (
           mode.commands.map((command) => (
-            <div key={command.id} className="group rounded-[12px] border border-[var(--sb-line-2)] bg-[var(--sb-panel)] px-4 py-3">
+            <div key={command.id} className="bd-cmd group">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="text-[13.5px] text-[var(--sb-ink)]">"{command.phrase}"</div>
+                <div className="bd-cmd-phrase">&ldquo;{command.phrase}&rdquo;</div>
                 <div className="flex items-center gap-2">
-                  <div className="flex overflow-hidden rounded-full border border-[var(--sb-line)]">
-                    <button
-                      type="button"
-                      onClick={() => onToggleOpenMode(command.id, "tab")}
-                      className={cn(
-                        "px-2.5 py-1 text-[10.5px]",
-                        command.open_mode === "tab" ? "bg-[var(--sb-ink)] text-[var(--sb-on-ink)]" : "bg-[var(--sb-panel)] text-[var(--sb-ink-3)]",
-                      )}
-                    >
+                  <div className="bd-seg">
+                    <button type="button" className={command.open_mode === "tab" ? "on" : ""} onClick={() => onToggleOpenMode(command.id, "tab")}>
                       Tab
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => onToggleOpenMode(command.id, "incognito")}
-                      className={cn(
-                        "px-2.5 py-1 text-[10.5px]",
-                        command.open_mode === "incognito" ? "bg-[var(--sb-ink)] text-[var(--sb-on-ink)]" : "bg-[var(--sb-panel)] text-[var(--sb-ink-3)]",
-                      )}
-                    >
+                    <button type="button" className={command.open_mode === "incognito" ? "on" : ""} onClick={() => onToggleOpenMode(command.id, "incognito")}>
                       Incognito
                     </button>
                   </div>
                   <button
                     type="button"
                     onClick={() => onDeleteCommand(command.id)}
-                    className="rounded-md p-1 text-[var(--sb-ink-4)] opacity-0 transition hover:bg-[var(--sb-bg-2)] hover:text-[var(--sb-ink-2)] group-hover:opacity-100"
+                    className="rounded-md p-1 text-[var(--sb-ink-4)] opacity-0 transition hover:text-[var(--sb-ink-2)] group-hover:opacity-100"
                   >
                     <XCircle className="h-3.5 w-3.5" />
                   </button>
                 </div>
               </div>
 
-              <div className="mt-2 space-y-1">
+              <div className="mt-2.5 space-y-1">
                 {command.urls.map((u) => (
-                  <div key={u.id} className="flex items-center justify-between gap-2 text-[12px] text-[var(--sb-ink-3)]">
+                  <div key={u.id} className="bd-url-row">
                     <span className="truncate">{u.url}</span>
                     <button type="button" onClick={() => onDeleteUrl(command.id, u.id)} className="flex-shrink-0 text-[var(--sb-ink-4)] hover:text-[var(--sb-ink-2)]">
                       <XCircle className="h-3 w-3" />
@@ -1154,11 +1128,9 @@ function VoiceModeCard({
                   </div>
                 ))}
                 {command.urls.length > 1 ? (
-                  <div style={monoStyle} className="text-[9.5px] uppercase tracking-[0.08em] text-[var(--sb-ink-4)]">
-                    Opens a random 1-{command.urls.length} of these each time
-                  </div>
+                  <div className="bd-eyebrow !text-[9px]">Opens a random 1&ndash;{command.urls.length} of these each time</div>
                 ) : null}
-                <div className="flex items-center gap-1.5 pt-1">
+                <div className="flex items-center gap-1.5 pt-1.5">
                   <input
                     value={urlDrafts[command.id] || ""}
                     onChange={(event) => setUrlDrafts((prev) => ({ ...prev, [command.id]: event.target.value }))}
@@ -1168,8 +1140,8 @@ function VoiceModeCard({
                         setUrlDrafts((prev) => ({ ...prev, [command.id]: "" }));
                       }
                     }}
-                    placeholder="Add another URL for this command…"
-                    className="h-7 flex-1 rounded-md border border-[var(--sb-line)] bg-[var(--sb-panel-2)] px-2 text-[11.5px] text-[var(--sb-ink)] outline-none"
+                    placeholder="Add another URL…"
+                    className="bd-input h-7 flex-1 !py-0 !text-[11.5px]"
                   />
                   <button
                     type="button"
@@ -1177,7 +1149,7 @@ function VoiceModeCard({
                       onAddUrl(command.id, urlDrafts[command.id] || "");
                       setUrlDrafts((prev) => ({ ...prev, [command.id]: "" }));
                     }}
-                    className="h-7 flex-shrink-0 rounded-md border border-[var(--sb-line)] px-2 text-[11px] text-[var(--sb-ink-3)] hover:bg-[var(--sb-bg-2)]"
+                    className="bd-btn ghost !px-2.5 !py-1 !text-[11px]"
                   >
                     Add
                   </button>
@@ -1191,31 +1163,31 @@ function VoiceModeCard({
           <input
             value={draft.phrase}
             onChange={(event) => onDraftChange({ ...draft, phrase: event.target.value })}
-            placeholder='Phrase, e.g. "open my inbox"'
-            className="h-8 min-w-[160px] flex-1 rounded-md border border-[var(--sb-line)] bg-[var(--sb-panel)] px-2 text-[12px] text-[var(--sb-ink)] outline-none"
+            placeholder="Phrase, e.g. open my inbox"
+            className="bd-input h-8 min-w-[150px] flex-1 !py-0 !text-[12px]"
           />
           <input
             value={draft.url}
             onChange={(event) => onDraftChange({ ...draft, url: event.target.value })}
             placeholder="https://…"
-            className="h-8 min-w-[160px] flex-1 rounded-md border border-[var(--sb-line)] bg-[var(--sb-panel)] px-2 text-[12px] text-[var(--sb-ink)] outline-none"
+            className="bd-input h-8 min-w-[150px] flex-1 !py-0 !text-[12px]"
           />
           <select
             value={draft.openMode}
             onChange={(event) => onDraftChange({ ...draft, openMode: event.target.value as "tab" | "incognito" })}
-            className="h-8 rounded-md border border-[var(--sb-line)] bg-[var(--sb-panel)] px-2 text-[12px] text-[var(--sb-ink)]"
+            className="bd-input h-8 !py-0 !text-[12px]"
           >
             <option value="tab">Tab</option>
             <option value="incognito">Incognito</option>
           </select>
-          <Button
+          <button
             type="button"
             onClick={onAddCommand}
             disabled={!draft.phrase.trim() || !draft.url.trim()}
-            className="h-8 rounded-md bg-[var(--sb-accent)] px-3 text-[12px] text-white hover:bg-[var(--sb-accent-deep)]"
+            className="bd-btn dark !py-1.5"
           >
-            <Plus className="mr-1 h-3.5 w-3.5" /> Add command
-          </Button>
+            <Plus className="h-3.5 w-3.5" /> Add command
+          </button>
         </div>
       </div>
     </div>
@@ -3245,8 +3217,8 @@ export default function Dashboard() {
 
   if (loading || !user) {
     return (
-      <div className="min-h-screen bg-[var(--sb-bg)]">
-        <div className="grid min-h-screen lg:grid-cols-[240px_minmax(0,1fr)]">
+      <div className="bd-root min-h-screen bg-[var(--sb-bg)]">
+        <div className="grid min-h-screen lg:grid-cols-[244px_minmax(0,1fr)]">
           <div className="hidden border-r border-[var(--sb-line)] bg-[var(--sb-panel)] p-5 lg:block">
             <Skeleton className="mb-6 h-7 w-32 rounded-full bg-[var(--sb-bg-2)]" />
             <Skeleton className="mb-6 h-11 w-full rounded-xl bg-[var(--sb-bg-2)]" />
@@ -3271,14 +3243,14 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-[var(--sb-bg)] text-[var(--sb-ink)]">
+    <div className="bd-root min-h-screen bg-[var(--sb-bg)] text-[var(--sb-ink)]">
       <div
         className="grid min-h-screen transition-[grid-template-columns] duration-300"
-        style={{ gridTemplateColumns: sidebarCollapsed ? "64px minmax(0,1fr)" : "240px minmax(0,1fr)" }}
+        style={{ gridTemplateColumns: sidebarCollapsed ? "64px minmax(0,1fr)" : "244px minmax(0,1fr)" }}
       >
         <aside className={cn(
-          "sticky top-0 hidden h-screen flex-col border-r border-[var(--sb-line)] bg-[var(--sb-panel)] py-4 lg:flex overflow-hidden transition-all duration-300",
-          sidebarCollapsed ? "px-2 items-center" : "px-3.5",
+          "bd-sidebar hidden py-[22px] lg:flex transition-all duration-300",
+          sidebarCollapsed ? "px-2 items-center" : "px-4",
         )}>
           <div className={cn("flex items-center pb-5", sidebarCollapsed ? "justify-center" : "justify-between")}>
             {sidebarCollapsed ? (
@@ -3374,7 +3346,7 @@ export default function Dashboard() {
 
           <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
           {!sidebarCollapsed && (
-            <div style={monoStyle} className="px-2 pb-1 text-[9.5px] uppercase tracking-[0.14em] text-[var(--sb-ink-3)]">
+            <div className="bd-nav-grp">
               Workspace
             </div>
           )}
@@ -3442,7 +3414,7 @@ export default function Dashboard() {
           </div>
 
           {!sidebarCollapsed && (
-            <div style={monoStyle} className="px-2 pb-1 pt-4 text-[9.5px] uppercase tracking-[0.14em] text-[var(--sb-ink-3)]">
+            <div className="bd-nav-grp">
               Library
             </div>
           )}
@@ -3494,7 +3466,7 @@ export default function Dashboard() {
           </div>
 
           {!sidebarCollapsed && (
-            <div style={monoStyle} className="px-2 pb-1 pt-4 text-[9.5px] uppercase tracking-[0.14em] text-[var(--sb-ink-3)]">
+            <div className="bd-nav-grp">
               Account
             </div>
           )}
@@ -3509,10 +3481,10 @@ export default function Dashboard() {
           </div>
           </div>
 
-          <div className="mt-auto w-full border-t border-[var(--sb-line-2)] pt-3">
+          <div className="bd-side-foot mt-auto w-full">
             {!sidebarCollapsed && (
-              <div className="mb-3 overflow-hidden rounded-xl bg-[var(--sb-ink)] p-4 text-[var(--sb-on-ink)]">
-                <div style={monoStyle} className="mb-2 text-[10px] uppercase tracking-[0.12em] text-[var(--sb-accent-2)]">
+              <div className="bd-invert mb-3 overflow-hidden rounded-xl p-4">
+                <div style={monoStyle} className="bd-invert-accent mb-2 text-[10px] uppercase tracking-[0.12em]">
                   {isPremium ? "PREMIUM ACTIVE" : "FREE PLAN"}
                 </div>
                 <h4 style={serifStyle} className="mb-3 max-w-[170px] text-[20px] leading-[1.15] tracking-[-0.02em]">
@@ -3552,21 +3524,16 @@ export default function Dashboard() {
               type="button"
               onClick={() => setActiveTab("settings")}
               title={sidebarCollapsed ? (profile?.display_name || firstName) : undefined}
-              className={cn(
-                "flex w-full items-center gap-2.5 rounded-lg py-2 text-left transition hover:bg-[var(--sb-bg-2)]",
-                sidebarCollapsed ? "justify-center px-0" : "px-2.5",
-              )}
+              className={cn("bd-profile w-full", sidebarCollapsed && "justify-center")}
             >
-              <div className="grid h-7 w-7 flex-shrink-0 place-items-center rounded-full bg-[linear-gradient(135deg,#6B4E32,#8C5A3D)] text-xs font-semibold text-white">
+              <div className="bd-avatar">
                 {getInitials(profile?.display_name || user.email || "SB")}
               </div>
               {!sidebarCollapsed && (
                 <>
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-[13px] font-medium text-[var(--sb-ink)]">{profile?.display_name || firstName}</div>
-                    <div style={monoStyle} className="text-[10px] uppercase tracking-[0.04em] text-[var(--sb-ink-3)]">
-                      BETA
-                    </div>
+                    <div className="bd-pn truncate">{profile?.display_name || firstName}</div>
+                    <div className="bd-pb">{isPremium ? "Premium" : "Free"}</div>
                   </div>
                   <ChevronRight className="h-4 w-4 text-[var(--sb-ink-3)]" />
                 </>
@@ -3577,35 +3544,28 @@ export default function Dashboard() {
         </aside>
 
         <main className="min-w-0">
-          <div className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b border-[var(--sb-line-2)] bg-[color-mix(in_srgb,var(--sb-bg)_86%,transparent)] px-4 backdrop-blur md:px-8">
-            <div style={monoStyle} className="hidden items-center gap-2 text-[11px] text-[var(--sb-ink-3)] md:flex">
-              <span>Braino</span>
-              <span className="text-[var(--sb-ink-4)]">/</span>
-              <b className="font-medium text-[var(--sb-ink)]">{dashboardTabLabel(activeTab)}</b>
-            </div>
+          <div className="bd-topbar px-4 md:!px-10">
+            <span className="bd-tt hidden md:inline">{dashboardTabLabel(activeTab)}</span>
 
-            <div className="flex max-w-[540px] flex-1 items-center gap-2 rounded-[10px] border border-[var(--sb-line-2)] bg-[var(--sb-panel)] px-3 py-2 text-[13px] text-[var(--sb-ink-3)]">
-              <Search className="h-3.5 w-3.5" />
+            <label className="bd-search">
+              <Search className="h-[15px] w-[15px] flex-shrink-0" />
               <input
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
                 placeholder={topSearchPlaceholder}
-                className="w-full border-0 bg-transparent text-[13.5px] text-[var(--sb-ink)] outline-none placeholder:text-[var(--sb-ink-3)]"
               />
-              <span style={monoStyle} className="hidden rounded border border-[var(--sb-line-2)] bg-[var(--sb-bg-2)] px-1.5 py-0.5 text-[10px] md:inline-flex">
-                CMD K
-              </span>
-            </div>
+              <span className="bd-kbd hidden md:inline-flex">CMD K</span>
+            </label>
 
-            <div className="ml-auto flex items-center gap-2">
-              <button className="grid h-9 w-9 place-items-center rounded-[10px] text-[var(--sb-ink-2)] transition hover:bg-[var(--sb-panel)] hover:text-[var(--sb-ink)]">
+            <div className="flex items-center gap-1.5">
+              <button className="grid h-8 w-8 place-items-center rounded-lg text-[var(--sb-ink-3)] transition hover:bg-[var(--sb-panel)] hover:text-[var(--sb-ink)]">
                 <Bell className="h-4 w-4" />
               </button>
-              <button className="grid h-9 w-9 place-items-center rounded-[10px] text-[var(--sb-ink-2)] transition hover:bg-[var(--sb-panel)] hover:text-[var(--sb-ink)]">
+              <button className="grid h-8 w-8 place-items-center rounded-lg text-[var(--sb-ink-3)] transition hover:bg-[var(--sb-panel)] hover:text-[var(--sb-ink)]">
                 <HelpCircle className="h-4 w-4" />
               </button>
               <Link to="/remote-agent">
-                <button className="hidden items-center gap-2 rounded-[10px] bg-[var(--sb-ink)] px-4 py-2 text-[13px] font-medium text-[var(--sb-on-ink)] transition hover:opacity-90 md:inline-flex">
+                <button className="bd-btn dark hidden md:inline-flex">
                   <Plus className="h-3.5 w-3.5" />
                   New task
                 </button>
@@ -3613,7 +3573,9 @@ export default function Dashboard() {
             </div>
           </div>
 
-          <div className="mx-auto w-full max-w-[1320px] px-4 pb-20 pt-8 md:px-8 lg:px-10">
+          <div className="bd-pane">
+            {activeTab === "overview" && (
+            <>
             <div className="mb-8 flex flex-wrap items-end justify-between gap-6">
               <div>
                 <h1 style={serifStyle} className="mb-2 text-[clamp(36px,4.4vw,56px)] leading-[1.02] tracking-[-0.03em]">
@@ -3629,7 +3591,7 @@ export default function Dashboard() {
               </div>
 
               <div className="min-w-[220px] rounded-[14px] border border-[var(--sb-line-2)] bg-[var(--sb-panel-2)] px-4 py-3">
-                <div style={monoStyle} className="mb-2 flex items-center justify-between text-[11px] uppercase tracking-[0.06em] text-[var(--sb-ink-3)]">
+                <div style={monoStyle} className="mb-2 flex items-center justify-between gap-3 text-[11px] uppercase tracking-[0.06em] text-[var(--sb-ink-3)]">
                   <span>Delegate this month</span>
                   <span className="text-[var(--sb-ink)]">
                     <b>{tasksThisMonth}</b>
@@ -3691,21 +3653,23 @@ export default function Dashboard() {
                 );
               })}
             </div>
+            </>
+            )}
 
             {activeTab === "overview" && (
               <div>
                 <div className="mb-8 grid gap-3 md:grid-cols-2 xl:grid-cols-[1.4fr_1fr_1fr_1fr]">
-                  <div className="relative overflow-hidden rounded-[18px] border border-[var(--sb-ink)] bg-[linear-gradient(180deg,var(--sb-ink)_0%,#2A211A_100%)] p-5 text-[var(--sb-on-ink)]">
+                  <div className="bd-invert relative overflow-hidden rounded-[18px] p-5">
                     <div className="mb-3 flex items-center justify-between">
-                      <span style={monoStyle} className="text-[10.5px] uppercase tracking-[0.14em] text-[var(--sb-accent-2)]">
+                      <span style={monoStyle} className="bd-invert-accent text-[10.5px] uppercase tracking-[0.14em]">
                         Tasks done
                       </span>
-                      <span className="grid h-[22px] w-[22px] place-items-center rounded-md bg-white/10 text-[var(--sb-accent-2)]">
+                      <span className="bd-invert-accent grid h-[22px] w-[22px] place-items-center rounded-md bg-white/10">
                         <CheckCircle2 className="h-3.5 w-3.5" />
                       </span>
                     </div>
                     <div style={serifStyle} className="mb-1 flex items-end gap-1 text-5xl leading-none tracking-[-0.03em]">
-                      <span className="italic text-[var(--sb-accent-2)]">{doneTasks}</span>
+                      <span className="bd-invert-accent italic">{doneTasks}</span>
                       <span className="pb-1 text-lg font-sans text-white/50">/ {commands.length}</span>
                     </div>
                     <div className="text-[13.5px] text-white/65">{successRate}% success rate</div>
@@ -4271,6 +4235,10 @@ export default function Dashboard() {
 
             {activeTab === "notes" && (
               <div>
+                <div className="bd-phead">
+                  <h1>Everything, <span className="bd-serif-i">remembered.</span></h1>
+                  <div className="bd-sub">{notes.length} notes captured across your workspaces. Searchable, and yours.</div>
+                </div>
                 <div className="mb-5 flex flex-wrap items-center gap-3">
                   <div className="flex min-w-[240px] max-w-[420px] flex-1 items-center gap-2 rounded-[10px] border border-[var(--sb-line-2)] bg-[var(--sb-panel-2)] px-3 py-2">
                     <Search className="h-3.5 w-3.5 text-[var(--sb-ink-3)]" />
@@ -4397,6 +4365,10 @@ export default function Dashboard() {
 
             {activeTab === "tasks" && (
               <div>
+                <div className="bd-phead">
+                  <h1>Delegate to the <span className="bd-serif-i">agent.</span></h1>
+                  <div className="bd-sub">Tell Braino what to do in the browser and it runs the steps for you.</div>
+                </div>
                 <div className="mb-5 flex flex-wrap items-center gap-3">
                   <div className="flex min-w-[240px] max-w-[420px] flex-1 items-center gap-2 rounded-[10px] border border-[var(--sb-line-2)] bg-[var(--sb-panel-2)] px-3 py-2">
                     <Search className="h-3.5 w-3.5 text-[var(--sb-ink-3)]" />
@@ -4457,6 +4429,10 @@ export default function Dashboard() {
 
             {activeTab === "xAutomation" && (
               <div className="space-y-5">
+                <div className="bd-phead">
+                  <h1>X on <span className="bd-serif-i">autopilot.</span></h1>
+                  <div className="bd-sub">Braino drafts replies and schedules posts. You stay in control.</div>
+                </div>
                 {/* X sub-tab nav */}
                 <div className="flex gap-1 rounded-xl border border-[var(--sb-line-2)] bg-[var(--sb-panel-2)] p-1">
                   {(["settings", "activity"] as const).map((tab) => (
@@ -5549,6 +5525,10 @@ export default function Dashboard() {
 
             {activeTab === "settings" && (
               <div className="grid gap-5 xl:grid-cols-2">
+                <div className="bd-phead xl:col-span-2">
+                  <h1>Settings.</h1>
+                  <div className="bd-sub">Account, connections, and how Braino sounds.</div>
+                </div>
                 <div className="rounded-[18px] border border-[var(--sb-line-2)] bg-[var(--sb-panel-2)] p-6 xl:col-span-2">
                   <div className="flex items-start justify-between gap-4">
                     <div>
@@ -5978,13 +5958,9 @@ export default function Dashboard() {
 
             {activeTab === "memory" && (
               <div>
-                <div className="mb-6">
-                  <h2 style={serifStyle} className="text-[28px] leading-none tracking-[-0.02em] text-[var(--sb-ink)]">
-                    Memory
-                  </h2>
-                  <p className="mt-1.5 text-[13.5px] text-[var(--sb-ink-2)]">
-                    Braino should always know who you are. Your overall memory lives here, and X automation persona data gets merged in automatically when it exists.
-                  </p>
+                <div className="bd-phead">
+                  <h1>What Braino <span className="bd-serif-i">knows.</span></h1>
+                  <div className="bd-sub">Long-term memory across everything you do. Edit or forget any of it.</div>
                 </div>
 
                 <div className="grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
@@ -6298,13 +6274,9 @@ export default function Dashboard() {
 
             {activeTab === "highlights" && (
               <div>
-                <div className="mb-6">
-                  <h2 style={serifStyle} className="text-[28px] leading-none tracking-[-0.02em] text-[var(--sb-ink)]">
-                    Highlights
-                  </h2>
-                  <p className="mt-1.5 text-[13.5px] text-[var(--sb-ink-2)]">
-                    Text you've saved from pages across the web. Select any passage and ask SideBrain to highlight it.
-                  </p>
+                <div className="bd-phead">
+                  <h1>Passages worth <span className="bd-serif-i">keeping.</span></h1>
+                  <div className="bd-sub">Text you&apos;ve saved from pages across the web. Select any passage and ask Braino to highlight it.</div>
                 </div>
 
                 {dataLoading ? (
@@ -6383,35 +6355,36 @@ export default function Dashboard() {
 
             {activeTab === "voiceCommands" && (
               <div>
-                <div className="mb-6">
-                  <h2 style={serifStyle} className="text-[28px] leading-none tracking-[-0.02em] text-[var(--sb-ink)]">
-                    Voice Commands
-                  </h2>
-                  <p className="mt-1.5 max-w-[620px] text-[13.5px] text-[var(--sb-ink-2)]">
-                    Group your shortcuts into modes. Say "Braino, start &lt;mode&gt;" to activate one — its commands go live and Braino's
-                    notch takes on its color. Say "Braino, stop &lt;mode&gt;" to switch it off. Each command opens the URL you configure
-                    directly, no searching, no thinking — and if you attach more than one URL, Braino opens a random subset of them each time.
-                  </p>
+                <div className="bd-phead">
+                  <h1>Say it, <span className="bd-serif-i">open it.</span></h1>
+                  <div className="bd-sub">
+                    Group your shortcuts into modes. Say &quot;Braino, start &lt;mode&gt;&quot; to activate one: its commands go live and
+                    Braino&apos;s notch takes on its color. Each command opens the URL you configured directly, no searching, no thinking.
+                    Attach more than one URL and Braino opens a random handful each time.
+                  </div>
                 </div>
 
-                <div className="mb-5 flex items-center gap-2">
-                  <Input
+                <div className="bd-ask">
+                  <input
                     value={newModeName}
                     onChange={(event) => setNewModeName(event.target.value)}
                     onKeyDown={(event) => {
                       if (event.key === "Enter") handleCreateVoiceMode();
                     }}
-                    placeholder="New mode name, e.g. Work"
-                    className="h-10 max-w-xs rounded-xl border-[var(--sb-line)] bg-[var(--sb-panel)] text-sm"
+                    placeholder="Name a new mode, e.g. Work…"
                   />
-                  <Button
-                    type="button"
-                    onClick={handleCreateVoiceMode}
-                    disabled={!newModeName.trim()}
-                    className="h-10 rounded-xl bg-[var(--sb-accent)] px-4 text-[13px] text-white hover:bg-[var(--sb-accent-deep)]"
-                  >
-                    <Plus className="mr-1 h-4 w-4" /> New mode
-                  </Button>
+                  <button type="button" className="bd-send" onClick={handleCreateVoiceMode} title="Create mode">
+                    <Plus className="h-[17px] w-[17px]" />
+                  </button>
+                </div>
+
+                <div className="bd-shead">
+                  <h2>Your modes</h2>
+                  {voiceModes.length > 0 ? (
+                    <span className="bd-mono text-[11px] text-[var(--sb-ink-3)]">
+                      {voiceModes.reduce((n, m) => n + m.commands.length, 0)} commands
+                    </span>
+                  ) : null}
                 </div>
 
                 {dataLoading ? (
@@ -6430,16 +6403,9 @@ export default function Dashboard() {
                     }}
                   >
                     {voiceModes.filter((m) => !m.is_hidden).length === 0 ? (
-                      <div className="flex flex-col items-center gap-3 rounded-[16px] border border-dashed border-[var(--sb-line)] bg-[var(--sb-panel)] px-6 py-12 text-center">
-                        <div className="grid h-11 w-11 place-items-center rounded-full bg-[var(--sb-accent-soft)]">
-                          <Zap className="h-5 w-5 text-[var(--sb-accent-deep)]" />
-                        </div>
-                        <div>
-                          <div className="mb-1 text-sm font-medium text-[var(--sb-ink)]">No modes yet</div>
-                          <div className="max-w-[380px] text-[13px] text-[var(--sb-ink-3)]">
-                            Create a mode above, then add "say this, open that" commands to it.
-                          </div>
-                        </div>
+                      <div className="bd-empty">
+                        <h3>No modes yet</h3>
+                        <p>Name one above, then teach it what to open. Say the phrase, Braino opens the link.</p>
                       </div>
                     ) : (
                       voiceModes
@@ -6468,14 +6434,10 @@ export default function Dashboard() {
                   </div>
                 )}
 
-                <div className="mt-8">
+                <div className="bd-shead"><h2>Hidden</h2></div>
+                <div>
                   <div
-                    className={cn(
-                      "rounded-[18px] border border-dashed p-5 transition",
-                      draggedModeId
-                        ? "border-[var(--sb-accent)] bg-[var(--sb-accent-soft)]"
-                        : "border-[var(--sb-line-2)] bg-[var(--sb-panel-2)]",
-                    )}
+                    className={cn("bd-dropzone", draggedModeId && "over")}
                     onDragOver={(event) => event.preventDefault()}
                     onDrop={() => {
                       if (draggedModeId) handleToggleModeHidden(draggedModeId, true);
@@ -6483,59 +6445,40 @@ export default function Dashboard() {
                     }}
                   >
                     <div className="mb-3 flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2.5">
                         <FolderOpen className="h-4 w-4 text-[var(--sb-ink-3)]" />
-                        <h3 style={serifStyle} className="text-[19px] leading-none tracking-[-0.02em] text-[var(--sb-ink)]">
+                        <h3 style={serifStyle} className="text-[19px] leading-none tracking-[-0.01em] text-[var(--sb-ink)]">
                           Hidden modes
                         </h3>
-                        <Badge variant="outline" className="rounded-full border-[var(--sb-line)] bg-[var(--sb-panel)] px-2.5 py-0.5 text-[9.5px] text-[var(--sb-ink-3)]">
-                          {voiceModes.filter((m) => m.is_hidden).length}
-                        </Badge>
+                        <span className="bd-tag">{voiceModes.filter((m) => m.is_hidden).length}</span>
                       </div>
                       {!hiddenModesCredentialId ? (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          onClick={handleRegisterHiddenModesFingerprint}
-                          className="h-8 rounded-full border-[var(--sb-line)] bg-[var(--sb-panel)] px-3 text-[12px] text-[var(--sb-ink)] hover:bg-[var(--sb-bg-2)]"
-                        >
-                          Set up fingerprint unlock
-                        </Button>
+                        <button type="button" onClick={handleRegisterHiddenModesFingerprint} className="bd-btn ghost !py-1.5 !text-[12px]">
+                          <Shield className="h-3.5 w-3.5" /> Set up fingerprint
+                        </button>
                       ) : !hiddenFolderUnlocked ? (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          onClick={handleUnlockHiddenFolder}
-                          disabled={hiddenFolderUnlocking}
-                          className="h-8 rounded-full border-[var(--sb-line)] bg-[var(--sb-panel)] px-3 text-[12px] text-[var(--sb-ink)] hover:bg-[var(--sb-bg-2)]"
-                        >
-                          {hiddenFolderUnlocking ? "Waiting for fingerprint…" : "Unlock with fingerprint"}
-                        </Button>
+                        <button type="button" onClick={handleUnlockHiddenFolder} disabled={hiddenFolderUnlocking} className="bd-btn ghost !py-1.5 !text-[12px]">
+                          <Shield className="h-3.5 w-3.5" />
+                          {hiddenFolderUnlocking ? "Waiting…" : "Unlock"}
+                        </button>
                       ) : (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          onClick={() => setHiddenFolderUnlocked(false)}
-                          className="h-8 rounded-full px-3 text-[12px] text-[var(--sb-ink-3)] hover:bg-[var(--sb-bg-2)]"
-                        >
+                        <button type="button" onClick={() => setHiddenFolderUnlocked(false)} className="bd-btn ghost !py-1.5 !text-[12px]">
                           Lock
-                        </Button>
+                        </button>
                       )}
                     </div>
 
-                    <p className="mb-3 text-[12.5px] text-[var(--sb-ink-3)]">
-                      Drag a mode here to hide it from the list above. Reopening this folder requires your fingerprint / device
-                      biometric — visibility only, voice activation still works normally.
+                    <p className="mb-4 max-w-[560px] text-[12.5px] leading-relaxed text-[var(--sb-ink-3)]">
+                      Drag a mode here to hide it from the list above. Reopening this folder asks for your fingerprint. Visibility
+                      only: a hidden mode still activates by voice exactly as before.
                     </p>
 
                     {!hiddenFolderUnlocked ? (
-                      <div className="rounded-[14px] border border-[var(--sb-line-2)] bg-[var(--sb-panel)] px-4 py-6 text-center text-[12.5px] text-[var(--sb-ink-4)]">
+                      <div className="bd-locked">
                         {voiceModes.filter((m) => m.is_hidden).length} mode{voiceModes.filter((m) => m.is_hidden).length === 1 ? "" : "s"} locked
                       </div>
                     ) : voiceModes.filter((m) => m.is_hidden).length === 0 ? (
-                      <div className="rounded-[14px] border border-dashed border-[var(--sb-line-2)] bg-[var(--sb-panel)] px-4 py-6 text-center text-[12.5px] text-[var(--sb-ink-4)]">
-                        Nothing hidden yet — drag a mode card into this folder.
-                      </div>
+                      <div className="bd-locked !border-dashed">Nothing hidden yet</div>
                     ) : (
                       <div className="space-y-4">
                         {voiceModes
