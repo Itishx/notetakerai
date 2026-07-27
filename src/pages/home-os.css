@@ -1009,8 +1009,10 @@ body.nn-booting .hos > :not(.notchnav) { opacity: 0; transform: translateY(18px)
    cannot influence the bar's width at all — the row never moves, and the notch
    only grows downward (via padding-bottom) to uncover it. */
 .nn-island {
-  position: absolute; left: 50%; transform: translateX(-50%); top: 52px;
-  width: min(560px, calc(100vw - 40px));
+  /* Must live INSIDE the notch's width: the bar never widens (that slid the
+     row), and overflow is hidden, so a panel wider than the bar simply loses
+     its right-hand column. Inset within the bar instead. */
+  position: absolute; left: 16px; right: 16px; top: 52px;
   opacity: 0; pointer-events: none;
   font-family: "SF Pro Display", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
   transition: opacity .3s ease .1s;
@@ -1022,16 +1024,17 @@ body.nn-booting .hos > :not(.notchnav) { opacity: 0; transform: translateY(18px)
   font-size: 9.5px; letter-spacing: .18em; text-transform: uppercase;
   color: rgba(255,255,255,.34); padding-bottom: 8px;
 }
-.nn-island-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 22px; }
+.nn-island-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 18px; }
 .nn-island-link {
-  display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+  font-size: 14px;
+  display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
   min-width: 0; white-space: nowrap;
-  padding: 9px 0; border-bottom: 1px solid rgba(255,255,255,.08);
+  padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,.08);
   color: #f5f5f7; text-decoration: none; font-size: 15px; font-weight: 500;
   transition: color .15s ease, padding-left .15s ease;
 }
 .nn-island-link:hover { color: #fff; padding-left: 4px; }
-.nn-island-link span { font-size: 10.5px; color: rgba(255,255,255,.36); font-weight: 400; overflow: hidden; text-overflow: ellipsis; }
+.nn-island-link span { font-size: 9.5px; color: rgba(255,255,255,.36); font-weight: 400; overflow: hidden; text-overflow: ellipsis; }
 
 @media (max-width: 620px) { .nn-island-grid { grid-template-columns: 1fr; } }
 @media (prefers-reduced-motion: reduce) { .notchnav, .nn-island { transition: none; } }

@@ -252,11 +252,44 @@ body {
 #notch-face:not(.listen):not(.speak) .nf-ears { opacity: 0; }
 #notch-face:not(.listen):not(.speak) #nf-mouth-idle { display: none; }
 
+/* LISTENING = the notch radiates coral, continuously, in the same rhythm as
+   the wake-up sequence. It is the one unambiguous "he is hearing you" signal,
+   so it never goes quiet while the mic is live. Speaking is left alone: the
+   mouth already carries that state. */
 #notch-face.listen .nf-pill {
   width: 250px;
   height: calc(var(--nf-notch-h) + 44px);
   border-radius: 0 0 26px 26px;
-  box-shadow: 0 0 20px rgba(232, 120, 110, 0.3);
+  animation: nfListenRadiate 1.9s ease-in-out infinite;
+}
+
+@keyframes nfListenRadiate {
+  0%, 100% {
+    box-shadow:
+      0 0 0 1px rgba(232, 120, 110, 0.34),
+      0 0 18px 2px rgba(232, 120, 110, 0.30);
+  }
+  50% {
+    box-shadow:
+      0 0 0 1.6px rgba(240, 149, 140, 0.90),
+      0 0 38px 7px rgba(232, 120, 110, 0.62);
+  }
+}
+
+/* A running Voice Command mode still owns the colour while listening, so the
+   mode tint wins over the coral rather than fighting it. */
+#notch-face.nf-voice-mode.listen .nf-pill {
+  animation: none;
+  box-shadow:
+    0 0 0 1.5px var(--nf-mode-color, #0A84FF),
+    0 0 30px -1px var(--nf-mode-color, #0A84FF);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #notch-face.listen .nf-pill {
+    animation: none;
+    box-shadow: 0 0 0 1.4px rgba(232, 120, 110, 0.7), 0 0 22px 3px rgba(232, 120, 110, 0.4);
+  }
 }
 
 /* Final design: speaking keeps the island size, with a simple talking mouth. */

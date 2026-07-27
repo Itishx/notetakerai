@@ -399,3 +399,19 @@ The dashboard (`/dashboard`) runs its own design system, ported verbatim from th
 - The design resets bare `<button>`; without the scoped reset in `braino-dash.css` the browser's default border outlines every nav item and chip.
 
 **IA.** The greeting hero, delegate meter, and sub-tab strip render on the Overview tab only. Every other tab opens with its own `.bd-phead`, and the topbar carries the page title.
+
+### Notch state colours (Mac)
+
+The notch carries voice state as colour, so it reads at a glance without text:
+
+- **Listening — coral, radiating.** `#notch-face.listen` runs `nfListenRadiate`
+  (1.9s, infinite): a coral ring breathing between a hairline and a 38px bloom,
+  the same rhythm as the wake-up sequence. It is the one unambiguous "he is
+  hearing you" signal, so it never goes quiet while the mic is live.
+- **Speaking — unchanged.** The mouth already carries that state; adding a
+  second signal on top of it just competes with itself.
+- **Voice Command mode — the mode's own colour wins.** While a mode runs, its
+  tint overrides the coral rather than animating underneath it, so "which mode
+  am I in" stays readable even mid-sentence.
+
+Reduced motion gets the coral as a static ring, not a pulse.
