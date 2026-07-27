@@ -187,9 +187,38 @@ const NN_ISLAND = [
   { to: "/founder-letter", label: "Letter", note: "why" },
 ];
 
+/* Shown only until he has been woken — the dare that makes the reveal land. */
+function NotchInvite() {
+  const [asleep, setAsleep] = useState(() => {
+    try { return localStorage.getItem("sbNotchAwake") !== "1"; } catch { return false; }
+  });
+  useEffect(() => {
+    if (!asleep) return;
+    const id = window.setInterval(() => {
+      try { if (localStorage.getItem("sbNotchAwake") === "1") setAsleep(false); } catch { /* ignore */ }
+    }, 600);
+    return () => window.clearInterval(id);
+  }, [asleep]);
+  if (!asleep) return null;
+  return (
+    <section className="hos-clickeyes">
+      <p>He&apos;s been blinking at you this whole time.</p>
+      <span>Click the eyes.</span>
+    </section>
+  );
+}
+
 export function NotchNav({ narrator = false }: { narrator?: boolean }) {
   const ref = useRef<HTMLElement>(null);
   const [islandOpen, setIslandOpen] = useState(false);
+  /* First visit shows ONLY his eyes, following the cursor — no notch, no
+     links, nothing. Clicking them asks your name, then plays the real boot
+     sequence and the nav assembles itself. After that it is remembered. */
+  const [awake, setAwake] = useState(() => {
+    try { return localStorage.getItem("sbNotchAwake") === "1"; } catch { return true; }
+  });
+  const [naming, setNaming] = useState(false);
+  const [nameDraft, setNameDraft] = useState("");
 
   useEffect(() => {
     if (!islandOpen) return;
@@ -265,6 +294,20 @@ export function NotchNav({ narrator = false }: { narrator?: boolean }) {
       }
     };
     const bootTimers: number[] = [];
+    /* asleep: the eyes track the cursor and nothing else exists yet */
+    if (!awake) {
+      el.classList.add("nn-preboot");
+      const onMove = (ev: MouseEvent) => {
+        const r = el.getBoundingClientRect();
+        const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+        const dx = clamp((ev.clientX - cx) / 260, -1, 1);
+        const dy = clamp((ev.clientY - cy) / 220, -1, 1);
+        pupils.forEach((pp) => pp.style.transform = `translate(${dx * 3.4}px, ${dy * 2.6}px)`);
+      };
+      window.addEventListener("mousemove", onMove);
+      return () => { window.removeEventListener("mousemove", onMove); el.classList.remove("nn-preboot"); };
+    }
+    el.classList.remove("nn-preboot");
     if (!reduced) {
       /* the WHOLE page waits: nav boots first, wink lands, wings spread,
          and only then does the rest of the site fade in */
@@ -349,7 +392,7 @@ export function NotchNav({ narrator = false }: { narrator?: boolean }) {
       document.body.classList.remove("nn-booting");
       io?.disconnect();
     };
-  }, [narrator]);
+  }, [narrator, awake]);
   return (
     <nav className={`notchnav${islandOpen ? " nn-open" : ""}`} ref={ref} aria-label="Primary">
       <div className="nn-row">
@@ -367,8 +410,8 @@ export function NotchNav({ narrator = false }: { narrator?: boolean }) {
         tabIndex={0}
         aria-expanded={islandOpen}
         aria-label={islandOpen ? "Close menu" : "Open menu"}
-        onClick={() => setIslandOpen((v) => !v)}
-        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setIslandOpen((v) => !v); } }}
+        onClick={() => (awake ? setIslandOpen((v) => !v) : setNaming(true))}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); awake ? setIslandOpen((v) => !v) : setNaming(true); } }}
       >
         <g className="ne nn-eye"><circle cx="49" cy="22" r="12" fill="#fff" /><circle className="np" cx="49" cy="22" r="6.2" fill="#1B1713" /><circle cx="51.3" cy="19.3" r="2" fill="#fff" /></g>
         <g className="ne nn-eye nn-eye-r"><circle cx="71" cy="22" r="12" fill="#fff" /><circle className="np" cx="71" cy="22" r="6.2" fill="#1B1713" /><circle cx="73.3" cy="19.3" r="2" fill="#fff" /></g>
@@ -382,6 +425,34 @@ export function NotchNav({ narrator = false }: { narrator?: boolean }) {
       </div>
       <span className="nn-cap" aria-live="polite" />
       </div>
+      {naming && !awake ? (
+        <form
+          className="nn-name"
+          onSubmit={(e) => {
+            e.preventDefault();
+            const n = nameDraft.trim();
+            try {
+              if (n) localStorage.setItem("sbUserName", n);
+              localStorage.setItem("sbNotchAwake", "1");
+            } catch { /* private mode: he just wakes anyway */ }
+            setNaming(false);
+            setAwake(true);   // re-runs the effect, which plays the real boot
+          }}
+        >
+          <label htmlFor="nn-name-input">Before he opens his eyes — what should he call you?</label>
+          <div className="nn-name-row">
+            <input
+              id="nn-name-input"
+              autoFocus
+              value={nameDraft}
+              onChange={(e) => setNameDraft(e.target.value)}
+              placeholder="your name"
+              maxLength={40}
+            />
+            <button type="submit">Wake him</button>
+          </div>
+        </form>
+      ) : null}
       <div className="nn-island">
         <div className="nn-island-label">Go anywhere</div>
         <div className="nn-island-grid">
@@ -811,6 +882,8 @@ export default function HomeOS() {
         </div>
 
       </header>
+
+      <NotchInvite />
 
       {/* the homepage is now three things: where to go next, the real FAQ, and
           the live log — the running record of what he is becoming */}
