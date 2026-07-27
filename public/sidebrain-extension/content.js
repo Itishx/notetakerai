@@ -9990,6 +9990,18 @@ function __sbBuildBrainUI() {
     });
   } catch (_) {}
 
+  // Voice Commands (dashboard → voice_modes/voice_commands/voice_command_urls → cached by
+  // background.js's ~1min voiceModesPoll alarm). Read synchronously, offline, same shape as
+  // the swearing preference above. onChanged also fires when THIS tab starts/stops a mode.
+  try {
+    chrome.storage?.local?.get?.(["sbVoiceModes"], (r) => {
+      if (!chrome.runtime.lastError) __sbSetVoiceModesCache(r?.sbVoiceModes);
+    });
+    chrome.storage?.onChanged?.addListener?.((changes, area) => {
+      if (area === "local" && changes.sbVoiceModes) __sbSetVoiceModesCache(changes.sbVoiceModes.newValue);
+    });
+  } catch (_) {}
+
   // ── Hive-mind handshake: this tab may have been opened BY a running delegate task
   // (Amazon and friends open products in new tabs). Ask the background if a run is
   // mid-flight here; if so, come up already in the working state instead of blank. ──
@@ -16196,13 +16208,126 @@ async function __sbResolvePremiumStatus(forceRefresh = false) {
 // sources, optionally opens a few tabs for show, and presents/speaks the result + best pick.
 // It does NOT use the Delegate browser loop (that's reserved for ACTION tasks).
 let __sbCompareSkillState = { phase: "idle" };
+// A pending "open tabs or just research?" question left unanswered this long is stale — treat it
+// as expired rather than let it hijack an unrelated later command.
+const __SB_PENDING_CLARIFICATION_TTL_MS = 3 * 60 * 1000;
 
 function __sbResetCompareSkillState() { __sbCompareSkillState = { phase: "idle" }; }
 function __sbSetCompareSkillState(next = {}) {
   __sbCompareSkillState = { phase: "idle", ...next, updatedAt: Date.now() };
 }
 function __sbIsCompareSkillAwaitingInput() {
-  return __sbCompareSkillState?.phase === "awaiting_choice";
+  if (__sbCompareSkillState?.phase !== "awaiting_choice") return false;
+  const updatedAt = __sbCompareSkillState?.updatedAt || 0;
+  if (Date.now() - updatedAt > __SB_PENDING_CLARIFICATION_TTL_MS) {
+    __sbResetCompareSkillState();
+    return false;
+  }
+  return true;
+}
+
+// ── Human Intelligence Layer ─────────────────────────────────────────────────
+// A general "Braino asked a question, waiting for the answer" state — the same idea as
+// __sbCompareSkillState above, generalized beyond one skill. Used when __sbHandleAmbiguityGate
+// decides a command is genuinely ambiguous (a vague referent tied to a delivery choice, or a
+// message/call aimed at a named person) rather than committing to a best guess.
+let __sbPendingClarification = null;
+// shape: { createdAt, expiresAt, originalPromptText, restatedGoal, question, ctx }
+
+function __sbSetPendingClarification(fields = {}) {
+  const now = Date.now();
+  __sbPendingClarification = { createdAt: now, expiresAt: now + __SB_PENDING_CLARIFICATION_TTL_MS, ...fields };
+}
+
+function __sbClearPendingClarification() { __sbPendingClarification = null; }
+
+function __sbHasPendingClarification() {
+  if (!__sbPendingClarification) return false;
+  if (Date.now() > __sbPendingClarification.expiresAt) {
+    __sbPendingClarification = null;
+    return false;
+  }
+  return true;
+}
+
+// Cheap, deterministic pre-filter for whether a command is worth the extra reasoning round-trip at
+// all. Obviously-specific commands (open Gmail, party tricks, volume, ...) never reach this check
+// or return long before it. Only fresh commands carrying a real marker of ambiguity pay the cost:
+// a vague referent tied to a delivery-method fork, or a message/call aimed at a named person (whose
+// exact contact match can't be verified from here — see the Delegate-side contact rule instead).
+function __sbLooksAmbiguousForReasoning(text) {
+  const t = String(text || "").trim();
+  if (!t || t.length > 220) return false;
+  if (/\b(more|similar|other|another)\b.{0,20}\b(like|to)\b.{0,10}\b(this|that|it)\b/i.test(t)) return true;
+  if (/\b(show me|tell me|find me|play me|recommend)\b.{0,25}\bmore\b.{0,20}\b(like|similar)\b/i.test(t)) return true;
+  if (/\b(text|message|dm|whatsapp|call|email)\b.{0,25}\b(to\s+)?[A-Z][a-zA-Z'-]{1,20}\b/.test(t)) return true;
+  return false;
+}
+
+// One round-trip to background.js's "reasonAboutIntent" handler — a fast, small-model reasoning
+// call (same tier as the existing classifyBrainAgentTask classifier), given the prompt, recent
+// chat history, current page, and any pending clarification. Never throws; null on any failure so
+// callers always have a safe "skip the gate" fallback.
+function __sbCallReasoningGate(promptText, ctx = {}) {
+  return new Promise((resolve) => {
+    try {
+      chrome.runtime.sendMessage({
+        action: "reasonAboutIntent",
+        promptText: String(promptText || ""),
+        chatHistory: __sbGetRecentSharedChatHistory(10),
+        pageContext: { url: location.href, title: document.title },
+        pending: __sbPendingClarification ? {
+          question: __sbPendingClarification.question,
+          restatedGoal: __sbPendingClarification.restatedGoal,
+          originalPromptText: __sbPendingClarification.originalPromptText,
+        } : null,
+      }, (resp) => { void chrome.runtime.lastError; resolve(resp || null); });
+    } catch (_) { resolve(null); }
+  });
+}
+
+// Checked FIRST in __sbProcessPrompt (right after the safety/persona pre-empts, before the regex
+// intent classifier) so an answer to a pending question is never misrouted as a fresh command.
+// Slot-filling: once the reasoning call confirms this message answers the pending question, resume
+// the ORIGINAL task with the answer merged into a self-contained instruction (mirrors how the
+// Compare skill already merges its stored query with the newly-supplied tabs/no-tabs choice).
+async function __sbHandlePendingClarificationFollowup(promptText, ctx = {}) {
+  if (!__sbHasPendingClarification()) return false;
+  const pending = __sbPendingClarification;
+  const result = await __sbCallReasoningGate(promptText, ctx).catch(() => null);
+  if (!result || !result.bound_to_pending) {
+    // Either the reasoning call failed, or this is judged to be a fresh, unrelated command —
+    // either way don't let a stale question hijack it.
+    __sbClearPendingClarification();
+    return false;
+  }
+  __sbClearPendingClarification();
+  const mergedInstruction = String(result.resolved_instruction || "").trim()
+    || `${pending.restatedGoal} ${promptText}`.trim();
+  return await __sbProcessPrompt(mergedInstruction, ctx);
+}
+
+// Fresh-turn check, run once intent has been classified and every skill with its own
+// disambiguation (Compare, X-skill, referential open) has already had first crack. Only pays the
+// reasoning round-trip for commands __sbLooksAmbiguousForReasoning flags. If the model confirms
+// genuine ambiguity, ask one short clarifying question and remember it instead of guessing.
+async function __sbHandleAmbiguityGate(promptText, ctx = {}) {
+  if (!__sbLooksAmbiguousForReasoning(promptText)) return false;
+  const result = await __sbCallReasoningGate(promptText, ctx).catch(() => null);
+  if (!result || !result.ambiguous || !result.clarifying_question) return false;
+  const fromVoice = Boolean(ctx.fromVoice);
+  const voiceOutput = ctx.voiceOutput === "realtime" ? "realtime" : "legacy";
+  __sbSetPendingClarification({
+    originalPromptText: promptText,
+    restatedGoal: String(result.restated_goal || promptText).trim(),
+    question: String(result.clarifying_question).trim(),
+  });
+  __sbChatHistory.push({ role: "user", content: promptText });
+  __sbChatHistory.push({ role: "assistant", content: result.clarifying_question });
+  if (fromVoice) await __sbSpeakWithPreferredVoice(result.clarifying_question, voiceOutput, { verbatim: true });
+  else __sbShowBubble(result.clarifying_question, false, { kicker: "Braino" });
+  __sbCompleteVoiceTurn(ctx);
+  return true;
 }
 
 // ── Referential follow-up ────────────────────────────────────────────────────
@@ -16881,6 +17006,39 @@ async function __sbProcessPrompt(text, options = {}) {
     return;
   }
 
+  // Human Intelligence Layer, step 1: if Braino is waiting on an answer to a clarifying question
+  // he just asked, check THIS message against it before anything else — otherwise the regex
+  // classifier below could misroute the answer ("open tabs") as a fresh, meaningless command.
+  if (await __sbHandlePendingClarificationFollowup(promptText, { fromVoice, voiceOutput, voiceTurnToken })) {
+    return;
+  }
+
+  // Voice Commands — the user's OWN configured shortcuts win over every built-in route below.
+  // Asking ABOUT a mode is answered first, so "are you in <name>?" is never
+  // mistaken for "enter <name>".
+  const __voiceModeQuery = __sbDetectVoiceModeQuery(text) || __sbDetectVoiceModeQuery(promptText);
+  if (__voiceModeQuery) {
+    __sbStopSpeech();
+    await __sbHandleVoiceModeQuery(__voiceModeQuery, { fromVoice, voiceOutput });
+    __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken });
+    return;
+  }
+  // Mode start/stop next, then (while a mode runs) that mode's phrase→URL commands.
+  const __voiceModeCmd = __sbDetectVoiceModeCommand(text) || __sbDetectVoiceModeCommand(promptText);
+  if (__voiceModeCmd) {
+    __sbStopSpeech();
+    await __sbHandleVoiceModeCommand(__voiceModeCmd, { fromVoice, voiceOutput });
+    __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken });
+    return;
+  }
+  const __voicePhrase = __sbDetectVoiceCommandPhrase(text) || __sbDetectVoiceCommandPhrase(promptText);
+  if (__voicePhrase) {
+    __sbStopSpeech();
+    __sbHandleVoiceCommandPhrase(__voicePhrase, { fromVoice, voiceOutput });
+    __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken });
+    return;
+  }
+
   // Open-known-site shortcut — instant navigate instead of the ~10s agent loop (simple opens only).
   // Detect on the RAW text too (forced-Delegate mode can strip the "open" verb from promptText).
   const __openSite = __sbDetectOpenSite(text) || __sbDetectOpenSite(promptText);
@@ -17072,6 +17230,14 @@ async function __sbProcessPrompt(text, options = {}) {
   }
   if (__sbIsTabsQuery(promptText)) {
     await __sbHandleTabsQuery(promptText, { fromVoice, voiceOutput, voiceTurnToken });
+    return;
+  }
+
+  // Human Intelligence Layer, step 2: every skill with its OWN disambiguation (Compare, X-skill,
+  // referential open) has already had first crack above. For anything left, only genuinely
+  // ambiguous-looking commands (a vague referent tied to a delivery choice, or a message/call
+  // aimed at a named person) pay the extra round-trip to ask "am I sure, or should I check?".
+  if (intent !== "record" && await __sbHandleAmbiguityGate(promptText, { fromVoice, voiceOutput, voiceTurnToken })) {
     return;
   }
 
@@ -19429,6 +19595,16 @@ function __sbIsBenignRealtimeControlError(message) {
   );
 }
 
+// The "already has an active response" race fires precisely WHILE our own client-side state
+// says a response is active (it's the server telling us our response.create landed before its
+// response.cancel finished processing) — so it can never pass __sbHasActiveRealtimeResponse()'s
+// gate the way the other benign errors do. It's harmless (the waiter still resolves and the
+// caller falls back cleanly), so it's checked separately and bypasses that gate entirely.
+function __sbIsRaceyActiveResponseError(message) {
+  const text = String(message || "").toLowerCase();
+  return text.includes("already has an active response");
+}
+
 function __sbResolveRtWaiter(payload) {
   if (!__sbRtResponseWaiter) return;
   const waiter = __sbRtResponseWaiter;
@@ -19536,12 +19712,16 @@ function __sbEndStreamTts() {
 }
 
 // Single drain loop: play queued sentences in order, prefetching the next while the current plays.
+// Once Fish fails once in a turn, remaining sentences skip straight to browser voice instead of
+// each paying a failed round-trip first (fishDown is per-call/per-turn, not global — 429s are
+// transient, so a fresh turn always retries Fish).
 async function __sbDrainStreamTts() {
   const s = __sbStreamTts;
   if (!s || s.draining || !s.headers) return;
   s.draining = true;
+  let fishDown = false;
   try {
-    let pending = null; // { promise } — a fetch already started for the next sentence
+    let pending = null; // { sentence, promise } — a fetch already started for the next sentence
     while (true) {
       if (!__sbStreamTts || s.token !== __sbSpeechGeneration) return; // barge-in / superseded
       let item = pending;
@@ -19552,22 +19732,42 @@ async function __sbDrainStreamTts() {
           await new Promise((r) => setTimeout(r, 25));
           continue;
         }
-        item = { promise: __sbFetchSentenceTts(s.queue.shift(), s.token, s.headers) };
+        const sentence = s.queue.shift();
+        item = fishDown
+          ? { sentence, promise: Promise.resolve({ skipFish: true }) }
+          : { sentence, promise: __sbFetchSentenceTts(sentence, s.token, s.headers) };
       }
       const cur = await item.promise;
       if (s.token !== __sbSpeechGeneration) return;
+      if (cur.error) fishDown = true; // flip BEFORE deciding the next prefetch below
       // Kick off the next sentence's fetch NOW so it overlaps this one's playback (no gap).
       if (s.queue.length > 0) {
-        pending = { promise: __sbFetchSentenceTts(s.queue.shift(), s.token, s.headers) };
+        const nextSentence = s.queue.shift();
+        pending = fishDown
+          ? { sentence: nextSentence, promise: Promise.resolve({ skipFish: true }) }
+          : { sentence: nextSentence, promise: __sbFetchSentenceTts(nextSentence, s.token, s.headers) };
       }
-      if (cur.error) { __sbHandleFishTtsFailure(cur.error); continue; }
+      if (cur.skipFish) {
+        const played = await __sbSpeakWithBrowser(item.sentence, s.token);
+        if (played) s.spoke = true;
+        continue;
+      }
+      if (cur.error) {
+        __sbHandleFishTtsFailure(cur.error);
+        const played = await __sbSpeakWithBrowser(item.sentence, s.token);
+        if (played) s.spoke = true;
+        continue;
+      }
       if (!cur.resp) return;
       try {
         const played = await __sbPlaySentenceResp(cur.resp, s.token);
         if (played) s.spoke = true;
       } catch (mediaErr) {
         if (s.token !== __sbSpeechGeneration) return;
+        fishDown = true;
         __sbHandleFishTtsFailure(mediaErr);
+        const played = await __sbSpeakWithBrowser(item.sentence, s.token);
+        if (played) s.spoke = true;
       }
     }
   } finally {
@@ -20015,6 +20215,221 @@ function __sbIsAdvanceToBraino(text) {
 // ── Open-known-site shortcut: "open YouTube" navigates instantly instead of running the heavy agent
 // loop (~10s). Only fires for a SIMPLE open of a known site — anything compound ("open YouTube and
 // play X") falls through to the real agent. ──
+// ── Voice Commands ───────────────────────────────────────────────────────────
+// User-configured "say this, open that" shortcuts, grouped into Modes. Configured on the
+// dashboard, cached here by background.js. A mode is voice-activated ("start work mode"); while
+// it's active ONLY its commands match, and the bar wears the mode's color. A matched command
+// opens a RANDOM subset (1..N) of its URLs — so a phrase with several links stays surprising.
+let __sbVoiceModes = [];
+
+function __sbSetVoiceModesCache(modes) {
+  __sbVoiceModes = Array.isArray(modes) ? modes : [];
+  try { __sbApplyVoiceModeSkin(__sbActiveVoiceMode()); } catch (_) {}
+}
+
+function __sbActiveVoiceMode() {
+  return __sbVoiceModes.find((m) => m && m.isActive) || null;
+}
+
+// Same filler-stripping as __sbDetectOpenSite so "hey braino, could you start work mode please"
+// normalizes down to the words that actually carry the command.
+function __sbNormalizeVoiceText(text) {
+  return String(text || "")
+    .toLowerCase()
+    .trim()
+    .replace(/[.!?,]+$/, "")
+    .replace(/^(?:hey |hi |yo |ok |okay |braino[,!. ]+|can you |could you |would you |will you |please |kindly |i want you to |i'?d like you to |let'?s )+/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+// "start work mode" / "switch off work" / "stop work mode" → { mode, action }.
+// Mode names are compared on letters+digits ONLY. Speech-to-text writes a name
+// like "Focus2" as two tokens ("focus 2"), and users type names with spaces,
+// caps and punctuation that they never say out loud — comparing raw strings
+// made a correctly-configured mode simply never match.
+const __SB_NUMWORDS = {zero:"0",one:"1",two:"2",three:"3",four:"4",five:"5",six:"6",seven:"7",eight:"8",nine:"9",
+  ten:"10",eleven:"11",twelve:"12",thirteen:"13",fourteen:"14",fifteen:"15",sixteen:"16",seventeen:"17",
+  eighteen:"18",nineteen:"19",twenty:"20",thirty:"30",forty:"40",fifty:"50"};
+function __sbVoiceModeKey(text) {
+  // Spoken numbers arrive as words ("mode eighteen"), typed names as digits
+  // ("Focus2") — fold them together before comparing.
+  return __sbNormalizeVoiceText(text)
+    .replace(/[a-z]+/g, (w) => __SB_NUMWORDS[w] || w)
+    .replace(/[^a-z0-9]/g, "");
+}
+const __SB_MODE_START_VERBS = "start|activate|turn on|enable|begin|switch on|switch to|enter|go into|open";
+const __SB_MODE_STOP_VERBS = "stop|deactivate|turn off|disable|end|switch off|exit|quit|leave|close";
+function __sbDetectVoiceModeCommand(text) {
+  const t = __sbNormalizeVoiceText(text);
+  if (!t || !__sbVoiceModes.length) return null;
+  const m = t.match(new RegExp(`^(${__SB_MODE_START_VERBS}|${__SB_MODE_STOP_VERBS})\\s+(?:the\\s+)?(.+)$`));
+  if (!m) return null;
+  const action = new RegExp(`^(${__SB_MODE_START_VERBS})$`).test(m[1]) ? "start" : "stop";
+  const rest = m[2].trim();
+  if (!rest) return null;
+  // "enter <name> mode", "start mode <name>" and "start <name>" must all
+  // resolve to the same mode, so try the phrase as-is AND with a leading or
+  // trailing "mode" stripped off. Nothing here knows any specific name —
+  // every candidate is matched against whatever the user configured.
+  const candidates = [rest, rest.replace(/^mode\s+/, ""), rest.replace(/\s+mode$/, "")].map(__sbVoiceModeKey).filter(Boolean);
+  const mode = __sbVoiceModes.find((mo) => {
+    const name = __sbVoiceModeKey(mo.name);
+    const bare = name.replace(/^mode/, "").replace(/mode$/, "");
+    return candidates.some((c) => c === name || (bare && c === bare));
+  });
+  return mode ? { mode, action } : null;
+}
+
+// Self-awareness: Braino knows which mode he is in and answers straight, without
+// a model round-trip. "are you in <name>?" / "what mode are you in?" /
+// "am i in a mode?" — asked ABOUT a mode, this must never be mistaken for a
+// command to enter one, so it is checked before __sbDetectVoiceModeCommand.
+function __sbDetectVoiceModeQuery(text) {
+  const t = __sbNormalizeVoiceText(text);
+  if (!t) return null;
+  if (/^(what|which)\s+mode\b|^what('?s| is)\s+(the\s+)?(current\s+)?mode\b|^(are|am)\s+(you|we|i)\s+in\s+(any|a)\s+mode\b/.test(t)) {
+    return { kind: "which" };
+  }
+  const m = t.match(/^(?:are|is)\s+(?:you|we|it)\s+in\s+(?:the\s+)?(.+?)(?:\s+mode)?\??$|^(?:am\s+i)\s+in\s+(?:the\s+)?(.+?)(?:\s+mode)?\??$/);
+  if (!m) return null;
+  const rest = (m[1] || m[2] || "").trim();
+  if (!rest) return null;
+  const candidates = [rest, rest.replace(/^mode\s+/, "")].map(__sbVoiceModeKey).filter(Boolean);
+  const mode = __sbVoiceModes.find((mo) => {
+    const name = __sbVoiceModeKey(mo.name);
+    const bare = name.replace(/^mode/, "").replace(/mode$/, "");
+    return candidates.some((c) => c === name || (bare && c === bare));
+  });
+  return mode ? { kind: "is", mode } : null;
+}
+
+async function __sbHandleVoiceModeQuery(q, ctx = {}) {
+  const fromVoice = Boolean(ctx.fromVoice);
+  const voiceOutput = ctx.voiceOutput === "realtime" ? "realtime" : "legacy";
+  const active = __sbActiveVoiceMode();
+  let line;
+  if (q.kind === "which") {
+    line = active ? `I'm in ${active.name}.` : "No mode right now, just me.";
+  } else {
+    line = active && active.id === q.mode.id
+      ? `Yes, ${q.mode.name} is on.`
+      : active ? `No. ${active.name} is on, not ${q.mode.name}.` : `No, ${q.mode.name} is off.`;
+  }
+  if (fromVoice) { __sbNoteSpoken(line); await __sbSpeakWithPreferredVoice(line, voiceOutput, { verbatim: true }); }
+  else __sbShowBubble(line, true, { tone: "status", kicker: "Braino" });
+}
+
+// Only the ACTIVE mode's phrases are live — a command belonging to an inactive mode never fires.
+function __sbDetectVoiceCommandPhrase(text) {
+  const mode = __sbActiveVoiceMode();
+  if (!mode) return null;
+  const t = __sbNormalizeVoiceText(text);
+  if (!t) return null;
+  for (const command of mode.commands || []) {
+    const phrase = __sbNormalizeVoiceText(command.phrase);
+    if (phrase && (t === phrase || t.replace(/\s+mode$/, "") === phrase)) return { mode, command };
+  }
+  return null;
+}
+
+// Random 1..N of the command's URLs, so a multi-link command varies run to run.
+function __sbPickRandomUrls(urls) {
+  const list = (urls || []).filter(Boolean);
+  if (list.length <= 1) return list;
+  const shuffled = list.slice().sort(() => Math.random() - 0.5);
+  return shuffled.slice(0, 1 + Math.floor(Math.random() * list.length));
+}
+
+function __sbHandleVoiceCommandPhrase(match, ctx = {}) {
+  const fromVoice = Boolean(ctx.fromVoice);
+  const voiceOutput = ctx.voiceOutput === "realtime" ? "realtime" : "legacy";
+  const picked = __sbPickRandomUrls(match.command.urls);
+  if (!picked.length) return;
+  const incognito = match.command.openMode === "incognito";
+  for (const url of picked) {
+    try {
+      chrome.runtime.sendMessage({ action: incognito ? "openIncognitoTab" : "openTab", url, active: true }, (resp) => {
+        void chrome.runtime.lastError;
+        if (incognito && resp && resp.ok === false && resp.reason === "incognito-not-allowed") {
+          const warn = "I need incognito access for that. Turn on Allow in Incognito for Braino in chrome://extensions.";
+          if (fromVoice) { __sbNoteSpoken(warn); void __sbSpeakWithPreferredVoice(warn, voiceOutput, { verbatim: true }); }
+          else __sbShowBubble(warn, true, { tone: "status", kicker: "Braino" });
+        }
+      });
+    } catch (_) {}
+  }
+  const line = picked.length > 1 ? `Opening ${picked.length} links.` : "Opening it.";
+  if (fromVoice) { __sbNoteSpoken(line); void __sbSpeakWithPreferredVoice(line, voiceOutput, { verbatim: true }); }
+  else __sbShowBubble(line, true, { tone: "status", kicker: "Braino" });
+}
+
+// Bar takes the mode's color for as long as the mode runs, and flashes a "Mode activated" caption
+// that fades — the extension-side counterpart of the Mac notch treatment.
+function __sbApplyVoiceModeSkin(mode) {
+  try { __sbUpdateEdgeGlowFx(); } catch (_) {}
+  const bar = document.getElementById("__sb_bar__");
+  if (!bar) return;
+  if (mode) {
+    bar.style.setProperty("--sb-voice-mode-color", mode.notchColor || "#0A84FF");
+    bar.classList.add("sb-voice-mode");
+  } else {
+    bar.classList.remove("sb-voice-mode");
+    bar.style.removeProperty("--sb-voice-mode-color");
+  }
+}
+
+function __sbEnsureVoiceModeCss() {
+  if (document.getElementById("__sb_voice_mode_css__")) return;
+  const style = document.createElement("style");
+  style.id = "__sb_voice_mode_css__";
+  style.textContent = `
+#__sb_bar__.sb-voice-mode{box-shadow:0 0 0 1.5px var(--sb-voice-mode-color,#0A84FF),0 0 22px -2px var(--sb-voice-mode-color,#0A84FF);transition:box-shadow .5s ease;}
+#__sb_voice_mode_caption__{position:fixed;left:50%;transform:translateX(-50%);bottom:96px;z-index:2147483640;padding:7px 16px;border-radius:999px;font:500 12.5px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;letter-spacing:.02em;color:#fff;background:rgba(20,18,16,.9);backdrop-filter:blur(8px);box-shadow:0 0 0 1px var(--sb-voice-mode-color,#0A84FF),0 6px 24px -8px rgba(0,0,0,.6);opacity:0;transition:opacity .35s ease,transform .35s ease;pointer-events:none;}
+#__sb_voice_mode_caption__.show{opacity:1;transform:translateX(-50%) translateY(-4px);}
+`;
+  document.head.appendChild(style);
+}
+
+function __sbFlashVoiceModeCaption(text, color) {
+  try {
+    __sbEnsureVoiceModeCss();
+    let el = document.getElementById("__sb_voice_mode_caption__");
+    if (!el) {
+      el = document.createElement("div");
+      el.id = "__sb_voice_mode_caption__";
+      document.body.appendChild(el);
+    }
+    el.style.setProperty("--sb-voice-mode-color", color || "#0A84FF");
+    el.textContent = text;
+    requestAnimationFrame(() => el.classList.add("show"));
+    clearTimeout(el.__sbHideTimer);
+    el.__sbHideTimer = setTimeout(() => {
+      el.classList.remove("show");
+      setTimeout(() => { try { el.remove(); } catch (_) {} }, 400);
+    }, 1800);
+  } catch (_) {}
+}
+
+async function __sbHandleVoiceModeCommand(detected, ctx = {}) {
+  const fromVoice = Boolean(ctx.fromVoice);
+  const voiceOutput = ctx.voiceOutput === "realtime" ? "realtime" : "legacy";
+  const starting = detected.action === "start";
+  const mode = detected.mode;
+
+  __sbEnsureVoiceModeCss();
+  // Optimistic: skin + caption immediately, don't wait on the network round-trip.
+  __sbVoiceModes = __sbVoiceModes.map((m) => ({ ...m, isActive: starting ? m.id === mode.id : false }));
+  __sbApplyVoiceModeSkin(starting ? mode : null);
+  __sbFlashVoiceModeCaption(starting ? `${mode.name} activated` : `${mode.name} off`, mode.notchColor);
+
+  try { chrome.runtime.sendMessage({ action: "setVoiceModeActive", modeId: mode.id, active: starting }, () => { void chrome.runtime.lastError; }); } catch (_) {}
+
+  const line = starting ? `${mode.name} on.` : `${mode.name} off.`;
+  if (fromVoice) { __sbNoteSpoken(line); await __sbSpeakWithPreferredVoice(line, voiceOutput, { verbatim: true }); }
+  else __sbShowBubble(line, true, { tone: "status", kicker: "Braino" });
+}
+
 const __SB_KNOWN_SITES = [
   { keys: ["youtube", "yt"], url: "https://www.youtube.com", name: "YouTube" },
   { keys: ["spotify"], url: "https://open.spotify.com", name: "Spotify" },
@@ -20128,6 +20543,17 @@ async function __sbHandleInlineRealtimeTurn(transcript, turnToken) {
     routeMode: routing.forcedMode,
     connector: routing.connectorHint,
   });
+
+  // Voice Commands — steer down __sbProcessPrompt BEFORE classification, or the realtime model
+  // just TALKS about the mode instead of Braino actually flipping it / opening the links.
+  const __vmQuery = __sbDetectVoiceModeQuery(transcript) || __sbDetectVoiceModeQuery(promptText);
+  const __vmCmd = __sbDetectVoiceModeCommand(transcript) || __sbDetectVoiceModeCommand(promptText);
+  const __vmPhrase = __sbDetectVoiceCommandPhrase(transcript) || __sbDetectVoiceCommandPhrase(promptText);
+  if (__vmQuery || __vmCmd || __vmPhrase) {
+    __sbPatchRealtimeCostTurn({ routeIntent: __vmQuery ? "voice_mode_query" : __vmCmd ? "voice_mode_toggle" : "voice_command" });
+    await __sbProcessPrompt(promptText, { fromVoice: true, voiceOutput: "realtime", voiceTurnToken: turnToken });
+    return;
+  }
 
   // Open-known-site shortcut — navigate instantly instead of the ~10s agent loop. Cancels any
   // speculative answer first so it doesn't talk over the "Opening …" line. Detect on the RAW
@@ -20571,6 +20997,14 @@ function __sbHandleRtEvent(ev) {
   }
   if (ev.type === "error") {
     const message = ev.error?.message || "Realtime error";
+    // This race fires precisely while our own state says a response is active, so it needs an
+    // explicit resolve here (unlike the other benign cases below, which rely on the next
+    // __sbCreateRtWaiter() call or a subsequent response.cancelled/done to clean up the waiter).
+    if (__sbIsRaceyActiveResponseError(message)) {
+      __sbResetRealtimeResponseState();
+      __sbResolveRtWaiter({ status: "cancelled", text: "", errorMessage: "" });
+      return;
+    }
     if (!__sbHasActiveRealtimeResponse() && __sbIsBenignRealtimeControlError(message)) {
       return;
     }
@@ -21260,6 +21694,8 @@ function __sbEnsureGlowFx() {
   style.textContent = `
 #__sb_edge_glow__{position:fixed;inset:0;pointer-events:none;z-index:2147483630;opacity:0;transition:opacity .6s ease;}
 #__sb_edge_glow__::before{content:"";position:absolute;inset:0;}
+#__sb_edge_glow__.sbmode{opacity:1;}
+#__sb_edge_glow__.sbmode::before{box-shadow:inset 0 0 90px 18px color-mix(in srgb, var(--sb-voice-mode-color,#0A84FF) 42%, transparent),inset 0 0 34px 6px color-mix(in srgb, var(--sb-voice-mode-color,#0A84FF) 30%, transparent);animation:__sb_edge_breath__ 3.2s ease-in-out infinite;}
 #__sb_edge_glow__.listen{opacity:1;}
 #__sb_edge_glow__.listen::before{box-shadow:inset 0 0 70px 14px rgba(122,162,255,.30),inset 0 0 26px 4px rgba(160,190,255,.22);animation:__sb_edge_breath__ 2.6s ease-in-out infinite;}
 #__sb_edge_glow__.speak{opacity:1;}
@@ -21290,7 +21726,12 @@ function __sbUpdateEdgeGlowFx(voiceState) {
   const glow = document.getElementById("__sb_edge_glow__");
   if (!glow) return;
   const map = { connecting: "think", listening: "listen", hearing: "listen", captured: "think", speaking: "speak" };
-  glow.className = map[__sbGlowVoice] || (__sbMusicFxOn ? "music" : "");
+  // A running Voice Command mode owns the perimeter when nothing louder (voice
+  // / music) is using it — the whole screen edge wears the mode's colour for
+  // as long as the mode is on.
+  const mode = typeof __sbActiveVoiceMode === "function" ? __sbActiveVoiceMode() : null;
+  if (mode) glow.style.setProperty("--sb-voice-mode-color", mode.notchColor || "#0A84FF");
+  glow.className = map[__sbGlowVoice] || (__sbMusicFxOn ? "music" : (mode ? "sbmode" : ""));
 }
 
 function __sbSpawnTopNote() {

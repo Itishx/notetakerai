@@ -143,6 +143,14 @@ Living status doc. Update on every capability change. Statuses: ✅ done+tested 
 | Auto realtime invocation | 🟡 | Because HE started the conversation, realtime connects right after his ambient line — the user just answers. Guards: skips during her mode, music theatrics, any active session/speech/processing |
 | "Don't disturb me" valve | 🟡 | "braino don't disturb/bother me" mutes ambient (session-scoped); "you can disturb me" / "start checking on me" re-enables. COST NOTE: each glance is one vision call — 30s pacing is demo-only |
 
+## Time suite (07-26 — the notch is a clock now)
+| Capability | Status | Notes |
+|---|---|---|
+| Time/date awareness ("what time is it", "what day is today") | 🟡 | Deterministic delegate intent AND a live clock line in every chat context (activeMacContextLines) — casual chat used to answer blind since only the delegate could look at a clock |
+| Alarms ("set an alarm for 7", "wake me up at 6:30", "remind me at 3pm to X") | 🟡 | Wall-clock timers (kind:"alarm"): CLOCK_RE handles 7 / 7:30 / 7.30pm / noon / midnight / half past 7; no am-pm → NEAREST future interpretation. PERSISTED to timers.json and re-armed on boot (a restart no longer eats your wake-up). Fire = amber pulsing island + insistent triple-chime every 1.6s for 60s + spoken "It's 7:00…"; dismiss = tap the notch OR "stop the alarm"; "snooze" = 9 min re-arm (10-min window). "turn off the alarm" outside the ring window cancels pending alarms only |
+| Stopwatch ("start a stopwatch", "stop/resume/reset the stopwatch", "how long has it been") | 🟡 | Main owns state; ⏱ counts up live in the ticker (paused state shown); tray row has pause/resume + reset buttons. All intents require the word stopwatch so bare "stop" stays a barge-in |
+| Notch time UI | 🟡 | Ticker: ringing alarm > timer countdown > running stopwatch > alarm-within-60-min ("⏰ 7:00 · in 42m"); alarms never hog the countdown slot all day. Tray .nf-timerlist reworked: ⏰ alarms w/ clock time, ⏳ timers w/ countdown, ⏱ stopwatch w/ controls, per-item ✕ via new braino-mac:timer-cancel IPC (replaces the old cancel-all ✕) |
+
 ## Voice personas (ported to Mac 07-25)
 | Capability | Status | Notes |
 |---|---|---|

@@ -1653,3 +1653,14 @@ body {
     0 0 26px -2px var(--nf-mode-color, #0A84FF);
   transition: box-shadow 0.5s ease;
 }
+
+/* Voice Command mode: the whole screen perimeter wears the mode's colour for
+   as long as the mode runs — same Apple-Intelligence edge treatment as the
+   listen/speak states, just driven by the mode instead of the voice status. */
+#edge-glow.voicemode { opacity: 1; }
+#edge-glow.voicemode::before {
+  box-shadow:
+    inset 0 0 120px 26px color-mix(in srgb, var(--vm-color, #0a84ff) 40%, transparent),
+    inset 0 0 44px 8px color-mix(in srgb, var(--vm-color, #0a84ff) 28%, transparent);
+  animation: edgeBreath 3.2s ease-in-out infinite;
+}

@@ -57,8 +57,62 @@
           </div>
           <div class="nf-cap nf-cap-l"></div>
           <div id="nf-status"></div>
+          <div id="nf-status-2"></div>
+          <div class="nf-volume" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="11" height="11"><path d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor"/><path d="M16 8.5a5 5 0 0 1 0 7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+            <div class="nf-vol-bar"><i></i></div>
+            <span class="nf-vol-num"></span>
+          </div>
+          <div class="nf-drop-hint">drop it, I&rsquo;ll hold it</div>
+          <div class="nf-tray" aria-hidden="true">
+            <div class="nf-tray-main">
+              <div class="nf-np">
+                <div class="nf-np-art"><svg viewBox="0 0 24 24" width="18" height="18"><path d="M9 18.5a2.5 2.5 0 1 1-1.5-2.29V6.8l9-2.2v9.6a2.5 2.5 0 1 1-1.5-2.29V8.1l-6 1.47v8.93z" fill="currentColor"/></svg></div>
+                <div class="nf-np-meta">
+                  <div class="nf-np-track">Nothing playing</div>
+                  <div class="nf-np-artist"></div>
+                  <div class="nf-np-bar"><i></i></div>
+                </div>
+                <div class="nf-np-ctl">
+                  <button class="nf-ib nf-prev" title="Previous"><svg viewBox="0 0 24 24"><path d="M7 5v14h-1.8V5H7zm12 0v14L8.5 12 19 5z" fill="currentColor"/></svg></button>
+                  <button class="nf-ib nf-play" title="Play / Pause"><svg viewBox="0 0 24 24"><path class="nf-ic-play" d="M8 5v14l11-7L8 5z" fill="currentColor"/><g class="nf-ic-pause"><rect x="7" y="5" width="3.6" height="14" rx="1" fill="currentColor"/><rect x="13.4" y="5" width="3.6" height="14" rx="1" fill="currentColor"/></g></svg></button>
+                  <button class="nf-ib nf-next" title="Next"><svg viewBox="0 0 24 24"><path d="M17 5v14h1.8V5H17zM5 5v14l10.5-7L5 5z" fill="currentColor"/></svg></button>
+                </div>
+              </div>
+              <div class="nf-side">
+                <div class="nf-cal">
+                  <div class="nf-cal-when">today</div>
+                  <div class="nf-cal-title">No events coming up</div>
+                  <button class="nf-join" hidden>Join &amp; record</button>
+                </div>
+                <div class="nf-timerlist" hidden></div>
+                <div class="nf-sys">
+                  <span class="nf-batt"></span>
+                  <span class="nf-bt"></span>
+                </div>
+              </div>
+            </div>
+            <div class="nf-shelf" hidden></div>
+          </div>
           <div class="nf-privacy"></div>
+          <div class="nf-think-dots"><i></i><i></i><i></i></div>
+          <div class="nf-think-arrow"></div>
         </div>
+        <!-- The keynote shimmer: a white-to-blue light that traces the island's
+             outline, verbatim from the trybraino.com reveal. Fired by JS via
+             the .nf-shining class, every ~90s while he's home and idle. -->
+        <svg class="nf-shine" viewBox="0 0 190 55" aria-hidden="true">
+          <defs>
+            <linearGradient id="nf-shine-grad" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0" stop-color="#FFFFFF" />
+              <stop offset="0.45" stop-color="#CFE0FF" />
+              <stop offset="0.8" stop-color="#7AA2FF" />
+              <stop offset="1" stop-color="#F0A86B" />
+            </linearGradient>
+          </defs>
+          <path class="nf-shine-glow" pathLength="100" d="M 0 0 H 190 V 39 Q 190 55 174 55 H 16 Q 0 55 0 39 Z" stroke="url(#nf-shine-grad)" fill="none" />
+          <path class="nf-shine-core" pathLength="100" d="M 0 0 H 190 V 39 Q 190 55 174 55 H 16 Q 0 55 0 39 Z" stroke="url(#nf-shine-grad)" fill="none" />
+        </svg>
       </div>
       <section id="status-pill">
         <span id="status-dot"></span>

@@ -546,13 +546,22 @@ function setStatus(status, text) {
 
 let lastGlowStatus = "ready";
 let musicMode = false;
+let activeVoiceMode = null;   // { name, color } while a Voice Command mode runs
 
 function updateEdgeGlow() {
   if (!edgeGlow) return;
   // Screen-perimeter glow is a MUSIC-only theatric now (user call): voice
   // states live entirely in the notch — sonar while listening, mouth while
   // speaking, pill glow instead of the whole screen.
-  edgeGlow.className = musicTheatricsReady && !herMode ? "music" : "";
+  // Exception: a running Voice Command mode owns the perimeter when music
+  // isn't using it, so the whole screen edge wears the mode's colour.
+  if (musicTheatricsReady && !herMode) { edgeGlow.className = "music"; return; }
+  if (activeVoiceMode) {
+    edgeGlow.style.setProperty("--vm-color", activeVoiceMode.color || "#0A84FF");
+    edgeGlow.className = "voicemode";
+    return;
+  }
+  edgeGlow.className = "";
 }
 
 // ── Notch Braino: the notch as his face ──
@@ -4498,6 +4507,8 @@ window.brainoMac.onTaskProgress((progress) => {
 // Voice Commands: a mode turning on/off retints the notch for as long as it runs, and flashes a
 // "<name> activated" caption that fades — no full reboot, just the color + the one beat.
 window.brainoMac.onVoiceMode((payload) => {
+  activeVoiceMode = payload.active ? { name: payload.name, color: payload.color } : null;
+  try { updateEdgeGlow(); } catch (_) {}
   if (!notchFace) return;
   if (payload.active) {
     notchFace.style.setProperty("--nf-mode-color", payload.color || "#0A84FF");

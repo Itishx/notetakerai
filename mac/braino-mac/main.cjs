@@ -2119,16 +2119,61 @@ function normalizeVoiceText(text) {
     .trim();
 }
 
+// Letters+digits only — speech-to-text splits a name like "Focus2" into two
+// tokens ("focus 2"), and typed
+// names carry caps/spaces/punctuation nobody says out loud. Comparing raw
+// strings made a correctly-configured mode simply never match.
+const MAC_NUMWORDS = {zero:"0",one:"1",two:"2",three:"3",four:"4",five:"5",six:"6",seven:"7",eight:"8",nine:"9",
+  ten:"10",eleven:"11",twelve:"12",thirteen:"13",fourteen:"14",fifteen:"15",sixteen:"16",seventeen:"17",
+  eighteen:"18",nineteen:"19",twenty:"20",thirty:"30",forty:"40",fifty:"50"};
+function voiceModeKey(text) {
+  // Spoken numbers arrive as words ("mode eighteen"), typed names as digits
+  // ("Focus2") — fold them together before comparing.
+  return normalizeVoiceText(text)
+    .replace(/[a-z]+/g, (w) => MAC_NUMWORDS[w] || w)
+    .replace(/[^a-z0-9]/g, "");
+}
+const MODE_START_VERBS = "start|activate|turn on|enable|begin|switch on|switch to|enter|go into|open";
+const MODE_STOP_VERBS = "stop|deactivate|turn off|disable|end|switch off|exit|quit|leave|close";
 function detectVoiceModeCommand(raw, modes) {
   const t = normalizeVoiceText(raw);
   if (!t || !modes.length) return null;
-  const m = t.match(/^(start|activate|turn on|enable|begin|switch on|stop|deactivate|turn off|disable|end|switch off|exit|quit)\s+(?:the\s+)?(.+?)(?:\s+mode)?$/);
+  const m = t.match(new RegExp(`^(${MODE_START_VERBS}|${MODE_STOP_VERBS})\\s+(?:the\\s+)?(.+)$`));
   if (!m) return null;
-  const action = /^(start|activate|turn on|enable|begin|switch on)$/.test(m[1]) ? "start" : "stop";
-  const target = m[2].trim().replace(/\s+mode$/, "");
-  if (!target) return null;
-  const mode = modes.find((mo) => normalizeVoiceText(mo.name).replace(/\s+mode$/, "") === target);
+  const action = new RegExp(`^(${MODE_START_VERBS})$`).test(m[1]) ? "start" : "stop";
+  const rest = m[2].trim();
+  if (!rest) return null;
+  // "enter <name> mode" / "start mode <name>" / "start <name>" all resolve
+  // to the same mode, whatever the user called it.
+  const candidates = [rest, rest.replace(/^mode\s+/, ""), rest.replace(/\s+mode$/, "")].map(voiceModeKey).filter(Boolean);
+  const mode = modes.find((mo) => {
+    const name = voiceModeKey(mo.name);
+    const bare = name.replace(/^mode/, "").replace(/mode$/, "");
+    return candidates.some((c) => c === name || (bare && c === bare));
+  });
   return mode ? { mode, action } : null;
+}
+
+// Self-awareness: Braino knows which mode he is in and answers straight, with
+// no model round-trip. Asked ABOUT a mode, this must never be mistaken for a
+// command to enter one, so it is checked before detectVoiceModeCommand.
+function detectVoiceModeQuery(raw, modes) {
+  const t = normalizeVoiceText(raw);
+  if (!t) return null;
+  if (/^(what|which)\s+mode\b|^what('?s| is)\s+(the\s+)?(current\s+)?mode\b|^(are|am)\s+(you|we|i)\s+in\s+(any|a)\s+mode\b/.test(t)) {
+    return { kind: "which" };
+  }
+  const m = t.match(/^(?:are|is)\s+(?:you|we|it)\s+in\s+(?:the\s+)?(.+?)(?:\s+mode)?\??$|^(?:am\s+i)\s+in\s+(?:the\s+)?(.+?)(?:\s+mode)?\??$/);
+  if (!m) return null;
+  const rest = (m[1] || m[2] || "").trim();
+  if (!rest) return null;
+  const candidates = [rest, rest.replace(/^mode\s+/, "")].map(voiceModeKey).filter(Boolean);
+  const mode = modes.find((mo) => {
+    const name = voiceModeKey(mo.name);
+    const bare = name.replace(/^mode/, "").replace(/mode$/, "");
+    return candidates.some((c) => c === name || (bare && c === bare));
+  });
+  return mode ? { kind: "is", mode } : null;
 }
 
 function detectVoiceCommandPhrase(raw, modes) {
@@ -9219,6 +9264,20 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
   // Voice Commands — the user's OWN configured shortcuts beat every built-in intent below, and
   // must run BEFORE classifyIntentLLM or the model just narrates instead of acting.
   const voiceModes = await fetchVoiceModes();
+  const modeQuery = detectVoiceModeQuery(raw, voiceModes);
+  if (modeQuery) {
+    const active = voiceModes.find((m) => m.isActive) || null;
+    logMac("delegate.voice_mode_query", { kind: modeQuery.kind, active: active?.name || "" });
+    let say;
+    if (modeQuery.kind === "which") {
+      say = active ? `I'm in ${active.name}.` : "No mode right now, just me.";
+    } else {
+      say = active && active.id === modeQuery.mode.id
+        ? `Yes, ${modeQuery.mode.name} is on.`
+        : active ? `No. ${active.name} is on, not ${modeQuery.mode.name}.` : `No, ${modeQuery.mode.name} is off.`;
+    }
+    return { ok: true, say };
+  }
   const modeCmd = detectVoiceModeCommand(raw, voiceModes);
   if (modeCmd) {
     const starting = modeCmd.action === "start";

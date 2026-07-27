@@ -120,4 +120,13 @@ These are the local Mac-only skills that do not require the browser extension ag
 
 macOS does not expose an official API for third-party apps to draw inside the real Dynamic Island/notch system surface. The practical version is a Braino-owned, always-on-top top-center overlay that visually behaves like a Dynamic Island: listening pulse, task progress, quick status, and small mascot reactions.
 
+### The notch is interactive now
+
+- **Hover near the notch** and the island springs open into a black-glass tray: now playing (artwork, live progress, prev/play/next), the next calendar event with a one-click **Join & record** button when it has a Zoom/Meet/Teams/Webex link, active timers, and battery + connected headphones.
+- **Click the collapsed notch** to start or stop voice. **Scroll on it** to change system volume (tiny HUD in the pill).
+- **Drag a file onto the notch** and Braino holds it on a shelf: ask him what to do with it by voice ("summarize this pdf", "email it to Renu"), or use the chip buttons (open / show in Finder / let go).
+- The ticker runs **two slots** like the iPhone island: primary activity on the left, a compact secondary on the right (charger plugged, AirPods connected, held files, music while a timer runs).
+- Hover works even mid-drag because the main process watches the real cursor position and flips window interactivity — the click-through overlay never sees mouse events during a native drag on its own.
+- Displays without a physical notch get a floating rounded pill instead.
+
 This first version is intentionally voice-first and delegate-only. It does not yet port the full extension agent loop, Gmail DOM adapters, or browser page extraction. The next bridge should share the signed-in browser extension auth/session with this native shell automatically.

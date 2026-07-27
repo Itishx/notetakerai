@@ -17014,7 +17014,16 @@ async function __sbProcessPrompt(text, options = {}) {
   }
 
   // Voice Commands — the user's OWN configured shortcuts win over every built-in route below.
-  // Mode start/stop first, then (while a mode runs) that mode's phrase→URL commands.
+  // Asking ABOUT a mode is answered first, so "are you in <name>?" is never
+  // mistaken for "enter <name>".
+  const __voiceModeQuery = __sbDetectVoiceModeQuery(text) || __sbDetectVoiceModeQuery(promptText);
+  if (__voiceModeQuery) {
+    __sbStopSpeech();
+    await __sbHandleVoiceModeQuery(__voiceModeQuery, { fromVoice, voiceOutput });
+    __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken });
+    return;
+  }
+  // Mode start/stop next, then (while a mode runs) that mode's phrase→URL commands.
   const __voiceModeCmd = __sbDetectVoiceModeCommand(text) || __sbDetectVoiceModeCommand(promptText);
   if (__voiceModeCmd) {
     __sbStopSpeech();
@@ -20235,16 +20244,80 @@ function __sbNormalizeVoiceText(text) {
 }
 
 // "start work mode" / "switch off work" / "stop work mode" → { mode, action }.
+// Mode names are compared on letters+digits ONLY. Speech-to-text writes a name
+// like "Focus2" as two tokens ("focus 2"), and users type names with spaces,
+// caps and punctuation that they never say out loud — comparing raw strings
+// made a correctly-configured mode simply never match.
+const __SB_NUMWORDS = {zero:"0",one:"1",two:"2",three:"3",four:"4",five:"5",six:"6",seven:"7",eight:"8",nine:"9",
+  ten:"10",eleven:"11",twelve:"12",thirteen:"13",fourteen:"14",fifteen:"15",sixteen:"16",seventeen:"17",
+  eighteen:"18",nineteen:"19",twenty:"20",thirty:"30",forty:"40",fifty:"50"};
+function __sbVoiceModeKey(text) {
+  // Spoken numbers arrive as words ("mode eighteen"), typed names as digits
+  // ("Focus2") — fold them together before comparing.
+  return __sbNormalizeVoiceText(text)
+    .replace(/[a-z]+/g, (w) => __SB_NUMWORDS[w] || w)
+    .replace(/[^a-z0-9]/g, "");
+}
+const __SB_MODE_START_VERBS = "start|activate|turn on|enable|begin|switch on|switch to|enter|go into|open";
+const __SB_MODE_STOP_VERBS = "stop|deactivate|turn off|disable|end|switch off|exit|quit|leave|close";
 function __sbDetectVoiceModeCommand(text) {
   const t = __sbNormalizeVoiceText(text);
   if (!t || !__sbVoiceModes.length) return null;
-  const m = t.match(/^(start|activate|turn on|enable|begin|switch on|stop|deactivate|turn off|disable|end|switch off|exit|quit)\s+(?:the\s+)?(.+?)(?:\s+mode)?$/);
+  const m = t.match(new RegExp(`^(${__SB_MODE_START_VERBS}|${__SB_MODE_STOP_VERBS})\\s+(?:the\\s+)?(.+)$`));
   if (!m) return null;
-  const action = /^(start|activate|turn on|enable|begin|switch on)$/.test(m[1]) ? "start" : "stop";
-  const target = m[2].trim();
-  if (!target) return null;
-  const mode = __sbVoiceModes.find((mo) => __sbNormalizeVoiceText(mo.name).replace(/\s+mode$/, "") === target.replace(/\s+mode$/, ""));
+  const action = new RegExp(`^(${__SB_MODE_START_VERBS})$`).test(m[1]) ? "start" : "stop";
+  const rest = m[2].trim();
+  if (!rest) return null;
+  // "enter <name> mode", "start mode <name>" and "start <name>" must all
+  // resolve to the same mode, so try the phrase as-is AND with a leading or
+  // trailing "mode" stripped off. Nothing here knows any specific name —
+  // every candidate is matched against whatever the user configured.
+  const candidates = [rest, rest.replace(/^mode\s+/, ""), rest.replace(/\s+mode$/, "")].map(__sbVoiceModeKey).filter(Boolean);
+  const mode = __sbVoiceModes.find((mo) => {
+    const name = __sbVoiceModeKey(mo.name);
+    const bare = name.replace(/^mode/, "").replace(/mode$/, "");
+    return candidates.some((c) => c === name || (bare && c === bare));
+  });
   return mode ? { mode, action } : null;
+}
+
+// Self-awareness: Braino knows which mode he is in and answers straight, without
+// a model round-trip. "are you in <name>?" / "what mode are you in?" /
+// "am i in a mode?" — asked ABOUT a mode, this must never be mistaken for a
+// command to enter one, so it is checked before __sbDetectVoiceModeCommand.
+function __sbDetectVoiceModeQuery(text) {
+  const t = __sbNormalizeVoiceText(text);
+  if (!t) return null;
+  if (/^(what|which)\s+mode\b|^what('?s| is)\s+(the\s+)?(current\s+)?mode\b|^(are|am)\s+(you|we|i)\s+in\s+(any|a)\s+mode\b/.test(t)) {
+    return { kind: "which" };
+  }
+  const m = t.match(/^(?:are|is)\s+(?:you|we|it)\s+in\s+(?:the\s+)?(.+?)(?:\s+mode)?\??$|^(?:am\s+i)\s+in\s+(?:the\s+)?(.+?)(?:\s+mode)?\??$/);
+  if (!m) return null;
+  const rest = (m[1] || m[2] || "").trim();
+  if (!rest) return null;
+  const candidates = [rest, rest.replace(/^mode\s+/, "")].map(__sbVoiceModeKey).filter(Boolean);
+  const mode = __sbVoiceModes.find((mo) => {
+    const name = __sbVoiceModeKey(mo.name);
+    const bare = name.replace(/^mode/, "").replace(/mode$/, "");
+    return candidates.some((c) => c === name || (bare && c === bare));
+  });
+  return mode ? { kind: "is", mode } : null;
+}
+
+async function __sbHandleVoiceModeQuery(q, ctx = {}) {
+  const fromVoice = Boolean(ctx.fromVoice);
+  const voiceOutput = ctx.voiceOutput === "realtime" ? "realtime" : "legacy";
+  const active = __sbActiveVoiceMode();
+  let line;
+  if (q.kind === "which") {
+    line = active ? `I'm in ${active.name}.` : "No mode right now, just me.";
+  } else {
+    line = active && active.id === q.mode.id
+      ? `Yes, ${q.mode.name} is on.`
+      : active ? `No. ${active.name} is on, not ${q.mode.name}.` : `No, ${q.mode.name} is off.`;
+  }
+  if (fromVoice) { __sbNoteSpoken(line); await __sbSpeakWithPreferredVoice(line, voiceOutput, { verbatim: true }); }
+  else __sbShowBubble(line, true, { tone: "status", kicker: "Braino" });
 }
 
 // Only the ACTIVE mode's phrases are live — a command belonging to an inactive mode never fires.
@@ -20294,6 +20367,7 @@ function __sbHandleVoiceCommandPhrase(match, ctx = {}) {
 // Bar takes the mode's color for as long as the mode runs, and flashes a "Mode activated" caption
 // that fades — the extension-side counterpart of the Mac notch treatment.
 function __sbApplyVoiceModeSkin(mode) {
+  try { __sbUpdateEdgeGlowFx(); } catch (_) {}
   const bar = document.getElementById("__sb_bar__");
   if (!bar) return;
   if (mode) {
@@ -20472,10 +20546,11 @@ async function __sbHandleInlineRealtimeTurn(transcript, turnToken) {
 
   // Voice Commands — steer down __sbProcessPrompt BEFORE classification, or the realtime model
   // just TALKS about the mode instead of Braino actually flipping it / opening the links.
+  const __vmQuery = __sbDetectVoiceModeQuery(transcript) || __sbDetectVoiceModeQuery(promptText);
   const __vmCmd = __sbDetectVoiceModeCommand(transcript) || __sbDetectVoiceModeCommand(promptText);
   const __vmPhrase = __sbDetectVoiceCommandPhrase(transcript) || __sbDetectVoiceCommandPhrase(promptText);
-  if (__vmCmd || __vmPhrase) {
-    __sbPatchRealtimeCostTurn({ routeIntent: __vmCmd ? "voice_mode_toggle" : "voice_command" });
+  if (__vmQuery || __vmCmd || __vmPhrase) {
+    __sbPatchRealtimeCostTurn({ routeIntent: __vmQuery ? "voice_mode_query" : __vmCmd ? "voice_mode_toggle" : "voice_command" });
     await __sbProcessPrompt(promptText, { fromVoice: true, voiceOutput: "realtime", voiceTurnToken: turnToken });
     return;
   }
@@ -21619,6 +21694,8 @@ function __sbEnsureGlowFx() {
   style.textContent = `
 #__sb_edge_glow__{position:fixed;inset:0;pointer-events:none;z-index:2147483630;opacity:0;transition:opacity .6s ease;}
 #__sb_edge_glow__::before{content:"";position:absolute;inset:0;}
+#__sb_edge_glow__.sbmode{opacity:1;}
+#__sb_edge_glow__.sbmode::before{box-shadow:inset 0 0 90px 18px color-mix(in srgb, var(--sb-voice-mode-color,#0A84FF) 42%, transparent),inset 0 0 34px 6px color-mix(in srgb, var(--sb-voice-mode-color,#0A84FF) 30%, transparent);animation:__sb_edge_breath__ 3.2s ease-in-out infinite;}
 #__sb_edge_glow__.listen{opacity:1;}
 #__sb_edge_glow__.listen::before{box-shadow:inset 0 0 70px 14px rgba(122,162,255,.30),inset 0 0 26px 4px rgba(160,190,255,.22);animation:__sb_edge_breath__ 2.6s ease-in-out infinite;}
 #__sb_edge_glow__.speak{opacity:1;}
@@ -21649,7 +21726,12 @@ function __sbUpdateEdgeGlowFx(voiceState) {
   const glow = document.getElementById("__sb_edge_glow__");
   if (!glow) return;
   const map = { connecting: "think", listening: "listen", hearing: "listen", captured: "think", speaking: "speak" };
-  glow.className = map[__sbGlowVoice] || (__sbMusicFxOn ? "music" : "");
+  // A running Voice Command mode owns the perimeter when nothing louder (voice
+  // / music) is using it — the whole screen edge wears the mode's colour for
+  // as long as the mode is on.
+  const mode = typeof __sbActiveVoiceMode === "function" ? __sbActiveVoiceMode() : null;
+  if (mode) glow.style.setProperty("--sb-voice-mode-color", mode.notchColor || "#0A84FF");
+  glow.className = map[__sbGlowVoice] || (__sbMusicFxOn ? "music" : (mode ? "sbmode" : ""));
 }
 
 function __sbSpawnTopNote() {
