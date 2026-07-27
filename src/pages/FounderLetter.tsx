@@ -28,6 +28,76 @@ const ramp = (p: number, a: number, b: number) => clamp((p - a) / (b - a), 0, 1)
    public/founder-letter-song.mp3 and it just works; if the file is missing
    the button hides itself. */
 const SONG_SRC = "/founder-letter-song.mp3";
+
+/* The live log — a running resume of ideas rather than a changelog. Newest
+   first, the way a career reads. New entries go on top; nothing gets deleted,
+   because the wrong turns are the point. */
+const LOG: { when: string; title: string; body: string; now?: boolean }[] = [
+  {
+    when: "July 2026",
+    now: true,
+    title: "BrainOS · IOMI",
+    body:
+      "He stops being an app you open and becomes the layer you talk to, named the way an operating " +
+      "system names itself: the OS, then the release. IOMI is not an acronym I'm going to unpack. It " +
+      "means something to me, and it happens to look and sound exactly right. That's the whole reason.",
+  },
+  {
+    when: "July 2026",
+    title: "Hands-free is the actual goal",
+    body:
+      "Not an assistant with a voice bolted on. An operating system you drive by speaking: say it, and " +
+      "watch it happen. Everything else on this list is in service of that one sentence.",
+  },
+  {
+    when: "July 2026",
+    title: "Still arguing with myself about the line",
+    body:
+      "Speak, watch it happen. Just ask. Ask Braino. I have more than these and I haven't picked one, " +
+      "which I think is honest to admit in public rather than pretend the positioning arrived finished.",
+  },
+  {
+    when: "July 2026",
+    title: "A vertical for widgets",
+    body:
+      "If he's the layer, then things get to live on him. Widgets are the shape that takes: small, " +
+      "single-purpose, always present, and eventually not all written by me.",
+  },
+  {
+    when: "July 2026",
+    title: "The standard I'm holding this to",
+    body:
+      "Apple's marketing, Apple's hype, Apple's quality, Apple's ecosystem. Not as a pose. Those are " +
+      "the products that made me love this stuff in the first place, and the only way I know to say " +
+      "thank you for that is to work at their level and make the things I grew up loving better.",
+  },
+  {
+    when: "June 2026",
+    title: "Braino Co-work",
+    body:
+      "He can already see the screen, so stop making him wait to be asked. Work the parallel track " +
+      "instead: already looking at what you're looking at, already knowing what you're stuck on.",
+  },
+  {
+    when: "May 2026",
+    title: "The Mac app",
+    body:
+      "He moves into the notch. Presence instead of software. This is the one that blew past what " +
+      "three months of extension work ever did.",
+  },
+  {
+    when: "Feb 2026",
+    title: "The Chrome extension",
+    body:
+      "Three months, full polish, basically no users. I'd have called it the thing at the time. It was " +
+      "the tuition, and I'd pay it again.",
+  },
+  {
+    when: "Late 2025",
+    title: "SideBrain",
+    body: "A sidebar that remembered things. A notes tool, honestly. Everything starts smaller than it ends.",
+  },
+];
 function ScrollSong() {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [playing, setPlaying] = useState(false);
@@ -457,6 +527,7 @@ export default function FounderLetter() {
           <div className="eyebrow">A letter from the founder · July 2026</div>
           <h1 className="fl-title">I built a Mac app to fuck around and find out. I did not expect it to find this.</h1>
           <div className="fl-sub">Fair warning: this is going to be a very emotional post. This might be the most emotional a founder has ever felt for his product. I'm not editing that out.</div>
+          <a className="fl-loglink" href="#log">The live log &mdash; where this is going, updated as it moves &darr;</a>
         </div>
         <div className="fl-byline">
           <img src={FOUNDER_AVATAR} alt="Itish Pande" />
@@ -529,6 +600,25 @@ export default function FounderLetter() {
         <h2 className="reveal">Where this goes</h2>
         <p className="reveal">I'm not going to pretend I have the whole map. What I know is the Chrome extension taught me what Braino needed to <em>say</em>, and the Mac app taught me what Braino needed to <em>be</em> — present, fast, watching, real. Braino Co-work is what happens when you point that presence at the actual work: not just noticing what's on your screen, but working the parallel track with you, and eventually looping in every tool and every API a real workday runs on.</p>
         <p className="reveal">I don't know exactly what lies ahead for this. But I know what it felt like to build it, and I haven't felt that in a long time. He's asleep in the notch while I type this. Both of us are exactly where we're supposed to be.</p>
+
+        <h2 className="reveal" id="log">The live log</h2>
+        <p className="reveal">
+          This section is not finished, and it is not supposed to be. It is the running record of what
+          Braino is becoming, written as it happens rather than cleaned up afterwards. It keeps
+          updating. Newest first.
+        </p>
+
+        <ol className="fl-log reveal">
+          {LOG.map((e) => (
+            <li className={`fl-log-item${e.now ? " now" : ""}`} key={e.title}>
+              <div className="fl-log-when">{e.when}{e.now ? <b>now</b> : null}</div>
+              <div className="fl-log-body">
+                <h3>{e.title}</h3>
+                <p>{e.body}</p>
+              </div>
+            </li>
+          ))}
+        </ol>
 
         <div className="fl-sig reveal">— Itish</div>
 

@@ -305,3 +305,80 @@
 
 /* the global BrainoWalker is mounted app-wide; on the letter he stays home */
 body.fl-no-walker #sb-brain-mascot-wrapper { display: none; }
+
+/* ── The live log ──────────────────────────────────────────────────────────
+   A resume of ideas, not a changelog: a single rail down the left, each entry
+   a role. The current one is marked "now" the way a live position is. */
+.fl-loglink {
+  display: inline-block;
+  margin-top: 22px;
+  font-size: 14px;
+  color: var(--fl-accent, #c9544a);
+  text-decoration: none;
+  border-bottom: 1px solid currentColor;
+  padding-bottom: 2px;
+  transition: opacity 0.15s ease;
+}
+.fl-loglink:hover { opacity: 0.7; }
+
+.fl-log {
+  list-style: none;
+  margin: 34px 0 0;
+  padding: 0 0 0 26px;
+  border-left: 1px solid rgba(128, 128, 128, 0.28);
+}
+.fl-log-item { position: relative; padding: 0 0 34px; }
+.fl-log-item:last-child { padding-bottom: 0; }
+.fl-log-item::before {
+  content: "";
+  position: absolute;
+  left: -31px;
+  top: 6px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.32;
+}
+.fl-log-item.now::before {
+  opacity: 1;
+  color: var(--fl-accent, #c9544a);
+  box-shadow: 0 0 0 4px rgba(201, 84, 74, 0.16);
+}
+.fl-log-when {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  opacity: 0.5;
+  margin-bottom: 7px;
+}
+.fl-log-when b {
+  font-family: inherit;
+  font-weight: 500;
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--fl-accent, #c9544a);
+  color: #fff;
+  opacity: 1;
+}
+.fl-log-body h3 {
+  margin: 0 0 8px;
+  font-size: 20px;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+}
+.fl-log-body p { margin: 0; opacity: 0.78; }
+
+@media (max-width: 620px) {
+  .fl-log { padding-left: 20px; }
+  .fl-log-item::before { left: -25px; }
+}
+
+/* Anchor jumps must clear the sticky nav, or #log lands underneath it. */
+#log { scroll-margin-top: 96px; }
