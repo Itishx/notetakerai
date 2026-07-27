@@ -1,0 +1,426 @@
+@font-face {
+  font-family: "SF Pro Display";
+  src: url("/fonts/SF-Pro-Display-Medium.otf") format("opentype");
+  font-weight: 500; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: "SF Pro Display";
+  src: url("/fonts/SF-Pro-Display-Semibold.otf") format("opentype");
+  font-weight: 600; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: "SF Pro Display";
+  src: url("/fonts/SF-Pro-Display-Bold.otf") format("opentype");
+  font-weight: 700; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: "SF Pro Display";
+  src: url("/fonts/SF-Pro-Display-Heavy.otf") format("opentype");
+  font-weight: 800; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: "SF Pro Display";
+  src: url("/fonts/SF-Pro-Display-Black.otf") format("opentype");
+  font-weight: 900; font-style: normal; font-display: swap;
+}
+
+/* notch-teaser.css — the Braino Notch teaser film. A single bounded 16:9 box
+   (the frame) on black; every scene is centred INSIDE it and nothing escapes.
+   Heavy NeueHaas kinetic type, the real notch, a music island, closing wink. */
+
+/* the page holds BOTH cuts stacked, scrollable */
+.nt-films {
+  height: 100vh; background: #000; color: #F5EFE7;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  overflow: hidden;
+  font-family: "SF Pro Display", "Helvetica Neue", -apple-system, sans-serif;
+}
+
+.nt {
+  position: relative; width: 100%; background: transparent; color: #F5EFE7;
+  display: flex; flex-direction: column; align-items: center; gap: 14px;
+  font-family: "SF Pro Display", "Helvetica Neue", -apple-system, sans-serif;
+}
+
+/* per-film header: which cut + runtime */
+.nt-head { display: flex; align-items: baseline; gap: 12px; }
+.nt-badge {
+  font-weight: 600; font-size: 13px; letter-spacing: .04em; text-transform: uppercase;
+  color: #0B0B0C; background: #F5EFE7; padding: 4px 11px; border-radius: 999px;
+}
+.nt-sub { font-weight: 500; font-size: 12.5px; letter-spacing: .02em; color: rgba(245,239,231,.5); }
+
+/* THE BOX: a fixed 16:9 frame. Everything lives inside; overflow is clipped. */
+.nt-frame {
+  position: relative;
+  width: min(100vw, calc(100vh * 16 / 9));
+  aspect-ratio: 16 / 9;
+  background: #000; overflow: hidden; border-radius: 0; cursor: pointer;
+  border: none; box-shadow: none;                  /* full-screen stage, no chrome */
+}
+/* FULLSCREEN: the frame fills the display, letterboxed to 16:9 on pure black */
+.nt-frame:fullscreen {
+  width: 100vw; height: 100vh; max-width: none; border: none; border-radius: 0;
+  display: grid; place-items: center; background: #000;
+}
+.nt-frame:fullscreen .nt-stage {
+  position: relative; width: min(100vw, calc(100vh * 16 / 9)); height: min(100vh, calc(100vw * 9 / 16)); inset: auto;
+}
+.nt-frame:fullscreen::before, .nt-frame:fullscreen::after { display: none; } /* no guide lines in fullscreen */
+/* centre guide lines — hidden by default, toggled with the ▦ button */
+.nt-frame::before, .nt-frame::after {
+  content: ""; position: absolute; background: rgba(255,255,255,.12); z-index: 30; pointer-events: none;
+  display: none;
+}
+.nt-frame.grids::before, .nt-frame.grids::after { display: block; }
+.nt-frame::before { left: 50%; top: 0; bottom: 0; width: 1px; }
+.nt-frame::after { top: 50%; left: 0; right: 0; height: 1px; }
+.nt-stage { position: absolute; inset: 0; }
+
+/* every scene centres on the same point inside the box */
+.nt-intro, .nt-bloom {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+}
+/* ── kinetic typography — every sentence line shares ONE dead-centre position,
+   ONE weight (600), ONE size. Consistent across the whole film. ── */
+/* GPU-promote everything the film animates per-frame: opacity flips then cost
+   a composite, not a repaint */
+.nt-open, .nt-greet, .nt-tag, .nt-intro, .nt-screen,
+.nt-screen-main, .nt-screen-note, .nt-notch, .nt-bloom {
+  will-change: opacity;
+}
+
+.nt-open, .nt-intro, .nt-mline, .nt-greet, .nt-tag, .nt-cowork, .nt-onemore, .nt-thatsbraino, .nt-hype, .nt-ready, .nt-boom, .nt-soon {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  display: flex; flex-wrap: nowrap; justify-content: center; align-items: center;
+  gap: 0 .2em; opacity: 0; color: #fff; text-align: center; white-space: nowrap;
+  font-weight: 600; letter-spacing: -.025em; line-height: 1; z-index: 2;
+  font-size: clamp(28px, 4.6vw, 58px);
+}
+/* "Boom" — the mic-drop after the skills flicker, its own singular beat.
+   10x was WAY too much (ran out of proportion, overflowed the frame) —
+   dialed back to a modest bump, still noticeably bigger than the other
+   lines. Position untouched — still translate(-50%,-50%) from the block
+   above, dead centre. "Bo" + "om" join with no space, read as one word —
+   same fused mechanic as "BrainoNotch". */
+.nt-boom { gap: 0; font-size: clamp(48px, 8vw, 100px); }
+/* "Ready?" holds alone, then clears for "Don't Blink" — normal word spacing
+   (the shared .2em gap above), NOT fused like "Boom". */
+/* "Less goooooo" — "goo" + "oooo" fuse with no space; "Less" keeps its own
+   spacing before it via margin, same pattern as "Introducing BrainoNotch" */
+.nt-intro { gap: 0; }
+.nt-intro .nt-in-first { margin-right: .2em; }
+.nt-intro {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  opacity: 0; white-space: nowrap; text-align: center; color: #fff; z-index: 2;
+  font-weight: 600; letter-spacing: -.025em; font-size: clamp(28px, 4.6vw, 58px);
+}
+
+/* "Braino Co-Work" — SAME mechanic as the Notch match cut: "Braino" holds,
+   "Co-Work" joins, whole frame inverts white↔black (plain, no colour). */
+/* "Braino" / "Co" / "Work" — per-word invert, same mechanic as "Let's f$cking go." */
+.nt-cowork { gap: 0 .12em; }   /* tighter than other lines, so "Co-Work" reads close */
+.nt-cowork .nt-word:first-child { display: none !important; }  /* "Braino" slot — the mascot stands in for it */
+
+/* the standing mascot, waving, taking "Braino"'s slot in the Co-Work reveal */
+.nt-cowork-mascot {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -60%);
+  opacity: 0; z-index: 2; pointer-events: none;
+}
+.nt-cowork-mascot svg { display: block; width: 84px; height: auto; }
+.nt-glitch {
+  position: absolute; inset: 0; background: #FFFFFF; opacity: 0; z-index: 9; pointer-events: none;
+}
+
+/* SEE-YOUR-SCREEN — the MAIN line sits at the exact same dead-centre line as
+   every other kinetic line (same size / weight / position). The two
+   parentheticals hang BELOW it, centred, without shifting the main line. */
+.nt-screen { position: absolute; inset: 0; opacity: 0; z-index: 2; }
+.nt-screen-main {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  display: flex; flex-wrap: wrap; justify-content: center; align-items: center;
+  gap: 0 .2em; color: #fff; font-weight: 600; letter-spacing: -.025em; line-height: 1;
+  white-space: nowrap; text-align: center;
+  font-size: clamp(28px, 4.6vw, 58px);   /* SAME size as (that you allow) — now split into ≤4-word phrases, no shrink needed */
+}
+/* the parentheticals are the SAME style as every other word AND appear in the
+   SAME dead-centre spot — sequentially: the main line clears, then "(quite
+   literally)" takes its place, then "(Ofc)" takes that place, bigger. */
+.nt-screen-main, .nt-screen-note {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+}
+.nt-screen-note {
+  opacity: 0; display: flex; flex-wrap: nowrap; justify-content: center; align-items: center; gap: 0 .2em;
+  white-space: nowrap; color: #fff; font-weight: 600; letter-spacing: -.025em; line-height: 1;
+  font-size: clamp(28px, 4.6vw, 58px);
+}
+/* "of course" — the real notch pops in on BLACK and winks fast, captioned
+   above it (notch caption typography). */
+.nt-ofc-caption {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -160%);
+  opacity: 0; z-index: 12; white-space: nowrap; text-align: center;
+  font-family: ui-monospace, Menlo, monospace; font-size: 15px;
+  letter-spacing: .04em; color: rgba(245, 239, 231, .78);
+}
+/* "of course" — bigger + glowing so the wink actually reads, not just a
+   passing blip; fast wink (the default nf-wink is 0.6s, too slow here) */
+.nt-notch.ofc-front { z-index: 11; transform: translate(-50%, -50%) scale(1.65); }
+.nt-notch.ofc-front .nf-pill {
+  box-shadow: 0 0 0 1px rgba(243,235,225,.28), 0 0 54px rgba(232,120,110,.5), 0 16px 50px rgba(0,0,0,.6) !important;
+}
+.nt-notch.ofc-front .nf-face.nf-wink .nf-eye-r { animation-duration: .28s !important; }
+
+/* SEE — the notch looks DOWN at your screen: eyes drift low and dart around */
+@keyframes ntLookScreen {
+  0%   { transform: translate(0, 2.6px); }
+  24%  { transform: translate(-3px, 3.2px); }
+  50%  { transform: translate(3px, 2.2px); }
+  76%  { transform: translate(-1.4px, 3.4px); }
+  100% { transform: translate(0, 2.6px); }
+}
+.nt-notch.seeing .nf-pupil-l, .nt-notch.seeing .nf-pupil-r,
+.nt-notch.seeing .nf-glint-l, .nt-notch.seeing .nf-glint-r {
+  animation: ntLookScreen 2.3s ease-in-out infinite;
+}
+/* hidden words take NO space; each revealed word appends to the growing line
+   with real spacing (the gap), previous words stay put */
+.nt-word { display: none; }
+.nt-word.in {
+  display: inline-block;                  /* appears in place — position + SIZE untouched */
+  animation: ntWordIn .18s ease-out both;
+}
+/* "+word" convention in sequence(): cancels the shared flex gap on THIS
+   word's leading edge, pulling it flush against whatever came before it —
+   e.g. "Fast" + "+er." reads as one fused word, "Faster." */
+.nt-word.nt-fuse { margin-left: -.2em; }
+/* STAMP: no motion, no scaling — the word HITS at full size instantly, with a
+   hot impact flash that settles, like a stamp striking the page */
+@keyframes ntWordIn {
+  0%   { opacity: 1; filter: brightness(2.2); text-shadow: 0 0 22px rgba(255,255,255,.9); }
+  100% { opacity: 1; filter: brightness(1); text-shadow: none; }
+}
+
+/* THE STACK — no special motion, per the design: just appears, same as the
+   plain stamp used everywhere else (inherits .nt-word.in, no override). */
+@media (prefers-reduced-motion: reduce) { .nt-word.in { animation: none; } }
+
+/* "Braino Co-Work": each word's own bright STAMP flash was stacking with the
+   deliberate background invert on "Co-", reading as three separate flashes
+   instead of one clean inversion. Words appear plainly here — the ONE
+   background invert (see render()) is the only flash that should read. */
+.nt-cowork .nt-word.in { animation: none; }
+
+.nt-dash { color: #fff; }
+
+/* ── the notch (boot / montage / button) ── */
+.nt-notch {
+  position: absolute; left: 50%; top: 50%;
+  width: 190px; height: 55px; opacity: 0;
+  transform: translate(-50%, -50%) scale(1.35); transform-origin: center center; z-index: 5;
+}
+.nt-notch .nf-face { top: 0; left: 50%; opacity: 1; }
+.nt-notch .nf-pill {
+  box-shadow: 0 0 0 1px rgba(243,235,225,.14), 0 0 30px rgba(232,120,110,.14), 0 16px 50px rgba(0,0,0,.6);
+  transition: width .35s cubic-bezier(.33,1,.68,1), height .35s cubic-bezier(.33,1,.68,1),
+              border-radius .35s cubic-bezier(.33,1,.68,1), box-shadow .3s ease;
+}
+.nt-notch.eyes-only .nf-pill { box-shadow: none !important; animation: none !important; }
+.nt-notch.eyes-only .nf-shine, .nt-notch.eyes-only .nf-privacy { display: none; }
+/* TURBO — the fast skills flicker: a brightening glow only, distinct from
+   the boot's slower "thinking" wiggle. The island itself stays STEADY, no
+   scale/position bounce — only the glow pulses to read as "fast". */
+@keyframes ntTurboGlow {
+  0%, 100% { filter: brightness(1); }
+  50%      { filter: brightness(1.2); }
+}
+.nt-notch.turbo { animation: ntTurboGlow .32s ease-in-out infinite; }
+.nt-notch.turbo .nf-pill {
+  box-shadow: 0 0 0 1px rgba(243,235,225,.22), 0 0 46px rgba(122,162,255,.4), 0 16px 50px rgba(0,0,0,.6) !important;
+}
+.nt-shimmer { position: absolute; top: 0; left: 50%; transform: translateX(-50%); width: 190px; overflow: visible; opacity: 0; }
+.nt-p { stroke-linecap: round; }
+.nt-p-core { stroke-width: 1.4; }
+.nt-p-glow { stroke-width: 5; opacity: .55; filter: blur(4px); }
+.nt-bloom {
+  width: 78%; height: 58%; opacity: 0; pointer-events: none;
+  transform: translate(-50%, -54%);
+  background:
+    radial-gradient(ellipse 48% 40% at 50% 50%, rgba(207,224,255,.16), transparent 66%),
+    radial-gradient(ellipse 66% 52% at 50% 58%, rgba(122,162,255,.1), transparent 72%),
+    radial-gradient(ellipse 38% 30% at 46% 62%, rgba(240,168,107,.07), transparent 72%);
+}
+
+/* ── proof caption ── */
+.nt-caption {
+  opacity: 0; white-space: nowrap;
+  font-family: "SF Mono", ui-monospace, Menlo, monospace;
+  font-size: clamp(13px, 1.9vw, 24px); letter-spacing: .04em; color: #F5EFE7;
+}
+.nt-caption::before { content: "🎤 "; opacity: .7; }
+
+/* ── the player is its own black island that GROWS from the notch's centre.
+   The notch face crossfades out as the player grows in at the same point, so
+   it reads as one continuous island morphing — no fighting the nf-pill. ── */
+/* the caption island (nf-pill) is the ONE island. It stretches for the caption,
+   then GROWS (the same pill, taller) into the player — the player content is
+   transparent and sits directly on this pill, so there is never a second notch. */
+.nt-notch .nf-face.captioning .nf-pill { width: 380px !important; }
+.nt-notch .nf-face.captioning .nf-cap-l { font-size: 11px !important; letter-spacing: .05em; }
+/* PLAYING: the SAME pill keeps its 380 width and grows TALLER (expand first) */
+.nt-notch.playing .nf-pill {
+  width: 380px !important; height: 96px !important; border-radius: 24px !important;
+}
+.nt-notch.playing .nf-band { opacity: 0; }   /* eyes/caption step aside */
+/* the player content: transparent, overlaid on the grown pill; fades in AFTER
+   the expansion (delay) so the pill visibly expands first, then the song pops */
+.nt-player {
+  position: absolute; left: 50%; top: 50%;
+  width: 380px; height: 96px; padding: 12px 18px; opacity: 0; pointer-events: none;
+  transform: translate(-50%, -50%);
+  display: grid; grid-template-columns: auto 1fr auto; grid-template-rows: auto auto;
+  column-gap: 12px; row-gap: 9px; align-items: center;
+  transition: opacity .28s ease;
+}
+.nt-notch.playing .nt-player { opacity: 1; transition: opacity .3s ease .35s; }
+.nt-player > * { opacity: 1; }
+.nt-mi-art {
+  grid-row: 1; width: 44px; aspect-ratio: 1; border-radius: 9px;
+  background: linear-gradient(150deg, #3a4a7a, #7a5a8a 55%, #c86a5a), url("/teaser-cover.jpg") center / cover no-repeat;
+  box-shadow: 0 3px 10px rgba(0,0,0,.5);
+}
+.nt-mi-meta { grid-column: 2; grid-row: 1; min-width: 0; }
+.nt-mi-title { font-weight: 800; font-size: 15px; letter-spacing: -.01em; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nt-mi-artist { font-weight: 600; font-size: 12px; color: #9A9A9A; margin-top: 2px; }
+.nt-eq { grid-column: 3; grid-row: 1; display: flex; align-items: flex-end; gap: 2px; height: 18px; }
+.nt-eq i { width: 3px; height: 100%; border-radius: 2px; background: linear-gradient(#8FB0FF, #5A7AE0); transform-origin: bottom; transform: scaleY(.3); }
+.nt-mi-bar { grid-column: 1 / -1; grid-row: 2; position: relative; height: 4px; border-radius: 2px; background: #2A2A2A; overflow: hidden; }
+.nt-mi-bar i { position: absolute; inset: 0 33% 0 0; background: #C9C9C9; border-radius: 2px; }
+.nt-player .nf-dancer { position: absolute; right: 14px; bottom: -22px; width: 26px; height: 32px; }
+.nt-player .nf-dancer svg { width: 100%; height: auto; overflow: visible; filter: drop-shadow(0 0 6px rgba(232,120,110,.5)); }
+
+/* ── the button card (fills the BOX, not the screen) ── */
+
+
+/* ── footer (outside the box) ── */
+.nt-foot {
+  position: fixed; bottom: 24px; left: 0; right: 0;
+  display: flex; align-items: center; justify-content: center; gap: 22px;
+  font-family: "SF Mono", ui-monospace, Menlo, monospace; font-size: 11px;
+  letter-spacing: .18em; text-transform: uppercase; z-index: 20;
+}
+.nt-foot a { color: #F5EFE7; text-decoration: none; opacity: .85; }
+.nt-foot a:hover { color: #F6A8A2; }
+.nt-replay { color: rgba(245,239,231,.38); }
+
+@media (prefers-reduced-motion: reduce) { .nt-word { opacity: 1; transform: none; filter: none; } }
+
+/* no floating mascot on the teaser stage */
+body.nt-page #sb-brain-mascot-wrapper { display: none !important; }
+
+/* ── control bar — Netflix style: invisible until the pointer moves, then a
+   bottom gradient veil with clean flat controls; fades away when idle ── */
+.nt-veil {
+  position: fixed; left: 0; right: 0; bottom: 0; height: 190px; z-index: 39;
+  background: linear-gradient(180deg, transparent, rgba(0,0,0,.82));
+  opacity: 0; pointer-events: none; transition: opacity .35s ease;
+}
+.nt-scrubber {
+  position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); z-index: 40;
+  width: min(92vw, 1400px);
+  display: flex; align-items: center; gap: 18px;
+  background: transparent; border: none; border-radius: 0; padding: 0 8px;
+  font-family: -apple-system, "SF Pro Text", "Helvetica Neue", sans-serif; font-size: 12px; color: #fff;
+  opacity: 0; pointer-events: none; transition: opacity .35s ease;
+}
+/* controls surface on hover/pointer-move (body.nt-controls), hide when idle */
+body.nt-controls .nt-scrubber, body.nt-controls .nt-veil { opacity: 1; pointer-events: auto; }
+body.nt-controls .nt-veil { pointer-events: none; }
+.nt-scrubber button {
+  display: grid; place-items: center; width: 40px; height: 40px;
+  background: transparent; border: none; border-radius: 0;
+  color: #fff; cursor: pointer; font-size: 20px; line-height: 1;
+  opacity: .9; transition: transform .15s ease, opacity .15s ease;
+}
+.nt-scrubber button:hover { opacity: 1; transform: scale(1.22); background: transparent; }
+.nt-scrubber button:active { transform: scale(1.05); }
+.nt-play { width: 44px !important; height: 44px !important; background: transparent !important; color: #fff !important; font-size: 24px !important; }
+.nt-play:hover { background: transparent !important; }
+.nt-step-back, .nt-step-fwd { font-size: 13px !important; letter-spacing: -1px; }
+/* Netflix slider: thin red-fill bar that thickens on hover, dot thumb */
+.nt-scrub {
+  -webkit-appearance: none; appearance: none; flex: 1; height: 22px;
+  background: transparent; cursor: pointer; --p: 0%;
+}
+.nt-scrub::-webkit-slider-runnable-track {
+  height: 4px; border-radius: 2px;
+  background: linear-gradient(90deg, #E8786E var(--p), rgba(255,255,255,.28) var(--p));
+  transition: height .15s ease;
+}
+.nt-scrub:hover::-webkit-slider-runnable-track { height: 7px; }
+.nt-scrub::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none; width: 14px; height: 14px; margin-top: -5px;
+  border-radius: 50%; background: #E8786E; box-shadow: 0 1px 4px rgba(0,0,0,.6);
+  transform: scale(0); transition: transform .15s ease;
+}
+.nt-scrub:hover::-webkit-slider-thumb { transform: scale(1); margin-top: -3.5px; }
+.nt-scrub:active::-webkit-slider-thumb { transform: scale(1.25); }
+.nt-scrub::-moz-range-track { height: 4px; border-radius: 2px; background: rgba(255,255,255,.28); }
+.nt-scrub::-moz-range-progress { height: 4px; border-radius: 2px; background: #E8786E; }
+.nt-scrub::-moz-range-thumb { width: 14px; height: 14px; border: none; border-radius: 50%; background: #E8786E; }
+.nt-time { color: rgba(245,239,231,.7); letter-spacing: .02em; min-width: 104px; font-variant-numeric: tabular-nums; font-family: "SF Mono", ui-monospace, Menlo, monospace; font-size: 11px; }
+.nt-meet { color: rgba(245,239,231,.75); text-decoration: none; letter-spacing: .1em; text-transform: uppercase; font-size: 10px; }
+.nt-meet:hover { color: #F6A8A2; }
+
+/* ── the notch-pill cut: "What can he do?" then the fast skills flicker,
+   typed as the notch's OWN caption (same wing as the Thinking/Reading
+   flicker), not a floating overlay. Stays black throughout — "cut-front"
+   just keeps the pill above the other overlays' z-index. ── */
+.nt-notch.cut-front { z-index: 11; }
+
+/* "Let's f$cking go." double-strobe: same white↔black invert as the match cut,
+   but fired TWICE fast — a glitch-hit instead of a held reveal */
+.nt-invert2 {
+  position: absolute; inset: 0; background: #FFFFFF; opacity: 0; z-index: 9;
+  pointer-events: none;
+}
+.nt-intro.invert-flash, .nt-cowork.invert-flash, .nt-thatsbraino.invert-flash,
+.nt-hype.invert-flash, .nt-ready.invert-flash, .nt-boom.invert-flash { color: #000000; z-index: 11; }
+/* no gap between "Braino" and "Notch" — they read as one word, "BrainoNotch";
+   "That's" keeps its own spacing before it via margin, not the shared gap */
+.nt-thatsbraino { gap: 0; }
+.nt-thatsbraino .nt-tb-first { margin-right: .2em; }
+/* "Notch" glitters — a shine sweeping across the text, distinct from the
+   plain black "Introducing Braino" it joins onto */
+.nt-thatsbraino .nt-tb-glitter {
+  background-image: linear-gradient(100deg, #0B0B0C 30%, #FFFFFF 48%, #F0A86B 52%, #0B0B0C 70%);
+  background-size: 240% auto;
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  animation: ntGlitterSweep 1.3s linear infinite;
+}
+@keyframes ntGlitterSweep {
+  0%   { background-position: 200% center; }
+  100% { background-position: -200% center; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .nt-thatsbraino .nt-tb-glitter { animation: none; background-position: 0% center; }
+}
+/* "That's Braino / Notch" callback cut — own overlay so it never fights the intro's invert2 */
+.nt-thatsbraino-invert {
+  position: absolute; inset: 0; background: #FFFFFF; opacity: 0; z-index: 9;
+  pointer-events: none;
+}
+
+/* upload + analysis log */
+.nt-upload {
+  display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+  padding: 6px 14px; border-radius: 999px; background: rgba(255,255,255,.1);
+  font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: #F5EFE7;
+  transition: background .18s ease;
+}
+.nt-upload:hover { background: rgba(232,120,110,.85); color: #1B0F0D; }
+.nt-log {
+  position: fixed; bottom: 70px; left: 50%; transform: translateX(-50%); z-index: 40;
+  font-family: "SF Mono", ui-monospace, Menlo, monospace; font-size: 11px;
+  color: rgba(245,239,231,.7); letter-spacing: .03em; text-align: center;
+  max-width: 80vw; pointer-events: none; text-shadow: 0 1px 4px rgba(0,0,0,.6);
+}

@@ -1130,6 +1130,20 @@ function startSwiftHotkeyHelper() {
   });
 }
 
+// Speech-to-text apps own the microphone while they are frontmost. Anything
+// said then is dictation aimed at THAT app, so Braino must not treat it as a
+// wake or a command — including the very common case of dictating a sentence
+// that happens to contain his name.
+const MAC_DICTATION_APPS = [
+  "wispr flow", "flow", "superwhisper", "macwhisper", "whisperkit",
+  "dragon dictate", "dragon", "otter", "voice control", "talon",
+];
+function isDictationApp(appName) {
+  const n = String(appName || "").trim().toLowerCase();
+  if (!n) return false;
+  return MAC_DICTATION_APPS.some((d) => n === d || n.startsWith(`${d} `) || n.includes(d));
+}
+
 // The wake-word helper is meant to run forever ("always listening"). Unlike
 // the hotkey tap, if it dies unexpectedly we DO want to bring it back — but
 // only if the reason wasn't "unavailable" (permission denied / on-device
@@ -1158,6 +1172,14 @@ function startBrainoWakeWord() {
       }
       if (line.startsWith("wake\t")) {
         const transcript = line.slice(5).trim();
+        // Dictation gate: while a speech-to-text app is frontmost the user is
+        // talking INTO that app, not to Braino. Saying "Braino" mid-dictation
+        // (e.g. dictating a message about Braino) was waking him every time.
+        const front = String(activeMacContext?.appName || "");
+        if (isDictationApp(front)) {
+          logMac("wakeword.suppressed", { reason: "dictation-app-frontmost", app: front, transcript: textForLog(transcript) });
+          return;
+        }
         logMac("wakeword.detected", { transcript: textForLog(transcript) });
         sendToRenderer("braino-mac:wake-detected", { transcript });
         ensureDockWindowVisible("wake-word");

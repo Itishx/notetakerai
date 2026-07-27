@@ -8,7 +8,6 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { lazy, Suspense, useState } from "react";
 import SplashScreen from "@/components/SplashScreen";
 import BrainoWalker from "@/components/BrainoWalker";
-import BrainoIntroGate from "@/components/BrainoIntroGate";
 import SpiderManBrandNewDay from "./pages/SpiderManBrandNewDayFast.tsx";
 import LaunchIntro from "./pages/LaunchIntro.tsx";
 
@@ -17,6 +16,16 @@ const SPLASH_SKIP_PATHS = new Set(["/", "/intro", "/interactive-tour", "/spiderm
 const normalizePath = (path: string) => (path.length > 1 ? path.replace(/\/+$/, "") : path);
 
 const Home = lazy(() => import("./pages/Home.tsx"));
+const HomeOS = lazy(() => import("./pages/HomeOS.tsx"));
+const FounderLetter = lazy(() => import("./pages/FounderLetter.tsx"));
+const JarvisOS = lazy(() => import("./pages/JarvisOS.tsx"));
+const BrowserOS = lazy(() => import("./pages/BrowserOS.tsx"));
+const NotchTeaser = lazy(() => import("./pages/NotchTeaser.tsx"));
+const IntroTeaser = lazy(() => import("./pages/IntroTeaser.tsx"));
+const EmotionTeaser = lazy(() => import("./pages/EmotionTeaser.tsx"));
+const Letter = lazy(() => import("./pages/Letter.tsx"));
+const Journal = lazy(() => import("./pages/Journal.tsx"));
+const JournalEngine = lazy(() => import("./pages/JournalEngine.tsx"));
 const PreLaunch = lazy(() => import("./pages/PreLaunch.tsx"));
 const LaunchTeaser = lazy(() => import("./pages/LaunchTeaser.tsx"));
 const WaitlistDashboard = lazy(() => import("./pages/WaitlistDashboard.tsx"));
@@ -50,10 +59,10 @@ const RealtimeCosts = lazy(() => import("./pages/RealtimeCosts.tsx"));
 const SkillsTracker = lazy(() => import("./pages/SkillsTracker.tsx"));
 const BrainoChat = lazy(() => import("./pages/BrainoChat.tsx"));
 const BrainoLaunchShort = lazy(() => import("./pages/BrainoLaunchShort.tsx"));
-const InteractiveTour = lazy(() => import("./pages/InteractiveTour.tsx"));
 const Interns = lazy(() => import("./pages/Interns.tsx"));
 const Team = lazy(() => import("./pages/Team.tsx"));
 const Shankar = lazy(() => import("./pages/Shankar.tsx"));
+const InstaGraphics = lazy(() => import("./pages/InstaGraphics.tsx"));
 const NotFound = lazy(() => import("./pages/NotFound.tsx"));
 
 function LandingGate({
@@ -67,23 +76,12 @@ function LandingGate({
   onIntroDone: () => void;
   onTourDone: () => void;
 }) {
-  if (!introDone) {
-    return (
-      <LaunchIntro
-        onFinish={onIntroDone}
-        onSkipToWebsite={() => {
-          onIntroDone();
-          onTourDone();
-        }}
-      />
-    );
-  }
-  return (
-    <>
-      <Home />
-      {!tourDone && <BrainoIntroGate variant="homepage" onFinish={onTourDone} />}
-    </>
-  );
+  // The launch film no longer plays at "/" (user call: the gateway opens
+  // instantly). It remains previewable at /intro.
+  void introDone;
+  void onIntroDone;
+  void tourDone;
+  return <HomeOS />;
 }
 
 function IntroPreviewRoute({ onIntroDone, onTourDone }: { onIntroDone: () => void; onTourDone: () => void }) {
@@ -147,6 +145,17 @@ function AppShell({
           <Route path="/intro" element={<IntroPreviewRoute onIntroDone={onHomeIntroDone} onTourDone={onHomeTourDone} />} />
           <Route path="/prelaunch" element={<PreLaunch />} />
           <Route path="/home-classic" element={<Index />} />
+          <Route path="/home-old" element={<Home />} />
+          <Route path="/home-new" element={<HomeOS />} />
+          <Route path="/founder-letter" element={<FounderLetter />} />
+          <Route path="/jarvis" element={<JarvisOS />} />
+          <Route path="/browser" element={<BrowserOS />} />
+          <Route path="/notch-teaser" element={<NotchTeaser />} />
+          <Route path="/dontblink" element={<IntroTeaser />} />
+          <Route path="/aware" element={<EmotionTeaser />} />
+          <Route path="/n" element={<Letter />} />
+          <Route path="/journal" element={<Journal />} />
+          <Route path="/journal/emotional-engine" element={<JournalEngine />} />
           <Route path="/teaser" element={<LaunchTeaser />} />
           <Route path="/waitlist-admin" element={<WaitlistDashboard />} />
           <Route path="/use-cases" element={<UseCases />} />
@@ -177,10 +186,10 @@ function AppShell({
           <Route path="/realtime-costs" element={<RealtimeCosts />} />
           <Route path="/skills" element={<SkillsTracker />} />
           <Route path="/chat" element={<BrainoChat />} />
-          <Route path="/interactive-tour" element={<InteractiveTour />} />
           <Route path="/launch-short" element={<BrainoLaunchShort />} />
           <Route path="/interns" element={<Interns />} />
           <Route path="/team" element={<Team />} />
+          <Route path="/InstaGraphics" element={<InstaGraphics />} />
           <Route path="/team/shankar" element={<Shankar />} />
           <Route path="/spiderman-brand-new-day" element={<SpiderManBrandNewDay />} />
           <Route path="/brand-new-day" element={<SpiderManBrandNewDay />} />

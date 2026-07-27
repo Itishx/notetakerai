@@ -1,121 +1,243 @@
 import { useEffect, useRef, useState } from "react";
 import NotchFace, { setNotchStatus } from "@/components/NotchFace";
-import { BRAINO_WALKER_SVG } from "@/components/brainoWalkerSvg";
 import { analyzeTrack, snapToBeat, type BeatAnalysis } from "@/lib/beatSync";
-import "./home-os.css";
 import "./notch-teaser.css";
 
 /* ============================================================================
    /notch-teaser — the Braino Notch teaser film. Fast kinetic typography (like
    the "don't blink" launch video) intercut with the REAL notch:
-     1  cold open   "Braino found a new home."   (word-by-word, dead centre)
-     2  intro       "Say hello to it."
+     1  cold open   "Braino." → "For your Mac."   (word-by-word, dead centre)
+     2  intro       "LetsFuckingGo" (flush, no spaces; per-word invert match cut)
      3  WAKE-UP     the full boot sequence — the notch comes alive
-     4  GREETING    the notch CAPTIONS "hey, it's me." (play-less-than-i-do style)
+     4  GREETING    the notch CAPTIONS "hey shawty"
      5  SEE         he looks down at your screen (eyes drift + dart)
-     6  REVEAL      "With a vision model, he sees everything on your screen."
-                    → (that you allow) → (Ofc) BIG
-     7  MATCH CUT   the bar returns, ONE continuous caption sequence: "Introducing"
-                    → "Braino" → "What does he do?" → fast mode-words flicker
-                    (Thinking · Reading · Pondering …) → "Notch", frame inverts B/W
-     8  "xD" → tagline "Speak. Watch It Happen." → "That's Braino"
-     9  "Oh... and one more thing." → Braino Co-Work
-    10  WINK        the island winks → black
+     6  REVEAL      "He sees your screen." → "Only when you ask." (no wink
+                    beat here anymore — straight into HYPE)
+     7  HYPE        "He's smarter now. Fast/+er. Like crazy / fast. chat ngl,
+                    even we were surprised. (full match cut, every word)
+                    Because he can... wait... let's just ask him." — trails
+                    into the pivot ("+" = fuses flush onto the prior word)
+     8  REAL LIFECYCLE  the bar returns and runs the ACTUAL notch states
+                    (verbatim to LID_SEQ): dozing → listen (sonar + mouth-
+                    listen, no text — this IS "let's ask him") → captioning
+                    types "What can you do?" → captioning + speak together
+                    — pill spreads sideways, mouth talks, his answer
+                    (Browsing · Coding · Emailing … → "Watching. Always.")
+                    types in the SAME real caption wing, glowing (turbo)
+     8b BOOM        its own separate beat ("Bo" + "om" join, no space), right after
+     9  tagline     "Speak." holds (extra breath) → clears → "Watch" → clears
+                    → "It" → clears → "Happen." — five sequential beats,
+                    nothing accumulates
+    10  MATCH CUT   "Introducing" (its own beat) → clears → "Braino" lands →
+                    "Notch" fuses onto it right as the frame flips white, a
+                    single shimmer wave (not looping), no space ("BrainoNotch")
+    11  "Oh... and one more thing." — its own beat
+    11b BIGGER      "This is part of / Ready? Lock in. / Braino OS /
+                    (Version 1) / (Coming Very Fucking Soon)" — FULL match
+                    cut, every word (per-word invert double-strobe across the
+                    whole scene, same mechanic as "LetsFuckingGo")
+    12  WINK        the island winks → black
    One rAF clock, deterministic render(t), fully scrubbable + MP3 beat-sync.
    ============================================================================ */
 
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 
-// Self-contained walker instance: rename BOTH the element-id prefix AND every
-// gradient id (sbb-*/sbwk-* — the source mixes both) to one unique prefix, so
-// this instance never collides with another on the page. Verbatim to how
-// content.js avoids "the white brain" bug (shared #sbb-fill across instances).
-const namespacedWalker = (prefix: string) =>
-  BRAINO_WALKER_SVG
-    .replace(/__sbwk_/g, `__${prefix}_`)
-    .replace(/sbb-(fill|dark|glow)/g, `${prefix}-$1`)
-    .replace(/sbwk-(fill|dark|glow)/g, `${prefix}-$1`);
-
-const OPEN_PHRASES = [["Braino?", "For?", "Your?", "Mac?"]];
-const INTRO_WORDS = ["Let's", "fucking", "goo."];
-const SCREEN_MAIN_PHRASES = [["With", "a", "vision", "model,"], ["now", "sees", "everything"], ["on", "your", "screen."]];
-const NOTE1_WORDS = ["(only", "when", "needed)"];
-const TAG_WORDS = ["Speak.", "Watch", "It", "Happen."];
+const OPEN_PHRASES = [["Braino."], ["For", "your", "Mac."]];
+// "Lets" holds, then "Fucking" joins, then "Go" fuses on, all flush with no
+// space (reads "LetsFuckingGo") — same fused-word mechanic as "BrainoNotch"/
+// "Boom". Same per-word invert double-strobe match cut as before, untouched.
+const INTRO_WORDS = ["Lets", "Fucking", "Go"];
+const SCREEN_MAIN_PHRASES = [["He", "sees", "your", "screen."]];
+const NOTE1_WORDS = ["Only", "when", "you", "ask"];
+// "Speak." holds, THEN clears with extra breathing room, THEN "Watch" →
+// "It" → "Happen." each land on their OWN, one fully replacing the last —
+// FIVE sequential beats total, none of them accumulating together.
+const TAG_PHRASES = [["Speak."], ["Watch"], ["It"], ["Happen."]];
+// Trimmed — this whole tagline was taking too long. Modest cuts, not drastic.
+const TAG_SW = 230;
+const TAG_GAPS: number[] = []; TAG_GAPS[0] = 340;  // extra gap after "Speak." before "Watch" joins — trimmed from 480
 const ONEMORE_PHRASES = [["Oh..."], ["and", "one", "more", "thing."]];
-const COWORK_WORDS = ["Braino", "Co-", "Work"];   // per-word invert: Braino normal, Co-=invert#1, Work=invert#2 — the hyphen inverts with it
+// The "big reveal" — straight after "one more thing.", no CoWork/mascot
+// beat anymore. FULL match cut on every word: same per-word double-strobe
+// mechanic as "LetsFuckingGo" and hype's "chat ngl..." line, applied across
+// every phrase in this scene (see bigInv below).
+const BIGGER_PHRASES = [
+  ["This", "is", "part", "of"],
+  ["Ready?", "Lock", "in."],
+  ["Braino", "OS"],
+  ["(Version", "1)"],
+  ["(Coming", "Very", "Fucking", "Soon)"],
+];
+const BIGGER_SW = 300;
+const BIGGER_GAPS: number[] = [];
 const GREET_CAP = "hey shawty";
-// "That's Braino?" holds, then "BrainoNotch" JOINS right next to it (nothing
-// clears — kinetic() only ever adds words) and the frame inverts white↔black.
-// "That's Braino?" keeps its ORIGINAL colour (white), so once the background
-// flips white it visually disappears — only "BrainoNotch" is recoloured
-// black, so it's the one thing that reads after the flip.
-const THATSBRAINO_WORDS = ["That's", "Braino?", "BrainoNotch"];
+// "Introducing" is its OWN fully separate beat — lands alone, clears
+// completely. THEN "Braino" lands on its own, and "+Notch" fuses onto it
+// (same "+" convention as Fast/+er.) right as the match cut
+// flips the frame white — reads as "Braino" / "BrainoNotch" appearing
+// together with the cut, not a 3-word pile-up under one accumulating line.
+const THATSBRAINO_PHRASES = [["Introducing"], ["Braino", "+Notch"]];
+// Per-phrase cadence: "Introducing" (index 0) gets the SAME normal word
+// cadence as everything else in the film — no special treatment. "Braino"/
+// "+Notch" (index 1) gets its own longer cadence so BRAINO holds a real
+// beat before Notch fuses onto it. These must be different numbers, and
+// they were bugged before: one shared value multiplied by word-count-per-
+// phrase silently added ~3 EXTRA SECONDS to the total film (a 2-word phrase
+// at sw=1000 costs 2000ms, not 1000ms) — that's what pushed "Cooking Next"
+// out of its slot at the end. Never reuse one big number across phrases of
+// different lengths again.
+const THATSBRAINO_SW = [300, 750];
+// "Introducing" doesn't need extra breathing room — back to the standard gap.
+const THATSBRAINO_GAPS: number[] = [];
+const THATSBRAINO_HOLD = 130;                // it's a MATCH CUT — sharp, not a lingering hold. Just enough to register before the next scene
 // what Braino actually does — real skills flickering fast, ending on the punch
 const MODE_WORDS = [
-  "Browsing", "Searching", "Coding", "Emailing",
-  "Booking", "Remembering", "Shopping", "Watching. Always.",
+  "Browsing", "Coding", "Emailing", "Booking",
+  "Scheduling", "Designing", "Debugging", "Translating",
+  "Summarizing", "Automating", "Remembering", "Shopping",
+  "Navigating", "Organizing", "Recording", "Researching",
+  "Reminding", "Listening", "Watching. Always.",
 ];
+// BOOM — its own separate, singular beat right after the flicker holds.
+// Two-part reveal, no space: "Bo" lands, then "om" joins to complete it.
+// +1 frame (33ms) added to the gap — "Bo" needs to fully stamp and settle
+// before "om" lands, not overlap it.
+const BOOM_PARTS = ["Bo", "om"];
+const BOOM_STARTS = [0, 253];
+const BOOM_DUR = 600;   // was 800 — trimmed the hold AFTER "Boom" forms, not the "Bo"/"om" reveal itself (BOOM_STARTS untouched)
 
 // mode flicker schedule (fast, accelerating; the final punch-word holds) —
-// this one stays quick, it's the Braino/Notch caption (CUT_CAP_HOLD) that got slowed down
+// sped up further (was 230->90ms): "Don't Blink" promises this speed, so
+// the flicker itself needs to be faster than it was.
 const MODE_DURS = MODE_WORDS.map((_, i) =>
-  i === MODE_WORDS.length - 1 ? 620 : Math.round(230 - (230 - 90) * (i / (MODE_WORDS.length - 2)))
+  i === MODE_WORDS.length - 1 ? 620 : Math.round(170 - (170 - 65) * (i / (MODE_WORDS.length - 2)))
 );
 const MODE_CUM: number[] = [];
 { let acc = 0; for (const d of MODE_DURS) { MODE_CUM.push(acc); acc += d; } }
 const MODES_TOTAL = MODE_DURS.reduce((a, b) => a + b, 0);
 const BOOT_LEN = 7700;    // verbatim boot beats; short hold after the greeting
-const WINK_TAIL = 4100;   // form → coral → WINK plays out fully → beat of black
-const COWORK_SW = 360;    // Braino → Co → Work cadence (each join is its own match cut)
-const ONEMORE_HOLD = 400; // "Oh, and one more thing." hold before Braino begins
-// ONE continuous notch-pill sequence, right after the vision reveal: types
-// "Introducing" → "Braino" → "What does he do?" (same caption wing as the
-// Thinking/Reading flicker), THEN the SAME pill runs the fast mode-words
-// flicker, THEN caption swaps to "Notch" and the frame inverts white↔black.
-const CUT_PRE_WORDS = ["What can he do?"];
-const CUT_CAP_HOLD = 780;   // per word, in the pill — readable
-const CUT_PRE_DUR = CUT_PRE_WORDS.length * CUT_CAP_HOLD;
-const CUT_DUR = CUT_PRE_DUR + MODES_TOTAL + CUT_CAP_HOLD;   // pre-words + fast flicker + "Notch"
-const VISION_MASCOT_DUR = 850; // "With a vision model," clears → a beat of black → mascot waves → match-cuts
-const VISION_PAUSE = 220;       // the wait: text is gone, nothing shows yet
-const VISION_MASCOT_IN = 130;   // mascot's own fade-in, right after the pause
-const VISION_FLIP_AT = 550;     // when, inside that window, the invert fires
-const THATSBRAINO_SW = 300;
+// The outro: island forms fast → he WINKS FIRST → the perimeter line races
+// back out (reverse of the boot's slow 2.7s draw-in, much quicker) → beat of
+// black. Reordered + tightened from the old form→coral→wink sequence.
+const WINK_START = 550;       // how long the fast draw-in takes before he winks
+const WINK_HOLD = 650;        // the wink itself, held
+const OUTRO_LINE_DUR = 900;   // the retracting perimeter line — faster than the boot's 2700ms
+const WINK_TAIL = WINK_START + WINK_HOLD + OUTRO_LINE_DUR + 300;   // + a beat of black — trailing black-beat was 550, trimmed; WINK_START/WINK_HOLD/OUTRO_LINE_DUR (the actual wink choreography) untouched
+const BIGGER_HOLD = 300;  // readable hold after "Coming Very Fucking Soon)" settles, before the wink
+const ONEMORE_HOLD = 200; // was 400 — "Oh, and one more thing." hold before the next beat begins
+// HYPE — right after the vision reveal, before the notch returns: quick
+// phrases in the same spot, building the pitch then trailing off into the
+// pivot — "He's smarter now. Fast/+er. Like crazy / fast. (0.5s hold)
+// Because he can... wait... let's just ask him." "Fast" + "+er." fuses flush
+// (no gap) into "Faster." — was reading choppy as a single flat word before.
+// "Like" lands, THEN "crazy" joins with its own emphasis animation (the "*"
+// marker — a little extra energy, matching what the word means), THEN
+// "fast." joins as its own beat.
+// "He's" is a PERSISTENT anchor word — its own element, never rebuilt, never
+// moved. Only the word NEXT TO it swaps: "Smart/+er" -> "Fast/+er." — each
+// itself a two-part fuse reveal (not a flat whole-word swap) — both slots are
+// ALWAYS reserved in a CSS Grid overlap (.nt-swap-stack), sized to the WIDER
+// of the two, so the container's width never changes between them and "He's"
+// truly cannot shift, at any point. Plain stamp only, no bounce/slide.
+const HYPE_OPEN_ANCHOR = "He’s";
+const HYPE_OPEN_SWAP_AT = 480;              // "Smarter" holds this long before "Faster." replaces it — UNCHANGED, this IS the swap animation timing
+const HYPE_OPEN_DUR = HYPE_OPEN_SWAP_AT + 700;   // reverted to +700 — the +400 trim made "Faster." feel rushed, not enough time to read it before the cut
+
+const HYPE_PHRASES = [["Like", "*crazy", "fast."], ["chat", "ngl,", "even", "we", "were", "surprised."], ["Because", "he", "can", "now"], ["wait..."], ["let's", "just", "ask", "him."]];
+// Slowed from 260 to 340 — closer to the intro's 360ms cadence (SW.open).
+// At 260ms the words were advancing faster than the .18s stamp flash could
+// even fully settle, especially on "Fast/+er." and "Like crazy/fast." —
+// reading choppy instead of a beat you can actually see land.
+const HYPE_SW = 340;
+// "chat ngl, even we were surprised" holds an extra beat before it joins
+// (index 0, right after "Like crazy fast." clears) — 0.5s instead of the
+// standard 260ms GAP. It also needs to LEAVE faster than standard once
+// landed — index 1's own trailing gap (before "Because he can now") trimmed
+// to 90ms. The tail ("Because he can now... wait... let's just ask him.")
+// gets widened gaps (index 2, 3) so each settles properly before the next
+// joins, instead of racing through on the bare default. EVERY word in this
+// phrase is its own match cut — see hypeInv below (per-word strobe, same
+// mechanic as "LetsFuckingGo"'s double-strobe, not one held flash).
+const HYPE_GAPS: number[] = []; HYPE_GAPS[0] = 500; HYPE_GAPS[1] = 90; HYPE_GAPS[2] = 340; HYPE_GAPS[3] = 380;
+// "Ready?" holds on its own, THEN clears for "Don't" → "Blink." — a normal
+// TWO-word line, real space between them (NOT fused like "BrainoNotch") —
+// the match cut fires once "Blink." lands. THEN straight into the "What can
+// you do?" lifecycle — NO wink here; the wink is the CLOSING beat instead,
+// once the fast skills words finish (see CUT_WINK_DUR below).
+const READY_PHRASES = [["Ready?"], ["Don't", "Blink."]];
+const READY_SW = 280;
+// "Ready?" holds ~0.7s (matches the old READY_DUR feel) before "Don't" begins.
+const READY_GAPS: number[] = []; READY_GAPS[0] = 500; READY_GAPS[1] = 350;   // was 600 — breathing room after "Don't Blink" lands, before the cut (READY_GAPS[0], the "Ready?" hold, untouched)
+// THE REAL notch lifecycle (verbatim to LID_SEQ in HomeOS.tsx), compressed
+// for the teaser's pace: listening (sonar + mouth-listen, no text — this IS
+// "let's just ask him") → captioning types what was heard ("What can you
+// do?") → speak + captioning together — the pill spreads AND the mouth
+// talks, skills flicker inside the SAME caption wing → once the fast words
+// finish, the caption clears and he WINKS — the closing beat, right before
+// "Boom". No dozing re-entry: "Don't Blink" already established he's awake.
+const CUT_PRE_TEXT = "What can you do?";
+const CUT_TYPE_MS = 45;     // per-character typing speed — matches the boot greeting's typewriter (GREET_CAP)
+const CUT_LISTEN_DUR = 400; // listening — sonar + mouth-listen, no text; the "What can you do?" caption was kicking in too late, trimmed the pure-listen gap before it types
+const CUT_TYPE_DUR = CUT_PRE_TEXT.length * CUT_TYPE_MS + 150;   // was +300 — captioning; the typing speed itself (CUT_PRE_TEXT.length * CUT_TYPE_MS) is untouched, only the hold after it finishes
+const CUT_WINK_DUR = 650;   // the closing wink, once the flicker finishes
+// cumulative phase-start offsets (ms from T.button)
+const CUT_LISTEN_AT = 0;
+const CUT_TYPE_AT = CUT_LISTEN_AT + CUT_LISTEN_DUR;
+const CUT_PRE_DUR = CUT_TYPE_AT + CUT_TYPE_DUR;   // == CUT_SPEAK_AT
+const CUT_SPEAK_END = CUT_PRE_DUR + MODES_TOTAL;  // flicker (incl. final hold) finishes here
+const CUT_DUR = CUT_SPEAK_END + CUT_WINK_DUR;     // + the closing wink
 
 // The WORDS get FASTER as the film progresses — each scene has its own cadence
 // (ms per word), decreasing scene by scene. Animations are NOT part of this.
-const SW = { open: 360, screen: 280, tag: 300 };
+const SW = { open: 360, screen: 280 };
 // TEXT flows: sentence → sentence is a small FIXED beat, never the big hold.
 const GAP = 260;
 
 // A GROUP is capped at 4 words — any longer sentence is split into sequential
 // phrases that share ONE spot: phrase clears, next phrase takes its place.
 // phraseSeq gives each phrase's start offset (ms) + the group's total duration.
-const phraseSeq = (phrases: string[][], sw: number) => {
+// `gaps` optionally overrides the trailing gap AFTER phrase i (sparse array —
+// unset indices fall back to the standard GAP), for the rare beat that needs
+// to hold longer before the next phrase joins.
+// `sw` can be a single number (every phrase shares one word-cadence) or a
+// per-phrase array (sparse — unset indices fall back to the LAST provided
+// value) — needed when one phrase's internal word-to-word hold must be much
+// longer than another's without inflating the WHOLE group's duration (this
+// caught out THATSBRAINO: a single big `sw` meant to slow only "Braino"→
+// "+Notch" also multiplied "Introducing"'s own contribution, and because
+// `sw` is applied `words-in-phrase × sw`, the effect compounds per word —
+// silently adding several extra SECONDS to the timeline, not the intended
+// fraction of one).
+const phraseSw = (sw: number | number[], i: number) =>
+  Array.isArray(sw) ? (sw[i] ?? sw[sw.length - 1]) : sw;
+const phraseSeq = (phrases: string[][], sw: number | number[], gaps?: number[]) => {
   const starts: number[] = [];
   let acc = 0;
-  for (const ph of phrases) { starts.push(acc); acc += ph.length * sw + GAP; }
+  phrases.forEach((ph, i) => {
+    starts.push(acc);
+    acc += ph.length * phraseSw(sw, i) + (gaps?.[i] ?? GAP);
+  });
   return { starts, total: acc };
 };
 
-const ONEMORE_DUR = phraseSeq(ONEMORE_PHRASES, 300).total + ONEMORE_HOLD;
-const COWORK_DUR = COWORK_WORDS.length * COWORK_SW + 550;   // 3 words + a readable hold before the wink
+const HYPE_DUR = phraseSeq(HYPE_PHRASES, HYPE_SW, HYPE_GAPS).total;
+const READY_TOTAL = phraseSeq(READY_PHRASES, READY_SW, READY_GAPS).total;
+const TAG_TOTAL = phraseSeq(TAG_PHRASES, TAG_SW, TAG_GAPS).total;
+const THATSBRAINO_DUR = phraseSeq(THATSBRAINO_PHRASES, THATSBRAINO_SW, THATSBRAINO_GAPS).total + THATSBRAINO_HOLD;
 
-// SEE-YOUR-SCREEN runs five phrases sequentially in the SAME spot; `sw` per
-// word, scaled by cadence. (3 for the main reveal, then the two asides.)
+const ONEMORE_DUR = phraseSeq(ONEMORE_PHRASES, 300).total + ONEMORE_HOLD;
+const BIGGER_DUR = phraseSeq(BIGGER_PHRASES, BIGGER_SW, BIGGER_GAPS).total + BIGGER_HOLD;
+
+// SEE-YOUR-SCREEN runs sequentially in the SAME spot: plain text, no cutaway.
+// No "of course" wink anymore — the scene just ends once "Only when you
+// ask" clears.
 const screenTimes = (sw: number, _H: number) => {
-  const p0 = SCREEN_MAIN_PHRASES[0].length * sw + GAP;
-  const mascotStart = p0;
-  const mascotEnd = p0 + VISION_MASCOT_DUR;             // "he" is replaced by the mascot + match cut
-  const p1 = SCREEN_MAIN_PHRASES[1].length * sw + GAP;
-  const p2 = SCREEN_MAIN_PHRASES[2].length * sw + GAP;
-  const mainStarts = [0, mascotEnd, mascotEnd + p1];
-  const mainEnd = mascotEnd + p1 + p2;
+  const mainEnd = SCREEN_MAIN_PHRASES[0].length * sw + GAP;
+  const mainStarts = [0];
   const n1Start = mainEnd;
   const n1End = n1Start + NOTE1_WORDS.length * sw + GAP;
-  const n2Start = n1End;
-  const total = n2Start + sw + GAP;
-  return { mainStarts, mainEnd, n1Start, n1End, n2Start, total, mascotStart, mascotEnd };
+  const total = n1End;
+  return { mainStarts, mainEnd, n1Start, n1End, total };
 };
 
 // Build the timeline. Word reveals use the per-scene SW cadence (untouched by
@@ -140,14 +262,17 @@ const buildTimeline = (H: number, snap?: (ms: number, down: boolean) => number) 
   const boot = S2(intro + INTRO_WORDS.length * SW.open + GAP, true); // SNAP: the wake-up hits a downbeat
   const see = S2(boot + BOOT_LEN);                           // right after the wink — no gap, no lag
   const screen = S2(see + H * 0.22);                         // the look-down, brief
-  const button = S2(screen + screenTimes(SW.screen, H).total + H * 0.08); // the bar returns: Introducing → Braino → What does he do? → fast words → Notch (cut)
-  const tag = S2(button + CUT_DUR + H * 0.3);                 // straight from the Braino/Notch reveal into the tagline
-  const thatsBraino = S2(tag + TAG_WORDS.length * SW.tag + H * 0.3);   // "That's Braino?" → "Notch" joins, frame inverts
-  const oneMore = S2(thatsBraino + THATSBRAINO_WORDS.length * THATSBRAINO_SW + GAP + H * 0.3);
-  const cowork = S2(oneMore + ONEMORE_DUR);                      // "Braino" / "Co" / "Work" begins
-  const wink = S2(cowork + COWORK_DUR, true);                 // SNAP: glitch·glitch·wink lands on a downbeat
+  const hype = S2(screen + screenTimes(SW.screen, H).total + H * 0.08);   // "He's [smarter/Faster.] → Like crazy / fast. (0.5s) Because he can now..."
+  const ready = S2(hype + HYPE_OPEN_DUR + HYPE_DUR + H * 0.06);               // "Ready?" → "Don't Blink" fuses in → the notch winks
+  const button = S2(ready + READY_TOTAL + H * 0.06, true);   // SNAP: restores the 3rd documented beat-hit (was silently lost — comment above always said boot/match-cut/wink) — "What can you do?" lands on a downbeat
+  const boom = S2(button + CUT_DUR + H * 0.2);                // his answer lands — "Boom", its own separate beat
+  const tag = S2(boom + BOOM_DUR + H * 0.2);                  // straight from "Boom" into the tagline
+  const thatsBraino = S2(tag + TAG_TOTAL + H * 0.3);   // "That's Braino" → "Notch" joins, frame inverts
+  const oneMore = S2(thatsBraino + THATSBRAINO_DUR + H * 0.3);
+  const bigger = S2(oneMore + ONEMORE_DUR);                   // "This is part of... Braino OS... Coming Very Fucking Soon)"
+  const wink = S2(bigger + BIGGER_DUR, true);                 // SNAP: glitch·glitch·wink lands on a downbeat
   const end = Math.round(wink + WINK_TAIL);
-  return { open, intro, boot, see, screen, button, tag, thatsBraino, oneMore, cowork, wink, end };
+  return { open, intro, boot, see, screen, hype, ready, button, boom, tag, thatsBraino, oneMore, bigger, wink, end };
 };
 
 // Solve the hold H so the whole film lands on `target` ms (end is linear in H).
@@ -156,7 +281,7 @@ const solveHold = (target: number) => {
   return clamp((target - e0) / ((e1 - e0) / 1000), 150, 6000);
 };
 
-const TARGET_MS = 34000;   // Ready?/flurry merged into one continuous notch-pill sequence (Introducing/Braino/What does he do?/fast words/Notch)
+const TARGET_MS = 34000;
 const DEFAULT_H = solveHold(TARGET_MS);
 const DEFAULT_T = buildTimeline(DEFAULT_H);
 
@@ -183,16 +308,18 @@ export default function NotchTeaser() {
     const openLine = q(".nt-open");
     const intro = q(".nt-intro");
     const screen = q(".nt-screen");
+    const hypeOpen = q(".nt-hype-open");
+    const hypeSwapA = q(".nt-hype-swap .nt-swap-a");
+    const hypeSwapB = q(".nt-hype-swap .nt-swap-b");
+    const hype = q(".nt-hype");
+    const ready = q(".nt-ready");
+    const boom = q(".nt-boom");
     const tag = q(".nt-tag");
     const thatsBraino = q(".nt-thatsbraino");
     const thatsBrainoInvert = q(".nt-thatsbraino-invert");
     const oneMore = q(".nt-onemore");
-    const cowork = q(".nt-cowork");
-    const coworkMascot = q(".nt-cowork-mascot");
-    const visionMascot = q(".nt-vision-mascot");
-    const visionInvert = q(".nt-vision-invert");
+    const bigger = q(".nt-bigger");
     const glitch = q(".nt-glitch");
-    const invert = q(".nt-invert");
     const invert2 = q(".nt-invert2");
     const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
@@ -206,6 +333,11 @@ export default function NotchTeaser() {
     // in render(), which was the real source of the recent jank.
     let openStarts = phraseSeq(OPEN_PHRASES, P.open).starts;
     let oneMoreStarts = phraseSeq(ONEMORE_PHRASES, 300).starts;
+    const biggerStarts = phraseSeq(BIGGER_PHRASES, BIGGER_SW, BIGGER_GAPS).starts;   // fixed cadence — never changes on sync
+    const hypeStarts = phraseSeq(HYPE_PHRASES, HYPE_SW, HYPE_GAPS).starts;   // fixed cadence — never changes on sync
+    const readyStarts = phraseSeq(READY_PHRASES, READY_SW, READY_GAPS).starts;   // fixed cadence — never changes on sync
+    const tagStarts = phraseSeq(TAG_PHRASES, TAG_SW, TAG_GAPS).starts;      // fixed cadence — never changes on sync
+    const thatsBrainoStarts = phraseSeq(THATSBRAINO_PHRASES, THATSBRAINO_SW, THATSBRAINO_GAPS).starts;   // fixed cadence — never changes on sync
     let st = screenTimes(P.screen, holdMs);
     const recomputeStarts = () => {
       openStarts = phraseSeq(OPEN_PHRASES, P.open).starts;
@@ -224,9 +356,6 @@ export default function NotchTeaser() {
     // cached per-frame elements — NEVER querySelector inside render (jank)
     const scMain = screen.querySelector<HTMLElement>(".nt-screen-main")!;
     const note1 = screen.querySelector<HTMLElement>(".nt-note-1")!;
-    const ofcBg = screen.querySelector<HTMLElement>(".nt-ofc-bg")!;
-    const ofcMascot = screen.querySelector<HTMLElement>(".nt-ofc-mascot")!;
-    const ofcCaption = screen.querySelector<HTMLElement>(".nt-ofc-caption")!;
     const capEl = notch.querySelector<HTMLElement>(".nf-cap-l");
 
     // the mode-word flicker index at elapsed time el (ms into the modes scene)
@@ -239,9 +368,9 @@ export default function NotchTeaser() {
 
     // reset
     root.querySelectorAll<HTMLElement>(".nt-word").forEach((w) => w.classList.remove("in"));
-    [notchWrap, bloom, intro, openLine, screen, tag, thatsBraino, oneMore, cowork, coworkMascot, visionMascot, visionInvert, ofcBg, ofcMascot, ofcCaption].forEach((el) => (el.style.opacity = "0"));
-    glitch.style.opacity = "0"; cowork.classList.remove("invert-flash");
-    invert.style.opacity = "0";
+    [notchWrap, bloom, intro, openLine, screen, hypeOpen, hype, ready, boom, tag, thatsBraino, oneMore, bigger].forEach((el) => (el.style.opacity = "0"));
+    [hypeSwapA, hypeSwapB].forEach((el) => { el.style.visibility = "hidden"; el.style.opacity = "0"; });
+    glitch.style.opacity = "0"; bigger.classList.remove("invert-flash");
     notchWrap.classList.remove("cut-front");
     invert2.style.opacity = "0"; intro.classList.remove("invert-flash");
     thatsBrainoInvert.style.opacity = "0"; thatsBraino.classList.remove("invert-flash");
@@ -250,7 +379,8 @@ export default function NotchTeaser() {
 
     if (reduced) { tag.style.opacity = "1"; root.querySelectorAll<HTMLElement>(".nt-tag .nt-word").forEach((w) => w.classList.add("in")); return; }
 
-    let raf = 0, lastCls = "", lastMode = -1, lastStatus = "__", mascotBuilt = false, visionMascotBuilt = false, ofcMascotBuilt = false;
+    let raf = 0, lastCls = "", lastMode = -1, lastStatus = "__";
+    let firedNotchShimmer = false;
     let audioAnchor = 0; // wall-clock anchor servo-locked to the audio clock
     let playing = true, manualT = 0, startWall = performance.now();
     const controls = root.querySelector<HTMLElement>(".nt-scrubber");
@@ -262,20 +392,49 @@ export default function NotchTeaser() {
     // ACCUMULATE one line, driven by the passed clock t (so it scrubs). Word
     // spans + last active index are cached per host — DOM writes only on change.
     const kinCache = new Map<HTMLElement, { spans: HTMLElement[]; last: number }>();
-    const kinetic = (host: HTMLElement, start: number, per: number, t: number) => {
+    // seqIdx is declared below (after `sequence` exists); resetSceneCaches
+    // clears both together — called on every restart (loop-wrap, manual
+    // replay-to-0), NOT just on mount. Without this, a host's "last reached"
+    // index stays latched from the PREVIOUS playthrough (e.g. Boom's "om",
+    // Blink's "Blink." — see the invert-flash bug this fixed), so the very
+    // first frame of a new loop reads those stale indices as if that beat
+    // had already landed again, pinning invert2 white from frame 1.
+    const resetSceneCaches = () => {
+      kinCache.clear();
+      seqIdx.clear();
+    };
+    // shared by both cadences below: writes the DOM only when the active index changes
+    const kineticAt = (host: HTMLElement, active: number) => {
       let c = kinCache.get(host);
-      if (!c) { c = { spans: Array.from(host.querySelectorAll<HTMLElement>(".nt-word")), last: -2 }; kinCache.set(host, c); }
-      const active = t - start < 0 ? -1 : Math.min(c.spans.length - 1, Math.floor((t - start) / per));
+      // :scope > .nt-word only — a plain descendant ".nt-word" query would
+      // also match nested .nt-swap-stack children (e.g. hype's "smart/er" ->
+      // "fast/er."), which aren't part of this host's own word list at all.
+      if (!c) { c = { spans: Array.from(host.querySelectorAll<HTMLElement>(":scope > .nt-word")), last: -2 }; kinCache.set(host, c); }
       if (active === c.last) return;
       c.last = active;
       c.spans.forEach((sp, i) => sp.classList.toggle("in", i <= active));
+    };
+    const kinetic = (host: HTMLElement, start: number, per: number, t: number) => {
+      const c = kinCache.get(host);
+      const len = c ? c.spans.length : host.querySelectorAll(".nt-word").length;
+      const active = t - start < 0 ? -1 : Math.min(len - 1, Math.floor((t - start) / per));
+      kineticAt(host, active);
+    };
+    // per-word cumulative offsets (ms from scene start) — for lines whose
+    // cadence isn't uniform, e.g. the tagline: "Speak." holds, then
+    // "Watch"/"It"/"Happen." join fast, one after another
+    const kineticStarts = (host: HTMLElement, starts: number[], sceneStart: number, t: number) => {
+      const rel = t - sceneStart;
+      let active = -1;
+      for (let i = 0; i < starts.length; i++) if (rel >= starts[i]) active = i;
+      kineticAt(host, active);
     };
 
     // SEQUENCE — drives a host through N phrases in the SAME spot: builds the
     // active phrase's word spans on demand, then accumulates it with kinetic().
     // Used for any sentence longer than 4 words (split into ≤4-word phrases).
     const seqIdx = new Map<HTMLElement, number>();
-    const sequence = (host: HTMLElement, phrases: string[][], starts: number[], sceneStart: number, sw: number, t: number) => {
+    const sequence = (host: HTMLElement, phrases: string[][], starts: number[], sceneStart: number, sw: number | number[], t: number) => {
       const rel = t - sceneStart;
       let idx = -1;
       for (let i = 0; i < phrases.length; i++) {
@@ -286,11 +445,22 @@ export default function NotchTeaser() {
       if (idx === -1 && rel >= starts[starts.length - 1]) idx = phrases.length - 1;
       if (idx < 0) return;
       if (seqIdx.get(host) !== idx) {
-        host.innerHTML = phrases[idx].map((w) => `<span class="nt-word">${w}</span>`).join("");
+        // A word prefixed with "+" fuses flush against the previous word (no
+        // gap) — e.g. ["Fast", "+er."] reads as one word, "Faster.", built
+        // from two separately-timed reveals instead of appearing all at once.
+        // A word prefixed with "*" gets an extra emphasis animation on top of
+        // the plain stamp-in (a little energy on a specific word, e.g. "crazy").
+        host.innerHTML = phrases[idx].map((w) => {
+          const fuse = w.startsWith("+");
+          const emph = w.startsWith("*");
+          const cls = fuse ? " nt-fuse" : emph ? " nt-emph" : "";
+          const text = fuse || emph ? w.slice(1) : w;
+          return `<span class="nt-word${cls}">${text}</span>`;
+        }).join("");
         seqIdx.set(host, idx);
         kinCache.delete(host);   // stale span cache — rebuild against the new phrase
       }
-      kinetic(host, sceneStart + starts[idx], sw, t);
+      kinetic(host, sceneStart + starts[idx], phraseSw(sw, idx), t);
     };
 
     // The whole film from an ARBITRARY time t (ms) — deterministic → scrubbable.
@@ -300,148 +470,145 @@ export default function NotchTeaser() {
       // ── TEXT scenes ──
       openLine.style.opacity = String(ramp(t, T.open, T.open + 120) * (1 - ramp(t, T.intro - 250, T.intro)));
       intro.style.opacity = String(ramp(t, T.intro, T.intro + 200) * (1 - ramp(t, T.boot - 250, T.boot)));
-      screen.style.opacity = String(ramp(t, T.screen, T.screen + 110) * (1 - ramp(t, T.button - 200, T.button - 60)));
-      tag.style.opacity = String(ramp(t, T.tag, T.tag + 120) * (1 - ramp(t, T.thatsBraino - 220, T.thatsBraino - 60)));
-      // "That's Braino?" holds, "BrainoNotch" JOINS right next to it (nothing
-      // clears, kinetic() only ever adds words), then the frame inverts —
-      // "That's Braino?" keeps its colour and disappears into the white,
-      // only "BrainoNotch" (.nt-tb-punch, see CSS) reads after the flip.
-      thatsBraino.style.opacity = String(ramp(t, T.thatsBraino, T.thatsBraino + 100) * (1 - ramp(t, T.oneMore - 220, T.oneMore - 60)));
-      kinetic(thatsBraino, T.thatsBraino, THATSBRAINO_SW, t);
+      screen.style.opacity = String(ramp(t, T.screen, T.screen + 110) * (1 - ramp(t, T.hype - 200, T.hype - 60)));
+      // "He's" is a fixed anchor — its own element, never rebuilt — while
+      // "smarter" swaps to "Faster." right next to it (plain stamp, no
+      // bounce — see .nt-swap-stack CSS), THEN the WHOLE beat clears and
+      // hands off to "Like crazy / fast. (0.5s) Because he can now..."
+      const hypeOpenT = T.hype + HYPE_OPEN_DUR;
+      hypeOpen.style.opacity = String(ramp(t, T.hype, T.hype + 100) * (1 - ramp(t, hypeOpenT - 220, hypeOpenT - 60)));
       {
-        const tbIdx = t < T.thatsBraino ? -1 : Math.min(THATSBRAINO_WORDS.length - 1, Math.floor((t - T.thatsBraino) / THATSBRAINO_SW));
-        const tbInv = tbIdx === THATSBRAINO_WORDS.length - 1 && t < T.oneMore;
+        // Direct inline styles, not classList — bypasses ANY possible CSS
+        // specificity/cascade/animation-interruption failure mode entirely.
+        const toB = (t - T.hype) >= HYPE_OPEN_SWAP_AT;
+        const smarterOn = !toB && t >= T.hype;
+        hypeSwapA.style.visibility = smarterOn ? "visible" : "hidden";
+        hypeSwapA.style.opacity = smarterOn ? "1" : "0";
+        hypeSwapB.style.visibility = toB ? "visible" : "hidden";
+        hypeSwapB.style.opacity = toB ? "1" : "0";
+        // "Smart" holds, "+er" fuses onto it → "Smarter"; then the slot swaps
+        // and "Fast" holds, "+er." fuses onto it → "Faster." — same fuse
+        // convention as everywhere else, not a flat swap of whole words. Uses
+        // the SAME standard GAP as every other word-to-word beat in the film
+        // (was a custom faster 160ms — read as rushed, out of rhythm with
+        // the rest of the stamp animation's pacing).
+        kinetic(hypeSwapA, T.hype, GAP, t);
+        kinetic(hypeSwapB, T.hype + HYPE_OPEN_SWAP_AT, GAP, t);
+      }
+      hype.style.opacity = String(ramp(t, hypeOpenT, hypeOpenT + 100) * (1 - ramp(t, T.ready - 220, T.ready - 60)));
+      sequence(hype, HYPE_PHRASES, hypeStarts, hypeOpenT, HYPE_SW, t);
+      // "Ready?" holds, clears, THEN "Don't" holds, "Blink." joins next to
+      // it — a real space, not fused — the match cut fires once it lands.
+      ready.style.opacity = String(ramp(t, T.ready, T.ready + 90) * (1 - ramp(t, T.ready + READY_TOTAL - 200, T.ready + READY_TOTAL - 60)));
+      sequence(ready, READY_PHRASES, readyStarts, T.ready, READY_SW, t);
+      // "Boom" — his answer lands, its own separate singular beat (not part
+      // of the skills flicker), big and on its own before the tagline
+      boom.style.opacity = String(ramp(t, T.boom, T.boom + 80) * (1 - ramp(t, T.tag - 200, T.tag - 60)));
+      kineticStarts(boom, BOOM_STARTS, T.boom, t);
+      tag.style.opacity = String(ramp(t, T.tag, T.tag + 120) * (1 - ramp(t, T.thatsBraino - 220, T.thatsBraino - 60)));
+      // "Introducing" holds and clears, THEN "Braino" lands, THEN "+Notch"
+      // fuses onto it right as the match cut flips the frame white.
+      thatsBraino.style.opacity = String(ramp(t, T.thatsBraino, T.thatsBraino + 100) * (1 - ramp(t, T.oneMore - 220, T.oneMore - 60)));
+      sequence(thatsBraino, THATSBRAINO_PHRASES, thatsBrainoStarts, T.thatsBraino, THATSBRAINO_SW, t);
+      {
+        // Same cache-based match-cut pattern as readyInv/boomInv: fires the
+        // instant "+Notch" (index 1 of phrase 1) actually lands, bounded by
+        // the scene's own window so it can't latch white past T.oneMore.
+        const tbInv = t < T.oneMore && (kinCache.get(thatsBraino)?.last ?? -1) === 1;
         thatsBraino.classList.toggle("invert-flash", tbInv);
         thatsBrainoInvert.style.opacity = tbInv ? "1" : "0";
-      }
-      // "Oh, and one more thing." — its own beat, right before Braino Co-Work
-      oneMore.style.opacity = String(ramp(t, T.oneMore, T.oneMore + 100) * (1 - ramp(t, T.cowork - 250, T.cowork - 80)));
-      sequence(oneMore, ONEMORE_PHRASES, oneMoreStarts, T.oneMore, 300, t);
-      // "Braino" / "Co" / "Work" — PER-WORD frame invert, SAME mechanic as
-      // "Let's f$cking go.": Braino normal, Co joins → match cut, Work joins →
-      // match cut again (lands back on black), then the existing wink plays on.
-      cowork.style.opacity = String(ramp(t, T.cowork, T.cowork + 120) * (1 - ramp(t, T.wink - 250, T.wink - 60)));
-      kinetic(cowork, T.cowork, COWORK_SW, t);
-      const coworkIdx = t < T.cowork ? -1 : Math.min(COWORK_WORDS.length - 1, Math.floor((t - T.cowork) / COWORK_SW));
-      const coworkInv = coworkIdx >= 0 && t < T.wink && coworkIdx % 2 === 1;
-      cowork.classList.toggle("invert-flash", coworkInv);
-      glitch.style.opacity = coworkInv ? "1" : "0";
-      // slot 0 ("Braino") is the standing mascot instead of text — same timing,
-      // same match-cut logic on Co-/Work untouched.
-      {
-        const showMascot = coworkIdx === 0;
-        coworkMascot.style.opacity = showMascot ? "1" : "0";
-        if (showMascot) {
-          if (!mascotBuilt && !coworkMascot.firstElementChild) {
-            coworkMascot.innerHTML = namespacedWalker("ntc");
-            mascotBuilt = true;
-          }
-          const wt = t - T.cowork;
-          const wave = Math.sin(wt / 90) * 26;
-          coworkMascot.querySelector<SVGGElement>("#__ntc_ra__")?.setAttribute("transform", `rotate(${wave} 92 59)`);
+        // fire the ONE shimmer wave exactly when "Notch" lands — a plain CSS
+        // animation on the fused span would start playing from mount and be
+        // long finished (frozen on its end frame) by the time this word is
+        // even revealed, so it's retriggered here like the ring burst.
+        if (tbInv && !firedNotchShimmer) {
+          firedNotchShimmer = true;
+          const fuseEl = thatsBraino.querySelector<HTMLElement>(".nt-fuse");
+          if (fuseEl) { fuseEl.classList.remove("nt-shimmer-play"); void fuseEl.offsetWidth; fuseEl.classList.add("nt-shimmer-play"); }
         }
+        if (!tbInv) firedNotchShimmer = false;
       }
+      // "Oh, and one more thing." — its own beat, right before the big reveal
+      oneMore.style.opacity = String(ramp(t, T.oneMore, T.oneMore + 100) * (1 - ramp(t, T.bigger - 250, T.bigger - 80)));
+      sequence(oneMore, ONEMORE_PHRASES, oneMoreStarts, T.oneMore, 300, t);
+      // "This is part of / Ready? Lock in. / Braino OS / (Version 1) /
+      // (Coming Very Fucking Soon)" — FULL match cut, every word: the frame
+      // flips on every EVEN word index within whatever phrase is active and
+      // holds until the next word lands, same per-word double-strobe
+      // mechanic as "LetsFuckingGo" and hype's "chat ngl..." line, just
+      // running across the whole scene instead of one phrase.
+      bigger.style.opacity = String(ramp(t, T.bigger, T.bigger + 120) * (1 - ramp(t, T.wink - 250, T.wink - 60)));
+      sequence(bigger, BIGGER_PHRASES, biggerStarts, T.bigger, BIGGER_SW, t);
+      const biggerWordIdx = kinCache.get(bigger)?.last ?? -1;
+      const biggerInv = t < T.wink && biggerWordIdx >= 0 && biggerWordIdx % 2 === 0;
+      bigger.classList.toggle("invert-flash", biggerInv);
+      glitch.style.opacity = biggerInv ? "1" : "0";
       sequence(openLine, OPEN_PHRASES, openStarts, T.open, P.open, t);
       kinetic(intro, T.intro, P.open, t);
       // "Let's f$cking go." — PER-WORD frame invert: each new word flips the whole
       // frame white↔black (like the match cut) and HOLDS until the next word.
       const introIdx = t < T.intro ? -1 : Math.min(INTRO_WORDS.length - 1, Math.floor((t - T.intro) / P.open));
       const introInv = introIdx >= 0 && t < T.boot && introIdx % 2 === 1;
+      // Same match-cut mechanic, reused on three more landings: "(0.5s)" (its
+      // own HYPE phrase), "Blink." landing next to "Don't" (real space, not
+      // fused), and "Boom" completing ("om" landing on "Bo"). Read straight off the
+      // sequence()/kineticStarts() state each already updated above this
+      // frame — held while that specific word/phrase is the active one.
+      // kinCache/seqIdx track the LAST active index, which latches forever
+      // once reached (by design, so revealed words stay visible) — using
+      // that alone as an invert gate left invert2 stuck white for the rest
+      // of the film the instant "Blink."/"Boom" landed. Bounding each by its
+      // own scene's time window fixes it: false again once that scene ends.
+      // "chat ngl, even we were surprised" — full of match cuts, one per
+      // word: the frame flips on every EVEN word index and holds until the
+      // next word lands, same per-word double-strobe mechanic as
+      // "LetsFuckingGo", not one flash held for the whole phrase.
+      const hypeWordIdx = (seqIdx.get(hype) ?? -1) === 1 ? (kinCache.get(hype)?.last ?? -1) : -1;
+      const hypeInv = t < T.ready && hypeWordIdx >= 0 && hypeWordIdx % 2 === 0;
+      const readyInv = t < T.button && (kinCache.get(ready)?.last ?? -1) === 1;   // "Blink." landed — match cut fires
+      const boomInv = t < T.tag + 66 && (kinCache.get(boom)?.last ?? -1) === 1;   // "om" landed — "Boom" complete; +2 frames (33ms each) held past the scene cutoff
       intro.classList.toggle("invert-flash", introInv);
+      hype.classList.toggle("invert-flash", hypeInv);
+      ready.classList.toggle("invert-flash", readyInv);
+      boom.classList.toggle("invert-flash", boomInv);
 
-      // invert2 is used by intro only now.
-      invert2.style.opacity = introInv ? "1" : "0";
-      kinetic(tag, T.tag, P.tag, t);
-      // SEE-YOUR-SCREEN — three lines SEQUENTIALLY in the SAME dead-centre spot:
-      // "He can now see your screen." clears → "(that you allow)" → "(Ofc)" big.
-      // scMain: "With a vision model," shows, then FULLY CLEARS before the
-      // mascot's window (no overlap) — a beat of black, then the mascot takes
-      // over — then it returns for "now sees everything on your screen."
-      {
-        const rel = t - T.screen;
-        let op: number;
-        if (rel < st.mascotStart) {
-          op = ramp(t, T.screen, T.screen + 90) * (1 - ramp(rel, st.mascotStart - 220, st.mascotStart - 60));
-        } else if (rel < st.mascotEnd) {
-          op = 0;   // the mascot beat owns the stage — text is fully gone
-        } else {
-          op = ramp(rel, st.mascotEnd, st.mascotEnd + 90) * (1 - ramp(t, T.screen + st.mainEnd, T.screen + st.mainEnd + 160));
-        }
-        scMain.style.opacity = String(op);
-      }
+      // invert2 is shared across all four match cuts — they never overlap in time.
+      invert2.style.opacity = (introInv || hypeInv || readyInv || boomInv) ? "1" : "0";
+      sequence(tag, TAG_PHRASES, tagStarts, T.tag, TAG_SW, t);
+      // SEE-YOUR-SCREEN — two lines SEQUENTIALLY in the SAME dead-centre spot:
+      // "He sees your screen." clears → "Only when you ask." No wink beat
+      // after this anymore — the scene just ends and hands off to HYPE.
+      scMain.style.opacity = String(ramp(t, T.screen, T.screen + 90) * (1 - ramp(t, T.screen + st.mainEnd - 220, T.screen + st.mainEnd - 60)));
       note1.style.opacity = String(ramp(t, T.screen + st.n1Start, T.screen + st.n1Start + 110) * (1 - ramp(t, T.screen + st.n1End, T.screen + st.n1End + 160)));
-      // "of course" — the standing mascot waves, captioned like the notch's
-      // own caption wing (same monospace typing style).
-      {
-        const ofcStart = T.screen + st.n2Start;
-        const ofcOp = ramp(t, ofcStart, ofcStart + 200) * (1 - ramp(t, T.button - 200, T.button - 60));
-        ofcBg.style.opacity = String(ofcOp);
-        ofcMascot.style.opacity = String(ofcOp);
-        ofcCaption.style.opacity = String(ofcOp);
-        if (ofcOp > 0.01) {
-          if (!ofcMascotBuilt && !ofcMascot.firstElementChild) {
-            ofcMascot.innerHTML = namespacedWalker("ofcm");
-            ofcMascotBuilt = true;
-          }
-          const ot = t - ofcStart;
-          const wave = Math.sin(ot / 90) * 26;
-          ofcMascot.querySelector<SVGGElement>("#__ofcm_ra__")?.setAttribute("transform", `rotate(${wave} 92 59)`);
-          const txt = "of course";
-          const chars = clamp(Math.floor((ot - 150) / 45), 0, txt.length);
-          ofcCaption.textContent = txt.slice(0, chars);
-        }
-      }
       sequence(scMain, SCREEN_MAIN_PHRASES, st.mainStarts, T.screen, P.screen, t);
       kinetic(note1, T.screen + st.n1Start, P.screen, t);
-      // "he" is REPLACED by the standing mascot + a match cut (same pattern as
-      // Braino Co-Work). Text clears → a WAIT (black) → mascot fades in, waves
-      // → the frame inverts white↔black, holding until the sentence continues.
-      {
-        const visionActive = t >= T.screen + st.mascotStart && t < T.screen + st.mascotEnd;
-        const vt = t - (T.screen + st.mascotStart);
-        const mascotShown = visionActive && vt >= VISION_PAUSE;   // the WAIT — nothing shows first
-        const visionFlip = visionActive && vt >= VISION_FLIP_AT;
-        visionMascot.style.opacity = mascotShown ? String(ramp(vt, VISION_PAUSE, VISION_PAUSE + VISION_MASCOT_IN)) : "0";
-        visionInvert.style.opacity = visionFlip ? "1" : "0";
-        screen.classList.toggle("invert-flash", visionFlip);
-        if (mascotShown) {
-          if (!visionMascotBuilt && !visionMascot.firstElementChild) {
-            visionMascot.innerHTML = namespacedWalker("ntv");
-            visionMascotBuilt = true;
-          }
-          const wave = Math.sin(vt / 90) * 26;
-          visionMascot.querySelector<SVGGElement>("#__ntv_ra__")?.setAttribute("transform", `rotate(${wave} 92 59)`);
-        }
-      }
 
       const inBoot = t >= T.boot && t < T.see;
       const inSee = t >= T.see && t < T.screen;         // notch looks DOWN at the screen
-      // the ONE notch-pill sequence: types "Introducing" → "Braino" → "What does
-      // he do?", THEN the SAME pill runs the fast mode-words flicker, THEN
-      // caption swaps to "Notch" and the frame inverts white↔black.
-      const inCut = t >= T.button && t < T.tag;
+      // the REAL notch lifecycle: dozes → wake hint → listens (asking him) →
+      // captions what was heard → speaks the answer (skills flicker, own
+      // overlay — his replies are voice + mouth, never a notch caption).
+      const inCut = t >= T.button && t < T.boom;
       const cutBt = inCut ? t - T.button : -1;
-      const inCutModes = inCut && cutBt >= CUT_PRE_DUR && cutBt < CUT_PRE_DUR + MODES_TOTAL;
-      const cutFlipped = inCut && cutBt >= CUT_PRE_DUR + MODES_TOTAL;   // "Notch" is the beat the frame inverts on
+      // turbo (fast glow) only during the actual flicker, not the closing wink
+      const inCutSpeak = inCut && cutBt >= CUT_PRE_DUR && cutBt < CUT_SPEAK_END;
       const inWink = t >= T.wink;
 
-      // ── the ONE island: boots, GREETS, LOOKS at the screen, returns for the
-      //    Introducing/Braino/what-does-he-do/fast-words/Notch cut, returns
-      //    again for the closing wink. It never shares the stage with text. ──
+      // ── the ONE island: boots, LOOKS at the screen, then stays hidden
+      //    through the screen-reveal text and the whole HYPE/Ready scene —
+      //    no "of course" wink anymore — returns for the WHOLE "What can
+      //    you do?" lifecycle, winks as ITS closing beat once the fast
+      //    words finish, then returns again for the film's final wink. ──
       let islandOp = 0;
       if (t >= T.boot && t < T.screen) islandOp = ramp(t, T.boot, T.boot + 400) * (1 - ramp(t, T.screen - 500, T.screen - 200));
-      else if (inCut) islandOp = ramp(t, T.button, T.button + 200) * (1 - ramp(t, T.tag - 250, T.tag - 80));
+      else if (inCut) islandOp = ramp(t, T.button, T.button + 200) * (1 - ramp(t, T.boom - 250, T.boom - 80));
       // the close: form + wink, then a HARD CUT to black (no fade)
-      else if (inWink) islandOp = ramp(t, T.wink + 200, T.wink + 500) * (t < T.wink + 3500 ? 1 : 0);
+      else if (inWink) islandOp = ramp(t, T.wink + 100, T.wink + 350) * (t < T.wink + WINK_START + WINK_HOLD + OUTRO_LINE_DUR ? 1 : 0);
       notchWrap.style.opacity = String(islandOp);
       notchWrap.classList.toggle("seeing", inSee);
-      notchWrap.classList.toggle("thinking", inCutModes);
+      notchWrap.classList.toggle("turbo", inCutSpeak);   // fast glow only, no jump — the pill already spreads + mouth talks
       notchWrap.classList.toggle("eyes-only", inWink);
-      // "cut-front" lifts the pill above the frame-invert overlay (z-index), so its
-      // caption stays visible when the background flips to white; "cut-flip" swaps
-      // the caption to black text for that half.
       notchWrap.classList.toggle("cut-front", inCut);
-      notchWrap.classList.toggle("cut-flip", cutFlipped);
 
       // PRE-BOOT — force the resting state while the notch is still INVISIBLE.
       // Without this, a loop wrap leaves him "awake nf-wink" from the ending and
@@ -484,43 +651,69 @@ export default function NotchTeaser() {
         if (cls !== lastCls) { notch.className = cls; lastCls = cls; setNotchStatus(notch, ""); }
       }
 
-      // MATCH CUT — ONE continuous notch-pill sequence: types "Introducing" →
-      // "Braino" → "What does he do?", THEN the SAME pill runs the fast
-      // mode-words flicker (VERBATIM to the Mac notch's thinking — busy +
-      // captioning, fixed pill width via .thinking), THEN caption swaps to
-      // "Notch" and the whole frame INVERTS white↔black in one beat.
+      // THE REAL notch lifecycle, verbatim to LID_SEQ: dozing (default) →
+      // listen (sonar + mouth-listen, no text — this beat IS "let's ask
+      // him") → captioning (types what was heard) → captioning + speak —
+      // the pill spreads sideways AND the mouth talks, his answer typed in
+      // the SAME real caption wing (eyes stay visible the whole time, no
+      // overlap to solve — this is the notch's own proven mechanic).
       if (inCut) {
-        const baseCls = inCutModes ? "nf-face on home awake busy captioning" : "nf-face on home awake captioning";
-        if (baseCls !== lastCls) { notch.className = baseCls; lastCls = baseCls; setNotchStatus(notch, ""); lastMode = -1; }
-        let word: string;
-        if (cutBt < CUT_PRE_DUR) {
-          word = CUT_PRE_WORDS[clamp(Math.floor(cutBt / CUT_CAP_HOLD), 0, CUT_PRE_WORDS.length - 1)];
-        } else if (inCutModes) {
+        let baseCls: string;
+        let capText = "";
+        if (cutBt < CUT_TYPE_AT) {
+          baseCls = "nf-face on home listen mic-live";
+        } else if (cutBt < CUT_PRE_DUR) {
+          baseCls = "nf-face on home captioning mic-live";
+          const chars = clamp(Math.floor((cutBt - CUT_TYPE_AT) / CUT_TYPE_MS), 0, CUT_PRE_TEXT.length);
+          capText = CUT_PRE_TEXT.slice(0, chars);
+        } else if (cutBt < CUT_SPEAK_END) {
+          baseCls = "nf-face on home captioning speak mic-live";
           const idx = modeIndexAt(cutBt - CUT_PRE_DUR);
           lastMode = idx;
-          word = idx === N - 1 ? MODE_WORDS[idx] : `${MODE_WORDS[idx]}…`;
+          capText = idx === N - 1 ? MODE_WORDS[idx] : `${MODE_WORDS[idx]}…`;
         } else {
-          word = "Notch";
+          // The fast words are DONE — the caption clears and he winks, the
+          // closing beat of this whole scene, right before "Boom".
+          baseCls = "nf-face on home awake nf-wink";
+          lastMode = -1;
         }
-        if (capEl && capEl.textContent !== word) capEl.textContent = word;
-        invert.style.opacity = cutFlipped ? "1" : "0";
+        if (baseCls !== lastCls) { notch.className = baseCls; lastCls = baseCls; setNotchStatus(notch, ""); }
+        if (capEl && capEl.textContent !== capText) capEl.textContent = capText;
       } else {
         if (lastMode !== -1) lastMode = -1;
-        invert.style.opacity = "0";
       }
 
-      // WINK — the island forms at dead centre with the perimeter shimmer, then
-      // Braino's CORAL wave washes through (his colours, same as boot), his eyes
-      // open, he WINKS, and it HARD-CUTS to black.
+      // WINK — the OUTRO, reordered: the island forms FAST, he WINKS almost
+      // immediately (first), THEN the perimeter line races back OUT — the
+      // exact reverse of the boot's slow draw-in, but quicker — completing
+      // the loop around the housing as it disappears, before the hard cut
+      // to black. No coral wash here; the outro is meant to read fast.
       if (inWink) {
         const rt = t - T.wink;
-        const sh = ramp(rt, 250, 1350);
-        shimmer.style.opacity = String(ramp(rt, 250, 500) * (1 - ramp(rt, 2700, 3200)));
+        const outroStart = WINK_START + WINK_HOLD;   // wink has held; the line starts retracting
+        const outroEnd = outroStart + OUTRO_LINE_DUR;
+        // sh: 0 = line invisible, 1 = line fully drawn/visible.
+        let sh: number;
+        let shimmerOp: number;
+        let bloomOp: number;
+        if (rt < WINK_START) {
+          // quick draw-IN as the island appears — much faster than the boot's 2.7s
+          sh = ramp(rt, 100, WINK_START);
+          shimmerOp = ramp(rt, 100, 300);
+          bloomOp = shimmerOp * 0.9;
+        } else if (rt < outroStart) {
+          sh = 1; shimmerOp = 1; bloomOp = 0.9;   // held fully formed while he winks
+        } else {
+          // OUTRO: the line retracts around the perimeter and vanishes — the
+          // reverse of the boot, and faster (900ms vs. 2700ms).
+          const outroT = 1 - ramp(rt, outroStart, outroEnd);
+          sh = outroT; shimmerOp = outroT; bloomOp = outroT * 0.9;
+        }
+        shimmer.style.opacity = String(shimmerOp);
         [glowP, coreP].forEach((el) => (el.style.strokeDashoffset = String(len * (1 - sh))));
-        bloom.style.opacity = String(ramp(rt, 250, 550) * (1 - ramp(rt, 2700, 3300)) * 0.8);
-        let cls = "nf-face on home awake";
-        if (rt >= 2100) cls = "nf-face on home awake nf-wink";        // the wink — 0.6s, plays out FULLY
-        else if (rt >= 1100) cls = "nf-face on home awake nf-coral";  // Braino's coral shimmer
+        bloom.style.opacity = String(bloomOp);
+        // WINK FIRST — as soon as he's formed, not after a coral wash.
+        const cls = rt >= WINK_START ? "nf-face on home awake nf-wink" : "nf-face on home awake";
         if (cls !== lastCls) { notch.className = cls; lastCls = cls; setNotchStatus(notch, ""); }
       }
     };
@@ -554,7 +747,7 @@ export default function NotchTeaser() {
         } else {
           manualT = performance.now() - startWall;
         }
-        if (manualT >= T.end) { seek(0); if (trackLoaded && audioEl) { audioEl.currentTime = 0; audioEl.play().catch(() => {}); } else { startWall = performance.now(); } } // LOOP
+        if (manualT >= T.end) { resetSceneCaches(); seek(0); if (trackLoaded && audioEl) { audioEl.currentTime = 0; audioEl.play().catch(() => {}); } else { startWall = performance.now(); } } // LOOP
       }
       render(manualT);
       // the glassy scrubber (backdrop blur) repaints on every update — throttle
@@ -574,7 +767,7 @@ export default function NotchTeaser() {
 
     const frame = q(".nt-frame");
     const onScrub = (e: Event) => { setPlaying(false); seek(+(e.target as HTMLInputElement).value); };
-    const onPlay = () => { if (manualT >= T.end) { seek(0); } setPlaying(!playing); };
+    const onPlay = () => { if (manualT >= T.end) { resetSceneCaches(); seek(0); } setPlaying(!playing); };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === " ") { e.preventDefault(); onPlay(); }
       else if (e.key === "ArrowRight") { setPlaying(false); seek(manualT + (e.shiftKey ? 1000 : 33)); }
@@ -601,7 +794,7 @@ export default function NotchTeaser() {
     controls?.addEventListener("click", (e) => e.stopPropagation());
     frame.addEventListener("click", onPlay);
     addEventListener("keydown", onKey);
-    const onFsChange = () => { if (document.fullscreenElement === frame) { seek(0); setPlaying(true); } };
+    const onFsChange = () => { if (document.fullscreenElement === frame) { resetSceneCaches(); seek(0); setPlaying(true); } };
     document.addEventListener("fullscreenchange", onFsChange);
 
     const log = (msg: string) => {
@@ -609,6 +802,104 @@ export default function NotchTeaser() {
       // eslint-disable-next-line no-console
       console.log("[BeatSync]", msg);
     };
+
+    // DOWNLOAD — there's no pre-rendered video file; this is a LIVE CSS/SVG
+    // animation. The only way to turn it into an actual video file is to
+    // record it in real time via tab capture (getDisplayMedia) + MediaRecorder,
+    // muxed with the synced <audio> track (tab audio comes along for free when
+    // the user picks "This Tab" in the share prompt — unavoidable, browser
+    // security requires that click). Resolution is whatever the tab is
+    // actually rendered at, so fullscreen first for the sharpest capture your
+    // display can give — this is NOT a guaranteed hardware-independent 4K
+    // render, it's a screen recording of the real thing. MP4 output only
+    // happens where the browser's MediaRecorder actually supports an MP4
+    // mimeType (Safari); everywhere else (Chrome/Edge/Firefox) it falls back
+    // to WebM, which is what those browsers are actually able to produce.
+    const downloadBtn = root.querySelector<HTMLButtonElement>(".nt-download");
+    let recording = false;
+    const onDownload = async () => {
+      if (recording) return;
+      const md = navigator.mediaDevices as (MediaDevices & { getDisplayMedia?: (c?: unknown) => Promise<MediaStream> }) | undefined;
+      if (!md?.getDisplayMedia) { log("Screen recording isn't supported in this browser."); return; }
+      recording = true;
+      if (downloadBtn) { downloadBtn.disabled = true; downloadBtn.textContent = "●"; }
+      let stream: MediaStream | null = null;
+      try {
+        const portrait = frame.classList.contains("portrait");
+        if (!document.fullscreenElement) { try { await frame.requestFullscreen(); } catch { /* user may decline — still proceed at whatever size */ } }
+        resetSceneCaches(); seek(0); setPlaying(false);
+        await new Promise((r) => setTimeout(r, 200)); // let fullscreen settle before the share prompt captures a frame
+        log('Pick "This Tab" in the share prompt to record with sound…');
+        // Retina displays have far more PHYSICAL pixels than their logical
+        // CSS size suggests (devicePixelRatio). Requesting exactly that many
+        // as an "ideal" (never a hard "min") asks for the most real quality
+        // the hardware actually has — unlike last time's hardcoded 3840×2160,
+        // which exceeded the real source on a smaller screen and corrupted
+        // the recording. "ideal" is just a hint the browser clamps safely;
+        // it can't fail the way a fixed/min request can.
+        const dpr = window.devicePixelRatio || 1;
+        const idealW = Math.round((window.screen.width || 1920) * dpr);
+        const idealH = Math.round((window.screen.height || 1080) * dpr);
+        stream = await md.getDisplayMedia({
+          video: { frameRate: 30, aspectRatio: portrait ? 9 / 16 : 16 / 9, width: { ideal: idealW }, height: { ideal: idealH } },
+          audio: true,
+          preferCurrentTab: true,       // Chrome-only: skips straight to "share this tab" instead of the full picker
+          selfBrowserSurface: "include",
+        });
+        if (!document.fullscreenElement) {
+          // the share prompt often force-exits fullscreen — recapture it now
+          // that permission is granted, so the actual recorded frame is full
+          // native resolution, not whatever small window was left behind.
+          try { await frame.requestFullscreen(); await new Promise((r) => setTimeout(r, 200)); } catch { /* proceed at whatever size is available */ }
+        }
+        const [videoTrack] = stream.getVideoTracks();
+        const { width: capW, height: capH } = videoTrack?.getSettings() || {};
+        log(`Capturing at ${capW ?? "?"}×${capH ?? "?"} (${portrait ? "9:16" : "16:9"}) — this is your display's real max, not a guaranteed 4K.`);
+        const mimeType = [
+          "video/mp4;codecs=avc1.640028,mp4a.40.2",
+          "video/mp4",
+          "video/webm;codecs=vp9,opus",
+          "video/webm",
+        ].find((m) => MediaRecorder.isTypeSupported(m)) || "";
+        // higher bitrate too — at this resolution 40Mbps was starting to
+        // compress visibly; 80Mbps keeps fine text/gradient edges crisp
+        const rec = new MediaRecorder(stream, { mimeType: mimeType || undefined, videoBitsPerSecond: 80_000_000 });
+        const chunks: Blob[] = [];
+        rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
+        const stopped = new Promise<void>((resolve) => { rec.onstop = () => resolve(); });
+        rec.start(1000);   // periodic chunks, not one giant blob at the end — more resilient if anything hiccups mid-recording
+        resetSceneCaches(); seek(0); setPlaying(true);
+        log(`Recording at ${capW ?? "?"}×${capH ?? "?"}, real time…`);
+        await new Promise((r) => setTimeout(r, T.end + 500));
+        rec.stop();
+        setPlaying(false);
+        await stopped;
+        const blob = new Blob(chunks, { type: (mimeType.split(";")[0]) || "video/webm" });
+        const ext = blob.type.includes("mp4") ? "mp4" : "webm";
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url; link.download = `braino-notch-teaser.${ext}`;
+        document.body.appendChild(link); link.click(); link.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 4000);
+        log(ext === "mp4" ? "Downloaded as MP4 ✓" : "Downloaded as WebM ✓ (this browser's recorder can't output native MP4)");
+      } catch (err) {
+        log(`Recording cancelled or failed: ${(err as Error)?.message || "?"}`);
+      } finally {
+        stream?.getTracks().forEach((tr) => tr.stop());
+        recording = false;
+        if (downloadBtn) { downloadBtn.disabled = false; downloadBtn.textContent = "⬇"; }
+      }
+    };
+    downloadBtn?.addEventListener("click", onDownload);
+
+    // orientation toggle (16:9 / 9:16) — export aspect ratio, applied to
+    // .nt-frame before recording starts
+    const orientBtns = Array.from(root.querySelectorAll<HTMLButtonElement>(".nt-orient-btn"));
+    const orientHandlers = orientBtns.map((btn) => () => {
+      frame.classList.toggle("portrait", btn.dataset.ar === "portrait");
+      orientBtns.forEach((b) => b.classList.toggle("active", b === btn));
+    });
+    orientBtns.forEach((b, i) => b.addEventListener("click", orientHandlers[i]));
 
     // Fit the film to the track: the WORDS keep their fast, accelerating cadence
     // (untouched); the HOLD is solved so the film spans the track, and every
@@ -633,7 +924,7 @@ export default function NotchTeaser() {
       // belt-and-braces: keep the ending inside the limit, but NEVER pull the
       // wink back onto the tagline/match cut — the close must play out in order
       const lastOk = target - WINK_TAIL;
-      const winkFloor = T.cowork + COWORK_DUR;   // wink must never land before Braino/Co/Work finishes
+      const winkFloor = T.bigger + BIGGER_DUR;   // wink must never land before the big reveal finishes
       if (T.wink > lastOk) T.wink = Math.round(Math.max(winkFloor, lastOk));
       T.end = T.wink + WINK_TAIL;
       // ABSOLUTE clamp: T.end must NEVER exceed the real audio file. If it did,
@@ -642,7 +933,7 @@ export default function NotchTeaser() {
       // oscillation right at the boundary. This is the last word, no exceptions.
       const hardEnd = Math.round(a.durationMs - 60);
       if (T.end > hardEnd) {
-        T.wink = Math.max(T.cowork + 100, hardEnd - WINK_TAIL);
+        T.wink = Math.max(T.bigger + 100, hardEnd - WINK_TAIL);
         T.end = Math.min(hardEnd, T.wink + WINK_TAIL);
       }
       if (slider) slider.max = String(T.end);
@@ -705,6 +996,8 @@ export default function NotchTeaser() {
     return () => {
       cancelled = true;
       fileInput?.removeEventListener("change", onFile);
+      downloadBtn?.removeEventListener("click", onDownload);
+      orientBtns.forEach((b, i) => b.removeEventListener("click", orientHandlers[i]));
       cancelAnimationFrame(raf);
       slider?.removeEventListener("input", onScrub);
       playBtn?.removeEventListener("click", onPlay);
@@ -742,21 +1035,26 @@ export default function NotchTeaser() {
             <div className="nt-screen">
               <div className="nt-screen-main" />
               <div className="nt-screen-note nt-note-1">{NOTE1_WORDS.map((w, i) => <span key={i} className="nt-word">{w}</span>)}</div>
-              {/* "of course" — full WHITE background (same as before), Braino
-                 stands in it and waves, with a caption BUBBLE above him,
-                 styled like the notch's own caption wing */}
-              <div className="nt-ofc-bg" />
-              <div className="nt-ofc-mascot" dangerouslySetInnerHTML={{ __html: namespacedWalker("ofcm") }} />
-              <div className="nt-ofc-caption">of course</div>
-              <div className="nt-vision-mascot" />
-              <div className="nt-vision-invert" />
             </div>
-            <div className="nt-tag">{TAG_WORDS.map((w, i) => <span key={i} className="nt-word">{w}</span>)}</div>
-            <div className="nt-thatsbraino">{THATSBRAINO_WORDS.map((w, i) => <span key={i} className={i === THATSBRAINO_WORDS.length - 1 ? "nt-word nt-tb-punch" : "nt-word"}>{w}</span>)}</div>
+            <div className="nt-hype-open">
+              <span className="nt-word nt-hype-anchor">{HYPE_OPEN_ANCHOR}</span>
+              <span className="nt-hype-swap nt-swap-stack">
+                <span className="nt-word nt-swap-a">
+                  <span className="nt-word">smart</span><span className="nt-word nt-fuse">er</span>
+                </span>
+                <span className="nt-word nt-swap-b">
+                  <span className="nt-word">fast</span><span className="nt-word nt-fuse">er.</span>
+                </span>
+              </span>
+            </div>
+            <div className="nt-hype" />
+            <div className="nt-ready" />
+            <div className="nt-boom">{BOOM_PARTS.map((w, i) => <span key={i} className="nt-word">{w}</span>)}</div>
+            <div className="nt-tag" />
+            <div className="nt-thatsbraino" />
             <div className="nt-thatsbraino-invert" />
             <div className="nt-onemore" />
-            <div className="nt-cowork-mascot" />
-            <div className="nt-cowork">{COWORK_WORDS.map((w, i) => <span key={i} className="nt-word">{w}</span>)}</div>
+            <div className="nt-bigger" />
             <div className="nt-glitch" />
 
             {/* ONE island the whole way — boots, GREETS, thinks, winks */}
@@ -778,29 +1076,9 @@ export default function NotchTeaser() {
             {/* "Let's f$cking go." double-strobe: white/black inverts TWICE, fast */}
             <div className="nt-invert2" />
 
-            {/* the Braino/Notch cut: captioned in the pill itself, invert white/black */}
-            <div className="nt-invert" />
           </div>
         </div>
         <audio className="nt-audio" preload="auto" />
-
-        <div className="nt-veil" aria-hidden="true" />
-        {/* frame-by-frame scrubber */}
-        <div className="nt-scrubber">
-          <button className="nt-play" title="Play / Pause (space)">❚❚</button>
-          <button className="nt-step-back" title="Back 1 frame (←)">◀|</button>
-          <input className="nt-scrub" type="range" min="0" max={String(DEFAULT_T.end)} defaultValue="0" step="1" />
-          <button className="nt-step-fwd" title="Forward 1 frame (→)">|▶</button>
-          <span className="nt-time">0.00s</span>
-          <button className="nt-replaybtn" onClick={replay} title="Restart">⟲</button>
-          <button className="nt-fs" onClick={goFullscreen} title="Fullscreen">⛶</button>
-          <button className="nt-grids" onClick={toggleGrids} title="Toggle centre guides">▦</button>
-          <label className="nt-upload" title="Upload an MP3 to beat-sync the text">
-            ♪ Sync track
-            <input className="nt-file" type="file" accept="audio/*" hidden />
-          </label>
-        </div>
-        <div className="nt-log" />
       </section>
     </div>
   );

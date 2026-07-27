@@ -1,0 +1,259 @@
+@font-face {
+  font-family: "SF Pro Display";
+  src: url("/fonts/SF-Pro-Display-Medium.otf") format("opentype");
+  font-weight: 500; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: "SF Pro Display";
+  src: url("/fonts/SF-Pro-Display-Semibold.otf") format("opentype");
+  font-weight: 600; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: "SF Pro Display";
+  src: url("/fonts/SF-Pro-Display-Bold.otf") format("opentype");
+  font-weight: 700; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: "SF Pro Display";
+  src: url("/fonts/SF-Pro-Display-Heavy.otf") format("opentype");
+  font-weight: 800; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: "SF Pro Display";
+  src: url("/fonts/SF-Pro-Display-Black.otf") format("opentype");
+  font-weight: 900; font-style: normal; font-display: swap;
+}
+
+/* emotion-teaser.css — twin of notch-teaser.css: same box, same stamp-cut
+   kinetic type engine, same font, same music-sync engine (own track). Dark
+   red base, plain white text, match cuts invert to white bg / dark red text. */
+
+.et-films {
+  height: 100vh; background: #2B0808; color: #FFFFFF;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  overflow: hidden;
+  font-family: "SF Pro Display", "Helvetica Neue", -apple-system, sans-serif;
+}
+.et {
+  position: relative; width: 100%; background: transparent; color: #FFFFFF;
+  display: flex; flex-direction: column; align-items: center; gap: 14px;
+  font-family: "SF Pro Display", "Helvetica Neue", -apple-system, sans-serif;
+}
+
+.et-frame {
+  position: relative;
+  width: min(100vw, calc(100vh * 16 / 9));
+  aspect-ratio: 16 / 9;
+  background: #2B0808; overflow: hidden; border-radius: 0; cursor: pointer;
+  border: none; box-shadow: none;
+}
+.et-frame:fullscreen {
+  width: 100vw; height: 100vh; max-width: none; border: none; border-radius: 0;
+  display: grid; place-items: center; background: #2B0808;
+}
+.et-frame:fullscreen .et-stage {
+  position: relative; width: min(100vw, calc(100vh * 16 / 9)); height: min(100vh, calc(100vw * 9 / 16)); inset: auto;
+}
+.et-frame:fullscreen::before, .et-frame:fullscreen::after { display: none; }
+/* centre guide lines — hidden by default, toggled with the ▦ button */
+.et-frame::before, .et-frame::after {
+  content: ""; position: absolute; background: rgba(255,255,255,.12); z-index: 30; pointer-events: none;
+  display: none;
+}
+.et-frame.grids::before, .et-frame.grids::after { display: block; }
+.et-frame::before { left: 50%; top: 0; bottom: 0; width: 1px; }
+.et-frame::after { top: 50%; left: 0; right: 0; height: 1px; }
+.et-stage { position: absolute; inset: 0; }
+
+/* ── kinetic type — one dead-centre line, one weight, one size, identical to /notch ── */
+.et-open, .et-complaint, .et-contrast, .et-why, .et-poet, .et-delib,
+.et-engine, .et-proof, .et-turn, .et-close, .et-cta, .et-profanity {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  display: flex; flex-wrap: nowrap; justify-content: center; align-items: center;
+  gap: 0 .2em; opacity: 0; color: #FFFFFF; text-align: center; white-space: nowrap;
+  font-weight: 600; letter-spacing: -.025em; line-height: 1; z-index: 2;
+  font-size: clamp(28px, 4.6vw, 58px);
+  will-change: opacity, transform;
+  /* as each new word appends, the centered flex row re-widens and its own
+     -50% transform recentres around it — without a transition that snaps
+     instantly and reads rigid/robotic. This glides the recentring instead. */
+  transition: transform .28s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.et-word { display: none; }
+.et-word.in {
+  display: inline-block;
+  animation: etWordIn .16s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@media (prefers-reduced-motion: reduce) { .et-word.in { animation: none; } }
+@keyframes etWordIn {
+  0%   { opacity: 1; filter: brightness(2.2); text-shadow: 0 0 22px rgba(255,255,255,.9); }
+  100% { opacity: 1; filter: brightness(1); text-shadow: none; }
+}
+
+/* every word in the film stomps the same way — the hard, instant hit
+   "Hu" -> "man." has (that one gets it from the match-cut rule below
+   stripping animation entirely during the invert flash). Word-to-word
+   PACING still breathes more after "Here's why" (see the SW/gap constants
+   and H multipliers in the .tsx) — only the reveal style is now universal;
+   speed and stomp are two separate knobs, not one. */
+@media (prefers-reduced-motion: reduce) { .et-slow .et-word.in { animation: none; } }
+
+/* "+word" fuse — identical convention to /notch: pulls flush against the
+   previous word, always laid out (no reflow-jump), reveals via visibility/opacity */
+.et-word.nt-fuse {
+  display: inline-block;
+  margin-left: -.2em;
+  visibility: hidden;
+  opacity: 0;
+}
+.et-word.nt-fuse.in { visibility: visible; opacity: 1; }
+
+/* "*word" emphasis — a bright shimmer sweep instead of a plain stamp */
+.et-word.nt-emph {
+  background-image: linear-gradient(100deg, #FFFFFF 15%, #FFD9D9 42%, #FF6B6B 55%, #FFFFFF 78%);
+  background-size: 220% auto;
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  animation: etGlitterSweep 1.6s ease-in-out infinite !important;
+}
+@keyframes etGlitterSweep {
+  0%   { background-position: 200% center; }
+  100% { background-position: -200% center; }
+}
+@media (prefers-reduced-motion: reduce) { .et-word.nt-emph { animation: none !important; background-position: 0% center; } }
+
+/* ── match-cut invert (fires on "Deliberately trained." right now — this
+   overlay is shared by any future match-cut too) ── */
+.et-invert {
+  position: absolute; inset: 0; background: #FFFFFF; opacity: 0; z-index: 9; pointer-events: none;
+}
+/* #2B0808 (the page bg) reads as near-black on the white flash — a proper,
+   visibly RED dark red instead, so the match-cut still feels like "dark red /
+   white", not "black / white". */
+.et-poet.invert-flash, .et-engine.invert-flash, .et-close.invert-flash,
+.et-proof.invert-flash, .et-turn.invert-flash, .et-cta.invert-flash { color: #8B1A1A; z-index: 11; }
+/* match-cut rule: the invert flip IS the effect — words involved in a
+   match-cut just appear, no stamp/fade animation competing with it. */
+.invert-flash .et-word.in { animation: none !important; }
+
+/* "Braino." — the closing card, biggest mark in the film */
+/* same font-size as every other line now — no more oversized treatment */
+.et-cta { font-weight: 700; }
+
+
+/* rapid-fire aside right after "Human." lands — same machine-gun cadence as
+   /notch's skills flicker. Same style as every other line in the film now
+   (base kinetic-line rule above) — no more small/italic whisper treatment,
+   just faster stomps. */
+.et-profanity .et-word.in { animation: etWordIn .08s steps(1) both; }
+@media (prefers-reduced-motion: reduce) { .et-profanity .et-word.in { animation: none; } }
+
+/* a beat of pure black before the closing card */
+.et-black {
+  position: absolute; inset: 0; background: #000000; opacity: 0; z-index: 8; pointer-events: none;
+}
+
+/* pulse-ring burst — concentric rings expanding out from centre, fired on
+   every match-cut */
+.et-rings {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: 10px; height: 10px; z-index: 1; pointer-events: none;
+}
+.et-rings i {
+  position: absolute; left: 50%; top: 50%; width: 10px; height: 10px;
+  margin: -5px 0 0 -5px; border-radius: 50%;
+  border: 2px solid #FFFFFF; opacity: 0;
+}
+.et-rings.burst i { animation: etRingBurst .85s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.et-rings.burst i:nth-child(2) { animation-delay: .09s; }
+.et-rings.burst i:nth-child(3) { animation-delay: .18s; }
+@keyframes etRingBurst {
+  0%   { opacity: .9; transform: scale(1); }
+  100% { opacity: 0; transform: scale(48); }
+}
+@media (prefers-reduced-motion: reduce) { .et-rings.burst i { animation: none; } }
+
+/* no floating mascot on the teaser stage */
+body.et-page #sb-brain-mascot-wrapper { display: none !important; }
+
+/* ── real notch cutaway — the same real app UI /notch uses, unmodified.
+   Its own warm coral/red palette already sits naturally on this film's dark
+   red base, so no recolor filter is needed — just a slight lift so it reads
+   clearly against the darker background. ── */
+.et-notch {
+  position: absolute; left: 50%; top: 50%;
+  width: 190px; height: 55px; opacity: 0;
+  transform: translate(-50%, -50%) scale(1.15); transform-origin: center center;
+  z-index: 5; pointer-events: none;
+  /* pulls its native warm coral toward this film's deep red, instead of the
+     app's usual coral/blue */
+  filter: saturate(1.6) hue-rotate(-18deg) brightness(1.05) drop-shadow(0 0 24px rgba(255,80,80,.18));
+}
+.et-notch .nf-face { top: 0; left: 50%; opacity: 1; }
+/* dance phase (closing card): clear of the "Braino."/"More Human, Less AI."
+   text sharing this same dead-centre spot, but still well inside the frame
+   (78% was running below the visible grid). Top-anchored (not vertically
+   centred like the base rule) so the scale-up in JS reads as the notch
+   expanding DOWNWARD from a fixed point, not growing from its centre. */
+.et-notch.et-dance-pos {
+  top: 62%;
+  transform-origin: top center;
+  transition: transform .5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+/* "he's overthinking this again" is longer than /notch's own captions —
+   wider pill + smaller, tighter type so it reads comfortably without
+   crowding, while staying well inside the frame at any viewport size. */
+.et-notch .nf-face.captioning .nf-pill { width: min(430px, 68vw) !important; }
+.et-notch .nf-face.captioning .nf-cap-l { font-size: 10px !important; letter-spacing: .03em; }
+
+@media (prefers-reduced-motion: reduce) { .et-word { opacity: 1; transform: none; filter: none; } }
+
+/* ── control bar — Netflix style: invisible until the pointer moves, then a
+   bottom gradient veil with clean flat controls; fades away when idle ── */
+.et-veil {
+  position: fixed; left: 0; right: 0; bottom: 0; height: 190px; z-index: 39;
+  background: linear-gradient(180deg, transparent, rgba(0,0,0,.82));
+  opacity: 0; pointer-events: none; transition: opacity .35s ease;
+}
+.et-scrubber {
+  position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); z-index: 40;
+  width: min(92vw, 1400px);
+  display: flex; align-items: center; gap: 18px;
+  background: transparent; border: none; border-radius: 0; padding: 0 8px;
+  font-family: -apple-system, "SF Pro Text", "Helvetica Neue", sans-serif; font-size: 12px; color: #fff;
+  opacity: 0; pointer-events: none; transition: opacity .35s ease;
+}
+body.et-controls .et-scrubber, body.et-controls .et-veil { opacity: 1; pointer-events: auto; }
+body.et-controls .et-veil { pointer-events: none; }
+.et-scrubber button {
+  display: grid; place-items: center; width: 40px; height: 40px;
+  background: transparent; border: none; border-radius: 0;
+  color: #fff; cursor: pointer; font-size: 20px; line-height: 1;
+  opacity: .9; transition: transform .15s ease, opacity .15s ease;
+}
+.et-scrubber button:hover { opacity: 1; transform: scale(1.22); background: transparent; }
+.et-scrubber button:active { transform: scale(1.05); }
+.et-play { width: 44px !important; height: 44px !important; background: transparent !important; color: #fff !important; font-size: 24px !important; }
+.et-play:hover { background: transparent !important; }
+.et-step-back, .et-step-fwd { font-size: 13px !important; letter-spacing: -1px; }
+.et-scrub {
+  -webkit-appearance: none; appearance: none; flex: 1; height: 22px;
+  background: transparent; cursor: pointer; --p: 0%;
+}
+.et-scrub::-webkit-slider-runnable-track {
+  height: 4px; border-radius: 2px;
+  background: linear-gradient(90deg, #FF6B6B var(--p), rgba(255,255,255,.28) var(--p));
+  transition: height .15s ease;
+}
+.et-scrub:hover::-webkit-slider-runnable-track { height: 7px; }
+.et-scrub::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none; width: 14px; height: 14px; margin-top: -5px;
+  border-radius: 50%; background: #FF6B6B; box-shadow: 0 1px 4px rgba(0,0,0,.6);
+  transform: scale(0); transition: transform .15s ease;
+}
+.et-scrub:hover::-webkit-slider-thumb { transform: scale(1); margin-top: -3.5px; }
+.et-scrub:active::-webkit-slider-thumb { transform: scale(1.25); }
+.et-scrub::-moz-range-track { height: 4px; border-radius: 2px; background: rgba(255,255,255,.28); }
+.et-scrub::-moz-range-progress { height: 4px; border-radius: 2px; background: #FF6B6B; }
+.et-scrub::-moz-range-thumb { width: 14px; height: 14px; border: none; border-radius: 50%; background: #FF6B6B; }
+.et-time { color: rgba(255,255,255,.7); letter-spacing: .02em; min-width: 104px; font-variant-numeric: tabular-nums; font-family: "SF Mono", ui-monospace, Menlo, monospace; font-size: 11px; }

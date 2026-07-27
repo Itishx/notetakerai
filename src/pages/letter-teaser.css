@@ -1,0 +1,65 @@
+/* letter-teaser.css — extras specific to /n on top of notch-teaser.css.
+   Same pattern as intro-teaser.css: reuse the shared engine/CSS untouched,
+   just recolor. Aware's palette (dark red base, white text, white-bg /
+   dark-red-text invert flash) instead of Don't Blink's off-white/black. */
+
+body.lt-page #sb-brain-mascot-wrapper { display: none !important; }
+
+.nt, .nt-frame, .nt-stage { background: #2B0808 !important; }
+.nt-open { color: #FFFFFF; }
+
+/* match cuts on every /n scene reuse /notch's own convention exactly:
+   invert to white bg / dark-red text, and suppress the stomp animation
+   while the invert is active (see docs/braino-design.md §10). Generic
+   attribute selector on purpose — a hardcoded per-scene class list is
+   exactly what caused 3 of the 15 cuts (score/bangalore/aware) to flash
+   white with invisible white-on-white text instead of recoloring, since
+   it's easy to add a new "!" cut in the data and forget to also list its
+   class here. This selector can't miss one. */
+[class*="lt-"].invert-flash {
+  color: #8B1A1A !important; z-index: 11;
+}
+[class*="lt-"].invert-flash .nt-word.in { animation: none !important; }
+
+/* parenthetical asides (Act 5's "(but when has the distance...)", the 2018
+   aside, Act 6's bracketed jokes) — smaller, dimmer, a touch of italic,
+   toggled the same way /dontblink toggles "it-anything" for its own beat. */
+.lt-aside { font-style: italic; font-weight: 500 !important; font-size: 0.62em !important; opacity: 0.82; }
+
+/* ambient dim — darkens after "On purpose.", lifts at Act 9's "nice" bookend */
+.lt-dim { position: absolute; inset: 0; background: #000000; opacity: 0; z-index: 1; pointer-events: none; }
+
+/* hard cut to black at the very end */
+.lt-black { position: absolute; inset: 0; background: #000000; opacity: 0; z-index: 10; pointer-events: none; }
+
+/* "you / you / you" — three fixed stamps stacked dead centre, each bigger
+   and softer than the last, filling the frame. Fixed CSS scale classes
+   (not per-frame JS) — same reliability principle as everything else here. */
+.lt-you-stack { position: absolute; inset: 0; display: grid; place-items: center; z-index: 3; pointer-events: none; }
+.lt-you-stack span {
+  grid-area: 1 / 1; opacity: 0; color: #FFFFFF; font-weight: 700;
+  font-family: Georgia, "Times New Roman", serif;
+  transition: opacity .35s ease;
+}
+.lt-you-stack span.in { opacity: 1; }
+.lt-you1 { font-size: clamp(48px, 9vw, 100px); }
+.lt-you2 { font-size: clamp(64px, 12vw, 140px); opacity: 0; filter: blur(0px); transform: translate(4px, -6px); }
+.lt-you2.in { opacity: 0.7; }
+.lt-you3 { font-size: clamp(84px, 16vw, 190px); transform: translate(-4px, 6px); }
+.lt-you3.in { opacity: 0.55; }
+
+/* closing cursor beneath "soon." */
+.lt-cursor {
+  position: absolute; left: 50%; bottom: 30%; transform: translate(-50%, 0);
+  color: #FF6B6B; font-weight: 300; font-size: clamp(24px, 4vw, 44px); opacity: 0; z-index: 4;
+}
+
+/* Act 8's five stacked LEVELS lines — wraps onto its own column instead of
+   the shared single-row layout, since these five need to stay stacked. */
+.lt-levels-list {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+  opacity: 0; z-index: 2; font-weight: 600; color: #FFFFFF;
+  font-size: clamp(16px, 2.4vw, 28px); text-align: center; white-space: normal; max-width: 88%;
+}
+.lt-levels-list .nt-word { display: block; transition: opacity .4s ease; }
