@@ -244,13 +244,18 @@
 }
 .apple-wordreveal .tone { color: var(--ap-accent, var(--ap-coral)); }
 .apple-wordreveal .wr-word {
-  display: inline-block;
-  opacity: 0; transform: translateY(0.5em);
-  transition: opacity 0.5s ease, transform 0.5s cubic-bezier(0.2,1,0.3,1);
+  display: inline-block; opacity: 0; transform-origin: center bottom;
 }
-.apple-wordreveal.go .wr-word { opacity: 1; transform: none; }
+/* The Don't Blink stamp, tuned for light ground: each word SLAMS down into
+   place (scale punch, expo-out) one after another — percussive, not soft. */
+.apple-wordreveal.go .wr-word { animation: wrStomp 0.34s cubic-bezier(0.16, 1, 0.3, 1) both; }
+@keyframes wrStomp {
+  0%   { opacity: 0; transform: scale(1.38); filter: blur(2px); }
+  55%  { opacity: 1; filter: blur(0); }
+  100% { opacity: 1; transform: scale(1); filter: blur(0); }
+}
 @media (prefers-reduced-motion: reduce) {
-  .apple-wordreveal .wr-word { opacity: 1; transform: none; transition: none; }
+  .apple-wordreveal .wr-word { opacity: 1; animation: none; }
 }
 
 /* ── Founder editorial quote: big SF Pro statement, colour lead-ins ── */

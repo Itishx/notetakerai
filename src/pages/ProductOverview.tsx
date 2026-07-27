@@ -175,7 +175,7 @@ function WordReveal({ segments, className }: { segments: WordSeg[]; className?: 
       {segments.map((seg, si) => (
         <span key={si} className={seg.tone ? "tone" : undefined}>
           {seg.text.split(" ").map((w, k) => (
-            <span className="wr-word" key={k} style={{ transitionDelay: `${(wi++) * 55}ms` }}>{w}&nbsp;</span>
+            <span className="wr-word" key={k} style={{ animationDelay: `${(wi++) * 90}ms` }}>{w}&nbsp;</span>
           ))}
         </span>
       ))}
