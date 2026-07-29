@@ -8,7 +8,7 @@ import "./waitlist.css";
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 const SUPABASE_KEY = (import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY) as string;
 
-type ProductId = "braino" | "macos" | "braino-os" | "hera";
+type ProductId = "braino" | "macos" | "braino-os" | "hera" | "everything";
 type SubmitState = "idle" | "loading" | "done" | "existing" | "error";
 type WaitlistSection = "braino" | "macos" | "braino-os" | "hera" | "join";
 type TeaserId = "browser" | "macos" | "os";
@@ -95,6 +95,13 @@ const PRODUCTS: Array<{
     name: "Braino Hera",
     eyebrow: "Voice writing",
     description: "Speak naturally and Hera turns your thoughts into clean, polished writing wherever you type. Yap Mode, rebuilt as a fast system-wide voice-writing companion.",
+  },
+  {
+    id: "everything",
+    number: "05",
+    name: "Send me everything, DAWG",
+    eyebrow: "All of Braino",
+    description: "Browser, IOMI, Braino OS, Hera—and whatever strange, adorable form Braino becomes next. You want the whole story.",
   },
 ];
 
@@ -212,7 +219,12 @@ export default function Waitlist() {
 
   const toggleProduct = (product: ProductId) => {
     setSelected((current) => {
+      if (product === "everything") {
+        return current.has("everything") ? new Set() : new Set<ProductId>(["everything"]);
+      }
+
       const next = new Set(current);
+      next.delete("everything");
       if (next.has(product)) {
         next.delete(product);
       } else {
