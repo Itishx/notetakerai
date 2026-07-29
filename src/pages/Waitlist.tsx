@@ -8,7 +8,7 @@ import "./waitlist.css";
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 const SUPABASE_KEY = (import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY) as string;
 
-type ProductId = "braino" | "macos" | "hera";
+type ProductId = "braino" | "macos" | "braino-os" | "hera";
 type SubmitState = "idle" | "loading" | "done" | "existing" | "error";
 type WaitlistSection = "braino" | "macos" | "braino-os" | "hera" | "join";
 type TeaserId = "browser" | "macos" | "os";
@@ -83,8 +83,15 @@ const PRODUCTS: Array<{
     description: "IOMI takes Braino beyond the browser: apps, files, mail, music, meetings and whatever is on your screen. Voice-first, glanceable, and built to feel present.",
   },
   {
-    id: "hera",
+    id: "braino-os",
     number: "03",
+    name: "Braino OS",
+    eyebrow: "The intelligence",
+    description: "The reasoning, memory, personality and motion layer underneath every version of Braino—turning separate abilities into one coherent character.",
+  },
+  {
+    id: "hera",
+    number: "04",
     name: "Braino Hera",
     eyebrow: "Voice writing",
     description: "Speak naturally and Hera turns your thoughts into clean, polished writing wherever you type. Yap Mode, rebuilt as a fast system-wide voice-writing companion.",
@@ -155,7 +162,7 @@ function useReveal() {
 
 export default function Waitlist() {
   const pageRef = useReveal();
-  const [selected, setSelected] = useState<Set<ProductId>>(new Set(PRODUCTS.map((product) => product.id)));
+  const [selected, setSelected] = useState<Set<ProductId>>(new Set());
   const [email, setEmail] = useState("");
   const [submitState, setSubmitState] = useState<SubmitState>("idle");
   const [activeSection, setActiveSection] = useState<WaitlistSection>("braino");
@@ -207,7 +214,7 @@ export default function Waitlist() {
     setSelected((current) => {
       const next = new Set(current);
       if (next.has(product)) {
-        if (next.size > 1) next.delete(product);
+        next.delete(product);
       } else {
         next.add(product);
       }
@@ -301,7 +308,7 @@ export default function Waitlist() {
 
             <div className="wl-braino-stories">
               <div className="wl-braino-story-row">
-                <article>
+                <article className="wl-mascot-card wl-reveal">
                   <div className="wl-story-art">
                     <img src="/reactions/braino-happy.svg" alt="Braino reaction face" />
                   </div>
@@ -311,7 +318,7 @@ export default function Waitlist() {
                     <p>Braino’s quickest form. Just enough face to listen, react and let the moment show.</p>
                   </div>
                 </article>
-                <article>
+                <article className="wl-mascot-card wl-reveal">
                   <div className="wl-story-art">
                     <MovingBraino motion="standing" />
                   </div>
@@ -324,7 +331,7 @@ export default function Waitlist() {
               </div>
 
               <div className="wl-braino-story-row">
-                <article>
+                <article className="wl-mascot-card wl-reveal">
                   <div className="wl-story-art wl-story-stage">
                     <MovingBraino motion="walking" />
                   </div>
@@ -334,7 +341,7 @@ export default function Waitlist() {
                     <p>Not a mascot trapped in a widget. Braino walks onto the page and moves through it with you.</p>
                   </div>
                 </article>
-                <article>
+                <article className="wl-mascot-card wl-reveal">
                   <div className="wl-story-art wl-story-stage">
                     <MovingBraino motion="dancing" />
                   </div>
@@ -347,7 +354,7 @@ export default function Waitlist() {
               </div>
 
               <div className="wl-braino-story-row">
-                <article>
+                <article className="wl-mascot-card wl-reveal">
                   <div className="wl-story-art wl-story-stage">
                     <MovingBraino motion="moonwalk" />
                   </div>
@@ -357,7 +364,7 @@ export default function Waitlist() {
                     <p>Hat on. Feet forward. Gliding backward. Intelligence is more memorable with a little theatre.</p>
                   </div>
                 </article>
-                <article>
+                <article className="wl-mascot-card wl-reveal">
                   <div className="wl-story-art wl-reaction-stage">
                     <img src="/reactions/braino-idle.svg" alt="Braino idle reaction" />
                     <img src="/reactions/braino-happy.svg" alt="Braino happy reaction" />
@@ -442,6 +449,12 @@ export default function Waitlist() {
       </article>
 
       <section className="wl-join" id="join">
+        <div className="wl-join-head wl-reveal">
+          <span>Choose your Braino</span>
+          <h2>Where do you want to meet him?</h2>
+          <p>Select only what you want to hear about. We’ll save each choice with your waitlist entry, so the updates you receive actually match the Braino you came for.</p>
+        </div>
+
         <div className="wl-picker wl-reveal">
           {PRODUCTS.map((product) => {
             const active = selected.has(product.id);
