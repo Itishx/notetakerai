@@ -33,6 +33,7 @@ const VisualEmotionalEngine = lazy(() => import("./pages/VisualEmotionalEngine.t
 const PreLaunch = lazy(() => import("./pages/PreLaunch.tsx"));
 const LaunchTeaser = lazy(() => import("./pages/LaunchTeaser.tsx"));
 const WaitlistDashboard = lazy(() => import("./pages/WaitlistDashboard.tsx"));
+const Waitlist = lazy(() => import("./pages/Waitlist.tsx"));
 const Index = lazy(() => import("./pages/Index.tsx"));
 const UseCases = lazy(() => import("./pages/UseCases.tsx"));
 const NotionSync = lazy(() => import("./pages/NotionSync.tsx"));
@@ -138,14 +139,7 @@ function AppShell({
       <div id="sb-brain-mascot-wrapper">{splashDone && !hideMascot && <BrainoWalker />}</div>
       <Suspense fallback={<div style={{ minHeight: "100vh", background: "var(--sb-bg, #fbf7f1)" }} />}>
         <Routes>
-          <Route path="/" element={
-            <LandingGate
-              introDone={homeIntroDone}
-              tourDone={homeTourDone}
-              onIntroDone={onHomeIntroDone}
-              onTourDone={onHomeTourDone}
-            />
-          } />
+          <Route path="/" element={<Waitlist />} />
           {/* Launch intro film remains previewable at /intro. */}
           <Route path="/intro" element={<IntroPreviewRoute onIntroDone={onHomeIntroDone} onTourDone={onHomeTourDone} />} />
           <Route path="/prelaunch" element={<PreLaunch />} />
@@ -166,6 +160,7 @@ function AppShell({
           <Route path="/Vig" element={<VisualEmotionalEngine />} />
           <Route path="/teaser" element={<LaunchTeaser />} />
           <Route path="/waitlist-admin" element={<WaitlistDashboard />} />
+          <Route path="/waitlist" element={<Waitlist />} />
           <Route path="/use-cases" element={<UseCases />} />
           <Route path="/notion-sync" element={<NotionSync />} />
           <Route path="/glass-preview" element={<GlassPreview />} />
