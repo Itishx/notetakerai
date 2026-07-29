@@ -2,15 +2,17 @@ import { FormEvent, useEffect, useRef, useState } from "react";
 import { ArrowUpRight, Check, Circle, Loader2, Moon, Play, Sun } from "lucide-react";
 import { BRAINO_WALKER_SVG } from "../components/brainoWalkerSvg";
 import { Braino, BrainoDefs, useTime } from "../components/BrainoChar";
+import EmotionNetwork from "../components/EmotionNetwork";
+import HumanIntelligence from "../components/HumanIntelligence";
 import IomiNotch from "../components/IomiNotch";
 import "./waitlist.css";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 const SUPABASE_KEY = (import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY) as string;
 
-type ProductId = "braino" | "macos" | "braino-os" | "hera" | "everything";
+type ProductId = "braino" | "macos" | "braino-os" | "hera" | "studio" | "everything";
 type SubmitState = "idle" | "loading" | "done" | "existing" | "error";
-type WaitlistSection = "braino" | "macos" | "braino-os" | "hera" | "join";
+type WaitlistSection = "braino" | "macos" | "braino-os" | "hera" | "studio" | "join";
 type TeaserId = "browser" | "macos" | "os";
 
 const SECTION_TABS: Array<{ id: WaitlistSection; label: string }> = [
@@ -18,6 +20,7 @@ const SECTION_TABS: Array<{ id: WaitlistSection; label: string }> = [
   { id: "macos", label: "IOMI" },
   { id: "braino-os", label: "Braino OS" },
   { id: "hera", label: "Hera" },
+  { id: "studio", label: "Studio" },
   { id: "join", label: "Join" },
 ];
 
@@ -97,8 +100,15 @@ const PRODUCTS: Array<{
     description: "Speak naturally and Hera turns your thoughts into clean, polished writing wherever you type. Yap Mode, rebuilt as a fast system-wide voice-writing companion.",
   },
   {
-    id: "everything",
+    id: "studio",
     number: "05",
+    name: "Braino Studio",
+    eyebrow: "Make him yours",
+    description: "Braino is a Diva 💅. Studio lets you customize his face, colours, wardrobe, movement and presence down to the last possible detail.",
+  },
+  {
+    id: "everything",
+    number: "06",
     name: "Send me everything, DAWG",
     eyebrow: "All of Braino",
     description: "Browser, IOMI, Braino OS, Hera—and whatever strange, adorable form Braino becomes next. You want the whole story.",
@@ -299,7 +309,7 @@ export default function Waitlist() {
       <article className="wl-article">
         <section className="wl-chapter wl-reveal" id="braino">
           <div className="wl-chapter-number">01 / The browser</div>
-          <h2>Braino for the browser.</h2>
+          <h2 className="wl-product-title wl-shimmer-gold">Braino for the browser.</h2>
           <figure className="wl-teaser-card">
             <TeaserPlayer
               id="browser"
@@ -395,7 +405,7 @@ export default function Waitlist() {
 
         <section className="wl-chapter wl-reveal" id="macos">
           <div className="wl-chapter-number">02 / IOMI</div>
-          <h2>Braino IOMI.</h2>
+          <h2 className="wl-product-title wl-shimmer-gold">Braino IOMI.</h2>
           <figure className="wl-teaser-card wl-macos-film">
             <TeaserPlayer
               id="macos"
@@ -428,21 +438,33 @@ export default function Waitlist() {
 
           <div className="wl-os-cards">
             <article>
-              <span>01</span>
-              <h3>More Than Motion Engine</h3>
-              <p>Braino does not merely move, react or animate. The engine underneath him turns context into behaviour, presence and an emotionally appropriate response.</p>
+              <div className="wl-engine-cover">
+                <span className="wl-engine-notch" aria-hidden="true"><i /><i /></span>
+                <div className="wl-engine-graphic"><EmotionNetwork caption={false} /></div>
+              </div>
+              <div className="wl-engine-copy">
+                <span>01 / The motion</span>
+                <h3>More Than Motion Engine</h3>
+                <p>Braino does not merely move, react or animate. The engine underneath him turns context into behaviour, presence and an emotionally appropriate response.</p>
+              </div>
             </article>
             <article>
-              <span>02</span>
-              <h3>Human Intelligence</h3>
-              <p>A reasoning layer built around how people actually communicate: incomplete thoughts, changing emotions, memory, intent and everything left unsaid.</p>
+              <div className="wl-engine-cover">
+                <span className="wl-engine-notch" aria-hidden="true"><i /><i /></span>
+                <div className="wl-engine-graphic"><HumanIntelligence caption={false} /></div>
+              </div>
+              <div className="wl-engine-copy">
+                <span>02 / The mind</span>
+                <h3>Human Intelligence</h3>
+                <p>A reasoning layer built around how people actually communicate: incomplete thoughts, changing emotions, memory, intent and everything left unsaid.</p>
+              </div>
             </article>
           </div>
         </section>
 
         <section className="wl-chapter wl-reveal" id="hera">
           <div className="wl-chapter-number">04 / Hera</div>
-          <h2>Braino Hera.</h2>
+          <h2 className="wl-product-title wl-shimmer-green">Braino Hera.</h2>
           <p className="wl-large">Live dictation: speak it out, and it gets transcribed where you are already typing.</p>
           <p>Hera is an experiment in system-wide voice writing. It does more than convert sound into words: it notices the context around you and shapes the rough thought without sanding away your meaning, rhythm or voice. Think Wispr Flow, but on steroids—and with Braino inside it.</p>
           <div className="wl-versions">
@@ -455,6 +477,30 @@ export default function Waitlist() {
             <div>
               <strong>Currently in development. Could change. Could be cancelled.</strong>
               <p>No one knows exactly what the final app mode is yet. That uncertainty is part of why it is here as a teaser, not a promise.</p>
+            </div>
+          </div>
+        </section>
+
+        <section className="wl-chapter wl-reveal" id="studio">
+          <div className="wl-chapter-number">05 / The atelier</div>
+          <h2>Braino Studio.</h2>
+          <p className="wl-large">Braino is a Diva 💅. Naturally, he needs a dressing room.</p>
+          <p>Studio is where Braino becomes yours. Change the way he looks, dresses, moves and reacts—from the shape of an expression to the colour of a glove and the exact energy of his entrance.</p>
+
+          <div className="wl-studio-card">
+            <div className="wl-studio-preview" aria-label="A customizable Braino preview">
+              <MovingBraino motion="standing" />
+              <span>Live look</span>
+            </div>
+            <div className="wl-studio-controls">
+              <span>In-house Diva system</span>
+              <h3>Down to the last detail.</h3>
+              <div className="wl-studio-options">
+                <div><b>Face</b><small>eyes · mood · expression</small></div>
+                <div><b>Wardrobe</b><small>gloves · shoes · accessories</small></div>
+                <div><b>Motion</b><small>walk · dance · entrance</small></div>
+                <div><b>Palette</b><small>body · glow · accents</small></div>
+              </div>
             </div>
           </div>
         </section>
@@ -480,7 +526,13 @@ export default function Waitlist() {
               >
                 <span className="wl-pick-top"><i>{product.number}</i>{active ? <Check /> : <Circle />}</span>
                 <small>{product.eyebrow}</small>
-                <h3>{product.name}</h3>
+                <h3 className={
+                  product.id === "hera"
+                    ? "wl-shimmer-green"
+                    : product.id === "braino" || product.id === "macos"
+                      ? "wl-shimmer-gold"
+                      : undefined
+                }>{product.name}</h3>
                 <p>{product.description}</p>
               </button>
             );
