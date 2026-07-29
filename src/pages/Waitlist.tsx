@@ -1,5 +1,8 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
-import { ArrowDown, ArrowUpRight, Check, Circle, Loader2 } from "lucide-react";
+import { ArrowUpRight, Check, Circle, Loader2, Moon, Play, Sun } from "lucide-react";
+import { BRAINO_WALKER_SVG } from "../components/brainoWalkerSvg";
+import { Braino, BrainoDefs, useTime } from "../components/BrainoChar";
+import IomiNotch from "../components/IomiNotch";
 import "./waitlist.css";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
@@ -7,6 +10,56 @@ const SUPABASE_KEY = (import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.
 
 type ProductId = "braino" | "macos" | "hera";
 type SubmitState = "idle" | "loading" | "done" | "existing" | "error";
+type WaitlistSection = "braino" | "macos" | "braino-os" | "hera" | "join";
+type TeaserId = "browser" | "macos" | "os";
+
+const SECTION_TABS: Array<{ id: WaitlistSection; label: string }> = [
+  { id: "braino", label: "Browser" },
+  { id: "macos", label: "IOMI" },
+  { id: "braino-os", label: "Braino OS" },
+  { id: "hera", label: "Hera" },
+  { id: "join", label: "Join" },
+];
+
+type MascotMotion = "standing" | "walking" | "dancing" | "moonwalk";
+
+function MovingBraino({ motion }: { motion: MascotMotion }) {
+  const time = useTime();
+  const danceBeat = time * 3.4;
+  const dancing = motion === "dancing";
+  const travel = motion === "walking"
+    ? Math.sin(time * 0.72) * 28
+    : motion === "moonwalk"
+      ? Math.sin(time * 0.58) * 34
+      : 0;
+
+  return (
+    <div
+      className={`wl-moving-braino is-${motion}`}
+      style={{ transform: `translateX(${travel}px)` }}
+      aria-hidden="true"
+    >
+      <Braino
+        size={230}
+        legs
+        gloves
+        idle
+        walk={motion === "walking"}
+        moonwalk={motion === "moonwalk"}
+        accessory={motion === "moonwalk" ? "fedora" : "none"}
+        expr={dancing || motion === "moonwalk" ? "mischief" : "happy"}
+        lookX={motion === "walking" ? 0.45 : 0}
+        lookY={dancing ? -0.2 : 0}
+        leftArm={dancing ? 42 + Math.sin(danceBeat) * 30 : null}
+        rightArm={dancing ? -42 + Math.sin(danceBeat) * 30 : null}
+        style={dancing ? {
+          transform: `translateY(${-Math.abs(Math.sin(danceBeat)) * 9}px) rotate(${Math.sin(danceBeat) * 4}deg)`,
+          transformOrigin: "50% 80%",
+        } : undefined}
+      />
+    </div>
+  );
+}
 
 const PRODUCTS: Array<{
   id: ProductId;
@@ -25,9 +78,9 @@ const PRODUCTS: Array<{
   {
     id: "macos",
     number: "02",
-    name: "Braino for macOS",
-    eyebrow: "The computer",
-    description: "Braino leaves the browser and lives at the level of the Mac: apps, files, mail, music, meetings and whatever is on your screen. Voice-first, glanceable, and built to feel present.",
+    name: "Braino IOMI",
+    eyebrow: "For the Mac",
+    description: "IOMI takes Braino beyond the browser: apps, files, mail, music, meetings and whatever is on your screen. Voice-first, glanceable, and built to feel present.",
   },
   {
     id: "hera",
@@ -37,6 +90,45 @@ const PRODUCTS: Array<{
     description: "Speak naturally and Hera turns your thoughts into clean, polished writing wherever you type. Yap Mode, rebuilt as a fast system-wide voice-writing companion.",
   },
 ];
+
+function TeaserPlayer({
+  id,
+  activeTeaser,
+  onPlay,
+  src,
+  videoSrc,
+  title,
+}: {
+  id: TeaserId;
+  activeTeaser: TeaserId | null;
+  onPlay: (id: TeaserId) => void;
+  src?: string;
+  videoSrc?: string;
+  title: string;
+}) {
+  const active = activeTeaser === id;
+
+  return (
+    <div className={`wl-teaser-viewport${active ? " playing" : ""}`}>
+      {active ? (
+        videoSrc ? (
+          <video key={id} src={videoSrc} title={title} controls autoPlay playsInline />
+        ) : (
+          <iframe
+            key={id}
+            src={src}
+            title={title}
+            allow="autoplay; fullscreen"
+          />
+        )
+      ) : (
+        <button type="button" className="wl-teaser-play" onClick={() => onPlay(id)} aria-label={`Play ${title}`}>
+          <span><Play fill="currentColor" aria-hidden="true" /></span>
+        </button>
+      )}
+    </div>
+  );
+}
 
 function useReveal() {
   const ref = useRef<HTMLElement>(null);
@@ -66,6 +158,50 @@ export default function Waitlist() {
   const [selected, setSelected] = useState<Set<ProductId>>(new Set(PRODUCTS.map((product) => product.id)));
   const [email, setEmail] = useState("");
   const [submitState, setSubmitState] = useState<SubmitState>("idle");
+  const [activeSection, setActiveSection] = useState<WaitlistSection>("braino");
+  const [activeTeaser, setActiveTeaser] = useState<TeaserId | null>(null);
+  const [theme, setTheme] = useState<"dark" | "light">(() => {
+    if (typeof window === "undefined") return "dark";
+    const saved = window.localStorage.getItem("braino-waitlist-theme");
+    if (saved === "light" || saved === "dark") return saved;
+    return window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+  });
+
+  useEffect(() => {
+    const sections = SECTION_TABS
+      .map(({ id }) => document.getElementById(id))
+      .filter((section): section is HTMLElement => Boolean(section));
+    if (!sections.length) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visible = entries
+          .filter((entry) => entry.isIntersecting)
+          .sort((a, b) => Math.abs(a.boundingClientRect.top) - Math.abs(b.boundingClientRect.top));
+        const next = visible[0]?.target.id as WaitlistSection | undefined;
+        if (next) setActiveSection(next);
+      },
+      { rootMargin: "-22% 0px -62% 0px", threshold: 0 },
+    );
+
+    sections.forEach((section) => observer.observe(section));
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    const teaserSection: Record<TeaserId, WaitlistSection> = {
+      browser: "braino",
+      macos: "macos",
+      os: "braino-os",
+    };
+    if (activeTeaser && teaserSection[activeTeaser] !== activeSection) {
+      setActiveTeaser(null);
+    }
+  }, [activeSection, activeTeaser]);
+
+  useEffect(() => {
+    window.localStorage.setItem("braino-waitlist-theme", theme);
+  }, [theme]);
 
   const toggleProduct = (product: ProductId) => {
     setSelected((current) => {
@@ -105,100 +241,184 @@ export default function Waitlist() {
   };
 
   return (
-    <main className="wl-page" ref={pageRef}>
-      <nav className="wl-nav">
-        <a href="#top" className="wl-mark" aria-label="Braino waitlist home">B</a>
-        <span>Braino · The waitlist</span>
-        <a href="#join">Join <ArrowDown size={13} aria-hidden="true" /></a>
-      </nav>
+    <main className={`wl-page is-${theme}`} ref={pageRef}>
+      <BrainoDefs />
+      <IomiNotch />
 
       <header className="wl-hero" id="top">
         <div className="wl-hero-copy wl-reveal">
-          <p className="wl-label">Braino · The waitlist</p>
           <h1>Three ways to meet <em>Braino.</em></h1>
           <p className="wl-dek">Braino began in the browser. Now we are carefully exploring what he becomes across the Mac and wherever you write. This is the honest, unfinished map.</p>
         </div>
       </header>
 
+      <div className="wl-tabs-shell" aria-label="Braino waitlist sections">
+        <nav className="wl-tabs">
+          {SECTION_TABS.map((tab) => (
+            <a
+              key={tab.id}
+              href={`#${tab.id}`}
+              className={activeSection === tab.id ? "active" : ""}
+              aria-current={activeSection === tab.id ? "location" : undefined}
+              onClick={() => setActiveSection(tab.id)}
+            >
+              {tab.label}
+            </a>
+          ))}
+        </nav>
+        <button
+          type="button"
+          className="wl-theme-toggle"
+          onClick={() => setTheme((current) => current === "dark" ? "light" : "dark")}
+          aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
+          title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
+        >
+          {theme === "dark" ? <Sun aria-hidden="true" /> : <Moon aria-hidden="true" />}
+        </button>
+      </div>
+
       <article className="wl-article">
         <section className="wl-chapter wl-reveal" id="braino">
           <div className="wl-chapter-number">01 / The browser</div>
           <h2>Braino for the browser.</h2>
+          <figure className="wl-teaser-card">
+            <TeaserPlayer
+              id="browser"
+              activeTeaser={activeTeaser}
+              onPlay={setActiveTeaser}
+              videoSrc="/Braino_Final.MP4"
+              title="Don’t Blink — Braino for the browser teaser"
+            />
+          </figure>
           <p className="wl-large">The Braino you can meet today: a companion who lives beside whatever you are doing on the web.</p>
           <p>Most AI waits inside a box. Braino reads the page you are already on, explains it, searches with you, remembers what matters, records a lecture, and helps turn intent into action without making you leave the work.</p>
           <p>The useful part is not that he can answer. Plenty of things can answer. The bet is that software becomes more useful when it has continuity, character, and enough context to understand what kind of help the moment actually needs.</p>
 
-          <div className="wl-feature-card">
-            <div className="wl-feature-card-top">
-              <span className="wl-feature-icon" aria-hidden="true">B</span>
-              <span>On this page</span>
-              <i>Browser</i>
-            </div>
-            <h3>Ask the page. Then act on it.</h3>
-            <p>Read, explain, write, remember, record, navigate and delegate—inside the browser tab where the thought began.</p>
-            <div className="wl-feature-command">
-              <span>Control ×2</span>
-              <strong>“Braino, what am I looking at?”</strong>
-            </div>
-          </div>
+          <section className="wl-who-braino" aria-labelledby="wl-who-braino-title">
+            <span className="wl-inline-number">04 / The character</span>
+            <h3 id="wl-who-braino-title">Who is Braino?</h3>
+            <p>He is one character with a whole physical vocabulary. Scroll through the forms: the face, the companion, the walk, the dancing, the reactions—and, naturally, the moonwalk.</p>
 
-          <figure className="wl-media-card wl-launch-image">
-            <img src="/braino-waitlist-forest.png" alt="Braino for the browser launch artwork" />
-            <figcaption><span>Braino for the browser</span><span>Launch artwork</span></figcaption>
-          </figure>
+            <div className="wl-braino-stories">
+              <div className="wl-braino-story-row">
+                <article>
+                  <div className="wl-story-art">
+                    <img src="/reactions/braino-happy.svg" alt="Braino reaction face" />
+                  </div>
+                  <div className="wl-story-copy">
+                    <span>01 / Face</span>
+                    <h4>The expression.</h4>
+                    <p>Braino’s quickest form. Just enough face to listen, react and let the moment show.</p>
+                  </div>
+                </article>
+                <article>
+                  <div className="wl-story-art">
+                    <MovingBraino motion="standing" />
+                  </div>
+                  <div className="wl-story-copy">
+                    <span>02 / Standing</span>
+                    <h4>The companion.</h4>
+                    <p>He arrives with a body, waits on the page and looks ready for whatever comes next.</p>
+                  </div>
+                </article>
+              </div>
 
-          <figure className="wl-media-card wl-launch-video">
-            <video controls playsInline preload="metadata" poster="/braino-waitlist-forest.png">
-              <source src="/Braino_Final.MP4" type="video/mp4" />
-              Your browser does not support embedded video.
-            </video>
-            <figcaption><span>Watch the launch film</span><span>Braino for the browser</span></figcaption>
-          </figure>
+              <div className="wl-braino-story-row">
+                <article>
+                  <div className="wl-story-art wl-story-stage">
+                    <MovingBraino motion="walking" />
+                  </div>
+                  <div className="wl-story-copy">
+                    <span>03 / Walking</span>
+                    <h4>He enters the work.</h4>
+                    <p>Not a mascot trapped in a widget. Braino walks onto the page and moves through it with you.</p>
+                  </div>
+                </article>
+                <article>
+                  <div className="wl-story-art wl-story-stage">
+                    <MovingBraino motion="dancing" />
+                  </div>
+                  <div className="wl-story-copy">
+                    <span>04 / Dancing</span>
+                    <h4>Joy has choreography.</h4>
+                    <p>The twist, disco fever, the sprinkler—he celebrates small wins like they actually matter.</p>
+                  </div>
+                </article>
+              </div>
+
+              <div className="wl-braino-story-row">
+                <article>
+                  <div className="wl-story-art wl-story-stage">
+                    <MovingBraino motion="moonwalk" />
+                  </div>
+                  <div className="wl-story-copy">
+                    <span>05 / Moonwalk</span>
+                    <h4>Of course he moonwalks.</h4>
+                    <p>Hat on. Feet forward. Gliding backward. Intelligence is more memorable with a little theatre.</p>
+                  </div>
+                </article>
+                <article>
+                  <div className="wl-story-art wl-reaction-stage">
+                    <img src="/reactions/braino-idle.svg" alt="Braino idle reaction" />
+                    <img src="/reactions/braino-happy.svg" alt="Braino happy reaction" />
+                    <div className="wl-mini-walker" dangerouslySetInnerHTML={{ __html: BRAINO_WALKER_SVG }} />
+                  </div>
+                  <div className="wl-story-copy">
+                    <span>06 / Reactions</span>
+                    <h4>One Braino. Many moods.</h4>
+                    <p>Quiet, curious, delighted or a little mischievous. His personality changes shape without disappearing.</p>
+                  </div>
+                </article>
+              </div>
+            </div>
+          </section>
         </section>
 
         <section className="wl-chapter wl-reveal" id="macos">
-          <div className="wl-chapter-number">02 / The Mac</div>
-          <h2>Braino for macOS.</h2>
-          <p className="wl-large">The browser taught Braino how people move through the web. The Mac teaches him how people move through an entire day.</p>
-          <p>On macOS, Braino lives in the notch and wakes by voice. He can work across apps, files, folders, mail, music and meetings. He sees the active work, understands where your attention is, and stays close without occupying the whole screen.</p>
+          <div className="wl-chapter-number">02 / IOMI</div>
+          <h2>Braino IOMI.</h2>
+          <figure className="wl-teaser-card wl-macos-film">
+            <TeaserPlayer
+              id="macos"
+              activeTeaser={activeTeaser}
+              onPlay={setActiveTeaser}
+              src="/notch-teaser?embed=1"
+              title="Braino IOMI teaser"
+            />
+          </figure>
+          <p className="wl-large">The browser taught Braino how people move through the web. IOMI teaches him how people move through an entire day.</p>
+          <p>On the Mac, IOMI lives in the notch and wakes by voice. He can work across apps, files, folders, mail, music and meetings. He sees the active work, understands where your attention is, and stays close without occupying the whole screen.</p>
           <p>This version runs on Braino OS: the reasoning, personality, context and controls that turn separate capabilities into one coherent presence.</p>
 
-          <figure className="wl-media-card wl-mac-teaser">
-            <div className="wl-mac-frame">
-              <div className="wl-mac-menubar"><span>● ● ●</span><b>Braino</b><span>9:41</span></div>
-              <div className="wl-mac-notch"><span /><span /></div>
-              <p>“Open the file we were working on.”</p>
-            </div>
-            <figcaption><span>A first look at Braino for macOS</span><span>Teaser</span></figcaption>
-          </figure>
-
-          <div className="wl-status"><span /><b>In active development</b><i>macOS · voice-first · system-wide</i></div>
+          <div className="wl-status"><span /><b>In active development</b><i>IOMI · Mac · voice-first</i></div>
         </section>
 
         <section className="wl-chapter wl-reveal" id="braino-os">
           <div className="wl-chapter-number">03 / The operating layer</div>
           <h2>Braino OS.</h2>
-          <p className="wl-large">Not another app. The intelligence underneath every place Braino lives.</p>
-          <p>Braino OS is the shared reasoning, memory, personality, context and control layer beneath Braino for the browser and Braino for macOS. It is what lets the same character understand the work, decide how to help, and carry continuity from one surface to another.</p>
-          <p>The browser is one body. The Mac is another. Braino OS is the mind that makes both of them feel like Braino.</p>
+          <figure className="wl-teaser-card wl-os-film">
+            <TeaserPlayer
+              id="os"
+              activeTeaser={activeTeaser}
+              onPlay={setActiveTeaser}
+              src="/braino-os?embed=1"
+              title="Braino OS teaser"
+            />
+          </figure>
+          <p className="wl-large">The full operating system story comes later. For now, two pieces matter.</p>
 
-          <div className="wl-os-map" aria-label="Braino OS system map">
-            <div>
-              <span>Input</span>
-              <strong>Voice · Screen · Context</strong>
-            </div>
-            <div className="wl-os-core">
-              <span>Core</span>
-              <strong>Braino OS</strong>
-              <p>Reasoning, memory, personality and control.</p>
-            </div>
-            <div>
-              <span>Surfaces</span>
-              <strong>Browser · macOS · Hera</strong>
-            </div>
+          <div className="wl-os-cards">
+            <article>
+              <span>01</span>
+              <h3>More Than Motion Engine</h3>
+              <p>Braino does not merely move, react or animate. The engine underneath him turns context into behaviour, presence and an emotionally appropriate response.</p>
+            </article>
+            <article>
+              <span>02</span>
+              <h3>Human Intelligence</h3>
+              <p>A reasoning layer built around how people actually communicate: incomplete thoughts, changing emotions, memory, intent and everything left unsaid.</p>
+            </article>
           </div>
-
-          <div className="wl-status"><span /><b>In active development</b><i>One Braino · many surfaces</i></div>
         </section>
 
         <section className="wl-chapter wl-reveal" id="hera">
@@ -222,12 +442,6 @@ export default function Waitlist() {
       </article>
 
       <section className="wl-join" id="join">
-        <div className="wl-join-head wl-reveal">
-          <p className="wl-label">The waitlist</p>
-          <h2>Choose where you want to meet Braino.</h2>
-          <p>Pick one, two, or all three. One email. No launch theatre—just the honest signal that you want to hear when the work is ready.</p>
-        </div>
-
         <div className="wl-picker wl-reveal">
           {PRODUCTS.map((product) => {
             const active = selected.has(product.id);
