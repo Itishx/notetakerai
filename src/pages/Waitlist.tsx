@@ -247,7 +247,7 @@ export default function Waitlist() {
 
       <header className="wl-hero" id="top">
         <div className="wl-hero-copy wl-reveal">
-          <h1>Three ways to meet <em>Braino.</em></h1>
+          <h1>Meet the cutest AI agent <em>you’ll ever see.</em></h1>
           <p className="wl-dek">Braino began in the browser. Now we are carefully exploring what he becomes across the Mac and wherever you write. This is the honest, unfinished map.</p>
         </div>
       </header>
