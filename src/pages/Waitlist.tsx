@@ -484,7 +484,7 @@ export default function Waitlist() {
         <section className="wl-chapter wl-reveal" id="studio">
           <div className="wl-chapter-number">05 / The atelier</div>
           <h2>Braino Studio.</h2>
-          <p className="wl-large">Braino is a Diva 💅. Naturally, he needs a dressing room.</p>
+          <p className="wl-large">Braino is a Diva 💅 — naturally, he needs a dressing room.</p>
           <p>Studio is where Braino becomes yours. Change the way he looks, dresses, moves and reacts—from the shape of an expression to the colour of a glove and the exact energy of his entrance.</p>
 
           <div className="wl-studio-card">
