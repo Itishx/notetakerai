@@ -129,19 +129,28 @@ export default function EngineLog() {
 
   useEffect(() => { void load(); }, [load]);
 
-  // Judging a run. The row updates in place rather than reloading the list, so
-  // marking ten runs in a row does not make the page jump under the cursor.
-  const judge = useCallback(async (run: Run, rating: "good" | "bad" | null, note?: string) => {
-    setSaving(run.id);
-    const nextNote = note !== undefined ? note : (run.note || "");
+  // Judging a RUN, not a turn. A loop run is one attempt at one job, so "he got
+  // there badly" is a statement about the whole thing; marking thirteen turns
+  // individually would be thirteen copies of one opinion. runId marks them all
+  // at once, and the UI shows the verdict once, at the top.
+  const judge = useCallback(async (
+    key: { id?: string; runId?: string | null },
+    rating: "good" | "bad" | null,
+    note: string | null,
+  ) => {
+    const marker = key.runId || key.id || "";
+    setSaving(marker);
     try {
       const res = await fetch(`${SUPABASE_URL}/functions/v1/engine-runs`, {
         method: "POST",
         headers: { "Content-Type": "application/json", apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
-        body: JSON.stringify({ id: run.id, rating, note: nextNote || null }),
+        body: JSON.stringify({ ...(key.runId ? { runId: key.runId } : { id: key.id }), rating, note: note || null }),
       });
       if (!res.ok) throw new Error(`Save failed (${res.status})`);
-      setRows((prev) => prev.map((r) => (r.id === run.id ? { ...r, rating, note: nextNote || null } : r)));
+      setRows((prev) => prev.map((r) => {
+        const hit = key.runId ? r.run_id === key.runId : r.id === key.id;
+        return hit ? { ...r, rating, note: note || null } : r;
+      }));
       setStats(null); // totals are stale now; the next refresh recomputes them
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not save that rating.");
@@ -241,17 +250,55 @@ export default function EngineLog() {
           const first = group.runs[0];
           const tokens = group.runs.reduce((sum, r) => sum + (r.total_tokens || 0), 0);
           const failed = group.runs.some((r) => !r.ok);
+          // Multi-turn loop runs are judged by run; single answers by row.
+          const key = group.runId ? { runId: group.runId } : { id: first.id };
+          const judgeKey = group.runId || first.id;
           return (
-            <section key={group.key} className={"el-group" + (failed ? " failed" : "")}>
+            <section key={group.key} className={"el-group" + (failed ? " failed" : "") + (first.rating ? ` rated-${first.rating}` : "")}>
               <div className="el-group-head">
                 <span className={`el-engine el-engine-${first.engine}`}>{ENGINE_LABEL[first.engine] || first.engine}</span>
                 <p className="el-command">{first.command}</p>
+                {first.rating && <span className={`el-rated el-rated-${first.rating}`}>{first.rating}</span>}
                 <span className="el-meta">
                   {group.runs.length > 1 ? `${group.runs.length} turns · ` : ""}
                   {tokens.toLocaleString()} tok · {when(first.created_at)}
                 </span>
               </div>
               {first.context && <p className="el-context">Context: {first.context}</p>}
+
+              {/* One verdict for the whole run. This is what turns the log into
+                  a worklist: at the end of a session, everything marked bad,
+                  with its note, IS the list of prompt edits to make. */}
+              <div className="el-judge">
+                <button
+                  className={"el-good" + (first.rating === "good" ? " on" : "")}
+                  disabled={saving === judgeKey}
+                  onClick={() => void judge(key, first.rating === "good" ? null : "good", noteDraft[judgeKey] ?? first.note ?? "")}
+                >
+                  Good
+                </button>
+                <button
+                  className={"el-bad" + (first.rating === "bad" ? " on" : "")}
+                  disabled={saving === judgeKey}
+                  onClick={() => void judge(key, first.rating === "bad" ? null : "bad", noteDraft[judgeKey] ?? first.note ?? "")}
+                >
+                  Bad
+                </button>
+                <input
+                  className="el-note-input"
+                  placeholder={first.rating === "bad" ? "What was wrong with it?" : "Your remarks (optional)"}
+                  value={noteDraft[judgeKey] ?? first.note ?? ""}
+                  onChange={(e) => setNoteDraft((d) => ({ ...d, [judgeKey]: e.target.value }))}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") void judge(key, first.rating, noteDraft[judgeKey] ?? "");
+                  }}
+                  onBlur={() => {
+                    const draft = noteDraft[judgeKey];
+                    if (draft !== undefined && draft !== (first.note || "")) void judge(key, first.rating, draft);
+                  }}
+                />
+                <span className="el-saving">{saving === judgeKey ? "saving" : ""}</span>
+              </div>
 
               <div className="el-turns">
                 {group.runs.slice().reverse().map((run) => (
@@ -267,41 +314,6 @@ export default function EngineLog() {
                       <span className="el-caret">{open === run.id ? "collapse" : "open"}</span>
                     </button>
                     {run.error && <p className="el-turn-error">{run.error}</p>}
-
-                    {/* The verdict. This is what turns the log into a worklist:
-                        at the end of a session, "marked bad" plus its note is
-                        the entire list of prompt edits to make. */}
-                    <div className="el-judge">
-                      <button
-                        className={"el-good" + (run.rating === "good" ? " on" : "")}
-                        disabled={saving === run.id}
-                        onClick={() => void judge(run, run.rating === "good" ? null : "good")}
-                      >
-                        Good
-                      </button>
-                      <button
-                        className={"el-bad" + (run.rating === "bad" ? " on" : "")}
-                        disabled={saving === run.id}
-                        onClick={() => void judge(run, run.rating === "bad" ? null : "bad")}
-                      >
-                        Bad
-                      </button>
-                      <input
-                        className="el-note-input"
-                        placeholder={run.rating === "bad" ? "What was wrong with it?" : "Note (optional)"}
-                        value={noteDraft[run.id] ?? run.note ?? ""}
-                        onChange={(e) => setNoteDraft((d) => ({ ...d, [run.id]: e.target.value }))}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") void judge(run, run.rating, noteDraft[run.id] ?? run.note ?? "");
-                        }}
-                        onBlur={() => {
-                          const draft = noteDraft[run.id];
-                          if (draft !== undefined && draft !== (run.note || "")) void judge(run, run.rating, draft);
-                        }}
-                      />
-                      {saving === run.id && <span className="el-saving">saving</span>}
-                    </div>
-
                     {open === run.id && (
                       <pre className="el-json">{JSON.stringify(run.response, null, 2)}</pre>
                     )}

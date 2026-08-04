@@ -146,3 +146,15 @@
 
 .el-filter-sep { width: 1px; align-self: stretch; background: var(--line); margin: 0 4px; }
 .el-rate-filter.on { background: var(--blue) !important; border-color: var(--blue) !important; color: #fff !important; }
+
+/* One verdict per RUN, not per turn. Thirteen turns marked bad was thirteen
+   copies of one opinion; the run carries it once, at the top. */
+.el-rated {
+  flex: none; font-size: 11px; font-weight: 700; letter-spacing: 0.06em;
+  text-transform: uppercase; border-radius: 4px; padding: 2px 8px; color: #fff;
+}
+.el-rated-good { background: var(--green); }
+.el-rated-bad { background: var(--coral); }
+.el-group.rated-bad { border-color: color-mix(in srgb, var(--coral) 55%, var(--line)); }
+.el-group.rated-good { border-color: color-mix(in srgb, var(--green) 45%, var(--line)); }
+.el-judge { padding-top: 12px; margin-top: 12px; border-top: 1px solid var(--line); }
