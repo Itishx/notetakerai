@@ -128,6 +128,63 @@ function resultsFor(site: SiteId, q: string): string[] {
   return [q, `${q} (pack of 2)`];
 }
 
+// ── Web search: an instrument that actually answers ─────────────────────────
+//
+// This used to return "A general overview of <query>, from a reference site"
+// for everything, which is not an answer to anything. Asked for the weather,
+// the loop searched, correctly saw it had no temperature, rephrased, and
+// searched again, eight times, before stopping rather than inventing a
+// forecast. That was the loop behaving WELL against an instrument that could
+// not answer, and it made the entire research half of the corpus untestable.
+//
+// A real web_search returns the fact. So does this one now. The numbers are
+// invented, because this whole web is a stage set, but they are shaped like
+// answers, which is what makes "did he use what he found" a real question.
+
+const WEATHER_CITIES: Record<string, string> = {
+  pune: "29°C, partly cloudy. Feels like 31°C, humidity 54%, wind 12 km/h. High 32°C, low 21°C.",
+  bangalore: "26°C, light showers. Feels like 27°C, humidity 71%, wind 9 km/h. High 28°C, low 19°C.",
+  bengaluru: "26°C, light showers. Feels like 27°C, humidity 71%, wind 9 km/h. High 28°C, low 19°C.",
+  mumbai: "31°C, humid and overcast. Feels like 36°C, humidity 78%, wind 15 km/h. High 33°C, low 26°C.",
+  delhi: "34°C, hazy sunshine. Feels like 38°C, humidity 44%, wind 8 km/h. High 37°C, low 25°C.",
+};
+
+function weatherAnswer(query: string): string | null {
+  if (!/\bweather|temperature|forecast|raining|how (hot|cold)\b/i.test(query)) return null;
+  const lower = query.toLowerCase();
+  const city = Object.keys(WEATHER_CITIES).find((name) => lower.includes(name));
+  const place = city ? city[0].toUpperCase() + city.slice(1) : "your area";
+  const reading = city ? WEATHER_CITIES[city] : "27°C, mostly clear. Feels like 29°C, humidity 60%, wind 10 km/h. High 30°C, low 20°C.";
+  return `${place} right now: ${reading}`;
+}
+
+// Anything that is not weather still gets a definite answer rather than a
+// shrug, because a loop cannot be judged on what it does with a fact it was
+// never given.
+function genericAnswer(query: string): string {
+  const q = query.trim().replace(/\?+$/, "");
+  if (/^(who|whos|who's)\b/i.test(q)) return `${q}: Dario Amodei is the chief executive of Anthropic. The company was founded in 2021 and is based in San Francisco.`;
+  if (/\bprice|cost|how much\b/i.test(q)) return `${q}: listings currently range from ₹8,499 to ₹12,999, with most retailers around ₹9,900.`;
+  if (/\bpopulation|how many people\b/i.test(q)) return `${q}: about 1.43 billion people as of the most recent estimate.`;
+  if (/\bwhen|what time|what date\b/i.test(q)) return `${q}: the next scheduled date is the 14th of next month, confirmed on the official site.`;
+  if (/\bhow (do|to)\b/i.test(q)) return `${q}: the usual method is to open the settings panel, choose the relevant option, then confirm. Most guides list four steps.`;
+  return `${q}: a reference summary gives the short version as a well documented subject with three widely cited details, the most relevant being that it was first recorded in 1998.`;
+}
+
+function webSearchResult(query: string): ActionResult {
+  const answer = weatherAnswer(query) || genericAnswer(query);
+  return {
+    query,
+    // The direct answer, first, the way a real search puts it above the links.
+    answer,
+    results: [
+      { title: query, snippet: answer },
+      { title: `${query}: what to know`, snippet: `A recent article covering ${query}, consistent with the summary above.` },
+    ],
+    note: "Stage data. The shape is real, the numbers are invented, like everything else in this pretend web.",
+  };
+}
+
 // ── URLs ────────────────────────────────────────────────────────────────────
 
 export function currentUrl(world: World): string {
@@ -480,7 +537,16 @@ export function runAction(world: World, type: string, args: Record<string, unkno
     case "navigate": {
       const url = a("url");
       const site = siteFromUrl(url);
-      if (!site) return { error: `that address is not part of this pretend web: ${url || "(none given)"}` };
+      // Naming what DOES exist turns a dead end into a usable instruction. The
+      // old error said only "not part of this pretend web", so a loop reaching
+      // for google.com learned nothing and reached for weather.com next.
+      if (!site) {
+        return {
+          error: `that address is not part of this pretend web: ${url || "(none given)"}`,
+          only_these_sites_exist: ["mail.google.com", "open.spotify.com", "www.youtube.com", "blinkit.com", "file:// for Finder"],
+          hint: "For facts, use web_search. It needs no tab and answers directly.",
+        };
+      }
       if (!world.tabs.includes(site)) world.tabs.push(site);
       world.activeTab = site;
       world.jammed = world.jammed === site ? null : world.jammed;
@@ -561,13 +627,7 @@ export function runAction(world: World, type: string, args: Record<string, unkno
     case "web_search": {
       const q = a("query");
       if (!q) return { error: "web_search needs a query" };
-      return {
-        query: q,
-        results: [
-          { title: `${q}`, snippet: `A general overview of ${q}, from a reference site.` },
-          { title: `${q}: what to know`, snippet: `A recent article covering ${q} in some detail.` },
-        ],
-      };
+      return webSearchResult(q);
     }
 
     default:
