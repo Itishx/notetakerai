@@ -85,6 +85,11 @@ const HOMEWORK: Todo[] = [
     note: '4 from the waitlist, 3 from the Mesa cohort (Sid, Prithvi + one), 3 strangers from the demo post. Success = iPhone pickups during deep-work blocks drop to near zero, and they relaunch Braino the next morning unprompted.',
   },
   {
+    state: 'todo', tag: 'Mac skill',
+    text: 'Weather should come from the machine, not a web search',
+    note: 'Time and date already work: he reads the Mac clock directly (main.cjs ~5543). Weather has no handler at all, so it falls through to web research, which is slow, costs a call, and returns prose instead of a number. Wanted: a weather intent that takes the location from the geo awareness already built (Intl timezone + the daily ipapi lookup) and hits a real forecast API, so "what is the weather" answers in one beat like the clock does. Same principle for anything the machine already knows: ask the machine, not the internet.',
+  },
+  {
     state: 'todo', tag: 'Deploy',
     text: 'Engine run log — push the migration and functions to make it live',
     note: 'Built: engine_runs table + _shared/engine-log.ts logging every hil-reason, hil-loop, and braino-reply call (command, response, tokens, failures), readable at /engine-log (creator-only). Needs `supabase db push` then `supabase functions deploy hil-reason hil-loop braino-reply engine-runs`.',
