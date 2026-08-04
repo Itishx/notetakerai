@@ -62,7 +62,7 @@ serve(async (req) => {
     if (url.searchParams.get("stats")) {
       const { data, error } = await admin
         .from("engine_runs")
-        .select("engine, total_tokens, ok, created_at, rating")
+        .select("engine, total_tokens, cached_tokens, ok, created_at, rating")
         .order("created_at", { ascending: false })
         .limit(5000);
       if (error) throw error;
@@ -87,6 +87,10 @@ serve(async (req) => {
           good: rows.filter((r) => r.rating === "good").length,
           bad: rows.filter((r) => r.rating === "bad").length,
           unjudged: rows.filter((r) => !r.rating).length,
+          // Billed at the cheap repeat rate because the instruction manual
+          // leading every request was already seen. Worth showing: it is most
+          // of the loop's bill, and it is invisible unless counted.
+          cached: rows.reduce((sum, r) => sum + (r.cached_tokens || 0), 0),
         },
         sampled: rows.length,
       });

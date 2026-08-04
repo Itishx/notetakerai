@@ -21,7 +21,15 @@ type EngineLogRow = {
   moment_id?: string | null;
   verdict?: string | null;
   model?: string | null;
-  usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number } | null;
+  usage?: {
+    prompt_tokens?: number;
+    completion_tokens?: number;
+    total_tokens?: number;
+    // Input the provider had already seen and billed at the cheaper cached
+    // rate. On the loop this is the difference between paying for the whole
+    // instruction manual every turn and paying for it once.
+    prompt_tokens_details?: { cached_tokens?: number };
+  } | null;
   elapsed_ms?: number | null;
   ok?: boolean;
   error?: string | null;
@@ -60,6 +68,7 @@ export function logEngineRun(row: EngineLogRow): void {
         prompt_tokens: usage.prompt_tokens ?? null,
         completion_tokens: usage.completion_tokens ?? null,
         total_tokens: usage.total_tokens ?? null,
+        cached_tokens: usage.prompt_tokens_details?.cached_tokens ?? null,
         elapsed_ms: row.elapsed_ms ?? null,
         ok: row.ok !== false,
         error: clip(row.error, 2000),

@@ -45,7 +45,7 @@ type Run = {
 
 type Stats = {
   byEngine: Record<string, { runs: number; tokens: number; failed: number; today: number }>;
-  total: { runs: number; tokens: number; failed: number; good: number; bad: number; unjudged: number };
+  total: { runs: number; tokens: number; failed: number; good: number; bad: number; unjudged: number; cached: number };
 };
 
 const ENGINES = [
@@ -72,12 +72,20 @@ function when(iso: string) {
 
 // Rough, and labelled as such on the page. Enough to answer "is this session
 // costing me real money" without pretending to be a billing statement.
+//
+// Cached input is billed far cheaper than fresh input, and on the loop it is
+// most of every turn after the first, so counting it at the full rate would
+// overstate the bill several times over. Measured at 97% cached on turn two.
 const COST_PER_MTOK = 0.6;
+const CACHED_DISCOUNT = 0.1; // cached input bills at roughly a tenth
+const USD_TO_INR = 85;
 
-function money(tokens: number) {
-  const dollars = (tokens / 1_000_000) * COST_PER_MTOK;
-  if (dollars < 0.01) return "<$0.01";
-  return `$${dollars.toFixed(2)}`;
+function money(tokens: number, cached = 0) {
+  const fresh = Math.max(0, tokens - cached);
+  const dollars = ((fresh + cached * CACHED_DISCOUNT) / 1_000_000) * COST_PER_MTOK;
+  const rupees = dollars * USD_TO_INR;
+  if (rupees < 1) return "under ₹1";
+  return `about ₹${rupees < 100 ? rupees.toFixed(1) : Math.round(rupees)}`;
 }
 
 export default function EngineLog() {
@@ -174,8 +182,16 @@ export default function EngineLog() {
             <span className="el-stat-label">calls logged</span>
           </div>
           <div className="el-stat">
-            <span className="el-stat-value">{stats.total.tokens.toLocaleString()}</span>
-            <span className="el-stat-label">tokens, about {money(stats.total.tokens)}</span>
+            <span className="el-stat-value">{money(stats.total.tokens, stats.total.cached)}</span>
+            <span className="el-stat-label">spent, {stats.total.tokens.toLocaleString()} tokens</span>
+          </div>
+          <div className="el-stat">
+            <span className="el-stat-value">
+              {stats.total.tokens ? Math.round((100 * stats.total.cached) / stats.total.tokens) : 0}%
+            </span>
+            <span className="el-stat-label">
+              billed at the cheap repeat rate, saving {money(stats.total.cached).replace("about ", "")}
+            </span>
           </div>
           <div className={"el-stat" + (stats.total.failed ? " bad" : "")}>
             <span className="el-stat-value">{stats.total.failed}</span>
@@ -300,7 +316,10 @@ export default function EngineLog() {
       <footer className="el-foot">
         <Link className="el-link" to="/human-intelligence">Human Intelligence</Link>
         <Link className="el-link" to="/emotional-intelligence">Emotional Intelligence</Link>
-        <span className="el-foot-note">Cost is an estimate at ${COST_PER_MTOK} per million tokens.</span>
+        <span className="el-foot-note">
+          Estimated at ${COST_PER_MTOK} per million tokens, with repeat text at a tenth of that.
+          Check the provider dashboard for the real rate.
+        </span>
       </footer>
     </div>
   );
