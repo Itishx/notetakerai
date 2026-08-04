@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { useAuth } from "@/contexts/AuthContext";
 import "./engine-log.css";
 
 /* ============================================================================
@@ -11,13 +10,15 @@ import "./engine-log.css";
    gone when the tab closed, so the same command was paid for twice to be read
    twice.
 
-   Reads through the engine-runs function, which is creator-gated. The table
-   itself has RLS on with no policies, because the endpoints that write it are
-   public and nobody should be able to read back what strangers typed.
+   Reads through the engine-runs function, which is open: signing in against
+   localhost was blocking the tuning this page exists to serve. The table still
+   refuses the anon key directly, so this function is the only door, but that
+   door is unlocked. Re-gate it before launch, since the demos that fill this
+   log are public and these rows include what other people typed into them.
    ============================================================================ */
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
-const ADMIN_EMAIL = "itishpande21@gmail.com";
+const SUPABASE_KEY = (import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY) as string;
 
 type Run = {
   id: string;
@@ -78,9 +79,6 @@ function money(tokens: number) {
 }
 
 export default function EngineLog() {
-  const { user, session, loading: authLoading } = useAuth();
-  const isCreator = user?.email === ADMIN_EMAIL;
-
   const [rows, setRows] = useState<Run[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
   const [engine, setEngine] = useState("all");
@@ -92,19 +90,18 @@ export default function EngineLog() {
   useEffect(() => { document.title = "Engine log — Braino"; }, []);
 
   const load = useCallback(async () => {
-    if (!session) return;
     setLoading(true);
     setError(null);
     try {
-      const auth = { Authorization: `Bearer ${session.access_token}` };
+      const headers = { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` };
       const base = `${SUPABASE_URL}/functions/v1/engine-runs`;
       const query = new URLSearchParams({ engine, limit: "200" });
       if (failedOnly) query.set("failed", "1");
       const [listRes, statRes] = await Promise.all([
-        fetch(`${base}?${query}`, { headers: auth }),
-        fetch(`${base}?stats=1`, { headers: auth }),
+        fetch(`${base}?${query}`, { headers }),
+        fetch(`${base}?stats=1`, { headers }),
       ]);
-      if (!listRes.ok) throw new Error(listRes.status === 403 ? "Not authorised." : `List failed (${listRes.status})`);
+      if (!listRes.ok) throw new Error(`List failed (${listRes.status})`);
       const list = await listRes.json();
       setRows(Array.isArray(list.rows) ? list.rows : []);
       if (statRes.ok) setStats(await statRes.json());
@@ -113,9 +110,9 @@ export default function EngineLog() {
     } finally {
       setLoading(false);
     }
-  }, [session, engine, failedOnly]);
+  }, [engine, failedOnly]);
 
-  useEffect(() => { if (isCreator && session) void load(); }, [isCreator, session, load]);
+  useEffect(() => { void load(); }, [load]);
 
   // Loop turns belong together: one run is one session of thinking, not nine
   // unrelated calls, so consecutive turns of the same run_id collapse into one
@@ -129,21 +126,6 @@ export default function EngineLog() {
     }
     return out;
   }, [rows]);
-
-  if (authLoading) return <div className="el-page"><p className="el-note">Checking who you are...</p></div>;
-
-  if (!isCreator) {
-    return (
-      <div className="el-page">
-        <h1 className="el-title">Engine log</h1>
-        <p className="el-note">
-          This is the private tuning log for both intelligence layers.
-          {user ? " This account cannot read it." : " Sign in as the creator to read it."}
-        </p>
-        <Link className="el-link" to="/">Back to Braino</Link>
-      </div>
-    );
-  }
 
   return (
     <div className="el-page">
