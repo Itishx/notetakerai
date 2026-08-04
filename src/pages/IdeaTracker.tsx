@@ -85,6 +85,11 @@ const HOMEWORK: Todo[] = [
     note: '4 from the waitlist, 3 from the Mesa cohort (Sid, Prithvi + one), 3 strangers from the demo post. Success = iPhone pickups during deep-work blocks drop to near zero, and they relaunch Braino the next morning unprompted.',
   },
   {
+    state: 'todo', tag: 'Deploy',
+    text: 'Engine run log — push the migration and functions to make it live',
+    note: 'Built: engine_runs table + _shared/engine-log.ts logging every hil-reason, hil-loop, and braino-reply call (command, response, tokens, failures), readable at /engine-log (creator-only). Needs `supabase db push` then `supabase functions deploy hil-reason hil-loop braino-reply engine-runs`.',
+  },
+  {
     state: 'doing', tag: 'Mac skill',
     text: '“Open what I just downloaded” — landed, needs a live run',
     note: 'Built into the Mac app: he scans Downloads + Desktop by arrival time (birthtime, not server mtime), skips half-finished .crdownload files, asks when two files land in the same minute, confirms when the newest is hours old, and can file it into a named folder or the Finder window you are looking at. Watch the reasoning first on /human-intelligence — two new Mac scenarios in the Loop tab.',

@@ -12,6 +12,7 @@ import { HIL_SYSTEM_PROMPT, HIL_VERSION } from "../../_shared/human-intelligence
 import { buildEmotionalCore, orderTraitsForMoment, steeringLine } from "../../_shared/emotional-engine/engine.ts";
 import { detectMoment, MOMENT_EMPHASIS, MOMENT_LABEL } from "../../_shared/emotional-engine/moments.ts";
 import { getClassManifest } from "../../_shared/emotional-engine/classes.ts";
+import { logEngineRun } from "../../_shared/engine-log.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -207,6 +208,17 @@ serve(async (req) => {
       }
       const errText = await aiRes.text();
       console.error("hil-reason AI error:", aiRes.status, errText);
+      logEngineRun({
+        engine: "hil-reason",
+        command: commandText,
+        context: contextText,
+        moment_id: momentId,
+        model: HIL_MODEL,
+        elapsed_ms: Date.now() - started,
+        ok: false,
+        error: `AI ${aiRes.status}: ${errText}`,
+        prompt_version: HIL_VERSION,
+      });
       return new Response(JSON.stringify({ error: "AI request failed" }), {
         status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -214,6 +226,19 @@ serve(async (req) => {
 
     const aiData = await aiRes.json();
     const reasoning = coerceReasoning(aiData?.choices?.[0]?.message?.content || "", screenReferent);
+
+    logEngineRun({
+      engine: "hil-reason",
+      command: commandText,
+      context: contextText,
+      response: reasoning,
+      moment_id: momentId,
+      verdict: reasoning.verdict,
+      model: HIL_MODEL,
+      usage: aiData?.usage,
+      elapsed_ms: Date.now() - started,
+      prompt_version: HIL_VERSION,
+    });
 
     return new Response(JSON.stringify({
       reasoning,

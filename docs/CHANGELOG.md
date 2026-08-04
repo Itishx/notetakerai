@@ -1,5 +1,12 @@
 # Braino Changelog
 
+## August 4, 2026 — Every run is recorded now
+- **Both intelligence layers keep a log.** Every call to Human Intelligence and to the Emotional Engine now records what was asked, what came back whole, which model answered, how long it took, and how many tokens it burned. Failures are recorded too, since those are the rows worth the most when tuning.
+- **The log has a home.** /engine-log shows the calls newest first, groups a Loop run's turns under the command that started it, filters to failures, and totals the tokens so a tuning session has a cost instead of a feeling. It is creator-only, because the endpoints that write it are public.
+- **The notch is down to four places.** Welcome, BrainoOS, Dashboard, and Iomi. Blog, Letter, Don't Blink, Motion Graphics, and Log are all still live pages, just no longer competing in the navigation.
+- **Whole mind moved to its own page.** It sat under Emotional Intelligence while half of what it shows is thinking. Each layer is now tuned alone, on its own page, against its own log. /whole-mind is where they meet once both hold up.
+- **Human Intelligence is down to Read and Loop.** The Lab tab was retired: the Loop already narrates its reasoning every turn, asks instead of guessing, checks each step, and stops at the gate, all while finishing a real job.
+
 ## August 4, 2026 — “Open what I just downloaded”
 - **Braino knows what you just downloaded without being told its name.** Say “open what I just downloaded” or “put what I just downloaded in the Invoices folder” and he resolves it by arrival time instead of name: newest first across Downloads and Desktop, using when the file landed on your Mac rather than the timestamp the server sent.
 - **He makes the calls a careful person makes.** A file still coming down is never opened or moved, he just tells you it is downloading. Two files landing in the same minute get a question instead of a coin flip. When the newest thing is hours old, he names it and checks before touching it.

@@ -10,6 +10,7 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { HIL_LOOP_PROMPT, HIL_LOOP_VERSION } from "../../_shared/human-intelligence/hil-loop-prompt.ts";
+import { logEngineRun } from "../../_shared/engine-log.ts";
 import { buildEmotionalCore } from "../../_shared/emotional-engine/engine.ts";
 import { detectMoment, MOMENT_EMPHASIS, MOMENT_LABEL } from "../../_shared/emotional-engine/moments.ts";
 
@@ -234,10 +235,14 @@ serve(async (req) => {
   }
 
   try {
-    const { command, context, state } = await req.json();
+    const { command, context, state, runId } = await req.json();
     const commandText = typeof command === "string" ? command.trim() : "";
     const contextText = typeof context === "string" ? context.trim() : "";
     const loopState: LoopState | null = state && typeof state === "object" ? state as LoopState : null;
+    // The client owns the run id so all turns of one run stitch together in the
+    // log. A missing or malformed one is not worth failing a turn over.
+    const logRunId = typeof runId === "string" && /^[0-9a-f-]{36}$/i.test(runId) ? runId : null;
+    const logTurn = (loopState?.steps?.length ?? 0) + 1;
 
     if (!commandText) {
       return new Response(JSON.stringify({ error: "No command provided" }), {
@@ -279,6 +284,19 @@ serve(async (req) => {
       }
       const errText = await aiRes.text();
       console.error("hil-loop AI error:", aiRes.status, errText);
+      logEngineRun({
+        engine: "hil-loop",
+        run_id: logRunId,
+        turn: logTurn,
+        command: commandText,
+        context: contextText,
+        moment_id: momentId,
+        model: HIL_LOOP_MODEL,
+        elapsed_ms: Date.now() - started,
+        ok: false,
+        error: `AI ${aiRes.status}`,
+        prompt_version: HIL_LOOP_VERSION,
+      });
       return new Response(JSON.stringify({ error: "AI request failed" }), {
         status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -289,6 +307,26 @@ serve(async (req) => {
       aiData?.choices?.[0]?.message?.content || "",
       Boolean(loopState?.lastStep),
     );
+
+    logEngineRun({
+      engine: "hil-loop",
+      run_id: logRunId,
+      turn: logTurn,
+      command: commandText,
+      context: contextText,
+      response: turn,
+      moment_id: momentId,
+      // The decision type is what a Loop turn is judged on: did he step, ask,
+      // finish, or give up. Stored flat so a session can be scanned without
+      // opening every row.
+      verdict: turn?.decision?.type ?? null,
+      model: HIL_LOOP_MODEL,
+      usage: aiData?.usage,
+      elapsed_ms: Date.now() - started,
+      ok: parseOk,
+      error: parseOk ? null : "decision JSON came back unreadable",
+      prompt_version: HIL_LOOP_VERSION,
+    });
 
     return new Response(JSON.stringify({
       turn,

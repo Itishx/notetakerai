@@ -245,6 +245,12 @@ verify_jwt = false
 entrypoint = "./functions/reasoning/hil-loop/index.ts"
 verify_jwt = false
 
+# Reads the engine_runs log. NOT public: the engines that write it are public,
+# so anything typed into them must not be readable back by anon. Gated on the
+# creator's email inside the function, same as waitlist-list.
+[functions.engine-runs]
+entrypoint = "./functions/reasoning/engine-runs/index.ts"
+
 # Braino actually replying, with the full emotional breakdown of how he replied.
 # Public on purpose (same as the HIL lab); model is pinned server-side.
 [functions.braino-reply]

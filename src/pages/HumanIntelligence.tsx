@@ -173,6 +173,9 @@ function ReadTab() {
         <div className="hil-cta-row apple-reveal">
           <Link className="hil-btn" to="/iomi">Meet Braino IOMI</Link>
           <Link className="hil-btn ghost" to="/emotional-intelligence">The Emotional Engine</Link>
+          {/* Creator-only: the page itself refuses anyone else, so the link is
+              harmless here and saves hunting for the URL mid-tuning. */}
+          <Link className="hil-btn ghost" to="/engine-log">Run log</Link>
         </div>
         <p className="hil-foot">Braino &middot; built by one person &middot; trybraino.com</p>
       </section>

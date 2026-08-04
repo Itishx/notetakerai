@@ -25,6 +25,7 @@ import { detectMomentDetailed, looksEmotionallyLoaded, MOMENT_LABEL } from "../.
 import { getClassManifest } from "../../_shared/emotional-engine/classes.ts";
 import { resolvePersonalitySettings } from "../../_shared/emotional-engine/settings.ts";
 import { scanForTells } from "../../_shared/emotional-engine/tells.ts";
+import { logEngineRun } from "../../_shared/engine-log.ts";
 import type { Moment } from "../../_shared/emotional-engine/types.ts";
 
 const corsHeaders = {
@@ -174,10 +175,24 @@ serve(async (req) => {
       });
     }
 
-    const reply = textOf(await aiRes.json());
+    const aiData = await aiRes.json();
+    const reply = textOf(aiData);
     // The check that makes the ban real: his own reply, against his own ban lists.
     const tells = scanForTells(reply);
     const dial = charmLevel(moment);
+
+    logEngineRun({
+      engine: "braino-reply",
+      command: message,
+      response: { reply, tells, how, intensity, leads, charm: dial, charm_off: charmOff },
+      moment_id: moment,
+      // A reply that tripped his own ban list is the row worth finding later,
+      // so the count is flat rather than buried in the JSON.
+      verdict: tells.length ? `tells:${tells.length}` : "clean",
+      model: REPLY_MODEL,
+      usage: aiData?.usage,
+      elapsed_ms: Date.now() - started,
+    });
 
     return new Response(JSON.stringify({
       reply,

@@ -30,6 +30,10 @@ type IomiNavItem = {
   children?: IomiNavItem[];
 };
 
+// Four destinations, deliberately. The notch is the whole site's navigation, so
+// everything that lived here competed with everything else: Blog, Letter, Don't
+// Blink, Motion Graphics, and Log are all still live pages, just no longer in
+// the notch. Reach them from the pages that already link to them.
 const IOMI_NAV: IomiNavItem[] = [
   { to: "/", label: "Welcome", note: "three classes" },
   {
@@ -43,13 +47,8 @@ const IOMI_NAV: IomiNavItem[] = [
       { to: "/yap-mode", label: "Yap Mode", note: "talk and it types" },
     ],
   },
-  { to: "/journal", label: "Blog", note: "built in public" },
-  { to: "/n", label: "Letter", note: "from the founder" },
   { to: "/dashboard", label: "Dashboard", note: "your controls" },
-  { to: "/dontblink", label: "Don't Blink", note: "the film" },
-  { to: "/motion-graphics", label: "Motion Graphics", note: "the films" },
   { to: "/iomi", label: "Iomi", note: "the OS" },
-  { to: "/changelog", label: "Log", note: "what shipped" },
 ];
 
 // The verbatim first-invoke boot beats (the app's real lifecycle, same as the

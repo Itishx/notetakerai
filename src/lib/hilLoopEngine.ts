@@ -109,6 +109,9 @@ export class HilLoopRunner {
 
   private command = "";
   private context = "";
+  // Ties every turn of one run together in the engine_runs log, so a nine-turn
+  // run reads as one session instead of nine unrelated rows.
+  private runId = "";
   private world: World = createWorld();
   private facts: string[] = [];
   private stepRecords: Array<{ intent: string; action: string; ok: boolean | null; why: string | null }> = [];
@@ -142,6 +145,7 @@ export class HilLoopRunner {
     this.moment = null;
     this.command = command.trim();
     this.context = context.trim();
+    this.runId = crypto.randomUUID();
     this.world = createWorld(preset);
     this.lastActionSig = null;
     this.facts = [];
@@ -223,6 +227,7 @@ export class HilLoopRunner {
     const payload = {
       command: this.command,
       context: this.context || undefined,
+      runId: this.runId,
       state: {
         tasks: this.tasks,
         facts: this.facts.slice(-20),

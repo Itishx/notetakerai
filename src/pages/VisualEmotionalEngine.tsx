@@ -3,7 +3,6 @@ import { Link } from "react-router-dom";
 import EmotionNetwork from "@/components/EmotionNetwork";
 import IomiNotch from "@/components/IomiNotch";
 import BrainoReplyLab from "@/components/BrainoReplyLab";
-import BrainoWholeMind from "@/components/BrainoWholeMind";
 import "../styles/apple.css";
 import "./human-intelligence.css";
 import "./visual-emotional-engine.css";
@@ -113,6 +112,7 @@ function ReadTab() {
         <div className="hil-cta-row apple-reveal">
           <Link className="hil-btn" to="/human-intelligence">Human Intelligence</Link>
           <Link className="hil-btn ghost" to="/braino-os">BrainoOS</Link>
+          <Link className="hil-btn ghost" to="/engine-log">Run log</Link>
         </div>
         <p className="hil-foot">Braino &middot; built by one person &middot; trybraino.com</p>
       </section>
@@ -120,12 +120,11 @@ function ReadTab() {
   );
 }
 
-// The Lab tab was retired: it showed the moment read, the trait reorder, and the
-// steering line, all of which Reply already shows, with the actual reply and the
-// tell scan on top. Two tabs demonstrating the same mechanism read as clutter,
-// so the mechanism now has one home and it is the one that proves itself.
+// Two tabs, on purpose. Lab was retired because Reply showed everything it did
+// plus the actual reply and the tell scan. Whole mind moved to its own page:
+// half of it is thinking, and this layer is being tuned on its own first.
 export default function VisualEmotionalEngine() {
-  const [tab, setTab] = useState<"read" | "reply" | "whole">("read");
+  const [tab, setTab] = useState<"read" | "reply">("read");
   const reveal = useReveal();
 
   return (
@@ -168,12 +167,9 @@ export default function VisualEmotionalEngine() {
       <div className="hil-tabs" id="tabs">
         <button className={tab === "read" ? "on" : ""} onClick={() => setTab("read")}>Read</button>
         <button className={tab === "reply" ? "on" : ""} onClick={() => setTab("reply")}>Reply</button>
-        <button className={tab === "whole" ? "on" : ""} onClick={() => setTab("whole")}>Whole mind</button>
       </div>
 
-      {tab === "read" ? <ReadTab />
-        : tab === "reply" ? <BrainoReplyLab />
-        : <BrainoWholeMind />}
+      {tab === "read" ? <ReadTab /> : <BrainoReplyLab />}
     </div>
   );
 }

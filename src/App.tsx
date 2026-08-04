@@ -84,6 +84,8 @@ const Shankar = lazy(() => import("./pages/Shankar.tsx"));
 const InstaGraphics = lazy(() => import("./pages/InstaGraphics.tsx"));
 const KnowledgeBase = lazy(() => import("./pages/KnowledgeBase.tsx"));
 const IdeaTracker = lazy(() => import("./pages/IdeaTracker.tsx"));
+const WholeMind = lazy(() => import("./pages/WholeMind.tsx"));
+const EngineLog = lazy(() => import("./pages/EngineLog.tsx"));
 const NotFound = lazy(() => import("./pages/NotFound.tsx"));
 const queryClient = new QueryClient();
 
@@ -171,6 +173,8 @@ function AppRoutes() {
         <Route path="/InstaGraphics" element={<InstaGraphics />} />
         <Route path="/instagraphics" element={<InstaGraphics />} />
         <Route path="/ideas" element={<IdeaTracker />} />
+        <Route path="/whole-mind" element={<WholeMind />} />
+        <Route path="/engine-log" element={<EngineLog />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     </Suspense>
