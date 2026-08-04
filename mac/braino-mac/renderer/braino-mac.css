@@ -118,6 +118,41 @@ body {
   animation: macWalkerListenGlow 2s ease-in-out infinite;
 }
 
+/* Yap Mode stays present without turning the mascot into a large beacon. */
+#walker.dictation-listening::before {
+  display: block;
+  left: 50%;
+  top: 46%;
+  width: 38px;
+  height: 38px;
+  z-index: 0;
+  border-radius: 999px;
+  border: 1px solid rgba(61, 232, 178, 0.5);
+  background: radial-gradient(circle, rgba(61,232,178,0.1), transparent 68%);
+  box-shadow: 0 0 12px rgba(61,232,178,0.28), 0 0 22px rgba(61,232,178,0.12);
+  transform: translate(-50%, -50%);
+  opacity: 0.72;
+  animation: yapModeMascotHalo 2.4s ease-in-out infinite;
+}
+
+#walker.dictation-listening::after {
+  display: none;
+}
+
+#walker.dictation-listening svg {
+  animation: yapModeMascotGlow 2.4s ease-in-out infinite;
+}
+
+@keyframes yapModeMascotHalo {
+  0%, 100% { opacity: 0.46; transform: translate(-50%, -50%) scale(0.92); }
+  50% { opacity: 0.78; transform: translate(-50%, -50%) scale(1.04); }
+}
+
+@keyframes yapModeMascotGlow {
+  0%, 100% { filter: drop-shadow(0 0 3px rgba(61,232,178,0.26)); }
+  50% { filter: drop-shadow(0 0 8px rgba(61,232,178,0.62)); }
+}
+
 #walker.connecting svg {
   animation: macVoiceConnecting 1.6s ease-in-out infinite;
 }
@@ -199,6 +234,8 @@ body {
      the notch strip itself: its top --nf-notch-h hides behind the physical
      housing, the face band lives on the chin below. */
   --nf-notch-h: 33px;
+  --nf-left-reach: 95px;
+  --nf-right-reach: 95px;
   position: fixed;
   top: 0;
   left: 50%;
@@ -225,10 +262,14 @@ body {
   overflow: hidden;
   background: linear-gradient(180deg, #F6A8A2, #E8786E 55%, #C9544A);
   transition:
-    width 0.5s cubic-bezier(0.34, 1.25, 0.4, 1),
-    height 0.5s cubic-bezier(0.34, 1.25, 0.4, 1),
-    border-radius 0.5s ease,
-    box-shadow 0.4s ease;
+    width 0.55s cubic-bezier(0.32, 0.72, 0, 1),
+    height 0.55s cubic-bezier(0.32, 0.72, 0, 1),
+    transform 0.55s cubic-bezier(0.32, 0.72, 0, 1),
+    border-radius 0.55s cubic-bezier(0.32, 0.72, 0, 1),
+    box-shadow 0.4s ease,
+    filter 0.16s ease;
+  transform-origin: top center;
+  will-change: width, height, transform, border-radius;
 }
 
 /* Black cover that makes idle read as "inside the notch"; fades on wake. */
@@ -285,6 +326,27 @@ body {
     0 0 30px -1px var(--nf-mode-color, #0A84FF);
 }
 
+/* Yap Mode is a compact notch state: label + tiny activity bars + close halo. */
+#notch-face.nf-dictation.listen .nf-pill {
+  width: 222px;
+  height: calc(var(--nf-notch-h) + 28px);
+  border-radius: 0 0 18px 18px;
+  animation: nfYapModeRadiate 2.4s ease-in-out infinite;
+}
+
+@keyframes nfYapModeRadiate {
+  0%, 100% {
+    box-shadow:
+      0 0 0 1px rgba(61,232,178,0.34),
+      0 0 9px 1px rgba(61,232,178,0.2);
+  }
+  50% {
+    box-shadow:
+      0 0 0 1.2px rgba(145,255,220,0.72),
+      0 0 17px 2px rgba(61,232,178,0.34);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   #notch-face.listen .nf-pill {
     animation: none;
@@ -304,7 +366,18 @@ body {
    centred over the housing. Only what we HEARD is captioned (left wing) —
    his replies are voice + the talking mouth, never text. */
 #notch-face.captioning .nf-pill {
-  width: 560px;
+  width: calc(var(--nf-left-reach) + var(--nf-right-reach));
+  transform: translateX(calc((var(--nf-right-reach) - var(--nf-left-reach)) / 2));
+  height: calc(var(--nf-notch-h) + 22px);
+  border-radius: 0 0 16px 16px;
+}
+
+/* Dictation captions use the dynamic-island surface itself. It expands only
+   while words are arriving, then settles back to the compact Yap Mode label. */
+#notch-face.nf-dictation.captioning .nf-pill {
+  width: calc(var(--nf-left-reach) + var(--nf-right-reach));
+  height: calc(var(--nf-notch-h) + 22px);
+  border-radius: 0 0 16px 16px;
 }
 
 #notch-face .nf-cap {
@@ -326,11 +399,44 @@ body {
 
 #notch-face .nf-cap-l {
   left: 14px;
+  width: max(0px, calc(var(--nf-left-reach) - 66px));
   text-align: right;
   font-family: ui-monospace, Menlo, monospace;
   font-size: 9px;
   letter-spacing: 0.04em;
   color: rgba(255, 240, 235, 0.5);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+#notch-face .nf-cap-r {
+  left: calc(var(--nf-left-reach) + 52px);
+  width: max(0px, calc(var(--nf-right-reach) - 66px));
+  text-align: left;
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 9px;
+  letter-spacing: .04em;
+  color: rgba(255,240,235,.5);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+#notch-face.nf-dictation.captioning .nf-cap {
+  top: 0;
+  height: 100%;
+  justify-content: center;
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 9px;
+  line-height: 1.2;
+  letter-spacing: 0.04em;
+  color: rgba(232, 255, 247, 0.82);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+#notch-face.nf-dictation.captioning #nf-status,
+#notch-face.nf-dictation.captioning .nf-viz {
+  opacity: 0;
 }
 
 #notch-face .nf-folds {
@@ -349,6 +455,32 @@ body {
   display: flex;
   align-items: flex-start;
   justify-content: center;
+}
+
+/* During a caption the island may be asymmetrical, but Braino remains pinned
+   to the physical screen centre. --nf-left-reach is precisely the distance
+   from the island's left edge back to his eyes. */
+#notch-face.captioning .nf-band {
+  right: auto;
+  left: var(--nf-left-reach);
+  width: 78px;
+  transform: translateX(-50%);
+}
+
+/* He reads the live sentence with you: first towards the growing left wing,
+   then across to the continuation when the right wing activates. */
+#notch-face.nf-caption-left:not(.scanning) #nf-pupil-l,
+#notch-face.nf-caption-left:not(.scanning) #nf-pupil-r,
+#notch-face.nf-caption-left:not(.scanning) #nf-glint-l,
+#notch-face.nf-caption-left:not(.scanning) #nf-glint-r {
+  transform: translateX(-2.8px);
+}
+
+#notch-face.nf-caption-right:not(.scanning) #nf-pupil-l,
+#notch-face.nf-caption-right:not(.scanning) #nf-pupil-r,
+#notch-face.nf-caption-right:not(.scanning) #nf-glint-l,
+#notch-face.nf-caption-right:not(.scanning) #nf-glint-r {
+  transform: translateX(2.8px);
 }
 
 #notch-face .nf-mini {
@@ -416,17 +548,36 @@ body {
    to match the reference dynamic islands: pure-black pill, generous radius. ── */
 #notch-face.nf-thinking .nf-pill {
   pointer-events: auto; cursor: pointer;
-  animation: nfThinkBreath 2.4s ease-in-out infinite;
+  animation: none;
+  box-shadow: 0 0 20px rgba(232, 120, 110, 0.24);
 }
 @keyframes nfThinkBreath {
   0%, 100% { box-shadow: 0 0 14px rgba(232, 120, 110, 0.18), 0 0 30px rgba(232, 120, 110, 0.08); }
   50% { box-shadow: 0 0 26px rgba(232, 120, 110, 0.38), 0 0 52px rgba(243, 154, 66, 0.16); }
 }
 /* the three-dot "thinking" shimmer, tucked just under his eyes when idle-sized */
-#notch-face.nf-thinking:not(.nf-think-open) .nf-think-dots { display: flex; }
+#notch-face.nf-thinking:not(.nf-think-open) .nf-think-dots { display: none; }
 #notch-face .nf-think-dots {
   display: none; position: absolute; z-index: 4; left: 50%; bottom: 6px;
   transform: translateX(-50%); gap: 4px; align-items: center;
+}
+#notch-face.nf-thinking:not(.nf-think-open) .nf-think-dots {
+  right: 13px;
+  left: auto;
+  transform: none;
+}
+#notch-face.nf-thinking:not(.nf-think-open) #nf-status {
+  opacity: 0;
+}
+#notch-face.nf-processing-caption:not(.nf-think-open) .nf-cap {
+  opacity: 1;
+}
+#notch-face.nf-processing-caption:not(.nf-think-open) .nf-cap-l {
+  color: rgba(255, 240, 235, .84);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .08em;
+  text-transform: uppercase;
 }
 #notch-face .nf-think-dots i {
   width: 4px; height: 4px; border-radius: 50%; background: #F6A8A2;
@@ -440,7 +591,8 @@ body {
    more here, hover me". It gently bobs to draw the eye, and rotates when open. */
 #notch-face.nf-think-hint .nf-think-arrow { display: block; }
 #notch-face .nf-think-arrow {
-  display: none; position: absolute; z-index: 5; right: 9px; top: 50%;
+  display: none; position: absolute; z-index: 5;
+  right: auto; left: calc(var(--nf-left-reach) + 43px); top: 50%;
   width: 7px; height: 7px; margin-top: -4px;
   border-right: 1.6px solid rgba(246, 168, 162, 0.9);
   border-bottom: 1.6px solid rgba(246, 168, 162, 0.9);
@@ -448,18 +600,312 @@ body {
   animation: nfArrowBob 1.6s ease-in-out infinite;
 }
 @keyframes nfArrowBob { 0%, 100% { transform: rotate(45deg) translate(0, 0); } 50% { transform: rotate(45deg) translate(2px, 2px); } }
-#notch-face.nf-think-open .nf-think-arrow { animation: none; transform: rotate(-135deg); top: auto; bottom: 8px; margin-top: 0; }
-
-/* expanded thinking: wide island, the full sentence reads in the left wing,
-   eyes stay centred (the .captioning geometry does the sideways stretch) */
-#notch-face.nf-think-open .nf-pill {
-  box-shadow: 0 0 30px rgba(232, 120, 110, 0.4), 0 0 60px rgba(243, 154, 66, 0.18);
+#notch-face.nf-think-open .nf-think-arrow {
+  left: calc(50% + 43px);
   animation: none;
+  transform: rotate(-135deg);
+  top: 18px;
+  bottom: auto;
+  margin-top: 0;
+}
+
+/* Expanded Thinking Canvas: the original notch becomes a wider, low-profile
+   strip. It never grows upward and never asks a caption wing to hold prose. */
+#notch-face.nf-thinking.nf-think-open .nf-pill {
+  width: 100vw;
+  height: 25vh;
+  min-height: 180px;
+  max-height: 300px;
+  transform: translateX(0);
+  border-radius: 0 0 30px 30px;
+  box-shadow:
+    inset 0 -1px 0 rgba(255,255,255,.08),
+    0 24px 70px rgba(0,0,0,.48);
+  animation: none;
+  transition:
+    width .55s cubic-bezier(.32,.72,0,1),
+    height .55s cubic-bezier(.32,.72,0,1),
+    transform .55s cubic-bezier(.32,.72,0,1),
+    border-radius .55s cubic-bezier(.32,.72,0,1),
+    box-shadow .4s ease;
 }
 /* while expanded the three dots hide (the sentence is the content now) */
 #notch-face.nf-think-open .nf-think-dots { display: none; }
 /* keep the whole island hoverable throughout a task, not just the pill */
 #notch-face.nf-thinking { pointer-events: auto; }
+
+#notch-face .nf-thinking-canvas {
+  position: absolute;
+  z-index: 8;
+  top: calc(var(--nf-notch-h) + 24px);
+  right: 5vw;
+  bottom: 22px;
+  left: 5vw;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-5px) scale(.985);
+  transform-origin: top center;
+  transition:
+    opacity .3s ease .16s,
+    transform .42s cubic-bezier(.32,.72,0,1),
+    visibility 0s linear .42s;
+  color: #f7f7f5;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", sans-serif;
+}
+
+#notch-face.nf-think-open .nf-thinking-canvas {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0) scale(1);
+  transition-delay: .12s, 0s, 0s;
+}
+
+#notch-face.nf-think-open .nf-band,
+#notch-face.nf-think-open .nf-cap,
+#notch-face.nf-think-open #nf-status,
+#notch-face.nf-think-open #nf-status-2,
+#notch-face.nf-think-open .nf-folds,
+#notch-face.nf-think-open .nf-privacy {
+  opacity: 0 !important;
+}
+
+#notch-face.nf-think-open .nf-band {
+  opacity: 1 !important;
+  right: auto;
+  left: 50%;
+  width: 78px;
+  transform: translateX(-50%);
+  pointer-events: auto;
+}
+
+/* Voice always owns the island. These guards keep the conversation legible
+   even if an async task update and a microphone event land in the same frame. */
+#notch-face.listen .nf-thinking-canvas,
+#notch-face.speak .nf-thinking-canvas {
+  opacity: 0 !important;
+  visibility: hidden !important;
+}
+
+#notch-face.listen .nf-band,
+#notch-face.listen .nf-cap,
+#notch-face.speak .nf-band,
+#notch-face.speak .nf-cap {
+  opacity: 1 !important;
+}
+
+#notch-face .nf-thinking-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+#notch-face .nf-thinking-brand {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: rgba(255,255,255,.92);
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: .01em;
+}
+
+#notch-face .nf-thinking-orb {
+  display: flex;
+  width: 16px;
+  height: 16px;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  border-radius: 50%;
+  background: linear-gradient(145deg, #f3a39a, #c9544a);
+  box-shadow: 0 0 14px rgba(232,120,110,.34);
+}
+
+#notch-face .nf-thinking-orb i {
+  width: 3px;
+  height: 4px;
+  border-radius: 50%;
+  background: #fff;
+}
+
+#notch-face .nf-thinking-state {
+  overflow: hidden;
+  margin-right: auto;
+  color: rgba(255,255,255,.5);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: .04em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#notch-face .nf-thinking-live {
+  display: grid;
+  width: 14px;
+  height: 14px;
+  place-items: center;
+  border: 1px solid rgba(232,120,110,.28);
+  border-radius: 50%;
+}
+
+#notch-face .nf-thinking-live i {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #e8786e;
+  box-shadow: 0 0 7px rgba(232,120,110,.8);
+  animation: nfThinkingLive 1.45s ease-in-out infinite;
+}
+
+@keyframes nfThinkingLive {
+  50% { opacity: .38; transform: scale(.72); }
+}
+
+#notch-face .nf-thinking-flow {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  min-width: 0;
+  padding-top: 7px;
+}
+
+#notch-face .nf-flow-node {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  gap: 2px;
+  padding: 6px 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+#notch-face .nf-flow-node small {
+  color: rgba(255,255,255,.38);
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+#notch-face .nf-flow-node span,
+#notch-face .nf-flow-node strong {
+  overflow: hidden;
+  color: rgba(255,255,255,.82);
+  font-size: clamp(15px, 1.35vw, 22px);
+  font-weight: 520;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#notch-face .nf-flow-node.active {
+  color: #fff;
+}
+
+#notch-face .nf-flow-arrow {
+  position: relative;
+  flex: 0 0 clamp(38px, 5vw, 82px);
+  height: 1px;
+  overflow: visible;
+  background: linear-gradient(90deg, rgba(232,120,110,.18), rgba(232,120,110,.8));
+}
+
+#notch-face .nf-flow-arrow::after {
+  content: "";
+  position: absolute;
+  top: -2px;
+  right: -1px;
+  width: 4px;
+  height: 4px;
+  border-top: 1px solid #e8786e;
+  border-right: 1px solid #e8786e;
+  transform: rotate(45deg);
+}
+
+#notch-face .nf-flow-arrow::before {
+  content: "";
+  position: absolute;
+  top: -2px;
+  left: 0;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #e8786e;
+  box-shadow: 0 0 9px rgba(232,120,110,.8);
+  animation: nfFlowTravel 1.1s linear infinite;
+}
+
+@keyframes nfFlowTravel {
+  from { transform: translateX(0) scale(.7); opacity: .2; }
+  50% { opacity: 1; }
+  to { transform: translateX(19px) scale(1); opacity: .35; }
+}
+
+#notch-face .nf-thinking-current {
+  overflow: hidden;
+  color: rgba(255,255,255,.94);
+  font-size: 13px;
+  font-weight: 520;
+  letter-spacing: -.015em;
+  line-height: 1.24;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#notch-face .nf-thinking-trail {
+  display: flex;
+  min-width: 0;
+  justify-content: flex-end;
+  gap: 5px;
+}
+
+#notch-face .nf-thinking-step {
+  display: block;
+  width: 4px;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 50%;
+  background: rgba(126,220,164,.62);
+  color: transparent;
+  font-size: 0;
+}
+
+#notch-face .nf-thinking-step::before { content: none; }
+
+#notch-face.nf-think-waiting .nf-thinking-orb {
+  background: linear-gradient(145deg, #ffd38d, #c7832d);
+  box-shadow: 0 0 16px rgba(255,190,92,.34);
+}
+
+#notch-face.nf-think-waiting .nf-thinking-state { color: rgba(255,200,116,.78); }
+#notch-face.nf-think-failed .nf-thinking-orb { background: linear-gradient(145deg, #ff8c83, #b63232); }
+#notch-face.nf-think-failed .nf-thinking-state { color: rgba(255,139,131,.8); }
+#notch-face.nf-think-complete .nf-thinking-orb { background: linear-gradient(145deg, #91e5ae, #2a9251); }
+#notch-face.nf-think-complete .nf-thinking-state { color: rgba(131,224,164,.82); }
+#notch-face.nf-think-complete .nf-thinking-live i {
+  animation: none;
+  background: #79d99a;
+  box-shadow: 0 0 7px rgba(121,217,154,.72);
+}
+
+@media (max-width: 720px) {
+  #notch-face.nf-thinking.nf-think-open .nf-pill {
+    width: 100vw;
+  }
+  #notch-face .nf-thinking-trail { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #notch-face.nf-thinking .nf-pill,
+  #notch-face .nf-thinking-canvas {
+    animation: none;
+    transition-duration: .01ms;
+  }
+}
 
 #notch-face.busy .nf-pill {
   width: 250px;
@@ -472,7 +918,23 @@ body {
    later and beat captioning's 560px, crushing the wing into a 3-character
    sliver. When both apply, the wide island wins (pulse kept). */
 #notch-face.busy.captioning .nf-pill {
-  width: 560px;
+  width: calc(var(--nf-left-reach) + var(--nf-right-reach));
+  height: calc(var(--nf-notch-h) + 22px);
+  transform: translateX(calc((var(--nf-right-reach) - var(--nf-left-reach)) / 2));
+  border-radius: 0 0 16px 16px;
+  animation: none;
+}
+
+/* The cognition canvas is the terminal geometry for this state machine.
+   Keep this after .busy so no legacy activity pill can collapse it. */
+#notch-face.busy.captioning.nf-thinking.nf-think-open .nf-pill {
+  width: 100vw;
+  height: 25vh;
+  min-height: 180px;
+  max-height: 300px;
+  transform: translateX(0);
+  border-radius: 0 0 30px 30px;
+  animation: none;
 }
 
 /* Ambient glance: eyes dart around while he reads the screen. */
@@ -548,11 +1010,26 @@ body {
   transition: opacity 0.3s ease;
 }
 
+/* Captions already make the active voice state unambiguous. A privacy dot
+   pinned to the moving outer edge makes the island read as two pieces, so it
+   yields only while the continuous caption surface is visible. */
+#notch-face.captioning .nf-privacy {
+  opacity: 0 !important;
+  animation: none !important;
+}
+
 #notch-face.mic-live .nf-privacy {
   opacity: 1;
   background: #E8786E;
   box-shadow: 0 0 6px rgba(232, 120, 110, 0.9);
   animation: nfPrivacyPulse 2.2s ease-in-out infinite;
+}
+
+#notch-face.nf-dictation.mic-live .nf-privacy {
+  width: 4px;
+  height: 4px;
+  background: #3DE8B2;
+  box-shadow: 0 0 4px rgba(61,232,178,0.78);
 }
 
 /* Armed for the wake word: dim, steady, gray — a deliberately different look
@@ -606,7 +1083,264 @@ body {
 
 /* Boot variant: the "very slow line" — same draw, twice the patience. */
 #notch-face.nf-shine-slow .nf-shine path {
-  animation-duration: 2.4s;
+  animation-duration: 1.35s;
+}
+
+/* IOMI boot identity — the production form of the approved Instagraphics
+   study. The legacy face stays beneath the black island until authentication
+   is complete; IOMI and the operating-layer eyes own these few seconds. */
+#notch-face .nf-iomi-identity,
+#notch-face .nf-iomi-awake-eyes,
+#notch-face .nf-iomi-expanded-card {
+  position: absolute;
+  z-index: 5;
+  pointer-events: none;
+}
+
+#notch-face.nf-iomi-booting .nf-band,
+#notch-face.nf-iomi-booting .nf-folds,
+#notch-face.nf-iomi-booting #nf-status,
+#notch-face.nf-iomi-booting #nf-status-2,
+#notch-face.nf-iomi-booting .nf-privacy {
+  opacity: 0 !important;
+}
+
+#notch-face.nf-iomi-booting .nf-pill {
+  background: #000;
+}
+
+#notch-face.nf-iomi-booting .nf-shine {
+  opacity: .48;
+}
+
+#notch-face.nf-iomi-booting .nf-shine-core {
+  stroke-width: 1.7;
+  opacity: .72;
+}
+
+#notch-face.nf-iomi-booting .nf-shine-glow {
+  stroke-width: 5;
+  animation: nfIomiPerimeterBreathe 2.8s ease-in-out infinite;
+}
+
+@keyframes nfIomiPerimeterBreathe {
+  0%, 100% { opacity: .18; filter: blur(3px); }
+  50% { opacity: .34; filter: blur(5px); }
+}
+
+#notch-face .nf-iomi-identity {
+  top: var(--nf-notch-h);
+  left: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  width: 52px;
+  height: 22px;
+  color: rgba(244, 241, 232, .64);
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0;
+  opacity: 0;
+  filter: blur(2px);
+  transform: translateX(-50%) scale(.32);
+  transition: opacity .3s ease, filter .36s ease, transform .42s cubic-bezier(.4,0,.8,.2);
+}
+
+#notch-face.nf-iomi-auth .nf-iomi-identity {
+  opacity: 1;
+  filter: blur(0);
+  transform: translateX(-50%) scale(1);
+}
+
+#notch-face .nf-iomi-identity span {
+  opacity: 0;
+  transform: translateY(2px);
+}
+
+#notch-face.nf-iomi-auth .nf-iomi-identity span {
+  animation: nfIomiLetterIn .4s cubic-bezier(.2,.7,.2,1) forwards;
+}
+
+#notch-face.nf-iomi-auth .nf-iomi-identity span:nth-child(1) { animation-delay: .1s; }
+#notch-face.nf-iomi-auth .nf-iomi-identity span:nth-child(2) { animation-delay: .55s; }
+#notch-face.nf-iomi-auth .nf-iomi-identity span:nth-child(3) { animation-delay: 1s; }
+#notch-face.nf-iomi-auth .nf-iomi-identity span:nth-child(4) { animation-delay: 1.45s; }
+
+@keyframes nfIomiLetterIn {
+  to { opacity: 1; transform: none; }
+}
+
+#notch-face .nf-iomi-awake-eyes {
+  top: calc(var(--nf-notch-h) + 9px);
+  left: 50%;
+  display: flex;
+  gap: 7px;
+  opacity: 0;
+  filter: blur(3px);
+  transform: translateX(-50%) scale(.28);
+  transition: opacity .36s ease .08s, filter .44s ease, transform .52s cubic-bezier(.16,.9,.25,1);
+}
+
+#notch-face .nf-iomi-awake-eyes i,
+#notch-face .nf-iomi-guide-eyes i {
+  display: block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #f4e4dc;
+  box-shadow: 0 0 7px rgba(244,228,220,.28);
+}
+
+#notch-face.nf-iomi-awake .nf-iomi-identity {
+  opacity: 0;
+  filter: blur(2px);
+  transform: translateX(-50%) scale(.32);
+}
+
+#notch-face.nf-iomi-awake .nf-iomi-awake-eyes {
+  opacity: 1;
+  filter: blur(0);
+  transform: translateX(-50%) scale(1);
+}
+
+#notch-face .nf-iomi-expanded-card {
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transform: translateY(10px);
+  transition: opacity .4s ease .3s, transform .5s ease .28s;
+}
+
+#notch-face.nf-iomi-expanded .nf-pill {
+  width: 610px;
+  height: 180px;
+  border-radius: 0 0 38px 38px;
+}
+
+#notch-face.nf-iomi-expanded .nf-shine {
+  width: 610px;
+  height: 180px;
+}
+
+#notch-face.nf-iomi-expanded .nf-iomi-awake-eyes {
+  opacity: 0;
+}
+
+#notch-face.nf-iomi-expanded .nf-iomi-expanded-card {
+  opacity: 1;
+  transform: none;
+}
+
+#notch-face .nf-iomi-greeting {
+  width: 325px;
+}
+
+#notch-face .nf-iomi-greeting strong {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  color: #f3efe5;
+  font-size: 31px;
+  font-weight: 600;
+  letter-spacing: -.035em;
+}
+
+#notch-face .nf-iomi-greeting strong span {
+  opacity: 0;
+  filter: blur(5px);
+  transform: translateY(7px);
+}
+
+#notch-face.nf-iomi-expanded .nf-iomi-greeting strong span {
+  animation: nfIomiGreetingWord .52s cubic-bezier(.2,.75,.2,1) forwards;
+}
+
+#notch-face.nf-iomi-expanded .nf-iomi-greeting strong span:nth-child(1) { animation-delay: .43s; }
+#notch-face.nf-iomi-expanded .nf-iomi-greeting strong span:nth-child(2) { animation-delay: .76s; }
+#notch-face.nf-iomi-expanded .nf-iomi-greeting strong span:nth-child(3) { animation-delay: 1.09s; }
+
+@keyframes nfIomiGreetingWord {
+  to { opacity: 1; filter: blur(0); transform: none; }
+}
+
+#notch-face .nf-iomi-greeting small,
+#notch-face .nf-iomi-wake-guide small {
+  display: block;
+  margin-top: 10px;
+  color: rgba(243,239,229,.42);
+  font-size: 15px;
+}
+
+#notch-face .nf-iomi-divider {
+  width: 1px;
+  height: 0;
+  margin: 0 28px;
+  background: linear-gradient(180deg, rgba(244,207,135,.16), rgba(236,128,120,.58), rgba(119,156,255,.16));
+  opacity: 0;
+  transition: height .65s cubic-bezier(.2,.8,.2,1) .52s, opacity .3s ease .5s;
+}
+
+#notch-face.nf-iomi-expanded .nf-iomi-divider {
+  height: 92px;
+  opacity: 1;
+}
+
+#notch-face .nf-iomi-wake-guide {
+  width: 165px;
+  opacity: 0;
+  transform: translateX(8px);
+  transition: opacity .42s ease 1.25s, transform .52s ease 1.22s;
+}
+
+#notch-face.nf-iomi-expanded .nf-iomi-wake-guide {
+  opacity: 1;
+  transform: none;
+}
+
+#notch-face .nf-iomi-guide-eyes {
+  display: flex;
+  gap: 7px;
+  margin-bottom: 12px;
+}
+
+#notch-face .nf-iomi-wake-guide > div:not(.nf-iomi-guide-eyes) {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 7px;
+}
+
+#notch-face .nf-iomi-wake-guide kbd {
+  min-width: 29px;
+  padding: 5px 7px;
+  border: 1px solid rgba(255,255,255,.14);
+  border-bottom-color: rgba(255,255,255,.28);
+  border-radius: 7px;
+  color: rgba(255,255,255,.76);
+  background: rgba(255,255,255,.055);
+  font: 500 11px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+  text-align: center;
+}
+
+#notch-face .nf-iomi-wake-guide em {
+  color: rgba(243,239,229,.34);
+  font-size: 10px;
+  font-style: normal;
+}
+
+#walker.nf-iomi-boot-jump svg {
+  animation: nfIomiWalkerJump 1.25s cubic-bezier(.18,.75,.25,1);
+}
+
+@keyframes nfIomiWalkerJump {
+  0% { transform: translateY(-30px) scale(.2); opacity: 0; }
+  28% { opacity: 1; }
+  58% { transform: translateY(-12px) scale(1.08) rotate(-3deg); }
+  78% { transform: translateY(5px) scale(.96) rotate(2deg); }
+  100% { transform: none; opacity: 1; }
 }
 
 /* The coral wave (from the site reveal, verbatim): a transparent band
@@ -776,6 +1510,33 @@ body {
   opacity: 1;
 }
 
+#notch-face.nf-dictation #nf-status {
+  left: 51px;
+  right: 24px;
+  bottom: 7px;
+  text-align: left;
+  font-size: 8.5px;
+  letter-spacing: 0.1em;
+  color: rgba(222, 255, 245, 0.86);
+}
+
+#notch-face.nf-dictation.listen:not(.captioning) .nf-viz {
+  display: flex;
+  left: 18px;
+  bottom: 8px;
+  height: 10px;
+  gap: 2px;
+  transform: none;
+}
+
+#notch-face.nf-dictation .nf-viz span {
+  width: 2px;
+  max-height: 10px;
+  background: #72EDC5;
+  box-shadow: 0 0 3px rgba(61,232,178,0.44);
+  animation-duration: 1.1s;
+}
+
 #notch-face.blink .nf-eye {
   animation: nfBlink 0.22s ease-in-out;
 }
@@ -838,13 +1599,42 @@ body {
 #notch-face.listen .nf-sonar i:nth-child(2) { animation-delay: 0.8s; }
 #notch-face.listen .nf-sonar i:nth-child(3) { animation-delay: 1.6s; }
 
+#notch-face.nf-dictation.listen .nf-sonar i {
+  border-color: #3DE8B2;
+  border-width: 1px;
+  animation-name: nfYapSonar;
+  animation-duration: 2.8s;
+}
+
+#notch-face.nf-dictation.listen .nf-sonar i:nth-child(2) {
+  animation-delay: 1.4s;
+}
+
+#notch-face.nf-dictation.listen .nf-sonar i:nth-child(3) {
+  display: none;
+}
+
 @keyframes nfSonar {
   0% { width: 120px; height: 44px; opacity: 0.6; border-width: 2px; }
   100% { width: 340px; height: 150px; opacity: 0; border-width: 0.5px; }
 }
 
+@keyframes nfYapSonar {
+  0% { width: 110px; height: 30px; opacity: 0.28; }
+  100% { width: 238px; height: 76px; opacity: 0; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   #notch-face.listen .nf-sonar i { animation: none; opacity: 0.4; }
+  #notch-face.nf-dictation.listen .nf-pill {
+    animation: none;
+    box-shadow: 0 0 0 1px rgba(61,232,178,0.6), 0 0 10px 1px rgba(61,232,178,0.24);
+  }
+  #walker.dictation-listening::before,
+  #walker.dictation-listening::after,
+  #walker.dictation-listening svg {
+    animation: none;
+  }
 }
 
 @keyframes nfBars {
@@ -945,6 +1735,277 @@ body {
   transform-origin: center bottom;
   position: relative;
   z-index: 1;
+  will-change: transform;
+}
+
+#walker-flip.resizing {
+  transition: transform 720ms cubic-bezier(0.18, 1.32, 0.34, 1);
+}
+
+#braino-customizer {
+  position: fixed;
+  z-index: 90;
+  box-sizing: border-box;
+  width: 286px;
+  padding: 9px 16px 16px;
+  border-radius: 20px;
+  color: rgba(255, 255, 255, 0.94);
+  background:
+    linear-gradient(180deg, rgba(67, 67, 70, 0.82), rgba(35, 35, 37, 0.88));
+  border: 0.5px solid rgba(255, 255, 255, 0.2);
+  box-shadow:
+    0 24px 70px rgba(0, 0, 0, 0.38),
+    0 4px 16px rgba(0, 0, 0, 0.22),
+    inset 0 0.5px 0 rgba(255, 255, 255, 0.18);
+  backdrop-filter: blur(32px) saturate(170%);
+  -webkit-backdrop-filter: blur(32px) saturate(170%);
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(7px) scale(0.975);
+  transform-origin: center bottom;
+  transition: opacity 160ms ease, transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1), visibility 160ms ease;
+}
+
+#braino-customizer.show {
+  pointer-events: auto;
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0) scale(1);
+}
+
+.braino-customizer-handle {
+  width: 34px;
+  height: 4px;
+  margin: 0 auto 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.braino-customizer-head,
+.braino-customizer-actions,
+.braino-customizer-scale {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.braino-customizer-head {
+  justify-content: flex-start;
+}
+
+.braino-customizer-icon {
+  position: relative;
+  flex: 0 0 auto;
+  width: 35px;
+  height: 35px;
+  margin-right: 10px;
+  border-radius: 9px;
+  background: linear-gradient(145deg, #5e5e62, #3d3d40);
+  border: 0.5px solid rgba(255, 255, 255, 0.2);
+  box-shadow: inset 0 0.5px 0 rgba(255, 255, 255, 0.2), 0 3px 8px rgba(0, 0, 0, 0.2);
+}
+
+.braino-customizer-icon::before,
+.braino-customizer-icon::after,
+.braino-customizer-icon span {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  border: 1.5px solid rgba(255, 255, 255, 0.88);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.braino-customizer-icon::before {
+  width: 19px;
+  height: 19px;
+}
+
+.braino-customizer-icon::after {
+  width: 3px;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.braino-customizer-icon span {
+  width: 11px;
+  height: 11px;
+  border-color: rgba(255, 255, 255, 0.52);
+}
+
+.braino-customizer-heading {
+  min-width: 0;
+  flex: 1;
+}
+
+.braino-customizer-kicker {
+  margin-top: 2px;
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 10.5px;
+  font-weight: 450;
+  letter-spacing: -0.005em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.braino-customizer-title {
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.braino-customizer-prompt {
+  margin: 13px 1px 0;
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 11px;
+  font-weight: 430;
+  line-height: 1.36;
+  letter-spacing: -0.006em;
+}
+
+#braino-size-value {
+  min-width: 42px;
+  margin-left: 8px;
+  color: rgba(255, 255, 255, 0.68);
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  font-weight: 550;
+  text-align: right;
+}
+
+.braino-customizer-control {
+  margin: 17px -1px 0;
+  padding: 13px 12px 10px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.17);
+  border: 0.5px solid rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+
+#braino-size-range {
+  display: block;
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  height: 16px;
+  margin: 0 0 5px;
+  background: transparent;
+  cursor: ew-resize;
+}
+
+#braino-size-range::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #0a84ff, #64a9ff);
+  box-shadow: 0 0.5px 1px rgba(0, 0, 0, 0.35);
+}
+
+#braino-size-range::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 15px;
+  height: 15px;
+  margin-top: -5.5px;
+  border: 0.5px solid rgba(0, 0, 0, 0.22);
+  border-radius: 50%;
+  background: linear-gradient(180deg, #ffffff, #e9e9eb);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.38), inset 0 0.5px 0 #fff;
+}
+
+.braino-customizer-scale {
+  color: rgba(255, 255, 255, 0.38);
+  font-size: 9px;
+  font-weight: 500;
+}
+
+.braino-customizer-section {
+  margin: 14px -1px 0;
+}
+
+.braino-customizer-section-title {
+  margin: 0 1px 8px;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.braino-character-row {
+  display: flex;
+  gap: 8px;
+}
+
+.braino-character-option {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 9px 11px;
+  border-radius: 12px;
+  border: 0.5px solid rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.17);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.12);
+  color: rgba(255, 255, 255, 0.72);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.braino-character-option.active {
+  border-color: rgba(10, 132, 255, 0.7);
+  background: rgba(10, 132, 255, 0.16);
+  color: #fff;
+}
+
+.braino-character-name {
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.braino-character-blurb {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 10px;
+  font-weight: 460;
+}
+
+.braino-character-option.active .braino-character-blurb {
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.braino-customizer-actions {
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.braino-customizer-actions button {
+  flex: 1;
+  min-height: 30px;
+  border: 0.5px solid rgba(255, 255, 255, 0.14);
+  border-radius: 7px;
+  color: rgba(255, 255, 255, 0.82);
+  background: rgba(255, 255, 255, 0.09);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 550;
+  cursor: pointer;
+  box-shadow: inset 0 0.5px 0 rgba(255, 255, 255, 0.12), 0 1px 2px rgba(0, 0, 0, 0.18);
+}
+
+.braino-customizer-actions button:active {
+  filter: brightness(0.88);
+}
+
+#braino-customizer-done {
+  border-color: rgba(0, 91, 210, 0.78);
+  color: #fff;
+  background: linear-gradient(180deg, #1687f8, #0875e1);
+  box-shadow: inset 0 0.5px 0 rgba(255, 255, 255, 0.28), 0 1px 3px rgba(0, 85, 190, 0.35);
 }
 
 #speech-bubble {
@@ -976,6 +2037,24 @@ body {
 #speech-bubble.show {
   opacity: 1;
   transform: translate(-50%, -100%) scale(1);
+}
+
+#speech-bubble.reply-karaoke {
+  color: transparent;
+}
+
+#speech-bubble .reply-caption-word {
+  color: rgba(255, 255, 255, 0.34);
+  transition: color 120ms ease, text-shadow 120ms ease;
+}
+
+#speech-bubble .reply-caption-word.spoken {
+  color: rgba(255, 255, 255, 0.96);
+}
+
+#speech-bubble .reply-caption-word.speaking-now {
+  color: #ff948a;
+  text-shadow: 0 0 16px rgba(232, 120, 110, 0.5);
 }
 
 #status-pill {
@@ -1385,6 +2464,13 @@ body {
   pointer-events: none;
   transition: opacity 0.24s ease 0.14s, transform 0.34s cubic-bezier(0.34, 1.25, 0.4, 1) 0.1s;
 }
+
+/* Presentation gate only: none of the media, calendar, timer, battery, or
+   Bluetooth implementation is removed. The core mechanism owns the island
+   until that motion system is signed off. */
+#notch-face.nf-core-only .nf-tray {
+  display: none !important;
+}
 #notch-face.expanded .nf-tray {
   opacity: 1;
   transform: none;
@@ -1635,11 +2721,10 @@ body {
 /* Click feedback: the island dips for a beat so a tap FEELS like a tap.
    Keyframe on purpose — a transform transition here would override the
    pill's width/height transition list. */
-#notch-face .nf-pill { transform-origin: top center; }
-#notch-face.nf-press .nf-pill { animation: nfPress 0.17s ease; }
-@keyframes nfPress {
-  0%, 100% { transform: scale(1); }
-  40% { transform: scale(0.96); }
+#notch-face.nf-press .nf-pill {
+  /* Never animate transform for tap feedback: transform positions asymmetric
+     captions, so replacing it made the island jump to a second origin. */
+  filter: brightness(1.16);
 }
 
 /* ══ Time suite: alarm ring state + tray time rows ══ */

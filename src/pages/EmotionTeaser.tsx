@@ -570,7 +570,7 @@ export default function EmotionTeaser() {
     const seek = (ms: number) => { manualT = clamp(ms, 0, T.end); if (trackLoaded && audioEl) audioEl.currentTime = (manualT + AUDIO_START_OFFSET_MS) / 1000; };
 
     const fmt = (ms: number) => `${(ms / 1000).toFixed(2)}s / ${(T.end / 1000).toFixed(1)}s`;
-    let audioAnchor = 0, lastUi = 0;
+    let audioAnchor = 0, lastUi = 0, endedOnce = false;
     const loop = () => {
       if (playing) {
         if (trackLoaded && audioEl) {
@@ -582,7 +582,13 @@ export default function EmotionTeaser() {
         } else {
           manualT = performance.now() - startWall;
         }
-        if (manualT >= T.end) { resetSceneCaches(); seek(0); if (trackLoaded && audioEl) { audioEl.currentTime = AUDIO_START_OFFSET_MS / 1000; audioEl.play().catch(() => {}); } else { startWall = performance.now(); } }
+        if (manualT >= T.end) {
+          if (!endedOnce && new URLSearchParams(window.location.search).has("embed")) {
+            endedOnce = true;
+            window.parent.postMessage({ type: "braino-tv-ended" }, window.location.origin);
+          }
+          resetSceneCaches(); seek(0); if (trackLoaded && audioEl) { audioEl.currentTime = AUDIO_START_OFFSET_MS / 1000; audioEl.play().catch(() => {}); } else { startWall = performance.now(); }
+        }
       }
       render(manualT);
       const now = performance.now();
@@ -704,8 +710,9 @@ export default function EmotionTeaser() {
     };
   }, [runId]);
 
+  const embed = typeof window !== "undefined" && new URLSearchParams(window.location.search).has("embed");
   return (
-    <div className="et-films">
+    <div className={"et-films" + (embed ? " et-embed" : "")}>
       <section className="et" ref={rootRef}>
         <div className="et-frame">
           <div className="et-stage">

@@ -1,0 +1,124 @@
+/* .nt-script-panel (notch-teaser.css) sets pointer-events:none for the
+   read-only auto-scrolling display; this must win regardless of CSS module
+   load order, hence the doubled-up selector instead of a single class. */
+.nt-script-panel.se-panel { pointer-events: auto; }
+.se-edit-btn {
+  display: inline-flex; align-self: flex-start; margin-bottom: 4px;
+  padding: 6px 14px; border-radius: 999px; border: none; cursor: pointer;
+  background: rgba(255,255,255,.1); color: #F5EFE7; font-size: 11px; letter-spacing: .06em;
+  text-transform: uppercase; font-family: -apple-system, "SF Pro Text", "Helvetica Neue", sans-serif;
+  transition: background .15s ease;
+}
+.se-edit-btn:hover { background: rgba(232,120,110,.85); color: #1B0F0D; }
+
+.se-editing {
+  background: rgba(10,10,12,.72); backdrop-filter: blur(16px);
+  border-right: 1px solid rgba(255,255,255,.08);
+}
+.se-head {
+  display: flex; align-items: center; justify-content: space-between;
+  font-family: -apple-system, "SF Pro Text", "Helvetica Neue", sans-serif;
+  font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: rgba(245,239,231,.5);
+  margin-bottom: 10px;
+}
+
+.se-toolbar {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  padding: 6px; border-radius: 12px; background: rgba(20,20,22,.92); backdrop-filter: blur(10px);
+  box-shadow: 0 10px 30px rgba(0,0,0,.5), 0 0 0 1px rgba(255,255,255,.08);
+}
+.se-toolbar button {
+  padding: 7px 13px; border-radius: 999px; border: none; cursor: pointer;
+  background: rgba(255,255,255,.1); color: #F5EFE7; font-size: 12px; font-weight: 600;
+  font-family: -apple-system, "SF Pro Text", "Helvetica Neue", sans-serif;
+  transition: background .15s ease, transform .1s ease;
+}
+.se-toolbar button:hover { background: #E8786E; color: #1B0F0D; transform: translateY(-1px); }
+/* the floating selection popover — pinned to the viewport, centred above
+   the selection, like a native text-editing bubble menu */
+.se-toolbar--float {
+  position: fixed; transform: translateY(-110%); z-index: 200; pointer-events: auto;
+  max-width: 280px;
+}
+
+.se-line-row {
+  display: flex; align-items: flex-start; gap: 6px;
+  border-top: 1px solid rgba(255,255,255,.16);
+  transition: background .12s ease;
+}
+.se-line-row:first-child { border-top: none; }
+.se-line-row:last-child { border-bottom: 1px solid rgba(255,255,255,.16); }
+.se-line-row:hover { background: rgba(255,255,255,.04); }
+.se-line-row.se-dragging { opacity: .4; }
+.se-line-handle {
+  flex-shrink: 0; margin-top: 10px; cursor: grab; color: rgba(245,239,231,.55);
+  font-size: 13px; line-height: 1; user-select: none;
+}
+.se-line-handle:active { cursor: grabbing; }
+.se-line {
+  flex: 1; padding: 10px 0; min-width: 0;
+  font-family: -apple-system, "SF Pro Text", "Helvetica Neue", sans-serif;
+  font-size: 14px; line-height: 1.5; color: rgba(245,239,231,.85);
+  cursor: text; user-select: text;
+}
+.se-line:focus { outline: none; background: rgba(255,255,255,.05); border-radius: 6px; }
+.se-line-empty { color: rgba(245,239,231,.35); font-style: italic; }
+.se-line-graphic {
+  flex-shrink: 0; margin-top: 6px; width: 22px; height: 22px; border-radius: 50%;
+  border: none; cursor: pointer; background: rgba(255,255,255,.08); font-size: 11px;
+  opacity: 0; transition: opacity .15s ease, background .15s ease;
+}
+.se-line-row:hover .se-line-graphic { opacity: .8; }
+.se-line-graphic.on { opacity: 1; background: rgba(122,162,255,.35); }
+.se-line-graphic:hover { background: #7AA2FF; }
+.se-line-del {
+  flex-shrink: 0; margin-top: 8px; width: 22px; height: 22px; border-radius: 50%;
+  border: none; cursor: pointer; background: rgba(255,255,255,.08); color: rgba(245,239,231,.6);
+  font-size: 11px; line-height: 1; opacity: 0; transition: opacity .15s ease, background .15s ease;
+}
+.se-line-row:hover .se-line-del { opacity: 1; }
+.se-line-del:hover { background: #E8786E; color: #1B0F0D; }
+
+.se-add-row { display: flex; gap: 8px; margin-top: 10px; }
+.se-add-line {
+  flex: 1; padding: 9px; border-radius: 10px;
+  border: 1px dashed rgba(255,255,255,.2); background: transparent; cursor: pointer;
+  color: rgba(245,239,231,.55); font-size: 12px; font-weight: 600;
+  font-family: -apple-system, "SF Pro Text", "Helvetica Neue", sans-serif;
+  transition: border-color .15s ease, color .15s ease;
+}
+.se-add-line:hover { border-color: #E8786E; color: #F5EFE7; }
+
+.se-rewrite-link {
+  margin-top: 12px; background: none; border: none; padding: 0; cursor: pointer;
+  color: rgba(245,239,231,.4); font-size: 11px; text-decoration: underline;
+  font-family: -apple-system, "SF Pro Text", "Helvetica Neue", sans-serif;
+}
+.se-rewrite-link:hover { color: rgba(245,239,231,.7); }
+
+.se-textarea {
+  flex: 1; min-height: 260px; width: 100%; resize: vertical;
+  background: rgba(0,0,0,.35); border: 1px solid rgba(255,255,255,.1); border-radius: 12px;
+  padding: 12px; color: #F5EFE7; font-family: "SF Mono", ui-monospace, Menlo, monospace;
+  font-size: 13px; line-height: 1.9; letter-spacing: .01em;
+}
+.se-textarea:focus { outline: none; border-color: rgba(232,120,110,.6); }
+
+.se-hint {
+  margin-top: 10px; font-size: 11px; line-height: 1.6; color: rgba(245,239,231,.45);
+  font-family: -apple-system, "SF Pro Text", "Helvetica Neue", sans-serif;
+}
+.se-hint code {
+  background: rgba(255,255,255,.1); border-radius: 4px; padding: 1px 5px;
+  font-family: "SF Mono", ui-monospace, Menlo, monospace; color: #F0A86B;
+}
+
+.se-apply {
+  margin-top: 12px; padding: 10px 16px; border-radius: 999px; border: none; cursor: pointer;
+  background: #E8786E; color: #1B0F0D; font-weight: 700; font-size: 13px;
+  font-family: -apple-system, "SF Pro Text", "Helvetica Neue", sans-serif;
+  transition: filter .15s ease;
+}
+.se-apply:hover { filter: brightness(1.08); }
+
+@media (max-width: 860px) { .se-panel { display: none; } }

@@ -1,0 +1,57 @@
+/* braino-writes.css — the autonomous-journal page. Composes apple.css tokens. */
+
+.bw-live { max-width: var(--ap-maxw); margin: 0 auto; padding: clamp(20px,3vw,40px) var(--ap-gutter) var(--ap-section); }
+.bw-live-card {
+  border: 1px solid var(--ap-hairline); border-radius: var(--ap-radius);
+  background: linear-gradient(160deg, var(--ap-violet-panel), color-mix(in srgb, var(--ap-violet) 22%, var(--ap-surface)));
+  padding: clamp(28px,4vw,52px);
+}
+.bw-live-top { display: inline-flex; align-items: center; gap: 9px; font-size: 13px; font-weight: 600; letter-spacing: 0.02em; color: var(--ap-violet); }
+.bw-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--ap-violet); box-shadow: 0 0 0 4px color-mix(in srgb, var(--ap-violet) 24%, transparent); animation: bwPulse 1.4s ease-in-out infinite; }
+@keyframes bwPulse { 0%,100% { opacity: 0.5; transform: scale(0.85); } 50% { opacity: 1; transform: scale(1.1); } }
+.bw-writing { font-size: clamp(24px,3.4vw,40px); font-weight: 600; letter-spacing: -0.02em; line-height: 1.12; margin: 16px 0 8px; color: var(--ap-ink); text-wrap: balance; }
+.bw-fromline { margin: 0; font-size: 15px; color: var(--ap-ink-soft); font-weight: 500; }
+.bw-fromline b { color: var(--ap-ink); font-weight: 600; }
+.bw-think { display: flex; align-items: flex-end; gap: 5px; height: 26px; margin: 22px 0; }
+.bw-think i { width: 5px; border-radius: 3px; background: var(--ap-violet); height: 26px; transform-origin: center; animation: bwWave 1.2s ease-in-out infinite; }
+.bw-think i:nth-child(1) { animation-delay: 0s; } .bw-think i:nth-child(2) { animation-delay: .12s; }
+.bw-think i:nth-child(3) { animation-delay: .24s; } .bw-think i:nth-child(4) { animation-delay: .08s; }
+.bw-think i:nth-child(5) { animation-delay: .3s; } .bw-think i:nth-child(6) { animation-delay: .18s; } .bw-think i:nth-child(7) { animation-delay: .05s; }
+@keyframes bwWave { 0%,100% { transform: scaleY(0.3); } 50% { transform: scaleY(1.4); } }
+.bw-next { display: inline-flex; align-items: center; gap: 12px; font-size: 14px; font-weight: 500; color: var(--ap-ink-soft); border-top: 1px solid var(--ap-hairline); padding-top: 20px; }
+.bw-clock { font-variant-numeric: tabular-nums; font-size: clamp(22px,3vw,30px); font-weight: 600; letter-spacing: -0.01em; color: var(--ap-ink); }
+@media (prefers-reduced-motion: reduce) { .bw-dot, .bw-think i { animation: none; } .bw-think i { height: 14px; } }
+
+.bw-how { max-width: var(--ap-maxw); margin: 0 auto; padding: 0 var(--ap-gutter) var(--ap-section); }
+.bw-how-head { margin-bottom: clamp(24px,4vw,44px); }
+.bw-how-sub { margin: 14px 0 0; font-size: clamp(16px,1.9vw,19px); line-height: 1.5; color: var(--ap-ink-soft); font-weight: 500; max-width: 60ch; }
+.bw-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: clamp(12px,1.6vw,16px); }
+.bw-step { display: flex; gap: clamp(16px,2.4vw,28px); align-items: baseline; border: 1px solid var(--ap-hairline); border-radius: 18px; background: var(--ap-surface); padding: clamp(20px,2.4vw,28px); }
+.bw-step-n { font-size: clamp(22px,3vw,34px); font-weight: 700; color: color-mix(in srgb, var(--ap-violet) 60%, var(--ap-hairline)); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+.bw-step h3 { margin: 0 0 6px; font-size: clamp(18px,2vw,22px); font-weight: 600; letter-spacing: -0.015em; }
+.bw-step p { margin: 0; font-size: 15px; line-height: 1.5; color: var(--ap-ink-soft); font-weight: 500; }
+
+.bw-approvals { max-width: var(--ap-maxw); margin: 0 auto; padding: 0 var(--ap-gutter) var(--ap-section); }
+.bw-appr-head { margin-bottom: clamp(22px,3vw,36px); }
+.bw-count { display: inline-grid; place-items: center; min-width: 30px; height: 30px; padding: 0 8px; border-radius: 980px; background: var(--ap-violet); color: #fff; font-size: 16px; font-weight: 600; margin-left: 10px; vertical-align: middle; }
+.bw-empty { font-size: 16px; color: var(--ap-ink-soft); font-weight: 500; }
+.bw-appr-list { display: grid; gap: clamp(12px,1.6vw,16px); }
+.bw-appr { display: flex; gap: 20px; align-items: center; justify-content: space-between; flex-wrap: wrap; border: 1px solid var(--ap-hairline); border-radius: 18px; background: var(--ap-surface); padding: clamp(20px,2.4vw,28px); }
+.bw-appr-body { flex: 1; min-width: 260px; }
+.bw-appr-tag { font-size: 12px; font-weight: 600; letter-spacing: 0.02em; color: var(--ap-violet); }
+.bw-appr-body h3 { margin: 8px 0 6px; font-size: clamp(19px,2.2vw,24px); font-weight: 600; letter-spacing: -0.015em; }
+.bw-appr-body p { margin: 0; font-size: 15px; line-height: 1.5; color: var(--ap-ink-soft); font-weight: 500; max-width: 60ch; }
+.bw-appr-actions { display: flex; gap: 10px; flex-shrink: 0; }
+.bw-view, .bw-approve { font: inherit; font-size: 14px; font-weight: 500; cursor: pointer; border-radius: 980px; padding: 10px 18px; border: 1px solid var(--ap-hairline); background: var(--ap-surface); color: var(--ap-ink); transition: border-color 0.2s ease, filter 0.2s ease; }
+.bw-view:hover { border-color: var(--ap-violet); }
+.bw-approve { background: var(--ap-violet); border-color: var(--ap-violet); color: #fff; }
+.bw-approve:hover { filter: brightness(1.08); }
+
+/* article preview modal — in the journal article style */
+.bw-modal { position: fixed; inset: 0; z-index: 3000; background: rgba(10,10,12,0.55); backdrop-filter: blur(6px); display: grid; place-items: start center; overflow-y: auto; padding: clamp(20px,5vh,60px) var(--ap-gutter); }
+.bw-article { position: relative; width: min(720px, 100%); background: var(--ap-surface); border: 1px solid var(--ap-hairline); border-radius: var(--ap-radius); padding: clamp(32px,5vw,64px); }
+.bw-close { position: absolute; top: 18px; right: 18px; width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--ap-hairline); background: var(--ap-surface); color: var(--ap-ink); cursor: pointer; font-size: 14px; }
+.bw-art-tag { font-size: 13px; font-weight: 600; color: var(--ap-violet); margin: 0 0 12px; }
+.bw-article h1 { font-size: clamp(28px,4vw,44px); font-weight: 600; letter-spacing: -0.022em; line-height: 1.08; margin: 0 0 24px; color: var(--ap-ink); text-wrap: balance; }
+.bw-article p { font-size: clamp(17px,2vw,20px); line-height: 1.6; color: var(--ap-ink); font-weight: 400; margin: 0 0 20px; }
+.bw-art-foot { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-top: 12px; padding-top: 22px; border-top: 1px solid var(--ap-hairline); font-size: 14px; color: var(--ap-ink-soft); font-weight: 500; }

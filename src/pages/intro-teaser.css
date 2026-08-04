@@ -160,3 +160,11 @@ body.nt-editmode .nt-timeline-marks { opacity: 1; pointer-events: auto; }
   color: rgba(255,255,255,.82); background: rgba(0,0,0,.35); border-radius: 4px;
   padding: 2px 6px; text-shadow: 0 1px 2px rgba(0,0,0,.6);
 }
+
+/* Embed mode (?embed): strip all editor chrome — show only the film. */
+.it-embed .nt-scrubber,
+.it-embed .nt-framecounter,
+.it-embed .nt-log,
+.it-embed .nt-cutmark,
+.it-embed .nt-cutmarks { display: none !important; }
+.it-embed, .it-embed .nt, .it-embed .nt-frame { background: #000 !important; }

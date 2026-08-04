@@ -45,16 +45,53 @@ const CUES: Array<{ moment: Moment; re: RegExp; weight: 1 | 2 | 3 }> = [
   { moment: "focused_task", weight: 1, re: /\b(fix|debug|refactor|write (me )?(a|the|some)|code|function|implement|build|summari[sz]e|translate|convert|generate|how do i|give me the|just (tell|show) me|tldr)\b/i },
 ];
 
-export function detectMoment(text: string | null | undefined): MomentReading {
-  const t = String(text || "").trim();
-  if (!t) return { moment: "neutral", intensity: 1 };
+// Which cue actually fired, for the breakdown UI. Empty when nothing matched.
+export type CueHit = { moment: Moment; matched: string; weight: 1 | 2 | 3 };
 
+export function detectMomentDetailed(text: string | null | undefined): MomentReading & { hits: CueHit[] } {
+  const t = String(text || "").trim();
+  if (!t) return { moment: "neutral", intensity: 1, hits: [] };
+
+  const hits: CueHit[] = [];
   for (const cue of CUES) {
-    if (cue.re.test(t)) {
-      return { moment: cue.moment, intensity: cue.weight };
-    }
+    const m = t.match(cue.re);
+    if (m) hits.push({ moment: cue.moment, matched: m[0], weight: cue.weight });
   }
-  return { moment: "neutral", intensity: 1 };
+  if (!hits.length) return { moment: "neutral", intensity: 1, hits: [] };
+
+  // Crisis is absolute: if any safety cue fired at all, it wins, full stop. That
+  // stays a hard-coded word match on purpose, so a life-or-death moment never
+  // depends on a model being reachable or in a good mood.
+  const crisis = hits.find((h) => h.moment === "crisis");
+  if (crisis) return { moment: "crisis", intensity: 3, hits };
+
+  // Otherwise STRONGEST match wins, not first. "I got the job but I'm terrified"
+  // used to land on whichever cue happened to be listed higher in the file; now
+  // the heavier signal takes it, and ties fall back to declaration order.
+  const best = hits.reduce((a, b) => (b.weight > a.weight ? b : a));
+  return { moment: best.moment, intensity: best.weight, hits };
+}
+
+export function detectMoment(text: string | null | undefined): MomentReading {
+  const { moment, intensity } = detectMomentDetailed(text);
+  return { moment, intensity };
+}
+
+// Does a message that matched NO cue still look emotionally loaded? Used to decide
+// whether it is worth one cheap model read to find the real moment. Deliberately
+// cheap and conservative: "open gmail" must never trip this, because the whole point
+// is that ordinary quick asks cost nothing extra.
+const SELF_REFERENTIAL = /\b(i|i'?m|im|me|my|myself|we|our)\b/i;
+const FEELING_SHAPED = /\b(feel|feeling|felt|been|lately|today|tonight|again|anymore|honestly|kind of|kinda|sort of|really|just)\b/i;
+const ACTION_ONLY = /^\s*(open|play|search|find|go to|show|navigate|close|read|summari[sz]e|translate|convert|email|send|add|buy|book|check)\b/i;
+
+export function looksEmotionallyLoaded(text: string | null | undefined): boolean {
+  const t = String(text || "").trim();
+  if (t.length < 12) return false;          // "hey", "ok", "yes"
+  if (ACTION_ONLY.test(t)) return false;    // a command, not a feeling
+  if (!SELF_REFERENTIAL.test(t)) return false;
+  const words = t.split(/\s+/).length;
+  return words >= 5 && (FEELING_SHAPED.test(t) || words >= 14);
 }
 
 // For each moment, the trait ids that should lead the response. The engine moves these to the

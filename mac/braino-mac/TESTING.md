@@ -17,19 +17,43 @@ Statuses in STATUS.md are the source of truth for what SHOULD work. ⏸️ items
 ---
 
 ## 1. Boot & presence
-- [ ] Launch `npm run mac:dev` → notch eyes appear → auth glow → green verdict → eyes open + wake chime
-- [ ] Boot greeting: he scans the screen, greets with an observation, mic auto-connects, you can answer immediately
-- [ ] After ~9s he says "press Control twice anytime", hangs up, but stays awake (eyes open)
-- [ ] Braino never pops out of the notch on his own
+- [ ] Launch `npm run mac:dev` with a saved session → subdued gold/coral/blue perimeter traces once and keeps breathing
+- [ ] IOMI appears exactly centred as four distinct beats: `I` → `O` → `M` → `I`
+- [ ] IOMI resolves inward into the two open operating-layer eyes; no blue auth pulse, coral wave, green verdict, or “verified” beat appears
+- [ ] Island expands → `Good`, `evening`, and the first name fade in separately on the left
+- [ ] Vertical divider and right-side wake guide show double `Control` for voice and double `Command` to bring Braino out
+- [ ] Braino speaks “Good evening, <name>. Everything is ready.” once in his normal voice; no duplicate line or floating reply caption appears
+- [ ] Mascot exits into the upper visible screen area while the notch closes; he does not jump straight to the bottom edge
+- [ ] Repeat after clearing the saved session → browser relay can take longer, but completed IOMI holds cleanly until auth returns
+- [ ] Deny/cancel browser auth → boot exits safely to `auth failed`; no greeting or mascot exit fires
+- [ ] Mic remains off throughout boot; double `Control` still starts the first realtime session normally afterward
 
 ## 2. Hotkeys & summon
 - [ ] Double `Control` → voice session starts (privacy dot coral, edge glow blue)
 - [ ] Double `Control` again → session ends
+- [ ] Single `Control` → nothing happens; one double tap produces one voice toggle with no blinking loop
+- [ ] Double `Option` in an editable field → Yap Mode starts; normal voice/Jarvis does not start
+- [ ] Double `Option` again → Yap Mode stops
 - [ ] `Control+Space` → backup voice toggle
 - [ ] Double `Space` → walker goes home to the notch / overlay shows
 - [ ] Double `Command` (bare taps only) → walker toggles out ↔ home; Cmd+C etc. never triggers it
 - [ ] `Cmd+Shift+H` → Her mode in / out
 - [ ] Say "come out" → walker leaves the notch; drag him anywhere; drop near Dock → he patrols
+
+## 2A. Yap Mode
+- [ ] Put the caret in Notes and double `Option` → notch glows mint while Braino is home
+- [ ] Bring the full mascot out, start Yap Mode → only the standing mascot glows mint
+- [ ] In Chrome/Notion, click a page block and double `Option` → notch immediately expands to `Yap Mode · listening`
+- [ ] Speak in Chrome/Notion → text inserts through the clipboard-restoring paste fallback
+- [ ] Dictate two turns → both land in order at the active caret with readable spacing
+- [ ] Say "new line" and "new paragraph" → layout commands insert the expected breaks
+- [ ] Say exactly "done" → session stops and `done` is not inserted
+- [ ] Say "I got it done yesterday" → sentence is inserted; Yap Mode stays active
+- [ ] Start normal Braino voice and say "Braino, start Yap Mode" → session switches to silent dictation
+- [ ] Move the caret to another editable app while active → the next turn lands there
+- [ ] Try a password or non-editable surface → Braino refuses and inserts nothing
+- [ ] Copy text before forcing the paste fallback → original clipboard is restored afterward
+- [ ] Logs show `dictation.started`, `dictation.inserted`, and `dictation.stopped`
 
 ## 3. Notch island — visual states (no commands, just watch)
 - [ ] Idle home: eyes in the black island, sleepy half-lidded after 30 min silence ("dozing")
@@ -73,6 +97,7 @@ Statuses in STATUS.md are the source of truth for what SHOULD work. ⏸️ items
 
 ## 8. Spotify (voice)
 - [ ] "play Bargad on Spotify" / "play my <playlist> playlist"
+- [ ] Start from a Chrome tab, then "play Bargad on Spotify" → Spotify opens and starts playback → Braino returns to the same Chrome tab before saying what is playing
 - [ ] "pause" / "resume" / "next" / "previous" (works, and "resume watching X" does NOT hijack this)
 - [ ] "set Spotify volume to 40%" / "lower the volume by 20%"
 - [ ] "queue <song>" · "restart this song" · "shuffle on/off" · "repeat on/off"
@@ -97,6 +122,7 @@ Statuses in STATUS.md are the source of truth for what SHOULD work. ⏸️ items
 - [ ] "move the tax PDF to Documents"
 - [ ] "delete the old receipt PDF" → asks → "yes, delete it" → **Touch ID prompt** → Trash
 - [ ] "find document called resume" / "open yaya image"
+- [ ] Regression: "open Claude settings usage" never opens an unrelated PNG; without a matching app, site, or filename, Braino reports that it could not find the target
 - [ ] "how many files do I have" (walks Desktop/Downloads/Documents/iCloud) · "how many braino folders"
 - [ ] "how many files in THIS folder" (with a Finder window open) → counts the open window
 - [ ] "what's worth deleting" → 3 oldest by real last-use, asks about redundant folder

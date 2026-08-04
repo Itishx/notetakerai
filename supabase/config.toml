@@ -31,6 +31,10 @@ entrypoint = "./functions/chat/transcribe-and-notes/index.ts"
 [functions.braino-dev-pulse]
 entrypoint = "./functions/github/braino-dev-pulse/index.ts"
 
+# Braino writes his own journal from the commit history (cron -> pending draft).
+[functions.generate-journal]
+entrypoint = "./functions/github/generate-journal/index.ts"
+
 # ── google ─────────────────────────────────────────────────────────────
 
 [functions.google-calendar-action]
@@ -223,6 +227,28 @@ verify_jwt = false
 
 [functions.fish-audio-tts]
 entrypoint = "./functions/voice/fish-audio-tts/index.ts"
+verify_jwt = false
+
+# ── reasoning (Human Intelligence Layer) ─────────────────────────────────
+
+# Public on purpose: the /human-intelligence lab lets anyone watch the brain think.
+[functions.hil-reason]
+entrypoint = "./functions/reasoning/hil-reason/index.ts"
+verify_jwt = false
+
+[functions.hil-feedback]
+entrypoint = "./functions/reasoning/hil-feedback/index.ts"
+verify_jwt = false
+
+# HIL Version 1, the loop: one call per turn, the browser holds the run state.
+[functions.hil-loop]
+entrypoint = "./functions/reasoning/hil-loop/index.ts"
+verify_jwt = false
+
+# Braino actually replying, with the full emotional breakdown of how he replied.
+# Public on purpose (same as the HIL lab); model is pinned server-side.
+[functions.braino-reply]
+entrypoint = "./functions/chat/braino-reply/index.ts"
 verify_jwt = false
 
 # ── research ─────────────────────────────────────────────────────────────

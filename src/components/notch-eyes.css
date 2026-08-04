@@ -1,0 +1,22 @@
+.ne-wrap {
+  position: relative; width: clamp(140px, 16vw, 220px); height: clamp(60px, 7vw, 90px);
+  border-radius: 999px; background: #1B1713;
+  box-shadow: 0 0 0 1px rgba(243,235,225,.14), 0 16px 50px rgba(0,0,0,.5);
+  display: grid; place-items: center;
+}
+.ne-plain, .ne-iomi {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  transition: opacity .16s ease, transform .16s ease;
+}
+.ne-plain { width: 46%; opacity: 1; transform: scale(1); }
+.ne-iomi {
+  gap: 9px; opacity: 0; transform: scale(.82);
+  font-family: -apple-system, "SF Pro Text", "Helvetica Neue", sans-serif;
+  font-size: clamp(13px, 1.6vw, 18px); font-weight: 700; letter-spacing: .04em; color: #F5EFE7;
+}
+.ne-dot { width: 9px; height: 9px; border-radius: 50%; background: #f5f5f7; }
+/* the fast, dynamic transition the direction asked for — driven by the beat,
+   not a loop: KineticFilm flips [data-hero-mode="iomi"] right on the cut. */
+[data-hero-mode="iomi"] .ne-plain { opacity: 0; transform: scale(1.15); }
+[data-hero-mode="iomi"] .ne-iomi { opacity: 1; transform: scale(1); }
+@media (prefers-reduced-motion: reduce) { .ne-plain, .ne-iomi { transition: none; } }

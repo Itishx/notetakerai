@@ -11,6 +11,7 @@ import identity from "./traits/identity.ts";
 import selfhood from "./traits/selfhood.ts";
 import humanity from "./traits/humanity.ts";
 import presence from "./traits/presence.ts";
+import charm from "./traits/charm.ts";
 import attunement from "./traits/attunement.ts";
 import authenticity from "./traits/authenticity.ts";
 import honesty from "./traits/honesty.ts";
@@ -26,6 +27,7 @@ export const ORDERED_TRAITS: Trait[] = [
   identity,    // who he is + the lines he never crosses
   selfhood,    // ★ knows his own body, surfaces, moves, and who built him
   presence,    // always there, in your corner
+  charm,       // ★ the through-line VOICE: noticed something, says it short, a little amused
   attunement,  // ★ reads the moment, says the right thing (the heart)
   authenticity,// ★ sound like a friend, not a bot — no AI-tells (the anti-brand-voice layer)
   humanity,    // ★ self-questions (feelings/realness/creator) answered like a person

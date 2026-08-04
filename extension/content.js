@@ -9879,7 +9879,7 @@ function __sbBuildBrainUI() {
   __sbDockBar.innerHTML = `
       <div id="__sb_bar_log__"><div class="sb-blog-steps"></div></div>
       <div id="__sb_bar_row__">
-      <input id="__sb_input__" placeholder="What's on your mind?" autocomplete="off" spellcheck="false" />
+      <input id="__sb_input__" placeholder="Go on." autocomplete="off" spellcheck="false" />
       <button id="__sb_mode_btn__" class="sb-pill-dropdown-btn" title="Mode">
         <span id="__sb_mode_label__">⚡ Auto</span>
         <svg viewBox="0 0 10 6" width="8" height="8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 1 5 5 9 1"/></svg>

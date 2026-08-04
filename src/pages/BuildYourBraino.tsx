@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import "./home.css";
 import Navbar from "@/components/Navbar";
 import SiteFooter from "@/components/SiteFooter";
+import BrainoGrowthDemo from "@/components/BrainoGrowthDemo";
 import { EditorialHero, Section, Eyebrow, EdTitle } from "@/lib/editorial";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
@@ -956,6 +957,10 @@ export default function BuildYourBraino() {
         title={<>One brain, built <em style={{ color: "var(--sb-accent-deep)", fontStyle: "italic" }}>your way.</em></>}
         dek="Start with Premium, then tune every lobe. Add exactly what you need and nothing you don't."
       />
+
+      <Section tone="1" pad={isMobile ? "42px 16px 54px" : "64px 32px 76px"} style={{ borderBottom: "1px solid var(--sb-line)" }}>
+        <BrainoGrowthDemo />
+      </Section>
 
       {/* ── PRICING TIERS ─────────────────────────────────────── */}
       <Section tone="2" pad={isMobile ? "48px 0" : "20px 0 80px"} style={{ borderBottom: "1px solid var(--sb-line)" }}>

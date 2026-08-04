@@ -27,13 +27,17 @@ export type BuildEmotionalCoreOptions = {
   // Which Braino class is answering (Saburi, Iomi, Telos...). Defaults to the shared "braino"
   // manifest, so every existing caller keeps behaving exactly as before. See classes.ts.
   classId?: ClassId;
+  // Explicit trait list, overriding the class manifest. Used by the Emotional Intelligence
+  // lab to build the SAME message with one trait removed, so the difference that trait
+  // makes is visible side by side. Production callers leave this alone.
+  traits?: Trait[];
 };
 
 export function buildEmotionalCore(options: BuildEmotionalCoreOptions = {}): string {
   const medium: ResponseMedium = options.medium === "voice" ? "voice" : "text";
   const settings = options.settings || DEFAULT_PERSONALITY_SETTINGS;
   const moment: Moment = options.moment || "neutral";
-  const traits = getClassManifest(options.classId).traits;
+  const traits = options.traits ?? getClassManifest(options.classId).traits;
 
   const ordered = orderTraitsForMoment(moment, traits);
 
@@ -48,10 +52,26 @@ export function buildEmotionalCore(options: BuildEmotionalCoreOptions = {}): str
   return parts.join("\n\n");
 }
 
+// The lead order for a moment: MOMENT_EMPHASIS names the priority order, and any trait
+// that declares the moment in its own leadsOn is appended if the table forgot it.
+//
+// Why both: every trait already declared leadsOn and NOTHING read it, so a trait could
+// claim to lead on grief while the table disagreed, and the table silently won. Two
+// sources of truth, one decorative. Now the table sets the ORDER (which matters, and a
+// trait cannot know its own rank against others) and the traits act as a safety net so a
+// newly added trait is never silently ignored.
+export function leadIdsForMoment(moment: Moment, traits: Trait[]): string[] {
+  const fromTable = MOMENT_EMPHASIS[moment] || [];
+  const declared = traits.filter((t) => t.leadsOn?.includes(moment)).map((t) => t.id);
+  return [...fromTable, ...declared.filter((id) => !fromTable.includes(id))];
+}
+
 // Move the traits this moment wants to lead with to the front, preserving the manifest order
 // for everything else. Unknown/duplicate ids are ignored safely.
-function orderTraitsForMoment(moment: Moment, traits: Trait[]): Trait[] {
-  const leadIds = MOMENT_EMPHASIS[moment] || [];
+// Exported so the HIL trace can show the real reordering rather than re-deriving it
+// (see reasoning/hil-reason). Behavior is unchanged for every existing caller.
+export function orderTraitsForMoment(moment: Moment, traits: Trait[]): Trait[] {
+  const leadIds = leadIdsForMoment(moment, traits);
   const traitById = Object.fromEntries(traits.map((t) => [t.id, t]));
   if (leadIds.length === 0) return traits;
 
@@ -70,9 +90,9 @@ function orderTraitsForMoment(moment: Moment, traits: Trait[]): Trait[] {
 
 // The single sentence that tells the model what to prioritize right now. This is the whole
 // "different responses use different traits" mechanism, in one legible line.
-function steeringLine(moment: Moment, traits: Trait[]): string {
+export function steeringLine(moment: Moment, traits: Trait[]): string {
   if (moment === "neutral") return "";
-  const leadIds = MOMENT_EMPHASIS[moment] || [];
+  const leadIds = leadIdsForMoment(moment, traits);
   if (leadIds.length === 0) return "";
   const traitById = Object.fromEntries(traits.map((t) => [t.id, t]));
   const traitNames = leadIds

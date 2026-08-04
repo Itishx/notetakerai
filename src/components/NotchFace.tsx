@@ -44,6 +44,18 @@ export const NOTCH_FACE_MARKUP = `
     <div class="nf-status"><span class="nf-status-inner"></span></div>
     <div class="nf-privacy"></div>
   </div>
+  <svg class="nf-shine" viewBox="0 0 190 55" aria-hidden="true">
+    <defs>
+      <linearGradient id="nf-shine-grad" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#FFFFFF" />
+        <stop offset="0.45" stop-color="#CFE0FF" />
+        <stop offset="0.8" stop-color="#7AA2FF" />
+        <stop offset="1" stop-color="#F0A86B" />
+      </linearGradient>
+    </defs>
+    <path class="nf-shine-glow" pathLength="100" d="M 0 0 H 190 V 39 Q 190 55 174 55 H 16 Q 0 55 0 39 Z" stroke="url(#nf-shine-grad)" fill="none" />
+    <path class="nf-shine-core" pathLength="100" d="M 0 0 H 190 V 39 Q 190 55 174 55 H 16 Q 0 55 0 39 Z" stroke="url(#nf-shine-grad)" fill="none" />
+  </svg>
 `;
 
 /** Set the island's little status ticker ("authenticating" / "authenticated"). */

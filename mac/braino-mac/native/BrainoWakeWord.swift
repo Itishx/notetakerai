@@ -17,6 +17,7 @@
 //                           that would silently break the privacy guarantee —
 //                           surface it and let the user use the hotkey instead
 import AVFoundation
+import Darwin
 import Foundation
 import Speech
 
@@ -24,6 +25,12 @@ import Speech
 // plus "raino" (the founder's own casual pronunciation) — kept in one place
 // here since this runs before anything ever reaches the renderer.
 let WAKE_WORDS = ["braino", "bruno", "breno", "reno", "dino", "raino"]
+
+func argumentValue(_ name: String) -> String? {
+  guard let index = CommandLine.arguments.firstIndex(of: name),
+        CommandLine.arguments.indices.contains(index + 1) else { return nil }
+  return CommandLine.arguments[index + 1]
+}
 
 func containsWakeWord(_ text: String) -> Bool {
   let lower = text.lowercased()
@@ -33,12 +40,17 @@ func containsWakeWord(_ text: String) -> Bool {
 final class BrainoWakeWord: NSObject {
   private let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "en_US"))
   private let audioEngine = AVAudioEngine()
+  private let outputPath = argumentValue("--out")
+  private let parentPID = Int32(argumentValue("--parent") ?? "") ?? 0
+  private let outputLock = NSLock()
   private var request: SFSpeechAudioBufferRecognitionRequest?
   private var task: SFSpeechRecognitionTask?
   private var cycleTimer: Timer?
+  private var parentTimer: Timer?
   private var stopped = false
 
   func start() {
+    printLine("starting\t\(ProcessInfo.processInfo.processIdentifier)")
     guard authorizeSpeech() else {
       printLine("unavailable\tSpeech recognition permission was not granted.")
       exit(1)
@@ -62,7 +74,8 @@ final class BrainoWakeWord: NSObject {
     do {
       try startEngineIfNeeded()
       try startCycle(with: recognizer)
-      printLine("armed")
+      startParentMonitor()
+      printLine("armed\t\(ProcessInfo.processInfo.processIdentifier)")
     } catch {
       printLine("unavailable\t\(clean(error.localizedDescription))")
       exit(1)
@@ -80,6 +93,21 @@ final class BrainoWakeWord: NSObject {
     }
     semaphore.wait()
     return allowed
+  }
+
+  private func startParentMonitor() {
+    guard parentPID > 1 else { return }
+    parentTimer?.invalidate()
+    parentTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
+      guard let self else { return }
+      if kill(self.parentPID, 0) != 0 {
+        self.stopped = true
+        self.request?.endAudio()
+        self.task?.cancel()
+        self.audioEngine.stop()
+        exit(0)
+      }
+    }
   }
 
   private func authorizeMicrophone() -> Bool {
@@ -163,9 +191,28 @@ final class BrainoWakeWord: NSObject {
   }
 
   private func printLine(_ line: String) {
+    outputLock.lock()
+    defer { outputLock.unlock() }
+    if let outputPath, !outputPath.isEmpty {
+      let url = URL(fileURLWithPath: outputPath)
+      let data = Data("\(line)\n".utf8)
+      if !FileManager.default.fileExists(atPath: outputPath) {
+        FileManager.default.createFile(atPath: outputPath, contents: nil)
+      }
+      if let handle = try? FileHandle(forWritingTo: url) {
+        do {
+          try handle.seekToEnd()
+          try handle.write(contentsOf: data)
+          try handle.close()
+        } catch {
+          try? handle.close()
+        }
+      }
+    }
     print(line)
     fflush(stdout)
   }
 }
 
-BrainoWakeWord().start()
+let brainoWakeWord = BrainoWakeWord()
+brainoWakeWord.start()

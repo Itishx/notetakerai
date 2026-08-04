@@ -4,12 +4,14 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-braino-realtime-model, x-braino-voice-engine, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+    "authorization, x-client-info, apikey, content-type, x-braino-realtime-model, x-braino-realtime-purpose, x-braino-voice-engine, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
   "Access-Control-Expose-Headers":
     "X-Braino-Realtime-Session-Id, X-Braino-Realtime-Allocated-Ms, X-Braino-Realtime-Model, X-Braino-Realtime-Transcription-Model",
 };
 
 const MAX_REALTIME_SESSION_MS = 24 * 60 * 60 * 1000;
+const DEFAULT_TRANSCRIPTION_MODEL = "gpt-4o-transcribe";
+const DICTATION_TRANSCRIPTION_MODEL = "gpt-realtime-whisper";
 type SupabaseClientLike = ReturnType<typeof createClient>;
 
 serve(async (req) => {
@@ -45,6 +47,7 @@ serve(async (req) => {
     const requestedModel = req.headers.get("X-Braino-Realtime-Model") || "";
     const realtimeModel = ALLOWED_REALTIME_MODELS.has(requestedModel) ? requestedModel : envModel;
     const realtimeVoice = Deno.env.get("OPENAI_REALTIME_VOICE") || "marin";
+    const headerPurpose = req.headers.get("X-Braino-Realtime-Purpose") || "";
 
     if (!anonKey || !supabaseUrl) {
       return json({ error: "Missing Supabase configuration." }, 500);
@@ -70,6 +73,8 @@ serve(async (req) => {
       const payload = await req.json().catch(() => null);
       const action = String(payload?.action || "").trim().toLowerCase();
       if (action === "client_secret") {
+        const purpose = headerPurpose === "dictation" || payload?.purpose === "dictation" ? "dictation" : "voice";
+        const reportedModel = purpose === "dictation" ? DICTATION_TRANSCRIPTION_MODEL : realtimeModel;
         const voiceSessionId = await createRealtimeVoiceSession(authClient, user.id);
         const openAiResponse = await fetch("https://api.openai.com/v1/realtime/client_secrets", {
           method: "POST",
@@ -79,7 +84,7 @@ serve(async (req) => {
             "OpenAI-Safety-Identifier": await hashSafetyIdentifier(user.id),
           },
           body: JSON.stringify({
-            session: buildRealtimeSessionConfig(realtimeModel, realtimeVoice),
+            session: buildRealtimeSessionConfig(realtimeModel, realtimeVoice, purpose),
           }),
         });
 
@@ -114,11 +119,11 @@ serve(async (req) => {
             expiresAt: extractClientSecretExpiry(parsed),
             sessionId: voiceSessionId,
             allocatedMs: MAX_REALTIME_SESSION_MS,
-            realtimeModel,
-            transcriptionModel: "gpt-4o-transcribe",
+            realtimeModel: reportedModel,
+            transcriptionModel: transcriptionModelForPurpose(purpose),
           },
           200,
-          realtimeHeaders(voiceSessionId, realtimeModel),
+          realtimeHeaders(voiceSessionId, reportedModel, purpose),
         );
       }
     }
@@ -140,10 +145,12 @@ serve(async (req) => {
     }
     console.log("openai-realtime-call received SDP", sdpDiagnostics);
 
+    const purpose = headerPurpose === "dictation" ? "dictation" : "voice";
+    const reportedModel = purpose === "dictation" ? DICTATION_TRANSCRIPTION_MODEL : realtimeModel;
     const voiceSessionId = await createRealtimeVoiceSession(authClient, user.id);
     const multipart = new FormData();
     multipart.set("sdp", sdp);
-    multipart.set("session", JSON.stringify(buildRealtimeSessionConfig(realtimeModel, realtimeVoice)));
+    multipart.set("session", JSON.stringify(buildRealtimeSessionConfig(realtimeModel, realtimeVoice, purpose)));
 
     const openAiResponse = await fetch("https://api.openai.com/v1/realtime/calls", {
       method: "POST",
@@ -172,8 +179,8 @@ serve(async (req) => {
       "Content-Type": "application/sdp",
       "X-Braino-Realtime-Session-Id": voiceSessionId,
       "X-Braino-Realtime-Allocated-Ms": String(MAX_REALTIME_SESSION_MS),
-      "X-Braino-Realtime-Model": realtimeModel,
-      "X-Braino-Realtime-Transcription-Model": "gpt-4o-transcribe",
+      "X-Braino-Realtime-Model": reportedModel,
+      "X-Braino-Realtime-Transcription-Model": transcriptionModelForPurpose(purpose),
     };
 
     const locationHeader = openAiResponse.headers.get("Location");
@@ -219,16 +226,41 @@ async function createRealtimeVoiceSession(supabase: SupabaseClientLike, userId: 
   return voiceSession.id;
 }
 
-function realtimeHeaders(sessionId: string, realtimeModel: string) {
+function realtimeHeaders(sessionId: string, realtimeModel: string, purpose: string) {
   return {
     "X-Braino-Realtime-Session-Id": sessionId,
     "X-Braino-Realtime-Allocated-Ms": String(MAX_REALTIME_SESSION_MS),
     "X-Braino-Realtime-Model": realtimeModel,
-    "X-Braino-Realtime-Transcription-Model": "gpt-4o-transcribe",
+    "X-Braino-Realtime-Transcription-Model": transcriptionModelForPurpose(purpose),
   };
 }
 
-function buildRealtimeSessionConfig(realtimeModel: string, realtimeVoice: string) {
+function transcriptionModelForPurpose(purpose: string) {
+  return purpose === "dictation" ? DICTATION_TRANSCRIPTION_MODEL : DEFAULT_TRANSCRIPTION_MODEL;
+}
+
+function buildRealtimeSessionConfig(realtimeModel: string, realtimeVoice: string, purpose = "voice") {
+  if (purpose === "dictation") {
+    return {
+      type: "transcription",
+      audio: {
+        input: {
+          format: {
+            type: "audio/pcm",
+            rate: 24000,
+          },
+          noise_reduction: {
+            type: "near_field",
+          },
+          transcription: {
+            model: DICTATION_TRANSCRIPTION_MODEL,
+            delay: "low",
+          },
+          turn_detection: null,
+        },
+      },
+    };
+  }
   return {
     type: "realtime",
     model: realtimeModel,
@@ -239,7 +271,7 @@ function buildRealtimeSessionConfig(realtimeModel: string, realtimeVoice: string
           type: "near_field",
         },
         transcription: {
-          model: "gpt-4o-transcribe",
+          model: DEFAULT_TRANSCRIPTION_MODEL,
           language: "en",
           prompt: [
             "Transcribe the user's direct command to Braino.",

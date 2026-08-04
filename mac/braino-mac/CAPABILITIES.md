@@ -2,6 +2,9 @@ Yeah, for the Mac app, Braino can become a proper system-level buddy. The honest
 
 **Already Possible Now**
 - Voice-first Braino on macOS with double-control / shortcut activation.
+- Yap Mode with double-Option activation: silent system-wide dictation through
+  `gpt-realtime-whisper`, inserted at the focused editable caret. Say "done" to
+  stop without inserting the control phrase.
 - Braino walking on/near the Dock, draggable around the screen.
 - Browser-style auth flow using Braino login.
 - Normal conversation through the same Braino personality layer.
@@ -23,6 +26,7 @@ Yeah, for the Mac app, Braino can become a proper system-level buddy. The honest
   - send or draft email in Apple Mail using Contacts lookup when possible
 - Spotify Mac app/API playback for songs, pause/resume/skip, volume changes, liked songs, and named playlist adds when connected.
 - ANZ Team demo: Braino introduces himself, plays the DAF Spotify demo through the Mac app, opens the machine learning article, reads the short canned summary, speaks Madhuri, Shree, then Palash, and opens trybraino.com.
+- Jyoti Sir Team demo: a deterministic cross-app flow keeps the mascot visible over low background music, demonstrates Desktop organization plus immediate undo, prepares an unsent WhatsApp draft, and safely closes its dedicated seven-tab Chrome window before the reviewed thank-you message. Narrated actions have a two-second beat before execution.
 - Basic "what app/window am I looking at?" awareness.
 - Logs for debugging voice, app-opening, file search, auth, and delegate actions.
 - Auto-stop listening after idle, so it does not keep burning realtime forever.

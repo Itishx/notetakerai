@@ -13,6 +13,9 @@ const HOTKEY_HELPER_PATH = path.join(__dirname, "native", "BrainoControlTap.swif
 const SPEECH_HELPER_PATH = path.join(__dirname, "native", "BrainoSpeech.swift");
 const TOUCH_ID_HELPER_PATH = path.join(__dirname, "native", "BrainoTouchID.swift");
 const WAKE_WORD_HELPER_PATH = path.join(__dirname, "native", "BrainoWakeWord.swift");
+const WAKE_WORD_APP_PATH = path.join(__dirname, "native", "bin", "BrainoWakeWord.app");
+const WAKE_WORD_APP_BIN = path.join(WAKE_WORD_APP_PATH, "Contents", "MacOS", "braino-wake-word");
+const WAKE_WORD_PLIST_PATH = path.join(__dirname, "native", "BrainoWakeWord-Info.plist");
 const AX_HELPER_PATH = path.join(__dirname, "native", "BrainoAX.swift");
 const LIVE_CAPTION_HELPER_PATH = path.join(__dirname, "native", "BrainoLiveCaption.swift");
 const APP_VERSION = "12.0.41";
@@ -21,26 +24,63 @@ const ORGANIZE_MANIFEST_NAME = ".braino-last-organize.json";
 const LOG_DIR = path.join(os.homedir(), "Library", "Logs", "Braino Mac");
 const LOG_PATH = path.join(LOG_DIR, "braino-mac.log");
 const AUTH_STORE_DIR = path.join(os.homedir(), "Library", "Application Support", "Braino Mac");
+app.setPath("userData", AUTH_STORE_DIR);
+const hasSingleInstanceLock = app.requestSingleInstanceLock();
+if (!hasSingleInstanceLock) app.quit();
 const AUTH_STORE_PATH = path.join(AUTH_STORE_DIR, "auth-session.json");
 const FILE_ACTION_HISTORY_PATH = path.join(AUTH_STORE_DIR, "file-actions.json");
 const FILE_ACTION_CONFIRM_MS = 120000;
 const MAC_WORKFLOW_CONFIRM_MS = 300000;
 const MAX_FILE_ACTION_HISTORY = 80;
 const AUTH_CALLBACK_PATH = "/braino-mac-auth-callback";
+
+// ── SKIT (TEMPORARY — Instagram demo, delete after recording) ──────────────
+// While enabled, double Option runs the scripted skit instead of Yap Mode.
+// dryRun=true opens the chat and types the message but never sends it
+// (rehearsal takes); flip to false for the one real take. To remove the
+// trick entirely, delete this block, the SKIT branch in the double-option
+// handler, the "braino-mac:skit-step" ipcMain handler, preload's skit
+// bridge, and runSkit() in the renderer.
+const SKIT = {
+  enabled: true,
+  dryRun: true,
+  contact: "Rahul Dey",
+  message: "Hey Shawty, this is Braino, Itish's AI. He's been meaning to text you, he just won't do it himself. (Automated message for a demo. He doesn't know I sent this... yet.)",
+};
 const {
   resolveWebTarget,
   resolveAppTarget,
   extractCloseShortcutTarget,
 } = require(path.join(ROOT_DIR, "extension", "lib", "openTargets.cjs"));
+const {
+  candidateMatchesQuery,
+  normalizeSearchToken,
+} = require(path.join(__dirname, "file-search-match.cjs"));
+const {
+  buildSpotifyFocusRestoreScript,
+  selectSpotifyReturnTarget,
+} = require(path.join(__dirname, "spotify-focus-return.cjs"));
+const {
+  evaluateDictationStart,
+  normalizeDictationChunk,
+  parseDictationControl,
+} = require(path.join(__dirname, "dictation.cjs"));
+const { parseMusicSegmentIntent, parseMusicSegmentRange } = require(path.join(__dirname, "music-segment-intent.cjs"));
+const { parseWhatsNewIntent } = require(path.join(__dirname, "whats-new-intent.cjs"));
 
 let dockWindow = null;
 let swiftHotkey = null;
-let swiftWakeWord = null;
 let wakeWordGaveUp = false; // true once "unavailable" fires — don't keep respawning a dead end
 let wakeWordCrashCount = 0;  // consecutive crashy exits; give up after 3 (TCC dead end)
 let wakeWordRestartTimer = null;
+let wakeWordTailTimer = null;
+let wakeWordTailOffset = 0;
+let wakeWordTailBuffer = "";
+let wakeWordRunning = false;
+let wakeWordStarting = false;
+let wakeWordHelperPid = 0;
+let wakeWordLaunchAt = 0;
 let activeSpeech = null;
-let lastControlTapAt = 0;
 let cachedAuthSession = null;
 let pendingAuthWaiters = [];
 let authBrowserFlow = null;
@@ -56,6 +96,16 @@ let lastOverlayContextKey = "";
 let lastOverlayStateSentAt = 0;
 let dockWindowHiddenByUser = false;
 let lastOverlayRaiseLogAt = 0;
+let dictationState = {
+  active: false,
+  startedAt: 0,
+  targetApp: "",
+  insertions: 0,
+  insertionMode: "",
+  focusStatus: "",
+};
+const DICTATION_TRANSCRIPTION_MODEL = "gpt-realtime-whisper";
+const DEFAULT_REALTIME_TRANSCRIPTION_MODEL = "gpt-4o-transcribe";
 
 function loadDotEnv() {
   const out = {};
@@ -639,6 +689,137 @@ function sendTaskProgress(payload) {
   sendToRenderer("braino-mac:task-progress", payload);
 }
 
+const CURSOR_MODE_POLL_MS = 3000;
+const CURSOR_MODE_QUIET_MS = 45000;
+let cursorModeTimer = null;
+let cursorModePolling = false;
+const cursorModeState = {
+  enabled: true,
+  active: false,
+  baselineSignature: null,
+  head: "",
+  changedFiles: [],
+  lastCommit: "",
+  lastActivityAt: 0,
+  completedAt: 0,
+};
+
+async function readCursorRepoSnapshot() {
+  const [{ stdout: status }, { stdout: head }, { stdout: commit }] = await Promise.all([
+    execFileP("git", ["-C", ROOT_DIR, "status", "--porcelain=v1"], { timeout: 5000 }),
+    execFileP("git", ["-C", ROOT_DIR, "rev-parse", "HEAD"], { timeout: 5000 }),
+    execFileP("git", ["-C", ROOT_DIR, "log", "-1", "--pretty=%s"], { timeout: 5000 }),
+  ]);
+  const changedFiles = String(status || "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => line.slice(3).trim())
+    .slice(0, 18);
+  return {
+    signature: `${String(head).trim()}|${String(status).trim()}`,
+    head: String(head).trim(),
+    changedFiles,
+    lastCommit: String(commit).trim(),
+  };
+}
+
+function cursorModePayload() {
+  return {
+    ...cursorModeState,
+    repoPath: ROOT_DIR,
+    quietMs: CURSOR_MODE_QUIET_MS,
+  };
+}
+
+function broadcastCursorMode() {
+  sendToRenderer("braino-mac:cursor-mode", cursorModePayload());
+}
+
+async function openCursorRepository() {
+  if (process.platform !== "darwin") return;
+  try {
+    await execFileP("open", ["-a", "Cursor", ROOT_DIR], { timeout: 8000 });
+  } catch (error) {
+    logMac("cursor_mode.open_failed", { error });
+  }
+}
+
+async function finishCursorTask(reason) {
+  if (!cursorModeState.active) return;
+  cursorModeState.active = false;
+  cursorModeState.completedAt = Date.now();
+  const payload = { ...cursorModePayload(), reason };
+  logMac("cursor_mode.task_complete", {
+    reason,
+    changedFiles: cursorModeState.changedFiles,
+    head: cursorModeState.head,
+  });
+  sendToRenderer("braino-mac:cursor-task-complete", payload);
+  broadcastCursorMode();
+  if (!/cursor/i.test(String(activeMacContext?.appName || ""))) {
+    await openCursorRepository();
+  }
+}
+
+async function pollCursorMode() {
+  if (!cursorModeState.enabled || cursorModePolling) return;
+  cursorModePolling = true;
+  try {
+    const snapshot = await readCursorRepoSnapshot();
+    const now = Date.now();
+    if (cursorModeState.baselineSignature === null) {
+      cursorModeState.baselineSignature = snapshot.signature;
+      cursorModeState.head = snapshot.head;
+      cursorModeState.changedFiles = snapshot.changedFiles;
+      cursorModeState.lastCommit = snapshot.lastCommit;
+      broadcastCursorMode();
+      return;
+    }
+
+    const previousHead = cursorModeState.head;
+    if (snapshot.signature !== cursorModeState.baselineSignature) {
+      cursorModeState.baselineSignature = snapshot.signature;
+      cursorModeState.head = snapshot.head;
+      cursorModeState.changedFiles = snapshot.changedFiles;
+      cursorModeState.lastCommit = snapshot.lastCommit;
+      cursorModeState.lastActivityAt = now;
+      cursorModeState.active = true;
+      logMac("cursor_mode.activity", {
+        activeApp: activeMacContext?.appName || "",
+        changedFiles: snapshot.changedFiles,
+        headChanged: Boolean(previousHead && previousHead !== snapshot.head),
+      });
+      broadcastCursorMode();
+      if (previousHead && previousHead !== snapshot.head) {
+        await finishCursorTask("commit");
+      }
+      return;
+    }
+
+    if (cursorModeState.active && now - cursorModeState.lastActivityAt >= CURSOR_MODE_QUIET_MS) {
+      await finishCursorTask("quiet");
+    }
+  } catch (error) {
+    logMac("cursor_mode.poll_failed", { error });
+  } finally {
+    cursorModePolling = false;
+  }
+}
+
+function startCursorModeMonitoring() {
+  if (cursorModeTimer) return;
+  void pollCursorMode();
+  cursorModeTimer = setInterval(() => void pollCursorMode(), CURSOR_MODE_POLL_MS);
+}
+
+function stopCursorModeMonitoring() {
+  if (cursorModeTimer) clearInterval(cursorModeTimer);
+  cursorModeTimer = null;
+  cursorModeState.active = false;
+  broadcastCursorMode();
+}
+
 function splitHelperLines(onLine) {
   let buffer = "";
   return (chunk) => {
@@ -826,6 +1007,54 @@ async function readActiveBrowserContext(appName) {
   }
 }
 let lastBrowserReadFailLogAt = 0;
+
+async function captureSpotifyReturnTarget() {
+  const cachedContext = activeMacContext ? { ...activeMacContext } : null;
+  const freshContext = await readActiveMacContext();
+  const target = selectSpotifyReturnTarget(freshContext, cachedContext);
+  logMac("spotify.focus.capture", {
+    freshApp: freshContext?.appName || "",
+    cachedApp: cachedContext?.appName || "",
+    returnApp: target?.appName || "",
+    returnTab: textForLog(target?.browserTitle || target?.windowTitle || ""),
+    returnUrl: textForLog(target?.browserUrl || ""),
+  });
+  return target;
+}
+
+async function restoreSpotifyReturnTarget(target, details = {}) {
+  if (!target) {
+    logMac("spotify.focus.restore.skipped", { ...details, reason: "spotify-or-no-return-target" });
+    return false;
+  }
+  const script = buildSpotifyFocusRestoreScript(target);
+  if (!script) return false;
+  try {
+    const { stdout } = await execFileP("/usr/bin/osascript", ["-e", script], { timeout: 4000 });
+    const status = String(stdout || "").trim();
+    const restored = status === "restored";
+    logMac("spotify.focus.restore.done", {
+      ...details,
+      appName: target.appName,
+      browserTitle: textForLog(target.browserTitle || ""),
+      browserUrl: textForLog(target.browserUrl || ""),
+      status,
+    });
+    return restored;
+  } catch (error) {
+    logMac("spotify.focus.restore.failed", { ...details, appName: target.appName, error });
+    return false;
+  }
+}
+
+async function runSpotifyTaskWithFocusReturn(details, task) {
+  const returnTarget = await captureSpotifyReturnTarget();
+  try {
+    return await task();
+  } finally {
+    await restoreSpotifyReturnTarget(returnTarget, details);
+  }
+}
 
 function displayForContext(context) {
   if (context?.windowBounds) {
@@ -1039,17 +1268,6 @@ async function requestMicrophoneAccess() {
   }
 }
 
-function markControlTap(source) {
-  const now = Date.now();
-  if (now - lastControlTapAt < 520) {
-    lastControlTapAt = 0;
-    sendToRenderer("braino-mac:voice-toggle", { source });
-    ensureDockWindowVisible("voice-hotkey");
-    return;
-  }
-  lastControlTapAt = now;
-}
-
 function toggleDockWindowVisibility(source) {
   if (!dockWindow || dockWindow.isDestroyed()) return;
   if (dockWindow.isVisible()) {
@@ -1077,13 +1295,8 @@ function registerHotkeys() {
       ensureDockWindowVisible("her-hotkey");
     }),
     bareControl: false,
+    controlHandler: "swift-event-tap",
   };
-
-  try {
-    registered.bareControl = globalShortcut.register("Control", () => markControlTap("Electron Control"));
-  } catch (_) {
-    registered.bareControl = false;
-  }
 
   sendToRenderer("braino-mac:helper-status", { type: "electron-hotkeys", registered });
   return registered;
@@ -1103,6 +1316,19 @@ function startSwiftHotkeyHelper() {
       if (trimmed === "double-control") {
         sendToRenderer("braino-mac:voice-toggle", { source: "double Control" });
         ensureDockWindowVisible("voice-hotkey");
+        return;
+      }
+      if (trimmed === "double-option") {
+        if (SKIT.enabled) {
+          // SKIT (TEMPORARY): hijack double Option for the Instagram demo.
+          logMac("hotkey.double_option", { skill: "skit" });
+          sendToRenderer("braino-mac:skit-start", {});
+          ensureDockWindowVisible("skit-hotkey");
+          return;
+        }
+        logMac("hotkey.double_option", { skill: "yap-mode" });
+        sendToRenderer("braino-mac:dictation-toggle", { source: "double Option" });
+        ensureDockWindowVisible("dictation-hotkey");
         return;
       }
       if (trimmed === "double-space") {
@@ -1144,79 +1370,184 @@ function isDictationApp(appName) {
   return MAC_DICTATION_APPS.some((d) => n === d || n.startsWith(`${d} `) || n.includes(d));
 }
 
-// The wake-word helper is meant to run forever ("always listening"). Unlike
-// the hotkey tap, if it dies unexpectedly we DO want to bring it back — but
-// only if the reason wasn't "unavailable" (permission denied / on-device
-// recognition unsupported), since respawning into the same wall is pointless
-// noise and the user should just fall back to double-Control / wake voice
-// commands via the manual hotkey instead.
-function startBrainoWakeWord() {
-  if (!fs.existsSync(WAKE_WORD_HELPER_PATH) || wakeWordGaveUp) return;
+async function ensureWakeWordApp() {
+  try {
+    const sourceStat = fs.statSync(WAKE_WORD_HELPER_PATH);
+    const plistStat = fs.statSync(WAKE_WORD_PLIST_PATH);
+    const binStat = fs.existsSync(WAKE_WORD_APP_BIN) ? fs.statSync(WAKE_WORD_APP_BIN) : null;
+    if (binStat && binStat.mtimeMs >= Math.max(sourceStat.mtimeMs, plistStat.mtimeMs)) return true;
+    fs.mkdirSync(path.dirname(WAKE_WORD_APP_BIN), { recursive: true });
+    fs.copyFileSync(WAKE_WORD_PLIST_PATH, path.join(WAKE_WORD_APP_PATH, "Contents", "Info.plist"));
+    await execFileP("/usr/bin/swiftc", [WAKE_WORD_HELPER_PATH, "-o", WAKE_WORD_APP_BIN, "-O"], { timeout: 120000 });
+    await execFileP("/usr/bin/codesign", ["-s", "-", "-f", "--deep", WAKE_WORD_APP_PATH], { timeout: 20000 });
+    logMac("wakeword.app.built", {});
+    return true;
+  } catch (error) {
+    logMac("wakeword.app.build_failed", { error });
+    return fs.existsSync(WAKE_WORD_APP_BIN);
+  }
+}
+
+function stopWakeWordTail() {
+  if (wakeWordTailTimer) {
+    clearInterval(wakeWordTailTimer);
+    wakeWordTailTimer = null;
+  }
+  wakeWordTailOffset = 0;
+  wakeWordTailBuffer = "";
+}
+
+function wakeWordProcessAlive() {
+  if (!wakeWordHelperPid) return true;
+  try {
+    process.kill(wakeWordHelperPid, 0);
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+function handleWakeWordLine(raw) {
+  const line = String(raw || "").trim();
+  if (!line) return;
+  const separator = line.indexOf("\t");
+  const type = separator < 0 ? line : line.slice(0, separator);
+  const value = separator < 0 ? "" : line.slice(separator + 1).trim();
+  if (type === "starting") {
+    wakeWordHelperPid = Number(value) || 0;
+    logMac("wakeword.starting", { helperPid: wakeWordHelperPid || null, via: "native-app" });
+    return;
+  }
+  if (type === "armed") {
+    wakeWordHelperPid = Number(value) || wakeWordHelperPid;
+    wakeWordCrashCount = 0;
+    logMac("wakeword.armed", { helperPid: wakeWordHelperPid || null, via: "native-app" });
+    sendToRenderer("braino-mac:wake-status", { armed: true });
+    return;
+  }
+  if (type === "wake") {
+    const transcript = value;
+    const front = String(activeMacContext?.appName || "");
+    if (isDictationApp(front)) {
+      logMac("wakeword.suppressed", { reason: "dictation-app-frontmost", app: front, transcript: textForLog(transcript) });
+      return;
+    }
+    logMac("wakeword.detected", { transcript: textForLog(transcript) });
+    sendToRenderer("braino-mac:wake-detected", { transcript });
+    ensureDockWindowVisible("wake-word");
+    return;
+  }
+  if (type === "unavailable") {
+    wakeWordGaveUp = true;
+    wakeWordRunning = false;
+    wakeWordStarting = false;
+    const reason = value || "Wake word is unavailable.";
+    logMac("wakeword.unavailable", { reason });
+    sendToRenderer("braino-mac:wake-status", { armed: false, unavailable: true, reason });
+    stopWakeWordTail();
+  }
+}
+
+function handleWakeWordExit() {
+  if (!wakeWordRunning || wakeWordGaveUp) return;
+  wakeWordRunning = false;
+  wakeWordStarting = false;
+  wakeWordHelperPid = 0;
+  stopWakeWordTail();
+  wakeWordCrashCount += 1;
+  if (wakeWordCrashCount >= 3) wakeWordGaveUp = true;
+  logMac("wakeword.exit", { gaveUp: wakeWordGaveUp, crashCount: wakeWordCrashCount, via: "native-app" });
+  if (wakeWordGaveUp) {
+    sendToRenderer("braino-mac:wake-status", {
+      armed: false,
+      unavailable: true,
+      reason: "Braino's wake-word helper stopped unexpectedly.",
+    });
+    return;
+  }
+  wakeWordRestartTimer = setTimeout(() => void startBrainoWakeWord(), 5000 * wakeWordCrashCount + 5000);
+}
+
+function tailWakeWordEvents() {
+  if (wakeWordTailTimer) return;
+  wakeWordTailTimer = setInterval(() => {
+    try {
+      const stat = fs.statSync(path.join(AUTH_STORE_DIR, "wake-word-events.txt"));
+      if (stat.size > wakeWordTailOffset) {
+        const fd = fs.openSync(path.join(AUTH_STORE_DIR, "wake-word-events.txt"), "r");
+        const buffer = Buffer.alloc(stat.size - wakeWordTailOffset);
+        fs.readSync(fd, buffer, 0, buffer.length, wakeWordTailOffset);
+        fs.closeSync(fd);
+        wakeWordTailOffset = stat.size;
+        const chunks = `${wakeWordTailBuffer}${buffer.toString("utf8")}`.split("\n");
+        wakeWordTailBuffer = chunks.pop() || "";
+        chunks.forEach(handleWakeWordLine);
+      }
+    } catch (_) {}
+    if (
+      wakeWordRunning
+      && wakeWordHelperPid
+      && Date.now() - wakeWordLaunchAt > 1200
+      && !wakeWordProcessAlive()
+    ) {
+      handleWakeWordExit();
+    }
+  }, 160);
+}
+
+// Speech recognition must run as its own app identity. Launching the Swift
+// source through swift-frontend makes the compiler the TCC client, and macOS
+// aborts it before it can report a denied permission.
+async function startBrainoWakeWord() {
+  if (
+    !fs.existsSync(WAKE_WORD_HELPER_PATH)
+    || !fs.existsSync(WAKE_WORD_PLIST_PATH)
+    || wakeWordGaveUp
+    || wakeWordRunning
+    || wakeWordStarting
+  ) return;
   if (wakeWordRestartTimer) {
     clearTimeout(wakeWordRestartTimer);
     wakeWordRestartTimer = null;
   }
-  swiftWakeWord = spawn("xcrun", ["swift", WAKE_WORD_HELPER_PATH], {
-    cwd: ROOT_DIR,
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-
-  swiftWakeWord.stdout.on("data", (chunk) => {
-    String(chunk || "").split(/\r?\n/).forEach((raw) => {
-      const line = raw.trim();
-      if (!line) return;
-      if (line === "armed") {
-        logMac("wakeword.armed", {});
-        sendToRenderer("braino-mac:wake-status", { armed: true });
-        return;
-      }
-      if (line.startsWith("wake\t")) {
-        const transcript = line.slice(5).trim();
-        // Dictation gate: while a speech-to-text app is frontmost the user is
-        // talking INTO that app, not to Braino. Saying "Braino" mid-dictation
-        // (e.g. dictating a message about Braino) was waking him every time.
-        const front = String(activeMacContext?.appName || "");
-        if (isDictationApp(front)) {
-          logMac("wakeword.suppressed", { reason: "dictation-app-frontmost", app: front, transcript: textForLog(transcript) });
-          return;
-        }
-        logMac("wakeword.detected", { transcript: textForLog(transcript) });
-        sendToRenderer("braino-mac:wake-detected", { transcript });
-        ensureDockWindowVisible("wake-word");
-        return;
-      }
-      if (line.startsWith("unavailable\t")) {
-        wakeWordGaveUp = true;
-        const reason = line.slice(12).trim();
-        logMac("wakeword.unavailable", { reason });
-        sendToRenderer("braino-mac:wake-status", { armed: false, unavailable: true, reason });
-      }
+  wakeWordStarting = true;
+  if (!(await ensureWakeWordApp())) {
+    wakeWordStarting = false;
+    wakeWordGaveUp = true;
+    sendToRenderer("braino-mac:wake-status", {
+      armed: false,
+      unavailable: true,
+      reason: "Braino's wake-word helper could not be built.",
     });
-  });
-
-  swiftWakeWord.stderr.on("data", (chunk) => {
-    const line = String(chunk || "").trim();
-    if (line) logMac("wakeword.stderr", { line });
-  });
-
-  swiftWakeWord.on("exit", (code) => {
-    swiftWakeWord = null;
-    // A TCC privacy-violation abort kills the process before it can print
-    // "unavailable" on stdout, so gaveUp never trips and the old code
-    // respawned it every 5s forever (flooding the log, burning CPU). Count
-    // consecutive crashy exits and give up after a few — a denied Speech
-    // Recognition permission is a dead end, not a transient hiccup.
-    const crashed = code === null || code !== 0;
-    wakeWordCrashCount = crashed ? wakeWordCrashCount + 1 : 0;
-    if (crashed && wakeWordCrashCount >= 3) wakeWordGaveUp = true;
-    logMac("wakeword.exit", { code, gaveUp: wakeWordGaveUp, crashCount: wakeWordCrashCount });
-    if (wakeWordGaveUp) {
-      sendToRenderer("braino-mac:wake-status", { armed: false, unavailable: true, reason: "wake word needs Speech Recognition permission" });
-      return;
-    }
-    // Transient crash — back off progressively, don't hammer every 5s.
-    wakeWordRestartTimer = setTimeout(() => startBrainoWakeWord(), 5000 * wakeWordCrashCount + 5000);
-  });
+    return;
+  }
+  const eventsPath = path.join(AUTH_STORE_DIR, "wake-word-events.txt");
+  try {
+    fs.writeFileSync(eventsPath, "");
+    wakeWordTailOffset = 0;
+    wakeWordTailBuffer = "";
+    wakeWordHelperPid = 0;
+    wakeWordLaunchAt = Date.now();
+    wakeWordRunning = true;
+    tailWakeWordEvents();
+    await execFileP("/usr/bin/open", [
+      "-g",
+      "-n",
+      "-a",
+      WAKE_WORD_APP_PATH,
+      "--args",
+      "--out",
+      eventsPath,
+      "--parent",
+      String(process.pid),
+    ], { timeout: 15000 });
+    logMac("wakeword.launch", { via: "open-app" });
+  } catch (error) {
+    logMac("wakeword.launch_failed", { error });
+    handleWakeWordExit();
+  } finally {
+    wakeWordStarting = false;
+  }
 }
 
 function decodeSpeechLine(line) {
@@ -1357,6 +1688,8 @@ const MAC_SKILLS_REPLY = [
   "12. I can play songs, pause/resume, skip, change volume, and add tracks to liked songs or playlists through Spotify.",
   "13. I can create notes in Apple Notes, asking what to write if you do not say it upfront.",
   "14. I can send or draft email in Apple Mail, resolving contact names through Contacts when possible.",
+  "15. Yap Mode turns double Option into silent system-wide dictation at the active caret.",
+  "16. I know what you just downloaded without being told the name, so I can open it, show it in Finder, or file it into a folder (including the Finder window you are looking at).",
 ].join("\n");
 
 function isMacSkillsPrompt(text) {
@@ -1861,6 +2194,25 @@ async function handlePendingMacWorkflow(raw) {
     return { ok: true, say: "Cancelled. I did not do anything." };
   }
 
+  if (pending.type === "music_segment" && pending.stage === "loop_range") {
+    const range = parseMusicSegmentRange(raw);
+    if (!range.valid) {
+      setPendingMacWorkflow(pending);
+      const say = range.reason === "invalid_range"
+        ? "The end needs to be after the start. Try again, like from two twenty to two twenty seven."
+        : `I still have ${pending.data?.song || "this song"}. Just tell me the range, like from two twenty to two twenty seven.`;
+      return { ok: true, say };
+    }
+    clearPendingMacWorkflow();
+    return playMusicSegmentOnMac({
+      ...range,
+      song: pending.data?.song || "",
+      provider: pending.data?.provider || "current",
+      useCurrent: Boolean(pending.data?.useCurrent),
+      currentMusic: pending.data?.currentMusic || null,
+    });
+  }
+
   if (pending.type === "phone" && pending.stage === "phone_number") {
     clearPendingMacWorkflow();
     const number = String(raw || "").replace(/[^\d+]/g, "");
@@ -1949,6 +2301,43 @@ async function handlePendingMacWorkflow(raw) {
     const restored = await moveRedundantItemsBack([item]);
     logMac("files.cleanup.recovered", { restored, binName: textForLog(item.binName) });
     return { ok: true, say: restored ? `Recovered ${item.binName}, back where it came from.` : "It would not move. It is still in the folder." };
+  }
+
+  // Answering "which one?" or "is that the one?" about a recent download. The
+  // pending options hold real paths, so the answer never re-scans and never
+  // drifts onto a file that landed while he was waiting.
+  if (pending.type === "recent_download") {
+    const answer = cleanPrompt(raw);
+    const options = pending.data?.options || [];
+    const action = pending.data?.action || "open";
+    const destination = pending.data?.destination || "";
+
+    if (pending.stage === "confirm_stale") {
+      clearPendingMacWorkflow();
+      if (/\b(?:yes|yeah|yep|sure|that one|correct|right|do it|please)\b/i.test(answer)) {
+        return actOnRecentDownload({ action, destination }, options[0]);
+      }
+      return { ok: true, say: "Okay, leaving it. Tell me the file name and I will find it." };
+    }
+
+    if (pending.stage === "pick") {
+      clearPendingMacWorkflow();
+      const ordinal = /\b(?:first|1st|former|one)\b/i.test(answer) ? 0 : /\b(?:second|2nd|latter|other|two)\b/i.test(answer) ? 1 : -1;
+      let chosen = ordinal >= 0 ? options[ordinal] : null;
+      if (!chosen) {
+        // Match on how a person actually answers: part of the name, or the
+        // kind of file ("the pdf", "the zip").
+        const spoken = answer.toLowerCase();
+        chosen = options.find((o) => {
+          const name = o.name.toLowerCase();
+          const ext = path.extname(name).replace(".", "");
+          if (ext && new RegExp(`\\b${ext}\\b`).test(spoken)) return true;
+          return name.split(/[\s._-]+/).some((token) => token.length > 2 && spoken.includes(token));
+        }) || null;
+      }
+      if (!chosen) return { ok: true, say: "I did not catch which one. Say the name or the file type." };
+      return actOnRecentDownload({ action, destination }, chosen);
+    }
   }
 
   if (pending.type === "whatsapp") {
@@ -2105,6 +2494,74 @@ async function fetchVoiceModes(options = {}) {
   }
   return voiceModesCache.modes;
 }
+
+// Which character renders on screen — chosen once on the website Dashboard
+// (profiles.mascot) so the website and the Mac app always agree. Same voice,
+// memory, and actions underneath either way; this only picks the rig.
+// Cached to disk so a signed-in-but-offline launch still knows the choice.
+const MASCOT_STATE_PATH = path.join(AUTH_STORE_DIR, "mascot.json");
+const MASCOT_CACHE_TTL_MS = 5 * 60 * 1000;
+let mascotCache = { id: null, fetchedAt: 0 };
+
+function loadCachedMascot() {
+  try {
+    return JSON.parse(fs.readFileSync(MASCOT_STATE_PATH, "utf8"))?.id === "webb" ? "webb" : "braino";
+  } catch (_) {
+    return "braino";
+  }
+}
+
+function saveCachedMascot(id) {
+  try { fs.writeFileSync(MASCOT_STATE_PATH, JSON.stringify({ id })); } catch (_) {}
+}
+
+async function loadMascotPreference(options = {}) {
+  const auth = authStatusPayload();
+  if (!auth.userId || !SUPABASE_URL || !SUPABASE_ANON_KEY) return loadCachedMascot();
+  if (!options.force && mascotCache.id && Date.now() - mascotCache.fetchedAt < MASCOT_CACHE_TTL_MS) return mascotCache.id;
+  const authToken = await getBrainoAuthToken();
+  if (!authToken) return loadCachedMascot();
+  try {
+    const base = SUPABASE_URL.replace(/\/$/, "");
+    const res = await fetch(`${base}/rest/v1/profiles?user_id=eq.${encodeURIComponent(auth.userId)}&select=mascot`, {
+      headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${authToken}` },
+    });
+    if (!res.ok) throw new Error(`profiles ${res.status}`);
+    const rows = await res.json();
+    const id = rows?.[0]?.mascot === "webb" ? "webb" : "braino";
+    mascotCache = { id, fetchedAt: Date.now() };
+    saveCachedMascot(id);
+    return id;
+  } catch (error) {
+    logMac("mascot.fetch_failed", { error: String(error?.message || error) });
+    return loadCachedMascot();
+  }
+}
+
+async function saveMascotPreference(id) {
+  const mascot = id === "webb" ? "webb" : "braino";
+  mascotCache = { id: mascot, fetchedAt: Date.now() };
+  saveCachedMascot(mascot);
+  const auth = authStatusPayload();
+  if (!auth.userId || !SUPABASE_URL || !SUPABASE_ANON_KEY) return true; // signed out: local cache is the source of truth
+  const authToken = await getBrainoAuthToken();
+  if (!authToken) return true;
+  try {
+    const base = SUPABASE_URL.replace(/\/$/, "");
+    const res = await fetch(`${base}/rest/v1/profiles?user_id=eq.${encodeURIComponent(auth.userId)}`, {
+      method: "PATCH",
+      headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${authToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ mascot }),
+    });
+    if (!res.ok) throw new Error(`profiles ${res.status}`);
+    return true;
+  } catch (error) {
+    logMac("mascot.save_failed", { error: String(error?.message || error) });
+    return false; // still saved locally above, so the picker stays in sync on this device
+  }
+}
+
+ipcMain.handle("braino-mac:set-mascot", async (_event, id) => ({ ok: await saveMascotPreference(id) }));
 
 async function setVoiceModeActive(modeId, active) {
   const auth = authStatusPayload();
@@ -2624,7 +3081,7 @@ async function executeClassifiedIntent(classified, raw) {
     return { ok: true, say: `Opening ${arg.replace(/^https?:\/\//, "")}.` };
   }
   if (tool === "find_file" && arg) {
-    const files = await findFiles(arg, { kind: "" });
+    const files = await findFiles(arg, { kind: "", requireNameMatch: true });
     if (!files.length) return { ok: false, say: `I searched the Mac, but did not find ${arg}.` };
     const opened = await openLocalPath(files[0]);
     return opened.ok
@@ -3030,10 +3487,14 @@ function stopBrainoWakeWord() {
     clearTimeout(wakeWordRestartTimer);
     wakeWordRestartTimer = null;
   }
-  if (swiftWakeWord) {
-    swiftWakeWord.kill();
-    swiftWakeWord = null;
+  wakeWordRunning = false;
+  wakeWordStarting = false;
+  stopWakeWordTail();
+  if (wakeWordHelperPid) {
+    try { process.kill(wakeWordHelperPid, "SIGTERM"); } catch (_) {}
+    wakeWordHelperPid = 0;
   }
+  execFileP("/usr/bin/pkill", ["-f", "braino-wake-word"], { timeout: 5000 }).catch(() => {});
   sendToRenderer("braino-mac:wake-status", { armed: false });
 }
 
@@ -4466,6 +4927,168 @@ async function runAxHelper(args, timeout = 15000) {
   }
 }
 
+function dictationStatePayload() {
+  return {
+    active: dictationState.active,
+    startedAt: dictationState.startedAt || null,
+    targetApp: dictationState.targetApp || "",
+    insertions: dictationState.insertions || 0,
+    insertionMode: dictationState.insertionMode || "",
+    focusStatus: dictationState.focusStatus || "",
+    model: DICTATION_TRANSCRIPTION_MODEL,
+  };
+}
+
+async function startDictationSkill() {
+  const [latestContext, focus] = await Promise.all([
+    readActiveMacContext(),
+    runAxHelper(["focused"]),
+  ]);
+  if (latestContext && !isBrainoSelfContext(latestContext)) activeMacContext = latestContext;
+  const appName = activeMacContext?.appName || "";
+  const decision = evaluateDictationStart(focus.status, Boolean(appName));
+  logMac("dictation.focus", {
+    status: focus.status,
+    detail: focus.detail || "",
+    app: appName,
+    insertionMode: decision.insertionMode || "",
+  });
+  if (!decision.ok) {
+    return {
+      ok: false,
+      error: decision.error,
+      ...dictationStatePayload(),
+    };
+  }
+
+  dictationState = {
+    active: true,
+    startedAt: Date.now(),
+    targetApp: appName,
+    insertions: 0,
+    insertionMode: decision.insertionMode,
+    focusStatus: focus.status,
+  };
+  logMac("dictation.started", {
+    app: dictationState.targetApp,
+    focusStatus: dictationState.focusStatus,
+    insertionMode: dictationState.insertionMode,
+    model: DICTATION_TRANSCRIPTION_MODEL,
+  });
+  return { ok: true, ...dictationStatePayload() };
+}
+
+function stopDictationSkill(reason = "stopped") {
+  const previous = { ...dictationState };
+  dictationState = {
+    active: false,
+    startedAt: 0,
+    targetApp: "",
+    insertions: 0,
+    insertionMode: "",
+    focusStatus: "",
+  };
+  if (previous.active) {
+    logMac("dictation.stopped", {
+      reason,
+      durationMs: previous.startedAt ? Date.now() - previous.startedAt : 0,
+      insertions: previous.insertions || 0,
+      app: previous.targetApp || "",
+    });
+  }
+  return { ok: true, ...dictationStatePayload() };
+}
+
+async function pasteDictationFallback(text) {
+  const previousClipboard = clipboard.readText();
+  clipboard.writeText(text);
+  try {
+    const { stdout } = await execFileP("/usr/bin/osascript", [
+      "-e",
+      [
+        'tell application "System Events"',
+        "set targetProcess to first application process whose frontmost is true",
+        "key code 9 using {command down}",
+        "return name of targetProcess",
+        "end tell",
+      ].join("\n"),
+    ], { timeout: 4000 });
+    await new Promise((resolve) => setTimeout(resolve, 420));
+    if (clipboard.readText() === text) clipboard.writeText(previousClipboard);
+    return {
+      ok: true,
+      targetApp: String(stdout || "").trim(),
+    };
+  } catch (error) {
+    if (clipboard.readText() === text) clipboard.writeText(previousClipboard);
+    return {
+      ok: false,
+      targetApp: "",
+      error: error?.message || "paste command failed",
+    };
+  }
+}
+
+async function insertDictationText(value) {
+  if (!dictationState.active) {
+    return { ok: false, error: "Yap Mode is not active.", ...dictationStatePayload() };
+  }
+  const text = normalizeDictationChunk(value);
+  if (!text) return { ok: true, inserted: false, ...dictationStatePayload() };
+
+  const focus = await runAxHelper(["focused"]);
+  if (focus.status === "needs-accessibility" || focus.status === "secure") {
+    const error = focus.status === "needs-accessibility"
+      ? "Braino needs Accessibility permission to type."
+      : "Yap Mode stays out of password and secure text fields.";
+    logMac("dictation.insert_failed", {
+      chars: text.length,
+      method: "",
+      status: focus.status,
+      insertion: dictationState.insertions,
+    });
+    return { ok: false, error, ...dictationStatePayload() };
+  }
+
+  // AXSelectedText reports success in apps such as Cursor even when the
+  // Electron editor silently discards the write. Send a real paste first.
+  const pasted = await pasteDictationFallback(text);
+  let ok = pasted.ok;
+  let method = ok ? "paste" : "";
+  let insertionStatus = focus.status;
+  if (!ok && focus.status === "editable") {
+    const inserted = await runAxHelper(["insert", Buffer.from(text, "utf8").toString("base64")]);
+    insertionStatus = inserted.status;
+    ok = inserted.status === "inserted";
+    method = ok ? "accessibility" : "";
+  }
+
+  if (ok) dictationState.insertions += 1;
+  logMac(ok ? "dictation.inserted" : "dictation.insert_failed", {
+    chars: text.length,
+    method,
+    status: insertionStatus,
+    insertion: dictationState.insertions,
+    targetApp: pasted.targetApp || "",
+    pasteError: pasted.error || "",
+  });
+  if (!ok) {
+    const error = insertionStatus === "needs-accessibility"
+      ? "Braino needs Accessibility permission to type."
+      : insertionStatus === "secure"
+        ? "Yap Mode stays out of password and secure text fields."
+        : "Keep the caret in an editable text field while dictating.";
+    return { ok: false, error, ...dictationStatePayload() };
+  }
+  return {
+    ok: true,
+    inserted: true,
+    chars: text.length,
+    method,
+    ...dictationStatePayload(),
+  };
+}
+
 function parseAxClickIntent(raw) {
   const source = cleanPrompt(String(raw || "")).replace(/[?.!]+\s*$/, "");
   // Bare shopping actions with no click verb — "add to cart", "buy now".
@@ -5147,10 +5770,17 @@ end tell`;
     if (!/sent/.test(String(stdout))) throw new Error(String(stdout || "WhatsApp is not open."));
   } catch (error) {
     logMac("whatsapp.send.enter_failed", { error });
-    return {
-      ok: false,
-      say: `I opened the chat with ${resolved.name} and typed the message, but could not press send. It is sitting in the box, just hit enter.`,
-    };
+    // WhatsApp occasionally ignores Enter after opening a deep link. Look at
+    // the actual app controls and press Send instead of asking the user to
+    // finish a message Braino already typed.
+    const pressed = await axClick({ target: "Send", clickLastPointed: false }).catch(() => ({ ok: false }));
+    logMac("whatsapp.send.fallback", { ok: Boolean(pressed?.ok), say: textForLog(pressed?.say || "") });
+    if (!pressed?.ok) {
+      return {
+        ok: false,
+        say: `I opened the chat with ${resolved.name} and typed the message, but WhatsApp would not let me press send.`,
+      };
+    }
   }
   logMac("whatsapp.sent", {
     recipient: textForLog(resolved.name),
@@ -5159,6 +5789,31 @@ end tell`;
   });
   sendTaskProgress({ status: "done", text: `Sent to ${resolved.name}` });
   return { ok: true, say: `Sent "${text}" to ${resolved.name} on WhatsApp.` };
+}
+
+async function draftWhatsAppMessage(recipientRaw, message) {
+  const text = String(message || "").trim();
+  if (!text) return { ok: false, say: "Tell me what the draft should say." };
+  sendTaskProgress({ status: "thinking", text: `Opening ${recipientRaw}` });
+  const resolved = await resolveWhatsAppRecipient(recipientRaw);
+  if (!resolved.ok) {
+    return {
+      ok: false,
+      say: `I could not find a number for ${recipientRaw}.`,
+    };
+  }
+  const phone = normalizeWhatsAppPhone(resolved.phone);
+  if (!phone || phone.length < 10) {
+    return { ok: false, say: `The number I have for ${resolved.name} does not look complete.` };
+  }
+  await shell.openExternal(`whatsapp://send?phone=${phone}&text=${encodeURIComponent(text)}`);
+  logMac("whatsapp.drafted", {
+    recipient: textForLog(resolved.name),
+    source: resolved.source,
+    messageChars: text.length,
+  });
+  sendTaskProgress({ status: "done", text: `Drafted for ${resolved.name}` });
+  return { ok: true, say: `Opened ${resolved.name} with the message ready, but did not send it.` };
 }
 
 let lastYouTubeList = { items: [], at: 0 };
@@ -5531,6 +6186,7 @@ function speakableYouTubeList(items, count = 3) {
 }
 
 async function playYouTubeVideo(query) {
+  stopMusicSegmentLoop();
   sendTaskProgress({ status: "thinking", text: `Finding ${query} on YouTube` });
   try {
     const { videos } = await fetchYouTubeResults(query, { limit: 5 });
@@ -6834,48 +7490,51 @@ async function queueSpotifyTrackOnMac(songQuery) {
 }
 
 async function playSpotifyContextOnMac(kind, name) {
+  stopMusicSegmentLoop();
   const query = String(name || "").trim();
   if (!query) return { ok: false, say: `Tell me the ${kind} name and I will play it on Spotify.` };
-  const startedAt = Date.now();
-  sendTaskProgress({ status: "thinking", text: `Searching Spotify for ${query}` });
-  const wasRunningPromise = isMacApplicationRunning("Spotify");
-  const openPromise = openApp("Spotify");
-  const searchPromise = callSpotifyFunction("spotify-search", { query, limit: 5, types: [kind] });
-  const [wasRunning, openResult, search] = await Promise.all([wasRunningPromise, openPromise, searchPromise]);
-  if (!search.ok) return { ok: false, say: search.error || "Spotify search failed." };
-  const list = kind === "playlist" ? search.playlists : kind === "album" ? search.albums : search.artists;
-  const item = Array.isArray(list) ? list[0] : null;
-  if (!item?.uri) return { ok: false, say: `I could not find a ${kind} called ${query} on Spotify.` };
-  if (!openResult.ok) return { ok: false, say: `I found the ${kind}, but I could not open the Spotify Mac app.` };
-  await new Promise((resolve) => setTimeout(resolve, wasRunning ? 180 : 650));
+  return runSpotifyTaskWithFocusReturn({ type: "context", kind, query: textForLog(query) }, async () => {
+    const startedAt = Date.now();
+    sendTaskProgress({ status: "thinking", text: `Searching Spotify for ${query}` });
+    const wasRunningPromise = isMacApplicationRunning("Spotify");
+    const openPromise = openApp("Spotify");
+    const searchPromise = callSpotifyFunction("spotify-search", { query, limit: 5, types: [kind] });
+    const [wasRunning, openResult, search] = await Promise.all([wasRunningPromise, openPromise, searchPromise]);
+    if (!search.ok) return { ok: false, say: search.error || "Spotify search failed." };
+    const list = kind === "playlist" ? search.playlists : kind === "album" ? search.albums : search.artists;
+    const item = Array.isArray(list) ? list[0] : null;
+    if (!item?.uri) return { ok: false, say: `I could not find a ${kind} called ${query} on Spotify.` };
+    if (!openResult.ok) return { ok: false, say: `I found the ${kind}, but I could not open the Spotify Mac app.` };
+    await new Promise((resolve) => setTimeout(resolve, wasRunning ? 180 : 650));
 
-  const label = kind === "playlist"
-    ? `your playlist ${item.name}${item.ownedByUser === false && item.owner ? ` by ${item.owner}` : ""}`
-    : kind === "album"
-      ? `the album ${item.name}${item.artists ? ` by ${item.artists}` : ""}`
-      : `${item.name}`;
-  sendTaskProgress({ status: "thinking", text: `Playing ${item.name}` });
+    const label = kind === "playlist"
+      ? `your playlist ${item.name}${item.ownedByUser === false && item.owner ? ` by ${item.owner}` : ""}`
+      : kind === "album"
+        ? `the album ${item.name}${item.artists ? ` by ${item.artists}` : ""}`
+        : `${item.name}`;
+    sendTaskProgress({ status: "thinking", text: `Playing ${item.name}` });
 
-  let nativeOk = false;
-  let apiOk = false;
-  let apiError = "";
-  try {
-    await playSpotifyTrackInMacApp(item.uri);
-    nativeOk = true;
-    logMac("spotify.context_play.mac_app.done", { kind, name: textForLog(item.name), uri: item.uri, durationMs: Date.now() - startedAt });
-  } catch (error) {
-    logMac("spotify.context_play.mac_app.failed", { kind, name: textForLog(item.name), uri: item.uri, error });
-  }
-  const playback = await callSpotifyFunction("spotify-playback", { action: "play", contextUri: item.uri });
-  if (playback.ok) apiOk = true;
-  else {
-    apiError = playback.error || "Spotify playback failed.";
-    logMac("spotify.context_play.api.failed_after_native", { kind, name: textForLog(item.name), error: apiError });
-  }
+    let nativeOk = false;
+    let apiOk = false;
+    let apiError = "";
+    try {
+      await playSpotifyTrackInMacApp(item.uri);
+      nativeOk = true;
+      logMac("spotify.context_play.mac_app.done", { kind, name: textForLog(item.name), uri: item.uri, durationMs: Date.now() - startedAt });
+    } catch (error) {
+      logMac("spotify.context_play.mac_app.failed", { kind, name: textForLog(item.name), uri: item.uri, error });
+    }
+    const playback = await callSpotifyFunction("spotify-playback", { action: "play", contextUri: item.uri });
+    if (playback.ok) apiOk = true;
+    else {
+      apiError = playback.error || "Spotify playback failed.";
+      logMac("spotify.context_play.api.failed_after_native", { kind, name: textForLog(item.name), error: apiError });
+    }
 
-  if (!nativeOk && !apiOk) return { ok: false, say: apiError || `Spotify opened, but I could not start the ${kind}.` };
-  sendTaskProgress({ status: "done", text: `Playing ${item.name}` });
-  return { ok: true, say: `Playing ${label} on Spotify.` };
+    if (!nativeOk && !apiOk) return { ok: false, say: apiError || `Spotify opened, but I could not start the ${kind}.` };
+    sendTaskProgress({ status: "done", text: `Playing ${item.name}` });
+    return { ok: true, say: `Playing ${label} on Spotify.` };
+  });
 }
 
 function parseSpotifyCreatePlaylistIntent(raw) {
@@ -7061,6 +7720,7 @@ async function controlSpotifyVolumeOnMac(volumeIntent) {
 
 async function controlSpotifyPlaybackOnMac(control) {
   const normalized = String(control || "").trim().toLowerCase();
+  if (normalized === "next" || normalized === "previous") stopMusicSegmentLoop();
   const commandMap = {
     pause: "pause",
     play: "play",
@@ -7109,57 +7769,276 @@ async function controlSpotifyPlaybackOnMac(control) {
 }
 
 async function playSpotifySongOnMac(songQuery) {
+  stopMusicSegmentLoop();
   const query = String(songQuery || "").trim();
   if (!query) return { ok: false, say: "Tell me the song name and I will play it on Spotify." };
-  const startedAt = Date.now();
-  sendTaskProgress({ status: "thinking", text: `Searching Spotify for ${query}` });
-  const wasRunningPromise = isMacApplicationRunning("Spotify");
-  const openPromise = openApp("Spotify");
-  const searchPromise = callSpotifyFunction("spotify-search", { query, limit: 5 });
-  const [wasRunning, openResult, search] = await Promise.all([wasRunningPromise, openPromise, searchPromise]);
-  if (!search.ok) return { ok: false, say: search.error || "Spotify search failed." };
-  const track = Array.isArray(search.tracks) ? search.tracks[0] : null;
-  if (!track?.uri) return { ok: false, say: `I could not find ${query} on Spotify.` };
+  return runSpotifyTaskWithFocusReturn({ type: "track", query: textForLog(query) }, async () => {
+    const startedAt = Date.now();
+    sendTaskProgress({ status: "thinking", text: `Searching Spotify for ${query}` });
+    const wasRunningPromise = isMacApplicationRunning("Spotify");
+    const openPromise = openApp("Spotify");
+    const searchPromise = callSpotifyFunction("spotify-search", { query, limit: 5 });
+    const [wasRunning, openResult, search] = await Promise.all([wasRunningPromise, openPromise, searchPromise]);
+    if (!search.ok) return { ok: false, say: search.error || "Spotify search failed." };
+    const track = Array.isArray(search.tracks) ? search.tracks[0] : null;
+    if (!track?.uri) return { ok: false, say: `I could not find ${query} on Spotify.` };
 
-  sendTaskProgress({ status: "thinking", text: "Opening Spotify" });
-  if (!openResult.ok) return { ok: false, say: "I found the track, but I could not open the Spotify Mac app." };
-  await new Promise((resolve) => setTimeout(resolve, wasRunning ? 180 : 650));
+    sendTaskProgress({ status: "thinking", text: "Opening Spotify" });
+    if (!openResult.ok) return { ok: false, say: "I found the track, but I could not open the Spotify Mac app." };
+    await new Promise((resolve) => setTimeout(resolve, wasRunning ? 180 : 650));
 
-  const title = String(track.name || track.title || query).trim();
-  const artists = formatSpotifyArtists(track) || "unknown";
-  let nativeOk = false;
-  let apiOk = false;
-  let apiError = "";
+    const title = String(track.name || track.title || query).trim();
+    const artists = formatSpotifyArtists(track) || "unknown";
+    let nativeOk = false;
+    let apiOk = false;
+    let apiError = "";
 
-  sendTaskProgress({ status: "thinking", text: `Playing ${title}` });
-  try {
-    await playSpotifyTrackInMacApp(track.uri);
-    nativeOk = true;
-    const state = await readSpotifyMacState();
-    logMac("spotify.mac_app.play.done", {
-      track: title,
-      artists,
-      uri: track.uri,
-      state: state?.state || "",
-      stateTrack: state?.name || "",
-      stateArtist: state?.artist || "",
-      durationMs: Date.now() - startedAt,
+    sendTaskProgress({ status: "thinking", text: `Playing ${title}` });
+    try {
+      await playSpotifyTrackInMacApp(track.uri);
+      nativeOk = true;
+      const state = await readSpotifyMacState();
+      logMac("spotify.mac_app.play.done", {
+        track: title,
+        artists,
+        uri: track.uri,
+        state: state?.state || "",
+        stateTrack: state?.name || "",
+        stateArtist: state?.artist || "",
+        durationMs: Date.now() - startedAt,
+      });
+    } catch (error) {
+      logMac("spotify.mac_app.play.failed", { track: title, artists, uri: track.uri, error });
+    }
+
+    const playback = await callSpotifyFunction("spotify-playback", { action: "play", uris: [track.uri] });
+    if (playback.ok) {
+      apiOk = true;
+    } else {
+      apiError = playback.error || "Spotify playback failed.";
+      logMac("spotify.api_play.failed_after_native", { track: title, artists, error: apiError });
+    }
+
+    if (!nativeOk && !apiOk) return { ok: false, say: apiError || "Spotify opened, but I could not start playback." };
+    sendTaskProgress({ status: "done", text: `Playing ${title}` });
+    return { ok: true, say: `Playing ${title} by ${artists} on Spotify.` };
+  });
+}
+
+// A-B music looping is deliberately one intent above the individual players.
+// The transcript is interpreted once, shown in the thinking surface, then the
+// provider adapter only has to play and seek. Starting any new segment replaces
+// the old timer, so two spoken commands can never fight over the playhead.
+let activeMusicSegmentTimer = null;
+let musicSegmentTimerGeneration = 0;
+let jyotiDemoChromeWindowId = null;
+
+function stopMusicSegmentLoop() {
+  musicSegmentTimerGeneration += 1;
+  if (!activeMusicSegmentTimer) return;
+  clearInterval(activeMusicSegmentTimer);
+  activeMusicSegmentTimer = null;
+}
+
+function replaceMusicSegmentTimer(callback, durationSeconds) {
+  stopMusicSegmentLoop();
+  const generation = musicSegmentTimerGeneration;
+  const intervalMs = Math.max(120, Math.min(500, Math.round(durationSeconds * 100)));
+  activeMusicSegmentTimer = setInterval(() => {
+    if (generation === musicSegmentTimerGeneration) void callback();
+  }, intervalMs);
+  activeMusicSegmentTimer.unref?.();
+}
+
+function replaceMusicSegmentBoundary(callback, durationSeconds) {
+  stopMusicSegmentLoop();
+  const generation = musicSegmentTimerGeneration;
+  const boundaryMs = Math.max(250, Math.round(durationSeconds * 1000));
+  const runBoundary = async () => {
+    if (generation !== musicSegmentTimerGeneration) return;
+    const startedAt = Date.now();
+    await callback();
+    if (generation !== musicSegmentTimerGeneration) return;
+    const nextDelay = Math.max(50, boundaryMs - (Date.now() - startedAt));
+    activeMusicSegmentTimer = setTimeout(runBoundary, nextDelay);
+    activeMusicSegmentTimer.unref?.();
+  };
+  activeMusicSegmentTimer = setTimeout(runBoundary, boundaryMs);
+  activeMusicSegmentTimer.unref?.();
+}
+
+async function resolveCurrentMusicForSegment() {
+  sendTaskProgress({ status: "thinking", text: "Looking at what is playing" });
+
+  if (musicPlaying && musicSource === "youtube") {
+    return { provider: "youtube_music", song: lastMusicTrack || "the current YouTube song" };
+  }
+
+  const [spotifyState, appleState] = await Promise.all([
+    callSpotifyFunction("spotify-player-state", {}).catch(() => null),
+    readAppleMusicState().catch(() => null),
+  ]);
+  const spotifyPlaying = Boolean(spotifyState?.ok && spotifyState?.isPlaying && spotifyState?.track);
+  const applePlaying = Boolean(appleState?.ok && /playing/i.test(appleState?.state || "") && appleState?.name);
+
+  if (musicSource === "spotify" && spotifyPlaying) {
+    return { provider: "spotify", song: spotifyState.track.name || lastMusicTrack || "the current song", track: spotifyState.track };
+  }
+  if (musicSource === "music" && applePlaying) {
+    return { provider: "apple_music", song: appleState.name, state: appleState };
+  }
+  if (spotifyPlaying) {
+    return { provider: "spotify", song: spotifyState.track.name || "the current song", track: spotifyState.track };
+  }
+  if (applePlaying) {
+    return { provider: "apple_music", song: appleState.name, state: appleState };
+  }
+
+  // The live YouTube watcher can lag one poll behind a fresh command. Check
+  // the visible browser video directly, which is the screen/context glance
+  // the phrase "this song" asks Braino to take.
+  const youtubeResult = await chromeInjectJs(
+    "(function(){var v=document.querySelector('video');if(!v||v.paused)return '';return document.title.replace(/\\s*-\\s*YouTube\\s*$/i,'').trim()||'the current YouTube song';})()",
+  );
+  if (youtubeResult && !/^__(?:err|jsoff|nowin)__$/.test(youtubeResult)) {
+    return { provider: "youtube_music", song: youtubeResult };
+  }
+  return null;
+}
+
+async function playMusicSegmentOnMac(intent) {
+  if (!intent?.valid) {
+    if (intent?.reason === "missing_range" && (intent.useCurrent || intent.song)) {
+      let currentMusic = null;
+      let song = intent.song || "";
+      let provider = intent.provider || "spotify";
+      if (intent.useCurrent) {
+        currentMusic = await resolveCurrentMusicForSegment();
+        if (!currentMusic) {
+          return { ok: true, say: "I cannot see a song playing right now. Start it, then ask me to loop this song again." };
+        }
+        song = currentMusic.song;
+        provider = currentMusic.provider;
+      }
+      setPendingMacWorkflow({
+        type: "music_segment",
+        stage: "loop_range",
+        data: { song, provider, useCurrent: Boolean(intent.useCurrent), currentMusic },
+      });
+      const providerName = provider === "apple_music" ? "Apple Music" : provider === "youtube_music" ? "YouTube Music" : "Spotify";
+      logMac("music.segment.awaiting_range", { song: textForLog(song), provider, useCurrent: Boolean(intent.useCurrent) });
+      return { ok: true, say: `I see ${song} playing on ${providerName}. What range should I loop?` };
+    }
+    const say = intent?.reason === "invalid_range"
+      ? "The loop end needs to be after its start. Say it like from two twenty to two twenty seven."
+      : intent?.reason === "missing_song"
+        ? "Which song should I loop?"
+        : "Tell me the loop range, like from two twenty to two twenty seven.";
+    return { ok: true, say };
+  }
+
+  let { song, provider } = intent;
+  const { startSeconds, endSeconds, interpretedRange } = intent;
+  let currentMusic = intent.currentMusic || null;
+  if (intent.useCurrent) {
+    currentMusic = currentMusic || await resolveCurrentMusicForSegment();
+    if (!currentMusic) {
+      return { ok: true, say: "I cannot see a song playing right now. Start it, then ask me to loop this song again." };
+    }
+    provider = currentMusic.provider;
+    song = currentMusic.song;
+  }
+  const providerName = provider === "apple_music" ? "Apple Music" : provider === "youtube_music" ? "YouTube Music" : "Spotify";
+  sendTaskProgress({ status: "thinking", text: `${song} · ${interpretedRange} · ${providerName}` });
+  logMac("music.segment.intent", { song: textForLog(song), provider, useCurrent: Boolean(intent.useCurrent), startSeconds, endSeconds, interpretedRange });
+
+  if (provider === "spotify") {
+    const search = intent.useCurrent ? null : await callSpotifyFunction("spotify-search", { query: song, limit: 5 });
+    const track = intent.useCurrent
+      ? currentMusic?.track
+      : search?.ok && Array.isArray(search.tracks)
+        ? search.tracks[0]
+        : null;
+    if (!track?.uri) return { ok: false, say: `I could not find ${song} on Spotify.` };
+    await openApp("Spotify");
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    let nativeStarted = false;
+    try {
+      await playSpotifyTrackInMacApp(track.uri, startSeconds * 1000);
+      nativeStarted = true;
+    } catch (error) {
+      logMac("music.segment.spotify.native_start_failed", { error });
+    }
+    // Always mirror the start through the Web API. The native app can accept
+    // `play track` while silently ignoring the initial seek on a cold player.
+    const playback = await callSpotifyFunction("spotify-playback", {
+      action: "play",
+      uris: [track.uri],
+      positionMs: startSeconds * 1000,
     });
-  } catch (error) {
-    logMac("spotify.mac_app.play.failed", { track: title, artists, uri: track.uri, error });
-  }
-
-  const playback = await callSpotifyFunction("spotify-playback", { action: "play", uris: [track.uri] });
-  if (playback.ok) {
-    apiOk = true;
+    if (!nativeStarted && !playback.ok) {
+      return { ok: false, say: playback.error || "Spotify could not start that loop." };
+    }
+    replaceMusicSegmentBoundary(async () => {
+      const boundaryAt = Date.now();
+      const nativeSeek = execFileP(
+        "/usr/bin/osascript",
+        ["-e", `tell application "Spotify" to set player position to ${startSeconds}`],
+        { timeout: 3000 },
+      ).then(() => true).catch(() => false);
+      const apiSeek = callSpotifyFunction("spotify-playback", {
+        action: "seek",
+        positionMs: startSeconds * 1000,
+      });
+      const [nativeOk, apiResult] = await Promise.all([nativeSeek, apiSeek]);
+      logMac("music.segment.spotify.boundary", {
+        startSeconds,
+        endSeconds,
+        nativeOk,
+        apiOk: Boolean(apiResult?.ok),
+        durationMs: Date.now() - boundaryAt,
+      });
+    }, endSeconds - startSeconds);
+  } else if (provider === "apple_music") {
+    const escapedSong = escapeAppleScriptString(song);
+    const script = intent.useCurrent
+      ? `tell application "Music"
+  activate
+  play
+  set player position to ${startSeconds}
+  return name of current track
+end tell`
+      : `tell application "Music"
+  activate
+  set matches to (every track of playlist "Library" whose name contains "${escapedSong}")
+  if (count of matches) is 0 then return "__notfound__"
+  play item 1 of matches
+  set player position to ${startSeconds}
+  return name of item 1 of matches
+end tell`;
+    const { stdout } = await execFileP("/usr/bin/osascript", ["-e", script], { timeout: 10000 }).catch(() => ({ stdout: "__notfound__" }));
+    if (String(stdout).trim() === "__notfound__") return { ok: false, say: `I could not find ${song} in your Apple Music library.` };
+    replaceMusicSegmentTimer(async () => {
+      const state = await readAppleMusicState();
+      if (state?.positionSec != null && state.positionSec >= endSeconds) {
+        await execFileP("/usr/bin/osascript", ["-e", `tell application "Music" to set player position to ${startSeconds}`], { timeout: 3000 }).catch(() => {});
+      }
+    }, endSeconds - startSeconds);
   } else {
-    apiError = playback.error || "Spotify playback failed.";
-    logMac("spotify.api_play.failed_after_native", { track: title, artists, error: apiError });
+    if (!intent.useCurrent) {
+      const { videos } = await fetchYouTubeResults(song, { limit: 5 }).catch(() => ({ videos: [] }));
+      const video = videos[0];
+      if (!video?.videoId) return { ok: false, say: `I could not find ${song} on YouTube Music.` };
+      await openChromeUrl(`https://www.youtube.com/watch?v=${video.videoId}&t=${startSeconds}s`);
+      await new Promise((resolve) => setTimeout(resolve, 1200));
+    }
+    const loopJs = `(function(){var v=document.querySelector('video');if(!v)return 'no-video';if(v.currentTime>=${endSeconds}||v.currentTime<${startSeconds - 1}){v.currentTime=${startSeconds};v.play();}return 'ok';})()`;
+    await chromeInjectJs(loopJs);
+    replaceMusicSegmentTimer(() => chromeInjectJs(loopJs), endSeconds - startSeconds);
   }
 
-  if (!nativeOk && !apiOk) return { ok: false, say: apiError || "Spotify opened, but I could not start playback." };
-  sendTaskProgress({ status: "done", text: `Playing ${title}` });
-  return { ok: true, say: `Playing ${title} by ${artists} on Spotify.` };
+  sendTaskProgress({ status: "done", text: `Looping ${interpretedRange}` });
+  return { ok: true, say: `Looping ${song} on ${providerName}, from ${interpretedRange}.` };
 }
 
 async function playMacTeamDemoSpotifyTrack() {
@@ -7352,16 +8231,6 @@ const FILE_KIND_EXTENSIONS = {
   archive: [".zip", ".rar", ".7z", ".tar", ".gz", ".dmg", ".pkg"],
 };
 
-function normalizeSearchToken(value) {
-  return String(value || "")
-    .toLowerCase()
-    .replace(/['"`]/g, "")
-    .replace(/&/g, " and ")
-    .replace(/[^a-z0-9\s.-]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
 function mdfindLiteral(value) {
   return String(value || "").replace(/\\/g, "\\\\").replace(/"/g, '\\"').trim();
 }
@@ -7399,51 +8268,6 @@ function rankNameMatch(candidateName, query) {
   const targetWords = target.split(" ").filter(Boolean);
   const hits = targetWords.filter((word) => candidate.includes(word)).length;
   return hits ? 40 + hits * 8 : 0;
-}
-
-function editDistanceWithin(a, b, maxDistance) {
-  const left = String(a || "");
-  const right = String(b || "");
-  if (Math.abs(left.length - right.length) > maxDistance) return false;
-  let previous = Array.from({ length: right.length + 1 }, (_, index) => index);
-  for (let i = 1; i <= left.length; i += 1) {
-    const current = [i];
-    let rowMin = current[0];
-    for (let j = 1; j <= right.length; j += 1) {
-      const cost = left[i - 1] === right[j - 1] ? 0 : 1;
-      const value = Math.min(
-        previous[j] + 1,
-        current[j - 1] + 1,
-        previous[j - 1] + cost,
-      );
-      current[j] = value;
-      rowMin = Math.min(rowMin, value);
-    }
-    if (rowMin > maxDistance) return false;
-    previous = current;
-  }
-  return previous[right.length] <= maxDistance;
-}
-
-function fuzzyWordIncluded(candidateWords, queryWord) {
-  if (!queryWord) return true;
-  if (queryWord.length <= 2) return candidateWords.includes(queryWord);
-  return candidateWords.some((candidateWord) => {
-    if (candidateWord.includes(queryWord) || queryWord.includes(candidateWord)) return true;
-    const maxDistance = queryWord.length >= 7 ? 2 : 1;
-    return editDistanceWithin(candidateWord, queryWord, maxDistance);
-  });
-}
-
-function candidateMatchesQuery(candidateText, queryText) {
-  const candidate = normalizeSearchToken(candidateText);
-  const query = normalizeSearchToken(queryText);
-  if (!candidate || !query) return false;
-  if (candidate.includes(query)) return true;
-  const candidateWords = candidate.split(" ").filter(Boolean);
-  const queryWords = query.split(" ").filter(Boolean);
-  if (!queryWords.length) return false;
-  return queryWords.every((word) => fuzzyWordIncluded(candidateWords, word));
 }
 
 const NATIVE_APP_BUNDLE_IDS = {
@@ -7879,11 +8703,13 @@ async function fallbackWalkFileSearch(query, options = {}) {
 async function findFiles(query, options = {}) {
   const cleanQuery = cleanFileQuery(query, options.kind || "");
   if (!cleanQuery) return [];
+  const requireNameMatch = Boolean(options.requireNameMatch);
   const variants = searchQueryVariants(cleanQuery);
   logMac("file.search.start", {
     requested: textForLog(query),
     cleanQuery,
     kind: options.kind || "",
+    requireNameMatch,
     variants,
   });
   let mdfindPaths = [];
@@ -7924,13 +8750,21 @@ async function findFiles(query, options = {}) {
       } catch (_) {
         return false;
       }
-      return pathMatchesKind(filePath, options.kind || "", stats);
+      if (!pathMatchesKind(filePath, options.kind || "", stats)) return false;
+      if (!requireNameMatch) return true;
+      const basename = path.basename(filePath);
+      const extension = path.extname(basename);
+      const stem = extension ? basename.slice(0, -extension.length) : basename;
+      const queryWithoutExtension = cleanQuery.replace(/\.[a-z0-9]{2,8}$/i, "");
+      return candidateMatchesQuery(basename, cleanQuery)
+        || candidateMatchesQuery(stem, queryWithoutExtension);
     })
     .sort((a, b) => rankFileMatch(b, cleanQuery, options.kind || "") - rankFileMatch(a, cleanQuery, options.kind || ""))
     .slice(0, 8);
   logMac("file.search.done", {
     cleanQuery,
     kind: options.kind || "",
+    requireNameMatch,
     matchCount: matches.length,
     firstResults: matches.slice(0, 5).map((filePath) => ({ name: path.basename(filePath), path: filePath })),
   });
@@ -8371,7 +9205,7 @@ function parseRenameFileIntent(raw) {
 }
 
 async function renameMacFile(intent) {
-  const files = await findFiles(intent.query, { kind: intent.kind });
+  const files = await findFiles(intent.query, { kind: intent.kind, requireNameMatch: true });
   if (!files.length) return { ok: false, say: `I searched the Mac, but did not find ${intent.query}.` };
   const sourcePath = files[0];
   if (isDangerousFileOperationPath(sourcePath)) return { ok: false, say: `I will not rename ${path.basename(sourcePath)} from voice.` };
@@ -8395,6 +9229,237 @@ async function renameMacFile(intent) {
     files: [destinationPath],
     say: `Renamed ${path.basename(sourcePath)} to ${path.basename(destinationPath)}.`,
   };
+}
+
+// ── "what I just downloaded" ────────────────────────────────────────────────
+// A name search cannot answer this, because the user never says the name. So
+// resolve it the way a person would: open the folder downloads land in, sort by
+// most recent, skip the junk, and look at the top item. The judgement calls a
+// person makes are the whole point of this skill:
+//   - a half-finished download (.crdownload/.part) is NOT ready, say so
+//   - two files landing seconds apart is genuinely ambiguous, so ask
+//   - the newest thing being hours old means "just" is probably wrong, so check
+// Desktop is scanned too because "Save as" lands there, but Downloads wins ties.
+
+const PARTIAL_DOWNLOAD_RE = /\.(crdownload|download|part|partial|opdownload|tmp)$/i;
+// Two files this close together came from one action (a zip plus its receipt,
+// an image set), so picking the top one by a few seconds would be a coin flip.
+const DOWNLOAD_TIE_MS = 90 * 1000;
+// Past this, "just downloaded" stops being obvious and a person would confirm.
+const DOWNLOAD_FRESH_MS = 60 * 60 * 1000;
+
+async function scanRecentDownloads(limit = 6) {
+  const roots = [
+    { dir: path.join(os.homedir(), "Downloads"), weight: 2 },
+    { dir: path.join(os.homedir(), "Desktop"), weight: 1 },
+  ];
+  const entries = [];
+  for (const root of roots) {
+    let names = [];
+    try {
+      names = await fs.promises.readdir(root.dir);
+    } catch (_) {
+      continue;
+    }
+    for (const name of names) {
+      if (name.startsWith(".")) continue;
+      const full = path.join(root.dir, name);
+      let stats = null;
+      try {
+        stats = await fs.promises.lstat(full);
+      } catch (_) {
+        continue;
+      }
+      if (stats.isSymbolicLink()) continue;
+      // Birth time is when the file ARRIVED on this Mac, which is what "just
+      // downloaded" means. mtime can be the server's timestamp from months ago.
+      const landedAt = Math.max(stats.birthtimeMs || 0, stats.mtimeMs || 0);
+      entries.push({
+        name,
+        full,
+        landedAt,
+        weight: root.weight,
+        isDir: stats.isDirectory(),
+        partial: PARTIAL_DOWNLOAD_RE.test(name),
+        ageMs: Date.now() - landedAt,
+      });
+    }
+  }
+  entries.sort((a, b) => (b.landedAt - a.landedAt) || (b.weight - a.weight));
+  return entries.slice(0, limit);
+}
+
+function describeDownloadAge(ageMs) {
+  const mins = Math.round(ageMs / 60000);
+  if (mins < 1) return "just now";
+  if (mins === 1) return "a minute ago";
+  if (mins < 60) return `${mins} minutes ago`;
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return hours === 1 ? "about an hour ago" : `about ${hours} hours ago`;
+  const days = Math.round(hours / 24);
+  return days === 1 ? "yesterday" : `${days} days ago`;
+}
+
+// "put it in this folder" means the Finder window the user is looking at.
+async function frontmostFinderFolder() {
+  const script = `
+tell application "System Events"
+  if not (exists application process "Finder") then return ""
+end tell
+tell application "Finder"
+  if (count of Finder windows) is 0 then return ""
+  try
+    return POSIX path of (target of front Finder window as alias)
+  on error
+    return ""
+  end try
+end tell`;
+  try {
+    const { stdout } = await execFileP("/usr/bin/osascript", ["-e", script], { timeout: 6000 });
+    const folder = String(stdout || "").trim();
+    return folder && safePathExists(folder) ? folder : "";
+  } catch (error) {
+    logMac("downloads.finder_front.failed", { error });
+    return "";
+  }
+}
+
+// Matches the ways a person refers to a file by its arrival instead of its name.
+function parseRecentDownloadIntent(raw) {
+  const source = String(raw || "").trim();
+  const referent = /\b(?:what|the (?:thing|file|one)|that|it|this)\b[^.?!]*\b(?:just|recently)\s+(?:down)?loaded\b/i.test(source)
+    || /\b(?:just|recently)\s+downloaded\b/i.test(source)
+    || /\b(?:my|the|that)\s+(?:last|latest|newest|most recent)\s+download\b/i.test(source)
+    || /\bdownload(?:ed)?\s+(?:file|thing)\b/i.test(source);
+  if (!referent) return null;
+
+  // "did I download X" / "what did I download" are questions, not commands.
+  const moveMatch = source.match(/\b(?:move|put|place|add|file|drop|shift)\b/i);
+  const openMatch = /\b(?:open|launch|show|run|view|see)\b/i.test(source);
+  const revealMatch = /\b(?:show (?:it )?in finder|reveal|where is it|which folder)\b/i.test(source);
+
+  if (moveMatch) {
+    const destMatch = source.match(/\b(?:to|into|in|inside|under)\s+(?:the\s+|my\s+)?(.+)$/i);
+    const destination = destMatch?.[1]?.trim() || "";
+    if (!destination) return { action: "move", destination: "" };
+    return { action: "move", destination };
+  }
+  if (revealMatch) return { action: "reveal", destination: "" };
+  if (openMatch) return { action: "open", destination: "" };
+  return { action: "identify", destination: "" };
+}
+
+async function handleRecentDownloadIntent(intent) {
+  const entries = await scanRecentDownloads(6);
+  const ready = entries.filter((e) => !e.partial);
+  const newest = ready[0];
+  const stillDownloading = entries.find((e) => e.partial && e.ageMs < DOWNLOAD_FRESH_MS);
+
+  logMac("downloads.recent.scan", {
+    action: intent.action,
+    candidates: entries.length,
+    newest: newest ? { name: textForLog(newest.name), ageMs: Math.round(newest.ageMs) } : null,
+    partialPending: Boolean(stillDownloading),
+  });
+
+  if (!newest) {
+    return {
+      ok: false,
+      say: stillDownloading
+        ? `${stillDownloading.name.replace(PARTIAL_DOWNLOAD_RE, "")} is still downloading. Give it a moment and ask me again.`
+        : "I looked in Downloads and on your Desktop and nothing has landed there recently.",
+    };
+  }
+
+  // A download finishing right now beats a finished one from a minute ago as
+  // the thing the user means, so flag it instead of silently opening the older.
+  if (stillDownloading && stillDownloading.landedAt > newest.landedAt) {
+    return {
+      ok: true,
+      say: `${stillDownloading.name.replace(PARTIAL_DOWNLOAD_RE, "")} is still coming down. The last finished one is ${newest.name}. Want that one instead?`,
+    };
+  }
+
+  // Two arrivals within seconds of each other: a person would not guess.
+  const rival = ready[1];
+  if (rival && Math.abs(newest.landedAt - rival.landedAt) < DOWNLOAD_TIE_MS) {
+    setPendingMacWorkflow({
+      type: "recent_download",
+      stage: "pick",
+      data: { action: intent.action, destination: intent.destination, options: [newest, rival].map((e) => ({ name: e.name, full: e.full })) },
+    });
+    return { ok: true, say: `Two things landed together: ${newest.name} and ${rival.name}. Which one?` };
+  }
+
+  // Old enough that "just" is doubtful: confirm rather than act on a stranger.
+  if (newest.ageMs > DOWNLOAD_FRESH_MS && intent.action !== "identify") {
+    setPendingMacWorkflow({
+      type: "recent_download",
+      stage: "confirm_stale",
+      data: { action: intent.action, destination: intent.destination, options: [{ name: newest.name, full: newest.full }] },
+    });
+    return { ok: true, say: `The newest thing I see is ${newest.name}, from ${describeDownloadAge(newest.ageMs)}. Is that the one?` };
+  }
+
+  return actOnRecentDownload(intent, newest);
+}
+
+async function actOnRecentDownload(intent, entry) {
+  const label = entry.name;
+
+  if (intent.action === "identify") {
+    return { ok: true, say: `The last thing you downloaded is ${label}, ${describeDownloadAge(Date.now() - (entry.landedAt || Date.now()))}. Want me to open it?` };
+  }
+
+  if (intent.action === "reveal") {
+    try {
+      await execFileP("open", ["-R", entry.full], { timeout: 8000 });
+      return { ok: true, say: `${label} is in ${path.basename(path.dirname(entry.full))}. I opened it in Finder.` };
+    } catch (error) {
+      logMac("downloads.reveal.failed", { error });
+      return { ok: false, say: `${label} is in ${path.basename(path.dirname(entry.full))}, but Finder would not open.` };
+    }
+  }
+
+  if (intent.action === "open") {
+    const opened = await openLocalPath(entry.full);
+    return opened.ok
+      ? { ok: true, files: [entry.full], say: `Opening ${label}.` }
+      : { ok: false, say: `I found ${label} but macOS would not open it.` };
+  }
+
+  // move
+  let destinationText = String(intent.destination || "").trim();
+  if (!destinationText || /^(?:this|that|the current|here)\b/i.test(destinationText)) {
+    const front = await frontmostFinderFolder();
+    if (!front) {
+      return { ok: false, say: `I have ${label} ready. Which folder should it go in?` };
+    }
+    return moveRecentDownloadTo(entry, front, path.basename(front));
+  }
+
+  const destination = await resolveDestinationFolder(destinationText);
+  if (!destination.ok) return { ok: false, say: destination.error };
+  return moveRecentDownloadTo(entry, destination.folderPath, path.basename(destination.folderPath) || destination.folderPath, destination.created);
+}
+
+async function moveRecentDownloadTo(entry, folderPath, folderLabel, folderCreated = false) {
+  if (isDangerousFileOperationPath(entry.full)) {
+    return { ok: false, say: `I will not move ${entry.name} from voice.` };
+  }
+  if (path.resolve(path.dirname(entry.full)) === path.resolve(folderPath)) {
+    return { ok: true, say: `${entry.name} is already in ${folderLabel}.` };
+  }
+  const destinationPath = await uniquePath(path.join(folderPath, entry.name));
+  sendTaskProgress({ status: "thinking", text: `Moving ${entry.name}`.slice(0, 36) });
+  await movePath(entry.full, destinationPath);
+  const steps = [];
+  if (folderCreated) steps.push({ type: "create_folder", path: folderPath });
+  steps.push({ type: "move", from: entry.full, to: destinationPath });
+  await pushFileAction({ type: "move", description: `moving ${entry.name} to ${folderLabel}`, steps });
+  sendTaskProgress({ status: "done", text: `Moved ${path.basename(destinationPath)}` });
+  logMac("downloads.move.done", { from: entry.full, to: destinationPath });
+  return { ok: true, files: [destinationPath], say: `Moved ${entry.name} into ${folderLabel}.` };
 }
 
 function parseMoveFileIntent(raw) {
@@ -8437,13 +9502,13 @@ async function resolveDestinationFolder(destinationText) {
 
   const cleanDestination = sanitizeFileSystemName(stripKnownFolderReference(raw).replace(/\bfolder\b/gi, " "));
   if (!cleanDestination) return { ok: false, error: "I could not understand the destination folder." };
-  const folders = await findFiles(cleanDestination, { kind: "folder" });
+  const folders = await findFiles(cleanDestination, { kind: "folder", requireNameMatch: true });
   if (!folders.length) return { ok: false, error: `I could not find a folder called ${cleanDestination}.` };
   return { ok: true, folderPath: folders[0], created: false };
 }
 
 async function moveMacFile(intent) {
-  const files = await findFiles(intent.query, { kind: intent.kind });
+  const files = await findFiles(intent.query, { kind: intent.kind, requireNameMatch: true });
   if (!files.length) return { ok: false, say: `I searched the Mac, but did not find ${intent.query}.` };
   const sourcePath = files[0];
   if (isDangerousFileOperationPath(sourcePath)) return { ok: false, say: `I will not move ${path.basename(sourcePath)} from voice.` };
@@ -8558,7 +9623,7 @@ function handlePendingFileConfirmation(raw) {
 }
 
 async function requestDeleteConfirmation(intent) {
-  const files = await findFiles(intent.query, { kind: intent.kind });
+  const files = await findFiles(intent.query, { kind: intent.kind, requireNameMatch: true });
   if (!files.length) return { ok: false, say: `I searched the Mac, but did not find ${intent.query}.` };
   const filePath = files[0];
   if (isDangerousFileOperationPath(filePath)) return { ok: false, say: `I will not delete ${path.basename(filePath)} from voice.` };
@@ -8770,10 +9835,26 @@ async function transcribeAudioCommand(payload = {}) {
     : { ok: false, error: "The audio was recorded, but no speech was detected." };
 }
 
-function buildRealtimeSessionConfig() {
+function buildRealtimeSessionConfig({ purpose = "voice", requestedModel = "gpt-realtime-mini" } = {}) {
+  if (purpose === "dictation") {
+    return {
+      type: "transcription",
+      audio: {
+        input: {
+          format: { type: "audio/pcm", rate: 24000 },
+          noise_reduction: { type: "near_field" },
+          transcription: {
+            model: DICTATION_TRANSCRIPTION_MODEL,
+            delay: "low",
+          },
+          turn_detection: null,
+        },
+      },
+    };
+  }
   return {
     type: "realtime",
-    model: "gpt-realtime-mini",
+    model: requestedModel,
     output_modalities: ["text"],
     instructions: [
       "You are Braino, running as a Mac desktop companion.",
@@ -8787,7 +9868,7 @@ function buildRealtimeSessionConfig() {
       input: {
         noise_reduction: { type: "near_field" },
         transcription: {
-          model: "gpt-4o-transcribe",
+          model: DEFAULT_REALTIME_TRANSCRIPTION_MODEL,
           language: "en",
           prompt: [
             "Transcribe exactly what the user says.",
@@ -8837,16 +9918,13 @@ function extractRealtimeClientSecret(payload) {
   return "";
 }
 
-function buildRealtimeClientSecretPayload(requestedModel) {
+function buildRealtimeClientSecretPayload(requestedModel, purpose = "voice") {
   return {
-    session: {
-      ...buildRealtimeSessionConfig(),
-      model: requestedModel,
-    },
+    session: buildRealtimeSessionConfig({ purpose, requestedModel }),
   };
 }
 
-async function createRealtimeClientSecretFromSupabase({ authToken, requestedModel, voiceEngine }) {
+async function createRealtimeClientSecretFromSupabase({ authToken, requestedModel, voiceEngine, purpose }) {
   const response = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/openai-realtime-call`, {
     method: "POST",
     headers: {
@@ -8854,10 +9932,12 @@ async function createRealtimeClientSecretFromSupabase({ authToken, requestedMode
       apikey: SUPABASE_ANON_KEY,
       Authorization: `Bearer ${authToken}`,
       "X-Braino-Realtime-Model": requestedModel,
+      "X-Braino-Realtime-Purpose": purpose || "voice",
     },
     body: JSON.stringify({
       action: "client_secret",
       voiceEngine: voiceEngine || "fish",
+      purpose: purpose || "voice",
     }),
   });
   const raw = await response.text();
@@ -8880,18 +9960,18 @@ async function createRealtimeClientSecretFromSupabase({ authToken, requestedMode
     clientSecret,
     sessionId: parsed?.sessionId || null,
     realtimeModel: parsed?.realtimeModel || requestedModel,
-    transcriptionModel: parsed?.transcriptionModel || "gpt-4o-transcribe",
+    transcriptionModel: parsed?.transcriptionModel || (purpose === "dictation" ? DICTATION_TRANSCRIPTION_MODEL : DEFAULT_REALTIME_TRANSCRIPTION_MODEL),
   };
 }
 
-async function createRealtimeClientSecretFromOpenAi({ requestedModel }) {
+async function createRealtimeClientSecretFromOpenAi({ requestedModel, purpose }) {
   const response = await fetch("https://api.openai.com/v1/realtime/client_secrets", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${OPENAI_API_KEY}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(buildRealtimeClientSecretPayload(requestedModel)),
+    body: JSON.stringify(buildRealtimeClientSecretPayload(requestedModel, purpose)),
   });
   const raw = await response.text();
   let parsed = null;
@@ -8913,7 +9993,7 @@ async function createRealtimeClientSecretFromOpenAi({ requestedModel }) {
     clientSecret,
     sessionId: null,
     realtimeModel: requestedModel,
-    transcriptionModel: "gpt-4o-transcribe",
+    transcriptionModel: purpose === "dictation" ? DICTATION_TRANSCRIPTION_MODEL : DEFAULT_REALTIME_TRANSCRIPTION_MODEL,
   };
 }
 
@@ -8946,7 +10026,7 @@ async function exchangeRealtimeOfferWithOpenAi({ sdp, clientSecret, requestedMod
   return { ok: true, answerSdp };
 }
 
-async function createRealtimeCallFromSupabaseDirect({ sdp, authToken, requestedModel, voiceEngine }) {
+async function createRealtimeCallFromSupabaseDirect({ sdp, authToken, requestedModel, voiceEngine, purpose }) {
   const response = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/openai-realtime-call`, {
     method: "POST",
     headers: {
@@ -8955,6 +10035,7 @@ async function createRealtimeCallFromSupabaseDirect({ sdp, authToken, requestedM
       Authorization: `Bearer ${authToken}`,
       "X-Braino-Realtime-Model": requestedModel,
       "X-Braino-Voice-Engine": voiceEngine || "fish",
+      "X-Braino-Realtime-Purpose": purpose || "voice",
     },
     body: sdp,
   });
@@ -8981,7 +10062,8 @@ async function createRealtimeCallFromSupabaseDirect({ sdp, authToken, requestedM
     answerSdp,
     sessionId: response.headers.get("x-braino-realtime-session-id") || null,
     realtimeModel: response.headers.get("x-braino-realtime-model") || requestedModel,
-    transcriptionModel: response.headers.get("x-braino-realtime-transcription-model") || "gpt-4o-transcribe",
+    transcriptionModel: response.headers.get("x-braino-realtime-transcription-model")
+      || (purpose === "dictation" ? DICTATION_TRANSCRIPTION_MODEL : DEFAULT_REALTIME_TRANSCRIPTION_MODEL),
   };
 }
 
@@ -8990,11 +10072,13 @@ function isLikelyRealtimeAnswerSdp(sdp) {
   return /^v=0\r?$/m.test(text) && /^m=/m.test(text);
 }
 
-async function createRealtimeCall({ offerSdp, voiceEngine } = {}) {
+async function createRealtimeCall({ offerSdp, voiceEngine, purpose } = {}) {
   const sdp = normalizeRealtimeSdp(offerSdp);
+  const sessionPurpose = purpose === "dictation" ? "dictation" : "voice";
   let authToken = await getBrainoAuthToken();
   logMac("realtime.create.start", {
     voiceEngine: voiceEngine || "fish",
+    purpose: sessionPurpose,
     ...getSdpStats(sdp),
     hasBrainoAuthToken: Boolean(authToken),
     hasOpenAiApiKey: Boolean(OPENAI_API_KEY),
@@ -9006,7 +10090,9 @@ async function createRealtimeCall({ offerSdp, voiceEngine } = {}) {
     return { ok: false, error: "Missing realtime offer SDP." };
   }
 
-  const requestedModel = voiceEngine === "realtime" ? "gpt-realtime-2" : "gpt-realtime-mini";
+  const requestedModel = sessionPurpose === "dictation"
+    ? DICTATION_TRANSCRIPTION_MODEL
+    : voiceEngine === "realtime" ? "gpt-realtime-2" : "gpt-realtime-mini";
   if (!authToken && !OPENAI_API_KEY && SUPABASE_URL && SUPABASE_ANON_KEY) {
     logMac("realtime.create.auth_required", { requestedModel });
     const authResult = await ensureBrainoAuth("realtime");
@@ -9027,12 +10113,28 @@ async function createRealtimeCall({ offerSdp, voiceEngine } = {}) {
       authToken,
       requestedModel,
       voiceEngine,
+      purpose: sessionPurpose,
     });
     if (directResult?.ok) {
+      if (
+        sessionPurpose === "dictation"
+        && directResult.transcriptionModel !== DICTATION_TRANSCRIPTION_MODEL
+      ) {
+        logMac("dictation.transcription_model_mismatch", {
+          requestedModel,
+          realtimeModel: directResult.realtimeModel || null,
+          transcriptionModel: directResult.transcriptionModel || null,
+          transport: "supabase-direct-sdp",
+        });
+        return {
+          ok: false,
+          error: `Yap Mode requires ${DICTATION_TRANSCRIPTION_MODEL}, but the server returned ${directResult.transcriptionModel || "an unknown model"}.`,
+        };
+      }
       logMac("realtime.create.supabase_direct_ok", {
         sessionId: directResult.sessionId || null,
         realtimeModel: directResult.realtimeModel || requestedModel,
-        transcriptionModel: directResult.transcriptionModel || "gpt-4o-transcribe",
+        transcriptionModel: directResult.transcriptionModel || (sessionPurpose === "dictation" ? DICTATION_TRANSCRIPTION_MODEL : DEFAULT_REALTIME_TRANSCRIPTION_MODEL),
       });
       return {
         ok: true,
@@ -9040,7 +10142,7 @@ async function createRealtimeCall({ offerSdp, voiceEngine } = {}) {
         transport: "supabase-direct-sdp",
         sessionId: directResult.sessionId || null,
         realtimeModel: directResult.realtimeModel || requestedModel,
-        transcriptionModel: directResult.transcriptionModel || "gpt-4o-transcribe",
+        transcriptionModel: directResult.transcriptionModel || (sessionPurpose === "dictation" ? DICTATION_TRANSCRIPTION_MODEL : DEFAULT_REALTIME_TRANSCRIPTION_MODEL),
       };
     }
     logMac("realtime.create.supabase_direct_failed", {
@@ -9056,6 +10158,7 @@ async function createRealtimeCall({ offerSdp, voiceEngine } = {}) {
       authToken,
       requestedModel,
       voiceEngine,
+      purpose: sessionPurpose,
     });
     if (!secretResult?.ok) {
       logMac("realtime.create.client_secret_failed", {
@@ -9063,6 +10166,21 @@ async function createRealtimeCall({ offerSdp, voiceEngine } = {}) {
         error: secretResult?.error || "missing client secret",
       });
       return { ok: false, error: secretResult?.error || "Realtime client secret failed." };
+    }
+    if (
+      sessionPurpose === "dictation"
+      && secretResult.transcriptionModel !== DICTATION_TRANSCRIPTION_MODEL
+    ) {
+      logMac("dictation.transcription_model_mismatch", {
+        requestedModel,
+        realtimeModel: secretResult.realtimeModel || null,
+        transcriptionModel: secretResult.transcriptionModel || null,
+        transport: "supabase-ephemeral",
+      });
+      return {
+        ok: false,
+        error: `Yap Mode requires ${DICTATION_TRANSCRIPTION_MODEL}, but the server returned ${secretResult.transcriptionModel || "an unknown model"}.`,
+      };
     }
     const exchange = await exchangeRealtimeOfferWithOpenAi({
       sdp,
@@ -9076,7 +10194,7 @@ async function createRealtimeCall({ offerSdp, voiceEngine } = {}) {
     logMac("realtime.create.supabase_ephemeral_ok", {
       sessionId: secretResult.sessionId || null,
       realtimeModel: secretResult.realtimeModel || requestedModel,
-      transcriptionModel: secretResult.transcriptionModel || "gpt-4o-transcribe",
+      transcriptionModel: secretResult.transcriptionModel || (sessionPurpose === "dictation" ? DICTATION_TRANSCRIPTION_MODEL : DEFAULT_REALTIME_TRANSCRIPTION_MODEL),
     });
     return {
       ok: true,
@@ -9084,7 +10202,7 @@ async function createRealtimeCall({ offerSdp, voiceEngine } = {}) {
       transport: "supabase-ephemeral",
       sessionId: secretResult.sessionId || null,
       realtimeModel: secretResult.realtimeModel || requestedModel,
-      transcriptionModel: secretResult.transcriptionModel || "gpt-4o-transcribe",
+      transcriptionModel: secretResult.transcriptionModel || (sessionPurpose === "dictation" ? DICTATION_TRANSCRIPTION_MODEL : DEFAULT_REALTIME_TRANSCRIPTION_MODEL),
     };
   }
 
@@ -9106,6 +10224,7 @@ async function createRealtimeCall({ offerSdp, voiceEngine } = {}) {
   });
   const secretResult = await createRealtimeClientSecretFromOpenAi({
     requestedModel,
+    purpose: sessionPurpose,
   });
   if (!secretResult?.ok) {
     logMac("realtime.create.client_secret_failed", {
@@ -9133,7 +10252,7 @@ async function createRealtimeCall({ offerSdp, voiceEngine } = {}) {
     transport: "openai-direct-ephemeral",
     sessionId: null,
     realtimeModel: requestedModel,
-    transcriptionModel: "gpt-4o-transcribe",
+    transcriptionModel: sessionPurpose === "dictation" ? DICTATION_TRANSCRIPTION_MODEL : DEFAULT_REALTIME_TRANSCRIPTION_MODEL,
   };
 }
 
@@ -9323,6 +10442,30 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
     activeUrl: textForLog(activeMacContext?.browserUrl || ""),
   });
   if (!raw) return { ok: false, say: "Say the task again, my guy. I got air." };
+
+  const cursorModeCommand = text.match(/\b(start|enable|turn on|stop|disable|turn off)\s+cursor mode\b/);
+  if (cursorModeCommand) {
+    const enable = /start|enable|turn on/.test(cursorModeCommand[1]);
+    cursorModeState.enabled = enable;
+    if (enable) startCursorModeMonitoring();
+    else stopCursorModeMonitoring();
+    logMac("cursor_mode.toggle", { enabled: enable });
+    return {
+      ok: true,
+      say: enable
+        ? "Cursor Mode is on. I will watch this repository and tell you when the work settles."
+        : "Cursor Mode is off.",
+    };
+  }
+
+  if (
+    /\b(cursor mode status|what am i working on|what feature am i working on|is (?:claude|codex|gpt) (?:done|finished)|coding task status)\b/.test(text)
+  ) {
+    const files = cursorModeState.changedFiles.slice(0, 5);
+    const work = files.length ? `The current files are ${files.join(", ")}.` : "I do not see new repository changes yet.";
+    const phase = cursorModeState.active ? "The coding task is active." : "No coding task is active right now.";
+    return { ok: true, say: `${phase} ${work}` };
+  }
 
   // Voice Commands — the user's OWN configured shortcuts beat every built-in intent below, and
   // must run BEFORE classifyIntentLLM or the model just narrates instead of acting.
@@ -9666,6 +10809,19 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
     return renameMacFile(renameFileIntent);
   }
 
+  // "open what I just downloaded" names no file, so it must beat the name-search
+  // paths below — they would hunt the Mac for a file called "what I just
+  // downloaded" and come back empty.
+  const recentDownloadIntent = parseRecentDownloadIntent(raw);
+  if (recentDownloadIntent) {
+    logMac("delegate.recent_download_intent", {
+      raw: textForLog(raw),
+      action: recentDownloadIntent.action,
+      destination: textForLog(recentDownloadIntent.destination || ""),
+    });
+    return handleRecentDownloadIntent(recentDownloadIntent);
+  }
+
   // "move cursor to the left" is a WINDOW command, not a file move — the
   // window intent parses later but must win here.
   const moveFileIntent = parseWindowManageIntent(raw) ? null : parseMoveFileIntent(raw);
@@ -9792,6 +10948,16 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
       return { ok: true, say: `Searching Chrome for ${webQuery}.` };
     }
     return runMacWebSearch(webQuery);
+  }
+
+  const musicSegment = parseMusicSegmentIntent(raw);
+  if (musicSegment) return playMusicSegmentOnMac(musicSegment);
+
+  const whatsNew = parseWhatsNewIntent(raw);
+  if (whatsNew) {
+    logMac("delegate.whats_new_intent", { slug: whatsNew.slug, title: whatsNew.title, action: whatsNew.action });
+    sendTaskProgress({ status: "thinking", text: `Latest: ${whatsNew.title}` });
+    return { ok: true, say: whatsNew.script, afterSpeechAction: whatsNew.action, latestFeature: whatsNew.slug };
   }
 
   const youtubePick = parseYouTubePickIntent(raw);
@@ -10085,7 +11251,10 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
       kind: fileIntent.kind || "",
       shouldOpen: fileIntent.shouldOpen,
     });
-    const files = await findFiles(fileIntent.query, { kind: fileIntent.kind });
+    const files = await findFiles(fileIntent.query, {
+      kind: fileIntent.kind,
+      requireNameMatch: fileIntent.shouldOpen,
+    });
     if (!files.length) return { ok: false, say: `I searched the Mac, but did not find ${fileIntent.query}.` };
     if (fileIntent.shouldOpen) {
       const opened = await openLocalPath(files[0]);
@@ -10130,7 +11299,7 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
       const host = new URL(website).hostname.replace(/^www\./, "");
       return { ok: true, say: `Opening ${host}.` };
     }
-    const files = await findFiles(target, { kind: "" });
+    const files = await findFiles(target, { kind: "", requireNameMatch: true });
     if (files.length) {
       const opened = await openLocalPath(files[0]);
       if (!opened.ok) return { ok: false, say: `I found ${path.basename(files[0])}, but macOS would not open it: ${opened.error}.`, files };
@@ -10174,6 +11343,124 @@ async function runMacDemoAction(action, payload = {}) {
   if (name === "play-team-spotify") {
     return playMacTeamDemoSpotifyTrack();
   }
+  if (name === "open-jyoti-demo-youtube") {
+    await openChromeUrl("https://www.youtube.com/");
+    return { ok: true, url: "https://www.youtube.com/" };
+  }
+  if (name === "open-jyoti-demo-netflix") {
+    await openChromeUrl("https://www.netflix.com/browse");
+    return { ok: true, url: "https://www.netflix.com/browse" };
+  }
+  if (name === "play-jyoti-demo-places") {
+    return playSpotifySongOnMac("places to be Fred again");
+  }
+  if (name === "minimize-jyoti-demo-spotify") {
+    return axManageWindow({ action: "minimize", appQuery: "spotify" });
+  }
+  if (name === "organize-jyoti-demo-desktop") {
+    return organizeDesktopFiles({ mode: "type" });
+  }
+  if (name === "undo-jyoti-demo-desktop") {
+    return undoDesktopOrganization();
+  }
+  if (name === "draft-jyoti-demo") {
+    return draftWhatsAppMessage("Amdocs Jyoti Sir", "hi from braino");
+  }
+  if (name === "open-jyoti-demo-tabs") {
+    const marker = "brainoJyotiDemo=1";
+    const urls = [
+      `https://www.youtube.com/?${marker}&tab=1`,
+      `https://medium.com/?${marker}&tab=2`,
+      `https://github.com/?${marker}&tab=3`,
+      `https://www.wikipedia.org/?${marker}&tab=4`,
+      `https://stackoverflow.com/?${marker}&tab=5`,
+      `https://news.ycombinator.com/?${marker}&tab=6`,
+      `https://www.google.com/search?q=Braino&${marker}&tab=7`,
+    ];
+    const openResult = await openApp("Google Chrome");
+    if (!openResult.ok) return { ok: false, say: "I could not open Chrome for the tab demo." };
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    const urlLines = urls.slice(1)
+      .map((url) => `make new tab at end of tabs of demoWindow with properties {URL:"${escapeAppleScriptString(url)}"}`)
+      .join("\n");
+    const script = `
+tell application "Google Chrome"
+  activate
+  set demoWindow to make new window
+  set URL of active tab of demoWindow to "${escapeAppleScriptString(urls[0])}"
+  ${urlLines}
+  return id of demoWindow as text
+end tell`;
+    try {
+      const { stdout } = await execFileP("/usr/bin/osascript", ["-e", script], { timeout: 10000 });
+      const windowId = Number(String(stdout || "").trim());
+      jyotiDemoChromeWindowId = Number.isFinite(windowId) ? windowId : null;
+      logMac("team_demo.jyoti.tabs_opened", { count: urls.length, windowId: jyotiDemoChromeWindowId });
+      return { ok: true, count: urls.length, windowId: jyotiDemoChromeWindowId };
+    } catch (error) {
+      logMac("team_demo.jyoti.tabs_open_failed", { error });
+      return { ok: false, say: "Chrome did not create the seven-tab demo window." };
+    }
+  }
+  if (name === "close-jyoti-demo-tabs") {
+    const windowId = jyotiDemoChromeWindowId;
+    jyotiDemoChromeWindowId = null;
+    if (Number.isFinite(windowId)) {
+      const script = `
+tell application "Google Chrome"
+  repeat with w in windows
+    if id of w is ${windowId} then
+      close w
+      return "closed"
+    end if
+  end repeat
+  return "missing"
+end tell`;
+      try {
+        const { stdout } = await execFileP("/usr/bin/osascript", ["-e", script], { timeout: 7000 });
+        if (/closed/.test(String(stdout))) {
+          logMac("team_demo.jyoti.tabs_closed", { count: 7, windowId });
+          return { ok: true, count: 7 };
+        }
+      } catch (error) {
+        logMac("team_demo.jyoti.tabs_window_close_failed", { windowId, error });
+      }
+    }
+    // Safe recovery if Chrome recreated the window or its id changed.
+    const result = await closeBrowserTabsMatching("brainoJyotiDemo=1");
+    return { ok: true, fallback: true, ...result };
+  }
+  if (name === "play-jyoti-demo-hers") {
+    const result = await playSpotifySongOnMac("She Needs Him Her's");
+    if (result?.ok) await openApp("Spotify");
+    return result;
+  }
+  if (name === "play-jyoti-demo-loop") {
+    return playMusicSegmentOnMac({
+      valid: true,
+      reason: null,
+      song: "ten Fred again",
+      provider: "spotify",
+      useCurrent: false,
+      startSeconds: 86,
+      endSeconds: 100,
+      durationSeconds: 14,
+      interpretedRange: "1:26 to 1:40",
+    });
+  }
+  if (name === "demo-latest-feature") {
+    return playMusicSegmentOnMac({
+      valid: true,
+      reason: null,
+      song: "FE!N",
+      provider: "spotify",
+      useCurrent: false,
+      startSeconds: 86,
+      endSeconds: 92,
+      durationSeconds: 6,
+      interpretedRange: "1:26 to 1:32",
+    });
+  }
   if (name === "pause-spotify") {
     return controlSpotifyPlaybackOnMac("pause");
   }
@@ -10192,7 +11479,7 @@ async function runMacDemoAction(action, payload = {}) {
   return { ok: false, error: `Unknown demo action: ${name || "empty"}` };
 }
 
-ipcMain.handle("braino-mac:get-config", () => {
+ipcMain.handle("braino-mac:get-config", async () => {
   const auth = authStatusPayload();
   const display = displayForContext(activeMacContext);
   return {
@@ -10203,8 +11490,10 @@ ipcMain.handle("braino-mac:get-config", () => {
     realtimeConfigured: Boolean((auth.authenticated && SUPABASE_URL && SUPABASE_ANON_KEY) || OPENAI_API_KEY),
     realtimeAuthSource: auth.source === "env" || auth.source === "stored" ? "braino" : OPENAI_API_KEY ? "openai" : "missing",
     auth,
+    dictation: dictationStatePayload(),
     accessibilityTrusted: systemPreferences.isTrustedAccessibilityClient(false),
     microphoneStatus: process.platform === "darwin" ? systemPreferences.getMediaAccessStatus("microphone") : "unsupported",
+    mascot: await loadMascotPreference(),
     logPath: LOG_PATH,
   };
 });
@@ -10241,6 +11530,13 @@ ipcMain.handle("braino-mac:delegate", async (_event, prompt) => {
 ipcMain.handle("braino-mac:demo-action", async (_event, action, payload) => runMacDemoAction(action, payload));
 
 ipcMain.handle("braino-mac:delegate-state", async () => delegateStatePayload());
+ipcMain.handle("braino-mac:cursor-mode-state", async () => cursorModePayload());
+ipcMain.handle("braino-mac:cursor-mode-control", async (_event, payload = {}) => {
+  cursorModeState.enabled = payload?.enabled !== false;
+  if (cursorModeState.enabled) startCursorModeMonitoring();
+  else stopCursorModeMonitoring();
+  return { ok: true, ...cursorModePayload() };
+});
 
 ipcMain.handle("braino-mac:active-context", async () => {
   await refreshDesktopOverlayContext("manual");
@@ -10277,6 +11573,22 @@ ipcMain.handle("braino-mac:transcribe-audio", async (_event, payload) => transcr
 ipcMain.handle("braino-mac:create-realtime-call", async (_event, payload) => createRealtimeCall(payload));
 
 ipcMain.handle("braino-mac:update-realtime-session", async (_event, payload) => updateRealtimeSession(payload));
+
+ipcMain.handle("braino-mac:dictation-intent", (_event, text, active) => (
+  parseDictationControl(text, Boolean(active))
+));
+
+ipcMain.handle("braino-mac:dictation-control", async (_event, payload = {}) => {
+  const action = String(payload?.action || "").trim().toLowerCase();
+  if (action === "start") return startDictationSkill();
+  if (action === "stop") return stopDictationSkill(String(payload?.reason || "stopped"));
+  if (action === "state") return { ok: true, ...dictationStatePayload() };
+  return { ok: false, error: "Unknown dictation action.", ...dictationStatePayload() };
+});
+
+ipcMain.handle("braino-mac:dictation-insert", async (_event, payload = {}) => (
+  insertDictationText(payload?.text)
+));
 
 ipcMain.handle("braino-mac:request-accessibility", () => ({
   accessibilityTrusted: requestAccessibilityTrust(true),
@@ -10515,6 +11827,40 @@ ipcMain.handle("braino-mac:calendar-join", async () => {
   return { ok: true, say: `Joining ${calendarNext?.title || "the meeting"}. I will record and take notes.` };
 });
 
+// SKIT (TEMPORARY — Instagram demo): renderer-driven steps between spoken
+// lines. "send" reuses the real WhatsApp machinery (draft in dry runs, real
+// auto-send otherwise); "close" Cmd+Ws the chat window and hides WhatsApp.
+ipcMain.handle("braino-mac:skit-step", async (_event, step) => {
+  if (!SKIT.enabled) return { ok: false, say: "" };
+  if (step === "send") {
+    return SKIT.dryRun
+      ? draftWhatsAppMessage(SKIT.contact, SKIT.message)
+      : sendWhatsAppMessage(SKIT.contact, SKIT.message);
+  }
+  if (step === "close") {
+    const script = `
+tell application "System Events"
+  if not (exists application process "WhatsApp") then return "no-app"
+  tell application process "WhatsApp"
+    set frontmost to true
+    delay 0.3
+    keystroke "w" using command down
+  end tell
+  delay 0.2
+  set visible of process "WhatsApp" to false
+end tell
+return "closed"`;
+    try {
+      await execFileP("/usr/bin/osascript", ["-e", script], { timeout: 8000 });
+      return { ok: true, say: "" };
+    } catch (error) {
+      logMac("skit.close_failed", { error });
+      return { ok: false, say: "" };
+    }
+  }
+  return { ok: false, say: "" };
+});
+
 ipcMain.handle("braino-mac:shelf-file", async (_event, payload = {}) => {
   const filePath = String(payload?.path || "");
   const action = String(payload?.action || "");
@@ -10724,14 +12070,46 @@ ipcMain.handle("braino-mac:tts", async (_event, text, referenceId) => {
   return { ok: true, dataUrl: `data:${contentType};base64,${base64}` };
 });
 
+const activeSystemSayProcesses = new Set();
+
+function stopSystemSayProcesses() {
+  let stopped = 0;
+  activeSystemSayProcesses.forEach((child) => {
+    try {
+      if (!child.killed) {
+        child.kill("SIGTERM");
+        stopped += 1;
+      }
+    } catch (_) {}
+  });
+  activeSystemSayProcesses.clear();
+  if (stopped) logMac("speech.system_say.stopped", { processes: stopped });
+  return stopped;
+}
+
 ipcMain.handle("braino-mac:system-say", async (_event, text) => {
   const speakable = String(text || "").trim();
   if (!speakable) return { ok: false };
-  execFile("say", [speakable.slice(0, 900)], () => {});
+  stopSystemSayProcesses();
+  const child = execFile("say", [speakable.slice(0, 900)], () => {
+    activeSystemSayProcesses.delete(child);
+  });
+  activeSystemSayProcesses.add(child);
   return { ok: true };
 });
 
+ipcMain.handle("braino-mac:system-say-stop", () => ({
+  ok: true,
+  stopped: stopSystemSayProcesses(),
+}));
+
+app.on("second-instance", () => {
+  logMac("app.second_instance.blocked", {});
+  ensureDockWindowVisible("second-instance");
+});
+
 app.whenReady().then(() => {
+  if (!hasSingleInstanceLock) return;
   setTimeout(() => void importAllContacts(), 8000);
   setInterval(() => void checkMusicState(), 5000);
   setInterval(() => void checkAllTabsSnapshot(), 8000);
@@ -10767,21 +12145,45 @@ app.whenReady().then(() => {
   if (loadWakeWordState()) startBrainoWakeWord();
   startXStatsPolling();
   startDesktopOverlaySync();
+  startCursorModeMonitoring();
   screen.on("display-metrics-changed", () => void refreshDesktopOverlayContext("display-metrics-changed"));
   screen.on("display-added", () => void refreshDesktopOverlayContext("display-added"));
   screen.on("display-removed", () => void refreshDesktopOverlayContext("display-removed"));
 });
 
-app.on("will-quit", () => {
-  globalShortcut.unregisterAll();
+let nativeCleanupStarted = false;
+
+function cleanupNativeHelpers() {
+  if (nativeCleanupStarted) return;
+  nativeCleanupStarted = true;
+  if (app.isReady()) globalShortcut.unregisterAll();
   if (overlaySyncTimer) {
     clearInterval(overlaySyncTimer);
     overlaySyncTimer = null;
   }
+  stopCursorModeMonitoring();
+  stopBrainoWakeWord();
   stopNativeSpeech();
   if (swiftHotkey) {
     try { swiftHotkey.kill(); } catch (_) {}
+    swiftHotkey = null;
   }
+}
+
+function handleTerminationSignal(signal) {
+  logMac("app.signal", { signal });
+  cleanupNativeHelpers();
+  if (app.isReady()) app.quit();
+  else app.exit(0);
+  const forcedExit = setTimeout(() => app.exit(0), 1200);
+  forcedExit.unref();
+}
+
+process.once("SIGINT", () => handleTerminationSignal("SIGINT"));
+process.once("SIGTERM", () => handleTerminationSignal("SIGTERM"));
+
+app.on("will-quit", () => {
+  cleanupNativeHelpers();
 });
 
 app.on("window-all-closed", () => {

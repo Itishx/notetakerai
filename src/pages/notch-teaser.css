@@ -524,3 +524,89 @@ body.nt-controls .nt-veil { pointer-events: none; }
   color: rgba(245,239,231,.7); letter-spacing: .03em; text-align: center;
   max-width: 80vw; pointer-events: none; text-shadow: 0 1px 4px rgba(0,0,0,.6);
 }
+
+/* ── public viewer transport — always visible (unlike the hover-gated dev
+   .nt-scrubber toolbar above), sits just above it so both can coexist ── */
+.nt-scrubber--public {
+  opacity: 1 !important; pointer-events: auto !important;
+  bottom: 18px; background: rgba(10,10,10,.35); backdrop-filter: blur(10px);
+  border-radius: 14px; padding: 8px 16px !important;
+}
+.nt-scrubber--compact { width: min(94vw, 640px); gap: 12px; }
+
+/* ── synced script panel — left rail, reads along with the film ── */
+.nt-script-panel {
+  position: fixed; left: 0; top: 0; bottom: 0; z-index: 30;
+  width: 320px; padding: 96px 28px 140px; overflow-y: auto;
+  background: linear-gradient(90deg, rgba(0,0,0,.55), rgba(0,0,0,0));
+  font-family: -apple-system, "SF Pro Text", "Helvetica Neue", sans-serif;
+  display: flex; flex-direction: column; gap: 14px; pointer-events: none;
+}
+.nt-script-line {
+  font-size: 14px; line-height: 1.4; color: rgba(245,239,231,.32);
+  transition: color .3s ease, opacity .3s ease; opacity: .6;
+}
+.nt-script-line.active { color: #F5EFE7; opacity: 1; font-weight: 600; }
+@media (max-width: 860px) { .nt-script-panel { display: none; } }
+@media (prefers-reduced-motion: reduce) { .nt-script-line { transition: none; } }
+
+/* ── Motion Editor layout — canvas + editor side by side, not an overlay.
+   The script panel is still the same fixed left rail; the frame just makes
+   room for it instead of sitting full-bleed underneath it. ── */
+.nt-frame.me-editor {
+  margin-left: 320px;
+  width: min(calc(100vw - 320px), calc(100vh * 16 / 9));
+}
+@media (max-width: 860px) { .nt-frame.me-editor { margin-left: 0; width: min(100vw, calc(100vh * 16 / 9)); } }
+
+/* ── KineticFilm — the generic data-driven player (Braino Split, Braino OS).
+   .kf-line is the same one dead-centre spot every kinetic line in the site
+   already lands in (same shape as .nt-screen-main), just generic/unscoped. ── */
+.kf-line {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  display: flex; flex-wrap: nowrap; justify-content: center; align-items: center;
+  gap: 0 .2em; color: #fff; font-weight: 600; letter-spacing: -.025em; line-height: 1;
+  white-space: nowrap; text-align: center; z-index: 2; will-change: opacity;
+  font-size: clamp(28px, 4.6vw, 58px);
+  transition: opacity .12s ease;
+}
+/* the headline reveal beat ("Braino OS.") — noticeably bigger, same modest
+   bump as the flagship film's "Boom." beat, no fused-word gap. */
+.kf-line-big { gap: 0; font-size: clamp(48px, 8vw, 100px); }
+.kf-word { display: inline-flex; align-items: baseline; gap: 0; white-space: nowrap; }
+/* KineticFilm groups fused fragments inside a real word box. The parent line
+   now owns inter-word spacing, so the old negative-margin cancellation is no
+   longer needed inside this component and cannot make letterforms collide. */
+.kf-word .nt-word.nt-fuse { margin-left: 0; }
+.kf-composition-grid { position: absolute; inset: 0; z-index: 18; pointer-events: none; color: rgba(80,180,255,.68); }
+.kf-composition-grid i { position: absolute; display: block; }
+.kf-grid-safe { inset: 8%; border: 1px solid rgba(80,180,255,.34); }
+.kf-grid-v { top: 0; bottom: 0; width: 1px; background: rgba(80,180,255,.22); }
+.kf-grid-v1 { left: 33.333%; }.kf-grid-v2 { left: 50%; background: rgba(80,180,255,.62); }.kf-grid-v3 { left: 66.666%; }
+.kf-grid-h { right: 0; left: 0; height: 1px; background: rgba(80,180,255,.22); }
+.kf-grid-h1 { top: 33.333%; }.kf-grid-h2 { top: 50%; background: rgba(80,180,255,.62); }.kf-grid-h3 { top: 66.666%; }
+.kf-composition-grid span { position: absolute; top: calc(50% + 8px); left: calc(50% + 8px); font: 9px/1 ui-monospace, monospace; letter-spacing: .08em; }
+/* match-cut rule, verbatim from the flagship film: while THIS beat is the one
+   cutting, its text flips black and rises above the invert overlay (z-index
+   11 > the overlay's 9), and its word-stamp flash is suppressed — one clean
+   flip, not two competing flashes. */
+.kf-line.invert-flash { color: #000000; z-index: 11; }
+.kf-line.invert-flash .nt-word.in { animation: none !important; }
+/* its own spot, below the dead-centre text line — was filling the whole
+   frame behind the text and visibly colliding with it. */
+.kf-hero {
+  position: absolute; left: 50%; bottom: 15%; transform: translateX(-50%);
+  width: min(60vw, 420px); display: grid; place-items: center; z-index: 1;
+  transition: opacity .3s ease;
+}
+.kf-outro {
+  position: absolute; inset: 0; display: grid; place-items: center; z-index: 6;
+  transition: opacity .3s ease;
+}
+/* a beat with an attached graphic — the image is the moment, text (if any)
+   still lands dead-centre on top of it via the shared .kf-line rule. */
+.kf-graphic-img {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  max-width: 72vw; max-height: 56vh; object-fit: contain; z-index: 0; border-radius: 12px;
+}
+@media (prefers-reduced-motion: reduce) { .kf-line, .kf-hero, .kf-outro { transition: none; } }

@@ -23,6 +23,7 @@ export default function SiteFooter() {
               <Link to="/premium">Pricing</Link>
               <Link to="/build-braino">Build Yours</Link>
               <Link to="/changelog">Changelog</Link>
+              <Link to="/knowledge">Knowledge Base</Link>
             </div>
             <div className="home-footer-col">
               <div className="home-footer-col-head">Resources</div>

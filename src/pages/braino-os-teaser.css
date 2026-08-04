@@ -1,0 +1,106 @@
+.braino-os-film {
+  min-height: 100svh;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 72% 18%, rgba(255, 111, 71, .2), transparent 34%),
+    radial-gradient(circle at 18% 82%, rgba(225, 190, 109, .12), transparent 30%),
+    #140b12;
+}
+
+.braino-os-film .braino-os-canvas,
+.braino-os-film .nt-stage {
+  background:
+    radial-gradient(circle at 50% 48%, rgba(118, 49, 68, .28), transparent 42%),
+    linear-gradient(145deg, #170c14 0%, #2a101b 52%, #120a10 100%);
+}
+
+.braino-os-film .kf-line {
+  color: #fff6e8;
+  text-shadow: 0 0 34px rgba(255, 136, 92, .16);
+}
+
+.braino-os-film .nt-invert2 {
+  background: #ff754f;
+}
+
+.braino-os-film .kf-line.invert-flash {
+  color: #24100f;
+  text-shadow: none;
+}
+
+.braino-os-film .kf-line-big {
+  background: linear-gradient(105deg, #fff7e9 10%, #ff9a76 42%, #f1c86e 67%, #fff7e9 92%);
+  background-size: 220% auto;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  animation: brainoOsTitle 3.4s linear infinite;
+}
+
+.braino-os-film .kf-line-big.invert-flash {
+  background: none;
+  color: #24100f;
+  -webkit-text-fill-color: #24100f;
+  animation: none;
+}
+
+.braino-os-film .nt-scrubber--public {
+  border: 1px solid rgba(255, 190, 153, .16);
+  background: rgba(22, 9, 15, .62);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, .25);
+}
+
+.braino-os-film .nt-scrub::-webkit-slider-runnable-track {
+  background: linear-gradient(90deg, #ff805b var(--p), rgba(255, 246, 232, .2) var(--p));
+}
+
+.braino-os-film .nt-scrub::-webkit-slider-thumb,
+.braino-os-film .nt-scrub::-moz-range-progress,
+.braino-os-film .nt-scrub::-moz-range-thumb {
+  background: #ff805b;
+}
+
+@keyframes brainoOsTitle {
+  to { background-position: -220% center; }
+}
+
+.braino-os-film .kf-line.kf-iomi-reveal {
+  gap: 0;
+  font-size: clamp(140px, 22vw, 320px);
+}
+
+.braino-os-film .kf-line.kf-iomi-reveal .kf-iomi-letter {
+  background-image: linear-gradient(96deg, #7a2e22 0%, #e8786e 20%, #f0a86b 42%, #ffd9a0 58%, #f0a86b 74%, #e8786e 90%, #7a2e22 100%);
+  background-size: 220% auto;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent !important;
+  animation: brainoOsIomiSweep 1.1s ease-in-out both !important;
+}
+
+@keyframes brainoOsIomiSweep {
+  from { background-position: 200% center; }
+  to { background-position: -40% center; }
+}
+
+@media (max-width: 760px) {
+  .braino-os-film .kf-line {
+    max-width: 88%;
+    flex-wrap: wrap;
+    white-space: normal;
+    line-height: .94;
+  }
+  .braino-os-film .kf-line-big {
+    font-size: clamp(46px, 15vw, 70px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .braino-os-film .kf-line-big,
+  .braino-os-film .kf-line.kf-iomi-reveal .kf-iomi-letter {
+    animation: none;
+  }
+}

@@ -24,3 +24,14 @@ dist-ssr
 *.sw?
 dist-extension/
 .vercel
+
+# Media source files kept locally only (large, and commercial tracks)
+teasermusic/
+
+# Generated: Playwright run output
+test-results/
+playwright-report/
+
+# Generated: the wake-word helper is compiled from source on launch
+# (ensureWakeWordApp in mac/braino-mac/main.cjs rebuilds it when stale)
+mac/braino-mac/native/bin/

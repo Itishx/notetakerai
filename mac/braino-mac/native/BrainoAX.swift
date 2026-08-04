@@ -7,6 +7,8 @@ import Foundation
 //   press <query>            fuzzy-find a pressable element in the front app and press it
 //   selected                 read the selected text from the focused element (base64)
 //   replace <base64>         replace the selected text in the focused element
+//   focused                 report whether the focused element accepts dictation
+//   insert <base64>         insert text at the focused editable element's caret
 //   window <action> <appQuery|front>   left|right|maximize|minimize|center on the main screen
 // Output is a single tab-separated line on stdout.
 
@@ -158,10 +160,80 @@ func runPress(query: String) {
   }
 }
 
-func focusedElement() -> AXUIElement? {
+func focusedElement(in appElement: AXUIElement? = nil) -> AXUIElement? {
+  if let appElement,
+     let raw = axAttr(appElement, kAXFocusedUIElementAttribute as String) {
+    return (raw as! AXUIElement)
+  }
   let systemWide = AXUIElementCreateSystemWide()
   guard let raw = axAttr(systemWide, kAXFocusedUIElementAttribute as String) else { return nil }
   return (raw as! AXUIElement)
+}
+
+func axSettable(_ element: AXUIElement, _ name: String) -> Bool {
+  var settable = DarwinBoolean(false)
+  let result = AXUIElementIsAttributeSettable(element, name as CFString, &settable)
+  return result == .success && settable.boolValue
+}
+
+struct FocusedTarget {
+  let status: String
+  let element: AXUIElement?
+  let role: String
+  let appName: String
+}
+
+func inspectFocusedTarget() -> FocusedTarget {
+  guard AXIsProcessTrusted() else {
+    return FocusedTarget(status: "needs-accessibility", element: nil, role: "", appName: "")
+  }
+  guard let (appElement, pid) = frontAppElement() else {
+    return FocusedTarget(status: "no_focus", element: nil, role: "", appName: "")
+  }
+  wakeLazyAccessibility(appElement)
+  let appName = NSRunningApplication(processIdentifier: pid)?.localizedName ?? ""
+  guard let element = focusedElement(in: appElement) else {
+    return FocusedTarget(status: "no_focus", element: nil, role: "", appName: appName)
+  }
+  let role = axString(element, kAXRoleAttribute as String)
+  let subrole = axString(element, kAXSubroleAttribute as String)
+  if role == "AXSecureTextField" || subrole == "AXSecureTextField" {
+    return FocusedTarget(status: "secure", element: nil, role: role, appName: appName)
+  }
+  let knownEditable = ["AXTextField", "AXTextArea", "AXComboBox"].contains(role)
+  let acceptsSelectedText = axSettable(element, kAXSelectedTextAttribute as String)
+  let acceptsValue = axSettable(element, kAXValueAttribute as String)
+  let status = acceptsSelectedText || (knownEditable && acceptsValue) ? "editable" : "not_editable"
+  return FocusedTarget(status: status, element: element, role: role, appName: appName)
+}
+
+func runFocused() {
+  let focused = inspectFocusedTarget()
+  guard focused.status == "editable" else {
+    let detail = "\(focused.appName)|\(focused.role)"
+    out(detail == "|" ? focused.status : "\(focused.status)\t\(Data(detail.utf8).base64EncodedString())")
+    return
+  }
+  let detail = "\(focused.appName)|\(focused.role)"
+  out("editable\t\(Data(detail.utf8).base64EncodedString())")
+}
+
+func runInsert(base64: String) {
+  guard let data = Data(base64Encoded: base64), let text = String(data: data, encoding: .utf8) else {
+    out("error\tbad encoding")
+    return
+  }
+  let focused = inspectFocusedTarget()
+  guard focused.status == "editable", let element = focused.element else {
+    out(focused.status)
+    return
+  }
+  let result = AXUIElementSetAttributeValue(
+    element,
+    kAXSelectedTextAttribute as CFString,
+    text as CFTypeRef
+  )
+  out(result == .success ? "inserted" : "insert_failed")
 }
 
 func runSelected() {
@@ -291,7 +363,7 @@ func runWindow(action: String, appQuery: String) {
 
 let arguments = CommandLine.arguments
 guard arguments.count >= 2 else {
-  out("error\tusage: press|selected|replace|window")
+  out("error\tusage: press|selected|replace|focused|insert|window")
   exit(0)
 }
 guard AXIsProcessTrusted() else {
@@ -305,6 +377,10 @@ case "selected":
   runSelected()
 case "replace":
   runReplace(base64: arguments.count > 2 ? arguments[2] : "")
+case "focused":
+  runFocused()
+case "insert":
+  runInsert(base64: arguments.count > 2 ? arguments[2] : "")
 case "window":
   let action = arguments.count > 2 ? arguments[2] : ""
   let appQuery = arguments.dropFirst(3).joined(separator: " ")

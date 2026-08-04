@@ -16,7 +16,7 @@
   <body>
     <main id="dock-stage" aria-label="Braino Mac dock companion">
       <div id="edge-glow" aria-hidden="true"></div>
-      <div id="notch-face" aria-hidden="true">
+      <div id="notch-face" class="nf-core-only" aria-label="Braino status">
         <div class="nf-sonar"><i></i><i></i><i></i></div>
         <div class="nf-pill">
           <svg class="nf-folds" viewBox="0 0 200 74" preserveAspectRatio="none">
@@ -33,6 +33,23 @@
             <path d="M 158.4 2 Q 165.4 20 158.4 37 Q 151.4 54 158.4 72" fill="none" stroke="#FBD9D2" stroke-width="1.1" stroke-linecap="round" opacity="0.5" />
             <path d="M 186.4 2 Q 179.4 20 186.4 37 Q 193.4 54 186.4 72" fill="none" stroke="#FBD9D2" stroke-width="1.1" stroke-linecap="round" opacity="0.5" />
           </svg>
+          <div class="nf-iomi-identity" aria-hidden="true">
+            <span>I</span><span>O</span><span>M</span><span>I</span>
+          </div>
+          <div class="nf-iomi-awake-eyes" aria-hidden="true"><i></i><i></i></div>
+          <div class="nf-iomi-expanded-card" aria-hidden="true">
+            <div class="nf-iomi-greeting">
+              <strong><span>Good</span><span>evening,</span><span class="nf-iomi-first-name">Itish.</span></strong>
+              <small>Everything is ready.</small>
+            </div>
+            <i class="nf-iomi-divider"></i>
+            <div class="nf-iomi-wake-guide">
+              <div class="nf-iomi-guide-eyes"><i></i><i></i></div>
+              <small>Wake Braino</small>
+              <div><kbd>Control</kbd><kbd>Control</kbd></div>
+              <div><kbd>⌘</kbd><kbd>⌘</kbd><em>bring me out</em></div>
+            </div>
+          </div>
           <div class="nf-band">
             <svg class="nf-mini" viewBox="0 0 120 56">
               <g class="nf-ears" opacity="0.32"><ellipse cx="38" cy="30" rx="8" ry="4.5" fill="#E14A48" /><ellipse cx="82" cy="30" rx="8" ry="4.5" fill="#E14A48" /></g>
@@ -56,6 +73,7 @@
             <div class="nf-dancer"></div>
           </div>
           <div class="nf-cap nf-cap-l"></div>
+          <div class="nf-cap nf-cap-r"></div>
           <div id="nf-status"></div>
           <div id="nf-status-2"></div>
           <div class="nf-volume" aria-hidden="true">
@@ -97,6 +115,32 @@
           <div class="nf-privacy"></div>
           <div class="nf-think-dots"><i></i><i></i><i></i></div>
           <div class="nf-think-arrow"></div>
+          <section class="nf-thinking-canvas" aria-live="polite" aria-label="Braino task progress">
+            <div class="nf-thinking-head">
+              <div class="nf-thinking-brand">
+                <span class="nf-thinking-orb" aria-hidden="true"><i></i><i></i></span>
+                <span>Braino</span>
+              </div>
+              <span class="nf-thinking-state">Thinking</span>
+              <span class="nf-thinking-live" aria-hidden="true"><i></i></span>
+            </div>
+            <div class="nf-thinking-flow" aria-label="Live request flow">
+              <div class="nf-flow-node nf-flow-prompt">
+                <small>You</small>
+                <span>Request received</span>
+              </div>
+              <i class="nf-flow-arrow" aria-hidden="true"></i>
+              <div class="nf-flow-node nf-flow-step active">
+                <small>Braino</small>
+                <strong class="nf-thinking-current">Understanding</strong>
+              </div>
+              <i class="nf-flow-arrow" aria-hidden="true"></i>
+              <div class="nf-flow-node nf-flow-response">
+                <small>Answer</small>
+                <span>Preparing</span>
+              </div>
+            </div>
+          </section>
         </div>
         <!-- The keynote shimmer: a white-to-blue light that traces the island's
              outline, verbatim from the trybraino.com reveal. Fired by JS via
@@ -104,10 +148,10 @@
         <svg class="nf-shine" viewBox="0 0 190 55" aria-hidden="true">
           <defs>
             <linearGradient id="nf-shine-grad" x1="0" y1="0" x2="1" y2="1">
-              <stop offset="0" stop-color="#FFFFFF" />
-              <stop offset="0.45" stop-color="#CFE0FF" />
-              <stop offset="0.8" stop-color="#7AA2FF" />
-              <stop offset="1" stop-color="#F0A86B" />
+              <stop offset="0" stop-color="#F4CF87" />
+              <stop offset="0.42" stop-color="#EC8078" />
+              <stop offset="0.7" stop-color="#DC77A8" />
+              <stop offset="1" stop-color="#779CFF" />
             </linearGradient>
           </defs>
           <path class="nf-shine-glow" pathLength="100" d="M 0 0 H 190 V 39 Q 190 55 174 55 H 16 Q 0 55 0 39 Z" stroke="url(#nf-shine-grad)" fill="none" />
@@ -137,6 +181,54 @@
       <section id="walker-lane">
         <div id="walker">
           <div id="walker-flip"></div>
+        </div>
+      </section>
+      <section id="braino-customizer" aria-hidden="true">
+        <div class="braino-customizer-handle" aria-hidden="true"></div>
+        <div class="braino-customizer-head">
+          <div class="braino-customizer-icon" aria-hidden="true">
+            <span></span>
+          </div>
+          <div class="braino-customizer-heading">
+            <div class="braino-customizer-title">Braino size</div>
+            <div class="braino-customizer-kicker">Customise your desktop companion</div>
+          </div>
+          <output id="braino-size-value" for="braino-size-range">100%</output>
+        </div>
+        <p class="braino-customizer-prompt">
+          Configure me however you’d like. Let’s put on a fucking show.
+        </p>
+        <div class="braino-customizer-control">
+          <input
+            id="braino-size-range"
+            type="range"
+            min="1"
+            max="5"
+            step="0.05"
+            value="1"
+            aria-label="Braino size"
+          />
+          <div class="braino-customizer-scale" aria-hidden="true">
+            <span>Default</span>
+            <span>Giant</span>
+          </div>
+        </div>
+        <div class="braino-customizer-section">
+          <div class="braino-customizer-section-title">Character</div>
+          <div id="braino-character-row" class="braino-character-row">
+            <button type="button" class="braino-character-option" data-mascot="braino">
+              <span class="braino-character-name">Braino</span>
+              <span class="braino-character-blurb">The original</span>
+            </button>
+            <button type="button" class="braino-character-option" data-mascot="webb">
+              <span class="braino-character-name">Webb</span>
+              <span class="braino-character-blurb">Web-slinger</span>
+            </button>
+          </div>
+        </div>
+        <div class="braino-customizer-actions">
+          <button id="braino-size-reset" type="button">Reset</button>
+          <button id="braino-customizer-done" type="button">Done</button>
         </div>
       </section>
     </main>

@@ -8,6 +8,9 @@ final class BrainoControlTap {
   private var lastControlDown: TimeInterval = 0
   private var lastSpaceDown: TimeInterval = 0
   private var controlIsDown = false
+  private var optionIsDown = false
+  private var optionTapPoisoned = false
+  private var lastOptionTap: TimeInterval = 0
   private var commandIsDown = false
   private var commandTapPoisoned = false
   private var lastCommandTap: TimeInterval = 0
@@ -85,6 +88,28 @@ final class BrainoControlTap {
     }
     controlIsDown = isControl
 
+    // Bare double-Option belongs exclusively to Yap Mode dictation.
+    // Chorded Option shortcuts never count.
+    let isOption = event.flags.contains(.maskAlternate)
+    if isOption && !optionIsDown {
+      optionIsDown = true
+      let otherMods: CGEventFlags = [.maskShift, .maskControl, .maskCommand]
+      optionTapPoisoned = !event.flags.intersection(otherMods).isEmpty
+    } else if isOption && optionIsDown {
+      optionTapPoisoned = true
+    } else if !isOption && optionIsDown {
+      optionIsDown = false
+      if !optionTapPoisoned {
+        let now = ProcessInfo.processInfo.systemUptime
+        if now - lastOptionTap < 0.52 {
+          printLine("double-option")
+          lastOptionTap = 0
+        } else {
+          lastOptionTap = now
+        }
+      }
+    }
+
     // Command double-tap = summon toggle. Only BARE taps count: any key or
     // extra modifier while command is held (a real shortcut like Cmd+C or
     // Cmd+Shift+S) poisons the tap so normal usage never triggers it.
@@ -112,6 +137,7 @@ final class BrainoControlTap {
 
   private func handleKeyDown(_ event: CGEvent) {
     if commandIsDown { commandTapPoisoned = true }
+    if optionIsDown { optionTapPoisoned = true }
     let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
     let isAutoRepeat = event.getIntegerValueField(.keyboardEventAutorepeat) != 0
     guard keyCode == 49, !isAutoRepeat else { return }
@@ -131,11 +157,21 @@ final class BrainoControlTap {
   }
 
   private static let handleEvent: CGEventTapCallBack = { _, type, event, refcon in
-    guard (type == .flagsChanged || type == .keyDown), let refcon else {
+    guard let refcon else {
       return Unmanaged.passUnretained(event)
     }
 
     let owner = Unmanaged<BrainoControlTap>.fromOpaque(refcon).takeUnretainedValue()
+    if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+      if let tap = owner.eventTap {
+        CGEvent.tapEnable(tap: tap, enable: true)
+        owner.printLine("braino-control-tap-reenabled")
+      }
+      return Unmanaged.passUnretained(event)
+    }
+    guard type == .flagsChanged || type == .keyDown else {
+      return Unmanaged.passUnretained(event)
+    }
     owner.handle(type, event)
     return Unmanaged.passUnretained(event)
   }

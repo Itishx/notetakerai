@@ -5,6 +5,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import "./braino-dash.css";
 import SpotifyPanel, { type SpotifyConnectionSummary } from "@/components/SpotifyPanel";
+import { Braino, BrainoDefs } from "@/components/BrainoChar";
+import { Webb, WebbDefs } from "@/components/WebbChar";
+import { MASCOTS, useMascotPreference, type MascotId } from "@/lib/mascotPreference";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -1345,6 +1348,7 @@ export default function Dashboard() {
     const stored = localStorage.getItem("brainoVoicePref");
     return stored === "realtime" ? "realtime" : "fish"; // "elevenlabs" legacy → "fish"
   });
+  const { mascot: mascotPref, setMascot: setMascotPref } = useMascotPreference();
   const [overallMemory, setOverallMemory] = useState("");
   const [overallMemoryDraft, setOverallMemoryDraft] = useState("");
   const [overallMemorySaving, setOverallMemorySaving] = useState(false);
@@ -3244,6 +3248,8 @@ export default function Dashboard() {
 
   return (
     <div className="bd-root min-h-screen bg-[var(--sb-bg)] text-[var(--sb-ink)]">
+      <BrainoDefs />
+      <WebbDefs />
       <div
         className="grid min-h-screen transition-[grid-template-columns] duration-300"
         style={{ gridTemplateColumns: sidebarCollapsed ? "64px minmax(0,1fr)" : "244px minmax(0,1fr)" }}
@@ -5642,6 +5648,48 @@ export default function Dashboard() {
                         </button>
                       </div>
                     ))}
+                  </div>
+                </div>
+
+                <div className="rounded-[18px] border border-[var(--sb-line-2)] bg-[var(--sb-panel-2)] p-6">
+                  <h3 style={serifStyle} className="mb-1 text-[26px] leading-none tracking-[-0.02em]">
+                    Choose your avatar
+                  </h3>
+                  <p className="mb-5 text-[13.5px] text-[var(--sb-ink-2)]">
+                    One Braino OS underneath — same voice, memory, and actions. Pick which character shows up on screen.
+                  </p>
+
+                  <div className="space-y-3">
+                    {(Object.keys(MASCOTS) as MascotId[]).map((id) => {
+                      const isSelected = mascotPref === id;
+                      const { displayName, blurb } = MASCOTS[id];
+                      return (
+                        <button
+                          key={id}
+                          onClick={() => setMascotPref(id)}
+                          className={cn(
+                            "flex w-full items-center gap-4 rounded-xl border p-4 text-left transition",
+                            isSelected
+                              ? "border-[var(--sb-ink-3)] bg-[var(--sb-panel)]"
+                              : "border-[var(--sb-line-2)] bg-[var(--sb-panel)] opacity-60 hover:opacity-90",
+                          )}
+                        >
+                          <div className="grid h-14 w-14 flex-shrink-0 place-items-end justify-center overflow-visible">
+                            {id === "webb"
+                              ? <Webb size={46} idle style={{ width: "auto", height: "100%" }} />
+                              : <Braino size={46} legs gloves idle expr="happy" style={{ width: "auto", height: "100%" }} />}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="text-sm font-medium text-[var(--sb-ink)]">{displayName}</div>
+                            <div style={monoStyle} className="mt-1 text-[11px] text-[var(--sb-ink-3)]">{blurb}</div>
+                          </div>
+                          <div className={cn(
+                            "h-4 w-4 flex-shrink-0 rounded-full border-2 transition",
+                            isSelected ? "border-[var(--sb-ink)] bg-[var(--sb-ink)]" : "border-[var(--sb-ink-4)]",
+                          )} />
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
 

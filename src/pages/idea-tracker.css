@@ -1,0 +1,279 @@
+/* Braino — Idea Tracker (/ideas).
+   Notion database anatomy (page icon + bold sans title, property rows, to-do
+   blocks, table view with pastel status tags, gallery cards, callout) on the
+   Apple system-sans base from apple.css. Coral appears only where Braino
+   himself does (LIVE pill, mic). Prefix: it- */
+
+.it-doc {
+  --coral: #E8786E;
+  --coral-deep: #C9544A;
+  --blue: #2383E2;               /* Notion primary (checkboxes, active view) */
+  --ink: #1d1d1f;
+  --ink-soft: #6e6e73;
+  --ink-faint: #a3a3a8;
+  --paper: #fbfbfd;
+  --surface: #ffffff;
+  --hover: #f4f4f2;
+  --callout: #f6f6f4;
+  --line: #e7e6e4;
+  /* Notion tag pastels: bg / text */
+  --tag-gray-bg: #E9E8E6;   --tag-gray-tx: #32302C;
+  --tag-red-bg: #FFE2DD;    --tag-red-tx: #5D1715;
+  --tag-blue-bg: #D3E5EF;   --tag-blue-tx: #183347;
+  --tag-green-bg: #DBEDDB;  --tag-green-tx: #1C3829;
+  --tag-yellow-bg: #FDECC8; --tag-yellow-tx: #402C1B;
+  --tag-purple-bg: #E8DEEE; --tag-purple-tx: #412454;
+  --tag-orange-bg: #FADEC9; --tag-orange-tx: #49290E;
+  min-height: 100vh;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+@media (prefers-color-scheme: dark) {
+  .it-doc {
+    --ink: #d4d4d4;
+    --ink-soft: #9b9b9b;
+    --ink-faint: #6f6f6f;
+    --paper: #191919;
+    --surface: #202020;
+    --hover: #242424;
+    --callout: #252525;
+    --line: #303030;
+    --tag-gray-bg: #3a3a3a;  --tag-gray-tx: #d4d4d4;
+    --tag-red-bg: #4e2c28;   --tag-red-tx: #f1b6ae;
+    --tag-blue-bg: #1f3a52;  --tag-blue-tx: #a8cdea;
+    --tag-green-bg: #243d30; --tag-green-tx: #b3dcc2;
+    --tag-yellow-bg: #4a3a20;--tag-yellow-tx: #ecd39a;
+    --tag-purple-bg: #3c2c4a;--tag-purple-tx: #d3bde6;
+    --tag-orange-bg: #4a3120;--tag-orange-tx: #eec4a0;
+  }
+}
+
+/* ── Top breadcrumb bar ─────────────────────────────────────────────── */
+.it-topbar {
+  position: sticky; top: 0; z-index: 10;
+  display: flex; align-items: center; gap: 7px;
+  padding: 12px clamp(20px, 4vw, 40px);
+  background: color-mix(in srgb, var(--paper) 84%, transparent);
+  backdrop-filter: blur(14px) saturate(1.4);
+  -webkit-backdrop-filter: blur(14px) saturate(1.4);
+  border-bottom: 1px solid var(--line);
+  font-size: 13.5px;
+}
+.it-crumb-home { color: var(--ink); text-decoration: none; font-weight: 600; }
+.it-crumb-home:hover { color: var(--coral-deep); }
+.it-crumb-sep { color: var(--ink-faint); }
+.it-crumb { color: var(--ink-soft); }
+.it-crumb-here { color: var(--ink); font-weight: 600; }
+.it-live-pill {
+  margin-left: auto;
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--coral-deep);
+  border: 1px solid color-mix(in srgb, var(--coral) 40%, transparent);
+  border-radius: 999px; padding: 4px 11px;
+}
+.it-live-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--coral); animation: it-pulse 2.2s ease-in-out infinite; }
+@keyframes it-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+/* ── Page column (Notion width) ─────────────────────────────────────── */
+.it-page { max-width: 900px; margin: 0 auto; padding: clamp(40px, 7vh, 72px) 24px 80px; }
+
+/* ── Reveal ─────────────────────────────────────────────────────────── */
+.it-reveal { opacity: 0; transform: translateY(12px); transition: opacity 0.6s ease, transform 0.6s ease; }
+.it-reveal.it-visible { opacity: 1; transform: none; }
+
+/* ── Page header ────────────────────────────────────────────────────── */
+.it-hero-icon { margin-bottom: 10px; }
+.it-title { font-size: clamp(34px, 6vw, 44px); font-weight: 700; letter-spacing: -0.02em; line-height: 1.1; margin: 0 0 18px; }
+.it-props { display: flex; flex-direction: column; gap: 2px; margin-bottom: 18px; }
+.it-prop { display: flex; align-items: baseline; gap: 14px; padding: 4px 0; font-size: 14px; }
+.it-prop-name { flex: none; width: 132px; color: var(--ink-soft); }
+.it-prop-value { color: var(--ink); font-weight: 500; }
+.it-sub { font-size: 15px; color: var(--ink-soft); max-width: 600px; margin: 0 0 22px; }
+.it-divider { height: 1px; background: var(--line); margin-top: 26px; }
+
+/* ── Capture bar ────────────────────────────────────────────────────── */
+.it-capture {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--surface);
+  border: 1px solid var(--line); border-radius: 10px;
+  padding: 8px 10px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  transition: border-color 0.25s ease, box-shadow 0.25s ease;
+}
+.it-capture:focus-within { border-color: var(--blue); box-shadow: 0 0 0 3px color-mix(in srgb, var(--blue) 14%, transparent); }
+.it-capture-live { border-color: var(--coral); box-shadow: 0 0 0 3px color-mix(in srgb, var(--coral) 16%, transparent); }
+.it-mic {
+  flex: none; width: 34px; height: 34px; border-radius: 8px;
+  border: none; cursor: pointer; font-size: 15px; line-height: 1;
+  background: var(--hover); color: var(--ink);
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: background 0.2s ease;
+}
+.it-mic:hover { background: var(--line); }
+.it-capture-live .it-mic { background: var(--coral); color: #fff; animation: it-pulse 1.6s ease-in-out infinite; }
+.it-capture-input {
+  flex: 1; min-width: 0; border: none; outline: none; background: transparent;
+  color: var(--ink); font: inherit; font-size: 15px;
+}
+.it-capture-input::placeholder { color: var(--ink-faint); }
+.it-capture-add {
+  flex: none; border: none; cursor: pointer; border-radius: 8px;
+  padding: 8px 16px; font-size: 13.5px; font-weight: 600;
+  background: var(--blue); color: #fff;
+  transition: opacity 0.2s ease;
+}
+.it-capture-add:disabled { opacity: 0.35; cursor: default; }
+.it-capture-hint { font-size: 12.5px; color: var(--ink-faint); margin: 8px 2px 0; }
+
+/* ── Sections ───────────────────────────────────────────────────────── */
+.it-section { margin-top: clamp(44px, 7vh, 64px); }
+.it-section-inbox { margin-top: clamp(28px, 5vh, 44px); }
+.it-h2 { font-size: 21px; font-weight: 700; letter-spacing: -0.01em; margin: 0 0 8px; display: flex; align-items: center; gap: 9px; }
+.it-count {
+  font-size: 12.5px; font-weight: 600; color: var(--ink-soft);
+  background: var(--tag-gray-bg); border-radius: 999px; padding: 1px 9px;
+}
+.it-section-lede { font-size: 14px; color: var(--ink-soft); margin: 0 0 18px; max-width: 620px; }
+
+/* ── Notion tag pill (shared) ───────────────────────────────────────── */
+.it-pill {
+  display: inline-flex; align-items: center;
+  font-size: 12px; font-weight: 500; line-height: 1;
+  border-radius: 4px; padding: 4px 8px; white-space: nowrap;
+}
+.it-pill-gray { background: var(--tag-gray-bg); color: var(--tag-gray-tx); }
+.it-pill-red { background: var(--tag-red-bg); color: var(--tag-red-tx); }
+.it-pill-blue { background: var(--tag-blue-bg); color: var(--tag-blue-tx); }
+.it-status-front-runner { background: var(--tag-green-bg); color: var(--tag-green-tx); }
+.it-status-building { background: var(--tag-blue-bg); color: var(--tag-blue-tx); }
+.it-status-next { background: var(--tag-yellow-bg); color: var(--tag-yellow-tx); }
+.it-status-seeded { background: var(--tag-purple-bg); color: var(--tag-purple-tx); }
+.it-status-exploring { background: var(--tag-orange-bg); color: var(--tag-orange-tx); }
+.it-status-parked, .it-status-icebox { background: var(--tag-gray-bg); color: var(--tag-gray-tx); }
+.it-status-icebox { opacity: 0.75; }
+
+/* ── Drag handle (decorative, Notion ⋮⋮) ────────────────────────────── */
+.it-handle { flex: none; color: var(--ink-faint); font-size: 12px; letter-spacing: -2px; opacity: 0; transition: opacity 0.15s ease; cursor: grab; }
+.it-todo:hover .it-handle, .it-inbox-row:hover .it-handle { opacity: 0.7; }
+
+/* ── Inbox rows ─────────────────────────────────────────────────────── */
+.it-inbox { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line); }
+.it-inbox-row {
+  display: flex; align-items: baseline; gap: 10px;
+  padding: 10px 6px; border-bottom: 1px solid var(--line);
+  transition: background 0.15s ease;
+}
+.it-inbox-row:hover { background: var(--hover); }
+.it-inbox-text { flex: 1; min-width: 0; font-size: 14.5px; }
+.it-inbox-time { flex: none; font-size: 12px; color: var(--ink-faint); }
+.it-inbox-del {
+  flex: none; border: none; background: transparent; cursor: pointer;
+  color: var(--ink-faint); font-size: 12px; border-radius: 4px; padding: 3px 6px;
+  opacity: 0; transition: opacity 0.15s ease, background 0.15s ease;
+}
+.it-inbox-row:hover .it-inbox-del { opacity: 1; }
+.it-inbox-del:hover { background: var(--tag-red-bg); color: var(--tag-red-tx); }
+
+/* ── Homework to-dos (Notion checkbox blocks) ───────────────────────── */
+.it-todos { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.it-todo {
+  display: flex; gap: 8px; align-items: flex-start;
+  padding: 10px 6px; border-radius: 6px;
+  transition: background 0.15s ease;
+}
+.it-todo:hover { background: var(--hover); }
+.it-todo .it-handle { margin-top: 4px; }
+.it-check {
+  flex: none; width: 16px; height: 16px; margin-top: 3px;
+  border: 1.4px solid var(--ink-faint); border-radius: 3px;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 700; color: #fff;
+}
+.it-todo-done .it-check { background: var(--blue); border-color: var(--blue); }
+.it-todo-doing .it-check { color: var(--blue); border-color: var(--blue); }
+.it-todo-done .it-todo-text { text-decoration: line-through; color: var(--ink-faint); }
+.it-todo-body { min-width: 0; }
+.it-todo-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+.it-todo-text { font-size: 15px; font-weight: 500; }
+.it-todo-note { font-size: 13px; color: var(--ink-soft); margin: 5px 0 0; max-width: 660px; }
+
+/* ── View bar (Table / Board tabs + tools) ──────────────────────────── */
+.it-viewbar {
+  display: flex; align-items: center; gap: 4px;
+  border-bottom: 1px solid var(--line);
+  font-size: 13.5px; color: var(--ink-soft);
+}
+.it-view { padding: 7px 10px; border-bottom: 2px solid transparent; cursor: default; }
+.it-view-active { color: var(--ink); font-weight: 600; border-bottom-color: var(--ink); }
+.it-viewbar-right { margin-left: auto; display: flex; align-items: center; gap: 2px; font-size: 13px; }
+.it-viewtool { padding: 5px 9px; border-radius: 5px; cursor: default; }
+.it-viewtool:hover { background: var(--hover); }
+.it-viewtool-new { background: var(--blue); color: #fff; font-weight: 600; border-radius: 6px; padding: 5px 11px; }
+
+/* ── Table view ─────────────────────────────────────────────────────── */
+.it-tablewrap { overflow-x: auto; }
+.it-table { width: 100%; min-width: 820px; border-collapse: collapse; font-size: 14px; }
+.it-table th {
+  text-align: left; font-size: 12.5px; font-weight: 500; color: var(--ink-soft);
+  padding: 9px 12px; border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+.it-table th + th, .it-table td + td { border-left: 1px solid var(--line); }
+.it-col-icon { color: var(--ink-faint); margin-right: 3px; }
+.it-table td { padding: 11px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.it-table tbody tr { transition: background 0.15s ease; }
+.it-table tbody tr:hover { background: var(--hover); }
+.it-cell-name { font-weight: 600; white-space: nowrap; }
+.it-cell-text { line-height: 1.55; min-width: 240px; }
+.it-cell-muted { color: var(--ink-soft); font-size: 13px; }
+.it-col-name { width: 170px; }
+.it-col-status { width: 120px; }
+.it-row-new td {
+  color: var(--ink-faint); font-size: 13.5px; cursor: default;
+  border-left: none !important;
+}
+.it-row-new:hover td { background: var(--hover); color: var(--ink-soft); }
+
+/* ── Gallery stat cards ─────────────────────────────────────────────── */
+.it-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin-bottom: 18px; }
+.it-stat {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 8px;
+  padding: 14px 15px; display: flex; flex-direction: column; gap: 4px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+}
+.it-stat-value { font-size: 21px; font-weight: 700; letter-spacing: -0.01em; }
+.it-stat-label { font-size: 12.5px; color: var(--ink-soft); }
+.it-standing { font-size: 14px; color: var(--ink-soft); max-width: 640px; margin: 0; }
+
+/* ── Callout (Notion block) ─────────────────────────────────────────── */
+.it-callout {
+  display: flex; gap: 14px; align-items: flex-start;
+  background: var(--callout); border: 1px solid var(--line); border-radius: 8px;
+  padding: 18px 20px;
+}
+.it-callout-emoji { font-size: 22px; line-height: 1.2; }
+.it-callout-body p { font-size: 14.5px; color: var(--ink-soft); margin: 0 0 12px; }
+.it-callout-title { font-weight: 700; color: var(--ink) !important; font-size: 15px !important; margin-bottom: 8px !important; }
+.it-callout-body p strong { color: var(--ink); }
+.it-callout-last { color: var(--ink) !important; font-weight: 600; margin-bottom: 0 !important; }
+
+/* ── Footer ─────────────────────────────────────────────────────────── */
+.it-footer {
+  margin-top: clamp(44px, 7vh, 64px); padding-top: 20px; border-top: 1px solid var(--line);
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px;
+  font-size: 13px;
+}
+.it-footer-link { color: var(--ink); text-decoration: none; font-weight: 600; }
+.it-footer-link:hover { color: var(--coral-deep); }
+.it-footer-note { color: var(--ink-faint); }
+
+@media (max-width: 560px) {
+  .it-prop-name { width: 108px; }
+  .it-viewbar-right .it-viewtool:not(.it-viewtool-new) { display: none; }
+}

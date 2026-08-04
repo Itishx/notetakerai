@@ -15,11 +15,34 @@ Braino starts on the visible macOS Dock strip and patrols across it. Drag Braino
 ## Controls
 
 - Double `Space`: show or hide Braino, matching the browser extension invocation style.
+- Double-click Braino: open **Customise Braino**, then resize him live from normal size up to Giant Braino. The chosen size is remembered on this Mac.
+- Cursor Mode: enabled by default for the active Braino repository. Braino watches Git/worktree activity, announces when a commit lands or work stays quiet for 45 seconds, and opens the repository in Cursor if another app is frontmost. Say “Cursor Mode status”, “What feature am I working on?”, or “Turn off Cursor Mode”.
 - Double `Control`: start live Braino voice. The primary path is the same WebRTC realtime loop as the Chrome extension: mic -> realtime transcription/VAD -> delegate action -> Braino/Fish Audio speech. You can barge in while Braino is speaking; the old reply is cancelled and the new command takes over.
+- Double `Option`: toggle Yap Mode, Braino's silent system-wide dictation skill.
 - `Control+Space`: backup voice toggle.
 - If macOS does not show the permission prompt, open System Settings -> Privacy & Security -> Accessibility and allow the terminal/Electron process running Braino.
 - Microphone access is requested separately before realtime or fallback recording starts. If it is blocked, open System Settings -> Privacy & Security -> Microphone and allow the terminal/Electron process running Braino.
 - If realtime is not configured or cannot connect, Braino records a short command, transcribes that audio through Supabase/OpenAI, then tries the native Swift helper, then falls back to a typed delegate prompt only if that also fails.
+
+## Yap Mode
+
+Yap Mode is a separate, transcription-only lane. Put the caret in an editable
+field, double `Option`, and speak. Braino inserts readable text at that caret
+without generating or speaking an assistant response.
+
+- Voice aliases: "Braino, start Yap Mode", "Braino, start dictation mode",
+  "Speak your mind", "Take this down", and "Write what I say".
+- Stop with double `Option`, "done", "stop dictation", or "that's it". The stop
+  phrase is consumed and is never inserted.
+- Model: `gpt-realtime-whisper` in a transcription-only Realtime WebRTC session.
+  The normal Braino conversation model and Fish TTS pipeline are bypassed.
+- The notch glows mint while Braino is home. The full standing mascot owns the
+  mint listening glow while he is out on the desktop.
+- Text insertion uses macOS Accessibility at the focused caret. Secure and
+  non-editable fields are rejected. A paste fallback restores the previous
+  clipboard after use.
+- The complete skill contract lives in
+  [`skills/yap-mode/SKILL.md`](../../skills/yap-mode/SKILL.md).
 
 ## Her Mode
 
@@ -68,6 +91,7 @@ It also records Mac delegate routing for local file/app actions, including clean
 - Apple Mail: “Send an email to Renu saying I’ll call you tomorrow” or “Draft an email to Rahul with subject Quick update body I’ll send details tonight”.
 - Spotify: “Play Bargad on Spotify”, “pause Spotify”, “lower the volume”, “set Spotify volume to 40%”, “add this song to liked songs”, or “add Brabus to my gym playlist”.
 - Team demo: “Braino, introduce yourself” runs the ANZ demo flow, plays DAF in the Spotify Mac app, opens the machine learning article, reads the short summary, speaks Madhuri, Shree, then Palash, and opens trybraino.com.
+- Jyoti Sir demo: “Braino, run the Jyoti Sir demo” keeps Braino visible over low-volume “Places to Be,” organizes and then restores the Desktop, opens an unsent “hi from braino” WhatsApp draft for Amdocs Jyoti Sir, creates and closes a dedicated seven-tab Chrome window, plays “She Needs Him,” then delivers the reviewed thank-you message. Each narrated action waits two seconds before firing.
 - Front window: “What do you see?” / “What is open?”
 
 ## Desktop Organization
@@ -107,6 +131,7 @@ These are the local Mac-only skills that do not require the browser extension ag
 11. Open installed Mac apps by name, with website fallback for common services like Netflix, WhatsApp, YouTube, Gmail, Maps, LinkedIn, Spotify, X, and ChatGPT.
 12. Control Spotify playback, volume, liked songs, and named playlist adds through the Mac app/API bridge.
 13. Run the ANZ Team demo with deterministic scripts for Madhuri, Rahul, Shreeya, Palash, and Shree.
+14. Use Yap Mode for silent system-wide dictation at the active caret.
 
 ## Mac Capability Map
 
@@ -114,6 +139,8 @@ These are the local Mac-only skills that do not require the browser extension ag
 - Browser control starter: open Chrome, open URLs, and run Google searches.
 - Local awareness starter: report the front app/window title through Accessibility.
 - Voice-first operation: realtime WebRTC listening when configured, browser recording fallback, native macOS speech recognition fallback, Fish Audio for Braino speech when configured, macOS `say` fallback otherwise.
+- System-wide dictation: double Option starts Yap Mode's transcription-only
+  session and inserts each completed turn into the focused editable field.
 - Visual companion: Dock patrol, drag-anywhere placement, transparent click-through overlay.
 
 ## Dynamic Island / Notch UI

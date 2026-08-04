@@ -1,19 +1,45 @@
 const { contextBridge, ipcRenderer, webUtils } = require("electron");
 const fs = require("node:fs");
+const os = require("node:os");
 const path = require("node:path");
 
-function loadWalkerSvg() {
-  const sourcePath = path.resolve(__dirname, "../../src/components/brainoWalkerSvg.ts");
-  let source = fs.readFileSync(sourcePath, "utf8");
-  source = source.replace("export const BRAINO_WALKER_SVG", "const BRAINO_WALKER_SVG");
-  return Function(`${source}\nreturn BRAINO_WALKER_SVG;`)();
+// Same userData path main.cjs writes profiles.mascot's local cache to
+// (mascot.json) — read here, synchronously, so the walker mounts with the
+// right character's markup from the very first frame. getWalkerSvgFor()
+// below lets the renderer also fetch a specific character's markup on
+// demand (used to hot-swap when the customizer card's picker changes,
+// without needing a restart).
+const AUTH_STORE_DIR = path.join(os.homedir(), "Library", "Application Support", "Braino Mac");
+const MASCOT_STATE_PATH = path.join(AUTH_STORE_DIR, "mascot.json");
+
+function loadCachedMascotSync() {
+  try {
+    return JSON.parse(fs.readFileSync(MASCOT_STATE_PATH, "utf8"))?.id === "webb" ? "webb" : "braino";
+  } catch (_) {
+    return "braino";
+  }
 }
 
-const walkerSvg = loadWalkerSvg();
+function loadWalkerSvgSource(fileName, exportName) {
+  const sourcePath = path.resolve(__dirname, "../../src/components", fileName);
+  let source = fs.readFileSync(sourcePath, "utf8");
+  source = source.replace(`export const ${exportName}`, `const ${exportName}`);
+  return Function(`${source}\nreturn ${exportName};`)();
+}
+
+function walkerSvgFor(mascotId) {
+  return mascotId === "webb"
+    ? loadWalkerSvgSource("webbWalkerSvg.ts", "WEBB_WALKER_SVG")
+    : loadWalkerSvgSource("brainoWalkerSvg.ts", "BRAINO_WALKER_SVG");
+}
+
+const walkerSvg = walkerSvgFor(loadCachedMascotSync());
 
 contextBridge.exposeInMainWorld("brainoMac", {
   getConfig: () => ipcRenderer.invoke("braino-mac:get-config"),
+  setMascot: (id) => ipcRenderer.invoke("braino-mac:set-mascot", id),
   getWalkerSvg: () => walkerSvg,
+  getWalkerSvgFor: (mascotId) => walkerSvgFor(mascotId),
   log: (payload) => ipcRenderer.invoke("braino-mac:log", payload),
   activeContext: () => ipcRenderer.invoke("braino-mac:active-context"),
   authStatus: () => ipcRenderer.invoke("braino-mac:auth-status"),
@@ -22,8 +48,13 @@ contextBridge.exposeInMainWorld("brainoMac", {
   delegate: (prompt) => ipcRenderer.invoke("braino-mac:delegate", prompt),
   demoAction: (action, payload) => ipcRenderer.invoke("braino-mac:demo-action", action, payload),
   delegateState: () => ipcRenderer.invoke("braino-mac:delegate-state"),
+  cursorModeState: () => ipcRenderer.invoke("braino-mac:cursor-mode-state"),
+  cursorModeControl: (payload) => ipcRenderer.invoke("braino-mac:cursor-mode-control", payload || {}),
   createRealtimeCall: (payload) => ipcRenderer.invoke("braino-mac:create-realtime-call", payload),
   updateRealtimeSession: (payload) => ipcRenderer.invoke("braino-mac:update-realtime-session", payload),
+  dictationIntent: (text, active) => ipcRenderer.invoke("braino-mac:dictation-intent", text, Boolean(active)),
+  dictationControl: (payload) => ipcRenderer.invoke("braino-mac:dictation-control", payload || {}),
+  dictationInsert: (payload) => ipcRenderer.invoke("braino-mac:dictation-insert", payload || {}),
   requestAccessibility: () => ipcRenderer.invoke("braino-mac:request-accessibility"),
   requestMicrophone: () => ipcRenderer.invoke("braino-mac:request-microphone"),
   nativeListen: () => ipcRenderer.invoke("braino-mac:native-listen"),
@@ -34,10 +65,21 @@ contextBridge.exposeInMainWorld("brainoMac", {
   ttsConfig: () => ipcRenderer.invoke("braino-mac:tts-config"),
   tts: (text, referenceId) => ipcRenderer.invoke("braino-mac:tts", text, referenceId || ""),
   systemSay: (text) => ipcRenderer.invoke("braino-mac:system-say", text),
+  stopSystemSay: () => ipcRenderer.invoke("braino-mac:system-say-stop"),
   onTaskProgress: (callback) => {
     const handler = (_event, payload) => callback(payload || {});
     ipcRenderer.on("braino-mac:task-progress", handler);
     return () => ipcRenderer.removeListener("braino-mac:task-progress", handler);
+  },
+  onCursorMode: (callback) => {
+    const handler = (_event, payload) => callback(payload || {});
+    ipcRenderer.on("braino-mac:cursor-mode", handler);
+    return () => ipcRenderer.removeListener("braino-mac:cursor-mode", handler);
+  },
+  onCursorTaskComplete: (callback) => {
+    const handler = (_event, payload) => callback(payload || {});
+    ipcRenderer.on("braino-mac:cursor-task-complete", handler);
+    return () => ipcRenderer.removeListener("braino-mac:cursor-task-complete", handler);
   },
   onVoiceMode: (callback) => {
     const handler = (_event, payload) => callback(payload || {});
@@ -53,6 +95,11 @@ contextBridge.exposeInMainWorld("brainoMac", {
     const handler = (_event, payload) => callback(payload || {});
     ipcRenderer.on("braino-mac:voice-toggle", handler);
     return () => ipcRenderer.removeListener("braino-mac:voice-toggle", handler);
+  },
+  onDictationToggle: (callback) => {
+    const handler = (_event, payload) => callback(payload || {});
+    ipcRenderer.on("braino-mac:dictation-toggle", handler);
+    return () => ipcRenderer.removeListener("braino-mac:dictation-toggle", handler);
   },
   onHerToggle: (callback) => {
     const handler = (_event, payload) => callback(payload || {});
@@ -108,6 +155,13 @@ contextBridge.exposeInMainWorld("brainoMac", {
     const handler = (_event, payload) => callback(payload || {});
     ipcRenderer.on("braino-mac:summon-toggle", handler);
     return () => ipcRenderer.removeListener("braino-mac:summon-toggle", handler);
+  },
+  // SKIT (TEMPORARY — Instagram demo, delete with the rest of the skit)
+  skitStep: (step) => ipcRenderer.invoke("braino-mac:skit-step", step),
+  onSkitStart: (callback) => {
+    const handler = () => callback();
+    ipcRenderer.on("braino-mac:skit-start", handler);
+    return () => ipcRenderer.removeListener("braino-mac:skit-start", handler);
   },
   setLiveCaptions: (on) => ipcRenderer.send("braino-mac:live-captions", Boolean(on)),
   ambientObserve: () => ipcRenderer.invoke("braino-mac:ambient-observe"),

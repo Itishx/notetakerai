@@ -1,20 +1,34 @@
+import { lazy, Suspense } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Route, Routes, useLocation, useNavigate } from "react-router-dom";
+import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { AuthProvider } from "@/contexts/AuthContext";
-import { lazy, Suspense, useState } from "react";
-import SplashScreen from "@/components/SplashScreen";
-import BrainoWalker from "@/components/BrainoWalker";
-import SpiderManBrandNewDay from "./pages/SpiderManBrandNewDayFast.tsx";
-import LaunchIntro from "./pages/LaunchIntro.tsx";
 
-const queryClient = new QueryClient();
-const SPLASH_SKIP_PATHS = new Set(["/", "/intro", "/interactive-tour", "/spiderman-brand-new-day", "/brand-new-day"]);
-const normalizePath = (path: string) => (path.length > 1 ? path.replace(/\/+$/, "") : path);
-
+const Waitlist = lazy(() => import("./pages/Waitlist.tsx"));
+const BrainoThronglets = lazy(() => import("./pages/BrainoThronglets.tsx"));
+const BrainoThrongletsDocs = lazy(() => import("./pages/BrainoThrongletsDocs.tsx"));
+const ChooseYourAvatarDocs = lazy(() => import("./pages/ChooseYourAvatarDocs.tsx"));
+const IomiBootIdentityDocs = lazy(() => import("./pages/IomiBootIdentityDocs.tsx"));
+const BrowserNotchPresenceDocs = lazy(() => import("./pages/BrowserNotchPresenceDocs.tsx"));
+const VoiceCommandEchoGuardDocs = lazy(() => import("./pages/VoiceCommandEchoGuardDocs.tsx"));
+const HilLoopDocs = lazy(() => import("./pages/HilLoopDocs.tsx"));
+const HowBrainoTalksDocs = lazy(() => import("./pages/HowBrainoTalksDocs.tsx"));
+const HumanIntelligence = lazy(() => import("./pages/HumanIntelligence.tsx"));
+const BrainoOSTeaser = lazy(() => import("./pages/BrainoOSTeaser.tsx"));
+const EcosystemTeaser = lazy(() => import("./pages/EcosystemTeaser.tsx"));
+const YapMode = lazy(() => import("./pages/YapMode.tsx"));
+const MotionGraphicsHub = lazy(() => import("./pages/MotionGraphicsHub.tsx"));
+const JyotiSirTeamDemoDocs = lazy(() => import("./pages/JyotiSirTeamDemoDocs.tsx"));
+const WhatsNewLiveDemosDocs = lazy(() => import("./pages/WhatsNewLiveDemosDocs.tsx"));
+const MascotReplyCaptionsDocs = lazy(() => import("./pages/MascotReplyCaptionsDocs.tsx"));
+const MusicSegmentLoopsDocs = lazy(() => import("./pages/MusicSegmentLoopsDocs.tsx"));
+const ExpandedThinkingCanvasDocs = lazy(() => import("./pages/ExpandedThinkingCanvasDocs.tsx"));
+const BrainoEcosystemDocs = lazy(() => import("./pages/BrainoEcosystemDocs.tsx"));
+const WaitlistNavigationDocs = lazy(() => import("./pages/WaitlistNavigationDocs.tsx"));
+const MacCursorModeDocs = lazy(() => import("./pages/MacCursorModeDocs.tsx"));
 const Home = lazy(() => import("./pages/Home.tsx"));
 const HomeOS = lazy(() => import("./pages/HomeOS.tsx"));
 const FounderLetter = lazy(() => import("./pages/FounderLetter.tsx"));
@@ -50,6 +64,7 @@ const Privacy = lazy(() => import("./pages/Privacy.tsx"));
 const Terms = lazy(() => import("./pages/Terms.tsx"));
 const Contact = lazy(() => import("./pages/Contact.tsx"));
 const ProductOverview = lazy(() => import("./pages/ProductOverview.tsx"));
+const ProductOverviewHomepageDocs = lazy(() => import("./pages/ProductOverviewHomepageDocs.tsx"));
 const Automations = lazy(() => import("./pages/Automations.tsx"));
 const Integrations = lazy(() => import("./pages/Integrations.tsx"));
 const ConnectorsVault = lazy(() => import("./pages/ConnectorsVault.tsx"));
@@ -67,178 +82,115 @@ const Interns = lazy(() => import("./pages/Interns.tsx"));
 const Team = lazy(() => import("./pages/Team.tsx"));
 const Shankar = lazy(() => import("./pages/Shankar.tsx"));
 const InstaGraphics = lazy(() => import("./pages/InstaGraphics.tsx"));
+const KnowledgeBase = lazy(() => import("./pages/KnowledgeBase.tsx"));
+const IdeaTracker = lazy(() => import("./pages/IdeaTracker.tsx"));
 const NotFound = lazy(() => import("./pages/NotFound.tsx"));
+const queryClient = new QueryClient();
 
-function LandingGate({
-  introDone,
-  tourDone,
-  onIntroDone,
-  onTourDone,
-}: {
-  introDone: boolean;
-  tourDone: boolean;
-  onIntroDone: () => void;
-  onTourDone: () => void;
-}) {
-  // The launch film no longer plays at "/" (user call: the gateway opens
-  // instantly). It remains previewable at /intro. "/" is now the three-class
-  // hub (BrainoClasses) rather than HomeOS directly.
-  void introDone;
-  void onIntroDone;
-  void tourDone;
-  return <BrainoClasses />;
-}
-
-function IntroPreviewRoute({ onIntroDone, onTourDone }: { onIntroDone: () => void; onTourDone: () => void }) {
-  const navigate = useNavigate();
+function AppRoutes() {
   return (
-    <LaunchIntro
-      onFinish={() => {
-        onIntroDone();
-        navigate("/", { replace: true });
-      }}
-      onSkipToWebsite={() => {
-        onIntroDone();
-        onTourDone();
-        navigate("/", { replace: true });
-      }}
-    />
+    <Suspense fallback={<div style={{ minHeight: "100vh", background: "#090a08" }} />}>
+      <Routes>
+        <Route path="/" element={<Waitlist />} />
+        <Route path="/braino-thronglets" element={<BrainoThronglets />} />
+        <Route path="/knowledge/braino-thronglets" element={<BrainoThrongletsDocs />} />
+        <Route path="/knowledge" element={<KnowledgeBase />} />
+        <Route path="/knowledge/product-overview-homepage" element={<ProductOverviewHomepageDocs />} />
+        <Route path="/knowledge/choose-your-avatar" element={<ChooseYourAvatarDocs />} />
+        <Route path="/knowledge/iomi-boot-identity" element={<IomiBootIdentityDocs />} />
+        <Route path="/knowledge/browser-notch-presence" element={<BrowserNotchPresenceDocs />} />
+        <Route path="/knowledge/voice-command-echo-guard" element={<VoiceCommandEchoGuardDocs />} />
+        <Route path="/knowledge/hil-version-1" element={<HilLoopDocs />} />
+        <Route path="/knowledge/how-braino-talks" element={<HowBrainoTalksDocs />} />
+        <Route path="/human-intelligence" element={<HumanIntelligence />} />
+        <Route path="/knowledge/jyoti-sir-team-demo" element={<JyotiSirTeamDemoDocs />} />
+        <Route path="/knowledge/whats-new-live-demos" element={<WhatsNewLiveDemosDocs />} />
+        <Route path="/knowledge/mascot-reply-captions" element={<MascotReplyCaptionsDocs />} />
+        <Route path="/knowledge/music-segment-loops" element={<MusicSegmentLoopsDocs />} />
+        <Route path="/knowledge/expanded-thinking-canvas" element={<ExpandedThinkingCanvasDocs />} />
+        <Route path="/knowledge/braino-ecosystem" element={<BrainoEcosystemDocs />} />
+        <Route path="/knowledge/waitlist-navigation" element={<WaitlistNavigationDocs />} />
+        <Route path="/knowledge/mac-cursor-mode" element={<MacCursorModeDocs />} />
+        <Route path="/classes" element={<BrainoClasses />} />
+        <Route path="/prelaunch" element={<PreLaunch />} />
+        <Route path="/home-classic" element={<Index />} />
+        <Route path="/home-old" element={<Home />} />
+        <Route path="/home-new" element={<HomeOS />} />
+        <Route path="/founder-letter" element={<FounderLetter />} />
+        <Route path="/jarvis" element={<JarvisOS />} />
+        <Route path="/notch-teaser" element={<NotchTeaser />} />
+        <Route path="/dontblink" element={<IntroTeaser />} />
+        <Route path="/aware" element={<EmotionTeaser />} />
+        <Route path="/n" element={<Letter />} />
+        <Route path="/saburi" element={<Saburi />} />
+        <Route path="/iomi" element={<Iomi />} />
+        <Route path="/telos" element={<Telos />} />
+        <Route path="/journal" element={<Journal />} />
+        <Route path="/journal/emotional-engine" element={<JournalEngine />} />
+        {/* The notch links here; /Vig stays as the old alias so shared links keep working. */}
+        <Route path="/emotional-intelligence" element={<VisualEmotionalEngine />} />
+        <Route path="/Vig" element={<VisualEmotionalEngine />} />
+        <Route path="/braino-os" element={<BrainoOSTeaser />} />
+        <Route path="/ecosystem-teaser" element={<EcosystemTeaser />} />
+        <Route path="/yap-mode" element={<YapMode />} />
+        <Route path="/motion-graphics" element={<MotionGraphicsHub />} />
+        <Route path="/teaser" element={<LaunchTeaser />} />
+        <Route path="/waitlist-admin" element={<WaitlistDashboard />} />
+        <Route path="/use-cases" element={<UseCases />} />
+        <Route path="/notion-sync" element={<NotionSync />} />
+        <Route path="/glass-preview" element={<GlassPreview />} />
+        <Route path="/auth" element={<Auth />} />
+        <Route path="/auth/extension" element={<ExtensionAuth />} />
+        <Route path="/premium" element={<Premium />} />
+        <Route path="/browser-agent" element={<BrowserAgent />} />
+        <Route path="/delegate" element={<Delegate />} />
+        <Route path="/remote-agent" element={<RemoteAgent />} />
+        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/build-plan" element={<BuildPlan />} />
+        <Route path="/reddit" element={<Reddit />} />
+        <Route path="/privacy" element={<Privacy />} />
+        <Route path="/terms" element={<Terms />} />
+        <Route path="/contact" element={<Contact />} />
+        <Route path="/product-overview" element={<ProductOverview />} />
+        <Route path="/automations" element={<Automations />} />
+        <Route path="/integrations" element={<Integrations />} />
+        <Route path="/connectors-vault" element={<ConnectorsVault />} />
+        <Route path="/changelog" element={<Changelog />} />
+        <Route path="/straight-talk" element={<StraightTalk />} />
+        <Route path="/why-the-wait" element={<WhyTheWait />} />
+        <Route path="/live" element={<BrainoLive />} />
+        <Route path="/playground" element={<Playground />} />
+        <Route path="/build-braino" element={<BuildYourBraino />} />
+        <Route path="/realtime-costs" element={<RealtimeCosts />} />
+        <Route path="/skills" element={<SkillsTracker />} />
+        <Route path="/chat" element={<BrainoChat />} />
+        <Route path="/launch-short" element={<BrainoLaunchShort />} />
+        <Route path="/interns" element={<Interns />} />
+        <Route path="/team" element={<Team />} />
+        <Route path="/team/shankar" element={<Shankar />} />
+        <Route path="/InstaGraphics" element={<InstaGraphics />} />
+        <Route path="/instagraphics" element={<InstaGraphics />} />
+        <Route path="/ideas" element={<IdeaTracker />} />
+        <Route path="*" element={<NotFound />} />
+      </Routes>
+    </Suspense>
   );
 }
 
-function AppShell({
-  splashDone,
-  onSplashDone,
-  homeIntroDone,
-  onHomeIntroDone,
-  homeTourDone,
-  onHomeTourDone,
-}: {
-  splashDone: boolean;
-  onSplashDone: () => void;
-  homeIntroDone: boolean;
-  onHomeIntroDone: () => void;
-  homeTourDone: boolean;
-  onHomeTourDone: () => void;
-}) {
-  const location = useLocation();
-  const pathname = normalizePath(location.pathname);
-  // The walking Braino shows everywhere except the dedicated chat page; the "/" landing
-  // hides it via PreLaunch's `body.sb-prelaunch #sb-brain-mascot-wrapper{display:none}` rule.
-  const hideMascot =
-    pathname === "/chat" ||
-    (pathname === "/" && !homeTourDone) ||
-    pathname === "/interactive-tour" ||
-    pathname === "/spiderman-brand-new-day" ||
-    pathname === "/brand-new-day";
-
+export default function App() {
   return (
-    <>
-      {!splashDone && <SplashScreen onDone={onSplashDone} />}
-      <div id="sb-brain-mascot-wrapper">{splashDone && !hideMascot && <BrainoWalker />}</div>
-      <Suspense fallback={<div style={{ minHeight: "100vh", background: "var(--sb-bg, #fbf7f1)" }} />}>
-        <Routes>
-          <Route path="/" element={
-            <LandingGate
-              introDone={homeIntroDone}
-              tourDone={homeTourDone}
-              onIntroDone={onHomeIntroDone}
-              onTourDone={onHomeTourDone}
-            />
-          } />
-          {/* Launch intro film remains previewable at /intro. */}
-          <Route path="/intro" element={<IntroPreviewRoute onIntroDone={onHomeIntroDone} onTourDone={onHomeTourDone} />} />
-          <Route path="/prelaunch" element={<PreLaunch />} />
-          <Route path="/home-classic" element={<Index />} />
-          <Route path="/home-old" element={<Home />} />
-          <Route path="/home-new" element={<HomeOS />} />
-          <Route path="/founder-letter" element={<FounderLetter />} />
-          <Route path="/jarvis" element={<JarvisOS />} />
-          <Route path="/notch-teaser" element={<NotchTeaser />} />
-          <Route path="/dontblink" element={<IntroTeaser />} />
-          <Route path="/aware" element={<EmotionTeaser />} />
-          <Route path="/n" element={<Letter />} />
-          <Route path="/saburi" element={<Saburi />} />
-          <Route path="/iomi" element={<Iomi />} />
-          <Route path="/telos" element={<Telos />} />
-          <Route path="/journal" element={<Journal />} />
-          <Route path="/journal/emotional-engine" element={<JournalEngine />} />
-          <Route path="/Vig" element={<VisualEmotionalEngine />} />
-          <Route path="/teaser" element={<LaunchTeaser />} />
-          <Route path="/waitlist-admin" element={<WaitlistDashboard />} />
-          <Route path="/use-cases" element={<UseCases />} />
-          <Route path="/notion-sync" element={<NotionSync />} />
-          <Route path="/glass-preview" element={<GlassPreview />} />
-          <Route path="/auth" element={<Auth />} />
-          <Route path="/auth/extension" element={<ExtensionAuth />} />
-          <Route path="/premium" element={<Premium />} />
-          <Route path="/browser-agent" element={<BrowserAgent />} />
-          <Route path="/delegate" element={<Delegate />} />
-          <Route path="/remote-agent" element={<RemoteAgent />} />
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/build-plan" element={<BuildPlan />} />
-          <Route path="/reddit" element={<Reddit />} />
-          <Route path="/privacy" element={<Privacy />} />
-          <Route path="/terms" element={<Terms />} />
-          <Route path="/contact" element={<Contact />} />
-          <Route path="/product-overview" element={<ProductOverview />} />
-          <Route path="/automations" element={<Automations />} />
-          <Route path="/integrations" element={<Integrations />} />
-          <Route path="/connectors-vault" element={<ConnectorsVault />} />
-          <Route path="/changelog" element={<Changelog />} />
-          <Route path="/straight-talk" element={<StraightTalk />} />
-          <Route path="/why-the-wait" element={<WhyTheWait />} />
-          <Route path="/live" element={<BrainoLive />} />
-          <Route path="/playground" element={<Playground />} />
-          <Route path="/build-braino" element={<BuildYourBraino />} />
-          <Route path="/realtime-costs" element={<RealtimeCosts />} />
-          <Route path="/skills" element={<SkillsTracker />} />
-          <Route path="/chat" element={<BrainoChat />} />
-          <Route path="/launch-short" element={<BrainoLaunchShort />} />
-          <Route path="/interns" element={<Interns />} />
-          <Route path="/team" element={<Team />} />
-          <Route path="/InstaGraphics" element={<InstaGraphics />} />
-          <Route path="/team/shankar" element={<Shankar />} />
-          <Route path="/spiderman-brand-new-day" element={<SpiderManBrandNewDay />} />
-          <Route path="/brand-new-day" element={<SpiderManBrandNewDay />} />
-          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </Suspense>
-    </>
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider>
+        <AuthProvider>
+          <TooltipProvider>
+            <Toaster />
+            <Sonner />
+            <BrowserRouter>
+              <AppRoutes />
+            </BrowserRouter>
+          </TooltipProvider>
+        </AuthProvider>
+      </ThemeProvider>
+    </QueryClientProvider>
   );
 }
-
-const App = () => {
-  const [splashDone, setSplashDone] = useState(() => {
-    if (typeof window === "undefined") return false;
-    return SPLASH_SKIP_PATHS.has(normalizePath(window.location.pathname));
-  });
-  const [homeIntroDone, setHomeIntroDone] = useState(false);
-  const [homeTourDone, setHomeTourDone] = useState(false);
-
-  return (
-  <QueryClientProvider client={queryClient}>
-    <ThemeProvider>
-      <AuthProvider>
-        <TooltipProvider>
-          <Toaster />
-          <Sonner />
-          <BrowserRouter>
-            <AppShell
-              splashDone={splashDone}
-              onSplashDone={() => setSplashDone(true)}
-              homeIntroDone={homeIntroDone}
-              onHomeIntroDone={() => setHomeIntroDone(true)}
-              homeTourDone={homeTourDone}
-              onHomeTourDone={() => setHomeTourDone(true)}
-            />
-          </BrowserRouter>
-        </TooltipProvider>
-      </AuthProvider>
-    </ThemeProvider>
-  </QueryClientProvider>
-  );
-};
-
-export default App;

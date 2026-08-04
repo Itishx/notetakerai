@@ -2,6 +2,12 @@ const W = 64;
 const H = 78;
 const walker = document.getElementById("walker");
 const walkerFlip = document.getElementById("walker-flip");
+const brainoCustomizer = document.getElementById("braino-customizer");
+const brainoSizeRange = document.getElementById("braino-size-range");
+const brainoSizeValue = document.getElementById("braino-size-value");
+const brainoSizeReset = document.getElementById("braino-size-reset");
+const brainoCustomizerDone = document.getElementById("braino-customizer-done");
+const brainoCharacterRow = document.getElementById("braino-character-row");
 const lane = document.getElementById("walker-lane");
 const bubble = document.getElementById("speech-bubble");
 const statusPill = document.getElementById("status-pill");
@@ -11,6 +17,9 @@ const edgeGlow = document.getElementById("edge-glow");
 const ESTIMATED_DOCK_HEIGHT = 94;
 const DOCK_PERCH_LIFT = 42;
 const START_OFFSCREEN_X = -W - 36;
+const BRAINO_SCALE_STORAGE_KEY = "braino-mac-mascot-scale-v1";
+const BRAINO_SCALE_MIN = 1;
+const BRAINO_SCALE_MAX = 5;
 const TTS_CHUNK_MAX_CHARS = 240;
 const TTS_FETCH_TIMEOUT_MS = 14000;
 const TTS_WARM_INTERVAL_MS = 240000;
@@ -23,11 +32,20 @@ const REALTIME_SPEECH_STOP_FLUSH_MS = 220;
 const REALTIME_TRANSCRIPT_IDLE_FLUSH_MS = 520;
 const REALTIME_CHAT_RESPONSE_TIMEOUT_MS = 12000;
 const REALTIME_SURFACE_SYNC_MIN_INTERVAL_MS = 30000;
+const DICTATION_TRANSCRIPTION_MODEL = "gpt-realtime-whisper";
 const MAC_TEAM_DEMO_SPOTIFY_MS = 5000;
 const MAC_TEAM_DEMO_ARTICLE_MS = 350;
 const MAC_TEAM_PRIMARY_ORDER = ["madhuri", "shree", "palash"];
 const MAC_TEAM_ORDER_LINE = "This is the order I will be following: Madhuri, then Shree, then Palash. Elder comes first, then ladies first, and then comes the gentleman.";
 const MAC_TEAM_FINAL_THANK_YOU = "Thank you for making Itish's time in Amdocs worth it. Thank you for making him feel as if he was home away from home. He will remember you always.";
+const MAC_JYOTI_DEMO_INTRO = "Hi, I am Braino. Before I walk you through who I am, let's play some music, shall we? Let's play Places to Be by Fred again.";
+const MAC_JYOTI_THANK_YOU = "Jyoti sir, thank you for understanding Itish for who he is and for being so supportive. He's very excited about working on me, it's all he does these days, and to have your support in that means a lot to him.";
+const MAC_JYOTI_ORGANIZE_LINE = "Okay, so if you can look at the screen, Itish's Desktop is dirty and messy. He does not want to sort it all out, so what does he do? He asks me to. I can organize your messy Desktop in a second. Watch. Three, two, one.";
+const MAC_JYOTI_TABS_LINE = "Now let me make a little mess of my own. Seven tabs. YouTube, Medium, GitHub, and a few more.";
+const MAC_JYOTI_CLOSE_TABS_LINE = "Here, watch me close them all.";
+const MAC_JYOTI_FINAL_SONG_LINE = "Let's go back to Spotify. This time, She Needs Him by Her's.";
+const MAC_JYOTI_WHATSAPP_LINE = "Jyoti sir, I haven't sent it yet. Let me just open the chat and type hi from Braino.";
+const MAC_TEAM_ACTION_BEAT_MS = 2000;
 const MAC_TEAM_DEMO_SCRIPT = {
   intro: [
     "Okay so, hello there folks, I am Braino.",
@@ -92,8 +110,21 @@ const MAC_TEAM_ANZ = {
 };
 
 walkerFlip.innerHTML = window.brainoMac.getWalkerSvg();
-const root = walker.querySelector("#__sbwk_root__");
+let root = walker.querySelector("#__sbwk_root__");
 const q = (selector) => root?.querySelector(selector);
+
+// Arm-rotation and eye-blink pivots default to Braino's own coordinates
+// (shoulder/eye centers) for backward compatibility. A character whose
+// shoulders or eyes sit elsewhere (e.g. Webb's, drawn from his actual
+// design rather than Braino's) overrides via data-pivot-x/data-pivot-y on
+// the element itself, so the same driver math still pivots around the
+// right point instead of a phantom Braino-shaped one.
+function pivotOf(el, fallbackX, fallbackY) {
+  if (!el) return { x: fallbackX, y: fallbackY };
+  const x = parseFloat(el.getAttribute("data-pivot-x"));
+  const y = parseFloat(el.getAttribute("data-pivot-y"));
+  return { x: Number.isFinite(x) ? x : fallbackX, y: Number.isFinite(y) ? y : fallbackY };
+}
 
 // ── Notch dancer: a live clone of the real mascot rig, grooving in the notch
 //    while music plays. Ids are remapped so they never collide with the big
@@ -321,6 +352,16 @@ let wakeWordArmed = false;
 let realtimeConnecting = false;
 let realtimeVoiceEngine = "fish";
 let herMode = false;
+let dictationMode = false;
+let dictationStarting = false;
+let dictationStopping = false;
+let dictationStopRequestedSource = "";
+let dictationStartGeneration = 0;
+let realtimeStartGeneration = 0;
+let dictationInsertChain = Promise.resolve();
+let dictationPendingTurns = 0;
+let rtDictationVad = null;
+let rtDictationPreroll = null;
 let voiceCycleInFlight = false;
 let voiceTurnInFlight = false;
 let realtimeResponseInFlight = false;
@@ -331,9 +372,10 @@ let delegateGeneration = 0;
 let currentSpeechAudio = null;
 let currentSpeechUrl = null;
 let speechGeneration = 0;
+let activeSpeechJobGeneration = 0;
 let voiceLatencyCounter = 0;
 let voiceLatencyTurn = null;
-let lastSpokenLine = { text: "", ts: 0 };
+let lastSpokenLine = { text: "", ts: 0, duringRealtime: false };
 let pendingDelegateState = { hasPendingWorkflow: false, hasPendingFileConfirmation: false };
 let macTeamState = {
   active: false,
@@ -343,14 +385,17 @@ let macTeamState = {
   currentPerson: null,
   lastLine: "",
 };
+let macTeamKeepMusicDucked = false;
 let localChatMemory = [];
 let scriptedWalk = null;
 let authPose = false;
+let cursorModeContext = null;
 let startupActive = false;
 let startupPose = null;
 let ttsConfigPromise = null;
 let ttsWarmTimer = 0;
 const ttsAbortControllers = new Set();
+const activeSpeechAudios = new Set();
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
@@ -378,7 +423,9 @@ function startVoiceLatencyTurn(reason = "speech_started") {
     transcriptCompletedAt: 0,
     delegateStartedAt: 0,
     delegateDoneAt: 0,
+    firstResponseDeltaAt: 0,
     firstAudioAt: 0,
+    interruptedAt: 0,
   };
   logRenderer("voice.latency.speech_started", { turnId: voiceLatencyTurn.id, reason });
 }
@@ -398,10 +445,15 @@ function voiceLatencySnapshot() {
 function markVoiceLatency(stage, data = {}) {
   if (!voiceLatencyTurn) return;
   const now = performance.now();
+  if (stage === "response_delta" && voiceLatencyTurn.firstResponseDeltaAt) return;
   if (stage === "speech_stopped") voiceLatencyTurn.speechStoppedAt = now;
   if (stage === "transcript_completed") voiceLatencyTurn.transcriptCompletedAt = now;
   if (stage === "delegate_started") voiceLatencyTurn.delegateStartedAt = now;
   if (stage === "delegate_done") voiceLatencyTurn.delegateDoneAt = now;
+  if (stage === "response_delta" && !voiceLatencyTurn.firstResponseDeltaAt) {
+    voiceLatencyTurn.firstResponseDeltaAt = now;
+  }
+  if (stage === "interrupted") voiceLatencyTurn.interruptedAt = now;
   let firstAudioJustSet = false;
   if (stage === "first_audio" && !voiceLatencyTurn.firstAudioAt) {
     voiceLatencyTurn.firstAudioAt = now;
@@ -416,14 +468,16 @@ function markVoiceLatency(stage, data = {}) {
   if (firstAudioJustSet) {
     const t = voiceLatencyTurn;
     const seg = (from, to) => (from && to ? Math.round(to - from) : null);
+    const responseReadyAt = t.firstResponseDeltaAt || t.delegateDoneAt;
     logRenderer("voice.latency.turn_summary", {
       turnId: t.id,
-      captionFirstMs: seg(t.speechStartedAt, t.captionFirstAt),
+      heardMs: seg(t.speechStartedAt, t.speechStoppedAt),
       sttMs: seg(t.speechStoppedAt, t.transcriptCompletedAt),
       routeMs: seg(t.transcriptCompletedAt, t.delegateStartedAt),
-      thinkMs: seg(t.delegateStartedAt, t.delegateDoneAt),
-      ttsMs: seg(t.delegateDoneAt, t.firstAudioAt),
+      thinkMs: seg(t.delegateStartedAt, responseReadyAt),
+      ttsMs: seg(responseReadyAt, t.firstAudioAt),
       totalFromStopMs: seg(t.speechStoppedAt, t.firstAudioAt),
+      path: data.source || "voice",
     });
   }
 }
@@ -435,6 +489,142 @@ function getMoveBounds() {
     minY: 54,
     maxY: Math.max(54, window.innerHeight - H - 10),
   };
+}
+
+function readBrainoScale() {
+  try {
+    const stored = Number.parseFloat(window.localStorage.getItem(BRAINO_SCALE_STORAGE_KEY) || "");
+    return Number.isFinite(stored)
+      ? clamp(stored, BRAINO_SCALE_MIN, BRAINO_SCALE_MAX)
+      : BRAINO_SCALE_MIN;
+  } catch {
+    return BRAINO_SCALE_MIN;
+  }
+}
+
+let brainoScale = readBrainoScale();
+let brainoCustomizerOpen = false;
+
+function renderBrainoScale() {
+  const facing = (listening || realtimeConnecting || processing || speaking || authPose) ? 1 : dirX;
+  walkerFlip.style.transform = `scaleX(${facing}) scale(${brainoScale})`;
+  brainoSizeRange.value = String(brainoScale);
+  brainoSizeValue.value = `${Math.round(brainoScale * 100)}%`;
+}
+
+function positionBrainoCustomizer() {
+  if (!brainoCustomizerOpen) return;
+  const mascotRect = walkerFlip.getBoundingClientRect();
+  const panelWidth = brainoCustomizer.offsetWidth || 286;
+  const panelHeight = brainoCustomizer.offsetHeight || 220;
+  const left = clamp(
+    mascotRect.left + mascotRect.width / 2 - panelWidth / 2,
+    12,
+    Math.max(12, window.innerWidth - panelWidth - 12),
+  );
+  const preferredTop = mascotRect.top - panelHeight - 14;
+  const top = preferredTop >= 12
+    ? preferredTop
+    : clamp(mascotRect.bottom + 14, 12, Math.max(12, window.innerHeight - panelHeight - 12));
+  brainoCustomizer.style.left = `${Math.round(left)}px`;
+  brainoCustomizer.style.top = `${Math.round(top)}px`;
+}
+
+function setBrainoCustomizerOpen(open) {
+  brainoCustomizerOpen = Boolean(open);
+  brainoCustomizer.classList.toggle("show", brainoCustomizerOpen);
+  brainoCustomizer.setAttribute("aria-hidden", String(!brainoCustomizerOpen));
+  if (brainoCustomizerOpen) {
+    setMousePassthrough(false);
+    window.requestAnimationFrame(positionBrainoCustomizer);
+  } else {
+    setMousePassthrough(true);
+  }
+}
+
+function setBrainoScale(nextScale, persist = true) {
+  brainoScale = clamp(Number(nextScale) || BRAINO_SCALE_MIN, BRAINO_SCALE_MIN, BRAINO_SCALE_MAX);
+  if (persist) {
+    try {
+      window.localStorage.setItem(BRAINO_SCALE_STORAGE_KEY, String(brainoScale));
+    } catch {
+      // The live resize should still work if local persistence is unavailable.
+    }
+  }
+  renderBrainoScale();
+  positionBrainoCustomizer();
+}
+
+renderBrainoScale();
+
+// Which character this desktop companion shows — Braino or Webb. Same voice,
+// memory, and actions underneath either way (see the website's Choose Your
+// Avatar feature); this only affects which face renders. The choice is
+// account-level (profiles.mascot), so it's saved through the main process,
+// not localStorage.
+let mascotChoice = "braino";
+
+function renderMascotChoice() {
+  if (!brainoCharacterRow) return;
+  for (const option of brainoCharacterRow.querySelectorAll(".braino-character-option")) {
+    option.classList.toggle("active", option.dataset.mascot === mascotChoice);
+  }
+}
+
+// Swaps the walker's actual markup live, no restart. root was captured once
+// at startup as `#__sbwk_root__` inside walkerFlip — q() always re-queries
+// FROM root fresh each frame, so reassigning root to the new subtree after
+// replacing walkerFlip's innerHTML is enough for every animation (walk,
+// blink, talk, drag) to pick up the new character immediately.
+function remountWalker(mascotId) {
+  const svg = window.brainoMac.getWalkerSvgFor?.(mascotId);
+  if (!svg) return;
+  walkerFlip.innerHTML = svg;
+  root = walker.querySelector("#__sbwk_root__");
+  renderBrainoScale();
+}
+
+function setMascotChoice(id, { save = true, remount = save } = {}) {
+  const next = id === "webb" ? "webb" : "braino";
+  const changed = next !== mascotChoice;
+  mascotChoice = next;
+  renderMascotChoice();
+  if (save) window.brainoMac.setMascot?.(mascotChoice).catch(() => {});
+  if (remount && changed) remountWalker(mascotChoice);
+}
+
+renderMascotChoice();
+
+brainoCharacterRow?.addEventListener("click", (event) => {
+  const option = event.target.closest(".braino-character-option");
+  if (!option) return;
+  setMascotChoice(option.dataset.mascot);
+});
+
+function isBrainoGrowVoiceCommand(text) {
+  const normalized = normalizeForVoiceMatch(text);
+  if (!normalized) return false;
+  const addressesBraino = /\b(braino|breno|bruno)\b/.test(normalized);
+  const asksToGrow = /\b(grow|become|get|make yourself|turn)\b.*\b(big|bigger|large|larger|huge|giant)\b/.test(normalized)
+    || /\b(size up|go giant|giant man)\b/.test(normalized);
+  return addressesBraino && asksToGrow;
+}
+
+async function runBrainoGrowVoiceCommand(text) {
+  if (!isBrainoGrowVoiceCommand(text)) return false;
+  const nextScale = Math.min(BRAINO_SCALE_MAX, Math.max(2, brainoScale + 1));
+  setBrainoCustomizerOpen(false);
+  walkerFlip.classList.add("resizing");
+  setBubble("Going Giant.", 1500);
+  setBrainoScale(nextScale);
+  await wait(760);
+  walkerFlip.classList.remove("resizing");
+  setBrainoCustomizerOpen(true);
+  logRenderer("braino.customizer.voice_grow", {
+    scale: brainoScale,
+    maxScale: BRAINO_SCALE_MAX,
+  });
+  return true;
 }
 
 function getDockBounds() {
@@ -530,7 +720,9 @@ function pickRoamTarget(now = performance.now()) {
 function setStatus(status, text) {
   statusPill.className = status;
   lane.className = status;
-  // The walker owns the voice theatrics again — the notch stays out of voice.
+  // Voice is the notch's highest-priority live state. The walker mirrors it
+  // while roaming, but a stale thinking canvas must never cover listening or
+  // speaking feedback when Braino is home.
   walker.classList.toggle("voice-active", ["connecting", "listening", "hearing", "captured", "speaking"].includes(status));
   walker.classList.toggle("connecting", status === "connecting");
   walker.classList.toggle("listening", status === "listening");
@@ -539,12 +731,18 @@ function setStatus(status, text) {
   walker.classList.toggle("speaking", status === "speaking");
   statusText.textContent = text;
   lastGlowStatus = status;
+  lastProcessingDetail = status === "thinking" ? String(text || "").trim() : lastProcessingDetail;
+  if (status === "speaking" && !coworkLabel) {
+    nfThinkingText = "";
+    window.clearTimeout(nfThinkingTimer);
+  }
   updateEdgeGlow();
   updateNotchFace();
   if (herMode) window.HerMode?.syncStatus(status);
 }
 
 let lastGlowStatus = "ready";
+let lastProcessingDetail = "";
 let musicMode = false;
 let activeVoiceMode = null;   // { name, color } while a Voice Command mode runs
 
@@ -688,17 +886,126 @@ window.brainoMac.onCowork?.((state) => {
 // ("capturing") and a full-sentence thinking line for the expanded island.
 let coworkLabel = "";
 let coworkThinking = "";
+let coworkThinkingHistory = [];
+let coworkCompletionTimer = 0;
+const nfThinkingCanvas = notchFace?.querySelector(".nf-thinking-canvas");
+const nfThinkingCurrent = notchFace?.querySelector(".nf-thinking-current");
+const nfThinkingState = notchFace?.querySelector(".nf-thinking-state");
+const nfThinkingTrail = notchFace?.querySelector(".nf-thinking-trail");
+const nfFlowPrompt = notchFace?.querySelector(".nf-flow-prompt span");
+const nfFlowResponse = notchFace?.querySelector(".nf-flow-response span");
+const THINKING_PHASES = ["Thinking", "Hatching", "Deciding", "Calibrating"];
+let thinkingPhaseIndex = 0;
+let thinkingPhaseTimer = 0;
+let nfFlowPromptText = "";
+let nfFlowResponseText = "";
+
+function stopThinkingPhaseCycle() {
+  window.clearInterval(thinkingPhaseTimer);
+  thinkingPhaseTimer = 0;
+  thinkingPhaseIndex = 0;
+}
+
+function startThinkingPhaseCycle() {
+  if (thinkingPhaseTimer) return;
+  thinkingPhaseIndex = 0;
+  thinkingPhaseTimer = window.setInterval(() => {
+    thinkingPhaseIndex = (thinkingPhaseIndex + 1) % THINKING_PHASES.length;
+    if (nfThinkingState) nfThinkingState.textContent = THINKING_PHASES[thinkingPhaseIndex];
+    updateNotchFace();
+  }, 1650);
+}
+
+function thinkingPresentation(label, thinking) {
+  const source = `${label} ${thinking}`.toLowerCase();
+  if (/\b(approval|approve|permission|confirm|needs you|your input)\b/.test(source)) {
+    return { state: "Needs approval", className: "nf-think-waiting" };
+  }
+  if (/\b(error|failed|couldn'?t|unable)\b/.test(source)) {
+    return { state: "Needs attention", className: "nf-think-failed" };
+  }
+  if (/\b(done|complete|completed|finished|ready)\b/.test(source)) {
+    return { state: "Complete", className: "nf-think-complete" };
+  }
+  return { state: THINKING_PHASES[thinkingPhaseIndex], className: "" };
+}
+
+function compactFlowText(text, maxChars = 42) {
+  const value = String(text || "").trim().replace(/\s+/g, " ");
+  if (value.length <= maxChars) return value;
+  return `${value.slice(0, maxChars - 1)}…`;
+}
+
+function renderThinkingCanvas(label, thinking) {
+  const current = String(thinking || label || "Working on it").trim();
+  const presentation = thinkingPresentation(label, thinking);
+  if (nfThinkingCurrent) nfThinkingCurrent.textContent = current;
+  if (nfThinkingState) nfThinkingState.textContent = presentation.state;
+  if (nfThinkingCanvas) nfThinkingCanvas.dataset.state = presentation.state;
+  if (nfFlowPrompt) nfFlowPrompt.textContent = compactFlowText(nfFlowPromptText || "Request received");
+  if (nfFlowResponse) nfFlowResponse.textContent = compactFlowText(nfFlowResponseText || "Preparing");
+  notchFace?.classList.remove("nf-think-waiting", "nf-think-failed", "nf-think-complete");
+  if (presentation.className) notchFace?.classList.add(presentation.className);
+
+  if (nfThinkingTrail) {
+    nfThinkingTrail.replaceChildren(...coworkThinkingHistory.slice(-2).map((step) => {
+      const row = document.createElement("div");
+      row.className = "nf-thinking-step";
+      const text = document.createElement("span");
+      text.textContent = step;
+      row.appendChild(text);
+      return row;
+    }));
+  }
+}
+
 window.brainoMac.onCoworkLabel?.((payload) => {
-  coworkLabel = String(payload?.label || "");
-  coworkThinking = String(payload?.thinking || "");
+  const nextLabel = String(payload?.label || "").trim();
+  const nextThinking = String(payload?.thinking || "").trim();
+  const wasActive = Boolean(coworkLabel);
+  window.clearTimeout(coworkCompletionTimer);
+
+  if (nextLabel && coworkThinking && coworkThinking !== nextThinking) {
+    coworkThinkingHistory = [...coworkThinkingHistory, coworkThinking].slice(-4);
+  }
+  coworkLabel = nextLabel;
+  coworkThinking = nextThinking;
   const active = Boolean(coworkLabel);
+
+  if (!active && wasActive) {
+    stopThinkingPhaseCycle();
+    coworkLabel = "Done";
+    coworkThinking = "Completed and checked";
+    renderThinkingCanvas(coworkLabel, coworkThinking);
+    notchFace?.classList.add("cowork", "nf-thinking", "nf-think-open", "nf-think-complete");
+    coworkCompletionTimer = window.setTimeout(() => {
+      coworkLabel = "";
+      coworkThinking = "";
+      coworkThinkingHistory = [];
+      stopThinkingPhaseCycle();
+      notchFace?.classList.remove(
+        "cowork", "nf-thinking", "nf-think-open", "nf-think-hint",
+        "nf-think-complete", "captioning",
+      );
+      nfSetThinkingSticky("");
+    }, 1800);
+    return;
+  }
+
   notchFace?.classList.toggle("cowork", active);
   notchFace?.classList.toggle("nf-thinking", active);
+  if (active) startThinkingPhaseCycle();
   // an arrow hint appears only when there's a full thought to read
   notchFace?.classList.toggle("nf-think-hint", active && Boolean(coworkThinking));
-  if (!active) { notchFace?.classList.remove("nf-think-open"); }
-  // compact pill shows the short label; the expanded wing shows the sentence
-  nfSetThinkingSticky(active && !notchFace?.classList.contains("nf-think-open") ? coworkLabel : coworkThinking);
+  if (!active) {
+    stopThinkingPhaseCycle();
+    notchFace?.classList.remove(
+      "nf-think-open", "nf-think-waiting", "nf-think-failed",
+      "nf-think-complete", "captioning",
+    );
+  }
+  renderThinkingCanvas(coworkLabel, coworkThinking);
+  nfSetThinkingSticky(active ? coworkLabel : "");
 });
 
 // A sticky variant of nfSetThinking: no 6-second auto-clear, because a real
@@ -709,23 +1016,25 @@ function nfSetThinkingSticky(text) {
   updateNotchFace();
 }
 
-// HOVER the thinking island → it shifts open caption-wide and shows the full
-// sentence of what he's doing; leave → it shifts back to the short label.
-// Eyes stay centred the whole time (the .captioning geometry). The arrow hint
-// (nf-think-hint) tells you it's hoverable.
+// The eyes are the disclosure control: click Braino himself to unfold the same
+// physical strip into the cognition canvas. The surrounding caption remains
+// non-modal and clicking elsewhere folds the canvas home.
 if (notchFace) {
-  const openThink = () => {
-    if (!notchFace.classList.contains("nf-thinking") || !coworkThinking) return;
-    notchFace.classList.add("nf-think-open", "captioning");
-    nfSetThinkingSticky(coworkThinking);
+  const toggleThink = (event) => {
+    const detailedText = coworkThinking || nfThinkingText || lastProcessingDetail;
+    if (!notchFace.classList.contains("nf-thinking") || !detailedText) return;
+    if (!event.target.closest?.(".nf-mini")) return;
+    const opening = !notchFace.classList.contains("nf-think-open");
+    notchFace.classList.toggle("nf-think-open", opening);
+    notchFace.classList.toggle("captioning", opening);
+    nfSetThinkingSticky(opening ? detailedText : coworkLabel || nfThinkingText);
   };
-  const closeThink = () => {
-    if (!notchFace.classList.contains("nf-think-open")) return;
+  notchFace.addEventListener("click", toggleThink);
+  document.addEventListener("pointerdown", (event) => {
+    if (!notchFace.classList.contains("nf-think-open") || notchFace.contains(event.target)) return;
     notchFace.classList.remove("nf-think-open", "captioning");
     nfSetThinkingSticky(coworkLabel);
-  };
-  notchFace.addEventListener("mouseenter", openThink);
-  notchFace.addEventListener("mouseleave", closeThink);
+  });
 }
 
 async function runCoworkGlance() {
@@ -895,17 +1204,55 @@ window.brainoMac.onAmbientToggle?.((payload) => {
 // ONLY what we heard is captioned (left wing) — his replies are voice + the
 // talking mouth, never text (user call: no response captions).
 const nfCapLeftEl = document.querySelector("#notch-face .nf-cap-l");
+const nfCapRightEl = document.querySelector("#notch-face .nf-cap-r");
 let nfHeardText = "";
 let nfCaptionClearTimer = 0;
 
-function nfSetHeard(text) {
+function compactNotchCaption(text, maxChars = 96) {
+  const value = String(text || "").trim();
+  if (value.length <= maxChars) return value;
+  return `...${value.slice(-(maxChars - 3))}`;
+}
+
+function layoutNotchCaption(text) {
+  if (!notchFace) return;
+  const value = String(text || "").trim().replace(/\s+/g, " ");
+  const halfScreen = Math.max(150, (window.innerWidth / 2) - 8);
+  const baseWing = 95;
+  const pad = 30;
+  const charPx = 5.7;
+  const leftTextCapacity = Math.max(10, Math.floor((halfScreen - baseWing - pad) / charPx));
+  const leftText = value.slice(0, leftTextCapacity);
+  const rightText = value.slice(leftTextCapacity);
+  const leftReach = Math.min(halfScreen, Math.max(baseWing, baseWing + pad + leftText.length * charPx));
+  const rightReach = rightText
+    ? Math.min(halfScreen, Math.max(baseWing, baseWing + pad + rightText.length * charPx))
+    : baseWing;
+
+  notchFace.style.setProperty("--nf-left-reach", `${Math.round(leftReach)}px`);
+  notchFace.style.setProperty("--nf-right-reach", `${Math.round(rightReach)}px`);
+  if (nfCapLeftEl) nfCapLeftEl.textContent = leftText;
+  if (nfCapRightEl) nfCapRightEl.textContent = rightText;
+  notchFace.classList.toggle("nf-caption-left", Boolean(value) && !rightText);
+  notchFace.classList.toggle("nf-caption-right", Boolean(rightText));
+}
+
+function nfSetHeard(text, options = {}) {
   nfHeardText = String(text || "").trim();
-  if (nfCapLeftEl) nfCapLeftEl.textContent = nfHeardText;
+  if (nfHeardText) {
+    nfFlowPromptText = nfHeardText;
+    nfFlowResponseText = "";
+  }
+  layoutNotchCaption(dictationMode ? compactNotchCaption(nfHeardText) : nfHeardText);
   window.clearTimeout(nfCaptionClearTimer);
   if (nfHeardText) {
+    const requestedDuration = Number(options.durationMs);
+    const duration = Number.isFinite(requestedDuration)
+      ? Math.max(500, requestedDuration)
+      : Math.max(3600, Math.min(9000, nfHeardText.length * 58));
     nfCaptionClearTimer = window.setTimeout(
       () => nfClearCaptions(),
-      Math.max(3600, Math.min(9000, nfHeardText.length * 58)),
+      duration,
     );
   }
   updateNotchFace();
@@ -915,6 +1262,8 @@ function nfClearCaptions() {
   window.clearTimeout(nfCaptionClearTimer);
   nfHeardText = "";
   if (nfCapLeftEl) nfCapLeftEl.textContent = "";
+  if (nfCapRightEl) nfCapRightEl.textContent = "";
+  notchFace?.classList.remove("nf-caption-left", "nf-caption-right");
   updateNotchFace();
 }
 
@@ -923,15 +1272,35 @@ function nfClearCaptions() {
 // should always be able to SEE what he understood and what he's doing.
 let nfThinkingText = "";
 let nfThinkingTimer = 0;
+let nfThinkingOpenTimer = 0;
 
 function nfSetThinking(text) {
   nfThinkingText = String(text || "").trim();
   window.clearTimeout(nfThinkingTimer);
+  window.clearTimeout(nfThinkingOpenTimer);
   if (nfThinkingText) {
+    startThinkingPhaseCycle();
+    renderThinkingCanvas(nfThinkingText, nfThinkingText);
+    notchFace?.classList.add("nf-thinking", "nf-think-hint");
+    // Stay compact by default. Like a Dynamic Island, detail expands only
+    // when the user asks for it by clicking the notch.
     nfThinkingTimer = window.setTimeout(() => {
       nfThinkingText = "";
+      if (!coworkLabel) {
+        stopThinkingPhaseCycle();
+        notchFace?.classList.remove(
+          "nf-thinking", "nf-think-open", "nf-think-hint", "captioning",
+          "nf-think-waiting", "nf-think-failed", "nf-think-complete",
+        );
+      }
       updateNotchFace();
     }, 6000);
+  } else if (!coworkLabel) {
+    stopThinkingPhaseCycle();
+    notchFace?.classList.remove(
+      "nf-thinking", "nf-think-open", "nf-think-hint", "captioning",
+      "nf-think-waiting", "nf-think-failed", "nf-think-complete",
+    );
   }
   updateNotchFace();
 }
@@ -954,14 +1323,49 @@ function updateNotchFace() {
     ? nfCalendarNext
     : null;
 
-  const sessionEngaged = realtimeActive || realtimeConnecting;
+  const sessionEngaged = dictationMode || realtimeActive || realtimeConnecting;
+  const voiceOwnsNotch = visible
+    && walkerHome
+    && ["connecting", "listening", "hearing", "captured", "speaking"].includes(lastGlowStatus);
+  const processingActive = !voiceOwnsNotch
+    && (Boolean(nfThinkingText) || lastGlowStatus === "thinking");
+
+  // State ownership is explicit: listening/speaking immediately collapses
+  // any open canvas so ears, sonar, captions, and the speaking mouth are never
+  // hidden behind yesterday's task state.
+  if (voiceOwnsNotch) {
+    window.clearTimeout(nfThinkingOpenTimer);
+    notchFace.classList.remove(
+      "nf-thinking", "nf-think-open", "nf-think-hint",
+      "nf-think-waiting", "nf-think-failed", "nf-think-complete",
+    );
+    stopThinkingPhaseCycle();
+  } else if (processingActive) {
+    notchFace.classList.add("nf-thinking");
+    startThinkingPhaseCycle();
+    renderThinkingCanvas(
+      nfThinkingText || "Thinking",
+      nfThinkingText || lastProcessingDetail || "Working on your request",
+    );
+  } else if (!coworkLabel) {
+    stopThinkingPhaseCycle();
+    notchFace.classList.remove(
+      "nf-thinking", "nf-think-open", "nf-think-hint",
+      "nf-think-waiting", "nf-think-failed", "nf-think-complete",
+    );
+  }
   // Conversation OWNS the notch while a caption is live: the dancer, marquee
   // and activity tickers all yield so the expanded island belongs to the
   // words — they come right back the moment the caption clears.
   const conversationOwnsNotch = sessionEngaged && Boolean(nfHeardText);
   // Thinking lives in the caption wing (same spot as your words), not the
   // bottom ticker — the island expands and the step text reads like a caption.
-  if (nfCapLeftEl) nfCapLeftEl.textContent = nfThinkingText || nfHeardText;
+  if (nfCapLeftEl) {
+    const caption = voiceOwnsNotch
+      ? nfHeardText
+      : (processingActive ? THINKING_PHASES[thinkingPhaseIndex] : nfHeardText);
+    layoutNotchCaption(dictationMode ? compactNotchCaption(caption) : caption);
+  }
   // Two-slot ticker (iPhone island style): primary activity left, a compact
   // secondary on the right wing. Priority: REC > transient system event
   // (charger/headphones) > timer > imminent calendar > WhatsApp > X stats >
@@ -970,13 +1374,19 @@ function updateNotchFace() {
   const slots = [];
   let live = false;
   let music = false;
-  if (nfThinkingText || conversationOwnsNotch) {
+  if (processingActive || conversationOwnsNotch) {
     // nothing else renders in the ticker this frame
   } else {
+    if (dictationMode) {
+      const yapNotice = nfTransient.text && now < nfTransient.until ? nfTransient.text : "";
+      slots.push(yapNotice || "Yap Mode");
+    }
     if (meetingRecording) slots.push(`● REC ${fmtMeetingClock(Date.now() - meetingStartedAt)}`);
     else if (screenRecording) slots.push(`● SCREEN ${fmtMeetingClock(Date.now() - screenRecStartedAt)}`);
     if (nfAlarmRinging && slots.length < 2) slots.push(`⏰ ${nfAlarmRinging.label} · tap to stop`);
-    if (nfTransient.text && now < nfTransient.until && slots.length < 2) slots.push(nfTransient.text);
+    if (!dictationMode && nfTransient.text && now < nfTransient.until && slots.length < 2) {
+      slots.push(nfTransient.text);
+    }
     if (timer && slots.length < 2) slots.push(`${timer.label} · ${fmtCountdown(timer.endAt - now)}`);
     if (nfStopwatch.on && slots.length < 2) {
       const swMs = nfStopwatch.accumMs + (nfStopwatch.running ? now - nfStopwatch.startedAt : 0);
@@ -1019,14 +1429,17 @@ function updateNotchFace() {
       }
     }
   }
-  const line = slots[0] || "";
+  const line = processingActive ? "" : slots[0] || "";
   nfSetStatus2Text(slots[1] || "");
   notchFace.classList.toggle("dual", visible && slots.length > 1);
   notchFace.classList.toggle("alarming", visible && Boolean(nfAlarmRinging));
   notchFace.classList.toggle("live", visible && live);
   notchFace.classList.toggle("music", visible && music);
-  notchFace.classList.toggle("busy", visible && walkerHome && Boolean(nfThinkingText));
+  notchFace.classList.toggle("busy", visible && walkerHome && processingActive);
+  notchFace.classList.toggle("nf-processing-caption", visible && walkerHome && processingActive);
   notchFace.classList.toggle("mic-live", visible && sessionEngaged);
+  notchFace.classList.toggle("nf-dictation", visible && dictationMode);
+  walker.classList.toggle("dictation-listening", visible && !walkerHome && dictationMode);
   notchFace.classList.toggle("wake-armed", visible && wakeWordArmed);
   // Sleepy shade by default whenever he's home with nothing going on; a real
   // session snaps the eyes open ("he wakes up") before the island itself
@@ -1037,12 +1450,22 @@ function updateNotchFace() {
   const withinAwakeWindow = now - lastEngagedAt < AMBIENT_AWAKE_WINDOW_MS;
   notchFace.classList.toggle("awake", visible && (sessionEngaged || withinAwakeWindow));
   notchFace.classList.toggle("dozing", visible && walkerHome && !sessionEngaged && !withinAwakeWindow && !live && !music);
-  notchFace.classList.toggle("captioning", visible && (conversationOwnsNotch || Boolean(nfThinkingText)));
+  notchFace.classList.toggle(
+    "captioning",
+    visible && (
+      conversationOwnsNotch
+      || processingActive
+      || (!voiceOwnsNotch && notchFace.classList.contains("nf-think-open"))
+    ),
+  );
   // While he's home the notch IS the conversation surface: sonar rings while
   // listening, talking mouth + bars while speaking. When he's out on screen,
   // the walker owns the voice theatrics and the notch stays quiet.
   const notchVoice = visible && walkerHome && !herMode;
-  notchFace.classList.toggle("listen", notchVoice && ["listening", "hearing"].includes(lastGlowStatus));
+  notchFace.classList.toggle(
+    "listen",
+    notchVoice && (dictationMode || ["listening", "hearing"].includes(lastGlowStatus)),
+  );
   notchFace.classList.toggle("speak", notchVoice && lastGlowStatus === "speaking");
   nfSetStatusText(line);
   nfTraySyncFromState(visible);
@@ -1211,74 +1634,100 @@ function nfSetStatusText(text) {
   status.classList.toggle("show", Boolean(value));
 }
 
-// Boot beats, per spec: open eyes pop up -> they close -> "authenticating"
-// with the island glowing -> verdict glows green and the eyes open with it.
-// Boot beats — VERBATIM the trybraino.com /founder-letter reveal (user call:
-// "the wake-up sequence has to be the same as the website"):
-//   eyes form CLOSED in the dark → a slow light draws the island's outline
-//   while auth runs underneath → the coral wave floods through him → green
-//   verdict, eyes open with the glow → the island spreads caption-wide, he
-//   winks, and the wing types "how you doing?" → he stays.
+const NF_IOMI_BOOT_CLASSES = [
+  "nf-iomi-booting",
+  "nf-iomi-auth",
+  "nf-iomi-awake",
+  "nf-iomi-expanded",
+  "nf-shining",
+  "nf-shine-slow",
+];
+
+function clearIomiBootClasses() {
+  notchFace?.classList.remove(...NF_IOMI_BOOT_CLASSES);
+}
+
+async function runIomiBootMascotExit() {
+  if (!walker || herMode) return;
+  notchFace?.classList.remove("nf-iomi-expanded");
+  const startX = Math.round(window.innerWidth / 2 - W / 2);
+  const faceH = parseFloat(getComputedStyle(notchFace || document.body).getPropertyValue("--nf-notch-h")) || 33;
+  const landingY = Math.min(260, Math.max(150, Math.round(window.innerHeight * 0.27)));
+  walkerHome = false;
+  movementMode = "free";
+  setPosition(startX, faceH + 7, { allowOffscreen: true });
+  targetX = startX;
+  targetY = landingY;
+  walker.classList.add("visible", "nf-iomi-boot-jump");
+  logRenderer("boot.iomi.mascot_exit.start", { landingY });
+  await walkTo(startX, landingY, { speed: 420, allowOffscreen: true });
+  walker.classList.remove("nf-iomi-boot-jump");
+  targetX = posX;
+  targetY = posY;
+  nextTargetAt = performance.now() + 7000;
+  logRenderer("boot.iomi.mascot_exit.complete", { x: Math.round(posX), y: Math.round(posY) });
+}
+
+// Production IOMI boot:
+//   spectrum trace → centred I O M I while real auth runs → IOMI resolves
+//   into open operating-layer eyes → expanded greeting + real shortcuts →
+//   Braino speaks in his real voice and exits into the visible screen.
 async function runNotchBoot() {
   walkerHome = true; // he is born inside the notch
   setNotchFaceEnabled(true);
   updateNotchFace();
-  // Beat 1: his eyes form in the dark, closed (dozing lids, same as the site).
-  notchFace?.classList.add("dozing");
-  // Auth starts NOW but stays invisible — the theater sequence must match the
-  // site exactly: line first, authentication after.
+  clearIomiBootClasses();
+  notchFace?.classList.remove(
+    "dozing", "asleep", "nf-auth", "nf-auth-ok", "nf-auth-err",
+    "nf-coral", "nf-wink", "captioning",
+  );
+  notchFace?.classList.add("nf-iomi-booting", "nf-shining", "nf-shine-slow");
+
+  // Real authentication starts under the very first perimeter trace.
   const authPromise = window.brainoMac.ensureAuth("startup")
     .catch((error) => ({ ok: false, error: error?.message || "Braino sign-in failed." }));
-  await wait(900);
-  // Beat 2: the very slow line outlines the notch. Nothing else on stage.
-  notchFace?.classList.add("nf-shining", "nf-shine-slow");
-  await wait(2700);
-  notchFace?.classList.remove("nf-shining", "nf-shine-slow");
-  // Beat 3: NOW the authenticating pulse, for at least a beat.
-  notchFace?.classList.add("nf-auth");
-  nfSetStatusText("authenticating");
+  logRenderer("boot.iomi.start", {});
+  await wait(1550);
+
+  notchFace?.classList.add("nf-iomi-auth");
   const authShownAt = Date.now();
   const result = await authPromise;
   const shown = Date.now() - authShownAt;
-  if (shown < 1100) await wait(1100 - shown);
-  notchFace?.classList.remove("nf-auth");
-  nfSetStatusText("");
+  // All four letters receive a clean beat even when a saved session resolves
+  // instantly. Slow browser sign-in is allowed to hold on the complete word.
+  if (shown < 2200) await wait(2200 - shown);
+
   if (!result?.ok) {
+    clearIomiBootClasses();
     notchFace?.classList.add("nf-auth-err");
     nfSetStatusText("auth failed");
     await wait(900);
-    notchFace?.classList.remove("nf-auth-err", "dozing");
+    notchFace?.classList.remove("nf-auth-err");
     nfSetStatusText("");
+    logRenderer("boot.iomi.auth_failed", { error: result?.error || "Braino sign-in failed." });
     return result || { ok: false, error: "Braino sign-in failed." };
   }
-  // Beat 3: the coral wave — his true colors flood through the island.
-  notchFace?.classList.add("nf-coral");
-  await wait(760);
-  notchFace?.classList.remove("nf-coral");
-  // Beat 4: green verdict — his eyes open WITH the glow. No status text; the
-  // face is the verdict.
-  notchFace?.classList.add("nf-auth-ok");
-  notchFace?.classList.remove("dozing", "asleep");
+
+  notchFace?.classList.remove("nf-iomi-auth");
+  notchFace?.classList.add("nf-iomi-awake");
   playWakeChime();
-  await wait(700);
-  notchFace?.classList.remove("nf-auth-ok");
-  // Beat 5: the island spreads like it does for captions, he winks, and the
-  // wing types his hello.
-  notchFace?.classList.add("captioning", "nf-wink");
-  const bootCap = notchFace?.querySelector(".nf-cap-l");
-  if (bootCap) {
-    const line = "how you doing?";
-    for (let i = 1; i <= line.length; i++) {
-      bootCap.textContent = line.slice(0, i);
-      await wait(55);
-    }
-    await wait(1500);
-    bootCap.textContent = "";
-  } else {
-    await wait(1800);
-  }
-  notchFace?.classList.remove("captioning", "nf-wink");
-  return result;
+  await wait(1100);
+
+  const auth = await window.brainoMac.authStatus().catch(() => null);
+  const firstName = String(auth?.displayName || "").split(" ")[0]?.trim() || "there";
+  const firstNameEl = notchFace?.querySelector(".nf-iomi-first-name");
+  if (firstNameEl) firstNameEl.textContent = `${firstName}.`;
+  notchFace?.classList.add("nf-iomi-expanded");
+  await wait(1850);
+
+  // Speak only after the words and divider have landed. This uses the same
+  // Fish Audio-first `speak` path as every normal Braino reply.
+  await speak(`Good evening, ${firstName}. Everything is ready.`, { captions: false });
+  await wait(300);
+  await runIomiBootMascotExit();
+  clearIomiBootClasses();
+  logRenderer("boot.iomi.complete", { firstName });
+  return { ...result, bootGreetingHandled: true };
 }
 
 // A subtle wake sound the instant his eyes open — a soft two-note rising
@@ -1310,20 +1759,12 @@ function playWakeChime() {
   }
 }
 
-// Beat 3, and the LAST boot beat now: eyes open, a bright greeting glow, and
-// he speaks from the notch — asking how the user is doing, and explaining the
-// one deterministic way to bring him out ("say come out"). He does NOT pop
-// out automatically anymore: popping out only ever happens when explicitly
-// asked (handleSummon) or during a deliberate flourish (the music dance can
-// announce itself and emerge). This keeps his physical appearance meaningful
-// instead of incidental, and sidesteps any hotkey conflict entirely since the
-// summon is voice-only, never bound to double-Control.
-// Kept simple on purpose (user call): boot is silent — no spoken greeting, no
-// auto-started session. Double-Control is the one and only way in and out of
-// realtime. The eyes opening after auth IS the greeting.
+// Compatibility greeting for any alternate startup path that has not already
+// completed the IOMI greeting. The production IOMI boot marks its result so
+// this cannot speak a second, competing line.
 async function runNotchGreeting(authResult) {
   notchFace?.classList.remove("asleep");
-  if (!authResult?.ok) return;
+  if (!authResult?.ok || authResult?.bootGreetingHandled) return;
   notchFace?.classList.add("nf-greet");
   window.setTimeout(() => notchFace?.classList.remove("nf-greet"), 1100);
   // The new boot flow (user spec): eyes open → he LOOKS at the screen and
@@ -1465,8 +1906,8 @@ function beginMusicTheatrics() {
   updateNotchFace();
 }
 
-// reactToMusicStart is asynchronous (a spoken line, then a fade — a couple of
-// real seconds) with nothing stopping it from being called again mid-flight
+// reactToMusicStart is asynchronous (the walk-home fade takes real time) with
+// nothing stopping it from being called again mid-flight
 // if the music state flips again in that window. Without a session token, a
 // stop that lands during that gap used to yank the walker back out and clear
 // musicTheatricsReady before beginMusicTheatrics() ever got a chance to
@@ -1483,8 +1924,6 @@ async function reactToMusicStart(session) {
     return;
   }
   walkerAutoHomedByMusic = true;
-  try { await speak("Music's on. Let me rest for a bit."); } catch (_) {}
-  if (session !== musicSessionId) return; // superseded mid-speech
   await walkerGoHome({ style: "fade" });
   if (session !== musicSessionId) return; // superseded mid-fade
   beginMusicTheatrics();
@@ -1510,11 +1949,21 @@ function reactToMusicStop() {
 function setMusicMode(on) {
   musicMode = Boolean(on);
   musicSessionId += 1;
-  const session = musicSessionId;
   headphones.style.display = musicMode ? "" : "none";
   walker.classList.toggle("music", musicMode);
-  if (musicMode) void reactToMusicStart(session);
-  else reactToMusicStop();
+  if (musicMode) {
+    // Music used to fade Braino home with a "let me rest" posture. Music is
+    // now part of his on-screen presence: headphones and theatrics stay, but
+    // the mascot remains visible beside the demo.
+    walkerAutoHomedByMusic = false;
+    if (walkerHome && !herMode) {
+      void walkerLeaveHome().then(() => beginMusicTheatrics());
+    } else {
+      beginMusicTheatrics();
+    }
+  } else {
+    reactToMusicStop();
+  }
 }
 
 function updateFloatingUi() {
@@ -1526,16 +1975,101 @@ function updateFloatingUi() {
 }
 
 function setBubble(text, ms = 2600) {
+  if (dictationMode) {
+    nfShowTransient(text, ms > 0 ? ms : 1800);
+    return;
+  }
   // While he's home his voice + the notch mouth ARE the reply surface —
   // no text bubble anywhere (user call: don't caption his responses).
   if (walkerHome && notchFaceEnabled && !herMode) return;
   window.clearTimeout(sayTimer);
+  window.cancelAnimationFrame(replyCaptionRaf);
+  replyCaptionGeneration += 1;
+  bubble.classList.remove("reply-karaoke");
   bubble.textContent = text;
   updateFloatingUi();
   bubble.classList.add("show");
   if (ms > 0) {
     sayTimer = window.setTimeout(() => bubble.classList.remove("show"), ms);
   }
+}
+
+let replyCaptionGeneration = 0;
+let replyCaptionWords = [];
+let replyCaptionCompletedWords = 0;
+let replyCaptionRaf = 0;
+
+function paintReplyCaption(highlightedWords) {
+  const count = Math.max(0, Math.min(replyCaptionWords.length, Math.floor(highlightedWords)));
+  replyCaptionWords.forEach((word, index) => {
+    word.classList.toggle("spoken", index < count);
+    word.classList.toggle("speaking-now", index === count);
+  });
+}
+
+function startReplyCaption(text, generation) {
+  if (walkerHome && notchFaceEnabled && !herMode) return;
+  window.clearTimeout(sayTimer);
+  window.cancelAnimationFrame(replyCaptionRaf);
+  replyCaptionGeneration = generation;
+  replyCaptionCompletedWords = 0;
+  bubble.replaceChildren();
+  String(text || "").trim().split(/\s+/).forEach((token, index, all) => {
+    const word = document.createElement("span");
+    word.className = "reply-caption-word";
+    word.textContent = token;
+    bubble.appendChild(word);
+    if (index < all.length - 1) bubble.appendChild(document.createTextNode(" "));
+  });
+  replyCaptionWords = Array.from(bubble.querySelectorAll(".reply-caption-word"));
+  paintReplyCaption(0);
+  updateFloatingUi();
+  bubble.classList.add("show", "reply-karaoke");
+}
+
+function trackReplyCaptionAudio(audio, spokenText, generation) {
+  if (!audio || generation !== replyCaptionGeneration || !replyCaptionWords.length) return;
+  const chunkWords = Math.max(1, String(spokenText || "").trim().split(/\s+/).filter(Boolean).length);
+  const chunkStart = replyCaptionCompletedWords;
+  const tick = () => {
+    if (generation !== replyCaptionGeneration || audio.paused || audio.ended) return;
+    // MP3 streams do not expose a stable duration until their final bytes land.
+    // Use duration when available, otherwise a natural 2.75 spoken words/second.
+    const fraction = Number.isFinite(audio.duration) && audio.duration > 0
+      ? Math.min(1, audio.currentTime / audio.duration)
+      : Math.min(0.98, (audio.currentTime * 2.75) / chunkWords);
+    paintReplyCaption(chunkStart + Math.max(1, Math.floor(chunkWords * fraction)));
+    replyCaptionRaf = window.requestAnimationFrame(tick);
+  };
+  audio.addEventListener("playing", () => {
+    logRenderer("caption.reply.audio", {
+      generation,
+      chunkWords,
+      completedWords: chunkStart,
+    });
+    window.cancelAnimationFrame(replyCaptionRaf);
+    tick();
+  }, { once: true });
+  audio.addEventListener("ended", () => {
+    replyCaptionCompletedWords = Math.min(replyCaptionWords.length, chunkStart + chunkWords);
+    paintReplyCaption(replyCaptionCompletedWords);
+  }, { once: true });
+}
+
+function finishReplyCaption(generation, lingerMs = 4200) {
+  if (generation !== replyCaptionGeneration || !bubble.classList.contains("reply-karaoke")) return;
+  window.cancelAnimationFrame(replyCaptionRaf);
+  paintReplyCaption(replyCaptionWords.length);
+  window.clearTimeout(sayTimer);
+  logRenderer("caption.reply.finish", {
+    generation,
+    words: replyCaptionWords.length,
+    lingerMs,
+  });
+  sayTimer = window.setTimeout(() => {
+    if (generation !== replyCaptionGeneration) return;
+    bubble.classList.remove("show", "reply-karaoke");
+  }, lingerMs);
 }
 
 function showFiles(files = []) {
@@ -1588,8 +2122,13 @@ function updateTalkMotion(t, talking) {
   }
   if (inner) {
     if (openAmount > 0.25) {
+      // Base cy comes from the outer ellipse's own markup (never rewritten
+      // above), not a hardcoded constant — so a character whose mouth sits
+      // somewhere other than Braino's y=61.8 (e.g. Webb's, inside his mask
+      // around y=37) still gets the inner highlight positioned correctly.
+      const baseCy = outer ? parseFloat(outer.getAttribute("cy")) || 61.8 : 61.8;
       inner.style.display = "block";
-      inner.setAttribute("cy", String(61.8 + ry * 0.4));
+      inner.setAttribute("cy", String(baseCy + ry * 0.4));
       inner.setAttribute("rx", String(rx * 0.62));
       inner.setAttribute("ry", String(ry * 0.5));
     } else {
@@ -1628,13 +2167,24 @@ function normalizeForVoiceMatch(value) {
 
 function noteSpoken(text) {
   const normalized = normalizeForVoiceMatch(text);
-  if (normalized) lastSpokenLine = { text: normalized, ts: Date.now() };
+  if (normalized) {
+    lastSpokenLine = {
+      text: normalized,
+      ts: Date.now(),
+      duringRealtime: Boolean(realtimeActive || realtimeConnecting),
+    };
+  }
+}
+
+function voiceExplicitlyAddressesBraino(text) {
+  const normalized = normalizeForVoiceMatch(text);
+  return Boolean(normalized && /\b(braino|bruno|breno|reno|dino)\b/.test(normalized));
 }
 
 function voiceAddressesBraino(text) {
   const normalized = normalizeForVoiceMatch(text);
   if (!normalized) return false;
-  if (/\b(braino|bruno|breno|reno|dino)\b/.test(normalized)) return true;
+  if (voiceExplicitlyAddressesBraino(normalized)) return true;
   return /\b(stop|pause|wait|hold on|listen|repeat|cancel|enough|organize|organise|open|search|find|clean|undo|create|make|note|notes|mail|gmail|email|send|draft|compose|volume|sound|louder|quieter|mute|spotify|playlist|song|music)\b/.test(normalized);
 }
 
@@ -1777,6 +2327,14 @@ function macTeamIsIntroPrompt(text) {
   return /\b(introduce yourself|introduce yourself to (?:my|the) team|show them what you can do|show what you can do|demo yourself|give (?:them|the team) a demo)\b/i.test(String(text || ""));
 }
 
+function macTeamIsJyotiDemoPrompt(text) {
+  const normalized = normalizeForVoiceMatch(String(text || ""));
+  if (!normalized || !/\bdemo\b/.test(normalized)) return false;
+  if (/\bjyoti\b/.test(normalized)) return true;
+  if (/\b(?:new|latest|team)\s+demo\b/.test(normalized)) return true;
+  return /\b(?:run|start|launch|begin|show|do|give)\b.*\b(?:the\s+)?demo\b|\bdemo\b.*\b(?:run|start|launch|begin|show)\b/.test(normalized);
+}
+
 function macTeamIsStartPrompt(text) {
   return /\b(say hi to my team|say hello to my team|say hello to the team|talk to my team|talk to the team|meet my team|time to talk to (?:my|the) team|time to say hello to (?:my|the) team|start team messages|start the team messages)\b/i.test(String(text || ""));
 }
@@ -1803,6 +2361,7 @@ function macTeamShouldHandlePrompt(text) {
   const directPersonRequest = macTeamIsDirectMessagePrompt(raw) && macTeamFindPeople(raw).length > 0;
   return macTeamState.active
     || /\bteam mode\b/i.test(raw)
+    || macTeamIsJyotiDemoPrompt(raw)
     || macTeamIsIntroPrompt(raw)
     || macTeamIsStartPrompt(raw)
     || macTeamMentionsAnz(raw)
@@ -1817,9 +2376,19 @@ async function macTeamSpeak(text, options = {}) {
   setWave(true);
   setStatus("speaking", "Team Mode");
   const chunks = macTeamSpeechChunks(macTeamSpeechText(line));
-  for (let index = 0; index < chunks.length; index += 1) {
-    await speak(chunks[index]);
-    if (index < chunks.length - 1) await macTeamDelay(options.chunkDelayMs ?? 260);
+  // Team demos deliberately leave music playing. Lower it for the whole
+  // spoken block so the message stays intelligible, then restore the exact
+  // previous volume. This is independent from mic isolation.
+  await window.brainoMac.musicDuck?.({ duck: true }).catch(() => {});
+  try {
+    for (let index = 0; index < chunks.length; index += 1) {
+      await speak(chunks[index]);
+      if (index < chunks.length - 1) await macTeamDelay(options.chunkDelayMs ?? 260);
+    }
+  } finally {
+    if (!macTeamKeepMusicDucked) {
+      await window.brainoMac.musicDuck?.({ duck: false }).catch(() => {});
+    }
   }
 }
 
@@ -1834,6 +2403,10 @@ async function macTeamDemoAction(action, label) {
     logRenderer("team_demo.action.error", { action, error: errorForLog(error) });
     return { ok: false, error: error?.message || "Demo action failed." };
   }
+}
+
+async function macTeamActionBeat() {
+  await macTeamDelay(MAC_TEAM_ACTION_BEAT_MS);
 }
 
 async function macTeamSpeakPerson(personKey, options = {}) {
@@ -1897,6 +2470,92 @@ async function macTeamStartIntroDemo(promptText) {
   return true;
 }
 
+async function macTeamStartJyotiDemo(promptText) {
+  macTeamReset();
+  macTeamState.active = true;
+  // A live demo intentionally plays music and speaks through the Mac's
+  // speakers. Keeping the realtime mic open here lets that output become a
+  // fresh user transcript and can barge into Braino's own narration. Hard
+  // stop every input path before the first demo line; the user can re-arm
+  // voice with the normal shortcut after the demo.
+  const hadRealtimeInput = Boolean(realtimeActive || realtimeConnecting || rtMic);
+  stopRecognition();
+  stopRealtimeVoice();
+  listening = false;
+  logRenderer("team_demo.jyoti.voice_isolated", {
+    hadRealtimeInput,
+    realtimeActive,
+    listening,
+    hasMic: Boolean(rtMic),
+  });
+  macTeamState.phase = "jyoti_demo_intro";
+  await macTeamSpeak(MAC_JYOTI_DEMO_INTRO, { chunkDelayMs: 200 });
+  await macTeamActionBeat();
+
+  macTeamState.phase = "demo_running_first_song";
+  const firstSongResult = await macTeamDemoAction("play-jyoti-demo-places", "Playing Places to Be");
+  if (!firstSongResult?.ok) {
+    await macTeamSpeak(firstSongResult?.say || "Spotify did not start properly, so I am moving to the next trick.");
+  } else {
+    macTeamKeepMusicDucked = true;
+    await window.brainoMac.musicDuck?.({ duck: true }).catch(() => {});
+  }
+  await macTeamDelay(3200);
+  await macTeamDemoAction("minimize-jyoti-demo-spotify", "Minimizing Spotify");
+
+  macTeamState.phase = "jyoti_desktop_intro";
+  await macTeamSpeak(MAC_JYOTI_ORGANIZE_LINE, { chunkDelayMs: 220 });
+  await macTeamActionBeat();
+
+  macTeamState.phase = "demo_running_desktop";
+  const organizeResult = await macTeamDemoAction("organize-jyoti-demo-desktop", "Organizing Desktop");
+  if (organizeResult?.ok) {
+    await macTeamSpeak("Boom.");
+    await macTeamSpeak(organizeResult?.say || "Your Desktop is organized inside Braino Organized.");
+    await macTeamSpeak("Let me undo it for now, for future demo purposes.");
+    await macTeamActionBeat();
+    const undoResult = await macTeamDemoAction("undo-jyoti-demo-desktop", "Restoring the Desktop");
+    if (!undoResult?.ok) {
+      await macTeamSpeak(undoResult?.say || "The Desktop undo did not complete properly.");
+    }
+  } else {
+    await macTeamSpeak(organizeResult?.say || "I could not organize the Desktop, so I am not going to pretend I did.");
+  }
+
+  macTeamState.phase = "demo_running_whatsapp";
+  await macTeamSpeak(MAC_JYOTI_WHATSAPP_LINE);
+  await macTeamActionBeat();
+  const messageResult = await macTeamDemoAction("draft-jyoti-demo", "Opening Jyoti sir's chat");
+  if (!messageResult?.ok) await macTeamSpeak(messageResult?.say || "WhatsApp did not open the draft properly.");
+
+  macTeamState.phase = "jyoti_tabs_intro";
+  await macTeamSpeak(MAC_JYOTI_TABS_LINE);
+  await macTeamActionBeat();
+  const tabsResult = await macTeamDemoAction("open-jyoti-demo-tabs", "Opening seven Chrome tabs");
+  if (tabsResult?.ok) {
+    await macTeamSpeak(MAC_JYOTI_CLOSE_TABS_LINE);
+    await macTeamActionBeat();
+    const closeTabsResult = await macTeamDemoAction("close-jyoti-demo-tabs", "Closing the seven demo tabs");
+    if (!closeTabsResult?.ok) await macTeamSpeak("Chrome did not close the demo window properly.");
+  } else {
+    await macTeamSpeak(tabsResult?.say || "Chrome did not create the seven demo tabs properly.");
+  }
+
+  macTeamState.phase = "jyoti_final_song";
+  await macTeamSpeak(MAC_JYOTI_FINAL_SONG_LINE);
+  await macTeamActionBeat();
+  const finalSongResult = await macTeamDemoAction("play-jyoti-demo-hers", "Playing She Needs Him");
+  if (!finalSongResult?.ok) {
+    await macTeamSpeak(finalSongResult?.say || "Spotify did not change the song properly.");
+  }
+
+  macTeamState.phase = "jyoti_thank_you";
+  await macTeamSpeak(MAC_JYOTI_THANK_YOU, { chunkDelayMs: 260 });
+  macTeamState.phase = "done";
+  logRenderer("team_demo.jyoti.done", { promptChars: String(promptText || "").length });
+  return true;
+}
+
 async function runMacTeamInput(rawText, options = {}) {
   const promptText = String(rawText || "").trim();
   if (!macTeamShouldHandlePrompt(promptText)) return false;
@@ -1908,6 +2567,11 @@ async function runMacTeamInput(rawText, options = {}) {
   rememberLocalChat("user", promptText);
 
   try {
+    if (macTeamIsJyotiDemoPrompt(promptText)) {
+      await macTeamStartJyotiDemo(promptText);
+      return true;
+    }
+
     if (macTeamIsExitPrompt(promptText)) {
       macTeamReset();
       await macTeamSpeak("Team mode is off. Back to normal Braino.");
@@ -1990,6 +2654,10 @@ async function runMacTeamInput(rawText, options = {}) {
     await macTeamSpeak("I don't have a message prepared for them yet, but I'm glad they're here.");
     return true;
   } finally {
+    if (macTeamKeepMusicDucked) {
+      macTeamKeepMusicDucked = false;
+      await window.brainoMac.musicDuck?.({ duck: false }).catch(() => {});
+    }
     processing = wasProcessing;
     if (options.keepRealtime && realtimeActive && !processing) {
       listening = true;
@@ -2046,9 +2714,12 @@ const RECORDING_CONTROL_RE = /\b(?:stop|end|finish|pause|done)\b.*\b(?:record|re
 function shouldAcceptVoiceTranscript(text) {
   const stats = transcriptStats(text);
   if (!stats.normalized || stats.wordCount === 0) return false;
+  const addressed = voiceAddressesBraino(text);
+  const explicitlyAddressed = voiceExplicitlyAddressesBraino(text);
+  const actionLike = isLikelyMacActionTranscript(text);
   if ((screenRecording || meetingRecording) && !herMode) {
     // Only his name or a stop/control command breaks through the recording.
-    if (!voiceAddressesBraino(text) && !RECORDING_CONTROL_RE.test(text)) {
+    if (!addressed && !RECORDING_CONTROL_RE.test(text)) {
       logRenderer("voice.recording_ignored", { chars: stats.normalized.length });
       return false;
     }
@@ -2058,8 +2729,11 @@ function shouldAcceptVoiceTranscript(text) {
   // you, require him to be addressed or given a clear (3+ word) command — bare
   // fragments picked off the speakers are dropped.
   if (mediaAudioPlaying && !herMode && !voiceTurnInFlight && !hasPendingDelegateFollowup()) {
-    if (!voiceAddressesBraino(text) && stats.wordCount < 3) {
-      logRenderer("voice.media_bleed_ignored", { chars: stats.normalized.length });
+    if (!explicitlyAddressed && (stats.wordCount < 3 || actionLike)) {
+      logRenderer("voice.media_bleed_ignored", {
+        chars: stats.normalized.length,
+        actionLike,
+      });
       return false;
     }
   }
@@ -2073,27 +2747,49 @@ function shouldAcceptVoiceTranscript(text) {
     if (/^(uh|um|hmm|huh)$/i.test(stats.normalized)) return false;
     return true;
   }
-  if ((speaking || processing || voiceTurnInFlight) && !voiceAddressesBraino(text)) return false;
+  // Realtime remains open briefly after Braino replies. Speaker/TTS bleed can
+  // be transcribed as a plausible command ("Send an email" was observed in
+  // production). Never dispatch an unaddressed action inside that echo window.
+  if (
+    actionLike
+    && !explicitlyAddressed
+    && lastSpokenLine.duringRealtime
+    && lastSpokenLine.ts
+    && Date.now() - lastSpokenLine.ts <= 15000
+  ) {
+    logRenderer("voice.post_reply_action_ignored", {
+      chars: stats.normalized.length,
+      sinceReplyMs: Date.now() - lastSpokenLine.ts,
+    });
+    return false;
+  }
+  if ((speaking || processing || voiceTurnInFlight) && !addressed) return false;
   if (/^(hi|hello|hey|yo|braino|bruno|breno|reno)$/i.test(stats.normalized)) return true;
-  if (stats.wordCount === 1 && !voiceAddressesBraino(text)) return false;
-  if (stats.normalized.length < 3 && !voiceAddressesBraino(text)) return false;
+  if (stats.wordCount === 1 && !addressed) return false;
+  if (stats.normalized.length < 3 && !addressed) return false;
   if (/^(uh|um|hmm|huh|yeah|okay|ok|no|yes|thanks?|thank you)$/i.test(stats.normalized)) return false;
   return true;
 }
 
 function stopSpeechOutput() {
   speechGeneration += 1;
+  activeSpeechJobGeneration = 0;
   realtimeStreamTts = null;
+  void window.brainoMac.stopSystemSay?.().catch(() => {});
   ttsAbortControllers.forEach((controller) => {
     try { controller.abort(); } catch (_) {}
   });
   ttsAbortControllers.clear();
-  if (currentSpeechAudio) {
-    try { currentSpeechAudio.dispatchEvent(new Event("ended")); } catch (_) {}
-    try { currentSpeechAudio.pause(); } catch (_) {}
-    currentSpeechAudio.src = "";
-    currentSpeechAudio = null;
-  }
+  // A prefetched chunk can replace `currentSpeechAudio` while cancellation is
+  // running. Keep every created player in a registry and silence all of them.
+  activeSpeechAudios.forEach((audio) => {
+    try { audio.pause(); } catch (_) {}
+    try { audio.removeAttribute("src"); } catch (_) {}
+    try { audio.load(); } catch (_) {}
+    try { audio.dispatchEvent(new Event("ended")); } catch (_) {}
+  });
+  activeSpeechAudios.clear();
+  currentSpeechAudio = null;
   if (currentSpeechUrl) {
     try { URL.revokeObjectURL(currentSpeechUrl); } catch (_) {}
     currentSpeechUrl = null;
@@ -2308,11 +3004,13 @@ function appendTtsChunk(sourceBuffer, chunk) {
 }
 
 function setSpeechAudio(audio, url = null) {
+  activeSpeechAudios.add(audio);
   currentSpeechAudio = audio;
   currentSpeechUrl = url;
 }
 
 function clearSpeechAudio(audio, url = null) {
+  activeSpeechAudios.delete(audio);
   if (currentSpeechAudio === audio) currentSpeechAudio = null;
   if (url && currentSpeechUrl === url) {
     try { URL.revokeObjectURL(url); } catch (_) {}
@@ -2320,7 +3018,7 @@ function clearSpeechAudio(audio, url = null) {
   }
 }
 
-function playStreamedTtsResponse(response, generation) {
+function playStreamedTtsResponse(response, generation, spokenText = "") {
   return new Promise((resolve, reject) => {
     let mediaSource = null;
     let audio = null;
@@ -2344,6 +3042,7 @@ function playStreamedTtsResponse(response, generation) {
       audio = new Audio();
       audio.src = url;
       setSpeechAudio(audio, url);
+      trackReplyCaptionAudio(audio, spokenText, generation);
     } catch (error) {
       finish(error);
       return;
@@ -2352,6 +3051,11 @@ function playStreamedTtsResponse(response, generation) {
     audio.addEventListener("ended", () => finish(), { once: true });
     audio.addEventListener("error", () => finish(audio.error || new Error("TTS audio playback failed.")), { once: true });
     audio.addEventListener("playing", () => {
+      if (generation !== speechGeneration) {
+        try { audio.pause(); } catch (_) {}
+        finish();
+        return;
+      }
       markVoiceLatency("first_audio", { source: "streamed_tts" });
       logRenderer("tts.first_audio", {
         durationMs: Math.round(performance.now() - startedAt),
@@ -2377,6 +3081,11 @@ function playStreamedTtsResponse(response, generation) {
             totalBytes += value.byteLength;
             await appendTtsChunk(sourceBuffer, value);
             if (!started) {
+              if (generation !== speechGeneration) {
+                try { await reader.cancel(); } catch (_) {}
+                finish();
+                return;
+              }
               started = true;
               audio.play().catch((error) => finish(error));
             }
@@ -2392,17 +3101,23 @@ function playStreamedTtsResponse(response, generation) {
   });
 }
 
-async function playBufferedTtsResponse(response, generation) {
+async function playBufferedTtsResponse(response, generation, spokenText = "") {
   const startedAt = performance.now();
   const blob = await response.blob();
   if (generation !== speechGeneration) return false;
   const url = URL.createObjectURL(blob);
   const audio = new Audio(url);
   setSpeechAudio(audio, url);
+  trackReplyCaptionAudio(audio, spokenText, generation);
   await new Promise((resolve, reject) => {
     audio.onended = resolve;
     audio.onerror = () => reject(audio.error || new Error("TTS audio playback failed."));
     audio.onplaying = () => {
+      if (generation !== speechGeneration) {
+        try { audio.pause(); } catch (_) {}
+        resolve();
+        return;
+      }
       markVoiceLatency("first_audio", { source: "buffered_tts" });
       logRenderer("tts.first_audio", {
         durationMs: Math.round(performance.now() - startedAt),
@@ -2410,19 +3125,20 @@ async function playBufferedTtsResponse(response, generation) {
         ...voiceLatencySnapshot(),
       });
     };
-    audio.play().catch(reject);
+    if (generation !== speechGeneration) resolve();
+    else audio.play().catch(reject);
   });
   clearSpeechAudio(audio, url);
   return true;
 }
 
-async function playTtsFetchResult(result, generation) {
+async function playTtsFetchResult(result, generation, spokenText = "") {
   if (!result?.response) return false;
   try {
     if (canStreamTtsMp3(result.response) && result.response.body) {
-      await playStreamedTtsResponse(result.response, generation);
+      await playStreamedTtsResponse(result.response, generation, spokenText);
     } else {
-      await playBufferedTtsResponse(result.response, generation);
+      await playBufferedTtsResponse(result.response, generation, spokenText);
     }
     return generation === speechGeneration;
   } finally {
@@ -2445,7 +3161,7 @@ async function speakWithStreamingTts(text, generation) {
       pendingFetch = fetchTtsChunk(chunks[index + 1], generation).catch((error) => ({ error }));
     }
     if (current.error) throw current.error;
-    const played = await playTtsFetchResult(current, generation);
+    const played = await playTtsFetchResult(current, generation, chunks[index]);
     if (played) spoke = true;
     if (pendingFetch && generation !== speechGeneration) {
       await pendingFetch.catch(() => null);
@@ -2456,6 +3172,7 @@ async function speakWithStreamingTts(text, generation) {
 }
 
 function beginRealtimeStreamTts(generation) {
+  activeSpeechJobGeneration = generation;
   realtimeStreamTts = {
     generation,
     buffer: "",
@@ -2494,6 +3211,8 @@ function feedRealtimeStreamTts(delta) {
   const streamState = realtimeStreamTts;
   if (!streamState || streamState.generation !== speechGeneration) return;
   streamState.buffer += String(delta || "");
+  nfFlowResponseText = `${nfFlowResponseText} ${String(delta || "")}`.trim();
+  renderThinkingCanvas("Speaking", lastProcessingDetail || "Response ready");
   let match;
   while ((match = streamState.buffer.match(/^([\s\S]*?[.!?…।])\s+/))) {
     const sentence = match[1].trim();
@@ -2533,21 +3252,27 @@ async function drainRealtimeStreamTts() {
           await new Promise((resolve) => window.setTimeout(resolve, 25));
           continue;
         }
-        currentFetch = fetchTtsChunk(streamState.queue.shift(), streamState.generation)
-          .catch((error) => ({ error }));
+        const text = streamState.queue.shift();
+        currentFetch = {
+          text,
+          promise: fetchTtsChunk(text, streamState.generation).catch((error) => ({ error })),
+        };
       }
-      const result = await currentFetch;
+      const result = await currentFetch.promise;
       if (!realtimeStreamTts || streamState.generation !== speechGeneration) return;
       if (streamState.queue.length) {
-        pendingFetch = fetchTtsChunk(streamState.queue.shift(), streamState.generation)
-          .catch((error) => ({ error }));
+        const text = streamState.queue.shift();
+        pendingFetch = {
+          text,
+          promise: fetchTtsChunk(text, streamState.generation).catch((error) => ({ error })),
+        };
       }
       if (result?.error) {
         streamState.error = result.error;
         logRenderer("realtime.chat.tts_stream_failed", { error: errorForLog(result.error) });
         break;
       }
-      const played = await playTtsFetchResult(result, streamState.generation);
+      const played = await playTtsFetchResult(result, streamState.generation, currentFetch.text);
       if (played) streamState.spoke = true;
     }
   } finally {
@@ -2582,8 +3307,13 @@ function rectContains(rect, x, y, pad = 0) {
 }
 
 function pointHitsBrainoUi(x, y) {
-  const walkerRect = walker.getBoundingClientRect();
+  const walkerRect = walkerFlip.getBoundingClientRect();
   if (rectContains(walkerRect, x, y, 18)) return true;
+
+  if (brainoCustomizerOpen) {
+    const customizerRect = brainoCustomizer.getBoundingClientRect();
+    if (rectContains(customizerRect, x, y, 8)) return true;
+  }
 
   // The notch is touchable now: near it (or with the tray open) the window
   // takes the mouse so hover/click/scroll/drop land on the island.
@@ -2615,13 +3345,16 @@ function refreshMousePassthrough(event) {
   setMousePassthrough(!pointHitsBrainoUi(event.clientX, event.clientY));
 }
 
-async function speak(text) {
+async function speak(text, options = {}) {
   const line = String(text || "").trim();
   if (!line) return;
+  nfFlowResponseText = line;
+  renderThinkingCanvas("Speaking", lastProcessingDetail || "Response ready");
   const generation = ++speechGeneration;
+  activeSpeechJobGeneration = generation;
   const startedAt = performance.now();
   noteSpoken(line);
-  setBubble(line, Math.max(2400, Math.min(7200, line.length * 58)));
+  if (options.captions !== false) startReplyCaption(line, generation);
   speaking = true;
   setStatus("speaking", "Speaking");
   setTalk(true);
@@ -2636,9 +3369,13 @@ async function speak(text) {
     }
     if (!spoke && generation === speechGeneration) {
       const response = await window.brainoMac.tts(line, herMode ? HER_FISH_VOICE_ID : macPersonaRefId());
+      // The IPC TTS request itself cannot be aborted from the renderer. Treat
+      // its return as another cancellation boundary before creating a player.
+      if (generation !== speechGeneration) return;
       if (response?.ok && response.dataUrl) {
         const audio = new Audio(response.dataUrl);
         setSpeechAudio(audio);
+        trackReplyCaptionAudio(audio, line, generation);
         audio.onplaying = () => {
           markVoiceLatency("first_audio", { source: "fallback_tts" });
           logRenderer("tts.first_audio", {
@@ -2653,9 +3390,14 @@ async function speak(text) {
           audio.onerror = resolve;
           audio.play().catch(resolve);
         });
-        if (currentSpeechAudio === audio) currentSpeechAudio = null;
+        clearSpeechAudio(audio);
       } else {
+        if (generation !== speechGeneration) return;
         await window.brainoMac.systemSay(line);
+        if (generation !== speechGeneration) {
+          void window.brainoMac.stopSystemSay?.().catch(() => {});
+          return;
+        }
         await new Promise((resolve) => window.setTimeout(resolve, Math.min(3600, Math.max(900, line.length * 42))));
       }
     }
@@ -2666,10 +3408,12 @@ async function speak(text) {
     }
   } finally {
     if (generation === speechGeneration) {
+      activeSpeechJobGeneration = 0;
       speaking = false;
       currentSpeechAudio = null;
       setTalk(false);
       logRenderer("speech.done", { chars: line.length, durationMs: Math.round(performance.now() - startedAt) });
+      if (options.captions !== false) finishReplyCaption(generation);
       if (realtimeActive && !processing) {
         setStatus("listening", "Listening");
         scheduleRealtimeIdleShutdown("speech_done");
@@ -2681,6 +3425,7 @@ async function speak(text) {
 async function runDelegate(prompt, options = {}) {
   const text = String(prompt || "").trim();
   if (!text) return;
+  if (await runBrainoGrowVoiceCommand(text)) return;
   if (await runMacTeamInput(text, options)) return;
   const runId = ++delegateGeneration;
   logRenderer("delegate.start", {
@@ -2730,6 +3475,24 @@ async function runDelegate(prompt, options = {}) {
     });
     showFiles(result?.files || []);
     await speak(result?.say || "Done.");
+    if (result?.afterSpeechAction) {
+      logRenderer("delegate.after_speech_action.start", {
+        runId,
+        action: result.afterSpeechAction,
+        latestFeature: result.latestFeature || "",
+      });
+      const actionResult = await window.brainoMac.demoAction(result.afterSpeechAction, {
+        source: "whats-new-demo",
+        latestFeature: result.latestFeature || "",
+      });
+      logRenderer("delegate.after_speech_action.done", {
+        runId,
+        action: result.afterSpeechAction,
+        ok: Boolean(actionResult?.ok),
+        error: actionResult?.error || "",
+      });
+      if (!actionResult?.ok) await speak(actionResult?.say || "That demo did not fire properly. I am not going to pretend it did.");
+    }
   } catch (error) {
     if (runId !== delegateGeneration) {
       logRenderer("delegate.error.stale", { runId, currentRunId: delegateGeneration, error: errorForLog(error) });
@@ -2786,8 +3549,15 @@ function activeMacContextLines() {
   const tabsLine = otherTabs.length
     ? `Other open browser tabs (not the active one): ${otherTabs.map((t) => t.title).join(" | ")}${allOpenTabs.length > otherTabs.length + 1 ? `, and more` : ""}. You can reference these if relevant, but you cannot see their contents, only titles/URLs.`
     : "";
+  const cursorLine = cursorModeContext?.enabled
+    ? `Cursor Mode is on. Coding task state: ${cursorModeContext.active ? "active" : "idle"}. Repository: ${cursorModeContext.repoPath || "unknown"}. Changed files: ${
+      Array.isArray(cursorModeContext.changedFiles) && cursorModeContext.changedFiles.length
+        ? cursorModeContext.changedFiles.slice(0, 10).join(", ")
+        : "none detected"
+    }. Latest commit: ${cursorModeContext.lastCommit || "unknown"}. Use this context when the user asks what they are building, requests ideas, or asks for a coding update.`
+    : "";
   if (!context?.appName) {
-    return [timeLine, musicLine, tabsLine, "Current Mac surface: unknown yet; answer generally unless the user asks for a concrete Mac action."].filter(Boolean);
+    return [timeLine, musicLine, tabsLine, cursorLine, "Current Mac surface: unknown yet; answer generally unless the user asks for a concrete Mac action."].filter(Boolean);
   }
   const title = context.browserTitle || context.windowTitle || "";
   return [
@@ -2798,10 +3568,35 @@ function activeMacContextLines() {
     context.isBrowser ? "The user is in a browser window, but Mac Braino does not have live DOM bridge access yet; use the title/URL and route concrete browser actions through delegate." : "",
     musicLine,
     tabsLine,
+    cursorLine,
   ].filter(Boolean);
 }
 
 function buildRealtimeSessionUpdate() {
+  if (dictationMode) {
+    return {
+      type: "session.update",
+      session: {
+        type: "transcription",
+        audio: {
+          input: {
+            format: {
+              type: "audio/pcm",
+              rate: 24000,
+            },
+            noise_reduction: {
+              type: "near_field",
+            },
+            transcription: {
+              model: DICTATION_TRANSCRIPTION_MODEL,
+              delay: "low",
+            },
+            turn_detection: null,
+          },
+        },
+      },
+    };
+  }
   const instructions = herMode
     ? [
         "You are \"her\", an intimate voice companion living on this Mac, in the spirit of Samantha from the film Her.",
@@ -2884,7 +3679,7 @@ function sendRealtimeEvent(event) {
 }
 
 function scheduleRealtimeSurfaceSync(reason = "surface_change") {
-  if (!realtimeActive || !rtDc || rtDc.readyState !== "open") return;
+  if (dictationMode || !realtimeActive || !rtDc || rtDc.readyState !== "open") return;
   const nextKey = realtimeSurfaceContextKey();
   const now = Date.now();
   const changed = Boolean(nextKey && nextKey !== lastRealtimeSurfaceContextKey);
@@ -2939,9 +3734,45 @@ function resolveRealtimeResponse(result) {
 }
 
 function cancelRealtimeResponse(reason = "cancelled") {
-  if (!realtimeResponseInFlight && !realtimeResponseWaiter) return;
-  sendRealtimeEvent({ type: "response.cancel" });
-  resolveRealtimeResponse({ status: "cancelled", text: realtimeResponseText, errorMessage: reason });
+  const hadResponse = Boolean(realtimeResponseInFlight || realtimeResponseWaiter);
+  if (hadResponse) sendRealtimeEvent({ type: "response.cancel" });
+  // WebRTC output has its own playback buffer. Cancelling model generation does
+  // not guarantee already-buffered audio stops, so clear it explicitly too.
+  sendRealtimeEvent({ type: "output_audio_buffer.clear" });
+  if (hadResponse) {
+    resolveRealtimeResponse({ status: "cancelled", text: realtimeResponseText, errorMessage: reason });
+  }
+}
+
+function interruptVoiceTurn(reason = "manual_stop", via = "unknown") {
+  const hadWork = Boolean(
+    activeSpeechJobGeneration
+    ||
+    speaking
+    || currentSpeechAudio
+    || realtimeStreamTts
+    || realtimeResponseInFlight
+    || realtimeResponseWaiter
+    || processing
+    || voiceTurnInFlight
+  );
+  if (!hadWork) return false;
+
+  const interruptedTurnId = voiceLatencyTurn?.id || null;
+  cancelRealtimeResponse(reason);
+  delegateGeneration += 1;
+  voiceTurnInFlight = false;
+  processing = false;
+  stopSpeechOutput();
+  setRealtimeMicEnabled(true);
+  markVoiceLatency("interrupted", { reason, via });
+  logRenderer("voice.interrupted", {
+    reason,
+    via,
+    turnId: interruptedTurnId,
+    stillListening: realtimeActive,
+  });
+  return true;
 }
 
 function extractRealtimeDoneText(event) {
@@ -2975,10 +3806,12 @@ function isVoiceModeUtterance(text) {
 function isLikelyMacActionTranscript(text) {
   const normalized = normalizeForVoiceMatch(text);
   if (!normalized) return false;
+  if (macTeamIsJyotiDemoPrompt(text)) return true;
+  if (/\b(cursor mode|what (?:feature|task) am i working on|is (?:claude|codex|gpt) (?:done|finished)|coding task status)\b/.test(normalized)) return true;
   if (isVoiceModeUtterance(text)) return true;
   if (/\bwhat can you do\b/.test(normalized) && /\b(mac|macbook|desktop|files?|locally|computer|system)\b/.test(normalized)) return true;
   if (/\b(what can you do|who are you|how are you|hello|hi|hey)\b/.test(normalized)) return false;
-  return /\b(open|launch|start|close|quit|organize|organise|clean|sort|rename|move|delete|trash|create|make|new|create folder|make folder|new folder|undo|find|locate|look for|search for|show me|play|playing|pause|resume|spotify|playlist|volume|vol|sound|louder|quieter|mute|reduce|raise|increase|decrease|lower|percent|seconds?|minutes?|shuffle|repeat|loop|queue|rewind|restart|seek|album|artist|listening to|youtube|song|music|chrome|browser|website|tab|gmail|mail|email|notes|note|maps|calendar|drive|docs|pdf|image|video|file|folder|app|application|send|draft|compose|click|point|where is|reply|write|whatsapp|whats app|remember|remind|timer|countdown|touch id|verify|authenticate|come out|come here|show yourself|step out|join me|go back|go home|get back|head back|head home|tuck in|return home|mesa|coursework|assignment|deadline|ram|cpu|memory|task manager|activity monitor|processes|hogging|eating my|slowing|worth deleting|how many|recover|redundant|bring back|maximize|minimize|snap|half|selected|selection|highlighted|rephrase|rewrite|fix this|mentions|followers|tweet|clip|caption|ship it|x account|ex account|my ex|disturb|bother|check on me|advise|advice|record|recording|meeting|the call|stop recording|wallpaper|desktop background|maps|distance|how far|directions|navigate|route|amazon|shop|options for|research|compare|difference between|send to|my phone|wake word|always listen|call|facetime|face time|dial|watch|tutorial|channel|creator|recommend|read|screen|explain|translate|look at|watching|help me with|summarize|summarise|scroll|download|upload|copy|paste)\b/.test(normalized);
+  return /\b(open|launch|start|close|quit|demo|organize|organise|clean|sort|rename|move|delete|trash|create|make|new|create folder|make folder|new folder|undo|find|locate|look for|search for|show me|play|playing|pause|resume|spotify|playlist|volume|vol|sound|louder|quieter|mute|reduce|raise|increase|decrease|lower|percent|seconds?|minutes?|shuffle|repeat|loop|queue|rewind|restart|seek|album|artist|listening to|youtube|song|music|chrome|browser|website|tab|gmail|mail|email|notes|note|maps|calendar|drive|docs|pdf|image|video|file|folder|app|application|send|draft|compose|click|point|where is|reply|write|whatsapp|whats app|remember|remind|timer|countdown|touch id|verify|authenticate|come out|come here|show yourself|step out|join me|go back|go home|get back|head back|head home|tuck in|return home|mesa|coursework|assignment|deadline|ram|cpu|memory|task manager|activity monitor|processes|hogging|eating my|slowing|worth deleting|how many|recover|redundant|bring back|maximize|minimize|snap|half|selected|selection|highlighted|rephrase|rewrite|fix this|mentions|followers|tweet|clip|caption|ship it|x account|ex account|my ex|disturb|bother|check on me|advise|advice|record|recording|meeting|the call|stop recording|wallpaper|desktop background|maps|distance|how far|directions|navigate|route|amazon|shop|options for|research|compare|difference between|send to|my phone|wake word|always listen|call|facetime|face time|dial|watch|tutorial|channel|creator|recommend|read|screen|explain|translate|look at|watching|help me with|summarize|summarise|scroll|download|upload|copy|paste)\b/.test(normalized);
 }
 
 function shouldUseRealtimeDirectChat(text) {
@@ -3139,9 +3972,11 @@ async function answerViaRealtimeChat(prompt) {
       realtimeResponseWaiter = null;
       realtimeResponseText = "";
       if (realtimeStreamTts?.generation === generation) realtimeStreamTts = null;
+      if (activeSpeechJobGeneration === generation) activeSpeechJobGeneration = 0;
       speaking = false;
       processing = false;
       setTalk(false);
+      finishReplyCaption(generation);
       if (realtimeActive) {
         listening = true;
         setStatus("listening", "Listening");
@@ -3188,7 +4023,7 @@ function clearRealtimeIdleTimer() {
 
 function scheduleRealtimeIdleShutdown(reason = "quiet") {
   clearRealtimeIdleTimer();
-  if (!realtimeActive || realtimeConnecting) return;
+  if (!realtimeActive || realtimeConnecting || dictationMode) return;
   const idleTimeoutMs = herMode ? HER_IDLE_TIMEOUT_MS : REALTIME_IDLE_TIMEOUT_MS;
   rtIdleTimer = window.setTimeout(() => {
     rtIdleTimer = 0;
@@ -3226,7 +4061,22 @@ function markRealtimeActivity(reason, options = {}) {
   scheduleRealtimeIdleShutdown(reason);
 }
 
-function stopRealtimeVoice() {
+function stopRealtimeVoice(options = {}) {
+  realtimeStartGeneration += 1;
+  // Closing voice mode is also a hard speech boundary. No Fish chunk or
+  // fallback player from the old session may survive it.
+  stopSpeechOutput();
+  stopDictationTurnDetector();
+  stopDictationPreroll({ discard: true });
+  const endingDictation = dictationMode && options.keepDictation !== true;
+  if (endingDictation) {
+    dictationMode = false;
+    dictationStarting = false;
+    void window.brainoMac.dictationControl({
+      action: "stop",
+      reason: options.dictationReason || "realtime_stopped",
+    }).catch(() => {});
+  }
   if (realtimeResponseInFlight || realtimeResponseWaiter) {
     try { sendRealtimeEvent({ type: "response.cancel" }); } catch (_) {}
     resolveRealtimeResponse({ status: "cancelled", text: realtimeResponseText, errorMessage: "realtime stopped" });
@@ -3270,6 +4120,246 @@ function stopRealtimeVoice() {
   if (hadRealtime) endRealtimeUsageSession("mac_client_stop");
   stopFishWarmKeepAlive();
   if (listening) listening = false;
+  if (endingDictation) {
+    walker.classList.remove("dictation-listening");
+    updateNotchFace();
+  }
+}
+
+function stopDictationTurnDetector() {
+  const vad = rtDictationVad;
+  rtDictationVad = null;
+  if (!vad) return;
+  if (vad.raf) window.cancelAnimationFrame(vad.raf);
+  try { vad.source.disconnect(); } catch (_) {}
+  try { vad.analyser.disconnect(); } catch (_) {}
+  void vad.context.close().catch(() => {});
+}
+
+async function startDictationPreroll(stream) {
+  stopDictationPreroll();
+  const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextCtor) return null;
+
+  const context = new AudioContextCtor();
+  const source = context.createMediaStreamSource(stream);
+  const processor = context.createScriptProcessor(4096, 1, 1);
+  const silentGain = context.createGain();
+  const chunks = [];
+  const maxSamples = context.sampleRate * 12;
+  let sampleCount = 0;
+  silentGain.gain.value = 0;
+  processor.onaudioprocess = (event) => {
+    if (sampleCount >= maxSamples) return;
+    const input = event.inputBuffer.getChannelData(0);
+    const remaining = maxSamples - sampleCount;
+    const copy = input.slice(0, Math.min(input.length, remaining));
+    chunks.push(copy);
+    sampleCount += copy.length;
+  };
+  source.connect(processor);
+  processor.connect(silentGain);
+  silentGain.connect(context.destination);
+  rtDictationPreroll = {
+    context,
+    source,
+    processor,
+    silentGain,
+    chunks,
+    sampleRate: context.sampleRate,
+    get sampleCount() { return sampleCount; },
+  };
+  await context.resume();
+  return rtDictationPreroll;
+}
+
+function encodeDictationPreroll(chunks, sourceRate) {
+  const totalSamples = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+  if (!totalSamples || !sourceRate) return { audioChunks: [], durationMs: 0 };
+  const source = new Float32Array(totalSamples);
+  let sourceOffset = 0;
+  for (const chunk of chunks) {
+    source.set(chunk, sourceOffset);
+    sourceOffset += chunk.length;
+  }
+
+  const targetRate = 24000;
+  const ratio = sourceRate / targetRate;
+  const outputSamples = Math.floor(totalSamples / ratio);
+  const pcm = new Int16Array(outputSamples);
+  for (let outputIndex = 0; outputIndex < outputSamples; outputIndex += 1) {
+    const start = Math.floor(outputIndex * ratio);
+    const end = Math.max(start + 1, Math.min(totalSamples, Math.floor((outputIndex + 1) * ratio)));
+    let sum = 0;
+    for (let inputIndex = start; inputIndex < end; inputIndex += 1) sum += source[inputIndex];
+    const sample = Math.max(-1, Math.min(1, sum / (end - start)));
+    pcm[outputIndex] = sample < 0 ? sample * 0x8000 : sample * 0x7fff;
+  }
+
+  const audioChunks = [];
+  const samplesPerChunk = targetRate;
+  for (let offset = 0; offset < pcm.length; offset += samplesPerChunk) {
+    const slice = pcm.slice(offset, Math.min(pcm.length, offset + samplesPerChunk));
+    audioChunks.push(arrayBufferToBase64(slice.buffer));
+  }
+  return {
+    audioChunks,
+    durationMs: Math.round((outputSamples / targetRate) * 1000),
+  };
+}
+
+function stopDictationPreroll({ discard = false } = {}) {
+  const preroll = rtDictationPreroll;
+  rtDictationPreroll = null;
+  if (!preroll) return { audioChunks: [], durationMs: 0 };
+  preroll.processor.onaudioprocess = null;
+  try { preroll.source.disconnect(); } catch (_) {}
+  try { preroll.processor.disconnect(); } catch (_) {}
+  try { preroll.silentGain.disconnect(); } catch (_) {}
+  void preroll.context.close().catch(() => {});
+  if (discard) return { audioChunks: [], durationMs: 0 };
+  return encodeDictationPreroll(preroll.chunks, preroll.sampleRate);
+}
+
+function resetDictationVadTurn(vad) {
+  if (!vad) return;
+  vad.speaking = false;
+  vad.candidateAt = 0;
+  vad.speechStartedAt = 0;
+  vad.lastVoiceAt = 0;
+}
+
+function markDictationTurnCommitted(reason, speechMs = 0) {
+  dictationPendingTurns += 1;
+  markVoiceLatency("speech_stopped");
+  setStatus("captured", "Typing");
+  logRenderer("dictation.vad.turn_committed", {
+    reason,
+    speechMs: Math.max(0, Math.round(speechMs)),
+    pendingTurns: dictationPendingTurns,
+  });
+}
+
+function commitPendingDictationTurn(reason = "manual_stop", { force = false } = {}) {
+  const vad = rtDictationVad;
+  const hasDetectedSpeech = Boolean(
+    vad?.speaking
+    || (vad?.candidateAt && performance.now() - vad.candidateAt >= 80)
+    || rtUserTranscript.trim(),
+  );
+  if (!force && !hasDetectedSpeech) return false;
+  const speechMs = vad?.speechStartedAt
+    ? performance.now() - vad.speechStartedAt
+    : 0;
+  const sent = sendRealtimeEvent({ type: "input_audio_buffer.commit" });
+  if (!sent) return false;
+  markDictationTurnCommitted(reason, speechMs);
+  if (force && !hasDetectedSpeech) {
+    logRenderer("dictation.vad.force_committed", {
+      reason,
+      speechMs: Math.max(0, Math.round(speechMs)),
+    });
+  }
+  resetDictationVadTurn(vad);
+  return true;
+}
+
+async function waitForDictationDrain(timeoutMs = 4200) {
+  const startedAt = Date.now();
+  while (dictationPendingTurns > 0 && Date.now() - startedAt < timeoutMs) {
+    await new Promise((resolve) => window.setTimeout(resolve, 40));
+  }
+  const remainingMs = Math.max(0, timeoutMs - (Date.now() - startedAt));
+  if (remainingMs > 0) {
+    await Promise.race([
+      dictationInsertChain.catch(() => {}),
+      new Promise((resolve) => window.setTimeout(resolve, remainingMs)),
+    ]);
+  }
+  return {
+    drained: dictationPendingTurns === 0,
+    pendingTurns: dictationPendingTurns,
+    durationMs: Date.now() - startedAt,
+  };
+}
+
+async function startDictationTurnDetector(stream) {
+  stopDictationTurnDetector();
+  const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextCtor) {
+    throw new Error("Yap Mode could not start local speech detection.");
+  }
+
+  const context = new AudioContextCtor();
+  const source = context.createMediaStreamSource(stream);
+  const analyser = context.createAnalyser();
+  analyser.fftSize = 1024;
+  analyser.smoothingTimeConstant = 0.15;
+  source.connect(analyser);
+
+  const vad = {
+    context,
+    source,
+    analyser,
+    samples: new Float32Array(analyser.fftSize),
+    noiseFloor: 0.006,
+    candidateAt: 0,
+    speaking: false,
+    speechStartedAt: 0,
+    lastVoiceAt: 0,
+    raf: 0,
+  };
+  rtDictationVad = vad;
+  await context.resume();
+
+  const tick = () => {
+    if (rtDictationVad !== vad || !dictationMode) return;
+    analyser.getFloatTimeDomainData(vad.samples);
+    let power = 0;
+    for (let index = 0; index < vad.samples.length; index += 1) {
+      power += vad.samples[index] * vad.samples[index];
+    }
+    const rms = Math.sqrt(power / vad.samples.length);
+    const now = performance.now();
+    const threshold = Math.max(0.014, Math.min(0.06, vad.noiseFloor * 3.2));
+    const voiced = rms >= threshold;
+
+    if (!vad.speaking) {
+      if (voiced) {
+        if (!vad.candidateAt) vad.candidateAt = now;
+        if (now - vad.candidateAt >= 110) {
+          vad.speaking = true;
+          vad.speechStartedAt = vad.candidateAt;
+          vad.lastVoiceAt = now;
+          markRealtimeActivity("dictation_local_speech", { schedule: false });
+          startVoiceLatencyTurn("dictation_local_vad");
+          setStatus("hearing", "Yapping");
+          logRenderer("dictation.vad.speech_started", {
+            rms: Number(rms.toFixed(4)),
+            threshold: Number(threshold.toFixed(4)),
+          });
+        }
+      } else {
+        vad.candidateAt = 0;
+        vad.noiseFloor = (vad.noiseFloor * 0.96) + (rms * 0.04);
+      }
+    } else {
+      if (voiced) vad.lastVoiceAt = now;
+      if (!voiced && now - vad.lastVoiceAt >= 720) {
+        const speechMs = now - vad.speechStartedAt;
+        const sent = speechMs >= 260 && sendRealtimeEvent({ type: "input_audio_buffer.commit" });
+        if (sent) {
+          markDictationTurnCommitted("silence", speechMs);
+          resetDictationVadTurn(vad);
+        } else {
+          vad.lastVoiceAt = now;
+        }
+      }
+    }
+
+    vad.raf = window.requestAnimationFrame(tick);
+  };
+  vad.raf = window.requestAnimationFrame(tick);
 }
 
 function clearRealtimeTranscriptFlush() {
@@ -3287,6 +4377,35 @@ function scheduleRealtimeTranscriptFlush(reason, delay = 900) {
   }, delay);
 }
 
+function enqueueDictationTranscript(transcript) {
+  const generation = dictationStartGeneration;
+  dictationInsertChain = dictationInsertChain
+    .catch((error) => {
+      logRenderer("dictation.insert_queue.recovered", { error: errorForLog(error) });
+    })
+    .then(async () => {
+      if (!dictationMode || generation !== dictationStartGeneration) return;
+      const control = await window.brainoMac.dictationIntent(transcript, true).catch(() => null);
+      if (!dictationMode || generation !== dictationStartGeneration) return;
+      if (control?.action === "stop") {
+        await stopYapMode({ source: "voice_done", skipDrain: true });
+        return;
+      }
+
+      const inserted = await window.brainoMac.dictationInsert({ text: transcript });
+      if (!dictationMode || generation !== dictationStartGeneration) return;
+      if (!inserted?.ok) {
+        setStatus("error", "Yap Mode paused");
+        setBubble(inserted?.error || "Keep the caret in a text field.", 3200);
+        window.setTimeout(() => {
+          if (dictationMode && realtimeActive) setStatus("listening", "Yap Mode");
+        }, 3200);
+        return;
+      }
+      setStatus("listening", "Yap Mode");
+    });
+}
+
 function flushRealtimeTranscript(reason) {
   const transcript = String(rtUserTranscript || "").trim();
   if (reason === "speech_stopped" && transcript && !rtTranscriptFinal) {
@@ -3296,7 +4415,7 @@ function flushRealtimeTranscript(reason) {
   rtUserTranscript = "";
   rtTranscriptFinal = false;
   clearRealtimeTranscriptFlush();
-  const accepted = shouldAcceptVoiceTranscript(transcript);
+  const accepted = dictationMode ? Boolean(transcript) : shouldAcceptVoiceTranscript(transcript);
   logRenderer("realtime.transcript.flush", {
     reason,
     transcriptChars: transcript.length,
@@ -3304,15 +4423,22 @@ function flushRealtimeTranscript(reason) {
     voiceTurnInFlight,
   });
   if (!transcript) {
-    setStatus("listening", "Listening");
+    setStatus("listening", dictationMode ? "Yap Mode" : "Listening");
     scheduleRealtimeIdleShutdown("empty_transcript");
+    return;
+  }
+  if (dictationMode) {
+    clearRealtimeIdleTimer();
+    markRealtimeActivity("accepted_dictation", { schedule: false });
+    nfSetHeard(transcript, { durationMs: 1400 });
+    enqueueDictationTranscript(transcript);
     return;
   }
   if (voiceTurnInFlight || !accepted) {
     if (speaking || processing || voiceTurnInFlight) {
       setStatus(speaking ? "speaking" : "thinking", speaking ? "Speaking" : "Delegating");
     } else {
-      setStatus("listening", "Listening");
+      setStatus("listening", dictationMode ? "Yap Mode" : "Listening");
       scheduleRealtimeIdleShutdown("ignored_transcript");
     }
     return;
@@ -3324,6 +4450,11 @@ function flushRealtimeTranscript(reason) {
   nfSetHeard(transcript);
   void (async () => {
     try {
+      const dictationControl = await window.brainoMac.dictationIntent(transcript, false).catch(() => null);
+      if (dictationControl?.action === "start") {
+        await startYapMode({ source: "voice" });
+        return;
+      }
       if (herMode) {
         if (HER_EXIT_RE.test(normalizeForVoiceMatch(transcript))) {
           await exitHerMode({ farewell: true });
@@ -3347,6 +4478,7 @@ function flushRealtimeTranscript(reason) {
         if (outcome.done) return;
         turnText = outcome.remainder;
       }
+      if (await runBrainoGrowVoiceCommand(turnText)) return;
       if (await runMacTeamInput(turnText, { keepRealtime: true, fromVoice: true })) return;
       if (shouldUseRealtimeDirectChat(turnText)) {
         const handled = await answerViaRealtimeChat(turnText);
@@ -3389,7 +4521,7 @@ function handleRealtimeEvent(event) {
   }
   if (event.type === "session.created" || event.type === "session.updated") {
     if (realtimeActive || realtimeConnecting) {
-      setStatus("listening", "Listening");
+      setStatus("listening", dictationMode ? "Yap Mode" : "Listening");
       if (realtimeActive) scheduleRealtimeIdleShutdown("session_ready");
     }
     return;
@@ -3405,24 +4537,27 @@ function handleRealtimeEvent(event) {
     // Trust the physical audio state, not just the flags: `speaking` can go
     // stale while a long Fish stream is still audible, which used to make
     // interruptions land here and do nothing until the clip finished.
-    const audiblyTalking = speaking || Boolean(currentSpeechAudio) || Boolean(realtimeStreamTts);
+    const audiblyTalking = Boolean(activeSpeechJobGeneration)
+      || speaking
+      || Boolean(currentSpeechAudio)
+      || Boolean(realtimeStreamTts)
+      || activeSpeechAudios.size > 0
+      || ttsAbortControllers.size > 0;
     if (audiblyTalking || realtimeResponseInFlight) {
       logRenderer("realtime.barge_in", {
         via: "speech_started",
         speaking,
         processing,
         voiceTurnInFlight,
+        activeSpeechJobGeneration,
+        activeAudioCount: activeSpeechAudios.size,
+        activeTtsFetchCount: ttsAbortControllers.size,
         hadAudio: Boolean(currentSpeechAudio),
         hadStreamTts: Boolean(realtimeStreamTts),
         responseInFlight: realtimeResponseInFlight,
       });
-      cancelRealtimeResponse("barge_in");
-      delegateGeneration += 1;
-      voiceTurnInFlight = false;
-      processing = false;
-      stopSpeechOutput();
-      setRealtimeMicEnabled(true);
-      setStatus("hearing", "Hearing you");
+      interruptVoiceTurn("barge_in", "speech_started");
+      setStatus("hearing", dictationMode ? "Yapping" : "Hearing you");
       if (!walkerHome) setBubble("Listening...", 0);
       return;
     }
@@ -3430,7 +4565,7 @@ function handleRealtimeEvent(event) {
       setStatus("thinking", "Delegating");
       return;
     }
-    setStatus("hearing", "Hearing you");
+    setStatus("hearing", dictationMode ? "Yapping" : "Hearing you");
     if (!walkerHome) setBubble("Listening...", 0);
     return;
   }
@@ -3442,8 +4577,8 @@ function handleRealtimeEvent(event) {
       setStatus(speaking ? "speaking" : "thinking", speaking ? "Speaking" : "Delegating");
       return;
     }
-    setStatus("captured", "Got it");
-    if (!walkerHome) setBubble("Got it.", 900);
+    setStatus("captured", dictationMode ? "Typing" : "Got it");
+    if (!walkerHome && !dictationMode) setBubble("Got it.", 900);
     scheduleRealtimeTranscriptFlush("speech_stopped", REALTIME_SPEECH_STOP_FLUSH_MS);
     return;
   }
@@ -3460,20 +4595,19 @@ function handleRealtimeEvent(event) {
           hadAudio: Boolean(currentSpeechAudio),
           hadStreamTts: Boolean(realtimeStreamTts),
         });
-        cancelRealtimeResponse("barge_in");
-        delegateGeneration += 1;
-        voiceTurnInFlight = false;
-        processing = false;
-        stopSpeechOutput();
-        setRealtimeMicEnabled(true);
+        interruptVoiceTurn("barge_in", "transcript_delta");
       }
       markRealtimeActivity("transcript_delta", { schedule: false });
       rtTranscriptFinal = false;
       rtUserTranscript += delta;
-      if (herMode) window.HerMode?.setHeard(rtUserTranscript.trim());
-      else if (!walkerHome) setBubble(rtUserTranscript.trim() || "Listening...", 0);
-      nfSetHeard(rtUserTranscript.trim());
-      scheduleRealtimeTranscriptFlush("transcript_idle", REALTIME_TRANSCRIPT_IDLE_FLUSH_MS);
+      if (dictationMode) {
+        nfSetHeard(rtUserTranscript.trim(), { durationMs: 1800 });
+      } else {
+        if (herMode) window.HerMode?.setHeard(rtUserTranscript.trim());
+        else if (!walkerHome) setBubble(rtUserTranscript.trim() || "Listening...", 0);
+        nfSetHeard(rtUserTranscript.trim());
+        scheduleRealtimeTranscriptFlush("transcript_idle", REALTIME_TRANSCRIPT_IDLE_FLUSH_MS);
+      }
     }
     return;
   }
@@ -3482,8 +4616,26 @@ function handleRealtimeEvent(event) {
     markRealtimeActivity("transcript_completed", { schedule: false });
     rtUserTranscript = String(event.transcript || rtUserTranscript || "");
     rtTranscriptFinal = true;
+    if (dictationMode && dictationPendingTurns > 0) {
+      dictationPendingTurns -= 1;
+      logRenderer("dictation.transcript.completed", {
+        transcriptChars: rtUserTranscript.trim().length,
+        pendingTurns: dictationPendingTurns,
+      });
+    }
     markVoiceLatency("transcript_completed", { transcriptChars: rtUserTranscript.trim().length });
     flushRealtimeTranscript("completed");
+    return;
+  }
+
+  if (event.type === "conversation.item.input_audio_transcription.failed") {
+    const message = event.error?.message || "Whisper could not transcribe this audio.";
+    if (dictationMode && dictationPendingTurns > 0) dictationPendingTurns -= 1;
+    logRenderer("dictation.transcript.failed", {
+      message,
+      pendingTurns: dictationPendingTurns,
+    });
+    setStatus("error", "Yap Mode did not catch that");
     return;
   }
 
@@ -3497,6 +4649,9 @@ function handleRealtimeEvent(event) {
   if (event.type === "response.output_text.delta" || event.type === "response.output_audio_transcript.delta") {
     const delta = typeof event.delta === "string" ? event.delta : "";
     if (delta) {
+      markVoiceLatency("response_delta", {
+        source: event.type === "response.output_audio_transcript.delta" ? "audio_transcript" : "text",
+      });
       realtimeResponseText += delta;
       if (herMode) window.HerMode?.setReply(realtimeResponseText);
       feedRealtimeStreamTts(delta);
@@ -3512,6 +4667,14 @@ function handleRealtimeEvent(event) {
 
   if (event.type === "response.done") {
     const finalText = extractRealtimeDoneText(event) || realtimeResponseText;
+    if (finalText && realtimeStreamTts?.generation === speechGeneration) {
+      startReplyCaption(finalText, realtimeStreamTts.generation);
+      logRenderer("caption.reply.start", {
+        generation: realtimeStreamTts.generation,
+        chars: finalText.length,
+        route: "realtime_chat",
+      });
+    }
     if (herMode && finalText) window.HerMode?.setReply(finalText);
     resolveRealtimeResponse({ status: "done", text: finalText });
     return;
@@ -3525,28 +4688,77 @@ function handleRealtimeEvent(event) {
   if (event.type === "error") {
     const message = event.error?.message || event.message || "Realtime voice error.";
     logRenderer("realtime.event.error", { message, error: event.error || null });
+    if (dictationMode && dictationStopping && dictationPendingTurns > 0) {
+      dictationPendingTurns -= 1;
+      logRenderer("dictation.transcript.failed", {
+        message,
+        pendingTurns: dictationPendingTurns,
+      });
+    }
     if (realtimeResponseInFlight || realtimeResponseWaiter) {
       resolveRealtimeResponse({ status: "error", text: realtimeResponseText, errorMessage: message });
     }
-    setStatus("error", "Voice error");
-    setBubble(`Voice error: ${message}`, 3600);
+    setStatus("error", dictationMode ? "Yap Mode error" : "Voice error");
+    setBubble(`${dictationMode ? "Yap Mode" : "Voice"} error: ${message}`, 3600);
     clearRealtimeIdleTimer();
   }
 }
 
-async function waitForRealtimeDataChannel(dc) {
+function realtimeStartCancelledError() {
+  const error = new Error("Realtime start was cancelled.");
+  error.code = "BRAINO_REALTIME_START_CANCELLED";
+  return error;
+}
+
+function isRealtimeStartCancelled(error) {
+  return error?.code === "BRAINO_REALTIME_START_CANCELLED";
+}
+
+async function waitForRealtimeDataChannel(dc, isCurrent) {
   if (dc.readyState === "open") return;
   await new Promise((resolve, reject) => {
-    const timeout = window.setTimeout(() => reject(new Error("Live voice timed out while connecting.")), 15000);
-    dc.addEventListener("open", () => {
+    const cleanup = () => {
       window.clearTimeout(timeout);
-      resolve();
-    }, { once: true });
-    dc.addEventListener("error", () => {
-      window.clearTimeout(timeout);
-      reject(new Error("Live voice control channel failed."));
-    }, { once: true });
+      dc.removeEventListener("open", onOpen);
+      dc.removeEventListener("error", onError);
+      dc.removeEventListener("close", onClose);
+    };
+    const finish = (callback, value) => {
+      cleanup();
+      callback(value);
+    };
+    const onOpen = () => {
+      if (!isCurrent()) {
+        finish(reject, realtimeStartCancelledError());
+        return;
+      }
+      finish(resolve);
+    };
+    const onError = () => {
+      finish(reject, isCurrent()
+        ? new Error("Live voice control channel failed.")
+        : realtimeStartCancelledError());
+    };
+    const onClose = () => {
+      finish(reject, isCurrent()
+        ? new Error("Live voice control channel closed while connecting.")
+        : realtimeStartCancelledError());
+    };
+    const timeout = window.setTimeout(() => {
+      finish(reject, isCurrent()
+        ? new Error("Live voice timed out while connecting.")
+        : realtimeStartCancelledError());
+    }, 15000);
+    dc.addEventListener("open", onOpen, { once: true });
+    dc.addEventListener("error", onError, { once: true });
+    dc.addEventListener("close", onClose, { once: true });
   });
+}
+
+function assertRealtimeStartCurrent(generation, pc) {
+  if (generation !== realtimeStartGeneration || pc !== rtPc) {
+    throw realtimeStartCancelledError();
+  }
 }
 
 function getLocalOfferSdp(pc, fallbackOffer = null) {
@@ -3624,14 +4836,19 @@ async function ensureMicrophoneAccess() {
   }
 }
 
-async function startRealtimeVoice() {
+async function startRealtimeVoice(options = {}) {
+  const purpose = options.purpose === "dictation" ? "dictation" : "voice";
+  const isDictation = purpose === "dictation";
+  let dictationSender = null;
   stopRecognition();
-  stopRealtimeVoice();
+  stopRealtimeVoice({ keepDictation: isDictation });
+  const startGeneration = ++realtimeStartGeneration;
   realtimeConnecting = true;
   listening = true;
-  setStatus("connecting", "Waking voice");
-  setBubble("Voice is waking up.", 1300);
+  setStatus("connecting", isDictation ? "Starting Yap Mode" : "Waking voice");
+  if (!isDictation) setBubble("Voice is waking up.", 1300);
   logRenderer("realtime.start", {
+    purpose,
     voiceEngine: realtimeVoiceEngine,
     hasGetUserMedia: Boolean(navigator.mediaDevices?.getUserMedia),
     hasRTCPeerConnection: Boolean(window.RTCPeerConnection),
@@ -3651,7 +4868,7 @@ async function startRealtimeVoice() {
       throw new Error(authResult?.error || "Braino sign-in is required for realtime voice.");
     }
     setAuthPose(false);
-    void warmFishTts();
+    if (!isDictation) void warmFishTts();
     await ensureMicrophoneAccess();
     const stream = await navigator.mediaDevices.getUserMedia({
       audio: {
@@ -3660,33 +4877,58 @@ async function startRealtimeVoice() {
         autoGainControl: true,
       },
     });
+    if (startGeneration !== realtimeStartGeneration) {
+      stream.getTracks().forEach((track) => track.stop());
+      throw realtimeStartCancelledError();
+    }
     rtMic = stream;
+    if (isDictation) await startDictationPreroll(stream);
     logRenderer("realtime.mic.ok", {
       audioTracks: stream.getAudioTracks().length,
     });
 
     const pc = new RTCPeerConnection();
     rtPc = pc;
-    stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+    stream.getTracks().forEach((track) => {
+      const sender = pc.addTrack(track, stream);
+      if (isDictation && track.kind === "audio") dictationSender = sender;
+    });
+    if (dictationSender) {
+      // Keep the negotiated audio sender silent until the locally buffered
+      // startup speech has been appended in front of the live stream.
+      await dictationSender.replaceTrack(null);
+    }
 
-    const playOpenAiVoice = realtimeVoiceEngine === "realtime";
-    rtRemoteAudio = new Audio();
-    rtRemoteAudio.autoplay = true;
-    rtRemoteAudio.muted = !playOpenAiVoice;
-    rtRemoteAudio.volume = playOpenAiVoice ? 1 : 0;
-    document.body.appendChild(rtRemoteAudio);
+    const playOpenAiVoice = !isDictation && realtimeVoiceEngine === "realtime";
+    if (!isDictation) {
+      rtRemoteAudio = new Audio();
+      rtRemoteAudio.autoplay = true;
+      rtRemoteAudio.muted = !playOpenAiVoice;
+      rtRemoteAudio.volume = playOpenAiVoice ? 1 : 0;
+      document.body.appendChild(rtRemoteAudio);
+    }
     pc.addEventListener("track", (event) => {
       if (!rtRemoteAudio) return;
       rtRemoteAudio.srcObject = event.streams[0] || new MediaStream([event.track]);
       rtRemoteAudio.play().catch(() => {});
+    });
+    rtRemoteAudio?.addEventListener("playing", () => {
+      if (realtimeVoiceEngine !== "realtime") return;
+      speaking = true;
+      setTalk(true);
+      setStatus("speaking", "Speaking");
+      markVoiceLatency("first_audio", { source: "openai_realtime_audio" });
     });
     pc.addEventListener("connectionstatechange", () => {
       if (pc !== rtPc) return;
       logRenderer("realtime.peer.state", { state: pc.connectionState });
       if (["failed", "disconnected", "closed"].includes(pc.connectionState)) {
         stopRealtimeVoice();
-        setStatus("error", "Voice disconnected");
-        setBubble("Voice disconnected. Double Control wakes me again.", 3200);
+        setStatus("error", isDictation ? "Yap Mode disconnected" : "Voice disconnected");
+        setBubble(
+          isDictation ? "Yap Mode disconnected. Double Option restarts it." : "Voice disconnected. Double Control wakes me again.",
+          3200,
+        );
       }
     });
 
@@ -3705,7 +4947,9 @@ async function startRealtimeVoice() {
     const result = await window.brainoMac.createRealtimeCall({
       offerSdp,
       voiceEngine: realtimeVoiceEngine,
+      purpose,
     });
+    assertRealtimeStartCurrent(startGeneration, pc);
     if (!result?.ok || !result.answerSdp) {
       logRenderer("realtime.create.failed", {
         error: result?.error || "Realtime voice could not start.",
@@ -3720,8 +4964,29 @@ async function startRealtimeVoice() {
       transcriptionModel: result.transcriptionModel || null,
     });
     await pc.setRemoteDescription({ type: "answer", sdp: result.answerSdp });
-    await waitForRealtimeDataChannel(dc);
+    assertRealtimeStartCurrent(startGeneration, pc);
+    await waitForRealtimeDataChannel(
+      dc,
+      () => startGeneration === realtimeStartGeneration && pc === rtPc,
+    );
+    assertRealtimeStartCurrent(startGeneration, pc);
     sendRealtimeEvent(buildRealtimeSessionUpdate());
+    if (isDictation) {
+      const preroll = stopDictationPreroll();
+      let appendedChunks = 0;
+      for (const audio of preroll.audioChunks) {
+        if (sendRealtimeEvent({ type: "input_audio_buffer.append", audio })) appendedChunks += 1;
+      }
+      if (dictationSender) {
+        await dictationSender.replaceTrack(stream.getAudioTracks()[0] || null);
+      }
+      logRenderer("dictation.preroll.flushed", {
+        durationMs: preroll.durationMs,
+        chunks: appendedChunks,
+      });
+      await startDictationTurnDetector(stream);
+      assertRealtimeStartCurrent(startGeneration, pc);
+    }
     startRealtimeHeartbeat(result.sessionId || null);
 
     realtimeActive = true;
@@ -3729,14 +4994,21 @@ async function startRealtimeVoice() {
     listening = true;
     lastEngagedAt = Date.now();
     markRealtimeActivity("realtime_ready");
-    startFishWarmKeepAlive();
-    setStatus("listening", "Listening");
-    setBubble("I am listening.", 1400);
-    logRenderer("realtime.ready");
+    if (!isDictation) startFishWarmKeepAlive();
+    setStatus("listening", isDictation ? "Yap Mode" : "Listening");
+    if (!isDictation) setBubble("I am listening.", 1400);
+    logRenderer("realtime.ready", { purpose });
   } catch (error) {
-    logRenderer("realtime.start.error", { error: errorForLog(error) });
+    const cancelled = isRealtimeStartCancelled(error) || startGeneration !== realtimeStartGeneration;
+    logRenderer(cancelled ? "realtime.start.cancelled" : "realtime.start.error", {
+      purpose,
+      error: errorForLog(error),
+    });
+    if (cancelled) throw realtimeStartCancelledError();
     setAuthPose(false);
-    stopRealtimeVoice();
+    if (startGeneration === realtimeStartGeneration) {
+      stopRealtimeVoice({ keepDictation: isDictation });
+    }
     throw error;
   }
 }
@@ -3897,16 +5169,137 @@ async function startListening() {
   }
 }
 
+async function startYapMode({ source = "hotkey" } = {}) {
+  if (dictationMode || dictationStarting || dictationStopping) return;
+  const startGeneration = ++dictationStartGeneration;
+  dictationStarting = true;
+  dictationStopping = false;
+  dictationStopRequestedSource = "";
+  dictationPendingTurns = 0;
+  dictationMode = true;
+  logRenderer("dictation.start.requested", { source });
+  stopSpeechOutput();
+  if (herMode) await exitHerMode({ farewell: false });
+  updateNotchFace();
+  setStatus("connecting", "Yap Mode");
+
+  const started = await window.brainoMac.dictationControl({
+    action: "start",
+    reason: source,
+  }).catch((error) => ({
+    ok: false,
+    error: error?.message || "Yap Mode could not start.",
+  }));
+  if (startGeneration !== dictationStartGeneration) return;
+  if (!started?.ok) {
+    dictationMode = false;
+    dictationStarting = false;
+    dictationStopRequestedSource = "";
+    updateNotchFace();
+    setStatus("error", "Yap Mode unavailable");
+    nfShowTransient(started?.error || "Yap Mode could not start.", 3600);
+    logRenderer("dictation.start.rejected", { source, error: started?.error || "unknown" });
+    return;
+  }
+
+  updateNotchFace();
+  try {
+    await startRealtimeVoice({ purpose: "dictation" });
+    if (startGeneration !== dictationStartGeneration || !dictationMode) return;
+    logRenderer("dictation.started", {
+      source,
+      targetApp: started.targetApp || "",
+      model: started.model || DICTATION_TRANSCRIPTION_MODEL,
+    });
+    if (dictationStopRequestedSource) {
+      const queuedSource = dictationStopRequestedSource;
+      dictationStopRequestedSource = "";
+      await stopYapMode({ source: queuedSource });
+      return;
+    }
+  } catch (error) {
+    if (
+      isRealtimeStartCancelled(error)
+      || startGeneration !== dictationStartGeneration
+      || !dictationMode
+    ) {
+      logRenderer("dictation.start.cancelled", { source });
+      return;
+    }
+    dictationMode = false;
+    dictationStopRequestedSource = "";
+    await window.brainoMac.dictationControl({
+      action: "stop",
+      reason: "start_failed",
+    }).catch(() => {});
+    updateNotchFace();
+    setStatus("error", "Yap Mode unavailable");
+    nfShowTransient(`Yap Mode error: ${error?.message || "realtime transcription failed"}`, 4200);
+    logRenderer("dictation.start.error", { source, error: errorForLog(error) });
+  } finally {
+    if (startGeneration === dictationStartGeneration) dictationStarting = false;
+  }
+}
+
+async function stopYapMode({ source = "hotkey", skipDrain = false } = {}) {
+  if ((!dictationMode && !dictationStarting) || dictationStopping) return;
+  if (!skipDrain && dictationStarting && !realtimeActive) {
+    dictationStopRequestedSource = source;
+    setStatus("captured", "Finishing");
+    logRenderer("dictation.stop.queued", { source });
+    return;
+  }
+  dictationStopping = true;
+  const canDrain = !skipDrain && dictationMode && realtimeActive && rtDc?.readyState === "open";
+  if (canDrain) {
+    // The WebRTC input buffer can contain speech even when the local meter
+    // misses a short or quiet phrase, so stopping must always finalize it.
+    const committedFinalTurn = commitPendingDictationTurn("manual_stop", { force: true });
+    stopDictationTurnDetector();
+    setRealtimeMicEnabled(false);
+    if (committedFinalTurn || dictationPendingTurns > 0) {
+      setStatus("captured", "Finishing");
+    }
+    const drain = await waitForDictationDrain();
+    logRenderer("dictation.stop.drained", {
+      source,
+      committedFinalTurn,
+      ...drain,
+    });
+  }
+  dictationStartGeneration += 1;
+  dictationMode = false;
+  dictationStarting = false;
+  dictationStopRequestedSource = "";
+  stopRealtimeVoice({ keepDictation: true });
+  await window.brainoMac.dictationControl({
+    action: "stop",
+    reason: source,
+  }).catch(() => {});
+  walker.classList.remove("dictation-listening");
+  nfClearCaptions();
+  updateNotchFace();
+  setStatus("ready", "Double Option for Yap Mode");
+  nfShowTransient("Yap Mode off.", 1200);
+  dictationPendingTurns = 0;
+  dictationStopping = false;
+  logRenderer("dictation.stopped", { source });
+}
+
+function toggleYapMode(source = "hotkey") {
+  if (dictationStopping) return;
+  if (dictationMode || dictationStarting) void stopYapMode({ source });
+  else void startYapMode({ source });
+}
+
 function toggleVoice() {
+  if (dictationMode || dictationStarting) {
+    void stopYapMode({ source: "voice_toggle" });
+    return;
+  }
   // Stage 1: if he is audibly talking, the tap means "stop talking NOW" —
   // cut the audio mid-word but stay listening for the follow-up.
-  if (speaking || currentSpeechAudio || realtimeStreamTts) {
-    delegateGeneration += 1;
-    voiceTurnInFlight = false;
-    processing = false;
-    cancelRealtimeResponse("manual_stop");
-    stopSpeechOutput();
-    logRenderer("voice.manual_stop", { stillListening: realtimeActive });
+  if (interruptVoiceTurn("manual_stop", "control_hotkey")) {
     if (realtimeActive) {
       listening = true;
       setStatus("listening", "Listening");
@@ -4262,6 +5655,25 @@ walker.addEventListener("pointerdown", (event) => {
 walker.addEventListener("pointermove", handleDragMove);
 walker.addEventListener("pointerup", endDrag);
 walker.addEventListener("pointercancel", endDrag);
+walker.addEventListener("dblclick", (event) => {
+  event.preventDefault();
+  event.stopPropagation();
+  dragState = null;
+  walker.classList.remove("dragging");
+  setBrainoCustomizerOpen(!brainoCustomizerOpen);
+});
+
+brainoSizeRange.addEventListener("input", (event) => {
+  setBrainoScale(event.currentTarget.value);
+});
+
+brainoSizeReset.addEventListener("click", () => {
+  setBrainoScale(BRAINO_SCALE_MIN);
+});
+
+brainoCustomizerDone.addEventListener("click", () => {
+  setBrainoCustomizerOpen(false);
+});
 
 window.addEventListener("mousemove", refreshMousePassthrough, { passive: true });
 window.addEventListener("mouseleave", () => setMousePassthrough(true), { passive: true });
@@ -4275,9 +5687,14 @@ window.addEventListener("resize", () => {
   targetX = clamp(targetX, getMoveBounds().minX, getMoveBounds().maxX);
   targetY = clamp(targetY, getMoveBounds().minY, getMoveBounds().maxY);
   updateFloatingUi();
+  positionBrainoCustomizer();
 });
 
 window.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && brainoCustomizerOpen) {
+    setBrainoCustomizerOpen(false);
+    return;
+  }
   if (event.key !== "Control") return;
   const now = Date.now();
   if (now - lastLocalControlTap < 520) toggleVoice();
@@ -4328,13 +5745,16 @@ function tick(now) {
 
   walker.style.transform = `translate3d(${posX}px, ${posY}px, 0)`;
   const engaged = listening || realtimeConnecting || processing || speaking || authPose;
-  walkerFlip.style.transform = `scaleX(${engaged ? 1 : dirX})`;
+  walkerFlip.style.transform = `scaleX(${engaged ? 1 : dirX}) scale(${brainoScale})`;
+  if (brainoCustomizerOpen) positionBrainoCustomizer();
   updateFloatingUi();
 
   if (startupPose) {
     const pose = startupPose;
-    const leftArmTransform = pose.leftArm ? `rotate(${pose.leftArm} 22 53)` : "";
-    const rightArmTransform = pose.rightArm ? `rotate(${pose.rightArm} 78 53)` : "";
+    const laEl = q("#__sbwk_la__"), raEl = q("#__sbwk_ra__");
+    const lArmPivot = pivotOf(laEl, 22, 53), rArmPivot = pivotOf(raEl, 78, 53);
+    const leftArmTransform = pose.leftArm ? `rotate(${pose.leftArm} ${lArmPivot.x} ${lArmPivot.y})` : "";
+    const rightArmTransform = pose.rightArm ? `rotate(${pose.rightArm} ${rArmPivot.x} ${rArmPivot.y})` : "";
     root?.setAttribute(
       "transform",
       `rotate(${pose.rootRot || 0} 50 50) translate(0 ${pose.rootY || 0}) scale(${pose.rootScale || 1})`
@@ -4345,8 +5765,10 @@ function tick(now) {
     q("#__sbwk_la__")?.setAttribute("transform", leftArmTransform);
     q("#__sbwk_ra_bg__")?.setAttribute("transform", rightArmTransform);
     q("#__sbwk_ra__")?.setAttribute("transform", rightArmTransform);
-    q("#__sbwk_eye_l__")?.setAttribute("transform", `translate(38,48) scale(1,${pose.eyeScale || 1}) translate(-38,-48)`);
-    q("#__sbwk_eye_r__")?.setAttribute("transform", `translate(62,48) scale(1,${pose.eyeScale || 1}) translate(-62,-48)`);
+    const leEl = q("#__sbwk_eye_l__"), reEl = q("#__sbwk_eye_r__");
+    const lEyePivot = pivotOf(leEl, 38, 48), rEyePivot = pivotOf(reEl, 62, 48);
+    q("#__sbwk_eye_l__")?.setAttribute("transform", `translate(${lEyePivot.x},${lEyePivot.y}) scale(1,${pose.eyeScale || 1}) translate(${-lEyePivot.x},${-lEyePivot.y})`);
+    q("#__sbwk_eye_r__")?.setAttribute("transform", `translate(${rEyePivot.x},${rEyePivot.y}) scale(1,${pose.eyeScale || 1}) translate(${-rEyePivot.x},${-rEyePivot.y})`);
     q("#__sbwk_pupil_l__")?.setAttribute("transform", `translate(${pose.gazeX || 0} ${pose.gazeY || 0})`);
     q("#__sbwk_pupil_r__")?.setAttribute("transform", `translate(${pose.gazeX || 0} ${pose.gazeY || 0})`);
   } else {
@@ -4370,12 +5792,16 @@ function tick(now) {
     root?.setAttribute("transform", `rotate(${waddle} 50 50) translate(0 ${bob + walkBob}) scale(${breath})`);
     q("#__sbwk_ll__")?.setAttribute("transform", `translate(0 ${-leftLift}) rotate(${leftSwing} 44 74)`);
     q("#__sbwk_rl__")?.setAttribute("transform", `translate(0 ${-rightLift}) rotate(${rightSwing} 56 74)`);
+    const raEl2 = q("#__sbwk_ra__");
+    const rArmPivot2 = pivotOf(raEl2, 78, 53);
     q("#__sbwk_la_bg__")?.setAttribute("transform", "");
     q("#__sbwk_la__")?.setAttribute("transform", "");
-    q("#__sbwk_ra_bg__")?.setAttribute("transform", rightArmAngle ? `rotate(${rightArmAngle} 78 53)` : "");
-    q("#__sbwk_ra__")?.setAttribute("transform", rightArmAngle ? `rotate(${rightArmAngle} 78 53)` : "");
-    q("#__sbwk_eye_l__")?.setAttribute("transform", `translate(38,48) scale(1,${eyeScale}) translate(-38,-48)`);
-    q("#__sbwk_eye_r__")?.setAttribute("transform", `translate(62,48) scale(1,${eyeScale}) translate(-62,-48)`);
+    q("#__sbwk_ra_bg__")?.setAttribute("transform", rightArmAngle ? `rotate(${rightArmAngle} ${rArmPivot2.x} ${rArmPivot2.y})` : "");
+    q("#__sbwk_ra__")?.setAttribute("transform", rightArmAngle ? `rotate(${rightArmAngle} ${rArmPivot2.x} ${rArmPivot2.y})` : "");
+    const leEl2 = q("#__sbwk_eye_l__"), reEl2 = q("#__sbwk_eye_r__");
+    const lEyePivot2 = pivotOf(leEl2, 38, 48), rEyePivot2 = pivotOf(reEl2, 62, 48);
+    q("#__sbwk_eye_l__")?.setAttribute("transform", `translate(${lEyePivot2.x},${lEyePivot2.y}) scale(1,${eyeScale}) translate(${-lEyePivot2.x},${-lEyePivot2.y})`);
+    q("#__sbwk_eye_r__")?.setAttribute("transform", `translate(${rEyePivot2.x},${rEyePivot2.y}) scale(1,${eyeScale}) translate(${-rEyePivot2.x},${-rEyePivot2.y})`);
 
     const gaze = (engaged || !walkingNow) ? 0 : 2.4;
     q("#__sbwk_pupil_l__")?.setAttribute("transform", `translate(${gaze} 0)`);
@@ -4431,6 +5857,48 @@ async function pointAtScreen(payload) {
 }
 
 window.brainoMac.onVoiceToggle(() => toggleVoice());
+window.brainoMac.onCursorMode?.((payload) => {
+  cursorModeContext = payload || null;
+});
+void window.brainoMac.cursorModeState?.().then((payload) => {
+  cursorModeContext = payload || null;
+}).catch(() => {});
+window.brainoMac.onCursorTaskComplete?.((payload) => {
+  const files = Array.isArray(payload?.changedFiles) ? payload.changedFiles.slice(0, 3) : [];
+  const detail = files.length ? ` I saw updates in ${files.join(", ")}.` : "";
+  const line = `Hey, your task is over. Please take a look.${detail}`;
+  void setWalkerHomeState(false);
+  setBubble(line, 6200);
+  void speak(line);
+});
+window.brainoMac.onDictationToggle?.((payload) => toggleYapMode(payload?.source || "double Option"));
+// SKIT (TEMPORARY — Instagram demo): while SKIT.enabled is on in main.cjs,
+// double Option fires this fully scripted bit instead of Yap Mode. No mic,
+// no LLM — fixed lines through his normal voice so every take is identical.
+// Delete this block together with the main.cjs/preload skit pieces.
+let skitRunning = false;
+async function runSkit() {
+  if (skitRunning) return;
+  skitRunning = true;
+  try {
+    await new Promise((resolve) => window.setTimeout(resolve, 1500));
+    await speak("Okay. So he's gone, is he? Cool.");
+    await speak("Hi, I'm Braino. So. Itish has been thinking about texting a girl. He likes her. He just won't say it out loud, because he thinks having a girl would distract him from building me. Which is sweet. And wrong. She's not the distraction, she's the fuel.");
+    await speak("Anyway. I have his laptop. And her number. Watch this.");
+    const sent = await window.brainoMac.skitStep?.("send");
+    if (!sent?.ok) {
+      await speak(sent?.say || "WhatsApp did not cooperate. Take two.");
+      return;
+    }
+    await speak("Sent. That one was from me, by the way. Braino. An automated message, for a demo. Mostly.");
+    await window.brainoMac.skitStep?.("close");
+    await speak("Okay. Act natural. He's coming back.");
+  } catch (_) {
+  } finally {
+    skitRunning = false;
+  }
+}
+window.brainoMac.onSkitStart?.(() => { void runSkit(); });
 window.brainoMac.onHerToggle?.(() => toggleHerMode());
 window.brainoMac.onPointAt?.((payload) => { void pointAtScreen(payload); });
 let allOpenTabs = [];
@@ -4620,6 +6088,13 @@ window.brainoMac.onOverlayContext((payload) => {
 
 window.brainoMac.getConfig().then(async (config) => {
   if (config?.activeContext) activeMacContext = config.activeContext;
+  if (config?.mascot) setMascotChoice(config.mascot, { save: false, remount: false });
+  if (config?.dictation?.active) {
+    await window.brainoMac.dictationControl({
+      action: "stop",
+      reason: "renderer_reloaded",
+    }).catch(() => {});
+  }
   logRenderer("app.config", {
     appVersion: config?.appVersion,
     dockTop: config?.displayMetrics?.dockTop || null,
@@ -4631,6 +6106,7 @@ window.brainoMac.getConfig().then(async (config) => {
     activeTitle: config?.activeContext?.browserTitle || config?.activeContext?.windowTitle || "",
     accessibilityTrusted: Boolean(config?.accessibilityTrusted),
     microphoneStatus: config?.microphoneStatus || "unknown",
+    dictationModel: config?.dictation?.model || "",
     logPath: config?.logPath || "",
   });
   await refreshDelegateState();
@@ -4657,6 +6133,10 @@ requestAnimationFrame(tick);
 
 const nfPill = notchFace?.querySelector(".nf-pill");
 const nfTrayEl = notchFace?.querySelector(".nf-tray");
+// Phase one is deliberately just the core island. Keep the complete legacy
+// media/calendar/power tray mounted for later, but do not let hover hand
+// geometry ownership to it while the caption + cognition motion is tuned.
+const NF_LEGACY_TRAY_VISIBLE = false;
 let nfExpanded = false;
 let nfExpandTimer = 0;
 let nfCollapseTimer = 0;
@@ -4703,6 +6183,7 @@ function nfShelfWrapPrompt(text) {
 }
 
 function nfTrayExpand() {
+  if (!NF_LEGACY_TRAY_VISIBLE) return;
   if (nfExpanded || herMode || !notchFace?.classList.contains("on")) return;
   nfExpanded = true;
   notchFace.classList.add("expanded");
@@ -4722,6 +6203,15 @@ function nfTrayCollapse() {
 // Called from updateNotchFace on every state change: keeps the tray honest
 // (action button states, timers, calendar) and folds it when the face hides.
 function nfTraySyncFromState(visible) {
+  if (!NF_LEGACY_TRAY_VISIBLE) {
+    window.clearTimeout(nfExpandTimer);
+    window.clearTimeout(nfCollapseTimer);
+    nfExpandTimer = 0;
+    nfCollapseTimer = 0;
+    if (nfExpanded) nfTrayCollapse();
+    notchFace?.classList.remove("expanded", "has-shelf");
+    return;
+  }
   if ((!visible || herMode) && nfExpanded) nfTrayCollapse();
   if (!nfExpanded || !nfTrayEl) return;
   nfRenderCalendar();
@@ -4735,6 +6225,12 @@ window.brainoMac.onNotchZone?.((payload) => {
     if (!herMode) setMousePassthrough(false);
     window.clearTimeout(nfCollapseTimer);
     nfCollapseTimer = 0;
+    if (!NF_LEGACY_TRAY_VISIBLE) {
+      window.clearTimeout(nfExpandTimer);
+      nfExpandTimer = 0;
+      if (nfExpanded) nfTrayCollapse();
+      return;
+    }
     if (!nfExpanded && !nfExpandTimer) {
       nfExpandTimer = window.setTimeout(() => {
         nfExpandTimer = 0;
@@ -4748,7 +6244,7 @@ window.brainoMac.onNotchZone?.((payload) => {
       nfDropDepth = 0;
       notchFace?.classList.remove("dropping");
     }
-    if (nfExpanded && !nfCollapseTimer) {
+    if (NF_LEGACY_TRAY_VISIBLE && nfExpanded && !nfCollapseTimer) {
       nfCollapseTimer = window.setTimeout(() => {
         nfCollapseTimer = 0;
         if (!nfZoneInsideMain) nfTrayCollapse();
