@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import EmotionNetwork from "@/components/EmotionNetwork";
 import IomiNotch from "@/components/IomiNotch";
 import BrainoReplyLab from "@/components/BrainoReplyLab";
@@ -127,6 +127,11 @@ export default function VisualEmotionalEngine() {
   const [tab, setTab] = useState<"read" | "reply">("read");
   const reveal = useReveal();
 
+  // Arriving from /commands: ?run=<message>. Reply opens itself and runs it.
+  const [params] = useSearchParams();
+  const autoRun = params.get("run");
+  useEffect(() => { if (autoRun) setTab("reply"); }, [autoRun]);
+
   return (
     <div className="apple hil eil" ref={reveal} style={{ ["--ap-accent" as string]: "var(--ap-coral)" }}>
       <IomiNotch />
@@ -169,7 +174,7 @@ export default function VisualEmotionalEngine() {
         <button className={tab === "reply" ? "on" : ""} onClick={() => setTab("reply")}>Reply</button>
       </div>
 
-      {tab === "read" ? <ReadTab /> : <BrainoReplyLab />}
+      {tab === "read" ? <ReadTab /> : <BrainoReplyLab autoRun={autoRun} />}
     </div>
   );
 }

@@ -39,11 +39,13 @@ type Run = {
   ok: boolean;
   error: string | null;
   prompt_version: string | null;
+  rating: "good" | "bad" | null;
+  note: string | null;
 };
 
 type Stats = {
   byEngine: Record<string, { runs: number; tokens: number; failed: number; today: number }>;
-  total: { runs: number; tokens: number; failed: number };
+  total: { runs: number; tokens: number; failed: number; good: number; bad: number; unjudged: number };
 };
 
 const ENGINES = [
@@ -83,7 +85,11 @@ export default function EngineLog() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [engine, setEngine] = useState("all");
   const [failedOnly, setFailedOnly] = useState(false);
+  const [ratingFilter, setRatingFilter] = useState<"" | "good" | "bad" | "unjudged">("");
   const [open, setOpen] = useState<string | null>(null);
+  // Note drafts live here so typing does not fight the row list re-rendering.
+  const [noteDraft, setNoteDraft] = useState<Record<string, string>>({});
+  const [saving, setSaving] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -97,6 +103,7 @@ export default function EngineLog() {
       const base = `${SUPABASE_URL}/functions/v1/engine-runs`;
       const query = new URLSearchParams({ engine, limit: "200" });
       if (failedOnly) query.set("failed", "1");
+      if (ratingFilter) query.set("rating", ratingFilter);
       const [listRes, statRes] = await Promise.all([
         fetch(`${base}?${query}`, { headers }),
         fetch(`${base}?stats=1`, { headers }),
@@ -110,9 +117,30 @@ export default function EngineLog() {
     } finally {
       setLoading(false);
     }
-  }, [engine, failedOnly]);
+  }, [engine, failedOnly, ratingFilter]);
 
   useEffect(() => { void load(); }, [load]);
+
+  // Judging a run. The row updates in place rather than reloading the list, so
+  // marking ten runs in a row does not make the page jump under the cursor.
+  const judge = useCallback(async (run: Run, rating: "good" | "bad" | null, note?: string) => {
+    setSaving(run.id);
+    const nextNote = note !== undefined ? note : (run.note || "");
+    try {
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/engine-runs`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
+        body: JSON.stringify({ id: run.id, rating, note: nextNote || null }),
+      });
+      if (!res.ok) throw new Error(`Save failed (${res.status})`);
+      setRows((prev) => prev.map((r) => (r.id === run.id ? { ...r, rating, note: nextNote || null } : r)));
+      setStats(null); // totals are stale now; the next refresh recomputes them
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not save that rating.");
+    } finally {
+      setSaving(null);
+    }
+  }, []);
 
   // Loop turns belong together: one run is one session of thinking, not nine
   // unrelated calls, so consecutive turns of the same run_id collapse into one
@@ -153,6 +181,10 @@ export default function EngineLog() {
             <span className="el-stat-value">{stats.total.failed}</span>
             <span className="el-stat-label">failed or unreadable</span>
           </div>
+          <div className="el-stat">
+            <span className="el-stat-value">{stats.total.good} / {stats.total.bad}</span>
+            <span className="el-stat-label">marked good / bad, {stats.total.unjudged} unjudged</span>
+          </div>
           {Object.entries(stats.byEngine).map(([id, s]) => (
             <div key={id} className="el-stat">
               <span className="el-stat-value">{s.runs}</span>
@@ -169,6 +201,18 @@ export default function EngineLog() {
         <button className={"el-fail" + (failedOnly ? " on" : "")} onClick={() => setFailedOnly((v) => !v)}>
           Failures only
         </button>
+        <span className="el-filter-sep" />
+        {([["", "Any verdict"], ["bad", "Marked bad"], ["good", "Marked good"], ["unjudged", "Not judged"]] as const).map(
+          ([value, label]) => (
+            <button
+              key={value || "any"}
+              className={"el-rate-filter" + (ratingFilter === value ? " on" : "")}
+              onClick={() => setRatingFilter(value)}
+            >
+              {label}
+            </button>
+          ),
+        )}
       </div>
 
       {error && <p className="el-error">{error}</p>}
@@ -207,6 +251,41 @@ export default function EngineLog() {
                       <span className="el-caret">{open === run.id ? "collapse" : "open"}</span>
                     </button>
                     {run.error && <p className="el-turn-error">{run.error}</p>}
+
+                    {/* The verdict. This is what turns the log into a worklist:
+                        at the end of a session, "marked bad" plus its note is
+                        the entire list of prompt edits to make. */}
+                    <div className="el-judge">
+                      <button
+                        className={"el-good" + (run.rating === "good" ? " on" : "")}
+                        disabled={saving === run.id}
+                        onClick={() => void judge(run, run.rating === "good" ? null : "good")}
+                      >
+                        Good
+                      </button>
+                      <button
+                        className={"el-bad" + (run.rating === "bad" ? " on" : "")}
+                        disabled={saving === run.id}
+                        onClick={() => void judge(run, run.rating === "bad" ? null : "bad")}
+                      >
+                        Bad
+                      </button>
+                      <input
+                        className="el-note-input"
+                        placeholder={run.rating === "bad" ? "What was wrong with it?" : "Note (optional)"}
+                        value={noteDraft[run.id] ?? run.note ?? ""}
+                        onChange={(e) => setNoteDraft((d) => ({ ...d, [run.id]: e.target.value }))}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") void judge(run, run.rating, noteDraft[run.id] ?? run.note ?? "");
+                        }}
+                        onBlur={() => {
+                          const draft = noteDraft[run.id];
+                          if (draft !== undefined && draft !== (run.note || "")) void judge(run, run.rating, draft);
+                        }}
+                      />
+                      {saving === run.id && <span className="el-saving">saving</span>}
+                    </div>
+
                     {open === run.id && (
                       <pre className="el-json">{JSON.stringify(run.response, null, 2)}</pre>
                     )}

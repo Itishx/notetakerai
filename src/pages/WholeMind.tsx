@@ -3,6 +3,10 @@ import IomiNotch from "@/components/IomiNotch";
 import BrainoWholeMind from "@/components/BrainoWholeMind";
 import "../styles/apple.css";
 import "./human-intelligence.css";
+// The .ewm-* panel rules and the --eil-* coral variables both live here. Moving
+// Whole Mind off the Emotional Intelligence page left them behind, which is why
+// "What he thinks" rendered unstyled next to everything else.
+import "./visual-emotional-engine.css";
 
 /* ============================================================================
    /whole-mind — both halves of Braino on one message.
@@ -17,7 +21,9 @@ import "./human-intelligence.css";
 
 export default function WholeMind() {
   return (
-    <div className="apple hil" style={{ ["--ap-accent" as string]: "var(--ap-violet)" }}>
+    // `eil` is required, not decorative: --eil-coral and friends are scoped to
+    // it, and the feeling half is built out of them.
+    <div className="apple hil eil" style={{ ["--ap-accent" as string]: "var(--ap-coral)" }}>
       <IomiNotch />
 
       <header className="apple-hero hil-hero">

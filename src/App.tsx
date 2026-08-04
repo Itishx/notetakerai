@@ -86,6 +86,7 @@ const KnowledgeBase = lazy(() => import("./pages/KnowledgeBase.tsx"));
 const IdeaTracker = lazy(() => import("./pages/IdeaTracker.tsx"));
 const WholeMind = lazy(() => import("./pages/WholeMind.tsx"));
 const EngineLog = lazy(() => import("./pages/EngineLog.tsx"));
+const Commands = lazy(() => import("./pages/Commands.tsx"));
 const NotFound = lazy(() => import("./pages/NotFound.tsx"));
 const queryClient = new QueryClient();
 
@@ -175,6 +176,7 @@ function AppRoutes() {
         <Route path="/ideas" element={<IdeaTracker />} />
         <Route path="/whole-mind" element={<WholeMind />} />
         <Route path="/engine-log" element={<EngineLog />} />
+        <Route path="/commands" element={<Commands />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     </Suspense>

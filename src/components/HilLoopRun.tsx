@@ -124,7 +124,9 @@ function StepCard({ e, gatedNow, onConfirm, onDecline }: {
   );
 }
 
-export default function HilLoopRun() {
+// autoRun arrives from /commands through the URL. It fires exactly once per
+// mount, guarded below, so a re-render mid-run can never restart the run.
+export default function HilLoopRun({ autoRun }: { autoRun?: { command: string; preset: WorldPreset } | null }) {
   const [command, setCommand] = useState("");
   const [context, setContext] = useState("");
   const [reply, setReply] = useState("");
@@ -159,6 +161,18 @@ export default function HilLoopRun() {
     setReply("");
     void runner.start(text, ctx ?? context, preset);
   };
+
+  // One shot, keyed on the command itself so arriving from /commands with a
+  // different command re-fires while a re-render never does.
+  const firedFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (!autoRun?.command || firedFor.current === autoRun.command) return;
+    firedFor.current = autoRun.command;
+    setCommand(autoRun.command);
+    setContext("");
+    setReply("");
+    void runner.start(autoRun.command, "", autoRun.preset);
+  }, [autoRun, runner]);
 
   const sendReply = () => {
     const text = reply.trim();

@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
+import type { WorldPreset } from "@/lib/hilLoopWorld";
 import IomiNotch from "@/components/IomiNotch";
 import HilTraceGraph from "@/components/HilTraceGraph";
 import HilLoopRun from "@/components/HilLoopRun";
@@ -193,6 +194,16 @@ export default function HumanIntelligence() {
   const [tab, setTab] = useState<"read" | "loop">("read");
   const reveal = useReveal();
 
+  // Arriving from /commands: ?run=<command>&preset=<world>. The Loop tab opens
+  // itself and the command runs, so a test is one click from the corpus.
+  const [params] = useSearchParams();
+  const runParam = params.get("run");
+  const autoRun = useMemo(
+    () => (runParam ? { command: runParam, preset: (params.get("preset") || "empty") as WorldPreset } : null),
+    [runParam, params],
+  );
+  useEffect(() => { if (autoRun) setTab("loop"); }, [autoRun]);
+
   return (
     <div className="apple hil" ref={reveal} style={{ ["--ap-accent" as string]: "var(--ap-blue)" }}>
       <IomiNotch />
@@ -222,7 +233,7 @@ export default function HumanIntelligence() {
         <button className={tab === "loop" ? "on" : ""} onClick={() => setTab("loop")}>Loop</button>
       </div>
 
-      {tab === "read" ? <ReadTab /> : <HilLoopRun />}
+      {tab === "read" ? <ReadTab /> : <HilLoopRun autoRun={autoRun} />}
     </div>
   );
 }

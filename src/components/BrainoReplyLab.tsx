@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import EmotionNetwork from "@/components/EmotionNetwork";
 import type { Moment } from "@/lib/emotional-engine-viz";
 
@@ -48,7 +48,8 @@ const SAMPLES = [
   { label: "Teasing him", text: "you're kind of adorable you know that" },
 ];
 
-export default function BrainoReplyLab() {
+// autoRun arrives from /commands through the URL, fired once per command.
+export default function BrainoReplyLab({ autoRun }: { autoRun?: string | null }) {
   const [message, setMessage] = useState("");
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -86,6 +87,15 @@ export default function BrainoReplyLab() {
       setRunning(false);
     }
   };
+
+  const firedFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (!autoRun || firedFor.current === autoRun) return;
+    firedFor.current = autoRun;
+    void run(autoRun);
+    // run is recreated every render; depending on it would refire the command.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoRun]);
 
   // The A/B: same message, charm trait removed, so the difference is visible
   // instead of asserted.

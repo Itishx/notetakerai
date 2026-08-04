@@ -121,3 +121,28 @@
   display: flex; flex-wrap: wrap; align-items: center; gap: 16px;
 }
 .el-foot-note { margin-left: auto; font-size: 12px; color: var(--ink-faint); }
+
+/* ── The verdict on a run ───────────────────────────────────────────── */
+/* This is the row that matters at the end of a session: everything marked
+   bad, with its note, is the list of prompt edits to make. */
+.el-judge { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 0 2px 12px; }
+.el-judge button {
+  flex: none; border: 1px solid var(--line); background: transparent; color: var(--ink-soft);
+  border-radius: 6px; padding: 5px 14px; font-size: 12.5px; font-weight: 600; cursor: pointer;
+}
+.el-judge button:disabled { opacity: 0.5; cursor: default; }
+.el-good:hover:not(:disabled) { border-color: var(--green); color: var(--green); }
+.el-good.on { background: var(--green); border-color: var(--green); color: #fff; }
+.el-bad:hover:not(:disabled) { border-color: var(--coral); color: var(--coral); }
+.el-bad.on { background: var(--coral); border-color: var(--coral); color: #fff; }
+.el-note-input {
+  flex: 1; min-width: 180px;
+  border: 1px solid var(--line); background: var(--paper); color: var(--ink);
+  border-radius: 6px; padding: 6px 11px; font: inherit; font-size: 13px; outline: none;
+}
+.el-note-input:focus { border-color: var(--blue); }
+.el-note-input::placeholder { color: var(--ink-faint); }
+.el-saving { font-size: 11.5px; color: var(--ink-faint); }
+
+.el-filter-sep { width: 1px; align-self: stretch; background: var(--line); margin: 0 4px; }
+.el-rate-filter.on { background: var(--blue) !important; border-color: var(--blue) !important; color: #fff !important; }
