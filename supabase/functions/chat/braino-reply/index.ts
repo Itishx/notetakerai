@@ -181,7 +181,7 @@ serve(async (req) => {
     const tells = scanForTells(reply);
     const dial = charmLevel(moment);
 
-    logEngineRun({
+    const logId = logEngineRun({
       engine: "braino-reply",
       command: message,
       response: { reply, tells, how, intensity, leads, charm: dial, charm_off: charmOff },
@@ -218,6 +218,9 @@ serve(async (req) => {
         model: REPLY_MODEL,
         elapsed_ms: Date.now() - started,
         charm_off: charmOff,
+        // The row this reply landed in, so the surface can put Good, Bad and a
+        // note directly under the answer instead of on another page.
+        log_id: logId,
       },
     }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (e) {

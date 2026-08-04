@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import EmotionNetwork from "@/components/EmotionNetwork";
+import RunVerdict from "@/components/RunVerdict";
 import type { Moment } from "@/lib/emotional-engine-viz";
 
 /* ============================================================================
@@ -37,7 +38,7 @@ type ReplyResult = {
     trait_count: number;
   };
   tells: Tell[];
-  meta: { model: string; elapsed_ms: number; charm_off: boolean };
+  meta: { model: string; elapsed_ms: number; charm_off: boolean; log_id?: string | null };
 };
 
 const SAMPLES = [
@@ -157,6 +158,9 @@ export default function BrainoReplyLab({ autoRun }: { autoRun?: string | null })
             <div className="eir-reply">
               <span className="hil-sum-k">He says</span>
               <p>{main.reply}</p>
+              {/* Judge it here, while the reason is still in your head. Goes to
+                  the same row the engine already logged. */}
+              <RunVerdict logId={main.meta.log_id} label="Was this how he should have said it?" />
             </div>
 
             {/* The check that makes the ban real. */}

@@ -44,16 +44,18 @@ serve(async (req) => {
     if (req.method === "POST") {
       const body = await req.json().catch(() => ({}));
       const id = typeof body?.id === "string" ? body.id : "";
-      if (!id) return json({ error: "missing id" }, 400);
+      // A loop run is judged as a whole, not turn by turn: "he got there badly"
+      // is a statement about the run. runId marks every turn of it at once.
+      const runId = typeof body?.runId === "string" ? body.runId : "";
+      if (!id && !runId) return json({ error: "missing id or runId" }, 400);
 
       const rating = body?.rating === "good" || body?.rating === "bad" ? body.rating : null;
       const note = typeof body?.note === "string" ? body.note.slice(0, 2000) : null;
-      const { error } = await admin
-        .from("engine_runs")
-        .update({ rating, note, rated_at: new Date().toISOString() })
-        .eq("id", id);
+      const patch = { rating, note, rated_at: new Date().toISOString() };
+      const query = admin.from("engine_runs").update(patch);
+      const { error } = runId ? await query.eq("run_id", runId) : await query.eq("id", id);
       if (error) throw error;
-      return json({ ok: true, id, rating, note });
+      return json({ ok: true, id: id || null, runId: runId || null, rating, note });
     }
 
     const url = new URL(req.url);

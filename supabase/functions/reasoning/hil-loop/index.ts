@@ -308,7 +308,7 @@ serve(async (req) => {
       Boolean(loopState?.lastStep),
     );
 
-    logEngineRun({
+    const logId = logEngineRun({
       engine: "hil-loop",
       run_id: logRunId,
       turn: logTurn,
@@ -341,6 +341,7 @@ serve(async (req) => {
         elapsed_ms: Date.now() - started,
         hil_loop_version: HIL_LOOP_VERSION,
         parse_ok: parseOk,
+        log_id: logId,
       },
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },

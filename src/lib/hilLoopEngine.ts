@@ -132,6 +132,12 @@ export class HilLoopRunner {
     private onChange: () => void,
   ) {}
 
+  // Every turn of this run shares this id in the log, so a verdict left on the
+  // run marks the whole thing rather than whichever turn happened to be last.
+  get currentRunId(): string {
+    return this.runId;
+  }
+
   // What he can see right now, for the live screen panel in the UI.
   get screen(): { url: string; elements: PageElement[] } {
     return { url: currentUrl(this.world), elements: elementMap(this.world) };

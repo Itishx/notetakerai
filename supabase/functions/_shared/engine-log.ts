@@ -45,7 +45,17 @@ function clip(value: unknown, limit = MAX_TEXT): string | null {
   return value.length > limit ? `${value.slice(0, limit)}\n[truncated]` : value;
 }
 
-export function logEngineRun(row: EngineLogRow): void {
+/**
+ * Records the call and returns the id of the row it will land in.
+ *
+ * The id is generated here rather than by the database so it can go back in the
+ * response immediately, without waiting for the insert. That is what lets a
+ * surface put Good, Bad and a note directly under the answer it just showed:
+ * the verdict belongs where the answer is, not on a different page after
+ * hunting for the run.
+ */
+export function logEngineRun(row: EngineLogRow): string {
+  const id = crypto.randomUUID();
   // Deliberately not awaited by callers. Deno keeps the isolate alive for the
   // pending fetch, and if it does not finish, the response was still correct.
   void (async () => {
@@ -56,6 +66,7 @@ export function logEngineRun(row: EngineLogRow): void {
 
       const usage = row.usage || {};
       const payload = {
+        id,
         engine: row.engine,
         run_id: row.run_id ?? null,
         turn: row.turn ?? 1,
@@ -90,4 +101,5 @@ export function logEngineRun(row: EngineLogRow): void {
       console.error("engine-log threw:", error);
     }
   })();
+  return id;
 }

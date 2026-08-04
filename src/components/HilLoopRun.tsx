@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { HilLoopRunner, type LoopEvent, type StepEvent } from "@/lib/hilLoopEngine";
 import type { WorldPreset } from "@/lib/hilLoopWorld";
+import RunVerdict from "@/components/RunVerdict";
 
 /* ============================================================================
    HilLoopRun — the Loop tab on /human-intelligence: HIL Version 1, live.
@@ -344,6 +345,10 @@ export default function HilLoopRun({ autoRun }: { autoRun?: { command: string; p
           )}
           <div ref={feedEndRef} />
         </div>
+
+        {runner.phase === "ended" && (
+          <RunVerdict runId={runner.currentRunId} label="Did he get there the right way?" />
+        )}
 
         {runner.phase === "ended" && runner.meta && (
           <div className="hil-meta">
