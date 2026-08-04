@@ -180,224 +180,14 @@ function ReadTab() {
   );
 }
 
-function LabTab() {
-  const [command, setCommand] = useState("");
-  const [context, setContext] = useState("");
-  const [stage, setStage] = useState(0);           // 0 idle · 1 sent · 2 goal · 3 plan · 4 checks · 5 verdict
-  const [result, setResult] = useState<HilResult | null>(null);
-  const [ranWith, setRanWith] = useState<{ command: string; context: string } | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [running, setRunning] = useState(false);
-  const [note, setNote] = useState("");
-  const [noteState, setNoteState] = useState<"idle" | "sending" | "sent" | "error">("idle");
-  const timers = useRef<number[]>([]);
 
-  useEffect(() => () => { timers.current.forEach((t) => window.clearTimeout(t)); }, []);
-
-  const run = async (cmd?: string) => {
-    const text = (cmd ?? command).trim();
-    if (!text || running) return;
-    if (cmd) setCommand(cmd);
-    timers.current.forEach((t) => window.clearTimeout(t));
-    timers.current = [];
-    setError(null);
-    setResult(null);
-    setRanWith(null);
-    setRunning(true);
-    setStage(1);
-    setNote("");
-    setNoteState("idle");
-
-    try {
-      const res = await fetch(`${SUPABASE_URL}/functions/v1/hil-reason`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
-        body: JSON.stringify({ command: text, context: context.trim() || undefined }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error((data as { error?: string })?.error || "The reasoning call failed.");
-
-      setResult(data as HilResult);
-      // Snapshotted here, not read live in sendFeedback: the inputs re-enable once
-      // running goes false, and editing them afterward must not relabel a note
-      // that was written about THIS run's reasoning.
-      setRanWith({ command: text, context: context.trim() });
-      // Both the graph and the monologue read off this same `stage` number, so they
-      // move together — the reveal cadence is presentation, the content is fixed.
-      [2, 3, 4, 5].forEach((s, i) => {
-        timers.current.push(window.setTimeout(() => setStage(s), 350 + i * 900));
-      });
-      timers.current.push(window.setTimeout(() => setRunning(false), 350 + 4 * 900));
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "The reasoning call failed.");
-      setStage(0);
-      setRunning(false);
-    }
-  };
-
-  const r = result?.reasoning ?? null;
-  const beats = r && result ? buildMonologue(result.moment, r) : null;
-  const verdictKnown = stage >= 5 && r;
-
-  const sendFeedback = async () => {
-    const text = note.trim();
-    if (!text || !result || !ranWith || noteState === "sending") return;
-    setNoteState("sending");
-    try {
-      const res = await fetch(`${SUPABASE_URL}/functions/v1/hil-feedback`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
-        body: JSON.stringify({
-          command: ranWith.command, context: ranWith.context || undefined,
-          momentId: result.moment.id, reasoning: result.reasoning, note: text,
-        }),
-      });
-      if (!res.ok) throw new Error();
-      setNoteState("sent");
-    } catch {
-      setNoteState("error");
-    }
-  };
-
-  return (
-    <section className="hil-lab-wrap">
-      <p className="hil-kicker apple-reveal">The lab &middot; live</p>
-      <h2 className="hil-h2 apple-reveal">Give him a command. Watch him think.</h2>
-      <p className="hil-p apple-reveal">
-        This is not a recording. Your command goes to the real brain, one model call, and
-        what plays out below is the reasoning he would act on, in his own words. Nothing
-        is routed anywhere: no tabs open, no messages send.
-      </p>
-
-      <div className="hil-lab">
-        <div className="hil-lab-inputs">
-          <input
-            className="hil-cmd"
-            type="text"
-            value={command}
-            placeholder="Tell Braino to do something"
-            onChange={(e) => setCommand(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") run(); }}
-            disabled={running}
-          />
-          <textarea
-            className="hil-ctx"
-            value={context}
-            placeholder="Optional context: what is on screen, what came before"
-            onChange={(e) => setContext(e.target.value)}
-            rows={2}
-            disabled={running}
-          />
-          <div className="hil-lab-row">
-            <button className="hil-run" onClick={() => run()} disabled={running || !command.trim()}>
-              {running ? "Thinking" : "Run the brain"}
-            </button>
-            {running && <span className="hil-pulse" aria-hidden="true" />}
-          </div>
-          <div className="hil-samples">
-            {SAMPLES.map((s) => (
-              <button key={s} className="hil-sample" onClick={() => run(s)} disabled={running}>{s}</button>
-            ))}
-          </div>
-        </div>
-
-        {error && <div className="hil-error" role="alert">{error}</div>}
-
-        {/* Layout A (the same split box as the Braino/IOMI class picker): the
-            graph on the left, the thinking in the panel on the right, one
-            hairline dividing them. One stage number drives both, so the graph
-            and the monologue can never fall out of step. */}
-        <div className="hil-a">
-          <div className="hil-trace-col">
-            <HilTraceGraph
-              vertical
-              litCols={stage}
-              stepCount={r?.steps.length ?? 3}
-              checks={stage >= 4 && r ? r.checks : null}
-              verdict={stage >= 5 && r ? r.verdict : null}
-            />
-          </div>
-
-          <div className="hil-think-col" aria-live="polite">
-            {stage === 1 && !beats && <p className="hil-think-wait">Let me actually think about this before I do anything&hellip;</p>}
-            {beats && [2, 3, 4, 5].map((s, i) => stage >= s && (
-              <div className="hil-think-beat" key={s}>
-                {beats[i].map((line, j) => <p key={j}>{line}</p>)}
-              </div>
-            ))}
-            {stage === 0 && !running && <p className="hil-think-wait">His thinking will play out here, next to the graph.</p>}
-          </div>
-        </div>
-
-        {/* The plain summary: goal, work, checks, verdict. */}
-        {stage >= 2 && r && (
-          <div className="hil-summary">
-            <div className="hil-sum-row">
-              <span className="hil-sum-k">Goal</span>
-              <p className="hil-sum-goal">{r.restated_goal}</p>
-            </div>
-            {stage >= 3 && (
-              <div className="hil-sum-row">
-                <span className="hil-sum-k">Work</span>
-                <ol className="hil-steps">{r.steps.map((s, i) => <li key={i}>{s}</li>)}</ol>
-              </div>
-            )}
-            {stage >= 4 && (
-              <div className="hil-sum-row">
-                <span className="hil-sum-k">Checks</span>
-                <div className="hil-chips">
-                  {CHECK_META.map((c) => (
-                    <span key={c.key} className={"hil-chip " + (r.checks[c.key] ? "fired" : "clear")}>
-                      {r.checks[c.key] ? "▲" : "●"} {c.name}<i>{c.hint}</i>
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-            {verdictKnown && (
-              <div className={"hil-sum-row hil-verdict " + r.verdict}>
-                <span className="hil-sum-k">Verdict</span>
-                {r.verdict === "ask" ? (
-                  <p className="hil-question">&ldquo;{r.clarifying_question}&rdquo;</p>
-                ) : (
-                  <p className="hil-sum-goal">Proceed &mdash; {r.action}</p>
-                )}
-              </div>
-            )}
-            {verdictKnown && result && (
-              <div className="hil-meta">{result.meta.model} &middot; {result.meta.elapsed_ms}ms &middot; hil v{result.meta.hil_version}</div>
-            )}
-          </div>
-        )}
-
-        {/* Fine-tuning notes — not automated, just a durable log of what should
-            change about this specific run, to iterate the prompt by hand against. */}
-        {verdictKnown && (
-          <div className="hil-feedback">
-            <p className="hil-feedback-k">What should change about this?</p>
-            <textarea
-              className="hil-feedback-box"
-              value={note}
-              onChange={(e) => { setNote(e.target.value); if (noteState !== "idle") setNoteState("idle"); }}
-              placeholder="e.g. this should have asked instead of just doing it, or the wrong thing was flagged as unclear"
-              rows={2}
-            />
-            <div className="hil-feedback-row">
-              <button className="hil-feedback-btn" onClick={sendFeedback} disabled={!note.trim() || noteState === "sending"}>
-                {noteState === "sending" ? "Saving" : "Save note"}
-              </button>
-              {noteState === "sent" && <span className="hil-feedback-status ok">Saved.</span>}
-              {noteState === "error" && <span className="hil-feedback-status err">Couldn't save, try again.</span>}
-            </div>
-          </div>
-        )}
-      </div>
-    </section>
-  );
-}
-
+// The Lab tab was retired. It ran one call and showed what he WOULD do, which
+// the Loop already demonstrates and then some: the Loop narrates its reasoning
+// in first person every turn, asks instead of guessing when the screen holds no
+// answer, judges each step before the next, and stops at the gate. The claim
+// Lab made, the Loop makes while actually finishing the job.
 export default function HumanIntelligence() {
-  const [tab, setTab] = useState<"read" | "lab" | "loop">("read");
+  const [tab, setTab] = useState<"read" | "loop">("read");
   const reveal = useReveal();
 
   return (
@@ -409,7 +199,7 @@ export default function HumanIntelligence() {
           <span className="an-name">Human Intelligence</span>
           <div className="an-links">
             {tab === "read" && ANCHORS.map((a) => <a key={a.href} href={a.href}>{a.label}</a>)}
-            <a className="hil-tryit" href="#tabs" onClick={(e) => { e.preventDefault(); setTab("lab"); }}>Try it</a>
+            <a className="hil-tryit" href="#tabs" onClick={(e) => { e.preventDefault(); setTab("loop"); }}>Try it</a>
           </div>
         </div>
       </nav>
@@ -426,11 +216,10 @@ export default function HumanIntelligence() {
 
       <div className="hil-tabs" id="tabs">
         <button className={tab === "read" ? "on" : ""} onClick={() => setTab("read")}>Read</button>
-        <button className={tab === "lab" ? "on" : ""} onClick={() => setTab("lab")}>Lab</button>
         <button className={tab === "loop" ? "on" : ""} onClick={() => setTab("loop")}>Loop</button>
       </div>
 
-      {tab === "read" ? <ReadTab /> : tab === "lab" ? <LabTab /> : <HilLoopRun />}
+      {tab === "read" ? <ReadTab /> : <HilLoopRun />}
     </div>
   );
 }
