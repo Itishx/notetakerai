@@ -5,7 +5,7 @@ import type { Moment } from "@/lib/emotional-engine-viz";
 /* ============================================================================
    BrainoReplyLab — the Reply tab on /emotional-intelligence.
 
-   The Lab tab shows which traits WOULD lead. This one actually makes him talk,
+   The retired Lab tab showed which traits WOULD lead. This one makes him talk,
    then shows the whole reasoning behind how he talked: the moment he read and
    how he read it, which traits led, the exact steering sentence, where the charm
    dial sat, and a tell-scan of his own reply against his own banned-phrase lists.

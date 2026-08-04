@@ -35,7 +35,7 @@ export default function HowBrainoTalksDocs() {
           <h2>Say something. See exactly why he answered that way.</h2>
           <p>The Emotional Intelligence page has two new views. <strong>Reply</strong> gives you his answer plus the whole reason behind it: the moment he read and how he read it, who spoke first, the one sentence that steered him, where the charm dial sat, and the tell check. <strong>Whole mind</strong> runs one message through both halves of him at once, the thinking and the feeling, side by side.</p>
           <div className="kb-cta-row">
-            <Link className="kb-btn" to="/emotional-intelligence">Open the Emotional Intelligence lab</Link>
+            <Link className="kb-btn" to="/emotional-intelligence">Open Emotional Intelligence</Link>
           </div>
         </section>
         <section className="kb-article-block">
