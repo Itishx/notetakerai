@@ -6031,19 +6031,14 @@ async function runSkit() {
     // idle-shutdown timers before the first line (they bump speechGeneration
     // and silently cut speak() mid-sentence).
     try { stopRealtimeVoice(); } catch (_) {}
-    // He takes the stage WHILE introducing himself — out of the notch, grown to
-    // 2.6x, planted stage right by the time he says "Watch." No dead walking
-    // between the line and the moonwalk.
+    // He takes the stage WHILE introducing himself — out of the notch, normal size.
+    // No growth, no theatrics, just him on stage.
     skitMoonwalk = true;
-    const takeTheStage = (async () => {
-      await setWalkerHomeState(false);
-      setBrainoScale(Math.min(BRAINO_SCALE_MAX, 2.6), false);
-    })();
+    await setWalkerHomeState(false);
     await skitSpeak("Hi, I am Braino.");
     // Spotify only warms up AFTER the first line — he speaks first, always.
     void window.brainoMac.skitStep?.("prewarm");
     await skitSpeak("I am the only AI in both human and AI history ever to do the moonwalk. Watch.");
-    await takeTheStage;
     const played = await window.brainoMac.skitStep?.("play");
     if (!played?.ok) {
       await speak(played?.say || "Spotify did not cooperate. Take two.");
@@ -6052,9 +6047,10 @@ async function runSkit() {
     // Billie Jean is already sitting at 3:31 (the play step verifies the seek).
     // Isolated demo: no music theatrics, no headphones, no auto-home.
     await skitPerformMoonwalk(11000);   // Chrome's own duration: 10-12s on stage
-    // He stays out, full size, and asks. Keep skitMoonwalk true so tick does not
+    // He stays out and asks while waving. Keep skitMoonwalk true so tick does not
     // resume roam/dock and walk him mid-line; clear it in finally after the skit.
     await window.brainoMac.skitStep?.("close");
+    setWave(true);
     await skitSpeak("So, how was it?");
     skitCompleted = true;
     skitJustCompleted = true;   // Lock auto-home until Cmd+2
@@ -6062,10 +6058,11 @@ async function runSkit() {
   } finally {
     skitMoonwalk = false;   // Clear BEFORE endMoonwalk so tick can resume if needed
     skitEndMoonwalk();
+    setWave(false);   // Stop waving after the skit ends
     if (musicMode) setMusicMode(false);
     skitRunning = false;
-    // Size restores only on a FAILED take; a clean take leaves him big and
-    // on-stage after "So, how was it?" (prevScale kept for the crash path).
+    // On a failed take, restore his original scale; on success he stays out at
+    // normal size after "So, how was it?" waits for Cmd+2.
     if (!skitCompleted) setBrainoScale(prevScale, false);
     skitCompleted = false;
   }
