@@ -812,6 +812,7 @@ let ambientBusy = false;
 async function runAmbientGlance() {
   if (coworkEnabled) return; // cowork mode owns the watching; never double-fire
   if (ambientBusy || !ambientEnabled || herMode) return;
+  if (skitRunning || skitJustCompleted) return; // skit isolation: no ambient during/after demo
   if (realtimeActive || realtimeConnecting || speaking || processing || voiceTurnInFlight) return;
   if (musicTheatricsReady) return;
   const now = Date.now();
@@ -1039,6 +1040,7 @@ if (notchFace) {
 
 async function runCoworkGlance() {
   if (!coworkEnabled || coworkBusy || herMode) return;
+  if (skitRunning || skitJustCompleted) return; // skit isolation: no cowork during/after demo
   if (realtimeActive || realtimeConnecting || speaking || processing || voiceTurnInFlight) return;
   if (musicTheatricsReady) return;
   const now = Date.now();
@@ -1591,7 +1593,13 @@ async function handleSummon() {
 // back into the notch if he's out. Silent on the way home, no theatrics.
 async function handleSummonToggle() {
   if (herMode) return;
-  skitJustCompleted = false;   // Cmd+2 clears the post-skit gate
+  // If we're in post-skit mode, Cmd+2 just dismisses it — he stays out and unfreezes.
+  if (skitJustCompleted) {
+    skitJustCompleted = false;
+    setBubble("", 0);   // Clear any skit bubble
+    return;
+  }
+  // Normal toggle: if home, come out; if out, go home.
   if (walkerHome) {
     void speak("Coming out, watch out.");
     await setWalkerHomeState(false);
@@ -5353,6 +5361,9 @@ function toggleYapMode(source = "hotkey") {
 }
 
 function toggleVoice() {
+  // Skit isolation: voice is completely disabled during the demo and post-demo
+  // wait state. Only Cmd+2 can dismiss the skit.
+  if (skitRunning || skitJustCompleted) return;
   if (dictationMode || dictationStarting) {
     void stopYapMode({ source: "voice_toggle" });
     return;
