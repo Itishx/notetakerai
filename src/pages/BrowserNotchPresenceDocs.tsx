@@ -34,6 +34,7 @@ export default function BrowserNotchPresenceDocs() {
           <aside className="kb-honesty"><strong>What is still staged</strong><p>The InstaGraphics page uses sample copy and a fictional webpage. The Chrome extension now owns the real lifecycle, while specialist recording and cinema surfaces still keep parts of their older internal UI.</p></aside>
         </section>
         <footer className="kb-article-footer">
+          <a href="/braino.zip" download>Download Braino v1.0.0 <ArrowRight aria-hidden="true" /></a>
           <Link to="/instagraphics?design=chrome-system">Open the full-browser prototype <ArrowRight aria-hidden="true" /></Link>
           <p>Internal source: Braino Knowledge Base/design/browser-notch-presence.md</p>
         </footer>

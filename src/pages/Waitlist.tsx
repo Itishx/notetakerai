@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
-import { ArrowUpRight, Check, Circle, Loader2, Moon, Play, Sun } from "lucide-react";
+import { ArrowUpRight, Check, Circle, Download, Loader2, Moon, Play, Sun } from "lucide-react";
 import { Link } from "react-router-dom";
 import { BRAINO_WALKER_SVG } from "../components/brainoWalkerSvg";
 import { Braino, BrainoDefs, useTime } from "../components/BrainoChar";
@@ -8,6 +8,7 @@ import HumanIntelligence from "../components/HumanIntelligence";
 import IomiNotch from "../components/IomiNotch";
 import BrainoGrowthDemo from "../components/BrainoGrowthDemo";
 import BrainoFooter from "../components/BrainoFooter";
+import { EXTENSION_DOWNLOAD_URL } from "../lib/extensionDownload";
 import "./waitlist.css";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
@@ -398,6 +399,11 @@ export default function Waitlist() {
               <em>you’ll ever meet.</em>
             </h1>
             <p className="wl-dek">Braino began in the browser. Now he is learning how to live across your Mac, your words and the rest of your digital life.</p>
+            <a className="wl-download-cta" href={EXTENSION_DOWNLOAD_URL} download="braino.zip">
+              <Download aria-hidden="true" />
+              <span>Download Braino</span>
+              <small>Chrome · v1.0.0</small>
+            </a>
             <div className="wl-hero-footnote">
               <span>One character.</span>
               <span>Everywhere you work.</span>

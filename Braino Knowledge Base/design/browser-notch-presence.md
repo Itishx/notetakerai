@@ -17,6 +17,8 @@ The extension has a lot of ability, but ability spread across several surfaces i
 
 Open `/instagraphics?design=chrome-system` for the full-browser study. Choose idle, listening, working, short answer, or long answer to compare the states at real browser scale. The earlier notch-only motion study remains at `/instagraphics?design=browser-notch`.
 
+The current v1.0.0 package can be downloaded directly from the primary button on `/`.
+
 ## What Braino knows or does
 
 - Keeps Braino visible inside the idle notch.
