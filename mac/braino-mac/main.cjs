@@ -51,7 +51,7 @@ const {
   resolveWebTarget,
   resolveAppTarget,
   extractCloseShortcutTarget,
-} = require(path.join(ROOT_DIR, "extension", "lib", "openTargets.cjs"));
+} = require(path.join(ROOT_DIR, "extension", "lib", "openTargets.js"));
 const {
   candidateMatchesQuery,
   normalizeSearchToken,

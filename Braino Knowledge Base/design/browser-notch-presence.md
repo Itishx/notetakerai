@@ -36,6 +36,10 @@ The current v1.0.0 package can be downloaded directly from the primary button on
 - Expands on click into full-sentence, user-facing task progress before showing the answer.
 - Includes a Readable/Liquid theme comparison for every expanded surface: input, mode menu, expanded thinking, and both answer sizes.
 - Removes the detached mascot from this focused notch-only experiment.
+- Injects the notch on every ordinary webpage through the extension content script; browser-owned pages such as `chrome://` remain unavailable to extensions.
+- Uses Space twice as the primary invocation. The notch stays closed until invoked, then performs the real silent authentication handshake against both trusted Braino web origins.
+- Shows the green authenticated state only after the extension validates the same stored session used by chat. If neither origin has a valid session, the notch presents an explicit sign-in state instead of opening a dead input.
+- Keeps the approved mode menu inside the notch while the existing page, lecture, meeting, delegate, and team engines continue underneath it.
 
 ## Honest limitations
 
@@ -44,6 +48,8 @@ The InstaGraphics page remains a staged design preview, but the notch shell and 
 ## Technical shape
 
 The prototypes live in `src/pages/InstaGraphics.tsx` and `src/pages/insta-graphics.css`. The full Chrome system study is an edge-to-edge viewport rather than a 1080×1920 story frame. It uses the shared `BRAINO_WALKER_SVG` and the extension's Apple/system typography, warm ink and coral palette, compact input controls, and state-specific notch radii. A theme switch compares the light readable handoff with the extension's dark translucent liquid glass. The material changes while state dimensions, information hierarchy, mascot position, and perimeter signal stay fixed.
+
+The extension service worker imports shared helpers with browser-native `.js` paths. Shared Mac code requires the same file directly; `.cjs` is avoided inside `importScripts()` because Chrome can classify it as `application/octet-stream` and refuse to execute it. The production notch is mounted in an isolated Shadow DOM so page CSS cannot distort the approved state geometry. The older bar and card remain hidden as the functional engine for sending, voice, mode routing, and rich-answer preparation.
 
 ## Product or design decisions
 

@@ -22,7 +22,7 @@ export default function BrowserNotchPresenceDocs() {
           <p>The compact state cycles through Hatching, Calibrating, and Thinking. Click it and the notch opens into full-sentence progress: what Braino is reading, changing, and preparing next. These are useful activity summaries, not private chain-of-thought.</p>
           <p>Braino stays visible inside idle, listening, and working. Listening sends sonar outward from him; working places him beside the live status instead of replacing him with a number. Long answers only grow as tall as their content, and the walker above follow-up uses the production extension gait.</p>
           <p>A small theme switch lets us judge the same expanded states in two materials. Readable uses the warm light surface; Liquid uses the extension’s translucent dark glass across input, modes, expanded thinking, short answers, and long answers. The structure does not jump when the material changes, and Braino’s coral face states stay coral.</p>
-          <p>Version 1.0.0 brings that system into the Chrome extension. Space twice forms the notch with a perimeter shimmer, fills Braino’s coral material, authenticates with closed eyes, flashes a green verdict, and opens his eyes before settling into idle. The same mounted surface then handles text, voice, progress, themes, and answers.</p>
+          <p>Version 1.0.0 brings that system into the Chrome extension. Space twice forms the notch with a perimeter shimmer, fills Braino’s coral material, and silently checks both trusted Braino web sessions. The green verdict appears only after the same credential used by chat is validated. If no session exists, the notch asks you to sign in instead of opening an input that cannot answer.</p>
           <p>The detached ambient mascot is removed so the notch can be judged on its own. Inside a long answer, the full standing Braino gets one small walker lane above follow-up input. When the answer is dismissed, the notch shrinks instead of leaving another interface open. The same interaction rule is intended for Chrome and Mac/IOMI.</p>
         </section>
         <section className="kb-article-block kb-dark-block">
@@ -31,7 +31,8 @@ export default function BrowserNotchPresenceDocs() {
           <p>One continuous transformation inside the notch, with Braino still visible outside it as the familiar entry point.</p>
         </section>
         <section className="kb-article-block">
-          <aside className="kb-honesty"><strong>What is still staged</strong><p>The InstaGraphics page uses sample copy and a fictional webpage. The Chrome extension now owns the real lifecycle, while specialist recording and cinema surfaces still keep parts of their older internal UI.</p></aside>
+          <aside className="kb-honesty"><strong>What is still staged</strong><p>The InstaGraphics page uses sample copy and a fictional webpage. The Chrome extension now owns the real lifecycle through an isolated notch surface, while specialist recording and cinema surfaces still keep parts of their older internal UI. Chrome does not allow extensions to inject into browser-owned pages such as chrome://.</p></aside>
+          <p>The v1.0.0 package also uses browser-native <code>.js</code> helper paths, preventing Chrome from rejecting a shared service-worker script as an unsupported binary MIME type.</p>
         </section>
         <footer className="kb-article-footer">
           <a href="/braino.zip" download>Download Braino v1.0.0 <ArrowRight aria-hidden="true" /></a>

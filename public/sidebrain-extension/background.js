@@ -32,7 +32,7 @@ for (const [obj, key] of [[chrome.runtime, "sendMessage"], [chrome.tabs, "sendMe
 
 try {
   importScripts(
-    "lib/openTargets.cjs",
+    "lib/openTargets.js",
     "lib/elementMap.js",
     "lib/models.js",
     "lib/taskState.js",

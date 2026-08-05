@@ -10002,6 +10002,7 @@ function __sbBuildBrainUI() {
     </div>
   `;
   (document.documentElement||document.body).appendChild(cardWrap);
+  __sbMountNotchV1();
 
   // ── User geo (timezone/city/country, no permission prompts — background caches an
   // IP lookup daily). Rides into chat requests + voice instructions so Braino knows
@@ -11786,6 +11787,93 @@ function __sbSetGreetingPlaceholder() {
   });
 }
 
+let __sbNotchV1 = null;
+function __sbMountNotchV1() {
+  if (__sbNotchV1 || document.getElementById("__sb_notch_v1_host__")) return;
+  const host = document.createElement("div");
+  host.id = "__sb_notch_v1_host__";
+  host.style.cssText = "all:initial;position:fixed;z-index:2147483647;top:0;left:50%;transform:translateX(-50%);pointer-events:none";
+  const shadow = host.attachShadow({ mode: "open" });
+  shadow.innerHTML = `
+    <style>
+      :host{all:initial}.n{--coral:#d86c63;position:relative;width:230px;height:72px;overflow:hidden;border:1px solid rgba(255,255,255,.32);border-top:0;border-radius:0 0 27px 27px;background:linear-gradient(180deg,#e99088,#d86c63 58%,#a9433b);box-shadow:0 13px 34px rgba(169,67,59,.24),inset 0 1px rgba(255,255,255,.38);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;pointer-events:auto;transition:width 1.05s cubic-bezier(.22,1,.36,1),height 1.05s cubic-bezier(.22,1,.36,1),border-radius .95s cubic-bezier(.22,1,.36,1),background .7s ease,border-color .7s ease,box-shadow .85s ease,opacity .42s ease,transform .7s cubic-bezier(.22,1,.36,1);color:#1b1713}
+      .n[data-state=off]{opacity:0;pointer-events:none;transform:translateY(-18px) scale(.94)}
+      .panel{position:absolute;inset:0;box-sizing:border-box;opacity:0;pointer-events:none;transform:translateY(6px);transition:opacity .42s ease,transform .76s cubic-bezier(.22,1,.36,1)}.face{z-index:2}.face svg{display:block;width:100%;height:100%}.fold{fill:none;stroke:rgba(151,54,48,.42);stroke-width:2;stroke-linecap:round}.eye{fill:#fff}.pupil{fill:#2b1b18}.lid{opacity:0;fill:none;stroke:#fff;stroke-width:3;stroke-linecap:round}.smile{fill:none;stroke:#fff;stroke-width:2.5;stroke-linecap:round}.mouth{display:none;fill:#5f211d;stroke:#fff;stroke-width:1.5}.mouth ellipse:last-child{fill:#f4a09a;stroke:0}
+      .status{z-index:5;display:flex;align-items:flex-end;justify-content:center;padding-bottom:5px;color:rgba(255,255,255,.84);font-size:8px;font-weight:750;letter-spacing:.12em;text-transform:uppercase}.input{z-index:6;display:flex;align-items:center;gap:9px;padding:16px 18px}.input label{display:grid;gap:6px;min-width:0;flex:1}.input small{color:#c9544a;font-size:9px;font-weight:750;letter-spacing:.11em;text-transform:uppercase}.input input{min-width:0;border:0;outline:0;color:#1b1713;background:transparent;font:500 14px/1.2 inherit}.input input::placeholder{color:rgba(27,23,19,.48)}button{border:0;cursor:pointer;font-family:inherit}.round{display:grid;place-items:center;flex:0 0 32px;width:32px;height:32px;border-radius:50%;color:#6b5248;background:rgba(65,48,40,.07)}.send{color:#fff;background:#e8786e}.mode{padding:8px 10px;border-radius:999px;color:#6b5248;background:rgba(65,48,40,.07);font-size:10px;font-weight:700}.theme{flex-basis:25px;width:25px;height:25px;font-size:14px}.close{flex-basis:25px;width:25px;height:25px;font-size:15px}
+      .menu{z-index:8;display:flex;flex-direction:column;padding:19px}.menu header{display:flex;align-items:center;justify-content:space-between;padding:0 4px 14px;border-bottom:1px solid rgba(65,48,40,.09)}.menu header small{font-size:10px;font-weight:750;letter-spacing:.1em;text-transform:uppercase}.actions{display:flex;align-items:center;gap:7px}.actions em{padding:6px 9px;border-radius:999px;color:#c9544a;background:rgba(232,120,110,.1);font-size:9px;font-weight:750;font-style:normal}.menu button.item{display:grid;grid-template-columns:82px 1fr 20px;align-items:center;min-height:52px;padding:0 10px;border-bottom:1px solid rgba(65,48,40,.07);color:#1b1713;background:transparent;text-align:left}.item b{font-size:12px}.item small{color:rgba(27,23,19,.48);font-size:10px}.item strong{color:#c9544a}
+      .thinking{z-index:7;display:flex;flex-direction:column;padding:76px 24px 10px;text-align:left}.thinking header{display:flex;justify-content:space-between;padding:0 2px 8px;border-bottom:1px solid rgba(65,48,40,.1);color:#a7433b;font-size:10px;font-weight:750;letter-spacing:.1em;text-transform:uppercase}.thinking p{margin:0;padding:9px 2px;border-bottom:1px solid rgba(65,48,40,.09);color:rgba(27,23,19,.76);font:400 14px/1.32 Georgia,serif}.answer{z-index:9;display:flex;flex-direction:column;padding:18px 24px 16px;text-align:left;overflow:auto}.answer header{display:flex;align-items:center;justify-content:space-between;padding-bottom:12px;border-bottom:1px solid rgba(65,48,40,.1)}.answer header b{font-size:12px}.answer-body{color:#1b1713;font:400 15px/1.55 Georgia,serif}.answer-body h1,.answer-body h2,.answer-body h3{font-family:Georgia,serif}.answer footer{display:flex;align-items:center;gap:8px;margin-top:12px;padding-top:10px;border-top:1px solid rgba(65,48,40,.1);color:rgba(27,23,19,.42);font-size:11px}.answer footer span{flex:1}
+      .n[data-state=idle] .face,.n[data-state=listening] .face,.n[data-state=working] .face,.n[data-state=speaking] .face,.n[data-state=authenticating] .face,.n[data-state=authenticated] .face{opacity:1;transform:none}.n[data-state=input]{width:min(570px,78vw);height:104px;border-radius:0 0 31px 31px;background:rgba(255,251,247,.76)}.n[data-state=input] .input{opacity:1;pointer-events:auto;transform:none}.n[data-state=menu]{width:min(570px,78vw);height:404px;border-radius:0 0 34px 34px;background:rgba(255,251,247,.8)}.n[data-state=menu] .menu{opacity:1;pointer-events:auto;transform:none}.n[data-state=listening]{height:72px}.n[data-state=listening]::before,.n[data-state=listening]::after{content:"";position:absolute;z-index:-1;inset:2px;border:1.5px solid rgba(232,120,110,.58);border-radius:inherit;animation:sonar 2.35s ease-out infinite}.n[data-state=listening]::after{animation-delay:1.15s}@keyframes sonar{to{opacity:0;transform:scale(1.28,1.7)}}.n[data-state=working]{width:440px;height:88px}.n[data-state=working] .status{opacity:1;transform:none}.n[data-state=thinking]{width:min(650px,82vw);height:260px;border-radius:0 0 36px 36px;background:linear-gradient(180deg,rgba(246,168,162,.82) 0,rgba(255,251,247,.76) 74px,rgba(255,251,247,.68) 100%)}.n[data-state=thinking] .face{opacity:1;height:72px;transform:none}.n[data-state=thinking] .eye{opacity:0}.n[data-state=thinking] .lid{opacity:1}.n[data-state=thinking] .thinking{opacity:1;pointer-events:auto;transform:none}.n[data-state=speaking]{height:82px}.n[data-state=speaking] .smile{display:none}.n[data-state=speaking] .mouth{display:block;transform-box:fill-box;transform-origin:center;animation:talk .46s ease-in-out infinite alternate}@keyframes talk{from{transform:scaleY(.55)}to{transform:scaleY(1.12)}}
+      .n[data-state=short]{width:min(610px,82vw);height:120px;border-radius:0 0 34px 34px;background:rgba(255,251,247,.76)}.n[data-state=long]{width:min(650px,82vw);height:min(620px,calc(100vh - 28px));border-radius:0 0 38px 38px;background:rgba(255,251,247,.76)}.n[data-state=short] .answer,.n[data-state=long] .answer{opacity:1;pointer-events:auto;transform:none}.n[data-state=short] .answer{padding-top:12px}.n[data-state=short] .answer header{display:none}.n[data-state=short] .answer-body{font-size:16px;line-height:1.3}.n[data-state=short] .answer footer{margin-top:auto}
+      .n[data-state=invoking]{width:270px;height:82px;border:0;background:transparent;box-shadow:none;animation:shell 1.25s cubic-bezier(.22,1,.36,1) both}.n[data-state=invoking]::before{content:"";position:absolute;z-index:12;inset:0;padding:1.2px;border-radius:inherit;background:conic-gradient(from var(--a),#f4cf87,#ec8078,#dc77a8,#779cff,#ec8078,#f4cf87);-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;animation:spin 1.25s linear both}.n[data-state=invoking]::after{content:"";position:absolute;inset:1px;border-radius:inherit;background-image:linear-gradient(105deg,transparent 26%,rgba(255,225,218,.58) 45%,transparent 64%),linear-gradient(180deg,#e99088,#d86c63 58%,#a9433b);background-size:260% 100%,100% 100%;opacity:0;animation:fill .72s ease .48s forwards}@property --a{syntax:"<angle>";inherits:false;initial-value:0deg}@keyframes shell{from{opacity:0;transform:scaleX(.06) scaleY(.72)}to{opacity:1;transform:none}}@keyframes spin{to{--a:300deg}}@keyframes fill{from{opacity:0;background-position:150% 0,0 0}to{opacity:1;background-position:-80% 0,0 0}}
+      .n[data-state=authenticating],.n[data-state=authenticated]{width:270px;height:82px;border-radius:0 0 29px 29px}.n[data-state=authenticating] .eye{opacity:0}.n[data-state=authenticating] .lid{opacity:1}.n[data-state=authenticating] .status,.n[data-state=authenticated] .status{opacity:1;transform:none}.n[data-state=authenticating] .status{color:transparent;background:linear-gradient(90deg,rgba(255,255,255,.46),#fff,#f4cf87,rgba(255,255,255,.46));background-size:240% 100%;-webkit-background-clip:text;background-clip:text;animation:textshine 1.45s linear infinite}@keyframes textshine{to{background-position:-140% 0}}.n[data-state=authenticated]{border-color:rgba(93,219,135,.72);box-shadow:0 0 0 1px rgba(93,219,135,.18),0 18px 58px rgba(52,184,98,.34)}.n[data-state=authenticated] .eye{transform-box:fill-box;transform-origin:center;animation:eyes .72s ease both}@keyframes eyes{from{transform:scaleY(.06)}to{transform:scaleY(1)}}
+      .n.liquid[data-state=input],.n.liquid[data-state=menu],.n.liquid[data-state=thinking],.n.liquid[data-state=short],.n.liquid[data-state=long]{color:#fff;border-color:rgba(255,255,255,.42);background:linear-gradient(145deg,rgba(31,27,28,.48),rgba(18,16,17,.38));backdrop-filter:blur(20px) saturate(185%)}.liquid input,.liquid .menu button.item,.liquid .answer-body{color:#fff}.liquid .item small,.liquid .answer footer{color:rgba(255,255,255,.46)}
+      .n[data-state=listening]{width:390px;height:74px;border-radius:0 0 28px 28px}.n[data-state=working]{width:420px;height:78px;border-radius:0 0 28px 28px}.n[data-state=short]{width:min(610px,76vw);height:112px}.n[data-state=short] .answer{padding:15px 19px 12px 22px}.n[data-state=short] .answer-body{font-size:17px;line-height:1.35}
+      .answer-body .sb-turn{margin:0}.answer-body .sb-user-msg{display:none}.answer-body .sb-assistant-msg,.answer-body .sb-answer{margin:0;color:inherit;background:transparent}.answer-body p{margin:0 0 10px}.answer-body p:last-child{margin-bottom:0}.answer-body ul,.answer-body ol{margin:8px 0;padding-left:20px}
+      .signin{z-index:10;display:flex;align-items:center;gap:12px;padding:15px 18px}.signin span{display:grid;gap:3px;min-width:0;flex:1}.signin b{font-size:12px}.signin small{color:rgba(27,23,19,.48);font-size:10px}.signin button{padding:9px 13px;border-radius:999px;color:#fff;background:#d86c63;font-size:10px;font-weight:750}.n[data-state=signin]{width:min(430px,78vw);height:88px;border-radius:0 0 29px 29px;background:rgba(255,251,247,.9)}.n[data-state=signin] .signin{opacity:1;pointer-events:auto;transform:none}
+    </style>
+    <section class="n" data-state="off">
+      <div class="panel face"><svg viewBox="0 0 230 72" preserveAspectRatio="none"><path class="fold" d="M115 0 Q111 14 115 27 Q119 40 115 56 M25 4 Q14 13 25 22 Q12 31 25 40 Q14 50 30 61 M61 1 Q49 11 60 20 Q47 30 61 39 Q49 49 65 63 M169 1 Q181 11 170 20 Q183 30 169 39 Q181 49 165 63 M205 4 Q216 13 205 22 Q218 31 205 40 Q216 50 200 61"/><circle class="eye" cx="103" cy="29" r="10"/><circle class="eye" cx="127" cy="29" r="10"/><circle class="pupil" cx="104" cy="30" r="4.8"/><circle class="pupil" cx="128" cy="30" r="4.8"/><path class="lid" d="M93 29 Q103 36 113 29 M117 29 Q127 36 137 29"/><path class="smile" d="M108 47 Q115 54 122 47"/><g class="mouth"><ellipse cx="115" cy="49" rx="7" ry="5.5"/><ellipse cx="115" cy="51" rx="4.2" ry="2.2"/></g></svg></div>
+      <div class="panel status"></div>
+      <div class="panel input"><label><small>Ask Braino</small><input placeholder="Summarise this page…"/></label><button class="mode">Auto⌄</button><button class="round mic">⌁</button><button class="round send">↑</button><button class="round theme">◐</button><button class="round close" title="Close">×</button></div>
+      <div class="panel menu"><header><small>Choose a mode</small><span class="actions"><em class="active-mode">Auto</em><button class="round theme">◐</button><button class="round close" title="Close">×</button></span></header><button class="item" data-mode="auto"><b>Auto</b><small>Let Braino decide</small><strong>✓</strong></button><button class="item" data-mode="page"><b>Page</b><small>Read and work on this page</small></button><button class="item" data-mode="lecture"><b>Lecture</b><small>Capture and explain audio</small></button><button class="item" data-mode="meeting"><b>Meeting</b><small>Listen remember and follow up</small></button><button class="item" data-mode="agent"><b>Delegate</b><small>Complete a browser task</small></button><button class="item" data-mode="team"><b>Team</b><small>Work with shared context</small></button></div>
+      <div class="panel thinking"><header><span>Braino is thinking</span><span>Collapse</span></header><p>Reading the page and understanding what matters.</p><p>Separating the useful signal from the repetition.</p><p>Preparing the answer in your context.</p></div>
+      <div class="panel answer"><header><b>Braino</b><button class="round theme">◐</button></header><div class="answer-body"></div><footer><span>Ask a follow-up</span><b>↑</b></footer></div>
+      <div class="panel signin"><span><b>Sign in to Braino</b><small>Your session was not found on either Braino page.</small></span><button>Sign in</button><button class="round close" title="Close">×</button></div>
+    </section>`;
+  (document.documentElement || document.body).appendChild(host);
+  ["__sb_bar__", "__sb_card_wrap__", "__sb_brain_btn__", "__sb_walk_lane__", "__sb_mode_dropdown__"].forEach((id) => {
+    document.getElementById(id)?.style?.setProperty("display", "none", "important");
+  });
+  const shell = shadow.querySelector(".n");
+  const input = shadow.querySelector(".input input");
+  const submitInput = () => {
+    const value = input.value.trim();
+    if (!value) return;
+    const legacyInput = document.getElementById("__sb_input__");
+    if (legacyInput) legacyInput.value = value;
+    __sbNotchSetState("working", "Thinking");
+    document.getElementById("__sb_send_btn__")?.click();
+    input.value = "";
+  };
+  shell.addEventListener("click", () => { if (shell.dataset.state === "idle") __sbOpenPanel(); });
+  input.addEventListener("input", () => { const old = document.getElementById("__sb_input__"); if (old) old.value = input.value; });
+  input.addEventListener("keydown", (event) => { if (event.key === "Enter") { event.preventDefault(); submitInput(); } });
+  shadow.querySelector(".input .send").addEventListener("click", submitInput);
+  shadow.querySelector(".input .mic").addEventListener("click", () => __sbToggleHeadphoneMode());
+  shadow.querySelector(".input .mode").addEventListener("click", () => __sbNotchSetState("menu"));
+  shadow.querySelectorAll(".menu .item").forEach((button) => button.addEventListener("click", () => {
+    const requested = button.dataset.mode;
+    const legacyMode = requested === "auto" ? "page" : requested;
+    document.querySelector(`#__sb_mode_dropdown__ [data-mode="${legacyMode}"]`)?.click();
+    shadow.querySelector(".input .mode").textContent = `${requested === "auto" ? "Auto" : button.querySelector("b")?.textContent || "Auto"}⌄`;
+    shadow.querySelector(".active-mode").textContent = requested === "auto" ? "Auto" : button.querySelector("b")?.textContent || "Auto";
+    shadow.querySelectorAll(".menu .item strong").forEach((mark) => mark.remove());
+    button.insertAdjacentHTML("beforeend", "<strong>✓</strong>");
+    __sbNotchSetState("input");
+  }));
+  shadow.querySelectorAll(".close").forEach((button) => button.addEventListener("click", (event) => { event.stopPropagation(); __sbHideAll(); }));
+  shadow.querySelector(".signin > button")?.addEventListener("click", (event) => {
+    event.stopPropagation();
+    chrome.runtime.sendMessage({ action: "openAuthTab" }, () => { void chrome.runtime.lastError; });
+  });
+  shadow.querySelector(".thinking header span:last-child")?.addEventListener("click", (event) => { event.stopPropagation(); __sbNotchSetState("working", __sbAgentBusyLabel.replace(/…/g, "")); });
+  shadow.querySelectorAll(".theme").forEach((button) => button.addEventListener("click", (event) => { event.stopPropagation(); shell.classList.toggle("liquid"); }));
+  __sbNotchV1 = { host, shadow, shell, input };
+}
+function __sbNotchSetState(state, status = "") {
+  if (!__sbNotchV1) return;
+  __sbNotchV1.shell.dataset.state = state || "input";
+  const label = __sbNotchV1.shadow.querySelector(".status");
+  if (label) label.textContent = status;
+  if (state === "input") setTimeout(() => __sbNotchV1?.input?.focus(), 180);
+}
+function __sbNotchShowAnswer(text, rich, html) {
+  if (!__sbNotchV1) return;
+  const body = __sbNotchV1.shadow.querySelector(".answer-body");
+  if (body) body.innerHTML = html || __sbEscapeHtml(text);
+  __sbNotchSetState(!rich && String(text || "").length < 240 ? "short" : "long");
+}
+
 const __SB_NOTCH_CLASSES = ["sb-notch-invoking", "sb-notch-auth", "sb-notch-auth-ok", "sb-notch-idle", "sb-notch-listening", "sb-notch-working", "sb-notch-speaking"];
 function __sbSetBrowserNotchState(state, status = "") {
   const bar = document.getElementById("__sb_bar__");
@@ -11794,6 +11882,8 @@ function __sbSetBrowserNotchState(state, status = "") {
   if (state) bar.classList.add(`sb-notch-${state}`);
   const label = document.getElementById("__sb_notch_status__");
   if (label) label.textContent = status;
+  const mapped = state === "auth" ? "authenticating" : state === "auth-ok" ? "authenticated" : state;
+  __sbNotchSetState(mapped || "input", status);
 }
 
 function __sbRunBrowserNotchBoot(finishReady, finishRejected) {
@@ -11802,7 +11892,6 @@ function __sbRunBrowserNotchBoot(finishReady, finishRejected) {
   let done = false;
   let authWatcher = null;
   let authFallback = null;
-  let authTokenPresent = false;
   const timers = [];
   const later = (fn, ms) => { const id = setTimeout(fn, ms); timers.push(id); return id; };
   const cleanup = () => {
@@ -11822,7 +11911,7 @@ function __sbRunBrowserNotchBoot(finishReady, finishRejected) {
   };
   const settleRejected = () => {
     if (done) return; done = true; cleanup();
-    __sbSetBrowserNotchState("");
+    __sbNotchSetState("signin");
     finishRejected();
   };
 
@@ -11830,16 +11919,28 @@ function __sbRunBrowserNotchBoot(finishReady, finishRejected) {
   bar.classList.remove("sb-signin", "sb-waking", "sb-cinematic");
   bar.classList.add("open");
   __sbSetBrowserNotchState("invoking");
-  chrome.storage.local.get("authToken", ({ authToken }) => { authTokenPresent = !!authToken; });
   later(() => {
     __sbSetBrowserNotchState("auth", "Authenticating");
-    if (authTokenPresent) { later(settleReady, 1900); return; }
-    try { chrome.runtime.sendMessage({ action: "openSilentAuthTab" }, () => { void chrome.runtime.lastError; }); } catch (_) {}
+    const verify = () => {
+      try {
+        chrome.runtime.sendMessage({ action: "checkAuth" }, (result) => {
+          void chrome.runtime.lastError;
+          if (result?.authenticated) later(settleReady, 350);
+        });
+      } catch (_) {}
+    };
+    verify();
+    try {
+      chrome.runtime.sendMessage({ action: "openSilentAuthTab" }, () => {
+        void chrome.runtime.lastError;
+        verify();
+      });
+    } catch (_) {}
     authWatcher = (changes, area) => {
-      if (area === "local" && changes.authToken?.newValue) later(settleReady, 350);
+      if (area === "local" && (changes.authToken?.newValue || changes.authRefreshToken?.newValue)) verify();
     };
     try { chrome.storage.onChanged.addListener(authWatcher); } catch (_) {}
-    authFallback = setTimeout(settleRejected, 6000);
+    authFallback = setTimeout(settleRejected, 12000);
   }, 1250);
 }
 
@@ -11899,6 +12000,7 @@ function __sbHideAll() {
   __sbRefreshInlineOwner();
   if (__sbDanceModeActive || __sbWkDancing) __sbStopDanceMode({ silent: true });
   __sbBrainVisible = false;
+  __sbNotchSetState("off");
   __sbSetCursorRideMode(false);
   if (__sbMovieModeActive) __sbDeactivateMovieMode({ silent: true });
   const btn = document.getElementById("__sb_brain_btn__");
@@ -14271,6 +14373,15 @@ function __sbAgentLogRender() {
   }
   bar.classList.toggle("sb-log-thinking", Boolean(__sbAgentThought));
   bar.classList.add("sb-log-open");
+  if (__sbNotchV1) {
+    const lines = (__sbAgentThought
+      ? [__sbAgentThought, ...__sbAgentLogSteps.slice(-2).map((step) => step.text)]
+      : __sbAgentLogSteps.slice(-3).map((step) => step.text)).filter(Boolean);
+    __sbNotchV1.shadow.querySelectorAll(".thinking p").forEach((slot, index) => {
+      slot.textContent = lines[index] || (index === 0 ? __sbAgentBusyLabel : "");
+    });
+    __sbNotchSetState("thinking");
+  }
   if (typeof __sbSyncWalkerLane === "function") __sbSyncWalkerLane();
 }
 
@@ -14555,6 +14666,7 @@ function __sbShowBubble(text, autoHide = true, options = {}) {
     { prompt: options.prompt || "", answer: String(text || "") },
     { rich, answerText: String(text || "") },
   );
+  __sbNotchShowAnswer(String(text || ""), rich, turnHtml);
   if (__sbHasSpotifySurface()) {
     scroll.innerHTML = __sbBuildSpotifyPanelHtml(turnHtml);
     scroll.scrollTop = 0;
@@ -14580,6 +14692,7 @@ function __sbSetupBarSignIn() {
   const handleAuthArrival = (changes, area) => {
     if (area !== "local" || !changes.authToken?.newValue) return;
     chrome.storage.onChanged.removeListener(handleAuthArrival);
+    __sbNotchSetState("authenticated", "Authenticated");
     const bar = document.getElementById("__sb_bar__");
     if (!bar || !bar.classList.contains("open")) return;
 
@@ -14597,6 +14710,9 @@ function __sbSetupBarSignIn() {
       bar.classList.remove("sb-waking", "open");
       if (label) label.textContent = "Waking up…";
       chrome.storage.local.set({ sbBrainExpanded: false });
+      __sbBrainVisible = true;
+      __sbInputOpen = true;
+      __sbNotchSetState("input");
     }, 900);
   };
   chrome.storage.onChanged.addListener(handleAuthArrival);
