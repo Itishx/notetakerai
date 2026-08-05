@@ -6016,15 +6016,15 @@ async function runSkit() {
   // Build stamp: check ~/Library/Logs/Braino Mac/braino-mac.log for skit.build
   // after a take — if this string is missing or older, the app is running a
   // stale build and the take does not reflect the current code.
-  logRenderer("skit.build", { v: "v6-uncuttable-script-invisible-spotify" });
+  logRenderer("skit.build", { v: "v7-speaks-first-stays-out-seek-guard" });
   const prevScale = brainoScale;
+  let skitCompleted = false;
   try {
     await new Promise((resolve) => window.setTimeout(resolve, 250));
     // Nothing may interrupt the script: kill any live voice session and its
     // idle-shutdown timers before the first line (they bump speechGeneration
     // and silently cut speak() mid-sentence).
     try { stopRealtimeVoice(); } catch (_) {}
-    void window.brainoMac.skitStep?.("prewarm");   // Spotify boots quietly behind the intro lines
     // He takes the stage WHILE introducing himself — out of the notch, grown to
     // 2.6x, planted stage right by the time he says "Watch." No dead walking
     // between the line and the moonwalk.
@@ -6034,6 +6034,8 @@ async function runSkit() {
       setBrainoScale(Math.min(BRAINO_SCALE_MAX, 2.6), false);
     })();
     await skitSpeak("Hi, I am Braino.");
+    // Spotify only warms up AFTER the first line — he speaks first, always.
+    void window.brainoMac.skitStep?.("prewarm");
     await skitSpeak("I am the only AI in both human and AI history ever to do the moonwalk. Watch.");
     await takeTheStage;
     const played = await window.brainoMac.skitStep?.("play");
@@ -6045,16 +6047,20 @@ async function runSkit() {
     // Isolated demo: no music theatrics, no headphones, no auto-home.
     await skitPerformMoonwalk(11000);   // Chrome's own duration: 10-12s on stage
     skitMoonwalk = false;
-    setBrainoScale(prevScale, false);
-    await setWalkerHomeState(true);
+    // He stays out, full size, and asks. No trip back to the notch.
     await window.brainoMac.skitStep?.("close");
+    await skitSpeak("So, how was it?");
+    skitCompleted = true;
   } catch (_) {
   } finally {
     skitEndMoonwalk();
     skitMoonwalk = false;
-    setBrainoScale(prevScale, false);
     if (musicMode) setMusicMode(false);
     skitRunning = false;
+    // Size restores only on a FAILED take; a clean take leaves him big and
+    // on-stage after "So, how was it?" (prevScale kept for the crash path).
+    if (!skitCompleted) setBrainoScale(prevScale, false);
+    skitCompleted = false;
   }
 }
 window.brainoMac.onSkitStart?.(() => { void runSkit(); });
