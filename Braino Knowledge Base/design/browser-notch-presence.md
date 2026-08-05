@@ -15,7 +15,7 @@ The extension has a lot of ability, but ability spread across several surfaces i
 
 ## How to use it
 
-Open `/instagraphics?design=browser-notch`, let the sequence play, or choose any state manually. Replay runs the full idle-to-done story again.
+Open `/instagraphics?design=chrome-system` for the full-browser study. Choose idle, listening, working, or chat to compare the surfaces at real browser scale. The earlier notch-only motion study remains at `/instagraphics?design=browser-notch`.
 
 ## What Braino knows or does
 
@@ -25,18 +25,20 @@ Open `/instagraphics?design=browser-notch`, let the sequence play, or choose any
 - Expands on click to reveal the task summary and verified steps.
 - Lets Braino hop down into the existing browser walk mode.
 - Speaks the result, then shrinks back to the idle home.
+- Keeps the existing liquid chat for history, sources, approvals, and follow-ups.
+- Keeps the standing mascot as Braino's ambient presence and the way into chat.
 
 ## Honest limitations
 
-This is a visual prototype, not the production extension UI. Buttons change staged states; they do not yet control a real tab, voice session, browser action, or undo operation. The sample webpage is fictional.
+This is a visual prototype, not the production extension UI. Buttons change staged states; they do not yet control a real tab, voice session, browser action, or undo operation. The sample webpage and conversation are fictional. The liquid panel matches production tokens but does not yet reuse the production DOM.
 
 ## Technical shape
 
-The prototype lives in `src/pages/InstaGraphics.tsx` and `src/pages/insta-graphics.css`. It uses a timed React state sequence, the shared `BRAINO_WALKER_SVG`, manual phase controls, replay, reduced-motion handling, and the existing 1080×1920 InstaGraphics export frame.
+The prototypes live in `src/pages/InstaGraphics.tsx` and `src/pages/insta-graphics.css`. The full Chrome system study is an edge-to-edge viewport rather than a 1080×1920 story frame. It uses the shared `BRAINO_WALKER_SVG` and the extension's Apple/system typography, warm ink and coral palette, 24px liquid-glass radius, readable glass treatment, and compact input controls.
 
 ## Product or design decisions
 
-The notch is Braino's home, not a separate status card. Every state is a transformation of the same object. Compact thinking communicates that work is alive; expanded thinking shows useful progress without exposing hidden chain-of-thought. Completion is temporary: after Braino speaks, the notch returns to idle.
+The three surfaces have different jobs. The mascot carries presence. The notch carries voice and live task status. The liquid chat carries depth, history, sources, approvals, and follow-ups. The notch must not become a second chat window. Compact thinking communicates that work is alive without exposing hidden chain-of-thought. Completion is temporary: after Braino speaks, the notch returns to idle.
 
 ## What comes next
 

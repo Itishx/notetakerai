@@ -1,5 +1,14 @@
 # Braino Changelog
 
+## August 5, 2026 — He reads people now, instead of matching words
+- **A crisis phrased the ordinary way used to be missed entirely.** The safety word list only knew contractions, so "I don't want to be here" was caught and "I do **not** want to be here" was read as nothing at all. It also knew "hurt myself" but not "hurting myself". Every one of those now routes to crisis on words alone, with no model involved, exactly as the safety promise requires.
+- **Distress described through the body reaches him.** A tight chest, a racing heart, shaking hands, a brain that will not stop. People say those far more often than they say "I am anxious", and until now every one of them read as neutral and got the generic Braino.
+- **When the words find nothing, he actually thinks about it.** A reasoning layer now reads what someone is going through underneath the vocabulary, and says in one line why. "I keep checking if he posted" has no emotional keyword in it at all; he reads it as anxiety and explains that you sound stuck in a loop of waiting.
+- **The same reading now runs in real chat, not just the lab.** Both layers moved into one shared file, so the demo and the product can never drift apart. Plain commands still cost nothing extra.
+- **Voice finally hears the moment.** The Mac's voice ran the neutral personality permanently, so his traits never reordered no matter what you said. It now reads the moment from what you just said and leads with the right part of himself, with no added delay before he speaks.
+- **How strongly it landed matters again.** Intensity was measured and then thrown away, so a flicker of nerves and a panic attack produced an identical prompt.
+- **All of it is scored.** A new test runs the real detector against the 525-message corpus on /commands. Accuracy went from **14% to 52%**, crisis from **1 of 20 to 13 of 20** on words alone, and the number is printed on every run so it can never quietly slide back.
+
 ## August 4, 2026 — Every run is recorded now
 - **Both intelligence layers keep a log.** Every call to Human Intelligence and to the Emotional Engine now records what was asked, what came back whole, which model answered, how long it took, and how many tokens it burned. Failures are recorded too, since those are the rows worth the most when tuning.
 - **The log has a home.** /engine-log shows the calls newest first, groups a Loop run's turns under the command that started it, filters to failures, and totals the tokens so a tuning session has a cost instead of a feeling. It is creator-only, because the endpoints that write it are public.

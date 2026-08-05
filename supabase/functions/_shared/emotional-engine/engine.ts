@@ -24,6 +24,10 @@ export type BuildEmotionalCoreOptions = {
   medium?: ResponseMedium;
   settings?: PersonalitySettings;
   moment?: Moment;
+  // How strongly the moment registered (1 mild, 2 clear, 3 severe). Reaches the
+  // steering line so a panic attack and a flicker of nerves stop producing the
+  // identical prompt. Defaults to 2, which is how every existing caller behaved.
+  intensity?: number;
   // Which Braino class is answering (Saburi, Iomi, Telos...). Defaults to the shared "braino"
   // manifest, so every existing caller keeps behaving exactly as before. See classes.ts.
   classId?: ClassId;
@@ -46,7 +50,7 @@ export function buildEmotionalCore(options: BuildEmotionalCoreOptions = {}): str
     .map((trait) => trait.body(ctx).trim())
     .filter(Boolean);
 
-  const steer = steeringLine(moment, traits);
+  const steer = steeringLine(moment, traits, options.intensity ?? 2);
   const parts = steer ? [steer, ...renderedTraits] : renderedTraits;
 
   return parts.join("\n\n");
@@ -90,7 +94,7 @@ export function orderTraitsForMoment(moment: Moment, traits: Trait[]): Trait[] {
 
 // The single sentence that tells the model what to prioritize right now. This is the whole
 // "different responses use different traits" mechanism, in one legible line.
-export function steeringLine(moment: Moment, traits: Trait[]): string {
+export function steeringLine(moment: Moment, traits: Trait[], intensity = 2): string {
   if (moment === "neutral") return "";
   const leadIds = leadIdsForMoment(moment, traits);
   if (leadIds.length === 0) return "";
@@ -99,5 +103,9 @@ export function steeringLine(moment: Moment, traits: Trait[]): string {
     .map((id) => traitById[id]?.name?.split(/[—,]/)[0].trim().toLowerCase())
     .filter(Boolean)
     .join(", ");
-  return `Right now the user is in ${MOMENT_LABEL[moment]} moment. Lead with ${traitNames}; let the rest of who you are stay present but recede. Attune to where they actually are before you respond.`;
+  // Intensity was measured and then thrown away, so a flicker of nerves and a
+  // panic attack produced an identical prompt. At full strength it is said out
+  // loud, because the difference between those two is the whole job.
+  const severity = intensity >= 3 ? " This is at full strength, so meet it there and do not soften it into something smaller." : "";
+  return `Right now the user is in ${MOMENT_LABEL[moment]} moment.${severity} Lead with ${traitNames}; let the rest of who you are stay present but recede. Attune to where they actually are before you respond.`;
 }

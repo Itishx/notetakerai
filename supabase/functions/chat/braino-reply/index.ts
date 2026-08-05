@@ -21,7 +21,8 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { buildEmotionalCore, leadIdsForMoment, orderTraitsForMoment, steeringLine } from "../../_shared/emotional-engine/engine.ts";
-import { detectMomentDetailed, looksEmotionallyLoaded, MOMENT_LABEL } from "../../_shared/emotional-engine/moments.ts";
+import { MOMENT_LABEL } from "../../_shared/emotional-engine/moments.ts";
+import { readMoment } from "../../_shared/emotional-engine/moment-reader.ts";
 import { getClassManifest } from "../../_shared/emotional-engine/classes.ts";
 import { resolvePersonalitySettings } from "../../_shared/emotional-engine/settings.ts";
 import { scanForTells } from "../../_shared/emotional-engine/tells.ts";
@@ -36,11 +37,6 @@ const corsHeaders = {
 
 const REPLY_MODEL = "gpt-5.4-mini";
 const OPENAI_ENDPOINT = "https://api.openai.com/v1/chat/completions";
-
-const VALID_MOMENTS = new Set<Moment>([
-  "neutral", "crisis", "grief", "heartbreak", "venting", "anxiety",
-  "celebration", "conflict", "banter", "focused_task", "building",
-]);
 
 // Where the charm trait sits for each moment, for the breakdown display. This mirrors
 // the dial inside traits/charm.ts; it is labelling only, the trait itself is the truth.
@@ -71,29 +67,6 @@ function textOf(aiData: unknown): string {
   return String(d?.choices?.[0]?.message?.content || "").trim();
 }
 
-// Layer two of moment detection: the word cues found nothing, but the message looks
-// like it carries feeling. One small call decides the real moment before the personality
-// is assembled. Ordinary quick asks never reach this, so they cost nothing extra.
-async function readMomentWithModel(apiKey: string, message: string): Promise<{ moment: Moment; ok: boolean }> {
-  try {
-    const res = await callModel(apiKey, [
-      {
-        role: "system",
-        content:
-          "You label the emotional situation behind a message. Reply with ONE word from this list and nothing else: " +
-          "neutral, grief, heartbreak, venting, anxiety, celebration, conflict, banter, focused_task, building. " +
-          "Pick neutral only when the message genuinely carries no feeling. Do not explain.",
-      },
-      { role: "user", content: message.slice(0, 1000) },
-    ], 8);
-    if (!res.ok) return { moment: "neutral", ok: false };
-    const word = textOf(await res.json()).toLowerCase().replace(/[^a-z_]/g, "");
-    if (VALID_MOMENTS.has(word as Moment) && word !== "crisis") return { moment: word as Moment, ok: true };
-    return { moment: "neutral", ok: false };
-  } catch {
-    return { moment: "neutral", ok: false };
-  }
-}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -116,22 +89,13 @@ serve(async (req) => {
 
     const started = Date.now();
 
-    // ── Layer 1: the word cues. Instant, free, and crisis is decided here and ONLY
-    // here, so a life-or-death moment never depends on a model being reachable.
-    const cueRead = detectMomentDetailed(message);
-    let moment: Moment = cueRead.moment;
-    let intensity = cueRead.intensity;
-    let how: "cues" | "model" | "none" = cueRead.hits.length ? "cues" : "none";
-
-    // ── Layer 2: the cues found nothing, but this reads as loaded. Spend one small call.
-    if (cueRead.moment === "neutral" && looksEmotionallyLoaded(message)) {
-      const deep = await readMomentWithModel(apiKey, message);
-      if (deep.ok && deep.moment !== "neutral") {
-        moment = deep.moment;
-        intensity = 2;
-        how = "model";
-      }
-    }
+    // Both layers, from the shared reader, so this lab and the production chat
+    // path run the exact same code and can never drift apart.
+    const read = await readMoment(message, { apiKey, model: REPLY_MODEL });
+    const moment: Moment = read.moment;
+    const intensity = read.intensity;
+    const how = read.how;
+    const cueRead = { moment: read.moment, intensity: read.intensity, hits: read.hits };
 
     // ── Assemble the personality for THIS moment.
     const allTraits = getClassManifest(body?.classId).traits;
@@ -139,11 +103,11 @@ serve(async (req) => {
     const traits = charmOff ? allTraits.filter((t) => t.id !== "charm") : allTraits;
     const ordered = orderTraitsForMoment(moment, traits);
     const leads = leadIdsForMoment(moment, traits);
-    const steer = steeringLine(moment, traits);
+    const steer = steeringLine(moment, traits, intensity);
     // traits is passed explicitly so charmOff genuinely removes the trait from the
     // prompt. Without it buildEmotionalCore would rebuild the full list internally
     // and the A/B comparison would be a lie.
-    const personality = buildEmotionalCore({ medium: "text", moment, settings, classId: body?.classId, traits });
+    const personality = buildEmotionalCore({ medium: "text", moment, intensity, settings, classId: body?.classId, traits });
 
     const messages = [
       { role: "system", content: personality },
@@ -184,7 +148,7 @@ serve(async (req) => {
     const logId = logEngineRun({
       engine: "braino-reply",
       command: message,
-      response: { reply, tells, how, intensity, leads, charm: dial, charm_off: charmOff },
+      response: { reply, tells, how, intensity, why: read.why, leads, charm: dial, charm_off: charmOff },
       moment_id: moment,
       // A reply that tripped his own ban list is the row worth finding later,
       // so the count is flat rather than buried in the JSON.
@@ -203,6 +167,7 @@ serve(async (req) => {
         how,                    // "cues" | "model" | "none"
         cueHits: cueRead.hits,  // the exact words that tripped it
         cueSaid: cueRead.moment, // what layer 1 thought, for comparing against layer 2
+        why: read.why,           // when layer 2 decided, its one line on why
       },
       personality: {
         leads,

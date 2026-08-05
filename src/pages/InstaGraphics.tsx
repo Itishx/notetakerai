@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { BRAINO_WALKER_SVG } from "@/components/brainoWalkerSvg";
 import "./insta-graphics.css";
 
-type InstaPreview = "braino-os" | "iomi-boot" | "browser-notch";
+type InstaPreview = "braino-os" | "iomi-boot" | "browser-notch" | "chrome-system";
 type IomiBootPhase = "shimmer" | "authenticating" | "awake" | "expanded" | "mascot";
 type BrowserNotchPhase = "idle" | "input" | "listening" | "hatching" | "expanded" | "speaking" | "hopped";
 
@@ -235,6 +235,58 @@ function BrowserNotchPrototype() {
   );
 }
 
+type ChromeSystemPhase = "idle" | "listening" | "working" | "answer";
+
+function ChromeSystemPrototype() {
+  const [phase, setPhase] = useState<ChromeSystemPhase>("idle");
+  return (
+    <div className="ig-frame ig-chrome-system-frame" id="ig-chrome-system">
+      <div className={`ig-chrome-system phase-${phase}`}>
+        <header className="ig-cs-browser-bar">
+          <i /><i /><i />
+          <span>braino.com / the page you are already on</span>
+          <b>⋯</b>
+        </header>
+
+        <main className="ig-cs-webpage">
+          <span className="ig-cs-page-label">Browser surface study</span>
+          <h1>The page stays<br />the main character.</h1>
+          <p>Braino appears only at the depth the moment needs.</p>
+          <div className="ig-cs-page-grid"><i/><i/><i/><i/><i/><i/></div>
+        </main>
+
+        <button className="ig-cs-notch" type="button" onClick={() => setPhase(phase === "idle" ? "listening" : phase === "listening" ? "working" : phase === "working" ? "answer" : "idle")}>
+          <span className="ig-cs-notch-idle"><i /><i /> <small>Talk to Braino</small></span>
+          <span className="ig-cs-notch-listening"><i/><i/><i/><i/><i/> <small>Listening</small></span>
+          <span className="ig-cs-notch-working"><b>2</b><span><strong>Working on it</strong><small>Filling the form · 2 of 3</small></span><em/></span>
+          <span className="ig-cs-notch-answer">
+            <i className="ig-cs-answer-mascot" dangerouslySetInnerHTML={{ __html: BRAINO_WALKER_SVG }} />
+            <span><small>Braino</small><strong>I cleaned it up. Want me to replace the original?</strong></span>
+            <em>Done</em>
+          </span>
+        </button>
+
+        <button className="ig-cs-mascot" type="button" aria-label="Talk to Braino" onClick={() => setPhase("listening")}>
+          <span dangerouslySetInnerHTML={{ __html: BRAINO_WALKER_SVG }} />
+          <small>Ask Braino</small>
+        </button>
+
+        <div className="ig-cs-principles">
+          <span><b>Mascot</b>Presence</span>
+          <span><b>Notch</b>Ask + status + answer</span>
+          <span><b>One surface</b>No floating chat</span>
+        </div>
+
+        <div className="ig-iomi-controls ig-cs-controls" aria-label="Chrome system states">
+          {(["idle", "listening", "working", "answer"] as ChromeSystemPhase[]).map((item) => (
+            <button key={item} type="button" className={phase === item ? "is-active" : ""} onClick={() => setPhase(item)}>{item}</button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /*
   /InstaGraphics — static 9:16 (1080x1920) export frames for Instagram
   Stories/Reels. Each .ig-frame is a fixed-size 1080x1920 element (native
@@ -249,6 +301,7 @@ export default function InstaGraphics() {
   const [preview, setPreview] = useState<InstaPreview>(() =>
     new URLSearchParams(window.location.search).get("design") === "iomi" ? "iomi-boot"
       : new URLSearchParams(window.location.search).get("design") === "browser-notch" ? "browser-notch"
+        : new URLSearchParams(window.location.search).get("design") === "chrome-system" ? "chrome-system"
         : "braino-os"
   );
 
@@ -268,7 +321,7 @@ export default function InstaGraphics() {
   }, []);
 
   return (
-    <div className={`ig-page${preview === "iomi-boot" ? " is-iomi-preview" : ""}${preview === "browser-notch" ? " is-browser-preview" : ""}`} ref={wrapRef}>
+    <div className={`ig-page${preview === "iomi-boot" ? " is-iomi-preview" : ""}${preview === "browser-notch" ? " is-browser-preview" : ""}${preview === "chrome-system" ? " is-chrome-system-preview" : ""}`} ref={wrapRef}>
       <nav className="ig-preview-switcher" aria-label="Instagraphics previews">
         <button type="button" className={preview === "braino-os" ? "is-active" : ""} onClick={() => setPreview("braino-os")}>
           Braino post
@@ -279,9 +332,12 @@ export default function InstaGraphics() {
         <button type="button" className={preview === "browser-notch" ? "is-active" : ""} onClick={() => setPreview("browser-notch")}>
           Browser notch
         </button>
+        <button type="button" className={preview === "chrome-system" ? "is-active" : ""} onClick={() => setPreview("chrome-system")}>
+          Chrome system
+        </button>
       </nav>
 
-      {preview === "iomi-boot" ? <IomiBootPrototype /> : preview === "browser-notch" ? <BrowserNotchPrototype /> : <div className="ig-frame" id="ig-braino-os">
+      {preview === "iomi-boot" ? <IomiBootPrototype /> : preview === "browser-notch" ? <BrowserNotchPrototype /> : preview === "chrome-system" ? <ChromeSystemPrototype /> : <div className="ig-frame" id="ig-braino-os">
         <header className="ig-story-header">
           <span className="ig-wordmark">Braino</span>
           <span className="ig-prelaunch">PreLaunch · Saturday</span>

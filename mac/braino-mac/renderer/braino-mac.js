@@ -3860,6 +3860,47 @@ async function refreshPersonaBundle() {
 }
 window.setInterval(() => void refreshPersonaBundle(), 10 * 60 * 1000);
 
+// ── Voice finally reads the moment ──────────────────────────────────────────
+// Until now the voice lane ran the engine's NEUTRAL prompt permanently: the
+// persona bundle is a session bootstrap cached for ten minutes, so it never saw
+// a message and never carried a moment. Traits never reordered, and the
+// steering sentence was omitted entirely, which is what it does on neutral.
+//
+// The fix costs nothing per turn. The bundle now ships the real cue table and
+// the real steering lines, so the moment is read HERE, locally, from what was
+// just said, and the matching sentence is prepended to the instructions that
+// already get rebuilt on every turn. No extra call before he speaks.
+//
+// Cues only, deliberately: the reasoning fallback that text chat uses needs a
+// round trip, and this lane exists to start speaking immediately. That is why
+// widening the cues to cover how people actually describe distress mattered
+// most here.
+let compiledMomentCues = null;
+
+function macDetectMoment(text) {
+  const message = String(text || "").trim();
+  if (!message || !brainoPersona?.momentCues) return "neutral";
+  if (!compiledMomentCues) {
+    try {
+      compiledMomentCues = brainoPersona.momentCues.map((cue) => ({
+        moment: cue.moment,
+        weight: cue.weight,
+        re: new RegExp(cue.source, cue.flags),
+      }));
+    } catch (error) {
+      logRenderer("moment.compile_failed", { error: String(error) });
+      compiledMomentCues = [];
+    }
+  }
+  const hits = compiledMomentCues.filter((cue) => cue.re.test(message));
+  if (!hits.length) return "neutral";
+  // Crisis is absolute, exactly as it is server side.
+  if (hits.some((h) => h.moment === "crisis")) return "crisis";
+  return hits.reduce((a, b) => (b.weight > a.weight ? b : a)).moment;
+}
+
+let macCurrentMoment = "neutral";
+
 function buildRealtimeChatInstructions() {
   if (herMode) return buildHerChatInstructions();
   // Active voice persona REPLACES the whole personality (same mechanism as
@@ -3878,6 +3919,10 @@ function buildRealtimeChatInstructions() {
     ].join("\n\n");
   }
   const parts = [];
+  // The steering sentence goes FIRST, above the personality, the same position
+  // buildEmotionalCore puts it in on every other surface.
+  const steer = brainoPersona?.momentSteering?.[macCurrentMoment];
+  if (steer) parts.push(steer);
   if (brainoPersona?.persona) {
     // The full Emotional Engine core, same soul as every other surface.
     parts.push(brainoPersona.persona);
@@ -3899,6 +3944,10 @@ function buildRealtimeChatInstructions() {
 async function answerViaRealtimeChat(prompt) {
   const text = String(prompt || "").trim();
   if (!text || !shouldUseRealtimeDirectChat(text)) return false;
+  // Read the moment from what was just said, before the instructions for this
+  // turn are built below.
+  macCurrentMoment = macDetectMoment(text);
+  if (macCurrentMoment !== "neutral") logRenderer("moment.voice", { moment: macCurrentMoment });
   const runId = ++delegateGeneration;
   stopSpeechOutput();
   const generation = speechGeneration;

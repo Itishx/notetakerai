@@ -33,6 +33,7 @@ export type BuildBrainoSystemPromptOptions = {
   devPulse?: string | null;                 // Braino's sense of his own recent commits + work rhythm
   // Emotional Engine inputs:
   moment?: Moment;                          // the detected emotional moment (drives trait emphasis)
+  intensity?: number;                       // how strongly it registered (1-3); reaches the steering line
   personalitySettings?: Partial<PersonalitySettings> | null; // user toggles (dad jokes, pushback…)
   classId?: ClassId;                        // which Braino class is answering (Saburi, Iomi, Telos…)
 };
@@ -82,6 +83,7 @@ export function buildBrainoSystemPrompt(options: BuildBrainoSystemPromptOptions 
     medium: responseMedium,
     settings: resolvePersonalitySettings(options.personalitySettings),
     moment: options.moment || "neutral",
+    intensity: options.intensity,
     classId: options.classId,
   });
 

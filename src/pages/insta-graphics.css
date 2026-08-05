@@ -1040,6 +1040,68 @@
   .ig-browser-spectrum, .ig-browser-orb i, .ig-browser-progress i, .ig-browser-mascot, .ig-browser-target, .ig-browser-copy { animation: none !important; }
 }
 
+/* Chrome system is a full browser-surface prototype, not a 9:16 export. */
+.ig-page.is-chrome-system-preview {
+  display: block;
+  min-height: 100vh;
+  overflow: hidden;
+  background: #e9e5dc;
+}
+.ig-page.is-chrome-system-preview .ig-chrome-system-frame {
+  width: 100vw;
+  height: 100vh;
+  transform: none;
+  overflow: hidden;
+  background: #e9e5dc;
+  color: #1b1713;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+.ig-page.is-chrome-system-preview .ig-chrome-system-frame::before { display: none; }
+.ig-chrome-system { position: relative; width: 100%; height: 100%; overflow: hidden; }
+.ig-cs-browser-bar {
+  position: absolute; z-index: 20; inset: 0 0 auto; height: 58px;
+  display: flex; align-items: center; gap: 8px; padding: 0 22px;
+  color: rgba(27,23,19,.42); background: rgba(255,251,247,.92);
+  border-bottom: 1px solid rgba(65,48,40,.1); backdrop-filter: blur(22px) saturate(170%);
+}
+.ig-cs-browser-bar i { width: 10px; height: 10px; border-radius: 50%; background: rgba(65,48,40,.16); }
+.ig-cs-browser-bar span { width: min(560px, 50vw); margin: 0 auto; padding: 9px 16px; border-radius: 10px; background: rgba(65,48,40,.055); text-align: center; font-size: 12px; }
+.ig-cs-browser-bar b { font-size: 20px; letter-spacing: 3px; }
+.ig-cs-webpage {
+  position: absolute; inset: 58px 0 0; padding: clamp(86px, 12vh, 145px) clamp(60px, 9vw, 150px);
+  background:
+    radial-gradient(circle at 77% 35%, rgba(232,120,110,.14), transparent 24%),
+    radial-gradient(circle at 23% 85%, rgba(230,190,126,.16), transparent 25%),
+    linear-gradient(145deg, #f4f0e8, #ddd8ce);
+}
+.ig-cs-page-label { font-size: 11px; font-weight: 750; letter-spacing: .14em; text-transform: uppercase; color: #c9544a; }
+.ig-cs-webpage h1 { max-width: 780px; margin: 22px 0 20px; font: 500 clamp(54px, 7.2vw, 116px)/.91 "Instrument Serif", Georgia, serif; letter-spacing: -.045em; }
+.ig-cs-webpage > p { max-width: 500px; color: rgba(27,23,19,.58); font-size: clamp(16px, 1.5vw, 22px); line-height: 1.45; }
+.ig-cs-page-grid { position: absolute; right: 7vw; bottom: 7vh; width: min(430px, 34vw); display: grid; grid-template-columns: repeat(3,1fr); gap: 12px; opacity: .65; }
+.ig-cs-page-grid i { height: clamp(80px, 13vh, 145px); border: 1px solid rgba(65,48,40,.1); border-radius: 18px; background: rgba(255,251,247,.42); box-shadow: inset 0 1px rgba(255,255,255,.72); }
+.ig-cs-notch {
+  position: absolute; z-index: 40; left: 50%; top: 58px; width: 178px; height: 48px; padding: 0;
+  transform: translateX(-50%); overflow: hidden; border: 0; border-radius: 0 0 22px 22px;
+  color: #fff; background: #060706; box-shadow: 0 14px 36px rgba(0,0,0,.18); cursor: pointer;
+  transition: width 800ms cubic-bezier(.16,.86,.22,1), height 800ms cubic-bezier(.16,.86,.22,1), border-radius 800ms cubic-bezier(.16,.86,.22,1);
+}
+.phase-listening .ig-cs-notch { width: 390px; height: 74px; border-radius: 0 0 28px 28px; }
+.phase-working .ig-cs-notch { width: 420px; height: 78px; border-radius: 0 0 28px 28px; }
+.phase-answer .ig-cs-notch { width: min(610px, 76vw); height: 112px; border-radius: 0 0 34px 34px; }
+.ig-cs-notch > span { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; opacity: 0; transform: translateY(6px); transition: opacity 300ms ease, transform 550ms cubic-bezier(.16,.86,.22,1); }
+.phase-idle .ig-cs-notch-idle, .phase-listening .ig-cs-notch-listening, .phase-working .ig-cs-notch-working, .phase-answer .ig-cs-notch-answer { opacity: 1; transform: none; transition-delay: 280ms; }
+.ig-cs-notch-idle { gap: 4px; }.ig-cs-notch-idle i { width: 7px; height: 7px; border-radius: 50%; background: #fff; }.ig-cs-notch-idle small { margin-left: 9px; color: rgba(255,255,255,.58); font-size: 11px; }
+.ig-cs-notch-listening { gap: 6px; }.ig-cs-notch-listening i { width: 4px; height: 22px; border-radius: 8px; background: linear-gradient(#f4cf87,#ec8078 60%,#779cff); animation: igCsWave 1.2s ease-in-out infinite alternate; }.ig-cs-notch-listening i:nth-child(2),.ig-cs-notch-listening i:nth-child(4){height:38px;animation-delay:-.5s}.ig-cs-notch-listening i:nth-child(3){height:50px;animation-delay:-.8s}.ig-cs-notch-listening small{margin-left:18px;color:rgba(255,255,255,.7);font-size:13px}
+.ig-cs-notch-working { justify-content: flex-start !important; gap: 12px; padding: 0 20px; text-align: left; }.ig-cs-notch-working > b{display:grid;place-items:center;width:32px;height:32px;border-radius:50%;color:#17110f;background:#e8786e;font-size:12px}.ig-cs-notch-working > span{display:grid;gap:4px}.ig-cs-notch-working strong{font-size:13px}.ig-cs-notch-working small{color:rgba(255,255,255,.43);font-size:10px}.ig-cs-notch-working em{width:7px;height:7px;margin-left:auto;border-radius:50%;background:#e8786e;box-shadow:0 0 16px #e8786e;animation:igCsPulse 1.8s ease-in-out infinite}
+.ig-cs-notch-chat { gap: 10px; }.ig-cs-notch-chat > i{width:7px;height:7px;border-radius:50%;background:white}.ig-cs-notch-chat > span{display:grid;text-align:left}.ig-cs-notch-chat strong{font-size:11px}.ig-cs-notch-chat small{font-size:8px;color:rgba(255,255,255,.4)}
+.ig-cs-notch-answer { justify-content:flex-start!important; gap:16px; padding:15px 19px 15px 22px; text-align:left; }.ig-cs-answer-mascot{display:block;width:56px;flex:0 0 56px;font-style:normal;filter:drop-shadow(0 3px 10px rgba(232,120,110,.3))}.ig-cs-answer-mascot svg{display:block;width:100%!important;height:auto!important;overflow:visible}.ig-cs-notch-answer>span{display:grid;gap:6px;min-width:0}.ig-cs-notch-answer small{color:#e8786e;font-size:9px;font-weight:750;letter-spacing:.12em;text-transform:uppercase}.ig-cs-notch-answer strong{max-width:420px;color:rgba(255,255,255,.9);font:400 17px/1.35 "Newsreader","Charter BT",Georgia,serif}.ig-cs-notch-answer>em{margin-left:auto;padding:8px 11px;border:1px solid rgba(255,255,255,.12);border-radius:999px;color:rgba(255,255,255,.55);font:650 9px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-style:normal}
+.ig-cs-mascot { position: absolute; z-index: 45; right: 34px; bottom: 40px; width: 88px; border: 0; padding: 0; color: #413028; background: transparent; cursor: pointer; filter: drop-shadow(0 5px 16px rgba(200,84,74,.4)); transition: transform 450ms cubic-bezier(.16,.86,.22,1); }.ig-cs-mascot:hover{transform:translateY(-5px) scale(1.03)}.ig-cs-mascot span,.ig-cs-mascot svg{display:block;width:100%!important;height:auto!important;overflow:visible}.ig-cs-mascot small{display:inline-block;margin-top:7px;padding:6px 9px;border-radius:999px;background:rgba(255,251,247,.8);box-shadow:0 5px 16px rgba(27,23,19,.1);font-size:9px;font-weight:700}
+.ig-cs-liquid-chat { position:absolute; z-index:42; right:28px; top:86px; bottom:145px; width:min(390px,calc(100vw - 44px)); padding:16px; border:1px solid rgba(255,255,255,.55); border-radius:24px; color:#1b1713; background:rgba(255,251,247,.64); box-shadow:0 26px 80px rgba(27,23,19,.2),inset 0 1px rgba(255,255,255,.7); backdrop-filter:blur(22px) saturate(170%); opacity:0; pointer-events:none; transform:translateX(22px) scale(.97); transition:opacity 300ms ease,transform 620ms cubic-bezier(.16,.86,.22,1); display:flex; flex-direction:column; gap:14px; }.phase-chat .ig-cs-liquid-chat{opacity:1;pointer-events:auto;transform:none}.ig-cs-liquid-chat header{display:flex;align-items:center;justify-content:space-between;padding:2px 2px 10px;border-bottom:1px solid rgba(65,48,40,.08)}.ig-cs-liquid-chat header span{display:flex;align-items:center;gap:4px}.ig-cs-liquid-chat header i{width:7px;height:7px;border-radius:50%;background:#1b1713}.ig-cs-liquid-chat header b{margin-left:7px;font-size:13px}.ig-cs-liquid-chat header button{border:0;background:transparent;color:#6b5248;font-size:22px}.ig-cs-context{display:flex;align-items:center;gap:10px;padding:10px;border-radius:13px;background:rgba(65,48,40,.055)}.ig-cs-context>i{display:grid;place-items:center;width:28px;height:28px;border-radius:9px;background:#e8786e;color:white;font-style:normal}.ig-cs-context span{display:grid;font-size:11px;font-weight:650}.ig-cs-context small{color:rgba(27,23,19,.45);font-size:8px;text-transform:uppercase;letter-spacing:.1em}.ig-cs-message{max-width:88%;font-size:13.5px;line-height:1.55}.ig-cs-message.is-user{align-self:flex-end;padding:10px 14px;border-radius:14px;background:rgba(65,48,40,.09)}.ig-cs-message.is-braino{padding:4px 2px;font-family:"Newsreader","Charter BT",Georgia,serif;font-size:16px;line-height:1.65}.ig-cs-approval{display:flex;align-items:center;justify-content:space-between;margin-top:auto;padding:12px;border:1px solid rgba(65,48,40,.09);border-radius:14px;background:rgba(255,255,255,.28)}.ig-cs-approval span{display:grid;font-size:11px}.ig-cs-approval small{color:#c9544a;font-size:8px;font-weight:750;text-transform:uppercase;letter-spacing:.1em}.ig-cs-approval button{border:0;border-radius:999px;padding:8px 12px;color:white;background:#e8786e;font-size:10px;font-weight:700}.ig-cs-liquid-chat footer{display:flex;align-items:center;gap:7px;margin:0 -16px -16px;padding:13px 14px;border-top:1px solid rgba(65,48,40,.08)}.ig-cs-liquid-chat footer span{flex:1;color:#a79b92;font-size:12px}.ig-cs-liquid-chat footer button{display:grid;place-items:center;width:30px;height:30px;border:0;border-radius:50%;background:rgba(65,48,40,.06)}.ig-cs-liquid-chat footer button:last-child{color:white;background:#e8786e}
+.ig-cs-principles { position:absolute; z-index:25; left:clamp(24px,5vw,80px); bottom:34px; display:flex; gap:8px; }.ig-cs-principles span{display:grid;gap:3px;min-width:124px;padding:10px 13px;border:1px solid rgba(255,255,255,.55);border-radius:13px;background:rgba(255,251,247,.56);box-shadow:0 7px 22px rgba(27,23,19,.08);backdrop-filter:blur(16px);color:rgba(27,23,19,.48);font-size:9px}.ig-cs-principles b{color:#1b1713;font-size:11px}
+.ig-cs-controls { position:absolute!important; z-index:60; left:50%!important; right:auto!important; bottom:24px!important; top:auto!important; transform:translateX(-50%)!important; width:auto!important; }
+@keyframes igCsWave{to{height:10px;opacity:.45}}@keyframes igCsPulse{50%{transform:scale(1.4);opacity:.5}}
+@media(max-width:760px){.ig-cs-webpage{padding:100px 25px}.ig-cs-webpage h1{font-size:54px}.ig-cs-page-grid,.ig-cs-principles{display:none}.ig-cs-mascot{right:18px;bottom:92px}.ig-cs-liquid-chat{right:12px;top:78px;bottom:180px}.ig-cs-controls{bottom:18px!important}.phase-listening .ig-cs-notch,.phase-working .ig-cs-notch{width:min(390px,90vw)}}
+
 /* Browser notch v2: one continuous home → input → work → home object. */
 .ig-browser-notch {
   width: 170px;

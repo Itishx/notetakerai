@@ -8,7 +8,7 @@ import {
 } from "../../_shared/realtime-cost-summary.ts";
 import { isDevPulseQuestion, loadDevPulseForRequest } from "../../_shared/dev-pulse.ts";
 import { loadUserKnowledge } from "../../_shared/user-knowledge.ts";
-import { detectMoment } from "../../_shared/emotional-engine/moments.ts";
+import { readMoment } from "../../_shared/emotional-engine/moment-reader.ts";
 import { captureFromConversation } from "../../_shared/memory-engine/capture.ts";
 
 const corsHeaders = {
@@ -503,6 +503,19 @@ serve(async (req) => {
         })
       : null;
 
+    // The emotional read, both layers, same shared code the lab runs. Skipped
+    // entirely for delegate and vision work, which are machine instructions
+    // rather than someone talking. The reader's own gate keeps this free for
+    // ordinary asks: only a message that genuinely carries feeling and that the
+    // word cues could not place ever costs a second call.
+    const emotionalRead = (!isDelegateRequest && !hasImage && !visionDescribe && typeof message === "string")
+      ? await readMoment(message, {
+          apiKey: Deno.env.get("OPENAI_API_KEY") || "",
+          model: "gpt-5.4-mini",
+          timeoutMs: 3000,
+        })
+      : null;
+
     const systemPrompt = isDelegateRequest
       ? String(notes || "You are Braino Delegate. Return strict JSON only.")
       : visionDescribe
@@ -547,7 +560,8 @@ ${notes || "(no notes yet)"}`
           devPulse: devPulseResult?.formatted || null,
           // Emotional Engine: detect the emotional moment from this message so the right traits
           // lead the reply, and apply the user's personality toggles.
-          moment: detectMoment(typeof message === "string" ? message : "").moment,
+          moment: emotionalRead?.moment ?? "neutral",
+          intensity: emotionalRead?.intensity,
           personalitySettings: userKnowledge?.personalitySettings ?? null,
           classId: (["saburi", "iomi", "telos"].includes(classId) ? classId : undefined) as ClassId | undefined,
         });

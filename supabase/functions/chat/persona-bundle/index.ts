@@ -5,8 +5,16 @@
 // per-user memory context so voice Braino IS Braino, not a thin agent prompt.
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
-import { buildEmotionalCore } from "../../_shared/emotional-engine/engine.ts";
+import { buildEmotionalCore, steeringLine } from "../../_shared/emotional-engine/engine.ts";
+import { getClassManifest } from "../../_shared/emotional-engine/classes.ts";
+import { serializeCues } from "../../_shared/emotional-engine/moments.ts";
 import { resolvePersonalitySettings } from "../../_shared/emotional-engine/settings.ts";
+import type { Moment } from "../../_shared/emotional-engine/types.ts";
+
+const ALL_MOMENTS: Moment[] = [
+  "crisis", "grief", "heartbreak", "venting", "anxiety",
+  "celebration", "conflict", "banter", "focused_task", "building",
+];
 import { loadUserKnowledge } from "../../_shared/user-knowledge.ts";
 
 const corsHeaders = {
@@ -48,11 +56,26 @@ serve(async (req) => {
       settings: resolvePersonalitySettings(knowledge.personalitySettings || undefined),
     });
 
+    // Voice used to run neutral forever: this bundle is a session bootstrap
+    // cached for ten minutes, so it never saw a message and never carried a
+    // moment. It still does not need to. The Mac rebuilds its instruction
+    // string on every single turn, so it only needs the RULES once: the cue
+    // table to read the moment locally, and the steering sentence to say which
+    // traits should lead. No per turn call, no latency, nothing to drift.
+    const traits = getClassManifest().traits;
+    const momentSteering: Record<string, string> = {};
+    for (const moment of ALL_MOMENTS) {
+      const line = steeringLine(moment, traits);
+      if (line) momentSteering[moment] = line;
+    }
+
     return json({
       persona,
       userContext: knowledge.combinedContext || "",
       displayName: knowledge.displayName || "",
       memoryEnabled: knowledge.memoryEnabled !== false,
+      momentCues: serializeCues(),
+      momentSteering,
     });
   } catch (error) {
     console.error("persona-bundle error:", error);
