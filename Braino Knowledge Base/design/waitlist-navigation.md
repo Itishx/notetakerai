@@ -78,7 +78,42 @@ The opening now puts Braino beside the promise instead of leaving the headline a
 
 The result is still editorial, but no longer empty. The hero establishes the character before the chapters explain the products around him.
 
+## Notch navigation
+
+The floating left chapter rail has been removed. Its seven destinations—Braino, Browser, IOMI, Braino OS, Studio, Hera, and Join—now live inside the top notch navigation, where they open the matching section on the same page.
+
+The website notch no longer starts asleep. It shows awake eyes in the centre from the first frame; clicking the eyes expands the notch into the chapter menu. The old sleep, snore, and first-click boot implementation remains available behind the component's `sleepOnFirstVisit` option, but the public site leaves it off.
+
+The hero footnote explicitly says “Click the notch eyes to explore.” Notch chapter links perform a real smooth scroll to the matching section instead of relying on a hash change alone.
+
+The hero's “cutest AI agent” line now uses a restrained warm-gold, coral, and deep-coral treatment instead of the previous four-colour sweep.
+
+The light/dark theme control moved into the expanded notch beside “Go anywhere.” It is no longer dependent on the removed sidebar rail.
+
+The sixth Braino form is now a real mood board using all eight existing reaction faces: calm, happy, laughing, celebrating, focused, shocked, scared, and tears of joy. The earlier duplicate faces and unrelated walking mascot were removed.
+
+The footer game is intentionally forgiving: higher jumps, softer gravity, coyote time after leaving an edge, buffered jump input before landing, wider collision tolerance, and a recovery bounce when a pipe catches a late jump. Green pipes can be landed on and no longer create an unfair instant death or forced fall.
+
+## Waitlist categories
+
+Each signup saves the selected Braino interests in the existing waitlist row: Braino for Browser, Braino IOMI, Braino OS, Braino Studio, Braino Hera, or Everything. The admin page displays those choices as readable badges. If an existing email signs up again with another selection, the new interest is merged into the same row rather than creating a duplicate or discarding the choice. Historical rows without category context remain untouched and appear as “Uncategorised.”
+
+The Hera chapter no longer uses a boxed coming-soon card. It gives one short plain-text preview and ends with “Coming soon.”
+
 The old “Download Braino” button has been removed from the hero. This page is the waitlist and should keep one clear commitment path instead of presenting an immediate extension download beside the opening promise.
+
+The public footer now keeps only the playable Braino course and a quiet legal baseline: copyright, the founder signoff, Privacy, and Terms. Product, resource, contact, placeholder social, download, pricing, and disclaimer columns stay hidden until those destinations are ready for public visitors.
+
+### Hidden footer link map
+
+Keep this exact map for restoration when the destinations are public-ready:
+
+- **Product:** Overview → `/product-overview`; The three classes → `/product-overview#classes`; Pricing → `/premium`; Download for Mac → `/premium`
+- **Resources:** Journal → `/journal`; Changelog → `/changelog`; Knowledge Base → `/knowledge`; Privacy → `/privacy`; Terms → `/terms`
+- **Connect:** X · @brainosays → `https://x.com/brainosays`; Instagram → `https://instagram.com`; YouTube → `https://youtube.com`; Contact → `/contact`
+- **Disclaimer:** “Braino only sees your screen the moment you invoke him. Nothing is captured, nothing is stored.”
+
+Instagram and YouTube were generic placeholder URLs, not confirmed Braino profile links. Replace them with exact account URLs before restoring those entries.
 
 ## Hera disclosure
 

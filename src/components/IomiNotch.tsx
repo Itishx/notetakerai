@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, LayoutGroup, motion } from "framer-motion";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Moon, Sun } from "lucide-react";
 import { Link } from "react-router-dom";
 import NotchFace, { setNotchStatus, typeNotchCaption } from "./NotchFace";
 import "./iomi-notch.css";
@@ -100,9 +100,15 @@ let wokeFallback = false;
 export default function IomiNotch({
   nav = IOMI_NAV,
   variant = "plain",
+  sleepOnFirstVisit = false,
+  theme,
+  onToggleTheme,
 }: {
   nav?: IomiNavItem[];
   variant?: "iomi" | "plain";
+  sleepOnFirstVisit?: boolean;
+  theme?: "dark" | "light";
+  onToggleTheme?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [activeParent, setActiveParent] = useState<IomiNavItem | null>(null);
@@ -110,7 +116,7 @@ export default function IomiNotch({
   const [watching, setWatching] = useState<string | null>(null); // Braino TV status
   // Asleep on the very first paint of a fresh load (plain variant only), so the
   // eyes render closed immediately — no open-eye flash.
-  const [asleep, setAsleep] = useState(() => variant === "plain" && !readWoke());
+  const [asleep, setAsleep] = useState(() => sleepOnFirstVisit && variant === "plain" && !readWoke());
   const [boot, setBoot] = useState<BootPhase>("idle");
   const mountAt = useRef(Date.now());
   const greetRef = useRef("");
@@ -183,6 +189,15 @@ export default function IomiNotch({
   const closeNav = () => {
     setOpen(false);
     setActiveParent(null);
+  };
+
+  const followNav = (to: string) => {
+    closeNav();
+    if (!to.startsWith("#")) return;
+    const targetId = to.slice(1);
+    window.requestAnimationFrame(() => {
+      document.getElementById(targetId)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
   };
 
   useEffect(() => {
@@ -267,7 +282,20 @@ export default function IomiNotch({
                   exit={{ opacity: 0, x: -18 }}
                   transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
                 >
-                  <div className="iomi-notch-label">Go anywhere</div>
+                  <div className="iomi-notch-label-row">
+                    <div className="iomi-notch-label">Go anywhere</div>
+                    {theme && onToggleTheme && (
+                      <button
+                        type="button"
+                        className="iomi-notch-theme"
+                        onClick={onToggleTheme}
+                        aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
+                        title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
+                      >
+                        {theme === "dark" ? <Sun aria-hidden="true" /> : <Moon aria-hidden="true" />}
+                      </button>
+                    )}
+                  </div>
                   <div className="iomi-notch-grid">
                     {nav.map((item) => {
                       const hasChildren = Boolean(item.children?.length);
@@ -280,7 +308,7 @@ export default function IomiNotch({
                           exit={{ opacity: 0, y: 4 }}
                           transition={{ duration: 0.2 }}
                         >
-                          <Link className="iomi-notch-link" to={item.to} onClick={closeNav}>
+                          <Link className="iomi-notch-link" to={item.to} onClick={() => followNav(item.to)}>
                             <span className="iomi-notch-copy">
                               <motion.span className="iomi-notch-name" layoutId={`iomi-name-${layoutKey}`}>
                                 {item.label}
@@ -355,7 +383,7 @@ export default function IomiNotch({
                         }}
                         transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
                       >
-                        <Link className="iomi-notch-subpage" to={child.to} onClick={closeNav}>
+                        <Link className="iomi-notch-subpage" to={child.to} onClick={() => followNav(child.to)}>
                           <span>{child.label}</span>
                           <small>{child.note}</small>
                           <ChevronRight aria-hidden="true" />

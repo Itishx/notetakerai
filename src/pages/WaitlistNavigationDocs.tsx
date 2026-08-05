@@ -50,6 +50,26 @@ export default function WaitlistNavigationDocs() {
             sit between the opening description and the two paragraphs that explain
             the operating layer underneath Braino.
           </p>
+          <p>
+            The separate left chapter rail is gone. Braino, Browser, IOMI, Braino OS,
+            Studio, Hera, and Join now open from the top notch itself. Its awake eyes
+            sit in the centre immediately; the public page no longer begins with a
+            sleeping notch or a first-click wake-up sequence.
+          </p>
+          <p>
+            Waitlist choices now travel with the email into the existing admin view.
+            Each person shows the Braino surface they chose, repeat signups merge new
+            interests, and older entries remain safely visible as uncategorised.
+          </p>
+          <p>
+            The hero now tells visitors to click the notch eyes, every notch entry
+            scrolls to a real section, and the footer game has forgiving jumps,
+            buffered input, edge grace, and recoverable pipe collisions.
+          </p>
+          <p>
+            The expanded notch also owns the light/dark toggle, while Braino's sixth
+            form now shows the complete eight-face reaction board instead of repeated art.
+          </p>
         </section>
 
         <section className="kb-article-block">
@@ -82,6 +102,11 @@ export default function WaitlistNavigationDocs() {
             The hero now pairs its three-beat “cutest AI agent” headline with Braino
             himself, a quiet orbital visual, and one simpler explanation. The old
             “Download Braino” hero button is gone so the page keeps one clear waitlist path.
+          </p>
+          <p>
+            The footer is just the playable Braino course now, followed by copyright,
+            the founder signoff, Privacy, and Terms. Unfinished product and social links
+            no longer appear as public promises.
           </p>
         </section>
 

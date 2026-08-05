@@ -8,8 +8,27 @@ const ADMIN_EMAIL = 'itishpande21@gmail.com';
 type WaitlistRow = {
   id: string;
   email: string;
+  context: string | null;
   created_at: string;
 };
+
+const CATEGORY_LABELS: Record<string, string> = {
+  braino: 'Braino · Browser',
+  macos: 'Braino IOMI',
+  'braino-os': 'Braino OS',
+  studio: 'Braino Studio',
+  hera: 'Braino Hera',
+  everything: 'Everything',
+};
+
+function waitlistCategories(context: string | null) {
+  if (!context?.startsWith('editorial-waitlist:')) return [];
+  return context
+    .slice('editorial-waitlist:'.length)
+    .split(',')
+    .map(value => value.trim())
+    .filter(value => CATEGORY_LABELS[value]);
+}
 
 function isToday(iso: string) {
   return new Date(iso).toDateString() === new Date().toDateString();
@@ -185,6 +204,7 @@ export default function WaitlistDashboard() {
               <tr style={{ borderBottom: '1px solid rgba(251,247,241,0.1)' }}>
                 <th style={th}>#</th>
                 <th style={th}>Email</th>
+                <th style={th}>Interested in</th>
                 <th style={th}>Joined</th>
                 <th style={{ ...th, width: 40 }}></th>
               </tr>
@@ -214,6 +234,18 @@ export default function WaitlistDashboard() {
                         opacity: 0.8,
                       }}>new</span>
                     )}
+                  </td>
+                  <td style={td}>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                      {waitlistCategories(row.context).length ? waitlistCategories(row.context).map(category => (
+                        <span key={category} style={{
+                          padding: '3px 7px', borderRadius: 999,
+                          color: '#f0b26e', background: 'rgba(226,125,57,.1)',
+                          border: '1px solid rgba(226,125,57,.2)',
+                          fontSize: 10, whiteSpace: 'nowrap',
+                        }}>{CATEGORY_LABELS[category]}</span>
+                      )) : <span style={{ color: 'rgba(251,247,241,.28)', fontSize: 11 }}>Uncategorised</span>}
+                    </div>
                   </td>
                   <td style={{ ...td, color: 'rgba(251,247,241,0.4)', whiteSpace: 'nowrap' }}>
                     {new Date(row.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}

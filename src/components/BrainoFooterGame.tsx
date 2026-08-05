@@ -90,6 +90,8 @@ export default function BrainoFooterGame() {
     let playerY = 0;
     let velocityY = 0;
     let grounded = true;
+    let lastGroundedAt = performance.now();
+    let jumpQueuedUntil = 0;
     let coinCount = 0;
     let pipeDive: {
       elapsed: number;
@@ -220,6 +222,8 @@ export default function BrainoFooterGame() {
       playerY = 0;
       velocityY = 0;
       grounded = true;
+      lastGroundedAt = performance.now();
+      jumpQueuedUntil = 0;
       coinCount = 0;
       pipeDive = null;
       game.classList.remove("is-pipe-diving");
@@ -259,9 +263,12 @@ export default function BrainoFooterGame() {
 
     const jump = () => {
       if (phaseRef.current !== "running") return;
-      if (!grounded) return;
+      const now = performance.now();
+      jumpQueuedUntil = now + 180;
+      if (!grounded && now - lastGroundedAt > 150) return;
       grounded = false;
-      velocityY = 620;
+      velocityY = 760;
+      jumpQueuedUntil = 0;
     };
 
     actionRef.current = { jump, restart };
@@ -334,13 +341,12 @@ export default function BrainoFooterGame() {
           playerX = Math.max(20, Math.min(game.clientWidth - PLAYER_WIDTH - 20, playerX));
 
           const previousY = playerY;
-          velocityY -= 1780 * dt;
+          velocityY -= 1650 * dt;
           playerY += velocityY * dt;
 
           const playerLeft = playerX + 9;
           const playerRight = playerX + PLAYER_WIDTH - 9;
           let landingSurface = 0;
-          let landingPipe: CourseObject | null = null;
           let hitPipe = false;
 
           for (const object of objects) {
@@ -351,40 +357,36 @@ export default function BrainoFooterGame() {
 
             const objectTop = object.bottom + object.height;
             if (velocityY <= 0 && previousY >= objectTop - 5 && playerY <= objectTop + 7) {
-              if (object.pipe) landingPipe = object;
-              else landingSurface = Math.max(landingSurface, objectTop);
+              landingSurface = Math.max(landingSurface, objectTop);
               continue;
             }
 
             const playerTop = playerY + PLAYER_HEIGHT;
             const overlapsY = playerTop > object.bottom + 7 && playerY < objectTop - 7;
-            if (object.lethalSide && overlapsY && playerY < objectTop - 8) hitPipe = true;
+            if (
+              object.lethalSide && overlapsY && playerY < objectTop - 18
+              && playerRight > screenX + 14 && playerLeft < screenX + object.width - 14
+            ) hitPipe = true;
           }
 
-          if (landingPipe) {
-            const pipeScreenX = landingPipe.x - worldOffset;
-            const pipeTop = landingPipe.bottom + landingPipe.height;
-            pipeDive = {
-              elapsed: 0,
-              startY: pipeTop,
-              startX: playerX,
-              targetX: pipeScreenX + landingPipe.width / 2 - PLAYER_WIDTH / 2,
-              warped: false,
-            };
-            playerY = pipeTop;
-            velocityY = 0;
-            grounded = false;
-            game.classList.add("is-pipe-diving");
-          } else if (landingSurface > 0 && velocityY <= 0) {
+          if (landingSurface > 0 && velocityY <= 0) {
             playerY = landingSurface;
             velocityY = 0;
             grounded = true;
+            lastGroundedAt = now;
           } else if (playerY <= 0) {
             playerY = 0;
             velocityY = 0;
             grounded = true;
+            lastGroundedAt = now;
           } else {
             grounded = false;
+          }
+
+          if (jumpQueuedUntil >= now && grounded) {
+            grounded = false;
+            velocityY = 760;
+            jumpQueuedUntil = 0;
           }
 
           for (const coin of courseCoins) {
@@ -399,7 +401,13 @@ export default function BrainoFooterGame() {
             setCoins(coinCount);
           }
 
-          if (hitPipe) finishRun();
+          // Pipes are obstacles, not instant deaths. A late jump gets a small
+          // forgiving bounce so the course stays playful on touch screens.
+          if (hitPipe && playerY < 24) {
+            grounded = false;
+            velocityY = Math.max(velocityY, 640);
+            playerY = Math.max(playerY, 8);
+          }
         }
 
         while (nextSegmentStart - worldOffset < game.clientWidth * 2.2) createSegment();

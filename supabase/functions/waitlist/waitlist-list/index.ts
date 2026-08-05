@@ -59,7 +59,7 @@ serve(async (req) => {
   // GET — list all rows
   const { data, error } = await adminClient
     .from("waitlist")
-    .select("id, email, created_at")
+    .select("id, email, context, created_at")
     .order("created_at", { ascending: true });
 
   if (error) {

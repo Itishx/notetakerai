@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
-import { ArrowUpRight, Check, Circle, Loader2, Moon, Play, Sun } from "lucide-react";
+import { ArrowUpRight, Check, Circle, Loader2, Play } from "lucide-react";
 import { Link } from "react-router-dom";
 import { BRAINO_WALKER_SVG } from "../components/brainoWalkerSvg";
 import { Braino, BrainoDefs, useTime } from "../components/BrainoChar";
@@ -27,6 +27,23 @@ const SECTION_TABS: Array<{ id: WaitlistSection; label: string }> = [
   { id: "hera", label: "Hera" },
   { id: "join", label: "Join" },
 ];
+
+const WAITLIST_NOTCH_NAV = SECTION_TABS.map((section, index) => ({
+  to: `#${section.id}`,
+  label: section.label,
+  note: `Chapter ${String(index + 1).padStart(2, "0")}`,
+}));
+
+const BRAINO_REACTIONS = [
+  ["/reactions/braino-idle.svg", "Braino calm"],
+  ["/reactions/braino-happy.svg", "Braino happy"],
+  ["/reactions/braino-laughing.svg", "Braino laughing"],
+  ["/reactions/braino-celebrating.svg", "Braino celebrating"],
+  ["/reactions/braino-focus.svg", "Braino focused"],
+  ["/reactions/braino-shocked.svg", "Braino shocked"],
+  ["/reactions/braino-scared.svg", "Braino scared"],
+  ["/reactions/braino-tears-of-joy.svg", "Braino crying with joy"],
+] as const;
 
 type MascotMotion = "standing" | "walking" | "dancing" | "moonwalk";
 
@@ -100,11 +117,7 @@ export function BrainoIntroduction() {
                   {form.art === "face" ? (
                     <img src="/reactions/braino-happy.svg" alt="Braino reaction face" />
                   ) : form.art === "reactions" ? (
-                    <>
-                      <img src="/reactions/braino-idle.svg" alt="Braino idle reaction" />
-                      <img src="/reactions/braino-happy.svg" alt="Braino happy reaction" />
-                      <div className="wl-mini-walker" dangerouslySetInnerHTML={{ __html: BRAINO_WALKER_SVG }} />
-                    </>
+                    BRAINO_REACTIONS.map(([src, alt]) => <img src={src} alt={alt} key={src} />)
                   ) : (
                     <MovingBraino motion={form.art} />
                   )}
@@ -143,7 +156,8 @@ export function BrainoHeraChapter() {
     <section className="wl-chapter wl-reveal" id="hera">
       <div className="wl-chapter-number">06 / Hera</div>
       <h2 className="wl-product-title">Braino <span className="wl-shimmer wl-shimmer-green">Hera</span>.</h2>
-      <div className="wl-hera-secret"><span aria-hidden="true"><i /><i /><i /></span><p className="wl-large">Coming soon.</p></div>
+      <p className="wl-large">A quieter, more personal side of Braino is taking shape.</p>
+      <p>We are keeping the details close until the idea is ready to meet people properly. Coming soon.</p>
     </section>
   );
 }
@@ -297,7 +311,11 @@ export function WaitlistJoin({ id = "join" }: { id?: string }) {
       const response = await fetch(`${SUPABASE_URL}/functions/v1/waitlist-signup`, {
         method: "POST",
         headers: { "Content-Type": "application/json", apikey: SUPABASE_KEY },
-        body: JSON.stringify({ email: email.trim(), context: `editorial-waitlist:${Array.from(selected).join(",")}` }),
+        body: JSON.stringify({
+          email: email.trim(),
+          categories: Array.from(selected),
+          context: `editorial-waitlist:${Array.from(selected).join(",")}`,
+        }),
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error();
@@ -386,7 +404,12 @@ export default function Waitlist() {
   return (
     <main className={`wl-page is-${theme}`} ref={pageRef}>
       <BrainoDefs />
-      <IomiNotch />
+      <IomiNotch
+        nav={WAITLIST_NOTCH_NAV}
+        sleepOnFirstVisit={false}
+        theme={theme}
+        onToggleTheme={() => setTheme((current) => current === "dark" ? "light" : "dark")}
+      />
 
       <header className="wl-hero" id="top">
         <div className="wl-hero-layout">
@@ -401,6 +424,7 @@ export default function Waitlist() {
             <div className="wl-hero-footnote">
               <span>One character.</span>
               <span>Everywhere you work.</span>
+              <span>Click the notch eyes to explore.</span>
             </div>
           </div>
 
@@ -420,33 +444,6 @@ export default function Waitlist() {
           </div>
         </div>
       </header>
-
-      <div className="wl-tabs-shell is-revealed" aria-label="Braino waitlist sections">
-        <span className="wl-rail-label">Explore</span>
-        <nav className="wl-tabs">
-          {SECTION_TABS.map((tab, index) => (
-            <a
-              key={tab.id}
-              href={`#${tab.id}`}
-              className={activeSection === tab.id ? "active" : ""}
-              aria-current={activeSection === tab.id ? "location" : undefined}
-              onClick={() => setActiveSection(tab.id)}
-            >
-              <i>{String(index + 1).padStart(2, "0")}</i>
-              <span>{tab.label}</span>
-            </a>
-          ))}
-        </nav>
-        <button
-          type="button"
-          className="wl-theme-toggle"
-          onClick={() => setTheme((current) => current === "dark" ? "light" : "dark")}
-          aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
-          title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
-        >
-          {theme === "dark" ? <Sun aria-hidden="true" /> : <Moon aria-hidden="true" />}
-        </button>
-      </div>
 
       <article className="wl-article">
         <BrainoIntroduction />
