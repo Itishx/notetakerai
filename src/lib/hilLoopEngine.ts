@@ -90,6 +90,7 @@ function describeAction(action: Record<string, unknown>, target: PageElement | n
   const t = String(action?.type || "");
   if (t === "navigate") return `navigate to ${String(action.url || "")}`;
   if (t === "read") return "read the page";
+  if (t === "look") return "look at the screen";
   if (t === "click") return `click [${action.index}]${target ? ` "${target.name}"` : ""}`;
   if (t === "type") return `type into [${action.index}]${target ? ` "${target.name}"` : ""}: "${String(action.text || "")}"${action.submit === true ? " and submit" : ""}`;
   if (t === "pressKey") return `press ${String(action.key || "")}`;
@@ -143,7 +144,7 @@ export class HilLoopRunner {
     return { url: currentUrl(this.world), elements: elementMap(this.world) };
   }
 
-  async start(command: string, context: string, preset: WorldPreset = "empty") {
+  async start(command: string, context: string, preset: WorldPreset = "empty", screenImage = "") {
     this.phase = "thinking";
     this.events = [];
     this.tasks = [];
@@ -152,7 +153,7 @@ export class HilLoopRunner {
     this.command = command.trim();
     this.context = context.trim();
     this.runId = crypto.randomUUID();
-    this.world = createWorld(preset);
+    this.world = createWorld(preset, screenImage);
     this.lastActionSig = null;
     this.facts = [];
     this.stepRecords = [];
@@ -426,6 +427,22 @@ export class HilLoopRunner {
       }
     } else {
       this.lastStepFailed = false;
+    }
+
+    // Findings that must OUTLIVE the turn that produced them.
+    //
+    // The step record keeps only what was attempted and whether it worked, and
+    // the full result is handed back for exactly one turn. That is right for a
+    // click, whose meaning is "it worked", and wrong for anything whose whole
+    // value is the content that came back. A look costs a screenshot and a
+    // vision call, and it was being forgotten immediately: the loop looked at
+    // the Eiffel Tower on turn one and said "the screen is blank" on turn two.
+    // A search answer has the same shape. Both go into facts, which every turn
+    // carries, so a thing learned once stays learned.
+    const payload = result as Record<string, unknown>;
+    if (!errText) {
+      if (typeof payload?.sees === "string") this.facts.push(`I looked at the screen and saw: ${payload.sees}`);
+      else if (typeof payload?.answer === "string") this.facts.push(`Search "${String(card.action.query || "")}" answered: ${payload.answer}`);
     }
 
     this.stepRecords.push({ intent: card.intent, action: card.actionLabel, ok: errText ? false : null, why: errText });

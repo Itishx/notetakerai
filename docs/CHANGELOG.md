@@ -1,5 +1,11 @@
 # Braino Changelog
 
+## August 5, 2026 — A song for whatever he can see
+- **"Play a song based on what you see" now has a way to be thought about.** He looks at the screen, names what the image is actually about (an Eiffel Tower is Paris, France, romance, dusk), thinks of real songs it connects to through more than one door, picks the most right or the most enjoyably sideways, checks the song exists, and only then opens the music app and plays it.
+- **You can watch him choose before any of it is real.** The Loop on /human-intelligence has a new field for what is on your screen, and it is kept apart from the context box on purpose: he only learns what is there if he decides to look, exactly as a screenshot and a vision call cost something on a real Mac. Two ready-made scenes are in the samples, and twenty commands are in the corpus on /commands.
+- **He is not allowed to invent a title.** Playing a song that does not exist is the one unforgivable outcome, so when he is unsure he checks first, and when a check comes back empty he says so instead of pretending.
+- **Fixed: he used to forget what he saw.** A look was handed back for exactly one turn and then dropped, so he could read the Eiffel Tower off the screen and say "the screen is blank" a moment later. What he sees, and what a search answers, now stay with him for the rest of the run.
+
 ## August 5, 2026 — He reads people now, instead of matching words
 - **A crisis phrased the ordinary way used to be missed entirely.** The safety word list only knew contractions, so "I don't want to be here" was caught and "I do **not** want to be here" was read as nothing at all. It also knew "hurt myself" but not "hurting myself". Every one of those now routes to crisis on words alone, with no model involved, exactly as the safety promise requires.
 - **Distress described through the body reaches him.** A tight chest, a racing heart, shaking hands, a brain that will not stop. People say those far more often than they say "I am anxious", and until now every one of them read as neutral and got the generic Braino.

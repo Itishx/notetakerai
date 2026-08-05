@@ -15,7 +15,7 @@ The extension has a lot of ability, but ability spread across several surfaces i
 
 ## How to use it
 
-Open `/instagraphics?design=chrome-system` for the full-browser study. Choose idle, listening, working, or chat to compare the surfaces at real browser scale. The earlier notch-only motion study remains at `/instagraphics?design=browser-notch`.
+Open `/instagraphics?design=chrome-system` for the full-browser study. Choose idle, listening, working, short answer, or long answer to compare the states at real browser scale. The earlier notch-only motion study remains at `/instagraphics?design=browser-notch`.
 
 ## What Braino knows or does
 
@@ -25,12 +25,18 @@ Open `/instagraphics?design=chrome-system` for the full-browser study. Choose id
 - Expands on click to reveal the task summary and verified steps.
 - Lets Braino hop down into the existing browser walk mode.
 - Speaks the result, then shrinks back to the idle home.
-- Keeps the existing liquid chat for history, sources, approvals, and follow-ups.
-- Keeps the standing mascot as Braino's ambient presence and the way into chat.
+- Tests answers directly inside the notch without opening liquid chat.
+- Uses a compact notch tray for short answers and an anchored, scrollable liquid sheet for long answers.
+- Gives the long-answer sheet a small walker lane above follow-up input, using Braino's full standing mascot rig.
+- Keeps Braino visible inside idle, listening, and compact working states; listening radiates sonar from him.
+- Sizes the long-answer sheet to its rendered content instead of reserving empty height.
+- Cycles Hatching, Calibrating, and Thinking in the compact working notch.
+- Expands on click into full-sentence, user-facing task progress before showing the answer.
+- Removes the detached mascot from this focused notch-only experiment.
 
 ## Honest limitations
 
-This is a visual prototype, not the production extension UI. Buttons change staged states; they do not yet control a real tab, voice session, browser action, or undo operation. The sample webpage and conversation are fictional. The liquid panel matches production tokens but does not yet reuse the production DOM.
+This is a visual prototype, not the production extension UI. Buttons change staged states; they do not yet control a real tab, voice session, browser action, or undo operation. The sample webpage, progress sentences, and answers are fictional. Progress copy must describe observable actions and must not expose private model chain-of-thought. Citations, persistent history, approvals, keyboard behavior, and multi-turn conversations still need implementation decisions.
 
 ## Technical shape
 
@@ -38,7 +44,7 @@ The prototypes live in `src/pages/InstaGraphics.tsx` and `src/pages/insta-graphi
 
 ## Product or design decisions
 
-The three surfaces have different jobs. The mascot carries presence. The notch carries voice and live task status. The liquid chat carries depth, history, sources, approvals, and follow-ups. The notch must not become a second chat window. Compact thinking communicates that work is alive without exposing hidden chain-of-thought. Completion is temporary: after Braino speaks, the notch returns to idle.
+The current experiment deliberately tests a notch-only system shared by Chrome and Mac/IOMI. Braino—not an abstract badge—remains the visual anchor in idle, listening, and working states. Asking, voice, live task status, and the immediate answer all happen in one place. Liquid chat, the detached ambient mascot, explanatory page copy, and design legends are removed from this prototype. Braino appears again inside the expanded long-answer surface as a small walker above follow-up input, driven by the production extension gait math. Compact thinking communicates that work is alive without exposing hidden chain-of-thought. Completion is temporary: after the answer, the notch returns to idle.
 
 ## What comes next
 

@@ -18,7 +18,7 @@ import RunVerdict from "@/components/RunVerdict";
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 const SUPABASE_KEY = (import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY) as string;
 
-const LOOP_SAMPLES: Array<{ label: string; cmd: string; ctx: string; preset: WorldPreset }> = [
+const LOOP_SAMPLES: Array<{ label: string; cmd: string; ctx: string; preset: WorldPreset; screen?: string }> = [
   {
     label: "\"Reply to this email\" with the thread open",
     cmd: "reply to this email",
@@ -30,6 +30,20 @@ const LOOP_SAMPLES: Array<{ label: string; cmd: string; ctx: string; preset: Wor
     cmd: "reply to this email",
     ctx: "",
     preset: "gmail-inbox",
+  },
+  {
+    label: "Vision: play a song based on what you see",
+    cmd: "play a song based on what you see",
+    ctx: "",
+    preset: "empty",
+    screen: "A photograph of the Eiffel Tower at dusk, lit up gold, with the Seine and a couple of bridges in the foreground. Set as the desktop wallpaper.",
+  },
+  {
+    label: "Vision: a song for this, but funny",
+    cmd: "look at my screen and play the funniest song that fits",
+    ctx: "",
+    preset: "empty",
+    screen: "A close-up photo of a very fat orange cat asleep on a keyboard, in a messy home office with three empty coffee cups.",
   },
   {
     label: "Mac: \"open what I just downloaded\"",
@@ -77,6 +91,7 @@ function ResultLine({ result }: { result: unknown }) {
   const note = typeof r.happened === "string" ? r.happened
     : typeof r.navigated === "string" ? `the page loaded at ${r.navigated}`
     : Array.isArray(r.elements) ? `read back ${r.elements.length} elements`
+    : typeof r.sees === "string" ? `he sees: ${r.sees}`
     : Array.isArray(r.results) ? `${(r.results as unknown[]).length} results came back`
     : typeof r.error === "string" ? null
     : null;
@@ -130,6 +145,8 @@ function StepCard({ e, gatedNow, onConfirm, onDecline }: {
 export default function HilLoopRun({ autoRun }: { autoRun?: { command: string; preset: WorldPreset } | null }) {
   const [command, setCommand] = useState("");
   const [context, setContext] = useState("");
+  // What a vision model would see. Only reaches him if he chooses to look.
+  const [screenImage, setScreenImage] = useState("");
   const [reply, setReply] = useState("");
   const [, setVersion] = useState(0);
   const runnerRef = useRef<HilLoopRunner | null>(null);
@@ -155,12 +172,16 @@ export default function HilLoopRun({ autoRun }: { autoRun?: { command: string; p
     }
   }, [eventCount]);
 
-  const start = (cmd?: string, ctx?: string, preset: WorldPreset = "empty") => {
+  const start = (cmd?: string, ctx?: string, preset: WorldPreset = "empty", screen?: string) => {
     const text = (cmd ?? command).trim();
     if (!text || running) return;
-    if (cmd !== undefined) { setCommand(cmd); setContext(ctx ?? ""); }
+    if (cmd !== undefined) {
+      setCommand(cmd);
+      setContext(ctx ?? "");
+      if (screen !== undefined) setScreenImage(screen);
+    }
     setReply("");
-    void runner.start(text, ctx ?? context, preset);
+    void runner.start(text, ctx ?? context, preset, screen ?? screenImage);
   };
 
   // One shot, keyed on the command itself so arriving from /commands with a
@@ -213,9 +234,22 @@ export default function HilLoopRun({ autoRun }: { autoRun?: { command: string; p
           <textarea
             className="hil-ctx"
             value={context}
-            placeholder="Optional context: what is on screen, what came before"
+            placeholder="Optional context: what came before, who is who"
             onChange={(e) => setContext(e.target.value)}
             rows={2}
+            disabled={running}
+          />
+          {/* Kept apart from context on purpose. Context is handed to him every
+              turn for free; this is not. He only learns what is on the screen
+              if he decides to look, which is what a screenshot and a vision
+              call cost on the real Mac. */}
+          <input
+            className="hil-cmd hil-screen"
+            type="text"
+            value={screenImage}
+            placeholder="On your screen, if he looks: your wallpaper, a photo, whatever the camera would see"
+            onChange={(e) => setScreenImage(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") start(); }}
             disabled={running}
           />
           <div className="hil-lab-row">
@@ -233,7 +267,7 @@ export default function HilLoopRun({ autoRun }: { autoRun?: { command: string; p
           </div>
           <div className="hil-samples">
             {LOOP_SAMPLES.map((s) => (
-              <button key={s.label} className="hil-sample" onClick={() => start(s.cmd, s.ctx, s.preset)} disabled={running}>
+              <button key={s.label} className="hil-sample" onClick={() => start(s.cmd, s.ctx, s.preset, s.screen ?? "")} disabled={running}>
                 {s.label}
               </button>
             ))}

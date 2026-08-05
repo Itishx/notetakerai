@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { BRAINO_WALKER_SVG } from "@/components/brainoWalkerSvg";
+import BrainoWalker from "@/components/BrainoWalker";
 import "./insta-graphics.css";
 
 type InstaPreview = "braino-os" | "iomi-boot" | "browser-notch" | "chrome-system";
@@ -235,10 +236,32 @@ function BrowserNotchPrototype() {
   );
 }
 
-type ChromeSystemPhase = "idle" | "listening" | "working" | "answer";
+type ChromeSystemPhase = "idle" | "listening" | "working" | "expanded-thinking" | "short-answer" | "long-answer";
 
 function ChromeSystemPrototype() {
   const [phase, setPhase] = useState<ChromeSystemPhase>("idle");
+  const [replayId, setReplayId] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
+
+  useEffect(() => {
+    if (replayId === 0) return;
+    setPhase("idle");
+    setIsPlaying(true);
+    const sequence: Array<[ChromeSystemPhase, number]> = [
+      ["listening", 1100],
+      ["working", 3800],
+      ["expanded-thinking", 6900],
+      ["short-answer", 10400],
+      ["long-answer", 13200],
+      ["idle", 18500],
+    ];
+    const timers = sequence.map(([nextPhase, delay], index) => window.setTimeout(() => {
+      setPhase(nextPhase);
+      if (index === sequence.length - 1) setIsPlaying(false);
+    }, delay));
+    return () => timers.forEach((timer) => window.clearTimeout(timer));
+  }, [replayId]);
+
   return (
     <div className="ig-frame ig-chrome-system-frame" id="ig-chrome-system">
       <div className={`ig-chrome-system phase-${phase}`}>
@@ -249,38 +272,49 @@ function ChromeSystemPrototype() {
         </header>
 
         <main className="ig-cs-webpage">
-          <span className="ig-cs-page-label">Browser surface study</span>
-          <h1>The page stays<br />the main character.</h1>
-          <p>Braino appears only at the depth the moment needs.</p>
-          <div className="ig-cs-page-grid"><i/><i/><i/><i/><i/><i/></div>
+          <div className="ig-cs-demo-site">
+            <header><i /><span /><nav><b /><b /><b /></nav></header>
+            <section><span /><span /><span /></section>
+            <div><article /><article /><article /></div>
+          </div>
         </main>
 
-        <button className="ig-cs-notch" type="button" onClick={() => setPhase(phase === "idle" ? "listening" : phase === "listening" ? "working" : phase === "working" ? "answer" : "idle")}>
-          <span className="ig-cs-notch-idle"><i /><i /> <small>Talk to Braino</small></span>
-          <span className="ig-cs-notch-listening"><i/><i/><i/><i/><i/> <small>Listening</small></span>
-          <span className="ig-cs-notch-working"><b>2</b><span><strong>Working on it</strong><small>Filling the form · 2 of 3</small></span><em/></span>
-          <span className="ig-cs-notch-answer">
-            <i className="ig-cs-answer-mascot" dangerouslySetInnerHTML={{ __html: BRAINO_WALKER_SVG }} />
+        <button className="ig-cs-notch" type="button" onClick={() => { if (!isPlaying) setPhase(phase === "idle" ? "listening" : phase === "listening" ? "working" : phase === "working" ? "expanded-thinking" : phase === "expanded-thinking" ? "short-answer" : phase === "short-answer" ? "long-answer" : "idle"); }}>
+          {phase !== "long-answer" && <i className="ig-cs-state-braino" dangerouslySetInnerHTML={{ __html: BRAINO_WALKER_SVG }} />}
+          <span className="ig-cs-notch-idle"><b className="ig-cs-idle-eyes"><i /><i /></b><small>Talk to Braino</small></span>
+          <span className="ig-cs-notch-listening"><small>Listening</small></span>
+          <span className="ig-cs-notch-working"><span><strong><i>Hatching</i><i>Calibrating</i><i>Thinking</i></strong><small>Click to see Braino’s process</small></span><em/></span>
+          <span className="ig-cs-notch-expanded-thinking">
+            <header><span><i /> Braino is thinking</span><em>Collapse</em></header>
+            <p>First I’m reading the page to understand what the writer is actually trying to say.</p>
+            <p>Now I’m separating the useful argument from the repetition around it.</p>
+            <p>Next I’ll rewrite the answer in your tone and keep the original meaning intact.</p>
+          </span>
+          <span className="ig-cs-notch-short-answer">
             <span><small>Braino</small><strong>I cleaned it up. Want me to replace the original?</strong></span>
-            <em>Done</em>
+            <em>Replace</em>
+          </span>
+          <span className="ig-cs-notch-long-answer">
+            <header><span><i /><i /><b>Braino</b></span><em>Done</em></header>
+            <article>
+              <small>Answer from this page</small>
+              <h2>Here’s the useful version.</h2>
+              <p>The article argues that better work does not come from adding more tools. It comes from reducing the distance between deciding and doing.</p>
+              <p>The strongest idea is to keep context close to the action, so you spend less time rebuilding what you already knew.</p>
+              <div><b>1</b><span><strong>Reduce the hand-offs</strong><small>Keep research, decisions and execution connected.</small></span></div>
+              <div><b>2</b><span><strong>Preserve context</strong><small>Let the system remember what led to the decision.</small></span></div>
+            </article>
+            <div className="ig-cs-answer-walk-lane"><BrainoWalker perchTargetId="ig-cs-followup-bar" alwaysPerched /></div>
+            <footer id="ig-cs-followup-bar"><span>Ask a follow-up</span><i>⌁</i><b>↑</b></footer>
           </span>
         </button>
 
-        <button className="ig-cs-mascot" type="button" aria-label="Talk to Braino" onClick={() => setPhase("listening")}>
-          <span dangerouslySetInnerHTML={{ __html: BRAINO_WALKER_SVG }} />
-          <small>Ask Braino</small>
-        </button>
-
-        <div className="ig-cs-principles">
-          <span><b>Mascot</b>Presence</span>
-          <span><b>Notch</b>Ask + status + answer</span>
-          <span><b>One surface</b>No floating chat</span>
-        </div>
-
-        <div className="ig-iomi-controls ig-cs-controls" aria-label="Chrome system states">
-          {(["idle", "listening", "working", "answer"] as ChromeSystemPhase[]).map((item) => (
-            <button key={item} type="button" className={phase === item ? "is-active" : ""} onClick={() => setPhase(item)}>{item}</button>
+        <div className="ig-cs-controls" aria-label="Chrome system states">
+          <span>Preview state</span>
+          {(["idle", "listening", "working", "expanded-thinking", "short-answer", "long-answer"] as ChromeSystemPhase[]).map((item) => (
+            <button key={item} type="button" disabled={isPlaying} className={phase === item ? "is-active" : ""} onClick={() => setPhase(item)}>{item}</button>
           ))}
+          <button type="button" className="ig-cs-replay" onClick={() => setReplayId((value) => value + 1)}>{isPlaying ? "Playing…" : "Replay flow"}</button>
         </div>
       </div>
     </div>

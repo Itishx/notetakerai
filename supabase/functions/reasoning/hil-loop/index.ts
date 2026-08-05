@@ -26,7 +26,12 @@ const HIL_LOOP_MODEL = "gpt-5.4-mini";
 const OPENAI_ENDPOINT = "https://api.openai.com/v1/chat/completions";
 
 // The action vocabulary, matching the real extension's BG_DELEGATE_ACTIONS.
-const ACTION_TYPES = new Set(["navigate", "read", "click", "type", "pressKey", "scroll", "wait", "web_search"]);
+// The allowlist is the last word: an action not named here is rejected as an
+// unreadable turn, no matter how correct it was. "look" was added to the prompt
+// and to the world before it was added here, and the symptom was Braino
+// appearing to fail at the new skill while actually performing it perfectly.
+// Anything taught in hil-loop-prompt.ts must be listed here in the same change.
+const ACTION_TYPES = new Set(["navigate", "read", "look", "click", "type", "pressKey", "scroll", "wait", "web_search"]);
 
 // Reversibility is decided by WHAT is being clicked, and the element name lives on
 // the client (it holds the live observation), so the final say is enforced there in
@@ -43,7 +48,10 @@ async function callModel(apiKey: string, messages: unknown[]) {
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ model: HIL_LOOP_MODEL, messages }),
+    // An explicit ceiling where there was none. A turn that weighs several
+    // candidate songs runs longer than one that clicks a button, and a decision
+    // cut off mid-JSON is indistinguishable from a broken one.
+    body: JSON.stringify({ model: HIL_LOOP_MODEL, messages, max_completion_tokens: 1200 }),
   });
 }
 

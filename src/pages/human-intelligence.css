@@ -323,3 +323,13 @@
   .hil-think-beat, .hil-sum-row { animation: none; }
   .hil-pulse { animation: none; }
 }
+
+/* The screen field on the Loop: what a vision model would see if he looks.
+   Tinted apart from the command box because it is not an instruction, it is
+   the world, and he only gets it if he decides to take the screenshot. */
+.hil-screen {
+  font-size: 13.5px;
+  background: color-mix(in srgb, var(--ap-violet, #6b52c4) 5%, var(--ap-surface, #fff));
+  border-color: color-mix(in srgb, var(--ap-violet, #6b52c4) 25%, var(--ap-hairline, #d2d2d7));
+}
+.hil-screen::placeholder { opacity: 0.75; }

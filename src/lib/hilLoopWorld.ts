@@ -50,6 +50,11 @@ export type World = {
     opened: string | null;
     lastMove: { file: string; to: string } | null;
   };
+  // What a vision model would return if he looked at the screen right now.
+  // Deliberately NOT in the state he is handed every turn: on the real Mac a
+  // look costs a screenshot and a vision call, so the loop has to decide to
+  // take one. Handing him the answer for free would test nothing.
+  screen: { image: string; looked: boolean };
   // The last textbox typed into, so pressKey Enter can submit it the way a real
   // page would. Cleared whenever the screen changes underneath it.
   lastTyped: { site: SiteId; name: string } | null;
@@ -79,7 +84,7 @@ const DOWNLOADS: FinderFile[] = [
 
 export type WorldPreset = "empty" | "gmail-thread" | "gmail-inbox" | "finder-downloads";
 
-export function createWorld(preset: WorldPreset = "empty"): World {
+export function createWorld(preset: WorldPreset = "empty", screenImage = ""): World {
   const world: World = {
     tabs: [],
     activeTab: null,
@@ -89,6 +94,7 @@ export function createWorld(preset: WorldPreset = "empty"): World {
     youtube: { screen: "home", query: "", results: [], nowPlaying: null },
     blinkit: { screen: "home", query: "", results: [], cart: [], ordered: false },
     finder: { folder: "Downloads", files: DOWNLOADS.map((f) => ({ ...f })), opened: null, lastMove: null },
+    screen: { image: screenImage.trim(), looked: false },
     lastTyped: null,
   };
   if (preset === "gmail-thread") {
@@ -442,7 +448,11 @@ export function elementAt(world: World, index: number): PageElement | null {
 // The observation string sent to the model every turn: exactly what a read of the
 // live page would give the real Delegate loop, in the same shape.
 export function renderObservation(world: World): string {
-  if (!world.activeTab) return "No tab is open. There is nothing on screen.";
+  if (!world.activeTab) {
+    return world.screen.image && !world.screen.looked
+      ? "No tab is open, but the desktop is showing something. Use look to see it."
+      : "No tab is open. There is nothing on screen.";
+  }
   const lines = [`URL: ${currentUrl(world)}`, `TITLE: ${pageTitle(world)}`];
 
   const notes: string[] = [];
@@ -468,6 +478,11 @@ export function renderObservation(world: World): string {
     if (world.blinkit.cart.length) notes.push(`cart holds: ${world.blinkit.cart.join(", ")}`);
   }
   if (notes.length) lines.push(`PAGE STATE: ${notes.join("; ")}`);
+
+  // Only the FACT that a screen exists, never what is on it. He has to look.
+  if (world.screen.image && !world.screen.looked) {
+    lines.push("SCREEN: there is something on the screen behind these tabs. Use look to see it.");
+  }
 
   const others = world.tabs.filter((t) => t !== world.activeTab);
   if (others.length) lines.push(`OTHER OPEN TABS: ${others.map((t) => SITE_LABEL[t]).join(", ")}`);
@@ -558,6 +573,21 @@ export function runAction(world: World, type: string, args: Record<string, unkno
       const gate = needTab(world);
       if (gate) return gate;
       return { url: currentUrl(world), title: pageTitle(world), elements: elementMap(world) };
+    }
+
+    // Looking at the screen. Needs no tab, because it is the whole screen and
+    // not a page: on the real Mac this is a screenshot handed to a vision
+    // model. What comes back is a DESCRIPTION, never the thing itself, so
+    // whatever he does next has to be reasoned from words about an image.
+    case "look": {
+      world.screen.looked = true;
+      if (!world.screen.image) {
+        return {
+          sees: "The screen is a plain desktop. Nothing on it identifies a place, a person, or a mood.",
+          note: "Nothing to go on. Say so rather than inventing something to see.",
+        };
+      }
+      return { sees: world.screen.image, note: "This is what the vision model returned. Work from it, and do not add details it did not mention." };
     }
 
     case "click": {
