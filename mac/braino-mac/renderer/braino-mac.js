@@ -6062,8 +6062,7 @@ async function runSkit() {
     }
     // Billie Jean is already sitting at 3:31 (the play step verifies the seek).
     // Isolated demo: no music theatrics, no headphones, no auto-home.
-    // Give the song 2 seconds to settle before the moonwalk starts.
-    await new Promise((resolve) => window.setTimeout(resolve, 2000));
+    // Moonwalk starts IMMEDIATELY as the song plays.
     await skitPerformMoonwalk(20000);   // 20s moonwalk
     // He stays out and asks while waving. Keep skitMoonwalk true so tick does not
     // resume roam/dock and walk him mid-line; clear it in finally after the skit.
