@@ -11904,9 +11904,12 @@ ipcMain.handle("braino-mac:calendar-join", async () => {
 ipcMain.handle("braino-mac:skit-step", async (_event, step) => {
   if (!SKIT.enabled) return { ok: false, say: "" };
   if (step === "prewarm") {
-    // Boot Spotify in background (-g) while Braino delivers the intro lines.
-    // The app warms up and stays VISIBLE during the moonwalk.
-    try { await execFileP("open", ["-g", "-b", "com.spotify.client"], { timeout: 8000 }); } catch (error) { logMac("skit.prewarm_failed", { error }); }
+    // Boot Spotify and SHOW IT visibly for the moonwalk.
+    try { await execFileP("open", ["-b", "com.spotify.client"], { timeout: 8000 }); } catch (error) { logMac("skit.prewarm_failed", { error }); }
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    // Explicitly show Spotify window
+    try { await execFileP("/usr/bin/osascript", ["-e", 'tell application "System Events" to set visible of process "Spotify" to true'], { timeout: 2000 }); } catch (_) {}
+    try { await execFileP("/usr/bin/osascript", ["-e", 'tell application "Spotify" to activate'], { timeout: 2000 }); } catch (_) {}
     return { ok: true, say: "" };
   }
   if (step === "play") {
