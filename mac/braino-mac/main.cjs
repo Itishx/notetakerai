@@ -7614,7 +7614,7 @@ async function createSpotifyPlaylistOnMac(name, options = {}) {
   return { ok: true, say: `Created the playlist ${created.playlistName || playlistName} on Spotify.` };
 }
 
-async function playSpotifyTrackInMacApp(uri, positionMs = 0) {
+async function playSpotifyTrackInMacApp(uri, positionMs = 0, { activate = true } = {}) {
   const safeUri = escapeAppleScriptString(uri);
   const positionSeconds = Math.max(0, Math.round(Number(positionMs) || 0) / 1000);
   // Seek only after the track is genuinely playing, then HAMMER the seek until
@@ -7638,7 +7638,7 @@ async function playSpotifyTrackInMacApp(uri, positionMs = 0) {
     : "";
   const script = `
 tell application "Spotify"
-  activate
+${activate ? "  activate" : ""}
   play track "${safeUri}"
 ${seekLine}
 end tell`;
@@ -11909,7 +11909,9 @@ ipcMain.handle("braino-mac:skit-step", async (_event, step) => {
       let lastError = null;
       for (let attempt = 0; attempt < 4; attempt += 1) {
         try {
-          await playSpotifyTrackInMacApp(SKIT.trackUri, SKIT.startMs);
+          // No activate: music only — the Spotify window must never jump in
+          // front of the performance.
+          await playSpotifyTrackInMacApp(SKIT.trackUri, SKIT.startMs, { activate: false });
           lastError = null;
           break;
         } catch (error) {
@@ -11918,6 +11920,9 @@ ipcMain.handle("braino-mac:skit-step", async (_event, step) => {
         }
       }
       if (lastError) throw lastError;
+      try {
+        await execFileP("/usr/bin/osascript", ["-e", 'tell application "System Events" to set visible of process "Spotify" to false'], { timeout: 3000 });
+      } catch (_) {}
       logMac("skit.play.done", { uri: SKIT.trackUri });
       return { ok: true, say: "" };
     } catch (error) {

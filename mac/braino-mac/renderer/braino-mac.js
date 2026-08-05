@@ -5957,10 +5957,11 @@ function skitPerformMoonwalk(durationMs = 15000) {
     const X0 = getMoveBounds().maxX;
     const wrapSpan = X0 - START_OFFSCREEN_X;   // glide fully off-screen, then wrap (Chrome: laneW + W)
     const SPEED = 80 * brainoScale;            // Chrome's 80 px/s, scaled with his size so the glide reads identically
+    const phase0 = X0 - posX;                  // start gliding from WHEREVER he stands (no staging trek)
     const start = performance.now();
     const step = (now) => {
       const t = (now - start) / 1000;
-      const x = X0 - ((t * SPEED) % wrapSpan);
+      const x = X0 - ((phase0 + t * SPEED) % wrapSpan);
       setPosition(x, floorY, { allowOffscreen: true });
       const ph = Math.sin(t * 4.0);
       const heelR = Math.max(0, ph) * 42, heelL = Math.max(0, -ph) * 42;
@@ -6010,7 +6011,6 @@ async function runSkit() {
     const takeTheStage = (async () => {
       await setWalkerHomeState(false);
       setBrainoScale(Math.min(BRAINO_SCALE_MAX, 2.6), false);
-      await walkTo(getMoveBounds().maxX, getDockBounds().y, { speed: 340 });
     })();
     await speak("Hi, I am Braino.");
     await speak("I am the only AI in both human and AI history ever to do the moonwalk. Watch.");
