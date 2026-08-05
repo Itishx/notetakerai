@@ -11927,10 +11927,17 @@ function __sbMountNotchV1() {
       .cap-l{left:16px;width:max(0px,calc(var(--lr) - 141px));text-align:right;align-items:flex-end}
       .cap-r{left:calc(var(--lr) + 125px);width:max(0px,calc(var(--rr) - 141px));text-align:left;align-items:flex-start}
       .answer-body{color:rgba(27,23,19,.66);font:400 15px/1.62 "Newsreader","Charter BT",Georgia,serif}
-      .answer-body h1,.answer-body h2,.answer-body h3{margin:10px 0 15px;color:#1b1713;font:400 24px/1.1 "Newsreader","Charter BT",Georgia,serif}
+      .answer-body h1,.answer-body h2{margin:10px 0 15px;color:#1b1713;font:400 31px/1.05 "Newsreader","Charter BT",Georgia,serif}
+      .answer-body h3{margin:10px 0 12px;color:#1b1713;font:400 20px/1.15 "Newsreader","Charter BT",Georgia,serif}
       .answer-body p{margin:0 0 13px;color:rgba(27,23,19,.66)}
       .answer-body p:last-child{margin-bottom:0}
-      .answer-body ul,.answer-body ol{margin:8px 0;padding-left:20px}
+      .answer-body ul{margin:8px 0;padding-left:20px}
+      .answer-body ul>li{margin:0 0 6px}
+      .answer-body ul>li::marker{color:#c9544a}
+      .answer-body ol{list-style:none;margin:8px 0 0;padding:0;counter-reset:sbn}
+      .answer-body ol>li{counter-increment:sbn;display:grid;grid-template-columns:29px 1fr;gap:10px;align-items:start;padding:13px 0;border-top:1px solid rgba(65,48,40,.09)}
+      .answer-body ol>li::before{content:counter(sbn);display:grid;place-items:center;width:22px;height:22px;border-radius:50%;color:#17110f;background:#e8786e;font:750 9px/22px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;text-align:center}
+      .liquid .answer-body ol>li{border-color:rgba(255,255,255,.09)}
       .answer-body strong{color:#1b1713}
       .answer-body a{color:#c9544a}
       .answer-body .sb-turn{margin:0}.answer-body .sb-card-q,.answer-body .sb-user-msg{display:none}.answer-body .sb-card-a,.answer-body .sb-card-status,.answer-body .sb-assistant-msg,.answer-body .sb-answer{margin:0;color:inherit;background:transparent;font:inherit}
