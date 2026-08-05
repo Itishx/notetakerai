@@ -5992,15 +5992,17 @@ function skitPerformMoonwalk(durationMs = 15000) {
     moonlegs.setAttribute("display", "inline");
     q("#__sbwk_fedora__")?.setAttribute("display", "inline");
     const floorY = posY;
-    const X0 = getMoveBounds().maxX;
-    const wrapSpan = X0 - START_OFFSCREEN_X;   // glide fully off-screen, then wrap (Chrome: laneW + W)
+    const bounds = getMoveBounds();
+    const X0 = bounds.maxX;
+    const X1 = bounds.minX;
+    const wrapSpan = X0 - X1;   // wrap WITHIN visible bounds only, no off-screen
     const SPEED = 80 * brainoScale;            // Chrome's 80 px/s, scaled with his size so the glide reads identically
     const phase0 = X0 - posX;                  // start gliding from WHEREVER he stands (no staging trek)
     const start = performance.now();
     const step = (now) => {
       const t = (now - start) / 1000;
       const x = X0 - ((phase0 + t * SPEED) % wrapSpan);
-      setPosition(x, floorY, { allowOffscreen: true });
+      setPosition(Math.max(X1, Math.min(X0, x)), floorY, { allowOffscreen: false });
       const ph = Math.sin(t * 4.0);
       const heelR = Math.max(0, ph) * 42, heelL = Math.max(0, -ph) * 42;
       const slideR = Math.max(0, -ph) * 10, slideL = Math.max(0, ph) * 10;
