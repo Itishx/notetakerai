@@ -6002,22 +6002,26 @@ async function runSkit() {
   const prevScale = brainoScale;
   try {
     await new Promise((resolve) => window.setTimeout(resolve, 250));
-    await speak("Hi. I am Braino. And I am the only AI in both human and AI history ever to do the moonwalk. Watch.");
+    void window.brainoMac.skitStep?.("prewarm");   // Spotify boots quietly behind the intro lines
+    // He takes the stage WHILE introducing himself — out of the notch, grown to
+    // 2.6x, planted stage right by the time he says "Watch." No dead walking
+    // between the line and the moonwalk.
+    skitMoonwalk = true;
+    const takeTheStage = (async () => {
+      await setWalkerHomeState(false);
+      setBrainoScale(Math.min(BRAINO_SCALE_MAX, 2.6), false);
+      await walkTo(getMoveBounds().maxX, getDockBounds().y, { speed: 340 });
+    })();
+    await speak("Hi, I am Braino.");
+    await speak("I am the only AI in both human and AI history ever to do the moonwalk. Watch.");
+    await takeTheStage;
     const played = await window.brainoMac.skitStep?.("play");
     if (!played?.ok) {
       await speak(played?.say || "Spotify did not cooperate. Take two.");
       return;
     }
-    // Billie Jean lands at 3:31 — THE moonwalk moment, same cue as the Chrome
-    // trick. Isolated demo: no music theatrics, no headphones, no auto-home.
-    // He takes the stage grown to 2.6x and moonwalks for ~15 seconds.
-    await new Promise((resolve) => window.setTimeout(resolve, 900));
-    await setWalkerHomeState(false);
-    setBrainoScale(Math.min(BRAINO_SCALE_MAX, 2.6), false);
-    // Enter stage right along his real floor, then the verbatim Chrome moonwalk.
-    const floor = getDockBounds();
-    skitMoonwalk = true;
-    await walkTo(getMoveBounds().maxX, floor.y, { speed: 340 });
+    // Billie Jean is already sitting at 3:31 (the play step verifies the seek).
+    // Isolated demo: no music theatrics, no headphones, no auto-home.
     await skitPerformMoonwalk(15000);
     skitMoonwalk = false;
     setBrainoScale(prevScale, false);

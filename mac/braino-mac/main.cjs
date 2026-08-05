@@ -7617,18 +7617,24 @@ async function createSpotifyPlaylistOnMac(name, options = {}) {
 async function playSpotifyTrackInMacApp(uri, positionMs = 0) {
   const safeUri = escapeAppleScriptString(uri);
   const positionSeconds = Math.max(0, Math.round(Number(positionMs) || 0) / 1000);
-  // Seek only after the track is genuinely playing — a blind delay raced the
-  // track load and Spotify swallowed the seek (song started at 0:00). Then
-  // verify and re-assert once: Spotify sometimes snaps back to 0 on buffer.
+  // Seek only after the track is genuinely playing, then HAMMER the seek until
+  // the playhead verifiably lands: Spotify swallows seeks for a couple of
+  // seconds after a track starts (worse on cold launch), so one polite seek +
+  // one re-assert both fell in the swallow window and the song played from 0:00.
   const seekLine = positionSeconds > 0
     ? `  repeat with i from 1 to 20
     if player state is playing then exit repeat
     delay 0.2
   end repeat
-  delay 0.2
-  set player position to ${positionSeconds}
-  delay 0.4
-  if player position < ${Math.max(0, positionSeconds - 3)} then set player position to ${positionSeconds}`
+  repeat with i from 1 to 15
+    try
+      set player position to ${positionSeconds}
+    end try
+    delay 0.4
+    try
+      if player position > ${Math.max(0, positionSeconds - 6)} then exit repeat
+    end try
+  end repeat`
     : "";
   const script = `
 tell application "Spotify"
@@ -7636,7 +7642,7 @@ tell application "Spotify"
   play track "${safeUri}"
 ${seekLine}
 end tell`;
-  await execFileP("/usr/bin/osascript", ["-e", script], { timeout: 10000 });
+  await execFileP("/usr/bin/osascript", ["-e", script], { timeout: positionSeconds > 0 ? 22000 : 10000 });
 }
 
 async function isMacApplicationRunning(appName) {
@@ -11882,6 +11888,12 @@ ipcMain.handle("braino-mac:calendar-join", async () => {
 // auto-send otherwise); "close" Cmd+Ws the chat window and hides WhatsApp.
 ipcMain.handle("braino-mac:skit-step", async (_event, step) => {
   if (!SKIT.enabled) return { ok: false, say: "" };
+  if (step === "prewarm") {
+    // Fire-and-forget: boot Spotify in the BACKGROUND (no focus steal) while
+    // Braino delivers the intro line, so the play step hits a warm app.
+    try { await execFileP("open", ["-g", "-b", "com.spotify.client"], { timeout: 8000 }); } catch (error) { logMac("skit.prewarm_failed", { error }); }
+    return { ok: true, say: "" };
+  }
   if (step === "play") {
     try {
       // The Web API path (search + playback) needs Supabase auth, a linked
