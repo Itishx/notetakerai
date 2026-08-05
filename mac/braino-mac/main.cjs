@@ -7639,11 +7639,16 @@ async function playSpotifyTrackInMacApp(uri, positionMs = 0, { activate = true }
   const script = `
 tell application "Spotify"
 ${activate ? "  activate" : ""}
-  pause
   play track "${safeUri}"
 ${seekLine}
 end tell`;
   await execFileP("/usr/bin/osascript", ["-e", script], { timeout: positionSeconds > 0 ? 22000 : 10000 });
+  // Immediately hide the window after the script runs (don't wait for it)
+  if (!activate) {
+    try {
+      await execFileP("/usr/bin/osascript", ["-e", 'tell application "System Events" to set visible of process "Spotify" to false'], { timeout: 2000 });
+    } catch (_) {}
+  }
 }
 
 async function isMacApplicationRunning(appName) {
@@ -11902,8 +11907,8 @@ ipcMain.handle("braino-mac:skit-step", async (_event, step) => {
       // a demo machine. The skit plays the hardcoded URI natively instead.
       try { stopMusicSegmentLoop(); } catch (_) {}   // a stray A/B loop timer would re-seek the track
       const wasRunning = await isMacApplicationRunning("Spotify");
-      // Open Spotify HEADLESS (-g -j) so the window never appears on stage, only the audio.
-      try { await execFileP("open", ["-g", "-j", "-b", "com.spotify.client"], { timeout: 8000 }); } catch (_) {}
+      // Open Spotify in background (-g) ONLY. Hide the window via System Events after.
+      try { await execFileP("open", ["-g", "-b", "com.spotify.client"], { timeout: 8000 }); } catch (_) {}
       const deadline = Date.now() + 15000;
       while (Date.now() < deadline && !(await isMacApplicationRunning("Spotify"))) {
         await new Promise((resolve) => setTimeout(resolve, 400));
