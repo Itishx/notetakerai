@@ -6036,7 +6036,7 @@ async function runSkit() {
   // Build stamp: check ~/Library/Logs/Braino Mac/braino-mac.log for skit.build
   // after a take — if this string is missing or older, the app is running a
   // stale build and the take does not reflect the current code.
-  logRenderer("skit.build", { v: "v18-no-double-open-mega-seek-lock" });
+  logRenderer("skit.build", { v: "v19-open-spotify-after-watch" });
   const prevScale = brainoScale;
   let skitCompleted = false;
   try {
@@ -6048,13 +6048,12 @@ async function runSkit() {
     walkerAutoHomedByMusic = false;
     musicSessionId += 1;   // Nuke any pending music reactions
     // He takes the stage WHILE introducing himself — out of the notch, normal size.
-    // No growth, no theatrics, just him on stage.
     skitMoonwalk = true;
     await setWalkerHomeState(false);
     await skitSpeak("Hi, I am Braino.");
-    // Spotify only warms up AFTER the first line — he speaks first, always.
-    void window.brainoMac.skitStep?.("prewarm");
     await skitSpeak("I am the only AI in both human and AI history ever to do the moonwalk. Watch.");
+    // NOW open Spotify after the speech, giving it time to boot before play
+    void window.brainoMac.skitStep?.("prewarm");
     const played = await window.brainoMac.skitStep?.("play");
     if (!played?.ok) {
       await speak(played?.say || "Spotify did not cooperate. Take two.");
