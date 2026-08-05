@@ -2,8 +2,8 @@
 
 **Type:** Design decision  
 **Platform:** Braino Chrome extension  
-**Status:** Exploring  
-**Released:** July 31, 2026
+**Status:** Released in Chrome extension v1.0.0
+**Released:** August 5, 2026
 
 ## The simple version
 
@@ -32,19 +32,20 @@ Open `/instagraphics?design=chrome-system` for the full-browser study. Choose id
 - Sizes the long-answer sheet to its rendered content instead of reserving empty height.
 - Cycles Hatching, Calibrating, and Thinking in the compact working notch.
 - Expands on click into full-sentence, user-facing task progress before showing the answer.
+- Includes a Readable/Liquid theme comparison for every expanded surface: input, mode menu, expanded thinking, and both answer sizes.
 - Removes the detached mascot from this focused notch-only experiment.
 
 ## Honest limitations
 
-This is a visual prototype, not the production extension UI. Buttons change staged states; they do not yet control a real tab, voice session, browser action, or undo operation. The sample webpage, progress sentences, and answers are fictional. Progress copy must describe observable actions and must not expose private model chain-of-thought. Citations, persistent history, approvals, keyboard behavior, and multi-turn conversations still need implementation decisions.
+The InstaGraphics page remains a staged design preview, but the notch shell and its state mapping now ship in extension v1.0.0. Existing browser actions, modes, voice sessions, answers, and authentication are connected to the new surface. The preview’s sample webpage and sample copy remain fictional. Progress copy describes observable activity and does not expose private model chain-of-thought. Some specialist surfaces such as cinema mode and recording retain their existing internal layouts.
 
 ## Technical shape
 
-The prototypes live in `src/pages/InstaGraphics.tsx` and `src/pages/insta-graphics.css`. The full Chrome system study is an edge-to-edge viewport rather than a 1080×1920 story frame. It uses the shared `BRAINO_WALKER_SVG` and the extension's Apple/system typography, warm ink and coral palette, 24px liquid-glass radius, readable glass treatment, and compact input controls.
+The prototypes live in `src/pages/InstaGraphics.tsx` and `src/pages/insta-graphics.css`. The full Chrome system study is an edge-to-edge viewport rather than a 1080×1920 story frame. It uses the shared `BRAINO_WALKER_SVG` and the extension's Apple/system typography, warm ink and coral palette, compact input controls, and state-specific notch radii. A theme switch compares the light readable handoff with the extension's dark translucent liquid glass. The material changes while state dimensions, information hierarchy, mascot position, and perimeter signal stay fixed.
 
 ## Product or design decisions
 
-The current experiment deliberately tests a notch-only system shared by Chrome and Mac/IOMI. Braino—not an abstract badge—remains the visual anchor in idle, listening, and working states. Asking, voice, live task status, and the immediate answer all happen in one place. Liquid chat, the detached ambient mascot, explanatory page copy, and design legends are removed from this prototype. Braino appears again inside the expanded long-answer surface as a small walker above follow-up input, driven by the production extension gait math. Compact thinking communicates that work is alive without exposing hidden chain-of-thought. Completion is temporary: after the answer, the notch returns to idle.
+The notch-only system is now the Chrome extension’s primary mounted surface in v1.0.0 and remains shared in spirit with Mac/IOMI. Braino—not an abstract badge—anchors idle, listening, working, and speaking. Asking, voice, live task status, authentication, and answers happen from the top-centred notch. The readable and liquid themes are two presentations of the same interaction, not separate modes. Coral identity states stay coral; only expanded utility surfaces change material. The older bottom input bar and walker implementation remain in the source for safe rollback, but are no longer mounted in the standard extension experience. Compact thinking communicates that work is alive without exposing hidden chain-of-thought. Completion is temporary: after the answer, the notch returns to idle.
 
 ## What comes next
 

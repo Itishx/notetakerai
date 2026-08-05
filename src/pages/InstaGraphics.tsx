@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { BRAINO_WALKER_SVG } from "@/components/brainoWalkerSvg";
-import BrainoWalker from "@/components/BrainoWalker";
 import "./insta-graphics.css";
 
 type InstaPreview = "braino-os" | "iomi-boot" | "browser-notch" | "chrome-system";
@@ -236,24 +235,119 @@ function BrowserNotchPrototype() {
   );
 }
 
-type ChromeSystemPhase = "idle" | "listening" | "working" | "expanded-thinking" | "short-answer" | "long-answer";
+type ChromeSystemPhase = "invoking" | "authenticating" | "authenticated" | "idle" | "input" | "mode-menu" | "listening" | "working" | "expanded-thinking" | "short-answer" | "long-answer" | "speaking";
+
+function NotchWalker() {
+  const laneRef = useRef<HTMLDivElement>(null);
+  const walkerRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const lane = laneRef.current;
+    const walker = walkerRef.current;
+    const root = walker?.querySelector("#__sbwk_root__") as SVGGElement | null;
+    const flip = walker?.querySelector(".ig-cs-walker-flip") as HTMLElement | null;
+    if (!lane || !walker || !root || !flip) return;
+    let raf = 0, x = 6, direction = 1, last = performance.now();
+    const started = last;
+    const tick = (now: number) => {
+      const dt = Math.min(.05, (now - last) / 1000); last = now;
+      const t = (now - started) / 1000;
+      const maxX = Math.max(6, lane.clientWidth - 56);
+      x += direction * 74 * dt;
+      if (x >= maxX) { x = maxX; direction = -1; }
+      else if (x <= 6) { x = 6; direction = 1; }
+      walker.style.transform = `translateX(${x}px)`;
+      flip.style.transform = `scaleX(${direction})`;
+      const s = t * 4.5, lp = Math.sin(s), rp = Math.sin(s + Math.PI);
+      const ll = Math.max(0, lp) * 5, rl = Math.max(0, rp) * 5;
+      const ls = Math.max(0, lp) * 8, rs = Math.max(0, rp) * 8;
+      const waddle = Math.sin(s) * 3.4;
+      const walkBob = -Math.abs(Math.sin(s)) * 2 - .4;
+      const breath = 1 + .014 * Math.sin(t * 1.7);
+      const bob = Math.sin(t * 1.7 + .6) * .8;
+      root.setAttribute("transform", `rotate(${waddle} 50 50) translate(0 ${bob + walkBob}) scale(${breath})`);
+      root.querySelector("#__sbwk_ll__")?.setAttribute("transform", `translate(0 ${-ll}) rotate(${ls} 44 74)`);
+      root.querySelector("#__sbwk_rl__")?.setAttribute("transform", `translate(0 ${-rl}) rotate(${rs} 56 74)`);
+      root.querySelector("#__sbwk_pupil_l__")?.setAttribute("transform", "translate(2.4 0)");
+      root.querySelector("#__sbwk_pupil_r__")?.setAttribute("transform", "translate(2.4 0)");
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+  return <div ref={laneRef} className="ig-cs-local-walk-lane"><div ref={walkerRef} className="ig-cs-local-walker"><div className="ig-cs-walker-flip" dangerouslySetInnerHTML={{ __html: BRAINO_WALKER_SVG }} /></div></div>;
+}
 
 function ChromeSystemPrototype() {
   const [phase, setPhase] = useState<ChromeSystemPhase>("idle");
   const [replayId, setReplayId] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [showCoachmark, setShowCoachmark] = useState(true);
+  const [interactionKind, setInteractionKind] = useState<"text" | "voice">("text");
+  const [draft, setDraft] = useState("");
+  const [glassTheme, setGlassTheme] = useState<"readable" | "liquid">("readable");
+  const [authRunId, setAuthRunId] = useState(0);
+
+  useEffect(() => {
+    if (!authRunId) return;
+    setShowCoachmark(false);
+    setPhase("invoking");
+    const authenticating = window.setTimeout(() => setPhase("authenticating"), 1250);
+    const success = window.setTimeout(() => setPhase("authenticated"), 3150);
+    const ready = window.setTimeout(() => setPhase("idle"), 4050);
+    return () => { window.clearTimeout(authenticating); window.clearTimeout(success); window.clearTimeout(ready); };
+  }, [authRunId]);
+
+  useEffect(() => {
+    let lastControlAt = 0;
+    let lastSpaceAt = 0;
+    const onShortcut = (event: KeyboardEvent) => {
+      if (event.code === "Space" && !event.repeat && !event.metaKey && !event.ctrlKey && !event.altKey) {
+        const target = event.target as HTMLElement | null;
+        const typing = !!target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName));
+        if (typing) { lastSpaceAt = 0; return; }
+        const now = performance.now();
+        if (now - lastSpaceAt < 500) {
+          event.preventDefault();
+          setAuthRunId((value) => value + 1);
+          lastSpaceAt = 0;
+        } else lastSpaceAt = now;
+        return;
+      }
+      if (event.key === "Control" && !event.repeat) {
+        const now = performance.now();
+        if (now - lastControlAt < 650) {
+          setShowCoachmark(false);
+          setInteractionKind("voice");
+          setPhase("listening");
+          lastControlAt = 0;
+        } else {
+          lastControlAt = now;
+        }
+      }
+    };
+    window.addEventListener("keydown", onShortcut);
+    return () => window.removeEventListener("keydown", onShortcut);
+  }, []);
 
   useEffect(() => {
     if (replayId === 0) return;
+    setInteractionKind("voice");
     setPhase("idle");
     setIsPlaying(true);
     const sequence: Array<[ChromeSystemPhase, number]> = [
-      ["listening", 1100],
-      ["working", 3800],
-      ["expanded-thinking", 6900],
-      ["short-answer", 10400],
-      ["long-answer", 13200],
-      ["idle", 18500],
+      ["invoking", 300],
+      ["authenticating", 1650],
+      ["authenticated", 3550],
+      ["idle", 4450],
+      ["input", 5550],
+      ["mode-menu", 7950],
+      ["listening", 10650],
+      ["working", 13350],
+      ["expanded-thinking", 16450],
+      ["speaking", 19950],
+      ["short-answer", 22250],
+      ["long-answer", 24950],
+      ["idle", 31350],
     ];
     const timers = sequence.map(([nextPhase, delay], index) => window.setTimeout(() => {
       setPhase(nextPhase);
@@ -262,9 +356,21 @@ function ChromeSystemPrototype() {
     return () => timers.forEach((timer) => window.clearTimeout(timer));
   }, [replayId]);
 
+  const themeToggle = (
+    <button
+      type="button"
+      className="ig-cs-theme-toggle"
+      aria-label={`Switch to ${glassTheme === "readable" ? "liquid" : "readable"} glass`}
+      title={`Switch to ${glassTheme === "readable" ? "Liquid" : "Readable"} glass`}
+      onClick={(event) => { event.stopPropagation(); setGlassTheme((current) => current === "readable" ? "liquid" : "readable"); }}
+    >
+      <span aria-hidden="true">◐</span>
+    </button>
+  );
+
   return (
     <div className="ig-frame ig-chrome-system-frame" id="ig-chrome-system">
-      <div className={`ig-chrome-system phase-${phase}`}>
+      <div className={`ig-chrome-system theme-${glassTheme} phase-${phase}`}>
         <header className="ig-cs-browser-bar">
           <i /><i /><i />
           <span>braino.com / the page you are already on</span>
@@ -279,23 +385,60 @@ function ChromeSystemPrototype() {
           </div>
         </main>
 
-        <button className="ig-cs-notch" type="button" onClick={() => { if (!isPlaying) setPhase(phase === "idle" ? "listening" : phase === "listening" ? "working" : phase === "working" ? "expanded-thinking" : phase === "expanded-thinking" ? "short-answer" : phase === "short-answer" ? "long-answer" : "idle"); }}>
-          {phase !== "long-answer" && <i className="ig-cs-state-braino" dangerouslySetInnerHTML={{ __html: BRAINO_WALKER_SVG }} />}
-          <span className="ig-cs-notch-idle"><b className="ig-cs-idle-eyes"><i /><i /></b><small>Talk to Braino</small></span>
+        <section className="ig-cs-notch" onClick={() => { if (!isPlaying) { setShowCoachmark(false); if (phase === "idle") { setInteractionKind("text"); setPhase("input"); } else if (phase === "listening") setPhase("working"); else if (phase === "working") setPhase("expanded-thinking"); else if (phase === "expanded-thinking") setPhase(interactionKind === "voice" ? "speaking" : "short-answer"); else if (phase === "speaking") setPhase("short-answer"); else if (phase === "short-answer") setPhase("long-answer"); else if (phase === "long-answer") setPhase("idle"); } }}>
+          <svg className="ig-cs-flow-perimeter" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+            <defs><linearGradient id="ig-cs-flow-spectrum" x1="-1" y1="0" x2="1" y2="1" spreadMethod="repeat"><stop offset="0" stopColor="#f4cf87"/><stop offset=".4" stopColor="#ec8078"/><stop offset=".72" stopColor="#dc77a8"/><stop offset="1" stopColor="#779cff"/><animateTransform attributeName="gradientTransform" type="translate" from="-1 0" to="1 0" dur="3.8s" repeatCount="indefinite" /></linearGradient></defs>
+            <path className="ig-cs-flow-glow" pathLength="100" d="M 0 0 H 100 V 90 Q 100 100 90 100 H 10 Q 0 100 0 90 Z" fill="none" stroke="url(#ig-cs-flow-spectrum)" />
+            <path className="ig-cs-flow-core" pathLength="100" d="M 0 0 H 100 V 90 Q 100 100 90 100 H 10 Q 0 100 0 90 Z" fill="none" stroke="url(#ig-cs-flow-spectrum)" />
+          </svg>
+          <b className="ig-cs-idle-face ig-cs-persistent-face" aria-hidden="true">
+            <svg viewBox="0 0 230 72" preserveAspectRatio="none">
+              <path d="M115 0 Q111 14 115 27 Q119 40 115 56" />
+              <path d="M25 4 Q14 13 25 22 Q12 31 25 40 Q14 50 30 61" />
+              <path d="M61 1 Q49 11 60 20 Q47 30 61 39 Q49 49 65 63" />
+              <path d="M169 1 Q181 11 170 20 Q183 30 169 39 Q181 49 165 63" />
+              <path d="M205 4 Q216 13 205 22 Q218 31 205 40 Q216 50 200 61" />
+              <g className="ig-cs-real-eye"><circle cx="103" cy="29" r="10" /><g className="ig-cs-pupil"><circle cx="104" cy="30" r="4.8" /><circle cx="106" cy="27.5" r="1.7" /></g></g>
+              <g className="ig-cs-real-eye"><circle cx="127" cy="29" r="10" /><g className="ig-cs-pupil"><circle cx="128" cy="30" r="4.8" /><circle cx="130" cy="27.5" r="1.7" /></g></g>
+              <g className="ig-cs-thinking-lids"><path d="M93 29 Q103 36 113 29"/><path d="M117 29 Q127 36 137 29"/></g>
+              <path className="ig-cs-resting-smile" d="M108 47 Q115 54 122 47" />
+              <g className="ig-cs-speaking-mouth"><ellipse cx="115" cy="49" rx="7" ry="5.5" /><ellipse cx="115" cy="51" rx="4.2" ry="2.2" /></g>
+            </svg>
+          </b>
+          <span className="ig-cs-notch-idle">
+            <small>Talk to Braino</small>
+          </span>
+          <span className="ig-cs-notch-auth"><small>{phase === "authenticated" ? "Authenticated" : "Authenticating"}</small><i /></span>
+          <span className="ig-cs-notch-input">
+            <span><small>Ask Braino</small><input value={draft} onChange={(event) => setDraft(event.target.value)} onClick={(event) => event.stopPropagation()} onKeyDown={(event) => { if (event.key === "Enter" && draft.trim()) { event.preventDefault(); setInteractionKind("text"); setPhase("working"); } }} placeholder="Summarise this page…" /></span>
+            <button type="button" className="ig-cs-mode-trigger" onClick={(event) => { event.stopPropagation(); setPhase("mode-menu"); }}>Auto⌄</button>
+            <button type="button" className="ig-cs-mic-trigger" onClick={(event) => { event.stopPropagation(); setInteractionKind("voice"); setPhase("listening"); }}>⌁</button>
+            <button type="button" className="ig-cs-send-trigger" disabled={!draft.trim()} onClick={(event) => { event.stopPropagation(); if (draft.trim()) { setInteractionKind("text"); setPhase("working"); } }}>↑</button>
+            {themeToggle}
+          </span>
+          <span className="ig-cs-notch-mode-menu" onClick={(event) => event.stopPropagation()}>
+            <header><small>Choose a mode</small><span className="ig-cs-header-actions"><em>Auto</em>{themeToggle}</span></header>
+            <i onClick={() => setPhase("input")}><b>Auto</b><small>Let Braino decide</small><strong>✓</strong></i>
+            <i onClick={() => setPhase("input")}><b>Page</b><small>Read and work on this page</small></i>
+            <i onClick={() => setPhase("input")}><b>Lecture</b><small>Capture and explain audio</small></i>
+            <i onClick={() => setPhase("input")}><b>Meeting</b><small>Listen, remember and follow up</small></i>
+            <i onClick={() => setPhase("input")}><b>Delegate</b><small>Complete a browser task</small></i>
+            <i onClick={() => setPhase("input")}><b>Team</b><small>Work with shared context</small></i>
+          </span>
           <span className="ig-cs-notch-listening"><small>Listening</small></span>
           <span className="ig-cs-notch-working"><span><strong><i>Hatching</i><i>Calibrating</i><i>Thinking</i></strong><small>Click to see Braino’s process</small></span><em/></span>
           <span className="ig-cs-notch-expanded-thinking">
-            <header><span><i /> Braino is thinking</span><em>Collapse</em></header>
+            <header><span><i /> Braino is thinking</span><span className="ig-cs-header-actions"><em>Collapse</em>{themeToggle}</span></header>
             <p>First I’m reading the page to understand what the writer is actually trying to say.</p>
             <p>Now I’m separating the useful argument from the repetition around it.</p>
             <p>Next I’ll rewrite the answer in your tone and keep the original meaning intact.</p>
           </span>
           <span className="ig-cs-notch-short-answer">
-            <span><small>Braino</small><strong>I cleaned it up. Want me to replace the original?</strong></span>
-            <em>Replace</em>
+            <span className="ig-cs-short-answer-row"><span><small>Braino</small><strong>I cleaned it up. Want me to replace the original?</strong></span><span className="ig-cs-header-actions"><em>Replace</em>{themeToggle}</span></span>
+            {phase === "short-answer" && <NotchWalker />}
           </span>
           <span className="ig-cs-notch-long-answer">
-            <header><span><i /><i /><b>Braino</b></span><em>Done</em></header>
+            <header><span><i /><i /><b>Braino</b></span><span className="ig-cs-header-actions"><em>Done</em>{themeToggle}</span></header>
             <article>
               <small>Answer from this page</small>
               <h2>Here’s the useful version.</h2>
@@ -304,15 +447,17 @@ function ChromeSystemPrototype() {
               <div><b>1</b><span><strong>Reduce the hand-offs</strong><small>Keep research, decisions and execution connected.</small></span></div>
               <div><b>2</b><span><strong>Preserve context</strong><small>Let the system remember what led to the decision.</small></span></div>
             </article>
-            <div className="ig-cs-answer-walk-lane"><BrainoWalker perchTargetId="ig-cs-followup-bar" alwaysPerched /></div>
+            <div className="ig-cs-answer-walk-lane">{phase === "long-answer" && <NotchWalker />}</div>
             <footer id="ig-cs-followup-bar"><span>Ask a follow-up</span><i>⌁</i><b>↑</b></footer>
           </span>
-        </button>
+          <span className="ig-cs-notch-speaking"><small>Speaking</small><i /><i /><i /></span>
+        </section>
+        {showCoachmark && phase === "idle" && <div className="ig-cs-coachmark"><span>Click to type</span><small>Control ×2 to talk</small></div>}
 
         <div className="ig-cs-controls" aria-label="Chrome system states">
           <span>Preview state</span>
-          {(["idle", "listening", "working", "expanded-thinking", "short-answer", "long-answer"] as ChromeSystemPhase[]).map((item) => (
-            <button key={item} type="button" disabled={isPlaying} className={phase === item ? "is-active" : ""} onClick={() => setPhase(item)}>{item}</button>
+          {(["invoking", "authenticating", "authenticated", "idle", "input", "mode-menu", "listening", "working", "expanded-thinking", "speaking", "short-answer", "long-answer"] as ChromeSystemPhase[]).map((item) => (
+            <button key={item} type="button" disabled={isPlaying} className={phase === item ? "is-active" : ""} onClick={() => { if (item === "listening" || item === "speaking") setInteractionKind("voice"); if (item === "input") setInteractionKind("text"); setPhase(item); }}>{item}</button>
           ))}
           <button type="button" className="ig-cs-replay" onClick={() => setReplayId((value) => value + 1)}>{isPlaying ? "Playing…" : "Replay flow"}</button>
         </div>

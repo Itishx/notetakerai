@@ -9851,6 +9851,41 @@ function __sbBuildBrainUI() {
       pointer-events: none;
     }
     #__sb_voice_error_pill__.visible { opacity: 1; transform: translateY(0) scale(1); }
+
+    /* ── Braino browser notch v1.0.0. The legacy dock and walker remain in this file,
+       but this is the mounted presence surface. ── */
+    #__sb_bar__{top:0;bottom:auto;width:min(570px,calc(100vw - 48px));min-height:104px;transform:translateX(-50%) translateY(-18px) scale(.97);border-radius:0 0 31px 31px;background:rgba(255,251,247,.72);border:1px solid rgba(255,255,255,.72);border-top:0;box-shadow:0 24px 70px rgba(27,23,19,.16),inset 0 1px rgba(255,255,255,.8);backdrop-filter:blur(24px) saturate(175%);-webkit-backdrop-filter:blur(24px) saturate(175%);overflow:hidden;transition:width 1.05s cubic-bezier(.22,1,.36,1),height 1.05s cubic-bezier(.22,1,.36,1),border-radius .95s cubic-bezier(.22,1,.36,1),background .7s ease,border-color .7s ease,box-shadow .85s ease,opacity .38s ease,transform .8s cubic-bezier(.22,1,.36,1)}
+    #__sb_bar__.open{transform:translateX(-50%) translateY(0) scale(1)}
+    #__sb_bar_row__{min-height:104px;padding:16px 18px;gap:9px}
+    #__sb_notch_face__{display:none;position:absolute;z-index:5;inset:0;pointer-events:none}#__sb_notch_face__ svg{width:100%;height:100%;overflow:visible}#__sb_notch_face__ .sb-n-fold{fill:none;stroke:rgba(151,54,48,.42);stroke-width:2;stroke-linecap:round}#__sb_notch_face__ .sb-n-eye{fill:#fff;filter:drop-shadow(0 1px 1px rgba(110,35,31,.2))}#__sb_notch_face__ .sb-n-pupil{fill:#2b1b18;transform-box:fill-box;transform-origin:center}#__sb_notch_face__ .sb-n-lid{opacity:0;fill:none;stroke:#fff;stroke-width:3;stroke-linecap:round}#__sb_notch_face__ .sb-n-smile{fill:none;stroke:#fff;stroke-width:2.5;stroke-linecap:round}
+    #__sb_notch_status__{position:absolute;z-index:7;left:50%;bottom:5px;transform:translateX(-50%);color:rgba(255,255,255,.82);font:700 8px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;letter-spacing:.12em;text-transform:uppercase;white-space:nowrap}
+    #__sb_notch_theme__{flex:0 0 25px;width:25px;height:25px;padding:0;display:grid;place-items:center;border:1px solid rgba(65,48,40,.12);border-radius:50%;color:rgba(27,23,19,.58);background:rgba(255,255,255,.32);cursor:pointer}
+    #__sb_bar__.sb-notch-idle{width:230px;min-height:72px;height:72px;border-radius:0 0 27px 27px;background:linear-gradient(180deg,#f6a8a2 0%,#e8786e 56%,#c9544a 100%);border-color:rgba(255,255,255,.48);box-shadow:0 13px 34px rgba(201,84,74,.28),inset 0 1px rgba(255,255,255,.45);cursor:pointer}
+    #__sb_bar__.sb-notch-idle #__sb_bar_row__,#__sb_bar__.sb-notch-invoking #__sb_bar_row__,#__sb_bar__.sb-notch-auth #__sb_bar_row__,#__sb_bar__.sb-notch-auth-ok #__sb_bar_row__{display:none}
+    #__sb_bar__.sb-notch-idle #__sb_notch_face__,#__sb_bar__.sb-notch-auth #__sb_notch_face__,#__sb_bar__.sb-notch-auth-ok #__sb_notch_face__{display:block}
+    #__sb_bar__.sb-notch-idle #__sb_notch_status__{display:none}
+    #__sb_bar__.sb-notch-invoking,#__sb_bar__.sb-notch-auth,#__sb_bar__.sb-notch-auth-ok{width:270px;min-height:82px;height:82px;border-radius:0 0 29px 29px;overflow:visible}
+    #__sb_bar__.sb-notch-invoking{border:0;background:transparent;box-shadow:none;backdrop-filter:none;-webkit-backdrop-filter:none;animation:__sb_notch_shell__ 1.25s cubic-bezier(.22,1,.36,1) both}#__sb_bar__.sb-notch-invoking #__sb_notch_face__{display:block;opacity:0;animation:__sb_notch_face_in__ .38s ease-out .82s forwards}#__sb_bar__.sb-notch-invoking .sb-n-eye{opacity:0}#__sb_bar__.sb-notch-invoking .sb-n-lid{opacity:1}
+    #__sb_bar__.sb-notch-invoking::before{content:"";position:absolute;z-index:14;inset:0;padding:1.2px;border-radius:inherit;background:conic-gradient(from var(--sb-notch-angle),#f4cf87,#ec8078,#dc77a8,#779cff,#ec8078,#f4cf87);-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;filter:drop-shadow(0 0 4px rgba(236,128,120,.55));animation:__sb_notch_shimmer__ 1.25s linear both}
+    #__sb_bar__.sb-notch-invoking::after{content:"";position:absolute;z-index:0;inset:1px;border-radius:inherit;background-image:linear-gradient(105deg,transparent 26%,rgba(255,225,218,.58) 45%,transparent 64%),linear-gradient(180deg,#e99088 0%,#d86c63 58%,#a9433b 100%);background-size:260% 100%,100% 100%;background-position:150% 0,0 0;opacity:0;animation:__sb_notch_fill__ .72s cubic-bezier(.22,1,.36,1) .48s forwards}
+    #__sb_bar__.sb-notch-auth,#__sb_bar__.sb-notch-auth-ok{background:linear-gradient(180deg,#e99088 0%,#d86c63 58%,#a9433b 100%);border-color:rgba(255,255,255,.32);box-shadow:0 18px 54px rgba(201,84,74,.3),inset 0 1px rgba(255,255,255,.38)}
+    #__sb_bar__.sb-notch-auth #__sb_notch_face__ .sb-n-eye{opacity:0}#__sb_bar__.sb-notch-auth #__sb_notch_face__ .sb-n-lid{opacity:1}#__sb_bar__.sb-notch-auth #__sb_notch_status__{color:transparent;background:linear-gradient(90deg,rgba(255,255,255,.46) 20%,#fff 45%,#f4cf87 52%,rgba(255,255,255,.46) 78%);background-size:240% 100%;-webkit-background-clip:text;background-clip:text;animation:__sb_auth_text__ 1.45s linear infinite}
+    #__sb_bar__.sb-notch-auth::before,#__sb_bar__.sb-notch-auth-ok::before{content:"";position:absolute;z-index:14;inset:0;padding:1.25px;border-radius:inherit;pointer-events:none;background:conic-gradient(from var(--sb-notch-angle),transparent 0 18%,#f4cf87 28%,#ec8078 38%,transparent 49%);-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;animation:__sb_notch_perimeter__ 2.2s linear infinite}
+    #__sb_bar__.sb-notch-auth-ok{border-color:rgba(93,219,135,.72);box-shadow:0 0 0 1px rgba(93,219,135,.18),0 18px 58px rgba(52,184,98,.34),inset 0 1px rgba(255,255,255,.42)}#__sb_bar__.sb-notch-auth-ok::before{background:conic-gradient(from var(--sb-notch-angle),#62df8d,#d9ffe5,#62df8d)}#__sb_bar__.sb-notch-auth-ok #__sb_notch_status__{color:#d9ffe5}#__sb_bar__.sb-notch-auth-ok .sb-n-eye{transform-box:fill-box;transform-origin:center;animation:__sb_notch_eyes_open__ .72s cubic-bezier(.2,.8,.2,1) both}
+    @property --sb-notch-angle{syntax:"<angle>";inherits:false;initial-value:0deg}@keyframes __sb_notch_shell__{0%{opacity:0;transform:translateX(-50%) scaleX(.06) scaleY(.72)}18%{opacity:1}72%{transform:translateX(-50%) scaleX(1.025)}100%{opacity:1;transform:translateX(-50%)}}@keyframes __sb_notch_shimmer__{0%{opacity:0;--sb-notch-angle:0deg}18%{opacity:1}100%{opacity:1;--sb-notch-angle:300deg}}@keyframes __sb_notch_fill__{0%{opacity:0;background-position:150% 0,0 0}32%{opacity:.5}100%{opacity:1;background-position:-80% 0,0 0}}@keyframes __sb_notch_face_in__{from{opacity:0;transform:translateY(-2px) scale(.96)}to{opacity:1;transform:none}}@keyframes __sb_notch_perimeter__{to{--sb-notch-angle:360deg}}@keyframes __sb_auth_text__{from{background-position:140% 0}to{background-position:-140% 0}}@keyframes __sb_notch_eyes_open__{from{opacity:0;transform:scaleY(.06)}to{opacity:1;transform:scaleY(1)}}
+    #__sb_walk_lane__,#__sbwk_say__,#__sb_brain_btn__{display:none!important}
+    #__sb_card_wrap__{top:0;left:50%;transform:translateX(-50%);width:min(650px,calc(100vw - 32px))}#__sb_card_wrap__.animating-in #__sb_bubble__{animation:__sb_notch_answer_in__ .42s cubic-bezier(.16,.86,.22,1) both}@keyframes __sb_notch_answer_in__{from{opacity:0;transform:scaleX(.72) translateY(-12px)}to{opacity:1;transform:none}}
+    #__sb_card_wrap__.sb-notch-short{width:min(610px,calc(100vw - 32px))}#__sb_card_wrap__.sb-notch-short #__sb_bubble__{max-height:none}#__sb_card_wrap__.sb-notch-short .sb-card-scroll{padding:18px 24px 12px}#__sb_card_wrap__.sb-notch-short .sb-card-header{padding-top:9px}
+    #__sb_bubble__{width:100%;max-width:none;max-height:calc(100vh - 28px);min-height:0;resize:none;border-radius:0 0 34px 34px;background:linear-gradient(145deg,rgba(31,27,28,.48),rgba(18,16,17,.38));backdrop-filter:blur(20px) saturate(185%);-webkit-backdrop-filter:blur(20px) saturate(185%)}#__sb_bubble__.sb-readable{background:rgba(255,251,247,.72);border-color:rgba(255,255,255,.72)}#__sb_orbit_brain__{display:none!important}
+    #__sb_bar__.sb-answer-covered{opacity:0;pointer-events:none}
+    #__sb_bar__.sb-notch-liquid:not(.sb-notch-idle):not(.sb-notch-invoking):not(.sb-notch-auth):not(.sb-notch-auth-ok):not(.sb-notch-listening):not(.sb-notch-working):not(.sb-notch-speaking){color:#fff;border-color:rgba(255,255,255,.42);background:linear-gradient(145deg,rgba(31,27,28,.48),rgba(18,16,17,.38));box-shadow:0 24px 70px rgba(0,0,0,.2),inset 0 1px rgba(255,255,255,.24)}#__sb_bar__.sb-notch-liquid #__sb_input__{color:#fff;text-shadow:none}#__sb_bar__.sb-notch-liquid #__sb_input__::placeholder{color:rgba(255,255,255,.42)}#__sb_bar__.sb-notch-liquid #__sb_mode_btn__,#__sb_bar__.sb-notch-liquid .sb-bar-icon-btn,#__sb_bar__.sb-notch-liquid #__sb_notch_theme__{color:rgba(255,255,255,.82);background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.14);filter:none}
+    #__sb_notch_face__ .sb-n-mouth{display:none;fill:#5f211d;stroke:#fff;stroke-width:1.5}#__sb_notch_face__ .sb-n-mouth ellipse:last-child{fill:#f4a09a;stroke:0}
+    #__sb_bar__.sb-notch-listening,#__sb_bar__.sb-notch-working,#__sb_bar__.sb-notch-speaking{width:230px;min-height:82px;height:82px;border-radius:0 0 29px 29px;background:linear-gradient(180deg,#f6a8a2 0%,#e8786e 56%,#c9544a 100%);border-color:rgba(255,255,255,.46);box-shadow:0 15px 42px rgba(201,84,74,.3),inset 0 1px rgba(255,255,255,.42);overflow:visible}
+    #__sb_bar__.sb-notch-listening #__sb_bar_row__,#__sb_bar__.sb-notch-working #__sb_bar_row__,#__sb_bar__.sb-notch-speaking #__sb_bar_row__{display:none}#__sb_bar__.sb-notch-listening #__sb_notch_face__,#__sb_bar__.sb-notch-working #__sb_notch_face__,#__sb_bar__.sb-notch-speaking #__sb_notch_face__{display:block}
+    #__sb_bar__.sb-notch-listening::before,#__sb_bar__.sb-notch-listening::after{content:"";position:absolute;z-index:-1;inset:2px;border:1.5px solid rgba(232,120,110,.58);border-radius:inherit;animation:__sb_notch_sonar__ 2.35s cubic-bezier(.2,.65,.3,1) infinite}#__sb_bar__.sb-notch-listening::after{animation-delay:1.15s}@keyframes __sb_notch_sonar__{from{opacity:.72;transform:scale(1)}to{opacity:0;transform:scale(1.28,1.7)}}
+    #__sb_bar__.sb-notch-working{width:440px;height:88px}#__sb_bar__.sb-notch-working #__sb_notch_status__{display:block;color:rgba(255,255,255,.84)}
+    #__sb_bar__.sb-notch-speaking .sb-n-smile{display:none}#__sb_bar__.sb-notch-speaking .sb-n-mouth{display:block;transform-box:fill-box;transform-origin:center;animation:__sb_notch_talk__ .46s ease-in-out infinite alternate}@keyframes __sb_notch_talk__{from{transform:scaleY(.55)}to{transform:scaleY(1.12)}}
+    #__sb_bar__.sb-log-open{width:min(650px,calc(100vw - 32px));height:auto;min-height:180px;border-radius:0 0 36px 36px;background:rgba(255,251,247,.72)}#__sb_bar__.sb-log-open #__sb_notch_face__{display:none}#__sb_bar__.sb-log-open #__sb_bar_log__{max-height:220px;padding:28px 24px 14px}#__sb_bar__.sb-log-open #__sb_bar_row__{display:flex;min-height:64px}
   `;
   document.head.appendChild(style);
 
@@ -9877,6 +9912,7 @@ function __sbBuildBrainUI() {
   const __sbDockBar = document.createElement("div");
   __sbDockBar.id = "__sb_bar__";
   __sbDockBar.innerHTML = `
+      <div id="__sb_notch_face__" aria-hidden="true"><svg viewBox="0 0 230 72" preserveAspectRatio="none"><path class="sb-n-fold" d="M115 0 Q111 14 115 27 Q119 40 115 56 M25 4 Q14 13 25 22 Q12 31 25 40 Q14 50 30 61 M61 1 Q49 11 60 20 Q47 30 61 39 Q49 49 65 63 M169 1 Q181 11 170 20 Q183 30 169 39 Q181 49 165 63 M205 4 Q216 13 205 22 Q218 31 205 40 Q216 50 200 61"/><circle class="sb-n-eye" cx="103" cy="29" r="10"/><circle class="sb-n-eye" cx="127" cy="29" r="10"/><circle class="sb-n-pupil" cx="104" cy="30" r="4.8"/><circle class="sb-n-pupil" cx="128" cy="30" r="4.8"/><path class="sb-n-lid" d="M93 29 Q103 36 113 29 M117 29 Q127 36 137 29"/><path class="sb-n-smile" d="M108 47 Q115 54 122 47"/><g class="sb-n-mouth"><ellipse cx="115" cy="49" rx="7" ry="5.5"/><ellipse cx="115" cy="51" rx="4.2" ry="2.2"/></g></svg><span id="__sb_notch_status__"></span></div>
       <div id="__sb_bar_log__"><div class="sb-blog-steps"></div></div>
       <div id="__sb_bar_row__">
       <input id="__sb_input__" placeholder="Go on." autocomplete="off" spellcheck="false" />
@@ -9893,6 +9929,7 @@ function __sbBuildBrainUI() {
       <button id="__sb_send_btn__" class="sb-bar-icon-btn" title="Send">
         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
       </button>
+      <button id="__sb_notch_theme__" type="button" title="Switch glass theme" aria-label="Switch glass theme">◐</button>
       <button id="__sb_bar_close__" class="sb-bar-icon-btn" title="Dock Braino (Esc)">
         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
@@ -10109,9 +10146,13 @@ function __sbBuildBrainUI() {
     // Show brain if docked OR if voice mode is on (voice takes over, so show it either way).
     if (sbBrainDocked || sbVoiceModeOn) {
       const b = document.getElementById("__sb_brain_btn__");
-      if (b) b.style.display = "";
+      if (b) b.style.display = "none";
       __sbBrainVisible = true;
-      if (sbBrainDocked && !sbVoiceModeOn) __sbSyncIdleState();
+      if (sbBrainDocked && !sbVoiceModeOn) {
+        const bar = document.getElementById("__sb_bar__");
+        if (bar) { bar.classList.add("open"); __sbSetBrowserNotchState("idle"); }
+        __sbSyncIdleState();
+      }
       if (!sbBrainDocked && sbVoiceModeOn && __sbContextOk()) {
         chrome.storage.local.set({ sbBrainDocked: true });
       }
@@ -10162,6 +10203,12 @@ function __sbBuildBrainUI() {
       // Docked mascot is only visible/clickable in DOCKED state → open the panel.
       __sbOpenPanel();
     }
+  });
+  document.getElementById("__sb_bar__")?.addEventListener("click", (event) => {
+    const bar = event.currentTarget;
+    if (!(bar instanceof HTMLElement) || !bar.classList.contains("sb-notch-idle")) return;
+    event.preventDefault(); event.stopPropagation();
+    __sbOpenPanel();
   });
 
   // ⌘I / Ctrl+I — toggle brain. Double-tap Space — primary invoke (cycles the loop).
@@ -10240,7 +10287,8 @@ function __sbBuildBrainUI() {
         __sbLastSpaceTap = 0;
         e.preventDefault(); e.stopPropagation();   // swallow the scroll on the invoking tap
         if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
-        __sbToggleBrain();
+        if (!__sbBrainVisible || !__sbInputOpen) __sbOpenPanel();
+        else __sbDock();
       } else {
         __sbLastSpaceTap = now;
       }
@@ -10326,18 +10374,26 @@ function __sbBuildBrainUI() {
 
   // ── Theme toggle (glass ↔ readable) ──
   const __sbThemeBtn = document.getElementById("__sb_theme_toggle_btn__");
+  const __sbNotchThemeBtn = document.getElementById("__sb_notch_theme__");
   const __sbApplyTheme = (mode) => {
     const isReadable = mode === "readable";
-    // Theme applies to the answer CARD only. The bottom bar stays transparent glass
-    // (legibility there comes from the text halo), so we never force it opaque.
     bubble.classList.toggle("sb-readable", isReadable);
+    document.getElementById("__sb_bar__")?.classList.toggle("sb-notch-liquid", !isReadable);
     __sbThemeBtn.textContent = isReadable ? "◐" : "◑";
+    if (__sbNotchThemeBtn) __sbNotchThemeBtn.textContent = isReadable ? "◐" : "◑";
     __sbThemeBtn.title = isReadable ? "Switch to liquid glass" : "Switch to clear glass (readable)";
+    if (__sbNotchThemeBtn) __sbNotchThemeBtn.title = __sbThemeBtn.title;
   };
   // Default = liquid glass. The toggle switches to a translucent glassmorphism (still
   // see-through, but readable) for when the liquid glass makes the page hard to read.
   chrome.storage.local.get("sbTheme", ({ sbTheme }) => __sbApplyTheme(sbTheme || "glass"));
   __sbThemeBtn.addEventListener("click", () => {
+    const next = bubble.classList.contains("sb-readable") ? "glass" : "readable";
+    __sbApplyTheme(next);
+    chrome.storage.local.set({ sbTheme: next });
+  });
+  __sbNotchThemeBtn?.addEventListener("click", (event) => {
+    event.stopPropagation();
     const next = bubble.classList.contains("sb-readable") ? "glass" : "readable";
     __sbApplyTheme(next);
     chrome.storage.local.set({ sbTheme: next });
@@ -10780,6 +10836,7 @@ function __sbOpenCard(options = {}) {
   // Keep the bar open and Braino strolling on it while the answer card is up.
   const alreadyOpen = wrap.classList.contains("visible");
   wrap.classList.add("visible");
+  document.getElementById("__sb_bar__")?.classList.add("sb-answer-covered");
   if (!alreadyOpen) {
     wrap.classList.add("animating-in");
     requestAnimationFrame(() => setTimeout(() => wrap.classList.remove("animating-in"), 400));
@@ -10788,7 +10845,7 @@ function __sbOpenCard(options = {}) {
   else __sbStopOrbit();
   const bubble = wrap.querySelector("#__sb_bubble__");
   // theme (glass/readable) is persisted separately via __sbThemeBtn init — no override here
-  __sbInitCardDrag(wrap);
+  // Answers are physically anchored to the notch in v1.0.0; legacy drag code stays intact.
   __sbScheduleCursorFollow();
 }
 
@@ -10796,14 +10853,12 @@ function __sbCollapseCard() {
   if (!__sbOwnsInlineUi()) return;
   const wrap = document.getElementById("__sb_card_wrap__");
   if (wrap) wrap.classList.remove("visible");
+  document.getElementById("__sb_bar__")?.classList.remove("sb-answer-covered");
   __sbStopOrbit();
   if (__sbBubbleTimer) clearTimeout(__sbBubbleTimer);
   if (__sbBrainVisible && __sbInputOpen) {
     document.getElementById("__sb_bar__")?.classList.add("open");
-    // Bar stays open with the card now, so the walker is already running — only
-    // (re)start it if something actually stopped it (don't teleport mid-stroll).
-    const lane = document.getElementById("__sb_walk_lane__");
-    if (!lane || lane.style.display === "none") __sbStartWalkLoop();
+    __sbStopWalkLoop();
   }
   __sbScheduleCursorFollow();
   __sbSyncIdleState(); // back to docked idle — resume animations
@@ -11731,6 +11786,63 @@ function __sbSetGreetingPlaceholder() {
   });
 }
 
+const __SB_NOTCH_CLASSES = ["sb-notch-invoking", "sb-notch-auth", "sb-notch-auth-ok", "sb-notch-idle", "sb-notch-listening", "sb-notch-working", "sb-notch-speaking"];
+function __sbSetBrowserNotchState(state, status = "") {
+  const bar = document.getElementById("__sb_bar__");
+  if (!bar) return;
+  bar.classList.remove(...__SB_NOTCH_CLASSES);
+  if (state) bar.classList.add(`sb-notch-${state}`);
+  const label = document.getElementById("__sb_notch_status__");
+  if (label) label.textContent = status;
+}
+
+function __sbRunBrowserNotchBoot(finishReady, finishRejected) {
+  const bar = document.getElementById("__sb_bar__");
+  if (!bar) { finishReady(); return; }
+  let done = false;
+  let authWatcher = null;
+  let authFallback = null;
+  let authTokenPresent = false;
+  const timers = [];
+  const later = (fn, ms) => { const id = setTimeout(fn, ms); timers.push(id); return id; };
+  const cleanup = () => {
+    timers.forEach(clearTimeout);
+    if (authFallback) clearTimeout(authFallback);
+    if (authWatcher) { try { chrome.storage.onChanged.removeListener(authWatcher); } catch (_) {} }
+  };
+  const settleReady = () => {
+    if (done) return; done = true; cleanup();
+    __sbSetBrowserNotchState("auth-ok", "Authenticated");
+    setTimeout(() => {
+      __sbSetBrowserNotchState("idle");
+      __sbInputOpen = false;
+      if (__sbContextOk()) chrome.storage.local.set({ sbBrainDocked: true, sbBrainExpanded: false });
+      finishReady();
+    }, 900);
+  };
+  const settleRejected = () => {
+    if (done) return; done = true; cleanup();
+    __sbSetBrowserNotchState("");
+    finishRejected();
+  };
+
+  __sbInputOpen = false;
+  bar.classList.remove("sb-signin", "sb-waking", "sb-cinematic");
+  bar.classList.add("open");
+  __sbSetBrowserNotchState("invoking");
+  chrome.storage.local.get("authToken", ({ authToken }) => { authTokenPresent = !!authToken; });
+  later(() => {
+    __sbSetBrowserNotchState("auth", "Authenticating");
+    if (authTokenPresent) { later(settleReady, 1900); return; }
+    try { chrome.runtime.sendMessage({ action: "openSilentAuthTab" }, () => { void chrome.runtime.lastError; }); } catch (_) {}
+    authWatcher = (changes, area) => {
+      if (area === "local" && changes.authToken?.newValue) later(settleReady, 350);
+    };
+    try { chrome.storage.onChanged.addListener(authWatcher); } catch (_) {}
+    authFallback = setTimeout(settleRejected, 6000);
+  }, 1250);
+}
+
 // ── Three-state presence model ──────────────────────────────────────────────
 //   OFF    — Braino not on the page          (__sbBrainVisible = false)
 //   DOCKED — idle mascot bottom-right         (visible, !__sbInputOpen)
@@ -11749,7 +11861,14 @@ function __sbOpenPanel() {
   __sbSetCursorRideMode(false);
   const btn = document.getElementById("__sb_brain_btn__");
   if (btn) btn.style.display = "none";          // walker is the mascot in PANEL
-  __sbToggleInput(true, { skipPersist: true, wakeClimb: wasOff });
+  if (wasOff) {
+    __sbRunBrowserNotchBoot(
+      () => {},
+      () => { document.getElementById("__sb_bar__")?.classList.add("open", "sb-signin"); __sbSetupBarSignIn(); },
+    );
+  } else {
+    __sbToggleInput(true, { skipPersist: true });
+  }
   if (__sbContextOk()) chrome.storage.local.set({ sbBrainDocked: true, sbBrainExpanded: true });
 }
 
@@ -11766,7 +11885,9 @@ function __sbDock() {
   if (wrap) wrap.classList.remove("visible");
   __sbStopOrbit();
   const btn = document.getElementById("__sb_brain_btn__");
-  if (btn) btn.style.display = "";
+  if (btn) btn.style.display = "none";
+  const bar = document.getElementById("__sb_bar__");
+  if (bar) { bar.classList.add("open"); __sbSetBrowserNotchState("idle"); }
   __sbSyncIdleState();
   if (__sbContextOk()) chrome.storage.local.set({ sbBrainDocked: true, sbBrainExpanded: false });
 }
@@ -11834,6 +11955,7 @@ function __sbToggleInput(open, options = {}) {
 
     const __sbOpenBarReady = () => {
       bar.classList.remove("sb-signin", "sb-waking", "sb-cinematic");
+      __sbSetBrowserNotchState("");
       bar.classList.add("open");
       // PANEL: the walker is the mascot — hide the docked bottom-right brain button.
       const __dockBtn = document.getElementById("__sb_brain_btn__");
@@ -11850,8 +11972,8 @@ function __sbToggleInput(open, options = {}) {
           b.classList.toggle("selected", b.dataset.model === model));
       });
       if (!options.suppressFocus) setTimeout(() => document.getElementById("__sb_input__")?.focus(), 50);
-      // Start walk cycle — legs + body animation from braino-char.jsx design
-      __sbStartWalkLoop();
+      // The legacy walker remains available in code; the browser notch now owns presence.
+      __sbStopWalkLoop();
     };
 
     // OFF→PANEL plays the full climb wake-up; DOCKED→PANEL (and other opens) are instant.
@@ -14157,6 +14279,7 @@ function __sbAgentLogShow(title) {
   __sbAgentLogTouch();
   __sbAgentBusy = true;
   if (title) __sbAgentBusyLabel = title;
+  __sbSetBrowserNotchState("working", __sbAgentBusyLabel.replace(/…/g, ""));
   if (typeof __sbWkStatus === "function") __sbWkStatus(__sbAgentBusyLabel);  // flip "Listening…" → working label
   __sbAgentLogRender();
   if (__sbJarvisOpen) __sbJarvisLogShow(__sbAgentBusyLabel);   // mirror into the Jarvis HUD console
@@ -14215,6 +14338,7 @@ function __sbAgentLogClear() {
     const bar = document.getElementById("__sb_bar__");
     const log = document.getElementById("__sb_bar_log__");
     if (bar) bar.classList.remove("sb-log-open");
+    if (bar && __sbBrainVisible) __sbSetBrowserNotchState(__sbHeadphoneMode ? "listening" : "idle");
     const stepsEl = log && log.querySelector(".sb-blog-steps");
     if (stepsEl) stepsEl.innerHTML = "";
     __sbAgentLogCollapseTimer = null;
@@ -14426,6 +14550,7 @@ function __sbShowBubble(text, autoHide = true, options = {}) {
   __sbRefreshInlineOwner();
   __sbLastBubbleRaw = String(text || "");
   const rich = Boolean(options.rich);
+  document.getElementById("__sb_card_wrap__")?.classList.toggle("sb-notch-short", !rich && __sbLastBubbleRaw.length < 240);
   const turnHtml = __sbBuildCardTurnHtml(
     { prompt: options.prompt || "", answer: String(text || "") },
     { rich, answerText: String(text || "") },
@@ -21822,6 +21947,10 @@ function __sbSetHpBrainState(state) {
   if (bar) {
     bar.classList.toggle("hp-active", !!state);
     bar.classList.toggle("hp-listening", state === "listening");
+    if (state === "listening" || state === "hearing") __sbSetBrowserNotchState("listening");
+    else if (state === "speaking") __sbSetBrowserNotchState("speaking");
+    else if (state === "connecting" || state === "captured") __sbSetBrowserNotchState("working", state === "captured" ? "Thinking" : "Waking up");
+    else if (__sbBrainVisible && !__sbInputOpen) __sbSetBrowserNotchState("idle");
   }
 
   // The walker is the visible mascot while the bar is open, so it carries the glow
