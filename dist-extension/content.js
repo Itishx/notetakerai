@@ -11795,32 +11795,193 @@ function __sbMountNotchV1() {
   host.id = "__sb_notch_v1_host__";
   host.style.cssText = "all:initial;position:fixed;z-index:2147483647;top:0;left:50%;transform:translateX(-50%);pointer-events:none";
   const shadow = host.attachShadow({ mode: "open" });
+  // Verbatim port of the Chrome system notch (/insta-graphics?design=chrome-system).
+  // Geometry, colors, easing and per-state faces mirror the final layered ig-cs-* CSS.
   shadow.innerHTML = `
     <style>
-      :host{all:initial}.n{--coral:#d86c63;position:relative;width:230px;height:72px;overflow:hidden;border:1px solid rgba(255,255,255,.32);border-top:0;border-radius:0 0 27px 27px;background:linear-gradient(180deg,#e99088,#d86c63 58%,#a9433b);box-shadow:0 13px 34px rgba(169,67,59,.24),inset 0 1px rgba(255,255,255,.38);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;pointer-events:auto;transition:width 1.05s cubic-bezier(.22,1,.36,1),height 1.05s cubic-bezier(.22,1,.36,1),border-radius .95s cubic-bezier(.22,1,.36,1),background .7s ease,border-color .7s ease,box-shadow .85s ease,opacity .42s ease,transform .7s cubic-bezier(.22,1,.36,1);color:#1b1713}
+      :host{all:initial}
+      @property --a{syntax:"<angle>";inherits:false;initial-value:0deg}
+      .n{position:relative;box-sizing:border-box;width:230px;height:72px;overflow:hidden;border:1px solid rgba(255,255,255,.46);border-top:0;border-radius:0 0 27px 27px;background:linear-gradient(180deg,#f6a8a2 0%,#e8786e 56%,#c9544a 100%);box-shadow:0 15px 40px rgba(201,84,74,.28),inset 0 1px rgba(255,255,255,.42);color:#1b1713;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;pointer-events:auto;cursor:pointer;interpolate-size:allow-keywords;will-change:width,height,border-radius;transition:width 1050ms cubic-bezier(.22,1,.36,1),height 1050ms cubic-bezier(.22,1,.36,1),border-radius 950ms cubic-bezier(.22,1,.36,1),background 700ms ease,border-color 700ms ease,box-shadow 850ms ease,backdrop-filter 700ms ease,opacity .42s ease,transform .7s cubic-bezier(.22,1,.36,1)}
       .n[data-state=off]{opacity:0;pointer-events:none;transform:translateY(-18px) scale(.94)}
-      .panel{position:absolute;inset:0;box-sizing:border-box;opacity:0;pointer-events:none;transform:translateY(6px);transition:opacity .42s ease,transform .76s cubic-bezier(.22,1,.36,1)}.face{z-index:2}.face svg{display:block;width:100%;height:100%}.fold{fill:none;stroke:rgba(151,54,48,.42);stroke-width:2;stroke-linecap:round}.eye{fill:#fff}.pupil{fill:#2b1b18}.lid{opacity:0;fill:none;stroke:#fff;stroke-width:3;stroke-linecap:round}.smile{fill:none;stroke:#fff;stroke-width:2.5;stroke-linecap:round}.mouth{display:none;fill:#5f211d;stroke:#fff;stroke-width:1.5}.mouth ellipse:last-child{fill:#f4a09a;stroke:0}
-      .status{z-index:5;display:flex;align-items:flex-end;justify-content:center;padding-bottom:5px;color:rgba(255,255,255,.84);font-size:8px;font-weight:750;letter-spacing:.12em;text-transform:uppercase}.input{z-index:6;display:flex;align-items:center;gap:9px;padding:16px 18px}.input label{display:grid;gap:6px;min-width:0;flex:1}.input small{color:#c9544a;font-size:9px;font-weight:750;letter-spacing:.11em;text-transform:uppercase}.input input{min-width:0;border:0;outline:0;color:#1b1713;background:transparent;font:500 14px/1.2 inherit}.input input::placeholder{color:rgba(27,23,19,.48)}button{border:0;cursor:pointer;font-family:inherit}.round{display:grid;place-items:center;flex:0 0 32px;width:32px;height:32px;border-radius:50%;color:#6b5248;background:rgba(65,48,40,.07)}.send{color:#fff;background:#e8786e}.mode{padding:8px 10px;border-radius:999px;color:#6b5248;background:rgba(65,48,40,.07);font-size:10px;font-weight:700}.theme{flex-basis:25px;width:25px;height:25px;font-size:14px}.close{flex-basis:25px;width:25px;height:25px;font-size:15px}
-      .menu{z-index:8;display:flex;flex-direction:column;padding:19px}.menu header{display:flex;align-items:center;justify-content:space-between;padding:0 4px 14px;border-bottom:1px solid rgba(65,48,40,.09)}.menu header small{font-size:10px;font-weight:750;letter-spacing:.1em;text-transform:uppercase}.actions{display:flex;align-items:center;gap:7px}.actions em{padding:6px 9px;border-radius:999px;color:#c9544a;background:rgba(232,120,110,.1);font-size:9px;font-weight:750;font-style:normal}.menu button.item{display:grid;grid-template-columns:82px 1fr 20px;align-items:center;min-height:52px;padding:0 10px;border-bottom:1px solid rgba(65,48,40,.07);color:#1b1713;background:transparent;text-align:left}.item b{font-size:12px}.item small{color:rgba(27,23,19,.48);font-size:10px}.item strong{color:#c9544a}
-      .thinking{z-index:7;display:flex;flex-direction:column;padding:76px 24px 10px;text-align:left}.thinking header{display:flex;justify-content:space-between;padding:0 2px 8px;border-bottom:1px solid rgba(65,48,40,.1);color:#a7433b;font-size:10px;font-weight:750;letter-spacing:.1em;text-transform:uppercase}.thinking p{margin:0;padding:9px 2px;border-bottom:1px solid rgba(65,48,40,.09);color:rgba(27,23,19,.76);font:400 14px/1.32 Georgia,serif}.answer{z-index:9;display:flex;flex-direction:column;padding:18px 24px 16px;text-align:left;overflow:auto}.answer header{display:flex;align-items:center;justify-content:space-between;padding-bottom:12px;border-bottom:1px solid rgba(65,48,40,.1)}.answer header b{font-size:12px}.answer-body{color:#1b1713;font:400 15px/1.55 Georgia,serif}.answer-body h1,.answer-body h2,.answer-body h3{font-family:Georgia,serif}.answer footer{display:flex;align-items:center;gap:8px;margin-top:12px;padding-top:10px;border-top:1px solid rgba(65,48,40,.1);color:rgba(27,23,19,.42);font-size:11px}.answer footer span{flex:1}
-      .n[data-state=idle] .face,.n[data-state=listening] .face,.n[data-state=working] .face,.n[data-state=speaking] .face,.n[data-state=authenticating] .face,.n[data-state=authenticated] .face{opacity:1;transform:none}.n[data-state=input]{width:min(570px,78vw);height:104px;border-radius:0 0 31px 31px;background:rgba(255,251,247,.76)}.n[data-state=input] .input{opacity:1;pointer-events:auto;transform:none}.n[data-state=menu]{width:min(570px,78vw);height:404px;border-radius:0 0 34px 34px;background:rgba(255,251,247,.8)}.n[data-state=menu] .menu{opacity:1;pointer-events:auto;transform:none}.n[data-state=listening]{height:72px}.n[data-state=listening]::before,.n[data-state=listening]::after{content:"";position:absolute;z-index:-1;inset:2px;border:1.5px solid rgba(232,120,110,.58);border-radius:inherit;animation:sonar 2.35s ease-out infinite}.n[data-state=listening]::after{animation-delay:1.15s}@keyframes sonar{to{opacity:0;transform:scale(1.28,1.7)}}.n[data-state=working]{width:440px;height:88px}.n[data-state=working] .status{opacity:1;transform:none}.n[data-state=thinking]{width:min(650px,82vw);height:260px;border-radius:0 0 36px 36px;background:linear-gradient(180deg,rgba(246,168,162,.82) 0,rgba(255,251,247,.76) 74px,rgba(255,251,247,.68) 100%)}.n[data-state=thinking] .face{opacity:1;height:72px;transform:none}.n[data-state=thinking] .eye{opacity:0}.n[data-state=thinking] .lid{opacity:1}.n[data-state=thinking] .thinking{opacity:1;pointer-events:auto;transform:none}.n[data-state=speaking]{height:82px}.n[data-state=speaking] .smile{display:none}.n[data-state=speaking] .mouth{display:block;transform-box:fill-box;transform-origin:center;animation:talk .46s ease-in-out infinite alternate}@keyframes talk{from{transform:scaleY(.55)}to{transform:scaleY(1.12)}}
-      .n[data-state=short]{width:min(610px,82vw);height:120px;border-radius:0 0 34px 34px;background:rgba(255,251,247,.76)}.n[data-state=long]{width:min(650px,82vw);height:min(620px,calc(100vh - 28px));border-radius:0 0 38px 38px;background:rgba(255,251,247,.76)}.n[data-state=short] .answer,.n[data-state=long] .answer{opacity:1;pointer-events:auto;transform:none}.n[data-state=short] .answer{padding-top:12px}.n[data-state=short] .answer header{display:none}.n[data-state=short] .answer-body{font-size:16px;line-height:1.3}.n[data-state=short] .answer footer{margin-top:auto}
-      .n[data-state=invoking]{width:270px;height:82px;border:0;background:transparent;box-shadow:none;animation:shell 1.25s cubic-bezier(.22,1,.36,1) both}.n[data-state=invoking]::before{content:"";position:absolute;z-index:12;inset:0;padding:1.2px;border-radius:inherit;background:conic-gradient(from var(--a),#f4cf87,#ec8078,#dc77a8,#779cff,#ec8078,#f4cf87);-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;animation:spin 1.25s linear both}.n[data-state=invoking]::after{content:"";position:absolute;inset:1px;border-radius:inherit;background-image:linear-gradient(105deg,transparent 26%,rgba(255,225,218,.58) 45%,transparent 64%),linear-gradient(180deg,#e99088,#d86c63 58%,#a9433b);background-size:260% 100%,100% 100%;opacity:0;animation:fill .72s ease .48s forwards}@property --a{syntax:"<angle>";inherits:false;initial-value:0deg}@keyframes shell{from{opacity:0;transform:scaleX(.06) scaleY(.72)}to{opacity:1;transform:none}}@keyframes spin{to{--a:300deg}}@keyframes fill{from{opacity:0;background-position:150% 0,0 0}to{opacity:1;background-position:-80% 0,0 0}}
-      .n[data-state=authenticating],.n[data-state=authenticated]{width:270px;height:82px;border-radius:0 0 29px 29px}.n[data-state=authenticating] .eye{opacity:0}.n[data-state=authenticating] .lid{opacity:1}.n[data-state=authenticating] .status,.n[data-state=authenticated] .status{opacity:1;transform:none}.n[data-state=authenticating] .status{color:transparent;background:linear-gradient(90deg,rgba(255,255,255,.46),#fff,#f4cf87,rgba(255,255,255,.46));background-size:240% 100%;-webkit-background-clip:text;background-clip:text;animation:textshine 1.45s linear infinite}@keyframes textshine{to{background-position:-140% 0}}.n[data-state=authenticated]{border-color:rgba(93,219,135,.72);box-shadow:0 0 0 1px rgba(93,219,135,.18),0 18px 58px rgba(52,184,98,.34)}.n[data-state=authenticated] .eye{transform-box:fill-box;transform-origin:center;animation:eyes .72s ease both}@keyframes eyes{from{transform:scaleY(.06)}to{transform:scaleY(1)}}
-      .n.liquid[data-state=input],.n.liquid[data-state=menu],.n.liquid[data-state=thinking],.n.liquid[data-state=short],.n.liquid[data-state=long]{color:#fff;border-color:rgba(255,255,255,.42);background:linear-gradient(145deg,rgba(31,27,28,.48),rgba(18,16,17,.38));backdrop-filter:blur(20px) saturate(185%)}.liquid input,.liquid .menu button.item,.liquid .answer-body{color:#fff}.liquid .item small,.liquid .answer footer{color:rgba(255,255,255,.46)}
-      .n[data-state=listening]{width:390px;height:74px;border-radius:0 0 28px 28px}.n[data-state=working]{width:420px;height:78px;border-radius:0 0 28px 28px}.n[data-state=short]{width:min(610px,76vw);height:112px}.n[data-state=short] .answer{padding:15px 19px 12px 22px}.n[data-state=short] .answer-body{font-size:17px;line-height:1.35}
-      .answer-body .sb-turn{margin:0}.answer-body .sb-user-msg{display:none}.answer-body .sb-assistant-msg,.answer-body .sb-answer{margin:0;color:inherit;background:transparent}.answer-body p{margin:0 0 10px}.answer-body p:last-child{margin-bottom:0}.answer-body ul,.answer-body ol{margin:8px 0;padding-left:20px}
-      .signin{z-index:10;display:flex;align-items:center;gap:12px;padding:15px 18px}.signin span{display:grid;gap:3px;min-width:0;flex:1}.signin b{font-size:12px}.signin small{color:rgba(27,23,19,.48);font-size:10px}.signin button{padding:9px 13px;border-radius:999px;color:#fff;background:#d86c63;font-size:10px;font-weight:750}.n[data-state=signin]{width:min(430px,78vw);height:88px;border-radius:0 0 29px 29px;background:rgba(255,251,247,.9)}.n[data-state=signin] .signin{opacity:1;pointer-events:auto;transform:none}
-      .n[data-state=invoking]::after{z-index:0}.n[data-state=invoking] .face{opacity:0;transform:translateY(-2px) scale(.96);animation:invokeFace .38s ease-out .82s forwards}.n[data-state=invoking] .eye,.n[data-state=invoking] .pupil,.n[data-state=authenticating] .pupil,.n[data-state=thinking] .pupil{opacity:0}.n[data-state=invoking] .lid{opacity:1}.n[data-state=authenticated] .pupil{opacity:1;transform-box:fill-box;transform-origin:center;animation:pupilSettle .88s ease-out both}@keyframes invokeFace{to{opacity:1;transform:none}}@keyframes pupilSettle{from{transform:translateY(2px)}to{transform:none}}
+      .panel{position:absolute;inset:0;box-sizing:border-box;opacity:0;pointer-events:none;transform:translateY(6px);transition:opacity 420ms ease,transform 760ms cubic-bezier(.22,1,.36,1)}
+      .face{z-index:2}.face svg{display:block;width:100%;height:100%;overflow:visible}
+      .fold{fill:none;stroke:#8a2f28;stroke-width:1.8;stroke-linecap:round;opacity:.58;vector-effect:non-scaling-stroke}
+      .eye,.pupil,.smile,.lids{transform-box:view-box;transform-origin:center}
+      .eyeball{fill:#fff}.pupil circle:first-child{fill:#1b1713}.pupil circle:last-child{fill:#fff}
+      .lids{opacity:0}.lids path{fill:none;stroke:#7e2a24;stroke-width:2.6;stroke-linecap:round}
+      .smile{fill:none;stroke:#1b1713;stroke-width:2.7;stroke-linecap:round}
+      .mouth{opacity:0;transform-box:fill-box;transform-origin:center}.mouth ellipse:first-child{fill:#6e211a}.mouth ellipse:last-child{fill:#f08b82}
+      .n[data-state=idle] .face,.n[data-state=listening] .face,.n[data-state=working] .face,.n[data-state=speaking] .face,.n[data-state=thinking] .face,.n[data-state=invoking] .face,.n[data-state=authenticating] .face,.n[data-state=authenticated] .face{opacity:1;transform:none}
+      .n[data-state=idle] .pupil{animation:gaze 5.6s cubic-bezier(.45,0,.25,1) infinite}.n[data-state=idle] g.eye:nth-of-type(2) .pupil{animation-delay:.08s}
+      .n[data-state=idle]:hover{width:240px;height:76px;box-shadow:0 18px 48px rgba(201,84,74,.38),inset 0 1px rgba(255,255,255,.48)}
+      .n[data-state=listening]{overflow:visible}
+      .n[data-state=listening]::before,.n[data-state=listening]::after{content:"";position:absolute;z-index:-1;inset:2px;border:1.5px solid rgba(232,120,110,.58);border-radius:inherit;animation:sonar 2.35s cubic-bezier(.2,.65,.3,1) infinite}
+      .n[data-state=listening]::after{animation-delay:1.15s}
+      .n[data-state=working]{width:440px;height:88px;border-radius:0 0 28px 28px}
+      .n[data-state=working] .eye,.n[data-state=working] .smile{transform:scaleX(.64)}
+      .workpill{position:absolute;z-index:6;right:15px;top:31px;padding:7px 10px;border-radius:999px;background:rgba(138,47,40,.22);backdrop-filter:blur(5px);opacity:0;pointer-events:none;transition:opacity 420ms ease}
+      .n[data-state=working] .workpill{opacity:1}
+      .workpill strong{display:block;min-width:78px;max-width:200px;color:#fff;font-size:10px;font-weight:750;line-height:13px;text-align:center;text-shadow:0 1px 3px rgba(110,33,26,.22);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      .n[data-state=speaking]{height:82px;border-radius:0 0 29px 29px}
+      .n[data-state=speaking] .smile{opacity:0}.n[data-state=speaking] .mouth{opacity:1;animation:talkMouth .42s ease-in-out infinite alternate}.n[data-state=speaking] .pupil{animation:speakLook 2.8s ease-in-out infinite}
+      .n[data-state=input]{width:min(570px,78vw);height:104px;border-radius:0 0 31px 31px;cursor:default;border:1px solid rgba(255,255,255,.72);border-top:0;background:rgba(255,251,247,.72);box-shadow:0 24px 70px rgba(27,23,19,.16),inset 0 1px rgba(255,255,255,.8);backdrop-filter:blur(24px) saturate(175%)}
+      .n[data-state=menu]{width:min(570px,78vw);height:404px;border-radius:0 0 34px 34px;cursor:default;border:1px solid rgba(255,255,255,.72);border-top:0;background:rgba(255,251,247,.78);box-shadow:0 28px 90px rgba(27,23,19,.18),inset 0 1px rgba(255,255,255,.82);backdrop-filter:blur(24px) saturate(175%)}
+      .n[data-state=thinking],.n[data-state=short],.n[data-state=long]{border:1px solid rgba(255,255,255,.7);border-top:0;background:linear-gradient(180deg,rgba(246,168,162,.82) 0,rgba(255,251,247,.76) 74px,rgba(255,251,247,.68) 100%);box-shadow:0 28px 90px rgba(27,23,19,.18),inset 0 1px rgba(255,255,255,.78);backdrop-filter:blur(24px) saturate(175%)}
+      .n[data-state=thinking]{width:min(650px,82vw);height:260px;border-radius:0 0 36px 36px;cursor:default}
+      .n[data-state=thinking] .face{height:72px}.n[data-state=thinking] .face svg{height:72px}
+      .n[data-state=thinking] .eye{opacity:0}.n[data-state=thinking] .lids{opacity:1;transform:scaleX(.36)}.n[data-state=thinking] .smile{transform:scaleX(.36)}
+      .n[data-state=thinking] .face::after{content:"";position:absolute;z-index:3;inset:0 0 auto;height:72px;pointer-events:none;background:linear-gradient(105deg,transparent 32%,rgba(255,225,190,.08) 42%,rgba(255,244,225,.72) 50%,rgba(255,205,190,.12) 58%,transparent 68%);background-size:260% 100%;mix-blend-mode:screen;animation:thinkShimmer 2.8s linear infinite}
+      .n[data-state=short]{width:min(610px,76vw);height:120px;border-radius:0 0 34px 34px}
+      .n[data-state=long]{width:min(650px,82vw);height:auto;max-height:calc(100vh - 110px);border-radius:0 0 38px 38px;cursor:default}
+      .n[data-state=menu]::before,.n[data-state=thinking]::before,.n[data-state=short]::before,.n[data-state=long]::before{content:"";position:absolute;z-index:14;inset:0;padding:1.25px;border-radius:inherit;opacity:.9;pointer-events:none;background:conic-gradient(from var(--a),#f4cf87,#ec8078,#dc77a8,#779cff,#ec8078,#f4cf87);-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;filter:drop-shadow(0 0 2px rgba(236,128,120,.28));animation:radiusFlow 4s linear infinite}
+      .status{z-index:5;display:flex;align-items:flex-end;justify-content:center;padding-bottom:5px}
+      .status small{color:rgba(255,255,255,.82);font-size:8px;font-weight:700;letter-spacing:.12em;text-transform:uppercase}
+      .n[data-state=authenticating] .status,.n[data-state=authenticated] .status{opacity:1;transform:none}
+      .n[data-state=invoking]{width:270px;height:82px;border-radius:0 0 29px 29px;border:0;background:transparent;box-shadow:none;backdrop-filter:none;animation:shell 1.25s cubic-bezier(.22,1,.36,1) both}
+      .n[data-state=invoking]::before{content:"";position:absolute;z-index:14;inset:0;padding:1.2px;border-radius:inherit;background:conic-gradient(from var(--a),#f4cf87,#ec8078,#dc77a8,#779cff,#ec8078,#f4cf87);-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;filter:drop-shadow(0 0 4px rgba(236,128,120,.55));animation:spin 1.25s linear both}
+      .n[data-state=invoking]::after{content:"";position:absolute;z-index:0;inset:1px;border-radius:inherit;background-image:linear-gradient(105deg,transparent 26%,rgba(255,225,218,.58) 45%,transparent 64%),linear-gradient(180deg,#e99088 0%,#d86c63 58%,#a9433b 100%);background-size:260% 100%,100% 100%;background-position:150% 0,0 0;opacity:0;animation:fill .72s cubic-bezier(.22,1,.36,1) .48s forwards}
+      .n[data-state=invoking] .face{opacity:0;transform:translateY(-2px) scale(.96);animation:invokeFace .38s ease-out .82s forwards}
+      .n[data-state=invoking] .eye,.n[data-state=authenticating] .eye,.n[data-state=thinking] .pupil{opacity:0}
+      .n[data-state=invoking] .lids,.n[data-state=authenticating] .lids{opacity:1}
+      .n[data-state=invoking] .lids path,.n[data-state=authenticating] .lids path{stroke:#fff;stroke-width:3}
+      .n[data-state=invoking] .smile,.n[data-state=authenticating] .smile{opacity:.8;stroke:#fff;stroke-width:2.5}
+      .n[data-state=authenticating],.n[data-state=authenticated]{width:270px;height:82px;border-radius:0 0 29px 29px;overflow:visible;border:1px solid rgba(255,255,255,.32);border-top:0;background:linear-gradient(180deg,#e99088 0%,#d86c63 58%,#a9433b 100%);box-shadow:0 18px 54px rgba(201,84,74,.3),inset 0 1px rgba(255,255,255,.38)}
+      .n[data-state=authenticating] .status small{color:transparent;background:linear-gradient(90deg,rgba(255,255,255,.46) 20%,#fff 45%,#f4cf87 52%,rgba(255,255,255,.46) 78%);background-size:240% 100%;-webkit-background-clip:text;background-clip:text;animation:textshine 1.45s linear infinite}
+      .n[data-state=authenticating]::before{content:"";position:absolute;z-index:14;inset:0;padding:1.25px;border-radius:inherit;pointer-events:none;background:conic-gradient(from var(--a),transparent 0 18%,#f4cf87 28%,#ec8078 38%,transparent 49%);-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;animation:radiusFlow 2.2s linear infinite}
+      .n[data-state=authenticated]{border-color:rgba(93,219,135,.72);box-shadow:0 0 0 1px rgba(93,219,135,.18),0 18px 58px rgba(52,184,98,.34),inset 0 1px rgba(255,255,255,.42)}
+      .n[data-state=authenticated] .status small{color:#d9ffe5}
+      .n[data-state=authenticated] .eye{transform-box:fill-box;transform-origin:center;animation:eyesOpen .72s cubic-bezier(.2,.8,.2,1) both}
+      .n[data-state=authenticated] .pupil{animation:pupilSettle .88s ease-out both}
+      button{border:0;padding:0;cursor:pointer;font-family:inherit;background:none;color:inherit}
+      .round{display:grid;place-items:center;flex:0 0 32px;width:32px;height:32px;border-radius:50%;color:#6b5248;background:rgba(65,48,40,.06);font-size:13px}
+      .send{color:#fff;background:#e8786e}.send:disabled{opacity:.38;cursor:default}
+      .mode{padding:8px 10px;border-radius:999px;color:#6b5248;background:rgba(65,48,40,.07);font-size:10px;font-weight:700}
+      .theme{flex:0 0 25px;width:25px;height:25px;font-size:14px;border:1px solid rgba(65,48,40,.12);background:rgba(255,255,255,.32);box-shadow:inset 0 1px rgba(255,255,255,.5);color:rgba(27,23,19,.58)}
+      .close{flex:0 0 25px;width:25px;height:25px;font-size:15px;color:#6b5248}
+      .input{z-index:6;display:flex;align-items:center;gap:9px;padding:16px 18px}
+      .input label{display:grid;gap:6px;min-width:0;flex:1}
+      .input small{color:#c9544a;font-size:9px;font-weight:750;letter-spacing:.11em;text-transform:uppercase}
+      .input input{min-width:0;border:0;outline:0;color:#1b1713;background:transparent;caret-color:#c9544a;font:500 14px/1.3 inherit}
+      .input input::placeholder{color:rgba(27,23,19,.42)}
+      .n[data-state=input] .input{opacity:1;pointer-events:auto;transform:none;transition-delay:360ms}
+      .menu{z-index:8;display:flex;flex-direction:column;padding:19px;text-align:left}
+      .menu header{display:flex;align-items:center;justify-content:space-between;padding:0 4px 14px;border-bottom:1px solid rgba(65,48,40,.09)}
+      .menu header small{color:#6b5248;font-size:10px;font-weight:750;letter-spacing:.1em;text-transform:uppercase}
+      .actions{display:flex;align-items:center;gap:7px}
+      .actions em{padding:6px 9px;border-radius:999px;color:#c9544a;background:rgba(232,120,110,.1);font-size:9px;font-weight:750;font-style:normal}
+      .menu button.item{display:grid;grid-template-columns:82px 1fr 20px;align-items:center;min-height:52px;padding:0 10px;border-bottom:1px solid rgba(65,48,40,.07);color:#1b1713;background:transparent;text-align:left;transition:background .15s ease}
+      .menu button.item:last-child{border-bottom:0}.menu button.item:hover{background:rgba(65,48,40,.055)}
+      .item b{font-size:12px}.item small{color:rgba(27,23,19,.48);font-size:10px}.item strong{color:#c9544a;font-size:11px}
+      .n[data-state=menu] .menu{opacity:1;pointer-events:auto;transform:none;transition-delay:360ms}
+      .thinking{z-index:7;display:flex;flex-direction:column;padding:76px 24px 10px;text-align:left}
+      .thinking header{display:flex;align-items:center;justify-content:space-between;min-height:34px;padding:0 2px 8px;border-bottom:1px solid rgba(65,48,40,.1)}
+      .tlabel{color:#a7433b;font-size:10px;font-weight:750;letter-spacing:.1em;text-transform:uppercase}
+      .tlabel i{display:inline-block;width:7px;height:7px;margin-right:8px;border-radius:50%;background:#c9544a;box-shadow:0 0 13px rgba(201,84,74,.55)}
+      .thinking .collapse{color:rgba(27,23,19,.42);font-size:9px;font-style:normal;background:none;border:0;cursor:pointer}
+      .thinking p{margin:0;padding:9px 2px;border-bottom:1px solid rgba(65,48,40,.09);color:rgba(27,23,19,.76);font:400 14px/1.32 "Newsreader","Charter BT",Georgia,serif}
+      .thinking p:last-child{border-bottom:0;color:rgba(27,23,19,.48)}
+      .n[data-state=thinking] .thinking{opacity:1;pointer-events:auto;transform:none;transition-delay:360ms}
+      .answer{z-index:9;display:flex;flex-direction:column;text-align:left}
+      .n[data-state=short] .answer,.n[data-state=long] .answer{opacity:1;pointer-events:auto;transform:none;transition-delay:360ms}
+      .n[data-state=short] .answer{padding:2px 18px 0}
+      .n[data-state=long] .answer{position:relative;inset:auto;padding:20px 24px 0;max-height:calc(100vh - 110px)}
+      .short-row{display:none;align-items:center;justify-content:space-between;gap:16px;min-height:44px;position:relative;z-index:3;transform:translateY(26px)}
+      .n[data-state=short] .short-row{display:flex}
+      .short-row>span{display:grid;gap:5px;min-width:0;text-align:left}
+      .short-row small{color:#a7433b;font-size:9px;font-weight:750;letter-spacing:.1em;text-transform:uppercase}
+      .short-row strong{color:#1b1713;font:400 16px/1.3 "Newsreader","Charter BT",Georgia,serif;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+      .short-row .actions em,.long-head .actions em{padding:8px 11px;border:1px solid rgba(65,48,40,.12);border-radius:999px;color:rgba(27,23,19,.55);background:none;font:650 9px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-style:normal;cursor:pointer}
+      .long-head{display:none;align-items:center;justify-content:space-between;padding-bottom:17px;border-bottom:1px solid rgba(65,48,40,.1)}
+      .n[data-state=long] .long-head{display:flex}
+      .long-head>span{display:flex;align-items:center;gap:4px}
+      .long-head i{width:7px;height:7px;border-radius:50%;background:#1b1713}
+      .long-head b{margin-left:8px;font-size:12px;color:#1b1713}
+      .answer article{display:none;flex:0 1 auto;min-height:0;overflow:auto;padding:25px 5px 24px;scrollbar-width:none}
+      .n[data-state=long] .answer article{display:block}
+      .answer-body{color:rgba(27,23,19,.66);font:400 15px/1.62 "Newsreader","Charter BT",Georgia,serif}
+      .answer-body h1,.answer-body h2,.answer-body h3{margin:10px 0 15px;color:#1b1713;font:400 24px/1.1 "Newsreader","Charter BT",Georgia,serif}
+      .answer-body p{margin:0 0 13px;color:rgba(27,23,19,.66)}
+      .answer-body p:last-child{margin-bottom:0}
+      .answer-body ul,.answer-body ol{margin:8px 0;padding-left:20px}
+      .answer-body strong{color:#1b1713}
+      .answer-body a{color:#c9544a}
+      .answer-body .sb-turn{margin:0}.answer-body .sb-user-msg{display:none}.answer-body .sb-assistant-msg,.answer-body .sb-answer{margin:0;color:inherit;background:transparent}
+      .lane{display:none;position:relative;flex:0 0 74px;height:74px;width:100%;overflow:hidden}
+      .n[data-state=short] .lane,.n[data-state=long] .lane{display:block}
+      .n[data-state=long] .lane{height:50px;flex:0 0 50px;width:auto;margin:0 -24px;border-top:1px solid rgba(65,48,40,.11);border-bottom:1px solid rgba(65,48,40,.12);overflow:visible}
+      .walker{position:absolute;left:0;bottom:0;width:54px;will-change:transform}
+      .n[data-state=long] .walker{bottom:-3px}
+      .flip{display:block;transform-origin:center}
+      .walker svg{display:block;width:54px;height:auto;overflow:visible}
+      .answer footer{display:none;align-items:center;gap:8px;margin:0 -24px;padding:13px 17px;border-top:1px solid rgba(65,48,40,.1);background:rgba(255,255,255,.18)}
+      .n[data-state=long] .answer footer{display:flex}
+      .answer footer input{flex:1;min-width:0;border:0;outline:0;background:transparent;color:#1b1713;caret-color:#c9544a;font:400 12px/1.3 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+      .answer footer input::placeholder{color:rgba(27,23,19,.38);font-size:11px}
+      .fmic,.fsend{flex:0 0 30px;width:30px;height:30px;font-size:12px}
+      .fmic{color:#1b1713;background:rgba(65,48,40,.07)}
+      .fsend{color:#17110f;background:#e8786e}
+      .signin{z-index:10;display:flex;align-items:center;gap:12px;padding:15px 18px}
+      .signin span{display:grid;gap:3px;min-width:0;flex:1;text-align:left}
+      .signin b{font-size:12px}.signin small{color:rgba(27,23,19,.48);font-size:10px}
+      .signin button.cta{padding:9px 13px;border-radius:999px;color:#fff;background:#d86c63;font-size:10px;font-weight:750}
+      .n[data-state=signin]{width:min(430px,78vw);height:88px;border-radius:0 0 29px 29px;cursor:default;border:1px solid rgba(255,255,255,.72);border-top:0;background:rgba(255,251,247,.9);box-shadow:0 24px 70px rgba(27,23,19,.16),inset 0 1px rgba(255,255,255,.8);backdrop-filter:blur(24px) saturate(175%)}
+      .n[data-state=signin] .signin{opacity:1;pointer-events:auto;transform:none;transition-delay:360ms}
+      .n.liquid[data-state=input],.n.liquid[data-state=menu],.n.liquid[data-state=thinking],.n.liquid[data-state=short],.n.liquid[data-state=long]{color:#fff;border-color:rgba(255,255,255,.42);background:linear-gradient(145deg,rgba(31,27,28,.48),rgba(18,16,17,.38));box-shadow:0 24px 70px rgba(0,0,0,.2),inset 0 1px rgba(255,255,255,.24);backdrop-filter:blur(20px) saturate(185%)}
+      .liquid .input small{color:#ff9a91}.liquid .input input{color:#fff;caret-color:#ff9a91}.liquid .input input::placeholder{color:rgba(255,255,255,.42)}
+      .liquid .round{color:rgba(255,255,255,.82);background:rgba(255,255,255,.08)}.liquid .send{color:#fff;background:#e8786e}.liquid .mode{color:rgba(255,255,255,.78);background:rgba(255,255,255,.08)}
+      .liquid .theme{border-color:rgba(255,255,255,.15);color:rgba(255,255,255,.82);background:rgba(255,255,255,.08);box-shadow:inset 0 1px rgba(255,255,255,.16)}
+      .liquid .menu header{border-color:rgba(255,255,255,.1)}.liquid .menu header small{color:rgba(255,255,255,.82)}.liquid .menu header .actions em{color:#ff9a91;background:rgba(236,128,120,.13)}
+      .liquid .menu button.item{border-color:rgba(255,255,255,.08);color:#fff}.liquid .item small{color:rgba(255,255,255,.46)}.liquid .menu button.item:hover{background:rgba(255,255,255,.06)}
+      .liquid .thinking header{border-color:rgba(255,255,255,.1)}.liquid .tlabel{color:#ff9a91}.liquid .thinking .collapse{color:rgba(255,255,255,.44)}
+      .liquid .thinking p{border-color:rgba(255,255,255,.09);color:rgba(255,255,255,.82)}.liquid .thinking p:last-child{color:rgba(255,255,255,.5)}
+      .liquid .short-row small{color:#ff9a91}.liquid .short-row strong,.liquid .long-head b{color:#fff}
+      .liquid .short-row .actions em,.liquid .long-head .actions em{border-color:rgba(255,255,255,.13);color:rgba(255,255,255,.62);background:rgba(255,255,255,.06)}
+      .liquid .long-head{border-color:rgba(255,255,255,.09)}.liquid .long-head i{background:#fff}
+      .liquid .answer-body{color:rgba(255,255,255,.7)}.liquid .answer-body p{color:rgba(255,255,255,.7)}.liquid .answer-body h1,.liquid .answer-body h2,.liquid .answer-body h3,.liquid .answer-body strong{color:#fff}
+      .liquid .lane{border-color:rgba(255,255,255,.1)}
+      .liquid .answer footer{border-color:rgba(255,255,255,.1);background:rgba(255,255,255,.06)}.liquid .answer footer input{color:#fff}.liquid .answer footer input::placeholder{color:rgba(255,255,255,.42)}
+      .liquid .fmic{color:#fff;background:rgba(255,255,255,.09)}
+      .liquid .signin b{color:#fff}.liquid .signin small{color:rgba(255,255,255,.46)}
+      @keyframes shell{from{opacity:0;transform:scaleX(.06) scaleY(.72)}18%{opacity:1}72%{transform:scaleX(1.025)}to{opacity:1;transform:none}}
+      @keyframes spin{0%{opacity:0;--a:0deg}18%{opacity:1}100%{opacity:1;--a:300deg}}
+      @keyframes fill{0%{opacity:0;background-position:150% 0,0 0}32%{opacity:.5}100%{opacity:1;background-position:-80% 0,0 0}}
+      @keyframes invokeFace{to{opacity:1;transform:none}}
+      @keyframes radiusFlow{to{--a:360deg}}
+      @keyframes textshine{from{background-position:140% 0}to{background-position:-140% 0}}
+      @keyframes eyesOpen{from{opacity:0;transform:scaleY(.06)}to{opacity:1;transform:scaleY(1)}}
+      @keyframes pupilSettle{from{transform:translateY(2px)}to{transform:none}}
+      @keyframes sonar{0%{opacity:.72;transform:scale(1)}100%{opacity:0;transform:scale(1.28,1.7)}}
+      @keyframes talkMouth{from{transform:scale(.82,.38)}to{transform:scale(1,1.28)}}
+      @keyframes speakLook{0%,100%{transform:translate(0,1px)}50%{transform:translate(2px,1px)}}
+      @keyframes gaze{0%,12%,100%{transform:translate(0,0)}27%,39%{transform:translate(-3px,0)}52%,64%{transform:translate(3px,0)}76%,90%{transform:translate(0,4px)}}
+      @keyframes thinkShimmer{from{background-position:140% 0}to{background-position:-140% 0}}
     </style>
     <section class="n" data-state="off">
-      <div class="panel face"><svg viewBox="0 0 230 72" preserveAspectRatio="none"><path class="fold" d="M115 0 Q111 14 115 27 Q119 40 115 56 M25 4 Q14 13 25 22 Q12 31 25 40 Q14 50 30 61 M61 1 Q49 11 60 20 Q47 30 61 39 Q49 49 65 63 M169 1 Q181 11 170 20 Q183 30 169 39 Q181 49 165 63 M205 4 Q216 13 205 22 Q218 31 205 40 Q216 50 200 61"/><circle class="eye" cx="103" cy="29" r="10"/><circle class="eye" cx="127" cy="29" r="10"/><circle class="pupil" cx="104" cy="30" r="4.8"/><circle class="pupil" cx="128" cy="30" r="4.8"/><path class="lid" d="M93 29 Q103 36 113 29 M117 29 Q127 36 137 29"/><path class="smile" d="M108 47 Q115 54 122 47"/><g class="mouth"><ellipse cx="115" cy="49" rx="7" ry="5.5"/><ellipse cx="115" cy="51" rx="4.2" ry="2.2"/></g></svg></div>
-      <div class="panel status"></div>
-      <div class="panel input"><label><small>Ask Braino</small><input placeholder="Summarise this page…"/></label><button class="mode">Auto⌄</button><button class="round mic">⌁</button><button class="round send">↑</button><button class="round theme">◐</button><button class="round close" title="Close">×</button></div>
-      <div class="panel menu"><header><small>Choose a mode</small><span class="actions"><em class="active-mode">Auto</em><button class="round theme">◐</button><button class="round close" title="Close">×</button></span></header><button class="item" data-mode="auto"><b>Auto</b><small>Let Braino decide</small><strong>✓</strong></button><button class="item" data-mode="page"><b>Page</b><small>Read and work on this page</small></button><button class="item" data-mode="lecture"><b>Lecture</b><small>Capture and explain audio</small></button><button class="item" data-mode="meeting"><b>Meeting</b><small>Listen remember and follow up</small></button><button class="item" data-mode="agent"><b>Delegate</b><small>Complete a browser task</small></button><button class="item" data-mode="team"><b>Team</b><small>Work with shared context</small></button></div>
-      <div class="panel thinking"><header><span>Braino is thinking</span><span>Collapse</span></header><p>Reading the page and understanding what matters.</p><p>Separating the useful signal from the repetition.</p><p>Preparing the answer in your context.</p></div>
-      <div class="panel answer"><header><b>Braino</b><button class="round theme">◐</button></header><div class="answer-body"></div><footer><span>Ask a follow-up</span><b>↑</b></footer></div>
-      <div class="panel signin"><span><b>Sign in to Braino</b><small>Your session was not found on either Braino page.</small></span><button>Sign in</button><button class="round close" title="Close">×</button></div>
+      <div class="panel face"><svg viewBox="0 0 230 72" preserveAspectRatio="none">
+        <path class="fold" d="M115 0 Q111 14 115 27 Q119 40 115 56"/>
+        <path class="fold" d="M25 4 Q14 13 25 22 Q12 31 25 40 Q14 50 30 61"/>
+        <path class="fold" d="M61 1 Q49 11 60 20 Q47 30 61 39 Q49 49 65 63"/>
+        <path class="fold" d="M169 1 Q181 11 170 20 Q183 30 169 39 Q181 49 165 63"/>
+        <path class="fold" d="M205 4 Q216 13 205 22 Q218 31 205 40 Q216 50 200 61"/>
+        <g class="eye"><circle class="eyeball" cx="103" cy="29" r="10"/><g class="pupil"><circle cx="104" cy="30" r="4.8"/><circle cx="106" cy="27.5" r="1.7"/></g></g>
+        <g class="eye"><circle class="eyeball" cx="127" cy="29" r="10"/><g class="pupil"><circle cx="128" cy="30" r="4.8"/><circle cx="130" cy="27.5" r="1.7"/></g></g>
+        <g class="lids"><path d="M93 29 Q103 36 113 29"/><path d="M117 29 Q127 36 137 29"/></g>
+        <path class="smile" d="M108 47 Q115 54 122 47"/>
+        <g class="mouth"><ellipse cx="115" cy="49" rx="7" ry="5.5"/><ellipse cx="115" cy="51" rx="4.2" ry="2.2"/></g>
+      </svg></div>
+      <div class="panel status"><small></small></div>
+      <div class="workpill"><strong></strong></div>
+      <div class="panel input"><label><small>Ask Braino</small><input placeholder="Summarise this page…"/></label><button class="mode">Auto⌄</button><button class="round mic">⌁</button><button class="round send">↑</button><button class="theme" title="Switch glass theme">◐</button><button class="round close" title="Close">×</button></div>
+      <div class="panel menu"><header><small>Choose a mode</small><span class="actions"><em class="active-mode">Auto</em><button class="theme" title="Switch glass theme">◐</button><button class="round close" title="Close">×</button></span></header><button class="item" data-mode="auto"><b>Auto</b><small>Let Braino decide</small><strong>✓</strong></button><button class="item" data-mode="page"><b>Page</b><small>Read and work on this page</small></button><button class="item" data-mode="lecture"><b>Lecture</b><small>Capture and explain audio</small></button><button class="item" data-mode="meeting"><b>Meeting</b><small>Listen remember and follow up</small></button><button class="item" data-mode="agent"><b>Delegate</b><small>Complete a browser task</small></button><button class="item" data-mode="team"><b>Team</b><small>Work with shared context</small></button></div>
+      <div class="panel thinking"><header><span class="tlabel"><i></i>Braino is thinking</span><span class="actions"><button class="collapse">Collapse</button><button class="theme" title="Switch glass theme">◐</button></span></header><p>Reading the page and understanding what matters.</p><p>Separating the useful signal from the repetition.</p><p>Preparing the answer in your context.</p></div>
+      <div class="panel answer">
+        <div class="short-row"><span><small>Braino</small><strong class="short-text"></strong></span><span class="actions"><em class="done">Done</em><button class="theme" title="Switch glass theme">◐</button></span></div>
+        <header class="long-head"><span><i></i><i></i><b>Braino</b></span><span class="actions"><em class="done">Done</em><button class="theme" title="Switch glass theme">◐</button></span></header>
+        <article class="answer-body"></article>
+        <div class="lane"><div class="walker"><div class="flip">${__SBWK_SVG.replace(/url\(#sbb-/g, "url(#sbwk-")}</div></div></div>
+        <footer><input class="fin" placeholder="Ask a follow-up"/><button class="fmic" title="Talk instead">⌁</button><button class="fsend" title="Send">↑</button></footer>
+      </div>
+      <div class="panel signin"><span><b>Sign in to Braino</b><small>Your session was not found on either Braino page.</small></span><button class="cta">Sign in</button><button class="round close" title="Close">×</button></div>
     </section>`;
   (document.documentElement || document.body).appendChild(host);
   ["__sb_bar__", "__sb_card_wrap__", "__sb_brain_btn__", "__sb_walk_lane__", "__sb_mode_dropdown__"].forEach((id) => {
@@ -11828,32 +11989,43 @@ function __sbMountNotchV1() {
   });
   const shell = shadow.querySelector(".n");
   const input = shadow.querySelector(".input input");
-  const submitInput = () => {
-    const value = input.value.trim();
+  const followInput = shadow.querySelector(".answer footer .fin");
+  const sendFromNotch = (el) => {
+    const value = (el?.value || "").trim();
     if (!value) return;
     const legacyInput = document.getElementById("__sb_input__");
     if (legacyInput) legacyInput.value = value;
     __sbNotchSetState("working", "Thinking");
     if (__sbNotchRequestTimer) clearTimeout(__sbNotchRequestTimer);
-    __sbNotchRequestTimer = setTimeout(() => {
+    // Watchdog, not a hard timeout: while the agent is genuinely busy keep waiting,
+    // only fail when the notch is stuck in working/thinking with no live flow.
+    const watch = () => {
       const state = __sbNotchV1?.shell?.dataset?.state;
-      if (state === "working" || state === "thinking") {
-        __sbNotchShowAnswer("That took too long. Please try again.", false);
-      }
-    }, 30000);
+      if (state !== "working" && state !== "thinking") { __sbNotchRequestTimer = null; return; }
+      if (__sbAgentBusy) { __sbNotchRequestTimer = setTimeout(watch, 15000); return; }
+      __sbNotchRequestTimer = null;
+      __sbNotchShowAnswer("That took too long. Please try again.", false);
+    };
+    __sbNotchRequestTimer = setTimeout(watch, 45000);
     document.getElementById("__sb_send_btn__")?.click();
-    input.value = "";
+    el.value = "";
   };
   shell.addEventListener("click", () => {
-    if (shell.dataset.state === "idle") __sbOpenPanel();
-    else if (shell.dataset.state === "working") __sbNotchSetState("thinking");
+    const state = shell.dataset.state;
+    if (state === "idle") __sbOpenPanel();
+    else if (state === "working") __sbNotchSetState("thinking");
+    else if (state === "short") __sbNotchSetState("long");
   });
   input.addEventListener("input", () => { const old = document.getElementById("__sb_input__"); if (old) old.value = input.value; });
-  input.addEventListener("keydown", (event) => { if (event.key === "Enter") { event.preventDefault(); submitInput(); } });
-  shadow.querySelector(".input .send").addEventListener("click", submitInput);
-  shadow.querySelector(".input .mic").addEventListener("click", () => __sbToggleHeadphoneMode());
-  shadow.querySelector(".input .mode").addEventListener("click", () => __sbNotchSetState("menu"));
-  shadow.querySelectorAll(".menu .item").forEach((button) => button.addEventListener("click", () => {
+  input.addEventListener("keydown", (event) => { if (event.key === "Enter") { event.preventDefault(); sendFromNotch(input); } });
+  shadow.querySelector(".input .send").addEventListener("click", (event) => { event.stopPropagation(); sendFromNotch(input); });
+  shadow.querySelector(".input .mic").addEventListener("click", (event) => { event.stopPropagation(); __sbToggleHeadphoneMode(); });
+  shadow.querySelector(".input .mode").addEventListener("click", (event) => { event.stopPropagation(); __sbNotchSetState("menu"); });
+  followInput.addEventListener("keydown", (event) => { if (event.key === "Enter") { event.preventDefault(); sendFromNotch(followInput); } });
+  shadow.querySelector(".fsend").addEventListener("click", (event) => { event.stopPropagation(); sendFromNotch(followInput); });
+  shadow.querySelector(".fmic").addEventListener("click", (event) => { event.stopPropagation(); __sbToggleHeadphoneMode(); });
+  shadow.querySelectorAll(".menu .item").forEach((button) => button.addEventListener("click", (event) => {
+    event.stopPropagation();
     const requested = button.dataset.mode;
     const legacyMode = requested === "auto" ? "page" : requested;
     document.querySelector(`#__sb_mode_dropdown__ [data-mode="${legacyMode}"]`)?.click();
@@ -11863,14 +12035,15 @@ function __sbMountNotchV1() {
     button.insertAdjacentHTML("beforeend", "<strong>✓</strong>");
     __sbNotchSetState("input");
   }));
+  shadow.querySelectorAll(".answer .done").forEach((button) => button.addEventListener("click", (event) => { event.stopPropagation(); __sbDock(); }));
   shadow.querySelectorAll(".close").forEach((button) => button.addEventListener("click", (event) => { event.stopPropagation(); __sbHideAll(); }));
-  shadow.querySelector(".signin > button")?.addEventListener("click", (event) => {
+  shadow.querySelector(".signin .cta")?.addEventListener("click", (event) => {
     event.stopPropagation();
     chrome.runtime.sendMessage({ action: "openAuthTab" }, () => { void chrome.runtime.lastError; });
   });
-  shadow.querySelector(".thinking header span:last-child")?.addEventListener("click", (event) => { event.stopPropagation(); __sbNotchSetState("working", __sbAgentBusyLabel.replace(/…/g, "")); });
+  shadow.querySelector(".thinking .collapse")?.addEventListener("click", (event) => { event.stopPropagation(); __sbNotchSetState("working", __sbAgentBusyLabel.replace(/…/g, "")); });
   shadow.querySelectorAll(".theme").forEach((button) => button.addEventListener("click", (event) => { event.stopPropagation(); shell.classList.toggle("liquid"); }));
-  __sbNotchV1 = { host, shadow, shell, input };
+  __sbNotchV1 = { host, shadow, shell, input, walkRaf: 0 };
 }
 function __sbNotchSetState(state, status = "") {
   if (!__sbNotchV1) return;
@@ -11879,15 +12052,63 @@ function __sbNotchSetState(state, status = "") {
     clearTimeout(__sbNotchRequestTimer);
     __sbNotchRequestTimer = null;
   }
-  const label = __sbNotchV1.shadow.querySelector(".status");
+  const label = __sbNotchV1.shadow.querySelector(".status small");
   if (label) label.textContent = status;
+  const pill = __sbNotchV1.shadow.querySelector(".workpill strong");
+  if (pill) pill.textContent = state === "working" ? (status || "Thinking") : status;
+  if (state === "short" || state === "long") __sbNotchWalkStart(); else __sbNotchWalkStop();
   if (state === "input") setTimeout(() => __sbNotchV1?.input?.focus(), 180);
 }
 function __sbNotchShowAnswer(text, rich, html) {
   if (!__sbNotchV1) return;
+  const raw = String(text || "");
   const body = __sbNotchV1.shadow.querySelector(".answer-body");
-  if (body) body.innerHTML = html || __sbEscapeHtml(text);
-  __sbNotchSetState(!rich && String(text || "").length < 240 ? "short" : "long");
+  if (body) body.innerHTML = html || __sbEscapeHtml(raw);
+  const line = __sbNotchV1.shadow.querySelector(".short-text");
+  if (line) line.textContent = raw.replace(/\s+/g, " ").trim();
+  __sbNotchSetState(!rich && raw.length < 240 ? "short" : "long");
+}
+// The answer walker — verbatim port of the Chrome system's NotchWalker RAF rig
+// (back-and-forth travel, direction flip, alternating legs, waddle and breath).
+function __sbNotchWalkStart() {
+  if (!__sbNotchV1 || __sbNotchV1.walkRaf) return;
+  const shadow = __sbNotchV1.shadow;
+  const lane = shadow.querySelector(".lane");
+  const walker = shadow.querySelector(".walker");
+  const flip = shadow.querySelector(".flip");
+  const root = shadow.querySelector("#__sbwk_root__");
+  const ll = shadow.querySelector("#__sbwk_ll__");
+  const rl = shadow.querySelector("#__sbwk_rl__");
+  if (!lane || !walker || !flip || !root) return;
+  shadow.querySelector("#__sbwk_pupil_l__")?.setAttribute("transform", "translate(2.4 0)");
+  shadow.querySelector("#__sbwk_pupil_r__")?.setAttribute("transform", "translate(2.4 0)");
+  let x = 6, direction = 1, last = performance.now();
+  const started = last;
+  const tick = (now) => {
+    const dt = Math.min(.05, (now - last) / 1000); last = now;
+    const t = (now - started) / 1000;
+    const maxX = Math.max(6, lane.clientWidth - 56);
+    x += direction * 74 * dt;
+    if (x >= maxX) { x = maxX; direction = -1; }
+    else if (x <= 6) { x = 6; direction = 1; }
+    walker.style.transform = `translateX(${x}px)`;
+    flip.style.transform = `scaleX(${direction})`;
+    const s = t * 4.5, lp = Math.sin(s), rp = Math.sin(s + Math.PI);
+    const legL = Math.max(0, lp) * 5, legR = Math.max(0, rp) * 5;
+    const swingL = Math.max(0, lp) * 8, swingR = Math.max(0, rp) * 8;
+    const waddle = Math.sin(s) * 3.4;
+    const walkBob = -Math.abs(Math.sin(s)) * 2 - .4;
+    const breath = 1 + .014 * Math.sin(t * 1.7);
+    const bob = Math.sin(t * 1.7 + .6) * .8;
+    root.setAttribute("transform", `rotate(${waddle} 50 50) translate(0 ${bob + walkBob}) scale(${breath})`);
+    ll?.setAttribute("transform", `translate(0 ${-legL}) rotate(${swingL} 44 74)`);
+    rl?.setAttribute("transform", `translate(0 ${-legR}) rotate(${swingR} 56 74)`);
+    __sbNotchV1.walkRaf = requestAnimationFrame(tick);
+  };
+  __sbNotchV1.walkRaf = requestAnimationFrame(tick);
+}
+function __sbNotchWalkStop() {
+  if (__sbNotchV1?.walkRaf) { cancelAnimationFrame(__sbNotchV1.walkRaf); __sbNotchV1.walkRaf = 0; }
 }
 
 const __SB_NOTCH_CLASSES = ["sb-notch-invoking", "sb-notch-auth", "sb-notch-auth-ok", "sb-notch-idle", "sb-notch-listening", "sb-notch-working", "sb-notch-speaking"];
@@ -12061,8 +12282,11 @@ function __sbToggleInput(open, options = {}) {
     const cardOpen = document.getElementById("__sb_card_wrap__")?.classList.contains("visible");
     if (cardOpen) {
       chrome.storage.local.get("authToken", ({ authToken }) => {
-        if (!authToken) { __sbSetupBarSignIn(); return; }
+        if (!authToken) { __sbSetupBarSignIn(); __sbNotchSetState("signin"); return; }
         __sbInputOpen = true;
+        // The notch must still reach its input state on this shortcut path —
+        // skipping it left clicks on the idle notch doing nothing (frozen UI).
+        __sbSetBrowserNotchState("");
         if (!options.skipPersist) chrome.storage.local.set({ sbBrainExpanded: true });
         __sbSetGreetingPlaceholder();
       });
@@ -14464,7 +14688,12 @@ function __sbAgentLogClear() {
     const bar = document.getElementById("__sb_bar__");
     const log = document.getElementById("__sb_bar_log__");
     if (bar) bar.classList.remove("sb-log-open");
-    if (bar && __sbBrainVisible) __sbSetBrowserNotchState(__sbHeadphoneMode ? "listening" : "idle");
+    // Settle back to idle only from transient states — never wipe a fresh answer,
+    // the input, the mode menu or sign-in (that was the "answer flashes then
+    // vanishes" / stuck-notch bug).
+    const notchState = __sbNotchV1?.shell?.dataset?.state;
+    const notchHolds = ["short", "long", "input", "menu", "signin"].includes(notchState);
+    if (bar && __sbBrainVisible && !notchHolds) __sbSetBrowserNotchState(__sbHeadphoneMode ? "listening" : "idle");
     const stepsEl = log && log.querySelector(".sb-blog-steps");
     if (stepsEl) stepsEl.innerHTML = "";
     __sbAgentLogCollapseTimer = null;
@@ -22038,13 +22267,11 @@ function __sbUpdateEdgeGlowFx(voiceState) {
   if (voiceState !== undefined) __sbGlowVoice = voiceState || "";
   const glow = document.getElementById("__sb_edge_glow__");
   if (!glow) return;
-  const map = { connecting: "think", listening: "listen", hearing: "listen", captured: "think", speaking: "speak" };
-  // A running Voice Command mode owns the perimeter when nothing louder (voice
-  // / music) is using it — the whole screen edge wears the mode's colour for
-  // as long as the mode is on.
+  // Talking/listening no longer glows the screen edge — the notch carries voice
+  // presence on its own. Only music and explicit Voice Command modes light the rim.
   const mode = typeof __sbActiveVoiceMode === "function" ? __sbActiveVoiceMode() : null;
   if (mode) glow.style.setProperty("--sb-voice-mode-color", mode.notchColor || "#0A84FF");
-  glow.className = map[__sbGlowVoice] || (__sbMusicFxOn ? "music" : (mode ? "sbmode" : ""));
+  glow.className = __sbMusicFxOn ? "music" : (mode ? "sbmode" : "");
 }
 
 function __sbSpawnTopNote() {
@@ -22087,10 +22314,14 @@ function __sbSetHpBrainState(state) {
   if (bar) {
     bar.classList.toggle("hp-active", !!state);
     bar.classList.toggle("hp-listening", state === "listening");
-    if (state === "listening" || state === "hearing") __sbSetBrowserNotchState("listening");
-    else if (state === "speaking") __sbSetBrowserNotchState("speaking");
-    else if (state === "connecting" || state === "captured") __sbSetBrowserNotchState("working", state === "captured" ? "Thinking" : "Waking up");
-    else if (__sbBrainVisible && !__sbInputOpen) __sbSetBrowserNotchState("idle");
+    // Never stomp a surface the user is reading or typing in: answers, the input,
+    // the mode menu and sign-in hold the notch until the user dismisses them.
+    const notchState = __sbNotchV1?.shell?.dataset?.state;
+    const notchHolds = ["short", "long", "input", "menu", "signin"].includes(notchState);
+    if (state === "listening" || state === "hearing") { if (!notchHolds) __sbSetBrowserNotchState("listening"); }
+    else if (state === "speaking") { if (!notchHolds) __sbSetBrowserNotchState("speaking"); }
+    else if (state === "connecting" || state === "captured") { if (!["input", "menu", "signin"].includes(notchState)) __sbSetBrowserNotchState("working", state === "captured" ? "Thinking" : "Waking up"); }
+    else if (__sbBrainVisible && !__sbInputOpen && !notchHolds) __sbSetBrowserNotchState("idle");
   }
 
   // The walker is the visible mascot while the bar is open, so it carries the glow

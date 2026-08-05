@@ -68,3 +68,9 @@ Test the visual hierarchy at real extension scale, then connect the strongest st
 - [x] Listed in **Everything New with Braino**
 - [x] Public copy is simple and human
 - [x] Release date and status are accurate
+
+## v1.1.0 — verbatim Chrome system parity and the unstick pass (5 August 2026)
+
+The extension notch is now a verbatim port of the final Chrome system layers, not an approximation. Listening no longer expands: it stays the 230×72 coral body with sonar rings only. Working is 440×88 with the compensated face and the dark-red status pill in the top right. Expanded thinking carries the closed-lid face strip, the coral shimmer, and the flowing spectrum perimeter. Speaking uses the two-tone talking mouth and glancing pupils on the unchanged body. Short answers render as the design's card: BRAINO label, one serif line, a Done pill, and the production walker rig pacing his lane. Long answers are the content-sized glass sheet with the dotted header, serif article, walker lane, and a live Ask-a-follow-up bar. Idle gained the design's pupil gaze cycle and hover growth.
+
+Four freeze sources were removed. The 600ms settle timer and the voice-state sync no longer overwrite answers, the input, the menu, or sign-in — those states hold until the user acts. The hidden legacy card's open flag no longer swallows idle clicks. Every answer state has explicit exits: short click expands to long, Done returns to idle, and the follow-up bar sends. The fixed 30-second failure guard became a watchdog that keeps waiting while a delegate run is genuinely busy. The blue screen-edge glow while talking or listening was removed; only music and explicit Voice Command modes light the rim.
