@@ -6023,7 +6023,7 @@ async function runSkit() {
   // Build stamp: check ~/Library/Logs/Braino Mac/braino-mac.log for skit.build
   // after a take — if this string is missing or older, the app is running a
   // stale build and the take does not reflect the current code.
-  logRenderer("skit.build", { v: "v10-normal-size-wave-stand" });
+  logRenderer("skit.build", { v: "v11-20s-moonwalk-music-locked" });
   const prevScale = brainoScale;
   let skitCompleted = false;
   try {
@@ -6049,7 +6049,7 @@ async function runSkit() {
     }
     // Billie Jean is already sitting at 3:31 (the play step verifies the seek).
     // Isolated demo: no music theatrics, no headphones, no auto-home.
-    await skitPerformMoonwalk(11000);   // Chrome's own duration: 10-12s on stage
+    await skitPerformMoonwalk(20000);   // 20s moonwalk
     // He stays out and asks while waving. Keep skitMoonwalk true so tick does not
     // resume roam/dock and walk him mid-line; clear it in finally after the skit.
     await window.brainoMac.skitStep?.("close");
