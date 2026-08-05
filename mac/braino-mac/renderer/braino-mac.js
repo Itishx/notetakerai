@@ -5215,6 +5215,8 @@ async function startLegacyCommandCapture(reason = "") {
 }
 
 async function startListening() {
+  // Skit isolation: realtime cannot start during the demo or post-demo freeze
+  if (skitRunning || skitJustCompleted) return;
   if (processing || realtimeConnecting || realtimeActive || voiceCycleInFlight) return;
   voiceCycleInFlight = true;
   logRenderer("voice.toggle.start_listening");
