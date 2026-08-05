@@ -5787,7 +5787,7 @@ function tick(now) {
       walkingNow = false;
       resolve();
     }
-  } else if (!dragState && !shouldHoldAttention && !skitMoonwalk) {
+  } else if (!dragState && !shouldHoldAttention && !skitMoonwalk && !skitJustCompleted) {
     if (movementMode === "dock") {
       targetY = getDockBounds().y;
     }
