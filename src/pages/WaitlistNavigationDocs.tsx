@@ -70,6 +70,11 @@ export default function WaitlistNavigationDocs() {
             The expanded notch also owns the light/dark toggle, while Braino's sixth
             form now shows the complete eight-face reaction board instead of repeated art.
           </p>
+          <p>
+            On mobile, the six “Who is Braino?” forms now stack one card at a time as
+            you scroll, preserving the desktop reveal without squeezing two cards into
+            a phone viewport.
+          </p>
         </section>
 
         <section className="kb-article-block">

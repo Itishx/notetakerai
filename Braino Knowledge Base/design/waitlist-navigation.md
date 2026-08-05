@@ -92,6 +92,8 @@ The light/dark theme control moved into the expanded notch beside “Go anywhere
 
 The sixth Braino form is now a real mood board using all eight existing reaction faces: calm, happy, laughing, celebrating, focused, shocked, scared, and tears of joy. The earlier duplicate faces and unrelated walking mascot were removed.
 
+On phones, “Who is Braino?” keeps the desktop stacking idea but adapts it to one card at a time. All six form cards are individual sticky layers with small safe-area-aware top offsets, compact artwork, controlled viewport heights, rounded edges, and enough closing space for the final reaction card to complete its hold. Desktop keeps its paired-card stack unchanged.
+
 The footer game is intentionally forgiving: higher jumps, softer gravity, coyote time after leaving an edge, buffered jump input before landing, wider collision tolerance, and a recovery bounce when a pipe catches a late jump. Green pipes can be landed on and no longer create an unfair instant death or forced fall.
 
 ## Waitlist categories
