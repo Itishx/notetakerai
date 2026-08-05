@@ -11905,10 +11905,8 @@ ipcMain.handle("braino-mac:skit-step", async (_event, step) => {
   if (!SKIT.enabled) return { ok: false, say: "" };
   if (step === "prewarm") {
     // Boot Spotify in background (-g) while Braino delivers the intro lines.
-    // The app warms up silently in the background.
+    // The app warms up and stays VISIBLE during the moonwalk.
     try { await execFileP("open", ["-g", "-b", "com.spotify.client"], { timeout: 8000 }); } catch (error) { logMac("skit.prewarm_failed", { error }); }
-    // Immediately hide the window so it never appears on stage
-    try { await execFileP("/usr/bin/osascript", ["-e", 'tell application "System Events" to set visible of process "Spotify" to false'], { timeout: 2000 }); } catch (_) {}
     return { ok: true, say: "" };
   }
   if (step === "play") {
