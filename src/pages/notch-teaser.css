@@ -97,7 +97,7 @@
   will-change: opacity;
 }
 
-.nt-open, .nt-intro, .nt-mline, .nt-greet, .nt-tag, .nt-cowork, .nt-onemore, .nt-weare, .nt-thatsbraino, .nt-hype-open, .nt-hype, .nt-ready, .nt-boom {
+.nt-open, .nt-intro, .nt-mline, .nt-greet, .nt-tag, .nt-onemore, .nt-bigger, .nt-thatsbraino, .nt-hype-open, .nt-hype, .nt-ready, .nt-boom {
   position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
   display: flex; flex-wrap: nowrap; justify-content: center; align-items: center;
   gap: 0 .2em; opacity: 0; color: #fff; text-align: center; white-space: nowrap;
@@ -113,61 +113,18 @@
 .nt-boom { gap: 0; font-size: clamp(48px, 8vw, 100px); }
 /* "Ready?" holds alone, then clears for "Don't Blink" — normal word spacing
    (the shared .2em gap above), NOT fused like "Boom". */
-/* "Less goooooo" — "goo" + "oooo" fuse with no space; "Less" keeps its own
-   spacing before it via margin, same pattern as "Introducing BrainoNotch" */
+/* "LetsFuckingGo" — all three words flush, no space anywhere, same fused
+   mechanic as "BrainoNotch"/"Boom" */
 .nt-intro { gap: 0; }
-.nt-intro .nt-in-first { margin-right: .2em; }
 .nt-intro {
   position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
   opacity: 0; white-space: nowrap; text-align: center; color: #fff; z-index: 2;
   font-weight: 600; letter-spacing: -.025em; font-size: clamp(28px, 4.6vw, 58px);
 }
 
-/* "Braino Co-Work" — SAME mechanic as the Notch match cut: "Braino" holds,
-   "Co-Work" joins, whole frame inverts white↔black (plain, no colour). */
-/* "Braino" / "Co" / "Work" — per-word invert, same mechanic as "Let's f$cking go." */
-.nt-cowork { gap: 0 .12em; }   /* tighter than other lines, so "Co-Work" reads close — font stays the same as every other line */
-/* It's a TEASE — flat white read too plain. Same shimmer mechanic as
-   "Notch"'s glitter (ntGlitterSweep, already defined below), but in
-   Braino's own warm coral/gold instead of white, and slower/softer to suit
-   the editorial italic rather than the punchy sans reveal it was built for. */
-/* MUST use the `>` direct-child combinator here, not a bare descendant
-   selector — ".nt-cowork .nt-word:first-child" (space) matches ANY .nt-word
-   that is the first child of ITS OWN parent anywhere inside .nt-cowork, which
-   silently also caught ".nt-swap-a" ("-Work", the first child of the nested
-   .nt-cowork-swap wrapper) and permanently display:none'd it via !important
-   — "-Work" could never appear no matter what the JS visibility toggle did.
-   ">" restricts this to .nt-cowork's OWN direct children only ("Braino"). */
-.nt-cowork > .nt-word.in:not(:first-child),
-.nt-cowork .nt-cowork-swap .nt-word.in {
-  background-image: linear-gradient(100deg, #F5EFE7 15%, #F0A86B 42%, #E8786E 55%, #F5EFE7 78%);
-  background-size: 220% auto;
-  -webkit-background-clip: text; background-clip: text; color: transparent;
-  /* ".in:not(:first-child)" beats the plain ".in { animation:none }" rule
-     below on specificity regardless of source order — that rule kills the
-     generic word-stamp flash, not this shimmer; without the extra
-     specificity here the two silently collided and this animation lost. */
-  animation: ntGlitterSweep 2.4s ease-in-out infinite !important;
-}
-@media (prefers-reduced-motion: reduce) {
-  .nt-cowork > .nt-word.in:not(:first-child),
-  .nt-cowork .nt-cowork-swap .nt-word.in { animation: none !important; background-position: 0% center; }
-}
-/* During the match-cut flash (white bg) the coral gradient washes out —
-   drop to solid black for that beat only, same legibility rule as every
-   other invert-flash moment; the shimmer returns once it settles back. */
-.nt-cowork.invert-flash > .nt-word.in:not(:first-child),
-.nt-cowork.invert-flash .nt-cowork-swap .nt-word.in {
-  background: none; -webkit-text-fill-color: initial; color: #000000; animation: none !important;
-}
-.nt-cowork > .nt-word:first-child { display: none !important; }  /* "Braino" slot — the mascot stands in for it */
-
-/* the standing mascot, waving, taking "Braino"'s slot in the Co-Work reveal */
-.nt-cowork-mascot {
-  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -60%);
-  opacity: 0; z-index: 2; pointer-events: none;
-}
-.nt-cowork-mascot svg { display: block; width: 84px; height: auto; }
+/* the big reveal beat ("This is part of... Braino OS... Coming Very
+   Fucking Soon)") — full match cut, every word (see biggerInv in the .tsx),
+   reusing the shared .nt-glitch white overlay below. */
 .nt-glitch {
   position: absolute; inset: 0; background: #FFFFFF; opacity: 0; z-index: 9; pointer-events: none;
 }
@@ -258,8 +215,8 @@
 }
 
 /* ── Persistent-anchor word swap: an anchor word stays put, forever, while a
-   DIFFERENT word beside it changes ("smarter" -> "Faster.", "-Work" ->
-   "oking"). Used by .nt-hype-open ("He's") and .nt-cowork ("Co").
+   DIFFERENT word beside it changes ("smarter" -> "Faster."). Used by
+   .nt-hype-open ("He's").
 
    FULLY DECOUPLED positioning, not flex-centering the pair as one group:
    the anchor's RIGHT edge is pinned to the container's exact horizontal
@@ -278,7 +235,7 @@
    (visibility/opacity) at a time. PLAIN STAMP ONLY — no bounce, no slide,
    no blur, just the same brightness flash (ntWordIn) every other word in
    the film gets by default. ── */
-.nt-hype-open, .nt-cowork {
+.nt-hype-open {
   overflow: visible;   /* absolutely-positioned children extend past the flex box's own (now irrelevant) width */
 }
 .nt-hype-anchor {
@@ -289,15 +246,6 @@
   position: absolute; top: 50%; right: calc(50% + .7em); transform: translateY(-50%);
   display: inline-block; white-space: nowrap;
 }
-/* the split point is nudged LEFT of true centre (not exactly 50/50) —
-   "-Work"/"-oking" on the right is much wider than "Co" on the left, so
-   splitting at dead-centre left the whole phrase reading shifted right.
-   Both this and .nt-cowork-swap below move together by the same amount,
-   so "Co" and "-Work"/"-oking" stay flush against each other either way. */
-.nt-cowork > .nt-word:nth-child(2) {
-  position: absolute; top: 50%; right: calc(50% + 1em); transform: translateY(-50%);
-  white-space: nowrap;
-}
 .nt-hype-swap {
   position: absolute; top: 50%; left: calc(50% - .5em); transform: translateY(-50%);
 }
@@ -307,21 +255,6 @@
    tight. Zero it out here; adjacent inline-blocks with no JSX whitespace
    between them already sit flush with no gap on their own. */
 .nt-hype-swap .nt-fuse { margin-left: 0; }
-/* flush against "Co", shifted left with it (see .nt-word:nth-child(2)
-   above) so the whole "Co-Work"/"Co-oking" phrase reads centred as a block
-   instead of split at dead-centre (which read shifted right, since
-   "-Work"/"-oking" is much wider than "Co"). */
-.nt-cowork-swap {
-  position: absolute; top: 50%; left: calc(50% - 1em); transform: translateY(-50%);
-}
-/* "-" and "Work" are two SEPARATE .nt-word elements (a two-step reveal, not
-   one lump "-Work") — the shared .nt-fuse margin (-.2em, tuned for other
-   fused pairs like "Bo"/"om") pulled "Work" into the hyphen, reading
-   crumbled/overlapping next to "Co" — compare "-oking" (swap-b, plain text,
-   no fuse hack) which reads clean at natural spacing. Zero it out here too,
-   same fix as the hype-open swap: adjacent inline-blocks with no JSX
-   whitespace between them already sit flush on their own. */
-.nt-cowork-swap .nt-swap-a .nt-fuse { margin-left: 0; }
 .nt-swap-stack {
   display: inline-grid;
   text-align: left;   /* flush at the pinned left edge, not centered in the (wider-word-sized) cell */
@@ -353,11 +286,10 @@
    plain stamp used everywhere else (inherits .nt-word.in, no override). */
 @media (prefers-reduced-motion: reduce) { .nt-word.in { animation: none; } }
 
-/* "Braino Co-Work": each word's own bright STAMP flash was stacking with the
-   deliberate background invert on "Co-", reading as three separate flashes
-   instead of one clean inversion. Words appear plainly here — the ONE
-   background invert (see render()) is the only flash that should read. */
-.nt-cowork .nt-word.in { animation: none; }
+/* the big reveal beat: each word's own bright STAMP flash would stack with
+   the per-word background invert (biggerInv), reading as two flashes
+   instead of one clean cut — same fix as Boom/Ready. */
+.nt-bigger.invert-flash .nt-word.in { animation: none !important; }
 
 .nt-dash { color: #fff; }
 
@@ -365,7 +297,7 @@
 .nt-notch {
   position: absolute; left: 50%; top: 50%;
   width: 190px; height: 55px; opacity: 0;
-  transform: translate(-50%, -50%) scale(1.35); transform-origin: center center; z-index: 5;
+  transform: translate(-50%, -50%) scale(1.55); transform-origin: center center; z-index: 5;   /* was 1.35 — brought closer/bigger */
 }
 .nt-notch .nf-face { top: 0; left: 50%; opacity: 1; }
 .nt-notch .nf-pill {
@@ -540,21 +472,30 @@ body.nt-controls .nt-veil { pointer-events: none; }
   position: absolute; inset: 0; background: #FFFFFF; opacity: 0; z-index: 9;
   pointer-events: none;
 }
-.nt-intro.invert-flash, .nt-cowork.invert-flash, .nt-thatsbraino.invert-flash,
+.nt-intro.invert-flash, .nt-bigger.invert-flash, .nt-thatsbraino.invert-flash,
 .nt-hype.invert-flash, .nt-ready.invert-flash, .nt-boom.invert-flash { color: #000000; z-index: 11; }
+/* Match Cut rule (see docs/braino-design.md §10): the invert flip IS the
+   effect — "Bo"/"om" were still playing their own stamp brightness-flash
+   WHILE the frame also inverted, two effects competing instead of one clean
+   cut. Suppressed here only (thatsbraino/cowork stay exactly as they are). */
+.nt-boom.invert-flash .nt-word.in { animation: none !important; }
+/* "Don't Blink." — same fix: "Blink." was still stamping/flashing while the
+   frame also inverted white. Suppressed here only. */
+.nt-ready.invert-flash .nt-word.in { animation: none !important; }
 /* "Introducing" is its own fully separate beat now (own phrase, clears
    completely) — no more cross-word margin needed. "Braino" + "+Notch" share
    the standard .2em gap, cancelled by the "+" fuse convention exactly like
    every other fused pair (Fast/+er., Bli/+nk.) — this container no longer
    overrides gap to 0, so that cancellation math stays consistent everywhere. */
-/* "Notch" glitters — a shine sweeping across the text, distinct from the
-   plain black "Braino" it joins onto. Scoped to THIS scene's fused word only
-   (.nt-fuse is shared machinery — Fast/+er. etc. must stay plain). */
-.nt-thatsbraino .nt-fuse {
+/* "Notch" glitters once — a single shine sweeping across the text as it
+   lands, not a looping shimmer competing with the match cut itself. Scoped
+   to THIS scene's fused word only (.nt-fuse is shared machinery — Fast/+er.
+   etc. must stay plain). */
+.nt-thatsbraino .nt-fuse.nt-shimmer-play {
   background-image: linear-gradient(100deg, #0B0B0C 30%, #FFFFFF 48%, #F0A86B 52%, #0B0B0C 70%);
   background-size: 240% auto;
   -webkit-background-clip: text; background-clip: text; color: transparent;
-  animation: ntGlitterSweep 1.3s linear infinite;
+  animation: ntGlitterSweep 1s linear both;
 }
 @keyframes ntGlitterSweep {
   0%   { background-position: 200% center; }
@@ -583,3 +524,89 @@ body.nt-controls .nt-veil { pointer-events: none; }
   color: rgba(245,239,231,.7); letter-spacing: .03em; text-align: center;
   max-width: 80vw; pointer-events: none; text-shadow: 0 1px 4px rgba(0,0,0,.6);
 }
+
+/* ── public viewer transport — always visible (unlike the hover-gated dev
+   .nt-scrubber toolbar above), sits just above it so both can coexist ── */
+.nt-scrubber--public {
+  opacity: 1 !important; pointer-events: auto !important;
+  bottom: 18px; background: rgba(10,10,10,.35); backdrop-filter: blur(10px);
+  border-radius: 14px; padding: 8px 16px !important;
+}
+.nt-scrubber--compact { width: min(94vw, 640px); gap: 12px; }
+
+/* ── synced script panel — left rail, reads along with the film ── */
+.nt-script-panel {
+  position: fixed; left: 0; top: 0; bottom: 0; z-index: 30;
+  width: 320px; padding: 96px 28px 140px; overflow-y: auto;
+  background: linear-gradient(90deg, rgba(0,0,0,.55), rgba(0,0,0,0));
+  font-family: -apple-system, "SF Pro Text", "Helvetica Neue", sans-serif;
+  display: flex; flex-direction: column; gap: 14px; pointer-events: none;
+}
+.nt-script-line {
+  font-size: 14px; line-height: 1.4; color: rgba(245,239,231,.32);
+  transition: color .3s ease, opacity .3s ease; opacity: .6;
+}
+.nt-script-line.active { color: #F5EFE7; opacity: 1; font-weight: 600; }
+@media (max-width: 860px) { .nt-script-panel { display: none; } }
+@media (prefers-reduced-motion: reduce) { .nt-script-line { transition: none; } }
+
+/* ── Motion Editor layout — canvas + editor side by side, not an overlay.
+   The script panel is still the same fixed left rail; the frame just makes
+   room for it instead of sitting full-bleed underneath it. ── */
+.nt-frame.me-editor {
+  margin-left: 320px;
+  width: min(calc(100vw - 320px), calc(100vh * 16 / 9));
+}
+@media (max-width: 860px) { .nt-frame.me-editor { margin-left: 0; width: min(100vw, calc(100vh * 16 / 9)); } }
+
+/* ── KineticFilm — the generic data-driven player (Braino Split, Braino OS).
+   .kf-line is the same one dead-centre spot every kinetic line in the site
+   already lands in (same shape as .nt-screen-main), just generic/unscoped. ── */
+.kf-line {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  display: flex; flex-wrap: nowrap; justify-content: center; align-items: center;
+  gap: 0 .2em; color: #fff; font-weight: 600; letter-spacing: -.025em; line-height: 1;
+  white-space: nowrap; text-align: center; z-index: 2; will-change: opacity;
+  font-size: clamp(28px, 4.6vw, 58px);
+  transition: opacity .12s ease;
+}
+/* the headline reveal beat ("Braino OS.") — noticeably bigger, same modest
+   bump as the flagship film's "Boom." beat, no fused-word gap. */
+.kf-line-big { gap: 0; font-size: clamp(48px, 8vw, 100px); }
+.kf-word { display: inline-flex; align-items: baseline; gap: 0; white-space: nowrap; }
+/* KineticFilm groups fused fragments inside a real word box. The parent line
+   now owns inter-word spacing, so the old negative-margin cancellation is no
+   longer needed inside this component and cannot make letterforms collide. */
+.kf-word .nt-word.nt-fuse { margin-left: 0; }
+.kf-composition-grid { position: absolute; inset: 0; z-index: 18; pointer-events: none; color: rgba(80,180,255,.68); }
+.kf-composition-grid i { position: absolute; display: block; }
+.kf-grid-safe { inset: 8%; border: 1px solid rgba(80,180,255,.34); }
+.kf-grid-v { top: 0; bottom: 0; width: 1px; background: rgba(80,180,255,.22); }
+.kf-grid-v1 { left: 33.333%; }.kf-grid-v2 { left: 50%; background: rgba(80,180,255,.62); }.kf-grid-v3 { left: 66.666%; }
+.kf-grid-h { right: 0; left: 0; height: 1px; background: rgba(80,180,255,.22); }
+.kf-grid-h1 { top: 33.333%; }.kf-grid-h2 { top: 50%; background: rgba(80,180,255,.62); }.kf-grid-h3 { top: 66.666%; }
+.kf-composition-grid span { position: absolute; top: calc(50% + 8px); left: calc(50% + 8px); font: 9px/1 ui-monospace, monospace; letter-spacing: .08em; }
+/* match-cut rule, verbatim from the flagship film: while THIS beat is the one
+   cutting, its text flips black and rises above the invert overlay (z-index
+   11 > the overlay's 9), and its word-stamp flash is suppressed — one clean
+   flip, not two competing flashes. */
+.kf-line.invert-flash { color: #000000; z-index: 11; }
+.kf-line.invert-flash .nt-word.in { animation: none !important; }
+/* its own spot, below the dead-centre text line — was filling the whole
+   frame behind the text and visibly colliding with it. */
+.kf-hero {
+  position: absolute; left: 50%; bottom: 15%; transform: translateX(-50%);
+  width: min(60vw, 420px); display: grid; place-items: center; z-index: 1;
+  transition: opacity .3s ease;
+}
+.kf-outro {
+  position: absolute; inset: 0; display: grid; place-items: center; z-index: 6;
+  transition: opacity .3s ease;
+}
+/* a beat with an attached graphic — the image is the moment, text (if any)
+   still lands dead-centre on top of it via the shared .kf-line rule. */
+.kf-graphic-img {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  max-width: 72vw; max-height: 56vh; object-fit: contain; z-index: 0; border-radius: 12px;
+}
+@media (prefers-reduced-motion: reduce) { .kf-line, .kf-hero, .kf-outro { transition: none; } }

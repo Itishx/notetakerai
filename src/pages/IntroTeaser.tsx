@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import NotchFace, { setNotchStatus } from "@/components/NotchFace";
 import { analyzeTrack, snapToBeat, type BeatAnalysis } from "@/lib/beatSync";
+import ScriptPanel from "@/components/ScriptPanel";
+import TeaserTransport from "@/components/TeaserTransport";
+import type { ScriptLine } from "@/lib/teaserScript";
 import "./notch-teaser.css";
 import "./intro-teaser.css";
 
@@ -464,9 +467,61 @@ const TARGET_MS = 78000;   // script clocks the front half at "71 seconds" — r
 const DEFAULT_H = solveHold(TARGET_MS);
 const DEFAULT_T = buildTimeline(DEFAULT_H);
 
+// ── read-along script panel — DERIVED ONLY from the arrays/timeline above
+// (never hand-duplicated), so the panel can never drift from the actual
+// film. "+word"/"*word" chunks (manual or auto via chunkWord) are rejoined
+// flush, same as they render on screen. ──
+const joinPhrase = (words: string[]) => {
+  let out = "";
+  words.forEach((w) => {
+    const fused = w.startsWith("+");
+    const text = fused || w.startsWith("*") ? w.slice(1) : w;
+    out += fused || out === "" ? text : ` ${text}`;
+  });
+  return out;
+};
+
+function buildScriptLines(T: typeof DEFAULT_T): ScriptLine[] {
+  const lines: ScriptLine[] = [];
+  const group = (base: number, phrases: string[][], sw: number | number[], gaps?: number[]) => {
+    const starts = phraseSeq(phrases, sw, gaps).starts;
+    phrases.forEach((p, i) => lines.push({ tStart: base + starts[i], text: joinPhrase(p) }));
+  };
+
+  group(T.act1, ACT1_PHRASES, ACT1_SWS, ACT1_GAPS);
+  group(T.dontBlink, DONTBLINK_PHRASES, DONTBLINK_SWS, DONTBLINK_GAPS);
+  group(T.act2, ACT2_PHRASES, ACT2_SW, ACT2_GAPS);
+  group(T.act3, ACT3_PHRASES, ACT3_SWS, ACT3_GAPS);
+  group(T.act4, ACT4_PHRASES, ACT4_SW, ACT4_GAPS);
+  group(T.turn, TURN_PHRASES, TURN_SW, TURN_GAPS);
+  lines.push({ tStart: T.deepBreaths, text: joinPhrase(DEEPBREATHS_WORDS) });
+  lines.push({ tStart: T.boot, text: "The notch wakes up." });
+  group(T.open, OPEN_PHRASES, OPEN_SW, OPEN_GAPS);
+  lines.push({ tStart: T.intro, text: joinPhrase(INTRO_WORDS) });
+  const st = screenTimes(SW.screen, DEFAULT_H);
+  lines.push({ tStart: T.screen, text: joinPhrase(SCREEN_MAIN_PHRASES[0]) });
+  lines.push({ tStart: T.screen + st.n1Start, text: joinPhrase(NOTE1_WORDS) });
+  lines.push({ tStart: T.hype, text: "He's smarter now. Faster." });
+  group(T.hype + HYPE_OPEN_DUR, HYPE_PHRASES, HYPE_SW, HYPE_GAPS);
+  group(T.ready, READY_PHRASES, READY_SW, READY_GAPS);
+  lines.push({ tStart: T.button, text: "Listening…" });
+  lines.push({ tStart: T.button + CUT_TYPE_AT, text: CUT_PRE_TEXT });
+  lines.push({ tStart: T.button + CUT_PRE_DUR, text: MODE_WORDS.join(" · ") });
+  lines.push({ tStart: T.boom, text: "Boom." });
+  group(T.tag, TAG_PHRASES, TAG_SW, TAG_GAPS);
+  group(T.oneMore, ONEMORE_PHRASES, 300);
+  group(T.bigger, BIGGER_PHRASES, BIGGER_SW, BIGGER_GAPS);
+  lines.push({ tStart: T.wink, text: "Braino. trybraino.com" });
+  return lines.sort((a, b) => a.tStart - b.tStart);
+}
+const SCRIPT_LINES = buildScriptLines(DEFAULT_T);
+
 export default function IntroTeaser() {
   const [runId, setRunId] = useState(0);
   const rootRef = useRef<HTMLDivElement>(null);
+  const [currentMs, setCurrentMs] = useState(0);
+  const [playingUi, setPlayingUi] = useState(true);
+  const controlsApiRef = useRef<{ seek: (ms: number) => void; onPlay: () => void } | null>(null);
 
   useEffect(() => {
     document.body.classList.add("nt-page");
@@ -1082,6 +1137,7 @@ export default function IntroTeaser() {
     const fmt = (ms: number) => `${(ms / 1000).toFixed(2)}s / ${(T.end / 1000).toFixed(1)}s`;
     const setPlaying = (p: boolean) => {
       playing = p;
+      setPlayingUi(p);
       if (playBtn) playBtn.textContent = p ? "❚❚" : "▶";
       if (trackLoaded && audioEl) {
         if (p) { audioEl.currentTime = manualT / 1000; audioEl.play().catch(() => {}); }
@@ -1095,6 +1151,7 @@ export default function IntroTeaser() {
     };
 
     let lastUi = 0;
+    let endedOnce = false;
     const loop = () => {
       if (playing) {
         if (trackLoaded && audioEl) {
@@ -1106,7 +1163,13 @@ export default function IntroTeaser() {
         } else {
           manualT = performance.now() - startWall;
         }
-        if (manualT >= T.end) { resetSceneCaches(); seek(0); if (trackLoaded && audioEl) { audioEl.currentTime = 0; audioEl.play().catch(() => {}); } else { startWall = performance.now(); } }
+        if (manualT >= T.end) {
+          if (!endedOnce && new URLSearchParams(window.location.search).has("embed")) {
+            endedOnce = true;
+            window.parent.postMessage({ type: "braino-tv-ended" }, window.location.origin);
+          }
+          resetSceneCaches(); seek(0); if (trackLoaded && audioEl) { audioEl.currentTime = 0; audioEl.play().catch(() => {}); } else { startWall = performance.now(); }
+        }
       }
       render(manualT);
       const now = performance.now();
@@ -1117,6 +1180,7 @@ export default function IntroTeaser() {
           slider.style.setProperty("--p", `${(manualT / T.end) * 100}%`);
         }
         if (timeLabel) timeLabel.textContent = fmt(manualT);
+        setCurrentMs(manualT);
       }
       raf = requestAnimationFrame(loop);
     };
@@ -1125,6 +1189,7 @@ export default function IntroTeaser() {
     const frame = q(".nt-frame");
     const onScrub = (e: Event) => { setPlaying(false); seek(+(e.target as HTMLInputElement).value); };
     const onPlay = () => { if (manualT >= T.end) { resetSceneCaches(); seek(0); } setPlaying(!playing); };
+    controlsApiRef.current = { seek: (ms: number) => { setPlaying(false); seek(ms); }, onPlay };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === " ") { e.preventDefault(); onPlay(); }
       else if (e.key === "ArrowRight") { setPlaying(false); seek(manualT + (e.shiftKey ? 1000 : 33)); }
@@ -1365,8 +1430,9 @@ export default function IntroTeaser() {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const replay = () => setRunId((n) => n + 1);
 
+  const embed = typeof window !== "undefined" && new URLSearchParams(window.location.search).has("embed");
   return (
-    <div className="nt-films">
+    <div className={"nt-films" + (embed ? " it-embed" : "")}>
       <section className="nt" ref={rootRef}>
         <div className="nt-frame">
           <div className="nt-stage">
@@ -1459,6 +1525,18 @@ export default function IntroTeaser() {
           <input className="nt-bgcolor" type="color" defaultValue="#000000" title="Background colour" />
         </div>
         <div className="nt-log" />
+
+        {/* public viewer chrome — additive, doesn't touch the film's own
+            scene text/timing/render(t) above */}
+        <ScriptPanel lines={SCRIPT_LINES} currentMs={currentMs} />
+        <TeaserTransport
+          durationMs={DEFAULT_T.end}
+          currentMs={currentMs}
+          playing={playingUi}
+          onSeek={(ms) => controlsApiRef.current?.seek(ms)}
+          onTogglePlay={() => controlsApiRef.current?.onPlay()}
+          onRestart={replay}
+        />
       </section>
     </div>
   );

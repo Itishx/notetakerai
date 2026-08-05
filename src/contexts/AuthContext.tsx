@@ -5,7 +5,7 @@ import type { User, Session } from "@supabase/supabase-js";
 interface AuthContextType {
   user: User | null;
   session: Session | null;
-  profile: { display_name: string | null; avatar_url: string | null; is_premium: boolean } | null;
+  profile: { display_name: string | null; avatar_url: string | null; is_premium: boolean; mascot: string | null } | null;
   loading: boolean;
   isPremium: boolean;
   signUp: (email: string, password: string, name?: string) => Promise<{ error: any }>;
@@ -23,13 +23,13 @@ const INTERNAL_PREMIUM_EMAILS = new Set([
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
-  const [profile, setProfile] = useState<{ display_name: string | null; avatar_url: string | null; is_premium: boolean } | null>(null);
+  const [profile, setProfile] = useState<{ display_name: string | null; avatar_url: string | null; is_premium: boolean; mascot: string | null } | null>(null);
   const [loading, setLoading] = useState(true);
 
   const fetchProfile = async (userId: string) => {
     const { data } = await supabase
       .from("profiles")
-      .select("display_name, avatar_url, is_premium")
+      .select("display_name, avatar_url, is_premium, mascot")
       .eq("user_id", userId)
       .single();
     setProfile(data);

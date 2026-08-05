@@ -216,6 +216,11 @@ body.et-page #sb-brain-mascot-wrapper { display: none !important; }
 }
 body.et-controls .et-scrubber, body.et-controls .et-veil { opacity: 1; pointer-events: auto; }
 body.et-controls .et-veil { pointer-events: none; }
+
+/* embedded (Braino TV / Motion Graphics iframe) — same idea as /dontblink's
+   it-embed: hide the dev scrubber chrome entirely, just the film on black */
+.et-embed .et-scrubber, .et-embed .et-veil { display: none !important; }
+.et-embed, .et-embed .et, .et-embed .et-frame { background: #000 !important; }
 .et-scrubber button {
   display: grid; place-items: center; width: 40px; height: 40px;
   background: transparent; border: none; border-radius: 0;

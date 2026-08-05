@@ -1,214 +1,180 @@
-import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
+import EmotionNetwork from "@/components/EmotionNetwork";
 import IomiNotch from "@/components/IomiNotch";
-import "./braino-classes.css";
-import {
-  MOMENT_CUES,
-  MOMENT_LABEL,
-  MOMENT_ORDER,
-  orderTraitsForMoment,
-  steeringLine,
-  type Moment,
-} from "@/lib/emotional-engine-viz";
+import BrainoReplyLab from "@/components/BrainoReplyLab";
+import "../styles/apple.css";
+import "./human-intelligence.css";
 import "./visual-emotional-engine.css";
 
-/* ============================================================================
-   /Vig — Visual Emotional Engine. Not documentation, a live diagram: pick a
-   moment and watch Braino's actual trait-ordering logic run in front of you
-   (ported straight from engine.ts + moments.ts, see src/lib/emotional-engine-viz.ts).
-   One thought — the user's message — becomes a moment, the moment reorders
-   twelve traits, the reordered traits become the system prompt.
-   ============================================================================ */
+const ANCHORS = [
+  { href: "#why", label: "Why" },
+  { href: "#routing", label: "The routing" },
+  { href: "#source", label: "The source" },
+];
 
-const MOMENT_NAV: [Moment, string][] = MOMENT_ORDER.map((m) => [m, MOMENT_LABEL[m].replace(/^an? /, "")]);
+function useReveal() {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const elements = ref.current?.querySelectorAll<HTMLElement>(".apple-reveal");
+    if (!elements?.length) return;
+    const observer = new IntersectionObserver(
+      (entries) => entries.forEach((entry) => entry.isIntersecting && entry.target.classList.add("in")),
+      { threshold: 0.16 },
+    );
+    elements.forEach((element) => observer.observe(element));
+    return () => observer.disconnect();
+  }, []);
+  return ref;
+}
 
+function ReadTab() {
+  return (
+    <>
+      <article className="hil-read" id="why">
+        <p className="hil-kicker apple-reveal">Why a heart, before an answer</p>
+        <h2 className="hil-h2 apple-reveal">Words carry a moment with them.</h2>
+        <p className="hil-p apple-reveal">
+          The same technically correct sentence can feel thoughtful, cold, funny, or
+          completely wrong depending on when it arrives. Braino reads that emotional
+          moment before deciding which parts of his personality should lead.
+        </p>
+        <p className="hil-p apple-reveal">
+          This is not sentiment analysis pasted onto the end of a response. The Emotional
+          Intelligence Layer changes the order of the personality prompt before the model
+          answers, so the response begins from the right place.
+        </p>
+        <blockquote className="hil-quote apple-reveal">
+          The whole personality stays. The right part steps forward.
+        </blockquote>
+      </article>
+
+      <article className="hil-read" id="routing">
+        <p className="hil-kicker apple-reveal">How the moment moves through him</p>
+        <h2 className="hil-h2 apple-reveal">Three small decisions. No second AI call.</h2>
+        <p className="hil-p apple-reveal">
+          The routing is intentionally legible. A plain word-cue reader detects the
+          moment, the relevant traits move to the front, and one steering sentence is
+          placed above the assembled personality.
+        </p>
+        <div className="hil-checkdefs apple-reveal">
+          <div className="hil-checkdef">
+            <b>One</b>
+            <span><strong>Read the signal.</strong> Crisis, grief, anxiety, celebration, conflict, banter, focused work, and ordinary conversation each have explicit cues.</span>
+          </div>
+          <div className="hil-checkdef">
+            <b>Two</b>
+            <span><strong>Reorder the traits.</strong> Attunement may lead an anxious moment; directness and boundaries lead when the user just wants the work done.</span>
+          </div>
+          <div className="hil-checkdef yes">
+            <b>Three</b>
+            <span><strong>Assemble one heart.</strong> The remaining traits recede without disappearing, and the resulting block becomes the personality half of Braino's prompt.</span>
+          </div>
+        </div>
+      </article>
+
+      <article className="hil-read" id="source">
+        <p className="hil-kicker apple-reveal">The source of truth</p>
+        <h2 className="hil-h2 apple-reveal">Reply runs the real thing, then checks itself.</h2>
+        <p className="hil-p apple-reveal">
+          The Reply tab is not a simulation of the engine. It calls the same endpoint
+          Braino answers from, so the moment, the trait order, and the steering sentence
+          you see are the ones that actually shaped the reply above them.
+        </p>
+        <p className="hil-p apple-reveal">
+          Then it scans his own answer against his own banned phrases. Therapy voice,
+          wellness closers, "great question", dashes. A rule he can be caught breaking
+          is a rule, and anything else is a wish.
+        </p>
+      </article>
+
+      <section className="hil-brain-wrap apple-reveal">
+        <div className="hil-brain">
+          <div className="hil-brain-bar">
+            <span /><span /><span />
+            <i>emotional-engine / moments.ts</i>
+          </div>
+          <pre>{`message
+  -> detectMoment()
+  -> orderTraitsForMoment()
+  -> steeringLine()
+  -> one assembled personality block`}</pre>
+        </div>
+      </section>
+
+      <section className="hil-read hil-end">
+        <h2 className="hil-h2 apple-reveal">The heart and the mind stay separate.</h2>
+        <p className="hil-p apple-reveal">
+          Emotional Intelligence decides how Braino should meet the moment. Human
+          Intelligence decides what the user means and whether he should act or ask.
+          Braino OS runs both, in that order, on every command.
+        </p>
+        <div className="hil-cta-row apple-reveal">
+          <Link className="hil-btn" to="/human-intelligence">Human Intelligence</Link>
+          <Link className="hil-btn ghost" to="/braino-os">BrainoOS</Link>
+          <Link className="hil-btn ghost" to="/engine-log">Run log</Link>
+        </div>
+        <p className="hil-foot">Braino &middot; built by one person &middot; trybraino.com</p>
+      </section>
+    </>
+  );
+}
+
+// Two tabs, on purpose. Lab was retired because Reply showed everything it did
+// plus the actual reply and the tell scan. Whole mind moved to its own page:
+// half of it is thinking, and this layer is being tuned on its own first.
 export default function VisualEmotionalEngine() {
-  const [moment, setMoment] = useState<Moment>("neutral");
+  const [tab, setTab] = useState<"read" | "reply">("read");
+  const reveal = useReveal();
 
-  const ordered = useMemo(() => orderTraitsForMoment(moment), [moment]);
-  const leadCount = useMemo(() => {
-    if (moment === "neutral") return 0;
-    const lead = new Set(ordered.slice(0, 4).filter((t) => t.leadsOn.includes(moment)));
-    return lead.size;
-  }, [ordered, moment]);
-  const steer = useMemo(() => steeringLine(moment), [moment]);
+  // Arriving from /commands: ?run=<message>. Reply opens itself and runs it.
+  const [params] = useSearchParams();
+  const autoRun = params.get("run");
+  useEffect(() => { if (autoRun) setTab("reply"); }, [autoRun]);
 
   return (
-    <div className="bos vig" style={{ ["--accent" as string]: "#d97706" }}>
+    <div className="apple hil eil" ref={reveal} style={{ ["--ap-accent" as string]: "var(--ap-coral)" }}>
       <IomiNotch />
 
-      <header className="bos-hero quote">
-        <div className="bos-wrap">
-          <div className="bos-hero-split">
-            <div className="bos-hero-copy">
-              <div className="bos-pill"><i />the emotional engine &middot; visualized</div>
-              <h1 className="bos-qtitle">
-                One thought walks in. <em>Watch what it becomes.</em>
-              </h1>
-              <p className="bos-qsub">
-                This isn&rsquo;t a diagram of the idea. It&rsquo;s the actual routing logic Braino
-                runs on every message &mdash; pick a moment below and watch his twelve traits
-                reorder themselves in real time, the same way they do in production.
-              </p>
-            </div>
-            <div className="bos-art"><div className="bos-orb" /></div>
+      <nav className="apple-anchors">
+        <div className="apple-anchors-inner">
+          <span className="an-name">Emotional Intelligence</span>
+          <div className="an-links">
+            {tab === "read" && ANCHORS.map((anchor) => (
+              <a key={anchor.href} href={anchor.href}>{anchor.label}</a>
+            ))}
+            <a
+              className="hil-tryit"
+              href="#tabs"
+              onClick={(event) => {
+                event.preventDefault();
+                setTab("reply");
+              }}
+            >
+              Try it
+            </a>
           </div>
+        </div>
+      </nav>
+
+      <header className="apple-hero hil-hero eil-hero">
+        <p className="apple-eyebrow">The Emotional Intelligence Layer</p>
+        <h1 className="apple-display">He feels the <span className="tone">moment</span> before he answers.</h1>
+        <p className="apple-subhead">
+          Every message rearranges the same twelve traits. This is the heart, and a
+          place to watch it decide who should speak first.
+        </p>
+        <div className="hil-hero-art eil-hero-art apple-reveal">
+          <EmotionNetwork />
         </div>
       </header>
 
-      <hr className="bos-rule" />
+      <div className="hil-tabs" id="tabs">
+        <button className={tab === "read" ? "on" : ""} onClick={() => setTab("read")}>Read</button>
+        <button className={tab === "reply" ? "on" : ""} onClick={() => setTab("reply")}>Reply</button>
+      </div>
 
-      {/* ---------- Step 1: the thought ---------- */}
-      <section className="bos-sec">
-        <div className="bos-narrow">
-          <div className="bos-eyebrow">Step 1 &middot; the thought</div>
-          <h2 className="bos-h2">A message comes in.<br /><em>No AI call yet.</em></h2>
-          <p className="bos-lede">
-            Before any model is asked to think, a word-cue reader called <code>detectMoment()</code>{" "}
-            scans the message for phrases &mdash; no extra latency, no extra cost. Pick the moment
-            it would detect:
-          </p>
-        </div>
-      </section>
-
-      <section className="bos-sec vig-picker-sec">
-        <div className="bos-wrap">
-          <div className="vig-picker">
-            {MOMENT_NAV.map(([m, label]) => (
-              <button
-                key={m}
-                className={"vig-chip" + (m === moment ? " active" : "") + (m === "crisis" ? " crisis" : "")}
-                onClick={() => setMoment(m)}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-          {moment !== "neutral" && (
-            <div className="vig-cues">
-              <span className="vig-cues-label">cues it listens for</span>
-              {MOMENT_CUES[moment].map((c) => (
-                <span className="vig-cue" key={c}>{c}</span>
-              ))}
-            </div>
-          )}
-        </div>
-      </section>
-
-      <hr className="bos-rule" />
-
-      {/* ---------- Step 2: the reorder ---------- */}
-      <section className="bos-sec">
-        <div className="bos-narrow">
-          <div className="bos-eyebrow">Step 2 &middot; the reorder</div>
-          <h2 className="bos-h2">
-            {moment === "neutral" ? (
-              <>Nothing detected.<br /><em>The default order holds.</em></>
-            ) : (
-              <>{leadCount} traits move to the front.<br /><em>The rest recede, but stay present.</em></>
-            )}
-          </h2>
-          <p className="bos-lede">
-            Twelve traits make up his mind, always in this priority order by default. A detected
-            moment doesn&rsquo;t swap traits in or out &mdash; it just decides who speaks first.
-          </p>
-        </div>
-      </section>
-
-      <section className="bos-sec vig-stack-sec">
-        <div className="bos-wrap">
-          <div className="vig-stack">
-            {ordered.map((t, i) => {
-              const leading = moment !== "neutral" && t.leadsOn.includes(moment) && i < 4;
-              return (
-                <div
-                  className={"vig-trait" + (leading ? " leading" : "") + (t.alwaysOn ? " always" : "")}
-                  key={t.id}
-                  style={{ transitionDelay: `${i * 24}ms` }}
-                >
-                  <div className="vig-trait-rank">{i + 1}</div>
-                  <div className="vig-trait-body">
-                    <div className="vig-trait-name">
-                      {t.name}
-                      {leading && <span className="vig-trait-tag">leads now</span>}
-                      {!t.alwaysOn && <span className="vig-trait-tag opt">opt-in</span>}
-                    </div>
-                    <div className="vig-trait-sum">{t.summary}</div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </section>
-
-      <hr className="bos-rule" />
-
-      {/* ---------- Step 3: the steering line + assembled prompt ---------- */}
-      <section className="bos-sec">
-        <div className="bos-narrow">
-          <div className="bos-eyebrow">Step 3 &middot; the assembly</div>
-          <h2 className="bos-h2">Every trait writes its part.<br /><em>One block gets handed to the model.</em></h2>
-          <p className="bos-lede">
-            If a moment was detected, one steering sentence is generated and placed first. Then
-            each trait in the new order renders its own prose &mdash; in plain English, not code
-            &mdash; and they&rsquo;re joined into a single personality block.
-          </p>
-        </div>
-      </section>
-
-      <section className="bos-sec vig-assemble-sec">
-        <div className="bos-wrap">
-          <div className="vig-terminal">
-            <div className="vig-terminal-bar"><span /><span /><span /></div>
-            <div className="vig-terminal-body">
-              {steer ? (
-                <div className="vig-line steer">{steer}</div>
-              ) : (
-                <div className="vig-line dim">// neutral moment — no steering line, natural order plays</div>
-              )}
-              {ordered.slice(0, 6).map((t) => (
-                <div className="vig-line" key={t.id}>
-                  <span className="vig-line-id">[{t.id}]</span> {t.summary}
-                </div>
-              ))}
-              <div className="vig-line dim">// + {Math.max(ordered.length - 6, 0)} more traits, joined into one block</div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <hr className="bos-rule" />
-
-      <section className="bos-sec">
-        <div className="bos-narrow">
-          <div className="bos-eyebrow">What this isn&rsquo;t</div>
-          <div className="bos-notx">
-            <div className="bos-notx-row no"><b>Not</b><span>one paragraph of "be nice and helpful" pasted into every request.</span></div>
-            <div className="bos-notx-row no"><b>Not</b><span>a second AI call to figure out how to feel &mdash; the routing above is plain word-matching, instant and free.</span></div>
-            <div className="bos-notx-row no"><b>Not</b><span>traits that vanish when they're not leading &mdash; they just step back and stay present.</span></div>
-            <div className="bos-notx-row yes"><b>Just</b><span>twelve hand-written playbooks, reordered by what's actually happening to you right now.</span></div>
-          </div>
-        </div>
-      </section>
-
-      <hr className="bos-rule" />
-
-      <section className="bos-cta">
-        <div className="bos-narrow">
-          <h2 className="bos-h2">One engine.<br /><em>Soon, three different hearts.</em></h2>
-          <p className="bos-lede" style={{ margin: "26px auto 0" }}>
-            This is the shared engine every class runs on today. Braino Saburi &mdash; the
-            companion class &mdash; is the first to get his own, distinct system prompt, built
-            from the ground up for one thing: being someone you can feel.
-          </p>
-          <div className="bos-cta-row">
-            <Link className="bos-btn" to="/saburi">Meet Braino Saburi</Link>
-            <Link className="bos-btn ghost" to="/journal/emotional-engine">Read the full write-up</Link>
-          </div>
-        </div>
-        <div className="bos-foot">Braino &middot; built by one person &middot; trybraino.com</div>
-      </section>
+      {tab === "read" ? <ReadTab /> : <BrainoReplyLab autoRun={autoRun} />}
     </div>
   );
 }

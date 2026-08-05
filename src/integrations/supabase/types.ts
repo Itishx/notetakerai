@@ -410,6 +410,7 @@ export type Database = {
           hidden_modes_credential_id: string | null
           id: string
           is_premium: boolean
+          mascot: string
           memory_enabled: boolean
           overall_memory: string
           personality_settings: Json | null
@@ -424,6 +425,7 @@ export type Database = {
           hidden_modes_credential_id?: string | null
           id?: string
           is_premium?: boolean
+          mascot?: string
           memory_enabled?: boolean
           overall_memory?: string
           personality_settings?: Json | null
@@ -438,6 +440,7 @@ export type Database = {
           hidden_modes_credential_id?: string | null
           id?: string
           is_premium?: boolean
+          mascot?: string
           memory_enabled?: boolean
           overall_memory?: string
           personality_settings?: Json | null

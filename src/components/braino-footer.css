@@ -1,0 +1,565 @@
+/* braino-footer.css — the site footer. Self-contained dark band with its own
+   tokens, so the coral face-tiles pop regardless of the page's light/dark
+   Apple theme. The wordmark tiles are built + cascaded by BrainoFooter.tsx. */
+
+.braino-footer {
+  --bf-bg: #000;
+  --bf-ink: #f5f5f7;
+  --bf-ink-2: #8a8a8f;
+  --bf-ink-3: #5a5a60;
+  --bf-line: rgba(255, 255, 255, 0.08);
+  --bf-coral: #E8786E;
+  --bf-coral-deep: #C9544A;
+  --bf-coral-dark: #1B1713;
+  --bf-blue: #5c8dff;
+  background: var(--bf-bg);
+  color: var(--bf-ink);
+  font-family: "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  margin-top: clamp(40px, 7vw, 96px);
+}
+
+/* ── Mario theme: the footer is a blue sky over a playable pixel level. ── */
+.braino-footer.mario {
+  --bf-ink: #111d3a;
+  --bf-ink-2: #20375b;
+  --bf-ink-3: #344d72;
+  --bf-line: rgba(20, 31, 58, 0.2);
+  background: #6f8df4;
+}
+.bf-playstrip {
+  position: relative;
+  height: 286px;
+  margin-top: 8px;
+  overflow: hidden;
+  isolation: isolate;
+  image-rendering: pixelated;
+}
+.bf-ground2 {
+  position: absolute;
+  z-index: 8;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 50px;
+  border-top: 4px solid #171516;
+  background-color: #d66a2d;
+  background-image:
+    linear-gradient(#f39a52 3px, transparent 3px),
+    linear-gradient(90deg, #6d351f 3px, transparent 3px),
+    linear-gradient(#6d351f 3px, transparent 3px);
+  background-position: 0 3px, 0 3px, 0 3px;
+  background-size: 32px 16px, 32px 32px, 16px 16px;
+  box-shadow: inset 0 4px #ffb063;
+}
+.bf-bricks,
+.bf-qblock,
+.bf-pipe,
+.bf-castle {
+  position: absolute;
+  z-index: 6;
+  box-sizing: border-box;
+}
+.bf-bricks {
+  height: 34px;
+  border: 3px solid #171516;
+  background-color: #d66a2d;
+  background-image:
+    linear-gradient(#f39a52 3px, transparent 3px),
+    linear-gradient(90deg, #6d351f 3px, transparent 3px),
+    linear-gradient(#6d351f 3px, transparent 3px);
+  background-position: 0 0, 0 0, 0 0;
+  background-size: 34px 17px, 34px 34px, 17px 17px;
+  box-shadow: inset 0 3px #ffb063, 4px 5px 0 rgba(39, 31, 40, 0.16);
+}
+.bf-qblock {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border: 3px solid #171516;
+  background: #f39b38;
+  box-shadow: inset 3px 3px #ffc15e, inset -3px -3px #b94d1f, 4px 5px 0 rgba(39, 31, 40, 0.16);
+  color: #6d2d1a;
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 25px;
+  font-weight: 900;
+  line-height: 1;
+}
+.bf-qblock::before,
+.bf-qblock::after {
+  content: "";
+  position: absolute;
+  width: 3px;
+  height: 3px;
+  background: #73321d;
+}
+.bf-qblock::before { left: 3px; bottom: 3px; }
+.bf-qblock::after { right: 3px; top: 3px; }
+.bf-pipe {
+  width: 58px;
+  border: 3px solid #171516;
+  background: linear-gradient(90deg, #18843b 0 16%, #78ed54 16% 31%, #2eb64c 31% 68%, #167936 68% 100%);
+  box-shadow: inset -5px 0 #12682f, 4px 5px 0 rgba(39, 31, 40, 0.16);
+}
+.bf-pipe::before {
+  content: "";
+  position: absolute;
+  left: -8px;
+  right: -8px;
+  top: -3px;
+  height: 22px;
+  border: 3px solid #171516;
+  background: linear-gradient(90deg, #18843b 0 15%, #83f15c 15% 30%, #32bd50 30% 74%, #147132 74% 100%);
+  box-shadow: inset 0 3px #a8f685;
+}
+.bf-castle {
+  right: 3%;
+  bottom: 50px;
+  width: 142px;
+  height: 122px;
+  border: 3px solid #171516;
+  background-color: #c95f2d;
+  background-image:
+    linear-gradient(#f08a4b 3px, transparent 3px),
+    linear-gradient(90deg, #642e22 3px, transparent 3px),
+    linear-gradient(#642e22 3px, transparent 3px);
+  background-size: 30px 15px, 30px 30px, 15px 15px;
+  box-shadow: inset 0 3px #f6a15e, 5px 5px 0 rgba(39, 31, 40, 0.18);
+}
+.bf-castle::before {
+  content: "";
+  position: absolute;
+  left: 18px;
+  right: 18px;
+  top: -42px;
+  height: 42px;
+  border: 3px solid #171516;
+  border-bottom: 0;
+  background:
+    linear-gradient(90deg, #c95f2d 0 18px, transparent 18px 30px, #c95f2d 30px 48px, transparent 48px 60px, #c95f2d 60px 100%) top / 100% 18px no-repeat,
+    repeating-linear-gradient(0deg, #c95f2d 0 12px, #642e22 12px 15px);
+}
+.bf-castle::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -3px;
+  width: 34px;
+  height: 52px;
+  transform: translateX(-50%);
+  border: 3px solid #171516;
+  border-bottom: 0;
+  border-radius: 18px 18px 0 0;
+  background: #311d27;
+  box-shadow: inset 6px 0 #4c2930;
+}
+.bf-cloudy {
+  position: absolute;
+  z-index: 1;
+  width: 76px;
+  height: 28px;
+  border: 3px solid #1a315f;
+  background: #fff;
+  box-shadow: inset 0 -6px #bcebf4, 4px 5px 0 rgba(39, 31, 40, 0.12);
+  clip-path: polygon(0 58%, 12% 58%, 12% 34%, 25% 34%, 25% 15%, 42% 15%, 42% 0, 58% 0, 58% 16%, 75% 16%, 75% 35%, 88% 35%, 88% 58%, 100% 58%, 100% 84%, 88% 84%, 88% 100%, 12% 100%, 12% 84%, 0 84%);
+}
+.bf-cloudy.a { top: 26px; left: 11%; }
+.bf-cloudy.b { top: 54px; left: 42%; transform: scale(0.82); }
+.bf-cloudy.c { top: 22px; left: 67%; transform: scale(1.2); }
+.bf-cloudy.d { top: 74px; left: 89%; transform: scale(0.72); }
+.bf-hill {
+  position: absolute;
+  z-index: 2;
+  bottom: 50px;
+  background: #48bd4b;
+  border: 3px solid #171516;
+  clip-path: polygon(0 100%, 0 82%, 10% 82%, 10% 63%, 20% 63%, 20% 45%, 32% 45%, 32% 25%, 44% 25%, 44% 10%, 56% 10%, 56% 25%, 68% 25%, 68% 45%, 80% 45%, 80% 63%, 90% 63%, 90% 82%, 100% 82%, 100% 100%);
+  box-shadow: inset 12px 0 #8ce35d;
+}
+.bf-hill.a { width: 132px; height: 70px; left: 2%; }
+.bf-hill.b { width: 106px; height: 56px; left: 39%; }
+.bf-hill.c { width: 126px; height: 66px; left: 76%; }
+.bf-hint {
+  position: absolute;
+  z-index: 9;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 12px;
+  font-weight: 700;
+  color: rgba(17, 29, 58, 0.68);
+  white-space: nowrap;
+  text-shadow: 0 1px rgba(255, 255, 255, 0.35);
+}
+@media (max-width: 760px) {
+  .bf-playstrip { height: 238px; }
+}
+
+.bf-cols {
+  max-width: 1024px; margin: 0 auto; padding: clamp(44px, 6vw, 72px) clamp(20px, 5vw, 40px) 8px;
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 32px;
+}
+.bf-col h4 { margin: 0 0 18px; font-size: 15px; font-weight: 600; letter-spacing: -0.01em; color: var(--bf-ink); }
+.bf-col a { display: block; margin: 0 0 12px; color: var(--bf-ink-2); text-decoration: none; font-size: 15px; transition: color 0.18s ease; }
+.bf-col a:hover { color: var(--bf-ink); }
+.bf-col p { margin: 0; color: var(--bf-ink-3); font-size: 14px; line-height: 1.55; max-width: 30ch; }
+@media (max-width: 720px) { .bf-cols { grid-template-columns: 1fr 1fr; gap: 28px; } }
+
+/* ── the name-in-faces stage ── */
+.bf-stage {
+  position: relative; height: clamp(220px, 26vw, 320px); margin-top: 24px;
+  display: flex; align-items: flex-end; justify-content: center; overflow: hidden;
+}
+.bf-tiles { position: relative; }
+.bf-tile { position: absolute; transform: translate(-50%, -50%) scale(0); opacity: 0; will-change: transform, opacity; }
+.bf-stage.play .bf-tile { animation: bfPop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+@keyframes bfPop {
+  0% { opacity: 0; transform: translate(-50%, calc(-50% + 14px)) scale(0.2); }
+  70% { opacity: 1; }
+  100% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+
+/* his face — a coral pill with two eyes, one per lit pixel */
+.bf-face {
+  width: 20px; height: 12px; border-radius: 3px 3px 5px 5px;
+  background: linear-gradient(180deg, #F6A8A2, var(--bf-coral) 60%, var(--bf-coral-deep));
+  display: flex; align-items: center; justify-content: center; gap: 3px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5);
+}
+.bf-face i { width: 3.4px; height: 3.4px; border-radius: 50%; background: var(--bf-coral-dark); }
+.bf-face.big { width: 48px; height: 28px; border-radius: 7px 7px 12px 12px; gap: 8px; }
+.bf-face.big i { width: 8px; height: 8px; }
+
+/* a coral heart, the stray desktop prop */
+.bf-heart { display: block; width: 34px; height: 34px; position: relative; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5)); }
+.bf-heart::before, .bf-heart::after {
+  content: ""; position: absolute; width: 17px; height: 27px; left: 17px; top: 0;
+  background: var(--bf-coral); border-radius: 17px 17px 0 0; transform: rotate(-45deg); transform-origin: 0 100%;
+}
+.bf-heart::after { left: 0; transform: rotate(45deg); transform-origin: 100% 100%; }
+
+.bf-prop { position: absolute; bottom: 22px; }
+.bf-prop.left { left: 5%; }
+.bf-prop.right { right: 6%; bottom: 46%; }
+@media (max-width: 720px) { .bf-prop { display: none; } }
+
+/* ── the playable Mario-style world ── */
+.bf-game { position: relative; max-width: 1024px; margin: 8px auto 0; padding: 0 clamp(20px, 5vw, 40px); }
+.bf-game-canvas {
+  display: block; width: 100%; height: 340px; border-radius: 18px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4), inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+  touch-action: none; cursor: pointer;
+}
+.bf-game-hud {
+  position: absolute; top: 16px; left: clamp(32px, 6vw, 56px); z-index: 2;
+  display: flex; align-items: center; gap: 8px;
+  color: #fff; font-weight: 700; font-size: 16px; font-variant-numeric: tabular-nums;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
+}
+.bf-game-hud .bf-coin { width: 13px; height: 15px; border-radius: 50%; background: #f2c14e; box-shadow: inset 0 0 0 2px #c9922a; }
+.bf-game-start {
+  position: absolute; inset: 0; z-index: 2; display: flex; flex-direction: column; gap: 8px;
+  align-items: center; justify-content: center; text-align: center; pointer-events: none;
+  background: rgba(0, 0, 0, 0.28); border-radius: 18px; margin: 0 clamp(20px, 5vw, 40px);
+}
+.bf-game-start strong { color: #fff; font-size: clamp(22px, 3vw, 32px); font-weight: 600; letter-spacing: -0.02em; }
+.bf-game-start span { color: rgba(255, 255, 255, 0.85); font-size: 14px; font-weight: 500; }
+
+/* ── the footer IS the game: a blue Mario-style playable band ── */
+.bf-runner {
+  position: relative; max-width: 1024px; margin: 20px auto 0; height: 240px;
+  border-radius: 18px; overflow: hidden; cursor: pointer; touch-action: none;
+  background: linear-gradient(#5c94fc 0%, #74a6fc 70%);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+}
+.bf-runner:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.bf-r-ground {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 46px;
+  background: repeating-linear-gradient(90deg, #d07a34 0 30px, #b8692a 30px 32px);
+  border-top: 5px solid #47b45f;
+}
+.bf-r-cloud { position: absolute; background: #fff; border-radius: 40px; opacity: 0.92; }
+.bf-r-cloud::before, .bf-r-cloud::after { content: ""; position: absolute; background: #fff; border-radius: 50%; }
+.bf-r-cloud.a { width: 64px; height: 20px; top: 30px; left: 22%; }
+.bf-r-cloud.a::before { width: 26px; height: 26px; top: -12px; left: 12px; }
+.bf-r-cloud.b { width: 50px; height: 16px; top: 60px; left: 64%; }
+.bf-r-cloud.b::before { width: 20px; height: 20px; top: -9px; left: 10px; }
+.bf-r-hill { position: absolute; bottom: 46px; background: #3fae5a; border-radius: 50% 50% 0 0; }
+.bf-r-hill.a { width: 130px; height: 58px; left: 8%; }
+.bf-r-hill.b { width: 96px; height: 42px; left: 68%; }
+.bf-runner-braino { position: absolute; bottom: 46px; left: 14%; z-index: 2; }
+.bf-r-obstacles { position: absolute; inset: 0; z-index: 1; }
+.bf-ob { position: absolute; left: 0; }
+.bf-ob.goomba { background: #8a4b2a; border-radius: 8px 8px 4px 4px; box-shadow: inset 0 -6px 0 rgba(255,255,255,0.18); }
+.bf-ob.pipe { background: #2f9e4f; border-radius: 4px 4px 0 0; box-shadow: inset 0 0 0 3px #37b85c; }
+.bf-r-score { position: absolute; top: 12px; left: 16px; z-index: 3; color: #fff; font-weight: 700; font-size: 15px; font-variant-numeric: tabular-nums; text-shadow: 0 2px 3px rgba(0, 0, 0, 0.3); }
+.bf-r-overlay {
+  position: absolute; inset: 0; z-index: 3; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 5px; text-align: center; background: rgba(0, 0, 0, 0.22); pointer-events: none;
+}
+.bf-play { width: 56px; height: 56px; border-radius: 50%; background: #fff; color: #4a86f0; display: grid; place-items: center; font-size: 20px; margin-bottom: 6px; box-shadow: 0 6px 16px rgba(0, 0, 0, 0.3); }
+.bf-r-overlay strong { color: #fff; font-size: clamp(18px, 2.4vw, 24px); font-weight: 600; }
+.bf-r-overlay span { color: rgba(255, 255, 255, 0.9); font-size: 13px; font-weight: 500; }
+
+.bf-baseline {
+  max-width: 1024px; margin: 24px auto 0; padding: 16px clamp(20px, 5vw, 40px) 40px;
+  display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+  color: var(--bf-ink-3); font-size: 12px; border-top: 1px solid var(--bf-line);
+}
+
+/* ── Endless footer course. The window begins at the copyright row; only the
+   world inside moves, while the columns and legal copy above remain still. ── */
+.bf-game-window {
+  position: relative;
+  margin-top: 24px;
+  overflow: hidden;
+  border-top: 1px solid var(--bf-line);
+  background: #6f8df4;
+}
+.bf-game-window .bf-baseline {
+  position: relative;
+  z-index: 20;
+  margin: 0 auto;
+  padding: 16px clamp(20px, 5vw, 40px) 14px;
+  border-top: 0;
+}
+.bf-game-window .bf-playstrip {
+  margin-top: 0;
+  cursor: pointer;
+  touch-action: none;
+  outline: none;
+}
+.bf-game-window .bf-playstrip:focus-visible {
+  box-shadow: inset 0 0 0 3px rgba(255, 255, 255, 0.9);
+}
+.bf-course-world,
+.bf-course-segment {
+  position: absolute;
+  inset: 0;
+  will-change: transform;
+}
+.bf-course-segment {
+  right: auto;
+  overflow: visible;
+}
+.bf-game-braino {
+  position: absolute;
+  z-index: 11;
+  left: 0;
+  bottom: 50px;
+  width: 64px;
+  height: 78px;
+  will-change: transform;
+  pointer-events: none;
+  filter: drop-shadow(3px 4px 0 rgba(31, 33, 48, 0.18));
+}
+.bf-game-braino > div:last-child,
+.bf-game-braino svg {
+  display: block;
+  width: 64px;
+  height: 78px;
+}
+.bf-playstrip.is-running .bf-game-braino > div:last-child {
+  animation: bfBrainoRunBob 0.28s steps(2, end) infinite;
+}
+@keyframes bfBrainoRunBob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-2px); }
+}
+.bf-playstrip.is-pipe-diving .bf-game-braino {
+  z-index: 5;
+  filter: none;
+}
+.bf-game-window .bf-game-hud {
+  position: absolute;
+  z-index: 14;
+  top: 12px;
+  left: clamp(16px, 4vw, 42px);
+  display: flex;
+  align-items: center;
+  gap: clamp(10px, 2.4vw, 24px);
+  color: #fff;
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: clamp(11px, 1.2vw, 14px);
+  font-weight: 900;
+  letter-spacing: 0;
+  line-height: 1;
+  text-shadow: 2px 2px 0 #1a315f;
+  pointer-events: none;
+}
+.bf-game-coin-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.bf-game-coin-count i {
+  width: 11px;
+  height: 15px;
+  border: 2px solid #6a351c;
+  border-radius: 50%;
+  background: #ffd34f;
+  box-shadow: inset 3px 0 #fff08a, inset -2px 0 #d98b20;
+}
+.bf-coin-pixel {
+  position: absolute;
+  z-index: 7;
+  width: 18px;
+  height: 22px;
+  box-sizing: border-box;
+  border: 3px solid #61331d;
+  border-radius: 50%;
+  background: #ffd34f;
+  box-shadow: inset 4px 0 #fff49a, inset -3px 0 #d98b20, 3px 3px 0 rgba(39, 31, 40, 0.16);
+  animation: bfCoinTurn 0.8s steps(4, end) infinite;
+}
+.bf-coin-pixel::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 6px;
+  width: 2px;
+  background: #b96b1c;
+}
+.bf-coin-pixel.collected {
+  opacity: 0;
+  transform: translateY(-18px) scale(1.5);
+  transition: opacity 0.16s linear, transform 0.16s ease-out;
+}
+@keyframes bfCoinTurn {
+  0%, 100% { transform: scaleX(1); }
+  50% { transform: scaleX(0.35); }
+}
+.bf-game-controls {
+  position: absolute;
+  z-index: 15;
+  right: clamp(14px, 3vw, 30px);
+  bottom: 64px;
+  display: grid;
+  grid-template-columns: repeat(4, 42px);
+  gap: 7px;
+}
+.bf-game-controls button {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 3px solid #171516;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.94);
+  color: #15294f;
+  box-shadow: 3px 4px 0 rgba(23, 21, 22, 0.28);
+  cursor: pointer;
+  touch-action: none;
+}
+.bf-game-controls button:hover {
+  background: #fff7d2;
+}
+.bf-game-controls button:active {
+  transform: translate(2px, 2px);
+  box-shadow: 1px 2px 0 rgba(23, 21, 22, 0.28);
+}
+.bf-game-controls button:focus-visible {
+  outline: 3px solid #fff;
+  outline-offset: 2px;
+}
+.bf-game-controls svg {
+  width: 22px;
+  height: 22px;
+  stroke-width: 3;
+}
+.bf-game-restart {
+  background: #f39b38 !important;
+  color: #5b2a18 !important;
+}
+.bf-braino-says {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 10px);
+  width: min(210px, 46vw);
+  display: grid;
+  gap: 2px;
+  transform: translateX(-50%);
+  padding: 9px 11px 8px;
+  border: 3px solid #fff;
+  border-radius: 6px;
+  background: #171516;
+  color: #fff;
+  box-shadow: 4px 4px 0 rgba(23, 21, 22, 0.25);
+  font-family: "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  line-height: 1.15;
+  text-align: left;
+  pointer-events: none;
+}
+.bf-braino-says::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  width: 10px;
+  height: 10px;
+  border-right: 3px solid #fff;
+  border-bottom: 3px solid #fff;
+  background: #171516;
+  transform: translate(-50%, -5px) rotate(45deg);
+}
+.bf-braino-says strong {
+  color: #f39b38;
+  font-size: 10px;
+  text-transform: uppercase;
+}
+.bf-braino-says span {
+  font-size: 12px;
+  font-weight: 700;
+}
+.bf-braino-says small {
+  color: rgba(255, 255, 255, 0.64);
+  font-size: 10px;
+}
+.bf-castle-scenery {
+  pointer-events: none;
+}
+html.bf-footer-game-visible #sb-brain-mascot-wrapper {
+  opacity: 0;
+  pointer-events: none;
+}
+#sb-brain-mascot-wrapper {
+  transition: opacity 0.2s ease;
+}
+
+@media (max-width: 600px) {
+  .bf-game-window .bf-baseline {
+    padding-bottom: 11px;
+  }
+  .bf-game-window .bf-game-hud {
+    top: 10px;
+    gap: 9px;
+    font-size: 10px;
+  }
+  .bf-game-controls {
+    right: 10px;
+    bottom: 60px;
+    grid-template-columns: repeat(4, 36px);
+    gap: 5px;
+  }
+  .bf-game-controls button {
+    width: 36px;
+    height: 36px;
+    border-width: 2px;
+  }
+  .bf-game-controls svg {
+    width: 19px;
+    height: 19px;
+  }
+  .bf-braino-says {
+    width: 170px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bf-playstrip.is-running .bf-game-braino > div:last-child,
+  .bf-coin-pixel {
+    animation: none;
+  }
+}

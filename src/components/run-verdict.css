@@ -1,0 +1,62 @@
+/* RunVerdict — the judgement bar under an answer. Quiet until you touch it,
+   then unmistakable, because a verdict half given is worse than none. */
+
+.rv {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--ap-hairline, #d2d2d7);
+}
+
+.rv-label {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ap-ink-soft, #6e6e73);
+  margin-right: 2px;
+}
+
+.rv-btn {
+  flex: none;
+  border: 1px solid var(--ap-hairline, #d2d2d7);
+  background: transparent;
+  color: var(--ap-ink-soft, #6e6e73);
+  border-radius: 999px;
+  padding: 6px 18px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+.rv-good:hover { border-color: #3a8f5f; color: #3a8f5f; }
+.rv-good.on { background: #3a8f5f; border-color: #3a8f5f; color: #fff; }
+.rv-bad:hover { border-color: #d9645b; color: #d9645b; }
+.rv-bad.on { background: #d9645b; border-color: #d9645b; color: #fff; }
+
+.rv-note {
+  flex: 1;
+  min-width: 190px;
+  border: 1px solid var(--ap-hairline, #d2d2d7);
+  border-radius: 999px;
+  background: var(--ap-surface, #fff);
+  color: var(--ap-ink, #1d1d1f);
+  padding: 7px 15px;
+  font: inherit;
+  font-size: 13px;
+  outline: none;
+}
+.rv-note:focus { border-color: var(--ap-blue, #2f6fed); }
+.rv-note::placeholder { color: var(--ap-ink-soft, #6e6e73); opacity: 0.7; }
+
+.rv-state { font-size: 11.5px; color: var(--ap-ink-soft, #6e6e73); min-width: 52px; }
+.rv-saved { color: #3a8f5f; }
+.rv-error { color: #d9645b; }
+
+@media (max-width: 560px) {
+  .rv-note { min-width: 100%; order: 3; }
+}

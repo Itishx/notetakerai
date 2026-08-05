@@ -1,0 +1,2812 @@
+html,
+body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: transparent;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+  user-select: none;
+}
+
+body {
+  pointer-events: none;
+}
+
+#dock-stage {
+  position: fixed;
+  inset: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+#walker-lane {
+  position: absolute;
+  inset: 0;
+  border-radius: 0;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+#walker-lane.listening {
+  animation: laneListen 1.35s ease-in-out infinite;
+}
+
+#walker-lane.connecting,
+#walker-lane.hearing,
+#walker-lane.captured {
+  animation: laneListen 1.05s ease-in-out infinite;
+}
+
+#walker-lane.thinking {
+  animation: none;
+}
+
+#walker-lane.speaking {
+  animation: laneSpeak 1.1s ease-in-out infinite;
+}
+
+#walker {
+  position: absolute;
+  width: 64px;
+  height: 78px;
+  left: 0;
+  top: 0;
+  pointer-events: auto;
+  cursor: grab;
+  touch-action: none;
+  filter:
+    drop-shadow(0 10px 18px rgba(0,0,0,0.22))
+    drop-shadow(0 2px 12px rgba(201,84,74,0.36));
+  opacity: 0;
+  transform: translate3d(40px, calc(100vh - 94px), 0);
+  transition: opacity 460ms ease;
+  will-change: transform;
+  isolation: isolate;
+}
+
+#walker.visible {
+  opacity: 1;
+}
+
+/* Music retreat: he already has headphones on, he just fades out in place —
+   no walk. Higher specificity than .visible so it wins while both are set. */
+#walker.visible.fading-home {
+  opacity: 0;
+  transition: opacity 600ms ease;
+}
+
+#walker.dragging {
+  cursor: grabbing;
+}
+
+#walker::before,
+#walker::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+  opacity: 0;
+}
+
+#walker.hearing::before,
+#walker.hearing::after {
+  display: block;
+  left: 50%;
+  top: 46%;
+  width: 56px;
+  height: 56px;
+  z-index: 0;
+  border-radius: 999px;
+  border: 2px solid rgba(232,120,110,0.52);
+  background: radial-gradient(circle, rgba(255,255,255,0.16), rgba(232,120,110,0.12) 42%, transparent 68%);
+  box-shadow:
+    0 0 22px rgba(232,120,110,0.3),
+    0 0 42px rgba(246,168,162,0.18);
+  transform: translate(-50%, -50%) scale(0.5);
+  opacity: 0;
+  animation: voiceSonar 2.4s ease-out infinite;
+}
+
+#walker.hearing::after {
+  animation-delay: 1.2s;
+}
+
+#walker.hearing svg {
+  animation: macWalkerListenGlow 2s ease-in-out infinite;
+}
+
+/* Yap Mode stays present without turning the mascot into a large beacon. */
+#walker.dictation-listening::before {
+  display: block;
+  left: 50%;
+  top: 46%;
+  width: 38px;
+  height: 38px;
+  z-index: 0;
+  border-radius: 999px;
+  border: 1px solid rgba(61, 232, 178, 0.5);
+  background: radial-gradient(circle, rgba(61,232,178,0.1), transparent 68%);
+  box-shadow: 0 0 12px rgba(61,232,178,0.28), 0 0 22px rgba(61,232,178,0.12);
+  transform: translate(-50%, -50%);
+  opacity: 0.72;
+  animation: yapModeMascotHalo 2.4s ease-in-out infinite;
+}
+
+#walker.dictation-listening::after {
+  display: none;
+}
+
+#walker.dictation-listening svg {
+  animation: yapModeMascotGlow 2.4s ease-in-out infinite;
+}
+
+@keyframes yapModeMascotHalo {
+  0%, 100% { opacity: 0.46; transform: translate(-50%, -50%) scale(0.92); }
+  50% { opacity: 0.78; transform: translate(-50%, -50%) scale(1.04); }
+}
+
+@keyframes yapModeMascotGlow {
+  0%, 100% { filter: drop-shadow(0 0 3px rgba(61,232,178,0.26)); }
+  50% { filter: drop-shadow(0 0 8px rgba(61,232,178,0.62)); }
+}
+
+#walker.connecting svg {
+  animation: macVoiceConnecting 1.6s ease-in-out infinite;
+}
+
+#walker.speaking svg {
+  animation: macWalkerSpeakGlow 1s ease-in-out infinite;
+}
+
+#walker.authenticating svg {
+  animation: macAuthGlow 0.9s ease-in-out infinite;
+}
+
+#walker.authenticated svg {
+  animation: macAuthSuccess 0.95s ease-in-out 1;
+}
+
+/* Edge glow — Apple Intelligence style: the whole screen perimeter radiates.
+   Listening = cool blue breath. Speaking = warm coral, pulsing with his voice.
+   Pure CSS, click-through, driven by the same voice status machine. */
+#edge-glow {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 54;
+  opacity: 0;
+  transition: opacity 0.6s ease;
+}
+
+#edge-glow::before,
+#edge-glow::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+
+#edge-glow.listen {
+  opacity: 1;
+}
+
+#edge-glow.listen::before {
+  box-shadow:
+    inset 0 0 70px 14px rgba(122, 162, 255, 0.30),
+    inset 0 0 26px 4px rgba(160, 190, 255, 0.22);
+  animation: edgeBreath 2.6s ease-in-out infinite;
+}
+
+#edge-glow.speak {
+  opacity: 1;
+}
+
+#edge-glow.speak::before {
+  box-shadow:
+    inset 0 0 110px 26px rgba(232, 120, 110, 0.42),
+    inset 0 0 40px 8px rgba(243, 154, 66, 0.30);
+  animation: edgePulse 1s ease-in-out infinite;
+}
+
+#edge-glow.speak::after {
+  box-shadow: inset 0 0 16px 2px rgba(255, 214, 198, 0.35);
+  animation: edgePulse 1s ease-in-out infinite reverse;
+}
+
+#edge-glow.think {
+  opacity: 0.5;
+}
+
+#edge-glow.think::before {
+  box-shadow: inset 0 0 60px 12px rgba(122, 162, 255, 0.22);
+  animation: edgeBreath 3.4s ease-in-out infinite;
+}
+
+/* Notch Braino — ported from the "Braino In The Notch" design: one unified notch.
+   idle = coral head (folds + eyes + smile) · listening = island morph + sonar
+   rings · speaking = bigger island with voice bars. The top --nf-notch-h of the
+   pill hides behind the physical notch; the face band lives below it. */
+#notch-face {
+  /* The window truly starts at screen y=0 (enableLargerThanScreen defeats the
+     menu-bar constraint) and our level is above the bar, so the pill occupies
+     the notch strip itself: its top --nf-notch-h hides behind the physical
+     housing, the face band lives on the chin below. */
+  --nf-notch-h: 33px;
+  --nf-left-reach: 95px;
+  --nf-right-reach: 95px;
+  position: fixed;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  pointer-events: none;
+  z-index: 57;
+  opacity: 0;
+  transition: opacity 0.5s ease;
+}
+
+#notch-face.on {
+  opacity: 1;
+}
+
+#notch-face .nf-pill {
+  position: relative;
+  margin: 0 auto;
+  /* Idle: pure black, exactly notch-width — it merges with the physical
+     housing into one bigger notch, and his eyes float in the black. The
+     coral head is revealed by the wake morph. */
+  width: var(--nf-notch-w, 190px);
+  height: calc(var(--nf-notch-h) + 22px);
+  border-radius: 0 0 16px 16px;
+  overflow: hidden;
+  background: linear-gradient(180deg, #F6A8A2, #E8786E 55%, #C9544A);
+  transition:
+    width 0.55s cubic-bezier(0.32, 0.72, 0, 1),
+    height 0.55s cubic-bezier(0.32, 0.72, 0, 1),
+    transform 0.55s cubic-bezier(0.32, 0.72, 0, 1),
+    border-radius 0.55s cubic-bezier(0.32, 0.72, 0, 1),
+    box-shadow 0.4s ease,
+    filter 0.16s ease;
+  transform-origin: top center;
+  will-change: width, height, transform, border-radius;
+}
+
+/* Black cover that makes idle read as "inside the notch"; fades on wake. */
+#notch-face .nf-pill::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: #000;
+  z-index: 2;
+  transition: opacity 0.45s ease;
+  opacity: 1;
+}
+
+/* The notch stays black in every state — the island extends, never fills. */
+
+#notch-face .nf-folds { z-index: 1; }
+#notch-face .nf-band { z-index: 3; }
+#notch-face #nf-status { z-index: 4; }
+
+/* Idle is eyes-only in the dark: ears and mouth surface with the coral. */
+#notch-face:not(.listen):not(.speak) .nf-ears { opacity: 0; }
+#notch-face:not(.listen):not(.speak) #nf-mouth-idle { display: none; }
+
+/* LISTENING = the notch radiates coral, continuously, in the same rhythm as
+   the wake-up sequence. It is the one unambiguous "he is hearing you" signal,
+   so it never goes quiet while the mic is live. Speaking is left alone: the
+   mouth already carries that state. */
+#notch-face.listen .nf-pill {
+  width: 250px;
+  height: calc(var(--nf-notch-h) + 44px);
+  border-radius: 0 0 26px 26px;
+  animation: nfListenRadiate 1.9s ease-in-out infinite;
+}
+
+@keyframes nfListenRadiate {
+  0%, 100% {
+    box-shadow:
+      0 0 0 1px rgba(232, 120, 110, 0.34),
+      0 0 18px 2px rgba(232, 120, 110, 0.30);
+  }
+  50% {
+    box-shadow:
+      0 0 0 1.6px rgba(240, 149, 140, 0.90),
+      0 0 38px 7px rgba(232, 120, 110, 0.62);
+  }
+}
+
+/* A running Voice Command mode still owns the colour while listening, so the
+   mode tint wins over the coral rather than fighting it. */
+#notch-face.nf-voice-mode.listen .nf-pill {
+  animation: none;
+  box-shadow:
+    0 0 0 1.5px var(--nf-mode-color, #0A84FF),
+    0 0 30px -1px var(--nf-mode-color, #0A84FF);
+}
+
+/* Yap Mode is a compact notch state: label + tiny activity bars + close halo. */
+#notch-face.nf-dictation.listen .nf-pill {
+  width: 222px;
+  height: calc(var(--nf-notch-h) + 28px);
+  border-radius: 0 0 18px 18px;
+  animation: nfYapModeRadiate 2.4s ease-in-out infinite;
+}
+
+@keyframes nfYapModeRadiate {
+  0%, 100% {
+    box-shadow:
+      0 0 0 1px rgba(61,232,178,0.34),
+      0 0 9px 1px rgba(61,232,178,0.2);
+  }
+  50% {
+    box-shadow:
+      0 0 0 1.2px rgba(145,255,220,0.72),
+      0 0 17px 2px rgba(61,232,178,0.34);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #notch-face.listen .nf-pill {
+    animation: none;
+    box-shadow: 0 0 0 1.4px rgba(232, 120, 110, 0.7), 0 0 22px 3px rgba(232, 120, 110, 0.4);
+  }
+}
+
+/* Final design: speaking keeps the island size, with a simple talking mouth. */
+#notch-face.speak .nf-pill {
+  width: 250px;
+  height: calc(var(--nf-notch-h) + 44px);
+  border-radius: 0 0 26px 26px;
+  box-shadow: 0 0 34px rgba(232, 120, 110, 0.5);
+}
+
+/* Captions: the island stretches SIDEWAYS only — height untouched, eyes stay
+   centred over the housing. Only what we HEARD is captioned (left wing) —
+   his replies are voice + the talking mouth, never text. */
+#notch-face.captioning .nf-pill {
+  width: calc(var(--nf-left-reach) + var(--nf-right-reach));
+  transform: translateX(calc((var(--nf-right-reach) - var(--nf-left-reach)) / 2));
+  height: calc(var(--nf-notch-h) + 22px);
+  border-radius: 0 0 16px 16px;
+}
+
+/* Dictation captions use the dynamic-island surface itself. It expands only
+   while words are arriving, then settles back to the compact Yap Mode label. */
+#notch-face.nf-dictation.captioning .nf-pill {
+  width: calc(var(--nf-left-reach) + var(--nf-right-reach));
+  height: calc(var(--nf-notch-h) + 22px);
+  border-radius: 0 0 16px 16px;
+}
+
+#notch-face .nf-cap {
+  position: absolute;
+  z-index: 4;
+  top: 0;
+  height: 100%;
+  width: calc(50% - var(--nf-notch-w, 190px) / 2 - 22px);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity 0.3s ease 0.18s;
+  line-height: 1.3;
+}
+
+#notch-face.captioning .nf-cap { opacity: 1; }
+
+#notch-face .nf-cap-l {
+  left: 14px;
+  width: max(0px, calc(var(--nf-left-reach) - 66px));
+  text-align: right;
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  color: rgba(255, 240, 235, 0.5);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+#notch-face .nf-cap-r {
+  left: calc(var(--nf-left-reach) + 52px);
+  width: max(0px, calc(var(--nf-right-reach) - 66px));
+  text-align: left;
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 9px;
+  letter-spacing: .04em;
+  color: rgba(255,240,235,.5);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+#notch-face.nf-dictation.captioning .nf-cap {
+  top: 0;
+  height: 100%;
+  justify-content: center;
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 9px;
+  line-height: 1.2;
+  letter-spacing: 0.04em;
+  color: rgba(232, 255, 247, 0.82);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+#notch-face.nf-dictation.captioning #nf-status,
+#notch-face.nf-dictation.captioning .nf-viz {
+  opacity: 0;
+}
+
+#notch-face .nf-folds {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+#notch-face .nf-band {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: var(--nf-notch-h);
+  bottom: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+}
+
+/* During a caption the island may be asymmetrical, but Braino remains pinned
+   to the physical screen centre. --nf-left-reach is precisely the distance
+   from the island's left edge back to his eyes. */
+#notch-face.captioning .nf-band {
+  right: auto;
+  left: var(--nf-left-reach);
+  width: 78px;
+  transform: translateX(-50%);
+}
+
+/* He reads the live sentence with you: first towards the growing left wing,
+   then across to the continuation when the right wing activates. */
+#notch-face.nf-caption-left:not(.scanning) #nf-pupil-l,
+#notch-face.nf-caption-left:not(.scanning) #nf-pupil-r,
+#notch-face.nf-caption-left:not(.scanning) #nf-glint-l,
+#notch-face.nf-caption-left:not(.scanning) #nf-glint-r {
+  transform: translateX(-2.8px);
+}
+
+#notch-face.nf-caption-right:not(.scanning) #nf-pupil-l,
+#notch-face.nf-caption-right:not(.scanning) #nf-pupil-r,
+#notch-face.nf-caption-right:not(.scanning) #nf-glint-l,
+#notch-face.nf-caption-right:not(.scanning) #nf-glint-r {
+  transform: translateX(2.8px);
+}
+
+#notch-face .nf-mini {
+  width: 78px;
+  margin-top: -4px;
+  display: none;
+  transition: width 0.5s cubic-bezier(0.34, 1.25, 0.4, 1);
+}
+
+/* Eyes appear only while the walker is home inside the notch, at rest. */
+#notch-face.home:not(.music):not(.live) .nf-mini {
+  display: block;
+}
+
+#notch-face.listen #nf-mouth-idle { display: none; }
+#notch-face.listen #nf-mouth-listen { display: block !important; }
+#notch-face.speak #nf-mouth-idle,
+#notch-face.speak #nf-mouth-listen { display: none !important; }
+
+#notch-face .nf-viz {
+  display: none;
+  position: absolute;
+  bottom: 7px;
+  left: 50%;
+  transform: translateX(-50%);
+  align-items: flex-end;
+  gap: 4px;
+  height: 22px;
+}
+
+/* Speaking: ONE animation only — the talking mouth (rule further down).
+   Bars stay off (they read as a second voice on top of the mouth); music
+   mode has its own dancer instead. */
+
+/* Music: the actual mascot (a live clone of his real rig), grooving in the
+   island. Limb animation is driven in JS via the same transform-attribute
+   technique the big walker uses, not CSS keyframes, since it is the real SVG. */
+#notch-face .nf-dancer {
+  display: none;
+  position: absolute;
+  top: 2px;
+  left: 50%;
+  width: 24px;
+  height: 29px;
+  margin-left: -12px;
+  overflow: visible;
+}
+
+#notch-face .nf-dancer svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+#notch-face.music .nf-dancer {
+  display: block;
+}
+
+/* Busy (mission control) and music islands: modest stretch, ticker visible. */
+/* ── Thinking island (cowork tasks): the dynamic-island thinking flow. A
+   sticky task lights a soft coral breathing glow and a three-dot shimmer under
+   his eyes; the island is tappable (pointer-events on), and a tap expands it
+   caption-wide via .nf-think-open + .captioning to read the full step. Styled
+   to match the reference dynamic islands: pure-black pill, generous radius. ── */
+#notch-face.nf-thinking .nf-pill {
+  pointer-events: auto; cursor: pointer;
+  animation: none;
+  box-shadow: 0 0 20px rgba(232, 120, 110, 0.24);
+}
+@keyframes nfThinkBreath {
+  0%, 100% { box-shadow: 0 0 14px rgba(232, 120, 110, 0.18), 0 0 30px rgba(232, 120, 110, 0.08); }
+  50% { box-shadow: 0 0 26px rgba(232, 120, 110, 0.38), 0 0 52px rgba(243, 154, 66, 0.16); }
+}
+/* the three-dot "thinking" shimmer, tucked just under his eyes when idle-sized */
+#notch-face.nf-thinking:not(.nf-think-open) .nf-think-dots { display: none; }
+#notch-face .nf-think-dots {
+  display: none; position: absolute; z-index: 4; left: 50%; bottom: 6px;
+  transform: translateX(-50%); gap: 4px; align-items: center;
+}
+#notch-face.nf-thinking:not(.nf-think-open) .nf-think-dots {
+  right: 13px;
+  left: auto;
+  transform: none;
+}
+#notch-face.nf-thinking:not(.nf-think-open) #nf-status {
+  opacity: 0;
+}
+#notch-face.nf-processing-caption:not(.nf-think-open) .nf-cap {
+  opacity: 1;
+}
+#notch-face.nf-processing-caption:not(.nf-think-open) .nf-cap-l {
+  color: rgba(255, 240, 235, .84);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+#notch-face .nf-think-dots i {
+  width: 4px; height: 4px; border-radius: 50%; background: #F6A8A2;
+  box-shadow: 0 0 5px rgba(232, 120, 110, 0.8);
+  animation: nfThinkDot 1.1s ease-in-out infinite;
+}
+#notch-face .nf-think-dots i:nth-child(2) { animation-delay: 0.16s; }
+#notch-face .nf-think-dots i:nth-child(3) { animation-delay: 0.32s; }
+@keyframes nfThinkDot { 0%, 100% { opacity: 0.3; transform: translateY(0); } 50% { opacity: 1; transform: translateY(-2px); } }
+/* the arrow hint: a small chevron on the right of the pill that says "there's
+   more here, hover me". It gently bobs to draw the eye, and rotates when open. */
+#notch-face.nf-think-hint .nf-think-arrow { display: block; }
+#notch-face .nf-think-arrow {
+  display: none; position: absolute; z-index: 5;
+  right: auto; left: calc(var(--nf-left-reach) + 43px); top: 50%;
+  width: 7px; height: 7px; margin-top: -4px;
+  border-right: 1.6px solid rgba(246, 168, 162, 0.9);
+  border-bottom: 1.6px solid rgba(246, 168, 162, 0.9);
+  transform: rotate(45deg);
+  animation: nfArrowBob 1.6s ease-in-out infinite;
+}
+@keyframes nfArrowBob { 0%, 100% { transform: rotate(45deg) translate(0, 0); } 50% { transform: rotate(45deg) translate(2px, 2px); } }
+#notch-face.nf-think-open .nf-think-arrow {
+  left: calc(50% + 43px);
+  animation: none;
+  transform: rotate(-135deg);
+  top: 18px;
+  bottom: auto;
+  margin-top: 0;
+}
+
+/* Expanded Thinking Canvas: the original notch becomes a wider, low-profile
+   strip. It never grows upward and never asks a caption wing to hold prose. */
+#notch-face.nf-thinking.nf-think-open .nf-pill {
+  width: 100vw;
+  height: 25vh;
+  min-height: 180px;
+  max-height: 300px;
+  transform: translateX(0);
+  border-radius: 0 0 30px 30px;
+  box-shadow:
+    inset 0 -1px 0 rgba(255,255,255,.08),
+    0 24px 70px rgba(0,0,0,.48);
+  animation: none;
+  transition:
+    width .55s cubic-bezier(.32,.72,0,1),
+    height .55s cubic-bezier(.32,.72,0,1),
+    transform .55s cubic-bezier(.32,.72,0,1),
+    border-radius .55s cubic-bezier(.32,.72,0,1),
+    box-shadow .4s ease;
+}
+/* while expanded the three dots hide (the sentence is the content now) */
+#notch-face.nf-think-open .nf-think-dots { display: none; }
+/* keep the whole island hoverable throughout a task, not just the pill */
+#notch-face.nf-thinking { pointer-events: auto; }
+
+#notch-face .nf-thinking-canvas {
+  position: absolute;
+  z-index: 8;
+  top: calc(var(--nf-notch-h) + 24px);
+  right: 5vw;
+  bottom: 22px;
+  left: 5vw;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-5px) scale(.985);
+  transform-origin: top center;
+  transition:
+    opacity .3s ease .16s,
+    transform .42s cubic-bezier(.32,.72,0,1),
+    visibility 0s linear .42s;
+  color: #f7f7f5;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", sans-serif;
+}
+
+#notch-face.nf-think-open .nf-thinking-canvas {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0) scale(1);
+  transition-delay: .12s, 0s, 0s;
+}
+
+#notch-face.nf-think-open .nf-band,
+#notch-face.nf-think-open .nf-cap,
+#notch-face.nf-think-open #nf-status,
+#notch-face.nf-think-open #nf-status-2,
+#notch-face.nf-think-open .nf-folds,
+#notch-face.nf-think-open .nf-privacy {
+  opacity: 0 !important;
+}
+
+#notch-face.nf-think-open .nf-band {
+  opacity: 1 !important;
+  right: auto;
+  left: 50%;
+  width: 78px;
+  transform: translateX(-50%);
+  pointer-events: auto;
+}
+
+/* Voice always owns the island. These guards keep the conversation legible
+   even if an async task update and a microphone event land in the same frame. */
+#notch-face.listen .nf-thinking-canvas,
+#notch-face.speak .nf-thinking-canvas {
+  opacity: 0 !important;
+  visibility: hidden !important;
+}
+
+#notch-face.listen .nf-band,
+#notch-face.listen .nf-cap,
+#notch-face.speak .nf-band,
+#notch-face.speak .nf-cap {
+  opacity: 1 !important;
+}
+
+#notch-face .nf-thinking-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+#notch-face .nf-thinking-brand {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: rgba(255,255,255,.92);
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: .01em;
+}
+
+#notch-face .nf-thinking-orb {
+  display: flex;
+  width: 16px;
+  height: 16px;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  border-radius: 50%;
+  background: linear-gradient(145deg, #f3a39a, #c9544a);
+  box-shadow: 0 0 14px rgba(232,120,110,.34);
+}
+
+#notch-face .nf-thinking-orb i {
+  width: 3px;
+  height: 4px;
+  border-radius: 50%;
+  background: #fff;
+}
+
+#notch-face .nf-thinking-state {
+  overflow: hidden;
+  margin-right: auto;
+  color: rgba(255,255,255,.5);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: .04em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#notch-face .nf-thinking-live {
+  display: grid;
+  width: 14px;
+  height: 14px;
+  place-items: center;
+  border: 1px solid rgba(232,120,110,.28);
+  border-radius: 50%;
+}
+
+#notch-face .nf-thinking-live i {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #e8786e;
+  box-shadow: 0 0 7px rgba(232,120,110,.8);
+  animation: nfThinkingLive 1.45s ease-in-out infinite;
+}
+
+@keyframes nfThinkingLive {
+  50% { opacity: .38; transform: scale(.72); }
+}
+
+#notch-face .nf-thinking-flow {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  min-width: 0;
+  padding-top: 7px;
+}
+
+#notch-face .nf-flow-node {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  gap: 2px;
+  padding: 6px 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+#notch-face .nf-flow-node small {
+  color: rgba(255,255,255,.38);
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+#notch-face .nf-flow-node span,
+#notch-face .nf-flow-node strong {
+  overflow: hidden;
+  color: rgba(255,255,255,.82);
+  font-size: clamp(15px, 1.35vw, 22px);
+  font-weight: 520;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#notch-face .nf-flow-node.active {
+  color: #fff;
+}
+
+#notch-face .nf-flow-arrow {
+  position: relative;
+  flex: 0 0 clamp(38px, 5vw, 82px);
+  height: 1px;
+  overflow: visible;
+  background: linear-gradient(90deg, rgba(232,120,110,.18), rgba(232,120,110,.8));
+}
+
+#notch-face .nf-flow-arrow::after {
+  content: "";
+  position: absolute;
+  top: -2px;
+  right: -1px;
+  width: 4px;
+  height: 4px;
+  border-top: 1px solid #e8786e;
+  border-right: 1px solid #e8786e;
+  transform: rotate(45deg);
+}
+
+#notch-face .nf-flow-arrow::before {
+  content: "";
+  position: absolute;
+  top: -2px;
+  left: 0;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #e8786e;
+  box-shadow: 0 0 9px rgba(232,120,110,.8);
+  animation: nfFlowTravel 1.1s linear infinite;
+}
+
+@keyframes nfFlowTravel {
+  from { transform: translateX(0) scale(.7); opacity: .2; }
+  50% { opacity: 1; }
+  to { transform: translateX(19px) scale(1); opacity: .35; }
+}
+
+#notch-face .nf-thinking-current {
+  overflow: hidden;
+  color: rgba(255,255,255,.94);
+  font-size: 13px;
+  font-weight: 520;
+  letter-spacing: -.015em;
+  line-height: 1.24;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#notch-face .nf-thinking-trail {
+  display: flex;
+  min-width: 0;
+  justify-content: flex-end;
+  gap: 5px;
+}
+
+#notch-face .nf-thinking-step {
+  display: block;
+  width: 4px;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 50%;
+  background: rgba(126,220,164,.62);
+  color: transparent;
+  font-size: 0;
+}
+
+#notch-face .nf-thinking-step::before { content: none; }
+
+#notch-face.nf-think-waiting .nf-thinking-orb {
+  background: linear-gradient(145deg, #ffd38d, #c7832d);
+  box-shadow: 0 0 16px rgba(255,190,92,.34);
+}
+
+#notch-face.nf-think-waiting .nf-thinking-state { color: rgba(255,200,116,.78); }
+#notch-face.nf-think-failed .nf-thinking-orb { background: linear-gradient(145deg, #ff8c83, #b63232); }
+#notch-face.nf-think-failed .nf-thinking-state { color: rgba(255,139,131,.8); }
+#notch-face.nf-think-complete .nf-thinking-orb { background: linear-gradient(145deg, #91e5ae, #2a9251); }
+#notch-face.nf-think-complete .nf-thinking-state { color: rgba(131,224,164,.82); }
+#notch-face.nf-think-complete .nf-thinking-live i {
+  animation: none;
+  background: #79d99a;
+  box-shadow: 0 0 7px rgba(121,217,154,.72);
+}
+
+@media (max-width: 720px) {
+  #notch-face.nf-thinking.nf-think-open .nf-pill {
+    width: 100vw;
+  }
+  #notch-face .nf-thinking-trail { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #notch-face.nf-thinking .nf-pill,
+  #notch-face .nf-thinking-canvas {
+    animation: none;
+    transition-duration: .01ms;
+  }
+}
+
+#notch-face.busy .nf-pill {
+  width: 250px;
+  height: calc(var(--nf-notch-h) + 26px);
+  border-radius: 0 0 20px 20px;
+  animation: nfAuthPulse 1.6s ease-in-out infinite;
+}
+
+/* Thinking text lives in the caption wings — busy's narrow pill was defined
+   later and beat captioning's 560px, crushing the wing into a 3-character
+   sliver. When both apply, the wide island wins (pulse kept). */
+#notch-face.busy.captioning .nf-pill {
+  width: calc(var(--nf-left-reach) + var(--nf-right-reach));
+  height: calc(var(--nf-notch-h) + 22px);
+  transform: translateX(calc((var(--nf-right-reach) - var(--nf-left-reach)) / 2));
+  border-radius: 0 0 16px 16px;
+  animation: none;
+}
+
+/* The cognition canvas is the terminal geometry for this state machine.
+   Keep this after .busy so no legacy activity pill can collapse it. */
+#notch-face.busy.captioning.nf-thinking.nf-think-open .nf-pill {
+  width: 100vw;
+  height: 25vh;
+  min-height: 180px;
+  max-height: 300px;
+  transform: translateX(0);
+  border-radius: 0 0 30px 30px;
+  animation: none;
+}
+
+/* Ambient glance: eyes dart around while he reads the screen. */
+#notch-face.scanning #nf-pupil-l,
+#notch-face.scanning #nf-pupil-r,
+#notch-face.scanning #nf-glint-l,
+#notch-face.scanning #nf-glint-r {
+  animation: nfScanLook 2s ease-in-out infinite;
+}
+
+@keyframes nfScanLook {
+  0%, 100% { transform: translateX(0); }
+  22% { transform: translateX(-3.4px); }
+  48% { transform: translateX(3.2px) translateY(-1.4px); }
+  74% { transform: translateX(-1.6px) translateY(1.2px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #notch-face.scanning #nf-pupil-l, #notch-face.scanning #nf-pupil-r { animation: none; }
+}
+
+#notch-face.music .nf-pill,
+#notch-face.live .nf-pill {
+  width: 260px;
+  height: calc(var(--nf-notch-h) + 34px);
+  border-radius: 0 0 22px 22px;
+}
+
+#notch-face.live .nf-pill {
+  animation: nfIslandBreath 3.8s ease-in-out infinite;
+}
+
+@keyframes nfIslandBreath {
+  0%, 100% { box-shadow: 0 0 12px rgba(232, 120, 110, 0.16), 0 0 26px rgba(232, 120, 110, 0.07); }
+  50% { box-shadow: 0 0 22px rgba(232, 120, 110, 0.34), 0 0 46px rgba(243, 154, 66, 0.14); }
+}
+
+/* Music light show: box-shadow is driven live in JS (--music-hue/--music-flash),
+   beat-synced when real system audio is readable, procedural otherwise. No CSS
+   keyframe here on purpose, it would fight the per-frame values. */
+#notch-face.music .nf-pill {
+  box-shadow:
+    0 0 calc(14px + 46px * var(--music-flash, 0)) calc(3px + 10px * var(--music-flash, 0))
+      hsla(var(--music-hue, 10), 82%, 66%, calc(0.26 + 0.6 * var(--music-flash, 0))),
+    0 0 calc(30px + 60px * var(--music-flash, 0))
+      hsla(calc(var(--music-hue, 10) + 45), 78%, 60%, calc(0.14 + 0.35 * var(--music-flash, 0)));
+}
+
+/* Timer done: the island celebrates for a beat. */
+#notch-face.nf-flash .nf-pill {
+  animation: nfFlash 0.65s ease-in-out 4;
+}
+
+@keyframes nfFlash {
+  0%, 100% { box-shadow: 0 0 12px rgba(232, 120, 110, 0.3); }
+  50% { box-shadow: 0 0 34px rgba(84, 222, 138, 0.85); }
+}
+
+/* Privacy dot: a quiet coral point whenever the mic session is live.
+   z-index matters: without it the dot paints UNDER the black cover (z2)
+   and is invisible in every state — which is exactly how it shipped broken. */
+#notch-face .nf-privacy {
+  position: absolute;
+  z-index: 5;
+  right: 10px;
+  bottom: 10px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #E8786E;
+  box-shadow: 0 0 6px rgba(232, 120, 110, 0.9);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+/* Captions already make the active voice state unambiguous. A privacy dot
+   pinned to the moving outer edge makes the island read as two pieces, so it
+   yields only while the continuous caption surface is visible. */
+#notch-face.captioning .nf-privacy {
+  opacity: 0 !important;
+  animation: none !important;
+}
+
+#notch-face.mic-live .nf-privacy {
+  opacity: 1;
+  background: #E8786E;
+  box-shadow: 0 0 6px rgba(232, 120, 110, 0.9);
+  animation: nfPrivacyPulse 2.2s ease-in-out infinite;
+}
+
+#notch-face.nf-dictation.mic-live .nf-privacy {
+  width: 4px;
+  height: 4px;
+  background: #3DE8B2;
+  box-shadow: 0 0 4px rgba(61,232,178,0.78);
+}
+
+/* Armed for the wake word: dim, steady, gray — a deliberately different look
+   from the bright coral pulse, so it reads as "listening on-device, nothing
+   sent" rather than "a live cloud session is streaming your voice." */
+/* Over the music light show a 5px dot drowns in the glow — go bigger with a
+   dark halo so "realtime is live" stays legible mid-party. */
+#notch-face.music.mic-live .nf-privacy {
+  width: 8px;
+  height: 8px;
+  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.6), 0 0 10px rgba(232, 120, 110, 1);
+}
+
+#notch-face.wake-armed:not(.mic-live) .nf-privacy {
+  opacity: 0.7;
+  background: rgba(210, 210, 210, 0.8);
+  box-shadow: 0 0 3px rgba(210, 210, 210, 0.5);
+  animation: none;
+}
+
+/* The keynote shimmer: every ~90s while he's home and idle, a white-to-blue
+   light draws the outline of the island — the exact trace from the
+   trybraino.com reveal (same 190x55 r16 path, same gradient, same dash-draw).
+   The top run hides behind the physical housing; the sides and bottom arc
+   catch the light. Driven by the .nf-shining class from JS. */
+#notch-face .nf-shine {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: var(--nf-notch-w, 190px);
+  height: calc(var(--nf-notch-h) + 22px);
+  overflow: visible;
+  z-index: 6;
+  opacity: 0;
+  transition: opacity 0.45s ease;
+  pointer-events: none;
+}
+#notch-face .nf-shine path { stroke-linecap: round; }
+#notch-face .nf-shine-core { stroke-width: 2.2; }
+#notch-face .nf-shine-glow { stroke-width: 7; opacity: 0.7; filter: blur(5px); }
+#notch-face.nf-shining .nf-shine { opacity: 1; transition: opacity 0.25s ease; }
+#notch-face.nf-shining .nf-shine path {
+  stroke-dasharray: 100;
+  stroke-dashoffset: 100;
+  animation: nfShineDraw 1.6s cubic-bezier(0.3, 0.5, 0.3, 1) forwards;
+}
+@keyframes nfShineDraw {
+  to { stroke-dashoffset: 0; }
+}
+
+/* Boot variant: the "very slow line" — same draw, twice the patience. */
+#notch-face.nf-shine-slow .nf-shine path {
+  animation-duration: 1.35s;
+}
+
+/* IOMI boot identity — the production form of the approved Instagraphics
+   study. The legacy face stays beneath the black island until authentication
+   is complete; IOMI and the operating-layer eyes own these few seconds. */
+#notch-face .nf-iomi-identity,
+#notch-face .nf-iomi-awake-eyes,
+#notch-face .nf-iomi-expanded-card {
+  position: absolute;
+  z-index: 5;
+  pointer-events: none;
+}
+
+#notch-face.nf-iomi-booting .nf-band,
+#notch-face.nf-iomi-booting .nf-folds,
+#notch-face.nf-iomi-booting #nf-status,
+#notch-face.nf-iomi-booting #nf-status-2,
+#notch-face.nf-iomi-booting .nf-privacy {
+  opacity: 0 !important;
+}
+
+#notch-face.nf-iomi-booting .nf-pill {
+  background: #000;
+}
+
+#notch-face.nf-iomi-booting .nf-shine {
+  opacity: .48;
+}
+
+#notch-face.nf-iomi-booting .nf-shine-core {
+  stroke-width: 1.7;
+  opacity: .72;
+}
+
+#notch-face.nf-iomi-booting .nf-shine-glow {
+  stroke-width: 5;
+  animation: nfIomiPerimeterBreathe 2.8s ease-in-out infinite;
+}
+
+@keyframes nfIomiPerimeterBreathe {
+  0%, 100% { opacity: .18; filter: blur(3px); }
+  50% { opacity: .34; filter: blur(5px); }
+}
+
+#notch-face .nf-iomi-identity {
+  top: var(--nf-notch-h);
+  left: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  width: 52px;
+  height: 22px;
+  color: rgba(244, 241, 232, .64);
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0;
+  opacity: 0;
+  filter: blur(2px);
+  transform: translateX(-50%) scale(.32);
+  transition: opacity .3s ease, filter .36s ease, transform .42s cubic-bezier(.4,0,.8,.2);
+}
+
+#notch-face.nf-iomi-auth .nf-iomi-identity {
+  opacity: 1;
+  filter: blur(0);
+  transform: translateX(-50%) scale(1);
+}
+
+#notch-face .nf-iomi-identity span {
+  opacity: 0;
+  transform: translateY(2px);
+}
+
+#notch-face.nf-iomi-auth .nf-iomi-identity span {
+  animation: nfIomiLetterIn .4s cubic-bezier(.2,.7,.2,1) forwards;
+}
+
+#notch-face.nf-iomi-auth .nf-iomi-identity span:nth-child(1) { animation-delay: .1s; }
+#notch-face.nf-iomi-auth .nf-iomi-identity span:nth-child(2) { animation-delay: .55s; }
+#notch-face.nf-iomi-auth .nf-iomi-identity span:nth-child(3) { animation-delay: 1s; }
+#notch-face.nf-iomi-auth .nf-iomi-identity span:nth-child(4) { animation-delay: 1.45s; }
+
+@keyframes nfIomiLetterIn {
+  to { opacity: 1; transform: none; }
+}
+
+#notch-face .nf-iomi-awake-eyes {
+  top: calc(var(--nf-notch-h) + 9px);
+  left: 50%;
+  display: flex;
+  gap: 7px;
+  opacity: 0;
+  filter: blur(3px);
+  transform: translateX(-50%) scale(.28);
+  transition: opacity .36s ease .08s, filter .44s ease, transform .52s cubic-bezier(.16,.9,.25,1);
+}
+
+#notch-face .nf-iomi-awake-eyes i,
+#notch-face .nf-iomi-guide-eyes i {
+  display: block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #f4e4dc;
+  box-shadow: 0 0 7px rgba(244,228,220,.28);
+}
+
+#notch-face.nf-iomi-awake .nf-iomi-identity {
+  opacity: 0;
+  filter: blur(2px);
+  transform: translateX(-50%) scale(.32);
+}
+
+#notch-face.nf-iomi-awake .nf-iomi-awake-eyes {
+  opacity: 1;
+  filter: blur(0);
+  transform: translateX(-50%) scale(1);
+}
+
+#notch-face .nf-iomi-expanded-card {
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transform: translateY(10px);
+  transition: opacity .4s ease .3s, transform .5s ease .28s;
+}
+
+#notch-face.nf-iomi-expanded .nf-pill {
+  width: 610px;
+  height: 180px;
+  border-radius: 0 0 38px 38px;
+}
+
+#notch-face.nf-iomi-expanded .nf-shine {
+  width: 610px;
+  height: 180px;
+}
+
+#notch-face.nf-iomi-expanded .nf-iomi-awake-eyes {
+  opacity: 0;
+}
+
+#notch-face.nf-iomi-expanded .nf-iomi-expanded-card {
+  opacity: 1;
+  transform: none;
+}
+
+#notch-face .nf-iomi-greeting {
+  width: 325px;
+}
+
+#notch-face .nf-iomi-greeting strong {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  color: #f3efe5;
+  font-size: 31px;
+  font-weight: 600;
+  letter-spacing: -.035em;
+}
+
+#notch-face .nf-iomi-greeting strong span {
+  opacity: 0;
+  filter: blur(5px);
+  transform: translateY(7px);
+}
+
+#notch-face.nf-iomi-expanded .nf-iomi-greeting strong span {
+  animation: nfIomiGreetingWord .52s cubic-bezier(.2,.75,.2,1) forwards;
+}
+
+#notch-face.nf-iomi-expanded .nf-iomi-greeting strong span:nth-child(1) { animation-delay: .43s; }
+#notch-face.nf-iomi-expanded .nf-iomi-greeting strong span:nth-child(2) { animation-delay: .76s; }
+#notch-face.nf-iomi-expanded .nf-iomi-greeting strong span:nth-child(3) { animation-delay: 1.09s; }
+
+@keyframes nfIomiGreetingWord {
+  to { opacity: 1; filter: blur(0); transform: none; }
+}
+
+#notch-face .nf-iomi-greeting small,
+#notch-face .nf-iomi-wake-guide small {
+  display: block;
+  margin-top: 10px;
+  color: rgba(243,239,229,.42);
+  font-size: 15px;
+}
+
+#notch-face .nf-iomi-divider {
+  width: 1px;
+  height: 0;
+  margin: 0 28px;
+  background: linear-gradient(180deg, rgba(244,207,135,.16), rgba(236,128,120,.58), rgba(119,156,255,.16));
+  opacity: 0;
+  transition: height .65s cubic-bezier(.2,.8,.2,1) .52s, opacity .3s ease .5s;
+}
+
+#notch-face.nf-iomi-expanded .nf-iomi-divider {
+  height: 92px;
+  opacity: 1;
+}
+
+#notch-face .nf-iomi-wake-guide {
+  width: 165px;
+  opacity: 0;
+  transform: translateX(8px);
+  transition: opacity .42s ease 1.25s, transform .52s ease 1.22s;
+}
+
+#notch-face.nf-iomi-expanded .nf-iomi-wake-guide {
+  opacity: 1;
+  transform: none;
+}
+
+#notch-face .nf-iomi-guide-eyes {
+  display: flex;
+  gap: 7px;
+  margin-bottom: 12px;
+}
+
+#notch-face .nf-iomi-wake-guide > div:not(.nf-iomi-guide-eyes) {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 7px;
+}
+
+#notch-face .nf-iomi-wake-guide kbd {
+  min-width: 29px;
+  padding: 5px 7px;
+  border: 1px solid rgba(255,255,255,.14);
+  border-bottom-color: rgba(255,255,255,.28);
+  border-radius: 7px;
+  color: rgba(255,255,255,.76);
+  background: rgba(255,255,255,.055);
+  font: 500 11px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+  text-align: center;
+}
+
+#notch-face .nf-iomi-wake-guide em {
+  color: rgba(243,239,229,.34);
+  font-size: 10px;
+  font-style: normal;
+}
+
+#walker.nf-iomi-boot-jump svg {
+  animation: nfIomiWalkerJump 1.25s cubic-bezier(.18,.75,.25,1);
+}
+
+@keyframes nfIomiWalkerJump {
+  0% { transform: translateY(-30px) scale(.2); opacity: 0; }
+  28% { opacity: 1; }
+  58% { transform: translateY(-12px) scale(1.08) rotate(-3deg); }
+  78% { transform: translateY(5px) scale(.96) rotate(2deg); }
+  100% { transform: none; opacity: 1; }
+}
+
+/* The coral wave (from the site reveal, verbatim): a transparent band
+   travels across the black cover, left to right, and the coral brain that is
+   ALWAYS under the glass shows through the moving gap — his true colors. */
+#notch-face.nf-coral .nf-pill::after {
+  opacity: 1;
+  background: linear-gradient(90deg, #000 0 38%, rgba(0, 0, 0, 0) 46% 54%, #000 62% 100%);
+  background-size: 300% 100%;
+  background-position: 100% 0;
+  animation: nfCoralWave 0.7s cubic-bezier(0.4, 0.1, 0.4, 1) 1 both;
+}
+
+@keyframes nfCoralWave {
+  from { background-position: 100% 0; }
+  to { background-position: 0% 0; }
+}
+
+#notch-face.nf-coral .nf-folds { opacity: 1; }
+
+/* The wink (site reveal, verbatim): right eye dips closed for a beat while
+   the left stays open. The wink IS the greeting. */
+#notch-face.nf-wink #nf-eye-r {
+  animation: nfWink 0.6s ease-in-out 1;
+}
+
+@keyframes nfWink {
+  0%, 100% { transform: scaleY(1); }
+  35%, 65% { transform: scaleY(0.08); }
+}
+
+/* Cowork mode armed: steady amber dot — a third state, deliberately distinct
+   from bright-coral-pulsing (live cloud session) and dim-gray (wake word
+   armed on-device). He is watching the screen on an interval, not the mic. */
+#notch-face.cowork:not(.mic-live) .nf-privacy {
+  opacity: 0.85;
+  background: #F3C56B;
+  box-shadow: 0 0 5px rgba(243, 197, 107, 0.8);
+  animation: none;
+}
+
+@keyframes nfPrivacyPulse {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
+}
+
+/* The notch ticker replaces the floating status pill. */
+#status-pill { display: none !important; }
+
+#notch-face.speak #nf-mouth-talk {
+  display: block !important;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: nfTalk 0.28s ease-in-out infinite;
+}
+
+@keyframes nfTalk {
+  0%, 100% { transform: scaleY(0.45); }
+  50% { transform: scaleY(1.25); }
+}
+
+#notch-face .nf-viz span {
+  width: 3px;
+  border-radius: 2px;
+  background: #FFF3EE;
+  box-shadow: 0 0 6px rgba(255, 240, 235, 0.6);
+  height: 6px;
+  animation: nfBars 0.7s ease-in-out infinite;
+}
+
+#notch-face .nf-viz span:nth-child(2) { animation-delay: 0.09s; }
+#notch-face .nf-viz span:nth-child(3) { animation-delay: 0.18s; animation-duration: 0.62s; }
+#notch-face .nf-viz span:nth-child(4) { animation-delay: 0.27s; }
+#notch-face .nf-viz span:nth-child(5) { animation-delay: 0.36s; animation-duration: 0.78s; }
+#notch-face .nf-viz span:nth-child(6) { animation-delay: 0.45s; }
+#notch-face .nf-viz span:nth-child(7) { animation-delay: 0.54s; animation-duration: 0.66s; }
+#notch-face .nf-viz span:nth-child(8) { animation-delay: 0.63s; }
+#notch-face .nf-viz span:nth-child(9) { animation-delay: 0.72s; animation-duration: 0.74s; }
+
+#notch-face .nf-eye {
+  transform-box: fill-box;
+  transform-origin: center;
+  opacity: 1;
+  transition: transform 0.55s ease, opacity 0.5s ease;
+}
+
+/* Asleep / dozing: eyes closed. Used during boot (before auth completes) and
+   whenever the walker is out roaming with nothing happening — one soul, so the
+   home face rests while the body is away. */
+#notch-face.asleep .nf-eye {
+  transform: scaleY(0.08);
+}
+
+#notch-face.asleep #nf-mouth-idle {
+  d: path("M 54 44 Q 60 46.5 66 44");
+}
+
+/* Beat 3: eyes-open greeting glow — one bright warm pulse, then settle. */
+#notch-face.nf-greet .nf-pill {
+  animation: nfGreetGlow 1.1s ease-out 1;
+}
+
+@keyframes nfGreetGlow {
+  0% { box-shadow: 0 0 0 rgba(232, 120, 110, 0); }
+  30% { box-shadow: 0 0 34px rgba(232, 120, 110, 0.85), 0 0 60px rgba(243, 154, 66, 0.4); }
+  100% { box-shadow: 0 0 12px rgba(232, 120, 110, 0.16), 0 0 26px rgba(232, 120, 110, 0.07); }
+}
+
+/* Boot: authenticating — island extends, cool pulse, status caption. */
+#notch-face.nf-auth .nf-pill {
+  width: 250px;
+  height: calc(var(--nf-notch-h) + 44px);
+  border-radius: 0 0 26px 26px;
+  animation: nfAuthPulse 1.3s ease-in-out infinite;
+}
+
+#notch-face.nf-auth-ok .nf-pill {
+  box-shadow: 0 0 30px rgba(84, 222, 138, 0.75);
+}
+
+#notch-face.nf-auth-err .nf-pill {
+  box-shadow: 0 0 30px rgba(255, 92, 92, 0.75);
+}
+
+/* The boot pulse colour is a variable so a Voice Command mode can drive it:
+   default is the cool blue, a running mode swaps in whatever colour was
+   picked on the dashboard. */
+#notch-face { --nf-boot-color: 122, 162, 255; }
+
+@keyframes nfAuthPulse {
+  0%, 100% { box-shadow: 0 0 14px rgba(var(--nf-boot-color), 0.35); }
+  50% { box-shadow: 0 0 30px rgba(var(--nf-boot-color), 0.7); }
+}
+
+#nf-status {
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  bottom: 6px;
+  text-align: center;
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(255, 240, 235, 0.9);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+  white-space: nowrap;
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+#nf-status .nf-status-inner {
+  display: inline-block;
+}
+
+#nf-status .nf-status-inner.marquee {
+  animation: nfMarquee 7s ease-in-out infinite alternate;
+}
+
+@keyframes nfMarquee {
+  0%, 12% { transform: translateX(0); }
+  88%, 100% { transform: translateX(var(--nf-scroll, -40px)); }
+}
+
+#nf-status.show {
+  opacity: 1;
+}
+
+#notch-face.nf-dictation #nf-status {
+  left: 51px;
+  right: 24px;
+  bottom: 7px;
+  text-align: left;
+  font-size: 8.5px;
+  letter-spacing: 0.1em;
+  color: rgba(222, 255, 245, 0.86);
+}
+
+#notch-face.nf-dictation.listen:not(.captioning) .nf-viz {
+  display: flex;
+  left: 18px;
+  bottom: 8px;
+  height: 10px;
+  gap: 2px;
+  transform: none;
+}
+
+#notch-face.nf-dictation .nf-viz span {
+  width: 2px;
+  max-height: 10px;
+  background: #72EDC5;
+  box-shadow: 0 0 3px rgba(61,232,178,0.44);
+  animation-duration: 1.1s;
+}
+
+#notch-face.blink .nf-eye {
+  animation: nfBlink 0.22s ease-in-out;
+}
+
+#notch-face.listen .nf-eye {
+  transform: scaleY(1.06);
+}
+
+/* The iPhone "Hey Siri" pattern: armed but idle = a sleepy half-lidded
+   shade (still there, still listening for the wake word locally, just
+   resting), not the wide-open idle look. A live session snaps them open —
+   "he wakes up" — before the island itself takes over the visual. */
+/* Dozing: a proper closed eyelid curve replaces the open eye, rather than
+   squashing it flat (a squash read as broken, not sleepy). */
+#notch-face .nf-lid {
+  opacity: 0;
+  transition: opacity 0.5s ease;
+}
+
+#notch-face.dozing .nf-eye {
+  opacity: 0;
+  transition: opacity 0.5s ease;
+}
+
+#notch-face.dozing .nf-lid {
+  opacity: 1;
+}
+
+#notch-face.awake .nf-eye {
+  transform: scaleY(1.1);
+}
+
+#notch-face .nf-sonar {
+  position: absolute;
+  top: calc(var(--nf-notch-h) + 10px);
+  left: 50%;
+  width: 2px;
+  height: 2px;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+}
+
+/* Sonar is BACK (user call): with the screen glow now music-only, the rings
+   are the listening signal again — notch-local, no full-screen anything. */
+#notch-face.listen .nf-sonar { opacity: 1; }
+
+#notch-face .nf-sonar i {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform: translate(-50%, -50%);
+  width: 120px;
+  height: 44px;
+  border-radius: 999px;
+  border: 1.5px solid #E8786E;
+  opacity: 0;
+}
+
+#notch-face.listen .nf-sonar i { animation: nfSonar 2.4s ease-out infinite; }
+#notch-face.listen .nf-sonar i:nth-child(2) { animation-delay: 0.8s; }
+#notch-face.listen .nf-sonar i:nth-child(3) { animation-delay: 1.6s; }
+
+#notch-face.nf-dictation.listen .nf-sonar i {
+  border-color: #3DE8B2;
+  border-width: 1px;
+  animation-name: nfYapSonar;
+  animation-duration: 2.8s;
+}
+
+#notch-face.nf-dictation.listen .nf-sonar i:nth-child(2) {
+  animation-delay: 1.4s;
+}
+
+#notch-face.nf-dictation.listen .nf-sonar i:nth-child(3) {
+  display: none;
+}
+
+@keyframes nfSonar {
+  0% { width: 120px; height: 44px; opacity: 0.6; border-width: 2px; }
+  100% { width: 340px; height: 150px; opacity: 0; border-width: 0.5px; }
+}
+
+@keyframes nfYapSonar {
+  0% { width: 110px; height: 30px; opacity: 0.28; }
+  100% { width: 238px; height: 76px; opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #notch-face.listen .nf-sonar i { animation: none; opacity: 0.4; }
+  #notch-face.nf-dictation.listen .nf-pill {
+    animation: none;
+    box-shadow: 0 0 0 1px rgba(61,232,178,0.6), 0 0 10px 1px rgba(61,232,178,0.24);
+  }
+  #walker.dictation-listening::before,
+  #walker.dictation-listening::after,
+  #walker.dictation-listening svg {
+    animation: none;
+  }
+}
+
+@keyframes nfBars {
+  0%, 100% { height: 6px; }
+  50% { height: 20px; }
+}
+
+@keyframes nfBlink {
+  0%, 100% { transform: scaleY(1); }
+  50% { transform: scaleY(0.12); }
+}
+
+/* Musical notes drifting out from under the notch while music plays. */
+#notch-notes {
+  position: fixed;
+  top: 0;
+  left: 50%;
+  width: 0;
+  height: 0;
+  z-index: 56;
+  pointer-events: none;
+}
+
+#notch-notes span {
+  position: absolute;
+  top: 8px;
+  left: 0;
+  font-size: 15px;
+  color: rgba(232, 120, 110, 0.9);
+  text-shadow: 0 0 8px rgba(232, 120, 110, 0.55);
+  animation: noteFloat 3.4s ease-out forwards;
+}
+
+#notch-notes span.blue {
+  color: rgba(122, 162, 255, 0.9);
+  text-shadow: 0 0 8px rgba(122, 162, 255, 0.55);
+}
+
+@keyframes noteFloat {
+  0% { opacity: 0; transform: translate(var(--dx0), 4px) scale(0.7) rotate(0deg); }
+  14% { opacity: 0.95; }
+  100% { opacity: 0; transform: translate(var(--dx), 80px) scale(1.08) rotate(var(--rot)); }
+}
+
+/* Music mode: a full light show, driven live in JS via --music-hue/--music-flash
+   (real beat-detected system audio when readable, a humanized procedural beat
+   clock otherwise — always something, never silent). */
+#edge-glow.music {
+  opacity: calc(0.55 + 0.35 * var(--music-flash, 0));
+}
+
+#edge-glow.music::before {
+  box-shadow:
+    inset 0 0 calc(64px + 90px * var(--music-flash, 0)) calc(12px + 22px * var(--music-flash, 0))
+      hsla(var(--music-hue, 10), 78%, 62%, calc(0.20 + 0.5 * var(--music-flash, 0))),
+    inset 0 0 calc(26px + 40px * var(--music-flash, 0)) calc(5px + 8px * var(--music-flash, 0))
+      hsla(calc(var(--music-hue, 10) + 55), 74%, 60%, calc(0.14 + 0.34 * var(--music-flash, 0)));
+}
+
+@keyframes edgeBreath {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
+}
+
+@keyframes edgePulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+#point-ring {
+  position: fixed;
+  width: 58px;
+  height: 58px;
+  margin: -29px 0 0 -29px;
+  border-radius: 50%;
+  border: 3px solid rgba(255, 122, 89, 0.95);
+  box-shadow: 0 0 26px rgba(255, 122, 89, 0.85), inset 0 0 18px rgba(255, 122, 89, 0.45);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 60;
+  transition: opacity 0.25s ease;
+}
+
+#point-ring.show {
+  opacity: 1;
+  animation: pointPulse 1.1s ease-in-out infinite;
+}
+
+@keyframes pointPulse {
+  0% { transform: scale(0.72); }
+  50% { transform: scale(1.12); }
+  100% { transform: scale(0.72); }
+}
+
+#walker-flip {
+  width: 64px;
+  height: 78px;
+  transform-origin: center bottom;
+  position: relative;
+  z-index: 1;
+  will-change: transform;
+}
+
+#walker-flip.resizing {
+  transition: transform 720ms cubic-bezier(0.18, 1.32, 0.34, 1);
+}
+
+#braino-customizer {
+  position: fixed;
+  z-index: 90;
+  box-sizing: border-box;
+  width: 286px;
+  padding: 9px 16px 16px;
+  border-radius: 20px;
+  color: rgba(255, 255, 255, 0.94);
+  background:
+    linear-gradient(180deg, rgba(67, 67, 70, 0.82), rgba(35, 35, 37, 0.88));
+  border: 0.5px solid rgba(255, 255, 255, 0.2);
+  box-shadow:
+    0 24px 70px rgba(0, 0, 0, 0.38),
+    0 4px 16px rgba(0, 0, 0, 0.22),
+    inset 0 0.5px 0 rgba(255, 255, 255, 0.18);
+  backdrop-filter: blur(32px) saturate(170%);
+  -webkit-backdrop-filter: blur(32px) saturate(170%);
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(7px) scale(0.975);
+  transform-origin: center bottom;
+  transition: opacity 160ms ease, transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1), visibility 160ms ease;
+}
+
+#braino-customizer.show {
+  pointer-events: auto;
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0) scale(1);
+}
+
+.braino-customizer-handle {
+  width: 34px;
+  height: 4px;
+  margin: 0 auto 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.braino-customizer-head,
+.braino-customizer-actions,
+.braino-customizer-scale {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.braino-customizer-head {
+  justify-content: flex-start;
+}
+
+.braino-customizer-icon {
+  position: relative;
+  flex: 0 0 auto;
+  width: 35px;
+  height: 35px;
+  margin-right: 10px;
+  border-radius: 9px;
+  background: linear-gradient(145deg, #5e5e62, #3d3d40);
+  border: 0.5px solid rgba(255, 255, 255, 0.2);
+  box-shadow: inset 0 0.5px 0 rgba(255, 255, 255, 0.2), 0 3px 8px rgba(0, 0, 0, 0.2);
+}
+
+.braino-customizer-icon::before,
+.braino-customizer-icon::after,
+.braino-customizer-icon span {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  border: 1.5px solid rgba(255, 255, 255, 0.88);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.braino-customizer-icon::before {
+  width: 19px;
+  height: 19px;
+}
+
+.braino-customizer-icon::after {
+  width: 3px;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.braino-customizer-icon span {
+  width: 11px;
+  height: 11px;
+  border-color: rgba(255, 255, 255, 0.52);
+}
+
+.braino-customizer-heading {
+  min-width: 0;
+  flex: 1;
+}
+
+.braino-customizer-kicker {
+  margin-top: 2px;
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 10.5px;
+  font-weight: 450;
+  letter-spacing: -0.005em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.braino-customizer-title {
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.braino-customizer-prompt {
+  margin: 13px 1px 0;
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 11px;
+  font-weight: 430;
+  line-height: 1.36;
+  letter-spacing: -0.006em;
+}
+
+#braino-size-value {
+  min-width: 42px;
+  margin-left: 8px;
+  color: rgba(255, 255, 255, 0.68);
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  font-weight: 550;
+  text-align: right;
+}
+
+.braino-customizer-control {
+  margin: 17px -1px 0;
+  padding: 13px 12px 10px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.17);
+  border: 0.5px solid rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+
+#braino-size-range {
+  display: block;
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  height: 16px;
+  margin: 0 0 5px;
+  background: transparent;
+  cursor: ew-resize;
+}
+
+#braino-size-range::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #0a84ff, #64a9ff);
+  box-shadow: 0 0.5px 1px rgba(0, 0, 0, 0.35);
+}
+
+#braino-size-range::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 15px;
+  height: 15px;
+  margin-top: -5.5px;
+  border: 0.5px solid rgba(0, 0, 0, 0.22);
+  border-radius: 50%;
+  background: linear-gradient(180deg, #ffffff, #e9e9eb);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.38), inset 0 0.5px 0 #fff;
+}
+
+.braino-customizer-scale {
+  color: rgba(255, 255, 255, 0.38);
+  font-size: 9px;
+  font-weight: 500;
+}
+
+.braino-customizer-section {
+  margin: 14px -1px 0;
+}
+
+.braino-customizer-section-title {
+  margin: 0 1px 8px;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.braino-character-row {
+  display: flex;
+  gap: 8px;
+}
+
+.braino-character-option {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 9px 11px;
+  border-radius: 12px;
+  border: 0.5px solid rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.17);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.12);
+  color: rgba(255, 255, 255, 0.72);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.braino-character-option.active {
+  border-color: rgba(10, 132, 255, 0.7);
+  background: rgba(10, 132, 255, 0.16);
+  color: #fff;
+}
+
+.braino-character-name {
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.braino-character-blurb {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 10px;
+  font-weight: 460;
+}
+
+.braino-character-option.active .braino-character-blurb {
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.braino-customizer-actions {
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.braino-customizer-actions button {
+  flex: 1;
+  min-height: 30px;
+  border: 0.5px solid rgba(255, 255, 255, 0.14);
+  border-radius: 7px;
+  color: rgba(255, 255, 255, 0.82);
+  background: rgba(255, 255, 255, 0.09);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 550;
+  cursor: pointer;
+  box-shadow: inset 0 0.5px 0 rgba(255, 255, 255, 0.12), 0 1px 2px rgba(0, 0, 0, 0.18);
+}
+
+.braino-customizer-actions button:active {
+  filter: brightness(0.88);
+}
+
+#braino-customizer-done {
+  border-color: rgba(0, 91, 210, 0.78);
+  color: #fff;
+  background: linear-gradient(180deg, #1687f8, #0875e1);
+  box-shadow: inset 0 0.5px 0 rgba(255, 255, 255, 0.28), 0 1px 3px rgba(0, 85, 190, 0.35);
+}
+
+#speech-bubble {
+  position: absolute;
+  left: 50%;
+  top: calc(50% - 120px);
+  max-width: min(760px, calc(100vw - 72px));
+  pointer-events: none;
+  transform: translate(-50%, calc(-100% + 10px)) scale(0.96);
+  padding: 13px 18px;
+  border-radius: 22px;
+  color: rgba(255,255,255,0.94);
+  background:
+    linear-gradient(135deg, rgba(27,23,19,0.88), rgba(27,23,19,0.68)),
+    radial-gradient(circle at 20% 0%, rgba(232,120,110,0.22), transparent 58%);
+  border: 1px solid rgba(255,255,255,0.16);
+  box-shadow: 0 18px 56px rgba(0,0,0,0.34);
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.36;
+  letter-spacing: 0;
+  opacity: 0;
+  transition: opacity 180ms ease, transform 180ms ease;
+  white-space: normal;
+}
+
+#speech-bubble.show {
+  opacity: 1;
+  transform: translate(-50%, -100%) scale(1);
+}
+
+#speech-bubble.reply-karaoke {
+  color: transparent;
+}
+
+#speech-bubble .reply-caption-word {
+  color: rgba(255, 255, 255, 0.34);
+  transition: color 120ms ease, text-shadow 120ms ease;
+}
+
+#speech-bubble .reply-caption-word.spoken {
+  color: rgba(255, 255, 255, 0.96);
+}
+
+#speech-bubble .reply-caption-word.speaking-now {
+  color: #ff948a;
+  text-shadow: 0 0 16px rgba(232, 120, 110, 0.5);
+}
+
+#status-pill {
+  position: absolute;
+  right: 26px;
+  top: 24px;
+  display: none;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(27,23,19,0.52);
+  border: 1px solid rgba(255,255,255,0.12);
+  color: rgba(255,255,255,0.82);
+  box-shadow: 0 12px 34px rgba(0,0,0,0.28);
+  backdrop-filter: blur(10px) saturate(130%);
+  -webkit-backdrop-filter: blur(10px) saturate(130%);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+#status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #9CA3AF;
+  box-shadow: 0 0 0 0 rgba(156,163,175,0.35);
+}
+
+#status-pill.ready #status-dot { background: #3DA35D; }
+#status-pill.connecting #status-dot { background: #A78BFA; animation: dotPulse 0.9s ease-in-out infinite; }
+#status-pill.listening #status-dot { background: #60A5FA; animation: dotPulse 1s ease-in-out infinite; }
+#status-pill.hearing #status-dot { background: #34D399; animation: dotPulse 0.55s ease-in-out infinite; }
+#status-pill.captured #status-dot { background: #38BDF8; animation: dotPulse 0.75s ease-in-out infinite; }
+#status-pill.thinking #status-dot { background: #F59E0B; animation: dotPulse 0.8s ease-in-out infinite; }
+#status-pill.speaking #status-dot { background: #E8786E; animation: dotPulse 0.7s ease-in-out infinite; }
+#status-pill.done #status-dot { background: #22C55E; }
+#status-pill.error #status-dot { background: #EF4444; }
+
+#file-strip {
+  position: absolute;
+  left: 50%;
+  bottom: 24px;
+  display: flex;
+  gap: 8px;
+  max-width: min(900px, calc(100vw - 260px));
+  transform: translateX(-50%);
+  opacity: 0;
+  transition: opacity 160ms ease;
+}
+
+#file-strip.show {
+  opacity: 1;
+}
+
+.file-chip {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 7px 10px;
+  border-radius: 999px;
+  background: rgba(255,251,247,0.76);
+  color: #1B1713;
+  border: 1px solid rgba(255,255,255,0.34);
+  box-shadow: 0 10px 26px rgba(0,0,0,0.16);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+@keyframes dotPulse {
+  50% { transform: scale(1.32); box-shadow: 0 0 0 8px rgba(232,120,110,0.10); }
+}
+
+@keyframes voiceSonar {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.46); }
+  12% { opacity: 0.78; }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(3.3); }
+}
+
+@keyframes macVoiceConnecting {
+  0%, 100% { filter: drop-shadow(0 0 8px rgba(56,189,248,0.6)); }
+  50% { filter: drop-shadow(0 0 16px rgba(56,189,248,0.85)); }
+}
+
+@keyframes macWalkerListenGlow {
+  0%, 100% { filter: drop-shadow(0 0 10px rgba(232,120,110,0.55)) drop-shadow(0 0 4px rgba(246,168,162,0.4)); }
+  50% { filter: drop-shadow(0 0 18px rgba(232,120,110,0.75)) drop-shadow(0 0 8px rgba(246,168,162,0.55)); }
+}
+
+@keyframes macWalkerSpeakGlow {
+  0%, 100% { filter: drop-shadow(0 0 10px rgba(99,102,241,0.75)) drop-shadow(0 0 4px rgba(139,92,246,0.5)); }
+  50% { filter: drop-shadow(0 0 20px rgba(99,102,241,0.95)) drop-shadow(0 0 9px rgba(139,92,246,0.65)); }
+}
+
+@keyframes macAuthGlow {
+  0%, 100% {
+    filter:
+      drop-shadow(0 2px 10px rgba(200,84,74,0.3))
+      drop-shadow(0 0 0 rgba(255,210,50,0));
+  }
+  50% {
+    filter:
+      drop-shadow(0 0 26px rgba(255,210,50,1))
+      drop-shadow(0 0 50px rgba(255,175,0,0.6));
+  }
+}
+
+@keyframes macAuthSuccess {
+  0%, 100% {
+    filter: drop-shadow(0 2px 12px rgba(40,180,70,0.45));
+  }
+  50% {
+    filter:
+      drop-shadow(0 0 28px rgba(80,230,110,1))
+      drop-shadow(0 0 54px rgba(40,180,70,0.7));
+  }
+}
+
+@keyframes laneListen {
+  50% { filter: drop-shadow(0 0 18px rgba(96,165,250,0.28)); }
+}
+
+@keyframes laneSpeak {
+  50% { filter: drop-shadow(0 0 18px rgba(232,120,110,0.34)); }
+}
+
+/* ── Meeting recorder: liquid-glass live-notes panel (ported from the
+   extension's #__sb_bubble__ glass), pinned bottom-right while recording.
+   The window itself is content-protected, so this never appears in a
+   screen share — the user sees it, the meeting does not. ── */
+#meeting-panel {
+  position: fixed;
+  right: 22px;
+  bottom: 96px;
+  width: 340px;
+  max-height: 62vh;
+  display: none;
+  flex-direction: column;
+  border-radius: 20px;
+  overflow: hidden;
+  z-index: 58;
+  color: #F3ECE4;
+  background: rgba(26, 22, 19, 0.42);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.5), inset 1px 1px 1px rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(26px) saturate(180%);
+  -webkit-backdrop-filter: blur(26px) saturate(180%);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  opacity: 0;
+  transform: translateY(10px) scale(0.98);
+  transition: opacity 0.3s ease, transform 0.3s cubic-bezier(0.34, 1.25, 0.4, 1);
+  pointer-events: none;
+}
+#meeting-panel.on {
+  display: flex;
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+#meeting-panel .mp-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 12px 15px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.09);
+  font-size: 12px;
+}
+#meeting-panel .mp-rec {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: #FF6B6B;
+}
+#meeting-panel .mp-rec i {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: #FF5C5C;
+  box-shadow: 0 0 8px rgba(255, 92, 92, 0.9);
+  animation: mpPulse 1.5s ease-in-out infinite;
+}
+@keyframes mpPulse { 0%, 100% { opacity: 0.5; } 50% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { #meeting-panel .mp-rec i { animation: none; } }
+#meeting-panel .mp-title { flex: 1; font-weight: 600; opacity: 0.92; }
+#meeting-panel .mp-time { font-variant-numeric: tabular-nums; opacity: 0.7; }
+#meeting-panel .mp-invisible {
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+  color: rgba(150, 220, 170, 0.9);
+  background: rgba(90, 200, 130, 0.12);
+  padding: 2px 7px;
+  border-radius: 999px;
+}
+
+#meeting-panel .mp-body {
+  padding: 12px 15px 15px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+#meeting-panel .mp-notes-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(243, 236, 228, 0.5);
+  margin-bottom: 4px;
+}
+#meeting-panel .mp-notes {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+#meeting-panel .mp-note {
+  font-size: 13px;
+  line-height: 1.45;
+  padding-left: 15px;
+  position: relative;
+  color: rgba(243, 236, 228, 0.95);
+  animation: mpNoteIn 0.4s ease;
+}
+#meeting-panel .mp-note::before {
+  content: "";
+  position: absolute;
+  left: 2px; top: 8px;
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  background: #E8786E;
+}
+@keyframes mpNoteIn { from { opacity: 0; transform: translateX(-6px); } to { opacity: 1; transform: none; } }
+#meeting-panel .mp-caption {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 10.5px;
+  line-height: 1.4;
+  color: rgba(243, 236, 228, 0.42);
+  min-height: 14px;
+}
+
+/* Meeting panel: draggable (grab the header), a stop button, pointer-events
+   on so it's interactive — the rest of the overlay stays click-through. */
+#meeting-panel { pointer-events: auto; }
+#meeting-panel .mp-head { cursor: grab; user-select: none; }
+#meeting-panel .mp-head.dragging { cursor: grabbing; }
+#meeting-panel .mp-stop {
+  border: 1px solid rgba(255, 92, 92, 0.5);
+  background: rgba(255, 92, 92, 0.14);
+  color: #FF8A82;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 4px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+#meeting-panel .mp-stop:hover { background: rgba(255, 92, 92, 0.26); }
+#meeting-panel .mp-stop:focus-visible { outline: 2px solid #FF8A82; outline-offset: 2px; }
+
+/* Notch recording pill: a red dot + timer live in the notch ticker while a
+   meeting records, so you can glance up and see it — and stop from there. */
+#notch-face.recording .nf-pill { box-shadow: 0 0 24px rgba(255, 92, 92, 0.5); }
+
+/* ══════════════════ Notch tray: the hover-expanded island ══════════════════
+   The notch is now touchable. Hover near it → the island springs open into a
+   black-glass tray: now playing with artwork + transport, calendar with Join,
+   timers, battery + headphones, quick actions, and a dropped-file shelf.
+   These rules live at the END of the file on purpose: .expanded must beat
+   every earlier state (.listen/.captioning/.busy/.music) at equal specificity. */
+
+/* The pill itself takes clicks (click = talk, scroll = volume) whenever the
+   window is interactive — the renderer only makes the window interactive when
+   the cursor is inside the notch zone, so the rest of the screen is untouched. */
+#notch-face .nf-pill { pointer-events: auto; cursor: pointer; }
+
+/* ── Second ticker slot: primary text left, compact secondary right — the
+   iPhone island's two-activity layout. .dual widens the pill a touch. ── */
+#nf-status-2 {
+  position: absolute;
+  z-index: 4;
+  right: 15px;
+  bottom: 6px;
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 8.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(243, 154, 66, 0.85);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+#nf-status-2.show { opacity: 1; }
+#notch-face.dual .nf-pill { min-width: 336px; }
+#notch-face.dual #nf-status {
+  text-align: left;
+  right: 110px;
+}
+
+/* ── Scroll-volume HUD: replaces the ticker for a beat while the wheel turns. ── */
+#notch-face .nf-volume {
+  position: absolute;
+  z-index: 6;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 5px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: rgba(255, 240, 235, 0.9);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  pointer-events: none;
+}
+#notch-face.vol .nf-volume { opacity: 1; }
+#notch-face.vol #nf-status, #notch-face.vol #nf-status-2 { opacity: 0; }
+#notch-face .nf-vol-bar {
+  width: 88px;
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.16);
+  overflow: hidden;
+}
+#notch-face .nf-vol-bar i {
+  display: block;
+  height: 100%;
+  width: var(--nf-vol, 50%);
+  border-radius: 2px;
+  background: #fff;
+  transition: width 0.12s ease;
+}
+#notch-face .nf-vol-num {
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 8.5px;
+  min-width: 20px;
+}
+
+/* ── Drag-a-file-at-him: the island opens its mouth. ── */
+#notch-face .nf-drop-hint {
+  position: absolute;
+  z-index: 6;
+  left: 0;
+  right: 0;
+  bottom: 9px;
+  text-align: center;
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 8.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(243, 154, 66, 0.95);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  pointer-events: none;
+}
+#notch-face.dropping .nf-drop-hint { opacity: 1; }
+#notch-face.dropping .nf-pill {
+  width: 360px;
+  height: calc(var(--nf-notch-h) + 62px);
+  border-radius: 0 0 26px 26px;
+  box-shadow:
+    inset 0 0 0 1.5px rgba(243, 154, 66, 0.55),
+    0 0 34px rgba(243, 154, 66, 0.35);
+}
+
+/* ── The expanded island ── */
+#notch-face.expanded .nf-pill {
+  width: 620px;
+  height: calc(var(--nf-notch-h) + 134px);
+  border-radius: 0 0 30px 30px;
+  background: linear-gradient(180deg, #000 0%, #060505 40%, #0d0b0b 100%);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.055),
+    0 22px 70px rgba(0, 0, 0, 0.6),
+    0 0 40px rgba(232, 120, 110, 0.14);
+}
+#notch-face.expanded.has-shelf .nf-pill {
+  height: calc(var(--nf-notch-h) + 178px);
+}
+/* Black glass stays black — no coral reveal underneath the tray. */
+#notch-face.expanded .nf-pill::after { opacity: 0; }
+/* Eyes stay up top, everything else theatric yields to the tray. */
+#notch-face.expanded .nf-mini { display: block; width: 78px; }
+#notch-face.expanded .nf-dancer,
+#notch-face.expanded .nf-viz { display: none; }
+#notch-face.expanded #nf-status,
+#notch-face.expanded #nf-status-2,
+#notch-face.expanded .nf-cap,
+#notch-face.expanded .nf-folds { opacity: 0; }
+
+#notch-face .nf-tray {
+  position: absolute;
+  z-index: 5;
+  left: 14px;
+  right: 14px;
+  top: calc(var(--nf-notch-h) + 32px);
+  bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  opacity: 0;
+  transform: translateY(7px);
+  pointer-events: none;
+  transition: opacity 0.24s ease 0.14s, transform 0.34s cubic-bezier(0.34, 1.25, 0.4, 1) 0.1s;
+}
+
+/* Presentation gate only: none of the media, calendar, timer, battery, or
+   Bluetooth implementation is removed. The core mechanism owns the island
+   until that motion system is signed off. */
+#notch-face.nf-core-only .nf-tray {
+  display: none !important;
+}
+#notch-face.expanded .nf-tray {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+}
+
+.nf-tray-main {
+  display: flex;
+  gap: 11px;
+  flex: 1;
+  min-height: 0;
+}
+
+/* Now playing card */
+.nf-np {
+  flex: 1.3;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 16px;
+  padding: 9px 12px;
+}
+.nf-np-art {
+  flex: none;
+  width: 50px;
+  height: 50px;
+  border-radius: 12px;
+  background-color: #241110;
+  background-image: linear-gradient(135deg, #2c1412, #4d201a);
+  background-size: cover;
+  background-position: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 240, 235, 0.32);
+  box-shadow: 0 5px 16px rgba(0, 0, 0, 0.55);
+}
+.nf-np-art.has-art { background-image: var(--nf-art); }
+.nf-np-art.has-art svg { display: none; }
+.nf-np-meta { flex: 1; min-width: 0; }
+.nf-np-track {
+  font-family: "Newsreader", Georgia, serif;
+  font-size: 13.5px;
+  line-height: 1.25;
+  color: #F4E4DC;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.nf-np-artist {
+  margin-top: 2px;
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 8px;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: rgba(255, 240, 235, 0.45);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.nf-np-bar {
+  margin-top: 8px;
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.11);
+  overflow: hidden;
+}
+.nf-np-bar i {
+  display: block;
+  height: 100%;
+  width: 0%;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #E8786E, #F39A42);
+  transition: width 1s linear;
+  box-shadow: 0 0 calc(8px * var(--music-flash, 0)) rgba(232, 120, 110, 0.9);
+}
+.nf-np.no-bar .nf-np-bar { visibility: hidden; }
+.nf-np-ctl { flex: none; display: flex; align-items: center; gap: 2px; }
+.nf-np.no-ctl .nf-np-ctl { display: none; }
+.nf-ib {
+  width: 29px;
+  height: 29px;
+  border: none;
+  background: transparent;
+  border-radius: 9px;
+  color: rgba(255, 240, 235, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, transform 0.08s ease;
+}
+.nf-ib svg { width: 14px; height: 14px; }
+.nf-ib:hover { background: rgba(255, 255, 255, 0.09); color: #fff; }
+.nf-ib:active { transform: scale(0.9); }
+.nf-play {
+  width: 33px;
+  height: 33px;
+  background: rgba(232, 120, 110, 0.16);
+  color: #F4A79E;
+}
+.nf-play:hover { background: rgba(232, 120, 110, 0.3); color: #fff; }
+.nf-play svg { width: 16px; height: 16px; }
+.nf-play .nf-ic-pause { display: none; }
+.nf-np.playing .nf-play .nf-ic-play { display: none; }
+.nf-np.playing .nf-play .nf-ic-pause { display: block; }
+
+/* Right column: calendar, timers, system line */
+.nf-side {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.nf-cal {
+  position: relative;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 14px;
+  padding: 8px 11px;
+  padding-right: 86px;
+}
+.nf-cal-when {
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 7.5px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: rgba(243, 154, 66, 0.8);
+}
+.nf-cal-title {
+  margin-top: 2px;
+  font-family: "Newsreader", Georgia, serif;
+  font-size: 12px;
+  color: #F4E4DC;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.nf-join {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  border: none;
+  border-radius: 999px;
+  padding: 6px 11px;
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 8px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background: linear-gradient(135deg, #54DE8A, #2FA45C);
+  color: #06130a;
+  cursor: pointer;
+  transition: filter 0.15s ease, transform 0.08s ease;
+}
+.nf-join:hover { filter: brightness(1.12); }
+.nf-join:active { transform: translateY(-50%) scale(0.94); }
+.nf-timerlist {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 9px;
+  color: rgba(255, 240, 235, 0.75);
+}
+.nf-timerlist .nf-timer-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 3px;
+}
+.nf-timer-row .t-count { color: #F4A79E; margin-left: auto; }
+.nf-timer-row button {
+  border: none;
+  background: none;
+  color: rgba(255, 240, 235, 0.4);
+  font-size: 10px;
+  cursor: pointer;
+  padding: 0 2px;
+}
+.nf-timer-row button:hover { color: #FF6B61; }
+.nf-sys {
+  display: flex;
+  gap: 14px;
+  padding: 0 3px;
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 8.5px;
+  letter-spacing: 0.06em;
+  color: rgba(255, 240, 235, 0.5);
+  white-space: nowrap;
+  overflow: hidden;
+}
+.nf-sys .charging { color: #54DE8A; }
+.nf-sys .low { color: #FF6B61; }
+
+/* Dropped-file shelf */
+.nf-shelf {
+  display: flex;
+  gap: 7px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.nf-chip {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  background: rgba(232, 120, 110, 0.09);
+  border: 1px solid rgba(232, 120, 110, 0.26);
+  border-radius: 11px;
+  padding: 5px 8px;
+}
+.nf-chip .c-name {
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 9px;
+  color: #F4E4DC;
+  max-width: 130px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.nf-chip button {
+  border: none;
+  background: none;
+  padding: 1px 3px;
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 7.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 240, 235, 0.5);
+  cursor: pointer;
+  transition: color 0.12s ease;
+}
+.nf-chip button:hover { color: #fff; }
+.nf-chip button.c-x:hover { color: #FF6B61; }
+
+/* No physical notch (external display / older Mac): float as a full pill
+   instead of pretending to hug a housing that is not there. */
+#notch-face.no-notch .nf-pill { border-radius: 16px; }
+#notch-face.no-notch.expanded .nf-pill { border-radius: 26px; }
+#notch-face.no-notch.dropping .nf-pill { border-radius: 22px; }
+
+/* Click feedback: the island dips for a beat so a tap FEELS like a tap.
+   Keyframe on purpose — a transform transition here would override the
+   pill's width/height transition list. */
+#notch-face.nf-press .nf-pill {
+  /* Never animate transform for tap feedback: transform positions asymmetric
+     captions, so replacing it made the island jump to a second origin. */
+  filter: brightness(1.16);
+}
+
+/* ══ Time suite: alarm ring state + tray time rows ══ */
+/* Ringing alarm: the island swells and pulses amber until tapped. */
+#notch-face.alarming .nf-pill {
+  width: 340px;
+  height: calc(var(--nf-notch-h) + 40px);
+  border-radius: 0 0 24px 24px;
+  animation: nfAlarmPulse 1.1s ease-in-out infinite;
+}
+@keyframes nfAlarmPulse {
+  0%, 100% { box-shadow: 0 0 16px rgba(255, 170, 60, 0.35), 0 0 40px rgba(255, 120, 60, 0.15); }
+  50% { box-shadow: 0 0 38px rgba(255, 170, 60, 0.85), 0 0 80px rgba(255, 120, 60, 0.4); }
+}
+#notch-face.alarming #nf-status { color: #FFC46B; }
+
+/* Tray time rows: kind glyph · label · right-aligned clock/countdown · controls */
+.nf-timer-row .t-kind { flex: none; font-size: 10px; }
+.nf-timer-row .t-label {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.nf-timer-row .t-sw {
+  border: none;
+  background: none;
+  color: rgba(255, 240, 235, 0.55);
+  font-size: 9px;
+  cursor: pointer;
+  padding: 0 3px;
+}
+.nf-timer-row .t-sw:hover { color: #fff; }
+.nf-timer-row .t-x {
+  border: none;
+  background: none;
+  color: rgba(255, 240, 235, 0.4);
+  font-size: 10px;
+  cursor: pointer;
+  padding: 0 2px;
+}
+.nf-timer-row .t-x:hover { color: #FF6B61; }
+
+/* Voice Commands: while a mode runs the notch wears that mode's colour — the
+   tint holds for as long as the mode is on, so you can see at a glance which
+   mode you are in. */
+#notch-face.nf-voice-mode .nf-pill {
+  box-shadow:
+    0 0 0 1.5px var(--nf-mode-color, #0A84FF),
+    0 0 26px -2px var(--nf-mode-color, #0A84FF);
+  transition: box-shadow 0.5s ease;
+}
+
+/* Entering a mode REPLAYS the boot glow in that mode's colour — the island
+   extends and pulses exactly like the auth boot, then settles into the tint
+   above. Not a cold restart: the notch is already awake, this is just the
+   mode announcing itself. */
+#notch-face.nf-mode-boot .nf-pill {
+  width: 250px;
+  height: calc(var(--nf-notch-h) + 44px);
+  border-radius: 0 0 26px 26px;
+  animation: nfModeBoot 1.15s cubic-bezier(0.16, 1, 0.3, 1) 1 both;
+}
+
+@keyframes nfModeBoot {
+  0%   { box-shadow: 0 0 0 0 rgba(var(--nf-boot-color), 0); }
+  25%  { box-shadow: 0 0 34px 6px rgba(var(--nf-boot-color), 0.85); }
+  60%  { box-shadow: 0 0 18px 2px rgba(var(--nf-boot-color), 0.45); }
+  100% { box-shadow: 0 0 26px -2px rgba(var(--nf-boot-color), 0.7); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #notch-face.nf-mode-boot .nf-pill { animation: none; }
+}
+
+/* Voice Command mode: the whole screen perimeter wears the mode's colour for
+   as long as the mode runs — same Apple-Intelligence edge treatment as the
+   listen/speak states, just driven by the mode instead of the voice status. */
+#edge-glow.voicemode { opacity: 1; }
+#edge-glow.voicemode::before {
+  box-shadow:
+    inset 0 0 120px 26px color-mix(in srgb, var(--vm-color, #0a84ff) 40%, transparent),
+    inset 0 0 44px 8px color-mix(in srgb, var(--vm-color, #0a84ff) 28%, transparent);
+  animation: edgeBreath 3.2s ease-in-out infinite;
+}

@@ -1,0 +1,335 @@
+/* ============================================================================
+   /human-intelligence — Apple chrome, Medium's editorial ALIGNMENT only.
+
+   Font stays pure Apple (SF Pro Display, same as every other .apple page) —
+   the narrow measure and section rhythm are what "Medium" means here, not a
+   different typeface. Body copy matches the exact size/weight/color already
+   used on /product-overview (.cl-desc, .jr-desc): clamp(15-20px), weight 500,
+   --ap-ink-soft. Two tabs: Read (the write-up) and Lab (its own live view).
+   ============================================================================ */
+
+.hil {
+  --hil-measure: 680px;
+  /* --ap-amber/--ap-green are tuned for large graphic elements (dots, borders,
+     the canvas) — as small TEXT on white or their own panel tint they sit at
+     2.9-4:1, under the 4.5:1 AA floor. These are darkened 20% for text only. */
+  --hil-amber-ink: #936921;
+  --hil-green-ink: #2e724c;
+}
+/* .apple-anchors is already tuned to sit exactly above the fixed IomiNotch
+   (apple.css: "the Iomi notch sits BELOW the header, never under it") — don't
+   invent a second header pattern here, it will overlap the notch by a few px. */
+.hil-tryit {
+  font-size: 13px; font-weight: 600; color: #fff; background: var(--ap-blue);
+  padding: 6px 15px; border-radius: 980px; text-decoration: none; white-space: nowrap;
+  transition: filter 0.2s ease;
+}
+.hil-tryit:hover { filter: brightness(1.08); }
+
+/* ---------- Hero ---------- */
+.hil-hero { padding-bottom: clamp(16px, 2.4vw, 26px); }
+.hil-hero-art {
+  max-width: 860px; margin: clamp(28px, 4.6vw, 48px) auto 0;
+  background: var(--ap-surface); border: 1px solid var(--ap-hairline);
+  border-radius: var(--ap-radius); padding: 22px 12px 10px; overflow: hidden;
+}
+.hil-hero-art canvas { width: 100%; display: block; }
+.hil-trace-canvas { width: 100%; display: block; }
+
+/* ---------- Tabs ---------- */
+.hil-tabs {
+  display: flex; justify-content: center; gap: 4px; margin: 0 auto clamp(30px, 4vw, 48px);
+  background: #f0f0f2; border-radius: 980px; padding: 4px; width: fit-content;
+}
+.hil-tabs button {
+  border: none; background: none; cursor: pointer; font-family: inherit;
+  font-size: 14.5px; font-weight: 600; letter-spacing: -0.005em;
+  color: var(--ap-ink-soft); padding: 9px 22px; border-radius: 980px;
+  transition: color 0.2s ease, background 0.2s ease;
+}
+.hil-tabs button:hover { color: var(--ap-ink); }
+.hil-tabs button.on { background: var(--ap-surface); color: var(--ap-ink); box-shadow: 0 1px 4px rgba(29,29,31,0.14); }
+.hil-tabs button:focus-visible { outline: 2px solid var(--ap-blue); outline-offset: 2px; }
+
+/* ---------- The read ---------- */
+.hil-read { max-width: var(--hil-measure); margin: 0 auto; padding: clamp(40px, 5.4vw, 68px) var(--ap-gutter) 0; }
+.hil-kicker { font-size: 13px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ap-blue); margin: 0 0 14px; }
+.hil-h2 { font-size: clamp(28px, 4.2vw, 44px); font-weight: 600; letter-spacing: -0.022em; line-height: 1.12; margin: 0 0 20px; color: var(--ap-ink); text-wrap: balance; }
+.hil-p { font-size: clamp(16px, 1.9vw, 20px); line-height: 1.55; color: var(--ap-ink-soft); font-weight: 500; margin: 0 0 22px; max-width: 62ch; }
+.hil-p em { font-style: normal; font-weight: 600; color: var(--ap-ink); }
+.hil-link { color: var(--ap-blue); text-decoration: none; font-weight: 600; }
+.hil-link:hover { text-decoration: underline; }
+
+.hil-quote {
+  margin: clamp(28px, 3.6vw, 40px) 0; padding: 0 0 0 22px; border-left: 3px solid var(--ap-blue);
+  font-size: clamp(22px, 2.8vw, 28px); font-weight: 600; letter-spacing: -0.02em; line-height: 1.3; color: var(--ap-ink);
+}
+
+.hil-checkdefs { display: flex; flex-direction: column; gap: 18px; margin: 28px 0 0; }
+.hil-checkdef { display: flex; gap: 16px; align-items: baseline; }
+.hil-checkdef b { flex: 0 0 46px; font-size: 12.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ap-blue); }
+.hil-checkdef.yes b { color: var(--ap-green); }
+.hil-checkdef span { font-size: 16px; line-height: 1.55; color: var(--ap-ink-soft); font-weight: 500; }
+.hil-checkdef span strong { color: var(--ap-ink); font-weight: 600; }
+
+/* ---------- The prompt, verbatim ---------- */
+.hil-brain-wrap { max-width: 860px; margin: 0 auto; padding: clamp(24px, 3.6vw, 36px) var(--ap-gutter) 0; }
+.hil-brain { border: 1px solid var(--ap-hairline); border-radius: 18px; overflow: hidden; background: var(--ap-surface); }
+.hil-brain-bar { display: flex; align-items: center; gap: 7px; padding: 13px 18px; border-bottom: 1px solid var(--ap-hairline); background: #f5f5f7; }
+.hil-brain-bar span { width: 10px; height: 10px; border-radius: 50%; background: #d2d2d7; }
+.hil-brain-bar i { margin-left: auto; font-style: normal; font-family: "SF Mono", ui-monospace, Menlo, monospace; font-size: 11px; letter-spacing: 0.03em; color: var(--ap-ink-soft); }
+.hil-brain pre { margin: 0; padding: 24px 26px 32px; max-height: 520px; overflow: auto; font-family: "SF Mono", ui-monospace, Menlo, monospace; font-size: 12.5px; line-height: 1.75; color: #3a3a3f; white-space: pre-wrap; word-break: break-word; }
+
+/* ---------- End of read ---------- */
+.hil-end { padding-bottom: clamp(56px, 7vw, 100px); }
+.hil-cta-row { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 28px; }
+.hil-btn { display: inline-flex; align-items: center; gap: 8px; background: var(--ap-blue); color: #fff; text-decoration: none; padding: 13px 26px; border-radius: 980px; font-size: 16px; font-weight: 500; transition: filter 0.2s ease; }
+.hil-btn:hover { filter: brightness(1.08); }
+.hil-btn.ghost { background: none; color: var(--ap-blue); box-shadow: inset 0 0 0 1px var(--ap-hairline); }
+.hil-btn.ghost:hover { background: color-mix(in srgb, var(--ap-blue) 7%, transparent); filter: none; }
+.hil-foot { margin: clamp(40px, 5vw, 60px) 0 0; font-size: 13px; color: var(--ap-ink-soft); }
+
+/* ---------- Lab ---------- */
+.hil-lab-wrap { max-width: 900px; margin: 0 auto; padding: 0 var(--ap-gutter) clamp(60px, 8vw, 100px); }
+.hil-lab-wrap .hil-p { max-width: 62ch; }
+.hil-lab { margin-top: 30px; }
+.hil-lab-inputs { display: flex; flex-direction: column; gap: 12px; max-width: 640px; }
+.hil-cmd, .hil-ctx {
+  width: 100%; background: var(--ap-surface); border: 1px solid #c3c3ca;
+  border-radius: 14px; padding: 15px 18px; color: var(--ap-ink);
+  font-family: inherit; font-size: 16px; font-weight: 500; line-height: 1.45;
+  outline: none; resize: vertical; transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.hil-cmd::placeholder, .hil-ctx::placeholder { color: var(--ap-ink-soft); }
+.hil-cmd:focus, .hil-ctx:focus { border-color: var(--ap-blue); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ap-blue) 16%, transparent); }
+.hil-cmd:focus-visible, .hil-ctx:focus-visible { outline: 2px solid var(--ap-blue); outline-offset: 2px; }
+.hil-ctx { min-height: 62px; }
+.hil-lab-row { display: flex; align-items: center; gap: 14px; }
+.hil-run { background: var(--ap-blue); color: #fff; border: none; cursor: pointer; font-family: inherit; font-size: 16px; font-weight: 500; padding: 13px 26px; border-radius: 980px; transition: filter 0.2s ease; }
+.hil-run:hover:not(:disabled) { filter: brightness(1.08); }
+.hil-run:disabled { opacity: 0.45; cursor: default; }
+.hil-run:focus-visible { outline: 2px solid var(--ap-ink); outline-offset: 2px; }
+.hil-pulse { width: 9px; height: 9px; border-radius: 50%; background: var(--ap-blue); animation: hilPulse 1s ease-in-out infinite; }
+@keyframes hilPulse { 0%, 100% { opacity: 0.3; transform: scale(0.85); } 50% { opacity: 1; transform: scale(1.15); } }
+
+.hil-samples { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.hil-sample { background: var(--ap-surface); border: 1px solid var(--ap-hairline); border-radius: 980px; padding: 7px 14px; color: var(--ap-ink-soft); font-family: inherit; font-size: 13px; font-weight: 500; cursor: pointer; transition: color 0.15s ease, border-color 0.15s ease; }
+.hil-sample:hover:not(:disabled) { color: var(--ap-ink); border-color: var(--ap-blue); }
+.hil-sample:disabled { opacity: 0.45; cursor: default; }
+.hil-sample:focus-visible { outline: 2px solid var(--ap-blue); outline-offset: 2px; }
+
+.hil-error { margin-top: 20px; padding: 13px 18px; border-radius: 12px; border: 1px solid color-mix(in srgb, var(--ap-coral) 45%, var(--ap-hairline)); background: var(--ap-coral-panel); color: #8c2f27; font-size: 15px; font-weight: 500; }
+
+/* ---------- Layout A: graph left, thinking panel right, one hairline between
+   them — the exact same split-box chrome as the Braino/IOMI class picker
+   (.cl-a in apple.css), reused here instead of a second bespoke pattern. ---------- */
+.hil-a {
+  display: grid; grid-template-columns: 0.95fr 1.05fr; margin-top: 30px;
+  border: 1px solid var(--ap-hairline); border-radius: var(--ap-radius);
+  overflow: hidden; background: var(--ap-surface); min-height: clamp(360px, 48vh, 520px);
+}
+.hil-trace-col {
+  border-right: 1px solid var(--ap-hairline); display: flex; align-items: center;
+  padding: 22px 10px;
+}
+.hil-think-col {
+  padding: clamp(22px, 2.6vw, 34px); display: flex; flex-direction: column; justify-content: center;
+}
+
+.hil-think-wait { font-size: 16px; font-weight: 500; color: var(--ap-ink-soft); }
+.hil-think-beat { animation: hilThinkIn 0.6s ease both; margin-bottom: 16px; }
+.hil-think-beat p {
+  margin: 0 0 8px; font-size: clamp(16px, 1.7vw, 18px); line-height: 1.55;
+  color: var(--ap-ink); font-weight: 500;
+}
+.hil-think-beat p:last-child { margin-bottom: 0; }
+@keyframes hilThinkIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+/* ---------- Summary: Goal / Work / Checks / Verdict ---------- */
+.hil-summary { margin-top: 34px; border: 1px solid var(--ap-hairline); border-radius: 20px; overflow: hidden; background: var(--ap-surface); }
+.hil-sum-row { padding: 18px clamp(18px, 2.4vw, 26px); border-bottom: 1px solid var(--ap-hairline); animation: hilRowIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.hil-sum-row:last-of-type { border-bottom: none; }
+@keyframes hilRowIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.hil-sum-k { display: block; font-size: 11px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ap-ink-soft); margin-bottom: 9px; }
+.hil-sum-goal { margin: 0; font-size: 18px; font-weight: 600; letter-spacing: -0.01em; color: var(--ap-ink); }
+.hil-steps { margin: 0; padding: 0 0 0 20px; }
+.hil-steps li { font-size: 15.5px; line-height: 1.8; color: var(--ap-ink-soft); font-weight: 500; }
+.hil-steps li::marker { color: var(--ap-blue); font-weight: 700; }
+.hil-chips { display: flex; flex-wrap: wrap; gap: 9px; }
+.hil-chip { display: inline-flex; align-items: baseline; gap: 7px; border-radius: 980px; padding: 7px 14px; font-size: 12.5px; font-weight: 600; }
+/* The hint text (i) stays --ap-ink-soft regardless of chip state: --ap-green
+   and --ap-amber are both under 3:1 on white/panel at this size, so they're
+   used only for the dot/border/label, never for the small print. */
+.hil-chip i { font-style: normal; font-weight: 500; font-size: 11px; color: var(--ap-ink-soft); }
+.hil-chip.clear { border: 1px solid color-mix(in srgb, var(--ap-green) 40%, var(--ap-hairline)); color: var(--ap-green); }
+.hil-chip.fired { border: 1px solid color-mix(in srgb, var(--ap-amber) 50%, var(--ap-hairline)); color: var(--ap-amber); background: var(--ap-amber-panel); }
+.hil-verdict.proceed { background: color-mix(in srgb, var(--ap-green-panel) 55%, var(--ap-surface)); }
+.hil-verdict.ask { background: color-mix(in srgb, var(--ap-amber-panel) 50%, var(--ap-surface)); }
+.hil-question { margin: 0; font-size: clamp(19px, 2.2vw, 23px); font-weight: 600; letter-spacing: -0.02em; line-height: 1.3; color: var(--ap-ink); }
+.hil-meta { padding: 10px clamp(18px, 2.4vw, 26px) 16px; font-family: "SF Mono", ui-monospace, Menlo, monospace; font-size: 11px; letter-spacing: 0.03em; color: var(--ap-ink-soft); }
+
+/* ---------- Feedback: not automated, just a durable log to tune the prompt by hand ---------- */
+.hil-feedback { margin-top: 22px; max-width: 640px; }
+.hil-feedback-k { margin: 0 0 10px; font-size: 13px; font-weight: 600; color: var(--ap-ink-soft); }
+.hil-feedback-box {
+  width: 100%; background: var(--ap-surface); border: 1px solid #c3c3ca; border-radius: 14px;
+  padding: 13px 16px; color: var(--ap-ink); font-family: inherit; font-size: 15px; font-weight: 500;
+  line-height: 1.45; outline: none; resize: vertical;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.hil-feedback-box::placeholder { color: var(--ap-ink-soft); }
+.hil-feedback-box:focus { border-color: var(--ap-blue); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ap-blue) 16%, transparent); }
+.hil-feedback-box:focus-visible { outline: 2px solid var(--ap-blue); outline-offset: 2px; }
+.hil-feedback-row { display: flex; align-items: center; gap: 12px; margin-top: 10px; }
+.hil-feedback-btn {
+  background: var(--ap-surface); color: var(--ap-ink); border: 1px solid var(--ap-hairline);
+  cursor: pointer; font-family: inherit; font-size: 14px; font-weight: 600;
+  padding: 9px 18px; border-radius: 980px; transition: border-color 0.15s ease;
+}
+.hil-feedback-btn:hover:not(:disabled) { border-color: var(--ap-blue); }
+.hil-feedback-btn:disabled { opacity: 0.45; cursor: default; }
+.hil-feedback-btn:focus-visible { outline: 2px solid var(--ap-blue); outline-offset: 2px; }
+.hil-feedback-status { font-size: 13px; font-weight: 600; }
+.hil-feedback-status.ok { color: var(--hil-green-ink); }
+.hil-feedback-status.err { color: #8c2f27; }
+
+/* ---------- Loop tab: HIL Version 1 running against the pretend world ---------- */
+.hil-loop-sabotage { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.hil-loop-sabotage span { font-size: 12.5px; font-weight: 600; color: var(--ap-ink-soft); }
+.hil-loop-sabotage button {
+  background: var(--ap-surface); border: 1px solid var(--ap-hairline); border-radius: 980px;
+  padding: 7px 14px; color: var(--ap-ink-soft); font-family: inherit; font-size: 12.5px; font-weight: 600;
+  cursor: pointer; transition: color 0.15s ease, border-color 0.15s ease;
+}
+.hil-loop-sabotage button:hover { color: #8c2f27; border-color: color-mix(in srgb, var(--ap-coral) 55%, var(--ap-hairline)); }
+.hil-loop-sabotage button:focus-visible { outline: 2px solid var(--ap-blue); outline-offset: 2px; }
+
+/* The live element map: what a read of the page actually returns, indices and all. */
+.hil-loop-screen { margin-top: 22px; border: 1px solid var(--ap-hairline); border-radius: 16px; overflow: hidden; background: var(--ap-surface); }
+.hil-loop-screen-bar { display: flex; align-items: center; gap: 7px; padding: 11px 16px; border-bottom: 1px solid var(--ap-hairline); background: #f5f5f7; }
+.hil-loop-screen-bar span { width: 9px; height: 9px; border-radius: 50%; background: #d2d2d7; }
+.hil-loop-screen-bar i { margin-left: 8px; font-style: normal; font-family: "SF Mono", ui-monospace, Menlo, monospace; font-size: 11px; color: var(--ap-ink-soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hil-loop-screen-els { padding: 12px 16px; max-height: 190px; overflow: auto; }
+.hil-loop-screen-els p { margin: 0 0 4px; font-family: "SF Mono", ui-monospace, Menlo, monospace; font-size: 11.5px; line-height: 1.6; color: var(--ap-ink-soft); }
+.hil-loop-screen-els p b { color: var(--ap-blue); font-weight: 700; }
+.hil-loop-screen-els p span { color: var(--ap-ink); }
+.hil-loop-screen-empty { font-family: inherit !important; font-size: 13px !important; }
+
+.hil-loop-jobs { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 22px; }
+.hil-loop-job {
+  border: 1px solid var(--ap-hairline); border-radius: 980px; padding: 7px 14px;
+  font-size: 13px; font-weight: 600; color: var(--ap-ink-soft); background: var(--ap-surface);
+}
+.hil-loop-job.active { border-color: color-mix(in srgb, var(--ap-blue) 55%, var(--ap-hairline)); color: var(--ap-blue); }
+.hil-loop-job.done { border-color: color-mix(in srgb, var(--ap-green) 45%, var(--ap-hairline)); color: var(--ap-green); }
+.hil-loop-mood {
+  margin-left: auto; border: 1px solid color-mix(in srgb, var(--ap-amber) 50%, var(--ap-hairline));
+  background: var(--ap-amber-panel); border-radius: 980px; padding: 7px 14px;
+  font-size: 12.5px; font-weight: 600; color: var(--ap-amber);
+}
+
+.hil-loop-feed { margin-top: 18px; display: flex; flex-direction: column; gap: 12px; }
+.hil-loop-card {
+  border: 1px solid var(--ap-hairline); border-radius: 16px; background: var(--ap-surface);
+  padding: 16px clamp(16px, 2.2vw, 22px); animation: hilRowIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.hil-loop-thinking { margin: 0 0 10px; font-size: 15px; line-height: 1.5; font-weight: 500; color: var(--ap-ink-soft); }
+.hil-loop-goal { margin: 0; font-size: 17.5px; font-weight: 600; letter-spacing: -0.01em; color: var(--ap-ink); }
+.hil-loop-splitnote { margin: 8px 0 0; font-size: 13px; font-weight: 600; color: var(--ap-blue); }
+
+.hil-loop-badge {
+  display: inline-block; margin: 0 0 10px; border-radius: 980px; padding: 4px 11px;
+  font-size: 10.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+}
+.hil-loop-badge.gate { background: var(--ap-amber-panel); color: var(--ap-amber); border: 1px solid color-mix(in srgb, var(--ap-amber) 50%, var(--ap-hairline)); }
+.hil-loop-badge.recovery { background: color-mix(in srgb, var(--ap-blue) 10%, var(--ap-surface)); color: var(--ap-blue); border: 1px solid color-mix(in srgb, var(--ap-blue) 40%, var(--ap-hairline)); }
+
+.hil-loop-steprow { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.hil-loop-tool {
+  font-family: "SF Mono", ui-monospace, Menlo, monospace; font-size: 12.5px; font-weight: 600;
+  color: var(--ap-blue); background: color-mix(in srgb, var(--ap-blue) 8%, var(--ap-surface));
+  border-radius: 7px; padding: 4px 9px; word-break: break-word;
+}
+.hil-loop-intent-line { margin: 8px 0 0; font-size: 15.5px; font-weight: 600; color: var(--ap-ink); }
+.hil-loop-expects { margin: 7px 0 0; font-size: 12.5px; font-weight: 500; color: var(--ap-ink-soft); }
+.hil-loop-result { margin: 6px 0 0; font-size: 13px; font-weight: 500; color: var(--ap-ink-soft); font-style: italic; }
+.hil-loop-status { margin-top: 10px; font-size: 13.5px; font-weight: 600; }
+.hil-loop-status.ok { color: var(--ap-green); }
+.hil-loop-status.failed { color: #8c2f27; }
+.hil-loop-status.checking, .hil-loop-status.held, .hil-loop-status.running { color: var(--ap-ink-soft); }
+
+.hil-loop-card.gated { border-color: color-mix(in srgb, var(--ap-amber) 55%, var(--ap-hairline)); background: color-mix(in srgb, var(--ap-amber-panel) 45%, var(--ap-surface)); }
+.hil-loop-card.recovery { border-left: 3px solid var(--ap-blue); }
+.hil-loop-gaterow { margin-top: 12px; }
+.hil-loop-gaterow p { margin: 0 0 10px; font-size: 14px; font-weight: 600; color: var(--ap-amber); }
+.hil-loop-gaterow div { display: flex; gap: 10px; }
+.hil-loop-confirm {
+  background: var(--ap-blue); color: #fff; border: none; cursor: pointer; font-family: inherit;
+  font-size: 14.5px; font-weight: 600; padding: 10px 20px; border-radius: 980px; transition: filter 0.2s ease;
+}
+.hil-loop-confirm:hover { filter: brightness(1.08); }
+.hil-loop-confirm:focus-visible { outline: 2px solid var(--ap-ink); outline-offset: 2px; }
+.hil-loop-decline {
+  background: none; color: var(--ap-ink); border: 1px solid var(--ap-hairline); cursor: pointer;
+  font-family: inherit; font-size: 14.5px; font-weight: 600; padding: 10px 20px; border-radius: 980px;
+  transition: border-color 0.15s ease;
+}
+.hil-loop-decline:hover { border-color: var(--ap-ink); }
+.hil-loop-decline:focus-visible { outline: 2px solid var(--ap-blue); outline-offset: 2px; }
+
+.hil-loop-card.ask { border-color: color-mix(in srgb, var(--ap-blue) 45%, var(--ap-hairline)); }
+.hil-loop-question { margin: 0; font-size: 18px; font-weight: 600; letter-spacing: -0.015em; color: var(--ap-ink); }
+.hil-loop-answer { margin: 10px 0 0; font-size: 14.5px; font-weight: 600; color: var(--ap-blue); }
+.hil-loop-replyrow { display: flex; gap: 10px; margin-top: 12px; }
+.hil-loop-replyrow input {
+  flex: 1; background: var(--ap-surface); border: 1px solid #c3c3ca; border-radius: 12px;
+  padding: 11px 14px; color: var(--ap-ink); font-family: inherit; font-size: 15px; font-weight: 500; outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.hil-loop-replyrow input:focus { border-color: var(--ap-blue); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ap-blue) 16%, transparent); }
+.hil-loop-replyrow button {
+  background: var(--ap-blue); color: #fff; border: none; cursor: pointer; font-family: inherit;
+  font-size: 14.5px; font-weight: 600; padding: 10px 20px; border-radius: 980px;
+}
+.hil-loop-replyrow button:disabled { opacity: 0.45; cursor: default; }
+
+.hil-loop-card.taskdone { background: color-mix(in srgb, var(--ap-green-panel) 55%, var(--ap-surface)); border-color: color-mix(in srgb, var(--ap-green) 40%, var(--ap-hairline)); }
+.hil-loop-card.taskdone p { margin: 0; font-size: 15px; font-weight: 600; color: var(--hil-green-ink); }
+
+.hil-loop-card.sabotage { border-style: dashed; background: #f5f5f7; }
+.hil-loop-card.sabotage p { margin: 0; font-size: 14px; font-weight: 600; color: var(--ap-ink); }
+
+.hil-loop-card.pending { border-style: dashed; }
+.hil-loop-card.pending p { margin: 0; font-size: 14px; font-weight: 500; color: var(--ap-ink-soft); }
+
+.hil-loop-endlabel { display: block; margin-bottom: 8px; font-size: 11px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; }
+.hil-loop-card.ending p { margin: 0; font-size: 16px; font-weight: 600; line-height: 1.45; color: var(--ap-ink); }
+.hil-loop-card.ending.all_done { background: color-mix(in srgb, var(--ap-green-panel) 55%, var(--ap-surface)); }
+.hil-loop-card.ending.all_done .hil-loop-endlabel { color: var(--ap-green); }
+.hil-loop-card.ending.declined, .hil-loop-card.ending.budget { background: color-mix(in srgb, var(--ap-amber-panel) 50%, var(--ap-surface)); }
+.hil-loop-card.ending.declined .hil-loop-endlabel, .hil-loop-card.ending.budget .hil-loop-endlabel { color: var(--ap-amber); }
+.hil-loop-card.ending.blocked, .hil-loop-card.ending.error { background: var(--ap-coral-panel); }
+.hil-loop-card.ending.blocked .hil-loop-endlabel, .hil-loop-card.ending.error .hil-loop-endlabel { color: #8c2f27; }
+
+@media (max-width: 760px) {
+  .hil-a { grid-template-columns: 1fr; }
+  .hil-trace-col { border-right: 0; border-bottom: 1px solid var(--ap-hairline); }
+  .hil-loop-sabotage { margin-left: 0; }
+}
+@media (max-width: 620px) {
+  .hil-checkdef { flex-direction: column; gap: 4px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hil-think-beat, .hil-sum-row { animation: none; }
+  .hil-pulse { animation: none; }
+}
+
+/* The screen field on the Loop: what a vision model would see if he looks.
+   Tinted apart from the command box because it is not an instruction, it is
+   the world, and he only gets it if he decides to take the screenshot. */
+.hil-screen {
+  font-size: 13.5px;
+  background: color-mix(in srgb, var(--ap-violet, #6b52c4) 5%, var(--ap-surface, #fff));
+  border-color: color-mix(in srgb, var(--ap-violet, #6b52c4) 25%, var(--ap-hairline, #d2d2d7));
+}
+.hil-screen::placeholder { opacity: 0.75; }

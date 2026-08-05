@@ -1,0 +1,188 @@
+/* her-mode.css — full-screen takeover styles, adapted from the Claude Design Her.html. */
+
+#her-stage {
+  --her-paper: #F4E9DC;
+  --her-coral: #E8786E;
+  --her-amber: #F39A42;
+  --her-mono: "JetBrains Mono", ui-monospace, monospace;
+  --her-serif: "Newsreader", Georgia, serif;
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  display: none;
+  background: #0B0807;
+  font-family: var(--her-serif);
+  color: var(--her-paper);
+  -webkit-font-smoothing: antialiased;
+  opacity: 0;
+  transition: opacity 0.9s ease;
+}
+
+#her-stage.on {
+  display: block;
+}
+
+#her-stage.visible {
+  opacity: 1;
+}
+
+body.her-active #walker-lane,
+body.her-active #status-pill,
+body.her-active #speech-bubble,
+body.her-active #file-strip {
+  display: none !important;
+}
+
+#her-stage .her-field {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+
+/* film grain overlay */
+#her-stage .her-grain {
+  position: absolute;
+  inset: -50%;
+  z-index: 1;
+  pointer-events: none;
+  opacity: 0.05;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  animation: herGrain 1.4s steps(3) infinite;
+}
+
+@keyframes herGrain {
+  0% { transform: translate(0, 0); }
+  33% { transform: translate(-6px, 4px); }
+  66% { transform: translate(5px, -5px); }
+  100% { transform: translate(0, 0); }
+}
+
+/* soft vignette to seat the light */
+#her-stage::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  background: radial-gradient(120% 90% at 50% 46%, transparent 40%, rgba(11, 8, 7, 0.55) 100%);
+}
+
+#her-stage .her-top {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 5;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: clamp(20px, 3vw, 40px) clamp(22px, 4vw, 54px);
+}
+
+#her-stage .her-wordmark {
+  font-family: var(--her-serif);
+  font-style: italic;
+  font-weight: 500;
+  font-size: clamp(20px, 2vw, 26px);
+  letter-spacing: 0.01em;
+  color: rgba(244, 233, 220, 0.92);
+}
+
+#her-stage .her-wordmark .dot {
+  color: var(--her-coral);
+}
+
+#her-stage .her-statecap {
+  font-family: var(--her-mono);
+  font-size: 10px;
+  letter-spacing: 0.34em;
+  text-transform: uppercase;
+  color: rgba(244, 233, 220, 0.42);
+}
+
+#her-stage .her-caption {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 56%;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 0 clamp(28px, 8vw, 140px);
+  text-align: center;
+  pointer-events: none;
+}
+
+#her-stage .her-heard {
+  font-family: var(--her-mono);
+  font-size: clamp(11px, 1.1vw, 13px);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(244, 233, 220, 0.44);
+  max-width: 40ch;
+}
+
+#her-stage .her-reply {
+  font-family: var(--her-serif);
+  font-style: italic;
+  font-weight: 400;
+  font-size: clamp(24px, 3.4vw, 44px);
+  line-height: 1.28;
+  color: var(--her-paper);
+  text-wrap: pretty;
+  max-width: 20ch;
+  text-shadow: 0 2px 40px rgba(233, 120, 110, 0.35);
+}
+
+#her-stage .her-prompt {
+  font-family: var(--her-serif);
+  font-style: italic;
+  font-size: clamp(15px, 1.7vw, 21px);
+  color: rgba(244, 233, 220, 0.5);
+  max-width: 34ch;
+  text-wrap: pretty;
+}
+
+#her-stage .her-hint {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: clamp(28px, 4vh, 44px);
+  z-index: 6;
+  display: flex;
+  justify-content: center;
+  font-family: var(--her-mono);
+  font-size: 10px;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: rgba(244, 233, 220, 0.4);
+  pointer-events: none;
+}
+
+#her-stage .her-topright {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+#her-stage .her-leave {
+  font-family: var(--her-mono);
+  font-size: 10px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: rgba(244, 233, 220, 0.4);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 6px 13px;
+  cursor: pointer;
+  transition: color 0.3s, border-color 0.3s;
+}
+
+#her-stage .her-leave:hover {
+  color: var(--her-paper);
+  border-color: rgba(233, 120, 110, 0.45);
+}

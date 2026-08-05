@@ -3,8 +3,10 @@ import { Link } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Braino, BrainoDefs } from "@/components/BrainoChar";
+import { Webb, WebbDefs } from "@/components/WebbChar";
 import { BRAINO_WALKER_SVG } from "@/components/brainoWalkerSvg";
 import { useBrainoVoice } from "@/hooks/useBrainoVoice";
+import { MASCOTS, useMascotPreference } from "@/lib/mascotPreference";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 const SUPABASE_KEY = (import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY) as string;
@@ -346,9 +348,12 @@ function Icon({ name }: { name: "new" | "search" | "library" | "menu" | "plus" |
 }
 
 function BrainoMark({ size = 30, expr = "happy", talking = false }: { size?: number; expr?: string; talking?: boolean }) {
+  const { mascot } = useMascotPreference();
   return (
     <span className={`braino-avatar${talking ? " is-talking" : ""}`}>
-      <Braino size={size} expr={expr} arm="none" talk={talking} legs gloves idle bobAmp={talking ? 0.75 : 0.45} />
+      {mascot === "webb"
+        ? <Webb size={size} arm="none" talk={talking} idle bobAmp={talking ? 0.75 : 0.45} />
+        : <Braino size={size} expr={expr} arm="none" talk={talking} legs gloves idle bobAmp={talking ? 0.75 : 0.45} />}
     </span>
   );
 }
@@ -636,10 +641,12 @@ function VoiceOverlay({
   signedIn: boolean;
   onStop: () => void;
 }) {
+  const { mascot } = useMascotPreference();
+  const mascotName = MASCOTS[mascot].displayName;
   const talking = status === "speaking";
   const expr = status === "error" ? "ohh" : status === "thinking" ? "think" : talking ? "grin" : "happy";
   return (
-    <div className={`bc-voice-stage is-${status}`} role="dialog" aria-label="Braino voice mode">
+    <div className={`bc-voice-stage is-${status}`} role="dialog" aria-label={`${mascotName} voice mode`}>
       <button className="bc-voice-close" type="button" aria-label="Close voice mode" onClick={onStop}>
         <Icon name="x" />
       </button>
@@ -651,7 +658,7 @@ function VoiceOverlay({
       <div className="bc-voice-state">
         {status === "connecting" ? "Waking up"
           : status === "thinking" ? "Thinking"
-          : status === "speaking" ? "Braino is speaking"
+          : status === "speaking" ? `${mascotName} is speaking`
           : status === "error" ? "Voice needs attention"
           : "Listening"}
       </div>
@@ -667,6 +674,7 @@ function VoiceOverlay({
 
 export default function BrainoChat() {
   const { user, session } = useAuth();
+  const { mascot: mascotPref } = useMascotPreference();
   const initial = useMemo(() => {
     const threads = readThreads();
     const id = readCurrentThreadId();
@@ -1048,13 +1056,15 @@ export default function BrainoChat() {
     return currentThread?.title || (messages.length ? makeTitle(messages) : "New chat");
   }, [currentThreadId, messages, threads]);
 
-  const placeholder = delegateMode ? "Tell Braino what to do..." : "Message Braino";
+  const mascotName = MASCOTS[mascotPref].displayName;
+  const placeholder = delegateMode ? `Tell ${mascotName} what to do...` : `Message ${mascotName}`;
   const emptyGreeting = useMemo(() => buildEmptyGreeting(user), [user]);
 
   return (
     <div className={`bchat ${sidebarCollapsed ? "is-collapsed" : ""}`}>
       <style>{CHAT_CSS}</style>
       <BrainoDefs />
+      <WebbDefs />
       {voiceActive && (
         <VoiceOverlay status={voiceStatus} error={voiceError} signedIn={!!user} onStop={voiceStop} />
       )}

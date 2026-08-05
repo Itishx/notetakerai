@@ -1,5 +1,61 @@
 # Braino Changelog
 
+## August 5, 2026 — A song for whatever he can see
+- **"Play a song based on what you see" now has a way to be thought about.** He looks at the screen, names what the image is actually about (an Eiffel Tower is Paris, France, romance, dusk), thinks of real songs it connects to through more than one door, picks the most right or the most enjoyably sideways, checks the song exists, and only then opens the music app and plays it.
+- **You can watch him choose before any of it is real.** The Loop on /human-intelligence has a new field for what is on your screen, and it is kept apart from the context box on purpose: he only learns what is there if he decides to look, exactly as a screenshot and a vision call cost something on a real Mac. Two ready-made scenes are in the samples, and twenty commands are in the corpus on /commands.
+- **He is not allowed to invent a title.** Playing a song that does not exist is the one unforgivable outcome, so when he is unsure he checks first, and when a check comes back empty he says so instead of pretending.
+- **Fixed: he used to forget what he saw.** A look was handed back for exactly one turn and then dropped, so he could read the Eiffel Tower off the screen and say "the screen is blank" a moment later. What he sees, and what a search answers, now stay with him for the rest of the run.
+
+## August 5, 2026 — He reads people now, instead of matching words
+- **A crisis phrased the ordinary way used to be missed entirely.** The safety word list only knew contractions, so "I don't want to be here" was caught and "I do **not** want to be here" was read as nothing at all. It also knew "hurt myself" but not "hurting myself". Every one of those now routes to crisis on words alone, with no model involved, exactly as the safety promise requires.
+- **Distress described through the body reaches him.** A tight chest, a racing heart, shaking hands, a brain that will not stop. People say those far more often than they say "I am anxious", and until now every one of them read as neutral and got the generic Braino.
+- **When the words find nothing, he actually thinks about it.** A reasoning layer now reads what someone is going through underneath the vocabulary, and says in one line why. "I keep checking if he posted" has no emotional keyword in it at all; he reads it as anxiety and explains that you sound stuck in a loop of waiting.
+- **The same reading now runs in real chat, not just the lab.** Both layers moved into one shared file, so the demo and the product can never drift apart. Plain commands still cost nothing extra.
+- **Voice finally hears the moment.** The Mac's voice ran the neutral personality permanently, so his traits never reordered no matter what you said. It now reads the moment from what you just said and leads with the right part of himself, with no added delay before he speaks.
+- **How strongly it landed matters again.** Intensity was measured and then thrown away, so a flicker of nerves and a panic attack produced an identical prompt.
+- **All of it is scored.** A new test runs the real detector against the 525-message corpus on /commands. Accuracy went from **14% to 52%**, crisis from **1 of 20 to 13 of 20** on words alone, and the number is printed on every run so it can never quietly slide back.
+
+## August 4, 2026 — Every run is recorded now
+- **Both intelligence layers keep a log.** Every call to Human Intelligence and to the Emotional Engine now records what was asked, what came back whole, which model answered, how long it took, and how many tokens it burned. Failures are recorded too, since those are the rows worth the most when tuning.
+- **The log has a home.** /engine-log shows the calls newest first, groups a Loop run's turns under the command that started it, filters to failures, and totals the tokens so a tuning session has a cost instead of a feeling. It is creator-only, because the endpoints that write it are public.
+- **The notch is down to four places.** Welcome, BrainoOS, Dashboard, and Iomi. Blog, Letter, Don't Blink, Motion Graphics, and Log are all still live pages, just no longer competing in the navigation.
+- **Whole mind moved to its own page.** It sat under Emotional Intelligence while half of what it shows is thinking. Each layer is now tuned alone, on its own page, against its own log. /whole-mind is where they meet once both hold up.
+- **Human Intelligence is down to Read and Loop.** The Lab tab was retired: the Loop already narrates its reasoning every turn, asks instead of guessing, checks each step, and stops at the gate, all while finishing a real job.
+
+## August 4, 2026 — “Open what I just downloaded”
+- **Braino knows what you just downloaded without being told its name.** Say “open what I just downloaded” or “put what I just downloaded in the Invoices folder” and he resolves it by arrival time instead of name: newest first across Downloads and Desktop, using when the file landed on your Mac rather than the timestamp the server sent.
+- **He makes the calls a careful person makes.** A file still coming down is never opened or moved, he just tells you it is downloading. Two files landing in the same minute get a question instead of a coin flip. When the newest thing is hours old, he names it and checks before touching it.
+- **“This folder” means the one you are looking at.** Filing something into the front Finder window works without naming it.
+- **You can watch him reason about it first.** Two Mac scenarios were added to the Loop on /human-intelligence, where a Finder window is now part of the pretend world: the file list starts sorted by name, so he has to sort by date himself, and a half-finished download plus two same-minute files are sitting there to catch a guess.
+
+## August 4, 2026 — Idea Tracker
+- **New internal page: /ideas.** A live tracker built with faithful Notion anatomy — page icon and property rows, to-do blocks with real Notion checkboxes, a table view with view tabs and pastel status tags, gallery stat cards, and a callout — on the Apple system-sans base. No editorial serif.
+- **Dump ideas from the top of the page.** A capture bar under the title takes typed or dictated ideas (built-in browser speech, coral pulse while listening) and drops them into an Inbox section, saved in the browser for now.
+- **The page is the database.** All content lives as data arrays in the page itself, so appending an idea is one entry — and it's the declared v0 of Idea Mode, where Braino will transcribe spoken ideas, draft GitHub-grounded plans, and dispatch approved ones to a coding agent.
+
+## August 2, 2026 — How Braino talks
+- **He never opens with "What's on your mind?" again.** A new charm trait makes his real voice the baseline instead of something that only appeared when you asked about him. He opens with what he noticed, or a short real line, never an empty question that hands the work back to you.
+- **His charm scales with the moment, down to zero.** Full when things are ordinary or good, pure speed when you just want the thing done, warm with the teasing off when you're venting, plain in heartbreak, and completely absent in grief or distress where wit would be an insult. Until now his tone never actually changed with emotion; only the order of his traits did.
+- **Every reply is checked against his own banned phrases, in code.** Therapy voice, wellness closers, "great question", "as an AI", em dashes. It either comes back clean or names the exact phrase that slipped through, so the ban is enforced instead of requested.
+- **He reads emotion in layers now.** Word cues first, instant and free. If the words find nothing but the message still carries feeling, he takes one small deeper read. Crisis stays a hard word match so it never depends on a model being reachable. The strongest signal wins instead of whichever was listed first.
+- **The swearing toggle actually does something.** It was defined, defaulted, settable, and read by nothing at all.
+- **Two new views on /emotional-intelligence.** Reply gives you his answer plus the entire reason behind it. Whole mind runs one message through both halves of him at once, the thinking and the feeling, side by side.
+- **Fixed: four dead links in the notch** (Emotional Intelligence, BrainoOS, Yap Mode, Motion Graphics all led to "Page not found").
+- **Fixed: Braino re-playing his whole wake-up every few clicks.** The 404 page's "Return to Home" was doing a full browser reload, which reset him to asleep. The boot now plays once per tab.
+
+## August 1, 2026 — HIL Version 1: The Loop
+- **Braino's brain now walks the plan, live on /human-intelligence.** A new Loop tab runs a command end to end against a pretend world: he splits it into jobs, takes one small step per turn, checks each step actually worked, and finishes job one completely before job two starts.
+- **The gate is code, not a request.** Send and checkout always pause the run on an amber card and wait for a real click — even when the command literally said "check out". Declining ends the run cleanly.
+- **He notices when the world breaks.** Two sabotage buttons let you close his tab or jam the site mid-run; he spots the change, says so, inserts the recovery step, and continues. The same failure twice ends the run with a plain explanation of what broke and how far he got.
+- **Questions arrive mid-run, not up front.** What he can't resolve from context he sets aside and asks about at the exact step that needs it, like asking what the email should say only once the draft is addressed and open.
+- **Nothing real executes.** The tabs, emails, songs, and cart are stage props in browser memory; the loop is not wired into the extension yet — that port happens after the thinking holds up here.
+
+## July 29, 2026 — Yap Mode
+- **Double Option starts dictation anywhere on the Mac.** Braino opens a transcription-only `gpt-realtime-whisper` session and inserts readable text into the focused editable field.
+- **Yap Mode stays quiet.** It does not use TTS or produce an assistant response. Say “done” or double Option again to stop, and the stop phrase is never inserted.
+- **The mode has a visible contract.** Braino glows mint while listening, secure and read-only fields are rejected, and the skill is documented in the Braino Journal.
+- **New release rule.** Every new Braino mode now ships with a skill contract and a Journal or What’s New entry.
+
 ## v8.6.0 — Live voice status, right above his head
 - **You can always see what Braino is doing in voice.** A little status bubble now floats over his head through the conversation — "Listening…" while he's hearing you, "Understanding…" while he processes, "Waking up…" while connecting — then clears as he speaks.
 - **Same look as the wakeup bubble.** It reuses the existing speech-bubble design with a soft pulsing coral dot so it reads as a live state, not a one-off quip.

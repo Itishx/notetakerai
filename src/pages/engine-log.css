@@ -1,0 +1,160 @@
+/* /engine-log — the private tuning log. A working instrument, not a showpiece:
+   dense rows, monospace for anything the model produced, one accent per engine. */
+
+.el-page {
+  --ink: #1d1d1f;
+  --ink-soft: #6e6e73;
+  --ink-faint: #a3a3a8;
+  --paper: #fbfbfd;
+  --surface: #ffffff;
+  --line: #e3e3e6;
+  --blue: #2f6fed;
+  --coral: #d9645b;
+  --violet: #6b52c4;
+  --green: #3a8f5f;
+  min-height: 100vh;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  padding: clamp(28px, 5vw, 56px) clamp(18px, 4vw, 40px) 80px;
+  max-width: 1080px;
+  margin: 0 auto;
+}
+
+@media (prefers-color-scheme: dark) {
+  .el-page {
+    --ink: #ededf0;
+    --ink-soft: #9b9ba1;
+    --ink-faint: #6c6c73;
+    --paper: #0d0d0f;
+    --surface: #161618;
+    --line: #262629;
+  }
+}
+
+.el-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 26px; }
+.el-title { font-size: clamp(28px, 4vw, 36px); font-weight: 700; letter-spacing: -0.02em; margin: 0 0 6px; }
+.el-sub { font-size: 14.5px; color: var(--ink-soft); margin: 0; }
+.el-note { font-size: 15px; color: var(--ink-soft); margin: 12px 0; }
+.el-error { font-size: 14px; color: var(--coral); margin: 14px 0; }
+.el-link { color: var(--blue); text-decoration: none; font-size: 14px; font-weight: 500; }
+.el-link:hover { text-decoration: underline; }
+
+.el-refresh {
+  flex: none; border: 1px solid var(--line); background: var(--surface); color: var(--ink);
+  border-radius: 8px; padding: 8px 16px; font-size: 13.5px; font-weight: 600; cursor: pointer;
+}
+.el-refresh:hover:not(:disabled) { border-color: var(--blue); color: var(--blue); }
+.el-refresh:disabled { opacity: 0.5; cursor: default; }
+
+/* ── Stats ─────────────────────────────────────────────────────────── */
+.el-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 22px; }
+.el-stat {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
+  padding: 14px 16px; display: flex; flex-direction: column; gap: 4px;
+}
+.el-stat.bad { border-color: color-mix(in srgb, var(--coral) 45%, var(--line)); }
+.el-stat-value { font-size: 22px; font-weight: 700; letter-spacing: -0.01em; }
+.el-stat.bad .el-stat-value { color: var(--coral); }
+.el-stat-label { font-size: 12px; color: var(--ink-soft); }
+
+/* ── Filters ───────────────────────────────────────────────────────── */
+.el-filters { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 20px; }
+.el-filters button {
+  border: 1px solid var(--line); background: var(--surface); color: var(--ink-soft);
+  border-radius: 999px; padding: 6px 14px; font-size: 13px; font-weight: 500; cursor: pointer;
+}
+.el-filters button:hover { color: var(--ink); }
+.el-filters button.on { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+.el-filters .el-fail.on { background: var(--coral); border-color: var(--coral); color: #fff; }
+
+/* ── Runs ──────────────────────────────────────────────────────────── */
+.el-list { display: flex; flex-direction: column; gap: 12px; }
+.el-group {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+  padding: 16px 18px;
+}
+.el-group.failed { border-color: color-mix(in srgb, var(--coral) 45%, var(--line)); }
+.el-group-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 12px; }
+.el-engine {
+  flex: none; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+  border-radius: 5px; padding: 3px 8px; color: #fff;
+}
+.el-engine-hil-loop { background: var(--blue); }
+.el-engine-hil-reason { background: var(--violet); }
+.el-engine-braino-reply { background: var(--coral); }
+.el-command { flex: 1; min-width: 220px; font-size: 15px; font-weight: 600; margin: 0; }
+.el-meta { font-size: 12px; color: var(--ink-faint); white-space: nowrap; }
+.el-context { font-size: 12.5px; color: var(--ink-soft); margin: 8px 0 0; }
+
+.el-turns { display: flex; flex-direction: column; gap: 2px; margin-top: 12px; }
+.el-turn { border-top: 1px solid var(--line); }
+.el-turn.bad { background: color-mix(in srgb, var(--coral) 6%, transparent); }
+.el-turn-head {
+  width: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px;
+  background: none; border: none; cursor: pointer; color: inherit;
+  padding: 9px 2px; text-align: left; font: inherit;
+}
+.el-turn-head:hover { color: var(--blue); }
+.el-turn-n { font-size: 13px; font-weight: 600; min-width: 62px; }
+.el-verdict, .el-moment {
+  font-size: 11.5px; border-radius: 4px; padding: 2px 7px;
+  background: color-mix(in srgb, var(--ink) 8%, transparent); color: var(--ink-soft);
+}
+.el-moment { color: var(--coral); background: color-mix(in srgb, var(--coral) 12%, transparent); }
+.el-turn-meta { margin-left: auto; font-size: 12px; color: var(--ink-faint); white-space: nowrap; }
+.el-caret { font-size: 11.5px; color: var(--ink-faint); }
+.el-turn-error { font-size: 12.5px; color: var(--coral); margin: 0 0 8px; padding-left: 2px; }
+
+.el-json {
+  margin: 0 0 12px; padding: 12px 14px; border-radius: 8px;
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+  font-size: 12px; line-height: 1.55; color: var(--ink);
+  overflow-x: auto; white-space: pre-wrap; word-break: break-word;
+  max-height: 460px; overflow-y: auto;
+}
+
+.el-foot {
+  margin-top: 34px; padding-top: 18px; border-top: 1px solid var(--line);
+  display: flex; flex-wrap: wrap; align-items: center; gap: 16px;
+}
+.el-foot-note { margin-left: auto; font-size: 12px; color: var(--ink-faint); }
+
+/* ── The verdict on a run ───────────────────────────────────────────── */
+/* This is the row that matters at the end of a session: everything marked
+   bad, with its note, is the list of prompt edits to make. */
+.el-judge { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 0 2px 12px; }
+.el-judge button {
+  flex: none; border: 1px solid var(--line); background: transparent; color: var(--ink-soft);
+  border-radius: 6px; padding: 5px 14px; font-size: 12.5px; font-weight: 600; cursor: pointer;
+}
+.el-judge button:disabled { opacity: 0.5; cursor: default; }
+.el-good:hover:not(:disabled) { border-color: var(--green); color: var(--green); }
+.el-good.on { background: var(--green); border-color: var(--green); color: #fff; }
+.el-bad:hover:not(:disabled) { border-color: var(--coral); color: var(--coral); }
+.el-bad.on { background: var(--coral); border-color: var(--coral); color: #fff; }
+.el-note-input {
+  flex: 1; min-width: 180px;
+  border: 1px solid var(--line); background: var(--paper); color: var(--ink);
+  border-radius: 6px; padding: 6px 11px; font: inherit; font-size: 13px; outline: none;
+}
+.el-note-input:focus { border-color: var(--blue); }
+.el-note-input::placeholder { color: var(--ink-faint); }
+.el-saving { font-size: 11.5px; color: var(--ink-faint); }
+
+.el-filter-sep { width: 1px; align-self: stretch; background: var(--line); margin: 0 4px; }
+.el-rate-filter.on { background: var(--blue) !important; border-color: var(--blue) !important; color: #fff !important; }
+
+/* One verdict per RUN, not per turn. Thirteen turns marked bad was thirteen
+   copies of one opinion; the run carries it once, at the top. */
+.el-rated {
+  flex: none; font-size: 11px; font-weight: 700; letter-spacing: 0.06em;
+  text-transform: uppercase; border-radius: 4px; padding: 2px 8px; color: #fff;
+}
+.el-rated-good { background: var(--green); }
+.el-rated-bad { background: var(--coral); }
+.el-group.rated-bad { border-color: color-mix(in srgb, var(--coral) 55%, var(--line)); }
+.el-group.rated-good { border-color: color-mix(in srgb, var(--green) 45%, var(--line)); }
+.el-judge { padding-top: 12px; margin-top: 12px; border-top: 1px solid var(--line); }

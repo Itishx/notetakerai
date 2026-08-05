@@ -24,3 +24,16 @@ dist-ssr
 *.sw?
 dist-extension/
 .vercel
+
+# NOTE: teasermusic/ is NOT ignored. src/pages/EcosystemTeaser.tsx imports a
+# track from it with ?url, so the build cannot resolve without it. Ignoring the
+# folder built fine locally (the file was on disk) and broke Vercel, which only
+# has what git tracks.
+
+# Generated: Playwright run output
+test-results/
+playwright-report/
+
+# Generated: the wake-word helper is compiled from source on launch
+# (ensureWakeWordApp in mac/braino-mac/main.cjs rebuilds it when stale)
+mac/braino-mac/native/bin/

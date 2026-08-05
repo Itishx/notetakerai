@@ -1,0 +1,64 @@
+/* Locked visual preset. These are the flagship /dontblink values, collected
+   in one place so subsequent films do not reinterpret its typography. */
+.dont-blink-blueprint .kf-line {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-wrap: nowrap;
+  justify-content: center;
+  align-items: center;
+  gap: 0 .2em;
+  max-width: none;
+  color: #fff;
+  font-size: clamp(28px, 4.6vw, 58px);
+  font-weight: 600;
+  letter-spacing: -.025em;
+  line-height: 1;
+  text-align: center;
+  white-space: nowrap;
+  text-shadow: none;
+}
+
+.dont-blink-blueprint .kf-word {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0;
+  white-space: nowrap;
+}
+
+.dont-blink-blueprint .kf-word .nt-word.nt-fuse { margin-left: 0; }
+
+/* This blueprint uses the hard positional stomp only. The flagship's brief
+   brightness bloom can read as glitter on slower dialogue, so ordinary
+   chunks appear at full opacity with no glow, filter or color sweep. */
+.dont-blink-blueprint .nt-word.in {
+  animation: none;
+  filter: none;
+  text-shadow: none;
+}
+
+.dont-blink-blueprint .kf-line-big {
+  gap: 0;
+  font-size: clamp(48px, 8vw, 100px);
+}
+
+.dont-blink-blueprint .kf-line.invert-flash {
+  color: #000;
+  z-index: 11;
+}
+
+.dont-blink-blueprint .kf-line.invert-flash .nt-word.in {
+  animation: none !important;
+}
+
+.dont-blink-blueprint .nt-invert2 { background: #fff; }
+
+@media (max-width: 760px) {
+  .dont-blink-blueprint .kf-line {
+    max-width: 90%;
+    flex-wrap: wrap;
+    white-space: normal;
+  }
+}

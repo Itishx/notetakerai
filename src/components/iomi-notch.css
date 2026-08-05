@@ -23,7 +23,7 @@
   transition: width 0.55s cubic-bezier(0.32, 0.72, 0, 1), height 0.55s cubic-bezier(0.32, 0.72, 0, 1),
               border-radius 0.55s cubic-bezier(0.32, 0.72, 0, 1);
 }
-.iomi-notch.open { width: min(660px, calc(100vw - 32px)); height: 268px; border-radius: 0 0 30px 30px; }
+.iomi-notch.open { width: min(660px, calc(100vw - 32px)); height: 350px; border-radius: 0 0 30px 30px; }
 
 .iomi-notch-bar {
   cursor: pointer; user-select: none;
@@ -45,30 +45,190 @@
 .iomi-notch-panel {
   opacity: 0; transform: translateY(-6px);
   transition: opacity 0.3s ease 0.12s, transform 0.3s ease 0.12s;
-  padding: 4px 24px 24px;
+  position: relative;
+  height: calc(100% - 34px);
 }
 .iomi-notch.open .iomi-notch-panel { opacity: 1; transform: none; }
+.iomi-notch-view {
+  position: absolute;
+  inset: 0;
+  padding: 4px 24px 24px;
+  overflow: hidden;
+}
 .iomi-notch-label {
   font-size: 10.5px; letter-spacing: 0.16em; text-transform: uppercase;
   color: var(--iomi-ink-3); padding: 6px 0 12px;
 }
 .iomi-notch-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 26px; }
+.iomi-notch-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  border-bottom: 1px solid var(--iomi-line);
+  min-width: 0;
+}
+.iomi-notch-item.has-children { grid-template-columns: minmax(0, 1fr) 28px; }
 .iomi-notch-link {
-  display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
-  padding: 11px 0; border-bottom: 1px solid var(--iomi-line);
+  display: flex; align-items: center; min-width: 0;
+  padding: 11px 0;
   color: var(--iomi-ink); text-decoration: none; font-size: 16px; font-weight: 500;
   transition: color 0.15s ease, padding-left 0.15s ease;
 }
 .iomi-notch-link:hover { color: #fff; padding-left: 5px; }
-.iomi-notch-link span { font-size: 11.5px; color: var(--iomi-ink-3); font-weight: 400; }
+.iomi-notch-copy {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+  min-width: 0; width: 100%;
+}
+.iomi-notch-name { color: inherit; white-space: nowrap; }
+.iomi-notch-note {
+  color: var(--iomi-ink-3); font-size: 11.5px; font-weight: 400;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.iomi-notch-arrow,
+.iomi-notch-back {
+  border: 0; background: transparent; color: var(--iomi-ink-3); cursor: pointer;
+  display: inline-grid; place-items: center; padding: 0;
+  transition: color 0.18s ease, transform 0.18s ease, background 0.18s ease;
+}
+.iomi-notch-arrow { width: 28px; height: 100%; min-height: 43px; }
+.iomi-notch-arrow svg,
+.iomi-notch-back svg { width: 15px; height: 15px; stroke-width: 1.6; }
+.iomi-notch-arrow:hover { color: var(--iomi-ink); transform: translateX(2px); }
+.iomi-notch-arrow:focus-visible,
+.iomi-notch-back:focus-visible {
+  outline: 2px solid #0a84ff; outline-offset: -2px;
+}
+
+/* The outer island remains fixed. Shared-layout motion turns the selected row
+   into the parent block while the child pages enter on its right. */
+.iomi-notch-parent-view {
+  display: grid;
+  grid-template-columns: minmax(0, 0.88fr) minmax(0, 1.12fr);
+  gap: 30px;
+  padding-top: 14px;
+}
+.iomi-notch-parent {
+  min-width: 0;
+  border-right: 1px solid var(--iomi-line);
+  padding-right: 28px;
+  display: flex;
+  flex-direction: column;
+}
+.iomi-notch-back {
+  width: 30px; height: 30px; border-radius: 50%;
+  background: rgba(255, 255, 255, 0.055);
+}
+.iomi-notch-back:hover { color: var(--iomi-ink); background: rgba(255, 255, 255, 0.1); transform: translateX(-2px); }
+.iomi-notch-parent-copy { margin: auto 0; padding-bottom: 24px; }
+.iomi-notch-parent h2 {
+  margin: 0; color: var(--iomi-ink);
+  font-size: 34px; font-weight: 600; line-height: 1.05; letter-spacing: 0;
+}
+.iomi-notch-parent p {
+  margin: 10px 0 0; color: var(--iomi-ink-3);
+  font-size: 14px; font-weight: 400; line-height: 1.4;
+}
+.iomi-notch-subpages { min-width: 0; }
+.iomi-notch-subpage {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 16px;
+  align-items: center;
+  column-gap: 10px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--iomi-line);
+  color: var(--iomi-ink);
+  text-decoration: none;
+  transition: color 0.18s ease, padding-left 0.18s ease;
+}
+.iomi-notch-subpage:hover { color: #fff; padding-left: 5px; }
+.iomi-notch-subpage > span {
+  min-width: 0; font-size: 16px; font-weight: 500;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.iomi-notch-subpage small {
+  grid-column: 1;
+  margin-top: 4px;
+  color: var(--iomi-ink-3);
+  font-size: 11.5px; font-weight: 400;
+}
+.iomi-notch-subpage svg {
+  grid-column: 2; grid-row: 1 / span 2;
+  width: 14px; height: 14px; color: var(--iomi-ink-3); stroke-width: 1.5;
+}
 
 .iomi-notch-bar:focus { outline: none; }
 .iomi-notch-bar:focus-visible { outline: 2px solid #0a84ff; outline-offset: -2px; }
 
 @media (max-width: 620px) {
-  .iomi-notch.open { height: 380px; }
+  .iomi-notch.open { height: min(560px, calc(100dvh - 12px)); }
   .iomi-notch-grid { grid-template-columns: 1fr; }
+  .iomi-notch-view { overflow-y: auto; }
+  .iomi-notch-parent-view {
+    grid-template-columns: minmax(108px, 0.78fr) minmax(0, 1.22fr);
+    gap: 15px; padding-inline: 18px;
+  }
+  .iomi-notch-parent { padding-right: 14px; }
+  .iomi-notch-parent-copy { padding-bottom: 12px; }
+  .iomi-notch-parent h2 { font-size: 23px; }
+  .iomi-notch-parent p { font-size: 12px; }
+  .iomi-notch-subpage > span { font-size: 14px; white-space: normal; }
+  .iomi-notch-subpage { padding: 13px 0; }
 }
 @media (prefers-reduced-motion: reduce) {
   .iomi-notch, .iomi-notch-panel { transition: none; }
+  .iomi-notch-arrow, .iomi-notch-back, .iomi-notch-link, .iomi-notch-subpage { transition: none; }
+}
+
+/* ── Sleep: eyes shut (the .sleeping lids are drawn in the SVG), plus a soft
+   snore drifting off the notch. The dock is pointer-events:none, so the snore
+   sits in the dock, not inside the notch (which clips overflow). ── */
+.iomi-notch-realeyes.sleeping { width: 30px; height: 20px; }
+.iomi-snore {
+  position: absolute; top: 7px; left: 50%; margin-left: 116px;
+  display: flex; align-items: flex-end; gap: 3px; pointer-events: none;
+}
+.iomi-snore i {
+  font-style: normal; font-weight: 600; color: rgba(245, 245, 247, 0.55);
+  opacity: 0; transform: translateY(6px);
+}
+.iomi-snore i:nth-child(1) { font-size: 11px; animation: iomiSnore 3.2s ease-in-out infinite; }
+.iomi-snore i:nth-child(2) { font-size: 14px; animation: iomiSnore 3.2s ease-in-out 0.5s infinite; }
+.iomi-snore i:nth-child(3) { font-size: 18px; animation: iomiSnore 3.2s ease-in-out 1s infinite; }
+@keyframes iomiSnore {
+  0% { opacity: 0; transform: translateY(6px) rotate(-4deg); }
+  30% { opacity: 0.65; }
+  100% { opacity: 0; transform: translateY(-16px) rotate(6deg); }
+}
+
+/* ── "Now playing" — the footer game is running; the notch shows an equalizer. */
+.iomi-music {
+  position: absolute; top: 10px; left: 50%; margin-left: 112px;
+  display: flex; align-items: flex-end; gap: 3px; height: 16px; pointer-events: none;
+}
+.iomi-music i { width: 3px; border-radius: 2px; background: #E8786E; height: 5px; }
+.iomi-music i:nth-child(1) { animation: iomiEq 0.6s ease-in-out infinite; }
+.iomi-music i:nth-child(2) { animation: iomiEq 0.6s ease-in-out 0.18s infinite; }
+.iomi-music i:nth-child(3) { animation: iomiEq 0.6s ease-in-out 0.36s infinite; }
+.iomi-music i:nth-child(4) { animation: iomiEq 0.6s ease-in-out 0.09s infinite; }
+@keyframes iomiEq { 0%, 100% { height: 4px; } 50% { height: 15px; } }
+@media (prefers-reduced-motion: reduce) { .iomi-music i { animation: none; height: 10px; } }
+
+/* ── Braino TV — a teaser is playing somewhere on the page ── */
+.iomi-watching {
+  position: absolute; top: 12px; left: 50%; margin-left: 112px; white-space: nowrap;
+  font-family: "SF Mono", ui-monospace, Menlo, monospace; font-size: 10px; letter-spacing: .04em;
+  color: rgba(245,239,231,.8); pointer-events: none;
+}
+
+/* ── Boot: click the sleeping notch → the whole page drops to black, only the
+   notch stays lit, and it runs the ACTUAL Mac boot sequence (a NotchFace
+   driven through the LID_SEQ beats). His line lands as a subtitle below. ── */
+/* Boot in place — no black. The NotchFace sits exactly where the notch is and
+   plays its beats; the rest of the page is untouched. Raised above the header
+   so the booting notch is never clipped. */
+.iomi-notch-dock.booting { z-index: 3001 !important; }
+.iomi-boot-face { opacity: 1; transition: opacity 0.4s ease; }
+.iomi-boot-face.fading { opacity: 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  .iomi-snore i { opacity: 0.5; transform: none; animation: none; }
 }

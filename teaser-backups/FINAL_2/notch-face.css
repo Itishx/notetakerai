@@ -1,0 +1,547 @@
+/* notch-face.css — Braino's notch, ported VERBATIM from
+   mac/braino-mac/renderer/braino-mac.css (#notch-face and friends).
+   Transforms applied: `#notch-face` -> `.nf-face`, `#nf-*` ids -> `.nf-*`
+   classes (so the web can render several instances), and the root
+   `position: fixed` -> `absolute` (each page places its own instance).
+   Every dimension, timing, color and keyframe is the app's own.
+   If the app's notch changes, re-port this file the same way. */
+
+.nf-face {
+  /* The window truly starts at screen y=0 (enableLargerThanScreen defeats the
+     menu-bar constraint) and our level is above the bar, so the pill occupies
+     the notch strip itself: its top --nf-notch-h hides behind the physical
+     housing, the face band lives on the chin below. */
+  --nf-notch-h: 33px;
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  pointer-events: none;
+  z-index: 57;
+  opacity: 0;
+  transition: opacity 0.5s ease;
+}
+
+.nf-face.on {
+  opacity: 1;
+}
+
+.nf-face .nf-pill {
+  position: relative;
+  margin: 0 auto;
+  /* Idle: pure black, exactly notch-width — it merges with the physical
+     housing into one bigger notch, and his eyes float in the black. The
+     coral head is revealed by the wake morph. */
+  width: var(--nf-notch-w, 190px);
+  height: calc(var(--nf-notch-h) + 22px);
+  border-radius: 0 0 16px 16px;
+  overflow: hidden;
+  background: linear-gradient(180deg, #F6A8A2, #E8786E 55%, #C9544A);
+  transition:
+    width 0.5s cubic-bezier(0.34, 1.25, 0.4, 1),
+    height 0.5s cubic-bezier(0.34, 1.25, 0.4, 1),
+    border-radius 0.5s ease,
+    box-shadow 0.4s ease;
+}
+
+/* Black cover that makes idle read as "inside the notch"; fades on wake. */
+.nf-face .nf-pill::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: #000;
+  z-index: 2;
+  transition: opacity 0.45s ease;
+  opacity: 1;
+}
+
+/* The notch stays black in every state — the island extends, never fills. */
+
+.nf-face .nf-folds { z-index: 1; }
+.nf-face .nf-band { z-index: 3; }
+.nf-face .nf-status { z-index: 4; }
+
+/* Idle is eyes-only in the dark: ears and mouth surface with the coral. */
+.nf-face:not(.listen):not(.speak) .nf-ears { opacity: 0; }
+.nf-face:not(.listen):not(.speak) .nf-mouth-idle { display: none; }
+
+.nf-face.listen .nf-pill {
+  width: 250px;
+  height: calc(var(--nf-notch-h) + 44px);
+  border-radius: 0 0 26px 26px;
+  box-shadow: 0 0 20px rgba(232, 120, 110, 0.3);
+}
+
+/* Final design: speaking keeps the island size, with a simple talking mouth. */
+.nf-face.speak .nf-pill {
+  width: 250px;
+  height: calc(var(--nf-notch-h) + 44px);
+  border-radius: 0 0 26px 26px;
+  box-shadow: 0 0 34px rgba(232, 120, 110, 0.5);
+}
+
+/* Captions: the island stretches SIDEWAYS only — height untouched, eyes stay
+   centred over the housing. Only what we HEARD is captioned (left wing) —
+   his replies are voice + the talking mouth, never text. */
+.nf-face.captioning .nf-pill {
+  width: 560px;
+}
+
+.nf-face .nf-cap {
+  position: absolute;
+  z-index: 4;
+  top: 0;
+  height: 100%;
+  width: calc(50% - var(--nf-notch-w, 190px) / 2 - 22px);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity 0.3s ease 0.18s;
+  line-height: 1.3;
+}
+
+.nf-face.captioning .nf-cap { opacity: 1; }
+
+.nf-face .nf-cap-l {
+  left: 14px;
+  text-align: right;
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  color: rgba(255, 240, 235, 0.5);
+}
+
+.nf-face .nf-folds {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.nf-face .nf-band {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: var(--nf-notch-h);
+  bottom: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+}
+
+.nf-face .nf-mini {
+  width: 78px;
+  margin-top: -4px;
+  display: none;
+  transition: width 0.5s cubic-bezier(0.34, 1.25, 0.4, 1);
+}
+
+/* Eyes appear only while the walker is home inside the notch, at rest. */
+.nf-face.home:not(.music):not(.live) .nf-mini {
+  display: block;
+}
+
+.nf-face.listen .nf-mouth-idle { display: none; }
+.nf-face.listen .nf-mouth-listen { display: block !important; }
+.nf-face.speak .nf-mouth-idle,
+.nf-face.speak .nf-mouth-listen { display: none !important; }
+
+.nf-face .nf-viz {
+  display: none;
+  position: absolute;
+  bottom: 7px;
+  left: 50%;
+  transform: translateX(-50%);
+  align-items: flex-end;
+  gap: 4px;
+  height: 22px;
+}
+
+/* Speaking: ONE animation only — the talking mouth (rule further down).
+   Bars stay off (they read as a second voice on top of the mouth); music
+   mode has its own dancer instead. */
+
+/* Music: the actual mascot (a live clone of his real rig), grooving in the
+   island. Limb animation is driven in JS via the same transform-attribute
+   technique the big walker uses, not CSS keyframes, since it is the real SVG. */
+.nf-face .nf-dancer {
+  display: none;
+  position: absolute;
+  top: 2px;
+  left: 50%;
+  width: 24px;
+  height: 29px;
+  margin-left: -12px;
+  overflow: visible;
+}
+
+.nf-face .nf-dancer svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.nf-face.music .nf-dancer {
+  display: block;
+}
+
+/* Busy (mission control) and music islands: modest stretch, ticker visible. */
+.nf-face.busy .nf-pill {
+  width: 250px;
+  height: calc(var(--nf-notch-h) + 26px);
+  border-radius: 0 0 20px 20px;
+  animation: nfAuthPulse 1.6s ease-in-out infinite;
+}
+
+/* Thinking text lives in the caption wings — busy's narrow pill was defined
+   later and beat captioning's 560px, crushing the wing into a 3-character
+   sliver. When both apply, the wide island wins (pulse kept). */
+.nf-face.busy.captioning .nf-pill {
+  width: 560px;
+}
+
+/* Ambient glance: eyes dart around while he reads the screen. */
+.nf-face.scanning .nf-pupil-l,
+.nf-face.scanning .nf-pupil-r,
+.nf-face.scanning .nf-glint-l,
+.nf-face.scanning .nf-glint-r {
+  animation: nfScanLook 2s ease-in-out infinite;
+}
+
+@keyframes nfScanLook {
+  0%, 100% { transform: translateX(0); }
+  22% { transform: translateX(-3.4px); }
+  48% { transform: translateX(3.2px) translateY(-1.4px); }
+  74% { transform: translateX(-1.6px) translateY(1.2px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nf-face.scanning .nf-pupil-l, .nf-face.scanning .nf-pupil-r { animation: none; }
+}
+
+.nf-face.music .nf-pill,
+.nf-face.live .nf-pill {
+  width: 260px;
+  height: calc(var(--nf-notch-h) + 34px);
+  border-radius: 0 0 22px 22px;
+}
+
+.nf-face.live .nf-pill {
+  animation: nfIslandBreath 3.8s ease-in-out infinite;
+}
+
+@keyframes nfIslandBreath {
+  0%, 100% { box-shadow: 0 0 12px rgba(232, 120, 110, 0.16), 0 0 26px rgba(232, 120, 110, 0.07); }
+  50% { box-shadow: 0 0 22px rgba(232, 120, 110, 0.34), 0 0 46px rgba(243, 154, 66, 0.14); }
+}
+
+/* Music light show: box-shadow is driven live in JS (--music-hue/--music-flash),
+   beat-synced when real system audio is readable, procedural otherwise. No CSS
+   keyframe here on purpose, it would fight the per-frame values. */
+.nf-face.music .nf-pill {
+  box-shadow:
+    0 0 calc(14px + 46px * var(--music-flash, 0)) calc(3px + 10px * var(--music-flash, 0))
+      hsla(var(--music-hue, 10), 82%, 66%, calc(0.26 + 0.6 * var(--music-flash, 0))),
+    0 0 calc(30px + 60px * var(--music-flash, 0))
+      hsla(calc(var(--music-hue, 10) + 45), 78%, 60%, calc(0.14 + 0.35 * var(--music-flash, 0)));
+}
+
+/* Timer done: the island celebrates for a beat. */
+.nf-face.nf-flash .nf-pill {
+  animation: nfFlash 0.65s ease-in-out 4;
+}
+
+@keyframes nfFlash {
+  0%, 100% { box-shadow: 0 0 12px rgba(232, 120, 110, 0.3); }
+  50% { box-shadow: 0 0 34px rgba(84, 222, 138, 0.85); }
+}
+
+/* Privacy dot: a quiet coral point whenever the mic session is live.
+   z-index matters: without it the dot paints UNDER the black cover (z2)
+   and is invisible in every state — which is exactly how it shipped broken. */
+.nf-face .nf-privacy {
+  position: absolute;
+  z-index: 5;
+  right: 10px;
+  bottom: 10px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #E8786E;
+  box-shadow: 0 0 6px rgba(232, 120, 110, 0.9);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.nf-face.mic-live .nf-privacy {
+  opacity: 1;
+  background: #E8786E;
+  box-shadow: 0 0 6px rgba(232, 120, 110, 0.9);
+  animation: nfPrivacyPulse 2.2s ease-in-out infinite;
+}
+
+/* Armed for the wake word: dim, steady, gray — a deliberately different look
+   from the bright coral pulse, so it reads as "listening on-device, nothing
+   sent" rather than "a live cloud session is streaming your voice." */
+/* Over the music light show a 5px dot drowns in the glow — go bigger with a
+   dark halo so "realtime is live" stays legible mid-party. */
+.nf-face.music.mic-live .nf-privacy {
+  width: 8px;
+  height: 8px;
+  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.6), 0 0 10px rgba(232, 120, 110, 1);
+}
+
+.nf-face.wake-armed:not(.mic-live) .nf-privacy {
+  opacity: 0.7;
+  background: rgba(210, 210, 210, 0.8);
+  box-shadow: 0 0 3px rgba(210, 210, 210, 0.5);
+  animation: none;
+}
+
+@keyframes nfPrivacyPulse {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
+}
+
+/* The notch ticker replaces the floating status pill. */
+#status-pill { display: none !important; }
+
+.nf-face.speak .nf-mouth-talk {
+  display: block !important;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: nfTalk 0.28s ease-in-out infinite;
+}
+
+@keyframes nfTalk {
+  0%, 100% { transform: scaleY(0.45); }
+  50% { transform: scaleY(1.25); }
+}
+
+.nf-face .nf-viz span {
+  width: 3px;
+  border-radius: 2px;
+  background: #FFF3EE;
+  box-shadow: 0 0 6px rgba(255, 240, 235, 0.6);
+  height: 6px;
+  animation: nfBars 0.7s ease-in-out infinite;
+}
+
+.nf-face .nf-viz span:nth-child(2) { animation-delay: 0.09s; }
+.nf-face .nf-viz span:nth-child(3) { animation-delay: 0.18s; animation-duration: 0.62s; }
+.nf-face .nf-viz span:nth-child(4) { animation-delay: 0.27s; }
+.nf-face .nf-viz span:nth-child(5) { animation-delay: 0.36s; animation-duration: 0.78s; }
+.nf-face .nf-viz span:nth-child(6) { animation-delay: 0.45s; }
+.nf-face .nf-viz span:nth-child(7) { animation-delay: 0.54s; animation-duration: 0.66s; }
+.nf-face .nf-viz span:nth-child(8) { animation-delay: 0.63s; }
+.nf-face .nf-viz span:nth-child(9) { animation-delay: 0.72s; animation-duration: 0.74s; }
+
+.nf-face .nf-eye {
+  transform-box: fill-box;
+  transform-origin: center;
+  opacity: 1;
+  transition: transform 0.55s ease, opacity 0.5s ease;
+}
+
+/* Asleep / dozing: eyes closed. Used during boot (before auth completes) and
+   whenever the walker is out roaming with nothing happening — one soul, so the
+   home face rests while the body is away. */
+.nf-face.asleep .nf-eye {
+  transform: scaleY(0.08);
+}
+
+.nf-face.asleep .nf-mouth-idle {
+  d: path("M 54 44 Q 60 46.5 66 44");
+}
+
+/* Beat 3: eyes-open greeting glow — one bright warm pulse, then settle. */
+.nf-face.nf-greet .nf-pill {
+  animation: nfGreetGlow 1.1s ease-out 1;
+}
+
+@keyframes nfGreetGlow {
+  0% { box-shadow: 0 0 0 rgba(232, 120, 110, 0); }
+  30% { box-shadow: 0 0 34px rgba(232, 120, 110, 0.85), 0 0 60px rgba(243, 154, 66, 0.4); }
+  100% { box-shadow: 0 0 12px rgba(232, 120, 110, 0.16), 0 0 26px rgba(232, 120, 110, 0.07); }
+}
+
+/* Boot: authenticating — island extends, cool pulse, status caption. */
+.nf-face.nf-auth .nf-pill {
+  width: 250px;
+  height: calc(var(--nf-notch-h) + 44px);
+  border-radius: 0 0 26px 26px;
+  animation: nfAuthPulse 1.3s ease-in-out infinite;
+}
+
+.nf-face.nf-auth-ok .nf-pill {
+  box-shadow: 0 0 30px rgba(84, 222, 138, 0.75);
+}
+
+.nf-face.nf-auth-err .nf-pill {
+  box-shadow: 0 0 30px rgba(255, 92, 92, 0.75);
+}
+
+@keyframes nfAuthPulse {
+  0%, 100% { box-shadow: 0 0 14px rgba(122, 162, 255, 0.35); }
+  50% { box-shadow: 0 0 30px rgba(122, 162, 255, 0.7); }
+}
+
+.nf-status {
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  bottom: 6px;
+  text-align: center;
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(255, 240, 235, 0.9);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+  white-space: nowrap;
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.nf-status .nf-status-inner {
+  display: inline-block;
+}
+
+.nf-status .nf-status-inner.marquee {
+  animation: nfMarquee 7s ease-in-out infinite alternate;
+}
+
+@keyframes nfMarquee {
+  0%, 12% { transform: translateX(0); }
+  88%, 100% { transform: translateX(var(--nf-scroll, -40px)); }
+}
+
+.nf-status.show {
+  opacity: 1;
+}
+
+.nf-face.blink .nf-eye {
+  animation: nfBlink 0.22s ease-in-out;
+}
+
+.nf-face.listen .nf-eye {
+  transform: scaleY(1.06);
+}
+
+/* The iPhone "Hey Siri" pattern: armed but idle = a sleepy half-lidded
+   shade (still there, still listening for the wake word locally, just
+   resting), not the wide-open idle look. A live session snaps them open —
+   "he wakes up" — before the island itself takes over the visual. */
+/* Dozing: a proper closed eyelid curve replaces the open eye, rather than
+   squashing it flat (a squash read as broken, not sleepy). */
+.nf-face .nf-lid {
+  opacity: 0;
+  transition: opacity 0.5s ease;
+}
+
+.nf-face.dozing .nf-eye {
+  opacity: 0;
+  transition: opacity 0.5s ease;
+}
+
+.nf-face.dozing .nf-lid {
+  opacity: 1;
+}
+
+.nf-face.awake .nf-eye {
+  transform: scaleY(1.1);
+}
+
+.nf-face .nf-sonar {
+  position: absolute;
+  top: calc(var(--nf-notch-h) + 10px);
+  left: 50%;
+  width: 2px;
+  height: 2px;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+}
+
+/* Sonar is BACK (user call): with the screen glow now music-only, the rings
+   are the listening signal again — notch-local, no full-screen anything. */
+.nf-face.listen .nf-sonar { opacity: 1; }
+
+.nf-face .nf-sonar i {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform: translate(-50%, -50%);
+  width: 120px;
+  height: 44px;
+  border-radius: 999px;
+  border: 1.5px solid #E8786E;
+  opacity: 0;
+}
+
+.nf-face.listen .nf-sonar i { animation: nfSonar 2.4s ease-out infinite; }
+.nf-face.listen .nf-sonar i:nth-child(2) { animation-delay: 0.8s; }
+.nf-face.listen .nf-sonar i:nth-child(3) { animation-delay: 1.6s; }
+
+@keyframes nfSonar {
+  0% { width: 120px; height: 44px; opacity: 0.6; border-width: 2px; }
+  100% { width: 340px; height: 150px; opacity: 0; border-width: 0.5px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nf-face.listen .nf-sonar i { animation: none; opacity: 0.4; }
+}
+
+@keyframes nfBars {
+  0%, 100% { height: 6px; }
+  50% { height: 20px; }
+}
+
+@keyframes nfBlink {
+  0%, 100% { transform: scaleY(1); }
+  50% { transform: scaleY(0.12); }
+}
+
+/* Musical notes drifting out from under the notch while music plays. */
+
+/* ══════════════════════════════════════════════════════════════════════════
+   WEB-ONLY ADDITIONS — everything above this line is the verbatim app port;
+   these two states exist only for the site's demos, not in the Mac app.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* Auth verdict on the web: he WINKS instead of printing "authenticated"
+   (at demo scale the status text collides with his open eyes). */
+.nf-face.nf-wink .nf-eye-r { animation: nfWink 0.6s ease-in-out 1; }
+@keyframes nfWink {
+  0%, 100% { transform: scaleY(1); }
+  35%, 65% { transform: scaleY(0.08); }
+}
+
+/* The chameleon beat: for one flicker the black cover lifts and the coral
+   brain (the gradient + folds that are ALWAYS under the glass) shows
+   through — his true colors — then the notch goes black again. The island
+   holds the extended auth size during the flash so the coral fills a stable
+   shape instead of a shrinking one. */
+.nf-face.nf-coral .nf-pill {
+  width: 250px;
+  height: calc(var(--nf-notch-h) + 44px);
+  border-radius: 0 0 26px 26px;
+}
+.nf-face.nf-coral .nf-pill::after {
+  opacity: 1;
+  /* a transparent band travels across the black cover: the coral shows
+     through the moving gap — a wave passing through him, left to right */
+  background: linear-gradient(90deg, #000 0 38%, rgba(0, 0, 0, 0) 46% 54%, #000 62% 100%);
+  background-size: 300% 100%;
+  background-position: 100% 0;
+  animation: nfCoralWave 0.7s cubic-bezier(.4, .1, .4, 1) 1 both;
+}
+@keyframes nfCoralWave {
+  from { background-position: 100% 0; }
+  to { background-position: 0% 0; }
+}
+.nf-face.nf-coral .nf-folds { opacity: 1; }
+.nf-face.nf-coral .nf-pill { box-shadow: 0 0 34px rgba(232, 120, 110, 0.55), 0 0 70px rgba(232, 120, 110, 0.25); }

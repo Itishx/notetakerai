@@ -46,6 +46,7 @@
         id: String(item?.id || index + 1),
         desc,
         status,
+        doneWhen: String(item?.doneWhen || "").trim(),
       });
       if (normalized.length >= 8) break;
     }
@@ -130,7 +131,7 @@
   }
 
   function renderTaskState(state) {
-    const subgoals = state.subgoals.map((goal) => `- [${goal.status}] ${goal.id}. ${goal.desc}`).join("\n") || "- [active] 1. Complete the task";
+    const subgoals = state.subgoals.map((goal) => `- [${goal.status}] ${goal.id}. ${goal.desc}${goal.doneWhen ? ` (done when: ${goal.doneWhen})` : ""}`).join("\n") || "- [active] 1. Complete the task";
     const facts = state.facts.slice(-10).map((fact) => `- ${fact.key}: ${fact.value}`).join("\n") || "None.";
     const history = state.history.slice(-3).map((item, index) => {
       const action = item.action ? JSON.stringify(item.action) : "(none)";

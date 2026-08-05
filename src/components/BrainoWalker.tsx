@@ -51,6 +51,26 @@ export default function BrainoWalker({
     let perched = false;
     const viewportMaxX = () => Math.max(40, (lane.clientWidth || window.innerWidth) - W - 6);
 
+    // ── footer platformer: jump (↑/Space) and land on `.sb-bridge` ledges ──
+    let jumpY = 0, jumpV = 0, airborne = false, onBridge = false;
+    // The highest surface top (px above the lane floor) that is under his feet
+    // AND at or below height `y` — so he lands on the topmost ledge beneath him,
+    // and drops to the next one down when he walks off. Floor is 0.
+    const surfaceUnderFeet = (y: number) => {
+      const bridges = document.querySelectorAll<HTMLElement>(".sb-bridge");
+      const lr = lane.getBoundingClientRect();
+      const cx = lr.left + posX + W / 2;
+      let best = 0;
+      bridges.forEach((br) => {
+        const r = br.getBoundingClientRect();
+        if (cx >= r.left && cx <= r.right) {
+          const h = lr.bottom - r.top;
+          if (h <= y + 10 && h > best) best = h;
+        }
+      });
+      return best;
+    };
+
     const roamLanePos = () => {
       lane.style.top = `${window.innerHeight - 96 - 16}px`;
       lane.style.left = "0px";
@@ -126,7 +146,22 @@ export default function BrainoWalker({
         else if (x <= 6) { x = 6; dirX = 1; }
         posX = x;
       }
-      if (!throwMode) walker.style.transform = `translateX(${posX}px)`;
+      // jump physics + bridge/floor landing
+      if (!throwMode && !perched) {
+        if (airborne) {
+          jumpV -= 2000 * dt; jumpY += jumpV * dt;
+          const surf = surfaceUnderFeet(jumpY);
+          if (jumpV < 0 && jumpY <= surf) { jumpY = surf; jumpV = 0; airborne = false; onBridge = surf > 6; }
+          else if (jumpY <= 0) { jumpY = 0; jumpV = 0; airborne = false; onBridge = false; }
+        } else {
+          // standing: keep the surface under his feet; walk off an edge → fall
+          const support = surfaceUnderFeet(jumpY);
+          if (support >= jumpY - 4) { jumpY = support; onBridge = support > 6; }
+          else { airborne = true; jumpV = 0; onBridge = false; }
+        }
+      } else { jumpY = 0; airborne = false; onBridge = false; }
+
+      if (!throwMode) walker.style.transform = `translate(${posX}px, ${-jumpY}px)`;
       if (flip) flip.style.transform = `scaleX(${dirX})`;
 
       // leg / arm walk cycle
@@ -349,6 +384,23 @@ export default function BrainoWalker({
     const onMouse = (e: MouseEvent) => { mouseX = e.clientX; mouseY = e.clientY; mouseAt = performance.now(); };
     const onResize = () => { applyLanePos(); posX = Math.max(6, Math.min(posX, viewportMaxX())); };
 
+    // ↑ / Space makes him jump — but only when a footer bridge is near the
+    // bottom of the viewport, so the key never hijacks normal page scrolling.
+    const onJumpKey = (e: KeyboardEvent) => {
+      if (e.code !== "Space" && e.key !== " " && e.key !== "ArrowUp") return;
+      if (perched || thrown || moonwalking || airborne) return;
+      const lr = lane.getBoundingClientRect();
+      let near = false;
+      document.querySelectorAll<HTMLElement>(".sb-bridge").forEach((br) => {
+        const r = br.getBoundingClientRect();
+        if (r.top < lr.bottom + 40 && r.bottom > lr.bottom - 360) near = true;
+      });
+      if (!near) return;
+      e.preventDefault();
+      jumpV = 720; airborne = true; onBridge = false;
+      if (Math.random() < 0.35) say("Wheee!");
+    };
+
     walker.addEventListener("pointerdown", onDown);
     walker.addEventListener("pointermove", onMove);
     walker.addEventListener("pointerup", onUp);
@@ -356,6 +408,7 @@ export default function BrainoWalker({
     window.addEventListener("mousemove", onMouse);
     window.addEventListener("resize", onResize);
     window.addEventListener("scroll", updatePerch, { passive: true });
+    window.addEventListener("keydown", onJumpKey, { passive: false });
 
     posX = Math.min(Math.max(40, window.innerWidth * 0.5), viewportMaxX());
     updatePerch();
@@ -372,6 +425,7 @@ export default function BrainoWalker({
       window.removeEventListener("mousemove", onMouse);
       window.removeEventListener("resize", onResize);
       window.removeEventListener("scroll", updatePerch);
+      window.removeEventListener("keydown", onJumpKey);
     };
   }, []);
 

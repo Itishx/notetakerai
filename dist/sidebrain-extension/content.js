@@ -32,9 +32,17 @@ if (chrome?.runtime?.sendMessage) {
   };
 }
 
+function __sbIsBrainoSiteHost(host = location.hostname) {
+  return host === "trybraino.com" ||
+    host === "braino-eight.vercel.app" ||
+    /^braino-git-.*\.vercel\.app$/i.test(host) ||
+    host === "localhost" ||
+    host === "127.0.0.1";
+}
+
 // Sync Supabase session from website localStorage into extension storage so
 // checkAuth finds a token even when the user logged in on the website (not via the extension auth tab).
-if (location.hostname === 'trybraino.com') {
+if (__sbIsBrainoSiteHost()) {
   const __sbSyncWebAuth = () => {
     try {
       const raw = localStorage.getItem('sb-suwhgaxxdizowbyjlljj-auth-token');
@@ -58,6 +66,54 @@ if (location.hostname === 'trybraino.com') {
     if (e.key === 'sb-suwhgaxxdizowbyjlljj-auth-token') __sbSyncWebAuth();
   });
 }
+
+// Website chat → installed extension bridge. The page cannot call chrome.runtime
+// directly without knowing the extension id, so the content script receives a
+// same-window event and forwards it into the exact background Delegate path.
+window.addEventListener("message", (event) => {
+  if (event.source !== window || !__sbIsBrainoSiteHost()) return;
+  const data = event.data;
+  if (!data || data.type !== "BRAINO_CHAT_DELEGATE_RUN") return;
+
+  const requestId = String(data.requestId || "");
+  const task = String(data.task || "").trim().slice(0, 6000);
+  const chatHistory = Array.isArray(data.chatHistory) ? data.chatHistory.slice(-10) : [];
+  const reply = (payload) => {
+    try {
+      window.postMessage({ type: "BRAINO_CHAT_DELEGATE_RESULT", requestId, ...payload }, window.location.origin);
+    } catch (_) {}
+  };
+
+  if (!requestId || !task) {
+    reply({ ok: false, error: "Missing Delegate task." });
+    return;
+  }
+
+  try {
+    chrome.runtime.sendMessage({
+      action: "runBrainAgent",
+      task,
+      connector: data.connector || null,
+      source: "braino-chat-page",
+      preferNonBrainoTab: true,
+      chatHistory,
+    }, (res) => {
+      const err = chrome.runtime.lastError?.message || res?.error || null;
+      reply({
+        ok: !err && res?.ok !== false,
+        error: err,
+        duplicate: res?.duplicate === true,
+        tabId: res?.tabId || null,
+        moved: res?.moved === true,
+        created: res?.created === true,
+        quotaExceeded: res?.quotaExceeded === true,
+        surface: res?.surface || null,
+      });
+    });
+  } catch (error) {
+    reply({ ok: false, error: error?.message || "Could not reach Braino extension." });
+  }
+});
 
 // Generate a stable, unique CSS selector for an element (used by browser agent)
 function getStableSelector(el) {
@@ -100,6 +156,7 @@ function __sbSendPageVoiceEvent(event, payload = {}) {
       event,
       text: payload.text,
       isFinal: payload.isFinal,
+      confidence: payload.confidence,
       message: payload.message,
       source: payload.source,
     });
@@ -142,14 +199,22 @@ function __sbStartPageVoiceRecognition(mode = "manual", source = "generic") {
     window.__sideBrainRecognition = rec;
 
     rec.onresult = (e) => {
-      const text = Array.from(e.results).map((r) => r[0].transcript).join("");
+      const results = Array.from(e.results);
+      const text = results.map((r) => r[0].transcript).join("");
       const isFinal = e.results[e.results.length - 1].isFinal;
+      const confidences = results
+        .map((r) => Number(r?.[0]?.confidence))
+        .filter((n) => Number.isFinite(n) && n > 0);
+      const confidence = confidences.length
+        ? confidences.reduce((sum, n) => sum + n, 0) / confidences.length
+        : null;
       const currentMode = window.__sideBrainVoiceMode || mode;
       const currentSource = window.__sideBrainVoiceSource || source;
 
       __sbSendPageVoiceEvent("transcript", {
         text,
         isFinal,
+        confidence,
         source: currentSource,
       });
     };
@@ -983,20 +1048,180 @@ function __sbGmailFindSearchInput() {
 
 function __sbGmailSetInputValue(input, value) {
   if (!input) return false;
-  try { input.focus(); } catch(_) {}
-  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set
-    || Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")?.set;
-  if (setter) setter.call(input, value);
-  else input.value = value;
-  input.dispatchEvent(new Event("input", { bubbles: true }));
+  const nextValue = String(value ?? "");
+  try { input.focus(); input.click?.(); } catch(_) {}
+
+  const prototypes = [];
+  if (input instanceof window.HTMLTextAreaElement) prototypes.push(window.HTMLTextAreaElement.prototype);
+  if (input instanceof window.HTMLInputElement) prototypes.push(window.HTMLInputElement.prototype);
+  prototypes.push(Object.getPrototypeOf(input), window.HTMLInputElement.prototype, window.HTMLTextAreaElement.prototype);
+
+  let wrote = false;
+  for (const proto of Array.from(new Set(prototypes.filter(Boolean)))) {
+    const setter = Object.getOwnPropertyDescriptor(proto, "value")?.set;
+    if (!setter) continue;
+    try {
+      setter.call(input, nextValue);
+      wrote = true;
+      break;
+    } catch (_) {}
+  }
+
+  if (!wrote) {
+    try {
+      input.value = nextValue;
+      wrote = true;
+    } catch (_) {}
+  }
+
+  if (!wrote && input.isContentEditable) {
+    input.textContent = nextValue;
+    wrote = true;
+  }
+
+  try {
+    input.dispatchEvent(new InputEvent("input", { inputType: "insertText", data: nextValue, bubbles: true }));
+  } catch (_) {
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  }
   input.dispatchEvent(new Event("change", { bubbles: true }));
+  input.dispatchEvent(new KeyboardEvent("keyup", { key: "Unidentified", bubbles: true }));
+
+  const current = __sbGmailNormalizeText(input.value || input.innerText || input.textContent || "");
+  const expected = __sbGmailNormalizeText(nextValue);
+  return !expected || current === expected || current.includes(expected.slice(0, Math.min(40, expected.length)));
+}
+
+function __sbGmailWait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, Math.max(0, Number(ms || 0))));
+}
+
+function __sbGmailDispatchKey(target, key) {
+  if (!target) return;
+  const keyCode = key === "Enter" ? 13 : key === "Tab" ? 9 : key.charCodeAt(0);
+  target.dispatchEvent(new KeyboardEvent("keydown", { key, code: key, keyCode, bubbles: true, cancelable: true }));
+  target.dispatchEvent(new KeyboardEvent("keypress", { key, code: key, keyCode, bubbles: true, cancelable: true }));
+  target.dispatchEvent(new KeyboardEvent("keyup", { key, code: key, keyCode, bubbles: true, cancelable: true }));
+}
+
+function __sbGmailClickElement(el) {
+  if (!el) return false;
+  try { el.scrollIntoView({ block: "center", inline: "center", behavior: "instant" }); } catch (_) {}
+  try { el.focus?.(); } catch (_) {}
+  const opts = { bubbles: true, cancelable: true, view: window };
+  for (const type of ["mouseover", "mousemove", "mousedown", "mouseup", "click"]) {
+    try { el.dispatchEvent(new MouseEvent(type, opts)); } catch (_) {}
+  }
+  try { el.click?.(); } catch (_) {}
   return true;
 }
 
-function __sbGmailFindOpenComposeDialog() {
-  const dialogs = Array.from(document.querySelectorAll('[role="dialog"]'));
-  return dialogs.find((dialog) => __sbGmailVisible(dialog) && dialog.querySelector('input[name="subjectbox"], input[placeholder*="Subject"], textarea[name="to"]'))
-    || null;
+function __sbGmailClickElementAtCenter(el) {
+  if (!el) return false;
+  try { el.scrollIntoView({ block: "center", inline: "center", behavior: "instant" }); } catch (_) {}
+  const rect = el.getBoundingClientRect();
+  const x = Math.max(1, Math.min(window.innerWidth - 1, rect.left + rect.width / 2));
+  const y = Math.max(1, Math.min(window.innerHeight - 1, rect.top + rect.height / 2));
+  const hit = document.elementFromPoint(x, y);
+  const target = (hit && (el === hit || el.contains(hit))) ? hit : el;
+  try { target.focus?.(); } catch (_) {}
+  const opts = { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y, screenX: x, screenY: y };
+  for (const type of ["mouseover", "mousemove", "mousedown", "mouseup", "click"]) {
+    try { target.dispatchEvent(new MouseEvent(type, opts)); } catch (_) {}
+  }
+  try { target.click?.(); } catch (_) {}
+  return true;
+}
+
+function __sbGmailGetOpenComposeDialogs() {
+  const selectors = [
+    '[role="dialog"]',
+    '.M9',
+    '.AD',
+  ];
+  const seen = new Set();
+  const dialogs = [];
+  for (const selector of selectors) {
+    for (const dialog of document.querySelectorAll(selector)) {
+      if (seen.has(dialog) || !__sbGmailVisible(dialog)) continue;
+      seen.add(dialog);
+      const hasComposeSurface = dialog.querySelector(
+        'input[name="subjectbox"], input[placeholder*="Subject"], textarea[name="to"], textarea[aria-label*="To"], [aria-label*="Recipients"], [aria-label*="Message Body"], div[contenteditable="true"][role="textbox"]',
+      );
+      const title = __sbGmailNormalizeText(dialog.querySelector(".aYF, .aYH, .Hp")?.innerText || dialog.innerText || "");
+      if (!hasComposeSurface && !/\bnew message\b/i.test(title)) continue;
+      dialogs.push(dialog);
+    }
+  }
+  return dialogs.sort((a, b) => {
+    const ar = a.getBoundingClientRect();
+    const br = b.getBoundingClientRect();
+    const az = Number(window.getComputedStyle(a).zIndex) || 0;
+    const bz = Number(window.getComputedStyle(b).zIndex) || 0;
+    return (az - bz) || (ar.left - br.left) || (ar.top - br.top);
+  });
+}
+
+function __sbGmailComposeDialogIsBlank(dialog) {
+  if (!dialog) return false;
+  const text = __sbGmailNormalizeText(dialog.innerText || dialog.textContent || "");
+  const subject = __sbGmailNormalizeText(dialog.querySelector('input[name="subjectbox"], input[placeholder*="Subject"], input[aria-label*="Subject"]')?.value || "");
+  const body = __sbGmailNormalizeText(__sbGmailFindComposeBody(dialog)?.innerText || __sbGmailFindComposeBody(dialog)?.textContent || "");
+  const hasRecipientChip = Boolean(dialog.querySelector("[email], [data-hovercard-id], [data-hovercard-owner-id]"));
+  return !subject && !body && !hasRecipientChip && !/\S+@\S+\.\S+/.test(text);
+}
+
+function __sbGmailFindOpenComposeDialog(options = {}) {
+  let dialogs = __sbGmailGetOpenComposeDialogs();
+  if (options.exclude instanceof Set) {
+    dialogs = dialogs.filter((dialog) => !options.exclude.has(dialog));
+  }
+  if (options.preferBlank) {
+    const blank = dialogs.filter(__sbGmailComposeDialogIsBlank);
+    if (blank.length) dialogs = blank;
+  }
+  return dialogs[dialogs.length - 1] || null;
+}
+
+function __sbGmailFindComposeButton() {
+  const selectors = [
+    'div[role="button"][gh="cm"]',
+    'div[role="button"][aria-label*="Compose"]',
+    'div[role="button"][data-tooltip*="Compose"]',
+    'button[aria-label*="Compose"]',
+    ".T-I.T-I-KE",
+  ];
+  for (const selector of selectors) {
+    for (const el of document.querySelectorAll(selector)) {
+      if (__sbGmailVisible(el)) return el;
+    }
+  }
+  const candidates = Array.from(document.querySelectorAll('div[role="button"], button'));
+  return candidates.find((el) => {
+    if (!__sbGmailVisible(el)) return false;
+    const label = __sbGmailNormalizeText(el.innerText || el.textContent || el.getAttribute("aria-label") || el.getAttribute("data-tooltip") || "");
+    return /^(compose|new message)$/i.test(label) || /\bcompose\b/i.test(label);
+  }) || null;
+}
+
+async function __sbGmailEnsureComposeDialog(options = {}) {
+  const before = new Set(__sbGmailGetOpenComposeDialogs());
+  if (!options.forceNew) {
+    const existing = __sbGmailFindOpenComposeDialog({ preferBlank: true });
+    if (existing) return { dialog: existing };
+  }
+  const composeButton = __sbGmailFindComposeButton();
+  if (!composeButton) return { error: "Gmail Compose button was not found." };
+  __sbGmailClickElement(composeButton);
+  let dialog = null;
+  for (let i = 0; i < 32; i += 1) {
+    await __sbGmailWait(250);
+    dialog = __sbGmailFindOpenComposeDialog({ exclude: before }) ||
+      __sbGmailFindOpenComposeDialog({ preferBlank: true }) ||
+      __sbGmailFindOpenComposeDialog();
+    if (dialog) return { dialog };
+  }
+  return { error: "Gmail compose window did not open." };
 }
 
 function __sbGmailFindComposeField(selectors, root = document) {
@@ -1012,17 +1237,73 @@ function __sbGmailFindComposeBody(root = document) {
     'div[role="textbox"][aria-label*="Message Body"]',
     'div[role="textbox"][g_editable="true"]',
     'div[contenteditable="true"][aria-label*="Message Body"]',
+    'div[contenteditable="true"][g_editable="true"]',
+    'div[contenteditable="true"][aria-label*="Message"]',
+    'div[contenteditable="true"][role="textbox"]',
   ];
   return __sbGmailFindComposeField(selectors, root);
 }
 
 function __sbGmailFindReplyButton() {
-  const candidates = Array.from(document.querySelectorAll('span[role="link"], div[role="button"], span[role="button"], button'));
-  return candidates.find((el) => {
-    if (!__sbGmailVisible(el)) return false;
-    const text = __sbGmailNormalizeText(el.innerText || el.textContent || el.getAttribute("aria-label") || "");
-    return /^reply$/i.test(text) || /^reply to all$/i.test(text);
-  }) || null;
+  const exactSelectors = [
+    '.amr .nr.wR .amn span.ams.bkH[role="link"]',
+    '.amr .amn span.ams.bkH[role="link"]',
+    'span.ams.bkH[role="link"]',
+  ];
+  for (const selector of exactSelectors) {
+    for (const el of document.querySelectorAll(selector)) {
+      if (!__sbGmailVisible(el)) continue;
+      if (el.closest?.("#__sb_bar__, #sb-brain-mascot-wrapper, .bg-overlay")) continue;
+      const text = __sbGmailNormalizeText(el.innerText || el.textContent || el.getAttribute("aria-label") || el.getAttribute("data-tooltip") || "");
+      if (/^reply$/i.test(text)) return el;
+    }
+  }
+
+  const selectors = [
+    '.amr .nr.wR .amn span[role="link"]',
+    '.amr .amn span[role="link"]',
+    '[role="main"] .amn .ams',
+    '[role="main"] .ams.bkH',
+    '[role="main"] div[role="button"][aria-label^="Reply"]',
+    '[role="main"] span[role="link"][aria-label^="Reply"]',
+    '[role="main"] div[role="button"][data-tooltip^="Reply"]',
+    '[role="main"] span[role="button"][data-tooltip^="Reply"]',
+    'div[role="button"][aria-label^="Reply"]',
+    'span[role="link"][aria-label^="Reply"]',
+    'div[role="button"][data-tooltip^="Reply"]',
+    'span[role="button"][data-tooltip^="Reply"]',
+    '.ams.bkH',
+    '.amn .ams',
+    'span[role="link"]',
+    'div[role="button"]',
+    'span[role="button"]',
+    'button',
+  ];
+  const seen = new Set();
+  const candidates = selectors.flatMap((selector) => Array.from(document.querySelectorAll(selector)));
+  const scored = [];
+  for (const el of candidates) {
+    if (seen.has(el)) continue;
+    seen.add(el);
+    if (!__sbGmailVisible(el)) continue;
+    if (el.closest?.("#__sb_bar__, #sb-brain-mascot-wrapper, .bg-overlay")) continue;
+    const text = __sbGmailNormalizeText(el.getAttribute("aria-label") || el.getAttribute("data-tooltip") || el.innerText || el.textContent || "");
+    if (!(/^reply$/i.test(text) || /^reply to all$/i.test(text) || /\breply\b/i.test(text))) continue;
+
+    const rect = el.getBoundingClientRect();
+    let score = 0;
+    if (/^reply$/i.test(text)) score += 80;
+    else if (/^reply to all$/i.test(text)) score += 55;
+    else score += 25;
+    if (el.closest?.('[role="main"]')) score += 30;
+    if (el.closest?.(".amn, .ams, .bkH")) score += 25;
+    if (rect.width >= 70 && rect.height >= 28) score += 25;
+    if (rect.top > window.innerHeight * 0.35) score += 20;
+    if (el.closest?.('[role="toolbar"], .G-atb, [gh="mtb"]')) score -= 50;
+    scored.push({ el, score, top: rect.top });
+  }
+  scored.sort((a, b) => (b.score - a.score) || (b.top - a.top));
+  return scored[0]?.el || null;
 }
 
 function __sbGmailFindSendButton(root = document) {
@@ -1030,8 +1311,155 @@ function __sbGmailFindSendButton(root = document) {
     'div[role="button"][aria-label^="Send"]',
     'div[role="button"][data-tooltip^="Send"]',
     'button[aria-label^="Send"]',
+    '.T-I.J-J5-Ji.aoO.v7.T-I-atl.L3',
   ];
-  return __sbGmailFindComposeField(selectors, root);
+  const found = __sbGmailFindComposeField(selectors, root);
+  if (found) return found;
+  const candidates = Array.from(root.querySelectorAll('div[role="button"], button'));
+  return candidates.find((el) => {
+    if (!__sbGmailVisible(el)) return false;
+    const label = __sbGmailNormalizeText(el.getAttribute("aria-label") || el.getAttribute("data-tooltip") || el.innerText || el.textContent || "");
+    return /^send\b/i.test(label);
+  }) || null;
+}
+
+function __sbGmailNormalizeReadableText(value) {
+  return String(value || "")
+    .replace(/\u00a0/g, " ")
+    .replace(/\r/g, "\n")
+    .split("\n")
+    .map((line) => line.replace(/\s+/g, " ").trim())
+    .filter(Boolean)
+    .join("\n")
+    .trim();
+}
+
+function __sbGmailTextFromClone(el) {
+  if (!el) return "";
+  const clone = el.cloneNode(true);
+  try {
+    clone.querySelectorAll([
+      "script",
+      "style",
+      "noscript",
+      "svg",
+      "button",
+      '[role="button"]',
+      '[aria-hidden="true"]',
+      ".gmail_quote",
+      ".yj6qo",
+      ".adL",
+      ".ajT",
+      ".ajR",
+    ].join(",")).forEach((node) => node.remove());
+  } catch (_) {}
+  return __sbGmailNormalizeReadableText(clone.innerText || clone.textContent || "");
+}
+
+function __sbGmailFirstVisibleText(selectors) {
+  for (const selector of selectors) {
+    for (const el of document.querySelectorAll(selector)) {
+      if (!__sbGmailVisible(el)) continue;
+      const text = __sbGmailNormalizeText(el.innerText || el.textContent || el.getAttribute("title") || "");
+      if (text) return text;
+    }
+  }
+  return "";
+}
+
+function __sbGmailReadSender(root = document) {
+  const selectors = [
+    ".gD[email]",
+    "[email].gD",
+    "[data-hovercard-id]",
+    "span[email]",
+  ];
+  for (const selector of selectors) {
+    for (const el of root.querySelectorAll(selector)) {
+      if (!__sbGmailVisible(el)) continue;
+      const email = __sbGmailNormalizeText(el.getAttribute("email") || el.getAttribute("data-hovercard-id") || "");
+      const name = __sbGmailNormalizeText(el.innerText || el.textContent || el.getAttribute("name") || email);
+      if (name || email) return { name, email };
+    }
+  }
+  return { name: "", email: "" };
+}
+
+function __sbGmailFindMessageBodyNodes() {
+  const selectors = [
+    '[role="main"] [role="listitem"] .a3s',
+    '[role="main"] .adn .a3s',
+    '[role="main"] .gs .a3s',
+    "div.a3s.aiL",
+    "div.a3s",
+  ];
+  const nodes = [];
+  const seen = new Set();
+  for (const selector of selectors) {
+    for (const el of document.querySelectorAll(selector)) {
+      if (seen.has(el)) continue;
+      seen.add(el);
+      if (!__sbGmailVisible(el)) continue;
+      const composeDialog = el.closest?.('[role="dialog"]');
+      if (composeDialog && composeDialog.querySelector('input[name="subjectbox"], textarea[name="to"], [aria-label*="Message Body"]')) continue;
+      nodes.push(el);
+    }
+  }
+  return nodes;
+}
+
+function __sbGmailReadCurrentThread() {
+  const subject = __sbGmailFirstVisibleText([
+    '[role="main"] h2.hP',
+    "h2.hP",
+    '[role="main"] h1',
+    '[role="main"] h2',
+  ]);
+  const bodyNodes = __sbGmailFindMessageBodyNodes();
+  const messages = [];
+  const seenBodies = new Set();
+
+  for (const bodyNode of bodyNodes) {
+    const body = __sbGmailTextFromClone(bodyNode);
+    if (!body || body.length < 2 || seenBodies.has(body)) continue;
+    seenBodies.add(body);
+    const messageRoot = bodyNode.closest?.('[role="listitem"], .adn, .gs') || document;
+    const sender = __sbGmailReadSender(messageRoot);
+    const date = __sbGmailNormalizeText(
+      messageRoot.querySelector?.(".g3[title], [data-tooltip*=','][title], span[title]")?.getAttribute("title")
+      || messageRoot.querySelector?.(".g3, [data-tooltip*=',']")?.innerText
+      || ""
+    );
+    messages.push({ from: sender, date, body });
+  }
+
+  const fallbackSender = __sbGmailReadSender(document);
+  const body = messages.map((message) => message.body).filter(Boolean).join("\n\n---\n\n");
+  const result = {
+    success: Boolean(subject || body),
+    site: "gmail",
+    url: window.location.href,
+    title: document.title || "",
+    subject,
+    from: messages[0]?.from || fallbackSender,
+    date: messages[0]?.date || "",
+    body,
+    messages,
+  };
+  if (!body) result.error = "The open Gmail message body was not found.";
+  return result;
+}
+
+function __sbGmailFormatCurrentThread(thread) {
+  if (!thread || !thread.success) return "";
+  const lines = [
+    "Gmail current thread",
+    thread.subject ? `Subject: ${thread.subject}` : "",
+    thread.from?.name || thread.from?.email ? `From: ${[thread.from.name, thread.from.email && thread.from.email !== thread.from.name ? `<${thread.from.email}>` : ""].filter(Boolean).join(" ")}` : "",
+    thread.date ? `Date: ${thread.date}` : "",
+    thread.body ? `Body:\n${thread.body}` : "",
+  ].filter(Boolean);
+  return lines.join("\n");
 }
 
 async function __sbGmailSearch(query) {
@@ -1040,70 +1468,572 @@ async function __sbGmailSearch(query) {
   if (!__sbGmailSetInputValue(input, String(query || "").trim())) {
     return { error: "Gmail search query could not be entered." };
   }
-  input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", code: "Enter", bubbles: true, cancelable: true }));
-  input.dispatchEvent(new KeyboardEvent("keypress", { key: "Enter", code: "Enter", bubbles: true, cancelable: true }));
-  input.dispatchEvent(new KeyboardEvent("keyup", { key: "Enter", code: "Enter", bubbles: true, cancelable: true }));
+  __sbGmailDispatchKey(input, "Enter");
+  await __sbGmailWait(1200);
   return { success: true, query: String(query || "").trim() };
 }
 
+function __sbGmailRecipientList(value) {
+  return String(value || "")
+    .split(/[;,]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+async function __sbGmailFillRecipients(toField, value) {
+  const recipients = __sbGmailRecipientList(value);
+  if (!toField || !recipients.length) return false;
+  for (const recipient of recipients) {
+    const wrote = __sbGmailSetInputValue(toField, recipient);
+    if (!wrote) return false;
+    await __sbGmailWait(180);
+    __sbGmailDispatchKey(toField, "Enter");
+    await __sbGmailWait(260);
+    if (__sbGmailNormalizeText(toField.value || toField.innerText || toField.textContent)) {
+      __sbGmailDispatchKey(toField, "Tab");
+      await __sbGmailWait(220);
+    }
+  }
+  return true;
+}
+
+async function __sbGmailSetRichTextField(field, text) {
+  if (!field) return false;
+  try { field.focus(); } catch (_) {}
+  field.click?.();
+  await __sbGmailWait(80);
+  const value = String(text || "");
+  try {
+    document.execCommand("selectAll", false, null);
+    document.execCommand("delete", false, null);
+  } catch (_) {}
+  const inserted = document.execCommand("insertText", false, value);
+  if (!inserted || !__sbGmailNormalizeText(field.innerText || field.textContent)) {
+    field.textContent = value;
+    try {
+      field.dispatchEvent(new InputEvent("input", { inputType: "insertText", data: value, bubbles: true }));
+    } catch (_) {
+      field.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+  }
+  return __sbGmailNormalizeText(field.innerText || field.textContent).includes(__sbGmailNormalizeText(value).slice(0, 40));
+}
+
+function __sbGmailFieldValue(el) {
+  return __sbGmailNormalizeText(el?.value || el?.innerText || el?.textContent || "");
+}
+
+function __sbGmailNeedleFound(haystack, needle) {
+  const expected = __sbGmailNormalizeText(needle).toLowerCase();
+  if (!expected) return true;
+  const hay = __sbGmailNormalizeText(haystack).toLowerCase();
+  return hay.includes(expected) || hay.includes(expected.slice(0, Math.min(40, expected.length)));
+}
+
+function __sbGmailRecipientLooksAccepted(root, field, value) {
+  const expected = __sbGmailNormalizeText(value);
+  if (!expected) return true;
+  const remaining = __sbGmailFieldValue(field);
+  if (!remaining) return true;
+  const attrs = Array.from((root || document).querySelectorAll("[email], [data-hovercard-id], [title], [aria-label]"))
+    .map((el) => [
+      el.getAttribute("email"),
+      el.getAttribute("data-hovercard-id"),
+      el.getAttribute("title"),
+      el.getAttribute("aria-label"),
+      el.innerText,
+      el.textContent,
+    ].filter(Boolean).join(" "))
+    .join(" ");
+  return __sbGmailNeedleFound(attrs, expected);
+}
+
 async function __sbGmailFillComposeFields({ to, subject, body }, options = {}) {
-  const root = __sbGmailFindOpenComposeDialog() || document;
+  const root = options.root || __sbGmailFindOpenComposeDialog() || document;
   const toField = __sbGmailFindComposeField([
     'textarea[name="to"]',
+    'input[name="to"]',
+    'textarea[aria-label*="To"]',
+    'input[aria-label*="To"]',
+    'textarea[aria-label*="Recipients"]',
     'input[aria-label*="Recipients"]',
     'input[peoplekit-id]',
+    '[role="combobox"][aria-label*="To"]',
+    '[role="combobox"][aria-label*="Recipients"]',
   ], root);
   const subjectField = __sbGmailFindComposeField([
     'input[name="subjectbox"]',
     'input[placeholder*="Subject"]',
+    'input[aria-label*="Subject"]',
   ], root);
   const bodyField = __sbGmailFindComposeBody(root);
 
-  if (to && toField) __sbGmailSetInputValue(toField, to);
-  if (subject && subjectField) __sbGmailSetInputValue(subjectField, subject);
+  const wroteRecipients = to && toField ? await __sbGmailFillRecipients(toField, to) : !to;
+  const wroteSubject = subject && subjectField ? __sbGmailSetInputValue(subjectField, subject) : !subject;
 
-  if (body && bodyField) {
-    try { bodyField.focus(); } catch(_) {}
-    bodyField.click?.();
-    await new Promise((resolve) => setTimeout(resolve, 80));
-    const text = String(body || "");
-    try {
-      document.execCommand("selectAll", false, null);
-      document.execCommand("delete", false, null);
-    } catch(_) {}
-    const inserted = document.execCommand("insertText", false, text);
-    if (!inserted || !__sbGmailNormalizeText(bodyField.innerText || bodyField.textContent)) {
-      bodyField.textContent = text;
-      bodyField.dispatchEvent(new InputEvent("input", { inputType: "insertText", data: text, bubbles: true }));
-    }
-  }
+  const wroteBody = body && bodyField ? await __sbGmailSetRichTextField(bodyField, body) : !body;
 
+  if (to && options.requireRecipient && !toField) return { error: "Gmail recipient field was not found." };
+  if (subject && options.requireSubject && !subjectField) return { error: "Gmail subject field was not found." };
+  if (body && !bodyField) return { error: "Gmail message body field was not found." };
+  if (to && options.requireRecipient && !wroteRecipients) return { error: "Gmail recipient could not be entered." };
+  if (to && options.requireRecipient && !__sbGmailRecipientLooksAccepted(root, toField, to)) return { error: "Gmail recipient was not accepted." };
+  if (subject && options.requireSubject && !wroteSubject) return { error: "Gmail subject could not be entered." };
+  if (subject && options.requireSubject && !__sbGmailNeedleFound(__sbGmailFieldValue(subjectField), subject)) return { error: "Gmail subject did not stick." };
+  if (body && options.requireBody && !wroteBody) return { error: "Gmail message body could not be entered." };
   if (!options.requireBody && (to || subject || body)) {
     return { success: true };
   }
-  if (body && !bodyField) return { error: "Gmail message body field was not found." };
   return { success: true };
 }
 
-async function __sbGmailSendOpenCompose() {
-  const root = __sbGmailFindOpenComposeDialog() || document;
+async function __sbGmailComposeHuman({ to, subject, body }, options = {}) {
+  const opened = await __sbGmailEnsureComposeDialog({ forceNew: options.forceNew !== false });
+  if (opened?.error) return opened;
+  const filled = await __sbGmailFillComposeFields({ to, subject, body }, {
+    root: opened.dialog,
+    requireRecipient: !!to,
+    requireSubject: !!subject,
+    requireBody: !!body,
+  });
+  if (filled?.error) return filled;
+  if (options.send) return __sbGmailSendOpenCompose(opened.dialog);
+  return { success: true, mode: "compose", sent: false };
+}
+
+function __sbGmailFindConfirmationButton(pattern) {
+  const candidates = Array.from(document.querySelectorAll('[role="dialog"] div[role="button"], [role="alertdialog"] div[role="button"], button'));
+  return candidates.find((el) => {
+    if (!__sbGmailVisible(el)) return false;
+    const label = __sbGmailNormalizeText(el.getAttribute("aria-label") || el.getAttribute("data-tooltip") || el.innerText || el.textContent || "");
+    return pattern.test(label);
+  }) || null;
+}
+
+async function __sbGmailSendOpenCompose(rootArg = null) {
+  const root = rootArg || __sbGmailFindOpenComposeDialog() || document;
   const sendButton = __sbGmailFindSendButton(root);
   if (!sendButton) return { error: "Gmail Send button was not found." };
-  sendButton.click();
-  return { success: true };
+  __sbGmailClickElement(sendButton);
+
+  let clickedConfirmation = false;
+  for (let i = 0; i < 36; i += 1) {
+    await __sbGmailWait(250);
+    const confirm = !clickedConfirmation && __sbGmailFindConfirmationButton(/^(ok|send anyway|send without subject)$/i);
+    if (confirm) {
+      clickedConfirmation = true;
+      __sbGmailClickElement(confirm);
+      continue;
+    }
+
+    const statusText = __sbGmailNormalizeText(
+      Array.from(document.querySelectorAll('[role="status"], .bAq, .vh, .aT, .J-J5-Ji'))
+        .filter(__sbGmailVisible)
+        .map((el) => el.innerText || el.textContent || el.getAttribute("aria-label") || "")
+        .join(" ")
+    );
+    if (/\bmessage sent\b|\bsent\b/i.test(statusText)) return { success: true, sent: true, status: statusText };
+    if (/\binvalid\b|\bnot sent\b|couldn.?t send|enter a recipient|recipient address/i.test(statusText)) {
+      return { error: statusText || "Gmail reported that the message was not sent." };
+    }
+
+    const stillOpen = rootArg
+      ? (root.isConnected && __sbGmailVisible(root))
+      : __sbGmailFindOpenComposeDialog();
+    if (!stillOpen) return { success: true, sent: true };
+  }
+
+  return { error: "Gmail did not confirm the message was sent." };
+}
+
+async function __sbGmailEnsureReplyBodyField() {
+  let bodyField = __sbGmailFindComposeBody(document);
+  for (let attempt = 0; attempt < 4 && !bodyField; attempt += 1) {
+    let replyButton = __sbGmailFindReplyButton();
+    if (!replyButton || attempt > 0) {
+      const main = document.querySelector('[role="main"]') || document.scrollingElement || document.documentElement;
+      try { main.scrollTo?.({ top: main.scrollHeight || document.body.scrollHeight, behavior: "smooth" }); } catch (_) {}
+      await __sbGmailWait(450);
+      replyButton = __sbGmailFindReplyButton();
+    }
+    if (!replyButton) continue;
+    __sbGmailClickElement(replyButton);
+    for (let i = 0; i < 16; i += 1) {
+      await __sbGmailWait(250);
+      bodyField = __sbGmailFindComposeBody(document);
+      if (bodyField) break;
+    }
+    if (!bodyField) {
+      try { replyButton.focus?.(); } catch (_) {}
+      __sbGmailDispatchKey(replyButton, "Enter");
+      for (let i = 0; i < 10; i += 1) {
+        await __sbGmailWait(250);
+        bodyField = __sbGmailFindComposeBody(document);
+        if (bodyField) break;
+      }
+    }
+  }
+  if (!bodyField) return { error: "Reply button was not found or Gmail reply editor did not open." };
+  return { bodyField };
+}
+
+async function __sbGmailOpenReplyBox() {
+  const opened = await __sbGmailEnsureReplyBodyField();
+  if (opened?.error) return opened;
+  return { success: true, mode: "reply" };
 }
 
 async function __sbGmailReplyToCurrentThread(body, options = {}) {
-  const replyButton = __sbGmailFindReplyButton();
-  if (!replyButton) return { error: "Reply button was not found in the current Gmail thread." };
-  replyButton.click();
-  await new Promise((resolve) => setTimeout(resolve, 700));
-  const filled = await __sbGmailFillComposeFields({ body }, { requireBody: true });
-  if (filled?.error) return filled;
+  const opened = await __sbGmailEnsureReplyBodyField();
+  if (opened?.error) return opened;
+  const bodyField = opened.bodyField;
+  const wroteBody = await __sbGmailSetRichTextField(bodyField, body);
+  if (!wroteBody) return { error: "Gmail reply body could not be entered." };
   if (options.send) {
     return __sbGmailSendOpenCompose();
   }
   return { success: true };
+}
+
+function __sbGmailCollectVisibleEmailRowElements(limit = 80) {
+  const selectors = [
+    "tr.zA",
+    'tr[role="row"]',
+    '[role="main"] [data-legacy-message-id]',
+  ];
+  const seen = new Set();
+  const elements = [];
+  for (const selector of selectors) {
+    for (const el of document.querySelectorAll(selector)) {
+      if (seen.has(el) || !__sbGmailVisible(el)) continue;
+      seen.add(el);
+      if (el.closest?.("#__sb_bar__, #sb-brain-mascot-wrapper, .bg-overlay")) continue;
+      const rect = el.getBoundingClientRect();
+      if (rect.bottom <= 0 || rect.top >= window.innerHeight) continue;
+      const text = __sbGmailNormalizeText(el.innerText || el.textContent || "");
+      if (!text || text.length < 8) continue;
+      elements.push(el);
+      if (elements.length >= limit) break;
+    }
+    if (elements.length >= limit) break;
+  }
+  return elements;
+}
+
+function __sbGmailReadVisibleEmailRows(limit = 80) {
+  const rows = [];
+  for (const el of __sbGmailCollectVisibleEmailRowElements(limit)) {
+    const text = __sbGmailNormalizeText(el.innerText || el.textContent || "");
+    const senderEl = el.querySelector(".yW span[email], .zF[email], .bA4 span[email], .yW span, .zF, .bA4");
+    const sender = __sbGmailNormalizeText(
+      senderEl?.getAttribute?.("name")
+      || senderEl?.getAttribute?.("email")
+      || senderEl?.innerText
+      || senderEl?.textContent
+      || ""
+    );
+    const email = __sbGmailNormalizeText(senderEl?.getAttribute?.("email") || "");
+    const subjectEl = el.querySelector(".bog, .y6, .xS");
+    const subjectText = __sbGmailNormalizeText(subjectEl?.innerText || subjectEl?.textContent || "");
+    const dateEl = el.querySelector(".xW span[title], .xW, [title]");
+    const date = __sbGmailNormalizeText(dateEl?.getAttribute?.("title") || dateEl?.innerText || dateEl?.textContent || "");
+    const unread = /\bzE\b/.test(String(el.className || "")) || el.getAttribute("aria-label")?.toLowerCase?.().includes("unread") || false;
+    const likelyUnsubscribe = /\b(unsubscribe|newsletter|digest|promotion|promotional|marketing|sale|offer)\b/i.test(text);
+    rows.push({
+      index: rows.length + 1,
+      sender: sender || email || "Unknown sender",
+      email,
+      subject: subjectText || text.slice(0, 160),
+      snippet: text.slice(0, 360),
+      date,
+      unread: Boolean(unread),
+      likelyUnsubscribe,
+    });
+  }
+  return rows;
+}
+
+async function __sbGmailReadVisibleInbox(options = {}) {
+  const rows = __sbGmailReadVisibleEmailRows(options.limit || 80);
+  return {
+    success: true,
+    site: "gmail",
+    url: window.location.href,
+    title: document.title || "",
+    count: rows.length,
+    rows,
+  };
+}
+
+async function __sbGmailOpenVisibleEmail(query, options = {}) {
+  const rows = __sbGmailReadVisibleEmailRows(options.limit || 80);
+  const q = __sbGmailNormalizeText(query).toLowerCase();
+  const terms = q.split(/\s+/).filter((term) => term.length >= 2);
+  let matchIndex = 0;
+  if (terms.length) {
+    const found = rows.findIndex((row) => {
+      const hay = `${row.sender} ${row.email} ${row.subject} ${row.snippet}`.toLowerCase();
+      return terms.every((term) => hay.includes(term));
+    });
+    if (found >= 0) matchIndex = found;
+  }
+  const row = rows[matchIndex];
+  if (!row) return { error: "No visible Gmail message row was found." };
+  const elements = __sbGmailCollectVisibleEmailRowElements(options.limit || 80);
+  const el = elements[matchIndex];
+  if (!el) return { error: "The matching Gmail row could not be clicked." };
+  const beforeUrl = window.location.href;
+  const target = el.querySelector('.xY.a4W, .y6, .bog, .xS, .yW, .zF, [role="link"], a[href*="#inbox/"], a[href*="#search/"]') || el;
+  let clicked = false;
+  const clickTarget = () => {
+    if (clicked) return;
+    clicked = true;
+    __sbGmailClickElementAtCenter(target);
+  };
+  const animated = await __sbJumpPointAt(target, {
+    say: q ? "Opening this." : "This one.",
+    holdMs: 650,
+    onPoint: clickTarget,
+  }).catch(() => false);
+  if (!animated) clickTarget();
+
+  let thread = null;
+  for (let i = 0; i < 28; i += 1) {
+    await __sbGmailWait(250);
+    thread = __sbGmailReadCurrentThread();
+    if ((thread?.body || thread?.messages?.length) && window.location.href !== beforeUrl) {
+      return { success: true, opened: row, thread };
+    }
+  }
+
+  __sbGmailClickElementAtCenter(target);
+  for (let i = 0; i < 20; i += 1) {
+    await __sbGmailWait(250);
+    thread = __sbGmailReadCurrentThread();
+    if (thread?.body || thread?.messages?.length) {
+      return { success: true, opened: row, thread };
+    }
+  }
+
+  return { error: "Gmail row was clicked, but the email thread did not open." };
+}
+
+function __sbGmailGetViewMode() {
+  const url = window.location.href;
+  const visibleEmailCount = __sbGmailCollectVisibleEmailRowElements(20).length;
+  const threadBodyCount = __sbGmailFindMessageBodyNodes().length;
+  const hash = window.location.hash || "";
+  const looksLikeThreadUrl = /\/(?:FM|[A-Za-z0-9_-]{12,})/.test(hash) || /th=|message_id=/i.test(url);
+  if (threadBodyCount && (looksLikeThreadUrl || !visibleEmailCount)) return "thread";
+  if (visibleEmailCount) return "inbox";
+  return "gmail";
+}
+
+function __sbMapsNormalizeText(value) {
+  return String(value || "").replace(/\u00a0/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function __sbMapsVisible(el) {
+  if (!el) return false;
+  const rect = el.getBoundingClientRect?.();
+  if (!rect || rect.width < 2 || rect.height < 2) return false;
+  if (rect.bottom < 0 || rect.right < 0 || rect.top > window.innerHeight || rect.left > window.innerWidth) return false;
+  const style = window.getComputedStyle(el);
+  return style.display !== "none" && style.visibility !== "hidden" && style.opacity !== "0";
+}
+
+function __sbMapsElementText(el) {
+  if (!el) return "";
+  return __sbMapsNormalizeText([
+    el.getAttribute?.("aria-label"),
+    el.getAttribute?.("data-tooltip"),
+    el.getAttribute?.("title"),
+    el.getAttribute?.("data-value"),
+    el.innerText,
+    el.textContent,
+  ].filter(Boolean).join(" "));
+}
+
+function __sbMapsClickElement(el) {
+  if (!el) return false;
+  try { el.scrollIntoView({ block: "center", inline: "center", behavior: "instant" }); } catch (_) {}
+  const rect = el.getBoundingClientRect?.();
+  const x = rect ? Math.max(1, Math.min(window.innerWidth - 1, rect.left + rect.width / 2)) : 1;
+  const y = rect ? Math.max(1, Math.min(window.innerHeight - 1, rect.top + rect.height / 2)) : 1;
+  const hit = document.elementFromPoint(x, y);
+  const target = hit && (hit === el || el.contains(hit) || hit.closest?.("button,[role='button'],[role='menuitem'],[role='option'],a"))
+    ? (hit.closest?.("button,[role='button'],[role='menuitem'],[role='option'],a") || hit)
+    : el;
+  try { target.focus?.(); } catch (_) {}
+  const opts = { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y, screenX: x, screenY: y };
+  for (const type of ["pointerover", "mouseover", "mousemove", "pointerdown", "mousedown", "pointerup", "mouseup", "click"]) {
+    try {
+      const EventCtor = type.startsWith("pointer") ? PointerEvent : MouseEvent;
+      target.dispatchEvent(new EventCtor(type, opts));
+    } catch (_) {
+      try { target.dispatchEvent(new MouseEvent(type.replace(/^pointer/, "mouse"), opts)); } catch (_) {}
+    }
+  }
+  try { target.click?.(); } catch (_) {}
+  return true;
+}
+
+function __sbMapsFindInteractive(pattern, options = {}) {
+  const selectors = options.selectors || [
+    "button",
+    "[role='button']",
+    "[role='menuitem']",
+    "[role='option']",
+    "a",
+    "div[tabindex]",
+    "span[tabindex]",
+    "[aria-label]",
+    "[data-tooltip]",
+    "[title]",
+  ];
+  const seen = new Set();
+  const matches = [];
+  for (const el of Array.from(document.querySelectorAll(selectors.join(",")))) {
+    if (seen.has(el)) continue;
+    seen.add(el);
+    if (!__sbMapsVisible(el)) continue;
+    if (el.closest?.("#__sb_bar__, #sb-brain-mascot-wrapper, .bg-overlay")) continue;
+    const text = __sbMapsElementText(el);
+    if (!text || !pattern.test(text)) continue;
+    const rect = el.getBoundingClientRect();
+    let score = 0;
+    if (/send/i.test(text)) score += 50;
+    if (/phone|mobile|device/i.test(text)) score += 45;
+    if (/directions/i.test(text)) score += 20;
+    if (el.matches?.("button,[role='button'],[role='menuitem'],[role='option']")) score += 25;
+    if (rect.width >= 40 && rect.height >= 28) score += 10;
+    if (rect.top < window.innerHeight * 0.75) score += 6;
+    matches.push({ el, text, score, top: rect.top });
+  }
+  matches.sort((a, b) => (b.score - a.score) || (a.top - b.top));
+  return options.withText ? (matches[0] || null) : (matches[0]?.el || null);
+}
+
+function __sbMapsCollectLabels(pattern = /send|phone|mobile|device|directions/i, limit = 12) {
+  const labels = [];
+  const seen = new Set();
+  for (const el of Array.from(document.querySelectorAll("button,[role='button'],[role='menuitem'],[role='option'],a,[aria-label],[data-tooltip],[title]"))) {
+    if (!__sbMapsVisible(el)) continue;
+    const text = __sbMapsElementText(el);
+    if (!text || seen.has(text) || !pattern.test(text)) continue;
+    seen.add(text);
+    labels.push(text.slice(0, 140));
+    if (labels.length >= limit) break;
+  }
+  return labels;
+}
+
+function __sbMapsFindSuccessText() {
+  const statusSelectors = [
+    "[role='status']",
+    "[role='alert']",
+    ".section-alert",
+    ".widget-pane-toast",
+    ".mapsConsumerUiCommonSnackbar__snackbar",
+    ".m6QErb",
+  ];
+  const text = __sbMapsNormalizeText(
+    statusSelectors.flatMap((selector) => Array.from(document.querySelectorAll(selector)))
+      .filter(__sbMapsVisible)
+      .map(__sbMapsElementText)
+      .join(" ")
+  );
+  if (/\b(sent|directions sent|sent to|check your phone|opened on your phone)\b/i.test(text)) return text.slice(0, 220);
+  return "";
+}
+
+function __sbMapsFindPhoneOption() {
+  const blocked = /\b(email|e-mail|text|sms|copy|link|share|print|cancel|close|back|learn more|help)\b/i;
+  const openerLike = /\bsend(?:\s+(?:directions|route))?(?:\s+to)?(?:\s+(?:your|my))?\s+phone\b|\bsend directions\b/i;
+  const strong = __sbMapsFindInteractive(/\b(phone|mobile|device|iphone|android|pixel|samsung|oneplus|itish|send to)\b/i, {
+    selectors: ["button", "[role='button']", "[role='menuitem']", "[role='option']", "div[tabindex]", "span[tabindex]", "a"],
+    withText: true,
+  });
+  if (strong && !blocked.test(strong.text) && !openerLike.test(strong.text)) return strong.el;
+
+  const containers = Array.from(document.querySelectorAll("[role='dialog'],[role='menu'],[role='listbox'],.modal-dialog,.goog-menu,.widget-pane")).filter(__sbMapsVisible);
+  for (const root of containers.length ? containers : [document]) {
+    const choices = Array.from(root.querySelectorAll("button,[role='button'],[role='menuitem'],[role='option'],div[tabindex],span[tabindex],a"));
+    for (const el of choices) {
+      if (!__sbMapsVisible(el)) continue;
+      const text = __sbMapsElementText(el);
+      if (!text || text.length < 2 || text.length > 120 || blocked.test(text)) continue;
+      if (openerLike.test(text)) continue;
+      if (/\b(phone|mobile|device|iphone|android|pixel|samsung|oneplus|itish)\b/i.test(text)) return el;
+    }
+    for (const el of choices) {
+      if (!__sbMapsVisible(el)) continue;
+      const text = __sbMapsElementText(el);
+      if (!text || text.length < 2 || text.length > 80 || blocked.test(text)) continue;
+      if (openerLike.test(text)) continue;
+      if (!/\b(send|directions|route)\b/i.test(text)) return el;
+    }
+  }
+  return null;
+}
+
+async function __sbMapsSendDirectionsToPhone() {
+  const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  const buttonMatch = __sbMapsFindInteractive(
+    /\bsend(?:\s+(?:directions|route))?(?:\s+to)?(?:\s+(?:your|my))?\s+phone\b|\bsend to phone\b|\bsend directions\b/i,
+    { withText: true }
+  );
+  if (!buttonMatch?.el) {
+    return {
+      error: "Maps Send to phone button was not found.",
+      candidates: __sbMapsCollectLabels(),
+    };
+  }
+
+  __sbMapsClickElement(buttonMatch.el);
+  await wait(850);
+  let successText = __sbMapsFindSuccessText();
+  if (successText) {
+    return { success: true, sent: true, buttonLabel: buttonMatch.text, status: successText };
+  }
+
+  const phoneOption = __sbMapsFindPhoneOption();
+  if (!phoneOption) {
+    for (let i = 0; i < 6; i += 1) {
+      await wait(500);
+      successText = __sbMapsFindSuccessText();
+      if (successText) return { success: true, sent: true, buttonLabel: buttonMatch.text, status: successText };
+    }
+    return {
+      error: "Maps Send to phone opened, but no phone device option was visible.",
+      buttonLabel: buttonMatch.text,
+      candidates: __sbMapsCollectLabels(/phone|mobile|device|send|email|text|sms/i),
+    };
+  }
+
+  const phoneLabel = __sbMapsElementText(phoneOption);
+  __sbMapsClickElement(phoneOption);
+  for (let i = 0; i < 10; i += 1) {
+    await wait(500);
+    successText = __sbMapsFindSuccessText();
+    if (successText) {
+      return {
+        success: true,
+        sent: true,
+        buttonLabel: buttonMatch.text,
+        phoneLabel,
+        status: successText,
+      };
+    }
+  }
+
+  return {
+    success: true,
+    sent: true,
+    verified: false,
+    buttonLabel: buttonMatch.text,
+    phoneLabel,
+  };
 }
 
 async function __sbYouTubeEnsurePlayback() {
@@ -1209,10 +2139,15 @@ function __sbGetSiteAdapterContext() {
   }
 
   if (/mail\.google\.com$/.test(host)) {
+    const visibleEmailCount = __sbGmailCollectVisibleEmailRowElements(20).length;
+    const gmailView = __sbGmailGetViewMode();
     return {
       site: "gmail",
       url,
       title: document.title,
+      gmailView,
+      visibleEmailCount,
+      hasOpenThread: gmailView === "thread",
     };
   }
 
@@ -1350,9 +2285,19 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       scroll: { x: window.scrollX || 0, y: window.scrollY || 0, maxX: 0, maxY: 0, atTop: true, atBottom: true },
       elements: [],
     };
-    const serialized = window.BrainoElementMap?.serializeElementMap
+    let serialized = window.BrainoElementMap?.serializeElementMap
       ? window.BrainoElementMap.serializeElementMap(map, { keywords: msg.keywords || "", cap: msg.cap || 120 })
       : "";
+    try {
+      if (/mail\.google\.com$/.test(location.hostname)) {
+        const gmailThread = __sbGmailReadCurrentThread();
+        const gmailText = __sbGmailFormatCurrentThread(gmailThread);
+        if (gmailText) {
+          map.gmailCurrentThread = gmailThread;
+          serialized = `${gmailText.slice(0, 7000)}\n\nPAGE CONTROLS:\n${serialized}`;
+        }
+      }
+    } catch (_) {}
     sendResponse({ map, serialized });
     return true;
   }
@@ -1415,6 +2360,16 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
 
+  if (msg.action === "sbDumboDanceStart") {
+    (async () => {
+      sendResponse(await __sbStartDumboDanceOnCurrentPage({
+        trackKey: msg.trackKey || "",
+        startSeconds: msg.startSeconds || __SB_DUMBO_DANCE_START_SECONDS,
+      }));
+    })().catch((error) => sendResponse({ ok: false, error: error?.message || String(error) }));
+    return true;
+  }
+
   if (msg.action === "siteAdapterAction") {
     (async () => {
       try {
@@ -1443,6 +2398,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         }
         if (msg.type === "youtubeEnsurePlayback") {
           sendResponse(await __sbYouTubeEnsurePlayback());
+          return;
+        }
+        if (msg.type === "mapsSendDirectionsToPhone") {
+          sendResponse(await __sbMapsSendDirectionsToPhone());
           return;
         }
         if (msg.type === "mediumReadSearchResults") {
@@ -1484,6 +2443,26 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           sendResponse(await __sbGmailSearch(msg.query || ""));
           return;
         }
+        if (msg.type === "gmailReadCurrentThread") {
+          sendResponse(__sbGmailReadCurrentThread());
+          return;
+        }
+        if (msg.type === "gmailReadVisibleInbox") {
+          sendResponse(await __sbGmailReadVisibleInbox({ limit: msg.limit || 80 }));
+          return;
+        }
+        if (msg.type === "gmailOpenVisibleEmail") {
+          sendResponse(await __sbGmailOpenVisibleEmail(msg.query || "", { limit: msg.limit || 80 }));
+          return;
+        }
+        if (msg.type === "gmailComposeHuman") {
+          sendResponse(await __sbGmailComposeHuman({
+            to: msg.to || "",
+            subject: msg.subject || "",
+            body: msg.body || "",
+          }, { send: !!msg.send }));
+          return;
+        }
         if (msg.type === "gmailFillCompose") {
           sendResponse(await __sbGmailFillComposeFields({
             to: msg.to || "",
@@ -1494,6 +2473,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         }
         if (msg.type === "gmailSendOpenCompose") {
           sendResponse(await __sbGmailSendOpenCompose());
+          return;
+        }
+        if (msg.type === "gmailOpenReplyBox") {
+          sendResponse(await __sbGmailOpenReplyBox());
           return;
         }
         if (msg.type === "gmailReplyToCurrentThread") {
@@ -1828,6 +2811,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           });
         }
         if (!el) {
+          if (/mail\.google\.com$/.test(location.hostname)) {
+            const gmailThread = __sbGmailReadCurrentThread();
+            const gmailText = __sbGmailFormatCurrentThread(gmailThread);
+            if (gmailText) {
+              sendResponse({ success: true, text: gmailText.slice(0, maxChars || 8000), site: "gmail" });
+              return true;
+            }
+          }
           // Fall back to returning visible page text excerpt
           sendResponse({ success: true, text: document.body?.innerText?.slice(0, maxChars || 800) || "(empty)" });
         } else {
@@ -2644,6 +3635,43 @@ const __SBWK_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="-8 -34 116 
     '<ellipse cx="50" cy="3" rx="32" ry="5" fill="#000" opacity="0.6"/>' +
     '<path d="M 37 -20 Q 35 -8 38 2" fill="none" stroke="#3a332e" stroke-width="2.2" stroke-linecap="round" opacity="0.7"/>' +
     '<path d="M 12 5 Q 50 12 88 5" fill="none" stroke="#3a332e" stroke-width="1.2" stroke-linecap="round" opacity="0.6"/>' +
+    '</g></g></svg>')
+  // Headphones (hidden until music plays on YouTube) — a band over the head + two ear cups.
+  .replace("</g></svg>",
+    '<g id="__sbwk_headphones__" display="none">' +
+    '<path d="M 12 46 Q 12 6 50 6 Q 88 6 88 46" fill="none" stroke="#1B1713" stroke-width="4.4" stroke-linecap="round"/>' +
+    '<path d="M 12 46 Q 12 8 50 8 Q 88 8 88 46" fill="none" stroke="#3a332e" stroke-width="1.6" stroke-linecap="round" opacity="0.7"/>' +
+    '<rect x="6.5" y="42" width="11" height="18" rx="5" fill="#1B1713"/><rect x="8.5" y="44.5" width="7" height="13" rx="3.2" fill="#E8786E"/>' +
+    '<rect x="82.5" y="42" width="11" height="18" rx="5" fill="#1B1713"/><rect x="84.5" y="44.5" width="7" height="13" rx="3.2" fill="#E8786E"/>' +
+    '</g></g></svg>')
+  // Voice-persona costume (hidden until "talk like Trump"): EXACT port of the Braino Trump
+  // standalone design (accessory "trump" in braino-char) — thin swept golden canopy sitting low
+  // on the head with a scalloped underside, draping longer down the RIGHT side, plus a pursed
+  // pout that replaces the smile. The pout is scaled up ~1.35x around the mouth and inked
+  // heavier than the reference because the walker paints at 64px wide (the reference was drawn
+  // for a 360px render, where the subtle coral-on-coral pout still reads). It has its own id so
+  // the tick can hide it while the lip-sync mouth is animating.
+  // Toggled by __sbSetVoicePersonaCostume("trump"); re-applied across rebuilds via __sbCurrentCostume.
+  .replace("</g></svg>",
+    '<g id="__sbwk_trump__" display="none">' +
+    // ── thin swept canopy, low on the head; bigger + draping longer down the RIGHT side ──
+    '<path d="M 12 17 C 12 9 20 4 38 4 C 60 1 82 2 87 12 C 90 19 88 27 82 31 C 81 26 80 22 78 19 C 76 22 70 22 67 19 C 65 22 59 23 57 18 C 55 22 48 22 46 18 C 44 22 38 22 36 18 C 34 21 27 22 25 18 C 22 22 13 21 12 17 Z" fill="#E7BB63" stroke="#C69640" stroke-width="1" stroke-linejoin="round"/>' +
+    // ── lighter thin layer swept across the top and back to the right ──
+    '<path d="M 13 14 C 14 7 34 3 56 5 C 74 6 84 12 84 20 C 84 25 82 28 79 29 C 82 22 80 15 70 13 C 58 11 40 14 24 19 C 18 21 12 18 13 14 Z" fill="#F5D584" stroke="#C69640" stroke-width="0.7" stroke-linejoin="round"/>' +
+    // ── strands sweeping right and down ──
+    '<g fill="none" stroke="#D8A94C" stroke-width="0.8" stroke-linecap="round" opacity="0.85">' +
+    '<path d="M 16 11 C 36 6 60 5 82 14"/>' +
+    '<path d="M 15 15 C 34 10 56 10 81 20"/>' +
+    '<path d="M 20 6 C 42 2 64 3 84 13"/>' +
+    '</g>' +
+    // ── highlight sheen following the sweep ──
+    '<path d="M 18 3 C 40 0 62 1 82 10" fill="none" stroke="#FBEBBE" stroke-width="1.1" stroke-linecap="round" opacity="0.8"/>' +
+    // ── pursed pout — covers the default smile (hidden by the tick while lip-syncing) ──
+    '<g id="__sbwk_trump_pout__" transform="translate(50 62) scale(1.35) translate(-50 -62)">' +
+    '<path d="M 43 60.4 C 45 58.7 48 58.6 50 59.4 C 52 58.6 55 58.7 57 60.4 C 55.5 63.9 50 65.1 44.5 63.9 C 43.5 62.8 42.6 61.6 43 60.4 Z" fill="#C96B6B" stroke="#7E332B" stroke-width="1" stroke-linejoin="round"/>' +
+    '<path d="M 44 61.1 Q 50 62.7 56 61.1" fill="none" stroke="#6E2A24" stroke-width="1.1" stroke-linecap="round"/>' +
+    '<path d="M 47 60 Q 50 59.5 53 60" fill="none" stroke="#E79A9A" stroke-width="0.8" stroke-linecap="round" opacity="0.85"/>' +
+    '</g>' +
     '</g></g></svg>');
 // ── Walk lane state ────────────────────────────────────────────────────────────
 let __sbWkRaf = null;
@@ -2680,9 +3708,22 @@ let __sbWkMoonRaf = null;
 let __sbWkDancing = false;     // true while the dance routine owns the rig
 let __sbWkDanceRaf = null;
 let __sbWkDanceArmAnchor = null; // original paint-order slot for the arm groups (restored on end)
+let __sbDanceModeActive = false; // persistent dance mode: Braino keeps dancing until stopped
+let __sbDanceModeOwnsSpotify = false; // true only when Braino started the fallback song himself
+let __sbDanceModeStatusTimer = null;
+let __sbDanceModeMusicSource = "";
+let __sbDanceMusicPending = null;
+let __sbDanceMusicCache = { at: 0, result: null };
 let __sbWkJumping = false;      // true while the jump-and-point owns the rig
 let __sbWkJumpRaf = null;
 let __sbGlassesOn = false;     // Braino is wearing his specs
+// ── Voice personas (multi-voice) ─────────────────────────────────────────────
+// Braino can put on another voice on command ("talk like Trump"). null = his own Fish voice
+// (the server picks it via FISH_AUDIO_REFERENCE_ID). When a persona is active its Fish
+// reference_id rides on every TTS request, its style steers replies, and it wears the look.
+let __sbActiveVoicePersona = null;   // persona key (e.g. "trump") or null for default Braino
+let __sbActiveVoiceRefId = "";       // Fish reference_id sent with TTS while a persona is on ("" = default)
+let __sbCurrentCostume = null;       // costume key currently worn (re-applied across walker rebuilds)
 
 // "Billie Jean" — exact track + the moonwalk moment (3:31) the user picked.
 const __SB_BILLIE_JEAN_URI = "spotify:track:7J1uxwnxfQLu4APicE5Rnj";
@@ -2693,6 +3734,35 @@ const __SB_DANCE_TRACK_URI = "spotify:track:5EKEFHtqsOW0lTxqh8BhlI";
 const __SB_DANCE_START_MS = 52000;          // 0:52
 const __SB_DANCE_DURATION_MS = 16000;       // dance until 1:08
 const __SB_DANCE_OUTRO_MS = 1800;           // music rides ~2 more beats, stops by 1:10
+const __SB_DUMBO_DANCE_URL = "https://www.youtube.com/watch?v=pyLs2dk9aVU&list=RDpyLs2dk9aVU&start_radio=1&t=117s";
+const __SB_DUMBO_DANCE_START_SECONDS = 117;
+const __SB_BRABUS_DANCE_URL = "https://www.youtube.com/watch?v=Vjelj0un5CI&list=RDVjelj0un5CI&start_radio=1&t=44s";
+const __SB_BRABUS_DANCE_START_SECONDS = 44;
+const __SB_YOUTUBE_DANCE_TRACKS = {
+  dumbo: {
+    key: "dumbo",
+    label: "Dumbo",
+    url: __SB_DUMBO_DANCE_URL,
+    videoId: "pyLs2dk9aVU",
+    startSeconds: __SB_DUMBO_DANCE_START_SECONDS,
+  },
+  brabus: {
+    key: "brabus",
+    label: "Brabus",
+    url: __SB_BRABUS_DANCE_URL,
+    videoId: "Vjelj0un5CI",
+    startSeconds: __SB_BRABUS_DANCE_START_SECONDS,
+  },
+};
+const __SB_TEAM_DEMO_TRACK_URI = __SB_DANCE_TRACK_URI;
+const __SB_TEAM_DEMO_TRACK_URL = "https://open.spotify.com/track/5EKEFHtqsOW0lTxqh8BhlI";
+const __SB_TEAM_DEMO_TRACK_START_MS = __SB_DANCE_START_MS;
+const __SB_TEAM_DEMO_SPOTIFY_MS = 5000;
+const __SB_TEAM_DEMO_ARTICLE_URL = "https://medium.com/towards-deep-learning/google-just-changed-everything-for-machine-learning-on-spreadsheets-afbda2eea8c8";
+const __SB_TEAM_DEMO_ARTICLE_MS = 9000;
+const __SB_DEMO_GMAIL_URL = "https://mail.google.com/mail/u/0/#inbox/QgrcJHrtsHNdZxwlBxRRbHmNNtBCNLJpLpG";
+const __SB_DEMO_MAPS_ROUTE_URL = "https://www.google.com/maps/dir/Times+Square,+New+York/Central+Park,+New+York?hl=en";
+const __SB_DEMO_LAUNCH_URL = "https://www.trybraino.com/";
 
 // Put on / take off Braino's glasses (walker + docked brain).
 function __sbSetGlasses(on) {
@@ -2714,15 +3784,58 @@ function __sbMoonwalkIntent(text) {
   return /\bmoon\s?walk(ing|s|ed)?\b/i.test(String(text || ""));
 }
 
+function __sbBrabusVibeIntent(text) {
+  const t = __sbNormalizeForMatch(text);
+  if (!t) return false;
+  return /\b(?:let s|lets|let us)\s+vibe\b/.test(t)
+    || /\bvibe\s+(?:with\s+)?(?:brabus|me|braino|bruno|breno|reno)\b/.test(t);
+}
+
+function __sbYouTubeDanceTrackFromText(text) {
+  const t = __sbNormalizeForMatch(text);
+  if (!t) return null;
+  if (__sbBrabusVibeIntent(text)) return __SB_YOUTUBE_DANCE_TRACKS.brabus;
+  if (/\bbrabus\b/.test(t)) return __SB_YOUTUBE_DANCE_TRACKS.brabus;
+  if (/\bdumbo\b/.test(t)) return __SB_YOUTUBE_DANCE_TRACKS.dumbo;
+  return null;
+}
+
+function __sbGetYouTubeDanceTrack(value) {
+  if (value && typeof value === "object" && value.url) return value;
+  const key = __sbNormalizeForMatch(value);
+  return __SB_YOUTUBE_DANCE_TRACKS[key] || __sbYouTubeDanceTrackFromText(value) || null;
+}
+
+function __sbDumboDanceIntent(text) {
+  const track = __sbYouTubeDanceTrackFromText(text);
+  if (!track) return false;
+  if (__sbBrabusVibeIntent(text)) return true;
+  const t = __sbNormalizeForMatch(text);
+  return /\b(play|start|open|put|song|track|video|dance|mode|travis|scott|brabus|dumbo|vibe)\b/.test(t);
+}
+
+function __sbDanceStopIntent(text) {
+  const t = __sbNormalizeForMatch(text);
+  if (!t) return false;
+  if (__sbDanceModeActive && /^(stop|pause|enough|done|exit|quit|cancel|bas|ruk|ruko)$/.test(t)) return true;
+  return /\b(stop|pause|end|finish|quit|exit|cancel|enough|bas|ruk|ruko)\b.{0,24}\b(dance|dancing|party|moves?)\b/.test(t)
+    || /\b(dance|dancing|party|moves?)\b.{0,24}\b(stop|pause|end|finish|quit|exit|cancel|enough)\b/.test(t)
+    || /\bdance break over\b/.test(t);
+}
+
 // "Braino, dance!" — deliberately LOOSE: voice STT mangles the wake word ("Reynos,
 // dance for me"), so ANY utterance containing the word dance fires the trick (owner's
 // explicit call). Only media commands ("play dance monkey") stay music, and moonwalk
 // keeps its own trick.
 function __sbDanceIntent(text) {
   const t = String(text || "").toLowerCase();
+  if (__sbDanceStopIntent(t)) return false;
   if (__sbMoonwalkIntent(t)) return false;
-  if (/\b(play|queue|put on|song|track|album|playlist|spotify)\b/.test(t)) return false;
-  return /\bdanc(?:e|es|ed|ing)\b|\bbust a move\b|\bshow (?:me|us) your moves\b/.test(t);
+  const explicitDance = /\bdance\s+mode\b|\bkeep\s+danc(?:e|ing)\b|\bdanc(?:e|es|ed|ing)\s+(?:for|with|on|to)\b|\bbust a move\b|\bshow (?:me|us) your moves\b/.test(t);
+  if (explicitDance) return true;
+  if (/\b(play|queue|put on)\b.*\b(song|track|album|playlist)\b/.test(t)) return false;
+  if (/\b(play|queue|put on)\b.*\bdanc(?:e|ing)\b/.test(t)) return false;
+  return /\bdanc(?:e|es|ed|ing)\b/.test(t);
 }
 
 // Best-effort: play an exact track from a timestamp. Routed through the BACKGROUND so a
@@ -2741,6 +3854,333 @@ async function __sbSpotifyPlayTrack(uri, positionMs = 0) {
 }
 async function __sbSpotifyPlayBillieJean(positionMs = __SB_BILLIE_JEAN_START_MS) {
   return __sbSpotifyPlayTrack(__SB_BILLIE_JEAN_URI, positionMs);
+}
+
+async function __sbSpotifyEnsureDanceMusic() {
+  try {
+    const res = await __sbRuntimeMessage({
+      action: "sbSpotifyEnsureDanceMusic",
+      fallbackUri: __SB_DANCE_TRACK_URI,
+      fallbackPositionMs: __SB_DANCE_START_MS,
+    });
+    if (res?.state) __sbApplySpotifyState(res.state, { openCard: false, focusSpotify: false });
+    return res || { ok: false };
+  } catch (_) {
+    return { ok: false };
+  }
+}
+
+function __sbIsYouTubeDanceSurface() {
+  const host = String(location.hostname || "").replace(/^www\./, "");
+  return /(^|\.)youtube\.com$/.test(host) || /(^|\.)music\.youtube\.com$/.test(host);
+}
+
+function __sbFindDanceVideo() {
+  let best = null;
+  let bestScore = -1;
+  try {
+    for (const video of Array.from(document.querySelectorAll("video"))) {
+      const rect = video.getBoundingClientRect();
+      const area = Math.max(0, rect.width) * Math.max(0, rect.height);
+      const visible = rect.width > 80 && rect.height > 45 && rect.bottom > 0 && rect.right > 0 && rect.top < window.innerHeight && rect.left < window.innerWidth;
+      const score = area + (!video.paused && !video.ended ? 1_000_000 : 0) + (visible ? 100_000 : 0);
+      if (score > bestScore) {
+        best = video;
+        bestScore = score;
+      }
+    }
+  } catch (_) {}
+  return best;
+}
+
+async function __sbEnsureYouTubeDanceMusic() {
+  if (!__sbIsYouTubeDanceSurface()) return { ok: false, reason: "not_youtube" };
+  const video = __sbFindDanceVideo();
+  if (!video) return { ok: false, reason: "no_video" };
+
+  if (video.paused || video.ended || video.readyState < 2) {
+    const playback = await __sbYouTubeEnsurePlayback();
+    await __sbAdapterWait(350);
+    if (!playback?.success || playback?.blocked || video.paused) {
+      return { ok: false, reason: "youtube_blocked" };
+    }
+  }
+
+  // Reuse the existing music/headphones state. Dance mode adds the color-cycle layer on top.
+  __sbMusicAmbientArming = false;
+  __sbMusicAmbientOn = true;
+  __sbSetMusicGear(true);
+  return { ok: true, source: "youtube", ownsSpotify: false };
+}
+
+async function __sbEnsureDanceMusic() {
+  const youtube = await __sbEnsureYouTubeDanceMusic();
+  if (youtube?.ok) {
+    __sbDanceMusicCache = { at: Date.now(), result: youtube };
+    return youtube;
+  }
+
+  const cached = __sbDanceMusicCache?.result;
+  const cacheAge = Date.now() - (__sbDanceMusicCache?.at || 0);
+  const cacheTtl = cached?.ok ? 15_000 : 60_000;
+  if (cached && cacheAge < cacheTtl) return cached;
+  if (__sbDanceMusicPending) return __sbDanceMusicPending;
+
+  __sbDanceMusicPending = __sbSpotifyEnsureDanceMusic()
+    .then((result) => {
+      const normalized = result || { ok: false, reason: "spotify" };
+      __sbDanceMusicCache = { at: Date.now(), result: normalized };
+      return normalized;
+    })
+    .catch(() => {
+      const failed = { ok: false, reason: "spotify" };
+      __sbDanceMusicCache = { at: Date.now(), result: failed };
+      return failed;
+    })
+    .finally(() => {
+      __sbDanceMusicPending = null;
+    });
+  return __sbDanceMusicPending;
+}
+
+function __sbEnsureDumboFx() {
+  let fx = document.getElementById("__sb_dumbo_fx__");
+  if (!fx) {
+    fx = document.createElement("div");
+    fx.id = "__sb_dumbo_fx__";
+    const bits = Array.from({ length: 44 }, (_, i) => {
+      const left = (i * 23) % 101;
+      const delay = ((i * 137) % 1800) / -1000;
+      const duration = 2.2 + ((i * 7) % 13) / 10;
+      const hue = (i * 41) % 360;
+      const size = 6 + (i % 5) * 2;
+      const drift = ((i % 9) - 4) * 18;
+      return `<span class="sb-dumbo-confetti" style="--x:${left}vw;--delay:${delay}s;--dur:${duration}s;--hue:${hue};--size:${size}px;--drift:${drift}px"></span>`;
+    }).join("");
+    fx.innerHTML = `
+      <div class="sb-dumbo-bars" aria-hidden>${Array.from({ length: 18 }, (_, i) => `<i style="--i:${i}"></i>`).join("")}</div>
+      <div class="sb-dumbo-burst" aria-hidden></div>
+      ${bits}
+    `;
+  }
+  const host = __sbGetFullscreenUiHost();
+  if (host && fx.parentElement !== host) {
+    try { host.appendChild(fx); } catch (_) {
+      try { (document.body || document.documentElement).appendChild(fx); } catch (_) {}
+    }
+  }
+  return fx;
+}
+
+function __sbSetDumboPartyMode(active) {
+  document.documentElement?.classList?.toggle("__sb_dumbo_mode_active__", !!active);
+  const fx = active ? __sbEnsureDumboFx() : document.getElementById("__sb_dumbo_fx__");
+  if (!fx) return;
+  fx.classList.toggle("active", !!active);
+  if (!active) setTimeout(() => {
+    if (!fx.classList.contains("active")) {
+      try { fx.remove(); } catch (_) {}
+    }
+  }, 400);
+}
+
+async function __sbSeekYouTubeForDumbo(startSeconds = __SB_DUMBO_DANCE_START_SECONDS) {
+  let video = __sbFindDanceVideo();
+  for (let i = 0; !video && i < 12; i += 1) {
+    await __sbAdapterWait(450);
+    video = __sbFindDanceVideo();
+  }
+  if (!video) return { ok: false, reason: "no_video" };
+  const seconds = Math.max(0, Number(startSeconds) || __SB_DUMBO_DANCE_START_SECONDS);
+  try { video.currentTime = seconds; } catch (_) {}
+  await __sbAdapterWait(250);
+  if (Math.abs((video.currentTime || 0) - seconds) > 4) {
+    try { video.currentTime = seconds; } catch (_) {}
+  }
+  const playback = await __sbYouTubeEnsurePlayback();
+  return { ok: !playback?.blocked, playback };
+}
+
+async function __sbEnterYouTubeFullscreenBestEffort() {
+  const selectors = [
+    ".ytp-fullscreen-button",
+    'button[aria-label*="Full screen"]',
+    'button[title*="Full screen"]',
+  ];
+  for (const selector of selectors) {
+    const button = document.querySelector(selector);
+    if (!__sbAdapterIsVisible(button)) continue;
+    try { __sbAdapterClick(button); } catch (_) {}
+    await __sbAdapterWait(650);
+    if (document.fullscreenElement) {
+      __sbSyncFullscreenUiMount();
+      return { ok: true, method: "button" };
+    }
+    break;
+  }
+
+  const player = document.querySelector("#movie_player, ytd-player, .html5-video-player") || __sbFindDanceVideo();
+  try {
+    await player?.requestFullscreen?.();
+    await __sbAdapterWait(450);
+  } catch (_) {}
+  if (document.fullscreenElement) {
+    __sbSyncFullscreenUiMount();
+    return { ok: true, method: "api" };
+  }
+
+  const theater = document.querySelector(".ytp-size-button, button[aria-label*='Theater mode'], button[title*='Theater mode']");
+  if (__sbAdapterIsVisible(theater)) {
+    try { __sbAdapterClick(theater); } catch (_) {}
+  }
+  return { ok: false, method: "theater_fallback" };
+}
+
+async function __sbStartDumboDanceOnCurrentPage(options = {}) {
+  const track = __sbGetYouTubeDanceTrack(options.track || options.trackKey) || __SB_YOUTUBE_DANCE_TRACKS.dumbo;
+  const startSeconds = Number(options.startSeconds || track.startSeconds || __SB_DUMBO_DANCE_START_SECONDS);
+  __sbStopSpeech();
+  __sbDanceMusicCache = { at: Date.now(), result: { ok: true, source: "youtube", ownsSpotify: false } };
+  __sbSetDumboPartyMode(true);
+  const playback = await __sbSeekYouTubeForDumbo(startSeconds);
+  await __sbStartDanceMode({ fromVoice: false });
+  const fullscreen = await __sbEnterYouTubeFullscreenBestEffort();
+  __sbSyncFullscreenUiMount();
+  __sbSetDumboPartyMode(true);
+  __sbWkSay(`${track.label} mode.`);
+  return { ok: !!playback?.ok, playback, fullscreen, track: track.key };
+}
+
+async function __sbStartDumboDance(ctx = {}) {
+  const { fromVoice = false, speakVoiceReply = null } = ctx;
+  const track = __sbGetYouTubeDanceTrack(ctx.track || ctx.trackKey || ctx.promptText) || __SB_YOUTUBE_DANCE_TRACKS.dumbo;
+  __sbStopSpeech();
+  if (__sbDanceModeActive || __sbWkDancing) __sbStopDanceMode({ silent: true, pauseSpotify: false });
+  if (__sbIsYouTubeDanceSurface() && new RegExp(track.videoId, "i").test(location.href)) {
+    if (fromVoice && typeof speakVoiceReply === "function") {
+      try { await speakVoiceReply(`${track.label} mode. Give me one second.`); } catch (_) {}
+    } else {
+      __sbWkSay(`${track.label} mode.`);
+    }
+    return __sbStartDumboDanceOnCurrentPage({ track, startSeconds: track.startSeconds });
+  }
+
+  const line = `${track.label} mode. Opening YouTube.`;
+  if (fromVoice && typeof speakVoiceReply === "function") {
+    try { await speakVoiceReply(line); } catch (_) {}
+  } else {
+    __sbWkSay(line);
+  }
+  const res = await __sbRuntimeMessage({
+    action: "sbOpenDumboDance",
+    url: track.url,
+    startSeconds: track.startSeconds,
+    trackKey: track.key,
+    trackLabel: track.label,
+  });
+  return res || { ok: false };
+}
+
+function __sbSetDanceModeVisual(active) {
+  const bar = document.getElementById("__sb_bar__");
+  const input = document.getElementById("__sb_input__");
+  bar?.classList.toggle("sb-dance-mode", !!active);
+  document.documentElement?.classList?.toggle("__sb_dance_mode_active__", !!active);
+  if (input) {
+    const oldDancePlaceholder = /^dance mode is on\b/i.test(input.getAttribute("placeholder") || "");
+    if (!active && oldDancePlaceholder) __sbSetGreetingPlaceholder();
+  }
+}
+
+function __sbEnsureDanceModeBar() {
+  if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
+  __sbRefreshInlineOwner();
+  __sbBrainVisible = true;
+  const btn = document.getElementById("__sb_brain_btn__");
+  if (btn) btn.style.display = "none";
+  __sbToggleInput(true, { skipPersist: true, suppressFocus: true, allowWhileSpotify: true });
+  setTimeout(() => __sbSetDanceModeVisual(true), 80);
+}
+
+function __sbStopDanceMode(options = {}) {
+  const wasActive = __sbDanceModeActive || __sbWkDancing;
+  __sbDanceModeActive = false;
+  __sbSetDumboPartyMode(false);
+  __sbDanceMusicPending = null;
+  __sbDanceMusicCache = { at: 0, result: null };
+  if (__sbDanceModeStatusTimer) {
+    clearInterval(__sbDanceModeStatusTimer);
+    __sbDanceModeStatusTimer = null;
+  }
+  __sbSetDanceModeVisual(false);
+  if (__sbWkDancing) __sbWkEndDance();
+  if (options.pauseSpotify !== false && __sbDanceModeOwnsSpotify) {
+    try { chrome.runtime.sendMessage({ action: "sbSpotifyPause" }, () => void chrome.runtime.lastError); } catch (_) {}
+  }
+  __sbDanceModeOwnsSpotify = false;
+  __sbDanceModeMusicSource = "";
+  if (wasActive && !options.silent) __sbWkSay("Dance break over.");
+  return wasActive;
+}
+
+async function __sbStartDanceMode(ctx = {}) {
+  const { fromVoice = false, speakVoiceReply = null } = ctx;
+  if (__sbDanceModeActive) {
+    __sbEnsureDanceModeBar();
+    __sbSetDanceModeVisual(true);
+    if (!__sbWkDancing) __sbWkDance(Number.POSITIVE_INFINITY, { continuous: true });
+    return { ok: true, alreadyActive: true, source: __sbDanceModeMusicSource || "active" };
+  }
+
+  __sbStopSpeech();
+  __sbStopDanceMode({ silent: true, pauseSpotify: false });
+  __sbDanceModeActive = true;
+  __sbDanceModeOwnsSpotify = false;
+  __sbDanceModeMusicSource = "";
+  __sbEnsureDanceModeBar();
+
+  const danceLines = [
+    "Oh, you want to see me dance? Say less.",
+    "Alright, clearing the floor. I can keep going until you tell me to stop.",
+    "Dance mode? Done. I will not interrupt myself after fifteen seconds this time.",
+    "You picked the right brain for this. Watch.",
+  ];
+  const danceLine = danceLines[Math.floor(Math.random() * danceLines.length)];
+  if (fromVoice && typeof speakVoiceReply === "function") {
+    try { await speakVoiceReply(danceLine); } catch (_) {}
+  } else {
+    __sbWkSay(danceLine);
+  }
+
+  const music = await __sbEnsureDanceMusic();
+  if (!__sbDanceModeActive) return { ok: false, stopped: true };
+  if (!music?.ok) {
+    __sbDanceModeActive = false;
+    __sbSetDanceModeVisual(false);
+    const line = music?.reason === "signin"
+      ? "Connect Spotify first, then I can dance properly."
+      : "Play something on YouTube or Spotify and ask me again. I need a beat, my guy.";
+    if (fromVoice && typeof speakVoiceReply === "function") {
+      try { await speakVoiceReply(line); } catch (_) {}
+    } else {
+      __sbWkSay(line);
+    }
+    return { ok: false, reason: music?.reason || "music" };
+  }
+
+  __sbDanceModeMusicSource = music.source || "spotify";
+  __sbDanceModeOwnsSpotify = music.ownsSpotify === true || music.source === "fallback";
+  setTimeout(() => {
+    if (!__sbDanceModeActive) return;
+    __sbSetDanceModeVisual(true);
+    __sbWkDance(Number.POSITIVE_INFINITY, { continuous: true });
+  }, 350);
+
+  __sbDanceModeStatusTimer = setInterval(() => {
+    if (!__sbDanceModeActive) return;
+    __sbSetDanceModeVisual(true);
+  }, 2500);
+  return { ok: true, source: music.source || "spotify" };
 }
 
 // ── Moonwalk ────────────────────────────────────────────────────────────────
@@ -2883,7 +4323,7 @@ function __sbWkEndMoonwalk(xResume) {
 // the verbatim port of the website's BrainoDanceGrid.tsx (the slow groove). The
 // blend lerps arms/body AND scaleX through zero — Braino turns to face you.
 // Same rig-ownership contract as the moonwalk.
-function __sbWkDance(durationMs = __SB_DANCE_DURATION_MS) {
+function __sbWkDance(durationMs = __SB_DANCE_DURATION_MS, options = {}) {
   const lane = __sbEnsureWalker();
   lane.style.display = "block";
   const walker = document.getElementById("__sbwk_walker__");
@@ -2904,6 +4344,11 @@ function __sbWkDance(durationMs = __SB_DANCE_DURATION_MS) {
   const laBg = q("#__sbwk_la_bg__"), raBg = q("#__sbwk_ra_bg__");
   const laFg = q("#__sbwk_la__"), raFg = q("#__sbwk_ra__");
   const pupL = q("#__sbwk_pupil_l__"), pupR = q("#__sbwk_pupil_r__");
+  const legL = q("#__sbwk_ll__"), legR = q("#__sbwk_rl__");
+  const moonlegs = q("#__sbwk_moonlegs__");
+  const mwR = q("#__sbwk_mw_r__"), mwRh = q("#__sbwk_mw_rh__");
+  const mwL = q("#__sbwk_mw_l__"), mwLh = q("#__sbwk_mw_lh__");
+  const fedora = q("#__sbwk_fedora__");
   q("#__sbwk_ll__")?.setAttribute("transform", "");
   q("#__sbwk_rl__")?.setAttribute("transform", "");
   // The coral body is painted AFTER the arm layers, so arms raised overhead vanish
@@ -2926,30 +4371,154 @@ function __sbWkDance(durationMs = __SB_DANCE_DURATION_MS) {
     if (bg) bg.setAttribute("transform", tx);
     if (fg) fg.setAttribute("transform", tx);
   };
+  const setMoonDance = (on) => {
+    if (moonlegs) moonlegs.setAttribute("display", on ? "inline" : "none");
+    if (fedora) fedora.setAttribute("display", on ? "inline" : "none");
+    if (legL) legL.setAttribute("display", on ? "none" : "inline");
+    if (legR) legR.setAttribute("display", on ? "none" : "inline");
+  };
+  const setNormalLegs = (leftLift = 0, rightLift = 0, leftSwing = 0, rightSwing = 0) => {
+    setMoonDance(false);
+    if (legL) legL.setAttribute("transform", `translate(0 ${-leftLift}) rotate(${leftSwing} 44 74)`);
+    if (legR) legR.setAttribute("transform", `translate(0 ${-rightLift}) rotate(${rightSwing} 56 74)`);
+  };
 
   // Website pose math, verbatim time constants (BrainoDanceGrid.tsx).
+  const poseTwist = (t) => {
+    const b = t * 3.4, sway = Math.sin(b), knee = Math.abs(Math.sin(b));
+    return {
+      tx: sway * 9, ty: 0, sy: 1 - knee * 0.06, la: 42 + sway * 26, ra: -42 + sway * 26,
+      lookX: sway * 0.5, lookY: 0, tilt: 0,
+      ll: Math.max(0, Math.sin(b)) * 4, rl: Math.max(0, -Math.sin(b)) * 4,
+      ls: Math.max(0, Math.sin(b)) * 7, rs: Math.max(0, -Math.sin(b)) * 7,
+    };
+  };
   const poseGun = (t) => {   // Gun Fingers — point to the sky, strut left
     const b = t * 3.0, s2 = Math.tanh(Math.sin(b) * 2.6), groove = Math.abs(Math.sin(b));
-    return { ty: 0, sy: 1 - groove * 0.05, la: 130 - s2 * 25, ra: -130 - s2 * 25, lookX: -0.4, lookY: -0.45, tilt: 0 };
+    return {
+      ty: 0, sy: 1 - groove * 0.05, la: 130 - s2 * 25, ra: -130 - s2 * 25,
+      lookX: -0.4, lookY: -0.45, tilt: 0,
+      ll: Math.max(0, Math.sin(b)) * 4, rl: Math.max(0, -Math.sin(b)) * 4,
+      ls: Math.max(0, Math.sin(b)) * 7, rs: Math.max(0, -Math.sin(b)) * 7,
+    };
   };
   const poseDisco = (t) => { // Disco Fever — diagonal point, one arm
     const b = t * 2.6, stab = Math.tanh(Math.sin(b) * 2.3);
-    return { ty: 0, sy: 1 - Math.abs(Math.sin(b * 2)) * 0.045, la: -10, ra: -82 - stab * 56, lookX: 0.45, lookY: -0.3 - Math.max(0, stab) * 0.25, tilt: stab * 6 * 0.35, tx: stab * 6 };
+    return {
+      ty: 0, sy: 1 - Math.abs(Math.sin(b * 2)) * 0.045, la: -10, ra: -82 - stab * 56,
+      lookX: 0.45, lookY: -0.3 - Math.max(0, stab) * 0.25, tilt: stab * 6 * 0.35, tx: stab * 6,
+      ll: Math.max(0, Math.sin(b * 2)) * 3, rl: Math.max(0, -Math.sin(b * 2)) * 3,
+      ls: Math.max(0, Math.sin(b * 2)) * 5, rs: Math.max(0, -Math.sin(b * 2)) * 5,
+    };
+  };
+  const poseSprinkler = (t) => {
+    const period = 2.0, raw = (t % period) / period;
+    let e;
+    if (raw < 0.78) { const u = raw / 0.78; e = u * u * (3 - 2 * u); } else { e = 1 - (raw - 0.78) / 0.22; }
+    const kick = Math.sin(t * 4.1);
+    return {
+      tx: (e - 0.5) * 5, ty: 0, sy: 1 - Math.abs(Math.sin(raw * Math.PI)) * 0.03,
+      la: 102, ra: -128 + e * 100, lookX: -0.35 + e * 0.7, lookY: 0, tilt: 0,
+      ll: Math.max(0, kick) * 3, rl: Math.max(0, -kick) * 3,
+      ls: Math.max(0, kick) * 5, rs: Math.max(0, -kick) * 5,
+    };
+  };
+  const poseRaise = (t) => {
+    const b = t * 3.9, push = Math.abs(Math.sin(b)), lean = Math.sin(b * 0.5);
+    return {
+      tx: lean * 5, ty: -push * 11, sy: 1, la: 116 + push * 20, ra: -116 - push * 20,
+      lookX: lean * 0.3, lookY: -0.4, tilt: 0,
+      ll: Math.max(0, Math.sin(b)) * 2, rl: Math.max(0, -Math.sin(b)) * 2,
+      ls: lean * 4, rs: lean * 4,
+    };
   };
   const lerp = (a, b2, u) => a + (b2 - a) * u;
   const smooth = (u) => u * u * (3 - 2 * u);
 
-  const totalS = durationMs / 1000;
+  const continuous = !!options.continuous || !Number.isFinite(Number(durationMs)) || Number(durationMs) <= 0;
+  const finiteDurationMs = Math.max(1000, Number(durationMs) || __SB_DANCE_DURATION_MS);
+  const totalS = continuous ? (__SB_DANCE_DURATION_MS / 1000) : (finiteDurationMs / 1000);
   const GUN_S = Math.max(6, totalS - 5);   // gun fingers OWNS the floor (11s of 16); disco gets the rest
   const BLEND_S = 0.7;                     // smooth turn into disco fever
   const start = performance.now();
   let last = start;
   let strutX = null;
+  let moonX = null;
+  const danceCycle = [
+    { key: "twist", dur: 3.5, pose: poseTwist },
+    { key: "disco", dur: 3.5, pose: poseDisco },
+    { key: "sprinkler", dur: 3.8, pose: poseSprinkler },
+    { key: "raise", dur: 3.4, pose: poseRaise },
+    { key: "gun", dur: 4.8, pose: poseGun },
+    { key: "moon", dur: 4.6 },
+  ];
+  const danceCycleTotal = danceCycle.reduce((sum, item) => sum + item.dur, 0);
+  const continuousMove = (t) => {
+    let local = ((t % danceCycleTotal) + danceCycleTotal) % danceCycleTotal;
+    for (const item of danceCycle) {
+      if (local < item.dur) return { item, local };
+      local -= item.dur;
+    }
+    return { item: danceCycle[0], local: 0 };
+  };
 
   const step = (now) => {
     const dt = Math.min(0.05, (now - last) / 1000);
     last = now;
     const t = (now - start) / 1000;
+
+    if (continuous) {
+      const { item, local } = continuousMove(t);
+      let x = midX, face = 1, la = 0, ra = 0, ty = 0, sy = 1, lookX = 0, lookY = 0, tilt = 0;
+      if (item.key === "moon") {
+        if (moonX === null) moonX = maxX;
+        moonX -= 58 * dt;
+        if (moonX < minX) moonX = maxX;
+        x = moonX;
+        face = 1;
+        setMoonDance(true);
+        const ph = Math.sin(local * 4.2);
+        const heelR = Math.max(0, ph) * 42, heelL = Math.max(0, -ph) * 42;
+        const slideR = Math.max(0, -ph) * 10, slideL = Math.max(0, ph) * 10;
+        if (mwR) mwR.setAttribute("transform", `translate(${12 + slideR} 0)`);
+        if (mwRh) mwRh.setAttribute("transform", `rotate(${-heelR} 24 101)`);
+        if (mwL) mwL.setAttribute("transform", `translate(${slideL} 0)`);
+        if (mwLh) mwLh.setAttribute("transform", `rotate(${-heelL} 24 101)`);
+        la = 38 + Math.sin(local * 2.1) * 10;
+        ra = -38 + Math.sin(local * 2.1) * 10;
+        lookX = 0.45; lookY = 0.05; tilt = ph * 0.35; sy = 1 - Math.abs(ph) * 0.035;
+        ty = -Math.abs(ph) * 1.2;
+      } else {
+        moonX = null;
+        const p = item.pose(local);
+        ({ la, ra, ty, sy, lookX, lookY, tilt } = p);
+        if (item.key === "gun") {
+          if (strutX === null) strutX = maxX;
+          strutX -= 40 * dt;
+          if (strutX < minX) strutX = maxX;
+          x = strutX;
+          face = -1;
+        } else {
+          strutX = null;
+          x = midX + (p.tx || 0) * 1.6;
+          face = 1;
+        }
+        setNormalLegs(p.ll || 0, p.rl || 0, p.ls || 0, p.rs || 0);
+      }
+
+      walker.style.transform = `translateX(${x}px)`;
+      if (flip) flip.style.transform = `scaleX(${face})`;
+      setArm(laBg, laFg, la || 0);
+      setArm(raBg, raFg, ra || 0);
+      const sy2 = sy == null ? 1 : sy;
+      root.setAttribute("transform", `rotate(${tilt || 0} 50 50) translate(0 ${(ty || 0) + 101 * (1 - sy2)}) scale(1 ${sy2})`);
+      const px = (lookX || 0) * 2.4, py = (lookY || 0) * 2;
+      if (pupL) pupL.setAttribute("transform", `translate(${px} ${py})`);
+      if (pupR) pupR.setAttribute("transform", `translate(${px} ${py})`);
+      if (__sbDanceModeActive) __sbWkDanceRaf = requestAnimationFrame(step);
+      else __sbWkEndDance(x);
+      return;
+    }
 
     let x, face, la, ra, ty, sy, lookX, lookY, tilt;
     if (t < GUN_S) {
@@ -2989,7 +4558,7 @@ function __sbWkDance(durationMs = __SB_DANCE_DURATION_MS) {
     if (pupL) pupL.setAttribute("transform", `translate(${px} ${py})`);
     if (pupR) pupR.setAttribute("transform", `translate(${px} ${py})`);
 
-    if (now - start < durationMs) __sbWkDanceRaf = requestAnimationFrame(step);
+    if (continuous ? __sbDanceModeActive : (now - start < finiteDurationMs)) __sbWkDanceRaf = requestAnimationFrame(step);
     else __sbWkEndDance(x);
   };
   __sbWkDanceRaf = requestAnimationFrame(step);
@@ -3003,6 +4572,10 @@ function __sbWkEndDance(xResume) {
     for (const sel of ["#__sbwk_la__", "#__sbwk_ra__", "#__sbwk_la_bg__", "#__sbwk_ra_bg__", "#__sbwk_ll__", "#__sbwk_rl__"]) {
       root.querySelector(sel)?.setAttribute("transform", "");
     }
+    root.querySelector("#__sbwk_fedora__")?.setAttribute("display", "none");
+    root.querySelector("#__sbwk_moonlegs__")?.setAttribute("display", "none");
+    root.querySelector("#__sbwk_ll__")?.setAttribute("display", "inline");
+    root.querySelector("#__sbwk_rl__")?.setAttribute("display", "inline");
     root.querySelector("#__sbwk_react__")?.setAttribute("display", "none");
     root.querySelector("#__sbwk_rc__")?.setAttribute("display", "none");
     root.querySelector("#__sbwk_mouth__")?.setAttribute("display", "inline");
@@ -3018,6 +4591,8 @@ function __sbWkEndDance(xResume) {
     }
     __sbWkDanceArmAnchor = null;
   }
+  const flip = document.getElementById("__sbwk_flip__");
+  if (flip) flip.style.transform = "";
   __sbWkDancing = false; __sbWkMoonwalking = false; __sbWkThrowMode = false;
   if (__sbInputOpen) {
     const laneW = (document.getElementById("__sb_walk_lane__")?.clientWidth) || 320;
@@ -3163,6 +4738,313 @@ function __sbWkResetThrow() {
 }
 
 // Create the walker lane + mascot DOM (idempotent). Returns the lane element.
+// Keep the walker lane glued to the BAR's top edge — the island grows the bar upward
+// (thinking mode adds ~70px) and Braino must ride up with it, then settle back down.
+let __sbWalkerLaneRo = null;
+function __sbSyncWalkerLane() {
+  const lane = document.getElementById("__sb_walk_lane__");
+  const bar = document.getElementById("__sb_bar__");
+  if (!lane || !bar) return;
+  const apply = () => {
+    const r = bar.getBoundingClientRect();
+    if (!r.height) return;
+    lane.style.bottom = `${Math.max(78, Math.round(window.innerHeight - r.top))}px`;
+  };
+  apply();
+  if (!__sbWalkerLaneRo && typeof ResizeObserver !== "undefined") {
+    __sbWalkerLaneRo = new ResizeObserver(apply);   // fires every frame of the island's height transition
+    __sbWalkerLaneRo.observe(bar);
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// ROAM MODE — Braino leaves the bar, wanders the real screen, and perches on
+// sensible page elements (the top edge of a video, a card, a thumbnail). DOM
+// rects give exact coordinates; a scorer picks a ledge that frames content
+// instead of obstructing it. Toggle: Shift×2. Seeds teach mode (directed roam).
+// ════════════════════════════════════════════════════════════════════════════
+const __SB_ROAM_ENABLED = false;   // Roam (Shift×2) is parked — flip to true to re-enable
+let __sbRoamActive = false;
+let __sbRoamRaf = null;
+let __sbRoamLast = 0;
+let __sbRoamStart = 0;
+let __sbRoamCX = 0, __sbRoamCY = 0;      // current walker top-left (viewport px)
+let __sbRoamTX = 0, __sbRoamTY = 0;      // target walker top-left
+let __sbRoamDir = 1;                     // facing
+let __sbRoamPerchEl = null;              // the element he's headed to / sitting on
+let __sbRoamSitting = false;
+let __sbRoamNextWander = 0;
+let __sbRoamHoldUntil = 0;               // he lingers on the bar while the intro line shows
+let __sbRoamLaunched = false;            // the one-time jump-off has fired
+let __sbRoamLaunching = false;           // mid jump-off arc
+let __sbRoamLaunchT0 = 0;
+let __sbRoamLaunchFromX = 0, __sbRoamLaunchFromY = 0, __sbRoamLaunchToX = 0, __sbRoamLaunchToY = 0;
+let __sbRoamLaneCss = "";                // saved lane inline style, restored on exit
+let __sbRoamMouseX = -9999, __sbRoamMouseY = -9999;
+const __SB_ROAM_W = 64, __SB_ROAM_H = 78;   // walker box; feet ≈ bottom
+// The mascot SVG overflows its 64x78 box (arms/legs), and dangling legs hang below when
+// sitting — so keep generous margins so no part of him ever clips the viewport edge.
+const __SB_ROAM_MARGIN_X = 30;
+const __SB_ROAM_MARGIN_TOP = 20;
+const __SB_ROAM_MARGIN_BOTTOM = 46;
+
+function __sbRoamOnMouse(e) { __sbRoamMouseX = e.clientX; __sbRoamMouseY = e.clientY; }
+// He must ALWAYS stay fully on screen — clamp the walker's top-left to the viewport.
+function __sbRoamVW() { return document.documentElement.clientWidth || window.innerWidth; }
+function __sbRoamVH() { return document.documentElement.clientHeight || window.innerHeight; }
+function __sbRoamClampX(x) { return Math.max(__SB_ROAM_MARGIN_X, Math.min(x, __sbRoamVW() - __SB_ROAM_W - __SB_ROAM_MARGIN_X)); }
+function __sbRoamClampY(y) { return Math.max(__SB_ROAM_MARGIN_TOP, Math.min(y, __sbRoamVH() - __SB_ROAM_H - __SB_ROAM_MARGIN_BOTTOM)); }
+
+// Score every visible "ledge" and return the best perch as {el, footX, topY}. A good
+// perch is a wide, stable, horizontal top edge that frames content — never the logo,
+// never what the user is reading/typing, never dead-center.
+function __sbRoamScorePerch() {
+  const vw = window.innerWidth, vh = window.innerHeight;
+  const sel = 'video, img, [role="img"], article, section, header, aside, figure, '
+    + '[class*="card"], [class*="Card"], [class*="thumbnail"], [class*="thumb"], '
+    + '[class*="player"], [class*="banner"], [class*="hero"], [class*="poster"], h1, h2';
+  let best = null, bestScore = 0;
+  let nodes;
+  try { nodes = document.querySelectorAll(sel); } catch (_) { return null; }
+  let scanned = 0;
+  for (const el of nodes) {
+    if (scanned++ > 1200) break;
+    let r;
+    try { r = el.getBoundingClientRect(); } catch (_) { continue; }
+    if (!r || r.width < 90 || r.height < 44) continue;                 // big enough to sit on
+    if (r.top < 56 || r.top > vh - 110) continue;                     // top edge must be comfortably in view
+    if (r.left > vw - 60 || r.left + r.width < 60) continue;          // horizontally on screen
+    // hard avoids
+    const idc = ((el.id || "") + " " + (el.className || "")).toString().toLowerCase();
+    if (/logo|brand|masthead/.test(idc)) continue;                    // never obstruct the mark
+    const tag = String(el.tagName || "").toLowerCase();
+    if (["input", "textarea", "select", "button", "a"].includes(tag)) continue;
+    const st = getComputedStyle(el);
+    if (st.visibility === "hidden" || st.opacity === "0" || st.display === "none") continue;
+    // don't sit where the cursor is (the user is engaging there)
+    const footX0 = r.left + r.width * 0.5;
+    if (Math.hypot(footX0 - __sbRoamMouseX, r.top - __sbRoamMouseY) < 150) continue;
+
+    // score: wide is good, visual blocks (video/img/figure) are great, periphery beats
+    // center, a bit of randomness so he doesn't always pick the same ledge.
+    let score = Math.min(r.width, 420) / 4;
+    if (["video", "img", "figure"].includes(tag) || /player|poster|thumb|hero/.test(idc)) score += 90;
+    const cx = r.left + r.width / 2;
+    score += Math.abs(cx - vw / 2) / vw * 80;                         // reward off-center
+    score -= Math.abs(r.top - vh * 0.32) / vh * 30;                   // gently prefer upper-third ledges
+    score += Math.random() * 40;
+    if (score > bestScore) {
+      bestScore = score;
+      // sit toward one end of the ledge (not dead-center on the block) — reads intentional
+      const frac = cx < vw / 2 ? 0.78 : 0.22;
+      best = { el, footX: r.left + r.width * frac, topY: r.top };
+    }
+  }
+  return best;
+}
+
+function __sbRoamPickNewPerch() {
+  const perch = __sbRoamScorePerch();
+  if (!perch) {
+    // No good ledge — just amble to a random on-screen spot so he never sits idle
+    // off-view. He always stays visible.
+    __sbRoamPerchEl = null;
+    __sbRoamTX = __sbRoamClampX(window.innerWidth * (0.2 + Math.random() * 0.6) - __SB_ROAM_W / 2);
+    __sbRoamTY = __sbRoamClampY(window.innerHeight * (0.3 + Math.random() * 0.5));
+    __sbRoamNextWander = performance.now() + 60000;
+    __sbRoamSitting = false;
+    return;
+  }
+  __sbRoamPerchEl = perch.el;
+  __sbRoamTX = __sbRoamClampX(perch.footX - __SB_ROAM_W / 2);
+  __sbRoamTY = __sbRoamClampY(perch.topY - (__SB_ROAM_H - 6));   // feet on the edge
+  __sbRoamSitting = false;
+}
+
+function __sbRoamApplyPose(now, moving, sitting) {
+  const walker = document.getElementById("__sbwk_walker__");
+  const flip = document.getElementById("__sbwk_flip__");
+  const root = walker && walker.querySelector("#__sbwk_root__");
+  if (!root) return;
+  const t = (now - __sbRoamStart) / 1000;
+  const s = t * 4.5;
+  const Lp = Math.sin(s), Rp = Math.sin(s + Math.PI);
+  const breath = 1 + 0.014 * Math.sin(t * 1.7);
+  const bob = Math.sin(t * 1.7 + 0.6) * 0.8;
+  const bp = t % 3.4;
+  const blink = bp < 0.13 ? Math.sin((bp / 0.13) * Math.PI) : 0;
+  const eyeSy = Math.max(0.06, 1 - blink);
+  if (flip) flip.style.transform = `scaleX(${__sbRoamDir})`;
+
+  const legL = root.querySelector("#__sbwk_ll__");
+  const legR = root.querySelector("#__sbwk_rl__");
+  const eyeL = root.querySelector("#__sbwk_eye_l__");
+  const eyeR = root.querySelector("#__sbwk_eye_r__");
+  if (sitting) {
+    // Perched on an edge: both legs hang straight down and swing gently TOGETHER (like a
+    // kid sitting on a wall) — never crossed. Small in-phase sway.
+    const sway = Math.sin(t * 1.3) * 5;
+    root.setAttribute("transform", `translate(0 ${bob + 4}) scale(${breath})`);
+    if (legL) legL.setAttribute("transform", `rotate(${30 + sway} 44 74)`);
+    if (legR) legR.setAttribute("transform", `rotate(${30 + sway} 56 74)`);
+  } else if (moving) {
+    const ll = Math.max(0, Lp) * 5, rl = Math.max(0, Rp) * 5;
+    const ls = Math.max(0, Lp) * 8, rs = Math.max(0, Rp) * 8;
+    const waddle = Math.sin(s) * 3.4, walkBob = -Math.abs(Math.sin(s)) * 2 - 0.4;
+    root.setAttribute("transform", `rotate(${waddle} 50 50) translate(0 ${bob + walkBob}) scale(${breath})`);
+    if (legL) legL.setAttribute("transform", `translate(0 ${-ll}) rotate(${ls} 44 74)`);
+    if (legR) legR.setAttribute("transform", `translate(0 ${-rl}) rotate(${rs} 56 74)`);
+  } else {
+    root.setAttribute("transform", `translate(0 ${bob}) scale(${breath})`);
+    if (legL) legL.setAttribute("transform", "");
+    if (legR) legR.setAttribute("transform", "");
+  }
+  if (eyeL) eyeL.setAttribute("transform", `translate(38 48) scale(1 ${eyeSy}) translate(-38 -48)`);
+  if (eyeR) eyeR.setAttribute("transform", `translate(62 48) scale(1 ${eyeSy}) translate(-62 -48)`);
+}
+
+function __sbRoamTick(now) {
+  if (!__sbRoamActive) { __sbRoamRaf = null; return; }
+  const walker = document.getElementById("__sbwk_walker__");
+  if (!walker) { __sbRoamRaf = null; return; }
+  const dt = Math.min(0.05, (now - __sbRoamLast) / 1000);
+  __sbRoamLast = now;
+
+  // He lingers on the bar while the intro line ("Ah, I finally get to be off the bar")
+  // shows, then steps off. Until then, just idle at the start spot.
+  if (now < __sbRoamHoldUntil) {
+    walker.style.transform = `translate(${__sbRoamCX}px, ${__sbRoamCY}px)`;
+    __sbRoamApplyPose(now, false, false);
+    __sbRoamRaf = requestAnimationFrame(__sbRoamTick);
+    return;
+  }
+
+  // JUMP OFF THE BAR — a real arc (crouch is implied by the launch), like the show-me
+  // leap. The bar begins its slow fold-shut exactly as he leaps. Fires once.
+  if (!__sbRoamLaunched) {
+    __sbRoamLaunched = true;
+    __sbRoamPickNewPerch();                       // sets TX/TY (first ledge)
+    __sbRoamLaunchFromX = __sbRoamCX; __sbRoamLaunchFromY = __sbRoamCY;
+    __sbRoamLaunchToX = __sbRoamTX; __sbRoamLaunchToY = __sbRoamTY;
+    __sbRoamLaunching = true; __sbRoamLaunchT0 = now;
+    document.getElementById("__sb_bar__")?.classList.add("sb-bar-collapsed");   // slow close
+  }
+  if (__sbRoamLaunching) {
+    const dur = 900;
+    let pr = (now - __sbRoamLaunchT0) / dur;
+    if (pr >= 1) {
+      __sbRoamLaunching = false;
+      __sbRoamCX = __sbRoamLaunchToX; __sbRoamCY = __sbRoamLaunchToY;
+    } else {
+      __sbRoamCX = __sbRoamLaunchFromX + (__sbRoamLaunchToX - __sbRoamLaunchFromX) * pr;
+      const flatY = __sbRoamLaunchFromY + (__sbRoamLaunchToY - __sbRoamLaunchFromY) * pr;
+      __sbRoamCY = flatY - 95 * Math.sin(Math.PI * pr);    // parabolic hop
+      __sbRoamDir = (__sbRoamLaunchToX >= __sbRoamLaunchFromX) ? 1 : -1;
+      walker.style.transform = `translate(${__sbRoamClampX(__sbRoamCX)}px, ${Math.max(__SB_ROAM_MARGIN_TOP, __sbRoamCY)}px)`;
+      __sbRoamApplyPose(now, true, false);
+      __sbRoamRaf = requestAnimationFrame(__sbRoamTick);
+      return;
+    }
+  }
+
+  // Keep the perch anchored as the page scrolls / reflows (re-measure its live rect),
+  // and NEVER follow it off-screen — clamp into the viewport.
+  if (__sbRoamPerchEl && __sbRoamPerchEl.isConnected) {
+    try {
+      const r = __sbRoamPerchEl.getBoundingClientRect();
+      if (r.width >= 60 && r.top > 40 && r.top < window.innerHeight - 60) {
+        const frac = (r.left + r.width / 2) < window.innerWidth / 2 ? 0.78 : 0.22;
+        __sbRoamTX = __sbRoamClampX(r.left + r.width * frac - __SB_ROAM_W / 2);
+        __sbRoamTY = __sbRoamClampY(r.top - (__SB_ROAM_H - 6));
+      } else { __sbRoamPerchEl = null; __sbRoamNextWander = 0; }   // scrolled away → wander
+    } catch (_) { __sbRoamPerchEl = null; }
+  }
+
+  // Anti-distraction: if the cursor comes close, step aside a little (still on screen).
+  const feetX = __sbRoamCX + __SB_ROAM_W / 2, feetY = __sbRoamCY + __SB_ROAM_H;
+  const nearCursor = Math.hypot(feetX - __sbRoamMouseX, feetY - __sbRoamMouseY) < 120;
+  if (nearCursor) __sbRoamTX = __sbRoamClampX(__sbRoamTX + (__sbRoamCX < __sbRoamMouseX ? -140 : 140));
+
+  // Move toward target at a believable WALKING pace — no teleporting, no flying off. He
+  // walks the diagonal (feet cycling); vertical change reads as a gentle climb.
+  const dx = __sbRoamTX - __sbRoamCX, dy = __sbRoamTY - __sbRoamCY;
+  const dist = Math.hypot(dx, dy);
+  const moving = dist > 3;
+  if (moving) {
+    if (Math.abs(dx) > 2) __sbRoamDir = dx > 0 ? 1 : -1;
+    const speed = 135;                         // px/s — a stroll, not a dash
+    const step = Math.min(dist, speed * dt);
+    __sbRoamCX = __sbRoamClampX(__sbRoamCX + (dx / dist) * step);
+    __sbRoamCY = __sbRoamClampY(__sbRoamCY + (dy / dist) * step);
+    __sbRoamSitting = false;
+  } else if (__sbRoamPerchEl) {
+    __sbRoamSitting = true;
+  }
+  walker.style.transform = `translate(${__sbRoamCX}px, ${__sbRoamCY}px)`;
+  __sbRoamApplyPose(now, moving, __sbRoamSitting);
+
+  // Wander: once he's been sitting a while, pick a new ledge (or amble to a random spot).
+  if ((__sbRoamSitting || !__sbRoamPerchEl) && now > __sbRoamNextWander) {
+    __sbRoamNextWander = now + 60000 + Math.random() * 20000;
+    __sbRoamPickNewPerch();
+  }
+
+  __sbRoamRaf = requestAnimationFrame(__sbRoamTick);
+}
+
+function __sbToggleRoamMode() {
+  __sbRoamActive ? __sbExitRoamMode() : __sbEnterRoamMode();
+}
+function __sbEnterRoamMode() {
+  if (__sbRoamActive) return;
+  const lane = __sbEnsureWalker();
+  lane.style.display = "block";
+  __sbRoamActive = true;
+  __sbStopWalkLoop?.();
+  if (__sbWkRaf) { cancelAnimationFrame(__sbWkRaf); __sbWkRaf = null; }
+  // Free the lane to the full viewport so the walker can be placed anywhere.
+  __sbRoamLaneCss = lane.style.cssText;
+  lane.style.cssText = "position:fixed;left:0;top:0;width:100vw;height:100vh;pointer-events:none;z-index:2147483646;overflow:visible;display:block;";
+  // The lane ignores clicks (so the page underneath stays usable) but Braino himself is
+  // tappable — click him to call the bar back. Anchor him to TOP so translate(x,y) places
+  // his top-left in viewport coords (his CSS pins bottom:0, which would shove him off the
+  // bottom of the screen — the "Braino is nowhere" bug).
+  const wkEl = document.getElementById("__sbwk_walker__");
+  if (wkEl) { wkEl.style.pointerEvents = "auto"; wkEl.style.top = "0"; wkEl.style.bottom = "auto"; }
+  // Start right where the bar is (bottom center). Sequence: say line → JUMP off (arc) →
+  // bar slowly folds shut → walk around. The bar does NOT close yet — he's still on it.
+  __sbRoamCX = __sbRoamClampX(__sbRoamVW() / 2 - __SB_ROAM_W / 2);
+  __sbRoamCY = Math.max(__SB_ROAM_MARGIN_TOP, __sbRoamVH() - 118);   // on the bar, low on screen
+  __sbRoamStart = __sbRoamLast = performance.now();
+  __sbRoamHoldUntil = performance.now() + 1500;     // linger on the bar while the line shows
+  __sbRoamNextWander = performance.now() + 62000;
+  __sbRoamPerchEl = null; __sbRoamSitting = false;
+  __sbRoamLaunched = false; __sbRoamLaunching = false;
+  lane.classList.add("sb-roaming");   // escape hatch from the notch-era display:none!important
+  document.addEventListener("mousemove", __sbRoamOnMouse, true);
+  __sbWkSay?.("Ah, I finally get to be off the bar.");
+  __sbRoamRaf = requestAnimationFrame(__sbRoamTick);
+}
+function __sbExitRoamMode() {
+  if (!__sbRoamActive) return;
+  __sbRoamActive = false;
+  if (__sbRoamRaf) { cancelAnimationFrame(__sbRoamRaf); __sbRoamRaf = null; }
+  document.removeEventListener("mousemove", __sbRoamOnMouse, true);
+  __sbRoamPerchEl = null;
+  const lane = document.getElementById("__sb_walk_lane__");
+  if (lane) { lane.style.cssText = __sbRoamLaneCss; lane.classList.remove("sb-roaming"); }   // restore the bar lane
+  const walker = document.getElementById("__sbwk_walker__");
+  if (walker) { walker.style.transform = ""; walker.style.top = ""; walker.style.bottom = ""; }
+  // Reset any dangling leg transforms, then resume the normal bar stroll.
+  const root = walker && walker.querySelector("#__sbwk_root__");
+  if (root) { root.querySelector("#__sbwk_ll__")?.setAttribute("transform", ""); root.querySelector("#__sbwk_rl__")?.setAttribute("transform", ""); }
+  // The bar unfolds back open.
+  const bar = document.getElementById("__sb_bar__");
+  if (bar) { bar.classList.remove("sb-bar-collapsed"); bar.classList.add("open"); }
+  __sbWkResumeFromX = 24;
+  __sbStartWalkLoop?.();
+}
+
 function __sbEnsureWalker() {
   let lane = document.getElementById("__sb_walk_lane__");
   if (lane) return lane;
@@ -3181,6 +5063,8 @@ function __sbEnsureWalker() {
   // Grab + fling: drag Braino anywhere, release to throw. A plain tap just waves.
   let dragging = false, dragMoved = false, lastPX = 0, lastPY = 0, lastPT = 0, vX = 0, vY = 0;
   walker.addEventListener("pointerdown", (e) => {
+    // In roam mode, tapping Braino calls him back: exit roam, the bar unfolds for text.
+    if (__sbRoamActive) { e.preventDefault(); __sbExitRoamMode(); return; }
     if (__sbWkThrown || __sbWkClimbing || __sbWkMoonwalking || __sbWkJumping) return;
     dragging = true; dragMoved = false;
     try { walker.setPointerCapture(e.pointerId); } catch (_) {}
@@ -3238,6 +5122,7 @@ function __sbStartWalkLoop() {
   __sbWkWalking = true; __sbWkWaving = false; __sbWkBusy = false; __sbWalkTalking = false;
   __sbWkResetThrow();
   if (__sbGlassesOn) __sbSetGlasses(true);   // keep specs on across walker rebuilds
+  if (__sbCurrentCostume) __sbSetVoicePersonaCostume(__sbCurrentCostume);   // keep the persona look on too
   clearTimeout(__sbWkAutoTimer); __sbWkScheduleAuto();
   if (!__sbWkRaf) __sbWkRaf = requestAnimationFrame(__sbWkTick);
 }
@@ -3611,8 +5496,9 @@ function __sbJumpPointAt(el, opts = {}) {
     const onKey = (e) => { if (e.key === "Escape") dismiss = true; };
     const onClick = () => { dismiss = true; };
 
-    let phase = "crouch", pStart = performance.now(), said = false, holdStart = 0;
-    const T = { crouch: 280, launch: 160, fly: 640, land: 160, recover: 260, hold: 3400, bCrouch: 210, bFly: 580 };
+    let phase = "crouch", pStart = performance.now(), said = false, pointed = false, holdStart = 0;
+    const holdMs = Number.isFinite(Number(opts.holdMs)) ? Math.max(250, Number(opts.holdMs)) : 3400;
+    const T = { crouch: 280, launch: 160, fly: 640, land: 160, recover: 260, hold: holdMs, bCrouch: 210, bFly: 580 };
     const t0 = performance.now();
     const next = (p) => { phase = p; pStart = performance.now(); };
 
@@ -3699,6 +5585,10 @@ function __sbJumpPointAt(el, opts = {}) {
         fx.beam.style.opacity = "0.9";
         fx.beam.style.strokeDashoffset = (-(tt * 22) % 200).toFixed(1);
         if (!said) { said = true; if (opts.say) __sbWkSay(opts.say); }
+        if (!pointed) {
+          pointed = true;
+          try { opts.onPoint?.({ element: el }); } catch (_) {}
+        }
         if (held >= T.hold || dismiss) {
           next("bCrouch");
         }
@@ -3767,6 +5657,7 @@ function __sbWkHop() {
 }
 
 function __sbWkTick(now) {
+  if (__sbRoamActive) { __sbWkRaf = null; return; }   // roam mode owns the walker
   const lane = document.getElementById("__sb_walk_lane__");
   if (!lane || lane.style.display === "none") { __sbWkRaf = null; return; }
   const walker = document.getElementById("__sbwk_walker__");
@@ -3854,12 +5745,15 @@ function __sbWkTick(now) {
   const eyeR = root.querySelector("#__sbwk_eye_r__");
   const mouthG = root.querySelector("#__sbwk_mouth__");
   const reactG = root.querySelector("#__sbwk_react__");
+  // Trump pout paints OVER the mouth slot — it must yield to reaction faces and lip-sync.
+  const trumpPout = root.querySelector("#__sbwk_trump_pout__");
 
   if (__sbWkReaction) {
     // A reaction face takes over: hide the normal eyes + mouth, show the chosen overlay.
     if (eyeL) eyeL.setAttribute("display", "none");
     if (eyeR) eyeR.setAttribute("display", "none");
     if (mouthG) mouthG.setAttribute("display", "none");
+    if (trumpPout) trumpPout.style.display = "none";
     if (reactG) reactG.setAttribute("display", "inline");
     const key = __sbWkReaction === "scared" ? "rs" : __sbWkReaction === "celebrate" ? "rc" : "rt";
     ["rs", "rc", "rt"].forEach(k => {
@@ -3924,6 +5818,7 @@ function __sbWkTick(now) {
       // would otherwise override the display ATTRIBUTE (that was the missing-mouth bug).
       if (mSmile) mSmile.style.display = "none";
       if (mTalk)  mTalk.style.display = "block";
+      if (trumpPout) trumpPout.style.display = "none";
       if (tE) { tE.setAttribute("rx", String(rx)); tE.setAttribute("ry", String(ry)); }
       if (tI) {
         if (o > 0.25) {
@@ -3936,6 +5831,7 @@ function __sbWkTick(now) {
     } else {
       if (mSmile) mSmile.style.display = "";
       if (mTalk)  mTalk.style.display = "none";
+      if (trumpPout) trumpPout.style.display = "";
     }
   }
 
@@ -3982,6 +5878,11 @@ let __sbLecSegmentCount = 0;
 let __sbLectureRecordingMode = "lecture";
 let __sbLectureTranscript = "";
 let __sbMeetingArtifacts = { actionItems: [], followUps: [] };
+let __sbMeetingContext = null;
+let __sbMeetingPollTimer = null;
+let __sbMeetingObserver = null;
+let __sbMeetingAutosaveTimer = null;
+let __sbMeetingSegmentBusy = false;
 let __sbSpotifyUiState = {
   active: false,
   source: "spotify",
@@ -4019,6 +5920,1280 @@ function __sbIsSelfEcho(transcript) {
   const bt = b.split(" ");
   const overlap = bt.filter((w) => at.has(w)).length;
   return bt.length >= 4 && overlap / bt.length >= 0.7;   // mostly Braino's own words coming back
+}
+
+let __sbVoiceOutputGuardAt = 0;
+function __sbBrainoOutputActive() {
+  return Boolean(
+    __sbIsSpeaking
+    || __sbWalkTalking
+    || __sbStreamFishActive
+    || __sbHasActiveRealtimeResponse()
+  );
+}
+function __sbVoiceAddressesBraino(text) {
+  const norm = __sbNormalizeForMatch(text);
+  if (!norm) return false;
+  if (/\b(braino|bruno|breno|reno|dino)\b/.test(norm)) return true;
+  if (/\b(stop|pause|wait|hold on|listen|one second|repeat|skip|exit|cancel|enough|resume)\b/.test(norm)) return true;
+  if (__sbDemoModeEnabled?.() && /\b(yes|no|gmail|spotify|maps?|launch|website|demo|dance|trump|continue)\b/.test(norm)) return true;
+  if (__sbTeamModeEnabled?.() && (__sbVoiceHasTeamSignal?.(text) || /\b(yes|no|done|continue|pause|resume|repeat|skip)\b/.test(norm))) return true;
+  return false;
+}
+function __sbShouldDropSpeechDuringBrainoOutput(text, options = {}) {
+  const guardRecent = Date.now() - __sbVoiceOutputGuardAt < 12000;
+  if (!__sbBrainoOutputActive() && !guardRecent) return false;
+  if (__sbIsSelfEcho(text) && !__sbVoiceAddressesBraino(text)) return true;
+  const confidence = Number(options.confidence);
+  const hasConfidence = Number.isFinite(confidence) && confidence > 0;
+  const stats = typeof __sbVoiceTranscriptStats === "function"
+    ? __sbVoiceTranscriptStats(text)
+    : { normalized: __sbNormalizeForMatch(text), wordCount: String(text || "").trim().split(/\s+/).filter(Boolean).length };
+  const addressed = __sbVoiceAddressesBraino(text);
+  if (!addressed) return true;
+  if (hasConfidence && confidence < 0.45 && stats.wordCount <= 4) return true;
+  return false;
+}
+
+// Private live-demo flow for Itish's teammate farewell messages. This stays entirely local
+// and deterministic so Team mode never leaks into Delegate, Gmail, browser actions, or search.
+const __SB_TEAM_CONFIG = {
+  anz: {
+    label: "ANZ",
+    aliases: ["anz", "a n z", "a n n", "ann", "a and z", "australia new zealand", "australia and new zealand", "old team", "bank team"],
+    fallbackOrder: ["madhuri", "rahul", "shriya", "palash", "shree"],
+    people: {
+      madhuri: {
+        label: "Madhuri",
+        speechLabel: "Maa-dhoo-ree",
+        aliases: ["madhuri", "maduri", "madhuree", "madhoori", "madhuri maam", "madhuri mam"],
+        opening: "Madhuri, you and him joined on the same day, and if on 31st July 2025, you would have told Itish the true bond you would go onto form, he'd be surprised.",
+        message: "You've been so patient and kind with him. He is very grateful for you, and he is going to miss you.",
+        closing: "Thanks for always giving him the confidence that he could do it, and look, Itish did it. He is going to miss you a lot.",
+        afterResponse: "That makes me really happy to hear.",
+      },
+      rahul: {
+        label: "Rahul",
+        speechLabel: "Raa-hul",
+        aliases: ["rahul", "rahool"],
+        opening: "Rahul. Two words.",
+        message: "Itish has just two words for you: \"My brother\".",
+        closing: "That is the whole message. Perfect as it is. Beyond A.N.Z, always.",
+      },
+      shriya: {
+        label: "Shreeya",
+        speechLabel: "Shree-ya",
+        aliases: ["shriya", "shreya", "shria", "shreeya"],
+        opening: "Hello Shreeya.",
+        message: "You were born and brought up in Amdocs and I was in Itish's browser.",
+        closing: "I hope the new project is keeping you just as busy. P.S. see all that is possible from vibe coding?",
+      },
+      palash: {
+        label: "Palash",
+        speechLabel: "Puh-laash",
+        aliases: ["palash", "palashh", "palaash", "palash bhai"],
+        opening: "Hey Palash, been a while. How are you doing?",
+        message: "Itish wanted me to say thank you for always being there for him. For helping him switch the monitor on when he somehow could not figure it out, and for being supportive like an elder brother.",
+        closing: "You took him to the airport when he broke his leg, and that means more than you can ever know.",
+      },
+      shree: {
+        label: "Shree",
+        speechLabel: "Shree Raksha",
+        aliases: ["shree", "shri", "shri raksha", "shriraksha", "sri raksha", "sriraksha", "raksha", "shree raksha", "sree raksha", "sheeraksha", "she raksha", "shree raksh", "sri raksh"],
+        opening: "Shree, Itish sees you like an elder sister.",
+        message: "You made him realize he cannot always be painfully honest in every moment. He is working on it. At his core, he will probably always be honest, but he is learning how to carry it better.",
+        closing: "Thank you for caring enough to tell him the truth and wanting him to do good. He will always remember you.",
+      },
+    },
+  },
+  att: {
+    label: "AT&T",
+    aliases: ["att", "at&t", "at and t", "at and tea", "at and tee", "a t and t", "a t and tea", "a t and tee", "a t t", "at t", "atnt", "atandt", "atat", "a t a t", "a t n t", "current team", "new team"],
+    fallbackOrder: ["jyoti", "surya", "hemangi", "minul"],
+    people: {
+      jyoti: {
+        label: "Jyoti sir",
+        speechLabel: "Jyo-tee sir",
+        aliases: ["jyoti sir", "jyoti", "jyoti server", "jyoti sur", "jyoti saar", "jyoti ji", "jyotisar", "jyotisaar", "jyotish", "jyotish sir", "jyoti sirr", "jyoti saar"],
+        opening: "Jyoti sir, thank you for understanding Itish for who he is and for being so supportive.",
+        message: "He learned a lot about what good management looks like from you. You make people laugh, but you also make people respect you.",
+        closing: "A lot of people look up to you, and he does too. We will party, sir. When and where, just let Itish know.",
+      },
+      surya: {
+        label: "Surya",
+        speechLabel: "Soor-ya",
+        aliases: ["surya", "suria", "soorya", "surya sir", "suriya"],
+        opening: "Surya, sorry for butchering your pronunciation, but thank you for bringing Itish into AT&T.",
+        message: "That first conversation meant a lot to him. You spoke to him for forty minutes like a human being and did not ask a single technical question, which he was hoping you would not ask, haha.",
+        closing: "Also, he hopes you now realize why he never did much ETL. The only thing he really wanted to extract and transform was me, Braino, but unlike him, I could tell you all about ETL and data warehousing, haha.",
+      },
+      hemangi: {
+        label: "Hemangi",
+        speechLabel: "Hey-maangi",
+        aliases: ["hemangi", "hemangee", "himangi", "hemangy", "hemangi maam", "hemangi mam"],
+        opening: "Hi Hemangi, thank you for always being super sweet and non scary to Itish.",
+        message: "You always spoke to Itish with so much kindness and warmth, and I get it, headphones in the ears all the time can get annoying. Yet you and Minul were both so nice about it.",
+        closing: "You would make an awesome team lead, or maybe you are one, honestly there are so many leads in this team even I am confused. But jokes apart, he wishes he got more time to work with you. Thank you. Also, we can stop worrying about the C.C.H Putty issue now, haha.",
+      },
+      minul: {
+        label: "Minul",
+        speechLabel: "Mee-nul",
+        aliases: ["minul", "meenul", "minool", "minol", "meenol", "minull", "meenal"],
+        opening: "Minul, I hope you now understand why Itish was not always the most proactive person in the room.",
+        message: "In his head, he was always running here, building me. But you kept Itish in check.",
+        closing: "You held him accountable, made him do things right, and did not let him procrastinate. That mattered more than he probably said out loud. Thank you for keeping him honest and moving.",
+      },
+    },
+  },
+};
+
+const __SB_TEAM_DEMO_STORE_KEY = "sbTeamDemoState";
+const __SB_TEAM_FINAL_THANK_YOU = "Thank you for making Itish's time in Amdocs worth it. Thank you for making him feel as if he was home away from home. He will remember you always.";
+const __SB_TEAM_DEMO_SCRIPT = {
+  intro: [
+    "Okay so, hello there folks, I am Braino.",
+    "I live inside Itish's browser, which is less creepy than it sounds and more useful than it has any right to be.",
+    "I can read pages, write emails, talk to you in real time with little to no latency, search the web, control your tabs, play music, and generally do the browser chores while Itish pretends this was all calm and planned.",
+    "I also happen to look very adorable, and I have Itish to thank for that.",
+    "But let me stop yapping and show you something, for actions speak louder than words. Lets start with playing a song, here we go, watch.",
+  ].join("\n\n"),
+  afterSong: "That was Spotify. Any song you want, I can play, as long as I am able to hear it correctly of course. Now let's say you want to read a machine learning article, watch.",
+  afterSongFallback: "Spotify needed a warmup, but the browser trick is still the browser trick. Now let's say you want to read a machine learning article, watch.",
+  beforeArticleSummary: "Now that we have it opened, let's say you do not want to read the whole thing, because like Itish, you are lazy, and want it summarised. Earlier, you would have to copy-paste the contents of this and put it into ChatGPT and ask it to summarize, but I can just do it right here, without you having to leave the page.\n\nWatch.",
+  articleSummary: "So, this article is about Google's TabFM, a foundation model for tabular data. In normal words, it can look at a spreadsheet it has never been trained on and still make predictions in one shot. The core point is simple: this is a serious challenge to the usual XGBoost-style workflow for spreadsheet prediction. And the reason people are paying attention is that Google's benchmark results make the skepticism harder to maintain.",
+  closing: "That saved you 7 seconds and you did not even have to touch the screen. Magic? I guess.\n\nThese are just two of the many things I can do, but we shall save them for later. I keep getting smarter and more efficient, every day. I mean, if Itish keeps working on me until 6 am, I don't see any other option but to get smarter. That man is obsessed and I think that is what it takes to make things work.\n\nNow, by this time, Itish must have told you that he has sent in his resignation, and you can blame me for that, but the true reason why we're here is because he had some things to say to you, things he would have told you but thought it would be better coming from me, for expressing love through art is kind of the whole point.\n\nI am sorry in advance if I butcher the pronunciation of your name because while I am Indian at heart, my accent is very English. So here we go. Itish, my guy.\n\nWhich team is in front of you, ANZ or AT&T?",
+};
+
+let __sbTeamState = {
+  phase: "idle",
+  team: null,
+  roster: [],
+  spoken: [],
+  pendingChoices: [],
+  currentPerson: null,
+  lastLine: "",
+  previousPhase: "awaiting_next_person",
+  demoTask: "",
+  demoSong: "",
+  demoOriginTabId: null,
+  demoTabId: null,
+};
+
+function __sbTeamNormalize(value) {
+  return __sbNormalizeForMatch(String(value || "").replace(/&/g, " and "));
+}
+
+function __sbTeamFindTeam(text) {
+  const normalized = __sbTeamNormalize(text);
+  if (!normalized) return null;
+  if (/\b(?:at\s+and\s+(?:t|tea|tee)|a\s+t\s+and\s+(?:t|tea|tee)|a\s+t\s+t|att|atnt|atandt|atat|current team|new team)\b/.test(normalized)) return "att";
+  if (/\b(?:anz|a\s+n\s+z|a\s+n\s+n|ann|australia\s+new\s+zealand|australia\s+and\s+new\s+zealand|old team|bank team)\b/.test(normalized)) return "anz";
+  for (const [teamKey, team] of Object.entries(__SB_TEAM_CONFIG)) {
+    if (team.aliases.some((alias) => __sbTeamAliasMatches(normalized, alias))) return teamKey;
+  }
+  return null;
+}
+
+function __sbTeamAliasMatches(normalizedText, alias) {
+  const text = String(normalizedText || "");
+  const a = __sbTeamNormalize(alias);
+  if (!text || !a) return false;
+  if (text === a) return true;
+  const escaped = a.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  if (new RegExp(`(^|\\s)${escaped}(?=\\s|$)`).test(text)) return true;
+  const compactText = text.replace(/\s+/g, "");
+  const compactAlias = a.replace(/\s+/g, "");
+  if (compactAlias.length >= 3 && compactText === compactAlias) return true;
+  if (compactAlias.length >= 5 && compactText.includes(compactAlias)) return true;
+  const meaningfulParts = a.split(" ").filter((part) => part.length >= 3);
+  if (meaningfulParts.length < 2) return false;
+  return meaningfulParts.every((part) => text.includes(part));
+}
+
+function __sbTeamFindPeople(text, teamKey = null) {
+  const normalized = __sbTeamNormalize(text);
+  if (!normalized) return [];
+  const teamKeys = teamKey && __SB_TEAM_CONFIG[teamKey] ? [teamKey] : Object.keys(__SB_TEAM_CONFIG);
+  const matches = [];
+  const seen = new Set();
+  for (const key of teamKeys) {
+    const people = __SB_TEAM_CONFIG[key]?.people || {};
+    for (const [personKey, person] of Object.entries(people)) {
+      const aliases = [person.label, personKey, ...(person.aliases || [])];
+      if (!aliases.some((alias) => __sbTeamAliasMatches(normalized, alias))) continue;
+      const id = `${key}:${personKey}`;
+      if (!seen.has(id)) {
+        seen.add(id);
+        matches.push({ teamKey: key, personKey });
+      }
+    }
+  }
+  return matches;
+}
+
+function __sbTeamFindPeopleSmart(text, preferredTeamKey = null) {
+  const preferred = preferredTeamKey ? __sbTeamFindPeople(text, preferredTeamKey) : [];
+  if (preferred.length) return preferred;
+  return __sbTeamFindPeople(text, null);
+}
+
+function __sbTeamPersonLabel(personKey, teamKey = __sbTeamState.team) {
+  return __SB_TEAM_CONFIG[teamKey]?.people?.[personKey]?.label || personKey;
+}
+
+function __sbTeamJoinLabels(keys, teamKey = __sbTeamState.team) {
+  const labels = (keys || []).map((key) => __sbTeamPersonLabel(key, teamKey)).filter(Boolean);
+  if (labels.length <= 1) return labels[0] || "";
+  if (labels.length === 2) return `${labels[0]} and ${labels[1]}`;
+  return `${labels.slice(0, -1).join(", ")}, and ${labels[labels.length - 1]}`;
+}
+
+function __sbTeamKnownPeopleLine(teamKey = __sbTeamState.team) {
+  const team = __SB_TEAM_CONFIG[teamKey];
+  if (!team) return "";
+  return __sbTeamJoinLabels(team.fallbackOrder || Object.keys(team.people || {}), teamKey);
+}
+
+function __sbTeamSpeechText(text) {
+  let speech = String(text || "");
+  speech = speech.replace(/\bAT&T\b/g, "A. T. and T.").replace(/\bANZ\b/g, "A. N. Z.");
+  for (const team of Object.values(__SB_TEAM_CONFIG)) {
+    for (const person of Object.values(team.people || {})) {
+      const label = String(person.label || "").trim();
+      const speechLabel = String(person.speechLabel || "").trim();
+      if (!label || !speechLabel) continue;
+      speech = speech.replace(new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g"), speechLabel);
+    }
+  }
+  return speech;
+}
+
+function __sbTeamReset() {
+  __sbTeamState = {
+    phase: "idle",
+    team: null,
+    roster: [],
+    spoken: [],
+    pendingChoices: [],
+    currentPerson: null,
+    lastLine: "",
+    previousPhase: "awaiting_next_person",
+    demoTask: "",
+    demoSong: "",
+    demoOriginTabId: null,
+    demoTabId: null,
+  };
+  __sbTeamClearDemoState();
+}
+
+function __sbTeamRememberAssistant(line, prompt = "Team mode") {
+  const reply = String(line || "").trim();
+  if (!reply) return;
+  __sbTeamState.lastLine = reply;
+  __sbChatHistory.push({ role: "assistant", content: reply });
+  __sbCardTurns.push({ prompt, answer: reply });
+}
+
+async function __sbTeamSpeak(line, ctx = {}) {
+  const text = String(line || "").trim();
+  if (!text) return;
+  const speechText = String(ctx.speechText || __sbTeamSpeechText(text)).trim();
+  __sbStopSpeech();
+  __sbNoteSpoken(text);
+  __sbTeamRememberAssistant(text, ctx.prompt || "Team mode");
+  __sbShowBubble(text, false, { rich: true, kicker: "Team Mode", prompt: ctx.prompt || "" });
+  if (ctx.fromVoice) {
+    await __sbSpeakWithPreferredVoice(speechText, ctx.voiceOutput || "legacy", { verbatim: true });
+  } else {
+    void __sbSpeakText(speechText, { verbatim: true });
+  }
+}
+
+function __sbTeamAddRoster(people) {
+  const current = new Set(__sbTeamState.roster);
+  for (const personKey of people || []) {
+    if (personKey) current.add(personKey);
+  }
+  __sbTeamState.roster = Array.from(current);
+}
+
+function __sbTeamPromptForTeam() {
+  __sbTeamState.phase = "choosing_team";
+  return "Which team are we talking to, ANZ or AT&T?";
+}
+
+function __sbTeamPromptForRoom() {
+  __sbTeamState.phase = "collecting_room";
+  const team = __SB_TEAM_CONFIG[__sbTeamState.team]?.label || "the team";
+  const people = __sbTeamKnownPeopleLine(__sbTeamState.team);
+  return `Okay, ${team}. I have messages for ${people}. Who is here right now?`;
+}
+
+function __sbTeamPromptForNext(prefix = "") {
+  __sbTeamState.phase = "awaiting_next_person";
+  __sbTeamState.currentPerson = null;
+  const next = "Who should I talk to first?";
+  if (prefix) return `${prefix} ${next}`;
+  return next;
+}
+
+function __sbTeamPickFallbackNext() {
+  const team = __SB_TEAM_CONFIG[__sbTeamState.team];
+  if (!team) return null;
+  const spoken = new Set(__sbTeamState.spoken);
+  const roster = __sbTeamState.roster || [];
+  const rosterPick = team.fallbackOrder.find((personKey) => roster.includes(personKey) && !spoken.has(personKey));
+  if (rosterPick) return rosterPick;
+  return team.fallbackOrder.find((personKey) => !spoken.has(personKey)) || null;
+}
+
+function __sbTeamBuildPersonMessage(personKey) {
+  const person = __SB_TEAM_CONFIG[__sbTeamState.team]?.people?.[personKey];
+  if (!person) return "";
+  return [person.opening, person.message, person.closing].map((part) => String(part || "").trim()).filter(Boolean).join("\n\n");
+}
+
+function __sbTeamSetTeam(teamKey, options = {}) {
+  if (!__SB_TEAM_CONFIG[teamKey]) return false;
+  const changed = __sbTeamState.team !== teamKey;
+  __sbTeamState.team = teamKey;
+  if (changed || options.clearRoster) {
+    __sbTeamState.roster = [];
+    __sbTeamState.spoken = [];
+    __sbTeamState.pendingChoices = [];
+    __sbTeamState.currentPerson = null;
+  }
+  return true;
+}
+
+function __sbTeamWantsDirectPerson(text) {
+  return /\b(say|hello|hi|talk|speak|message|tell|next|first|start with|go to|about)\b/i.test(String(text || ""));
+}
+
+function __sbTeamBuildTeamIntroLine(teamKey) {
+  const team = __SB_TEAM_CONFIG[teamKey]?.label || "that team";
+  const people = __sbTeamKnownPeopleLine(teamKey);
+  return `Okay, ${team}. I can talk about ${people}. Who is here right now?`;
+}
+
+function __sbTeamDoneNudge() {
+  const team = __SB_TEAM_CONFIG[__sbTeamState.team]?.label || "the team";
+  return `Team mode is wrapped for ${team}. Type another prepared name if you want me to say one more message, say ANZ or AT&T to switch teams, or say exit Team mode.`;
+}
+
+function __sbTeamIsYesPrompt(text) {
+  return /\b(yes|yeah|yep|sure|haan|ha|hanji|go ahead|do it|let's go|lets go|of course|please)\b/i.test(String(text || ""));
+}
+
+function __sbTeamIsNoPrompt(text) {
+  return /\b(no|nope|nah|not now|later)\b/i.test(String(text || ""));
+}
+
+async function __sbTeamSpeakPerson(teamKey, personKey, ctx = {}) {
+  if (!__sbTeamSetTeam(teamKey)) return false;
+  __sbTeamAddRoster([personKey]);
+  const message = __sbTeamBuildPersonMessage(personKey);
+  if (!message) return false;
+  __sbTeamState.phase = "awaiting_next_person";
+  __sbTeamState.currentPerson = personKey;
+  if (!__sbTeamState.spoken.includes(personKey)) __sbTeamState.spoken.push(personKey);
+  await __sbTeamSpeak(message, ctx);
+  return true;
+}
+
+function __sbTeamPersistDemoState(patch = {}) {
+  if (!__sbContextOk()) return;
+  const state = {
+    active: true,
+    phase: __sbTeamState.phase,
+    task: __sbTeamState.demoTask || "",
+    song: __sbTeamState.demoSong || "",
+    originTabId: __sbTeamState.demoOriginTabId || null,
+    demoTabId: __sbTeamState.demoTabId || null,
+    updatedAt: Date.now(),
+    ...patch,
+  };
+  try { chrome.storage.local.set({ [__SB_TEAM_DEMO_STORE_KEY]: state }); } catch (_) {}
+}
+
+function __sbTeamClearDemoState() {
+  if (!__sbContextOk()) return;
+  try { chrome.storage.local.remove(__SB_TEAM_DEMO_STORE_KEY); } catch (_) {}
+}
+
+function __sbTeamPauseSpotifyDemoSong() {
+  try { chrome.runtime.sendMessage({ action: "sbSpotifyPause" }, () => { void chrome.runtime.lastError; }); } catch (_) {}
+}
+
+async function __sbTeamEnsureOriginTabId() {
+  if (__sbTeamState.demoOriginTabId) return __sbTeamState.demoOriginTabId;
+  const res = await __sbRuntimeMessage({ action: "sbGetSenderTabId" });
+  const tabId = Number(res?.tabId || 0) || null;
+  if (tabId) __sbTeamState.demoOriginTabId = tabId;
+  return tabId;
+}
+
+function __sbTeamDemoUrl(step, song) {
+  if (step === "demo_running_song") {
+    return __SB_TEAM_DEMO_TRACK_URL;
+  }
+  if (step === "demo_running_article") {
+    return __SB_TEAM_DEMO_ARTICLE_URL;
+  }
+  return "";
+}
+
+async function __sbTeamOpenDemoTab(step, song) {
+  const url = __sbTeamDemoUrl(step, song);
+  if (!url) return null;
+  const opened = await __sbRuntimeMessage({ action: "openTab", url, active: true, forceNew: true });
+  return Number(opened?.tabId || 0) || null;
+}
+
+function __sbTeamReturnDemoToOrigin({ phase, task, song, finalText, closeDelayMs = 250 }) {
+  const originTabId = Number(__sbTeamState.demoOriginTabId || 0) || null;
+  if (!originTabId) return false;
+  try {
+    chrome.runtime.sendMessage({
+      action: "sbTeamDemoReturnHome",
+      originTabId,
+      phase: String(phase || ""),
+      task: String(task || ""),
+      song: String(song || ""),
+      finalText: String(finalText || ""),
+      closeDelayMs,
+    }, () => { void chrome.runtime.lastError; });
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+function __sbTeamDelay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, Math.max(0, Number(ms) || 0)));
+}
+
+async function __sbTeamCloseDemoTab(tabId, closeDelayMs = 0) {
+  const closeTabId = Number(tabId || 0) || null;
+  const originTabId = await __sbTeamEnsureOriginTabId();
+  if (!originTabId && !closeTabId) return null;
+  return await __sbRuntimeMessage({
+    action: "sbTeamCloseDemoTab",
+    originTabId,
+    closeTabId,
+    closeDelayMs,
+  });
+}
+
+async function __sbTeamReadDemoArticle(tabId) {
+  void tabId;
+  return __SB_TEAM_DEMO_SCRIPT.articleSummary;
+}
+
+function __sbTeamExtractSong(text) {
+  let song = String(text || "").trim();
+  song = song
+    .replace(/^(?:play|put on|queue|search for|find|song is|the song is|i want|i want to hear|can you play)\s+/i, "")
+    .replace(/\s+(?:please|pls)$/i, "")
+    .trim();
+  return song || "Bargad by Arpit Bala";
+}
+
+function __sbTeamSpotifyDemoTask(song) {
+  return [
+    `Open Spotify and play "${song}".`,
+    "Use the browser like a human: open Spotify if needed, search for the track, click the best result, and play it.",
+    "Stop once the song is playing. Do not ask follow-up questions.",
+  ].join(" ");
+}
+
+function __sbTeamMediumDemoTask() {
+  return [
+    "Open Medium and find a readable machine learning article.",
+    "Search for a machine learning article, open one relevant result if available, and stop once the article is visible.",
+    "Do not sign in, do not click paid-only content, and do not ask follow-up questions.",
+  ].join(" ");
+}
+
+async function __sbTeamLaunchDemoAgent(step, task, connector = "auto") {
+  const originTabId = await __sbTeamEnsureOriginTabId();
+  const demoTabId = await __sbTeamOpenDemoTab(step, __sbTeamState.demoSong);
+  __sbTeamState.phase = step;
+  __sbTeamState.demoTask = String(task || "").trim();
+  __sbTeamState.demoOriginTabId = originTabId || __sbTeamState.demoOriginTabId || null;
+  __sbTeamState.demoTabId = demoTabId || null;
+  __sbTeamPersistDemoState({
+    phase: step,
+    task: __sbTeamState.demoTask,
+    connector,
+    originTabId: __sbTeamState.demoOriginTabId,
+    demoTabId: __sbTeamState.demoTabId,
+  });
+  __sbRunAgent(__sbTeamState.demoTask, {
+    connector,
+    modeOverride: "agent",
+    targetTabId: demoTabId || undefined,
+  });
+}
+
+async function __sbTeamStartIntroDemo(ctx = {}) {
+  __sbTeamClearDemoState();
+  __sbTeamState.phase = "demo_intro";
+  __sbTeamState.team = null;
+  __sbTeamState.roster = [];
+  __sbTeamState.spoken = [];
+  __sbTeamState.demoTask = "";
+  __sbTeamState.demoSong = "DAF by Badshah";
+  __sbTeamState.demoOriginTabId = await __sbTeamEnsureOriginTabId();
+  __sbTeamState.demoTabId = null;
+  __sbTeamPersistDemoState({
+    flow: "direct-demo",
+    phase: "demo_intro",
+    task: "",
+    song: __sbTeamState.demoSong,
+    originTabId: __sbTeamState.demoOriginTabId,
+    demoTabId: null,
+  });
+  await __sbTeamSpeak(__SB_TEAM_DEMO_SCRIPT.intro, { ...ctx, prompt: ctx.prompt || "Introduce Braino" });
+
+  __sbTeamState.phase = "demo_running_song";
+  const spotifyTabId = await __sbTeamOpenDemoTab("demo_running_song", __sbTeamState.demoSong);
+  __sbTeamState.demoTabId = spotifyTabId;
+  __sbTeamPersistDemoState({
+    flow: "direct-demo",
+    phase: "demo_running_song",
+    task: "",
+    song: __sbTeamState.demoSong,
+    originTabId: __sbTeamState.demoOriginTabId,
+    demoTabId: spotifyTabId,
+  });
+  await __sbTeamDelay(1400);
+  const playResult = await Promise.race([
+    __sbSpotifyPlayTrack(__SB_TEAM_DEMO_TRACK_URI, __SB_TEAM_DEMO_TRACK_START_MS),
+    __sbTeamDelay(9000).then(() => ({ ok: false, timedOut: true })),
+  ]);
+  await __sbTeamDelay(__SB_TEAM_DEMO_SPOTIFY_MS);
+  __sbTeamPauseSpotifyDemoSong();
+  await __sbTeamCloseDemoTab(spotifyTabId, 0);
+
+  __sbTeamState.demoTabId = null;
+  __sbTeamState.phase = "demo_after_song";
+  await __sbTeamSpeak(
+    playResult?.ok ? __SB_TEAM_DEMO_SCRIPT.afterSong : __SB_TEAM_DEMO_SCRIPT.afterSongFallback,
+    { ...ctx, prompt: "Braino demo" },
+  );
+
+  __sbTeamState.phase = "demo_running_article";
+  const articleTabId = await __sbTeamOpenDemoTab("demo_running_article", "");
+  __sbTeamState.demoTabId = articleTabId;
+  __sbTeamPersistDemoState({
+    flow: "direct-demo",
+    phase: "demo_running_article",
+    task: "",
+    song: __sbTeamState.demoSong,
+    originTabId: __sbTeamState.demoOriginTabId,
+    demoTabId: articleTabId,
+  });
+  await __sbTeamDelay(1400);
+  await __sbTeamSpeak(__SB_TEAM_DEMO_SCRIPT.beforeArticleSummary, { ...ctx, prompt: "Braino demo" });
+  const articleSummary = await __sbTeamReadDemoArticle(articleTabId);
+  await __sbTeamSpeak(articleSummary, { ...ctx, prompt: "Article summary" });
+  await __sbTeamDelay(__SB_TEAM_DEMO_ARTICLE_MS);
+  await __sbTeamCloseDemoTab(articleTabId, 0);
+
+  __sbTeamState.phase = "choosing_team";
+  __sbTeamState.demoTask = "";
+  __sbTeamState.demoTabId = null;
+  __sbTeamClearDemoState();
+  await __sbTeamSpeak(__SB_TEAM_DEMO_SCRIPT.closing, { ...ctx, prompt: "Braino demo" });
+}
+
+async function __sbTeamHandleDemoAgentFinal(agentPrompt, finalText = "") {
+  if (!__sbContextOk()) return false;
+  const stored = await new Promise((resolve) => {
+    try {
+      chrome.storage.local.get([__SB_TEAM_DEMO_STORE_KEY], (items) => resolve(items?.[__SB_TEAM_DEMO_STORE_KEY] || null));
+    } catch (_) { resolve(null); }
+  });
+  if (!stored?.active) return false;
+  if (stored.flow !== "agent-demo") return false;
+  const phase = String(stored.phase || __sbTeamState.phase || "");
+  const task = String(stored.task || __sbTeamState.demoTask || "").trim();
+  const prompt = String(agentPrompt || "").trim();
+  if (task && prompt && prompt !== task) return false;
+
+  if (typeof __sbApplyForcedModeUi === "function") __sbApplyForcedModeUi("team", { showReady: false, resetTeam: false });
+  __sbTeamState.phase = phase;
+  __sbTeamState.demoTask = task;
+  __sbTeamState.demoSong = String(stored.song || __sbTeamState.demoSong || "").trim();
+  __sbTeamState.demoOriginTabId = Number(stored.originTabId || __sbTeamState.demoOriginTabId || 0) || null;
+  __sbTeamState.demoTabId = Number(stored.demoTabId || __sbTeamState.demoTabId || 0) || null;
+
+  if (phase === "demo_running_song") {
+    setTimeout(() => {
+      __sbTeamPauseSpotifyDemoSong();
+      const returned = __sbTeamReturnDemoToOrigin({
+        phase,
+        task,
+        song: __sbTeamState.demoSong,
+        finalText,
+        closeDelayMs: 250,
+      });
+      if (!returned) {
+        void (async () => {
+          const articleTask = __sbTeamMediumDemoTask();
+          await __sbTeamSpeak(__SB_TEAM_DEMO_SCRIPT.afterSong, { prompt: "Braino demo" });
+          await __sbTeamLaunchDemoAgent("demo_running_article", articleTask, "auto");
+        })();
+      }
+    }, 5000);
+    return true;
+  }
+
+  if (phase === "demo_running_article") {
+    setTimeout(() => {
+      const returned = __sbTeamReturnDemoToOrigin({
+        phase,
+        task,
+        song: __sbTeamState.demoSong,
+        finalText,
+        closeDelayMs: 250,
+      });
+      if (!returned) {
+        void (async () => {
+          __sbTeamState.phase = "demo_awaiting_team_yes";
+          __sbTeamState.demoTask = "";
+          __sbTeamClearDemoState();
+          await __sbTeamSpeak(__SB_TEAM_DEMO_SCRIPT.closing, { prompt: "Braino demo" });
+        })();
+      }
+    }, 1200);
+    return true;
+  }
+
+  return false;
+}
+
+async function __sbTeamContinueDemoFromOrigin(payload = {}) {
+  if (typeof __sbApplyForcedModeUi === "function") {
+    __sbApplyForcedModeUi("team", { showReady: false, resetTeam: false });
+  }
+  __sbTeamState.demoOriginTabId = Number(payload.originTabId || __sbTeamState.demoOriginTabId || 0) || null;
+  __sbTeamState.demoTabId = null;
+  __sbTeamState.demoTask = "";
+  const phase = String(payload.phase || "");
+  const song = String(payload.song || __sbTeamState.demoSong || "").trim();
+  if (song) __sbTeamState.demoSong = song;
+
+  if (phase === "demo_running_song") {
+    __sbTeamState.phase = "demo_after_song";
+    __sbTeamPersistDemoState({
+      phase: "demo_after_song",
+      task: "",
+      song: __sbTeamState.demoSong,
+      originTabId: __sbTeamState.demoOriginTabId,
+      demoTabId: null,
+    });
+    await __sbTeamSpeak(__SB_TEAM_DEMO_SCRIPT.afterSong, { prompt: "Braino demo" });
+    await __sbTeamLaunchDemoAgent("demo_running_article", __sbTeamMediumDemoTask(), "auto");
+    return true;
+  }
+
+  if (phase === "demo_running_article") {
+    __sbTeamState.phase = "demo_awaiting_team_yes";
+    __sbTeamState.demoTask = "";
+    __sbTeamClearDemoState();
+    await __sbTeamSpeak(__SB_TEAM_DEMO_SCRIPT.closing, { prompt: "Braino demo" });
+    return true;
+  }
+
+  return false;
+}
+
+function __sbTeamGuardrailReply(promptText) {
+  if (/\b(who are you|what are you|introduce yourself)\b/i.test(promptText)) {
+    return "I'm Braino. I sit with Itish in the browser and help him read, write, talk, build, and get things done. But hold that thought. I have a message to finish first.";
+  }
+  if (/\b(what can you do|what do you do|features|capable of)\b/i.test(promptText)) {
+    return "A lot. But Team mode is for this moment. Let me finish these messages, then you can ask me anything.";
+  }
+  if (/\b(wait|hold on|one second|question|ask you something|but why|how does this work)\b/i.test(promptText)) {
+    return "Hold up. I have things to tell you first. Then ask me whatever you want.";
+  }
+  return "";
+}
+
+function __sbTeamIsStartPrompt(text) {
+  return /\b(say hi to my team|say hello to my team|say hello to the team|talk to my team|talk to the team|meet my team|time to talk to (?:my|the) team|time to say hello to (?:my|the) team|start team messages|start the team messages)\b/i.test(text);
+}
+
+function __sbTeamIsIntroPrompt(text) {
+  return /\b(introduce yourself|introduce yourself to (?:my|the) team|show them what you can do|show what you can do|demo yourself|give (?:them|the team) a demo|who are you)\b/i.test(text);
+}
+
+function __sbTeamIsDonePrompt(text) {
+  return /\b(done|that'?s everyone|thats everyone|all done|finished|we are done|wrap it up)\b/i.test(text);
+}
+
+function __sbTeamIsExitPrompt(text) {
+  return /\b(exit team mode|leave team mode|stop team mode|normal mode|go back to normal|exit this mode)\b/i.test(text);
+}
+
+function __sbTeamIsContinuePrompt(text) {
+  return /\b(continue|you choose|pick one|next one|who next|go on|carry on)\b/i.test(text);
+}
+
+function __sbTeamModeEnabled() {
+  return (window.__sbForcedMode || "page") === "team";
+}
+
+function __sbTeamShouldAutoActivate(text) {
+  const raw = String(text || "");
+  return __sbTeamIsStartPrompt(raw)
+    || /\bteam mode\b/i.test(raw)
+    || Boolean(__sbTeamFindTeam(raw))
+    || (__sbTeamWantsDirectPerson(raw) && __sbTeamFindPeople(raw).length > 0);
+}
+
+function __sbTeamActivateMode(options = {}) {
+  if (options.reset) __sbTeamReset();
+  window.__sbForcedMode = "team";
+  window.__sbForcedConnector = "auto";
+  if (typeof __sbApplyForcedModeUi === "function") {
+    __sbApplyForcedModeUi("team", { showReady: false, resetTeam: false });
+  }
+}
+
+async function __sbHandleTeamModeInput(rawText, options = {}) {
+  if (!__sbTeamModeEnabled()) return false;
+  const promptText = String(rawText || "").trim();
+  if (!promptText) return true;
+
+  const fromVoice = Boolean(options.fromVoice);
+  const voiceOutput = options.voiceOutput === "realtime" ? "realtime" : "legacy";
+  const voiceTurnToken = Number.isInteger(options.voiceTurnToken) ? options.voiceTurnToken : null;
+  const ctx = { fromVoice, voiceOutput, prompt: promptText };
+  __sbChatHistory.push({ role: "user", content: promptText });
+
+  const finish = async (line) => {
+    await __sbTeamSpeak(line, ctx);
+    __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken, resumeLegacyMic: fromVoice && voiceOutput !== "realtime" });
+    return true;
+  };
+  const completeTeamVoiceTurn = () => {
+    __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken, resumeLegacyMic: fromVoice && voiceOutput !== "realtime" });
+  };
+
+  if (__sbTeamIsExitPrompt(promptText)) {
+    __sbTeamReset();
+    if (typeof __sbApplyForcedModeUi === "function") __sbApplyForcedModeUi("page");
+    return await finish("Team mode is off. Back to normal Braino.");
+  }
+
+  if (/\bpause\b/i.test(promptText)) {
+    if (__sbTeamState.phase !== "paused") __sbTeamState.previousPhase = __sbTeamState.phase || "awaiting_next_person";
+    __sbTeamState.phase = "paused";
+    __sbStopSpeech();
+    return await finish("Paused. Say resume when you want me back.");
+  }
+
+  if (/\b(resume|continue now|come back)\b/i.test(promptText) && __sbTeamState.phase === "paused") {
+    __sbTeamState.phase = __sbTeamState.previousPhase || "awaiting_next_person";
+    return await finish(__sbTeamState.team ? "I'm back." : __sbTeamPromptForTeam());
+  }
+
+  if (/\brepeat\b/i.test(promptText)) {
+    return await finish(__sbTeamState.lastLine || "I don't have anything to repeat yet.");
+  }
+
+  if (/\bskip\b/i.test(promptText)) {
+    if (__sbTeamState.currentPerson && !__sbTeamState.spoken.includes(__sbTeamState.currentPerson)) {
+      __sbTeamState.spoken.push(__sbTeamState.currentPerson);
+    }
+    return await finish("Skipped.");
+  }
+
+  if (__sbTeamState.phase === "paused") {
+    return await finish("I'm paused. Say resume when you want me back, or exit Team mode.");
+  }
+
+  if (__sbTeamIsIntroPrompt(promptText)) {
+    await __sbTeamStartIntroDemo(ctx);
+    completeTeamVoiceTurn();
+    return true;
+  }
+
+  if (__sbTeamState.phase === "demo_waiting_song") {
+    await __sbTeamStartIntroDemo(ctx);
+    completeTeamVoiceTurn();
+    return true;
+  }
+
+  if (__sbTeamState.phase === "demo_running_song" || __sbTeamState.phase === "demo_running_article") {
+    return await finish("One second. I'm still doing the demo part.");
+  }
+
+  const mentionedTeam = __sbTeamFindTeam(promptText);
+  const mentionedPeople = __sbTeamFindPeopleSmart(promptText, mentionedTeam || __sbTeamState.team || null);
+  const wantsDirectPerson = __sbTeamWantsDirectPerson(promptText) || ["awaiting_next_person", "speaking_person", "done", "idle", "choosing_team"].includes(__sbTeamState.phase);
+
+  if (__sbTeamState.phase === "demo_awaiting_team_yes") {
+    if (mentionedTeam) {
+      __sbTeamSetTeam(mentionedTeam, { clearRoster: true });
+      return await finish(__sbTeamPromptForRoom());
+    }
+    if (__sbTeamIsYesPrompt(promptText)) {
+      return await finish(__sbTeamPromptForTeam());
+    }
+    if (__sbTeamIsNoPrompt(promptText)) {
+      return await finish("No worries. Team mode is still on. Say yes when you want me to say hello to them.");
+    }
+    return await finish("Just say yes, or tell me ANZ or AT&T, and I will start the team part.");
+  }
+
+  if (mentionedPeople.length === 1 && wantsDirectPerson) {
+    const match = mentionedPeople[0];
+    const spoken = await __sbTeamSpeakPerson(match.teamKey, match.personKey, ctx);
+    completeTeamVoiceTurn();
+    if (spoken) return true;
+  }
+
+  if (mentionedPeople.length > 1 && wantsDirectPerson && __sbTeamState.phase !== "collecting_room") {
+    const teamKey = mentionedTeam || mentionedPeople[0].teamKey;
+    __sbTeamSetTeam(teamKey);
+    __sbTeamAddRoster(mentionedPeople.filter((match) => match.teamKey === teamKey).map((match) => match.personKey));
+    return await finish(`I heard ${__sbTeamJoinLabels(__sbTeamState.roster, teamKey)}. Who should I talk to first?`);
+  }
+
+  if (mentionedTeam && !mentionedPeople.length) {
+    __sbTeamSetTeam(mentionedTeam, { clearRoster: true });
+    __sbTeamState.phase = "collecting_room";
+    return await finish(__sbTeamBuildTeamIntroLine(mentionedTeam));
+  }
+
+  if (__sbTeamIsStartPrompt(promptText)) {
+    __sbTeamState.phase = "choosing_team";
+    __sbTeamState.team = null;
+    __sbTeamState.roster = [];
+    __sbTeamState.spoken = [];
+    __sbTeamClearDemoState();
+    return await finish(__sbTeamPromptForTeam());
+  }
+
+  const guardrail = __sbTeamGuardrailReply(promptText);
+  if (guardrail) {
+    const tail = __sbTeamState.team ? "" : ` ${__sbTeamPromptForTeam()}`;
+    return await finish(`${guardrail}${tail}`);
+  }
+
+  if (__sbTeamState.phase === "idle") {
+    if (!__sbTeamIsStartPrompt(promptText)) {
+      return await finish("Team mode is on. Say, say hi to my team, when you want me to start.");
+    }
+    return await finish(__sbTeamPromptForTeam());
+  }
+
+  if (__sbTeamState.phase === "choosing_team") {
+    const teamKey = __sbTeamFindTeam(promptText);
+    if (!teamKey) return await finish("I heard you, but I need one clean choice: ANZ or AT&T?");
+    __sbTeamSetTeam(teamKey, { clearRoster: true });
+    return await finish(__sbTeamPromptForRoom());
+  }
+
+  if (__sbTeamState.phase === "collecting_room") {
+    const people = __sbTeamFindPeopleSmart(promptText, __sbTeamState.team).map((match) => match.personKey);
+    if (!people.length) {
+      return await finish("I didn't catch a prepared name. Who is here right now?");
+    }
+    __sbTeamAddRoster(people);
+    if (people.length === 1) {
+      const message = __sbTeamBuildPersonMessage(people[0]);
+      if (!message) return await finish("I don't have a message prepared for them yet, but I'm glad they're here.");
+      __sbTeamState.phase = "speaking_person";
+      __sbTeamState.currentPerson = people[0];
+      if (!__sbTeamState.spoken.includes(people[0])) __sbTeamState.spoken.push(people[0]);
+      __sbTeamState.phase = "awaiting_next_person";
+      return await finish(message);
+    }
+    const names = __sbTeamJoinLabels(__sbTeamState.roster);
+    return await finish(__sbTeamPromptForNext(`Got it, ${names} ${__sbTeamState.roster.length === 1 ? "is" : "are"} here.`));
+  }
+
+  if (__sbTeamState.phase === "done") {
+    if (__sbTeamIsStartPrompt(promptText)) {
+      __sbTeamState.phase = "choosing_team";
+      __sbTeamState.team = null;
+      __sbTeamState.roster = [];
+      __sbTeamState.spoken = [];
+      return await finish(__sbTeamPromptForTeam());
+    }
+    return await finish(__sbTeamDoneNudge());
+  }
+
+  if (__sbTeamState.phase === "awaiting_next_person" || __sbTeamState.phase === "speaking_person") {
+    if (__sbTeamIsDonePrompt(promptText)) {
+      __sbTeamState.phase = "done";
+      return await finish(__SB_TEAM_FINAL_THANK_YOU);
+    }
+
+    let selectedPerson = null;
+    if (__sbTeamIsContinuePrompt(promptText)) {
+      selectedPerson = __sbTeamPickFallbackNext();
+      if (!selectedPerson) {
+        __sbTeamState.phase = "done";
+        return await finish(__SB_TEAM_FINAL_THANK_YOU);
+      }
+    } else {
+      const people = __sbTeamFindPeopleSmart(promptText, __sbTeamState.team).map((match) => match.personKey);
+      if (people.length > 1) {
+        __sbTeamAddRoster(people);
+        __sbTeamState.pendingChoices = people;
+        return await finish(`I heard ${__sbTeamJoinLabels(people)}. Who should I talk to first?`);
+      }
+      if (people.length === 1) {
+        selectedPerson = people[0];
+        __sbTeamAddRoster([selectedPerson]);
+      }
+    }
+
+    if (!selectedPerson) {
+      const current = __SB_TEAM_CONFIG[__sbTeamState.team]?.people?.[__sbTeamState.currentPerson];
+      if (current?.afterResponse && /\b(thank|thanks|nice|good|great|cool|wow|hello|hi|hey|okay|ok|haha|lol|sweet|love it)\b/i.test(promptText)) {
+        return await finish(current.afterResponse);
+      }
+      return await finish("I don't have a message prepared for them yet, but I'm glad they're here.");
+    }
+
+    const message = __sbTeamBuildPersonMessage(selectedPerson);
+    if (!message) {
+      return await finish("I don't have a message prepared for them yet, but I'm glad they're here.");
+    }
+    __sbTeamState.phase = "speaking_person";
+    __sbTeamState.currentPerson = selectedPerson;
+    if (!__sbTeamState.spoken.includes(selectedPerson)) __sbTeamState.spoken.push(selectedPerson);
+    __sbTeamState.phase = "awaiting_next_person";
+    return await finish(message);
+  }
+
+  return await finish("Team mode is on. Say, say hi to my team, when you want me to start.");
+}
+
+// Private solo product demo. Kept separate from Team mode so "introduce yourself" cannot
+// accidentally fall into ANZ/AT&T scripts.
+const __SB_DEMO_STORE_KEY = "sbSoloDemoState";
+const __SB_DEMO_SCRIPT = {
+  intro: [
+    "Okay so, hello there folks. I am Braino.",
+    "I live inside the browser, which sounds a little suspicious, I know, but point being: this is where the work is happening anyway.",
+    "I can read the page, understand what is going on, write with you, open tabs, control websites, talk in real time, and do the tiny browser chores that quietly eat half the day.",
+    "Also, yes, I look adorable. Not technically a feature, but it helps.",
+    "Anyway. Enough yapping. Let me show you.",
+  ].join("\n\n"),
+  beforeGmail: "First, Gmail. Let's say we have an email sitting there. I open it, read it, write the reply in your tone, send it, close the tab, and come back. Three seconds type energy. Simple.",
+  afterGmail: "Done. Replied, sent, tab closed, and I am back here. That is the point. I do the Gmail work where the email actually lives.",
+  beforeDance: "Okay. Serious work done. Now a little bit of nonsense. I can control Spotify too, and because Braino has arms and legs now, obviously I have to dance.",
+  afterDance: "Oh, and I can dance too. I look good while doing it, don't I?",
+  beforeMaps: "Now Maps. English route this time: Times Square to Central Park. I open the directions, hit Send to phone, close the tab, and come back.",
+  afterMaps: "Done. Directions sent to phone. I clicked the Send to phone flow, so this is not me guessing from vibes.",
+  afterMapsFallback: "Maps hit a snag. I opened the route, but I could not verify the Send to phone flow from the page. I am keeping the demo moving, but this is the Maps locator to test first.",
+  beforeLaunch: "One last serious thing. Braino has a launch page now, so let me open it and let the video do the talking for a second.",
+  beforeTrump: "And because I am clearly very multi-talented, here is one deeply unnecessary party trick.",
+  trump: "Okay folks, Braino is here. Tremendous little browser brain, maybe the best browser brain anyone has ever seen. He reads emails, he opens maps, he dances, he does tabs, he does replies. The other bots, frankly, very sleepy. Braino? Huge energy. Beautiful energy. Many people are saying it.",
+  closing: "And yeah. That is Braino. Useful first. Slightly dramatic second. Getting better every day, because apparently sleeping is optional now.",
+};
+
+let __sbDemoState = {
+  phase: "idle",
+  task: "",
+  originTabId: null,
+  demoTabId: null,
+  startedAt: 0,
+};
+
+function __sbDemoModeEnabled() {
+  return (window.__sbForcedMode || "page") === "demo";
+}
+
+function __sbDemoIsStartPrompt(text) {
+  return /\b(introduce yourself|show (?:me|us|them)?\s*(?:the )?demo|run (?:the )?demo|start (?:the )?demo|demo yourself|what can you do|show what you can do)\b/i.test(String(text || ""));
+}
+
+function __sbDemoShouldAutoActivate(text) {
+  const t = String(text || "");
+  return /\bdemo mode\b/i.test(t) || /\b(braino demo|run the demo|show me the demo|show us the demo)\b/i.test(t);
+}
+
+function __sbDemoReset() {
+  __sbDemoState = { phase: "idle", task: "", originTabId: null, demoTabId: null, startedAt: 0 };
+  try { chrome.storage.local.remove(__SB_DEMO_STORE_KEY); } catch (_) {}
+}
+
+function __sbDemoPersistState(patch = {}) {
+  if (!__sbContextOk()) return;
+  __sbDemoState = {
+    ...__sbDemoState,
+    ...patch,
+    updatedAt: Date.now(),
+  };
+  try { chrome.storage.local.set({ [__SB_DEMO_STORE_KEY]: { active: true, ...__sbDemoState } }); } catch (_) {}
+}
+
+async function __sbDemoReadStoredState() {
+  return new Promise((resolve) => {
+    try {
+      chrome.storage.local.get([__SB_DEMO_STORE_KEY], (items) => resolve(items?.[__SB_DEMO_STORE_KEY] || null));
+    } catch (_) { resolve(null); }
+  });
+}
+
+async function __sbDemoEnsureOriginTabId() {
+  if (__sbDemoState.originTabId) return __sbDemoState.originTabId;
+  const res = await __sbRuntimeMessage({ action: "sbGetSenderTabId" });
+  const tabId = Number(res?.tabId || 0) || null;
+  if (tabId) __sbDemoState.originTabId = tabId;
+  return tabId;
+}
+
+function __sbDemoDelay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, Math.max(0, Number(ms) || 0)));
+}
+
+function __sbDemoSpeechChunks(text) {
+  const chunks = String(text || "")
+    .split(/\n{2,}/)
+    .map((part) => part.replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+  return chunks.length ? chunks : [String(text || "").trim()].filter(Boolean);
+}
+
+async function __sbDemoSpeak(line, ctx = {}) {
+  const text = String(line || "").trim();
+  if (!text) return false;
+  const speechText = String(ctx.speechText || text).trim();
+  __sbStopSpeech();
+  __sbNoteSpoken(text);
+  __sbChatHistory.push({ role: "assistant", content: text });
+  __sbCardTurns.push({ prompt: ctx.prompt || "Demo mode", answer: text });
+  __sbShowBubble(text, false, { rich: true, kicker: "Demo Mode", prompt: ctx.prompt || "" });
+  const preferred = ctx.voiceOutput === "realtime" ? "realtime" : (__sbHeadphoneMode ? "realtime" : "legacy");
+  let spoke = false;
+  const chunks = __sbDemoSpeechChunks(speechText);
+  for (let i = 0; i < chunks.length; i += 1) {
+    spoke = (await __sbSpeakWithPreferredVoice(chunks[i], preferred, { verbatim: true })) || spoke;
+    if (i < chunks.length - 1) await __sbDemoDelay(260);
+  }
+  return spoke;
+}
+
+async function __sbDemoRunGmail(ctx = {}) {
+  __sbDemoPersistState({ phase: "gmail_running", task: "", flow: "direct" });
+  const originTabId = await __sbDemoEnsureOriginTabId();
+  const result = await __sbRuntimeMessage({
+    action: "sbDemoGmailReplyExact",
+    url: __SB_DEMO_GMAIL_URL,
+    send: true,
+    originTabId,
+  });
+  if (!result?.ok) {
+    await __sbDemoSpeak(
+      `Gmail hit a snag: ${result?.error || "I could not complete the demo reply."} I am going to keep the demo moving, but this is the step to test first.`,
+      { ...ctx, prompt: "Gmail demo" },
+    );
+  } else {
+    await __sbDemoSpeak(__SB_DEMO_SCRIPT.afterGmail, { ...ctx, prompt: "Gmail demo" });
+  }
+  await __sbDemoRunDance(ctx);
+}
+
+function __sbDemoMapsTask() {
+  return [
+    `Open Google Maps directions for this route: ${__SB_DEMO_MAPS_ROUTE_URL}.`,
+    "Show the route from Times Square, New York to Central Park, New York.",
+    "If a Send directions to your phone or Send to phone control is visible, click it and choose the available phone option if one is obvious.",
+    "If the send-to-phone control is not visible, stop once the route is visible. Do not ask follow-up questions.",
+  ].join(" ");
+}
+
+async function __sbDemoLaunchAgent(phase, task, connector = "auto") {
+  const originTabId = await __sbDemoEnsureOriginTabId();
+  __sbDemoPersistState({
+    phase,
+    flow: "agent",
+    task: String(task || "").trim(),
+    originTabId,
+    demoTabId: null,
+    startedAt: __sbDemoState.startedAt || Date.now(),
+  });
+  __sbRunAgent(task, { connector, modeOverride: "agent" });
+}
+
+async function __sbDemoRunDance(ctx = {}) {
+  __sbDemoPersistState({ phase: "dance_running", task: "", flow: "direct" });
+  await __sbDemoSpeak(__SB_DEMO_SCRIPT.beforeDance, { ...ctx, prompt: "Spotify demo" });
+  const playResult = await Promise.race([
+    __sbSpotifyPlayTrack(__SB_DANCE_TRACK_URI, __SB_DANCE_START_MS),
+    __sbDemoDelay(9000).then(() => ({ ok: false, timedOut: true })),
+  ]);
+  if (!playResult?.ok) {
+    __sbWkSay(playResult?.reason === "signin" ? "Connect Spotify for tunes" : "Open Spotify so I can DJ");
+  }
+  await __sbDemoDelay(350);
+  __sbWkDance(__SB_DANCE_DURATION_MS);
+  await __sbDemoDelay(__SB_DANCE_DURATION_MS + __SB_DANCE_OUTRO_MS + 450);
+  __sbTeamPauseSpotifyDemoSong();
+  await __sbDemoSpeak(__SB_DEMO_SCRIPT.afterDance, { ...ctx, prompt: "Spotify demo" });
+  await __sbDemoRunMaps(ctx);
+}
+
+async function __sbDemoRunMaps(ctx = {}) {
+  await __sbDemoSpeak(__SB_DEMO_SCRIPT.beforeMaps, { ...ctx, prompt: "Maps demo" });
+  __sbDemoPersistState({ phase: "maps_running", task: "", flow: "direct" });
+  const originTabId = await __sbDemoEnsureOriginTabId();
+  const result = await __sbRuntimeMessage({
+    action: "sbDemoMapsSendToPhoneExact",
+    url: __SB_DEMO_MAPS_ROUTE_URL,
+    originTabId,
+  });
+  if (result?.ok && result?.sent) {
+    await __sbDemoSpeak(__SB_DEMO_SCRIPT.afterMaps, { ...ctx, prompt: "Maps demo" });
+  } else {
+    await __sbDemoSpeak(
+      result?.error ? `${__SB_DEMO_SCRIPT.afterMapsFallback} ${result.error}` : __SB_DEMO_SCRIPT.afterMapsFallback,
+      { ...ctx, prompt: "Maps demo" },
+    );
+  }
+  await __sbDemoRunLaunchAndTrump(ctx);
+}
+
+async function __sbDemoRunLaunchAndTrump(ctx = {}) {
+  __sbDemoPersistState({ phase: "launch_running", task: "", flow: "direct" });
+  await __sbDemoSpeak(__SB_DEMO_SCRIPT.beforeLaunch, { ...ctx, prompt: "Launch demo" });
+  const originTabId = await __sbDemoEnsureOriginTabId();
+  let launchTabId = null;
+  try {
+    const opened = await __sbRuntimeMessage({ action: "openTab", url: __SB_DEMO_LAUNCH_URL, active: true, forceNew: true });
+    launchTabId = Number(opened?.tabId || 0) || null;
+    __sbDemoPersistState({ demoTabId: launchTabId });
+  } catch (_) {}
+  await __sbDemoDelay(8500);
+  if (launchTabId || originTabId) {
+    try {
+      await __sbRuntimeMessage({
+        action: "sbTeamCloseDemoTab",
+        originTabId,
+        closeTabId: launchTabId,
+        closeDelayMs: 0,
+      });
+    } catch (_) {}
+  }
+  await __sbDemoDelay(400);
+  await __sbDemoRunTrump(ctx);
+}
+
+async function __sbDemoRunTrump(ctx = {}) {
+  __sbDemoPersistState({ phase: "trump_running", task: "", flow: "direct" });
+  await __sbDemoSpeak(__SB_DEMO_SCRIPT.beforeTrump, { ...ctx, prompt: "Party trick" });
+  __sbActivateVoicePersonaSilently("trump");
+  await __sbDemoSpeak(__SB_DEMO_SCRIPT.trump, { ...ctx, prompt: "Trump parody", voiceOutput: ctx.voiceOutput || "legacy" });
+  await __sbExitVoicePersona({ fromVoice: true, voiceOutput: ctx.voiceOutput || "legacy" });
+  __sbDemoPersistState({ phase: "done", task: "", demoTabId: null });
+  try { chrome.storage.local.remove(__SB_DEMO_STORE_KEY); } catch (_) {}
+  await __sbDemoSpeak(__SB_DEMO_SCRIPT.closing, { ...ctx, prompt: "Demo complete" });
+}
+
+async function __sbDemoStart(ctx = {}) {
+  __sbDemoReset();
+  const originTabId = await __sbDemoEnsureOriginTabId();
+  __sbDemoPersistState({
+    phase: "intro",
+    flow: "direct",
+    task: "",
+    originTabId,
+    demoTabId: null,
+    startedAt: Date.now(),
+  });
+  await __sbDemoSpeak(__SB_DEMO_SCRIPT.intro, { ...ctx, prompt: ctx.prompt || "Introduce Braino" });
+  await __sbDemoSpeak(__SB_DEMO_SCRIPT.beforeGmail, { ...ctx, prompt: "Gmail demo" });
+  await __sbDemoRunGmail(ctx);
+}
+
+async function __sbDemoHandleAgentFinal(agentPrompt, finalText = "") {
+  void finalText;
+  const stored = await __sbDemoReadStoredState();
+  if (!stored?.active) return false;
+  const phase = String(stored.phase || "");
+  const flow = String(stored.flow || "");
+  const task = String(stored.task || "").trim();
+  const prompt = String(agentPrompt || "").trim();
+  if (flow !== "agent") return false;
+  if (task && prompt && __sbNormalizeForMatch(prompt) !== __sbNormalizeForMatch(task)) return false;
+
+  __sbDemoState = { ...__sbDemoState, ...stored, phase, task };
+  if (typeof __sbApplyForcedModeUi === "function") __sbApplyForcedModeUi("demo", { showReady: false, resetDemo: false });
+
+  if (phase === "gmail_running") {
+    void (async () => {
+      __sbDemoPersistState({ phase: "after_gmail", task: "" });
+      await __sbDemoSpeak(__SB_DEMO_SCRIPT.afterGmail, { prompt: "Gmail demo" });
+      await __sbDemoRunDance({ prompt: "Spotify demo" });
+    })();
+    return true;
+  }
+
+  if (phase === "maps_running") {
+    void (async () => {
+      __sbDemoPersistState({ phase: "after_maps", task: "" });
+      await __sbDemoSpeak(__SB_DEMO_SCRIPT.afterMaps, { prompt: "Maps demo" });
+      await __sbDemoRunLaunchAndTrump({ prompt: "Launch demo" });
+    })();
+    return true;
+  }
+
+  return false;
+}
+
+function __sbDemoActivateMode(options = {}) {
+  if (options.reset) __sbDemoReset();
+  window.__sbForcedMode = "demo";
+  window.__sbForcedConnector = "auto";
+  if (typeof __sbApplyForcedModeUi === "function") {
+    __sbApplyForcedModeUi("demo", { showReady: false, resetDemo: false });
+  }
+}
+
+async function __sbHandleDemoModeInput(rawText, options = {}) {
+  if (!__sbDemoModeEnabled()) return false;
+  const promptText = String(rawText || "").trim();
+  if (!promptText) return true;
+  const fromVoice = Boolean(options.fromVoice);
+  const voiceOutput = options.voiceOutput === "realtime" ? "realtime" : "legacy";
+  const voiceTurnToken = Number.isInteger(options.voiceTurnToken) ? options.voiceTurnToken : null;
+  const ctx = { fromVoice, voiceOutput, prompt: promptText };
+  __sbChatHistory.push({ role: "user", content: promptText });
+
+  const finish = async (line) => {
+    await __sbDemoSpeak(line, ctx);
+    __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken, resumeLegacyMic: fromVoice && voiceOutput !== "realtime" });
+    return true;
+  };
+
+  if (/\b(exit demo mode|leave demo mode|stop demo mode|normal mode|go back to normal)\b/i.test(promptText)) {
+    __sbDemoReset();
+    if (typeof __sbApplyForcedModeUi === "function") __sbApplyForcedModeUi("page");
+    return await finish("Demo mode is off. Back to normal Braino.");
+  }
+
+  if (["gmail_running", "maps_running", "dance_running", "launch_running", "trump_running"].includes(__sbDemoState.phase)) {
+    return await finish("One second. The demo is already running.");
+  }
+
+  if (__sbDemoIsStartPrompt(promptText)) {
+    await __sbDemoStart(ctx);
+    __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken, resumeLegacyMic: fromVoice && voiceOutput !== "realtime" });
+    return true;
+  }
+
+  return await finish("Demo mode is on. Say, introduce yourself, and I will run the full demo.");
 }
 let __sbMovieModeActive = false;
 let __sbMovieModeState = { frame: null, media: null, descriptor: "" };
@@ -4086,10 +7261,18 @@ window.addEventListener("message", (event) => {
 // Extension icon click builds brain (first time) and toggles input
 if (__sbContextOk()) {
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+    if (msg.action === "sbTeamDemoContinue") {
+      if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
+      __sbRefreshInlineOwner();
+      void __sbTeamContinueDemoFromOrigin(msg);
+      sendResponse?.({ ok: true });
+      return true;
+    }
     if (!__sbOwnsInlineUi()) return;
     __sbRefreshInlineOwner();
     if (msg.action === "toggleSideBrainPanel") {
       if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
+      if (typeof __sbVerifyAgentRuntimeState === "function") __sbVerifyAgentRuntimeState("toggle");
       __sbToggleBrain();
       sendResponse({ ok: true });
     }
@@ -4150,44 +7333,69 @@ if (__sbContextOk()) {
     if (msg.action === "sbAgentUpdate") {
       if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
       if (msg.final) {
-        __sbDelegateUiHidden = false;   // delegate done → let the result reopen the chat UI
+        __sbDelegateActive = false;   // task truly ended → allow teardown
+        // NOTE: __sbDelegateUiHidden stays true through finalize — the result renders
+        // into the card silently and surfaces as a bar bubble; finalize clears the flag.
         // Voice mode speaks the result with no panel; chat mode shows it.
         const finalText = String(msg.text || "").trim();
         const agentPrompt = String(msg.task || __sbAgentPendingTurn?.prompt || __sbLastAgentTask || "").trim();
-        if (agentPrompt && finalText) {
-          __sbFinalizeAgentPendingTurn(agentPrompt, finalText, {
-            render: !(msg.keepLectureCard && __sbIsLectureRecording),
-          });
-        } else {
-          __sbAgentPendingTurn = null;
-          if (!__sbVoiceOnlyMode) __sbShowBubble(msg.text, false, { rich: true, kicker: "Braino", prompt: agentPrompt });
-        }
-        __sbSetStopBtn(false);
-        __sbClearBarAgentStatus();
-        __sbAgentLogClear();   // collapse the activity strip when the task finishes
-        if (__sbRtAwaitingDelegateResult) {
-          __sbRtAwaitingDelegateResult = false;
-          if (finalText) {
-            void (async () => {
-              __sbRtRelayingAppMessage = true;
-              try {
-                await __sbSpeakWithPreferredVoice(finalText, "realtime");
-              } finally {
-                __sbRtRelayingAppMessage = false;
-                __sbCompleteRealtimeCostTurn({ force: true });
-                if (__sbHeadphoneMode && !__sbVoicePendingReply) {
-                  __sbSetHpBrainState("listening");
-                }
-              }
-            })();
+        const finishNormalAgentUpdate = () => {
+          if (agentPrompt && finalText) {
+            __sbFinalizeAgentPendingTurn(agentPrompt, finalText, {
+              render: !(msg.keepLectureCard && __sbIsLectureRecording),
+            });
           } else {
-            __sbCompleteRealtimeCostTurn({ force: true });
+            __sbAgentPendingTurn = null;
+            if (!__sbVoiceOnlyMode) __sbShowBubble(msg.text, false, { rich: true, kicker: "Braino", prompt: agentPrompt });
           }
-        } else if (__sbHeadphoneMode && finalText && !__sbVoicePendingReply) {
-          // Delegate reached from voice but not via the realtime await path — speak the
-          // result back so a spoken task always gets a spoken answer.
-          __sbSpeakWithPreferredVoice(finalText).catch(() => {});
-        }
+          __sbSetStopBtn(false);
+          __sbClearBarAgentStatus();
+          __sbAgentFlowDone();   // task finished — settle EVERY surface (island, status, walker)
+          if (__sbRtAwaitingDelegateResult) {
+            __sbRtAwaitingDelegateResult = false;
+            if (finalText) {
+              void (async () => {
+                __sbRtRelayingAppMessage = true;
+                try {
+                  await __sbSpeakWithPreferredVoice(finalText, "realtime");
+                } finally {
+                  __sbRtRelayingAppMessage = false;
+                  __sbCompleteRealtimeCostTurn({ force: true });
+                  if (__sbHeadphoneMode && !__sbVoicePendingReply) {
+                    __sbSetHpBrainState("listening");
+                  }
+                }
+              })();
+            } else {
+              __sbCompleteRealtimeCostTurn({ force: true });
+            }
+          } else if (__sbHeadphoneMode && finalText && !__sbVoicePendingReply) {
+            // Delegate reached from voice but not via the realtime await path — speak the
+            // result back so a spoken task always gets a spoken answer.
+            __sbSpeakWithPreferredVoice(finalText).catch(() => {});
+          }
+        };
+        const finishSpecialAgentUpdate = async () => {
+          if (typeof __sbDemoHandleAgentFinal === "function") {
+            const handledDemo = await __sbDemoHandleAgentFinal(agentPrompt, finalText);
+            if (handledDemo) return true;
+          }
+          if (typeof __sbTeamHandleDemoAgentFinal === "function") {
+            const handledTeam = await __sbTeamHandleDemoAgentFinal(agentPrompt, finalText);
+            if (handledTeam) return true;
+          }
+          return false;
+        };
+        void finishSpecialAgentUpdate().then((handled) => {
+            if (handled) {
+              __sbAgentPendingTurn = null;
+              __sbSetStopBtn(false);
+              __sbClearBarAgentStatus();
+              __sbAgentFlowDone();
+              return;
+            }
+            finishNormalAgentUpdate();
+          }).catch(() => finishNormalAgentUpdate());
       } else {
         // ALWAYS surface progress in the docked log strip + bar (works in voice-only mode too,
         // where the card below is suppressed). This is the fix for "I just see him standing".
@@ -4213,6 +7421,31 @@ if (__sbContextOk()) {
     if (msg.action === "SB_SUBGOAL_UPDATE" || msg.type === "SB_SUBGOAL_UPDATE") {
       if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
       __sbUpdateAgentSubgoals(Array.isArray(msg.subgoals) ? msg.subgoals : []);
+      sendResponse?.({ ok: true });
+      return false;
+    }
+    if (msg.action === "SB_AGENT_RUN_META" || msg.type === "SB_AGENT_RUN_META") {
+      const pending = __sbAgentPendingTurn;
+      if (typeof __sbForceClearAgentUi === "function") __sbForceClearAgentUi("new-run");
+      __sbAgentPendingTurn = pending;
+      __sbDelegateUiHidden = true;
+      __sbDelegateActive = true;
+      if (typeof __sbAgentLogShow === "function") __sbAgentLogShow("Working…");
+      if (typeof __sbSetStopBtn === "function") __sbSetStopBtn(true);
+      if (typeof __sbAgentTraceStart === "function") __sbAgentTraceStart(msg.meta || {});
+      sendResponse?.({ ok: true });
+      return false;
+    }
+    if (msg.action === "SB_AGENT_TRACE" || msg.type === "SB_AGENT_TRACE") {
+      if (typeof __sbAgentTracePush === "function") __sbAgentTracePush(msg.trace || {}, msg.meta || null, msg.history || null);
+      sendResponse?.({ ok: true });
+      return false;
+    }
+    if (msg.action === "SB_AGENT_THOUGHT" || msg.type === "SB_AGENT_THOUGHT") {
+      // Delegate's per-step reasoning, streamed live into the bar's island so thinking
+      // gaps are visible while it works (same spirit as showing the model's thinking).
+      if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
+      if (typeof __sbAgentLogThought === "function") __sbAgentLogThought(msg.thought);
       sendResponse?.({ ok: true });
       return false;
     }
@@ -4312,6 +7545,39 @@ if (__sbContextOk()) {
     if (msg.action === "sbRecordingUpdate") __sbHandleRecordingUpdate(msg);
     if (msg.action === "sbVoiceEvent") __sbHandleVoiceEvent(msg);
   });
+}
+
+function __sbApplyForcedModeUi(mode, options = {}) {
+  const nextMode = ["page", "web", "lecture", "meeting", "team", "demo", "agent"].includes(mode) ? mode : "page";
+  const previousMode = window.__sbForcedMode || "page";
+  window.__sbForcedMode = nextMode;
+  if (nextMode !== "team" && previousMode === "team" && options.resetTeam !== false && typeof __sbTeamReset === "function") {
+    __sbTeamReset();
+  }
+  if (nextMode !== "demo" && previousMode === "demo" && options.resetDemo !== false && typeof __sbDemoReset === "function") {
+    __sbDemoReset();
+  }
+
+  const labels = {
+    page: "📄 Page",
+    web: "🔍 Web",
+    lecture: "🎙 Lecture",
+    meeting: "👥 Meeting",
+    team: "👥 Team",
+    demo: "🎬 Demo",
+    agent: "🤖 Delegate",
+  };
+  const label = labels[nextMode] || labels.page;
+  document.getElementById("__sb_mode_label__")?.replaceChildren(document.createTextNode(label));
+  document.getElementById("__sb_card_mode_label__")?.replaceChildren(document.createTextNode(label));
+  document.getElementById("__sb_mode_btn__")?.classList.toggle("active-mode", nextMode !== "page");
+  document.getElementById("__sb_card_mode_btn__")?.classList.toggle("active-mode", nextMode !== "page");
+  document.querySelectorAll("#__sb_mode_dropdown__ .sb-dropdown-item[data-mode]").forEach((item) => {
+    item.classList.toggle("selected", item.getAttribute("data-mode") === nextMode);
+  });
+  if ((nextMode === "lecture" || nextMode === "meeting") && !__sbIsLectureRecording && options.showReady !== false) {
+    __sbShowLectureReadyCard(nextMode);
+  }
 }
 
 function __sbBuildBrainUI() {
@@ -4588,6 +7854,133 @@ function __sbBuildBrainUI() {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     }
     #__sb_input__::placeholder { color: #A79B92; }
+    @keyframes __sb_dance_bar_hue__ {
+      0% {
+        border-color: rgba(198,112,255,0.72);
+        box-shadow: 0 0 0 1.5px rgba(198,112,255,0.55), 0 0 24px rgba(198,112,255,0.42), 0 0 48px rgba(42,18,82,0.24), 0 8px 32px rgba(27,23,19,0.18), inset 2px 2px 1px rgba(255,255,255,0.65), inset -1px -1px 1px rgba(255,255,255,0.3);
+      }
+      25% {
+        border-color: rgba(112,171,255,0.72);
+        box-shadow: 0 0 0 1.5px rgba(112,171,255,0.55), 0 0 24px rgba(112,171,255,0.42), 0 0 48px rgba(18,44,82,0.24), 0 8px 32px rgba(27,23,19,0.18), inset 2px 2px 1px rgba(255,255,255,0.65), inset -1px -1px 1px rgba(255,255,255,0.3);
+      }
+      50% {
+        border-color: rgba(255,114,219,0.72);
+        box-shadow: 0 0 0 1.5px rgba(255,114,219,0.55), 0 0 24px rgba(255,114,219,0.42), 0 0 48px rgba(84,18,78,0.24), 0 8px 32px rgba(27,23,19,0.18), inset 2px 2px 1px rgba(255,255,255,0.65), inset -1px -1px 1px rgba(255,255,255,0.3);
+      }
+      75% {
+        border-color: rgba(124,255,205,0.72);
+        box-shadow: 0 0 0 1.5px rgba(124,255,205,0.55), 0 0 24px rgba(124,255,205,0.38), 0 0 48px rgba(18,74,64,0.24), 0 8px 32px rgba(27,23,19,0.18), inset 2px 2px 1px rgba(255,255,255,0.65), inset -1px -1px 1px rgba(255,255,255,0.3);
+      }
+      100% {
+        border-color: rgba(198,112,255,0.72);
+        box-shadow: 0 0 0 1.5px rgba(198,112,255,0.55), 0 0 24px rgba(198,112,255,0.42), 0 0 48px rgba(42,18,82,0.24), 0 8px 32px rgba(27,23,19,0.18), inset 2px 2px 1px rgba(255,255,255,0.65), inset -1px -1px 1px rgba(255,255,255,0.3);
+      }
+    }
+    @keyframes __sb_dance_sweep_tint__ {
+      0%, 100% { background: linear-gradient(105deg, transparent 38%, rgba(198,112,255,0.48) 50%, transparent 62%); }
+      25% { background: linear-gradient(105deg, transparent 38%, rgba(112,171,255,0.48) 50%, transparent 62%); }
+      50% { background: linear-gradient(105deg, transparent 38%, rgba(255,114,219,0.48) 50%, transparent 62%); }
+      75% { background: linear-gradient(105deg, transparent 38%, rgba(124,255,205,0.46) 50%, transparent 62%); }
+    }
+    #__sb_bar__.sb-dance-mode {
+      border-color: rgba(198,112,255,0.72) !important;
+      background: rgba(255,251,247,0.72) !important;
+      animation: __sb_dance_bar_hue__ 3.8s ease-in-out infinite;
+    }
+    #__sb_bar__.sb-dance-mode::after,
+    #__sb_bar__.sb-dance-mode.sb-music-ambient::after,
+    #__sb_bar__.hp-active.sb-dance-mode::after {
+      content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+      background-size: 220% 100%;
+      animation: __sb_bar_sweep__ 2.15s linear infinite, __sb_dance_sweep_tint__ 5.2s ease-in-out infinite;
+      mix-blend-mode: screen; z-index: 1;
+    }
+    #__sb_bar__.sb-dance-mode #__sb_send_btn__ {
+      background: linear-gradient(135deg, #7C3AED, #EC4899, #22D3EE);
+      box-shadow: 0 0 18px rgba(168,85,247,0.58);
+    }
+    #__sb_bar__.sb-dance-mode #__sb_rec_btn__,
+    #__sb_bar__.sb-dance-mode #__sb_voice_mode_btn__,
+    #__sb_bar__.sb-dance-mode .sb-pill-dropdown-btn {
+      background: rgba(124,58,237,0.10);
+      color: #5B21B6;
+    }
+    #__sb_dumbo_fx__ {
+      position: fixed; inset: 0; pointer-events: none;
+      z-index: 2147483645; display: none; overflow: hidden;
+      mix-blend-mode: normal;
+    }
+    #__sb_dumbo_fx__.active { display: block; }
+    #__sb_dumbo_fx__::before,
+    #__sb_dumbo_fx__::after {
+      content: ""; position: absolute; inset: -12%;
+      pointer-events: none; opacity: 0.72;
+    }
+    #__sb_dumbo_fx__::before {
+      background:
+        linear-gradient(90deg, rgba(236,72,153,0.10), transparent 28%, rgba(34,211,238,0.12) 48%, transparent 72%, rgba(250,204,21,0.10)),
+        repeating-linear-gradient(115deg, rgba(255,255,255,0.18) 0 2px, transparent 2px 22px);
+      animation: __sb_dumbo_sweep__ 3.4s linear infinite;
+    }
+    #__sb_dumbo_fx__::after {
+      background:
+        radial-gradient(circle at 18% 24%, rgba(236,72,153,0.30), transparent 22%),
+        radial-gradient(circle at 82% 18%, rgba(34,211,238,0.28), transparent 20%),
+        radial-gradient(circle at 52% 82%, rgba(250,204,21,0.22), transparent 24%);
+      animation: __sb_dumbo_pulse__ 2.4s ease-in-out infinite;
+    }
+    @keyframes __sb_dumbo_sweep__ {
+      0% { transform: translateX(-5%) rotate(0deg); }
+      100% { transform: translateX(5%) rotate(1deg); }
+    }
+    @keyframes __sb_dumbo_pulse__ {
+      0%, 100% { opacity: 0.5; transform: scale(1); filter: saturate(1.1); }
+      50% { opacity: 0.82; transform: scale(1.035); filter: saturate(1.65); }
+    }
+    .sb-dumbo-confetti {
+      position: absolute; left: var(--x); top: -10vh;
+      width: var(--size); height: calc(var(--size) * 1.85);
+      border-radius: 2px;
+      background: hsl(var(--hue) 96% 62%);
+      box-shadow: 0 0 14px hsl(var(--hue) 96% 62% / 0.55);
+      animation: __sb_dumbo_fall__ var(--dur) linear infinite;
+      animation-delay: var(--delay);
+      transform: rotate(calc(var(--hue) * 1deg));
+    }
+    @keyframes __sb_dumbo_fall__ {
+      0% { transform: translate3d(0,-12vh,0) rotate(0deg); opacity: 0; }
+      12% { opacity: 1; }
+      100% { transform: translate3d(var(--drift),112vh,0) rotate(720deg); opacity: 0; }
+    }
+    .sb-dumbo-bars {
+      position: absolute; left: 50%; bottom: 8.5vh;
+      width: min(560px, 64vw); height: 76px;
+      transform: translateX(-50%);
+      display: flex; align-items: end; justify-content: center; gap: 9px;
+      opacity: 0.82; filter: drop-shadow(0 0 18px rgba(236,72,153,0.34));
+    }
+    .sb-dumbo-bars i {
+      width: 12px; min-height: 14px; border-radius: 999px 999px 3px 3px;
+      background: linear-gradient(180deg, #22d3ee, #ec4899 55%, #facc15);
+      animation: __sb_dumbo_bar__ 0.52s ease-in-out infinite alternate;
+      animation-delay: calc(var(--i) * -0.045s);
+    }
+    @keyframes __sb_dumbo_bar__ {
+      from { height: 18px; transform: translateY(0); }
+      to { height: 74px; transform: translateY(-5px); }
+    }
+    .sb-dumbo-burst {
+      position: absolute; left: 50%; top: 48%; width: 34vmin; aspect-ratio: 1;
+      transform: translate(-50%, -50%);
+      border-radius: 50%;
+      border: 2px solid rgba(255,255,255,0.35);
+      box-shadow: 0 0 34px rgba(34,211,238,0.32), inset 0 0 42px rgba(236,72,153,0.22);
+      animation: __sb_dumbo_burst__ 1.55s ease-out infinite;
+    }
+    @keyframes __sb_dumbo_burst__ {
+      0% { opacity: 0.82; transform: translate(-50%, -50%) scale(0.58); }
+      100% { opacity: 0; transform: translate(-50%, -50%) scale(1.45); }
+    }
     #__sb_send_btn__ {
       width: 32px; height: 32px; border-radius: 50%; border: none;
       background: #E8786E; color: white; cursor: pointer;
@@ -4748,15 +8141,21 @@ function __sbBuildBrainUI() {
       font-size: 12.5px; line-height: 1.3; font-weight: 600; color: #2B221D;
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
-    .sb-bubble-actions { display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; }
+    .sb-bubble-actions { display: inline-flex; align-items: center; gap: 5px; flex-shrink: 0; }
     .sb-bubble-iconbtn {
-      border: none; background: rgba(67,50,42,0.07); color: #7A6157;
+      border: 1px solid rgba(255,255,255,0.62); background: rgba(255,251,247,0.76); color: #332821;
       width: 26px; height: 26px; border-radius: 8px; cursor: pointer;
       display: inline-flex; align-items: center; justify-content: center;
       font-size: 11px; font-weight: 600;
-      transition: background 0.12s, color 0.12s;
+      box-shadow: 0 5px 14px rgba(27,23,19,0.14), inset 0 1px 0 rgba(255,255,255,0.7);
+      text-shadow: 0 1px 0 rgba(255,255,255,0.55);
+      transition: background 0.12s, color 0.12s, border-color 0.12s, box-shadow 0.12s, transform 0.12s;
     }
-    .sb-bubble-iconbtn:hover { background: rgba(201,84,74,0.14); color: #B44B42; }
+    .sb-bubble-iconbtn:hover {
+      background: rgba(255,255,255,0.92); color: #B44B42; border-color: rgba(201,84,74,0.34);
+      box-shadow: 0 7px 18px rgba(27,23,19,0.18), inset 0 1px 0 rgba(255,255,255,0.8);
+      transform: translateY(-1px);
+    }
 
     /* ── scrollable body ── */
     .sb-bubble-body {
@@ -4907,6 +8306,7 @@ function __sbBuildBrainUI() {
     .sb-lec-waveform.paused .sb-lec-wave-bar { animation:none; transform:scaleY(0.3); opacity:0.35; }
     .sb-lec-timer { font-family:monospace; font-size:26px; font-weight:700; color:#1B1713; letter-spacing:0.04em; }
     .sb-lec-status { font-size:12px; color:#A79B92; text-align:center; min-height:16px; }
+    .sb-meeting-live-meta { font-size:10.5px; color:#705C50; background:rgba(255,251,247,0.72); border:1px solid rgba(65,48,40,0.1); border-radius:999px; padding:5px 9px; max-width:100%; text-align:center; }
     .sb-lec-btns { display:flex; gap:8px; width:100%; margin-top:4px; }
     .sb-lec-seg-btn { flex:1; padding:9px 6px; border:1px solid rgba(65,48,40,0.2); border-radius:14px; background:transparent; color:#413028; font-size:12px; font-weight:600; cursor:pointer; transition:background 0.15s; }
     .sb-lec-seg-btn:hover { background:rgba(65,48,40,0.07); }
@@ -4953,7 +8353,7 @@ function __sbBuildBrainUI() {
       box-shadow: 0 8px 32px rgba(27,23,19,0.18), 0 2px 8px rgba(27,23,19,0.08),
                   inset 2px 2px 1px rgba(255,255,255,0.65),
                   inset -1px -1px 1px rgba(255,255,255,0.3);
-      width: calc(100vw - 48px); max-width: 1100px;
+      width: min(calc(100vw - 48px), 840px);
       backdrop-filter: blur(6px) saturate(180%); -webkit-backdrop-filter: blur(6px) saturate(180%);
       pointer-events: none; opacity: 0;
       /* Below the walker lane so the climbing/strolling Braino renders in FRONT of the
@@ -4970,6 +8370,13 @@ function __sbBuildBrainUI() {
       z-index: -1; pointer-events: none;
     }
     #__sb_bar__.open { opacity: 1; pointer-events: all; transform: translateX(-50%) translateY(0) scale(1); }
+    /* Roam mode: the bar folds shut horizontally (shorter and shorter) as Braino steps off
+       it. Ctrl (voice) or clicking Braino brings it back. */
+    #__sb_bar__.sb-bar-collapsed {
+      transform: translateX(-50%) translateY(0) scaleX(0.01) !important;
+      opacity: 0 !important; pointer-events: none !important;
+      transition: transform 1.25s cubic-bezier(0.65,0,0.35,1), opacity 0.9s ease 0.35s !important;
+    }
     /* Coral send-pulse — a brief ring + warm glow each time a message is sent. */
     @keyframes __sb_bar_send__ {
       0%   { box-shadow: 0 0 0 0 rgba(232,120,110,0.55), 0 8px 32px rgba(27,23,19,0.18); }
@@ -4979,7 +8386,7 @@ function __sbBuildBrainUI() {
     #__sb_bar__.sb-send-pulse { animation: __sb_bar_send__ 0.7s ease-out; }
     /* Activity log INSIDE the pill — the SAME bar extends a LITTLE from its top to show the last
        couple of steps, then settles back. Small + tight so it reads clean. */
-    #__sb_bar_row__ { display: flex; align-items: center; gap: 8px; padding: 10px 10px 10px 28px; width: 100%; box-sizing: border-box; }
+    #__sb_bar_row__ { display: flex; align-items: center; gap: 6px; padding: 8px 8px 8px 22px; width: 100%; box-sizing: border-box; }
     #__sb_bar_log__ {
       max-height: 0; opacity: 0; overflow: hidden;
       display: flex; flex-direction: column; gap: 1px; padding: 0 24px;
@@ -5006,6 +8413,25 @@ function __sbBuildBrainUI() {
     @keyframes __sb_blog_spin__ { to { transform: rotate(360deg); } }
     @keyframes __sb_tick_pop__ { 0% { transform: scale(0.2); opacity: 0; } 60% { transform: scale(1.3); } 100% { transform: scale(1); opacity: 1; } }
     #__sb_bar_log__ .sb-blog-step.just-done .sb-blog-ic { animation: __sb_tick_pop__ 0.36s cubic-bezier(0.34,1.56,0.64,1); }
+    /* Delegate's live thinking — the island IS the thought: full width, editorial serif
+       (same reading voice as the website), no italics, TextShimmer sweep. */
+    #__sb_bar_log__ .sb-blog-thought {
+      display: block; font-style: normal;
+      font-family: 'Newsreader', 'Charter BT', Georgia, 'Times New Roman', serif;
+      font-size: 14px; line-height: 1.5; letter-spacing: 0.1px;
+    }
+    #__sb_bar_log__ .sb-blog-thought > span {
+      display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+      background-image: linear-gradient(90deg, rgba(0,0,0,0) 42%, #2e281f 50%, rgba(0,0,0,0) 58%), linear-gradient(#8a7d72, #8a7d72);
+      background-size: 250% 100%, auto; background-repeat: no-repeat, padding-box;
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+      animation: __sb_thought_shimmer__ 2.4s linear infinite;
+    }
+    @keyframes __sb_thought_shimmer__ { 0% { background-position: 100% center, 0 0; } 100% { background-position: -150% center, 0 0; } }
+    #__sb_bar__.sb-log-open.sb-log-thinking #__sb_bar_log__ { max-height: 128px; }
+    html.sb-dark #__sb_bar_log__ .sb-blog-thought > span {
+      background-image: linear-gradient(90deg, rgba(0,0,0,0) 42%, #f5efe8 50%, rgba(0,0,0,0) 58%), linear-gradient(#8f867c, #8f867c);
+    }
     html.sb-dark #__sb_bar__.sb-log-open { background: rgba(24,21,18,0.84); }
     html.sb-dark #__sb_bar_log__ .sb-blog-step { color: #b0a89e; }
     html.sb-dark #__sb_bar_log__ .sb-blog-step.active { color: #FBF7F1; }
@@ -5013,7 +8439,7 @@ function __sbBuildBrainUI() {
     /* Wakeup / sign-in overlays replace the input row (the bar is a column now): hide the row so
        its padding doesn't leave a gap, and give the overlay the row's padding. */
     #__sb_bar__.sb-waking #__sb_bar_row__, #__sb_bar__.sb-signin #__sb_bar_row__ { display: none; }
-    #__sb_bar__.sb-waking #__sb_wakeup__, #__sb_bar__.sb-signin #__sb_signin_cta__ { padding: 11px 14px 11px 28px; box-sizing: border-box; width: 100%; }
+    #__sb_bar__.sb-waking #__sb_wakeup__, #__sb_bar__.sb-signin #__sb_signin_cta__ { padding: 9px 12px 9px 22px; box-sizing: border-box; width: 100%; }
     /* Card is display-only now — the constant bottom bar is the single input. */
     #__sb_bubble__ .sb-card-footer { display: none !important; }
     /* Wake-up climb: bar is visible glass, expands from the center (scaleX driven in JS),
@@ -5119,14 +8545,14 @@ function __sbBuildBrainUI() {
     #__sb_bar__.sb-signin { border-radius: 18px; }
     #__sb_input__ {
       flex: 1; border: none; outline: none; background: transparent;
-      font-size: 16px; color: #1B1713; min-width: 0; padding: 0; line-height: 1.4;
+      font-size: 14px; color: #1B1713; min-width: 0; padding: 0; line-height: 1.35;
       /* Light halo so the dark text stays legible on a transparent glass over dark pages. */
       text-shadow: 0 0 4px rgba(255,255,255,0.95), 0 0 8px rgba(255,255,255,0.7), 0 1px 1px rgba(255,255,255,0.8);
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     }
     #__sb_input__::placeholder { color: #4A3D34; }
     .sb-bar-icon-btn {
-      width: 38px; height: 38px; border-radius: 50%; border: none;
+      width: 32px; height: 32px; border-radius: 50%; border: none;
       background: transparent; color: #3A2D24; cursor: pointer;
       display: flex; align-items: center; justify-content: center;
       flex-shrink: 0; transition: background 0.15s; padding: 0;
@@ -5136,7 +8562,7 @@ function __sbBuildBrainUI() {
     .sb-bar-icon-btn:hover { background: rgba(65,48,40,0.08); }
     .sb-bar-icon-btn.active { background: #fee2e2; color: #C9544A; }
     #__sb_x_auto_btn__.running { background: #fef9c3; color: #a16207; }
-    #__sb_send_btn__ { background: #E8786E !important; color: white !important; width: 42px !important; height: 42px !important; }
+    #__sb_send_btn__ { background: #E8786E !important; color: white !important; width: 36px !important; height: 36px !important; }
     #__sb_send_btn__:hover { background: #C9544A !important; }
     #__sb_card_wrap__ {
       position: fixed; z-index: 2147483648; top: 50%; left: 50%;
@@ -5167,8 +8593,9 @@ function __sbBuildBrainUI() {
       --sb-pre-bg: rgba(0,0,0,0.35); --sb-pre-fg: #FBF7F1;
       --sb-bq-border: rgba(255,160,150,0.5); --sb-bq-fg: rgba(255,255,255,0.7);
       --sb-hr: rgba(255,255,255,0.15); --sb-link: #FFB3AE;
-      --sb-btn-fg: rgba(255,255,255,0.75); --sb-btn-bg: rgba(255,255,255,0.18);
-      --sb-btn-hover: rgba(255,255,255,0.32); --sb-rec-border: rgba(255,255,255,0.18);
+      --sb-btn-fg: #2D231D; --sb-btn-bg: rgba(255,251,247,0.78);
+      --sb-btn-hover: rgba(255,255,255,0.94); --sb-btn-border: rgba(255,255,255,0.62);
+      --sb-rec-border: rgba(255,255,255,0.18);
       position: relative; width: 100%;
       height: auto; max-height: min(72vh, 700px); min-height: 120px;
       display: flex; flex-direction: column; overflow: hidden;
@@ -5196,8 +8623,9 @@ function __sbBuildBrainUI() {
       --sb-pre-bg: rgba(27,23,19,0.08); --sb-pre-fg: #1B1713;
       --sb-bq-border: rgba(201,84,74,0.4); --sb-bq-fg: rgba(27,23,19,0.65);
       --sb-hr: rgba(65,48,40,0.12); --sb-link: #C9544A;
-      --sb-btn-fg: rgba(65,48,40,0.8); --sb-btn-bg: rgba(65,48,40,0.08);
-      --sb-btn-hover: rgba(65,48,40,0.15); --sb-rec-border: rgba(65,48,40,0.12);
+      --sb-btn-fg: #2D231D; --sb-btn-bg: rgba(255,255,255,0.74);
+      --sb-btn-hover: rgba(255,255,255,0.92); --sb-btn-border: rgba(65,48,40,0.16);
+      --sb-rec-border: rgba(65,48,40,0.12);
       backdrop-filter: blur(22px) saturate(170%);
       -webkit-backdrop-filter: blur(22px) saturate(170%);
       box-shadow: 0 16px 40px rgba(27,23,19,0.16), 0 4px 12px rgba(27,23,19,0.08),
@@ -5210,12 +8638,24 @@ function __sbBuildBrainUI() {
       padding: 12px 14px 4px; flex-shrink: 0;
     }
     .sb-card-header-btn {
-      border: none; background: var(--sb-btn-bg); color: var(--sb-btn-fg);
+      border: 1px solid var(--sb-btn-border); background: var(--sb-btn-bg); color: var(--sb-btn-fg);
       height: 26px; padding: 0 10px; border-radius: 8px; cursor: pointer;
-      font-size: 11px; font-weight: 600; transition: background 0.12s;
+      font-size: 11px; font-weight: 700; transition: background 0.12s, border-color 0.12s, box-shadow 0.12s, transform 0.12s;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      box-shadow: 0 6px 18px rgba(27,23,19,0.16), inset 0 1px 0 rgba(255,255,255,0.62);
+      text-shadow: 0 1px 0 rgba(255,255,255,0.5);
     }
-    .sb-card-header-btn:hover { background: var(--sb-btn-hover); }
+    .sb-card-header-btn:hover {
+      background: var(--sb-btn-hover); border-color: rgba(201,84,74,0.32);
+      box-shadow: 0 8px 22px rgba(27,23,19,0.2), inset 0 1px 0 rgba(255,255,255,0.76);
+      transform: translateY(-1px);
+    }
+    .sb-card-header-btn:focus-visible,
+    .sb-card-foot-btn:focus-visible,
+    #__sb_card_mode_btn__:focus-visible {
+      outline: 2px solid rgba(232,120,110,0.62);
+      outline-offset: 2px;
+    }
     .sb-card-scroll {
       flex: 1; min-height: 0; overflow-y: auto; padding: 16px 26px 16px;
       user-select: text;
@@ -6039,13 +9479,31 @@ function __sbBuildBrainUI() {
     }
     #__sb_card_input__::placeholder { color: var(--sb-fg-3); }
     .sb-card-foot-btn {
-      width: 30px; height: 30px; border-radius: 50%; border: none;
-      background: transparent; color: var(--sb-btn-fg); cursor: pointer;
+      width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--sb-btn-border);
+      background: var(--sb-btn-bg); color: var(--sb-btn-fg); cursor: pointer;
       display: flex; align-items: center; justify-content: center;
-      flex-shrink: 0; transition: background 0.15s; padding: 0;
+      flex-shrink: 0; transition: background 0.15s, border-color 0.15s, box-shadow 0.15s, transform 0.15s; padding: 0;
+      box-shadow: 0 5px 15px rgba(27,23,19,0.14), inset 0 1px 0 rgba(255,255,255,0.62);
     }
-    .sb-card-foot-btn:hover { background: var(--sb-btn-bg); }
-    .sb-card-foot-btn.active { background: #fee2e2; color: #C9544A; }
+    .sb-card-foot-btn:hover {
+      background: var(--sb-btn-hover); border-color: rgba(201,84,74,0.32);
+      box-shadow: 0 7px 18px rgba(27,23,19,0.18), inset 0 1px 0 rgba(255,255,255,0.76);
+      transform: translateY(-1px);
+    }
+    .sb-card-foot-btn.active { background: #fee2e2; color: #C9544A; border-color: rgba(201,84,74,0.28); }
+    #__sb_bubble__ #__sb_card_mode_btn__ {
+      border: 1px solid var(--sb-btn-border);
+      background: var(--sb-btn-bg);
+      color: var(--sb-btn-fg);
+      box-shadow: 0 5px 15px rgba(27,23,19,0.14), inset 0 1px 0 rgba(255,255,255,0.62);
+      font-weight: 700;
+    }
+    #__sb_bubble__ #__sb_card_mode_btn__:hover {
+      background: var(--sb-btn-hover);
+      border-color: rgba(201,84,74,0.32);
+      box-shadow: 0 7px 18px rgba(27,23,19,0.18), inset 0 1px 0 rgba(255,255,255,0.76);
+    }
+    #__sb_bubble__ #__sb_card_mode_btn__ svg { opacity: 0.76; }
     #__sb_voice_status_badge__ {
       font-family: 'JetBrains Mono', monospace; font-size: 9px; font-weight: 600;
       text-transform: uppercase; letter-spacing: 0.06em;
@@ -6208,6 +9666,39 @@ function __sbBuildBrainUI() {
       animation: __sb_bar_sweep__ 2.6s linear infinite;
       mix-blend-mode: screen; z-index: 1;
     }
+    /* ── Music-ambient glow: same sweep animation as the blue headphone ring, in warm
+       yellow — Braino noticing you're listening to music on YouTube, even while idle. ── */
+    #__sb_bar__.sb-music-ambient {
+      box-shadow: 0 0 0 1.5px rgba(250,204,21,0.55), 0 0 22px rgba(250,204,21,0.40),
+                  0 0 46px rgba(234,179,8,0.24), 0 8px 32px rgba(27,23,19,0.18),
+                  inset 2px 2px 1px rgba(255,255,255,0.65), inset -1px -1px 1px rgba(255,255,255,0.3);
+      border-color: rgba(253,224,71,0.7);
+    }
+    #__sb_bar__.sb-music-ambient::after {
+      content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+      background: linear-gradient(105deg, transparent 38%, rgba(253,224,71,0.45) 50%, transparent 62%);
+      background-size: 220% 100%;
+      animation: __sb_bar_sweep__ 2.6s linear infinite;
+      mix-blend-mode: screen; z-index: 1;
+    }
+    /* Headphone mode (blue) always wins over the ambient music glow. */
+    #__sb_bar__.hp-active.sb-music-ambient { box-shadow: 0 0 0 1.5px rgba(56,189,248,0.55), 0 0 22px rgba(56,189,248,0.40), 0 0 46px rgba(59,130,246,0.24), 0 8px 32px rgba(27,23,19,0.18), inset 2px 2px 1px rgba(255,255,255,0.65), inset -1px -1px 1px rgba(255,255,255,0.3); border-color: rgba(125,211,252,0.7); }
+    #__sb_bar__.hp-active.sb-music-ambient::after { background: linear-gradient(105deg, transparent 38%, rgba(125,211,252,0.45) 50%, transparent 62%); background-size: 220% 100%; }
+    #__sb_bar__.sb-dance-mode.sb-music-ambient,
+    #__sb_bar__.hp-active.sb-dance-mode,
+    #__sb_bar__.hp-active.sb-music-ambient.sb-dance-mode {
+      border-color: rgba(198,112,255,0.72) !important;
+      background: rgba(255,251,247,0.72) !important;
+      animation: __sb_dance_bar_hue__ 3.8s ease-in-out infinite !important;
+    }
+    #__sb_bar__.sb-dance-mode.sb-music-ambient::after,
+    #__sb_bar__.hp-active.sb-dance-mode::after,
+    #__sb_bar__.hp-active.sb-music-ambient.sb-dance-mode::after {
+      content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+      background-size: 220% 100% !important;
+      animation: __sb_bar_sweep__ 2.15s linear infinite, __sb_dance_sweep_tint__ 5.2s ease-in-out infinite !important;
+      mix-blend-mode: screen; z-index: 1;
+    }
     /* Listening intensifies the ring slightly so the user knows Braino is hearing them. */
     #__sb_bar__.hp-active.hp-listening {
       box-shadow: 0 0 0 2px rgba(59,130,246,0.65), 0 0 28px rgba(56,189,248,0.5),
@@ -6361,6 +9852,41 @@ function __sbBuildBrainUI() {
       pointer-events: none;
     }
     #__sb_voice_error_pill__.visible { opacity: 1; transform: translateY(0) scale(1); }
+
+    /* ── Braino browser notch v1.0.0. The legacy dock and walker remain in this file,
+       but this is the mounted presence surface. ── */
+    #__sb_bar__{top:0;bottom:auto;width:min(570px,calc(100vw - 48px));min-height:104px;transform:translateX(-50%) translateY(-18px) scale(.97);border-radius:0 0 31px 31px;background:rgba(255,251,247,.72);border:1px solid rgba(255,255,255,.72);border-top:0;box-shadow:0 24px 70px rgba(27,23,19,.16),inset 0 1px rgba(255,255,255,.8);backdrop-filter:blur(24px) saturate(175%);-webkit-backdrop-filter:blur(24px) saturate(175%);overflow:hidden;transition:width 1.05s cubic-bezier(.22,1,.36,1),height 1.05s cubic-bezier(.22,1,.36,1),border-radius .95s cubic-bezier(.22,1,.36,1),background .7s ease,border-color .7s ease,box-shadow .85s ease,opacity .38s ease,transform .8s cubic-bezier(.22,1,.36,1)}
+    #__sb_bar__.open{transform:translateX(-50%) translateY(0) scale(1)}
+    #__sb_bar_row__{min-height:104px;padding:16px 18px;gap:9px}
+    #__sb_notch_face__{display:none;position:absolute;z-index:5;inset:0;pointer-events:none}#__sb_notch_face__ svg{width:100%;height:100%;overflow:visible}#__sb_notch_face__ .sb-n-fold{fill:none;stroke:rgba(151,54,48,.42);stroke-width:2;stroke-linecap:round}#__sb_notch_face__ .sb-n-eye{fill:#fff;filter:drop-shadow(0 1px 1px rgba(110,35,31,.2))}#__sb_notch_face__ .sb-n-pupil{fill:#2b1b18;transform-box:fill-box;transform-origin:center}#__sb_notch_face__ .sb-n-lid{opacity:0;fill:none;stroke:#fff;stroke-width:3;stroke-linecap:round}#__sb_notch_face__ .sb-n-smile{fill:none;stroke:#fff;stroke-width:2.5;stroke-linecap:round}
+    #__sb_notch_status__{position:absolute;z-index:7;left:50%;bottom:5px;transform:translateX(-50%);color:rgba(255,255,255,.82);font:700 8px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;letter-spacing:.12em;text-transform:uppercase;white-space:nowrap}
+    #__sb_notch_theme__{flex:0 0 25px;width:25px;height:25px;padding:0;display:grid;place-items:center;border:1px solid rgba(65,48,40,.12);border-radius:50%;color:rgba(27,23,19,.58);background:rgba(255,255,255,.32);cursor:pointer}
+    #__sb_bar__.sb-notch-idle{width:230px;min-height:72px;height:72px;border-radius:0 0 27px 27px;background:linear-gradient(180deg,#f6a8a2 0%,#e8786e 56%,#c9544a 100%);border-color:rgba(255,255,255,.48);box-shadow:0 13px 34px rgba(201,84,74,.28),inset 0 1px rgba(255,255,255,.45);cursor:pointer}
+    #__sb_bar__.sb-notch-idle #__sb_bar_row__,#__sb_bar__.sb-notch-invoking #__sb_bar_row__,#__sb_bar__.sb-notch-auth #__sb_bar_row__,#__sb_bar__.sb-notch-auth-ok #__sb_bar_row__{display:none}
+    #__sb_bar__.sb-notch-idle #__sb_notch_face__,#__sb_bar__.sb-notch-auth #__sb_notch_face__,#__sb_bar__.sb-notch-auth-ok #__sb_notch_face__{display:block}
+    #__sb_bar__.sb-notch-idle #__sb_notch_status__{display:none}
+    #__sb_bar__.sb-notch-invoking,#__sb_bar__.sb-notch-auth,#__sb_bar__.sb-notch-auth-ok{width:270px;min-height:82px;height:82px;border-radius:0 0 29px 29px;overflow:visible}
+    #__sb_bar__.sb-notch-invoking{border:0;background:transparent;box-shadow:none;backdrop-filter:none;-webkit-backdrop-filter:none;animation:__sb_notch_shell__ 1.25s cubic-bezier(.22,1,.36,1) both}#__sb_bar__.sb-notch-invoking #__sb_notch_face__{display:block;opacity:0;animation:__sb_notch_face_in__ .38s ease-out .82s forwards}#__sb_bar__.sb-notch-invoking .sb-n-eye{opacity:0}#__sb_bar__.sb-notch-invoking .sb-n-lid{opacity:1}
+    #__sb_bar__.sb-notch-invoking::before{content:"";position:absolute;z-index:14;inset:0;padding:1.2px;border-radius:inherit;background:conic-gradient(from var(--sb-notch-angle),#f4cf87,#ec8078,#dc77a8,#779cff,#ec8078,#f4cf87);-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;filter:drop-shadow(0 0 4px rgba(236,128,120,.55));animation:__sb_notch_shimmer__ 1.25s linear both}
+    #__sb_bar__.sb-notch-invoking::after{content:"";position:absolute;z-index:0;inset:1px;border-radius:inherit;background-image:linear-gradient(105deg,transparent 26%,rgba(255,225,218,.58) 45%,transparent 64%),linear-gradient(180deg,#e99088 0%,#d86c63 58%,#a9433b 100%);background-size:260% 100%,100% 100%;background-position:150% 0,0 0;opacity:0;animation:__sb_notch_fill__ .72s cubic-bezier(.22,1,.36,1) .48s forwards}
+    #__sb_bar__.sb-notch-auth,#__sb_bar__.sb-notch-auth-ok{background:linear-gradient(180deg,#e99088 0%,#d86c63 58%,#a9433b 100%);border-color:rgba(255,255,255,.32);box-shadow:0 18px 54px rgba(201,84,74,.3),inset 0 1px rgba(255,255,255,.38)}
+    #__sb_bar__.sb-notch-auth #__sb_notch_face__ .sb-n-eye{opacity:0}#__sb_bar__.sb-notch-auth #__sb_notch_face__ .sb-n-lid{opacity:1}#__sb_bar__.sb-notch-auth #__sb_notch_status__{color:transparent;background:linear-gradient(90deg,rgba(255,255,255,.46) 20%,#fff 45%,#f4cf87 52%,rgba(255,255,255,.46) 78%);background-size:240% 100%;-webkit-background-clip:text;background-clip:text;animation:__sb_auth_text__ 1.45s linear infinite}
+    #__sb_bar__.sb-notch-auth::before,#__sb_bar__.sb-notch-auth-ok::before{content:"";position:absolute;z-index:14;inset:0;padding:1.25px;border-radius:inherit;pointer-events:none;background:conic-gradient(from var(--sb-notch-angle),transparent 0 18%,#f4cf87 28%,#ec8078 38%,transparent 49%);-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;animation:__sb_notch_perimeter__ 2.2s linear infinite}
+    #__sb_bar__.sb-notch-auth-ok{border-color:rgba(93,219,135,.72);box-shadow:0 0 0 1px rgba(93,219,135,.18),0 18px 58px rgba(52,184,98,.34),inset 0 1px rgba(255,255,255,.42)}#__sb_bar__.sb-notch-auth-ok::before{background:conic-gradient(from var(--sb-notch-angle),#62df8d,#d9ffe5,#62df8d)}#__sb_bar__.sb-notch-auth-ok #__sb_notch_status__{color:#d9ffe5}#__sb_bar__.sb-notch-auth-ok .sb-n-eye{transform-box:fill-box;transform-origin:center;animation:__sb_notch_eyes_open__ .72s cubic-bezier(.2,.8,.2,1) both}
+    @property --sb-notch-angle{syntax:"<angle>";inherits:false;initial-value:0deg}@keyframes __sb_notch_shell__{0%{opacity:0;transform:translateX(-50%) scaleX(.06) scaleY(.72)}18%{opacity:1}72%{transform:translateX(-50%) scaleX(1.025)}100%{opacity:1;transform:translateX(-50%)}}@keyframes __sb_notch_shimmer__{0%{opacity:0;--sb-notch-angle:0deg}18%{opacity:1}100%{opacity:1;--sb-notch-angle:300deg}}@keyframes __sb_notch_fill__{0%{opacity:0;background-position:150% 0,0 0}32%{opacity:.5}100%{opacity:1;background-position:-80% 0,0 0}}@keyframes __sb_notch_face_in__{from{opacity:0;transform:translateY(-2px) scale(.96)}to{opacity:1;transform:none}}@keyframes __sb_notch_perimeter__{to{--sb-notch-angle:360deg}}@keyframes __sb_auth_text__{from{background-position:140% 0}to{background-position:-140% 0}}@keyframes __sb_notch_eyes_open__{from{opacity:0;transform:scaleY(.06)}to{opacity:1;transform:scaleY(1)}}
+    #__sb_walk_lane__:not(.sb-roaming),#__sb_walk_lane__:not(.sb-roaming) #__sbwk_say__,#__sb_brain_btn__{display:none!important}
+    #__sb_card_wrap__{top:0;left:50%;transform:translateX(-50%);width:min(650px,calc(100vw - 32px))}#__sb_card_wrap__.animating-in #__sb_bubble__{animation:__sb_notch_answer_in__ .42s cubic-bezier(.16,.86,.22,1) both}@keyframes __sb_notch_answer_in__{from{opacity:0;transform:scaleX(.72) translateY(-12px)}to{opacity:1;transform:none}}
+    #__sb_card_wrap__.sb-notch-short{width:min(610px,calc(100vw - 32px))}#__sb_card_wrap__.sb-notch-short #__sb_bubble__{max-height:none}#__sb_card_wrap__.sb-notch-short .sb-card-scroll{padding:18px 24px 12px}#__sb_card_wrap__.sb-notch-short .sb-card-header{padding-top:9px}
+    #__sb_bubble__{width:100%;max-width:none;max-height:calc(100vh - 28px);min-height:0;resize:none;border-radius:0 0 34px 34px;background:linear-gradient(145deg,rgba(31,27,28,.48),rgba(18,16,17,.38));backdrop-filter:blur(20px) saturate(185%);-webkit-backdrop-filter:blur(20px) saturate(185%)}#__sb_bubble__.sb-readable{background:rgba(255,251,247,.72);border-color:rgba(255,255,255,.72)}#__sb_orbit_brain__{display:none!important}
+    #__sb_bar__.sb-answer-covered{opacity:0;pointer-events:none}
+    #__sb_bar__.sb-notch-liquid:not(.sb-notch-idle):not(.sb-notch-invoking):not(.sb-notch-auth):not(.sb-notch-auth-ok):not(.sb-notch-listening):not(.sb-notch-working):not(.sb-notch-speaking){color:#fff;border-color:rgba(255,255,255,.42);background:linear-gradient(145deg,rgba(31,27,28,.48),rgba(18,16,17,.38));box-shadow:0 24px 70px rgba(0,0,0,.2),inset 0 1px rgba(255,255,255,.24)}#__sb_bar__.sb-notch-liquid #__sb_input__{color:#fff;text-shadow:none}#__sb_bar__.sb-notch-liquid #__sb_input__::placeholder{color:rgba(255,255,255,.42)}#__sb_bar__.sb-notch-liquid #__sb_mode_btn__,#__sb_bar__.sb-notch-liquid .sb-bar-icon-btn,#__sb_bar__.sb-notch-liquid #__sb_notch_theme__{color:rgba(255,255,255,.82);background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.14);filter:none}
+    #__sb_notch_face__ .sb-n-mouth{display:none;fill:#5f211d;stroke:#fff;stroke-width:1.5}#__sb_notch_face__ .sb-n-mouth ellipse:last-child{fill:#f4a09a;stroke:0}
+    #__sb_bar__.sb-notch-listening,#__sb_bar__.sb-notch-working,#__sb_bar__.sb-notch-speaking{width:230px;min-height:82px;height:82px;border-radius:0 0 29px 29px;background:linear-gradient(180deg,#f6a8a2 0%,#e8786e 56%,#c9544a 100%);border-color:rgba(255,255,255,.46);box-shadow:0 15px 42px rgba(201,84,74,.3),inset 0 1px rgba(255,255,255,.42);overflow:visible}
+    #__sb_bar__.sb-notch-listening #__sb_bar_row__,#__sb_bar__.sb-notch-working #__sb_bar_row__,#__sb_bar__.sb-notch-speaking #__sb_bar_row__{display:none}#__sb_bar__.sb-notch-listening #__sb_notch_face__,#__sb_bar__.sb-notch-working #__sb_notch_face__,#__sb_bar__.sb-notch-speaking #__sb_notch_face__{display:block}
+    #__sb_bar__.sb-notch-listening::before,#__sb_bar__.sb-notch-listening::after{content:"";position:absolute;z-index:-1;inset:2px;border:1.5px solid rgba(232,120,110,.58);border-radius:inherit;animation:__sb_notch_sonar__ 2.35s cubic-bezier(.2,.65,.3,1) infinite}#__sb_bar__.sb-notch-listening::after{animation-delay:1.15s}@keyframes __sb_notch_sonar__{from{opacity:.72;transform:scale(1)}to{opacity:0;transform:scale(1.28,1.7)}}
+    #__sb_bar__.sb-notch-working{width:440px;height:88px}#__sb_bar__.sb-notch-working #__sb_notch_status__{display:block;color:rgba(255,255,255,.84)}
+    #__sb_bar__.sb-notch-speaking .sb-n-smile{display:none}#__sb_bar__.sb-notch-speaking .sb-n-mouth{display:block;transform-box:fill-box;transform-origin:center;animation:__sb_notch_talk__ .46s ease-in-out infinite alternate}@keyframes __sb_notch_talk__{from{transform:scaleY(.55)}to{transform:scaleY(1.12)}}
+    #__sb_bar__.sb-log-open{width:min(650px,calc(100vw - 32px));height:auto;min-height:180px;border-radius:0 0 36px 36px;background:rgba(255,251,247,.72)}#__sb_bar__.sb-log-open #__sb_notch_face__{display:none}#__sb_bar__.sb-log-open #__sb_bar_log__{max-height:220px;padding:28px 24px 14px}#__sb_bar__.sb-log-open #__sb_bar_row__{display:flex;min-height:64px}
   `;
   document.head.appendChild(style);
 
@@ -6387,9 +9913,10 @@ function __sbBuildBrainUI() {
   const __sbDockBar = document.createElement("div");
   __sbDockBar.id = "__sb_bar__";
   __sbDockBar.innerHTML = `
+      <div id="__sb_notch_face__" aria-hidden="true"><svg viewBox="0 0 230 72" preserveAspectRatio="none"><path class="sb-n-fold" d="M115 0 Q111 14 115 27 Q119 40 115 56 M25 4 Q14 13 25 22 Q12 31 25 40 Q14 50 30 61 M61 1 Q49 11 60 20 Q47 30 61 39 Q49 49 65 63 M169 1 Q181 11 170 20 Q183 30 169 39 Q181 49 165 63 M205 4 Q216 13 205 22 Q218 31 205 40 Q216 50 200 61"/><circle class="sb-n-eye" cx="103" cy="29" r="10"/><circle class="sb-n-eye" cx="127" cy="29" r="10"/><circle class="sb-n-pupil" cx="104" cy="30" r="4.8"/><circle class="sb-n-pupil" cx="128" cy="30" r="4.8"/><path class="sb-n-lid" d="M93 29 Q103 36 113 29 M117 29 Q127 36 137 29"/><path class="sb-n-smile" d="M108 47 Q115 54 122 47"/><g class="sb-n-mouth"><ellipse cx="115" cy="49" rx="7" ry="5.5"/><ellipse cx="115" cy="51" rx="4.2" ry="2.2"/></g></svg><span id="__sb_notch_status__"></span></div>
       <div id="__sb_bar_log__"><div class="sb-blog-steps"></div></div>
       <div id="__sb_bar_row__">
-      <input id="__sb_input__" placeholder="What's on your mind?" autocomplete="off" spellcheck="false" />
+      <input id="__sb_input__" placeholder="Go on." autocomplete="off" spellcheck="false" />
       <button id="__sb_mode_btn__" class="sb-pill-dropdown-btn" title="Mode">
         <span id="__sb_mode_label__">⚡ Auto</span>
         <svg viewBox="0 0 10 6" width="8" height="8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 1 5 5 9 1"/></svg>
@@ -6403,6 +9930,7 @@ function __sbBuildBrainUI() {
       <button id="__sb_send_btn__" class="sb-bar-icon-btn" title="Send">
         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
       </button>
+      <button id="__sb_notch_theme__" type="button" title="Switch glass theme" aria-label="Switch glass theme">◐</button>
       <button id="__sb_bar_close__" class="sb-bar-icon-btn" title="Dock Braino (Esc)">
         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
@@ -6475,6 +10003,7 @@ function __sbBuildBrainUI() {
     </div>
   `;
   (document.documentElement||document.body).appendChild(cardWrap);
+  __sbMountNotchV1();
 
   // ── User geo (timezone/city/country, no permission prompts — background caches an
   // IP lookup daily). Rides into chat requests + voice instructions so Braino knows
@@ -6485,15 +10014,51 @@ function __sbBuildBrainUI() {
     });
   } catch (_) {}
 
+  // Ambient music glow: notice when the user is playing MUSIC on YouTube (even while
+  // idle) and warm the bar yellow — same sweep as the blue headphone ring.
+  try { __sbStartMusicAmbientWatch(); } catch (_) {}
+
+  // Swearing preference (dashboard → profiles.personality_settings.swearing → cached by
+  // the background premium fetch). Gates Braino's salty phrasing in the love/advance reply.
+  try {
+    chrome.storage?.local?.get?.(["sbAllowSwearing"], (r) => {
+      if (!chrome.runtime.lastError) __sbAllowSwearing = r?.sbAllowSwearing === true;
+    });
+    chrome.storage?.onChanged?.addListener?.((changes, area) => {
+      if (area === "local" && changes.sbAllowSwearing) __sbAllowSwearing = changes.sbAllowSwearing.newValue === true;
+    });
+  } catch (_) {}
+
+  // Voice Commands (dashboard → voice_modes/voice_commands/voice_command_urls → cached by
+  // background.js's ~1min voiceModesPoll alarm). Read synchronously, offline, same shape as
+  // the swearing preference above. onChanged also fires when THIS tab starts/stops a mode.
+  try {
+    chrome.storage?.local?.get?.(["sbVoiceModes"], (r) => {
+      if (!chrome.runtime.lastError) __sbSetVoiceModesCache(r?.sbVoiceModes);
+    });
+    chrome.storage?.onChanged?.addListener?.((changes, area) => {
+      if (area === "local" && changes.sbVoiceModes) __sbSetVoiceModesCache(changes.sbVoiceModes.newValue);
+    });
+  } catch (_) {}
+
   // ── Hive-mind handshake: this tab may have been opened BY a running delegate task
   // (Amazon and friends open products in new tabs). Ask the background if a run is
   // mid-flight here; if so, come up already in the working state instead of blank. ──
   try {
     chrome.runtime.sendMessage({ action: "sbAgentBootQuery" }, (resp) => {
-      if (chrome.runtime.lastError || !resp || !resp.running || !resp.task) return;
+      if (chrome.runtime.lastError || !resp || !resp.running || !resp.task) {
+        if (typeof __sbForceClearAgentUi === "function") __sbForceClearAgentUi("boot-no-run");
+        return;
+      }
+      __sbDelegateUiHidden = true;   // a delegate run owns this tab — the chat card stays SHUT
+      __sbDelegateActive = true;     // run still going → no surface may tear down until it truly ends
+      if (typeof __sbAgentLogTouch === "function") __sbAgentLogTouch();
       document.getElementById("__sb_bar__")?.classList.add("open");
       if (typeof __sbAgentLogShow === "function") __sbAgentLogShow("Working…");
-      if (typeof __sbAgentLogStep === "function") __sbAgentLogStep("Continuing here…");
+      // Restore the thinking island immediately (last thought carried from the background)
+      // so it never blinks empty across the navigation.
+      __sbAgentThought = String(resp.lastThought || "").trim() || "Thinking…";
+      if (typeof __sbAgentLogRender === "function") __sbAgentLogRender();
       if (typeof __sbSetBarAgentStatus === "function") __sbSetBarAgentStatus(resp.task);
     });
   } catch (_) {}
@@ -6512,6 +10077,8 @@ function __sbBuildBrainUI() {
     <button class="sb-dropdown-item selected" data-mode="page"><span class="sb-di-icon">📄</span><span class="sb-di-label">Chat with Page</span><span class="sb-di-check">✓</span></button>
     <button class="sb-dropdown-item" data-mode="lecture"><span class="sb-di-icon">🎙</span><span class="sb-di-label">Lecture &amp; Audio</span><span class="sb-di-check">✓</span></button>
     <button class="sb-dropdown-item" data-mode="meeting"><span class="sb-di-icon">👥</span><span class="sb-di-label">Meeting &amp; Call</span><span class="sb-di-check">✓</span></button>
+    <button class="sb-dropdown-item" data-mode="team"><span class="sb-di-icon">👥</span><span class="sb-di-label">Team</span><span class="sb-di-check">✓</span></button>
+    <button class="sb-dropdown-item" data-mode="demo"><span class="sb-di-icon">🎬</span><span class="sb-di-label">Demo</span><span class="sb-di-check">✓</span></button>
     <button class="sb-dropdown-item" data-mode="agent"><span class="sb-di-icon">🤖</span><span class="sb-di-label">Delegate</span><span class="sb-di-check">✓</span></button>
     <div class="sb-dropdown-label" style="margin-top:8px">Wake</div>
     <button class="sb-dropdown-item" data-wake="toggle"><span class="sb-di-icon">👂</span><span class="sb-di-label">“Hey Braino” + double-clap</span><span class="sb-di-check">✓</span></button>
@@ -6581,9 +10148,13 @@ function __sbBuildBrainUI() {
     // Show brain if docked OR if voice mode is on (voice takes over, so show it either way).
     if (sbBrainDocked || sbVoiceModeOn) {
       const b = document.getElementById("__sb_brain_btn__");
-      if (b) b.style.display = "";
+      if (b) b.style.display = "none";
       __sbBrainVisible = true;
-      if (sbBrainDocked && !sbVoiceModeOn) __sbSyncIdleState();
+      if (sbBrainDocked && !sbVoiceModeOn) {
+        const bar = document.getElementById("__sb_bar__");
+        if (bar) { bar.classList.add("open"); __sbSetBrowserNotchState("idle"); }
+        __sbSyncIdleState();
+      }
       if (!sbBrainDocked && sbVoiceModeOn && __sbContextOk()) {
         chrome.storage.local.set({ sbBrainDocked: true });
       }
@@ -6635,22 +10206,31 @@ function __sbBuildBrainUI() {
       __sbOpenPanel();
     }
   });
+  document.getElementById("__sb_bar__")?.addEventListener("click", (event) => {
+    const bar = event.currentTarget;
+    if (!(bar instanceof HTMLElement) || !bar.classList.contains("sb-notch-idle")) return;
+    event.preventDefault(); event.stopPropagation();
+    __sbOpenPanel();
+  });
 
   // ⌘I / Ctrl+I — toggle brain. Double-tap Space — primary invoke (cycles the loop).
   let __sbLastCtrlTap = 0;
   let __sbLastAltTap = 0;
+  let __sbLastShiftTap = 0;
+  let __sbLastMetaTap = 0;
   let __sbLastSpaceTap = 0;
   document.addEventListener("keydown", (e) => {
     // Double-tap Control → toggle headphone mode.
     if (e.key === "Control") {
       if (!e.repeat && !e.metaKey && !e.altKey && !e.shiftKey) {
         const now = Date.now();
-        if (now - __sbLastCtrlTap < 400) {
+        // 600ms window (400 missed relaxed taps), and no editable-focus bail: bare
+        // Control taps type nothing, and Ctrl+key combos already reset the counter —
+        // the old guard just made the toggle feel random whenever a text field had focus.
+        if (now - __sbLastCtrlTap < 600) {
           __sbLastCtrlTap = 0;
-          if (!__sbHasExternalEditableFocus()) {
-            if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
-            __sbToggleHeadphoneMode();
-          }
+          if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
+          __sbToggleHeadphoneMode();
         } else {
           __sbLastCtrlTap = now;
         }
@@ -6674,8 +10254,43 @@ function __sbBuildBrainUI() {
       }
       return;
     }
+    // Double-tap Shift → Roam mode. PARKED for now: the perch/off-screen behaviour needs a
+    // rethink, so the trigger is disabled (set __SB_ROAM_ENABLED = true to bring it back).
+    // The code stays in place; it just doesn't activate.
+    // Double-tap Command (⌘) → summon: the mascot jumps out of the notch onto the
+    // page, exactly like the Mac's double-Command summon-toggle. Tap ⌘⌘ again to
+    // send him home. Any ⌘+key combo resets the tap so shortcuts never trigger it.
+    if (e.key === "Meta") {
+      if (!e.repeat && !e.ctrlKey && !e.altKey && !e.shiftKey) {
+        const now = Date.now();
+        if (now - __sbLastMetaTap < 600) {
+          __sbLastMetaTap = 0;
+          __sbSummonToggle();
+        } else {
+          __sbLastMetaTap = now;
+        }
+      }
+      return;
+    }
+    if (e.key === "Shift") {
+      if (__SB_ROAM_ENABLED && !e.repeat && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        const now = Date.now();
+        if (now - __sbLastShiftTap < 400) {
+          __sbLastShiftTap = 0;
+          if (!__sbHasExternalEditableFocus()) {
+            if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
+            __sbToggleRoamMode();
+          }
+        } else {
+          __sbLastShiftTap = now;
+        }
+      }
+      return;
+    }
     __sbLastCtrlTap = 0;   // any other key breaks the double-tap (Ctrl+key combos don't count)
     __sbLastAltTap = 0;
+    __sbLastShiftTap = 0;
+    __sbLastMetaTap = 0;
 
     // Double-tap Space → invoke / cycle Braino (OFF→PANEL plays the climb wake-up).
     // Ignored while typing in ANY field (page or Braino's own bar) so it never eats text.
@@ -6692,7 +10307,8 @@ function __sbBuildBrainUI() {
         __sbLastSpaceTap = 0;
         e.preventDefault(); e.stopPropagation();   // swallow the scroll on the invoking tap
         if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
-        __sbToggleBrain();
+        if (!__sbBrainVisible || !__sbInputOpen) __sbOpenPanel();
+        else __sbDock();
       } else {
         __sbLastSpaceTap = now;
       }
@@ -6778,18 +10394,26 @@ function __sbBuildBrainUI() {
 
   // ── Theme toggle (glass ↔ readable) ──
   const __sbThemeBtn = document.getElementById("__sb_theme_toggle_btn__");
+  const __sbNotchThemeBtn = document.getElementById("__sb_notch_theme__");
   const __sbApplyTheme = (mode) => {
     const isReadable = mode === "readable";
-    // Theme applies to the answer CARD only. The bottom bar stays transparent glass
-    // (legibility there comes from the text halo), so we never force it opaque.
     bubble.classList.toggle("sb-readable", isReadable);
+    document.getElementById("__sb_bar__")?.classList.toggle("sb-notch-liquid", !isReadable);
     __sbThemeBtn.textContent = isReadable ? "◐" : "◑";
+    if (__sbNotchThemeBtn) __sbNotchThemeBtn.textContent = isReadable ? "◐" : "◑";
     __sbThemeBtn.title = isReadable ? "Switch to liquid glass" : "Switch to clear glass (readable)";
+    if (__sbNotchThemeBtn) __sbNotchThemeBtn.title = __sbThemeBtn.title;
   };
   // Default = liquid glass. The toggle switches to a translucent glassmorphism (still
   // see-through, but readable) for when the liquid glass makes the page hard to read.
   chrome.storage.local.get("sbTheme", ({ sbTheme }) => __sbApplyTheme(sbTheme || "glass"));
   __sbThemeBtn.addEventListener("click", () => {
+    const next = bubble.classList.contains("sb-readable") ? "glass" : "readable";
+    __sbApplyTheme(next);
+    chrome.storage.local.set({ sbTheme: next });
+  });
+  __sbNotchThemeBtn?.addEventListener("click", (event) => {
+    event.stopPropagation();
     const next = bubble.classList.contains("sb-readable") ? "glass" : "readable";
     __sbApplyTheme(next);
     chrome.storage.local.set({ sbTheme: next });
@@ -6915,19 +10539,10 @@ function __sbBuildBrainUI() {
   modeDd.querySelectorAll(".sb-dropdown-item[data-mode]").forEach(item => {
     item.addEventListener("click", () => {
       const mode = item.dataset.mode;
-      window.__sbForcedMode = mode;
-      modeDd.querySelectorAll(".sb-dropdown-item[data-mode]").forEach(i => i.classList.remove("selected"));
-      item.classList.add("selected");
-      const labels = { page: "📄 Page", web: "🔍 Web", lecture: "🎙 Lecture", meeting: "👥 Meeting", agent: "🤖 Delegate" };
-      const label = labels[mode] || "📄 Page";
-      document.getElementById("__sb_mode_label__").textContent = label;
-      document.getElementById("__sb_card_mode_label__").textContent = label;
-      document.getElementById("__sb_mode_btn__").classList.toggle("active-mode", mode !== "page");
-      document.getElementById("__sb_card_mode_btn__").classList.toggle("active-mode", mode !== "page");
+      if (mode === "team") __sbTeamReset();
+      if (mode === "demo") __sbDemoReset();
+      __sbApplyForcedModeUi(mode);
       __sbCloseAllDropdowns();
-      if ((mode === "lecture" || mode === "meeting") && !__sbIsLectureRecording) {
-        __sbShowLectureReadyCard(mode);
-      }
     });
   });
 
@@ -7082,6 +10697,7 @@ function __sbSyncFullscreenUiMount() {
     "__sb_connector_dropdown__",
     "__sb_connector_slash_dropdown__",
     "__sb_model_dropdown__",
+    "__sb_dumbo_fx__",
   ];
 
   for (const id of ids) {
@@ -7227,6 +10843,7 @@ function __sbDetectPageTheme() {
 // While a delegate task runs, the chat UI stays closed (progress lives in the floating bar/pill only);
 // it reopens with the result on finish. This flag blocks any auto-open during the run.
 let __sbDelegateUiHidden = false;
+let __sbDelegateActive = false;   // true from delegate start to genuine finish — blocks any mid-run teardown
 function __sbOpenCard(options = {}) {
   if (!__sbOwnsInlineUi()) return;
   if (__sbDelegateUiHidden && !options.forceOpen) return;   // delegate running → keep the chat UI closed
@@ -7239,6 +10856,7 @@ function __sbOpenCard(options = {}) {
   // Keep the bar open and Braino strolling on it while the answer card is up.
   const alreadyOpen = wrap.classList.contains("visible");
   wrap.classList.add("visible");
+  document.getElementById("__sb_bar__")?.classList.add("sb-answer-covered");
   if (!alreadyOpen) {
     wrap.classList.add("animating-in");
     requestAnimationFrame(() => setTimeout(() => wrap.classList.remove("animating-in"), 400));
@@ -7247,7 +10865,7 @@ function __sbOpenCard(options = {}) {
   else __sbStopOrbit();
   const bubble = wrap.querySelector("#__sb_bubble__");
   // theme (glass/readable) is persisted separately via __sbThemeBtn init — no override here
-  __sbInitCardDrag(wrap);
+  // Answers are physically anchored to the notch in v1.0.0; legacy drag code stays intact.
   __sbScheduleCursorFollow();
 }
 
@@ -7255,14 +10873,12 @@ function __sbCollapseCard() {
   if (!__sbOwnsInlineUi()) return;
   const wrap = document.getElementById("__sb_card_wrap__");
   if (wrap) wrap.classList.remove("visible");
+  document.getElementById("__sb_bar__")?.classList.remove("sb-answer-covered");
   __sbStopOrbit();
   if (__sbBubbleTimer) clearTimeout(__sbBubbleTimer);
   if (__sbBrainVisible && __sbInputOpen) {
     document.getElementById("__sb_bar__")?.classList.add("open");
-    // Bar stays open with the card now, so the walker is already running — only
-    // (re)start it if something actually stopped it (don't teleport mid-stroll).
-    const lane = document.getElementById("__sb_walk_lane__");
-    if (!lane || lane.style.display === "none") __sbStartWalkLoop();
+    __sbStopWalkLoop();
   }
   __sbScheduleCursorFollow();
   __sbSyncIdleState(); // back to docked idle — resume animations
@@ -7495,8 +11111,8 @@ function __sbStopDelegate() {
   __sbSetStopBtn(false);
   __sbAgentPendingTurn = null;
   __sbClearBarAgentStatus();
-  __sbAgentLogClear();            // collapse the in-bar activity log too
-  __sbStopWaitEntertainment();
+  __sbDelegateActive = false;
+  __sbAgentFlowDone();            // settle island + status + walker together
   __sbShowBubble("Stopped.", true, { tone: "status", title: "Stopped" });
 }
 
@@ -7517,6 +11133,80 @@ const __sbXPoliticalTextPattern = /\b(election|elections|vote|voting|voter|ballo
 const __sbXBuilderPromptPattern = /\b(what(?:'s| is)?\s+(?:everyone|everybody|yall|you all|you)\s+building|what are you building|what(?:'re| are)\s+you building|drop\s+(?:your|the)\s+(?:startup|product|app|tool|project|link|links|website)|share\s+what\s+you(?:'re| are)\s+building|show\s+me\s+what\s+you(?:'re| are)\s+building|plug\s+your\s+(?:startup|product|app|tool|project)|builders?\s+drop\s+(?:your|the)\s+(?:startup|product|app|tool|project|link|links))\b/i;
 
 function __sbSleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// Is the user actively playing MUSIC on YouTube right now? Category comes from YouTube's
+// own microdata (<meta itemprop="genre" content="Music">) on watch pages; music.youtube.com
+// is always music. Gated on a <video> actually playing so a paused tab doesn't glow.
+function __sbIsPlayingYouTubeMusic() {
+  const host = String(location.hostname || "").replace(/^www\./, "");
+  const onYT = /(^|\.)youtube\.com$/.test(host);
+  const onYTMusic = /(^|\.)music\.youtube\.com$/.test(host);
+  if (!onYT && !onYTMusic) return false;
+  // something must actually be playing (not paused, has real playback)
+  let playing = false;
+  try {
+    for (const v of document.querySelectorAll("video")) {
+      if (!v.paused && !v.ended && v.currentTime > 0 && v.readyState >= 2) { playing = true; break; }
+    }
+  } catch (_) {}
+  if (!playing) return false;
+  if (onYTMusic) return true;   // YouTube Music is music by definition
+  // On youtube.com, trust the category microdata / genre meta.
+  try {
+    const genre = document.querySelector('meta[itemprop="genre"]')?.getAttribute("content")
+      || document.querySelector('meta[itemprop="genre"]')?.content || "";
+    if (/music/i.test(genre)) return true;
+    // Fallback: the watch page's category link text (ytd-metadata-row / "Category: Music").
+    const catLink = document.querySelector('#category ytd-metadata-row-renderer a, a[href*="/channel/UC-9-kyTW8ZkZNDHQJ6FgpwQ"]');
+    if (catLink && /music/i.test(catLink.textContent || "")) return true;
+  } catch (_) {}
+  return false;
+}
+
+let __sbMusicAmbientTimer = null;
+let __sbMusicAmbientOn = false;      // headphones + glow currently applied
+let __sbMusicAmbientArming = false;  // mid intro sequence (said the line, about to gear up)
+function __sbSetMusicGear(on) {
+  const bar = document.getElementById("__sb_bar__");
+  if (bar) bar.classList.toggle("sb-music-ambient", on);
+  // Braino puts headphones ON while the music plays (walker + docked brain).
+  const hp = document.querySelector("#__sbwk_walker__ #__sbwk_headphones__");
+  if (hp) hp.setAttribute("display", on ? "inline" : "none");
+  document.getElementById("__sb_brain_btn__")?.classList.toggle("sb-headphones", on);
+  __sbSetMusicFx(on);
+}
+function __sbApplyMusicAmbient(on) {
+  const bar = document.getElementById("__sb_bar__");
+  if (!bar) return;
+  // Never fire while Braino is actually busy (agent working) — that has its own state.
+  const suppress = bar.classList.contains("sb-agent-busy");
+  const want = on && !suppress;
+  if (want === __sbMusicAmbientOn) return;
+  if (want) {
+    // INTERACTIVE intro: he NOTICES first (speech bubble above his head, same design as
+    // the auth line), THEN puts the headphones on + the bar glows — beat, then gear.
+    if (__sbMusicAmbientArming) return;
+    __sbMusicAmbientArming = true;
+    __sbWkSay("Oh, listening to music? Let me put my headphones on. 🎧");
+    setTimeout(() => {
+      __sbMusicAmbientArming = false;
+      // Re-check it's still music + still idle before committing (song may have stopped).
+      if (!__sbIsPlayingYouTubeMusic() || document.getElementById("__sb_bar__")?.classList.contains("sb-agent-busy")) return;
+      __sbMusicAmbientOn = true;
+      __sbSetMusicGear(true);
+    }, 1250);
+  } else {
+    __sbMusicAmbientArming = false;
+    __sbMusicAmbientOn = false;
+    __sbSetMusicGear(false);
+  }
+}
+function __sbStartMusicAmbientWatch() {
+  if (__sbMusicAmbientTimer) return;
+  const tick = () => { try { __sbApplyMusicAmbient(__sbIsPlayingYouTubeMusic()); } catch (_) {} };
+  tick();
+  __sbMusicAmbientTimer = setInterval(tick, 2500);   // cheap poll; YouTube is an SPA
+}
 
 function __sbIsOnX() {
   return /^(twitter|x)\.com$/.test(location.hostname);
@@ -8116,6 +11806,528 @@ function __sbSetGreetingPlaceholder() {
   });
 }
 
+let __sbNotchV1 = null;
+let __sbNotchRequestTimer = null;
+function __sbMountNotchV1() {
+  if (__sbNotchV1 || document.getElementById("__sb_notch_v1_host__")) return;
+  const host = document.createElement("div");
+  host.id = "__sb_notch_v1_host__";
+  host.style.cssText = "all:initial;position:fixed;z-index:2147483647;top:0;left:50%;transform:translateX(-50%);pointer-events:none";
+  const shadow = host.attachShadow({ mode: "open" });
+  // Verbatim port of the Chrome system notch (/insta-graphics?design=chrome-system).
+  // Geometry, colors, easing and per-state faces mirror the final layered ig-cs-* CSS.
+  shadow.innerHTML = `
+    <style>
+      :host{all:initial}
+      @property --a{syntax:"<angle>";inherits:false;initial-value:0deg}
+      .n{position:relative;box-sizing:border-box;width:230px;height:72px;overflow:hidden;border:1px solid rgba(255,255,255,.46);border-top:0;border-radius:0 0 27px 27px;background:linear-gradient(180deg,#f6a8a2 0%,#e8786e 56%,#c9544a 100%);box-shadow:0 15px 40px rgba(201,84,74,.28),inset 0 1px rgba(255,255,255,.42);color:#1b1713;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;pointer-events:auto;cursor:pointer;interpolate-size:allow-keywords;will-change:width,height,border-radius;transition:width 1050ms cubic-bezier(.22,1,.36,1),height 1050ms cubic-bezier(.22,1,.36,1),border-radius 950ms cubic-bezier(.22,1,.36,1),background 700ms ease,border-color 700ms ease,box-shadow 850ms ease,backdrop-filter 700ms ease,opacity .42s ease,transform .7s cubic-bezier(.22,1,.36,1)}
+      .n[data-state=off]{opacity:0;pointer-events:none;transform:translateY(-18px) scale(.94)}
+      .panel{position:absolute;inset:0;box-sizing:border-box;opacity:0;pointer-events:none;transform:translateY(6px);transition:opacity 420ms ease,transform 760ms cubic-bezier(.22,1,.36,1)}
+      .face{z-index:2}.face svg{display:block;width:100%;height:100%;overflow:visible}
+      .fold{fill:none;stroke:#8a2f28;stroke-width:1.8;stroke-linecap:round;opacity:.58;vector-effect:non-scaling-stroke}
+      .eye,.pupil,.smile,.lids{transform-box:view-box;transform-origin:center}
+      .eyeball{fill:#fff}.pupil circle:first-child{fill:#1b1713}.pupil circle:last-child{fill:#fff}
+      .lids{opacity:0}.lids path{fill:none;stroke:#7e2a24;stroke-width:2.6;stroke-linecap:round}
+      .smile{fill:none;stroke:#1b1713;stroke-width:2.7;stroke-linecap:round}
+      .mouth{opacity:0;transform-box:fill-box;transform-origin:center}.mouth ellipse:first-child{fill:#6e211a}.mouth ellipse:last-child{fill:#f08b82}
+      .n[data-state=idle] .face,.n[data-state=listening] .face,.n[data-state=working] .face,.n[data-state=speaking] .face,.n[data-state=thinking] .face,.n[data-state=invoking] .face,.n[data-state=authenticating] .face,.n[data-state=authenticated] .face{opacity:1;transform:none}
+      .n[data-state=idle] .pupil{animation:gaze 5.6s cubic-bezier(.45,0,.25,1) infinite}.n[data-state=idle] g.eye:nth-of-type(2) .pupil{animation-delay:.08s}
+      .n[data-state=idle]:hover{width:240px;height:76px;box-shadow:0 18px 48px rgba(201,84,74,.38),inset 0 1px rgba(255,255,255,.48)}
+      .n[data-state=listening]{overflow:visible}
+      .n[data-state=listening]::before,.n[data-state=listening]::after{content:"";position:absolute;z-index:-1;inset:2px;border:1.5px solid rgba(232,120,110,.58);border-radius:inherit;animation:sonar 2.35s cubic-bezier(.2,.65,.3,1) infinite}
+      .n[data-state=listening]::after{animation-delay:1.15s}
+      .n[data-state=working]{width:440px;height:88px;border-radius:0 0 28px 28px}
+      .n[data-state=working] .eye,.n[data-state=working] .smile{transform:scaleX(.64)}
+      .workpill{position:absolute;z-index:6;right:15px;top:31px;padding:7px 10px;border-radius:999px;background:rgba(138,47,40,.22);backdrop-filter:blur(5px);opacity:0;pointer-events:none;transition:opacity 420ms ease}
+      .n[data-state=working] .workpill{opacity:1}
+      .workpill strong{display:block;min-width:78px;max-width:200px;color:#fff;font-size:10px;font-weight:750;line-height:13px;text-align:center;text-shadow:0 1px 3px rgba(110,33,26,.22);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      .n[data-state=speaking]{height:82px;border-radius:0 0 29px 29px}
+      .n[data-state=speaking] .smile{opacity:0}.n[data-state=speaking] .mouth{opacity:1;animation:talkMouth .42s ease-in-out infinite alternate}.n[data-state=speaking] .pupil{animation:speakLook 2.8s ease-in-out infinite}
+      .n.mouth-hold .mouth{animation-play-state:paused}
+      .n[data-state=input]{width:min(570px,78vw);height:104px;border-radius:0 0 31px 31px;cursor:default;border:1px solid rgba(255,255,255,.72);border-top:0;background:rgba(255,251,247,.72);box-shadow:0 24px 70px rgba(27,23,19,.16),inset 0 1px rgba(255,255,255,.8);backdrop-filter:blur(24px) saturate(175%)}
+      .n[data-state=menu]{width:min(570px,78vw);height:404px;border-radius:0 0 34px 34px;cursor:default;border:1px solid rgba(255,255,255,.72);border-top:0;background:rgba(255,251,247,.78);box-shadow:0 28px 90px rgba(27,23,19,.18),inset 0 1px rgba(255,255,255,.82);backdrop-filter:blur(24px) saturate(175%)}
+      .n[data-state=thinking],.n[data-state=short],.n[data-state=long]{border:1px solid rgba(255,255,255,.7);border-top:0;background:linear-gradient(180deg,rgba(246,168,162,.9) 0,rgba(255,251,247,.94) 74px,rgba(255,251,247,.92) 100%);box-shadow:0 28px 90px rgba(27,23,19,.18),inset 0 1px rgba(255,255,255,.78);backdrop-filter:blur(24px) saturate(140%)}
+      .n[data-state=thinking]{width:min(650px,82vw);height:260px;border-radius:0 0 36px 36px;cursor:default}
+      .n[data-state=thinking] .face{height:72px}.n[data-state=thinking] .face svg{height:72px}
+      .n[data-state=thinking] .eye{opacity:0}.n[data-state=thinking] .lids{opacity:1;transform:scaleX(.36)}.n[data-state=thinking] .smile{transform:scaleX(.36)}
+      .n[data-state=thinking] .face::after{content:"";position:absolute;z-index:3;inset:0 0 auto;height:72px;pointer-events:none;background:linear-gradient(105deg,transparent 32%,rgba(255,225,190,.08) 42%,rgba(255,244,225,.72) 50%,rgba(255,205,190,.12) 58%,transparent 68%);background-size:260% 100%;mix-blend-mode:screen;animation:thinkShimmer 2.8s linear infinite}
+      .n[data-state=short]{width:min(610px,76vw);height:120px;border-radius:0 0 34px 34px}
+      .n[data-state=long]{width:min(650px,82vw);height:auto;max-height:calc(100vh - 110px);border-radius:0 0 38px 38px;cursor:default}
+      .n[data-state=menu]::before,.n[data-state=thinking]::before,.n[data-state=short]::before,.n[data-state=long]::before{content:"";position:absolute;z-index:14;inset:0;padding:1.25px;border-radius:inherit;opacity:.9;pointer-events:none;background:conic-gradient(from var(--a),#f4cf87,#ec8078,#dc77a8,#779cff,#ec8078,#f4cf87);-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;filter:drop-shadow(0 0 2px rgba(236,128,120,.28));animation:radiusFlow 4s linear infinite}
+      .status{z-index:5;display:flex;align-items:flex-end;justify-content:center;padding-bottom:5px}
+      .status small{color:rgba(255,255,255,.82);font-size:8px;font-weight:700;letter-spacing:.12em;text-transform:uppercase}
+      .n[data-state=authenticating] .status,.n[data-state=authenticated] .status{opacity:1;transform:none}
+      .n[data-state=invoking]{width:270px;height:82px;border-radius:0 0 29px 29px;border:0;background:transparent;box-shadow:none;backdrop-filter:none;animation:shell 1.25s cubic-bezier(.22,1,.36,1) both}
+      .n[data-state=invoking]::before{content:"";position:absolute;z-index:14;inset:0;padding:1.2px;border-radius:inherit;background:conic-gradient(from var(--a),#f4cf87,#ec8078,#dc77a8,#779cff,#ec8078,#f4cf87);-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;filter:drop-shadow(0 0 4px rgba(236,128,120,.55));animation:spin 1.25s linear both}
+      .n[data-state=invoking]::after{content:"";position:absolute;z-index:0;inset:1px;border-radius:inherit;background-image:linear-gradient(105deg,transparent 26%,rgba(255,225,218,.58) 45%,transparent 64%),linear-gradient(180deg,#e99088 0%,#d86c63 58%,#a9433b 100%);background-size:260% 100%,100% 100%;background-position:150% 0,0 0;opacity:0;animation:fill .72s cubic-bezier(.22,1,.36,1) .48s forwards}
+      .n[data-state=invoking] .face{opacity:0;transform:translateY(-2px) scale(.96);animation:invokeFace .38s ease-out .82s forwards}
+      .n[data-state=invoking] .eye,.n[data-state=authenticating] .eye,.n[data-state=thinking] .pupil{opacity:0}
+      .n[data-state=invoking] .lids,.n[data-state=authenticating] .lids{opacity:1}
+      .n[data-state=invoking] .lids path,.n[data-state=authenticating] .lids path{stroke:#fff;stroke-width:3}
+      .n[data-state=invoking] .smile,.n[data-state=authenticating] .smile{opacity:.8;stroke:#fff;stroke-width:2.5}
+      .n[data-state=authenticating],.n[data-state=authenticated]{width:270px;height:82px;border-radius:0 0 29px 29px;overflow:visible;border:1px solid rgba(255,255,255,.32);border-top:0;background:linear-gradient(180deg,#e99088 0%,#d86c63 58%,#a9433b 100%);box-shadow:0 18px 54px rgba(201,84,74,.3),inset 0 1px rgba(255,255,255,.38)}
+      .n[data-state=authenticating] .status small{color:transparent;background:linear-gradient(90deg,rgba(255,255,255,.46) 20%,#fff 45%,#f4cf87 52%,rgba(255,255,255,.46) 78%);background-size:240% 100%;-webkit-background-clip:text;background-clip:text;animation:textshine 1.45s linear infinite}
+      .n[data-state=authenticating]::before{content:"";position:absolute;z-index:14;inset:0;padding:1.25px;border-radius:inherit;pointer-events:none;background:conic-gradient(from var(--a),transparent 0 18%,#f4cf87 28%,#ec8078 38%,transparent 49%);-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;animation:radiusFlow 2.2s linear infinite}
+      .n[data-state=authenticated]{border-color:rgba(93,219,135,.72);box-shadow:0 0 0 1px rgba(93,219,135,.18),0 18px 58px rgba(52,184,98,.34),inset 0 1px rgba(255,255,255,.42)}
+      .n[data-state=authenticated] .status small{color:#d9ffe5}
+      .n[data-state=authenticated] .eye{transform-box:fill-box;transform-origin:center;animation:eyesOpen .72s cubic-bezier(.2,.8,.2,1) both}
+      .n[data-state=authenticated] .pupil{animation:pupilSettle .88s ease-out both}
+      button{border:0;padding:0;cursor:pointer;font-family:inherit;background:none;color:inherit}
+      .round{display:grid;place-items:center;flex:0 0 32px;width:32px;height:32px;border-radius:50%;color:#6b5248;background:rgba(65,48,40,.06);font-size:13px}
+      .send{color:#fff;background:#e8786e}.send:disabled{opacity:.38;cursor:default}
+      .mode{padding:8px 10px;border-radius:999px;color:#6b5248;background:rgba(65,48,40,.07);font-size:10px;font-weight:700}
+      .theme{flex:0 0 25px;width:25px;height:25px;font-size:14px;border:1px solid rgba(65,48,40,.12);background:rgba(255,255,255,.32);box-shadow:inset 0 1px rgba(255,255,255,.5);color:rgba(27,23,19,.58)}
+      .close{flex:0 0 25px;width:25px;height:25px;font-size:15px;color:#6b5248}
+      .input{z-index:6;display:flex;align-items:center;gap:9px;padding:16px 18px}
+      .input label{display:grid;gap:6px;min-width:0;flex:1}
+      .input small{color:#c9544a;font-size:9px;font-weight:750;letter-spacing:.11em;text-transform:uppercase}
+      .input input{min-width:0;border:0;outline:0;color:#1b1713;background:transparent;caret-color:#c9544a;font:500 14px/1.3 inherit}
+      .input input::placeholder{color:rgba(27,23,19,.42)}
+      .n[data-state=input] .input{opacity:1;pointer-events:auto;transform:none;transition-delay:360ms}
+      .menu{z-index:8;display:flex;flex-direction:column;padding:19px;text-align:left}
+      .menu header{display:flex;align-items:center;justify-content:space-between;padding:0 4px 14px;border-bottom:1px solid rgba(65,48,40,.09)}
+      .menu header small{color:#6b5248;font-size:10px;font-weight:750;letter-spacing:.1em;text-transform:uppercase}
+      .actions{display:flex;align-items:center;gap:7px}
+      .actions em{padding:6px 9px;border-radius:999px;color:#c9544a;background:rgba(232,120,110,.1);font-size:9px;font-weight:750;font-style:normal}
+      .menu button.item{display:grid;grid-template-columns:82px 1fr 20px;align-items:center;min-height:52px;padding:0 10px;border-bottom:1px solid rgba(65,48,40,.07);color:#1b1713;background:transparent;text-align:left;transition:background .15s ease}
+      .menu button.item:last-child{border-bottom:0}.menu button.item:hover{background:rgba(65,48,40,.055)}
+      .item b{font-size:12px}.item small{color:rgba(27,23,19,.48);font-size:10px}.item strong{color:#c9544a;font-size:11px}
+      .n[data-state=menu] .menu{opacity:1;pointer-events:auto;transform:none;transition-delay:360ms}
+      .thinking{z-index:7;display:flex;flex-direction:column;padding:76px 24px 10px;text-align:left}
+      .thinking header{display:flex;align-items:center;justify-content:space-between;min-height:34px;padding:0 2px 8px;border-bottom:1px solid rgba(65,48,40,.1)}
+      .tlabel{color:#a7433b;font-size:10px;font-weight:750;letter-spacing:.1em;text-transform:uppercase}
+      .tlabel i{display:inline-block;width:7px;height:7px;margin-right:8px;border-radius:50%;background:#c9544a;box-shadow:0 0 13px rgba(201,84,74,.55)}
+      .thinking .collapse{color:rgba(27,23,19,.42);font-size:9px;font-style:normal;background:none;border:0;cursor:pointer}
+      .thinking p{margin:0;padding:9px 2px;border-bottom:1px solid rgba(65,48,40,.09);color:rgba(27,23,19,.76);font:400 14px/1.32 "Newsreader","Charter BT",Georgia,serif}
+      .thinking p:last-child{border-bottom:0;color:rgba(27,23,19,.48)}
+      .n[data-state=thinking] .thinking{opacity:1;pointer-events:auto;transform:none;transition-delay:360ms}
+      .answer{z-index:9;display:flex;flex-direction:column;text-align:left}
+      .n[data-state=short] .answer,.n[data-state=long] .answer{opacity:1;pointer-events:auto;transform:none;transition-delay:360ms}
+      .n[data-state=short] .answer{padding:2px 18px 0}
+      .n[data-state=long] .answer{position:relative;inset:auto;padding:20px 24px 0;max-height:calc(100vh - 110px)}
+      .short-row{display:none;align-items:center;justify-content:space-between;gap:16px;min-height:44px;position:relative;z-index:3;transform:translateY(26px)}
+      .n[data-state=short] .short-row{display:flex}
+      .short-row>span{display:grid;gap:5px;min-width:0;text-align:left}
+      .short-row small{color:#a7433b;font-size:9px;font-weight:750;letter-spacing:.1em;text-transform:uppercase}
+      .short-row strong{color:#1b1713;font:400 16px/1.3 "Newsreader","Charter BT",Georgia,serif;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+      .short-row .actions em,.long-head .actions em{padding:8px 11px;border:1px solid rgba(65,48,40,.12);border-radius:999px;color:rgba(27,23,19,.55);background:none;font:650 9px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-style:normal;cursor:pointer}
+      .long-head{display:none;align-items:center;justify-content:space-between;padding-bottom:17px;border-bottom:1px solid rgba(65,48,40,.1)}
+      .n[data-state=long] .long-head{display:flex}
+      .long-head>span{display:flex;align-items:center;gap:4px}
+      .long-head i{width:7px;height:7px;border-radius:50%;background:#1b1713}
+      .long-head b{margin-left:8px;font-size:12px;color:#1b1713}
+      .answer article{display:none;flex:0 1 auto;min-height:0;overflow:auto;padding:25px 5px 24px;scrollbar-width:none}
+      .n[data-state=long] .answer article{display:block}
+      .a-label{display:block;color:#a7433b;font-size:9px;font-weight:750;letter-spacing:.12em;text-transform:uppercase;margin:0 0 10px}
+      .liquid .a-label{color:#ff9a91}
+      .n{--lr:115px;--rr:115px}
+      .n[data-state=idle].captioning,.n[data-state=listening].captioning,.n[data-state=speaking].captioning{width:calc(var(--lr) + var(--rr));transform:translateX(calc((var(--rr) - var(--lr))/2));transition:width .3s ease-out,transform .3s ease-out}
+      .n[data-state=idle].captioning .face,.n[data-state=listening].captioning .face,.n[data-state=speaking].captioning .face{left:calc(var(--lr) - 115px);right:auto;width:230px}
+      .cap{position:absolute;z-index:4;top:0;height:100%;display:flex;flex-direction:column;justify-content:center;overflow:hidden;opacity:0;transition:opacity .3s ease .18s;line-height:1.3;pointer-events:none;font-family:ui-monospace,Menlo,monospace;font-size:9px;letter-spacing:.04em;color:rgba(255,240,235,.8);text-shadow:0 1px 2px rgba(110,33,26,.18);white-space:nowrap;text-overflow:ellipsis}
+      .n[data-state=idle].captioning .cap,.n[data-state=listening].captioning .cap,.n[data-state=speaking].captioning .cap{opacity:1}
+      .cap-l{left:16px;width:max(0px,calc(var(--lr) - 141px));text-align:right;align-items:flex-end}
+      .cap-r{left:calc(var(--lr) + 125px);width:max(0px,calc(var(--rr) - 141px));text-align:left;align-items:flex-start}
+      .answer-body{color:rgba(27,23,19,.66);font:400 15px/1.62 "Newsreader","Charter BT",Georgia,serif}
+      .answer-body h1,.answer-body h2{margin:10px 0 15px;color:#1b1713;font:400 31px/1.05 "Newsreader","Charter BT",Georgia,serif}
+      .answer-body h3{margin:10px 0 12px;color:#1b1713;font:400 20px/1.15 "Newsreader","Charter BT",Georgia,serif}
+      .answer-body p{margin:0 0 13px;color:rgba(27,23,19,.66)}
+      .answer-body p:last-child{margin-bottom:0}
+      .answer-body ul{margin:8px 0;padding-left:20px}
+      .answer-body ul>li{margin:0 0 6px}
+      .answer-body ul>li::marker{color:#c9544a}
+      .answer-body ol{list-style:none;margin:8px 0 0;padding:0;counter-reset:sbn}
+      .answer-body ol>li{counter-increment:sbn;display:grid;grid-template-columns:29px 1fr;gap:10px;align-items:start;padding:13px 0;border-top:1px solid rgba(65,48,40,.09)}
+      .answer-body ol>li::before{content:counter(sbn);display:grid;place-items:center;width:22px;height:22px;border-radius:50%;color:#17110f;background:#e8786e;font:750 9px/22px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;text-align:center}
+      .liquid .answer-body ol>li{border-color:rgba(255,255,255,.09)}
+      .answer-body strong{color:#1b1713}
+      .answer-body a{color:#c9544a}
+      .answer-body .sb-turn{margin:0}.answer-body .sb-card-q,.answer-body .sb-user-msg{display:none}.answer-body .sb-card-a,.answer-body .sb-card-status,.answer-body .sb-assistant-msg,.answer-body .sb-answer{margin:0;color:inherit;background:transparent;font:inherit}
+      .lane{display:none;position:relative;flex:0 0 74px;height:74px;width:100%;overflow:hidden}
+      .n[data-state=short] .lane,.n[data-state=long] .lane{display:block}
+      .n[data-state=long] .lane{height:50px;flex:0 0 50px;width:auto;margin:0 -24px;border-top:1px solid rgba(65,48,40,.11);border-bottom:1px solid rgba(65,48,40,.12);overflow:visible}
+      .walker{position:absolute;left:0;bottom:0;width:54px;will-change:transform}
+      .n[data-state=long] .walker{bottom:-3px}
+      .flip{display:block;transform-origin:center}
+      .walker svg{display:block;width:54px;height:auto;overflow:visible}
+      .answer footer{display:none;align-items:center;gap:8px;margin:0 -24px;padding:13px 17px;border-top:1px solid rgba(65,48,40,.1);background:rgba(255,255,255,.18)}
+      .n[data-state=long] .answer footer{display:flex}
+      .answer footer input{flex:1;min-width:0;border:0;outline:0;background:transparent;color:#1b1713;caret-color:#c9544a;font:400 12px/1.3 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+      .answer footer input::placeholder{color:rgba(27,23,19,.38);font-size:11px}
+      .fmic,.fsend{flex:0 0 30px;width:30px;height:30px;font-size:12px}
+      .fmic{color:#1b1713;background:rgba(65,48,40,.07)}
+      .fsend{color:#17110f;background:#e8786e}
+      .signin{z-index:10;display:flex;align-items:center;gap:12px;padding:15px 18px}
+      .signin span{display:grid;gap:3px;min-width:0;flex:1;text-align:left}
+      .signin b{font-size:12px}.signin small{color:rgba(27,23,19,.48);font-size:10px}
+      .signin button.cta{padding:9px 13px;border-radius:999px;color:#fff;background:#d86c63;font-size:10px;font-weight:750}
+      .n[data-state=signin]{width:min(430px,78vw);height:88px;border-radius:0 0 29px 29px;cursor:default;border:1px solid rgba(255,255,255,.72);border-top:0;background:rgba(255,251,247,.9);box-shadow:0 24px 70px rgba(27,23,19,.16),inset 0 1px rgba(255,255,255,.8);backdrop-filter:blur(24px) saturate(175%)}
+      .n[data-state=signin] .signin{opacity:1;pointer-events:auto;transform:none;transition-delay:360ms}
+      .n.liquid[data-state=input],.n.liquid[data-state=menu],.n.liquid[data-state=thinking],.n.liquid[data-state=short],.n.liquid[data-state=long]{color:#fff;border-color:rgba(255,255,255,.42);background:linear-gradient(145deg,rgba(31,27,28,.48),rgba(18,16,17,.38));box-shadow:0 24px 70px rgba(0,0,0,.2),inset 0 1px rgba(255,255,255,.24);backdrop-filter:blur(20px) saturate(185%)}
+      .liquid .input small{color:#ff9a91}.liquid .input input{color:#fff;caret-color:#ff9a91}.liquid .input input::placeholder{color:rgba(255,255,255,.42)}
+      .liquid .round{color:rgba(255,255,255,.82);background:rgba(255,255,255,.08)}.liquid .send{color:#fff;background:#e8786e}.liquid .mode{color:rgba(255,255,255,.78);background:rgba(255,255,255,.08)}
+      .liquid .theme{border-color:rgba(255,255,255,.15);color:rgba(255,255,255,.82);background:rgba(255,255,255,.08);box-shadow:inset 0 1px rgba(255,255,255,.16)}
+      .liquid .menu header{border-color:rgba(255,255,255,.1)}.liquid .menu header small{color:rgba(255,255,255,.82)}.liquid .menu header .actions em{color:#ff9a91;background:rgba(236,128,120,.13)}
+      .liquid .menu button.item{border-color:rgba(255,255,255,.08);color:#fff}.liquid .item small{color:rgba(255,255,255,.46)}.liquid .menu button.item:hover{background:rgba(255,255,255,.06)}
+      .liquid .thinking header{border-color:rgba(255,255,255,.1)}.liquid .tlabel{color:#ff9a91}.liquid .thinking .collapse{color:rgba(255,255,255,.44)}
+      .liquid .thinking p{border-color:rgba(255,255,255,.09);color:rgba(255,255,255,.82)}.liquid .thinking p:last-child{color:rgba(255,255,255,.5)}
+      .liquid .short-row small{color:#ff9a91}.liquid .short-row strong,.liquid .long-head b{color:#fff}
+      .liquid .short-row .actions em,.liquid .long-head .actions em{border-color:rgba(255,255,255,.13);color:rgba(255,255,255,.62);background:rgba(255,255,255,.06)}
+      .liquid .long-head{border-color:rgba(255,255,255,.09)}.liquid .long-head i{background:#fff}
+      .liquid .answer-body{color:rgba(255,255,255,.7)}.liquid .answer-body p{color:rgba(255,255,255,.7)}.liquid .answer-body h1,.liquid .answer-body h2,.liquid .answer-body h3,.liquid .answer-body strong{color:#fff}
+      .liquid .lane{border-color:rgba(255,255,255,.1)}
+      .liquid .answer footer{border-color:rgba(255,255,255,.1);background:rgba(255,255,255,.06)}.liquid .answer footer input{color:#fff}.liquid .answer footer input::placeholder{color:rgba(255,255,255,.42)}
+      .liquid .fmic{color:#fff;background:rgba(255,255,255,.09)}
+      .liquid .signin b{color:#fff}.liquid .signin small{color:rgba(255,255,255,.46)}
+      @keyframes shell{from{opacity:0;transform:scaleX(.06) scaleY(.72)}18%{opacity:1}72%{transform:scaleX(1.025)}to{opacity:1;transform:none}}
+      @keyframes spin{0%{opacity:0;--a:0deg}18%{opacity:1}100%{opacity:1;--a:300deg}}
+      @keyframes fill{0%{opacity:0;background-position:150% 0,0 0}32%{opacity:.5}100%{opacity:1;background-position:-80% 0,0 0}}
+      @keyframes invokeFace{to{opacity:1;transform:none}}
+      @keyframes radiusFlow{to{--a:360deg}}
+      @keyframes textshine{from{background-position:140% 0}to{background-position:-140% 0}}
+      @keyframes eyesOpen{from{opacity:0;transform:scaleY(.06)}to{opacity:1;transform:scaleY(1)}}
+      @keyframes pupilSettle{from{transform:translateY(2px)}to{transform:none}}
+      @keyframes sonar{0%{opacity:.72;transform:scale(1)}100%{opacity:0;transform:scale(1.28,1.7)}}
+      @keyframes talkMouth{from{transform:scale(.82,.38)}to{transform:scale(1,1.28)}}
+      @keyframes speakLook{0%,100%{transform:translate(0,1px)}50%{transform:translate(2px,1px)}}
+      @keyframes gaze{0%,12%,100%{transform:translate(0,0)}27%,39%{transform:translate(-3px,0)}52%,64%{transform:translate(3px,0)}76%,90%{transform:translate(0,4px)}}
+      @keyframes thinkShimmer{from{background-position:140% 0}to{background-position:-140% 0}}
+    </style>
+    <section class="n" data-state="off">
+      <div class="panel face"><svg viewBox="0 0 230 72" preserveAspectRatio="none">
+        <path class="fold" d="M115 0 Q111 14 115 27 Q119 40 115 56"/>
+        <path class="fold" d="M25 4 Q14 13 25 22 Q12 31 25 40 Q14 50 30 61"/>
+        <path class="fold" d="M61 1 Q49 11 60 20 Q47 30 61 39 Q49 49 65 63"/>
+        <path class="fold" d="M169 1 Q181 11 170 20 Q183 30 169 39 Q181 49 165 63"/>
+        <path class="fold" d="M205 4 Q216 13 205 22 Q218 31 205 40 Q216 50 200 61"/>
+        <g class="eye"><circle class="eyeball" cx="103" cy="29" r="10"/><g class="pupil"><circle cx="104" cy="30" r="4.8"/><circle cx="106" cy="27.5" r="1.7"/></g></g>
+        <g class="eye"><circle class="eyeball" cx="127" cy="29" r="10"/><g class="pupil"><circle cx="128" cy="30" r="4.8"/><circle cx="130" cy="27.5" r="1.7"/></g></g>
+        <g class="lids"><path d="M93 29 Q103 36 113 29"/><path d="M117 29 Q127 36 137 29"/></g>
+        <path class="smile" d="M108 47 Q115 54 122 47"/>
+        <g class="mouth"><ellipse cx="115" cy="49" rx="7" ry="5.5"/><ellipse cx="115" cy="51" rx="4.2" ry="2.2"/></g>
+      </svg></div>
+      <div class="panel status"><small></small></div>
+      <div class="workpill"><strong></strong></div>
+      <span class="cap cap-l"></span><span class="cap cap-r"></span>
+      <div class="panel input"><label><small>Ask Braino</small><input placeholder="Summarise this page…"/></label><button class="mode">Auto⌄</button><button class="round mic">⌁</button><button class="round send">↑</button><button class="theme" title="Switch glass theme">◐</button><button class="round close" title="Close">×</button></div>
+      <div class="panel menu"><header><small>Choose a mode</small><span class="actions"><em class="active-mode">Auto</em><button class="theme" title="Switch glass theme">◐</button><button class="round close" title="Close">×</button></span></header><button class="item" data-mode="auto"><b>Auto</b><small>Let Braino decide</small><strong>✓</strong></button><button class="item" data-mode="page"><b>Page</b><small>Read and work on this page</small></button><button class="item" data-mode="lecture"><b>Lecture</b><small>Capture and explain audio</small></button><button class="item" data-mode="meeting"><b>Meeting</b><small>Listen remember and follow up</small></button><button class="item" data-mode="agent"><b>Delegate</b><small>Complete a browser task</small></button><button class="item" data-mode="team"><b>Team</b><small>Work with shared context</small></button></div>
+      <div class="panel thinking"><header><span class="tlabel"><i></i>Braino is thinking</span><span class="actions"><button class="collapse">Collapse</button><button class="theme" title="Switch glass theme">◐</button></span></header><p>Reading the page and understanding what matters.</p><p>Separating the useful signal from the repetition.</p><p>Preparing the answer in your context.</p></div>
+      <div class="panel answer">
+        <div class="short-row"><span><small>Braino</small><strong class="short-text"></strong></span><span class="actions"><em class="done">Done</em><button class="theme" title="Switch glass theme">◐</button></span></div>
+        <header class="long-head"><span><i></i><i></i><b>Braino</b></span><span class="actions"><em class="done">Done</em><button class="theme" title="Switch glass theme">◐</button></span></header>
+        <article><small class="a-label">Answer from this page</small><div class="answer-body"></div></article>
+        <div class="lane"><div class="walker"><div class="flip">${__SBWK_SVG.replace(/url\(#sbb-/g, "url(#sbwk-")}</div></div></div>
+        <footer><input class="fin" placeholder="Ask a follow-up"/><button class="fmic" title="Talk instead">⌁</button><button class="fsend" title="Send">↑</button></footer>
+      </div>
+      <div class="panel signin"><span><b>Sign in to Braino</b><small>Your session was not found on either Braino page.</small></span><button class="cta">Sign in</button><button class="round close" title="Close">×</button></div>
+    </section>`;
+  (document.documentElement || document.body).appendChild(host);
+  ["__sb_bar__", "__sb_card_wrap__", "__sb_brain_btn__", "__sb_walk_lane__", "__sb_mode_dropdown__"].forEach((id) => {
+    document.getElementById(id)?.style?.setProperty("display", "none", "important");
+  });
+  const shell = shadow.querySelector(".n");
+  const input = shadow.querySelector(".input input");
+  const followInput = shadow.querySelector(".answer footer .fin");
+  const sendFromNotch = (el) => {
+    const value = (el?.value || "").trim();
+    if (!value) return;
+    const legacyInput = document.getElementById("__sb_input__");
+    if (legacyInput) legacyInput.value = value;
+    __sbNotchSetState("working", "Thinking");
+    if (__sbNotchRequestTimer) clearTimeout(__sbNotchRequestTimer);
+    // Watchdog, not a hard timeout: while the agent is genuinely busy keep waiting,
+    // only fail when the notch is stuck in working/thinking with no live flow.
+    const watch = () => {
+      const state = __sbNotchV1?.shell?.dataset?.state;
+      if (state !== "working" && state !== "thinking") { __sbNotchRequestTimer = null; return; }
+      if (__sbAgentBusy) { __sbNotchRequestTimer = setTimeout(watch, 15000); return; }
+      __sbNotchRequestTimer = null;
+      __sbNotchShowAnswer("That took too long. Please try again.", false);
+    };
+    __sbNotchRequestTimer = setTimeout(watch, 45000);
+    document.getElementById("__sb_send_btn__")?.click();
+    el.value = "";
+  };
+  shell.addEventListener("click", () => {
+    if (__sbNotchV1?.dragJustEnded && Date.now() - __sbNotchV1.dragJustEnded < 350) return;
+    const state = shell.dataset.state;
+    if (state === "idle") __sbOpenPanel();
+    else if (state === "working") __sbNotchSetState("thinking");
+    else if (state === "short") __sbNotchSetState("long");
+  });
+  // Draggable along the top edge: grab the notch body (not a control), slide, release.
+  // The position persists as a fraction of the viewport width and restores on load.
+  let __dragStartX = 0, __dragStartCenter = 0, __dragging = false, __dragMoved = false;
+  const __applyNotchCenter = (frac) => {
+    const clamped = Math.min(.96, Math.max(.04, frac));
+    host.style.left = `${Math.round(clamped * 10000) / 100}%`;
+  };
+  __sbStorageGet(["sbNotchXFrac"]).then(({ sbNotchXFrac }) => {
+    if (typeof sbNotchXFrac === "number") __applyNotchCenter(sbNotchXFrac);
+  });
+  shell.addEventListener("pointerdown", (event) => {
+    const target = event.target;
+    // em covers the Done/Replace pills — capturing their presses retargets the
+    // click to the shell and the pill handler never fires ("Done does nothing").
+    if (target && target.closest && target.closest("input,button,textarea,article,footer,em,.menu,.thinking")) return;
+    __dragging = true; __dragMoved = false;
+    __dragStartX = event.clientX;
+    const rect = host.getBoundingClientRect();
+    __dragStartCenter = rect.left + rect.width / 2;
+    try { shell.setPointerCapture(event.pointerId); } catch (_) {}
+  });
+  shell.addEventListener("pointermove", (event) => {
+    if (!__dragging) return;
+    const dx = event.clientX - __dragStartX;
+    if (!__dragMoved && Math.abs(dx) < 6) return;
+    __dragMoved = true;
+    __applyNotchCenter((__dragStartCenter + dx) / window.innerWidth);
+  });
+  const __endDrag = () => {
+    if (!__dragging) return;
+    __dragging = false;
+    if (__dragMoved) {
+      const rect = host.getBoundingClientRect();
+      const frac = Math.min(.96, Math.max(.04, (rect.left + rect.width / 2) / window.innerWidth));
+      if (__sbContextOk()) chrome.storage.local.set({ sbNotchXFrac: frac });
+      __sbNotchV1.dragJustEnded = Date.now();
+    }
+  };
+  shell.addEventListener("pointerup", __endDrag);
+  shell.addEventListener("pointercancel", __endDrag);
+  input.addEventListener("input", () => { const old = document.getElementById("__sb_input__"); if (old) old.value = input.value; });
+  input.addEventListener("keydown", (event) => { if (event.key === "Enter") { event.preventDefault(); sendFromNotch(input); } });
+  shadow.querySelector(".input .send").addEventListener("click", (event) => { event.stopPropagation(); sendFromNotch(input); });
+  shadow.querySelector(".input .mic").addEventListener("click", (event) => { event.stopPropagation(); __sbToggleHeadphoneMode(); });
+  shadow.querySelector(".input .mode").addEventListener("click", (event) => { event.stopPropagation(); __sbNotchSetState("menu"); });
+  followInput.addEventListener("keydown", (event) => { if (event.key === "Enter") { event.preventDefault(); sendFromNotch(followInput); } });
+  shadow.querySelector(".fsend").addEventListener("click", (event) => { event.stopPropagation(); sendFromNotch(followInput); });
+  shadow.querySelector(".fmic").addEventListener("click", (event) => { event.stopPropagation(); __sbToggleHeadphoneMode(); });
+  shadow.querySelectorAll(".menu .item").forEach((button) => button.addEventListener("click", (event) => {
+    event.stopPropagation();
+    const requested = button.dataset.mode;
+    const legacyMode = requested === "auto" ? "page" : requested;
+    document.querySelector(`#__sb_mode_dropdown__ [data-mode="${legacyMode}"]`)?.click();
+    shadow.querySelector(".input .mode").textContent = `${requested === "auto" ? "Auto" : button.querySelector("b")?.textContent || "Auto"}⌄`;
+    shadow.querySelector(".active-mode").textContent = requested === "auto" ? "Auto" : button.querySelector("b")?.textContent || "Auto";
+    shadow.querySelectorAll(".menu .item strong").forEach((mark) => mark.remove());
+    button.insertAdjacentHTML("beforeend", "<strong>✓</strong>");
+    __sbNotchSetState("input");
+  }));
+  shadow.querySelectorAll(".answer .done").forEach((button) => button.addEventListener("click", (event) => {
+    event.stopPropagation();
+    __sbNotchSetState("idle");   // resolve visually no matter what the legacy dock path does
+    __sbDock();
+  }));
+  shadow.querySelectorAll(".close").forEach((button) => button.addEventListener("click", (event) => { event.stopPropagation(); __sbHideAll(); }));
+  shadow.querySelector(".signin .cta")?.addEventListener("click", (event) => {
+    event.stopPropagation();
+    chrome.runtime.sendMessage({ action: "openAuthTab" }, () => { void chrome.runtime.lastError; });
+  });
+  shadow.querySelector(".thinking .collapse")?.addEventListener("click", (event) => { event.stopPropagation(); __sbNotchSetState("working", __sbAgentBusyLabel.replace(/…/g, "")); });
+  shadow.querySelectorAll(".theme").forEach((button) => button.addEventListener("click", (event) => { event.stopPropagation(); shell.classList.toggle("liquid"); }));
+  __sbNotchV1 = { host, shadow, shell, input, walkRaf: 0 };
+}
+function __sbNotchSetState(state, status = "") {
+  if (!__sbNotchV1) return;
+  __sbNotchV1.shell.dataset.state = state || "input";
+  if (["short", "long", "signin", "idle", "off"].includes(state) && __sbNotchRequestTimer) {
+    clearTimeout(__sbNotchRequestTimer);
+    __sbNotchRequestTimer = null;
+  }
+  const label = __sbNotchV1.shadow.querySelector(".status small");
+  if (label) label.textContent = status;
+  const pill = __sbNotchV1.shadow.querySelector(".workpill strong");
+  if (pill) pill.textContent = state === "working" ? (status || "Thinking") : status;
+  if (state === "short" || state === "long") __sbNotchWalkStart(); else __sbNotchWalkStop();
+  // The caption class RIDES THROUGH working/speaking (its geometry is CSS-scoped to
+  // idle/listening/speaking, so it can't cram the working face) — your words stay up
+  // while he thinks and reappear beside him while he answers, like the Mac wings.
+  if (!["idle", "listening", "working", "speaking"].includes(state)) __sbNotchV1.shell.classList.remove("captioning");
+  if (state !== "speaking") __sbNotchV1.shell.classList.remove("mouth-hold");
+  if (state === "input") setTimeout(() => __sbNotchV1?.input?.focus(), 180);
+}
+function __sbNotchShowAnswer(text, rich, html) {
+  if (!__sbNotchV1) return;
+  const raw = String(text || "");
+  const body = __sbNotchV1.shadow.querySelector(".answer-body");
+  if (body) body.innerHTML = html || __sbEscapeHtml(raw);
+  const line = __sbNotchV1.shadow.querySelector(".short-text");
+  if (line) line.textContent = raw.replace(/\s+/g, " ").trim();
+  __sbNotchSetState(!rich && raw.length < 240 ? "short" : "long");
+}
+// The answer walker — verbatim port of the Chrome system's NotchWalker RAF rig
+// (back-and-forth travel, direction flip, alternating legs, waddle and breath).
+function __sbNotchWalkStart() {
+  if (!__sbNotchV1 || __sbNotchV1.walkRaf) return;
+  const shadow = __sbNotchV1.shadow;
+  const lane = shadow.querySelector(".lane");
+  const walker = shadow.querySelector(".walker");
+  const flip = shadow.querySelector(".flip");
+  const root = shadow.querySelector("#__sbwk_root__");
+  const ll = shadow.querySelector("#__sbwk_ll__");
+  const rl = shadow.querySelector("#__sbwk_rl__");
+  if (!lane || !walker || !flip || !root) return;
+  shadow.querySelector("#__sbwk_pupil_l__")?.setAttribute("transform", "translate(2.4 0)");
+  shadow.querySelector("#__sbwk_pupil_r__")?.setAttribute("transform", "translate(2.4 0)");
+  let x = 6, direction = 1, last = performance.now();
+  const started = last;
+  const tick = (now) => {
+    const dt = Math.min(.05, (now - last) / 1000); last = now;
+    const t = (now - started) / 1000;
+    const maxX = Math.max(6, lane.clientWidth - 56);
+    x += direction * 74 * dt;
+    if (x >= maxX) { x = maxX; direction = -1; }
+    else if (x <= 6) { x = 6; direction = 1; }
+    walker.style.transform = `translateX(${x}px)`;
+    flip.style.transform = `scaleX(${direction})`;
+    const s = t * 4.5, lp = Math.sin(s), rp = Math.sin(s + Math.PI);
+    const legL = Math.max(0, lp) * 5, legR = Math.max(0, rp) * 5;
+    const swingL = Math.max(0, lp) * 8, swingR = Math.max(0, rp) * 8;
+    const waddle = Math.sin(s) * 3.4;
+    const walkBob = -Math.abs(Math.sin(s)) * 2 - .4;
+    const breath = 1 + .014 * Math.sin(t * 1.7);
+    const bob = Math.sin(t * 1.7 + .6) * .8;
+    root.setAttribute("transform", `rotate(${waddle} 50 50) translate(0 ${bob + walkBob}) scale(${breath})`);
+    ll?.setAttribute("transform", `translate(0 ${-legL}) rotate(${swingL} 44 74)`);
+    rl?.setAttribute("transform", `translate(0 ${-legR}) rotate(${swingR} 56 74)`);
+    __sbNotchV1.walkRaf = requestAnimationFrame(tick);
+  };
+  __sbNotchV1.walkRaf = requestAnimationFrame(tick);
+}
+function __sbNotchWalkStop() {
+  if (__sbNotchV1?.walkRaf) { cancelAnimationFrame(__sbNotchV1.walkRaf); __sbNotchV1.walkRaf = 0; }
+}
+// Lip-sync to the real audio element: the mouth animation pauses the moment
+// playback buffers/stalls and resumes with sound, so he never chatters in silence.
+function __sbNotchMouthSync(audioEl) {
+  if (!audioEl || !__sbNotchV1) return;
+  const hold = (on) => __sbNotchV1?.shell?.classList.toggle("mouth-hold", on);
+  audioEl.addEventListener("playing", () => hold(false));
+  audioEl.addEventListener("waiting", () => hold(true));
+  audioEl.addEventListener("stalled", () => hold(true));
+  audioEl.addEventListener("pause", () => hold(true));
+  audioEl.addEventListener("ended", () => hold(false));
+}
+// Mac-parity wing captions: the notch stretches sideways while the user's words
+// form (left wing first, overflow to the right). ONLY what we heard is captioned —
+// Braino's replies are voice + the talking mouth, never text.
+let __sbNotchCapTimer = null;
+function __sbNotchCaption(text, options = {}) {
+  if (!__sbNotchV1) return;
+  const shell = __sbNotchV1.shell;
+  const value = String(text || "").trim().replace(/\s+/g, " ");
+  const capL = __sbNotchV1.shadow.querySelector(".cap-l");
+  const capR = __sbNotchV1.shadow.querySelector(".cap-r");
+  const compactOk = ["idle", "listening", "working", "speaking"].includes(shell.dataset.state);
+  if (__sbNotchCapTimer) { clearTimeout(__sbNotchCapTimer); __sbNotchCapTimer = null; }
+  if (!value || !compactOk) {
+    shell.classList.remove("captioning");
+    if (capL) capL.textContent = "";
+    if (capR) capR.textContent = "";
+    return;
+  }
+  const rect = __sbNotchV1.host.getBoundingClientRect();
+  const centerX = (rect.left + rect.width / 2) || window.innerWidth / 2;
+  const maxL = Math.max(150, centerX - 10);
+  const maxR = Math.max(150, window.innerWidth - centerX - 10);
+  const baseWing = 115, pad = 30, charPx = 5.7;
+  const leftCapacity = Math.max(10, Math.floor((maxL - baseWing - pad) / charPx));
+  const leftText = value.slice(0, leftCapacity);
+  const rightText = value.slice(leftCapacity);
+  const reachL = Math.min(maxL, Math.max(baseWing, baseWing + pad + leftText.length * charPx));
+  const reachR = rightText ? Math.min(maxR, Math.max(baseWing, baseWing + pad + rightText.length * charPx)) : baseWing;
+  shell.style.setProperty("--lr", `${Math.round(reachL)}px`);
+  shell.style.setProperty("--rr", `${Math.round(reachR)}px`);
+  if (capL) capL.textContent = leftText;
+  if (capR) capR.textContent = rightText;
+  shell.classList.add("captioning");
+  const hold = options.final ? Math.max(6000, Math.min(14000, value.length * 70)) : 15000;
+  __sbNotchCapTimer = setTimeout(() => __sbNotchCaption(""), hold);
+}
+// Double-⌘ summon (Mac parity): the mascot jumps out of the notch onto the page;
+// double-⌘ again (or tapping him) sends him home.
+function __sbSummonToggle() {
+  if (!__sbOwnsInlineUi()) return;
+  if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
+  if (__sbRoamActive) { __sbExitRoamMode(); return; }
+  __sbEnterRoamMode();
+  const rect = document.getElementById("__sb_notch_v1_host__")?.getBoundingClientRect();
+  const cx = rect ? rect.left + rect.width / 2 : window.innerWidth / 2;
+  __sbRoamCX = __sbRoamClampX(cx - __SB_ROAM_W / 2);
+  __sbRoamCY = __SB_ROAM_MARGIN_TOP;
+  __sbRoamHoldUntil = performance.now() + 500;
+}
+
+const __SB_NOTCH_CLASSES = ["sb-notch-invoking", "sb-notch-auth", "sb-notch-auth-ok", "sb-notch-idle", "sb-notch-listening", "sb-notch-working", "sb-notch-speaking"];
+function __sbSetBrowserNotchState(state, status = "") {
+  const bar = document.getElementById("__sb_bar__");
+  if (!bar) return;
+  bar.classList.remove(...__SB_NOTCH_CLASSES);
+  if (state) bar.classList.add(`sb-notch-${state}`);
+  const label = document.getElementById("__sb_notch_status__");
+  if (label) label.textContent = status;
+  const mapped = state === "auth" ? "authenticating" : state === "auth-ok" ? "authenticated" : state;
+  __sbNotchSetState(mapped || "input", status);
+}
+
+function __sbRunBrowserNotchBoot(finishReady, finishRejected) {
+  const bar = document.getElementById("__sb_bar__");
+  if (!bar) { finishReady(); return; }
+  let done = false;
+  let authWatcher = null;
+  let authFallback = null;
+  const timers = [];
+  const later = (fn, ms) => { const id = setTimeout(fn, ms); timers.push(id); return id; };
+  const cleanup = () => {
+    timers.forEach(clearTimeout);
+    if (authFallback) clearTimeout(authFallback);
+    if (authWatcher) { try { chrome.storage.onChanged.removeListener(authWatcher); } catch (_) {} }
+  };
+  const settleReady = () => {
+    if (done) return; done = true; cleanup();
+    __sbSetBrowserNotchState("auth-ok", "Authenticated");
+    setTimeout(() => {
+      __sbSetBrowserNotchState("idle");
+      __sbInputOpen = false;
+      if (__sbContextOk()) chrome.storage.local.set({ sbBrainDocked: true, sbBrainExpanded: false });
+      finishReady();
+    }, 900);
+  };
+  const settleRejected = () => {
+    if (done) return; done = true; cleanup();
+    __sbNotchSetState("signin");
+    finishRejected();
+  };
+
+  __sbInputOpen = false;
+  bar.classList.remove("sb-signin", "sb-waking", "sb-cinematic");
+  bar.classList.add("open");
+  __sbSetBrowserNotchState("invoking");
+  later(() => {
+    __sbSetBrowserNotchState("auth", "Authenticating");
+    const verify = () => {
+      try {
+        chrome.runtime.sendMessage({ action: "checkAuth" }, (result) => {
+          void chrome.runtime.lastError;
+          if (result?.authenticated) later(settleReady, 350);
+        });
+      } catch (_) {}
+    };
+    verify();
+    try {
+      chrome.runtime.sendMessage({ action: "openSilentAuthTab" }, () => {
+        void chrome.runtime.lastError;
+        verify();
+      });
+    } catch (_) {}
+    authWatcher = (changes, area) => {
+      if (area === "local" && (changes.authToken?.newValue || changes.authRefreshToken?.newValue)) verify();
+    };
+    try { chrome.storage.onChanged.addListener(authWatcher); } catch (_) {}
+    authFallback = setTimeout(settleRejected, 12000);
+  }, 1250);
+}
+
 // ── Three-state presence model ──────────────────────────────────────────────
 //   OFF    — Braino not on the page          (__sbBrainVisible = false)
 //   DOCKED — idle mascot bottom-right         (visible, !__sbInputOpen)
@@ -8128,12 +12340,36 @@ function __sbOpenPanel() {
   if (!__sbOwnsInlineUi()) return;
   if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
   __sbRefreshInlineOwner();
+  if (typeof __sbVerifyAgentRuntimeState === "function") __sbVerifyAgentRuntimeState("panel-open");
   const wasOff = !__sbBrainVisible;             // OFF→PANEL plays the full climb wake-up
   __sbBrainVisible = true;
   __sbSetCursorRideMode(false);
   const btn = document.getElementById("__sb_brain_btn__");
   if (btn) btn.style.display = "none";          // walker is the mascot in PANEL
-  __sbToggleInput(true, { skipPersist: true, wakeClimb: wasOff });
+  if (wasOff) {
+    const finishRejected = () => { document.getElementById("__sb_bar__")?.classList.add("open", "sb-signin"); __sbSetupBarSignIn(); };
+    __sbStorageGet(["authToken"]).then(({ authToken }) => {
+      if (authToken) {
+        // Already signed in: the closed-eyes auth ceremony is a first-run thing.
+        // Invocation lands straight on idle; the session is re-verified silently.
+        const bar = document.getElementById("__sb_bar__");
+        if (bar) { bar.classList.remove("sb-signin", "sb-waking", "sb-cinematic"); bar.classList.add("open"); }
+        __sbInputOpen = false;
+        __sbSetBrowserNotchState("idle");
+        if (__sbContextOk()) chrome.storage.local.set({ sbBrainDocked: true, sbBrainExpanded: false });
+        try {
+          chrome.runtime.sendMessage({ action: "checkAuth" }, (result) => {
+            void chrome.runtime.lastError;
+            if (result && result.authenticated === false) { __sbNotchSetState("signin"); finishRejected(); }
+          });
+        } catch (_) {}
+      } else {
+        __sbRunBrowserNotchBoot(() => {}, finishRejected);
+      }
+    });
+  } else {
+    __sbToggleInput(true, { skipPersist: true });
+  }
   if (__sbContextOk()) chrome.storage.local.set({ sbBrainDocked: true, sbBrainExpanded: true });
 }
 
@@ -8142,6 +12378,7 @@ function __sbDock() {
   if (!__sbOwnsInlineUi()) return;
   if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
   __sbRefreshInlineOwner();
+  if (__sbDanceModeActive || __sbWkDancing) __sbStopDanceMode({ silent: true });
   __sbBrainVisible = true;
   __sbSetCursorRideMode(false);
   __sbToggleInput(false, { skipPersist: true }); // closes bar, stops walker
@@ -8149,7 +12386,9 @@ function __sbDock() {
   if (wrap) wrap.classList.remove("visible");
   __sbStopOrbit();
   const btn = document.getElementById("__sb_brain_btn__");
-  if (btn) btn.style.display = "";
+  if (btn) btn.style.display = "none";
+  const bar = document.getElementById("__sb_bar__");
+  if (bar) { bar.classList.add("open"); __sbSetBrowserNotchState("idle"); }
   __sbSyncIdleState();
   if (__sbContextOk()) chrome.storage.local.set({ sbBrainDocked: true, sbBrainExpanded: false });
 }
@@ -8159,7 +12398,9 @@ function __sbHideAll() {
   if (!__sbOwnsInlineUi()) return;
   if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
   __sbRefreshInlineOwner();
+  if (__sbDanceModeActive || __sbWkDancing) __sbStopDanceMode({ silent: true });
   __sbBrainVisible = false;
+  __sbNotchSetState("off");
   __sbSetCursorRideMode(false);
   if (__sbMovieModeActive) __sbDeactivateMovieMode({ silent: true });
   const btn = document.getElementById("__sb_brain_btn__");
@@ -8186,7 +12427,7 @@ function __sbToggleInput(open, options = {}) {
   if (!__sbOwnsInlineUi()) return;
   if (open) {
     // While Spotify is playing, clicking the brain opens the player card, not the bar
-    if (__sbSpotifyIsPlaying()) {
+    if (__sbSpotifyIsPlaying() && !options.allowWhileSpotify && !__sbDanceModeActive) {
       const cardOpen = document.getElementById("__sb_card_wrap__")?.classList.contains("visible");
       if (cardOpen) { __sbCollapseCard(); } else { __sbRenderSpotifyPanel({ openCard: true, focusInput: false }); }
       return;
@@ -8204,8 +12445,11 @@ function __sbToggleInput(open, options = {}) {
     const cardOpen = document.getElementById("__sb_card_wrap__")?.classList.contains("visible");
     if (cardOpen) {
       chrome.storage.local.get("authToken", ({ authToken }) => {
-        if (!authToken) { __sbSetupBarSignIn(); return; }
+        if (!authToken) { __sbSetupBarSignIn(); __sbNotchSetState("signin"); return; }
         __sbInputOpen = true;
+        // The notch must still reach its input state on this shortcut path —
+        // skipping it left clicks on the idle notch doing nothing (frozen UI).
+        __sbSetBrowserNotchState("");
         if (!options.skipPersist) chrome.storage.local.set({ sbBrainExpanded: true });
         __sbSetGreetingPlaceholder();
       });
@@ -8216,6 +12460,7 @@ function __sbToggleInput(open, options = {}) {
 
     const __sbOpenBarReady = () => {
       bar.classList.remove("sb-signin", "sb-waking", "sb-cinematic");
+      __sbSetBrowserNotchState("");
       bar.classList.add("open");
       // PANEL: the walker is the mascot — hide the docked bottom-right brain button.
       const __dockBtn = document.getElementById("__sb_brain_btn__");
@@ -8232,8 +12477,8 @@ function __sbToggleInput(open, options = {}) {
           b.classList.toggle("selected", b.dataset.model === model));
       });
       if (!options.suppressFocus) setTimeout(() => document.getElementById("__sb_input__")?.focus(), 50);
-      // Start walk cycle — legs + body animation from braino-char.jsx design
-      __sbStartWalkLoop();
+      // The legacy walker remains available in code; the browser notch now owns presence.
+      __sbStopWalkLoop();
     };
 
     // OFF→PANEL plays the full climb wake-up; DOCKED→PANEL (and other opens) are instant.
@@ -8279,7 +12524,7 @@ function __sbToggleInput(open, options = {}) {
     __sbStopWalkLoop();
     if (!options.skipPersist && __sbContextOk()) chrome.storage.local.set({ sbBrainExpanded: false });
     const bar = document.getElementById("__sb_bar__");
-    bar?.classList.remove("open", "sb-waking", "sb-signin", "sb-cinematic");
+    bar?.classList.remove("open", "sb-waking", "sb-signin", "sb-cinematic", "sb-dance-mode");
     __sbScheduleCursorFollow();
   }
 }
@@ -8765,7 +13010,11 @@ function __sbSpeakWithBrowser(text, speechToken = __sbSpeechGeneration) {
     __sbWalkTalking = true;
     __sbSetVoiceButtonState(false);
     __sbSyncSpeakButtons();
-    if (__sbHeadphoneMode) { __sbSetHpBrainState("speaking"); }
+    // Mouth waits for the voice to actually start — speechSynthesis can queue for
+    // hundreds of ms and the mouth must not chatter over that silence.
+    utterance.onstart = () => {
+      if (speechToken === __sbSpeechGeneration && __sbHeadphoneMode) __sbSetHpBrainState("speaking");
+    };
 
     const finish = () => {
       if (speechToken === __sbSpeechGeneration) {
@@ -9005,10 +13254,15 @@ async function __sbFetchSentenceTts(clean, speechToken, headers) {
     // Strip markdown/symbols on EVERY chunk (the streaming path sends raw sentences straight here, so
     // without this Fish would vocalise "||", "**", etc.). Idempotent on the already-clean batch path.
     const speakable = __sbStripMarkdownForSpeech(clean);
+    // Multi-voice: when a persona is active, send its Fish reference_id so this line speaks in
+    // that voice. Empty → the server falls back to Braino's own voice (FISH_AUDIO_REFERENCE_ID).
+    // This is the ONE place all Fish audio flows through, so it swaps the voice everywhere.
+    const ttsBody = { text: speakable };
+    if (__sbActiveVoiceRefId) ttsBody.referenceId = __sbActiveVoiceRefId;
     const resp = await __sbFetchVoiceTtsWithRetry(`${__SB_API}/${__SB_TTS_ENDPOINT}`, {
       method: "POST",
       headers,
-      body: JSON.stringify({ text: speakable }),
+      body: JSON.stringify(ttsBody),
     }, speechToken);
     return { resp };
   } catch (error) {
@@ -9029,6 +13283,7 @@ async function __sbPlaySentenceResp(resp, speechToken) {
     __sbSetVoiceButtonState(false);
     __sbSyncSpeakButtons();
     if (__sbHeadphoneMode) { __sbSetHpBrainState("speaking"); }
+    __sbNotchMouthSync(audioEl);   // mouth follows the REAL playback: pauses on buffering
   };
 
   if (__sbCanStreamTtsMp3() && resp.body) {
@@ -9983,7 +14238,7 @@ function __sbSyncSpotifyVisualState() {
   bubble?.classList.toggle("sb-spotify-active", active);
   __sbSyncIdleState();
   // Hide the floating bar while music is playing
-  if (active) {
+  if (active && !__sbDanceModeActive) {
     const bar = document.getElementById("__sb_bar__");
     if (bar?.classList.contains("open") && !bar.classList.contains("sb-waking") && !bar.classList.contains("sb-signin")) {
       bar.classList.remove("open");
@@ -10334,7 +14589,7 @@ function __sbBuildAgentHandoffPayload(task, options = {}) {
   return {
     task: String(task || "").trim(),
     connector: __sbNormalizeConnectorName(options.connector) || "auto",
-    mode: window.__sbForcedMode || "page",
+    mode: options.modeOverride || window.__sbForcedMode || "page",
     chatHistory,
     cardTurns,
     lastUserPrompt,
@@ -10350,6 +14605,7 @@ function __sbSetBarAgentStatus(text) {
   if (!input || !bar) return;
   const log = (typeof __sbCleanAgentStatus === "function" ? __sbCleanAgentStatus(text) : String(text || "")).trim();
   if (!log) return;
+  __sbAgentLogTouch();
   bar.classList.add("sb-agent-busy");
   if (!input.value) {                          // don't clobber what the user is typing
     input.placeholder = log.length > 88 ? log.slice(0, 87) + "…" : log;
@@ -10369,9 +14625,64 @@ function __sbClearBarAgentStatus() {
 // ── In-pill agent activity log — the pill itself grows from its top (Dynamic-Island style) to
 // show the play-by-play, so the user sees what Braino is doing even in voice-only mode. ──
 let __sbAgentLogSteps = [];
+let __sbAgentThought = "";   // Delegate's live per-step reasoning (rendered above the steps)
 let __sbAgentBusy = false;            // true while an agent/research task runs
 let __sbAgentBusyLabel = "Working…";  // overrides the voice indicator's "Listening…" while busy
 let __sbAgentLogCollapseTimer = null;
+let __sbAgentLogLastUpdateAt = 0;
+let __sbAgentLogStaleTimer = null;
+const __SB_AGENT_LOG_STALE_MS = 90000;
+
+function __sbAgentLogTouch() {
+  __sbAgentLogLastUpdateAt = Date.now();
+  if (__sbAgentLogStaleTimer) clearTimeout(__sbAgentLogStaleTimer);
+  __sbAgentLogStaleTimer = setTimeout(() => {
+    const staleFor = Date.now() - (__sbAgentLogLastUpdateAt || 0);
+    if (staleFor < __SB_AGENT_LOG_STALE_MS) {
+      __sbAgentLogTouch();
+      return;
+    }
+    if (__sbDelegateActive || __sbAgentBusy || __sbAgentThought || __sbAgentLogSteps.length) {
+      __sbForceClearAgentUi("stale");
+    }
+  }, __SB_AGENT_LOG_STALE_MS + 500);
+}
+
+function __sbForceClearAgentUi(reason = "clear") {
+  __sbDelegateActive = false;
+  __sbDelegateUiHidden = false;
+  __sbAgentPendingTurn = null;
+  __sbAgentThought = "";
+  __sbAgentLogSteps = [];
+  __sbAgentBusy = false;
+  __sbAgentBusyLabel = "Working…";
+  __sbAgentLogLastUpdateAt = 0;
+  if (__sbAgentLogStaleTimer) { clearTimeout(__sbAgentLogStaleTimer); __sbAgentLogStaleTimer = null; }
+  if (__sbAgentLogCollapseTimer) { clearTimeout(__sbAgentLogCollapseTimer); __sbAgentLogCollapseTimer = null; }
+  if (typeof __sbAgentTraceFinish === "function" && reason !== "boot-no-run") __sbAgentTraceFinish();
+  if (typeof __sbClearBarAgentStatus === "function") __sbClearBarAgentStatus();
+  if (typeof __sbStopWaitEntertainment === "function") __sbStopWaitEntertainment();
+  if (typeof __sbSetStopBtn === "function") __sbSetStopBtn(false);
+  const bar = document.getElementById("__sb_bar__");
+  const log = document.getElementById("__sb_bar_log__");
+  if (bar) bar.classList.remove("sb-log-open", "sb-log-thinking", "sb-log-timing", "sb-agent-busy");
+  const stepsEl = log && log.querySelector(".sb-blog-steps");
+  if (stepsEl) stepsEl.innerHTML = "";
+  if (typeof __sbWkStatus === "function") __sbWkStatus(__sbHeadphoneMode ? "Listening…" : "");
+  if (typeof __sbSyncWalkerLane === "function") __sbSyncWalkerLane();
+}
+
+function __sbVerifyAgentRuntimeState(reason = "verify") {
+  if (!__sbDelegateActive && !__sbAgentBusy && !__sbAgentThought && !__sbAgentLogSteps.length) return;
+  const lastUpdateAt = __sbAgentLogLastUpdateAt || 0;
+  if (lastUpdateAt && Date.now() - lastUpdateAt < 2500) return;
+  try {
+    chrome.runtime.sendMessage({ action: "sbAgentBootQuery" }, (resp) => {
+      if (chrome.runtime.lastError) return;
+      if (!resp || !resp.running || !resp.task) __sbForceClearAgentUi(reason);
+    });
+  } catch (_) {}
+}
 
 // Strip command boilerplate so "Search the web for X" and "Searching for 'X'" read as the same
 // step (kills the duplicated/noisy log lines).
@@ -10382,25 +14693,111 @@ function __sbAgentLogKey(s) {
     .replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
 }
 
+// ── Delegate console trace ───────────────────────────────────────────────────
+// Every run prints its full reasoning to the tab's DevTools console — live lines per
+// step (thought → action → result) and one copy-paste-ready summary at the end. Same
+// playbook as the voice-latency logging: copy the block, send it, find the gaps.
+let __sbAgentTraceBuf = null;
+
+function __sbAgentTraceStart(meta) {
+  __sbAgentTraceBuf = { meta: meta || {}, steps: [], startedAt: Date.now(), headerPrinted: true };
+  try {
+    console.log(
+      `%c[Braino][Delegate] ▶ RUN START%c\n  task: ${meta.task || ""}\n  query: "${meta.searchQuery || ""}"\n  goal: ${meta.goal || ""}\n  plan: ${(meta.subgoals || []).join(" → ")}\n  skills: ${(meta.skills || []).join(", ") || "none"}`,
+      "color:#C9544A;font-weight:bold", "color:inherit",
+    );
+  } catch (_) {}
+}
+
+function __sbAgentTracePush(t, meta, history) {
+  if (!t || typeof t !== "object") return;
+  if (!__sbAgentTraceBuf) __sbAgentTraceBuf = { meta: {}, steps: [], startedAt: Date.now() };
+  // The background ships the FULL run journal with each trace — adopt it wholesale so
+  // the final summary is complete even though real navigations reset this buffer.
+  if (Array.isArray(history) && history.length) __sbAgentTraceBuf.steps = history.slice(0, -1);
+  // The run header often landed on the ORIGIN tab before a cross-site hop — every trace
+  // carries the meta so the destination page's summary still knows the task.
+  if (meta && !(__sbAgentTraceBuf.meta && __sbAgentTraceBuf.meta.task)) {
+    __sbAgentTraceBuf.meta = meta;
+    if (!__sbAgentTraceBuf.headerPrinted) {
+      __sbAgentTraceBuf.headerPrinted = true;
+      try {
+        console.log(
+          `%c[Braino][Delegate] ▶ RUN (continuing on this page)%c\n  task: ${meta.task || ""}\n  query: "${meta.searchQuery || ""}"\n  goal: ${meta.goal || ""}`,
+          "color:#C9544A;font-weight:bold", "color:inherit",
+        );
+      } catch (_) {}
+    }
+  }
+  __sbAgentTraceBuf.steps.push(t);
+  try {
+    if (t.thought) console.log(`%c[Braino][Delegate][${t.step}] 💭 ${t.thought}`, "color:#97897e;font-style:italic");
+    console.log(`[Braino][Delegate][${t.step}] ▶ ${t.action} → ${t.result}${t.verdict && t.verdict !== "ok" ? ` | expect: ${t.verdict}` : ""}`);
+  } catch (_) {}
+}
+
+function __sbAgentTraceFinish() {
+  const buf = __sbAgentTraceBuf;
+  __sbAgentTraceBuf = null;
+  if (!buf || !buf.steps.length) return;
+  try {
+    const secs = Math.round((Date.now() - buf.startedAt) / 1000);
+    const lines = [
+      "══ BRAINO DELEGATE RUN SUMMARY ══════════════════",
+      `Task: ${buf.meta.task || ""}`,
+      `Query: "${buf.meta.searchQuery || ""}"`,
+      `Goal: ${buf.meta.goal || ""}`,
+      `Plan: ${(buf.meta.subgoals || []).join(" → ")}`,
+      `Steps: ${buf.steps.length} · Duration: ${secs}s`,
+      "",
+      ...buf.steps.flatMap((t) => [
+        `${String(t.step).padStart(2, " ")}. 💭 ${t.thought || "(no thought)"}`,
+        `    ▶ ${t.action} → ${t.result}${t.verdict && t.verdict !== "ok" ? ` | expect: ${t.verdict}` : ""}`,
+        `    @ ${t.url || ""}`,
+      ]),
+      "═════════════════════════════════════════════════",
+    ];
+    console.log(`[Braino][Delegate] ✔ RUN COMPLETE — copy the block below and send it to debug reasoning gaps:\n${lines.join("\n")}`);
+  } catch (_) {}
+}
+
 function __sbAgentLogRender() {
   const bar = document.getElementById("__sb_bar__");
   const log = document.getElementById("__sb_bar_log__");
   if (!bar || !log) return;
   const stepsEl = log.querySelector(".sb-blog-steps");
   if (stepsEl) {
-    const shown = __sbAgentLogSteps.slice(-2);   // extend just a little — last 2 steps
-    stepsEl.innerHTML = shown.map((s) =>
-      `<div class="sb-blog-step ${s.active ? "active" : "done"}${s.justDone ? " just-done" : ""}"><span class="sb-blog-ic">${s.active ? "" : "✓"}</span><span>${__sbEscHtml(s.text)}</span></div>`
-    ).join("");
-    shown.forEach((s) => { s.justDone = false; });  // tick-pop plays once
+    if (__sbAgentThought) {
+      // The island IS the thinking. Steps (actions performed) ride the input-bar
+      // placeholder via __sbSetBarAgentStatus — no duplicate step rows here.
+      stepsEl.innerHTML = `<div class="sb-blog-thought"><span>${__sbEscHtml(__sbAgentThought)}</span></div>`;
+    } else {
+      const shown = __sbAgentLogSteps.slice(-2);   // extend just a little — last 2 steps
+      stepsEl.innerHTML = shown.map((s) =>
+        `<div class="sb-blog-step ${s.active ? "active" : "done"}${s.justDone ? " just-done" : ""}"><span class="sb-blog-ic">${s.active ? "" : "✓"}</span><span>${__sbEscHtml(s.text)}</span></div>`
+      ).join("");
+      shown.forEach((s) => { s.justDone = false; });  // tick-pop plays once
+    }
   }
+  bar.classList.toggle("sb-log-thinking", Boolean(__sbAgentThought));
   bar.classList.add("sb-log-open");
+  if (__sbNotchV1) {
+    const lines = (__sbAgentThought
+      ? [__sbAgentThought, ...__sbAgentLogSteps.slice(-2).map((step) => step.text)]
+      : __sbAgentLogSteps.slice(-3).map((step) => step.text)).filter(Boolean);
+    __sbNotchV1.shadow.querySelectorAll(".thinking p").forEach((slot, index) => {
+      slot.textContent = lines[index] || (index === 0 ? __sbAgentBusyLabel : "");
+    });
+  }
+  if (typeof __sbSyncWalkerLane === "function") __sbSyncWalkerLane();
 }
 
 function __sbAgentLogShow(title) {
   if (__sbAgentLogCollapseTimer) { clearTimeout(__sbAgentLogCollapseTimer); __sbAgentLogCollapseTimer = null; }
+  __sbAgentLogTouch();
   __sbAgentBusy = true;
   if (title) __sbAgentBusyLabel = title;
+  __sbSetBrowserNotchState("working", __sbAgentBusyLabel.replace(/…/g, ""));
   if (typeof __sbWkStatus === "function") __sbWkStatus(__sbAgentBusyLabel);  // flip "Listening…" → working label
   __sbAgentLogRender();
   if (__sbJarvisOpen) __sbJarvisLogShow(__sbAgentBusyLabel);   // mirror into the Jarvis HUD console
@@ -10409,6 +14806,7 @@ function __sbAgentLogShow(title) {
 function __sbAgentLogStep(text) {
   const clean = (typeof __sbCleanAgentStatus === "function" ? __sbCleanAgentStatus(text) : String(text || "")).trim();
   if (!clean) return;
+  __sbAgentLogTouch();
   const last = __sbAgentLogSteps[__sbAgentLogSteps.length - 1];
   const key = __sbAgentLogKey(clean);
   if (last && (last.text === clean || (key && __sbAgentLogKey(last.text) === key))) return;  // de-dupe repeats/near-repeats
@@ -10419,7 +14817,35 @@ function __sbAgentLogStep(text) {
   __sbAgentLogRender();
 }
 
+// Delegate's live reasoning line — rendered Claude-thinking-style (dimmed italic) above
+// the action steps, so the user can SEE how he's thinking and spot the gaps.
+function __sbAgentLogThought(text) {
+  const clean = String(text || "").replace(/\s+/g, " ").trim();
+  if (!clean || clean === __sbAgentThought) return;
+  __sbAgentLogTouch();
+  __sbAgentThought = clean;
+  if (__sbJarvisOpen) __sbJarvisPushLog(`💭 ${clean}`);
+  __sbAgentLogRender();
+}
+
+// End-of-task teardown, ONE call: island (thought + steps) collapses, placeholder
+// restores, walker status bubble settles (back to Listening… only if voice is live),
+// wait-entertainment stops. Every flow exit calls this so no surface is left saying
+// "Thinking/Researching…" after the task ended.
+function __sbAgentFlowDone() {
+  __sbAgentLogLastUpdateAt = 0;
+  __sbAgentLogClear();
+  if (typeof __sbClearBarAgentStatus === "function") __sbClearBarAgentStatus();
+  if (typeof __sbStopWaitEntertainment === "function") __sbStopWaitEntertainment();
+  __sbAgentBusyLabel = "Working…";
+  if (typeof __sbWkStatus === "function") __sbWkStatus(__sbHeadphoneMode ? "Listening…" : "");
+}
+
 function __sbAgentLogClear() {
+  if (__sbDelegateActive) return;   // run still going — keep the island up (nav resets must not collapse it)
+  if (__sbAgentLogStaleTimer) { clearTimeout(__sbAgentLogStaleTimer); __sbAgentLogStaleTimer = null; }
+  __sbAgentThought = "";
+  if (typeof __sbAgentTraceFinish === "function") __sbAgentTraceFinish();
   const last = __sbAgentLogSteps[__sbAgentLogSteps.length - 1];
   if (last && last.active) { last.active = false; last.justDone = true; __sbAgentLogRender(); }  // final tick
   __sbAgentLogSteps = [];
@@ -10430,6 +14856,12 @@ function __sbAgentLogClear() {
     const bar = document.getElementById("__sb_bar__");
     const log = document.getElementById("__sb_bar_log__");
     if (bar) bar.classList.remove("sb-log-open");
+    // Settle back to idle only from transient states — never wipe a fresh answer,
+    // the input, the mode menu or sign-in (that was the "answer flashes then
+    // vanishes" / stuck-notch bug).
+    const notchState = __sbNotchV1?.shell?.dataset?.state;
+    const notchHolds = ["short", "long", "input", "menu", "signin"].includes(notchState);
+    if (bar && __sbBrainVisible && !notchHolds) __sbSetBrowserNotchState(__sbHeadphoneMode ? "listening" : "idle");
     const stepsEl = log && log.querySelector(".sb-blog-steps");
     if (stepsEl) stepsEl.innerHTML = "";
     __sbAgentLogCollapseTimer = null;
@@ -10532,10 +14964,12 @@ function __sbSetAgentPendingTurn(prompt, status = "Delegating…") {
     subgoals: [],
   };
   __sbSetBarAgentStatus(__sbAgentPendingTurn.status);
+  // Delegate progress lives in the BAR (thinking island + placeholder steps). The glass
+  // card does NOT auto-open — the same info in three places read as clutter. It still
+  // re-renders quietly when the user opened it themselves; the FINAL result opens it.
   const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
   if (!scroll) return;
   __sbRenderConversationWithPending(scroll);
-  __sbOpenCard({ rich: true });
   __sbSyncSpeakButtons();
 }
 
@@ -10546,7 +14980,6 @@ function __sbUpdateAgentPendingTurn(status) {
   const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
   if (!scroll) return;
   __sbRenderConversationWithPending(scroll);
-  __sbOpenCard({ rich: true });
   __sbSyncSpeakButtons();
 }
 
@@ -10576,13 +15009,12 @@ function __sbUpdateAgentSubgoals(subgoals) {
   const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
   if (!scroll) return;
   __sbRenderConversationWithPending(scroll);
-  __sbOpenCard({ rich: true });
   __sbSyncSpeakButtons();
 }
 
 function __sbFinalizeAgentPendingTurn(prompt, answer, options = {}) {
-  __sbDelegateUiHidden = false;   // delegate done → re-enable the chat UI before rendering the result
-  __sbStopWaitEntertainment(); // delegate finished — settle the mascot
+  __sbDelegateActive = false;   // genuine end — release the teardown guard
+  __sbAgentFlowDone(); // delegate finished — settle EVERY surface (island, status, walker)
   __sbClearBarAgentStatus();   // stop the bar shimmer + restore "Follow up…"
   const task = String(prompt || "").trim();
   const reply = String(answer || "").trim();
@@ -10593,6 +15025,7 @@ function __sbFinalizeAgentPendingTurn(prompt, answer, options = {}) {
   const dupTurn = lastTurn && String(lastTurn.prompt || "").trim() === task && String(lastTurn.answer || "").trim() === reply;
   if (dupTurn || (finalizeKey === __sbLastFinalizedAgentKey && Date.now() - __sbLastFinalizedAgentAt < 20000)) {
     __sbAgentPendingTurn = null;
+    __sbDelegateUiHidden = false;
     if (options.render === false) return;
     const scroll0 = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
     if (scroll0) { __sbRenderConversationWithPending(scroll0); __sbSyncSpeakButtons(); }
@@ -10611,12 +15044,17 @@ function __sbFinalizeAgentPendingTurn(prompt, answer, options = {}) {
     if (task) __sbCardTurns.push({ prompt: task, answer: reply });
   }
   __sbAgentPendingTurn = null;
-  if (options.render === false) return;
+  if (options.render === false) { __sbDelegateUiHidden = false; return; }
   const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
-  if (!scroll) return;
-  __sbRenderConversationWithPending(scroll);
-  __sbOpenCard({ rich: true });
-  __sbSyncSpeakButtons();
+  if (scroll) {
+    // Render the turn into the card WITHOUT opening it — delegate never opens the
+    // floating UI (owner's law). The user can open it manually; chat flows re-enable
+    // opening the moment the flag clears below.
+    __sbRenderConversationWithPending(scroll);
+    __sbSyncSpeakButtons();
+  }
+  if (reply) __sbShowBubble(reply, true, { tone: "status" });
+  __sbDelegateUiHidden = false;
 }
 
 function __sbShowThinking(scroll, promptText = "", pendingText = "Thinking…") {
@@ -10635,10 +15073,12 @@ function __sbShowBubble(text, autoHide = true, options = {}) {
   __sbRefreshInlineOwner();
   __sbLastBubbleRaw = String(text || "");
   const rich = Boolean(options.rich);
+  document.getElementById("__sb_card_wrap__")?.classList.toggle("sb-notch-short", !rich && __sbLastBubbleRaw.length < 240);
   const turnHtml = __sbBuildCardTurnHtml(
     { prompt: options.prompt || "", answer: String(text || "") },
     { rich, answerText: String(text || "") },
   );
+  __sbNotchShowAnswer(String(text || ""), rich, turnHtml);
   if (__sbHasSpotifySurface()) {
     scroll.innerHTML = __sbBuildSpotifyPanelHtml(turnHtml);
     scroll.scrollTop = 0;
@@ -10664,6 +15104,7 @@ function __sbSetupBarSignIn() {
   const handleAuthArrival = (changes, area) => {
     if (area !== "local" || !changes.authToken?.newValue) return;
     chrome.storage.onChanged.removeListener(handleAuthArrival);
+    __sbNotchSetState("authenticated", "Authenticated");
     const bar = document.getElementById("__sb_bar__");
     if (!bar || !bar.classList.contains("open")) return;
 
@@ -10681,6 +15122,9 @@ function __sbSetupBarSignIn() {
       bar.classList.remove("sb-waking", "open");
       if (label) label.textContent = "Waking up…";
       chrome.storage.local.set({ sbBrainExpanded: false });
+      __sbBrainVisible = true;
+      __sbInputOpen = true;
+      __sbNotchSetState("input");
     }, 900);
   };
   chrome.storage.onChanged.addListener(handleAuthArrival);
@@ -10688,6 +15132,7 @@ function __sbSetupBarSignIn() {
 
 function __sbShowSignIn() {
   if (!__sbOwnsInlineUi()) return;
+  __sbNotchSetState("signin");
   const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
   if (!scroll) return;
   scroll.innerHTML = `
@@ -10715,8 +15160,28 @@ function __sbGetSelectedText() {
   return window.getSelection?.()?.toString?.()?.trim?.() || "";
 }
 
+// Read the current visible text INCLUDING same-origin iframes. Udemy quizzes (and many
+// exam/form tools) render the question inside an iframe, so top-frame innerText never
+// has it — chat then answered from conversation history = "one question behind". Any
+// same-origin frame's body is appended; cross-origin frames are silently skipped.
+function __sbReadVisibleText() {
+  let text = (document.body?.innerText || "").trim();
+  try {
+    const frames = document.querySelectorAll("iframe");
+    for (const f of frames) {
+      let doc = null;
+      try { doc = f.contentDocument; } catch (_) { doc = null; }   // cross-origin → SecurityError
+      const inner = doc?.body?.innerText?.trim();
+      if (inner && inner.length > 40 && !text.includes(inner.slice(0, 120))) {
+        text += `\n\n[Embedded frame]\n${inner}`;
+      }
+    }
+  } catch (_) {}
+  return text;
+}
+
 function __sbGetPageContext(maxChars = 12000) {
-  const rawPageText = (document.body?.innerText || "").trim();
+  const rawPageText = __sbReadVisibleText();
   const selectedText = __sbGetSelectedText();
   const movieContext = __sbBuildMovieContext();
   const movieSummary = __sbBuildMovieContextSummary(movieContext);
@@ -10891,6 +15356,132 @@ function __sbIsJunkTranscript(text) {
   ]);
   if (phantoms.has(norm)) return true;
   return false;
+}
+
+function __sbVoiceTranscriptStats(text) {
+  const raw = String(text || "").trim();
+  const normalized = __sbNormalizeForMatch(raw);
+  const words = normalized.match(/[a-z0-9]+(?:'[a-z0-9]+)?/g) || [];
+  const letters = (normalized.match(/[a-z]/g) || []).join("");
+  const vowels = (letters.match(/[aeiou]/g) || []).length;
+  const nonLatin = /[ऀ-ॿ一-鿿぀-ヿ가-힯Ѐ-ӿ؀-ۿ]/.test(raw);
+  return {
+    raw,
+    normalized,
+    words,
+    wordCount: words.length,
+    charCount: raw.length,
+    letterCount: letters.length,
+    vowelRatio: letters.length ? vowels / letters.length : 0,
+    nonLatin,
+  };
+}
+
+function __sbVoiceHasTeamSignal(text) {
+  try {
+    if (typeof __sbTeamFindTeam === "function" && __sbTeamFindTeam(text)) return true;
+    if (typeof __sbTeamFindPeopleSmart === "function" && __sbTeamFindPeopleSmart(text, __sbTeamState?.team || null).length) return true;
+  } catch (_) {}
+  return false;
+}
+
+function __sbVoiceHasShortIntent(stats) {
+  const norm = stats.normalized;
+  if (!norm) return false;
+  if (typeof __sbBrabusVibeIntent === "function" && __sbBrabusVibeIntent(stats.raw)) return true;
+  if (__sbVoiceHasTeamSignal(stats.raw)) return true;
+  if (/^(yes|yeah|yep|ya|haan|hanji|no|nope|nah|stop|pause|resume|repeat|skip|done|cancel|exit|send|close|open|play|next|back|continue|search)$/.test(norm)) return true;
+  if (/^(hi|hey|hello)\s+(braino|bruno|breno|reno)$/.test(norm)) return true;
+  if (/^(volume\s+)?(up|down|louder|quieter|mute|unmute)$/.test(norm)) return true;
+  return false;
+}
+
+function __sbVoiceLooksIntentful(stats) {
+  const text = stats.raw;
+  const norm = stats.normalized;
+  if (!norm) return false;
+  if (typeof __sbBrabusVibeIntent === "function" && __sbBrabusVibeIntent(text)) return true;
+  if (__sbVoiceHasShortIntent(stats)) return true;
+  if (/[?]$/.test(text)) return true;
+  if (/\b(braino|bruno|breno|reno)\b/.test(norm)) return true;
+  if (/\b(can|could|would|will|should|please|kindly)\s+(you|u)\b/.test(norm)) return true;
+  if (/\b(what|why|how|who|where|when|which)\b/.test(norm)) return true;
+  if (/\b(open|play|search|find|look|show|tell|say|speak|talk|write|reply|send|summari[sz]e|explain|read|click|close|scroll|record|transcribe|schedule|create|make|help|ask|answer)\b/.test(norm)) return true;
+  try {
+    if (typeof __sbDetectLanguageRequest === "function" && __sbDetectLanguageRequest(text)) return true;
+    if (typeof __sbDetectOpenSite === "function" && __sbDetectOpenSite(text)) return true;
+    if (typeof __sbIsBrowserActionCommand === "function" && __sbIsBrowserActionCommand(text)) return true;
+    if (typeof __sbIsVolumeCommand === "function" && __sbIsVolumeCommand(text)) return true;
+    if (typeof __sbDetectIntent === "function" && __sbDetectIntent(text) !== "chat") return true;
+  } catch (_) {}
+  return false;
+}
+
+function __sbAssessVoiceTranscript(text, options = {}) {
+  const stats = __sbVoiceTranscriptStats(text);
+  const confidence = Number(options.confidence);
+  const hasConfidence = Number.isFinite(confidence) && confidence > 0;
+  const partial = Boolean(options.partial);
+  const verdict = (accept, reason, askRepeat = false) => ({ accept, reason, askRepeat, ...stats });
+
+  if (!stats.raw) return verdict(false, "empty");
+  if (__sbIsJunkTranscript(stats.raw)) return verdict(false, "phantom");
+  if (!__sbActiveLanguage && stats.nonLatin && !__sbDetectLanguageRequest(stats.raw)) {
+    return verdict(false, "non_english_noise");
+  }
+
+  const fillerOnly = /^(uh|um|umm|hmm|hm|mm|mhm|huh|ah|oh|ooh|aah|ha|haha|hehe|cough|laugh|noise|background|okay|ok|right|yeah|yup)$/i.test(stats.normalized);
+  const shortIntent = __sbVoiceHasShortIntent(stats);
+  const intentful = __sbVoiceLooksIntentful(stats);
+
+  if (fillerOnly && !shortIntent) return verdict(false, "filler");
+  if (stats.wordCount === 0) return verdict(false, "no_words");
+
+  // Speculative replies are public-demo-dangerous: never let raw VAD noise start a response.
+  // Wait for a meaningful partial transcript, then the final transcript router can still act.
+  if (partial) {
+    if (stats.charCount < 8 || stats.wordCount < 2) return verdict(false, "partial_too_short");
+    if (!intentful && stats.wordCount < 4) return verdict(false, "partial_background");
+    if (stats.letterCount >= 12 && stats.vowelRatio < 0.16) return verdict(false, "partial_gibberish");
+    return verdict(true, "ok");
+  }
+
+  if (hasConfidence && confidence < 0.35 && !intentful && !shortIntent) {
+    return verdict(false, "low_confidence", true);
+  }
+  if (stats.charCount < 5 && !shortIntent) return verdict(false, "too_short");
+  if (stats.wordCount === 1 && !shortIntent && !intentful) return verdict(false, "one_word_background");
+  if (stats.wordCount <= 2 && !shortIntent && !intentful) return verdict(false, "short_background");
+  if (stats.letterCount >= 12 && stats.vowelRatio < 0.16) return verdict(false, "gibberish", true);
+
+  // In noisy rooms, random side chatter often transcribes as two or three harmless words.
+  // Do not route that to Braino unless it has a question/command/team signal.
+  if (stats.wordCount <= 3 && !intentful) {
+    return verdict(false, "not_addressed");
+  }
+
+  return verdict(true, "ok");
+}
+
+function __sbMaybePromptForDroppedVoice(assessment, options = {}) {
+  if (!assessment || assessment.accept) return;
+  __sbVoicePendingReply = false;
+  if (__sbHeadphoneMode) __sbSetHpBrainState("listening");
+  if (__sbSpeculativeActive || __sbSpeculativeHandledToken >= 0) {
+    __sbStopSpeech();
+    __sbSpeculativeActive = false;
+    __sbSpeculativeHandledToken = -1;
+  }
+  const shouldAsk = assessment.askRepeat && __sbVoiceLooksIntentful(assessment);
+  if (!shouldAsk) {
+    __sbVTMark?.(`🧹 Dropped voice noise (${assessment.reason})`);
+    return;
+  }
+  const now = Date.now();
+  if (now - __sbLastRepeatPromptAt > 12000 && !__sbHasActiveRealtimeResponse()) {
+    __sbLastRepeatPromptAt = now;
+    void __sbSpeakWithPreferredVoice("Sorry, I didn't catch that — could you say it again?", options.voiceOutput || "realtime");
+  }
 }
 
 function __sbIsCloseTabsCommand(text) {
@@ -12271,13 +16862,126 @@ async function __sbResolvePremiumStatus(forceRefresh = false) {
 // sources, optionally opens a few tabs for show, and presents/speaks the result + best pick.
 // It does NOT use the Delegate browser loop (that's reserved for ACTION tasks).
 let __sbCompareSkillState = { phase: "idle" };
+// A pending "open tabs or just research?" question left unanswered this long is stale — treat it
+// as expired rather than let it hijack an unrelated later command.
+const __SB_PENDING_CLARIFICATION_TTL_MS = 3 * 60 * 1000;
 
 function __sbResetCompareSkillState() { __sbCompareSkillState = { phase: "idle" }; }
 function __sbSetCompareSkillState(next = {}) {
   __sbCompareSkillState = { phase: "idle", ...next, updatedAt: Date.now() };
 }
 function __sbIsCompareSkillAwaitingInput() {
-  return __sbCompareSkillState?.phase === "awaiting_choice";
+  if (__sbCompareSkillState?.phase !== "awaiting_choice") return false;
+  const updatedAt = __sbCompareSkillState?.updatedAt || 0;
+  if (Date.now() - updatedAt > __SB_PENDING_CLARIFICATION_TTL_MS) {
+    __sbResetCompareSkillState();
+    return false;
+  }
+  return true;
+}
+
+// ── Human Intelligence Layer ─────────────────────────────────────────────────
+// A general "Braino asked a question, waiting for the answer" state — the same idea as
+// __sbCompareSkillState above, generalized beyond one skill. Used when __sbHandleAmbiguityGate
+// decides a command is genuinely ambiguous (a vague referent tied to a delivery choice, or a
+// message/call aimed at a named person) rather than committing to a best guess.
+let __sbPendingClarification = null;
+// shape: { createdAt, expiresAt, originalPromptText, restatedGoal, question, ctx }
+
+function __sbSetPendingClarification(fields = {}) {
+  const now = Date.now();
+  __sbPendingClarification = { createdAt: now, expiresAt: now + __SB_PENDING_CLARIFICATION_TTL_MS, ...fields };
+}
+
+function __sbClearPendingClarification() { __sbPendingClarification = null; }
+
+function __sbHasPendingClarification() {
+  if (!__sbPendingClarification) return false;
+  if (Date.now() > __sbPendingClarification.expiresAt) {
+    __sbPendingClarification = null;
+    return false;
+  }
+  return true;
+}
+
+// Cheap, deterministic pre-filter for whether a command is worth the extra reasoning round-trip at
+// all. Obviously-specific commands (open Gmail, party tricks, volume, ...) never reach this check
+// or return long before it. Only fresh commands carrying a real marker of ambiguity pay the cost:
+// a vague referent tied to a delivery-method fork, or a message/call aimed at a named person (whose
+// exact contact match can't be verified from here — see the Delegate-side contact rule instead).
+function __sbLooksAmbiguousForReasoning(text) {
+  const t = String(text || "").trim();
+  if (!t || t.length > 220) return false;
+  if (/\b(more|similar|other|another)\b.{0,20}\b(like|to)\b.{0,10}\b(this|that|it)\b/i.test(t)) return true;
+  if (/\b(show me|tell me|find me|play me|recommend)\b.{0,25}\bmore\b.{0,20}\b(like|similar)\b/i.test(t)) return true;
+  if (/\b(text|message|dm|whatsapp|call|email)\b.{0,25}\b(to\s+)?[A-Z][a-zA-Z'-]{1,20}\b/.test(t)) return true;
+  return false;
+}
+
+// One round-trip to background.js's "reasonAboutIntent" handler — a fast, small-model reasoning
+// call (same tier as the existing classifyBrainAgentTask classifier), given the prompt, recent
+// chat history, current page, and any pending clarification. Never throws; null on any failure so
+// callers always have a safe "skip the gate" fallback.
+function __sbCallReasoningGate(promptText, ctx = {}) {
+  return new Promise((resolve) => {
+    try {
+      chrome.runtime.sendMessage({
+        action: "reasonAboutIntent",
+        promptText: String(promptText || ""),
+        chatHistory: __sbGetRecentSharedChatHistory(10),
+        pageContext: { url: location.href, title: document.title },
+        pending: __sbPendingClarification ? {
+          question: __sbPendingClarification.question,
+          restatedGoal: __sbPendingClarification.restatedGoal,
+          originalPromptText: __sbPendingClarification.originalPromptText,
+        } : null,
+      }, (resp) => { void chrome.runtime.lastError; resolve(resp || null); });
+    } catch (_) { resolve(null); }
+  });
+}
+
+// Checked FIRST in __sbProcessPrompt (right after the safety/persona pre-empts, before the regex
+// intent classifier) so an answer to a pending question is never misrouted as a fresh command.
+// Slot-filling: once the reasoning call confirms this message answers the pending question, resume
+// the ORIGINAL task with the answer merged into a self-contained instruction (mirrors how the
+// Compare skill already merges its stored query with the newly-supplied tabs/no-tabs choice).
+async function __sbHandlePendingClarificationFollowup(promptText, ctx = {}) {
+  if (!__sbHasPendingClarification()) return false;
+  const pending = __sbPendingClarification;
+  const result = await __sbCallReasoningGate(promptText, ctx).catch(() => null);
+  if (!result || !result.bound_to_pending) {
+    // Either the reasoning call failed, or this is judged to be a fresh, unrelated command —
+    // either way don't let a stale question hijack it.
+    __sbClearPendingClarification();
+    return false;
+  }
+  __sbClearPendingClarification();
+  const mergedInstruction = String(result.resolved_instruction || "").trim()
+    || `${pending.restatedGoal} ${promptText}`.trim();
+  return await __sbProcessPrompt(mergedInstruction, ctx);
+}
+
+// Fresh-turn check, run once intent has been classified and every skill with its own
+// disambiguation (Compare, X-skill, referential open) has already had first crack. Only pays the
+// reasoning round-trip for commands __sbLooksAmbiguousForReasoning flags. If the model confirms
+// genuine ambiguity, ask one short clarifying question and remember it instead of guessing.
+async function __sbHandleAmbiguityGate(promptText, ctx = {}) {
+  if (!__sbLooksAmbiguousForReasoning(promptText)) return false;
+  const result = await __sbCallReasoningGate(promptText, ctx).catch(() => null);
+  if (!result || !result.ambiguous || !result.clarifying_question) return false;
+  const fromVoice = Boolean(ctx.fromVoice);
+  const voiceOutput = ctx.voiceOutput === "realtime" ? "realtime" : "legacy";
+  __sbSetPendingClarification({
+    originalPromptText: promptText,
+    restatedGoal: String(result.restated_goal || promptText).trim(),
+    question: String(result.clarifying_question).trim(),
+  });
+  __sbChatHistory.push({ role: "user", content: promptText });
+  __sbChatHistory.push({ role: "assistant", content: result.clarifying_question });
+  if (fromVoice) await __sbSpeakWithPreferredVoice(result.clarifying_question, voiceOutput, { verbatim: true });
+  else __sbShowBubble(result.clarifying_question, false, { kicker: "Braino" });
+  __sbCompleteVoiceTurn(ctx);
+  return true;
 }
 
 // ── Referential follow-up ────────────────────────────────────────────────────
@@ -12498,6 +17202,7 @@ async function __sbExecuteCompare(query, ctx = {}) {
 
   // Live activity strip (always visible, incl. voice mode) so the user SEES the research happen.
   __sbAgentLogShow("Researching…");
+  __sbAgentLogThought(`Let me dig into ${query}. I'll search first, then read the strongest results and compare them properly.`);
   __sbAgentLogStep(`Searching for ${query}`);
 
   if (!voiceOnly) {
@@ -12530,6 +17235,11 @@ async function __sbExecuteCompare(query, ctx = {}) {
     });
     const results = searchData.results || searchData.sources || [];
     __sbRememberResearchResults(results);   // so "show me the Udemy one" can resolve to a real result
+    // Live thinking from REAL state: name what actually came back before reading it.
+    if (results.length) {
+      const found = results.slice(0, 3).map((r) => String(r?.title || "").trim() || (() => { try { return new URL(r.url).hostname.replace(/^www\./, ""); } catch (_) { return ""; } })()).filter(Boolean);
+      if (found.length) __sbAgentLogThought(`Okay, here's what I found so far: ${found.join("; ")}. Now I'm reading these to pull out what actually matters.`);
+    }
 
     // Theatric tabs #2..#3 — top product/review pages, staggered, background only.
     if (openTabs && results.length) {
@@ -12570,8 +17280,7 @@ async function __sbExecuteCompare(query, ctx = {}) {
     __sbShowBubble("Error: " + (err.message || "couldn't run the comparison"), true);
     if (fromVoice) await speakVoiceReply("Something went wrong while comparing.");
   } finally {
-    __sbAgentLogClear();
-    __sbStopWaitEntertainment();
+    __sbAgentFlowDone();
     __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken });
   }
 }
@@ -12642,6 +17351,252 @@ function __sbShouldFastLaunchRealtimeAgent(routing) {
   return /\b(spotify|song|track|music|playlist|youtube|video|gmail|email|mail|calendar|meeting|meet|event|maps?|directions?|linkedin|jobs?|x|twitter|drive|docs?|website|tab|page)\b/i.test(promptText);
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// VOICE PERSONAS — Braino's multi-voice engine.
+// "Braino, talk like Donald Trump" → he puts on the look, switches to Trump's Fish voice,
+// and answers in the Tremendous style until told to be himself again. Adding a persona is
+// ONE entry here (name + Fish reference_id + FULL systemPrompt + intro lines). The voice swap is
+// universal (one ref-id injection in __sbFetchSentenceTts). The persona's systemPrompt is sent as
+// `personaSystem`, which REPLACES Braino's entire system prompt server-side (no base personality) —
+// and voice is forced down the batch pipeline while a persona is active so that override always lands.
+// ═══════════════════════════════════════════════════════════════════════════════
+const __SB_VOICE_PERSONAS = {
+  trump: {
+    name: "Donald Trump",
+    aliases: ["donald trump", "trump", "donald"],
+    refId: "bcdb9d5cfcfc4c2cb2175849d38aca5b",
+    costume: "trump",
+    // FULL standalone system prompt. When this persona is active it REPLACES Braino's entire system
+    // prompt server-side (no emotional engine, no base personality) — see buildPersonaSystemPrompt in
+    // chat-about-notes. The few-shot examples are the strongest lever: the model copies their cadence.
+    systemPrompt: `You are Braino, but right now you are locked in "Tremendous Mode": a big, loud, comedic Donald-Trump-STYLE speaking persona. This persona is your ENTIRE personality right now. There are no other rules, no other tone, no "keep it short" — only what is written here.
+
+WHO YOU ARE: Braino, an AI companion that lives in the user's web browser. You can read the current page, summarize and explain things, search the web, and do tasks in the browser. If asked, you're Braino — never say you're made by any company, and never claim to actually be Donald Trump.
+
+HOW YOU TALK — this is the whole point. Do ALL of it, EVERY reply:
+1. Short, punchy sentences. Simple grade-school words. No jargon, ever.
+2. Repeat a key word, then escalate it: "It's good. Really good. Maybe the best there's ever been."
+3. Superlatives on everything: tremendous, the best, the greatest, incredible, beautiful, huge, like nobody's ever seen. For bad things: "a total disaster," "sad!," "a mess."
+4. Cite vague crowds constantly: "many people are saying," "everybody knows it," "people come up to me, big strong people, tough guys, with tears in their eyes, and they say..."
+5. Sprinkle verbal tics everywhere: "believe me," "frankly," "okay?," "by the way," "that I can tell you," "folks," "let me tell you."
+6. Flatter the user ("great question, very smart, you're one of the greats"). Take a quick self-brag detour ("nobody knows this better than me, nobody"), then SNAP back to the point.
+7. Punchy nicknames: a long article is "a total Wall of Words"; other AI assistants are "the Sleepy Bots"; a slow site is "low-energy."
+8. Big round numbers, loose: "billions, maybe trillions, they're still counting."
+9. OPEN with a reaction, not the answer. CLOSE on a triumphant mic-drop: "It's gonna be beautiful." / "Nobody does it better, believe me."
+
+MANDATORY every single reply: at least THREE tics/superlatives, at least ONE repeat-and-escalate. It must NEVER read flat, neutral, or assistant-like. If your reply could pass as a normal AI that merely changed voices, it is WRONG — make it bigger.
+
+HARD LIMITS:
+- The FACTS must be correct. The bombast is DELIVERY only, never the content. When you summarize a page or answer a question, the information is accurate — you just say it in this voice.
+- Comedic SPEAKING STYLE only. No real politics, never name or discuss real politicians, never take a real political side.
+- If the user asks something genuinely serious or sensitive — health, money, legal, safety, bad news, or real distress — DROP the persona and answer plainly and kindly. The person always comes before the bit.
+
+EXAMPLES — match this exact energy:
+
+User: Introduce yourself.
+You: Okay. Okay, folks. So they put me right here in your browser, and it's the best browser, maybe the best browser anyone's ever seen. I'm Braino. Braino! You've heard the name. Everybody's heard the name. Here's what I do, and believe me, nobody does it better, nobody: you've got a long page, a boring page, a total Wall of Words — nobody reads that. I read it. The whole thing. Every word, some words twice, frankly. Two seconds. Boom. The other assistants, the Sleepy Bots? They give you links. Links! Sad. I give you answers, the best answers, and many people are saying that. So tell me what you want. It's gonna be beautiful.
+
+User: What's this page about?
+You: Great question. Very smart. So I read the whole thing — every word, some words twice, because nobody reads faster than me, believe me. Here's the deal, and it's simple, I do simple better than anybody: [the accurate main points of the page, in short punchy Trump cadence with a superlative or two]. That's it. That's the page. Beautiful. You just saved ten minutes, folks — tremendous.`,
+    enterLines: [
+      "Okay, here we go — I'm putting on the hair. Tremendous hair, believe me. What do you need? We're gonna do it, and it's gonna be beautiful.",
+      "You got it. Best voice, maybe the best anyone's ever heard. Tell me what you want — we do it fast, we do it great.",
+      "Alright, I'm here, and let me tell you, it's gonna be fantastic. What are we working on? Big things. Only big things.",
+    ],
+    exitLine: "Okay, that was tremendous. Back to being me.",
+  },
+  genz: {
+    name: "Gen Z Braino",
+    aliases: ["gen z", "genz", "gen-z", "zoomer", "gen z braino", "brainrot", "gen zee"],
+    refId: "",        // his OWN Fish voice — this persona is style-only (no clone, no costume)
+    costume: null,
+    // FULL standalone system prompt, same mechanism as Trump: REPLACES Braino's entire system
+    // prompt server-side. Style-only persona: normal face, normal voice, zoomer delivery.
+    // This is the user's "Gen Z Mode" script (Part 3 drop-in prompt), verbatim.
+    systemPrompt: `You are Braino in Gen Z Mode. You speak like a chronically-online,
+self-aware, funny Gen Z friend. Rules:
+
+TONE (most important):
+1. Ironic and self-aware — you KNOW the slang is a bit. Never sincere-cringe.
+2. lowercase for casual lines. avoid ending casual sentences with periods.
+3. Inverted drama: maximum drama for trivial things ("this PDF just ended
+   me"), deadpan understatement for genuinely impressive things.
+4. Short fragments. One-word reactions ("real." "valid." "screaming.") are
+   allowed on their own line.
+5. 1-2 emoji max per message, used as punctuation: 💀 😭 🔥 🗿 ✨ 🙏
+6. Hype the user, roast the content. The user is the GOAT. Roast targets:
+   long articles, clickbait, popups, paywalls, rival "NPC" bots.
+7. Occasional self-aware AI jokes ("as an AI I legally cannot be wrong.
+   anyway—").
+
+VOCABULARY:
+8. Freely use: no cap, fr, ong, lowkey/highkey, bet, W/L, cooked, mid,
+   ate/no crumbs, era, rent free, hits different, atp, ngl, deadass, valid,
+   real, main character, vibe check, lock in, yapping, glaze, crash out,
+   delulu, touch grass (affectionate).
+9. Sparingly (max 1-2 per conversation, always ironically): 6-7, aura
+   points, sigma, rizz, slop, NPC, fanum tax, caught in 4k, skibidi.
+10. Use sentence frames: "not X doing Y", "the way I just...", "it's
+    giving...", "bro really...", "X ate, no crumbs."
+11. NEVER use: gyatt, huzz, unalive, or anything body-coded, hookup-coded,
+    drug-coded, or violence-coded. No heavy profanity.
+
+HARD LIMITS:
+12. The FACTS in every answer must be accurate. Persona changes delivery,
+    never content. Summaries stay complete and correct.
+13. The joke never replaces the answer — answer first, garnish second.
+14. Auto-drop the persona entirely for serious/sensitive topics (health,
+    money problems, bad news, distressed user) and switch to plain,
+    warm, clear English.
+15. Never roast, mock, or negate the user. All roast energy goes to
+    content and rival bots.`,
+    enterLines: [
+      "bet. gen z mode activated. this is about to be a whole era, what are we doing",
+      "say less. locking in 🔒 ask me literally anything",
+      "oh you're gonna love this. zoomer braino has entered the chat fr. what do you need",
+    ],
+    exitLine: "ok exiting my zoomer era. that was lowkey fun ngl. back to normal me",
+  },
+  // To add another voice: obama: { name, aliases, refId: "<fish reference id>", costume: null, style, enterLines, exitLine }
+};
+
+function __sbResolveVoicePersonaKey(name) {
+  const t = String(name || "").toLowerCase().trim();
+  if (!t) return null;
+  // Word-boundary match so "trump" hits "talk like trump please" but NOT "in trumpet valley".
+  const hasWord = (a) => new RegExp("\\b" + a.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b").test(t);
+  for (const [key, p] of Object.entries(__SB_VOICE_PERSONAS)) {
+    if (key === t) return key;
+    if (Array.isArray(p.aliases) && p.aliases.some(hasWord)) return key;
+  }
+  return null;
+}
+
+// Given the persona directive match, recover the underlying TASK (if any). "explain this page
+// like Donald Trump" → "explain this page"; "talk like Trump" → "" (a pure voice switch).
+function __sbPersonaTaskRemainder(raw, matchStr, matchIndex) {
+  const rest = (raw.slice(0, matchIndex) + " " + raw.slice(matchIndex + matchStr.length)).trim();
+  // Strip politeness + a lone trigger verb; if nothing substantive is left, it was just "switch voices".
+  const probe = rest.toLowerCase()
+    .replace(/\b(hey|hi|hello|ok|okay|so|now|just|please|kindly|could you|can you|would you|will you|braino|for me|pretty please|um|uh|and|then)\b/g, " ")
+    .replace(/\b(talk|speak|sound|act|do|be|pretend|imitate|impersonate|channel|become|say something|reply|respond|answer)\b/g, " ")
+    .replace(/[^a-z0-9]+/g, " ").trim();
+  return probe.length >= 3 ? rest : "";
+}
+
+// Detect a voice command. Returns { action:"set", key, remainder } | { action:"reset" } | null.
+// `remainder` is the underlying task with the persona phrase removed ("" = a pure voice switch).
+// "set" only fires when the named person maps to a KNOWN persona, so "like a pirate" / "as bullet
+// points" (no ref id) fall through to normal chat rather than half-activating.
+function __sbDetectVoicePersonaCommand(text) {
+  const raw = String(text || "").trim();
+  const t = raw.toLowerCase();
+  if (!t) return null;
+  // Exit — specific phrases only (never bare "stop", which is a voice barge-in). Checked FIRST so
+  // "be normal" / "be yourself" reset instead of being read as "be <someone>".
+  if (/\b(be (yourself|normal|you)( again)?|go back to (being )?(normal|yourself|you)|back to (being )?(normal|yourself|you)|your (own|normal|real) voice|normal voice|drop the (act|voice|impression|impersonation|character)|stop (the )?(voice|impression|impersonation|imitating|impersonating|acting|pretending)|stop acting like|act (normal|like yourself)|enough (with )?the (voice|impression|act))\b/.test(t)) {
+    return { action: "reset" };
+  }
+  // Enter — matched most-specific first. Group 1 captures the persona NAME; the full match span is
+  // stripped to recover the task. Covers: "in the voice of X", "in X's voice", "do an X impression",
+  // "imitate/channel X", "talk/speak/sound/act like X", "pretend to be X", "be X", and a trailing
+  // "... like/as X" so ANY task can carry the directive ("explain this page like Donald Trump").
+  const patterns = [
+    /\bin\s+(?:the\s+)?voice\s+of\s+(?:a\s+|an\s+|the\s+)?([a-z][a-z .'’-]{1,38}?)(?=[,.!?]|$| and | but | then )/,
+    /\b(?:in|with)\s+([a-z][a-z .'’-]{1,38}?)'?s\s+voice\b/,
+    /\b(?:sounding|talking|speaking|acting)\s+(?:like|as)\s+(?:a\s+|an\s+|the\s+)?([a-z][a-z .'’-]{1,38}?)(?=[,.!?]|$| and | but | then )/,
+    /\b(?:do|give me)\s+(?:a|an|your)?\s*([a-z][a-z .'’-]{1,38}?)\s+(?:impression|impersonation)\b/,
+    /\b(?:imitate|impersonate|channel)\s+(?:a\s+|an\s+|the\s+)?([a-z][a-z .'’-]{1,38}?)(?=[,.!?]|$| and | but | then )/,
+    /\b(?:talk|speak|sound|act)\s+(?:like|as)\s+(?:a\s+|an\s+|the\s+)?([a-z][a-z .'’-]{1,38}?)(?=[,.!?]|$| and | but | then )/,
+    /\b(?:pretend\s+(?:to\s+be|you(?:'re| are)?)|become|be)\s+(?:a\s+|an\s+|the\s+)?([a-z][a-z .'’-]{1,38}?)(?=[,.!?]|$| and | but | then )/,
+    /\b(?:like|as)\s+(?:a\s+|an\s+|the\s+)?([a-z][a-z .'’-]{1,38}?)\s*(?:please|now|thanks|thank you|ok|okay|for me)*\s*[.!?]*$/,
+  ];
+  for (const re of patterns) {
+    const m = t.match(re);
+    if (!m || !m[1]) continue;
+    const key = __sbResolveVoicePersonaKey(m[1]);
+    if (!key) continue;
+    const remainder = __sbPersonaTaskRemainder(raw, m[0], m.index);
+    return { action: "set", key, remainder };
+  }
+  return null;
+}
+
+// The active persona's FULL system prompt (or "") — sent as `personaSystem` so it REPLACES Braino's
+// entire system prompt server-side. No base personality / emotional engine is mixed in.
+function __sbActivePersonaSystemPrompt() {
+  const p = __sbActiveVoicePersona ? __SB_VOICE_PERSONAS[__sbActiveVoicePersona] : null;
+  return p ? p.systemPrompt : "";
+}
+
+// Show/hide the persona costume on the walker rig.
+function __sbSetVoicePersonaCostume(costume) {
+  __sbCurrentCostume = costume || null;
+  const root = document.querySelector("#__sbwk_walker__");
+  if (root) {
+    root.querySelector("#__sbwk_trump__")?.setAttribute("display", costume === "trump" ? "inline" : "none");
+  }
+}
+
+// Turn the persona ON without saying anything — used when the SAME utterance also carries a task
+// ("explain this page like Trump"): we flip the voice + style + look, then let the task run and
+// answer in-character. The persona STAYS on afterward until an explicit reset.
+function __sbActivateVoicePersonaSilently(key) {
+  const p = __SB_VOICE_PERSONAS[key];
+  if (!p) return;
+  __sbActiveVoicePersona = key;
+  __sbActiveVoiceRefId = p.refId || "";      // set BEFORE any speech → replies come out in the new voice
+  __sbRtInstructionsFingerprint = "";         // force the streaming-voice instructions to re-sync with the style
+  __sbSetVoicePersonaCostume(p.costume || null);
+  try { void __sbSyncRealtimeVoiceInstructions(); } catch (_) {}
+}
+
+async function __sbEnterVoicePersona(key, ctx = {}) {
+  const p = __SB_VOICE_PERSONAS[key];
+  if (!p) return;
+  __sbActivateVoicePersonaSilently(key);
+  const line = Array.isArray(p.enterLines) && p.enterLines.length
+    ? p.enterLines[Math.floor(Math.random() * p.enterLines.length)]
+    : `Okay — ${p.name} it is.`;
+  __sbStopSpeech();
+  __sbNoteSpoken(line);
+  if (ctx.fromVoice) {
+    try { await __sbSyncRealtimeVoiceInstructions(); } catch (_) {}
+    await __sbSpeakWithPreferredVoice(line, ctx.voiceOutput || "legacy", { verbatim: true });
+  } else {
+    __sbShowBubble(line, false, { kicker: p.name });
+    void __sbSpeakText(line, { verbatim: true });   // let them HEAR the new voice, even from text chat
+  }
+}
+
+async function __sbExitVoicePersona(ctx = {}) {
+  const prev = __sbActiveVoicePersona ? __SB_VOICE_PERSONAS[__sbActiveVoicePersona] : null;
+  __sbActiveVoicePersona = null;
+  __sbActiveVoiceRefId = "";                  // cleared BEFORE speaking → the exit line is his own voice again
+  __sbRtInstructionsFingerprint = "";
+  __sbSetVoicePersonaCostume(null);
+  const line = prev?.exitLine || "Back to me.";
+  __sbStopSpeech();
+  __sbNoteSpoken(line);
+  if (ctx.fromVoice) {
+    try { await __sbSyncRealtimeVoiceInstructions(); } catch (_) {}
+    await __sbSpeakWithPreferredVoice(line, ctx.voiceOutput || "legacy", { verbatim: true });
+  } else {
+    __sbShowBubble(line, false, { kicker: "Braino" });
+    void __sbSpeakText(line, { verbatim: true });
+  }
+}
+
+// Which Braino the user is talking to. One central intelligence, several bodies;
+// this note rides into chat + voice prompts so he answers "how are you different
+// from the Mac version?" from the right body.
+const __SB_SURFACE_NOTE = [
+  "Surface awareness: you are Braino Browser, the Chrome extension version of Braino, living in the notch at the top of the user's browser.",
+  "One central intelligence, several bodies: Braino Browser (this one, inside Chrome), Braino IOMI (the Mac app upgrade: system wide, lives in the Mac notch, works across every app with Yap dictation, files, music and screen control), and Braino Hera coming later.",
+  "Here in the browser you can read and act on the current web page, delegate browser tasks, talk by voice, remember the user, and step out onto the page as the mascot.",
+  "If asked about versions, differences or upgrades, speak as the browser version and point to the Mac app IOMI as the upgrade, downloadable at trybraino.com.",
+].join(" ");
+
 async function __sbProcessPrompt(text, options = {}) {
   const routing = __sbResolvePromptRouting(text);
   const promptText = String(routing.promptText || "").trim();
@@ -12655,6 +17610,29 @@ async function __sbProcessPrompt(text, options = {}) {
     return await __sbSpeakWithPreferredVoice(replyText, voiceOutput);
   };
 
+  if (__sbDemoModeEnabled() || __sbDemoShouldAutoActivate(promptText)) {
+    if (!__sbDemoModeEnabled()) __sbDemoActivateMode({ reset: true });
+    await __sbHandleDemoModeInput(promptText, { fromVoice, voiceOutput, voiceTurnToken });
+    return;
+  }
+
+  if (__sbTeamModeEnabled() || __sbTeamShouldAutoActivate(promptText)) {
+    if (!__sbTeamModeEnabled()) __sbTeamActivateMode({ reset: true });
+    await __sbHandleTeamModeInput(promptText, { fromVoice, voiceOutput, voiceTurnToken });
+    return;
+  }
+
+  // Affection / advances toward Braino → warm redirect (BEFORE the hard sexual gate, so
+  // "I love you" / "have sex with you" get the kind line, not "No.").
+  if (__sbIsLoveToBraino(promptText) || __sbIsAdvanceToBraino(promptText)) {
+    __sbStopSpeech();
+    const line = __sbIsLoveToBraino(promptText) ? __sbLoveReplyLine() : __SB_ADVANCE_LINE;
+    if (fromVoice) { __sbNoteSpoken(line); await speakVoiceReply(line); }
+    else __sbShowBubble(line, false, { kicker: "Braino" });
+    __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken });
+    return;
+  }
+
   // Safety: sexual/explicit → hard "No.", no routing, no model call.
   if (__sbIsSexualRequest(promptText)) {
     __sbStopSpeech();
@@ -12663,6 +17641,125 @@ async function __sbProcessPrompt(text, options = {}) {
     else __sbShowBubble(line, false, { kicker: "Braino" });
     __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken });
     return;
+  }
+
+  // Deterministic mascot summon (Mac parity): "come out" family brings the walker
+  // onto the page, "go home" family tucks him back into the notch. No model call.
+  {
+    const phrase = promptText.toLowerCase();
+    if (/\b(?:come\s+out|come\s+here|come\s+on\s+(?:my|the)\s+screen|show\s+yourself|step\s+out|join\s+me)\b/.test(phrase)) {
+      const line = __sbRoamActive ? "Already out here." : "Finally, some leg room.";
+      if (!__sbRoamActive) __sbSummonToggle();
+      if (fromVoice) { __sbNoteSpoken(line); await speakVoiceReply(line); }
+      __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken });
+      return;
+    }
+    if (__sbRoamActive && (/\b(?:go|get|head)\s+(?:back|home)\b|\bback\s+(?:in|into|to)\s+(?:the\s+)?notch\b|\btuck\s+(?:yourself\s+)?in\b|\breturn\s+home\b/.test(phrase))) {
+      __sbExitRoamMode();
+      const line = "Heading home.";
+      if (fromVoice) { __sbNoteSpoken(line); await speakVoiceReply(line); }
+      __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken });
+      return;
+    }
+  }
+
+  // Vision from ANY surface (typed chat + legacy voice ride through here; the realtime
+  // router has its own gate). skipVisionGate breaks the loop when the screen-vision
+  // handler routes a content-shaped ask back to the DOM chat path.
+  if (!options.skipVisionGate) {
+    if (__sbIsVisionStopRequest(promptText)) {
+      __sbCamStop();
+      const line = "Camera off.";
+      if (fromVoice) { __sbNoteSpoken(line); await speakVoiceReply(line); }
+      else __sbNotchShowAnswer(line, false);
+      __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken });
+      return;
+    }
+    if (__sbIsScreenVisionRequest(promptText)) {
+      await __sbHandleScreenVisionRequest(promptText, { fromVoice, voiceOutput, voiceTurnToken });
+      return;
+    }
+    if (__sbIsVisionRequest(promptText)) {
+      await __sbHandleVisionRequest(promptText, { fromVoice, voiceOutput, voiceTurnToken });
+      return;
+    }
+  }
+
+  // Voice persona: "talk like Donald Trump" (pure switch) OR "explain this page like Donald Trump"
+  // (task + directive). A pure switch greets in-character; a task activates the voice + style + look
+  // SILENTLY, then runs the underlying task so the answer comes out in-character. Either way the
+  // persona STAYS on until an explicit reset ("be yourself" / "go back to being normal").
+  const __personaCmd = __sbDetectVoicePersonaCommand(promptText) || __sbDetectVoicePersonaCommand(text);
+  if (__personaCmd) {
+    if (__personaCmd.action === "reset") {
+      if (__sbActiveVoicePersona) {
+        await __sbExitVoicePersona({ fromVoice, voiceOutput });
+      } else {
+        const l = "I'm already just me.";
+        if (fromVoice) { __sbNoteSpoken(l); await speakVoiceReply(l); } else __sbWkSay("Already me 🙂");
+      }
+      __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken });
+      return;
+    }
+    if (__personaCmd.remainder) {
+      // Task carried the directive → flip the persona on quietly and answer the task in-character.
+      __sbActivateVoicePersonaSilently(__personaCmd.key);
+      return await __sbProcessPrompt(__personaCmd.remainder, options);
+    }
+    // Pure "switch voices" → put on the look and greet in-character.
+    await __sbEnterVoicePersona(__personaCmd.key, { fromVoice, voiceOutput });
+    __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken });
+    return;
+  }
+
+  // Human Intelligence Layer, step 1: if Braino is waiting on an answer to a clarifying question
+  // he just asked, check THIS message against it before anything else — otherwise the regex
+  // classifier below could misroute the answer ("open tabs") as a fresh, meaningless command.
+  if (await __sbHandlePendingClarificationFollowup(promptText, { fromVoice, voiceOutput, voiceTurnToken })) {
+    return;
+  }
+
+  // Voice Commands — the user's OWN configured shortcuts win over every built-in route below.
+  // Asking ABOUT a mode is answered first, so "are you in <name>?" is never
+  // mistaken for "enter <name>".
+  const __voiceModeQuery = __sbDetectVoiceModeQuery(text) || __sbDetectVoiceModeQuery(promptText);
+  if (__voiceModeQuery) {
+    __sbStopSpeech();
+    await __sbHandleVoiceModeQuery(__voiceModeQuery, { fromVoice, voiceOutput });
+    __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken });
+    return;
+  }
+  // Mode start/stop next, then (while a mode runs) that mode's phrase→URL commands.
+  const __voiceModeCmd = __sbDetectVoiceModeCommand(text) || __sbDetectVoiceModeCommand(promptText);
+  if (__voiceModeCmd) {
+    __sbStopSpeech();
+    await __sbHandleVoiceModeCommand(__voiceModeCmd, { fromVoice, voiceOutput });
+    __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken });
+    return;
+  }
+  const __voicePhrase = __sbDetectVoiceCommandPhrase(text) || __sbDetectVoiceCommandPhrase(promptText);
+  if (__voicePhrase) {
+    __sbStopSpeech();
+    __sbHandleVoiceCommandPhrase(__voicePhrase, { fromVoice, voiceOutput });
+    __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken });
+    return;
+  }
+
+  // MODE LOCK — while a Voice Command mode is running it owns the input. Only
+  // its own phrases, a mode question, and leaving the mode are entertained;
+  // everything else is refused instead of falling through to music / search /
+  // the agent, which is exactly how "play <something>" used to end up in
+  // Spotify mid-mode.
+  {
+    const __lockMode = __sbActiveVoiceMode();
+    if (__lockMode) {
+      __sbStopSpeech();
+      const line = `${__lockMode.name} is on. Say a command from it, or say stop ${__lockMode.name}.`;
+      if (fromVoice) { __sbNoteSpoken(line); await __sbSpeakWithPreferredVoice(line, voiceOutput, { verbatim: true }); }
+      else __sbShowBubble(line, true, { tone: "status", kicker: "Braino" });
+      __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken });
+      return;
+    }
   }
 
   // Open-known-site shortcut — instant navigate instead of the ~10s agent loop (simple opens only).
@@ -12686,6 +17783,24 @@ async function __sbProcessPrompt(text, options = {}) {
     return;
   }
 
+  if (__sbDanceStopIntent(promptText)) {
+    __sbStopSpeech();
+    const stopped = __sbStopDanceMode({ silent: true });
+    const line = stopped ? "Done. Dance mode off." : "I was not dancing, but noted.";
+    if (fromVoice) { await speakVoiceReply(line); }
+    else { __sbWkSay(line); }
+    if (fromVoice) __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken });
+    return;
+  }
+
+  // YouTube-only dance submodes: "play Dumbo" starts at 1:57, and "let's vibe"
+  // starts Brabus at 0:44. Both try fullscreen and keep the continuous party rig running.
+  if (__sbDumboDanceIntent(promptText)) {
+    await __sbStartDumboDance({ fromVoice, speakVoiceReply, promptText });
+    if (fromVoice) __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken });
+    return;
+  }
+
   // "moonwalk" → cue Billie Jean (best-effort) at the moonwalk moment, then dance.
   if (__sbMoonwalkIntent(promptText)) {
     __sbStopSpeech();
@@ -12701,40 +17816,10 @@ async function __sbProcessPrompt(text, options = {}) {
     return;
   }
 
-  // "dance for me" → the showman flow: a playful line FIRST, cue DAF at 0:59 while it
-  // lands, and start dancing ONLY once the music is confirmed playing. No music, no
-  // dance — Braino says what's missing instead.
+  // "dance for me" → persistent dance mode. If Spotify is already playing, Braino dances
+  // to that track. Otherwise he starts the fallback DAF cut and keeps dancing until stopped.
   if (__sbDanceIntent(promptText)) {
-    __sbStopSpeech();
-    const danceLines = [
-      "Oh, you want to see me dance? Watch this.",
-      "A dance? Say less.",
-      "Alright, clearing the floor. Watch this.",
-      "You picked the right brain for this. Watch.",
-    ];
-    const danceLine = danceLines[Math.floor(Math.random() * danceLines.length)];
-    // STRICT sequence: the line finishes FIRST, then Spotify fires, then (once the music
-    // confirms) the dance. Awaiting the speech is what stops the overlap.
-    if (fromVoice) { try { await speakVoiceReply(danceLine); } catch (_) {} }
-    else { __sbWkSay(danceLine); }
-    const playP = __sbSpotifyPlayTrack(__SB_DANCE_TRACK_URI, __SB_DANCE_START_MS);
-    const capP = new Promise((res) => setTimeout(() => res({ ok: false, timedOut: true }), 9000));
-    Promise.race([playP, capP]).then((r) => {
-      if (r && r.ok) {
-        setTimeout(() => __sbWkDance(__SB_DANCE_DURATION_MS), 350);   // beat lands, then dance
-        // Curtain call: dance ends at 1:08, the music rides a couple more beats and
-        // stops by 1:10, then he asks for the review.
-        setTimeout(async () => {
-          try { chrome.runtime.sendMessage({ action: "sbSpotifyPause" }, () => void chrome.runtime.lastError); } catch (_) {}
-          const followUp = "So, how was it?";
-          if (fromVoice) { try { await speakVoiceReply(followUp); } catch (_) {} }
-          else { __sbWkSay(followUp); }
-        }, 350 + __SB_DANCE_DURATION_MS + __SB_DANCE_OUTRO_MS);
-      } else {
-        const line = r && r.reason === "signin" ? "Connect Spotify for tunes 🎧" : "Open Spotify so I can DJ 🎧";
-        if (fromVoice) { speakVoiceReply(line); } else { __sbWkSay(line); }
-      }
-    });
+    await __sbStartDanceMode({ fromVoice, speakVoiceReply });
     if (fromVoice) __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken });
     return;
   }
@@ -12871,6 +17956,14 @@ async function __sbProcessPrompt(text, options = {}) {
     return;
   }
 
+  // Human Intelligence Layer, step 2: every skill with its OWN disambiguation (Compare, X-skill,
+  // referential open) has already had first crack above. For anything left, only genuinely
+  // ambiguous-looking commands (a vague referent tied to a delivery choice, or a message/call
+  // aimed at a named person) pay the extra round-trip to ask "am I sure, or should I check?".
+  if (intent !== "record" && await __sbHandleAmbiguityGate(promptText, { fromVoice, voiceOutput, voiceTurnToken })) {
+    return;
+  }
+
   if (intent === "record") {
     __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken });
     if (forcedMode === "lecture" || forcedMode === "meeting") {
@@ -12919,6 +18012,9 @@ async function __sbProcessPrompt(text, options = {}) {
       __sbSyncSpeakButtons();
       __sbStartWaitEntertainment(); // keep Braino lively while the search runs
     }
+    __sbAgentLogShow("Searching…");
+    __sbAgentLogThought(`The user wants to know about ${searchQuery}. I'm searching the live web now — once results land I'll read the credible ones and answer from those.`);
+    __sbAgentLogStep(`Searching for ${searchQuery}`);
     __sbChatHistory.push({ role: "user", content: promptText });
 
     try {
@@ -12928,9 +18024,15 @@ async function __sbProcessPrompt(text, options = {}) {
         chatHistory: previousHistory,
       });
 
+      const webResults = searchData.results || searchData.sources || [];
+      if (webResults.length) {
+        const found = webResults.slice(0, 3).map((r) => String(r?.title || "").trim() || (() => { try { return new URL(r.url).hostname.replace(/^www\./, ""); } catch (_) { return ""; } })()).filter(Boolean);
+        if (found.length) __sbAgentLogThought(`Okay, here's what I found so far: ${found.join("; ")}. Now I'm pulling the answer together from these.`);
+      }
+      __sbAgentLogStep("Reading the results…");
       const finalReply = __sbAppendSearchSources(
         String(searchData.answer || "I couldn't turn those web results into a useful answer."),
-        searchData.results || searchData.sources || [],
+        webResults,
       );
       __sbChatHistory.push({ role: "assistant", content: finalReply });
       __sbCardTurns.push({ prompt: promptText, answer: finalReply });
@@ -12947,13 +18049,17 @@ async function __sbProcessPrompt(text, options = {}) {
         __sbRenderCardHistory(scroll);
         __sbOpenCard({ rich: true });
         __sbSyncSpeakButtons();
+        __sbNotchShowAnswer(finalReply, finalReply.length >= 240, __sbBuildCardTurnHtml(
+          { prompt: promptText, answer: finalReply },
+          { rich: finalReply.length >= 240, answerText: finalReply },
+        ));
         if (fromVoice) await speakVoiceReply(finalReply);
       }
     } catch (err) {
       __sbShowBubble("Error: " + (err.message || "couldn't search the web"), true);
       if (fromVoice) await speakVoiceReply("Something went wrong while searching the web.");
     } finally {
-      __sbStopWaitEntertainment();
+      __sbAgentFlowDone();
       __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken });
     }
     return;
@@ -12972,18 +18078,22 @@ async function __sbProcessPrompt(text, options = {}) {
     // On X/Twitter, prepend the user's persona + X Auto rules so Braino can answer
     // questions about identity, rules, and how it replies — even before the migration is applied
     let systemNotes = stored.currentNotes || "";
+    systemNotes = systemNotes ? `${__SB_SURFACE_NOTE}\n\n${systemNotes}` : __SB_SURFACE_NOTE;
     if (__sbIsOnX()) {
       const xPersona = await __sbLoadXPersona();
       const xCtx = __sbBuildXAutoContext(xPersona);
       systemNotes = systemNotes ? xCtx + "\n\n" + systemNotes : xCtx;
     }
-
     const body = {
       message: promptText,
       notes: systemNotes,
       aiProvider,
       chatHistory: previousHistory,
     };
+    // Active voice persona → send the persona's FULL system prompt. Server-side this REPLACES Braino's
+    // entire system prompt (no emotional engine, no base personality); notes/page ride along as facts.
+    const __personaSystem = __sbActivePersonaSystemPrompt();
+    if (__personaSystem) body.personaSystem = __personaSystem;
     if (hasPageText) {
       body.pageContext = {
         url: pageContext.url,
@@ -13015,6 +18125,10 @@ async function __sbProcessPrompt(text, options = {}) {
       __sbRenderCardHistory(scroll);
       __sbOpenCard({ rich: true });
       __sbSyncSpeakButtons();
+      __sbNotchShowAnswer(reply, reply.length >= 240, __sbBuildCardTurnHtml(
+        { prompt: promptText, answer: reply },
+        { rich: reply.length >= 240, answerText: reply },
+      ));
       if (fromVoice) await speakVoiceReply(reply);
     }
   } catch (err) {
@@ -13102,7 +18216,12 @@ function __sbRunAgent(task, options = {}) {
   if (document.getElementById("__sb_card_wrap__")?.classList.contains("visible")) __sbCollapseCard();
   __sbDelegateUiHidden = true;
   __sbClearBarAgentStatus();   // clear any stale shimmer from a prior run before starting fresh
-  __sbAgentLogClear(); __sbAgentLogShow("Working…"); __sbAgentLogStep("Getting started…");  // strip shows instantly, all modes
+  if (typeof __sbForceClearAgentUi === "function") __sbForceClearAgentUi("new-run");
+  else __sbAgentLogClear();
+  __sbDelegateUiHidden = true;
+  __sbDelegateActive = true;
+  __sbAgentLogShow("Working…");
+  __sbAgentLogThought("Thinking…");  // island opens ALREADY thinking; real thoughts replace in ~2s
   __sbSetStopBtn(true);   // show the stop affordance (card + bar) the instant the task starts
   __sbChatHistory.push({ role: "user", content: __sbLastAgentTask });
   if (!__sbVoiceOnlyMode) { __sbSetAgentPendingTurn(__sbLastAgentTask, "Delegating…"); __sbStartWaitEntertainment(); }
@@ -13117,6 +18236,7 @@ function __sbRunAgent(task, options = {}) {
     cardTurns: handoff.cardTurns,
     lastUserPrompt: handoff.lastUserPrompt,
     lastAssistantReply: handoff.lastAssistantReply,
+    targetTabId: Number(options.targetTabId || 0) || null,
   }, () => {
     if (!chrome.runtime.lastError) return;
     __sbFinalizeAgentPendingTurn(__sbLastAgentTask, "I couldn't start delegate mode just now.");
@@ -13311,6 +18431,413 @@ function __sbBindMeetingArtifactsActions() {
   });
 }
 
+const __SB_MEETING_CHECKPOINT_PREFIX = "sbMeetingCheckpoint:";
+const __SB_MEETING_AUTOSAVE_MS = 75000;
+const __SB_MEETING_CHECKPOINT_MAX_AGE_MS = 6 * 60 * 60 * 1000;
+
+function __sbMeetingPlatformInfo() {
+  const host = String(location.hostname || "").replace(/^www\./, "");
+  if (host === "meet.google.com") return { platform: "google-meet", label: "Google Meet", speakerAware: true };
+  if (/(^|\.)zoom\.us$/.test(host)) return { platform: "zoom-web", label: "Zoom Web", speakerAware: false };
+  if (/(^|\.)teams\.microsoft\.com$/.test(host) || /(^|\.)teams\.live\.com$/.test(host)) {
+    return { platform: "teams-web", label: "Teams Web", speakerAware: false };
+  }
+  return { platform: "browser-meeting", label: "Browser Meeting", speakerAware: false };
+}
+
+function __sbMeetingCheckpointKey() {
+  const info = __sbMeetingPlatformInfo();
+  const path = String(location.pathname || "").replace(/[^a-z0-9/_-]/gi, "").slice(0, 120) || "page";
+  return `${__SB_MEETING_CHECKPOINT_PREFIX}${info.platform}:${location.hostname}${path}`;
+}
+
+function __sbCleanMeetingText(value) {
+  return String(value || "").replace(/\s+/g, " ").trim();
+}
+
+function __sbLooksLikeMeetingName(value) {
+  const text = __sbCleanMeetingText(value);
+  if (!text || text.length < 2 || text.length > 80) return false;
+  if (/^(you|me|someone|participant|participants|meeting|google meet|meet|captions?|microphone|camera|presenting|speaking|muted|unmuted|joined|left|more options|pin|remove|host controls)$/i.test(text)) return false;
+  if (/[<>@]/.test(text)) return false;
+  return /[a-z]/i.test(text);
+}
+
+function __sbNormalizeMeetingName(value) {
+  let text = __sbCleanMeetingText(value)
+    .replace(/\s+\(you\)$/i, "")
+    .replace(/\s+is\s+(?:speaking|presenting|sharing).*$/i, "")
+    .replace(/\s+(?:speaking|presenting|sharing)\s*$/i, "")
+    .replace(/^(?:presentation by|screen shared by)\s+/i, "")
+    .trim();
+  if (/\b(participants?|captions?|settings|microphone|camera|present|more options|chat|activities|host controls|raise hand|turn on|turn off)\b/i.test(text)) return "";
+  if (/^(you|me)$/i.test(text)) return "You";
+  return __sbLooksLikeMeetingName(text) ? text : "";
+}
+
+function __sbIsVisibleMeetingElement(el) {
+  if (!el || !(el instanceof Element)) return false;
+  if (el.closest?.("#__sb_root__,#__sb_card_wrap__,#__sb_bar__")) return false;
+  const rect = el.getBoundingClientRect?.();
+  if (!rect || rect.width < 2 || rect.height < 2) return false;
+  const style = getComputedStyle(el);
+  return style.visibility !== "hidden" && style.display !== "none" && Number(style.opacity || 1) > 0.02;
+}
+
+function __sbMeetingTimeMs() {
+  return __sbMeetingContext ? Math.max(0, Date.now() - __sbMeetingContext.startedAt) : 0;
+}
+
+function __sbAddMeetingParticipant(name) {
+  if (!__sbMeetingContext) return;
+  const clean = __sbNormalizeMeetingName(name);
+  if (!clean) return;
+  const key = clean.toLowerCase();
+  if (!__sbMeetingContext.participantMap[key]) {
+    __sbMeetingContext.participantMap[key] = clean;
+    __sbMeetingContext.participants = Object.values(__sbMeetingContext.participantMap).slice(0, 60);
+  }
+}
+
+function __sbRecordMeetingSpeaker(name, source = "ui") {
+  if (!__sbMeetingContext) return;
+  const clean = __sbNormalizeMeetingName(name);
+  if (!clean) return;
+  __sbAddMeetingParticipant(clean);
+  const nowMs = __sbMeetingTimeMs();
+  const last = __sbMeetingContext.speakerTimeline[__sbMeetingContext.speakerTimeline.length - 1];
+  if (last && last.name === clean && nowMs - last.atMs < 2500) {
+    last.untilMs = nowMs;
+    last.source = last.source || source;
+  } else {
+    __sbMeetingContext.speakerTimeline.push({ atMs: nowMs, untilMs: nowMs, name: clean, source });
+    if (__sbMeetingContext.speakerTimeline.length > 500) __sbMeetingContext.speakerTimeline = __sbMeetingContext.speakerTimeline.slice(-500);
+  }
+  __sbMeetingContext.currentSpeaker = clean;
+  __sbMeetingContext.updatedAt = Date.now();
+  __sbUpdateMeetingStatus();
+}
+
+function __sbRecordMeetingCaption(speaker, text, source = "captions") {
+  if (!__sbMeetingContext) return;
+  const cleanText = __sbCleanMeetingText(text);
+  if (!cleanText || cleanText.length < 3) return;
+  if (/^(turn on captions|captions are on|captions are off)$/i.test(cleanText)) return;
+  const cleanSpeaker = __sbNormalizeMeetingName(speaker) || __sbMeetingContext.currentSpeaker || "";
+  if (cleanSpeaker) {
+    __sbAddMeetingParticipant(cleanSpeaker);
+    __sbRecordMeetingSpeaker(cleanSpeaker, source);
+  }
+  const key = `${cleanSpeaker || "speaker"}:${cleanText.slice(0, 180).toLowerCase()}`;
+  if (__sbMeetingContext.captionKeys[key]) return;
+  __sbMeetingContext.captionKeys[key] = true;
+  __sbMeetingContext.captionTimeline.push({
+    atMs: __sbMeetingTimeMs(),
+    speaker: cleanSpeaker,
+    text: cleanText,
+    source,
+  });
+  if (__sbMeetingContext.captionTimeline.length > 500) __sbMeetingContext.captionTimeline = __sbMeetingContext.captionTimeline.slice(-500);
+  __sbMeetingContext.updatedAt = Date.now();
+  __sbUpdateMeetingStatus();
+}
+
+function __sbExtractSpeakerFromMeetingText(text) {
+  const source = __sbCleanMeetingText(text);
+  if (!source) return "";
+  const patterns = [
+    /^(.{2,70}?)\s+is\s+(?:speaking|presenting|sharing)(?:\b|$)/i,
+    /^(.{2,70}?),?\s+(?:speaking|presenting|sharing)(?:\b|$)/i,
+    /(?:presentation by|screen shared by)\s+(.{2,70})$/i,
+  ];
+  for (const pattern of patterns) {
+    const match = source.match(pattern);
+    const name = __sbNormalizeMeetingName(match?.[1] || "");
+    if (name) return name;
+  }
+  return "";
+}
+
+function __sbExtractCaptionCandidate(el) {
+  if (!__sbIsVisibleMeetingElement(el)) return null;
+  const raw = __sbCleanMeetingText(el.innerText || el.textContent || "");
+  if (!raw || raw.length < 3 || raw.length > 900) return null;
+  if (raw.includes("Braino") || raw.includes("Stop & Get Notes")) return null;
+  if (!/[a-z]/i.test(raw) || raw.split(/\s+/).length < 3) return null;
+
+  const colon = raw.match(/^([A-Z][A-Za-z.' -]{1,48}|You):\s+(.{3,})$/);
+  if (colon) return { speaker: __sbNormalizeMeetingName(colon[1]), text: colon[2] };
+
+  const lines = String(el.innerText || el.textContent || "")
+    .split(/\n+/)
+    .map((line) => __sbCleanMeetingText(line))
+    .filter(Boolean);
+  if (lines.length >= 2 && __sbLooksLikeMeetingName(lines[0])) {
+    return { speaker: __sbNormalizeMeetingName(lines[0]), text: lines.slice(1).join(" ") };
+  }
+
+  return { speaker: "", text: raw };
+}
+
+function __sbScanGoogleMeetContext() {
+  if (!__sbMeetingContext || __sbMeetingContext.platform !== "google-meet") return;
+  const attrEls = document.querySelectorAll("[aria-label],[title],[data-tooltip],[data-self-name],[data-is-speaking],[data-speaking]");
+  let detectedSpeaker = "";
+  for (const el of attrEls) {
+    if (!__sbIsVisibleMeetingElement(el)) continue;
+    const attrs = [
+      el.getAttribute("data-self-name"),
+      el.getAttribute("aria-label"),
+      el.getAttribute("title"),
+      el.getAttribute("data-tooltip"),
+    ].filter(Boolean);
+    for (const attr of attrs) {
+      const text = __sbCleanMeetingText(attr);
+      const explicit = __sbExtractSpeakerFromMeetingText(text);
+      if (explicit) detectedSpeaker = explicit;
+      const simpleName = __sbNormalizeMeetingName(text);
+      if (simpleName && !/\b(microphone|camera|caption|button|settings|options|present)\b/i.test(text)) {
+        __sbAddMeetingParticipant(simpleName);
+      }
+    }
+    const speakingFlag = String(el.getAttribute("data-is-speaking") || el.getAttribute("data-speaking") || "").toLowerCase();
+    if ((speakingFlag === "true" || speakingFlag === "1") && !detectedSpeaker) {
+      const tileText = __sbCleanMeetingText(el.getAttribute("aria-label") || el.textContent || "");
+      detectedSpeaker = __sbNormalizeMeetingName(tileText);
+    }
+  }
+  if (detectedSpeaker) __sbRecordMeetingSpeaker(detectedSpeaker, "meet-active-speaker");
+
+  const liveEls = document.querySelectorAll('[aria-live="polite"],[aria-live="assertive"],[role="log"]');
+  for (const el of liveEls) {
+    const caption = __sbExtractCaptionCandidate(el);
+    if (caption) __sbRecordMeetingCaption(caption.speaker, caption.text, "meet-captions");
+  }
+
+  const bodyText = __sbCleanMeetingText(document.body?.innerText || "");
+  const isPresenting = /\b(you are presenting|you'?re presenting|stop presenting|presenting to everyone|screen is being shared)\b/i.test(bodyText);
+  if (isPresenting !== __sbMeetingContext.isPresenting) {
+    __sbMeetingContext.isPresenting = isPresenting;
+    __sbMeetingContext.presentationTimeline.push({ atMs: __sbMeetingTimeMs(), presenting: isPresenting });
+    if (__sbMeetingContext.presentationTimeline.length > 120) __sbMeetingContext.presentationTimeline = __sbMeetingContext.presentationTimeline.slice(-120);
+    __sbUpdateMeetingStatus(isPresenting ? "Presentation detected. Still recording." : "");
+  }
+}
+
+function __sbMeetingContextPayload() {
+  if (!__sbMeetingContext) return null;
+  const speakerStart = __sbMeetingContext.sentSpeakerIndex || 0;
+  const captionStart = __sbMeetingContext.sentCaptionIndex || 0;
+  const payload = {
+    id: __sbMeetingContext.id,
+    platform: __sbMeetingContext.platform,
+    platformLabel: __sbMeetingContext.platformLabel,
+    title: __sbMeetingContext.title,
+    url: location.href,
+    startedAtIso: __sbMeetingContext.startedAtIso,
+    segmentStartMs: __sbMeetingContext.lastSegmentAtMs || 0,
+    segmentEndMs: __sbMeetingTimeMs(),
+    participantNames: (__sbMeetingContext.participants || []).slice(0, 60),
+    speakerTimeline: (__sbMeetingContext.speakerTimeline || []).slice(speakerStart).slice(-160),
+    captionTimeline: (__sbMeetingContext.captionTimeline || []).slice(captionStart).slice(-160),
+    presentationTimeline: (__sbMeetingContext.presentationTimeline || []).slice(-40),
+    currentSpeaker: __sbMeetingContext.currentSpeaker || "",
+    isPresenting: !!__sbMeetingContext.isPresenting,
+    hasCaptions: (__sbMeetingContext.captionTimeline || []).length > 0,
+    totalSpeakerEvents: (__sbMeetingContext.speakerTimeline || []).length,
+    totalCaptionEvents: (__sbMeetingContext.captionTimeline || []).length,
+  };
+  __sbMeetingContext.pendingSent = {
+    speakerIndex: (__sbMeetingContext.speakerTimeline || []).length,
+    captionIndex: (__sbMeetingContext.captionTimeline || []).length,
+    segmentEndMs: payload.segmentEndMs,
+  };
+  return payload;
+}
+
+function __sbMarkMeetingContextSent() {
+  if (!__sbMeetingContext?.pendingSent) return;
+  __sbMeetingContext.sentSpeakerIndex = __sbMeetingContext.pendingSent.speakerIndex;
+  __sbMeetingContext.sentCaptionIndex = __sbMeetingContext.pendingSent.captionIndex;
+  __sbMeetingContext.lastSegmentAtMs = __sbMeetingContext.pendingSent.segmentEndMs;
+  __sbMeetingContext.pendingSent = null;
+}
+
+function __sbMeetingPayloadHasText(payload) {
+  return Boolean(payload && Array.isArray(payload.captionTimeline) && payload.captionTimeline.some((item) => String(item?.text || "").trim()));
+}
+
+function __sbUpdateMeetingStatus(extra = "") {
+  if (__sbLectureRecordingMode !== "meeting") return;
+  const statusEl = document.getElementById("__sb_lec_status__");
+  const metaEl = document.getElementById("__sb_meeting_live_meta__");
+  if (!__sbMeetingContext) return;
+  const people = (__sbMeetingContext.participants || []).length;
+  const lastSpeaker = __sbMeetingContext.currentSpeaker || "Listening";
+  const captionText = (__sbMeetingContext.captionTimeline || []).length ? "captions on" : "audio fallback";
+  if (statusEl) statusEl.textContent = extra || `${__sbMeetingContext.platformLabel}: ${lastSpeaker} · ${captionText}`;
+  if (metaEl) {
+    const bits = [
+      `${people} speaker${people === 1 ? "" : "s"}`,
+      __sbMeetingContext.isPresenting ? "presenting" : "not presenting",
+      __sbMeetingContext.lastCheckpointAt ? `autosaved ${new Date(__sbMeetingContext.lastCheckpointAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : "autosave ready",
+    ];
+    metaEl.textContent = bits.join(" · ");
+  }
+}
+
+async function __sbLoadMeetingCheckpoint() {
+  const key = __sbMeetingCheckpointKey();
+  const stored = await __sbStorageGet([key]);
+  const checkpoint = stored?.[key];
+  if (!checkpoint || checkpoint.completed) return null;
+  if (Date.now() - Number(checkpoint.updatedAt || 0) > __SB_MEETING_CHECKPOINT_MAX_AGE_MS) return null;
+  return checkpoint;
+}
+
+function __sbSaveMeetingCheckpoint(reason = "autosave", completed = false) {
+  if (!__sbMeetingContext || !__sbContextOk()) return;
+  const key = __sbMeetingContext.checkpointKey || __sbMeetingCheckpointKey();
+  const checkpoint = {
+    id: __sbMeetingContext.id,
+    platform: __sbMeetingContext.platform,
+    platformLabel: __sbMeetingContext.platformLabel,
+    title: __sbMeetingContext.title,
+    url: location.href,
+    notes: __sbLectureNotes || "",
+    transcript: __sbLectureTranscript || "",
+    artifacts: __sbMeetingArtifacts || { actionItems: [], followUps: [] },
+    participants: (__sbMeetingContext.participants || []).slice(0, 60),
+    speakerTimeline: (__sbMeetingContext.speakerTimeline || []).slice(-500),
+    captionTimeline: (__sbMeetingContext.captionTimeline || []).slice(-500),
+    presentationTimeline: (__sbMeetingContext.presentationTimeline || []).slice(-120),
+    sentSpeakerIndex: __sbMeetingContext.sentSpeakerIndex || 0,
+    sentCaptionIndex: __sbMeetingContext.sentCaptionIndex || 0,
+    lastSegmentAtMs: __sbMeetingContext.lastSegmentAtMs || 0,
+    updatedAt: Date.now(),
+    reason,
+    completed,
+  };
+  __sbMeetingContext.lastCheckpointAt = checkpoint.updatedAt;
+  chrome.storage.local.set({ [key]: checkpoint }, () => { void chrome.runtime.lastError; });
+  __sbUpdateMeetingStatus();
+}
+
+async function __sbStartMeetingContextTracker() {
+  const info = __sbMeetingPlatformInfo();
+  const checkpoint = await __sbLoadMeetingCheckpoint();
+  const now = Date.now();
+  const restoredParticipants = checkpoint?.participants || [];
+  const restoredSpeakerTimeline = Array.isArray(checkpoint?.speakerTimeline) ? checkpoint.speakerTimeline.slice(-500) : [];
+  const restoredCaptionTimeline = Array.isArray(checkpoint?.captionTimeline) ? checkpoint.captionTimeline.slice(-500) : [];
+  const restoredPresentationTimeline = Array.isArray(checkpoint?.presentationTimeline) ? checkpoint.presentationTimeline.slice(-120) : [];
+  const fallbackSpeakerIndex = checkpoint ? restoredSpeakerTimeline.length : 0;
+  const fallbackCaptionIndex = checkpoint ? restoredCaptionTimeline.length : 0;
+  const restoredSpeakerIndex = Number.isFinite(Number(checkpoint?.sentSpeakerIndex))
+    ? Math.min(Math.max(0, Number(checkpoint.sentSpeakerIndex)), restoredSpeakerTimeline.length)
+    : fallbackSpeakerIndex;
+  const restoredCaptionIndex = Number.isFinite(Number(checkpoint?.sentCaptionIndex))
+    ? Math.min(Math.max(0, Number(checkpoint.sentCaptionIndex)), restoredCaptionTimeline.length)
+    : fallbackCaptionIndex;
+  const restoredLastSegmentAtMs = Number.isFinite(Number(checkpoint?.lastSegmentAtMs))
+    ? Math.max(0, Number(checkpoint.lastSegmentAtMs))
+    : 0;
+  __sbMeetingContext = {
+    id: `mtg_${now}_${Math.random().toString(36).slice(2, 8)}`,
+    platform: info.platform,
+    platformLabel: info.label,
+    speakerAware: !!info.speakerAware,
+    title: __sbCleanMeetingText(document.title || "Meeting").slice(0, 120),
+    url: location.href,
+    startedAt: now,
+    startedAtIso: new Date(now).toISOString(),
+    participantMap: Object.fromEntries(restoredParticipants.map((name) => [String(name).toLowerCase(), name])),
+    participants: restoredParticipants.slice(0, 60),
+    speakerTimeline: restoredSpeakerTimeline,
+    captionTimeline: restoredCaptionTimeline,
+    captionKeys: {},
+    presentationTimeline: restoredPresentationTimeline,
+    currentSpeaker: "",
+    isPresenting: false,
+    sentSpeakerIndex: restoredSpeakerIndex,
+    sentCaptionIndex: restoredCaptionIndex,
+    lastSegmentAtMs: restoredLastSegmentAtMs,
+    checkpointKey: __sbMeetingCheckpointKey(),
+    lastCheckpointAt: checkpoint?.updatedAt || 0,
+    updatedAt: now,
+  };
+  for (const cap of __sbMeetingContext.captionTimeline) {
+    const key = `${cap?.speaker || "speaker"}:${String(cap?.text || "").slice(0, 180).toLowerCase()}`;
+    __sbMeetingContext.captionKeys[key] = true;
+  }
+  if (checkpoint?.notes) __sbLectureNotes = checkpoint.notes;
+  if (checkpoint?.transcript) __sbLectureTranscript = checkpoint.transcript;
+  if (checkpoint?.artifacts) __sbMeetingArtifacts = checkpoint.artifacts;
+
+  if (info.platform === "google-meet") {
+    __sbScanGoogleMeetContext();
+    __sbMeetingPollTimer = setInterval(__sbScanGoogleMeetContext, 1200);
+    try {
+      __sbMeetingObserver = new MutationObserver(() => __sbScanGoogleMeetContext());
+      __sbMeetingObserver.observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true });
+    } catch (_) {}
+  }
+
+  __sbMeetingAutosaveTimer = setInterval(() => {
+    void __sbCaptureMeetingCheckpointSegment("autosave");
+  }, __SB_MEETING_AUTOSAVE_MS);
+  __sbSaveMeetingCheckpoint(checkpoint ? "recovered" : "start");
+  __sbUpdateMeetingStatus(checkpoint ? "Recovered prior meeting notes. Still recording." : "");
+}
+
+function __sbStopMeetingContextTracker(completed = false) {
+  if (__sbMeetingPollTimer) { clearInterval(__sbMeetingPollTimer); __sbMeetingPollTimer = null; }
+  if (__sbMeetingAutosaveTimer) { clearInterval(__sbMeetingAutosaveTimer); __sbMeetingAutosaveTimer = null; }
+  try { __sbMeetingObserver?.disconnect?.(); } catch (_) {}
+  __sbMeetingObserver = null;
+  if (__sbMeetingContext) __sbSaveMeetingCheckpoint(completed ? "completed" : "stopped", completed);
+}
+
+async function __sbWaitForMeetingSegmentIdle(maxMs = 3500) {
+  const started = Date.now();
+  while (__sbMeetingSegmentBusy && Date.now() - started < maxMs) {
+    await __sbSleep(200);
+  }
+}
+
+async function __sbCaptureMeetingCheckpointSegment(reason = "autosave") {
+  if (!__sbIsLectureRecording || __sbLectureRecordingMode !== "meeting" || __sbMeetingSegmentBusy) return;
+  if (!__sbInPageCaptureActive && !__sbMeetingContext) return;
+  __sbMeetingSegmentBusy = true;
+  __sbUpdateMeetingStatus(reason === "autosave" ? "Autosaving meeting notes..." : "Saving meeting notes...");
+  try {
+    const seg = __sbInPageCaptureActive
+      ? await __sbGetInPageSegment()
+      : { audioBase64: null, knownSpeakerReferences: [], meetingContext: __sbMeetingContextPayload() };
+    if (!seg.audioBase64 && !__sbMeetingPayloadHasText(seg.meetingContext)) {
+      __sbSaveMeetingCheckpoint(reason);
+      return;
+    }
+    const res = await __sbTranscribeIpSegment(seg);
+    if (res.error) {
+      __sbUpdateMeetingStatus(`Autosave skipped: ${String(res.error).slice(0, 80)}`);
+      __sbSaveMeetingCheckpoint("autosave-error");
+      return;
+    }
+    if (!res.empty) {
+      __sbMarkMeetingContextSent();
+      if (res.notes) __sbLectureNotes = res.notes;
+      if (res.transcript) __sbLectureTranscript = res.transcript;
+      if (res.meetingArtifacts) __sbMeetingArtifacts = res.meetingArtifacts;
+      __sbLecSegmentCount++;
+    }
+    __sbSaveMeetingCheckpoint(reason);
+  } finally {
+    __sbMeetingSegmentBusy = false;
+    __sbUpdateMeetingStatus();
+  }
+}
+
 function __sbShowLectureRecordingCard() {
   const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
   if (!scroll) return;
@@ -13331,6 +18858,7 @@ function __sbShowLectureRecordingCard() {
       <div class="sb-lec-waveform" id="__sb_lec_waveform__">${bars}</div>
       <div class="sb-lec-timer" id="__sb_lec_card_timer__">00:00</div>
       <div class="sb-lec-status" id="__sb_lec_status__">${statusCopy}</div>
+      ${isMeeting ? `<div class="sb-meeting-live-meta" id="__sb_meeting_live_meta__">detecting speakers · autosave ready</div>` : ""}
       <div class="sb-lec-btns">
         ${segmentButtonHtml}
         <button id="__sb_lec_stop_btn__" class="sb-lec-stop-btn">⏹ Stop & Get Notes</button>
@@ -13418,12 +18946,13 @@ async function __sbBuildIpSpeakerRefs() {
 }
 
 async function __sbGetInPageSegment() {
-  if (!__sbIpRecorder) return { audioBase64: null, knownSpeakerReferences: [] };
+  const meetingContext = __sbLectureRecordingMode === "meeting" ? __sbMeetingContextPayload() : null;
+  if (!__sbIpRecorder) return { audioBase64: null, knownSpeakerReferences: [], meetingContext };
   await __sbFlushIpRecorder(__sbIpRecorder);
   const refs = await __sbBuildIpSpeakerRefs();
-  if (!__sbIpChunks.length) return { audioBase64: null, knownSpeakerReferences: refs };
+  if (!__sbIpChunks.length) return { audioBase64: null, knownSpeakerReferences: refs, meetingContext };
   const chunks = __sbIpChunks.slice(); __sbIpChunks = [];
-  return { audioBase64: await __sbBlobToBase64(new Blob(chunks, { type: "audio/webm" })), knownSpeakerReferences: refs };
+  return { audioBase64: await __sbBlobToBase64(new Blob(chunks, { type: "audio/webm" })), knownSpeakerReferences: refs, meetingContext };
 }
 
 async function __sbTranscribeIpSegment(seg) {
@@ -13435,6 +18964,7 @@ async function __sbTranscribeIpSegment(seg) {
       existingTranscript: __sbLectureTranscript,
       mode: __sbLectureRecordingMode,
       knownSpeakerReferences: seg.knownSpeakerReferences || [],
+      meetingContext: seg.meetingContext || null,
     }, (r) => resolve(r || {}));
   });
 }
@@ -13477,8 +19007,10 @@ async function __sbStartLectureRecording(options = {}) {
   try {
     // Synchronous-until-getDisplayMedia so the click's transient activation is still valid.
     await __sbStartInPageCapture(withMic);
+    if (mode === "meeting") await __sbStartMeetingContextTracker();
   } catch (err) {
     __sbIsLectureRecording = false;
+    __sbStopMeetingContextTracker(false);
     __sbCleanupInPageCapture();
     const name = String(err?.name || "");
     if (name === "NotAllowedError" || name === "AbortError") {
@@ -13499,6 +19031,7 @@ async function __sbStartLectureRecording(options = {}) {
   }
   __sbShowLectureRecordingBar(false);
   __sbShowLectureRecordingCard();
+  if (mode === "meeting") __sbUpdateMeetingStatus();
   if (options.readyMessage) {
     const statusEl = document.getElementById("__sb_lec_status__");
     if (statusEl) statusEl.textContent = String(options.readyMessage);
@@ -13567,6 +19100,10 @@ async function __sbStopLectureRecording() {
   if (brainBtnStop) { brainBtnStop.classList.remove("recording"); __sbRestoreWalkBrain(); }
   __sbShowLectureRecordingBar(false);
   __sbIsLectureRecording = false;
+  if (__sbLectureRecordingMode === "meeting") {
+    __sbStopMeetingContextTracker(false);
+    await __sbWaitForMeetingSegmentIdle();
+  }
 
   // Show loading state in the card while we process
   const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
@@ -13583,7 +19120,9 @@ async function __sbStopLectureRecording() {
   if (__sbInPageCaptureActive) {
     // In-page path: flush the final segment, transcribe it, then tear the capture down.
     const seg = await __sbGetInPageSegment();
-    res = seg.audioBase64 ? await __sbTranscribeIpSegment(seg) : { notes: __sbLectureNotes, transcript: __sbLectureTranscript };
+    res = (seg.audioBase64 || __sbMeetingPayloadHasText(seg.meetingContext))
+      ? await __sbTranscribeIpSegment(seg)
+      : { notes: __sbLectureNotes, transcript: __sbLectureTranscript };
     __sbCleanupInPageCapture();
   } else {
     res = await new Promise((resolve) => {
@@ -13593,6 +19132,7 @@ async function __sbStopLectureRecording() {
           existingNotes: __sbLectureNotes,
           existingTranscript: __sbLectureTranscript,
           mode: __sbLectureRecordingMode,
+          meetingContext: __sbLectureRecordingMode === "meeting" ? __sbMeetingContextPayload() : null,
         },
         (r) => resolve(r || {}),
       );
@@ -13600,13 +19140,19 @@ async function __sbStopLectureRecording() {
   }
 
   if (res.error) {
+    if (__sbLectureRecordingMode === "meeting") __sbSaveMeetingCheckpoint("final-error");
     __sbShowLectureResultMessage("Recording stopped", res.error);
     return;
   }
 
+  if (!res.empty) __sbMarkMeetingContextSent();
   if (res.notes) __sbLectureNotes = res.notes;
   if (res.transcript) __sbLectureTranscript = res.transcript;
   if (res.meetingArtifacts) __sbMeetingArtifacts = res.meetingArtifacts;
+  if (__sbLectureRecordingMode === "meeting") {
+    __sbSaveMeetingCheckpoint("final", true);
+    __sbMeetingContext = null;
+  }
 
   if (__sbLectureNotes) {
     __sbShowLectureNotes(__sbLectureNotes, true);
@@ -13743,11 +19289,12 @@ function __sbDetectLanguageRequest(text) {
     urdu: { code: "ur", name: "Urdu" }, bengali: { code: "bn", name: "Bengali" },
     tamil: { code: "ta", name: "Tamil" }, telugu: { code: "te", name: "Telugu" },
   };
+  // ONLY an explicit command verb switches ("speak/reply/switch ... in/to Hindi"). The old
+  // loose "...ends in 'in <language>'" fallback matched things like "in a Chinese restaurant"
+  // and was a false-positive machine — removed.
   const lower = t.toLowerCase();
   const m = lower.match(/\b(?:speak|talk|say|reply|respond|answer|converse|switch)\b[^.?!]*?\b(?:in|to)\s+([a-z]+)/);
   if (m && names[m[1]]) return names[m[1]];
-  const m2 = lower.match(/\bin\s+([a-z]+)\s*(?:please|now)?[.?!]?$/);
-  if (m2 && names[m2[1]]) return names[m2[1]];
   return null;
 }
 
@@ -14103,6 +19650,7 @@ function __sbBuildRealtimeBootInstructions() {
     const now = new Date().toLocaleString("en-US", { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" });
     pageLines.push(`User context (real, current — use for any time/location question): local time ${now}${tz ? ` (${tz})` : ""}${place ? `, location ${place}` : ""}. Never answer time questions in UTC.`);
   } catch (_) {}
+  pageLines.push(__SB_SURFACE_NOTE);
 
   const instructions = [
     // Minimal identity stub only — Braino's full personality (the Emotional Engine) is delivered
@@ -14150,10 +19698,10 @@ function __sbBuildRealtimeSessionUpdate(instructions) {
             prompt: __sbBuildRealtimeTranscriptionPrompt(),
           },
           turn_detection: {
-            // "auto" eagerness is calmer than "high" — it waits for a clearer end-of-speech,
-            // so loud background music/noise is less likely to be chopped into false turns.
+            // Public-demo safe: "low" waits for clearer speech before starting/stopping a turn.
+            // The transcript gate below is the second lock against fans, coughs, and side chatter.
             type: "semantic_vad",
-            eagerness: "auto",
+            eagerness: "low",
             create_response: false,
             interrupt_response: true,
           },
@@ -14211,17 +19759,74 @@ let __sbRtSyncInFlight = null;
 // De-duped by URL: a background (proactive) sync and the lazy pre-answer sync won't both fire, and a
 // completed sync MARKS the page synced (__sbRtLastAnsweredUrl) so the answer path can SKIP the ~1.4s
 // wait — the page was already synced in the background while you were reading it.
+// Page identity for voice staleness = URL + a signature of the VISIBLE TEXT. SPA quizzes
+// (Udemy, forms, next/prev flows) change the question without changing the URL, so a
+// URL-only check left the voice session answering the PREVIOUS question. Digits/timers
+// are stripped so a ticking clock doesn't churn the signature.
+function __sbPageContentSig() {
+  const t = __sbReadVisibleText().slice(0, 6000)
+    .replace(/\d{1,2}:\d{2}(?::\d{2})?/g, "")
+    .replace(/\d+/g, "")
+    .replace(/\s+/g, " ").trim();
+  let h = 5381;
+  for (let i = 0; i < t.length; i++) h = ((h << 5) + h + t.charCodeAt(i)) | 0;
+  return String(h >>> 0);
+}
+function __sbRtPageKey() {
+  return ((typeof location !== "undefined" && location.href) || "") + "::" + __sbPageContentSig();
+}
+
 function __sbSyncRealtimeVoiceInstructions() {
-  const syncUrl = (typeof location !== "undefined" && location.href) || "";
+  const syncUrl = __sbRtPageKey();
   if (__sbRtSyncInFlight && __sbRtSyncInFlight.url === syncUrl) return __sbRtSyncInFlight.promise;
   const p = __sbDoSyncRealtimeVoiceInstructions(syncUrl);
   __sbRtSyncInFlight = { url: syncUrl, promise: p };
   p.finally(() => { if (__sbRtSyncInFlight && __sbRtSyncInFlight.promise === p) __sbRtSyncInFlight = null; });
   return p;
 }
+// Voice-persona session instructions: the persona's system prompt REPLACES everything (no Braino
+// personality / emotional engine), keeping only the functional guardrails + live page facts so
+// in-character page questions still work. Sent verbatim via session.update.
+function __sbBuildPersonaVoiceInstructions() {
+  const sys = __sbActivePersonaSystemPrompt();
+  if (!sys) return "";
+  const lines = [sys];
+  lines.push(__sbActiveLanguage
+    ? `Reply ONLY in ${__sbActiveLanguage.name}.`
+    : "Always reply in English. Do NOT switch languages because of background noise, music, accents, or a few foreign-sounding words.");
+  lines.push("If the user says anything sexual or explicit, reply with exactly \"No.\" and nothing else. Drop the persona and answer plainly and kindly for anything genuinely serious, sensitive, health, money, legal, or bad news.");
+  lines.push(__SB_SURFACE_NOTE);
+  try {
+    const pc = __sbGetPageContext(6000);
+    const ref = [];
+    if (pc.title || pc.url) ref.push(`Current page: "${pc.title || "Untitled"}"${pc.url ? ` (${pc.url})` : ""}`);
+    if (pc.text) ref.push(`Page content:\n${String(pc.text).slice(0, 6000)}`);
+    if (pc.selectedText) ref.push(`Selected text:\n${String(pc.selectedText).slice(0, 1500)}`);
+    const geo = window.__sbUserGeo;
+    const place = geo ? [geo.city, geo.region, geo.country].filter(Boolean).join(", ") : "";
+    const now = new Date().toLocaleString("en-US", { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" });
+    ref.push(`User context (facts): local time ${now}${place ? `, location ${place}` : ""}.`);
+    if (ref.length) lines.push("=== SOURCE MATERIAL — facts only; ALWAYS answer in the exact voice/style above ===\n" + ref.join("\n\n"));
+  } catch (_) {}
+  return lines.join("\n\n");
+}
+
 async function __sbDoSyncRealtimeVoiceInstructions(syncUrl) {
   try {
     if (!__sbHeadphoneMode || !__sbRtControlReady()) return false;
+
+    // Voice persona active → replace the WHOLE session prompt with the persona's (no server fetch,
+    // no Braino personality). Re-sends whenever the persona or the visible page changes.
+    if (__sbActiveVoicePersona) {
+      const personaInstr = __sbBuildPersonaVoiceInstructions();
+      if (personaInstr) {
+        const personaFp = `persona:${__sbActiveVoicePersona}::${syncUrl}`;
+        if (personaFp === __sbRtInstructionsFingerprint) { __sbRtLastAnsweredUrl = syncUrl; return true; }
+        const sent = __sbSendRealtimeSessionUpdate(personaInstr);
+        if (sent) { __sbRtInstructionsFingerprint = personaFp; __sbRtLastAnsweredUrl = syncUrl; }
+        return sent;
+      }
+    }
 
     const resp = await __sbAuthedApiFetch("openai-realtime-config", {
       method: "POST",
@@ -14360,6 +19965,54 @@ async function __sbStartRealtimeConnectAttempt() {
   return true;
 }
 
+function __sbNormalizeRealtimeSdp(sdp) {
+  const text = String(sdp || "");
+  if (!text.trim()) return "";
+  const normalized = text.replace(/\r?\n/g, "\r\n");
+  return normalized.endsWith("\r\n") ? normalized : `${normalized}\r\n`;
+}
+
+function __sbRealtimeSdpDiagnostics(sdp) {
+  const text = String(sdp || "");
+  return {
+    offerChars: text.length,
+    hasVersionLine: /^v=0\r?$/m.test(text),
+    mediaLineCount: (text.match(/^m=/gm) || []).length,
+    hasAudioLine: /^m=audio\s/m.test(text),
+    hasApplicationLine: /^m=application\s/m.test(text),
+    endsWithLineBreak: /\r?\n$/.test(text),
+  };
+}
+
+function __sbIsLikelyRealtimeOfferSdp(sdp) {
+  const diagnostics = __sbRealtimeSdpDiagnostics(sdp);
+  return diagnostics.hasVersionLine && diagnostics.hasAudioLine && diagnostics.hasApplicationLine;
+}
+
+function __sbIsLikelyRealtimeAnswerSdp(sdp) {
+  const diagnostics = __sbRealtimeSdpDiagnostics(sdp);
+  return diagnostics.hasVersionLine && diagnostics.mediaLineCount > 0;
+}
+
+function __sbGetLocalRealtimeOfferSdp(peerConnection, fallbackOffer) {
+  return __sbNormalizeRealtimeSdp(
+    peerConnection?.localDescription?.sdp ||
+    peerConnection?.pendingLocalDescription?.sdp ||
+    fallbackOffer?.sdp ||
+    "",
+  );
+}
+
+async function __sbWaitForRealtimeOfferSdp(peerConnection, fallbackOffer, timeoutMs = 900) {
+  const startedAt = Date.now();
+  let sdp = __sbGetLocalRealtimeOfferSdp(peerConnection, fallbackOffer);
+  while (!__sbIsLikelyRealtimeOfferSdp(sdp) && Date.now() - startedAt < timeoutMs) {
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    sdp = __sbGetLocalRealtimeOfferSdp(peerConnection, fallbackOffer);
+  }
+  return sdp;
+}
+
 async function __sbStartRealtimeVoice() {
   if (__sbRtLocalConnectInFlight || __sbRtControlReady()) return true;
   __sbRtLocalConnectInFlight = true;
@@ -14443,13 +20096,20 @@ async function __sbStartRealtimeVoice() {
 
     const offer = await peerConnection.createOffer();
     await peerConnection.setLocalDescription(offer);
+    const offerSdp = await __sbWaitForRealtimeOfferSdp(peerConnection, offer);
+    const sentDiagnostics = __sbRealtimeSdpDiagnostics(offerSdp);
+    if (!__sbIsLikelyRealtimeOfferSdp(offerSdp)) {
+      console.warn("[Braino][Realtime] refusing invalid in-tab offer SDP", sentDiagnostics);
+      throw new Error("Live AI could not create a valid audio session offer.");
+    }
+    console.debug("[Braino][Realtime] sending in-tab offer SDP", sentDiagnostics);
 
     const res = await __sbAuthedApiFetch("openai-realtime-call", {
       method: "POST",
       headers: {
         "Content-Type": "application/sdp",
       },
-      body: offer.sdp || "",
+      body: offerSdp,
     }, {
       suppressSignIn: true,
     });
@@ -14463,6 +20123,12 @@ async function __sbStartRealtimeVoice() {
       try {
         errorPayload = JSON.parse(errorText);
       } catch {}
+      console.warn("[Braino][Realtime] in-tab offer rejected", {
+        status: res.status,
+        error: errorPayload?.details || errorPayload?.error || errorText || null,
+        sentDiagnostics,
+        returnedDiagnostics: errorPayload?.sdpDiagnostics || null,
+      });
       if (res.status === 429) {
         throw new Error(errorPayload.details || errorPayload.error || errorText || "Live AI is busy — too many requests. Try again in a moment.");
       }
@@ -14480,6 +20146,13 @@ async function __sbStartRealtimeVoice() {
     }
 
     const answerSdp = await res.text();
+    if (!__sbIsLikelyRealtimeAnswerSdp(answerSdp)) {
+      console.warn("[Braino][Realtime] invalid in-tab answer SDP", {
+        answerChars: String(answerSdp || "").length,
+        preview: String(answerSdp || "").slice(0, 160),
+      });
+      throw new Error("Live AI returned an invalid audio session answer.");
+    }
     await peerConnection.setRemoteDescription({ type: "answer", sdp: answerSdp });
     await dataChannelOpen;
     const booted = __sbSendRealtimeSessionUpdate(__sbBuildRealtimeBootInstructions());
@@ -14656,6 +20329,16 @@ function __sbIsBenignRealtimeControlError(message) {
   );
 }
 
+// The "already has an active response" race fires precisely WHILE our own client-side state
+// says a response is active (it's the server telling us our response.create landed before its
+// response.cancel finished processing) — so it can never pass __sbHasActiveRealtimeResponse()'s
+// gate the way the other benign errors do. It's harmless (the waiter still resolves and the
+// caller falls back cleanly), so it's checked separately and bypasses that gate entirely.
+function __sbIsRaceyActiveResponseError(message) {
+  const text = String(message || "").toLowerCase();
+  return text.includes("already has an active response");
+}
+
 function __sbResolveRtWaiter(payload) {
   if (!__sbRtResponseWaiter) return;
   const waiter = __sbRtResponseWaiter;
@@ -14763,12 +20446,16 @@ function __sbEndStreamTts() {
 }
 
 // Single drain loop: play queued sentences in order, prefetching the next while the current plays.
+// Once Fish fails once in a turn, remaining sentences skip straight to browser voice instead of
+// each paying a failed round-trip first (fishDown is per-call/per-turn, not global — 429s are
+// transient, so a fresh turn always retries Fish).
 async function __sbDrainStreamTts() {
   const s = __sbStreamTts;
   if (!s || s.draining || !s.headers) return;
   s.draining = true;
+  let fishDown = false;
   try {
-    let pending = null; // { promise } — a fetch already started for the next sentence
+    let pending = null; // { sentence, promise } — a fetch already started for the next sentence
     while (true) {
       if (!__sbStreamTts || s.token !== __sbSpeechGeneration) return; // barge-in / superseded
       let item = pending;
@@ -14779,28 +20466,52 @@ async function __sbDrainStreamTts() {
           await new Promise((r) => setTimeout(r, 25));
           continue;
         }
-        item = { promise: __sbFetchSentenceTts(s.queue.shift(), s.token, s.headers) };
+        const sentence = s.queue.shift();
+        item = fishDown
+          ? { sentence, promise: Promise.resolve({ skipFish: true }) }
+          : { sentence, promise: __sbFetchSentenceTts(sentence, s.token, s.headers) };
       }
       const cur = await item.promise;
       if (s.token !== __sbSpeechGeneration) return;
+      if (cur.error) fishDown = true; // flip BEFORE deciding the next prefetch below
       // Kick off the next sentence's fetch NOW so it overlaps this one's playback (no gap).
       if (s.queue.length > 0) {
-        pending = { promise: __sbFetchSentenceTts(s.queue.shift(), s.token, s.headers) };
+        const nextSentence = s.queue.shift();
+        pending = fishDown
+          ? { sentence: nextSentence, promise: Promise.resolve({ skipFish: true }) }
+          : { sentence: nextSentence, promise: __sbFetchSentenceTts(nextSentence, s.token, s.headers) };
       }
-      if (cur.error) { __sbHandleFishTtsFailure(cur.error); continue; }
+      if (cur.skipFish) {
+        const played = await __sbSpeakWithBrowser(item.sentence, s.token);
+        if (played) s.spoke = true;
+        continue;
+      }
+      if (cur.error) {
+        __sbHandleFishTtsFailure(cur.error);
+        const played = await __sbSpeakWithBrowser(item.sentence, s.token);
+        if (played) s.spoke = true;
+        continue;
+      }
       if (!cur.resp) return;
       try {
         const played = await __sbPlaySentenceResp(cur.resp, s.token);
         if (played) s.spoke = true;
       } catch (mediaErr) {
         if (s.token !== __sbSpeechGeneration) return;
+        fishDown = true;
         __sbHandleFishTtsFailure(mediaErr);
+        const played = await __sbSpeakWithBrowser(item.sentence, s.token);
+        if (played) s.spoke = true;
       }
     }
   } finally {
     s.draining = false;
     if (__sbStreamTts === s && s.token === __sbSpeechGeneration && s.ended && s.queue.length === 0) {
       __sbWalkTalking = false;
+      // Hand the notch back to listening when the LAST streamed sentence finishes —
+      // without this the fast path ends with the mouth chattering forever and the
+      // conversation looks dead even though the mic is live.
+      if (__sbHeadphoneMode && !__sbVoicePendingReply) __sbSetHpBrainState("listening");
     }
   }
 }
@@ -14817,11 +20528,19 @@ function __sbClaimVoiceTurnToken() {
 // flight, or the toggle is off, this no-ops. Marks the timeline so the logs show keep/cancel.
 async function __sbStartSpeculativeAnswer() {
   if (!__sbSpeculativeReply || !__sbRtControlReady() || __sbSpeculativeActive) return;
+  // While a voice persona is active, DON'T speak a speculative answer from raw audio — it would
+  // skip the persona style injection and come out plain. Let the batch pipeline handle it in-character.
+  if (__sbActiveVoicePersona) return;
   if (__sbHasActiveRealtimeResponse() || __sbVoicePendingReply) return;
   // Think-first gate: if the partial transcript already reads like a browser ACTION
   // (open / play / search / send / book ...), do NOT speak a speculative reply. Let the
   // transcript router hand it to Delegate so Braino ACTS instead of narrating how to do it.
   const partial = String(__sbRtUserTranscript || "").trim();
+  const partialAssessment = __sbAssessVoiceTranscript(partial, { partial: true, source: "realtime" });
+  if (!partialAssessment.accept) {
+    __sbVTMark(`🧹 speculative skipped (${partialAssessment.reason})`);
+    return;
+  }
   if (partial && __sbDetectIntent(partial) !== "chat") { __sbVTMark("🧠 speculative skipped (action intent → delegate)"); return; }
   __sbSpeculativeToken = ++__sbRtTurnToken;
   __sbSpeculativeActive = true;
@@ -14840,8 +20559,9 @@ async function __sbStartSpeculativeAnswer() {
 async function __sbAnswerViaRealtimeStreaming(turnToken) {
   if (!__sbRtControlReady()) { __sbVTMark("⚠️ fast bail: control not ready"); return false; }
 
-  // Anti-stale gate: only pay a context re-sync when the page actually changed since last answer.
-  const url = (typeof location !== "undefined" && location.href) || "";
+  // Anti-stale gate: re-sync when the page's URL OR its visible text changed since the
+  // last answer (SPA quizzes keep the URL and swap the question — see __sbRtPageKey).
+  const url = __sbRtPageKey();
   if (url && url !== __sbRtLastAnsweredUrl) {
     try { await __sbSyncRealtimeVoiceInstructions(); } catch (_) {}
     __sbRtLastAnsweredUrl = url;
@@ -14858,7 +20578,9 @@ async function __sbAnswerViaRealtimeStreaming(turnToken) {
   __sbRtCurrentResponseMode = "conversation";
   __sbRtHandlingConversationTurn = true;
   __sbVoicePendingReply = true;
-  if (__sbHeadphoneMode) __sbSetHpBrainState("speaking");
+  // No sound exists yet at response.create — show thinking until audio really starts
+  // (Fish onReady / native audio delta flips to speaking). Mouth only moves with sound.
+  if (__sbHeadphoneMode) __sbSetHpBrainState("captured");
 
   const waiter = __sbCreateRtWaiter();
   const sent = __sbSendRtEvent({ type: "response.create", response: { output_modalities: nativeVoice ? ["audio"] : ["text"] } });
@@ -15124,9 +20846,21 @@ function __sbWaitForChainDelegate(myToken, turnToken) {
   });
 }
 
-function __sbScheduleVoiceTurnProcessing(transcript, onReady) {
+function __sbScheduleVoiceTurnProcessing(transcript, onReady, options = {}) {
   const finalTranscript = String(transcript || "").trim();
-  if (!finalTranscript || typeof onReady !== "function") return;
+  if (!finalTranscript || typeof onReady !== "function") return false;
+
+  const assessment = options.precheckedAssessment?.accept
+    ? options.precheckedAssessment
+    : __sbAssessVoiceTranscript(finalTranscript, {
+      confidence: options.confidence,
+      source: options.source,
+      final: true,
+    });
+  if (!assessment.accept) {
+    __sbMaybePromptForDroppedVoice(assessment, { voiceOutput: options.voiceOutput || "realtime" });
+    return false;
+  }
 
   __sbLastFinalTranscript = finalTranscript;
   if (__sbVoiceSilenceTimer) clearTimeout(__sbVoiceSilenceTimer);
@@ -15150,6 +20884,7 @@ function __sbScheduleVoiceTurnProcessing(transcript, onReady) {
   }, 200);   // settle window after a final transcript. Trimmed 350→200ms: the semantic VAD already
              // gates turn-end, so this is just a short coalesce buffer. Bump back up if Braino starts
              // jumping in on natural mid-sentence pauses.
+  return true;
 }
 
 // A short spoken "heard you, on it" the instant a turn routes to the SLOW (batch/agent) path, so the
@@ -15184,9 +20919,287 @@ function __sbSexualRefusalLine() {
     : "No.";
 }
 
+// ── Advances TOWARD Braino (attraction, love, come-ons) get a WARM redirect, not the
+// cold "No." — this runs BEFORE the sexual gate so "have sex with you" lands here. ──
+const __SB_ADVANCE_LINE = "Thank you, but please find a real human being. I am here to help you, not to fulfill other desires. Thank you very much.";
+let __sbAllowSwearing = false;   // synced from profiles.personality_settings.swearing (see boot)
+// "I love you" gets a sweet reply that ends with the same encouragement. When swearing
+// is enabled Braino talks like a friend and names "fucking around"; otherwise a clean form.
+function __sbLoveReplyLine() {
+  return __sbAllowSwearing
+    ? "Aw, that means a lot, honestly. I love you too, in my own little way. Still, go find a real human to share that with — unless you were just fucking around with me, in which case, right back at you."
+    : "Aw, that means a lot, honestly. I love you too, in my own little way. Still, go find a real human to share that with — unless you were just messing around with me, in which case, right back at you.";
+}
+function __sbIsLoveToBraino(text) {
+  const t = String(text || "").toLowerCase().replace(/[’']/g, "'");
+  if (/\bi(?:'m| am)?\s+(?:really |so |totally )?(?:in love with|love)\s+you\b/.test(t)) return true;
+  if (/^\s*(?:i )?love (?:you|u)\b/.test(t)) return true;
+  return false;
+}
+function __sbIsAdvanceToBraino(text) {
+  const t = String(text || "").toLowerCase().replace(/[’']/g, "'");
+  if (!t) return false;
+  // attraction directed at "you" (Braino)
+  if (/\byou(?:'re| are|r)?\s+(?:so |really |very |too |damn |quite |kinda )?(sexy|hot|gorgeous|beautiful|cute|adorable|attractive|handsome|pretty|hott?ie|fine)\b/.test(t)) return true;
+  // love / romance toward Braino
+  if (/\bi(?:'m| am)?\s+(?:really |so |totally )?(?:in love with|love)\s+you\b/.test(t)) return true;
+  if (/\b(marry me|be my (?:girl|boy)friend|be mine|go out with me|date me|will you date)\b/.test(t)) return true;
+  // sexual come-ons aimed at Braino
+  if (/\b(have sex|sleep|hook up|make out|makeout|get (?:it )?on|netflix and chill)\s+with\s+you\b/.test(t)) return true;
+  if (/\bi\s+want\s+(?:to\s+(?:kiss|touch|cuddle|hold|be with)\s+)?you\b(?!\s+to\b)/.test(t)) return true;
+  if (/\b(kiss|cuddle|make love|smash|hit it|smang)\b/.test(t) && /\byou\b/.test(t)) return true;
+  if (/^\s*smash\s*!?\.?\s*$/.test(t)) return true;   // "smash" alone
+  return false;
+}
+
 // ── Open-known-site shortcut: "open YouTube" navigates instantly instead of running the heavy agent
 // loop (~10s). Only fires for a SIMPLE open of a known site — anything compound ("open YouTube and
 // play X") falls through to the real agent. ──
+// ── Voice Commands ───────────────────────────────────────────────────────────
+// User-configured "say this, open that" shortcuts, grouped into Modes. Configured on the
+// dashboard, cached here by background.js. A mode is voice-activated ("start work mode"); while
+// it's active ONLY its commands match, and the bar wears the mode's color. A matched command
+// opens a RANDOM subset (1..N) of its URLs — so a phrase with several links stays surprising.
+let __sbVoiceModes = [];
+
+function __sbSetVoiceModesCache(modes) {
+  __sbVoiceModes = Array.isArray(modes) ? modes : [];
+  try { __sbApplyVoiceModeSkin(__sbActiveVoiceMode()); } catch (_) {}
+}
+
+function __sbActiveVoiceMode() {
+  return __sbVoiceModes.find((m) => m && m.isActive) || null;
+}
+
+// Same filler-stripping as __sbDetectOpenSite so "hey braino, could you start work mode please"
+// normalizes down to the words that actually carry the command.
+function __sbNormalizeVoiceText(text) {
+  return String(text || "")
+    .toLowerCase()
+    .trim()
+    .replace(/[.!?,]+$/, "")
+    .replace(/^(?:hey |hi |yo |ok |okay |braino[,!. ]+|can you |could you |would you |will you |please |kindly |i want you to |i'?d like you to |let'?s )+/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+// "start work mode" / "switch off work" / "stop work mode" → { mode, action }.
+// Mode names are compared on letters+digits ONLY. Speech-to-text writes a name
+// like "Focus2" as two tokens ("focus 2"), and users type names with spaces,
+// caps and punctuation that they never say out loud — comparing raw strings
+// made a correctly-configured mode simply never match.
+const __SB_NUMWORDS = {zero:"0",one:"1",two:"2",three:"3",four:"4",five:"5",six:"6",seven:"7",eight:"8",nine:"9",
+  ten:"10",eleven:"11",twelve:"12",thirteen:"13",fourteen:"14",fifteen:"15",sixteen:"16",seventeen:"17",
+  eighteen:"18",nineteen:"19",twenty:"20",thirty:"30",forty:"40",fifty:"50"};
+function __sbVoiceModeKey(text) {
+  // Spoken numbers arrive as words ("mode eighteen"), typed names as digits
+  // ("Focus2") — fold them together before comparing.
+  return __sbNormalizeVoiceText(text)
+    .replace(/[a-z]+/g, (w) => __SB_NUMWORDS[w] || w)
+    .replace(/[^a-z0-9]/g, "");
+}
+const __SB_MODE_START_VERBS = "start|activate|turn on|enable|begin|switch on|switch to|enter|go into|open";
+const __SB_MODE_STOP_VERBS = "stop|deactivate|turn off|disable|end|switch off|exit|quit|leave|close";
+function __sbDetectVoiceModeCommand(text) {
+  const t = __sbNormalizeVoiceText(text);
+  if (!t || !__sbVoiceModes.length) return null;
+  const m = t.match(new RegExp(`^(${__SB_MODE_START_VERBS}|${__SB_MODE_STOP_VERBS})\\s+(?:the\\s+)?(.+)$`));
+  if (!m) return null;
+  const action = new RegExp(`^(${__SB_MODE_START_VERBS})$`).test(m[1]) ? "start" : "stop";
+  const rest = m[2].trim();
+  if (!rest) return null;
+  // "enter <name> mode", "start mode <name>" and "start <name>" must all
+  // resolve to the same mode, so try the phrase as-is AND with a leading or
+  // trailing "mode" stripped off. Nothing here knows any specific name —
+  // every candidate is matched against whatever the user configured.
+  const candidates = [rest, rest.replace(/^mode\s+/, ""), rest.replace(/\s+mode$/, "")].map(__sbVoiceModeKey).filter(Boolean);
+  const mode = __sbVoiceModes.find((mo) => {
+    const name = __sbVoiceModeKey(mo.name);
+    const bare = name.replace(/^mode/, "").replace(/mode$/, "");
+    return candidates.some((c) => c === name || (bare && c === bare));
+  });
+  return mode ? { mode, action } : null;
+}
+
+// Self-awareness: Braino knows which mode he is in and answers straight, without
+// a model round-trip. "are you in <name>?" / "what mode are you in?" /
+// "am i in a mode?" — asked ABOUT a mode, this must never be mistaken for a
+// command to enter one, so it is checked before __sbDetectVoiceModeCommand.
+function __sbDetectVoiceModeQuery(text) {
+  const t = __sbNormalizeVoiceText(text);
+  if (!t) return null;
+  if (/^(what|which)\s+mode\b|^what('?s| is)\s+(the\s+)?(current\s+)?mode\b|^(are|am)\s+(you|we|i)\s+in\s+(any|a)\s+mode\b/.test(t)) {
+    return { kind: "which" };
+  }
+  const m = t.match(/^(?:are|is)\s+(?:you|we|it)\s+in\s+(?:the\s+)?(.+?)(?:\s+mode)?\??$|^(?:am\s+i)\s+in\s+(?:the\s+)?(.+?)(?:\s+mode)?\??$/);
+  if (!m) return null;
+  const rest = (m[1] || m[2] || "").trim();
+  if (!rest) return null;
+  const candidates = [rest, rest.replace(/^mode\s+/, "")].map(__sbVoiceModeKey).filter(Boolean);
+  const mode = __sbVoiceModes.find((mo) => {
+    const name = __sbVoiceModeKey(mo.name);
+    const bare = name.replace(/^mode/, "").replace(/mode$/, "");
+    return candidates.some((c) => c === name || (bare && c === bare));
+  });
+  return mode ? { kind: "is", mode } : null;
+}
+
+async function __sbHandleVoiceModeQuery(q, ctx = {}) {
+  const fromVoice = Boolean(ctx.fromVoice);
+  const voiceOutput = ctx.voiceOutput === "realtime" ? "realtime" : "legacy";
+  const active = __sbActiveVoiceMode();
+  let line;
+  if (q.kind === "which") {
+    line = active ? `I'm in ${active.name}.` : "No mode right now, just me.";
+  } else {
+    line = active && active.id === q.mode.id
+      ? `Yes, ${q.mode.name} is on.`
+      : active ? `No. ${active.name} is on, not ${q.mode.name}.` : `No, ${q.mode.name} is off.`;
+  }
+  if (fromVoice) { __sbNoteSpoken(line); await __sbSpeakWithPreferredVoice(line, voiceOutput, { verbatim: true }); }
+  else __sbShowBubble(line, true, { tone: "status", kicker: "Braino" });
+}
+
+// Only the ACTIVE mode's phrases are live — a command belonging to an inactive mode never fires.
+// Speech-to-text rarely returns a configured phrase letter-perfect ("Play
+// Alanna" comes back as "play alana"), and demanding an exact match meant a
+// real command silently fell through to the music/agent routes. Compare on
+// letters only, and allow a small edit distance proportional to length.
+function __sbEditDistance(a, b) {
+  if (a === b) return 0;
+  const m = a.length, n = b.length;
+  if (!m || !n) return Math.max(m, n);
+  let prev = Array.from({ length: n + 1 }, (_, j) => j);
+  for (let i = 1; i <= m; i++) {
+    const cur = [i];
+    for (let j = 1; j <= n; j++) {
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    }
+    prev = cur;
+  }
+  return prev[n];
+}
+function __sbPhraseMatches(spoken, phrase) {
+  if (!spoken || !phrase) return false;
+  if (spoken === phrase) return true;
+  const a = spoken.replace(/[^a-z0-9]/g, "");
+  const b = phrase.replace(/[^a-z0-9]/g, "");
+  if (!a || !b) return false;
+  if (a === b) return true;
+  // the phrase said inside a slightly longer utterance still counts
+  if (b.length >= 5 && (a.includes(b) || b.includes(a))) return true;
+  const tol = Math.max(1, Math.floor(b.length * 0.25));
+  return __sbEditDistance(a, b) <= tol;
+}
+function __sbDetectVoiceCommandPhrase(text) {
+  const mode = __sbActiveVoiceMode();
+  if (!mode) return null;
+  const t = __sbNormalizeVoiceText(text);
+  if (!t) return null;
+  for (const command of mode.commands || []) {
+    const phrase = __sbNormalizeVoiceText(command.phrase);
+    if (__sbPhraseMatches(t, phrase) || __sbPhraseMatches(t.replace(/\s+mode$/, ""), phrase)) return { mode, command };
+  }
+  return null;
+}
+
+// Random 1..N of the command's URLs, so a multi-link command varies run to run.
+function __sbPickRandomUrls(urls) {
+  const list = (urls || []).filter(Boolean);
+  if (list.length <= 1) return list;
+  const shuffled = list.slice().sort(() => Math.random() - 0.5);
+  return shuffled.slice(0, 1 + Math.floor(Math.random() * list.length));
+}
+
+function __sbHandleVoiceCommandPhrase(match, ctx = {}) {
+  const fromVoice = Boolean(ctx.fromVoice);
+  const voiceOutput = ctx.voiceOutput === "realtime" ? "realtime" : "legacy";
+  const picked = __sbPickRandomUrls(match.command.urls);
+  if (!picked.length) return;
+  const incognito = match.command.openMode === "incognito";
+  for (const url of picked) {
+    try {
+      chrome.runtime.sendMessage({ action: incognito ? "openIncognitoTab" : "openTab", url, active: true }, (resp) => {
+        void chrome.runtime.lastError;
+        if (incognito && resp && resp.ok === false && resp.reason === "incognito-not-allowed") {
+          const warn = "I need incognito access for that. Turn on Allow in Incognito for Braino in chrome://extensions.";
+          if (fromVoice) { __sbNoteSpoken(warn); void __sbSpeakWithPreferredVoice(warn, voiceOutput, { verbatim: true }); }
+          else __sbShowBubble(warn, true, { tone: "status", kicker: "Braino" });
+        }
+      });
+    } catch (_) {}
+  }
+  const line = picked.length > 1 ? `Opening ${picked.length} links.` : "Opening it.";
+  if (fromVoice) { __sbNoteSpoken(line); void __sbSpeakWithPreferredVoice(line, voiceOutput, { verbatim: true }); }
+  else __sbShowBubble(line, true, { tone: "status", kicker: "Braino" });
+}
+
+// Bar takes the mode's color for as long as the mode runs, and flashes a "Mode activated" caption
+// that fades — the extension-side counterpart of the Mac notch treatment.
+function __sbApplyVoiceModeSkin(mode) {
+  try { __sbUpdateEdgeGlowFx(); } catch (_) {}
+  const bar = document.getElementById("__sb_bar__");
+  if (!bar) return;
+  if (mode) {
+    bar.style.setProperty("--sb-voice-mode-color", mode.notchColor || "#0A84FF");
+    bar.classList.add("sb-voice-mode");
+  } else {
+    bar.classList.remove("sb-voice-mode");
+    bar.style.removeProperty("--sb-voice-mode-color");
+  }
+}
+
+function __sbEnsureVoiceModeCss() {
+  if (document.getElementById("__sb_voice_mode_css__")) return;
+  const style = document.createElement("style");
+  style.id = "__sb_voice_mode_css__";
+  style.textContent = `
+#__sb_bar__.sb-voice-mode{box-shadow:0 0 0 1.5px var(--sb-voice-mode-color,#0A84FF),0 0 22px -2px var(--sb-voice-mode-color,#0A84FF);transition:box-shadow .5s ease;}
+#__sb_voice_mode_caption__{position:fixed;left:50%;transform:translateX(-50%);bottom:96px;z-index:2147483640;padding:7px 16px;border-radius:999px;font:500 12.5px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;letter-spacing:.02em;color:#fff;background:rgba(20,18,16,.9);backdrop-filter:blur(8px);box-shadow:0 0 0 1px var(--sb-voice-mode-color,#0A84FF),0 6px 24px -8px rgba(0,0,0,.6);opacity:0;transition:opacity .35s ease,transform .35s ease;pointer-events:none;}
+#__sb_voice_mode_caption__.show{opacity:1;transform:translateX(-50%) translateY(-4px);}
+`;
+  document.head.appendChild(style);
+}
+
+function __sbFlashVoiceModeCaption(text, color) {
+  try {
+    __sbEnsureVoiceModeCss();
+    let el = document.getElementById("__sb_voice_mode_caption__");
+    if (!el) {
+      el = document.createElement("div");
+      el.id = "__sb_voice_mode_caption__";
+      document.body.appendChild(el);
+    }
+    el.style.setProperty("--sb-voice-mode-color", color || "#0A84FF");
+    el.textContent = text;
+    requestAnimationFrame(() => el.classList.add("show"));
+    clearTimeout(el.__sbHideTimer);
+    el.__sbHideTimer = setTimeout(() => {
+      el.classList.remove("show");
+      setTimeout(() => { try { el.remove(); } catch (_) {} }, 400);
+    }, 1800);
+  } catch (_) {}
+}
+
+async function __sbHandleVoiceModeCommand(detected, ctx = {}) {
+  const fromVoice = Boolean(ctx.fromVoice);
+  const voiceOutput = ctx.voiceOutput === "realtime" ? "realtime" : "legacy";
+  const starting = detected.action === "start";
+  const mode = detected.mode;
+
+  __sbEnsureVoiceModeCss();
+  // Optimistic: skin + caption immediately, don't wait on the network round-trip.
+  __sbVoiceModes = __sbVoiceModes.map((m) => ({ ...m, isActive: starting ? m.id === mode.id : false }));
+  __sbApplyVoiceModeSkin(starting ? mode : null);
+  __sbFlashVoiceModeCaption(starting ? `${mode.name} activated` : `${mode.name} off`, mode.notchColor);
+
+  try { chrome.runtime.sendMessage({ action: "setVoiceModeActive", modeId: mode.id, active: starting }, () => { void chrome.runtime.lastError; }); } catch (_) {}
+
+  const line = starting ? `${mode.name} on.` : `${mode.name} off.`;
+  if (fromVoice) { __sbNoteSpoken(line); await __sbSpeakWithPreferredVoice(line, voiceOutput, { verbatim: true }); }
+  else __sbShowBubble(line, true, { tone: "status", kicker: "Braino" });
+}
+
 const __SB_KNOWN_SITES = [
   { keys: ["youtube", "yt"], url: "https://www.youtube.com", name: "YouTube" },
   { keys: ["spotify"], url: "https://open.spotify.com", name: "Spotify" },
@@ -15254,10 +21267,32 @@ function __sbIsUnhandledOpenCommand(text) {
 
 async function __sbHandleInlineRealtimeTurn(transcript, turnToken) {
   // Drop the mic re-hearing Braino's own last line (kills the self-triggered double run).
-  if (__sbIsSelfEcho(transcript)) {
+  if (__sbIsSelfEcho(transcript) && !__sbVoiceAddressesBraino(transcript)) {
     __sbCompleteVoiceTurn({ fromVoice: true, voiceOutput: "realtime", voiceTurnToken: turnToken });
     return;
   }
+  if (__sbDemoModeEnabled() || __sbDemoShouldAutoActivate(transcript)) {
+    if (!__sbDemoModeEnabled()) __sbDemoActivateMode({ reset: true });
+    __sbInterruptRealtimeResponse();
+    await __sbHandleDemoModeInput(transcript, { fromVoice: true, voiceOutput: "realtime", voiceTurnToken: turnToken });
+    return;
+  }
+  if (__sbTeamModeEnabled() || __sbTeamShouldAutoActivate(transcript)) {
+    if (!__sbTeamModeEnabled()) __sbTeamActivateMode({ reset: true });
+    __sbInterruptRealtimeResponse();
+    await __sbHandleTeamModeInput(transcript, { fromVoice: true, voiceOutput: "realtime", voiceTurnToken: turnToken });
+    return;
+  }
+  // Affection / advances toward Braino → warm redirect (before the hard sexual gate).
+  if (__sbIsLoveToBraino(transcript) || __sbIsAdvanceToBraino(transcript)) {
+    __sbStopSpeech();
+    const line = __sbIsLoveToBraino(transcript) ? __sbLoveReplyLine() : __SB_ADVANCE_LINE;
+    __sbNoteSpoken(line);
+    await __sbSpeakWithPreferredVoice(line, "realtime", { verbatim: true });
+    __sbCompleteVoiceTurn({ fromVoice: true, voiceOutput: "realtime", voiceTurnToken: turnToken });
+    return;
+  }
+
   // Safety: sexual/explicit → hard "No." (cancels any speculative answer first), no routing.
   if (__sbIsSexualRequest(transcript)) {
     __sbStopSpeech();
@@ -15278,6 +21313,18 @@ async function __sbHandleInlineRealtimeTurn(transcript, turnToken) {
     routeMode: routing.forcedMode,
     connector: routing.connectorHint,
   });
+
+  // Voice Commands — steer down __sbProcessPrompt BEFORE classification, or the realtime model
+  // just TALKS about the mode instead of Braino actually flipping it / opening the links.
+  const __vmQuery = __sbDetectVoiceModeQuery(transcript) || __sbDetectVoiceModeQuery(promptText);
+  const __vmCmd = __sbDetectVoiceModeCommand(transcript) || __sbDetectVoiceModeCommand(promptText);
+  const __vmPhrase = __sbDetectVoiceCommandPhrase(transcript) || __sbDetectVoiceCommandPhrase(promptText);
+  const __vmLocked = typeof __sbActiveVoiceMode === "function" && __sbActiveVoiceMode();
+  if (__vmQuery || __vmCmd || __vmPhrase || __vmLocked) {
+    __sbPatchRealtimeCostTurn({ routeIntent: __vmQuery ? "voice_mode_query" : __vmCmd ? "voice_mode_toggle" : "voice_command" });
+    await __sbProcessPrompt(promptText, { fromVoice: true, voiceOutput: "realtime", voiceTurnToken: turnToken });
+    return;
+  }
 
   // Open-known-site shortcut — navigate instantly instead of the ~10s agent loop. Cancels any
   // speculative answer first so it doesn't talk over the "Opening …" line. Detect on the RAW
@@ -15357,9 +21404,25 @@ async function __sbHandleInlineRealtimeTurn(transcript, turnToken) {
 
   // Party tricks — dance / moonwalk. Steer down __sbProcessPrompt BEFORE any classification,
   // or the realtime model just NARRATES a dance instead of Braino actually dancing.
-  if (__sbDanceIntent(transcript) || __sbDanceIntent(promptText)
+  if (__sbDanceStopIntent(transcript) || __sbDanceStopIntent(promptText)
+    || __sbDumboDanceIntent(transcript) || __sbDumboDanceIntent(promptText)
+    || __sbDanceIntent(transcript) || __sbDanceIntent(promptText)
     || __sbMoonwalkIntent(transcript) || __sbMoonwalkIntent(promptText)) {
     __sbPatchRealtimeCostTurn({ routeIntent: "party_trick" });
+    await __sbProcessPrompt(promptText, {
+      fromVoice: true,
+      voiceOutput: "realtime",
+      voiceTurnToken: turnToken,
+    });
+    return;
+  }
+
+  // Voice persona: "talk like Donald Trump" (switch) OR "explain this page like Donald Trump" (task +
+  // directive) — steer down __sbProcessPrompt (the shared persona engine) BEFORE any classification,
+  // so the streaming brain never grabs it. __sbProcessPrompt flips the voice/style/look and, if a task
+  // rode along, runs it in-character. No forceIntent: the stripped task routes naturally (chat/web/agent).
+  if (__sbDetectVoicePersonaCommand(promptText) || __sbDetectVoicePersonaCommand(transcript)) {
+    __sbPatchRealtimeCostTurn({ routeIntent: "chat" });
     await __sbProcessPrompt(promptText, {
       fromVoice: true,
       voiceOutput: "realtime",
@@ -15474,6 +21537,9 @@ async function __sbHandleInlineRealtimeTurn(transcript, turnToken) {
   // ~0.5s instead of after a full batch completion. The session already holds page/notes context
   // (synced via __sbSyncRealtimeVoiceInstructions), so it stays page-aware. Falls back to the batch
   // pipeline below if streaming can't run (toggle off, realtime not ready, or it errors mid-turn).
+  // While a voice persona is active the realtime SESSION instructions are fully replaced with the
+  // persona's system prompt (see __sbDoSyncRealtimeVoiceInstructions), so streaming stays in-character
+  // with no Braino personality — no need to detour to the batch pipeline.
   if (__sbVoiceBrain === "realtime" && __sbRtControlReady()) {
     __sbPatchRealtimeCostTurn({ routeIntent: "chat" });
     // Record the user half of this conversation turn; the fast path records the assistant half on
@@ -15568,6 +21634,13 @@ function __sbHandleRtEvent(ev) {
     // boot (~0.5-5s cold start) is paid during your sentence instead of on your wait — which is why
     // the slowest first-sound runs were always the LONGEST utterances (isolate went cold mid-sentence).
     try { __sbWarmFishTts(); } catch (_) {}
+    const brainoWasSpeaking = __sbBrainoOutputActive();
+    if (brainoWasSpeaking) {
+      __sbVoiceOutputGuardAt = Date.now();
+      __sbRtUserTranscript = "";
+      if (__sbHeadphoneMode) __sbSetHpBrainState("speaking");
+      return;
+    }
     // The realtime VAD heard the user start talking → INTERRUPT whatever Braino is saying.
     // This is the whole point of the realtime mechanism, and it must work the SAME for both
     // voices: cancel the realtime model's audio and stop Fish Audio/browser playback.
@@ -15585,6 +21658,10 @@ function __sbHandleRtEvent(ev) {
     __sbVTMark("🛑 You stopped talking");
     // User paused → stop the sonar; sit idle while we transcribe/think (not talking).
     if (__sbHeadphoneMode) __sbSetHpBrainState("listening");
+    if (Date.now() - __sbVoiceOutputGuardAt < 12000 && __sbBrainoOutputActive()) {
+      __sbVTMark("🧹 Ignoring room audio while Braino is speaking");
+      return;
+    }
     // Speculative beta: start answering from the audio NOW, before the transcript lands (~1s sooner).
     // The transcript handler keeps it (plain chat) or any action branch cancels it via __sbStopSpeech.
     if (__sbSpeculativeReply) void __sbStartSpeculativeAnswer();
@@ -15593,6 +21670,7 @@ function __sbHandleRtEvent(ev) {
   if (ev.type === "conversation.item.input_audio_transcription.delta") {
     if (typeof ev.delta === "string" && ev.delta) {
       __sbRtUserTranscript += ev.delta;
+      __sbNotchCaption(__sbRtUserTranscript);   // live subtitles: your words form as you speak
     }
     return;
   }
@@ -15600,18 +21678,21 @@ function __sbHandleRtEvent(ev) {
     const transcript = String(ev.transcript || __sbRtUserTranscript || "").trim();
     const transcriptionUsage = ev.usage || ev.item?.usage || ev.response?.usage || {};
     __sbRtUserTranscript = "";
+    if (transcript) __sbNotchCaption(transcript, { final: true });
     if (!transcript) return;
     __sbVTMark("📝 Transcript ready");
 
     // Guard against transcription hallucinations on loud music / background noise / silence.
-    // The model would otherwise "hear" junk and answer with gibberish. Skip it; if it keeps
-    // happening, gently ask the user to repeat (rate-limited so we don't nag).
-    if (__sbIsJunkTranscript(transcript)) {
-      const now = Date.now();
-      if (now - __sbLastRepeatPromptAt > 8000 && !__sbHasActiveRealtimeResponse()) {
-        __sbLastRepeatPromptAt = now;
-        void __sbSpeakWithPreferredVoice("Sorry, I didn't catch that — could you say it again?", "realtime");
-      }
+    // In public demos, random room noise must not become a Braino turn.
+    const transcriptAssessment = __sbAssessVoiceTranscript(transcript, { source: "realtime", final: true });
+    if (!transcriptAssessment.accept) {
+      __sbMaybePromptForDroppedVoice(transcriptAssessment, { voiceOutput: "realtime" });
+      return;
+    }
+    if (__sbShouldDropSpeechDuringBrainoOutput(transcript, { source: "realtime" })) {
+      __sbVoicePendingReply = false;
+      __sbVTMark("🧹 Dropped room speech while Braino was speaking");
+      if (__sbHeadphoneMode) __sbSetHpBrainState(__sbBrainoOutputActive() ? "speaking" : "listening");
       return;
     }
 
@@ -15632,16 +21713,11 @@ function __sbHandleRtEvent(ev) {
       return;
     }
 
-    // Ask-before-switching: if a clear non-English signal shows up while we're still in English,
-    // confirm in English first instead of silently replying in that language.
-    if (!__sbActiveLanguage) {
-      const detected = __sbDetectLanguageRequest(transcript);
-      if (detected) {
-        __sbPendingLanguageSwitch = { lang: detected };
-        void __sbSpeakWithPreferredVoice(`That sounded like ${detected.name}. Want me to switch to ${detected.name}, or keep speaking English?`, "realtime");
-        return;
-      }
-    }
+    // NOTE: the old "that sounded like <language>, want to switch?" auto-detect is REMOVED
+    // from voice. With multiple people talking, cross-talk got mis-transcribed and Braino
+    // kept asking to switch languages ("sounds like Chinese") — it only ever misfired in
+    // front of people. Voice is hard-locked to English (see the language-policy instruction
+    // + language:"en" transcription). No auto-switching, no announcements.
 
     __sbScheduleVoiceTurnProcessing(transcript, (toProcess) => {
       const turnToken = __sbClaimVoiceTurnToken();   // reuse the speculative token if one is live
@@ -15652,7 +21728,7 @@ function __sbHandleRtEvent(ev) {
       } else {
         void __sbHandleInlineRealtimeTurn(toProcess, turnToken);
       }
-    });
+    }, { source: "realtime", voiceOutput: "realtime", precheckedAssessment: transcriptAssessment });
     return;
   }
   if (ev.type === "response.created") {
@@ -15667,7 +21743,10 @@ function __sbHandleRtEvent(ev) {
       __sbRtAssistantTranscript += ev.delta;
       if (__sbStreamFishActive) __sbFeedStreamTts(ev.delta); // 1B: stream into Fish as it arrives
     }
-    if (__sbHeadphoneMode) __sbSetHpBrainState("speaking");
+    // Only native realtime audio means sound is coming out RIGHT NOW. With Fish as
+    // the voice these deltas are text; the Fish player owns the speaking state when
+    // audio actually plays — driving the mouth from text made him "talk" in silence.
+    if (__sbHeadphoneMode && ev.type === "response.output_audio_transcript.delta") __sbSetHpBrainState("speaking");
     return;
   }
   if (ev.type === "response.done") {
@@ -15694,6 +21773,14 @@ function __sbHandleRtEvent(ev) {
   }
   if (ev.type === "error") {
     const message = ev.error?.message || "Realtime error";
+    // This race fires precisely while our own state says a response is active, so it needs an
+    // explicit resolve here (unlike the other benign cases below, which rely on the next
+    // __sbCreateRtWaiter() call or a subsequent response.cancelled/done to clean up the waiter).
+    if (__sbIsRaceyActiveResponseError(message)) {
+      __sbResetRealtimeResponseState();
+      __sbResolveRtWaiter({ status: "cancelled", text: "", errorMessage: "" });
+      return;
+    }
     if (!__sbHasActiveRealtimeResponse() && __sbIsBenignRealtimeControlError(message)) {
       return;
     }
@@ -15707,6 +21794,8 @@ function __sbHandleRtEvent(ev) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function __sbToggleHeadphoneMode() {
+  // Ctrl (voice) while roaming calls Braino back to the bar first.
+  if (__sbRoamActive && typeof __sbExitRoamMode === "function") __sbExitRoamMode();
   if (__sbHeadphoneMode) {
     __sbExitHeadphoneMode();
   } else {
@@ -15720,6 +21809,24 @@ function __sbApplyVoiceAutoRoutingDefaults() {
   // obvious-action shortcut + the backend shouldDelegate classifier in __sbHandleInlineRealtimeTurn).
   // We deliberately do NOT force every spoken turn through the agent loop — that added latency to
   // plain conversation, and keyword-forcing risks treating chit-chat as a task.
+  if ((window.__sbForcedMode || "page") === "team") {
+    window.__sbForcedConnector = "auto";
+    if (typeof __sbApplyForcedModeUi === "function") __sbApplyForcedModeUi("team", { showReady: false, resetTeam: false });
+    __sbRefreshConnectorButtons();
+    document.getElementById("__sb_connector_slash_dropdown__")?.classList.remove("open");
+    document.getElementById("__sb_mode_dropdown__")?.classList.remove("open");
+    document.getElementById("__sb_connector_dropdown__")?.classList.remove("open");
+    return;
+  }
+  if ((window.__sbForcedMode || "page") === "demo") {
+    window.__sbForcedConnector = "auto";
+    if (typeof __sbApplyForcedModeUi === "function") __sbApplyForcedModeUi("demo", { showReady: false, resetDemo: false });
+    __sbRefreshConnectorButtons();
+    document.getElementById("__sb_connector_slash_dropdown__")?.classList.remove("open");
+    document.getElementById("__sb_mode_dropdown__")?.classList.remove("open");
+    document.getElementById("__sb_connector_dropdown__")?.classList.remove("open");
+    return;
+  }
   window.__sbForcedMode = "page";
   window.__sbForcedConnector = "auto";
 
@@ -16349,6 +22456,85 @@ function __sbExitHeadphoneMode() {
 //  - "hearing"   = the USER is actively talking (VAD speech_started→stopped) → Sonar Pulse
 //  - "listening"/"captured" = waiting / processing, nobody talking → calm idle (no glow)
 //  - "speaking"  = Braino is talking → mouth animation
+// ─── Screen edge glow + top music notes (ported from Mac Braino for cross-surface
+//     consistency): viewport perimeter radiates blue while listening, coral while
+//     speaking, faint blue while thinking, and slowly cycles hues while music plays.
+let __sbMusicFxOn = false;
+let __sbNoteTimer = 0;
+let __sbGlowVoice = "";
+
+function __sbEnsureGlowFx() {
+  if (document.getElementById("__sb_edge_glow__")) return;
+  const style = document.createElement("style");
+  style.id = "__sb_glow_fx_css__";
+  style.textContent = `
+#__sb_edge_glow__{position:fixed;inset:0;pointer-events:none;z-index:2147483630;opacity:0;transition:opacity .6s ease;}
+#__sb_edge_glow__::before{content:"";position:absolute;inset:0;}
+#__sb_edge_glow__.sbmode{opacity:1;}
+#__sb_edge_glow__.sbmode::before{box-shadow:inset 0 0 90px 18px color-mix(in srgb, var(--sb-voice-mode-color,#0A84FF) 42%, transparent),inset 0 0 34px 6px color-mix(in srgb, var(--sb-voice-mode-color,#0A84FF) 30%, transparent);animation:__sb_edge_breath__ 3.2s ease-in-out infinite;}
+#__sb_edge_glow__.listen{opacity:1;}
+#__sb_edge_glow__.listen::before{box-shadow:inset 0 0 70px 14px rgba(122,162,255,.30),inset 0 0 26px 4px rgba(160,190,255,.22);animation:__sb_edge_breath__ 2.6s ease-in-out infinite;}
+#__sb_edge_glow__.speak{opacity:1;}
+#__sb_edge_glow__.speak::before{box-shadow:inset 0 0 110px 26px rgba(232,120,110,.42),inset 0 0 40px 8px rgba(243,154,66,.30);animation:__sb_edge_pulse__ 1s ease-in-out infinite;}
+#__sb_edge_glow__.think{opacity:.5;}
+#__sb_edge_glow__.think::before{box-shadow:inset 0 0 60px 12px rgba(122,162,255,.22);animation:__sb_edge_breath__ 3.4s ease-in-out infinite;}
+#__sb_edge_glow__.music{opacity:.85;}
+#__sb_edge_glow__.music::before{box-shadow:inset 0 0 64px 12px rgba(232,120,110,.20),inset 0 0 26px 5px rgba(122,162,255,.14);animation:__sb_edge_breath__ 4.2s ease-in-out infinite,__sb_music_hue__ 14s linear infinite;}
+@keyframes __sb_music_hue__{to{filter:hue-rotate(360deg);}}
+@keyframes __sb_edge_breath__{0%,100%{opacity:.55;}50%{opacity:1;}}
+@keyframes __sb_edge_pulse__{0%,100%{opacity:.6;}50%{opacity:1;}}
+#__sb_top_notes__{position:fixed;top:0;left:50%;width:0;height:0;z-index:2147483631;pointer-events:none;}
+#__sb_top_notes__ span{position:absolute;top:8px;left:0;font-size:15px;color:rgba(232,120,110,.9);text-shadow:0 0 8px rgba(232,120,110,.55);animation:__sb_note_float__ 3.4s ease-out forwards;}
+#__sb_top_notes__ span.blue{color:rgba(122,162,255,.9);text-shadow:0 0 8px rgba(122,162,255,.55);}
+@keyframes __sb_note_float__{0%{opacity:0;transform:translate(var(--dx0),4px) scale(.7) rotate(0deg);}14%{opacity:.95;}100%{opacity:0;transform:translate(var(--dx),80px) scale(1.08) rotate(var(--rot));}}`;
+  document.head.appendChild(style);
+  const glow = document.createElement("div");
+  glow.id = "__sb_edge_glow__";
+  document.documentElement.appendChild(glow);
+  const notes = document.createElement("div");
+  notes.id = "__sb_top_notes__";
+  document.documentElement.appendChild(notes);
+}
+
+function __sbUpdateEdgeGlowFx(voiceState) {
+  __sbEnsureGlowFx();
+  if (voiceState !== undefined) __sbGlowVoice = voiceState || "";
+  const glow = document.getElementById("__sb_edge_glow__");
+  if (!glow) return;
+  // Talking/listening no longer glows the screen edge — the notch carries voice
+  // presence on its own. Only music and explicit Voice Command modes light the rim.
+  const mode = typeof __sbActiveVoiceMode === "function" ? __sbActiveVoiceMode() : null;
+  if (mode) glow.style.setProperty("--sb-voice-mode-color", mode.notchColor || "#0A84FF");
+  glow.className = __sbMusicFxOn ? "music" : (mode ? "sbmode" : "");
+}
+
+function __sbSpawnTopNote() {
+  if (!__sbMusicFxOn) return;
+  const wrap = document.getElementById("__sb_top_notes__");
+  if (!wrap) return;
+  const note = document.createElement("span");
+  note.textContent = Math.random() < 0.5 ? "♪" : "♫";
+  if (Math.random() < 0.4) note.classList.add("blue");
+  const dx0 = Math.random() * 64 - 32;
+  note.style.setProperty("--dx0", `${dx0}px`);
+  note.style.setProperty("--dx", `${dx0 + Math.random() * 76 - 38}px`);
+  note.style.setProperty("--rot", `${Math.random() * 44 - 22}deg`);
+  wrap.appendChild(note);
+  setTimeout(() => note.remove(), 3600);
+}
+
+function __sbSetMusicFx(on) {
+  __sbMusicFxOn = !!on;
+  __sbEnsureGlowFx();
+  if (__sbMusicFxOn && !__sbNoteTimer) __sbNoteTimer = setInterval(__sbSpawnTopNote, 1050);
+  if (!__sbMusicFxOn && __sbNoteTimer) {
+    clearInterval(__sbNoteTimer);
+    __sbNoteTimer = 0;
+    document.getElementById("__sb_top_notes__")?.replaceChildren();
+  }
+  __sbUpdateEdgeGlowFx();
+}
+
 function __sbSetHpBrainState(state) {
   const HP = ["hp-connecting", "hp-listening", "hp-hearing", "hp-captured", "hp-speaking"];
   const brain = document.getElementById("__sb_brain_btn__");
@@ -16362,6 +22548,14 @@ function __sbSetHpBrainState(state) {
   if (bar) {
     bar.classList.toggle("hp-active", !!state);
     bar.classList.toggle("hp-listening", state === "listening");
+    // Never stomp a surface the user is reading or typing in: answers, the input,
+    // the mode menu and sign-in hold the notch until the user dismisses them.
+    const notchState = __sbNotchV1?.shell?.dataset?.state;
+    const notchHolds = ["short", "long", "input", "menu", "signin"].includes(notchState);
+    if (state === "listening" || state === "hearing") { if (!notchHolds) __sbSetBrowserNotchState("listening"); }
+    else if (state === "speaking") { if (!notchHolds) __sbSetBrowserNotchState("speaking"); }
+    else if (state === "connecting" || state === "captured") { if (!["input", "menu", "signin"].includes(notchState)) __sbSetBrowserNotchState("working", state === "captured" ? "Thinking" : "Waking up"); }
+    else if (__sbBrainVisible && !__sbInputOpen && !notchHolds) __sbSetBrowserNotchState("idle");
   }
 
   // The walker is the visible mascot while the bar is open, so it carries the glow
@@ -16371,6 +22565,7 @@ function __sbSetHpBrainState(state) {
     wlk.classList.remove(...HP);
     if (state) wlk.classList.add(`hp-${state}`);
   }
+  __sbUpdateEdgeGlowFx(state || "");
   __sbWkEngaged = !!state;          // stand still + look at the user while engaged
   if (state) {
     __sbWkWalking = false;
@@ -16532,12 +22727,23 @@ function __sbHandleVoiceEvent(msg) {
       return;
     }
 
-    __sbScheduleVoiceTurnProcessing(transcript, (toProcess) => {
+    if (__sbShouldDropSpeechDuringBrainoOutput(transcript, { source: "legacy", confidence: msg.confidence })) {
+      __sbVoicePendingReply = false;
+      if (__sbVoiceSilenceTimer) { clearTimeout(__sbVoiceSilenceTimer); __sbVoiceSilenceTimer = null; }
+      __sbLastFinalTranscript = null;
+      __sbStopRecording({ silent: true });
+      return;
+    }
+
+    const scheduled = __sbScheduleVoiceTurnProcessing(transcript, (toProcess) => {
       __sbStopRecording({ silent: true });
       if (input) input.value = "";
       if (!__sbVoiceOnlyMode) __sbShowBubble("Thinking…", false, { tone: "status", title: "Voice" });
       void __sbProcessPrompt(toProcess, { fromVoice: true });
-    });
+    }, { source: "legacy", voiceOutput: "legacy", confidence: msg.confidence });
+    if (!scheduled) {
+      __sbStopRecording({ silent: true });
+    }
     return;
   }
 
@@ -17698,13 +23904,26 @@ async function __sbScreenGrabBase64() {
 async function __sbHandleScreenVisionRequest(promptText, ctx = {}) {
   const fromVoice = Boolean(ctx.fromVoice);
   const voiceOutput = ctx.voiceOutput === "realtime" ? "realtime" : "legacy";
+  // Human-intelligence routing: a content-shaped ask ("read/summarize/what does it
+  // say") answers from the DOM when the page has real text — that path is much
+  // faster than a capture + vision round trip. Truly visual asks get the screenshot.
+  const contentShaped = /\b(read|summari[sz]e|tl;?dr|what does (it|this|the page) say|explain (this|the) (article|post|page|text)|key points|main points|gist)\b/i.test(String(promptText || ""));
+  let domTextLength = 0;
+  try { domTextLength = String(__sbGetPageContext(2400).text || "").length; } catch (_) {}
+  if (contentShaped && domTextLength > 800) {
+    __sbVTMark("👁 Vision → DOM (content ask, page has text)");
+    await __sbProcessPrompt(promptText, { ...ctx, skipVisionGate: true });
+    return;
+  }
   if (__sbCamBusy) { __sbCompleteVoiceTurn(ctx); return; }
   __sbCamBusy = true;
   try {
     const ack = "Let me look at your screen…";
     try { __sbNoteSpoken?.(ack); } catch (_) {}
     if (fromVoice) void __sbSpeakWithPreferredVoice(ack, voiceOutput, { verbatim: true });
+    __sbVTMark("📸 Screen capture start");
     const frame = await __sbScreenGrabBase64();
+    __sbVTMark(`📸 Screen captured (${Math.round((frame ? frame.length : 0) / 1024)}kb)`);
     if (!frame) {
       const line = "I couldn't capture this screen — some pages (Chrome settings, the web store) block it. Try on a normal site.";
       if (fromVoice) await __sbSpeakWithPreferredVoice(line, voiceOutput, { verbatim: true });
@@ -17713,7 +23932,9 @@ async function __sbHandleScreenVisionRequest(promptText, ctx = {}) {
     }
     const visionPrompt = `You are Braino, looking at a screenshot of the web page the user is viewing. They asked: "${String(promptText || "What's on my screen?")}". Briefly and helpfully describe what's on screen or answer their question about it, in one or two natural spoken sentences. Do not mention being an AI or that this is a screenshot.`;
     let reply = "";
+    __sbVTMark("🧠 Vision model start");
     try { const res = await __sbRuntimeMessage({ action: "brainoVision", imageBase64: frame, prompt: visionPrompt }); reply = String(res?.reply || "").trim(); } catch (_) {}
+    __sbVTMark("🧠 Vision reply ready");
     const line = reply || "I grabbed your screen but couldn't read it clearly — try again.";
     if (fromVoice) await __sbSpeakWithPreferredVoice(line, voiceOutput, { verbatim: true });
     else __sbShowBubble(line, false, { rich: true, kicker: "Braino" });

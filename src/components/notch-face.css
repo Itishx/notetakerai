@@ -558,3 +558,21 @@
 }
 .nf-face.nf-coral .nf-folds { opacity: 1; }
 .nf-face.nf-coral .nf-pill { box-shadow: 0 0 34px rgba(232, 120, 110, 0.55), 0 0 70px rgba(232, 120, 110, 0.25); }
+
+/* ── nf-shine: the slow light that draws the island's outline during boot —
+   ported from braino-mac.css (#notch-face → .nf-face). Beat 2 of the wake. ── */
+.nf-face .nf-shine {
+  position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+  width: var(--nf-notch-w, 190px); height: calc(var(--nf-notch-h) + 22px);
+  overflow: visible; z-index: 6; opacity: 0; transition: opacity 0.45s ease; pointer-events: none;
+}
+.nf-face .nf-shine path { stroke-linecap: round; }
+.nf-face .nf-shine-core { stroke-width: 2.2; }
+.nf-face .nf-shine-glow { stroke-width: 7; opacity: 0.7; filter: blur(5px); }
+.nf-face.nf-shining .nf-shine { opacity: 1; transition: opacity 0.25s ease; }
+.nf-face.nf-shining .nf-shine path {
+  stroke-dasharray: 100; stroke-dashoffset: 100;
+  animation: nfShineDraw 1.6s cubic-bezier(0.3, 0.5, 0.3, 1) forwards;
+}
+.nf-face.nf-shine-slow .nf-shine path { animation-duration: 2.4s; }
+@keyframes nfShineDraw { to { stroke-dashoffset: 0; } }

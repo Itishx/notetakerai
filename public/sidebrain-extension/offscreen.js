@@ -21,6 +21,54 @@ let rtDc = null;
 let rtMic = null;
 let rtRemoteAudio = null;
 
+function rtNormalizeSdp(sdp) {
+  const text = String(sdp || "");
+  if (!text.trim()) return "";
+  const normalized = text.replace(/\r?\n/g, "\r\n");
+  return normalized.endsWith("\r\n") ? normalized : `${normalized}\r\n`;
+}
+
+function rtSdpDiagnostics(sdp) {
+  const text = String(sdp || "");
+  return {
+    offerChars: text.length,
+    hasVersionLine: /^v=0\r?$/m.test(text),
+    mediaLineCount: (text.match(/^m=/gm) || []).length,
+    hasAudioLine: /^m=audio\s/m.test(text),
+    hasApplicationLine: /^m=application\s/m.test(text),
+    endsWithLineBreak: /\r?\n$/.test(text),
+  };
+}
+
+function rtIsLikelyOfferSdp(sdp) {
+  const d = rtSdpDiagnostics(sdp);
+  return d.hasVersionLine && d.hasAudioLine && d.hasApplicationLine;
+}
+
+function rtIsLikelyAnswerSdp(sdp) {
+  const d = rtSdpDiagnostics(sdp);
+  return d.hasVersionLine && d.mediaLineCount > 0;
+}
+
+function rtGetLocalOfferSdp(pc, fallbackOffer) {
+  return rtNormalizeSdp(
+    pc?.localDescription?.sdp ||
+    pc?.pendingLocalDescription?.sdp ||
+    fallbackOffer?.sdp ||
+    "",
+  );
+}
+
+async function rtWaitForOfferSdp(pc, fallbackOffer, timeoutMs = 900) {
+  const startedAt = Date.now();
+  let sdp = rtGetLocalOfferSdp(pc, fallbackOffer);
+  while (!rtIsLikelyOfferSdp(sdp) && Date.now() - startedAt < timeoutMs) {
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    sdp = rtGetLocalOfferSdp(pc, fallbackOffer);
+  }
+  return sdp;
+}
+
 async function startRealtimeSession({ authToken, bootInstructions, voiceEngine }) {
   stopRealtimeSession();
 
@@ -72,6 +120,13 @@ async function startRealtimeSession({ authToken, bootInstructions, voiceEngine }
 
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
+    const offerSdp = await rtWaitForOfferSdp(pc, offer);
+    const sentDiagnostics = rtSdpDiagnostics(offerSdp);
+    if (!rtIsLikelyOfferSdp(offerSdp)) {
+      console.warn("[Braino][Realtime] refusing invalid offer SDP", sentDiagnostics);
+      throw new Error("Live AI could not create a valid audio session offer.");
+    }
+    console.debug("[Braino][Realtime] sending offer SDP", sentDiagnostics);
 
     // Per-mode model: OpenAI-voice mode uses gpt-realtime-2; Default Braino uses gpt-realtime-mini.
     // The backend validates this against an allowlist (falls back to env).
@@ -84,16 +139,36 @@ async function startRealtimeSession({ authToken, bootInstructions, voiceEngine }
         Authorization: `Bearer ${authToken}`,
         "X-Braino-Realtime-Model": requestedModel,
       },
-      body: offer.sdp || "",
+      body: offerSdp,
     });
 
     if (!res.ok) {
       let msg = `Live AI failed (${res.status})`;
-      try { const t = await res.text(); const j = JSON.parse(t); msg = j.details || j.error || t || msg; } catch {}
+      try {
+        const t = await res.text();
+        try {
+          const j = JSON.parse(t);
+          msg = j.details || j.error || t || msg;
+        } catch {
+          msg = t || msg;
+        }
+        console.warn("[Braino][Realtime] offer rejected", {
+          status: res.status,
+          message: msg,
+          sentDiagnostics,
+        });
+      } catch {}
       throw new Error(msg);
     }
 
     const answerSdp = await res.text();
+    if (!rtIsLikelyAnswerSdp(answerSdp)) {
+      console.warn("[Braino][Realtime] invalid answer SDP", {
+        answerChars: String(answerSdp || "").length,
+        preview: String(answerSdp || "").slice(0, 160),
+      });
+      throw new Error("Live AI returned an invalid audio session answer.");
+    }
     await pc.setRemoteDescription({ type: "answer", sdp: answerSdp });
     await dataChannelOpen;
 
@@ -151,7 +226,9 @@ async function startSpeechRecognition() {
   // the Chrome mic permission grant for the extension origin.
   // SpeechRecognition reuses this permission once granted.
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+    });
     stream.getTracks().forEach(t => t.stop()); // release immediately — just needed for permission
   } catch (e) {
     chrome.runtime.sendMessage({ action: "voiceEvent", event: "error", message: "not-allowed" });
@@ -172,9 +249,16 @@ async function startSpeechRecognition() {
   };
 
   recognition.onresult = (e) => {
-    const transcript = Array.from(e.results).map(r => r[0].transcript).join("");
+    const results = Array.from(e.results);
+    const transcript = results.map(r => r[0].transcript).join("");
     const isFinal = e.results[e.results.length - 1].isFinal;
-    chrome.runtime.sendMessage({ action: "voiceEvent", event: "transcript", text: transcript, isFinal });
+    const confidences = results
+      .map((r) => Number(r?.[0]?.confidence))
+      .filter((n) => Number.isFinite(n) && n > 0);
+    const confidence = confidences.length
+      ? confidences.reduce((sum, n) => sum + n, 0) / confidences.length
+      : null;
+    chrome.runtime.sendMessage({ action: "voiceEvent", event: "transcript", text: transcript, isFinal, confidence });
     if (isFinal) { voiceListening = false; recognition.stop(); }
   };
 

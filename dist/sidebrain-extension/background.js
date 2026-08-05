@@ -32,6 +32,7 @@ for (const [obj, key] of [[chrome.runtime, "sendMessage"], [chrome.tabs, "sendMe
 
 try {
   importScripts(
+    "lib/openTargets.js",
     "lib/elementMap.js",
     "lib/models.js",
     "lib/taskState.js",
@@ -1045,9 +1046,265 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (changeInfo.url !== undefined || changeInfo.status === "complete") {
     bgSyncActionPopup(tabId, tab?.url || "");
   }
+  const url = String(changeInfo.url || tab?.url || "");
+  if (changeInfo.status === "complete" && /\/functions\/v1\/spotify-oauth-callback\b/.test(url) && !/[?&]error=/.test(url)) {
+    setTimeout(() => {
+      chrome.tabs.remove(tabId, () => { void chrome.runtime.lastError; });
+    }, 1400);
+  }
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.action === "sbGetSenderTabId") {
+    sendResponse({ ok: true, tabId: sender?.tab?.id || null });
+    return false;
+  }
+  if (message.action === "sbTeamDemoReturnHome") {
+    (async () => {
+      const originTabId = Number(message.originTabId || 0) || null;
+      const closeTabId = sender?.tab?.id || null;
+      if (!originTabId) {
+        sendResponse({ ok: false, error: "Missing origin tab." });
+        return;
+      }
+      let originTab = null;
+      try { originTab = await chrome.tabs.get(originTabId); } catch (_) { originTab = null; }
+      if (!originTab?.id) {
+        sendResponse({ ok: false, error: "Original tab is gone." });
+        return;
+      }
+      try { await chrome.windows.update(originTab.windowId, { focused: true }); } catch (_) {}
+      try { await chrome.tabs.update(originTab.id, { active: true }); } catch (_) {}
+      await bgSendInlineUiMessage(originTab.id, {
+        action: "sbTeamDemoContinue",
+        originTabId: originTab.id,
+        phase: String(message.phase || ""),
+        task: String(message.task || ""),
+        song: String(message.song || ""),
+        finalText: String(message.finalText || ""),
+      });
+      if (closeTabId && closeTabId !== originTab.id) {
+        setTimeout(() => {
+          try { chrome.tabs.remove(closeTabId, () => { void chrome.runtime.lastError; }); } catch (_) {}
+        }, Math.max(0, Math.min(2000, Number(message.closeDelayMs || 0))));
+      }
+      sendResponse({ ok: true, originTabId: originTab.id, closedTabId: closeTabId });
+    })().catch((error) => sendResponse({ ok: false, error: error?.message || String(error) }));
+    return true;
+  }
+  if (message.action === "sbTeamCloseDemoTab") {
+    (async () => {
+      const originTabId = Number(message.originTabId || 0) || null;
+      const closeTabId = Number(message.closeTabId || 0) || null;
+      const closeDelayMs = Math.max(0, Math.min(5000, Number(message.closeDelayMs || 0)));
+      let originTab = null;
+      if (originTabId) {
+        try { originTab = await chrome.tabs.get(originTabId); } catch (_) { originTab = null; }
+      }
+      if (originTab?.id) {
+        try { await chrome.windows.update(originTab.windowId, { focused: true }); } catch (_) {}
+        try { await chrome.tabs.update(originTab.id, { active: true }); } catch (_) {}
+      }
+      if (closeTabId && closeTabId !== originTab?.id) {
+        setTimeout(() => {
+          try { chrome.tabs.remove(closeTabId, () => { void chrome.runtime.lastError; }); } catch (_) {}
+        }, closeDelayMs);
+      }
+      sendResponse({ ok: true, originTabId: originTab?.id || null, closedTabId: closeTabId || null });
+    })().catch((error) => sendResponse({ ok: false, error: error?.message || String(error) }));
+    return true;
+  }
+  if (message.action === "sbDemoGmailReplyExact") {
+    (async () => {
+      const url = String(message.url || "").trim();
+      const originTabId = Number(message.originTabId || sender?.tab?.id || 0) || null;
+      const shouldSend = message.send !== false;
+      if (!/^https:\/\/mail\.google\.com\//.test(url)) {
+        sendResponse({ ok: false, error: "Demo Gmail URL is invalid." });
+        return;
+      }
+
+      const tab = await new Promise((resolve) => {
+        chrome.tabs.create({ url, active: true }, (created) => {
+          void chrome.runtime.lastError;
+          resolve(created || null);
+        });
+      });
+      const gmailTabId = Number(tab?.id || 0) || null;
+      if (!gmailTabId) {
+        sendResponse({ ok: false, error: "Could not open the demo Gmail thread." });
+        return;
+      }
+
+      await bgWaitForTabReady(gmailTabId, 18000);
+      await bgDelay(2200);
+
+      let thread = null;
+      for (let i = 0; i < 12; i += 1) {
+        thread = await bgExecuteSiteAdapterAction(gmailTabId, { type: "gmailReadCurrentThread" });
+        if (bgGmailThreadHasBody(thread)) break;
+        await bgDelay(700);
+      }
+      if (!bgGmailThreadHasBody(thread)) {
+        throw new Error(thread?.error || "The demo Gmail thread opened, but Braino could not read the message body.");
+      }
+
+      const openedReply = await bgExecuteSiteAdapterAction(gmailTabId, { type: "gmailOpenReplyBox" });
+      if (openedReply?.error) throw new Error(openedReply.error);
+
+      const replyBody = await bgBuildGmailGeneratedReply(
+        "Demo mode: reply to this Gmail in Itish's tone. Keep it short, natural, and send-ready.",
+        thread,
+      );
+      if (!replyBody) throw new Error("Braino could not generate a useful Gmail reply.");
+
+      const replyResult = await bgExecuteSiteAdapterAction(gmailTabId, {
+        type: "gmailReplyToCurrentThread",
+        body: replyBody,
+        send: shouldSend,
+      });
+      if (replyResult?.error) throw new Error(replyResult.error);
+
+      await bgDelay(900);
+      if (originTabId) {
+        try {
+          const originTab = await chrome.tabs.get(originTabId);
+          if (originTab?.windowId) await chrome.windows.update(originTab.windowId, { focused: true });
+          await chrome.tabs.update(originTabId, { active: true });
+        } catch (_) {}
+      }
+      await bgDelay(250);
+      try {
+        await new Promise((resolve) => {
+          chrome.tabs.remove(gmailTabId, () => {
+            void chrome.runtime.lastError;
+            resolve();
+          });
+        });
+      } catch (_) {}
+
+      sendResponse({
+        ok: true,
+        tabId: gmailTabId,
+        subject: thread?.subject || "",
+        replyBody,
+        sent: shouldSend,
+        closed: true,
+      });
+    })().catch((error) => sendResponse({ ok: false, error: error?.message || String(error) }));
+    return true;
+  }
+  if (message.action === "sbDemoMapsSendToPhoneExact") {
+    (async () => {
+      const url = String(message.url || "").trim();
+      const originTabId = Number(message.originTabId || sender?.tab?.id || 0) || null;
+      if (!/^https:\/\/www\.google\.[^/]+\/maps\//.test(url)) {
+        sendResponse({ ok: false, error: "Demo Maps URL is invalid." });
+        return;
+      }
+
+      const tab = await new Promise((resolve) => {
+        chrome.tabs.create({ url, active: true }, (created) => {
+          void chrome.runtime.lastError;
+          resolve(created || null);
+        });
+      });
+      const mapsTabId = Number(tab?.id || 0) || null;
+      if (!mapsTabId) {
+        sendResponse({ ok: false, error: "Could not open the demo Maps route." });
+        return;
+      }
+
+      let result = null;
+      try {
+        await bgWaitForTabReady(mapsTabId, 18000);
+        await bgDelay(2800);
+
+        for (let i = 0; i < 7; i += 1) {
+          result = await bgExecuteSiteAdapterAction(mapsTabId, { type: "mapsSendDirectionsToPhone" });
+          if (result?.sent || result?.success) break;
+          await bgDelay(850);
+        }
+      } finally {
+        await bgDelay(900);
+        if (originTabId) {
+          try {
+            const originTab = await chrome.tabs.get(originTabId);
+            if (originTab?.windowId) await chrome.windows.update(originTab.windowId, { focused: true });
+            await chrome.tabs.update(originTabId, { active: true });
+          } catch (_) {}
+        }
+        await bgDelay(200);
+        try {
+          await new Promise((resolve) => {
+            chrome.tabs.remove(mapsTabId, () => {
+              void chrome.runtime.lastError;
+              resolve();
+            });
+          });
+        } catch (_) {}
+      }
+
+      if (result?.sent || result?.success) {
+        sendResponse({
+          ok: true,
+          sent: true,
+          tabId: mapsTabId,
+          buttonLabel: result.buttonLabel || "",
+          phoneLabel: result.phoneLabel || "",
+          status: result.status || "",
+          verified: result.verified !== false,
+          closed: true,
+        });
+        return;
+      }
+
+      sendResponse({
+        ok: false,
+        sent: false,
+        tabId: mapsTabId,
+        error: result?.error || "Could not verify Maps Send to phone.",
+        candidates: Array.isArray(result?.candidates) ? result.candidates : [],
+        closed: true,
+      });
+    })().catch((error) => sendResponse({ ok: false, error: error?.message || String(error) }));
+    return true;
+  }
+  if (message.action === "sbOpenDumboDance") {
+    (async () => {
+      const url = String(message.url || "").trim();
+      const startSeconds = Number(message.startSeconds || 117) || 117;
+      const trackKey = String(message.trackKey || "").trim();
+      const trackLabel = String(message.trackLabel || "Dumbo").trim();
+      if (!/^https:\/\/(www\.)?youtube\.com\/watch\?/.test(url)) {
+        sendResponse({ ok: false, error: `${trackLabel} YouTube URL is invalid.` });
+        return;
+      }
+
+      const tab = await new Promise((resolve) => {
+        chrome.tabs.create({ url, active: true }, (created) => {
+          void chrome.runtime.lastError;
+          resolve(created || null);
+        });
+      });
+      const tabId = Number(tab?.id || 0) || null;
+      if (!tabId) {
+        sendResponse({ ok: false, error: `Could not open ${trackLabel} on YouTube.` });
+        return;
+      }
+
+      await bgWaitForTabReady(tabId, 18000);
+      await bgDelay(1600);
+      const result = await bgSendInlineUiMessage(tabId, {
+        action: "sbDumboDanceStart",
+        startSeconds,
+        trackKey,
+        trackLabel,
+      });
+      sendResponse({ ok: !result?.error, tabId, result });
+    })().catch((error) => sendResponse({ ok: false, error: error?.message || String(error) }));
+    return true;
+  }
   if (message.action === "getStreamId") {
     (async () => {
       const requestedTabId = message.tabId || sender?.tab?.id || null;
@@ -1159,7 +1416,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
   if (message.action === "stopRecordingAndTranscribe") {
     bgConsumeRecordingSeconds();
-    bgStopRecordingAndTranscribe(message.existingNotes || "", message.mode, message.existingTranscript || "")
+    bgStopRecordingAndTranscribe(message.existingNotes || "", message.mode, message.existingTranscript || "", message.meetingContext || null)
       .then((res) => sendResponse(res))
       .catch((e) => sendResponse({ error: e.message }));
     return true;
@@ -1173,6 +1430,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       existingTranscript: message.existingTranscript || "",
       mode: bgNormalizeRecordingMode(message.mode),
       knownSpeakerReferences: Array.isArray(message.knownSpeakerReferences) ? message.knownSpeakerReferences : [],
+      meetingContext: message.meetingContext && typeof message.meetingContext === "object" ? message.meetingContext : null,
     })
       .then((res) => sendResponse(res))
       .catch((e) => sendResponse({ error: e.message }));
@@ -1235,6 +1493,50 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     })().then(sendResponse).catch(() => sendResponse({ ok: false }));
     return true;
   }
+  if (message.action === "sbSpotifyEnsureDanceMusic") {
+    (async () => {
+      const tabId = sender?.tab?.id || null;
+      const fallbackUri = String(message.fallbackUri || "").trim();
+      const fallbackPositionMs = Number.isFinite(Number(message.fallbackPositionMs)) ? Number(message.fallbackPositionMs) : 0;
+
+      const currentState = await bgFetchSpotifyPlayerState();
+      if (currentState?.isPlaying && currentState?.track) {
+        const uiState = bgBuildSpotifyUiStateFromPlayback(currentState, {
+          intent: "dance_mode",
+          summary: "Braino is dancing to the Spotify track you already had playing.",
+        });
+        if (tabId) bgPushSpotifyState(tabId, uiState, { focusSpotify: false });
+        return { ok: true, source: "current", state: uiState };
+      }
+
+      if (!fallbackUri) return { ok: false, reason: "missing_track" };
+      try {
+        const prevActive = tabId || await bgGetActiveTabId();
+        const existing = await bgFindSpotifyTab().catch(() => null);
+        await bgPlaySpotifyWithAutoOpen([fallbackUri], fallbackPositionMs, { background: Boolean(existing) });
+        if (!existing && prevActive) {
+          try { chrome.tabs.update(prevActive, { active: true }); } catch (_) {}
+        }
+        await bgDelay(900);
+        const nextState = await bgFetchSpotifyPlayerState();
+        const uiState = bgBuildSpotifyUiStateFromPlayback(nextState, {
+          intent: "dance_mode",
+          assumePlaying: true,
+          summary: "Braino started a fallback track for dance mode.",
+        });
+        if (tabId) bgPushSpotifyState(tabId, uiState, { focusSpotify: false });
+        return { ok: true, source: "fallback", state: uiState };
+      } catch (err) {
+        const msg = String(err?.message || "");
+        return {
+          ok: false,
+          reason: /sign\s?in|auth|connect/i.test(msg) ? "signin" : "device",
+          error: msg,
+        };
+      }
+    })().then(sendResponse).catch(() => sendResponse({ ok: false }));
+    return true;
+  }
   if (message.action === "sbSpotifyPause") {
     // End of a party trick: the band stops when the show stops.
     bgCallSpotifyFunction("spotify-playback", { action: "pause" })
@@ -1253,7 +1555,23 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const bootTabId = sender?.tab?.id || null;
     const bootTask = (bootTabId && bgAgentTaskByTab.get(bootTabId)) || "";
     const runFresh = Boolean(bgDelegateRunInfo) && (Date.now() - bgDelegateRunInfo.at < 30000);
-    sendResponse({ task: bootTask, running: Boolean(bootTask) && runFresh });
+    const activeClaim = bootTabId ? bgActiveDelegateRunsByTab.get(bootTabId) : null;
+    const claimFresh = Boolean(activeClaim) && (Date.now() - activeClaim.startedAt < 120000);
+    const runOwnsThisTab = Boolean(bootTabId) && (
+      bgDelegateRunInfo?.tabId === bootTabId ||
+      bgDelegateAdoptTabId === bootTabId ||
+      claimFresh
+    );
+    const running = Boolean(bootTask) && ((runFresh && runOwnsThisTab) || claimFresh);
+    if (!running && bootTabId) {
+      bgAgentTaskByTab.delete(bootTabId);
+      bgLastThoughtByTab.delete(bootTabId);
+    }
+    sendResponse({
+      task: running ? bootTask : "",
+      running,
+      lastThought: running ? (bgLastThoughtByTab.get(bootTabId) || "") : "",
+    });
     return false;
   }
   if (message.action === "getStatus") {
@@ -1295,6 +1613,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         event: message.event,
         text: message.text,
         isFinal: message.isFinal,
+        confidence: message.confidence,
         error: message.message,
         source: message.source,
       }, () => { void chrome.runtime.lastError; });
@@ -1303,7 +1622,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
   if (message.action === "getPageContent") {
     (async () => {
-      const preferredTabId = sender?.tab?.id || await bgGetActiveTabId();
+      const requestedTabId = Number(message.tabId || 0) || null;
+      const preferredTabId = requestedTabId || sender?.tab?.id || await bgGetActiveTabId();
       const recovery = await bgEnsureScriptableBrainoTab(preferredTabId, {
         activate: true,
         handoffMessage: "Chrome pages can't be read, so I moved Braino to a normal tab.",
@@ -1801,7 +2121,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         connector,
       });
       const senderTabId = sender?.tab?.id || null;
-      const preferredTabId = senderTabId || message.senderTabId || await bgGetActiveTabId();
+      const explicitTargetTabId = Number(message.targetTabId || 0) || null;
+      const preferredTabId = explicitTargetTabId || (message.preferNonBrainoTab === true
+        ? await bgFindBestDelegateTargetTabId(senderTabId || message.senderTabId || null)
+        : senderTabId || message.senderTabId || await bgGetActiveTabId());
       const recovery = await bgEnsureScriptableBrainoTab(preferredTabId, {
         activate: true,
         handoffMessage: "Chrome pages can't host Braino, so I moved it to a normal tab to keep going.",
@@ -1925,7 +2248,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       for (const [u, entry] of bgRecentOpenedTabs) {
         if (Date.now() - entry.ts > 60000) bgRecentOpenedTabs.delete(u);
       }
-      const recent = bgRecentOpenedTabs.get(url);
+      const recent = message.forceNew === true ? null : bgRecentOpenedTabs.get(url);
       if (recent && Date.now() - recent.ts < 10000) {
         chrome.tabs.get(recent.tabId, (tab) => {
           if (!chrome.runtime.lastError && tab?.id) {
@@ -1953,6 +2276,41 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
     sendResponse({ ok: false });
     return false;
+  }
+
+  // Voice Commands: incognito counterpart to openTab. Requires the user to have flipped
+  // "Allow in Incognito" for Braino in chrome://extensions — we can't grant that ourselves.
+  if (message.action === "openIncognitoTab") {
+    const url = String(message.url || "").trim();
+    if (!(url.startsWith("https://") || url.startsWith("http://"))) {
+      sendResponse({ ok: false });
+      return false;
+    }
+    chrome.extension.isAllowedIncognitoAccess((allowed) => {
+      if (!allowed) {
+        sendResponse({ ok: false, reason: "incognito-not-allowed" });
+        return;
+      }
+      chrome.windows.create({ url, incognito: true }, (win) => {
+        void chrome.runtime.lastError;
+        sendResponse({ ok: true, windowId: win?.id ?? null });
+      });
+    });
+    return true;
+  }
+
+  // Voice Commands: flip a mode on/off (deactivating any other active mode for this user), then
+  // refresh the local cache immediately so this device's notch reflects it without waiting a full
+  // poll cycle. Other devices pick it up on their next ~1min voiceModesPoll alarm.
+  if (message.action === "setVoiceModeActive") {
+    (async () => {
+      const modeId = String(message.modeId || "");
+      const active = Boolean(message.active);
+      if (!modeId) { sendResponse({ ok: false }); return; }
+      const result = await bgSetVoiceModeActive(modeId, active);
+      sendResponse(result);
+    })();
+    return true;
   }
 
   // Design Delegate: open the design tool in a visible tab and TYPE a synthesized prompt into its
@@ -2021,6 +2379,79 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         adapter: parsed?.adapter || null,
         intent: openable?.contentKind || parsed?.intent || null,
       });
+    })();
+    return true;
+  }
+  // Human Intelligence Layer: a fast reasoning pass content.js calls ONLY for commands that
+  // already look ambiguous (see __sbLooksAmbiguousForReasoning), or when it's checking whether a
+  // new message answers a clarifying question Braino just asked (message.pending is set). Never
+  // runs on every turn — this is the gate, not a replacement for the regular classifier.
+  if (message.action === "reasonAboutIntent") {
+    (async () => {
+      const promptText = String(message.promptText || "").trim();
+      if (!promptText) { sendResponse({ ambiguous: false }); return; }
+      try {
+        const sharedContext = bgBuildAgentConversationContext({ chatHistory: message.chatHistory || [] });
+        const pageContext = message.pageContext || {};
+        const pending = message.pending || null;
+
+        const systemPrompt = pending
+          ? [
+              "You are Braino's common-sense layer. Braino just asked the user a clarifying question because",
+              "his previous request was ambiguous. Decide whether the user's NEW message answers that question.",
+              "Return STRICT JSON only, no prose, no markdown:",
+              '{"bound_to_pending":true|false,"resolved_instruction":"one self-contained instruction combining the original goal with the answer"}',
+              "Rules:",
+              "- bound_to_pending=true only if the new message is plausibly an answer to THE QUESTION asked (a choice, a name, a yes/no, a clarification). If it reads like a brand-new, unrelated request, bound_to_pending=false.",
+              "- resolved_instruction must be a complete instruction a browser agent or search could act on directly — never leave a bare fragment like 'open tabs' with no object. Combine the ORIGINAL GOAL with the answer.",
+            ].join("\n")
+          : [
+              "You are Braino's common-sense layer, run BEFORE he acts on a command. A cheap filter already",
+              "flagged this command as possibly ambiguous. Decide: is there a genuine ambiguity here that a",
+              "thoughtful human assistant would pause and double-check, rather than guess?",
+              "Return STRICT JSON only, no prose, no markdown:",
+              '{"restated_goal":"what the user wants, in one plain sentence","ambiguous":true|false,"clarifying_question":"one short question, or empty string if not ambiguous"}',
+              "Rules:",
+              "- Use CURRENT PAGE and CHAT HISTORY to resolve vague references ('this', 'it', 'that video') BEFORE deciding if something is ambiguous — most of the time the page/context already makes the referent clear and this is NOT ambiguous.",
+              "- The kind of ambiguity worth asking about: a genuine fork in HOW to deliver the result (e.g. list it here vs. open tabs), or a named person/target that could plausibly mean more than one thing where guessing wrong would be embarrassing or wasteful (e.g. sending a message to the wrong contact).",
+              "- Do NOT flag something ambiguous just because it's short or casual. Default to ambiguous=false. Only flag it when a reasonable person would actually stop and ask.",
+              "- clarifying_question must be ONE short, natural question — not a list of options recited back.",
+            ].join("\n");
+
+        const userPromptLines = [
+          `MESSAGE: ${promptText}`,
+          pageContext.url ? `CURRENT PAGE: ${pageContext.url}${pageContext.title ? ` — ${pageContext.title}` : ""}` : null,
+          `CHAT HISTORY:\n${bgBuildAgentConversationText(sharedContext) || "None."}`,
+        ];
+        if (pending) {
+          userPromptLines.push(`ORIGINAL GOAL: ${pending.restatedGoal || pending.originalPromptText || ""}`);
+          userPromptLines.push(`QUESTION ASKED: ${pending.question || ""}`);
+        }
+        userPromptLines.push("Return the JSON now.");
+
+        const reply = await bgCallDelegateModel({
+          systemPrompt,
+          userPrompt: userPromptLines.filter(Boolean).join("\n\n"),
+          model: BrainoModels?.MODELS?.STEP || "gpt-5.4-mini",
+        });
+        const parsed = bgExtractJsonObject(reply);
+
+        if (pending) {
+          sendResponse({
+            bound_to_pending: Boolean(parsed.bound_to_pending),
+            resolved_instruction: String(parsed.resolved_instruction || "").trim(),
+          });
+        } else {
+          sendResponse({
+            restated_goal: String(parsed.restated_goal || promptText).trim(),
+            ambiguous: Boolean(parsed.ambiguous) && Boolean(String(parsed.clarifying_question || "").trim()),
+            clarifying_question: String(parsed.clarifying_question || "").trim(),
+          });
+        }
+      } catch (error) {
+        console.warn("[Braino][HIL] reasonAboutIntent failed:", error?.message || error);
+        sendResponse(message.pending ? { bound_to_pending: false } : { ambiguous: false });
+      }
     })();
     return true;
   }
@@ -2165,13 +2596,15 @@ async function bgScavengeAuthFromBrainoTabs() {
 }
 const BG_PREMIUM_CACHE_MS = 5 * 60 * 1000;
 const BG_BRAINO_FAVORITE_SONG_URI = "spotify:track:6Hgh47WXVKtXN5zGOu0hjI";
+const BG_SPOTIFY_RECONNECT_THROTTLE_MS = 2 * 60 * 1000;
+let bgSpotifyReconnectLastOpenedAt = 0;
 
 // Flat registry of what Braino can do — consulted before dispatching to the LLM agent loop.
 const BG_CAPABILITY_MANIFEST = {
   spotify:  ["playSong", "setVolume", "playbackControl", "addSongToPlaylist", "playSongFromPlaylist"],
   medium:   ["searchArticles"],
   twitter:  ["readFeed", "generateAndPost", "postTweet"],
-  gmail:    ["search", "draftEmail", "sendEmail", "replyCurrentThread"],
+  gmail:    ["search", "openEmail", "readCurrentThread", "readInboxSummary", "draftEmail", "sendEmail", "replyCurrentThread"],
   drive:    ["createDoc", "organize", "search", "createFolder", "rename", "move", "delete"],
   calendar: ["createEvent", "rescheduleEvent", "cancelEvent", "forwardEvent", "listEvents", "openNextMeet", "watchEvents"],
 };
@@ -2621,6 +3054,40 @@ function bgIsScriptableUrl(url) {
          !url.startsWith("https://chromewebstore.google.com");
 }
 
+function bgIsBrainoSiteUrl(url) {
+  try {
+    const host = new URL(url || "").hostname;
+    return host === "trybraino.com" ||
+      host === "braino-eight.vercel.app" ||
+      /^braino-git-.*\.vercel\.app$/i.test(host) ||
+      host === "localhost" ||
+      host === "127.0.0.1";
+  } catch (_) {
+    return false;
+  }
+}
+
+async function bgFindBestDelegateTargetTabId(senderTabId = null) {
+  const choose = (tabs) => {
+    const candidates = (tabs || [])
+      .filter((tab) => tab?.id != null && tab.id !== senderTabId)
+      .filter((tab) => bgIsScriptableUrl(tab.url || "") && !bgIsBrainoSiteUrl(tab.url || ""))
+      .sort((a, b) => (Number(b.lastAccessed) || 0) - (Number(a.lastAccessed) || 0));
+    return candidates[0]?.id || null;
+  };
+
+  const currentWindowTabs = await new Promise((resolve) => {
+    chrome.tabs.query({ currentWindow: true }, (tabs) => resolve(tabs || []));
+  });
+  const currentWindowPick = choose(currentWindowTabs);
+  if (currentWindowPick) return currentWindowPick;
+
+  const allTabs = await new Promise((resolve) => {
+    chrome.tabs.query({}, (tabs) => resolve(tabs || []));
+  });
+  return choose(allTabs) || senderTabId || await bgGetActiveTabId();
+}
+
 // Pre-register the correct action popup for a tab so clicking the icon
 // always does the right thing without waiting for onClicked to fire.
 function bgSyncActionPopup(tabId, url) {
@@ -2880,6 +3347,7 @@ const bgAgentTaskByTab = new Map();
 // at its next safe point. Freshness-gated so a finished run can never adopt anything. ──
 let bgDelegateRunInfo = null;   // { tabId, at } — refreshed every loop iteration
 let bgDelegateAdoptTabId = null;
+const bgLastThoughtByTab = new Map();   // last thought per tab → the reborn content script restores the island instantly
 chrome.tabs.onCreated.addListener((tab) => {
   if (!bgDelegateRunInfo || !tab?.id || !tab.openerTabId) return;
   if (tab.openerTabId !== bgDelegateRunInfo.tabId) return;
@@ -2918,24 +3386,53 @@ function bgTryClaimDelegateRun(tabId, task) {
   return { ok: true, token };
 }
 
-function bgReleaseDelegateRun(tabId, token) {
-  const active = bgActiveDelegateRunsByTab.get(tabId);
-  if (active?.token === token) bgActiveDelegateRunsByTab.delete(tabId);
-  for (const [key, entry] of bgActiveDelegateRunsByTask) {
-    if (entry.token === token) bgActiveDelegateRunsByTask.delete(key);
+function bgClearDelegateTaskState(tabId, task) {
+  const taskKey = bgDelegateTaskKey(task);
+  if (tabId) {
+    bgAgentTaskByTab.delete(tabId);
+    bgLastThoughtByTab.delete(tabId);
+    if (bgDelegateRunInfo?.tabId === tabId) bgDelegateRunInfo = null;
+    if (bgDelegateAdoptTabId === tabId) bgDelegateAdoptTabId = null;
+  }
+  if (!taskKey) return;
+  for (const [mappedTabId, mappedTask] of bgAgentTaskByTab) {
+    if (bgDelegateTaskKey(mappedTask) !== taskKey) continue;
+    bgAgentTaskByTab.delete(mappedTabId);
+    bgLastThoughtByTab.delete(mappedTabId);
+    if (bgDelegateRunInfo?.tabId === mappedTabId) bgDelegateRunInfo = null;
+    if (bgDelegateAdoptTabId === mappedTabId) bgDelegateAdoptTabId = null;
   }
 }
 
+function bgReleaseDelegateRun(tabId, token) {
+  const active = bgActiveDelegateRunsByTab.get(tabId);
+  let releasedKey = "";
+  if (active?.token === token) {
+    releasedKey = active.key || "";
+    bgActiveDelegateRunsByTab.delete(tabId);
+  }
+  for (const [key, entry] of bgActiveDelegateRunsByTask) {
+    if (entry.token === token) {
+      releasedKey = releasedKey || key;
+      bgActiveDelegateRunsByTask.delete(key);
+    }
+  }
+  bgClearDelegateTaskState(tabId, releasedKey);
+}
+
 function bgBrainUpdate(tabId, text, final = false, opts = {}) {
+  const taskForMessage = opts.task || bgAgentTaskByTab.get(tabId) || "";
   void bgSendInlineUiMessage(tabId, {
     action: "sbAgentUpdate",
     text,
     final,
     speakHint: opts.speakHint || null,
-    task: opts.task || bgAgentTaskByTab.get(tabId) || "",
+    task: taskForMessage,
     keepLectureCard: opts.keepLectureCard === true,
   });
-  if (final) setTimeout(() => bgAgentTaskByTab.delete(tabId), 5000);
+  if (final) {
+    bgClearDelegateTaskState(tabId, taskForMessage);
+  }
 }
 
 async function bgSendInlineUiMessage(tabId, message) {
@@ -3217,6 +3714,7 @@ function bgSelectDelegateSkillsHeuristic(task) {
   if (/\b(linkedin|jobs?|roles?|openings?|sdet|developer|engineer)\b/.test(raw)) skills.push("linkedin-jobs");
   if (/\b(twitter|x\b|tweet|post|publish|followers?|mentions?)\b/.test(raw)) skills.push("x-growth-posting");
   if (/\b(cost|spend|receipt|realtime|voice)\b/.test(raw)) skills.push("realtime-costs");
+  if (/\b(youtube|video|videos|watch|reaction)\b/.test(raw)) skills.push("youtube");
   // Shopping: Amazon by name, or a buy/purchase ask with no other store named (Amazon is
   // the default store). "order" alone is excluded — too food-delivery shaped.
   if (/\b(amazon|add to cart|checkout)\b/.test(raw)
@@ -3259,14 +3757,26 @@ SKILL realtime-costs:
 - Answer from stored Braino realtime cost data when available.
 - Use exact dates for today/last 7 days. Do not invent costs.
 - Usually this should answer rather than operate the browser.`;
+  if (skill === "youtube") return `
+SKILL youtube:
+- Search by typing into the search combobox and submitting; the results URL contains /results.
+- RESULTS PAGE — the critical distinction: an element named ONLY a channel name (e.g. "Tanmay Bhat") is a CHANNEL card. Clicking it opens the channel page, NEVER a video. To PLAY something, click a link whose name is a full video TITLE (long text, usually with views/age/duration). If you land on a channel page (URL has /@handle) more than once, STOP clicking channel-named elements — go back to results and open a titled video row.
+- WATCH PAGE (URL contains /watch): playback AUTOSTARTS. Do not hunt for a "Play" button. Assert url_contains "watch", and for a play task that IS completion — return done.
+- Never re-run the same search while its results are already visible.`;
   if (skill === "amazon-shopping") return `
 SKILL amazon-shopping (guided buying — the user stays in the loop):
 - DOMAIN: always use the user's LOCAL Amazon (see the user-context line: India → amazon.in, US → amazon.com). If you find yourself on another country's Amazon, navigate to the local one first.
-- PREREQUISITE: the user must already be signed in. If the header shows "Hello, sign in" or a Sign in prompt, STOP with {"type":"clarify","text":"You're not signed in to Amazon, so I can't shop for you yet. Sign in and ask me again."}. NEVER type credentials, even if they appear in context.
+- PREREQUISITE: the user must already be signed in. "Hello, sign in" in the header means logged OUT; "Hello, <name>" means logged IN. A "Sign in" link merely EXISTING somewhere on the page does NOT mean logged out — every Amazon page has one. Treat login as blocking ONLY when the URL itself is a sign-in page (/ap/signin) or a password field is visible; then STOP with {"type":"clarify","text":"Amazon is asking you to sign in on this page. Do that and ask me to continue."}. NEVER type credentials, even if they appear in context.
 - CONTINUATION FIRST: if the current page already shows the requested product (product page or cart), do NOT re-search or re-open Amazon — continue from where the page is. On a product page, the next step is Add to Cart; in the cart, the next step is Proceed to Buy.
+- CART IS SACRED: NEVER click Delete, Remove, "Save for later", or a quantity +/− stepper on ANY cart item. Do not "clean up", "clear", or adjust the existing cart. Only ADD what the user asked for and move forward. (This is also enforced deterministically — such clicks are blocked — but never even attempt them.)
+- THE ORDERED STEPS — always know which one you are on: (1) SEARCH the book, (2) OPEN the book (click its result link), (3) ADD TO CART, (4) PROCEED to checkout. Announce the step in your thought ("Step 2: opening the listing").
+- SUBMITTING THE SEARCH: after typing the query, Enter is unreliable on Amazon — click the "Go" / magnifying-glass search button next to the box. Once the URL contains "/s?k=", the search ran; do not retype.
+- LOCATING THE RESULT: after a search, the product listings ARE in the observation as link elements — a link whose name starts with the title you searched IS the book (names truncate before the author; that is fine). Do NOT read or scroll repeatedly waiting for them to "appear" — click the best-matching title link. If the task is only to SEARCH, opening the top matching result and confirming it counts as done.
 - BUY FLOW per product: Amazon search box → open the matching product → click "Add to Cart" → dismiss protection-plan/add-on popups ("No Thanks") → only after ALL requested products are in the cart: open the cart ("Go to Cart" / cart icon) → click "Proceed to Buy" / "Proceed to checkout".
 - SEARCH ONCE: use the provided search query exactly one time. If the product is visible in the results, open it; if not, scroll once, then clarify. NEVER re-run reworded variations of the same search — a second near-identical query is forbidden.
 - Amazon re-renders after every click. After each click take {"type":"wait","ms":1000}, then re-read before acting again.
+- RESULT TITLES TRUNCATE: the author's name is usually NOT visible in a result's element name ("Atomic Habits: The life-changing million-copy..." cuts off before "James Clear"). A result whose name STARTS WITH the requested title IS the listing — open it and verify the author on the product page. Do not read/scroll in circles waiting for title+author to appear together; they won't.
+- Never use web_search while on Amazon — everything the task needs is on the page or one site-search away.
 - AMBIGUITY = ASK: if results show several plausible matches (editions, formats, bundles, sellers), scroll down ~600 once so options are visible, then {"type":"clarify","text":"Which one from this page do you want me to add to cart? I can see <top 2-3 options with price>."}. Never guess between editions. The user's next command continues the run on this same page.
 - MULTIPLE PRODUCTS ("buy X and Y"): strictly sequential — search X, add to cart, then search Y, add to cart. Go to cart only after all items are added.
 - PAYMENT BOUNDARY: never enter or select payment details, addresses, or place the final order. Advance to the payment-method step (open the UPI/QR view if offered) and finish with {"type":"answer","text":"Checkout is ready — finish the payment on your screen."}.
@@ -3291,12 +3801,14 @@ async function bgSynthesizeIntent(task, sharedContext, pageInfo = null) {
       "- If CURRENT PAGE already shows the thing the user is referring to (e.g. they're on the product page and say 'buy it'), resolvedTask must say to CONTINUE on the current page rather than re-open or re-search (e.g. 'On the currently open Amazon page for <product>, add it to cart and proceed to checkout'). This applies ONLY when the current page genuinely matches the request (right site AND right content). If the current page is unrelated to the ask (e.g. a dashboard is open and they ask to buy something on Amazon), do NOT anchor to it — resolvedTask must direct the agent to the right site (e.g. 'Go to amazon.com, search for <product>, and buy it').",
       "- NEVER echo the user's full sentence. Extract entities: what + where. No filler, no question words, no 'restaurants that serve' phrasing — just keywords (e.g. 'dosa restaurants Mumbai', 'chicken biryani Bandra').",
       "- surface=maps for places/restaurants/cafes/shops/directions/near-me; surface=web for general info/products/facts/how-to; surface=none if it's not a search at all.",
-      "- searchQuery must name the RESOLVED entity too, never the pronoun ('The Subtle Art of Not Giving a F*ck book', not 'that book').",
+      "- searchQuery must name the RESOLVED entity, never the pronoun ('The Subtle Art of Not Giving a F*ck', not 'that book').",
+      "- For a SPECIFIC NAMED product/title, searchQuery is EXACTLY that name — do NOT append a category word the user didn't say ('The Subtle Art of Not Giving a F*ck', NOT '...book'; 'OnePlus Buds Pro 4', NOT '...headphones'). The store already knows the category.",
       "- searchQuery is what gets typed INTO a site's own search box. NEVER include the site name, 'Amazon', 'India', or any storefront/country words in it ('Atomic Habits book' — NOT 'Atomic Habits Amazon India'). The storefront choice belongs in resolvedTask only.",
       "- Put time/price/quality/vibe/'good'/'best'/'open in the morning' into softConstraints, NOT into searchQuery — those are applied by reading and ranking the results.",
       "- Keep searchQuery short (2-6 words typically). Keep the location if the user named one; if they said near me/home, set softConstraints accordingly and keep 'near me' wording in the query.",
       "- For a DIRECTIONS/route/navigate request, fill directions.origin and directions.destination as separate places (e.g. 'from Laburnum Park, Pune to Malad West, Mumbai' → origin='Laburnum Park, Pune', destination='Malad West, Mumbai'). If the user gives only a destination, leave origin empty (current location). Otherwise leave both empty.",
       "- Sites with country storefronts (Amazon etc.): resolvedTask must name the USER's local domain from USER CONTEXT (India → amazon.in, US → amazon.com, UK → amazon.co.uk), even if the user said 'amazon.com'.",
+      "- PLAY requests — pick the surface by CONTENT TYPE, not by the currently open site: videos/reactions/vlogs/trailers/episodes/interviews → YouTube (resolvedTask names youtube.com), songs/tracks/albums/playlists/music → Spotify. 'Play Tanmay Bhat reaction videos' while ON Spotify still goes to YouTube.",
     ].join("\n");
     const geo = await bgGetUserGeo().catch(() => null);
     const userPrompt = [
@@ -3360,7 +3872,8 @@ async function bgDecomposeDelegateTask(task, sharedContext, tabId, onProgress, o
       : "";
     const prompt = [
       "Return strict JSON only.",
-      "Shape: {\"goal\":\"...\",\"subgoals\":[{\"id\":\"1\",\"desc\":\"...\",\"status\":\"active|pending\"}],\"skills\":[\"google-calendar|google-maps|linkedin-jobs|realtime-costs|x-growth-posting|amazon-shopping\"]}",
+      "Shape: {\"goal\":\"...\",\"subgoals\":[{\"id\":\"1\",\"desc\":\"...\",\"status\":\"active|pending\",\"doneWhen\":\"observable postcondition\"}],\"skills\":[\"google-calendar|google-maps|linkedin-jobs|realtime-costs|x-growth-posting|amazon-shopping|youtube\"]}",
+      "Every subgoal MUST include doneWhen: a postcondition CHECKABLE from the live page — a URL fragment ('URL contains /watch'), visible text, or a visible element. Never a feeling ('video is playing' → 'URL contains /watch').",
       "Choose only skills that are relevant. Do not include selectors or CSS.",
       `Task: ${task}`,
       `Context:\n${bgBuildAgentConversationText(sharedContext || {}) || "None."}`,
@@ -3379,6 +3892,7 @@ async function bgDecomposeDelegateTask(task, sharedContext, tabId, onProgress, o
       "realtime-costs",
       "x-growth-posting",
       "amazon-shopping",
+      "youtube",
     ].includes(skill)) : fallbackSkills;
     return {
       goal: String(parsed.goal || task).trim() || task,
@@ -3401,7 +3915,7 @@ function bgBuildDelegateSystemPrompt(skills, lessons, geo = null) {
 Return ONLY strict JSON. No prose. No markdown fences.
 
 Decision shape:
-{"thought":"1-2 short sentences","memory_update":{"facts":[{"key":"...","value":"..."}],"current_subgoal":"...","subgoal_complete":false},"action":ACTION,"expect":ASSERTION,"done_confidence":0}
+{"thought":"your ACTUAL thinking, 1-2 complete first-person sentences","memory_update":{"facts":[{"key":"...","value":"..."}],"current_subgoal":"...","subgoal_complete":false},"action":ACTION,"expect":ASSERTION,"done_confidence":0}
 
 Actions:
 {"type":"navigate","url":"https://..."}
@@ -3428,6 +3942,7 @@ Assertions:
 {"assert":"none"}
 
 Rules:
+- thought is YOUR live reasoning, shown to the user while you work. Write complete first-person sentences that connect what you see, what the user wants, and why this next action — like "The user wants the hardcover and I can see Add to Cart, so I'll click it." Never telegraphic fragments ("search box. type query."), never third person.
 - Return exactly one action per turn.
 - Never output selector, targetText, targetTag, XPath, or CSS. Target live elements only by index.
 - Use the observation as ground truth. If the needed element is absent, scroll, wait, read, or clarify.
@@ -3439,13 +3954,14 @@ Rules:
 - Prefer {"type":"answer"} to finish informational tasks. Reserve {"type":"done"} for ACTION tasks (send / book / buy / save / submit) where the live page itself proves completion. Never loop trying to "prove" an informational task is done — answering IS done.
 - If the user explicitly asked to send an email, click Send when the draft is correctly addressed and written. Do not ask for another confirmation.
 - For other high-risk final actions not clearly requested by the user, clarify before acting.
+- If the task names a specific person/contact to message, call, or email (WhatsApp, Gmail, LinkedIn, etc.) and the observed contact list shows NO exact match, or shows several plausible matches (e.g. "Prakhar" vs "Prakhar Brother" vs "Prakhar Office"), STOP and {"type":"clarify"} asking which one — never click the closest-looking name and guess. This applies to selecting the recipient itself, separate from the final send-confirmation rule above.
 - For local place tasks (nearest theater, restaurants near me, directions from home), do not ask for the user's location. Open Google Maps using "near me" or "My Location", read the visible results once, and answer with the top options — do not keep re-searching.
 - Today is ${bgDelegateTodayText()}. ${geo ? bgUserContextLine(geo) : ""}
 - Use the user's LOCAL storefront for country-specific sites: ${geo?.countryCode && BG_AMAZON_TLD_BY_COUNTRY[geo.countryCode] ? `Amazon = ${BG_AMAZON_TLD_BY_COUNTRY[geo.countryCode]}` : "match the Amazon domain to the user's location"}. If you land on another country's storefront, navigate to the local one.
 
 Useful URL shortcuts:
 - Gmail inbox: https://mail.google.com/mail/u/0/#inbox
-- Gmail compose with prefill: https://mail.google.com/mail/?view=cm&to=TO&su=SUBJECT&body=BODY
+- Gmail compose: open the inbox, click the visible Compose button, then type recipient, subject, and body into Gmail's fields. Do not use Gmail prefill URLs unless the visible UI is unavailable.
 - Google Calendar create event: https://calendar.google.com/calendar/r/eventedit?text=TITLE&dates=YYYYMMDDTHHMMSS/YYYYMMDDTHHMMSS
 - LinkedIn Jobs: https://www.linkedin.com/jobs/search/?keywords=ROLE&location=CITY
 - Google Maps search: https://www.google.com/maps/search/QUERY
@@ -3472,6 +3988,10 @@ async function bgDecideNextAction({ task, state, observationText, skills, lesson
         : `WHEN SEARCHING: use the query "${synth.searchQuery}" — do NOT paste the user's sentence. One good search is enough.`)
       : null,
     synth?.softConstraints?.length ? `APPLY THESE PREFERENCES by reading and RANKING the results (not by adding them to the query): ${synth.softConstraints.join("; ")}.` : null,
+    (() => {
+      const active = (state?.subgoals || []).find((g) => g.status === "active");
+      return active?.doneWhen ? `ACTIVE SUBGOAL IS DONE WHEN: ${active.doneWhen} — check the observation against THIS, not your impression.` : null;
+    })(),
     "STATE:",
     BrainoTaskState.renderTaskState(state),
     "OBSERVATION:",
@@ -3518,14 +4038,16 @@ async function bgVerifyDelegateDone({ task, state, tabId }) {
       "Be strict: complete=true only if the observed page proves the goal was achieved " +
       "(e.g. the email shows as sent, the event shows as saved, the requested data is visible). " +
       "If it merely looks ready but not done, return false. No prose, no markdown.";
+    const doneContracts = (state?.subgoals || []).filter((g) => g.doneWhen).map((g) => `- ${g.desc}: ${g.doneWhen}`).join("\n");
     const userPrompt = [
       `TASK: ${task}`,
+      doneContracts ? `COMPLETION CONTRACTS (each subgoal counts as done only when its check holds):\n${doneContracts}` : null,
       "STATE:",
       BrainoTaskState.renderTaskState(state),
       "OBSERVATION:",
       obs.serialized || "(empty observation)",
       "Is the task complete in the observed state? Strict JSON only.",
-    ].join("\n\n");
+    ].filter(Boolean).join("\n\n");
     const reply = await bgCallDelegateModel({
       systemPrompt,
       userPrompt,
@@ -3578,7 +4100,7 @@ async function bgBuildElementObservation(tabId, keywords = "") {
   if (!tabId) return empty;
   return new Promise((resolve) => {
     function send(retrying) {
-      chrome.tabs.sendMessage(tabId, { action: "buildElementMap", keywords, cap: 120 }, (res) => {
+      chrome.tabs.sendMessage(tabId, { action: "buildElementMap", keywords, cap: 170 }, (res) => {
         if (chrome.runtime.lastError) {
           if (retrying) { resolve(empty); return; }
           chrome.scripting.executeScript({ target: { tabId }, files: BG_CONTENT_SCRIPT_FILES }, () => {
@@ -3674,12 +4196,14 @@ async function bgExecuteDelegateAction(tabId, action, state) {
   const result = await bgExecuteAgentAction(tabId, action);
   if (!result?.error && action.type === "navigate") {
     await bgWaitForTabReady(tabId, 8000);
-    await bgDelay(700);
+    await bgDelay(1300);   // lazy result grids (Amazon etc.) render after readyState — let them
   } else if (!result?.error && ["click", "type", "selectOption", "pressKey", "scroll"].includes(action.type)) {
     await bgDelay(450);
   }
   if (action.type === "read" && result?.text) {
-    state.facts.push({ key: `read:${state.facts.length + 1}`, value: String(result.text).slice(0, 2000), source: "page" });
+    // 2000 chars was just the top chrome on list-heavy pages (Amazon nav/filters) — the
+    // actual results sit lower, so reads kept returning junk. 5000 reaches the listings.
+    state.facts.push({ key: `read:${state.facts.length + 1}`, value: String(result.text).slice(0, 5000), source: "page" });
   }
   return result || { error: "No response from action execution" };
 }
@@ -3804,9 +4328,45 @@ async function bgRunMacroReplay({ tabId, task, state, macro, origin, onProgress 
   return { ok: true, message: "Done.", origin };
 }
 
+// CART SAFETY: refuse any click that removes an item from or changes the quantity of a
+// cart. Returns a block reason string, or "" to allow. Deterministic — the model can
+// never override it. Explicit safe actions (add to cart, buy, checkout, proceed, place
+// order) are always allowed even if their label mentions "cart".
+function bgCartSafetyBlock(action, obs) {
+  if (!action || action.type !== "click") return "";
+  const els = (obs && Array.isArray(obs.elements)) ? obs.elements : [];
+  const el = els.find((e) => Number(e.index) === Number(action.index));
+  const name = String(el?.name || el?.value || "").trim().toLowerCase();
+  if (!name) return "";
+  // Never treat the forward/purchase controls as destructive.
+  if (/\b(add to cart|add to basket|buy now|buy it|place (your )?order|proceed|checkout|check out|continue|order now)\b/.test(name)) return "";
+  // Destructive-to-cart controls — blocked no matter the page.
+  const destructive =
+    /\b(delete|remove)\b/.test(name)                                   // "Delete", "Remove", "Remove from cart"
+    || /\bsave for later\b/.test(name)                                 // moves it out of the active cart
+    || /\bmove to (?:wish ?list|saved|list)\b/.test(name)
+    || /\b(decrease|reduce|decrement|increase|increment)\b.*\b(quantity|qty|item)\b/.test(name)
+    || /\b(quantity|qty)\b.*\b(decrease|reduce|increase)\b/.test(name)
+    || /^[-‐‑‒–—−+]$/.test(name)                              // a bare stepper "+" / "−" (all dash/minus variants)
+    || /^(?:minus|plus)$/.test(name);
+  if (destructive) {
+    return `SAFETY: refused to click "${String(el?.name || "").slice(0, 60)}". Braino never deletes items from or changes quantities in a cart. If you need to reach checkout, use Proceed/Buy — do not modify existing cart items. If the user explicitly wants an item removed, they must do it themselves.`;
+  }
+  return "";
+}
+
 // Record "this search executed" when a URL proves its results page is up. The mark lives
 // in state.searchesDone (never evicted — the facts list caps at 30 and was scrolling
 // marks out on long runs) plus a copy in facts for model visibility. Idempotent.
+// Accumulate the run's full trace in STATE (survives page navigations, unlike the
+// content-script buffer) and ship it whole with every trace message.
+function bgPushTrace(state, tabId, meta, trace) {
+  if (!state.traceLog) state.traceLog = [];
+  state.traceLog.push(trace);
+  if (state.traceLog.length > 60) state.traceLog = state.traceLog.slice(-60);
+  bgSendInlineUiMessage(tabId, { action: "SB_AGENT_TRACE", meta, trace, history: state.traceLog });
+}
+
 function bgRecordSearchDone(state, url) {
   if (typeof BrainoSearchGuard === "undefined" || !BrainoSearchGuard || !state) return;
   if (!Array.isArray(state.searchesDone)) state.searchesDone = [];
@@ -3871,6 +4431,24 @@ async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {
   state.goal = decomp.goal || task;
   BrainoTaskState.setSubgoals(state, decomp.subgoals);
   await bgSendInlineUiMessage(currentTabId, { action: "SB_SUBGOAL_UPDATE", subgoals: state.subgoals });
+  // Console trace: run header → the tab's DevTools console (the user copies these to
+  // debug reasoning gaps — same playbook as the voice-latency logging). The meta ALSO
+  // rides on every per-step trace: the run often starts on tab A and navigates away,
+  // and the destination page's fresh content script never saw the header.
+  const traceMeta = {
+    task,
+    searchQuery: synth?.searchQuery || "",
+    goal: state.goal,
+    subgoals: (state.subgoals || []).map((g) => g.desc),
+    skills: decomp.skills || [],
+  };
+  bgSendInlineUiMessage(currentTabId, { action: "SB_AGENT_RUN_META", meta: traceMeta });
+  // First thought lands the moment the plan exists — the island should never sit on
+  // "Getting started…" while the first per-step decision (~2-4s) is still coming.
+  if (state.subgoals?.length) {
+    const planLine = state.subgoals.map((g) => g.desc).join(", then ");
+    bgSendInlineUiMessage(currentTabId, { action: "SB_AGENT_THOUGHT", thought: `Here's my plan: ${planLine}.` });
+  }
 
   const fastActions = skipFastPath ? null : bgTryFastPath(task, [], synth, await bgGetUserGeo().catch(() => null));
   if (fastActions?.length) {
@@ -3921,7 +4499,13 @@ async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {
       }
     }
 
-    const activeKeywords = state.subgoals.find((goal) => goal.status === "active")?.desc || task;
+    // Observation keywords decide which elements survive the cull. Using ONLY the
+    // subgoal desc ("open the matching product listing") culled the actual result links —
+    // their titles ("The Subtle Art of Not Giving a F*ck") share no words with the desc,
+    // so they scored 0 and header/cart controls won the budget. Lead with the search
+    // query + task so the TARGET's own words keep its links in the observation.
+    const activeGoalDesc = state.subgoals.find((goal) => goal.status === "active")?.desc || "";
+    const activeKeywords = [state.synth?.searchQuery || "", task, activeGoalDesc].filter(Boolean).join(" ") || task;
     const obsResult = await bgBuildElementObservation(currentTabId, activeKeywords);
     let obs = obsResult.map;
     // The results page may have finished loading AFTER the previous step's re-observe
@@ -3953,6 +4537,14 @@ async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {
       return { ok: false, message: msg, state };
     }
 
+    // Stream the model's reasoning into the bar's island BEFORE the action runs —
+    // think, then act, and the user watches both.
+    const stepThought = String(decision?.thought || "").trim();
+    if (stepThought) {
+      bgLastThoughtByTab.set(currentTabId, stepThought);
+      bgSendInlineUiMessage(currentTabId, { action: "SB_AGENT_THOUGHT", thought: stepThought });
+    }
+
     BrainoTaskState.mergeMemoryUpdate(state, decision.memory_update, "model");
     await bgSendInlineUiMessage(currentTabId, { action: "SB_SUBGOAL_UPDATE", subgoals: state.subgoals });
 
@@ -3965,6 +4557,15 @@ async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {
         onProgress?.("Double-checking the result...");
         const verify = await bgVerifyDelegateDone({ task, state, tabId: currentTabId });
         llmUsd += BrainoModels?.estimateModelCost?.(BrainoModels?.MODELS?.STRATEGIST) || 0.02;
+        bgPushTrace(state, currentTabId, traceMeta, {
+          step: step + 1,
+          thought: String(decision?.thought || "").trim(),
+          action: "verify done (self-check)",
+          actionRaw: "{}",
+          result: verify && verify.complete === false ? `verifier says NOT done: ${String(verify?.reason || "").slice(0, 160)}` : "verifier confirms done",
+          verdict: verify && verify.complete === false ? "rejected" : "ok",
+          url: "",
+        });
         if (verify && verify.complete === false) {
           const note = `Self-check: not done yet — ${verify.reason || "the page does not yet prove the task is complete"}.`;
           state.facts.push({ key: `self_check:${state.facts.length + 1}`, value: note, source: "verifier" });
@@ -3984,6 +4585,15 @@ async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {
     }
     if (action.type === "answer" || action.type === "clarify") {
       const msg = action.text || "I need more information to continue.";
+      bgPushTrace(state, currentTabId, traceMeta, {
+        step: step + 1,
+        thought: String(decision?.thought || "").trim(),
+        action: action.type === "answer" ? "ANSWER (run ends)" : "CLARIFY (run ends, asks the user)",
+        actionRaw: "{}",
+        result: String(msg).slice(0, 240),
+        verdict: "terminal",
+        url: String(obs?.url || "").slice(0, 160),
+      });
       onFinal?.(msg);
       return { ok: action.type === "answer", message: msg, state };
     }
@@ -4061,7 +4671,39 @@ async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {
       state.facts.push({ key: `redundant_search_guard:${state.facts.length + 1}`, value: guardVerdict.note, source: "runtime" });
       state.facts = state.facts.slice(-30);
       BrainoTaskState.commitHistory(state, decision, { success: false, skipped: true, note: guardVerdict.note }, { ok: false, reason: guardVerdict.note });
+      bgPushTrace(state, currentTabId, traceMeta, {
+        step: step + 1,
+        thought: String(decision?.thought || "").trim(),
+        action: bgDescribeDelegateAction(action, obs) || action.type,
+        actionRaw: JSON.stringify({ type: action.type }),
+        result: `skipped by search guard: ${guardVerdict.note.slice(0, 160)}`,
+        verdict: "skipped",
+        url: String(obs?.url || "").slice(0, 160),
+      });
       onProgress?.("Already there — skipping a repeat search...");
+      prevObs = obs;
+      continue;
+    }
+
+    // ── CART SAFETY (hard, non-negotiable): Braino must NEVER remove items from or
+    // change quantities in a cart. It deleted items from a real user's cart. This is a
+    // deterministic block on clicking delete/remove/save-for-later/quantity-stepper
+    // controls — enforcement, not a prompt request. Add-to-Cart / Buy / Checkout pass. ──
+    const cartBlock = bgCartSafetyBlock(action, obs);
+    if (cartBlock) {
+      state.facts.push({ key: `cart_safety:${state.facts.length + 1}`, value: cartBlock, source: "runtime" });
+      state.facts = state.facts.slice(-30);
+      BrainoTaskState.commitHistory(state, decision, { success: false, skipped: true, note: cartBlock }, { ok: false, reason: cartBlock });
+      bgPushTrace(state, currentTabId, traceMeta, {
+        step: step + 1,
+        thought: String(decision?.thought || "").trim(),
+        action: bgDescribeDelegateAction(action, obs) || action.type,
+        actionRaw: JSON.stringify({ type: action.type, index: action.index }),
+        result: `BLOCKED by cart safety: ${cartBlock.slice(0, 160)}`,
+        verdict: "blocked",
+        url: String(obs?.url || "").slice(0, 160),
+      });
+      onProgress?.("Not touching existing cart items — safety.");
       prevObs = obs;
       continue;
     }
@@ -4095,8 +4737,74 @@ async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {
     // Post-action check too (the per-iteration check at the loop top catches races that
     // resolve later): a search is done ONLY when its results page is actually up.
     if (!result?.error) bgRecordSearchDone(state, newObs?.url);
+    // Repeated-action breaker (general): reading/scrolling the SAME page over and over
+    // yields nothing new — the interactive elements are ALREADY in every observation.
+    // The atomic-habits run read the results page 11 times insisting it "couldn't see
+    // the listing." After 3 same-type actions on one URL, forbid another and force a
+    // click on the best-matching visible element (or answer/clarify).
+    try {
+      const au = new URL(String(obs?.url || ""));
+      const aKey = au.host + au.pathname + ":" + action.type;
+      state.actionStreak = (state.actionStreak && state.actionStreak.key === aKey)
+        ? { key: aKey, n: state.actionStreak.n + 1 }
+        : { key: aKey, n: 1 };
+      if (["read", "scroll"].includes(action.type) && state.actionStreak.n >= 3) {
+        const note = `You have used "${action.type}" ${state.actionStreak.n} times on this page. Reading/scrolling again reveals NOTHING new — every interactive element on the page is ALREADY listed in the observation above (result links included, even offscreen ones). Do NOT ${action.type} again. Instead: pick the element whose name best matches what you want and CLICK it; if genuinely nothing matches, answer or clarify. On a shopping/search-results page, the product you want is a link whose name STARTS WITH the title you searched — click it.`;
+        state.facts.push({ key: `repeated_action:${state.facts.length + 1}`, value: note, source: "runtime" });
+        state.facts = state.facts.slice(-30);
+        onProgress?.("Reading in circles — I'll pick a result and click it...");
+      }
+    } catch (_) {}
+
+    // Subgoal-stagnation escalation: action success is not progress. If the ACTIVE
+    // subgoal hasn't advanced in 8 steps, force the existing replan machinery — the
+    // 118s YouTube loop never tripped stuckCount because every click "succeeded".
+    {
+      const activeGoal = state.subgoals.find((g) => g.status === "active");
+      const streakId = activeGoal ? activeGoal.id : "";
+      state.subgoalStreak = (state.subgoalStreak && state.subgoalStreak.id === streakId)
+        ? { id: streakId, n: state.subgoalStreak.n + 1 }
+        : { id: streakId, n: 1 };
+      if (activeGoal && (state.subgoalStreak.n === 8 || state.subgoalStreak.n === 14)) {
+        state.stuckCount = Math.max(state.stuckCount || 0, 3);   // triggers strong-model replan
+        state.facts.push({
+          key: `stalled_subgoal:${streakId}:${state.subgoalStreak.n}`,
+          value: `Subgoal "${activeGoal.desc}" has not advanced in ${state.subgoalStreak.n} steps even though individual actions succeeded. Progress is measured by the GOAL, not by clicks. Replan or finish with what you already have.`,
+          source: "runtime",
+        });
+        state.facts = state.facts.slice(-30);
+        onProgress?.("This subgoal is stalled — rethinking the plan...");
+      }
+    }
+
+    // Going-in-circles detector: every click can "succeed" while the run ping-pongs
+    // between the same two pages (results ↔ channel, 9 visits in one real trace) —
+    // action success is not goal progress. Third landing on the same URL = say so.
+    try {
+      const cu = new URL(String(newObs?.url || ""));
+      const cKey = cu.host + cu.pathname;
+      state.urlVisits = state.urlVisits || {};
+      state.urlVisits[cKey] = (state.urlVisits[cKey] || 0) + 1;
+      if (state.urlVisits[cKey] === 3) {
+        state.facts.push({
+          key: `going_in_circles:${cKey.slice(0, 60)}`,
+          value: `You have now landed on ${cKey} 3 times this run — you are going in circles. Change tactic decisively: open a FULL-TITLED item instead of a repeated generic element, or finish with answer/clarify using what you already have.`,
+          source: "runtime",
+        });
+        state.facts = state.facts.slice(-30);
+      }
+    } catch (_) {}
     const verdict = BrainoRecovery.verifyAssertion(decision.expect || { assert: "none" }, newObs);
     BrainoTaskState.commitHistory(state, decision, result, verdict);
+    bgPushTrace(state, currentTabId, traceMeta, {
+      step: step + 1,
+      thought: stepThought,
+      action: String(bgDescribeDelegateAction(action, obs) || action.type).replace(/\s*#undefined\b/, " (page)"),
+      actionRaw: JSON.stringify({ type: action.type, index: action.index, url: action.url, text: action.text, query: action.query }),
+      result: result?.error ? `error: ${String(result.error).slice(0, 200)}` : "ok",
+      verdict: verdict?.ok ? "ok" : `failed: ${String(verdict?.reason || "").slice(0, 200)}`,
+      url: String(newObs?.url || "").slice(0, 160),
+    });
     await bgSendInlineUiMessage(currentTabId, { action: "SB_SUBGOAL_UPDATE", subgoals: state.subgoals });
 
     if (!result?.error && verdict.ok) {
@@ -4160,6 +4868,24 @@ async function bgRunBrainAgent(tabId, task, connectorHint, sharedContext = {}) {
     try { chrome.tabs.get(currentTabId, (tab) => resolve(chrome.runtime.lastError ? null : { url: tab?.url, title: tab?.title })); }
     catch { resolve(null); }
   });
+  const immediateSiteContext = await bgGetSiteAdapterContext(currentTabId).catch(() => null);
+  const immediateAdapterTask = bgParseAdapterTask(task, immediateSiteContext, connectorHint);
+  if (bgShouldRunImmediateGmailAdapter(immediateAdapterTask, immediateSiteContext)) {
+    try {
+      const adapterMessage = await bgTryHandleSiteAdapterTask({
+        tabId: currentTabId,
+        task,
+        connectorHint,
+        history,
+        onProgress,
+        shouldStop: () => bgAgentShouldStop,
+      });
+      if (adapterMessage) return finish(adapterMessage, true);
+    } catch (error) {
+      return finish(`Adapter error: ${error?.message || error}`, false);
+    }
+  }
+
   const userGeo = await bgGetUserGeo().catch(() => null);
   const synth = await bgSynthesizeIntent(task, conversationContext, pageInfo).catch(() => null);
   // Steer the fast path and everything after it by the context-resolved task, not the
@@ -4402,6 +5128,11 @@ async function bgCallSpotifyFunction(functionName, payload) {
 
 async function bgOpenSpotifyReconnect(token) {
   try {
+    const now = Date.now();
+    if (now - bgSpotifyReconnectLastOpenedAt < BG_SPOTIFY_RECONNECT_THROTTLE_MS) {
+      console.warn("[Braino][Spotify][BG] Reconnect already opened recently; suppressing duplicate auth tab.");
+      return false;
+    }
     const tok = token || (await bgRefreshAuthToken());
     if (!tok) return false;
     const response = await fetch(`${BG_API_BASE}/spotify-oauth-start`, {
@@ -4414,6 +5145,7 @@ async function bgOpenSpotifyReconnect(token) {
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok || !data?.authUrl) return false;
+    bgSpotifyReconnectLastOpenedAt = now;
     await new Promise((resolve) => chrome.tabs.create({ url: data.authUrl }, resolve));
     return true;
   } catch (err) {
@@ -4839,6 +5571,11 @@ async function bgPushSpotifyPlaybackState(tabId, base = {}, options = {}) {
 function bgParseAdapterTask(task, siteContext, connectorHint) {
   const raw = String(task || "").trim();
   const text = raw.toLowerCase();
+  const assistantStrippedRaw = raw
+    .replace(/^\s*(?:(?:hey|hi|yo|okay|ok)\s+)?(?:braino|breno)[:,]?\s*/i, "")
+    .replace(/^\s*(?:can|could|would)\s+you\s+(?:please\s+)?/i, "")
+    .replace(/^\s*please\s+/i, "")
+    .trim() || raw;
   const currentSite = siteContext?.site || "generic";
   const normalizedConnector = bgNormalizeConnectorHint(connectorHint) || "auto";
   const explicitSpotifyMention = /\bspotify\b/.test(text);
@@ -4849,6 +5586,7 @@ function bgParseAdapterTask(task, siteContext, connectorHint) {
     currentSite === "gmail" ||
     normalizedConnector === "gmail" ||
     /\bgmail\b|\bemail\b|\bmail\b/.test(text);
+  const gmailShouldSend = /^\s*send\b/i.test(assistantStrippedRaw);
   const wantsGoogleDrive =
     currentSite === "google-drive" ||
     normalizedConnector === "google-drive" ||
@@ -4937,13 +5675,20 @@ function bgParseAdapterTask(task, siteContext, connectorHint) {
     }
   }
 
+  // VIDEO content veto — "play <X> reaction videos / vlog / trailer / episode" is
+  // YouTube-shaped no matter what site is open. Spotify's search happily returns a
+  // random song for it (real bug: "play tanmay bhat's reaction videos" on Spotify
+  // played music). Explicit song words re-enable the music path.
+  const wantsVideoContent = /\b(videos?|reaction|reactions|vlogs?|trailers?|episodes?|shorts|documentary|interview|watch)\b/i.test(raw)
+    && !/\b(songs?|tracks?|albums?|playlists?|music)\b/i.test(raw);
+
   const quotedDirectPlay = raw.match(/play\s+[“”](.+?)[“”](?:\s+(?:on|in)\s+spotify)?$/i);
-  if ((onSpotify || explicitMusicIntent) && quotedDirectPlay && !/^(?:next|previous|prev|pause|resume|stop|shuffle|repeat)$/i.test(quotedDirectPlay[1].trim())) {
+  if (!wantsVideoContent && (onSpotify || explicitMusicIntent) && quotedDirectPlay && !/^(?:next|previous|prev|pause|resume|stop|shuffle|repeat)$/i.test(quotedDirectPlay[1].trim())) {
     return { adapter: "spotify", intent: "playSong", song: quotedDirectPlay[1].trim() };
   }
 
   const directPlay = raw.match(/play\s+(?:the\s+song\s+|song\s+)?(.+?)(?:\s+(?:on|in)\s+spotify)?$/i);
-  if ((onSpotify || explicitMusicIntent) && directPlay && !/\bfrom\s+(?:my\s+)?playlist\b/i.test(raw) && !/^(?:next|previous|prev|pause|resume|stop|shuffle|repeat)$/i.test(directPlay[1].trim())) {
+  if (!wantsVideoContent && (onSpotify || explicitMusicIntent) && directPlay && !/\bfrom\s+(?:my\s+)?playlist\b/i.test(raw) && !/^(?:next|previous|prev|pause|resume|stop|shuffle|repeat)$/i.test(directPlay[1].trim())) {
     return { adapter: "spotify", intent: "playSong", song: directPlay[1].trim() };
   }
 
@@ -4980,32 +5725,43 @@ function bgParseAdapterTask(task, siteContext, connectorHint) {
     }
   }
 
-  const sendEmailMatch = raw.match(/(?:send|compose|draft|write)\s+(?:an?\s+)?email\s+to\s+(.+?)\s+(?:about|subject)\s+(.+?)\s+(?:saying|that says|body)\s+(.+)$/i);
+  const sendEmailMatch = assistantStrippedRaw.match(/(?:send|compose|draft|write)\s+(?:an?\s+)?email\s+to\s+(.+?)\s+(?:about|subject|with subject)\s+(.+?)\s+(?:saying|that says|with message|body|and body|and saying)\s+(.+)$/i);
   if (wantsGmail && sendEmailMatch) {
     return {
       adapter: "gmail",
-      intent: /^(send)/i.test(raw.trim()) ? "sendEmail" : "draftEmail",
+      intent: gmailShouldSend ? "sendEmail" : "draftEmail",
       to: sendEmailMatch[1].trim(),
       subject: sendEmailMatch[2].trim(),
       body: sendEmailMatch[3].trim(),
     };
   }
 
-  const namedEmailMatch = raw.match(/(?:send|compose|draft|write)\s+(.+?)\s+an?\s+email(?:\s+(?:about|subject)\s+(.+?))?(?:\s+(?:saying|that says|with message|body)\s+(.+))?$/i);
+  const sendBodyNoSubjectMatch = assistantStrippedRaw.match(/(?:send|compose|draft|write)\s+(?:an?\s+)?email\s+to\s+(.+?)\s+(?:saying|that says|with message|body|and say|telling them|tell them)\s+(.+)$/i);
+  if (wantsGmail && sendBodyNoSubjectMatch) {
+    return {
+      adapter: "gmail",
+      intent: gmailShouldSend ? "sendEmail" : "draftEmail",
+      to: sendBodyNoSubjectMatch[1].trim(),
+      subject: "",
+      body: sendBodyNoSubjectMatch[2].trim(),
+    };
+  }
+
+  const namedEmailMatch = assistantStrippedRaw.match(/(?:send|compose|draft|write)\s+(.+?)\s+an?\s+email(?:\s+(?:about|subject|with subject)\s+(.+?))?(?:\s+(?:saying|that says|with message|body|and say|telling them|tell them)\s+(.+))?$/i);
   if (wantsGmail && namedEmailMatch) {
     const recipient = namedEmailMatch[1].trim();
     const subject = namedEmailMatch[2]?.trim() || "";
     const body = namedEmailMatch[3]?.trim() || "";
     return {
       adapter: "gmail",
-      intent: /^send\b/i.test(raw.trim()) && body ? "sendEmail" : "draftEmail",
+      intent: gmailShouldSend && body ? "sendEmail" : "draftEmail",
       to: recipient,
       subject,
       body,
     };
   }
 
-  const draftEmailMatch = raw.match(/(?:draft|compose|write)\s+(?:an?\s+)?email\s+to\s+(.+?)\s+(?:saying|that says|with message)\s+(.+)$/i);
+  const draftEmailMatch = assistantStrippedRaw.match(/(?:draft|compose|write)\s+(?:an?\s+)?email\s+to\s+(.+?)\s+(?:saying|that says|with message|and say|telling them|tell them)\s+(.+)$/i);
   if (wantsGmail && draftEmailMatch) {
     return {
       adapter: "gmail",
@@ -5016,7 +5772,7 @@ function bgParseAdapterTask(task, siteContext, connectorHint) {
     };
   }
 
-  const simpleEmailMatch = raw.match(/(?:send|compose|draft|write)\s+(?:an?\s+)?email\s+to\s+(.+?)$/i);
+  const simpleEmailMatch = assistantStrippedRaw.match(/(?:send|compose|draft|write)\s+(?:an?\s+)?email\s+to\s+(.+?)$/i);
   if (wantsGmail && simpleEmailMatch) {
     return {
       adapter: "gmail",
@@ -5027,7 +5783,19 @@ function bgParseAdapterTask(task, siteContext, connectorHint) {
     };
   }
 
-  const replyEmailMatch = raw.match(/reply\s+to\s+(?:this\s+)?email\s+(?:saying|with)\s+(.+)$/i);
+  const currentReplyBodyMatch =
+    assistantStrippedRaw.match(/\b(?:write|draft|compose|send)\s+(?:me\s+)?(?:a\s+|an\s+)?(?:reply|response|answer)(?:\s+(?:to|for)\s+(?:this|it|the\s+(?:email|mail|message|thread)|current\s+(?:email|mail|message|thread)))?\s*(?:saying|with|that says|and say|body|here'?s how|heres how|like this|:|-)\s+([\s\S]+)$/i) ||
+    assistantStrippedRaw.match(/\b(?:reply|respond|answer)(?:\s+(?:to\s+)?(?:this|it|the\s+(?:email|mail|message|thread)|current\s+(?:email|mail|message|thread)))?\s*(?:saying|with|that says|and say|body|here'?s how|heres how|like this|:|-)\s+([\s\S]+)$/i);
+  if (wantsGmail && currentReplyBodyMatch) {
+    return {
+      adapter: "gmail",
+      intent: "replyCurrentThread",
+      body: currentReplyBodyMatch[1].trim(),
+      send: !/^\s*(?:draft|compose)\b/i.test(assistantStrippedRaw),
+    };
+  }
+
+  const replyEmailMatch = assistantStrippedRaw.match(/reply\s+to\s+(?:this\s+)?email\s+(?:saying|with)\s+(.+)$/i);
   if (wantsGmail && replyEmailMatch) {
     return {
       adapter: "gmail",
@@ -5037,7 +5805,7 @@ function bgParseAdapterTask(task, siteContext, connectorHint) {
     };
   }
 
-  const draftReplyMatch = raw.match(/draft\s+(?:a\s+)?reply\s+to\s+(?:this\s+)?email\s+(?:saying|with)\s+(.+)$/i);
+  const draftReplyMatch = assistantStrippedRaw.match(/draft\s+(?:a\s+)?reply\s+to\s+(?:this\s+)?email\s+(?:saying|with)\s+(.+)$/i);
   if (wantsGmail && draftReplyMatch) {
     return {
       adapter: "gmail",
@@ -5047,7 +5815,90 @@ function bgParseAdapterTask(task, siteContext, connectorHint) {
     };
   }
 
-  const gmailSearchMatch = raw.match(/(?:find|search|look for|open)\s+(?:emails?|mail)\s+(?:about|for|from)?\s+(.+)$/i);
+  const replySpecificEmailMatch = assistantStrippedRaw.match(/(?:(draft|write|compose)\s+(?:a\s+)?reply|reply|respond)\s+(?:to|for)\s+(?:the\s+)?(?:gmail\s+)?(?:email|mail|message|thread)\s+(?:from|about|for|regarding|with)\s+(.+?)\s+(?:saying|with|that says|body|and say)\s+(.+)$/i);
+  if (wantsGmail && replySpecificEmailMatch) {
+    return {
+      adapter: "gmail",
+      intent: "replyEmail",
+      query: replySpecificEmailMatch[2].trim(),
+      body: replySpecificEmailMatch[3].trim(),
+      send: !replySpecificEmailMatch[1],
+    };
+  }
+
+  const generatedReplyForEmailMatch = wantsGmail && (
+    assistantStrippedRaw.match(/\b(?:draft|write|compose|generate|send)\s+(?:a\s+)?(?:reply|response)\s+(?:to|for)\s+(?:the\s+)?(?:gmail\s+)?(?:email|mail|message|thread)\s+(?:from|about|for|regarding|with)\s+(.+)$/i) ||
+    assistantStrippedRaw.match(/\bwhat\s+should\s+i\s+(?:say|reply|respond)\s+(?:to|for)\s+(?:the\s+)?(?:gmail\s+)?(?:email|mail|message|thread)\s+(?:from|about|for|regarding|with)\s+(.+)$/i)
+  );
+  if (generatedReplyForEmailMatch) {
+    const draftOnly = /\b(?:draft|compose|generate|suggest|what\s+(?:can|should)|what\s+to\s+say)\b/i.test(assistantStrippedRaw);
+    return {
+      adapter: "gmail",
+      intent: "draftGeneratedReplyForEmail",
+      query: String(generatedReplyForEmailMatch[1] || "").trim(),
+      send: !draftOnly,
+    };
+  }
+
+  const generatedReplyMatch = wantsGmail && (
+    /\b(?:draft|write|compose|generate|send)\s+(?:me\s+)?(?:a\s+|an\s+)?(?:reply|response|answer)\s*(?:to|for)?\s*(?:this|it|the\s+(?:email|mail|message|thread)|current\s+(?:email|mail|message|thread))?\b/i.test(assistantStrippedRaw) ||
+    /\b(?:reply|respond|answer)\s+(?:to\s+)?(?:this|it|the\s+(?:email|mail|message|thread)|current\s+(?:email|mail|message|thread))\b/i.test(assistantStrippedRaw) ||
+    /\bhelp(?:\s+me)?\s+(?:write|draft|compose)?\s*(?:a\s+|an\s+)?(?:reply|response|answer)\s*(?:to|for)?\s*(?:this|it|the\s+(?:email|mail|message|thread)|current\s+(?:email|mail|message|thread))?\b/i.test(assistantStrippedRaw) ||
+    /\b(?:write|draft)\s+what\s+i\s+should\s+(?:say|reply|respond)\b/i.test(assistantStrippedRaw) ||
+    /\bwhat\s+(?:can|should)\s+i\s+(?:say|reply|respond)\b/i.test(assistantStrippedRaw)
+  );
+  if (generatedReplyMatch) {
+    const draftOnly = /\b(?:draft|compose|generate|suggest|what\s+(?:can|should)|what\s+to\s+say)\b/i.test(assistantStrippedRaw);
+    return {
+      adapter: "gmail",
+      intent: "draftGeneratedReplyCurrentThread",
+      send: !draftOnly,
+    };
+  }
+
+  const asksAboutCurrentGmailThread = wantsGmail && (
+    (
+      /\b(?:currently\s+open|current|opened|this)\b.*\b(?:gmail|email|mail|message|thread)\b/i.test(assistantStrippedRaw) &&
+      /\b(?:read|summari[sz]e|explain|what|says?|contents?|about|reply|respond|say)\b/i.test(assistantStrippedRaw)
+    ) ||
+    (
+      currentSite === "gmail" &&
+      /\b(?:read|summari[sz]e|explain|what(?:'s| is)?(?:\s+in)?|what does\b.*\bsay|tell me\b.*\b(?:about|what)|what (?:can|should) i (?:say|reply|respond)|help(?: me)? (?:reply|respond)|suggest(?: a)? reply)\b/i.test(assistantStrippedRaw) &&
+      /\b(?:email|mail|message|thread|this|it|reply|respond|say)\b/i.test(assistantStrippedRaw)
+    )
+  );
+  if (asksAboutCurrentGmailThread) {
+    return {
+      adapter: "gmail",
+      intent: "readCurrentThread",
+      wantsReplyAdvice: /\b(?:reply|respond|what (?:can|should) i say|what (?:can|should) i reply|what to say|suggest(?: a)? reply|help(?: me)? (?:reply|respond))\b/i.test(assistantStrippedRaw),
+    };
+  }
+
+  const openEmailMatch =
+    assistantStrippedRaw.match(/\b(?:open|show|pull up|bring up|click|tap)\s+(?:(?:this|that|the|a)\s+)?(?:(?:visible|shown|current|top|first|latest|last|recent)\s+)?(?:gmail\s+)?(?:email|emails|mail|message|thread)(?:\s+(?:that|which)\s+(?:is\s+)?(?:visible|shown|in\s+(?:the\s+)?view|on\s+(?:the\s+)?screen|in\s+(?:the\s+)?inbox)|\s+(?:in\s+(?:the\s+)?view|on\s+(?:the\s+)?screen|from\s+(?:the\s+)?inbox|visible\s+(?:in\s+)?(?:the\s+)?inbox))?(?:\s+(?:from|about|for|regarding|with|by|called|titled)\s+(.+?))?\s*[?.!]*$/i) ||
+    assistantStrippedRaw.match(/\b(?:open|show|pull up|bring up|click|tap)\s+(?:(?:this|that|the|a)\s+)?(?:email|mail|message|thread)\s+(?:in\s+(?:the\s+)?view|on\s+(?:the\s+)?screen|from\s+(?:the\s+)?inbox|visible\s+(?:in\s+)?(?:the\s+)?inbox)\s*[?.!]*$/i) ||
+    assistantStrippedRaw.match(/\b(?:read|summari[sz]e|explain)\s+(?:the\s+)?(?:latest|last|first|recent)?\s*(?:gmail\s+)?(?:email|emails|mail|message|thread)\s+(?:from|about|for|regarding|with|by|called|titled)\s+(.+)$/i);
+  if (wantsGmail && openEmailMatch) {
+    return {
+      adapter: "gmail",
+      intent: "openEmail",
+      query: String(openEmailMatch[1] || "").replace(/[?.!]+$/g, "").trim(),
+      summarize: /\b(?:read|summari[sz]e|explain)\b/i.test(assistantStrippedRaw),
+    };
+  }
+
+  const asksGmailInboxInsights = wantsGmail &&
+    !/\b(?:send|draft|compose|write)\s+(?:an?\s+)?email\b/i.test(assistantStrippedRaw) &&
+    /\b(?:inbox|emails?\s+(?:do\s+i\s+)?get|who\s+(?:emails|mails)|from\s+most|how\s+often|unsubscribe|newsletter|newsletters|triage|promotions?|senders?|what\s+emails)\b/i.test(assistantStrippedRaw);
+  if (asksGmailInboxInsights) {
+    return {
+      adapter: "gmail",
+      intent: "readInboxSummary",
+    };
+  }
+
+  const gmailSearchMatch = assistantStrippedRaw.match(/(?:find|search|look for|open)\s+(?:emails?|mail)\s+(?:about|for|from)?\s+(.+)$/i);
   if (wantsGmail && gmailSearchMatch) {
     return {
       adapter: "gmail",
@@ -5150,6 +6001,15 @@ function bgParseAdapterTask(task, siteContext, connectorHint) {
   }
 
   return null;
+}
+
+function bgShouldRunImmediateGmailAdapter(parsed, siteContext) {
+  if (siteContext?.site !== "gmail" || parsed?.adapter !== "gmail") return false;
+  return parsed.intent === "replyCurrentThread" ||
+    parsed.intent === "draftGeneratedReplyCurrentThread" ||
+    parsed.intent === "draftEmail" ||
+    parsed.intent === "sendEmail" ||
+    parsed.intent === "openEmail";
 }
 
 function bgLooksLikeBrowserTask(task) {
@@ -5271,6 +6131,282 @@ async function bgRunAdapterStep({ history, description, type, run, onProgress, o
   if (onResult) await onResult({ description, type: type || "adapter", result });
   if (result?.error) throw new Error(result.error);
   return result;
+}
+
+function bgGmailThreadHasBody(thread) {
+  return Boolean(String(thread?.body || "").trim() || (Array.isArray(thread?.messages) && thread.messages.some((message) => String(message?.body || "").trim())));
+}
+
+function bgFormatGmailThreadForPrompt(thread) {
+  const from = thread?.from || {};
+  const sender = [from.name, from.email && from.email !== from.name ? `<${from.email}>` : ""].filter(Boolean).join(" ");
+  const messages = Array.isArray(thread?.messages) && thread.messages.length
+    ? thread.messages.map((message, index) => {
+        const msgFrom = message?.from ? [message.from.name, message.from.email && message.from.email !== message.from.name ? `<${message.from.email}>` : ""].filter(Boolean).join(" ") : "";
+        return [
+          `Message ${index + 1}:`,
+          msgFrom ? `From: ${msgFrom}` : "",
+          message?.date ? `Date: ${message.date}` : "",
+          `Body:\n${String(message?.body || "").trim()}`,
+        ].filter(Boolean).join("\n");
+      }).join("\n\n---\n\n")
+    : String(thread?.body || "").trim();
+  return [
+    thread?.subject ? `Subject: ${thread.subject}` : "",
+    sender ? `From: ${sender}` : "",
+    thread?.date ? `Date: ${thread.date}` : "",
+    messages ? `Extracted email text:\n${messages}` : "",
+  ].filter(Boolean).join("\n\n").slice(0, 12000);
+}
+
+function bgBuildGmailThreadFallbackAnswer(thread, wantsReplyAdvice) {
+  const subject = String(thread?.subject || "this email").trim();
+  const from = thread?.from?.name || thread?.from?.email || "the sender";
+  const body = String(thread?.body || thread?.messages?.[0]?.body || "").replace(/\s+/g, " ").trim();
+  const bodyPreview = body ? body.slice(0, 700) : "I could identify the thread, but the email body was not readable from Gmail.";
+  const reply = wantsReplyAdvice
+    ? "\n\nSuggested reply:\nThanks for the reminder. I’ll review this and confirm the payment if it’s expected on my side."
+    : "";
+  return `This email is from ${from} with the subject “${subject}”.\n\n${bodyPreview}${reply}`;
+}
+
+async function bgBuildGmailCurrentThreadAnswer(task, thread, parsed) {
+  const wantsReplyAdvice = Boolean(parsed?.wantsReplyAdvice);
+  if (!bgGmailThreadHasBody(thread)) {
+    return "I can see the Gmail thread, but I could not extract the message body. Open/expand the latest message in the thread and ask me again.";
+  }
+  try {
+    const systemPrompt = [
+      "You help the user understand the currently open Gmail email.",
+      "Use ONLY the extracted email text provided. Do not invent missing details.",
+      "Give a concise summary. If the user asks what to say or how to reply, include a short suggested reply.",
+      "If the email asks for payment, confirmation, login, or sensitive action, mention that the user should verify it is expected before acting.",
+    ].join("\n");
+    const userPrompt = [
+      `USER REQUEST: ${task}`,
+      wantsReplyAdvice ? "The user wants reply advice or wording." : "The user wants the email summarized.",
+      "CURRENT GMAIL THREAD:",
+      bgFormatGmailThreadForPrompt(thread),
+    ].join("\n\n");
+    const answer = await bgCallDelegateModel({
+      systemPrompt,
+      userPrompt,
+      model: BrainoModels?.MODELS?.STEP || "gpt-5.4-mini",
+    });
+    return String(answer || "").trim() || bgBuildGmailThreadFallbackAnswer(thread, wantsReplyAdvice);
+  } catch (_) {
+    return bgBuildGmailThreadFallbackAnswer(thread, wantsReplyAdvice);
+  }
+}
+
+async function bgBuildGmailGeneratedReply(task, thread) {
+  if (!bgGmailThreadHasBody(thread)) {
+    return "";
+  }
+  try {
+    const systemPrompt = [
+      "You draft replies to the currently open Gmail email.",
+      "Use ONLY the extracted email text. Do not invent commitments, facts, or private details.",
+      "Return only the reply body text. No markdown, no subject line, no explanation.",
+      "Keep it concise, natural, and safe. If the email requests payment, login, or sensitive action, say the user will verify first.",
+    ].join("\n");
+    const userPrompt = [
+      `USER REQUEST: ${task}`,
+      "CURRENT GMAIL THREAD:",
+      bgFormatGmailThreadForPrompt(thread),
+      "Draft the reply body now.",
+    ].join("\n\n");
+    const answer = await bgCallDelegateModel({
+      systemPrompt,
+      userPrompt,
+      model: BrainoModels?.MODELS?.STEP || "gpt-5.4-mini",
+    });
+    return String(answer || "").trim();
+  } catch (_) {
+    return "";
+  }
+}
+
+function bgInferGmailSubject(body, task) {
+  const source = String(body || task || "")
+    .replace(/\s+/g, " ")
+    .replace(/^(?:send|compose|draft|write)\s+(?:an?\s+)?email\s+to\s+.+?\s+(?:saying|that says|with message|body|and say|telling them|tell them)\s+/i, "")
+    .trim();
+  if (!source) return "Quick note";
+
+  const sentence = source.split(/[.!?]\s+/)[0] || source;
+  const words = sentence
+    .replace(/["“”]/g, "")
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 8)
+    .join(" ");
+  if (!words) return "Quick note";
+  return words.length > 70 ? `${words.slice(0, 67).trim()}...` : words;
+}
+
+function bgNormalizeGmailSender(value) {
+  return String(value || "Unknown sender").replace(/\s+/g, " ").trim() || "Unknown sender";
+}
+
+async function bgRememberGmailInboxRows(rows) {
+  const visibleRows = Array.isArray(rows) ? rows : [];
+  let memory = {};
+  try {
+    const stored = await chrome.storage.local.get("sbGmailCompanionMemory");
+    memory = stored?.sbGmailCompanionMemory && typeof stored.sbGmailCompanionMemory === "object"
+      ? stored.sbGmailCompanionMemory
+      : {};
+  } catch (_) {}
+  const senders = memory.senders && typeof memory.senders === "object" ? memory.senders : {};
+  const now = Date.now();
+  for (const row of visibleRows) {
+    const key = bgNormalizeGmailSender(row?.email || row?.sender);
+    const current = senders[key] || {
+      label: row?.sender || key,
+      email: row?.email || "",
+      count: 0,
+      unread: 0,
+      unsubscribeLikely: 0,
+      firstSeenAt: now,
+      lastSeenAt: now,
+    };
+    current.label = row?.sender || current.label || key;
+    current.email = row?.email || current.email || "";
+    current.count += 1;
+    if (row?.unread) current.unread += 1;
+    if (row?.likelyUnsubscribe) current.unsubscribeLikely += 1;
+    current.lastSeenAt = now;
+    senders[key] = current;
+  }
+  memory = {
+    ...memory,
+    senders,
+    totalRowsObserved: Number(memory.totalRowsObserved || 0) + visibleRows.length,
+    scans: Number(memory.scans || 0) + 1,
+    updatedAt: now,
+  };
+  try { await chrome.storage.local.set({ sbGmailCompanionMemory: memory }); } catch (_) {}
+  return memory;
+}
+
+function bgTopGmailSendersFromRows(rows, limit = 5) {
+  const counts = new Map();
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const key = bgNormalizeGmailSender(row?.sender || row?.email);
+    const current = counts.get(key) || { label: row?.sender || key, email: row?.email || "", count: 0, unread: 0, unsubscribeLikely: 0 };
+    current.count += 1;
+    if (row?.unread) current.unread += 1;
+    if (row?.likelyUnsubscribe) current.unsubscribeLikely += 1;
+    counts.set(key, current);
+  }
+  return Array.from(counts.values()).sort((a, b) => b.count - a.count || a.label.localeCompare(b.label)).slice(0, limit);
+}
+
+function bgTopGmailSendersFromMemory(memory, limit = 5) {
+  const senders = memory?.senders && typeof memory.senders === "object" ? Object.values(memory.senders) : [];
+  return senders
+    .map((sender) => ({
+      label: sender.label || sender.email || "Unknown sender",
+      email: sender.email || "",
+      count: Number(sender.count || 0),
+      unread: Number(sender.unread || 0),
+      unsubscribeLikely: Number(sender.unsubscribeLikely || 0),
+    }))
+    .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label))
+    .slice(0, limit);
+}
+
+function bgBuildGmailInboxSummary(task, inbox, memory) {
+  const rows = Array.isArray(inbox?.rows) ? inbox.rows : [];
+  const visibleTop = bgTopGmailSendersFromRows(rows, 6);
+  const rememberedTop = bgTopGmailSendersFromMemory(memory, 6);
+  const unreadCount = rows.filter((row) => row.unread).length;
+  const unsubscribeRows = rows.filter((row) => row.likelyUnsubscribe);
+  const visibleLine = visibleTop.length
+    ? visibleTop.map((item) => `${item.label} (${item.count})`).join(", ")
+    : "No visible senders found";
+  const memoryLine = rememberedTop.length
+    ? rememberedTop.map((item) => `${item.label} (${item.count})`).join(", ")
+    : "No prior Gmail scans yet";
+  const unsubscribeLine = unsubscribeRows.length
+    ? unsubscribeRows.slice(0, 5).map((row) => `${row.sender}: ${row.subject}`).join("\n- ")
+    : "I do not see obvious unsubscribe/newsletter candidates in the visible sample.";
+  return [
+    `I scanned ${rows.length} visible Gmail rows from the page.`,
+    `Visible top senders: ${visibleLine}.`,
+    `Unread in this visible sample: ${unreadCount}.`,
+    `Remembered across ${Number(memory?.scans || 0)} page scans: ${memoryLine}.`,
+    `Likely unsubscribe/newsletter candidates: ${unsubscribeRows.length}.`,
+    unsubscribeRows.length ? `- ${unsubscribeLine}` : unsubscribeLine,
+    "Note: this is page-based Gmail reading, not Gmail API access, so the stats improve as Braino sees more inbox/search pages.",
+  ].join("\n");
+}
+
+async function bgEnsureGmailOpen(tabId, siteContext, onProgress, history, onResult) {
+  if (siteContext?.site === "gmail") return tabId;
+  const result = await bgRunAdapterStep({
+    history,
+    description: "Open Gmail",
+    type: "navigate",
+    onProgress,
+    onResult,
+    run: async () => {
+      const created = await new Promise((resolve) => chrome.tabs.create({
+        url: "https://mail.google.com/mail/u/0/#inbox",
+        active: true,
+      }, resolve));
+      const gmailTabId = created?.id || tabId;
+      try {
+        chrome.storage.local.set({ activeTabId: gmailTabId });
+      } catch (_) {}
+      if (gmailTabId) {
+        await bgWaitForTabReady(gmailTabId, 10000);
+        await bgDelay(1800);
+      }
+      return {
+        success: Boolean(gmailTabId),
+        tabId: gmailTabId,
+        url: created?.url || "https://mail.google.com/mail/u/0/#inbox",
+      };
+    },
+  });
+  return result?.tabId || tabId;
+}
+
+async function bgOpenGmailVisibleThread({ tabId, siteContext, query, history, onProgress, onResult }) {
+  const gmailTabId = await bgEnsureGmailOpen(tabId, siteContext, onProgress, history, onResult);
+  const trimmedQuery = String(query || "").trim();
+
+  if (trimmedQuery) {
+    await bgRunAdapterStep({
+      history,
+      description: `Search Gmail for "${trimmedQuery}"`,
+      type: "gmailSearch",
+      onProgress,
+      onResult,
+      run: () => bgExecuteSiteAdapterAction(gmailTabId, {
+        type: "gmailSearch",
+        query: trimmedQuery,
+      }),
+    });
+    await bgDelay(1800);
+  }
+
+  const opened = await bgRunAdapterStep({
+    history,
+    description: trimmedQuery ? "Open the matching Gmail message" : "Open the first visible Gmail message",
+    type: "gmailOpenVisibleEmail",
+    onProgress,
+    onResult,
+    run: () => bgExecuteSiteAdapterAction(gmailTabId, {
+      type: "gmailOpenVisibleEmail",
+      query: trimmedQuery,
+      limit: 80,
+    }),
+  });
+
+  return { gmailTabId, opened };
 }
 
 // Find the Spotify web-player tab (prefer the one actually playing audio).
@@ -5716,27 +6852,7 @@ async function bgTryHandleSiteAdapterTask({ tabId, task, history, onProgress, on
   }
 
   if (parsed.adapter === "gmail" && parsed.intent === "search") {
-    if (siteContext?.site !== "gmail") {
-      await bgRunAdapterStep({
-        history,
-        description: "Open Gmail",
-        type: "navigate",
-        onProgress,
-        onResult,
-        run: async () => {
-          const result = await bgExecuteAgentAction(tabId, {
-            type: "navigate",
-            url: "https://mail.google.com/mail/u/0/#inbox",
-            description: "Open Gmail",
-          });
-          if (!result?.error) {
-            await bgWaitForTabReady(tabId, 8000);
-            await bgDelay(1800);
-          }
-          return result;
-        },
-      });
-    }
+    const gmailTabId = await bgEnsureGmailOpen(tabId, siteContext, onProgress, history, onResult);
 
     await bgRunAdapterStep({
       history,
@@ -5744,13 +6860,67 @@ async function bgTryHandleSiteAdapterTask({ tabId, task, history, onProgress, on
       type: "gmailSearch",
       onProgress,
       onResult,
-      run: () => bgExecuteSiteAdapterAction(tabId, {
+      run: () => bgExecuteSiteAdapterAction(gmailTabId, {
         type: "gmailSearch",
         query: parsed.query,
       }),
     });
 
     return `Searched Gmail for **${parsed.query}**.`;
+  }
+
+  if (parsed.adapter === "gmail" && parsed.intent === "readInboxSummary") {
+    const gmailTabId = await bgEnsureGmailOpen(tabId, siteContext, onProgress, history, onResult);
+
+    const inbox = await bgRunAdapterStep({
+      history,
+      description: "Read the visible Gmail inbox",
+      type: "gmailReadVisibleInbox",
+      onProgress,
+      onResult,
+      run: () => bgExecuteSiteAdapterAction(gmailTabId, {
+        type: "gmailReadVisibleInbox",
+        limit: 80,
+      }),
+    });
+    const memory = await bgRememberGmailInboxRows(inbox?.rows || []);
+    return bgBuildGmailInboxSummary(task, inbox, memory);
+  }
+
+  if (parsed.adapter === "gmail" && parsed.intent === "openEmail") {
+    const { opened } = await bgOpenGmailVisibleThread({
+      tabId,
+      siteContext,
+      query: parsed.query || "",
+      history,
+      onProgress,
+      onResult,
+    });
+
+    if (parsed.summarize) {
+      return bgBuildGmailCurrentThreadAnswer(task, opened?.thread, { wantsReplyAdvice: false });
+    }
+    const subject = opened?.thread?.subject || opened?.opened?.subject || "the message";
+    return `Opened **${subject}** in Gmail.`;
+  }
+
+  if (parsed.adapter === "gmail" && parsed.intent === "readCurrentThread") {
+    if (siteContext?.site !== "gmail") {
+      return "Open the Gmail email you want first, then ask me to read or summarize it.";
+    }
+
+    const thread = await bgRunAdapterStep({
+      history,
+      description: "Read the current Gmail thread",
+      type: "gmailReadCurrentThread",
+      onProgress,
+      onResult,
+      run: () => bgExecuteSiteAdapterAction(tabId, {
+        type: "gmailReadCurrentThread",
+      }),
+    });
+
+    return bgBuildGmailCurrentThreadAnswer(task, thread, parsed);
   }
 
   if (parsed.adapter === "gmail" && (parsed.intent === "draftEmail" || parsed.intent === "sendEmail")) {
@@ -5767,58 +6937,25 @@ async function bgTryHandleSiteAdapterTask({ tabId, task, history, onProgress, on
       recipientLabel = bgFormatContactLabel(resolvedContact.contact, parsed.to);
     }
 
-    const composeUrl = bgBuildGmailComposeUrl({
-      to: recipientEmail,
-      subject: parsed.subject,
-      body: parsed.body,
-    });
+    const gmailTabId = await bgEnsureGmailOpen(tabId, siteContext, onProgress, history, onResult);
+    const subject = parsed.subject || (parsed.intent === "sendEmail" && parsed.body ? bgInferGmailSubject(parsed.body, task) : "");
 
     await bgRunAdapterStep({
       history,
-      description: `Open Gmail compose for ${recipientLabel}`,
-      type: "navigate",
+      description: parsed.intent === "sendEmail" ? `Compose and send Gmail message to ${recipientLabel}` : `Open Gmail compose for ${recipientLabel}`,
+      type: "gmailComposeHuman",
       onProgress,
       onResult,
-      run: async () => {
-        const result = await bgExecuteAgentAction(tabId, {
-          type: "navigate",
-          url: composeUrl,
-          description: `Open Gmail compose for ${recipientLabel}`,
-        });
-        if (!result?.error) {
-          await bgWaitForTabReady(tabId, 8000);
-          await bgDelay(1800);
-        }
-        return result;
-      },
-    });
-
-    await bgRunAdapterStep({
-      history,
-      description: "Verify Gmail compose fields",
-      type: "gmailFillCompose",
-      onProgress,
-      onResult,
-      run: () => bgExecuteSiteAdapterAction(tabId, {
-        type: "gmailFillCompose",
+      run: () => bgExecuteSiteAdapterAction(gmailTabId, {
+        type: "gmailComposeHuman",
         to: recipientEmail,
-        subject: parsed.subject || "",
+        subject,
         body: parsed.body,
+        send: parsed.intent === "sendEmail",
       }),
     });
 
     if (parsed.intent === "sendEmail") {
-      if (shouldStop?.()) throw new Error("Stopped.");
-      await bgRunAdapterStep({
-        history,
-        description: "Send the Gmail message",
-        type: "gmailSendOpenCompose",
-        onProgress,
-        onResult,
-        run: () => bgExecuteSiteAdapterAction(tabId, {
-          type: "gmailSendOpenCompose",
-        }),
-      });
       return `Sent the email to **${recipientLabel}**.`;
     }
 
@@ -5828,6 +6965,132 @@ async function bgTryHandleSiteAdapterTask({ tabId, task, history, onProgress, on
     return `Drafted an email to **${recipientLabel}** in Gmail.`;
   }
 
+  if (parsed.adapter === "gmail" && parsed.intent === "replyEmail") {
+    const { gmailTabId } = await bgOpenGmailVisibleThread({
+      tabId,
+      siteContext,
+      query: parsed.query || "",
+      history,
+      onProgress,
+      onResult,
+    });
+
+    await bgRunAdapterStep({
+      history,
+      description: "Click Gmail Reply",
+      type: "gmailOpenReplyBox",
+      onProgress,
+      onResult,
+      run: () => bgExecuteSiteAdapterAction(gmailTabId, {
+        type: "gmailOpenReplyBox",
+      }),
+    });
+
+    await bgRunAdapterStep({
+      history,
+      description: parsed.send ? "Paste and send Gmail reply" : "Paste Gmail reply draft",
+      type: "gmailReplyToCurrentThread",
+      onProgress,
+      onResult,
+      run: () => bgExecuteSiteAdapterAction(gmailTabId, {
+        type: "gmailReplyToCurrentThread",
+        body: parsed.body,
+        send: !!parsed.send,
+      }),
+    });
+
+    return parsed.send
+      ? "Replied to the matching Gmail thread."
+      : "Drafted a reply in the matching Gmail thread.";
+  }
+
+  if (parsed.adapter === "gmail" && parsed.intent === "draftGeneratedReplyForEmail") {
+    const { gmailTabId, opened } = await bgOpenGmailVisibleThread({
+      tabId,
+      siteContext,
+      query: parsed.query || "",
+      history,
+      onProgress,
+      onResult,
+    });
+    await bgRunAdapterStep({
+      history,
+      description: "Click Gmail Reply",
+      type: "gmailOpenReplyBox",
+      onProgress,
+      onResult,
+      run: () => bgExecuteSiteAdapterAction(gmailTabId, {
+        type: "gmailOpenReplyBox",
+      }),
+    });
+    const replyBody = await bgBuildGmailGeneratedReply(task, opened?.thread);
+    if (!replyBody) return "I opened the matching Gmail thread, but I could not draft a useful reply from the visible email body.";
+
+    await bgRunAdapterStep({
+      history,
+      description: parsed.send ? "Paste and send Gmail reply" : "Paste Gmail reply draft",
+      type: "gmailReplyToCurrentThread",
+      onProgress,
+      onResult,
+      run: () => bgExecuteSiteAdapterAction(gmailTabId, {
+        type: "gmailReplyToCurrentThread",
+        body: replyBody,
+        send: !!parsed.send,
+      }),
+    });
+
+    return parsed.send
+      ? `Replied in Gmail:\n\n${replyBody}`
+      : `Drafted this reply in Gmail:\n\n${replyBody}`;
+  }
+
+  if (parsed.adapter === "gmail" && parsed.intent === "draftGeneratedReplyCurrentThread") {
+    if (siteContext?.site !== "gmail") {
+      return "Open the Gmail thread you want first, then ask me to draft a reply.";
+    }
+
+    await bgRunAdapterStep({
+      history,
+      description: "Click Gmail Reply",
+      type: "gmailOpenReplyBox",
+      onProgress,
+      onResult,
+      run: () => bgExecuteSiteAdapterAction(tabId, {
+        type: "gmailOpenReplyBox",
+      }),
+    });
+
+    const thread = await bgRunAdapterStep({
+      history,
+      description: "Read the current Gmail thread",
+      type: "gmailReadCurrentThread",
+      onProgress,
+      onResult,
+      run: () => bgExecuteSiteAdapterAction(tabId, {
+        type: "gmailReadCurrentThread",
+      }),
+    });
+    const replyBody = await bgBuildGmailGeneratedReply(task, thread);
+    if (!replyBody) return "I can see the thread, but I could not draft a useful reply from the visible email body.";
+
+    await bgRunAdapterStep({
+      history,
+      description: parsed.send ? "Paste and send Gmail reply" : "Paste Gmail reply draft",
+      type: "gmailReplyToCurrentThread",
+      onProgress,
+      onResult,
+      run: () => bgExecuteSiteAdapterAction(tabId, {
+        type: "gmailReplyToCurrentThread",
+        body: replyBody,
+        send: !!parsed.send,
+      }),
+    });
+
+    return parsed.send
+      ? `Replied in Gmail:\n\n${replyBody}`
+      : `Drafted this reply in Gmail:\n\n${replyBody}`;
+  }
+
   if (parsed.adapter === "gmail" && parsed.intent === "replyCurrentThread") {
     if (siteContext?.site !== "gmail") {
       return "Open the Gmail thread you want first, then ask me to reply and I’ll use the Gmail adapter.";
@@ -5835,7 +7098,18 @@ async function bgTryHandleSiteAdapterTask({ tabId, task, history, onProgress, on
 
     await bgRunAdapterStep({
       history,
-      description: parsed.send ? "Reply in the current Gmail thread and send" : "Draft a reply in the current Gmail thread",
+      description: "Click Gmail Reply",
+      type: "gmailOpenReplyBox",
+      onProgress,
+      onResult,
+      run: () => bgExecuteSiteAdapterAction(tabId, {
+        type: "gmailOpenReplyBox",
+      }),
+    });
+
+    await bgRunAdapterStep({
+      history,
+      description: parsed.send ? "Paste and send Gmail reply" : "Paste Gmail reply draft",
       type: "gmailReplyToCurrentThread",
       onProgress,
       onResult,
@@ -6230,6 +7504,32 @@ function bgLooksLikeGoogleMapsPlaceTask(task) {
   return placeCategory && locationHint;
 }
 
+// Amazon search fast-path — same philosophy as the Maps from-A-to-B deep link. Typing
+// into Amazon's search box and submitting is flaky friction with zero intelligence value
+// (one run looped 13 steps on it). When the task is an Amazon shop/buy, jump STRAIGHT to
+// the results URL for the exact title, then let the loop do the real work (locate → cart →
+// buy). The loop's intelligence is spent where it matters, not on a search box.
+function bgBuildAmazonSearchFastPath(task, synth = null, geo = null) {
+  const raw = String(task || "").trim();
+  const t = raw.toLowerCase();
+  if (!/\bamazon\b/.test(t) && !(/\b(buy|purchase|order|shop for)\b/.test(t) && !/\b(flipkart|ebay|swiggy|zomato|blinkit|instamart)\b/.test(t))) return null;
+  // The clean product title comes from synthesis (now stripped of category suffixes).
+  let title = String(synth?.searchQuery || "").trim();
+  if (!title) {
+    // Fallback: pull the thing between the buy/search verb and any "on amazon" tail.
+    const m = raw.match(/\b(?:buy|purchase|order|search for|shop for|find|get)\s+(.+?)(?:\s+(?:on|from|at|in)\s+amazon[a-z.]*)?(?:\s+(?:for me|please|pls))?\s*$/i);
+    title = (m?.[1] || "").trim();
+  }
+  if (!title || title.length < 2) return null;
+  const tld = (geo?.countryCode && BG_AMAZON_TLD_BY_COUNTRY[geo.countryCode]) || "amazon.in";
+  return [{
+    type: "navigate",
+    url: `https://www.${tld}/s?k=${encodeURIComponent(title)}`,
+    description: `Search ${tld} for "${title}"`,
+    continueAfter: true,
+  }];
+}
+
 function bgBuildGoogleMapsFastPath(task, synth = null) {
   const raw = String(task || "").trim();
   const t = raw.toLowerCase();
@@ -6476,6 +7776,20 @@ Should I send **Name** to your phone?
 `;
 }
 
+function bgBuildOpenShortcutFastPath(task, opensThenActs = false) {
+  const shortcuts = globalThis.BrainoOpenTargets;
+  const target = shortcuts?.extractOpenShortcutTarget?.(task);
+  if (!target) return null;
+  const url = shortcuts.resolveWebTarget?.(target);
+  if (!url) return null;
+  return [{
+    type: "navigate",
+    url,
+    description: `Open ${target}`,
+    continueAfter: Boolean(opensThenActs),
+  }];
+}
+
 function bgTryFastPath(task, history, synth = null, geo = null) {
   if (history.length > 0) return null;
   const t = task.toLowerCase().trim();
@@ -6505,6 +7819,10 @@ function bgTryFastPath(task, history, synth = null, geo = null) {
   if (/^(?:new|create|open)\s+(?:a\s+)?google slide\b|^(?:new|open)\s+slides\.new\b/i.test(task)) {
     return [{ type: "navigate", url: "https://slides.new", description: "Open a new Google Slide deck", continueAfter: opensThenActs }];
   }
+  const openShortcutFastPath = bgBuildOpenShortcutFastPath(task, opensThenActs);
+  if (openShortcutFastPath) return openShortcutFastPath;
+  const amazonSearchFastPath = bgBuildAmazonSearchFastPath(task, synth, geo);
+  if (amazonSearchFastPath) return amazonSearchFastPath;
   const googleMapsFastPath = bgBuildGoogleMapsFastPath(task, synth);
   if (googleMapsFastPath) return googleMapsFastPath;
   const mediumFastPath = bgBuildMediumFastPath(task);
@@ -6566,17 +7884,14 @@ function bgTryFastPath(task, history, synth = null, geo = null) {
 }
 
 function bgGetPlatformGuide(url) {
-  if (/mail\.google\.com/.test(url)) return `
+if (/mail\.google\.com/.test(url)) return `
 ── GMAIL (you are here) ──
 Compose new email:
-  1. navigate → https://mail.google.com/mail/u/0/#compose
-  2. wait 1200
-  3. [{"type":"type","selector":"[name='to']","targetText":"To","text":"RECIPIENT"},{"type":"pressKey","key":"Tab"},{"type":"type","selector":"[name='subjectbox']","text":"SUBJECT"}]
-  4. pressKey Tab
-  5. type body → selector="[role='textbox'][aria-label*='Message']" or targetText="Message Body"
-  6. click Send → selector="[data-tooltip*='Send']" or [aria-label*="Send"] or targetText="Send"
-Reply: click Reply (.amn or targetText="Reply") → wait 600 → type in [role='textbox'] → click Send
-Search: click [aria-label="Search mail"] → type query → pressKey Enter`;
+  1. click the visible Compose/New message button
+  2. type recipient, subject, and body into the visible Gmail compose fields
+  3. click Send only if the user explicitly asked to send
+Reply: read the current thread first; if drafting, click Reply and type into the visible reply editor
+Search/open: use the Gmail search box, then open the matching visible result row`;
   if (/youtube\.com/.test(url)) return `
 ── YOUTUBE (you are here) ──
 Search & play: navigate → https://www.youtube.com/results?search_query=QUERY (encode spaces as +)
@@ -6707,6 +8022,7 @@ MINDSET: You are a browser robot. Every task is solved by executing and verifyin
 - If STEPS TAKEN SO FAR is empty → you have done NOTHING yet → start executing immediately.
 - Resolve ambiguous follow-ups like "find the best one" or "open it" using CHAT CONTEXT before planning.
 - Pure questions with no browser actions → {"type":"answer","message":"..."}
+- EXCEPTION to "resolve ambiguity silently": if the task names a specific person/contact to message, call, or email and the observed contact list shows no exact match or shows several plausible matches (e.g. "Prakhar" vs "Prakhar Brother"), that is NOT something to guess from chat context — {"type":"clarify","message":"..."} asking which one, before opening or typing into that chat.
 
 ACTIONS:
 {"type":"navigate","url":"https://...","description":"..."}
@@ -6778,7 +8094,7 @@ RULES:
 
 URL SHORTCUTS — single navigate, zero form interaction needed:
 ── EMAIL / MESSAGING ──
-Gmail compose:    https://mail.google.com/mail/?view=cm&to=TO&su=SUBJECT&body=BODY  (encode spaces as %20)
+Gmail compose:    navigate to https://mail.google.com/mail/u/0/#inbox, click Compose, then type recipient, subject, and body into the visible Gmail fields. Do not use Gmail prefill URLs unless the page UI is unavailable.
 WhatsApp by phone#:  https://wa.me/COUNTRYCODENUMBER?text=MESSAGE  (India: 91XXXXXXXXXX, encode spaces as %20)
 WhatsApp by name:    navigate → https://web.whatsapp.com → search contact name → click → type → Enter
 Twitter/X post:   navigate → https://x.com/compose/tweet  (type into the composer)
@@ -7453,7 +8769,7 @@ async function bgResolvePremiumStatus(options = {}) {
 
   let token = data.authToken;
   const fetchPremium = async (accessToken) => fetch(
-    `${BG_SUPABASE_URL}/rest/v1/profiles?user_id=eq.${encodeURIComponent(data.authUserId)}&select=is_premium&limit=1`,
+    `${BG_SUPABASE_URL}/rest/v1/profiles?user_id=eq.${encodeURIComponent(data.authUserId)}&select=is_premium,personality_settings&limit=1`,
     { headers: { apikey: BG_SUPABASE_ANON_KEY, Authorization: `Bearer ${accessToken}` } },
   );
 
@@ -7470,7 +8786,10 @@ async function bgResolvePremiumStatus(options = {}) {
 
     const rows = await res.json();
     const isPremium = rows?.[0]?.is_premium === true;
-    await bgSetStorage({ isPremium, isPremiumCachedAt: now });
+    // Cache the swearing preference (personality_settings.swearing) so the content
+    // script can gate salty phrasing instantly, offline, without its own fetch.
+    const allowSwearing = rows?.[0]?.personality_settings?.swearing === true;
+    await bgSetStorage({ isPremium, isPremiumCachedAt: now, sbAllowSwearing: allowSwearing });
     return { ok: true, isPremium, source: "profile" };
   } catch (error) {
     return {
@@ -7479,6 +8798,101 @@ async function bgResolvePremiumStatus(options = {}) {
       source: "fallback",
       error: error?.message || String(error),
     };
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Voice Commands: "say this, open that" shortcuts configured on the dashboard, grouped into
+// voice-activatable Modes (each with a notch color). Cached into chrome.storage.local as
+// sbVoiceModes so content.js can match phrases synchronously, offline, without its own fetch —
+// same TTL-cache-piggyback shape as bgResolvePremiumStatus above. Hidden modes (dashboard-only
+// visibility) are fetched too — hiding a mode only hides it in the dashboard UI, voice still works.
+// ─────────────────────────────────────────────────────────────────────────────
+const BG_VOICE_MODES_CACHE_MS = 60 * 1000;
+
+async function bgFetchVoiceCommands(options = {}) {
+  const now = Date.now();
+  const data = await bgGetStorage(["authToken", "authRefreshToken", "authUserId", "sbVoiceModesCachedAt"]);
+
+  if (!options.forceRefresh && data.sbVoiceModesCachedAt && now - data.sbVoiceModesCachedAt < BG_VOICE_MODES_CACHE_MS) {
+    return { ok: true, source: "cache" };
+  }
+  if (!data.authUserId) return { ok: false, source: "missing-user" };
+
+  let token = data.authToken;
+  const fetchRows = (accessToken) => {
+    const headers = { apikey: BG_SUPABASE_ANON_KEY, Authorization: `Bearer ${accessToken}` };
+    return Promise.all([
+      fetch(`${BG_SUPABASE_URL}/rest/v1/voice_modes?user_id=eq.${encodeURIComponent(data.authUserId)}&select=id,name,notch_color,is_active&order=position.asc`, { headers }),
+      fetch(`${BG_SUPABASE_URL}/rest/v1/voice_commands?user_id=eq.${encodeURIComponent(data.authUserId)}&select=id,mode_id,phrase,open_mode&order=position.asc`, { headers }),
+      fetch(`${BG_SUPABASE_URL}/rest/v1/voice_command_urls?select=id,command_id,url&order=position.asc`, { headers }),
+    ]);
+  };
+
+  try {
+    let [modesRes, commandsRes, urlsRes] = token ? await fetchRows(token) : [null, null, null];
+    if (!modesRes || modesRes.status === 401) {
+      token = data.authRefreshToken ? await bgRefreshAuthToken() : null;
+      [modesRes, commandsRes, urlsRes] = token ? await fetchRows(token) : [null, null, null];
+    }
+    if (!modesRes || !modesRes.ok || !commandsRes?.ok || !urlsRes?.ok) {
+      throw new Error(`Voice commands lookup failed: ${modesRes?.status || "no-token"}`);
+    }
+
+    const [modes, commands, urls] = await Promise.all([modesRes.json(), commandsRes.json(), urlsRes.json()]);
+    const urlsByCommand = new Map();
+    for (const u of urls) {
+      const list = urlsByCommand.get(u.command_id) || [];
+      list.push(u.url);
+      urlsByCommand.set(u.command_id, list);
+    }
+    const commandsByMode = new Map();
+    for (const c of commands) {
+      const list = commandsByMode.get(c.mode_id) || [];
+      list.push({ id: c.id, phrase: c.phrase, openMode: c.open_mode === "incognito" ? "incognito" : "tab", urls: urlsByCommand.get(c.id) || [] });
+      commandsByMode.set(c.mode_id, list);
+    }
+    const sbVoiceModes = modes.map((m) => ({
+      id: m.id,
+      name: m.name,
+      notchColor: m.notch_color || "#0A84FF",
+      isActive: m.is_active === true,
+      commands: commandsByMode.get(m.id) || [],
+    }));
+    await bgSetStorage({ sbVoiceModes, sbVoiceModesCachedAt: now });
+    return { ok: true, source: "profile" };
+  } catch (error) {
+    return { ok: false, source: "fallback", error: error?.message || String(error) };
+  }
+}
+
+async function bgSetVoiceModeActive(modeId, active) {
+  const data = await bgGetStorage(["authToken", "authRefreshToken", "authUserId"]);
+  if (!data.authUserId) return { ok: false, source: "missing-user" };
+  let token = data.authToken;
+  const doWrite = async (accessToken) => {
+    const headers = { apikey: BG_SUPABASE_ANON_KEY, Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" };
+    // Only one active mode per user (unique partial index) — deactivate the rest first.
+    if (active) {
+      await fetch(`${BG_SUPABASE_URL}/rest/v1/voice_modes?user_id=eq.${encodeURIComponent(data.authUserId)}&is_active=eq.true`, {
+        method: "PATCH", headers, body: JSON.stringify({ is_active: false }),
+      });
+    }
+    return fetch(`${BG_SUPABASE_URL}/rest/v1/voice_modes?id=eq.${encodeURIComponent(modeId)}`, {
+      method: "PATCH", headers, body: JSON.stringify({ is_active: active, updated_at: new Date().toISOString() }),
+    });
+  };
+  try {
+    let res = token ? await doWrite(token) : null;
+    if (!res || res.status === 401) {
+      token = data.authRefreshToken ? await bgRefreshAuthToken() : null;
+      res = token ? await doWrite(token) : null;
+    }
+    if (!res || !res.ok) throw new Error(`Mode update failed: ${res?.status || "no-token"}`);
+    await bgFetchVoiceCommands({ forceRefresh: true });
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: error?.message || String(error) };
   }
 }
 
@@ -7684,15 +9098,18 @@ async function bgCheckCalendarReminders() {
 // Set up alarm for polling every minute (MV3 minimum is 1 minute)
 chrome.alarms.create("remoteAgentPoll", { periodInMinutes: 1 });
 chrome.alarms.create("calendarReminders", { periodInMinutes: 1 });
+chrome.alarms.create("voiceModesPoll", { periodInMinutes: 1 });
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === "remoteAgentPoll") bgPollRemoteCommands();
   if (alarm.name === "calendarReminders") bgCheckCalendarReminders();
+  if (alarm.name === "voiceModesPoll") bgFetchVoiceCommands();
 });
 // Delay startup connections — gives the service worker time to settle
 // and avoids flooding the Chrome error panel on a cold start with a flaky network
 setTimeout(() => {
   bgPollRemoteCommands();
   bgCheckCalendarReminders();
+  bgFetchVoiceCommands();
   bgStartRealtime();
 }, 2000);
 
@@ -7978,11 +9395,20 @@ async function bgGetAudioSegment() {
   });
 }
 
-async function bgTranscribeAudioChunk({ audioBase64, existingNotes = "", existingTranscript = "", mode = "lecture", knownSpeakerReferences = [] }) {
+function bgMeetingContextHasText(meetingContext) {
+  if (!meetingContext || typeof meetingContext !== "object") return false;
+  const captions = Array.isArray(meetingContext.captionTimeline) ? meetingContext.captionTimeline : [];
+  return captions.some((item) => String(item?.text || "").trim());
+}
+
+async function bgTranscribeAudioChunk({ audioBase64, existingNotes = "", existingTranscript = "", mode = "lecture", knownSpeakerReferences = [], meetingContext = null }) {
   const stored = await new Promise(r => chrome.storage.local.get(["authToken"], r));
   if (!stored.authToken) return { error: "Not signed in", notes: existingNotes };
 
-  if (!audioBase64) return { notes: existingNotes, empty: true };
+  const normalizedMode = bgNormalizeRecordingMode(mode);
+  if (!audioBase64 && !(normalizedMode === "meeting" && bgMeetingContextHasText(meetingContext))) {
+    return { notes: existingNotes, empty: true };
+  }
 
   try {
     const res = await fetch(`${BG_API_BASE}/transcribe-and-notes`, {
@@ -7993,11 +9419,12 @@ async function bgTranscribeAudioChunk({ audioBase64, existingNotes = "", existin
         apikey: BG_SUPABASE_ANON_KEY,
       },
       body: JSON.stringify({
-        audioSegments: [audioBase64],
+        audioSegments: audioBase64 ? [audioBase64] : [],
         existingNotes,
         existingTranscript,
-        mode: bgNormalizeRecordingMode(mode),
+        mode: normalizedMode,
         knownSpeakerReferences,
+        meetingContext,
         clientNow: new Date().toISOString(),
         clientTimeZone: bgCalendarTimeZone(),
       }),
@@ -8039,7 +9466,7 @@ async function bgGetAndTranscribeSegment(existingNotes, mode, existingTranscript
   });
 }
 
-async function bgStopRecordingAndTranscribe(existingNotes, mode, existingTranscript) {
+async function bgStopRecordingAndTranscribe(existingNotes, mode, existingTranscript, meetingContext = null) {
   const activeMode = bgNormalizeRecordingMode(mode || bgRecordingMode);
   try {
     const stopRes = await stopRecording();
@@ -8049,6 +9476,7 @@ async function bgStopRecordingAndTranscribe(existingNotes, mode, existingTranscr
       existingTranscript,
       mode: activeMode,
       knownSpeakerReferences: Array.isArray(stopRes?.knownSpeakerReferences) ? stopRes.knownSpeakerReferences : [],
+      meetingContext,
     });
   } finally {
     bgRecordingMode = "lecture";

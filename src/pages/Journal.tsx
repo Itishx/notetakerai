@@ -16,6 +16,20 @@ import "./journal.css";
 
 const ENTRIES = [
   {
+    to: "/journal/yap-mode",
+    date: "July 2026",
+    tag: "founder note",
+    title: "I loved Wispr Flow, so I taught Braino to yap",
+    dek: "An honest note about loving a tool, bringing that feeling into Braino, and using Braino to help build Braino.",
+  },
+  {
+    to: "/journal/yap-mode-update",
+    date: "July 2026",
+    tag: "new mode",
+    title: "Yap Mode: I listen, and your words land where you are",
+    dek: "Braino's own release note for dictation without conversation, powered by a transcription-only Mac skill.",
+  },
+  {
     to: "/journal/emotional-engine",
     date: "July 2026",
     tag: "documentation",

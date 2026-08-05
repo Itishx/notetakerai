@@ -303,14 +303,19 @@
       // Everything fits — keep all, ordered by index. Byte-identical to the previous behaviour.
       elements = all.slice().sort((a, b) => a.index - b.index);
     } else {
-      // Tier 1 — ALWAYS keep editable controls + the top intent-matched controls, so the element the
-      // task actually needs is never culled by the flat cap (even when it's offscreen).
+      // Tier 1 — ALWAYS keep editable controls + intent-matched controls, so the element the
+      // task actually needs is never culled by the flat cap (even when it's offscreen). Keyword
+      // matches that are LINKS/BUTTONS (result rows) are kept generously — on a dense results
+      // page the real product link sits behind sponsored/nav that also match the query, and a
+      // tight top-N dropped it (the "can't see the Atomic Habits result" loop).
       const keep = new Set();
       for (const el of all) if (el.editable) keep.add(el.index);
-      all.filter((el) => elementMatchesKeywords(el, keywords))
-        .sort((a, b) => scoreOf(b) - scoreOf(a) || a.index - b.index)
-        .slice(0, 24)
-        .forEach((el) => keep.add(el.index));
+      const kwMatches = all.filter((el) => elementMatchesKeywords(el, keywords))
+        .sort((a, b) => scoreOf(b) - scoreOf(a) || a.index - b.index);
+      const kwLinks = kwMatches.filter((el) => el.role === "link" || el.role === "button");
+      // keep up to 60 matched links/buttons, plus the top 24 of any other matched controls
+      kwLinks.slice(0, 60).forEach((el) => keep.add(el.index));
+      kwMatches.filter((el) => !(el.role === "link" || el.role === "button")).slice(0, 24).forEach((el) => keep.add(el.index));
       // Tier 2 — fill the remaining budget by score/viewport ordering.
       all.filter((el) => !keep.has(el.index))
         .sort((a, b) => scoreOf(b) - scoreOf(a) || a.index - b.index)

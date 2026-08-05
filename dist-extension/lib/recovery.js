@@ -100,7 +100,18 @@
     if (/captcha|recaptcha|verify you are human|human verification/.test(text) || /captcha/.test(lower)) {
       return { type: ErrorTypes.CAPTCHA, detail };
     }
-    if (/sign in|log in|login|password|auth|session expired/.test(text) || /login|auth/.test(lower)) {
+    // AUTH_WALL demands STRONG evidence. Every retail header contains a "Sign in" link
+    // even when the user IS logged in — matching mere page text classified ANY Amazon
+    // failure as a login wall ("I hit a login wall" while logged in). A real wall means
+    // the sign-in PAGE itself is open, or a password field is in front of us.
+    const authUrl = String(obs?.url || "").toLowerCase();
+    const authTitle = String(obs?.title || "").toLowerCase();
+    const onSigninPage = /\/ap\/signin|\/signin\b|\/login\b|\/sessions\/new|accounts\.google\.com\/v3\/signin/.test(authUrl)
+      || /^(?:please\s+)?(?:sign in|log ?in)\b/.test(authTitle);
+    const hasPasswordField = Array.isArray(obs?.elements) && obs.elements.some((el) =>
+      String(el?.inputType || "").toLowerCase() === "password"
+      || (String(el?.role || "") === "textbox" && /^password\b/i.test(String(el?.name || ""))));
+    if (onSigninPage || hasPasswordField || /session expired|not signed in|please sign in to continue/.test(lower)) {
       return { type: ErrorTypes.AUTH_WALL, detail };
     }
     if (/rate limit|too many requests|429/.test(lower)) return { type: ErrorTypes.RATE_LIMIT, detail };
