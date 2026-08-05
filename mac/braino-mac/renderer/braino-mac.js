@@ -6052,16 +6052,16 @@ async function runSkit() {
     // Billie Jean is already sitting at 3:31 (the play step verifies the seek).
     // Isolated demo: no music theatrics, no headphones, no auto-home.
     await skitPerformMoonwalk(11000);   // Chrome's own duration: 10-12s on stage
-    skitMoonwalk = false;
-    // He stays out, full size, and asks. No trip back to the notch.
+    // He stays out, full size, and asks. Keep skitMoonwalk true so tick does not
+    // resume roam/dock and walk him mid-line; clear it in finally after the skit.
     await window.brainoMac.skitStep?.("close");
     await skitSpeak("So, how was it?");
     skitCompleted = true;
     skitJustCompleted = true;   // Lock auto-home until Cmd+2
   } catch (_) {
   } finally {
+    skitMoonwalk = false;   // Clear BEFORE endMoonwalk so tick can resume if needed
     skitEndMoonwalk();
-    skitMoonwalk = false;
     if (musicMode) setMusicMode(false);
     skitRunning = false;
     // Size restores only on a FAILED take; a clean take leaves him big and
