@@ -1547,6 +1547,11 @@ let walkerHomeBusy = false;
 let walkerHomeQueued = null;
 
 async function setWalkerHomeState(wantHome, opts = {}) {
+  // During post-skit mode, he CANNOT go home. Period. Force him out if anything tries.
+  if (skitJustCompleted && wantHome) {
+    walkerHome = false;
+    return;
+  }
   if (walkerHomeBusy) {
     walkerHomeQueued = wantHome;
     return;
