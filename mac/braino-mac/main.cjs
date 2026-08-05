@@ -43,7 +43,7 @@ const AUTH_CALLBACK_PATH = "/braino-mac-auth-callback";
 // bridge, and runSkit() in the renderer.
 const SKIT = {
   enabled: true,
-  dryRun: true,
+  dryRun: false,   // REAL TAKE: double Option genuinely sends the message below.
   contact: "Rahul Dey",
   message: "Hey Shawty, this is Braino, Itish's AI. He's been meaning to text you, he just won't do it himself. (Automated message for a demo. He doesn't know I sent this... yet.)",
 };

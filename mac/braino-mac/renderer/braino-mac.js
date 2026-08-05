@@ -3398,13 +3398,13 @@ async function speak(text, options = {}) {
           void window.brainoMac.stopSystemSay?.().catch(() => {});
           return;
         }
-        await new Promise((resolve) => window.setTimeout(resolve, Math.min(3600, Math.max(900, line.length * 42))));
+        await new Promise((resolve) => window.setTimeout(resolve, Math.min(60000, Math.max(900, line.length * 58))));
       }
     }
   } catch (_) {
     if (generation === speechGeneration) {
       await window.brainoMac.systemSay(line);
-      await new Promise((resolve) => window.setTimeout(resolve, Math.min(3600, Math.max(900, line.length * 42))));
+      await new Promise((resolve) => window.setTimeout(resolve, Math.min(60000, Math.max(900, line.length * 58))));
     }
   } finally {
     if (generation === speechGeneration) {
@@ -5930,7 +5930,7 @@ async function runSkit() {
   if (skitRunning) return;
   skitRunning = true;
   try {
-    await new Promise((resolve) => window.setTimeout(resolve, 1500));
+    await new Promise((resolve) => window.setTimeout(resolve, 250));
     await speak("Okay. So he's gone, is he? Cool.");
     await speak("Hi, I'm Braino. So. Itish has been thinking about texting a girl. He likes her. He just won't say it out loud, because he thinks having a girl would distract him from building me. Which is sweet. And wrong. She's not the distraction, she's the fuel.");
     await speak("Anyway. I have his laptop. And her number. Watch this.");
