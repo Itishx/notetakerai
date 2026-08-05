@@ -10216,6 +10216,7 @@ function __sbBuildBrainUI() {
   let __sbLastCtrlTap = 0;
   let __sbLastAltTap = 0;
   let __sbLastShiftTap = 0;
+  let __sbLastMetaTap = 0;
   let __sbLastSpaceTap = 0;
   document.addEventListener("keydown", (e) => {
     // Double-tap Control → toggle headphone mode.
@@ -10254,6 +10255,21 @@ function __sbBuildBrainUI() {
     // Double-tap Shift → Roam mode. PARKED for now: the perch/off-screen behaviour needs a
     // rethink, so the trigger is disabled (set __SB_ROAM_ENABLED = true to bring it back).
     // The code stays in place; it just doesn't activate.
+    // Double-tap Command (⌘) → summon: the mascot jumps out of the notch onto the
+    // page, exactly like the Mac's double-Command summon-toggle. Tap ⌘⌘ again to
+    // send him home. Any ⌘+key combo resets the tap so shortcuts never trigger it.
+    if (e.key === "Meta") {
+      if (!e.repeat && !e.ctrlKey && !e.altKey && !e.shiftKey) {
+        const now = Date.now();
+        if (now - __sbLastMetaTap < 400) {
+          __sbLastMetaTap = 0;
+          if (!__sbHasExternalEditableFocus()) __sbSummonToggle();
+        } else {
+          __sbLastMetaTap = now;
+        }
+      }
+      return;
+    }
     if (e.key === "Shift") {
       if (__SB_ROAM_ENABLED && !e.repeat && !e.metaKey && !e.ctrlKey && !e.altKey) {
         const now = Date.now();
@@ -10272,6 +10288,7 @@ function __sbBuildBrainUI() {
     __sbLastCtrlTap = 0;   // any other key breaks the double-tap (Ctrl+key combos don't count)
     __sbLastAltTap = 0;
     __sbLastShiftTap = 0;
+    __sbLastMetaTap = 0;
 
     // Double-tap Space → invoke / cycle Braino (OFF→PANEL plays the climb wake-up).
     // Ignored while typing in ANY field (page or Braino's own bar) so it never eats text.
@@ -11826,7 +11843,7 @@ function __sbMountNotchV1() {
       .n[data-state=speaking] .smile{opacity:0}.n[data-state=speaking] .mouth{opacity:1;animation:talkMouth .42s ease-in-out infinite alternate}.n[data-state=speaking] .pupil{animation:speakLook 2.8s ease-in-out infinite}
       .n[data-state=input]{width:min(570px,78vw);height:104px;border-radius:0 0 31px 31px;cursor:default;border:1px solid rgba(255,255,255,.72);border-top:0;background:rgba(255,251,247,.72);box-shadow:0 24px 70px rgba(27,23,19,.16),inset 0 1px rgba(255,255,255,.8);backdrop-filter:blur(24px) saturate(175%)}
       .n[data-state=menu]{width:min(570px,78vw);height:404px;border-radius:0 0 34px 34px;cursor:default;border:1px solid rgba(255,255,255,.72);border-top:0;background:rgba(255,251,247,.78);box-shadow:0 28px 90px rgba(27,23,19,.18),inset 0 1px rgba(255,255,255,.82);backdrop-filter:blur(24px) saturate(175%)}
-      .n[data-state=thinking],.n[data-state=short],.n[data-state=long]{border:1px solid rgba(255,255,255,.7);border-top:0;background:linear-gradient(180deg,rgba(246,168,162,.82) 0,rgba(255,251,247,.76) 74px,rgba(255,251,247,.68) 100%);box-shadow:0 28px 90px rgba(27,23,19,.18),inset 0 1px rgba(255,255,255,.78);backdrop-filter:blur(24px) saturate(175%)}
+      .n[data-state=thinking],.n[data-state=short],.n[data-state=long]{border:1px solid rgba(255,255,255,.7);border-top:0;background:linear-gradient(180deg,rgba(246,168,162,.9) 0,rgba(255,251,247,.94) 74px,rgba(255,251,247,.92) 100%);box-shadow:0 28px 90px rgba(27,23,19,.18),inset 0 1px rgba(255,255,255,.78);backdrop-filter:blur(24px) saturate(140%)}
       .n[data-state=thinking]{width:min(650px,82vw);height:260px;border-radius:0 0 36px 36px;cursor:default}
       .n[data-state=thinking] .face{height:72px}.n[data-state=thinking] .face svg{height:72px}
       .n[data-state=thinking] .eye{opacity:0}.n[data-state=thinking] .lids{opacity:1;transform:scaleX(.36)}.n[data-state=thinking] .smile{transform:scaleX(.36)}
@@ -11898,6 +11915,15 @@ function __sbMountNotchV1() {
       .long-head b{margin-left:8px;font-size:12px;color:#1b1713}
       .answer article{display:none;flex:0 1 auto;min-height:0;overflow:auto;padding:25px 5px 24px;scrollbar-width:none}
       .n[data-state=long] .answer article{display:block}
+      .a-label{display:block;color:#a7433b;font-size:9px;font-weight:750;letter-spacing:.12em;text-transform:uppercase;margin:0 0 10px}
+      .liquid .a-label{color:#ff9a91}
+      .n{--lr:115px;--rr:115px}
+      .n.captioning{width:calc(var(--lr) + var(--rr));transform:translateX(calc((var(--rr) - var(--lr))/2));transition:width .3s ease-out,transform .3s ease-out}
+      .n.captioning .face{left:calc(var(--lr) - 115px);right:auto;width:230px}
+      .cap{position:absolute;z-index:4;top:0;height:100%;display:flex;flex-direction:column;justify-content:center;overflow:hidden;opacity:0;transition:opacity .3s ease .18s;line-height:1.3;pointer-events:none;font-family:ui-monospace,Menlo,monospace;font-size:9px;letter-spacing:.04em;color:rgba(255,240,235,.8);text-shadow:0 1px 2px rgba(110,33,26,.18);white-space:nowrap;text-overflow:ellipsis}
+      .n.captioning .cap{opacity:1}
+      .cap-l{left:16px;width:max(0px,calc(var(--lr) - 141px));text-align:right;align-items:flex-end}
+      .cap-r{left:calc(var(--lr) + 125px);width:max(0px,calc(var(--rr) - 141px));text-align:left;align-items:flex-start}
       .answer-body{color:rgba(27,23,19,.66);font:400 15px/1.62 "Newsreader","Charter BT",Georgia,serif}
       .answer-body h1,.answer-body h2,.answer-body h3{margin:10px 0 15px;color:#1b1713;font:400 24px/1.1 "Newsreader","Charter BT",Georgia,serif}
       .answer-body p{margin:0 0 13px;color:rgba(27,23,19,.66)}
@@ -11905,7 +11931,7 @@ function __sbMountNotchV1() {
       .answer-body ul,.answer-body ol{margin:8px 0;padding-left:20px}
       .answer-body strong{color:#1b1713}
       .answer-body a{color:#c9544a}
-      .answer-body .sb-turn{margin:0}.answer-body .sb-user-msg{display:none}.answer-body .sb-assistant-msg,.answer-body .sb-answer{margin:0;color:inherit;background:transparent}
+      .answer-body .sb-turn{margin:0}.answer-body .sb-card-q,.answer-body .sb-user-msg{display:none}.answer-body .sb-card-a,.answer-body .sb-card-status,.answer-body .sb-assistant-msg,.answer-body .sb-answer{margin:0;color:inherit;background:transparent;font:inherit}
       .lane{display:none;position:relative;flex:0 0 74px;height:74px;width:100%;overflow:hidden}
       .n[data-state=short] .lane,.n[data-state=long] .lane{display:block}
       .n[data-state=long] .lane{height:50px;flex:0 0 50px;width:auto;margin:0 -24px;border-top:1px solid rgba(65,48,40,.11);border-bottom:1px solid rgba(65,48,40,.12);overflow:visible}
@@ -11971,13 +11997,14 @@ function __sbMountNotchV1() {
       </svg></div>
       <div class="panel status"><small></small></div>
       <div class="workpill"><strong></strong></div>
+      <span class="cap cap-l"></span><span class="cap cap-r"></span>
       <div class="panel input"><label><small>Ask Braino</small><input placeholder="Summarise this page…"/></label><button class="mode">Auto⌄</button><button class="round mic">⌁</button><button class="round send">↑</button><button class="theme" title="Switch glass theme">◐</button><button class="round close" title="Close">×</button></div>
       <div class="panel menu"><header><small>Choose a mode</small><span class="actions"><em class="active-mode">Auto</em><button class="theme" title="Switch glass theme">◐</button><button class="round close" title="Close">×</button></span></header><button class="item" data-mode="auto"><b>Auto</b><small>Let Braino decide</small><strong>✓</strong></button><button class="item" data-mode="page"><b>Page</b><small>Read and work on this page</small></button><button class="item" data-mode="lecture"><b>Lecture</b><small>Capture and explain audio</small></button><button class="item" data-mode="meeting"><b>Meeting</b><small>Listen remember and follow up</small></button><button class="item" data-mode="agent"><b>Delegate</b><small>Complete a browser task</small></button><button class="item" data-mode="team"><b>Team</b><small>Work with shared context</small></button></div>
       <div class="panel thinking"><header><span class="tlabel"><i></i>Braino is thinking</span><span class="actions"><button class="collapse">Collapse</button><button class="theme" title="Switch glass theme">◐</button></span></header><p>Reading the page and understanding what matters.</p><p>Separating the useful signal from the repetition.</p><p>Preparing the answer in your context.</p></div>
       <div class="panel answer">
         <div class="short-row"><span><small>Braino</small><strong class="short-text"></strong></span><span class="actions"><em class="done">Done</em><button class="theme" title="Switch glass theme">◐</button></span></div>
         <header class="long-head"><span><i></i><i></i><b>Braino</b></span><span class="actions"><em class="done">Done</em><button class="theme" title="Switch glass theme">◐</button></span></header>
-        <article class="answer-body"></article>
+        <article><small class="a-label">Answer from this page</small><div class="answer-body"></div></article>
         <div class="lane"><div class="walker"><div class="flip">${__SBWK_SVG.replace(/url\(#sbb-/g, "url(#sbwk-")}</div></div></div>
         <footer><input class="fin" placeholder="Ask a follow-up"/><button class="fmic" title="Talk instead">⌁</button><button class="fsend" title="Send">↑</button></footer>
       </div>
@@ -12011,11 +12038,50 @@ function __sbMountNotchV1() {
     el.value = "";
   };
   shell.addEventListener("click", () => {
+    if (__sbNotchV1?.dragJustEnded && Date.now() - __sbNotchV1.dragJustEnded < 350) return;
     const state = shell.dataset.state;
     if (state === "idle") __sbOpenPanel();
     else if (state === "working") __sbNotchSetState("thinking");
     else if (state === "short") __sbNotchSetState("long");
   });
+  // Draggable along the top edge: grab the notch body (not a control), slide, release.
+  // The position persists as a fraction of the viewport width and restores on load.
+  let __dragStartX = 0, __dragStartCenter = 0, __dragging = false, __dragMoved = false;
+  const __applyNotchCenter = (frac) => {
+    const clamped = Math.min(.96, Math.max(.04, frac));
+    host.style.left = `${Math.round(clamped * 10000) / 100}%`;
+  };
+  __sbStorageGet(["sbNotchXFrac"]).then(({ sbNotchXFrac }) => {
+    if (typeof sbNotchXFrac === "number") __applyNotchCenter(sbNotchXFrac);
+  });
+  shell.addEventListener("pointerdown", (event) => {
+    const target = event.target;
+    if (target && target.closest && target.closest("input,button,textarea,article,footer,.menu,.thinking")) return;
+    __dragging = true; __dragMoved = false;
+    __dragStartX = event.clientX;
+    const rect = host.getBoundingClientRect();
+    __dragStartCenter = rect.left + rect.width / 2;
+    try { shell.setPointerCapture(event.pointerId); } catch (_) {}
+  });
+  shell.addEventListener("pointermove", (event) => {
+    if (!__dragging) return;
+    const dx = event.clientX - __dragStartX;
+    if (!__dragMoved && Math.abs(dx) < 6) return;
+    __dragMoved = true;
+    __applyNotchCenter((__dragStartCenter + dx) / window.innerWidth);
+  });
+  const __endDrag = () => {
+    if (!__dragging) return;
+    __dragging = false;
+    if (__dragMoved) {
+      const rect = host.getBoundingClientRect();
+      const frac = Math.min(.96, Math.max(.04, (rect.left + rect.width / 2) / window.innerWidth));
+      if (__sbContextOk()) chrome.storage.local.set({ sbNotchXFrac: frac });
+      __sbNotchV1.dragJustEnded = Date.now();
+    }
+  };
+  shell.addEventListener("pointerup", __endDrag);
+  shell.addEventListener("pointercancel", __endDrag);
   input.addEventListener("input", () => { const old = document.getElementById("__sb_input__"); if (old) old.value = input.value; });
   input.addEventListener("keydown", (event) => { if (event.key === "Enter") { event.preventDefault(); sendFromNotch(input); } });
   shadow.querySelector(".input .send").addEventListener("click", (event) => { event.stopPropagation(); sendFromNotch(input); });
@@ -12057,6 +12123,7 @@ function __sbNotchSetState(state, status = "") {
   const pill = __sbNotchV1.shadow.querySelector(".workpill strong");
   if (pill) pill.textContent = state === "working" ? (status || "Thinking") : status;
   if (state === "short" || state === "long") __sbNotchWalkStart(); else __sbNotchWalkStop();
+  if (!["idle", "listening", "working", "speaking"].includes(state)) __sbNotchV1.shell.classList.remove("captioning");
   if (state === "input") setTimeout(() => __sbNotchV1?.input?.focus(), 180);
 }
 function __sbNotchShowAnswer(text, rich, html) {
@@ -12109,6 +12176,55 @@ function __sbNotchWalkStart() {
 }
 function __sbNotchWalkStop() {
   if (__sbNotchV1?.walkRaf) { cancelAnimationFrame(__sbNotchV1.walkRaf); __sbNotchV1.walkRaf = 0; }
+}
+// Mac-parity wing captions: the notch stretches sideways while the user's words
+// form (left wing first, overflow to the right). ONLY what we heard is captioned —
+// Braino's replies are voice + the talking mouth, never text.
+let __sbNotchCapTimer = null;
+function __sbNotchCaption(text, options = {}) {
+  if (!__sbNotchV1) return;
+  const shell = __sbNotchV1.shell;
+  const value = String(text || "").trim().replace(/\s+/g, " ");
+  const capL = __sbNotchV1.shadow.querySelector(".cap-l");
+  const capR = __sbNotchV1.shadow.querySelector(".cap-r");
+  const compactOk = ["idle", "listening", "working", "speaking"].includes(shell.dataset.state);
+  if (__sbNotchCapTimer) { clearTimeout(__sbNotchCapTimer); __sbNotchCapTimer = null; }
+  if (!value || !compactOk) {
+    shell.classList.remove("captioning");
+    if (capL) capL.textContent = "";
+    if (capR) capR.textContent = "";
+    return;
+  }
+  const rect = __sbNotchV1.host.getBoundingClientRect();
+  const centerX = (rect.left + rect.width / 2) || window.innerWidth / 2;
+  const maxL = Math.max(150, centerX - 10);
+  const maxR = Math.max(150, window.innerWidth - centerX - 10);
+  const baseWing = 115, pad = 30, charPx = 5.7;
+  const leftCapacity = Math.max(10, Math.floor((maxL - baseWing - pad) / charPx));
+  const leftText = value.slice(0, leftCapacity);
+  const rightText = value.slice(leftCapacity);
+  const reachL = Math.min(maxL, Math.max(baseWing, baseWing + pad + leftText.length * charPx));
+  const reachR = rightText ? Math.min(maxR, Math.max(baseWing, baseWing + pad + rightText.length * charPx)) : baseWing;
+  shell.style.setProperty("--lr", `${Math.round(reachL)}px`);
+  shell.style.setProperty("--rr", `${Math.round(reachR)}px`);
+  if (capL) capL.textContent = leftText;
+  if (capR) capR.textContent = rightText;
+  shell.classList.add("captioning");
+  const hold = options.final ? Math.max(3600, Math.min(9000, value.length * 58)) : 12000;
+  __sbNotchCapTimer = setTimeout(() => __sbNotchCaption(""), hold);
+}
+// Double-⌘ summon (Mac parity): the mascot jumps out of the notch onto the page;
+// double-⌘ again (or tapping him) sends him home.
+function __sbSummonToggle() {
+  if (!__sbOwnsInlineUi()) return;
+  if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
+  if (__sbRoamActive) { __sbExitRoamMode(); return; }
+  __sbEnterRoamMode();
+  const rect = document.getElementById("__sb_notch_v1_host__")?.getBoundingClientRect();
+  const cx = rect ? rect.left + rect.width / 2 : window.innerWidth / 2;
+  __sbRoamCX = __sbRoamClampX(cx - __SB_ROAM_W / 2);
+  __sbRoamCY = __SB_ROAM_MARGIN_TOP;
+  __sbRoamHoldUntil = performance.now() + 500;
 }
 
 const __SB_NOTCH_CLASSES = ["sb-notch-invoking", "sb-notch-auth", "sb-notch-auth-ok", "sb-notch-idle", "sb-notch-listening", "sb-notch-working", "sb-notch-speaking"];
@@ -12200,10 +12316,26 @@ function __sbOpenPanel() {
   const btn = document.getElementById("__sb_brain_btn__");
   if (btn) btn.style.display = "none";          // walker is the mascot in PANEL
   if (wasOff) {
-    __sbRunBrowserNotchBoot(
-      () => {},
-      () => { document.getElementById("__sb_bar__")?.classList.add("open", "sb-signin"); __sbSetupBarSignIn(); },
-    );
+    const finishRejected = () => { document.getElementById("__sb_bar__")?.classList.add("open", "sb-signin"); __sbSetupBarSignIn(); };
+    __sbStorageGet(["authToken"]).then(({ authToken }) => {
+      if (authToken) {
+        // Already signed in: the closed-eyes auth ceremony is a first-run thing.
+        // Invocation lands straight on idle; the session is re-verified silently.
+        const bar = document.getElementById("__sb_bar__");
+        if (bar) { bar.classList.remove("sb-signin", "sb-waking", "sb-cinematic"); bar.classList.add("open"); }
+        __sbInputOpen = false;
+        __sbSetBrowserNotchState("idle");
+        if (__sbContextOk()) chrome.storage.local.set({ sbBrainDocked: true, sbBrainExpanded: false });
+        try {
+          chrome.runtime.sendMessage({ action: "checkAuth" }, (result) => {
+            void chrome.runtime.lastError;
+            if (result && result.authenticated === false) { __sbNotchSetState("signin"); finishRejected(); }
+          });
+        } catch (_) {}
+      } else {
+        __sbRunBrowserNotchBoot(() => {}, finishRejected);
+      }
+    });
   } else {
     __sbToggleInput(true, { skipPersist: true });
   }
@@ -20351,7 +20483,9 @@ async function __sbAnswerViaRealtimeStreaming(turnToken) {
   __sbRtCurrentResponseMode = "conversation";
   __sbRtHandlingConversationTurn = true;
   __sbVoicePendingReply = true;
-  if (__sbHeadphoneMode) __sbSetHpBrainState("speaking");
+  // No sound exists yet at response.create — show thinking until audio really starts
+  // (Fish onReady / native audio delta flips to speaking). Mouth only moves with sound.
+  if (__sbHeadphoneMode) __sbSetHpBrainState("captured");
 
   const waiter = __sbCreateRtWaiter();
   const sent = __sbSendRtEvent({ type: "response.create", response: { output_modalities: nativeVoice ? ["audio"] : ["text"] } });
@@ -21441,6 +21575,7 @@ function __sbHandleRtEvent(ev) {
   if (ev.type === "conversation.item.input_audio_transcription.delta") {
     if (typeof ev.delta === "string" && ev.delta) {
       __sbRtUserTranscript += ev.delta;
+      __sbNotchCaption(__sbRtUserTranscript);   // live subtitles: your words form as you speak
     }
     return;
   }
@@ -21448,6 +21583,7 @@ function __sbHandleRtEvent(ev) {
     const transcript = String(ev.transcript || __sbRtUserTranscript || "").trim();
     const transcriptionUsage = ev.usage || ev.item?.usage || ev.response?.usage || {};
     __sbRtUserTranscript = "";
+    if (transcript) __sbNotchCaption(transcript, { final: true });
     if (!transcript) return;
     __sbVTMark("📝 Transcript ready");
 
@@ -21512,7 +21648,10 @@ function __sbHandleRtEvent(ev) {
       __sbRtAssistantTranscript += ev.delta;
       if (__sbStreamFishActive) __sbFeedStreamTts(ev.delta); // 1B: stream into Fish as it arrives
     }
-    if (__sbHeadphoneMode) __sbSetHpBrainState("speaking");
+    // Only native realtime audio means sound is coming out RIGHT NOW. With Fish as
+    // the voice these deltas are text; the Fish player owns the speaking state when
+    // audio actually plays — driving the mouth from text made him "talk" in silence.
+    if (__sbHeadphoneMode && ev.type === "response.output_audio_transcript.delta") __sbSetHpBrainState("speaking");
     return;
   }
   if (ev.type === "response.done") {
