@@ -6036,7 +6036,7 @@ async function runSkit() {
   // Build stamp: check ~/Library/Logs/Braino Mac/braino-mac.log for skit.build
   // after a take — if this string is missing or older, the app is running a
   // stale build and the take does not reflect the current code.
-  logRenderer("skit.build", { v: "v20-open-spotify-line-2s-settle" });
+  logRenderer("skit.build", { v: "v21-immediate-moonwalk-no-buffer" });
   const prevScale = brainoScale;
   let skitCompleted = false;
   try {
