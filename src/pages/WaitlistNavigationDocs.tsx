@@ -80,7 +80,8 @@ export default function WaitlistNavigationDocs() {
             The waitlist owns `/`, while existing product and design pages remain
             available at their explicit routes for direct testing and review.
             The hero now pairs its three-beat “cutest AI agent” headline with Braino
-            himself, a quiet orbital visual, and one simpler explanation.
+            himself, a quiet orbital visual, and one simpler explanation. The old
+            “Download Braino” hero button is gone so the page keeps one clear waitlist path.
           </p>
         </section>
 

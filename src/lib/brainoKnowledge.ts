@@ -20,6 +20,18 @@ export type KnowledgeEntry = {
 
 export const KNOWLEDGE_ENTRIES: readonly KnowledgeEntry[] = [
   {
+    slug: "moonwalk-ecosystem-teaser",
+    title: "Moonwalk Ecosystem Teaser",
+    category: "Design decision",
+    date: "2026-08-05",
+    dateLabel: "August 5, 2026",
+    description:
+      "The ecosystem film's exact kinetic language, reduced to one moonwalk promise and one oversized trybraino.com.",
+    status: "MVP",
+    platform: "Braino website",
+    number: "018",
+  },
+  {
     slug: "mac-moonwalk-party-trick",
     title: "Mac Moonwalk Party Trick",
     category: "Feature",

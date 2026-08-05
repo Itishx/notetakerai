@@ -78,6 +78,8 @@ The opening now puts Braino beside the promise instead of leaving the headline a
 
 The result is still editorial, but no longer empty. The hero establishes the character before the chapters explain the products around him.
 
+The old “Download Braino” button has been removed from the hero. This page is the waitlist and should keep one clear commitment path instead of presenting an immediate extension download beside the opening promise.
+
 ## Hera disclosure
 
 Hera remains named in the chapter rail and waitlist picker, but its public mechanics are intentionally undisclosed. The chapter contains only “Coming soon,” and the picker says that Braino is keeping this one quiet.

@@ -19,6 +19,7 @@ const HowBrainoTalksDocs = lazy(() => import("./pages/HowBrainoTalksDocs.tsx"));
 const HumanIntelligence = lazy(() => import("./pages/HumanIntelligence.tsx"));
 const BrainoOSTeaser = lazy(() => import("./pages/BrainoOSTeaser.tsx"));
 const EcosystemTeaser = lazy(() => import("./pages/EcosystemTeaser.tsx"));
+const MoonwalkTeaser = lazy(() => import("./pages/MoonwalkTeaser.tsx"));
 const YapMode = lazy(() => import("./pages/YapMode.tsx"));
 const MotionGraphicsHub = lazy(() => import("./pages/MotionGraphicsHub.tsx"));
 const JyotiSirTeamDemoDocs = lazy(() => import("./pages/JyotiSirTeamDemoDocs.tsx"));
@@ -66,6 +67,7 @@ const Contact = lazy(() => import("./pages/Contact.tsx"));
 const ProductOverview = lazy(() => import("./pages/ProductOverview.tsx"));
 const ProductOverviewHomepageDocs = lazy(() => import("./pages/ProductOverviewHomepageDocs.tsx"));
 const MacMoonwalkPartyTrickDocs = lazy(() => import("./pages/MacMoonwalkPartyTrickDocs.tsx"));
+const MoonwalkEcosystemTeaserDocs = lazy(() => import("./pages/MoonwalkEcosystemTeaserDocs.tsx"));
 const Automations = lazy(() => import("./pages/Automations.tsx"));
 const Integrations = lazy(() => import("./pages/Integrations.tsx"));
 const ConnectorsVault = lazy(() => import("./pages/ConnectorsVault.tsx"));
@@ -101,6 +103,7 @@ function AppRoutes() {
         <Route path="/knowledge" element={<KnowledgeBase />} />
         <Route path="/knowledge/product-overview-homepage" element={<ProductOverviewHomepageDocs />} />
         <Route path="/knowledge/mac-moonwalk-party-trick" element={<MacMoonwalkPartyTrickDocs />} />
+        <Route path="/knowledge/moonwalk-ecosystem-teaser" element={<MoonwalkEcosystemTeaserDocs />} />
         <Route path="/knowledge/choose-your-avatar" element={<ChooseYourAvatarDocs />} />
         <Route path="/knowledge/iomi-boot-identity" element={<IomiBootIdentityDocs />} />
         <Route path="/knowledge/browser-notch-presence" element={<BrowserNotchPresenceDocs />} />
@@ -137,6 +140,7 @@ function AppRoutes() {
         <Route path="/Vig" element={<VisualEmotionalEngine />} />
         <Route path="/braino-os" element={<BrainoOSTeaser />} />
         <Route path="/ecosystem-teaser" element={<EcosystemTeaser />} />
+        <Route path="/moonwalk-teaser" element={<MoonwalkTeaser />} />
         <Route path="/yap-mode" element={<YapMode />} />
         <Route path="/motion-graphics" element={<MotionGraphicsHub />} />
         <Route path="/teaser" element={<LaunchTeaser />} />
