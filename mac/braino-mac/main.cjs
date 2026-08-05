@@ -7617,30 +7617,32 @@ async function createSpotifyPlaylistOnMac(name, options = {}) {
 async function playSpotifyTrackInMacApp(uri, positionMs = 0, { activate = true } = {}) {
   const safeUri = escapeAppleScriptString(uri);
   const positionSeconds = Math.max(0, Math.round(Number(positionMs) || 0) / 1000);
-  // Seek only after the track is genuinely playing, then HAMMER until stable.
-  // Spotify resets position to 0 during metadata load even after successful seek,
-  // so we must verify the position is STABLE (not bouncing) before returning.
+  // Seek only after the track is genuinely playing, then HAMMER until absolutely stable.
+  // Spotify WILL reset position to 0 during metadata load, so we aggressively re-verify
+  // and re-seek if it drifts. Only return when position is locked.
   const seekLine = positionSeconds > 0
-    ? `  repeat with i from 1 to 20
+    ? `  repeat with i from 1 to 25
     if player state is playing then exit repeat
     delay 0.2
   end repeat
-  repeat with i from 1 to 20
+  repeat with i from 1 to 25
     try
       set player position to ${positionSeconds}
     end try
-    delay 0.35
+    delay 0.3
     try
-      if player position > ${Math.max(0, positionSeconds - 6)} then exit repeat
+      if player position > ${Math.max(0, positionSeconds - 5)} then exit repeat
     end try
   end repeat
-  -- Verify stability: position should not drop back to 0 (Spotify metadata reset)
-  repeat with i from 1 to 5
-    delay 0.2
-    if player position < ${Math.max(0, positionSeconds - 10)} then
-      set player position to ${positionSeconds}
-      delay 0.5
-    end if
+  -- Stability lock: re-seek aggressively if position drops even slightly
+  repeat with i from 1 to 10
+    delay 0.25
+    try
+      if player position < ${Math.max(0, positionSeconds - 8)} then
+        set player position to ${positionSeconds}
+        delay 0.3
+      end if
+    end try
   end repeat`
     : "";
   const script = `
@@ -11916,13 +11918,17 @@ ipcMain.handle("braino-mac:skit-step", async (_event, step) => {
       // a demo machine. The skit plays the hardcoded URI natively instead.
       try { stopMusicSegmentLoop(); } catch (_) {}   // a stray A/B loop timer would re-seek the track
       const wasRunning = await isMacApplicationRunning("Spotify");
-      // Open Spotify in background (-g) ONLY. Hide the window via System Events after.
-      try { await execFileP("open", ["-g", "-b", "com.spotify.client"], { timeout: 8000 }); } catch (_) {}
-      const deadline = Date.now() + 15000;
-      while (Date.now() < deadline && !(await isMacApplicationRunning("Spotify"))) {
-        await new Promise((resolve) => setTimeout(resolve, 400));
+      // DON'T open again if prewarm already did. Only wait for it if not running yet.
+      if (!wasRunning) {
+        try { await execFileP("open", ["-g", "-b", "com.spotify.client"], { timeout: 8000 }); } catch (_) {}
+        const deadline = Date.now() + 15000;
+        while (Date.now() < deadline && !(await isMacApplicationRunning("Spotify"))) {
+          await new Promise((resolve) => setTimeout(resolve, 400));
+        }
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+      } else {
+        await new Promise((resolve) => setTimeout(resolve, 250));
       }
-      await new Promise((resolve) => setTimeout(resolve, wasRunning ? 250 : 1500));
       let lastError = null;
       for (let attempt = 0; attempt < 4; attempt += 1) {
         try {
