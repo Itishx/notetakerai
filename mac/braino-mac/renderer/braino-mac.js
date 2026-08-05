@@ -5794,7 +5794,8 @@ function tick(now) {
 
   walker.style.transform = `translate3d(${posX}px, ${posY}px, 0)`;
   const engaged = listening || realtimeConnecting || processing || speaking || authPose;
-  walkerFlip.style.transform = `scaleX(${engaged ? 1 : dirX}) scale(${brainoScale})`;
+  // skitMoonwalk locks him facing forward while he glides backwards — the moonwalk.
+  walkerFlip.style.transform = `scaleX(${(engaged || skitMoonwalk) ? 1 : dirX}) scale(${brainoScale})`;
   if (brainoCustomizerOpen) positionBrainoCustomizer();
   updateFloatingUi();
 
@@ -5927,6 +5928,7 @@ window.brainoMac.onDictationToggle?.((payload) => toggleYapMode(payload?.source 
 // v2: no texting. Beat It on Spotify, out of the notch, BIG, dancing, reset.
 // Delete this block together with the main.cjs/preload skit pieces.
 let skitRunning = false;
+let skitMoonwalk = false;
 async function runSkit() {
   if (skitRunning) return;
   skitRunning = true;
@@ -5934,30 +5936,34 @@ async function runSkit() {
   try {
     await new Promise((resolve) => window.setTimeout(resolve, 250));
     await speak("Okay. So he's gone, is he? Cool.");
-    await speak("Perfect. Spotify. Beat It. Watch this.");
+    await speak("Perfect. Spotify. Billie Jean. Watch this.");
     const played = await window.brainoMac.skitStep?.("play");
     if (!played?.ok) {
       await speak(played?.say || "Spotify did not cooperate. Take two.");
       return;
     }
-    // Music theatrics (light show, notes, notch groove) fire on their own once
-    // playback is detected. Give them a beat, then take the stage: out of the
-    // notch, grown to 2.6x, bopping side to side while Beat It runs.
+    // Billie Jean lands at 3:31 — THE moonwalk moment, same cue as the Chrome
+    // trick. Music theatrics (light show, notes, notch groove) fire on their
+    // own; he takes the stage grown to 2.6x and moonwalks: face locked forward
+    // while gliding backwards, twice across the screen.
     await new Promise((resolve) => window.setTimeout(resolve, 1400));
     await setWalkerHomeState(false);
     setBrainoScale(Math.min(BRAINO_SCALE_MAX, 2.6), false);
     const stageY = Math.max(160, Math.round(window.innerHeight * 0.45));
     const stageX = Math.round(window.innerWidth / 2 - W / 2);
-    for (let hop = 0; hop < 4; hop += 1) {
-      const dx = hop % 2 === 0 ? -150 : 150;
-      await walkTo(stageX + dx, stageY, { speed: 240 });
-    }
+    skitMoonwalk = true;
+    await walkTo(stageX + 190, stageY, { speed: 300 });
+    await walkTo(stageX - 190, stageY, { speed: 170 });
+    await walkTo(stageX + 190, stageY, { speed: 300 });
+    await walkTo(stageX - 190, stageY, { speed: 170 });
+    skitMoonwalk = false;
     await speak("Okay. Okay. He's coming back. Act natural.");
     setBrainoScale(prevScale, false);
     await setWalkerHomeState(true);
     await window.brainoMac.skitStep?.("close");
   } catch (_) {
   } finally {
+    skitMoonwalk = false;
     setBrainoScale(prevScale, false);
     skitRunning = false;
   }

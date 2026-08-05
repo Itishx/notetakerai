@@ -43,7 +43,12 @@ const AUTH_CALLBACK_PATH = "/braino-mac-auth-callback";
 // preload's skit bridge, and runSkit() in the renderer.
 const SKIT = {
   enabled: true,
-  song: "Beat It Michael Jackson",
+  song: "Billie Jean Michael Jackson",
+  // Same cue as the Chrome extension's moonwalk trick: Billie Jean, seeked to
+  // the 3:31 moonwalk moment. Native AppleScript play by URI + position needs
+  // no Spotify Web API, no linked account and no network beyond Spotify itself.
+  trackUri: "spotify:track:7J1uxwnxfQLu4APicE5Rnj",
+  startMs: 211000,
 };
 const {
   resolveWebTarget,
@@ -11870,7 +11875,30 @@ ipcMain.handle("braino-mac:skit-step", async (_event, step) => {
   if (!SKIT.enabled) return { ok: false, say: "" };
   if (step === "play") {
     try {
-      return await playSpotifySongOnMac(SKIT.song);
+      // The Web API path (search + playback) needs Supabase auth, a linked
+      // Spotify account and an active device — any of which can be missing on
+      // a demo machine. The skit plays the hardcoded URI natively instead.
+      const wasRunning = await isMacApplicationRunning("Spotify");
+      await openApp("Spotify");
+      const deadline = Date.now() + 15000;
+      while (Date.now() < deadline && !(await isMacApplicationRunning("Spotify"))) {
+        await new Promise((resolve) => setTimeout(resolve, 400));
+      }
+      await new Promise((resolve) => setTimeout(resolve, wasRunning ? 250 : 1500));
+      let lastError = null;
+      for (let attempt = 0; attempt < 4; attempt += 1) {
+        try {
+          await playSpotifyTrackInMacApp(SKIT.trackUri, SKIT.startMs);
+          lastError = null;
+          break;
+        } catch (error) {
+          lastError = error;
+          await new Promise((resolve) => setTimeout(resolve, 900));
+        }
+      }
+      if (lastError) throw lastError;
+      logMac("skit.play.done", { uri: SKIT.trackUri });
+      return { ok: true, say: "" };
     } catch (error) {
       logMac("skit.play_failed", { error });
       return { ok: false, say: "Spotify did not cooperate. Take two." };
