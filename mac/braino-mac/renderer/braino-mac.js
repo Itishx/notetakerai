@@ -5935,6 +5935,19 @@ let skitRunning = false;
 let skitMoonwalk = false;
 let skitMoonRaf = 0;
 
+// A skit line must ALWAYS land in full. Something bumping speechGeneration
+// (voice-session teardown, idle shutdown) can silently abort speak() mid-line —
+// the 15:39 take lost line 2 to exactly that. If a line returns suspiciously
+// fast for its length, it was cut: say it again once.
+async function skitSpeak(line) {
+  const minMs = Math.max(1200, line.length * 38);
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const t0 = performance.now();
+    await speak(line);
+    if (performance.now() - t0 >= minMs) return;
+  }
+}
+
 // Verbatim port of the Chrome extension's __sbWkMoonwalk (extension/content.js
 // lines 4228-4292): the hidden __sbwk_moonlegs__ rig replaces the normal legs so
 // both feet point the SAME way, each foot pops onto its toe (heel to 42 degrees
@@ -6003,6 +6016,10 @@ async function runSkit() {
   const prevScale = brainoScale;
   try {
     await new Promise((resolve) => window.setTimeout(resolve, 250));
+    // Nothing may interrupt the script: kill any live voice session and its
+    // idle-shutdown timers before the first line (they bump speechGeneration
+    // and silently cut speak() mid-sentence).
+    try { stopRealtimeVoice(); } catch (_) {}
     void window.brainoMac.skitStep?.("prewarm");   // Spotify boots quietly behind the intro lines
     // He takes the stage WHILE introducing himself — out of the notch, grown to
     // 2.6x, planted stage right by the time he says "Watch." No dead walking
@@ -6012,8 +6029,8 @@ async function runSkit() {
       await setWalkerHomeState(false);
       setBrainoScale(Math.min(BRAINO_SCALE_MAX, 2.6), false);
     })();
-    await speak("Hi, I am Braino.");
-    await speak("I am the only AI in both human and AI history ever to do the moonwalk. Watch.");
+    await skitSpeak("Hi, I am Braino.");
+    await skitSpeak("I am the only AI in both human and AI history ever to do the moonwalk. Watch.");
     await takeTheStage;
     const played = await window.brainoMac.skitStep?.("play");
     if (!played?.ok) {
@@ -6022,7 +6039,7 @@ async function runSkit() {
     }
     // Billie Jean is already sitting at 3:31 (the play step verifies the seek).
     // Isolated demo: no music theatrics, no headphones, no auto-home.
-    await skitPerformMoonwalk(15000);
+    await skitPerformMoonwalk(11000);   // Chrome's own duration: 10-12s on stage
     skitMoonwalk = false;
     setBrainoScale(prevScale, false);
     await setWalkerHomeState(true);
