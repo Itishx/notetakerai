@@ -6036,7 +6036,7 @@ async function runSkit() {
   // Build stamp: check ~/Library/Logs/Braino Mac/braino-mac.log for skit.build
   // after a take — if this string is missing or older, the app is running a
   // stale build and the take does not reflect the current code.
-  logRenderer("skit.build", { v: "v12-fully-frozen-till-cmd2" });
+  logRenderer("skit.build", { v: "v13-realtime-hardblocked-voice-disabled" });
   const prevScale = brainoScale;
   let skitCompleted = false;
   try {
