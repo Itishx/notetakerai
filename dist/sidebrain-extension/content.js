@@ -10223,12 +10223,13 @@ function __sbBuildBrainUI() {
     if (e.key === "Control") {
       if (!e.repeat && !e.metaKey && !e.altKey && !e.shiftKey) {
         const now = Date.now();
-        if (now - __sbLastCtrlTap < 400) {
+        // 600ms window (400 missed relaxed taps), and no editable-focus bail: bare
+        // Control taps type nothing, and Ctrl+key combos already reset the counter —
+        // the old guard just made the toggle feel random whenever a text field had focus.
+        if (now - __sbLastCtrlTap < 600) {
           __sbLastCtrlTap = 0;
-          if (!__sbHasExternalEditableFocus()) {
-            if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
-            __sbToggleHeadphoneMode();
-          }
+          if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
+          __sbToggleHeadphoneMode();
         } else {
           __sbLastCtrlTap = now;
         }
@@ -10261,9 +10262,9 @@ function __sbBuildBrainUI() {
     if (e.key === "Meta") {
       if (!e.repeat && !e.ctrlKey && !e.altKey && !e.shiftKey) {
         const now = Date.now();
-        if (now - __sbLastMetaTap < 400) {
+        if (now - __sbLastMetaTap < 600) {
           __sbLastMetaTap = 0;
-          if (!__sbHasExternalEditableFocus()) __sbSummonToggle();
+          __sbSummonToggle();
         } else {
           __sbLastMetaTap = now;
         }
@@ -11841,6 +11842,7 @@ function __sbMountNotchV1() {
       .workpill strong{display:block;min-width:78px;max-width:200px;color:#fff;font-size:10px;font-weight:750;line-height:13px;text-align:center;text-shadow:0 1px 3px rgba(110,33,26,.22);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
       .n[data-state=speaking]{height:82px;border-radius:0 0 29px 29px}
       .n[data-state=speaking] .smile{opacity:0}.n[data-state=speaking] .mouth{opacity:1;animation:talkMouth .42s ease-in-out infinite alternate}.n[data-state=speaking] .pupil{animation:speakLook 2.8s ease-in-out infinite}
+      .n.mouth-hold .mouth{animation-play-state:paused}
       .n[data-state=input]{width:min(570px,78vw);height:104px;border-radius:0 0 31px 31px;cursor:default;border:1px solid rgba(255,255,255,.72);border-top:0;background:rgba(255,251,247,.72);box-shadow:0 24px 70px rgba(27,23,19,.16),inset 0 1px rgba(255,255,255,.8);backdrop-filter:blur(24px) saturate(175%)}
       .n[data-state=menu]{width:min(570px,78vw);height:404px;border-radius:0 0 34px 34px;cursor:default;border:1px solid rgba(255,255,255,.72);border-top:0;background:rgba(255,251,247,.78);box-shadow:0 28px 90px rgba(27,23,19,.18),inset 0 1px rgba(255,255,255,.82);backdrop-filter:blur(24px) saturate(175%)}
       .n[data-state=thinking],.n[data-state=short],.n[data-state=long]{border:1px solid rgba(255,255,255,.7);border-top:0;background:linear-gradient(180deg,rgba(246,168,162,.9) 0,rgba(255,251,247,.94) 74px,rgba(255,251,247,.92) 100%);box-shadow:0 28px 90px rgba(27,23,19,.18),inset 0 1px rgba(255,255,255,.78);backdrop-filter:blur(24px) saturate(140%)}
@@ -12056,7 +12058,9 @@ function __sbMountNotchV1() {
   });
   shell.addEventListener("pointerdown", (event) => {
     const target = event.target;
-    if (target && target.closest && target.closest("input,button,textarea,article,footer,.menu,.thinking")) return;
+    // em covers the Done/Replace pills — capturing their presses retargets the
+    // click to the shell and the pill handler never fires ("Done does nothing").
+    if (target && target.closest && target.closest("input,button,textarea,article,footer,em,.menu,.thinking")) return;
     __dragging = true; __dragMoved = false;
     __dragStartX = event.clientX;
     const rect = host.getBoundingClientRect();
@@ -12101,7 +12105,11 @@ function __sbMountNotchV1() {
     button.insertAdjacentHTML("beforeend", "<strong>✓</strong>");
     __sbNotchSetState("input");
   }));
-  shadow.querySelectorAll(".answer .done").forEach((button) => button.addEventListener("click", (event) => { event.stopPropagation(); __sbDock(); }));
+  shadow.querySelectorAll(".answer .done").forEach((button) => button.addEventListener("click", (event) => {
+    event.stopPropagation();
+    __sbNotchSetState("idle");   // resolve visually no matter what the legacy dock path does
+    __sbDock();
+  }));
   shadow.querySelectorAll(".close").forEach((button) => button.addEventListener("click", (event) => { event.stopPropagation(); __sbHideAll(); }));
   shadow.querySelector(".signin .cta")?.addEventListener("click", (event) => {
     event.stopPropagation();
@@ -12123,7 +12131,8 @@ function __sbNotchSetState(state, status = "") {
   const pill = __sbNotchV1.shadow.querySelector(".workpill strong");
   if (pill) pill.textContent = state === "working" ? (status || "Thinking") : status;
   if (state === "short" || state === "long") __sbNotchWalkStart(); else __sbNotchWalkStop();
-  if (!["idle", "listening", "working", "speaking"].includes(state)) __sbNotchV1.shell.classList.remove("captioning");
+  if (!["idle", "listening"].includes(state)) __sbNotchV1.shell.classList.remove("captioning");
+  if (state !== "speaking") __sbNotchV1.shell.classList.remove("mouth-hold");
   if (state === "input") setTimeout(() => __sbNotchV1?.input?.focus(), 180);
 }
 function __sbNotchShowAnswer(text, rich, html) {
@@ -12177,6 +12186,17 @@ function __sbNotchWalkStart() {
 function __sbNotchWalkStop() {
   if (__sbNotchV1?.walkRaf) { cancelAnimationFrame(__sbNotchV1.walkRaf); __sbNotchV1.walkRaf = 0; }
 }
+// Lip-sync to the real audio element: the mouth animation pauses the moment
+// playback buffers/stalls and resumes with sound, so he never chatters in silence.
+function __sbNotchMouthSync(audioEl) {
+  if (!audioEl || !__sbNotchV1) return;
+  const hold = (on) => __sbNotchV1?.shell?.classList.toggle("mouth-hold", on);
+  audioEl.addEventListener("playing", () => hold(false));
+  audioEl.addEventListener("waiting", () => hold(true));
+  audioEl.addEventListener("stalled", () => hold(true));
+  audioEl.addEventListener("pause", () => hold(true));
+  audioEl.addEventListener("ended", () => hold(false));
+}
 // Mac-parity wing captions: the notch stretches sideways while the user's words
 // form (left wing first, overflow to the right). ONLY what we heard is captioned —
 // Braino's replies are voice + the talking mouth, never text.
@@ -12187,7 +12207,9 @@ function __sbNotchCaption(text, options = {}) {
   const value = String(text || "").trim().replace(/\s+/g, " ");
   const capL = __sbNotchV1.shadow.querySelector(".cap-l");
   const capR = __sbNotchV1.shadow.querySelector(".cap-r");
-  const compactOk = ["idle", "listening", "working", "speaking"].includes(shell.dataset.state);
+  // Wings live only in idle/listening: working's 440px face compensation and the
+  // speaking mouth collide with caption geometry and cram the face.
+  const compactOk = ["idle", "listening"].includes(shell.dataset.state);
   if (__sbNotchCapTimer) { clearTimeout(__sbNotchCapTimer); __sbNotchCapTimer = null; }
   if (!value || !compactOk) {
     shell.classList.remove("captioning");
@@ -12979,7 +13001,11 @@ function __sbSpeakWithBrowser(text, speechToken = __sbSpeechGeneration) {
     __sbWalkTalking = true;
     __sbSetVoiceButtonState(false);
     __sbSyncSpeakButtons();
-    if (__sbHeadphoneMode) { __sbSetHpBrainState("speaking"); }
+    // Mouth waits for the voice to actually start — speechSynthesis can queue for
+    // hundreds of ms and the mouth must not chatter over that silence.
+    utterance.onstart = () => {
+      if (speechToken === __sbSpeechGeneration && __sbHeadphoneMode) __sbSetHpBrainState("speaking");
+    };
 
     const finish = () => {
       if (speechToken === __sbSpeechGeneration) {
@@ -13248,6 +13274,7 @@ async function __sbPlaySentenceResp(resp, speechToken) {
     __sbSetVoiceButtonState(false);
     __sbSyncSpeakButtons();
     if (__sbHeadphoneMode) { __sbSetHpBrainState("speaking"); }
+    __sbNotchMouthSync(audioEl);   // mouth follows the REAL playback: pauses on buffering
   };
 
   if (__sbCanStreamTtsMp3() && resp.body) {
