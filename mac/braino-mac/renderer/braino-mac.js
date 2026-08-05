@@ -6054,6 +6054,7 @@ async function runSkit() {
     await skitSpeak("I am the only AI in both human and AI history ever to do the moonwalk. Watch.");
     // NOW open Spotify after the speech, giving it time to boot before play
     void window.brainoMac.skitStep?.("prewarm");
+    await skitSpeak("Let's open Spotify, shall we?");
     const played = await window.brainoMac.skitStep?.("play");
     if (!played?.ok) {
       await speak(played?.say || "Spotify did not cooperate. Take two.");
@@ -6061,6 +6062,8 @@ async function runSkit() {
     }
     // Billie Jean is already sitting at 3:31 (the play step verifies the seek).
     // Isolated demo: no music theatrics, no headphones, no auto-home.
+    // Give the song 2 seconds to settle before the moonwalk starts.
+    await new Promise((resolve) => window.setTimeout(resolve, 2000));
     await skitPerformMoonwalk(20000);   // 20s moonwalk
     // He stays out and asks while waving. Keep skitMoonwalk true so tick does not
     // resume roam/dock and walk him mid-line; clear it in finally after the skit.
