@@ -6013,6 +6013,10 @@ function skitEndMoonwalk() {
 async function runSkit() {
   if (skitRunning) return;
   skitRunning = true;
+  // Build stamp: check ~/Library/Logs/Braino Mac/braino-mac.log for skit.build
+  // after a take — if this string is missing or older, the app is running a
+  // stale build and the take does not reflect the current code.
+  logRenderer("skit.build", { v: "v6-uncuttable-script-invisible-spotify" });
   const prevScale = brainoScale;
   try {
     await new Promise((resolve) => window.setTimeout(resolve, 250));
