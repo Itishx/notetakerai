@@ -36,16 +36,14 @@ const AUTH_CALLBACK_PATH = "/braino-mac-auth-callback";
 
 // ── SKIT (TEMPORARY — Instagram demo, delete after recording) ──────────────
 // While enabled, double Option runs the scripted skit instead of Yap Mode.
-// dryRun=true opens the chat and types the message but never sends it
-// (rehearsal takes); flip to false for the one real take. To remove the
-// trick entirely, delete this block, the SKIT branch in the double-option
-// handler, the "braino-mac:skit-step" ipcMain handler, preload's skit
-// bridge, and runSkit() in the renderer.
+// v2: no texting. Braino notices the user is gone, plays Beat It on Spotify,
+// steps out of the notch, grows, dances, then resets like nothing happened.
+// To remove the trick entirely, delete this block, the SKIT branch in the
+// double-option handler, the "braino-mac:skit-step" ipcMain handler,
+// preload's skit bridge, and runSkit() in the renderer.
 const SKIT = {
   enabled: true,
-  dryRun: false,   // REAL TAKE: double Option genuinely sends the message below.
-  contact: "Rahul Dey",
-  message: "Hey Shawty, this is Braino, Itish's AI. He's been meaning to text you, he just won't do it himself. (Automated message for a demo. He doesn't know I sent this... yet.)",
+  song: "Beat It Michael Jackson",
 };
 const {
   resolveWebTarget,
@@ -11870,23 +11868,20 @@ ipcMain.handle("braino-mac:calendar-join", async () => {
 // auto-send otherwise); "close" Cmd+Ws the chat window and hides WhatsApp.
 ipcMain.handle("braino-mac:skit-step", async (_event, step) => {
   if (!SKIT.enabled) return { ok: false, say: "" };
-  if (step === "send") {
-    return SKIT.dryRun
-      ? draftWhatsAppMessage(SKIT.contact, SKIT.message)
-      : sendWhatsAppMessage(SKIT.contact, SKIT.message);
+  if (step === "play") {
+    try {
+      return await playSpotifySongOnMac(SKIT.song);
+    } catch (error) {
+      logMac("skit.play_failed", { error });
+      return { ok: false, say: "Spotify did not cooperate. Take two." };
+    }
   }
   if (step === "close") {
     const script = `
-tell application "System Events"
-  if not (exists application process "WhatsApp") then return "no-app"
-  tell application process "WhatsApp"
-    set frontmost to true
-    delay 0.3
-    keystroke "w" using command down
-  end tell
-  delay 0.2
-  set visible of process "WhatsApp" to false
-end tell
+if application "Spotify" is running then
+  tell application "Spotify" to pause
+  tell application "Spotify" to quit
+end if
 return "closed"`;
     try {
       await execFileP("/usr/bin/osascript", ["-e", script], { timeout: 8000 });

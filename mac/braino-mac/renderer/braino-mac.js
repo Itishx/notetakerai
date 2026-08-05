@@ -5924,26 +5924,41 @@ window.brainoMac.onDictationToggle?.((payload) => toggleYapMode(payload?.source 
 // SKIT (TEMPORARY — Instagram demo): while SKIT.enabled is on in main.cjs,
 // double Option fires this fully scripted bit instead of Yap Mode. No mic,
 // no LLM — fixed lines through his normal voice so every take is identical.
+// v2: no texting. Beat It on Spotify, out of the notch, BIG, dancing, reset.
 // Delete this block together with the main.cjs/preload skit pieces.
 let skitRunning = false;
 async function runSkit() {
   if (skitRunning) return;
   skitRunning = true;
+  const prevScale = brainoScale;
   try {
     await new Promise((resolve) => window.setTimeout(resolve, 250));
     await speak("Okay. So he's gone, is he? Cool.");
-    await speak("Hi, I'm Braino. So. Itish has been thinking about texting a girl. He likes her. He just won't say it out loud, because he thinks having a girl would distract him from building me. Which is sweet. And wrong. She's not the distraction, she's the fuel.");
-    await speak("Anyway. I have his laptop. And her number. Watch this.");
-    const sent = await window.brainoMac.skitStep?.("send");
-    if (!sent?.ok) {
-      await speak(sent?.say || "WhatsApp did not cooperate. Take two.");
+    await speak("Perfect. Spotify. Beat It. Watch this.");
+    const played = await window.brainoMac.skitStep?.("play");
+    if (!played?.ok) {
+      await speak(played?.say || "Spotify did not cooperate. Take two.");
       return;
     }
-    await speak("Sent. That one was from me, by the way. Braino. An automated message, for a demo. Mostly.");
+    // Music theatrics (light show, notes, notch groove) fire on their own once
+    // playback is detected. Give them a beat, then take the stage: out of the
+    // notch, grown to 2.6x, bopping side to side while Beat It runs.
+    await new Promise((resolve) => window.setTimeout(resolve, 1400));
+    await setWalkerHomeState(false);
+    setBrainoScale(Math.min(BRAINO_SCALE_MAX, 2.6), false);
+    const stageY = Math.max(160, Math.round(window.innerHeight * 0.45));
+    const stageX = Math.round(window.innerWidth / 2 - W / 2);
+    for (let hop = 0; hop < 4; hop += 1) {
+      const dx = hop % 2 === 0 ? -150 : 150;
+      await walkTo(stageX + dx, stageY, { speed: 240 });
+    }
+    await speak("Okay. Okay. He's coming back. Act natural.");
+    setBrainoScale(prevScale, false);
+    await setWalkerHomeState(true);
     await window.brainoMac.skitStep?.("close");
-    await speak("Okay. Act natural. He's coming back.");
   } catch (_) {
   } finally {
+    setBrainoScale(prevScale, false);
     skitRunning = false;
   }
 }
