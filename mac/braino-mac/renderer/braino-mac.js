@@ -6070,6 +6070,8 @@ async function runSkit() {
     await skitSpeak("So, how was it?");
     skitCompleted = true;
     skitJustCompleted = true;   // Lock auto-home until Cmd+2
+    // Explicit: he is OUT and will stay OUT until Cmd+2
+    if (walkerHome) await setWalkerHomeState(false);
   } catch (_) {
   } finally {
     skitMoonwalk = false;   // Clear BEFORE endMoonwalk so tick can resume if needed

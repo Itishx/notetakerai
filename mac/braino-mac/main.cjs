@@ -7639,6 +7639,7 @@ async function playSpotifyTrackInMacApp(uri, positionMs = 0, { activate = true }
   const script = `
 tell application "Spotify"
 ${activate ? "  activate" : ""}
+  pause
   play track "${safeUri}"
 ${seekLine}
 end tell`;
