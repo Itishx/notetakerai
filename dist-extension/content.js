@@ -11921,10 +11921,10 @@ function __sbMountNotchV1() {
       .a-label{display:block;color:#a7433b;font-size:9px;font-weight:750;letter-spacing:.12em;text-transform:uppercase;margin:0 0 10px}
       .liquid .a-label{color:#ff9a91}
       .n{--lr:115px;--rr:115px}
-      .n.captioning{width:calc(var(--lr) + var(--rr));transform:translateX(calc((var(--rr) - var(--lr))/2));transition:width .3s ease-out,transform .3s ease-out}
-      .n.captioning .face{left:calc(var(--lr) - 115px);right:auto;width:230px}
+      .n[data-state=idle].captioning,.n[data-state=listening].captioning,.n[data-state=speaking].captioning{width:calc(var(--lr) + var(--rr));transform:translateX(calc((var(--rr) - var(--lr))/2));transition:width .3s ease-out,transform .3s ease-out}
+      .n[data-state=idle].captioning .face,.n[data-state=listening].captioning .face,.n[data-state=speaking].captioning .face{left:calc(var(--lr) - 115px);right:auto;width:230px}
       .cap{position:absolute;z-index:4;top:0;height:100%;display:flex;flex-direction:column;justify-content:center;overflow:hidden;opacity:0;transition:opacity .3s ease .18s;line-height:1.3;pointer-events:none;font-family:ui-monospace,Menlo,monospace;font-size:9px;letter-spacing:.04em;color:rgba(255,240,235,.8);text-shadow:0 1px 2px rgba(110,33,26,.18);white-space:nowrap;text-overflow:ellipsis}
-      .n.captioning .cap{opacity:1}
+      .n[data-state=idle].captioning .cap,.n[data-state=listening].captioning .cap,.n[data-state=speaking].captioning .cap{opacity:1}
       .cap-l{left:16px;width:max(0px,calc(var(--lr) - 141px));text-align:right;align-items:flex-end}
       .cap-r{left:calc(var(--lr) + 125px);width:max(0px,calc(var(--rr) - 141px));text-align:left;align-items:flex-start}
       .answer-body{color:rgba(27,23,19,.66);font:400 15px/1.62 "Newsreader","Charter BT",Georgia,serif}
@@ -12139,7 +12139,10 @@ function __sbNotchSetState(state, status = "") {
   const pill = __sbNotchV1.shadow.querySelector(".workpill strong");
   if (pill) pill.textContent = state === "working" ? (status || "Thinking") : status;
   if (state === "short" || state === "long") __sbNotchWalkStart(); else __sbNotchWalkStop();
-  if (!["idle", "listening"].includes(state)) __sbNotchV1.shell.classList.remove("captioning");
+  // The caption class RIDES THROUGH working/speaking (its geometry is CSS-scoped to
+  // idle/listening/speaking, so it can't cram the working face) — your words stay up
+  // while he thinks and reappear beside him while he answers, like the Mac wings.
+  if (!["idle", "listening", "working", "speaking"].includes(state)) __sbNotchV1.shell.classList.remove("captioning");
   if (state !== "speaking") __sbNotchV1.shell.classList.remove("mouth-hold");
   if (state === "input") setTimeout(() => __sbNotchV1?.input?.focus(), 180);
 }
@@ -12215,9 +12218,7 @@ function __sbNotchCaption(text, options = {}) {
   const value = String(text || "").trim().replace(/\s+/g, " ");
   const capL = __sbNotchV1.shadow.querySelector(".cap-l");
   const capR = __sbNotchV1.shadow.querySelector(".cap-r");
-  // Wings live only in idle/listening: working's 440px face compensation and the
-  // speaking mouth collide with caption geometry and cram the face.
-  const compactOk = ["idle", "listening"].includes(shell.dataset.state);
+  const compactOk = ["idle", "listening", "working", "speaking"].includes(shell.dataset.state);
   if (__sbNotchCapTimer) { clearTimeout(__sbNotchCapTimer); __sbNotchCapTimer = null; }
   if (!value || !compactOk) {
     shell.classList.remove("captioning");
@@ -12240,7 +12241,7 @@ function __sbNotchCaption(text, options = {}) {
   if (capL) capL.textContent = leftText;
   if (capR) capR.textContent = rightText;
   shell.classList.add("captioning");
-  const hold = options.final ? Math.max(3600, Math.min(9000, value.length * 58)) : 12000;
+  const hold = options.final ? Math.max(6000, Math.min(14000, value.length * 70)) : 15000;
   __sbNotchCapTimer = setTimeout(() => __sbNotchCaption(""), hold);
 }
 // Double-⌘ summon (Mac parity): the mascot jumps out of the notch onto the page;
@@ -17662,6 +17663,28 @@ async function __sbProcessPrompt(text, options = {}) {
     }
   }
 
+  // Vision from ANY surface (typed chat + legacy voice ride through here; the realtime
+  // router has its own gate). skipVisionGate breaks the loop when the screen-vision
+  // handler routes a content-shaped ask back to the DOM chat path.
+  if (!options.skipVisionGate) {
+    if (__sbIsVisionStopRequest(promptText)) {
+      __sbCamStop();
+      const line = "Camera off.";
+      if (fromVoice) { __sbNoteSpoken(line); await speakVoiceReply(line); }
+      else __sbNotchShowAnswer(line, false);
+      __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken });
+      return;
+    }
+    if (__sbIsScreenVisionRequest(promptText)) {
+      await __sbHandleScreenVisionRequest(promptText, { fromVoice, voiceOutput, voiceTurnToken });
+      return;
+    }
+    if (__sbIsVisionRequest(promptText)) {
+      await __sbHandleVisionRequest(promptText, { fromVoice, voiceOutput, voiceTurnToken });
+      return;
+    }
+  }
+
   // Voice persona: "talk like Donald Trump" (pure switch) OR "explain this page like Donald Trump"
   // (task + directive). A pure switch greets in-character; a task activates the voice + style + look
   // SILENTLY, then runs the underlying task so the answer comes out in-character. Either way the
@@ -20485,6 +20508,10 @@ async function __sbDrainStreamTts() {
     s.draining = false;
     if (__sbStreamTts === s && s.token === __sbSpeechGeneration && s.ended && s.queue.length === 0) {
       __sbWalkTalking = false;
+      // Hand the notch back to listening when the LAST streamed sentence finishes —
+      // without this the fast path ends with the mouth chattering forever and the
+      // conversation looks dead even though the mic is live.
+      if (__sbHeadphoneMode && !__sbVoicePendingReply) __sbSetHpBrainState("listening");
     }
   }
 }
@@ -23877,13 +23904,26 @@ async function __sbScreenGrabBase64() {
 async function __sbHandleScreenVisionRequest(promptText, ctx = {}) {
   const fromVoice = Boolean(ctx.fromVoice);
   const voiceOutput = ctx.voiceOutput === "realtime" ? "realtime" : "legacy";
+  // Human-intelligence routing: a content-shaped ask ("read/summarize/what does it
+  // say") answers from the DOM when the page has real text — that path is much
+  // faster than a capture + vision round trip. Truly visual asks get the screenshot.
+  const contentShaped = /\b(read|summari[sz]e|tl;?dr|what does (it|this|the page) say|explain (this|the) (article|post|page|text)|key points|main points|gist)\b/i.test(String(promptText || ""));
+  let domTextLength = 0;
+  try { domTextLength = String(__sbGetPageContext(2400).text || "").length; } catch (_) {}
+  if (contentShaped && domTextLength > 800) {
+    __sbVTMark("👁 Vision → DOM (content ask, page has text)");
+    await __sbProcessPrompt(promptText, { ...ctx, skipVisionGate: true });
+    return;
+  }
   if (__sbCamBusy) { __sbCompleteVoiceTurn(ctx); return; }
   __sbCamBusy = true;
   try {
     const ack = "Let me look at your screen…";
     try { __sbNoteSpoken?.(ack); } catch (_) {}
     if (fromVoice) void __sbSpeakWithPreferredVoice(ack, voiceOutput, { verbatim: true });
+    __sbVTMark("📸 Screen capture start");
     const frame = await __sbScreenGrabBase64();
+    __sbVTMark(`📸 Screen captured (${Math.round((frame ? frame.length : 0) / 1024)}kb)`);
     if (!frame) {
       const line = "I couldn't capture this screen — some pages (Chrome settings, the web store) block it. Try on a normal site.";
       if (fromVoice) await __sbSpeakWithPreferredVoice(line, voiceOutput, { verbatim: true });
@@ -23892,7 +23932,9 @@ async function __sbHandleScreenVisionRequest(promptText, ctx = {}) {
     }
     const visionPrompt = `You are Braino, looking at a screenshot of the web page the user is viewing. They asked: "${String(promptText || "What's on my screen?")}". Briefly and helpfully describe what's on screen or answer their question about it, in one or two natural spoken sentences. Do not mention being an AI or that this is a screenshot.`;
     let reply = "";
+    __sbVTMark("🧠 Vision model start");
     try { const res = await __sbRuntimeMessage({ action: "brainoVision", imageBase64: frame, prompt: visionPrompt }); reply = String(res?.reply || "").trim(); } catch (_) {}
+    __sbVTMark("🧠 Vision reply ready");
     const line = reply || "I grabbed your screen but couldn't read it clearly — try again.";
     if (fromVoice) await __sbSpeakWithPreferredVoice(line, voiceOutput, { verbatim: true });
     else __sbShowBubble(line, false, { rich: true, kicker: "Braino" });
