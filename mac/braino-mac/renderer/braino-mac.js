@@ -1591,6 +1591,7 @@ async function handleSummon() {
 // back into the notch if he's out. Silent on the way home, no theatrics.
 async function handleSummonToggle() {
   if (herMode) return;
+  skitJustCompleted = false;   // Cmd+2 clears the post-skit gate
   if (walkerHome) {
     void speak("Coming out, watch out.");
     await setWalkerHomeState(false);
@@ -1892,6 +1893,9 @@ function spawnNotchNote() {
 }
 
 let walkerAutoHomedByMusic = false;
+// After the skit ends, he stays OUT until Cmd+2 is pressed — music stop does
+// not trigger auto-home while this is true.
+let skitJustCompleted = false;
 // Gates every visible theatric (edge glow, notch dance, light show, falling
 // notes, now-playing marquee): stays false until he has ACTUALLY finished
 // walking home, never flips on the instant music is merely detected.
@@ -1941,7 +1945,9 @@ function reactToMusicStop() {
   }
   updateEdgeGlow();
   updateNotchFace();
-  if (walkerAutoHomedByMusic && walkerHome) {
+  // After a skit, he stays out until Cmd+2 is pressed. Music stop does not
+  // trigger auto-home while skitJustCompleted is true.
+  if (walkerAutoHomedByMusic && walkerHome && !skitJustCompleted) {
     walkerAutoHomedByMusic = false;
     void walkerLeaveHome();
   }
@@ -6051,6 +6057,7 @@ async function runSkit() {
     await window.brainoMac.skitStep?.("close");
     await skitSpeak("So, how was it?");
     skitCompleted = true;
+    skitJustCompleted = true;   // Lock auto-home until Cmd+2
   } catch (_) {
   } finally {
     skitEndMoonwalk();

@@ -2011,7 +2011,7 @@ body {
 #speech-bubble {
   position: absolute;
   left: 50%;
-  top: 50%;
+  top: calc(50% - 120px);
   max-width: min(760px, calc(100vw - 72px));
   pointer-events: none;
   transform: translate(-50%, calc(-100% + 10px)) scale(0.96);
