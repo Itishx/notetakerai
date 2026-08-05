@@ -7617,9 +7617,18 @@ async function createSpotifyPlaylistOnMac(name, options = {}) {
 async function playSpotifyTrackInMacApp(uri, positionMs = 0) {
   const safeUri = escapeAppleScriptString(uri);
   const positionSeconds = Math.max(0, Math.round(Number(positionMs) || 0) / 1000);
+  // Seek only after the track is genuinely playing — a blind delay raced the
+  // track load and Spotify swallowed the seek (song started at 0:00). Then
+  // verify and re-assert once: Spotify sometimes snaps back to 0 on buffer.
   const seekLine = positionSeconds > 0
-    ? `  delay 0.35
-  set player position to ${positionSeconds}`
+    ? `  repeat with i from 1 to 20
+    if player state is playing then exit repeat
+    delay 0.2
+  end repeat
+  delay 0.2
+  set player position to ${positionSeconds}
+  delay 0.4
+  if player position < ${Math.max(0, positionSeconds - 3)} then set player position to ${positionSeconds}`
     : "";
   const script = `
 tell application "Spotify"

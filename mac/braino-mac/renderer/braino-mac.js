@@ -1919,6 +1919,7 @@ function beginMusicTheatrics() {
 let musicSessionId = 0;
 
 async function reactToMusicStart(session) {
+  if (skitRunning) return;   // isolated demo: no music reaction during the skit
   if (herMode || walkerHome || speaking || processing || voiceTurnInFlight) {
     if (session === musicSessionId) beginMusicTheatrics();
     return;
@@ -1947,6 +1948,9 @@ function reactToMusicStop() {
 }
 
 function setMusicMode(on) {
+  // SKIT isolation: the moonwalk demo owns the stage. While the bit runs, music
+  // detection must not put headphones on him, start notch theatrics, or move him.
+  if (skitRunning && on) return;
   musicMode = Boolean(on);
   musicSessionId += 1;
   headphones.style.display = musicMode ? "" : "none";
@@ -5776,7 +5780,7 @@ function tick(now) {
       walkingNow = false;
       resolve();
     }
-  } else if (!dragState && !shouldHoldAttention) {
+  } else if (!dragState && !shouldHoldAttention && !skitMoonwalk) {
     if (movementMode === "dock") {
       targetY = getDockBounds().y;
     }
@@ -5929,42 +5933,102 @@ window.brainoMac.onDictationToggle?.((payload) => toggleYapMode(payload?.source 
 // Delete this block together with the main.cjs/preload skit pieces.
 let skitRunning = false;
 let skitMoonwalk = false;
+let skitMoonRaf = 0;
+
+// Verbatim port of the Chrome extension's __sbWkMoonwalk (extension/content.js
+// lines 4228-4292): the hidden __sbwk_moonlegs__ rig replaces the normal legs so
+// both feet point the SAME way, each foot pops onto its toe (heel to 42 degrees
+// at pivot 24,101) while the other slides 10px on phase sin(t*4.0), the body
+// GLIDES BACKWARD continuously with the exact waddle/bob/breath root motion, MJ
+// fedora on, pupils leading the facing (0.95). Root/pupil/eye channels ride
+// tick's startupPose branch, whose formulas match Chrome's exactly; the moonleg
+// groups are never touched by tick, so this rAF drives them directly.
+function skitPerformMoonwalk(durationMs = 15000) {
+  return new Promise((resolve) => {
+    const moonlegs = q("#__sbwk_moonlegs__");
+    const mwR = q("#__sbwk_mw_r__"), mwRh = q("#__sbwk_mw_rh__");
+    const mwL = q("#__sbwk_mw_l__"), mwLh = q("#__sbwk_mw_lh__");
+    if (!moonlegs || !mwR || !mwL) { resolve(); return; }
+    q("#__sbwk_ll__")?.setAttribute("display", "none");
+    q("#__sbwk_rl__")?.setAttribute("display", "none");
+    moonlegs.setAttribute("display", "inline");
+    q("#__sbwk_fedora__")?.setAttribute("display", "inline");
+    const floorY = posY;
+    const X0 = getMoveBounds().maxX;
+    const wrapSpan = X0 - START_OFFSCREEN_X;   // glide fully off-screen, then wrap (Chrome: laneW + W)
+    const SPEED = 80 * brainoScale;            // Chrome's 80 px/s, scaled with his size so the glide reads identically
+    const start = performance.now();
+    const step = (now) => {
+      const t = (now - start) / 1000;
+      const x = X0 - ((t * SPEED) % wrapSpan);
+      setPosition(x, floorY, { allowOffscreen: true });
+      const ph = Math.sin(t * 4.0);
+      const heelR = Math.max(0, ph) * 42, heelL = Math.max(0, -ph) * 42;
+      const slideR = Math.max(0, -ph) * 10, slideL = Math.max(0, ph) * 10;
+      mwR.setAttribute("transform", `translate(${12 + slideR} 0)`);
+      mwRh?.setAttribute("transform", `rotate(${-heelR} 24 101)`);
+      mwL.setAttribute("transform", `translate(${slideL} 0)`);
+      mwLh?.setAttribute("transform", `rotate(${-heelL} 24 101)`);
+      const waddle = ph * 1.0;
+      const walkBob = -Math.abs(ph) * 1.0 - 0.3;
+      const breath = 1 + 0.014 * Math.sin(t * 1.7);
+      const bob = Math.sin(t * 1.7 + 0.6) * 0.8;
+      setStartupPose({ rootRot: waddle, rootY: bob + walkBob, rootScale: breath, gazeX: 0.95, gazeY: 0, eyeScale: 1 });
+      if (now - start < durationMs && skitRunning) {
+        skitMoonRaf = requestAnimationFrame(step);
+      } else {
+        skitEndMoonwalk();
+        resolve();
+      }
+    };
+    skitMoonRaf = requestAnimationFrame(step);
+  });
+}
+
+// Exact mirror of Chrome's __sbWkEndMoonwalk restore sequence.
+function skitEndMoonwalk() {
+  if (skitMoonRaf) { cancelAnimationFrame(skitMoonRaf); skitMoonRaf = 0; }
+  q("#__sbwk_fedora__")?.setAttribute("display", "none");
+  q("#__sbwk_moonlegs__")?.setAttribute("display", "none");
+  q("#__sbwk_ll__")?.setAttribute("display", "inline");
+  q("#__sbwk_rl__")?.setAttribute("display", "inline");
+  q("#__sbwk_pupil_l__")?.setAttribute("transform", "translate(0 0)");
+  q("#__sbwk_pupil_r__")?.setAttribute("transform", "translate(0 0)");
+  setStartupPose(null);
+}
 async function runSkit() {
   if (skitRunning) return;
   skitRunning = true;
   const prevScale = brainoScale;
   try {
     await new Promise((resolve) => window.setTimeout(resolve, 250));
-    await speak("Okay. So he's gone, is he? Cool.");
-    await speak("Perfect. Spotify. Billie Jean. Watch this.");
+    await speak("Hi. I am Braino. And I am the only AI in both human and AI history ever to do the moonwalk. Watch.");
     const played = await window.brainoMac.skitStep?.("play");
     if (!played?.ok) {
       await speak(played?.say || "Spotify did not cooperate. Take two.");
       return;
     }
     // Billie Jean lands at 3:31 — THE moonwalk moment, same cue as the Chrome
-    // trick. Music theatrics (light show, notes, notch groove) fire on their
-    // own; he takes the stage grown to 2.6x and moonwalks: face locked forward
-    // while gliding backwards, twice across the screen.
-    await new Promise((resolve) => window.setTimeout(resolve, 1400));
+    // trick. Isolated demo: no music theatrics, no headphones, no auto-home.
+    // He takes the stage grown to 2.6x and moonwalks for ~15 seconds.
+    await new Promise((resolve) => window.setTimeout(resolve, 900));
     await setWalkerHomeState(false);
     setBrainoScale(Math.min(BRAINO_SCALE_MAX, 2.6), false);
-    const stageY = Math.max(160, Math.round(window.innerHeight * 0.45));
-    const stageX = Math.round(window.innerWidth / 2 - W / 2);
+    // Enter stage right along his real floor, then the verbatim Chrome moonwalk.
+    const floor = getDockBounds();
     skitMoonwalk = true;
-    await walkTo(stageX + 190, stageY, { speed: 300 });
-    await walkTo(stageX - 190, stageY, { speed: 170 });
-    await walkTo(stageX + 190, stageY, { speed: 300 });
-    await walkTo(stageX - 190, stageY, { speed: 170 });
+    await walkTo(getMoveBounds().maxX, floor.y, { speed: 340 });
+    await skitPerformMoonwalk(15000);
     skitMoonwalk = false;
-    await speak("Okay. Okay. He's coming back. Act natural.");
     setBrainoScale(prevScale, false);
     await setWalkerHomeState(true);
     await window.brainoMac.skitStep?.("close");
   } catch (_) {
   } finally {
+    skitEndMoonwalk();
     skitMoonwalk = false;
     setBrainoScale(prevScale, false);
+    if (musicMode) setMusicMode(false);
     skitRunning = false;
   }
 }
