@@ -418,7 +418,7 @@ export default function Waitlist() {
             <h1>
               <span>Meet the</span>
               <strong>cutest AI agent</strong>
-              <em>you’ll ever meet.</em>
+              <em>you’ll ever see.</em>
             </h1>
             <p className="wl-dek">Braino began in the browser. Now he is learning how to live across your Mac, your words and the rest of your digital life.</p>
             <div className="wl-hero-footnote">

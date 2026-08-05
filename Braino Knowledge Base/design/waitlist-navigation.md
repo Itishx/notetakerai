@@ -74,7 +74,7 @@ working pages directly during design and testing.
 
 ## Hero decision
 
-The opening now puts Braino beside the promise instead of leaving the headline alone. “Meet the cutest AI agent you’ll ever meet” is split into three deliberate beats, with the important words carrying the restrained gold-to-coral-to-blue identity gradient. The real Braino character floats inside a quiet orbital system on the right, supported by one direct description and the line “One character. Everywhere you work.”
+The opening now puts Braino beside the promise instead of leaving the headline alone. “Meet the cutest AI agent you’ll ever see” is split into three deliberate beats, with the important words carrying the restrained gold-to-coral identity gradient. The real Braino character floats inside a quiet orbital system on the right, supported by one direct description and the line “One character. Everywhere you work.”
 
 The result is still editorial, but no longer empty. The hero establishes the character before the chapters explain the products around him.
 
