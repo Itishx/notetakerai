@@ -7617,23 +7617,30 @@ async function createSpotifyPlaylistOnMac(name, options = {}) {
 async function playSpotifyTrackInMacApp(uri, positionMs = 0, { activate = true } = {}) {
   const safeUri = escapeAppleScriptString(uri);
   const positionSeconds = Math.max(0, Math.round(Number(positionMs) || 0) / 1000);
-  // Seek only after the track is genuinely playing, then HAMMER the seek until
-  // the playhead verifiably lands: Spotify swallows seeks for a couple of
-  // seconds after a track starts (worse on cold launch), so one polite seek +
-  // one re-assert both fell in the swallow window and the song played from 0:00.
+  // Seek only after the track is genuinely playing, then HAMMER until stable.
+  // Spotify resets position to 0 during metadata load even after successful seek,
+  // so we must verify the position is STABLE (not bouncing) before returning.
   const seekLine = positionSeconds > 0
     ? `  repeat with i from 1 to 20
     if player state is playing then exit repeat
     delay 0.2
   end repeat
-  repeat with i from 1 to 15
+  repeat with i from 1 to 20
     try
       set player position to ${positionSeconds}
     end try
-    delay 0.4
+    delay 0.35
     try
       if player position > ${Math.max(0, positionSeconds - 6)} then exit repeat
     end try
+  end repeat
+  -- Verify stability: position should not drop back to 0 (Spotify metadata reset)
+  repeat with i from 1 to 5
+    delay 0.2
+    if player position < ${Math.max(0, positionSeconds - 10)} then
+      set player position to ${positionSeconds}
+      delay 0.5
+    end if
   end repeat`
     : "";
   const script = `
@@ -11895,9 +11902,11 @@ ipcMain.handle("braino-mac:calendar-join", async () => {
 ipcMain.handle("braino-mac:skit-step", async (_event, step) => {
   if (!SKIT.enabled) return { ok: false, say: "" };
   if (step === "prewarm") {
-    // Boot Spotify HIDDEN (-j) and in the background (-g) while Braino delivers
-    // the intro lines: the app warms up but NO window ever appears on stage.
-    try { await execFileP("open", ["-g", "-j", "-b", "com.spotify.client"], { timeout: 8000 }); } catch (error) { logMac("skit.prewarm_failed", { error }); }
+    // Boot Spotify in background (-g) while Braino delivers the intro lines.
+    // The app warms up silently in the background.
+    try { await execFileP("open", ["-g", "-b", "com.spotify.client"], { timeout: 8000 }); } catch (error) { logMac("skit.prewarm_failed", { error }); }
+    // Immediately hide the window so it never appears on stage
+    try { await execFileP("/usr/bin/osascript", ["-e", 'tell application "System Events" to set visible of process "Spotify" to false'], { timeout: 2000 }); } catch (_) {}
     return { ok: true, say: "" };
   }
   if (step === "play") {
