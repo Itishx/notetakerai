@@ -6055,11 +6055,9 @@ async function runSkit() {
     // He takes the stage WHILE introducing himself — out of the notch, normal size.
     skitMoonwalk = true;
     await setWalkerHomeState(false);
-    await skitSpeak("Hi, I am Braino.");
-    await skitSpeak("I am the only AI in both human and AI history ever to do the moonwalk. Watch.");
+    await skitSpeak("Hi, I am Braino. Think of me as the real life version of Jarvis from Iron Man. Apart from doing all the things that I do, I happen to be the only AI to do the moonwalk. Watch:");
     // NOW open Spotify after the speech, giving it time to boot before play
     void window.brainoMac.skitStep?.("prewarm");
-    await skitSpeak("Let's open Spotify, shall we?");
     const played = await window.brainoMac.skitStep?.("play");
     if (!played?.ok) {
       await speak(played?.say || "Spotify did not cooperate. Take two.");
