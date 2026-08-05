@@ -40,6 +40,8 @@ The current v1.0.0 package can be downloaded directly from the primary button on
 - Uses Space twice as the primary invocation. The notch stays closed until invoked, then performs the real silent authentication handshake against both trusted Braino web origins.
 - Shows the green authenticated state only after the extension validates the same stored session used by chat. If neither origin has a valid session, the notch presents an explicit sign-in state instead of opening a dead input.
 - Keeps the approved mode menu inside the notch while the existing page, lecture, meeting, delegate, and team engines continue underneath it.
+- Keeps compact work compact until the user clicks to expand the thinking process. Every normal chat reply is handed directly from the hidden response engine into short or long answer state, with a 30-second visible failure guard so the notch cannot remain stuck on Thinking.
+- Treats the boot face as one layered animation: coral fills behind Braino, pupils disappear completely while the lids are closed, and the pupils return only with the authenticated eye-opening motion.
 
 ## Honest limitations
 

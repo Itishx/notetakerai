@@ -11788,6 +11788,7 @@ function __sbSetGreetingPlaceholder() {
 }
 
 let __sbNotchV1 = null;
+let __sbNotchRequestTimer = null;
 function __sbMountNotchV1() {
   if (__sbNotchV1 || document.getElementById("__sb_notch_v1_host__")) return;
   const host = document.createElement("div");
@@ -11810,6 +11811,7 @@ function __sbMountNotchV1() {
       .n[data-state=listening]{width:390px;height:74px;border-radius:0 0 28px 28px}.n[data-state=working]{width:420px;height:78px;border-radius:0 0 28px 28px}.n[data-state=short]{width:min(610px,76vw);height:112px}.n[data-state=short] .answer{padding:15px 19px 12px 22px}.n[data-state=short] .answer-body{font-size:17px;line-height:1.35}
       .answer-body .sb-turn{margin:0}.answer-body .sb-user-msg{display:none}.answer-body .sb-assistant-msg,.answer-body .sb-answer{margin:0;color:inherit;background:transparent}.answer-body p{margin:0 0 10px}.answer-body p:last-child{margin-bottom:0}.answer-body ul,.answer-body ol{margin:8px 0;padding-left:20px}
       .signin{z-index:10;display:flex;align-items:center;gap:12px;padding:15px 18px}.signin span{display:grid;gap:3px;min-width:0;flex:1}.signin b{font-size:12px}.signin small{color:rgba(27,23,19,.48);font-size:10px}.signin button{padding:9px 13px;border-radius:999px;color:#fff;background:#d86c63;font-size:10px;font-weight:750}.n[data-state=signin]{width:min(430px,78vw);height:88px;border-radius:0 0 29px 29px;background:rgba(255,251,247,.9)}.n[data-state=signin] .signin{opacity:1;pointer-events:auto;transform:none}
+      .n[data-state=invoking]::after{z-index:0}.n[data-state=invoking] .face{opacity:0;transform:translateY(-2px) scale(.96);animation:invokeFace .38s ease-out .82s forwards}.n[data-state=invoking] .eye,.n[data-state=invoking] .pupil,.n[data-state=authenticating] .pupil,.n[data-state=thinking] .pupil{opacity:0}.n[data-state=invoking] .lid{opacity:1}.n[data-state=authenticated] .pupil{opacity:1;transform-box:fill-box;transform-origin:center;animation:pupilSettle .88s ease-out both}@keyframes invokeFace{to{opacity:1;transform:none}}@keyframes pupilSettle{from{transform:translateY(2px)}to{transform:none}}
     </style>
     <section class="n" data-state="off">
       <div class="panel face"><svg viewBox="0 0 230 72" preserveAspectRatio="none"><path class="fold" d="M115 0 Q111 14 115 27 Q119 40 115 56 M25 4 Q14 13 25 22 Q12 31 25 40 Q14 50 30 61 M61 1 Q49 11 60 20 Q47 30 61 39 Q49 49 65 63 M169 1 Q181 11 170 20 Q183 30 169 39 Q181 49 165 63 M205 4 Q216 13 205 22 Q218 31 205 40 Q216 50 200 61"/><circle class="eye" cx="103" cy="29" r="10"/><circle class="eye" cx="127" cy="29" r="10"/><circle class="pupil" cx="104" cy="30" r="4.8"/><circle class="pupil" cx="128" cy="30" r="4.8"/><path class="lid" d="M93 29 Q103 36 113 29 M117 29 Q127 36 137 29"/><path class="smile" d="M108 47 Q115 54 122 47"/><g class="mouth"><ellipse cx="115" cy="49" rx="7" ry="5.5"/><ellipse cx="115" cy="51" rx="4.2" ry="2.2"/></g></svg></div>
@@ -11832,10 +11834,20 @@ function __sbMountNotchV1() {
     const legacyInput = document.getElementById("__sb_input__");
     if (legacyInput) legacyInput.value = value;
     __sbNotchSetState("working", "Thinking");
+    if (__sbNotchRequestTimer) clearTimeout(__sbNotchRequestTimer);
+    __sbNotchRequestTimer = setTimeout(() => {
+      const state = __sbNotchV1?.shell?.dataset?.state;
+      if (state === "working" || state === "thinking") {
+        __sbNotchShowAnswer("That took too long. Please try again.", false);
+      }
+    }, 30000);
     document.getElementById("__sb_send_btn__")?.click();
     input.value = "";
   };
-  shell.addEventListener("click", () => { if (shell.dataset.state === "idle") __sbOpenPanel(); });
+  shell.addEventListener("click", () => {
+    if (shell.dataset.state === "idle") __sbOpenPanel();
+    else if (shell.dataset.state === "working") __sbNotchSetState("thinking");
+  });
   input.addEventListener("input", () => { const old = document.getElementById("__sb_input__"); if (old) old.value = input.value; });
   input.addEventListener("keydown", (event) => { if (event.key === "Enter") { event.preventDefault(); submitInput(); } });
   shadow.querySelector(".input .send").addEventListener("click", submitInput);
@@ -11863,6 +11875,10 @@ function __sbMountNotchV1() {
 function __sbNotchSetState(state, status = "") {
   if (!__sbNotchV1) return;
   __sbNotchV1.shell.dataset.state = state || "input";
+  if (["short", "long", "signin", "idle", "off"].includes(state) && __sbNotchRequestTimer) {
+    clearTimeout(__sbNotchRequestTimer);
+    __sbNotchRequestTimer = null;
+  }
   const label = __sbNotchV1.shadow.querySelector(".status");
   if (label) label.textContent = status;
   if (state === "input") setTimeout(() => __sbNotchV1?.input?.focus(), 180);
@@ -14380,7 +14396,6 @@ function __sbAgentLogRender() {
     __sbNotchV1.shadow.querySelectorAll(".thinking p").forEach((slot, index) => {
       slot.textContent = lines[index] || (index === 0 ? __sbAgentBusyLabel : "");
     });
-    __sbNotchSetState("thinking");
   }
   if (typeof __sbSyncWalkerLane === "function") __sbSyncWalkerLane();
 }
@@ -14720,6 +14735,7 @@ function __sbSetupBarSignIn() {
 
 function __sbShowSignIn() {
   if (!__sbOwnsInlineUi()) return;
+  __sbNotchSetState("signin");
   const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
   if (!scroll) return;
   scroll.innerHTML = `
@@ -17584,6 +17600,10 @@ async function __sbProcessPrompt(text, options = {}) {
         __sbRenderCardHistory(scroll);
         __sbOpenCard({ rich: true });
         __sbSyncSpeakButtons();
+        __sbNotchShowAnswer(finalReply, finalReply.length >= 240, __sbBuildCardTurnHtml(
+          { prompt: promptText, answer: finalReply },
+          { rich: finalReply.length >= 240, answerText: finalReply },
+        ));
         if (fromVoice) await speakVoiceReply(finalReply);
       }
     } catch (err) {
@@ -17655,6 +17675,10 @@ async function __sbProcessPrompt(text, options = {}) {
       __sbRenderCardHistory(scroll);
       __sbOpenCard({ rich: true });
       __sbSyncSpeakButtons();
+      __sbNotchShowAnswer(reply, reply.length >= 240, __sbBuildCardTurnHtml(
+        { prompt: promptText, answer: reply },
+        { rich: reply.length >= 240, answerText: reply },
+      ));
       if (fromVoice) await speakVoiceReply(reply);
     }
   } catch (err) {
