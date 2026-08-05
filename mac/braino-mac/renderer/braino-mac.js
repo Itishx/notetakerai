@@ -1923,7 +1923,8 @@ function beginMusicTheatrics() {
 let musicSessionId = 0;
 
 async function reactToMusicStart(session) {
-  if (skitRunning) return;   // isolated demo: no music reaction during the skit
+  // Skit isolation: no music detection during demo or after until Cmd+2 dismissed him
+  if (skitRunning || skitJustCompleted) return;
   if (herMode || walkerHome || speaking || processing || voiceTurnInFlight) {
     if (session === musicSessionId) beginMusicTheatrics();
     return;
@@ -6029,8 +6030,10 @@ async function runSkit() {
     await new Promise((resolve) => window.setTimeout(resolve, 250));
     // Nothing may interrupt the script: kill any live voice session and its
     // idle-shutdown timers before the first line (they bump speechGeneration
-    // and silently cut speak() mid-sentence).
+    // and silently cut speak() mid-sentence). Also kill music detection state.
     try { stopRealtimeVoice(); } catch (_) {}
+    walkerAutoHomedByMusic = false;
+    musicSessionId += 1;   // Nuke any pending music reactions
     // He takes the stage WHILE introducing himself — out of the notch, normal size.
     // No growth, no theatrics, just him on stage.
     skitMoonwalk = true;
@@ -6061,6 +6064,10 @@ async function runSkit() {
     setWave(false);   // Stop waving after the skit ends
     if (musicMode) setMusicMode(false);
     skitRunning = false;
+    // Reset music state so it doesn't try to pull him home after the skit ends.
+    walkerAutoHomedByMusic = false;
+    musicTheatricsReady = false;
+    musicSessionId += 1;   // Cancel any in-flight music reactions
     // On a failed take, restore his original scale; on success he stays out at
     // normal size after "So, how was it?" waits for Cmd+2.
     if (!skitCompleted) setBrainoScale(prevScale, false);
