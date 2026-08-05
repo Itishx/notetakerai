@@ -5020,6 +5020,7 @@ function __sbEnterRoamMode() {
   __sbRoamNextWander = performance.now() + 62000;
   __sbRoamPerchEl = null; __sbRoamSitting = false;
   __sbRoamLaunched = false; __sbRoamLaunching = false;
+  lane.classList.add("sb-roaming");   // escape hatch from the notch-era display:none!important
   document.addEventListener("mousemove", __sbRoamOnMouse, true);
   __sbWkSay?.("Ah, I finally get to be off the bar.");
   __sbRoamRaf = requestAnimationFrame(__sbRoamTick);
@@ -5031,7 +5032,7 @@ function __sbExitRoamMode() {
   document.removeEventListener("mousemove", __sbRoamOnMouse, true);
   __sbRoamPerchEl = null;
   const lane = document.getElementById("__sb_walk_lane__");
-  if (lane) lane.style.cssText = __sbRoamLaneCss;   // restore the bar lane
+  if (lane) { lane.style.cssText = __sbRoamLaneCss; lane.classList.remove("sb-roaming"); }   // restore the bar lane
   const walker = document.getElementById("__sbwk_walker__");
   if (walker) { walker.style.transform = ""; walker.style.top = ""; walker.style.bottom = ""; }
   // Reset any dangling leg transforms, then resume the normal bar stroll.
@@ -9873,7 +9874,7 @@ function __sbBuildBrainUI() {
     #__sb_bar__.sb-notch-auth::before,#__sb_bar__.sb-notch-auth-ok::before{content:"";position:absolute;z-index:14;inset:0;padding:1.25px;border-radius:inherit;pointer-events:none;background:conic-gradient(from var(--sb-notch-angle),transparent 0 18%,#f4cf87 28%,#ec8078 38%,transparent 49%);-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;animation:__sb_notch_perimeter__ 2.2s linear infinite}
     #__sb_bar__.sb-notch-auth-ok{border-color:rgba(93,219,135,.72);box-shadow:0 0 0 1px rgba(93,219,135,.18),0 18px 58px rgba(52,184,98,.34),inset 0 1px rgba(255,255,255,.42)}#__sb_bar__.sb-notch-auth-ok::before{background:conic-gradient(from var(--sb-notch-angle),#62df8d,#d9ffe5,#62df8d)}#__sb_bar__.sb-notch-auth-ok #__sb_notch_status__{color:#d9ffe5}#__sb_bar__.sb-notch-auth-ok .sb-n-eye{transform-box:fill-box;transform-origin:center;animation:__sb_notch_eyes_open__ .72s cubic-bezier(.2,.8,.2,1) both}
     @property --sb-notch-angle{syntax:"<angle>";inherits:false;initial-value:0deg}@keyframes __sb_notch_shell__{0%{opacity:0;transform:translateX(-50%) scaleX(.06) scaleY(.72)}18%{opacity:1}72%{transform:translateX(-50%) scaleX(1.025)}100%{opacity:1;transform:translateX(-50%)}}@keyframes __sb_notch_shimmer__{0%{opacity:0;--sb-notch-angle:0deg}18%{opacity:1}100%{opacity:1;--sb-notch-angle:300deg}}@keyframes __sb_notch_fill__{0%{opacity:0;background-position:150% 0,0 0}32%{opacity:.5}100%{opacity:1;background-position:-80% 0,0 0}}@keyframes __sb_notch_face_in__{from{opacity:0;transform:translateY(-2px) scale(.96)}to{opacity:1;transform:none}}@keyframes __sb_notch_perimeter__{to{--sb-notch-angle:360deg}}@keyframes __sb_auth_text__{from{background-position:140% 0}to{background-position:-140% 0}}@keyframes __sb_notch_eyes_open__{from{opacity:0;transform:scaleY(.06)}to{opacity:1;transform:scaleY(1)}}
-    #__sb_walk_lane__,#__sbwk_say__,#__sb_brain_btn__{display:none!important}
+    #__sb_walk_lane__:not(.sb-roaming),#__sb_walk_lane__:not(.sb-roaming) #__sbwk_say__,#__sb_brain_btn__{display:none!important}
     #__sb_card_wrap__{top:0;left:50%;transform:translateX(-50%);width:min(650px,calc(100vw - 32px))}#__sb_card_wrap__.animating-in #__sb_bubble__{animation:__sb_notch_answer_in__ .42s cubic-bezier(.16,.86,.22,1) both}@keyframes __sb_notch_answer_in__{from{opacity:0;transform:scaleX(.72) translateY(-12px)}to{opacity:1;transform:none}}
     #__sb_card_wrap__.sb-notch-short{width:min(610px,calc(100vw - 32px))}#__sb_card_wrap__.sb-notch-short #__sb_bubble__{max-height:none}#__sb_card_wrap__.sb-notch-short .sb-card-scroll{padding:18px 24px 12px}#__sb_card_wrap__.sb-notch-short .sb-card-header{padding-top:9px}
     #__sb_bubble__{width:100%;max-width:none;max-height:calc(100vh - 28px);min-height:0;resize:none;border-radius:0 0 34px 34px;background:linear-gradient(145deg,rgba(31,27,28,.48),rgba(18,16,17,.38));backdrop-filter:blur(20px) saturate(185%);-webkit-backdrop-filter:blur(20px) saturate(185%)}#__sb_bubble__.sb-readable{background:rgba(255,251,247,.72);border-color:rgba(255,255,255,.72)}#__sb_orbit_brain__{display:none!important}
@@ -17585,6 +17586,16 @@ async function __sbExitVoicePersona(ctx = {}) {
   }
 }
 
+// Which Braino the user is talking to. One central intelligence, several bodies;
+// this note rides into chat + voice prompts so he answers "how are you different
+// from the Mac version?" from the right body.
+const __SB_SURFACE_NOTE = [
+  "Surface awareness: you are Braino Browser, the Chrome extension version of Braino, living in the notch at the top of the user's browser.",
+  "One central intelligence, several bodies: Braino Browser (this one, inside Chrome), Braino IOMI (the Mac app upgrade: system wide, lives in the Mac notch, works across every app with Yap dictation, files, music and screen control), and Braino Hera coming later.",
+  "Here in the browser you can read and act on the current web page, delegate browser tasks, talk by voice, remember the user, and step out onto the page as the mascot.",
+  "If asked about versions, differences or upgrades, speak as the browser version and point to the Mac app IOMI as the upgrade, downloadable at trybraino.com.",
+].join(" ");
+
 async function __sbProcessPrompt(text, options = {}) {
   const routing = __sbResolvePromptRouting(text);
   const promptText = String(routing.promptText || "").trim();
@@ -17629,6 +17640,26 @@ async function __sbProcessPrompt(text, options = {}) {
     else __sbShowBubble(line, false, { kicker: "Braino" });
     __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken });
     return;
+  }
+
+  // Deterministic mascot summon (Mac parity): "come out" family brings the walker
+  // onto the page, "go home" family tucks him back into the notch. No model call.
+  {
+    const phrase = promptText.toLowerCase();
+    if (/\b(?:come\s+out|come\s+here|come\s+on\s+(?:my|the)\s+screen|show\s+yourself|step\s+out|join\s+me)\b/.test(phrase)) {
+      const line = __sbRoamActive ? "Already out here." : "Finally, some leg room.";
+      if (!__sbRoamActive) __sbSummonToggle();
+      if (fromVoice) { __sbNoteSpoken(line); await speakVoiceReply(line); }
+      __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken });
+      return;
+    }
+    if (__sbRoamActive && (/\b(?:go|get|head)\s+(?:back|home)\b|\bback\s+(?:in|into|to)\s+(?:the\s+)?notch\b|\btuck\s+(?:yourself\s+)?in\b|\breturn\s+home\b/.test(phrase))) {
+      __sbExitRoamMode();
+      const line = "Heading home.";
+      if (fromVoice) { __sbNoteSpoken(line); await speakVoiceReply(line); }
+      __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken });
+      return;
+    }
   }
 
   // Voice persona: "talk like Donald Trump" (pure switch) OR "explain this page like Donald Trump"
@@ -18024,6 +18055,7 @@ async function __sbProcessPrompt(text, options = {}) {
     // On X/Twitter, prepend the user's persona + X Auto rules so Braino can answer
     // questions about identity, rules, and how it replies — even before the migration is applied
     let systemNotes = stored.currentNotes || "";
+    systemNotes = systemNotes ? `${__SB_SURFACE_NOTE}\n\n${systemNotes}` : __SB_SURFACE_NOTE;
     if (__sbIsOnX()) {
       const xPersona = await __sbLoadXPersona();
       const xCtx = __sbBuildXAutoContext(xPersona);
@@ -19595,6 +19627,7 @@ function __sbBuildRealtimeBootInstructions() {
     const now = new Date().toLocaleString("en-US", { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" });
     pageLines.push(`User context (real, current — use for any time/location question): local time ${now}${tz ? ` (${tz})` : ""}${place ? `, location ${place}` : ""}. Never answer time questions in UTC.`);
   } catch (_) {}
+  pageLines.push(__SB_SURFACE_NOTE);
 
   const instructions = [
     // Minimal identity stub only — Braino's full personality (the Emotional Engine) is delivered
@@ -19739,6 +19772,7 @@ function __sbBuildPersonaVoiceInstructions() {
     ? `Reply ONLY in ${__sbActiveLanguage.name}.`
     : "Always reply in English. Do NOT switch languages because of background noise, music, accents, or a few foreign-sounding words.");
   lines.push("If the user says anything sexual or explicit, reply with exactly \"No.\" and nothing else. Drop the persona and answer plainly and kindly for anything genuinely serious, sensitive, health, money, legal, or bad news.");
+  lines.push(__SB_SURFACE_NOTE);
   try {
     const pc = __sbGetPageContext(6000);
     const ref = [];
