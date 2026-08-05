@@ -11901,7 +11901,17 @@ ipcMain.handle("braino-mac:skit-step", async (_event, step) => {
       return { ok: true, say: "" };
     } catch (error) {
       logMac("skit.play_failed", { error });
-      return { ok: false, say: "Spotify did not cooperate. Take two." };
+      const msg = String(error?.message || error || "");
+      // A bare "Command failed" with no stderr = osascript hung until our timeout,
+      // which is what a pending/suppressed macOS Automation consent looks like.
+      // An explicit -1743 = the consent was denied. Either way the fix is the same.
+      const tccShaped = /1743|not authori[sz]ed/i.test(msg) || /Command failed: \/usr\/bin\/osascript/.test(msg);
+      return {
+        ok: false,
+        say: tccShaped
+          ? "macOS is blocking me from controlling Spotify. Open System Settings, Privacy and Security, Automation, allow me for Spotify and System Events, and take two."
+          : "Spotify did not cooperate. Take two.",
+      };
     }
   }
   if (step === "close") {
