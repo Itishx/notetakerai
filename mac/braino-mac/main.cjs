@@ -36,8 +36,8 @@ const AUTH_CALLBACK_PATH = "/braino-mac-auth-callback";
 
 // ── SKIT (TEMPORARY — Instagram demo, delete after recording) ──────────────
 // While enabled, double Option runs the scripted skit instead of Yap Mode.
-// v2: no texting. Braino notices the user is gone, plays Beat It on Spotify,
-// steps out of the notch, grows, dances, then resets like nothing happened.
+// Double Option opens Spotify, cues Billie Jean at 3:31, moonwalks over the
+// visible Spotify window, pauses the track, and delivers the closing line.
 // To remove the trick entirely, delete this block, the SKIT branch in the
 // double-option handler, the "braino-mac:skit-step" ipcMain handler,
 // preload's skit bridge, and runSkit() in the renderer.
@@ -7614,12 +7614,24 @@ async function createSpotifyPlaylistOnMac(name, options = {}) {
   return { ok: true, say: `Created the playlist ${created.playlistName || playlistName} on Spotify.` };
 }
 
-async function playSpotifyTrackInMacApp(uri, positionMs = 0, { activate = true } = {}) {
+async function playSpotifyTrackInMacApp(uri, positionMs = 0, { activate = true, stabilityLock = true } = {}) {
   const safeUri = escapeAppleScriptString(uri);
   const positionSeconds = Math.max(0, Math.round(Number(positionMs) || 0) / 1000);
   // Seek only after the track is genuinely playing, then HAMMER until absolutely stable.
   // Spotify WILL reset position to 0 during metadata load, so we aggressively re-verify
   // and re-seek if it drifts. Only return when position is locked.
+  const stabilityLines = stabilityLock
+    ? `  -- Stability lock: re-seek aggressively if position drops even slightly
+  repeat with i from 1 to 10
+    delay 0.25
+    try
+      if player position < ${Math.max(0, positionSeconds - 8)} then
+        set player position to ${positionSeconds}
+        delay 0.3
+      end if
+    end try
+  end repeat`
+    : "";
   const seekLine = positionSeconds > 0
     ? `  repeat with i from 1 to 25
     if player state is playing then exit repeat
@@ -7634,16 +7646,7 @@ async function playSpotifyTrackInMacApp(uri, positionMs = 0, { activate = true }
       if player position > ${Math.max(0, positionSeconds - 5)} then exit repeat
     end try
   end repeat
-  -- Stability lock: re-seek aggressively if position drops even slightly
-  repeat with i from 1 to 10
-    delay 0.25
-    try
-      if player position < ${Math.max(0, positionSeconds - 8)} then
-        set player position to ${positionSeconds}
-        delay 0.3
-      end if
-    end try
-  end repeat`
+${stabilityLines}`
     : "";
   const script = `
 tell application "Spotify"
@@ -11933,9 +11936,12 @@ ipcMain.handle("braino-mac:skit-step", async (_event, step) => {
       let lastError = null;
       for (let attempt = 0; attempt < 4; attempt += 1) {
         try {
-          // No activate: music only — the Spotify window must never jump in
-          // front of the performance.
-          await playSpotifyTrackInMacApp(SKIT.trackUri, SKIT.startMs, { activate: false });
+          // Spotify is part of the stage for this trick. Keep it foregrounded
+          // while the native player loads, plays, and locks onto 3:31.
+          // The async guard below owns long-tail seek correction. Do not block
+          // the renderer for the normal 2.5-second stability lock: the moonwalk
+          // must begin as soon as the cue is playing.
+          await playSpotifyTrackInMacApp(SKIT.trackUri, SKIT.startMs, { activate: true, stabilityLock: false });
           lastError = null;
           break;
         } catch (error) {
@@ -11996,18 +12002,18 @@ ipcMain.handle("braino-mac:skit-step", async (_event, step) => {
       };
     }
   }
-  if (step === "close") {
+  if (step === "finish") {
     const script = `
 if application "Spotify" is running then
   tell application "Spotify" to pause
-  tell application "Spotify" to quit
+  tell application "Spotify" to activate
 end if
-return "closed"`;
+return "paused"`;
     try {
       await execFileP("/usr/bin/osascript", ["-e", script], { timeout: 8000 });
       return { ok: true, say: "" };
     } catch (error) {
-      logMac("skit.close_failed", { error });
+      logMac("skit.finish_failed", { error });
       return { ok: false, say: "" };
     }
   }

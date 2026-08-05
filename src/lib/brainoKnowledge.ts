@@ -20,6 +20,18 @@ export type KnowledgeEntry = {
 
 export const KNOWLEDGE_ENTRIES: readonly KnowledgeEntry[] = [
   {
+    slug: "mac-moonwalk-party-trick",
+    title: "Mac Moonwalk Party Trick",
+    category: "Feature",
+    date: "2026-08-05",
+    dateLabel: "August 5, 2026",
+    description:
+      "After Braino's introduction, Double Option opens Spotify, cues Billie Jean at 3:31, and sends him moonwalking immediately along the bottom Mac Dock.",
+    status: "MVP",
+    platform: "Braino for Mac",
+    number: "017",
+  },
+  {
     slug: "product-overview-homepage",
     title: "Product Overview Homepage Refresh",
     category: "Design decision",

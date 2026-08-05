@@ -15,7 +15,6 @@ const statusText = document.getElementById("status-text");
 const fileStrip = document.getElementById("file-strip");
 const edgeGlow = document.getElementById("edge-glow");
 const ESTIMATED_DOCK_HEIGHT = 94;
-const DOCK_PERCH_LIFT = 42;
 const START_OFFSCREEN_X = -W - 36;
 const BRAINO_SCALE_STORAGE_KEY = "braino-mac-mascot-scale-v1";
 const BRAINO_SCALE_MIN = 1;
@@ -633,12 +632,14 @@ function getDockBounds() {
   const dockTop = measuredDockTop > 0
     ? clamp(measuredDockTop, 90, window.innerHeight - 20)
     : window.innerHeight - ESTIMATED_DOCK_HEIGHT;
-  const y = clamp(dockTop - H - DOCK_PERCH_LIFT, 54, Math.max(54, window.innerHeight - H - 10));
+  // Braino's feet should meet the Dock's top edge. The old extra 42px "perch"
+  // lift visibly floated him above the Dock instead.
+  const y = clamp(dockTop - H, 54, Math.max(54, window.innerHeight - H - 10));
   return {
     minX: sideInset,
     maxX: Math.max(sideInset, window.innerWidth - sideInset - W),
     y,
-    snapThresholdY: dockTop - H - DOCK_PERCH_LIFT - 38,
+    snapThresholdY: dockTop - H - 38,
   };
 }
 
@@ -1598,10 +1599,11 @@ async function handleSummon() {
 // back into the notch if he's out. Silent on the way home, no theatrics.
 async function handleSummonToggle() {
   if (herMode) return;
-  // If we're in post-skit mode, Cmd+2 just dismisses it — he stays out and unfreezes.
+  // Double-Command is the one explicit way to send him home after the skit.
   if (skitJustCompleted) {
     skitJustCompleted = false;
     setBubble("", 0);   // Clear any skit bubble
+    await setWalkerHomeState(true);
     return;
   }
   // Normal toggle: if home, come out; if out, go home.
@@ -5703,17 +5705,13 @@ function endDrag(event) {
   try { walker.releasePointerCapture(event.pointerId); } catch (_) {}
   walker.classList.remove("dragging");
   dragState = null;
-  const dock = getDockBounds();
-  if (posY >= dock.snapThresholdY) {
-    movementMode = "dock";
-    setPosition(posX, dock.y);
-    targetX = posX + dirX * 280;
-    targetY = dock.y;
-  } else {
-    movementMode = "free";
-  }
-  nextTargetAt = performance.now() + 2600;
-  setBubble(movementMode === "dock" ? "Back on the Dock." : "Parked here. I can still walk around.", 1600);
+  // A manual placement is exact: do not snap to a computed rail. Resume normal
+  // roaming from the dropped point after a short beat so he never freezes.
+  movementMode = "free";
+  targetX = posX;
+  targetY = posY;
+  nextTargetAt = performance.now() + 1200;
+  setBubble("Starting from here.", 1600);
   refreshMousePassthrough(event);
 }
 
@@ -5954,7 +5952,7 @@ window.brainoMac.onDictationToggle?.((payload) => toggleYapMode(payload?.source 
 // SKIT (TEMPORARY — Instagram demo): while SKIT.enabled is on in main.cjs,
 // double Option fires this fully scripted bit instead of Yap Mode. No mic,
 // no LLM — fixed lines through his normal voice so every take is identical.
-// v2: no texting. Beat It on Spotify, out of the notch, BIG, dancing, reset.
+// Spotify stays visible while Billie Jean plays from 3:31 and Braino moonwalks.
 // Delete this block together with the main.cjs/preload skit pieces.
 let skitRunning = false;
 let skitMoonwalk = false;
@@ -5991,6 +5989,8 @@ function skitPerformMoonwalk(durationMs = 15000) {
     q("#__sbwk_rl__")?.setAttribute("display", "none");
     moonlegs.setAttribute("display", "inline");
     q("#__sbwk_fedora__")?.setAttribute("display", "inline");
+    // Start from exactly where Braino is standing when the trick begins. Do not
+    // teleport him to an edge or force him onto a computed Dock rail.
     const floorY = posY;
     const bounds = getMoveBounds();
     const X0 = bounds.maxX;
@@ -6043,7 +6043,7 @@ async function runSkit() {
   // Build stamp: check ~/Library/Logs/Braino Mac/braino-mac.log for skit.build
   // after a take — if this string is missing or older, the app is running a
   // stale build and the take does not reflect the current code.
-  logRenderer("skit.build", { v: "v26-spotify-open-foreground-forced" });
+  logRenderer("skit.build", { v: "v37-final-pose-held-until-exit" });
   const prevScale = brainoScale;
   let skitCompleted = false;
   try {
@@ -6054,29 +6054,32 @@ async function runSkit() {
     try { stopRealtimeVoice(); } catch (_) {}
     walkerAutoHomedByMusic = false;
     musicSessionId += 1;   // Nuke any pending music reactions
-    // He takes the stage WHILE introducing himself — out of the notch, normal size.
+    // Lock the mascot out from the first frame, not merely after successful
+    // completion. Failures and cleanup paths must not send him to the notch.
+    skitJustCompleted = true;
+    // Keep the original spoken introduction exactly as written.
     skitMoonwalk = true;
     await setWalkerHomeState(false);
     await skitSpeak("Hi, I am Braino. Think of me as the real life version of Jarvis from Iron Man. Apart from doing all the things that I do, I happen to be the only AI to do the moonwalk. Watch:");
-    // NOW open Spotify after the speech, giving it time to boot before play
-    void window.brainoMac.skitStep?.("prewarm");
+    // Await the prewarm so opening and playback cannot race each other on a
+    // cold Spotify launch.
+    await window.brainoMac.skitStep?.("prewarm");
     const played = await window.brainoMac.skitStep?.("play");
     if (!played?.ok) {
-      await speak(played?.say || "Spotify did not cooperate. Take two.");
+      setBubble(played?.say || "Spotify did not cooperate. Take two.", 7000);
       return;
     }
     // Billie Jean is already sitting at 3:31 (the play step verifies the seek).
     // Isolated demo: no music theatrics, no headphones, no auto-home.
-    // Moonwalk starts IMMEDIATELY as the song plays.
+    // Start the moonwalk from his current position the moment verified playback begins.
     await skitPerformMoonwalk(20000);   // 20s moonwalk
     // He stays out and asks while waving. Keep skitMoonwalk true so tick does not
     // resume roam/dock and walk him mid-line; clear it in finally after the skit.
-    await window.brainoMac.skitStep?.("close");
+    await window.brainoMac.skitStep?.("finish");
     setWave(true);
-    await skitSpeak("So, how was it?");
+    await skitSpeak("How was it?");
     skitCompleted = true;
-    skitJustCompleted = true;   // Lock auto-home until Cmd+2
-    // Explicit: he is OUT and will stay OUT until Cmd+2
+    // Explicit: he is OUT and will stay OUT until double-Command.
     if (walkerHome) await setWalkerHomeState(false);
   } catch (_) {
   } finally {
@@ -6090,7 +6093,7 @@ async function runSkit() {
     musicTheatricsReady = false;
     musicSessionId += 1;   // Cancel any in-flight music reactions
     // On a failed take, restore his original scale; on success he stays out at
-    // normal size after "So, how was it?" waits for Cmd+2.
+    // normal size after the closing line waits for Cmd+2.
     if (!skitCompleted) setBrainoScale(prevScale, false);
     skitCompleted = false;
   }

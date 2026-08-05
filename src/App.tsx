@@ -65,6 +65,7 @@ const Terms = lazy(() => import("./pages/Terms.tsx"));
 const Contact = lazy(() => import("./pages/Contact.tsx"));
 const ProductOverview = lazy(() => import("./pages/ProductOverview.tsx"));
 const ProductOverviewHomepageDocs = lazy(() => import("./pages/ProductOverviewHomepageDocs.tsx"));
+const MacMoonwalkPartyTrickDocs = lazy(() => import("./pages/MacMoonwalkPartyTrickDocs.tsx"));
 const Automations = lazy(() => import("./pages/Automations.tsx"));
 const Integrations = lazy(() => import("./pages/Integrations.tsx"));
 const ConnectorsVault = lazy(() => import("./pages/ConnectorsVault.tsx"));
@@ -99,6 +100,7 @@ function AppRoutes() {
         <Route path="/knowledge/braino-thronglets" element={<BrainoThrongletsDocs />} />
         <Route path="/knowledge" element={<KnowledgeBase />} />
         <Route path="/knowledge/product-overview-homepage" element={<ProductOverviewHomepageDocs />} />
+        <Route path="/knowledge/mac-moonwalk-party-trick" element={<MacMoonwalkPartyTrickDocs />} />
         <Route path="/knowledge/choose-your-avatar" element={<ChooseYourAvatarDocs />} />
         <Route path="/knowledge/iomi-boot-identity" element={<IomiBootIdentityDocs />} />
         <Route path="/knowledge/browser-notch-presence" element={<BrowserNotchPresenceDocs />} />
