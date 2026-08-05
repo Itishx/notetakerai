@@ -5733,6 +5733,29 @@ function normalizeWhatsAppPhone(phone) {
   return digits;
 }
 
+// True once WhatsApp is genuinely up: the process exists AND it has a real window.
+// Polls because launch time varies wildly between warm and cold starts; a fixed
+// sleep either wastes seconds or fires Enter into an app that is not there yet.
+async function waitForWhatsAppReady(maxMs) {
+  const probe = `
+tell application "System Events"
+  if not (exists application process "WhatsApp") then return "no-app"
+  tell application process "WhatsApp"
+    if (count of windows) is 0 then return "no-window"
+  end tell
+end tell
+return "ready"`;
+  const started = Date.now();
+  while (Date.now() - started < maxMs) {
+    try {
+      const { stdout } = await execFileP("/usr/bin/osascript", ["-e", probe], { timeout: 4000 });
+      if (/ready/.test(String(stdout || ""))) return true;
+    } catch (_) {}
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  return false;
+}
+
 async function sendWhatsAppMessage(recipientRaw, message) {
   const text = String(message || "").trim();
   if (!text) return { ok: false, say: "Tell me what the message should say." };
@@ -5750,10 +5773,25 @@ async function sendWhatsAppMessage(recipientRaw, message) {
     return { ok: false, say: `The number I have for ${resolved.name} does not look complete. Teach me the full number with country code.` };
   }
 
+  const deepLink = `whatsapp://send?phone=${phone}&text=${encodeURIComponent(text)}`;
   const wasRunning = await isMacApplicationRunning("WhatsApp");
-  await shell.openExternal(`whatsapp://send?phone=${phone}&text=${encodeURIComponent(text)}`);
+  await shell.openExternal(deepLink);
+  sendTaskProgress({ status: "thinking", text: "Opening WhatsApp" });
+  // WAIT for WhatsApp to actually be up instead of sleeping a fixed amount. Cold
+  // boots regularly outlived the old 3.4s sleep, Enter fired into nothing, and
+  // Braino announced "sent" while nothing had happened.
+  const ready = await waitForWhatsAppReady(wasRunning ? 9000 : 25000);
+  if (!ready) {
+    logMac("whatsapp.send.open_timeout", { wasRunning });
+    return { ok: false, say: `WhatsApp did not finish opening, so I have not sent it. Open WhatsApp once and ask me again.` };
+  }
+  if (!wasRunning) {
+    // Deep links fired during a cold boot are routinely dropped by WhatsApp.
+    // Re-aim the chat now that the app is alive, then let it focus the composer.
+    await shell.openExternal(deepLink);
+  }
   sendTaskProgress({ status: "thinking", text: `Typing to ${resolved.name}`.slice(0, 36) });
-  await new Promise((resolve) => setTimeout(resolve, wasRunning ? 1600 : 3400));
+  await new Promise((resolve) => setTimeout(resolve, wasRunning ? 1200 : 2200));
 
   const pressEnter = `
 tell application "System Events"
