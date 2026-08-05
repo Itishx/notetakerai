@@ -11901,7 +11901,8 @@ ipcMain.handle("braino-mac:skit-step", async (_event, step) => {
       // a demo machine. The skit plays the hardcoded URI natively instead.
       try { stopMusicSegmentLoop(); } catch (_) {}   // a stray A/B loop timer would re-seek the track
       const wasRunning = await isMacApplicationRunning("Spotify");
-      await openApp("Spotify");
+      // Open Spotify HEADLESS (-g -j) so the window never appears on stage, only the audio.
+      try { await execFileP("open", ["-g", "-j", "-b", "com.spotify.client"], { timeout: 8000 }); } catch (_) {}
       const deadline = Date.now() + 15000;
       while (Date.now() < deadline && !(await isMacApplicationRunning("Spotify"))) {
         await new Promise((resolve) => setTimeout(resolve, 400));
@@ -11921,16 +11922,32 @@ ipcMain.handle("braino-mac:skit-step", async (_event, step) => {
         }
       }
       if (lastError) throw lastError;
-      try {
-        await execFileP("/usr/bin/osascript", ["-e", 'tell application "System Events" to set visible of process "Spotify" to false'], { timeout: 3000 });
-      } catch (_) {}
-      // Playhead guardian: the verified seek can still get yanked back to 0:00
-      // moments later (session restore / stray timers). For the length of the
-      // bit, watch the position each second and re-pin 3:31 if anything moves it.
+      // Playhead guardian: re-pin 3:31 every 200ms for the first 2s to catch and prevent
+      // any seek drifts before they become visible. After 2s, relaxes to 1s checks through
+      // the moonwalk.
       const pinSeconds = Math.round(SKIT.startMs / 1000);
-      const guardUntil = Date.now() + 16000;
+      const guardStart = Date.now();
+      let guardPhase = 0;   // 0 = fast (200ms), 1 = slow (1s)
       const guard = setInterval(async () => {
-        if (Date.now() > guardUntil) { clearInterval(guard); return; }
+        const elapsed = Date.now() - guardStart;
+        if (elapsed > 2000 && guardPhase === 0) {
+          guardPhase = 1;
+          clearInterval(guard);
+          // Switch to 1s timer for the rest of the moonwalk
+          const slowGuard = setInterval(async () => {
+            if (Date.now() - guardStart > 22000) { clearInterval(slowGuard); return; }
+            try {
+              const { stdout } = await execFileP("/usr/bin/osascript", ["-e", 'tell application "Spotify" to return player position as text'], { timeout: 2500 });
+              const pos = parseFloat(String(stdout).trim().replace(",", "."));
+              if (Number.isFinite(pos) && pos < pinSeconds - 8) {
+                await execFileP("/usr/bin/osascript", ["-e", `tell application "Spotify" to set player position to ${pinSeconds}`], { timeout: 2500 });
+                logMac("skit.seek_guard.repinned", { from: pos });
+              }
+            } catch (_) {}
+          }, 1000);
+          return;
+        }
+        if (elapsed > 22000) { clearInterval(guard); return; }
         try {
           const { stdout } = await execFileP("/usr/bin/osascript", ["-e", 'tell application "Spotify" to return player position as text'], { timeout: 2500 });
           const pos = parseFloat(String(stdout).trim().replace(",", "."));
@@ -11939,7 +11956,7 @@ ipcMain.handle("braino-mac:skit-step", async (_event, step) => {
             logMac("skit.seek_guard.repinned", { from: pos });
           }
         } catch (_) {}
-      }, 1000);
+      }, 200);
       logMac("skit.play.done", { uri: SKIT.trackUri });
       return { ok: true, say: "" };
     } catch (error) {
