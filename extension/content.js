@@ -4621,7 +4621,9 @@ function __sbWkApplyThrowTransform() {
 }
 
 // Show a short speech bubble above Braino's head.
-function __sbWkSay(text) {
+// holdMs is optional: quips use the short default, but a real short ANSWER has to
+// stay up long enough to read while he speaks it, so callers pass a length-scaled hold.
+function __sbWkSay(text, holdMs) {
   const walker = document.getElementById("__sbwk_walker__");
   if (!walker) return;
   let b = walker.querySelector("#__sbwk_say__");
@@ -4629,7 +4631,7 @@ function __sbWkSay(text) {
   b.textContent = text;
   requestAnimationFrame(() => b.classList.add("show"));
   clearTimeout(__sbWkSayTimer);
-  __sbWkSayTimer = setTimeout(() => b.classList.remove("show"), 1500);
+  __sbWkSayTimer = setTimeout(() => b.classList.remove("show"), Number.isFinite(holdMs) ? holdMs : 1500);
 }
 
 // Persistent voice-state bubble above Braino's head (same design as __sbWkSay, but it sticks
@@ -5023,8 +5025,14 @@ function __sbEnterRoamMode() {
   __sbRoamPerchEl = null; __sbRoamSitting = false;
   __sbRoamLaunched = false; __sbRoamLaunching = false;
   lane.classList.add("sb-roaming");   // escape hatch from the notch-era display:none!important
+  // The home goes dark the moment he leaves it. Two lit Brainos would be two things
+  // to talk to; from here the notch is only a screen he can push answers onto.
+  if (__sbNotchV1) {
+    __sbNotchV1.shell.classList.add("vacant");
+    if (__sbNotchV1.shell.dataset.state !== "long") __sbNotchSetState("idle");
+  }
   document.addEventListener("mousemove", __sbRoamOnMouse, true);
-  __sbWkSay?.("Ah, I finally get to be off the bar.");
+  __sbWkSay?.("Coming out. Watch your step.");
   __sbRoamRaf = requestAnimationFrame(__sbRoamTick);
 }
 function __sbExitRoamMode() {
@@ -5043,6 +5051,13 @@ function __sbExitRoamMode() {
   // The bar unfolds back open.
   const bar = document.getElementById("__sb_bar__");
   if (bar) { bar.classList.remove("sb-bar-collapsed"); bar.classList.add("open"); }
+  // He is home: the coral floods back and the face is his again. If the notch was
+  // holding a long answer for him, leave it up — walking back in should not wipe
+  // what you were reading.
+  if (__sbNotchV1) {
+    __sbNotchV1.shell.classList.remove("vacant");
+    if (!["long", "short"].includes(__sbNotchV1.shell.dataset.state)) __sbNotchSetState("idle");
+  }
   __sbWkResumeFromX = 24;
   __sbStartWalkLoop?.();
 }
@@ -12006,6 +12021,25 @@ function __sbMountNotchV1() {
       @keyframes speakLook{0%,100%{transform:translate(0,1px)}50%{transform:translate(2px,1px)}}
       @keyframes gaze{0%,12%,100%{transform:translate(0,0)}27%,39%{transform:translate(-3px,0)}52%,64%{transform:translate(3px,0)}76%,90%{transform:translate(0,4px)}}
       @keyframes thinkShimmer{from{background-position:140% 0}to{background-position:-140% 0}}
+      /* VACANT — Braino is out on the page (Cmd x2). The notch is his home, not a
+         second him, so the coral drains out and the face leaves with him: two lit
+         Brainos would be two things to talk to. Deliberately scoped to the EMPTY
+         states only, so the moment he pushes a long answer up here the panel keeps
+         its normal readable glass. Click the empty shell to call him back. */
+      .n.vacant .face{opacity:0!important}
+      .n.vacant[data-state=idle],.n.vacant[data-state=off]{
+        width:132px;height:30px;border-radius:0 0 16px 16px;cursor:pointer;
+        border:1px solid rgba(255,255,255,.14);border-top:0;
+        background:linear-gradient(180deg,rgba(34,25,23,.6) 0%,rgba(20,15,14,.66) 100%);
+        box-shadow:0 10px 26px rgba(0,0,0,.26),inset 0 1px rgba(255,255,255,.07);
+        backdrop-filter:blur(14px) saturate(120%);
+      }
+      .n.vacant[data-state=idle] .idle{opacity:0}
+      .n.vacant[data-state=idle] .vacancy,.n.vacant[data-state=off] .vacancy{opacity:1}
+      .vacancy{position:absolute;inset:0;z-index:3;display:flex;align-items:center;justify-content:center;gap:7px;opacity:0;pointer-events:none;transition:opacity .45s ease}
+      .vacancy i{width:5px;height:5px;border-radius:50%;background:rgba(244,228,220,.26)}
+      .n.vacant[data-state=idle]:hover{background:linear-gradient(180deg,rgba(44,32,29,.66) 0%,rgba(26,19,18,.7) 100%)}
+      .n.vacant[data-state=idle]:hover .vacancy i{background:rgba(244,228,220,.5)}
       /* Boot greeting — verbatim port of the Mac's nf-iomi-expanded card
          (braino-mac.css): 610x180 pill, the face steps aside entirely, and a
          centred two-column card opens (greeting 325 | 1px rule | wake 165).
@@ -12051,6 +12085,7 @@ function __sbMountNotchV1() {
         <g class="mouth"><ellipse cx="115" cy="49" rx="7" ry="5.5"/><ellipse cx="115" cy="51" rx="4.2" ry="2.2"/></g>
       </svg></div>
       <div class="panel status"><small></small></div>
+      <div class="vacancy" aria-hidden="true"><i></i><i></i></div>
       <div class="panel greet"><span class="greet-copy"><strong><span class="greet-lead">Good</span><span class="greet-part">evening,</span><span class="greet-name">there.</span></strong><small>Everything is ready.</small></span><i class="greet-rule"></i><span class="greet-wake"><span class="greet-eyes"><i></i><i></i></span><small>Wake Braino</small><span class="greet-keys"><kbd>Control</kbd><kbd>Control</kbd></span><span class="greet-keys"><kbd>Click</kbd><em>to type</em></span></span></div>
       <div class="workpill"><strong></strong></div>
       <span class="cap cap-l"></span><span class="cap cap-r"></span>
@@ -12096,6 +12131,9 @@ function __sbMountNotchV1() {
   shell.addEventListener("click", () => {
     if (__sbNotchV1?.dragJustEnded && Date.now() - __sbNotchV1.dragJustEnded < 350) return;
     const state = shell.dataset.state;
+    // Empty home + he is out there → clicking it calls him back in, which is the
+    // only discoverable way home that is not a keyboard shortcut.
+    if (__sbRoamActive && (state === "idle" || state === "off")) { __sbExitRoamMode(); return; }
     if (state === "idle") __sbOpenPanel();
     else if (state === "working") __sbNotchSetState("thinking");
     else if (state === "short") __sbNotchSetState("long");
@@ -12185,6 +12223,13 @@ function __sbMountNotchV1() {
 }
 function __sbNotchSetState(state, status = "") {
   if (!__sbNotchV1) return;
+  // While he is out on the page the notch is a screen, and the only thing worth
+  // putting on a screen is a long answer (or a sign-in he must act on). Listening,
+  // speaking and working all belong to the mascot now — lighting the notch up for
+  // them is exactly what made it read as a second Braino standing in his own house.
+  if (__sbNotchV1.shell.classList.contains("vacant") && !["long", "signin"].includes(state)) {
+    state = "idle";
+  }
   __sbNotchV1.shell.dataset.state = state || "input";
   if (["short", "long", "signin", "idle", "off"].includes(state) && __sbNotchRequestTimer) {
     clearTimeout(__sbNotchRequestTimer);
@@ -12205,11 +12250,25 @@ function __sbNotchSetState(state, status = "") {
 function __sbNotchShowAnswer(text, rich, html) {
   if (!__sbNotchV1) return;
   const raw = String(text || "");
+  const isLong = Boolean(rich) || raw.length >= 240;
+
+  // While he is OUT on the page the notch is a screen, not a mouth.
+  //  - short answer → the bubble over his head. You are already looking at him,
+  //    and lighting up the notch too would put the reply in the wrong place.
+  //  - long answer  → drops down from the notch so it is actually readable, while
+  //    he stays outside and speaks it. The two surfaces split the job; he never
+  //    walks home just to answer.
+  if (__sbRoamActive && !isLong) {
+    const line = raw.replace(/\s+/g, " ").trim();
+    __sbWkSay?.(line, Math.min(14000, 2200 + line.length * 55));
+    return;
+  }
+
   const body = __sbNotchV1.shadow.querySelector(".answer-body");
   if (body) body.innerHTML = html || __sbEscapeHtml(raw);
   const line = __sbNotchV1.shadow.querySelector(".short-text");
   if (line) line.textContent = raw.replace(/\s+/g, " ").trim();
-  __sbNotchSetState(!rich && raw.length < 240 ? "short" : "long");
+  __sbNotchSetState(isLong ? "long" : "short");
 }
 // The answer walker — verbatim port of the Chrome system's NotchWalker RAF rig
 // (back-and-forth travel, direction flip, alternating legs, waddle and breath).
