@@ -1663,6 +1663,16 @@ function clearIomiBootClasses() {
   notchFace?.classList.remove(...NF_IOMI_BOOT_CLASSES);
 }
 
+// Kept branch-for-branch identical to the extension's __sbTimeGreeting() so the
+// Mac and the browser never greet the same moment differently.
+function timeGreeting() {
+  const h = new Date().getHours();
+  if (h >= 5 && h < 12) return "Good morning";
+  if (h >= 12 && h < 17) return "Good afternoon";
+  if (h >= 17 && h < 23) return "Good evening";
+  return "It's late";
+}
+
 async function runIomiBootMascotExit() {
   if (!walker || herMode) return;
   notchFace?.classList.remove("nf-iomi-expanded");
@@ -1731,6 +1741,16 @@ async function runNotchBoot() {
 
   const auth = await window.brainoMac.authStatus().catch(() => null);
   const firstName = String(auth?.displayName || "").split(" ")[0]?.trim() || "there";
+  // One salutation value, written and spoken. He boots whenever the machine
+  // wakes, so the greeting follows the clock instead of assuming night. Same
+  // four branches as the extension's __sbTimeGreeting() so the two surfaces
+  // never disagree about what time of day it is.
+  const greeting = timeGreeting();
+  const [greetLead, ...greetRest] = greeting.split(" ");
+  const leadEl = notchFace?.querySelector(".nf-iomi-greet-lead");
+  if (leadEl) leadEl.textContent = greetLead;
+  const salutationEl = notchFace?.querySelector(".nf-iomi-salutation");
+  if (salutationEl) salutationEl.textContent = `${greetRest.join(" ")},`;
   const firstNameEl = notchFace?.querySelector(".nf-iomi-first-name");
   if (firstNameEl) firstNameEl.textContent = `${firstName}.`;
   notchFace?.classList.add("nf-iomi-expanded");
@@ -1738,11 +1758,11 @@ async function runNotchBoot() {
 
   // Speak only after the words and divider have landed. This uses the same
   // Fish Audio-first `speak` path as every normal Braino reply.
-  await speak(`Good evening, ${firstName}. Everything is ready.`, { captions: false });
+  await speak(`${greeting}, ${firstName}. Everything is ready.`, { captions: false });
   await wait(300);
   await runIomiBootMascotExit();
   clearIomiBootClasses();
-  logRenderer("boot.iomi.complete", { firstName });
+  logRenderer("boot.iomi.complete", { firstName, greeting });
   return { ...result, bootGreetingHandled: true };
 }
 

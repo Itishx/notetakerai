@@ -11991,6 +11991,36 @@ function __sbMountNotchV1() {
       @keyframes speakLook{0%,100%{transform:translate(0,1px)}50%{transform:translate(2px,1px)}}
       @keyframes gaze{0%,12%,100%{transform:translate(0,0)}27%,39%{transform:translate(-3px,0)}52%,64%{transform:translate(3px,0)}76%,90%{transform:translate(0,4px)}}
       @keyframes thinkShimmer{from{background-position:140% 0}to{background-position:-140% 0}}
+      /* Boot greeting — verbatim port of the Mac's nf-iomi-expanded card
+         (braino-mac.css): 610x180 pill, the face steps aside entirely, and a
+         centred two-column card opens (greeting 325 | 1px rule | wake 165).
+         The face needs no rule to hide: .panel is opacity:0 by default and
+         greeting is simply absent from the face's visible-state list. */
+      .n[data-state=greeting]{width:min(610px,80vw);height:180px;border-radius:0 0 38px 38px;overflow:hidden;cursor:default;border:1px solid rgba(255,255,255,.42);border-top:0;background:linear-gradient(180deg,#f6a8a2 0%,#e8786e 56%,#c9544a 100%);box-shadow:0 28px 84px rgba(201,84,74,.36),inset 0 1px rgba(255,255,255,.46)}
+      .greet{z-index:11;display:flex;align-items:center;justify-content:center}
+      .n[data-state=greeting] .greet{opacity:1;transform:none;transition-delay:300ms}
+      .greet-copy{width:325px;text-align:left}
+      .greet-copy strong{display:flex;align-items:baseline;gap:8px;color:#fdf6f2;font-size:31px;font-weight:600;letter-spacing:-.035em;text-shadow:0 2px 14px rgba(110,33,26,.28)}
+      .greet-copy strong span{opacity:0;filter:blur(5px);transform:translateY(7px)}
+      .n[data-state=greeting] .greet-copy strong span{animation:greetWord .52s cubic-bezier(.2,.75,.2,1) forwards}
+      .n[data-state=greeting] .greet-copy strong span:nth-child(1){animation-delay:.43s}
+      .n[data-state=greeting] .greet-copy strong span:nth-child(2){animation-delay:.76s}
+      .n[data-state=greeting] .greet-copy strong span:nth-child(3){animation-delay:1.09s}
+      .greet-copy>small{display:block;margin-top:10px;color:rgba(253,246,242,.66);font-size:15px;opacity:0}
+      .n[data-state=greeting] .greet-copy>small{animation:greetFade .5s ease 1.5s forwards}
+      @keyframes greetWord{to{opacity:1;filter:blur(0);transform:none}}
+      @keyframes greetFade{to{opacity:1}}
+      .greet-rule{width:1px;height:0;margin:0 28px;align-self:center;background:linear-gradient(180deg,rgba(255,255,255,0),rgba(255,255,255,.6),rgba(255,255,255,0));opacity:0;transition:height .65s cubic-bezier(.2,.8,.2,1) .52s,opacity .3s ease .5s}
+      .n[data-state=greeting] .greet-rule{height:92px;opacity:1}
+      .greet-wake{width:165px;opacity:0;transform:translateX(8px);transition:opacity .42s ease 1.25s,transform .52s ease 1.22s}
+      .n[data-state=greeting] .greet-wake{opacity:1;transform:none}
+      .greet-eyes{display:flex;gap:7px;margin-bottom:12px}
+      .greet-eyes i{width:9px;height:9px;border-radius:50%;background:#fdf6f2;box-shadow:0 0 8px rgba(253,246,242,.45)}
+      .greet-wake>small{display:block;margin-bottom:10px;color:rgba(253,246,242,.7);font-size:13px}
+      .greet-keys{display:flex;align-items:center;gap:5px;margin-top:6px}
+      .greet-keys kbd{padding:4px 8px;border:1px solid rgba(255,255,255,.28);border-radius:6px;background:rgba(255,255,255,.14);color:#fff;font:600 10px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+      .greet-keys em{color:rgba(253,246,242,.55);font-size:10px;font-style:normal}
+      @media(prefers-reduced-motion:reduce){.greet-copy strong span,.greet-copy>small{animation-duration:1ms!important;animation-delay:0ms!important}.greet-rule,.greet-wake,.greet{transition-duration:1ms!important;transition-delay:0ms!important}}
     </style>
     <section class="n" data-state="off">
       <div class="panel face"><svg viewBox="0 0 230 72" preserveAspectRatio="none">
@@ -12006,6 +12036,7 @@ function __sbMountNotchV1() {
         <g class="mouth"><ellipse cx="115" cy="49" rx="7" ry="5.5"/><ellipse cx="115" cy="51" rx="4.2" ry="2.2"/></g>
       </svg></div>
       <div class="panel status"><small></small></div>
+      <div class="panel greet"><span class="greet-copy"><strong><span class="greet-lead">Good</span><span class="greet-part">evening,</span><span class="greet-name">there.</span></strong><small>Everything is ready.</small></span><i class="greet-rule"></i><span class="greet-wake"><span class="greet-eyes"><i></i><i></i></span><small>Wake Braino</small><span class="greet-keys"><kbd>Control</kbd><kbd>Control</kbd></span><span class="greet-keys"><kbd>Click</kbd><em>to type</em></span></span></div>
       <div class="workpill"><strong></strong></div>
       <span class="cap cap-l"></span><span class="cap cap-r"></span>
       <div class="panel input"><label><small>Ask Braino</small><input placeholder="Summarise this page…"/></label><button class="mode">Auto⌄</button><button class="round mic">⌁</button><button class="round send">↑</button><button class="theme" title="Switch glass theme">◐</button><button class="round close" title="Close">×</button></div>
@@ -12258,7 +12289,28 @@ function __sbSummonToggle() {
   __sbRoamHoldUntil = performance.now() + 500;
 }
 
-const __SB_NOTCH_CLASSES = ["sb-notch-invoking", "sb-notch-auth", "sb-notch-auth-ok", "sb-notch-idle", "sb-notch-listening", "sb-notch-working", "sb-notch-speaking"];
+// Fills the boot greeting before it is shown. The name mirrors the Mac's
+// `String(auth?.displayName || "").split(" ")[0] || "there"`. The salutation is
+// __sbTimeGreeting() split across the two animated spans, so "It's late" lands
+// as "It's / late," the same way "Good / evening," does.
+function __sbNotchFillGreeting() {
+  if (!__sbNotchV1) return;
+  const shadow = __sbNotchV1.shadow;
+  const leadEl = shadow.querySelector(".greet-lead");
+  const partEl = shadow.querySelector(".greet-part");
+  const nameEl = shadow.querySelector(".greet-name");
+  const [lead, ...rest] = __sbTimeGreeting().split(" ");
+  if (leadEl) leadEl.textContent = lead;
+  if (partEl) partEl.textContent = `${rest.join(" ")},`;
+  __sbStorageGet(["authDisplayName", "authEmail"]).then(({ authDisplayName, authEmail }) => {
+    const first = String(authDisplayName || "").trim().split(/\s+/)[0]
+      || String(authEmail || "").split("@")[0]
+      || "there";
+    if (nameEl) nameEl.textContent = `${first}.`;
+  }).catch(() => {});
+}
+
+const __SB_NOTCH_CLASSES = ["sb-notch-invoking", "sb-notch-auth", "sb-notch-auth-ok", "sb-notch-greeting", "sb-notch-idle", "sb-notch-listening", "sb-notch-working", "sb-notch-speaking"];
 function __sbSetBrowserNotchState(state, status = "") {
   const bar = document.getElementById("__sb_bar__");
   if (!bar) return;
@@ -12283,15 +12335,22 @@ function __sbRunBrowserNotchBoot(finishReady, finishRejected) {
     if (authFallback) clearTimeout(authFallback);
     if (authWatcher) { try { chrome.storage.onChanged.removeListener(authWatcher); } catch (_) {} }
   };
+  // Beat-for-beat with the Mac's runNotchBoot(): green verdict holds on the open
+  // eyes for 1100ms, the island spreads into the greeting card, then it collapses
+  // to idle and he docks. Timings are the Mac's own (wait 1100 → 1850 → 300).
   const settleReady = () => {
     if (done) return; done = true; cleanup();
     __sbSetBrowserNotchState("auth-ok", "Authenticated");
-    setTimeout(() => {
-      __sbSetBrowserNotchState("idle");
-      __sbInputOpen = false;
-      if (__sbContextOk()) chrome.storage.local.set({ sbBrainDocked: true, sbBrainExpanded: false });
-      finishReady();
-    }, 900);
+    later(() => {
+      __sbNotchFillGreeting();
+      __sbSetBrowserNotchState("greeting");
+      later(() => {
+        __sbSetBrowserNotchState("idle");
+        __sbInputOpen = false;
+        if (__sbContextOk()) chrome.storage.local.set({ sbBrainDocked: true, sbBrainExpanded: false });
+        finishReady();
+      }, 3650);
+    }, 1100);
   };
   const settleRejected = () => {
     if (done) return; done = true; cleanup();
