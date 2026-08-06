@@ -4919,7 +4919,15 @@ function __sbRoamTick(now) {
   // leap. The bar begins its slow fold-shut exactly as he leaps. Fires once.
   if (!__sbRoamLaunched) {
     __sbRoamLaunched = true;
-    __sbRoamPickNewPerch();                       // sets TX/TY (first ledge)
+    // He steps DOWN out of the notch and lands just under it — the Mac's
+    // runIomiBootMascotExit geometry (centre x, ~27% viewport height, clamped).
+    // Picking a free-roam destination here instead sent him arcing clear across
+    // the page in 900ms, which reads as being flung rather than climbing out.
+    // The strolling starts after he has landed.
+    __sbRoamTX = __sbRoamClampX(__sbRoamCX);
+    __sbRoamTY = __sbRoamClampY(Math.min(260, Math.max(150, Math.round(window.innerHeight * 0.27))));
+    __sbRoamPerchEl = null;
+    __sbRoamNextWander = now + 1400;               // beat on landing, then wander
     __sbRoamLaunchFromX = __sbRoamCX; __sbRoamLaunchFromY = __sbRoamCY;
     __sbRoamLaunchToX = __sbRoamTX; __sbRoamLaunchToY = __sbRoamTY;
     __sbRoamLaunching = true; __sbRoamLaunchT0 = now;
@@ -17428,6 +17436,12 @@ async function __sbShouldForceVoiceDelegate(routing) {
   if (!promptText) return false;
   if (__sbLooksLikeCompare(promptText)) return false; // the Compare skill owns these, not Delegate
   if (__sbIsMovieSceneQuestion(promptText) && __sbBuildMovieContext()) return false;
+  // Plain conversation never needs the delegate classifier. Asking anyway cost a
+  // backend round trip on EVERY spoken turn before Braino could begin answering,
+  // and when the classifier guessed wrong "how are you" came back as an agent task
+  // — so he said "On it, working on that now" and went off to do browser work
+  // instead of just talking. No action verb, no delegate: answer as conversation.
+  if (!__sbIsBrowserActionCommand(promptText)) return false;
 
   const handoff = __sbBuildAgentHandoffPayload(promptText, { connector: routing?.connectorHint });
   const result = await __sbRuntimeMessage({
@@ -19810,10 +19824,14 @@ function __sbBuildRealtimeSessionUpdate(instructions) {
             prompt: __sbBuildRealtimeTranscriptionPrompt(),
           },
           turn_detection: {
-            // Public-demo safe: "low" waits for clearer speech before starting/stopping a turn.
-            // The transcript gate below is the second lock against fans, coughs, and side chatter.
+            // Matches the Mac. "low" was chosen to be public-demo safe against fans
+            // and side chatter, but it makes the VAD sit through a long pause before
+            // conceding the turn ended — which lands as Braino carrying on listening
+            // well after you finished, then answering late. The transcript gate below
+            // is already a second lock against noise, so the eagerness does not have
+            // to carry that job alone.
             type: "semantic_vad",
-            eagerness: "low",
+            eagerness: "medium",
             create_response: false,
             interrupt_response: true,
           },
