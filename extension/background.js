@@ -2223,10 +2223,20 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         if (res.ok) { sendResponse({ authenticated: true }); return; }
         if (authRefreshToken) {
           const refreshed = await bgRefreshAuthToken();
-          sendResponse({ authenticated: !!refreshed });
-          return;
+          if (refreshed) { sendResponse({ authenticated: true }); return; }
         }
-        sendResponse({ authenticated: false });
+        // Token dead AND refresh dead. We used to stop here and leave the dead
+        // pair sitting in storage — which permanently locked out the scavenge at
+        // the top of this handler, because that only runs when storage is EMPTY.
+        // The refresh token gets rotated out from under us by the website and the
+        // Mac app (all three share one Supabase session), so this state is reached
+        // routinely, and once reached it never recovered: an open, freshly
+        // signed-in trybraino.com tab could not rescue it and the user was stuck
+        // being told to sign in. Drop the dead credentials and let the scavenge
+        // have a real chance (it persists whatever it finds).
+        await chrome.storage.local.remove(["authToken", "authRefreshToken"]);
+        const rescued = await bgScavengeAuthFromBrainoTabs();
+        sendResponse({ authenticated: !!rescued?.access_token });
       } catch {
         sendResponse({ authenticated: !!authToken });
       }

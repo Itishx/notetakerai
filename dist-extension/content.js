@@ -4844,20 +4844,16 @@ function __sbRoamScorePerch() {
 }
 
 function __sbRoamPickNewPerch() {
-  const perch = __sbRoamScorePerch();
-  if (!perch) {
-    // No good ledge — just amble to a random on-screen spot so he never sits idle
-    // off-view. He always stays visible.
-    __sbRoamPerchEl = null;
-    __sbRoamTX = __sbRoamClampX(window.innerWidth * (0.2 + Math.random() * 0.6) - __SB_ROAM_W / 2);
-    __sbRoamTY = __sbRoamClampY(window.innerHeight * (0.3 + Math.random() * 0.5));
-    __sbRoamNextWander = performance.now() + 60000;
-    __sbRoamSitting = false;
-    return;
-  }
-  __sbRoamPerchEl = perch.el;
-  __sbRoamTX = __sbRoamClampX(perch.footX - __SB_ROAM_W / 2);
-  __sbRoamTY = __sbRoamClampY(perch.topY - (__SB_ROAM_H - 6));   // feet on the edge
+  // FREE ROAM. He walks the open viewport and never sits on page furniture.
+  // __sbRoamScorePerch() is deliberately not consulted any more: perching parked
+  // him on a random card for a minute at a stretch, which read as "he got stuck
+  // somewhere" rather than "he is out here with me". Pick an open spot, stroll to
+  // it, pause a beat, pick another. Leaving __sbRoamPerchEl null also keeps
+  // __sbRoamSitting false in the tick, so the sitting pose never triggers.
+  __sbRoamPerchEl = null;
+  __sbRoamTX = __sbRoamClampX(window.innerWidth * (0.12 + Math.random() * 0.76) - __SB_ROAM_W / 2);
+  __sbRoamTY = __sbRoamClampY(window.innerHeight * (0.25 + Math.random() * 0.6));
+  __sbRoamNextWander = performance.now() + 2200 + Math.random() * 3200;
   __sbRoamSitting = false;
 }
 
@@ -4983,11 +4979,9 @@ function __sbRoamTick(now) {
   walker.style.transform = `translate(${__sbRoamCX}px, ${__sbRoamCY}px)`;
   __sbRoamApplyPose(now, moving, __sbRoamSitting);
 
-  // Wander: once he's been sitting a while, pick a new ledge (or amble to a random spot).
-  if ((__sbRoamSitting || !__sbRoamPerchEl) && now > __sbRoamNextWander) {
-    __sbRoamNextWander = now + 60000 + Math.random() * 20000;
-    __sbRoamPickNewPerch();
-  }
+  // Wander: he arrives, takes a short breath, then strolls somewhere else.
+  // __sbRoamPickNewPerch sets the next interval itself.
+  if (!moving && now > __sbRoamNextWander) __sbRoamPickNewPerch();
 
   __sbRoamRaf = requestAnimationFrame(__sbRoamTick);
 }
@@ -5063,8 +5057,15 @@ function __sbEnsureWalker() {
   // Grab + fling: drag Braino anywhere, release to throw. A plain tap just waves.
   let dragging = false, dragMoved = false, lastPX = 0, lastPY = 0, lastPT = 0, vX = 0, vY = 0;
   walker.addEventListener("pointerdown", (e) => {
-    // In roam mode, tapping Braino calls him back: exit roam, the bar unfolds for text.
-    if (__sbRoamActive) { e.preventDefault(); __sbExitRoamMode(); return; }
+    // In roam mode, tapping Braino opens the ask panel and he STAYS out on the
+    // page. He is the thing you talk to, not a button that sends himself away —
+    // Ctrl x2, Cmd x2 or "go home" are how he goes back in.
+    if (__sbRoamActive) {
+      e.preventDefault();
+      __sbInputOpen = true;
+      __sbNotchSetState("input");
+      return;
+    }
     if (__sbWkThrown || __sbWkClimbing || __sbWkMoonwalking || __sbWkJumping) return;
     dragging = true; dragMoved = false;
     try { walker.setPointerCapture(e.pointerId); } catch (_) {}
@@ -5923,6 +5924,12 @@ function __sbIsSelfEcho(transcript) {
 }
 
 let __sbVoiceOutputGuardAt = 0;
+// How long speech must persist, while Braino is talking, before it counts as a
+// real interruption rather than his own audio echoing back. Long enough that a
+// speaker-echo blip dies inside it, short enough that talking over him feels
+// instant. Raise it if he ever starts interrupting himself.
+const __SB_BARGE_CONFIRM_MS = 420;
+let __sbBargeConfirmTimer = null;
 function __sbBrainoOutputActive() {
   return Boolean(
     __sbIsSpeaking
@@ -12039,7 +12046,7 @@ function __sbMountNotchV1() {
       <div class="panel greet"><span class="greet-copy"><strong><span class="greet-lead">Good</span><span class="greet-part">evening,</span><span class="greet-name">there.</span></strong><small>Everything is ready.</small></span><i class="greet-rule"></i><span class="greet-wake"><span class="greet-eyes"><i></i><i></i></span><small>Wake Braino</small><span class="greet-keys"><kbd>Control</kbd><kbd>Control</kbd></span><span class="greet-keys"><kbd>Click</kbd><em>to type</em></span></span></div>
       <div class="workpill"><strong></strong></div>
       <span class="cap cap-l"></span><span class="cap cap-r"></span>
-      <div class="panel input"><label><small>Ask Braino</small><input placeholder="Summarise this page…"/></label><button class="mode">Auto⌄</button><button class="round mic">⌁</button><button class="round send">↑</button><button class="theme" title="Switch glass theme">◐</button><button class="round close" title="Close">×</button></div>
+      <div class="panel input"><label><small>Ask Braino</small><input placeholder="Summarise this page…"/></label><button class="mode">Auto⌄</button><button class="round send">↑</button><button class="theme" title="Switch glass theme">◐</button><button class="round close" title="Back to idle">×</button></div>
       <div class="panel menu"><header><small>Choose a mode</small><span class="actions"><em class="active-mode">Auto</em><button class="theme" title="Switch glass theme">◐</button><button class="round close" title="Close">×</button></span></header><button class="item" data-mode="auto"><b>Auto</b><small>Let Braino decide</small><strong>✓</strong></button><button class="item" data-mode="page"><b>Page</b><small>Read and work on this page</small></button><button class="item" data-mode="lecture"><b>Lecture</b><small>Capture and explain audio</small></button><button class="item" data-mode="meeting"><b>Meeting</b><small>Listen remember and follow up</small></button><button class="item" data-mode="agent"><b>Delegate</b><small>Complete a browser task</small></button><button class="item" data-mode="team"><b>Team</b><small>Work with shared context</small></button></div>
       <div class="panel thinking"><header><span class="tlabel"><i></i>Braino is thinking</span><span class="actions"><button class="collapse">Collapse</button><button class="theme" title="Switch glass theme">◐</button></span></header><p>Reading the page and understanding what matters.</p><p>Separating the useful signal from the repetition.</p><p>Preparing the answer in your context.</p></div>
       <div class="panel answer">
@@ -12128,7 +12135,9 @@ function __sbMountNotchV1() {
   input.addEventListener("input", () => { const old = document.getElementById("__sb_input__"); if (old) old.value = input.value; });
   input.addEventListener("keydown", (event) => { if (event.key === "Enter") { event.preventDefault(); sendFromNotch(input); } });
   shadow.querySelector(".input .send").addEventListener("click", (event) => { event.stopPropagation(); sendFromNotch(input); });
-  shadow.querySelector(".input .mic").addEventListener("click", (event) => { event.stopPropagation(); __sbToggleHeadphoneMode(); });
+  // No mic button here on purpose: Ctrl x2 is the one voice control, and a second
+  // trigger sitting unlabelled between Auto and Send only raised the question of
+  // what it did.
   shadow.querySelector(".input .mode").addEventListener("click", (event) => { event.stopPropagation(); __sbNotchSetState("menu"); });
   followInput.addEventListener("keydown", (event) => { if (event.key === "Enter") { event.preventDefault(); sendFromNotch(followInput); } });
   shadow.querySelector(".fsend").addEventListener("click", (event) => { event.stopPropagation(); sendFromNotch(followInput); });
@@ -12149,7 +12158,15 @@ function __sbMountNotchV1() {
     __sbNotchSetState("idle");   // resolve visually no matter what the legacy dock path does
     __sbDock();
   }));
-  shadow.querySelectorAll(".close").forEach((button) => button.addEventListener("click", (event) => { event.stopPropagation(); __sbHideAll(); }));
+  // x returns Braino to idle, it does not dismiss him. Closing the whole extension
+  // from the panel's corner button was too destructive for what reads as "collapse
+  // this panel" — Cmd+I is still the way to put him away entirely.
+  shadow.querySelectorAll(".close").forEach((button) => button.addEventListener("click", (event) => {
+    event.stopPropagation();
+    __sbInputOpen = false;
+    __sbNotchSetState("idle");
+    if (__sbContextOk()) chrome.storage.local.set({ sbBrainDocked: true, sbBrainExpanded: false });
+  }));
   shadow.querySelector(".signin .cta")?.addEventListener("click", (event) => {
     event.stopPropagation();
     chrome.runtime.sendMessage({ action: "openAuthTab" }, () => { void chrome.runtime.lastError; });
@@ -12364,13 +12381,22 @@ function __sbRunBrowserNotchBoot(finishReady, finishRejected) {
   __sbSetBrowserNotchState("invoking");
   later(() => {
     __sbSetBrowserNotchState("auth", "Authenticating");
+    // A cold MV3 service worker answers with `undefined` (or nothing at all), and
+    // this used to just drop the reply on the floor — no retry, no error branch —
+    // so the 12s timer below would declare a perfectly valid session signed out.
+    // Retry a few times before letting that happen.
+    let verifyTries = 0;
     const verify = () => {
       try {
         chrome.runtime.sendMessage({ action: "checkAuth" }, (result) => {
           void chrome.runtime.lastError;
-          if (result?.authenticated) later(settleReady, 350);
+          if (done) return;
+          if (result?.authenticated) { later(settleReady, 350); return; }
+          if (result === undefined && verifyTries++ < 4) later(verify, 900);
         });
-      } catch (_) {}
+      } catch (_) {
+        if (!done && verifyTries++ < 4) later(verify, 900);
+      }
     };
     verify();
     try {
@@ -16526,6 +16552,27 @@ function __sbIsDesignMockupRequest(text) {
   return false;
 }
 
+// A failed voice turn says its reason ONCE, then goes quiet for a while. Without
+// this, a live mic plus a failing backend meant every stray noise produced another
+// spoken apology, which is how "Please sign in to continue" ended up on loop.
+let __sbLastTurnFailureAt = 0;
+let __sbLastTurnFailureKind = "";
+async function __sbSpeakTurnFailure(failure) {
+  const kind = failure === "auth" ? "auth" : "network";
+  const now = Date.now();
+  if (kind === __sbLastTurnFailureKind && now - __sbLastTurnFailureAt < 30000) return;
+  __sbLastTurnFailureAt = now;
+  __sbLastTurnFailureKind = kind;
+  if (kind === "auth") {
+    // A genuine 401/403. Say it once and drop out of voice, because staying live
+    // just burns the mic on turns that cannot possibly succeed.
+    await speakVoiceReply("You are signed out. Sign in and I will pick this up.");
+    try { if (typeof __sbExitHeadphoneMode === "function") __sbExitHeadphoneMode(); } catch (_) {}
+    return;
+  }
+  await speakVoiceReply("That did not go through. Say it again.");
+}
+
 async function __sbFetchAssistantReply(body) {
   const enrichedBody = body && typeof body === "object" && !Array.isArray(body)
     ? {
@@ -16548,10 +16595,13 @@ async function __sbFetchAssistantReply(body) {
     allowAnonymous: true,
     jsonBody: enrichedBody,
   });
-  if (!resp) return { reply: null };
+  // The caller has to be able to tell "you are signed out" apart from "the
+  // request died". Collapsing both into a bare null is what made every network
+  // blip announce itself as a sign-in problem.
+  if (!resp) return { reply: null, failure: "network" };
 
   if (resp.status === 401 || resp.status === 403) {
-    return { reply: null };
+    return { reply: null, failure: "auth" };
   }
 
   if (!resp.ok) {
@@ -18164,9 +18214,12 @@ async function __sbProcessPrompt(text, options = {}) {
     if (movieContext) body.movieContext = movieContext;
     if (selectedText) body.selectedText = selectedText;
 
-    const { reply } = await __sbFetchAssistantReply(body);
+    const { reply, failure } = await __sbFetchAssistantReply(body);
     if (!reply) {
-      if (fromVoice) await speakVoiceReply("Please sign in to continue.");
+      // Only a real 401/403 is a sign-in problem. Everything else (dropped
+      // request, empty body from the backend) used to claim the user was signed
+      // out, and with the mic live that turned into Braino chanting it on loop.
+      if (fromVoice) await __sbSpeakTurnFailure(failure);
       return;
     }
     __sbChatHistory.push({ role: "assistant", content: reply });
@@ -20315,12 +20368,20 @@ try {
     }
 
     if ("sbVoiceModeOn" in changes && changes.sbVoiceModeOn.newValue === false) {
-      // Voice fully off everywhere.
-      if (__sbHeadphoneMode) {
-        __sbCleanupRealtimeVoice({ reason: "voice_mode_off" });
-        __sbDetachVoiceVisual();
-        __sbStopSpeech();
-      }
+      // Voice fully off everywhere. Deliberately NOT gated on __sbHeadphoneMode:
+      // a tab that reloaded mid-session carries a false local flag with a live
+      // mic, and that gate is what left Braino listening after being told to stop.
+      // Tear down unconditionally and reset the local flag so the next Ctrl x2
+      // reads as "turn on" rather than a second "turn off".
+      __sbHeadphoneMode = false;
+      __sbVoiceOnlyMode = false;
+      __sbVoicePendingReply = false;
+      __sbCleanupRealtimeVoice({ reason: "voice_mode_off" });
+      __sbDetachVoiceVisual();
+      __sbStopSpeech();
+      try { __sbSetHpBrainState(""); __sbSetVoiceStatusBadge(null); } catch (_) {}
+      document.getElementById("__sb_rec_btn__")?.classList.remove("active");
+      document.getElementById("__sb_card_voice_mode_btn__")?.classList.remove("active");
       return;
     }
 
@@ -21693,11 +21754,32 @@ function __sbHandleRtEvent(ev) {
     // boot (~0.5-5s cold start) is paid during your sentence instead of on your wait — which is why
     // the slowest first-sound runs were always the LONGEST utterances (isolate went cold mid-sentence).
     try { __sbWarmFishTts(); } catch (_) {}
-    const brainoWasSpeaking = __sbBrainoOutputActive();
-    if (brainoWasSpeaking) {
+    // Braino is mid-sentence and the VAD just fired. That is one of two things:
+    // the user talking over him (a real barge-in, which has to work) or his own
+    // voice leaking back through the speakers (echo, which must be ignored or he
+    // interrupts himself and the conversation falls apart).
+    //
+    // The old code picked one answer — always "echo" — and returned, which is why
+    // he could never be interrupted. Blanket-allowing is the opposite mistake.
+    // So: don't decide on the first frame, WAIT. Echo through speakers arrives in
+    // short bursts that stop; a person talking over him keeps going. If speech is
+    // still live when the confirm window elapses, it is a real barge-in.
+    // speech_stopped inside the window cancels it.
+    if (__sbBrainoOutputActive()) {
       __sbVoiceOutputGuardAt = Date.now();
       __sbRtUserTranscript = "";
       if (__sbHeadphoneMode) __sbSetHpBrainState("speaking");
+      if (__sbBargeConfirmTimer) clearTimeout(__sbBargeConfirmTimer);
+      __sbBargeConfirmTimer = setTimeout(() => {
+        __sbBargeConfirmTimer = null;
+        if (!__sbBrainoOutputActive()) return;      // he finished on his own
+        __sbVTMark("✋ Barge-in confirmed");
+        __sbVoicePendingReply = false;
+        if (__sbHasActiveRealtimeResponse()) __sbInterruptRealtimeResponse();
+        __sbStopSpeech();
+        __sbRtUserTranscript = "";
+        if (__sbHeadphoneMode) __sbSetHpBrainState("hearing");
+      }, __SB_BARGE_CONFIRM_MS);
       return;
     }
     // The realtime VAD heard the user start talking → INTERRUPT whatever Braino is saying.
@@ -21715,6 +21797,9 @@ function __sbHandleRtEvent(ev) {
   }
   if (ev.type === "input_audio_buffer.speech_stopped") {
     __sbVTMark("🛑 You stopped talking");
+    // Speech ended inside the confirm window → it was a blip (very likely his own
+    // audio), not someone talking over him. Stand down; he keeps his sentence.
+    if (__sbBargeConfirmTimer) { clearTimeout(__sbBargeConfirmTimer); __sbBargeConfirmTimer = null; }
     // User paused → stop the sonar; sit idle while we transcribe/think (not talking).
     if (__sbHeadphoneMode) __sbSetHpBrainState("listening");
     if (Date.now() - __sbVoiceOutputGuardAt < 12000 && __sbBrainoOutputActive()) {
@@ -21855,11 +21940,20 @@ function __sbHandleRtEvent(ev) {
 function __sbToggleHeadphoneMode() {
   // Ctrl (voice) while roaming calls Braino back to the bar first.
   if (__sbRoamActive && typeof __sbExitRoamMode === "function") __sbExitRoamMode();
-  if (__sbHeadphoneMode) {
-    __sbExitHeadphoneMode();
-  } else {
-    __sbEnterHeadphoneMode();
-  }
+  if (__sbHeadphoneMode) { __sbExitHeadphoneMode(); return; }
+  // __sbHeadphoneMode is per TAB, but the session is global (offscreen document +
+  // the sbVoiceModeOn flag). After a reload or a tab switch this tab can believe
+  // voice is off while the mic is very much live — and Ctrl x2 would then open a
+  // SECOND session instead of closing the running one, which is why voice felt
+  // impossible to turn off. Storage is the truth; ask it before entering.
+  __sbStorageGet(["sbVoiceModeOn"]).then(({ sbVoiceModeOn }) => {
+    if (sbVoiceModeOn) {
+      __sbHeadphoneMode = true;   // adopt the live session so the full exit path runs
+      __sbExitHeadphoneMode();
+    } else {
+      __sbEnterHeadphoneMode();
+    }
+  }).catch(() => __sbEnterHeadphoneMode());
 }
 
 function __sbApplyVoiceAutoRoutingDefaults() {
@@ -22491,6 +22585,7 @@ function __sbExitHeadphoneMode() {
   if (__sbContextOk()) chrome.storage.local.set({ sbVoiceModeOn: false });
 
   if (__sbVoiceSilenceTimer) { clearTimeout(__sbVoiceSilenceTimer); __sbVoiceSilenceTimer = null; }
+  if (__sbBargeConfirmTimer) { clearTimeout(__sbBargeConfirmTimer); __sbBargeConfirmTimer = null; }
   __sbLastFinalTranscript = null;
   __sbRtTurnToken = 0;
   __sbRtUserTranscript = "";
