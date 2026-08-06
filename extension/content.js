@@ -4853,9 +4853,15 @@ function __sbRoamPickNewPerch() {
   // it, pause a beat, pick another. Leaving __sbRoamPerchEl null also keeps
   // __sbRoamSitting false in the tick, so the sitting pose never triggers.
   __sbRoamPerchEl = null;
-  __sbRoamTX = __sbRoamClampX(window.innerWidth * (0.12 + Math.random() * 0.76) - __SB_ROAM_W / 2);
-  __sbRoamTY = __sbRoamClampY(window.innerHeight * (0.25 + Math.random() * 0.6));
-  __sbRoamNextWander = performance.now() + 2200 + Math.random() * 3200;
+  // Stroll a SHORT way from where he already is, rather than targeting a random
+  // absolute point in the viewport. Absolute targets meant a single move could be
+  // most of a screen wide, and at 135px/s that is ~10 seconds of committed travel
+  // in one direction — which reads as him leaving, not wandering near you.
+  const stepX = (150 + Math.random() * 240) * (Math.random() < 0.5 ? -1 : 1);
+  const stepY = Math.random() * 90 - 45;
+  __sbRoamTX = __sbRoamClampX(__sbRoamCX + stepX);
+  __sbRoamTY = __sbRoamClampY(__sbRoamCY + stepY);
+  __sbRoamNextWander = performance.now() + 2600 + Math.random() * 3400;
   __sbRoamSitting = false;
 }
 
@@ -4927,7 +4933,7 @@ function __sbRoamTick(now) {
     // the page in 900ms, which reads as being flung rather than climbing out.
     // The strolling starts after he has landed.
     __sbRoamTX = __sbRoamClampX(__sbRoamCX);
-    __sbRoamTY = __sbRoamClampY(Math.min(260, Math.max(150, Math.round(window.innerHeight * 0.27))));
+    __sbRoamTY = __sbRoamClampY(__sbRoamCY + 150);   // a short drop from wherever he stepped out
     __sbRoamPerchEl = null;
     __sbRoamNextWander = now + 1400;               // beat on landing, then wander
     __sbRoamLaunchFromX = __sbRoamCX; __sbRoamLaunchFromY = __sbRoamCY;
@@ -4944,7 +4950,10 @@ function __sbRoamTick(now) {
     } else {
       __sbRoamCX = __sbRoamLaunchFromX + (__sbRoamLaunchToX - __sbRoamLaunchFromX) * pr;
       const flatY = __sbRoamLaunchFromY + (__sbRoamLaunchToY - __sbRoamLaunchFromY) * pr;
-      __sbRoamCY = flatY - 95 * Math.sin(Math.PI * pr);    // parabolic hop
+      // A gentle step DOWN out of the notch. The old -95px arc lifted him well
+      // above his own start point mid-flight — off the top of the screen when he
+      // launches from the notch — which is what read as him flying away.
+      __sbRoamCY = flatY - 18 * Math.sin(Math.PI * pr);
       __sbRoamDir = (__sbRoamLaunchToX >= __sbRoamLaunchFromX) ? 1 : -1;
       walker.style.transform = `translate(${__sbRoamClampX(__sbRoamCX)}px, ${Math.max(__SB_ROAM_MARGIN_TOP, __sbRoamCY)}px)`;
       __sbRoamApplyPose(now, true, false);
@@ -12335,6 +12344,21 @@ function __sbNotchCaption(text, options = {}) {
   const capR = __sbNotchV1.shadow.querySelector(".cap-r");
   const compactOk = ["idle", "listening", "working", "speaking"].includes(shell.dataset.state);
   if (__sbNotchCapTimer) { clearTimeout(__sbNotchCapTimer); __sbNotchCapTimer = null; }
+
+  // He is out on the page → your words form over HIS head, not in his empty house.
+  // Captions only add a CSS class, they never go through __sbNotchSetState, which
+  // is why the vacant notch kept lighting up with subtitles despite that guard.
+  if (__sbRoamActive) {
+    shell.classList.remove("captioning");
+    if (capL) capL.textContent = "";
+    if (capR) capR.textContent = "";
+    __sbWkStatus?.(value || null);
+    if (value) {
+      const hold = options.final ? Math.max(6000, Math.min(14000, value.length * 70)) : 15000;
+      __sbNotchCapTimer = setTimeout(() => __sbNotchCaption(""), hold);
+    }
+    return;
+  }
   if (!value || !compactOk) {
     shell.classList.remove("captioning");
     if (capL) capL.textContent = "";
