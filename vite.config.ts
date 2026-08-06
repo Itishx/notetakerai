@@ -3,8 +3,11 @@ import react from "@vitejs/plugin-react-swc";
 import path from "path";
 import fs from "fs";
 
+// extension/ is the only source of truth for the shipped version. This used to
+// read public/sidebrain-extension/ first, which is the retired build — so a
+// version bump in extension/ was invisible to the site and the download button
+// advertised a stale version next to a current zip.
 const extensionManifestPaths = [
-  path.resolve(__dirname, "./public/sidebrain-extension/manifest.json"),
   path.resolve(__dirname, "./extension/manifest.json"),
 ];
 

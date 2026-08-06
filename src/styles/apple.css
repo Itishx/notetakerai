@@ -1517,3 +1517,23 @@
   .po-ecosystem-solo .po-eco-constellation { transform: none; transition: none; }
 }
 @media(prefers-reduced-motion:reduce){.po-planet-orbit,.po-planet-orbit .node{animation-play-state:paused!important}}
+
+/* ── Hero download CTA ──────────────────────────────────────────────────────
+   The extension is not on the Web Store yet, so the primary hero action hands
+   over the zip directly and states the install steps rather than implying a
+   one-click store install.
+   ------------------------------------------------------------------------ */
+.apple-hero-cta { margin-top: 30px; display: flex; flex-direction: column; align-items: center; gap: 11px; }
+.apple-hero.left .apple-hero-cta { align-items: flex-start; }
+.apple-dl {
+  display: inline-flex; align-items: center; gap: 10px;
+  padding: 13px 26px; border-radius: 980px;
+  background: var(--ap-blue); color: #fff; text-decoration: none;
+  font-size: 17px; font-weight: 500; line-height: 1;
+  transition: filter .2s ease, transform .2s ease, box-shadow .2s ease;
+}
+.apple-dl:hover { filter: brightness(1.08); transform: translateY(-1px); box-shadow: 0 12px 30px rgba(47,111,237,.28); }
+.apple-dl span { padding: 4px 9px; border-radius: 999px; background: rgba(255,255,255,.22); font-size: 12px; font-weight: 600; }
+.apple-hero-cta small { color: rgba(0,0,0,.5); font-size: 13px; }
+:root.dark .apple-hero-cta small, .dark .apple-hero-cta small { color: rgba(255,255,255,.55); }
+@media (prefers-reduced-motion: reduce) { .apple-dl { transition: none; } .apple-dl:hover { transform: none; } }

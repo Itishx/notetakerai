@@ -8,6 +8,7 @@ import MiniBraino from "@/components/MiniBraino";
 import BrainoFooter from "@/components/BrainoFooter";
 import { BrainoTVProvider, BrainoTVScreen, useBrainoTV } from "@/components/BrainoTV";
 import { BRAINO_WALKER_SVG } from "@/components/brainoWalkerSvg";
+import { EXTENSION_DOWNLOAD_URL, EXTENSION_DOWNLOAD_FILENAME, EXTENSION_VERSION } from "@/lib/extensionDownload";
 import { Braino, BrainoDefs, useTime } from "@/components/BrainoChar";
 import { BrainoIntroduction, BrainoStudioChapter } from "./Waitlist";
 import "../styles/apple.css";
@@ -514,6 +515,15 @@ const ProductOverview = ({ onMascotRelease }: ProductOverviewProps) => {
           Braino lives on your Mac. He sees your screen, talks in his own voice, and does the
           work alongside you — a companion, not a chatbot in a tab.
         </p>
+        {/* Not on the Web Store yet, so this hands over the zip and says plainly
+            what to do with it. Version comes from the manifest at build time. */}
+        <div className="apple-hero-cta">
+          <a className="apple-dl" href={EXTENSION_DOWNLOAD_URL} download={EXTENSION_DOWNLOAD_FILENAME}>
+            Download for Chrome
+            <span>v{EXTENSION_VERSION}</span>
+          </a>
+          <small>Unzip, then Chrome → Extensions → turn on Developer mode → Load unpacked.</small>
+        </div>
         <div className="apple-hero-links">
           <a href="#what">What is Braino</a>
           <Link to="/premium">Get Braino</Link>
