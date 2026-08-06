@@ -4905,6 +4905,29 @@ function __sbRoamApplyPose(now, moving, sitting) {
   }
   if (eyeL) eyeL.setAttribute("transform", `translate(38 48) scale(1 ${eyeSy}) translate(-38 -48)`);
   if (eyeR) eyeR.setAttribute("transform", `translate(62 48) scale(1 ${eyeSy}) translate(-62 -48)`);
+
+  // MOUTH. The roam pose never drove this — only the bar-lane walk tick did — so
+  // once he was out on the page he answered with a closed smile and it looked like
+  // the sound was coming from nowhere. Same drive as __sbWkTick.
+  const mSmile = root.querySelector("#__sbwk_smile__");
+  const mTalk = root.querySelector("#__sbwk_talk__");
+  const tE = root.querySelector("#__sbwk_te__");
+  const tI = root.querySelector("#__sbwk_ti__");
+  if (__sbWalkTalking || __sbBrainoOutputActive()) {
+    const o = Math.max(0, Math.min(1,
+      (0.5 + 0.5 * Math.sin(t * 13.5)) *
+      (0.55 + 0.45 * Math.sin(t * 7.7 + 1.3)) *
+      (0.7 + 0.3 * Math.sin(t * 23))
+    ));
+    // style.display, not the attribute: the talk group ships inline display:none.
+    if (mSmile) mSmile.style.display = "none";
+    if (mTalk) mTalk.style.display = "block";
+    if (tE) { tE.setAttribute("rx", String(4 - o * 0.5)); tE.setAttribute("ry", String(1.4 + o * 4.2)); }
+    if (tI) { tI.setAttribute("ry", String(0.7 + o * 1.6)); }
+  } else {
+    if (mSmile) mSmile.style.display = "";
+    if (mTalk) mTalk.style.display = "none";
+  }
 }
 
 function __sbRoamTick(now) {
@@ -4984,7 +5007,12 @@ function __sbRoamTick(now) {
   // walks the diagonal (feet cycling); vertical change reads as a gentle climb.
   const dx = __sbRoamTX - __sbRoamCX, dy = __sbRoamTY - __sbRoamCY;
   const dist = Math.hypot(dx, dy);
-  const moving = dist > 3;
+  // He stops to talk. Strolling on through his own answer read as wandering off
+  // mid-sentence; the Mac plants him and he speaks from where he stands. The
+  // wander clock is held back too, so he does not bolt the instant he finishes.
+  const talking = __sbWalkTalking || __sbBrainoOutputActive();
+  if (talking) __sbRoamNextWander = now + 1800;
+  const moving = !talking && dist > 3;
   if (moving) {
     if (Math.abs(dx) > 2) __sbRoamDir = dx > 0 ? 1 : -1;
     const speed = 135;                         // px/s — a stroll, not a dash
@@ -15190,6 +15218,7 @@ function __sbUpdateAgentSubgoals(subgoals) {
 
 function __sbFinalizeAgentPendingTurn(prompt, answer, options = {}) {
   __sbDelegateActive = false;   // genuine end — release the teardown guard
+  if (__sbRoamActive) __sbWkStatus?.(null);   // drop the "Working on it…" bubble over him
   __sbAgentFlowDone(); // delegate finished — settle EVERY surface (island, status, walker)
   __sbClearBarAgentStatus();   // stop the bar shimmer + restore "Follow up…"
   const task = String(prompt || "").trim();
@@ -18431,6 +18460,10 @@ function __sbRunAgent(task, options = {}) {
   __sbDelegateActive = true;
   __sbAgentLogShow("Working…");
   __sbAgentLogThought("Thinking…");  // island opens ALREADY thinking; real thoughts replace in ~2s
+  // Roam collapses the bar, and the bar is where every scrap of delegate progress
+  // renders — so a task started while he is out ran completely blind, which is
+  // indistinguishable from it never having started. Put the state on him instead.
+  if (__sbRoamActive) __sbWkStatus?.("Working on it…");
   __sbSetStopBtn(true);   // show the stop affordance (card + bar) the instant the task starts
   __sbChatHistory.push({ role: "user", content: __sbLastAgentTask });
   if (!__sbVoiceOnlyMode) { __sbSetAgentPendingTurn(__sbLastAgentTask, "Delegating…"); __sbStartWaitEntertainment(); }
@@ -22039,8 +22072,9 @@ function __sbHandleRtEvent(ev) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function __sbToggleHeadphoneMode() {
-  // Ctrl (voice) while roaming calls Braino back to the bar first.
-  if (__sbRoamActive && typeof __sbExitRoamMode === "function") __sbExitRoamMode();
+  // Voice does NOT send him home. Cmd x2 put him on the page on purpose, so Ctrl x2
+  // starts a conversation with the mascot where he stands — dragging him back into
+  // the notch the moment you tried to talk to him defeated the whole handover.
   if (__sbHeadphoneMode) { __sbExitHeadphoneMode(); return; }
   // __sbHeadphoneMode is per TAB, but the session is global (offscreen document +
   // the sbVoiceModeOn flag). After a reload or a tab switch this tab can believe
