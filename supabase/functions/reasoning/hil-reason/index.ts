@@ -169,7 +169,7 @@ serve(async (req) => {
     const manifestTraits = getClassManifest().traits;
     const orderedTraits = orderTraitsForMoment(momentId, manifestTraits);
     const steer = steeringLine(momentId, manifestTraits);
-    const emotionalCore = buildEmotionalCore({ medium: "text", moment: momentId });
+    const emotionalCore = buildEmotionalCore({ medium: "text", moment: momentId, intensity: reading.intensity });
     const systemPrompt = [
       HIL_SYSTEM_PROMPT,
       "=== WHO YOU ARE (the Emotional Engine, appended live for this request) ===",

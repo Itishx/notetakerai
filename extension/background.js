@@ -2405,6 +2405,28 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         const pageContext = message.pageContext || {};
         const pending = message.pending || null;
 
+        // Fresh command (not an answer to a question Braino already asked) goes to
+        // the canonical layer. The `pending` case is a different job entirely,
+        // binding a reply back onto an earlier question, which HIL does not model,
+        // so that branch keeps its own prompt below.
+        if (!pending) {
+          const hilContext = [
+            pageContext.url ? `On screen: ${pageContext.url}${pageContext.title ? ` — ${pageContext.title}` : ""}` : null,
+            bgBuildAgentConversationText(sharedContext) ? `Recent conversation:\n${bgBuildAgentConversationText(sharedContext)}` : null,
+          ].filter(Boolean).join("\n\n");
+          const hil = await bgReasonViaHil(promptText, hilContext);
+          if (hil) {
+            sendResponse({
+              restated_goal: String(hil.restated_goal || promptText).trim(),
+              ambiguous: hil.verdict === "ask" && Boolean(String(hil.clarifying_question || "").trim()),
+              clarifying_question: String(hil.clarifying_question || "").trim(),
+            });
+            return;
+          }
+          // hil-reason unreachable: fall through to the legacy inline prompt rather
+          // than skip the check, because skipping it means acting on a guess.
+        }
+
         const systemPrompt = pending
           ? [
               "You are Braino's common-sense layer. Braino just asked the user a clarifying question because",
@@ -3626,6 +3648,43 @@ function bgDelegateClarifyDecision(message, thought = "The model response was no
     expect: { assert: "none" },
     done_confidence: 0,
   });
+}
+
+// Braino's ONE common-sense layer, the same bytes /commands and /human-intelligence
+// tune. The extension used to carry its own hand-written copy of this reasoning
+// inline, which is how the lab could learn "look at the screen before you ask" while
+// the browser kept asking anyway: the two were never the same prompt.
+//
+// hil-reason returns a strict superset of what the old inline prompt did
+// (restated_goal, ambiguous, clarifying_question, plus steps/checks/verdict/action),
+// so nothing downstream had to change shape. It also appends the Emotional Engine
+// server-side, which is the point: the canonical prompt says the personality is "the
+// judge of tone and of doubt" and moves the bar for asking, lower in a heavy moment,
+// higher when someone just wants it done. That only works when both arrive together.
+//
+// Returns null on any failure so the caller can fall back to the old path rather
+// than lose the check entirely.
+async function bgReasonViaHil(commandText, contextText) {
+  try {
+    const res = await fetch(`${BG_API_BASE}/hil-reason`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: BG_SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${BG_SUPABASE_ANON_KEY}`,
+      },
+      body: JSON.stringify({ command: commandText, context: contextText || "" }),
+    });
+    if (!res.ok) { console.warn("[Braino][HIL] hil-reason", res.status); return null; }
+    const data = await res.json();
+    const r = data?.reasoning;
+    if (!r || typeof r !== "object") return null;
+    console.log(`[Braino][HIL] ${r.verdict} — ${r.restated_goal}`);
+    return r;
+  } catch (error) {
+    console.warn("[Braino][HIL] hil-reason failed:", error?.message || error);
+    return null;
+  }
 }
 
 async function bgCallDelegateModel({ systemPrompt, userPrompt, model, validationError }) {
