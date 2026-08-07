@@ -499,17 +499,28 @@ func runObserve(cap: Int) {
 // staleness guard: the tree can move between the observation and the click, and
 // pressing whatever now happens to sit at that index is how an agent ends up
 // clicking Delete when it meant Save.
-func runPressIndex(index: Int, expected: String) {
+// `cap` must be the SAME number observe used. A real window has hundreds of
+// elements and the observation shows 120, so anything past the cap was never seen
+// by the model or the guard, and acting on it is acting blind.
+func runPressIndex(index: Int, expected: String, cap: Int) {
   guard let ctx = hilCandidates() else {
     out("error\tno front app")
     return
   }
-  guard index >= 1 && index <= ctx.items.count else {
-    out("stale\tindex \(index) is outside the \(ctx.items.count) elements now on screen")
+  let visible = min(cap, ctx.items.count)
+  guard index >= 1 && index <= visible else {
+    out("stale\tindex \(index) is outside the \(visible) elements that were shown")
+    return
+  }
+  // An empty expected label used to switch this check off entirely, which is the
+  // opposite of what a caller who does not know the label should get. No label
+  // means no evidence the tree is unchanged, so it is refused.
+  if expected.isEmpty {
+    out("stale\tno expected label was given for index \(index), so I cannot confirm the element is still the one that was seen")
     return
   }
   let target = ctx.items[index - 1]
-  if !expected.isEmpty && scoreMatch(label: target.label, query: expected) < 0.5 {
+  if scoreMatch(label: target.label, query: expected) < 0.5 {
     out("stale\texpected \"\(expected)\" at \(index) but found \"\(target.label)\"")
     return
   }
@@ -519,20 +530,39 @@ func runPressIndex(index: Int, expected: String) {
 
 // Focus a field by index, then set its value. Two AX calls, one command, because
 // HIL's type action names the field and the text in a single step.
-func runTypeIndex(index: Int, base64: String) {
+// Same guard as pressing, which this was missing entirely: writing a draft into
+// the wrong field is worse than clicking the wrong button, because nothing on
+// screen announces it and the loop records a success either way.
+func runTypeIndex(index: Int, expected: String, base64: String, cap: Int) {
   guard let data = Data(base64Encoded: base64), let text = String(data: data, encoding: .utf8) else {
     out("error\tbad encoding")
+    return
+  }
+  // Data(base64Encoded: "") is a valid EMPTY payload, so a type action with no
+  // text sailed through and set the field to "" while reporting typed. Wiping a
+  // field is a destructive act and it will not happen by omission.
+  if text.isEmpty {
+    out("error\tno text was given, and I will not blank a field by accident")
     return
   }
   guard let ctx = hilCandidates() else {
     out("error\tno front app")
     return
   }
-  guard index >= 1 && index <= ctx.items.count else {
-    out("stale\tindex \(index) is outside the \(ctx.items.count) elements now on screen")
+  let visible = min(cap, ctx.items.count)
+  guard index >= 1 && index <= visible else {
+    out("stale\tindex \(index) is outside the \(visible) elements that were shown")
+    return
+  }
+  if expected.isEmpty {
+    out("stale\tno expected label was given for index \(index)")
     return
   }
   let target = ctx.items[index - 1]
+  if scoreMatch(label: target.label, query: expected) < 0.5 {
+    out("stale\texpected \"\(expected)\" at \(index) but found \"\(target.label)\"")
+    return
+  }
   AXUIElementSetAttributeValue(target.element, kAXFocusedAttribute as CFString, kCFBooleanTrue)
   let result = AXUIElementSetAttributeValue(target.element, kAXValueAttribute as CFString, text as CFTypeRef)
   out(result == .success ? "typed\t\(target.label)" : "type_failed\t\(target.label)")
@@ -593,11 +623,16 @@ case "key":
 case "observe":
   runObserve(cap: arguments.count > 2 ? (Int(arguments[2]) ?? 120) : 120)
 case "pressindex":
+  // pressindex <index> <cap> <expected label...>
   runPressIndex(index: arguments.count > 2 ? (Int(arguments[2]) ?? 0) : 0,
-                expected: arguments.dropFirst(3).joined(separator: " "))
+                expected: arguments.dropFirst(4).joined(separator: " "),
+                cap: arguments.count > 3 ? (Int(arguments[3]) ?? 120) : 120)
 case "typeindex":
+  // typeindex <index> <cap> <base64 text> <expected label...>
   runTypeIndex(index: arguments.count > 2 ? (Int(arguments[2]) ?? 0) : 0,
-               base64: arguments.count > 3 ? arguments[3] : "")
+               expected: arguments.dropFirst(5).joined(separator: " "),
+               base64: arguments.count > 4 ? arguments[4] : "",
+               cap: arguments.count > 3 ? (Int(arguments[3]) ?? 120) : 120)
 case "clickat":
   let x = arguments.count > 2 ? (Double(arguments[2]) ?? -1) : -1
   let y = arguments.count > 3 ? (Double(arguments[3]) ?? -1) : -1

@@ -5044,18 +5044,24 @@ async function pasteDictationFallback(text, expectedApp = "") {
     const { stdout } = await execFileP("/usr/bin/osascript", [
       "-e",
       [
+        "on run argv",
         'tell application "System Events"',
         "set targetProcess to first application process whose frontmost is true",
+        "set targetName to name of targetProcess as text",
+        'set expectedName to ""',
+        "if (count of argv) > 0 then set expectedName to item 1 of argv as text",
+        "ignoring case",
+        'if expectedName is not "" and targetName is not expectedName then return "moved" & tab & targetName',
+        "end ignoring",
         "key code 9 using {command down}",
-        "return name of targetProcess",
+        'return "pasted" & tab & targetName',
         "end tell",
+        "end run",
       ].join("\n"),
+      expectedApp,
     ], { timeout: 4000 });
-    const targetApp = String(stdout || "").trim();
-    const targetMatches = !expectedApp
-      || !targetApp
-      || targetApp.localeCompare(expectedApp, undefined, { sensitivity: "accent" }) === 0;
-    if (!targetMatches) {
+    const [outcome = "", targetApp = ""] = String(stdout || "").trim().split("\t");
+    if (outcome !== "pasted") {
       return {
         ok: false,
         targetApp,
@@ -10650,7 +10656,37 @@ async function macBuildObservation() {
   const lines = elements.map((e) => `[${e.index}] ${String(e.role || "").padEnd(9)} "${e.name}"`);
   if (data?.hidden > 0) lines.push(`... ${data.hidden} more elements hidden by cap`);
   const header = `APP: ${data?.app || "unknown"}${data?.window ? ` | window: ${data.window}` : ""}`;
-  return { ok: true, text: [header, ...lines].join("\n"), elements };
+  return { ok: true, text: [header, ...lines].join("\n"), elements, appName: data?.app || "", windowTitle: data?.window || "" };
+}
+
+// HIL emits a machine-checkable assert on every step and the Mac was discarding
+// all of them, so the only verification was the model judging its own work on the
+// next turn. That is the failure mode where a run looks healthy while achieving
+// nothing. Mirrors extension/lib/recovery.js verifyAssertion.
+function macVerifyAssert(expect, obs) {
+  if (!expect || typeof expect !== "object" || expect.assert === "none") return { ok: true };
+  const els = Array.isArray(obs?.elements) ? obs.elements : [];
+  const hay = [obs?.appName || "", obs?.windowTitle || "", ...els.map((e) => `${e.role} ${e.name}`)].join(" ").toLowerCase();
+  const norm = (v) => String(v || "").trim().toLowerCase();
+  if (expect.assert === "text_present") {
+    return hay.includes(norm(expect.value)) ? { ok: true } : { ok: false, why: `I could not find "${expect.value}" on screen afterwards.` };
+  }
+  if (expect.assert === "url_contains") {
+    // A Mac window has no URL; its title is the closest honest equivalent.
+    return hay.includes(norm(expect.value)) ? { ok: true } : { ok: false, why: `Nothing on screen mentions "${expect.value}".` };
+  }
+  if (expect.assert === "element_exists" || expect.assert === "element_gone") {
+    const want = norm(expect.match?.name);
+    const found = !want || els.some((e) => norm(e.name).includes(want));
+    const shouldExist = expect.assert === "element_exists";
+    return found === shouldExist ? { ok: true } : { ok: false, why: shouldExist ? `"${expect.match?.name}" never appeared.` : `"${expect.match?.name}" is still there.` };
+  }
+  if (expect.assert === "value_equals") {
+    const el = els.find((e) => Number(e.index) === Number(expect.index));
+    if (!el) return { ok: false, why: `Element [${expect.index}] is no longer on screen.` };
+    return norm(el.name).includes(norm(expect.value)) ? { ok: true } : { ok: false, why: `[${expect.index}] does not hold "${expect.value}".` };
+  }
+  return { ok: true };
 }
 
 async function macExecuteHilAction(action, elements) {
@@ -10668,18 +10704,22 @@ async function macExecuteHilAction(action, elements) {
     // expected label here would have told the helper to skip its own staleness
     // check and press whatever now sits there.
     if (!el) return { ok: false, error: `There is no element [${action.index}] on screen.` };
-    const res = await runAxHelper(["pressindex", String(action.index), el.name || ""], 20000);
-    if (res.status === "pressed") { await macHilWait(700); return { ok: true }; }
+    const res = await runAxHelper(["pressindex", String(action.index), String(MAC_HIL_OBSERVE_CAP), el.name || ""], 20000);
+    if (res.status === "pressed") { await macHilWait(700); return { ok: true, pressed: res.detail }; }
     return { ok: false, error: `${res.status}: ${res.detail}` };
   }
   if (type === "type") {
     const el = byIndex(action.index);
     if (!el) return { ok: false, error: `There is no field [${action.index}] on screen.` };
-    const res = await runAxHelper(["typeindex", String(action.index), Buffer.from(String(action.text || ""), "utf8").toString("base64")], 20000);
+    const res = await runAxHelper(["typeindex", String(action.index), String(MAC_HIL_OBSERVE_CAP),
+      Buffer.from(String(action.text || ""), "utf8").toString("base64"), el.name || ""], 20000);
     if (res.status !== "typed") return { ok: false, error: `${res.status}: ${res.detail}` };
     if (action.submit) await runAxHelper(["key", "return"], 8000).catch(() => {});
     await macHilWait(700);
-    return { ok: true, typedInto: el?.name || "" };
+    // The helper's OWN target label, not the model's expectation echoed back. On a
+    // screen where twenty fields are all called "text field", reporting what we
+    // hoped for is how a wrong write looks like a right one.
+    return { ok: true, typedInto: res.detail || el.name || "" };
   }
   if (type === "pressKey") {
     // A real keystroke. This used to call the helper's `press` verb, which is a
@@ -10820,7 +10860,16 @@ async function runMacHilLoop(command) {
     if (result?.sees) state.facts.push(`I looked and saw: ${String(result.sees).slice(0, 600)}`);
     if (result?.answer) state.facts.push(`Search "${stepObj.action?.query}" answered: ${String(result.answer).slice(0, 600)}`);
     if (state.facts.length > 12) state.facts = state.facts.slice(-12);
-    lastStep = { intent: stepObj.intent || "", action: stepObj.action, expects: stepObj.expects || "", result };
+    // Verify against a FRESH observation, the way the browser does: the point of an
+    // assert is what the screen looks like after, not whether the call returned.
+    let verified = { ok: true };
+    if (result?.ok && stepObj.assert) {
+      const after = await macBuildObservation();
+      verified = macVerifyAssert(stepObj.assert, after);
+      if (!verified.ok) logMac("hil.loop.assert_failed", { why: verified.why, assert: stepObj.assert?.assert });
+    }
+    const settled = verified.ok ? result : { ...result, ok: false, error: verified.why };
+    lastStep = { intent: stepObj.intent || "", action: stepObj.action, expects: stepObj.expects || "", result: settled };
     state.budgetLeft = Math.max(1, maxSteps - step - 1);
   }
   logMac("hil.loop.budget", { runId });
