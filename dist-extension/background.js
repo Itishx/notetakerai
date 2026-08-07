@@ -4460,6 +4460,37 @@ async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {
     bgSendInlineUiMessage(currentTabId, { action: "SB_AGENT_THOUGHT", thought: `Here's my plan: ${planLine}.` });
   }
 
+  // YouTube resolves BEFORE the DOM loop ever starts. Same as the Mac: work out
+  // the videoId from the results JSON and navigate straight to it, instead of
+  // opening YouTube and asking a vision loop to find the right box on the page.
+  if (!skipFastPath) {
+    const ytQuery = bgParseYouTubeWatchIntent(task);
+    if (ytQuery) {
+      try {
+        onProgress?.(`Finding ${ytQuery} on YouTube`);
+        const videos = await bgFetchYouTubeResults(ytQuery, { limit: 5 });
+        const video = videos[0];
+        if (video?.videoId) {
+          const url = `https://www.youtube.com/watch?v=${video.videoId}`;
+          console.log(`[BgDelegate][youtube] resolved "${ytQuery}" → ${video.title} (${video.videoId})`);
+          onProgress?.(`Playing ${video.title}`);
+          const fast = { type: "navigate", url, description: `Play ${video.title}` };
+          const result = await bgExecuteDelegateAction(currentTabId, fast, state);
+          const newObs = (await bgBuildElementObservation(currentTabId, task)).map;
+          BrainoTaskState.commitHistory(state, { action: fast, expect: { assert: "url_contains", value: "watch" }, thought: "YouTube resolver" }, result, { ok: true });
+          return {
+            ok: true,
+            answer: `Playing ${video.title}${video.channel ? ` by ${video.channel}` : ""} on YouTube.`,
+            steps: state.history?.length || 1,
+          };
+        }
+      } catch (error) {
+        // Resolver had a bad day — fall through to the normal loop rather than fail.
+        console.warn("[BgDelegate][youtube] resolver failed, using the agent loop:", error?.message || error);
+      }
+    }
+  }
+
   const fastActions = skipFastPath ? null : bgTryFastPath(task, [], synth, await bgGetUserGeo().catch(() => null));
   if (fastActions?.length) {
     for (const fast of fastActions) {
@@ -7798,6 +7829,64 @@ function bgBuildOpenShortcutFastPath(task, opensThenActs = false) {
     description: `Open ${target}`,
     continueAfter: Boolean(opensThenActs),
   }];
+}
+
+// ── YouTube resolver — a straight port of the Mac's fetchYouTubeResults
+// (mac/braino-mac/main.cjs:6112). This is the entire reason Mac Braino opens a
+// video in a second while the extension used to scroll a results page forever:
+// the Mac never LOOKS at YouTube. It fetches the results page, pulls videoIds
+// out of the embedded ytInitialData JSON, and navigates straight to /watch.
+// The extension was instead handing the DOM to an LLM and asking it to visually
+// recognise which box was a video — ten-plus round trips, and it could not tell a
+// channel card from a video row. Same mechanism now, on both surfaces.
+async function bgFetchYouTubeResults(query, { limit = 6 } = {}) {
+  const response = await fetch(`https://www.youtube.com/results?search_query=${encodeURIComponent(query)}&hl=en`, {
+    headers: { "Accept-Language": "en" },
+  });
+  const html = await response.text();
+  const match = html.match(/var ytInitialData = (\{[\s\S]+?\});<\/script>/);
+  if (!match) throw new Error("YouTube results page had no data.");
+  const data = JSON.parse(match[1]);
+  const videos = [];
+  const walk = (node) => {
+    if (!node || typeof node !== "object") return;
+    if (node.videoRenderer?.videoId) {
+      const v = node.videoRenderer;
+      videos.push({
+        videoId: v.videoId,
+        title: v.title?.runs?.[0]?.text || "",
+        channel: v.ownerText?.runs?.[0]?.text || "",
+        length: v.lengthText?.simpleText || "",
+      });
+      return;
+    }
+    for (const key of Object.keys(node)) walk(node[key]);
+  };
+  walk(data.contents);
+  return videos.slice(0, limit);
+}
+
+// Pull the search phrase out of a "play/watch/show me X (on youtube)" task.
+// Deliberately generic — it extracts whatever the user asked for, it does not
+// know or care about any particular video.
+function bgParseYouTubeWatchIntent(task) {
+  const t = String(task || "").trim();
+  if (!t) return null;
+  const mentionsYouTube = /\byoutube\b|\byt\b/i.test(t);
+  const m = t.match(/^(?:can you\s+|please\s+)?(?:go\s+)?(?:play|watch|show me|put on|open|pull up|find)\s+(.+)$/i);
+  if (!m) return null;
+  let q = m[1]
+    .replace(/\s+(?:on|in|from|over on)\s+(?:youtube|yt)\b.*$/i, "")
+    .replace(/^(?:the|a|an)\s+/i, "")
+    .replace(/\b(?:video|clip)\b\s*$/i, "")
+    .trim();
+  if (!q) return null;
+  // A bare "open netflix" is a site, not a video search. Only treat it as YouTube
+  // if YouTube was named, or the phrasing is unambiguously "play/watch something".
+  const isPlayVerb = /^(?:can you\s+|please\s+)?(?:go\s+)?(?:play|watch|show me|put on)\b/i.test(t);
+  if (!mentionsYouTube && !isPlayVerb) return null;
+  if (/^https?:/i.test(q)) return null;
+  return q;
 }
 
 function bgTryFastPath(task, history, synth = null, geo = null) {
