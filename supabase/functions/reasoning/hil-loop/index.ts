@@ -262,7 +262,10 @@ serve(async (req) => {
     const started = Date.now();
     const reading = detectMoment(commandText);
     const momentId = reading.moment;
-    const emotionalCore = buildEmotionalCore({ medium: "text", moment: momentId });
+    // intensity was computed here, returned to the client, and then dropped on the
+    // floor — so buildEmotionalCore always assembled at its default of 2 and a
+    // panic-level command produced a byte-identical personality to a mild one.
+    const emotionalCore = buildEmotionalCore({ medium: "text", moment: momentId, intensity: reading.intensity });
     const systemPrompt = [
       HIL_LOOP_PROMPT,
       "=== WHO YOU ARE (the Emotional Engine, appended live for this request) ===",

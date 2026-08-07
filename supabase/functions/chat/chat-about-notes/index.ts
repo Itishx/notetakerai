@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
 import { buildBrainoSystemPrompt, buildUserContextText } from "../../_shared/braino-prompt.ts";
+import { buildEmotionalCore } from "../../_shared/emotional-engine/engine.ts";
 import type { ClassId } from "../../_shared/emotional-engine/types.ts";
 import {
   formatRealtimeCostSummaryForBraino,
@@ -517,7 +518,20 @@ serve(async (req) => {
       : null;
 
     const systemPrompt = isDelegateRequest
-      ? String(notes || "You are Braino Delegate. Return strict JSON only.")
+      // Delegate used to get the caller's prompt and nothing else, which is why the
+      // agent had no personality anywhere: this branch is the single chokepoint every
+      // agentic surface routes through. Its `thought` field is streamed to the user
+      // live while it works, so it was the one place Braino narrated himself in a
+      // voice that was not his. Same assembly order hil-loop uses (job first,
+      // personality appended), which is proven to keep strict JSON intact.
+      // focused_task, not neutral: this is him mid-work, so competence leads and the
+      // conversational warmth steps back.
+      ? [
+          String(notes || "You are Braino Delegate. Return strict JSON only."),
+          "=== WHO YOU ARE (appended live; it governs your voice, never your output shape) ===",
+          buildEmotionalCore({ medium: "text", moment: "focused_task" }),
+          "The JSON contract above outranks everything here. Personality lives in the `thought` field and nowhere else: no prose outside the object, no code fences, no extra keys.",
+        ].join("\n\n")
       : visionDescribe
       ? "You are Braino, looking at the user live through their webcam or at their screen. Answer their request about what you see in one or two warm, natural, spoken sentences. Be specific about what's actually there. Never mention being an AI, or that this is an image, a frame, or a screenshot."
       : hasImage
