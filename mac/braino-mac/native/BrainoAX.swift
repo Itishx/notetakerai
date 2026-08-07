@@ -161,13 +161,18 @@ func runPress(query: String) {
 }
 
 func focusedElement(in appElement: AXUIElement? = nil) -> AXUIElement? {
+  // The system-wide focus is often more accurate for Chromium/Electron web
+  // editors. Their application-level focused element can briefly stay on the
+  // web area while a contenteditable child already owns the caret.
+  let systemWide = AXUIElementCreateSystemWide()
+  if let raw = axAttr(systemWide, kAXFocusedUIElementAttribute as String) {
+    return (raw as! AXUIElement)
+  }
   if let appElement,
      let raw = axAttr(appElement, kAXFocusedUIElementAttribute as String) {
     return (raw as! AXUIElement)
   }
-  let systemWide = AXUIElementCreateSystemWide()
-  guard let raw = axAttr(systemWide, kAXFocusedUIElementAttribute as String) else { return nil }
-  return (raw as! AXUIElement)
+  return nil
 }
 
 func axSettable(_ element: AXUIElement, _ name: String) -> Bool {
@@ -183,6 +188,53 @@ struct FocusedTarget {
   let appName: String
 }
 
+func axBool(_ element: AXUIElement, _ name: String) -> Bool {
+  guard let value = axAttr(element, name) else { return false }
+  if let number = value as? NSNumber { return number.boolValue }
+  return false
+}
+
+func editableTarget(from original: AXUIElement) -> (status: String, element: AXUIElement?, role: String) {
+  var current: AXUIElement? = original
+  var depth = 0
+  let editableRoles: Set<String> = ["AXTextField", "AXTextArea", "AXComboBox", "AXSearchField"]
+
+  while let element = current, depth < 12 {
+    let role = axString(element, kAXRoleAttribute as String)
+    let subrole = axString(element, kAXSubroleAttribute as String)
+    if role == "AXSecureTextField" || subrole == "AXSecureTextField" {
+      return ("secure", nil, role)
+    }
+
+    let selectedText = axSettable(element, kAXSelectedTextAttribute as String)
+    let selectedRange = axSettable(element, kAXSelectedTextRangeAttribute as String)
+    let value = axSettable(element, kAXValueAttribute as String)
+    let explicitlyEditable = axBool(element, "AXEditable")
+    if selectedText || explicitlyEditable || (editableRoles.contains(role) && (selectedRange || value)) {
+      return ("editable", element, role)
+    }
+
+    guard let parent = axAttr(element, kAXParentAttribute as String) else { break }
+    current = (parent as! AXUIElement)
+    depth += 1
+  }
+
+  return ("not_editable", original, axString(original, kAXRoleAttribute as String))
+}
+
+func findFocusedDescendant(in root: AXUIElement) -> AXUIElement? {
+  var queue: [AXUIElement] = [root]
+  var visited = 0
+  let deadline = Date().addingTimeInterval(0.35)
+  while !queue.isEmpty && visited < 1800 && Date() < deadline {
+    let element = queue.removeFirst()
+    visited += 1
+    if axBool(element, kAXFocusedAttribute as String) { return element }
+    queue.append(contentsOf: axChildren(element))
+  }
+  return nil
+}
+
 func inspectFocusedTarget() -> FocusedTarget {
   guard AXIsProcessTrusted() else {
     return FocusedTarget(status: "needs-accessibility", element: nil, role: "", appName: "")
@@ -192,19 +244,23 @@ func inspectFocusedTarget() -> FocusedTarget {
   }
   wakeLazyAccessibility(appElement)
   let appName = NSRunningApplication(processIdentifier: pid)?.localizedName ?? ""
-  guard let element = focusedElement(in: appElement) else {
+  // Lazy browser accessibility trees do not necessarily update in the same
+  // run-loop tick in which AXManualAccessibility is enabled.
+  usleep(70_000)
+  var element = focusedElement(in: appElement)
+  if element == nil, let window = axAttr(appElement, kAXFocusedWindowAttribute as String) {
+    element = findFocusedDescendant(in: window as! AXUIElement)
+  }
+  guard let element else {
     return FocusedTarget(status: "no_focus", element: nil, role: "", appName: appName)
   }
-  let role = axString(element, kAXRoleAttribute as String)
-  let subrole = axString(element, kAXSubroleAttribute as String)
-  if role == "AXSecureTextField" || subrole == "AXSecureTextField" {
-    return FocusedTarget(status: "secure", element: nil, role: role, appName: appName)
-  }
-  let knownEditable = ["AXTextField", "AXTextArea", "AXComboBox"].contains(role)
-  let acceptsSelectedText = axSettable(element, kAXSelectedTextAttribute as String)
-  let acceptsValue = axSettable(element, kAXValueAttribute as String)
-  let status = acceptsSelectedText || (knownEditable && acceptsValue) ? "editable" : "not_editable"
-  return FocusedTarget(status: status, element: element, role: role, appName: appName)
+  let resolved = editableTarget(from: element)
+  return FocusedTarget(
+    status: resolved.status,
+    element: resolved.element,
+    role: resolved.role,
+    appName: appName
+  )
 }
 
 func runFocused() {
@@ -361,9 +417,156 @@ func runWindow(action: String, appQuery: String) {
   }
 }
 
+
+// ── HIL loop surface ─────────────────────────────────────────────────────────
+// The browser's Delegate sees an indexed element map and targets by index. This
+// gives the Mac the same shape on top of the accessibility tree, so ONE prompt
+// (hil-loop-prompt.ts) can drive both surfaces. Everything below reuses the same
+// collectPressables walk the press command already trusts, so what HIL sees and
+// what a press hits are the same list in the same order.
+
+let EDITABLE_ROLES: Set<String> = ["AXTextField", "AXTextArea", "AXComboBox", "AXSearchField"]
+
+func collectEditables(from root: AXUIElement) -> [Candidate] {
+  var found: [Candidate] = []
+  var queue: [AXUIElement] = [root]
+  var visited = 0
+  let deadline = Date().addingTimeInterval(2.5)
+  while !queue.isEmpty && visited < 8000 && Date() < deadline {
+    let element = queue.removeFirst()
+    visited += 1
+    let role = axString(element, kAXRoleAttribute as String)
+    if EDITABLE_ROLES.contains(role) {
+      var label = elementLabel(element)
+      if label.isEmpty { label = axString(element, kAXPlaceholderValueAttribute as String) }
+      if label.isEmpty { label = "text field" }
+      found.append(Candidate(element: element, label: label, role: role))
+    }
+    queue.append(contentsOf: axChildren(element))
+  }
+  return found
+}
+
+// One deterministic list: editables first, then pressables. Both the observe and
+// the act commands build it the same way, so index N means the same element in
+// both, as long as the screen has not changed underneath (which is exactly what
+// the loop's re-observation each turn is for).
+func hilCandidates() -> (app: String, window: String, items: [Candidate])? {
+  guard let (appElement, _) = frontAppElement() else { return nil }
+  wakeLazyAccessibility(appElement)
+  let appName = axString(appElement, kAXTitleAttribute as String)
+  var root = appElement
+  var windowTitle = ""
+  if let window = axAttr(appElement, kAXFocusedWindowAttribute as String) {
+    root = window as! AXUIElement
+    windowTitle = axString(root, kAXTitleAttribute as String)
+  }
+  var items = collectEditables(from: root)
+  items.append(contentsOf: collectPressables(from: root))
+  return (appName, windowTitle, items)
+}
+
+func jsonEscape(_ value: String) -> String {
+  var out = ""
+  for ch in value.unicodeScalars {
+    switch ch {
+    case "\"": out += "\\\""
+    case "\\": out += "\\\\"
+    case "\n", "\r", "\t": out += " "
+    default:
+      if ch.value < 0x20 { out += " " } else { out.unicodeScalars.append(ch) }
+    }
+  }
+  return out
+}
+
+// Emitted as ONE line of JSON because the Node bridge reads only the first line.
+func runObserve(cap: Int) {
+  guard let ctx = hilCandidates() else {
+    out("error\tno front app")
+    return
+  }
+  var rows: [String] = []
+  for (i, c) in ctx.items.prefix(cap).enumerated() {
+    let role = c.role.hasPrefix("AX") ? String(c.role.dropFirst(2)).lowercased() : c.role.lowercased()
+    rows.append("{\"index\":\(i + 1),\"role\":\"\(jsonEscape(role))\",\"name\":\"\(jsonEscape(c.label))\"}")
+  }
+  let more = max(0, ctx.items.count - cap)
+  out("observe\t{\"app\":\"\(jsonEscape(ctx.app))\",\"window\":\"\(jsonEscape(ctx.window))\",\"hidden\":\(more),\"elements\":[\(rows.joined(separator: ","))]}")
+}
+
+// Press by INDEX, with the label the caller expected. The label check is a
+// staleness guard: the tree can move between the observation and the click, and
+// pressing whatever now happens to sit at that index is how an agent ends up
+// clicking Delete when it meant Save.
+func runPressIndex(index: Int, expected: String) {
+  guard let ctx = hilCandidates() else {
+    out("error\tno front app")
+    return
+  }
+  guard index >= 1 && index <= ctx.items.count else {
+    out("stale\tindex \(index) is outside the \(ctx.items.count) elements now on screen")
+    return
+  }
+  let target = ctx.items[index - 1]
+  if !expected.isEmpty && scoreMatch(label: target.label, query: expected) < 0.5 {
+    out("stale\texpected \"\(expected)\" at \(index) but found \"\(target.label)\"")
+    return
+  }
+  let result = AXUIElementPerformAction(target.element, kAXPressAction as CFString)
+  out(result == .success ? "pressed\t\(target.label)" : "press_failed\t\(target.label)")
+}
+
+// Focus a field by index, then set its value. Two AX calls, one command, because
+// HIL's type action names the field and the text in a single step.
+func runTypeIndex(index: Int, base64: String) {
+  guard let data = Data(base64Encoded: base64), let text = String(data: data, encoding: .utf8) else {
+    out("error\tbad encoding")
+    return
+  }
+  guard let ctx = hilCandidates() else {
+    out("error\tno front app")
+    return
+  }
+  guard index >= 1 && index <= ctx.items.count else {
+    out("stale\tindex \(index) is outside the \(ctx.items.count) elements now on screen")
+    return
+  }
+  let target = ctx.items[index - 1]
+  AXUIElementSetAttributeValue(target.element, kAXFocusedAttribute as CFString, kCFBooleanTrue)
+  let result = AXUIElementSetAttributeValue(target.element, kAXValueAttribute as CFString, text as CFTypeRef)
+  out(result == .success ? "typed\t\(target.label)" : "type_failed\t\(target.label)")
+}
+
+
+// A genuine keystroke, not a fuzzy element search. The loop's pressKey and the
+// submit flag on typing both need this: "press Return" must mean the Return KEY,
+// never a button whose label happens to read Return.
+let KEY_CODES: [String: CGKeyCode] = [
+  "return": 36, "enter": 36, "tab": 48, "space": 49, "escape": 53, "esc": 53,
+  "delete": 51, "backspace": 51, "down": 125, "up": 126, "left": 123, "right": 124,
+]
+
+func runKey(name: String) {
+  let key = name.lowercased().trimmingCharacters(in: .whitespaces)
+  guard let code = KEY_CODES[key] else {
+    out("error\tunknown key \(key)")
+    return
+  }
+  guard let down = CGEvent(keyboardEventSource: nil, virtualKey: code, keyDown: true),
+        let up = CGEvent(keyboardEventSource: nil, virtualKey: code, keyDown: false) else {
+    out("error\tevent create failed")
+    return
+  }
+  down.post(tap: .cghidEventTap)
+  usleep(40_000)
+  up.post(tap: .cghidEventTap)
+  out("key\t\(key)")
+}
+
 let arguments = CommandLine.arguments
 guard arguments.count >= 2 else {
-  out("error\tusage: press|selected|replace|focused|insert|window")
+  out("error\tusage: press|pressindex|typeindex|observe|key|selected|replace|focused|insert|window")
   exit(0)
 }
 guard AXIsProcessTrusted() else {
@@ -385,6 +588,16 @@ case "window":
   let action = arguments.count > 2 ? arguments[2] : ""
   let appQuery = arguments.dropFirst(3).joined(separator: " ")
   runWindow(action: action, appQuery: appQuery.isEmpty ? "front" : appQuery)
+case "key":
+  runKey(name: arguments.dropFirst(2).joined(separator: " "))
+case "observe":
+  runObserve(cap: arguments.count > 2 ? (Int(arguments[2]) ?? 120) : 120)
+case "pressindex":
+  runPressIndex(index: arguments.count > 2 ? (Int(arguments[2]) ?? 0) : 0,
+                expected: arguments.dropFirst(3).joined(separator: " "))
+case "typeindex":
+  runTypeIndex(index: arguments.count > 2 ? (Int(arguments[2]) ?? 0) : 0,
+               base64: arguments.count > 3 ? arguments[3] : "")
 case "clickat":
   let x = arguments.count > 2 ? (Double(arguments[2]) ?? -1) : -1
   let y = arguments.count > 3 ? (Double(arguments[3]) ?? -1) : -1

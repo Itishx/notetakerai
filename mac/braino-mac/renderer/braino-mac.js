@@ -359,6 +359,10 @@ let dictationStartGeneration = 0;
 let realtimeStartGeneration = 0;
 let dictationInsertChain = Promise.resolve();
 let dictationPendingTurns = 0;
+let dictationTurnOrder = [];
+let dictationTurns = new Map();
+let dictationSpeechActive = false;
+let dictationManualCommitPending = false;
 let rtDictationVad = null;
 let rtDictationPreroll = null;
 let voiceCycleInFlight = false;
@@ -3657,8 +3661,22 @@ function buildRealtimeSessionUpdate() {
             transcription: {
               model: DICTATION_TRANSCRIPTION_MODEL,
               delay: "low",
+              prompt: [
+                "This is direct personal dictation into a Mac text field.",
+                "Transcribe every clearly spoken word faithfully in the language used by the speaker.",
+                "Add only punctuation and capitalization that are strongly supported by the speech.",
+                "Keep names, brands, acronyms, numbers, URLs, file names, and code tokens exact.",
+                "Do not summarize, answer, add ideas, or silently rewrite the meaning.",
+                "Ignore music, keyboard noise, fans, coughs, and unrelated background speech.",
+              ].join(" "),
+              keywords: ["Braino", "Brainohera", "IOMI", "Yap Mode", "Notch"],
             },
-            turn_detection: null,
+            turn_detection: {
+              type: "server_vad",
+              threshold: 0.42,
+              prefix_padding_ms: 600,
+              silence_duration_ms: 900,
+            },
           },
         },
       },
@@ -4345,8 +4363,60 @@ function resetDictationVadTurn(vad) {
   vad.lastVoiceAt = 0;
 }
 
+function resetDictationTurnState() {
+  dictationPendingTurns = 0;
+  dictationTurnOrder = [];
+  dictationTurns = new Map();
+  dictationSpeechActive = false;
+  dictationManualCommitPending = false;
+}
+
+function dictationTurnFor(itemId) {
+  const id = String(itemId || "").trim();
+  if (!id) return null;
+  if (!dictationTurns.has(id)) {
+    dictationTurns.set(id, {
+      id,
+      text: "",
+      completed: false,
+      failed: false,
+    });
+  }
+  return dictationTurns.get(id);
+}
+
+function registerCommittedDictationTurn(itemId) {
+  const turn = dictationTurnFor(itemId);
+  if (!turn) return;
+  if (!dictationTurnOrder.includes(turn.id)) {
+    dictationTurnOrder.push(turn.id);
+    dictationPendingTurns += 1;
+  }
+  dictationManualCommitPending = false;
+  logRenderer("dictation.turn.committed", {
+    itemId: turn.id,
+    pendingTurns: dictationPendingTurns,
+  });
+  drainCompletedDictationTurns();
+}
+
+function drainCompletedDictationTurns() {
+  while (dictationTurnOrder.length) {
+    const itemId = dictationTurnOrder[0];
+    const turn = dictationTurns.get(itemId);
+    if (!turn?.completed) break;
+    dictationTurnOrder.shift();
+    dictationTurns.delete(itemId);
+    dictationPendingTurns = Math.max(0, dictationPendingTurns - 1);
+    if (!turn.failed && turn.text.trim()) {
+      console.log(`[Braino Yap] "${turn.text.trim()}"`);
+      enqueueDictationTranscript(turn.text);
+    }
+  }
+}
+
 function markDictationTurnCommitted(reason, speechMs = 0) {
-  dictationPendingTurns += 1;
+  dictationManualCommitPending = true;
   markVoiceLatency("speech_stopped");
   setStatus("captured", "Typing");
   logRenderer("dictation.vad.turn_committed", {
@@ -4359,7 +4429,8 @@ function markDictationTurnCommitted(reason, speechMs = 0) {
 function commitPendingDictationTurn(reason = "manual_stop", { force = false } = {}) {
   const vad = rtDictationVad;
   const hasDetectedSpeech = Boolean(
-    vad?.speaking
+    dictationSpeechActive
+    || vad?.speaking
     || (vad?.candidateAt && performance.now() - vad.candidateAt >= 80)
     || rtUserTranscript.trim(),
   );
@@ -4370,6 +4441,7 @@ function commitPendingDictationTurn(reason = "manual_stop", { force = false } = 
   const sent = sendRealtimeEvent({ type: "input_audio_buffer.commit" });
   if (!sent) return false;
   markDictationTurnCommitted(reason, speechMs);
+  dictationSpeechActive = false;
   if (force && !hasDetectedSpeech) {
     logRenderer("dictation.vad.force_committed", {
       reason,
@@ -4382,7 +4454,7 @@ function commitPendingDictationTurn(reason = "manual_stop", { force = false } = 
 
 async function waitForDictationDrain(timeoutMs = 4200) {
   const startedAt = Date.now();
-  while (dictationPendingTurns > 0 && Date.now() - startedAt < timeoutMs) {
+  while ((dictationPendingTurns > 0 || dictationManualCommitPending) && Date.now() - startedAt < timeoutMs) {
     await new Promise((resolve) => window.setTimeout(resolve, 40));
   }
   const remainingMs = Math.max(0, timeoutMs - (Date.now() - startedAt));
@@ -4393,7 +4465,7 @@ async function waitForDictationDrain(timeoutMs = 4200) {
     ]);
   }
   return {
-    drained: dictationPendingTurns === 0,
+    drained: dictationPendingTurns === 0 && !dictationManualCommitPending,
     pendingTurns: dictationPendingTurns,
     durationMs: Date.now() - startedAt,
   };
@@ -4510,6 +4582,18 @@ function enqueueDictationTranscript(transcript) {
 
       const inserted = await window.brainoMac.dictationInsert({ text: transcript });
       if (!dictationMode || generation !== dictationStartGeneration) return;
+      if (inserted?.fallback) {
+        const recoverable = String(inserted.transcript || transcript || "").trim();
+        setStatus("listening", "Yap Mode · copied");
+        nfSetHeard(recoverable, { durationMs: 12000 });
+        nfShowTransient("No text box · copied", 12000);
+        logRenderer("dictation.notch_fallback", {
+          transcriptChars: recoverable.length,
+          clipboardRetained: Boolean(inserted.clipboardRetained),
+          focusStatus: inserted.focusStatus || "",
+        });
+        return;
+      }
       if (!inserted?.ok) {
         setStatus("error", "Yap Mode paused");
         setBubble(inserted?.error || "Keep the caret in a text field.", 3200);
@@ -5105,7 +5189,6 @@ async function startRealtimeVoice(options = {}) {
         durationMs: preroll.durationMs,
         chunks: appendedChunks,
       });
-      await startDictationTurnDetector(stream);
       assertRealtimeStartCurrent(startGeneration, pc);
     }
     startRealtimeHeartbeat(result.sessionId || null);

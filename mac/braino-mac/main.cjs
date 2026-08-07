@@ -42,7 +42,10 @@ const AUTH_CALLBACK_PATH = "/braino-mac-auth-callback";
 // double-option handler, the "braino-mac:skit-step" ipcMain handler,
 // preload's skit bridge, and runSkit() in the renderer.
 const SKIT = {
-  enabled: true,
+  // Double Option belongs to Yap Mode. Keep the recording-only skit code
+  // available for an explicit demo trigger, but never let it take the global
+  // dictation shortcut again.
+  enabled: false,
   song: "Billie Jean Michael Jackson",
   // Same cue as the Chrome extension's moonwalk trick: Billie Jean, seeked to
   // the 3:31 moonwalk moment. Native AppleScript play by URI + position needs
@@ -64,6 +67,8 @@ const {
   selectSpotifyReturnTarget,
 } = require(path.join(__dirname, "spotify-focus-return.cjs"));
 const {
+  buildDictationTranscriptionConfig,
+  buildDictationTurnDetection,
   evaluateDictationStart,
   normalizeDictationChunk,
   parseDictationControl,
@@ -104,9 +109,11 @@ let dictationState = {
   startedAt: 0,
   targetApp: "",
   insertions: 0,
+  fallbacks: 0,
   insertionMode: "",
   focusStatus: "",
 };
+let lastDictationTranscript = "";
 const DICTATION_TRANSCRIPTION_MODEL = "gpt-realtime-whisper";
 const DEFAULT_REALTIME_TRANSCRIPTION_MODEL = "gpt-4o-transcribe";
 
@@ -2195,6 +2202,19 @@ async function handlePendingMacWorkflow(raw) {
   if (isWorkflowCancelIntent(raw)) {
     clearPendingMacWorkflow();
     return { ok: true, say: "Cancelled. I did not do anything." };
+  }
+
+  // The HIL loop asked something and stopped. Fold the answer back into the
+  // original command and run it again: the loop is stateless between calls, so
+  // the answer has to arrive as part of the command rather than as a resumption.
+  // Without this the loop's questions were rhetorical and the pending slot would
+  // sit there until it timed out.
+  if (pending.type === "hil_answer") {
+    clearPendingMacWorkflow();
+    const original = String(pending.data?.command || "").trim();
+    const question = String(pending.data?.question || "").trim();
+    logMac("hil.loop.answered", { answer: textForLog(raw) });
+    return runMacHilLoop(`${original}\n\n(You asked: ${question}\nThey answered: ${raw})`);
   }
 
   if (pending.type === "music_segment" && pending.stage === "loop_range") {
@@ -4936,10 +4956,22 @@ function dictationStatePayload() {
     startedAt: dictationState.startedAt || null,
     targetApp: dictationState.targetApp || "",
     insertions: dictationState.insertions || 0,
+    fallbacks: dictationState.fallbacks || 0,
     insertionMode: dictationState.insertionMode || "",
     focusStatus: dictationState.focusStatus || "",
+    hasLastTranscript: Boolean(lastDictationTranscript),
     model: DICTATION_TRANSCRIPTION_MODEL,
   };
+}
+
+function parseAxFocusDetail(detail) {
+  try {
+    const decoded = Buffer.from(String(detail || ""), "base64").toString("utf8");
+    const [appName = "", role = ""] = decoded.split("|");
+    return { appName: appName.trim(), role: role.trim() };
+  } catch (_) {
+    return { appName: "", role: "" };
+  }
 }
 
 async function startDictationSkill() {
@@ -4948,7 +4980,8 @@ async function startDictationSkill() {
     runAxHelper(["focused"]),
   ]);
   if (latestContext && !isBrainoSelfContext(latestContext)) activeMacContext = latestContext;
-  const appName = activeMacContext?.appName || "";
+  const focusTarget = parseAxFocusDetail(focus.detail);
+  const appName = focusTarget.appName || activeMacContext?.appName || "";
   const decision = evaluateDictationStart(focus.status, Boolean(appName));
   logMac("dictation.focus", {
     status: focus.status,
@@ -4969,6 +5002,7 @@ async function startDictationSkill() {
     startedAt: Date.now(),
     targetApp: appName,
     insertions: 0,
+    fallbacks: 0,
     insertionMode: decision.insertionMode,
     focusStatus: focus.status,
   };
@@ -4988,6 +5022,7 @@ function stopDictationSkill(reason = "stopped") {
     startedAt: 0,
     targetApp: "",
     insertions: 0,
+    fallbacks: 0,
     insertionMode: "",
     focusStatus: "",
   };
@@ -5002,7 +5037,7 @@ function stopDictationSkill(reason = "stopped") {
   return { ok: true, ...dictationStatePayload() };
 }
 
-async function pasteDictationFallback(text) {
+async function pasteDictationFallback(text, expectedApp = "") {
   const previousClipboard = clipboard.readText();
   clipboard.writeText(text);
   try {
@@ -5016,20 +5051,63 @@ async function pasteDictationFallback(text) {
         "end tell",
       ].join("\n"),
     ], { timeout: 4000 });
-    await new Promise((resolve) => setTimeout(resolve, 420));
+    const targetApp = String(stdout || "").trim();
+    const targetMatches = !expectedApp
+      || !targetApp
+      || targetApp.localeCompare(expectedApp, undefined, { sensitivity: "accent" }) === 0;
+    if (!targetMatches) {
+      return {
+        ok: false,
+        targetApp,
+        previousClipboard,
+        error: `Focus moved from ${expectedApp} to ${targetApp}.`,
+      };
+    }
+    await new Promise((resolve) => setTimeout(resolve, 460));
     if (clipboard.readText() === text) clipboard.writeText(previousClipboard);
     return {
       ok: true,
-      targetApp: String(stdout || "").trim(),
+      targetApp,
+      previousClipboard,
     };
   } catch (error) {
-    if (clipboard.readText() === text) clipboard.writeText(previousClipboard);
+    // A failed paste deliberately leaves the transcript on the clipboard. It
+    // is safer to preserve the user's words than to restore old contents and
+    // make a successful transcription unrecoverable.
     return {
       ok: false,
       targetApp: "",
+      previousClipboard,
       error: error?.message || "paste command failed",
     };
   }
+}
+
+function keepDictationFallback(text, focusStatus, error = "") {
+  const transcript = String(text || "").trim();
+  if (transcript) {
+    clipboard.writeText(transcript);
+    lastDictationTranscript = transcript;
+  }
+  dictationState.fallbacks += 1;
+  dictationState.insertionMode = "notch";
+  dictationState.focusStatus = focusStatus || "not_editable";
+  logMac("dictation.fallback", {
+    chars: transcript.length,
+    status: dictationState.focusStatus,
+    error: error || "",
+    fallback: dictationState.fallbacks,
+    clipboardRetained: Boolean(transcript),
+  });
+  return {
+    ok: true,
+    inserted: false,
+    fallback: true,
+    transcript,
+    clipboardRetained: Boolean(transcript),
+    message: "No text box found. Transcript copied.",
+    ...dictationStatePayload(),
+  };
 }
 
 async function insertDictationText(value) {
@@ -5038,6 +5116,7 @@ async function insertDictationText(value) {
   }
   const text = normalizeDictationChunk(value);
   if (!text) return { ok: true, inserted: false, ...dictationStatePayload() };
+  lastDictationTranscript = text.trim();
 
   const focus = await runAxHelper(["focused"]);
   if (focus.status === "needs-accessibility" || focus.status === "secure") {
@@ -5053,9 +5132,16 @@ async function insertDictationText(value) {
     return { ok: false, error, ...dictationStatePayload() };
   }
 
-  // AXSelectedText reports success in apps such as Cursor even when the
-  // Electron editor silently discards the write. Send a real paste first.
-  const pasted = await pasteDictationFallback(text);
+  const focusTarget = parseAxFocusDetail(focus.detail);
+  if (focusTarget.appName) dictationState.targetApp = focusTarget.appName;
+  dictationState.focusStatus = focus.status;
+  if (focus.status !== "editable") {
+    return keepDictationFallback(text, focus.status);
+  }
+
+  // A real paste event is the most compatible insertion path for native,
+  // Chromium, Electron, terminal, and remote-desktop editors.
+  const pasted = await pasteDictationFallback(text, focusTarget.appName);
   let ok = pasted.ok;
   let method = ok ? "paste" : "";
   let insertionStatus = focus.status;
@@ -5064,9 +5150,13 @@ async function insertDictationText(value) {
     insertionStatus = inserted.status;
     ok = inserted.status === "inserted";
     method = ok ? "accessibility" : "";
+    if (ok && clipboard.readText() === text) clipboard.writeText(pasted.previousClipboard || "");
   }
 
-  if (ok) dictationState.insertions += 1;
+  if (ok) {
+    dictationState.insertions += 1;
+    dictationState.insertionMode = method;
+  }
   logMac(ok ? "dictation.inserted" : "dictation.insert_failed", {
     chars: text.length,
     method,
@@ -5076,12 +5166,7 @@ async function insertDictationText(value) {
     pasteError: pasted.error || "",
   });
   if (!ok) {
-    const error = insertionStatus === "needs-accessibility"
-      ? "Braino needs Accessibility permission to type."
-      : insertionStatus === "secure"
-        ? "Yap Mode stays out of password and secure text fields."
-        : "Keep the caret in an editable text field while dictating.";
-    return { ok: false, error, ...dictationStatePayload() };
+    return keepDictationFallback(text, insertionStatus, pasted.error || "insertion failed");
   }
   return {
     ok: true,
@@ -9917,11 +10002,10 @@ function buildRealtimeSessionConfig({ purpose = "voice", requestedModel = "gpt-r
         input: {
           format: { type: "audio/pcm", rate: 24000 },
           noise_reduction: { type: "near_field" },
-          transcription: {
+          transcription: buildDictationTranscriptionConfig({
             model: DICTATION_TRANSCRIPTION_MODEL,
-            delay: "low",
-          },
-          turn_detection: null,
+          }),
+          turn_detection: buildDictationTurnDetection(),
         },
       },
     };
@@ -10536,6 +10620,229 @@ function fireHilReasonThinking(raw, ticket) {
 // Bumped the moment an action completes, which retires any HIL thinking still in
 // flight for it.
 let hilThinkingTicket = 0;
+
+
+// ── HIL LOOP ON THE MAC ───────────────────────────────────────────────────────
+// The same brain that drives the browser Delegate, driving the Mac's accessibility
+// tree instead of a DOM. One prompt (hil-loop-prompt.ts), one version, both
+// surfaces: that is the whole point, and it is why the observation below is shaped
+// exactly like the browser's element map rather than something Mac-specific.
+//
+// The regex cascade stays the fast lane. "play billie jean" and "open spotify"
+// answer in under a second and must never wait on a model. This loop is for the
+// work the cascade cannot do: several jobs in one breath, anything that needs to
+// look at the result before choosing the next move, anything it simply does not
+// match.
+const macHilWait = (ms) => new Promise((r) => setTimeout(r, ms));
+const MAC_HIL_MAX_STEPS = 14;          // AX calls are slow; this is a real ceiling, not a formality
+const MAC_HIL_MAX_MS = 90000;          // and a wall clock, because steps say nothing about elapsed time
+const MAC_HIL_OBSERVE_CAP = 120;
+
+// The AX helper answers in one line: "observe\t{json}".
+async function macBuildObservation() {
+  const res = await runAxHelper(["observe", String(MAC_HIL_OBSERVE_CAP)], 20000);
+  if (res.status !== "observe") return { ok: false, error: res.detail || res.status, text: "", elements: [] };
+  let data = null;
+  try { data = JSON.parse(res.detail); } catch (_) { return { ok: false, error: "unreadable observation", text: "", elements: [] }; }
+  const elements = Array.isArray(data?.elements) ? data.elements : [];
+  // Serialized in the browser's format so the prompt's targeting rules read the
+  // same way on both surfaces.
+  const lines = elements.map((e) => `[${e.index}] ${String(e.role || "").padEnd(9)} "${e.name}"`);
+  if (data?.hidden > 0) lines.push(`... ${data.hidden} more elements hidden by cap`);
+  const header = `APP: ${data?.app || "unknown"}${data?.window ? ` | window: ${data.window}` : ""}`;
+  return { ok: true, text: [header, ...lines].join("\n"), elements };
+}
+
+async function macExecuteHilAction(action, elements) {
+  const type = String(action?.type || "");
+  const byIndex = (i) => elements.find((e) => Number(e.index) === Number(i));
+
+  if (type === "navigate") {
+    await openChromeUrl(String(action.url || ""));
+    await macHilWait(1400);
+    return { ok: true };
+  }
+  if (type === "click") {
+    const el = byIndex(action.index);
+    // No element at that index means the model invented one. Passing an empty
+    // expected label here would have told the helper to skip its own staleness
+    // check and press whatever now sits there.
+    if (!el) return { ok: false, error: `There is no element [${action.index}] on screen.` };
+    const res = await runAxHelper(["pressindex", String(action.index), el.name || ""], 20000);
+    if (res.status === "pressed") { await macHilWait(700); return { ok: true }; }
+    return { ok: false, error: `${res.status}: ${res.detail}` };
+  }
+  if (type === "type") {
+    const el = byIndex(action.index);
+    if (!el) return { ok: false, error: `There is no field [${action.index}] on screen.` };
+    const res = await runAxHelper(["typeindex", String(action.index), Buffer.from(String(action.text || ""), "utf8").toString("base64")], 20000);
+    if (res.status !== "typed") return { ok: false, error: `${res.status}: ${res.detail}` };
+    if (action.submit) await runAxHelper(["key", "return"], 8000).catch(() => {});
+    await macHilWait(700);
+    return { ok: true, typedInto: el?.name || "" };
+  }
+  if (type === "pressKey") {
+    // A real keystroke. This used to call the helper's `press` verb, which is a
+    // fuzzy search over element LABELS, so asking for Return could press any
+    // button named Return.
+    const res = await runAxHelper(["key", String(action.key || "return")], 8000);
+    await macHilWait(500);
+    return res.status === "key" ? { ok: true } : { ok: false, error: `${res.status}: ${res.detail}` };
+  }
+  if (type === "read" || type === "look") {
+    const obs = await macBuildObservation();
+    return { ok: obs.ok, sees: obs.text.slice(0, 3000), error: obs.error };
+  }
+  if (type === "web_search") {
+    const found = await runMacWebSearch(String(action.query || ""));
+    // .say is the real field, and ok matters: a failed search recorded as a fact
+    // becomes something Braino then treats as true for the rest of the run.
+    if (!found?.ok || !found?.say) return { ok: false, error: found?.say || "The search came back with nothing usable." };
+    return { ok: true, answer: String(found.say) };
+  }
+  if (type === "wait") {
+    await macHilWait(Math.min(4000, Math.max(0, Number(action.ms) || 800)));
+    return { ok: true };
+  }
+  return { ok: false, error: `Mac cannot run the action "${type}" yet.` };
+}
+
+// One task, many turns. State lives here and is re-sent whole each turn, exactly
+// like the browser: no growing transcript, so turn nine thinks as clearly as one.
+async function runMacHilLoop(command) {
+  const runId = crypto.randomUUID();
+  // Several jobs need more room than one. This is the only thing the multi-step
+  // read is used for now: how much rope, not which brain.
+  const maxSteps = macLooksMultiStep(command) ? MAC_HIL_MAX_STEPS : Math.ceil(MAC_HIL_MAX_STEPS / 2);
+  const state = { tasks: [], facts: [], asides: [], steps: [], budgetLeft: maxSteps };
+  let lastStep = null;
+  let said = "";
+  let retried = false;
+  const deadline = Date.now() + MAC_HIL_MAX_MS;
+  logMac("hil.loop.start", { command: textForLog(command), runId });
+
+  for (let step = 0; step < maxSteps; step += 1) {
+    // Every turn is a model call plus two or three AX walks, and this holds the
+    // single delegate IPC the whole time. A run that will not finish has to give
+    // the surface back rather than leave the user talking to a frozen Braino.
+    if (Date.now() > deadline) {
+      logMac("hil.loop.timeout", { runId, step });
+      return { ok: false, say: said || "That was taking too long, so I stopped partway rather than leave you hanging.", source: "hil_loop" };
+    }
+    const obs = await macBuildObservation();
+    const body = {
+      command,
+      context: activeMacContext?.appName ? `Front app: ${activeMacContext.appName}` : "",
+      runId,
+      state: { ...state, screen: obs.text, lastStep: lastStep || undefined },
+    };
+    let turn = null;
+    try {
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/hil-loop`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error(`hil-loop ${res.status}`);
+      const data = await res.json();
+      turn = data?.turn;
+      if (data?.meta?.parse_ok === false) throw new Error("unreadable turn");
+    } catch (error) {
+      // parse_ok=false is explicitly a "retry once" signal, not a fatal one, and
+      // the browser engine treats it that way. One hiccup should not end a run.
+      if (!retried) {
+        retried = true;
+        logMac("hil.loop.retry", { error: String(error?.message || error), step });
+        step -= 1;
+        continue;
+      }
+      logMac("hil.loop.failed", { error: String(error?.message || error), step });
+      return { ok: false, say: said || "I lost my train of thought partway through that one.", source: "hil_loop" };
+    }
+    if (!turn?.decision) return { ok: false, say: "I could not read my own next move.", source: "hil_loop" };
+
+    const thinking = String(turn.thinking || "").trim();
+    if (thinking) {
+      console.log(`[Braino HIL-LOOP] ${step + 1}: ${thinking}`);
+      sendTaskProgress({ status: "thinking", text: thinking.slice(0, 140) });
+    }
+    // HIL owns the plan. Its split is the job list, first turn only.
+    if (turn.split?.tasks?.length && !state.tasks.length) {
+      state.tasks = turn.split.tasks.map((desc, i) => ({ desc, status: i === 0 ? "active" : "pending" }));
+    }
+    // Its verdict on the step that just ran, so a failure is visible next turn.
+    if (turn.verdict && state.steps.length) {
+      const prev = state.steps[state.steps.length - 1];
+      prev.ok = turn.verdict.ok === true;
+      prev.why = turn.verdict.why || null;
+    }
+
+    const d = turn.decision;
+    if (d.type === "ask") {
+      // pendingMacWorkflow is how this app remembers it asked something. Without
+      // it the question was rhetorical: the user answered into a void.
+      setPendingMacWorkflow({ type: "hil_answer", stage: "hil_answer", data: { command, question: d.question } });
+      return { ok: true, say: d.question, source: "hil_loop" };
+    }
+    if (d.type === "answer") return { ok: true, say: d.text, source: "hil_loop" };
+    if (d.type === "blocked") return { ok: false, say: d.message, source: "hil_loop" };
+    if (d.type === "all_done") return { ok: true, say: d.message || said || "Done.", source: "hil_loop" };
+    if (d.type === "task_done") {
+      const active = state.tasks.findIndex((t) => t.status === "active");
+      if (active >= 0) state.tasks[active].status = "done";
+      const next = state.tasks.findIndex((t) => t.status === "pending");
+      if (next < 0) return { ok: true, say: d.message || "Done.", source: "hil_loop" };
+      state.tasks[next].status = "active";
+      state.budgetLeft = maxSteps - step;
+      said = d.message || said;
+      lastStep = null;
+      continue;
+    }
+
+    const stepObj = d.step || {};
+    // The gate. A step HIL marked irreversible stops and asks, because the Mac
+    // runner has no pause-and-resume of its own and a wrong send cannot be undone.
+    if (stepObj.reversible === false) {
+      const ask = `${stepObj.intent || "That next step"} cannot be undone. Want me to go ahead?`;
+      setPendingMacWorkflow({ type: "hil_answer", stage: "hil_answer", data: { command, question: ask } });
+      return { ok: true, say: ask, source: "hil_loop" };
+    }
+    const result = await macExecuteHilAction(stepObj.action, obs.elements);
+    state.steps.push({
+      intent: String(stepObj.intent || ""),
+      action: `${stepObj.action?.type}${stepObj.action?.index != null ? ` [${stepObj.action.index}]` : ""}`,
+      ok: null,
+      why: null,
+    });
+    if (state.steps.length > 14) state.steps = state.steps.slice(-14);
+    // A look or a search is worthless if it evaporates next turn, so its content
+    // is promoted into facts, which DO persist.
+    if (result?.sees) state.facts.push(`I looked and saw: ${String(result.sees).slice(0, 600)}`);
+    if (result?.answer) state.facts.push(`Search "${stepObj.action?.query}" answered: ${String(result.answer).slice(0, 600)}`);
+    if (state.facts.length > 12) state.facts = state.facts.slice(-12);
+    lastStep = { intent: stepObj.intent || "", action: stepObj.action, expects: stepObj.expects || "", result };
+    state.budgetLeft = Math.max(1, maxSteps - step - 1);
+  }
+  logMac("hil.loop.budget", { runId });
+  return { ok: false, say: said || "That took more steps than I give myself for one task, so I stopped.", source: "hil_loop" };
+}
+
+// The cascade handles a huge amount well and instantly. This decides when a
+// command clearly wants the loop instead: several jobs joined together, or an
+// explicit ask to work through something.
+// No longer a router: it only tells the fallback whether to expect one job or
+// several, which sets the step budget. Routing on it stole work the cascade did
+// better, because the cascade can screenshot, launch apps and search files and
+// this loop cannot.
+function macLooksMultiStep(raw) {
+  const t = String(raw || "").toLowerCase();
+  if (t.length < 12) return false;
+  const JOB = "(send|email|play|open|search|find|save|add|move|summari[sz]e|reply|message|schedule|screenshot|download|write|draft|put)";
+  if (new RegExp("\\b(then|after that|and then|once you|followed by)\\b").test(t)) return true;
+  // A job verb on EITHER side of "and" is two jobs. Only checking after it missed
+  // "summarise this and put it in my notes", where the first verb leads.
+  return new RegExp("\\b" + JOB + "\\b.*\\band\\b.*\\b" + JOB + "\\b").test(t);
+}
 
 async function runDelegate(prompt) {
   const raw = cleanPrompt(prompt);
@@ -11449,9 +11756,12 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
     sendTaskProgress({ status: "thinking", text: "understanding what you meant..." });
     const classified = await classifyIntentLLM(raw);
     if (classified) return executeClassifiedIntent(classified, raw);
-    logMac("delegate.generic_browser_fallback", { raw: textForLog(raw) });
-    await openChromeUrl(`https://www.google.com/search?q=${encodeURIComponent(raw)}`);
-    return { ok: true, say: "I do not know that exact move yet, so I searched it in Chrome." };
+    // The cascade has run out of patterns. This used to dump the raw sentence into
+    // a Google search and call it done, which is the "confident invention" the
+    // corpus exists to catch. Hand it to the loop instead: it can look, act, and
+    // say plainly when something is genuinely beyond it.
+    logMac("delegate.hil_loop.fallback", { raw: textForLog(raw) });
+    return runMacHilLoop(raw);
   }
 
   return runMacConversation(raw);
