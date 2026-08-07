@@ -290,6 +290,15 @@ const BRAINO_CONTACT_PHOTO_BUCKET = "braino-contact-photos";
 const BRAINO_CONTACT_PHOTO_MAX_BYTES = 5 * 1024 * 1024;
 const BRAINO_CONTACT_PHOTO_PUBLIC_PREFIX = `${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/public/${BRAINO_CONTACT_PHOTO_BUCKET}/`;
 
+// A fingerprint credential is welded to the exact rp.id it was created under, and we serve from both
+// trybraino.com and www.trybraino.com. Using the raw hostname means a key registered on one is invisible
+// on the other, which locks the hidden folder for good. Drop the www so both origins share one rp.id.
+const brainoRpId = () => {
+  const host = window.location.hostname;
+  if (host === "localhost" || /^[\d.]+$/.test(host)) return host;
+  return host.replace(/^www\./, "");
+};
+
 function dashboardTabLabel(tab: DashboardTab) {
   if (tab === "tasks") return "Agent Tasks";
   if (tab === "xAutomation") return "X Automation";
@@ -3108,7 +3117,7 @@ export default function Dashboard() {
       const credential = (await navigator.credentials.create({
         publicKey: {
           challenge,
-          rp: { name: "Braino", id: window.location.hostname },
+          rp: { name: "Braino", id: brainoRpId() },
           user: { id: userIdBytes, name: user.email || "braino-user", displayName: displayName || "Braino user" },
           pubKeyCredParams: [{ type: "public-key", alg: -7 }, { type: "public-key", alg: -257 }],
           // Device-bound and non-discoverable on purpose: a discoverable/resident key gets synced into
@@ -3148,7 +3157,7 @@ export default function Dashboard() {
       const assertion = await navigator.credentials.get({
         publicKey: {
           challenge,
-          rpId: window.location.hostname,
+          rpId: brainoRpId(),
           // "internal" transport + the client-device hint pin this to the fingerprint sensor on this
           // machine. Leave them out and the browser offers phone / security key / synced passkey first.
           allowCredentials: [{ id: rawId, type: "public-key", transports: ["internal"] as AuthenticatorTransport[] }],
@@ -6566,6 +6575,11 @@ export default function Dashboard() {
                     {!hiddenFolderUnlocked ? (
                       <div className="bd-locked">
                         {voiceModes.filter((m) => m.is_hidden).length} mode{voiceModes.filter((m) => m.is_hidden).length === 1 ? "" : "s"} locked
+                        {hiddenFolderNeedsSetup ? (
+                          <span className="mt-2 block text-[12px] font-normal normal-case tracking-normal text-[var(--sb-ink-3)]">
+                            No fingerprint key on this browser yet. Tap “Use this device” above and touch the sensor once.
+                          </span>
+                        ) : null}
                       </div>
                     ) : voiceModes.filter((m) => m.is_hidden).length === 0 ? (
                       <div className="bd-locked !border-dashed">Nothing hidden yet</div>
