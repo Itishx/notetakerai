@@ -3346,12 +3346,28 @@ window.addEventListener(__SB_INLINE_OWNER_PING_EVENT, (event) => {
   __sbRefreshInlineOwner();
 });
 
-window.addEventListener("pagehide", () => {
+window.addEventListener("pagehide", (e) => {
+  // persisted === true means the page is going into bfcache, NOT unloading: every
+  // listener and all state stays alive and can come straight back. Dropping the
+  // marker there left __sbOwnsInlineUi() false forever with nothing able to rebuild
+  // it — and since __sbSummonToggle guards on it, Cmd x2 became a silent no-op while
+  // Ctrl x2 (which has no such guard) still half-worked. That is the exact asymmetry.
+  if (e?.persisted) return;
   const marker = document.getElementById(__SB_INLINE_OWNER_MARKER_ID);
   if (marker?.dataset.ownerId === __SB_INLINE_OWNER_ID) {
     marker.remove();
   }
-}, { once: true });
+});
+
+// Some SPAs rebuild <head> wholesale and take the marker with it. Nothing used to
+// restore it, so the extension went permanently inert on those pages. Reclaim it.
+window.addEventListener("pageshow", () => {
+  try {
+    if (!document.getElementById(__SB_INLINE_OWNER_MARKER_ID)) {
+      __sbCreateInlineOwnerMarker(__SB_INLINE_OWNER_ID);
+    }
+  } catch (_) {}
+});
 
 __sbRefreshInlineOwner();
 
@@ -5253,6 +5269,11 @@ function __sbStopWalkLoop() {
   clearTimeout(__sbWkAutoTimer);
   __sbWkResetThrow();
   __sbWalkTalking = false;
+  // Roam owns the lane. This used to hide it unconditionally, and it is reached from
+  // __sbEnterHeadphoneMode via __sbCollapseCard — so pressing Ctrl x2 to talk to the
+  // roaming mascot DELETED him from the page, while roam kept running and painting an
+  // invisible Braino. That is the "he just disappeared" report.
+  if (__sbRoamActive) return;
   const lane = document.getElementById("__sb_walk_lane__");
   if (lane) {
     lane.style.display = "none";
@@ -10352,7 +10373,15 @@ function __sbBuildBrainUI() {
   let __sbLastShiftTap = 0;
   let __sbLastMetaTap = 0;
   let __sbLastSpaceTap = 0;
-  document.addEventListener("keydown", (e) => {
+  // ONE listener, ever. __sbBuildBrainUI re-runs whenever an SPA wipes #__sb_root__
+  // (a MutationObserver rebuilds it), and each run used to add another keydown
+  // listener that was never removed. With N listeners a single physical Ctrl x2 or
+  // Cmd x2 fired the toggle N times in one tick — even N cancelled itself out, odd N
+  // worked. That is exactly "sometimes works, sometimes not", and why Cmd x2 could
+  // leave him roaming with the notch still dark (exit then immediately re-enter).
+  if (!globalThis.__SB_KEYS_BOUND__) {
+    globalThis.__SB_KEYS_BOUND__ = true;
+    document.addEventListener("keydown", (e) => {
     // Double-tap Control → toggle headphone mode.
     if (e.key === "Control") {
       if (!e.repeat && !e.metaKey && !e.altKey && !e.shiftKey) {
@@ -10477,7 +10506,8 @@ function __sbBuildBrainUI() {
       e.preventDefault();
       __sbToggleBrain();
     }
-  }, true);
+    }, true);
+  }
 
   // Bar buttons
   document.getElementById("__sb_send_btn__").addEventListener("click", __sbSendMessage);
@@ -12346,7 +12376,10 @@ function __sbNotchSetState(state, status = "") {
   // The caption class RIDES THROUGH working/speaking (its geometry is CSS-scoped to
   // idle/listening/speaking, so it can't cram the working face) — your words stay up
   // while he thinks and reappear beside him while he answers, like the Mac wings.
-  if (!["idle", "listening", "working", "speaking"].includes(state)) __sbNotchV1.shell.classList.remove("captioning");
+  // Same set as compactOk in __sbNotchCaption — your words must survive the
+  // listening → captured → working handoff, which is precisely when you want to
+  // read them back.
+  if (!["idle", "listening", "captured", "working", "thinking", "speaking"].includes(state)) __sbNotchV1.shell.classList.remove("captioning");
   if (state !== "speaking") __sbNotchV1.shell.classList.remove("mouth-hold");
   if (state === "input") setTimeout(() => __sbNotchV1?.input?.focus(), 180);
 }
@@ -12436,7 +12469,11 @@ function __sbNotchCaption(text, options = {}) {
   const value = String(text || "").trim().replace(/\s+/g, " ");
   const capL = __sbNotchV1.shadow.querySelector(".cap-l");
   const capR = __sbNotchV1.shadow.querySelector(".cap-r");
-  const compactOk = ["idle", "listening", "working", "speaking"].includes(shell.dataset.state);
+  // "captured" and "thinking" belong here. The notch enters "captured" the instant
+  // you stop talking, and the FINAL transcript lands a moment later — so the caption
+  // was being written and wiped on the same breath, which is why your own words
+  // flashed for a frame and vanished before you could read them.
+  const compactOk = ["idle", "listening", "captured", "working", "thinking", "speaking"].includes(shell.dataset.state);
   if (__sbNotchCapTimer) { clearTimeout(__sbNotchCapTimer); __sbNotchCapTimer = null; }
 
   // He is out on the page → your words form over HIS head, not in his empty house.
@@ -12448,7 +12485,8 @@ function __sbNotchCaption(text, options = {}) {
     if (capR) capR.textContent = "";
     __sbWkStatus?.(value || null);
     if (value) {
-      const hold = options.final ? Math.max(6000, Math.min(14000, value.length * 70)) : 15000;
+      // Floor of 3s even for two words, so a short command is still readable.
+      const hold = options.final ? Math.max(3000, Math.min(14000, value.length * 90)) : 15000;
       __sbNotchCapTimer = setTimeout(() => __sbNotchCaption(""), hold);
     }
     return;

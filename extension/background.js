@@ -4156,13 +4156,26 @@ function bgCanonicalDelegateUrl(value) {
   }
 }
 
+function bgDelegateHost(value) {
+  try { return new URL(String(value)).hostname.replace(/^www\./, "").toLowerCase(); } catch (_) { return ""; }
+}
+
 function bgIsRepeatedDelegateNavigate(action, state, obs) {
   if (action?.type !== "navigate") return false;
   const target = bgCanonicalDelegateUrl(action.url);
   if (!target) return false;
   const current = bgCanonicalDelegateUrl(obs?.url || "");
   if (current && current === target) return true;
-  return state.history.slice(-5).some((item) => item?.ok && item?.action?.type === "navigate" && bgCanonicalDelegateUrl(item.action.url) === target);
+  // Compare HOSTS as well, not only exact URLs. Sites redirect — hotstar.com lands
+  // on hotstar.com/in/home — so an exact-match test reads the very next attempt at
+  // the same site as a fresh destination and waves it through. Every spelling (bare
+  // domain, /in, ?query, jiohotstar vs hotstar path) was a free pass, which is how
+  // one run navigated to the same site around ten times.
+  const targetHost = bgDelegateHost(action.url);
+  if (targetHost && bgDelegateHost(obs?.url) === targetHost) return true;
+  return state.history.slice(-5).some((item) => item?.ok && item?.action?.type === "navigate"
+    && (bgCanonicalDelegateUrl(item.action.url) === target
+      || (targetHost && bgDelegateHost(item.action.url) === targetHost)));
 }
 
 function bgDelegateActionFingerprint(action) {
@@ -4189,6 +4202,31 @@ function bgIsRepeatedDelegateAction(action, state) {
   return repeats.length >= limit;
 }
 
+// A delegate run gets its OWN tab and works there. It used to call
+// chrome.tabs.update on whatever tab the user was looking at, so asking Braino to
+// open a site while you were mid-sentence in another tab navigated THAT tab away
+// and destroyed what you were writing. There has never been a tabs.create in this
+// path — this is a missing feature, not a regression.
+//
+// The first navigate of a run opens a background tab and pins the run to it; every
+// later action reuses it. Returns the tab id the caller must continue in.
+async function bgClaimDelegateTab(tabId, action, state) {
+  if (action?.type !== "navigate") return tabId;
+  if (state?.ownTabId) {
+    // Confirm it still exists — the user may have closed it mid-run.
+    const alive = await new Promise((r) => chrome.tabs.get(state.ownTabId, (t) => { void chrome.runtime.lastError; r(Boolean(t)); }));
+    if (alive) return state.ownTabId;
+    state.ownTabId = null;
+  }
+  const created = await new Promise((r) => {
+    chrome.tabs.create({ url: action.url, active: false }, (t) => { void chrome.runtime.lastError; r(t || null); });
+  });
+  if (!created?.id) return tabId;             // creation failed — behave as before
+  if (state) { state.ownTabId = created.id; state.ownTabHandledUrl = action.url; }
+  console.log(`[BgDelegate] working in its own tab ${created.id} — the user's tab is left alone`);
+  return created.id;
+}
+
 async function bgExecuteDelegateAction(tabId, action, state) {
   if (action.type === "web_search") {
     const searchData = await bgPerformRealWebSearch(action.query, { purpose: "delegate" });
@@ -4203,6 +4241,18 @@ async function bgExecuteDelegateAction(tabId, action, state) {
     await bgDelay(Math.max(0, Math.min(5000, Number(action.ms || 1000))));
     return { success: true };
   }
+  // Route into the run's own tab, creating it on the first navigate.
+  const ownTab = await bgClaimDelegateTab(tabId, action, state);
+  if (ownTab !== tabId) {
+    // tabs.create already loaded the URL — don't navigate it a second time.
+    if (state?.ownTabHandledUrl === action.url) {
+      state.ownTabHandledUrl = null;
+      await bgWaitForTabReady(ownTab, 8000);
+      await bgDelay(1300);
+      return { success: true, tabId: ownTab };
+    }
+  }
+  tabId = state?.ownTabId || tabId;
   const result = await bgExecuteAgentAction(tabId, action);
   if (!result?.error && action.type === "navigate") {
     await bgWaitForTabReady(tabId, 8000);
@@ -4765,6 +4815,11 @@ async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {
       bgAgentTaskByTab.set(currentTabId, task);
       chrome.storage.local.set({ activeTabId: currentTabId });
       bgDelegateRunInfo = { tabId: currentTabId, at: Date.now() };
+    } else if (state.ownTabId) {
+      // The run owns a tab — stay in it. Following the user's focus is what let a
+      // background task reach into whatever they switched to and navigate it away.
+      currentTabId = state.ownTabId;
+      state.focusTabId = currentTabId;
     } else {
       const latestActiveTabId = await bgGetActiveTabId();
       if (latestActiveTabId && latestActiveTabId !== currentTabId) {
