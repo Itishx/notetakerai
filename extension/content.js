@@ -4802,16 +4802,28 @@ let __sbRoamMouseX = -9999, __sbRoamMouseY = -9999;
 const __SB_ROAM_W = 64, __SB_ROAM_H = 78;   // walker box; feet ≈ bottom
 // The mascot SVG overflows its 64x78 box (arms/legs), and dangling legs hang below when
 // sitting — so keep generous margins so no part of him ever clips the viewport edge.
-const __SB_ROAM_MARGIN_X = 30;
+// An invisible fence, not just an anti-clipping margin. A flat 30px let him walk
+// right up to the screen edge, which reads as him leaving even though he never
+// technically left. These are FUNCTIONS, not constants, so the fence survives a
+// window resize — a constant captured at load leaves the bounds sized for the old
+// viewport, and then he really can end up outside it.
 const __SB_ROAM_MARGIN_TOP = 20;
-const __SB_ROAM_MARGIN_BOTTOM = 46;
+function __sbRoamMarginX() { return Math.max(90, Math.round(__sbRoamVW() * 0.10)); }
+function __sbRoamMarginBottom() { return Math.max(90, Math.round(__sbRoamVH() * 0.12)); }
 
 function __sbRoamOnMouse(e) { __sbRoamMouseX = e.clientX; __sbRoamMouseY = e.clientY; }
 // He must ALWAYS stay fully on screen — clamp the walker's top-left to the viewport.
 function __sbRoamVW() { return document.documentElement.clientWidth || window.innerWidth; }
 function __sbRoamVH() { return document.documentElement.clientHeight || window.innerHeight; }
-function __sbRoamClampX(x) { return Math.max(__SB_ROAM_MARGIN_X, Math.min(x, __sbRoamVW() - __SB_ROAM_W - __SB_ROAM_MARGIN_X)); }
-function __sbRoamClampY(y) { return Math.max(__SB_ROAM_MARGIN_TOP, Math.min(y, __sbRoamVH() - __SB_ROAM_H - __SB_ROAM_MARGIN_BOTTOM)); }
+function __sbRoamClampX(x) {
+  const m = __sbRoamMarginX();
+  const lo = m, hi = __sbRoamVW() - __SB_ROAM_W - m;
+  return hi < lo ? Math.round((__sbRoamVW() - __SB_ROAM_W) / 2) : Math.max(lo, Math.min(x, hi));
+}
+function __sbRoamClampY(y) {
+  const lo = __SB_ROAM_MARGIN_TOP, hi = __sbRoamVH() - __SB_ROAM_H - __sbRoamMarginBottom();
+  return hi < lo ? lo : Math.max(lo, Math.min(y, hi));
+}
 
 // Score every visible "ledge" and return the best perch as {el, footX, topY}. A good
 // perch is a wide, stable, horizontal top edge that frames content — never the logo,
@@ -6060,13 +6072,48 @@ function __sbIsSelfEcho(transcript) {
 }
 
 let __sbVoiceOutputGuardAt = 0;
-// How long speech must persist, while Braino is talking, before it counts as a
-// real interruption rather than his own audio echoing back. Also the window the
-// transcriber gets to resolve actual words off the mic, which is the real test —
-// so it has to be long enough for a transcript delta to land, not just for a VAD
-// blip to die. Raise it if he ever starts interrupting himself.
-const __SB_BARGE_CONFIRM_MS = 700;
-let __sbBargeConfirmTimer = null;
+// ── Interruption, modelled on how a person handles it ────────────────────────
+// Someone talks over you: you stop MID-WORD. You do not finish your sentence and
+// then evaluate whether they had a point. Deciding comes after stopping.
+//
+// Then one of two things is true. They actually wanted something, so you deal with
+// it. Or it was nothing — a cough, a false start, someone else in the room — and
+// you pick up roughly where you left off.
+//
+// Waiting to be sure before stopping (which is what a confirm window does) is the
+// one thing a person never does, and it is why interrupting him never felt right.
+const __SB_BARGE_RESUME_MS = 3500;   // silence after a cut-off that means "it was nothing"
+let __sbSpeechRemainder = "";        // what he had left to say when he was cut off
+let __sbBargeResume = null;          // { text, at }
+let __sbBargeResumeTimer = null;
+
+// Called the instant he is cut off. Remembers the unsaid part and starts the clock
+// on whether the interruption amounted to anything.
+function __sbArmBargeResume() {
+  if (__sbBargeResumeTimer) { clearTimeout(__sbBargeResumeTimer); __sbBargeResumeTimer = null; }
+  const left = String(__sbSpeechRemainder || "").trim();
+  if (!left) { __sbBargeResume = null; return; }
+  __sbBargeResume = { text: left, at: Date.now() };
+  __sbBargeResumeTimer = setTimeout(() => {
+    __sbBargeResumeTimer = null;
+    const pending = __sbBargeResume;
+    __sbBargeResume = null;
+    if (!pending) return;
+    // Something real is already happening — he has moved on, don't talk over it.
+    if (__sbVoicePendingReply || __sbBrainoOutputActive() || __sbHasActiveRealtimeResponse()) return;
+    if (!__sbHeadphoneMode) return;
+    __sbVTMark?.("↩️ Interruption came to nothing — resuming");
+    void __sbSpeakWithPreferredVoice(pending.text, "realtime");
+  }, __SB_BARGE_RESUME_MS);
+}
+
+// The interruption produced a real turn → he is answering that now, so drop the
+// unsaid remainder rather than resuming a thought the user has moved past.
+function __sbCancelBargeResume() {
+  if (__sbBargeResumeTimer) { clearTimeout(__sbBargeResumeTimer); __sbBargeResumeTimer = null; }
+  __sbBargeResume = null;
+  __sbSpeechRemainder = "";
+}
 function __sbBrainoOutputActive() {
   return Boolean(
     __sbIsSpeaking
@@ -13704,6 +13751,10 @@ async function __sbSpeakText(text, options = {}) {
     let pendingFetch = null; // a promise for the NEXT sentence's TTS, kicked off during playback
     for (let i = 0; i < sentences.length; i++) {
       if (speechToken !== __sbSpeechGeneration) return spoke;
+      // What he still has left to say, refreshed before every sentence. If you cut
+      // him off, this is what he picks up from when the interruption turns out to
+      // have been nothing.
+      __sbSpeechRemainder = sentences.slice(i).join(" ");
       const fetchPromise = pendingFetch || __sbFetchSentenceTts(sentences[i], speechToken, headers);
       pendingFetch = null;
       const cur = await fetchPromise;
@@ -13737,6 +13788,7 @@ async function __sbSpeakText(text, options = {}) {
       }
     }
     __sbWalkTalking = false;
+    __sbSpeechRemainder = "";   // said it all — nothing left to be resumed later
   } catch (ttsErr) {
     if (speechToken !== __sbSpeechGeneration) return false;
     __sbHandleFishTtsFailure(ttsErr);
@@ -21213,7 +21265,8 @@ async function __sbHandleMultiIntentChain(segments, turnToken) {
       if (__sbChainAbortToken !== myToken || __sbRtTurnToken !== turnToken) return;
 
       // Hold the pending-reply lock across the whole chain to block concurrent turns.
-      __sbVoicePendingReply = true;
+      __sbCancelBargeResume();   // a real turn landed — he is answering that, not resuming
+    __sbVoicePendingReply = true;
 
       await __sbHandleInlineRealtimeTurn(segments[i], turnToken);
 
@@ -22052,41 +22105,27 @@ function __sbHandleRtEvent(ev) {
     // boot (~0.5-5s cold start) is paid during your sentence instead of on your wait — which is why
     // the slowest first-sound runs were always the LONGEST utterances (isolate went cold mid-sentence).
     try { __sbWarmFishTts(); } catch (_) {}
-    // Braino is mid-sentence and the VAD just fired. That is one of two things:
-    // the user talking over him (a real barge-in, which has to work) or his own
-    // voice leaking back through the speakers (echo, which must be ignored or he
-    // interrupts himself and the conversation falls apart).
+    // You started talking while he was talking → he stops. Immediately, mid-word,
+    // the way a person does. He does not weigh up whether you had a point first.
     //
-    // The old code picked one answer — always "echo" — and returned, which is why
-    // he could never be interrupted. Blanket-allowing is the opposite mistake.
-    // So: don't decide on the first frame, WAIT. Echo through speakers arrives in
-    // short bursts that stop; a person talking over him keeps going. If speech is
-    // still live when the confirm window elapses, it is a real barge-in.
-    // speech_stopped inside the window cancels it.
+    // Every previous attempt here tried to be CERTAIN before stopping: first by
+    // never stopping at all, then by waiting out a confirm window, then by demanding
+    // the transcriber resolve words within 700ms. All three made him impossible to
+    // interrupt, because certainty takes longer than a person's patience.
+    //
+    // The judgement moves AFTER the stop instead, where it is free: if the
+    // interruption turns out to be nothing — a cough, his own echo, someone else in
+    // the room — __sbArmBargeResume picks his sentence back up a few seconds later.
+    // Being wrong now costs a short pause rather than the whole feature.
     if (__sbBrainoOutputActive()) {
       __sbVoiceOutputGuardAt = Date.now();
       __sbRtUserTranscript = "";
-      if (__sbHeadphoneMode) __sbSetHpBrainState("speaking");
-      if (__sbBargeConfirmTimer) clearTimeout(__sbBargeConfirmTimer);
-      __sbBargeConfirmTimer = setTimeout(() => {
-        __sbBargeConfirmTimer = null;
-        if (!__sbBrainoOutputActive()) return;      // he finished on his own
-        // Energy alone is not enough to cut him off — through speakers his own
-        // voice keeps the VAD hot for as long as he talks, and acting on that
-        // killed his answer mid-sentence (leaving the mouth moving with no sound).
-        // Require the transcriber to have actually resolved WORDS off the mic:
-        // that survives echo cancellation only when a person really is talking.
-        if (!String(__sbRtUserTranscript || "").trim()) {
-          __sbVTMark("🔇 VAD hot but no words — treating as echo");
-          return;
-        }
-        __sbVTMark("✋ Barge-in confirmed");
-        __sbVoicePendingReply = false;
-        if (__sbHasActiveRealtimeResponse()) __sbInterruptRealtimeResponse();
-        __sbStopSpeech("barge-in");
-        __sbRtUserTranscript = "";
-        if (__sbHeadphoneMode) __sbSetHpBrainState("hearing");
-      }, __SB_BARGE_CONFIRM_MS);
+      __sbArmBargeResume();
+      __sbVTMark("✋ Cut off mid-sentence");
+      __sbVoicePendingReply = false;
+      if (__sbHasActiveRealtimeResponse()) __sbInterruptRealtimeResponse();
+      __sbStopSpeech("barge-in");
+      if (__sbHeadphoneMode) __sbSetHpBrainState("hearing");
       return;
     }
     // The realtime VAD heard the user start talking → INTERRUPT whatever Braino is saying.
@@ -22106,7 +22145,8 @@ function __sbHandleRtEvent(ev) {
     __sbVTMark("🛑 You stopped talking");
     // Speech ended inside the confirm window → it was a blip (very likely his own
     // audio), not someone talking over him. Stand down; he keeps his sentence.
-    if (__sbBargeConfirmTimer) { clearTimeout(__sbBargeConfirmTimer); __sbBargeConfirmTimer = null; }
+    // Deliberately does NOT touch the resume clock. Whether he picks his sentence
+    // back up is decided by whether a real turn materialises, not by you stopping.
     // User paused → stop the sonar; sit idle while we transcribe/think (not talking).
     if (__sbHeadphoneMode) __sbSetHpBrainState("listening");
     if (Date.now() - __sbVoiceOutputGuardAt < 12000 && __sbBrainoOutputActive()) {
@@ -22893,7 +22933,7 @@ function __sbExitHeadphoneMode() {
   if (__sbContextOk()) chrome.storage.local.set({ sbVoiceModeOn: false });
 
   if (__sbVoiceSilenceTimer) { clearTimeout(__sbVoiceSilenceTimer); __sbVoiceSilenceTimer = null; }
-  if (__sbBargeConfirmTimer) { clearTimeout(__sbBargeConfirmTimer); __sbBargeConfirmTimer = null; }
+  __sbCancelBargeResume();
   __sbLastFinalTranscript = null;
   __sbRtTurnToken = 0;
   __sbRtUserTranscript = "";
