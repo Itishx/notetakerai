@@ -4949,6 +4949,34 @@ function __sbRoamTick(now) {
   const dt = Math.min(0.05, (now - __sbRoamLast) / 1000);
   __sbRoamLast = now;
 
+  // Re-assert the anchor EVERY frame instead of trusting what enter-roam set once.
+  // translate(x, y) here is viewport coordinates, which is only true while the
+  // walker is anchored to the top. Its stylesheet pins `bottom: 0`, so the instant
+  // anything re-applies that — a rebuild, a competing animation, a style reset —
+  // the same y that meant "150px down the page" starts meaning "150px BELOW the
+  // bottom edge", and he shoots off the screen. Cheap, idempotent, and it makes
+  // that whole class of bug impossible rather than merely unlikely.
+  if (walker.style.top !== "0px" || walker.style.bottom !== "auto") {
+    walker.style.top = "0px";
+    walker.style.bottom = "auto";
+  }
+  // Same for the lane: it must stay the full-viewport surface, or his coordinates
+  // are measured against the wrong box.
+  const roamLane = document.getElementById("__sb_walk_lane__");
+  if (roamLane && !roamLane.classList.contains("sb-roaming")) {
+    roamLane.classList.add("sb-roaming");
+  }
+  // And he is never allowed outside the viewport, whatever the maths upstream did.
+  // A large correction means something genuinely threw him — say so, so the next
+  // "he flew off the page" report names its own cause instead of being guessed at.
+  const clampedX = __sbRoamClampX(__sbRoamCX);
+  const clampedY = __sbRoamClampY(__sbRoamCY);
+  if (Math.abs(clampedX - __sbRoamCX) > 50 || Math.abs(clampedY - __sbRoamCY) > 50) {
+    console.log(`[Braino 🪂] caught him leaving the page — was (${Math.round(__sbRoamCX)}, ${Math.round(__sbRoamCY)}), pulled back to (${Math.round(clampedX)}, ${Math.round(clampedY)})`);
+  }
+  __sbRoamCX = clampedX;
+  __sbRoamCY = clampedY;
+
   // He lingers on the bar while the intro line ("Ah, I finally get to be off the bar")
   // shows, then steps off. Until then, just idle at the start spot.
   if (now < __sbRoamHoldUntil) {
@@ -5093,6 +5121,9 @@ function __sbEnterRoamMode() {
   // Global, so he stays the mascot in every tab a delegate opens.
   if (__sbContextOk()) chrome.storage.local.set({ sbRoamOn: true });
   __sbWkSay?.("Coming out. Watch your step.");
+  // Never leave a second loop running: two ticks means every frame moves him twice,
+  // which reads as him rocketing across the page.
+  if (__sbRoamRaf) cancelAnimationFrame(__sbRoamRaf);
   __sbRoamRaf = requestAnimationFrame(__sbRoamTick);
 }
 function __sbExitRoamMode() {
