@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { EI_COUNT, EI_GROUPS, HI_COUNT, HI_GROUPS, type CommandGroup } from "@/lib/testCommands";
+import { COMMAND_STATUS, EI_COUNT, EI_GROUPS, FIXED_COUNT, HI_COUNT, HI_GROUPS, TESTED_COUNT, type CommandGroup } from "@/lib/testCommands";
 import "./commands.css";
 
 /* ============================================================================
@@ -54,7 +54,9 @@ export default function Commands() {
           <p className="cm-eyebrow">The tuning corpus</p>
           <h1 className="cm-title">Commands</h1>
           <p className="cm-sub">
-            {HI_COUNT + EI_COUNT} commands to run at him, grouped by the behaviour each one probes.
+            {HI_COUNT + EI_COUNT} commands to run at him, grouped by the behaviour each one probes.{" "}
+            <strong>{TESTED_COUNT} run so far, {FIXED_COUNT} already fixed</strong> — open "what went wrong" on any
+            marked row to see the answer that caused the change.
             Test it opens the layer's own page, fills the input, and runs it for real. Every run lands
             in the log.
           </p>
@@ -100,12 +102,37 @@ export default function Commands() {
               <p className="cm-why">{group.why}</p>
               {open && (
                 <ul className="cm-list">
-                  {group.commands.map((command) => (
-                    <li key={command} className="cm-row">
-                      <span className="cm-text">{command}</span>
-                      <button className="cm-test" onClick={() => test(command, group)}>Test it</button>
-                    </li>
-                  ))}
+                  {group.commands.map((command) => {
+                    const status = COMMAND_STATUS[command];
+                    return (
+                      <li key={command} className={`cm-row${status ? " is-tested" : ""}`}>
+                        <span className="cm-text">{command}</span>
+                        {status && (
+                          <span className={`cm-badge${status.fixed ? " is-fixed" : ""}`}>
+                            {status.fixed ? "tested · fixed" : "tested"}
+                          </span>
+                        )}
+                        <button className="cm-test" onClick={() => test(command, group)}>Test it</button>
+                        {status && (
+                          <details className="cm-diff">
+                            <summary>what went wrong</summary>
+                            <p className="cm-diff-label">He said</p>
+                            <pre className="cm-diff-before">{status.before}</pre>
+                            <p className="cm-diff-label">You said</p>
+                            <p className="cm-diff-note">{status.feedback}</p>
+                            {status.change && (<>
+                              <p className="cm-diff-label">{status.fixed ? "What changed" : "Not changed yet"}</p>
+                              <p className="cm-diff-note">{status.change}</p>
+                            </>)}
+                            {status.after && (<>
+                              <p className="cm-diff-label">He says now</p>
+                              <pre className="cm-diff-after">{status.after}</pre>
+                            </>)}
+                          </details>
+                        )}
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
             </section>

@@ -111,3 +111,23 @@
 }
 .cm-link { color: var(--blue); text-decoration: none; font-size: 14px; font-weight: 500; }
 .cm-link:hover { text-decoration: underline; }
+
+/* ── Tuning ledger: what has been run, what was wrong, what changed ────────── */
+.cm-row.is-tested { border-left: 2px solid rgba(232,120,110,.45); padding-left: 10px; }
+.cm-badge {
+  margin-left: 8px; padding: 2px 8px; border-radius: 999px;
+  border: 1px solid rgba(232,120,110,.35); background: rgba(232,120,110,.10);
+  color: #c9544a; font-size: 10px; font-weight: 700; letter-spacing: .04em; white-space: nowrap;
+}
+.cm-badge.is-fixed { border-color: rgba(52,168,98,.4); background: rgba(52,168,98,.12); color: #2f9256; }
+.cm-diff { flex-basis: 100%; margin-top: 8px; }
+.cm-diff summary { cursor: pointer; font-size: 11px; opacity: .6; }
+.cm-diff summary:hover { opacity: 1; }
+.cm-diff-label { margin: 10px 0 3px; font-size: 9.5px; font-weight: 750; letter-spacing: .1em; text-transform: uppercase; opacity: .5; }
+.cm-diff-before, .cm-diff-after {
+  margin: 0; padding: 9px 11px; border-radius: 8px; white-space: pre-wrap;
+  font: 400 12px/1.5 ui-monospace, Menlo, monospace;
+}
+.cm-diff-before { background: rgba(201,84,74,.08); border-left: 2px solid rgba(201,84,74,.45); }
+.cm-diff-after  { background: rgba(52,168,98,.09);  border-left: 2px solid rgba(52,168,98,.5); }
+.cm-diff-note { margin: 0; font-size: 12px; line-height: 1.5; opacity: .8; }
