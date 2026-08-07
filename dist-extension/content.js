@@ -13175,7 +13175,11 @@ let __sbSpeculativeActive = false;    // a speculative answer is live this turn
 let __sbSpeculativeToken = -1;        // the speculative answer's turn token
 let __sbSpeculativeHandledToken = -1; // token of a speculative answer that COMPLETED (already spoke)
 
-function __sbStopSpeech() {
+function __sbStopSpeech(reason = "") {
+  // Audible in the console alongside the [Braino ⏱] trace. Every "his mouth moves
+  // but nothing comes out" report so far has been speech being cancelled by
+  // something, and without this line the only way to find the culprit is to guess.
+  try { console.log(`[Braino 🔇] speech stopped${reason ? ` — ${reason}` : ""}`); } catch (_) {}
   // Linchpin for the speculative beta: if something else takes over speech while a speculative answer
   // is LIVE (its realtime response already exists), cancel it cleanly. The speculative's OWN setup
   // stop runs before its response exists, so it is spared by the __sbHasActiveRealtimeResponse check.
@@ -13213,10 +13217,14 @@ function __sbStopSpeech() {
     __sbCurrentUtterance = null;
   }
   __sbIsSpeaking = false;
-  // The mouth follows the voice. Without this the animation kept running after any
-  // interrupted or aborted speech, so he sat there flapping in silence — which is
-  // what "his mouth moves but nothing comes out" actually was.
+  // The mouth follows the voice — on BOTH bodies. Neither was being reset here, so
+  // any interrupted or aborted speech left him flapping in silence. Two separate
+  // mechanisms had to be cleared: __sbWalkTalking drives the mascot's mouth from
+  // the RAF pose, while the notch's is pure CSS off data-state="speaking". That is
+  // why the symptom looked identical in the notch and out on the page — it was
+  // never a surface bug, it was the speech dying with nothing telling the face.
   __sbWalkTalking = false;
+  if (__sbHeadphoneMode) __sbSetHpBrainState(__sbVoicePendingReply ? "captured" : "listening");
   __sbSetVoiceButtonState(__sbIsRecording);
   __sbSyncSpeakButtons();
 }
@@ -21943,7 +21951,7 @@ function __sbHandleRtEvent(ev) {
         __sbVTMark("✋ Barge-in confirmed");
         __sbVoicePendingReply = false;
         if (__sbHasActiveRealtimeResponse()) __sbInterruptRealtimeResponse();
-        __sbStopSpeech();
+        __sbStopSpeech("barge-in");
         __sbRtUserTranscript = "";
         if (__sbHeadphoneMode) __sbSetHpBrainState("hearing");
       }, __SB_BARGE_CONFIRM_MS);
