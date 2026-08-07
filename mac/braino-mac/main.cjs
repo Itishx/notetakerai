@@ -10491,9 +10491,58 @@ async function runMacConversation(prompt) {
   }
 }
 
+// The canonical Human Intelligence layer, thinking alongside every Mac command.
+// Deliberately NON-BLOCKING: the regex cascade below answers in under a second and
+// waiting one to three seconds for a model before every action would kill exactly
+// the speed that makes the Mac feel alive. So the action fires immediately and
+// HIL's reasoning lands in the notch as it arrives, the same thinking sentences the
+// /human-intelligence Loop page shows, narrating the same command. Every call is
+// also logged server-side to engine_runs (engine "hil-reason"), so /engine-log now
+// carries real Mac traffic, not just the lab's.
+function fireHilReasonThinking(raw, ticket) {
+  if (!raw || !SUPABASE_URL || !SUPABASE_ANON_KEY) return;
+  // browserTitle is where a browser's tab title lives; windowTitle is often blank
+  // there. Every other reader of this object falls back the same way.
+  const surfaceTitle = activeMacContext?.windowTitle || activeMacContext?.browserTitle || "";
+  const contextLine = activeMacContext?.appName
+    ? `On screen: ${activeMacContext.appName}${surfaceTitle ? ` — ${surfaceTitle}` : ""}`
+    : "";
+  void fetch(`${SUPABASE_URL}/functions/v1/hil-reason`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
+    body: JSON.stringify({ command: raw, context: contextLine }),
+  }).then(async (res) => {
+    if (!res.ok) { console.log(`[Braino HIL] reason ${res.status}`); return; }
+    const data = await res.json().catch(() => null);
+    const r = data?.reasoning;
+    if (!r) return;
+    // Always log. The terminal record is the point of this for testing, and it is
+    // free of any timing concerns.
+    console.log(`[Braino HIL] ${r.verdict} — ${r.restated_goal}${r.clarifying_question ? ` | would have asked: ${r.clarifying_question}` : ""}`);
+    logMac("hil.reason", { verdict: r.verdict, goal: textForLog(r.restated_goal || "") });
+    // Painting is a different matter. The regex cascade answers in well under a
+    // second and this model call takes one to three, so by the time it lands the
+    // notch is usually already showing the RESULT. Overwriting "Sent to Sarah" with
+    // a stale plan sentence is worse than showing nothing, so a finished action wins.
+    if (ticket !== hilThinkingTicket) return;
+    // An "ask" verdict is never painted either: the action has already fired, so a
+    // question here is one nobody can answer and it contradicts what just happened.
+    if (r.verdict === "ask") return;
+    const line = (Array.isArray(r.steps) && r.steps[0]) || r.restated_goal || "";
+    if (line) sendTaskProgress({ status: "thinking", text: String(line).slice(0, 140) });
+  }).catch((error) => console.log("[Braino HIL] reason failed:", error?.message || error));
+}
+
+// Bumped the moment an action completes, which retires any HIL thinking still in
+// flight for it.
+let hilThinkingTicket = 0;
+
 async function runDelegate(prompt) {
   const raw = cleanPrompt(prompt);
+  const ticket = ++hilThinkingTicket;
+  fireHilReasonThinking(raw, ticket);
   const result = await routeMacDelegate(prompt, raw);
+  hilThinkingTicket += 1;   // the action has answered; late thinking must not paint over it
   if (raw && result?.source !== "mac_conversation") {
     rememberMacChat("user", raw);
     if (result?.say) rememberMacChat("assistant", result.say);

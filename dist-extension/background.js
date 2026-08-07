@@ -39,6 +39,7 @@ try {
     "lib/recovery.js",
     "lib/macroStore.js",
     "lib/searchGuard.js",
+    "lib/hilAdapter.js",
   );
 } catch (error) {
   console.warn("[Braino][Delegate] helper import failed:", error);
@@ -4039,7 +4040,88 @@ ${lessonText}
 ${skillText}`;
 }
 
+// ── The one brain ────────────────────────────────────────────────────────────
+// When this flag is on (it is on by default), every Delegate step is decided by
+// the canonical HIL loop, the exact prompt /commands and /human-intelligence tune,
+// with the Emotional Engine appended server-side. The legacy inline prompt below
+// stays as the fallback for any turn where hil-loop is unreachable or returns
+// something the runner cannot validate, so a bad turn degrades to yesterday's
+// behaviour instead of a dead run. Kill switch: chrome.storage sbUseHilBrain=false.
+let bgUseHilBrainCached = true;
+try {
+  chrome.storage.local.get(["sbUseHilBrain"], (r) => {
+    void chrome.runtime.lastError;
+    bgUseHilBrainCached = r?.sbUseHilBrain !== false;
+  });
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === "local" && "sbUseHilBrain" in changes) {
+      bgUseHilBrainCached = changes.sbUseHilBrain.newValue !== false;
+      console.log(`[Braino][HIL-LOOP] brain ${bgUseHilBrainCached ? "ON (canonical HIL)" : "OFF (legacy prompt)"}`);
+    }
+  });
+} catch (_) {}
+
+async function bgDecideViaHilLoop({ task, state, observationText, stuckCount }) {
+  const adapter = globalThis.BrainoHilAdapter;
+  if (!adapter) return null;
+  // One run id for the whole task so every turn stitches together in /engine-log.
+  if (!state.hilRunId) { try { state.hilRunId = crypto.randomUUID(); } catch (_) { state.hilRunId = null; } }
+  const budget = Math.max(1, (state.hilBudgetMax || 40) - (state.history?.length || 0));
+  // (hilBudgetMax is stamped onto state by bgRunDelegateLoop from the real budget.)
+  const payload = adapter.toHilPayload({
+    task,
+    state,
+    screen: observationText,
+    budgetLeft: budget,
+    runId: state.hilRunId,
+    // Deliberately empty: by the time this runs, `task` IS synth.resolvedTask (the
+    // loop swaps it in before the first decision), so passing it again as "originally
+    // spoken" duplicated the command under a false label. The original phrasing is
+    // not retained anywhere upstream, so there is nothing honest to put here yet.
+    context: "",
+  });
+  const res = await fetch(`${BG_API_BASE}/hil-loop`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", apikey: BG_SUPABASE_ANON_KEY, Authorization: `Bearer ${BG_SUPABASE_ANON_KEY}` },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) { console.warn("[Braino][HIL-LOOP]", res.status, "falling back to legacy prompt"); return null; }
+  const data = await res.json();
+  if (data?.meta?.parse_ok === false) { console.warn("[Braino][HIL-LOOP] unreadable turn, falling back"); return null; }
+  const pendingCount = (state.subgoals || []).filter((g) => g.status === "pending").length;
+  const adapted = adapter.fromHilTurn(data?.turn, { pendingCount });
+  if (!adapted) return null;
+
+  // HIL just planned: its split becomes the runner's subgoal list, one time.
+  if (adapted.split?.tasks?.length && !state.hilSplitDone) {
+    BrainoTaskState.setSubgoals(state, adapted.split.tasks.map((desc) => ({ desc })));
+    if (adapted.split.restated_goal) state.goal = adapted.split.restated_goal;
+  }
+  state.hilSplitDone = true;
+
+  // The exact validation the legacy path runs, so HIL output gets no special
+  // trust: a shape the runner cannot execute falls back rather than half-runs.
+  const decision = bgValidateDecision(adapted.decision);
+  decision.memory_update = adapted.decision.memory_update;
+  console.log(`[Braino][HIL-LOOP] turn ${(state.history?.length || 0) + 1} (${data?.meta?.hil_loop_version}): ${data?.turn?.decision?.type} — ${adapted.thinking?.slice(0, 140)}`);
+  return decision;
+}
+
 async function bgDecideNextAction({ task, state, observationText, skills, lessons, phase, stuckCount, validationError }) {
+  // The canonical brain first. validationError means the LEGACY path is mid-retry
+  // on its own malformed JSON, so that lane keeps the conversation.
+  if (bgUseHilBrainCached && !validationError) {
+    try {
+      const hilDecision = await bgDecideViaHilLoop({ task, state, observationText, stuckCount });
+      // Same envelope the legacy paths return. Returning the bare decision here made
+      // the caller's `picked.decision` undefined, which then threw on memory_update
+      // outside any try — the new brain crashed the run every time it WORKED, and
+      // only survived on the turns where it failed into the fallback.
+      if (hilDecision) return { decision: hilDecision, model: "hil-loop" };
+    } catch (error) {
+      console.warn("[Braino][HIL-LOOP] failed, using legacy prompt:", error?.message || error);
+    }
+  }
   const model = BrainoModels?.pickModel?.(phase || "step", stuckCount || 0) || "gpt-5.4-mini";
   const decideGeo = await bgGetUserGeo().catch(() => null);
   const systemPrompt = bgBuildDelegateSystemPrompt(skills, lessons, decideGeo);
@@ -4516,6 +4598,10 @@ async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {
   // C1 — load durable lessons learned on this site in past runs (local storage, instant).
   let lessons = await (BrainoMacroStore?.getLessons?.(origin) || Promise.resolve([])).catch(() => []);
   const state = BrainoTaskState.createTaskState(task, currentTabId);
+  // HIL is told how much room is left, and rule 8 makes it wrap up when the budget
+  // looks nearly spent. Without this it read the default 40 against a 120-step long
+  // task and started finishing early from about step 39 onward.
+  state.hilBudgetMax = budget.maxSteps;
   // Un-evictable record of executed searches ({host, query}) — the facts list caps at 30
   // entries and long runs were scrolling search_done marks out, silently re-arming repeats.
   state.searchesDone = [];

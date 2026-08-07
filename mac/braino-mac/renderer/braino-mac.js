@@ -3233,6 +3233,7 @@ async function speakWithStreamingTts(text, generation) {
 }
 
 function beginRealtimeStreamTts(generation) {
+  console.log(`[Braino 🗣 OUT] (realtime reply, EE ${brainoPersona?.persona ? "live" : "FALLBACK STUB"}) streaming...`);
   activeSpeechJobGeneration = generation;
   realtimeStreamTts = {
     generation,
@@ -3409,6 +3410,11 @@ function refreshMousePassthrough(event) {
 async function speak(text, options = {}) {
   const line = String(text || "").trim();
   if (!line) return;
+  // Logged AFTER the empty guard: a whitespace-only reply used to print an OUT
+  // line for speech that never happened, which broke IN/OUT pairing when reading
+  // the terminal back.
+  console.log(`[Braino 🗣 OUT] (${brainoPersona?.persona ? "EE persona live" : "EE FALLBACK STUB"}) "${line.slice(0, 200)}"`);
+  logRenderer("voice.out", { text: line.slice(0, 200), ee: Boolean(brainoPersona?.persona) });
   nfFlowResponseText = line;
   renderThinkingCanvas("Speaking", lastProcessingDetail || "Response ready");
   const generation = ++speechGeneration;
@@ -4557,6 +4563,11 @@ function flushRealtimeTranscript(reason) {
   markRealtimeActivity("accepted_transcript", { schedule: false });
   if (speaking) stopSpeechOutput();
   voiceTurnInFlight = true;
+  // Testing tap: every accepted spoken turn, in the terminal, with the gate it
+  // cleared. Rejected audio never reaches this line, so IN here means "became a
+  // real turn". Pairs with the [Braino 🗣 OUT] lines in speak/stream below.
+  console.log(`[Braino 🎤 IN] "${transcript}"`);
+  logRenderer("voice.in", { transcript: transcript.slice(0, 200) });
   nfSetHeard(transcript);
   void (async () => {
     try {

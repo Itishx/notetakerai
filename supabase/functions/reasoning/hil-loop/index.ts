@@ -31,15 +31,43 @@ const OPENAI_ENDPOINT = "https://api.openai.com/v1/chat/completions";
 // and to the world before it was added here, and the symptom was Braino
 // appearing to fail at the new skill while actually performing it perfectly.
 // Anything taught in hil-loop-prompt.ts must be listed here in the same change.
-const ACTION_TYPES = new Set(["navigate", "read", "look", "click", "type", "pressKey", "scroll", "wait", "web_search"]);
+const ACTION_TYPES = new Set(["navigate", "read", "look", "click", "type", "pressKey", "scroll", "wait", "web_search", "selectOption", "downloadImage"]);
 
 // Reversibility is decided by WHAT is being clicked, and the element name lives on
 // the client (it holds the live observation), so the final say is enforced there in
 // isIrreversibleClick, mirroring bgCartSafetyBlock in the extension. Here we only
 // keep the model honest about the obvious cases it can see in its own action.
-const IRREVERSIBLE_HINT = /\b(send|place (your )?order|proceed to (buy|checkout)|pay now|buy now|checkout|publish|post|delete|remove|discard)\b/i;
+// This is a FLOOR, and on the extension it is the only one: the lab re-gates by
+// element name client-side (isIrreversibleClick), the extension does not, so
+// whatever passes here reaches a real click. Rule 7 draws the fine line (a send
+// whose words the user dictated is finishing the job, not deciding for them) and it
+// draws it in the prompt, where the command is actually readable. Down here the
+// regex cannot tell those apart, so it keeps everything destructive and lets the
+// model's own reversible flag be the thing rule 7 relaxes.
+const IRREVERSIBLE_HINT = /\b(place (your )?order|proceed to (buy|checkout)|pay now|buy now|checkout|publish|post|delete|remove|discard)\b/i;
 
-const DECISION_TYPES = new Set(["step", "ask", "task_done", "all_done", "blocked"]);
+const DECISION_TYPES = new Set(["step", "ask", "answer", "task_done", "all_done", "blocked"]);
+
+// The optional machine-checkable assertion a step may carry alongside its prose
+// `expects`. Prose is for legibility; this is what a real runner can verify without
+// a model call, and verified pass/fail is what drives the extension's stuck counter,
+// escalation and recovery. Shapes mirror extension/lib/recovery.js verifyAssertion.
+const ASSERT_KINDS = new Set(["element_exists", "element_gone", "url_contains", "value_equals", "text_present", "none"]);
+
+// The KIND alone is not enough. The extension revalidates every assertion with
+// bgValidateAssertion, which THROWS on a missing companion field and discards the
+// turn, so a half-formed assert here would cost a whole step. Anything that would
+// not survive that check is dropped and the step simply carries no assertion.
+function isUsableAssert(a: unknown): boolean {
+  if (!a || typeof a !== "object" || Array.isArray(a)) return false;
+  const v = a as Record<string, unknown>;
+  const kind = String(v.assert || "");
+  if (!ASSERT_KINDS.has(kind)) return false;
+  if (kind === "element_exists" || kind === "element_gone") return Boolean(v.match && typeof v.match === "object");
+  if (kind === "url_contains" || kind === "text_present") return typeof v.value === "string" && Boolean(v.value.trim());
+  if (kind === "value_equals") return Number.isInteger(v.index) && typeof v.value === "string";
+  return true; // "none"
+}
 
 async function callModel(apiKey: string, messages: unknown[]) {
   return await fetch(OPENAI_ENDPOINT, {
@@ -51,7 +79,10 @@ async function callModel(apiKey: string, messages: unknown[]) {
     // An explicit ceiling where there was none. A turn that weighs several
     // candidate songs runs longer than one that clicks a button, and a decision
     // cut off mid-JSON is indistinguishable from a broken one.
-    body: JSON.stringify({ model: HIL_LOOP_MODEL, messages, max_completion_tokens: 1200 }),
+    // Raised with the observation cap and the answer channel: 1200 was set when the
+    // screen was 3000 chars and no turn ever had to carry findings. An answer that
+    // runs out of tokens mid-sentence is indistinguishable from a broken turn.
+    body: JSON.stringify({ model: HIL_LOOP_MODEL, messages, max_completion_tokens: 2400 }),
   });
 }
 
@@ -87,7 +118,7 @@ function renderState(command: string, context: string, state: LoopState | null):
     // nothing at all, which made looking-before-asking impossible exactly when it
     // matters most. The screen is never withheld.
     parts.push("First turn. No task list exists yet. Restate the goal, split it into its separate jobs, and choose the first action of job one. Look at the observation below before deciding anything: if what the command refers to is already open, continue from it rather than going to find it.");
-    if (state?.screen) parts.push(`OBSERVATION, the live page right now:\n${String(state.screen).slice(0, 3000)}`);
+    if (state?.screen) parts.push(`OBSERVATION, the live page right now:\n${String(state.screen).slice(0, 16000)}`);
     parts.push("Return the JSON for this turn now.");
     return parts.join("\n\n");
   }
@@ -112,7 +143,7 @@ function renderState(command: string, context: string, state: LoopState | null):
 
   parts.push(`Budget left for the active job: ${Math.max(0, Number(state!.budgetLeft) || 0)} actions.`);
   // The live element map. Indices below are the ONLY ones that may be targeted.
-  if (state!.screen) parts.push(`OBSERVATION, the live page right now:\n${String(state!.screen).slice(0, 3000)}`);
+  if (state!.screen) parts.push(`OBSERVATION, the live page right now:\n${String(state!.screen).slice(0, 16000)}`);
   if (state!.userReply) parts.push(`The user just replied: "${String(state!.userReply).slice(0, 1000)}"`);
 
   if (state!.lastStep) {
@@ -139,8 +170,9 @@ type LoopTurn = {
   split: { restated_goal: string; tasks: string[] } | null;
   verdict: { ok: boolean; why: string | null } | null;
   decision:
-    | { type: "step"; step: { intent: string; action: Record<string, unknown>; expects: string; reversible: boolean } }
+    | { type: "step"; step: { intent: string; action: Record<string, unknown>; expects: string; reversible: boolean; assert?: Record<string, unknown> } }
     | { type: "ask"; question: string }
+    | { type: "answer"; text: string }
     | { type: "task_done" | "all_done" | "blocked"; message: string };
 };
 
@@ -193,11 +225,23 @@ function coerceTurn(rawContent: string, hadLastStep: boolean): { turn: LoopTurn;
         action: { ...action, type: actionType },
         expects: typeof s.expects === "string" && s.expects.trim() ? s.expects.trim() : "The action completes without an error.",
         reversible: looksIrreversible ? false : s.reversible !== false,
+        // Optional machine-checkable assertion. Kept only when it is one of the
+        // known shapes; a malformed one is dropped, never a reason to fail the turn.
+        ...(isUsableAssert(s.assert) ? { assert: s.assert as Record<string, unknown> } : {}),
       },
     };
   } else if (type === "ask") {
     const q = typeof rawDecision.question === "string" ? rawDecision.question.trim() : "";
     decision = { type: "ask", question: q || "Something here only you can answer. What should I do?" };
+  } else if (type === "answer") {
+    // The reporting channel. Informational work ends by HANDING OVER what was
+    // found, and before this existed the only way out was a terminal message,
+    // which taught the model to keep browsing to "prove" a task that was already
+    // answerable. Accept text or message so a near-miss still lands.
+    const t = typeof rawDecision.text === "string" && rawDecision.text.trim()
+      ? rawDecision.text.trim()
+      : typeof rawDecision.message === "string" ? rawDecision.message.trim() : "";
+    decision = { type: "answer", text: t || "I found what was asked for, but my answer text came back empty." };
   } else {
     const m = typeof rawDecision.message === "string" ? rawDecision.message.trim() : "";
     decision = {

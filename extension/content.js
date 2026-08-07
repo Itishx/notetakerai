@@ -21137,6 +21137,11 @@ async function __sbRequestRealtimeReply(text, { relayMode = false, verbatim = fa
 }
 
 async function __sbSpeakWithPreferredVoice(text, preferred = "legacy", options = {}) {
+  // Every spoken reply exits through here, whichever pipeline made it. The source
+  // tag says which brain produced the words: chat replies come from
+  // chat-about-notes with the Emotional Engine composed server-side, delegate
+  // narration from the HIL loop when the brain flag is on.
+  console.log(`[Braino 🗣 OUT] (${options.source || (preferred === "realtime" ? "realtime+EE" : "chat+EE")}) "${String(text || "").slice(0, 200)}"`);
   // Remember what Braino is about to say so the mic can't re-hear it and re-fire an intent.
   __sbNoteSpoken(text);
   if (!__sbVTPath) __sbVTPath = "Slow Path";   // reached the batch speak entry (not fast streaming)
@@ -22186,6 +22191,9 @@ function __sbHandleRtEvent(ev) {
       if (__sbHeadphoneMode) __sbSetHpBrainState(__sbBrainoOutputActive() ? "speaking" : "listening");
       return;
     }
+    // Testing tap, paired with [Braino 🗣 OUT] in __sbSpeakWithPreferredVoice:
+    // this line only prints for audio that cleared every gate and became a turn.
+    console.log(`[Braino 🎤 IN] "${transcript}"`);
 
     // Language confirmation flow. If we asked the user whether to switch languages, this turn is
     // their yes/no answer — consume it instead of treating it as a normal request.

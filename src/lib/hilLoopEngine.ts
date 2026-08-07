@@ -72,8 +72,9 @@ type ServerTurn = {
   split: { restated_goal: string; tasks: string[] } | null;
   verdict: { ok: boolean; why: string | null } | null;
   decision:
-    | { type: "step"; step: { intent: string; action: Record<string, unknown>; expects: string; reversible: boolean } }
+    | { type: "step"; step: { intent: string; action: Record<string, unknown>; expects: string; reversible: boolean; assert?: Record<string, unknown> } }
     | { type: "ask"; question: string }
+    | { type: "answer"; text: string }
     | { type: "task_done" | "all_done" | "blocked"; message: string };
 };
 
@@ -355,6 +356,14 @@ export class HilLoopRunner {
       this.events.push({ kind: "ask", id: this.nextId++, thinking: splitJustLanded ? "" : turn.thinking, question: d.question, answer: null });
       this.phase = "awaiting_answer";
       this.onChange();
+      return;
+    }
+
+    if (d.type === "answer") {
+      // The findings ARE the completion for informational work: hand them over and
+      // close out, rather than browsing on to prove a task that is already answered.
+      this.tasks.forEach((t) => { if (t.status !== "done") t.status = "done"; });
+      this.end("all_done", d.text, turn.thinking);
       return;
     }
 
