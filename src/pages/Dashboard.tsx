@@ -1332,6 +1332,8 @@ export default function Dashboard() {
   const [newModeName, setNewModeName] = useState("");
   const [hiddenFolderUnlocked, setHiddenFolderUnlocked] = useState(false);
   const [hiddenFolderUnlocking, setHiddenFolderUnlocking] = useState(false);
+  // Set when the stored fingerprint can't be used here (new browser, wiped keychain) so we can offer re-registering.
+  const [hiddenFolderNeedsSetup, setHiddenFolderNeedsSetup] = useState(false);
   const [draggedModeId, setDraggedModeId] = useState<string | null>(null);
   const [newCommandDraft, setNewCommandDraft] = useState<Record<string, { phrase: string; url: string; openMode: "tab" | "incognito" }>>({});
   const [hiddenModesCredentialId, setHiddenModesCredentialId] = useState<string | null>(null);
@@ -3089,6 +3091,17 @@ export default function Dashboard() {
       toast({ title: "Not supported", description: "This browser/device doesn't support fingerprint unlock.", variant: "destructive" });
       return;
     }
+    // Refuse to start unless a real biometric sensor is wired to this browser. Without the check the
+    // browser happily falls back to its passkey sheet and starts asking for account passwords.
+    const hasTouchId = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable().catch(() => false);
+    if (!hasTouchId) {
+      toast({
+        title: "No fingerprint on this device",
+        description: "Turn on Touch ID (or Windows Hello) for this browser, then try again.",
+        variant: "destructive",
+      });
+      return;
+    }
     try {
       const challenge = crypto.getRandomValues(new Uint8Array(32));
       const userIdBytes = new TextEncoder().encode(user.id);
@@ -3098,14 +3111,25 @@ export default function Dashboard() {
           rp: { name: "Braino", id: window.location.hostname },
           user: { id: userIdBytes, name: user.email || "braino-user", displayName: displayName || "Braino user" },
           pubKeyCredParams: [{ type: "public-key", alg: -7 }, { type: "public-key", alg: -257 }],
-          authenticatorSelection: { authenticatorAttachment: "platform", userVerification: "required" },
+          // Device-bound and non-discoverable on purpose: a discoverable/resident key gets synced into
+          // iCloud Keychain, which is what turns this into a "passkey for trybraino.com" password prompt.
+          // Discouraged keeps it in the browser's local Touch ID keychain, so the sensor is the only key.
+          authenticatorSelection: {
+            authenticatorAttachment: "platform",
+            residentKey: "discouraged",
+            requireResidentKey: false,
+            userVerification: "required",
+          },
+          attestation: "none",
+          hints: ["client-device"],
           timeout: 60000,
-        },
+        } as PublicKeyCredentialCreationOptions,
       })) as PublicKeyCredential | null;
       if (!credential) throw new Error("No credential returned");
       const credentialId = btoa(String.fromCharCode(...new Uint8Array(credential.rawId))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
       await supabase.from("profiles").update({ hidden_modes_credential_id: credentialId }).eq("user_id", user.id);
       setHiddenModesCredentialId(credentialId);
+      setHiddenFolderNeedsSetup(false);
       setHiddenFolderUnlocked(true);
       toast({ title: "Fingerprint set", description: "This device can now unlock your hidden modes." });
     } catch (err) {
@@ -3125,15 +3149,26 @@ export default function Dashboard() {
         publicKey: {
           challenge,
           rpId: window.location.hostname,
-          allowCredentials: [{ id: rawId, type: "public-key" }],
+          // "internal" transport + the client-device hint pin this to the fingerprint sensor on this
+          // machine. Leave them out and the browser offers phone / security key / synced passkey first.
+          allowCredentials: [{ id: rawId, type: "public-key", transports: ["internal"] as AuthenticatorTransport[] }],
           userVerification: "required",
+          hints: ["client-device"],
           timeout: 60000,
-        },
+        } as PublicKeyCredentialRequestOptions,
       });
       if (!assertion) throw new Error("No assertion returned");
+      setHiddenFolderNeedsSetup(false);
       setHiddenFolderUnlocked(true);
     } catch (err) {
-      toast({ title: "Unlock failed", description: (err as Error)?.message || "Fingerprint didn't match.", variant: "destructive" });
+      // The stored key is device-bound, so a different browser or a wiped keychain can never match it.
+      // Offer re-registration rather than leaving the folder permanently locked.
+      setHiddenFolderNeedsSetup(true);
+      toast({
+        title: "Unlock failed",
+        description: "Fingerprint didn't match, or this device was never set up. Tap \"Use this device\" to register it.",
+        variant: "destructive",
+      });
     } finally {
       setHiddenFolderUnlocking(false);
     }
@@ -6505,10 +6540,17 @@ export default function Dashboard() {
                           <Shield className="h-3.5 w-3.5" /> Set up fingerprint
                         </button>
                       ) : !hiddenFolderUnlocked ? (
-                        <button type="button" onClick={handleUnlockHiddenFolder} disabled={hiddenFolderUnlocking} className="bd-btn ghost !py-1.5 !text-[12px]">
-                          <Shield className="h-3.5 w-3.5" />
-                          {hiddenFolderUnlocking ? "Waiting…" : "Unlock"}
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button type="button" onClick={handleUnlockHiddenFolder} disabled={hiddenFolderUnlocking} className="bd-btn ghost !py-1.5 !text-[12px]">
+                            <Shield className="h-3.5 w-3.5" />
+                            {hiddenFolderUnlocking ? "Waiting…" : "Unlock"}
+                          </button>
+                          {hiddenFolderNeedsSetup ? (
+                            <button type="button" onClick={handleRegisterHiddenModesFingerprint} className="bd-btn ghost !py-1.5 !text-[12px]">
+                              Use this device
+                            </button>
+                          ) : null}
+                        </div>
                       ) : (
                         <button type="button" onClick={() => setHiddenFolderUnlocked(false)} className="bd-btn ghost !py-1.5 !text-[12px]">
                           Lock
