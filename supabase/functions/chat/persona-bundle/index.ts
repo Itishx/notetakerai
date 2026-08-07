@@ -9,6 +9,7 @@ import { buildEmotionalCore, steeringLine } from "../../_shared/emotional-engine
 import { getClassManifest } from "../../_shared/emotional-engine/classes.ts";
 import { serializeCues } from "../../_shared/emotional-engine/moments.ts";
 import { resolvePersonalitySettings } from "../../_shared/emotional-engine/settings.ts";
+import { buildLanguagePolicyBlock } from "../../_shared/emotional-engine/language.ts";
 import type { Moment } from "../../_shared/emotional-engine/types.ts";
 
 const ALL_MOMENTS: Moment[] = [
@@ -51,10 +52,21 @@ serve(async (req) => {
       includeXContentSource: false,
     });
 
-    const persona = buildEmotionalCore({
-      medium: "voice",
-      settings: resolvePersonalitySettings(knowledge.personalitySettings || undefined),
-    });
+    // The language policy has to ride WITH the persona. Every other surface gets
+    // it from buildBrainoSystemPrompt, which appends it right after the emotional
+    // core, but voice clients bypass that builder entirely and only ever receive
+    // this string. Without it Braino had no language rule at all on Mac voice: the
+    // session bootstrap carried one, but the Mac rebuilds its instructions on every
+    // turn and that per-response string replaces the session's, so the rule was
+    // dropped on the first reply. He drifted into other languages unprompted and
+    // captioned himself in them.
+    const persona = [
+      buildEmotionalCore({
+        medium: "voice",
+        settings: resolvePersonalitySettings(knowledge.personalitySettings || undefined),
+      }),
+      buildLanguagePolicyBlock("mirror_user", "voice"),
+    ].join("\n\n");
 
     // Voice used to run neutral forever: this bundle is a session bootstrap
     // cached for ten minutes, so it never saw a message and never carried a

@@ -2846,6 +2846,17 @@ function stopSpeechOutput() {
   }
   speaking = false;
   setTalk(false);
+  // The karaoke caption only ever cleared on the two happy paths (speak() finishing,
+  // and response.done), so anything that killed speech early left his words on
+  // screen permanently: a barge-in, an error, or the datachannel closing mid-reply.
+  // Speech stopping is the one event common to every one of those, so the caption
+  // comes down here. Guarded on the class so a normal finish keeps its linger.
+  if (bubble?.classList?.contains("reply-karaoke")) {
+    window.cancelAnimationFrame(replyCaptionRaf);
+    window.clearTimeout(sayTimer);
+    replyCaptionGeneration += 1;   // orphan any in-flight painter
+    bubble.classList.remove("show", "reply-karaoke");
+  }
 }
 
 function stripSpeechText(text) {
