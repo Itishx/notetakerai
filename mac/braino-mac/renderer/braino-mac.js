@@ -1993,6 +1993,10 @@ function setMusicMode(on) {
   // SKIT isolation: the moonwalk demo owns the stage. While the bit runs, music
   // detection must not put headphones on him, start notch theatrics, or move him.
   if (skitRunning && on) return;
+  // Idempotent: the music IPC re-fires on every track change, ad and detector flap,
+  // and each of those edges used to run the whole block below — including pulling
+  // him out of the notch. Only a real state change should do anything.
+  if (musicMode === Boolean(on)) return;
   musicMode = Boolean(on);
   musicSessionId += 1;
   headphones.style.display = musicMode ? "" : "none";

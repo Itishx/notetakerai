@@ -4878,12 +4878,24 @@ function __sbRoamApplyPose(now, moving, sitting) {
   const bp = t % 3.4;
   const blink = bp < 0.13 ? Math.sin((bp / 0.13) * Math.PI) : 0;
   const eyeSy = Math.max(0.06, 1 - blink);
-  if (flip) flip.style.transform = `scaleX(${__sbRoamDir})`;
-
   const legL = root.querySelector("#__sbwk_ll__");
   const legR = root.querySelector("#__sbwk_rl__");
   const eyeL = root.querySelector("#__sbwk_eye_l__");
   const eyeR = root.querySelector("#__sbwk_eye_r__");
+
+  // ── Gaze + facing, ported from the Mac (braino-mac.js:5843-5845, 5903-5905) ──
+  // Roam never drove the pupils, so out on the page his eyes froze at whatever
+  // transform they last held and he walked around staring dead ahead. The Mac
+  // leads with the eyes while walking and snaps them back to centre — looking at
+  // YOU — the moment he is engaged. Same for the body: he faces you when spoken
+  // to instead of staying turned in his last direction of travel.
+  const engaged = __sbHeadphoneMode || __sbVoiceOnlyMode
+    || __sbWalkTalking || __sbBrainoOutputActive();
+  if (flip) flip.style.transform = `scaleX(${engaged ? 1 : __sbRoamDir})`;
+  const gaze = (engaged || !moving) ? 0 : 2.4;
+  root.querySelector("#__sbwk_pupil_l__")?.setAttribute("transform", `translate(${gaze} 0)`);
+  root.querySelector("#__sbwk_pupil_r__")?.setAttribute("transform", `translate(${gaze} 0)`);
+
   if (sitting) {
     // Perched on an edge: both legs hang straight down and swing gently TOGETHER (like a
     // kid sitting on a wall) — never crossed. Small in-phase sway.
@@ -5024,7 +5036,7 @@ function __sbRoamTick(now) {
   const moving = !inConversation && dist > 3;
   if (moving) {
     if (Math.abs(dx) > 2) __sbRoamDir = dx > 0 ? 1 : -1;
-    const speed = 135;                         // px/s — a stroll, not a dash
+    const speed = 76;                          // px/s — the Mac's ambient pace (braino-mac.js:5832)
     const step = Math.min(dist, speed * dt);
     __sbRoamCX = __sbRoamClampX(__sbRoamCX + (dx / dist) * step);
     __sbRoamCY = __sbRoamClampY(__sbRoamCY + (dy / dist) * step);
@@ -6021,17 +6033,20 @@ function __sbVoiceAddressesBraino(text) {
   return false;
 }
 function __sbShouldDropSpeechDuringBrainoOutput(text, options = {}) {
-  const guardRecent = Date.now() - __sbVoiceOutputGuardAt < 12000;
-  if (!__sbBrainoOutputActive() && !guardRecent) return false;
+  // THIS is what ate the second turn of every conversation.
+  //
+  // It used to run for 12 seconds after Braino last made a sound (guardRecent) and
+  // then throw away ANY transcript that did not contain the word "Braino" or a
+  // command word. Nobody says a name twice in a real back-and-forth, so the whole
+  // turn was transcribed, judged unaddressed, and silently binned — which is
+  // exactly the "he doesn't speak on turn 2" symptom, on BOTH surfaces.
+  //
+  // What actually needs suppressing is his own voice returning through the
+  // speakers, and __sbIsSelfEcho already tests for that by comparing against what
+  // he just said. That test is kept. The name requirement and the 12s tail are not:
+  // they were public-demo armour that made normal conversation impossible.
+  if (!__sbBrainoOutputActive()) return false;
   if (__sbIsSelfEcho(text) && !__sbVoiceAddressesBraino(text)) return true;
-  const confidence = Number(options.confidence);
-  const hasConfidence = Number.isFinite(confidence) && confidence > 0;
-  const stats = typeof __sbVoiceTranscriptStats === "function"
-    ? __sbVoiceTranscriptStats(text)
-    : { normalized: __sbNormalizeForMatch(text), wordCount: String(text || "").trim().split(/\s+/).filter(Boolean).length };
-  const addressed = __sbVoiceAddressesBraino(text);
-  if (!addressed) return true;
-  if (hasConfidence && confidence < 0.45 && stats.wordCount <= 4) return true;
   return false;
 }
 
@@ -13658,6 +13673,13 @@ async function __sbSpeakText(text, options = {}) {
     __sbHandleFishTtsFailure(ttsErr);
     spoke = await __sbSpeakWithBrowser(clean, speechToken);
   } finally {
+    // __sbIsSpeaking must clear even when this job was superseded. It used to sit
+    // inside the token check below, so a barge-in (which bumps __sbSpeechGeneration)
+    // left it stuck true — and __sbBrainoOutputActive() then reads true forever,
+    // permanently arming the barge-confirm branch and the self-echo filter. Every
+    // later turn gets treated as "he is still talking" and thrown away.
+    __sbIsSpeaking = false;
+    __sbWalkTalking = false;
     if (speechToken === __sbSpeechGeneration) {
       if (__sbCurrentSpeechAudio) {
         try { __sbCurrentSpeechAudio.pause(); } catch {}
@@ -13667,7 +13689,6 @@ async function __sbSpeakText(text, options = {}) {
         URL.revokeObjectURL(__sbCurrentSpeechUrl);
         __sbCurrentSpeechUrl = null;
       }
-      __sbIsSpeaking = false;
       __sbSetVoiceButtonState(__sbIsRecording);
       __sbSyncSpeakButtons();
       // After speaking ends in headphone mode, go back to listening
@@ -15586,10 +15607,14 @@ function __sbIsJunkTranscript(text) {
   if (/^[\[\(\*].*[\]\)\*]$/.test(raw)) return true;
   const norm = raw.toLowerCase().replace(/[^a-z\s]/g, "").replace(/\s+/g, " ").trim();
   // Classic silence/music phantom outputs.
+  // Only things Whisper INVENTS out of silence belong here. "okay", "bye" and
+  // "thank you" were in this list and are ordinary human replies — dropping them
+  // meant agreeing with Braino, or thanking him, registered as noise. YouTube
+  // outro boilerplate stays, because silence really does hallucinate into it.
   const phantoms = new Set([
-    "you", "thank you", "thank you so much", "thanks for watching",
+    "you", "thanks for watching",
     "thanks for watching everyone", "please subscribe", "subscribe",
-    "bye", "bye bye", "okay", "music", "applause", "silence", "the end",
+    "music", "applause", "silence", "the end",
   ]);
   if (phantoms.has(norm)) return true;
   return false;
@@ -15686,16 +15711,21 @@ function __sbAssessVoiceTranscript(text, options = {}) {
   if (hasConfidence && confidence < 0.35 && !intentful && !shortIntent) {
     return verdict(false, "low_confidence", true);
   }
-  if (stats.charCount < 5 && !shortIntent) return verdict(false, "too_short");
-  if (stats.wordCount === 1 && !shortIntent && !intentful) return verdict(false, "one_word_background");
-  if (stats.wordCount <= 2 && !shortIntent && !intentful) return verdict(false, "short_background");
+  // ── Length gates, ported from the Mac (braino-mac.js:2814-2815) ──────────────
+  // The Mac is the working reference and it only ever refuses a SINGLE unaddressed
+  // word. This file had grown to refuse up to THREE words, which is most of how a
+  // person actually answers a question — "the blue one", "about ten minutes", "not
+  // right now", "yeah go ahead" all died here, silently, which is what made a real
+  // back-and-forth impossible in the browser but fine on the Mac.
+  // `too_short` also only consulted shortIntent, never intentful, so "help", "read",
+  // "wait" and "more" were dropped despite being in the intentful verb list.
+  // `addressed` is the Mac's escape hatch (braino-mac.js:2814) — his name OR a bare
+  // command word like wait / stop / repeat / resume. Without consulting it, "wait"
+  // was being binned as background noise.
+  const addressed = __sbVoiceAddressesBraino(stats.raw || "");
+  if (stats.charCount < 3 && !shortIntent && !intentful && !addressed) return verdict(false, "too_short");
+  if (stats.wordCount === 1 && !shortIntent && !intentful && !addressed) return verdict(false, "one_word_background");
   if (stats.letterCount >= 12 && stats.vowelRatio < 0.16) return verdict(false, "gibberish", true);
-
-  // In noisy rooms, random side chatter often transcribes as two or three harmless words.
-  // Do not route that to Braino unless it has a question/command/team signal.
-  if (stats.wordCount <= 3 && !intentful) {
-    return verdict(false, "not_addressed");
-  }
 
   return verdict(true, "ok");
 }
@@ -15709,15 +15739,27 @@ function __sbMaybePromptForDroppedVoice(assessment, options = {}) {
     __sbSpeculativeActive = false;
     __sbSpeculativeHandledToken = -1;
   }
-  const shouldAsk = assessment.askRepeat && __sbVoiceLooksIntentful(assessment);
-  if (!shouldAsk) {
+  // Speak up unless it was obviously not speech.
+  //
+  // This used to require `askRepeat && __sbVoiceLooksIntentful(...)`, which can never
+  // both be true: the only reason that sets askRepeat is `low_confidence`, and that
+  // branch already required !intentful. So the prompt was unreachable and every
+  // single rejection vanished without a sound — which is precisely why these bugs
+  // survived so long. If Braino heard you and decided not to act, he says so.
+  //
+  // Genuine non-speech stays silent, or he would narrate the room.
+  const SILENT_REASONS = new Set(["empty", "no_words", "phantom", "filler", "non_english_noise"]);
+  if (SILENT_REASONS.has(assessment.reason) || String(assessment.reason || "").startsWith("partial_")) {
     __sbVTMark?.(`🧹 Dropped voice noise (${assessment.reason})`);
     return;
   }
   const now = Date.now();
   if (now - __sbLastRepeatPromptAt > 12000 && !__sbHasActiveRealtimeResponse()) {
     __sbLastRepeatPromptAt = now;
+    __sbVTMark?.(`🗣 Asking for a repeat (${assessment.reason})`);
     void __sbSpeakWithPreferredVoice("Sorry, I didn't catch that — could you say it again?", options.voiceOutput || "realtime");
+  } else {
+    __sbVTMark?.(`🧹 Dropped voice noise (${assessment.reason}, cooling down)`);
   }
 }
 
@@ -20999,11 +21041,16 @@ function __sbCompleteVoiceTurn(options = {}) {
 
   const voiceOutput = options.voiceOutput === "realtime" ? "realtime" : "legacy";
   const voiceTurnToken = Number.isInteger(options.voiceTurnToken) ? options.voiceTurnToken : null;
+  // Release the pending-reply lock BEFORE the stale-token bail. This is the
+  // "he doesn't speak on turn 2" bug: a superseded turn (any barge-in bumps
+  // __sbRtTurnToken) returned here without ever clearing the flag, and
+  // __sbScheduleVoiceTurnProcessing then silently discards every later transcript
+  // while it is set. One superseded turn used to wedge voice permanently.
+  __sbVoicePendingReply = false;
   if (voiceOutput === "realtime" && voiceTurnToken !== null && voiceTurnToken !== __sbRtTurnToken) {
     return;
   }
 
-  __sbVoicePendingReply = false;
   if (__sbHeadphoneMode) {
     __sbSetHpBrainState("listening");
     if (voiceOutput === "legacy" && options.resumeLegacyMic) {
@@ -21037,7 +21084,14 @@ function __sbSplitAndCorrectTranscript(transcript) {
   }
 
   const FILLER_ONLY = /^(?:okay|ok|alright|right|hmm|ah|oh|uh|um|sure|cool|great|nice|perfect|sounds good|that'?s?\s+too\s+loud)[.!,]?$/i;
-  parts = parts.filter(p => p.length > 4 && !FILLER_ONLY.test(p));
+  // Keep short segments that are real intent. The flat >4 chars rule threw away
+  // "stop", "yes", "no" and "next" whenever an utterance happened to get split,
+  // which are exactly the words you most need to survive.
+  parts = parts.filter((p) => {
+    if (FILLER_ONLY.test(p)) return false;
+    if (p.length > 4) return true;
+    try { return __sbVoiceHasShortIntent(__sbVoiceTranscriptStats(p)); } catch (_) { return false; }
+  });
 
   if (parts.length <= 1) return [raw];
 
@@ -21159,6 +21213,15 @@ function __sbScheduleVoiceTurnProcessing(transcript, onReady, options = {}) {
     // answer is in play, IT set the pending flag — and we MUST still run the router so it can confirm
     // (plain chat → keep) or cancel-and-handle (action). Otherwise actions get silently swallowed.
     const specInPlay = __sbSpeculativeActive || __sbSpeculativeHandledToken >= 0;
+    // Self-heal. This early return is where a stuck flag silently eats every turn
+    // forever, so never trust it blindly: if nothing is actually in flight, the
+    // flag is a leak from a turn that died without releasing it. Clear and carry on
+    // rather than going mute until the tab is reloaded.
+    if (__sbVoicePendingReply && !specInPlay
+        && !__sbHasActiveRealtimeResponse() && !__sbBrainoOutputActive()) {
+      console.log("[Braino 🩹] pending-reply lock was stale — releasing");
+      __sbVoicePendingReply = false;
+    }
     if (!toProcess || (__sbVoicePendingReply && !specInPlay)) return;
 
     if (__sbHeadphoneMode) {
