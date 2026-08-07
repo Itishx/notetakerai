@@ -5007,12 +5007,21 @@ function __sbRoamTick(now) {
   // walks the diagonal (feet cycling); vertical change reads as a gentle climb.
   const dx = __sbRoamTX - __sbRoamCX, dy = __sbRoamTY - __sbRoamCY;
   const dist = Math.hypot(dx, dy);
-  // He stops to talk. Strolling on through his own answer read as wandering off
-  // mid-sentence; the Mac plants him and he speaks from where he stands. The
-  // wander clock is held back too, so he does not bolt the instant he finishes.
-  const talking = __sbWalkTalking || __sbBrainoOutputActive();
-  if (talking) __sbRoamNextWander = now + 1800;
-  const moving = !talking && dist > 3;
+  // He PLANTS himself for the whole conversation — not just while sound is coming
+  // out of him. Gating on TTS alone meant he resumed strolling in every gap: while
+  // listening, while thinking, between two sentences of one answer. Those gaps are
+  // exactly when you are looking at him, so it read as him gliding around while
+  // being spoken to. Voice engaged = feet planted; he wanders only when idle.
+  const inConversation = __sbHeadphoneMode || __sbVoiceOnlyMode
+    || __sbWalkTalking || __sbBrainoOutputActive();
+  if (inConversation) {
+    // Drop any pent-up destination too, otherwise the moment the conversation ends
+    // he darts off to wherever he was headed before you started talking.
+    __sbRoamTX = __sbRoamCX;
+    __sbRoamTY = __sbRoamCY;
+    __sbRoamNextWander = now + 1500;
+  }
+  const moving = !inConversation && dist > 3;
   if (moving) {
     if (Math.abs(dx) > 2) __sbRoamDir = dx > 0 ? 1 : -1;
     const speed = 135;                         // px/s — a stroll, not a dash
