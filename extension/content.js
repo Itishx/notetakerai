@@ -5078,6 +5078,8 @@ function __sbEnterRoamMode() {
     if (__sbNotchV1.shell.dataset.state !== "long") __sbNotchSetState("idle");
   }
   document.addEventListener("mousemove", __sbRoamOnMouse, true);
+  // Global, so he stays the mascot in every tab a delegate opens.
+  if (__sbContextOk()) chrome.storage.local.set({ sbRoamOn: true });
   __sbWkSay?.("Coming out. Watch your step.");
   __sbRoamRaf = requestAnimationFrame(__sbRoamTick);
 }
@@ -5104,6 +5106,7 @@ function __sbExitRoamMode() {
     __sbNotchV1.shell.classList.remove("vacant");
     if (!["long", "short"].includes(__sbNotchV1.shell.dataset.state)) __sbNotchSetState("idle");
   }
+  if (__sbContextOk()) chrome.storage.local.set({ sbRoamOn: false });
   __sbWkResumeFromX = 24;
   __sbStartWalkLoop?.();
 }
@@ -5994,10 +5997,11 @@ function __sbIsSelfEcho(transcript) {
 
 let __sbVoiceOutputGuardAt = 0;
 // How long speech must persist, while Braino is talking, before it counts as a
-// real interruption rather than his own audio echoing back. Long enough that a
-// speaker-echo blip dies inside it, short enough that talking over him feels
-// instant. Raise it if he ever starts interrupting himself.
-const __SB_BARGE_CONFIRM_MS = 420;
+// real interruption rather than his own audio echoing back. Also the window the
+// transcriber gets to resolve actual words off the mic, which is the real test —
+// so it has to be long enough for a transcript delta to land, not just for a VAD
+// blip to die. Raise it if he ever starts interrupting himself.
+const __SB_BARGE_CONFIRM_MS = 700;
 let __sbBargeConfirmTimer = null;
 function __sbBrainoOutputActive() {
   return Boolean(
@@ -10219,8 +10223,15 @@ function __sbBuildBrainUI() {
   // This makes Braino persist across tabs: once invoked, it follows you to every tab
   // and survives collapse instead of vanishing.
   document.getElementById("__sb_brain_btn__").style.display = "none";
-  __sbStorageGet(["sbBrainDocked", "sbBrainExpanded", "sbVoiceModeOn"]).then(({ sbBrainDocked, sbBrainExpanded, sbVoiceModeOn }) => {
+  __sbStorageGet(["sbBrainDocked", "sbBrainExpanded", "sbVoiceModeOn", "sbRoamOn"]).then(({ sbBrainDocked, sbBrainExpanded, sbVoiceModeOn, sbRoamOn }) => {
     if (!__sbOwnsInlineUi()) return;
+    // Whichever body he is wearing has to follow him between tabs. He was out on
+    // the page, a delegate opened a new tab, and he rematerialised there as the
+    // notch — two different Brainos across two tabs in one conversation. Roam is
+    // global state now, same as voice mode.
+    if (sbRoamOn && !__sbRoamActive) {
+      setTimeout(() => { if (!__sbRoamActive) __sbSummonToggle?.(); }, 400);
+    }
     // Show brain if docked OR if voice mode is on (voice takes over, so show it either way).
     if (sbBrainDocked || sbVoiceModeOn) {
       const b = document.getElementById("__sb_brain_btn__");
@@ -13202,6 +13213,10 @@ function __sbStopSpeech() {
     __sbCurrentUtterance = null;
   }
   __sbIsSpeaking = false;
+  // The mouth follows the voice. Without this the animation kept running after any
+  // interrupted or aborted speech, so he sat there flapping in silence — which is
+  // what "his mouth moves but nothing comes out" actually was.
+  __sbWalkTalking = false;
   __sbSetVoiceButtonState(__sbIsRecording);
   __sbSyncSpeakButtons();
 }
@@ -21916,6 +21931,15 @@ function __sbHandleRtEvent(ev) {
       __sbBargeConfirmTimer = setTimeout(() => {
         __sbBargeConfirmTimer = null;
         if (!__sbBrainoOutputActive()) return;      // he finished on his own
+        // Energy alone is not enough to cut him off — through speakers his own
+        // voice keeps the VAD hot for as long as he talks, and acting on that
+        // killed his answer mid-sentence (leaving the mouth moving with no sound).
+        // Require the transcriber to have actually resolved WORDS off the mic:
+        // that survives echo cancellation only when a person really is talking.
+        if (!String(__sbRtUserTranscript || "").trim()) {
+          __sbVTMark("🔇 VAD hot but no words — treating as echo");
+          return;
+        }
         __sbVTMark("✋ Barge-in confirmed");
         __sbVoicePendingReply = false;
         if (__sbHasActiveRealtimeResponse()) __sbInterruptRealtimeResponse();
