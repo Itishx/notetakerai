@@ -118,9 +118,10 @@ function AppRoutes() {
   return (
     <Suspense fallback={<div style={{ minHeight: "100vh", background: "#090a08" }} />}>
       <Routes>
-        {/* Braino is the front door now. The page that used to be here is /overview.
-            /waitlist stays as an alias so existing join links keep working. */}
-        <Route path="/" element={<Foundry />} />
+        {/* The waitlist is the front door again while the five-tab Braino page
+            is still being finished. Braino lives at /braino meanwhile, and
+            /overview stays pointed at the same waitlist page so old links work. */}
+        <Route path="/" element={<Waitlist />} />
         <Route path="/overview" element={<Waitlist />} />
         <Route path="/waitlist" element={<Waitlist />} />
         <Route path="/braino-thronglets" element={<BrainoThronglets />} />
@@ -183,7 +184,7 @@ function AppRoutes() {
         <Route path="/meetings" element={<Meetings />} />
         {/* The browser story is a tab on /braino now, not a page of its own.
             Two places saying the same thing is what made this confusing. */}
-        <Route path="/browser" element={<Navigate to="/?view=browser" replace />} />
+        <Route path="/browser" element={<Navigate to="/braino?view=browser" replace />} />
         <Route path="/brainohera" element={<YapMode />} />
         <Route path="/motion-graphics" element={<MotionGraphicsHub />} />
         <Route path="/spotify-mac-teaser" element={<DontBlinkSpotifyTeaser />} />
@@ -210,9 +211,9 @@ function AppRoutes() {
         {/* The page is Braino's, and Foundry is one of its three tabs. It lived at
             /foundry for a while, which made every conversation about it circular.
             The old URL still works and still opens the Foundry tab. */}
-        {/* The products are tabs on / now. The old product URLs still land right. */}
-        <Route path="/braino" element={<Navigate to="/" replace />} />
-        <Route path="/foundry" element={<Navigate to="/?view=foundry" replace />} />
+        {/* The products are tabs on /braino, and the old product URLs land right. */}
+        <Route path="/braino" element={<Foundry />} />
+        <Route path="/foundry" element={<Navigate to="/braino?view=foundry" replace />} />
         <Route path="/automations" element={<Automations />} />
         <Route path="/integrations" element={<Integrations />} />
         <Route path="/connectors-vault" element={<ConnectorsVault />} />

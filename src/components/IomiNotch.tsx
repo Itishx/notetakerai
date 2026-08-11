@@ -44,10 +44,10 @@ export type IomiNotchTab = {
 // Blink, Motion Graphics, and Log are all still live pages, just no longer in
 // the notch. Reach them from the pages that already link to them.
 const IOMI_NAV: IomiNavItem[] = [
-  { to: "/", label: "Braino", note: "start here" },
-  { to: "/?view=browser", label: "Browser", note: "free in Chrome" },
-  { to: "/?view=foundry", label: "Foundry", note: "the Mac co-founder" },
-  { to: "/?view=hera", label: "HERA", note: "talk and it types" },
+  { to: "/braino", label: "Braino", note: "start here" },
+  { to: "/braino?view=browser", label: "Browser", note: "free in Chrome" },
+  { to: "/braino?view=foundry", label: "Foundry", note: "the Mac co-founder" },
+  { to: "/braino?view=hera", label: "HERA", note: "talk and it types" },
   {
     to: "/braino-os",
     label: "BrainoOS",

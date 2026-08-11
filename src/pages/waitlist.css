@@ -185,6 +185,9 @@
 .wl-form button { display: flex; align-items: center; gap: 8px; align-self: center; padding: 12px 20px; border: 0; border-radius: 100px; color: var(--wl-ink); background: #111210; cursor: pointer; font: inherit; font-size: 13px; }
 .wl-form button svg { width: 16px; }
 .wl-form > p { color: #b0473a; font-size: 12px; }
+/* The pre-submit nudge is the same sentence as the alert, in a quieter voice:
+   nothing has gone wrong yet, so it must not read as an error. */
+.wl-form > p.wl-form-hint { color: #86887f; }
 .wl-success { display: flex; align-items: center; gap: 16px; padding: 26px 0; border-top: 1px solid #111210; border-bottom: 1px solid #111210; }
 .wl-success > svg { width: 32px; height: 32px; }
 .wl-success strong, .wl-success span { display: block; }

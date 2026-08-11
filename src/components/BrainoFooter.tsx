@@ -17,9 +17,9 @@ const FOOTER_COLUMNS: Array<{ head: string; links: Array<[string, string]> }> = 
   {
     head: "Product",
     links: [
-      ["Braino Browser", "/?view=browser"],
-      ["Braino Foundry", "/?view=foundry"],
-      ["BrainoHERA", "/?view=hera"],
+      ["Braino Browser", "/braino?view=browser"],
+      ["Braino Foundry", "/braino?view=foundry"],
+      ["BrainoHERA", "/braino?view=hera"],
       ["Pricing", "/premium"],
     ],
   },
@@ -28,10 +28,10 @@ const FOOTER_COLUMNS: Array<{ head: string; links: Array<[string, string]> }> = 
     // in a footer before they look for a feature.
     head: "Braino for",
     links: [
-      ["The browser", "/?view=browser"],
-      ["Founders", "/?view=foundry"],
-      ["Solo builders", "/?view=foundry"],
-      ["Mac developers", "/?view=foundry"],
+      ["The browser", "/braino?view=browser"],
+      ["Founders", "/braino?view=foundry"],
+      ["Solo builders", "/braino?view=foundry"],
+      ["Mac developers", "/braino?view=foundry"],
       ["Meetings", "/meetings"],
       ["X", "/live"],
     ],

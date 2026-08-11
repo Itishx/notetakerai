@@ -357,7 +357,12 @@ export function WaitlistJoin({ id = "join" }: { id?: string }) {
           <label htmlFor={`${id}-email`}>Your email</label>
           <div><input id={`${id}-email`} type="email" value={email} onChange={(event) => { setEmail(event.target.value); if (submitState === "error" || submitState === "needs-pick") setSubmitState("idle"); }} placeholder="you@somewhere.com" autoComplete="email" required /><button type="submit" disabled={submitState === "loading"}>{submitState === "loading" ? <Loader2 className="wl-spin" /> : <>Join the waitlist <ArrowUpRight /></>}</button></div>
           {submitState === "error" && <p role="alert">That didn’t go through. Check the email and try once more.</p>}
-          {submitState === "needs-pick" && <p role="alert">Pick at least one above, so we know which Braino to write to you about.</p>}
+          {/* The picker is a scroll above the button, so someone can reach here
+              with nothing chosen and no idea. Say it while they can still act on
+              it; the same sentence turns into a real alert if they submit anyway. */}
+          {submitState === "needs-pick"
+            ? <p role="alert">Pick at least one above, so we know which Braino to write to you about.</p>
+            : selected.size === 0 && <p className="wl-form-hint">Pick at least one above, so we know which Braino to write to you about.</p>}
         </>}
       </form>
     </section>
