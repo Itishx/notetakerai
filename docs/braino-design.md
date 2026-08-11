@@ -665,3 +665,16 @@ The extension notch (`extension/content.js`, shadow DOM under `#__sb_notch_v1_ho
 - **Mic permission** drops out of the notch as an anchored 380×300 panel (26px radius, coral hairline, 420ms drop / 280ms retract on the notch easing) — same extension-origin iframe underneath; the full-screen dimmed modal remains only as the no-notch fallback. `mic-permission.html` itself: coral-gradient sonar mic disc, "Braino needs your microphone", pill CTA.
 - **Boot greeting** (once per browser session): wake chime (E5→B5 sines), greeting card, spoken `"{Good evening}, {name}. Everything is ready."`, then the mascot steps out under the notch, WAVES (roam pose now drives the arm), says "Press Control or Command twice to talk to me," and folds back in. Cameo never persists roam state.
 - **Roam** wanders a ~35% home box (`__sbRoamFenceX/Y` fence TARGETS, never live position — no teleports); drag the mascot to move home (drop = wave), tap still opens the ask panel. Menu: Team removed; Lecture/Meeting land on the record surface, not the input panel.
+
+---
+
+## 19. BrainoX command center (`/x`, `src/pages/BrainoX.tsx`)
+
+The distribution OS surface from BrainoX.md, kept in the `/live` family: full-bleed `#0a0a0a`, white ink at graded opacities, `rounded-2xl border-white/8 bg-white/4` cards, no Navbar/SiteFooter. It is a working tool, not a marketing page.
+
+- **Control bar** (top border strip): `Braino / x command center`, automation state pill (emerald dot + mode when live, red + "Stopped" when killed), the kill switch as a real button (red tint to stop, solid emerald to resume), and Settings toggle. The kill switch is the loudest control on the page on purpose.
+- **Briefing card**: "How's my X?" + `Brief me` pill (white-on-black primary). Returns a 4-up stat grid (`Stat` tiles: black/40 wells, 11px label, lg semibold value) and the spoken-style paragraph under it. Same JSON the voice layer would read.
+- **Composer**: three entry-mode pills (`I wrote this` / `Raw thought` / `Braino, draft something`) — active pill inverts to white/black. Generated options render as a 3-up card grid: angle + score (emerald ≥80, ink ≥70, amber below), post text, authenticity note in 11px ink/30, `Save as draft` outline button.
+- **Queue**: status sections with uppercase 12px ink/40 headers (Scheduled → Approved → Drafts → Needs review → Paused → Failed → Published → Rejected). Items are draggable cards (`cursor-grab`) in the pre-scheduled states; fractional-position drops, one-row updates. Right rail of pill `ItemButton`s per status; subtle variant is borderless ink/40. Policy holds surface inline in amber ("Held: ..."), errors in red, published items link out to X.
+- **Idea inbox** and **activity log** ride the same card language; log rows lead with a result dot (emerald success / amber blocked / red failed) and show agent · action · target with the reason in ink/35 beneath.
+- Footer note names the honest boundaries: connection managed on /dashboard, public stats on /live.

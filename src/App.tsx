@@ -92,6 +92,8 @@ const Changelog = lazy(() => import("./pages/Changelog.tsx"));
 const StraightTalk = lazy(() => import("./pages/StraightTalk.tsx"));
 const WhyTheWait = lazy(() => import("./pages/WhyTheWait.tsx"));
 const BrainoLive = lazy(() => import("./pages/BrainoLive.tsx"));
+const BrainoX = lazy(() => import("./pages/BrainoX.tsx"));
+const BrainoXDocs = lazy(() => import("./pages/BrainoXDocs.tsx"));
 const Playground = lazy(() => import("./pages/Playground.tsx"));
 const BuildYourBraino = lazy(() => import("./pages/BuildYourBraino.tsx"));
 const RealtimeCosts = lazy(() => import("./pages/RealtimeCosts.tsx"));
@@ -125,6 +127,7 @@ function AppRoutes() {
         <Route path="/overview" element={<Waitlist />} />
         <Route path="/waitlist" element={<Waitlist />} />
         <Route path="/braino-thronglets" element={<BrainoThronglets />} />
+        <Route path="/knowledge/brainox-distribution" element={<BrainoXDocs />} />
         <Route path="/knowledge/braino-thronglets" element={<BrainoThrongletsDocs />} />
         <Route path="/knowledge" element={<KnowledgeBase />} />
         <Route path="/knowledge/insta-graphics-editorial-archive" element={<InstaGraphicsArchiveDocs />} />
@@ -221,6 +224,7 @@ function AppRoutes() {
         <Route path="/straight-talk" element={<StraightTalk />} />
         <Route path="/why-the-wait" element={<WhyTheWait />} />
         <Route path="/live" element={<BrainoLive />} />
+        <Route path="/x" element={<BrainoX />} />
         <Route path="/playground" element={<Playground />} />
         <Route path="/build-braino" element={<BuildYourBraino />} />
         <Route path="/realtime-costs" element={<RealtimeCosts />} />

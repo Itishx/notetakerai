@@ -20,6 +20,18 @@ export type KnowledgeEntry = {
 
 export const KNOWLEDGE_ENTRIES: readonly KnowledgeEntry[] = [
   {
+    slug: "brainox-distribution",
+    title: "BrainoX: Itish Owns the Voice, Braino Owns the Distribution",
+    category: "Feature",
+    date: "2026-08-12",
+    dateLabel: "August 12, 2026",
+    description:
+      "A distribution command center at /x: raw thoughts become honest post options, a drag-to-order queue feeds a hard policy guard, and one briefing answers how the account is really doing.",
+    status: "MVP",
+    platform: "Braino website",
+    number: "030",
+  },
+  {
     slug: "two-products-and-the-browser-page",
     title: "Braino Comes in Three, on One Page",
     category: "Design decision",

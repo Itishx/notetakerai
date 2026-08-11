@@ -139,6 +139,15 @@ verify_jwt = false
 
 # ── x ─────────────────────────────────────────────────────────────
 
+[functions.brainox-briefing]
+entrypoint = "./functions/x/brainox-briefing/index.ts"
+
+[functions.brainox-generate]
+entrypoint = "./functions/x/brainox-generate/index.ts"
+
+[functions.brainox-schedule]
+entrypoint = "./functions/x/brainox-schedule/index.ts"
+
 [functions.dispatch-scheduled-x-posts]
 entrypoint = "./functions/x/dispatch-scheduled-x-posts/index.ts"
 verify_jwt = false
