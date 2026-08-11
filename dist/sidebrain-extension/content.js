@@ -3326,6 +3326,36 @@ function __sbRuntimeMessage(message) {
   });
 }
 
+// ── Auth-token cache ─────────────────────────────────────────────────────────
+// Every reply used to await a chrome.storage read for the auth token BEFORE the
+// first TTS fetch could leave — a serial hop sitting directly on time-to-first-
+// audio. Primed once here, kept fresh by onChanged; readers get it synchronously.
+let __sbAuthTokenCache = null;
+let __sbAuthTokenCachePrimed = false;
+function __sbPrimeAuthTokenCache() {
+  __sbStorageGet(["authToken"]).then(({ authToken }) => {
+    __sbAuthTokenCache = authToken || null;
+    __sbAuthTokenCachePrimed = true;
+  }).catch(() => { __sbAuthTokenCachePrimed = true; });
+}
+__sbPrimeAuthTokenCache();
+try {
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === "local" && Object.prototype.hasOwnProperty.call(changes, "authToken")) {
+      __sbAuthTokenCache = changes.authToken.newValue || null;
+      __sbAuthTokenCachePrimed = true;
+    }
+  });
+} catch (_) {}
+// Synchronous when warm; falls back to a storage read only on a cold cache.
+async function __sbGetAuthTokenFast() {
+  if (__sbAuthTokenCachePrimed) return __sbAuthTokenCache;
+  const { authToken } = await __sbStorageGet(["authToken"]).catch(() => ({}));
+  __sbAuthTokenCache = authToken || null;
+  __sbAuthTokenCachePrimed = true;
+  return __sbAuthTokenCache;
+}
+
 function __sbOwnsInlineUi() {
   const marker = document.getElementById(__SB_INLINE_OWNER_MARKER_ID);
   return !!marker && marker.dataset.ownerId === __SB_INLINE_OWNER_ID;
@@ -4799,6 +4829,7 @@ let __sbRoamLaunchT0 = 0;
 let __sbRoamLaunchFromX = 0, __sbRoamLaunchFromY = 0, __sbRoamLaunchToX = 0, __sbRoamLaunchToY = 0;
 let __sbRoamLaneCss = "";                // saved lane inline style, restored on exit
 let __sbRoamMouseX = -9999, __sbRoamMouseY = -9999;
+let __sbRoamCameoActive = false;         // boot hello: no sbRoamOn persist, no intro bubble
 const __SB_ROAM_W = 64, __SB_ROAM_H = 78;   // walker box; feet ≈ bottom
 // The mascot SVG overflows its 64x78 box (arms/legs), and dangling legs hang below when
 // sitting — so keep generous margins so no part of him ever clips the viewport edge.
@@ -4823,6 +4854,39 @@ function __sbRoamClampX(x) {
 function __sbRoamClampY(y) {
   const lo = __SB_ROAM_MARGIN_TOP, hi = __sbRoamVH() - __SB_ROAM_H - __sbRoamMarginBottom();
   return hi < lo ? lo : Math.max(lo, Math.min(y, hi));
+}
+
+// ── Home fence ──────────────────────────────────────────────────────────────
+// He wanders only a limited patch of the screen (~35% of each axis) centred on
+// HOME — where you last dropped him, or where he stepped out. The fence constrains
+// TARGETS (wander picks, cursor step-asides), never the live position: clamping
+// the position itself would teleport him to the box edge in a single frame, while
+// an in-fence target is simply walked to, so he converges home with no visual snap.
+let __sbRoamHomeXFrac = null, __sbRoamHomeYFrac = null;   // his CENTRE, viewport fractions
+let __sbRoamHomeLoaded = false;
+let __sbRoamDragging = false;
+const __SB_ROAM_HOME_HALF = 0.175;   // ±17.5% per axis → a 35% box
+function __sbRoamSetHome(x, y) {
+  const vw = __sbRoamVW(), vh = __sbRoamVH();
+  __sbRoamHomeXFrac = (x + __SB_ROAM_W / 2) / vw;
+  __sbRoamHomeYFrac = (y + __SB_ROAM_H / 2) / vh;
+  if (__sbContextOk()) chrome.storage.local.set({ sbRoamHomeFrac: { x: __sbRoamHomeXFrac, y: __sbRoamHomeYFrac } });
+}
+function __sbRoamFenceX(x) {
+  const v = __sbRoamClampX(x);
+  if (__sbRoamHomeXFrac == null || __sbRoamCameoActive) return v;
+  const vw = __sbRoamVW();
+  const cx = __sbRoamHomeXFrac * vw - __SB_ROAM_W / 2;
+  const half = vw * __SB_ROAM_HOME_HALF;
+  return __sbRoamClampX(Math.max(cx - half, Math.min(v, cx + half)));
+}
+function __sbRoamFenceY(y) {
+  const v = __sbRoamClampY(y);
+  if (__sbRoamHomeYFrac == null || __sbRoamCameoActive) return v;
+  const vh = __sbRoamVH();
+  const cy = __sbRoamHomeYFrac * vh - __SB_ROAM_H / 2;
+  const half = vh * __SB_ROAM_HOME_HALF;
+  return __sbRoamClampY(Math.max(cy - half, Math.min(v, cy + half)));
 }
 
 // Score every visible "ledge" and return the best perch as {el, footX, topY}. A good
@@ -4885,10 +4949,17 @@ function __sbRoamPickNewPerch() {
   // absolute point in the viewport. Absolute targets meant a single move could be
   // most of a screen wide, and at 135px/s that is ~10 seconds of committed travel
   // in one direction — which reads as him leaving, not wandering near you.
+  // No home yet this install: his first strolling spot IS home. Seeded here (not
+  // at roam entry) because this is the first moment his position is settled.
+  if (__sbRoamHomeLoaded && __sbRoamHomeXFrac == null && !__sbRoamCameoActive) {
+    __sbRoamSetHome(__sbRoamCX, __sbRoamCY);
+  }
   const stepX = (150 + Math.random() * 240) * (Math.random() < 0.5 ? -1 : 1);
   const stepY = Math.random() * 90 - 45;
-  __sbRoamTX = __sbRoamClampX(__sbRoamCX + stepX);
-  __sbRoamTY = __sbRoamClampY(__sbRoamCY + stepY);
+  // Fenced, not just clamped: every stroll target lives inside the ~35% home box,
+  // so even if something placed him outside it he walks back in on the next pick.
+  __sbRoamTX = __sbRoamFenceX(__sbRoamCX + stepX);
+  __sbRoamTY = __sbRoamFenceY(__sbRoamCY + stepY);
   __sbRoamNextWander = performance.now() + 2600 + Math.random() * 3400;
   __sbRoamSitting = false;
 }
@@ -4946,6 +5017,15 @@ function __sbRoamApplyPose(now, moving, sitting) {
   if (eyeL) eyeL.setAttribute("transform", `translate(38 48) scale(1 ${eyeSy}) translate(-38 -48)`);
   if (eyeR) eyeR.setAttribute("transform", `translate(62 48) scale(1 ${eyeSy}) translate(-62 -48)`);
 
+  // WAVE. Same story as the mouth below: the arm drive only lived in the bar-lane
+  // tick (__sbWkTick), so a roam-mode __sbWkTriggerWave() set the flag and nothing
+  // moved. The boot cameo waves from roam, so the roam pose has to honour it.
+  const raBg = root.querySelector("#__sbwk_ra_bg__");
+  const raFg = root.querySelector("#__sbwk_ra__");
+  const raTx = __sbWkWaving ? `rotate(${-28 + Math.sin(t * 11) * 16} 78 53)` : "";
+  if (raBg) raBg.setAttribute("transform", raTx);
+  if (raFg) raFg.setAttribute("transform", raTx);
+
   // MOUTH. The roam pose never drove this — only the bar-lane walk tick did — so
   // once he was out on the page he answered with a closed smile and it looked like
   // the sound was coming from nowhere. Same drive as __sbWkTick.
@@ -4976,6 +5056,15 @@ function __sbRoamTick(now) {
   if (!walker) { __sbRoamRaf = null; return; }
   const dt = Math.min(0.05, (now - __sbRoamLast) / 1000);
   __sbRoamLast = now;
+
+  // In your hand: follow the pointer, keep breathing, decide nothing. The drag
+  // handlers own __sbRoamCX/CY until release.
+  if (__sbRoamDragging) {
+    walker.style.transform = `translate(${__sbRoamCX}px, ${__sbRoamCY}px)`;
+    __sbRoamApplyPose(now, false, false);
+    __sbRoamRaf = requestAnimationFrame(__sbRoamTick);
+    return;
+  }
 
   // Re-assert the anchor EVERY frame instead of trusting what enter-roam set once.
   // translate(x, y) here is viewport coordinates, which is only true while the
@@ -5069,7 +5158,7 @@ function __sbRoamTick(now) {
   // Anti-distraction: if the cursor comes close, step aside a little (still on screen).
   const feetX = __sbRoamCX + __SB_ROAM_W / 2, feetY = __sbRoamCY + __SB_ROAM_H;
   const nearCursor = Math.hypot(feetX - __sbRoamMouseX, feetY - __sbRoamMouseY) < 120;
-  if (nearCursor) __sbRoamTX = __sbRoamClampX(__sbRoamTX + (__sbRoamCX < __sbRoamMouseX ? -140 : 140));
+  if (nearCursor) __sbRoamTX = __sbRoamFenceX(__sbRoamTX + (__sbRoamCX < __sbRoamMouseX ? -140 : 140));
 
   // Move toward target at a believable WALKING pace — no teleporting, no flying off. He
   // walks the diagonal (feet cycling); vertical change reads as a gentle climb.
@@ -5113,11 +5202,15 @@ function __sbRoamTick(now) {
 function __sbToggleRoamMode() {
   __sbRoamActive ? __sbExitRoamMode() : __sbEnterRoamMode();
 }
-function __sbEnterRoamMode() {
+function __sbEnterRoamMode(opts = {}) {
   if (__sbRoamActive) return;
   const lane = __sbEnsureWalker();
   lane.style.display = "block";
   __sbRoamActive = true;
+  // A cameo is the boot hello: he steps out, waves, and goes straight back. It must
+  // never persist sbRoamOn — other tabs auto-summon on that flag (the 400ms resume),
+  // and a 4-second hello would spawn a mascot in every open tab.
+  __sbRoamCameoActive = !!opts.cameo;
   __sbStopWalkLoop?.();
   if (__sbWkRaf) { cancelAnimationFrame(__sbWkRaf); __sbWkRaf = null; }
   // Free the lane to the full viewport so the walker can be placed anywhere.
@@ -5147,8 +5240,31 @@ function __sbEnterRoamMode() {
   }
   document.addEventListener("mousemove", __sbRoamOnMouse, true);
   // Global, so he stays the mascot in every tab a delegate opens.
-  if (__sbContextOk()) chrome.storage.local.set({ sbRoamOn: true });
-  __sbWkSay?.("Coming out. Watch your step.");
+  if (!__sbRoamCameoActive && __sbContextOk()) chrome.storage.local.set({ sbRoamOn: true });
+  if (!__sbRoamCameoActive) {
+    // HOME: where you last placed him, restored from storage. If none is stored
+    // yet, the first wander pick seeds it from wherever he actually is by then
+    // (post jump-off landing) — entry paths place him differently, so seeding
+    // here would fence him around a spot he never stood on.
+    if (!__sbRoamHomeLoaded) {
+      __sbStorageGet(["sbRoamHomeFrac"]).then(({ sbRoamHomeFrac }) => {
+        __sbRoamHomeLoaded = true;
+        if (sbRoamHomeFrac && Number.isFinite(sbRoamHomeFrac.x) && Number.isFinite(sbRoamHomeFrac.y)) {
+          __sbRoamHomeXFrac = sbRoamHomeFrac.x;
+          __sbRoamHomeYFrac = sbRoamHomeFrac.y;
+        }
+      }).catch(() => { __sbRoamHomeLoaded = true; });
+    }
+    // First time out ever: tell them the rules of the yard. After that, the
+    // familiar one-liner.
+    __sbStorageGet(["sbRoamHintDone"]).then(({ sbRoamHintDone }) => {
+      if (sbRoamHintDone) { __sbWkSay?.("Coming out. Watch your step."); return; }
+      if (__sbContextOk()) chrome.storage.local.set({ sbRoamHintDone: true });
+      const hint = "You can drag me and place me anywhere, and I'll walk around only in a limited part of your screen. Press Command twice and I'll go back in the notch.";
+      __sbWkSay?.(hint, 10000);
+      __sbSpeakWithPreferredVoice(hint, "legacy", { verbatim: true, source: "roam-hint" }).catch(() => {});
+    }).catch(() => { __sbWkSay?.("Coming out. Watch your step."); });
+  }
   // Never leave a second loop running: two ticks means every frame moves him twice,
   // which reads as him rocketing across the page.
   if (__sbRoamRaf) cancelAnimationFrame(__sbRoamRaf);
@@ -5177,7 +5293,10 @@ function __sbExitRoamMode() {
     __sbNotchV1.shell.classList.remove("vacant");
     if (!["long", "short"].includes(__sbNotchV1.shell.dataset.state)) __sbNotchSetState("idle");
   }
-  if (__sbContextOk()) chrome.storage.local.set({ sbRoamOn: false });
+  // A cameo never persisted sbRoamOn:true, so it must not stamp false either —
+  // that would stomp a genuine roam running in another tab.
+  if (!__sbRoamCameoActive && __sbContextOk()) chrome.storage.local.set({ sbRoamOn: false });
+  __sbRoamCameoActive = false;
   __sbWkResumeFromX = 24;
   __sbStartWalkLoop?.();
 }
@@ -5199,14 +5318,21 @@ function __sbEnsureWalker() {
 
   // Grab + fling: drag Braino anywhere, release to throw. A plain tap just waves.
   let dragging = false, dragMoved = false, lastPX = 0, lastPY = 0, lastPT = 0, vX = 0, vY = 0;
+  // Roam drag: pick him up, place him, and that spot becomes HOME (the centre of
+  // his walking fence). A plain tap still opens the ask panel — the 6px dead zone
+  // decides which one you meant. This restores the drag that 0c9b551 removed,
+  // without giving up tap-to-talk.
+  let roamDragMoved = false, roamOffX = 0, roamOffY = 0;
   walker.addEventListener("pointerdown", (e) => {
-    // In roam mode, tapping Braino opens the ask panel and he STAYS out on the
-    // page. He is the thing you talk to, not a button that sends himself away —
-    // Ctrl x2, Cmd x2 or "go home" are how he goes back in.
     if (__sbRoamActive) {
+      if (__sbWkJumping) return;
       e.preventDefault();
-      __sbInputOpen = true;
-      __sbNotchSetState("input");
+      __sbRoamDragging = true;
+      roamDragMoved = false;
+      roamOffX = e.clientX - __sbRoamCX;
+      roamOffY = e.clientY - __sbRoamCY;
+      try { walker.setPointerCapture(e.pointerId); } catch (_) {}
+      walker.style.cursor = "grabbing";
       return;
     }
     if (__sbWkThrown || __sbWkClimbing || __sbWkMoonwalking || __sbWkJumping) return;
@@ -5220,6 +5346,14 @@ function __sbEnsureWalker() {
     e.preventDefault();
   });
   walker.addEventListener("pointermove", (e) => {
+    if (__sbRoamDragging) {
+      const nx = e.clientX - roamOffX, ny = e.clientY - roamOffY;
+      if (!roamDragMoved && Math.abs(nx - __sbRoamCX) + Math.abs(ny - __sbRoamCY) < 6) return;   // dead zone → still a tap
+      roamDragMoved = true;
+      __sbRoamCX = nx; __sbRoamCY = ny;       // raw follow; clamped on release
+      __sbRoamTX = nx; __sbRoamTY = ny;       // target = hand, so nothing walks him away
+      return;
+    }
     if (!dragging) return;
     const now = performance.now();
     const dt = Math.max(0.001, (now - lastPT) / 1000);
@@ -5231,6 +5365,28 @@ function __sbEnsureWalker() {
     __sbWkApplyThrowTransform();
   });
   const endDrag = (e) => {
+    if (__sbRoamDragging) {
+      __sbRoamDragging = false;
+      walker.style.cursor = "grab";
+      try { walker.releasePointerCapture(e.pointerId); } catch (_) {}
+      if (!roamDragMoved) {
+        // Tap: he stays out and the ask panel opens — he is the thing you talk
+        // to, not a button that sends himself away (the intent of 0c9b551).
+        __sbInputOpen = true;
+        __sbNotchSetState("input");
+        return;
+      }
+      // Dropped: clamp back on screen, and this spot is his new home. The wave
+      // is the acknowledgment that he understood the assignment.
+      __sbRoamCX = __sbRoamClampX(__sbRoamCX);
+      __sbRoamCY = __sbRoamClampY(__sbRoamCY);
+      __sbRoamSetHome(__sbRoamCX, __sbRoamCY);
+      __sbRoamTX = __sbRoamCX; __sbRoamTY = __sbRoamCY;
+      __sbRoamHoldUntil = performance.now() + 1400;
+      __sbRoamNextWander = performance.now() + 3600 + Math.random() * 2000;
+      __sbWkTriggerWave();
+      return;
+    }
     if (!dragging) return;
     dragging = false;
     walker.style.cursor = "grab";
@@ -6023,6 +6179,7 @@ const __SB_FISH_VOICE_NAME = "Fish Audio Braino";
 let __sbIsLectureRecording = false;
 let __sbLectureNotes = "";
 let __sbLectureInterval = null;
+let __sbLectureSeconds = 0;   // running duration; read at stop for the spoken wrap-up
 let __sbLecSegmentCount = 0;
 let __sbLectureRecordingMode = "lecture";
 let __sbLectureTranscript = "";
@@ -6058,6 +6215,17 @@ function __sbNormalizeForMatch(s) {
 function __sbNoteSpoken(text) {
   const t = __sbNormalizeForMatch(text);
   if (t) __sbLastSpokenLine = { text: t, ts: Date.now() };
+}
+// Escape hatch, SHIPPED OFF: hard-mute the shared offscreen mic while Braino
+// speaks. The echo FILTER above is the primary defence — a hard mute would kill
+// barge-in (interrupting him mid-sentence), which is behaviour we want to keep.
+// Flip the flag only if AEC + the filter still leak on open speakers.
+const __SB_MUTE_MIC_WHILE_SPEAKING = false;
+function __sbSetRtMicEnabled(enabled) {
+  if (!__SB_MUTE_MIC_WHILE_SPEAKING) return;
+  try {
+    chrome.runtime.sendMessage({ action: "offscreenRtMic", enabled: !!enabled }, () => { void chrome.runtime.lastError; });
+  } catch (_) {}
 }
 function __sbIsSelfEcho(transcript) {
   const a = __sbNormalizeForMatch(transcript);
@@ -7743,6 +7911,33 @@ if (__sbContextOk()) {
     if (msg.action === "sbRecordingUpdate") __sbHandleRecordingUpdate(msg);
     if (msg.action === "sbVoiceEvent") __sbHandleVoiceEvent(msg);
   });
+}
+
+// ── "Record this" voice commands — port of mac/braino-mac/meeting-intent.cjs ──
+// STOP patterns are checked before anything else; questions ABOUT meetings are
+// rejected; meeting-vs-lecture comes from what they SAID first, then from where
+// they ARE (the tab's URL — cheaper and more reliable than a screenshot check).
+const __SB_MEETING_NOUN_RE = /(?:call|meeting|meet|huddle|standup|stand-up|sync|interview|session|conversation|zoom|1:1|one on one|one-on-one)/i;
+const __SB_RECORD_STOP_RES = [
+  /\bstop\b[^.]*\brecord/i,
+  /\brecord(?:ing)?\b[^.]*\bstop\b/i,
+  /\b(?:that'?s|thats) (?:it|enough)\b[^.]*\brecord/i,
+  /\b(?:end|finish|wrap up|wrap)\b[^.]*\b(?:the\s+)?(?:recording|notes)\b/i,
+];
+function __sbClassifyRecordIntent(prompt) {
+  const t = String(prompt || "")
+    .replace(/^\s*(?:hey\s+)?(?:braino|breno|braido)[\s,]+/i, "")
+    .replace(/\s+/g, " ")
+    .replace(/[?.!]+\s*$/, "")
+    .trim();
+  if (!t) return null;
+  if (__SB_RECORD_STOP_RES.some((re) => re.test(t))) return { action: "stop" };
+  if (/\bwhat(?:'s| is| are)\b|\bwhen(?:'s| is)\b|\bdid you\b|\bhave you\b|\bwhere(?:'s| is)\b|\bhow (?:do|did|does)\b/i.test(t)) return null;
+  if (!/\b(?:record|recording|take notes|note take|transcribe|listen in|sit in)\b/i.test(t)) return null;
+  const host = String(location.hostname || "");
+  const onMeetingSite = /(^|\.)meet\.google\.com$|(^|\.)zoom\.us$|(^|\.)teams\.(?:microsoft|live)\.com$|(^|\.)webex\.com$/.test(host);
+  const mode = (__SB_MEETING_NOUN_RE.test(t) || onMeetingSite) ? "meeting" : "lecture";
+  return { action: "start", mode };
 }
 
 function __sbApplyForcedModeUi(mode, options = {}) {
@@ -10275,7 +10470,6 @@ function __sbBuildBrainUI() {
     <button class="sb-dropdown-item selected" data-mode="page"><span class="sb-di-icon">📄</span><span class="sb-di-label">Chat with Page</span><span class="sb-di-check">✓</span></button>
     <button class="sb-dropdown-item" data-mode="lecture"><span class="sb-di-icon">🎙</span><span class="sb-di-label">Lecture &amp; Audio</span><span class="sb-di-check">✓</span></button>
     <button class="sb-dropdown-item" data-mode="meeting"><span class="sb-di-icon">👥</span><span class="sb-di-label">Meeting &amp; Call</span><span class="sb-di-check">✓</span></button>
-    <button class="sb-dropdown-item" data-mode="team"><span class="sb-di-icon">👥</span><span class="sb-di-label">Team</span><span class="sb-di-check">✓</span></button>
     <button class="sb-dropdown-item" data-mode="demo"><span class="sb-di-icon">🎬</span><span class="sb-di-label">Demo</span><span class="sb-di-check">✓</span></button>
     <button class="sb-dropdown-item" data-mode="agent"><span class="sb-di-icon">🤖</span><span class="sb-di-label">Delegate</span><span class="sb-di-check">✓</span></button>
     <div class="sb-dropdown-label" style="margin-top:8px">Wake</div>
@@ -10359,6 +10553,9 @@ function __sbBuildBrainUI() {
         const bar = document.getElementById("__sb_bar__");
         if (bar) { bar.classList.add("open"); __sbSetBrowserNotchState("idle"); }
         __sbSyncIdleState();
+        // First notch of the browser session says hello out loud, like the Mac
+        // does on launch. The claim inside makes every later tab silent.
+        void __sbRunBootGreetingSequence({ manageCard: true });
       }
       if (!sbBrainDocked && sbVoiceModeOn && __sbContextOk()) {
         chrome.storage.local.set({ sbBrainDocked: true });
@@ -12065,8 +12262,18 @@ function __sbMountNotchV1() {
       .n[data-state=thinking] .face{height:72px}.n[data-state=thinking] .face svg{height:72px}
       .n[data-state=thinking] .eye{opacity:0}.n[data-state=thinking] .lids{opacity:1;transform:scaleX(.36)}.n[data-state=thinking] .smile{transform:scaleX(.36)}
       .n[data-state=thinking] .face::after{content:"";position:absolute;z-index:3;inset:0 0 auto;height:72px;pointer-events:none;background:linear-gradient(105deg,transparent 32%,rgba(255,225,190,.08) 42%,rgba(255,244,225,.72) 50%,rgba(255,205,190,.12) 58%,transparent 68%);background-size:260% 100%;mix-blend-mode:screen;animation:thinkShimmer 2.8s linear infinite}
-      .n[data-state=short]{width:min(610px,76vw);height:120px;border-radius:0 0 34px 34px}
-      .n[data-state=long]{width:min(650px,82vw);height:auto;max-height:calc(100vh - 110px);border-radius:0 0 38px 38px;cursor:default}
+      .n[data-state=short]{width:min(610px,76vw);height:min(var(--sb-answer-short-height,120px),320px);border-radius:0 0 34px 34px}
+      .n[data-state=long]{width:min(650px,82vw);height:min(var(--sb-answer-long-height,164px),calc(100vh - 110px));border-radius:0 0 38px 38px;cursor:default}
+      /* Mac c057f08: spoken lines can be shorter than the 1.05s cinematic shell
+         transition — answers ride a faster curve so speech never outruns geometry. */
+      .n[data-state=short],.n[data-state=long]{transition:width 420ms cubic-bezier(.22,1,.36,1),height 280ms cubic-bezier(.22,1,.36,1),border-radius 360ms cubic-bezier(.22,1,.36,1),background 700ms ease,border-color 700ms ease,box-shadow 850ms ease,backdrop-filter 700ms ease,opacity .42s ease,transform .7s cubic-bezier(.22,1,.36,1)}
+      /* Karaoke: words light up against the real audio. Coral marks the live word. */
+      .sb-aw{color:rgba(27,23,19,.30);transition:color 160ms ease}
+      .sb-aw.spoken{color:rgba(27,23,19,.78)}
+      .sb-aw.now{color:#c9544a}
+      .liquid .sb-aw{color:rgba(255,255,255,.34)}
+      .liquid .sb-aw.spoken{color:rgba(255,255,255,.92)}
+      .liquid .sb-aw.now{color:#ff9a91}
       .n[data-state=menu]::before,.n[data-state=thinking]::before,.n[data-state=short]::before,.n[data-state=long]::before{content:"";position:absolute;z-index:14;inset:0;padding:1.25px;border-radius:inherit;opacity:.9;pointer-events:none;background:conic-gradient(from var(--a),#f4cf87,#ec8078,#dc77a8,#779cff,#ec8078,#f4cf87);-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;filter:drop-shadow(0 0 2px rgba(236,128,120,.28));animation:radiusFlow 4s linear infinite}
       .status{z-index:5;display:flex;align-items:flex-end;justify-content:center;padding-bottom:5px}
       .status small{color:rgba(255,255,255,.82);font-size:8px;font-weight:700;letter-spacing:.12em;text-transform:uppercase}
@@ -12123,7 +12330,7 @@ function __sbMountNotchV1() {
       .n[data-state=short] .short-row{display:flex}
       .short-row>span{display:grid;gap:5px;min-width:0;text-align:left}
       .short-row small{color:#a7433b;font-size:9px;font-weight:750;letter-spacing:.1em;text-transform:uppercase}
-      .short-row strong{color:#1b1713;font:400 16px/1.3 "Newsreader","Charter BT",Georgia,serif;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+      .short-row strong{color:#1b1713;font:400 16px/1.3 "Newsreader","Charter BT",Georgia,serif;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
       .short-row .actions em,.long-head .actions em{padding:8px 11px;border:1px solid rgba(65,48,40,.12);border-radius:999px;color:rgba(27,23,19,.55);background:none;font:650 9px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-style:normal;cursor:pointer}
       .long-head{display:none;align-items:center;justify-content:space-between;padding-bottom:17px;border-bottom:1px solid rgba(65,48,40,.1)}
       .n[data-state=long] .long-head{display:flex}
@@ -12170,6 +12377,35 @@ function __sbMountNotchV1() {
       .fmic,.fsend{flex:0 0 30px;width:30px;height:30px;font-size:12px}
       .fmic{color:#1b1713;background:rgba(65,48,40,.07)}
       .fsend{color:#17110f;background:#e8786e}
+      /* Recording surface — the Mac meeting recorder's live sheet, in coral-warm
+         translucency (it stays up for a whole lecture, so it must not be a slab). */
+      .n[data-state=record]{width:min(570px,80vw);height:min(var(--sb-record-height,170px),calc(100vh - 110px));border-radius:0 0 34px 34px;cursor:default;border:1px solid rgba(255,255,255,.34);border-top:0;background:linear-gradient(180deg,rgba(44,19,15,.9) 0,rgba(26,12,10,.88) 100%);box-shadow:0 28px 90px rgba(20,9,7,.4),inset 0 1px rgba(255,255,255,.26);backdrop-filter:blur(26px) saturate(150%)}
+      .n[data-state=record] .record{opacity:1;pointer-events:auto;transform:none;transition-delay:360ms}
+      .record{z-index:9;display:flex;flex-direction:column;padding:18px 22px 16px;text-align:left;color:#f6ece9}
+      .rec-head{display:flex;align-items:center;justify-content:space-between;padding-bottom:10px;border-bottom:1px solid rgba(255,255,255,.12)}
+      .rec-live{display:flex;align-items:center;gap:9px}
+      .rec-dot{width:9px;height:9px;border-radius:50%;background:#ff5b4d;box-shadow:0 0 12px rgba(255,91,77,.8);animation:sbRecPulse 1.6s ease-in-out infinite}
+      .record[data-phase=ready] .rec-dot{animation:none;background:rgba(255,255,255,.35);box-shadow:none}
+      .rec-clock{font:650 13px/1 ui-monospace,Menlo,monospace;letter-spacing:.06em;color:#fff}
+      .rec-mode{color:#ffb3a9;font-size:9px;font-weight:750;letter-spacing:.12em;text-transform:uppercase}
+      .rec-stop{padding:9px 18px;border-radius:999px;color:#fff;background:#d84a3f;font:750 11px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;cursor:pointer;box-shadow:0 4px 14px rgba(216,74,63,.42)}
+      .rec-stop:hover{filter:brightness(1.08)}
+      .record[data-phase=ready] .rec-stop{display:none}
+      .rec-body{flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column;gap:8px;padding:11px 0 2px}
+      .record[data-phase=ready] .rec-body{display:none}
+      .rec-speaker{color:#ffb3a9;font-size:10.5px;font-weight:700;min-height:13px}
+      .rec-lines{display:grid;gap:4px}
+      .rec-lines p{margin:0;color:rgba(255,240,235,.85);font:400 12.5px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+      .rec-notes{display:grid;gap:3px}
+      .rec-notes p{margin:0;color:rgba(255,255,255,.58);font-size:11px;line-height:1.4}
+      .rec-notes p::before{content:"• ";color:#ff9a91}
+      .rec-ready-foot{display:none;align-items:center;justify-content:space-between;gap:12px;padding-top:13px}
+      .record[data-phase=ready] .rec-ready-foot{display:flex}
+      .rec-ready-title{display:block;font-size:13px;color:#fff}
+      .rec-ready-sub{color:rgba(255,240,235,.56);font-size:10.5px}
+      .rec-start{flex-shrink:0;padding:12px 20px;border-radius:999px;color:#fff;background:linear-gradient(160deg,#f6a8a2 0%,#e8786e 55%,#c9544a 100%);font:750 12px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;cursor:pointer;box-shadow:0 6px 18px rgba(201,84,74,.45),inset 0 1px rgba(255,255,255,.3)}
+      .rec-start:hover{filter:brightness(1.06)}
+      @keyframes sbRecPulse{0%,100%{opacity:1}50%{opacity:.35}}
       .signin{z-index:10;display:flex;align-items:center;gap:12px;padding:15px 18px}
       .signin span{display:grid;gap:3px;min-width:0;flex:1;text-align:left}
       .signin b{font-size:12px}.signin small{color:rgba(27,23,19,.48);font-size:10px}
@@ -12274,8 +12510,13 @@ function __sbMountNotchV1() {
       <div class="workpill"><strong></strong></div>
       <span class="cap cap-l"></span><span class="cap cap-r"></span>
       <div class="panel input"><label><small>Ask Braino</small><input placeholder="Summarise this page…"/></label><button class="mode">Auto⌄</button><button class="round send">↑</button><button class="theme" title="Switch glass theme">◐</button><button class="round close" title="Back to idle">×</button></div>
-      <div class="panel menu"><header><small>Choose a mode</small><span class="actions"><em class="active-mode">Auto</em><button class="theme" title="Switch glass theme">◐</button><button class="round close" title="Close">×</button></span></header><button class="item" data-mode="auto"><b>Auto</b><small>Let Braino decide</small><strong>✓</strong></button><button class="item" data-mode="page"><b>Page</b><small>Read and work on this page</small></button><button class="item" data-mode="lecture"><b>Lecture</b><small>Capture and explain audio</small></button><button class="item" data-mode="meeting"><b>Meeting</b><small>Listen remember and follow up</small></button><button class="item" data-mode="agent"><b>Delegate</b><small>Complete a browser task</small></button><button class="item" data-mode="team"><b>Team</b><small>Work with shared context</small></button></div>
+      <div class="panel menu"><header><small>Choose a mode</small><span class="actions"><em class="active-mode">Auto</em><button class="theme" title="Switch glass theme">◐</button><button class="round close" title="Close">×</button></span></header><button class="item" data-mode="auto"><b>Auto</b><small>Let Braino decide</small><strong>✓</strong></button><button class="item" data-mode="page"><b>Page</b><small>Read and work on this page</small></button><button class="item" data-mode="lecture"><b>Lecture</b><small>Capture and explain audio</small></button><button class="item" data-mode="meeting"><b>Meeting</b><small>Listen remember and follow up</small></button><button class="item" data-mode="agent"><b>Delegate</b><small>Complete a browser task</small></button></div>
       <div class="panel thinking"><header><span class="tlabel"><i></i>Braino is thinking</span><span class="actions"><button class="collapse">Collapse</button><button class="theme" title="Switch glass theme">◐</button></span></header><p>Reading the page and understanding what matters.</p><p>Separating the useful signal from the repetition.</p><p>Preparing the answer in your context.</p></div>
+      <div class="panel record" data-phase="ready">
+        <header class="rec-head"><span class="rec-live"><i class="rec-dot"></i><b class="rec-clock">00:00</b><small class="rec-mode">Lecture &amp; Audio</small></span><span class="actions"><button class="rec-stop">Stop</button></span></header>
+        <div class="rec-body"><div class="rec-speaker"></div><div class="rec-lines"></div><div class="rec-notes"></div></div>
+        <footer class="rec-ready-foot"><span class="rec-ready-copy"><b class="rec-ready-title">Ready to record</b><small class="rec-ready-sub">This tab's audio, captured into clean notes.</small></span><button class="rec-start">Start recording</button></footer>
+      </div>
       <div class="panel answer">
         <div class="short-row"><span><small>Braino</small><strong class="short-text"></strong></span><span class="actions"><em class="done">Done</em><button class="theme" title="Switch glass theme">◐</button></span></div>
         <header class="long-head"><span><i></i><i></i><b>Braino</b></span><span class="actions"><em class="done">Done</em><button class="theme" title="Switch glass theme">◐</button></span></header>
@@ -12381,8 +12622,23 @@ function __sbMountNotchV1() {
     shadow.querySelector(".active-mode").textContent = requested === "auto" ? "Auto" : button.querySelector("b")?.textContent || "Auto";
     shadow.querySelectorAll(".menu .item strong").forEach((mark) => mark.remove());
     button.insertAdjacentHTML("beforeend", "<strong>✓</strong>");
-    __sbNotchSetState("input");
+    // Lecture/Meeting land on the RECORD surface, not the ask panel — picking a
+    // recording mode and being told to "Summarise this page" was the whole bug.
+    // Mid-recording, land on the LIVE phase: resetting to "ready" would hide the
+    // Stop button behind a phase the self-heal trusts.
+    if (legacyMode === "lecture" || legacyMode === "meeting") {
+      if (__sbIsLectureRecording) __sbNotchShowRecordLive();
+      else __sbNotchShowRecordReady(legacyMode);
+    } else __sbNotchSetState("input");
   }));
+  shadow.querySelector(".record .rec-start")?.addEventListener("click", (event) => {
+    event.stopPropagation();
+    void __sbStartLectureRecording();   // this click IS the getDisplayMedia user gesture
+  });
+  shadow.querySelector(".record .rec-stop")?.addEventListener("click", (event) => {
+    event.stopPropagation();
+    void __sbStopLectureRecording();
+  });
   shadow.querySelectorAll(".answer .done").forEach((button) => button.addEventListener("click", (event) => {
     event.stopPropagation();
     __sbNotchSetState("idle");   // resolve visually no matter what the legacy dock path does
@@ -12411,7 +12667,10 @@ function __sbNotchSetState(state, status = "") {
   // putting on a screen is a long answer (or a sign-in he must act on). Listening,
   // speaking and working all belong to the mascot now — lighting the notch up for
   // them is exactly what made it read as a second Braino standing in his own house.
-  if (__sbNotchV1.shell.classList.contains("vacant") && !["long", "signin"].includes(state)) {
+  // "input" is allowed while vacant: tapping the roaming mascot opens the ask
+  // panel by design (0c9b551) — coercing it to idle made that tap do nothing and
+  // leak __sbInputOpen.
+  if (__sbNotchV1.shell.classList.contains("vacant") && !["long", "signin", "record", "input"].includes(state)) {
     state = "idle";
   }
   __sbNotchV1.shell.dataset.state = state || "input";
@@ -12424,6 +12683,10 @@ function __sbNotchSetState(state, status = "") {
   const pill = __sbNotchV1.shadow.querySelector(".workpill strong");
   if (pill) pill.textContent = state === "working" ? (status || "Thinking") : status;
   if (state === "short" || state === "long") __sbNotchWalkStart(); else __sbNotchWalkStop();
+  // Leaving the answer surface releases its measured heights, linger and karaoke —
+  // the Mac's clearNotchAnswer discipline (a stale height var resizes the next turn).
+  if (state !== "short" && state !== "long") __sbClearNotchAnswerSurface();
+  if (state !== "record") __sbNotchV1.shell.style.removeProperty("--sb-record-height");
   // The caption class RIDES THROUGH working/speaking (its geometry is CSS-scoped to
   // idle/listening/speaking, so it can't cram the working face) — your words stay up
   // while he thinks and reappear beside him while he answers, like the Mac wings.
@@ -12437,7 +12700,8 @@ function __sbNotchSetState(state, status = "") {
 function __sbNotchShowAnswer(text, rich, html) {
   if (!__sbNotchV1) return;
   const raw = String(text || "");
-  const isLong = Boolean(rich) || raw.length >= 240;
+  const cls = __sbClassifyNotchAnswer(raw, { rich: Boolean(rich) });
+  const isLong = cls.kind === "long";
 
   // While he is OUT on the page the notch is a screen, not a mouth.
   //  - short answer → the bubble over his head. You are already looking at him,
@@ -12446,16 +12710,27 @@ function __sbNotchShowAnswer(text, rich, html) {
   //    he stays outside and speaks it. The two surfaces split the job; he never
   //    walks home just to answer.
   if (__sbRoamActive && !isLong) {
-    const line = raw.replace(/\s+/g, " ").trim();
+    const line = cls.text.replace(/\s+/g, " ").trim();
     __sbWkSay?.(line, Math.min(14000, 2200 + line.length * 55));
     return;
   }
 
+  __sbNotchKaraoke.reset();
+  __sbNotchAnswerManualHold = Boolean(html);
   const body = __sbNotchV1.shadow.querySelector(".answer-body");
-  if (body) body.innerHTML = html || __sbEscapeHtml(raw);
+  if (body) {
+    // Rich HTML keeps its markup (lists, links) — karaoke only runs on plain
+    // text, where word spans can't break anything.
+    if (html) body.innerHTML = html;
+    else __sbNotchAnswerWordSpans(body, cls.text);
+  }
   const line = __sbNotchV1.shadow.querySelector(".short-text");
-  if (line) line.textContent = raw.replace(/\s+/g, " ").trim();
+  if (line) {
+    if (isLong) line.textContent = cls.text.replace(/\s+/g, " ").trim();
+    else __sbNotchAnswerWordSpans(line, cls.text.replace(/\s+/g, " ").trim());
+  }
   __sbNotchSetState(isLong ? "long" : "short");
+  __sbNotchScheduleAnswerRefit(isLong ? "long" : "short");
 }
 // The answer walker — verbatim port of the Chrome system's NotchWalker RAF rig
 // (back-and-forth travel, direction flip, alternating legs, waddle and breath).
@@ -12563,15 +12838,362 @@ function __sbNotchCaption(text, options = {}) {
   if (capL) capL.textContent = leftText;
   if (capR) capR.textContent = rightText;
   shell.classList.add("captioning");
-  const hold = options.final ? Math.max(6000, Math.min(14000, value.length * 70)) : 15000;
+  // Sticky finals (the completed voice transcript) hold much longer: they are
+  // meant to survive the whole working/thinking stretch and be replaced by the
+  // answer surface, not by a timer. 30s is a safety net for errored turns.
+  const hold = options.sticky ? 30000 : options.final ? Math.max(6000, Math.min(14000, value.length * 70)) : 15000;
   __sbNotchCapTimer = setTimeout(() => __sbNotchCaption(""), hold);
 }
+// ── Answer surface: Mac c057f08 port (notch-response.cjs + measured heights + karaoke) ──
+// The Mac notch owns conversational text: everything you said and everything Braino
+// says renders IN the island, the shell follows the measured copy, and the words
+// light up against the real audio. Same system here, in the browser's coral theme.
+
+// Pure helpers — ported from mac/braino-mac/notch-response.cjs @ c057f08.
+function __sbNormalizeNotchAnswer(text) {
+  return String(text || "")
+    .replace(/\r\n?/g, "\n")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/[ \t]+([,.;:!?])/g, "$1")
+    // Realtime transcripts occasionally weld the next word to sentence punctuation.
+    // Repair only unmistakable prose boundaries; decimals, URLs, acronyms survive.
+    .replace(/([a-z0-9][.!?]["'”’]?)(?=[A-Z])/g, "$1 ")
+    .replace(/([,;:]["'”’]?)(?=[A-Za-z])/g, "$1 ")
+    // Inline markdown is written for a page, not a surface that speaks — the
+    // karaoke renderer paints every token literally, so strip paired markers.
+    .replace(/\*\*(?=\S)([\s\S]*?\S)\*\*/g, "$1")
+    .replace(/__(?=\S)([\s\S]*?\S)__/g, "$1")
+    .replace(/(?<![*\w])\*(?=\S)([^*\n]*?\S)\*(?!\*)/g, "$1")
+    .replace(/(?<![_\w])_(?=\S)([^_\n]*?\S)_(?!_)/g, "$1")
+    .replace(/`{1,3}(?=\S)([\s\S]*?\S)`{1,3}/g, "$1")
+    .trim();
+}
+function __sbClassifyNotchAnswer(text, options = {}) {
+  const normalized = __sbNormalizeNotchAnswer(text);
+  // The Mac's 100-char boundary: the compact surface visibly holds about two
+  // lines; the old 240 boundary let the clamp hide medium replies' endings.
+  const isLong = Boolean(options.rich)
+    || normalized.length >= 100
+    || normalized.includes("\n\n")
+    || /^\s*(?:[-*+] |\d+[.)] )/m.test(normalized);
+  return { kind: isLong ? "long" : "short", text: normalized };
+}
+function __sbNotchAnswerLingerMs(text, kind) {
+  const chars = __sbNormalizeNotchAnswer(text).length;
+  if (kind === "long") return Math.max(7000, Math.min(15000, 5600 + chars * 18));
+  return Math.max(3600, Math.min(6200, 3200 + chars * 18));
+}
+
+// Measured heights: each surface reports its rendered height into a CSS custom
+// property and the shell's height transition animates the change — the Mac's
+// measure → property → CSS pattern. Re-measure on the Mac's refit beats so a
+// mid-transition read (wrong column width) can't stick a wrong size.
+const __SB_NOTCH_REFIT_DELAYS = [140, 320, 480];
+let __sbNotchAnswerRefitTimers = [];
+let __sbNotchAnswerLingerTimer = null;
+// True when the surface holds rich/manual content (lecture notes, delegate HTML)
+// whose text is NOT what is being spoken — the spoken wrap-up line must not arm
+// a linger sized to ITSELF and fold someone's notes seconds after they appear.
+let __sbNotchAnswerManualHold = false;
+function __sbNotchMeasureAnswer(kind) {
+  if (!__sbNotchV1) return;
+  const shell = __sbNotchV1.shell;
+  if (shell.dataset.state !== kind) return;   // surface changed under the timer
+  const shadow = __sbNotchV1.shadow;
+  if (kind === "long") {
+    const article = shadow.querySelector(".answer article");
+    if (!article) return;
+    const head = shadow.querySelector(".long-head");
+    const footer = shadow.querySelector(".answer footer");
+    // answer padding-top (20) + header + article natural height + lane (50) + footer.
+    const h = 20 + (head ? head.offsetHeight : 0) + article.scrollHeight + 50 + (footer ? footer.offsetHeight : 57) + 2;
+    shell.style.setProperty("--sb-answer-long-height", `${Math.max(164, Math.round(h))}px`);
+  } else if (kind === "short") {
+    const strong = shadow.querySelector(".short-text");
+    if (!strong) return;
+    // Text height + label/row chrome (14) + lane (74) + breathing room. A one-liner
+    // resolves to exactly today's 120px, so nothing changes until the text wraps.
+    const h = strong.scrollHeight + 14 + 74 + 8;
+    shell.style.setProperty("--sb-answer-short-height", `${Math.max(120, Math.min(320, Math.round(h)))}px`);
+  }
+}
+function __sbNotchScheduleAnswerRefit(kind) {
+  __sbNotchAnswerRefitTimers.forEach(clearTimeout);
+  __sbNotchAnswerRefitTimers = [];
+  const run = () => __sbNotchMeasureAnswer(kind);
+  requestAnimationFrame(run);
+  __SB_NOTCH_REFIT_DELAYS.forEach((ms) => __sbNotchAnswerRefitTimers.push(setTimeout(run, ms)));
+  try { document.fonts?.ready?.then(run); } catch (_) {}
+}
+function __sbClearNotchAnswerSurface() {
+  if (!__sbNotchV1) return;
+  // The Mac's height-leak fix: a stale height var makes the next one-liner
+  // inherit the last long answer's size. Clear on every exit path.
+  __sbNotchV1.shell.style.removeProperty("--sb-answer-long-height");
+  __sbNotchV1.shell.style.removeProperty("--sb-answer-short-height");
+  __sbNotchAnswerRefitTimers.forEach(clearTimeout);
+  __sbNotchAnswerRefitTimers = [];
+  if (__sbNotchAnswerLingerTimer) { clearTimeout(__sbNotchAnswerLingerTimer); __sbNotchAnswerLingerTimer = null; }
+  __sbNotchAnswerManualHold = false;
+  __sbNotchKaraoke.reset();
+}
+// Spoken answers fold up on their own after the Mac's linger (long 7–15s, short
+// 3.6–6.2s). Typed answers keep the manual Done button — no timer.
+function __sbNotchArmAnswerLinger(text, kind) {
+  if (__sbNotchAnswerLingerTimer) clearTimeout(__sbNotchAnswerLingerTimer);
+  __sbNotchAnswerLingerTimer = setTimeout(() => {
+    __sbNotchAnswerLingerTimer = null;
+    const st = __sbNotchV1?.shell?.dataset?.state;
+    if (st === "short" || st === "long") __sbNotchSetState("idle");
+  }, __sbNotchAnswerLingerMs(text, kind));
+}
+
+// Karaoke: the words light up against the REAL audio element (the same one the
+// mouth follows), sentence by sentence — the Mac's trackNotchAnswerAudio. While a
+// MediaSource stream is mid-flight its duration is Infinity, so a word-pace
+// estimate carries the highlight until the duration turns finite.
+const __sbNotchKaraoke = {
+  spans: [], cursor: 0, chunk: [], raf: 0, audio: null,
+  reset() {
+    if (this.raf) cancelAnimationFrame(this.raf);
+    this.raf = 0; this.audio = null; this.spans = []; this.cursor = 0; this.chunk = [];
+  },
+  syncSpans() {
+    if (!__sbNotchV1) return;
+    const st = __sbNotchV1.shell.dataset.state;
+    const sel = st === "short" ? ".short-text .sb-aw" : ".answer article .sb-aw";
+    this.spans = Array.from(__sbNotchV1.shadow.querySelectorAll(sel));
+  },
+  attachSentence(sentenceText, audioEl, token) {
+    if (token !== __sbSpeechGeneration || !__sbNotchV1) return;
+    const st = __sbNotchV1.shell.dataset.state;
+    if (st !== "short" && st !== "long") return;
+    this.syncSpans();
+    const words = String(sentenceText || "").trim().split(/\s+/).filter(Boolean);
+    if (!words.length) return;
+    const start = this.cursor;
+    this.chunk = this.spans.slice(start, start + words.length);
+    if (!this.chunk.length) return;
+    this.audio = audioEl;
+    if (this.raf) cancelAnimationFrame(this.raf);
+    const est = Math.max(900, words.length * 320);   // fallback pace ≈ spoken-word rate
+    const t0 = performance.now();
+    const step = () => {
+      this.raf = 0;
+      if (token !== __sbSpeechGeneration || !this.chunk.length) return;
+      const a = this.audio;
+      let fr = (a && Number.isFinite(a.duration) && a.duration > 0)
+        ? a.currentTime / a.duration
+        : (performance.now() - t0) / est;
+      fr = Math.max(0, Math.min(1, fr));
+      const upto = Math.floor(fr * this.chunk.length);
+      for (let i = 0; i < this.chunk.length; i++) {
+        const sp = this.chunk[i];
+        if (i < upto) { sp.classList.add("spoken"); sp.classList.remove("now"); }
+        else if (i === upto) sp.classList.add("now");
+        else { sp.classList.remove("now"); }
+      }
+      // Auto-scroll the reading surface so the live word stays in view.
+      const liveEl = this.chunk[Math.min(upto, this.chunk.length - 1)];
+      const article = liveEl && liveEl.closest ? liveEl.closest("article") : null;
+      if (article && article.scrollHeight > article.clientHeight) {
+        const target = Math.max(0, liveEl.offsetTop - article.clientHeight * 0.6);
+        if (Math.abs(article.scrollTop - target) > 16) article.scrollTop = target;
+      }
+      if (!a || !a.ended) this.raf = requestAnimationFrame(step);
+    };
+    this.raf = requestAnimationFrame(step);
+    let settled = false;   // 'ended' AND 'error' can both fire; settling twice rolls the cursor back
+    const chunkLen = this.chunk.length;
+    const settle = () => {
+      if (settled || token !== __sbSpeechGeneration) return;
+      settled = true;
+      this.chunk.forEach((sp) => { sp.classList.add("spoken"); sp.classList.remove("now"); });
+      this.cursor = start + chunkLen;
+      this.chunk = [];
+    };
+    audioEl.addEventListener("ended", settle, { once: true });
+    audioEl.addEventListener("error", settle, { once: true });
+  },
+  // Browser-voice fallback has no audio element to track — resolve the words.
+  completeAll(token) {
+    if (token !== __sbSpeechGeneration) return;
+    this.syncSpans();
+    this.spans.forEach((sp) => { sp.classList.add("spoken"); sp.classList.remove("now"); });
+    this.cursor = this.spans.length;
+    this.chunk = [];
+  },
+};
+function __sbNotchAnswerWordSpans(target, text) {
+  target.innerHTML = "";
+  const frag = document.createDocumentFragment();
+  String(text || "").split(/\s+/).filter(Boolean).forEach((w) => {
+    const sp = document.createElement("span");
+    sp.className = "sb-aw";
+    sp.textContent = `${w} `;
+    frag.appendChild(sp);
+  });
+  target.appendChild(frag);
+}
+
+// Streaming answers (realtime → Fish fast path): text deltas append as karaoke
+// words while the shell grows to the measured copy — this closes the by-design
+// gap where the fast path pushed no text to the notch at all.
+let __sbNotchAnswerStreamState = null;
+function __sbNotchAnswerStreamBegin(token) {
+  __sbNotchAnswerStreamState = { token, text: "", pendingWord: "", started: false };
+}
+function __sbNotchAnswerStreamFeed(delta) {
+  const st = __sbNotchAnswerStreamState;
+  if (!st || st.token !== __sbSpeechGeneration || !__sbNotchV1) return;
+  st.text += delta;
+  if (!st.started) {
+    st.started = true;
+    const body = __sbNotchV1.shadow.querySelector(".answer-body");
+    if (body) body.innerHTML = "";
+    const line = __sbNotchV1.shadow.querySelector(".short-text");
+    if (line) line.textContent = "";
+    __sbNotchKaraoke.reset();
+    __sbNotchAnswerManualHold = false;   // streamed words ARE the spoken text
+    // Reuse `long` — already in both hold arrays, so voice-state changes can't
+    // stomp the surface mid-answer. It may downgrade to short at finalize.
+    __sbNotchSetState("long");
+    __sbNotchScheduleAnswerRefit("long");
+  }
+  const chunk = st.pendingWord + delta;
+  const parts = chunk.split(/(\s+)/);
+  st.pendingWord = parts.length % 2 === 1 ? parts.pop() : "";   // trailing partial word stays out of the DOM
+  const words = parts.join("").split(/\s+/).filter(Boolean);
+  if (!words.length) return;
+  const body = __sbNotchV1.shadow.querySelector(".answer-body");
+  if (!body) return;
+  const frag = document.createDocumentFragment();
+  for (const w of words) {
+    const clean = w.replace(/^[*_`]+|[*_`]+$/g, "");
+    if (!clean) continue;
+    const sp = document.createElement("span");
+    sp.className = "sb-aw";
+    sp.textContent = `${clean} `;
+    frag.appendChild(sp);
+  }
+  body.appendChild(frag);
+  // Re-measure only on sentence boundaries — per-delta re-measure thrashes the
+  // height transition into a stutter.
+  if (/[.!?…।]["'”’]?$/.test(words[words.length - 1])) __sbNotchScheduleAnswerRefit("long");
+}
+function __sbNotchAnswerStreamEnd() {
+  const st = __sbNotchAnswerStreamState;
+  __sbNotchAnswerStreamState = null;
+  if (!st || st.token !== __sbSpeechGeneration || !st.started || !__sbNotchV1) return null;
+  const tail = st.pendingWord.trim().replace(/^[*_`]+|[*_`]+$/g, "");
+  if (tail) {
+    const body = __sbNotchV1.shadow.querySelector(".answer-body");
+    if (body) {
+      const sp = document.createElement("span");
+      sp.className = "sb-aw";
+      sp.textContent = `${tail} `;
+      body.appendChild(sp);
+    }
+  }
+  __sbNotchScheduleAnswerRefit("long");
+  return st.text;
+}
+
+// ── Recording surface: lecture & meeting live IN the notch ──────────────────
+// The Mac meeting recorder's surface, ported: REC clock, current speaker, the
+// last transcript lines, note bullets, and a Stop button that actually stops.
+// data-phase="ready" shows the Start affordance (getDisplayMedia needs a real
+// user gesture, so even voice commands land here first).
+function __sbNotchMeasureRecord() {
+  if (!__sbNotchV1 || __sbNotchV1.shell.dataset.state !== "record") return;
+  const panel = __sbNotchV1.shadow.querySelector(".record");
+  if (!panel) return;
+  const head = panel.querySelector(".rec-head");
+  const body = panel.querySelector(".rec-body");
+  const foot = panel.querySelector(".rec-ready-foot");
+  const ready = panel.dataset.phase === "ready";
+  const h = 34 + (head ? head.offsetHeight : 40)
+    + (ready ? (foot ? foot.offsetHeight + 13 : 70) : Math.max(64, (body ? body.scrollHeight : 64) + 13));
+  __sbNotchV1.shell.style.setProperty("--sb-record-height", `${Math.max(150, Math.round(h))}px`);
+}
+function __sbNotchShowRecordReady(mode) {
+  if (!__sbNotchV1) return;
+  // Belt-and-braces: while capture is live there is no "ready" — only the live
+  // surface with its Stop button.
+  if (__sbIsLectureRecording) { __sbNotchShowRecordLive(); return; }
+  const shadow = __sbNotchV1.shadow;
+  const panel = shadow.querySelector(".record");
+  if (!panel) return;
+  panel.dataset.phase = "ready";
+  const isMeeting = mode === "meeting";
+  const modeEl = shadow.querySelector(".rec-mode");
+  if (modeEl) modeEl.textContent = isMeeting ? "Meeting & Call" : "Lecture & Audio";
+  const sub = shadow.querySelector(".rec-ready-sub");
+  if (sub) sub.textContent = isMeeting
+    ? "Tab audio + your mic, written into meeting notes."
+    : "This tab's audio, captured into clean study notes.";
+  const clock = shadow.querySelector(".rec-clock");
+  if (clock) clock.textContent = "00:00";
+  const speaker = shadow.querySelector(".rec-speaker");
+  if (speaker) speaker.textContent = "";
+  const lines = shadow.querySelector(".rec-lines");
+  if (lines) lines.innerHTML = "";
+  const bullets = shadow.querySelector(".rec-notes");
+  if (bullets) bullets.innerHTML = "";
+  __sbNotchSetState("record");
+  __sbNotchMeasureRecord();
+  requestAnimationFrame(() => __sbNotchMeasureRecord());
+}
+function __sbNotchShowRecordLive() {
+  if (!__sbNotchV1) return;
+  const panel = __sbNotchV1.shadow.querySelector(".record");
+  if (!panel) return;
+  panel.dataset.phase = "live";
+  if (__sbNotchV1.shell.dataset.state !== "record") __sbNotchSetState("record");
+  __sbNotchRecordSync("Recording…");
+}
+function __sbNotchRecordClock(text) {
+  const clock = __sbNotchV1?.shadow?.querySelector(".rec-clock");
+  if (clock) clock.textContent = text;
+}
+// Pulls the live picture from the recording globals: meeting captions (Google
+// Meet's own timeline) or the accumulated transcript tail, plus note bullets.
+function __sbNotchRecordSync(statusText) {
+  if (!__sbNotchV1 || __sbNotchV1.shell.dataset.state !== "record") return;
+  const shadow = __sbNotchV1.shadow;
+  const speaker = shadow.querySelector(".rec-speaker");
+  if (speaker && statusText != null) speaker.textContent = String(statusText);
+  else if (speaker && __sbLectureRecordingMode === "meeting" && __sbMeetingContext?.currentSpeaker) {
+    speaker.textContent = `${__sbMeetingContext.platformLabel || "Meeting"} · ${__sbMeetingContext.currentSpeaker}`;
+  }
+  const lines = shadow.querySelector(".rec-lines");
+  if (lines) {
+    let tail = [];
+    if (__sbLectureRecordingMode === "meeting" && Array.isArray(__sbMeetingContext?.captionTimeline) && __sbMeetingContext.captionTimeline.length) {
+      tail = __sbMeetingContext.captionTimeline.slice(-3).map((cap) => `${cap?.speaker ? cap.speaker + ": " : ""}${cap?.text || ""}`);
+    } else {
+      tail = String(__sbLectureTranscript || "").split(/\n+/).map((s) => s.trim()).filter(Boolean).slice(-3);
+    }
+    lines.innerHTML = tail.map((l) => `<p>${__sbEscapeHtml(l)}</p>`).join("");
+  }
+  const bullets = shadow.querySelector(".rec-notes");
+  if (bullets) {
+    const picks = String(__sbLectureNotes || "").split(/\n+/)
+      .map((s) => s.replace(/^[#>*\-\d.\s•]+/, "").trim())
+      .filter((s) => s.length > 8).slice(-4);
+    bullets.innerHTML = picks.map((b) => `<p>${__sbEscapeHtml(b)}</p>`).join("");
+  }
+  __sbNotchMeasureRecord();
+}
+
 // Double-⌘ summon (Mac parity): the mascot jumps out of the notch onto the page;
 // double-⌘ again (or tapping him) sends him home.
 function __sbSummonToggle() {
   if (!__sbOwnsInlineUi()) return;
   if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
   if (__sbRoamActive) { __sbExitRoamMode(); return; }
+  try { void __sbWarmFishTts(); } catch (_) {}   // summoning him usually precedes talking — warm Fish now
   __sbEnterRoamMode();
   const rect = document.getElementById("__sb_notch_v1_host__")?.getBoundingClientRect();
   const cx = rect ? rect.left + rect.width / 2 : window.innerWidth / 2;
@@ -12613,6 +13235,123 @@ function __sbSetBrowserNotchState(state, status = "") {
   __sbNotchSetState(mapped || "input", status);
 }
 
+// ── Spoken boot greeting + mascot cameo (Mac parity) ────────────────────────
+// The Mac speaks its greeting on every app launch and the mascot exits the notch
+// (runNotchBoot → speak(…) → runIomiBootMascotExit, braino-mac.js:2807-2873). The
+// browser twin fires once per BROWSER session: content.js runs in every tab, so the
+// background arbitrates a single claim (claimBootGreeting → chrome.storage.session).
+let __sbBootGreetingDone = false;
+let __sbBootChimeCtx = null;
+
+// The Mac's playWakeChime() verbatim: two soft sine notes, E5 → B5, bell fade —
+// synthesized so there's no asset for the CSP to block.
+function __sbBootChime() {
+  try {
+    __sbBootChimeCtx = __sbBootChimeCtx || new (window.AudioContext || window.webkitAudioContext)();
+    const ctx = __sbBootChimeCtx;
+    if (ctx.state === "suspended") ctx.resume();
+    const now = ctx.currentTime;
+    [{ f: 659.25, t: 0 }, { f: 987.77, t: 0.11 }].forEach(({ f, t }) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = f;
+      gain.gain.setValueAtTime(0.0001, now + t);
+      gain.gain.exponentialRampToValueAtTime(0.12, now + t + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + t + 0.5);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(now + t);
+      osc.stop(now + t + 0.55);
+    });
+  } catch (_) {}
+}
+
+async function __sbClaimBootGreeting() {
+  try {
+    const res = await new Promise((resolve) => {
+      chrome.runtime.sendMessage({ action: "claimBootGreeting" }, (r) => { void chrome.runtime.lastError; resolve(r); });
+    });
+    return !!(res && res.granted);
+  } catch (_) { return false; }
+}
+
+async function __sbBootGreetingLine() {
+  const { authDisplayName, authEmail } = await __sbStorageGet(["authDisplayName", "authEmail"]).catch(() => ({}));
+  const first = String(authDisplayName || "").trim().split(/\s+/)[0]
+    || String(authEmail || "").split("@")[0]
+    || "there";
+  return `${__sbTimeGreeting()}, ${first}. Everything is ready.`;
+}
+
+// He steps out of the notch, waves, tells you how to reach him, and walks home.
+// The roam rig is the body (same as the Mac using its standing walker), flagged as
+// a cameo so nothing about real roam state persists.
+async function __sbRunBootMascotCameo() {
+  if (__sbRoamActive || __sbHeadphoneMode || __sbVoiceOnlyMode || __sbInputOpen) return;
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  try { __sbEnterRoamMode({ cameo: true }); } catch (_) { return; }
+  // Born from the notch: appear just under the housing, hold there for the wave,
+  // then the roam tick's one-time jump-off arcs him down a step (the Mac lands at
+  // ~27% of the screen). Wandering is parked for the whole hello.
+  __sbRoamCX = __sbRoamClampX(__sbRoamVW() / 2 - __SB_ROAM_W / 2);
+  __sbRoamCY = 84;
+  __sbRoamTX = __sbRoamCX; __sbRoamTY = __sbRoamCY;
+  __sbRoamHoldUntil = performance.now() + 2100;
+  __sbRoamNextWander = performance.now() + 600000;
+  __sbWkTriggerWave();
+  const hint = "Press Control or Command twice to talk to me.";
+  __sbWkSay?.(hint, 4600);   // the words are on screen even when page audio is blocked
+  try { await __sbSpeakWithPreferredVoice(hint, "legacy", { verbatim: true, source: "boot-greeting" }); } catch (_) {}
+  await wait(900);
+  // Only fold the cameo up if it's still ours AND untouched — if the user tapped
+  // him (ask panel open), the hello becomes a real visit instead of vanishing
+  // from under them mid-question.
+  if (__sbRoamActive && __sbRoamCameoActive) {
+    if (__sbInputOpen) { __sbRoamCameoActive = false; return; }
+    __sbExitRoamMode();
+  }
+}
+
+// The audible half of boot. `manageCard` = the caller landed straight on idle (the
+// signed-in fast paths) so this sequence owns the greeting card too; the full
+// cinematic __sbRunBrowserNotchBoot drives its own card timing and passes false.
+async function __sbRunBootGreetingSequence(opts = {}) {
+  if (__sbBootGreetingDone) return false;
+  __sbBootGreetingDone = true;
+  if (document.visibilityState !== "visible") return false;   // greet from the tab being looked at
+  const { authToken } = await __sbStorageGet(["authToken"]).catch(() => ({}));
+  if (!authToken) return false;                               // no session — nothing to say yet
+  if (!(await __sbClaimBootGreeting())) return false;         // another tab already greeted
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  try { void __sbWarmFishTts(); } catch (_) {}   // wake the TTS isolate before the first line
+  __sbBootChime();
+  if (opts.manageCard) {
+    __sbNotchFillGreeting();
+    __sbSetBrowserNotchState("greeting");
+  }
+  const line = await __sbBootGreetingLine();
+  // The Mac speaks only after the card's words have landed (runNotchBoot waits 1850ms).
+  await wait(1850);
+  let spoke = false;
+  try { spoke = !!(await __sbSpeakWithPreferredVoice(line, "legacy", { verbatim: true, source: "boot-greeting" })); } catch (_) {}
+  await wait(300);
+  if (opts.manageCard && ["greeting", "authenticated"].includes(__sbNotchV1?.shell?.dataset?.state)) {
+    __sbSetBrowserNotchState("idle");
+  }
+  if (!spoke) {
+    // Nothing was audible. Only hand the claim back when the cause was the
+    // autoplay policy (no user activation in this document yet) — if the user
+    // HAS interacted, the silence was an interruption or a real failure, and
+    // releasing would replay the whole greeting later in the same session.
+    if (!(navigator.userActivation && navigator.userActivation.hasBeenActive)) {
+      try { chrome.runtime.sendMessage({ action: "claimBootGreeting", release: true }, () => { void chrome.runtime.lastError; }); } catch (_) {}
+    }
+    return false;
+  }
+  await __sbRunBootMascotCameo();
+  return true;
+}
+
 function __sbRunBrowserNotchBoot(finishReady, finishRejected) {
   const bar = document.getElementById("__sb_bar__");
   if (!bar) { finishReady(); return; }
@@ -12635,6 +13374,9 @@ function __sbRunBrowserNotchBoot(finishReady, finishRejected) {
     later(() => {
       __sbNotchFillGreeting();
       __sbSetBrowserNotchState("greeting");
+      // The audible half rides the same beat: chime + spoken greeting under the
+      // card, then the wave cameo once the card has folded to idle.
+      void __sbRunBootGreetingSequence({ manageCard: false });
       later(() => {
         __sbSetBrowserNotchState("idle");
         __sbInputOpen = false;
@@ -12715,6 +13457,7 @@ function __sbOpenPanel() {
         if (bar) { bar.classList.remove("sb-signin", "sb-waking", "sb-cinematic"); bar.classList.add("open"); }
         __sbInputOpen = false;
         __sbSetBrowserNotchState("idle");
+        void __sbRunBootGreetingSequence({ manageCard: true });
         if (__sbContextOk()) chrome.storage.local.set({ sbBrainDocked: true, sbBrainExpanded: false });
         try {
           chrome.runtime.sendMessage({ action: "checkAuth" }, (result) => {
@@ -13383,11 +14126,13 @@ function __sbSpeakWithBrowser(text, speechToken = __sbSpeechGeneration) {
     __sbSyncSpeakButtons();
     // Mouth waits for the voice to actually start — speechSynthesis can queue for
     // hundreds of ms and the mouth must not chatter over that silence.
+    let started = false;
     utterance.onstart = () => {
+      started = true;
       if (speechToken === __sbSpeechGeneration && __sbHeadphoneMode) __sbSetHpBrainState("speaking");
     };
 
-    const finish = () => {
+    const finish = (spokeAtAll) => {
       if (speechToken === __sbSpeechGeneration) {
         if (__sbCurrentUtterance === utterance) __sbCurrentUtterance = null;
         __sbIsSpeaking = false;
@@ -13398,11 +14143,14 @@ function __sbSpeakWithBrowser(text, speechToken = __sbSpeechGeneration) {
           __sbSetHpBrainState(__sbVoicePendingReply ? "captured" : "listening");
         }
       }
-      resolve(speechToken === __sbSpeechGeneration);
+      resolve(spokeAtAll && speechToken === __sbSpeechGeneration);
     };
 
-    utterance.onend = finish;
-    utterance.onerror = finish;
+    utterance.onend = () => finish(true);
+    // 'not-allowed' (gesture-less autoplay block) errors BEFORE onstart — that is
+    // silence, not speech. Resolving true here is what burned the boot-greeting
+    // claim on mute boots.
+    utterance.onerror = () => finish(started);
     window.speechSynthesis.cancel();
     window.speechSynthesis.speak(utterance);
   });
@@ -13643,7 +14391,7 @@ async function __sbFetchSentenceTts(clean, speechToken, headers) {
 
 // Play one already-fetched TTS Response. Returns true if it played under the current token,
 // false on token mismatch. Throws on a media error so the caller can fall back.
-async function __sbPlaySentenceResp(resp, speechToken) {
+async function __sbPlaySentenceResp(resp, speechToken, sentenceText) {
   const ttsProvider = resp.headers.get("x-braino-tts-provider") || __SB_TTS_PROVIDER;
   const ttsContentType = resp.headers.get("content-type") || "";
   const onReady = (audioEl, objUrl) => {
@@ -13655,6 +14403,8 @@ async function __sbPlaySentenceResp(resp, speechToken) {
     __sbSyncSpeakButtons();
     if (__sbHeadphoneMode) { __sbSetHpBrainState("speaking"); }
     __sbNotchMouthSync(audioEl);   // mouth follows the REAL playback: pauses on buffering
+    // The karaoke follows the SAME element as the mouth, so buffering pauses both.
+    if (sentenceText) __sbNotchKaraoke.attachSentence(sentenceText, audioEl, speechToken);
   };
 
   if (__sbCanStreamTtsMp3() && resp.body) {
@@ -13733,13 +14483,18 @@ async function __sbSpeakText(text, options = {}) {
   const clean = __sbStripMarkdownForSpeech(text);
   if (!clean) return false;
 
+  // Register what he's about to say with the self-echo filter. Callers that come
+  // through __sbSpeakWithPreferredVoice already did this; direct callers didn't —
+  // and any spoken line the filter doesn't know about can re-enter as a command.
+  __sbNoteSpoken(clean);
+
   __sbStopSpeech();
   const speechToken = ++__sbSpeechGeneration;
   const sentences = __sbSplitSentencesForTts(clean);
   let spoke = false;
 
   try {
-    const { authToken: ttsToken } = await __sbStorageGet(["authToken"]);
+    const ttsToken = await __sbGetAuthTokenFast();   // warm cache: no storage IPC on the audio path
     if (speechToken !== __sbSpeechGeneration) return false;
 
     // fish-audio-tts uses a server-side key, so it works with just the anon apikey — no user
@@ -13780,11 +14535,16 @@ async function __sbSpeakText(text, options = {}) {
       }
 
       try {
-        const played = await __sbPlaySentenceResp(cur.resp, speechToken);
+        const played = await __sbPlaySentenceResp(cur.resp, speechToken, sentences[i]);
         if (speechToken !== __sbSpeechGeneration) return spoke;
         if (played) spoke = true;
       } catch (mediaErr) {
         if (speechToken !== __sbSpeechGeneration) return spoke;
+        // NotAllowedError = the autoplay policy blocked play() (no user gesture
+        // yet, e.g. the boot greeting on a freshly restored tab). That is NOT a
+        // Fish outage: no error card, no badge flip, no browser-voice fallback
+        // (which is gesture-gated too). Return "didn't speak" honestly.
+        if (mediaErr?.name === "NotAllowedError") return spoke;
         const remainder = sentences.slice(i).join(" ");
         __sbHandleFishTtsFailure(mediaErr);
         spoke = (await __sbSpeakWithBrowser(remainder, speechToken)) || spoke;
@@ -13795,9 +14555,21 @@ async function __sbSpeakText(text, options = {}) {
     __sbSpeechRemainder = "";   // said it all — nothing left to be resumed later
   } catch (ttsErr) {
     if (speechToken !== __sbSpeechGeneration) return false;
+    if (ttsErr?.name === "NotAllowedError") return false;   // autoplay block, not a Fish failure
     __sbHandleFishTtsFailure(ttsErr);
     spoke = await __sbSpeakWithBrowser(clean, speechToken);
   } finally {
+    // Speech is over one way or another: resolve the karaoke and start the Mac
+    // linger if an answer is up. Lives in `finally` so Fish-failure paths can't
+    // leave a frozen half-lit answer (completeAll/linger are token-guarded, so a
+    // superseded turn is a no-op). NOT when the surface holds manual/rich content
+    // (lecture notes, delegate HTML): the spoken wrap-up is shorter than the
+    // notes it would fold away.
+    __sbNotchKaraoke.completeAll(speechToken);
+    if (speechToken === __sbSpeechGeneration && !__sbNotchAnswerManualHold) {
+      const st = __sbNotchV1?.shell?.dataset?.state;
+      if (st === "short" || st === "long") __sbNotchArmAnswerLinger(clean, st);
+    }
     // __sbIsSpeaking must clear even when this job was superseded. It used to sit
     // inside the token check below, so a barge-in (which bumps __sbSpeechGeneration)
     // left it stuck true — and __sbBrainoOutputActive() then reads true forever,
@@ -15179,7 +15951,10 @@ function __sbAgentLogShow(title) {
   __sbAgentLogTouch();
   __sbAgentBusy = true;
   if (title) __sbAgentBusyLabel = title;
-  __sbSetBrowserNotchState("working", __sbAgentBusyLabel.replace(/…/g, ""));
+  // Never stomp a live recording surface — its Stop button must stay reachable.
+  if (__sbNotchV1?.shell?.dataset?.state !== "record") {
+    __sbSetBrowserNotchState("working", __sbAgentBusyLabel.replace(/…/g, ""));
+  }
   if (typeof __sbWkStatus === "function") __sbWkStatus(__sbAgentBusyLabel);  // flip "Listening…" → working label
   __sbAgentLogRender();
   if (__sbJarvisOpen) __sbJarvisLogShow(__sbAgentBusyLabel);   // mirror into the Jarvis HUD console
@@ -15242,7 +16017,7 @@ function __sbAgentLogClear() {
     // the input, the mode menu or sign-in (that was the "answer flashes then
     // vanishes" / stuck-notch bug).
     const notchState = __sbNotchV1?.shell?.dataset?.state;
-    const notchHolds = ["short", "long", "input", "menu", "signin"].includes(notchState);
+    const notchHolds = ["short", "long", "input", "menu", "signin", "record"].includes(notchState);
     if (bar && __sbBrainVisible && !notchHolds) __sbSetBrowserNotchState(__sbHeadphoneMode ? "listening" : "idle");
     const stepsEl = log && log.querySelector(".sb-blog-steps");
     if (stepsEl) stepsEl.innerHTML = "";
@@ -17754,6 +18529,13 @@ async function __sbShouldForceVoiceDelegate(routing) {
   // instead of just talking. No action verb, no delegate: answer as conversation.
   if (!__sbIsBrowserActionCommand(promptText)) return false;
 
+  // Unambiguous task shapes skip the backend classifier entirely — that hop cost
+  // a full network round-trip on every action-shaped spoken turn before Braino
+  // could start. Only genuinely ambiguous phrasing still asks the backend.
+  if (/^(?:please\s+)?(?:hey\s+braino[,\s]+)?(?:can you\s+|could you\s+|would you\s+)?(?:open|go to|play|book|buy|order)\b/i.test(promptText)) {
+    return true;
+  }
+
   const handoff = __sbBuildAgentHandoffPayload(promptText, { connector: routing?.connectorHint });
   const result = await __sbRuntimeMessage({
     action: "classifyBrainAgentTask",
@@ -17766,6 +18548,72 @@ async function __sbShouldForceVoiceDelegate(routing) {
   });
 
   return result?.shouldDelegate === true;
+}
+
+// ── Current-screen actions ──────────────────────────────────────────────────
+// "Click this video on my screen" used to fall into the full delegate loop, which
+// opens its OWN background tab and works from a fresh DOM — so it clicked nothing
+// you were looking at, then went off and searched for it again. An action verb
+// plus a demonstrative ("this…", "…on my screen") means THIS page: resolve the
+// element right here, jump-point, click, done. No loop, no verifier, no follow-up.
+const __SB_ONSCREEN_VERB_RE = /\b(?:click|press|tap|play|open|select|choose|hit)\b/i;
+const __SB_ONSCREEN_REF_RE = /\b(?:this|that one|right there|on (?:my|the) screen|on-?screen|the one (?:you|we|i) (?:can )?see)\b/i;
+function __sbIsOnScreenActionRequest(text) {
+  const t = String(text || "").trim();
+  if (!t || t.length > 160) return false;
+  return __SB_ONSCREEN_VERB_RE.test(t) && __SB_ONSCREEN_REF_RE.test(t);
+}
+function __sbResolveOnScreenTarget(prompt) {
+  const stop = new Set(["click", "press", "tap", "play", "open", "select", "choose", "hit",
+    "the", "and", "this", "that", "one", "can", "you", "see", "for", "please", "braino",
+    "video", "screen", "there", "right", "now", "just"]);
+  const words = String(prompt || "").toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter(Boolean);
+  const keywords = words.filter((w) => w.length > 2 && !stop.has(w));
+  const wantsVideo = /\bvideo\b/i.test(prompt);
+  const vw = window.innerWidth, vh = window.innerHeight;
+  let nodes;
+  try {
+    nodes = document.querySelectorAll('a[href], button, [role="button"], [role="link"], video, input[type="submit"], [onclick]');
+  } catch (_) { return null; }
+  let best = null, bestScore = 0, scanned = 0;
+  for (const el of nodes) {
+    if (scanned++ > 2600) break;
+    let r;
+    try { r = el.getBoundingClientRect(); } catch (_) { continue; }
+    if (!r || r.width < 40 || r.height < 18) continue;
+    if (r.bottom < 0 || r.top > vh || r.right < 0 || r.left > vw) continue;   // on screen RIGHT NOW
+    if (el.closest?.("#__sb_root__, #__sb_bar__, #__sb_walk_lane__")) continue; // never his own UI
+    const label = `${el.getAttribute?.("aria-label") || ""} ${el.getAttribute?.("title") || ""} ${String(el.innerText || "").slice(0, 220)}`.toLowerCase();
+    let score = 0;
+    for (const k of keywords) if (label.includes(k)) score += 30;
+    if (wantsVideo) {
+      const tag = String(el.tagName || "").toLowerCase();
+      const idc = `${el.id || ""} ${typeof el.className === "string" ? el.className : ""}`;
+      if (tag === "video"
+        || /watch\?v=|\/video|\/shorts\//.test(String(el.getAttribute?.("href") || ""))
+        || /video|thumbnail/i.test(idc)) score += 45;
+    }
+    if (!score) continue;
+    score += Math.max(0, 30 - (Math.max(0, r.top) / vh) * 30);       // higher on screen reads as "this"
+    score += Math.min(20, (r.width * r.height) / (vw * vh) * 120);   // prominence
+    if (score > bestScore) { bestScore = score; best = el; }
+  }
+  return bestScore >= 45 ? best : null;
+}
+async function __sbTryOnScreenAction(promptText) {
+  const target = __sbResolveOnScreenTarget(promptText);
+  if (!target) return false;
+  // A raw <video> click toggles pause — the enclosing link/button is the intent.
+  const clickable = target.closest?.('a[href], button, [role="button"], [role="link"]') || target;
+  const doClick = () => { try { clickable.click(); } catch (_) {} };
+  try {
+    if (typeof __sbJumpPointAt === "function" && !__sbWkJumping && !__sbRoamActive) {
+      const pointed = await __sbJumpPointAt(clickable, { onPoint: doClick });
+      if (pointed !== false) return true;
+    }
+  } catch (_) {}
+  doClick();
+  return true;
 }
 
 function __sbShouldFastLaunchRealtimeAgent(routing) {
@@ -18400,6 +19248,27 @@ async function __sbProcessPrompt(text, options = {}) {
 
   if (intent === "record") {
     __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken });
+    const rec = __sbClassifyRecordIntent(promptText);
+    // STOP first, always — "stop recording" must never be read as a start
+    // (the Mac's meeting-intent lesson, ported).
+    if (rec?.action === "stop") {
+      if (__sbIsLectureRecording) void __sbStopLectureRecording();
+      else { try { void __sbStopRecording(); } catch (_) {} }
+      return;
+    }
+    if (rec?.action === "start" && !__sbIsLectureRecording) {
+      // "Braino, record this lecture/meeting": pick the mode from what they said
+      // and where they are, then land on the ready surface — the Start tap is the
+      // user gesture getDisplayMedia demands, so Braino says exactly that.
+      __sbApplyForcedModeUi(rec.mode, { showReady: false });
+      __sbNotchShowRecordReady(rec.mode);
+      const line = rec.mode === "meeting"
+        ? "Ready to record this meeting. Hit Start in the notch and pick this tab."
+        : "Ready to record. Hit Start in the notch and pick this tab.";
+      __sbNoteSpoken(line);
+      void __sbSpeakWithPreferredVoice(line, "legacy", { verbatim: true, source: "record-ready" });
+      return;
+    }
     if (forcedMode === "lecture" || forcedMode === "meeting") {
       void __sbStartLectureRecording();
     } else {
@@ -18740,13 +19609,16 @@ function __sbShowLectureReadyCard(mode) {
 
 function __sbShowLectureResultMessage(title, message) {
   const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
-  if (!scroll) return;
-  scroll.innerHTML = `
-    <div class="sb-lec-ready">
-      <div class="sb-lec-kicker">${__sbEscapeHtml(title)}</div>
-      <div class="sb-lec-ready-sub">${__sbEscapeHtml(message)}</div>
-    </div>
-  `;
+  if (scroll) {
+    scroll.innerHTML = `
+      <div class="sb-lec-ready">
+        <div class="sb-lec-kicker">${__sbEscapeHtml(title)}</div>
+        <div class="sb-lec-ready-sub">${__sbEscapeHtml(message)}</div>
+      </div>
+    `;
+  }
+  // The visible copy of the same message — the bubble card is hidden in notch v1.
+  __sbNotchShowAnswer(`${title}. ${message}`, false);
 }
 
 function __sbGetMeetingArtifacts() {
@@ -19110,6 +19982,9 @@ function __sbMeetingPayloadHasText(payload) {
 
 function __sbUpdateMeetingStatus(extra = "") {
   if (__sbLectureRecordingMode !== "meeting") return;
+  // Mirror every meeting heartbeat onto the notch record surface (speaker, last
+  // captions, note bullets) — the legacy card below is display:none in notch v1.
+  __sbNotchRecordSync(extra || null);
   const statusEl = document.getElementById("__sb_lec_status__");
   const metaEl = document.getElementById("__sb_meeting_live_meta__");
   if (!__sbMeetingContext) return;
@@ -19480,9 +20355,10 @@ async function __sbStartLectureRecording(options = {}) {
   const withMic = (mode === "meeting");
 
   // Display capture requires a user gesture. If we got here without one (voice/typed command or
-  // a background message), show the ready card so the user taps Start — that tap is the gesture.
+  // a background message), show the ready surface so the user taps Start — that tap is the gesture.
   if (!(navigator.userActivation && navigator.userActivation.isActive)) {
     __sbShowLectureReadyCard(mode);
+    __sbNotchShowRecordReady(mode);   // the visible one — the legacy card lives in a hidden wrap
     return;
   }
 
@@ -19520,6 +20396,7 @@ async function __sbStartLectureRecording(options = {}) {
   }
   __sbShowLectureRecordingBar(false);
   __sbShowLectureRecordingCard();
+  __sbNotchShowRecordLive();   // the notch is the live surface: clock, lines, Stop
   if (mode === "meeting") __sbUpdateMeetingStatus();
   if (options.readyMessage) {
     const statusEl = document.getElementById("__sb_lec_status__");
@@ -19527,8 +20404,10 @@ async function __sbStartLectureRecording(options = {}) {
   }
 
   let seconds = 0;
+  __sbLectureSeconds = 0;
   __sbLectureInterval = setInterval(() => {
     seconds++;
+    __sbLectureSeconds = seconds;
     const m = String(Math.floor(seconds / 60)).padStart(2, "0");
     const s = String(seconds % 60).padStart(2, "0");
     const timeStr = `${m}:${s}`;
@@ -19536,6 +20415,16 @@ async function __sbStartLectureRecording(options = {}) {
     if (timerEl) timerEl.textContent = timeStr;
     const cardTimerEl = document.getElementById("__sb_lec_card_timer__");
     if (cardTimerEl) cardTimerEl.textContent = timeStr;
+    __sbNotchRecordClock(timeStr);
+    // Self-heal: if anything stomped the record surface (a stray state setter this
+    // guard-list missed), take it back within a second — capture is still running
+    // and the Stop button must stay reachable. User-held surfaces (typing, menus,
+    // a Q&A answer being read) are respected and reclaimed once they resolve.
+    const stState = __sbNotchV1?.shell?.dataset?.state;
+    if (__sbIsLectureRecording && stState && !["record", "input", "menu", "signin", "short", "long"].includes(stState)) {
+      const panel = __sbNotchV1.shadow.querySelector(".record");
+      if (panel) { panel.dataset.phase = "live"; __sbNotchSetState("record"); __sbNotchMeasureRecord(); }
+    }
   }, 1000);
 }
 
@@ -19577,6 +20466,7 @@ async function __sbCaptureLectureSegment() {
     if (res.meetingArtifacts) __sbMeetingArtifacts = res.meetingArtifacts;
     __sbLecSegmentCount++;
     if (statusEl) statusEl.textContent = `✓ Segment ${__sbLecSegmentCount} saved — still recording…`;
+    __sbNotchRecordSync(`Segment ${__sbLecSegmentCount} saved — still recording`);
     if (segBtn) { segBtn.disabled = false; segBtn.textContent = "✂ Save Segment"; }
   } finally {
     if (captureBtn) captureBtn.classList.remove("loading");
@@ -19604,6 +20494,7 @@ async function __sbStopLectureRecording() {
       </div>
     `;
   }
+  __sbNotchRecordSync("Transcribing and writing your notes…");
 
   let res;
   if (__sbInPageCaptureActive) {
@@ -19657,28 +20548,64 @@ async function __sbStopLectureRecording() {
 }
 
 function __sbShowLectureNotes(notes, isFinal) {
-  const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
-  if (!scroll) return;
   __sbLastBubbleRaw = notes;
   const meetingArtifactsHtml = isFinal ? __sbRenderMeetingArtifactsHtml() : "";
+  // Notion is retired as the notes destination — notes live in-house now, and the
+  // dashboard sync below happens automatically. Copy stays for quick grabbing.
   const actionsHtml = isFinal ? `
     <div class="sb-lec-notes-actions">
       <button id="__sb_lec_copy_btn__" class="sb-lec-copy-btn">Copy</button>
-      <button id="__sb_notion_sync_btn__" class="sb-notion-btn" style="flex:1.4">Sync to Notion</button>
     </div>
   ` : "";
-  scroll.innerHTML = `<div class="sb-card-a">${__sbRenderMarkdown(notes)}${meetingArtifactsHtml}</div>${actionsHtml}`;
-  __sbOpenCard({ rich: true });
-  if (__sbBubbleTimer) clearTimeout(__sbBubbleTimer);
-  if (isFinal) {
-    document.getElementById("__sb_notion_sync_btn__")?.addEventListener("click", __sbSyncNotesToNotion);
-    document.getElementById("__sb_lec_copy_btn__")?.addEventListener("click", () => {
-      navigator.clipboard.writeText(notes).catch(() => {});
-      const btn = document.getElementById("__sb_lec_copy_btn__");
-      if (btn) { btn.textContent = "Copied!"; setTimeout(() => { btn.textContent = "Copy"; }, 1800); }
-    });
-    __sbBindMeetingArtifactsActions();
+  const scroll = document.getElementById("__sb_bubble__")?.querySelector(".sb-card-scroll");
+  if (scroll) {
+    scroll.innerHTML = `<div class="sb-card-a">${__sbRenderMarkdown(notes)}${meetingArtifactsHtml}</div>${actionsHtml}`;
+    __sbOpenCard({ rich: true });
+    if (__sbBubbleTimer) clearTimeout(__sbBubbleTimer);
+    if (isFinal) {
+      document.getElementById("__sb_lec_copy_btn__")?.addEventListener("click", () => {
+        navigator.clipboard.writeText(notes).catch(() => {});
+        const btn = document.getElementById("__sb_lec_copy_btn__");
+        if (btn) { btn.textContent = "Copied!"; setTimeout(() => { btn.textContent = "Copy"; }, 1800); }
+      });
+      __sbBindMeetingArtifactsActions();
+    }
   }
+  // THE visible rendering: the notes land in the notch reading surface (the
+  // bubble card above is display:none under notch v1).
+  const savedLine = isFinal ? `<p style="margin-top:14px;color:rgba(27,23,19,.5);font-size:12px">Synced to your dashboard automatically.</p>` : "";
+  __sbNotchShowAnswer(notes, true, `<div class="sb-card-a">${__sbRenderMarkdown(notes)}${meetingArtifactsHtml}</div>${savedLine}`);
+
+  if (!isFinal) return;
+  // In-house save: the whole point. use_case matches the Dashboard's switch
+  // (src/pages/Dashboard.tsx — "meeting" / "lecture" cards).
+  const isMeeting = __sbLectureRecordingMode === "meeting";
+  const title = `${isMeeting ? "Meeting Notes" : "Lecture Notes"} — ` + new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  const structured = (__sbLectureTranscript
+    ? `${notes}\n\n— Full transcript —\n\n${__sbLectureTranscript}`
+    : notes).slice(0, 60000);
+  const mins = Math.max(1, Math.round((__sbLectureSeconds || 0) / 60));
+  try {
+    chrome.runtime.sendMessage({
+      action: "bgSaveNote",
+      title,
+      transcript: String(__sbLectureTranscript || "").slice(0, 60000),
+      structuredNotes: structured,
+      useCase: isMeeting ? "meeting" : "lecture",
+    }, (res) => {
+      void chrome.runtime.lastError;
+      const line = res?.ok
+        ? `Done. ${mins} ${mins === 1 ? "minute" : "minutes"} recorded, written up and synced to your dashboard.`
+        : `Done. ${mins} ${mins === 1 ? "minute" : "minutes"} recorded and written up. The dashboard sync hiccuped, so copy the notes if you need them right now.`;
+      __sbNoteSpoken(line);
+      __sbSpeakWithPreferredVoice(line, "legacy", { verbatim: true, source: "recording-notes" }).then(() => {
+        // "When that is done, the notch goes back": a comfortable read window after
+        // the wrap-up, sized to the notes themselves (the manual-hold flag keeps
+        // the wrap-up line from folding them early).
+        __sbNotchArmAnswerLinger(notes, "long");
+      }).catch(() => {});
+    });
+  } catch (_) {}
 }
 
 async function __sbSyncNotesToNotion() {
@@ -20919,7 +21846,9 @@ function __sbInterruptRealtimeResponse() {
 function __sbBeginStreamTts(speechToken) {
   __sbStreamTts = { token: speechToken, buffer: "", queue: [], draining: false, ended: false, headers: null, spoke: false, firstEmitted: false, group: "" };
   const s = __sbStreamTts;
-  __sbStorageGet(["authToken"]).then(({ authToken }) => {
+  // Token comes from the warm cache — the storage round-trip here used to gate the
+  // FIRST Fish fetch of every fast-path turn (headers stay null until it lands).
+  __sbGetAuthTokenFast().then((authToken) => {
     if (!__sbStreamTts || __sbStreamTts !== s || s.token !== __sbSpeechGeneration) return;
     const headers = { "Content-Type": "application/json", apikey: __SB_ANON_KEY };
     if (authToken) headers.Authorization = `Bearer ${authToken}`;
@@ -20993,6 +21922,10 @@ async function __sbDrainStreamTts() {
           ? { sentence, promise: Promise.resolve({ skipFish: true }) }
           : { sentence, promise: __sbFetchSentenceTts(sentence, s.token, s.headers) };
       }
+      // Self-echo closure: the streamed fast path never registered its own words,
+      // so a long answer heard through speakers could re-enter as a command.
+      // Per-sentence keeps the 8s echo window fresh across a long reply.
+      __sbNoteSpoken(item.sentence);
       const cur = await item.promise;
       if (s.token !== __sbSpeechGeneration) return;
       if (cur.error) fishDown = true; // flip BEFORE deciding the next prefetch below
@@ -21016,7 +21949,7 @@ async function __sbDrainStreamTts() {
       }
       if (!cur.resp) return;
       try {
-        const played = await __sbPlaySentenceResp(cur.resp, s.token);
+        const played = await __sbPlaySentenceResp(cur.resp, s.token, item.sentence);
         if (played) s.spoke = true;
       } catch (mediaErr) {
         if (s.token !== __sbSpeechGeneration) return;
@@ -21093,7 +22026,12 @@ async function __sbAnswerViaRealtimeStreaming(turnToken) {
   const nativeVoice = __sbVoiceOutputPref === "realtime";   // model speaks audio directly (no Fish)
   __sbStopSpeech(); // claim a fresh speech token + clear any prior stream
   const speechToken = __sbSpeechGeneration;
-  if (!nativeVoice) { __sbBeginStreamTts(speechToken); __sbStreamFishActive = true; }
+  if (!nativeVoice) {
+    __sbBeginStreamTts(speechToken);
+    __sbStreamFishActive = true;
+    // Mac parity: the fast path streams its words INTO the notch as it speaks.
+    __sbNotchAnswerStreamBegin(speechToken);
+  }
 
   if (__sbHasActiveRealtimeResponse()) __sbInterruptRealtimeResponse();
   __sbRtAssistantTranscript = "";
@@ -21110,20 +22048,29 @@ async function __sbAnswerViaRealtimeStreaming(turnToken) {
     __sbVTMark("⚠️ fast bail: send failed");
     __sbStreamFishActive = false;
     __sbStreamTts = null;
+    __sbNotchAnswerStreamState = null;
     __sbResetRealtimeResponseState();
     return false; // control channel not ready → fall back to batch path
   }
 
   __sbVTPath = "Fast Path";   // the live model is streaming the answer (no batch backend hop)
   const result = await waiter; // resolves at response.done / cancelled / error
+  let streamedNotchText = null;
   if (!nativeVoice) {
     __sbStreamFishActive = false;
     __sbEndStreamTts(); // flush the trailing partial sentence
+    streamedNotchText = __sbNotchAnswerStreamEnd(); // flush the trailing words into the surface
     // Fish audio lags the text stream — wait for it to finish playing (or barge-in to supersede)
     // before finalizing the turn, so TTS cost events land on this turn and the next turn waits.
     while (__sbStreamTts && __sbStreamTts.token === speechToken &&
            (__sbStreamTts.draining || __sbStreamTts.queue.length > 0)) {
       await new Promise((r) => setTimeout(r, 40));
+    }
+    // Audio has finished (or was superseded). Resolve the highlight and start the
+    // Mac linger — the surface folds itself back to idle.
+    if (streamedNotchText && speechToken === __sbSpeechGeneration) {
+      __sbNotchKaraoke.completeAll(speechToken);
+      __sbNotchArmAnswerLinger(streamedNotchText, "long");
     }
   }
   // In native-voice mode the OpenAI audio plays via the offscreen WebRTC track; response.done
@@ -21405,6 +22352,12 @@ function __sbScheduleVoiceTurnProcessing(transcript, onReady, options = {}) {
   __sbLastFinalTranscript = finalTranscript;
   if (__sbVoiceSilenceTimer) clearTimeout(__sbVoiceSilenceTimer);
 
+  // A final that ends on real sentence punctuation is a finished thought — the
+  // semantic VAD already gated turn-end, so the coalesce buffer is pure added
+  // latency for it. Keep the 200ms only for un-terminated finals (mid-thought
+  // fragments that a follow-on final may extend).
+  const settleMs = /[.!?…।]["'”’]?$/.test(finalTranscript) ? 0 : 200;
+
   __sbVoiceSilenceTimer = setTimeout(() => {
     __sbVoiceSilenceTimer = null;
     const toProcess = __sbLastFinalTranscript;
@@ -21430,9 +22383,7 @@ function __sbScheduleVoiceTurnProcessing(transcript, onReady, options = {}) {
 
     __sbVoicePendingReply = true;
     onReady(toProcess);
-  }, 200);   // settle window after a final transcript. Trimmed 350→200ms: the semantic VAD already
-             // gates turn-end, so this is just a short coalesce buffer. Bump back up if Braino starts
-             // jumping in on natural mid-sentence pauses.
+  }, settleMs);   // 0ms for punctuated finals; 200ms coalesce only for mid-thought fragments.
   return true;
 }
 
@@ -22041,6 +22992,23 @@ async function __sbHandleInlineRealtimeTurn(transcript, turnToken) {
     return;
   }
 
+  // Current-screen action: an action verb + a demonstrative means THIS page.
+  // Act right here and END THE TURN — the delegate loop (own tab, fresh DOM,
+  // re-search on doubt) is exactly the wrong tool for "click this video".
+  if (__sbIsOnScreenActionRequest(promptText)) {
+    const acted = await __sbTryOnScreenAction(promptText);
+    if (acted) {
+      __sbStopSpeech();
+      __sbPatchRealtimeCostTurn({ routeIntent: "agent" });
+      const confirmLine = "Done.";
+      __sbNoteSpoken(confirmLine);
+      void __sbSpeakWithPreferredVoice(confirmLine, "realtime", { verbatim: true, source: "on-screen-action" });
+      __sbCompleteVoiceTurn({ fromVoice: true, voiceOutput: "realtime", voiceTurnToken: turnToken });
+      return;
+    }
+    // Nothing on this screen matched — fall through to the normal routes.
+  }
+
   if (__sbShouldFastLaunchRealtimeAgent(routing)) {
     __sbPatchRealtimeCostTurn({ routeIntent: "agent" });
     __sbRtAwaitingDelegateResult = true;
@@ -22247,7 +23215,9 @@ function __sbHandleRtEvent(ev) {
     const transcript = String(ev.transcript || __sbRtUserTranscript || "").trim();
     const transcriptionUsage = ev.usage || ev.item?.usage || ev.response?.usage || {};
     __sbRtUserTranscript = "";
-    if (transcript) __sbNotchCaption(transcript, { final: true });
+    // Sticky: your words stay up through working/thinking (the Mac's showsTranscript
+    // fix) and are released when the answer surface takes over or on return to idle.
+    if (transcript) __sbNotchCaption(transcript, { final: true, sticky: true });
     if (!transcript) return;
     __sbVTMark("📝 Transcript ready");
 
@@ -22313,7 +23283,10 @@ function __sbHandleRtEvent(ev) {
     if (typeof ev.delta === "string" && ev.delta) {
       __sbVTFirst(ev.type.includes("audio") ? "🔊 First audio out" : "💬 First text out");
       __sbRtAssistantTranscript += ev.delta;
-      if (__sbStreamFishActive) __sbFeedStreamTts(ev.delta); // 1B: stream into Fish as it arrives
+      if (__sbStreamFishActive) {
+        __sbFeedStreamTts(ev.delta);        // 1B: stream into Fish as it arrives
+        __sbNotchAnswerStreamFeed(ev.delta); // …and into the notch as karaoke words
+      }
     }
     // Only native realtime audio means sound is coming out RIGHT NOW. With Fish as
     // the voice these deltas are text; the Fish player owns the speaking state when
@@ -22434,23 +23407,61 @@ function __sbApplyVoiceAutoRoutingDefaults() {
 function __sbShowMicPermissionModal() {
   return new Promise((resolve) => {
     try {
-      if (document.getElementById("__sb_mic_perm__")) { resolve(true); return; }
+      const existingPerm = document.getElementById("__sb_mic_perm__");
+      if (existingPerm) {
+        // Mid-retract (the 300ms hide animation): it's about to remove itself —
+        // reporting "shown" for it would make the background skip its popup
+        // fallback with nothing on screen. Clear it and build fresh.
+        if (existingPerm.dataset.closing === "1") existingPerm.remove();
+        else { resolve(true); return; }
+      }
+      // The permission is part of the notch conversation, so it DROPS OUT of the
+      // notch instead of dimming the whole page behind a centered card. The iframe
+      // itself stays: the grant must land on the EXTENSION origin so the offscreen
+      // document inherits it — only the presentation changed. If the notch isn't
+      // mounted (legacy surface), fall back to the old centered overlay.
+      const notchRect = document.getElementById("__sb_notch_v1_host__")?.getBoundingClientRect();
+      const anchored = !!(notchRect && notchRect.width > 0);
       const overlay = document.createElement("div");
       overlay.id = "__sb_mic_perm__";
-      overlay.style.cssText = [
-        "position:fixed", "inset:0", "z-index:2147483647",
-        "background:rgba(8,5,4,0.55)", "backdrop-filter:blur(3px)",
-        "display:flex", "align-items:center", "justify-content:center",
-      ].join(";");
+      overlay.dataset.anchored = anchored ? "1" : "0";
+      if (anchored) {
+        const cx = Math.round(notchRect.left + notchRect.width / 2);
+        const top = Math.round(Math.max(8, notchRect.bottom + 10));
+        overlay.style.cssText = [
+          "position:fixed", `left:${cx}px`, `top:${top}px`,
+          "transform:translateX(-50%) translateY(-14px)", "opacity:0",
+          "z-index:2147483647", "width:380px", "height:300px",
+          "border-radius:26px", "overflow:hidden", "background:#1c0e0b",
+          "box-shadow:0 24px 70px rgba(0,0,0,0.46), 0 0 0 1px rgba(232,120,110,0.30)",
+          "transition:opacity 420ms cubic-bezier(.22,1,.36,1), transform 420ms cubic-bezier(.22,1,.36,1)",
+        ].join(";");
+      } else {
+        overlay.style.cssText = [
+          "position:fixed", "inset:0", "z-index:2147483647",
+          "background:rgba(8,5,4,0.55)", "backdrop-filter:blur(3px)",
+          "display:flex", "align-items:center", "justify-content:center",
+        ].join(";");
+      }
       const frame = document.createElement("iframe");
       frame.src = chrome.runtime.getURL("mic-permission.html");
       frame.allow = "microphone"; // delegate mic to the extension-origin iframe
-      frame.style.cssText = [
-        "width:380px", "height:300px", "border:0", "border-radius:18px",
-        "box-shadow:0 20px 60px rgba(0,0,0,0.5)", "background:#160b09",
-      ].join(";");
+      frame.style.cssText = anchored
+        ? "width:100%;height:100%;border:0;display:block;background:#1c0e0b"
+        : [
+          "width:380px", "height:300px", "border:0", "border-radius:18px",
+          "box-shadow:0 20px 60px rgba(0,0,0,0.5)", "background:#1c0e0b",
+        ].join(";");
       overlay.appendChild(frame);
       (document.body || document.documentElement).appendChild(overlay);
+      if (anchored) {
+        // Double rAF so the initial transform is committed before the drop plays.
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+          overlay.style.opacity = "1";
+          overlay.style.transform = "translateX(-50%) translateY(0)";
+        }));
+        try { __sbNotchCaption("Braino needs your microphone", { final: true }); } catch (_) {}
+      }
 
       // Wait for the iframe to confirm it rendered. If the page's CSP blocked the
       // extension iframe, no "ready" arrives → remove the (blank) overlay and report
@@ -22477,7 +23488,18 @@ function __sbShowMicPermissionModal() {
 }
 
 function __sbHideMicPermissionModal() {
-  document.getElementById("__sb_mic_perm__")?.remove();
+  const el = document.getElementById("__sb_mic_perm__");
+  if (!el) return;
+  if (el.dataset.anchored === "1") {
+    // Retract back into the notch, mirroring the drop.
+    el.dataset.closing = "1";
+    el.style.transition = "opacity 280ms cubic-bezier(.22,1,.36,1), transform 280ms cubic-bezier(.22,1,.36,1)";
+    el.style.opacity = "0";
+    el.style.transform = "translateX(-50%) translateY(-12px)";
+    setTimeout(() => el.remove(), 300);
+  } else {
+    el.remove();
+  }
 }
 
 function __sbFormatContactPromptHtml(message) {
@@ -23134,10 +24156,13 @@ function __sbSetHpBrainState(state) {
     // Never stomp a surface the user is reading or typing in: answers, the input,
     // the mode menu and sign-in hold the notch until the user dismisses them.
     const notchState = __sbNotchV1?.shell?.dataset?.state;
-    const notchHolds = ["short", "long", "input", "menu", "signin"].includes(notchState);
+    // "record" is in the hold list for the same reason the Mac's meeting sheet
+    // needed its zone guard: the surface is up for a whole meeting, and any voice
+    // state-change stomping it is the browser twin of the dead Stop button.
+    const notchHolds = ["short", "long", "input", "menu", "signin", "record"].includes(notchState);
     if (state === "listening" || state === "hearing") { if (!notchHolds) __sbSetBrowserNotchState("listening"); }
     else if (state === "speaking") { if (!notchHolds) __sbSetBrowserNotchState("speaking"); }
-    else if (state === "connecting" || state === "captured") { if (!["input", "menu", "signin"].includes(notchState)) __sbSetBrowserNotchState("working", state === "captured" ? "Thinking" : "Waking up"); }
+    else if (state === "connecting" || state === "captured") { if (!["input", "menu", "signin", "record"].includes(notchState)) __sbSetBrowserNotchState("working", state === "captured" ? "Thinking" : "Waking up"); }
     else if (__sbBrainVisible && !__sbInputOpen && !notchHolds) __sbSetBrowserNotchState("idle");
   }
 

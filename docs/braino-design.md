@@ -450,6 +450,42 @@ Two composition rules, both learned the hard way:
   `syncYapNotchZone(false)` branch has to know the meeting surface is open, or
   the zone is torn down a second after it is claimed and Stop stops responding.
 
+### Music island (Mac) — the Dynamic Island port
+
+Music is the one state that is NOT a member of the sheet family: the pill
+itself is the island, and it morphs on the base spring curve so collapsed →
+expanded reads as one continuous object growing out of the housing.
+
+- **Collapsed (`.music`).** Artwork tile (26px, radius 7) on the left wing, a
+  five-bar EQ on the right wing, track · artist in the chin — the iPhone island
+  layout mapped onto the Mac housing, with the physical notch playing the role
+  of the camera. Width is `--nf-notch-w + 92px` (46px wings), never a fixed
+  number: a fixed width left the wings uneven across housing sizes. The chin
+  title drops the mono/uppercase ticker dress for SF Pro sentence case. The
+  dancer no longer rides the island; the EQ and the light show carry the energy.
+- **EQ colour = light show hue.** The bars are `hsl(var(--music-hue) …)`, the
+  same variable the beat-synced glow cycles, so the bars and the halo read as
+  one instrument.
+- **Expanded (`.nf-music-open`).** Hover the island for ~240ms → the pill grows
+  to 400×(notch-h + 162) with 34px bottom radii: artwork 58px, a 19px/700
+  Braino SF Pro Display title with a white four-bar waveform badge riding the
+  title line, an artists-only 15px grey line under it (the source name appears
+  only when metadata has no artist — never as a `· spotify` suffix), a live
+  progress bar with elapsed and `-remaining` in tabular numerals, and big
+  prev/play-pause/next (26–30px glyphs, 46px gaps). The surface paints its own
+  opaque black: without it the pill's resident chrome (FOUNDRY identity
+  letters, awake eyes) ghosts through — the mic-live privacy dot and volume
+  HUD are re-raised above it on purpose. Progress re-anchors on every 6s
+  now-playing poll and drifts on wall-clock between polls. Leave the zone for
+  ~380ms and it folds.
+- **Pause does not fold the player.** Pausing kills the `music` class (the
+  watcher flips music-state off), but the open player stays while the island is
+  otherwise quiet, and for three minutes after the music stops the player is
+  still one hover away — pause → hover → play never needs a voice round-trip.
+  A louder state (voice, REC, alarm) folds it immediately.
+- **No click-to-talk while open.** The open surface owns every click; only the
+  transport buttons act. A stray tap on the artwork must not start a session.
+
 ---
 
 ## 13. Site nav — the IOMI notch (one shared component, site-wide)
@@ -614,3 +650,18 @@ Faithful Notion database anatomy on the Apple system-sans base (`src/pages/IdeaT
 - 📍 stats as gallery-view cards (bold sans values); 🌱 Idea Mode as a Notion callout block (emoji left, `#f6f6f4` bg).
 - Coral appears only where Braino himself does: LIVE pill and the live mic. Everything else is Notion neutrals + pastels.
 - All content is data arrays at the top of the TSX (`HOMEWORK`, `IDEAS`, `STATS`) — the page is the database.
+
+---
+
+## 18. Browser Notch v1.1 — conversational + recording surfaces (extension)
+
+The extension notch (`extension/content.js`, shadow DOM under `#__sb_notch_v1_host__`) now owns BOTH sides of the conversation and the recorder, ported from the Mac's c057f08 notch work but kept in Braino's coral/warm-cream language (the Mac stays dynamic-island black).
+
+- **Answer surfaces (short/long) — measured, not fixed.** Heights come from the rendered copy via `--sb-answer-short-height` / `--sb-answer-long-height`; re-measured on the Mac's refit beats `[140, 320, 480]ms` + `document.fonts.ready`. Answers ride a FASTER transition than the shell (width 420ms / height 280ms vs the 1050ms signature ease) so speech never outruns geometry. Height vars are cleared on every exit (`__sbClearNotchAnswerSurface`) — a stale var resizing the next turn is the Mac height-leak bug.
+- **Karaoke.** Plain-text answers render as `.sb-aw` word spans: unspoken 30% ink, spoken 78% ink, live word coral `#c9544a` (liquid theme: 34% / 92% white, live `#ff9a91`). Highlight is driven by the REAL Fish audio element per sentence (`__sbNotchKaraoke.attachSentence`), same element as the mouth — buffering pauses both. Streaming (fast-path) answers append words live via `__sbNotchAnswerStream*` and re-measure on sentence boundaries only.
+- **Classification** is the Mac's: 100-char short/long boundary, markdown stripped for the speaking surface (`__sbNormalizeNotchAnswer`), spoken answers self-fold after the Mac linger (long 7–15s, short 3.6–6.2s); rich/manual content (lecture notes, delegate HTML) never auto-folds off the wrap-up line (`__sbNotchAnswerManualHold`).
+- **Sticky "You said".** The final transcript caption survives working/thinking (Mac `showsTranscript` fix) and is released when the answer takes over.
+- **Record state** (`data-state=record`, `.panel.record`, `data-phase=ready|live`): translucent warm-dark sheet (NOT a slab — it's up for a whole meeting), pulsing REC dot + mono clock + mode label + coral-gradient Start pill (ready) / red Stop pill (live), current speaker line, last-3 transcript lines, coral-bulleted note tails. Height via `--sb-record-height`. "record" is in every hold list, plus a 1s self-heal reclaims the surface if anything stomps it (browser twin of the Mac Stop-button zone bug).
+- **Mic permission** drops out of the notch as an anchored 380×300 panel (26px radius, coral hairline, 420ms drop / 280ms retract on the notch easing) — same extension-origin iframe underneath; the full-screen dimmed modal remains only as the no-notch fallback. `mic-permission.html` itself: coral-gradient sonar mic disc, "Braino needs your microphone", pill CTA.
+- **Boot greeting** (once per browser session): wake chime (E5→B5 sines), greeting card, spoken `"{Good evening}, {name}. Everything is ready."`, then the mascot steps out under the notch, WAVES (roam pose now drives the arm), says "Press Control or Command twice to talk to me," and folds back in. Cameo never persists roam state.
+- **Roam** wanders a ~35% home box (`__sbRoamFenceX/Y` fence TARGETS, never live position — no teleports); drag the mascot to move home (drop = wave), tap still opens the ask panel. Menu: Team removed; Lecture/Meeting land on the record surface, not the input panel.

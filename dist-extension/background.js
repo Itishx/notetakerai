@@ -1055,7 +1055,44 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   }
 });
 
+// The spoken boot greeting fires once per BROWSER session, but content.js runs in
+// every tab. The in-memory flag makes the check-and-set atomic within one service
+// worker lifetime; chrome.storage.session (cleared on browser restart, survives MV3
+// worker restarts) carries the claim across worker restarts.
+let bgBootGreetingClaimed = false;
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.action === "claimBootGreeting") {
+    // A claimant whose audio never played (autoplay block at real browser boot)
+    // hands the claim back so a later, gesture-blessed page load can greet.
+    if (message.release) {
+      bgBootGreetingClaimed = false;
+      try { chrome.storage.session.remove("sbBootGreetedAt").catch(() => {}); } catch (_) {}
+      sendResponse({ ok: true });
+      return false;
+    }
+    if (bgBootGreetingClaimed) { sendResponse({ granted: false }); return false; }
+    bgBootGreetingClaimed = true;
+    chrome.storage.session.get("sbBootGreetedAt").then((v) => {
+      if (v && v.sbBootGreetedAt) { sendResponse({ granted: false }); return; }
+      return chrome.storage.session.set({ sbBootGreetedAt: Date.now() }).then(() => sendResponse({ granted: true }));
+    }).catch(() => sendResponse({ granted: true }));
+    return true;
+  }
+  if (message.action === "bgSaveNote") {
+    (async () => {
+      const out = await bgPostSaveNote({
+        title: message.title,
+        transcript: message.transcript,
+        structuredNotes: message.structuredNotes,
+        useCase: message.useCase,
+        sourceUrl: sender?.tab?.url || "",
+        sourceTitle: sender?.tab?.title || "",
+      }).catch((e) => ({ ok: false, error: String(e?.message || e || "save_failed") }));
+      sendResponse(out);
+    })();
+    return true;
+  }
   if (message.action === "sbGetSenderTabId") {
     sendResponse({ ok: true, tabId: sender?.tab?.id || null });
     return false;
@@ -3515,33 +3552,48 @@ function bgPushSpotifyState(tabId, state, options = {}) {
   });
 }
 
+// One writer for the in-house `notes` table (the dashboard reads it). Delegate
+// results, lecture notes and meeting notes all land here — Notion is retired as
+// the notes destination.
+async function bgPostSaveNote({ title, transcript, structuredNotes, useCase, sourceUrl, sourceTitle }) {
+  const stored = await new Promise(r => chrome.storage.local.get(["authToken"], r));
+  if (!stored.authToken) return { ok: false, error: "not_signed_in" };
+  const res = await fetch(`${BG_API_BASE}/save-note`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${stored.authToken}`,
+      apikey: BG_SUPABASE_ANON_KEY,
+    },
+    body: JSON.stringify({
+      action: "save",
+      session_id: crypto.randomUUID(),
+      title: String(title || "Notes").slice(0, 120),
+      transcript: String(transcript || "").slice(0, 60000),
+      structured_notes: String(structuredNotes || "").slice(0, 60000),
+      source_url: sourceUrl || "",
+      source_title: sourceTitle || "",
+      use_case: useCase || "memory",
+    }),
+  });
+  return res.ok ? { ok: true } : { ok: false, error: `save_failed_${res.status}` };
+}
+
 async function bgSaveAgentTask(tabId, task, result) {
   try {
-    const stored = await new Promise(r => chrome.storage.local.get(["authToken"], r));
-    if (!stored.authToken) return;
     let sourceUrl = "", sourceTitle = "";
     try {
       const tab = await new Promise(r => chrome.tabs.get(tabId, r));
       sourceUrl = tab?.url || "";
       sourceTitle = tab?.title || "";
     } catch (_) {}
-    await fetch(`${BG_API_BASE}/save-note`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${stored.authToken}`,
-        apikey: BG_SUPABASE_ANON_KEY,
-      },
-      body: JSON.stringify({
-        action: "save",
-        session_id: crypto.randomUUID(),
-        title: task.length > 120 ? task.slice(0, 117) + "…" : task,
-        transcript: task,
-        structured_notes: result || "Task completed.",
-        source_url: sourceUrl,
-        source_title: sourceTitle,
-        use_case: "agent",
-      }),
+    await bgPostSaveNote({
+      title: task.length > 120 ? task.slice(0, 117) + "…" : task,
+      transcript: task,
+      structuredNotes: result || "Task completed.",
+      useCase: "agent",
+      sourceUrl,
+      sourceTitle,
     });
   } catch (_) {}
 }
@@ -4586,6 +4638,20 @@ function bgRecordSearchDone(state, url) {
   state.facts = state.facts.slice(-30);
 }
 
+// A task whose whole job is one action ("click the trailer", "play that video").
+// No conjunctions, starts with the verb. For these, a landed click IS completion —
+// asking the strategist to reflect afterwards is where "clicked it, then searched
+// for it again" came from.
+function bgIsSingleActionTask(task) {
+  const t = String(task || "").trim().toLowerCase();
+  if (!t || t.length > 120) return false;
+  if (/\b(?:and|then|after that)\b|,/.test(t)) return false;
+  // "play" is deliberately absent: playing implies a subsequent state (audio
+  // actually running) that a single landed click doesn't prove — a click on a
+  // search result or title card would end the run before anything played.
+  return /^(?:please\s+)?(?:can you\s+|could you\s+|would you\s+)?(?:click|press|tap|select|choose)\b/.test(t);
+}
+
 async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {}, onProgress, onFinal, shouldStop, skipFastPath = false, synth: passedSynth = null }) {
   let currentTabId = tabId;
   bgDelegateRunInfo = { tabId: currentTabId, at: Date.now() };
@@ -4807,6 +4873,17 @@ async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {
           url: "",
         });
         if (verify && verify.complete === false) {
+          state.verifyRejectCount = (state.verifyRejectCount || 0) + 1;
+          // Two rejected self-checks means the strategist and the verifier disagree
+          // about what "done" looks like. Continuing past that point is where the
+          // re-search loops came from — accept with a hedge instead of grinding on
+          // and firing more queries at a task that was probably already finished.
+          if (state.verifyRejectCount >= 2) {
+            BrainoTaskState.markActiveSubgoalDone(state);
+            const hedged = "Done, as far as I can tell. If something looks off, tell me what's missing.";
+            onFinal?.(hedged);
+            return { ok: true, message: hedged, state };
+          }
           const note = `Self-check: not done yet — ${verify.reason || "the page does not yet prove the task is complete"}.`;
           state.facts.push({ key: `self_check:${state.facts.length + 1}`, value: note, source: "verifier" });
           state.facts = state.facts.slice(-30);
@@ -4982,6 +5059,26 @@ async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {
     // Post-action check too (the per-iteration check at the loop top catches races that
     // resolve later): a search is done ONLY when its results page is actually up.
     if (!result?.error) bgRecordSearchDone(state, newObs?.url);
+    // A successful navigation is a new stage of the task — a verifier disagreement
+    // from an earlier page shouldn't count against a later, different done-claim.
+    if (!result?.error && action.type === "navigate") state.verifyRejectCount = 0;
+    // Single-action completion: for "click/play X" the landed click IS the task.
+    // Require the clicked element's description to share a content keyword with
+    // the task (so a cookie-banner click on the way never ends the run early).
+    if (!result?.error && action.type === "click" && bgIsSingleActionTask(task)) {
+      const desc = String(bgDescribeDelegateAction(action, obs) || "").toLowerCase();
+      const kw = String(task).toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/)
+        .filter((w) => w.length > 3 && !["click", "press", "play", "open", "select", "choose",
+          "please", "video", "button", "link", "this", "that", "screen", "could", "would"].includes(w));
+      // Content keywords are REQUIRED: with none ("click that"), any successful
+      // click — including a cookie-banner dismissal en route — would end the run.
+      if (kw.length > 0 && kw.some((w) => desc.includes(w))) {
+        BrainoTaskState.markActiveSubgoalDone(state);
+        const msg = "Done.";
+        onFinal?.(msg);
+        return { ok: true, message: msg, state };
+      }
+    }
     // Repeated-action breaker (general): reading/scrolling the SAME page over and over
     // yields nothing new — the interactive elements are ALREADY in every observation.
     // The atomic-habits run read the results page 11 times insisting it "couldn't see

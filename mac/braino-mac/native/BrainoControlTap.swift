@@ -46,7 +46,12 @@ final class BrainoControlTap {
       return
     }
 
-    let mask = CGEventMask((1 << CGEventType.flagsChanged.rawValue) | (1 << CGEventType.keyDown.rawValue))
+    let watched: [CGEventType] = [
+      .flagsChanged, .keyDown,
+      .leftMouseDown, .rightMouseDown, .otherMouseDown, .scrollWheel,
+    ]
+    var mask: CGEventMask = 0
+    for type in watched { mask |= CGEventMask(1) << CGEventMask(type.rawValue) }
     let refcon = UnsafeMutableRawPointer(Unmanaged.passUnretained(self).toOpaque())
     guard let tap = CGEvent.tapCreate(
       tap: .cgSessionEventTap,
@@ -76,6 +81,15 @@ final class BrainoControlTap {
   private func handle(_ type: CGEventType, _ event: CGEvent) {
     if type == .keyDown {
       handleKeyDown(event)
+      return
+    }
+    if type == .leftMouseDown || type == .rightMouseDown || type == .otherMouseDown || type == .scrollWheel {
+      // Shift+click / Cmd+click / Option+scroll is pointing, not a gesture:
+      // poison any held modifier tap so ordinary mouse work never counts
+      // toward a double-tap.
+      if commandIsDown { commandTapPoisoned = true }
+      if optionIsDown { optionTapPoisoned = true }
+      if shiftIsDown { shiftTapPoisoned = true }
       return
     }
 
@@ -196,7 +210,8 @@ final class BrainoControlTap {
       }
       return Unmanaged.passUnretained(event)
     }
-    guard type == .flagsChanged || type == .keyDown else {
+    guard type == .flagsChanged || type == .keyDown || type == .leftMouseDown
+      || type == .rightMouseDown || type == .otherMouseDown || type == .scrollWheel else {
       return Unmanaged.passUnretained(event)
     }
     owner.handle(type, event)

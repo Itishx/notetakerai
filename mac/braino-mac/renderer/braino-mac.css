@@ -542,9 +542,75 @@ body {
   overflow: visible;
 }
 
+/* Music no longer shows the dancer: the island is a Dynamic Island now-playing
+   surface — artwork on the left wing, a live EQ on the right wing, the track
+   title in the chin. The dancer rig stays mounted for other theatrics. */
 #notch-face.music .nf-dancer {
+  display: none;
+}
+
+#notch-face .nf-music-mini {
+  display: none;
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+}
+
+#notch-face.music .nf-music-mini {
   display: block;
 }
+
+#notch-face .nf-mm-art {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.45);
+  background: #1c1c1e center/cover no-repeat;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+}
+
+#notch-face .nf-mm-art.has-art {
+  background-image: var(--nf-art);
+}
+
+#notch-face .nf-mm-art.has-art svg { display: none; }
+
+/* Right wing: the EQ breathes in the same hue the light show is cycling, so
+   the bars and the glow read as one instrument. */
+#notch-face .nf-mm-eq {
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: flex-end;
+  gap: 2.5px;
+  height: 18px;
+}
+
+#notch-face .nf-mm-eq i {
+  width: 2.5px;
+  border-radius: 2px;
+  background: hsl(var(--music-hue, 16) 85% 68%);
+  box-shadow: 0 0 5px hsla(var(--music-hue, 16), 85%, 68%, 0.55);
+  transform-origin: 50% 100%;
+  animation: nfBars 0.72s ease-in-out infinite;
+}
+
+#notch-face .nf-mm-eq i:nth-child(1) { height: 7px; }
+#notch-face .nf-mm-eq i:nth-child(2) { height: 12px; animation-delay: 0.11s; animation-duration: 0.6s; }
+#notch-face .nf-mm-eq i:nth-child(3) { height: 16px; animation-delay: 0.22s; }
+#notch-face .nf-mm-eq i:nth-child(4) { height: 10px; animation-delay: 0.33s; animation-duration: 0.8s; }
+#notch-face .nf-mm-eq i:nth-child(5) { height: 6px; animation-delay: 0.44s; animation-duration: 0.64s; }
 
 /* Busy (mission control) and music islands: modest stretch, ticker visible. */
 /* ── Thinking island (cowork tasks): the dynamic-island thinking flow. A
@@ -994,6 +1060,29 @@ body {
 @keyframes nfIslandBreath {
   0%, 100% { box-shadow: 0 0 12px rgba(232, 120, 110, 0.16), 0 0 26px rgba(232, 120, 110, 0.07); }
   50% { box-shadow: 0 0 22px rgba(232, 120, 110, 0.34), 0 0 46px rgba(243, 154, 66, 0.14); }
+}
+
+/* Collapsed music island: width rides the MEASURED housing (+46px wings each
+   side) so the artwork and EQ always sit beside the physical notch, exactly
+   like the iPhone island flanks the camera — a fixed 260px left the wings
+   uneven on wider housings. */
+#notch-face.music .nf-pill {
+  width: calc(var(--nf-notch-w, 190px) + 92px);
+}
+
+/* The chin title drops the mono/uppercase ticker dress for now-playing: SF
+   Pro, sentence case, clear of both wings so the marquee never rides under
+   the artwork. */
+#notch-face.music #nf-status {
+  left: 46px;
+  right: 46px;
+  bottom: 5px;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  color: rgba(255, 255, 255, 0.85);
 }
 
 /* Music light show: box-shadow is driven live in JS (--music-hue/--music-flash),
@@ -3927,4 +4016,232 @@ body {
 @media (prefers-reduced-motion: reduce) {
   #notch-face .nf-meeting-rec i,
   #notch-face.nf-meeting-voiced .nf-meeting-wave i { animation: none; }
+}
+
+/* ══════════════ Music island, expanded: the full player ══════════════
+   Hover the collapsed music island → the pill itself grows out of the notch
+   into a Dynamic Island player (artwork + title/artist + live progress +
+   transport). No separate sheet: the same black pill morphs on the base
+   spring curve, so collapsed → expanded reads as one continuous object.
+   This block lives at the END of the file on purpose: it must out-order the
+   .music sizing rules and the .no-notch radius override above. */
+
+#notch-face.nf-music-open .nf-pill {
+  width: min(400px, calc(100vw - 32px));
+  height: calc(var(--nf-notch-h) + 162px);
+  border-radius: 0 0 34px 34px;
+}
+
+#notch-face.no-notch.nf-music-open .nf-pill {
+  border-radius: 30px;
+}
+
+/* The collapsed dress folds away while the player is up. The surface paints
+   its own black (below) so nothing bleeds through, but the residents that
+   sit ABOVE the surface's z-order are hidden explicitly — the FOUNDRY
+   identity letters were ghosting through the first cut of this. */
+#notch-face.nf-music-open .nf-music-mini,
+#notch-face.nf-music-open .nf-dancer,
+#notch-face.nf-music-open .nf-iomi-identity,
+#notch-face.nf-music-open .nf-iomi-awake-eyes { display: none; }
+#notch-face.nf-music-open #nf-status,
+#notch-face.nf-music-open #nf-status-2 { opacity: 0 !important; }
+#notch-face.nf-music-open .nf-band { opacity: 0; }
+
+/* Mic-live dot and the volume HUD must survive above the opaque surface. */
+#notch-face.nf-music-open .nf-privacy { z-index: 12; }
+#notch-face.nf-music-open .nf-volume { z-index: 12; }
+
+#notch-face .nf-music-surface {
+  position: absolute;
+  z-index: 11;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  padding: calc(var(--nf-notch-h) + 12px) 24px 16px;
+  color: #f7f7f5;
+  /* Opaque on purpose: the pill under this still carries folds, identity
+     chrome and eyes — the player is a clean black stage, not a veil. */
+  background: #000;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateY(-8px);
+  transition:
+    opacity 240ms ease 120ms,
+    transform 620ms cubic-bezier(.22, 1, .36, 1) 60ms,
+    visibility 0s linear 700ms;
+}
+
+#notch-face.nf-music-open .nf-music-surface {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: none;
+  transition-delay: 100ms, 40ms, 0ms;
+}
+
+#notch-face .nf-ms-main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+#notch-face .nf-ms-art {
+  flex: none;
+  width: 58px;
+  height: 58px;
+  border-radius: 13px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.4);
+  background: #1c1c1e center/cover no-repeat;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+}
+
+#notch-face .nf-ms-art.has-art { background-image: var(--nf-art); }
+#notch-face .nf-ms-art.has-art svg { display: none; }
+
+#notch-face .nf-ms-meta {
+  flex: 1;
+  min-width: 0;
+}
+
+#notch-face .nf-ms-track {
+  font-family: "Braino SF Pro Display", "SF Pro Display", -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#notch-face .nf-ms-artist {
+  margin-top: 3px;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+  font-size: 15px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.55);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Waveform badge (reference): white, riding the TITLE line — not vertically
+   centred on the artwork — grooving while playing, resting low when paused. */
+#notch-face .nf-ms-eq {
+  flex: none;
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 18px;
+  margin-left: 8px;
+  align-self: flex-start;
+  margin-top: 6px;
+}
+
+#notch-face .nf-ms-eq i {
+  width: 3.5px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.92);
+  transform: scaleY(0.35);
+  transform-origin: 50% 100%;
+}
+
+#notch-face .nf-ms-eq i:nth-child(1) { height: 10px; }
+#notch-face .nf-ms-eq i:nth-child(2) { height: 18px; }
+#notch-face .nf-ms-eq i:nth-child(3) { height: 13px; }
+#notch-face .nf-ms-eq i:nth-child(4) { height: 7px; }
+
+#notch-face .nf-music-surface.playing .nf-ms-eq i {
+  transform: none;
+  animation: nfBars 0.72s ease-in-out infinite;
+}
+
+#notch-face .nf-music-surface.playing .nf-ms-eq i:nth-child(2) { animation-delay: 0.11s; animation-duration: 0.6s; }
+#notch-face .nf-music-surface.playing .nf-ms-eq i:nth-child(3) { animation-delay: 0.22s; }
+#notch-face .nf-music-surface.playing .nf-ms-eq i:nth-child(4) { animation-delay: 0.33s; animation-duration: 0.8s; }
+
+#notch-face .nf-ms-progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+#notch-face .nf-ms-progress span {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+  font-size: 12.5px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, 0.6);
+  min-width: 34px;
+}
+
+#notch-face .nf-ms-elapsed { text-align: left; }
+#notch-face .nf-ms-remaining { text-align: right; }
+
+#notch-face .nf-ms-bar {
+  flex: 1;
+  height: 4.5px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.16);
+  overflow: hidden;
+}
+
+#notch-face .nf-ms-bar i {
+  display: block;
+  height: 100%;
+  width: 0%;
+  border-radius: 2px;
+  background: #fff;
+  transition: width 0.5s linear;
+}
+
+/* No readable duration (YouTube tab audio): keep the row's height so the
+   layout doesn't jump, just blank it. */
+#notch-face .nf-music-surface.no-bar .nf-ms-progress { visibility: hidden; }
+
+#notch-face .nf-ms-ctl {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 46px;
+  margin-top: 10px;
+}
+
+#notch-face .nf-music-surface.no-ctl .nf-ms-ctl { visibility: hidden; }
+
+#notch-face .nf-ms-btn {
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.12s ease;
+}
+
+#notch-face .nf-ms-btn svg { width: 26px; height: 26px; }
+#notch-face .nf-ms-play svg { width: 30px; height: 30px; }
+#notch-face .nf-ms-btn:hover { background: rgba(255, 255, 255, 0.12); }
+#notch-face .nf-ms-btn:active { transform: scale(0.92); }
+
+#notch-face .nf-ms-ic-pause { display: none; }
+#notch-face .nf-music-surface.playing .nf-ms-ic-play { display: none; }
+#notch-face .nf-music-surface.playing .nf-ms-ic-pause { display: block; }
+
+@media (prefers-reduced-motion: reduce) {
+  #notch-face .nf-mm-eq i,
+  #notch-face .nf-music-surface.playing .nf-ms-eq i { animation: none; }
 }

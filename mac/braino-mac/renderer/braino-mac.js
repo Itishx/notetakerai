@@ -2549,6 +2549,7 @@ function updateNotchFace() {
   notchFace.classList.toggle("alarming", visible && Boolean(nfAlarmRinging));
   notchFace.classList.toggle("live", visible && live);
   notchFace.classList.toggle("music", visible && music);
+  if (visible && music) nfMusicNoteActive(now);
   notchFace.classList.toggle("launch-now-playing", visible && launchDemoNowPlaying);
   notchFace.classList.toggle("busy", visible && walkerHome && processingActive);
   notchFace.classList.remove("nf-processing-caption");
@@ -7965,7 +7966,7 @@ async function skitSpeak(line, options = {}) {
 
 /* One TTS asset removes the network gap between scripted sentences. The
    visible answer still advances line by line from the shared audio playhead. */
-async function speakLaunchDemoSequence(lines, shouldCancel = () => false) {
+async function speakLaunchDemoSequence(lines, shouldCancel = () => false, options = {}) {
   const sequence = lines.map((line) => String(line || "").trim()).filter(Boolean);
   if (!sequence.length || shouldCancel()) return false;
   const fullText = sequence.join(" ");
@@ -7982,9 +7983,14 @@ async function speakLaunchDemoSequence(lines, shouldCancel = () => false) {
   let url = null;
   let captionRaf = 0;
   try {
-    result = await fetchTtsChunk(fullText, generation);
-    if (!result?.response || generation !== speechGeneration || shouldCancel()) return false;
-    const blob = await result.response.blob();
+    // A caller with the whole audio already in hand (story skit prefetch)
+    // skips the generate-then-download wait entirely — tap to voice is instant.
+    let blob = options.prefetchedBlob || null;
+    if (!blob) {
+      result = await fetchTtsChunk(fullText, generation);
+      if (!result?.response || generation !== speechGeneration || shouldCancel()) return false;
+      blob = await result.response.blob();
+    }
     if (generation !== speechGeneration || shouldCancel()) return false;
     url = URL.createObjectURL(blob);
     audio = new Audio(url);
@@ -8335,6 +8341,136 @@ window.brainoMac.onLaunchDemoStart?.(() => {
   if (launchDemoActive) void stopLaunchDemo();
   else void runLaunchDemo();
 });
+
+// ── STORY SKIT (TEMPORARY — launch-countdown Instagram story) ──────────────
+// Single bare Shift tap: Braino delivers the thank-you script from the notch
+// as one continuous audio, then the main process rick-rolls a browser tab.
+// The script lives in main.cjs (STORY_SKIT.lines) and arrives in the payload.
+let storySkitActive = false;
+let storySkitCancelRequested = false;
+let storySkitRestoreHome = false;
+let storySkitAudioBlob = null;
+let storySkitHahaBlob = null;
+let storySkitHahaText = "Haha.";
+let storySkitPrefetchPromise = null;
+
+// Fish needs ~20s to generate the full script as one file — far too long to sit
+// silent after the tap. Generate it ONCE (kicked at boot) and keep the blob;
+// every take then starts instantly. The closing "Haha" is prefetched the same
+// way so it lands right as the tab closes. Deliberately no persona/her
+// referenceId: the thank-you is Braino himself.
+function prefetchStorySkitAudio() {
+  if (storySkitAudioBlob) return Promise.resolve(storySkitAudioBlob);
+  if (storySkitPrefetchPromise) return storySkitPrefetchPromise;
+  storySkitPrefetchPromise = (async () => {
+    try {
+      const config = await window.brainoMac.storySkitConfig?.();
+      const sequence = (Array.isArray(config?.lines) ? config.lines : [])
+        .map((line) => String(line || "").trim()).filter(Boolean);
+      if (!config?.ok || !sequence.length) return null;
+      const tts = await getTtsConfig();
+      if (!tts?.ok || !tts.endpoint || !tts.anonKey) return null;
+      const fetchBlob = async (text) => {
+        const response = await fetch(tts.endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", apikey: tts.anonKey },
+          body: JSON.stringify({ text: stripSpeechText(text), latency: "normal" }),
+        });
+        if (!response.ok) throw await readTtsError(response);
+        return await response.blob();
+      };
+      storySkitAudioBlob = await fetchBlob(sequence.join(" "));
+      logRenderer("story_skit.prefetch.ready", { bytes: storySkitAudioBlob.size });
+      if (config.haha) storySkitHahaText = String(config.haha);
+      if (!storySkitHahaBlob) {
+        storySkitHahaBlob = await fetchBlob(storySkitHahaText).catch(() => null);
+      }
+      return storySkitAudioBlob;
+    } catch (error) {
+      logRenderer("story_skit.prefetch.failed", { error: errorForLog(error) });
+      return null;
+    } finally {
+      storySkitPrefetchPromise = null;
+    }
+  })();
+  return storySkitPrefetchPromise;
+}
+
+async function runStorySkit(lines) {
+  if (storySkitActive || skitRunning || launchDemoActive) return;
+  const sequence = (Array.isArray(lines) ? lines : []).map((line) => String(line || "").trim()).filter(Boolean);
+  if (!sequence.length) return;
+  storySkitActive = true;
+  storySkitCancelRequested = false;
+  storySkitRestoreHome = walkerHome;
+  skitRunning = true;
+  try {
+    logRenderer("story_skit.start", { lines: sequence.length });
+    try { stopRealtimeVoice(); } catch (_) {}
+
+    // Braino speaks from wherever he already is, same as the launch film.
+    skitJustCompleted = true;
+    if (walkerHome) await setWalkerHomeState(false);
+    // Cached → instant. In flight → join it. Failed/never ran → this fetch is
+    // no slower than fetching inline, and it seeds the cache for retakes.
+    const prefetched = storySkitAudioBlob || await prefetchStorySkitAudio();
+    if (storySkitCancelRequested) return;
+    const spokeContinuously = await speakLaunchDemoSequence(
+      sequence,
+      () => storySkitCancelRequested,
+      prefetched ? { prefetchedBlob: prefetched } : {},
+    );
+    if (!spokeContinuously && !storySkitCancelRequested) {
+      for (const line of sequence) {
+        if (storySkitCancelRequested) return;
+        await skitSpeak(line, {
+          replyCaption: false,
+          notchRich: true,
+          shouldCancel: () => storySkitCancelRequested,
+        });
+      }
+    }
+    if (storySkitCancelRequested) return;
+
+    clearNotchAnswer({ invalidate: true });
+    // skitJustCompleted stays true here, so the roam branch never moves him: he
+    // stands exactly where he spoke, watching, while the tab opens, plays ~5s
+    // and closes itself (storySkitOpen resolves only after the close).
+    const opened = await window.brainoMac.storySkitOpen?.();
+    if (storySkitCancelRequested) return;
+    if (!opened?.ok) {
+      logRenderer("story_skit.open_failed", {});
+      return;
+    }
+    await speakLaunchDemoSequence(
+      [storySkitHahaText],
+      () => storySkitCancelRequested,
+      storySkitHahaBlob ? { prefetchedBlob: storySkitHahaBlob } : {},
+    );
+    clearNotchAnswer({ invalidate: true });
+    logRenderer("story_skit.done", {});
+  } finally {
+    skitRunning = false;
+    skitJustCompleted = false;
+    storySkitActive = false;
+    if (storySkitRestoreHome && !walkerHome) await setWalkerHomeState(true);
+    storySkitRestoreHome = false;
+    updateNotchFace();
+  }
+}
+
+window.brainoMac.onStorySkitStart?.((payload) => {
+  if (storySkitActive) {
+    // Second tap while he is talking = cut the take.
+    storySkitCancelRequested = true;
+    stopSpeechOutput();
+    clearNotchAnswer({ invalidate: true });
+    return;
+  }
+  void runStorySkit(payload?.lines);
+});
+// Warm the skit audio right after boot settles so the first tap is instant.
+window.setTimeout(() => { void prefetchStorySkitAudio(); }, 4000);
 window.brainoMac.onHerToggle?.(() => toggleHerMode());
 window.brainoMac.onPointAt?.((payload) => { void pointAtScreen(payload); });
 let allOpenTabs = [];
@@ -8587,13 +8723,23 @@ let nfLowBatterySpoken = false;
 let nfVolHideTimer = 0;
 let nfVolPending = 0;
 let nfVolBusy = false;
+// Music island (Dynamic Island now-playing): collapsed art+EQ live in
+// .nf-music-mini, the hover-expanded player in .nf-music-surface. Both are
+// separate from the parked legacy tray.
+const nfMusicMiniEl = notchFace?.querySelector(".nf-music-mini");
+const nfMusicSurfaceEl = notchFace?.querySelector(".nf-music-surface");
+let nfMusicOpen = false;
+let nfMusicOpenTimer = 0;
+let nfMusicCloseTimer = 0;
+let nfMusicLastActiveAt = 0;
+let nfMusicMiniArt = null;
 
 function nfPointInNotchZone(x, y) {
   if (!notchFace?.classList.contains("on") || herMode || !nfPill) return false;
   const rect = nfPill.getBoundingClientRect();
   // Collapsed: the pill itself, nearly edge-to-edge — a padded zone was
   // stealing clicks from Chrome tabs that sit beside/below the housing.
-  const pad = nfExpanded || nfDropDepth > 0 ? 26 : 4;
+  const pad = nfExpanded || nfMusicOpen || nfDropDepth > 0 ? 26 : 4;
   return x >= rect.left - pad && x <= rect.right + pad && y <= rect.bottom + pad;
 }
 
@@ -8638,6 +8784,12 @@ function nfTrayCollapse() {
 // Called from updateNotchFace on every state change: keeps the tray honest
 // (action button states, timers, calendar) and folds it when the face hides.
 function nfTraySyncFromState(visible) {
+  // Fold the music player the moment the island stops being music's: hidden
+  // face, her mode, or a louder state (voice, REC, alarm…) taking the pill.
+  // A plain pause does NOT fold it — that's the pause→hover→play path.
+  if (nfMusicOpen && (!visible || herMode || (!notchFace?.classList.contains("music") && !nfIslandQuietForMusic()))) {
+    nfMusicCollapsePlayer();
+  }
   if (!NF_LEGACY_TRAY_VISIBLE) {
     window.clearTimeout(nfExpandTimer);
     window.clearTimeout(nfCollapseTimer);
@@ -8660,10 +8812,18 @@ window.brainoMac.onNotchZone?.((payload) => {
     if (!herMode) setMousePassthrough(false);
     window.clearTimeout(nfCollapseTimer);
     nfCollapseTimer = 0;
+    window.clearTimeout(nfMusicCloseTimer);
+    nfMusicCloseTimer = 0;
     if (!NF_LEGACY_TRAY_VISIBLE) {
       window.clearTimeout(nfExpandTimer);
       nfExpandTimer = 0;
       if (nfExpanded) nfTrayCollapse();
+      if (!nfMusicOpen && !nfMusicOpenTimer && nfMusicHoverEligible()) {
+        nfMusicOpenTimer = window.setTimeout(() => {
+          nfMusicOpenTimer = 0;
+          if (nfZoneInsideMain && nfMusicHoverEligible()) nfMusicExpandPlayer();
+        }, 240);
+      }
       return;
     }
     if (!nfExpanded && !nfExpandTimer) {
@@ -8675,6 +8835,14 @@ window.brainoMac.onNotchZone?.((payload) => {
   } else {
     window.clearTimeout(nfExpandTimer);
     nfExpandTimer = 0;
+    window.clearTimeout(nfMusicOpenTimer);
+    nfMusicOpenTimer = 0;
+    if (nfMusicOpen && !nfMusicCloseTimer) {
+      nfMusicCloseTimer = window.setTimeout(() => {
+        nfMusicCloseTimer = 0;
+        if (!nfZoneInsideMain) nfMusicCollapsePlayer();
+      }, 380);
+    }
     if (nfDropDepth > 0) {
       nfDropDepth = 0;
       notchFace?.classList.remove("dropping");
@@ -8702,6 +8870,9 @@ document.addEventListener("click", (event) => {
     nfStopAlarmRing("tap");
     return;
   }
+  // Open music player: the surface owns every click (transport buttons keep
+  // their own handlers) — a stray tap must not flip a voice session on.
+  if (nfMusicOpen || event.target.closest(".nf-music-surface")) return;
   if (nfExpanded && nfPill) {
     const rect = nfPill.getBoundingClientRect();
     const bandBottom = rect.top + (parseFloat(getComputedStyle(notchFace).getPropertyValue("--nf-notch-h")) || 33) + 34;
@@ -8755,6 +8926,8 @@ window.brainoMac.onNowPlaying?.((payload) => {
   nfNowPlaying = next;
   nfNowPlayingAt = Date.now();
   if (changed && nfExpanded) nfRenderNowPlaying();
+  nfSyncMusicMini();
+  if (changed && nfMusicOpen) nfRenderMusicSurface();
 });
 
 function nfRenderNowPlaying() {
@@ -8795,6 +8968,7 @@ function nfTickProgress() {
 
 window.setInterval(() => {
   if (nfExpanded) nfTickProgress();
+  if (nfMusicOpen) nfMusicTickProgress();
 }, 1000);
 
 for (const [selector, action] of [[".nf-prev", "previous"], [".nf-play", "toggle"], [".nf-next", "next"]]) {
@@ -8806,6 +8980,148 @@ for (const [selector, action] of [[".nf-prev", "previous"], [".nf-play", "toggle
       nfRenderNowPlaying();
     }
     logRenderer("tray.media", { action, source });
+    void window.brainoMac.mediaControl?.({ action, source });
+  });
+}
+
+// ══════════ Music island: Dynamic Island now-playing ══════════
+// Collapsed .music = artwork left wing + EQ right wing + title in the chin.
+// Hover while music owns the island → the SAME pill morphs into the full
+// player (art, title/artist, live progress, transport). One object, one
+// spring — no separate sheet.
+
+// The poll feed wins (artwork, progress, control); the theatrics line from
+// the music watcher backfills track/artist so the player is never blank in
+// the window before the first poll lands.
+function nfMusicData() {
+  if (nfNowPlaying?.track) return nfNowPlaying;
+  if (musicTheatricsReady && lastMusicInfo.track) {
+    return {
+      source: lastMusicInfo.source || "",
+      track: lastMusicInfo.track,
+      artist: lastMusicInfo.artist || "",
+      playing: true,
+      artworkUrl: "",
+      positionSec: null,
+      durationSec: null,
+      canControl: lastMusicInfo.source !== "youtube",
+    };
+  }
+  return null;
+}
+
+function nfSyncMusicMini() {
+  const art = nfMusicMiniEl?.querySelector(".nf-mm-art");
+  if (!art) return;
+  const url = nfMusicData()?.artworkUrl || "";
+  if (url === nfMusicMiniArt) return;
+  nfMusicMiniArt = url;
+  if (url) {
+    art.style.setProperty("--nf-art", `url("${url}")`);
+    art.classList.add("has-art");
+  } else {
+    art.classList.remove("has-art");
+    art.style.removeProperty("--nf-art");
+  }
+}
+
+// updateNotchFace stamps this every frame music owns the island; the pause
+// grace window below is measured from it.
+function nfMusicNoteActive(at) {
+  nfMusicLastActiveAt = at || Date.now();
+  nfSyncMusicMini();
+}
+
+function nfIslandQuietForMusic() {
+  if (!notchFace) return false;
+  return !["listen", "speak", "busy", "live", "captioning", "alarming", "nf-thinking", "nf-yap-open", "nf-meeting-open", "nf-inline-open", "nf-answer-open", "nf-answer-long", "nf-iomi-booting", "nf-iomi-expanded", "dropping", "nf-auth", "nf-greet", "expanded"].some((c) => notchFace.classList.contains(c));
+}
+
+function nfMusicHoverEligible() {
+  if (herMode || !notchFace?.classList.contains("on")) return false;
+  if (notchFace.classList.contains("music")) return true;
+  // Pause grace: for a few minutes after the music stops the player stays
+  // one hover away, so pause → hover → play needs no voice round-trip.
+  const d = nfNowPlaying;
+  return Boolean(
+    d?.track && d.canControl && !d.playing
+    && Date.now() - nfMusicLastActiveAt < 3 * 60 * 1000
+    && nfIslandQuietForMusic(),
+  );
+}
+
+function nfMusicExpandPlayer() {
+  if (nfMusicOpen || herMode || !notchFace?.classList.contains("on")) return;
+  nfMusicOpen = true;
+  notchFace.classList.add("nf-music-open");
+  window.brainoMac.setNotchZone?.({ expanded: true, width: 440, height: 240 });
+  nfRenderMusicSurface();
+  logRenderer("music.island.expand", { source: nfMusicData()?.source || "" });
+}
+
+function nfMusicCollapsePlayer() {
+  if (!nfMusicOpen) return;
+  nfMusicOpen = false;
+  notchFace?.classList.remove("nf-music-open");
+  if (!nfExpanded) window.brainoMac.setNotchZone?.({ expanded: false });
+  logRenderer("music.island.collapse", {});
+}
+
+function nfMusicFmtTime(totalSec) {
+  const sec = Math.max(0, Math.round(totalSec));
+  return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, "0")}`;
+}
+
+function nfRenderMusicSurface() {
+  if (!nfMusicSurfaceEl) return;
+  const d = nfMusicData();
+  // Reference design shows artists only — the source label steps in solely
+  // when the metadata has no artist, so the line is never blank.
+  const sourceLabel = d?.source === "spotify" ? "Spotify" : d?.source === "music" ? "Apple Music" : d?.source === "youtube" ? "YouTube" : "";
+  nfMusicSurfaceEl.querySelector(".nf-ms-track").textContent = d?.track || "Nothing playing";
+  nfMusicSurfaceEl.querySelector(".nf-ms-artist").textContent = d ? d.artist || sourceLabel : "";
+  nfMusicSurfaceEl.classList.toggle("playing", Boolean(d?.playing));
+  nfMusicSurfaceEl.classList.toggle("no-ctl", !d?.canControl);
+  nfMusicSurfaceEl.classList.toggle("no-bar", !(d?.durationSec > 0));
+  const art = nfMusicSurfaceEl.querySelector(".nf-ms-art");
+  if (art) {
+    if (d?.artworkUrl) {
+      art.style.setProperty("--nf-art", `url("${d.artworkUrl}")`);
+      art.classList.add("has-art");
+    } else {
+      art.classList.remove("has-art");
+      art.style.removeProperty("--nf-art");
+    }
+  }
+  nfMusicTickProgress();
+}
+
+// Live progress between polls: the last polled position plus wall-clock
+// drift while playing. The next poll (every 6s) re-anchors it.
+function nfMusicTickProgress() {
+  if (!nfMusicSurfaceEl) return;
+  const bar = nfMusicSurfaceEl.querySelector(".nf-ms-bar i");
+  const d = nfMusicData();
+  if (!bar || !(d?.durationSec > 0) || d.positionSec == null) {
+    if (bar) bar.style.width = "0%";
+    return;
+  }
+  const drift = d.playing ? (Date.now() - nfNowPlayingAt) / 1000 : 0;
+  const pos = Math.max(0, Math.min(d.durationSec, d.positionSec + drift));
+  bar.style.width = `${(pos / d.durationSec) * 100}%`;
+  nfMusicSurfaceEl.querySelector(".nf-ms-elapsed").textContent = nfMusicFmtTime(pos);
+  nfMusicSurfaceEl.querySelector(".nf-ms-remaining").textContent = `-${nfMusicFmtTime(d.durationSec - pos)}`;
+}
+
+for (const [selector, action] of [[".nf-ms-prev", "previous"], [".nf-ms-play", "toggle"], [".nf-ms-next", "next"]]) {
+  nfMusicSurfaceEl?.querySelector(selector)?.addEventListener("click", () => {
+    const source = nfMusicData()?.source || "spotify";
+    // Optimistic flip so the button answers instantly; the poll corrects it.
+    if (action === "toggle" && nfNowPlaying) {
+      nfNowPlaying.playing = !nfNowPlaying.playing;
+      nfRenderMusicSurface();
+    }
+    logRenderer("music.island.media", { action, source });
     void window.brainoMac.mediaControl?.({ action, source });
   });
 }

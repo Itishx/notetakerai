@@ -1251,11 +1251,13 @@ return {frontApp, "", windowTitle, windowPositionText, windowSizeText, "", ""} a
       lastContextReadFailLogAt = now;
       const message = String(error?.message || error);
       // -1743 is macOS's "not authorised to send Apple events".
-      /* The friendly "is Automation allowed" wording is produced by the log
-         formatter, not by the error itself — error.message still holds the raw
-         osascript dump. Matching the pretty string meant this never fired.
-         The raw markers are what to test. */
-      const denied = /-1743|not authori[sz]ed|not allowed|osascript/i.test(message);
+      /* Only a genuine authorization error may summon the Settings pane. The
+         previous marker list included the literal word "osascript", which is
+         present in EVERY execFile failure ("Command failed: /usr/bin/osascript
+         …") — so a 3.5s timeout kill while the system was briefly busy read as
+         a denial and randomly threw System Settings in the user's face. A
+         killed child is a timeout by definition, never a denial. */
+      const denied = !error?.killed && /-1743|not authori[sz]ed/i.test(message);
       if (denied) void askForPermission("automation");
       logMac("desktop.context.read_failed", {
         error,
