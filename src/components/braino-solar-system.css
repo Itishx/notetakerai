@@ -1,0 +1,720 @@
+/* ── Braino solar system ────────────────────────────────────────────────────
+   Its own section: a light Apple canvas with a luminous system on it. Braino OS
+   burns at the centre wearing Braino's own brain-fold pattern; the products
+   orbit. Clicking a planet zooms into it — the system scales past the viewer and
+   dissolves while the planet arrives lit from inside.
+
+   Every planet owns one colour, set once here as --p and --p-deep so the orb,
+   its glow, the focus view and the CTA all stay in agreement.
+   ────────────────────────────────────────────────────────────────────────── */
+
+/* This one section is deep space on purpose. A solar system drawn on white does
+   not read as a solar system, and the whole point of the graphic is that the
+   family is one system travelling together. */
+.bss {
+  --bss-far: 0px;
+  --bss-mid: 0px;
+  --bss-near: 0px;
+  --sun: #e8786e;
+  --sun-deep: #b8443a;
+  --bss-ink: #f4f5fa;
+  --bss-ink-soft: #9ba3bd;
+  --bss-ring: rgba(150, 172, 226, 0.22);
+  position: relative;
+  padding: clamp(78px, 10vw, 136px) var(--ap-gutter);
+  color: var(--bss-ink);
+  background: #000;
+  overflow: hidden;
+}
+
+/* A drifting field of dust, so the black is never flat. */
+.bss::before {
+  content: "";
+  position: absolute;
+  inset: -30%;
+  background-image:
+    radial-gradient(1.6px 1.6px at 12% 22%, rgba(255,255,255,.75), transparent 60%),
+    radial-gradient(1.4px 1.4px at 78% 12%, rgba(255,255,255,.55), transparent 60%),
+    radial-gradient(1.7px 1.7px at 34% 68%, rgba(255,255,255,.65), transparent 60%),
+    radial-gradient(1.3px 1.3px at 62% 82%, rgba(255,255,255,.5), transparent 60%),
+    radial-gradient(1.5px 1.5px at 88% 58%, rgba(255,255,255,.6), transparent 60%),
+    radial-gradient(1.2px 1.2px at 22% 44%, rgba(255,255,255,.45), transparent 60%),
+    radial-gradient(1.6px 1.6px at 52% 30%, rgba(255,255,255,.5), transparent 60%),
+    radial-gradient(1.3px 1.3px at 8% 86%, rgba(255,255,255,.45), transparent 60%);
+  background-size: 46% 46%;
+  animation: bssDust 4.5s linear infinite;
+  pointer-events: none;
+}
+
+/* Straight backwards along one axis: the system is heading somewhere, in a
+   line, and the field streams past it. */
+@keyframes bssDust {
+  to { transform: translate3d(-46%, 0, 0); }
+}
+
+/* A second, finer plane at a different speed. One plane reads as a texture;
+   two read as a volume you are moving through. */
+.bss::after {
+  content: "";
+  position: absolute;
+  inset: -30%;
+  background-image:
+    radial-gradient(1px 1px at 18% 34%, rgba(255,255,255,.5), transparent 60%),
+    radial-gradient(1px 1px at 66% 18%, rgba(255,255,255,.4), transparent 60%),
+    radial-gradient(1px 1px at 42% 76%, rgba(255,255,255,.45), transparent 60%),
+    radial-gradient(1px 1px at 84% 62%, rgba(255,255,255,.35), transparent 60%),
+    radial-gradient(1px 1px at 6% 8%, rgba(255,255,255,.4), transparent 60%);
+  background-size: 31% 31%;
+  animation: bssDust 9s linear infinite;
+  pointer-events: none;
+}
+
+.bss-head,
+.bss-stage {
+  position: relative;
+  z-index: 1;
+  max-width: var(--ap-maxw);
+  margin-inline: auto;
+}
+
+.bss-head { max-width: 720px; }
+
+.bss-eyebrow {
+  margin: 0 0 14px;
+  color: #ff9d8f;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.bss-head h2 {
+  margin: 0 0 14px;
+  color: var(--bss-ink);
+  font-size: clamp(36px, 4.6vw, 56px);
+  line-height: 1.05;
+  font-weight: 650;
+  letter-spacing: -0.032em;
+}
+
+.bss-head h2 span { color: var(--bss-ink-soft); }
+
+.bss-sub {
+  max-width: 56ch;
+  margin: 0;
+  color: var(--bss-ink-soft);
+  font-size: clamp(16px, 1.7vw, 19px);
+  line-height: 1.55;
+}
+
+/* ── Stage ── */
+.bss-stage {
+  position: relative;
+  margin-top: clamp(30px, 4vw, 54px);
+  aspect-ratio: 16 / 11;
+  max-height: 660px;
+  container-type: inline-size;
+}
+
+.bss-space { position: absolute; inset: 0; pointer-events: none; }
+
+
+/* Two far-off clouds. Very low contrast on purpose: you should feel them more
+   than see them. */
+.bss-nebula {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(60px);
+  pointer-events: none;
+}
+
+.bss-nebula.n1 {
+  left: -6%;
+  top: -14%;
+  width: 52%;
+  aspect-ratio: 1.4;
+  background: radial-gradient(circle, rgba(86, 116, 224, 0.2), transparent 66%);
+  transform: translate3d(0, var(--bss-far), 0);
+  animation: bssNebula 26s ease-in-out infinite alternate;
+}
+
+.bss-nebula.n2 {
+  right: -10%;
+  bottom: -18%;
+  width: 58%;
+  aspect-ratio: 1.6;
+  background: radial-gradient(circle, rgba(196, 88, 156, 0.16), transparent 66%);
+  transform: translate3d(0, var(--bss-mid), 0);
+  animation: bssNebula 34s ease-in-out infinite alternate-reverse;
+}
+
+@keyframes bssNebula {
+  from { opacity: .55; }
+  to { opacity: 1; }
+}
+
+.bss-glow {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 78%;
+  aspect-ratio: 1;
+  transform: translate(-50%, calc(-50% + var(--bss-far)));
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(232, 120, 110, 0.13), rgba(232, 120, 110, 0.04) 45%, transparent 68%);
+}
+
+.bss-star {
+  position: absolute;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 8px rgba(255,255,255,.8);
+  transform: translateY(var(--bss-far));
+  animation: bssTwinkle 4s ease-in-out infinite, bssStreak 2.8s linear infinite;
+}
+
+/* Far stars barely move and stay dim; near stars rip past and burn brighter.
+   The difference between the layers is the whole illusion of depth. */
+.bss-star.depth-1 { opacity: .45; animation-duration: 4s, 9s; }
+.bss-star.depth-2 { opacity: .7; animation-duration: 4s, 5.2s; }
+.bss-star.depth-3 { opacity: 1; animation-duration: 4s, 2.6s; box-shadow: 0 0 10px rgba(255,255,255,.95); }
+
+@keyframes bssTwinkle {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 1; }
+}
+
+/* ── The camera move ──
+   --zoom-x / --zoom-y are written on click and hold the position of the planet
+   that was chosen. Both the system and the focus view scale about that exact
+   point, on the same curve and duration, so the whole thing is one continuous
+   push forward: the system flies past the viewer while the planet grows out of
+   where it stood. The easing is a long quint-out, which is the settle you feel
+   in an Apple wallpaper zoom — fast off the mark, and a very slow arrival. */
+.bss-system {
+  position: absolute;
+  inset: 0;
+  transform-origin: var(--zoom-x, 50%) var(--zoom-y, 50%);
+  transition:
+    transform 1.15s cubic-bezier(0.62, 0.02, 0.16, 1),
+    opacity 0.8s cubic-bezier(0.5, 0, 0.9, 1);
+}
+
+.bss.is-zoomed .bss-system {
+  transform: scale(4.2);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.bss-rings { position: absolute; inset: 0; }
+
+/* Ring diameters are a share of the stage HEIGHT, not its width: the stage is
+   wider than it is tall, and sizing off the width pushed the outer rings out
+   through the top and bottom of the section. */
+.bss-rings i {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  height: var(--d);
+  width: auto;
+  aspect-ratio: 1;
+  border: 1px solid var(--bss-ring);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 26px rgba(120, 150, 230, .09) inset;
+}
+
+.bss-rings .r1 { --d: 40%; transform: translate(-50%, calc(-50% + var(--bss-near))); }
+.bss-rings .r2 { --d: 58%; transform: translate(-50%, calc(-50% + var(--bss-mid))); }
+.bss-rings .r3 { --d: 74%; transform: translate(-50%, calc(-50% + var(--bss-mid))); }
+.bss-rings .r4 { --d: 90%; border-style: dashed; transform: translate(-50%, calc(-50% + var(--bss-far))); }
+
+/* ── The burning sun ── */
+.bss-sun {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  transform: translate(-50%, calc(-50% + var(--bss-near)));
+}
+
+.bss-sun-core {
+  position: relative;
+  width: clamp(96px, 13cqi, 148px);
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  text-decoration: none;
+}
+
+.bss-corona,
+.bss-flare {
+  position: absolute;
+  inset: -46%;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+/* The heat haze: two offset radial bursts breathing out of phase. */
+.bss-corona {
+  background: radial-gradient(circle, rgba(232, 120, 110, 0.42) 34%, rgba(232, 120, 110, 0.16) 50%, transparent 70%);
+  animation: bssBurn 3.6s ease-in-out infinite;
+}
+
+.bss-flare {
+  background: conic-gradient(from 0deg, transparent 0deg, rgba(255, 176, 120, 0.5) 26deg, transparent 62deg, transparent 150deg, rgba(232, 120, 110, 0.42) 190deg, transparent 232deg, transparent 320deg, rgba(255, 200, 140, 0.4) 344deg, transparent 360deg);
+  filter: blur(11px);
+  animation: bssFlare 14s linear infinite;
+}
+
+.bss-sun-body {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 34% 28%, #ffd9a8 0%, #ffab7d 22%, var(--sun) 52%, var(--sun-deep) 88%);
+  box-shadow:
+    0 0 0 1px rgba(184, 68, 58, 0.35),
+    0 0 46px rgba(232, 120, 110, 0.55),
+    inset -10px -14px 30px rgba(120, 30, 24, 0.4),
+    inset 8px 10px 26px rgba(255, 226, 190, 0.5);
+  animation: bssPulse 3.6s ease-in-out infinite, bssSunSpin 34s linear infinite;
+}
+
+/* The surface turns; the eyes are counter-rotated so they keep facing forward. */
+@keyframes bssSunSpin {
+  to { transform: rotate(360deg); }
+}
+
+/* Braino's eyes, the same two ovals the browser notch wears. He is recognised
+   by his face, not by a texture. */
+.bss-eye {
+  position: absolute;
+  top: 42%;
+  width: 21%;
+  height: 26%;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 2px 6px rgba(90, 20, 14, 0.45);
+  animation: bssBlink 6.5s ease-in-out infinite, bssSunSpinBack 34s linear infinite;
+}
+
+@keyframes bssSunSpinBack {
+  to { transform: rotate(-360deg); }
+}
+
+.bss-eye.left { left: 24%; }
+.bss-eye.right { right: 24%; }
+
+.bss-eye::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 52%;
+  width: 52%;
+  height: 52%;
+  border-radius: 50%;
+  background: #2a0a06;
+  transform: translate(-50%, -50%);
+}
+
+@keyframes bssBlink {
+  0%, 92%, 100% { scale: 1 1; }
+  95% { scale: 1 0.12; }
+}
+
+.bss-sun-label { text-align: center; }
+.bss-sun-label strong { display: block; color: var(--bss-ink); font-size: 15px; font-weight: 650; text-shadow: 0 2px 12px rgba(0,0,0,.7); }
+.bss-sun-label small { display: block; margin-top: 2px; color: var(--bss-ink-soft); font-size: 11.5px; }
+
+@keyframes bssBurn {
+  0%, 100% { transform: scale(1); opacity: 0.85; }
+  50% { transform: scale(1.09); opacity: 1; }
+}
+
+@keyframes bssPulse {
+  0%, 100% { filter: brightness(1); }
+  50% { filter: brightness(1.09); }
+}
+
+@keyframes bssFlare {
+  to { transform: rotate(360deg); }
+}
+
+/* ── Planets ── */
+.bss-planets { margin: 0; padding: 0; list-style: none; }
+
+/* NOTE: these are bss-ring-N, never ring-N. Tailwind owns .ring-1/.ring-2/.ring-4
+   as focus-ring utilities, and using those names painted a blue box around the
+   second orbit.
+
+   Each orbit is a square the exact diameter of its ring, centred on the sun and
+   rotated by --a. The planet sits at twelve o'clock on that square, so it always
+   lands on the ring, then counter-rotates so its label stays upright. */
+.bss-orbit {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  height: var(--d);
+  width: auto;
+  aspect-ratio: 1;
+  pointer-events: none;
+  transform: translate(-50%, calc(-50% + var(--drift, 0px)));
+}
+
+.bss-orbit.bss-ring-1 { --d: 40%; --drift: var(--bss-near); }
+.bss-orbit.bss-ring-2 { --d: 58%; --drift: var(--bss-mid); }
+.bss-orbit.bss-ring-3 { --d: 74%; --drift: var(--bss-mid); }
+.bss-orbit.bss-ring-4 { --d: 90%; --drift: var(--bss-far); }
+
+/* The revolution itself. The spin wrapper carries the planet around its ring;
+   the upright wrapper runs the identical animation backwards so the label never
+   turns upside down. */
+.bss-orbit-spin {
+  position: absolute;
+  inset: 0;
+  display: block;
+  animation-name: bssRevolve;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+
+.bss-planet-upright {
+  display: grid;
+  justify-items: center;
+  gap: 9px;
+  animation-name: bssRevolveBack;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+  animation-duration: inherit;
+  animation-delay: inherit;
+}
+
+@keyframes bssRevolve {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes bssRevolveBack {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(-360deg); }
+}
+
+.bss-planet {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  cursor: pointer;
+  pointer-events: auto;
+  display: block;
+  transform: translate(-50%, -50%);
+}
+
+/* The system travels, but the camera travels with it — so it stays centred in
+   frame while space streams past. A long one-way traverse looked right for two
+   seconds and then sailed off the edge and left an empty section behind, which
+   is not a graphic anyone can look at.
+
+   So the forward motion is carried by the field (dust and stars, streaming
+   backwards fast) and the system only breathes around the centre: enough to
+   feel underway, never enough to leave. Alternate + ease-in-out means there is
+   no snap at the loop point either. */
+.bss-travel {
+  position: absolute;
+  inset: 0;
+  animation: bssTravel 11s ease-in-out infinite alternate;
+}
+
+@keyframes bssTravel {
+  from { transform: translate3d(-2.6%, 0.8%, 0); }
+  to { transform: translate3d(2.6%, -0.8%, 0); }
+}
+
+.bss-orb {
+  position: relative;
+  width: clamp(38px, 5.4cqi, 62px);
+  aspect-ratio: 1;
+  display: block;
+  border-radius: 50%;
+  background: radial-gradient(circle at 33% 27%, color-mix(in srgb, var(--p) 22%, #fff) 0%, var(--p) 46%, var(--p-deep) 100%);
+  box-shadow:
+    0 0 26px color-mix(in srgb, var(--p) 45%, transparent),
+    inset -6px -8px 16px color-mix(in srgb, var(--p-deep) 70%, transparent),
+    inset 5px 6px 14px rgba(255, 255, 255, 0.42);
+  animation: bssFloat 7s ease-in-out infinite;
+}
+
+/* The light that lives inside the planet rather than on it. */
+.bss-orb i {
+  position: absolute;
+  inset: 14%;
+  border-radius: 50%;
+  background: radial-gradient(circle at 40% 36%, rgba(255, 255, 255, 0.66), transparent 62%);
+  animation: bssBreathe 4.2s ease-in-out infinite;
+}
+
+.bss-planet-label {
+  text-align: center;
+  white-space: nowrap;
+  transition: opacity 0.25s ease;
+}
+
+/* Set by the collision pass: the inner planet's name steps aside rather than
+   printing on top of its neighbour's. */
+.bss-planet-label.is-muted { opacity: 0; }
+.bss-planet-label b { display: block; color: var(--bss-ink); font-size: 13.5px; font-weight: 650; text-shadow: 0 2px 12px rgba(0,0,0,.75); }
+.bss-planet-label small { display: block; margin-top: 1px; color: var(--bss-ink-soft); font-size: 11px; }
+
+.bss-planet:hover .bss-orb,
+.bss-planet:focus-visible .bss-orb {
+  box-shadow:
+    0 0 40px color-mix(in srgb, var(--p) 62%, transparent),
+    inset -6px -8px 16px color-mix(in srgb, var(--p-deep) 70%, transparent),
+    inset 5px 6px 14px rgba(255, 255, 255, 0.5);
+}
+
+.bss-planet:focus-visible { outline: 2px solid var(--p); outline-offset: 8px; border-radius: 14px; }
+
+@keyframes bssFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-7px); }
+}
+
+@keyframes bssBreathe {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+
+/* ── The palette. One colour per planet, reused by the focus view. ── */
+.bss .is-browser { --p: #e8786e; --p-deep: #a83c33; }
+/* Foundry: Maldives sea blue. */
+.bss .is-foundry { --p: #1fb6d8; --p-deep: #0a6a86; }
+.bss .is-hera { --p: #2fc98d; --p-deep: #12704e; }
+.bss .is-studio { --p: #8b6cf0; --p-deep: #4a2fa8; }
+
+/* ── Zoomed planet ── */
+.bss-focus {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+  align-items: center;
+  gap: clamp(24px, 5vw, 64px);
+  opacity: 0;
+  transform: scale(0.05);
+  transform-origin: var(--zoom-x, 50%) var(--zoom-y, 50%);
+  pointer-events: none;
+  /* Slow off the mark, real travel through the middle, gentle arrival — you
+     should be able to watch the planet come toward you. */
+  transition:
+    transform 1.15s cubic-bezier(0.62, 0.02, 0.16, 1),
+    opacity 0.62s cubic-bezier(0.5, 0, 0.9, 1);
+}
+
+.bss.is-zoomed .bss-focus {
+  opacity: 1;
+  transform: scale(1);
+  pointer-events: auto;
+}
+
+/* The words arrive after the planet has, so the copy does not fly in with it. */
+.bss-focus-copy > *,
+.bss-back {
+  opacity: 0;
+  transform: translateY(12px);
+  transition: opacity 0.5s ease, transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.bss.is-zoomed .bss-focus-copy > *,
+.bss.is-zoomed .bss-back {
+  opacity: 1;
+  transform: none;
+}
+
+.bss.is-zoomed .bss-back { transition-delay: 0.74s; }
+.bss.is-zoomed .bss-focus-number { transition-delay: 0.78s; }
+.bss.is-zoomed .bss-focus-copy h3 { transition-delay: 0.84s; }
+.bss.is-zoomed .bss-focus-copy > p { transition-delay: 0.9s; }
+.bss.is-zoomed .bss-focus-copy ul { transition-delay: 0.96s; }
+.bss.is-zoomed .bss-focus-cta { transition-delay: 1.02s; }
+
+.bss-back {
+  position: absolute;
+  left: 0;
+  top: 0;
+  padding: 9px 15px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--bss-ink);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.bss-back:hover { border-color: var(--p); color: #fff; background: rgba(255,255,255,.12); }
+.bss-back:focus-visible { outline: 2px solid var(--p); outline-offset: 3px; }
+
+.bss-focus-orb {
+  position: relative;
+  justify-self: center;
+  width: min(360px, 84%);
+  aspect-ratio: 1;
+}
+
+.bss-focus-glow,
+.bss-focus-body,
+.bss-focus-sheen {
+  position: absolute;
+  border-radius: 50%;
+}
+
+.bss-focus-glow {
+  inset: -18%;
+  background: radial-gradient(circle, color-mix(in srgb, var(--p) 34%, transparent) 38%, transparent 70%);
+  animation: bssBurn 4.4s ease-in-out infinite;
+}
+
+/* The animated gradient is what makes it read as lit from within rather than
+   painted: the highlight travels while the body keeps breathing. */
+.bss-focus-body {
+  inset: 0;
+  background:
+    radial-gradient(circle at 32% 26%, color-mix(in srgb, var(--p) 16%, #fff) 0%, var(--p) 44%, var(--p-deep) 100%);
+  background-size: 190% 190%;
+  box-shadow:
+    inset -22px -30px 60px color-mix(in srgb, var(--p-deep) 78%, transparent),
+    inset 18px 22px 54px rgba(255, 255, 255, 0.34),
+    0 30px 80px color-mix(in srgb, var(--p) 30%, transparent);
+  animation: bssDrift 9s ease-in-out infinite;
+}
+
+.bss-focus-sheen {
+  inset: 8%;
+  background: radial-gradient(circle at 38% 32%, rgba(255, 255, 255, 0.5), transparent 58%);
+  animation: bssBreathe 5s ease-in-out infinite;
+}
+
+@keyframes bssDrift {
+  0%, 100% { background-position: 32% 26%; }
+  50% { background-position: 62% 58%; }
+}
+
+.bss-focus-copy { max-width: 46ch; }
+
+.bss-focus-number {
+  display: block;
+  margin-bottom: 12px;
+  color: var(--p);
+  font: 700 12px "SF Mono", ui-monospace, monospace;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.bss-focus-copy h3 {
+  margin: 0 0 14px;
+  color: var(--bss-ink);
+  font-size: clamp(30px, 4vw, 48px);
+  line-height: 1.05;
+  font-weight: 650;
+  letter-spacing: -0.03em;
+}
+
+.bss-focus-copy > p {
+  margin: 0 0 22px;
+  color: var(--bss-ink-soft);
+  font-size: clamp(15px, 1.6vw, 18px);
+  line-height: 1.55;
+}
+
+.bss-focus-copy ul { margin: 0 0 26px; padding: 0; list-style: none; display: grid; gap: 10px; }
+
+.bss-focus-copy li {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  color: var(--bss-ink);
+  font-size: 14.5px;
+}
+
+.bss-focus-copy li::before {
+  content: "";
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--p);
+}
+
+.bss-focus-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--p);
+  font-size: 15px;
+  font-weight: 650;
+  text-decoration: none;
+}
+
+.bss-focus-cta:hover { text-decoration: underline; }
+.bss-focus-cta svg { width: 16px; }
+
+@container (max-width: 720px) {
+  .bss-planet-label b { font-size: 11.5px; }
+  .bss-planet-label small { display: none; }
+}
+
+@media (max-width: 820px) {
+  .bss-stage { aspect-ratio: 1 / 1; }
+  .bss-focus { grid-template-columns: 1fr; align-content: center; gap: 22px; text-align: center; }
+  .bss-focus-orb { width: min(210px, 52%); }
+  .bss-focus-copy { max-width: none; justify-self: center; }
+  .bss-focus-copy li { justify-content: center; }
+  .bss-back { left: 50%; margin-left: -92px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bss-corona,
+  .bss-flare,
+  .bss-sun-body,
+  .bss-orb,
+  .bss-orb i,
+  .bss-star,
+  .bss-focus-glow,
+  .bss-focus-body,
+  .bss-focus-sheen,
+  .bss-orbit-spin,
+  .bss-planet-upright,
+  .bss-travel,
+  .bss-sun-body,
+  .bss-eye,
+  .bss::before,
+  .bss::after,
+  .bss-nebula { animation: none; }
+  .bss-system,
+  .bss-focus,
+  .bss-planet,
+  .bss-focus-copy > *,
+  .bss-back { transition: none; }
+  .bss-focus-copy > *,
+  .bss-back { opacity: 1; transform: none; }
+}
+
+/* Individual stars streak past on the same heading as the dust. */
+@keyframes bssStreak {
+  from { opacity: 0; margin-left: 16%; }
+  12% { opacity: 1; }
+  82% { opacity: 1; }
+  to { opacity: 0; margin-left: -30%; }
+}

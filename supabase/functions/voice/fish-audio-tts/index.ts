@@ -5,7 +5,10 @@ const corsHeaders = {
 };
 
 const FISH_AUDIO_API_KEY = Deno.env.get("FISH_AUDIO_API_KEY");
-const FISH_AUDIO_MODEL = Deno.env.get("FISH_AUDIO_MODEL") || "s2-pro";
+// s2.1-pro is Fish's current default and their measured time-to-first-audio is ~70ms
+// against ~100ms for s2-pro, which we were pinned to. The voice itself lives in
+// reference_id, so this changes speed and nothing about how Braino sounds.
+const FISH_AUDIO_MODEL = Deno.env.get("FISH_AUDIO_MODEL") || "s2.1-pro";
 // Braino's voice. Override via FISH_AUDIO_REFERENCE_ID secret; otherwise this default is used.
 const FISH_AUDIO_REFERENCE_ID =
   Deno.env.get("FISH_AUDIO_REFERENCE_ID") ||

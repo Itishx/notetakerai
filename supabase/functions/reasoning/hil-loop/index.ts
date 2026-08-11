@@ -13,6 +13,7 @@ import { HIL_LOOP_PROMPT, HIL_LOOP_VERSION } from "../../_shared/human-intellige
 import { logEngineRun } from "../../_shared/engine-log.ts";
 import { buildEmotionalCore } from "../../_shared/emotional-engine/engine.ts";
 import { detectMoment, MOMENT_EMPHASIS, MOMENT_LABEL } from "../../_shared/emotional-engine/moments.ts";
+import { BRAINO_TEXT_MODEL, BRAINO_TEXT_REASONING_EFFORT } from "../../_shared/openai-models.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -22,7 +23,7 @@ const corsHeaders = {
 
 // One model, chosen server-side. This endpoint is deliberately public (verify_jwt=false)
 // so the lab works for anyone, which means the caller must NOT get to pick the model.
-const HIL_LOOP_MODEL = "gpt-5.4-mini";
+const HIL_LOOP_MODEL = BRAINO_TEXT_MODEL;
 const OPENAI_ENDPOINT = "https://api.openai.com/v1/chat/completions";
 
 // The action vocabulary, matching the real extension's BG_DELEGATE_ACTIONS.
@@ -82,7 +83,12 @@ async function callModel(apiKey: string, messages: unknown[]) {
     // Raised with the observation cap and the answer channel: 1200 was set when the
     // screen was 3000 chars and no turn ever had to carry findings. An answer that
     // runs out of tokens mid-sentence is indistinguishable from a broken turn.
-    body: JSON.stringify({ model: HIL_LOOP_MODEL, messages, max_completion_tokens: 2400 }),
+    body: JSON.stringify({
+      model: HIL_LOOP_MODEL,
+      reasoning_effort: BRAINO_TEXT_REASONING_EFFORT,
+      messages,
+      max_completion_tokens: 2400,
+    }),
   });
 }
 

@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import HilShadowLog from "../components/HilShadowLog";
+import "../components/hil-shadow-log.css";
 import { Link } from "react-router-dom";
 import "./engine-log.css";
 
@@ -50,12 +52,14 @@ type Stats = {
 
 const ENGINES = [
   { id: "all", label: "Everything" },
+  { id: "hil-router", label: "Router" },
   { id: "hil-loop", label: "Loop" },
   { id: "hil-reason", label: "Reason" },
   { id: "braino-reply", label: "Reply" },
 ];
 
 const ENGINE_LABEL: Record<string, string> = {
+  "hil-router": "Router",
   "hil-loop": "Loop",
   "hil-reason": "Reason",
   "braino-reply": "Reply",
@@ -91,7 +95,7 @@ function money(tokens: number, cached = 0) {
 export default function EngineLog() {
   const [rows, setRows] = useState<Run[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
-  const [engine, setEngine] = useState("all");
+  const [engine, setEngine] = useState("hil-router");
   const [failedOnly, setFailedOnly] = useState(false);
   const [ratingFilter, setRatingFilter] = useState<"" | "good" | "bad" | "unjudged">("");
   const [open, setOpen] = useState<string | null>(null);
@@ -176,15 +180,19 @@ export default function EngineLog() {
     <div className="el-page">
       <header className="el-head">
         <div>
-          <h1 className="el-title">Engine log</h1>
-          <p className="el-sub">Every call both layers have made. Command, answer, and what it cost.</p>
+          <h1 className="el-title">{engine === "hil-router" ? "Braino vs HIL" : "Engine log"}</h1>
+          <p className="el-sub">
+            {engine === "hil-router"
+              ? "Everything you said, what Braino did, and what HIL would have done. HIL is only watching."
+              : "Every call both layers have made. Command, answer, and what it cost."}
+          </p>
         </div>
         <button className="el-refresh" onClick={() => void load()} disabled={loading}>
           {loading ? "Loading" : "Refresh"}
         </button>
       </header>
 
-      {stats && (
+      {stats && engine !== "hil-router" && (
         <div className="el-stats">
           <div className="el-stat">
             <span className="el-stat-value">{stats.total.runs}</span>
@@ -241,11 +249,15 @@ export default function EngineLog() {
       </div>
 
       {error && <p className="el-error">{error}</p>}
-      {!error && !loading && !rows.length && (
+      {!error && !loading && !rows.length && engine !== "hil-router" && (
         <p className="el-note">Nothing logged yet. Run something on Human Intelligence or Emotional Intelligence and it lands here.</p>
       )}
 
-      <div className="el-list">
+      {/* The shadow stage has exactly one question, so on the Router tab it gets
+          the whole page rather than a panel above the generic run list. */}
+      {engine === "hil-router" && <HilShadowLog rows={rows} loading={loading} />}
+
+      <div className="el-list" hidden={engine === "hil-router"}>
         {groups.map((group) => {
           const first = group.runs[0];
           const tokens = group.runs.reduce((sum, r) => sum + (r.total_tokens || 0), 0);

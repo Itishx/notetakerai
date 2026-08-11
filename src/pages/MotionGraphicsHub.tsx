@@ -19,6 +19,18 @@ type TeaserEntry =
 
 const TEASERS: TeaserEntry[] = [
   {
+    id: "brainohera", title: "BrainoHERA", src: "/brainohera-teaser?embed=1", date: "August 2026", tag: "film",
+    dek: "Stop scrolling. Braino can type while you speak—even when the Wi-Fi cannot.",
+  },
+  {
+    id: "sub-agents", title: "Sub-Agents", src: "/sub-agents-teaser?embed=1", date: "August 2026", tag: "concept film",
+    dek: "One request opens six rooms. Six Brainos work at once. One answer comes back.",
+  },
+  {
+    id: "spotify-mac", title: "Spotify in a Blink", src: "/spotify-mac-teaser?embed=1", date: "August 2026", tag: "film",
+    dek: "Say the song. Watch it play. That’s Braino.",
+  },
+  {
     id: "dont-blink", title: "Don't Blink.", src: "/dontblink?embed=1", date: "July 2026", tag: "film",
     dek: "The flagship film — Braino, the notch, and everything he can do.",
   },

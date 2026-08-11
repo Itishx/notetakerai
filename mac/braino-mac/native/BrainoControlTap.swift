@@ -7,6 +7,9 @@ final class BrainoControlTap {
   private var runLoopSource: CFRunLoopSource?
   private var lastControlDown: TimeInterval = 0
   private var lastSpaceDown: TimeInterval = 0
+  private var shiftIsDown = false
+  private var shiftTapPoisoned = false
+  private var lastShiftTap: TimeInterval = 0
   private var controlIsDown = false
   private var optionIsDown = false
   private var optionTapPoisoned = false
@@ -88,7 +91,30 @@ final class BrainoControlTap {
     }
     controlIsDown = isControl
 
-    // Bare double-Option belongs exclusively to Yap Mode dictation.
+    // Bare double-Shift owns the launch-film ritual. A Shift used with any
+    // other modifier or key is a normal shortcut/typed character and must not
+    // count as a tap.
+    let isShift = event.flags.contains(.maskShift)
+    if isShift && !shiftIsDown {
+      shiftIsDown = true
+      let otherMods: CGEventFlags = [.maskControl, .maskAlternate, .maskCommand]
+      shiftTapPoisoned = !event.flags.intersection(otherMods).isEmpty
+    } else if isShift && shiftIsDown {
+      shiftTapPoisoned = true
+    } else if !isShift && shiftIsDown {
+      shiftIsDown = false
+      if !shiftTapPoisoned {
+        let now = ProcessInfo.processInfo.systemUptime
+        if now - lastShiftTap < 0.52 {
+          printLine("double-shift")
+          lastShiftTap = 0
+        } else {
+          lastShiftTap = now
+        }
+      }
+    }
+
+    // Bare double-Option belongs exclusively to BrainoHERA dictation.
     // Chorded Option shortcuts never count.
     let isOption = event.flags.contains(.maskAlternate)
     if isOption && !optionIsDown {
@@ -138,6 +164,7 @@ final class BrainoControlTap {
   private func handleKeyDown(_ event: CGEvent) {
     if commandIsDown { commandTapPoisoned = true }
     if optionIsDown { optionTapPoisoned = true }
+    if shiftIsDown { shiftTapPoisoned = true }
     let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
     let isAutoRepeat = event.getIntegerValueField(.keyboardEventAutorepeat) != 0
     guard keyCode == 49, !isAutoRepeat else { return }

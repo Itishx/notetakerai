@@ -43,6 +43,35 @@ contextBridge.exposeInMainWorld("brainoMac", {
   log: (payload) => ipcRenderer.invoke("braino-mac:log", payload),
   activeContext: () => ipcRenderer.invoke("braino-mac:active-context"),
   authStatus: () => ipcRenderer.invoke("braino-mac:auth-status"),
+  parakeetState: () => ipcRenderer.invoke("braino-mac:parakeet-state"),
+  parakeetControl: (payload) => ipcRenderer.invoke("braino-mac:parakeet-control", payload || {}),
+  onDictationFallback: (callback) => {
+    const handler = (_event, payload) => callback(payload || {});
+    ipcRenderer.on("braino-mac:dictation-fallback", handler);
+    return () => ipcRenderer.removeListener("braino-mac:dictation-fallback", handler);
+  },
+  onDictationUi: (callback) => {
+    const handler = (_event, payload) => callback(payload || {});
+    ipcRenderer.on("braino-mac:dictation-ui", handler);
+    return () => ipcRenderer.removeListener("braino-mac:dictation-ui", handler);
+  },
+  onDictationPartial: (callback) => {
+    const handler = (_event, payload) => callback(payload || {});
+    ipcRenderer.on("braino-mac:dictation-partial", handler);
+    return () => ipcRenderer.removeListener("braino-mac:dictation-partial", handler);
+  },
+  permissionReport: () => ipcRenderer.invoke("braino-mac:permission-report"),
+  permissionAsk: (kind) => ipcRenderer.invoke("braino-mac:permission-ask", { kind }),
+  onPermissionNeeded: (callback) => {
+    const handler = (_event, payload) => callback(payload || {});
+    ipcRenderer.on("braino-mac:permission-needed", handler);
+    return () => ipcRenderer.removeListener("braino-mac:permission-needed", handler);
+  },
+  dashboardState: () => ipcRenderer.invoke("braino-mac:dashboard-state"),
+  dashboardData: (key) => ipcRenderer.invoke("braino-mac:dashboard-data", key),
+  dashboardOpen: () => ipcRenderer.invoke("braino-mac:dashboard-open"),
+  setWindowTheme: (theme) => ipcRenderer.invoke("braino-mac:window-theme", theme),
+  revealPath: (target) => ipcRenderer.invoke("braino-mac:reveal-path", target),
   authSignOut: () => ipcRenderer.invoke("braino-mac:auth-sign-out"),
   ensureAuth: (reason) => ipcRenderer.invoke("braino-mac:ensure-auth", reason),
   delegate: (prompt) => ipcRenderer.invoke("braino-mac:delegate", prompt),
@@ -55,11 +84,15 @@ contextBridge.exposeInMainWorld("brainoMac", {
   dictationIntent: (text, active) => ipcRenderer.invoke("braino-mac:dictation-intent", text, Boolean(active)),
   dictationControl: (payload) => ipcRenderer.invoke("braino-mac:dictation-control", payload || {}),
   dictationInsert: (payload) => ipcRenderer.invoke("braino-mac:dictation-insert", payload || {}),
+  dictationRefine: (payload) => ipcRenderer.invoke("braino-mac:dictation-refine", payload || {}),
   requestAccessibility: () => ipcRenderer.invoke("braino-mac:request-accessibility"),
   requestMicrophone: () => ipcRenderer.invoke("braino-mac:request-microphone"),
   nativeListen: () => ipcRenderer.invoke("braino-mac:native-listen"),
   stopNativeListen: () => ipcRenderer.invoke("braino-mac:native-listen-stop"),
   transcribeAudio: (payload) => ipcRenderer.invoke("braino-mac:transcribe-audio", payload),
+  meetingSegment: (payload) => ipcRenderer.invoke("braino-mac:meeting-segment", payload || {}),
+  meetingCaptureFailed: (reason) => ipcRenderer.invoke("braino-mac:meeting-capture-failed", { reason }),
+  meetingStealth: (enabled) => ipcRenderer.invoke("braino-mac:meeting-stealth", Boolean(enabled)),
   setMousePassthrough: (passthrough) => ipcRenderer.send("braino-mac:set-mouse-passthrough", Boolean(passthrough)),
   personaBundle: () => ipcRenderer.invoke("braino-mac:persona-bundle"),
   ttsConfig: () => ipcRenderer.invoke("braino-mac:tts-config"),
@@ -162,6 +195,13 @@ contextBridge.exposeInMainWorld("brainoMac", {
     const handler = () => callback();
     ipcRenderer.on("braino-mac:skit-start", handler);
     return () => ipcRenderer.removeListener("braino-mac:skit-start", handler);
+  },
+  launchDemoOpen: () => ipcRenderer.invoke("braino-mac:launch-demo-open"),
+  launchDemoStop: () => ipcRenderer.invoke("braino-mac:launch-demo-stop"),
+  onLaunchDemoStart: (callback) => {
+    const handler = () => callback();
+    ipcRenderer.on("braino-mac:launch-demo-start", handler);
+    return () => ipcRenderer.removeListener("braino-mac:launch-demo-start", handler);
   },
   setLiveCaptions: (on) => ipcRenderer.send("braino-mac:live-captions", Boolean(on)),
   ambientObserve: () => ipcRenderer.invoke("braino-mac:ambient-observe"),

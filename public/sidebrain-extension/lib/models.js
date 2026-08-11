@@ -1,17 +1,15 @@
 (function initBrainoModels(global) {
   "use strict";
 
-  // STEP runs every normal loop turn — keep it fast/cheap.
-  // STRATEGIST is the stronger GPT-5 brain, used only on the rare hard moments
-  // (getting stuck / escalation / re-planning / done-verification), never the hot path.
+  // Luna is the lowest-cost GPT-5.6 tier. Keep the two roles so routing and
+  // budgets do not change, but pin both to the same Braino-wide model.
   const MODELS = {
-    STEP: "gpt-5.4-mini",
-    STRATEGIST: "gpt-5.4",
+    STEP: "gpt-5.6-luna",
+    STRATEGIST: "gpt-5.6-luna",
   };
 
   const MODEL_COST_ESTIMATES_USD = {
-    [MODELS.STEP]: 0.002,
-    [MODELS.STRATEGIST]: 0.02,
+    [MODELS.STEP]: 0.0005,
   };
 
   function pickModel(phase, stuckCount) {

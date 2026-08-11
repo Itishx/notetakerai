@@ -11,6 +11,7 @@ import { isDevPulseQuestion, loadDevPulseForRequest } from "../../_shared/dev-pu
 import { loadUserKnowledge } from "../../_shared/user-knowledge.ts";
 import { readMoment } from "../../_shared/emotional-engine/moment-reader.ts";
 import { captureFromConversation } from "../../_shared/memory-engine/capture.ts";
+import { BRAINO_TEXT_MODEL, BRAINO_TEXT_REASONING_EFFORT } from "../../_shared/openai-models.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -36,8 +37,7 @@ const ALLOWED_DELEGATE_CLAUDE_MODELS = new Set([
   "claude-sonnet-4-20250514",
 ]);
 const ALLOWED_DELEGATE_OPENAI_MODELS = new Set([
-  "gpt-5.4-mini",
-  "gpt-5.4",
+  BRAINO_TEXT_MODEL,
 ]);
 
 function resolveDelegateClaudeModel(delegateModel?: string | null) {
@@ -49,7 +49,7 @@ function resolveDelegateClaudeModel(delegateModel?: string | null) {
 function resolveDelegateOpenAIModel(delegateModel?: string | null) {
   const requested = typeof delegateModel === "string" ? delegateModel.trim() : "";
   if (requested && ALLOWED_DELEGATE_OPENAI_MODELS.has(requested)) return requested;
-  return "gpt-5.4-mini";
+  return BRAINO_TEXT_MODEL;
 }
 
 function resolveAiConfig(requestedProvider?: string, options: { delegateModel?: string | null } = {}): AiConfig {
@@ -81,7 +81,11 @@ async function callLovableAi(config: AiConfig, messages: any[]) {
       Authorization: `Bearer ${config.apiKey}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ model: config.model, messages }),
+    body: JSON.stringify({
+      model: config.model,
+      reasoning_effort: BRAINO_TEXT_REASONING_EFFORT,
+      messages,
+    }),
   });
   return res;
 }
@@ -474,9 +478,9 @@ serve(async (req) => {
     });
     const hasImage = !!imageBase64;
     // "describe" vision (camera / screen "what do you see") — NOT the lecture-notes diagram flow.
-    // gpt-5.4-mini (the default) has no image input → it 500s; route describe to a vision-capable model.
+    // Luna accepts image input, so this path can share Braino's default instead of
+    // jumping to a separate flagship model.
     const visionDescribe = hasImage && visionMode === "describe";
-    if (visionDescribe && config.provider === "openai") config.model = "gpt-5.5";
     const existingImageMap = existingImages && typeof existingImages === "object" ? existingImages : {};
     const existingImageKeys = Object.keys(existingImageMap);
 
@@ -512,7 +516,7 @@ serve(async (req) => {
     const emotionalRead = (!isDelegateRequest && !hasImage && !visionDescribe && typeof message === "string")
       ? await readMoment(message, {
           apiKey: Deno.env.get("OPENAI_API_KEY") || "",
-          model: "gpt-5.4-mini",
+          model: BRAINO_TEXT_MODEL,
           timeoutMs: 3000,
         })
       : null;

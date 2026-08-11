@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self';" />
+    <title>Braino</title>
+    <link rel="stylesheet" href="dashboard.css" />
+  </head>
+  <body>
+    <div class="bd-root">
+      <!-- ── Sidebar. Traffic lights float over its top padding. ── -->
+      <aside class="bd-sidebar">
+        <div class="bd-brand">
+          <span class="bd-face" aria-hidden="true"><i></i><i></i></span>
+          <span class="bd-brand-wm">Braino</span>
+        </div>
+
+        <nav class="bd-nav" id="nav" aria-label="Sections">
+          <div class="bd-nav-grp">Workspace</div>
+          <button class="bd-nav-item active" data-view="overview"><span class="bd-ic"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 3h6v6H3zM11 3h6v4h-6zM11 11h6v6h-6zM3 13h6v4H3z"/></svg></span><span class="bd-nm">Overview</span></button>
+          <button class="bd-nav-item" data-view="notes"><span class="bd-ic"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 3h7l3 3v11a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M7 9h6M7 12.5h6M7 6h3"/></svg></span><span class="bd-nm">Notes</span><span class="bd-ct" id="ct-notes"></span></button>
+          <button class="bd-nav-item" data-view="tasks"><span class="bd-ic"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 4.5v11l9-5.5z"/><path d="M16 4v12"/></svg></span><span class="bd-nm">Agent Tasks</span><span class="bd-ct" id="ct-tasks"></span></button>
+          <button class="bd-nav-item" data-view="xauto"><span class="bd-ic"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 4l12 12M16 4L4 16"/></svg></span><span class="bd-nm">X Automation</span><span class="bd-ct" id="ct-xauto"></span></button>
+          <button class="bd-nav-item muted" disabled><span class="bd-ic"><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="7" y="3" width="6" height="9" rx="3"/><path d="M5 10a5 5 0 0 0 10 0M10 15v2"/></svg></span><span class="bd-nm">Recordings</span><span class="bd-ct">Soon</span></button>
+          <button class="bd-nav-item" data-view="memory"><span class="bd-ic"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3c-2.2 0-3.4 1.4-3.4 2.9 0 .8-.6 1-1.1 1.5C4.6 8.2 4 9 4 10.2c0 1.2.7 2 1.4 2.5.6.4.6.9.6 1.5C6 15.7 7.3 17 9 17c1 0 1.6-.5 1.6-1.4V4.6C10.6 3.6 10.4 3 10 3z"/><path d="M10 3c2.2 0 3.4 1.4 3.4 2.9 0 .8.6 1 1.1 1.5.9.8 1.5 1.6 1.5 2.8 0 1.2-.7 2-1.4 2.5-.6.4-.6.9-.6 1.5 0 1.5-1.3 2.8-3 2.8"/></svg></span><span class="bd-nm">Memory</span><span class="bd-ct" id="ct-memory"></span></button>
+
+          <div class="bd-nav-grp">Library</div>
+          <button class="bd-nav-item muted" disabled><span class="bd-ic"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 6a1 1 0 0 1 1-1h3.5l1.5 2H16a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/></svg></span><span class="bd-nm">Collections</span><span class="bd-ct">Soon</span></button>
+          <button class="bd-nav-item" data-view="search"><span class="bd-ic"><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="9" cy="9" r="5"/><path d="M12.8 12.8L17 17"/></svg></span><span class="bd-nm">Search</span></button>
+          <button class="bd-nav-item" data-view="high"><span class="bd-ic"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3l2.1 4.5 4.9.6-3.6 3.4.9 4.9L10 14l-4.3 2.4.9-4.9L3 8.1l4.9-.6z"/></svg></span><span class="bd-nm">Highlights</span><span class="bd-ct" id="ct-high"></span></button>
+          <button class="bd-nav-item" data-view="voice"><span class="bd-ic"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 4h12a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H8l-4 3V5a1 1 0 0 1 1-1z"/><path d="M7 8h6M7 10.5h4"/></svg></span><span class="bd-nm">Voice Commands</span><span class="bd-ct" id="ct-voice"></span></button>
+
+          <div class="bd-nav-grp">Account</div>
+          <button class="bd-nav-item" data-view="settings"><span class="bd-ic"><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="2.6"/><path d="M10 2.6v2M10 15.4v2M17.4 10h-2M4.6 10h-2M15.2 4.8l-1.4 1.4M6.2 13.8l-1.4 1.4M15.2 15.2l-1.4-1.4M6.2 6.2L4.8 4.8"/></svg></span><span class="bd-nm">Settings</span></button>
+
+          <div class="bd-nav-grp">This Mac</div>
+          <button class="bd-nav-item" data-view="hera"><span class="bd-ic"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3.5v13M6.5 6.5v7M13.5 6.5v7M3.5 9v2M16.5 9v2"/></svg></span><span class="bd-nm">BrainoHERA</span></button>
+          <button class="bd-nav-item" data-view="modes"><span class="bd-ic"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3l7 4-7 4-7-4z"/><path d="M3 11l7 4 7-4"/></svg></span><span class="bd-nm">Voice Modes</span><span class="bd-ct" id="ct-modes"></span></button>
+          <button class="bd-nav-item" data-view="access"><span class="bd-ic"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 9V6.5a4 4 0 0 1 8 0V9"/><rect x="4" y="9" width="12" height="8" rx="1.6"/><path d="M10 12.5v1.6"/></svg></span><span class="bd-nm">Permissions</span></button>
+          <button class="bd-nav-item" data-view="keys"><span class="bd-ic"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M7.5 4.5a2 2 0 1 0 0 4h5a2 2 0 1 1 0-4"/><path d="M7.5 15.5a2 2 0 1 1 0-4h5a2 2 0 1 0 0 4"/><path d="M7.5 8.5h5v3h-5z"/></svg></span><span class="bd-nm">Shortcuts</span></button>
+          <button class="bd-nav-item" data-view="account"><span class="bd-ic"><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="7.5" r="3"/><path d="M4.5 16.5a5.5 5.5 0 0 1 11 0"/></svg></span><span class="bd-nm">Account</span></button>
+        </nav>
+
+        <div class="bd-side-foot">
+          <div class="bd-profile">
+            <span class="bd-avatar" id="avatar">B</span>
+            <div><div class="bd-pn" id="side-who">Signed out</div><div class="bd-pb" id="side-plan">Braino for Mac</div></div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- ── Main ── -->
+      <div class="bd-main">
+        <header class="bd-topbar">
+          <span class="bd-eyebrow" id="crumb">Overview</span>
+          <div class="bd-topbar-end">
+            <div class="bd-theme" id="theme-switch" role="group" aria-label="Theme">
+              <button type="button" data-theme-set="paper" title="Paper" aria-label="Paper theme"></button>
+              <button type="button" data-theme-set="white" title="White" aria-label="White theme"></button>
+              <button type="button" data-theme-set="black" title="Black" aria-label="Black theme"></button>
+            </div>
+            <span class="bd-kbd" id="version">—</span>
+            <span class="bd-live" id="live-dot" title="Braino is running"></span>
+          </div>
+        </header>
+
+        <div class="bd-pane">
+          <section class="bd-view active" data-view="overview">
+            <div class="bd-phead">
+              <h1 id="greeting">Good morning.</h1>
+              <p class="bd-sub" id="lede">Braino is in your notch, listening for a double Option.</p>
+            </div>
+
+            <form class="bd-ask" id="runner" autocomplete="off">
+              <input id="run-input" type="text" placeholder="Ask Braino to do something…" aria-label="Command for Braino" spellcheck="false" />
+              <button class="bd-send" type="submit" id="run-go">Run</button>
+            </form>
+            <div class="bd-quick" id="run-suggest"></div>
+            <div class="bd-answer" id="run-out" role="status" aria-live="polite" hidden></div>
+
+            <div class="bd-shead"><h2>Usage</h2></div>
+            <div class="bd-stats" id="stats"></div>
+
+            <div class="bd-shead"><h2>Last 14 days</h2><span class="bd-more">Dictation sessions</span></div>
+            <div class="bd-chart" id="chart"></div>
+
+            <div class="bd-shead"><h2>Right now</h2></div>
+            <dl class="bd-card" id="now"></dl>
+          </section>
+
+          <section class="bd-view" data-view="tasks">
+            <div class="bd-phead"><h1>Agent Tasks</h1><p class="bd-sub">Everything you have run from this window, this session.</p></div>
+            <div class="bd-list" id="tasks-list"></div>
+          </section>
+
+          <section class="bd-view" data-view="notes">
+            <div class="bd-phead"><h1>Notes</h1><p class="bd-sub">The same notes the website dashboard shows.</p></div>
+            <div class="bd-list" id="notes-list"></div>
+          </section>
+
+          <section class="bd-view" data-view="memory">
+            <div class="bd-phead"><h1>Memory</h1><p class="bd-sub">What Braino picked up while you worked. The store the Emotional Engine reads from.</p></div>
+            <div class="bd-list" id="memory-list"></div>
+          </section>
+
+
+          <section class="bd-view" data-view="xauto">
+            <div class="bd-phead"><h1>X Automation</h1><p class="bd-sub">Scheduled posts and the reply autopilot, from your account.</p></div>
+            <div class="bd-stats" id="xauto-stats"></div>
+            <div class="bd-shead"><h2>Scheduled</h2></div>
+            <div class="bd-list" id="xauto-list"></div>
+          </section>
+
+          <section class="bd-view" data-view="search">
+            <div class="bd-phead"><h1>Search</h1><p class="bd-sub">Look across your notes and Braino's memory.</p></div>
+            <form class="bd-ask" id="search-form" autocomplete="off">
+              <input id="search-input" type="text" placeholder="Search notes and memory…" aria-label="Search" spellcheck="false" />
+              <button class="bd-send" type="submit">Search</button>
+            </form>
+            <div class="bd-list" id="search-list"></div>
+          </section>
+
+          <section class="bd-view" data-view="high">
+            <div class="bd-phead"><h1>Highlights</h1><p class="bd-sub">What Braino thought was worth keeping.</p></div>
+            <div class="bd-list" id="high-list"></div>
+          </section>
+
+          <section class="bd-view" data-view="settings">
+            <div class="bd-phead"><h1>Settings</h1><p class="bd-sub">How Braino behaves on this Mac.</p></div>
+            <div class="bd-shead"><h2>Appearance</h2></div>
+            <dl class="bd-card" id="settings-appearance"></dl>
+            <div class="bd-shead"><h2>Behaviour</h2></div>
+            <dl class="bd-card" id="settings-behaviour"></dl>
+          </section>
+
+          <section class="bd-view" data-view="hera">
+            <div class="bd-phead"><h1>BrainoHERA</h1><p class="bd-sub">Put the caret in any Mac text field, press Option twice, and speak.</p></div>
+            <div class="bd-stats" id="hera-stats"></div>
+            <div class="bd-shead"><h2>This session</h2></div>
+            <dl class="bd-card" id="hera-now"></dl>
+          </section>
+
+          <section class="bd-view" data-view="voice">
+            <div class="bd-phead"><h1>Voice Commands</h1><p class="bd-sub">Say the phrase, Braino runs the command. Grouped by the mode they live in.</p></div>
+            <div id="voice-list"></div>
+          </section>
+
+          <section class="bd-view" data-view="modes">
+            <div class="bd-phead"><h1>Voice Modes</h1><p class="bd-sub">Each mode carries its own phrases and notch colour.</p></div>
+            <div class="bd-list" id="modes-list"></div>
+          </section>
+
+          <section class="bd-view" data-view="access">
+            <div class="bd-phead"><h1>Permissions</h1><p class="bd-sub">Braino asks macOS for exactly two things, and neither is granted until you say so.</p></div>
+            <div id="perms"></div>
+          </section>
+
+          <section class="bd-view" data-view="keys">
+            <div class="bd-phead"><h1>Shortcuts</h1><p class="bd-sub">Every mode has one deliberate way in.</p></div>
+            <div class="bd-list" id="keys"></div>
+          </section>
+
+          <section class="bd-view" data-view="account">
+            <div class="bd-phead"><h1>Account</h1><p class="bd-sub">Who Braino thinks you are on this Mac.</p></div>
+            <dl class="bd-card" id="account"></dl>
+            <div class="bd-shead"><h2>On disk</h2></div>
+            <dl class="bd-card" id="paths"></dl>
+          </section>
+        </div>
+      </div>
+    </div>
+
+    <script src="dashboard.js"></script>
+  </body>
+</html>

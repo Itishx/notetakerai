@@ -27,6 +27,7 @@ import { getClassManifest } from "../../_shared/emotional-engine/classes.ts";
 import { resolvePersonalitySettings } from "../../_shared/emotional-engine/settings.ts";
 import { scanForTells } from "../../_shared/emotional-engine/tells.ts";
 import { logEngineRun } from "../../_shared/engine-log.ts";
+import { BRAINO_TEXT_MODEL, BRAINO_TEXT_REASONING_EFFORT } from "../../_shared/openai-models.ts";
 import type { Moment } from "../../_shared/emotional-engine/types.ts";
 
 const corsHeaders = {
@@ -35,7 +36,7 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const REPLY_MODEL = "gpt-5.4-mini";
+const REPLY_MODEL = BRAINO_TEXT_MODEL;
 const OPENAI_ENDPOINT = "https://api.openai.com/v1/chat/completions";
 
 // Where the charm trait sits for each moment, for the breakdown display. This mirrors
@@ -58,7 +59,12 @@ async function callModel(apiKey: string, messages: unknown[], maxTokens = 600) {
   return await fetch(OPENAI_ENDPOINT, {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ model: REPLY_MODEL, messages, max_completion_tokens: maxTokens }),
+    body: JSON.stringify({
+      model: REPLY_MODEL,
+      reasoning_effort: BRAINO_TEXT_REASONING_EFFORT,
+      messages,
+      max_completion_tokens: maxTokens,
+    }),
   });
 }
 

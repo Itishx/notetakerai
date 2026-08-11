@@ -1885,3 +1885,26 @@
   .wl-hera-secret::after,
   .wl-hera-secret > span i { animation: none !important; }
 }
+
+/* Chapter footer link: the one place a chapter hands off to a full page of its
+   own (Meetings). Kept quiet so it reads as a continuation, not a CTA. */
+.wl-chapter-link {
+  margin-top: 34px;
+}
+
+.wl-chapter-link a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--wl-accent);
+  font-size: 14px;
+  text-decoration: none;
+  border-bottom: 1px solid color-mix(in srgb, var(--wl-accent) 40%, transparent);
+  padding-bottom: 2px;
+  transition: border-color 200ms ease, opacity 200ms ease;
+}
+
+.wl-chapter-link a:hover {
+  border-bottom-color: var(--wl-accent);
+  opacity: 0.85;
+}

@@ -30,7 +30,7 @@ Open Braino for Mac and double-press Option. Spotify can be closed or already ru
 
 ## Honest limitations
 
-This is an MVP party trick for the Mac app. It needs Spotify installed and macOS Automation permission for Braino to control Spotify and System Events. The shortcut temporarily replaces Yap Mode on double Option while the skit flag is enabled. Spotify playback also needs the local app to be able to play the track.
+This is an MVP party trick for the Mac app. It needs Spotify installed and macOS Automation permission for Braino to control Spotify and System Events. The shortcut temporarily replaces BrainoHERA on double Option while the skit flag is enabled. Spotify playback also needs the local app to be able to play the track.
 
 ## Technical shape
 
@@ -42,7 +42,7 @@ Spotify remains foregrounded because it is part of the visual joke. Playback mus
 
 ## What comes next
 
-After the intended recording or demo window, decide whether the shortcut remains a hidden easter egg or double Option returns fully to Yap Mode.
+After the intended recording or demo window, decide whether the shortcut remains a hidden easter egg or double Option returns fully to BrainoHERA.
 
 ## Public documentation checklist
 

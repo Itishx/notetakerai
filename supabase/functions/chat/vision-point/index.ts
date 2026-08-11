@@ -2,6 +2,7 @@
 // No chat context, no knowledge loading, minimal reasoning: latency is the feature.
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { BRAINO_TEXT_MODEL } from "../../_shared/openai-models.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -51,7 +52,7 @@ serve(async (req) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "gpt-5.5",
+        model: BRAINO_TEXT_MODEL,
         reasoning_effort: "low",
         max_completion_tokens: 500,
         messages: [

@@ -1,0 +1,372 @@
+/* Braino Meetings (/meetings)
+   Apple shell, same as /yap-mode: apple.css supplies tokens and the anchor nav.
+   One continuous surface from top to bottom — no full-bleed colour slab
+   partway down the page. Emphasis comes from type scale, space and hairlines. */
+
+.mt {
+  --mt-blue: #2f6fed;
+  overflow-x: hidden;
+}
+
+.mt *,
+.mt *::before,
+.mt *::after {
+  letter-spacing: 0;
+}
+
+.mt-shimmer {
+  display: inline;
+  background-image: linear-gradient(100deg, #1b3f8f 0%, #4f8bff 23%, #dce9ff 43%, #4f8bff 63%, #1b3f8f 100%);
+  background-size: 220% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  animation: mtNameShimmer 3.4s linear infinite;
+}
+
+@keyframes mtNameShimmer {
+  to { background-position: -220% 0; }
+}
+
+.mt-join {
+  padding: 6px 15px;
+  border-radius: 999px;
+  background: var(--mt-blue);
+  color: #fff !important;
+  opacity: 1 !important;
+}
+
+.mt-join-lg {
+  padding: 13px 28px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+/* ── Landing ───────────────────────────────────────────────────────────── */
+
+.mt-landing {
+  max-width: var(--ap-maxw);
+  margin: 0 auto;
+  padding: clamp(92px, 12vw, 158px) var(--ap-gutter) clamp(30px, 4vw, 56px);
+}
+
+.mt-landing-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 20px;
+  color: var(--mt-blue);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.mt-landing-eyebrow span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--mt-blue);
+}
+
+.mt-landing-desc {
+  max-width: 16ch;
+  margin: 0 0 clamp(28px, 4vw, 52px);
+  color: var(--ap-ink);
+  font-size: clamp(38px, 6.2vw, 76px);
+  font-weight: 600;
+  line-height: 1.04;
+  letter-spacing: -0.026em;
+}
+
+.mt-landing-name {
+  margin: 0;
+  color: var(--ap-ink);
+  font-size: clamp(46px, 10vw, 132px);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.03em;
+}
+
+/* ── Sections ──────────────────────────────────────────────────────────── */
+
+.mt-section {
+  max-width: var(--ap-maxw);
+  margin: 0 auto;
+  padding: var(--ap-section) var(--ap-gutter);
+}
+
+.mt-kicker {
+  margin: 0 0 16px;
+  color: var(--mt-blue);
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.mt-h2 {
+  margin: 0 0 clamp(20px, 2.6vw, 32px);
+  color: var(--ap-ink);
+  font-size: clamp(30px, 4.8vw, 58px);
+  font-weight: 600;
+  line-height: 1.06;
+  letter-spacing: -0.022em;
+}
+
+/* The screen-share claim is the loudest thing on the page. It gets there with
+   size, not with a background colour. */
+.mt-big { font-size: clamp(34px, 6vw, 74px); }
+
+.mt-p {
+  max-width: 52ch;
+  margin: 0 0 16px;
+  color: var(--ap-ink);
+  font-size: clamp(17px, 1.6vw, 21px);
+  line-height: 1.55;
+}
+
+.mt-p-soft {
+  color: var(--ap-ink-soft);
+  font-size: clamp(15px, 1.4vw, 18px);
+}
+
+/* ── Nothing joins: the roster does the talking ────────────────────────── */
+
+.mt-split {
+  display: grid;
+  gap: clamp(34px, 6vw, 76px);
+  grid-template-columns: 1fr;
+  align-items: center;
+}
+
+@media (min-width: 860px) {
+  .mt-split { grid-template-columns: 1fr minmax(300px, 380px); }
+}
+
+.mt-split-copy { min-width: 0; }
+
+.mt-roster {
+  margin: 0;
+  padding: 26px 26px 20px;
+  border: 1px solid var(--ap-hairline);
+  border-radius: var(--ap-radius);
+  background: var(--ap-surface);
+}
+
+.mt-roster figcaption {
+  margin-bottom: 16px;
+  color: var(--ap-ink-soft);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+.mt-roster ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.mt-roster li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 0;
+  color: var(--ap-ink);
+  font-size: 16px;
+}
+
+.mt-roster li span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--ap-blue-panel);
+  color: var(--mt-blue);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.mt-roster-you span {
+  background: var(--mt-blue);
+  color: #fff;
+}
+
+/* The empty slot is the point: where every other tool puts a bot, there is a
+   gap. Dashed rather than solid, because nothing is actually there. */
+.mt-roster-gap {
+  margin: 12px 0 0;
+  padding: 14px 12px;
+  border: 1px dashed var(--ap-hairline);
+  border-radius: 14px;
+  color: var(--ap-ink-soft);
+  font-size: 13px;
+  text-align: center;
+}
+
+/* ── Two streams ───────────────────────────────────────────────────────── */
+
+.mt-streams {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  margin: 0 0 clamp(26px, 3.4vw, 38px);
+}
+
+.mt-stream {
+  padding: 24px 24px 26px;
+  border: 1px solid var(--ap-hairline);
+  border-left: 3px solid var(--ap-ink-soft);
+  border-radius: 18px;
+  background: var(--ap-surface);
+}
+
+.mt-stream-you { border-left-color: var(--mt-blue); }
+
+.mt-stream span {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--ap-ink-soft);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.mt-stream b {
+  color: var(--ap-ink);
+  font-size: 23px;
+  font-weight: 600;
+  letter-spacing: -0.014em;
+}
+
+/* ── Honest ────────────────────────────────────────────────────────────── */
+
+.mt-honest-list {
+  display: grid;
+  gap: 0;
+  margin: 0 0 clamp(34px, 5vw, 56px);
+}
+
+.mt-honest-list > div {
+  display: grid;
+  gap: 6px 40px;
+  grid-template-columns: 1fr;
+  padding: 22px 0;
+  border-top: 1px solid var(--ap-hairline);
+}
+
+@media (min-width: 760px) {
+  .mt-honest-list > div { grid-template-columns: minmax(0, 22ch) 1fr; }
+}
+
+.mt-honest-list dt {
+  color: var(--ap-ink);
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.012em;
+}
+
+.mt-honest-list dd {
+  margin: 0;
+  color: var(--ap-ink-soft);
+  font-size: 16px;
+  line-height: 1.55;
+}
+
+.mt-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 22px;
+  flex-wrap: wrap;
+}
+
+.mt-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 16px;
+  border: 1px solid var(--ap-hairline);
+  border-radius: 999px;
+  background: var(--ap-surface);
+  font-size: 13px;
+}
+
+.mt-status > span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ap-green);
+}
+
+.mt-status b { color: var(--ap-ink); font-weight: 600; }
+.mt-status i { color: var(--ap-ink-soft); font-style: normal; }
+
+.mt-links {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.mt-links a { color: var(--mt-blue); font-size: 15px; text-decoration: none; }
+.mt-links a:hover { text-decoration: underline; }
+.mt-links .mt-join-lg:hover { text-decoration: none; opacity: 0.92; }
+
+/* ── Reveal ────────────────────────────────────────────────────────────── */
+
+.mt-reveal {
+  opacity: 0;
+  transform: translateY(14px);
+  transition: opacity 620ms cubic-bezier(.22,1,.36,1), transform 620ms cubic-bezier(.22,1,.36,1);
+}
+
+.mt-reveal.in {
+  opacity: 1;
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mt-reveal { opacity: 1; transform: none; transition: none; }
+  .mt-shimmer { animation: none; }
+}
+
+/* ── Footer ────────────────────────────────────────────────────────────── */
+/* SiteFooter ships as .home-footer, built for the cream home pages: warm
+   background, its own type scale, its own link colour. Dropped onto an Apple
+   page it arrives wearing the wrong clothes, so it is re-dressed in the page's
+   own tokens here. */
+
+.mt .home-footer {
+  margin-top: 0;
+  border-top: 1px solid var(--ap-hairline);
+  background: var(--ap-bg);
+  color: var(--ap-ink-soft);
+}
+
+.mt .home-footer-inner {
+  max-width: var(--ap-maxw);
+  padding-inline: var(--ap-gutter);
+}
+
+.mt .home-footer a,
+.mt .home-footer p,
+.mt .home-footer span,
+.mt .home-footer li {
+  color: var(--ap-ink-soft);
+}
+
+.mt .home-footer h1,
+.mt .home-footer h2,
+.mt .home-footer h3,
+.mt .home-footer h4,
+.mt .home-footer strong,
+.mt .home-footer b {
+  color: var(--ap-ink);
+}
+
+.mt .home-footer a:hover { color: var(--mt-blue); }

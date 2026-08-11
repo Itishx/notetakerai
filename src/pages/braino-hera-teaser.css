@@ -1,0 +1,162 @@
+.hera-db-film {
+  --hera-green: #17693e;
+  --hera-bright: #4ac784;
+  min-height: 100svh;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: #050506;
+}
+
+.hera-db-film .hera-db-canvas,
+.hera-db-film .nt-stage { background: #050506; }
+.hera-db-film .kf-line { z-index: 4; max-width: min(1120px, 86vw); gap: 0 .2em; color: var(--hera-bright); letter-spacing: -.02em; }
+.hera-db-film .kf-line-big { font-size: clamp(58px, 9.2vw, 132px); }
+.hera-db-film .kf-line.invert-flash { color: #050506; }
+.hera-db-film .nt-invert2 { background: var(--hera-bright); }
+.hera-db-film .nt-stage:has(.kf-line[data-beat-id="wispr-flow"].invert-flash) .nt-invert2 { background: #fff; }
+.hera-db-film .kf-hero { z-index: 3; position: absolute; inset: 0; width: 100%; height: 100%; transform: none; transition: none; }
+
+.hera-db-film .kf-line[data-beat-id="runs-locally"],
+.hera-db-film .kf-line[data-beat-id="but-we-do"],
+.hera-db-film .kf-line[data-beat-id="foundry"] { color: var(--hera-bright); }
+
+.hera-db-film .kf-line[data-beat-id="stop-scrolling"] {
+  font-size: clamp(24px, 3.1vw, 40px);
+  font-weight: 520;
+  letter-spacing: -.018em;
+}
+.hera-db-film .kf-line[data-beat-id="stop-scrolling"] .nt-word.in {
+  animation: heraOpeningFade .49s ease-out both;
+}
+.hera-db-film .kf-line[data-beat-id="wispr-cant"] .nt-word.in {
+  animation: heraSoftFade .49s ease-out both;
+}
+
+/* BrainoNotch-style name construction: the word is assembled in place by
+   hard text stamps. There is deliberately no scale/bounce hero animation. */
+.hera-db-film .kf-line[data-beat-id="hera-name"] { gap: 0; font-size: clamp(96px,15vw,220px); }
+.hera-db-film .kf-line[data-beat-id="hera-name"] .nt-word.in {
+  background-image: linear-gradient(180deg,#f4fff9 0%,#8fffdc 18%,#2f9c65 46%,#d8ffe9 51%,#17693e 58%,#050506 100%);
+  background-size: 100% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  animation: heraMetalStamp .14s steps(2,end) both;
+}
+.hera-db-film .kf-line[data-beat-id="foundry"] .nt-word.in {
+  animation: heraFoundryStomp .16s cubic-bezier(.16,1,.3,1) both;
+}
+.hera-db-film .kf-line[data-beat-id="foundry"].kf-iomi-reveal {
+  gap: 0;
+  background-image: linear-gradient(96deg,#050506 0%,#17693e 20%,#4ac784 42%,#d8ffe9 56%,#4ac784 70%,#17693e 88%,#050506 100%);
+  background-size: 220% auto;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  font-size: clamp(110px,16vw,230px);
+  animation: heraFoundrySweep .94s ease-in-out both;
+}
+.hera-db-film .kf-line[data-beat-id="foundry"].kf-iomi-reveal .kf-iomi-letter {
+  color: inherit !important;
+  -webkit-text-fill-color: transparent;
+  animation: none !important;
+}
+
+.hera-proof { position: absolute; inset: 0; overflow: hidden; color: #fff; background: #000; }
+.hera-proof-notch {
+  --proof-height: 168px;
+  position: absolute;
+  z-index: 1;
+  top: 50%;
+  left: 50%;
+  width: min(520px, 48vw);
+  height: var(--proof-height);
+  box-sizing: border-box;
+  padding: 54px 24px 18px;
+  overflow: hidden;
+  border-radius: 0 0 26px 26px;
+  color: #f7f7f5;
+  background: #050506;
+  box-shadow: 0 18px 54px rgba(21,70,54,.17), 0 0 0 1px rgba(61,232,178,.2);
+  transform: translate(-50%,-50%);
+  transform-origin: 50% 50%;
+  transition: width 720ms cubic-bezier(.22,1,.36,1), height 720ms cubic-bezier(.22,1,.36,1), border-radius 720ms cubic-bezier(.22,1,.36,1), box-shadow 300ms ease;
+}
+.hera-proof-notch::before { position: absolute; top: 22px; left: 50%; width: 28px; height: 9px; border-radius: 50%; border: 3px solid rgba(255,255,255,.85); border-top: 0; border-left-color: transparent; border-right-color: transparent; transform: translateX(-50%); content: ""; }
+.hera-proof-notch > header { height: 25px; padding: 0 1px 10px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,.09); font-family: -apple-system,BlinkMacSystemFont,"SF Pro Text",sans-serif; }
+.hera-proof-notch > header > span { display: flex; align-items: center; gap: 0; color: rgba(255,255,255,.92); font-size: 11px; font-weight: 650; }
+.hera-proof-notch > header > span > i { width: 7px; height: 7px; margin-right: 8px; border-radius: 50%; background: #8fffdc; box-shadow: 0 0 12px rgba(61,232,178,.65); animation: heraProofDot 1.5s ease-in-out infinite; }
+.hera-shimmer,
+.hera-name strong { background-image: linear-gradient(100deg,#17693e 0%,#4ac784 23%,#d8ffe9 43%,#4ac784 63%,#17693e 100%); background-size: 220% 100%; background-clip: text; -webkit-background-clip: text; color: transparent; -webkit-text-fill-color: transparent; animation: heraNameShimmer 2.2s linear infinite; }
+.hera-proof-notch > header b { color: rgba(255,255,255,.42); font-size: 9px; font-weight: 650; letter-spacing: .05em; }
+.hera-proof-transcript { height: calc(100% - 25px); padding: 9px 1px 0; display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start; gap: 2px; overflow-x: hidden; overflow-y: hidden; scroll-behavior: auto; }
+.hera-proof-line { flex: 0 0 auto; width: 100%; margin: 0; color: rgba(255,255,255,.94); font: 520 14px/1.18 -apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text","Helvetica Neue",sans-serif; letter-spacing: -.015em; white-space: nowrap; }
+.hera-proof-line i { display: none; width: 2px; height: 1em; margin-left: 4px; vertical-align: -.14em; background: #8fffdc; animation: heraCaret .72s step-end infinite; }
+
+.kf-hero[data-hero-mode="full"] .hera-proof-line i { display: inline-block; }
+.kf-hero[data-hero-mode="full"] .hera-proof-notch { animation: heraNotchDrop 950ms cubic-bezier(.16,1,.3,1) both; }
+.kf-hero[data-hero-mode="full"] .hera-proof-notch > header { animation: heraNotchContent 700ms ease both; }
+.kf-hero[data-hero-mode="full"] .hera-proof { animation: heraProofExit 7650ms ease both; }
+.kf-hero[data-hero-mode=""] .hera-proof { opacity: 0; }
+
+.hera-caret-end { position: absolute; inset: 0; display: grid; place-items: center; background: #050506; }
+.hera-caret-end i { width: 5px; height: 92px; border-radius: 2px; background: var(--hera-bright); animation: heraFinalCaret 900ms step-end 1 both; }
+
+.hera-thought-roll { position: absolute; inset: 0; overflow: hidden; background: #050506; font-family: -apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text","Helvetica Neue",sans-serif; }
+.hera-thought-track { position: absolute; top: 50%; left: 50%; width: min(1080px,88vw); transition: transform .16s cubic-bezier(.16,1,.3,1); }
+.hera-thought-track p { height: 36px; margin: 0; display: flex; align-items: center; justify-content: center; color: var(--hera-bright); font-size: clamp(25px,3.55vw,48px); font-weight: 620; line-height: .76; letter-spacing: -.035em; white-space: nowrap; opacity: 0; }
+.hera-thought-track p span { display: inline-block; opacity: 1; }
+.hera-thought-track p span { margin-left: .22em; }
+.hera-thought-track p span:first-child { margin-left: 0; }
+
+.hera-db-film .kf-line[data-beat-id="thought-1"],
+.hera-db-film .kf-line[data-beat-id="thought-2"],
+.hera-db-film .kf-line[data-beat-id="thought-3"],
+.hera-db-film .kf-line[data-beat-id="thought-4"] { visibility: hidden; }
+
+.kf-hero[data-hero-mode="roll-1"] .hera-thought-track { transform: translate(-50%,-18px); }
+.kf-hero[data-hero-mode="roll-2"] .hera-thought-track { transform: translate(-50%,-54px); }
+.kf-hero[data-hero-mode="roll-3"] .hera-thought-track { transform: translate(-50%,-90px); }
+.kf-hero[data-hero-mode="roll-4"] .hera-thought-track { transform: translate(-50%,-126px); }
+
+.kf-hero[data-hero-mode="roll-1"] .hera-thought-track p:nth-child(-n+1),
+.kf-hero[data-hero-mode="roll-2"] .hera-thought-track p:nth-child(-n+2),
+.kf-hero[data-hero-mode="roll-3"] .hera-thought-track p:nth-child(-n+3),
+.kf-hero[data-hero-mode="roll-4"] .hera-thought-track p:nth-child(-n+4) { opacity: 1; }
+
+.kf-hero[data-hero-mode="roll-1"] .hera-thought-track p:nth-child(1) span,
+.kf-hero[data-hero-mode="roll-2"] .hera-thought-track p:nth-child(2) span,
+.kf-hero[data-hero-mode="roll-3"] .hera-thought-track p:nth-child(3) span,
+.kf-hero[data-hero-mode="roll-4"] .hera-thought-track p:nth-child(4) span { opacity: 0; animation: heraThoughtChunk 10ms step-end both; }
+
+@keyframes heraProofDot { 0%,100%{opacity:.42;transform:scale(.82)}50%{opacity:1;transform:scale(1)} }
+@keyframes heraNameShimmer { to{background-position:-220% 0} }
+@keyframes heraCaret { 0%,48%{opacity:1}49%,100%{opacity:0} }
+@keyframes heraMetalStamp { from{opacity:0;clip-path:polygon(0 0,22% 0,0 100%,0 100%);filter:contrast(1.7) brightness(1.45);text-shadow:none}to{opacity:1;clip-path:polygon(0 0,100% 0,100% 100%,0 100%);filter:contrast(1.1) brightness(1);text-shadow:0 2px 0 rgba(0,0,0,.45)} }
+@keyframes heraFoundryStomp { from{opacity:1;filter:brightness(1.8)}to{opacity:1;filter:brightness(1)} }
+@keyframes heraFoundrySweep { from{background-position:200% center}to{background-position:-40% center} }
+@keyframes heraOpeningFade { from{opacity:0}to{opacity:1} }
+@keyframes heraSoftFade { from{opacity:0}to{opacity:1} }
+@keyframes heraCreditLand { from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none} }
+@keyframes heraThoughtChunk { from{opacity:0}to{opacity:1} }
+@keyframes heraFinalCaret { 0%,24%,50%,74%{opacity:1}25%,49%,75%,100%{opacity:0} }
+@keyframes heraNotchDrop {
+  0% { width: min(190px,22vw); height: 32px; padding-top: 54px; border-radius: 12px; box-shadow: none; opacity: 0; transform: translate(-50%,-50%) scale(.7); }
+  38% { width: min(222px,32vw); height: 60px; border-radius: 18px; opacity: 1; transform: translate(-50%,-50%) scale(1.02); }
+  100% { width: min(520px,56vw); height: 168px; border-radius: 26px; box-shadow: 0 22px 68px rgba(0,0,0,.42),0 0 0 1px rgba(74,199,132,.34); opacity: 1; transform: translate(-50%,-50%) scale(1.5); }
+}
+@keyframes heraNotchContent { 0%,42%{opacity:0;transform:translateY(-7px)}100%{opacity:1;transform:none} }
+@keyframes heraProofExit { 0%,90%{opacity:1;transform:scale(1)}100%{opacity:0;transform:scale(1.035)} }
+
+@media(max-width:700px){
+  .hera-db-film .kf-line { max-width: 88vw; gap: 0 .2em; font-size: clamp(31px,10vw,48px); line-height: 1; }
+  .hera-db-film .kf-line-big { font-size: clamp(48px,14vw,72px); }
+  .hera-proof-notch { padding: 52px 18px 15px; }
+  .hera-proof-line { font-size: 13px; }
+  .hera-caret-end i { height: 68px; }
+}
+
+@media(prefers-reduced-motion:reduce){.hera-db-film *{animation:none!important;transition:none!important}}

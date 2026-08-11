@@ -566,3 +566,43 @@ html.bf-footer-game-visible #sb-brain-mascot-wrapper {
     animation: none;
   }
 }
+
+/* ── Navigation columns ──────────────────────────────────────────────────────
+   Restored above the game. They sit on the footer's own dark palette rather
+   than borrowing the page's, so the footer reads the same on every page it
+   lands on. */
+.bf-cols {
+  max-width: 1024px;
+  margin: 0 auto;
+  padding: clamp(46px, 6vw, 72px) clamp(20px, 5vw, 40px) clamp(30px, 4vw, 44px);
+  display: grid;
+  gap: clamp(24px, 3vw, 40px);
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+}
+
+.bf-col { display: flex; flex-direction: column; gap: 9px; min-width: 0; }
+
+.bf-col-head {
+  margin-bottom: 3px;
+  color: var(--bf-ink);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+.bf-col a {
+  color: var(--bf-ink-2);
+  font-size: 14px;
+  line-height: 1.35;
+  text-decoration: none;
+  transition: color 0.18s ease;
+}
+
+.bf-col a:hover { color: var(--bf-ink); }
+
+.braino-footer .bf-cols + .bf-game-window { border-top: 1px solid var(--bf-line); }
+
+@media (max-width: 560px) {
+  .bf-cols { grid-template-columns: 1fr 1fr; gap: 26px 20px; }
+}

@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
+import { BRAINO_TEXT_MODEL } from "../../_shared/openai-models.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -201,8 +202,8 @@ function toolConfigForPurpose(purpose: Purpose) {
 // reasoning. Deep purposes (doc writing, comparisons) keep the strong model for quality.
 function modelForPurpose(purpose: Purpose) {
   const deep = purpose === "google_doc" || purpose === "compare";
-  if (deep) return Deno.env.get("OPENAI_WEB_SEARCH_MODEL") || "gpt-5.5";
-  return Deno.env.get("OPENAI_WEB_SEARCH_FAST_MODEL") || Deno.env.get("OPENAI_WEB_SEARCH_MODEL") || "gpt-5.4-mini";
+  if (deep) return Deno.env.get("OPENAI_WEB_SEARCH_MODEL") || BRAINO_TEXT_MODEL;
+  return Deno.env.get("OPENAI_WEB_SEARCH_FAST_MODEL") || Deno.env.get("OPENAI_WEB_SEARCH_MODEL") || BRAINO_TEXT_MODEL;
 }
 
 async function sha256(value: string) {

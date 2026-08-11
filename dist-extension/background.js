@@ -52,7 +52,7 @@ let bgAgentShouldStop = false;
 let rtVoiceOwnerTabId = null; // single realtime-voice owner tab (so only one Braino speaks)
 let bgRtSessionActive = false; // offscreen realtime session is running
 let bgRtSessionStarting = false;
-let bgRtSessionInfo = { sessionId: null, limitMs: 0, allocatedMs: 0, realtimeModel: null, transcriptionModel: null };
+let bgRtSessionInfo = { sessionId: null, limitMs: 0, allocatedMs: 0, realtimeModel: null, transcriptionModel: null, noiseReduction: null };
 
 // On install/update, clear the "offscreen is broken" flag so every client re-attempts the
 // global offscreen voice path once (now backed by a one-time mic-permission grant). If it
@@ -1427,6 +1427,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === "transcribeSegment") {
     bgTranscribeAudioChunk({
       audioBase64: message.audioBase64 || null,
+      audioStreams: Array.isArray(message.audioStreams) ? message.audioStreams : [],
       existingNotes: message.existingNotes || "",
       existingTranscript: message.existingTranscript || "",
       mode: bgNormalizeRecordingMode(message.mode),
@@ -1983,6 +1984,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       allocatedMs: Number(message.allocatedMs || 0),
       realtimeModel: message.realtimeModel || null,
       transcriptionModel: message.transcriptionModel || null,
+      // Only offscreen can read the mic label, and only the tab rebuilds session.update.
+      // Relay the verdict so later re-sends don't stomp the denoiser back to the default.
+      noiseReduction: message.noiseReduction || null,
     };
     chrome.storage.local.set({ sbRtSessionActive: true }); // global session is genuinely live now
     bgVoiceVisualTabId = rtVoiceOwnerTabId; // the starting tab shows the presence first
@@ -2005,7 +2009,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     bgConsumeVoiceSeconds();
     bgRtSessionStarting = false;
     bgRtSessionActive = false;
-    bgRtSessionInfo = { sessionId: null, limitMs: 0, allocatedMs: 0, realtimeModel: null, transcriptionModel: null };
+    bgRtSessionInfo = { sessionId: null, limitMs: 0, allocatedMs: 0, realtimeModel: null, transcriptionModel: null, noiseReduction: null };
     bgVoiceVisualTabId = null;
     chrome.storage.local.set({ sbRtSessionActive: false });
     // Tell the active tab so it can fall back to legacy voice.
@@ -2029,7 +2033,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     bgConsumeVoiceSeconds();
     bgRtSessionStarting = false;
     bgRtSessionActive = false;
-    bgRtSessionInfo = { sessionId: null, limitMs: 0, allocatedMs: 0, realtimeModel: null, transcriptionModel: null };
+    bgRtSessionInfo = { sessionId: null, limitMs: 0, allocatedMs: 0, realtimeModel: null, transcriptionModel: null, noiseReduction: null };
     rtVoiceOwnerTabId = null;
     bgVoiceVisualTabId = null;
     chrome.storage.local.set({ sbRtSessionActive: false });
@@ -2465,7 +2469,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         const reply = await bgCallDelegateModel({
           systemPrompt,
           userPrompt: userPromptLines.filter(Boolean).join("\n\n"),
-          model: BrainoModels?.MODELS?.STEP || "gpt-5.4-mini",
+          model: BrainoModels?.MODELS?.STEP || "gpt-5.6-luna",
         });
         const parsed = bgExtractJsonObject(reply);
 
@@ -3891,7 +3895,7 @@ async function bgSynthesizeIntent(task, sharedContext, pageInfo = null) {
     const reply = await bgCallDelegateModel({
       systemPrompt,
       userPrompt,
-      model: BrainoModels?.MODELS?.STEP || "gpt-5.4-mini",
+      model: BrainoModels?.MODELS?.STEP || "gpt-5.6-luna",
     });
     const p = bgExtractJsonObject(reply);
     // Deterministic scrub: a trailing "on amazon india"-style storefront tag in the query
@@ -3931,8 +3935,8 @@ async function bgDecomposeDelegateTask(task, sharedContext, tabId, onProgress, o
     const isReplan = Boolean(options.strong);
     onProgress?.(isReplan ? "Rethinking the plan..." : "Understanding the task...");
     const model = isReplan
-      ? (BrainoModels?.MODELS?.STRATEGIST || "gpt-5.4")
-      : (BrainoModels?.MODELS?.STEP || "gpt-5.4-mini");
+      ? (BrainoModels?.MODELS?.STRATEGIST || "gpt-5.6-luna")
+      : (BrainoModels?.MODELS?.STEP || "gpt-5.6-luna");
     const stalledContext = isReplan && options.state
       ? [
           "The previous plan STALLED. Current run state:",
@@ -4122,7 +4126,7 @@ async function bgDecideNextAction({ task, state, observationText, skills, lesson
       console.warn("[Braino][HIL-LOOP] failed, using legacy prompt:", error?.message || error);
     }
   }
-  const model = BrainoModels?.pickModel?.(phase || "step", stuckCount || 0) || "gpt-5.4-mini";
+  const model = BrainoModels?.pickModel?.(phase || "step", stuckCount || 0) || "gpt-5.6-luna";
   const decideGeo = await bgGetUserGeo().catch(() => null);
   const systemPrompt = bgBuildDelegateSystemPrompt(skills, lessons, decideGeo);
   const synth = state?.synth || null;
@@ -4202,7 +4206,7 @@ async function bgVerifyDelegateDone({ task, state, tabId }) {
     const reply = await bgCallDelegateModel({
       systemPrompt,
       userPrompt,
-      model: BrainoModels?.MODELS?.STRATEGIST || "gpt-5.4",
+      model: BrainoModels?.MODELS?.STRATEGIST || "gpt-5.6-luna",
     });
     const parsed = bgExtractJsonObject(reply);
     return { complete: parsed?.complete !== false, reason: String(parsed?.reason || "").slice(0, 200) };
@@ -4233,7 +4237,7 @@ async function bgReflectAndStoreLessons({ task, state, origin, outcome }) {
     const reply = await bgCallDelegateModel({
       systemPrompt,
       userPrompt,
-      model: BrainoModels?.MODELS?.STRATEGIST || "gpt-5.4",
+      model: BrainoModels?.MODELS?.STRATEGIST || "gpt-5.6-luna",
     });
     const parsed = bgExtractJsonObject(reply);
     const lessons = Array.isArray(parsed?.lessons) ? parsed.lessons : [];
@@ -4724,7 +4728,7 @@ async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {
     if (state.stuckCount >= 3 && replanCount < 2) {
       replanCount += 1;
       const replan = await bgDecomposeDelegateTask(task, sharedContext, currentTabId, onProgress, { strong: true, state });
-      llmUsd += BrainoModels?.estimateModelCost?.(BrainoModels?.MODELS?.STRATEGIST) || 0.02;
+      llmUsd += BrainoModels?.estimateModelCost?.(BrainoModels?.MODELS?.STRATEGIST) || 0.0005;
       if (replan?.subgoals?.length) {
         BrainoTaskState.setSubgoals(state, replan.subgoals);
         if (Array.isArray(replan.skills) && replan.skills.length) {
@@ -4766,7 +4770,7 @@ async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {
       });
       decision = picked.decision;
       model = picked.model;
-      llmUsd += BrainoModels?.estimateModelCost?.(model) || 0.002;
+      llmUsd += BrainoModels?.estimateModelCost?.(model) || 0.0005;
     } catch (error) {
       const msg = `Delegate model error: ${error?.message || error}`;
       onFinal?.(msg);
@@ -4792,7 +4796,7 @@ async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {
         verifyCount += 1;
         onProgress?.("Double-checking the result...");
         const verify = await bgVerifyDelegateDone({ task, state, tabId: currentTabId });
-        llmUsd += BrainoModels?.estimateModelCost?.(BrainoModels?.MODELS?.STRATEGIST) || 0.02;
+        llmUsd += BrainoModels?.estimateModelCost?.(BrainoModels?.MODELS?.STRATEGIST) || 0.0005;
         bgPushTrace(state, currentTabId, traceMeta, {
           step: step + 1,
           thought: String(decision?.thought || "").trim(),
@@ -6432,7 +6436,7 @@ async function bgBuildGmailCurrentThreadAnswer(task, thread, parsed) {
     const answer = await bgCallDelegateModel({
       systemPrompt,
       userPrompt,
-      model: BrainoModels?.MODELS?.STEP || "gpt-5.4-mini",
+      model: BrainoModels?.MODELS?.STEP || "gpt-5.6-luna",
     });
     return String(answer || "").trim() || bgBuildGmailThreadFallbackAnswer(thread, wantsReplyAdvice);
   } catch (_) {
@@ -6460,7 +6464,7 @@ async function bgBuildGmailGeneratedReply(task, thread) {
     const answer = await bgCallDelegateModel({
       systemPrompt,
       userPrompt,
-      model: BrainoModels?.MODELS?.STEP || "gpt-5.4-mini",
+      model: BrainoModels?.MODELS?.STEP || "gpt-5.6-luna",
     });
     return String(answer || "").trim();
   } catch (_) {
@@ -9700,12 +9704,16 @@ function bgMeetingContextHasText(meetingContext) {
   return captions.some((item) => String(item?.text || "").trim());
 }
 
-async function bgTranscribeAudioChunk({ audioBase64, existingNotes = "", existingTranscript = "", mode = "lecture", knownSpeakerReferences = [], meetingContext = null }) {
+async function bgTranscribeAudioChunk({ audioBase64, audioStreams = [], existingNotes = "", existingTranscript = "", mode = "lecture", knownSpeakerReferences = [], meetingContext = null }) {
   const stored = await new Promise(r => chrome.storage.local.get(["authToken"], r));
   if (!stored.authToken) return { error: "Not signed in", notes: existingNotes };
 
   const normalizedMode = bgNormalizeRecordingMode(mode);
-  if (!audioBase64 && !(normalizedMode === "meeting" && bgMeetingContextHasText(meetingContext))) {
+  // Meetings arrive as two streams recorded from the same moment (the call, and you). Lectures
+  // and older callers still send one blob.
+  const streams = Array.isArray(audioStreams) ? audioStreams.filter((s) => s?.audioBase64) : [];
+  const hasAudio = streams.length > 0 || Boolean(audioBase64);
+  if (!hasAudio && !(normalizedMode === "meeting" && bgMeetingContextHasText(meetingContext))) {
     return { notes: existingNotes, empty: true };
   }
 
@@ -9718,7 +9726,9 @@ async function bgTranscribeAudioChunk({ audioBase64, existingNotes = "", existin
         apikey: BG_SUPABASE_ANON_KEY,
       },
       body: JSON.stringify({
-        audioSegments: audioBase64 ? [audioBase64] : [],
+        ...(streams.length
+          ? { audioStreams: streams }
+          : { audioSegments: audioBase64 ? [audioBase64] : [] }),
         existingNotes,
         existingTranscript,
         mode: normalizedMode,
@@ -9758,6 +9768,7 @@ async function bgGetAndTranscribeSegment(existingNotes, mode, existingTranscript
   const segRes = await bgGetAudioSegment();
   return bgTranscribeAudioChunk({
     audioBase64: segRes?.audioBase64 || null,
+    audioStreams: Array.isArray(segRes?.audioStreams) ? segRes.audioStreams : [],
     existingNotes,
     existingTranscript,
     mode: mode || bgRecordingMode,
@@ -9771,6 +9782,7 @@ async function bgStopRecordingAndTranscribe(existingNotes, mode, existingTranscr
     const stopRes = await stopRecording();
     return await bgTranscribeAudioChunk({
       audioBase64: stopRes?.audioBase64 || null,
+      audioStreams: Array.isArray(stopRes?.audioStreams) ? stopRes.audioStreams : [],
       existingNotes,
       existingTranscript,
       mode: activeMode,

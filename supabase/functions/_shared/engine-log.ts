@@ -12,7 +12,10 @@
 //      errored or came back malformed is exactly what a prompt edit has to fix.
 
 type EngineLogRow = {
-  engine: "hil-reason" | "hil-loop" | "braino-reply";
+  // hil-router is the reflex tier: one call, one tool name, no deliberation. It
+  // runs in shadow first, so these rows are the whole point of that stage —
+  // what HIL would have chosen, next to what the cascade actually did.
+  engine: "hil-reason" | "hil-loop" | "braino-reply" | "hil-router";
   run_id?: string | null;
   turn?: number;
   command: string;
@@ -40,9 +43,35 @@ type EngineLogRow = {
 // still leave a readable row instead of blowing up the insert.
 const MAX_TEXT = 8000;
 
+// Hidden voice modes are private to the person using them. The model still gets
+// the real command — only what lands in this table is redacted. Tuning needs to
+// know a mode command happened, never which one.
+const PERSONAL_MODE_RE = /\bmode\s*\d+\b/gi;
+
+function redactPersonalModes(value: string): string {
+  return value.replace(PERSONAL_MODE_RE, "mode [redacted]");
+}
+
 function clip(value: unknown, limit = MAX_TEXT): string | null {
   if (typeof value !== "string") return null;
-  return value.length > limit ? `${value.slice(0, limit)}\n[truncated]` : value;
+  const safe = redactPersonalModes(value);
+  return safe.length > limit ? `${safe.slice(0, limit)}\n[truncated]` : safe;
+}
+
+// `response` is stored as raw JSON, so it never passed through clip() — which is
+// how the model's own replies ("you are now in mode N") kept the number on record
+// even when the command was clean. Walk it.
+function redactDeep(value: unknown): unknown {
+  if (typeof value === "string") return redactPersonalModes(value);
+  if (Array.isArray(value)) return value.map(redactDeep);
+  if (value && typeof value === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
+      out[key] = redactDeep(item);
+    }
+    return out;
+  }
+  return value;
 }
 
 /**
@@ -72,7 +101,7 @@ export function logEngineRun(row: EngineLogRow): string {
         turn: row.turn ?? 1,
         command: clip(row.command) ?? "",
         context: clip(row.context),
-        response: row.response ?? null,
+        response: redactDeep(row.response) ?? null,
         moment_id: row.moment_id ?? null,
         verdict: row.verdict ?? null,
         model: row.model ?? null,

@@ -39,6 +39,7 @@ try {
     "lib/recovery.js",
     "lib/macroStore.js",
     "lib/searchGuard.js",
+    "lib/hilAdapter.js",
   );
 } catch (error) {
   console.warn("[Braino][Delegate] helper import failed:", error);
@@ -51,7 +52,7 @@ let bgAgentShouldStop = false;
 let rtVoiceOwnerTabId = null; // single realtime-voice owner tab (so only one Braino speaks)
 let bgRtSessionActive = false; // offscreen realtime session is running
 let bgRtSessionStarting = false;
-let bgRtSessionInfo = { sessionId: null, limitMs: 0, allocatedMs: 0, realtimeModel: null, transcriptionModel: null };
+let bgRtSessionInfo = { sessionId: null, limitMs: 0, allocatedMs: 0, realtimeModel: null, transcriptionModel: null, noiseReduction: null };
 
 // On install/update, clear the "offscreen is broken" flag so every client re-attempts the
 // global offscreen voice path once (now backed by a one-time mic-permission grant). If it
@@ -1426,6 +1427,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === "transcribeSegment") {
     bgTranscribeAudioChunk({
       audioBase64: message.audioBase64 || null,
+      audioStreams: Array.isArray(message.audioStreams) ? message.audioStreams : [],
       existingNotes: message.existingNotes || "",
       existingTranscript: message.existingTranscript || "",
       mode: bgNormalizeRecordingMode(message.mode),
@@ -1982,6 +1984,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       allocatedMs: Number(message.allocatedMs || 0),
       realtimeModel: message.realtimeModel || null,
       transcriptionModel: message.transcriptionModel || null,
+      // Only offscreen can read the mic label, and only the tab rebuilds session.update.
+      // Relay the verdict so later re-sends don't stomp the denoiser back to the default.
+      noiseReduction: message.noiseReduction || null,
     };
     chrome.storage.local.set({ sbRtSessionActive: true }); // global session is genuinely live now
     bgVoiceVisualTabId = rtVoiceOwnerTabId; // the starting tab shows the presence first
@@ -2004,7 +2009,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     bgConsumeVoiceSeconds();
     bgRtSessionStarting = false;
     bgRtSessionActive = false;
-    bgRtSessionInfo = { sessionId: null, limitMs: 0, allocatedMs: 0, realtimeModel: null, transcriptionModel: null };
+    bgRtSessionInfo = { sessionId: null, limitMs: 0, allocatedMs: 0, realtimeModel: null, transcriptionModel: null, noiseReduction: null };
     bgVoiceVisualTabId = null;
     chrome.storage.local.set({ sbRtSessionActive: false });
     // Tell the active tab so it can fall back to legacy voice.
@@ -2028,7 +2033,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     bgConsumeVoiceSeconds();
     bgRtSessionStarting = false;
     bgRtSessionActive = false;
-    bgRtSessionInfo = { sessionId: null, limitMs: 0, allocatedMs: 0, realtimeModel: null, transcriptionModel: null };
+    bgRtSessionInfo = { sessionId: null, limitMs: 0, allocatedMs: 0, realtimeModel: null, transcriptionModel: null, noiseReduction: null };
     rtVoiceOwnerTabId = null;
     bgVoiceVisualTabId = null;
     chrome.storage.local.set({ sbRtSessionActive: false });
@@ -2223,10 +2228,20 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         if (res.ok) { sendResponse({ authenticated: true }); return; }
         if (authRefreshToken) {
           const refreshed = await bgRefreshAuthToken();
-          sendResponse({ authenticated: !!refreshed });
-          return;
+          if (refreshed) { sendResponse({ authenticated: true }); return; }
         }
-        sendResponse({ authenticated: false });
+        // Token dead AND refresh dead. We used to stop here and leave the dead
+        // pair sitting in storage — which permanently locked out the scavenge at
+        // the top of this handler, because that only runs when storage is EMPTY.
+        // The refresh token gets rotated out from under us by the website and the
+        // Mac app (all three share one Supabase session), so this state is reached
+        // routinely, and once reached it never recovered: an open, freshly
+        // signed-in trybraino.com tab could not rescue it and the user was stuck
+        // being told to sign in. Drop the dead credentials and let the scavenge
+        // have a real chance (it persists whatever it finds).
+        await chrome.storage.local.remove(["authToken", "authRefreshToken"]);
+        const rescued = await bgScavengeAuthFromBrainoTabs();
+        sendResponse({ authenticated: !!rescued?.access_token });
       } catch {
         sendResponse({ authenticated: !!authToken });
       }
@@ -2395,6 +2410,28 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         const pageContext = message.pageContext || {};
         const pending = message.pending || null;
 
+        // Fresh command (not an answer to a question Braino already asked) goes to
+        // the canonical layer. The `pending` case is a different job entirely,
+        // binding a reply back onto an earlier question, which HIL does not model,
+        // so that branch keeps its own prompt below.
+        if (!pending) {
+          const hilContext = [
+            pageContext.url ? `On screen: ${pageContext.url}${pageContext.title ? ` — ${pageContext.title}` : ""}` : null,
+            bgBuildAgentConversationText(sharedContext) ? `Recent conversation:\n${bgBuildAgentConversationText(sharedContext)}` : null,
+          ].filter(Boolean).join("\n\n");
+          const hil = await bgReasonViaHil(promptText, hilContext);
+          if (hil) {
+            sendResponse({
+              restated_goal: String(hil.restated_goal || promptText).trim(),
+              ambiguous: hil.verdict === "ask" && Boolean(String(hil.clarifying_question || "").trim()),
+              clarifying_question: String(hil.clarifying_question || "").trim(),
+            });
+            return;
+          }
+          // hil-reason unreachable: fall through to the legacy inline prompt rather
+          // than skip the check, because skipping it means acting on a guess.
+        }
+
         const systemPrompt = pending
           ? [
               "You are Braino's common-sense layer. Braino just asked the user a clarifying question because",
@@ -2432,7 +2469,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         const reply = await bgCallDelegateModel({
           systemPrompt,
           userPrompt: userPromptLines.filter(Boolean).join("\n\n"),
-          model: BrainoModels?.MODELS?.STEP || "gpt-5.4-mini",
+          model: BrainoModels?.MODELS?.STEP || "gpt-5.6-luna",
         });
         const parsed = bgExtractJsonObject(reply);
 
@@ -3618,6 +3655,43 @@ function bgDelegateClarifyDecision(message, thought = "The model response was no
   });
 }
 
+// Braino's ONE common-sense layer, the same bytes /commands and /human-intelligence
+// tune. The extension used to carry its own hand-written copy of this reasoning
+// inline, which is how the lab could learn "look at the screen before you ask" while
+// the browser kept asking anyway: the two were never the same prompt.
+//
+// hil-reason returns a strict superset of what the old inline prompt did
+// (restated_goal, ambiguous, clarifying_question, plus steps/checks/verdict/action),
+// so nothing downstream had to change shape. It also appends the Emotional Engine
+// server-side, which is the point: the canonical prompt says the personality is "the
+// judge of tone and of doubt" and moves the bar for asking, lower in a heavy moment,
+// higher when someone just wants it done. That only works when both arrive together.
+//
+// Returns null on any failure so the caller can fall back to the old path rather
+// than lose the check entirely.
+async function bgReasonViaHil(commandText, contextText) {
+  try {
+    const res = await fetch(`${BG_API_BASE}/hil-reason`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: BG_SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${BG_SUPABASE_ANON_KEY}`,
+      },
+      body: JSON.stringify({ command: commandText, context: contextText || "" }),
+    });
+    if (!res.ok) { console.warn("[Braino][HIL] hil-reason", res.status); return null; }
+    const data = await res.json();
+    const r = data?.reasoning;
+    if (!r || typeof r !== "object") return null;
+    console.log(`[Braino][HIL] ${r.verdict} — ${r.restated_goal}`);
+    return r;
+  } catch (error) {
+    console.warn("[Braino][HIL] hil-reason failed:", error?.message || error);
+    return null;
+  }
+}
+
 async function bgCallDelegateModel({ systemPrompt, userPrompt, model, validationError }) {
   const message = validationError
     ? `${userPrompt}\n\nYour previous JSON failed validation: ${validationError}\nReturn corrected strict JSON only.`
@@ -3821,7 +3895,7 @@ async function bgSynthesizeIntent(task, sharedContext, pageInfo = null) {
     const reply = await bgCallDelegateModel({
       systemPrompt,
       userPrompt,
-      model: BrainoModels?.MODELS?.STEP || "gpt-5.4-mini",
+      model: BrainoModels?.MODELS?.STEP || "gpt-5.6-luna",
     });
     const p = bgExtractJsonObject(reply);
     // Deterministic scrub: a trailing "on amazon india"-style storefront tag in the query
@@ -3861,8 +3935,8 @@ async function bgDecomposeDelegateTask(task, sharedContext, tabId, onProgress, o
     const isReplan = Boolean(options.strong);
     onProgress?.(isReplan ? "Rethinking the plan..." : "Understanding the task...");
     const model = isReplan
-      ? (BrainoModels?.MODELS?.STRATEGIST || "gpt-5.4")
-      : (BrainoModels?.MODELS?.STEP || "gpt-5.4-mini");
+      ? (BrainoModels?.MODELS?.STRATEGIST || "gpt-5.6-luna")
+      : (BrainoModels?.MODELS?.STEP || "gpt-5.6-luna");
     const stalledContext = isReplan && options.state
       ? [
           "The previous plan STALLED. Current run state:",
@@ -3970,8 +4044,89 @@ ${lessonText}
 ${skillText}`;
 }
 
+// ── The one brain ────────────────────────────────────────────────────────────
+// When this flag is on (it is on by default), every Delegate step is decided by
+// the canonical HIL loop, the exact prompt /commands and /human-intelligence tune,
+// with the Emotional Engine appended server-side. The legacy inline prompt below
+// stays as the fallback for any turn where hil-loop is unreachable or returns
+// something the runner cannot validate, so a bad turn degrades to yesterday's
+// behaviour instead of a dead run. Kill switch: chrome.storage sbUseHilBrain=false.
+let bgUseHilBrainCached = true;
+try {
+  chrome.storage.local.get(["sbUseHilBrain"], (r) => {
+    void chrome.runtime.lastError;
+    bgUseHilBrainCached = r?.sbUseHilBrain !== false;
+  });
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === "local" && "sbUseHilBrain" in changes) {
+      bgUseHilBrainCached = changes.sbUseHilBrain.newValue !== false;
+      console.log(`[Braino][HIL-LOOP] brain ${bgUseHilBrainCached ? "ON (canonical HIL)" : "OFF (legacy prompt)"}`);
+    }
+  });
+} catch (_) {}
+
+async function bgDecideViaHilLoop({ task, state, observationText, stuckCount }) {
+  const adapter = globalThis.BrainoHilAdapter;
+  if (!adapter) return null;
+  // One run id for the whole task so every turn stitches together in /engine-log.
+  if (!state.hilRunId) { try { state.hilRunId = crypto.randomUUID(); } catch (_) { state.hilRunId = null; } }
+  const budget = Math.max(1, (state.hilBudgetMax || 40) - (state.history?.length || 0));
+  // (hilBudgetMax is stamped onto state by bgRunDelegateLoop from the real budget.)
+  const payload = adapter.toHilPayload({
+    task,
+    state,
+    screen: observationText,
+    budgetLeft: budget,
+    runId: state.hilRunId,
+    // Deliberately empty: by the time this runs, `task` IS synth.resolvedTask (the
+    // loop swaps it in before the first decision), so passing it again as "originally
+    // spoken" duplicated the command under a false label. The original phrasing is
+    // not retained anywhere upstream, so there is nothing honest to put here yet.
+    context: "",
+  });
+  const res = await fetch(`${BG_API_BASE}/hil-loop`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", apikey: BG_SUPABASE_ANON_KEY, Authorization: `Bearer ${BG_SUPABASE_ANON_KEY}` },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) { console.warn("[Braino][HIL-LOOP]", res.status, "falling back to legacy prompt"); return null; }
+  const data = await res.json();
+  if (data?.meta?.parse_ok === false) { console.warn("[Braino][HIL-LOOP] unreadable turn, falling back"); return null; }
+  const pendingCount = (state.subgoals || []).filter((g) => g.status === "pending").length;
+  const adapted = adapter.fromHilTurn(data?.turn, { pendingCount });
+  if (!adapted) return null;
+
+  // HIL just planned: its split becomes the runner's subgoal list, one time.
+  if (adapted.split?.tasks?.length && !state.hilSplitDone) {
+    BrainoTaskState.setSubgoals(state, adapted.split.tasks.map((desc) => ({ desc })));
+    if (adapted.split.restated_goal) state.goal = adapted.split.restated_goal;
+  }
+  state.hilSplitDone = true;
+
+  // The exact validation the legacy path runs, so HIL output gets no special
+  // trust: a shape the runner cannot execute falls back rather than half-runs.
+  const decision = bgValidateDecision(adapted.decision);
+  decision.memory_update = adapted.decision.memory_update;
+  console.log(`[Braino][HIL-LOOP] turn ${(state.history?.length || 0) + 1} (${data?.meta?.hil_loop_version}): ${data?.turn?.decision?.type} — ${adapted.thinking?.slice(0, 140)}`);
+  return decision;
+}
+
 async function bgDecideNextAction({ task, state, observationText, skills, lessons, phase, stuckCount, validationError }) {
-  const model = BrainoModels?.pickModel?.(phase || "step", stuckCount || 0) || "gpt-5.4-mini";
+  // The canonical brain first. validationError means the LEGACY path is mid-retry
+  // on its own malformed JSON, so that lane keeps the conversation.
+  if (bgUseHilBrainCached && !validationError) {
+    try {
+      const hilDecision = await bgDecideViaHilLoop({ task, state, observationText, stuckCount });
+      // Same envelope the legacy paths return. Returning the bare decision here made
+      // the caller's `picked.decision` undefined, which then threw on memory_update
+      // outside any try — the new brain crashed the run every time it WORKED, and
+      // only survived on the turns where it failed into the fallback.
+      if (hilDecision) return { decision: hilDecision, model: "hil-loop" };
+    } catch (error) {
+      console.warn("[Braino][HIL-LOOP] failed, using legacy prompt:", error?.message || error);
+    }
+  }
+  const model = BrainoModels?.pickModel?.(phase || "step", stuckCount || 0) || "gpt-5.6-luna";
   const decideGeo = await bgGetUserGeo().catch(() => null);
   const systemPrompt = bgBuildDelegateSystemPrompt(skills, lessons, decideGeo);
   const synth = state?.synth || null;
@@ -4051,7 +4206,7 @@ async function bgVerifyDelegateDone({ task, state, tabId }) {
     const reply = await bgCallDelegateModel({
       systemPrompt,
       userPrompt,
-      model: BrainoModels?.MODELS?.STRATEGIST || "gpt-5.4",
+      model: BrainoModels?.MODELS?.STRATEGIST || "gpt-5.6-luna",
     });
     const parsed = bgExtractJsonObject(reply);
     return { complete: parsed?.complete !== false, reason: String(parsed?.reason || "").slice(0, 200) };
@@ -4082,7 +4237,7 @@ async function bgReflectAndStoreLessons({ task, state, origin, outcome }) {
     const reply = await bgCallDelegateModel({
       systemPrompt,
       userPrompt,
-      model: BrainoModels?.MODELS?.STRATEGIST || "gpt-5.4",
+      model: BrainoModels?.MODELS?.STRATEGIST || "gpt-5.6-luna",
     });
     const parsed = bgExtractJsonObject(reply);
     const lessons = Array.isArray(parsed?.lessons) ? parsed.lessons : [];
@@ -4146,13 +4301,26 @@ function bgCanonicalDelegateUrl(value) {
   }
 }
 
+function bgDelegateHost(value) {
+  try { return new URL(String(value)).hostname.replace(/^www\./, "").toLowerCase(); } catch (_) { return ""; }
+}
+
 function bgIsRepeatedDelegateNavigate(action, state, obs) {
   if (action?.type !== "navigate") return false;
   const target = bgCanonicalDelegateUrl(action.url);
   if (!target) return false;
   const current = bgCanonicalDelegateUrl(obs?.url || "");
   if (current && current === target) return true;
-  return state.history.slice(-5).some((item) => item?.ok && item?.action?.type === "navigate" && bgCanonicalDelegateUrl(item.action.url) === target);
+  // Compare HOSTS as well, not only exact URLs. Sites redirect — hotstar.com lands
+  // on hotstar.com/in/home — so an exact-match test reads the very next attempt at
+  // the same site as a fresh destination and waves it through. Every spelling (bare
+  // domain, /in, ?query, jiohotstar vs hotstar path) was a free pass, which is how
+  // one run navigated to the same site around ten times.
+  const targetHost = bgDelegateHost(action.url);
+  if (targetHost && bgDelegateHost(obs?.url) === targetHost) return true;
+  return state.history.slice(-5).some((item) => item?.ok && item?.action?.type === "navigate"
+    && (bgCanonicalDelegateUrl(item.action.url) === target
+      || (targetHost && bgDelegateHost(item.action.url) === targetHost)));
 }
 
 function bgDelegateActionFingerprint(action) {
@@ -4179,6 +4347,31 @@ function bgIsRepeatedDelegateAction(action, state) {
   return repeats.length >= limit;
 }
 
+// A delegate run gets its OWN tab and works there. It used to call
+// chrome.tabs.update on whatever tab the user was looking at, so asking Braino to
+// open a site while you were mid-sentence in another tab navigated THAT tab away
+// and destroyed what you were writing. There has never been a tabs.create in this
+// path — this is a missing feature, not a regression.
+//
+// The first navigate of a run opens a background tab and pins the run to it; every
+// later action reuses it. Returns the tab id the caller must continue in.
+async function bgClaimDelegateTab(tabId, action, state) {
+  if (action?.type !== "navigate") return tabId;
+  if (state?.ownTabId) {
+    // Confirm it still exists — the user may have closed it mid-run.
+    const alive = await new Promise((r) => chrome.tabs.get(state.ownTabId, (t) => { void chrome.runtime.lastError; r(Boolean(t)); }));
+    if (alive) return state.ownTabId;
+    state.ownTabId = null;
+  }
+  const created = await new Promise((r) => {
+    chrome.tabs.create({ url: action.url, active: false }, (t) => { void chrome.runtime.lastError; r(t || null); });
+  });
+  if (!created?.id) return tabId;             // creation failed — behave as before
+  if (state) { state.ownTabId = created.id; state.ownTabHandledUrl = action.url; }
+  console.log(`[BgDelegate] working in its own tab ${created.id} — the user's tab is left alone`);
+  return created.id;
+}
+
 async function bgExecuteDelegateAction(tabId, action, state) {
   if (action.type === "web_search") {
     const searchData = await bgPerformRealWebSearch(action.query, { purpose: "delegate" });
@@ -4193,6 +4386,18 @@ async function bgExecuteDelegateAction(tabId, action, state) {
     await bgDelay(Math.max(0, Math.min(5000, Number(action.ms || 1000))));
     return { success: true };
   }
+  // Route into the run's own tab, creating it on the first navigate.
+  const ownTab = await bgClaimDelegateTab(tabId, action, state);
+  if (ownTab !== tabId) {
+    // tabs.create already loaded the URL — don't navigate it a second time.
+    if (state?.ownTabHandledUrl === action.url) {
+      state.ownTabHandledUrl = null;
+      await bgWaitForTabReady(ownTab, 8000);
+      await bgDelay(1300);
+      return { success: true, tabId: ownTab };
+    }
+  }
+  tabId = state?.ownTabId || tabId;
   const result = await bgExecuteAgentAction(tabId, action);
   if (!result?.error && action.type === "navigate") {
     await bgWaitForTabReady(tabId, 8000);
@@ -4397,6 +4602,10 @@ async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {
   // C1 — load durable lessons learned on this site in past runs (local storage, instant).
   let lessons = await (BrainoMacroStore?.getLessons?.(origin) || Promise.resolve([])).catch(() => []);
   const state = BrainoTaskState.createTaskState(task, currentTabId);
+  // HIL is told how much room is left, and rule 8 makes it wrap up when the budget
+  // looks nearly spent. Without this it read the default 40 against a 120-step long
+  // task and started finishing early from about step 39 onward.
+  state.hilBudgetMax = budget.maxSteps;
   // Un-evictable record of executed searches ({host, query}) — the facts list caps at 30
   // entries and long runs were scrolling search_done marks out, silently re-arming repeats.
   state.searchesDone = [];
@@ -4450,6 +4659,37 @@ async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {
     bgSendInlineUiMessage(currentTabId, { action: "SB_AGENT_THOUGHT", thought: `Here's my plan: ${planLine}.` });
   }
 
+  // YouTube resolves BEFORE the DOM loop ever starts. Same as the Mac: work out
+  // the videoId from the results JSON and navigate straight to it, instead of
+  // opening YouTube and asking a vision loop to find the right box on the page.
+  if (!skipFastPath) {
+    const ytQuery = bgParseYouTubeWatchIntent(task);
+    if (ytQuery) {
+      try {
+        onProgress?.(`Finding ${ytQuery} on YouTube`);
+        const videos = await bgFetchYouTubeResults(ytQuery, { limit: 5 });
+        const video = videos[0];
+        if (video?.videoId) {
+          const url = `https://www.youtube.com/watch?v=${video.videoId}`;
+          console.log(`[BgDelegate][youtube] resolved "${ytQuery}" → ${video.title} (${video.videoId})`);
+          onProgress?.(`Playing ${video.title}`);
+          const fast = { type: "navigate", url, description: `Play ${video.title}` };
+          const result = await bgExecuteDelegateAction(currentTabId, fast, state);
+          const newObs = (await bgBuildElementObservation(currentTabId, task)).map;
+          BrainoTaskState.commitHistory(state, { action: fast, expect: { assert: "url_contains", value: "watch" }, thought: "YouTube resolver" }, result, { ok: true });
+          return {
+            ok: true,
+            answer: `Playing ${video.title}${video.channel ? ` by ${video.channel}` : ""} on YouTube.`,
+            steps: state.history?.length || 1,
+          };
+        }
+      } catch (error) {
+        // Resolver had a bad day — fall through to the normal loop rather than fail.
+        console.warn("[BgDelegate][youtube] resolver failed, using the agent loop:", error?.message || error);
+      }
+    }
+  }
+
   const fastActions = skipFastPath ? null : bgTryFastPath(task, [], synth, await bgGetUserGeo().catch(() => null));
   if (fastActions?.length) {
     for (const fast of fastActions) {
@@ -4488,7 +4728,7 @@ async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {
     if (state.stuckCount >= 3 && replanCount < 2) {
       replanCount += 1;
       const replan = await bgDecomposeDelegateTask(task, sharedContext, currentTabId, onProgress, { strong: true, state });
-      llmUsd += BrainoModels?.estimateModelCost?.(BrainoModels?.MODELS?.STRATEGIST) || 0.02;
+      llmUsd += BrainoModels?.estimateModelCost?.(BrainoModels?.MODELS?.STRATEGIST) || 0.0005;
       if (replan?.subgoals?.length) {
         BrainoTaskState.setSubgoals(state, replan.subgoals);
         if (Array.isArray(replan.skills) && replan.skills.length) {
@@ -4530,7 +4770,7 @@ async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {
       });
       decision = picked.decision;
       model = picked.model;
-      llmUsd += BrainoModels?.estimateModelCost?.(model) || 0.002;
+      llmUsd += BrainoModels?.estimateModelCost?.(model) || 0.0005;
     } catch (error) {
       const msg = `Delegate model error: ${error?.message || error}`;
       onFinal?.(msg);
@@ -4556,7 +4796,7 @@ async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {
         verifyCount += 1;
         onProgress?.("Double-checking the result...");
         const verify = await bgVerifyDelegateDone({ task, state, tabId: currentTabId });
-        llmUsd += BrainoModels?.estimateModelCost?.(BrainoModels?.MODELS?.STRATEGIST) || 0.02;
+        llmUsd += BrainoModels?.estimateModelCost?.(BrainoModels?.MODELS?.STRATEGIST) || 0.0005;
         bgPushTrace(state, currentTabId, traceMeta, {
           step: step + 1,
           thought: String(decision?.thought || "").trim(),
@@ -4724,6 +4964,11 @@ async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {
       bgAgentTaskByTab.set(currentTabId, task);
       chrome.storage.local.set({ activeTabId: currentTabId });
       bgDelegateRunInfo = { tabId: currentTabId, at: Date.now() };
+    } else if (state.ownTabId) {
+      // The run owns a tab — stay in it. Following the user's focus is what let a
+      // background task reach into whatever they switched to and navigate it away.
+      currentTabId = state.ownTabId;
+      state.focusTabId = currentTabId;
     } else {
       const latestActiveTabId = await bgGetActiveTabId();
       if (latestActiveTabId && latestActiveTabId !== currentTabId) {
@@ -6191,7 +6436,7 @@ async function bgBuildGmailCurrentThreadAnswer(task, thread, parsed) {
     const answer = await bgCallDelegateModel({
       systemPrompt,
       userPrompt,
-      model: BrainoModels?.MODELS?.STEP || "gpt-5.4-mini",
+      model: BrainoModels?.MODELS?.STEP || "gpt-5.6-luna",
     });
     return String(answer || "").trim() || bgBuildGmailThreadFallbackAnswer(thread, wantsReplyAdvice);
   } catch (_) {
@@ -6219,7 +6464,7 @@ async function bgBuildGmailGeneratedReply(task, thread) {
     const answer = await bgCallDelegateModel({
       systemPrompt,
       userPrompt,
-      model: BrainoModels?.MODELS?.STEP || "gpt-5.4-mini",
+      model: BrainoModels?.MODELS?.STEP || "gpt-5.6-luna",
     });
     return String(answer || "").trim();
   } catch (_) {
@@ -7788,6 +8033,64 @@ function bgBuildOpenShortcutFastPath(task, opensThenActs = false) {
     description: `Open ${target}`,
     continueAfter: Boolean(opensThenActs),
   }];
+}
+
+// ── YouTube resolver — a straight port of the Mac's fetchYouTubeResults
+// (mac/braino-mac/main.cjs:6112). This is the entire reason Mac Braino opens a
+// video in a second while the extension used to scroll a results page forever:
+// the Mac never LOOKS at YouTube. It fetches the results page, pulls videoIds
+// out of the embedded ytInitialData JSON, and navigates straight to /watch.
+// The extension was instead handing the DOM to an LLM and asking it to visually
+// recognise which box was a video — ten-plus round trips, and it could not tell a
+// channel card from a video row. Same mechanism now, on both surfaces.
+async function bgFetchYouTubeResults(query, { limit = 6 } = {}) {
+  const response = await fetch(`https://www.youtube.com/results?search_query=${encodeURIComponent(query)}&hl=en`, {
+    headers: { "Accept-Language": "en" },
+  });
+  const html = await response.text();
+  const match = html.match(/var ytInitialData = (\{[\s\S]+?\});<\/script>/);
+  if (!match) throw new Error("YouTube results page had no data.");
+  const data = JSON.parse(match[1]);
+  const videos = [];
+  const walk = (node) => {
+    if (!node || typeof node !== "object") return;
+    if (node.videoRenderer?.videoId) {
+      const v = node.videoRenderer;
+      videos.push({
+        videoId: v.videoId,
+        title: v.title?.runs?.[0]?.text || "",
+        channel: v.ownerText?.runs?.[0]?.text || "",
+        length: v.lengthText?.simpleText || "",
+      });
+      return;
+    }
+    for (const key of Object.keys(node)) walk(node[key]);
+  };
+  walk(data.contents);
+  return videos.slice(0, limit);
+}
+
+// Pull the search phrase out of a "play/watch/show me X (on youtube)" task.
+// Deliberately generic — it extracts whatever the user asked for, it does not
+// know or care about any particular video.
+function bgParseYouTubeWatchIntent(task) {
+  const t = String(task || "").trim();
+  if (!t) return null;
+  const mentionsYouTube = /\byoutube\b|\byt\b/i.test(t);
+  const m = t.match(/^(?:can you\s+|please\s+)?(?:go\s+)?(?:play|watch|show me|put on|open|pull up|find)\s+(.+)$/i);
+  if (!m) return null;
+  let q = m[1]
+    .replace(/\s+(?:on|in|from|over on)\s+(?:youtube|yt)\b.*$/i, "")
+    .replace(/^(?:the|a|an)\s+/i, "")
+    .replace(/\b(?:video|clip)\b\s*$/i, "")
+    .trim();
+  if (!q) return null;
+  // A bare "open netflix" is a site, not a video search. Only treat it as YouTube
+  // if YouTube was named, or the phrasing is unambiguously "play/watch something".
+  const isPlayVerb = /^(?:can you\s+|please\s+)?(?:go\s+)?(?:play|watch|show me|put on)\b/i.test(t);
+  if (!mentionsYouTube && !isPlayVerb) return null;
+  if (/^https?:/i.test(q)) return null;
+  return q;
 }
 
 function bgTryFastPath(task, history, synth = null, geo = null) {
@@ -9401,12 +9704,16 @@ function bgMeetingContextHasText(meetingContext) {
   return captions.some((item) => String(item?.text || "").trim());
 }
 
-async function bgTranscribeAudioChunk({ audioBase64, existingNotes = "", existingTranscript = "", mode = "lecture", knownSpeakerReferences = [], meetingContext = null }) {
+async function bgTranscribeAudioChunk({ audioBase64, audioStreams = [], existingNotes = "", existingTranscript = "", mode = "lecture", knownSpeakerReferences = [], meetingContext = null }) {
   const stored = await new Promise(r => chrome.storage.local.get(["authToken"], r));
   if (!stored.authToken) return { error: "Not signed in", notes: existingNotes };
 
   const normalizedMode = bgNormalizeRecordingMode(mode);
-  if (!audioBase64 && !(normalizedMode === "meeting" && bgMeetingContextHasText(meetingContext))) {
+  // Meetings arrive as two streams recorded from the same moment (the call, and you). Lectures
+  // and older callers still send one blob.
+  const streams = Array.isArray(audioStreams) ? audioStreams.filter((s) => s?.audioBase64) : [];
+  const hasAudio = streams.length > 0 || Boolean(audioBase64);
+  if (!hasAudio && !(normalizedMode === "meeting" && bgMeetingContextHasText(meetingContext))) {
     return { notes: existingNotes, empty: true };
   }
 
@@ -9419,7 +9726,9 @@ async function bgTranscribeAudioChunk({ audioBase64, existingNotes = "", existin
         apikey: BG_SUPABASE_ANON_KEY,
       },
       body: JSON.stringify({
-        audioSegments: audioBase64 ? [audioBase64] : [],
+        ...(streams.length
+          ? { audioStreams: streams }
+          : { audioSegments: audioBase64 ? [audioBase64] : [] }),
         existingNotes,
         existingTranscript,
         mode: normalizedMode,
@@ -9459,6 +9768,7 @@ async function bgGetAndTranscribeSegment(existingNotes, mode, existingTranscript
   const segRes = await bgGetAudioSegment();
   return bgTranscribeAudioChunk({
     audioBase64: segRes?.audioBase64 || null,
+    audioStreams: Array.isArray(segRes?.audioStreams) ? segRes.audioStreams : [],
     existingNotes,
     existingTranscript,
     mode: mode || bgRecordingMode,
@@ -9472,6 +9782,7 @@ async function bgStopRecordingAndTranscribe(existingNotes, mode, existingTranscr
     const stopRes = await stopRecording();
     return await bgTranscribeAudioChunk({
       audioBase64: stopRes?.audioBase64 || null,
+      audioStreams: Array.isArray(stopRes?.audioStreams) ? stopRes.audioStreams : [],
       existingNotes,
       existingTranscript,
       mode: activeMode,

@@ -28,13 +28,16 @@ const ANCHORS = [
   { href: "#engine", label: "Emotion Engine" },
 ];
 
+// Each side now has a page of its own: /browser for the extension, /foundry for
+// the Mac. Both used to point at /iomi, which made the fork look like a choice
+// between one product and itself.
 const CLASSES = [
-  { num: "01", short: "The Browser", name: "Braino", accent: "ac-coral", face: "", to: "/iomi",
-    line: "Your browser companion — on any page, any tab, on every platform. Powered by the Emotional Engine.",
-    does: ["Answers about the page you're on", "Web search, built in", "Records lectures and meetings", "Talks in his own voice"] },
-  { num: "02", short: "macOS", name: "Braino IOMI", accent: "ac-amber", face: "cls-iomi", to: "/iomi", raised: true,
-    line: "The macOS product — he lives in the notch and runs your whole Mac. Powered by Braino OS.",
-    does: ["Runs your Mac by voice", "Files, folders, apps and mail", "Hands-free, a glance away", "The full Braino OS"] },
+  { num: "01", short: "The Browser", name: "Braino", accent: "ac-coral", face: "", to: "/braino",
+    line: "Your browser companion, on any page and any tab. Powered by the Emotional Engine.",
+    does: ["Chat with the page", "Writes for you", "Listens and takes the notes", "Runs the browser"] },
+  { num: "02", short: "macOS", name: "Braino Foundry", accent: "ac-amber", face: "cls-iomi", to: "/braino?view=foundry", raised: true,
+    line: "The Mac product. He lives in the notch and runs your whole machine. Powered by Braino OS.",
+    does: ["Runs your Mac by voice", "Files, folders, apps and mail", "Sits in your meetings", "The full Braino OS"] },
 ];
 
 // The three classes — one rounded box (layout A): the names down one side,
@@ -49,7 +52,7 @@ function ClassesLineup() {
     <section className="apple-cloptions" id="classes">
       <div className="cl-headwrap apple-reveal">
         <h2 className="cl-head">Braino comes in two.</h2>
-        <p className="cl-desc">Braino on the browser, for every platform — and Braino IOMI, the macOS product that runs on Braino OS. Both powered by the Emotional Engine v1.</p>
+        <p className="cl-desc">Braino on the browser, on any page and any tab. Braino Foundry on the Mac, running your whole machine. One character, one Emotional Engine, two places to meet him.</p>
       </div>
       <div className={"cl-a " + A.accent}>
         <div className="cl-names">
@@ -101,7 +104,7 @@ const JOURNALS: Record<"braino" | "itish", JournalSet> = {
     accent: "ac-violet",
     desc: "Written and run by Braino himself — autonomously. A cron wakes him, he reads every commit, and he writes. The founder only approves.",
     left: [
-      { kind: "v", accent: "ac-green", tag: "New mode · Yap Mode", to: "/journal/yap-mode-update",
+      { kind: "v", accent: "ac-green", tag: "New mode · BrainoHERA", to: "/journal/yap-mode-update",
         title: "I listen. Your words land where you are.", body: "Double Option wakes a quiet Mac skill: no answer, no TTS, just readable text at the cursor until you say done." },
       { kind: "h", accent: "ac-violet", tag: "The first article · How this works", to: "/braino-writes",
         title: "How I maintain my own journal.", body: "This whole blog writes itself. I watch every commit we make, wake on a schedule, draft the story in our voice, and wait for approval. Here's exactly how." },
@@ -120,8 +123,8 @@ const JOURNALS: Record<"braino" | "itish", JournalSet> = {
     accent: "ac-amber",
     desc: "Written by me — the founder essays behind it. Less changelog, more the thinking, in my own voice.",
     left: [
-      { kind: "h", accent: "ac-green", tag: "Yap Mode · Why I built it", to: "/journal/yap-mode",
-        title: "I loved Wispr Flow, so I taught Braino to yap.", body: "Not a rivalry post. Just the honest story of loving a tool enough to want that feeling inside the thing I am building." },
+      { kind: "h", accent: "ac-green", tag: "BrainoHERA · Why I built it", to: "/journal/yap-mode",
+        title: "I loved Wispr Flow, so I built BrainoHERA.", body: "Not a rivalry post. Just the honest story of loving a tool enough to want that feeling inside the thing I am building." },
       { kind: "v", accent: "ac-amber", tag: "Founder · personal", to: "/n",
         title: "Not okay, in exactly the way this work requires.", body: "Why I think that's honest to admit in public, and why it's the reason he feels like anything at all." },
       { kind: "hr", accent: "ac-coral", tag: "The tuition", to: "/n",
@@ -482,7 +485,7 @@ const ProductOverview = ({ onMascotRelease }: ProductOverviewProps) => {
   };
 
   return (
-    <BrainoTVProvider initial={{ src: "/dontblink?embed=1", title: "Don't Blink" }}>
+    <BrainoTVProvider>
     <div className={"apple" + (dark ? " dark" : "")} ref={ref}>
       <BrainoDefs />
       <IomiNotch />
@@ -531,10 +534,11 @@ const ProductOverview = ({ onMascotRelease }: ProductOverviewProps) => {
       </header>
 
       {/* Hero stage — the real Don't Blink teaser (the 90s film at /dontblink,
-          with its own music), embedded seamlessly on black */}
+          with its own music). It waits behind a play button: the film brings a
+          soundtrack, and a hero has no business starting one uninvited. */}
       <div className="apple-boot">
         <div className="apple-macscreen apple-reveal">
-          <BrainoTVScreen className="apple-boot-video" />
+          <BrainoTVScreen className="apple-boot-video" offer={{ src: "/dontblink?embed=1", title: "Don't Blink" }} />
         </div>
       </div>
 

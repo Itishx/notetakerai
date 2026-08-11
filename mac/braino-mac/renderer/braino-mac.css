@@ -118,7 +118,7 @@ body {
   animation: macWalkerListenGlow 2s ease-in-out infinite;
 }
 
-/* Yap Mode stays present without turning the mascot into a large beacon. */
+/* BrainoHERA stays present without turning the mascot into a large beacon. */
 #walker.dictation-listening::before {
   display: block;
   left: 50%;
@@ -234,6 +234,10 @@ body {
      the notch strip itself: its top --nf-notch-h hides behind the physical
      housing, the face band lives on the chin below. */
   --nf-notch-h: 33px;
+  --nf-safe-top: max(var(--nf-notch-h), 32px);
+  --nf-content-top: calc(var(--nf-safe-top) + 20px);
+  --nf-compact-surface-w: min(480px, calc(100vw - 32px));
+  --nf-reading-surface-w: min(580px, calc(100vw - 32px));
   --nf-left-reach: 95px;
   --nf-right-reach: 95px;
   position: fixed;
@@ -260,7 +264,9 @@ body {
   height: calc(var(--nf-notch-h) + 22px);
   border-radius: 0 0 16px 16px;
   overflow: hidden;
-  background: linear-gradient(180deg, #F6A8A2, #E8786E 55%, #C9544A);
+  /* The Mac notch is always black. Coral belongs to Braino himself, never to
+     the shell: a coral base leaked through whenever response classes changed. */
+  background: #000;
   transition:
     width 0.55s cubic-bezier(0.32, 0.72, 0, 1),
     height 0.55s cubic-bezier(0.32, 0.72, 0, 1),
@@ -326,7 +332,7 @@ body {
     0 0 30px -1px var(--nf-mode-color, #0A84FF);
 }
 
-/* Yap Mode is a compact notch state: label + tiny activity bars + close halo. */
+/* BrainoHERA is a compact notch state: label + tiny activity bars + close halo. */
 #notch-face.nf-dictation.listen .nf-pill {
   width: 222px;
   height: calc(var(--nf-notch-h) + 28px);
@@ -373,7 +379,7 @@ body {
 }
 
 /* Dictation captions use the dynamic-island surface itself. It expands only
-   while words are arriving, then settles back to the compact Yap Mode label. */
+   while words are arriving, then settles back to the compact BrainoHERA label. */
 #notch-face.nf-dictation.captioning .nf-pill {
   width: calc(var(--nf-left-reach) + var(--nf-right-reach));
   height: calc(var(--nf-notch-h) + 22px);
@@ -653,7 +659,8 @@ body {
     transform .42s cubic-bezier(.32,.72,0,1),
     visibility 0s linear .42s;
   color: #f7f7f5;
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", sans-serif;
+  font-family: "Braino SF Pro Display", "SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, sans-serif;
+  font-synthesis: none;
 }
 
 #notch-face.nf-think-open .nf-thinking-canvas {
@@ -967,6 +974,23 @@ body {
   animation: nfIslandBreath 3.8s ease-in-out infinite;
 }
 
+/* Launch playback is a quiet system state, not music visualisation. Braino's
+   eyes live in the island and the filename stays readable until stopped. */
+#notch-face.launch-now-playing .nf-pill {
+  width: 310px;
+  height: calc(var(--nf-notch-h) + 34px);
+  border-radius: 0 0 22px 22px;
+  background: #000;
+  box-shadow: 0 12px 34px rgba(0,0,0,.34), inset 0 -1px rgba(255,255,255,.09);
+  animation: none;
+}
+
+#notch-face.launch-now-playing #nf-status {
+  color: rgba(255,255,255,.82);
+  letter-spacing: .025em;
+  text-transform: none;
+}
+
 @keyframes nfIslandBreath {
   0%, 100% { box-shadow: 0 0 12px rgba(232, 120, 110, 0.16), 0 0 26px rgba(232, 120, 110, 0.07); }
   50% { box-shadow: 0 0 22px rgba(232, 120, 110, 0.34), 0 0 46px rgba(243, 154, 66, 0.14); }
@@ -1134,13 +1158,17 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 2px;
-  width: 52px;
+  /* Sized to the word, not to a number. The fixed 52px here was cut for the
+     four letters of the old name; FOUNDRY is seven and overflowed it, which is
+     what made the reveal look broken. Auto width plus a smaller face keeps the
+     whole word inside the notch. */
+  gap: 1px;
+  width: auto;
   height: 22px;
   color: rgba(244, 241, 232, .64);
-  font-size: 14px;
+  font-size: 10px;
   font-weight: 500;
-  letter-spacing: 0;
+  letter-spacing: .4px;
   opacity: 0;
   filter: blur(2px);
   transform: translateX(-50%) scale(.32);
@@ -1162,10 +1190,13 @@ body {
   animation: nfIomiLetterIn .4s cubic-bezier(.2,.7,.2,1) forwards;
 }
 
-#notch-face.nf-iomi-auth .nf-iomi-identity span:nth-child(1) { animation-delay: .1s; }
-#notch-face.nf-iomi-auth .nf-iomi-identity span:nth-child(2) { animation-delay: .55s; }
-#notch-face.nf-iomi-auth .nf-iomi-identity span:nth-child(3) { animation-delay: 1s; }
-#notch-face.nf-iomi-auth .nf-iomi-identity span:nth-child(4) { animation-delay: 1.45s; }
+#notch-face.nf-iomi-auth .nf-iomi-identity span:nth-child(1) { animation-delay: 0.1s; }
+#notch-face.nf-iomi-auth .nf-iomi-identity span:nth-child(2) { animation-delay: 0.325s; }
+#notch-face.nf-iomi-auth .nf-iomi-identity span:nth-child(3) { animation-delay: 0.55s; }
+#notch-face.nf-iomi-auth .nf-iomi-identity span:nth-child(4) { animation-delay: 0.775s; }
+#notch-face.nf-iomi-auth .nf-iomi-identity span:nth-child(5) { animation-delay: 1.0s; }
+#notch-face.nf-iomi-auth .nf-iomi-identity span:nth-child(6) { animation-delay: 1.225s; }
+#notch-face.nf-iomi-auth .nf-iomi-identity span:nth-child(7) { animation-delay: 1.45s; }
 
 @keyframes nfIomiLetterIn {
   to { opacity: 1; transform: none; }
@@ -1192,10 +1223,14 @@ body {
   box-shadow: 0 0 7px rgba(244,228,220,.28);
 }
 
+/* The match cut: the word collapses to roughly the width of the eye pair and
+   the eyes bloom from the same centre, so one becomes the other instead of one
+   fading while the other appears somewhere else.
+   FOUNDRY is ~51px at this size; .33 lands it on the 17px eye pair. */
 #notch-face.nf-iomi-awake .nf-iomi-identity {
   opacity: 0;
   filter: blur(2px);
-  transform: translateX(-50%) scale(.32);
+  transform: translateX(-50%) scale(.33);
 }
 
 #notch-face.nf-iomi-awake .nf-iomi-awake-eyes {
@@ -2809,4 +2844,1087 @@ body {
     inset 0 0 120px 26px color-mix(in srgb, var(--vm-color, #0a84ff) 40%, transparent),
     inset 0 0 44px 8px color-mix(in srgb, var(--vm-color, #0a84ff) 28%, transparent);
   animation: edgeBreath 3.2s ease-in-out infinite;
+}
+
+/* ── Chrome-system response surfaces on Mac IOMI ──────────────────────────
+   This is the same state family as extension/content.js and the
+   InstaGraphics chrome-system frame: liquid thinking, compact short answers,
+   and a readable long-answer sheet. These rules intentionally come last so a
+   live response owns geometry without deleting the timer/music/recording
+   state waiting underneath it. */
+@font-face {
+  font-family: "Braino SF Pro Display";
+  src: url("../../../public/fonts/SF-Pro-Display-Medium.otf") format("opentype");
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Braino SF Pro Display";
+  src: url("../../../public/fonts/SF-Pro-Display-Semibold.otf") format("opentype");
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+}
+#notch-face.nf-thinking.nf-think-open .nf-pill,
+#notch-face.busy.captioning.nf-thinking.nf-think-open .nf-pill,
+#notch-face.nf-yap-open.nf-dictation .nf-pill,
+#notch-face.nf-yap-open .nf-pill,
+#notch-face.nf-inline-open .nf-pill,
+#notch-face.nf-answer-open .nf-pill,
+#notch-face.nf-answer-exiting .nf-pill,
+#notch-face.nf-surface-exiting .nf-pill {
+  overflow: visible;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  clip-path: none;
+  filter: none;
+  transform: translateX(0);
+  animation: none;
+  transition:
+    width 1050ms cubic-bezier(.22,1,.36,1),
+    height 1050ms cubic-bezier(.22,1,.36,1),
+    border-radius 950ms cubic-bezier(.22,1,.36,1),
+    background 700ms ease,
+    border-color 700ms ease,
+    box-shadow 850ms ease,
+    backdrop-filter 700ms ease;
+}
+
+#notch-face.nf-thinking.nf-think-open .nf-pill,
+#notch-face.busy.captioning.nf-thinking.nf-think-open .nf-pill {
+  width: var(--nf-reading-surface-w);
+  height: min(var(--nf-thinking-height, 280px), calc(var(--nf-screen-h, 100vh) - 70px));
+  min-height: 280px;
+  max-height: calc(var(--nf-screen-h, 100vh) - 70px);
+  border-radius: 0 0 36px 36px;
+}
+
+/* Same story as the inline surface: a hard 146px meant any reply longer than two
+   lines got cut off mid-sentence with an ellipsis. Grow to fit the copy. */
+#notch-face.nf-answer-short .nf-pill {
+  width: var(--nf-compact-surface-w);
+  height: min(var(--nf-answer-short-height, 146px), calc(var(--nf-screen-h, 100vh) - 90px));
+  min-height: 146px;
+  max-height: 320px;
+  border-radius: 0 0 34px 34px;
+}
+
+#notch-face.nf-answer-long .nf-pill {
+  width: var(--nf-reading-surface-w);
+  height: min(var(--nf-answer-long-height, 520px), calc(var(--nf-screen-h, 100vh) - 90px));
+  min-height: 164px;
+  max-height: calc(var(--nf-screen-h, 100vh) - 90px);
+  border-radius: 0 0 38px 38px;
+}
+
+/* Spoken lines can be shorter than the 1.05s cinematic shell transition.
+   Keep the visual family, but let height catch the measured copy immediately
+   enough that the next sentence never starts inside the previous geometry. */
+#notch-face.nf-answer-open .nf-pill,
+#notch-face.nf-answer-exiting .nf-pill,
+#notch-face.nf-surface-exiting .nf-pill {
+  transition:
+    width 420ms cubic-bezier(.22,1,.36,1),
+    height 280ms cubic-bezier(.22,1,.36,1),
+    border-radius 360ms cubic-bezier(.22,1,.36,1),
+    background 180ms ease,
+    box-shadow 240ms ease;
+}
+
+/* Grows with what you said, the way Yap Mode does. min-height and max-height
+   were both pinned to 136px, so --nf-inline-height could never do anything and
+   a long sentence was clamped away instead of the island stretching for it. */
+#notch-face.nf-inline-open .nf-pill {
+  width: var(--nf-compact-surface-w);
+  height: min(var(--nf-inline-height, 136px), calc(var(--nf-screen-h, 100vh) - 70px));
+  min-height: 136px;
+  max-height: 300px;
+  border-radius: 0 0 32px 32px;
+}
+
+#notch-face.nf-yap-open.nf-dictation .nf-pill,
+#notch-face.nf-yap-open .nf-pill {
+  width: min(520px, calc(100vw - 32px));
+  height: min(var(--nf-yap-height, 172px), calc(var(--nf-screen-h, 100vh) - 70px));
+  min-height: 150px;
+  max-height: 260px;
+  border-radius: 0 0 34px 34px;
+}
+
+#notch-face.nf-thinking.nf-think-open .nf-pill::after,
+#notch-face.nf-yap-open .nf-pill::after,
+#notch-face.nf-inline-open .nf-pill::after,
+#notch-face.nf-answer-open .nf-pill::after,
+#notch-face.nf-answer-exiting .nf-pill::after,
+#notch-face.nf-surface-exiting .nf-pill::after {
+  content: "";
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  right: auto;
+  bottom: auto;
+  left: 50%;
+  width: var(--nf-notch-w, 190px);
+  height: calc(var(--nf-safe-top) + 24px);
+  border-radius: 0 0 18px 18px;
+  background: #000;
+  opacity: 1;
+  transform: translateX(-50%);
+  animation: none;
+}
+
+#notch-face.nf-thinking.nf-think-open .nf-pill::before,
+#notch-face.nf-yap-open .nf-pill::before,
+#notch-face.nf-inline-open .nf-pill::before,
+#notch-face.nf-answer-open .nf-pill::before,
+#notch-face.nf-answer-exiting .nf-pill::before,
+#notch-face.nf-surface-exiting .nf-pill::before {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  /* Anchored to the notch, NOT floating under it.
+     This started at `calc(var(--nf-safe-top) + 8px)` with a full 28px radius,
+     which put an 8px gap of desktop between the physical housing and the sheet
+     and rounded the top corners — so every answer read as a separate card
+     hovering below the notch instead of the island growing out of it.
+     Every child here (.nf-answer-short-row, .nf-answer-long-head,
+     .nf-inline-caption, .nf-thinking-canvas) already offsets its own content by
+     --nf-content-top measured from the pill top, i.e. they were all written for
+     a sheet that starts at y=0. Only this background had been moved down, so
+     restoring it needs no padding changes anywhere else.
+     Square at the top so the shape is continuous with the housing; rounded only
+     where it leaves the notch. */
+  inset: 0;
+  display: block;
+  border-radius: 0 0 28px 28px;
+  background: linear-gradient(180deg,rgba(0,0,0,.99),rgba(8,8,8,.98));
+  /* No inset top hairline: at y=0 it would draw a lit line across the very top
+     of the screen either side of the notch. Depth comes from the drop shadow. */
+  box-shadow: 0 24px 70px rgba(0,0,0,.46);
+  pointer-events: none;
+}
+
+#notch-face.nf-think-open .nf-band,
+#notch-face.nf-think-open .nf-cap,
+#notch-face.nf-think-open #nf-status,
+#notch-face.nf-think-open #nf-status-2,
+#notch-face.nf-think-open .nf-folds,
+#notch-face.nf-think-open .nf-privacy,
+#notch-face.nf-think-open .nf-volume,
+#notch-face.nf-answer-open .nf-band,
+#notch-face.nf-answer-open .nf-cap,
+#notch-face.nf-answer-open #nf-status,
+#notch-face.nf-answer-open #nf-status-2,
+#notch-face.nf-answer-open .nf-folds,
+#notch-face.nf-answer-open .nf-privacy,
+#notch-face.nf-answer-open .nf-volume,
+#notch-face.nf-answer-open .nf-think-dots,
+#notch-face.nf-answer-open .nf-think-arrow,
+#notch-face.nf-answer-open .nf-tray,
+#notch-face.nf-answer-open .nf-sonar {
+  display: none !important;
+  opacity: 0 !important;
+}
+
+/* Live speech and compact thinking now stay inside Braino's own black box.
+   The legacy left/right caption wings remain in the DOM only for old scripted
+   states; normal conversation never gives them visual ownership. */
+#notch-face .nf-inline-caption {
+  position: absolute;
+  z-index: 12;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  padding: var(--nf-content-top) 22px 12px;
+  color: #f7f7f5;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateY(-5px);
+  transition: opacity 260ms ease 80ms, transform 620ms cubic-bezier(.22,1,.36,1), visibility 0s linear 620ms;
+  font-family: "Braino SF Pro Display", "SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, sans-serif;
+  font-synthesis: none;
+}
+
+#notch-face.nf-inline-open .nf-inline-caption {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+  transition-delay: 80ms, 0ms, 0ms;
+}
+
+#notch-face .nf-inline-caption header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 7px;
+  border-bottom: 1px solid rgba(255,255,255,.09);
+}
+
+#notch-face .nf-inline-caption-label {
+  color: rgba(255,255,255,.56);
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+
+#notch-face .nf-inline-caption-state {
+  flex: 0 0 auto;
+  color: rgba(255,255,255,.36);
+  font-size: 9px;
+  font-weight: 600;
+}
+
+#notch-face .nf-inline-caption-text {
+  display: -webkit-box;
+  margin: 8px 0 0;
+  overflow: hidden;
+  color: rgba(255,255,255,.84);
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.35;
+  letter-spacing: -.012em;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  /* The panel now grows to fit (see --nf-inline-height), so this is only the
+     ceiling before we stop growing — not a two-line guillotine on every
+     sentence. */
+  -webkit-line-clamp: 6;
+}
+
+#notch-face.nf-inline-thinking .nf-inline-caption-text {
+  color: #f7f7f5;
+  font-size: 17px;
+  font-weight: 600;
+}
+
+#notch-face.nf-inline-open .nf-band,
+#notch-face.nf-inline-open .nf-cap,
+#notch-face.nf-inline-open #nf-status,
+#notch-face.nf-inline-open #nf-status-2,
+#notch-face.nf-inline-open .nf-folds,
+#notch-face.nf-inline-open .nf-privacy,
+#notch-face.nf-inline-open .nf-volume,
+#notch-face.nf-inline-open .nf-viz,
+#notch-face.nf-inline-open .nf-tray,
+#notch-face.nf-inline-open .nf-sonar,
+#notch-face.nf-inline-open .nf-think-dots,
+#notch-face.nf-inline-open .nf-think-arrow {
+  display: none !important;
+  opacity: 0 !important;
+}
+
+/* Yap owns one stable black sheet. The width never follows transcript length;
+   new speech stacks downward in short readable turns, using the same spring
+   geometry as answer surfaces. */
+#notch-face .nf-yap-surface {
+  position: absolute;
+  z-index: 11;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  padding: var(--nf-content-top) 24px 18px;
+  color: #f7f7f5;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateY(-8px);
+  transition:
+    opacity 280ms ease 140ms,
+    transform 720ms cubic-bezier(.22,1,.36,1) 80ms,
+    visibility 0s linear 760ms;
+}
+
+#notch-face.nf-yap-open .nf-yap-surface {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+  transition-delay: 120ms, 40ms, 0ms;
+}
+
+#notch-face .nf-yap-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex: 0 0 25px;
+  padding: 0 1px 10px;
+  border-bottom: 1px solid rgba(255,255,255,.09);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+}
+
+#notch-face .nf-yap-head > span {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: rgba(255,255,255,.9);
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: .11em;
+  text-transform: uppercase;
+}
+
+#notch-face .nf-yap-head .nf-brainohera-wordmark {
+  display: inline;
+  color: rgba(255,255,255,.9);
+  font: 650 11px/1 "Braino SF Pro Display", "SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, sans-serif;
+  letter-spacing: -.015em;
+  text-transform: none;
+}
+
+#notch-face .nf-yap-head .nf-hera-shimmer {
+  display: inline-block;
+  width: fit-content;
+  background-image: linear-gradient(100deg, #17693e 0%, #4ac784 23%, #d8ffe9 43%, #4ac784 63%, #17693e 100%);
+  background-size: 220% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  animation: nfHeraNameShimmer 3.4s linear infinite;
+}
+
+@keyframes nfHeraNameShimmer {
+  to { background-position: -220% 0; }
+}
+
+#notch-face .nf-yap-head i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #8fffdc;
+  box-shadow: 0 0 12px rgba(61,232,178,.5);
+  animation: nfYapDot 1.5s ease-in-out infinite;
+}
+
+#notch-face.dictation-finishing .nf-yap-head i {
+  background: rgba(255,255,255,.72);
+  box-shadow: none;
+  animation: none;
+}
+
+@keyframes nfYapDot {
+  0%,100% { opacity: .42; transform: scale(.82); }
+  50% { opacity: 1; transform: scale(1); }
+}
+
+#notch-face .nf-yap-head b {
+  color: rgba(255,255,255,.42);
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: .05em;
+}
+
+#notch-face .nf-yap-transcript {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  flex-direction: column;
+  gap: 8px;
+  overflow: hidden;
+  padding: 12px 1px 0;
+  scrollbar-width: none;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 16px, #000 100%);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 16px, #000 100%);
+}
+
+#notch-face .nf-yap-transcript::-webkit-scrollbar { display: none; }
+#notch-face .nf-yap-transcript p {
+  margin: 0;
+  color: rgba(255,255,255,.74);
+  font: 500 15px/1.4 "Braino SF Pro Display", "SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, sans-serif;
+  letter-spacing: -.012em;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+#notch-face .nf-yap-transcript p:not(:last-child) { color: rgba(255,255,255,.4); }
+#notch-face .nf-yap-transcript .nf-yap-empty { color: rgba(255,255,255,.32); }
+
+#notch-face.nf-yap-open .nf-band,
+#notch-face.nf-yap-open .nf-cap,
+#notch-face.nf-yap-open #nf-status,
+#notch-face.nf-yap-open #nf-status-2,
+#notch-face.nf-yap-open .nf-viz,
+#notch-face.nf-yap-open .nf-folds,
+#notch-face.nf-yap-open .nf-privacy,
+#notch-face.nf-yap-open .nf-volume,
+#notch-face.nf-yap-open .nf-tray,
+#notch-face.nf-yap-open .nf-sonar {
+  display: none !important;
+  opacity: 0 !important;
+}
+
+/* Thinking: sleeping face above three legible progress summaries. The moving
+   light crosses the face exactly like the Chrome-system composition. */
+#notch-face .nf-thinking-canvas {
+  inset: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 8;
+  display: flex;
+  justify-content: flex-start;
+  padding: calc(var(--nf-safe-top) + 43px) 24px 10px;
+  box-sizing: border-box;
+  color: #f7f7f5;
+  font-family: "Braino SF Pro Display", "SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, sans-serif;
+  font-synthesis: none;
+}
+
+#notch-face .nf-response-face {
+  position: absolute;
+  z-index: 2;
+  inset: 0 0 auto;
+  width: 100%;
+  height: 72px;
+  overflow: hidden;
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+#notch-face .nf-response-face::after {
+  content: "";
+  position: absolute;
+  z-index: 3;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(105deg,transparent 32%,rgba(255,255,255,.03) 42%,rgba(255,255,255,.22) 50%,rgba(255,255,255,.05) 58%,transparent 68%);
+  background-size: 260% 100%;
+  mix-blend-mode: screen;
+  animation: nfThinkShimmer 2.8s linear infinite;
+}
+
+@keyframes nfThinkShimmer {
+  from { background-position: 180% 0; }
+  to { background-position: -80% 0; }
+}
+
+#notch-face .nf-response-face svg {
+  display: block;
+  width: 100%;
+  height: 72px;
+}
+
+#notch-face .nf-response-fold,
+#notch-face .nf-response-lid,
+#notch-face .nf-response-smile {
+  fill: none;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+
+#notch-face .nf-response-fold { stroke: rgba(255,255,255,.42); stroke-width: 1.8; opacity: .58; }
+#notch-face .nf-response-lid { stroke: rgba(255,255,255,.78); stroke-width: 2.6; }
+#notch-face .nf-response-smile { stroke: rgba(255,255,255,.9); stroke-width: 2.7; }
+
+#notch-face .nf-thinking-head {
+  min-height: 34px;
+  padding: 0 2px 8px;
+  border-bottom: 1px solid rgba(255,255,255,.09);
+}
+
+#notch-face .nf-thinking-brand {
+  gap: 8px;
+  color: rgba(255,255,255,.88);
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+
+#notch-face .nf-thinking-brand > i {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 13px rgba(255,255,255,.3);
+}
+
+#notch-face .nf-thinking-state {
+  margin-left: auto;
+  margin-right: 0;
+  color: rgba(255,255,255,.42);
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: .05em;
+}
+
+#notch-face .nf-thinking-lines { display: block; min-height: 0; }
+#notch-face .nf-thinking-lines p {
+  margin: 0;
+  padding: 9px 2px;
+  border-bottom: 1px solid rgba(255,255,255,.08);
+  color: rgba(255,255,255,.76);
+  font: 500 15px/1.4 "Braino SF Pro Display", "SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, sans-serif;
+  letter-spacing: -.012em;
+  white-space: normal;
+}
+#notch-face .nf-thinking-lines p:last-child { border-bottom: 0; color: rgba(255,255,255,.48); }
+#notch-face .nf-thinking-current { overflow: visible; text-overflow: clip; }
+
+/* Answer: browser-parity compact and reading modes, plus the existing Mac
+   word timing so the written answer follows the actual audio playback. */
+#notch-face .nf-answer-surface {
+  position: absolute;
+  z-index: 10;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateY(6px);
+  color: #f7f7f5;
+  font-family: "Braino SF Pro Display", "SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, sans-serif;
+  font-synthesis: none;
+  text-align: left;
+  transition: opacity 420ms ease, transform 760ms cubic-bezier(.22,1,.36,1), visibility 0s linear 760ms;
+}
+
+#notch-face.nf-answer-open .nf-answer-surface {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: none;
+  transition-delay: 320ms, 0ms, 0ms;
+}
+
+#notch-face .nf-answer-short-row {
+  display: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 0;
+  height: 100%;
+  box-sizing: border-box;
+  padding: var(--nf-content-top) 18px 14px;
+}
+
+#notch-face.nf-answer-short .nf-answer-short-row { display: flex; }
+#notch-face .nf-answer-short-row > span { display: grid; min-width: 0; gap: 5px; }
+#notch-face .nf-answer-short-row small,
+#notch-face .nf-answer-label {
+  color: rgba(255,255,255,.6);
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+
+#notch-face .nf-answer-short-text {
+  display: -webkit-box;
+  overflow: hidden;
+  color: #f7f7f5;
+  font: 500 17px/1.38 "Braino SF Pro Display", "SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, sans-serif;
+  letter-spacing: -.014em;
+  -webkit-box-orient: vertical;
+  /* Ceiling, not a guillotine — the panel grows to the copy first. Anything
+     past this is long enough that classifyMacNotchAnswer sends it to the
+     long-answer sheet instead. */
+  -webkit-line-clamp: 7;
+}
+
+#notch-face .nf-answer-done {
+  flex: 0 0 auto;
+  padding: 8px 11px;
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 999px;
+  color: rgba(255,255,255,.62);
+  background: rgba(255,255,255,.06);
+  font: 650 9px/1 "Braino SF Pro Display", "SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, sans-serif;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+#notch-face .nf-answer-long-head {
+  display: none;
+  align-items: center;
+  justify-content: space-between;
+  margin: var(--nf-content-top) 24px 0;
+  padding-bottom: 17px;
+  border-bottom: 1px solid rgba(255,255,255,.09);
+}
+
+#notch-face.nf-answer-long .nf-answer-long-head { display: flex; }
+#notch-face .nf-answer-long-head > span { display: flex; align-items: center; gap: 4px; }
+#notch-face .nf-answer-long-head i { width: 7px; height: 7px; border-radius: 50%; background: rgba(255,255,255,.86); }
+#notch-face .nf-answer-long-head b { margin-left: 8px; color: #f7f7f5; font-size: 12px; font-weight: 650; }
+
+#notch-face .nf-answer-surface article {
+  display: none;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 25px 29px 24px;
+  scrollbar-width: none;
+}
+
+#notch-face .nf-answer-surface article::-webkit-scrollbar { display: none; }
+#notch-face.nf-answer-long .nf-answer-surface article { display: block; }
+#notch-face .nf-answer-label { display: block; margin: 0 0 10px; letter-spacing: .12em; }
+#notch-face:not(.nf-answer-context-page) .nf-answer-label { display: none; }
+#notch-face .nf-answer-body {
+  color: rgba(255,255,255,.68);
+  font: 500 17px/1.48 "Braino SF Pro Display", "SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, sans-serif;
+  letter-spacing: -.014em;
+}
+#notch-face .nf-answer-block { margin: 0 0 13px; }
+#notch-face .nf-answer-block:last-child { margin-bottom: 0; }
+#notch-face .nf-answer-heading { margin: 8px 0 15px; color: #f7f7f5; font-size: 26px; line-height: 1.08; }
+#notch-face .nf-answer-bullet,
+#notch-face .nf-answer-number { position: relative; padding-left: 20px; }
+#notch-face .nf-answer-bullet::before { content: "•"; position: absolute; left: 3px; color: rgba(255,255,255,.72); }
+#notch-face .nf-answer-number { counter-increment: nfAnswerNumber; padding: 11px 0 11px 38px; border-top: 1px solid rgba(255,255,255,.08); }
+#notch-face .nf-answer-body { counter-reset: nfAnswerNumber; }
+#notch-face .nf-answer-number::before {
+  content: counter(nfAnswerNumber);
+  position: absolute;
+  top: 12px;
+  left: 0;
+  display: grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border-radius: 50%;
+  color: #050505;
+  background: rgba(255,255,255,.88);
+  font: 650 9px/22px "Braino SF Pro Display", "SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+/* One explicit Apple type contract owns every textual part of the response
+   states. This prevents an older editorial or control font from leaking into
+   thinking, short answers, long answers, labels, headings, or buttons. */
+#notch-face .nf-thinking-canvas,
+#notch-face .nf-thinking-canvas *,
+#notch-face .nf-answer-surface,
+#notch-face .nf-answer-surface * {
+  font-family: "Braino SF Pro Display", "SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, sans-serif;
+  font-synthesis: none;
+}
+
+#notch-face .nf-answer-word { color: rgba(255,255,255,.28); transition: color 120ms ease, text-shadow 120ms ease; }
+#notch-face .nf-answer-word.spoken { color: rgba(255,255,255,.84); }
+#notch-face .nf-answer-word.speaking-now { color: #fff; text-shadow: 0 0 9px rgba(255,255,255,.34); }
+#notch-face .nf-answer-short-text .nf-answer-word:not(:last-child) { margin-right: .24em; }
+
+/* A display without a housing gets the same body card without a fake neck. */
+#notch-face.no-notch.nf-thinking.nf-think-open .nf-pill::after,
+#notch-face.no-notch.nf-yap-open .nf-pill::after,
+#notch-face.no-notch.nf-inline-open .nf-pill::after,
+#notch-face.no-notch.nf-answer-open .nf-pill::after,
+#notch-face.no-notch.nf-answer-exiting .nf-pill::after,
+#notch-face.no-notch.nf-surface-exiting .nf-pill::after { display: none; }
+
+/* On a notched Mac the sheet is square at the top because it is continuous with
+   the housing. An external display has no housing to continue from, so square
+   corners would just jam the card into the screen edge — give it its own top. */
+#notch-face.no-notch.nf-thinking.nf-think-open .nf-pill::before,
+#notch-face.no-notch.nf-yap-open .nf-pill::before,
+#notch-face.no-notch.nf-inline-open .nf-pill::before,
+#notch-face.no-notch.nf-answer-open .nf-pill::before,
+#notch-face.no-notch.nf-answer-exiting .nf-pill::before,
+#notch-face.no-notch.nf-surface-exiting .nf-pill::before {
+  inset: 8px 0 0;
+  border-radius: 26px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #notch-face.nf-thinking.nf-think-open .nf-pill,
+  #notch-face.nf-yap-open .nf-pill,
+  #notch-face.nf-inline-open .nf-pill,
+  #notch-face.nf-answer-open .nf-pill,
+  #notch-face.nf-answer-exiting .nf-pill,
+  #notch-face.nf-surface-exiting .nf-pill,
+  #notch-face .nf-thinking-canvas,
+  #notch-face .nf-yap-surface,
+  #notch-face .nf-inline-caption,
+  #notch-face .nf-answer-surface {
+    animation: none;
+    transition-duration: .01ms;
+    transition-delay: 0ms;
+  }
+  #notch-face.nf-thinking.nf-think-open .nf-pill::before,
+  #notch-face.nf-yap-open .nf-pill::before,
+  #notch-face.nf-inline-open .nf-pill::before,
+  #notch-face.nf-answer-open .nf-pill::before,
+  #notch-face.nf-answer-exiting .nf-pill::before,
+  #notch-face.nf-surface-exiting .nf-pill::before,
+  #notch-face .nf-response-face::after,
+  #notch-face .nf-hera-shimmer { animation: none; }
+}
+
+/* ── Voice wake: the blue shimmer ──
+   Control x2 acknowledges instantly even though the session takes a few
+   seconds to come up. Blue is already this notch's waking colour
+   (--nf-boot-color), so this reuses it rather than inventing a signal. */
+#notch-face.nf-waking-voice .nf-shine path {
+  stroke: rgba(122, 162, 255, 0.95);
+}
+
+#notch-face.nf-waking-voice {
+  animation: nfVoiceWakeGlow 1.6s ease-in-out infinite;
+}
+
+@keyframes nfVoiceWakeGlow {
+  0%, 100% { box-shadow: 0 0 16px rgba(122, 162, 255, 0.30); }
+  50% { box-shadow: 0 0 34px rgba(122, 162, 255, 0.72); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #notch-face.nf-waking-voice { animation: none; }
+}
+
+/* ── Meeting recorder surface ────────────────────────────────────────────────
+   The same drop-down-from-the-notch shell the Yap and answer surfaces use: the
+   ::after cap keeps the physical notch looking untouched, the ::before sheet
+   grows downward with a square top so it reads as the island stretching rather
+   than a card floating below it.
+
+   One deliberate difference. Every other surface is opaque black because it
+   owns the screen for a few seconds. This one is up for the whole meeting, over
+   whatever you are actually working on, so it is translucent and blurred: you
+   can see it is alive without losing the window underneath. */
+#notch-face.nf-meeting-open:not(.nf-answer-open):not(.nf-think-open):not(.nf-yap-open):not(.nf-inline-open) .nf-pill {
+  overflow: visible;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  clip-path: none;
+  filter: none;
+  transform: translateX(0);
+  animation: none;
+  width: var(--nf-reading-surface-w);
+  height: min(var(--nf-meeting-height, 300px), calc(var(--nf-screen-h, 100vh) - 70px));
+  min-height: 200px;
+  max-height: calc(var(--nf-screen-h, 100vh) - 70px);
+  border-radius: 0 0 34px 34px;
+  transition:
+    width 620ms cubic-bezier(.22,1,.36,1),
+    height 420ms cubic-bezier(.22,1,.36,1),
+    border-radius 520ms cubic-bezier(.22,1,.36,1);
+}
+
+/* The black cap over the real notch, so the housing never appears to change. */
+#notch-face.nf-meeting-open:not(.nf-answer-open):not(.nf-think-open):not(.nf-yap-open):not(.nf-inline-open) .nf-pill::after {
+  content: "";
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  right: auto;
+  bottom: auto;
+  left: 50%;
+  width: var(--nf-notch-w, 190px);
+  height: calc(var(--nf-safe-top) + 24px);
+  border-radius: 0 0 18px 18px;
+  background: #000;
+  opacity: 1;
+  transform: translateX(-50%);
+  animation: none;
+}
+
+/* The sheet. Square at the top so it is continuous with the housing, rounded
+   only where it leaves the notch. Translucent rather than black: see above. */
+#notch-face.nf-meeting-open:not(.nf-answer-open):not(.nf-think-open):not(.nf-yap-open):not(.nf-inline-open) .nf-pill::before {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  display: block;
+  border-radius: 0 0 30px 30px;
+  background: linear-gradient(180deg, rgba(12,12,14,.72), rgba(10,10,12,.58));
+  backdrop-filter: blur(26px) saturate(150%);
+  -webkit-backdrop-filter: blur(26px) saturate(150%);
+  box-shadow: 0 24px 70px rgba(0,0,0,.38);
+  pointer-events: none;
+}
+
+/* While the sheet is open the resting notch furniture would collide with it. */
+#notch-face.nf-meeting-open .nf-band,
+#notch-face.nf-meeting-open .nf-cap,
+#notch-face.nf-meeting-open #nf-status,
+#notch-face.nf-meeting-open #nf-status-2,
+#notch-face.nf-meeting-open .nf-folds,
+#notch-face.nf-meeting-open .nf-privacy,
+#notch-face.nf-meeting-open .nf-volume,
+#notch-face.nf-meeting-open .nf-viz,
+#notch-face.nf-meeting-open .nf-tray,
+#notch-face.nf-meeting-open .nf-sonar,
+#notch-face.nf-meeting-open .nf-think-dots,
+#notch-face.nf-meeting-open .nf-think-arrow {
+  display: none !important;
+  opacity: 0 !important;
+}
+
+#notch-face .nf-meeting-surface {
+  position: absolute;
+  z-index: 12;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  padding: var(--nf-content-top) 22px 16px;
+  color: #f7f7f5;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateY(-8px);
+  transition:
+    opacity 260ms ease 120ms,
+    transform 640ms cubic-bezier(.22,1,.36,1) 60ms,
+    visibility 0s linear 680ms;
+  font-family: "Braino SF Pro Display", "SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, sans-serif;
+  font-synthesis: none;
+}
+
+/* Yields the same way the geometry does: if Braino has to answer something mid-meeting,
+   the answer takes the island and the meeting content steps back rather than drawing over
+   the top of it. The recording never stops; only its surface does. */
+#notch-face.nf-meeting-open:not(.nf-answer-open):not(.nf-think-open):not(.nf-yap-open):not(.nf-inline-open) .nf-meeting-surface {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: none;
+  transition-delay: 100ms, 30ms, 0ms;
+}
+
+#notch-face .nf-meeting-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
+  padding: 0 1px 10px;
+  border-bottom: 1px solid rgba(255,255,255,.10);
+}
+
+#notch-face .nf-meeting-rec {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #ff6b6b;
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: .04em;
+}
+
+#notch-face .nf-meeting-rec i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #ff5c5c;
+  animation: nfMeetingPulse 1.7s ease-in-out infinite;
+}
+
+@keyframes nfMeetingPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: .35; transform: scale(.78); }
+}
+
+#notch-face .nf-meeting-title {
+  color: rgba(255,255,255,.62);
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: .11em;
+  text-transform: uppercase;
+}
+
+#notch-face .nf-meeting-people {
+  flex: 1 1 auto;
+  color: rgba(255,255,255,.36);
+  font-size: 10.5px;
+  font-weight: 500;
+}
+
+#notch-face .nf-meeting-stealth,
+#notch-face .nf-meeting-stop {
+  flex: 0 0 auto;
+  border: 1px solid rgba(255,255,255,.16);
+  border-radius: 999px;
+  background: rgba(255,255,255,.06);
+  color: rgba(255,255,255,.78);
+  cursor: pointer;
+  transition: background 160ms ease, color 160ms ease, border-color 160ms ease;
+}
+
+#notch-face .nf-meeting-stealth {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+}
+
+#notch-face .nf-meeting-stealth:hover,
+#notch-face .nf-meeting-stop:hover {
+  background: rgba(255,255,255,.13);
+  color: #fff;
+}
+
+/* On = hidden from screen shares, which is the safe default, so the struck-out
+   eye is the ON state. Off means people you share with can see this. */
+#notch-face .nf-meeting-stealth .nf-eye-slash { opacity: 0; }
+#notch-face .nf-meeting-stealth.is-on .nf-eye-slash { opacity: 1; }
+#notch-face .nf-meeting-stealth.is-on {
+  border-color: rgba(122,162,255,.42);
+  background: rgba(122,162,255,.16);
+  color: rgba(190,210,255,.95);
+}
+
+#notch-face .nf-meeting-stop {
+  height: 24px;
+  padding: 0 12px;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+#notch-face .nf-meeting-live {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  padding-top: 11px;
+}
+
+#notch-face .nf-meeting-speaker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+#notch-face .nf-meeting-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(120,220,160,.95);
+  box-shadow: 0 0 10px rgba(120,220,160,.6);
+}
+
+#notch-face .nf-meeting-speaker-name {
+  color: #f7f7f5;
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: -.008em;
+}
+
+/* Five bars that only move while somebody is actually talking, so the surface
+   is honest about whether it is hearing anything. */
+#notch-face .nf-meeting-wave {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 12px;
+  margin-left: 2px;
+}
+
+#notch-face .nf-meeting-wave i {
+  width: 2px;
+  height: 3px;
+  border-radius: 1px;
+  background: rgba(255,255,255,.34);
+}
+
+#notch-face.nf-meeting-voiced .nf-meeting-wave i {
+  animation: nfMeetingWave 900ms ease-in-out infinite;
+  background: rgba(160,230,190,.85);
+}
+
+#notch-face.nf-meeting-voiced .nf-meeting-wave i:nth-child(2) { animation-delay: 120ms; }
+#notch-face.nf-meeting-voiced .nf-meeting-wave i:nth-child(3) { animation-delay: 240ms; }
+#notch-face.nf-meeting-voiced .nf-meeting-wave i:nth-child(4) { animation-delay: 360ms; }
+#notch-face.nf-meeting-voiced .nf-meeting-wave i:nth-child(5) { animation-delay: 480ms; }
+
+@keyframes nfMeetingWave {
+  0%, 100% { height: 3px; }
+  50% { height: 11px; }
+}
+
+#notch-face .nf-meeting-lines {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin-top: 7px;
+  overflow: hidden;
+  color: rgba(255,255,255,.78);
+  font-size: 13px;
+  line-height: 1.42;
+  letter-spacing: -.008em;
+  overflow-wrap: anywhere;
+}
+
+#notch-face .nf-meeting-lines p {
+  margin: 0 0 5px;
+  opacity: .5;
+  transition: opacity 300ms ease;
+}
+
+#notch-face .nf-meeting-lines p:last-child {
+  color: #f7f7f5;
+  opacity: 1;
+}
+
+#notch-face .nf-meeting-lines b {
+  color: rgba(255,255,255,.52);
+  font-weight: 650;
+}
+
+#notch-face .nf-meeting-notes {
+  flex: 0 0 auto;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255,255,255,.10);
+}
+
+#notch-face .nf-meeting-notes small {
+  display: block;
+  margin-bottom: 5px;
+  color: rgba(255,255,255,.38);
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+#notch-face .nf-meeting-notes ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+#notch-face .nf-meeting-notes li {
+  position: relative;
+  margin: 0 0 3px;
+  padding-left: 12px;
+  color: rgba(255,255,255,.74);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+#notch-face .nf-meeting-notes li::before {
+  content: "";
+  position: absolute;
+  top: 7px;
+  left: 2px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: rgba(255,255,255,.34);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #notch-face .nf-meeting-rec i,
+  #notch-face.nf-meeting-voiced .nf-meeting-wave i { animation: none; }
 }

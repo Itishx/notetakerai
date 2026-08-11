@@ -128,7 +128,7 @@ const IDEAS: Idea[] = [
   {
     name: 'Braino Hera (Wispr Flow, but ours)', status: 'seeded',
     what: 'System-wide voice dictation as its own product — talk into any app, Braino types. Differentiated by computer use on top: he doesn’t just transcribe, he can act on what you said.',
-    note: 'Yap Mode (double Option) already ships the core. Productizing = cheaper transcription models + polish. Cost per minute is the known dragon; park until it matters.',
+    note: 'BrainoHERA (double Option) already ships the core. Productizing = cheaper transcription models + polish. Cost per minute is the known dragon; park until it matters.',
   },
   {
     name: 'Voice-first site builder (narrow Lovable)', status: 'exploring',

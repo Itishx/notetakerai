@@ -254,3 +254,97 @@
 @media (prefers-reduced-motion: reduce) {
   .iomi-snore i { opacity: 0.5; transform: none; animation: none; }
 }
+
+
+/* ── The island's tabs, behind an arrow ──────────────────────────────────────
+   At rest it is small: two eyes tucked into the left corner and an arrow on the
+   right, nothing centred. Press the arrow and it grows outward from that corner
+   to make room for the pages, then shrinks back. This is not the tall dropdown
+   (.open); it is the same bar, wider. */
+.iomi-notch.has-tabs { width: 108px; }
+.iomi-notch.has-tabs.tabs-open { width: min(566px, calc(100vw - 24px)); }
+.iomi-notch.has-tabs.open { width: min(660px, calc(100vw - 32px)); }
+
+/* Left corner, not the middle: content starts at the eyes and grows rightward,
+   so the widening reads as the island stretching rather than re-centring. */
+.iomi-notch.has-tabs .iomi-notch-bar {
+  justify-content: flex-start;
+  gap: 8px;
+  padding: 0 6px 0 12px;
+}
+
+.iomi-notch.has-tabs .iomi-notch-realeyes { flex: 0 0 auto; width: 26px; height: 18px; }
+
+.iomi-notch-arrow {
+  flex: 0 0 auto;
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.09);
+  color: var(--iomi-ink-2);
+  cursor: pointer;
+  transition: background 0.18s ease, color 0.18s ease, transform 0.42s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.iomi-notch-arrow svg { width: 15px; height: 15px; }
+.iomi-notch-arrow:hover { background: rgba(255, 255, 255, 0.16); color: var(--iomi-ink); }
+.iomi-notch.tabs-open .iomi-notch-arrow { transform: rotate(180deg); }
+.iomi-notch.open .iomi-notch-arrow { display: none; }
+
+/* The tabs take no width until the arrow opens them, so the island can rest at
+   its small size instead of being permanently stretched around them. They fade
+   in a beat after the width starts moving, so the shape leads and the text
+   follows rather than both arriving at once. */
+.iomi-notch-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  max-width: 0;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transition: max-width 0.5s cubic-bezier(0.32, 0.72, 0, 1), opacity 0.2s ease;
+}
+
+.iomi-notch.tabs-open .iomi-notch-tabs {
+  max-width: 470px;
+  opacity: 1;
+  pointer-events: auto;
+  transition: max-width 0.55s cubic-bezier(0.32, 0.72, 0, 1), opacity 0.28s ease 0.16s;
+}
+
+.iomi-notch.open .iomi-notch-tabs { display: none; }
+
+.iomi-notch-tab {
+  padding: 0 10px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  color: var(--iomi-ink-2);
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  text-decoration: none;
+  transition: color 0.18s ease, background 0.18s ease;
+}
+
+.iomi-notch-tab:hover { color: var(--iomi-ink); background: rgba(255, 255, 255, 0.09); }
+.iomi-notch-tab.on { color: #000; background: var(--iomi-ink); }
+
+@media (max-width: 600px) {
+  .iomi-notch.has-tabs { width: 96px; }
+  .iomi-notch.has-tabs.tabs-open { width: calc(100vw - 20px); }
+  .iomi-notch-tab { padding: 0 7px; font-size: 10.5px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .iomi-notch, .iomi-notch-tabs, .iomi-notch-arrow { transition: none; }
+}

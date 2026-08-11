@@ -13,6 +13,7 @@ import { buildEmotionalCore, orderTraitsForMoment, steeringLine } from "../../_s
 import { detectMoment, MOMENT_EMPHASIS, MOMENT_LABEL } from "../../_shared/emotional-engine/moments.ts";
 import { getClassManifest } from "../../_shared/emotional-engine/classes.ts";
 import { logEngineRun } from "../../_shared/engine-log.ts";
+import { BRAINO_TEXT_MODEL, BRAINO_TEXT_REASONING_EFFORT } from "../../_shared/openai-models.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -23,7 +24,7 @@ const corsHeaders = {
 // One model, chosen server-side. This endpoint is deliberately public (verify_jwt=false)
 // so the lab works for anyone, which means the caller must NOT get to pick the model:
 // an unauthenticated request body could otherwise point our key at a 10x tier.
-const HIL_MODEL = "gpt-5.4-mini";
+const HIL_MODEL = BRAINO_TEXT_MODEL;
 const OPENAI_ENDPOINT = "https://api.openai.com/v1/chat/completions";
 
 async function callModel(apiKey: string, messages: unknown[]) {
@@ -33,7 +34,11 @@ async function callModel(apiKey: string, messages: unknown[]) {
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ model: HIL_MODEL, messages }),
+    body: JSON.stringify({
+      model: HIL_MODEL,
+      reasoning_effort: BRAINO_TEXT_REASONING_EFFORT,
+      messages,
+    }),
   });
 }
 

@@ -18,7 +18,7 @@ export default function ExpandedThinkingCanvasDocs() {
           <h1>You should know<br /><em>when Braino is working.</em></h1>
           <p>
             A longer task turns the Mac notch into one continuous cognition surface:
-            a thin screen-wide sentence first, then a top-quarter live trace on demand.
+            a compact signal first, then an optional black thinking sheet when you click.
           </p>
           <time dateTime="2026-07-29">Published July 29, 2026</time>
         </header>
@@ -30,10 +30,10 @@ export default function ExpandedThinkingCanvasDocs() {
             into the notch until the interface felt more anxious than intelligent.
           </p>
           <p>
-            The new Thinking Canvas keeps the notch thin by default. Words grow left
-            from Braino&apos;s centred eyes, continue on the right when necessary, and
-            never wrap upward. Click his eyes and the same black island drops down with
-            the prompt, current step, and emerging answer.
+            Heard words still grow from Braino&apos;s centred eyes without stealing the
+            current app. A real request keeps a compact progress signal in the notch.
+            Click anywhere on it when you want the black thinking sheet with three short
+            progress summaries; click away to fold it again.
           </p>
         </section>
 
@@ -42,8 +42,8 @@ export default function ExpandedThinkingCanvasDocs() {
           <h2>Present. Working.<br />Finished.</h2>
           <div className="kb-timeline">
             <div><span>01</span><Circle aria-hidden="true" /><p>The live sentence grows across one thin top strip.</p></div>
-            <div><span>02</span><Square aria-hidden="true" /><p>Clicking Braino&apos;s eyes drops the strip into the cognition canvas.</p></div>
-            <div><span>03</span><Check aria-hidden="true" /><p>Completion holds briefly, then Braino settles home.</p></div>
+            <div><span>02</span><Square aria-hidden="true" /><p>The thinking sheet opens only when you click the compact notch.</p></div>
+            <div><span>03</span><Check aria-hidden="true" /><p>The same surface becomes the short or long answer, then settles home.</p></div>
           </div>
         </section>
 
@@ -67,9 +67,10 @@ export default function ExpandedThinkingCanvasDocs() {
           <aside className="kb-honesty">
             <strong>One state owns the island</strong>
             <p>
-              Listening and speaking immediately dismiss task progress. Braino&apos;s ears,
-              sonar, live words, and speaking mouth cannot be covered by an old thinking
-              canvas.
+              Listening immediately dismisses stale task progress. A real answer receives
+              the notch next, so thinking becomes readable speech instead of dropping to
+              an unrelated mouth-only state. The command itself is dispatched before the
+              Notch is painted, so visibility can never become execution latency.
             </p>
           </aside>
         </section>

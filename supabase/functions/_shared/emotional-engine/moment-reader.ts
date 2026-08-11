@@ -22,6 +22,7 @@
 import { detectMomentDetailed, looksEmotionallyLoaded } from "./moments.ts";
 import type { CueHit } from "./moments.ts";
 import type { Moment } from "./types.ts";
+import { BRAINO_TEXT_REASONING_EFFORT } from "../openai-models.ts";
 
 export type MomentRead = {
   moment: Moment;
@@ -112,6 +113,7 @@ export async function readMoment(text: string, options: ReaderOptions): Promise<
       headers: { Authorization: `Bearer ${options.apiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({
         model: options.model,
+        reasoning_effort: BRAINO_TEXT_REASONING_EFFORT,
         messages: [
           { role: "system", content: READER_PROMPT },
           { role: "user", content: String(text).slice(0, 1500) },

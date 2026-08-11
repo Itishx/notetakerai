@@ -4,10 +4,13 @@
 **Platform:** Braino for Mac  
 **Status:** MVP  
 **Released:** July 30, 2026
+**Updated:** August 10, 2026
 
 ## The simple version
 
-When Braino is walking on screen, his reply remains in the existing glass caption box while each spoken word lights up in sequence.
+Braino's written reply still moves with his voice, but the normal Mac path now renders it in the notch even while the standing mascot is walking.
+
+The old glass bubble remains only as a fallback when the notch surface is unavailable or deliberately disabled. It no longer rides above Braino during an ordinary voice conversation.
 
 ## Why it exists
 
@@ -15,11 +18,13 @@ The old caption timer began before speech finished. Longer replies could disappe
 
 ## How to use it
 
-Bring Braino onto the screen and speak normally. The full reply appears dimly, the current word turns coral, completed words turn white, and the box remains for a reading beat after speech ends.
+Speak normally. The full reply appears dimly in the notch, the current word brightens, completed words settle, and the surface remains for a reading beat after speech ends. Braino can keep walking without carrying a second subtitle box across your work.
 
 ## What Braino knows or does
 
-- Keeps the existing mascot caption shape and placement.
+- Uses the IOMI answer surface whether Braino is home or out.
+- Clears a stale mascot bubble when live transcript text reaches the notch.
+- Keeps the glass caption as a fallback when the notch is unavailable.
 - Highlights words against real audio playback time.
 - Works with streamed and buffered speech.
 - Starts dismissal only after speech completes.
@@ -34,7 +39,7 @@ The renderer turns reply text into safe DOM word spans. Each TTS audio player ad
 
 ## Product or design decisions
 
-The box did not need redesigning. The problem was timing and aliveness, so typography carries the speech.
+Timing still carries the speech, but placement now follows a stricter rule: conversational words belong to the notch; the mascot should never drag subtitles over the page.
 
 ## Public documentation checklist
 

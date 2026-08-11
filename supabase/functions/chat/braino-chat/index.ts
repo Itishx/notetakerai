@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { BRAINO_TEXT_MODEL, BRAINO_TEXT_REASONING_EFFORT } from "../../_shared/openai-models.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -50,7 +51,8 @@ serve(async (req) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "gpt-5.4-mini",
+        model: BRAINO_TEXT_MODEL,
+        reasoning_effort: BRAINO_TEXT_REASONING_EFFORT,
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
           ...messages,

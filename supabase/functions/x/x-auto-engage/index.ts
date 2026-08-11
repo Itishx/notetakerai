@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { loadUserKnowledge } from "../../_shared/user-knowledge.ts";
+import { BRAINO_TEXT_MODEL, BRAINO_TEXT_REASONING_EFFORT } from "../../_shared/openai-models.ts";
 import {
   buildSessionMetricFields,
   countPendingSessionReplies,
@@ -17,7 +18,7 @@ const corsHeaders = {
 };
 
 const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
-const MODEL = "gpt-5.4-mini";
+const MODEL = BRAINO_TEXT_MODEL;
 const MAX_MENTIONS_TO_QUEUE = 25;
 
 serve(async (req) => {
@@ -424,6 +425,7 @@ Rules:
     },
     body: JSON.stringify({
       model: MODEL,
+      reasoning_effort: BRAINO_TEXT_REASONING_EFFORT,
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },

@@ -1,4 +1,17 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { BRAINO_TEXT_MODEL, BRAINO_TEXT_REASONING_EFFORT } from "../../_shared/openai-models.ts";
+import {
+  buildMeetingCaptionTranscript,
+  labelMicEntries,
+  meetingContextHasCaptionText,
+  mergeTranscriptStreams,
+  nameTranscriptEntries,
+  normalizeMeetingContext,
+  parseDiarizedEntries,
+  speakerVocabularyHint,
+  transcriptEntriesToText,
+} from "../../_shared/meeting-speakers.ts";
+import type { MeetingContext, TranscriptEntry } from "../../_shared/meeting-speakers.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -6,14 +19,20 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const NOTES_MODEL = "gpt-5.4-mini";
+const NOTES_MODEL = BRAINO_TEXT_MODEL;
 
 type RecordingMode = "lecture" | "meeting";
+
+/** Which side of the conversation an upload came from. "system" is the call coming out of
+ *  your speakers, "mic" is you going in, "mixed" is the old single blended stream that
+ *  destroyed the distinction before the recorder ever got to it. */
+type AudioStreamRole = "system" | "mic" | "mixed";
 
 type AudioSegmentPayload = {
   audioBase64: string;
   fileName: string;
   mimeType: string;
+  role: AudioStreamRole;
 };
 
 type KnownSpeakerReference = {
@@ -46,31 +65,6 @@ type MeetingArtifacts = {
   followUps: MeetingFollowUp[];
 };
 
-type MeetingSpeakerEvent = {
-  atMs: number;
-  untilMs: number;
-  name: string;
-  source: string;
-};
-
-type MeetingCaptionEvent = {
-  atMs: number;
-  speaker: string;
-  text: string;
-  source: string;
-};
-
-type MeetingContext = {
-  platform: string;
-  platformLabel: string;
-  title: string;
-  participantNames: string[];
-  speakerTimeline: MeetingSpeakerEvent[];
-  captionTimeline: MeetingCaptionEvent[];
-  currentSpeaker: string;
-  isPresenting: boolean;
-};
-
 class OpenAiRequestError extends Error {
   status: number;
 
@@ -88,6 +82,10 @@ serve(async (req) => {
   try {
     const body = await req.json();
     const mode: RecordingMode = body.mode === "meeting" ? "meeting" : "lecture";
+    // Opt-in: absent for lectures and meetings, "en" for the Mac's command mic.
+    const requestedLanguage = typeof body.language === "string" && /^[a-z]{2}$/.test(body.language)
+      ? body.language
+      : undefined;
     const existingNotes = typeof body.existingNotes === "string" ? body.existingNotes : "";
     const existingTranscript = typeof body.existingTranscript === "string" ? body.existingTranscript.trim() : "";
     const existingImages = body.existingImages && typeof body.existingImages === "object" ? body.existingImages : {};
@@ -95,7 +93,7 @@ serve(async (req) => {
     const hasExistingNotes = existingNotes.trim().length > 0;
     const clientNow = typeof body.clientNow === "string" && body.clientNow.trim() ? body.clientNow.trim() : new Date().toISOString();
     const clientTimeZone = typeof body.clientTimeZone === "string" && body.clientTimeZone.trim() ? body.clientTimeZone.trim() : "UTC";
-    const segments = normalizeAudioSegments(body);
+    const { segments, parallel: parallelStreams } = normalizeAudioSegments(body);
     const knownSpeakerReferences = normalizeKnownSpeakerReferences(body.knownSpeakerReferences);
     const meetingContext = normalizeMeetingContext(body.meetingContext);
 
@@ -110,17 +108,36 @@ serve(async (req) => {
 
     console.log(`Transcribing ${segments.length} ${mode} audio segment(s)...`);
     const transcripts: string[] = [];
+    // One list of entries per upload, kept apart until they are named, because which stream a
+    // voice arrived on is itself the answer to "who was that".
+    const entriesByRole: TranscriptEntry[][] = [];
+    // Where this upload sits on the meeting clock, so diarizer timestamps can be compared
+    // against the UI's speaker and caption timelines.
+    let clockCursorMs = meetingContext.segmentStartMs;
 
     for (let i = 0; i < segments.length; i++) {
       try {
-        console.log(`Transcribing segment ${i + 1}/${segments.length}...`);
-        const transcript = await transcribeSegment({
+        console.log(`Transcribing ${segments[i].role} stream ${i + 1}/${segments.length}...`);
+        const result = await transcribeSegment({
+          language: requestedLanguage,
           segment: segments[i],
           mode,
           knownSpeakerReferences,
-          meetingContext,
           openAiApiKey: OPENAI_API_KEY,
+          clockOffsetMs: clockCursorMs,
+          vocabularyHint: mode === "meeting" ? speakerVocabularyHint(meetingContext) : "",
         });
+        if (result.entries.length) {
+          entriesByRole.push(
+            // The mic is you, by physics rather than by inference.
+            segments[i].role === "mic" ? labelMicEntries(result.entries) : result.entries,
+          );
+          // Parallel streams share one origin; consecutive chunks do not.
+          if (!parallelStreams) {
+            clockCursorMs = Math.max(clockCursorMs, result.entries[result.entries.length - 1].endMs);
+          }
+        }
+        const transcript = result.text;
         if (transcript) {
           transcripts.push(transcript);
         }
@@ -148,10 +165,23 @@ serve(async (req) => {
       return jsonResponse({ error: "No speech detected in any audio segment" }, 400);
     }
 
-    const audioTranscript = transcripts.length === 1
+    // Meeting mode: lay the streams back onto one timeline, then bind the diarizer's anonymous
+    // clusters to the names the meeting UI knows, and let a self-introduction ("I'm Priya")
+    // name anything still unresolved.
+    const meetingEntries = mergeTranscriptStreams(entriesByRole);
+    const namedMeetingTranscript = mode === "meeting" && meetingEntries.length
+      ? transcriptEntriesToText(nameTranscriptEntries(meetingEntries, meetingContext))
+      : "";
+
+    const audioTranscript = namedMeetingTranscript || (transcripts.length === 1
       ? transcripts[0]
-      : transcripts.map((t, i) => `[Segment ${i + 1}]\n${t}`).join("\n\n");
-    const combinedTranscript = captionTranscript || audioTranscript;
+      : transcripts.map((t, i) => `[Segment ${i + 1}]\n${t}`).join("\n\n"));
+
+    // Audio carries the words; the meeting UI carries the names. Captions used to REPLACE the
+    // audio transcript outright, which threw away the accurate speaker-attributed text we had
+    // just paid for in favour of a lossy, self-rewriting caption feed. They are now only the
+    // fallback for when there is no audio at all.
+    const combinedTranscript = audioTranscript || captionTranscript;
     const fullTranscript = [existingTranscript, combinedTranscript].filter(Boolean).join("\n\n").trim();
 
     console.log("Combined transcript length:", fullTranscript.length);
@@ -164,6 +194,10 @@ serve(async (req) => {
       existingImageKeys,
       transcript: fullTranscript || combinedTranscript,
       meetingContext,
+      // Captions no longer replace the audio transcript, but they are still worth showing the
+      // model as a second witness: they carry names, and they sometimes catch a line the audio
+      // missed. Only passed when they are not already serving as the transcript itself.
+      captionDigest: audioTranscript ? captionTranscript : "",
     });
 
     const notesRes = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -174,6 +208,7 @@ serve(async (req) => {
       },
       body: JSON.stringify({
         model: NOTES_MODEL,
+        reasoning_effort: BRAINO_TEXT_REASONING_EFFORT,
         messages: [
           {
             role: "system",
@@ -236,16 +271,40 @@ function jsonResponse(payload: unknown, status = 200) {
   });
 }
 
-function normalizeAudioSegments(body: Record<string, unknown>): AudioSegmentPayload[] {
+function normalizeAudioRole(value: unknown): AudioStreamRole {
+  const role = String(value || "").trim().toLowerCase();
+  if (role === "system" || role === "tab" || role === "remote") return "system";
+  if (role === "mic" || role === "microphone" || role === "self") return "mic";
+  return "mixed";
+}
+
+/** `audioStreams` are the two sides of one moment, sharing a clock. `audioSegments` is the
+ *  older list of consecutive chunks. Both still arrive, so both still parse. */
+function normalizeAudioSegments(body: Record<string, unknown>): {
+  segments: AudioSegmentPayload[];
+  parallel: boolean;
+} {
+  if (Array.isArray(body.audioStreams)) {
+    return {
+      segments: body.audioStreams
+        .map((stream, index) => normalizeAudioSegment(stream, index))
+        .filter((segment): segment is AudioSegmentPayload => Boolean(segment)),
+      parallel: true,
+    };
+  }
+
   const rawSegments = Array.isArray(body.audioSegments)
     ? body.audioSegments
     : typeof body.audioBase64 === "string"
       ? [body.audioBase64]
       : [];
 
-  return rawSegments
-    .map((segment, index) => normalizeAudioSegment(segment, index))
-    .filter((segment): segment is AudioSegmentPayload => Boolean(segment));
+  return {
+    segments: rawSegments
+      .map((segment, index) => normalizeAudioSegment(segment, index))
+      .filter((segment): segment is AudioSegmentPayload => Boolean(segment)),
+    parallel: false,
+  };
 }
 
 function normalizeAudioSegment(segment: unknown, index: number): AudioSegmentPayload | null {
@@ -254,21 +313,22 @@ function normalizeAudioSegment(segment: unknown, index: number): AudioSegmentPay
       audioBase64: segment,
       mimeType: "audio/webm",
       fileName: `segment-${index + 1}.webm`,
+      role: "mixed",
     };
   }
 
   if (!segment || typeof segment !== "object") return null;
-  const audioBase64 = typeof (segment as Record<string, unknown>).audioBase64 === "string"
-    ? String((segment as Record<string, unknown>).audioBase64).trim()
-    : "";
+  const raw = segment as Record<string, unknown>;
+  const audioBase64 = typeof raw.audioBase64 === "string" ? raw.audioBase64.trim() : "";
   if (!audioBase64) return null;
 
-  const mimeType = normalizeMimeType((segment as Record<string, unknown>).mimeType, "audio/webm");
-  const fileName = typeof (segment as Record<string, unknown>).fileName === "string" && String((segment as Record<string, unknown>).fileName).trim()
-    ? String((segment as Record<string, unknown>).fileName).trim()
-    : `segment-${index + 1}.${extensionFromMimeType(mimeType)}`;
+  const role = normalizeAudioRole(raw.role);
+  const mimeType = normalizeMimeType(raw.mimeType, "audio/webm");
+  const fileName = typeof raw.fileName === "string" && raw.fileName.trim()
+    ? raw.fileName.trim()
+    : `${role}-${index + 1}.${extensionFromMimeType(mimeType)}`;
 
-  return { audioBase64, mimeType, fileName };
+  return { audioBase64, mimeType, fileName, role };
 }
 
 function normalizeKnownSpeakerReferences(rawValue: unknown): KnownSpeakerReference[] {
@@ -289,83 +349,6 @@ function normalizeKnownSpeakerReference(reference: unknown, index: number): Know
     audioBase64,
     mimeType: normalizeMimeType(raw.mimeType, "audio/webm"),
   };
-}
-
-function normalizeMeetingContext(rawValue: unknown): MeetingContext {
-  const raw = rawValue && typeof rawValue === "object" ? rawValue as Record<string, unknown> : {};
-  const participantNames = Array.isArray(raw.participantNames)
-    ? raw.participantNames.map((name) => normalizeMeetingName(name)).filter(Boolean).slice(0, 60)
-    : [];
-  const speakerTimeline = Array.isArray(raw.speakerTimeline)
-    ? raw.speakerTimeline.map(normalizeMeetingSpeakerEvent).filter((event): event is MeetingSpeakerEvent => Boolean(event)).slice(-200)
-    : [];
-  const captionTimeline = Array.isArray(raw.captionTimeline)
-    ? raw.captionTimeline.map(normalizeMeetingCaptionEvent).filter((event): event is MeetingCaptionEvent => Boolean(event)).slice(-200)
-    : [];
-  const platform = typeof raw.platform === "string" ? raw.platform.trim().slice(0, 40) : "";
-  const platformLabel = typeof raw.platformLabel === "string" ? raw.platformLabel.trim().slice(0, 80) : "";
-  const title = typeof raw.title === "string" ? raw.title.trim().slice(0, 160) : "";
-  const currentSpeaker = normalizeMeetingName(raw.currentSpeaker);
-  return {
-    platform,
-    platformLabel,
-    title,
-    participantNames: [...new Set(participantNames)],
-    speakerTimeline,
-    captionTimeline,
-    currentSpeaker,
-    isPresenting: raw.isPresenting === true,
-  };
-}
-
-function normalizeMeetingSpeakerEvent(value: unknown): MeetingSpeakerEvent | null {
-  if (!value || typeof value !== "object") return null;
-  const raw = value as Record<string, unknown>;
-  const name = normalizeMeetingName(raw.name);
-  if (!name) return null;
-  const atMs = normalizeMs(raw.atMs);
-  const untilMs = Math.max(atMs, normalizeMs(raw.untilMs, atMs));
-  return {
-    atMs,
-    untilMs,
-    name,
-    source: typeof raw.source === "string" ? raw.source.trim().slice(0, 40) : "ui",
-  };
-}
-
-function normalizeMeetingCaptionEvent(value: unknown): MeetingCaptionEvent | null {
-  if (!value || typeof value !== "object") return null;
-  const raw = value as Record<string, unknown>;
-  const text = typeof raw.text === "string" ? raw.text.replace(/\s+/g, " ").trim() : "";
-  if (!text) return null;
-  return {
-    atMs: normalizeMs(raw.atMs),
-    speaker: normalizeMeetingName(raw.speaker),
-    text: text.slice(0, 600),
-    source: typeof raw.source === "string" ? raw.source.trim().slice(0, 40) : "captions",
-  };
-}
-
-function normalizeMs(value: unknown, fallback = 0) {
-  const number = Number(value);
-  return Number.isFinite(number) && number >= 0 ? Math.round(number) : fallback;
-}
-
-function normalizeMeetingName(value: unknown) {
-  const text = String(value || "")
-    .replace(/\s+/g, " ")
-    .replace(/\s+\(you\)$/i, "")
-    .replace(/\s+is\s+(?:speaking|presenting|sharing).*$/i, "")
-    .trim();
-  if (!text || text.length > 80) return "";
-  if (/\b(participants?|captions?|settings|microphone|camera|present|more options|chat|activities|host controls|raise hand|turn on|turn off)\b/i.test(text)) return "";
-  if (/^(speaker|participant|person|someone|meeting|google meet|captions?)$/i.test(text)) return "";
-  if (/^(you|me)$/i.test(text)) return "You";
-  return titleCaseSpeakerName(text);
-}
-
-function meetingContextHasCaptionText(context: MeetingContext) {
-  return context.captionTimeline.some((caption) => caption.text.trim().length > 0);
 }
 
 function normalizeMimeType(value: unknown, fallback: string) {
@@ -394,14 +377,25 @@ async function transcribeSegment({
   segment,
   mode,
   knownSpeakerReferences,
-  meetingContext,
   openAiApiKey,
+  language,
+  clockOffsetMs,
+  vocabularyHint,
 }: {
   segment: AudioSegmentPayload;
   mode: RecordingMode;
   knownSpeakerReferences: KnownSpeakerReference[];
-  meetingContext: MeetingContext;
   openAiApiKey: string;
+  /** Diarizer timestamps restart at 0 for every upload; this lifts them onto the meeting clock. */
+  clockOffsetMs: number;
+  /** The names we already expect to hear. A name the transcriber mangles is a name no later
+   *  layer can recover, so this goes in before a single word is decoded. */
+  vocabularyHint?: string;
+  /** ISO code. Opt-in, and left unset for lectures and meetings, which are
+   *  genuinely multilingual. The Mac's spoken-command path sets "en" because
+   *  without it the model guesses, and a mic left open in a room playing Hindi
+   *  standup came back as fluent Urdu which Braino then answered as a command. */
+  language?: string;
 }) {
   const form = new FormData();
   form.append("file", new Blob([decodeBase64(segment.audioBase64)], { type: segment.mimeType }), segment.fileName);
@@ -419,6 +413,14 @@ async function transcribeSegment({
     form.append("response_format", "json");
   }
 
+  // Naming the language stops the model inventing one from ambient audio. It is
+  // a hint, not a filter: it does not make non-English speech transcribe badly,
+  // it makes silence and background noise stop arriving as confident sentences.
+  if (language) form.append("language", language);
+
+  // Telling it the guest list up front is what keeps Sowmya from arriving as "so my".
+  if (vocabularyHint) form.append("prompt", vocabularyHint);
+
   const transcribeRes = await fetch("https://api.openai.com/v1/audio/transcriptions", {
     method: "POST",
     headers: {
@@ -432,7 +434,12 @@ async function transcribeSegment({
   }
 
   const transcribeData = await transcribeRes.json();
-  return formatTranscript(transcribeData, mode, meetingContext);
+  const flatText = typeof transcribeData.text === "string" ? transcribeData.text.trim() : "";
+  if (mode !== "meeting") return { text: flatText, entries: [] as TranscriptEntry[] };
+
+  const entries = parseDiarizedEntries(transcribeData, clockOffsetMs);
+  if (!entries.length) return { text: flatText, entries: [] as TranscriptEntry[] };
+  return { text: transcriptEntriesToText(entries), entries };
 }
 
 async function readOpenAiError(response: Response, fallback: string) {
@@ -456,193 +463,6 @@ function looksLikeNoSpeechError(message: string) {
   );
 }
 
-function titleCaseSpeakerName(value: string) {
-  return value
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((token) => {
-      if (/^[A-Z0-9]+$/.test(token)) return token;
-      return token.charAt(0).toUpperCase() + token.slice(1).toLowerCase();
-    })
-    .join(" ");
-}
-
-function isGenericSpeakerLabel(label: string) {
-  return /^speaker(?:\s+\d+)?$/i.test(label);
-}
-
-function assignGenericSpeakerLabel(
-  key: string,
-  speakerIds: Map<string, string>,
-  counter: { value: number },
-) {
-  const normalizedKey = key || "__speaker__";
-  const existing = speakerIds.get(normalizedKey);
-  if (existing) return existing;
-  const label = `Speaker ${counter.value++}`;
-  speakerIds.set(normalizedKey, label);
-  return label;
-}
-
-function formatSpeakerLabel(
-  rawSpeaker: unknown,
-  speakerIds?: Map<string, string>,
-  counter?: { value: number },
-) {
-  const speaker = String(rawSpeaker || "").trim();
-  if (!speaker) return assignGenericSpeakerLabel("__speaker__", speakerIds ?? new Map(), counter ?? { value: 1 });
-
-  const lowered = speaker.toLowerCase();
-  if (lowered === "you") return "You";
-
-  const numericMatch = lowered.match(/^(?:speaker[_\s-]*|spk[_\s-]*|person\s+)?(\d+)$/i);
-  if (numericMatch) return `Speaker ${parseInt(numericMatch[1], 10)}`;
-
-  const letterMatch = lowered.match(/^(?:speaker[_\s-]*|spk[_\s-]*|person\s+)?([a-z])$/i);
-  if (letterMatch) return `Speaker ${letterMatch[1].toUpperCase().charCodeAt(0) - 64}`;
-
-  if (/^(?:speaker|spk|person)\b/i.test(lowered)) {
-    return assignGenericSpeakerLabel(lowered, speakerIds ?? new Map(), counter ?? { value: 1 });
-  }
-
-  return titleCaseSpeakerName(speaker);
-}
-
-function extractExplicitSpeakerName(text: string) {
-  const source = String(text || "").trim();
-  if (!source) return "";
-
-  const patterns = [
-    /\b(?:i am|i'm|my name is)\s+([a-z][a-z' -]{1,60})/i,
-    /\bthis is\s+([a-z][a-z' -]{1,60})(?:\s+(?:speaking|here))?/i,
-  ];
-  const disallowed = new Set(["amazing", "awesome", "cool", "fine", "great", "interesting", "nice", "ok", "okay", "what", "why", "how", "when", "where"]);
-
-  for (const pattern of patterns) {
-    const match = source.match(pattern);
-    if (!match?.[1]) continue;
-    const candidate = match[1]
-      .replace(/\b(?:speaking|here)\b.*$/i, "")
-      .replace(/[.?!,]+.*$/, "")
-      .trim();
-    const words = candidate.split(/\s+/).filter(Boolean).slice(0, 3);
-    if (!words.length) continue;
-    if (words.some((word) => disallowed.has(word.toLowerCase()))) continue;
-    return titleCaseSpeakerName(words.join(" "));
-  }
-
-  return "";
-}
-
-function promoteExplicitSpeakerNames(entries: Array<{ speaker: string; text: string }>) {
-  const renameMap = new Map<string, string>();
-  const usedNames = new Set(
-    entries
-      .map((entry) => entry.speaker)
-      .filter((speaker) => speaker !== "You" && !isGenericSpeakerLabel(speaker))
-      .map((speaker) => speaker.toLowerCase()),
-  );
-
-  for (const entry of entries) {
-    if (!isGenericSpeakerLabel(entry.speaker)) continue;
-    const explicitName = extractExplicitSpeakerName(entry.text);
-    if (!explicitName) continue;
-    const normalizedName = explicitName.toLowerCase();
-    if (usedNames.has(normalizedName) && renameMap.get(entry.speaker)?.toLowerCase() !== normalizedName) continue;
-    renameMap.set(entry.speaker, explicitName);
-    usedNames.add(normalizedName);
-  }
-
-  return entries.map((entry) => ({
-    ...entry,
-    speaker: renameMap.get(entry.speaker) || entry.speaker,
-  }));
-}
-
-function segmentTimeToMs(value: unknown) {
-  const number = Number(value);
-  if (!Number.isFinite(number) || number < 0) return 0;
-  return number > 10000 ? Math.round(number) : Math.round(number * 1000);
-}
-
-function speakerFromMeetingTimeline(startMs: number, endMs: number, context: MeetingContext) {
-  if (!context?.speakerTimeline?.length) return "";
-  const windowStart = Math.max(0, startMs - 1800);
-  const windowEnd = Math.max(windowStart + 1, endMs + 1800);
-  const scores = new Map<string, number>();
-  for (const event of context.speakerTimeline) {
-    const eventStart = Number(event.atMs || 0);
-    const eventEnd = Math.max(eventStart + 1200, Number(event.untilMs || eventStart));
-    const overlap = Math.max(0, Math.min(windowEnd, eventEnd) - Math.max(windowStart, eventStart));
-    if (overlap <= 0) continue;
-    scores.set(event.name, (scores.get(event.name) || 0) + overlap);
-  }
-  let best = "";
-  let bestScore = 0;
-  for (const [name, score] of scores) {
-    if (score > bestScore) {
-      best = name;
-      bestScore = score;
-    }
-  }
-  return bestScore > 0 ? best : "";
-}
-
-function buildMeetingCaptionTranscript(context: MeetingContext) {
-  if (!context?.captionTimeline?.length) return "";
-  const merged: Array<{ speaker: string; text: string }> = [];
-  const seen = new Set<string>();
-  for (const caption of context.captionTimeline) {
-    const text = String(caption.text || "").replace(/\s+/g, " ").trim();
-    if (!text) continue;
-    const speaker = normalizeMeetingName(caption.speaker) || speakerFromMeetingTimeline(caption.atMs, caption.atMs + 3000, context) || context.currentSpeaker || "Speaker";
-    const key = `${speaker}:${text.toLowerCase()}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    const previous = merged[merged.length - 1];
-    if (previous && previous.speaker === speaker) previous.text = `${previous.text} ${text}`.trim();
-    else merged.push({ speaker, text });
-  }
-  return merged.map((entry) => `${entry.speaker}: ${entry.text}`).join("\n");
-}
-
-function formatTranscript(payload: Record<string, unknown>, mode: RecordingMode, meetingContext: MeetingContext = normalizeMeetingContext(null)) {
-  if (mode !== "meeting") {
-    return typeof payload.text === "string" ? payload.text.trim() : "";
-  }
-
-  const segments = Array.isArray(payload.segments) ? payload.segments : [];
-  if (!segments.length) {
-    return typeof payload.text === "string" ? payload.text.trim() : "";
-  }
-
-  const merged: Array<{ speaker: string; text: string }> = [];
-  const speakerIds = new Map<string, string>();
-  const speakerCounter = { value: 1 };
-  for (const segment of segments) {
-    if (!segment || typeof segment !== "object") continue;
-    const raw = segment as Record<string, unknown>;
-    const startMs = segmentTimeToMs(raw.start ?? raw.start_time ?? raw.startMs);
-    const endMs = segmentTimeToMs(raw.end ?? raw.end_time ?? raw.endMs) || startMs + 3000;
-    let speaker = formatSpeakerLabel(raw.speaker, speakerIds, speakerCounter);
-    if (isGenericSpeakerLabel(speaker)) {
-      const timelineSpeaker = speakerFromMeetingTimeline(startMs, endMs, meetingContext);
-      if (timelineSpeaker) speaker = timelineSpeaker;
-    }
-    const text = typeof raw.text === "string" ? raw.text.trim() : "";
-    if (!text) continue;
-    const previous = merged[merged.length - 1];
-    if (previous && previous.speaker === speaker) {
-      previous.text = `${previous.text} ${text}`.trim();
-    } else {
-      merged.push({ speaker, text });
-    }
-  }
-
-  const renamed = promoteExplicitSpeakerNames(merged);
-  return renamed.map((entry) => `${entry.speaker}: ${entry.text}`).join("\n");
-}
-
 function buildNotesPrompts({
   mode,
   hasExistingNotes,
@@ -650,6 +470,7 @@ function buildNotesPrompts({
   existingImageKeys,
   transcript,
   meetingContext,
+  captionDigest = "",
 }: {
   mode: RecordingMode;
   hasExistingNotes: boolean;
@@ -657,11 +478,15 @@ function buildNotesPrompts({
   existingImageKeys: string[];
   transcript: string;
   meetingContext?: MeetingContext;
+  captionDigest?: string;
 }) {
   if (mode === "meeting") {
     const knownParticipants = meetingContext?.participantNames?.length
       ? meetingContext.participantNames.join(", ")
       : "none detected";
+    const captionBlock = captionDigest
+      ? `\n\nPlatform captions for the same stretch of meeting. These are lossy and often truncated, so the transcript above wins on wording. Use these only to confirm who said something, or to catch a point the transcript clearly missed:\n\n${captionDigest.slice(0, 6000)}`
+      : "";
     const meetingContextBlock = `Meeting context:
 - Platform: ${meetingContext?.platformLabel || meetingContext?.platform || "unknown"}
 - Title: ${meetingContext?.title || "unknown"}
@@ -704,8 +529,8 @@ Rules:
 - Short transcript = short notes. Never pad or stretch content.`;
 
     const user = hasExistingNotes
-      ? `${meetingContextBlock}\n\nExisting meeting notes:\n\n${existingNotes}\n\nLatest transcript segment(s):\n\n${transcript}\n\nUpdate the meeting notes so they stay accurate and incorporate the new transcript.`
-      : `${meetingContextBlock}\n\nConvert this meeting transcript into structured meeting notes:\n\n${transcript}`;
+      ? `${meetingContextBlock}\n\nExisting meeting notes:\n\n${existingNotes}\n\nLatest transcript segment(s):\n\n${transcript}${captionBlock}\n\nUpdate the meeting notes so they stay accurate and incorporate the new transcript.`
+      : `${meetingContextBlock}\n\nConvert this meeting transcript into structured meeting notes:\n\n${transcript}${captionBlock}`;
 
     return { system, user };
   }
@@ -773,6 +598,7 @@ async function extractMeetingArtifacts({
     },
     body: JSON.stringify({
       model: NOTES_MODEL,
+      reasoning_effort: BRAINO_TEXT_REASONING_EFFORT,
       messages: [
         {
           role: "system",

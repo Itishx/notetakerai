@@ -7676,6 +7676,10 @@ if (__sbContextOk()) {
       }
       if (msg.realtimeModel) __sbRtRealtimeModel = String(msg.realtimeModel);
       if (msg.transcriptionModel) __sbRtTranscriptionModel = String(msg.transcriptionModel);
+      // Offscreen owns the mic in this path, so it is the only side that can read the
+      // device label. Adopt its verdict before __sbSyncRealtimeVoiceInstructions() below
+      // re-sends session.update, or every re-send would stomp the mode back to the default.
+      if (msg.noiseReduction) __sbRtNoiseReduction = String(msg.noiseReduction);
       if (msg.allocatedMs > 0) __sbScheduleRealtimeUsageCap(msg.allocatedMs);
       if (__sbIsRecording) __sbStopRecording({ silent: true });
       __sbStopSpeech();
@@ -19251,7 +19255,7 @@ async function __sbCaptureMeetingCheckpointSegment(reason = "autosave") {
     const seg = __sbInPageCaptureActive
       ? await __sbGetInPageSegment()
       : { audioBase64: null, knownSpeakerReferences: [], meetingContext: __sbMeetingContextPayload() };
-    if (!seg.audioBase64 && !__sbMeetingPayloadHasText(seg.meetingContext)) {
+    if (!seg.audioStreams?.length && !__sbMeetingPayloadHasText(seg.meetingContext)) {
       __sbSaveMeetingCheckpoint(reason);
       return;
     }
@@ -19315,9 +19319,9 @@ function __sbShowLectureRecordingCard() {
 // with the Start button's user gesture, captures this tab's audio in place, and feeds the same
 // transcription backend via the `transcribeSegment` message. Must be called inside a gesture.
 let __sbInPageCaptureActive = false;
-let __sbIpDisplayStream = null, __sbIpMicStream = null, __sbIpAudioCtx = null;
-let __sbIpRecorder = null, __sbIpChunks = [];
-let __sbIpMicRecorder = null, __sbIpMicChunks = [];
+let __sbIpDisplayStream = null, __sbIpMicStream = null;
+// Two recorders, never one. See __sbStartInPageCapture for why that is the whole ballgame.
+let __sbIpSysSeg = null, __sbIpMicSeg = null;
 
 function __sbBlobToBase64(blob) {
   return new Promise((resolve, reject) => {
@@ -19326,6 +19330,68 @@ function __sbBlobToBase64(blob) {
     r.onerror = () => reject(r.error || new Error("read failed"));
     r.readAsDataURL(blob);
   });
+}
+
+// ── Segment recorders that emit COMPLETE files ───────────────────────────────
+// MediaRecorder writes the WebM header (EBML + Tracks) into its FIRST blob only. Slicing
+// chunks off one long-running recorder therefore handed the transcription API headerless
+// fragments with no codec declaration, which it cannot open — so every segment after the
+// first was silently thrown away and a 45-minute meeting came back as its first 75 seconds.
+// Rotating fixes it at the source: each cut closes the outgoing recorder into a standalone
+// file. The replacement starts BEFORE the outgoing one is told to stop, so a boundary
+// duplicates a few milliseconds rather than losing them — a repeated syllable is nothing,
+// a dropped word is gone forever.
+const __SB_SEG_MIME = "audio/webm;codecs=opus";
+
+function __sbSegRecStart(seg) {
+  const recorder = new MediaRecorder(seg.stream, { mimeType: __SB_SEG_MIME });
+  const chunks = [];
+  recorder.ondataavailable = (e) => { if (e.data && e.data.size > 0) chunks.push(e.data); };
+  seg.recorder = recorder;
+  seg.chunks = chunks;
+  seg.startedAt = Date.now();
+  recorder.start(1000);
+}
+
+function __sbSegRecCreate(stream) {
+  const seg = { stream, recorder: null, chunks: [], startedAt: 0 };
+  __sbSegRecStart(seg);
+  return seg;
+}
+
+// Close the current recorder into one complete blob. Keeps rolling unless told otherwise.
+function __sbSegRecCut(seg, { keepRecording = true } = {}) {
+  return new Promise((resolve) => {
+    const outgoing = seg?.recorder;
+    const chunks = seg?.chunks || [];
+    const durationMs = seg?.startedAt ? Date.now() - seg.startedAt : 0;
+    // stop() flushes one last dataavailable into this same array before it fires "stop".
+    const done = () => resolve(chunks.length ? { blob: new Blob(chunks, { type: "audio/webm" }), durationMs } : null);
+    if (!seg || !outgoing || outgoing.state === "inactive") { done(); return; }
+    if (keepRecording) __sbSegRecStart(seg);
+    else { seg.recorder = null; seg.chunks = []; seg.startedAt = 0; }
+    let settled = false;
+    const finish = () => { if (settled) return; settled = true; clearTimeout(timer); done(); };
+    const timer = setTimeout(finish, 2000);
+    outgoing.addEventListener("stop", finish, { once: true });
+    try { outgoing.stop(); } catch (_) { finish(); }
+  });
+}
+
+function __sbSegRecStop(seg) {
+  try { if (seg?.recorder && seg.recorder.state !== "inactive") seg.recorder.stop(); } catch (_) {}
+  if (seg) { seg.recorder = null; seg.chunks = []; seg.startedAt = 0; }
+}
+
+// Opus spends almost nothing encoding silence, so a segment this thin is a muted call or a
+// closed mic. Skipping it is not only cheaper: transcribers hallucinate on silence, and
+// "Thanks for watching" has no business in anyone's meeting notes.
+const __SB_SILENCE_BYTES_PER_SEC = 800;
+
+function __sbSegLooksSilent(cut) {
+  const seconds = (cut?.durationMs || 0) / 1000;
+  if (!cut?.blob || seconds < 5) return false;   // too short to judge fairly
+  return (cut.blob.size / seconds) < __SB_SILENCE_BYTES_PER_SEC;
 }
 
 async function __sbStartInPageCapture(withMic) {
@@ -19343,60 +19409,49 @@ async function __sbStartInPageCapture(withMic) {
   // If the user hits Chrome's "Stop sharing" bar, finish the recording cleanly.
   audioTracks[0].addEventListener("ended", () => { if (__sbIsLectureRecording) void __sbStopLectureRecording(); });
 
-  let recordStream = new MediaStream(audioTracks);
+  // ── Two recorders, never one ───────────────────────────────────────────────
+  // The call arrives on the tab; you leave on the mic. Which side a voice came in on is the
+  // only speaker attribution in this entire system that cannot be wrong, and the old code
+  // summed both into a single mono track one line before recording — throwing that away, then
+  // paying a model to guess it back. Kept apart, the diarizer only has to separate the people
+  // on the far end, and you are identified by physics.
+  __sbIpSysSeg = __sbSegRecCreate(new MediaStream(audioTracks));
   if (withMic) {
-    __sbIpMicStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    __sbIpAudioCtx = new AudioContext();
-    const dest = __sbIpAudioCtx.createMediaStreamDestination();
-    __sbIpAudioCtx.createMediaStreamSource(new MediaStream(audioTracks)).connect(dest);
-    __sbIpAudioCtx.createMediaStreamSource(__sbIpMicStream).connect(dest);
-    recordStream = dest.stream;
-    __sbIpMicChunks = [];
-    __sbIpMicRecorder = new MediaRecorder(__sbIpMicStream, { mimeType: "audio/webm;codecs=opus" });
-    __sbIpMicRecorder.ondataavailable = (e) => { if (e.data.size > 0) __sbIpMicChunks.push(e.data); };
-    __sbIpMicRecorder.start(1000);
+    // Echo cancellation matters more than ever now: without it the remote voices coming out of
+    // your speakers land on the mic too and get transcribed a second time, as you.
+    __sbIpMicStream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: false, autoGainControl: true },
+    });
+    __sbIpMicSeg = __sbSegRecCreate(__sbIpMicStream);
   }
-  __sbIpChunks = [];
-  __sbIpRecorder = new MediaRecorder(recordStream, { mimeType: "audio/webm;codecs=opus" });
-  __sbIpRecorder.ondataavailable = (e) => { if (e.data.size > 0) __sbIpChunks.push(e.data); };
-  __sbIpRecorder.start(1000);
   __sbInPageCaptureActive = true;
 }
 
-function __sbFlushIpRecorder(rec) {
-  return new Promise((resolve) => {
-    if (!rec || rec.state !== "recording") { resolve(); return; }
-    let done = false;
-    const finish = () => { if (done) return; done = true; clearTimeout(t); rec.removeEventListener("dataavailable", on); resolve(); };
-    const on = () => finish();
-    const t = setTimeout(finish, 400);
-    rec.addEventListener("dataavailable", on, { once: true });
-    try { rec.requestData(); } catch { finish(); }
-  });
-}
-
-async function __sbBuildIpSpeakerRefs() {
-  if (__sbIpMicRecorder && __sbIpMicRecorder.state === "recording") await __sbFlushIpRecorder(__sbIpMicRecorder);
-  if (__sbIpMicChunks.length < 2) return [];
-  const b64 = await __sbBlobToBase64(new Blob(__sbIpMicChunks.slice(0, 6), { type: "audio/webm" }));
-  return b64 ? [{ name: "You", audioBase64: b64, mimeType: "audio/webm" }] : [];
-}
-
-async function __sbGetInPageSegment() {
+async function __sbGetInPageSegment(options = {}) {
   const meetingContext = __sbLectureRecordingMode === "meeting" ? __sbMeetingContextPayload() : null;
-  if (!__sbIpRecorder) return { audioBase64: null, knownSpeakerReferences: [], meetingContext };
-  await __sbFlushIpRecorder(__sbIpRecorder);
-  const refs = await __sbBuildIpSpeakerRefs();
-  if (!__sbIpChunks.length) return { audioBase64: null, knownSpeakerReferences: refs, meetingContext };
-  const chunks = __sbIpChunks.slice(); __sbIpChunks = [];
-  return { audioBase64: await __sbBlobToBase64(new Blob(chunks, { type: "audio/webm" })), knownSpeakerReferences: refs, meetingContext };
+  if (!__sbIpSysSeg && !__sbIpMicSeg) return { audioStreams: [], meetingContext };
+
+  // Cut both at the same moment so the two transcripts share a clock and can be interleaved.
+  const keepRecording = options.final !== true;
+  const [systemCut, micCut] = await Promise.all([
+    __sbIpSysSeg ? __sbSegRecCut(__sbIpSysSeg, { keepRecording }) : Promise.resolve(null),
+    __sbIpMicSeg ? __sbSegRecCut(__sbIpMicSeg, { keepRecording }) : Promise.resolve(null),
+  ]);
+
+  const audioStreams = [];
+  for (const [role, cut] of [["system", systemCut], ["mic", micCut]]) {
+    if (!cut?.blob || __sbSegLooksSilent(cut)) continue;
+    const audioBase64 = await __sbBlobToBase64(cut.blob);
+    if (audioBase64) audioStreams.push({ role, audioBase64, mimeType: "audio/webm", durationMs: cut.durationMs });
+  }
+  return { audioStreams, meetingContext };
 }
 
 async function __sbTranscribeIpSegment(seg) {
   return await new Promise((resolve) => {
     chrome.runtime.sendMessage({
       action: "transcribeSegment",
-      audioBase64: seg.audioBase64,
+      audioStreams: seg.audioStreams || [],
       existingNotes: __sbLectureNotes,
       existingTranscript: __sbLectureTranscript,
       mode: __sbLectureRecordingMode,
@@ -19407,13 +19462,10 @@ async function __sbTranscribeIpSegment(seg) {
 }
 
 function __sbCleanupInPageCapture() {
-  try { if (__sbIpRecorder && __sbIpRecorder.state !== "inactive") __sbIpRecorder.stop(); } catch {}
-  __sbIpRecorder = null; __sbIpChunks = [];
-  try { if (__sbIpMicRecorder && __sbIpMicRecorder.state !== "inactive") __sbIpMicRecorder.stop(); } catch {}
-  __sbIpMicRecorder = null; __sbIpMicChunks = [];
+  __sbSegRecStop(__sbIpSysSeg); __sbIpSysSeg = null;
+  __sbSegRecStop(__sbIpMicSeg); __sbIpMicSeg = null;
   if (__sbIpDisplayStream) { __sbIpDisplayStream.getTracks().forEach((t) => t.stop()); __sbIpDisplayStream = null; }
   if (__sbIpMicStream) { __sbIpMicStream.getTracks().forEach((t) => t.stop()); __sbIpMicStream = null; }
-  if (__sbIpAudioCtx) { __sbIpAudioCtx.close().catch(() => {}); __sbIpAudioCtx = null; }
   __sbInPageCaptureActive = false;
 }
 
@@ -19556,8 +19608,8 @@ async function __sbStopLectureRecording() {
   let res;
   if (__sbInPageCaptureActive) {
     // In-page path: flush the final segment, transcribe it, then tear the capture down.
-    const seg = await __sbGetInPageSegment();
-    res = (seg.audioBase64 || __sbMeetingPayloadHasText(seg.meetingContext))
+    const seg = await __sbGetInPageSegment({ final: true });
+    res = (seg.audioStreams?.length || __sbMeetingPayloadHasText(seg.meetingContext))
       ? await __sbTranscribeIpSegment(seg)
       : { notes: __sbLectureNotes, transcript: __sbLectureTranscript };
     __sbCleanupInPageCapture();
@@ -19789,6 +19841,18 @@ let __sbRtUsageWarningTimer = null;
 let __sbRtConnectHintTimer = null;
 let __sbRtRealtimeModel = "gpt-realtime-mini";
 let __sbRtTranscriptionModel = "gpt-4o-transcribe";
+// Which OpenAI input denoiser the live session runs. `near_field` assumes the mic is at
+// your mouth and treats a quiet, reverberant, arm's-length signal as noise to scrub —
+// which is exactly why voice mode used to force you to lean into the screen. Voice mode
+// was hardcoded to near_field on every surface while Yap Mode had already worked this out
+// (braino-mac.js dictation.noise_reduction.selected). Default to the laptop case and only
+// switch to near_field when the mic label says a headset is actually on your head.
+let __sbRtNoiseReduction = "far_field";
+const __SB_NEAR_FIELD_MIC_RE = /airpods?|head(?:set|phones?)|earbuds?|earphones?|bluetooth|usb|external|lavalier|lapel|rode|shure|yeti|blue snowball|jabra|bose|sony wh|galaxy buds/i;
+
+function __sbPickNoiseReduction(micLabel) {
+  return __SB_NEAR_FIELD_MIC_RE.test(String(micLabel || "")) ? "near_field" : "far_field";
+}
 let __sbRtCostTurn = null;
 let __sbRtLastCostTurn = null;
 let __sbRtCostTurnSeq = 0;
@@ -20122,7 +20186,8 @@ function __sbBuildRealtimeSessionUpdate(instructions) {
       audio: {
         input: {
           noise_reduction: {
-            type: "near_field",
+            // Mic-aware, not hardcoded. See __sbRtNoiseReduction.
+            type: __sbRtNoiseReduction,
           },
           transcription: {
             // Full transcribe model, not mini — accuracy is the whole point of STT and the
@@ -20475,9 +20540,17 @@ async function __sbStartRealtimeVoice() {
       }
     }, 1500);
 
+    // echoCancellation stays ON: Braino speaks out loud here, and without AEC he hears
+    // himself and barge-in collapses. autoGainControl stays ON: it is what lifts a voice
+    // from across the room. noiseSuppression is OFF on purpose — OpenAI already denoises
+    // this stream, and stacking Chrome's denoiser on top of it scrubs a distant voice
+    // along with the room. Same lesson the Mac dictation path already learned.
     __sbRtMic = await navigator.mediaDevices.getUserMedia({
-      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      audio: { echoCancellation: true, noiseSuppression: false, autoGainControl: true },
     });
+    const __sbRtMicLabel = String(__sbRtMic.getAudioTracks()[0]?.label || "");
+    __sbRtNoiseReduction = __sbPickNoiseReduction(__sbRtMicLabel);
+    console.debug("[Braino][Realtime] noise reduction", { type: __sbRtNoiseReduction, microphone: __sbRtMicLabel || "unknown" });
 
     const peerConnection = new RTCPeerConnection();
     __sbRtPeerConnection = peerConnection;

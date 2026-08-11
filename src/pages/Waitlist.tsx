@@ -14,14 +14,17 @@ const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 const SUPABASE_KEY = (import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY) as string;
 
 type ProductId = "braino" | "macos" | "braino-os" | "hera" | "studio" | "everything";
-type SubmitState = "idle" | "loading" | "done" | "existing" | "error";
-type WaitlistSection = "character" | "braino" | "macos" | "braino-os" | "hera" | "studio" | "join";
+type SubmitState = "idle" | "loading" | "done" | "existing" | "error" | "needs-pick";
+type WaitlistSection = "character" | "braino" | "macos" | "meetings" | "braino-os" | "hera" | "studio" | "join";
 type TeaserId = "browser" | "macos" | "os";
 
+// Meetings sits straight after IOMI on purpose: it is the first thing the Mac does that
+// people ask for by name, and the chapter before it is what makes it possible.
 const SECTION_TABS: Array<{ id: WaitlistSection; label: string }> = [
   { id: "character", label: "Braino" },
   { id: "braino", label: "Browser" },
   { id: "macos", label: "IOMI" },
+  { id: "meetings", label: "Meetings" },
   { id: "braino-os", label: "Braino OS" },
   { id: "studio", label: "Studio" },
   { id: "hera", label: "Hera" },
@@ -139,7 +142,7 @@ export function BrainoIntroduction() {
 export function BrainoStudioChapter() {
   return (
     <section className="wl-chapter wl-reveal" id="studio">
-      <div className="wl-chapter-number">05 / The atelier</div>
+      <div className="wl-chapter-number">06 / The atelier</div>
       <h2>Braino<span className="wl-shimmer wl-shimmer-studio">Studio</span>.</h2>
       <p className="wl-large">Braino is a Diva 💅 — naturally, he needs a dressing room.</p>
       <p>Studio is where Braino becomes yours. Change the way he looks, dresses, moves and reacts—from the shape of an expression to the colour of a glove and the exact energy of his entrance.</p>
@@ -154,7 +157,7 @@ export function BrainoStudioChapter() {
 export function BrainoHeraChapter() {
   return (
     <section className="wl-chapter wl-reveal" id="hera">
-      <div className="wl-chapter-number">06 / Hera</div>
+      <div className="wl-chapter-number">07 / Hera</div>
       <h2 className="wl-product-title">Braino <span className="wl-shimmer wl-shimmer-green">Hera</span>.</h2>
       <p className="wl-large">A quieter, more personal side of Braino is taking shape.</p>
       <p>We are keeping the details close until the idea is ready to meet people properly. Coming soon.</p>
@@ -302,8 +305,14 @@ export function WaitlistJoin({ id = "join" }: { id?: string }) {
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!email.includes("@") || selected.size === 0 || submitState === "loading") {
+    if (submitState === "loading") return;
+    if (!email.trim().includes("@")) {
       setSubmitState("error");
+      return;
+    }
+    if (selected.size === 0) {
+      // A real, fixable instruction instead of "your email is wrong".
+      setSubmitState("needs-pick");
       return;
     }
     setSubmitState("loading");
@@ -335,7 +344,7 @@ export function WaitlistJoin({ id = "join" }: { id?: string }) {
       <div className="wl-picker wl-reveal in">
         {PRODUCTS.map((product) => {
           const active = selected.has(product.id);
-          return <button type="button" className={active ? "selected" : ""} key={product.id} onClick={() => toggleProduct(product.id)} aria-pressed={active}>
+          return <button type="button" className={active ? "selected" : ""} key={product.id} onClick={() => { toggleProduct(product.id); if (submitState === "needs-pick") setSubmitState("idle"); }} aria-pressed={active}>
             <span className="wl-pick-top"><i>{product.number}</i>{active ? <Check /> : <Circle />}</span>
             <small>{product.eyebrow}</small>
             <h3><ProductName product={product.id} /></h3>
@@ -346,8 +355,9 @@ export function WaitlistJoin({ id = "join" }: { id?: string }) {
       <form className="wl-form wl-reveal in" onSubmit={submit}>
         {submitState === "done" || submitState === "existing" ? <div className="wl-success"><Check aria-hidden="true" /><div><strong>{submitState === "done" ? "You’re on the list." : "You’re already with us."}</strong><span>We’ll write when there is something worth opening.</span></div></div> : <>
           <label htmlFor={`${id}-email`}>Your email</label>
-          <div><input id={`${id}-email`} type="email" value={email} onChange={(event) => { setEmail(event.target.value); if (submitState === "error") setSubmitState("idle"); }} placeholder="you@somewhere.com" autoComplete="email" required /><button type="submit" disabled={submitState === "loading"}>{submitState === "loading" ? <Loader2 className="wl-spin" /> : <>Join the waitlist <ArrowUpRight /></>}</button></div>
+          <div><input id={`${id}-email`} type="email" value={email} onChange={(event) => { setEmail(event.target.value); if (submitState === "error" || submitState === "needs-pick") setSubmitState("idle"); }} placeholder="you@somewhere.com" autoComplete="email" required /><button type="submit" disabled={submitState === "loading"}>{submitState === "loading" ? <Loader2 className="wl-spin" /> : <>Join the waitlist <ArrowUpRight /></>}</button></div>
           {submitState === "error" && <p role="alert">That didn’t go through. Check the email and try once more.</p>}
+          {submitState === "needs-pick" && <p role="alert">Pick at least one above, so we know which Braino to write to you about.</p>}
         </>}
       </form>
     </section>
@@ -463,6 +473,9 @@ export default function Waitlist() {
           </figure>
           <p>Most AI waits inside a box. Braino reads the page you are already on, explains it, searches with you, remembers what matters, records a lecture, and helps turn intent into action without making you leave the work.</p>
           <p>The useful part is not that he can answer. Plenty of things can answer. The bet is that software becomes more useful when it has continuity, character, and enough context to understand what kind of help the moment actually needs.</p>
+          <p className="wl-chapter-link">
+            <Link to="/braino">See what the browser Braino does <ArrowUpRight size={15} aria-hidden="true" /></Link>
+          </p>
         </section>
 
         <section className="wl-chapter wl-reveal" id="macos">
@@ -484,10 +497,25 @@ export default function Waitlist() {
           <BrainoGrowthDemo />
 
           <div className="wl-status"><span /><b>In active development</b><i>IOMI · Mac · voice-first</i></div>
+          <p className="wl-chapter-link">
+            <Link to="/foundry">Meet Braino Foundry <ArrowUpRight size={15} aria-hidden="true" /></Link>
+          </p>
+        </section>
+
+        <section className="wl-chapter wl-reveal" id="meetings">
+          <div className="wl-chapter-number">04 / Meetings</div>
+          <h2 className="wl-product-title">Recorded live. <span className="wl-shimmer wl-shimmer-browser">Invisible to your screen share.</span></h2>
+          <p className="wl-large">Say it out loud and Braino records the meeting. No bot joins, nothing appears in the participant list, and your notes never show up in the screen you are sharing.</p>
+          <p>Most meeting tools arrive as a guest: a notetaker in the participant list that somebody has to admit, and the first half minute of the call is about the software instead of the work. Braino listens from your Mac instead. He hears the call and he hears you as two separate streams, keeps them apart, and writes notes that say who said what.</p>
+          <p>The part people ask about twice is the screen share. Braino records in the open, on your screen, where you can watch him work. The moment you present, that overlay is not in the picture. Your live notes stay yours without you remembering to hide anything.</p>
+          <div className="wl-status"><span /><b>In active development</b><i>Mac and browser</i></div>
+          <p className="wl-chapter-link">
+            <Link to="/meetings">See how meetings work <ArrowUpRight size={15} aria-hidden="true" /></Link>
+          </p>
         </section>
 
         <section className="wl-chapter wl-reveal" id="braino-os">
-          <div className="wl-chapter-number">04 / The operating layer</div>
+          <div className="wl-chapter-number">05 / The operating layer</div>
           <h2>Braino<span className="wl-shimmer wl-shimmer-os">OS</span>.</h2>
           <p className="wl-large">The intelligence and emotional operating layer underneath every version of Braino.</p>
 
@@ -524,7 +552,7 @@ export default function Waitlist() {
         <BrainoStudioChapter />
         {/*
         <section className="wl-chapter wl-reveal" id="studio">
-          <div className="wl-chapter-number">05 / The atelier</div>
+          <div className="wl-chapter-number">06 / The atelier</div>
           <h2>Braino<span className="wl-shimmer wl-shimmer-studio">Studio</span>.</h2>
           <p className="wl-large">Braino is a Diva 💅 — naturally, he needs a dressing room.</p>
           <p>Studio is where Braino becomes yours. Change the way he looks, dresses, moves and reacts—from the shape of an expression to the colour of a glove and the exact energy of his entrance.</p>
@@ -550,7 +578,7 @@ export default function Waitlist() {
         <BrainoHeraChapter />
         {/*
         <section className="wl-chapter wl-reveal" id="hera">
-          <div className="wl-chapter-number">06 / Hera</div>
+          <div className="wl-chapter-number">07 / Hera</div>
           <h2 className="wl-product-title">Braino <span className="wl-shimmer wl-shimmer-green">Hera</span>.</h2>
           <div className="wl-hera-secret">
             <span aria-hidden="true"><i /><i /><i /></span>

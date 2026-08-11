@@ -1,14 +1,32 @@
-const { app, BrowserWindow, clipboard, globalShortcut, ipcMain, screen, shell, systemPreferences } = require("electron");
+const { app, BrowserWindow, clipboard, desktopCapturer, globalShortcut, ipcMain, screen, shell, systemPreferences } = require("electron");
 const { execFile, spawn } = require("node:child_process");
 const crypto = require("node:crypto");
 const fs = require("node:fs");
 const http = require("node:http");
 const os = require("node:os");
 const path = require("node:path");
+const { looksInPerson, rosterFromInviteNames, selectAudibleStreams } = require("./meeting-audio.cjs");
+const { parseMeetingIntent: parseMeetingIntentImpl, mentionsMeeting } = require("./meeting-intent.cjs");
 
 const ROOT_DIR = path.resolve(__dirname, "../..");
 const PRELOAD_PATH = path.join(__dirname, "preload.cjs");
 const INDEX_PATH = path.join(__dirname, "renderer", "index.html");
+const DASHBOARD_PATH = path.join(__dirname, "renderer", "dashboard.html");
+const PARAKEET_BIN = path.join(__dirname, "native", "BrainoDictate", ".build", "release", "BrainoDictate");
+/* Opt-in. On-device dictation is real and running, but its accuracy is not yet
+   at the level of the cloud path, and dictation is something Itish uses every
+   day — so it does not get to be the default until it earns it.
+
+   Read lazily: ENV is parsed from the dotenv file much further down this file,
+   so touching it at module scope here hit the temporal dead zone and the app
+   refused to boot. */
+function parakeetEnabled() {
+  const fromFile = typeof ENV === "object" && ENV ? ENV.BRAINO_PARAKEET : "";
+  const setting = String(fromFile || process.env.BRAINO_PARAKEET || "").trim();
+  // On-device is the default. BRAINO_PARAKEET=0 falls back to the cloud path.
+  return setting !== "0";
+}
+let dashboardWindow = null;
 const HOTKEY_HELPER_PATH = path.join(__dirname, "native", "BrainoControlTap.swift");
 const SPEECH_HELPER_PATH = path.join(__dirname, "native", "BrainoSpeech.swift");
 const TOUCH_ID_HELPER_PATH = path.join(__dirname, "native", "BrainoTouchID.swift");
@@ -18,7 +36,7 @@ const WAKE_WORD_APP_BIN = path.join(WAKE_WORD_APP_PATH, "Contents", "MacOS", "br
 const WAKE_WORD_PLIST_PATH = path.join(__dirname, "native", "BrainoWakeWord-Info.plist");
 const AX_HELPER_PATH = path.join(__dirname, "native", "BrainoAX.swift");
 const LIVE_CAPTION_HELPER_PATH = path.join(__dirname, "native", "BrainoLiveCaption.swift");
-const APP_VERSION = "12.0.41";
+const APP_VERSION = "12.0.48";
 const ORGANIZED_FOLDER_NAME = "Braino Organized";
 const ORGANIZE_MANIFEST_NAME = ".braino-last-organize.json";
 const LOG_DIR = path.join(os.homedir(), "Library", "Logs", "Braino Mac");
@@ -29,20 +47,21 @@ const hasSingleInstanceLock = app.requestSingleInstanceLock();
 if (!hasSingleInstanceLock) app.quit();
 const AUTH_STORE_PATH = path.join(AUTH_STORE_DIR, "auth-session.json");
 const FILE_ACTION_HISTORY_PATH = path.join(AUTH_STORE_DIR, "file-actions.json");
+const USAGE_STATS_PATH = path.join(AUTH_STORE_DIR, "usage-stats.json");
 const FILE_ACTION_CONFIRM_MS = 120000;
 const MAC_WORKFLOW_CONFIRM_MS = 300000;
 const MAX_FILE_ACTION_HISTORY = 80;
 const AUTH_CALLBACK_PATH = "/braino-mac-auth-callback";
 
 // ── SKIT (TEMPORARY — Instagram demo, delete after recording) ──────────────
-// While enabled, double Option runs the scripted skit instead of Yap Mode.
+// While enabled, double Option runs the scripted skit instead of BrainoHERA.
 // Double Option opens Spotify, cues Billie Jean at 3:31, moonwalks over the
 // visible Spotify window, pauses the track, and delivers the closing line.
 // To remove the trick entirely, delete this block, the SKIT branch in the
 // double-option handler, the "braino-mac:skit-step" ipcMain handler,
 // preload's skit bridge, and runSkit() in the renderer.
 const SKIT = {
-  // Double Option belongs to Yap Mode. Keep the recording-only skit code
+  // Double Option belongs to BrainoHERA. Keep the recording-only skit code
   // available for an explicit demo trigger, but never let it take the global
   // dictation shortcut again.
   enabled: false,
@@ -52,6 +71,20 @@ const SKIT = {
   // no Spotify Web API, no linked account and no network beyond Spotify itself.
   trackUri: "spotify:track:7J1uxwnxfQLu4APicE5Rnj",
   startMs: 211000,
+};
+
+// Launch-film ritual: double Shift lets Braino introduce the film from inside
+// the notch, then opens the exact local master in QuickTime while he stands
+// still above it. Keep filename resolution explicit so a missing master never
+// silently turns into the wrong video.
+const LAUNCH_DEMO = {
+  enabled: true,
+  candidates: [
+    path.join(os.homedir(), "Downloads", "Launch Vid.MP4"),
+    path.join(os.homedir(), "Downloads", "Launch Vid.mp4"),
+    path.join(os.homedir(), "Desktop", "Launch Vid.MP4"),
+    path.join(os.homedir(), "Desktop", "Launch Vid.mp4"),
+  ],
 };
 const {
   resolveWebTarget,
@@ -67,10 +100,12 @@ const {
   selectSpotifyReturnTarget,
 } = require(path.join(__dirname, "spotify-focus-return.cjs"));
 const {
+  assessDictationRefinement,
+  assessDictationInsertion,
   buildDictationTranscriptionConfig,
   buildDictationTurnDetection,
   evaluateDictationStart,
-  normalizeDictationChunk,
+  normalizeDictationSession,
   parseDictationControl,
 } = require(path.join(__dirname, "dictation.cjs"));
 const { parseMusicSegmentIntent, parseMusicSegmentRange } = require(path.join(__dirname, "music-segment-intent.cjs"));
@@ -114,7 +149,7 @@ let dictationState = {
   focusStatus: "",
 };
 let lastDictationTranscript = "";
-const DICTATION_TRANSCRIPTION_MODEL = "gpt-realtime-whisper";
+const DICTATION_TRANSCRIPTION_MODEL = "gpt-live-transcribe";
 const DEFAULT_REALTIME_TRANSCRIPTION_MODEL = "gpt-4o-transcribe";
 
 function loadDotEnv() {
@@ -229,12 +264,26 @@ function redact(value) {
   return text;
 }
 
+// Hidden voice modes are private. They have to reach the model that acts on them,
+// but they have no business sitting in a log file, scrolling past in a terminal,
+// or being shipped to engine_runs. Redacting inside sanitizeForLog catches every
+// payload on its way out, whatever key the text arrived under — voice.in,
+// delegate.intent.start, feature.executed, hil.reason, or anything added later.
+const PERSONAL_MODE_RE = /\bmode\s*\d+\b/gi;
+
+function redactPersonalModes(text) {
+  return text.replace(PERSONAL_MODE_RE, "mode [redacted]");
+}
+
 function sanitizeForLog(value) {
+  if (typeof value === "string") return redactPersonalModes(value);
   if (value instanceof Error) {
     return {
       name: value.name,
-      message: value.message,
-      stack: value.stack?.split("\n").slice(0, 5).join("\n"),
+      // An error message can quote the command that caused it, so it gets the
+      // same treatment as any other string on the way out.
+      message: redactPersonalModes(String(value.message || "")),
+      stack: value.stack ? redactPersonalModes(String(value.stack).split("\n").slice(0, 5).join("\n")) : value.stack,
     };
   }
   if (Array.isArray(value)) return value.map(sanitizeForLog);
@@ -252,6 +301,208 @@ function sanitizeForLog(value) {
   return value;
 }
 
+/* ── Human-readable terminal log ──────────────────────────────────────────────
+ *
+ * The file at LOG_PATH stays raw JSON forever: that is the record you hand to
+ * someone debugging, and nothing below changes it. The TERMINAL is for a person
+ * watching Braino work, so it gets one short line per event — what you said,
+ * what he heard, what he did about it, and when he ignored you and why.
+ *
+ * It used to print the payload object straight to console.log, so a single
+ * failed osascript call filled the screen with an embedded AppleScript source
+ * dump and a stack trace, and the actual conversation scrolled away.
+ *
+ *   BRAINO_LOG=chat   only the conversation (you / him / what he ignored)
+ *   BRAINO_LOG=debug  every event, still one line each
+ *   BRAINO_LOG=raw    the old object dumps, when you need every field
+ *   BRAINO_LOG=off    silence
+ *
+ * The default shows an event only if describeLogEvent() gives it real phrasing,
+ * plus any failure. That rule maintains itself: internal chatter like nf.anchor
+ * and overlay.raise never has to be added to a mute list, and a new event only
+ * reaches the terminal when someone decides how to say it in English. It all
+ * still lands in the file either way.
+ */
+const LOG_STYLE = String(process.env.BRAINO_LOG || "human").toLowerCase();
+const LOG_COLOR = Boolean(process.stdout?.isTTY) && !process.env.NO_COLOR;
+
+const C = {
+  dim: (s) => (LOG_COLOR ? `\x1b[2m${s}\x1b[0m` : s),
+  you: (s) => (LOG_COLOR ? `\x1b[36m${s}\x1b[0m` : s),
+  him: (s) => (LOG_COLOR ? `\x1b[35m${s}\x1b[0m` : s),
+  good: (s) => (LOG_COLOR ? `\x1b[32m${s}\x1b[0m` : s),
+  warn: (s) => (LOG_COLOR ? `\x1b[33m${s}\x1b[0m` : s),
+  bad: (s) => (LOG_COLOR ? `\x1b[31m${s}\x1b[0m` : s),
+};
+
+function clockForLog() {
+  const d = new Date();
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
+function secsForLog(ms) {
+  const n = Number(ms);
+  if (!Number.isFinite(n)) return "";
+  const safe = Math.max(0, n); // a stage can log negative when clocks cross; never show it
+  return safe < 1000 ? `${Math.round(safe)}ms` : `${(safe / 1000).toFixed(1)}s`;
+}
+
+// One line, never a stack. The full trace is already in the file.
+function shortErrorForLog(value) {
+  const message = String(value?.message || value?.error?.message || value || "").trim();
+  if (!message) return "";
+  const lines = message.split("\n").map((l) => l.trim()).filter(Boolean);
+  const executionError = lines.find((l) => /execution error|not authori[sz]ed|not allowed/i.test(l));
+  if (executionError) return textForLog(executionError, 110);
+  // A failed osascript call embeds its entire AppleScript source in the message and
+  // says nothing about why. Printing that filled the terminal with a script listing.
+  // When there is no execution error to quote, the usual cause is the Automation
+  // consent prompt never being answered, so say the thing you can actually act on.
+  if (/osascript/i.test(message)) {
+    return "AppleScript call failed — is the app running, and is Automation allowed in System Settings › Privacy?";
+  }
+  return textForLog(lines[0] || "", 110);
+}
+
+// Compact k=v for events with no bespoke phrasing, so unknown events still read
+// as one line instead of a pretty-printed object.
+function briefPayloadForLog(payload) {
+  const parts = [];
+  for (const [key, value] of Object.entries(payload || {})) {
+    if (value == null || value === "" || value === false) continue;
+    if (key === "error") { parts.push(C.bad(shortErrorForLog(value))); continue; }
+    if (typeof value === "object") continue;
+    parts.push(`${C.dim(key)}=${textForLog(value, 60)}`);
+    if (parts.length >= 5) break;
+  }
+  return parts.join(" ");
+}
+
+const LOG_IGNORE_REASONS = {
+  action_while_speaking: "he was still talking",
+  self_echo_tail: "sounded like his own voice echoing back",
+};
+
+// Returns { icon, label, detail, chat } — or null to fall through to the
+// generic one-liner. `chat` marks the events that make up the conversation.
+function describeLogEvent(event, p) {
+  switch (event) {
+    case "app.ready":
+      return { icon: "🟢", label: C.good(`Braino ${p.appVersion || ""} ready`), detail: C.dim("log modes: BRAINO_LOG=chat | debug | raw") };
+    case "voice.toggle.start_listening":
+      return { icon: "🎧", label: "Listening", detail: "" };
+    case "voice.in":
+      return { icon: "👂", label: C.you("You said"), detail: `"${textForLog(p.transcript, 160)}"`, chat: true };
+    case "voice.out":
+      return { icon: "💬", label: C.him("Braino said"), detail: `"${textForLog(p.text, 160)}"`, chat: true };
+    case "voice.post_reply_action_ignored": {
+      const why = LOG_IGNORE_REASONS[p.reason] || "thought it was an echo";
+      const when = p.sinceSpeechEndedMs != null ? `, ${secsForLog(p.sinceSpeechEndedMs)} after he stopped` : "";
+      return { icon: "🔇", label: C.warn("Ignored you"), detail: `"${textForLog(p.text, 120)}" — ${why}${when}`, chat: true };
+    }
+    case "voice.recording_ignored":
+      return { icon: "🔇", label: C.warn("Ignored you"), detail: "a recording is running, so only his name gets through", chat: true };
+    case "voice.media_bleed_ignored":
+      return { icon: "🔇", label: C.warn("Ignored you"), detail: "media is playing and it sounded like the speakers", chat: true };
+    // realtime.barge_in fires immediately before this and says the same thing, so it
+    // is deliberately left unphrased: one interruption should read as one line.
+    case "voice.interrupted":
+      return { icon: "✋", label: C.you("You cut him off"), detail: p.stillListening ? "still listening" : "", chat: true };
+
+    case "realtime.noise_reduction.selected":
+    case "dictation.noise_reduction.selected": {
+      const mode = p.type === "far_field" ? "far-field (you can sit back)" : "near-field (headset)";
+      return { icon: "🎚", label: "Mic mode", detail: `${mode} · ${textForLog(p.microphone, 60)}` };
+    }
+    case "realtime.mic.ok":
+      return { icon: "🎤", label: "Mic ready", detail: `echo-cancel ${p.echoCancellation ? "on" : "off"} · noise-suppress ${p.noiseSuppression ? "on" : "off"} · auto-gain ${p.autoGainControl ? "on" : "off"}` };
+    case "realtime.session.ok":
+      return { icon: "🔗", label: C.good("Voice is live"), detail: "" };
+    case "realtime.idle.stop":
+      return { icon: "😴", label: C.warn("Voice went to sleep"), detail: `nothing for ${secsForLog(p.idleMs)} (${p.reason || "idle"})` };
+    case "speech.start":
+      return { icon: "🔊", label: "Speaking", detail: `${p.chars || 0} characters` };
+    case "speech.done":
+      return { icon: "✅", label: "Done speaking", detail: `took ${secsForLog(p.durationMs)}` };
+
+    case "delegate.start":
+      return { icon: "🤖", label: "Working on it", detail: "" };
+    case "delegate.done":
+      return p.ok
+        ? { icon: "✅", label: C.good("Finished"), detail: "" }
+        : { icon: "⚠️", label: C.warn("Gave up on that one"), detail: "" };
+    // The one event that already holds both halves of the exchange. This is the
+    // "here is what you said, here is what I did about it" line.
+    case "feature.executed":
+      return {
+        icon: p.ok ? "⚡" : "⚠️",
+        label: p.ok ? C.good("Handled") : C.warn("Tried and failed"),
+        detail: `"${textForLog(p.heard, 90)}" → "${textForLog(p.responded, 90)}" ${C.dim(`(${secsForLog(p.durationMs)})`)}`,
+        chat: true,
+      };
+
+    case "voice.latency.turn_summary":
+      return {
+        icon: "⏱",
+        label: "Speed",
+        detail: `${secsForLog(p.totalFromStopMs)} total — heard ${secsForLog(p.heardMs)}, transcribe ${secsForLog(p.sttMs)}, think ${secsForLog(p.thinkMs)}, speak ${secsForLog(p.ttsMs)}`,
+      };
+    default:
+      return null;
+  }
+}
+
+// The same thing failing over and over is one problem, not thirty. Spotify's state
+// poll failed 31 times in a single session; at one line each that buries the
+// conversation just as thoroughly as the old stack traces did.
+const FAILURE_REPEAT_MS = 30000;
+const failureLogState = new Map();
+
+function shouldPrintFailure(event) {
+  const now = Date.now();
+  const previous = failureLogState.get(event);
+  if (previous && now - previous.at < FAILURE_REPEAT_MS) {
+    previous.suppressed += 1;
+    return null;
+  }
+  const suppressed = previous?.suppressed || 0;
+  failureLogState.set(event, { at: now, suppressed: 0 });
+  return suppressed ? ` ${C.dim(`(+${suppressed} more since last shown)`)}` : "";
+}
+
+function consoleLogMac(event, payload) {
+  if (LOG_STYLE === "off") return;
+  if (LOG_STYLE === "raw") {
+    safeConsole("log", "[Braino Mac]", event, payload);
+    return;
+  }
+  const described = describeLogEvent(event, payload || {});
+  if (LOG_STYLE === "chat" && !described?.chat) return;
+
+  const time = C.dim(clockForLog());
+  if (described) {
+    const detail = described.detail ? ` ${described.detail}` : "";
+    safeConsole("log", `${time} ${described.icon}  ${described.label}${detail}`);
+    return;
+  }
+
+  const failed = /\.(failed|error)$|^error/.test(event) || Boolean(payload?.error);
+  if (failed) {
+    const repeatNote = shouldPrintFailure(event);
+    if (repeatNote === null) return;
+    const why = shortErrorForLog(payload?.error) || briefPayloadForLog(payload);
+    safeConsole("log", `${time} ⚠️  ${C.warn(event)}${why ? ` ${why}` : ""}${repeatNote}`);
+    return;
+  }
+
+  // Plumbing with no human phrasing yet. It is in the file; put it on screen with
+  // BRAINO_LOG=debug when you are actually chasing something.
+  if (LOG_STYLE !== "debug") return;
+  const brief = briefPayloadForLog(payload);
+  safeConsole("log", `${time} ${C.dim("·")} ${C.dim(event)}${brief ? ` ${brief}` : ""}`);
+}
+
 function logMac(event, payload = {}) {
   const entry = {
     ts: new Date().toISOString(),
@@ -263,7 +514,7 @@ function logMac(event, payload = {}) {
   try {
     appendMacLogLine(line);
   } catch (_) {}
-  safeConsole("log", "[Braino Mac]", event, sanitizeForLog(payload));
+  consoleLogMac(event, sanitizeForLog(payload));
 }
 
 function textForLog(value, maxLength = 180) {
@@ -686,12 +937,19 @@ function execFileP(command, args, options = {}) {
   });
 }
 
+/* Fans out to every Braino window that is open. The notch is the primary
+   listener, but the dashboard needs the same task-progress stream to show a
+   command running, and it simply ignores the channels that are not its
+   business. */
 function sendToRenderer(channel, payload) {
-  if (!dockWindow || dockWindow.isDestroyed()) return;
-  try {
-    dockWindow.webContents.send(channel, payload);
-  } catch (error) {
-    logMac("renderer.send.failed", { channel, error });
+  const targets = [dockWindow, dashboardWindow];
+  for (const target of targets) {
+    if (!target || target.isDestroyed()) continue;
+    try {
+      target.webContents.send(channel, payload);
+    } catch (error) {
+      logMac("renderer.send.failed", { channel, error });
+    }
   }
 }
 
@@ -965,7 +1223,17 @@ set AppleScript's text item delimiters to tab
 return {frontApp, "", windowTitle, windowPositionText, windowSizeText, "", ""} as text`;
 
   try {
-    const { stdout } = await execFileP("/usr/bin/osascript", ["-e", script], { timeout: 3500 });
+    // 3.5s is right for the steady state, but macOS blocks the very first call
+    // behind an Automation consent dialog. Killing osascript at 3.5s meant the
+    // dialog was torn down before it could be answered, so the grant could
+    // never be given and the poll failed forever. The first attempt of a
+    // session therefore waits long enough for a human to click Allow.
+    const { stdout } = await execFileP(
+      "/usr/bin/osascript",
+      ["-e", script],
+      { timeout: desktopConsentSettled ? 3500 : 60000 },
+    );
+    desktopConsentSettled = true;
     const context = normalizeActiveMacContext(String(stdout || "").trimEnd().split("\t"));
     if (!context) return null;
     const browser = await readActiveBrowserContext(context.appName);
@@ -981,13 +1249,30 @@ return {frontApp, "", windowTitle, windowPositionText, windowSizeText, "", ""} a
     const now = Date.now();
     if (now - lastContextReadFailLogAt > 5 * 60 * 1000) {
       lastContextReadFailLogAt = now;
-      logMac("desktop.context.read_failed", { error });
+      const message = String(error?.message || error);
+      // -1743 is macOS's "not authorised to send Apple events".
+      /* The friendly "is Automation allowed" wording is produced by the log
+         formatter, not by the error itself — error.message still holds the raw
+         osascript dump. Matching the pretty string meant this never fired.
+         The raw markers are what to test. */
+      const denied = /-1743|not authori[sz]ed|not allowed|osascript/i.test(message);
+      if (denied) void askForPermission("automation");
+      logMac("desktop.context.read_failed", {
+        error,
+        denied,
+        fix: denied
+          ? "Allow Electron to control System Events in System Settings > Privacy & Security > Automation, or run: tccutil reset AppleEvents com.github.Electron"
+          : "",
+      });
     }
     return null;
   }
 }
 
 let lastContextReadFailLogAt = 0;
+/* False until the first successful AppleScript call of this launch. While it is
+   false the context read is allowed to block on the consent dialog. */
+let desktopConsentSettled = false;
 
 async function readActiveBrowserContext(appName) {
   const browser = String(appName || "").trim();
@@ -1032,6 +1317,20 @@ async function captureSpotifyReturnTarget() {
   return target;
 }
 
+function captureCachedSpotifyReturnTarget() {
+  const cachedContext = activeMacContext ? { ...activeMacContext } : null;
+  const target = selectSpotifyReturnTarget(null, cachedContext);
+  logMac("spotify.focus.capture", {
+    source: "cached_fast_path",
+    freshApp: "",
+    cachedApp: cachedContext?.appName || "",
+    returnApp: target?.appName || "",
+    returnTab: textForLog(target?.browserTitle || target?.windowTitle || ""),
+    returnUrl: textForLog(target?.browserUrl || ""),
+  });
+  return target;
+}
+
 async function restoreSpotifyReturnTarget(target, details = {}) {
   if (!target) {
     logMac("spotify.focus.restore.skipped", { ...details, reason: "spotify-or-no-return-target" });
@@ -1057,12 +1356,18 @@ async function restoreSpotifyReturnTarget(target, details = {}) {
   }
 }
 
-async function runSpotifyTaskWithFocusReturn(details, task) {
-  const returnTarget = await captureSpotifyReturnTarget();
+async function runSpotifyTaskWithFocusReturn(details, task, options = {}) {
+  const returnTarget = options.fastStart
+    ? captureCachedSpotifyReturnTarget()
+    : await captureSpotifyReturnTarget();
   try {
     return await task();
   } finally {
-    await restoreSpotifyReturnTarget(returnTarget, details);
+    if (options.deferRestore) {
+      void restoreSpotifyReturnTarget(returnTarget, details);
+    } else {
+      await restoreSpotifyReturnTarget(returnTarget, details);
+    }
   }
 }
 
@@ -1194,6 +1499,383 @@ function startDesktopOverlaySync() {
   }, 900);
 }
 
+/* Everything the dashboard shows has to be something that actually happened, so
+   the counters are written at the moment the work completes rather than
+   estimated later. Kept small on purpose: totals plus a rolling 30 days. */
+function loadUsageStats() {
+  try {
+    const raw = JSON.parse(fs.readFileSync(USAGE_STATS_PATH, "utf8"));
+    return {
+      dictationSessions: Number(raw?.dictationSessions) || 0,
+      dictationInserts: Number(raw?.dictationInserts) || 0,
+      dictationChars: Number(raw?.dictationChars) || 0,
+      dictationFallbacks: Number(raw?.dictationFallbacks) || 0,
+      delegateRuns: Number(raw?.delegateRuns) || 0,
+      lastUsedAt: raw?.lastUsedAt || null,
+      days: raw && typeof raw.days === "object" ? raw.days : {},
+    };
+  } catch (_) {
+    return { dictationSessions: 0, dictationInserts: 0, dictationChars: 0, dictationFallbacks: 0, delegateRuns: 0, lastUsedAt: null, days: {} };
+  }
+}
+
+function saveUsageStats(stats) {
+  try {
+    fs.mkdirSync(AUTH_STORE_DIR, { recursive: true });
+    fs.writeFileSync(USAGE_STATS_PATH, JSON.stringify(stats));
+  } catch (error) {
+    logMac("usage.save_failed", { error });
+  }
+}
+
+function todayKey() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+}
+
+function recordUsage(patch = {}) {
+  const stats = loadUsageStats();
+  const key = todayKey();
+  const day = stats.days[key] || { sessions: 0, inserts: 0, chars: 0 };
+  for (const [field, amount] of Object.entries(patch)) {
+    const value = Number(amount) || 0;
+    if (!value) continue;
+    stats[field] = (Number(stats[field]) || 0) + value;
+    if (field === "dictationSessions") day.sessions += value;
+    if (field === "dictationInserts") day.inserts += value;
+    if (field === "dictationChars") day.chars += value;
+  }
+  stats.days[key] = day;
+  // Keep a month. Anything older is not worth carrying around forever.
+  const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+  for (const dayKey of Object.keys(stats.days)) {
+    if (new Date(`${dayKey}T00:00:00`).getTime() < cutoff) delete stats.days[dayKey];
+  }
+  stats.lastUsedAt = new Date().toISOString();
+  saveUsageStats(stats);
+  return stats;
+}
+
+function usageSeries(stats, days = 14) {
+  const out = [];
+  for (let i = days - 1; i >= 0; i -= 1) {
+    const date = new Date();
+    date.setDate(date.getDate() - i);
+    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+    const day = stats.days[key] || { sessions: 0, inserts: 0, chars: 0 };
+    out.push({ date: key, sessions: day.sessions || 0, inserts: day.inserts || 0, chars: day.chars || 0 });
+  }
+  return out;
+}
+
+async function dashboardStatePayload() {
+  const stats = loadUsageStats();
+  let microphone = "unknown";
+  try {
+    microphone = systemPreferences.getMediaAccessStatus("microphone");
+  } catch (_) { /* older macOS can refuse the query */ }
+  return {
+    appVersion: APP_VERSION,
+    auth: authStatusPayload(),
+    permissions: {
+      // `false` here means "not prompting", so the dashboard reports what is
+      // actually granted without throwing a system dialog at the user.
+      accessibility: requestAccessibilityTrust(false),
+      microphone,
+    },
+    dictation: dictationStatePayload(),
+    wakeWord: loadWakeWordState(),
+    stats: {
+      dictationSessions: stats.dictationSessions,
+      dictationInserts: stats.dictationInserts,
+      dictationChars: stats.dictationChars,
+      dictationFallbacks: stats.dictationFallbacks,
+      delegateRuns: stats.delegateRuns,
+      lastUsedAt: stats.lastUsedAt,
+    },
+    series: usageSeries(stats),
+    paths: { log: LOG_PATH, auth: AUTH_STORE_PATH, usage: USAGE_STATS_PATH },
+  };
+}
+
+/* The one window in this app that behaves like a normal Mac app: focusable,
+   resizable, real traffic lights, its own Dock icon. The notch overlay stays a
+   non-focusable panel; this sits beside it, not inside it. */
+function openDashboardWindow() {
+  if (dashboardWindow && !dashboardWindow.isDestroyed()) {
+    if (dashboardWindow.isMinimized()) dashboardWindow.restore();
+    dashboardWindow.show();
+    dashboardWindow.focus();
+    return dashboardWindow;
+  }
+  dashboardWindow = new BrowserWindow({
+    width: 1060,
+    height: 720,
+    minWidth: 880,
+    minHeight: 600,
+    title: "Braino",
+    titleBarStyle: "hiddenInset",
+    trafficLightPosition: { x: 18, y: 20 },
+    backgroundColor: "#f4f4f7",
+    show: false,
+    webPreferences: {
+      preload: PRELOAD_PATH,
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+      devTools: true,
+    },
+  });
+  dashboardWindow.once("ready-to-show", () => {
+    app.dock?.show?.();
+    dashboardWindow.show();
+    dashboardWindow.focus();
+    logMac("dashboard.opened", { appVersion: APP_VERSION });
+  });
+  dashboardWindow.on("closed", () => {
+    dashboardWindow = null;
+    // Back to being a background presence once the window is gone.
+    app.dock?.hide?.();
+  });
+  dashboardWindow.loadFile(DASHBOARD_PATH);
+  return dashboardWindow;
+}
+
+/* ── On-device dictation (Parakeet, via the BrainoDictate helper) ──────────
+   The helper owns the microphone and the model; this side owns the lifecycle
+   and the text. It is kept warm because the first model load costs real time,
+   and a dictation shortcut has to feel instant on the first press too.
+
+   English only on purpose: Parakeet has no Hindi, so anything that needs
+   Hinglish still goes down the existing cloud path. */
+let parakeet = { proc: null, ready: false, listening: false, buffer: "", startedAt: 0 };
+
+function parakeetAvailable() {
+  try {
+    return fs.existsSync(PARAKEET_BIN);
+  } catch (_) {
+    return false;
+  }
+}
+
+function handleParakeetLine(line) {
+  let event;
+  try {
+    event = JSON.parse(line);
+  } catch (_) {
+    return;
+  }
+  if (event.type === "ready") {
+    parakeet.ready = true;
+    logMac("parakeet.ready", { warmMs: Date.now() - parakeet.startedAt });
+    return;
+  }
+  if (event.type === "error") {
+    logMac("parakeet.error", { message: event.message });
+    return;
+  }
+  // Deltas are the only thing that reaches the caret. The helper sends the new
+  // suffix each time the transcript grows, so inserting a delta is always
+  // correct and never repeats what is already typed.
+  if (event.type === "delta") {
+    const text = String(event.text || "");
+    if (!text.trim()) return;
+    heraLog(`heard: "${text.trim().slice(0, 60)}"`, { chars: text.length });
+    sendToRenderer("braino-mac:dictation-partial", { text: text.trim(), committed: true });
+    if (!localDictationActive) {
+      // Arrived after the session was torn down. Rather than drop it, put it
+      // on the clipboard so the words are never simply lost.
+      heraLog("arrived after close — copied to the clipboard instead");
+      clipboard.writeText(text.trim());
+      sendToRenderer("braino-mac:dictation-fallback", { text: text.trim(), reason: "late" });
+      return;
+    }
+    recordLocalTurn(text);
+    return;
+  }
+  // `final` is the whole utterance for logging and the notch; its text has
+  // already gone out as deltas, so inserting it here would duplicate it.
+  if (event.type === "final") {
+    const text = String(event.text || "").trim();
+    logMac("parakeet.final", { chars: text.length });
+    sendToRenderer("braino-mac:dictation-partial", { text, final: true });
+    // The trailing delta has already been inserted by now, so the session can
+    // safely close.
+    void finishLocalDictation("final");
+  }
+}
+
+/* Parakeet is a transcription source, nothing more.
+   The first cut had this file paste each utterance straight into the field,
+   which quietly bypassed everything the cloud path already did well: chunk
+   normalisation, the prefetched formatting pass, insert verification and the
+   Notch-plus-clipboard fallback. Turns are collected here and handed to the
+   very same insertDictationText() the cloud path uses, so the behaviour on
+   screen is identical and only the words' origin changed. */
+let localTurns = [];
+
+function recordLocalTurn(text) {
+  const raw = String(text || "").trim();
+  if (!raw) return;
+  const turn = { raw, prepared: "" };
+  localTurns.push(turn);
+  // Formatting is prefetched while you keep talking, exactly as the cloud path
+  // does it, so stopping never waits on a network round trip.
+  void refineDictationText(raw)
+    .then((result) => {
+      if (result?.refined && result.text) turn.prepared = result.text;
+      logMac("dictation.local.turn_prepared", { chars: raw.length, refined: Boolean(result?.refined) });
+    })
+    .catch(() => {});
+}
+
+/* The local engine drives the whole session from the main process: no WebRTC,
+   no renderer round trip, no cloud. The cloud path stays exactly as it was and
+   still runs whenever Parakeet is not ready — which is also the Hinglish
+   answer, since Parakeet has no Hindi. */
+let localDictationActive = false;
+let localDictationStarting = false;
+let heraSession = 0;
+/* When the last dictation session ended, used to keep the wake word from
+   picking up the tail of what was being dictated. */
+let lastDictationEndedAt = 0;
+
+/* One readable line per thing that happens in a HERA session, so a bad run can
+   be understood by reading rather than by cross-referencing six event names. */
+function heraLog(message, extra = {}) {
+  const line = `[HERA #${heraSession}] ${message}`;
+  logMac("hera", { session: heraSession, message, ...extra });
+  console.log(line, Object.keys(extra).length ? extra : "");
+}
+
+async function startLocalDictation() {
+  // Claimed synchronously, before the first await: the focus probe takes long
+  // enough that a second double Option would otherwise slip past the guard and
+  // start a second session on top of the first.
+  if (localDictationActive || localDictationStarting) {
+    logMac("dictation.local.start_ignored", { reason: "already_starting" });
+    return { ok: false, error: "Already listening." };
+  }
+  // Any close still pending from the previous session belongs to that session,
+  // not this one. Left armed, it fires 2.5s later and kills the new session.
+  if (localDictationClosing) {
+    clearTimeout(localDictationClosing);
+    localDictationClosing = null;
+    heraLog("previous close timer cancelled");
+  }
+  localDictationStarting = true;
+  const started = await startDictationSkill().finally(() => { localDictationStarting = false; });
+  if (!started.ok) {
+    sendToRenderer("braino-mac:dictation-ui", { active: false, engine: "parakeet" });
+    return started;
+  }
+  if (!parakeetSend("start")) {
+    sendToRenderer("braino-mac:dictation-ui", { active: false, engine: "parakeet" });
+    stopDictationSkill("parakeet_unavailable");
+    return { ok: false, error: "On-device dictation is not running." };
+  }
+  parakeet.listening = true;
+  localDictationActive = true;
+  localTurns = [];
+  heraSession += 1;
+  heraLog("LISTENING — speak now", { app: dictationState.targetApp });
+  // Without this the mode is invisible: the renderer never started a session,
+  // so nothing else would put the Notch into its BrainoHERA state.
+  sendToRenderer("braino-mac:dictation-ui", { active: true, engine: "parakeet" });
+  logMac("dictation.local.started", { app: dictationState.targetApp });
+  return { ok: true, engine: "parakeet", ...dictationStatePayload() };
+}
+
+let localDictationClosing = null;
+
+async function finishLocalDictation(reason) {
+  if (localDictationClosing) {
+    clearTimeout(localDictationClosing);
+    localDictationClosing = null;
+  }
+  if (!localDictationActive) return;
+  localDictationActive = false;
+  sendToRenderer("braino-mac:dictation-ui", { active: false, engine: "parakeet" });
+
+  const turns = localTurns.slice();
+  localTurns = [];
+  if (turns.length) {
+    const raws = turns.map((turn) => turn.raw);
+    const prepared = turns.map((turn) => turn.prepared || "");
+    // The same call the cloud path makes, so normalisation, verification and
+    // the Notch fallback all behave exactly as before.
+    const inserted = await insertDictationText(raws, prepared).catch((error) => {
+      logMac("dictation.local.insert_failed", { error });
+      return null;
+    });
+    heraLog(
+      inserted?.ok ? "pasted into the text box" : "COULD NOT PASTE — text is on the clipboard",
+      { ok: Boolean(inserted?.ok), turns: turns.length },
+    );
+  }
+  lastDictationEndedAt = Date.now();
+  heraLog(
+    turns.length ? `STOPPED — pasting ${turns.length} phrase(s)` : "STOPPED — nothing was heard",
+    { reason },
+  );
+  stopDictationSkill(reason);
+}
+
+function stopLocalDictation(reason = "double Option") {
+  parakeetSend("stop");
+  parakeet.listening = false;
+  // Keep the session open until the helper reports `final`, so its trailing
+  // delta still has somewhere to land. The timer is only a backstop for a
+  // helper that died mid-sentence.
+  heraLog("stop pressed — waiting for the last words");
+  localDictationClosing = setTimeout(() => {
+    heraLog("helper never answered, closing anyway");
+    void finishLocalDictation(`${reason}_timeout`);
+  }, 12000);
+  return { ok: true, closing: true };
+}
+
+function startParakeet() {
+  if (!parakeetAvailable()) {
+    logMac("parakeet.missing", { path: PARAKEET_BIN });
+    return null;
+  }
+  if (parakeet.proc && !parakeet.proc.killed) return parakeet.proc;
+  parakeet.startedAt = Date.now();
+  parakeet.ready = false;
+  const proc = spawn(PARAKEET_BIN, [], { stdio: ["pipe", "pipe", "pipe"] });
+  parakeet.proc = proc;
+  proc.stdout.setEncoding("utf8");
+  proc.stdout.on("data", (chunk) => {
+    parakeet.buffer += chunk;
+    let index = parakeet.buffer.indexOf("\n");
+    while (index >= 0) {
+      const line = parakeet.buffer.slice(0, index).trim();
+      parakeet.buffer = parakeet.buffer.slice(index + 1);
+      if (line) handleParakeetLine(line);
+      index = parakeet.buffer.indexOf("\n");
+    }
+  });
+  proc.stderr.setEncoding("utf8");
+  proc.stderr.on("data", (chunk) => logMac("parakeet.stderr", { line: String(chunk).trim().slice(0, 200) }));
+  proc.on("exit", (code) => {
+    logMac("parakeet.exit", { code });
+    parakeet = { proc: null, ready: false, listening: false, buffer: "", startedAt: 0 };
+  });
+  return proc;
+}
+
+function parakeetSend(command) {
+  if (!parakeet.proc || parakeet.proc.killed) return false;
+  try {
+    parakeet.proc.stdin.write(`${command}\n`);
+    return true;
+  } catch (error) {
+    logMac("parakeet.write_failed", { command, error });
+    return false;
+  }
+}
+
 function createDockWindow() {
   const initialDisplay = displayForContext(activeMacContext);
   const initialBounds = initialDisplay.bounds;
@@ -1252,6 +1934,68 @@ function createDockWindow() {
   dockWindow.webContents.session.setPermissionRequestHandler((_webContents, permission, callback) => {
     callback(permission === "media");
   });
+  // Lets the renderer ask for what is coming out of the speakers, which is the other half of
+  // every meeting. See the loopback block above startMeetingRecording.
+  installLoopbackAudioHandler(dockWindow.webContents.session);
+}
+
+/* Permissions, asked for the way a person would ask.
+
+   macOS will not let an app grant itself anything, and for Automation it will
+   not even re-prompt once a request has been refused. So the honest flow is:
+   notice what is missing, say plainly why it is needed, and open the exact
+   settings pane — rather than failing quietly in a log the user never reads. */
+const PERMISSION_PANES = {
+  accessibility: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility",
+  automation: "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation",
+  microphone: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone",
+  screen: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture",
+};
+
+const PERMISSION_REASONS = {
+  accessibility: "I need Accessibility to type into the box you're looking at.",
+  automation: "I need Automation to see which app you're in.",
+  microphone: "I need the microphone to hear you.",
+  screen: "I need Screen Recording to look at your screen.",
+};
+
+/* Asked at most once per launch each, so a missing grant never turns into a
+   loop of dialogs while something polls in the background. */
+const permissionAsked = new Set();
+
+async function askForPermission(kind, { force = false } = {}) {
+  const pane = PERMISSION_PANES[kind];
+  if (!pane) return { ok: false, error: "unknown_permission" };
+  if (!force && permissionAsked.has(kind)) return { ok: false, error: "already_asked" };
+  permissionAsked.add(kind);
+
+  const reason = PERMISSION_REASONS[kind] || "I need a permission to do that.";
+  logMac("permission.asked", { kind, reason });
+  // Braino says it himself, in the notch, before anything opens — so the
+  // System Settings window is expected rather than startling.
+  sendToRenderer("braino-mac:permission-needed", { kind, reason });
+  try {
+    await shell.openExternal(pane);
+  } catch (error) {
+    logMac("permission.pane_failed", { kind, error });
+    return { ok: false, error: "pane_failed" };
+  }
+  return { ok: true, kind, reason };
+}
+
+/* Everything Braino needs, and whether he has it. */
+async function permissionReport() {
+  let microphone = "unknown";
+  try { microphone = systemPreferences.getMediaAccessStatus("microphone"); } catch (_) {}
+  let screen = "unknown";
+  try { screen = systemPreferences.getMediaAccessStatus("screen"); } catch (_) {}
+  return {
+    accessibility: requestAccessibilityTrust(false),
+    microphone,
+    screen,
+    // Automation has no API to query; a failing context read is the only signal.
+    automation: desktopConsentSettled,
+  };
 }
 
 function requestAccessibilityTrust(prompt = true) {
@@ -1300,6 +2044,9 @@ function registerHotkeys() {
       sendToRenderer("braino-mac:voice-toggle", { source: "Control+Space" });
       ensureDockWindowVisible("voice-hotkey");
     }),
+    dashboard: globalShortcut.register("CommandOrControl+Shift+D", () => {
+      openDashboardWindow();
+    }),
     herToggle: globalShortcut.register("CommandOrControl+Shift+H", () => {
       sendToRenderer("braino-mac:her-toggle", { source: "Command+Shift+H" });
       ensureDockWindowVisible("her-hotkey");
@@ -1336,9 +2083,32 @@ function startSwiftHotkeyHelper() {
           ensureDockWindowVisible("skit-hotkey");
           return;
         }
-        logMac("hotkey.double_option", { skill: "yap-mode" });
+        // The cloud path is the default because it is the accurate one today.
+        // On-device is opt-in until it matches that quality: BRAINO_PARAKEET=1.
+        if (parakeetEnabled() && parakeet.ready) {
+          logMac("hotkey.double_option", { skill: "yap-mode", engine: "parakeet" });
+          if (localDictationActive || localDictationStarting) {
+            void stopLocalDictation("double Option");
+          } else {
+            // Paint the Notch on the keypress. startLocalDictation() has to
+            // resolve the focused field first, which measured 2s+ against
+            // Cursor — far too long to leave the user staring at nothing.
+            sendToRenderer("braino-mac:dictation-ui", { active: true, engine: "parakeet" });
+            void startLocalDictation();
+          }
+          ensureDockWindowVisible("dictation-hotkey");
+          return;
+        }
+        logMac("hotkey.double_option", { skill: "yap-mode", engine: "cloud" });
         sendToRenderer("braino-mac:dictation-toggle", { source: "double Option" });
         ensureDockWindowVisible("dictation-hotkey");
+        return;
+      }
+      if (trimmed === "double-shift") {
+        if (!LAUNCH_DEMO.enabled) return;
+        logMac("hotkey.double_shift", { skill: "launch-demo" });
+        sendToRenderer("braino-mac:launch-demo-start", {});
+        ensureDockWindowVisible("launch-demo-hotkey");
         return;
       }
       if (trimmed === "double-space") {
@@ -1438,6 +2208,16 @@ function handleWakeWordLine(raw) {
   if (type === "wake") {
     const transcript = value;
     const front = String(activeMacContext?.appName || "");
+    if (localDictationActive || localDictationStarting || dictationState.active) {
+      logMac("wakeword.suppressed", { reason: "dictation-active", transcript: textForLog(transcript) });
+      return;
+    }
+    // Saying "Braino HERA" to start dictation should not also wake the voice a
+    // second later, so the wake word stays deaf briefly after a session ends.
+    if (Date.now() - lastDictationEndedAt < 4000) {
+      logMac("wakeword.suppressed", { reason: "just-dictated", transcript: textForLog(transcript) });
+      return;
+    }
     if (isDictationApp(front)) {
       logMac("wakeword.suppressed", { reason: "dictation-app-frontmost", app: front, transcript: textForLog(transcript) });
       return;
@@ -1698,7 +2478,7 @@ const MAC_SKILLS_REPLY = [
   "12. I can play songs, pause/resume, skip, change volume, and add tracks to liked songs or playlists through Spotify.",
   "13. I can create notes in Apple Notes, asking what to write if you do not say it upfront.",
   "14. I can send or draft email in Apple Mail, resolving contact names through Contacts when possible.",
-  "15. Yap Mode turns double Option into silent system-wide dictation at the active caret.",
+  "15. BrainoHERA turns double Option into silent system-wide dictation at the active caret.",
   "16. I know what you just downloaded without being told the name, so I can open it, show it in Finder, or file it into a folder (including the Finder window you are looking at).",
 ].join("\n");
 
@@ -4418,8 +5198,364 @@ function meetingDetectFromTabs(tabs) {
   logMac("meeting.offer", { url: textForLog(fresh) });
 }
 
-function startMeetingRecording(source) {
+// ── System audio: the half of every meeting the Mac could not hear ───────────
+// The meeting recorder used to listen on the microphone alone, through an on-device
+// recognizer, which meant it captured your side of a call and none of theirs, with no way to
+// tell anybody apart. Electron exposes macOS's own loopback capture (Core Audio taps,
+// macOS 14.4+) through setDisplayMediaRequestHandler, so the renderer can now record what
+// comes OUT of the speakers as its own stream alongside the mic — the same two-stream shape
+// the browser extension uses, and the reason either of them can name a speaker.
+//
+// macOS will not hand that audio over unless the running bundle declares
+// NSAudioCaptureUsageDescription. Electron's stock Info.plist does not, so in development we
+// add it to the Electron bundle once. That is a bundle change, and a bundle change voids the
+// TCC grants macOS has already given this binary — hence doing it exactly once, at the
+// earliest possible moment, and saying so plainly rather than letting permissions silently
+// evaporate mid-meeting.
+const AUDIO_CAPTURE_USAGE_KEY = "NSAudioCaptureUsageDescription";
+const AUDIO_CAPTURE_USAGE_TEXT = "Braino records meeting audio so it can write your notes.";
+let audioCapturePlistState = { ready: false, changed: false, error: "" };
+
+function runningAppInfoPlistPath() {
+  // …/Something.app/Contents/MacOS/Something → …/Something.app/Contents/Info.plist
+  const macosDir = path.dirname(app.getPath("exe"));
+  if (path.basename(macosDir) !== "MacOS") return "";
+  return path.join(path.dirname(macosDir), "Info.plist");
+}
+
+async function ensureAudioCaptureUsageKey() {
+  if (process.platform !== "darwin") return { ready: true, changed: false, error: "" };
+  const plistPath = runningAppInfoPlistPath();
+  if (!plistPath || !fs.existsSync(plistPath)) {
+    return { ready: false, changed: false, error: "Could not find the app's Info.plist." };
+  }
+  try {
+    await execFileP("/usr/libexec/PlistBuddy", ["-c", `Print :${AUDIO_CAPTURE_USAGE_KEY}`, plistPath], { timeout: 5000 });
+    return { ready: true, changed: false, error: "" };
+  } catch (_) {
+    // Key absent. Fall through and add it.
+  }
+  if (app.isPackaged) {
+    // A shipped build must declare this at build time; rewriting a signed bundle would break
+    // its signature and is not something to do behind the user's back.
+    logMac("audiocapture.plist.missing_packaged", { path: textForLog(plistPath) });
+    return { ready: false, changed: false, error: "This build is missing NSAudioCaptureUsageDescription." };
+  }
+  try {
+    await execFileP(
+      "/usr/libexec/PlistBuddy",
+      ["-c", `Add :${AUDIO_CAPTURE_USAGE_KEY} string ${AUDIO_CAPTURE_USAGE_TEXT}`, plistPath],
+      { timeout: 5000 },
+    );
+    logMac("audiocapture.plist.added", { path: textForLog(plistPath) });
+    return { ready: true, changed: true, error: "" };
+  } catch (error) {
+    logMac("audiocapture.plist.add_failed", { error });
+    return { ready: false, changed: false, error: "Could not declare audio capture on this build." };
+  }
+}
+
+function installLoopbackAudioHandler(targetSession) {
+  if (!targetSession?.setDisplayMediaRequestHandler) return;
+  targetSession.setDisplayMediaRequestHandler((_request, callback) => {
+    // Braino only wants the audio, but Chromium still insists a video source be named, so the
+    // primary screen is offered and the renderer stops that track the instant it arrives.
+    desktopCapturer.getSources({ types: ["screen"] })
+      .then((sources) => {
+        if (!sources.length) {
+          logMac("loopback.sources.empty", {});
+          callback({});
+          return;
+        }
+        callback({ video: sources[0], audio: "loopback" });
+      })
+      .catch((error) => {
+        logMac("loopback.sources.failed", { error });
+        callback({});
+      });
+  }, { useSystemPicker: false });
+}
+
+// ── Meeting segments arrive from the renderer, already cut ───────────────────
+// The renderer holds the streams because that is where the browser APIs live; the main
+// process holds the account, the network, and the accumulated notes. One segment at a time,
+// because notes are rebuilt from the whole transcript and overlapping rebuilds would race.
+async function handleMeetingSegment(payload = {}) {
+  if (!meetingState) return { ok: false, error: "not_recording" };
+  if (meetingState.segmentBusy) return { ok: false, error: "busy" };
+
+  const { audible, skipped } = selectAudibleStreams(payload.audioStreams);
+  const segmentStartMs = Math.max(0, Number(payload.segmentStartMs) || 0);
+  const segmentEndMs = Math.max(segmentStartMs, Number(payload.segmentEndMs) || 0);
+  if (skipped.length) logMac("meeting.segment.silent", { skipped, segmentStartMs });
+  if (!audible.length) {
+    meetingState.lastSegmentEndMs = segmentEndMs;
+    return { ok: true, empty: true };
+  }
+  for (const stream of audible) meetingState.rolesSeen.add(stream.role);
+
+  const authToken = await getBrainoAuthToken();
+  if (!authToken) return { ok: false, error: "not_signed_in" };
+
+  meetingState.segmentBusy = true;
+  try {
+    const response = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/transcribe-and-notes`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${authToken}`,
+      },
+      body: JSON.stringify({
+        mode: "meeting",
+        audioStreams: audible.map(({ role, audioBase64, mimeType }) => ({ role, audioBase64, mimeType })),
+        existingNotes: meetingState.notesMarkdown,
+        existingTranscript: meetingState.transcriptText,
+        meetingContext: meetingMacContext(segmentStartMs, segmentEndMs),
+        clientNow: new Date().toISOString(),
+        clientTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+      }),
+    });
+
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      logMac("meeting.segment.failed", { status: response.status, error: textForLog(data?.error || "") });
+      return { ok: false, error: data?.error || `transcribe failed (${response.status})` };
+    }
+    if (!meetingState) return { ok: true, empty: true };   // stopped while we were away
+
+    if (data?.transcript) meetingState.transcriptText = String(data.transcript);
+    if (data?.notes) meetingState.notesMarkdown = String(data.notes);
+    if (data?.meetingArtifacts) meetingState.artifacts = data.meetingArtifacts;
+    meetingState.lastSegmentEndMs = segmentEndMs;
+    meetingState.segmentCount += 1;
+    logMac("meeting.segment.done", {
+      segment: meetingState.segmentCount,
+      roles: audible.map((s) => s.role),
+      transcriptChars: meetingState.transcriptText.length,
+    });
+
+    // The live panel shows whatever the notes currently say, so the user watches them form.
+    const bullets = String(meetingState.notesMarkdown)
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line.startsWith("- ") || line.startsWith("* "))
+      .slice(-14);
+    if (bullets.length) sendToRenderer("braino-mac:meeting", { action: "notes", notes: bullets });
+    return { ok: true, segment: meetingState.segmentCount };
+  } catch (error) {
+    logMac("meeting.segment.error", { error });
+    return { ok: false, error: error?.message || "segment upload failed" };
+  } finally {
+    if (meetingState) meetingState.segmentBusy = false;
+  }
+}
+
+// The renderer owns the recorders, so the last segment has to be asked for rather than taken.
+let pendingFinalSegment = null;
+
+function requestFinalMeetingSegment(timeoutMs = 6000) {
+  if (!dockWindow || dockWindow.isDestroyed()) return Promise.resolve(null);
+  if (pendingFinalSegment) return pendingFinalSegment.promise;
+
+  const pending = { resolve: null, timer: null, promise: null };
+  pending.promise = new Promise((resolve) => {
+    pending.resolve = (payload) => {
+      if (pendingFinalSegment !== pending) return;
+      clearTimeout(pending.timer);
+      pendingFinalSegment = null;
+      resolve(payload || null);
+    };
+  });
+  // If the renderer is gone or wedged, stopping must still finish rather than hang forever.
+  pending.timer = setTimeout(() => pending.resolve(null), timeoutMs);
+  pendingFinalSegment = pending;
+  sendToRenderer("braino-mac:meeting", { action: "final-segment" });
+  return pending.promise;
+}
+
+/** A periodic segment may be mid-upload when the user says stop. Waiting keeps the closing
+ *  minutes of the meeting instead of dropping them on a busy flag. */
+async function waitForMeetingSegmentIdle(maxMs = 8000) {
+  const startedAt = Date.now();
+  while (meetingState?.segmentBusy && Date.now() - startedAt < maxMs) {
+    await new Promise((resolve) => setTimeout(resolve, 150));
+  }
+}
+
+ipcMain.handle("braino-mac:meeting-segment", async (_event, payload = {}) => {
+  if (payload?.final && pendingFinalSegment) {
+    // The closing cut. stopMeetingRecording is waiting on this, and will run it itself.
+    pendingFinalSegment.resolve(payload);
+    return { ok: true, deferred: true };
+  }
+  return await handleMeetingSegment(payload);
+});
+
+// ── Stealth: whether the overlay reaches a screen share ──────────────────────
+// Content protection keeps the whole overlay out of the capture pipeline, so people you
+// share with never see it while you still do. It stays ON by default: live meeting notes
+// leaking into a shared screen is a bug, not a preference. The toggle exists so you can
+// deliberately show it, and the choice survives a restart.
+const MEETING_STEALTH_PATH = path.join(AUTH_STORE_DIR, "meeting-stealth.json");
+
+function loadMeetingStealth() {
+  try {
+    return JSON.parse(fs.readFileSync(MEETING_STEALTH_PATH, "utf8"))?.enabled !== false;
+  } catch (_) {
+    return true;
+  }
+}
+
+function saveMeetingStealth(enabled) {
+  try {
+    fs.mkdirSync(AUTH_STORE_DIR, { recursive: true });
+    fs.writeFileSync(MEETING_STEALTH_PATH, JSON.stringify({ enabled: Boolean(enabled) }));
+  } catch (error) {
+    logMac("meeting.stealth.save_failed", { error });
+  }
+}
+
+function applyMeetingStealth(enabled) {
+  try { dockWindow?.setContentProtection(Boolean(enabled)); } catch (_) {}
+  logMac("meeting.stealth", { enabled: Boolean(enabled) });
+}
+
+ipcMain.handle("braino-mac:meeting-stealth", (_event, enabled) => {
+  const on = enabled !== false;
+  saveMeetingStealth(on);
+  if (meetingState) {
+    meetingState.stealth = on;
+    applyMeetingStealth(on);
+  }
+  return { ok: true, enabled: on };
+});
+
+ipcMain.handle("braino-mac:meeting-capture-failed", (_event, payload = {}) => {
+  const reason = String(payload?.reason || "unknown").slice(0, 200);
+  if (meetingState) meetingState.audioCaptureError = reason;
+  logMac("meeting.capture.failed", { reason: textForLog(reason) });
+  return { ok: true };
+});
+
+// ── Reading names off a native Zoom or Teams window ──────────────────────────
+// A transcription API returns anonymous clusters and never a name. In the browser the
+// extension reads the Meet page for who is talking; on a native app the accessibility tree is
+// the only equivalent, and it is exactly how the other no-bot notetakers do this. Names and
+// active-speaker markers go into the same speakerTimeline shape the browser sends, so the
+// naming logic downstream cannot tell the two platforms apart.
+const MEETING_APPS = [
+  { match: /^zoom/i, query: "zoom" },
+  { match: /^microsoft teams|^teams/i, query: "Microsoft Teams" },
+  { match: /^webex/i, query: "Webex" },
+];
+const MEETING_AX_POLL_MS = 2500;
+
+async function detectMeetingApp() {
+  try {
+    const { stdout } = await execFileP("/usr/bin/osascript", [
+      "-e",
+      'tell application "System Events" to get name of every process whose background only is false',
+    ], { timeout: 5000 });
+    const running = String(stdout || "").split(",").map((name) => name.trim()).filter(Boolean);
+    for (const app of MEETING_APPS) {
+      if (running.some((name) => app.match.test(name))) return app.query;
+    }
+  } catch (error) {
+    logMac("meeting.ax.detect_failed", { error });
+  }
+  return "";
+}
+
+/** Whoever the meeting UI last showed as speaking. The on-device captions have no idea who
+ *  is talking, so this is what puts a name above the words as they arrive. */
+function meetingCurrentSpeakerName() {
+  const timeline = meetingState?.speakerTimeline || [];
+  if (!timeline.length) return "";
+  const last = timeline[timeline.length - 1];
+  const elapsed = Date.now() - meetingState.startedAt;
+  // Stale after a few seconds of silence: better a blank name than the wrong one.
+  return elapsed - last.untilMs < 6000 ? last.name : "";
+}
+
+async function pollMeetingSpeakers() {
+  if (!meetingState?.axApp) return;
+  const result = await runAxHelper(["meeting", meetingState.axApp], 8000);
+  if (result.status !== "meeting") return;
+  let payload = null;
+  try { payload = JSON.parse(result.detail || "{}"); } catch (_) { return; }
+
+  const before = meetingState.participantNames.size;
+  for (const name of Array.isArray(payload?.names) ? payload.names : []) {
+    const clean = String(name || "").trim();
+    if (clean) meetingState.participantNames.add(clean);
+  }
+  if (meetingState.participantNames.size !== before) {
+    sendToRenderer("braino-mac:meeting", { action: "people", names: Array.from(meetingState.participantNames) });
+  }
+
+  const speaking = String(payload?.speaking || "").trim();
+  if (!speaking) return;
+  const atMs = Date.now() - meetingState.startedAt;
+  const last = meetingState.speakerTimeline[meetingState.speakerTimeline.length - 1];
+  // Runs of the same speaker extend rather than pile up, so the timeline stays readable and
+  // an overlap test against a stretch of audio means something.
+  if (last && last.name === speaking && atMs - last.untilMs < MEETING_AX_POLL_MS * 2) {
+    last.untilMs = atMs;
+  } else {
+    meetingState.speakerTimeline.push({ atMs, untilMs: atMs, name: speaking, source: "mac-ax" });
+    if (meetingState.speakerTimeline.length > 500) {
+      meetingState.speakerTimeline = meetingState.speakerTimeline.slice(-500);
+    }
+  }
+}
+
+/** The invite Braino is about to record. Only used when it is the meeting actually starting
+ *  — a roster from an unrelated event would put strangers in your notes. */
+function meetingRosterForSource(source) {
+  const next = calendarNext;
+  if (!next?.attendees?.length) return [];
+  const startsSoon = Math.abs(Number(next.startAt || 0) - Date.now()) < 30 * 60 * 1000;
+  if (!startsSoon) return [];
+  const named = String(source || "").trim().toLowerCase();
+  const generic = !named || named === "meeting" || named === "call";
+  if (!generic && !String(next.title || "").toLowerCase().includes(named)) return [];
+  return next.attendees;
+}
+
+/** What the Mac knows about who is in the room. Thin next to the browser's view of a Meet
+ *  tab — there is no participant list to read here yet — but the clock offset matters just
+ *  as much, because it is what lets a later segment's timestamps mean anything. */
+function meetingMacContext(segmentStartMs, segmentEndMs) {
+  const timeline = meetingState?.speakerTimeline || [];
+  return {
+    platform: meetingState?.axApp ? `mac-${meetingState.axApp.toLowerCase().replace(/\s+/g, "-")}` : "mac-system-audio",
+    platformLabel: meetingState?.source || "Mac",
+    title: meetingState?.source || "",
+    participantNames: Array.from(meetingState?.participantNames || []),
+    segmentStartMs,
+    segmentEndMs,
+    speakerTimeline: timeline.slice(-200),
+    captionTimeline: [],
+    currentSpeaker: timeline.length ? timeline[timeline.length - 1].name : "",
+    isPresenting: false,
+  };
+}
+
+async function startMeetingRecording(source) {
   if (meetingState) return { ok: true, say: "Already recording. I have not missed a word." };
+
+  audioCapturePlistState = await ensureAudioCaptureUsageKey();
+  if (audioCapturePlistState.changed) {
+    // The bundle just changed under macOS's feet. Recording now would capture the mic only,
+    // and quietly — better to say it once and be right afterwards.
+    logMac("meeting.start.needs_restart", {});
+    return {
+      ok: false,
+      say: "I just gave myself permission to hear system audio. Restart me once and I will record the whole meeting, both sides.",
+    };
+  }
+
   meetingState = {
     startedAt: Date.now(),
     source: source || "meeting",
@@ -4428,15 +5564,57 @@ function startMeetingRecording(source) {
     lastNoteIndex: 0,
     shots: [],
     lastShotB64: "",
+    // Filled in by handleMeetingSegment as real transcription comes back.
+    transcriptText: "",
+    notesMarkdown: "",
+    artifacts: null,
+    segmentBusy: false,
+    segmentCount: 0,
+    lastSegmentEndMs: 0,
+    rolesSeen: new Set(),
+    // Seeded from the calendar invite, which is the only thing that knows who is coming
+    // before anybody speaks. Empty is fine; it just means names have to be earned from audio.
+    participantNames: new Set(meetingRosterForSource(source)),
+    audioCaptureError: "",
+    // Filled by pollMeetingSpeakers when a native meeting app is up. Same shape the browser
+    // extension sends, so the naming logic cannot tell the two platforms apart.
+    speakerTimeline: [],
+    axApp: "",
+    axTimer: null,
+    // Only fires while real transcription has produced nothing — see meetingLiveNotes.
     noteTimer: setInterval(() => void meetingLiveNotes(), 2 * 60 * 1000),
     shotTimer: setInterval(() => void meetingSnapshot(), 90 * 1000),
   };
+
+  // Zoom and Teams keep their participant list in the accessibility tree, which is the only
+  // place a native app will tell us who is talking.
+  void detectMeetingApp().then((axApp) => {
+    if (!meetingState || !axApp) return;
+    meetingState.axApp = axApp;
+    meetingState.axTimer = setInterval(() => void pollMeetingSpeakers(), MEETING_AX_POLL_MS);
+    logMac("meeting.ax.watching", { app: axApp });
+    void pollMeetingSpeakers();
+  });
+  // Live captions stay on because they are instant and on-device, which is what makes the
+  // surface feel alive. They are no longer the transcript, only the preview of one.
   startLiveCaptions();
-  try { dockWindow?.setContentProtection(true); } catch (_) {}
-  sendToRenderer("braino-mac:meeting", { action: "start", source: meetingState.source, startedAt: meetingState.startedAt });
-  logMac("meeting.start", { source: textForLog(meetingState.source) });
+  meetingState.stealth = loadMeetingStealth();
+  applyMeetingStealth(meetingState.stealth);
+  sendToRenderer("braino-mac:meeting", {
+    action: "start",
+    source: meetingState.source,
+    startedAt: meetingState.startedAt,
+    captureAudio: audioCapturePlistState.ready,
+    stealth: meetingState.stealth,
+  });
+  logMac("meeting.start", { source: textForLog(meetingState.source), systemAudio: audioCapturePlistState.ready });
   void meetingSnapshot();
-  return { ok: true, say: `Recording. I am listening, taking notes, and this stays invisible if you share your screen.` };
+  return {
+    ok: true,
+    say: audioCapturePlistState.ready
+      ? "Recording. I can hear both sides of this, and it stays invisible if you share your screen."
+      : "Recording, but only what your microphone picks up. I could not get permission for system audio.",
+  };
 }
 
 async function meetingSnapshot() {
@@ -4455,8 +5633,11 @@ function meetingTranscriptText(fromIndex = 0) {
     .join("\n");
 }
 
+/** The fallback path, from the on-device captions. It runs only while proper transcription
+ *  has produced nothing at all — no audio permission, no network, no signed-in account —
+ *  because captions hear one microphone and cannot tell anyone apart. */
 async function meetingLiveNotes() {
-  if (!meetingState) return;
+  if (!meetingState || meetingState.segmentCount > 0) return;
   const fresh = meetingTranscriptText(meetingState.lastNoteIndex);
   if (!fresh || fresh.length < 60) return;
   const fromIndex = meetingState.transcript.length;
@@ -4490,35 +5671,59 @@ async function meetingLiveNotes() {
 async function stopMeetingRecording() {
   if (!meetingState) return { ok: false, say: "Nothing is being recorded right now." };
   const state = meetingState;
+  // Ask the renderer for the last few seconds before tearing anything down, so the closing
+  // sentence of a meeting is not the one line that never makes it into the notes.
+  const tail = await requestFinalMeetingSegment().catch(() => null);
+  await waitForMeetingSegmentIdle();
+  if (tail) await handleMeetingSegment(tail).catch(() => null);
+
   meetingState = null;
   clearInterval(state.noteTimer);
   clearInterval(state.shotTimer);
+  if (state.axTimer) clearInterval(state.axTimer);
   try { dockWindow?.setContentProtection(false); } catch (_) {}
   sendToRenderer("braino-mac:meeting", { action: "stop" });
   const minutes = Math.max(1, Math.round((Date.now() - state.startedAt) / 60000));
-  const transcript = state.transcript.map((row) => `[${Math.round((row.t - state.startedAt) / 60000)}m] ${row.text}`).join("\n");
-  logMac("meeting.stop", { minutes, transcriptLines: state.transcript.length, notes: state.notes.length });
+
+  // Speaker-attributed audio when we managed to record it; the on-device captions only when
+  // we did not. The captions hear one microphone and cannot tell anyone apart, so they are a
+  // last resort rather than a co-equal source.
+  const heardBothSides = looksInPerson(state.rolesSeen) === false && state.rolesSeen.size > 0;
+  const transcript = state.transcriptText
+    || state.transcript.map((row) => `[${Math.round((row.t - state.startedAt) / 60000)}m] ${row.text}`).join("\n");
+  logMac("meeting.stop", {
+    minutes,
+    segments: state.segmentCount,
+    roles: Array.from(state.rolesSeen),
+    source: state.transcriptText ? "transcribed" : "captions",
+    transcriptChars: transcript.length,
+  });
   if (!transcript) return { ok: true, say: "Stopped. The meeting never produced a word I could hear, so there is nothing to save." };
   sendTaskProgress({ status: "thinking", text: "Writing up the meeting" });
-  const authToken = await getBrainoAuthToken();
-  let summary = "";
-  try {
-    const response = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/chat-about-notes`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${authToken}` },
-      body: JSON.stringify({
-        notes: "",
-        chatHistory: [],
-        message: `Summarize this ${minutes}-minute ${state.source} into crisp meeting notes with sections: Summary (2-3 sentences), Key points (bullets), Action items (bullets, or "None"). The screenshot shows the meeting screen for extra context.\n\nLive bullets so far:\n${state.notes.join("\n") || "(none)"}\n\nTranscript:\n${transcript.slice(0, 12000)}`,
-        visionMode: state.lastShotB64 ? "describe" : undefined,
-        imageBase64: state.lastShotB64 || undefined,
-        responseMedium: "text",
-      }),
-    });
-    const data = await response.json().catch(() => ({}));
-    summary = String(data?.reply || "").trim();
-  } catch (error) {
-    logMac("meeting.summary.failed", { error });
+
+  // The notes were already being written segment by segment. Only fall back to a one-shot
+  // summary when nothing built them along the way.
+  let summary = state.notesMarkdown;
+  if (!summary) {
+    const authToken = await getBrainoAuthToken();
+    try {
+      const response = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/chat-about-notes`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${authToken}` },
+        body: JSON.stringify({
+          notes: "",
+          chatHistory: [],
+          message: `Summarize this ${minutes}-minute ${state.source} into crisp meeting notes with sections: Summary (2-3 sentences), Key points (bullets), Action items (bullets, or "None"). The screenshot shows the meeting screen for extra context.\n\nLive bullets so far:\n${state.notes.join("\n") || "(none)"}\n\nTranscript:\n${transcript.slice(0, 12000)}`,
+          visionMode: state.lastShotB64 ? "describe" : undefined,
+          imageBase64: state.lastShotB64 || undefined,
+          responseMedium: "text",
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+      summary = String(data?.reply || "").trim();
+    } catch (error) {
+      logMac("meeting.summary.failed", { error });
+    }
   }
   const auth = authStatusPayload();
   const title = `${state.source} — ${new Date(state.startedAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })} (${minutes} min)`;
@@ -4542,21 +5747,22 @@ async function stopMeetingRecording() {
     });
     if (!response.ok) throw new Error(`notes insert ${response.status}`);
     logMac("meeting.synced", { title: textForLog(title), chars: body.length });
-    return { ok: true, say: `Done. ${minutes} minutes recorded, summarized, and synced to your dashboard.` };
+    return {
+      ok: true,
+      say: heardBothSides
+        ? `Done. ${minutes} minutes, both sides, written up and synced to your dashboard.`
+        : `Done. ${minutes} minutes recorded, summarized, and synced to your dashboard.`,
+    };
   } catch (error) {
     logMac("meeting.sync.failed", { error });
     return { ok: true, say: "Recorded and summarized, but the dashboard sync hiccuped. The notes are safe in my log." };
   }
 }
 
+// Lives in meeting-intent.cjs so the phrasings can be tested directly. Bare "record this" is
+// still a SCREEN recording; only a sentence with a meeting word in it lands here.
 function parseMeetingIntent(raw) {
-  const source = cleanPrompt(String(raw || "")).replace(/[?.!]+\s*$/, "");
-  if (/\bstop\b.*\brecord/i.test(source) || /\brecord(?:ing)?\b.*\bstop\b/i.test(source)) return { action: "stop" };
-  // Meeting = a CALL/MEETING specifically. Bare "record this" / "record my
-  // screen" is screen recording, handled separately.
-  if (/\brecord\b.*\b(?:this|the)\s+(?:call|meeting|meet)\b/i.test(source)
-    || /\brecord\s+(?:the\s+)?(?:call|meeting)\b/i.test(source)) return { action: "start" };
-  return null;
+  return parseMeetingIntentImpl(cleanPrompt(String(raw || "")));
 }
 
 // ── Screen video recording (Command-Shift-5 equivalent via screencapture). ──
@@ -4624,10 +5830,15 @@ function parseScreenshotIntent(raw) {
 function parseScreenRecordIntent(raw) {
   const source = cleanPrompt(String(raw || "")).replace(/[?.!]+\s*$/, "");
   if (screenRecProc && (/\bstop\b.*\brecord/i.test(source) || /\b(?:done|stop)\s+recording\b/i.test(source) || /\bstop\b.*\bscreen\b/i.test(source))) return { action: "stop" };
+  // Naming a meeting hands the sentence to the meeting recorder, whatever else is in it.
+  // This guard used to spell out its own short list of meeting words, so every word the
+  // meeting parser learned quietly became a screen recording here instead: "record this
+  // standup" captured the display. One shared list now, so the two cannot drift apart.
+  if (!screenRecProc && mentionsMeeting(source)) return null;
   if (/\brecord\s+(?:my|the)\s+screen\b/i.test(source)
     || /\bscreen\s*record(?:ing)?\b/i.test(source)
     || /\bstart\s+(?:a\s+)?screen\s+recording\b/i.test(source)
-    || /\brecord\s+(?:this|it|my|the)\b(?!\s+(?:call|meeting|meet))/i.test(source)
+    || /\brecord\s+(?:this|it|my|the)\b/i.test(source)
     || /^record$/i.test(source)) return { action: "start" };
   return null;
 }
@@ -4682,9 +5893,16 @@ function tailLiveCaptions() {
         const text = sep < 0 ? "" : trimmed.slice(sep + 1);
         if (kind === "caption" || kind === "caption-final") {
           sendToRenderer("braino-mac:live-caption", { text, final: kind === "caption-final" });
-          if (kind === "caption-final" && meetingState && text.trim()) {
-            meetingState.transcript.push({ t: Date.now(), text: text.trim() });
-            sendToRenderer("braino-mac:meeting", { action: "transcript", text: text.trim() });
+          if (meetingState && text.trim()) {
+            // Partials too, not just finals: the surface exists to prove Braino is hearing
+            // the room, and words appearing as they are spoken is the proof. The renderer
+            // collapses a growing partial into one line rather than stacking near-duplicates.
+            if (kind === "caption-final") meetingState.transcript.push({ t: Date.now(), text: text.trim() });
+            sendToRenderer("braino-mac:meeting", {
+              action: "live",
+              text: text.trim(),
+              speaker: meetingCurrentSpeakerName(),
+            });
           }
         } else if (kind === "unavailable") {
           logMac("caption.helper.unavailable", { reason: textForLog(text) });
@@ -4938,9 +6156,59 @@ async function postClipToX(caption) {
 }
 
 // ── Accessibility hands: press buttons, manage windows, act on selection. ──
-async function runAxHelper(args, timeout = 15000) {
+/* BrainoAX used to be handed to `xcrun swift` as SOURCE on every single call,
+   so each accessibility query recompiled a 26KB Swift file before doing any
+   work. Measured on this machine: 11.3s interpreted, 0.55s compiled.
+
+   That one line was the latency in nearly everything dictation does — the
+   6.2s preflight before the microphone opened, the 6.5s focus probe at insert
+   time, and the 15s field verification afterwards. Voice mode felt instant by
+   comparison purely because it never calls this helper.
+
+   The binary is built once per launch (and rebuilt whenever the source is
+   newer) and cached in userData. */
+let axHelperBinary = null;
+let axHelperBuild = null;
+
+function axBinaryIsFresh(binPath) {
   try {
-    const { stdout } = await execFileP("/usr/bin/xcrun", ["swift", AX_HELPER_PATH, ...args], { timeout });
+    return fs.statSync(binPath).mtimeMs >= fs.statSync(AX_HELPER_PATH).mtimeMs;
+  } catch (_) {
+    return false;
+  }
+}
+
+function ensureAxHelperBinary() {
+  if (axHelperBinary) return Promise.resolve(axHelperBinary);
+  const target = path.join(AUTH_STORE_DIR, "BrainoAX");
+  if (axBinaryIsFresh(target)) {
+    axHelperBinary = target;
+    return Promise.resolve(target);
+  }
+  if (!axHelperBuild) {
+    const startedAt = Date.now();
+    axHelperBuild = execFileP("/usr/bin/swiftc", [AX_HELPER_PATH, "-o", target, "-O"], { timeout: 180000 })
+      .then(() => {
+        axHelperBinary = target;
+        logMac("ax.helper_built", { durationMs: Date.now() - startedAt });
+        return target;
+      })
+      .catch((error) => {
+        // Fall back to the interpreter rather than losing accessibility.
+        logMac("ax.helper_build_failed", { error });
+        return null;
+      })
+      .finally(() => { axHelperBuild = null; });
+  }
+  return axHelperBuild;
+}
+
+async function runAxHelper(args, timeout = 15000) {
+  const binary = await ensureAxHelperBinary();
+  try {
+    const { stdout } = binary
+      ? await execFileP(binary, args, { timeout })
+      : await execFileP("/usr/bin/xcrun", ["swift", AX_HELPER_PATH, ...args], { timeout });
     const line = String(stdout || "").trim().split("\n")[0] || "";
     const sep = line.indexOf("\t");
     return sep < 0 ? { status: line, detail: "" } : { status: line.slice(0, sep), detail: line.slice(sep + 1) };
@@ -4967,11 +6235,38 @@ function dictationStatePayload() {
 function parseAxFocusDetail(detail) {
   try {
     const decoded = Buffer.from(String(detail || ""), "base64").toString("utf8");
-    const [appName = "", role = ""] = decoded.split("|");
-    return { appName: appName.trim(), role: role.trim() };
+    const [
+      appName = "",
+      role = "",
+      valueReadable = "0",
+      valueLength = "",
+      valueHash = "",
+      selectionLocation = "",
+      selectionLength = "",
+    ] = decoded.split("|");
+    return {
+      appName: appName.trim(),
+      role: role.trim(),
+      valueReadable: valueReadable === "1",
+      valueLength: valueLength === "" ? null : Number(valueLength),
+      valueHash,
+      selectionLocation: selectionLocation === "" ? null : Number(selectionLocation),
+      selectionLength: selectionLength === "" ? null : Number(selectionLength),
+    };
   } catch (_) {
-    return { appName: "", role: "" };
+    return { appName: "", role: "", valueReadable: false };
   }
+}
+
+async function verifyDictationFieldChange(before, text) {
+  if (!before?.valueReadable) return { verified: null, reason: "field_value_unavailable" };
+  // Give Electron/Chromium one render cycle, then read the focused field again.
+  await new Promise((resolve) => setTimeout(resolve, 90));
+  const afterResult = await runAxHelper(["fieldstate"]);
+  const after = afterResult.status === "field_state"
+    ? parseAxFocusDetail(afterResult.detail)
+    : { valueReadable: false };
+  return assessDictationInsertion(before, after, text);
 }
 
 async function startDictationSkill() {
@@ -5006,12 +6301,14 @@ async function startDictationSkill() {
     insertionMode: decision.insertionMode,
     focusStatus: focus.status,
   };
+  recordUsage({ dictationSessions: 1 });
   logMac("dictation.started", {
     app: dictationState.targetApp,
     focusStatus: dictationState.focusStatus,
     insertionMode: dictationState.insertionMode,
     model: DICTATION_TRANSCRIPTION_MODEL,
   });
+  warmDictationRefinement();
   return { ok: true, ...dictationStatePayload() };
 }
 
@@ -5069,7 +6366,10 @@ async function pasteDictationFallback(text, expectedApp = "") {
         error: `Focus moved from ${expectedApp} to ${targetApp}.`,
       };
     }
-    await new Promise((resolve) => setTimeout(resolve, 460));
+    // The paste event is dispatched synchronously. Keep the clipboard alive
+    // for a short native-event grace period, then restore it without adding a
+    // visible half-second tax to every Yap insertion.
+    await new Promise((resolve) => setTimeout(resolve, 140));
     if (clipboard.readText() === text) clipboard.writeText(previousClipboard);
     return {
       ok: true,
@@ -5096,6 +6396,7 @@ function keepDictationFallback(text, focusStatus, error = "") {
     lastDictationTranscript = transcript;
   }
   dictationState.fallbacks += 1;
+  recordUsage({ dictationFallbacks: 1 });
   dictationState.insertionMode = "notch";
   dictationState.focusStatus = focusStatus || "not_editable";
   logMac("dictation.fallback", {
@@ -5104,6 +6405,12 @@ function keepDictationFallback(text, focusStatus, error = "") {
     error: error || "",
     fallback: dictationState.fallbacks,
     clipboardRetained: Boolean(transcript),
+  });
+  // The words were never lost — they are on the clipboard. Say so, rather than
+  // letting it look like the whole session vanished.
+  sendToRenderer("braino-mac:dictation-fallback", {
+    text: transcript,
+    reason: dictationState.focusStatus,
   });
   return {
     ok: true,
@@ -5116,19 +6423,154 @@ function keepDictationFallback(text, focusStatus, error = "") {
   };
 }
 
-async function insertDictationText(value) {
-  if (!dictationState.active) {
-    return { ok: false, error: "Yap Mode is not active.", ...dictationStatePayload() };
+let lastDictationRefinementWarmAt = 0;
+
+function warmDictationRefinement() {
+  if (Date.now() - lastDictationRefinementWarmAt < 5 * 60 * 1000) return;
+  lastDictationRefinementWarmAt = Date.now();
+  void refineDictationText("BrainoHERA ready", { timeoutMs: 10000, warmup: true })
+    .then((result) => logMac("dictation.refine.warm", {
+      reason: result.refinementReason,
+      durationMs: result.refinementDurationMs,
+    }))
+    .catch(() => {});
+}
+
+async function refineDictationText(rawText, options = {}) {
+  const raw = String(rawText || "").trim();
+  const startedAt = Date.now();
+  const timeoutMs = Math.max(500, Number(options.timeoutMs) || 4200);
+  const fallback = (reason, extra = {}) => ({
+    text: raw,
+    refined: false,
+    refinementReason: reason,
+    refinementDurationMs: Date.now() - startedAt,
+    ...extra,
+  });
+  if (!raw) return fallback("empty");
+  if (raw.length > 20000) return fallback("too_long");
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return fallback("supabase_unavailable");
+
+  const authToken = await getBrainoAuthToken();
+  if (!authToken) return fallback("auth_unavailable");
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    logMac("dictation.refine.start", { chars: raw.length, warmup: options.warmup === true });
+    const response = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/dictation-refine`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${authToken}`,
+      },
+      body: JSON.stringify({ transcript: raw }),
+      signal: controller.signal,
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      logMac("dictation.refine.fallback", {
+        chars: raw.length,
+        reason: "request_failed",
+        status: response.status,
+        durationMs: Date.now() - startedAt,
+      });
+      return fallback("request_failed", { refinementStatus: response.status });
+    }
+
+    const candidate = String(data?.formatted || "").trim();
+    const assessment = assessDictationRefinement(raw, candidate);
+    if (!assessment.accepted) {
+      logMac("dictation.refine.rejected", {
+        chars: raw.length,
+        candidateChars: candidate.length,
+        reason: assessment.reason,
+        sourceCoverage: assessment.sourceCoverage ?? null,
+        candidateCoverage: assessment.candidateCoverage ?? null,
+        durationMs: Date.now() - startedAt,
+      });
+      return fallback(`rejected_${assessment.reason}`);
+    }
+
+    logMac("dictation.refine.done", {
+      chars: raw.length,
+      formattedChars: candidate.length,
+      changed: candidate !== raw,
+      durationMs: Date.now() - startedAt,
+    });
+    return {
+      text: candidate,
+      refined: candidate !== raw,
+      refinementReason: candidate === raw ? "unchanged" : "faithful",
+      refinementDurationMs: Date.now() - startedAt,
+    };
+  } catch (error) {
+    const reason = error?.name === "AbortError" ? "timeout" : "request_error";
+    logMac("dictation.refine.fallback", {
+      chars: raw.length,
+      reason,
+      error,
+      durationMs: Date.now() - startedAt,
+    });
+    return fallback(reason);
+  } finally {
+    clearTimeout(timeout);
   }
-  const text = normalizeDictationChunk(value);
-  if (!text) return { ok: true, inserted: false, ...dictationStatePayload() };
+}
+
+function preparedDictationSession(value, preparedValue) {
+  const rawChunks = (Array.isArray(value) ? value : [value])
+    .map((chunk) => String(chunk || "").trim());
+  const preparedChunks = Array.isArray(preparedValue) ? preparedValue : [];
+  let acceptedTurns = 0;
+  const selectedChunks = rawChunks.map((raw, index) => {
+    const candidate = String(preparedChunks[index] || "").trim();
+    // Spoken layout commands must reach the deterministic normalizer as raw
+    // words. Formatting "new line" into "New line." would destroy intent.
+    if (!candidate || !normalizeDictationSession([raw]).trim()) return raw;
+    const assessment = assessDictationRefinement(raw, candidate);
+    if (!assessment.accepted) return raw;
+    acceptedTurns += 1;
+    return candidate;
+  });
+  return {
+    text: normalizeDictationSession(selectedChunks).trim(),
+    rawText: normalizeDictationSession(rawChunks).trim(),
+    acceptedTurns,
+    totalTurns: rawChunks.filter(Boolean).length,
+  };
+}
+
+async function insertDictationText(value, preparedValue = []) {
+  if (!dictationState.active) {
+    return { ok: false, error: "BrainoHERA is not active.", ...dictationStatePayload() };
+  }
+  const preparedSession = preparedDictationSession(value, preparedValue);
+  const { rawText } = preparedSession;
+  if (!rawText) return { ok: true, inserted: false, ...dictationStatePayload() };
+  // Formatting was prefetched from transcript deltas while the user spoke.
+  // Stop-to-paste performs no network request: accepted prepared turns are
+  // used immediately and every other turn falls back to its exact transcript.
+  const text = preparedSession.text || rawText;
+  const insertionStartedAt = Date.now();
+  logMac("dictation.insert.start", {
+    chars: text.length,
+    turns: preparedSession.totalTurns,
+    preparedTurns: preparedSession.acceptedTurns,
+  });
+  const focus = await runAxHelper(["focused"]);
+  logMac("dictation.insert.focus_ready", {
+    status: focus.status,
+    durationMs: Date.now() - insertionStartedAt,
+  });
   lastDictationTranscript = text.trim();
 
-  const focus = await runAxHelper(["focused"]);
+  if (focus.status === "needs-accessibility") void askForPermission("accessibility");
   if (focus.status === "needs-accessibility" || focus.status === "secure") {
     const error = focus.status === "needs-accessibility"
       ? "Braino needs Accessibility permission to type."
-      : "Yap Mode stays out of password and secure text fields.";
+      : "BrainoHERA stays out of password and secure text fields.";
     logMac("dictation.insert_failed", {
       chars: text.length,
       method: "",
@@ -5148,20 +6590,42 @@ async function insertDictationText(value) {
   // A real paste event is the most compatible insertion path for native,
   // Chromium, Electron, terminal, and remote-desktop editors.
   const pasted = await pasteDictationFallback(text, focusTarget.appName);
+  logMac("dictation.insert.paste_dispatched", {
+    ok: Boolean(pasted.ok),
+    durationMs: Date.now() - insertionStartedAt,
+  });
   let ok = pasted.ok;
   let method = ok ? "paste" : "";
+  let verification = ok
+    ? await verifyDictationFieldChange(focusTarget, text)
+    : { verified: false, reason: "paste_command_failed" };
+  if (ok && verification.verified === false) {
+    ok = false;
+    method = "";
+  }
   let insertionStatus = focus.status;
   if (!ok && focus.status === "editable") {
     const inserted = await runAxHelper(["insert", Buffer.from(text, "utf8").toString("base64")]);
     insertionStatus = inserted.status;
     ok = inserted.status === "inserted";
     method = ok ? "accessibility" : "";
+    if (ok) {
+      verification = await verifyDictationFieldChange(focusTarget, text);
+      if (verification.verified === false) {
+        ok = false;
+        method = "";
+        insertionStatus = "insert_unverified";
+      }
+    }
     if (ok && clipboard.readText() === text) clipboard.writeText(pasted.previousClipboard || "");
   }
 
   if (ok) {
     dictationState.insertions += 1;
     dictationState.insertionMode = method;
+    // Counted here rather than at commit time: the dashboard should only claim
+    // characters that actually reached a text field.
+    recordUsage({ dictationInserts: 1, dictationChars: text.length });
   }
   logMac(ok ? "dictation.inserted" : "dictation.insert_failed", {
     chars: text.length,
@@ -5170,6 +6634,10 @@ async function insertDictationText(value) {
     insertion: dictationState.insertions,
     targetApp: pasted.targetApp || "",
     pasteError: pasted.error || "",
+    verified: verification.verified,
+    verificationReason: verification.reason,
+    durationMs: Date.now() - insertionStartedAt,
+    preparedTurns: preparedSession.acceptedTurns,
   });
   if (!ok) {
     return keepDictationFallback(text, insertionStatus, pasted.error || "insertion failed");
@@ -5177,8 +6645,14 @@ async function insertDictationText(value) {
   return {
     ok: true,
     inserted: true,
+    transcript: text,
     chars: text.length,
     method,
+    verified: verification.verified,
+    verificationReason: verification.reason,
+    refined: preparedSession.acceptedTurns > 0,
+    refinementReason: preparedSession.acceptedTurns > 0 ? "prefetched" : "raw_stream",
+    refinementDurationMs: 0,
     ...dictationStatePayload(),
   };
 }
@@ -5680,7 +7154,16 @@ async function checkCalendarNext() {
     "  if let e = events.first {",
     "    let clean: (String?) -> String = { ($0 ?? \"\").replacingOccurrences(of: \"\\t\", with: \" \").replacingOccurrences(of: \"\\n\", with: \" \") }",
     "    let blob = [e.url?.absoluteString ?? \"\", clean(e.location), String(clean(e.notes).prefix(600))].joined(separator: \" \")",
-    "    print(\"\\(Int(e.startDate.timeIntervalSince1970))\\t\\(e.title ?? \"Event\")\\t\\(blob)\")",
+    // The invite already knows who is coming. That is the only roster available before
+    // anybody has spoken, and it is what lets a name be attached to a voice at all.
+    // EKEvent.attendees is already [EKParticipant]?, so `?? []` let Swift infer
+    // the empty array as another optional and the whole expression came out as
+    // [EKParticipant]??. Binding the type explicitly is what makes it compile.
+    "    let attendeeList: [EKParticipant] = e.attendees ?? []",
+    // `resourceSpecifier` is NSURL, not Foundation's URL. Attendee URLs are
+    // mailto: links, so the address is the absolute string with the scheme off.
+    "    let people = attendeeList.compactMap { $0.name ?? $0.url.absoluteString.replacingOccurrences(of: \"mailto:\", with: \"\") }.map { clean($0) }.filter { !$0.isEmpty }",
+    "    print(\"\\(Int(e.startDate.timeIntervalSince1970))\\t\\(e.title ?? \"Event\")\\t\\(blob)\\t\\(people.joined(separator: \"|\"))\")",
     "  }",
     "}",
   ].join("\n");
@@ -5689,12 +7172,15 @@ async function checkCalendarNext() {
     await fs.promises.writeFile(tmpPath, swiftSource);
     const { stdout } = await execFileP("/usr/bin/xcrun", ["swift", tmpPath], { timeout: 60000 });
     const line = String(stdout || "").trim().split(/\r?\n/).pop() || "";
-    const [epoch, title = "", blob = ""] = line.split("\t");
+    const [epoch, title = "", blob = "", people = ""] = line.split("\t");
     const startAt = Number(epoch) * 1000;
     // Video-call link buried in the event's url/location/notes → one-click Join.
     const joinMatch = blob.match(/https?:\/\/[^\s<>"',;)]*(?:zoom\.us\/j\/|meet\.google\.com\/|teams\.microsoft\.com\/l\/meetup-join|webex\.com\/(?:meet|join)\/)[^\s<>"',;)]*/i);
+    // The guest list, which the recorder uses to put names on voices and to tell the
+    // transcriber how those names are spelled.
+    const attendees = rosterFromInviteNames(people);
     const next = Number.isFinite(startAt) && startAt > Date.now() - 60000 && title.trim()
-      ? { title: title.trim().slice(0, 30), startAt, joinUrl: joinMatch ? joinMatch[0] : "" }
+      ? { title: title.trim().slice(0, 30), startAt, joinUrl: joinMatch ? joinMatch[0] : "", attendees }
       : null;
     const changed = JSON.stringify(next) !== JSON.stringify(calendarNext);
     calendarNext = next;
@@ -7933,12 +9419,14 @@ async function controlSpotifyPlaybackOnMac(control) {
   }
 }
 
-async function playSpotifySongOnMac(songQuery) {
+async function playSpotifySongOnMac(songQuery, options = {}) {
   stopMusicSegmentLoop();
   const query = String(songQuery || "").trim();
   if (!query) return { ok: false, say: "Tell me the song name and I will play it on Spotify." };
-  return runSpotifyTaskWithFocusReturn({ type: "track", query: textForLog(query) }, async () => {
+  const fastStart = options.fastStart === true;
+  return runSpotifyTaskWithFocusReturn({ type: "track", query: textForLog(query), fastStart }, async () => {
     const startedAt = Date.now();
+    if (fastStart) logMac("spotify.fast_path.dispatched", { query: textForLog(query) });
     sendTaskProgress({ status: "thinking", text: `Searching Spotify for ${query}` });
     const wasRunningPromise = isMacApplicationRunning("Spotify");
     const openPromise = openApp("Spotify");
@@ -7962,32 +9450,43 @@ async function playSpotifySongOnMac(songQuery) {
     try {
       await playSpotifyTrackInMacApp(track.uri);
       nativeOk = true;
-      const state = await readSpotifyMacState();
       logMac("spotify.mac_app.play.done", {
         track: title,
         artists,
         uri: track.uri,
-        state: state?.state || "",
-        stateTrack: state?.name || "",
-        stateArtist: state?.artist || "",
         durationMs: Date.now() - startedAt,
       });
+      // Playback is already audible. Reading Spotify state is diagnostics, not
+      // part of starting the song, so it must not hold the command response.
+      void readSpotifyMacState().then((state) => {
+        logMac("spotify.mac_app.play.observed", {
+          track: title,
+          state: state?.state || "",
+          stateTrack: state?.name || "",
+          stateArtist: state?.artist || "",
+        });
+      }).catch(() => {});
     } catch (error) {
       logMac("spotify.mac_app.play.failed", { track: title, artists, uri: track.uri, error });
     }
 
-    const playback = await callSpotifyFunction("spotify-playback", { action: "play", uris: [track.uri] });
-    if (playback.ok) {
-      apiOk = true;
-    } else {
-      apiError = playback.error || "Spotify playback failed.";
-      logMac("spotify.api_play.failed_after_native", { track: title, artists, error: apiError });
+    // The native Mac app is the primary playback path. Calling the Web API as
+    // well used to add a timeout after the song had already started, and could
+    // even fail despite a successful native play. Use it only as a fallback.
+    if (!nativeOk) {
+      const playback = await callSpotifyFunction("spotify-playback", { action: "play", uris: [track.uri] });
+      if (playback.ok) {
+        apiOk = true;
+      } else {
+        apiError = playback.error || "Spotify playback failed.";
+        logMac("spotify.api_play.failed_after_native", { track: title, artists, error: apiError });
+      }
     }
 
     if (!nativeOk && !apiOk) return { ok: false, say: apiError || "Spotify opened, but I could not start playback." };
     sendTaskProgress({ status: "done", text: `Playing ${title}` });
     return { ok: true, say: `Playing ${title} by ${artists} on Spotify.` };
-  });
+  }, { fastStart, deferRestore: fastStart });
 }
 
 // A-B music looping is deliberately one intent above the individual players.
@@ -9978,6 +11477,10 @@ async function transcribeAudioCommand(payload = {}) {
       audioBase64,
       fileName: "braino-mac-command.webm",
       mimeType,
+      // The realtime path pins transcription to English and the fallback never
+      // did, which is the whole reason a Hindi comedy clip came back as Urdu and
+      // was handed to the router as a command. Same lock, same reason.
+      language: "en",
     }),
   });
 
@@ -10007,7 +11510,7 @@ function buildRealtimeSessionConfig({ purpose = "voice", requestedModel = "gpt-r
       audio: {
         input: {
           format: { type: "audio/pcm", rate: 24000 },
-          noise_reduction: { type: "near_field" },
+          noise_reduction: { type: "far_field" },
           transcription: buildDictationTranscriptionConfig({
             model: DICTATION_TRANSCRIPTION_MODEL,
           }),
@@ -10030,7 +11533,11 @@ function buildRealtimeSessionConfig({ purpose = "voice", requestedModel = "gpt-r
     ].join("\n"),
     audio: {
       input: {
-        noise_reduction: { type: "near_field" },
+        // The main process never sees the mic, so this is only the opening default; the
+        // renderer overrides it with the real device verdict via session.update the moment
+        // the data channel opens. Default to the laptop case, because `near_field` here was
+        // what made voice mode demand you lean into the screen before that update landed.
+        noise_reduction: { type: "far_field" },
         transcription: {
           model: DEFAULT_REALTIME_TRANSCRIPTION_MODEL,
           language: "en",
@@ -10292,7 +11799,7 @@ async function createRealtimeCall({ offerSdp, voiceEngine, purpose } = {}) {
         });
         return {
           ok: false,
-          error: `Yap Mode requires ${DICTATION_TRANSCRIPTION_MODEL}, but the server returned ${directResult.transcriptionModel || "an unknown model"}.`,
+          error: `BrainoHERA requires ${DICTATION_TRANSCRIPTION_MODEL}, but the server returned ${directResult.transcriptionModel || "an unknown model"}.`,
         };
       }
       logMac("realtime.create.supabase_direct_ok", {
@@ -10343,7 +11850,7 @@ async function createRealtimeCall({ offerSdp, voiceEngine, purpose } = {}) {
       });
       return {
         ok: false,
-        error: `Yap Mode requires ${DICTATION_TRANSCRIPTION_MODEL}, but the server returned ${secretResult.transcriptionModel || "an unknown model"}.`,
+        error: `BrainoHERA requires ${DICTATION_TRANSCRIPTION_MODEL}, but the server returned ${secretResult.transcriptionModel || "an unknown model"}.`,
       };
     }
     const exchange = await exchangeRealtimeOfferWithOpenAi({
@@ -10581,15 +12088,12 @@ async function runMacConversation(prompt) {
   }
 }
 
-// The canonical Human Intelligence layer, thinking alongside every Mac command.
-// Deliberately NON-BLOCKING: the regex cascade below answers in under a second and
-// waiting one to three seconds for a model before every action would kill exactly
-// the speed that makes the Mac feel alive. So the action fires immediately and
-// HIL's reasoning lands in the notch as it arrives, the same thinking sentences the
-// /human-intelligence Loop page shows, narrating the same command. Every call is
-// also logged server-side to engine_runs (engine "hil-reason"), so /engine-log now
-// carries real Mac traffic, not just the lab's.
-function fireHilReasonThinking(raw, ticket) {
+// The canonical Human Intelligence audit for Mac commands. It starts only after
+// the deterministic action has completed, so this model request cannot compete
+// with a Spotify search, app launch, or other latency-sensitive command. The
+// command's own deterministic progress remains available in the click-open
+// thinking sheet; this audit is logged for diagnosis and engine history only.
+function fireHilReasonThinking(raw) {
   if (!raw || !SUPABASE_URL || !SUPABASE_ANON_KEY) return;
   // browserTitle is where a browser's tab title lives; windowTitle is often blank
   // there. Every other reader of this object falls back the same way.
@@ -10610,22 +12114,8 @@ function fireHilReasonThinking(raw, ticket) {
     // free of any timing concerns.
     console.log(`[Braino HIL] ${r.verdict} — ${r.restated_goal}${r.clarifying_question ? ` | would have asked: ${r.clarifying_question}` : ""}`);
     logMac("hil.reason", { verdict: r.verdict, goal: textForLog(r.restated_goal || "") });
-    // Painting is a different matter. The regex cascade answers in well under a
-    // second and this model call takes one to three, so by the time it lands the
-    // notch is usually already showing the RESULT. Overwriting "Sent to Sarah" with
-    // a stale plan sentence is worse than showing nothing, so a finished action wins.
-    if (ticket !== hilThinkingTicket) return;
-    // An "ask" verdict is never painted either: the action has already fired, so a
-    // question here is one nobody can answer and it contradicts what just happened.
-    if (r.verdict === "ask") return;
-    const line = (Array.isArray(r.steps) && r.steps[0]) || r.restated_goal || "";
-    if (line) sendTaskProgress({ status: "thinking", text: String(line).slice(0, 140) });
   }).catch((error) => console.log("[Braino HIL] reason failed:", error?.message || error));
 }
-
-// Bumped the moment an action completes, which retires any HIL thinking still in
-// flight for it.
-let hilThinkingTicket = 0;
 
 
 // ── HIL LOOP ON THE MAC ───────────────────────────────────────────────────────
@@ -10893,12 +12383,169 @@ function macLooksMultiStep(raw) {
   return new RegExp("\\b" + JOB + "\\b.*\\band\\b.*\\b" + JOB + "\\b").test(t);
 }
 
+// ── HIL in shadow ────────────────────────────────────────────────────────────
+// Stage 1 of putting HIL in front of every command on the Mac, the way it
+// already is in the browser. It runs on every command, it decides NOTHING, and
+// its answer is thrown away. The only output is a row in engine_runs holding
+// what HIL would have chosen next to what the cascade actually did.
+//
+// This exists because the cascade is not evenly good. It is excellent on the
+// ~60 phrasings it was written for and silently wrong past them: the comment at
+// the bottom of routeMacDelegate records that the fallback used to dump the raw
+// sentence into a Google search and call it done. Guessing which of those two
+// halves a given command lands in is exactly what a week of shadow rows answers
+// and an argument does not.
+//
+// Three properties make this unable to affect a single command:
+//   1. it runs AFTER routeMacDelegate has already returned, so the user has
+//      been served before the call is even made;
+//   2. it is never awaited by anything on the delegate path;
+//   3. its own failures are swallowed here rather than thrown.
+// The 1200ms abort is therefore not protecting the user, it is protecting the
+// log from rows that would skew the latency read this stage exists to produce.
+const HIL_ROUTER_SHADOW = process.env.BRAINO_HIL_SHADOW !== "0";
+// 1200ms was borrowed from the live design, where it is the ceiling on how long
+// a person waits before the cascade takes over. Nobody waits on a shadow call:
+// it is fired after the command has already been answered. Measured on this Mac
+// the router takes 1000-1650ms, so a 1200ms abort cut off roughly half of them,
+// two aborts tripped the breaker, and every command for the next minute went
+// unlogged. The guard was costing exactly the data the stage exists to collect.
+// Generous here, tight later: stage 5 restores 1200ms because then it is real.
+const HIL_ROUTER_TIMEOUT_MS = 6000;
+// Raised with it. At two, an ordinary pair of slow calls silenced the log for a
+// minute; the breaker is meant to catch an outage, not a sluggish afternoon.
+const HIL_ROUTER_BREAKER_FAILS = 4;
+const HIL_ROUTER_BREAKER_MS = 60000;
+let hilRouterFails = 0;
+let hilRouterOpenUntil = 0;
+
+// State the model cannot see and would otherwise invent. alarmRingingSec is an
+// integer rather than a boolean on purpose: alarm handling behaves differently
+// inside the 2-minute and 10-minute windows, and "armed" cannot tell those
+// apart, so a boolean here would teach HIL a distinction it then cannot make.
+function hilRouterSurface() {
+  const wa = lastIncomingWhatsApp;
+  const waFresh = wa && Date.now() - wa.at < 15 * 60 * 1000;
+  return {
+    app: activeMacContext?.appName || "",
+    title: textForLog(activeMacContext?.browserTitle || activeMacContext?.windowTitle || ""),
+    url: textForLog(activeMacContext?.browserUrl || ""),
+    timerArmed: activeTimers.some((t) => (t.kind || "timer") === "timer"),
+    alarmArmed: activeTimers.some((t) => t.kind === "alarm"),
+    alarmRingingSec: lastFiredAlarm ? Math.round((Date.now() - lastFiredAlarm.at) / 1000) : null,
+    meetingRecording: Boolean(meetingState),
+    screenRecording: Boolean(screenRecProc),
+    undoable: hasFileActionHistory() || hasDesktopOrganizeManifest(),
+    lastWhatsApp: waFresh ? { from: wa.name, ageSec: Math.round((Date.now() - wa.at) / 1000) } : null,
+  };
+}
+
+function fireHilRouterShadow(raw, surface, result) {
+  if (!HIL_ROUTER_SHADOW || !raw) return;
+  if (Date.now() < hilRouterOpenUntil) return;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), HIL_ROUTER_TIMEOUT_MS);
+  // The ANON key, never getBrainoAuthToken(): that helper can block on a network
+  // token refresh, and a shadow call has no business doing anything that slow.
+  void fetch(`${SUPABASE_URL}/functions/v1/hil-router`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+    },
+    body: JSON.stringify({
+      command: raw,
+      surface,
+      shadow: true,
+      // What the cascade actually did. Stage 1 cannot name the branch that
+      // claimed it (that arrives with the tool registry in stage 3), so it
+      // records the shape of the outcome, which is enough to find the rows that
+      // matter: the fallbacks, the failures and the plain conversations.
+      cascade: {
+        source: result?.source || "cascade",
+        ok: result?.ok !== false,
+        said: textForLog(result?.say || ""),
+      },
+    }),
+    signal: controller.signal,
+  })
+    .then((res) => (res.ok ? res.json() : null))
+    .then((data) => {
+      if (!data?.verdict) return;
+      hilRouterFails = 0;
+      logMac("hil.router.shadow", {
+        v: data.verdict.v,
+        tool: data.verdict.t || "",
+        ms: data.elapsedMs,
+        rejected: data.rejected || null,
+        cascade: result?.source || "cascade",
+      });
+    })
+    .catch(() => {
+      hilRouterFails += 1;
+      if (hilRouterFails >= HIL_ROUTER_BREAKER_FAILS) {
+        hilRouterOpenUntil = Date.now() + HIL_ROUTER_BREAKER_MS;
+        logMac("hil.router.breaker_tripped", { forMs: HIL_ROUTER_BREAKER_MS });
+      }
+    })
+    .finally(() => clearTimeout(timer));
+}
+
+function fastSpotifyTrackIntent(raw) {
+  if (!/\bspotify\b/i.test(raw)) return null;
+  if (pendingMacWorkflow || voiceModesCache.modes.some((mode) => mode.isActive)) return null;
+  if (
+    parseMusicSegmentIntent(raw)
+    || parseSpotifyControlIntent(raw)
+    || parseSpotifyContextPlayIntent(raw)
+    || parseSpotifyQueueIntent(raw)
+    || parseSpotifyAddTrackIntent(raw)
+    || parseSpotifyCreatePlaylistIntent(raw)
+    || parseSpotifyVolumeIntent(raw)
+    || parseSpotifySeekIntent(raw)
+    || parseSpotifyShuffleRepeatIntent(raw)
+    || parseSpotifyWhatsPlayingIntent(raw)
+  ) return null;
+  const intent = parseSpotifyPlayIntent(raw);
+  return intent && !intent.needsSong ? intent : null;
+}
+
 async function runDelegate(prompt) {
   const raw = cleanPrompt(prompt);
-  const ticket = ++hilThinkingTicket;
-  fireHilReasonThinking(raw, ticket);
-  const result = await routeMacDelegate(prompt, raw);
-  hilThinkingTicket += 1;   // the action has answered; late thinking must not paint over it
+  // Snapshotted before routing, because routeMacDelegate's first act is to
+  // refresh activeMacContext and several branches switch apps. HIL has to be
+  // judged on the screen the user was actually looking at when they spoke.
+  const shadowSurface = HIL_ROUTER_SHADOW ? hilRouterSurface() : null;
+  const fastSpotify = fastSpotifyTrackIntent(raw);
+  let result;
+  if (fastSpotify) {
+    logMac("delegate.intent.start", {
+      prompt: textForLog(prompt),
+      cleaned: textForLog(raw),
+      activeApp: activeMacContext?.appName || "",
+      fastPath: "spotify_track",
+    });
+    logMac("delegate.spotify_play_intent", {
+      raw: textForLog(raw),
+      song: textForLog(fastSpotify.song),
+      needsSong: false,
+      fastPath: true,
+    });
+    result = await playSpotifySongOnMac(fastSpotify.song, { fastStart: true });
+  } else {
+    result = await routeMacDelegate(prompt, raw);
+  }
+  // Keep both model audits completely behind the result. A short delay also
+  // lets the renderer begin answer speech before background work uses network.
+  if (shadowSurface) {
+    const routerAuditTimer = setTimeout(() => fireHilRouterShadow(raw, shadowSurface, result), 750);
+    routerAuditTimer.unref?.();
+  }
+  if (raw) {
+    const hilAuditTimer = setTimeout(() => fireHilReasonThinking(raw), 1000);
+    hilAuditTimer.unref?.();
+  }
   if (raw && result?.source !== "mac_conversation") {
     rememberMacChat("user", raw);
     if (result?.say) rememberMacChat("assistant", result.say);
@@ -11571,7 +13218,7 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
   if (meetingIntent) {
     logMac("delegate.meeting_intent", { action: meetingIntent.action });
     return meetingIntent.action === "start"
-      ? startMeetingRecording(/\bcall\b/i.test(cleanPrompt(raw)) ? "call" : "meeting")
+      ? startMeetingRecording(meetingIntent.source || "meeting")
       : stopMeetingRecording();
   }
 
@@ -12036,6 +13683,140 @@ ipcMain.handle("braino-mac:log", async (_event, payload = {}) => {
 
 ipcMain.handle("braino-mac:auth-status", async () => authStatusPayload());
 
+ipcMain.handle("braino-mac:parakeet-state", async () => ({
+  available: parakeetAvailable(),
+  ready: parakeet.ready,
+  listening: parakeet.listening,
+}));
+
+ipcMain.handle("braino-mac:parakeet-control", async (_event, payload = {}) => {
+  const action = String(payload?.action || "");
+  if (action === "start") {
+    startParakeet();
+    if (!parakeet.ready) return { ok: false, error: "warming" };
+    parakeet.listening = parakeetSend("start");
+    return { ok: parakeet.listening, listening: parakeet.listening };
+  }
+  if (action === "stop") {
+    parakeetSend("stop");
+    parakeet.listening = false;
+    return { ok: true, listening: false };
+  }
+  return { ok: false, error: "unknown_action" };
+});
+
+ipcMain.handle("braino-mac:permission-report", async () => permissionReport());
+
+ipcMain.handle("braino-mac:permission-ask", async (_event, payload = {}) => (
+  askForPermission(String(payload?.kind || ""), { force: true })
+));
+
+ipcMain.handle("braino-mac:dashboard-state", async () => dashboardStatePayload());
+
+/* The dashboard's data sections read the same Supabase tables the website
+   dashboard reads, with the signed-in user's own token. Read-only, and the
+   table plus the columns are fixed here rather than taken from the renderer, so
+   the window can never ask for something it was not built to show. */
+const DASHBOARD_SOURCES = {
+  // Columns are copied from the queries the website dashboard actually runs.
+  // Guessing them is how this broke the first time: `notes` has no `content`
+  // column (it is `structured_notes`) and `braino_memories` has no `kind`
+  // (it is `category`), so PostgREST answered 400 and both lists stayed empty.
+  memory: {
+    table: "braino_memories",
+    select: "id,content,category,salience,created_at",
+    filter: "&status=eq.active",
+    order: "salience.desc",
+    limit: 60,
+  },
+  notes: {
+    table: "notes",
+    select: "id,title,source_title,structured_notes,use_case,created_at",
+    order: "created_at.desc",
+    limit: 40,
+  },
+  // X Automation and Highlights, same tables the website reads.
+  xauto: {
+    table: "scheduled_x_posts",
+    select: "id,content,status,scheduled_at,created_at",
+    order: "scheduled_at.desc",
+    limit: 40,
+  },
+  high: {
+    table: "notes",
+    select: "id,title,source_title,source_url,structured_notes,use_case,created_at",
+    filter: "&use_case=eq.highlight",
+    order: "created_at.desc",
+    limit: 40,
+  },
+  voice: { table: "voice_commands", select: "id,mode_id,phrase,open_mode,position", order: "position.asc", limit: 200 },
+  modes: { table: "voice_modes", select: "id,name,notch_color,is_active,position", order: "position.asc", limit: 40 },
+};
+
+ipcMain.handle("braino-mac:dashboard-data", async (_event, key) => {
+  const source = DASHBOARD_SOURCES[String(key || "")];
+  if (!source) return { ok: false, error: "unknown_source" };
+  const auth = authStatusPayload();
+  if (!auth.userId || !SUPABASE_URL || !SUPABASE_ANON_KEY) return { ok: false, error: "signed_out", rows: [] };
+  const authToken = await getBrainoAuthToken();
+  if (!authToken) return { ok: false, error: "signed_out", rows: [] };
+  const base = SUPABASE_URL.replace(/\/$/, "");
+  const url = `${base}/rest/v1/${source.table}`
+    + `?user_id=eq.${encodeURIComponent(auth.userId)}`
+    + `&select=${encodeURIComponent(source.select)}`
+    + (source.filter || "")
+    + `&order=${encodeURIComponent(source.order)}`
+    + `&limit=${source.limit}`;
+  try {
+    const res = await fetch(url, { headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${authToken}` } });
+    if (!res.ok) {
+      // PostgREST explains itself in the body; without this a wrong column name
+      // just looks like "it isn't loading".
+      const detail = await res.text().catch(() => "");
+      logMac("dashboard.data.failed", { key, table: source.table, status: res.status, detail: detail.slice(0, 300) });
+      return { ok: false, error: `http_${res.status}`, detail: detail.slice(0, 200), rows: [] };
+    }
+    const rows = await res.json();
+    return { ok: true, rows: Array.isArray(rows) ? rows : [] };
+  } catch (error) {
+    logMac("dashboard.data.error", { key, error });
+    return { ok: false, error: "request_failed", rows: [] };
+  }
+});
+
+/* White and Black are opaque themes, so the window's vibrancy layer has to come
+   off — otherwise the desktop keeps bleeding through whatever the CSS paints. */
+ipcMain.handle("braino-mac:window-theme", async (_event, theme) => {
+  if (!dashboardWindow || dashboardWindow.isDestroyed()) return { ok: false };
+  const wanted = ["paper", "white", "black"].includes(String(theme)) ? String(theme) : "paper";
+  const BACKGROUNDS = { paper: "#f4f4f7", white: "#fafafc", black: "#000000" };
+  try {
+    // The website dashboard is an opaque design. Vibrancy behind it only muddies
+    // the warm paper, so the window drops it entirely and paints a real colour.
+    dashboardWindow.setVibrancy(null);
+    dashboardWindow.setBackgroundColor(BACKGROUNDS[wanted]);
+  } catch (error) {
+    logMac("dashboard.theme.failed", { theme: wanted, error });
+    return { ok: false };
+  }
+  return { ok: true, theme: wanted };
+});
+
+ipcMain.handle("braino-mac:dashboard-open", async () => {
+  openDashboardWindow();
+  return { ok: true };
+});
+
+ipcMain.handle("braino-mac:reveal-path", async (_event, target) => {
+  const wanted = String(target || "");
+  const known = { log: LOG_PATH, auth: AUTH_STORE_PATH, usage: USAGE_STATS_PATH };
+  // Only ever reveal this app's own files, never an arbitrary path from the page.
+  const resolved = known[wanted];
+  if (!resolved) return { ok: false, error: "unknown_path" };
+  shell.showItemInFolder(resolved);
+  return { ok: true };
+});
+
 ipcMain.handle("braino-mac:auth-sign-out", async () => {
   clearAuthSession();
   return { ok: true, ...authStatusPayload() };
@@ -12069,7 +13850,14 @@ ipcMain.handle("braino-mac:dictation-control", async (_event, payload = {}) => {
 });
 
 ipcMain.handle("braino-mac:dictation-insert", async (_event, payload = {}) => (
-  insertDictationText(payload?.text)
+  insertDictationText(
+    Array.isArray(payload?.chunks) ? payload.chunks : payload?.text,
+    Array.isArray(payload?.prepared) ? payload.prepared : [],
+  )
+));
+
+ipcMain.handle("braino-mac:dictation-refine", async (_event, payload = {}) => (
+  refineDictationText(payload?.text, { timeoutMs: 3600, prefetch: true })
 ));
 
 ipcMain.handle("braino-mac:request-accessibility", () => ({
@@ -12304,7 +14092,7 @@ ipcMain.handle("braino-mac:calendar-join", async () => {
   // Give the call page a breath to load, then arm the recorder automatically —
   // one click from notch to recorded meeting.
   setTimeout(() => {
-    try { startMeetingRecording(calendarNext?.title || "meeting"); } catch (_) {}
+    void startMeetingRecording(calendarNext?.title || "meeting").catch(() => {});
   }, 6000);
   return { ok: true, say: `Joining ${calendarNext?.title || "the meeting"}. I will record and take notes.` };
 });
@@ -12428,6 +14216,54 @@ return "paused"`;
   return { ok: false, say: "" };
 });
 
+ipcMain.handle("braino-mac:launch-demo-open", async () => {
+  const videoPath = LAUNCH_DEMO.candidates.find((candidate) => fs.existsSync(candidate));
+  if (!videoPath) {
+    logMac("launch_demo.video_missing", { candidates: LAUNCH_DEMO.candidates });
+    return { ok: false, say: "I cannot find Launch Vid dot M P four in Downloads or on the Desktop." };
+  }
+  try {
+    await execFileP("/usr/bin/open", ["-a", "QuickTime Player", videoPath], { timeout: 10000 });
+    await new Promise((resolve) => setTimeout(resolve, 900));
+    const playScript = `
+tell application "QuickTime Player"
+  activate
+  if (count of documents) is greater than 0 then
+    present front document
+    play front document
+  else
+    error "QuickTime opened without a document"
+  end if
+end tell`;
+    await execFileP("/usr/bin/osascript", ["-e", playScript], { timeout: 8000 });
+    logMac("launch_demo.video_playing", { path: videoPath });
+    return { ok: true, path: videoPath };
+  } catch (error) {
+    logMac("launch_demo.video_failed", { path: videoPath, error });
+    return { ok: false, say: "QuickTime did not cooperate. Give me one more take." };
+  }
+});
+
+ipcMain.handle("braino-mac:launch-demo-stop", async () => {
+  const stopScript = `
+if application "QuickTime Player" is running then
+  tell application "QuickTime Player"
+    if (count of documents) is greater than 0 then
+      pause front document
+      close front document saving no
+    end if
+  end tell
+end if`;
+  try {
+    await execFileP("/usr/bin/osascript", ["-e", stopScript], { timeout: 8000 });
+    logMac("launch_demo.stopped", {});
+    return { ok: true };
+  } catch (error) {
+    logMac("launch_demo.stop_failed", { error });
+    return { ok: false };
+  }
+});
+
 ipcMain.handle("braino-mac:shelf-file", async (_event, payload = {}) => {
   const filePath = String(payload?.path || "");
   const action = String(payload?.action || "");
@@ -12459,9 +14295,19 @@ ipcMain.handle("braino-mac:shelf-file", async (_event, payload = {}) => {
 // hover-to-expand and drag-a-file-onto-the-notch both work.
 let notchZoneInside = false;
 let notchZoneExpanded = false;
+let notchZoneExpandedWidth = 680;
+let notchZoneExpandedHeight = 260;
 
 ipcMain.on("braino-mac:notch-zone-size", (_event, payload) => {
   notchZoneExpanded = Boolean(payload?.expanded);
+  const requestedWidth = Number(payload?.width);
+  const requestedHeight = Number(payload?.height);
+  notchZoneExpandedWidth = Number.isFinite(requestedWidth)
+    ? Math.max(220, Math.min(900, requestedWidth))
+    : 680;
+  notchZoneExpandedHeight = Number.isFinite(requestedHeight)
+    ? Math.max(90, Math.min(900, requestedHeight))
+    : 260;
 });
 
 setInterval(() => {
@@ -12476,8 +14322,8 @@ setInterval(() => {
     // earns a generous halo.
     const notchW = cachedNotchMetrics?.width || 190;
     const notchH = cachedNotchMetrics?.height || 33;
-    const halfWidth = notchZoneExpanded ? 340 : notchW / 2 + 8;
-    const height = notchZoneExpanded ? 260 : notchH + 26;
+    const halfWidth = notchZoneExpanded ? notchZoneExpandedWidth / 2 + 8 : notchW / 2 + 8;
+    const height = notchZoneExpanded ? notchZoneExpandedHeight : notchH + 26;
     const inside = Math.abs(point.x - centerX) <= halfWidth
       && point.y >= bounds.y
       && point.y <= bounds.y + height;
@@ -12706,6 +14552,9 @@ app.whenReady().then(() => {
     logPath: LOG_PATH,
   });
   requestAccessibilityTrust(true);
+  // Compile the accessibility helper up front; every dictation press depends
+  // on it and the interpreted path costs seconds per call.
+  void ensureAxHelperBinary();
   createDockWindow();
   registerHotkeys();
   startSwiftHotkeyHelper();
@@ -12713,6 +14562,26 @@ app.whenReady().then(() => {
   startXStatsPolling();
   startDesktopOverlaySync();
   startCursorModeMonitoring();
+  /* Voice wake costs ~4.7s, and the auth token is 444ms of it — paid on the
+     keypress because the token is only fetched when the session starts.
+     Refreshing it in the background means it is already valid when you ask.
+
+     Deliberately NOT prewarming the session itself: the 2.3s is OpenAI minting
+     it, and that needs the SDP offer which only exists once you press. The edge
+     function was measured answering in 16ms, so it is not a cold start to fix. */
+  const warmAuth = () => {
+    void getBrainoAuthToken().then((token) => {
+      logMac("auth.prewarm", { ok: Boolean(token) });
+    }).catch(() => {});
+  };
+  setTimeout(warmAuth, 2000);
+  setInterval(warmAuth, 4 * 60 * 1000);
+  // Warm the on-device model only when it is switched on, so the default
+  // launch costs nothing and holds no microphone.
+  if (parakeetEnabled()) setTimeout(() => startParakeet(), 3000);
+  // Clicking the Dock icon reopens the window, the way every Mac app behaves.
+  app.on("activate", () => openDashboardWindow());
+  if (process.env.BRAINO_MAC_DASHBOARD === "1") openDashboardWindow();
   screen.on("display-metrics-changed", () => void refreshDesktopOverlayContext("display-metrics-changed"));
   screen.on("display-added", () => void refreshDesktopOverlayContext("display-added"));
   screen.on("display-removed", () => void refreshDesktopOverlayContext("display-removed"));
@@ -12723,6 +14592,12 @@ let nativeCleanupStarted = false;
 function cleanupNativeHelpers() {
   if (nativeCleanupStarted) return;
   nativeCleanupStarted = true;
+  try {
+    if (parakeet.proc && !parakeet.proc.killed) {
+      parakeetSend("quit");
+      parakeet.proc.kill();
+    }
+  } catch (_) { /* already gone */ }
   if (app.isReady()) globalShortcut.unregisterAll();
   if (overlaySyncTimer) {
     clearInterval(overlaySyncTimer);

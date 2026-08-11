@@ -26,7 +26,7 @@ export default function MacMoonwalkPartyTrickDocs() {
           <p>The trick uses Spotify's native Mac controls, not a pretend player or a connected web account. The moonwalk only starts after playback and the 3:31 seek have been verified.</p>
         </section>
         <section className="kb-article-block">
-          <aside className="kb-honesty"><strong>A proper Mac easter egg</strong><p>Spotify must be installed, playable, and allowed under macOS Automation. While the skit flag is enabled, double Option runs this trick instead of Yap Mode. Braino remains outside afterward until double-Command explicitly sends him home.</p></aside>
+          <aside className="kb-honesty"><strong>A proper Mac easter egg</strong><p>Spotify must be installed, playable, and allowed under macOS Automation. While the skit flag is enabled, double Option runs this trick instead of BrainoHERA. Braino remains outside afterward until double-Command explicitly sends him home.</p></aside>
         </section>
         <footer className="kb-article-footer">
           <Link to="/knowledge">See every Braino document <ArrowRight aria-hidden="true" /></Link>

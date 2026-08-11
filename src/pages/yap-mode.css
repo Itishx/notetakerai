@@ -13,6 +13,30 @@
   letter-spacing: 0;
 }
 
+.brainohera-wordmark {
+  display: inline-block;
+  color: inherit;
+  white-space: nowrap;
+}
+
+/* Stays `inline` on purpose: an inline-block here makes the accessibility name
+   of the wordmark compute as "Braino HERA", so screen readers and tests read a
+   product name that does not exist. */
+.brainohera-shimmer {
+  display: inline;
+  background-image: linear-gradient(100deg, #17693e 0%, #4ac784 23%, #d8ffe9 43%, #4ac784 63%, #17693e 100%);
+  background-size: 220% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  animation: brainoHeraNameShimmer 3.4s linear infinite;
+}
+
+@keyframes brainoHeraNameShimmer {
+  to { background-position: -220% 0; }
+}
+
 .yap-try {
   color: #fff !important;
   background: var(--yap-mint);
@@ -21,43 +45,63 @@
   opacity: 1 !important;
 }
 
-.yap-hero {
-  min-height: 680px;
-  max-width: 1180px;
+/* The landing follows the class pages (/iomi): eyebrow, one large sentence,
+   then the name itself at full scale underneath. No product mock up here. */
+.yap-landing {
+  max-width: var(--ap-maxw);
   margin: 0 auto;
-  padding: 96px var(--ap-gutter) 44px;
-  display: grid;
-  grid-template-columns: minmax(250px, 0.72fr) minmax(520px, 1.28fr);
+  padding: clamp(88px, 11vw, 150px) var(--ap-gutter) clamp(28px, 4vw, 52px);
+}
+
+.yap-landing-eyebrow {
+  margin: 0 0 18px;
+  display: flex;
   align-items: center;
-  gap: 54px;
-}
-
-.yap-hero-copy {
-  position: relative;
-  z-index: 1;
-}
-
-.yap-hero-copy .apple-eyebrow {
-  margin-bottom: 10px;
+  gap: 8px;
   color: var(--yap-mint);
-  font-size: 20px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
-.yap-hero-copy h1 {
+.yap-landing-eyebrow::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--yap-mint);
+}
+
+.yap-landing-desc {
+  max-width: 26ch;
   margin: 0;
   color: var(--ap-ink);
-  font-size: 72px;
-  line-height: 0.98;
-  font-weight: 650;
+  font-size: clamp(24px, 3.4vw, 42px);
+  line-height: 1.18;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
 }
 
-.yap-hero-copy > p:last-child {
-  max-width: 20ch;
-  margin: 24px 0 0;
-  color: var(--ap-ink-soft);
-  font-size: 23px;
-  line-height: 1.35;
-  font-weight: 550;
+.yap-landing-desc .tone { color: var(--yap-mint); }
+
+.yap-landing-name {
+  margin: clamp(22px, 3vw, 44px) 0 0;
+  color: var(--ap-ink);
+  font-size: clamp(56px, 15vw, 190px);
+  line-height: 0.9;
+  font-weight: 650;
+  letter-spacing: -0.03em;
+  transform: scale(0.72);
+  transform-origin: left bottom;
+  opacity: 0;
+  transition: transform 0.6s cubic-bezier(0.34, 1.4, 0.5, 1), opacity 0.5s ease;
+}
+
+.yap-landing-name.pop {
+  transform: scale(1);
+  opacity: 1;
 }
 
 .yap-preview {
@@ -120,6 +164,7 @@
 }
 
 .yap-preview-status.listening { color: #187c5d; }
+.yap-preview-status.listening .brainohera-wordmark { color: #1d1d1f; }
 .yap-preview-status.listening i {
   background: var(--yap-mint-bright);
   box-shadow: 0 0 10px rgba(32, 169, 122, 0.8);
@@ -365,17 +410,19 @@
   font-weight: 500;
 }
 
+/* An editorial aside, not a panel. The coral rule carries the emphasis that a
+   filled box used to, without dropping a slab of black into a light page. */
 .yap-founder-note {
   max-width: 920px;
-  margin: 74px auto 0;
-  padding: 54px;
-  border-left: 4px solid var(--yap-coral);
-  color: #fff;
-  background: #151516;
+  margin: 84px auto 0;
+  padding: 4px 0 4px 34px;
+  border-left: 3px solid var(--yap-coral);
+  color: var(--ap-ink);
+  background: none;
 }
 
 .yap-founder-note h2 {
-  max-width: 15ch;
+  max-width: 20ch;
   margin: 0;
   font-size: 38px;
   line-height: 1.13;
@@ -386,7 +433,7 @@
 .yap-founder-note > p:not(.yap-kicker) {
   max-width: 67ch;
   margin: 22px 0 0;
-  color: #c7c7cc;
+  color: var(--ap-ink-soft);
   font-size: 18px;
   line-height: 1.65;
   font-weight: 500;
@@ -447,43 +494,15 @@
 .yap-rule-row strong { color: var(--ap-ink); font-size: 14px; }
 .yap-rule-row small { color: var(--ap-ink-soft); font-size: 12px; }
 
-.yap-black-band {
-  max-width: 1120px;
-  min-height: 430px;
-  margin: 86px auto 12px;
-  padding: 58px;
-  display: grid;
-  grid-template-columns: 1.1fr 0.9fr;
-  align-items: center;
-  gap: 50px;
-  color: #fff;
-  background: #151516;
-}
-
-.yap-black-band h2 {
-  margin: 0;
-  font-size: 44px;
-  line-height: 1.12;
-  font-weight: 650;
-}
-
-.yap-black-band p:not(.yap-kicker) {
-  max-width: 48ch;
-  margin: 20px 0 0;
-  color: #b4b4ba;
-  font-size: 17px;
-  line-height: 1.55;
-}
-
 .yap-done-visual {
-  min-height: 210px;
+  margin-top: 40px;
   display: grid;
-  place-items: center;
+  justify-items: start;
   align-content: center;
 }
 
 .yap-done-visual span {
-  color: #fff;
+  color: var(--ap-ink);
   font: 500 54px "SF Mono", ui-monospace, monospace;
 }
 
@@ -491,13 +510,14 @@
   width: 0;
   height: 2px;
   margin: 16px 0;
-  background: var(--yap-mint-bright);
+  background: var(--yap-mint);
   animation: yapStrike 3.2s ease-in-out infinite;
 }
 
 .yap-done-visual strong {
-  color: var(--yap-mint-bright);
+  color: #126b4f;
   font-size: 12px;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
@@ -516,7 +536,6 @@
 }
 
 .yap-links a:hover { text-decoration: underline; }
-.yap-foot { margin: 54px 0 0; color: var(--ap-ink-soft); font-size: 13px; }
 .yap-end { padding-bottom: 96px; }
 
 .yap-lab {
@@ -550,6 +569,250 @@
   margin: 18px 0 0;
   color: var(--ap-ink-soft);
   font: 500 12px "SF Mono", ui-monospace, monospace;
+}
+
+.yap-hero-specs {
+  margin: 30px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 26px;
+}
+
+.yap-hero-specs li {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.yap-hero-specs svg { width: 19px; height: 19px; flex: 0 0 auto; color: var(--yap-mint); }
+.yap-hero-specs span { display: grid; gap: 1px; }
+.yap-hero-specs strong { color: var(--ap-ink); font-size: 14px; font-weight: 600; }
+.yap-hero-specs small { color: var(--ap-ink-soft); font-size: 12px; }
+
+/* The two bars fill at their real durations, so the page shows the gap instead
+   of asserting it. Cloud takes 2.4s to cross; BrainoHERA is done in 0.4s. */
+.yap-lanes {
+  max-width: 860px;
+  margin: 18px auto 0;
+  padding: 0 var(--ap-gutter);
+  display: grid;
+  gap: 62px;
+}
+
+.yap-lane-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 26px;
+}
+
+.yap-lane-head strong { color: var(--ap-ink); font-size: 16px; font-weight: 600; }
+.yap-lane.cloud .yap-lane-head strong { color: var(--ap-ink-soft); }
+
+.yap-lane-time {
+  flex: 0 0 auto;
+  color: var(--ap-ink-soft);
+  font: 500 12px "SF Mono", ui-monospace, monospace;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.yap-lane.local .yap-lane-time { color: #126b4f; }
+
+.yap-lane-track {
+  position: relative;
+  height: 2px;
+  background: var(--ap-hairline);
+}
+
+/* The travelling head of each journey. Both lanes restart on the same 4s beat,
+   so the on-device dot is parked at its caret while the cloud dot is still out
+   over the internet somewhere. */
+.yap-lane-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 2px;
+  background: #b9b9c0;
+}
+
+.yap-lane-fill::after {
+  content: "";
+  position: absolute;
+  right: -5px;
+  top: -4px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #8c8c92;
+}
+
+.yap-lane.local .yap-lane-fill { background: var(--yap-mint); }
+.yap-lane.local .yap-lane-fill::after {
+  background: var(--yap-mint);
+  box-shadow: 0 0 0 5px rgba(32, 169, 122, 0.16);
+}
+
+.yap-lane.cloud .yap-lane-fill { animation: yapLaneCloud 4s linear infinite; }
+.yap-lane.local .yap-lane-fill { animation: yapLaneLocal 4s linear infinite; }
+
+@keyframes yapLaneCloud {
+  0% { width: 0; }
+  60%, 100% { width: 100%; }
+}
+
+@keyframes yapLaneLocal {
+  0% { width: 0; }
+  10%, 100% { width: 17%; }
+}
+
+.yap-lane-stop {
+  position: absolute;
+  top: 0;
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  transform: translateX(-50%);
+}
+
+.yap-lane-stop b {
+  width: 7px;
+  height: 7px;
+  margin-top: -2.5px;
+  border-radius: 50%;
+  background: var(--ap-hairline);
+}
+
+.yap-lane-stop small {
+  color: var(--ap-ink-soft);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.yap-lane-stop.end b { background: #b9b9c0; }
+.yap-lane-stop.end small { color: var(--ap-ink); font-weight: 600; }
+.yap-lane.local .yap-lane-stop.end b { background: var(--yap-mint); }
+.yap-lane.local .yap-lane-stop.end small { color: #126b4f; }
+
+/* End labels are pulled inward so neither edge hangs off the track, which would
+   push the page into a horizontal scroll on a phone. */
+.yap-lane-stop:first-of-type { transform: translateX(0); justify-items: start; }
+.yap-lane-stop.end { transform: translateX(-100%); justify-items: end; }
+
+.yap-local-foot {
+  max-width: 860px;
+  margin: 58px auto 0;
+  padding: 0 var(--ap-gutter);
+  color: var(--ap-ink-soft);
+  font-size: 14px;
+  line-height: 1.58;
+}
+
+.yap-claims {
+  max-width: 1120px;
+  margin: 76px auto 0;
+  padding: 0 var(--ap-gutter);
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 40px 56px;
+}
+
+.yap-claim {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  padding-top: 26px;
+  border-top: 1px solid var(--ap-hairline);
+}
+
+.yap-claim svg { width: 25px; height: 25px; color: var(--yap-mint); }
+.yap-claim h3 { margin: 0; color: var(--ap-ink); font-size: 22px; font-weight: 620; line-height: 1.2; }
+.yap-claim p { margin: 0; color: var(--ap-ink-soft); font-size: 15px; line-height: 1.62; }
+
+/* ── The shared SiteFooter, in this page's Apple palette ── */
+/* Both views already end on generous bottom padding, so the footer needs no
+   margin of its own. */
+.yap .home-footer {
+  padding: 64px var(--ap-gutter) 40px;
+  border-top: 1px solid var(--ap-hairline);
+  background: var(--ap-surface);
+}
+
+.yap .home-footer-inner { max-width: var(--ap-maxw); margin: 0 auto; }
+
+.yap .home-footer-top {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 40px;
+  justify-content: space-between;
+}
+
+.yap .home-footer-brand-block {
+  max-width: 320px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.yap .home-footer-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ap-ink);
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.yap .home-footer-tagline {
+  margin: 0;
+  color: var(--ap-ink-soft);
+  font-size: 14.5px;
+  line-height: 1.6;
+}
+
+.yap .home-footer-cta {
+  color: var(--yap-mint);
+  font-size: 15px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.yap .home-footer-cta:hover { text-decoration: underline; }
+
+.yap .home-footer-cols { display: flex; gap: 56px; flex-wrap: wrap; }
+.yap .home-footer-col { display: flex; flex-direction: column; gap: 9px; }
+
+.yap .home-footer-col-head {
+  margin-bottom: 5px;
+  color: var(--ap-ink);
+  font: 600 10.5px "SF Mono", ui-monospace, monospace;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.yap .home-footer-col a {
+  color: var(--ap-ink-soft);
+  font-size: 14.5px;
+  text-decoration: none;
+}
+
+.yap .home-footer-col a:hover { color: var(--ap-ink); }
+
+.yap .home-footer-bottom {
+  margin-top: 48px;
+  padding-top: 22px;
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  border-top: 1px solid var(--ap-hairline);
+  color: var(--ap-ink-soft);
+  font-size: 13px;
 }
 
 .yap-reveal {
@@ -595,26 +858,14 @@
 }
 
 @media (max-width: 860px) {
-  .yap-hero {
-    min-height: 0;
-    grid-template-columns: 1fr;
-    padding-top: 102px;
-    gap: 38px;
-  }
-  .yap-hero-copy { text-align: center; }
-  .yap-hero-copy > p:last-child { margin-inline: auto; }
-  .yap-hero-copy h1 { font-size: 58px; }
   .yap-flow { grid-template-columns: 1fr 1fr; }
   .yap-flow-step:nth-child(2) { border-right: 0; }
   .yap-flow-step:nth-child(n + 3) { border-top-color: #dedee2; }
   .yap-founder-note { margin-inline: var(--ap-gutter); }
-  .yap-black-band { margin-inline: var(--ap-gutter); grid-template-columns: 1fr; }
+  .yap-claims { grid-template-columns: 1fr; gap: 30px; }
 }
 
 @media (max-width: 560px) {
-  .yap-hero { padding-top: 96px; padding-bottom: 34px; }
-  .yap-hero-copy h1 { font-size: 44px; }
-  .yap-hero-copy > p:last-child { font-size: 19px; }
   .yap-preview { min-height: 430px; }
   .yap-editor { min-height: 320px; grid-template-columns: 1fr; grid-template-rows: minmax(190px, 1fr) 125px; }
   .yap-editor-copy { padding: 28px 24px; font-size: 18px; }
@@ -626,7 +877,7 @@
   .yap-done-command { padding-inline: 10px; }
   .yap-h2 { font-size: 32px; }
   .yap-p { font-size: 17px; }
-  .yap-founder-note { padding: 36px 26px; }
+  .yap-founder-note { padding-left: 22px; }
   .yap-founder-note h2 { font-size: 30px; }
   .yap-founder-note > p:not(.yap-kicker) { font-size: 16px; }
   .yap-flow { grid-template-columns: 1fr; }
@@ -634,14 +885,21 @@
   .yap-rule-row { grid-template-columns: 1fr; }
   .yap-rule-row > div { border-bottom: 1px solid #e4e4e8; }
   .yap-rule-row > div:last-child { border-bottom: 0; }
-  .yap-black-band { min-height: 0; padding: 38px 26px; }
-  .yap-black-band h2 { font-size: 32px; }
   .yap-done-visual span { font-size: 42px; }
+  .yap-hero-specs { gap: 12px 18px; }
+  .yap-claim h3 { font-size: 20px; }
+  /* Five stop labels will not fit a phone: the middle ones drop and the lane
+     keeps its two ends, which is the whole point of the picture anyway. */
+  .yap-lanes { gap: 52px; }
+  .yap-lane-head { flex-direction: column; align-items: flex-start; gap: 4px; }
+  .yap-lane.cloud .yap-lane-stop:not(:first-of-type):not(.end) { display: none; }
+  .yap-lane-stop small { font-size: 10px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .yap-reveal { opacity: 1; transform: none; transition: none; }
   .yap-preview-status.listening i,
+  .brainohera-shimmer,
   .yap-preview.is-listening .yap-mascot,
   .yap-preview.is-listening .yap-listening-ring,
   .yap-preview.is-listening .yap-wave i,
@@ -650,4 +908,10 @@
     animation: none;
   }
   .yap-done-visual i { width: 160px; }
+  .yap-landing-name { transform: none; opacity: 1; transition: none; }
+  /* Without the travel animation the lanes still have to read as a comparison,
+     so both fills sit at their finished lengths. */
+  .yap-lane .yap-lane-fill { animation: none; }
+  .yap-lane.cloud .yap-lane-fill { width: 100%; }
+  .yap-lane.local .yap-lane-fill { width: 17%; }
 }

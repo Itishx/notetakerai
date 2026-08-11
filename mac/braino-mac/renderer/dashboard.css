@@ -1,0 +1,561 @@
+/* ============================================================
+   Braino for Mac — dashboard window.
+
+   LAYOUT is the website dashboard's, class for class: sidebar with grouped
+   nav, sticky topbar, 880px pane, section rules, stats strip, row lists.
+   STYLE is Apple: SF Pro, the near-black ink ramp, hairlines and soft radii.
+
+   Keep those two apart when editing. Geometry rules below are ported from
+   src/pages/braino-dash.css and should stay as they are; colour and type are
+   ours and should stay Apple.
+   ============================================================ */
+
+.bd-root {
+  --paper: #ffffff;
+  --sidebar: #f4f4f7;
+  --surface: #ffffff;
+  --raise: #ffffff;
+  --ink: #1d1d1f;
+  --ink-2: #6e6e73;
+  --ink-3: #86868b;
+  --ink-4: #b4b4b9;
+  --line: #d9d9de;
+  --line-2: #ececf0;
+  --accent: #20a97a;
+  --accent-ink: #126b4f;
+  --accent-soft: rgba(32, 169, 122, 0.11);
+  --ok: #20a97a;
+  --ok-soft: rgba(32, 169, 122, 0.12);
+  --bad: #d9645b;
+  --bad-soft: rgba(217, 100, 91, 0.13);
+  --bd-shadow: 0 1px 2px rgba(29, 29, 31, 0.05), 0 18px 40px -24px rgba(29, 29, 31, 0.22);
+  --bd-r-sm: 8px;
+  --bd-r: 12px;
+  --bd-r-lg: 18px;
+
+  --display: -apple-system, "SF Pro Display", BlinkMacSystemFont, system-ui, sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, monospace;
+
+  background: var(--paper);
+  color: var(--ink);
+  font-family: -apple-system, "SF Pro Text", BlinkMacSystemFont, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  font-size: 14px;
+  color-scheme: light;
+}
+
+:root[data-theme="black"] .bd-root {
+  --paper: #0b0b0d;
+  --sidebar: #000000;
+  --surface: #141417;
+  --raise: #1b1b1e;
+  --ink: #f5f5f7;
+  --ink-2: #a1a1a6;
+  --ink-3: #86868b;
+  --ink-4: #5c5c62;
+  --line: rgba(255, 255, 255, 0.14);
+  --line-2: rgba(255, 255, 255, 0.08);
+  --accent: #3de8b2;
+  --accent-ink: #7ef0c4;
+  --accent-soft: rgba(61, 232, 178, 0.14);
+  --ok: #3de8b2;
+  --ok-soft: rgba(61, 232, 178, 0.14);
+  --bad: #ff8f85;
+  --bad-soft: rgba(255, 143, 133, 0.15);
+  --bd-shadow: 0 1px 2px rgba(0, 0, 0, 0.5), 0 24px 55px -28px rgba(0, 0, 0, 0.8);
+  color-scheme: dark;
+}
+
+:root[data-theme="white"] .bd-root {
+  --paper: #ffffff;
+  --sidebar: #fafafc;
+  --line: #e3e3e8;
+  --line-2: #f0f0f3;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body { overflow: hidden; }
+
+.bd-root button {
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  background: none;
+  color: inherit;
+  padding: 0;
+}
+
+.bd-display { font-family: var(--display); font-weight: 620; letter-spacing: -0.024em; line-height: 1.08; }
+.bd-mono { font-family: var(--mono); }
+
+.bd-eyebrow {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+/* ============================================================
+   Shell
+   ============================================================ */
+.bd-root {
+  height: 100%;
+  display: grid;
+  grid-template-columns: 236px minmax(0, 1fr);
+}
+
+/* A macOS source list: tinted away from the content pane so the two columns
+   read as different surfaces, not one flat sheet with a line down it. */
+.bd-sidebar {
+  border-right: 1px solid var(--line);
+  background: var(--sidebar);
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+  /* The traffic lights sit in this column, so the brand starts below them. */
+  padding: 46px 12px 12px;
+  -webkit-app-region: drag;
+}
+
+.bd-sidebar button, .bd-sidebar input { -webkit-app-region: no-drag; }
+
+.bd-brand { display: flex; align-items: center; gap: 9px; padding: 4px 10px 20px; }
+.bd-brand-wm { font-family: var(--display); font-size: 17px; font-weight: 640; letter-spacing: -0.02em; }
+
+.bd-face {
+  position: relative;
+  width: 22px; height: 22px; flex: 0 0 22px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #e79184, #a8382f);
+}
+
+.bd-face i { position: absolute; top: 34%; width: 4px; height: 5px; border-radius: 50%; background: #fff; }
+.bd-face i:first-child { left: 27%; }
+.bd-face i:last-child { right: 27%; }
+
+.bd-nav { flex: 1; overflow-y: auto; margin: 0 -6px; padding: 0 6px; }
+.bd-nav::-webkit-scrollbar { width: 0; }
+
+.bd-nav-grp {
+  padding: 20px 10px 7px;
+  font-size: 10px;
+  font-weight: 620;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+}
+
+.bd-nav-grp:first-child { padding-top: 2px; }
+
+.bd-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  /* The website's own row metrics. Tightening these is what made the column
+     feel cramped. */
+  padding: 8px 10px;
+  margin-bottom: 2px;
+  border-radius: 7px;
+  font-size: 13.5px;
+  font-weight: 450;
+  color: var(--ink-2);
+  white-space: nowrap;
+  width: 100%;
+  text-align: left;
+  transition: background 0.12s, color 0.12s;
+}
+
+.bd-nav-item:hover { background: rgba(120, 120, 128, 0.12); color: var(--ink); }
+
+/* Selected rows in a Mac source list lift onto their own surface rather than
+   just darkening. On a tinted sidebar that reads instantly. */
+.bd-nav-item.active {
+  background: var(--surface);
+  color: var(--ink);
+  font-weight: 550;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.09);
+}
+
+.bd-nav-item .bd-ic { width: 18px; height: 18px; flex: 0 0 18px; display: grid; place-items: center; color: var(--ink-3); }
+
+.bd-nav-item .bd-ic svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.bd-nav-item:hover .bd-ic { color: var(--ink-2); }
+.bd-nav-item.active .bd-ic { color: var(--accent); }
+.bd-nav-item .bd-nm { flex: 1; }
+.bd-nav-item .bd-ct { font-size: 11px; font-variant-numeric: tabular-nums; color: var(--ink-3); }
+.bd-nav-item.active .bd-ct { color: var(--ink-2); }
+
+:root[data-theme="black"] .bd-nav-item.active { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.6); }
+.bd-nav-item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+.bd-side-foot { padding-top: 10px; margin-top: 10px; border-top: 1px solid var(--line); }
+.bd-profile { display: flex; align-items: center; gap: 10px; padding: 7px 8px; border-radius: 8px; }
+.bd-profile:hover { background: rgba(120, 120, 128, 0.1); }
+
+.bd-avatar {
+  width: 30px; height: 30px; border-radius: 50%; flex: 0 0 30px;
+  display: grid; place-items: center;
+  font-size: 13px; font-weight: 600; color: #fff;
+  background: linear-gradient(135deg, #c9685a, #8a3e36);
+}
+
+.bd-profile .bd-pn { font-size: 13px; font-weight: 500; color: var(--ink); }
+.bd-profile .bd-pb { font-size: 11px; color: var(--ink-3); margin-top: 1px; }
+
+/* ---------- Main ---------- */
+.bd-main { height: 100vh; overflow-y: auto; background: var(--paper); }
+
+.bd-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  height: 46px;
+  padding: 0 24px;
+  background: color-mix(in srgb, var(--paper) 88%, transparent);
+  backdrop-filter: saturate(180%) blur(14px);
+  border-bottom: 1px solid var(--line-2);
+  -webkit-app-region: drag;
+}
+
+.bd-topbar > * { -webkit-app-region: no-drag; }
+.bd-topbar-end { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+
+.bd-kbd {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--ink-3);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 2px 6px;
+}
+
+.bd-live { width: 6px; height: 6px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 8px var(--ok); }
+
+.bd-pane { max-width: 880px; margin: 0 auto; padding: 46px 40px 120px; }
+
+@keyframes bdFade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.bd-view { display: none; }
+.bd-view.active { display: block; }
+.bd-view.active > * { animation: bdFade 0.35s ease both; }
+.bd-view.active > *:nth-child(2) { animation-delay: 0.03s; }
+.bd-view.active > *:nth-child(3) { animation-delay: 0.06s; }
+.bd-view.active > *:nth-child(4) { animation-delay: 0.09s; }
+.bd-view.active > *:nth-child(5) { animation-delay: 0.12s; }
+
+/* ---------- Page head ---------- */
+.bd-phead { margin-bottom: 34px; }
+
+.bd-phead h1 {
+  font-family: var(--display);
+  font-weight: 640;
+  letter-spacing: -0.026em;
+  font-size: clamp(30px, 4vw, 38px);
+  line-height: 1.06;
+  color: var(--ink);
+  margin: 0;
+}
+
+.bd-phead .bd-sub { font-size: 14px; color: var(--ink-2); margin-top: 8px; line-height: 1.5; }
+
+.bd-shead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 44px 0 14px;
+}
+
+.bd-shead:first-child { margin-top: 0; }
+
+.bd-shead h2 {
+  font-size: 15px;
+  font-weight: 620;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  margin: 0;
+}
+
+.bd-shead .bd-more { font-size: 12px; font-weight: 500; color: var(--ink-3); }
+
+/* ---------- Ask bar ---------- */
+.bd-ask {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 6px 6px 6px 18px;
+  box-shadow: var(--bd-shadow);
+  transition: border-color 0.15s;
+}
+
+.bd-ask:focus-within { border-color: var(--accent); }
+
+.bd-ask input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: none;
+  outline: none;
+  font: inherit;
+  font-size: 14.5px;
+  color: var(--ink);
+  padding: 10px 0;
+}
+
+.bd-ask input::placeholder { color: var(--ink-3); }
+
+.bd-send {
+  height: 34px;
+  padding: 0 17px;
+  border-radius: 10px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  transition: opacity 0.15s;
+}
+
+.bd-send:disabled { opacity: 0.4; }
+
+.bd-quick { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+
+.bd-chip {
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 12.5px;
+  color: var(--ink-2);
+  background: var(--surface);
+  transition: border-color 0.12s, color 0.12s;
+}
+
+.bd-chip:hover { border-color: var(--ink-4); color: var(--ink); }
+
+.bd-answer {
+  margin-top: 14px;
+  padding: 15px 18px;
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--accent);
+  border-radius: var(--bd-r);
+  background: var(--surface);
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--ink);
+}
+
+.bd-answer .bd-eyebrow { display: block; margin-bottom: 5px; }
+.bd-answer.is-working { border-left-color: var(--ink-4); color: var(--ink-2); }
+.bd-answer.is-error { border-left-color: var(--bad); }
+
+/* ---------- Rows ---------- */
+.bd-list { border-top: 1px solid var(--line-2); }
+
+.bd-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 15px 10px;
+  margin: 0 -10px;
+  border-bottom: 1px solid var(--line-2);
+  border-radius: 10px;
+  transition: background 0.12s;
+  width: calc(100% + 20px);
+  text-align: left;
+}
+
+.bd-row:hover { background: var(--surface); }
+
+.bd-row .bd-ic {
+  width: 30px; height: 30px; border-radius: 8px; flex: 0 0 30px;
+  display: grid; place-items: center;
+  color: var(--ink-2); background: var(--line-2);
+  font-size: 12px;
+}
+
+.bd-row .bd-bd { flex: 1; min-width: 0; }
+.bd-row .bd-ti { font-size: 14px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bd-row .bd-ti.wrap { white-space: normal; }
+
+.bd-row .bd-mt {
+  font-size: 11.5px; color: var(--ink-3); margin-top: 4px;
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+}
+
+.bd-row .bd-tm { font-size: 11.5px; color: var(--ink-3); white-space: nowrap; flex: 0 0 auto; }
+.bd-dotsep { width: 3px; height: 3px; border-radius: 50%; background: var(--ink-4); flex: 0 0 3px; }
+
+/* ---------- Tags ---------- */
+.bd-tag {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0;
+  padding: 2px 7px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  background: var(--line-2);
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+
+.bd-tag.ok { background: var(--ok-soft); color: var(--ok); }
+.bd-tag.bad { background: var(--bad-soft); color: var(--bad); }
+.bd-tag.accent { background: var(--accent-soft); color: var(--accent); }
+
+/* ---------- Card + stats ---------- */
+.bd-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--bd-r-lg); padding: 22px 24px; }
+
+.bd-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  border: 1px solid var(--line);
+  border-radius: var(--bd-r-lg);
+  overflow: hidden;
+  background: var(--surface);
+}
+
+.bd-stats .bd-st { padding: 20px 22px; border-right: 1px solid var(--line-2); }
+.bd-stats .bd-st:last-child { border-right: none; }
+.bd-stats .bd-st .bd-v { font-family: var(--display); font-size: 34px; font-weight: 620; letter-spacing: -0.03em; line-height: 1; color: var(--ink); font-variant-numeric: tabular-nums; }
+
+.bd-stats .bd-st .bd-l { font-size: 12.5px; color: var(--ink-2); margin-top: 7px; }
+
+@media (max-width: 760px) {
+  .bd-stats { grid-template-columns: 1fr 1fr; }
+  .bd-stats .bd-st { border-bottom: 1px solid var(--line-2); }
+}
+
+/* ---------- Chart ---------- */
+.bd-chart {
+  height: 132px;
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--line-2);
+}
+
+.bd-chart .bd-col { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; position: relative; }
+
+.bd-chart .bd-col small {
+  position: absolute;
+  bottom: -18px;
+  width: 100%;
+  font-size: 10px;
+  color: var(--ink-4);
+  text-align: center;
+}
+
+.bd-chart .bd-bar {
+  width: 100%;
+  min-height: 3px;
+  border-radius: 4px 4px 2px 2px;
+  background: var(--accent);
+  transition: height 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.bd-chart .bd-bar.empty { background: var(--line); }
+.bd-chart .bd-col.today .bd-bar { background: var(--accent-ink); }
+.bd-chart .bd-col.today small { color: var(--accent-ink); font-weight: 650; }
+
+/* ---------- Field rows ---------- */
+.bd-field {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 13px 0;
+  border-bottom: 1px solid var(--line-2);
+}
+
+.bd-field:last-child { border-bottom: none; }
+.bd-field dt { font-size: 13.5px; color: var(--ink-2); }
+.bd-field dd { margin: 0; font-size: 13.5px; color: var(--ink); text-align: right; font-variant-numeric: tabular-nums; }
+.bd-field dd.bd-mono { font-family: var(--mono); font-size: 11px; color: var(--ink-3); }
+
+/* ---------- Folders ---------- */
+.bd-folder { margin-bottom: 26px; }
+
+.bd-folder-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0 0 4px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.bd-folder-head em { margin-left: auto; font-style: normal; color: var(--ink-4); }
+
+/* ---------- Empty ---------- */
+.bd-empty {
+  padding: 26px;
+  border: 1px dashed var(--line);
+  border-radius: var(--bd-r);
+  text-align: center;
+  font-size: 13.5px;
+  color: var(--ink-3);
+  line-height: 1.55;
+}
+
+.bd-empty small { display: block; margin-top: 6px; font-family: var(--mono); font-size: 11px; }
+
+/* ---------- Permissions ---------- */
+.bd-perm {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 18px;
+  padding: 20px 0;
+  border-bottom: 1px solid var(--line-2);
+}
+
+.bd-perm:last-child { border-bottom: none; }
+.bd-perm h3 { margin: 0 0 5px; font-size: 14.5px; font-weight: 500; color: var(--ink); }
+.bd-perm p { margin: 0; max-width: 52ch; font-size: 13px; line-height: 1.5; color: var(--ink-2); }
+.bd-perm > div:last-child { display: flex; align-items: center; gap: 9px; }
+
+.bd-btn { padding: 7px 13px; border: 1px solid var(--line); border-radius: var(--bd-r-sm); background: var(--surface); font-size: 12.5px; color: var(--ink); }
+.bd-btn:hover { border-color: var(--ink-4); }
+
+/* ---------- Theme switch ---------- */
+.bd-theme { display: flex; gap: 3px; }
+.bd-theme button { width: 15px; height: 15px; border-radius: 50%; border: 1px solid var(--line); }
+.bd-theme button.on { box-shadow: 0 0 0 2px var(--accent); }
+.bd-theme [data-theme-set="paper"] { background: #fbfbfd; }
+.bd-theme [data-theme-set="white"] { background: #ffffff; }
+.bd-theme [data-theme-set="black"] { background: #000000; }
+
+@media (prefers-reduced-motion: reduce) {
+  .bd-view.active > * { animation: none; }
+  .bd-chart .bd-bar { transition: none; }
+}
+
+/* Sections the desktop app does not serve yet are shown and disabled, the same
+   way the website greys out Recordings and Collections, rather than hidden —
+   the shape of the product should be the same in both places. */
+.bd-nav-item.muted { color: var(--ink-4); cursor: default; }
+.bd-nav-item.muted:hover { background: none; color: var(--ink-4); }
+.bd-nav-item.muted .bd-ic { color: var(--ink-4); }
+.bd-nav-item.muted .bd-ct { color: var(--ink-4); }

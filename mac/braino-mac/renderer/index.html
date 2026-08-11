@@ -34,7 +34,7 @@
             <path d="M 186.4 2 Q 179.4 20 186.4 37 Q 193.4 54 186.4 72" fill="none" stroke="#FBD9D2" stroke-width="1.1" stroke-linecap="round" opacity="0.5" />
           </svg>
           <div class="nf-iomi-identity" aria-hidden="true">
-            <span>I</span><span>O</span><span>M</span><span>I</span>
+            <span>F</span><span>O</span><span>U</span><span>N</span><span>D</span><span>R</span><span>Y</span>
           </div>
           <div class="nf-iomi-awake-eyes" aria-hidden="true"><i></i><i></i></div>
           <div class="nf-iomi-expanded-card" aria-hidden="true">
@@ -74,6 +74,51 @@
           </div>
           <div class="nf-cap nf-cap-l"></div>
           <div class="nf-cap nf-cap-r"></div>
+          <section class="nf-yap-surface" aria-live="polite" aria-label="BrainoHERA live transcript">
+            <header class="nf-yap-head">
+              <span><i aria-hidden="true"></i><span class="nf-brainohera-wordmark">Braino<span class="nf-hera-shimmer">HERA</span></span></span>
+              <b>Listening</b>
+            </header>
+            <div class="nf-yap-transcript">
+              <p class="nf-yap-empty">Start talking. I’m writing it down.</p>
+            </div>
+          </section>
+          <!-- Meeting recorder. Same drop-down-from-the-notch family as the Yap and answer
+               surfaces, but translucent: this one sits over your work for the whole meeting,
+               so it reads as an overlay rather than a black card parked on your screen. -->
+          <section class="nf-meeting-surface" aria-live="polite" aria-label="Braino meeting recorder">
+            <header class="nf-meeting-head">
+              <span class="nf-meeting-rec"><i aria-hidden="true"></i><b class="nf-meeting-clock">00:00</b></span>
+              <span class="nf-meeting-title">Meeting</span>
+              <span class="nf-meeting-people"></span>
+              <button class="nf-meeting-stealth is-on" type="button" aria-pressed="true" title="Hidden from screen shares">
+                <svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true">
+                  <path class="nf-eye-open" d="M12 5c5 0 9 4.5 9 7s-4 7-9 7-9-4.5-9-7 4-7 9-7zm0 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8z" fill="currentColor"/>
+                  <path class="nf-eye-slash" d="M3.5 3.5l17 17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+              </button>
+              <button class="nf-meeting-stop" type="button">Stop</button>
+            </header>
+            <div class="nf-meeting-live">
+              <div class="nf-meeting-speaker">
+                <span class="nf-meeting-dot" aria-hidden="true"></span>
+                <b class="nf-meeting-speaker-name">Listening</b>
+                <span class="nf-meeting-wave" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
+              </div>
+              <div class="nf-meeting-lines"></div>
+            </div>
+            <div class="nf-meeting-notes" hidden>
+              <small>Notes</small>
+              <ul></ul>
+            </div>
+          </section>
+          <section class="nf-inline-caption" aria-live="polite" aria-label="Braino live voice caption">
+            <header>
+              <small class="nf-inline-caption-label">You said</small>
+              <span class="nf-inline-caption-state">Listening</span>
+            </header>
+            <p class="nf-inline-caption-text"></p>
+          </section>
           <div id="nf-status"></div>
           <div id="nf-status-2"></div>
           <div class="nf-volume" aria-hidden="true">
@@ -116,30 +161,41 @@
           <div class="nf-think-dots"><i></i><i></i><i></i></div>
           <div class="nf-think-arrow"></div>
           <section class="nf-thinking-canvas" aria-live="polite" aria-label="Braino task progress">
+            <div class="nf-response-face" aria-hidden="true">
+              <svg viewBox="0 0 230 72" preserveAspectRatio="none">
+                <path class="nf-response-fold" d="M115 0 Q111 14 115 27 Q119 40 115 56" />
+                <path class="nf-response-fold" d="M25 4 Q14 13 25 22 Q12 31 25 40 Q14 50 30 61" />
+                <path class="nf-response-fold" d="M61 1 Q49 11 60 20 Q47 30 61 39 Q49 49 65 63" />
+                <path class="nf-response-fold" d="M169 1 Q181 11 170 20 Q183 30 169 39 Q181 49 165 63" />
+                <path class="nf-response-fold" d="M205 4 Q216 13 205 22 Q218 31 205 40 Q216 50 200 61" />
+                <path class="nf-response-lid" d="M93 29 Q103 36 113 29" />
+                <path class="nf-response-lid" d="M117 29 Q127 36 137 29" />
+                <path class="nf-response-smile" d="M108 47 Q115 54 122 47" />
+              </svg>
+            </div>
             <div class="nf-thinking-head">
-              <div class="nf-thinking-brand">
-                <span class="nf-thinking-orb" aria-hidden="true"><i></i><i></i></span>
-                <span>Braino</span>
-              </div>
+              <div class="nf-thinking-brand"><i aria-hidden="true"></i><span>Braino is thinking</span></div>
               <span class="nf-thinking-state">Thinking</span>
-              <span class="nf-thinking-live" aria-hidden="true"><i></i></span>
             </div>
-            <div class="nf-thinking-flow" aria-label="Live request flow">
-              <div class="nf-flow-node nf-flow-prompt">
-                <small>You</small>
-                <span>Request received</span>
-              </div>
-              <i class="nf-flow-arrow" aria-hidden="true"></i>
-              <div class="nf-flow-node nf-flow-step active">
-                <small>Braino</small>
-                <strong class="nf-thinking-current">Understanding</strong>
-              </div>
-              <i class="nf-flow-arrow" aria-hidden="true"></i>
-              <div class="nf-flow-node nf-flow-response">
-                <small>Answer</small>
-                <span>Preparing</span>
-              </div>
+            <div class="nf-thinking-lines">
+              <p class="nf-flow-prompt"><span>Reading the page and understanding what matters.</span></p>
+              <p class="nf-thinking-current">Separating the useful signal from the repetition.</p>
+              <p class="nf-flow-response"><span>Preparing the answer in your context.</span></p>
             </div>
+          </section>
+          <section class="nf-answer-surface" aria-live="polite" aria-label="Braino answer">
+            <div class="nf-answer-short-row">
+              <span><small>Braino</small><strong class="nf-answer-short-text"></strong></span>
+              <button class="nf-answer-done" type="button">Done</button>
+            </div>
+            <header class="nf-answer-long-head">
+              <span><i></i><i></i><b>Braino</b></span>
+              <button class="nf-answer-done" type="button">Done</button>
+            </header>
+            <article>
+              <small class="nf-answer-label">Answer from this page</small>
+              <div class="nf-answer-body"></div>
+            </article>
           </section>
         </div>
         <!-- The keynote shimmer: a white-to-blue light that traces the island's
@@ -232,6 +288,7 @@
         </div>
       </section>
     </main>
+    <script src="../notch-response.cjs"></script>
     <script src="./her-presence.js"></script>
     <script src="./her-mode.js"></script>
     <script type="module" src="./braino-mac.js"></script>

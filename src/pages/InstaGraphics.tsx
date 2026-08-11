@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { BRAINO_WALKER_SVG } from "@/components/brainoWalkerSvg";
 import "./insta-graphics.css";
 
-type InstaPreview = "braino-os" | "iomi-boot" | "browser-notch" | "chrome-system";
 type IomiBootPhase = "shimmer" | "authenticating" | "awake" | "expanded" | "mascot";
 type BrowserNotchPhase = "idle" | "input" | "listening" | "hatching" | "expanded" | "speaking" | "hopped";
 
@@ -235,7 +234,7 @@ function BrowserNotchPrototype() {
   );
 }
 
-type ChromeSystemPhase = "invoking" | "authenticating" | "authenticated" | "idle" | "input" | "mode-menu" | "listening" | "working" | "expanded-thinking" | "short-answer" | "long-answer" | "speaking";
+type ChromeSystemPhase = "invoking" | "authenticating" | "authenticated" | "greeting" | "idle" | "input" | "mode-menu" | "listening" | "working" | "expanded-thinking" | "short-answer" | "long-answer" | "speaking";
 
 function NotchWalker() {
   const laneRef = useRef<HTMLDivElement>(null);
@@ -277,24 +276,32 @@ function NotchWalker() {
   return <div ref={laneRef} className="ig-cs-local-walk-lane"><div ref={walkerRef} className="ig-cs-local-walker"><div className="ig-cs-walker-flip" dangerouslySetInnerHTML={{ __html: BRAINO_WALKER_SVG }} /></div></div>;
 }
 
-function ChromeSystemPrototype() {
+export function ChromeSystemPrototype({ socialLoop = false }: { socialLoop?: boolean } = {}) {
   const [phase, setPhase] = useState<ChromeSystemPhase>("idle");
   const [replayId, setReplayId] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [showCoachmark, setShowCoachmark] = useState(true);
+  const [showCoachmark, setShowCoachmark] = useState(!socialLoop);
   const [interactionKind, setInteractionKind] = useState<"text" | "voice">("text");
   const [draft, setDraft] = useState("");
   const [glassTheme, setGlassTheme] = useState<"readable" | "liquid">("readable");
   const [authRunId, setAuthRunId] = useState(0);
 
   useEffect(() => {
+    if (socialLoop) setReplayId(1);
+  }, [socialLoop]);
+
+  useEffect(() => {
     if (!authRunId) return;
     setShowCoachmark(false);
     setPhase("invoking");
+    // Beat-for-beat with the Mac's runNotchBoot(): green verdict, then a 1100ms
+    // hold on the open eyes, then the island spreads into the greeting, then he
+    // drops out of the notch and the bar settles to idle.
     const authenticating = window.setTimeout(() => setPhase("authenticating"), 1250);
     const success = window.setTimeout(() => setPhase("authenticated"), 3150);
-    const ready = window.setTimeout(() => setPhase("idle"), 4050);
-    return () => { window.clearTimeout(authenticating); window.clearTimeout(success); window.clearTimeout(ready); };
+    const greeting = window.setTimeout(() => setPhase("greeting"), 4250);
+    const ready = window.setTimeout(() => setPhase("idle"), 7900);
+    return () => { window.clearTimeout(authenticating); window.clearTimeout(success); window.clearTimeout(greeting); window.clearTimeout(ready); };
   }, [authRunId]);
 
   useEffect(() => {
@@ -334,27 +341,40 @@ function ChromeSystemPrototype() {
     setInteractionKind("voice");
     setPhase("idle");
     setIsPlaying(true);
-    const sequence: Array<[ChromeSystemPhase, number]> = [
+    const sequence: Array<[ChromeSystemPhase, number]> = socialLoop ? [
+      ["idle", 0],
+      ["input", 900],
+      ["mode-menu", 2200],
+      ["listening", 3900],
+      ["speaking", 5600],
+      ["short-answer", 7100],
+      ["long-answer", 8700],
+      ["idle", 12000],
+    ] : [
       ["invoking", 300],
       ["authenticating", 1650],
       ["authenticated", 3550],
-      ["idle", 4450],
-      ["input", 5550],
-      ["mode-menu", 7950],
-      ["listening", 10650],
-      ["working", 13350],
-      ["expanded-thinking", 16450],
-      ["speaking", 19950],
-      ["short-answer", 22250],
-      ["long-answer", 24950],
-      ["idle", 31350],
+      ["greeting", 4650],
+      ["idle", 8300],
+      ["input", 9400],
+      ["mode-menu", 11800],
+      ["listening", 14500],
+      ["working", 17200],
+      ["expanded-thinking", 20300],
+      ["speaking", 23800],
+      ["short-answer", 26100],
+      ["long-answer", 28800],
+      ["idle", 35200],
     ];
     const timers = sequence.map(([nextPhase, delay], index) => window.setTimeout(() => {
       setPhase(nextPhase);
-      if (index === sequence.length - 1) setIsPlaying(false);
+      if (index === sequence.length - 1) {
+        if (socialLoop) setReplayId((value) => value + 1);
+        else setIsPlaying(false);
+      }
     }, delay));
     return () => timers.forEach((timer) => window.clearTimeout(timer));
-  }, [replayId]);
+  }, [replayId, socialLoop]);
 
   const themeToggle = (
     <button
@@ -369,7 +389,7 @@ function ChromeSystemPrototype() {
   );
 
   return (
-    <div className="ig-frame ig-chrome-system-frame" id="ig-chrome-system">
+    <div className={`ig-frame ig-chrome-system-frame${socialLoop ? " is-social-loop" : ""}`} id={socialLoop ? undefined : "ig-chrome-system"}>
       <div className={`ig-chrome-system theme-${glassTheme} phase-${phase}`}>
         <header className="ig-cs-browser-bar">
           <i /><i /><i />
@@ -409,6 +429,22 @@ function ChromeSystemPrototype() {
             <small>Talk to Braino</small>
           </span>
           <span className="ig-cs-notch-auth"><small>{phase === "authenticated" ? "Authenticated" : "Authenticating"}</small><i /></span>
+          {/* The Mac's nf-iomi-expanded-card, verbatim: the face steps aside, the
+              island opens into two columns, and a vertical rule separates the
+              greeting from the wake shortcuts. */}
+          <span className="ig-cs-notch-greeting">
+            <span className="ig-cs-greet-copy">
+              <strong><span>Good</span><span>evening,</span><span>Itish.</span></strong>
+              <small>Everything is ready.</small>
+            </span>
+            <i className="ig-cs-greet-divider" />
+            <span className="ig-cs-greet-wake">
+              <span className="ig-cs-greet-eyes"><i /><i /></span>
+              <small>Wake Braino</small>
+              <span className="ig-cs-greet-keys"><kbd>Control</kbd><kbd>Control</kbd></span>
+              <span className="ig-cs-greet-keys"><kbd>Click</kbd><em>to type</em></span>
+            </span>
+          </span>
           <span className="ig-cs-notch-input">
             <span><small>Ask Braino</small><input value={draft} onChange={(event) => setDraft(event.target.value)} onClick={(event) => event.stopPropagation()} onKeyDown={(event) => { if (event.key === "Enter" && draft.trim()) { event.preventDefault(); setInteractionKind("text"); setPhase("working"); } }} placeholder="Summarise this page…" /></span>
             <button type="button" className="ig-cs-mode-trigger" onClick={(event) => { event.stopPropagation(); setPhase("mode-menu"); }}>Auto⌄</button>
@@ -452,124 +488,301 @@ function ChromeSystemPrototype() {
           </span>
           <span className="ig-cs-notch-speaking"><small>Speaking</small><i /><i /><i /></span>
         </section>
-        {showCoachmark && phase === "idle" && <div className="ig-cs-coachmark"><span>Click to type</span><small>Control ×2 to talk</small></div>}
+        {/* runIomiBootMascotExit(): he is born inside the notch, then drops out of
+            it into the visible page. Outside the notch so nothing clips him. */}
+        {phase === "greeting" && (
+          <div className="ig-cs-boot-mascot" aria-hidden="true" dangerouslySetInnerHTML={{ __html: BRAINO_WALKER_SVG }} />
+        )}
+        {!socialLoop && showCoachmark && phase === "idle" && <div className="ig-cs-coachmark"><span>Click to type</span><small>Control ×2 to talk</small></div>}
 
-        <div className="ig-cs-controls" aria-label="Chrome system states">
+        {!socialLoop && <div className="ig-cs-controls" aria-label="Chrome system states">
           <span>Preview state</span>
-          {(["invoking", "authenticating", "authenticated", "idle", "input", "mode-menu", "listening", "working", "expanded-thinking", "speaking", "short-answer", "long-answer"] as ChromeSystemPhase[]).map((item) => (
+          {(["invoking", "authenticating", "authenticated", "greeting", "idle", "input", "mode-menu", "listening", "working", "expanded-thinking", "speaking", "short-answer", "long-answer"] as ChromeSystemPhase[]).map((item) => (
             <button key={item} type="button" disabled={isPlaying} className={phase === item ? "is-active" : ""} onClick={() => { if (item === "listening" || item === "speaking") setInteractionKind("voice"); if (item === "input") setInteractionKind("text"); setPhase(item); }}>{item}</button>
           ))}
           <button type="button" className="ig-cs-replay" onClick={() => setReplayId((value) => value + 1)}>{isPlaying ? "Playing…" : "Replay flow"}</button>
-        </div>
+        </div>}
       </div>
     </div>
   );
 }
 
-/*
-  /InstaGraphics — static 9:16 (1080x1920) export frames for Instagram
-  Stories/Reels. Each .ig-frame is a fixed-size 1080x1920 element (native
-  resolution, for a pixel-perfect screenshot) — CSS-scaled down purely for
-  on-screen preview so it fits the viewport instead of scrolling off below
-  the fold. To export: DevTools → Elements → select the .ig-frame node →
-  right-click → "Capture node screenshot" (captures at the true 1080x1920,
-  ignoring the on-screen preview scale).
-*/
-export default function InstaGraphics() {
-  const wrapRef = useRef<HTMLDivElement>(null);
-  const [preview, setPreview] = useState<InstaPreview>(() =>
-    new URLSearchParams(window.location.search).get("design") === "iomi" ? "iomi-boot"
-      : new URLSearchParams(window.location.search).get("design") === "browser-notch" ? "browser-notch"
-        : new URLSearchParams(window.location.search).get("design") === "chrome-system" ? "chrome-system"
-        : "braino-os"
-  );
+type TwinModePhase = "alone" | "discovering" | "locked" | "handoff";
 
-  useEffect(() => {
-    const fit = () => {
-      if (new URLSearchParams(window.location.search).get("export") === "1") {
-        wrapRef.current?.style.setProperty("--ig-scale", "1");
-        wrapRef.current?.classList.add("is-exporting");
-        return;
-      }
-      const scale = Math.min((window.innerHeight * 0.94) / 1920, (window.innerWidth * 0.94) / 1080);
-      wrapRef.current?.style.setProperty("--ig-scale", String(scale));
-    };
-    fit();
-    window.addEventListener("resize", fit);
-    return () => window.removeEventListener("resize", fit);
+// Both Brainos on one screen: the Mac notch lives in the menubar, the browser
+// notch hangs off the tab strip. The whole design question is how they SIGNAL
+// each other, so the thread between them is the subject, not decoration.
+const TWIN_SEQUENCE: ReadonlyArray<[TwinModePhase, number]> = [
+  ["alone", 300],
+  ["discovering", 2600],
+  ["locked", 5400],
+  ["handoff", 8600],
+  ["locked", 12400],
+];
+
+const TWIN_LINES: Record<TwinModePhase, { mac: string; browser: string; note: string }> = {
+  alone: { mac: "asleep", browser: "How you doing?", note: "Browser Braino only. No Mac heartbeat." },
+  discovering: { mac: "…", browser: "Hold on. Someone else is up.", note: "Handshake in flight." },
+  locked: { mac: "I'm here.", browser: "We're on both.", note: "Two Brainos, one mind. Rings breathe together." },
+  handoff: { mac: "Taking it.", browser: "This one needs the Mac.", note: "Work crossing the thread." },
+};
+
+// One face, two homes. Same eyes as the production notch so the design reads as
+// Braino and not a generic status light.
+function TwinFace({ awake }: { awake: boolean }) {
+  return (
+    <svg className={`ig-tw-face${awake ? " is-awake" : ""}`} viewBox="0 0 230 72" preserveAspectRatio="none" aria-hidden="true">
+      <g className="ig-tw-eye"><circle cx="103" cy="29" r="10" /><g className="ig-tw-pupil"><circle cx="104" cy="30" r="4.8" /><circle cx="106" cy="27.5" r="1.7" /></g></g>
+      <g className="ig-tw-eye"><circle cx="127" cy="29" r="10" /><g className="ig-tw-pupil"><circle cx="128" cy="30" r="4.8" /><circle cx="130" cy="27.5" r="1.7" /></g></g>
+      <g className="ig-tw-lids"><path d="M93 29 Q103 36 113 29" /><path d="M117 29 Q127 36 137 29" /></g>
+      <path className="ig-tw-smile" d="M108 47 Q115 54 122 47" />
+    </svg>
+  );
+}
+
+function TwinModePrototype() {
+  const [phase, setPhase] = useState<TwinModePhase>("locked");
+  const [runId, setRunId] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
+
+  const replay = useCallback(() => {
+    setPhase("alone");
+    setRunId((value) => value + 1);
   }, []);
 
-  return (
-    <div className={`ig-page${preview === "iomi-boot" ? " is-iomi-preview" : ""}${preview === "browser-notch" ? " is-browser-preview" : ""}${preview === "chrome-system" ? " is-chrome-system-preview" : ""}`} ref={wrapRef}>
-      <nav className="ig-preview-switcher" aria-label="Instagraphics previews">
-        <button type="button" className={preview === "braino-os" ? "is-active" : ""} onClick={() => setPreview("braino-os")}>
-          Braino post
-        </button>
-        <button type="button" className={preview === "iomi-boot" ? "is-active" : ""} onClick={() => setPreview("iomi-boot")}>
-          IOMI boot
-        </button>
-        <button type="button" className={preview === "browser-notch" ? "is-active" : ""} onClick={() => setPreview("browser-notch")}>
-          Browser notch
-        </button>
-        <button type="button" className={preview === "chrome-system" ? "is-active" : ""} onClick={() => setPreview("chrome-system")}>
-          Chrome system
-        </button>
-      </nav>
+  useEffect(() => {
+    if (runId === 0) return;
+    setIsPlaying(true);
+    const timers = TWIN_SEQUENCE.map(([next, delay], index) =>
+      window.setTimeout(() => {
+        setPhase(next);
+        if (index === TWIN_SEQUENCE.length - 1) setIsPlaying(false);
+      }, delay)
+    );
+    return () => timers.forEach((timer) => window.clearTimeout(timer));
+  }, [runId]);
 
-      {preview === "iomi-boot" ? <IomiBootPrototype /> : preview === "browser-notch" ? <BrowserNotchPrototype /> : preview === "chrome-system" ? <ChromeSystemPrototype /> : <div className="ig-frame" id="ig-braino-os">
-        <header className="ig-story-header">
-          <span className="ig-wordmark">Braino</span>
-          <span className="ig-prelaunch">PreLaunch · Saturday</span>
+  const macAwake = phase !== "alone";
+  const line = TWIN_LINES[phase];
+
+  return (
+    <div className="ig-frame ig-twin-frame" id="ig-twin-mode">
+      <div className={`ig-twin-desktop phase-${phase}`}>
+        {/* ── macOS menubar + the Mac app's notch ── */}
+        <header className="ig-tw-menubar">
+          <span className="ig-tw-mb-apps"><b>Braino</b><i>File</i><i>Edit</i><i>View</i></span>
+          <div className="ig-tw-mac-notch">
+            <span className="ig-tw-ring ig-tw-ring-blue" aria-hidden="true" />
+            <TwinFace awake={macAwake} />
+            <span className="ig-tw-notch-say">{line.mac}</span>
+          </div>
+          <span className="ig-tw-mb-status"><i>􀙇</i><i>􀋲</i><i>9:41</i></span>
         </header>
 
-        <main className="ig-story-copy">
-          <p className="ig-kicker">Hi, just had the best idea ever.</p>
-          <h1>
-            Build your own
-            <br />
-            version of <em>Braino.</em>
-          </h1>
-          <img className="ig-mascot" src="/reactions/braino-idle.svg" alt="" />
+        {/* ── The thread. This is the whole idea: one lit path between them. ── */}
+        <div className="ig-tw-thread" aria-hidden="true">
+          <span className="ig-tw-thread-line" />
+          <span className="ig-tw-thread-packet" />
+        </div>
 
-          <div className="ig-rule" />
+        {/* ── The browser window, with the extension's own notch ── */}
+        <div className="ig-tw-window">
+          <header className="ig-tw-chrome-bar">
+            <i /><i /><i />
+            <span>trybraino.com</span>
+            <b>⋯</b>
+          </header>
 
-          <p className="ig-intro">
-            I love Braino so much because I built him. He speaks like me,
-            is trained on me, and that&apos;s why he feels like my kid.
-          </p>
-
-          <p className="ig-reveal">
-            Now you&apos;ll be able to customise
-            <br /><strong>your own version of Braino.</strong>
-          </p>
-
-          <div className="ig-choices">
-            <span>Your own design</span>
-            <span>Your preferred voice</span>
-            <span>Choose from a set of skills</span>
+          <div className="ig-tw-browser-notch">
+            <span className="ig-tw-ring ig-tw-ring-coral" aria-hidden="true" />
+            <TwinFace awake />
+            <span className="ig-tw-notch-say">{line.browser}</span>
           </div>
 
-          <p className="ig-examples">
-            Make an <strong>Iron Man Braino.</strong>
-            <br />Make a <strong>Barbie Braino.</strong>
-          </p>
+          <main className="ig-tw-page">
+            <div className="ig-tw-page-skeleton"><i /><i /><i /><i /></div>
+          </main>
 
-          <p className="ig-city">
-            And every Braino ever made lives together in one city.
-            <br />Lowkey Black Mirror type shit.
-          </p>
-        </main>
+          <div className="ig-tw-mascot" aria-hidden="true" dangerouslySetInnerHTML={{ __html: BRAINO_WALKER_SVG }} />
+        </div>
 
-        <footer className="ig-story-footer">
-          <div className="ig-powered">
-            <small>All powered by</small>
-            <span>Braino<b>OS</b></span>
-          </div>
-          <p>You own the look. <strong>I own the tech.</strong></p>
-          <p className="ig-kid">He&apos;s my kid. <strong>He should feel like yours too.</strong></p>
-          <span className="ig-date">Braino PreLaunch · Saturday</span>
-        </footer>
-      </div>}
+        {/* ── The readable state, bottom-left, the way a real HUD would sit ── */}
+        <div className="ig-tw-hud">
+          <span className="ig-tw-badge ig-tw-badge-browser"><i /> Browser</span>
+          <span className="ig-tw-badge ig-tw-badge-mac"><i /> Mac</span>
+          <span className="ig-tw-hud-note">{line.note}</span>
+        </div>
+      </div>
+
+      <div className="ig-cs-controls ig-twin-controls" aria-label="Twin mode states">
+        <span>Twin state</span>
+        {(["alone", "discovering", "locked", "handoff"] as TwinModePhase[]).map((item) => (
+          <button key={item} type="button" disabled={isPlaying} className={phase === item ? "is-active" : ""} onClick={() => setPhase(item)}>
+            {item}
+          </button>
+        ))}
+        <button type="button" className="ig-cs-replay" onClick={replay}>{isPlaying ? "Playing…" : "Replay flow"}</button>
+      </div>
     </div>
+  );
+}
+
+
+const BRAINO_INTRO_SLIDES = [
+  {
+    number: "01",
+    eyebrow: "Meet Braino",
+    title: <>Speak.<br /><em>Watch it happen.</em></>,
+    copy: "A companion who lives on your Mac, understands what you mean, and does the work alongside you.",
+    className: "is-opening",
+    art: "character",
+  },
+  {
+    number: "02",
+    eyebrow: "Not another chatbot",
+    title: <>He sees the work.<br /><em>Then helps with it.</em></>,
+    copy: "Braino can understand the page, file, or app in front of you—without making you explain everything twice.",
+    className: "is-context",
+    art: "screen",
+  },
+  {
+    number: "03",
+    eyebrow: "Just ask",
+    title: <>Your words in.<br /><em>Real work out.</em></>,
+    copy: "Summarize the lecture. Organize the desktop. Draft the reply. Book the thing. Plain language is enough.",
+    className: "is-action",
+    art: "commands",
+  },
+  {
+    number: "04",
+    eyebrow: "A little more human",
+    title: <>He reads the room.<br /><em>Not just the prompt.</em></>,
+    copy: "Braino changes how he responds with the moment—quiet when life is heavy, playful when it is not.",
+    className: "is-feeling",
+    art: "feeling",
+  },
+  {
+    number: "05",
+    eyebrow: "Braino",
+    title: <>Not a tool.<br /><em>Your companion.</em></>,
+    copy: "One character. Your browser, your Mac, and the work between them. Meet him at trybraino.com.",
+    className: "is-close",
+    art: "ecosystem",
+  },
+] as const;
+
+function SocialArtwork({ kind }: { kind: typeof BRAINO_INTRO_SLIDES[number]["art"] }) {
+  if (kind === "screen") return <div className="ig-social-art is-screen"><div className="ig-post-browser"><span><i /><i /><i /></span><div><small>braino is reading</small><b>The page you’re on.</b><em>Not a pasted summary of it.</em></div><strong>Ask Braino <i>↑</i></strong></div></div>;
+  if (kind === "commands") return <div className="ig-social-art is-commands"><span>“Summarize this lecture.”</span><span>“Clean up my desktop.”</span><span>“Draft the reply.”</span><span>“Book that table.”</span></div>;
+  if (kind === "feeling") return <div className="ig-social-art is-feeling-art"><div className="ig-post-face"><i /><i /></div><span>same intelligence</span><span>different moment</span></div>;
+  if (kind === "ecosystem") return <div className="ig-social-art is-ecosystem"><span>Browser</span><span>Braino OS</span><span>IOMI</span><div aria-hidden="true" dangerouslySetInnerHTML={{ __html: BRAINO_WALKER_SVG }} /></div>;
+  return <div className="ig-social-art is-character"><div aria-hidden="true" dangerouslySetInnerHTML={{ __html: BRAINO_WALKER_SVG }} /><span>hello, human.</span></div>;
+}
+
+function BrainoIntroCarousel() {
+  const [activeSlide, setActiveSlide] = useState(0);
+  const [exportState, setExportState] = useState<"idle" | "rendering" | "zipping" | "done" | "error">("idle");
+  const slideRefs = useRef<Array<HTMLElement | null>>([]);
+
+  const move = (direction: number) => {
+    setActiveSlide((current) => (current + direction + BRAINO_INTRO_SLIDES.length) % BRAINO_INTRO_SLIDES.length);
+  };
+
+  const downloadAll = async () => {
+    if (exportState === "rendering" || exportState === "zipping") return;
+    try {
+      setExportState("rendering");
+      const [{ toBlob }, { default: JSZip }] = await Promise.all([import("html-to-image"), import("jszip")]);
+      const zip = new JSZip();
+      for (let index = 0; index < slideRefs.current.length; index += 1) {
+        const slide = slideRefs.current[index];
+        if (!slide) throw new Error(`Slide ${index + 1} is not ready`);
+        const png = await toBlob(slide, {
+          width: 1080,
+          height: 1350,
+          pixelRatio: 4,
+          cacheBust: true,
+          backgroundColor: window.getComputedStyle(slide).backgroundColor,
+          style: { width: "1080px", height: "1350px", transform: "none" },
+        });
+        if (!png) throw new Error(`Could not render slide ${index + 1}`);
+        zip.file(`braino-introduction-${String(index + 1).padStart(2, "0")}-4k.png`, png);
+      }
+      setExportState("zipping");
+      const archive = await zip.generateAsync({ type: "blob", compression: "DEFLATE", compressionOptions: { level: 6 } });
+      const url = URL.createObjectURL(archive);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "braino-instagram-introduction-4k.zip";
+      link.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setExportState("done");
+      window.setTimeout(() => setExportState("idle"), 2400);
+    } catch (error) {
+      console.error("Instagram carousel export failed", error);
+      setExportState("error");
+    }
+  };
+
+  const exportLabel = exportState === "rendering" ? "Rendering 4K PNGs…" : exportState === "zipping" ? "Making ZIP…" : exportState === "done" ? "Downloaded" : exportState === "error" ? "Try download again" : "Download all · 4K PNG ZIP";
+
+  return (
+    <div className="ig-carousel-shell">
+      <div className="ig-carousel-viewport">
+        <div className="ig-carousel-track" style={{ transform: `translateX(-${activeSlide * 100}%)` }}>
+          {BRAINO_INTRO_SLIDES.map((slide, index) => (
+            <section ref={(node) => { slideRefs.current[index] = node; }} className={`ig-social-slide ${slide.className}${index === activeSlide ? " is-active" : ""}`} key={slide.number} aria-hidden={index !== activeSlide}>
+              <header><span className="ig-social-brand"><i /> braino</span><span>{slide.number} / 05</span></header>
+              <SocialArtwork kind={slide.art} />
+              <div className="ig-social-copy">
+                <p>{slide.eyebrow}</p>
+                <h2>{slide.title}</h2>
+                <div className="ig-social-rule" />
+                <strong>{slide.copy}</strong>
+              </div>
+              <footer><span>Introducing Braino</span><span>trybraino.com</span></footer>
+            </section>
+          ))}
+        </div>
+      </div>
+      <div className="ig-carousel-controls">
+        <button type="button" onClick={() => move(-1)} aria-label="Previous carousel slide">←</button>
+        <div>{BRAINO_INTRO_SLIDES.map((slide, index) => <button type="button" key={slide.number} className={index === activeSlide ? "is-active" : ""} onClick={() => setActiveSlide(index)} aria-label={`Open slide ${index + 1}`} />)}</div>
+        <button type="button" onClick={() => move(1)} aria-label="Next carousel slide">→</button>
+      </div>
+      <button className="ig-download-all" type="button" onClick={downloadAll} disabled={exportState === "rendering" || exportState === "zipping"}>{exportLabel}<small>5 files · 4320 × 5400 each</small></button>
+    </div>
+  );
+}
+
+export default function InstaGraphics() {
+  return (
+    <main className="ig-page ig-archive">
+      <nav className="ig-archive-nav"><a href="#top" className="ig-archive-wordmark"><i /> braino</a><span>Social studio · 2026</span></nav>
+      <header className="ig-archive-hero" id="top">
+        <p>Insta Graphics</p>
+        <h1>Ideas worth<br /><em>stopping for.</em></h1>
+        <div><p>A living, scrollable archive of Braino’s social stories, product studies, and visual experiments.</p><span>Scroll to browse <b>↓</b></span></div>
+      </header>
+
+      <section className="ig-feature-story" aria-labelledby="braino-intro-title">
+        <div className="ig-story-meta"><span>001 · Carousel</span><span>August 6, 2026</span></div>
+        <div className="ig-story-heading"><div><p>New post · 1080 × 1350</p><h2 id="braino-intro-title">So, what is Braino?</h2></div><p>Five portrait slides built from the product overview’s typography, direct voice, warm neutrals, and coral signature—then given their own motion.</p></div>
+        <div className="ig-post-workbench"><aside><span>Instagram portrait</span><strong>1080 × 1350 px</strong><small>4:5 · five slides</small></aside><BrainoIntroCarousel /></div>
+      </section>
+
+      <section className="ig-archive-list" aria-label="Design archive">
+        {[
+          { number: "002", type: "Interaction study", title: "IOMI wakes up.", note: "A boot sequence with no authentication theatre—just IOMI resolving into Braino’s open eyes.", content: <IomiBootPrototype /> },
+          { number: "003", type: "Browser study", title: "A notch with presence.", note: "The browser surface stays calm and compact until the work needs room to breathe.", content: <BrowserNotchPrototype /> },
+          { number: "004", type: "System study", title: "Braino in Chrome.", note: "One connected lifecycle for listening, thinking, answering, and getting out of the way.", content: <ChromeSystemPrototype /> },
+          { number: "005", type: "Companion study", title: "Two Brainos. One mind.", note: "A visual exploration of discovery, connection, and handoff between companion instances.", content: <TwinModePrototype /> },
+        ].map((item) => <article className="ig-archive-entry" key={item.number}>
+          <div className="ig-entry-copy"><span>{item.number} · {item.type}</span><h2>{item.title}</h2><p>{item.note}</p></div>
+          <div className="ig-artboard-stage">{item.content}</div>
+        </article>)}
+      </section>
+      <footer className="ig-archive-footer"><p>More ideas are already moving.</p><a href="#top">Back to top ↑</a></footer>
+    </main>
   );
 }

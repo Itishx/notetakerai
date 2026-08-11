@@ -37,6 +37,7 @@ export default function KineticFilm({
   gap = DEFAULT_GAP,
   audioSrc,
   audioStartOffsetMs = 0,
+  mutedBeatIds,
   heroSlots,
   endHoldMs = 1400,
   outro,
@@ -50,6 +51,7 @@ export default function KineticFilm({
   gap?: number;
   audioSrc?: string;
   audioStartOffsetMs?: number;
+  mutedBeatIds?: readonly string[];
   heroSlots?: Record<string, ReactNode>;
   endHoldMs?: number;
   outro?: ReactNode;
@@ -126,11 +128,12 @@ export default function KineticFilm({
       const timings = finalTimings.current;
       let activeIdx = 0;
       for (let i = 0; i < timings.length; i++) if (t >= timings[i].start) activeIdx = i; else break;
+      const activeBeat = liveBeats[activeIdx];
+      if (audioEl) audioEl.muted = Boolean(activeBeat && mutedBeatIds?.includes(activeBeat.id));
 
       beatRefs.current.forEach((el, i) => { if (el) el.style.opacity = i === activeIdx ? "1" : "0"; });
       Object.entries(heroRefs.current).forEach(([key, el]) => {
         if (!el) return;
-        const activeBeat = liveBeats[activeIdx];
         const on = activeBeat?.hero === key;
         el.style.opacity = on ? "1" : "0";
         el.dataset.heroMode = on ? (activeBeat?.heroMode ?? "") : "";
@@ -242,6 +245,10 @@ export default function KineticFilm({
     const seek = (ms: number) => {
       manualT = clamp(ms, 0, end);
       audioAnchor = 0;
+      // Keep the wall clock anchored to the newly requested position. Without
+      // this, the very next animation frame recalculates time from the old
+      // start and appears to undo every progress-bar click while playing.
+      if (playingRef) startWall = performance.now() - manualT;
       if (trackLoaded && audioEl) audioEl.currentTime = (manualT + audioStartOffsetMs) / 1000;
       render(manualT);
       setCurrentMs(manualT);
@@ -325,7 +332,7 @@ export default function KineticFilm({
       window.removeEventListener("pointerdown", unlockAudio);
       window.removeEventListener("keydown", unlockAudio);
     };
-  }, [liveBeats, timings, total, endHoldMs, end, audioSrc, audioStartOffsetMs, onEnd]);
+  }, [liveBeats, timings, total, endHoldMs, end, audioSrc, audioStartOffsetMs, mutedBeatIds, onEnd]);
 
   const onSeek = (ms: number) => (rootRef.current as any)?.__kfSeek?.(ms);
   const onTogglePlay = () => (rootRef.current as any)?.__kfSetPlaying?.(!playing);

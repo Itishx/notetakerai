@@ -11,7 +11,7 @@ const corsHeaders = {
 
 const MAX_REALTIME_SESSION_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_TRANSCRIPTION_MODEL = "gpt-4o-transcribe";
-const DICTATION_TRANSCRIPTION_MODEL = "gpt-realtime-whisper";
+const DICTATION_TRANSCRIPTION_MODEL = "gpt-live-transcribe";
 type SupabaseClientLike = ReturnType<typeof createClient>;
 
 serve(async (req) => {
@@ -250,11 +250,22 @@ function buildRealtimeSessionConfig(realtimeModel: string, realtimeVoice: string
             rate: 24000,
           },
           noise_reduction: {
-            type: "near_field",
+            type: "far_field",
           },
           transcription: {
             model: DICTATION_TRANSCRIPTION_MODEL,
             delay: "low",
+            languages: ["en", "hi"],
+            prompt: [
+              "This is direct personal dictation into a Mac text field.",
+              "Transcribe every clearly spoken word faithfully in the language used by the speaker.",
+              "Keep openings, filler words, repetitions, false starts, slang, and profanity when they are spoken.",
+              "Add only punctuation and capitalization that are strongly supported by the speech.",
+              "Keep names, brands, acronyms, numbers, URLs, file names, and code tokens exact.",
+              "Do not summarize, answer, add ideas, or silently rewrite the meaning.",
+              "Ignore music, keyboard noise, fans, coughs, and unrelated background speech.",
+            ].join(" "),
+            keywords: ["Braino", "Brainohera", "IOMI", "Yap Mode", "Notch", "Itish", "Itish Pande"],
           },
           turn_detection: null,
         },
@@ -267,8 +278,12 @@ function buildRealtimeSessionConfig(realtimeModel: string, realtimeVoice: string
     output_modalities: ["text"],
     audio: {
       input: {
+        // Opening default only — the client owns the mic and overrides this with the real
+        // device verdict via session.update once the data channel opens. `near_field` here
+        // told OpenAI the mic was at the user's mouth, so a laptop voice at arm's length
+        // got scrubbed as room noise until that update arrived.
         noise_reduction: {
-          type: "near_field",
+          type: "far_field",
         },
         transcription: {
           model: DEFAULT_TRANSCRIPTION_MODEL,
@@ -281,8 +296,11 @@ function buildRealtimeSessionConfig(realtimeModel: string, realtimeVoice: string
           ].join(" "),
         },
         turn_detection: {
+          // Matches what every client sends in its session.update. This said "low" while
+          // the extension and the Mac both said "medium", so the value here was dead the
+          // instant the data channel opened and quietly disagreed with the clients.
           type: "semantic_vad",
-          eagerness: "low",
+          eagerness: "medium",
           create_response: false,
           interrupt_response: true,
         },

@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { dispatchDueXPosts, requireSupabaseServiceConfig } from "../../_shared/x-dispatch.ts";
 import { loadUserKnowledge } from "../../_shared/user-knowledge.ts";
+import { BRAINO_TEXT_MODEL, BRAINO_TEXT_REASONING_EFFORT } from "../../_shared/openai-models.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -288,7 +289,8 @@ ${input.task}`;
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "gpt-5.4-mini",
+      model: BRAINO_TEXT_MODEL,
+      reasoning_effort: BRAINO_TEXT_REASONING_EFFORT,
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
@@ -365,7 +367,8 @@ async function resolvePostContent(
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "gpt-5.4-mini",
+      model: BRAINO_TEXT_MODEL,
+      reasoning_effort: BRAINO_TEXT_REASONING_EFFORT,
       messages: [
         {
           role: "system",

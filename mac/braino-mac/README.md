@@ -18,29 +18,62 @@ Braino starts on the visible macOS Dock strip and patrols across it. Drag Braino
 - Double-click Braino: open **Customise Braino**, then resize him live from normal size up to Giant Braino. The chosen size is remembered on this Mac.
 - Cursor Mode: enabled by default for the active Braino repository. Braino watches Git/worktree activity, announces when a commit lands or work stays quiet for 45 seconds, and opens the repository in Cursor if another app is frontmost. Say “Cursor Mode status”, “What feature am I working on?”, or “Turn off Cursor Mode”.
 - Double `Control`: start live Braino voice. The primary path is the same WebRTC realtime loop as the Chrome extension: mic -> realtime transcription/VAD -> delegate action -> Braino/Fish Audio speech. You can barge in while Braino is speaking; the old reply is cancelled and the new command takes over.
-- Double `Option`: toggle Yap Mode, Braino's silent system-wide dictation skill.
+- Double `Option`: toggle BrainoHERA, Braino's silent system-wide dictation skill.
 - `Control+Space`: backup voice toggle.
 - If macOS does not show the permission prompt, open System Settings -> Privacy & Security -> Accessibility and allow the terminal/Electron process running Braino.
 - Microphone access is requested separately before realtime or fallback recording starts. If it is blocked, open System Settings -> Privacy & Security -> Microphone and allow the terminal/Electron process running Braino.
 - If realtime is not configured or cannot connect, Braino records a short command, transcribes that audio through Supabase/OpenAI, then tries the native Swift helper, then falls back to a typed delegate prompt only if that also fails.
 
-## Yap Mode
+## BrainoHERA
 
-Yap Mode is a separate, transcription-only lane. Put the caret in an editable
-field, double `Option`, and speak. Braino inserts readable text at that caret
-without generating or speaking an assistant response.
+BrainoHERA is a separate, transcription-only lane. Put the caret in an editable
+field, double `Option`, and speak. Double `Option` again stops capture and
+Braino inserts the complete session once at the caret, without generating or
+speaking an assistant response.
 
-- Voice aliases: "Braino, start Yap Mode", "Braino, start dictation mode",
-  "Speak your mind", "Take this down", and "Write what I say".
-- Stop with double `Option`, "done", "stop dictation", or "that's it". The stop
-  phrase is consumed and is never inserted.
-- Model: `gpt-realtime-whisper` in a transcription-only Realtime WebRTC session.
-  The normal Braino conversation model and Fish TTS pipeline are bypassed.
+- Voice aliases: "Braino, start BrainoHERA", "Braino, start Hera mode",
+  "Braino, start dictation mode", "Speak your mind", "Take this down", and
+  "Write what I say". The former "Yap Mode" phrase remains an alias.
+- Stop with double `Option` again. Every spoken phrase stays dictation, so words
+  such as "done" are inserted instead of becoming hidden commands.
+- Natural pauses create ordered transcription turns internally; they do not
+  trigger early pastes. The stop gesture removes the listening state
+  immediately, gives the final event 1.2 seconds to settle, then uses the
+  already streamed deltas if needed and performs one final insertion.
+- Model: `gpt-live-transcribe` in a transcription-only Realtime WebRTC session.
+  Braino keeps server turn detection off because this model rejects it, then
+  uses adaptive local speech detection and explicit buffer commits after a
+  natural pause. Microphone capture starts in parallel with the Accessibility
+  preflight instead of waiting roughly two seconds for it. The WebRTC sender
+  remains trackless and the 30-second pre-roll stays local until a non-secure
+  target is approved. Buffered and live speech then use one ordered PCM data
+  channel for the whole session; no later RTP frame can overtake the opening.
+  If a short phrase stops before a cold session opens, Braino freezes the local
+  audio and queues transcription instead of cancelling and discarding it.
+  The conversation model and Fish TTS are bypassed.
+- Dictation asks Chromium for a clean mono stream without its additional noise
+  suppression or gain control, then uses the session's near/far-field noise
+  reduction once. Expected-language hints cover English and Hindi/Hinglish;
+  literal vocabulary includes Itish and Itish Pande.
+- Every explicit commit is backed by tracked PCM duration and likely speech.
+  Stop reuses an in-flight pause commit and skips sub-100-ms or silence-only
+  buffers instead of sending a second empty turn.
 - The notch glows mint while Braino is home. The full standing mascot owns the
   mint listening glow while he is out on the desktop.
-- Text insertion uses macOS Accessibility at the focused caret. Secure and
-  non-editable fields are rejected. A paste fallback restores the previous
-  clipboard after use.
+- At home, BrainoHERA owns one fixed-width black Notch sheet. It springs downward
+  like a Braino answer and stacks finished phrases above the current phrase;
+  transcript length never stretches the Notch sideways. `Braino` stays white
+  and uppercase `HERA` uses the website's moving green shimmer.
+- Lossless notation formatting is prefetched from transcript deltas during
+  speech. Stop never waits for that network request: an unavailable or rejected
+  result falls back to the exact streamed words for that turn.
+- macOS Accessibility validates the focused caret, including nested browser and
+  Electron editors. Braino then sends a real paste event and, where the app
+  exposes field state, verifies that the value or caret actually changed.
+  Selected-text AX insertion is the second path. Secure fields are rejected.
+- If there is no editable field or insertion fails, Braino does not guess. The
+  Notch shows the full transcript and keeps it on the clipboard. A successful
+  insertion restores the clipboard content that was there before dictation.
 - The complete skill contract lives in
   [`skills/yap-mode/SKILL.md`](../../skills/yap-mode/SKILL.md).
 
@@ -131,7 +164,7 @@ These are the local Mac-only skills that do not require the browser extension ag
 11. Open installed Mac apps by name, with website fallback for common services like Netflix, WhatsApp, YouTube, Gmail, Maps, LinkedIn, Spotify, X, and ChatGPT.
 12. Control Spotify playback, volume, liked songs, and named playlist adds through the Mac app/API bridge.
 13. Run the ANZ Team demo with deterministic scripts for Madhuri, Rahul, Shreeya, Palash, and Shree.
-14. Use Yap Mode for silent system-wide dictation at the active caret.
+14. Use BrainoHERA for silent system-wide dictation at the active caret.
 
 ## Mac Capability Map
 
@@ -139,13 +172,23 @@ These are the local Mac-only skills that do not require the browser extension ag
 - Browser control starter: open Chrome, open URLs, and run Google searches.
 - Local awareness starter: report the front app/window title through Accessibility.
 - Voice-first operation: realtime WebRTC listening when configured, browser recording fallback, native macOS speech recognition fallback, Fish Audio for Braino speech when configured, macOS `say` fallback otherwise.
-- System-wide dictation: double Option starts Yap Mode's transcription-only
+- System-wide dictation: double Option starts BrainoHERA's transcription-only
   session and inserts each completed turn into the focused editable field.
 - Visual companion: Dock patrol, drag-anywhere placement, transparent click-through overlay.
 
 ## Dynamic Island / Notch UI
 
 macOS does not expose an official API for third-party apps to draw inside the real Dynamic Island/notch system surface. The practical version is a Braino-owned, always-on-top top-center overlay that visually behaves like a Dynamic Island: listening pulse, task progress, quick status, and small mascot reactions.
+
+### IOMI thinking and answers
+
+- A request opens the same warm liquid **Braino is thinking** treatment used by the Chrome-system InstaGraphics design.
+- It works whether the full mascot is home or walking on-screen. The old floating reply bubble yields so one answer is shown once.
+- The first answer text morphs that surface into a compact short answer or a long reading sheet. The shared browser boundary is 240 characters; paragraph and list structure also opts into long form.
+- Written words advance against Fish Audio playback while Braino speaks. macOS system voice uses a natural timing estimate.
+- Long answers carry the same walking Braino lane as the browser design. **Done** folds the response immediately; otherwise it lingers and returns to the previous music/timer/recording state.
+- The overlay does not include a follow-up text field, so Medium, Cursor, Mail, or the current editor keeps the caret.
+- BrainoHERA never enters this lane. It remains transcription-only.
 
 ### The notch is interactive now
 

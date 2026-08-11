@@ -18,6 +18,26 @@
 }
 .btv-idle p { margin: 0; font-size: 14px; }
 
+/* Poster state: the film is the hero, but it still waits for a click. */
+.btv-offer {
+  position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center;
+  justify-content: center; gap: 10px; border: none; background: #000; cursor: pointer;
+  font-family: -apple-system, "SF Pro Text", "Helvetica Neue", sans-serif;
+}
+.btv-offer-play {
+  width: 58px; height: 58px; border-radius: 50%; display: block;
+  background: rgba(245,239,231,.12); border: 1px solid rgba(245,239,231,.35);
+  transition: background .2s ease, transform .2s ease;
+  position: relative;
+}
+.btv-offer-play::after {
+  content: ""; position: absolute; top: 50%; left: 54%; transform: translate(-50%,-50%);
+  border-style: solid; border-width: 9px 0 9px 15px;
+  border-color: transparent transparent transparent rgba(245,239,231,.9);
+}
+.btv-offer:hover .btv-offer-play { background: rgba(245,239,231,.2); transform: scale(1.06); }
+.btv-offer-hint { font-size: 13px; color: rgba(245,239,231,.5); }
+
 /* the hub's own boxed screen (ProductOverview reuses .apple-macscreen instead) */
 .btv-hub-screen {
   position: relative; width: 100%; aspect-ratio: 16 / 10; border-radius: 18px;

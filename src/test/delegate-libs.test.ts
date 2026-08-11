@@ -134,8 +134,9 @@ describe("Delegate extension libs", () => {
     expect((globalThis as any).BrainoModels.MODELS.STEP).toMatch(/^gpt-/);
     expect((globalThis as any).BrainoModels.MODELS.STRATEGIST).toMatch(/^gpt-/);
     expect(JSON.stringify((globalThis as any).BrainoModels.MODELS)).not.toMatch(/claude/i);
-    // tiering must be REAL: the strategist is a genuinely different (stronger) model than the step model
-    expect((globalThis as any).BrainoModels.MODELS.STRATEGIST).not.toBe((globalThis as any).BrainoModels.MODELS.STEP);
+    // Routing roles stay distinct, but Braino's cost-first policy pins both to Luna.
+    expect((globalThis as any).BrainoModels.MODELS.STEP).toBe("gpt-5.6-luna");
+    expect((globalThis as any).BrainoModels.MODELS.STRATEGIST).toBe("gpt-5.6-luna");
     expect((globalThis as any).BrainoModels.pickModel("step", 2)).toBe((globalThis as any).BrainoModels.MODELS.STRATEGIST);
     expect((globalThis as any).BrainoModels.pickModel("step", 0)).toBe((globalThis as any).BrainoModels.MODELS.STEP);
   });

@@ -58,8 +58,13 @@ export function useBrainoTV(): BrainoTVApi {
   return ctx;
 }
 
-export function BrainoTVScreen({ className = "" }: { className?: string }) {
-  const { nowPlaying, screenRef, stop } = useBrainoTV();
+/* `offer` turns the idle screen into a poster with a play button, for pages
+   that want a film to be the hero. It is deliberately a click and not an
+   autoplay: these films carry their own music, and a screen that is below the
+   fold (or below the footer) would otherwise play a soundtrack out of an
+   invisible iframe. Nothing here ever mounts the iframe on its own. */
+export function BrainoTVScreen({ className = "", offer }: { className?: string; offer?: { src: string; title: string } }) {
+  const { nowPlaying, screenRef, stop, play } = useBrainoTV();
   return (
     <div ref={screenRef} className={`btv-root ${className}`}>
       {nowPlaying ? (
@@ -75,6 +80,12 @@ export function BrainoTVScreen({ className = "" }: { className?: string }) {
           />
           <button type="button" className="btv-close" onClick={stop} aria-label="Stop">✕</button>
         </>
+      ) : offer ? (
+        <button type="button" className="btv-offer" onClick={() => play(offer.src, offer.title)}>
+          <span className="btv-offer-play" aria-hidden="true" />
+          <span className="btv-idle-label">{offer.title}</span>
+          <span className="btv-offer-hint">Play with sound</span>
+        </button>
       ) : (
         <div className="btv-idle">
           <span className="btv-idle-label">Braino TV</span>

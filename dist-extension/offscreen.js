@@ -69,13 +69,29 @@ async function rtWaitForOfferSdp(pc, fallbackOffer, timeoutMs = 900) {
   return sdp;
 }
 
+// `near_field` assumes the mic is at your mouth. On a laptop mic that scrubs an
+// arm's-length voice as if it were room noise, which is what made voice mode demand you
+// lean into the screen. Only claim near_field when the label says a headset is on.
+const NEAR_FIELD_MIC_RE = /airpods?|head(?:set|phones?)|earbuds?|earphones?|bluetooth|usb|external|lavalier|lapel|rode|shure|yeti|blue snowball|jabra|bose|sony wh|galaxy buds/i;
+
+function pickNoiseReduction(micLabel) {
+  return NEAR_FIELD_MIC_RE.test(String(micLabel || "")) ? "near_field" : "far_field";
+}
+
 async function startRealtimeSession({ authToken, bootInstructions, voiceEngine }) {
   stopRealtimeSession();
 
   try {
+    // AEC on (Braino speaks out loud; without it he hears himself and barge-in dies).
+    // AGC on (it is what lifts a distant voice). Chrome's own noiseSuppression off —
+    // OpenAI denoises this stream already, and two denoisers on a far-field signal take
+    // the voice with the room.
     rtMic = await navigator.mediaDevices.getUserMedia({
-      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      audio: { echoCancellation: true, noiseSuppression: false, autoGainControl: true },
     });
+    const micLabel = String(rtMic.getAudioTracks()[0]?.label || "");
+    const noiseReduction = pickNoiseReduction(micLabel);
+    console.debug("[Braino][Realtime] noise reduction", { type: noiseReduction, microphone: micLabel || "unknown" });
 
     const pc = new RTCPeerConnection();
     rtPc = pc;
@@ -175,6 +191,10 @@ async function startRealtimeSession({ authToken, bootInstructions, voiceEngine }
     // Send the full session.update event (system prompt + turn_detection + modalities).
     // This MUST include create_response:false or the model auto-responds to everything.
     if (bootInstructions) {
+      // The content script builds this event before any mic exists, so it can only guess
+      // the denoiser. We hold the actual device — overwrite its guess with the truth.
+      const input = bootInstructions?.session?.audio?.input;
+      if (input?.noise_reduction) input.noise_reduction.type = noiseReduction;
       rtSendEvent(bootInstructions); // caller passes the full session.update event object
     }
 
@@ -184,6 +204,8 @@ async function startRealtimeSession({ authToken, bootInstructions, voiceEngine }
       allocatedMs: Number(res.headers.get("x-braino-realtime-allocated-ms") || "0"),
       realtimeModel: res.headers.get("x-braino-realtime-model") || null,
       transcriptionModel: res.headers.get("x-braino-realtime-transcription-model") || null,
+      noiseReduction,
+      microphoneLabel: micLabel || null,
     };
   } catch (error) {
     stopRealtimeSession();
@@ -278,13 +300,8 @@ async function startSpeechRecognition() {
   }
 }
 
-let mediaRecorder = null;
-let audioChunks = [];
-let audioContext = null;
 let micStream = null;
 let tabStream = null;
-let micRecorder = null;
-let micChunks = [];
 let playbackAudio = null;
 
 function blobToBase64(blob) {
@@ -296,68 +313,96 @@ function blobToBase64(blob) {
   });
 }
 
-async function flushRecorder(recorder) {
-  if (!recorder || recorder.state !== "recording") return;
-  await new Promise((resolve) => {
+// ── Segment recorders that emit COMPLETE files ───────────────────────────────
+// MediaRecorder writes the WebM header (EBML + Tracks) into its FIRST blob only, so slicing
+// chunks off one long-running recorder produced headerless fragments the transcription API
+// cannot open — every segment after the first was silently discarded. Rotating instead: each
+// cut closes the outgoing recorder into a standalone file, and the replacement starts BEFORE
+// the outgoing one stops so a boundary duplicates a few milliseconds instead of losing them.
+const SEG_MIME = "audio/webm;codecs=opus";
+
+function segRecStart(seg) {
+  const recorder = new MediaRecorder(seg.stream, { mimeType: SEG_MIME });
+  const chunks = [];
+  recorder.ondataavailable = (e) => { if (e.data && e.data.size > 0) chunks.push(e.data); };
+  seg.recorder = recorder;
+  seg.chunks = chunks;
+  seg.startedAt = Date.now();
+  recorder.start(1000);
+}
+
+function segRecCreate(stream) {
+  const seg = { stream, recorder: null, chunks: [], startedAt: 0 };
+  segRecStart(seg);
+  return seg;
+}
+
+function segRecCut(seg, { keepRecording = true } = {}) {
+  return new Promise((resolve) => {
+    const outgoing = seg?.recorder;
+    const chunks = seg?.chunks || [];
+    const durationMs = seg?.startedAt ? Date.now() - seg.startedAt : 0;
+    // stop() flushes one last dataavailable into this same array before it fires "stop".
+    const done = () => resolve(chunks.length ? { blob: new Blob(chunks, { type: "audio/webm" }), durationMs } : null);
+    if (!seg || !outgoing || outgoing.state === "inactive") { done(); return; }
+    if (keepRecording) segRecStart(seg);
+    else { seg.recorder = null; seg.chunks = []; seg.startedAt = 0; }
     let settled = false;
-    const finish = () => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      recorder.removeEventListener("dataavailable", onDataAvailable);
-      resolve();
-    };
-    const onDataAvailable = () => finish();
-    const timer = setTimeout(finish, 300);
-    recorder.addEventListener("dataavailable", onDataAvailable, { once: true });
-    try {
-      recorder.requestData();
-    } catch (_) {
-      finish();
-    }
+    const finish = () => { if (settled) return; settled = true; clearTimeout(timer); done(); };
+    const timer = setTimeout(finish, 2000);
+    outgoing.addEventListener("stop", finish, { once: true });
+    try { outgoing.stop(); } catch (_) { finish(); }
   });
 }
 
-async function buildKnownSpeakerReferences() {
-  if (micRecorder && micRecorder.state === "recording") {
-    await flushRecorder(micRecorder);
-  }
-  if (!micChunks.length) return [];
-  const referenceChunks = micChunks.slice(0, 6);
-  if (referenceChunks.length < 2) return [];
-  const audioBase64 = await blobToBase64(new Blob(referenceChunks, { type: "audio/webm" }));
-  if (!audioBase64) return [];
-  return [{ name: "You", audioBase64, mimeType: "audio/webm" }];
+function segRecStop(seg) {
+  try { if (seg?.recorder && seg.recorder.state !== "inactive") seg.recorder.stop(); } catch (_) {}
+  if (seg) { seg.recorder = null; seg.chunks = []; seg.startedAt = 0; }
 }
 
-async function getSegmentPayload() {
-  if (!mediaRecorder) return { audioBase64: null, knownSpeakerReferences: [] };
-  await flushRecorder(mediaRecorder);
-  if (audioChunks.length === 0) {
-    return {
-      audioBase64: null,
-      knownSpeakerReferences: await buildKnownSpeakerReferences(),
-    };
+// Opus spends almost nothing encoding silence, so a segment this thin is a muted call or a
+// closed mic. Skipping it is not only cheaper: transcribers hallucinate on silence, and
+// "Thanks for watching" has no business in anyone's meeting notes.
+const SILENCE_BYTES_PER_SEC = 800;
+
+function segLooksSilent(cut) {
+  const seconds = (cut?.durationMs || 0) / 1000;
+  if (!cut?.blob || seconds < 5) return false;   // too short to judge fairly
+  return (cut.blob.size / seconds) < SILENCE_BYTES_PER_SEC;
+}
+
+// The call (tab audio) and you (mic) are recorded separately and stay separate. See
+// startCapture for why that split is the whole point.
+let captureSeg = null;
+let micSeg = null;
+
+async function getSegmentPayload(options = {}) {
+  if (!captureSeg && !micSeg) return { audioStreams: [] };
+
+  // Cut both at the same moment so the two transcripts share a clock and can be interleaved.
+  const keepRecording = options.final !== true;
+  const [systemCut, micCut] = await Promise.all([
+    captureSeg ? segRecCut(captureSeg, { keepRecording }) : Promise.resolve(null),
+    micSeg ? segRecCut(micSeg, { keepRecording }) : Promise.resolve(null),
+  ]);
+
+  const audioStreams = [];
+  for (const [role, cut] of [["system", systemCut], ["mic", micCut]]) {
+    if (!cut?.blob || segLooksSilent(cut)) continue;
+    const audioBase64 = await blobToBase64(cut.blob);
+    if (audioBase64) audioStreams.push({ role, audioBase64, mimeType: "audio/webm", durationMs: cut.durationMs });
   }
-  const chunksToProcess = audioChunks.slice();
-  audioChunks = [];
-  return {
-    audioBase64: await blobToBase64(new Blob(chunksToProcess, { type: "audio/webm" })),
-    knownSpeakerReferences: await buildKnownSpeakerReferences(),
-  };
+  return { audioStreams };
 }
 
 function cleanupCaptureResources() {
-  if (mediaRecorder?.stream) {
-    mediaRecorder.stream.getTracks().forEach((t) => t.stop());
+  if (captureSeg?.stream) {
+    captureSeg.stream.getTracks().forEach((t) => t.stop());
   }
-  mediaRecorder = null;
-  audioChunks = [];
-  if (micRecorder) {
-    try { if (micRecorder.state !== "inactive") micRecorder.stop(); } catch (_) {}
-    micRecorder = null;
-  }
-  micChunks = [];
+  segRecStop(captureSeg);
+  captureSeg = null;
+  segRecStop(micSeg);
+  micSeg = null;
   if (micStream) {
     micStream.getTracks().forEach((t) => t.stop());
     micStream = null;
@@ -365,10 +410,6 @@ function cleanupCaptureResources() {
   if (tabStream) {
     tabStream.getTracks().forEach((t) => t.stop());
     tabStream = null;
-  }
-  if (audioContext) {
-    audioContext.close().catch(() => {});
-    audioContext = null;
   }
   if (playbackAudio) {
     try { playbackAudio.pause(); } catch (_) {}
@@ -466,7 +507,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === "getSegment") {
     getSegmentPayload()
       .then((payload) => sendResponse(payload))
-      .catch(() => sendResponse({ audioBase64: null, knownSpeakerReferences: [] }));
+      .catch(() => sendResponse({ audioStreams: [] }));
     return true;
   }
 });
@@ -490,63 +531,37 @@ async function startCapture(streamId, withMic) {
   playbackAudio.id = "playback";
   document.body.appendChild(playbackAudio);
 
-  let recordStream = tabStream;
+  // ── Two recorders, never one ───────────────────────────────────────────────
+  // The call arrives on the tab; you leave on the mic. Which side a voice came in on is the
+  // only speaker attribution in this system that cannot be wrong, and mixing the two into a
+  // single mono track — as this used to, one line before recording — threw it away and then
+  // paid a model to guess it back. Apart, the diarizer only separates the far end, and you
+  // are identified by physics.
+  captureSeg = segRecCreate(tabStream);
 
-  // For meetings: mix tab audio + microphone
   if (withMic) {
     try {
-      micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      audioContext = new AudioContext();
-      const dest = audioContext.createMediaStreamDestination();
-      audioContext.createMediaStreamSource(tabStream).connect(dest);
-      audioContext.createMediaStreamSource(micStream).connect(dest);
-      recordStream = dest.stream;
-
-      micChunks = [];
-      micRecorder = new MediaRecorder(micStream, { mimeType: "audio/webm;codecs=opus" });
-      micRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) micChunks.push(e.data);
-      };
-      micRecorder.start(1000);
+      // Echo cancellation matters more than ever now: without it the remote voices coming out
+      // of your speakers land on the mic too and get transcribed a second time, as you.
+      micStream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: false, autoGainControl: true },
+      });
+      micSeg = segRecCreate(micStream);
     } catch (e) {
       cleanupCaptureResources();
       const message = e?.message || "Microphone access failed";
       throw new Error(`Couldn't access your microphone for Meeting mode. ${message}`);
     }
   }
-
-  audioChunks = [];
-  mediaRecorder = new MediaRecorder(recordStream, { mimeType: "audio/webm;codecs=opus" });
-
-  mediaRecorder.ondataavailable = (e) => {
-    if (e.data.size > 0) audioChunks.push(e.data);
-  };
-
-  mediaRecorder.start(1000);
 }
 
 async function stopCapture() {
-  return new Promise((resolve, reject) => {
-    if (!mediaRecorder || mediaRecorder.state === "inactive") {
-      reject(new Error("Not recording"));
-      return;
-    }
-
-    mediaRecorder.onstop = () => {
-      (async () => {
-        const mixedChunks = audioChunks.slice();
-        const audioBase64 = mixedChunks.length
-          ? await blobToBase64(new Blob(mixedChunks, { type: "audio/webm" }))
-          : null;
-        const knownSpeakerReferences = await buildKnownSpeakerReferences();
-        cleanupCaptureResources();
-        resolve({ audioBase64, knownSpeakerReferences });
-      })().catch((error) => {
-        cleanupCaptureResources();
-        reject(error);
-      });
-    };
-
-    mediaRecorder.stop();
-  });
+  if (!captureSeg?.recorder || captureSeg.recorder.state === "inactive") {
+    throw new Error("Not recording");
+  }
+  try {
+    return await getSegmentPayload({ final: true });
+  } finally {
+    cleanupCaptureResources();
+  }
 }

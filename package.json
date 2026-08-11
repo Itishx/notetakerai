@@ -17,7 +17,10 @@
     "test:watch": "vitest",
     "deploy": "vercel --prod",
     "deploy:preview": "vercel",
-    "mac:dev": "env -u ELECTRON_RUN_AS_NODE electron mac/braino-mac/main.cjs"
+    "mac:dictate:build": "cd mac/braino-mac/native/BrainoDictate && swift build -c release",
+    "mac:dev": "env -u ELECTRON_RUN_AS_NODE electron mac/braino-mac/main.cjs",
+    "mac:cloud": "env -u ELECTRON_RUN_AS_NODE BRAINO_PARAKEET=0 electron mac/braino-mac/main.cjs",
+    "mac:dashboard": "env -u ELECTRON_RUN_AS_NODE BRAINO_MAC_DASHBOARD=1 electron mac/braino-mac/main.cjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
@@ -59,7 +62,9 @@
     "date-fns": "^3.6.0",
     "embla-carousel-react": "^8.6.0",
     "framer-motion": "^12.40.0",
+    "html-to-image": "^1.11.13",
     "input-otp": "^1.4.2",
+    "jszip": "^3.10.1",
     "lucide-react": "^0.462.0",
     "next-themes": "^0.3.0",
     "react": "^18.3.1",

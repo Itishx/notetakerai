@@ -8,6 +8,7 @@ import Foundation
 //   selected                 read the selected text from the focused element (base64)
 //   replace <base64>         replace the selected text in the focused element
 //   focused                 report whether the focused element accepts dictation
+//   fieldstate              report a non-content field fingerprint for paste verification
 //   insert <base64>         insert text at the focused editable element's caret
 //   window <action> <appQuery|front>   left|right|maximize|minimize|center on the main screen
 // Output is a single tab-separated line on stdout.
@@ -263,6 +264,43 @@ func inspectFocusedTarget() -> FocusedTarget {
   )
 }
 
+func stableTextHash(_ text: String) -> String {
+  var hash: UInt64 = 1469598103934665603
+  for byte in text.utf8 {
+    hash ^= UInt64(byte)
+    hash = hash &* 1099511628211
+  }
+  return String(hash, radix: 16)
+}
+
+func selectedTextRange(_ element: AXUIElement) -> CFRange? {
+  guard let raw = axAttr(element, kAXSelectedTextRangeAttribute as String),
+        CFGetTypeID(raw) == AXValueGetTypeID() else { return nil }
+  let value = unsafeBitCast(raw, to: AXValue.self)
+  guard AXValueGetType(value) == .cfRange else { return nil }
+  var range = CFRange(location: 0, length: 0)
+  return AXValueGetValue(value, .cfRange, &range) ? range : nil
+}
+
+func focusedStateDetail(_ focused: FocusedTarget) -> String {
+  guard focused.status == "editable", let element = focused.element else {
+    return "\(focused.appName)|\(focused.role)|0||||"
+  }
+  guard let value = axAttr(element, kAXValueAttribute as String) as? String else {
+    return "\(focused.appName)|\(focused.role)|0||||"
+  }
+  let range = selectedTextRange(element)
+  return [
+    focused.appName,
+    focused.role,
+    "1",
+    String(value.utf16.count),
+    stableTextHash(value),
+    range.map { String($0.location) } ?? "",
+    range.map { String($0.length) } ?? "",
+  ].joined(separator: "|")
+}
+
 func runFocused() {
   let focused = inspectFocusedTarget()
   guard focused.status == "editable" else {
@@ -270,8 +308,18 @@ func runFocused() {
     out(detail == "|" ? focused.status : "\(focused.status)\t\(Data(detail.utf8).base64EncodedString())")
     return
   }
-  let detail = "\(focused.appName)|\(focused.role)"
+  let detail = focusedStateDetail(focused)
   out("editable\t\(Data(detail.utf8).base64EncodedString())")
+}
+
+func runFieldState() {
+  let focused = inspectFocusedTarget()
+  guard focused.status == "editable" else {
+    out(focused.status)
+    return
+  }
+  let detail = focusedStateDetail(focused)
+  out("field_state\t\(Data(detail.utf8).base64EncodedString())")
 }
 
 func runInsert(base64: String) {
@@ -480,6 +528,101 @@ func jsonEscape(_ value: String) -> String {
   return out
 }
 
+// ── Who is in this meeting, and who is talking right now ─────────────────────
+// A transcription API returns anonymous clusters and never a name. Names live in the meeting
+// UI, and on a native Zoom or Teams window the only way in is the accessibility tree. This
+// reads the participant labels and any "X is speaking" marker out of it, which is what turns
+// "Speaker 2" into a person in the notes.
+//
+// It is deliberately forgiving: Zoom and Teams change their trees without warning, so this
+// collects candidates rather than relying on a fixed path, and returning only a roster (or
+// nothing at all) is a normal outcome rather than a failure.
+
+let MEETING_TEXT_ROLES: Set<String> = [
+  "AXStaticText", "AXButton", "AXCell", "AXRow", "AXImage", "AXGroup", "AXCheckBox",
+]
+
+// Chrome, controls, and status lines that read like names but are not people.
+let MEETING_LABEL_NOISE = try! NSRegularExpression(
+  pattern: "(participants?|captions?|settings|microphone|camera|share|chat|reactions?|record|leave|end|mute|unmute|invite|more|view|gallery|speaker view|apps|whiteboard|breakout|security|host|co-host|waiting room|raise hand|zoom|teams|webex|meeting|window|minimize|close|full screen|volume|search|toolbar|menu)",
+  options: .caseInsensitive)
+
+func meetingLooksLikeName(_ value: String) -> Bool {
+  let text = value.trimmingCharacters(in: .whitespacesAndNewlines)
+  if text.count < 2 || text.count > 60 { return false }
+  if text.rangeOfCharacter(from: CharacterSet.letters) == nil { return false }
+  if text.contains("@") || text.contains("http") { return false }
+  // Names are a couple of words, not a sentence.
+  let words = text.split(separator: " ")
+  if words.count > 4 { return false }
+  let range = NSRange(text.startIndex..<text.endIndex, in: text)
+  if MEETING_LABEL_NOISE.firstMatch(in: text, options: [], range: range) != nil { return false }
+  return true
+}
+
+/// "Priya Nair is speaking", "Priya Nair (Speaking)", "Priya Nair, speaking" → "Priya Nair"
+func meetingSpeakingName(_ value: String) -> String {
+  let text = value.trimmingCharacters(in: .whitespacesAndNewlines)
+  let patterns = [
+    "^(.{2,60}?)\\s+is\\s+speaking\\b",
+    "^(.{2,60}?)\\s*[,(]\\s*speaking\\s*\\)?$",
+    "^(.{2,60}?)\\s+is\\s+(?:presenting|sharing)\\b",
+  ]
+  for pattern in patterns {
+    guard let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) else { continue }
+    let range = NSRange(text.startIndex..<text.endIndex, in: text)
+    guard let match = regex.firstMatch(in: text, options: [], range: range),
+          match.numberOfRanges > 1,
+          let nameRange = Range(match.range(at: 1), in: text) else { continue }
+    let name = String(text[nameRange]).trimmingCharacters(in: .whitespacesAndNewlines)
+    if meetingLooksLikeName(name) { return name }
+  }
+  return ""
+}
+
+func runMeeting(appQuery: String) {
+  guard let appElement = targetAppElement(query: appQuery) else {
+    out("meeting\t{\"app\":\"\",\"names\":[],\"speaking\":\"\"}")
+    return
+  }
+  wakeLazyAccessibility(appElement)
+  let appName = axString(appElement, kAXTitleAttribute as String)
+
+  var names: [String] = []
+  var seen = Set<String>()
+  var speaking = ""
+
+  var queue: [AXUIElement] = [appElement]
+  var visited = 0
+  // A meeting window is large and this runs on a timer, so it is capped tightly. Missing a
+  // name on one pass is fine; the next pass a couple of seconds later will catch it.
+  let deadline = Date().addingTimeInterval(1.2)
+  while !queue.isEmpty && visited < 4000 && Date() < deadline {
+    let element = queue.removeFirst()
+    visited += 1
+    let role = axString(element, kAXRoleAttribute as String)
+    if MEETING_TEXT_ROLES.contains(role) {
+      for label in [elementLabel(element), axString(element, kAXDescriptionAttribute as String)] {
+        if label.isEmpty { continue }
+        let active = meetingSpeakingName(label)
+        if !active.isEmpty { speaking = active }
+        let candidate = active.isEmpty ? label.trimmingCharacters(in: .whitespacesAndNewlines) : active
+        if meetingLooksLikeName(candidate) {
+          let key = candidate.lowercased()
+          if !seen.contains(key) {
+            seen.insert(key)
+            names.append(candidate)
+          }
+        }
+      }
+    }
+    queue.append(contentsOf: axChildren(element))
+  }
+
+  let rows = names.prefix(60).map { "\"\(jsonEscape($0))\"" }.joined(separator: ",")
+  out("meeting\t{\"app\":\"\(jsonEscape(appName))\",\"names\":[\(rows)],\"speaking\":\"\(jsonEscape(speaking))\"}")
+}
+
 // Emitted as ONE line of JSON because the Node bridge reads only the first line.
 func runObserve(cap: Int) {
   guard let ctx = hilCandidates() else {
@@ -596,7 +739,7 @@ func runKey(name: String) {
 
 let arguments = CommandLine.arguments
 guard arguments.count >= 2 else {
-  out("error\tusage: press|pressindex|typeindex|observe|key|selected|replace|focused|insert|window")
+  out("error\tusage: press|pressindex|typeindex|observe|meeting|key|selected|replace|focused|fieldstate|insert|window")
   exit(0)
 }
 guard AXIsProcessTrusted() else {
@@ -612,6 +755,8 @@ case "replace":
   runReplace(base64: arguments.count > 2 ? arguments[2] : "")
 case "focused":
   runFocused()
+case "fieldstate":
+  runFieldState()
 case "insert":
   runInsert(base64: arguments.count > 2 ? arguments[2] : "")
 case "window":
@@ -622,6 +767,9 @@ case "key":
   runKey(name: arguments.dropFirst(2).joined(separator: " "))
 case "observe":
   runObserve(cap: arguments.count > 2 ? (Int(arguments[2]) ?? 120) : 120)
+case "meeting":
+  let appQuery = arguments.dropFirst(2).joined(separator: " ")
+  runMeeting(appQuery: appQuery.isEmpty ? "front" : appQuery)
 case "pressindex":
   // pressindex <index> <cap> <expected label...>
   runPressIndex(index: arguments.count > 2 ? (Int(arguments[2]) ?? 0) : 0,

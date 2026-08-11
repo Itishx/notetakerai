@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { loadUserKnowledge } from "../../_shared/user-knowledge.ts";
+import { BRAINO_TEXT_MODEL, BRAINO_TEXT_REASONING_EFFORT } from "../../_shared/openai-models.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -8,7 +9,7 @@ const corsHeaders = {
 };
 
 const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
-const MODEL = "gpt-5.4-mini";
+const MODEL = BRAINO_TEXT_MODEL;
 const X_POST_MAX_CHARS = 280;
 const X_POST_MIN_CHARS = 170;
 const X_POST_IDEAL_MIN_CHARS = 210;
@@ -299,6 +300,7 @@ async function requestPostBatch(opts: {
     },
     body: JSON.stringify({
       model: MODEL,
+      reasoning_effort: BRAINO_TEXT_REASONING_EFFORT,
       messages: [
         { role: "system", content: opts.systemPrompt },
         { role: "user", content: opts.userPrompt },

@@ -2,9 +2,17 @@ Yeah, for the Mac app, Braino can become a proper system-level buddy. The honest
 
 **Already Possible Now**
 - Voice-first Braino on macOS with double-control / shortcut activation.
-- Yap Mode with double-Option activation: silent system-wide dictation through
-  `gpt-realtime-whisper`, inserted at the focused editable caret. Say "done" to
-  stop without inserting the control phrase.
+- BrainoHERA with double-Option activation: silent system-wide dictation through
+  `gpt-live-transcribe`. Protected local mic capture now begins beside the
+  Accessibility preflight, while a trackless WebRTC sender prevents upload
+  until the non-secure focus gate passes. Startup and live speech then remain on
+  one ordered PCM data channel, with duration/speech-aware commits that cannot
+  send an empty Stop turn. Pauses buffer ordered turns; double Option immediately
+  stops capture, accepts a final event or bounded streamed-delta fallback, and
+  inserts the whole session once at the verified focused editable caret. A
+  fixed black Notch sheet grows downward while speaking, and lossless formatting
+  is prefetched so Stop performs no AI network wait. Missing or failed targets
+  fall back to a full Notch transcript plus the clipboard.
 - Braino walking on/near the Dock, draggable around the screen.
 - Browser-style auth flow using Braino login.
 - Normal conversation through the same Braino personality layer.

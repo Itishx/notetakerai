@@ -30,26 +30,36 @@ type IomiNavItem = {
   children?: IomiNavItem[];
 };
 
+/* Tabs pinned into the closed bar, for pages whose whole structure is the choice
+   between a few products. The island is a fixed 210px with overflow hidden, so
+   carrying these means it has to grow: see .iomi-notch.has-tabs. */
+export type IomiNotchTab = {
+  id: string;
+  label: string;
+  to: string;
+};
+
 // Four destinations, deliberately. The notch is the whole site's navigation, so
 // everything that lived here competed with everything else: Blog, Letter, Don't
 // Blink, Motion Graphics, and Log are all still live pages, just no longer in
 // the notch. Reach them from the pages that already link to them.
 const IOMI_NAV: IomiNavItem[] = [
-  { to: "/", label: "Welcome", note: "three classes" },
+  { to: "/", label: "Braino", note: "start here" },
+  { to: "/?view=browser", label: "Browser", note: "free in Chrome" },
+  { to: "/?view=foundry", label: "Foundry", note: "the Mac co-founder" },
+  { to: "/?view=hera", label: "HERA", note: "talk and it types" },
   {
     to: "/braino-os",
     label: "BrainoOS",
-    note: "the operating system",
+    note: "the layer underneath",
     children: [
       { to: "/braino-os", label: "Overview", note: "the operating system" },
       { to: "/human-intelligence", label: "Human Intelligence", note: "the mind that knows" },
       { to: "/emotional-intelligence", label: "Emotional Intelligence", note: "the heart that feels" },
-      { to: "/yap-mode", label: "Yap Mode", note: "talk and it types" },
     ],
   },
   { to: "/dashboard", label: "Dashboard", note: "your controls" },
-  { to: "/iomi", label: "Iomi", note: "the OS" },
-];
+]
 
 // The verbatim first-invoke boot beats (the app's real lifecycle, same as the
 // Don't Blink film). State classes are the app's own, applied to the NotchFace.
@@ -99,18 +109,25 @@ let wokeFallback = false;
 
 export default function IomiNotch({
   nav = IOMI_NAV,
+  tabs,
+  activeTab,
   variant = "plain",
   sleepOnFirstVisit = false,
   theme,
   onToggleTheme,
 }: {
   nav?: IomiNavItem[];
+  tabs?: IomiNotchTab[];
+  activeTab?: string;
   variant?: "iomi" | "plain";
   sleepOnFirstVisit?: boolean;
   theme?: "dark" | "light";
   onToggleTheme?: () => void;
 }) {
   const [open, setOpen] = useState(false);
+  // Separate from `open`: that is the tall dropdown. This is the island simply
+  // widening sideways to show its tabs, the way the old mascot arrow used to.
+  const [tabsOpen, setTabsOpen] = useState(false);
   const [activeParent, setActiveParent] = useState<IomiNavItem | null>(null);
   const [music, setMusic] = useState(false); // "now playing" while the footer game runs
   const [watching, setWatching] = useState<string | null>(null); // Braino TV status
@@ -241,7 +258,7 @@ export default function IomiNotch({
         <span className="iomi-watching" aria-hidden="true">Watching {watching}</span>
       )}
 
-      <div ref={ref} className={`iomi-notch${open ? " open" : ""}`} style={booting ? { visibility: "hidden" } : undefined}>
+      <div ref={ref} className={`iomi-notch${open ? " open" : ""}${tabs?.length ? " has-tabs" : ""}${tabs?.length && tabsOpen && !open ? " tabs-open" : ""}`} style={booting ? { visibility: "hidden" } : undefined}>
         <div
           className="iomi-notch-bar"
           role="button"
@@ -269,6 +286,31 @@ export default function IomiNotch({
               <path d="M 58 22 Q 71 28 84 22" fill="none" stroke="#F4E4DC" strokeWidth="2.6" strokeLinecap="round" />
             </svg>
           )}
+          {tabs?.length ? (
+            <span className="iomi-notch-tabs" onClick={(e) => e.stopPropagation()}>
+              {tabs.map((tab) => (
+                <Link
+                  key={tab.id}
+                  to={tab.to}
+                  className={`iomi-notch-tab${activeTab === tab.id ? " on" : ""}`}
+                  aria-current={activeTab === tab.id ? "page" : undefined}
+                  tabIndex={tabsOpen ? 0 : -1}
+                  onClick={() => { closeNav(); setTabsOpen(false); }}
+                >{tab.label}</Link>
+              ))}
+            </span>
+          ) : null}
+          {tabs?.length ? (
+            <button
+              type="button"
+              className="iomi-notch-arrow"
+              aria-expanded={tabsOpen}
+              aria-label={tabsOpen ? "Hide the Braino pages" : "Show the Braino pages"}
+              onClick={(e) => { e.stopPropagation(); setTabsOpen((current) => !current); }}
+            >
+              <ChevronRight aria-hidden="true" />
+            </button>
+          ) : null}
         </div>
         <div className="iomi-notch-panel">
           <LayoutGroup id="iomi-notch-navigation">

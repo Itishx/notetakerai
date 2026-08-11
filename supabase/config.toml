@@ -229,6 +229,9 @@ verify_jwt = false
 entrypoint = "./functions/voice/fish-audio-tts/index.ts"
 verify_jwt = false
 
+[functions.dictation-refine]
+entrypoint = "./functions/voice/dictation-refine/index.ts"
+
 # ── reasoning (Human Intelligence Layer) ─────────────────────────────────
 
 # Public on purpose: the /human-intelligence lab lets anyone watch the brain think.
@@ -243,6 +246,14 @@ verify_jwt = false
 # HIL Version 1, the loop: one call per turn, the browser holds the run state.
 [functions.hil-loop]
 entrypoint = "./functions/reasoning/hil-loop/index.ts"
+verify_jwt = false
+
+# HIL's reflex tier: one utterance in, one tool name out, no observation and no
+# narration. Same layer as hil-loop, running in its fast mode, so that HIL can
+# front every command instead of only the ones no regex claimed. Public for the
+# same reason hil-loop is, which is why the model is pinned inside the function.
+[functions.hil-router]
+entrypoint = "./functions/reasoning/hil-router/index.ts"
 verify_jwt = false
 
 # Reads the engine_runs log. Public for now: logging in against localhost was

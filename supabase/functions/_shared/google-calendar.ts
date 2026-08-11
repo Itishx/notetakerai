@@ -361,8 +361,14 @@ export function summarizeCalendarEvent(event: any) {
     meetUrl,
     start: event?.start || null,
     end: event?.end || null,
+    // displayName is what a meeting recorder needs to put a name on a voice, and Google has
+    // been sending it all along — it was simply being dropped here.
     attendees: Array.isArray(event?.attendees)
-      ? event.attendees.map((a: any) => ({ email: a.email, responseStatus: a.responseStatus || null }))
+      ? event.attendees.map((a: any) => ({
+        email: a.email,
+        displayName: a.displayName || null,
+        responseStatus: a.responseStatus || null,
+      }))
       : [],
     status: event?.status || null,
   };

@@ -3346,12 +3346,28 @@ window.addEventListener(__SB_INLINE_OWNER_PING_EVENT, (event) => {
   __sbRefreshInlineOwner();
 });
 
-window.addEventListener("pagehide", () => {
+window.addEventListener("pagehide", (e) => {
+  // persisted === true means the page is going into bfcache, NOT unloading: every
+  // listener and all state stays alive and can come straight back. Dropping the
+  // marker there left __sbOwnsInlineUi() false forever with nothing able to rebuild
+  // it — and since __sbSummonToggle guards on it, Cmd x2 became a silent no-op while
+  // Ctrl x2 (which has no such guard) still half-worked. That is the exact asymmetry.
+  if (e?.persisted) return;
   const marker = document.getElementById(__SB_INLINE_OWNER_MARKER_ID);
   if (marker?.dataset.ownerId === __SB_INLINE_OWNER_ID) {
     marker.remove();
   }
-}, { once: true });
+});
+
+// Some SPAs rebuild <head> wholesale and take the marker with it. Nothing used to
+// restore it, so the extension went permanently inert on those pages. Reclaim it.
+window.addEventListener("pageshow", () => {
+  try {
+    if (!document.getElementById(__SB_INLINE_OWNER_MARKER_ID)) {
+      __sbCreateInlineOwnerMarker(__SB_INLINE_OWNER_ID);
+    }
+  } catch (_) {}
+});
 
 __sbRefreshInlineOwner();
 
@@ -4621,7 +4637,9 @@ function __sbWkApplyThrowTransform() {
 }
 
 // Show a short speech bubble above Braino's head.
-function __sbWkSay(text) {
+// holdMs is optional: quips use the short default, but a real short ANSWER has to
+// stay up long enough to read while he speaks it, so callers pass a length-scaled hold.
+function __sbWkSay(text, holdMs) {
   const walker = document.getElementById("__sbwk_walker__");
   if (!walker) return;
   let b = walker.querySelector("#__sbwk_say__");
@@ -4629,7 +4647,7 @@ function __sbWkSay(text) {
   b.textContent = text;
   requestAnimationFrame(() => b.classList.add("show"));
   clearTimeout(__sbWkSayTimer);
-  __sbWkSayTimer = setTimeout(() => b.classList.remove("show"), 1500);
+  __sbWkSayTimer = setTimeout(() => b.classList.remove("show"), Number.isFinite(holdMs) ? holdMs : 1500);
 }
 
 // Persistent voice-state bubble above Braino's head (same design as __sbWkSay, but it sticks
@@ -4784,16 +4802,28 @@ let __sbRoamMouseX = -9999, __sbRoamMouseY = -9999;
 const __SB_ROAM_W = 64, __SB_ROAM_H = 78;   // walker box; feet ≈ bottom
 // The mascot SVG overflows its 64x78 box (arms/legs), and dangling legs hang below when
 // sitting — so keep generous margins so no part of him ever clips the viewport edge.
-const __SB_ROAM_MARGIN_X = 30;
+// An invisible fence, not just an anti-clipping margin. A flat 30px let him walk
+// right up to the screen edge, which reads as him leaving even though he never
+// technically left. These are FUNCTIONS, not constants, so the fence survives a
+// window resize — a constant captured at load leaves the bounds sized for the old
+// viewport, and then he really can end up outside it.
 const __SB_ROAM_MARGIN_TOP = 20;
-const __SB_ROAM_MARGIN_BOTTOM = 46;
+function __sbRoamMarginX() { return Math.max(90, Math.round(__sbRoamVW() * 0.10)); }
+function __sbRoamMarginBottom() { return Math.max(90, Math.round(__sbRoamVH() * 0.12)); }
 
 function __sbRoamOnMouse(e) { __sbRoamMouseX = e.clientX; __sbRoamMouseY = e.clientY; }
 // He must ALWAYS stay fully on screen — clamp the walker's top-left to the viewport.
 function __sbRoamVW() { return document.documentElement.clientWidth || window.innerWidth; }
 function __sbRoamVH() { return document.documentElement.clientHeight || window.innerHeight; }
-function __sbRoamClampX(x) { return Math.max(__SB_ROAM_MARGIN_X, Math.min(x, __sbRoamVW() - __SB_ROAM_W - __SB_ROAM_MARGIN_X)); }
-function __sbRoamClampY(y) { return Math.max(__SB_ROAM_MARGIN_TOP, Math.min(y, __sbRoamVH() - __SB_ROAM_H - __SB_ROAM_MARGIN_BOTTOM)); }
+function __sbRoamClampX(x) {
+  const m = __sbRoamMarginX();
+  const lo = m, hi = __sbRoamVW() - __SB_ROAM_W - m;
+  return hi < lo ? Math.round((__sbRoamVW() - __SB_ROAM_W) / 2) : Math.max(lo, Math.min(x, hi));
+}
+function __sbRoamClampY(y) {
+  const lo = __SB_ROAM_MARGIN_TOP, hi = __sbRoamVH() - __SB_ROAM_H - __sbRoamMarginBottom();
+  return hi < lo ? lo : Math.max(lo, Math.min(y, hi));
+}
 
 // Score every visible "ledge" and return the best perch as {el, footX, topY}. A good
 // perch is a wide, stable, horizontal top edge that frames content — never the logo,
@@ -4844,20 +4874,22 @@ function __sbRoamScorePerch() {
 }
 
 function __sbRoamPickNewPerch() {
-  const perch = __sbRoamScorePerch();
-  if (!perch) {
-    // No good ledge — just amble to a random on-screen spot so he never sits idle
-    // off-view. He always stays visible.
-    __sbRoamPerchEl = null;
-    __sbRoamTX = __sbRoamClampX(window.innerWidth * (0.2 + Math.random() * 0.6) - __SB_ROAM_W / 2);
-    __sbRoamTY = __sbRoamClampY(window.innerHeight * (0.3 + Math.random() * 0.5));
-    __sbRoamNextWander = performance.now() + 60000;
-    __sbRoamSitting = false;
-    return;
-  }
-  __sbRoamPerchEl = perch.el;
-  __sbRoamTX = __sbRoamClampX(perch.footX - __SB_ROAM_W / 2);
-  __sbRoamTY = __sbRoamClampY(perch.topY - (__SB_ROAM_H - 6));   // feet on the edge
+  // FREE ROAM. He walks the open viewport and never sits on page furniture.
+  // __sbRoamScorePerch() is deliberately not consulted any more: perching parked
+  // him on a random card for a minute at a stretch, which read as "he got stuck
+  // somewhere" rather than "he is out here with me". Pick an open spot, stroll to
+  // it, pause a beat, pick another. Leaving __sbRoamPerchEl null also keeps
+  // __sbRoamSitting false in the tick, so the sitting pose never triggers.
+  __sbRoamPerchEl = null;
+  // Stroll a SHORT way from where he already is, rather than targeting a random
+  // absolute point in the viewport. Absolute targets meant a single move could be
+  // most of a screen wide, and at 135px/s that is ~10 seconds of committed travel
+  // in one direction — which reads as him leaving, not wandering near you.
+  const stepX = (150 + Math.random() * 240) * (Math.random() < 0.5 ? -1 : 1);
+  const stepY = Math.random() * 90 - 45;
+  __sbRoamTX = __sbRoamClampX(__sbRoamCX + stepX);
+  __sbRoamTY = __sbRoamClampY(__sbRoamCY + stepY);
+  __sbRoamNextWander = performance.now() + 2600 + Math.random() * 3400;
   __sbRoamSitting = false;
 }
 
@@ -4874,12 +4906,24 @@ function __sbRoamApplyPose(now, moving, sitting) {
   const bp = t % 3.4;
   const blink = bp < 0.13 ? Math.sin((bp / 0.13) * Math.PI) : 0;
   const eyeSy = Math.max(0.06, 1 - blink);
-  if (flip) flip.style.transform = `scaleX(${__sbRoamDir})`;
-
   const legL = root.querySelector("#__sbwk_ll__");
   const legR = root.querySelector("#__sbwk_rl__");
   const eyeL = root.querySelector("#__sbwk_eye_l__");
   const eyeR = root.querySelector("#__sbwk_eye_r__");
+
+  // ── Gaze + facing, ported from the Mac (braino-mac.js:5843-5845, 5903-5905) ──
+  // Roam never drove the pupils, so out on the page his eyes froze at whatever
+  // transform they last held and he walked around staring dead ahead. The Mac
+  // leads with the eyes while walking and snaps them back to centre — looking at
+  // YOU — the moment he is engaged. Same for the body: he faces you when spoken
+  // to instead of staying turned in his last direction of travel.
+  const engaged = __sbHeadphoneMode || __sbVoiceOnlyMode
+    || __sbWalkTalking || __sbBrainoOutputActive();
+  if (flip) flip.style.transform = `scaleX(${engaged ? 1 : __sbRoamDir})`;
+  const gaze = (engaged || !moving) ? 0 : 2.4;
+  root.querySelector("#__sbwk_pupil_l__")?.setAttribute("transform", `translate(${gaze} 0)`);
+  root.querySelector("#__sbwk_pupil_r__")?.setAttribute("transform", `translate(${gaze} 0)`);
+
   if (sitting) {
     // Perched on an edge: both legs hang straight down and swing gently TOGETHER (like a
     // kid sitting on a wall) — never crossed. Small in-phase sway.
@@ -4901,6 +4945,29 @@ function __sbRoamApplyPose(now, moving, sitting) {
   }
   if (eyeL) eyeL.setAttribute("transform", `translate(38 48) scale(1 ${eyeSy}) translate(-38 -48)`);
   if (eyeR) eyeR.setAttribute("transform", `translate(62 48) scale(1 ${eyeSy}) translate(-62 -48)`);
+
+  // MOUTH. The roam pose never drove this — only the bar-lane walk tick did — so
+  // once he was out on the page he answered with a closed smile and it looked like
+  // the sound was coming from nowhere. Same drive as __sbWkTick.
+  const mSmile = root.querySelector("#__sbwk_smile__");
+  const mTalk = root.querySelector("#__sbwk_talk__");
+  const tE = root.querySelector("#__sbwk_te__");
+  const tI = root.querySelector("#__sbwk_ti__");
+  if (__sbWalkTalking || __sbBrainoOutputActive()) {
+    const o = Math.max(0, Math.min(1,
+      (0.5 + 0.5 * Math.sin(t * 13.5)) *
+      (0.55 + 0.45 * Math.sin(t * 7.7 + 1.3)) *
+      (0.7 + 0.3 * Math.sin(t * 23))
+    ));
+    // style.display, not the attribute: the talk group ships inline display:none.
+    if (mSmile) mSmile.style.display = "none";
+    if (mTalk) mTalk.style.display = "block";
+    if (tE) { tE.setAttribute("rx", String(4 - o * 0.5)); tE.setAttribute("ry", String(1.4 + o * 4.2)); }
+    if (tI) { tI.setAttribute("ry", String(0.7 + o * 1.6)); }
+  } else {
+    if (mSmile) mSmile.style.display = "";
+    if (mTalk) mTalk.style.display = "none";
+  }
 }
 
 function __sbRoamTick(now) {
@@ -4909,6 +4976,34 @@ function __sbRoamTick(now) {
   if (!walker) { __sbRoamRaf = null; return; }
   const dt = Math.min(0.05, (now - __sbRoamLast) / 1000);
   __sbRoamLast = now;
+
+  // Re-assert the anchor EVERY frame instead of trusting what enter-roam set once.
+  // translate(x, y) here is viewport coordinates, which is only true while the
+  // walker is anchored to the top. Its stylesheet pins `bottom: 0`, so the instant
+  // anything re-applies that — a rebuild, a competing animation, a style reset —
+  // the same y that meant "150px down the page" starts meaning "150px BELOW the
+  // bottom edge", and he shoots off the screen. Cheap, idempotent, and it makes
+  // that whole class of bug impossible rather than merely unlikely.
+  if (walker.style.top !== "0px" || walker.style.bottom !== "auto") {
+    walker.style.top = "0px";
+    walker.style.bottom = "auto";
+  }
+  // Same for the lane: it must stay the full-viewport surface, or his coordinates
+  // are measured against the wrong box.
+  const roamLane = document.getElementById("__sb_walk_lane__");
+  if (roamLane && !roamLane.classList.contains("sb-roaming")) {
+    roamLane.classList.add("sb-roaming");
+  }
+  // And he is never allowed outside the viewport, whatever the maths upstream did.
+  // A large correction means something genuinely threw him — say so, so the next
+  // "he flew off the page" report names its own cause instead of being guessed at.
+  const clampedX = __sbRoamClampX(__sbRoamCX);
+  const clampedY = __sbRoamClampY(__sbRoamCY);
+  if (Math.abs(clampedX - __sbRoamCX) > 50 || Math.abs(clampedY - __sbRoamCY) > 50) {
+    console.log(`[Braino 🪂] caught him leaving the page — was (${Math.round(__sbRoamCX)}, ${Math.round(__sbRoamCY)}), pulled back to (${Math.round(clampedX)}, ${Math.round(clampedY)})`);
+  }
+  __sbRoamCX = clampedX;
+  __sbRoamCY = clampedY;
 
   // He lingers on the bar while the intro line ("Ah, I finally get to be off the bar")
   // shows, then steps off. Until then, just idle at the start spot.
@@ -4923,7 +5018,15 @@ function __sbRoamTick(now) {
   // leap. The bar begins its slow fold-shut exactly as he leaps. Fires once.
   if (!__sbRoamLaunched) {
     __sbRoamLaunched = true;
-    __sbRoamPickNewPerch();                       // sets TX/TY (first ledge)
+    // He steps DOWN out of the notch and lands just under it — the Mac's
+    // runIomiBootMascotExit geometry (centre x, ~27% viewport height, clamped).
+    // Picking a free-roam destination here instead sent him arcing clear across
+    // the page in 900ms, which reads as being flung rather than climbing out.
+    // The strolling starts after he has landed.
+    __sbRoamTX = __sbRoamClampX(__sbRoamCX);
+    __sbRoamTY = __sbRoamClampY(__sbRoamCY + 150);   // a short drop from wherever he stepped out
+    __sbRoamPerchEl = null;
+    __sbRoamNextWander = now + 1400;               // beat on landing, then wander
     __sbRoamLaunchFromX = __sbRoamCX; __sbRoamLaunchFromY = __sbRoamCY;
     __sbRoamLaunchToX = __sbRoamTX; __sbRoamLaunchToY = __sbRoamTY;
     __sbRoamLaunching = true; __sbRoamLaunchT0 = now;
@@ -4938,7 +5041,10 @@ function __sbRoamTick(now) {
     } else {
       __sbRoamCX = __sbRoamLaunchFromX + (__sbRoamLaunchToX - __sbRoamLaunchFromX) * pr;
       const flatY = __sbRoamLaunchFromY + (__sbRoamLaunchToY - __sbRoamLaunchFromY) * pr;
-      __sbRoamCY = flatY - 95 * Math.sin(Math.PI * pr);    // parabolic hop
+      // A gentle step DOWN out of the notch. The old -95px arc lifted him well
+      // above his own start point mid-flight — off the top of the screen when he
+      // launches from the notch — which is what read as him flying away.
+      __sbRoamCY = flatY - 18 * Math.sin(Math.PI * pr);
       __sbRoamDir = (__sbRoamLaunchToX >= __sbRoamLaunchFromX) ? 1 : -1;
       walker.style.transform = `translate(${__sbRoamClampX(__sbRoamCX)}px, ${Math.max(__SB_ROAM_MARGIN_TOP, __sbRoamCY)}px)`;
       __sbRoamApplyPose(now, true, false);
@@ -4969,10 +5075,24 @@ function __sbRoamTick(now) {
   // walks the diagonal (feet cycling); vertical change reads as a gentle climb.
   const dx = __sbRoamTX - __sbRoamCX, dy = __sbRoamTY - __sbRoamCY;
   const dist = Math.hypot(dx, dy);
-  const moving = dist > 3;
+  // He PLANTS himself for the whole conversation — not just while sound is coming
+  // out of him. Gating on TTS alone meant he resumed strolling in every gap: while
+  // listening, while thinking, between two sentences of one answer. Those gaps are
+  // exactly when you are looking at him, so it read as him gliding around while
+  // being spoken to. Voice engaged = feet planted; he wanders only when idle.
+  const inConversation = __sbHeadphoneMode || __sbVoiceOnlyMode
+    || __sbWalkTalking || __sbBrainoOutputActive();
+  if (inConversation) {
+    // Drop any pent-up destination too, otherwise the moment the conversation ends
+    // he darts off to wherever he was headed before you started talking.
+    __sbRoamTX = __sbRoamCX;
+    __sbRoamTY = __sbRoamCY;
+    __sbRoamNextWander = now + 1500;
+  }
+  const moving = !inConversation && dist > 3;
   if (moving) {
     if (Math.abs(dx) > 2) __sbRoamDir = dx > 0 ? 1 : -1;
-    const speed = 135;                         // px/s — a stroll, not a dash
+    const speed = 76;                          // px/s — the Mac's ambient pace (braino-mac.js:5832)
     const step = Math.min(dist, speed * dt);
     __sbRoamCX = __sbRoamClampX(__sbRoamCX + (dx / dist) * step);
     __sbRoamCY = __sbRoamClampY(__sbRoamCY + (dy / dist) * step);
@@ -4983,11 +5103,9 @@ function __sbRoamTick(now) {
   walker.style.transform = `translate(${__sbRoamCX}px, ${__sbRoamCY}px)`;
   __sbRoamApplyPose(now, moving, __sbRoamSitting);
 
-  // Wander: once he's been sitting a while, pick a new ledge (or amble to a random spot).
-  if ((__sbRoamSitting || !__sbRoamPerchEl) && now > __sbRoamNextWander) {
-    __sbRoamNextWander = now + 60000 + Math.random() * 20000;
-    __sbRoamPickNewPerch();
-  }
+  // Wander: he arrives, takes a short breath, then strolls somewhere else.
+  // __sbRoamPickNewPerch sets the next interval itself.
+  if (!moving && now > __sbRoamNextWander) __sbRoamPickNewPerch();
 
   __sbRoamRaf = requestAnimationFrame(__sbRoamTick);
 }
@@ -5021,8 +5139,19 @@ function __sbEnterRoamMode() {
   __sbRoamPerchEl = null; __sbRoamSitting = false;
   __sbRoamLaunched = false; __sbRoamLaunching = false;
   lane.classList.add("sb-roaming");   // escape hatch from the notch-era display:none!important
+  // The home goes dark the moment he leaves it. Two lit Brainos would be two things
+  // to talk to; from here the notch is only a screen he can push answers onto.
+  if (__sbNotchV1) {
+    __sbNotchV1.shell.classList.add("vacant");
+    if (__sbNotchV1.shell.dataset.state !== "long") __sbNotchSetState("idle");
+  }
   document.addEventListener("mousemove", __sbRoamOnMouse, true);
-  __sbWkSay?.("Ah, I finally get to be off the bar.");
+  // Global, so he stays the mascot in every tab a delegate opens.
+  if (__sbContextOk()) chrome.storage.local.set({ sbRoamOn: true });
+  __sbWkSay?.("Coming out. Watch your step.");
+  // Never leave a second loop running: two ticks means every frame moves him twice,
+  // which reads as him rocketing across the page.
+  if (__sbRoamRaf) cancelAnimationFrame(__sbRoamRaf);
   __sbRoamRaf = requestAnimationFrame(__sbRoamTick);
 }
 function __sbExitRoamMode() {
@@ -5041,6 +5170,14 @@ function __sbExitRoamMode() {
   // The bar unfolds back open.
   const bar = document.getElementById("__sb_bar__");
   if (bar) { bar.classList.remove("sb-bar-collapsed"); bar.classList.add("open"); }
+  // He is home: the coral floods back and the face is his again. If the notch was
+  // holding a long answer for him, leave it up — walking back in should not wipe
+  // what you were reading.
+  if (__sbNotchV1) {
+    __sbNotchV1.shell.classList.remove("vacant");
+    if (!["long", "short"].includes(__sbNotchV1.shell.dataset.state)) __sbNotchSetState("idle");
+  }
+  if (__sbContextOk()) chrome.storage.local.set({ sbRoamOn: false });
   __sbWkResumeFromX = 24;
   __sbStartWalkLoop?.();
 }
@@ -5063,8 +5200,15 @@ function __sbEnsureWalker() {
   // Grab + fling: drag Braino anywhere, release to throw. A plain tap just waves.
   let dragging = false, dragMoved = false, lastPX = 0, lastPY = 0, lastPT = 0, vX = 0, vY = 0;
   walker.addEventListener("pointerdown", (e) => {
-    // In roam mode, tapping Braino calls him back: exit roam, the bar unfolds for text.
-    if (__sbRoamActive) { e.preventDefault(); __sbExitRoamMode(); return; }
+    // In roam mode, tapping Braino opens the ask panel and he STAYS out on the
+    // page. He is the thing you talk to, not a button that sends himself away —
+    // Ctrl x2, Cmd x2 or "go home" are how he goes back in.
+    if (__sbRoamActive) {
+      e.preventDefault();
+      __sbInputOpen = true;
+      __sbNotchSetState("input");
+      return;
+    }
     if (__sbWkThrown || __sbWkClimbing || __sbWkMoonwalking || __sbWkJumping) return;
     dragging = true; dragMoved = false;
     try { walker.setPointerCapture(e.pointerId); } catch (_) {}
@@ -5137,6 +5281,11 @@ function __sbStopWalkLoop() {
   clearTimeout(__sbWkAutoTimer);
   __sbWkResetThrow();
   __sbWalkTalking = false;
+  // Roam owns the lane. This used to hide it unconditionally, and it is reached from
+  // __sbEnterHeadphoneMode via __sbCollapseCard — so pressing Ctrl x2 to talk to the
+  // roaming mascot DELETED him from the page, while roam kept running and painting an
+  // invisible Braino. That is the "he just disappeared" report.
+  if (__sbRoamActive) return;
   const lane = document.getElementById("__sb_walk_lane__");
   if (lane) {
     lane.style.display = "none";
@@ -5923,6 +6072,48 @@ function __sbIsSelfEcho(transcript) {
 }
 
 let __sbVoiceOutputGuardAt = 0;
+// ── Interruption, modelled on how a person handles it ────────────────────────
+// Someone talks over you: you stop MID-WORD. You do not finish your sentence and
+// then evaluate whether they had a point. Deciding comes after stopping.
+//
+// Then one of two things is true. They actually wanted something, so you deal with
+// it. Or it was nothing — a cough, a false start, someone else in the room — and
+// you pick up roughly where you left off.
+//
+// Waiting to be sure before stopping (which is what a confirm window does) is the
+// one thing a person never does, and it is why interrupting him never felt right.
+const __SB_BARGE_RESUME_MS = 3500;   // silence after a cut-off that means "it was nothing"
+let __sbSpeechRemainder = "";        // what he had left to say when he was cut off
+let __sbBargeResume = null;          // { text, at }
+let __sbBargeResumeTimer = null;
+
+// Called the instant he is cut off. Remembers the unsaid part and starts the clock
+// on whether the interruption amounted to anything.
+function __sbArmBargeResume() {
+  if (__sbBargeResumeTimer) { clearTimeout(__sbBargeResumeTimer); __sbBargeResumeTimer = null; }
+  const left = String(__sbSpeechRemainder || "").trim();
+  if (!left) { __sbBargeResume = null; return; }
+  __sbBargeResume = { text: left, at: Date.now() };
+  __sbBargeResumeTimer = setTimeout(() => {
+    __sbBargeResumeTimer = null;
+    const pending = __sbBargeResume;
+    __sbBargeResume = null;
+    if (!pending) return;
+    // Something real is already happening — he has moved on, don't talk over it.
+    if (__sbVoicePendingReply || __sbBrainoOutputActive() || __sbHasActiveRealtimeResponse()) return;
+    if (!__sbHeadphoneMode) return;
+    __sbVTMark?.("↩️ Interruption came to nothing — resuming");
+    void __sbSpeakWithPreferredVoice(pending.text, "realtime");
+  }, __SB_BARGE_RESUME_MS);
+}
+
+// The interruption produced a real turn → he is answering that now, so drop the
+// unsaid remainder rather than resuming a thought the user has moved past.
+function __sbCancelBargeResume() {
+  if (__sbBargeResumeTimer) { clearTimeout(__sbBargeResumeTimer); __sbBargeResumeTimer = null; }
+  __sbBargeResume = null;
+  __sbSpeechRemainder = "";
+}
 function __sbBrainoOutputActive() {
   return Boolean(
     __sbIsSpeaking
@@ -5941,17 +6132,20 @@ function __sbVoiceAddressesBraino(text) {
   return false;
 }
 function __sbShouldDropSpeechDuringBrainoOutput(text, options = {}) {
-  const guardRecent = Date.now() - __sbVoiceOutputGuardAt < 12000;
-  if (!__sbBrainoOutputActive() && !guardRecent) return false;
+  // THIS is what ate the second turn of every conversation.
+  //
+  // It used to run for 12 seconds after Braino last made a sound (guardRecent) and
+  // then throw away ANY transcript that did not contain the word "Braino" or a
+  // command word. Nobody says a name twice in a real back-and-forth, so the whole
+  // turn was transcribed, judged unaddressed, and silently binned — which is
+  // exactly the "he doesn't speak on turn 2" symptom, on BOTH surfaces.
+  //
+  // What actually needs suppressing is his own voice returning through the
+  // speakers, and __sbIsSelfEcho already tests for that by comparing against what
+  // he just said. That test is kept. The name requirement and the 12s tail are not:
+  // they were public-demo armour that made normal conversation impossible.
+  if (!__sbBrainoOutputActive()) return false;
   if (__sbIsSelfEcho(text) && !__sbVoiceAddressesBraino(text)) return true;
-  const confidence = Number(options.confidence);
-  const hasConfidence = Number.isFinite(confidence) && confidence > 0;
-  const stats = typeof __sbVoiceTranscriptStats === "function"
-    ? __sbVoiceTranscriptStats(text)
-    : { normalized: __sbNormalizeForMatch(text), wordCount: String(text || "").trim().split(/\s+/).filter(Boolean).length };
-  const addressed = __sbVoiceAddressesBraino(text);
-  if (!addressed) return true;
-  if (hasConfidence && confidence < 0.45 && stats.wordCount <= 4) return true;
   return false;
 }
 
@@ -7482,6 +7676,10 @@ if (__sbContextOk()) {
       }
       if (msg.realtimeModel) __sbRtRealtimeModel = String(msg.realtimeModel);
       if (msg.transcriptionModel) __sbRtTranscriptionModel = String(msg.transcriptionModel);
+      // Offscreen owns the mic in this path, so it is the only side that can read the
+      // device label. Adopt its verdict before __sbSyncRealtimeVoiceInstructions() below
+      // re-sends session.update, or every re-send would stomp the mode back to the default.
+      if (msg.noiseReduction) __sbRtNoiseReduction = String(msg.noiseReduction);
       if (msg.allocatedMs > 0) __sbScheduleRealtimeUsageCap(msg.allocatedMs);
       if (__sbIsRecording) __sbStopRecording({ silent: true });
       __sbStopSpeech();
@@ -10143,8 +10341,15 @@ function __sbBuildBrainUI() {
   // This makes Braino persist across tabs: once invoked, it follows you to every tab
   // and survives collapse instead of vanishing.
   document.getElementById("__sb_brain_btn__").style.display = "none";
-  __sbStorageGet(["sbBrainDocked", "sbBrainExpanded", "sbVoiceModeOn"]).then(({ sbBrainDocked, sbBrainExpanded, sbVoiceModeOn }) => {
+  __sbStorageGet(["sbBrainDocked", "sbBrainExpanded", "sbVoiceModeOn", "sbRoamOn"]).then(({ sbBrainDocked, sbBrainExpanded, sbVoiceModeOn, sbRoamOn }) => {
     if (!__sbOwnsInlineUi()) return;
+    // Whichever body he is wearing has to follow him between tabs. He was out on
+    // the page, a delegate opened a new tab, and he rematerialised there as the
+    // notch — two different Brainos across two tabs in one conversation. Roam is
+    // global state now, same as voice mode.
+    if (sbRoamOn && !__sbRoamActive) {
+      setTimeout(() => { if (!__sbRoamActive) __sbSummonToggle?.(); }, 400);
+    }
     // Show brain if docked OR if voice mode is on (voice takes over, so show it either way).
     if (sbBrainDocked || sbVoiceModeOn) {
       const b = document.getElementById("__sb_brain_btn__");
@@ -10219,7 +10424,15 @@ function __sbBuildBrainUI() {
   let __sbLastShiftTap = 0;
   let __sbLastMetaTap = 0;
   let __sbLastSpaceTap = 0;
-  document.addEventListener("keydown", (e) => {
+  // ONE listener, ever. __sbBuildBrainUI re-runs whenever an SPA wipes #__sb_root__
+  // (a MutationObserver rebuilds it), and each run used to add another keydown
+  // listener that was never removed. With N listeners a single physical Ctrl x2 or
+  // Cmd x2 fired the toggle N times in one tick — even N cancelled itself out, odd N
+  // worked. That is exactly "sometimes works, sometimes not", and why Cmd x2 could
+  // leave him roaming with the notch still dark (exit then immediately re-enter).
+  if (!globalThis.__SB_KEYS_BOUND__) {
+    globalThis.__SB_KEYS_BOUND__ = true;
+    document.addEventListener("keydown", (e) => {
     // Double-tap Control → toggle headphone mode.
     if (e.key === "Control") {
       if (!e.repeat && !e.metaKey && !e.altKey && !e.shiftKey) {
@@ -10344,7 +10557,8 @@ function __sbBuildBrainUI() {
       e.preventDefault();
       __sbToggleBrain();
     }
-  }, true);
+    }, true);
+  }
 
   // Bar buttons
   document.getElementById("__sb_send_btn__").addEventListener("click", __sbSendMessage);
@@ -11991,6 +12205,55 @@ function __sbMountNotchV1() {
       @keyframes speakLook{0%,100%{transform:translate(0,1px)}50%{transform:translate(2px,1px)}}
       @keyframes gaze{0%,12%,100%{transform:translate(0,0)}27%,39%{transform:translate(-3px,0)}52%,64%{transform:translate(3px,0)}76%,90%{transform:translate(0,4px)}}
       @keyframes thinkShimmer{from{background-position:140% 0}to{background-position:-140% 0}}
+      /* VACANT — Braino is out on the page (Cmd x2). The notch is his home, not a
+         second him, so the coral drains out and the face leaves with him: two lit
+         Brainos would be two things to talk to. Deliberately scoped to the EMPTY
+         states only, so the moment he pushes a long answer up here the panel keeps
+         its normal readable glass. Click the empty shell to call him back. */
+      .n.vacant .face{opacity:0!important}
+      .n.vacant[data-state=idle],.n.vacant[data-state=off]{
+        width:132px;height:30px;border-radius:0 0 16px 16px;cursor:pointer;
+        border:1px solid rgba(255,255,255,.14);border-top:0;
+        background:linear-gradient(180deg,rgba(34,25,23,.6) 0%,rgba(20,15,14,.66) 100%);
+        box-shadow:0 10px 26px rgba(0,0,0,.26),inset 0 1px rgba(255,255,255,.07);
+        backdrop-filter:blur(14px) saturate(120%);
+      }
+      .n.vacant[data-state=idle] .idle{opacity:0}
+      .n.vacant[data-state=idle] .vacancy,.n.vacant[data-state=off] .vacancy{opacity:1}
+      .vacancy{position:absolute;inset:0;z-index:3;display:flex;align-items:center;justify-content:center;gap:7px;opacity:0;pointer-events:none;transition:opacity .45s ease}
+      .vacancy i{width:5px;height:5px;border-radius:50%;background:rgba(244,228,220,.26)}
+      .n.vacant[data-state=idle]:hover{background:linear-gradient(180deg,rgba(44,32,29,.66) 0%,rgba(26,19,18,.7) 100%)}
+      .n.vacant[data-state=idle]:hover .vacancy i{background:rgba(244,228,220,.5)}
+      /* Boot greeting — verbatim port of the Mac's nf-iomi-expanded card
+         (braino-mac.css): 610x180 pill, the face steps aside entirely, and a
+         centred two-column card opens (greeting 325 | 1px rule | wake 165).
+         The face needs no rule to hide: .panel is opacity:0 by default and
+         greeting is simply absent from the face's visible-state list. */
+      .n[data-state=greeting]{width:min(610px,80vw);height:180px;border-radius:0 0 38px 38px;overflow:hidden;cursor:default;border:1px solid rgba(255,255,255,.42);border-top:0;background:linear-gradient(180deg,#f6a8a2 0%,#e8786e 56%,#c9544a 100%);box-shadow:0 28px 84px rgba(201,84,74,.36),inset 0 1px rgba(255,255,255,.46)}
+      .greet{z-index:11;display:flex;align-items:center;justify-content:center}
+      .n[data-state=greeting] .greet{opacity:1;transform:none;transition-delay:300ms}
+      .greet-copy{width:325px;text-align:left}
+      .greet-copy strong{display:flex;align-items:baseline;gap:8px;color:#fdf6f2;font-size:31px;font-weight:600;letter-spacing:-.035em;text-shadow:0 2px 14px rgba(110,33,26,.28)}
+      .greet-copy strong span{opacity:0;filter:blur(5px);transform:translateY(7px)}
+      .n[data-state=greeting] .greet-copy strong span{animation:greetWord .52s cubic-bezier(.2,.75,.2,1) forwards}
+      .n[data-state=greeting] .greet-copy strong span:nth-child(1){animation-delay:.43s}
+      .n[data-state=greeting] .greet-copy strong span:nth-child(2){animation-delay:.76s}
+      .n[data-state=greeting] .greet-copy strong span:nth-child(3){animation-delay:1.09s}
+      .greet-copy>small{display:block;margin-top:10px;color:rgba(253,246,242,.66);font-size:15px;opacity:0}
+      .n[data-state=greeting] .greet-copy>small{animation:greetFade .5s ease 1.5s forwards}
+      @keyframes greetWord{to{opacity:1;filter:blur(0);transform:none}}
+      @keyframes greetFade{to{opacity:1}}
+      .greet-rule{width:1px;height:0;margin:0 28px;align-self:center;background:linear-gradient(180deg,rgba(255,255,255,0),rgba(255,255,255,.6),rgba(255,255,255,0));opacity:0;transition:height .65s cubic-bezier(.2,.8,.2,1) .52s,opacity .3s ease .5s}
+      .n[data-state=greeting] .greet-rule{height:92px;opacity:1}
+      .greet-wake{width:165px;opacity:0;transform:translateX(8px);transition:opacity .42s ease 1.25s,transform .52s ease 1.22s}
+      .n[data-state=greeting] .greet-wake{opacity:1;transform:none}
+      .greet-eyes{display:flex;gap:7px;margin-bottom:12px}
+      .greet-eyes i{width:9px;height:9px;border-radius:50%;background:#fdf6f2;box-shadow:0 0 8px rgba(253,246,242,.45)}
+      .greet-wake>small{display:block;margin-bottom:10px;color:rgba(253,246,242,.7);font-size:13px}
+      .greet-keys{display:flex;align-items:center;gap:5px;margin-top:6px}
+      .greet-keys kbd{padding:4px 8px;border:1px solid rgba(255,255,255,.28);border-radius:6px;background:rgba(255,255,255,.14);color:#fff;font:600 10px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+      .greet-keys em{color:rgba(253,246,242,.55);font-size:10px;font-style:normal}
+      @media(prefers-reduced-motion:reduce){.greet-copy strong span,.greet-copy>small{animation-duration:1ms!important;animation-delay:0ms!important}.greet-rule,.greet-wake,.greet{transition-duration:1ms!important;transition-delay:0ms!important}}
     </style>
     <section class="n" data-state="off">
       <div class="panel face"><svg viewBox="0 0 230 72" preserveAspectRatio="none">
@@ -12006,9 +12269,11 @@ function __sbMountNotchV1() {
         <g class="mouth"><ellipse cx="115" cy="49" rx="7" ry="5.5"/><ellipse cx="115" cy="51" rx="4.2" ry="2.2"/></g>
       </svg></div>
       <div class="panel status"><small></small></div>
+      <div class="vacancy" aria-hidden="true"><i></i><i></i></div>
+      <div class="panel greet"><span class="greet-copy"><strong><span class="greet-lead">Good</span><span class="greet-part">evening,</span><span class="greet-name">there.</span></strong><small>Everything is ready.</small></span><i class="greet-rule"></i><span class="greet-wake"><span class="greet-eyes"><i></i><i></i></span><small>Wake Braino</small><span class="greet-keys"><kbd>Control</kbd><kbd>Control</kbd></span><span class="greet-keys"><kbd>Click</kbd><em>to type</em></span></span></div>
       <div class="workpill"><strong></strong></div>
       <span class="cap cap-l"></span><span class="cap cap-r"></span>
-      <div class="panel input"><label><small>Ask Braino</small><input placeholder="Summarise this page…"/></label><button class="mode">Auto⌄</button><button class="round mic">⌁</button><button class="round send">↑</button><button class="theme" title="Switch glass theme">◐</button><button class="round close" title="Close">×</button></div>
+      <div class="panel input"><label><small>Ask Braino</small><input placeholder="Summarise this page…"/></label><button class="mode">Auto⌄</button><button class="round send">↑</button><button class="theme" title="Switch glass theme">◐</button><button class="round close" title="Back to idle">×</button></div>
       <div class="panel menu"><header><small>Choose a mode</small><span class="actions"><em class="active-mode">Auto</em><button class="theme" title="Switch glass theme">◐</button><button class="round close" title="Close">×</button></span></header><button class="item" data-mode="auto"><b>Auto</b><small>Let Braino decide</small><strong>✓</strong></button><button class="item" data-mode="page"><b>Page</b><small>Read and work on this page</small></button><button class="item" data-mode="lecture"><b>Lecture</b><small>Capture and explain audio</small></button><button class="item" data-mode="meeting"><b>Meeting</b><small>Listen remember and follow up</small></button><button class="item" data-mode="agent"><b>Delegate</b><small>Complete a browser task</small></button><button class="item" data-mode="team"><b>Team</b><small>Work with shared context</small></button></div>
       <div class="panel thinking"><header><span class="tlabel"><i></i>Braino is thinking</span><span class="actions"><button class="collapse">Collapse</button><button class="theme" title="Switch glass theme">◐</button></span></header><p>Reading the page and understanding what matters.</p><p>Separating the useful signal from the repetition.</p><p>Preparing the answer in your context.</p></div>
       <div class="panel answer">
@@ -12050,6 +12315,9 @@ function __sbMountNotchV1() {
   shell.addEventListener("click", () => {
     if (__sbNotchV1?.dragJustEnded && Date.now() - __sbNotchV1.dragJustEnded < 350) return;
     const state = shell.dataset.state;
+    // Empty home + he is out there → clicking it calls him back in, which is the
+    // only discoverable way home that is not a keyboard shortcut.
+    if (__sbRoamActive && (state === "idle" || state === "off")) { __sbExitRoamMode(); return; }
     if (state === "idle") __sbOpenPanel();
     else if (state === "working") __sbNotchSetState("thinking");
     else if (state === "short") __sbNotchSetState("long");
@@ -12097,7 +12365,9 @@ function __sbMountNotchV1() {
   input.addEventListener("input", () => { const old = document.getElementById("__sb_input__"); if (old) old.value = input.value; });
   input.addEventListener("keydown", (event) => { if (event.key === "Enter") { event.preventDefault(); sendFromNotch(input); } });
   shadow.querySelector(".input .send").addEventListener("click", (event) => { event.stopPropagation(); sendFromNotch(input); });
-  shadow.querySelector(".input .mic").addEventListener("click", (event) => { event.stopPropagation(); __sbToggleHeadphoneMode(); });
+  // No mic button here on purpose: Ctrl x2 is the one voice control, and a second
+  // trigger sitting unlabelled between Auto and Send only raised the question of
+  // what it did.
   shadow.querySelector(".input .mode").addEventListener("click", (event) => { event.stopPropagation(); __sbNotchSetState("menu"); });
   followInput.addEventListener("keydown", (event) => { if (event.key === "Enter") { event.preventDefault(); sendFromNotch(followInput); } });
   shadow.querySelector(".fsend").addEventListener("click", (event) => { event.stopPropagation(); sendFromNotch(followInput); });
@@ -12118,7 +12388,15 @@ function __sbMountNotchV1() {
     __sbNotchSetState("idle");   // resolve visually no matter what the legacy dock path does
     __sbDock();
   }));
-  shadow.querySelectorAll(".close").forEach((button) => button.addEventListener("click", (event) => { event.stopPropagation(); __sbHideAll(); }));
+  // x returns Braino to idle, it does not dismiss him. Closing the whole extension
+  // from the panel's corner button was too destructive for what reads as "collapse
+  // this panel" — Cmd+I is still the way to put him away entirely.
+  shadow.querySelectorAll(".close").forEach((button) => button.addEventListener("click", (event) => {
+    event.stopPropagation();
+    __sbInputOpen = false;
+    __sbNotchSetState("idle");
+    if (__sbContextOk()) chrome.storage.local.set({ sbBrainDocked: true, sbBrainExpanded: false });
+  }));
   shadow.querySelector(".signin .cta")?.addEventListener("click", (event) => {
     event.stopPropagation();
     chrome.runtime.sendMessage({ action: "openAuthTab" }, () => { void chrome.runtime.lastError; });
@@ -12129,6 +12407,13 @@ function __sbMountNotchV1() {
 }
 function __sbNotchSetState(state, status = "") {
   if (!__sbNotchV1) return;
+  // While he is out on the page the notch is a screen, and the only thing worth
+  // putting on a screen is a long answer (or a sign-in he must act on). Listening,
+  // speaking and working all belong to the mascot now — lighting the notch up for
+  // them is exactly what made it read as a second Braino standing in his own house.
+  if (__sbNotchV1.shell.classList.contains("vacant") && !["long", "signin"].includes(state)) {
+    state = "idle";
+  }
   __sbNotchV1.shell.dataset.state = state || "input";
   if (["short", "long", "signin", "idle", "off"].includes(state) && __sbNotchRequestTimer) {
     clearTimeout(__sbNotchRequestTimer);
@@ -12142,18 +12427,35 @@ function __sbNotchSetState(state, status = "") {
   // The caption class RIDES THROUGH working/speaking (its geometry is CSS-scoped to
   // idle/listening/speaking, so it can't cram the working face) — your words stay up
   // while he thinks and reappear beside him while he answers, like the Mac wings.
-  if (!["idle", "listening", "working", "speaking"].includes(state)) __sbNotchV1.shell.classList.remove("captioning");
+  // Same set as compactOk in __sbNotchCaption — your words must survive the
+  // listening → captured → working handoff, which is precisely when you want to
+  // read them back.
+  if (!["idle", "listening", "captured", "working", "thinking", "speaking"].includes(state)) __sbNotchV1.shell.classList.remove("captioning");
   if (state !== "speaking") __sbNotchV1.shell.classList.remove("mouth-hold");
   if (state === "input") setTimeout(() => __sbNotchV1?.input?.focus(), 180);
 }
 function __sbNotchShowAnswer(text, rich, html) {
   if (!__sbNotchV1) return;
   const raw = String(text || "");
+  const isLong = Boolean(rich) || raw.length >= 240;
+
+  // While he is OUT on the page the notch is a screen, not a mouth.
+  //  - short answer → the bubble over his head. You are already looking at him,
+  //    and lighting up the notch too would put the reply in the wrong place.
+  //  - long answer  → drops down from the notch so it is actually readable, while
+  //    he stays outside and speaks it. The two surfaces split the job; he never
+  //    walks home just to answer.
+  if (__sbRoamActive && !isLong) {
+    const line = raw.replace(/\s+/g, " ").trim();
+    __sbWkSay?.(line, Math.min(14000, 2200 + line.length * 55));
+    return;
+  }
+
   const body = __sbNotchV1.shadow.querySelector(".answer-body");
   if (body) body.innerHTML = html || __sbEscapeHtml(raw);
   const line = __sbNotchV1.shadow.querySelector(".short-text");
   if (line) line.textContent = raw.replace(/\s+/g, " ").trim();
-  __sbNotchSetState(!rich && raw.length < 240 ? "short" : "long");
+  __sbNotchSetState(isLong ? "long" : "short");
 }
 // The answer walker — verbatim port of the Chrome system's NotchWalker RAF rig
 // (back-and-forth travel, direction flip, alternating legs, waddle and breath).
@@ -12218,8 +12520,28 @@ function __sbNotchCaption(text, options = {}) {
   const value = String(text || "").trim().replace(/\s+/g, " ");
   const capL = __sbNotchV1.shadow.querySelector(".cap-l");
   const capR = __sbNotchV1.shadow.querySelector(".cap-r");
-  const compactOk = ["idle", "listening", "working", "speaking"].includes(shell.dataset.state);
+  // "captured" and "thinking" belong here. The notch enters "captured" the instant
+  // you stop talking, and the FINAL transcript lands a moment later — so the caption
+  // was being written and wiped on the same breath, which is why your own words
+  // flashed for a frame and vanished before you could read them.
+  const compactOk = ["idle", "listening", "captured", "working", "thinking", "speaking"].includes(shell.dataset.state);
   if (__sbNotchCapTimer) { clearTimeout(__sbNotchCapTimer); __sbNotchCapTimer = null; }
+
+  // He is out on the page → your words form over HIS head, not in his empty house.
+  // Captions only add a CSS class, they never go through __sbNotchSetState, which
+  // is why the vacant notch kept lighting up with subtitles despite that guard.
+  if (__sbRoamActive) {
+    shell.classList.remove("captioning");
+    if (capL) capL.textContent = "";
+    if (capR) capR.textContent = "";
+    __sbWkStatus?.(value || null);
+    if (value) {
+      // Floor of 3s even for two words, so a short command is still readable.
+      const hold = options.final ? Math.max(3000, Math.min(14000, value.length * 90)) : 15000;
+      __sbNotchCapTimer = setTimeout(() => __sbNotchCaption(""), hold);
+    }
+    return;
+  }
   if (!value || !compactOk) {
     shell.classList.remove("captioning");
     if (capL) capL.textContent = "";
@@ -12258,7 +12580,28 @@ function __sbSummonToggle() {
   __sbRoamHoldUntil = performance.now() + 500;
 }
 
-const __SB_NOTCH_CLASSES = ["sb-notch-invoking", "sb-notch-auth", "sb-notch-auth-ok", "sb-notch-idle", "sb-notch-listening", "sb-notch-working", "sb-notch-speaking"];
+// Fills the boot greeting before it is shown. The name mirrors the Mac's
+// `String(auth?.displayName || "").split(" ")[0] || "there"`. The salutation is
+// __sbTimeGreeting() split across the two animated spans, so "It's late" lands
+// as "It's / late," the same way "Good / evening," does.
+function __sbNotchFillGreeting() {
+  if (!__sbNotchV1) return;
+  const shadow = __sbNotchV1.shadow;
+  const leadEl = shadow.querySelector(".greet-lead");
+  const partEl = shadow.querySelector(".greet-part");
+  const nameEl = shadow.querySelector(".greet-name");
+  const [lead, ...rest] = __sbTimeGreeting().split(" ");
+  if (leadEl) leadEl.textContent = lead;
+  if (partEl) partEl.textContent = `${rest.join(" ")},`;
+  __sbStorageGet(["authDisplayName", "authEmail"]).then(({ authDisplayName, authEmail }) => {
+    const first = String(authDisplayName || "").trim().split(/\s+/)[0]
+      || String(authEmail || "").split("@")[0]
+      || "there";
+    if (nameEl) nameEl.textContent = `${first}.`;
+  }).catch(() => {});
+}
+
+const __SB_NOTCH_CLASSES = ["sb-notch-invoking", "sb-notch-auth", "sb-notch-auth-ok", "sb-notch-greeting", "sb-notch-idle", "sb-notch-listening", "sb-notch-working", "sb-notch-speaking"];
 function __sbSetBrowserNotchState(state, status = "") {
   const bar = document.getElementById("__sb_bar__");
   if (!bar) return;
@@ -12283,15 +12626,22 @@ function __sbRunBrowserNotchBoot(finishReady, finishRejected) {
     if (authFallback) clearTimeout(authFallback);
     if (authWatcher) { try { chrome.storage.onChanged.removeListener(authWatcher); } catch (_) {} }
   };
+  // Beat-for-beat with the Mac's runNotchBoot(): green verdict holds on the open
+  // eyes for 1100ms, the island spreads into the greeting card, then it collapses
+  // to idle and he docks. Timings are the Mac's own (wait 1100 → 1850 → 300).
   const settleReady = () => {
     if (done) return; done = true; cleanup();
     __sbSetBrowserNotchState("auth-ok", "Authenticated");
-    setTimeout(() => {
-      __sbSetBrowserNotchState("idle");
-      __sbInputOpen = false;
-      if (__sbContextOk()) chrome.storage.local.set({ sbBrainDocked: true, sbBrainExpanded: false });
-      finishReady();
-    }, 900);
+    later(() => {
+      __sbNotchFillGreeting();
+      __sbSetBrowserNotchState("greeting");
+      later(() => {
+        __sbSetBrowserNotchState("idle");
+        __sbInputOpen = false;
+        if (__sbContextOk()) chrome.storage.local.set({ sbBrainDocked: true, sbBrainExpanded: false });
+        finishReady();
+      }, 3650);
+    }, 1100);
   };
   const settleRejected = () => {
     if (done) return; done = true; cleanup();
@@ -12305,13 +12655,22 @@ function __sbRunBrowserNotchBoot(finishReady, finishRejected) {
   __sbSetBrowserNotchState("invoking");
   later(() => {
     __sbSetBrowserNotchState("auth", "Authenticating");
+    // A cold MV3 service worker answers with `undefined` (or nothing at all), and
+    // this used to just drop the reply on the floor — no retry, no error branch —
+    // so the 12s timer below would declare a perfectly valid session signed out.
+    // Retry a few times before letting that happen.
+    let verifyTries = 0;
     const verify = () => {
       try {
         chrome.runtime.sendMessage({ action: "checkAuth" }, (result) => {
           void chrome.runtime.lastError;
-          if (result?.authenticated) later(settleReady, 350);
+          if (done) return;
+          if (result?.authenticated) { later(settleReady, 350); return; }
+          if (result === undefined && verifyTries++ < 4) later(verify, 900);
         });
-      } catch (_) {}
+      } catch (_) {
+        if (!done && verifyTries++ < 4) later(verify, 900);
+      }
     };
     verify();
     try {
@@ -12951,7 +13310,11 @@ let __sbSpeculativeActive = false;    // a speculative answer is live this turn
 let __sbSpeculativeToken = -1;        // the speculative answer's turn token
 let __sbSpeculativeHandledToken = -1; // token of a speculative answer that COMPLETED (already spoke)
 
-function __sbStopSpeech() {
+function __sbStopSpeech(reason = "") {
+  // Audible in the console alongside the [Braino ⏱] trace. Every "his mouth moves
+  // but nothing comes out" report so far has been speech being cancelled by
+  // something, and without this line the only way to find the culprit is to guess.
+  try { console.log(`[Braino 🔇] speech stopped${reason ? ` — ${reason}` : ""}`); } catch (_) {}
   // Linchpin for the speculative beta: if something else takes over speech while a speculative answer
   // is LIVE (its realtime response already exists), cancel it cleanly. The speculative's OWN setup
   // stop runs before its response exists, so it is spared by the __sbHasActiveRealtimeResponse check.
@@ -12989,6 +13352,14 @@ function __sbStopSpeech() {
     __sbCurrentUtterance = null;
   }
   __sbIsSpeaking = false;
+  // The mouth follows the voice — on BOTH bodies. Neither was being reset here, so
+  // any interrupted or aborted speech left him flapping in silence. Two separate
+  // mechanisms had to be cleared: __sbWalkTalking drives the mascot's mouth from
+  // the RAF pose, while the notch's is pure CSS off data-state="speaking". That is
+  // why the symptom looked identical in the notch and out on the page — it was
+  // never a surface bug, it was the speech dying with nothing telling the face.
+  __sbWalkTalking = false;
+  if (__sbHeadphoneMode) __sbSetHpBrainState(__sbVoicePendingReply ? "captured" : "listening");
   __sbSetVoiceButtonState(__sbIsRecording);
   __sbSyncSpeakButtons();
 }
@@ -13384,6 +13755,10 @@ async function __sbSpeakText(text, options = {}) {
     let pendingFetch = null; // a promise for the NEXT sentence's TTS, kicked off during playback
     for (let i = 0; i < sentences.length; i++) {
       if (speechToken !== __sbSpeechGeneration) return spoke;
+      // What he still has left to say, refreshed before every sentence. If you cut
+      // him off, this is what he picks up from when the interruption turns out to
+      // have been nothing.
+      __sbSpeechRemainder = sentences.slice(i).join(" ");
       const fetchPromise = pendingFetch || __sbFetchSentenceTts(sentences[i], speechToken, headers);
       pendingFetch = null;
       const cur = await fetchPromise;
@@ -13417,11 +13792,19 @@ async function __sbSpeakText(text, options = {}) {
       }
     }
     __sbWalkTalking = false;
+    __sbSpeechRemainder = "";   // said it all — nothing left to be resumed later
   } catch (ttsErr) {
     if (speechToken !== __sbSpeechGeneration) return false;
     __sbHandleFishTtsFailure(ttsErr);
     spoke = await __sbSpeakWithBrowser(clean, speechToken);
   } finally {
+    // __sbIsSpeaking must clear even when this job was superseded. It used to sit
+    // inside the token check below, so a barge-in (which bumps __sbSpeechGeneration)
+    // left it stuck true — and __sbBrainoOutputActive() then reads true forever,
+    // permanently arming the barge-confirm branch and the self-echo filter. Every
+    // later turn gets treated as "he is still talking" and thrown away.
+    __sbIsSpeaking = false;
+    __sbWalkTalking = false;
     if (speechToken === __sbSpeechGeneration) {
       if (__sbCurrentSpeechAudio) {
         try { __sbCurrentSpeechAudio.pause(); } catch {}
@@ -13431,7 +13814,6 @@ async function __sbSpeakText(text, options = {}) {
         URL.revokeObjectURL(__sbCurrentSpeechUrl);
         __sbCurrentSpeechUrl = null;
       }
-      __sbIsSpeaking = false;
       __sbSetVoiceButtonState(__sbIsRecording);
       __sbSyncSpeakButtons();
       // After speaking ends in headphone mode, go back to listening
@@ -15014,6 +15396,7 @@ function __sbUpdateAgentSubgoals(subgoals) {
 
 function __sbFinalizeAgentPendingTurn(prompt, answer, options = {}) {
   __sbDelegateActive = false;   // genuine end — release the teardown guard
+  if (__sbRoamActive) __sbWkStatus?.(null);   // drop the "Working on it…" bubble over him
   __sbAgentFlowDone(); // delegate finished — settle EVERY surface (island, status, walker)
   __sbClearBarAgentStatus();   // stop the bar shimmer + restore "Follow up…"
   const task = String(prompt || "").trim();
@@ -15349,10 +15732,14 @@ function __sbIsJunkTranscript(text) {
   if (/^[\[\(\*].*[\]\)\*]$/.test(raw)) return true;
   const norm = raw.toLowerCase().replace(/[^a-z\s]/g, "").replace(/\s+/g, " ").trim();
   // Classic silence/music phantom outputs.
+  // Only things Whisper INVENTS out of silence belong here. "okay", "bye" and
+  // "thank you" were in this list and are ordinary human replies — dropping them
+  // meant agreeing with Braino, or thanking him, registered as noise. YouTube
+  // outro boilerplate stays, because silence really does hallucinate into it.
   const phantoms = new Set([
-    "you", "thank you", "thank you so much", "thanks for watching",
+    "you", "thanks for watching",
     "thanks for watching everyone", "please subscribe", "subscribe",
-    "bye", "bye bye", "okay", "music", "applause", "silence", "the end",
+    "music", "applause", "silence", "the end",
   ]);
   if (phantoms.has(norm)) return true;
   return false;
@@ -15449,16 +15836,21 @@ function __sbAssessVoiceTranscript(text, options = {}) {
   if (hasConfidence && confidence < 0.35 && !intentful && !shortIntent) {
     return verdict(false, "low_confidence", true);
   }
-  if (stats.charCount < 5 && !shortIntent) return verdict(false, "too_short");
-  if (stats.wordCount === 1 && !shortIntent && !intentful) return verdict(false, "one_word_background");
-  if (stats.wordCount <= 2 && !shortIntent && !intentful) return verdict(false, "short_background");
+  // ── Length gates, ported from the Mac (braino-mac.js:2814-2815) ──────────────
+  // The Mac is the working reference and it only ever refuses a SINGLE unaddressed
+  // word. This file had grown to refuse up to THREE words, which is most of how a
+  // person actually answers a question — "the blue one", "about ten minutes", "not
+  // right now", "yeah go ahead" all died here, silently, which is what made a real
+  // back-and-forth impossible in the browser but fine on the Mac.
+  // `too_short` also only consulted shortIntent, never intentful, so "help", "read",
+  // "wait" and "more" were dropped despite being in the intentful verb list.
+  // `addressed` is the Mac's escape hatch (braino-mac.js:2814) — his name OR a bare
+  // command word like wait / stop / repeat / resume. Without consulting it, "wait"
+  // was being binned as background noise.
+  const addressed = __sbVoiceAddressesBraino(stats.raw || "");
+  if (stats.charCount < 3 && !shortIntent && !intentful && !addressed) return verdict(false, "too_short");
+  if (stats.wordCount === 1 && !shortIntent && !intentful && !addressed) return verdict(false, "one_word_background");
   if (stats.letterCount >= 12 && stats.vowelRatio < 0.16) return verdict(false, "gibberish", true);
-
-  // In noisy rooms, random side chatter often transcribes as two or three harmless words.
-  // Do not route that to Braino unless it has a question/command/team signal.
-  if (stats.wordCount <= 3 && !intentful) {
-    return verdict(false, "not_addressed");
-  }
 
   return verdict(true, "ok");
 }
@@ -15472,15 +15864,27 @@ function __sbMaybePromptForDroppedVoice(assessment, options = {}) {
     __sbSpeculativeActive = false;
     __sbSpeculativeHandledToken = -1;
   }
-  const shouldAsk = assessment.askRepeat && __sbVoiceLooksIntentful(assessment);
-  if (!shouldAsk) {
+  // Speak up unless it was obviously not speech.
+  //
+  // This used to require `askRepeat && __sbVoiceLooksIntentful(...)`, which can never
+  // both be true: the only reason that sets askRepeat is `low_confidence`, and that
+  // branch already required !intentful. So the prompt was unreachable and every
+  // single rejection vanished without a sound — which is precisely why these bugs
+  // survived so long. If Braino heard you and decided not to act, he says so.
+  //
+  // Genuine non-speech stays silent, or he would narrate the room.
+  const SILENT_REASONS = new Set(["empty", "no_words", "phantom", "filler", "non_english_noise"]);
+  if (SILENT_REASONS.has(assessment.reason) || String(assessment.reason || "").startsWith("partial_")) {
     __sbVTMark?.(`🧹 Dropped voice noise (${assessment.reason})`);
     return;
   }
   const now = Date.now();
   if (now - __sbLastRepeatPromptAt > 12000 && !__sbHasActiveRealtimeResponse()) {
     __sbLastRepeatPromptAt = now;
+    __sbVTMark?.(`🗣 Asking for a repeat (${assessment.reason})`);
     void __sbSpeakWithPreferredVoice("Sorry, I didn't catch that — could you say it again?", options.voiceOutput || "realtime");
+  } else {
+    __sbVTMark?.(`🧹 Dropped voice noise (${assessment.reason}, cooling down)`);
   }
 }
 
@@ -16467,6 +16871,27 @@ function __sbIsDesignMockupRequest(text) {
   return false;
 }
 
+// A failed voice turn says its reason ONCE, then goes quiet for a while. Without
+// this, a live mic plus a failing backend meant every stray noise produced another
+// spoken apology, which is how "Please sign in to continue" ended up on loop.
+let __sbLastTurnFailureAt = 0;
+let __sbLastTurnFailureKind = "";
+async function __sbSpeakTurnFailure(failure) {
+  const kind = failure === "auth" ? "auth" : "network";
+  const now = Date.now();
+  if (kind === __sbLastTurnFailureKind && now - __sbLastTurnFailureAt < 30000) return;
+  __sbLastTurnFailureAt = now;
+  __sbLastTurnFailureKind = kind;
+  if (kind === "auth") {
+    // A genuine 401/403. Say it once and drop out of voice, because staying live
+    // just burns the mic on turns that cannot possibly succeed.
+    await speakVoiceReply("You are signed out. Sign in and I will pick this up.");
+    try { if (typeof __sbExitHeadphoneMode === "function") __sbExitHeadphoneMode(); } catch (_) {}
+    return;
+  }
+  await speakVoiceReply("That did not go through. Say it again.");
+}
+
 async function __sbFetchAssistantReply(body) {
   const enrichedBody = body && typeof body === "object" && !Array.isArray(body)
     ? {
@@ -16489,10 +16914,13 @@ async function __sbFetchAssistantReply(body) {
     allowAnonymous: true,
     jsonBody: enrichedBody,
   });
-  if (!resp) return { reply: null };
+  // The caller has to be able to tell "you are signed out" apart from "the
+  // request died". Collapsing both into a bare null is what made every network
+  // blip announce itself as a sign-in problem.
+  if (!resp) return { reply: null, failure: "network" };
 
   if (resp.status === 401 || resp.status === 403) {
-    return { reply: null };
+    return { reply: null, failure: "auth" };
   }
 
   if (!resp.ok) {
@@ -17319,6 +17747,12 @@ async function __sbShouldForceVoiceDelegate(routing) {
   if (!promptText) return false;
   if (__sbLooksLikeCompare(promptText)) return false; // the Compare skill owns these, not Delegate
   if (__sbIsMovieSceneQuestion(promptText) && __sbBuildMovieContext()) return false;
+  // Plain conversation never needs the delegate classifier. Asking anyway cost a
+  // backend round trip on EVERY spoken turn before Braino could begin answering,
+  // and when the classifier guessed wrong "how are you" came back as an agent task
+  // — so he said "On it, working on that now" and went off to do browser work
+  // instead of just talking. No action verb, no delegate: answer as conversation.
+  if (!__sbIsBrowserActionCommand(promptText)) return false;
 
   const handoff = __sbBuildAgentHandoffPayload(promptText, { connector: routing?.connectorHint });
   const result = await __sbRuntimeMessage({
@@ -18105,9 +18539,12 @@ async function __sbProcessPrompt(text, options = {}) {
     if (movieContext) body.movieContext = movieContext;
     if (selectedText) body.selectedText = selectedText;
 
-    const { reply } = await __sbFetchAssistantReply(body);
+    const { reply, failure } = await __sbFetchAssistantReply(body);
     if (!reply) {
-      if (fromVoice) await speakVoiceReply("Please sign in to continue.");
+      // Only a real 401/403 is a sign-in problem. Everything else (dropped
+      // request, empty body from the backend) used to claim the user was signed
+      // out, and with the mic live that turned into Braino chanting it on loop.
+      if (fromVoice) await __sbSpeakTurnFailure(failure);
       return;
     }
     __sbChatHistory.push({ role: "assistant", content: reply });
@@ -18222,6 +18659,10 @@ function __sbRunAgent(task, options = {}) {
   __sbDelegateActive = true;
   __sbAgentLogShow("Working…");
   __sbAgentLogThought("Thinking…");  // island opens ALREADY thinking; real thoughts replace in ~2s
+  // Roam collapses the bar, and the bar is where every scrap of delegate progress
+  // renders — so a task started while he is out ran completely blind, which is
+  // indistinguishable from it never having started. Put the state on him instead.
+  if (__sbRoamActive) __sbWkStatus?.("Working on it…");
   __sbSetStopBtn(true);   // show the stop affordance (card + bar) the instant the task starts
   __sbChatHistory.push({ role: "user", content: __sbLastAgentTask });
   if (!__sbVoiceOnlyMode) { __sbSetAgentPendingTurn(__sbLastAgentTask, "Delegating…"); __sbStartWaitEntertainment(); }
@@ -18814,7 +19255,7 @@ async function __sbCaptureMeetingCheckpointSegment(reason = "autosave") {
     const seg = __sbInPageCaptureActive
       ? await __sbGetInPageSegment()
       : { audioBase64: null, knownSpeakerReferences: [], meetingContext: __sbMeetingContextPayload() };
-    if (!seg.audioBase64 && !__sbMeetingPayloadHasText(seg.meetingContext)) {
+    if (!seg.audioStreams?.length && !__sbMeetingPayloadHasText(seg.meetingContext)) {
       __sbSaveMeetingCheckpoint(reason);
       return;
     }
@@ -18878,9 +19319,9 @@ function __sbShowLectureRecordingCard() {
 // with the Start button's user gesture, captures this tab's audio in place, and feeds the same
 // transcription backend via the `transcribeSegment` message. Must be called inside a gesture.
 let __sbInPageCaptureActive = false;
-let __sbIpDisplayStream = null, __sbIpMicStream = null, __sbIpAudioCtx = null;
-let __sbIpRecorder = null, __sbIpChunks = [];
-let __sbIpMicRecorder = null, __sbIpMicChunks = [];
+let __sbIpDisplayStream = null, __sbIpMicStream = null;
+// Two recorders, never one. See __sbStartInPageCapture for why that is the whole ballgame.
+let __sbIpSysSeg = null, __sbIpMicSeg = null;
 
 function __sbBlobToBase64(blob) {
   return new Promise((resolve, reject) => {
@@ -18889,6 +19330,68 @@ function __sbBlobToBase64(blob) {
     r.onerror = () => reject(r.error || new Error("read failed"));
     r.readAsDataURL(blob);
   });
+}
+
+// ── Segment recorders that emit COMPLETE files ───────────────────────────────
+// MediaRecorder writes the WebM header (EBML + Tracks) into its FIRST blob only. Slicing
+// chunks off one long-running recorder therefore handed the transcription API headerless
+// fragments with no codec declaration, which it cannot open — so every segment after the
+// first was silently thrown away and a 45-minute meeting came back as its first 75 seconds.
+// Rotating fixes it at the source: each cut closes the outgoing recorder into a standalone
+// file. The replacement starts BEFORE the outgoing one is told to stop, so a boundary
+// duplicates a few milliseconds rather than losing them — a repeated syllable is nothing,
+// a dropped word is gone forever.
+const __SB_SEG_MIME = "audio/webm;codecs=opus";
+
+function __sbSegRecStart(seg) {
+  const recorder = new MediaRecorder(seg.stream, { mimeType: __SB_SEG_MIME });
+  const chunks = [];
+  recorder.ondataavailable = (e) => { if (e.data && e.data.size > 0) chunks.push(e.data); };
+  seg.recorder = recorder;
+  seg.chunks = chunks;
+  seg.startedAt = Date.now();
+  recorder.start(1000);
+}
+
+function __sbSegRecCreate(stream) {
+  const seg = { stream, recorder: null, chunks: [], startedAt: 0 };
+  __sbSegRecStart(seg);
+  return seg;
+}
+
+// Close the current recorder into one complete blob. Keeps rolling unless told otherwise.
+function __sbSegRecCut(seg, { keepRecording = true } = {}) {
+  return new Promise((resolve) => {
+    const outgoing = seg?.recorder;
+    const chunks = seg?.chunks || [];
+    const durationMs = seg?.startedAt ? Date.now() - seg.startedAt : 0;
+    // stop() flushes one last dataavailable into this same array before it fires "stop".
+    const done = () => resolve(chunks.length ? { blob: new Blob(chunks, { type: "audio/webm" }), durationMs } : null);
+    if (!seg || !outgoing || outgoing.state === "inactive") { done(); return; }
+    if (keepRecording) __sbSegRecStart(seg);
+    else { seg.recorder = null; seg.chunks = []; seg.startedAt = 0; }
+    let settled = false;
+    const finish = () => { if (settled) return; settled = true; clearTimeout(timer); done(); };
+    const timer = setTimeout(finish, 2000);
+    outgoing.addEventListener("stop", finish, { once: true });
+    try { outgoing.stop(); } catch (_) { finish(); }
+  });
+}
+
+function __sbSegRecStop(seg) {
+  try { if (seg?.recorder && seg.recorder.state !== "inactive") seg.recorder.stop(); } catch (_) {}
+  if (seg) { seg.recorder = null; seg.chunks = []; seg.startedAt = 0; }
+}
+
+// Opus spends almost nothing encoding silence, so a segment this thin is a muted call or a
+// closed mic. Skipping it is not only cheaper: transcribers hallucinate on silence, and
+// "Thanks for watching" has no business in anyone's meeting notes.
+const __SB_SILENCE_BYTES_PER_SEC = 800;
+
+function __sbSegLooksSilent(cut) {
+  const seconds = (cut?.durationMs || 0) / 1000;
+  if (!cut?.blob || seconds < 5) return false;   // too short to judge fairly
+  return (cut.blob.size / seconds) < __SB_SILENCE_BYTES_PER_SEC;
 }
 
 async function __sbStartInPageCapture(withMic) {
@@ -18906,60 +19409,49 @@ async function __sbStartInPageCapture(withMic) {
   // If the user hits Chrome's "Stop sharing" bar, finish the recording cleanly.
   audioTracks[0].addEventListener("ended", () => { if (__sbIsLectureRecording) void __sbStopLectureRecording(); });
 
-  let recordStream = new MediaStream(audioTracks);
+  // ── Two recorders, never one ───────────────────────────────────────────────
+  // The call arrives on the tab; you leave on the mic. Which side a voice came in on is the
+  // only speaker attribution in this entire system that cannot be wrong, and the old code
+  // summed both into a single mono track one line before recording — throwing that away, then
+  // paying a model to guess it back. Kept apart, the diarizer only has to separate the people
+  // on the far end, and you are identified by physics.
+  __sbIpSysSeg = __sbSegRecCreate(new MediaStream(audioTracks));
   if (withMic) {
-    __sbIpMicStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    __sbIpAudioCtx = new AudioContext();
-    const dest = __sbIpAudioCtx.createMediaStreamDestination();
-    __sbIpAudioCtx.createMediaStreamSource(new MediaStream(audioTracks)).connect(dest);
-    __sbIpAudioCtx.createMediaStreamSource(__sbIpMicStream).connect(dest);
-    recordStream = dest.stream;
-    __sbIpMicChunks = [];
-    __sbIpMicRecorder = new MediaRecorder(__sbIpMicStream, { mimeType: "audio/webm;codecs=opus" });
-    __sbIpMicRecorder.ondataavailable = (e) => { if (e.data.size > 0) __sbIpMicChunks.push(e.data); };
-    __sbIpMicRecorder.start(1000);
+    // Echo cancellation matters more than ever now: without it the remote voices coming out of
+    // your speakers land on the mic too and get transcribed a second time, as you.
+    __sbIpMicStream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: false, autoGainControl: true },
+    });
+    __sbIpMicSeg = __sbSegRecCreate(__sbIpMicStream);
   }
-  __sbIpChunks = [];
-  __sbIpRecorder = new MediaRecorder(recordStream, { mimeType: "audio/webm;codecs=opus" });
-  __sbIpRecorder.ondataavailable = (e) => { if (e.data.size > 0) __sbIpChunks.push(e.data); };
-  __sbIpRecorder.start(1000);
   __sbInPageCaptureActive = true;
 }
 
-function __sbFlushIpRecorder(rec) {
-  return new Promise((resolve) => {
-    if (!rec || rec.state !== "recording") { resolve(); return; }
-    let done = false;
-    const finish = () => { if (done) return; done = true; clearTimeout(t); rec.removeEventListener("dataavailable", on); resolve(); };
-    const on = () => finish();
-    const t = setTimeout(finish, 400);
-    rec.addEventListener("dataavailable", on, { once: true });
-    try { rec.requestData(); } catch { finish(); }
-  });
-}
-
-async function __sbBuildIpSpeakerRefs() {
-  if (__sbIpMicRecorder && __sbIpMicRecorder.state === "recording") await __sbFlushIpRecorder(__sbIpMicRecorder);
-  if (__sbIpMicChunks.length < 2) return [];
-  const b64 = await __sbBlobToBase64(new Blob(__sbIpMicChunks.slice(0, 6), { type: "audio/webm" }));
-  return b64 ? [{ name: "You", audioBase64: b64, mimeType: "audio/webm" }] : [];
-}
-
-async function __sbGetInPageSegment() {
+async function __sbGetInPageSegment(options = {}) {
   const meetingContext = __sbLectureRecordingMode === "meeting" ? __sbMeetingContextPayload() : null;
-  if (!__sbIpRecorder) return { audioBase64: null, knownSpeakerReferences: [], meetingContext };
-  await __sbFlushIpRecorder(__sbIpRecorder);
-  const refs = await __sbBuildIpSpeakerRefs();
-  if (!__sbIpChunks.length) return { audioBase64: null, knownSpeakerReferences: refs, meetingContext };
-  const chunks = __sbIpChunks.slice(); __sbIpChunks = [];
-  return { audioBase64: await __sbBlobToBase64(new Blob(chunks, { type: "audio/webm" })), knownSpeakerReferences: refs, meetingContext };
+  if (!__sbIpSysSeg && !__sbIpMicSeg) return { audioStreams: [], meetingContext };
+
+  // Cut both at the same moment so the two transcripts share a clock and can be interleaved.
+  const keepRecording = options.final !== true;
+  const [systemCut, micCut] = await Promise.all([
+    __sbIpSysSeg ? __sbSegRecCut(__sbIpSysSeg, { keepRecording }) : Promise.resolve(null),
+    __sbIpMicSeg ? __sbSegRecCut(__sbIpMicSeg, { keepRecording }) : Promise.resolve(null),
+  ]);
+
+  const audioStreams = [];
+  for (const [role, cut] of [["system", systemCut], ["mic", micCut]]) {
+    if (!cut?.blob || __sbSegLooksSilent(cut)) continue;
+    const audioBase64 = await __sbBlobToBase64(cut.blob);
+    if (audioBase64) audioStreams.push({ role, audioBase64, mimeType: "audio/webm", durationMs: cut.durationMs });
+  }
+  return { audioStreams, meetingContext };
 }
 
 async function __sbTranscribeIpSegment(seg) {
   return await new Promise((resolve) => {
     chrome.runtime.sendMessage({
       action: "transcribeSegment",
-      audioBase64: seg.audioBase64,
+      audioStreams: seg.audioStreams || [],
       existingNotes: __sbLectureNotes,
       existingTranscript: __sbLectureTranscript,
       mode: __sbLectureRecordingMode,
@@ -18970,13 +19462,10 @@ async function __sbTranscribeIpSegment(seg) {
 }
 
 function __sbCleanupInPageCapture() {
-  try { if (__sbIpRecorder && __sbIpRecorder.state !== "inactive") __sbIpRecorder.stop(); } catch {}
-  __sbIpRecorder = null; __sbIpChunks = [];
-  try { if (__sbIpMicRecorder && __sbIpMicRecorder.state !== "inactive") __sbIpMicRecorder.stop(); } catch {}
-  __sbIpMicRecorder = null; __sbIpMicChunks = [];
+  __sbSegRecStop(__sbIpSysSeg); __sbIpSysSeg = null;
+  __sbSegRecStop(__sbIpMicSeg); __sbIpMicSeg = null;
   if (__sbIpDisplayStream) { __sbIpDisplayStream.getTracks().forEach((t) => t.stop()); __sbIpDisplayStream = null; }
   if (__sbIpMicStream) { __sbIpMicStream.getTracks().forEach((t) => t.stop()); __sbIpMicStream = null; }
-  if (__sbIpAudioCtx) { __sbIpAudioCtx.close().catch(() => {}); __sbIpAudioCtx = null; }
   __sbInPageCaptureActive = false;
 }
 
@@ -19119,8 +19608,8 @@ async function __sbStopLectureRecording() {
   let res;
   if (__sbInPageCaptureActive) {
     // In-page path: flush the final segment, transcribe it, then tear the capture down.
-    const seg = await __sbGetInPageSegment();
-    res = (seg.audioBase64 || __sbMeetingPayloadHasText(seg.meetingContext))
+    const seg = await __sbGetInPageSegment({ final: true });
+    res = (seg.audioStreams?.length || __sbMeetingPayloadHasText(seg.meetingContext))
       ? await __sbTranscribeIpSegment(seg)
       : { notes: __sbLectureNotes, transcript: __sbLectureTranscript };
     __sbCleanupInPageCapture();
@@ -19352,6 +19841,18 @@ let __sbRtUsageWarningTimer = null;
 let __sbRtConnectHintTimer = null;
 let __sbRtRealtimeModel = "gpt-realtime-mini";
 let __sbRtTranscriptionModel = "gpt-4o-transcribe";
+// Which OpenAI input denoiser the live session runs. `near_field` assumes the mic is at
+// your mouth and treats a quiet, reverberant, arm's-length signal as noise to scrub —
+// which is exactly why voice mode used to force you to lean into the screen. Voice mode
+// was hardcoded to near_field on every surface while Yap Mode had already worked this out
+// (braino-mac.js dictation.noise_reduction.selected). Default to the laptop case and only
+// switch to near_field when the mic label says a headset is actually on your head.
+let __sbRtNoiseReduction = "far_field";
+const __SB_NEAR_FIELD_MIC_RE = /airpods?|head(?:set|phones?)|earbuds?|earphones?|bluetooth|usb|external|lavalier|lapel|rode|shure|yeti|blue snowball|jabra|bose|sony wh|galaxy buds/i;
+
+function __sbPickNoiseReduction(micLabel) {
+  return __SB_NEAR_FIELD_MIC_RE.test(String(micLabel || "")) ? "near_field" : "far_field";
+}
 let __sbRtCostTurn = null;
 let __sbRtLastCostTurn = null;
 let __sbRtCostTurnSeq = 0;
@@ -19685,7 +20186,8 @@ function __sbBuildRealtimeSessionUpdate(instructions) {
       audio: {
         input: {
           noise_reduction: {
-            type: "near_field",
+            // Mic-aware, not hardcoded. See __sbRtNoiseReduction.
+            type: __sbRtNoiseReduction,
           },
           transcription: {
             // Full transcribe model, not mini — accuracy is the whole point of STT and the
@@ -19698,10 +20200,14 @@ function __sbBuildRealtimeSessionUpdate(instructions) {
             prompt: __sbBuildRealtimeTranscriptionPrompt(),
           },
           turn_detection: {
-            // Public-demo safe: "low" waits for clearer speech before starting/stopping a turn.
-            // The transcript gate below is the second lock against fans, coughs, and side chatter.
+            // Matches the Mac. "low" was chosen to be public-demo safe against fans
+            // and side chatter, but it makes the VAD sit through a long pause before
+            // conceding the turn ended — which lands as Braino carrying on listening
+            // well after you finished, then answering late. The transcript gate below
+            // is already a second lock against noise, so the eagerness does not have
+            // to carry that job alone.
             type: "semantic_vad",
-            eagerness: "low",
+            eagerness: "medium",
             create_response: false,
             interrupt_response: true,
           },
@@ -20034,9 +20540,17 @@ async function __sbStartRealtimeVoice() {
       }
     }, 1500);
 
+    // echoCancellation stays ON: Braino speaks out loud here, and without AEC he hears
+    // himself and barge-in collapses. autoGainControl stays ON: it is what lifts a voice
+    // from across the room. noiseSuppression is OFF on purpose — OpenAI already denoises
+    // this stream, and stacking Chrome's denoiser on top of it scrubs a distant voice
+    // along with the room. Same lesson the Mac dictation path already learned.
     __sbRtMic = await navigator.mediaDevices.getUserMedia({
-      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      audio: { echoCancellation: true, noiseSuppression: false, autoGainControl: true },
     });
+    const __sbRtMicLabel = String(__sbRtMic.getAudioTracks()[0]?.label || "");
+    __sbRtNoiseReduction = __sbPickNoiseReduction(__sbRtMicLabel);
+    console.debug("[Braino][Realtime] noise reduction", { type: __sbRtNoiseReduction, microphone: __sbRtMicLabel || "unknown" });
 
     const peerConnection = new RTCPeerConnection();
     __sbRtPeerConnection = peerConnection;
@@ -20256,12 +20770,20 @@ try {
     }
 
     if ("sbVoiceModeOn" in changes && changes.sbVoiceModeOn.newValue === false) {
-      // Voice fully off everywhere.
-      if (__sbHeadphoneMode) {
-        __sbCleanupRealtimeVoice({ reason: "voice_mode_off" });
-        __sbDetachVoiceVisual();
-        __sbStopSpeech();
-      }
+      // Voice fully off everywhere. Deliberately NOT gated on __sbHeadphoneMode:
+      // a tab that reloaded mid-session carries a false local flag with a live
+      // mic, and that gate is what left Braino listening after being told to stop.
+      // Tear down unconditionally and reset the local flag so the next Ctrl x2
+      // reads as "turn on" rather than a second "turn off".
+      __sbHeadphoneMode = false;
+      __sbVoiceOnlyMode = false;
+      __sbVoicePendingReply = false;
+      __sbCleanupRealtimeVoice({ reason: "voice_mode_off" });
+      __sbDetachVoiceVisual();
+      __sbStopSpeech();
+      try { __sbSetHpBrainState(""); __sbSetVoiceStatusBadge(null); } catch (_) {}
+      document.getElementById("__sb_rec_btn__")?.classList.remove("active");
+      document.getElementById("__sb_card_voice_mode_btn__")?.classList.remove("active");
       return;
     }
 
@@ -20688,6 +21210,11 @@ async function __sbRequestRealtimeReply(text, { relayMode = false, verbatim = fa
 }
 
 async function __sbSpeakWithPreferredVoice(text, preferred = "legacy", options = {}) {
+  // Every spoken reply exits through here, whichever pipeline made it. The source
+  // tag says which brain produced the words: chat replies come from
+  // chat-about-notes with the Emotional Engine composed server-side, delegate
+  // narration from the HIL loop when the brain flag is on.
+  console.log(`[Braino 🗣 OUT] (${options.source || (preferred === "realtime" ? "realtime+EE" : "chat+EE")}) "${String(text || "").slice(0, 200)}"`);
   // Remember what Braino is about to say so the mic can't re-hear it and re-fire an intent.
   __sbNoteSpoken(text);
   if (!__sbVTPath) __sbVTPath = "Slow Path";   // reached the batch speak entry (not fast streaming)
@@ -20713,11 +21240,16 @@ function __sbCompleteVoiceTurn(options = {}) {
 
   const voiceOutput = options.voiceOutput === "realtime" ? "realtime" : "legacy";
   const voiceTurnToken = Number.isInteger(options.voiceTurnToken) ? options.voiceTurnToken : null;
+  // Release the pending-reply lock BEFORE the stale-token bail. This is the
+  // "he doesn't speak on turn 2" bug: a superseded turn (any barge-in bumps
+  // __sbRtTurnToken) returned here without ever clearing the flag, and
+  // __sbScheduleVoiceTurnProcessing then silently discards every later transcript
+  // while it is set. One superseded turn used to wedge voice permanently.
+  __sbVoicePendingReply = false;
   if (voiceOutput === "realtime" && voiceTurnToken !== null && voiceTurnToken !== __sbRtTurnToken) {
     return;
   }
 
-  __sbVoicePendingReply = false;
   if (__sbHeadphoneMode) {
     __sbSetHpBrainState("listening");
     if (voiceOutput === "legacy" && options.resumeLegacyMic) {
@@ -20751,7 +21283,14 @@ function __sbSplitAndCorrectTranscript(transcript) {
   }
 
   const FILLER_ONLY = /^(?:okay|ok|alright|right|hmm|ah|oh|uh|um|sure|cool|great|nice|perfect|sounds good|that'?s?\s+too\s+loud)[.!,]?$/i;
-  parts = parts.filter(p => p.length > 4 && !FILLER_ONLY.test(p));
+  // Keep short segments that are real intent. The flat >4 chars rule threw away
+  // "stop", "yes", "no" and "next" whenever an utterance happened to get split,
+  // which are exactly the words you most need to survive.
+  parts = parts.filter((p) => {
+    if (FILLER_ONLY.test(p)) return false;
+    if (p.length > 4) return true;
+    try { return __sbVoiceHasShortIntent(__sbVoiceTranscriptStats(p)); } catch (_) { return false; }
+  });
 
   if (parts.length <= 1) return [raw];
 
@@ -20804,7 +21343,8 @@ async function __sbHandleMultiIntentChain(segments, turnToken) {
       if (__sbChainAbortToken !== myToken || __sbRtTurnToken !== turnToken) return;
 
       // Hold the pending-reply lock across the whole chain to block concurrent turns.
-      __sbVoicePendingReply = true;
+      __sbCancelBargeResume();   // a real turn landed — he is answering that, not resuming
+    __sbVoicePendingReply = true;
 
       await __sbHandleInlineRealtimeTurn(segments[i], turnToken);
 
@@ -20873,6 +21413,15 @@ function __sbScheduleVoiceTurnProcessing(transcript, onReady, options = {}) {
     // answer is in play, IT set the pending flag — and we MUST still run the router so it can confirm
     // (plain chat → keep) or cancel-and-handle (action). Otherwise actions get silently swallowed.
     const specInPlay = __sbSpeculativeActive || __sbSpeculativeHandledToken >= 0;
+    // Self-heal. This early return is where a stuck flag silently eats every turn
+    // forever, so never trust it blindly: if nothing is actually in flight, the
+    // flag is a leak from a turn that died without releasing it. Clear and carry on
+    // rather than going mute until the tab is reloaded.
+    if (__sbVoicePendingReply && !specInPlay
+        && !__sbHasActiveRealtimeResponse() && !__sbBrainoOutputActive()) {
+      console.log("[Braino 🩹] pending-reply lock was stale — releasing");
+      __sbVoicePendingReply = false;
+    }
     if (!toProcess || (__sbVoicePendingReply && !specInPlay)) return;
 
     if (__sbHeadphoneMode) {
@@ -21634,11 +22183,27 @@ function __sbHandleRtEvent(ev) {
     // boot (~0.5-5s cold start) is paid during your sentence instead of on your wait — which is why
     // the slowest first-sound runs were always the LONGEST utterances (isolate went cold mid-sentence).
     try { __sbWarmFishTts(); } catch (_) {}
-    const brainoWasSpeaking = __sbBrainoOutputActive();
-    if (brainoWasSpeaking) {
+    // You started talking while he was talking → he stops. Immediately, mid-word,
+    // the way a person does. He does not weigh up whether you had a point first.
+    //
+    // Every previous attempt here tried to be CERTAIN before stopping: first by
+    // never stopping at all, then by waiting out a confirm window, then by demanding
+    // the transcriber resolve words within 700ms. All three made him impossible to
+    // interrupt, because certainty takes longer than a person's patience.
+    //
+    // The judgement moves AFTER the stop instead, where it is free: if the
+    // interruption turns out to be nothing — a cough, his own echo, someone else in
+    // the room — __sbArmBargeResume picks his sentence back up a few seconds later.
+    // Being wrong now costs a short pause rather than the whole feature.
+    if (__sbBrainoOutputActive()) {
       __sbVoiceOutputGuardAt = Date.now();
       __sbRtUserTranscript = "";
-      if (__sbHeadphoneMode) __sbSetHpBrainState("speaking");
+      __sbArmBargeResume();
+      __sbVTMark("✋ Cut off mid-sentence");
+      __sbVoicePendingReply = false;
+      if (__sbHasActiveRealtimeResponse()) __sbInterruptRealtimeResponse();
+      __sbStopSpeech("barge-in");
+      if (__sbHeadphoneMode) __sbSetHpBrainState("hearing");
       return;
     }
     // The realtime VAD heard the user start talking → INTERRUPT whatever Braino is saying.
@@ -21656,6 +22221,10 @@ function __sbHandleRtEvent(ev) {
   }
   if (ev.type === "input_audio_buffer.speech_stopped") {
     __sbVTMark("🛑 You stopped talking");
+    // Speech ended inside the confirm window → it was a blip (very likely his own
+    // audio), not someone talking over him. Stand down; he keeps his sentence.
+    // Deliberately does NOT touch the resume clock. Whether he picks his sentence
+    // back up is decided by whether a real turn materialises, not by you stopping.
     // User paused → stop the sonar; sit idle while we transcribe/think (not talking).
     if (__sbHeadphoneMode) __sbSetHpBrainState("listening");
     if (Date.now() - __sbVoiceOutputGuardAt < 12000 && __sbBrainoOutputActive()) {
@@ -21695,6 +22264,9 @@ function __sbHandleRtEvent(ev) {
       if (__sbHeadphoneMode) __sbSetHpBrainState(__sbBrainoOutputActive() ? "speaking" : "listening");
       return;
     }
+    // Testing tap, paired with [Braino 🗣 OUT] in __sbSpeakWithPreferredVoice:
+    // this line only prints for audio that cleared every gate and became a turn.
+    console.log(`[Braino 🎤 IN] "${transcript}"`);
 
     // Language confirmation flow. If we asked the user whether to switch languages, this turn is
     // their yes/no answer — consume it instead of treating it as a normal request.
@@ -21794,13 +22366,23 @@ function __sbHandleRtEvent(ev) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function __sbToggleHeadphoneMode() {
-  // Ctrl (voice) while roaming calls Braino back to the bar first.
-  if (__sbRoamActive && typeof __sbExitRoamMode === "function") __sbExitRoamMode();
-  if (__sbHeadphoneMode) {
-    __sbExitHeadphoneMode();
-  } else {
-    __sbEnterHeadphoneMode();
-  }
+  // Voice does NOT send him home. Cmd x2 put him on the page on purpose, so Ctrl x2
+  // starts a conversation with the mascot where he stands — dragging him back into
+  // the notch the moment you tried to talk to him defeated the whole handover.
+  if (__sbHeadphoneMode) { __sbExitHeadphoneMode(); return; }
+  // __sbHeadphoneMode is per TAB, but the session is global (offscreen document +
+  // the sbVoiceModeOn flag). After a reload or a tab switch this tab can believe
+  // voice is off while the mic is very much live — and Ctrl x2 would then open a
+  // SECOND session instead of closing the running one, which is why voice felt
+  // impossible to turn off. Storage is the truth; ask it before entering.
+  __sbStorageGet(["sbVoiceModeOn"]).then(({ sbVoiceModeOn }) => {
+    if (sbVoiceModeOn) {
+      __sbHeadphoneMode = true;   // adopt the live session so the full exit path runs
+      __sbExitHeadphoneMode();
+    } else {
+      __sbEnterHeadphoneMode();
+    }
+  }).catch(() => __sbEnterHeadphoneMode());
 }
 
 function __sbApplyVoiceAutoRoutingDefaults() {
@@ -22432,6 +23014,7 @@ function __sbExitHeadphoneMode() {
   if (__sbContextOk()) chrome.storage.local.set({ sbVoiceModeOn: false });
 
   if (__sbVoiceSilenceTimer) { clearTimeout(__sbVoiceSilenceTimer); __sbVoiceSilenceTimer = null; }
+  __sbCancelBargeResume();
   __sbLastFinalTranscript = null;
   __sbRtTurnToken = 0;
   __sbRtUserTranscript = "";

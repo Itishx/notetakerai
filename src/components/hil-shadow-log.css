@@ -1,0 +1,166 @@
+/* HilShadowLog — black, quiet, one glance.
+   Restraint is the design here. The page answers one question, so there is one
+   accent colour, one type scale, and no borders that are not carrying meaning. */
+
+.hs {
+  --hs-ink: #f5f5f7;
+  --hs-dim: rgba(245, 245, 247, 0.52);
+  --hs-faint: rgba(245, 245, 247, 0.32);
+  --hs-line: rgba(255, 255, 255, 0.09);
+  --hs-card: rgba(255, 255, 255, 0.035);
+  --hs-braino: #6ee7a8;
+  --hs-hil: #7d95ff;
+  --hs-hot: #ffb454;
+  color: var(--hs-ink);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 0 20px 80px;
+}
+
+/* ── the four numbers ─────────────────────────────────────────────────────── */
+.hs-top {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 1px;
+  background: var(--hs-line);
+  border: 1px solid var(--hs-line);
+  border-radius: 18px;
+  overflow: hidden;
+  margin: 8px 0 26px;
+}
+.hs-big {
+  background: #000;
+  padding: 26px 22px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.hs-big-n {
+  font-size: 40px;
+  font-weight: 600;
+  letter-spacing: -0.028em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.hs-big-l {
+  font-size: 13px;
+  line-height: 1.35;
+  color: var(--hs-dim);
+  letter-spacing: -0.005em;
+}
+.hs-hot .hs-big-n { color: var(--hs-hot); }
+
+/* ── legend ───────────────────────────────────────────────────────────────── */
+.hs-legend {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--hs-faint);
+  margin: 0 2px 14px;
+  letter-spacing: -0.005em;
+}
+.hs-legend-gap { width: 18px; }
+.hs-dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+.hs-dot-braino { background: var(--hs-braino); }
+.hs-dot-hil { background: var(--hs-hil); }
+
+/* ── the list ─────────────────────────────────────────────────────────────── */
+.hs-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+
+.hs-item {
+  background: var(--hs-card);
+  border: 1px solid var(--hs-line);
+  border-radius: 18px;
+  padding: 20px 22px;
+  transition: background 0.18s ease, border-color 0.18s ease;
+}
+.hs-item:hover { background: rgba(255, 255, 255, 0.055); }
+/* The ones worth acting on: Braino had nothing, HIL did. */
+.hs-item-hot { border-color: rgba(255, 180, 84, 0.3); }
+
+.hs-said { margin-bottom: 16px; position: relative; }
+.hs-said-label,
+.hs-col-label {
+  display: block;
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.075em;
+  color: var(--hs-faint);
+  margin-bottom: 6px;
+}
+.hs-said-text {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 500;
+  letter-spacing: -0.018em;
+  line-height: 1.32;
+}
+.hs-when {
+  position: absolute;
+  top: 0;
+  right: 0;
+  font-size: 11.5px;
+  color: var(--hs-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── the two answers ──────────────────────────────────────────────────────── */
+.hs-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  background: var(--hs-line);
+  border-radius: 13px;
+  overflow: hidden;
+}
+.hs-col {
+  background: #050505;
+  padding: 14px 16px 15px;
+  min-width: 0;
+}
+.hs-col-braino { border-left: 2px solid var(--hs-braino); }
+.hs-col-hil { border-left: 2px solid var(--hs-hil); }
+.hs-col-text {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.45;
+  letter-spacing: -0.008em;
+  overflow-wrap: anywhere;
+}
+.hs-col-hil .hs-col-text { font-variant-numeric: tabular-nums; }
+.hs-kind-fire .hs-col-text { color: var(--hs-hil); font-weight: 500; }
+.hs-kind-think .hs-col-text,
+.hs-kind-ask .hs-col-text,
+.hs-kind-talk .hs-col-text { color: var(--hs-dim); }
+.hs-col-sub {
+  display: block;
+  margin-top: 7px;
+  font-size: 11.5px;
+  color: var(--hs-faint);
+  line-height: 1.4;
+}
+.hs-blocked { color: var(--hs-hot); }
+
+/* ── empty ────────────────────────────────────────────────────────────────── */
+.hs-empty {
+  max-width: 500px;
+  margin: 60px auto;
+  text-align: center;
+  color: #f5f5f7;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif;
+  padding: 0 24px;
+}
+.hs-empty h2 { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; margin: 0 0 12px; }
+.hs-empty p { font-size: 14.5px; line-height: 1.6; color: rgba(245, 245, 247, 0.55); margin: 0 0 14px; }
+.hs-empty-note { font-size: 13px !important; color: rgba(245, 245, 247, 0.34) !important; }
+
+@media (max-width: 620px) {
+  .hs-cols { grid-template-columns: 1fr; }
+  .hs-said-text { font-size: 17px; }
+  .hs-when { position: static; display: block; margin-top: 6px; }
+  .hs-big-n { font-size: 32px; }
+}

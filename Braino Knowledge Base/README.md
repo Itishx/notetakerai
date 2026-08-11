@@ -18,6 +18,14 @@ For every feature:
 
 ## Contents
 
+- [Braino comes in three, on one page](design/two-products-and-the-browser-page.md)
+- [Meeting Recorder: Both Sides, With Names](features/meeting-recorder.md)
+- [Meetings positioning: quiet, not covert](design/meetings-positioning.md)
+- [GPT-5.6 Luna Across Braino](features/gpt-5-6-luna-across-braino.md)
+- [Braino Foundry: The AI Co-Founder](design/braino-foundry-positioning.md)
+- [BrainoHERA: faithful system-wide dictation](features/yap-mode.md)
+- [Mac IOMI Response Surfaces](features/mac-iomi-response-surfaces.md)
+- [Expanded Thinking Canvas](features/expanded-thinking-canvas.md)
 - [How Braino Talks](features/how-braino-talks.md)
 - [HIL Version 1: The Loop](features/hil-version-1-loop.md)
 - [Braino Thronglets](features/braino-thronglets.md)

@@ -416,6 +416,40 @@ The notch carries voice state as colour, so it reads at a glance without text:
 
 Reduced motion gets the coral as a static ring, not a pulse.
 
+### Notch surfaces (Mac) — one family, one shell
+
+Every panel that appears while Braino works is the same shell, not a new card:
+`.nf-pill::after` paints a black cap the exact width of the physical notch so the
+housing never appears to change, and `.nf-pill::before` is a sheet that grows
+**downward** with a square top and rounded bottom corners. The island stretches;
+nothing floats underneath it.
+
+Members: `nf-think-open` (task progress), `nf-answer-open` (short and long
+answers), `nf-inline-open` (voice caption), `nf-yap-open` (BrainoHERA
+transcript), `nf-meeting-open` (meeting recorder).
+
+**`nf-meeting-open` is the one translucent member, on purpose.** Every other
+surface owns the screen for a few seconds, so opaque black is right. The meeting
+surface is up for the length of a meeting, over whatever you are actually
+working on, so it is `rgba(12,12,14,.72)` over a 26px backdrop blur: alive and
+readable without taking the window underneath it away. It carries a pulsing REC
+clock, the current speaker with a five-bar level that only animates while
+somebody is talking, the last four lines of transcript, and the note bullets as
+they build.
+
+Two composition rules, both learned the hard way:
+
+- **The meeting rules yield.** They sit at the end of the stylesheet, so at equal
+  specificity they beat everything. Each geometry rule is therefore scoped
+  `:not(.nf-answer-open):not(.nf-think-open):not(.nf-yap-open):not(.nf-inline-open)`
+  — if Braino has to answer mid-meeting the answer takes the island and the
+  meeting surface steps back. Recording never stops, only its surface does.
+- **A long-lived surface must hold its own click zone.** The window is
+  click-through except where `setNotchZone` says otherwise, and
+  `updateNotchFace()` runs every second inside a meeting. Its
+  `syncYapNotchZone(false)` branch has to know the meeting surface is open, or
+  the zone is torn down a second after it is claimed and Stop stops responding.
+
 ---
 
 ## 13. Site nav — the IOMI notch (one shared component, site-wide)
@@ -471,7 +505,7 @@ To report stages 3-4 truthfully rather than re-deriving them, `orderTraitsForMom
 
 **The source of truth.** `supabase/functions/_shared/human-intelligence/hil-system-prompt.ts` exports `HIL_SYSTEM_PROMPT` (+ `HIL_VERSION`). This one file is imported by BOTH the server (`hil-reason` sends those exact bytes to the model) and the website page (which prints them verbatim in the Read tab) — deliberately better than `/Vig`'s hand-mirrored-copy approach (§14), zero drift possible. It's a plain-TS string export with no Deno APIs precisely so Vite can import it too. Edit it, redeploy `hil-reason`, and Braino thinks differently. House rule holds: no em/en dashes anywhere in the prompt copy (diction.ts rule).
 
-**The edge function.** `supabase/functions/reasoning/hil-reason/index.ts` (config: `[functions.hil-reason]`, `verify_jwt=false`, public on purpose). Per request: `detectMoment(command)` (regex, zero cost) → `orderTraitsForMoment`/`steeringLine`/`buildEmotionalCore` → system prompt = HIL text + "WHO YOU ARE" separator + emotional core, in one call. Request `{command, context?}`; response `{reasoning:{restated_goal, steps, checks{…3 booleans}, ambiguous, clarifying_question, verdict, action}, moment:{id,label,leads,intensity}, pipeline:{…stage 1-5 measurements}, meta:{model,elapsed_ms,hil_version}}`. `ambiguous`/`verdict` are DERIVED server-side from the checks (never trusted from the model), and parse failures return a typed proceed-fallback, never a 500. The model is hardcoded server-side (`HIL_MODEL`, gpt-5.4-mini) and deliberately NOT selectable from the request body: the endpoint is public, so letting a caller name the model would point our key at a 10x tier for free.
+**The edge function.** `supabase/functions/reasoning/hil-reason/index.ts` (config: `[functions.hil-reason]`, `verify_jwt=false`, public on purpose). Per request: `detectMoment(command)` (regex, zero cost) → `orderTraitsForMoment`/`steeringLine`/`buildEmotionalCore` → system prompt = HIL text + "WHO YOU ARE" separator + emotional core, in one call. Request `{command, context?}`; response `{reasoning:{restated_goal, steps, checks{…3 booleans}, ambiguous, clarifying_question, verdict, action}, moment:{id,label,leads,intensity}, pipeline:{…stage 1-5 measurements}, meta:{model,elapsed_ms,hil_version}}`. `ambiguous`/`verdict` are DERIVED server-side from the checks (never trusted from the model), and parse failures return a typed proceed-fallback, never a 500. The model is hardcoded server-side through the shared Braino default (`HIL_MODEL`, gpt-5.6-luna, reasoning none) and deliberately NOT selectable from the request body: the endpoint is public, so letting a caller name the model would point our key at a more expensive tier for free.
 
 **The page — Apple chrome, Medium's alignment (not its font).** `src/pages/HumanIntelligence.tsx` + `human-intelligence.css`, route `/human-intelligence`, on the **light** `.apple` shell (`src/styles/apple.css`) — same as `/product-overview`, `.apple-anchors` sticky bar (NOT `.apple-nav`; see below), `.apple-hero`/`.apple-display`/`.apple-eyebrow`, `.apple-reveal` scroll-in. "Medium" here means the reading rhythm only — `.hil-read` caps the measure at 680px, section kickers, a left-ruled pull quote — the type stays pure SF Pro Display throughout, same weight/size/color as every other `.apple` page's body copy (`.cl-desc`/`.jr-desc` pattern: clamp(15-20px), weight 500, `--ap-ink-soft`). No serif was ever the right call here.
 
@@ -503,7 +537,7 @@ Apple supplies the chrome; **Medium supplies the reading**: `.hil-read` caps the
 
 **The second source of truth.** `supabase/functions/_shared/human-intelligence/hil-loop-prompt.ts` exports `HIL_LOOP_PROMPT` (+ `HIL_LOOP_VERSION`), sibling to `hil-system-prompt.ts` and under the same rules: plain-TS string, importable by Vite, no em/en dashes, edit-and-redeploy is the only way Braino's loop thinks differently.
 
-**The edge function.** `supabase/functions/reasoning/hil-loop/index.ts` (config `[functions.hil-loop]`, `verify_jwt=false`, model hardcoded `gpt-5.4-mini`, emotional core appended live — all mirroring `hil-reason`). One call per TURN: the browser sends `{command, context?, state}` where `state` is a fresh snapshot (jobs, facts, last-20 step records, budget, screen line, optional `userReply`/`lastStep`); the server renders it and returns `{turn:{thinking, split?, verdict?, decision}, moment, meta}`. `decision` is exactly one of `step | ask | task_done | all_done | blocked`. Two things are DERIVED server-side, never trusted from the model: `reversible` (forced `false` for `gmail_send`/`shop_checkout`, `true` otherwise — the gate is not the model's vote) and the parse fallback (unreadable turn → legible `blocked`, with `meta.parse_ok=false` so the client retries once).
+**The edge function.** `supabase/functions/reasoning/hil-loop/index.ts` (config `[functions.hil-loop]`, `verify_jwt=false`, shared default `gpt-5.6-luna` with reasoning set to `none`, emotional core appended live — all mirroring `hil-reason`). One call per TURN: the browser sends `{command, context?, state}` where `state` is a fresh snapshot (jobs, facts, last-20 step records, budget, screen line, optional `userReply`/`lastStep`); the server renders it and returns `{turn:{thinking, split?, verdict?, decision}, moment, meta}`. `decision` is exactly one of `step | ask | task_done | all_done | blocked`. Two things are DERIVED server-side, never trusted from the model: `reversible` (forced `false` for `gmail_send`/`shop_checkout`, `true` otherwise — the gate is not the model's vote) and the parse fallback (unreadable turn → legible `blocked`, with `meta.parse_ok=false` so the client retries once).
 
 **The action vocabulary is the real one (v2.0.0).** The loop does NOT call app-level helper verbs, because the real surfaces don't have any: Delegate navigates, reads the page into an indexed element map, and clicks/types against those indices (`BG_DELEGATE_ACTIONS`, background.js:3517); the Mac app does the same thing against the AX tree. So the loop's whole vocabulary is `navigate / read / click / type / pressKey / scroll / wait / web_search`, targeting elements only by index from the observation it was just handed. What you watch on the page is what would really be fired. (v1.0.0's `gmail_compose`/`spotify_play`-style tools were a fiction and were removed.)
 
