@@ -118,7 +118,11 @@ Deno.serve(async (req) => {
       : null;
 
     const systemPrompt = buildBrainoSystemPrompt({
-      responseMedium: "text",
+      // "voice" medium, not "text": every reply is spoken aloud by default here
+      // (fish-audio-tts) and shown in a small plain-text bubble with no markdown
+      // renderer, so this is the branch (diction.ts) that keeps him short and
+      // markdown-free instead of writing **bold**/lists into a plain bubble.
+      responseMedium: "voice",
       pageContext,
       notes: bridgeContext
         ? `Live knowledge from ${site.name}'s own systems, fetched just now for this question (this is the site's data, not the visitor's personal notes):\n${bridgeContext}`
