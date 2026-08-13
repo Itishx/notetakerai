@@ -569,6 +569,9 @@ function setBrainoCustomizerOpen(open) {
   brainoCustomizer.classList.toggle("show", brainoCustomizerOpen);
   brainoCustomizer.setAttribute("aria-hidden", String(!brainoCustomizerOpen));
   if (brainoCustomizerOpen) {
+    targetX = posX;
+    targetY = posY;
+    nextTargetAt = performance.now() + 2200;
     setMousePassthrough(false);
     window.requestAnimationFrame(positionBrainoCustomizer);
   } else {
@@ -591,7 +594,7 @@ function setBrainoScale(nextScale, persist = true) {
 
 renderBrainoScale();
 
-// Which character this desktop companion shows — Braino or Webb. Same voice,
+// Which character this desktop companion shows. Same voice,
 // memory, and actions underneath either way (see the website's Choose Your
 // Avatar feature); this only affects which face renders. The choice is
 // account-level (profiles.mascot), so it's saved through the main process,
@@ -613,15 +616,20 @@ function renderMascotChoice() {
 function remountWalker(mascotId) {
   const svg = window.brainoMac.getWalkerSvgFor?.(mascotId);
   if (!svg) return;
+  walker.classList.remove("mascot-braino", "mascot-webb", "mascot-ferro");
+  walker.classList.add(`mascot-${mascotId}`);
   walkerFlip.innerHTML = svg;
   root = walker.querySelector("#__sbwk_root__");
   renderBrainoScale();
 }
 
 function setMascotChoice(id, { save = true, remount = save } = {}) {
-  const next = id === "webb" ? "webb" : "braino";
+  const next = id === "webb" || id === "ferro" ? id : "braino";
   const changed = next !== mascotChoice;
   mascotChoice = next;
+  walker.classList.toggle("mascot-braino", mascotChoice === "braino");
+  walker.classList.toggle("mascot-webb", mascotChoice === "webb");
+  walker.classList.toggle("mascot-ferro", mascotChoice === "ferro");
   renderMascotChoice();
   if (save) window.brainoMac.setMascot?.(mascotChoice).catch(() => {});
   if (remount && changed) remountWalker(mascotChoice);
@@ -7630,6 +7638,10 @@ walker.addEventListener("dblclick", (event) => {
   event.preventDefault();
   event.stopPropagation();
   dragState = null;
+  scriptedWalk = null;
+  targetX = posX;
+  targetY = posY;
+  nextTargetAt = performance.now() + 2200;
   walker.classList.remove("dragging");
   setBrainoCustomizerOpen(!brainoCustomizerOpen);
 });
@@ -7698,7 +7710,7 @@ function tick(now) {
       walkingNow = false;
       resolve();
     }
-  } else if (!dragState && !shouldHoldAttention && !skitMoonwalk && !skitJustCompleted) {
+  } else if (!dragState && !brainoCustomizerOpen && !shouldHoldAttention && !skitMoonwalk && !skitJustCompleted) {
     if (movementMode === "dock") {
       targetY = getDockBounds().y;
     }
@@ -7745,29 +7757,34 @@ function tick(now) {
     q("#__sbwk_pupil_r__")?.setAttribute("transform", `translate(${pose.gazeX || 0} ${pose.gazeY || 0})`);
   } else {
     const s = t * 4.5;
+    const isFerro = mascotChoice === "ferro";
     const leftPhase = Math.sin(s);
     const rightPhase = Math.sin(s + Math.PI);
-    const walkAmount = walkingNow ? 1 : 0;
+    const walkAmount = walkingNow && !isFerro ? 1 : 0;
     const leftLift = Math.max(0, leftPhase) * 5 * walkAmount;
     const rightLift = Math.max(0, rightPhase) * 5 * walkAmount;
     const leftSwing = Math.max(0, leftPhase) * 8 * walkAmount;
     const rightSwing = Math.max(0, rightPhase) * 8 * walkAmount;
-    const waddle = Math.sin(s) * 3.4 * walkAmount;
+    const ferroFlight = isFerro ? (walkingNow ? 1 : 0.48) : 0;
+    const waddle = isFerro ? Math.sin(t * 2.6) * 4.8 * ferroFlight : Math.sin(s) * 3.4 * walkAmount;
     const walkBob = (-Math.abs(Math.sin(s)) * 2 - 0.4) * walkAmount;
     const breath = 1 + 0.014 * Math.sin(t * 1.7);
-    const bob = Math.sin(t * 1.7 + 0.6) * 0.8;
+    const bob = Math.sin(t * 1.7 + 0.6) * 0.8 - Math.abs(Math.sin(t * 7.2)) * 2.4 * ferroFlight;
     const blinkPhase = t % 3.4;
     const blink = blinkPhase < 0.13 ? Math.sin((blinkPhase / 0.13) * Math.PI) : 0;
     const eyeScale = authPose ? 0.07 : Math.max(0.06, 1 - blink);
-    const rightArmAngle = waving ? (-28 + Math.sin(t * 11) * 16) : 0;
+    const rightArmAngle = waving ? (-28 + Math.sin(t * 11) * 16) : (isFerro && walkingNow ? -18 : 0);
+    const leftArmAngle = isFerro && walkingNow ? 18 : 0;
 
     root?.setAttribute("transform", `rotate(${waddle} 50 50) translate(0 ${bob + walkBob}) scale(${breath})`);
     q("#__sbwk_ll__")?.setAttribute("transform", `translate(0 ${-leftLift}) rotate(${leftSwing} 44 74)`);
     q("#__sbwk_rl__")?.setAttribute("transform", `translate(0 ${-rightLift}) rotate(${rightSwing} 56 74)`);
     const raEl2 = q("#__sbwk_ra__");
     const rArmPivot2 = pivotOf(raEl2, 78, 53);
-    q("#__sbwk_la_bg__")?.setAttribute("transform", "");
-    q("#__sbwk_la__")?.setAttribute("transform", "");
+    const laEl2 = q("#__sbwk_la__");
+    const lArmPivot3 = pivotOf(laEl2, 22, 53);
+    q("#__sbwk_la_bg__")?.setAttribute("transform", leftArmAngle ? `rotate(${leftArmAngle} ${lArmPivot3.x} ${lArmPivot3.y})` : "");
+    q("#__sbwk_la__")?.setAttribute("transform", leftArmAngle ? `rotate(${leftArmAngle} ${lArmPivot3.x} ${lArmPivot3.y})` : "");
     q("#__sbwk_ra_bg__")?.setAttribute("transform", rightArmAngle ? `rotate(${rightArmAngle} ${rArmPivot2.x} ${rArmPivot2.y})` : "");
     q("#__sbwk_ra__")?.setAttribute("transform", rightArmAngle ? `rotate(${rightArmAngle} ${rArmPivot2.x} ${rArmPivot2.y})` : "");
     const leEl2 = q("#__sbwk_eye_l__"), reEl2 = q("#__sbwk_eye_r__");

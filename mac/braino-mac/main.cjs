@@ -2482,6 +2482,8 @@ const MAC_SKILLS_REPLY = [
   "14. I can send or draft email in Apple Mail, resolving contact names through Contacts when possible.",
   "15. BrainoHERA turns double Option into silent system-wide dictation at the active caret.",
   "16. I know what you just downloaded without being told the name, so I can open it, show it in Finder, or file it into a folder (including the Finder window you are looking at).",
+  "17. I can tell you exactly what is filling up your disk: total free space, the biggest folders by name and size, and what specifically is inside the biggest one.",
+  "18. I can search your whole Mac for something, not just by file name — I check file content and the actual text inside every Apple Note, so something you only ever typed into a note is still findable.",
 ].join("\n");
 
 function isMacSkillsPrompt(text) {
@@ -3310,7 +3312,8 @@ let mascotCache = { id: null, fetchedAt: 0 };
 
 function loadCachedMascot() {
   try {
-    return JSON.parse(fs.readFileSync(MASCOT_STATE_PATH, "utf8"))?.id === "webb" ? "webb" : "braino";
+    const id = JSON.parse(fs.readFileSync(MASCOT_STATE_PATH, "utf8"))?.id;
+    return id === "webb" || id === "ferro" ? id : "braino";
   } catch (_) {
     return "braino";
   }
@@ -3333,7 +3336,8 @@ async function loadMascotPreference(options = {}) {
     });
     if (!res.ok) throw new Error(`profiles ${res.status}`);
     const rows = await res.json();
-    const id = rows?.[0]?.mascot === "webb" ? "webb" : "braino";
+    const stored = rows?.[0]?.mascot;
+    const id = stored === "webb" || stored === "ferro" ? stored : "braino";
     mascotCache = { id, fetchedAt: Date.now() };
     saveCachedMascot(id);
     return id;
@@ -3344,7 +3348,7 @@ async function loadMascotPreference(options = {}) {
 }
 
 async function saveMascotPreference(id) {
-  const mascot = id === "webb" ? "webb" : "braino";
+  const mascot = id === "webb" || id === "ferro" ? id : "braino";
   mascotCache = { id: mascot, fetchedAt: Date.now() };
   saveCachedMascot(mascot);
   const auth = authStatusPayload();
@@ -8662,6 +8666,260 @@ async function countMatchingItems({ term, kind, scope }) {
   return { ok: true, say: `You have ${count} ${term} ${wantFolders ? "folders" : "files"}${(wantFolders ? files : dirs) ? ` plus ${other}` : ""}, mostly under ${topSpots}.` };
 }
 
+// ── Disk-storage awareness: what is actually filling this Mac up. ──
+// "What is taking up space" cannot be answered from vibes. df gives the real
+// total/used/free; the bucket scan (du -sk per known-heavy root) gives the
+// biggest offenders by NAME, not a percentage; the drill-down (du -d 1) opens
+// the single biggest bucket one level so the answer names an actual folder
+// ("Xcode DerivedData", not just "Library"), the way a person who actually
+// looked would answer it.
+function spokenBytes(bytes) {
+  const gb = bytes / 1024 ** 3;
+  if (gb >= 1) return `${gb >= 10 ? Math.round(gb) : gb.toFixed(1)} GB`;
+  const mb = bytes / 1024 ** 2;
+  return `${Math.max(1, Math.round(mb))} MB`;
+}
+
+async function readDiskFreeSpace() {
+  try {
+    const { stdout } = await execFileP("/bin/df", ["-k", "/"], { timeout: 5000 });
+    const dataLine = String(stdout || "").trim().split("\n").slice(1)[0] || "";
+    const parts = dataLine.trim().split(/\s+/);
+    const totalKb = Number(parts[1]) || 0;
+    const usedKb = Number(parts[2]) || 0;
+    const availKb = Number(parts[3]) || 0;
+    if (!totalKb) return null;
+    return {
+      totalBytes: totalKb * 1024,
+      freeBytes: availKb * 1024,
+      pctUsed: Math.round((usedKb / totalKb) * 100),
+    };
+  } catch (error) {
+    logMac("storage.df.failed", { error });
+    return null;
+  }
+}
+
+// Every place a Mac actually accumulates weight: the visible home folders,
+// the invisible Library ones nobody thinks to check, dev tooling caches, and
+// cloud-sync mirrors. Order does not matter — the scan sorts by size.
+const STORAGE_BUCKETS = [
+  { label: "Desktop", full: path.join(os.homedir(), "Desktop") },
+  { label: "Downloads", full: path.join(os.homedir(), "Downloads") },
+  { label: "Documents", full: path.join(os.homedir(), "Documents") },
+  { label: "Movies", full: path.join(os.homedir(), "Movies") },
+  { label: "Pictures", full: path.join(os.homedir(), "Pictures") },
+  { label: "Music", full: path.join(os.homedir(), "Music") },
+  { label: "Applications", full: "/Applications" },
+  { label: "app caches", full: path.join(os.homedir(), "Library", "Caches") },
+  { label: "app containers", full: path.join(os.homedir(), "Library", "Containers") },
+  { label: "app support data", full: path.join(os.homedir(), "Library", "Application Support") },
+  { label: "developer tools and simulators", full: path.join(os.homedir(), "Library", "Developer") },
+  { label: "Mail downloads", full: path.join(os.homedir(), "Library", "Mail") },
+  { label: "iCloud Drive's local copy", full: ICLOUD_DRIVE_PATH },
+  { label: "cloud-sync mirrors (Dropbox, Drive, etc.)", full: path.join(os.homedir(), "Library", "CloudStorage") },
+  { label: "the Trash", full: path.join(os.homedir(), ".Trash") },
+];
+
+async function scanStorageBuckets() {
+  const scanned = await Promise.all(STORAGE_BUCKETS.map(async (bucket) => {
+    if (!fs.existsSync(bucket.full)) return null;
+    const bytes = await dirSizeBytes(bucket.full);
+    return bytes > 0 ? { ...bucket, bytes } : null;
+  }));
+  return scanned.filter(Boolean).sort((a, b) => b.bytes - a.bytes);
+}
+
+async function drillDownBucket(full, topN = 3) {
+  try {
+    const { stdout } = await execFileP("/usr/bin/du", ["-x", "-d", "1", "-k", full], { timeout: 25000, maxBuffer: 4 * 1024 * 1024 });
+    const rows = String(stdout || "").trim().split("\n").filter(Boolean).map((line) => {
+      const [kb, ...rest] = line.trim().split(/\s+/);
+      const rowPath = rest.join(" ");
+      return { name: path.basename(rowPath) || rowPath, bytes: (Number(kb) || 0) * 1024, full: rowPath };
+    }).filter((row) => row.full !== full && row.bytes > 0);
+    return rows.sort((a, b) => b.bytes - a.bytes).slice(0, topN);
+  } catch (error) {
+    logMac("storage.drilldown.failed", { path: textForLog(full), error });
+    return [];
+  }
+}
+
+async function reportMacStorage() {
+  sendTaskProgress({ status: "thinking", text: "Checking what is filling up your disk" });
+  logMac("storage.report.start", {});
+  const [free, buckets] = await Promise.all([readDiskFreeSpace(), scanStorageBuckets()]);
+  if (!free && !buckets.length) {
+    return { ok: false, say: "I could not read your disk usage just now. Try again in a moment." };
+  }
+  const lines = [];
+  if (free) {
+    lines.push(`You have ${spokenBytes(free.freeBytes)} free out of ${spokenBytes(free.totalBytes)} total, so the disk is ${free.pctUsed}% full.`);
+  }
+  let biggest = null;
+  if (buckets.length) {
+    const top = buckets.slice(0, 5);
+    lines.push(`Biggest things on this Mac: ${top.map((b) => `${b.label}, ${spokenBytes(b.bytes)}`).join("; ")}.`);
+    biggest = top[0];
+  }
+  if (biggest) {
+    const inside = await drillDownBucket(biggest.full, 3);
+    if (inside.length) {
+      lines.push(`Specifically inside ${biggest.label}: ${inside.map((row) => `${row.name} at ${spokenBytes(row.bytes)}`).join(", ")}.`);
+    }
+  }
+  lines.push('Say "what can I clean up" and I will find the specific old files worth letting go of.');
+  logMac("storage.report.done", { pctUsed: free?.pctUsed, topBucket: biggest?.label, topBytes: biggest?.bytes });
+  return { ok: true, say: lines.join(" ") };
+}
+
+function parseStorageIntent(raw) {
+  const source = cleanPrompt(String(raw || ""));
+  if (!source) return null;
+  const cues = [
+    /\bwhat('?s| is)\s+(taking|using|eating|hogging|filling)\s+(up\s+)?(all\s+)?(my\s+)?(space|storage|disk)\b/i,
+    /\b(disk|storage)\s+(space\s+)?(is\s+)?(running out|almost full|nearly full|very full|very low|extremely low)\b/i,
+    /\brunning out of (disk\s+)?(space|storage)\b/i,
+    /\bhow much (space|storage|disk space)\b.*\b(do i have|is left|left|free|used|taking up|available)\b/i,
+    /\b(check|show me|what('?s| is))\s+(my\s+)?disk\s*(usage|space)\b/i,
+    /\bwhy is my (mac|macbook|computer|disk)\s+(so\s+)?full\b/i,
+    /\bstorage\s+(is\s+)?(very\s+)?low\b/i,
+  ];
+  return cues.some((re) => re.test(source)) ? {} : null;
+}
+
+// ── Mac-wide deep search: filenames, file CONTENT, and Apple Notes content. ──
+// The bug this exists to fix: a fact typed into a note (a UDYAM number, an
+// account ID, anything) lives in the note's BODY, not its title, and every
+// search Braino had only ever matched on file/note NAMES (mdfind
+// kMDItemDisplayName / findFiles above). That is a real, narrow blind spot,
+// not a general intelligence problem, so it gets a real, narrow fix: search
+// file content via Spotlight's free-text query, and search Apple Notes'
+// actual body text directly through Notes' own AppleScript dictionary, which
+// knows its content even when Spotlight's index of Notes is stale.
+async function searchAppleNotesContent(term, limit = 6) {
+  const cleanTerm = String(term || "").trim();
+  if (!cleanTerm) return [];
+  const script = `
+set searchTerm to ${appleScriptStringLiteral(cleanTerm)}
+set foundList to {}
+tell application id "com.apple.Notes"
+  repeat with acc in accounts
+    try
+      set matchingNotes to (notes of acc whose body contains searchTerm)
+      repeat with n in matchingNotes
+        try
+          set noteName to name of n
+          set folderName to "Notes"
+          try
+            set folderName to name of container of n
+          end try
+          set noteText to plaintext of n
+          set end of foundList to ((name of acc) & "|||" & folderName & "|||" & noteName & "|||" & noteText)
+        end try
+      end repeat
+    end try
+  end repeat
+end tell
+set AppleScript's text item delimiters to "@@@"
+set outputText to foundList as text
+set AppleScript's text item delimiters to ""
+return outputText`;
+  try {
+    const { stdout } = await execFileP("/usr/bin/osascript", ["-e", script], { timeout: 20000, maxBuffer: 8 * 1024 * 1024 });
+    const raw = String(stdout || "").trim();
+    if (!raw) return [];
+    const results = raw.split("@@@").map((row) => row.trim()).filter(Boolean).map((row) => {
+      const [account, folder, name, plaintext] = row.split("|||");
+      const body = String(plaintext || "");
+      const lower = body.toLowerCase();
+      const idx = lower.indexOf(cleanTerm.toLowerCase());
+      const snippet = idx >= 0
+        ? `${idx > 40 ? "..." : ""}${body.slice(Math.max(0, idx - 40), idx + cleanTerm.length + 60).trim()}${idx + cleanTerm.length + 60 < body.length ? "..." : ""}`
+        : body.slice(0, 140).trim();
+      return { account: account || "Notes", folder: folder || "Notes", name: name || "Untitled", snippet };
+    });
+    logMac("notes.content_search.done", { term: textForLog(cleanTerm), found: results.length });
+    return results.slice(0, limit);
+  } catch (error) {
+    logMac("notes.content_search.failed", { term: textForLog(cleanTerm), error });
+    return [];
+  }
+}
+
+async function spotlightContentSearch(term, limit = 8) {
+  const cleanTerm = String(term || "").trim();
+  if (!cleanTerm) return [];
+  try {
+    const { stdout } = await execFileP("/usr/bin/mdfind", [cleanTerm], { timeout: 15000, maxBuffer: 4 * 1024 * 1024 });
+    const paths = String(stdout || "").split("\n").map((line) => line.trim()).filter(Boolean)
+      .filter((p) => p.startsWith(os.homedir()))
+      .filter((p) => !/\/(node_modules|\.git|\.Trash)\//.test(p))
+      .filter((p) => p.includes("/Mobile Documents/") || !/\/Library\//.test(p) || /\/Library\/Mail\//.test(p));
+    logMac("files.content_search.mdfind", { term: textForLog(cleanTerm), found: paths.length });
+    return paths.slice(0, limit);
+  } catch (error) {
+    logMac("files.content_search.failed", { term: textForLog(cleanTerm), error });
+    return [];
+  }
+}
+
+async function runMacWideDeepSearch(term) {
+  const cleanTerm = String(term || "").trim();
+  if (!cleanTerm) return { ok: true, say: "Tell me what to search for and I will go through your whole Mac, including Apple Notes." };
+  sendTaskProgress({ status: "thinking", text: `Searching your whole Mac for ${cleanTerm}` });
+  logMac("search.mac_wide.start", { term: textForLog(cleanTerm) });
+  const [fileNameHits, contentHits, noteHits] = await Promise.all([
+    findFiles(cleanTerm, { kind: "", requireNameMatch: false }).catch(() => []),
+    spotlightContentSearch(cleanTerm, 8),
+    searchAppleNotesContent(cleanTerm, 6),
+  ]);
+  logMac("search.mac_wide.done", {
+    term: textForLog(cleanTerm),
+    fileNameHits: fileNameHits.length,
+    contentHits: contentHits.length,
+    noteHits: noteHits.length,
+  });
+  if (!fileNameHits.length && !contentHits.length && !noteHits.length) {
+    return {
+      ok: true,
+      say: `I searched every file name, every file's content Spotlight can read, and every note in Apple Notes for "${cleanTerm}" — nothing on this Mac. It may be somewhere Spotlight cannot read, like a scanned image, or a note that has not finished syncing from iCloud yet. Tell me roughly where you remember writing it and I will look there directly.`,
+    };
+  }
+  const lines = [];
+  if (noteHits.length) {
+    const first = noteHits[0];
+    lines.push(`I found it in Apple Notes. The note "${first.name}" in ${first.folder} says: "${first.snippet}".`);
+    if (noteHits.length > 1) lines.push(`${noteHits.length - 1} more note${noteHits.length > 2 ? "s" : ""} also mention it.`);
+  }
+  const fileNames = [...new Set([...contentHits, ...fileNameHits])].slice(0, 5).map((p) => path.basename(p));
+  if (fileNames.length) {
+    lines.push(`${noteHits.length ? "Also" : "I"} found it in ${fileNames.length} file${fileNames.length > 1 ? "s" : ""}: ${fileNames.join(", ")}.`);
+  }
+  return { ok: true, say: lines.join(" "), files: fileNameHits };
+}
+
+function parseMacWideSearchIntent(raw) {
+  const source = cleanPrompt(String(raw || ""));
+  if (!source) return null;
+  const broadCue = /\bmac[\s-]?wide\b/i.test(source)
+    || /\bsearch\b.*\b(my\s+)?(whole|entire)\s+mac\b/i.test(source)
+    || /\bsearch\s+(my\s+)?(mac\s+)?everywhere\b/i.test(source)
+    || /\b(do|run)\s+a\s+(deep|full|complete)\s+search\b/i.test(source)
+    || /\bsearch\s+(through\s+)?(my\s+)?notes\b.*\bfor\b/i.test(source)
+    || /\bcheck\s+(my\s+)?notes\s+for\b/i.test(source);
+  if (!broadCue) return null;
+  const afterFor = source.match(/\bfor\s+(?:my\s+)?(.+?)[?.!]*$/i);
+  let term = afterFor?.[1]?.trim() || "";
+  if (!term) {
+    term = source
+      .replace(/\b(mac[\s-]?wide|search|whole|entire|mac|everywhere|do|run|a|deep|full|complete|notes?|through|my|check)\b/gi, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+  return term ? { term } : null;
+}
+
 // ── Task-manager awareness: who is eating the machine. ──
 let pendingTaskHogs = null; // { apps: [names], at }
 const TASK_HOG_PROTECTED = new Set(["Finder", "WindowServer", "loginwindow", "kernel_task", "Electron", "Braino Mac", "Cursor", "Terminal"]);
@@ -13308,6 +13566,18 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
     return countMatchingItems(countIntent);
   }
 
+  const storageIntent = parseStorageIntent(raw);
+  if (storageIntent) {
+    logMac("delegate.storage_intent", { raw: textForLog(raw) });
+    return reportMacStorage();
+  }
+
+  const macWideIntent = parseMacWideSearchIntent(raw);
+  if (macWideIntent) {
+    logMac("delegate.mac_wide_search_intent", { raw: textForLog(raw), term: textForLog(macWideIntent.term) });
+    return runMacWideDeepSearch(macWideIntent.term);
+  }
+
   const cleanupIntent = parseFileCleanupIntent(raw);
   if (cleanupIntent) {
     logMac("delegate.file_cleanup_intent", { raw: textForLog(raw), action: cleanupIntent.action });
@@ -13383,7 +13653,12 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
       kind: fileIntent.kind,
       requireNameMatch: fileIntent.shouldOpen,
     });
-    if (!files.length) return { ok: false, say: `I searched the Mac, but did not find ${fileIntent.query}.` };
+    // A plain filename search misses anything that is only mentioned INSIDE a
+    // file or a note (an ID number typed into Apple Notes, for example), which
+    // is exactly the case where giving up reads as Braino being unaware of
+    // something the user knows for a fact exists. Before reporting nothing,
+    // widen to file content and Apple Notes content.
+    if (!files.length) return runMacWideDeepSearch(fileIntent.query);
     if (fileIntent.shouldOpen) {
       const opened = await openLocalPath(files[0]);
       if (!opened.ok) return { ok: false, say: `I found ${path.basename(files[0])}, but macOS would not open it: ${opened.error}.`, files };

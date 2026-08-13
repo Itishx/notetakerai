@@ -239,10 +239,10 @@ export const KNOWLEDGE_ENTRIES: readonly KnowledgeEntry[] = [
     slug: "choose-your-avatar",
     title: "Choose Your Avatar",
     category: "Feature",
-    date: "2026-07-30",
-    dateLabel: "July 30, 2026",
+    date: "2026-08-12",
+    dateLabel: "Updated August 12, 2026",
     description:
-      "How one Braino OS underneath lets you pick which character shows up — Braino, or Webb, an original web-slinger.",
+      "How one Braino OS underneath lets you pick which character shows up — Braino, Webb, or Ferro.",
     status: "MVP",
     platform: "Braino website",
     number: "012",

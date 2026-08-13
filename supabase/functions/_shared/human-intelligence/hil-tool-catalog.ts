@@ -40,7 +40,7 @@ export type HilTool = {
   handler?: string;
 };
 
-export const HIL_CATALOG_VERSION = "1.0.0";
+export const HIL_CATALOG_VERSION = "1.1.0";
 
 export const HIL_TOOL_CATALOG: HilTool[] = [
   // Split, because one entry covering both halves of actOnSelectedText made the
@@ -96,6 +96,12 @@ export const HIL_TOOL_CATALOG: HilTool[] = [
   { name: "gmail_reply", params: ["userInstruction"], gloss: "Draft and send a reply to the Gmail thread open in Chrome", irreversible: true, handler: "replyToOpenGmail", },
   { name: "hide_braino", params: [], gloss: "Hide the Braino window until the user calls it back", stateful: true, zeroNetwork: true, },
   { name: "mac_skills_list", params: [], gloss: "Recite the canned list of what Braino does on this Mac", zeroNetwork: true, memoSafe: true, },
+  { name: "mac_storage_report", params: [], gloss: "Break down disk space: total free, the biggest folders by name and size, and what specifically is inside the biggest one", zeroNetwork: true, memoSafe: true, handler: "reportMacStorage", },
+  // Not memoSafe: takes a free-text search term, so no two calls are the same
+  // question. Checks file names, file CONTENT via Spotlight, and the actual
+  // body text of every Apple Note, the fix for facts that only live inside a
+  // note rather than in its title.
+  { name: "mac_wide_deep_search", params: ["term"], gloss: "Search the whole Mac for a term: file names, file content, and Apple Notes body text, not just titles", zeroNetwork: true, handler: "runMacWideDeepSearch", },
   { name: "mail_send", params: ["action", "recipient", "recipientEmail", "subject", "body"], gloss: "Compose an Apple Mail message and send it, or leave a draft", irreversible: true, stateful: true, handler: "executeMailWorkflow", },
   { name: "manage_window", params: ["action", "appQuery"], gloss: "Maximize, minimize, center, or snap a window left or right", zeroNetwork: true, handler: "axManageWindow", },
   { name: "maps_directions", params: ["destination", "origin"], gloss: "Open Google Maps directions to a place, speak distance and travel time", handler: "runMapsDirections", },

@@ -14,7 +14,8 @@ const MASCOT_STATE_PATH = path.join(AUTH_STORE_DIR, "mascot.json");
 
 function loadCachedMascotSync() {
   try {
-    return JSON.parse(fs.readFileSync(MASCOT_STATE_PATH, "utf8"))?.id === "webb" ? "webb" : "braino";
+    const id = JSON.parse(fs.readFileSync(MASCOT_STATE_PATH, "utf8"))?.id;
+    return id === "webb" || id === "ferro" ? id : "braino";
   } catch (_) {
     return "braino";
   }
@@ -28,9 +29,9 @@ function loadWalkerSvgSource(fileName, exportName) {
 }
 
 function walkerSvgFor(mascotId) {
-  return mascotId === "webb"
-    ? loadWalkerSvgSource("webbWalkerSvg.ts", "WEBB_WALKER_SVG")
-    : loadWalkerSvgSource("brainoWalkerSvg.ts", "BRAINO_WALKER_SVG");
+  if (mascotId === "webb") return loadWalkerSvgSource("webbWalkerSvg.ts", "WEBB_WALKER_SVG");
+  if (mascotId === "ferro") return loadWalkerSvgSource("ferroWalkerSvg.ts", "FERRO_WALKER_SVG");
+  return loadWalkerSvgSource("brainoWalkerSvg.ts", "BRAINO_WALKER_SVG");
 }
 
 const walkerSvg = walkerSvgFor(loadCachedMascotSync());

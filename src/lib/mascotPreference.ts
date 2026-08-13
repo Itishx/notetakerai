@@ -1,5 +1,6 @@
 /* mascotPreference.ts — which character rides on Braino OS for this user.
-   Same voice, memory, and actions underneath (see BrainoChar.tsx / WebbChar.tsx);
+   Same voice, memory, and actions underneath (see BrainoChar.tsx / WebbChar.tsx /
+   ferroWalkerSvg.ts);
    this only decides which rig renders and what he's called. Signed-in users
    persist to profiles.mascot (the source both the website and the Mac app read
    from); signed-out falls back to localStorage, mirroring brainoVoicePref. */
@@ -7,7 +8,7 @@ import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 
-export type MascotId = "braino" | "webb";
+export type MascotId = "braino" | "webb" | "ferro";
 
 export const MASCOTS: Record<MascotId, { displayName: string; blurb: string }> = {
   braino: {
@@ -18,12 +19,21 @@ export const MASCOTS: Record<MascotId, { displayName: string; blurb: string }> =
     displayName: "Webb",
     blurb: "Crouched acrobat, teardrop lenses, amber-and-ink suit — the web-slinger.",
   },
+  ferro: {
+    displayName: "Ferro",
+    blurb: "Red-and-gold flight suit, glowing arc core — the screen-flying hero.",
+  },
 };
 
 const STORAGE_KEY = "brainoMascotPref";
 
 function readStored(): MascotId {
-  return localStorage.getItem(STORAGE_KEY) === "webb" ? "webb" : "braino";
+  const stored = localStorage.getItem(STORAGE_KEY);
+  return stored === "webb" || stored === "ferro" ? stored : "braino";
+}
+
+function isMascotId(value: unknown): value is MascotId {
+  return value === "braino" || value === "webb" || value === "ferro";
 }
 
 // Module-level shared state + subscribers (same pattern as BrainoChar.tsx's
@@ -61,14 +71,14 @@ export function useMascotPreference() {
   }, []);
 
   useEffect(() => {
-    if ((profile?.mascot === "webb" || profile?.mascot === "braino") && profile.mascot !== sharedMascot) {
+    if (isMascotId(profile?.mascot) && profile.mascot !== sharedMascot) {
       broadcastMascot(profile.mascot);
     }
   }, [profile?.mascot]);
 
   useEffect(() => {
     const onStorage = (event: StorageEvent) => {
-      if (event.key === STORAGE_KEY && (event.newValue === "webb" || event.newValue === "braino") && event.newValue !== sharedMascot) {
+      if (event.key === STORAGE_KEY && isMascotId(event.newValue) && event.newValue !== sharedMascot) {
         broadcastMascot(event.newValue);
       }
     };

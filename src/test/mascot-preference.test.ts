@@ -44,6 +44,13 @@ describe("useMascotPreference", () => {
     expect(result.current.mascot).toBe("webb");
   });
 
+  it("reads Ferro from localStorage", () => {
+    localStorage.setItem("brainoMascotPref", "ferro");
+    __resetMascotPreferenceForTests();
+    const { result } = renderHook(() => useMascotPreference());
+    expect(result.current.mascot).toBe("ferro");
+  });
+
   it("ignores garbage localStorage values and falls back to braino", () => {
     localStorage.setItem("brainoMascotPref", "not-a-real-mascot");
     __resetMascotPreferenceForTests();
@@ -88,6 +95,29 @@ describe("useMascotPreference", () => {
     expect(fromMock).toHaveBeenCalledWith("profiles");
     expect(updateMock).toHaveBeenCalledWith({ mascot: "webb" });
     expect(eqMock).toHaveBeenCalledWith("user_id", "user-123");
+  });
+
+  it("signed in: can persist Ferro", async () => {
+    mockUser = { id: "user-123" };
+    const eqMock = vi.fn().mockResolvedValue({ error: null });
+    updateMock.mockReturnValueOnce({ eq: eqMock });
+
+    const { result } = renderHook(() => useMascotPreference());
+    await act(async () => {
+      await result.current.setMascot("ferro");
+    });
+
+    expect(result.current.mascot).toBe("ferro");
+    expect(updateMock).toHaveBeenCalledWith({ mascot: "ferro" });
+    expect(eqMock).toHaveBeenCalledWith("user_id", "user-123");
+  });
+
+  it("adopts Ferro from the signed-in user's saved profile preference", async () => {
+    mockUser = { id: "user-123" };
+    mockProfile = { mascot: "ferro" };
+    const { result } = renderHook(() => useMascotPreference());
+    await waitFor(() => expect(result.current.mascot).toBe("ferro"));
+    expect(localStorage.getItem("brainoMascotPref")).toBe("ferro");
   });
 
   it("adopts the signed-in user's saved profile preference once it loads", async () => {
