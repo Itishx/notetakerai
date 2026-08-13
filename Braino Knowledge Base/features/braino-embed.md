@@ -62,9 +62,10 @@ universal database driver.
 
 ## Honest limitations
 
-- The mascot is a static idle/talking image swap, not the extension's full
-  animated walking figure yet — that's a real port of `content.js`'s
-  physics/animation system onto an arbitrary third-party DOM, not done.
+- The mascot is the real walker (arms, legs, walk cycle, blink, cursor
+  gaze, wave-on-click, talking mouth), ported from the homepage's
+  `BrainoWalker.tsx` — not a static image. Drag-to-throw and moonwalk
+  are not ported yet.
 - No memory across visits. Every browser session starts fresh; there's no
   per-visitor Memory Engine yet the way Braino's own product has for Itish.
 - No usage metering, rate limiting, or billing gate yet.

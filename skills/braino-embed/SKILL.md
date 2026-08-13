@@ -188,10 +188,10 @@ example code reads). Braino's backend now signs every bridge call with it.
 
 ## Honest limitations (v1)
 
-- The widget is a real, working chat + spoken-reply UI, not yet a full port
-  of the extension's animated walking mascot — it's a static mascot image
-  that swaps between an idle and a talking frame. Full walking/physics
-  animation on someone else's DOM is future work.
+- The widget has the real walking mascot (arms, legs, walk cycle, blink,
+  cursor gaze, wave-on-click, talking mouth), ported from the homepage's
+  `BrainoWalker.tsx` — not a static image. Drag-to-throw and moonwalk are
+  not ported (out of scope for v1).
 - No memory across visits yet. Each browser session starts fresh; there's no
   per-visitor Memory Engine the way Braino's own product has for Itish.
 - No usage metering or billing gate yet — `allowed_origins` is the only
