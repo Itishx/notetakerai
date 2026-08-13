@@ -37,6 +37,96 @@ function normalizeDictationSession(values) {
   return chunks.map(normalizeDictationChunk).join("");
 }
 
+/* Spoken numbers into digits.
+   Deliberately rule-based rather than handed to the model: "two point five
+   seconds" becoming "2.5 seconds" is arithmetic, not judgement, and a model
+   asked to do it was measured getting it wrong while sounding confident. */
+const NUMBER_UNITS = {
+  zero: 0, oh: 0, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7,
+  eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12, thirteen: 13,
+  fourteen: 14, fifteen: 15, sixteen: 16, seventeen: 17, eighteen: 18,
+  nineteen: 19,
+};
+const NUMBER_TENS = {
+  twenty: 20, thirty: 30, forty: 40, fifty: 50, sixty: 60, seventy: 70,
+  eighty: 80, ninety: 90,
+};
+const NUMBER_SCALES = { hundred: 100, thousand: 1000, million: 1000000 };
+
+function isNumberWord(word) {
+  return word in NUMBER_UNITS || word in NUMBER_TENS || word in NUMBER_SCALES;
+}
+
+/* Folds a run of number words into a single value.
+   "four hundred and sixty two" -> 462, "seventy four" -> 74. */
+function foldNumberWords(words) {
+  let total = 0;
+  let current = 0;
+  for (const word of words) {
+    if (word === "and") continue;
+    if (word in NUMBER_UNITS) {
+      current += NUMBER_UNITS[word];
+    } else if (word in NUMBER_TENS) {
+      current += NUMBER_TENS[word];
+    } else if (word === "hundred") {
+      current = (current || 1) * 100;
+    } else {
+      // thousand / million close off everything accumulated so far.
+      total += (current || 1) * NUMBER_SCALES[word];
+      current = 0;
+    }
+  }
+  return total + current;
+}
+
+function spokenNumbersToDigits(value) {
+  // Word array rather than a whitespace-preserving split: scanning a run of
+  // number words meant stepping over the separators too, which glued the number
+  // to the word after it ("74characters").
+  const words = String(value || "").trim().split(/\s+/).filter(Boolean);
+  const out = [];
+  let i = 0;
+  const clean = (word) => String(word || "").toLowerCase().replace(/[.,!?;:]+$/, "");
+
+  while (i < words.length) {
+    if (!isNumberWord(clean(words[i]))) { out.push(words[i]); i += 1; continue; }
+
+    const run = [];
+    let j = i;
+    while (j < words.length) {
+      const word = clean(words[j]);
+      if (isNumberWord(word)) { run.push(word); j += 1; continue; }
+      // "and" only counts when another number word follows it.
+      if (word === "and" && run.length && isNumberWord(clean(words[j + 1]))) {
+        run.push("and");
+        j += 1;
+        continue;
+      }
+      break;
+    }
+
+    let text = String(foldNumberWords(run));
+
+    if (clean(words[j]) === "point") {
+      const decimals = [];
+      let k = j + 1;
+      while (k < words.length) {
+        const digit = clean(words[k]);
+        if (!(digit in NUMBER_UNITS) || NUMBER_UNITS[digit] > 9) break;
+        decimals.push(NUMBER_UNITS[digit]);
+        k += 1;
+      }
+      if (decimals.length) { text += "." + decimals.join(""); j = k; }
+    }
+
+    // Carry over any punctuation that trailed the last spoken number word.
+    const trailing = String(words[j - 1] || "").match(/[.,!?;:]+$/);
+    out.push(text + (trailing ? trailing[0] : ""));
+    i = j;
+  }
+  return out.join(" ");
+}
+
 const DICTATION_NUMBER_WORDS = new Map(Object.entries({
   zero: "0", one: "1", two: "2", three: "3", four: "4", five: "5",
   six: "6", seven: "7", eight: "8", nine: "9", ten: "10",
@@ -51,7 +141,9 @@ const DICTATION_NUMBER_WORDS = new Map(Object.entries({
 // case disappear, "five p.m." and "5 PM" become the same tokens, and a spoken
 // "six o'clock" can safely become "6:00".
 function dictationSemanticTokens(value) {
-  return String(value || "")
+  // Spoken and written numbers fold to the same token here, so converting
+  // "two point five" to "2.5" reads as formatting rather than as changed words.
+  return spokenNumbersToDigits(String(value || ""))
     .normalize("NFKC")
     .toLowerCase()
     .replace(/[’‘]/g, "'")
@@ -236,6 +328,7 @@ function buildDictationTurnDetection() {
 }
 
 module.exports = {
+  spokenNumbersToDigits,
   assessDictationRefinement,
   assessDictationInsertion,
   buildDictationTranscriptionConfig,

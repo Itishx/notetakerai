@@ -40,7 +40,7 @@ export type HilTool = {
   handler?: string;
 };
 
-export const HIL_CATALOG_VERSION = "1.1.0";
+export const HIL_CATALOG_VERSION = "1.2.0";
 
 export const HIL_TOOL_CATALOG: HilTool[] = [
   // Split, because one entry covering both halves of actOnSelectedText made the
@@ -107,6 +107,10 @@ export const HIL_TOOL_CATALOG: HilTool[] = [
   { name: "maps_directions", params: ["destination", "origin"], gloss: "Open Google Maps directions to a place, speak distance and travel time", handler: "runMapsDirections", },
   { name: "maps_show", params: ["place"], gloss: "Open Google Maps in Chrome centered on a named place", handler: "runMapsShow", },
   { name: "mesa_checkin", params: [], gloss: "Open the Mesa School portal and speak coursework, deadlines, progress", memoSafe: true, handler: "runMesaCheckIn", },
+  // Full personality override, same shape as a voice persona. The router
+  // never needs to fire this mid-run: entry and exit are checked first, in
+  // code, before normal routing even starts.
+  { name: "monday_mode_toggle", params: ["action"], gloss: "Enter or exit Monday Mode: full sarcastic personality override, notch retints, mascot locks in the notch", stateful: true, zeroNetwork: true, handler: "setMondayModeState", },
   { name: "move_file", params: ["query", "kind", "destination"], gloss: "Find a file by name and move it into a folder", zeroNetwork: true, handler: "moveMacFile", },
   { name: "music_play_segment_loop", params: ["song", "provider", "startSeconds", "endSeconds", "useCurrent", "interpretedRange"], gloss: "Play only a timestamped slice of a song, looping it forever", stateful: true, handler: "playMusicSegmentOnMac", },
   { name: "netflix_resume", params: ["title"], gloss: "Resume or start a named Netflix title in Chrome", handler: "resumeNetflixOnMac", },
@@ -148,6 +152,10 @@ export const HIL_TOOL_CATALOG: HilTool[] = [
   { name: "timer_cancel", params: [], gloss: "Cancel running countdown timers and clear notch; today also wipes alarms", irreversible: true, zeroNetwork: true, handler: "cancelReminders", },
   { name: "timer_set", params: ["seconds", "label"], gloss: "Start a countdown timer for N seconds with an optional label", zeroNetwork: true, handler: "startReminder", },
   { name: "touch_id_verify", params: [], gloss: "Prompt macOS Touch ID, report verified, refused, or unavailable", zeroNetwork: true, memoSafe: true, handler: "requireTouchId", },
+  // Permanent, unlike every cleanup_* entry above — those all land in the
+  // recoverable Redundant Files folder. This is the real ~/.Trash, gated on
+  // Touch ID the same way executeConfirmedDelete gates a single-file delete.
+  { name: "trash_empty", params: [], gloss: "Empty the real macOS Trash for good, after Touch ID confirms it is you", irreversible: true, zeroNetwork: true, handler: "emptyMacTrash", },
   { name: "voice_mode_check", params: ["modeName"], gloss: "Answer yes or no whether one named Voice Command mode is active", stateful: true, },
   { name: "voice_mode_current", params: [], gloss: "Name which Voice Command mode is active right now, if any", stateful: true, },
   { name: "voice_mode_set", params: ["modeName", "action"], gloss: "Enter or leave a named Voice Command mode; retints the notch", stateful: true, },

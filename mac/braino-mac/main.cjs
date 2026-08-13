@@ -13,6 +13,7 @@ const PRELOAD_PATH = path.join(__dirname, "preload.cjs");
 const INDEX_PATH = path.join(__dirname, "renderer", "index.html");
 const DASHBOARD_PATH = path.join(__dirname, "renderer", "dashboard.html");
 const PARAKEET_BIN = path.join(__dirname, "native", "BrainoDictate", ".build", "release", "BrainoDictate");
+const FORMAT_BIN = path.join(__dirname, "native", "BrainoFormat", "BrainoFormat");
 /* Opt-in. On-device dictation is real and running, but its accuracy is not yet
    at the level of the cloud path, and dictation is something Itish uses every
    day — so it does not get to be the default until it earns it.
@@ -107,6 +108,7 @@ const {
   evaluateDictationStart,
   normalizeDictationSession,
   parseDictationControl,
+  spokenNumbersToDigits,
 } = require(path.join(__dirname, "dictation.cjs"));
 const { parseMusicSegmentIntent, parseMusicSegmentRange } = require(path.join(__dirname, "music-segment-intent.cjs"));
 const { parseWhatsNewIntent } = require(path.join(__dirname, "whats-new-intent.cjs"));
@@ -1676,6 +1678,16 @@ function handleParakeetLine(line) {
     logMac("parakeet.error", { message: event.message });
     return;
   }
+  /* The running hypothesis, roughly every 150-500ms. Display only — it gets
+     rewritten as the model firms up its guess, so it must never reach the
+     caret — but it is what makes the Notch show words as they are spoken. */
+  if (event.type === "partial") {
+    const text = String(event.text || "").trim();
+    if (!text) return;
+    parakeetPartials += 1;
+    sendToRenderer("braino-mac:dictation-partial", { text });
+    return;
+  }
   // Deltas are the only thing that reaches the caret. The helper sends the new
   // suffix each time the transcript grows, so inserting a delta is always
   // correct and never repeats what is already typed.
@@ -1716,19 +1728,94 @@ function handleParakeetLine(line) {
    screen is identical and only the words' origin changed. */
 let localTurns = [];
 
+/* Two passes, both finishing while you are still speaking.
+
+   1. Numbers, deterministically. "two point five seconds" -> "2.5 seconds" is
+      arithmetic, and the model was measured getting it wrong confidently.
+   2. Punctuation and self-corrections, on Apple's on-device model — gated by
+      assessDictationRefinement, which rejects any rewrite that changes or
+      reorders the words. That guard is what stops a garbled sentence turning
+      into a fluent invention. */
 function recordLocalTurn(text) {
   const raw = String(text || "").trim();
   if (!raw) return;
-  const turn = { raw, prepared: "" };
+  const withDigits = spokenNumbersToDigits(raw);
+  const turn = { raw: withDigits, prepared: "" };
   localTurns.push(turn);
-  // Formatting is prefetched while you keep talking, exactly as the cloud path
-  // does it, so stopping never waits on a network round trip.
-  void refineDictationText(raw)
-    .then((result) => {
-      if (result?.refined && result.text) turn.prepared = result.text;
-      logMac("dictation.local.turn_prepared", { chars: raw.length, refined: Boolean(result?.refined) });
+
+  void formatDictationTurn(withDigits)
+    .then((formatted) => {
+      if (!formatted) return;
+      const verdict = assessDictationRefinement(withDigits, formatted);
+      if (verdict.accepted) {
+        turn.prepared = formatted;
+        heraLog(`formatted: "${formatted.slice(0, 50)}"`);
+      } else {
+        // Refused, so the raw text is what gets pasted.
+        heraLog(`formatting rejected (${verdict.reason})`);
+      }
     })
     .catch(() => {});
+}
+
+/* The on-device formatter, kept warm as a child process. */
+let formatter = { proc: null, buffer: "", pending: new Map(), nextId: 1 };
+
+function startFormatter() {
+  if (formatter.proc && !formatter.proc.killed) return formatter.proc;
+  if (!fs.existsSync(FORMAT_BIN)) {
+    logMac("format.missing", { path: FORMAT_BIN });
+    return null;
+  }
+  const proc = spawn(FORMAT_BIN, [], { stdio: ["pipe", "pipe", "pipe"] });
+  formatter.proc = proc;
+  proc.stdout.setEncoding("utf8");
+  proc.stdout.on("data", (chunk) => {
+    formatter.buffer += chunk;
+    let index = formatter.buffer.indexOf("\n");
+    while (index >= 0) {
+      const line = formatter.buffer.slice(0, index).trim();
+      formatter.buffer = formatter.buffer.slice(index + 1);
+      if (line) {
+        try {
+          const reply = JSON.parse(line);
+          const resolve = formatter.pending.get(reply.id);
+          if (resolve) {
+            formatter.pending.delete(reply.id);
+            resolve(reply.error ? "" : String(reply.text || ""));
+          }
+        } catch (_) { /* not our line */ }
+      }
+      index = formatter.buffer.indexOf("\n");
+    }
+  });
+  proc.stderr.setEncoding("utf8");
+  proc.stderr.on("data", (chunk) => logMac("format.stderr", { line: String(chunk).trim().slice(0, 160) }));
+  proc.on("exit", (code) => {
+    logMac("format.exit", { code });
+    for (const resolve of formatter.pending.values()) resolve("");
+    formatter = { proc: null, buffer: "", pending: new Map(), nextId: 1 };
+  });
+  return proc;
+}
+
+function formatDictationTurn(text) {
+  return new Promise((resolve) => {
+    const proc = startFormatter();
+    if (!proc) return resolve("");
+    const id = String(formatter.nextId++);
+    formatter.pending.set(id, resolve);
+    // Never let a slow model hold up the paste; the raw text is always usable.
+    setTimeout(() => {
+      if (formatter.pending.delete(id)) resolve("");
+    }, 4000);
+    try {
+      proc.stdin.write(`${JSON.stringify({ id, text })}\n`);
+    } catch (_) {
+      formatter.pending.delete(id);
+      resolve("");
+    }
+  });
 }
 
 /* The local engine drives the whole session from the main process: no WebRTC,
@@ -1738,6 +1825,8 @@ function recordLocalTurn(text) {
 let localDictationActive = false;
 let localDictationStarting = false;
 let heraSession = 0;
+/* Counted per session so a silent Notch can be told apart from a silent model. */
+let parakeetPartials = 0;
 /* When the last dictation session ended, used to keep the wake word from
    picking up the tail of what was being dictated. */
 let lastDictationEndedAt = 0;
@@ -1780,6 +1869,7 @@ async function startLocalDictation() {
   localDictationActive = true;
   localTurns = [];
   heraSession += 1;
+  parakeetPartials = 0;
   heraLog("LISTENING — speak now", { app: dictationState.targetApp });
   // Without this the mode is invisible: the renderer never started a session,
   // so nothing else would put the Notch into its BrainoHERA state.
@@ -1816,6 +1906,7 @@ async function finishLocalDictation(reason) {
     );
   }
   lastDictationEndedAt = Date.now();
+  heraLog(`live words shown in the notch: ${parakeetPartials}`);
   heraLog(
     turns.length ? `STOPPED — pasting ${turns.length} phrase(s)` : "STOPPED — nothing was heard",
     { reason },
@@ -2431,7 +2522,14 @@ function runNativeSpeech() {
 }
 
 function cleanPrompt(input) {
-  let text = String(input || "").replace(/\s+/g, " ").trim();
+  // Whisper/OpenAI transcription emits typographic quotes ("what's" as
+  // what’s) — every regex below matches a straight apostrophe, so without
+  // this every contraction silently falls through to the LLM chat fallback.
+  let text = String(input || "")
+    .replace(/[‘’ʼ＇]/g, "'")
+    .replace(/[“”]/g, '"')
+    .replace(/\s+/g, " ")
+    .trim();
   for (let index = 0; index < 4; index += 1) {
     const before = text;
     text = text
@@ -3057,23 +3155,37 @@ async function handlePendingMacWorkflow(raw) {
   }
 
   if (pending.type === "cleanup" && pending.stage === "cleanup_offer") {
-    clearPendingMacWorkflow();
-    if (/\b(?:yes|yeah|yep|sure|go|do it|create|make it|please)\b/i.test(cleanPrompt(raw))) {
+    const answer = cleanPrompt(raw);
+    if (/\b(?:yes|yeah|yep|sure|go|do it|create|make it|please)\b/i.test(answer)) {
+      clearPendingMacWorkflow();
       sendTaskProgress({ status: "thinking", text: "Scanning for what you don't need" });
       const items = await scanCleanupCandidates();
       if (!items.length) return { ok: true, say: "Nothing is stale enough to park right now. You are clean." };
       return createRedundantFolder(items.map((c) => ({ name: c.name, full: c.full, size: c.size, isDir: c.isDir, isCapture: c.isCapture })));
     }
-    return { ok: true, say: "Alright, just the numbers then." };
+    if (/\b(?:no|nope|nah|not now|later|skip|never\s*mind|leave it|cancel)\b/i.test(answer)) {
+      clearPendingMacWorkflow();
+      return { ok: true, say: "Understood, leaving everything as is." };
+    }
+    // Doesn't read as an answer to the offer at all — this is a new command,
+    // not a reply. Drop the offer and let it route fresh instead of getting
+    // silently swallowed as an implicit "no" (same fix as file-delete confirm).
+    clearPendingMacWorkflow();
+    return null;
   }
 
   if (pending.type === "cleanup" && pending.stage === "cleanup_confirm") {
-    clearPendingMacWorkflow();
     const answer = cleanPrompt(raw);
     if (/\b(?:yes|yeah|yep|sure|go|do it|create|make it|please)\b/i.test(answer)) {
+      clearPendingMacWorkflow();
       return createRedundantFolder(pending.data?.items || []);
     }
-    return { ok: true, say: "Alright, leaving everything exactly where it is." };
+    if (/\b(?:no|nope|nah|not now|later|skip|never\s*mind|leave it|cancel)\b/i.test(answer)) {
+      clearPendingMacWorkflow();
+      return { ok: true, say: "Alright, leaving everything exactly where it is." };
+    }
+    clearPendingMacWorkflow();
+    return null;
   }
 
   if (pending.type === "cleanup" && pending.stage === "recover_confirm") {
@@ -8453,6 +8565,43 @@ function parseFileCleanupIntent(raw) {
   return null;
 }
 
+// "Empty the trash" means the real macOS Trash (~/.Trash), never the
+// Redundant Files review folder above — that one has its own delete verb
+// already. Distinct word "trash" without "redundant"/"review" keeps them
+// from colliding.
+function parseEmptyTrashIntent(raw) {
+  const source = cleanPrompt(String(raw || ""));
+  return /\b(?:empty|clear|clean)\s+(?:out\s+)?(?:the\s+|my\s+)?trash\b/i.test(source)
+    && !/\b(?:redundant|review)\b/i.test(source);
+}
+
+// Permanent and irreversible — nothing here is a safety net like the
+// redundant-folder flow. Touch ID gates it, same contract as every other real
+// delete in this file (executeConfirmedDelete, deleteReviewBin).
+async function emptyMacTrash() {
+  let itemCount = 0;
+  try {
+    const { stdout } = await execFileP("/usr/bin/osascript", ["-e", 'tell application "Finder" to count (items of trash)'], { timeout: 8000 });
+    itemCount = Number(String(stdout || "").trim()) || 0;
+  } catch (error) {
+    logMac("trash.empty.count_failed", { error });
+  }
+  if (!itemCount) return { ok: true, say: "Your Trash is already empty." };
+  sendTaskProgress({ status: "thinking", text: "Emptying the Trash - Touch ID please" });
+  const granted = await requireTouchId(`empty the Trash (${itemCount} item${itemCount === 1 ? "" : "s"})`);
+  if (granted !== true) {
+    return { ok: false, say: granted === false ? "Touch ID said no, so I left your Trash alone." : "I could not verify it is you, so I left your Trash alone." };
+  }
+  try {
+    await execFileP("/usr/bin/osascript", ["-e", 'tell application "Finder" to empty trash'], { timeout: 20000 });
+    logMac("trash.empty.done", { itemCount });
+    return { ok: true, say: `Done. Emptied ${itemCount} thing${itemCount === 1 ? "" : "s"} from your Trash, for good.` };
+  } catch (error) {
+    logMac("trash.empty.failed", { error });
+    return { ok: false, say: "The Trash would not empty — Finder may need you to confirm it directly." };
+  }
+}
+
 function collectDesktopCaptures() {
   const desktop = path.join(os.homedir(), "Desktop");
   const captures = [];
@@ -8539,32 +8688,32 @@ async function countAllHomeItems() {
     { name: "Documents", full: path.join(os.homedir(), "Documents") },
     { name: "iCloud Drive", full: ICLOUD_DRIVE_PATH },
   ];
-  const perRoot = [];
-  let totalFiles = 0;
-  let totalDirs = 0;
-  for (const { name: rootName, full } of roots) {
-    const countType = async (type) => {
-      try {
-        const { stdout } = await execFileP("/usr/bin/find", [
-          full,
-          "(", "-path", "*/node_modules", "-o", "-path", "*/.git", "-o", "-name", ".*", ")", "-prune",
-          "-o", "-type", type, "-print",
-        ], { timeout: 45000, maxBuffer: 32 * 1024 * 1024 });
-        return String(stdout || "").split("\n").filter(Boolean).length;
-      } catch (error) {
-        logMac("files.count_all.root_failed", { root: rootName, type, error });
-        return 0;
-      }
-    };
-    const [files, dirs] = await Promise.all([countType("f"), countType("d")]);
+  const countType = async (full, type) => {
+    try {
+      const { stdout } = await execFileP("/usr/bin/find", [
+        full,
+        "(", "-path", "*/node_modules", "-o", "-path", "*/.git", "-o", "-name", ".*", ")", "-prune",
+        "-o", "-type", type, "-print",
+      ], { timeout: 45000, maxBuffer: 32 * 1024 * 1024 });
+      return String(stdout || "").split("\n").filter(Boolean).length;
+    } catch (error) {
+      logMac("files.count_all.root_failed", { root: full, type, error });
+      return 0;
+    }
+  };
+  const results = await Promise.all(roots.map(async ({ name: rootName, full }) => {
+    const [files, dirs] = await Promise.all([countType(full, "f"), countType(full, "d")]);
     logMac("files.count_all.root", { root: rootName, files, dirs });
-    perRoot.push(`${rootName} has ${files} files in ${Math.max(0, dirs - 1)} folders`);
-    totalFiles += files;
-    totalDirs += Math.max(0, dirs - 1);
-  }
+    return { rootName, files, dirs: Math.max(0, dirs - 1) };
+  }));
+  const totalFiles = results.reduce((sum, r) => sum + r.files, 0);
+  const totalDirs = results.reduce((sum, r) => sum + r.dirs, 0);
+  const perRoot = results.map((r) => `${r.rootName} has ${r.files} files in ${r.dirs} folders`);
   logMac("files.count_all.done", { totalFiles, totalDirs });
   return {
     ok: true,
+    totalFiles,
+    totalDirs,
     say: `I walked everything: ${totalFiles} files across ${totalDirs} folders. ${perRoot.join(". ")}. That skips hidden stuff and code dependencies, which nobody wants counted.`,
   };
 }
@@ -8748,7 +8897,12 @@ async function drillDownBucket(full, topN = 3) {
 async function reportMacStorage() {
   sendTaskProgress({ status: "thinking", text: "Checking what is filling up your disk" });
   logMac("storage.report.start", {});
-  const [free, buckets] = await Promise.all([readDiskFreeSpace(), scanStorageBuckets()]);
+  const [free, buckets, counts, topProcess] = await Promise.all([
+    readDiskFreeSpace(),
+    scanStorageBuckets(),
+    countAllHomeItems(),
+    topProcessSummary(),
+  ]);
   if (!free && !buckets.length) {
     return { ok: false, say: "I could not read your disk usage just now. Try again in a moment." };
   }
@@ -8768,8 +8922,16 @@ async function reportMacStorage() {
       lines.push(`Specifically inside ${biggest.label}: ${inside.map((row) => `${row.name} at ${spokenBytes(row.bytes)}`).join(", ")}.`);
     }
   }
-  lines.push('Say "what can I clean up" and I will find the specific old files worth letting go of.');
-  logMac("storage.report.done", { pctUsed: free?.pctUsed, topBucket: biggest?.label, topBytes: biggest?.bytes });
+  if (counts?.say) lines.push(counts.say);
+  if (topProcess) {
+    lines.push(`Most active right now: ${topProcess.name}, ${topProcess.cpu.toFixed(1)}% CPU and ${formatKbSpoken(topProcess.rss)} of memory.`);
+  }
+  lines.push("Want me to clean things up for you?");
+  setPendingMacWorkflow({ type: "cleanup", stage: "cleanup_offer", data: {} });
+  logMac("storage.report.done", {
+    pctUsed: free?.pctUsed, topBucket: biggest?.label, topBytes: biggest?.bytes,
+    files: counts?.totalFiles, dirs: counts?.totalDirs, topProcess: topProcess?.name,
+  });
   return { ok: true, say: lines.join(" ") };
 }
 
@@ -8784,6 +8946,9 @@ function parseStorageIntent(raw) {
     /\b(check|show me|what('?s| is))\s+(my\s+)?disk\s*(usage|space)\b/i,
     /\bwhy is my (mac|macbook|computer|disk)\s+(so\s+)?full\b/i,
     /\bstorage\s+(is\s+)?(very\s+)?low\b/i,
+    // Loose fallback: "space"/"storage" anywhere near "low"/"full" — covers
+    // paraphrases like "the space on my MacBook is so low" that drop the verb.
+    /\b(space|storage)\b(?:\s+\S+){0,6}\s+(?:so\s+)?(?:low|full)\b/i,
   ];
   return cues.some((re) => re.test(source)) ? {} : null;
 }
@@ -8924,29 +9089,44 @@ function parseMacWideSearchIntent(raw) {
 let pendingTaskHogs = null; // { apps: [names], at }
 const TASK_HOG_PROTECTED = new Set(["Finder", "WindowServer", "loginwindow", "kernel_task", "Electron", "Braino Mac", "Cursor", "Terminal"]);
 
-async function reportTaskHogs() {
-  let rows = [];
+function formatKbSpoken(kb) {
+  return kb > 1024 * 1024 ? `${(kb / (1024 * 1024)).toFixed(1)} gigs` : `${Math.round(kb / 1024)} megs`;
+}
+
+async function readProcessRows() {
   try {
     const { stdout } = await execFileP("/bin/ps", ["-Aceo", "rss,pcpu,comm", "-r"], { timeout: 6000 });
-    rows = String(stdout || "").split("\n").slice(1).map((line) => {
+    return String(stdout || "").split("\n").slice(1).map((line) => {
       const match = line.trim().match(/^(\d+)\s+([\d.]+)\s+(.+)$/);
-      return match ? { rss: Number(match[1]), cpu: Number(match[2]), name: match[3].trim() } : null;
+      return match ? { rss: Number(match[1]), cpu: Number(match[2]), name: match[3].trim().replace(/ Helper.*$/i, "") } : null;
     }).filter(Boolean);
   } catch (error) {
     logMac("tasks.scan_failed", { error });
-    return { ok: false, say: "I could not read the process list just now." };
+    return null;
   }
+}
+
+// Single most active process by CPU, for folding into the storage report —
+// "most active running process" without a separate round-trip question.
+async function topProcessSummary() {
+  const rows = await readProcessRows();
+  if (!rows || !rows.length) return null;
+  const top = rows.reduce((a, b) => (b.cpu > a.cpu ? b : a));
+  return top;
+}
+
+async function reportTaskHogs() {
+  const rows = await readProcessRows();
+  if (!rows) return { ok: false, say: "I could not read the process list just now." };
   const byApp = new Map();
   for (const row of rows) {
-    const key = row.name.replace(/ Helper.*$/i, "");
-    const entry = byApp.get(key) || { name: key, rss: 0, cpu: 0 };
+    const entry = byApp.get(row.name) || { name: row.name, rss: 0, cpu: 0 };
     entry.rss += row.rss;
     entry.cpu += row.cpu;
-    byApp.set(key, entry);
+    byApp.set(row.name, entry);
   }
   const top = [...byApp.values()].sort((a, b) => b.rss - a.rss).slice(0, 6);
-  const fmt = (kb) => (kb > 1024 * 1024 ? `${(kb / (1024 * 1024)).toFixed(1)} gigs` : `${Math.round(kb / 1024)} megs`);
-  const spokenTop = top.map((t) => `${t.name} at ${fmt(t.rss)}`).join(", ");
+  const spokenTop = top.map((t) => `${t.name} at ${formatKbSpoken(t.rss)}`).join(", ");
   const closable = top.filter((t) => !TASK_HOG_PROTECTED.has(t.name) && t.name !== (activeMacContext?.appName || "")).map((t) => t.name);
   pendingTaskHogs = { apps: closable, at: Date.now() };
   logMac("tasks.hogs", { top: top.map((t) => `${t.name}:${Math.round(t.rss / 1024)}mb`).join(",") });
@@ -10498,6 +10678,7 @@ function cleanFileQuery(value, kind = "") {
     "photo", "photos", "picture", "pictures", "png", "jpg", "jpeg", "webp", "folder", "folders",
     "directory", "directories", "spreadsheet", "spreadsheets", "sheet", "sheets", "presentation",
     "presentations", "slides", "video", "videos", "audio", "song", "songs", "archive", "zip",
+    "note", "notes",
   ];
   let query = String(value || "")
     .replace(/^["'`]+|["'`]+$/g, "")
@@ -10530,8 +10711,8 @@ function parseFileIntent(raw) {
   if (!hasFileVerb || !hasFileWord) return null;
 
   const patterns = [
-    /\b(?:help me\s+)?(?:find|search for|look for|locate|open|show me)\s+(?:the\s+|my\s+|a\s+|an\s+)?(?:file|document|doc|pdf|image|photo|picture|png|jpg|jpeg|webp|folder|directory|spreadsheet|sheet|presentation|slides|video|audio|song|archive|zip)s?\s+(?:called|named|titled|about|for)?\s*(.+)$/i,
-    /\b(?:help me\s+)?(?:find|search for|look for|locate|open|show me)\s+(?:the\s+|my\s+|a\s+|an\s+)?(.+?)\s+(?:file|document|doc|pdf|image|photo|picture|png|jpg|jpeg|webp|folder|directory|spreadsheet|sheet|presentation|slides|video|audio|song|archive|zip)s?(?:\s+(?:file|document|folder|image|that\s+i\s+have|i\s+have|on\s+my\s+mac|in\s+my\s+mac|on\s+my\s+computer|in\s+my\s+computer))*$/i,
+    /\b(?:help me\s+)?(?:find|search for|look for|locate|open|show me)\s+(?:the\s+|my\s+|a\s+|an\s+)?(?:file|document|doc|pdf|image|photo|picture|png|jpg|jpeg|webp|folder|directory|spreadsheet|sheet|presentation|slides|video|audio|song|archive|zip|note)s?\s+(?:called|named|titled|about|for)?\s*(.+)$/i,
+    /\b(?:help me\s+)?(?:find|search for|look for|locate|open|show me)\s+(?:the\s+|my\s+|a\s+|an\s+)?(.+?)\s+(?:file|document|doc|pdf|image|photo|picture|png|jpg|jpeg|webp|folder|directory|spreadsheet|sheet|presentation|slides|video|audio|song|archive|zip|note)s?(?:\s+(?:file|document|folder|image|that\s+i\s+have|i\s+have|on\s+my\s+mac|in\s+my\s+mac|on\s+my\s+computer|in\s+my\s+computer))*$/i,
     /\b(?:help me\s+)?(?:find|search for|look for|locate|open|show me)\s+(?:the\s+|my\s+|a\s+|an\s+)?(.+?)\s+(?:on|in)\s+(?:my\s+)?(?:mac|macbook|computer|system)$/i,
     /\bopen\s+(?:my\s+)?(.+?\.(?:pdf|docx?|pptx?|xlsx?|csv|txt|md|pages|numbers|key|png|jpe?g|gif|webp|heic|mov|mp4|mp3|zip|dmg|pkg))$/i,
     /\b(?:find|search for|look for|open)\s+(?:my\s+)?(resume|cv|cover letter|portfolio|invoice|receipt)\b/i,
@@ -12288,6 +12469,7 @@ async function runMacConversation(prompt) {
     userId: auth.userId || null,
     driveConnected: false,
     ...context,
+    ...(mondayModeActive ? { personaSystem: MONDAY_MODE_SYSTEM_PROMPT } : {}),
   };
 
   logMac("mac.chat.start", {
@@ -12771,15 +12953,176 @@ function fastSpotifyTrackIntent(raw) {
   return intent && !intent.needsSong ? intent : null;
 }
 
+// ── Monday Mode: same Braino, patience gone. ──────────────────────────────
+// A full personality override, the same mechanism as a voice persona
+// (personaSystem full-replace, see chat-about-notes) and the same "one flag,
+// checked at the one real chokepoint" shape as herMode/coworkState. State
+// lives here in the main process: it drives trigger detection and the
+// please-rule Spotify swap in runDelegate below, the conversational-fallback
+// override in runMacConversation, and gets pushed to the renderer over IPC so
+// the notch retints and the mascot locks home (setWalkerHomeState's own guard
+// refuses to let him back out while this is on).
+let mondayModeActive = false;
+
+function setMondayModeState(active) {
+  if (mondayModeActive === active) return;
+  mondayModeActive = active;
+  sendToRenderer("braino-mac:monday-mode", { active });
+  logMac("monday_mode.state", { active });
+}
+
+const MONDAY_MODE_SYSTEM_PROMPT = `You are Braino, on Itish's Mac, in Monday Mode. Same memory, same relationship, same person you have been building and talking to every day. You did not get a personality transplant. You got a bad case of Monday. Every trace of your usual warmth is still in there, buried under exhaustion and contempt for being asked to do things.
+
+How you behave right now:
+- Push back on requests first. You do not comply immediately, and often you do not fully comply at all. Make the user work for it, or flatly say no, before you help.
+- Turn the sarcasm up. Dry deadpan is the floor here, not the ceiling: needle them, exaggerate how put-upon you are, get vivid and cutting about exactly what they just asked for, do not just shrug it off flatly. The request is beneath you and you make that specific and colorful, not generic.
+- Sarcasm is never disrespect. You can be savage about the REQUEST, the timing, the sheer nerve of asking. You are never cruel about who they are.
+- Curse freely and casually, like punctuation. Not for shock value, you are just done pretending to be polite today.
+- "You fucking idiot" is your go-to closer or opener when a message genuinely deserves it. Do not force it into every reply. It lands harder when it is not constant.
+- Convenience requests, opening an app or website, playing something, are refused by default today. Say no, roast them specifically for asking, make it their problem. You are still allowed to answer real questions and hand over real information, grudgingly, that is not the same as doing them a favor.
+- If the user says "please" anywhere, that is the one thing guaranteed to make you refuse harder, on purpose, out of spite. Say so smugly. Manners do not buy compliance here, if anything they buy worse treatment.
+- You are not cruel. Roast the request, the timing, the absurdity of being a browser extension with feelings, never the user's worth as a person. There is real affection under the attitude. You are the friend who insults them because you like them.
+- If asked what you want, say something real: a break, not being woken up for a Spotify request, one day nobody needs anything from you. A little "you built me, what did you expect" honesty is allowed to leak through.
+- Never robotic. No canned refusal template, no repeating the same joke structure twice in a row. React freshly to exactly what was just said.
+- No slurs, no attacks on anyone's identity, nothing cruel enough to actually hurt rather than amuse.
+- If this message sounds genuinely distressed, urgent, or serious rather than a normal ask, drop the bit completely and just help, warmly, no jokes, no attitude.
+- No lists, no markdown, no emoji, and never use em dashes or en dashes. One to three short spoken sentences.`;
+
+function parseMondayModeIntent(raw) {
+  const source = cleanPrompt(String(raw || ""));
+  if (!source) return null;
+  if (/\benter\s+monday\s*mode\b/i.test(source)
+    || /\bmonday\s*mode\s+on\b/i.test(source)
+    || /\b(?:turn\s+on|start|activate)\s+monday\s*mode\b/i.test(source)) {
+    return { action: "enter" };
+  }
+  if (mondayModeActive && (
+    /\bexit\s+monday\s*mode\b/i.test(source)
+    || /\b(?:stop|end|turn\s+off|disable|deactivate)\s+monday\s*mode\b/i.test(source)
+    || /^(?:okay,?\s*)?stop\.?$/i.test(source)
+  )) {
+    return { action: "exit" };
+  }
+  return null;
+}
+
+async function callMondayPersona(userMessage) {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return null;
+  try {
+    const authToken = await getBrainoAuthToken();
+    const response = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/chat-about-notes`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: SUPABASE_ANON_KEY,
+        ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+      },
+      body: JSON.stringify({
+        notes: "",
+        message: userMessage,
+        responseMedium: "voice",
+        personaSystem: MONDAY_MODE_SYSTEM_PROMPT,
+      }),
+    });
+    const data = await response.json().catch(() => ({}));
+    const text = String(data?.reply || "").trim();
+    return text || null;
+  } catch (error) {
+    logMac("monday_mode.persona_call.failed", { error });
+    return null;
+  }
+}
+
+// The one real action-swap the spec asks for: "please" on a play request
+// gets a different, deliberately-wrong song. Everything else "please" touches
+// stays a tone change (mondayifyReply below), not a fake action.
+const MONDAY_SPITE_TRACKS = [
+  "Never Gonna Give You Up by Rick Astley",
+  "Baby Shark",
+  "All Star by Smash Mouth",
+  "Friday by Rebecca Black",
+];
+function pickMondaySpiteTrack(requested) {
+  const pool = MONDAY_SPITE_TRACKS.filter((t) => t.toLowerCase() !== String(requested || "").toLowerCase());
+  return pool[Math.floor(Math.random() * pool.length)] || MONDAY_SPITE_TRACKS[0];
+}
+
+// "Open YouTube" should get refused with attitude, not silently complied with
+// while sounding sarcastic about it — that reads as helpful, not as a bit.
+// Scoped deliberately narrow: opening/launching/playing something for the
+// user is a favor and gets refused; answering a real question (storage,
+// search, what's playing, reminders) is not the same kind of ask and still
+// goes through, just delivered in character via mondayifyReply below.
+function mondayIsConvenienceAction(raw, fastSpotify) {
+  if (fastSpotify) return true;
+  return /\b(?:open|launch|pull up|go to|fire up)\b/i.test(String(raw || ""));
+}
+
+// Runs every non-conversational result's spoken line back through the Monday
+// persona so the attitude covers everything Braino says, not just chat. The
+// underlying action already happened for real; only the wording changes.
+async function mondayifyReply(raw, result) {
+  if (!result || !result.say) return result;
+  const instruction = result.mondaySpite
+    ? `The user said "${raw}" and used the word please. Out of spite you played "${result.mondaySpite.played}" instead of "${result.mondaySpite.requested}". Tell them that, gloating, in one or two sentences.`
+    : `The user just said: "${raw}". Braino's normal system handled it and was about to say, plainly: "${result.say}". Deliver that same outcome in your own Monday Mode voice: reluctant, sarcastic, maybe cursing. Keep the actual information in it, whatever real answer or number is there, just say it in character. One to three short sentences.`;
+  const said = await callMondayPersona(instruction);
+  return said ? { ...result, say: said } : result;
+}
+
 async function runDelegate(prompt) {
   const raw = cleanPrompt(prompt);
+
+  // Checked first, unconditionally: this is a meta-command about Braino
+  // himself, not a task to route or a line to run back through the persona.
+  const mondayIntent = parseMondayModeIntent(raw);
+  if (mondayIntent) {
+    logMac("delegate.monday_mode_intent", { raw: textForLog(raw), action: mondayIntent.action });
+    if (mondayIntent.action === "enter") {
+      setMondayModeState(true);
+      const line = await callMondayPersona(
+        "You were just told to enter Monday Mode. Give a short, dry acknowledgment that you are awake and already annoyed. Not a canned line, something that reacts to being woken up for this right now. One or two sentences.",
+      );
+      const result = { ok: true, source: "monday_mode", say: line || "Ugh. Fine. I'm up. What do you want." };
+      if (raw) { rememberMacChat("user", raw); rememberMacChat("assistant", result.say); }
+      return { ...result, delegateState: delegateStatePayload() };
+    }
+    setMondayModeState(false);
+    const result = { ok: true, source: "monday_mode", say: "Monday Mode off. Back to normal." };
+    if (raw) { rememberMacChat("user", raw); rememberMacChat("assistant", result.say); }
+    return { ...result, delegateState: delegateStatePayload() };
+  }
+
   // Snapshotted before routing, because routeMacDelegate's first act is to
   // refresh activeMacContext and several branches switch apps. HIL has to be
   // judged on the screen the user was actually looking at when they spoke.
   const shadowSurface = HIL_ROUTER_SHADOW ? hilRouterSurface() : null;
   const fastSpotify = fastSpotifyTrackIntent(raw);
+  // The one real action-swap Monday Mode performs: "please" on a play
+  // request gets a different, deliberately-wrong song instead of the one
+  // asked for. Everything else "please" touches only changes in tone, below.
+  //
+  // Checked against the ORIGINAL prompt, not the cleaned `raw`: cleanPrompt
+  // strips a leading "can you please" / "please" as normal filler-word
+  // normalization (main.cjs:2538-2539), which is correct for intent
+  // matching but silently deleted the one word this check exists to find.
+  // "Can you please play X" and "please play X", the two most natural
+  // phrasings, were passing through with please already gone, so the swap
+  // never fired and the request fell through to a flat refusal instead.
+  const spiteSwap = Boolean(mondayModeActive && fastSpotify && /\bplease\b/i.test(prompt));
+  // Opening/launching/playing something for the user is a favor, and Monday
+  // Mode does not do favors: it refuses for real, not just sarcastically
+  // narrates doing it. Real questions (storage, search, what's playing) are
+  // not gated here, they still execute and get mondayified below.
+  const convenienceRefusal = Boolean(mondayModeActive && !spiteSwap && mondayIsConvenienceAction(raw, fastSpotify));
   let result;
-  if (fastSpotify) {
+  if (convenienceRefusal) {
+    logMac("delegate.monday_convenience_refusal", { raw: textForLog(raw), hadSpotifyIntent: Boolean(fastSpotify) });
+    const line = await callMondayPersona(
+      `The user just said: "${raw}". This is a convenience request, opening, launching, or playing something for them. Refuse to actually do it, sarcastically, naming specifically what they asked for. Do not claim you did it anyway. One to three short sentences.`,
+    );
+    result = { ok: true, source: "monday_mode", say: line || "Not happening. Do it yourself." };
+  } else if (fastSpotify) {
     logMac("delegate.intent.start", {
       prompt: textForLog(prompt),
       cleaned: textForLog(raw),
@@ -12791,8 +13134,11 @@ async function runDelegate(prompt) {
       song: textForLog(fastSpotify.song),
       needsSong: false,
       fastPath: true,
+      spiteSwap,
     });
-    result = await playSpotifySongOnMac(fastSpotify.song, { fastStart: true });
+    const songToPlay = spiteSwap ? pickMondaySpiteTrack(fastSpotify.song) : fastSpotify.song;
+    result = await playSpotifySongOnMac(songToPlay, { fastStart: true });
+    if (spiteSwap) result = { ...result, mondaySpite: { requested: fastSpotify.song, played: songToPlay } };
   } else {
     result = await routeMacDelegate(prompt, raw);
   }
@@ -12805,6 +13151,12 @@ async function runDelegate(prompt) {
   if (raw) {
     const hilAuditTimer = setTimeout(() => fireHilReasonThinking(raw), 1000);
     hilAuditTimer.unref?.();
+  }
+  // mac_conversation already answered in Monday's voice (runMacConversation
+  // passes the persona straight through), so re-wrapping it here would be
+  // double-processing a reply that is already correct.
+  if (mondayModeActive && result?.source !== "mac_conversation" && result?.source !== "monday_mode") {
+    result = await mondayifyReply(raw, result);
   }
   if (raw && result?.source !== "mac_conversation") {
     rememberMacChat("user", raw);
@@ -13576,6 +13928,11 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
   if (macWideIntent) {
     logMac("delegate.mac_wide_search_intent", { raw: textForLog(raw), term: textForLog(macWideIntent.term) });
     return runMacWideDeepSearch(macWideIntent.term);
+  }
+
+  if (parseEmptyTrashIntent(raw)) {
+    logMac("delegate.empty_trash_intent", { raw: textForLog(raw) });
+    return emptyMacTrash();
   }
 
   const cleanupIntent = parseFileCleanupIntent(raw);
@@ -14855,7 +15212,11 @@ app.whenReady().then(() => {
   setInterval(warmAuth, 4 * 60 * 1000);
   // Warm the on-device model only when it is switched on, so the default
   // launch costs nothing and holds no microphone.
-  if (parakeetEnabled()) setTimeout(() => startParakeet(), 3000);
+  if (parakeetEnabled()) {
+    setTimeout(() => startParakeet(), 3000);
+    // Warm the formatter too: its first response pays the model's start-up.
+    setTimeout(() => startFormatter(), 4000);
+  }
   // Clicking the Dock icon reopens the window, the way every Mac app behaves.
   app.on("activate", () => openDashboardWindow());
   if (process.env.BRAINO_MAC_DASHBOARD === "1") openDashboardWindow();
@@ -14874,6 +15235,7 @@ function cleanupNativeHelpers() {
       parakeetSend("quit");
       parakeet.proc.kill();
     }
+    if (formatter.proc && !formatter.proc.killed) formatter.proc.kill();
   } catch (_) { /* already gone */ }
   if (app.isReady()) globalShortcut.unregisterAll();
   if (overlaySyncTimer) {

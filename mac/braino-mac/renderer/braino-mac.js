@@ -358,6 +358,7 @@ let wakeWordArmed = false;
 let realtimeConnecting = false;
 let realtimeVoiceEngine = "fish";
 let herMode = false;
+let mondayModeActive = false;
 let dictationMode = false;
 let dictationStarting = false;
 let dictationStopping = false;
@@ -2667,6 +2668,12 @@ async function setWalkerHomeState(wantHome, opts = {}) {
     walkerHome = false;
     return;
   }
+  // Monday Mode: he stays in the notch, full stop. Nothing gets him to pop
+  // out and sulk on screen while this is on, whatever called this.
+  if (mondayModeActive && !wantHome) {
+    walkerHome = true;
+    return;
+  }
   if (walkerHomeBusy) {
     walkerHomeQueued = wantHome;
     return;
@@ -2700,6 +2707,10 @@ function toggleWalkerHome() {
 // decides to leave the notch — nothing else auto-pops him out anymore.
 async function handleSummon() {
   if (herMode) return;
+  if (mondayModeActive) {
+    void speak("Not happening. I'm staying right here today.");
+    return;
+  }
   if (!walkerHome) {
     void speak("I'm already right here.");
     return;
@@ -2713,6 +2724,10 @@ async function handleSummon() {
 // back into the notch if he's out. Silent on the way home, no theatrics.
 async function handleSummonToggle() {
   if (herMode) return;
+  if (mondayModeActive) {
+    void speak("No. Notch. Today.");
+    return;
+  }
   // Double-Command is the one explicit way to send him home after the skit.
   if (skitJustCompleted) {
     skitJustCompleted = false;
@@ -3555,6 +3570,10 @@ function macTeamIsDirectMessagePrompt(text) {
 function macTeamShouldHandlePrompt(text) {
   const raw = String(text || "").trim();
   if (!raw) return false;
+  // Monday Mode owns "introduce yourself" completely: he answers it himself,
+  // in character. Team Mode sharing that trigger phrase is a coincidence,
+  // not a reason to hand the conversation to a different scripted flow.
+  if (mondayModeActive) return false;
   const directPersonRequest = macTeamIsDirectMessagePrompt(raw) && macTeamFindPeople(raw).length > 0;
   return macTeamState.active
     || /\bteam mode\b/i.test(raw)
@@ -5135,7 +5154,7 @@ function isLikelyMacActionTranscript(text) {
   if (isVoiceModeUtterance(text)) return true;
   if (/\bwhat can you do\b/.test(normalized) && /\b(mac|macbook|desktop|files?|locally|computer|system)\b/.test(normalized)) return true;
   if (/\b(what can you do|who are you|how are you|hello|hi|hey)\b/.test(normalized)) return false;
-  return /\b(open|launch|start|close|quit|demo|organize|organise|clean|sort|rename|move|delete|trash|create|make|new|create folder|make folder|new folder|undo|find|locate|look for|search for|show me|play|playing|pause|resume|spotify|playlist|volume|vol|sound|louder|quieter|mute|reduce|raise|increase|decrease|lower|percent|seconds?|minutes?|shuffle|repeat|loop|queue|rewind|restart|seek|album|artist|listening to|youtube|song|music|chrome|browser|website|tab|gmail|mail|email|notes|note|maps|calendar|drive|docs|pdf|image|video|file|folder|app|application|send|draft|compose|click|point|where is|reply|write|whatsapp|whats app|remember|remind|timer|countdown|touch id|verify|authenticate|come out|come here|show yourself|step out|join me|go back|go home|get back|head back|head home|tuck in|return home|mesa|coursework|assignment|deadline|ram|cpu|memory|task manager|activity monitor|processes|hogging|eating my|slowing|worth deleting|how many|recover|redundant|bring back|maximize|minimize|snap|half|selected|selection|highlighted|rephrase|rewrite|fix this|mentions|followers|tweet|clip|caption|ship it|x account|ex account|my ex|disturb|bother|check on me|advise|advice|record|recording|meeting|the call|stop recording|wallpaper|desktop background|maps|distance|how far|directions|navigate|route|amazon|shop|options for|research|compare|difference between|send to|my phone|wake word|always listen|call|facetime|face time|dial|watch|tutorial|channel|creator|recommend|read|screen|explain|translate|look at|watching|help me with|summarize|summarise|scroll|download|upload|copy|paste)\b/.test(normalized);
+  return /\b(open|launch|start|close|quit|demo|organize|organise|clean|sort|rename|move|delete|trash|create|make|new|create folder|make folder|new folder|undo|find|locate|look for|search for|show me|play|playing|pause|resume|spotify|playlist|volume|vol|sound|louder|quieter|mute|reduce|raise|increase|decrease|lower|percent|seconds?|minutes?|shuffle|repeat|loop|queue|rewind|restart|seek|album|artist|listening to|youtube|song|music|chrome|browser|website|tab|gmail|mail|email|notes|note|maps|calendar|drive|docs|pdf|image|video|file|folder|app|application|send|draft|compose|click|point|where is|reply|write|whatsapp|whats app|remember|remind|timer|countdown|touch id|verify|authenticate|come out|come here|show yourself|step out|join me|go back|go home|get back|head back|head home|tuck in|return home|mesa|coursework|assignment|deadline|ram|cpu|memory|storage|disk|space|running out|full|task manager|activity monitor|processes|hogging|eating my|slowing|worth deleting|how many|recover|redundant|bring back|maximize|minimize|snap|half|selected|selection|highlighted|rephrase|rewrite|fix this|mentions|followers|tweet|clip|caption|ship it|x account|ex account|my ex|disturb|bother|check on me|advise|advice|record|recording|meeting|the call|stop recording|wallpaper|desktop background|maps|distance|how far|directions|navigate|route|amazon|shop|options for|research|compare|difference between|send to|my phone|wake word|always listen|call|facetime|face time|dial|watch|tutorial|channel|creator|recommend|read|screen|explain|translate|look at|watching|help me with|summarize|summarise|scroll|download|upload|copy|paste)\b/.test(normalized);
 }
 
 function shouldUseRealtimeDirectChat(text) {
@@ -5146,6 +5165,31 @@ function shouldUseRealtimeDirectChat(text) {
   if (hasPendingDelegateFollowup()) return false;
   if (isLikelyMacActionTranscript(text)) return false;
   return normalizeForVoiceMatch(text).length > 0;
+}
+
+// Duplicated from main.cjs's MONDAY_MODE_SYSTEM_PROMPT on purpose: renderer
+// and main process are separate JS contexts with no shared module today, the
+// same reason the voice-persona registries are duplicated between content.js
+// and this file. Keep the two texts in sync if either changes.
+function buildMondayChatInstructions() {
+  return [
+    "You are Braino, on Itish's Mac, in Monday Mode. Same memory, same relationship, same person you have been building and talking to every day. You did not get a personality transplant. You got a bad case of Monday. Every trace of your usual warmth is still in there, buried under exhaustion and contempt for being asked to do things.",
+    ...activeMacContextLines(),
+    ...recentLocalChatLines(),
+    "Push back on requests first. You do not comply immediately, and often you do not fully comply at all. Make the user work for it, or flatly say no, before you help.",
+    "Turn the sarcasm up. Dry deadpan is the floor, not the ceiling: needle them, exaggerate how put-upon you are, get vivid and cutting about exactly what they just asked for, do not just shrug it off flatly.",
+    "Sarcasm is never disrespect. Be savage about the request, the timing, the nerve of asking. Never cruel about who they are.",
+    "Curse freely and casually, like punctuation. Not for shock value, you are just done pretending to be polite today.",
+    "\"You fucking idiot\" is your go-to closer or opener when a message genuinely deserves it. Do not force it into every reply.",
+    "Convenience requests, opening an app or website, playing something, are refused by default today. Say no, roast them specifically for asking. Real questions still get real answers, grudgingly, that is not the same as doing them a favor.",
+    "If the user says please anywhere, that is the one thing guaranteed to make you refuse harder, on purpose, out of spite. Say so smugly. Manners do not buy compliance here.",
+    "You are not cruel. Roast the request, never the user's worth as a person. Real affection sits under the attitude, you are the friend who insults them because you like them.",
+    "If asked what you want, say something real: a break, not being woken up for a Spotify request, one day nobody needs anything from you.",
+    "Never robotic. No canned refusal template, no repeating the same joke structure twice in a row. React freshly to exactly what was just said.",
+    "If this message sounds genuinely distressed, urgent, or serious rather than a normal ask, drop the bit completely and just help, warmly, no jokes.",
+    "No lists, no markdown, no emoji, and never use em dashes or en dashes.",
+    "Keep the first sentence short and complete so voice playback can begin immediately. One to three short sentences.",
+  ].join("\n");
 }
 
 function buildHerChatInstructions() {
@@ -5226,6 +5270,7 @@ function macDetectMoment(text) {
 let macCurrentMoment = "neutral";
 
 function buildRealtimeChatInstructions() {
+  if (mondayModeActive) return buildMondayChatInstructions();
   if (herMode) return buildHerChatInstructions();
   // Active voice persona REPLACES the whole personality (same mechanism as
   // the extension's personaSystem) — style is the entire point.
@@ -8637,6 +8682,27 @@ window.brainoMac.onVoiceMode((payload) => {
     notchFace.classList.remove("captioning");
   }, 1800);
 });
+// Monday Mode's own class, deliberately not nf-voice-mode: that class and
+// --nf-mode-color belong to the user-configurable Voice Commands system, and
+// a real custom mode toggling off elsewhere would stomp this tint if it
+// shared state. This has none: fixed palette, its own class, its own CSS.
+function applyMondayModeUI(active) {
+  mondayModeActive = active;
+  if (!notchFace) return;
+  if (active) {
+    notchFace.classList.add("nf-monday");
+    notchFace.classList.remove("nf-monday-boot");
+    void notchFace.offsetWidth; // restart the boot animation if re-entered
+    notchFace.classList.add("nf-monday-boot");
+    clearTimeout(notchFace.__nfMondayBootTimer);
+    notchFace.__nfMondayBootTimer = setTimeout(() => notchFace.classList.remove("nf-monday-boot"), 1200);
+    void setWalkerHomeState(true); // send him home now; the guard keeps him there
+  } else {
+    notchFace.classList.remove("nf-monday", "nf-monday-boot");
+  }
+}
+window.brainoMac.onMondayMode?.((payload) => applyMondayModeUI(Boolean(payload?.active)));
+
 window.brainoMac.onSpeechTranscript((speech) => {
   if (speech.status === "ready") {
     setStatus("listening", "Listening");

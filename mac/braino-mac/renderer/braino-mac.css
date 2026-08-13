@@ -2931,6 +2931,65 @@ body {
   #notch-face.nf-mode-boot .nf-pill { animation: none; }
 }
 
+/* Monday Mode: desaturated slate/red instead of the default glow, fixed
+   palette (not user-configurable, so no CSS var indirection needed) and its
+   own class rather than nf-voice-mode so a real Voice Commands mode toggling
+   off elsewhere can never stomp this tint by sharing state. */
+#notch-face.nf-monday .nf-pill {
+  box-shadow:
+    0 0 0 1.5px #7A4F4C,
+    0 0 26px -2px #7A4F4C;
+  filter: saturate(0.7) brightness(0.96);
+  transition: box-shadow 0.5s ease, filter 0.5s ease;
+}
+
+#notch-face.nf-monday-boot .nf-pill {
+  width: 250px;
+  height: calc(var(--nf-notch-h) + 44px);
+  border-radius: 0 0 26px 26px;
+  animation: nfMondayBoot 1.15s cubic-bezier(0.16, 1, 0.3, 1) 1 both;
+}
+
+@keyframes nfMondayBoot {
+  0%   { box-shadow: 0 0 0 0 rgba(122, 79, 76, 0); }
+  25%  { box-shadow: 0 0 34px 6px rgba(122, 79, 76, 0.8); }
+  60%  { box-shadow: 0 0 18px 2px rgba(122, 79, 76, 0.4); }
+  100% { box-shadow: 0 0 26px -2px rgba(122, 79, 76, 0.65); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #notch-face.nf-monday-boot .nf-pill { animation: none; }
+}
+
+/* Monday Mode's own shimmer: the same outline-trace SVG the startup boot
+   uses (.nf-shine, see the keynote-shimmer comment above), recolored red and
+   held lit for as long as the mode runs rather than fading after one pass.
+   The sweep itself only plays once, scoped to nf-monday-boot so it never
+   fights the general keynote-shimmer timer; nf-monday then keeps the traced
+   line fully drawn and gently breathing for the whole duration. */
+#notch-face.nf-monday .nf-shine {
+  opacity: 1;
+}
+#notch-face.nf-monday .nf-shine path {
+  stroke: #C0413B;
+}
+#notch-face.nf-monday .nf-shine-glow {
+  animation: nfMondayShimmerBreathe 2.6s ease-in-out infinite;
+}
+#notch-face.nf-monday-boot .nf-shine path {
+  stroke-dasharray: 100;
+  stroke-dashoffset: 100;
+  animation: nfShineDraw 1.15s cubic-bezier(0.3, 0.5, 0.3, 1) forwards;
+}
+@keyframes nfMondayShimmerBreathe {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 0.95; }
+}
+@media (prefers-reduced-motion: reduce) {
+  #notch-face.nf-monday .nf-shine-glow { animation: none; }
+  #notch-face.nf-monday-boot .nf-shine path { animation: none; stroke-dashoffset: 0; }
+}
+
 /* Voice Command mode: the whole screen perimeter wears the mode's colour for
    as long as the mode runs — same Apple-Intelligence edge treatment as the
    listen/speak states, just driven by the mode instead of the voice status. */

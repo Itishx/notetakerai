@@ -237,10 +237,11 @@ test("buffers turns and performs one insertion only after stop drain", () => {
   assert.doesNotMatch(renderer, /enqueueDictationTranscript/);
   assert.match(
     renderer,
-    /const drain = await waitForDictationDrain\(\);[\s\S]{0,800}?await flushBufferedDictationTranscript\(\)/,
+    /const drain = await waitForDictationDrain\([\s\S]{0,120}?\);[\s\S]{0,800}?await flushBufferedDictationTranscript\(\)/,
   );
   assert.match(renderer, /dictation\.stop\.acknowledged/);
-  assert.match(renderer, /waitForDictationDrain\(timeoutMs = 1200\)/);
+  assert.match(renderer, /function dictationDrainTimeoutMs\(committedAudioMs = 0\)/);
+  assert.match(renderer, /waitForDictationDrain\(dictationDrainTimeoutMs\(lastCommittedAudioMs\)\)/);
   assert.match(renderer, /settlePendingDictationDeltas\("stop_deadline"\)/);
   assert.match(renderer, /dictationStartGeneration \+= 1;[\s\S]{0,180}?stopRealtimeVoice\(\{ keepDictation: true \}\)/);
 });

@@ -32,6 +32,18 @@ export const KNOWLEDGE_ENTRIES: readonly KnowledgeEntry[] = [
     number: "032",
   },
   {
+    slug: "monday-mode",
+    title: "Monday Mode: Same Braino, Zero Patience",
+    category: "Mode",
+    date: "2026-08-13",
+    dateLabel: "August 13, 2026",
+    description:
+      "Say “Braino, enter Monday Mode” and he keeps his memory and personality, just runs out of patience: sarcastic pushback, casual cursing, and the mascot locked in the notch until you say stop.",
+    status: "MVP",
+    platform: "Braino for Mac",
+    number: "031",
+  },
+  {
     slug: "brainox-distribution",
     title: "BrainoX: Itish Owns the Voice, Braino Owns the Distribution",
     category: "Feature",

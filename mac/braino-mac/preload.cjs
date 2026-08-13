@@ -140,6 +140,11 @@ contextBridge.exposeInMainWorld("brainoMac", {
     ipcRenderer.on("braino-mac:her-toggle", handler);
     return () => ipcRenderer.removeListener("braino-mac:her-toggle", handler);
   },
+  onMondayMode: (callback) => {
+    const handler = (_event, payload) => callback(payload || {});
+    ipcRenderer.on("braino-mac:monday-mode", handler);
+    return () => ipcRenderer.removeListener("braino-mac:monday-mode", handler);
+  },
   onPointAt: (callback) => {
     const handler = (_event, payload) => callback(payload || {});
     ipcRenderer.on("braino-mac:point-at", handler);
