@@ -311,6 +311,18 @@ entrypoint = "./functions/waitlist/waitlist-list/index.ts"
 entrypoint = "./functions/waitlist/waitlist-signup/index.ts"
 verify_jwt = false
 
+# ── embed (Braino on other people's websites) ──────────────────────────
+
+[functions.embed-register]
+entrypoint = "./functions/embed/embed-register/index.ts"
+
+[functions.embed-chat]
+entrypoint = "./functions/embed/embed-chat/index.ts"
+verify_jwt = false
+
+[functions.embed-configure-bridge]
+entrypoint = "./functions/embed/embed-configure-bridge/index.ts"
+
 # ── legacy (no source folder in repo) ─────────────────────────────────
 
 [functions.elevenlabs-tts]

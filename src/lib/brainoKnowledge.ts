@@ -20,6 +20,18 @@ export type KnowledgeEntry = {
 
 export const KNOWLEDGE_ENTRIES: readonly KnowledgeEntry[] = [
   {
+    slug: "braino-embed",
+    title: "Braino Embed: One Script Tag, the Real Braino, Anywhere",
+    category: "Feature",
+    date: "2026-08-13",
+    dateLabel: "August 13, 2026",
+    description:
+      "Paste one script tag into any website and the real Braino shows up there too: same mascot, same voice, same personality, able to answer from that site's own data once it wires a small scoped bridge for its own database.",
+    status: "MVP",
+    platform: "Any website",
+    number: "032",
+  },
+  {
     slug: "brainox-distribution",
     title: "BrainoX: Itish Owns the Voice, Braino Owns the Distribution",
     category: "Feature",
