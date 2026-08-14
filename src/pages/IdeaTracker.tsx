@@ -60,6 +60,21 @@ type Todo = { state: TodoState; tag: string; critical?: boolean; text: string; n
 
 const HOMEWORK: Todo[] = [
   {
+    state: 'todo', tag: 'Onboarding',
+    text: 'Apple-style setup flow after Google sign-in, before the install button',
+    note: 'Get Started → sign in with Google (so we already know the real name) → a step-by-step, iPhone-style setup on the site, same tokens and type as the rest of trybraino.com. Name him, pick his voice, choose what he’s allowed to see, set the hotkeys, switch on the apps you want. Only then does “Add to Chrome / install” appear. The point: Braino is yours before you’ve installed him. This ships first, ahead of BrainoApps.',
+  },
+  {
+    state: 'todo', tag: 'Design',
+    text: 'Rebuild the Mac dashboard — what should Braino’s own app look like?',
+    note: 'Today it reads like a settings drawer. Wanted: a home. Live state (what he can see, what he’s listening for), every control in one place (modes, wake, memory, voice, permissions with honest copy), memory review, usage, and the new BrainoApps tab. A surface you open on purpose, not only when something breaks.',
+  },
+  {
+    state: 'todo', tag: 'BrainoApps',
+    text: 'BrainoApps v1 + BrainoSleep as app #1',
+    note: 'New dashboard tab. Toggle an app on and Braino picks up its tables and its phrases with no new code path. Sleep first: “braino i slept 12 to 6” logs the night against the real date, then “how much have I been sleeping”, “average this week”, “compare to last month” all answer off that table, with a real dashboard behind it. Build after the onboarding flow.',
+  },
+  {
     state: 'todo', tag: 'Money', critical: true,
     text: 'Lifetime Founder Edition — $50, first 10 people, sent to the waitlist',
     note: 'Mesa’s one critical gap: zero financial validation. Polar checkout is already wired end to end; this is a new product in the dashboard plus one landing block. Proof = screenshot of 3 completed payments.',
@@ -110,6 +125,21 @@ type IdeaStatus = 'front-runner' | 'building' | 'next' | 'seeded' | 'exploring' 
 type Idea = { name: string; status: IdeaStatus; what: string; note: string };
 
 const IDEAS: Idea[] = [
+  {
+    name: 'BrainoApps', status: 'next',
+    what: 'Add-on apps you flip on from a new dashboard tab. Each app is a manifest: its tables, the phrases that route to it, and the dashboard it draws. Switch one on and Braino instantly understands a new part of your life.',
+    note: 'The unlock is that an app is data, not a feature branch — schema + intent phrases + chart spec in one file, matched before general chat routing, with the date and time filled in from the machine. Cross-app is where it gets unfair: sleep against mood, gym against spend, all from lines you were going to say anyway.',
+  },
+  {
+    name: 'BrainoSleep', status: 'next',
+    what: 'App #1. Say “braino i slept 1am to 7” and he logs the night against the real date, no form, no app switch. Then ask anything: last night, this week’s average, last month, worst night, the trend.',
+    note: 'The proof that the manifest works. Small enough to actually finish, personal enough that you keep talking to it. Ships after the onboarding flow.',
+  },
+  {
+    name: 'The app shelf', status: 'exploring',
+    what: 'What comes after Sleep: Spend (“400 on groceries”), Lift (sets, PRs, volume), Mood (one line a day), Fuel (meals, water, last coffee), Habits (streaks), Read (books and pages), People (who you met, who to follow up with), Ship (a daily dev log riding Dev Pulse), Meds, Hours (where the day went, riding Cowork’s screen watch).',
+    note: 'Two tests decide the order: can it be said in one sentence, and does it get better when crossed with another app. Sleep × Mood and Fuel × Sleep are the demos that sell the whole shelf.',
+  },
   {
     name: 'Idea Mode', status: 'next',
     what: 'Speak an idea anywhere; Braino transcribes it Wispr-style, saves it to this page, drafts a plan grounded in the real GitHub repo (no made-up files), and “approve” dispatches it to a Claude agent to build.',
@@ -304,7 +334,7 @@ export default function IdeaTracker() {
           <h1 className="it-title">Idea Tracker</h1>
           <div className="it-props">
             <div className="it-prop"><span className="it-prop-name">☰ Owner</span><span className="it-prop-value">Itish + Braino</span></div>
-            <div className="it-prop"><span className="it-prop-name">◷ Updated</span><span className="it-prop-value">Aug 4, 2026</span></div>
+            <div className="it-prop"><span className="it-prop-name">◷ Updated</span><span className="it-prop-value">Aug 14, 2026</span></div>
             <div className="it-prop"><span className="it-prop-name"># Ideas</span><span className="it-prop-value">{IDEAS.length}</span></div>
             <div className="it-prop"><span className="it-prop-name">☑ Homework</span><span className="it-prop-value">{doneCount}/{HOMEWORK.length} done</span></div>
           </div>

@@ -110,6 +110,7 @@ const InstaPosts = lazy(() => import("./pages/InstaPosts.tsx"));
 const InstaGraphicsArchiveDocs = lazy(() => import("./pages/InstaGraphicsArchiveDocs.tsx"));
 const KnowledgeBase = lazy(() => import("./pages/KnowledgeBase.tsx"));
 const IdeaTracker = lazy(() => import("./pages/IdeaTracker.tsx"));
+const OnboardingFlow = lazy(() => import("./pages/OnboardingFlow.tsx"));
 const WholeMind = lazy(() => import("./pages/WholeMind.tsx"));
 const EngineLog = lazy(() => import("./pages/EngineLog.tsx"));
 const Commands = lazy(() => import("./pages/Commands.tsx"));
@@ -241,6 +242,8 @@ function AppRoutes() {
         <Route path="/InstaGraphics" element={<InstaGraphics />} />
         <Route path="/instagraphics" element={<InstaGraphics />} />
         <Route path="/instaposts" element={<InstaPosts />} />
+        <Route path="/instagraphics/onboarding" element={<OnboardingFlow />} />
+        <Route path="/onboarding" element={<OnboardingFlow />} />
         <Route path="/ideas" element={<IdeaTracker />} />
         <Route path="/whole-mind" element={<WholeMind />} />
         <Route path="/engine-log" element={<EngineLog />} />

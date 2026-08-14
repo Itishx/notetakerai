@@ -777,6 +777,7 @@ export default function InstaGraphics() {
           { number: "003", type: "Browser study", title: "A notch with presence.", note: "The browser surface stays calm and compact until the work needs room to breathe.", content: <BrowserNotchPrototype /> },
           { number: "004", type: "System study", title: "Braino in Chrome.", note: "One connected lifecycle for listening, thinking, answering, and getting out of the way.", content: <ChromeSystemPrototype /> },
           { number: "005", type: "Companion study", title: "Two Brainos. One mind.", note: "A visual exploration of discovery, connection, and handoff between companion instances.", content: <TwinModePrototype /> },
+          { number: "006", type: "Onboarding study", title: "Yours before you install him.", note: "An Apple-style setup flow that runs after sign-in and before the download, so Braino arrives already knowing you.", content: <a className="ig-fullpage-link" href="/instagraphics/onboarding"><span>Full-page flow</span><strong>Set up Braino</strong><em>8 steps · opens in its own tab →</em></a> },
         ].map((item) => <article className="ig-archive-entry" key={item.number}>
           <div className="ig-entry-copy"><span>{item.number} · {item.type}</span><h2>{item.title}</h2><p>{item.note}</p></div>
           <div className="ig-artboard-stage">{item.content}</div>
