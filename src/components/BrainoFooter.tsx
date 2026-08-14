@@ -24,14 +24,10 @@ const FOOTER_COLUMNS: Array<{ head: string; links: Array<[string, string]> }> = 
     ],
   },
   {
-    // The same products, named by who they are for. People look for themselves
-    // in a footer before they look for a feature.
     head: "Braino for",
     links: [
       ["The browser", "/braino?view=browser"],
-      ["Founders", "/braino?view=foundry"],
-      ["Solo builders", "/braino?view=foundry"],
-      ["Mac developers", "/braino?view=foundry"],
+      ["Founders & builders", "/braino?view=foundry"],
       ["Meetings", "/meetings"],
       ["X", "/live"],
     ],
@@ -42,25 +38,16 @@ const FOOTER_COLUMNS: Array<{ head: string; links: Array<[string, string]> }> = 
       ["Braino OS", "/braino-os"],
       ["Human Intelligence", "/human-intelligence"],
       ["Emotional Intelligence", "/emotional-intelligence"],
-      ["Build your Braino", "/build-braino"],
     ],
   },
   {
     head: "Read",
     links: [
       ["Knowledge Base", "/knowledge"],
+      ["Monday Mode", "/monday-mode"],
       ["Braino's journal", "/journal"],
       ["Changelog", "/changelog"],
       ["Founder's letter", "/founder-letter"],
-    ],
-  },
-  {
-    head: "More",
-    links: [
-      ["Integrations", "/integrations"],
-      ["Braino Chat", "/chat"],
-      ["Contact", "/contact"],
-      ["Join the waitlist", "/overview"],
     ],
   },
 ];

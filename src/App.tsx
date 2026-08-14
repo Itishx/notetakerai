@@ -94,6 +94,7 @@ const WhyTheWait = lazy(() => import("./pages/WhyTheWait.tsx"));
 const BrainoLive = lazy(() => import("./pages/BrainoLive.tsx"));
 const BrainoX = lazy(() => import("./pages/BrainoX.tsx"));
 const BrainoXDocs = lazy(() => import("./pages/BrainoXDocs.tsx"));
+const MondayMode = lazy(() => import("./pages/MondayMode.tsx"));
 const MondayModeDocs = lazy(() => import("./pages/MondayModeDocs.tsx"));
 const BrainoEmbedDocs = lazy(() => import("./pages/BrainoEmbedDocs.tsx"));
 const Playground = lazy(() => import("./pages/Playground.tsx"));
@@ -130,6 +131,7 @@ function AppRoutes() {
         <Route path="/overview" element={<Waitlist />} />
         <Route path="/waitlist" element={<Waitlist />} />
         <Route path="/braino-thronglets" element={<BrainoThronglets />} />
+        <Route path="/monday-mode" element={<MondayMode />} />
         <Route path="/knowledge/monday-mode" element={<MondayModeDocs />} />
         <Route path="/knowledge/braino-embed" element={<BrainoEmbedDocs />} />
         <Route path="/knowledge/brainox-distribution" element={<BrainoXDocs />} />
