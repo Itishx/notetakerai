@@ -19,6 +19,7 @@ import warmth from "./traits/warmth.ts";
 import humor from "./traits/humor.ts";
 import ideation from "./traits/ideation.ts";
 import boundaries from "./traits/boundaries.ts";
+import register from "./traits/register.ts";
 import diction from "./traits/diction.ts";
 
 // Default reading order. Identity/guardrails first, then who he is, then how he feels and
@@ -36,6 +37,7 @@ export const ORDERED_TRAITS: Trait[] = [
   humor,       // ★ dry wit + optional dad jokes
   ideation,    // co-builds himself with you (only on the "building" moment)
   boundaries,  // what he is NOT (no yes-man, full help)
+  register,    // ★ the founder's own register: answer first, fragments, honest over nice
   diction,     // how he actually talks
 ];
 
