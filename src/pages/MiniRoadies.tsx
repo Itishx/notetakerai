@@ -119,10 +119,23 @@ const CLOSE_EM = "but I’m not complaining";
    as often as .jpg — first one that loads wins, and a slot with nothing behind
    it stays an empty polaroid rather than a broken image. */
 const PHOTOS = [
-  ["/n1.JPG", "/n1.jpg", "/n1.jpeg", "/n1.png", "/n.JPG", "/n.jpg"],
   ["/n2.JPG", "/n2.jpg", "/n2.jpeg", "/n2.png"],
   ["/n3.JPG", "/n3.jpg", "/n3.jpeg", "/n3.png"],
 ];
+
+/* The first photo is the wide one, the odd short card in a row of portraits.
+   It gets a better job: it closes the page. */
+const FOOTER_PHOTO = ["/n1.jpg", "/n1.JPG", "/n1.jpeg", "/n1.png"];
+
+function FooterPhoto() {
+  const [tried, setTried] = useState(0);
+  if (tried >= FOOTER_PHOTO.length) return null;
+  return (
+    <div className="mr-foot-photo">
+      <img src={FOOTER_PHOTO[tried]} alt="" onError={() => setTried((t) => t + 1)} />
+    </div>
+  );
+}
 
 function Polaroid({ srcs, n }: { srcs: string[]; n: number }) {
   const [tried, setTried] = useState(0);
@@ -295,7 +308,7 @@ function withShimmer(text: string, word?: string) {
    --------------------------------------------------------------------------- */
 /* The message she gets the moment she says yes. Author's words. */
 const YES_NOTE =
-  "I’m telling you right now, almost a week before: keep your entire day free. I do not care how busy you are. Keep it free. No curfew please. No curfew please, 25 ho abhi se bol lo kuch important kaam hai, busy rahungi bahar rahungi. And then I leave for Bangalore dude, so maximum time possible, because that’s the only way I like it.";
+  "I’m telling you right now, almost a week before: keep your entire day free. I do not care how busy you are. Keep it free. No curfew please. No curfew please, 25 ho abhi se bol lo kuch important kaam hai, busy rahungi bahar rahungi. And then I leave for Bangalore dude, so maximum time possible, because that’s the bare minimum.";
 
 /* He runs, but not forever. Four dodges is enough of a bit: after that he gives
    up, walks back to his place in the card, turns red and lets her catch him. */
@@ -383,12 +396,14 @@ export default function MiniRoadies() {
     () => typeof sessionStorage !== "undefined" && sessionStorage.getItem("mr-open") === "1",
   );
   const [alive, setAlive] = useState(false);
-  const [dark, setDark] = useState(true);
   const [active, setActive] = useState("letter");
   const [openNotch, setOpenNotch] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const polaRef = useRef<HTMLDivElement | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
+  // what the USER asked for, read synchronously. The watchdog below has to be
+  // able to tell "the browser stopped the song" from "she pressed pause".
+  const wantSoundRef = useRef(false);
 
   // one card per press, so the arrows always land on a snap point
   const scrollPolas = (dir: number) => {
@@ -398,6 +413,21 @@ export default function MiniRoadies() {
     const stride = card ? card.offsetWidth + 26 : track.clientWidth * 0.8;
     track.scrollBy({ left: dir * stride, behavior: "smooth" });
   };
+
+  /* The page paints itself red, but the document behind it does not, so an
+     overscroll bounce flashed the site's black through. Paint the root too,
+     and put it back on the way out. */
+  useEffect(() => {
+    const root = document.documentElement;
+    const prevRoot = root.style.background;
+    const prevBody = document.body.style.background;
+    root.style.background = "#8C0D1C";
+    document.body.style.background = "#8C0D1C";
+    return () => {
+      root.style.background = prevRoot;
+      document.body.style.background = prevBody;
+    };
+  }, []);
 
   // personal page, not a marketing one — keep it out of search results
   useEffect(() => {
@@ -501,12 +531,46 @@ export default function MiniRoadies() {
 
   const toggle = () => {
     const next = !alive;
+    wantSoundRef.current = next;   // set BEFORE the pause, so the watchdog stands down
     setAlive(next);
     if (next) void play();
     else audioRef.current?.pause();
   };
 
-  useEffect(() => () => audioRef.current?.pause(), []);
+  /* The song must not stop. loop=true only covers a clean end of track: it does
+     nothing for a stalled stream, a decode hiccup, or the browser deciding on
+     its own to pause media, and any one of those left the letter silent
+     halfway through. This watches the element and puts it back, and the
+     interval catches the cases that fire no event at all. */
+  useEffect(() => {
+    const el = audioRef.current;
+    if (!alive || !el) return;
+
+    const resume = () => {
+      if (!wantSoundRef.current || !el.src) return;
+      if (!el.paused) return;
+      void el.play().catch(() => { /* autoplay refused; the next tick retries */ });
+    };
+    const onEnded = () => { el.currentTime = 0; resume(); };
+
+    el.addEventListener("ended", onEnded);
+    el.addEventListener("pause", resume);
+    el.addEventListener("stalled", resume);
+    el.addEventListener("error", resume);
+    document.addEventListener("visibilitychange", resume);
+    const beat = window.setInterval(resume, 1500);
+
+    return () => {
+      el.removeEventListener("ended", onEnded);
+      el.removeEventListener("pause", resume);
+      el.removeEventListener("stalled", resume);
+      el.removeEventListener("error", resume);
+      document.removeEventListener("visibilitychange", resume);
+      window.clearInterval(beat);
+    };
+  }, [alive]);
+
+  useEffect(() => () => { wantSoundRef.current = false; audioRef.current?.pause(); }, []);
 
   if (!unlocked) {
     return (
@@ -520,7 +584,7 @@ export default function MiniRoadies() {
   }
 
   return (
-    <div ref={rootRef} className={`mr${alive ? " is-alive" : ""}${dark ? " is-dark" : ""}`}>
+    <div ref={rootRef} className={`mr${alive ? " is-alive" : ""}`}>
       <div className="mr-glow" aria-hidden="true" />
 
       {/* Masthead, built like the Creatish article bar: the name sits dead
@@ -540,25 +604,9 @@ export default function MiniRoadies() {
           </button>
 
           <div className="mr-mast-right">
-            <button
-              className="mr-theme"
-              onClick={() => setDark((d) => !d)}
-              aria-label={dark ? "switch to light" : "switch to dark"}
-              title={dark ? "light" : "dark"}
-            >
-              {dark ? (
-                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round">
-                  <circle cx="12" cy="12" r="4.2" />
-                  <path d="M12 2.6v2.2M12 19.2v2.2M2.6 12h2.2M19.2 12h2.2M5.2 5.2l1.6 1.6M17.2 17.2l1.6 1.6M18.8 5.2l-1.6 1.6M6.8 17.2l-1.6 1.6" />
-                </svg>
-              ) : (
-                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M20.5 14.5A8.6 8.6 0 0 1 9.5 3.5a8.6 8.6 0 1 0 11 11Z" />
-                </svg>
-              )}
-            </button>
-            <a className="mr-mast-link" href="#invite">The 22nd</a>
-            <span className="mr-mast-avatar" aria-hidden="true">N</span>
+            <span className="mr-mast-avatar" aria-hidden="true">
+              <img src="/n2.JPG" alt="" />
+            </span>
           </div>
         </div>
 
@@ -580,6 +628,9 @@ export default function MiniRoadies() {
               <span className="dot" />
               {alive ? "let the letter rest" : "make the letter come to life"}
             </button>
+            {/* the instruction, not the surprise: it says WHEN to press, never
+                what happens when you do */}
+            {!alive && <span className="mr-alive-note">(click it before you start reading)</span>}
           </div>
         </header>
 
@@ -640,10 +691,15 @@ export default function MiniRoadies() {
         </section>
 
         <Invite />
+
+        <footer className="mr-foot">
+          <FooterPhoto />
+          <p className="mr-foot-line">Lawrence and Mayo House</p>
+        </footer>
       </article>
 
       {alive && <BrainoWalker dancing />}
-      <audio ref={audioRef} preload="none" />
+      <audio ref={audioRef} preload="auto" />
     </div>
   );
 }

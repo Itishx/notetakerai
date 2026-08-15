@@ -4,7 +4,7 @@
 
    Theme: monochrome, white by default, black on the header toggle. Every
    colour in the page comes from the tokens on .mr, so the flip is one class —
-   .mr.is-dark — and nothing else in the file knows about it.
+   .mr — and nothing else in the file knows about it.
 
    Two modes:
      rest  — a quiet reading page, 680px column, Charter body, NeueHaas display
@@ -22,14 +22,16 @@
 }
 
 .mr {
-  /* white theme */
-  --mr-paper: #FFFFFF;
-  --mr-paper-2: #FAFAFA;
-  --mr-ink: #0B0B0B;
-  --mr-ink-2: #2C2C2C;
-  --mr-ink-3: #767676;
-  --mr-line: rgba(0, 0, 0, 0.13);
-  --mr-glow-rgb: 0, 0, 0;
+  /* One palette: red. There is no light mode and no dark mode any more, so
+     every token below is the only value it will ever have. Ink is a warm bone
+     rather than pure white, which stops the serif from buzzing on the red. */
+  --mr-paper: #8C0D1C;
+  --mr-paper-2: #7C0A18;
+  --mr-ink: #FFF4F0;
+  --mr-ink-2: #F6D9D6;
+  --mr-ink-3: #D19A9C;
+  --mr-line: rgba(255, 255, 255, 0.2);
+  --mr-glow-rgb: 255, 255, 255;
 
   position: relative;
   min-height: 100dvh;
@@ -42,15 +44,6 @@
 }
 
 /* black theme */
-.mr.is-dark {
-  --mr-paper: #000000;
-  --mr-paper-2: #0A0A0A;
-  --mr-ink: #F7F5F2;
-  --mr-ink-2: #CAC5BF;
-  --mr-ink-3: #85807A;
-  --mr-line: rgba(255, 255, 255, 0.16);
-  --mr-glow-rgb: 255, 255, 255;
-}
 
 /* ── the nav: Braino's notch ────────────────────────────────────────────────
    Same idea as the notch on the homepage — a black island fixed to the top of
@@ -131,9 +124,8 @@
 @keyframes mrPulseDot { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.35; transform: scale(0.78); } }
 .mr-alive-note {
   font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
-  font-size: 10.5px;
-  letter-spacing: 0.13em;
-  text-transform: uppercase;
+  font-size: 11.5px;
+  letter-spacing: 0.02em;
   color: var(--mr-ink-3);
 }
 
@@ -296,7 +288,6 @@
   transition: transform 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94), box-shadow 0.35s ease;
   will-change: transform;
 }
-.mr.is-dark .mr-pola { box-shadow: 0 18px 40px rgba(0, 0, 0, 0.7); border-color: transparent; }
 .mr-pola:nth-child(1) { transform: rotate(-3deg) translateY(6px); }
 .mr-pola:nth-child(2) { transform: rotate(1.6deg); }
 .mr-pola:nth-child(3) { transform: rotate(-1.2deg) translateY(10px); }
@@ -466,14 +457,13 @@
    Shimmer — the scores and the one word that carries a section ("Check.").
    Light sweeps across the ink rather than recolouring it, so the numbers stay
    black on paper / bone on black and only the highlight moves. --mr-sheen is
-   flipped by .is-dark so the sweep reads on both grounds.
+   a light pink, so it glints on the red ground rather than vanishing into it.
    =========================================================================== */
 /* The sheen must never approach the paper colour. The first pass swept to
    near-white on white, so the numbers looked chopped in half as it passed
    through them. These stay solidly readable at every point of the sweep: it
    reads as light moving over ink, not as ink going missing. */
-.mr { --mr-sheen: #E0568C; }
-.mr.is-dark { --mr-sheen: #FF7FB0; }
+.mr { --mr-sheen: #FFC7DC; }  /* light pink, so it glints ON the red */
 
 .mr-shimmer {
   /* REPEATING, and sized in px rather than %. The first version was no-repeat
@@ -669,37 +659,24 @@
 }
 .mr-mast-chev.is-open { transform: rotate(180deg); }
 
-.mr-theme {
-  width: 30px; height: 30px;
-  display: grid; place-items: center;
-  border-radius: 50%;
-  border: 0;
-  background: transparent;
-  color: var(--mr-ink-2);
-  cursor: pointer;
-  transition: color 0.2s ease, transform 0.2s ease;
-}
-.mr-theme:hover { color: var(--mr-ink); transform: scale(1.1); }
 
-.mr-mast-link {
-  font-family: "NeueHaas", "Helvetica Neue", -apple-system, sans-serif;
-  font-size: 15px;
-  letter-spacing: -0.012em;
-  text-decoration: none;
-  color: var(--mr-ink-2);
-  transition: color 0.18s ease;
-}
-.mr-mast-link:hover { color: var(--mr-ink); }
 
 .mr-mast-avatar {
   width: 30px; height: 30px;
-  display: grid; place-items: center;
   border-radius: 50%;
-  background: #1F8B4C;
-  color: #FFFFFF;
-  font-family: "NeueHaas", "Helvetica Neue", sans-serif;
-  font-size: 13px;
-  font-weight: 600;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: var(--mr-paper-2);
+  box-shadow: 0 0 0 1px var(--mr-line);
+}
+.mr-mast-avatar img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+  /* her face sits left of centre in the frame, so the crop is pulled that way
+     rather than landing on the background behind her */
+  object-position: 36% 26%;
 }
 
 /* the section list, dropped from the chevron */
@@ -723,7 +700,7 @@
    =========================================================================== */
 .mr-mark {
   position: relative;
-  background: rgba(52, 168, 83, 0.22);
+  background: rgba(255, 240, 235, 0.24);
   color: var(--mr-ink);
   font-style: italic;
   padding: 2px 4px;
@@ -731,7 +708,6 @@
   box-decoration-break: clone;
   -webkit-box-decoration-break: clone;
 }
-.mr.is-dark .mr-mark { background: rgba(52, 168, 83, 0.3); }
 .mr-mark-tag {
   position: absolute;
   left: calc(100% + 26px);
@@ -1086,4 +1062,48 @@
 @media (prefers-reduced-motion: reduce) {
   .mr-alive-btn, .mr-alive-btn::after { animation: none; }
   .mr-alive-btn::after { opacity: 0; }
+}
+
+/* ===========================================================================
+   Footer — the wide photo closes the page. It was the odd short card in a row
+   of portraits; at full width it finally has the shape it wanted. The image
+   fades into the red at its foot so it sits IN the page rather than on it.
+   =========================================================================== */
+.mr-foot {
+  margin: 110px 0 0;
+  width: min(1180px, calc(100vw - 44px));
+  position: relative;
+  left: 50%;
+  margin-left: calc(min(1180px, 100vw - 44px) * -0.5);
+}
+.mr-foot-photo {
+  position: relative;
+  border-radius: 18px;
+  overflow: hidden;
+  box-shadow: 0 26px 70px rgba(0, 0, 0, 0.34);
+}
+.mr-foot-photo img {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+.mr-foot-photo::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 42%;
+  background: linear-gradient(to bottom, transparent, var(--mr-paper));
+  pointer-events: none;
+}
+/* the wordmark: as big as the page will allow, which is the whole point */
+.mr-foot-line {
+  margin: 40px 0 0 !important;
+  text-align: center;
+  font-family: "NeueHaas", "Helvetica Neue", -apple-system, sans-serif;
+  font-weight: 800;
+  font-size: clamp(34px, 8.4vw, 116px) !important;
+  line-height: 0.94 !important;
+  letter-spacing: -0.045em;
+  color: var(--mr-ink) !important;
+  text-wrap: balance;
 }
