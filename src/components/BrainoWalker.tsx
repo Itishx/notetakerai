@@ -8,20 +8,108 @@
 import { useEffect, useRef } from "react";
 import { BRAINO_WALKER_SVG } from "./brainoWalkerSvg";
 
+/* ── The dance ───────────────────────────────────────────────────────────────
+   Five steps, looping back to back for as long as `dancing` is true. Pose math
+   and time constants are verbatim from BrainoDanceGrid.tsx, the same source the
+   extension's __sbWkDance and the Mac's music dance both copy, so Braino dances
+   identically wherever he shows up.
+   ───────────────────────────────────────────────────────────────────────── */
+type DancePose = { tx: number; ty: number; sy: number; la: number; ra: number; lookX: number; lookY: number; tilt: number; ll: number; rl: number; ls: number; rs: number };
+
+const DANCE_POSES: Record<string, (t: number) => DancePose> = {
+  twist: (t) => {
+    const b = t * 3.4, sway = Math.sin(b), knee = Math.abs(Math.sin(b));
+    return { tx: sway * 9, ty: 0, sy: 1 - knee * 0.06, la: 42 + sway * 26, ra: -42 + sway * 26,
+      lookX: sway * 0.5, lookY: 0, tilt: 0,
+      ll: Math.max(0, Math.sin(b)) * 4, rl: Math.max(0, -Math.sin(b)) * 4,
+      ls: Math.max(0, Math.sin(b)) * 7, rs: Math.max(0, -Math.sin(b)) * 7 };
+  },
+  disco: (t) => {
+    const b = t * 2.6, stab = Math.tanh(Math.sin(b) * 2.3);
+    return { tx: stab * 6, ty: 0, sy: 1 - Math.abs(Math.sin(b * 2)) * 0.045, la: -10, ra: -82 - stab * 56,
+      lookX: 0.45, lookY: -0.3 - Math.max(0, stab) * 0.25, tilt: stab * 6 * 0.35,
+      ll: Math.max(0, Math.sin(b * 2)) * 3, rl: Math.max(0, -Math.sin(b * 2)) * 3,
+      ls: Math.max(0, Math.sin(b * 2)) * 5, rs: Math.max(0, -Math.sin(b * 2)) * 5 };
+  },
+  sprinkler: (t) => {
+    const period = 2.0, raw = (t % period) / period;
+    let e: number;
+    if (raw < 0.78) { const u = raw / 0.78; e = u * u * (3 - 2 * u); } else { e = 1 - (raw - 0.78) / 0.22; }
+    const kick = Math.sin(t * 4.1);
+    return { tx: (e - 0.5) * 5, ty: 0, sy: 1 - Math.abs(Math.sin(raw * Math.PI)) * 0.03,
+      la: 102, ra: -128 + e * 100, lookX: -0.35 + e * 0.7, lookY: 0, tilt: 0,
+      ll: Math.max(0, kick) * 3, rl: Math.max(0, -kick) * 3,
+      ls: Math.max(0, kick) * 5, rs: Math.max(0, -kick) * 5 };
+  },
+  raise: (t) => {
+    const b = t * 3.9, push = Math.abs(Math.sin(b)), lean = Math.sin(b * 0.5);
+    return { tx: lean * 5, ty: -push * 11, sy: 1, la: 116 + push * 20, ra: -116 - push * 20,
+      lookX: lean * 0.3, lookY: -0.4, tilt: 0,
+      ll: Math.max(0, Math.sin(b)) * 2, rl: Math.max(0, -Math.sin(b)) * 2,
+      ls: lean * 4, rs: lean * 4 };
+  },
+  gun: (t) => {
+    const b = t * 3.0, s2 = Math.tanh(Math.sin(b) * 2.6), groove = Math.abs(Math.sin(b));
+    return { tx: s2 * 4, ty: 0, sy: 1 - groove * 0.05, la: 130 - s2 * 25, ra: -130 - s2 * 25,
+      lookX: -0.4, lookY: -0.45, tilt: 0,
+      ll: Math.max(0, Math.sin(b)) * 4, rl: Math.max(0, -Math.sin(b)) * 4,
+      ls: Math.max(0, Math.sin(b)) * 7, rs: Math.max(0, -Math.sin(b)) * 7 };
+  },
+};
+
+const DANCE_CYCLE = [
+  { key: "twist", dur: 3.5 },
+  { key: "disco", dur: 3.5 },
+  { key: "sprinkler", dur: 3.8 },
+  { key: "raise", dur: 3.4 },
+  { key: "gun", dur: 4.8 },
+];
+const DANCE_TOTAL = DANCE_CYCLE.reduce((sum, i) => sum + i.dur, 0);
+const DANCE_CROSS = 0.55;
+const DANCE_KEYS: (keyof DancePose)[] = ["tx", "ty", "sy", "la", "ra", "lookX", "lookY", "tilt", "ll", "rl", "ls", "rs"];
+
+/* the pose at time t, with the tail of each step crossfaded into the head of
+   the next so the loop never snaps */
+function dancePoseAt(t: number): DancePose {
+  let local = ((t % DANCE_TOTAL) + DANCE_TOTAL) % DANCE_TOTAL;
+  let index = 0;
+  for (let i = 0; i < DANCE_CYCLE.length; i++) {
+    if (local < DANCE_CYCLE[i].dur) { index = i; break; }
+    local -= DANCE_CYCLE[i].dur;
+  }
+  const step = DANCE_CYCLE[index];
+  const pose = DANCE_POSES[step.key](local);
+  const tail = step.dur - local;
+  if (tail >= DANCE_CROSS) return pose;
+  const next = DANCE_POSES[DANCE_CYCLE[(index + 1) % DANCE_CYCLE.length].key](0);
+  const u0 = (DANCE_CROSS - tail) / DANCE_CROSS;
+  const u = u0 * u0 * (3 - 2 * u0);
+  const out = {} as DancePose;
+  for (const k of DANCE_KEYS) out[k] = pose[k] + (next[k] - pose[k]) * u;
+  return out;
+}
+
 const W = 64;   // walker width (px)
 
 export default function BrainoWalker({
   perchTargetId = "pg2-hero-bar",
   alwaysPerched = false,
+  dancing = false,
 }: {
   // The id of the element Braino should walk ON TOP of (his feet rest on its top edge).
   perchTargetId?: string;
   // When true he always stays perched on that bar (e.g. the chat input bar) instead of
   // only perching while the hero is in view.
   alwaysPerched?: boolean;
+  // When true he stops walking and runs the dance cycle in place, forever.
+  dancing?: boolean;
 } = {}) {
   const laneRef = useRef<HTMLDivElement>(null);
   const walkerRef = useRef<HTMLDivElement>(null);
+  // the animation loop below is mounted once, so the live value of `dancing`
+  // has to reach it through a ref rather than the closure
+  const dancingRef = useRef(dancing);
+  useEffect(() => { dancingRef.current = dancing; }, [dancing]);
 
   useEffect(() => {
     const lane = laneRef.current;
@@ -38,6 +126,7 @@ export default function BrainoWalker({
     let posX = 40, dirX = 1;
     let walking = true, waving = false, busy = false;
     let throwMode = false, thrown = false, moonwalking = false, glassesOn = false;
+    let dancingActive = false, danceStart = 0, danceArmAnchor: ChildNode | null = null;
     let tx = 0, ty = 0, rot = 0;
     let reaction: string | null = null, reactStart = 0;
     let waveTimer: number | undefined, autoTimer: number | undefined;
@@ -134,10 +223,40 @@ export default function BrainoWalker({
     };
 
     // ── normal walk tick ──
+    // The coral body is painted AFTER the arm layers, so arms raised overhead
+    // vanish behind the torso ("where are his hands?"). Lift the arm groups to
+    // the top of the paint order for the routine and put them back after.
+    const liftArms = () => {
+      const laFg = q("#__sbwk_la__"), raFg = q("#__sbwk_ra__");
+      if (!laFg || !raFg || !raFg.nextSibling || danceArmAnchor) return;
+      danceArmAnchor = raFg.nextSibling;
+      root.appendChild(laFg);
+      root.appendChild(raFg);
+    };
+    const dropArms = () => {
+      const laFg = q("#__sbwk_la__"), raFg = q("#__sbwk_ra__");
+      if (!danceArmAnchor || !laFg || !raFg) return;
+      root.insertBefore(laFg, danceArmAnchor);
+      root.insertBefore(raFg, danceArmAnchor);
+      danceArmAnchor = null;
+    };
+    // hand a clean rig back to the walk cycle
+    const resetRig = () => {
+      ["__sbwk_la_bg__", "__sbwk_la__", "__sbwk_ra_bg__", "__sbwk_ra__"].forEach((id) =>
+        q("#" + id)?.setAttribute("transform", ""));
+    };
+
     const tick = (now: number) => {
       const dt = Math.min(0.05, (now - last) / 1000); last = now;
       const t = (now - start) / 1000;
-      const moving = walking;
+      // Dancing outranks strolling, but never a throw or a moonwalk already in
+      // flight: those own the rig until they finish on their own.
+      const danceNow = dancingRef.current && !thrown && !moonwalking;
+      if (danceNow !== dancingActive) {
+        dancingActive = danceNow;
+        if (danceNow) { danceStart = now; liftArms(); } else { dropArms(); resetRig(); }
+      }
+      const moving = walking && !danceNow;
 
       if (moving && !throwMode) {
         const maxX = viewportMaxX();
@@ -178,13 +297,30 @@ export default function BrainoWalker({
       const eyeSy = Math.max(0.06, 1 - blink);
       const rightAngle = waving ? (-28 + Math.sin(t * 11) * 16) : 0;
 
-      root.setAttribute("transform", `rotate(${waddle} 50 50) translate(0 ${bob + walkBob}) scale(${breath})`);
       const legL = q("#__sbwk_ll__"), legR = q("#__sbwk_rl__");
       const raBg = q("#__sbwk_ra_bg__"), raFg = q("#__sbwk_ra__");
-      legL?.setAttribute("transform", `translate(0 ${-ll}) rotate(${ls} 44 74)`);
-      legR?.setAttribute("transform", `translate(0 ${-rl}) rotate(${rs} 56 74)`);
-      const raTx = rightAngle ? `rotate(${rightAngle} 78 53)` : "";
-      raBg?.setAttribute("transform", raTx); raFg?.setAttribute("transform", raTx);
+      const laBg = q("#__sbwk_la_bg__"), laFg = q("#__sbwk_la__");
+
+      if (danceNow) {
+        const p = dancePoseAt((now - danceStart) / 1000);
+        // sy squashes vertically only, so he compresses into the floor instead
+        // of shrinking; the 101*(1-sy) nudge keeps his feet planted while it does
+        root.setAttribute(
+          "transform",
+          `rotate(${p.tilt} 50 50) translate(${p.tx} ${p.ty + 101 * (1 - p.sy)}) scale(1 ${p.sy})`,
+        );
+        legL?.setAttribute("transform", `translate(0 ${-p.ll}) rotate(${p.ls} 44 74)`);
+        legR?.setAttribute("transform", `translate(0 ${-p.rl}) rotate(${p.rs} 56 74)`);
+        const laTx = `rotate(${p.la} 22 53)`, raTx2 = `rotate(${p.ra} 78 53)`;
+        laBg?.setAttribute("transform", laTx); laFg?.setAttribute("transform", laTx);
+        raBg?.setAttribute("transform", raTx2); raFg?.setAttribute("transform", raTx2);
+      } else {
+        root.setAttribute("transform", `rotate(${waddle} 50 50) translate(0 ${bob + walkBob}) scale(${breath})`);
+        legL?.setAttribute("transform", `translate(0 ${-ll}) rotate(${ls} 44 74)`);
+        legR?.setAttribute("transform", `translate(0 ${-rl}) rotate(${rs} 56 74)`);
+        const raTx = rightAngle ? `rotate(${rightAngle} 78 53)` : "";
+        raBg?.setAttribute("transform", raTx); raFg?.setAttribute("transform", raTx);
+      }
 
       const eyeL = q("#__sbwk_eye_l__"), eyeR = q("#__sbwk_eye_r__");
       const mouthG = q("#__sbwk_mouth__"), reactG = q("#__sbwk_react__");
@@ -213,7 +349,10 @@ export default function BrainoWalker({
         // gaze: follow the cursor if it moved recently, else look the way he walks
         const pupL = q("#__sbwk_pupil_l__"), pupR = q("#__sbwk_pupil_r__");
         let gx = (moving ? 2.4 : 0), gy = 0;
-        if (now - mouseAt < 2500 && mouseX >= 0) {
+        if (danceNow) {
+          const p = dancePoseAt((now - danceStart) / 1000);
+          gx = p.lookX * 2.4; gy = p.lookY * 2;
+        } else if (now - mouseAt < 2500 && mouseX >= 0) {
           const r = walker.getBoundingClientRect();
           const ex = r.left + r.width * 0.5, ey = r.top + r.height * 0.42;
           let dx = mouseX - ex, dy = mouseY - ey;

@@ -52,6 +52,7 @@ const NotchTeaser = lazy(() => import("./pages/NotchTeaser.tsx"));
 const IntroTeaser = lazy(() => import("./pages/IntroTeaser.tsx"));
 const EmotionTeaser = lazy(() => import("./pages/EmotionTeaser.tsx"));
 const Letter = lazy(() => import("./pages/Letter.tsx"));
+const MiniRoadies = lazy(() => import("./pages/MiniRoadies.tsx"));
 const Journal = lazy(() => import("./pages/Journal.tsx"));
 const BrainoClasses = lazy(() => import("./pages/BrainoClasses.tsx"));
 const Saburi = lazy(() => import("./pages/Saburi.tsx"));
@@ -176,7 +177,9 @@ function AppRoutes() {
         <Route path="/notch-teaser" element={<NotchTeaser />} />
         <Route path="/dontblink" element={<IntroTeaser />} />
         <Route path="/aware" element={<EmotionTeaser />} />
-        <Route path="/n" element={<Letter />} />
+        {/* /n is the letter now; the film is parked at /n/film until the 22nd */}
+        <Route path="/n" element={<MiniRoadies />} />
+        <Route path="/n/film" element={<Letter />} />
         <Route path="/saburi" element={<Saburi />} />
         <Route path="/iomi" element={<Iomi />} />
         <Route path="/telos" element={<Telos />} />

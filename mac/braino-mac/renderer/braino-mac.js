@@ -3066,9 +3066,179 @@ let skitJustCompleted = false;
 // walking home, never flips on the instant music is merely detected.
 let musicTheatricsReady = false;
 
+// ── Music dance: the full step set, looping, for as long as music plays ─────
+//
+// The notch dancer above does ONE move (The Twist) in a 40px window. The real
+// mascot, meanwhile, just kept walking through the whole song. The Chrome
+// extension already solved this and was never ported: __sbWkDance's danceCycle
+// runs five steps back to back forever (extension/content.js ~4490). This is
+// that cycle on the Mac rig, which shares the extension's node ids exactly.
+//
+// Pose math and time constants are verbatim from BrainoDanceGrid.tsx, the same
+// source the extension and the notch dancer both copy, so all three surfaces
+// dance identically.
+//
+// Routing: everything goes through setStartupPose, the way skitPerformMoonwalk
+// does, so tick stays the single writer of the rig. tick's roam branch is
+// skipped while musicDancing is true, so he holds his spot and dances instead
+// of grooving his way across the screen.
+let musicDancing = false;
+let musicDanceRaf = 0;
+let musicDanceStart = 0;
+let musicDanceYielded = false;
+
+const DANCE_POSES = {
+  twist: (t) => {
+    const b = t * 3.4, sway = Math.sin(b), knee = Math.abs(Math.sin(b));
+    return { tx: sway * 9, ty: 0, sy: 1 - knee * 0.06, la: 42 + sway * 26, ra: -42 + sway * 26,
+      lookX: sway * 0.5, lookY: 0, tilt: 0,
+      ll: Math.max(0, Math.sin(b)) * 4, rl: Math.max(0, -Math.sin(b)) * 4,
+      ls: Math.max(0, Math.sin(b)) * 7, rs: Math.max(0, -Math.sin(b)) * 7 };
+  },
+  disco: (t) => {
+    const b = t * 2.6, stab = Math.tanh(Math.sin(b) * 2.3);
+    return { tx: stab * 6, ty: 0, sy: 1 - Math.abs(Math.sin(b * 2)) * 0.045, la: -10, ra: -82 - stab * 56,
+      lookX: 0.45, lookY: -0.3 - Math.max(0, stab) * 0.25, tilt: stab * 6 * 0.35,
+      ll: Math.max(0, Math.sin(b * 2)) * 3, rl: Math.max(0, -Math.sin(b * 2)) * 3,
+      ls: Math.max(0, Math.sin(b * 2)) * 5, rs: Math.max(0, -Math.sin(b * 2)) * 5 };
+  },
+  sprinkler: (t) => {
+    const period = 2.0, raw = (t % period) / period;
+    let e;
+    if (raw < 0.78) { const u = raw / 0.78; e = u * u * (3 - 2 * u); } else { e = 1 - (raw - 0.78) / 0.22; }
+    const kick = Math.sin(t * 4.1);
+    return { tx: (e - 0.5) * 5, ty: 0, sy: 1 - Math.abs(Math.sin(raw * Math.PI)) * 0.03,
+      la: 102, ra: -128 + e * 100, lookX: -0.35 + e * 0.7, lookY: 0, tilt: 0,
+      ll: Math.max(0, kick) * 3, rl: Math.max(0, -kick) * 3,
+      ls: Math.max(0, kick) * 5, rs: Math.max(0, -kick) * 5 };
+  },
+  raise: (t) => {
+    const b = t * 3.9, push = Math.abs(Math.sin(b)), lean = Math.sin(b * 0.5);
+    return { tx: lean * 5, ty: -push * 11, sy: 1, la: 116 + push * 20, ra: -116 - push * 20,
+      lookX: lean * 0.3, lookY: -0.4, tilt: 0,
+      ll: Math.max(0, Math.sin(b)) * 2, rl: Math.max(0, -Math.sin(b)) * 2,
+      ls: lean * 4, rs: lean * 4 };
+  },
+  gun: (t) => {
+    const b = t * 3.0, s2 = Math.tanh(Math.sin(b) * 2.6), groove = Math.abs(Math.sin(b));
+    return { tx: s2 * 4, ty: 0, sy: 1 - groove * 0.05, la: 130 - s2 * 25, ra: -130 - s2 * 25,
+      lookX: -0.4, lookY: -0.45, tilt: 0,
+      ll: Math.max(0, Math.sin(b)) * 4, rl: Math.max(0, -Math.sin(b)) * 4,
+      ls: Math.max(0, Math.sin(b)) * 7, rs: Math.max(0, -Math.sin(b)) * 7 };
+  },
+};
+
+// Durations are the extension's. The cycle repeats until the music stops, so
+// the seam matters: each step ends near its own neutral, and CROSS_S crossfades
+// the last beat of one into the first of the next so nothing ever snaps.
+const DANCE_CYCLE = [
+  { key: "twist", dur: 3.5 },
+  { key: "disco", dur: 3.5 },
+  { key: "sprinkler", dur: 3.8 },
+  { key: "raise", dur: 3.4 },
+  { key: "gun", dur: 4.8 },
+];
+const DANCE_TOTAL = DANCE_CYCLE.reduce((sum, item) => sum + item.dur, 0);
+const CROSS_S = 0.55;
+
+function danceStepAt(t) {
+  let local = ((t % DANCE_TOTAL) + DANCE_TOTAL) % DANCE_TOTAL;
+  for (let i = 0; i < DANCE_CYCLE.length; i++) {
+    if (local < DANCE_CYCLE[i].dur) return { index: i, local };
+    local -= DANCE_CYCLE[i].dur;
+  }
+  return { index: 0, local: 0 };
+}
+
+function applyDancePose(p) {
+  setStartupPose({
+    rootRot: p.tilt || 0,
+    rootX: (p.tx || 0) * 0.9,
+    rootY: p.ty || 0,
+    rootScale: 1,
+    rootScaleY: p.sy == null ? 1 : p.sy,
+    leftArm: p.la || 0,
+    rightArm: p.ra || 0,
+    leftLeg: p.ls || 0,
+    rightLeg: p.rs || 0,
+    leftLegLift: p.ll || 0,
+    rightLegLift: p.rl || 0,
+    gazeX: (p.lookX || 0) * 2.4,
+    gazeY: (p.lookY || 0) * 2,
+    eyeScale: 1,
+  });
+}
+
+const danceMix = (a, b, u) => {
+  const out = {};
+  for (const k of ["tx", "ty", "sy", "la", "ra", "lookX", "lookY", "tilt", "ll", "rl", "ls", "rs"]) {
+    const av = a[k] == null ? (k === "sy" ? 1 : 0) : a[k];
+    const bv = b[k] == null ? (k === "sy" ? 1 : 0) : b[k];
+    out[k] = av + (bv - av) * u;
+  }
+  return out;
+};
+
+// He yields the floor the moment anything real happens (a voice turn, a drag, a
+// skit, the customizer) and picks the step back up when it passes. Yielding
+// releases the pose entirely so tick's normal walk owns him again meanwhile.
+function danceShouldYield() {
+  return !!(dragState || brainoCustomizerOpen || herMode || skitRunning || skitMoonwalk
+    || listening || realtimeConnecting || processing || speaking || voiceTurnInFlight);
+}
+
+function musicDanceFrame(now) {
+  if (!musicDancing) return;
+  musicDanceRaf = requestAnimationFrame(musicDanceFrame);
+
+  if (danceShouldYield()) {
+    if (!musicDanceYielded) { musicDanceYielded = true; setStartupPose(null); }
+    return;
+  }
+  // resuming: restart the clock so he re-enters on a step boundary instead of
+  // dropping back into the middle of a move he never finished
+  if (musicDanceYielded) { musicDanceYielded = false; musicDanceStart = now; }
+  if (!musicDanceStart) musicDanceStart = now;
+
+  const t = (now - musicDanceStart) / 1000;
+  const { index, local } = danceStepAt(t);
+  const step = DANCE_CYCLE[index];
+  let pose = DANCE_POSES[step.key](local);
+
+  // crossfade the tail of this step into the head of the next
+  const tail = step.dur - local;
+  if (tail < CROSS_S) {
+    const next = DANCE_CYCLE[(index + 1) % DANCE_CYCLE.length];
+    const u = (CROSS_S - tail) / CROSS_S;
+    pose = danceMix(pose, DANCE_POSES[next.key](0), u * u * (3 - 2 * u));
+  }
+  applyDancePose(pose);
+}
+
+function startMusicDance() {
+  if (musicDancing) return;
+  musicDancing = true;
+  musicDanceYielded = false;
+  musicDanceStart = 0;
+  musicDanceRaf = requestAnimationFrame(musicDanceFrame);
+}
+
+function stopMusicDance() {
+  if (!musicDancing && !musicDanceRaf) return;
+  musicDancing = false;
+  if (musicDanceRaf) cancelAnimationFrame(musicDanceRaf);
+  musicDanceRaf = 0;
+  musicDanceStart = 0;
+  musicDanceYielded = false;
+  // tick's walk branch rewrites every channel next frame, so dropping the pose
+  // is all the cleanup the rig needs.
+  setStartupPose(null);
+}
+
 function beginMusicTheatrics() {
   musicTheatricsReady = true;
   startNotchDance();
+  startMusicDance();
   void startLightShow();
   if (!noteTimer) noteTimer = window.setInterval(spawnNotchNote, 1050);
   updateEdgeGlow();
@@ -3102,6 +3272,7 @@ async function reactToMusicStart(session) {
 
 function reactToMusicStop() {
   musicTheatricsReady = false;
+  stopMusicDance();
   stopNotchDance();
   stopLightShow();
   if (noteTimer) {
@@ -7755,7 +7926,7 @@ function tick(now) {
       walkingNow = false;
       resolve();
     }
-  } else if (!dragState && !brainoCustomizerOpen && !shouldHoldAttention && !skitMoonwalk && !skitJustCompleted) {
+  } else if (!dragState && !brainoCustomizerOpen && !shouldHoldAttention && !skitMoonwalk && !skitJustCompleted && !musicDancing) {
     if (movementMode === "dock") {
       targetY = getDockBounds().y;
     }
@@ -7774,7 +7945,7 @@ function tick(now) {
   walker.style.transform = `translate3d(${posX}px, ${posY}px, 0)`;
   const engaged = listening || realtimeConnecting || processing || speaking || authPose;
   // skitMoonwalk locks him facing forward while he glides backwards — the moonwalk.
-  walkerFlip.style.transform = `scaleX(${(engaged || skitMoonwalk) ? 1 : dirX}) scale(${brainoScale})`;
+  walkerFlip.style.transform = `scaleX(${(engaged || skitMoonwalk || musicDancing) ? 1 : dirX}) scale(${brainoScale})`;
   if (brainoCustomizerOpen) positionBrainoCustomizer();
   updateFloatingUi();
 
@@ -7784,12 +7955,18 @@ function tick(now) {
     const lArmPivot = pivotOf(laEl, 22, 53), rArmPivot = pivotOf(raEl, 78, 53);
     const leftArmTransform = pose.leftArm ? `rotate(${pose.leftArm} ${lArmPivot.x} ${lArmPivot.y})` : "";
     const rightArmTransform = pose.rightArm ? `rotate(${pose.rightArm} ${rArmPivot.x} ${rArmPivot.y})` : "";
+    // sy squashes vertically only, so the body compresses into the floor rather
+    // than shrinking; the 101*(1-sy) nudge keeps his feet planted while it does
+    // (same compensation the extension's dance uses).
+    const poseScale = pose.rootScale || 1;
+    const poseSy = pose.rootScaleY == null ? 1 : pose.rootScaleY;
     root?.setAttribute(
       "transform",
-      `rotate(${pose.rootRot || 0} 50 50) translate(0 ${pose.rootY || 0}) scale(${pose.rootScale || 1})`
+      `rotate(${pose.rootRot || 0} 50 50) translate(${pose.rootX || 0} ${(pose.rootY || 0) + 101 * (1 - poseSy)}) scale(${poseScale} ${poseScale * poseSy})`
     );
-    q("#__sbwk_ll__")?.setAttribute("transform", pose.leftLeg ? `rotate(${pose.leftLeg} 44 74)` : "");
-    q("#__sbwk_rl__")?.setAttribute("transform", pose.rightLeg ? `rotate(${pose.rightLeg} 56 74)` : "");
+    const llLift = pose.leftLegLift || 0, rlLift = pose.rightLegLift || 0;
+    q("#__sbwk_ll__")?.setAttribute("transform", (pose.leftLeg || llLift) ? `translate(0 ${-llLift}) rotate(${pose.leftLeg || 0} 44 74)` : "");
+    q("#__sbwk_rl__")?.setAttribute("transform", (pose.rightLeg || rlLift) ? `translate(0 ${-rlLift}) rotate(${pose.rightLeg || 0} 56 74)` : "");
     q("#__sbwk_la_bg__")?.setAttribute("transform", leftArmTransform);
     q("#__sbwk_la__")?.setAttribute("transform", leftArmTransform);
     q("#__sbwk_ra_bg__")?.setAttribute("transform", rightArmTransform);

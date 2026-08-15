@@ -1,0 +1,1089 @@
+/* mini-roadies.css — /n. The film that used to live here is parked until the
+   22nd (it moved to /n/film); the route is the letter itself, set as a
+   Medium-style editorial piece in black and white.
+
+   Theme: monochrome, white by default, black on the header toggle. Every
+   colour in the page comes from the tokens on .mr, so the flip is one class —
+   .mr.is-dark — and nothing else in the file knows about it.
+
+   Two modes:
+     rest  — a quiet reading page, 680px column, Charter body, NeueHaas display
+     alive — "make the letter come to life": the screen edges start glowing
+             (breathing inset ring + a sheen that sweeps the perimeter), the
+             real BrainoWalker strolls the bottom, and the song plays.
+   ============================================================================ */
+
+@font-face {
+  font-family: "Charter";
+  src: url("/fonts/Charter_BT_Roman.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+.mr {
+  /* white theme */
+  --mr-paper: #FFFFFF;
+  --mr-paper-2: #FAFAFA;
+  --mr-ink: #0B0B0B;
+  --mr-ink-2: #2C2C2C;
+  --mr-ink-3: #767676;
+  --mr-line: rgba(0, 0, 0, 0.13);
+  --mr-glow-rgb: 0, 0, 0;
+
+  position: relative;
+  min-height: 100dvh;
+  background: var(--mr-paper);
+  color: var(--mr-ink);
+  font-family: "Charter", Georgia, "Times New Roman", serif;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+  transition: background 0.5s ease, color 0.5s ease;
+}
+
+/* black theme */
+.mr.is-dark {
+  --mr-paper: #000000;
+  --mr-paper-2: #0A0A0A;
+  --mr-ink: #F7F5F2;
+  --mr-ink-2: #CAC5BF;
+  --mr-ink-3: #85807A;
+  --mr-line: rgba(255, 255, 255, 0.16);
+  --mr-glow-rgb: 255, 255, 255;
+}
+
+/* ── the nav: Braino's notch ────────────────────────────────────────────────
+   Same idea as the notch on the homepage — a black island fixed to the top of
+   the screen, always black in both themes, that EXTENDS rather than fills.
+   Collapsed it's the house name; reach for it and it opens into the letter's
+   own anchors. Width/height easing is the app's own curve. */
+.mr-article {
+  max-width: 728px;
+  margin: 0 auto;
+  padding: 0 24px 120px;
+  position: relative;
+  z-index: 2;
+}
+/* anchors land clear of the sticky header */
+.mr-article [id] { scroll-margin-top: 118px; }
+
+.mr-head { padding: 128px 0 0; }
+.mr-eyebrow {
+  font-family: "JetBrains Mono", "SF Mono", ui-monospace, Menlo, monospace;
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--mr-ink-3);
+}
+.mr-title {
+  font-family: "NeueHaas", "Helvetica Neue", -apple-system, sans-serif;
+  font-weight: 700;
+  font-size: clamp(38px, 6.6vw, 68px);
+  line-height: 1.02;
+  letter-spacing: -0.034em;
+  margin: 16px 0 0;
+  color: var(--mr-ink);
+}
+.mr-rule {
+  height: 1px;
+  background: var(--mr-line);
+  margin: 34px 0 0;
+}
+
+/* ── the come-to-life button ────────────────────────────────────────────── */
+.mr-alive-wrap { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin: 26px 0 0; }
+.mr-alive-btn {
+  appearance: none;
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  border: 1px solid var(--mr-ink);
+  background: transparent;
+  color: var(--mr-ink);
+  font-family: "NeueHaas", "Helvetica Neue", sans-serif;
+  font-weight: 400;
+  font-size: 14.5px;
+  letter-spacing: 0.01em;
+  padding: 11px 20px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: transform 0.18s ease, box-shadow 0.35s ease, background 0.3s ease, color 0.3s ease;
+}
+.mr-alive-btn:hover {
+  transform: translateY(-1px);
+  background: var(--mr-ink);
+  color: var(--mr-paper);
+}
+.mr-alive-btn .dot {
+  display: inline-block;
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  margin-right: 9px;
+  vertical-align: middle;
+}
+.mr.is-alive .mr-alive-btn {
+  background: var(--mr-ink);
+  color: var(--mr-paper);
+  box-shadow: 0 0 26px rgba(var(--mr-glow-rgb), 0.22);
+}
+.mr.is-alive .mr-alive-btn .dot { animation: mrPulseDot 1.5s ease-in-out infinite; }
+@keyframes mrPulseDot { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.35; transform: scale(0.78); } }
+.mr-alive-note {
+  font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  font-size: 10.5px;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--mr-ink-3);
+}
+
+/* ── body copy ──────────────────────────────────────────────────────────── */
+.mr-article p {
+  font-size: 21px;
+  line-height: 1.92;
+  letter-spacing: -0.003em;
+  color: var(--mr-ink-2);
+  margin: 32px 0 0;
+}
+.mr-opener::first-letter {
+  font-family: "NeueHaas", sans-serif;
+  font-weight: 700;
+  font-size: 3.1em;
+  line-height: 0.82;
+  float: left;
+  padding: 10px 12px 0 0;
+  color: var(--mr-ink);
+}
+/* "Point being Mayo House" — its own beat, so it gets its own air */
+.mr-beat {
+  font-family: "NeueHaas", "Helvetica Neue", sans-serif;
+  font-weight: 700;
+  font-size: clamp(24px, 3.6vw, 34px) !important;
+  line-height: 1.18 !important;
+  letter-spacing: -0.022em;
+  color: var(--mr-ink) !important;
+  margin: 46px 0 40px !important;
+}
+.mr-close {
+  border-top: 1px solid var(--mr-line);
+  padding-top: 34px;
+  margin-top: 56px !important;
+}
+/* the last clause of the letter */
+.mr-close em { font-style: italic; color: var(--mr-ink); }
+
+/* ── the legend (before E / after E) ────────────────────────────────────── */
+.mr-legend {
+  margin: 40px 0 0;
+  border: 1px solid var(--mr-line);
+  border-radius: 14px;
+  padding: 22px 24px;
+  background: var(--mr-paper-2);
+}
+.mr-legend-row { display: flex; gap: 18px; align-items: baseline; }
+.mr-legend-row + .mr-legend-row { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--mr-line); }
+.mr-legend-k {
+  flex: none;
+  width: 78px;
+  font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--mr-ink);
+  padding-top: 4px;
+}
+.mr-legend-v { font-size: 16.5px; line-height: 1.62; color: var(--mr-ink-2); }
+
+/* ── the scorecard ──────────────────────────────────────────────────────── */
+.mr-scores { list-style: none; margin: 8px 0 0; padding: 0; counter-reset: mr; }
+.mr-item {
+  padding: 40px 0 0;
+  margin: 40px 0 0;
+  border-top: 1px solid var(--mr-line);
+}
+.mr-item:first-child { border-top: 0; }
+.mr-item-h {
+  font-family: "NeueHaas", "Helvetica Neue", sans-serif;
+  font-weight: 800;
+  font-size: clamp(23px, 3vw, 30px);
+  letter-spacing: -0.028em;
+  line-height: 1.2;
+  margin-bottom: 6px;
+  color: var(--mr-ink);
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+.mr-item-h::before {
+  counter-increment: mr;
+  content: counter(mr, decimal-leading-zero);
+  font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 0.1em;
+  color: var(--mr-ink-3);
+}
+.mr-score {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  margin: 20px 0 0;
+  font-family: "NeueHaas", "Helvetica Neue", sans-serif;
+  font-weight: 700;
+  font-size: clamp(40px, 7vw, 62px);
+  line-height: 1;
+  letter-spacing: -0.04em;
+  color: var(--mr-ink);
+}
+.mr-score .e {
+  font-family: "Charter", Georgia, serif;
+  font-style: italic;
+  font-weight: 400;
+  font-size: 0.44em;
+  letter-spacing: 0;
+  color: var(--mr-ink-3);
+  transform: translateY(-0.12em);
+}
+.mr-note {
+  font-size: 16.5px !important;
+  line-height: 1.66 !important;
+  color: var(--mr-ink-3) !important;
+  margin: 16px 0 0 !important;
+  max-width: 54ch;
+}
+.mr-aside {
+  font-style: italic;
+  color: var(--mr-ink-3) !important;
+  font-size: 17px !important;
+}
+
+/* ── the polaroids ──────────────────────────────────────────────────────────
+   Three at the bottom, scattered the way polaroids land on a table: thick
+   chin, a slight tilt each, hover straightens one out. An empty one keeps its
+   shape so the layout is already right before its photo lands. */
+/* A scroll-snap gallery. Full-width stacking made them enormous; three-across
+   made them tiny. A track sits between the two: each photo is a real polaroid
+   you can read, and you push through them one at a time. */
+.mr-polas {
+  width: min(1180px, calc(100vw - 44px));
+  margin-left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  /* each card owns its own height: stretching them to match left the landscape
+     shot sitting above a slab of empty polaroid */
+  align-items: flex-start;
+  gap: 26px;
+  padding: 10px 4px 22px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x mandatory;
+  scroll-behavior: smooth;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+.mr-polas::-webkit-scrollbar { display: none; }
+.mr-pola {
+  margin: 0;
+  flex: 0 0 auto;
+  width: clamp(260px, 34vw, 400px);
+  scroll-snap-align: center;
+  background: #FFFFFF;
+  padding: 14px 14px 0;
+  border-radius: 3px;
+  border: 1px solid var(--mr-line);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.18);
+  transition: transform 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94), box-shadow 0.35s ease;
+  will-change: transform;
+}
+.mr.is-dark .mr-pola { box-shadow: 0 18px 40px rgba(0, 0, 0, 0.7); border-color: transparent; }
+.mr-pola:nth-child(1) { transform: rotate(-3deg) translateY(6px); }
+.mr-pola:nth-child(2) { transform: rotate(1.6deg); }
+.mr-pola:nth-child(3) { transform: rotate(-1.2deg) translateY(10px); }
+.mr-pola:hover {
+  transform: rotate(0deg) translateY(-6px) scale(1.03);
+  box-shadow: 0 26px 54px rgba(0, 0, 0, 0.28);
+  z-index: 3;
+}
+.mr-pola-win {
+  position: relative;
+  aspect-ratio: 3 / 2;
+  overflow: hidden;
+  background: #EDEDED;
+  display: grid;
+  place-items: center;
+}
+/* contain, not cover: the window already takes each photo's own aspect once it
+   loads, and contain guarantees nothing is ever sliced off if it has not yet. */
+.mr-pola-win img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.mr-pola-slot {
+  font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  font-size: 9.5px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: #9A9A9A;
+}
+/* the chin a polaroid gets written on */
+.mr-pola-chin { height: 62px; }
+.mr-pola.is-empty { background: var(--mr-paper-2); border: 1px dashed var(--mr-line); box-shadow: none; }
+.mr-pola.is-empty .mr-pola-win { background: transparent; border: 1px dashed var(--mr-line); }
+.mr-pola.is-empty .mr-pola-slot { color: var(--mr-ink-3); }
+.mr.is-alive .mr-pola { box-shadow: 0 14px 34px rgba(0, 0, 0, 0.2), 0 0 30px rgba(var(--mr-glow-rgb), 0.12); }
+
+/* ── the parked film ────────────────────────────────────────────────────── */
+.mr-film {
+  margin: 84px 0 0;
+  border: 1px solid var(--mr-line);
+  border-radius: 18px;
+  overflow: hidden;
+  background: var(--mr-paper-2);
+}
+.mr-film-tile {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  display: grid;
+  place-items: center;
+  background: #0B0B0B;
+  border-bottom: 1px solid var(--mr-line);
+}
+.mr-film-tile::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.045) 0 1px, transparent 1px 3px);
+  pointer-events: none;
+}
+.mr-film-lock {
+  position: relative;
+  z-index: 1;
+  text-align: center;
+  padding: 0 20px;
+}
+.mr-film-lock .glyph {
+  width: 54px; height: 54px;
+  margin: 0 auto;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  display: grid; place-items: center;
+  font-size: 15px;
+  color: rgba(255, 255, 255, 0.6);
+  padding-left: 3px;
+}
+.mr-film-lock .line {
+  display: block;
+  margin-top: 14px;
+  font-family: "NeueHaas", "Helvetica Neue", sans-serif;
+  font-weight: 700;
+  font-size: clamp(20px, 3.4vw, 30px);
+  letter-spacing: -0.02em;
+  color: #FFFFFF;
+}
+.mr-film-cap {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 20px;
+  font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--mr-ink-3);
+}
+.mr-film-cap b { color: var(--mr-ink-2); font-weight: 400; }
+
+/* ── alive mode: the screen edges glow ──────────────────────────────────── */
+@property --mr-sweep {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+
+.mr-glow {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 1s ease;
+}
+.mr.is-alive .mr-glow { opacity: 1; }
+
+/* the breathing ring itself */
+.mr-glow::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  box-shadow:
+    inset 0 0 0 1.5px rgba(var(--mr-glow-rgb), 0.45),
+    inset 0 0 24px rgba(var(--mr-glow-rgb), 0.28),
+    inset 0 0 90px rgba(var(--mr-glow-rgb), 0.14),
+    inset 0 0 220px rgba(var(--mr-glow-rgb), 0.07);
+  animation: mrBreathe 3.8s ease-in-out infinite;
+}
+/* a sheen that sweeps around the perimeter (static, still pretty, if the
+   browser has no @property support for the animated angle) */
+.mr-glow::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  padding: 2px;
+  background: conic-gradient(
+    from var(--mr-sweep),
+    transparent 0 10%,
+    rgba(var(--mr-glow-rgb), 0.8) 18%,
+    transparent 28% 58%,
+    rgba(var(--mr-glow-rgb), 0.55) 68%,
+    transparent 80%
+  );
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  animation: mrSweep 7s linear infinite;
+}
+@keyframes mrBreathe { 0%, 100% { opacity: 0.7; } 50% { opacity: 1; } }
+@keyframes mrSweep { to { --mr-sweep: 360deg; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .mr-glow::before, .mr-glow::after, .mr-alive-btn .dot { animation: none; }
+}
+
+@media (max-width: 860px) {
+  .mr-polas { grid-template-columns: 1fr; gap: 26px; width: min(560px, calc(100vw - 44px)); }
+  .mr-pola-chin { height: 44px; }
+}
+
+@media (max-width: 640px) {
+  .mr-head { padding-top: 104px; }
+  .mr-article { padding-bottom: 150px; }
+  .mr-article p { font-size: 18.5px; }
+  .mr-legend-row { display: block; }
+  .mr-legend-k { width: auto; display: block; margin-bottom: 6px; }
+}
+
+/* ===========================================================================
+   Shimmer — the scores and the one word that carries a section ("Check.").
+   Light sweeps across the ink rather than recolouring it, so the numbers stay
+   black on paper / bone on black and only the highlight moves. --mr-sheen is
+   flipped by .is-dark so the sweep reads on both grounds.
+   =========================================================================== */
+/* The sheen must never approach the paper colour. The first pass swept to
+   near-white on white, so the numbers looked chopped in half as it passed
+   through them. These stay solidly readable at every point of the sweep: it
+   reads as light moving over ink, not as ink going missing. */
+.mr { --mr-sheen: #E0568C; }
+.mr.is-dark { --mr-sheen: #FF7FB0; }
+
+.mr-shimmer {
+  /* REPEATING, and sized in px rather than %. The first version was no-repeat
+     at 300%, so once the animation pushed it off-box the uncovered part of the
+     glyph had no background at all and rendered transparent: the numbers looked
+     sliced in half. A repeating tile always covers, whatever the position. The
+     tile is ink at both ends, so it butts seamlessly against itself. */
+  background-image: linear-gradient(
+    100deg,
+    var(--mr-ink) 0%, var(--mr-ink) 34%,
+    var(--mr-sheen) 47%, var(--mr-sheen) 53%,
+    var(--mr-ink) 66%, var(--mr-ink) 100%
+  );
+  background-size: 240px 100%;
+  background-repeat: repeat;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  animation: mrSheen 4.4s linear infinite;
+}
+/* body-copy shimmer sits at the text's own weight, so it reads as emphasis
+   rather than as a second typeface dropped into the paragraph */
+.mr-article p .mr-shimmer { font-weight: 700; }
+.mr-score .mr-shimmer { animation-duration: 5.2s; }
+.mr-score .mr-shimmer:last-of-type { animation-delay: 0.45s; }
+
+@keyframes mrSheen {
+  from { background-position: 240px 0; }
+  to   { background-position: 0 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mr-shimmer { animation: none; background: none; color: var(--mr-ink); -webkit-text-fill-color: var(--mr-ink); }
+}
+
+/* ===========================================================================
+   The gate — one question, on paper, before anything else.
+   =========================================================================== */
+.mr-gate-page {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 32px 22px;
+}
+.mr-gate {
+  position: relative;
+  z-index: 1;
+  width: min(680px, 100%);
+  text-align: center;
+}
+.mr-gate.is-wrong { animation: mrShake 0.62s cubic-bezier(0.36, 0.07, 0.19, 0.97); }
+@keyframes mrShake {
+  10%, 90% { transform: translateX(-2px); }
+  20%, 80% { transform: translateX(4px); }
+  30%, 50%, 70% { transform: translateX(-8px); }
+  40%, 60% { transform: translateX(8px); }
+}
+
+.mr-gate-eyebrow {
+  font-family: "JetBrains Mono", "SF Mono", ui-monospace, Menlo, monospace;
+  font-size: 11px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--mr-ink-3);
+  margin-bottom: 20px;
+}
+.mr-gate-h {
+  font-family: "NeueHaas", "Helvetica Neue", -apple-system, sans-serif;
+  font-weight: 700;
+  font-size: clamp(28px, 5vw, 44px);
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+  color: var(--mr-ink);
+  margin: 0 0 40px;
+}
+
+.mr-gate-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: center;
+  gap: 14px;
+  font-family: "Charter", Georgia, "Times New Roman", serif;
+  font-size: clamp(24px, 4.4vw, 38px);
+  line-height: 1.5;
+  color: var(--mr-ink);
+}
+.mr-gate-and, .mr-gate-fixed { font-style: italic; color: var(--mr-ink-2); }
+
+.mr-blank {
+  width: clamp(120px, 22vw, 190px);
+  border: 0;
+  border-bottom: 2px solid var(--mr-line);
+  background: transparent;
+  padding: 2px 6px 8px;
+  font: inherit;
+  color: var(--mr-ink);
+  text-align: center;
+  outline: none;
+  transition: border-color 0.22s ease;
+}
+.mr-blank::placeholder { color: transparent; }
+.mr-blank:focus { border-bottom-color: var(--mr-ink); }
+.mr-gate.is-wrong .mr-blank { border-bottom-color: rgba(200, 40, 40, 0.7); }
+
+.mr-gate-btn {
+  margin: 44px 0 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 13px 24px;
+  border-radius: 999px;
+  border: 1px solid var(--mr-line);
+  background: var(--mr-paper-2);
+  font-family: "NeueHaas", "Helvetica Neue", sans-serif;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--mr-ink);
+  cursor: pointer;
+  transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+}
+.mr-gate-btn:hover { transform: translateY(-1px); border-color: var(--mr-ink); }
+.mr-gate-btn .dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--mr-ink);
+  animation: mrPulseDot 1.5s ease-in-out infinite;
+}
+.mr-gate-foot {
+  margin: 20px 0 0;
+  font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  color: var(--mr-ink-3);
+}
+
+
+/* ===========================================================================
+   Masthead — the article bar. Name dead centre, function pushed to the edges,
+   the section list dropping from the chevron rather than crowding the line.
+   =========================================================================== */
+.mr-mast {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  background: color-mix(in srgb, var(--mr-paper) 88%, transparent);
+  backdrop-filter: saturate(180%) blur(14px);
+  -webkit-backdrop-filter: saturate(180%) blur(14px);
+  border-bottom: 1px solid var(--mr-line);
+}
+.mr-mast-bar {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 0 22px;
+  height: 62px;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;   /* the centre stays centred whatever the edges hold */
+  align-items: center;
+  gap: 14px;
+}
+.mr-mast-left { justify-self: start; display: flex; align-items: center; }
+.mr-mast-right { justify-self: end; display: flex; align-items: center; gap: 12px; }
+
+.mr-mast-eyes { display: flex; gap: 5px; }
+.mr-mast-eyes i {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--mr-ink);
+  animation: mrBlink 4.4s infinite;
+}
+.mr-mast-eyes i:last-child { animation-delay: 0.06s; }
+
+.mr-mast-name {
+  justify-self: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  padding: 6px 4px;
+  font-family: "NeueHaas", "Helvetica Neue", -apple-system, sans-serif;
+  font-weight: 800;
+  font-size: clamp(16px, 2.2vw, 21px);
+  letter-spacing: -0.028em;
+  color: var(--mr-ink);
+  white-space: nowrap;
+}
+.mr-mast-chev {
+  font-size: 13px;
+  color: var(--mr-ink-3);
+  transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.mr-mast-chev.is-open { transform: rotate(180deg); }
+
+.mr-theme {
+  width: 30px; height: 30px;
+  display: grid; place-items: center;
+  border-radius: 50%;
+  border: 0;
+  background: transparent;
+  color: var(--mr-ink-2);
+  cursor: pointer;
+  transition: color 0.2s ease, transform 0.2s ease;
+}
+.mr-theme:hover { color: var(--mr-ink); transform: scale(1.1); }
+
+.mr-mast-link {
+  font-family: "NeueHaas", "Helvetica Neue", -apple-system, sans-serif;
+  font-size: 15px;
+  letter-spacing: -0.012em;
+  text-decoration: none;
+  color: var(--mr-ink-2);
+  transition: color 0.18s ease;
+}
+.mr-mast-link:hover { color: var(--mr-ink); }
+
+.mr-mast-avatar {
+  width: 30px; height: 30px;
+  display: grid; place-items: center;
+  border-radius: 50%;
+  background: #1F8B4C;
+  color: #FFFFFF;
+  font-family: "NeueHaas", "Helvetica Neue", sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* the section list, dropped from the chevron */
+.mr-mast-menu {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.mr-mast.is-open .mr-mast-menu { grid-template-rows: 1fr; }
+.mr-mast-menu-inner {
+  overflow: hidden;
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 0 22px;
+}
+.mr-mast.is-open .mr-mast-menu-inner { padding-bottom: 26px; }
+
+/* ===========================================================================
+   Top highlight — the closing clause, marked the way a reader marks one, with
+   the label out in the right margin where Medium puts it.
+   =========================================================================== */
+.mr-mark {
+  position: relative;
+  background: rgba(52, 168, 83, 0.22);
+  color: var(--mr-ink);
+  font-style: italic;
+  padding: 2px 4px;
+  border-radius: 2px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+.mr.is-dark .mr-mark { background: rgba(52, 168, 83, 0.3); }
+.mr-mark-tag {
+  position: absolute;
+  left: calc(100% + 26px);
+  top: 50%;
+  transform: translateY(-50%);
+  font-family: "NeueHaas", "Helvetica Neue", sans-serif;
+  font-style: normal;
+  font-weight: 500;
+  font-size: 14px;
+  letter-spacing: -0.01em;
+  color: var(--mr-ink-3);
+  white-space: nowrap;
+  pointer-events: none;
+}
+/* no room for a margin note on a narrow screen — drop it rather than overlap */
+@media (max-width: 1100px) { .mr-mark-tag { display: none; } }
+
+@media (max-width: 640px) {
+  .mr-mast-bar { height: 54px; padding: 0 16px; }
+  .mr-mast-menu-inner { justify-content: flex-start; gap: 6px 16px; }
+}
+
+/* ===========================================================================
+   Gallery frame — heading on the left, arrows on the right.
+   =========================================================================== */
+.mr-gal { margin: 88px 0 0; }
+.mr-gal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--mr-line);
+}
+.mr-gal-arrows { display: flex; gap: 8px; }
+.mr-gal-arrows button {
+  width: 32px; height: 32px;
+  display: grid; place-items: center;
+  border-radius: 50%;
+  border: 1px solid var(--mr-line);
+  background: transparent;
+  color: var(--mr-ink-2);
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+  transition: border-color 0.2s ease, color 0.2s ease, transform 0.2s ease;
+}
+.mr-gal-arrows button:hover { border-color: var(--mr-ink); color: var(--mr-ink); transform: scale(1.08); }
+
+/* each photo sits a touch off-square, and straightens when you look at it */
+.mr-pola:nth-child(odd) { transform: rotate(-1.1deg); }
+.mr-pola:nth-child(even) { transform: rotate(1.3deg); }
+.mr-pola:hover { transform: rotate(0deg) translateY(-4px); box-shadow: 0 22px 50px rgba(0, 0, 0, 0.24); }
+
+/* ===========================================================================
+   The index — one rule per section, name at one edge, chapter at the other.
+   Used by the masthead menu and the footer both.
+   =========================================================================== */
+.mr-chapters-eyebrow {
+  font-family: "JetBrains Mono", "SF Mono", ui-monospace, Menlo, monospace;
+  font-size: 11px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--mr-ink-3);
+  margin-bottom: 18px;
+}
+.mr-chapters {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 56px;
+}
+.mr-chapter {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 15px 0;
+  border-bottom: 1px solid var(--mr-line);
+  text-decoration: none;
+  color: var(--mr-ink);
+  transition: opacity 0.18s ease;
+}
+.mr-chapter:hover { opacity: 0.58; }
+.mr-chapter-name {
+  font-family: "NeueHaas", "Helvetica Neue", -apple-system, sans-serif;
+  font-weight: 700;
+  font-size: clamp(17px, 2.1vw, 22px);
+  letter-spacing: -0.024em;
+}
+.mr-chapter-no {
+  font-family: "NeueHaas", "Helvetica Neue", sans-serif;
+  font-size: 13.5px;
+  color: var(--mr-ink-3);
+  white-space: nowrap;
+}
+.mr-chapter.is-on .mr-chapter-no { color: var(--mr-ink); }
+
+
+@media (max-width: 720px) {
+  .mr-chapters { grid-template-columns: 1fr; column-gap: 0; }
+}
+
+/* ===========================================================================
+   The ask.
+
+   Built the way Apple builds a product statement rather than the way the web
+   builds a form: no card, no border, no box to fill in. The page simply opens
+   up, one headline carries the whole moment at display size with the tracking
+   pulled in tight, a single quiet line sits under it, and the two choices are
+   the only other things on screen. The whitespace IS the design; a bordered
+   panel here would have made it look like a cookie consent.
+   =========================================================================== */
+.mr-invite {
+  margin: 120px 0 0;
+  padding: clamp(72px, 11vw, 132px) 0;
+  border-top: 1px solid var(--mr-line);
+  text-align: center;
+  /* display type needs more room than the reading column allows: at 728px the
+     headline broke three ways and left "me?" stranded on its own line */
+  /* Broken out WITHOUT a transform on purpose. A transformed ancestor becomes
+     the containing block for position:fixed, which made the runaway Yes button
+     resolve its coordinates against this section instead of the viewport and
+     fly off-screen. left + negative margin centres it the same way and leaves
+     fixed positioning alone. */
+  width: min(980px, calc(100vw - 44px));
+  position: relative;
+  left: 50%;
+  margin-left: calc(min(980px, 100vw - 44px) * -0.5);
+}
+.mr-invite-eyebrow {
+  font-family: "NeueHaas", "Helvetica Neue", -apple-system, sans-serif;
+  font-size: 17px !important;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--mr-ink-3) !important;
+  margin: 0 0 14px !important;
+}
+.mr-invite-q {
+  font-family: "NeueHaas", "Helvetica Neue", -apple-system, sans-serif;
+  font-weight: 700;
+  /* display size, tracking pulled in as it grows — the Apple headline move */
+  font-size: clamp(32px, 5.4vw, 60px);
+  letter-spacing: -0.038em;
+  line-height: 1.06;
+  color: var(--mr-ink);
+  margin: 0;
+  text-wrap: balance;
+}
+.mr-invite-sub {
+  font-family: "NeueHaas", "Helvetica Neue", -apple-system, sans-serif;
+  font-size: clamp(17px, 2vw, 21px) !important;
+  line-height: 1.45 !important;
+  letter-spacing: -0.01em;
+  color: var(--mr-ink-3) !important;
+  max-width: 34ch;
+  margin: 22px auto 0 !important;
+}
+
+.mr-invite-btns {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-top: clamp(38px, 5vw, 56px);
+  min-height: 50px;
+}
+
+/* Apple's control proportions: generous horizontal padding, full radius,
+   17px text, and a real filled/plain hierarchy between the two answers. */
+.mr-yes, .mr-no {
+  border-radius: 999px;
+  padding: 14px 30px;
+  font-family: "NeueHaas", "Helvetica Neue", sans-serif;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+.mr-yes {
+  background: var(--mr-ink);
+  color: var(--mr-paper);
+  transition: left 0.34s cubic-bezier(0.22, 1, 0.36, 1), top 0.34s cubic-bezier(0.22, 1, 0.36, 1),
+              background 0.3s ease, transform 0.2s ease;
+}
+.mr-yes.is-loose {
+  position: fixed;
+  z-index: 60;
+  margin: 0;
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.26);
+}
+/* four dodges is enough of a bit: it comes home, goes red, lets her catch it */
+.mr-yes.is-caught {
+  position: static;
+  background: #D83A2E;
+  border-color: #D83A2E;
+  color: #FFFFFF;
+  box-shadow: 0 10px 30px rgba(216, 58, 46, 0.34);
+  animation: mrCaught 0.42s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.mr-yes.is-caught:hover { transform: translateY(-1px); }
+@keyframes mrCaught {
+  0% { transform: scale(0.86); }
+  60% { transform: scale(1.06); }
+  100% { transform: scale(1); }
+}
+
+/* No is the plain control, until it refuses itself. "No" never leaves; the rest
+   of the sentence grows out of it, sized by its own content. */
+.mr-no {
+  background: transparent;
+  border-color: var(--mr-line);
+  color: var(--mr-ink);
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+  transition: border-color 0.24s ease, background 0.24s ease, color 0.24s ease;
+}
+.mr-no:hover { border-color: var(--mr-ink); }
+.mr-no-more {
+  display: grid;
+  grid-template-columns: 0fr;
+  opacity: 0;
+  transition: grid-template-columns 0.52s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.3s ease 0.12s;
+}
+.mr-no-more > * { overflow: hidden; }
+.mr-no.is-open {
+  background: var(--mr-ink);
+  border-color: var(--mr-ink);
+  color: var(--mr-paper);
+  cursor: default;
+}
+.mr-no.is-open .mr-no-more { grid-template-columns: 1fr; opacity: 1; }
+
+/* ── after yes ─────────────────────────────────────────────────────────── */
+.mr-invite.is-said { animation: mrSaid 0.62s cubic-bezier(0.22, 1, 0.36, 1); }
+@keyframes mrSaid {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: none; }
+}
+/* the note drops back to reading type: the headline had the moment, this has
+   the actual terms, so it gets a comfortable measure and the body serif */
+.mr-invite-note {
+  font-family: "Charter", Georgia, "Times New Roman", serif;
+  font-size: 19px !important;
+  line-height: 1.78 !important;
+  color: var(--mr-ink-2) !important;
+  max-width: 58ch;
+  margin: 40px auto 0 !important;
+  padding-top: 34px;
+  border-top: 1px solid var(--mr-line);
+  text-align: left;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mr-yes, .mr-no-more, .mr-invite.is-said { transition: none; animation: none; }
+}
+
+/* ===========================================================================
+   Alive = the disco. While the song plays, the perimeter stops being a plain
+   white edge and becomes the Mac's light show: --music-hue and --music-flash
+   are driven live in JS (see MiniRoadies.tsx), and every layer here reads them,
+   so the whole frame changes colour and punches on the beat. Offsetting the
+   outer layers by +45 and +90 degrees is what keeps two or three colours in the
+   air at once instead of one flat wash.
+   =========================================================================== */
+.mr.is-alive .mr-glow::before {
+  box-shadow:
+    inset 0 0 0 calc(1.5px + 2.5px * var(--music-flash, 0))
+      hsla(var(--music-hue, 12), 88%, 66%, calc(0.5 + 0.42 * var(--music-flash, 0))),
+    inset 0 0 calc(30px + 44px * var(--music-flash, 0))
+      hsla(var(--music-hue, 12), 86%, 64%, calc(0.3 + 0.44 * var(--music-flash, 0))),
+    inset 0 0 calc(110px + 96px * var(--music-flash, 0))
+      hsla(calc(var(--music-hue, 12) + 45), 82%, 60%, calc(0.17 + 0.33 * var(--music-flash, 0))),
+    inset 0 0 calc(250px + 130px * var(--music-flash, 0))
+      hsla(calc(var(--music-hue, 12) + 90), 80%, 58%, calc(0.09 + 0.22 * var(--music-flash, 0)));
+  /* the beat is the breath now, so the idle pulse would only fight it */
+  animation: none;
+}
+.mr.is-alive .mr-glow::after {
+  background: conic-gradient(
+    from var(--mr-sweep),
+    transparent 0 8%,
+    hsla(var(--music-hue, 12), 92%, 68%, 0.9) 17%,
+    transparent 27% 46%,
+    hsla(calc(var(--music-hue, 12) + 120), 92%, 66%, 0.75) 58%,
+    transparent 68% 82%,
+    hsla(calc(var(--music-hue, 12) + 240), 92%, 66%, 0.6) 90%,
+    transparent 100%
+  );
+  animation-duration: 4.2s;
+}
+/* the photos catch the room light too */
+.mr.is-alive .mr-pola {
+  box-shadow:
+    0 14px 34px rgba(0, 0, 0, 0.2),
+    0 0 calc(30px + 26px * var(--music-flash, 0))
+      hsla(var(--music-hue, 12), 85%, 62%, calc(0.14 + 0.24 * var(--music-flash, 0)));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mr.is-alive .mr-glow::after { animation: none; }
+}
+
+/* ===========================================================================
+   The invitation shimmer. This button is the only thing on the page asking to
+   be pressed, so a light travels across it on a loop: a narrow pink band swept
+   diagonally over the pill, clipped by the border radius. It sweeps, pauses,
+   sweeps again, rather than running continuously, because a constant animation
+   reads as a loading state and an intermittent one reads as a glint.
+
+   It stops once the letter IS alive: the button has been pressed, so there is
+   nothing left to invite.
+   =========================================================================== */
+.mr-alive-btn::after {
+  content: "";
+  position: absolute;
+  inset: -60% -12%;
+  z-index: -1;
+  background: linear-gradient(
+    100deg,
+    transparent 32%,
+    hsla(330, 84%, 62%, 0.26) 43%,
+    hsla(338, 96%, 76%, 0.72) 50%,
+    hsla(330, 84%, 62%, 0.26) 57%,
+    transparent 68%
+  );
+  transform: translateX(-120%);
+  animation: mrInvite 3.6s cubic-bezier(0.5, 0, 0.5, 1) infinite;
+  pointer-events: none;
+}
+/* the ring blooms faintly in time with the sweep, so the whole pill glints
+   rather than just its interior */
+.mr-alive-btn {
+  animation: mrInviteRing 3.6s ease-in-out infinite;
+}
+@keyframes mrInvite {
+  0%   { transform: translateX(-120%); }
+  42%  { transform: translateX(120%); }
+  100% { transform: translateX(120%); }   /* rest between passes */
+}
+@keyframes mrInviteRing {
+  0%, 100% { box-shadow: 0 0 0 rgba(224, 86, 140, 0); }
+  21%      { box-shadow: 0 0 22px rgba(224, 86, 140, 0.3); }
+  42%      { box-shadow: 0 0 0 rgba(224, 86, 140, 0); }
+}
+
+/* pressed: it is alive, the invitation is over */
+.mr.is-alive .mr-alive-btn { animation: none; }
+.mr.is-alive .mr-alive-btn::after { animation: none; opacity: 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  .mr-alive-btn, .mr-alive-btn::after { animation: none; }
+  .mr-alive-btn::after { opacity: 0; }
+}
