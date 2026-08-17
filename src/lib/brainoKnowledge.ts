@@ -20,6 +20,18 @@ export type KnowledgeEntry = {
 
 export const KNOWLEDGE_ENTRIES: readonly KnowledgeEntry[] = [
   {
+    slug: "braino-foundry-deck",
+    title: "The Foundry Deck: The Pitch, With the Missing Half Put Back",
+    category: "Design decision",
+    date: "2026-08-16",
+    dateLabel: "August 16, 2026",
+    description:
+      "The Braino Foundry pitch rebuilt as a real deck at /deck: thirty three slides, arrow keys, a static solar system, and the three things the original PDF never said, which are who Braino already is, the fact that there are two kinds of him, and the business behind it.",
+    status: "MVP",
+    platform: "Braino website",
+    number: "033",
+  },
+  {
     slug: "braino-embed",
     title: "Braino Embed: One Script Tag, the Real Braino, Anywhere",
     category: "Feature",

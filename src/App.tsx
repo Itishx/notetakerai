@@ -116,6 +116,8 @@ const OnboardingFlow = lazy(() => import("./pages/OnboardingFlow.tsx"));
 const WholeMind = lazy(() => import("./pages/WholeMind.tsx"));
 const EngineLog = lazy(() => import("./pages/EngineLog.tsx"));
 const Commands = lazy(() => import("./pages/Commands.tsx"));
+const Deck = lazy(() => import("./pages/Deck.tsx"));
+const DeckDocs = lazy(() => import("./pages/DeckDocs.tsx"));
 const NotFound = lazy(() => import("./pages/NotFound.tsx"));
 const queryClient = new QueryClient();
 const SPLASH_SKIP_PATHS = new Set(["/", "/intro", "/interactive-tour", "/spiderman-brand-new-day", "/brand-new-day"]);
@@ -167,6 +169,7 @@ function AppRoutes() {
         <Route path="/knowledge/meeting-recorder" element={<MeetingRecorderDocs />} />
         <Route path="/knowledge/two-products-and-the-browser-page" element={<TwoProductsDocs />} />
         <Route path="/knowledge/braino-foundry" element={<FoundryDocs />} />
+        <Route path="/knowledge/braino-foundry-deck" element={<DeckDocs />} />
         <Route path="/classes" element={<BrainoClasses />} />
         <Route path="/prelaunch" element={<PreLaunch />} />
         <Route path="/home-classic" element={<Index />} />
@@ -253,6 +256,8 @@ function AppRoutes() {
         <Route path="/whole-mind" element={<WholeMind />} />
         <Route path="/engine-log" element={<EngineLog />} />
         <Route path="/commands" element={<Commands />} />
+        <Route path="/deck" element={<Deck />} />
+        <Route path="/pitch" element={<Deck />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     </Suspense>
