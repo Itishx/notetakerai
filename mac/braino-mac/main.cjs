@@ -955,8 +955,108 @@ function sendToRenderer(channel, payload) {
   }
 }
 
+// The last status this side put on the notch. Command handlers say "thinking"
+// far more often than they say anything terminal (dozens of `return { ok:false }`
+// paths never send a done), and the renderer cannot tell a slow step from an
+// abandoned one. So the delegate dispatcher checks this after every command and
+// takes down a "thinking" that the handler walked away from.
+let lastTaskProgressStatus = "";
+
 function sendTaskProgress(payload) {
+  if (payload && typeof payload.status === "string") lastTaskProgressStatus = payload.status;
   sendToRenderer("braino-mac:task-progress", payload);
+}
+
+function settleTaskProgress(reason) {
+  if (lastTaskProgressStatus !== "thinking") return false;
+  logMac("task_progress.settled", { reason });
+  sendTaskProgress({ status: "ready", clearNotch: true });
+  return true;
+}
+
+// ── Interaction log ─────────────────────────────────────────────────────────
+// Every Mac turn — what was said, what he answered, which path answered it,
+// how long to first audio — goes to the shared braino-interaction-log edge
+// function so the Mac, the extension and the site read as one conversation.
+// Strictly fire-and-forget: the endpoint may not be deployed yet (a 404 is
+// noted, then backed off from rather than retried per turn), the Mac may be
+// signed out (anon key only), the network may be down. None of that may touch
+// the turn. No audio, no screenshots, texts clipped. session_id is one uuid
+// per app launch.
+const INTERACTION_SESSION_ID = crypto.randomUUID();
+const INTERACTION_LOG_TIMEOUT_MS = 5000;
+const INTERACTION_TEXT_MAX_CHARS = 12000;
+const INTERACTION_LOG_MISSING_BACKOFF_MS = 10 * 60 * 1000;
+let interactionLogMissingUntil = 0;
+
+function clipInteractionText(value) {
+  const text = String(value ?? "");
+  return text.length > INTERACTION_TEXT_MAX_CHARS ? text.slice(0, INTERACTION_TEXT_MAX_CHARS) : text;
+}
+
+function interactionUrlHost(url) {
+  try {
+    return url ? new URL(String(url)).hostname.replace(/^www\./, "") : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function logInteraction(event = {}) {
+  try {
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY || Date.now() < interactionLogMissingUntil) return;
+    const source = event && typeof event === "object" ? event : {};
+    const latency = source.latency_ms == null ? NaN : Number(source.latency_ms);
+    const body = {
+      surface: "mac",
+      session_id: INTERACTION_SESSION_ID,
+      kind: String(source.kind || "voice"),
+      mode: source.mode ? String(source.mode) : null,
+      user_text: clipInteractionText(source.user_text || ""),
+      braino_text: clipInteractionText(source.braino_text || ""),
+      route: source.route ? String(source.route) : null,
+      tts_provider: source.tts_provider ? String(source.tts_provider) : null,
+      tts_error: source.tts_error ? clipInteractionText(source.tts_error) : null,
+      latency_ms: Number.isFinite(latency) && latency >= 0 ? Math.round(latency) : null,
+      url_host: source.url_host ? String(source.url_host) : interactionUrlHost(activeMacContext?.browserUrl),
+      meta: {
+        ...(source.meta && typeof source.meta === "object" ? source.meta : {}),
+        app_version: APP_VERSION,
+        app_name: activeMacContext?.appName || null,
+      },
+    };
+    void (async () => {
+      // No refresh from a passive log: a refresh that fails offline clears the
+      // session, and tts_failure fires exactly when we're offline.
+      const authToken = await getBrainoAuthToken({ refresh: false }).catch(() => "");
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), INTERACTION_LOG_TIMEOUT_MS);
+      try {
+        const response = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/braino-interaction-log`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            apikey: SUPABASE_ANON_KEY,
+            ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+          },
+          body: JSON.stringify(body),
+          signal: controller.signal,
+        });
+        if (response.status === 404) {
+          // Server half not deployed yet. Say so, then back off instead of
+          // spending a request per turn on it; it is retried after the window.
+          interactionLogMissingUntil = Date.now() + INTERACTION_LOG_MISSING_BACKOFF_MS;
+          logMac("interaction.log.missing_endpoint", { retryInMs: INTERACTION_LOG_MISSING_BACKOFF_MS });
+        } else if (!response.ok) {
+          logMac("interaction.log.failed", { status: response.status, kind: body.kind });
+        }
+      } catch (error) {
+        logMac("interaction.log.failed", { kind: body.kind, error: error?.message || String(error) });
+      } finally {
+        clearTimeout(timeout);
+      }
+    })();
+  } catch (_) {}
 }
 
 const CURSOR_MODE_POLL_MS = 3000;
@@ -3636,7 +3736,9 @@ function voiceStep(text) {
   sendTaskProgress({ status: "thinking", text });
 }
 function voiceStepClear() {
-  sendToRenderer("braino-mac:task-progress", { status: "ready", clearNotch: true });
+  // Through sendTaskProgress, not sendToRenderer, so the "ready" is on record
+  // and settleTaskProgress does not fire a second one after the command.
+  sendTaskProgress({ status: "ready", clearNotch: true });
 }
 
 function sendVoiceModeState(mode) {
@@ -5726,6 +5828,12 @@ async function startMeetingRecording(source) {
     stealth: meetingState.stealth,
   });
   logMac("meeting.start", { source: textForLog(meetingState.source), systemAudio: audioCapturePlistState.ready });
+  logInteraction({
+    kind: "record",
+    mode: "meeting",
+    route: "meeting_recorder",
+    meta: { action: "start", source: meetingState.source, systemAudio: audioCapturePlistState.ready },
+  });
   void meetingSnapshot();
   return {
     ok: true,
@@ -5815,6 +5923,22 @@ async function stopMeetingRecording() {
     roles: Array.from(state.rolesSeen),
     source: state.transcriptText ? "transcribed" : "captions",
     transcriptChars: transcript.length,
+  });
+  // The recording itself, not its transcript: what was heard belongs in the
+  // meeting note, not in the conversation log.
+  logInteraction({
+    kind: "record",
+    mode: "meeting",
+    route: "meeting_recorder",
+    meta: {
+      action: "stop",
+      source: state.source,
+      durationMs: Date.now() - state.startedAt,
+      minutes,
+      segments: state.segmentCount,
+      transcriptSource: state.transcriptText ? "transcribed" : "captions",
+      transcriptChars: transcript.length,
+    },
   });
   if (!transcript) return { ok: true, say: "Stopped. The meeting never produced a word I could hear, so there is nothing to save." };
   sendTaskProgress({ status: "thinking", text: "Writing up the meeting" });
@@ -14273,9 +14397,16 @@ function featureEfficiencyPct(ok, durationMs) {
   return 60;
 }
 
-ipcMain.handle("braino-mac:delegate", async (_event, prompt) => {
+ipcMain.handle("braino-mac:delegate", async (event, prompt) => {
   const startedAt = Date.now();
-  const result = await runDelegate(prompt);
+  let result;
+  try {
+    result = await runDelegate(prompt);
+  } finally {
+    // Whatever the handler did (or threw), a "thinking" it did not close is
+    // closed here, before the renderer gets the result. See lastTaskProgressStatus.
+    settleTaskProgress("delegate_returned");
+  }
   const durationMs = Date.now() - startedAt;
   const ok = Boolean(result?.ok);
   if (result?.say && String(result.say).trim()) lastDelegateSay = String(result.say).trim();
@@ -14287,6 +14418,19 @@ ipcMain.handle("braino-mac:delegate", async (_event, prompt) => {
     efficiencyPct: featureEfficiencyPct(ok, durationMs),
     pendingWorkflow: result?.delegateState?.workflowStage || "",
   });
+  // The notch renderer logs its own turns (it knows the input channel and the
+  // time to first audio). The dashboard's typed box calls this directly and
+  // knows none of that, so its turns are logged here, from the sender.
+  if (dashboardWindow && !dashboardWindow.isDestroyed() && event?.sender === dashboardWindow.webContents) {
+    logInteraction({
+      kind: "typed",
+      route: "delegate",
+      user_text: String(prompt || ""),
+      braino_text: String(result?.say || ""),
+      latency_ms: durationMs,
+      meta: { source: "dashboard", ok },
+    });
+  }
   return result;
 });
 
@@ -14313,6 +14457,11 @@ ipcMain.handle("braino-mac:active-context", async () => {
 ipcMain.handle("braino-mac:log", async (_event, payload = {}) => {
   logMac(String(payload?.event || "renderer.log"), payload?.data || {});
   return { ok: true, logPath: LOG_PATH };
+});
+
+ipcMain.handle("braino-mac:log-interaction", async (_event, payload = {}) => {
+  logInteraction(payload && typeof payload === "object" ? payload : {});
+  return { ok: true };
 });
 
 ipcMain.handle("braino-mac:auth-status", async () => authStatusPayload());

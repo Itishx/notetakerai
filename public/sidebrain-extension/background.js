@@ -1097,40 +1097,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     sendResponse({ ok: true, tabId: sender?.tab?.id || null });
     return false;
   }
-  if (message.action === "sbTeamDemoReturnHome") {
-    (async () => {
-      const originTabId = Number(message.originTabId || 0) || null;
-      const closeTabId = sender?.tab?.id || null;
-      if (!originTabId) {
-        sendResponse({ ok: false, error: "Missing origin tab." });
-        return;
-      }
-      let originTab = null;
-      try { originTab = await chrome.tabs.get(originTabId); } catch (_) { originTab = null; }
-      if (!originTab?.id) {
-        sendResponse({ ok: false, error: "Original tab is gone." });
-        return;
-      }
-      try { await chrome.windows.update(originTab.windowId, { focused: true }); } catch (_) {}
-      try { await chrome.tabs.update(originTab.id, { active: true }); } catch (_) {}
-      await bgSendInlineUiMessage(originTab.id, {
-        action: "sbTeamDemoContinue",
-        originTabId: originTab.id,
-        phase: String(message.phase || ""),
-        task: String(message.task || ""),
-        song: String(message.song || ""),
-        finalText: String(message.finalText || ""),
-      });
-      if (closeTabId && closeTabId !== originTab.id) {
-        setTimeout(() => {
-          try { chrome.tabs.remove(closeTabId, () => { void chrome.runtime.lastError; }); } catch (_) {}
-        }, Math.max(0, Math.min(2000, Number(message.closeDelayMs || 0))));
-      }
-      sendResponse({ ok: true, originTabId: originTab.id, closedTabId: closeTabId });
-    })().catch((error) => sendResponse({ ok: false, error: error?.message || String(error) }));
-    return true;
-  }
-  if (message.action === "sbTeamCloseDemoTab") {
+  if (message.action === "sbDemoCloseLaunchTab") {
     (async () => {
       const originTabId = Number(message.originTabId || 0) || null;
       const closeTabId = Number(message.closeTabId || 0) || null;

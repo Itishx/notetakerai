@@ -42,6 +42,7 @@ contextBridge.exposeInMainWorld("brainoMac", {
   getWalkerSvg: () => walkerSvg,
   getWalkerSvgFor: (mascotId) => walkerSvgFor(mascotId),
   log: (payload) => ipcRenderer.invoke("braino-mac:log", payload),
+  logInteraction: (payload) => ipcRenderer.invoke("braino-mac:log-interaction", payload || {}),
   activeContext: () => ipcRenderer.invoke("braino-mac:active-context"),
   authStatus: () => ipcRenderer.invoke("braino-mac:auth-status"),
   parakeetState: () => ipcRenderer.invoke("braino-mac:parakeet-state"),

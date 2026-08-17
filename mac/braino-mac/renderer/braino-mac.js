@@ -448,6 +448,40 @@ function errorForLog(error) {
   };
 }
 
+// One line per finished turn to the shared interaction log. main.cjs owns the
+// request (auth, timeout, the endpoint); this side only says what the turn
+// looked like from here: the words each way, the path that answered, the mode
+// he was in, and how long the user waited for the first sound. Never awaited,
+// never allowed to throw into the turn that produced it.
+function currentInteractionMode() {
+  if (herMode) return "her";
+  if (dictationMode) return "hera";
+  if (meetingRecording) return "meeting";
+  if (macTeamState?.active) return "team";
+  if (mondayModeActive) return "monday";
+  if (activeVoiceMode?.name) return `voice_mode:${activeVoiceMode.name}`;
+  if (coworkEnabled) return "cowork";
+  if (musicMode) return "music";
+  return null;
+}
+
+// user-turn-end → first audible reply, from the per-turn latency record the
+// voice pipeline already keeps. Null when this turn was not spoken (typed,
+// greeting) or never reached audio.
+function voiceTurnFirstAudioMs() {
+  if (!voiceTurnInFlight) return null;   // otherwise a typed/native turn reports the previous realtime turn's latency
+  const turn = voiceLatencyTurn;
+  if (!turn?.speechStoppedAt || !turn.firstAudioAt) return null;
+  return Math.max(0, Math.round(turn.firstAudioAt - turn.speechStoppedAt));
+}
+
+function logInteraction(event = {}) {
+  try {
+    const pending = window.brainoMac.logInteraction?.({ mode: currentInteractionMode(), ...event });
+    if (pending?.catch) pending.catch(() => {});
+  } catch (_) {}
+}
+
 function startVoiceLatencyTurn(reason = "speech_started") {
   const now = performance.now();
   voiceLatencyTurn = {
@@ -814,6 +848,26 @@ let lastGlowStatus = "ready";
 let lastProcessingDetail = "";
 let musicMode = false;
 let activeVoiceMode = null;   // { name, color } while a Voice Command mode runs
+
+// Whoever sets "thinking" is supposed to set the terminal state too, and every
+// early return, barge-in, and forgotten status on the way out of a turn left
+// lastGlowStatus stuck there. That matters more than a wrong pill:
+// updateNotchFace re-derives processingActive from lastGlowStatus, so a stuck
+// "thinking" kept restarting the Thinking → Hatching → Deciding → Calibrating
+// cycle no matter how many times the caption itself was cleared. One settle
+// point for every one of those exits. It only touches a STALE status: while a
+// turn, a speech job or a realtime response is genuinely in flight it does
+// nothing, so it is safe to call from any exit path.
+function settleStaleThinkingStatus(reason, options = {}) {
+  const stale = lastGlowStatus === "thinking"
+    || (options.includeSpeaking && lastGlowStatus === "speaking");
+  if (!stale) return false;
+  if (processing || speaking || voiceTurnInFlight || realtimeResponseInFlight) return false;
+  if (realtimeActive || listening) setStatus("listening", dictationMode ? "BrainoHERA" : "Listening");
+  else setStatus("ready", "Double Space to show/hide");
+  logRenderer("status.stale_thinking.settled", { reason, realtimeActive, listening });
+  return true;
+}
 
 function updateEdgeGlow() {
   if (!edgeGlow) return;
@@ -1619,9 +1673,36 @@ window.brainoMac.onCoworkLabel?.((payload) => {
 
 // A sticky variant of nfSetThinking: no 6-second auto-clear, because a real
 // task runs for minutes. Cleared explicitly when the label goes empty.
+//
+// "Explicitly" was the only way it ever cleared, and a task that died without
+// sending its empty label (or a main-side ability that never got that far)
+// left its label in the notch cycling Thinking → Hatching until relaunch. So
+// there is now a generous safety net as well: every refresh re-arms it, which
+// keeps a task that is still narrating on screen, and only a label nobody has
+// touched for NF_STICKY_THINKING_MAX_MS gets taken down.
+const NF_STICKY_THINKING_MAX_MS = 90000;
+let nfStickyThinkingTimer = 0;
 function nfSetThinkingSticky(text) {
   nfThinkingText = String(text || "").trim();
   window.clearTimeout(nfThinkingTimer);
+  window.clearTimeout(nfStickyThinkingTimer);
+  nfStickyThinkingTimer = 0;
+  if (nfThinkingText) {
+    nfStickyThinkingTimer = window.setTimeout(() => {
+      nfStickyThinkingTimer = 0;
+      // Still genuinely working (a long Cowork ability, a delegate mid-run)? Re-arm
+      // instead of tearing a live session's label down under it.
+      if (processing || coworkBusy) { nfSetThinkingSticky(nfThinkingText); return; }
+      logRenderer("thinking.sticky.expired", { label: nfThinkingText.slice(0, 80), coworkLabel });
+      window.clearTimeout(coworkCompletionTimer);
+      coworkLabel = "";
+      coworkThinking = "";
+      coworkThinkingHistory = [];
+      // The amber "armed" dot belongs to Cowork being ON, not to the label.
+      notchFace?.classList.toggle("cowork", Boolean(coworkEnabled));
+      nfSetThinking("");
+    }, NF_STICKY_THINKING_MAX_MS);
+  }
   updateNotchFace();
 }
 
@@ -2380,6 +2461,10 @@ function nfSetThinking(text) {
           "nf-think-waiting", "nf-think-failed", "nf-think-complete",
         );
         window.brainoMac.setNotchZone?.({ expanded: false });
+        // Clearing the text is not enough on its own: updateNotchFace below
+        // would rebuild the sheet from a stale "thinking" status. Settle that
+        // too, but only when nothing is actually running (the helper checks).
+        settleStaleThinkingStatus("nf_thinking.auto_clear");
       }
       updateNotchFace();
     }, 6000);
@@ -2390,9 +2475,51 @@ function nfSetThinking(text) {
       "nf-think-waiting", "nf-think-failed", "nf-think-complete",
     );
     if (!nfAnswerMode) window.brainoMac.setNotchZone?.({ expanded: false });
+    settleStaleThinkingStatus("nf_thinking.cleared");
   }
   updateNotchFace();
 }
+
+// Last line of defence for the thinking sheet. Every owner above is supposed
+// to take it down, and each leak that was found has its own fix, but the cost
+// of one more forgotten path was a notch that cycled Thinking → Hatching until
+// relaunch. So: if the sheet has been up continuously for longer than any real
+// command takes, and no turn / speech / realtime response / cowork glance is
+// actually in flight, force it down and say so in the log. A sticky label with
+// its own expiry armed is left to that expiry (it knows more than we do here).
+const NF_THINKING_WATCHDOG_MS = 45000;
+const NF_THINKING_WATCHDOG_TICK_MS = 5000;
+let nfThinkingWatchdogSince = 0;
+window.setInterval(() => {
+  if (!notchFace?.classList.contains("nf-thinking")) {
+    nfThinkingWatchdogSince = 0;
+    return;
+  }
+  const now = Date.now();
+  if (!nfThinkingWatchdogSince) {
+    nfThinkingWatchdogSince = now;
+    return;
+  }
+  if (now - nfThinkingWatchdogSince < NF_THINKING_WATCHDOG_MS) return;
+  if (processing || speaking || voiceTurnInFlight || realtimeResponseInFlight || realtimeResponseWaiter) return;
+  if (coworkBusy || nfStickyThinkingTimer) return;
+  logRenderer("thinking.watchdog.cleared", {
+    onForMs: now - nfThinkingWatchdogSince,
+    lastGlowStatus,
+    thinkingText: nfThinkingText.slice(0, 80),
+    coworkLabel,
+    realtimeActive,
+  });
+  nfThinkingWatchdogSince = 0;
+  cancelPendingNotchThinking();
+  window.clearTimeout(coworkCompletionTimer);
+  coworkLabel = "";
+  coworkThinking = "";
+  coworkThinkingHistory = [];
+  notchFace.classList.toggle("cowork", Boolean(coworkEnabled));
+  nfSetThinking("");
+  settleStaleThinkingStatus("thinking.watchdog");
+}, NF_THINKING_WATCHDOG_TICK_MS);
 
 function updateNotchFace() {
   if (!notchFace) return;
@@ -2889,6 +3016,12 @@ async function runNotchBoot() {
   // Speak only after the words and divider have landed. This uses the same
   // Fish Audio-first `speak` path as every normal Braino reply.
   await speak(`${greeting}, ${firstName}. Everything is ready.`, { captions: false });
+  logInteraction({
+    kind: "voice",
+    route: "boot_greeting",
+    braino_text: `${greeting}, ${firstName}. Everything is ready.`,
+    meta: { flow: "iomi" },
+  });
   await wait(300);
   await runIomiBootMascotExit();
   clearIomiBootClasses();
@@ -2949,9 +3082,11 @@ async function runBootGreetingFlow() {
     const auth = await window.brainoMac.authStatus().catch(() => null);
     const firstName = String(auth?.displayName || "").split(" ")[0]?.trim() || "";
     lastEngagedAt = Date.now(); // present + awake, mic stays OFF
-    void speak(firstName
+    const greetingLine = firstName
       ? `${firstName}, press Control twice whenever you want me.`
-      : "Press Control twice whenever you want me.");
+      : "Press Control twice whenever you want me.";
+    void speak(greetingLine);
+    logInteraction({ kind: "voice", route: "boot_greeting", braino_text: greetingLine, meta: { flow: "notch" } });
   } catch (error) {
     logRenderer("boot.greeting.failed", { error: errorForLog(error) });
   }
@@ -4707,6 +4842,13 @@ async function drainRealtimeStreamTts() {
       if (result?.error) {
         streamState.error = result.error;
         logRenderer("realtime.chat.tts_stream_failed", { error: errorForLog(result.error) });
+        logInteraction({
+          kind: "tts_failure",
+          tts_provider: "fish_stream",
+          tts_error: result.error?.message || String(result.error),
+          braino_text: currentFetch.text,
+          route: "realtime_chat",
+        });
         break;
       }
       const played = await playTtsFetchResult(result, streamState.generation, currentFetch.text);
@@ -4814,12 +4956,31 @@ async function speak(text, options = {}) {
     } catch (streamError) {
       if (generation !== speechGeneration || isAbortLike(streamError)) return;
       logRenderer("tts.streaming.failed", { error: errorForLog(streamError) });
+      logInteraction({
+        kind: "tts_failure",
+        tts_provider: "fish_stream",
+        tts_error: streamError?.message || String(streamError || ""),
+        braino_text: line,
+        route: "speak",
+      });
     }
     if (!spoke && generation === speechGeneration) {
       const response = await window.brainoMac.tts(line, herMode ? HER_FISH_VOICE_ID : macPersonaRefId());
       // The IPC TTS request itself cannot be aborted from the renderer. Treat
       // its return as another cancellation boundary before creating a player.
       if (generation !== speechGeneration) return;
+      if (!(response?.ok && response.dataUrl)) {
+        // Both Fish paths are gone at this point and he is about to fall back
+        // to the system voice. That is exactly the failure worth a record.
+        logInteraction({
+          kind: "tts_failure",
+          tts_provider: "fish_ipc",
+          tts_error: String(response?.error || "no_audio"),
+          braino_text: line,
+          route: "speak",
+          meta: { fallback: "system_say" },
+        });
+      }
       if (response?.ok && response.dataUrl) {
         const audio = new Audio(response.dataUrl);
         setSpeechAudio(audio);
@@ -4871,6 +5032,9 @@ async function speak(text, options = {}) {
         setStatus("listening", "Listening");
         scheduleRealtimeIdleShutdown("speech_done");
       } else if (!listening && !processing) setStatus("ready", "Double Space to show/hide");
+      // The two branches above defer to whoever owns `processing`; if nobody
+      // does by now, a "thinking" left from before this line must not outlive it.
+      else settleStaleThinkingStatus("speech_done");
     }
   }
 }
@@ -4934,6 +5098,20 @@ async function runDelegate(prompt, options = {}) {
     });
     showFiles(result?.files || []);
     await speak(result?.say || "Done.");
+    logInteraction({
+      kind: "delegate",
+      route: "delegate",
+      user_text: text,
+      braino_text: String(result?.say || "Done."),
+      latency_ms: voiceTurnFirstAudioMs(),
+      meta: {
+        runId,
+        ok: Boolean(result?.ok),
+        input: options.source || (options.keepRealtime ? "voice" : "typed"),
+        filesCount: Array.isArray(result?.files) ? result.files.length : 0,
+        workflowStage: result?.delegateState?.workflowStage || "",
+      },
+    });
     if (result?.afterSpeechAction) {
       logRenderer("delegate.after_speech_action.start", {
         runId,
@@ -4966,6 +5144,14 @@ async function runDelegate(prompt, options = {}) {
     });
     await speak(`Delegate error: ${error?.message || "something broke"}.`);
     setStatus("error", "Delegate error");
+    logInteraction({
+      kind: "delegate",
+      route: "delegate",
+      user_text: text,
+      braino_text: `Delegate error: ${error?.message || "something broke"}.`,
+      latency_ms: voiceTurnFirstAudioMs(),
+      meta: { runId, ok: false, input: options.source || (options.keepRealtime ? "voice" : "typed"), error: error?.message || "delegate_error" },
+    });
   } finally {
     if (runId === delegateGeneration) {
       processing = false;
@@ -4973,6 +5159,12 @@ async function runDelegate(prompt, options = {}) {
         listening = true;
         setStatus("listening", "Listening");
         markRealtimeActivity("delegate_done");
+      } else {
+        // Without a live session nothing else will touch the status after
+        // this. speak() above deferred to us because `processing` was still
+        // set, so a leftover "thinking" (or its "speaking") is ours to settle,
+        // otherwise updateNotchFace keeps the phase cycle alive from it.
+        settleStaleThinkingStatus("delegate_done", { includeSpeaking: true });
       }
     }
   }
@@ -5279,6 +5471,12 @@ function interruptVoiceTurn(reason = "manual_stop", via = "unknown") {
   processing = false;
   stopSpeechOutput();
   setRealtimeMicEnabled(true);
+  // Bumping delegateGeneration above orphans the interrupted turn's finally
+  // blocks, so nobody downstream will settle its "thinking" any more. The
+  // pending sheet and the status come down here, with the interruption itself.
+  cancelPendingNotchThinking();
+  nfSetThinking("");
+  settleStaleThinkingStatus(`interrupted:${via}`);
   markVoiceLatency("interrupted", { reason, via });
   logRenderer("voice.interrupted", {
     reason,
@@ -5566,6 +5764,12 @@ async function answerViaRealtimeChat(prompt) {
     processing = false;
     speaking = false;
     setTalk(false);
+    // This return skips the finally below, and the caller falls back to
+    // runDelegate, which sets its own "thinking". If it did not (or bailed
+    // early), the one set above was permanent. Take it down here.
+    cancelPendingNotchThinking();
+    nfSetThinking("");
+    settleStaleThinkingStatus("realtime_chat.not_sent");
     return false;
   }
 
@@ -5589,6 +5793,21 @@ async function answerViaRealtimeChat(prompt) {
     } else if (!streamState?.spoke && finalText && generation === speechGeneration) {
       await speak(finalText);
     }
+    logInteraction({
+      kind: "voice",
+      route: "realtime_chat",
+      user_text: text,
+      braino_text: finalText,
+      latency_ms: voiceTurnFirstAudioMs(),
+      meta: {
+        runId,
+        status: result?.status || "unknown",
+        spoke: Boolean(streamState?.spoke),
+        streamTtsError: streamState?.error ? String(streamState.error?.message || streamState.error) : null,
+        engine: realtimeVoiceEngine,
+        moment: macCurrentMoment,
+      },
+    });
     return Boolean(finalText || streamState?.spoke);
   } catch (error) {
     logRenderer("realtime.chat.error", { error: errorForLog(error) });
@@ -5605,10 +5824,20 @@ async function answerViaRealtimeChat(prompt) {
       processing = false;
       setTalk(false);
       finishReplyCaption(generation);
+      // A turn that produced no words (timeout, cancel, error) never reached
+      // "speaking", which is what normally retires the thinking sheet, so its
+      // sheet (or the reveal timer about to open one) would sit there cycling.
+      cancelPendingNotchThinking();
+      if (!nfFlowResponseText) nfSetThinking("");
       if (realtimeActive) {
         listening = true;
         setStatus("listening", "Listening");
         scheduleRealtimeIdleShutdown("realtime_chat_done");
+      } else {
+        // The session can be gone by the time a timeout / cancel / error
+        // resolves the waiter (this is exactly the path a dropped data channel
+        // takes). Nobody else will settle the "thinking" set at the top then.
+        settleStaleThinkingStatus("realtime_chat_done", { includeSpeaking: true });
       }
     }
   }
@@ -6456,6 +6685,10 @@ function flushRealtimeTranscript(reason) {
         listening = true;
         setStatus("listening", "Listening");
         scheduleRealtimeIdleShutdown("turn_done");
+      } else {
+        // The turn may have torn the session down on its way out (her mode,
+        // yap mode, an error). Whatever "thinking" it left is nobody's now.
+        settleStaleThinkingStatus("voice_turn_done");
       }
     }
   })();
@@ -7205,7 +7438,7 @@ async function startLegacyCommandCapture(reason = "") {
     }
 
     listening = false;
-    if (!(await runMacTeamInput(transcript))) void runDelegate(transcript);
+    if (!(await runMacTeamInput(transcript))) void runDelegate(transcript, { source: "voice_native" });
   } catch (error) {
     if (token !== listenToken) return;
     logRenderer("voice.fallback.error", { error: errorForLog(error) });
@@ -7214,7 +7447,7 @@ async function startLegacyCommandCapture(reason = "") {
     setBubble(`Voice error: ${error?.message || "native speech failed"}`, 3600);
     const typed = window.prompt("Braino Mac delegate command");
     if (typed) {
-      if (!(await runMacTeamInput(typed))) void runDelegate(typed);
+      if (!(await runMacTeamInput(typed))) void runDelegate(typed, { source: "typed" });
     }
   } finally {
     if (token === listenToken && !processing) {
@@ -8809,7 +9042,23 @@ window.brainoMac.onAuthRequired(() => {
 window.brainoMac.onTaskProgress((progress) => {
   // explicit caption clear — lets a finished step settle the notch back to the
   // compact arch immediately instead of waiting out the 6s auto-clear.
-  if (progress.clearNotch) { try { nfSetThinking(""); } catch (_) {} return; }
+  //
+  // The status on the same payload must land too. voiceStepClear sends
+  // {status:"ready", clearNotch:true}, and this early return used to drop the
+  // status, so lastGlowStatus stayed "thinking" after every Voice Command and
+  // updateNotchFace rebuilt the phase cycle from it the moment the caption was
+  // gone. A "ready" here goes through the settle helper rather than straight
+  // to setStatus so a live realtime session keeps "listening", and a turn
+  // still running on this side keeps its own status until it finishes.
+  if (progress.clearNotch) {
+    try {
+      if (progress.status && progress.status !== "ready") setStatus(progress.status, progress.text || progress.status);
+      cancelPendingNotchThinking();
+      nfSetThinking("");
+      settleStaleThinkingStatus("task_progress.clear_notch");
+    } catch (_) {}
+    return;
+  }
   if (progress.status) setStatus(progress.status, progress.text || progress.status);
   if (progress.text) {
     if (walkerHome && notchFaceEnabled && !herMode) nfSetThinking(progress.text);

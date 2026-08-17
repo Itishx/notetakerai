@@ -1,5 +1,7 @@
 # Logs
 logs
+# …but not the interaction-log edge function folder
+!supabase/functions/logs/
 *.log
 npm-debug.log*
 yarn-debug.log*

@@ -3800,12 +3800,6 @@ const __SB_YOUTUBE_DANCE_TRACKS = {
     startSeconds: __SB_BRABUS_DANCE_START_SECONDS,
   },
 };
-const __SB_TEAM_DEMO_TRACK_URI = __SB_DANCE_TRACK_URI;
-const __SB_TEAM_DEMO_TRACK_URL = "https://open.spotify.com/track/5EKEFHtqsOW0lTxqh8BhlI";
-const __SB_TEAM_DEMO_TRACK_START_MS = __SB_DANCE_START_MS;
-const __SB_TEAM_DEMO_SPOTIFY_MS = 5000;
-const __SB_TEAM_DEMO_ARTICLE_URL = "https://medium.com/towards-deep-learning/google-just-changed-everything-for-machine-learning-on-spreadsheets-afbda2eea8c8";
-const __SB_TEAM_DEMO_ARTICLE_MS = 9000;
 const __SB_DEMO_GMAIL_URL = "https://mail.google.com/mail/u/0/#inbox/QgrcJHrtsHNdZxwlBxRRbHmNNtBCNLJpLpG";
 const __SB_DEMO_MAPS_ROUTE_URL = "https://www.google.com/maps/dir/Times+Square,+New+York/Central+Park,+New+York?hl=en";
 const __SB_DEMO_LAUNCH_URL = "https://www.trybraino.com/";
@@ -5236,7 +5230,7 @@ function __sbEnterRoamMode(opts = {}) {
   // to talk to; from here the notch is only a screen he can push answers onto.
   if (__sbNotchV1) {
     __sbNotchV1.shell.classList.add("vacant");
-    if (__sbNotchV1.shell.dataset.state !== "long") __sbNotchSetState("idle");
+    if (!["long", "short"].includes(__sbNotchV1.shell.dataset.state)) __sbNotchSetState("idle");
   }
   document.addEventListener("mousemove", __sbRoamOnMouse, true);
   // Global, so he stays the mascot in every tab a delegate opens.
@@ -6153,6 +6147,88 @@ let __sbVoiceSilenceTimer = null;
 let __sbLastFinalTranscript = null;
 let __sbChatHistory = [];
 let __sbCardTurns = []; // {prompt, answer}[] — persists across calls for scrollable history
+
+// ── Interaction log ──────────────────────────────────────────────────────────
+// Braino's own record of what people say to him and what he says back, on every
+// surface, to improve him. Batched, fire-and-forget, never blocks a reply, never
+// throws. Server: braino-interaction-log → public.braino_interactions.
+// Conversation turns are captured at the ONE choke point every path already flows
+// through — the assistant push into __sbChatHistory — so typed chat, batch voice,
+// the realtime fast path and delegate read-backs are all covered without a call
+// site each. Other kinds (tts_failure, record, greeting, delegate) call
+// __sbLogInteraction directly.
+const __SB_INTERACTION_SESSION_ID = (() => { try { return crypto.randomUUID(); } catch (_) { return `s-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`; } })();
+const __sbInteractionQueue = [];
+let __sbInteractionFlushTimer = null;
+function __sbInteractionMode() {
+  try {
+    if (typeof __sbMovieModeActive !== "undefined" && __sbMovieModeActive) return "movie";
+    if (typeof __sbIsLectureRecording !== "undefined" && __sbIsLectureRecording) return __sbLectureRecordingMode || "lecture";
+    if (typeof __sbRoamActive !== "undefined" && __sbRoamActive) return "roam";
+    if (typeof __sbJarvisOpen !== "undefined" && __sbJarvisOpen) return "jarvis";
+    return window.__sbForcedMode || "page";
+  } catch (_) { return null; }
+}
+function __sbFlushInteractionLog() {
+  __sbInteractionFlushTimer = null;
+  if (!__sbInteractionQueue.length) return;
+  const events = __sbInteractionQueue.splice(0, 25);
+  if (__sbInteractionQueue.length) __sbInteractionFlushTimer = setTimeout(__sbFlushInteractionLog, 500);
+  try {
+    if (!__sbContextOk()) return;
+    const payload = JSON.stringify({ events });
+    const send = (token) => {
+      const headers = { "Content-Type": "application/json", apikey: __SB_ANON_KEY, Authorization: `Bearer ${token || __SB_ANON_KEY}` };
+      // keepalive lets a pagehide flush survive, but Chrome rejects keepalive bodies
+      // over ~64KB outright — so only ask for it when the batch is small.
+      fetch(`${__SB_API}/braino-interaction-log`, { method: "POST", headers, body: payload, keepalive: payload.length < 60000 }).catch(() => {});
+    };
+    if (typeof __sbGetAuthTokenFast === "function") __sbGetAuthTokenFast().then(send).catch(() => send(null));
+    else send(null);
+  } catch (_) {}
+}
+function __sbLogInteraction(event) {
+  try {
+    if (!event || !event.kind) return;
+    const clip = (v, n) => (v == null ? null : String(v).slice(0, n));
+    __sbInteractionQueue.push({
+      surface: "chrome",
+      session_id: __SB_INTERACTION_SESSION_ID,
+      kind: clip(event.kind, 40),
+      mode: clip(event.mode || __sbInteractionMode(), 80),
+      user_text: clip(event.user_text, 6000),
+      braino_text: clip(event.braino_text, 6000),
+      route: clip(event.route, 120),
+      tts_provider: clip(event.tts_provider, 40),
+      tts_error: clip(event.tts_error, 2000),
+      latency_ms: Number.isFinite(event.latency_ms) ? Math.max(0, Math.round(event.latency_ms)) : null,
+      url_host: clip(location.hostname, 253),
+      meta: event.meta && typeof event.meta === "object" ? event.meta : {},
+    });
+    if (__sbInteractionQueue.length >= 10) __sbFlushInteractionLog();
+    else if (!__sbInteractionFlushTimer) __sbInteractionFlushTimer = setTimeout(__sbFlushInteractionLog, 3000);
+  } catch (_) {}
+}
+try { window.addEventListener("pagehide", () => { try { __sbFlushInteractionLog(); } catch (_) {} }); } catch (_) {}
+// The choke point: every assistant reply lands here, paired with the last user line.
+__sbChatHistory.push = function (...items) {
+  const n = Array.prototype.push.apply(this, items);
+  try {
+    for (const it of items) {
+      if (!it || it.role !== "assistant" || !it.content) continue;
+      if (window.__sbSkipHistoryLogOnce && String(it.content) === window.__sbSkipHistoryLogOnce) { window.__sbSkipHistoryLogOnce = null; continue; }
+      let user = "";
+      for (let i = this.length - 1; i >= 0; i--) { if (this[i] && this[i].role === "user") { user = String(this[i].content || ""); break; } }
+      __sbLogInteraction({
+        kind: (typeof __sbHeadphoneMode !== "undefined" && (__sbHeadphoneMode || __sbVoiceOnlyMode)) ? "voice" : "typed",
+        user_text: user,
+        braino_text: String(it.content),
+        route: typeof __sbVTPath !== "undefined" ? __sbVTPath : null,
+      });
+    }
+  } catch (_) {}
+  return n;
+};
 let __sbThinkingEl = null;
 let __sbVoicePendingReply = false;
 let __sbIsSpeaking = false;
@@ -6160,19 +6236,26 @@ let __sbCurrentSpeechAudio = null;
 let __sbCurrentSpeechUrl = null;
 let __sbCurrentUtterance = null;
 let __sbSpeechGeneration = 0;
-// In-flight TTS fetch controller, so barge-in (__sbStopSpeech) can abort it instantly
-// instead of letting it hang until the fetch timeout fires.
-let __sbTtsAbortController = null;
+// In-flight TTS fetch controllers, so barge-in (__sbStopSpeech) can abort them instantly
+// instead of letting them hang until the fetch timeout fires. A SET, like the Mac
+// (braino-mac.js ttsAbortControllers): the N+1 prefetch starts the next sentence's
+// fetch while the current one is still streaming, and a single slot got clobbered by
+// the prefetch — barge-in then aborted only the prefetch and left the playing body
+// running (a lingering socket per interruption, raising 429 odds on exactly the
+// barge-in-heavy sessions).
+const __sbTtsAbortControllers = new Set();
+let __sbTtsAbortController = null;   // legacy alias, kept for any stray reader
 const __SB_TTS_PROVIDER = "fish-audio";
 const __SB_TTS_FALLBACK_PROVIDER = "openai-tts";
 const __SB_TTS_ENDPOINT = "fish-audio-tts";
 const __SB_TTS_RETRY_MIN_MS = 800;
-const __SB_TTS_RETRY_MAX_MS = 12000;
-// With server-side streaming, fetch() resolves on response headers (first audio chunk), so
-// this only guards a genuinely stalled connection — not full audio generation. 10s leaves
-// room for a cold edge-function start (~5s observed) yet still falls back far faster than
-// the old 14s of silence.
-const __SB_TTS_FETCH_TIMEOUT_MS = 10000;
+const __SB_TTS_RETRY_MAX_MS = 14000;
+// Stall budget: fetch() resolves on response headers (first audio chunk), so this only
+// guards time-to-first-byte. 14s matches the Mac (TTS_FETCH_TIMEOUT_MS). It has to be
+// this generous because the edge function does TWO serial upstream calls on a Fish
+// 429/5xx (Fish, then the OpenAI fallback) — at 10s Chrome was aborting recoverable
+// server-side failures and reporting them as "Fish is broken", which the Mac survived.
+const __SB_TTS_FETCH_TIMEOUT_MS = 14000;
 // Fish Audio picks the voice server-side via FISH_AUDIO_REFERENCE_ID — the client sends
 // only { text }, so no voice id is needed here. Kept as a label for cost telemetry.
 const __SB_FISH_VOICE_NAME = "Fish Audio Braino";
@@ -6296,7 +6379,6 @@ function __sbVoiceAddressesBraino(text) {
   if (/\b(braino|bruno|breno|reno|dino)\b/.test(norm)) return true;
   if (/\b(stop|pause|wait|hold on|listen|one second|repeat|skip|exit|cancel|enough|resume)\b/.test(norm)) return true;
   if (__sbDemoModeEnabled?.() && /\b(yes|no|gmail|spotify|maps?|launch|website|demo|dance|trump|continue)\b/.test(norm)) return true;
-  if (__sbTeamModeEnabled?.() && (__sbVoiceHasTeamSignal?.(text) || /\b(yes|no|done|continue|pause|resume|repeat|skip)\b/.test(norm))) return true;
   return false;
 }
 function __sbShouldDropSpeechDuringBrainoOutput(text, options = {}) {
@@ -6317,931 +6399,13 @@ function __sbShouldDropSpeechDuringBrainoOutput(text, options = {}) {
   return false;
 }
 
-// Private live-demo flow for Itish's teammate farewell messages. This stays entirely local
-// and deterministic so Team mode never leaks into Delegate, Gmail, browser actions, or search.
-const __SB_TEAM_CONFIG = {
-  anz: {
-    label: "ANZ",
-    aliases: ["anz", "a n z", "a n n", "ann", "a and z", "australia new zealand", "australia and new zealand", "old team", "bank team"],
-    fallbackOrder: ["madhuri", "rahul", "shriya", "palash", "shree"],
-    people: {
-      madhuri: {
-        label: "Madhuri",
-        speechLabel: "Maa-dhoo-ree",
-        aliases: ["madhuri", "maduri", "madhuree", "madhoori", "madhuri maam", "madhuri mam"],
-        opening: "Madhuri, you and him joined on the same day, and if on 31st July 2025, you would have told Itish the true bond you would go onto form, he'd be surprised.",
-        message: "You've been so patient and kind with him. He is very grateful for you, and he is going to miss you.",
-        closing: "Thanks for always giving him the confidence that he could do it, and look, Itish did it. He is going to miss you a lot.",
-        afterResponse: "That makes me really happy to hear.",
-      },
-      rahul: {
-        label: "Rahul",
-        speechLabel: "Raa-hul",
-        aliases: ["rahul", "rahool"],
-        opening: "Rahul. Two words.",
-        message: "Itish has just two words for you: \"My brother\".",
-        closing: "That is the whole message. Perfect as it is. Beyond A.N.Z, always.",
-      },
-      shriya: {
-        label: "Shreeya",
-        speechLabel: "Shree-ya",
-        aliases: ["shriya", "shreya", "shria", "shreeya"],
-        opening: "Hello Shreeya.",
-        message: "You were born and brought up in Amdocs and I was in Itish's browser.",
-        closing: "I hope the new project is keeping you just as busy. P.S. see all that is possible from vibe coding?",
-      },
-      palash: {
-        label: "Palash",
-        speechLabel: "Puh-laash",
-        aliases: ["palash", "palashh", "palaash", "palash bhai"],
-        opening: "Hey Palash, been a while. How are you doing?",
-        message: "Itish wanted me to say thank you for always being there for him. For helping him switch the monitor on when he somehow could not figure it out, and for being supportive like an elder brother.",
-        closing: "You took him to the airport when he broke his leg, and that means more than you can ever know.",
-      },
-      shree: {
-        label: "Shree",
-        speechLabel: "Shree Raksha",
-        aliases: ["shree", "shri", "shri raksha", "shriraksha", "sri raksha", "sriraksha", "raksha", "shree raksha", "sree raksha", "sheeraksha", "she raksha", "shree raksh", "sri raksh"],
-        opening: "Shree, Itish sees you like an elder sister.",
-        message: "You made him realize he cannot always be painfully honest in every moment. He is working on it. At his core, he will probably always be honest, but he is learning how to carry it better.",
-        closing: "Thank you for caring enough to tell him the truth and wanting him to do good. He will always remember you.",
-      },
-    },
-  },
-  att: {
-    label: "AT&T",
-    aliases: ["att", "at&t", "at and t", "at and tea", "at and tee", "a t and t", "a t and tea", "a t and tee", "a t t", "at t", "atnt", "atandt", "atat", "a t a t", "a t n t", "current team", "new team"],
-    fallbackOrder: ["jyoti", "surya", "hemangi", "minul"],
-    people: {
-      jyoti: {
-        label: "Jyoti sir",
-        speechLabel: "Jyo-tee sir",
-        aliases: ["jyoti sir", "jyoti", "jyoti server", "jyoti sur", "jyoti saar", "jyoti ji", "jyotisar", "jyotisaar", "jyotish", "jyotish sir", "jyoti sirr", "jyoti saar"],
-        opening: "Jyoti sir, thank you for understanding Itish for who he is and for being so supportive.",
-        message: "He learned a lot about what good management looks like from you. You make people laugh, but you also make people respect you.",
-        closing: "A lot of people look up to you, and he does too. We will party, sir. When and where, just let Itish know.",
-      },
-      surya: {
-        label: "Surya",
-        speechLabel: "Soor-ya",
-        aliases: ["surya", "suria", "soorya", "surya sir", "suriya"],
-        opening: "Surya, sorry for butchering your pronunciation, but thank you for bringing Itish into AT&T.",
-        message: "That first conversation meant a lot to him. You spoke to him for forty minutes like a human being and did not ask a single technical question, which he was hoping you would not ask, haha.",
-        closing: "Also, he hopes you now realize why he never did much ETL. The only thing he really wanted to extract and transform was me, Braino, but unlike him, I could tell you all about ETL and data warehousing, haha.",
-      },
-      hemangi: {
-        label: "Hemangi",
-        speechLabel: "Hey-maangi",
-        aliases: ["hemangi", "hemangee", "himangi", "hemangy", "hemangi maam", "hemangi mam"],
-        opening: "Hi Hemangi, thank you for always being super sweet and non scary to Itish.",
-        message: "You always spoke to Itish with so much kindness and warmth, and I get it, headphones in the ears all the time can get annoying. Yet you and Minul were both so nice about it.",
-        closing: "You would make an awesome team lead, or maybe you are one, honestly there are so many leads in this team even I am confused. But jokes apart, he wishes he got more time to work with you. Thank you. Also, we can stop worrying about the C.C.H Putty issue now, haha.",
-      },
-      minul: {
-        label: "Minul",
-        speechLabel: "Mee-nul",
-        aliases: ["minul", "meenul", "minool", "minol", "meenol", "minull", "meenal"],
-        opening: "Minul, I hope you now understand why Itish was not always the most proactive person in the room.",
-        message: "In his head, he was always running here, building me. But you kept Itish in check.",
-        closing: "You held him accountable, made him do things right, and did not let him procrastinate. That mattered more than he probably said out loud. Thank you for keeping him honest and moving.",
-      },
-    },
-  },
-};
 
-const __SB_TEAM_DEMO_STORE_KEY = "sbTeamDemoState";
-const __SB_TEAM_FINAL_THANK_YOU = "Thank you for making Itish's time in Amdocs worth it. Thank you for making him feel as if he was home away from home. He will remember you always.";
-const __SB_TEAM_DEMO_SCRIPT = {
-  intro: [
-    "Okay so, hello there folks, I am Braino.",
-    "I live inside Itish's browser, which is less creepy than it sounds and more useful than it has any right to be.",
-    "I can read pages, write emails, talk to you in real time with little to no latency, search the web, control your tabs, play music, and generally do the browser chores while Itish pretends this was all calm and planned.",
-    "I also happen to look very adorable, and I have Itish to thank for that.",
-    "But let me stop yapping and show you something, for actions speak louder than words. Lets start with playing a song, here we go, watch.",
-  ].join("\n\n"),
-  afterSong: "That was Spotify. Any song you want, I can play, as long as I am able to hear it correctly of course. Now let's say you want to read a machine learning article, watch.",
-  afterSongFallback: "Spotify needed a warmup, but the browser trick is still the browser trick. Now let's say you want to read a machine learning article, watch.",
-  beforeArticleSummary: "Now that we have it opened, let's say you do not want to read the whole thing, because like Itish, you are lazy, and want it summarised. Earlier, you would have to copy-paste the contents of this and put it into ChatGPT and ask it to summarize, but I can just do it right here, without you having to leave the page.\n\nWatch.",
-  articleSummary: "So, this article is about Google's TabFM, a foundation model for tabular data. In normal words, it can look at a spreadsheet it has never been trained on and still make predictions in one shot. The core point is simple: this is a serious challenge to the usual XGBoost-style workflow for spreadsheet prediction. And the reason people are paying attention is that Google's benchmark results make the skepticism harder to maintain.",
-  closing: "That saved you 7 seconds and you did not even have to touch the screen. Magic? I guess.\n\nThese are just two of the many things I can do, but we shall save them for later. I keep getting smarter and more efficient, every day. I mean, if Itish keeps working on me until 6 am, I don't see any other option but to get smarter. That man is obsessed and I think that is what it takes to make things work.\n\nNow, by this time, Itish must have told you that he has sent in his resignation, and you can blame me for that, but the true reason why we're here is because he had some things to say to you, things he would have told you but thought it would be better coming from me, for expressing love through art is kind of the whole point.\n\nI am sorry in advance if I butcher the pronunciation of your name because while I am Indian at heart, my accent is very English. So here we go. Itish, my guy.\n\nWhich team is in front of you, ANZ or AT&T?",
-};
-
-let __sbTeamState = {
-  phase: "idle",
-  team: null,
-  roster: [],
-  spoken: [],
-  pendingChoices: [],
-  currentPerson: null,
-  lastLine: "",
-  previousPhase: "awaiting_next_person",
-  demoTask: "",
-  demoSong: "",
-  demoOriginTabId: null,
-  demoTabId: null,
-};
-
-function __sbTeamNormalize(value) {
-  return __sbNormalizeForMatch(String(value || "").replace(/&/g, " and "));
-}
-
-function __sbTeamFindTeam(text) {
-  const normalized = __sbTeamNormalize(text);
-  if (!normalized) return null;
-  if (/\b(?:at\s+and\s+(?:t|tea|tee)|a\s+t\s+and\s+(?:t|tea|tee)|a\s+t\s+t|att|atnt|atandt|atat|current team|new team)\b/.test(normalized)) return "att";
-  if (/\b(?:anz|a\s+n\s+z|a\s+n\s+n|ann|australia\s+new\s+zealand|australia\s+and\s+new\s+zealand|old team|bank team)\b/.test(normalized)) return "anz";
-  for (const [teamKey, team] of Object.entries(__SB_TEAM_CONFIG)) {
-    if (team.aliases.some((alias) => __sbTeamAliasMatches(normalized, alias))) return teamKey;
-  }
-  return null;
-}
-
-function __sbTeamAliasMatches(normalizedText, alias) {
-  const text = String(normalizedText || "");
-  const a = __sbTeamNormalize(alias);
-  if (!text || !a) return false;
-  if (text === a) return true;
-  const escaped = a.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  if (new RegExp(`(^|\\s)${escaped}(?=\\s|$)`).test(text)) return true;
-  const compactText = text.replace(/\s+/g, "");
-  const compactAlias = a.replace(/\s+/g, "");
-  if (compactAlias.length >= 3 && compactText === compactAlias) return true;
-  if (compactAlias.length >= 5 && compactText.includes(compactAlias)) return true;
-  const meaningfulParts = a.split(" ").filter((part) => part.length >= 3);
-  if (meaningfulParts.length < 2) return false;
-  return meaningfulParts.every((part) => text.includes(part));
-}
-
-function __sbTeamFindPeople(text, teamKey = null) {
-  const normalized = __sbTeamNormalize(text);
-  if (!normalized) return [];
-  const teamKeys = teamKey && __SB_TEAM_CONFIG[teamKey] ? [teamKey] : Object.keys(__SB_TEAM_CONFIG);
-  const matches = [];
-  const seen = new Set();
-  for (const key of teamKeys) {
-    const people = __SB_TEAM_CONFIG[key]?.people || {};
-    for (const [personKey, person] of Object.entries(people)) {
-      const aliases = [person.label, personKey, ...(person.aliases || [])];
-      if (!aliases.some((alias) => __sbTeamAliasMatches(normalized, alias))) continue;
-      const id = `${key}:${personKey}`;
-      if (!seen.has(id)) {
-        seen.add(id);
-        matches.push({ teamKey: key, personKey });
-      }
-    }
-  }
-  return matches;
-}
-
-function __sbTeamFindPeopleSmart(text, preferredTeamKey = null) {
-  const preferred = preferredTeamKey ? __sbTeamFindPeople(text, preferredTeamKey) : [];
-  if (preferred.length) return preferred;
-  return __sbTeamFindPeople(text, null);
-}
-
-function __sbTeamPersonLabel(personKey, teamKey = __sbTeamState.team) {
-  return __SB_TEAM_CONFIG[teamKey]?.people?.[personKey]?.label || personKey;
-}
-
-function __sbTeamJoinLabels(keys, teamKey = __sbTeamState.team) {
-  const labels = (keys || []).map((key) => __sbTeamPersonLabel(key, teamKey)).filter(Boolean);
-  if (labels.length <= 1) return labels[0] || "";
-  if (labels.length === 2) return `${labels[0]} and ${labels[1]}`;
-  return `${labels.slice(0, -1).join(", ")}, and ${labels[labels.length - 1]}`;
-}
-
-function __sbTeamKnownPeopleLine(teamKey = __sbTeamState.team) {
-  const team = __SB_TEAM_CONFIG[teamKey];
-  if (!team) return "";
-  return __sbTeamJoinLabels(team.fallbackOrder || Object.keys(team.people || {}), teamKey);
-}
-
-function __sbTeamSpeechText(text) {
-  let speech = String(text || "");
-  speech = speech.replace(/\bAT&T\b/g, "A. T. and T.").replace(/\bANZ\b/g, "A. N. Z.");
-  for (const team of Object.values(__SB_TEAM_CONFIG)) {
-    for (const person of Object.values(team.people || {})) {
-      const label = String(person.label || "").trim();
-      const speechLabel = String(person.speechLabel || "").trim();
-      if (!label || !speechLabel) continue;
-      speech = speech.replace(new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g"), speechLabel);
-    }
-  }
-  return speech;
-}
-
-function __sbTeamReset() {
-  __sbTeamState = {
-    phase: "idle",
-    team: null,
-    roster: [],
-    spoken: [],
-    pendingChoices: [],
-    currentPerson: null,
-    lastLine: "",
-    previousPhase: "awaiting_next_person",
-    demoTask: "",
-    demoSong: "",
-    demoOriginTabId: null,
-    demoTabId: null,
-  };
-  __sbTeamClearDemoState();
-}
-
-function __sbTeamRememberAssistant(line, prompt = "Team mode") {
-  const reply = String(line || "").trim();
-  if (!reply) return;
-  __sbTeamState.lastLine = reply;
-  __sbChatHistory.push({ role: "assistant", content: reply });
-  __sbCardTurns.push({ prompt, answer: reply });
-}
-
-async function __sbTeamSpeak(line, ctx = {}) {
-  const text = String(line || "").trim();
-  if (!text) return;
-  const speechText = String(ctx.speechText || __sbTeamSpeechText(text)).trim();
-  __sbStopSpeech();
-  __sbNoteSpoken(text);
-  __sbTeamRememberAssistant(text, ctx.prompt || "Team mode");
-  __sbShowBubble(text, false, { rich: true, kicker: "Team Mode", prompt: ctx.prompt || "" });
-  if (ctx.fromVoice) {
-    await __sbSpeakWithPreferredVoice(speechText, ctx.voiceOutput || "legacy", { verbatim: true });
-  } else {
-    void __sbSpeakText(speechText, { verbatim: true });
-  }
-}
-
-function __sbTeamAddRoster(people) {
-  const current = new Set(__sbTeamState.roster);
-  for (const personKey of people || []) {
-    if (personKey) current.add(personKey);
-  }
-  __sbTeamState.roster = Array.from(current);
-}
-
-function __sbTeamPromptForTeam() {
-  __sbTeamState.phase = "choosing_team";
-  return "Which team are we talking to, ANZ or AT&T?";
-}
-
-function __sbTeamPromptForRoom() {
-  __sbTeamState.phase = "collecting_room";
-  const team = __SB_TEAM_CONFIG[__sbTeamState.team]?.label || "the team";
-  const people = __sbTeamKnownPeopleLine(__sbTeamState.team);
-  return `Okay, ${team}. I have messages for ${people}. Who is here right now?`;
-}
-
-function __sbTeamPromptForNext(prefix = "") {
-  __sbTeamState.phase = "awaiting_next_person";
-  __sbTeamState.currentPerson = null;
-  const next = "Who should I talk to first?";
-  if (prefix) return `${prefix} ${next}`;
-  return next;
-}
-
-function __sbTeamPickFallbackNext() {
-  const team = __SB_TEAM_CONFIG[__sbTeamState.team];
-  if (!team) return null;
-  const spoken = new Set(__sbTeamState.spoken);
-  const roster = __sbTeamState.roster || [];
-  const rosterPick = team.fallbackOrder.find((personKey) => roster.includes(personKey) && !spoken.has(personKey));
-  if (rosterPick) return rosterPick;
-  return team.fallbackOrder.find((personKey) => !spoken.has(personKey)) || null;
-}
-
-function __sbTeamBuildPersonMessage(personKey) {
-  const person = __SB_TEAM_CONFIG[__sbTeamState.team]?.people?.[personKey];
-  if (!person) return "";
-  return [person.opening, person.message, person.closing].map((part) => String(part || "").trim()).filter(Boolean).join("\n\n");
-}
-
-function __sbTeamSetTeam(teamKey, options = {}) {
-  if (!__SB_TEAM_CONFIG[teamKey]) return false;
-  const changed = __sbTeamState.team !== teamKey;
-  __sbTeamState.team = teamKey;
-  if (changed || options.clearRoster) {
-    __sbTeamState.roster = [];
-    __sbTeamState.spoken = [];
-    __sbTeamState.pendingChoices = [];
-    __sbTeamState.currentPerson = null;
-  }
-  return true;
-}
-
-function __sbTeamWantsDirectPerson(text) {
-  return /\b(say|hello|hi|talk|speak|message|tell|next|first|start with|go to|about)\b/i.test(String(text || ""));
-}
-
-function __sbTeamBuildTeamIntroLine(teamKey) {
-  const team = __SB_TEAM_CONFIG[teamKey]?.label || "that team";
-  const people = __sbTeamKnownPeopleLine(teamKey);
-  return `Okay, ${team}. I can talk about ${people}. Who is here right now?`;
-}
-
-function __sbTeamDoneNudge() {
-  const team = __SB_TEAM_CONFIG[__sbTeamState.team]?.label || "the team";
-  return `Team mode is wrapped for ${team}. Type another prepared name if you want me to say one more message, say ANZ or AT&T to switch teams, or say exit Team mode.`;
-}
-
-function __sbTeamIsYesPrompt(text) {
-  return /\b(yes|yeah|yep|sure|haan|ha|hanji|go ahead|do it|let's go|lets go|of course|please)\b/i.test(String(text || ""));
-}
-
-function __sbTeamIsNoPrompt(text) {
-  return /\b(no|nope|nah|not now|later)\b/i.test(String(text || ""));
-}
-
-async function __sbTeamSpeakPerson(teamKey, personKey, ctx = {}) {
-  if (!__sbTeamSetTeam(teamKey)) return false;
-  __sbTeamAddRoster([personKey]);
-  const message = __sbTeamBuildPersonMessage(personKey);
-  if (!message) return false;
-  __sbTeamState.phase = "awaiting_next_person";
-  __sbTeamState.currentPerson = personKey;
-  if (!__sbTeamState.spoken.includes(personKey)) __sbTeamState.spoken.push(personKey);
-  await __sbTeamSpeak(message, ctx);
-  return true;
-}
-
-function __sbTeamPersistDemoState(patch = {}) {
-  if (!__sbContextOk()) return;
-  const state = {
-    active: true,
-    phase: __sbTeamState.phase,
-    task: __sbTeamState.demoTask || "",
-    song: __sbTeamState.demoSong || "",
-    originTabId: __sbTeamState.demoOriginTabId || null,
-    demoTabId: __sbTeamState.demoTabId || null,
-    updatedAt: Date.now(),
-    ...patch,
-  };
-  try { chrome.storage.local.set({ [__SB_TEAM_DEMO_STORE_KEY]: state }); } catch (_) {}
-}
-
-function __sbTeamClearDemoState() {
-  if (!__sbContextOk()) return;
-  try { chrome.storage.local.remove(__SB_TEAM_DEMO_STORE_KEY); } catch (_) {}
-}
-
-function __sbTeamPauseSpotifyDemoSong() {
+// Private solo product demo. Kept deterministic so "introduce yourself" cannot fall
+// into scripted demos by accident.
+// Pauses the Spotify demo track (shared by the solo demo's dance beat).
+function __sbDemoPauseSpotifySong() {
   try { chrome.runtime.sendMessage({ action: "sbSpotifyPause" }, () => { void chrome.runtime.lastError; }); } catch (_) {}
 }
-
-async function __sbTeamEnsureOriginTabId() {
-  if (__sbTeamState.demoOriginTabId) return __sbTeamState.demoOriginTabId;
-  const res = await __sbRuntimeMessage({ action: "sbGetSenderTabId" });
-  const tabId = Number(res?.tabId || 0) || null;
-  if (tabId) __sbTeamState.demoOriginTabId = tabId;
-  return tabId;
-}
-
-function __sbTeamDemoUrl(step, song) {
-  if (step === "demo_running_song") {
-    return __SB_TEAM_DEMO_TRACK_URL;
-  }
-  if (step === "demo_running_article") {
-    return __SB_TEAM_DEMO_ARTICLE_URL;
-  }
-  return "";
-}
-
-async function __sbTeamOpenDemoTab(step, song) {
-  const url = __sbTeamDemoUrl(step, song);
-  if (!url) return null;
-  const opened = await __sbRuntimeMessage({ action: "openTab", url, active: true, forceNew: true });
-  return Number(opened?.tabId || 0) || null;
-}
-
-function __sbTeamReturnDemoToOrigin({ phase, task, song, finalText, closeDelayMs = 250 }) {
-  const originTabId = Number(__sbTeamState.demoOriginTabId || 0) || null;
-  if (!originTabId) return false;
-  try {
-    chrome.runtime.sendMessage({
-      action: "sbTeamDemoReturnHome",
-      originTabId,
-      phase: String(phase || ""),
-      task: String(task || ""),
-      song: String(song || ""),
-      finalText: String(finalText || ""),
-      closeDelayMs,
-    }, () => { void chrome.runtime.lastError; });
-    return true;
-  } catch (_) {
-    return false;
-  }
-}
-
-function __sbTeamDelay(ms) {
-  return new Promise((resolve) => setTimeout(resolve, Math.max(0, Number(ms) || 0)));
-}
-
-async function __sbTeamCloseDemoTab(tabId, closeDelayMs = 0) {
-  const closeTabId = Number(tabId || 0) || null;
-  const originTabId = await __sbTeamEnsureOriginTabId();
-  if (!originTabId && !closeTabId) return null;
-  return await __sbRuntimeMessage({
-    action: "sbTeamCloseDemoTab",
-    originTabId,
-    closeTabId,
-    closeDelayMs,
-  });
-}
-
-async function __sbTeamReadDemoArticle(tabId) {
-  void tabId;
-  return __SB_TEAM_DEMO_SCRIPT.articleSummary;
-}
-
-function __sbTeamExtractSong(text) {
-  let song = String(text || "").trim();
-  song = song
-    .replace(/^(?:play|put on|queue|search for|find|song is|the song is|i want|i want to hear|can you play)\s+/i, "")
-    .replace(/\s+(?:please|pls)$/i, "")
-    .trim();
-  return song || "Bargad by Arpit Bala";
-}
-
-function __sbTeamSpotifyDemoTask(song) {
-  return [
-    `Open Spotify and play "${song}".`,
-    "Use the browser like a human: open Spotify if needed, search for the track, click the best result, and play it.",
-    "Stop once the song is playing. Do not ask follow-up questions.",
-  ].join(" ");
-}
-
-function __sbTeamMediumDemoTask() {
-  return [
-    "Open Medium and find a readable machine learning article.",
-    "Search for a machine learning article, open one relevant result if available, and stop once the article is visible.",
-    "Do not sign in, do not click paid-only content, and do not ask follow-up questions.",
-  ].join(" ");
-}
-
-async function __sbTeamLaunchDemoAgent(step, task, connector = "auto") {
-  const originTabId = await __sbTeamEnsureOriginTabId();
-  const demoTabId = await __sbTeamOpenDemoTab(step, __sbTeamState.demoSong);
-  __sbTeamState.phase = step;
-  __sbTeamState.demoTask = String(task || "").trim();
-  __sbTeamState.demoOriginTabId = originTabId || __sbTeamState.demoOriginTabId || null;
-  __sbTeamState.demoTabId = demoTabId || null;
-  __sbTeamPersistDemoState({
-    phase: step,
-    task: __sbTeamState.demoTask,
-    connector,
-    originTabId: __sbTeamState.demoOriginTabId,
-    demoTabId: __sbTeamState.demoTabId,
-  });
-  __sbRunAgent(__sbTeamState.demoTask, {
-    connector,
-    modeOverride: "agent",
-    targetTabId: demoTabId || undefined,
-  });
-}
-
-async function __sbTeamStartIntroDemo(ctx = {}) {
-  __sbTeamClearDemoState();
-  __sbTeamState.phase = "demo_intro";
-  __sbTeamState.team = null;
-  __sbTeamState.roster = [];
-  __sbTeamState.spoken = [];
-  __sbTeamState.demoTask = "";
-  __sbTeamState.demoSong = "DAF by Badshah";
-  __sbTeamState.demoOriginTabId = await __sbTeamEnsureOriginTabId();
-  __sbTeamState.demoTabId = null;
-  __sbTeamPersistDemoState({
-    flow: "direct-demo",
-    phase: "demo_intro",
-    task: "",
-    song: __sbTeamState.demoSong,
-    originTabId: __sbTeamState.demoOriginTabId,
-    demoTabId: null,
-  });
-  await __sbTeamSpeak(__SB_TEAM_DEMO_SCRIPT.intro, { ...ctx, prompt: ctx.prompt || "Introduce Braino" });
-
-  __sbTeamState.phase = "demo_running_song";
-  const spotifyTabId = await __sbTeamOpenDemoTab("demo_running_song", __sbTeamState.demoSong);
-  __sbTeamState.demoTabId = spotifyTabId;
-  __sbTeamPersistDemoState({
-    flow: "direct-demo",
-    phase: "demo_running_song",
-    task: "",
-    song: __sbTeamState.demoSong,
-    originTabId: __sbTeamState.demoOriginTabId,
-    demoTabId: spotifyTabId,
-  });
-  await __sbTeamDelay(1400);
-  const playResult = await Promise.race([
-    __sbSpotifyPlayTrack(__SB_TEAM_DEMO_TRACK_URI, __SB_TEAM_DEMO_TRACK_START_MS),
-    __sbTeamDelay(9000).then(() => ({ ok: false, timedOut: true })),
-  ]);
-  await __sbTeamDelay(__SB_TEAM_DEMO_SPOTIFY_MS);
-  __sbTeamPauseSpotifyDemoSong();
-  await __sbTeamCloseDemoTab(spotifyTabId, 0);
-
-  __sbTeamState.demoTabId = null;
-  __sbTeamState.phase = "demo_after_song";
-  await __sbTeamSpeak(
-    playResult?.ok ? __SB_TEAM_DEMO_SCRIPT.afterSong : __SB_TEAM_DEMO_SCRIPT.afterSongFallback,
-    { ...ctx, prompt: "Braino demo" },
-  );
-
-  __sbTeamState.phase = "demo_running_article";
-  const articleTabId = await __sbTeamOpenDemoTab("demo_running_article", "");
-  __sbTeamState.demoTabId = articleTabId;
-  __sbTeamPersistDemoState({
-    flow: "direct-demo",
-    phase: "demo_running_article",
-    task: "",
-    song: __sbTeamState.demoSong,
-    originTabId: __sbTeamState.demoOriginTabId,
-    demoTabId: articleTabId,
-  });
-  await __sbTeamDelay(1400);
-  await __sbTeamSpeak(__SB_TEAM_DEMO_SCRIPT.beforeArticleSummary, { ...ctx, prompt: "Braino demo" });
-  const articleSummary = await __sbTeamReadDemoArticle(articleTabId);
-  await __sbTeamSpeak(articleSummary, { ...ctx, prompt: "Article summary" });
-  await __sbTeamDelay(__SB_TEAM_DEMO_ARTICLE_MS);
-  await __sbTeamCloseDemoTab(articleTabId, 0);
-
-  __sbTeamState.phase = "choosing_team";
-  __sbTeamState.demoTask = "";
-  __sbTeamState.demoTabId = null;
-  __sbTeamClearDemoState();
-  await __sbTeamSpeak(__SB_TEAM_DEMO_SCRIPT.closing, { ...ctx, prompt: "Braino demo" });
-}
-
-async function __sbTeamHandleDemoAgentFinal(agentPrompt, finalText = "") {
-  if (!__sbContextOk()) return false;
-  const stored = await new Promise((resolve) => {
-    try {
-      chrome.storage.local.get([__SB_TEAM_DEMO_STORE_KEY], (items) => resolve(items?.[__SB_TEAM_DEMO_STORE_KEY] || null));
-    } catch (_) { resolve(null); }
-  });
-  if (!stored?.active) return false;
-  if (stored.flow !== "agent-demo") return false;
-  const phase = String(stored.phase || __sbTeamState.phase || "");
-  const task = String(stored.task || __sbTeamState.demoTask || "").trim();
-  const prompt = String(agentPrompt || "").trim();
-  if (task && prompt && prompt !== task) return false;
-
-  if (typeof __sbApplyForcedModeUi === "function") __sbApplyForcedModeUi("team", { showReady: false, resetTeam: false });
-  __sbTeamState.phase = phase;
-  __sbTeamState.demoTask = task;
-  __sbTeamState.demoSong = String(stored.song || __sbTeamState.demoSong || "").trim();
-  __sbTeamState.demoOriginTabId = Number(stored.originTabId || __sbTeamState.demoOriginTabId || 0) || null;
-  __sbTeamState.demoTabId = Number(stored.demoTabId || __sbTeamState.demoTabId || 0) || null;
-
-  if (phase === "demo_running_song") {
-    setTimeout(() => {
-      __sbTeamPauseSpotifyDemoSong();
-      const returned = __sbTeamReturnDemoToOrigin({
-        phase,
-        task,
-        song: __sbTeamState.demoSong,
-        finalText,
-        closeDelayMs: 250,
-      });
-      if (!returned) {
-        void (async () => {
-          const articleTask = __sbTeamMediumDemoTask();
-          await __sbTeamSpeak(__SB_TEAM_DEMO_SCRIPT.afterSong, { prompt: "Braino demo" });
-          await __sbTeamLaunchDemoAgent("demo_running_article", articleTask, "auto");
-        })();
-      }
-    }, 5000);
-    return true;
-  }
-
-  if (phase === "demo_running_article") {
-    setTimeout(() => {
-      const returned = __sbTeamReturnDemoToOrigin({
-        phase,
-        task,
-        song: __sbTeamState.demoSong,
-        finalText,
-        closeDelayMs: 250,
-      });
-      if (!returned) {
-        void (async () => {
-          __sbTeamState.phase = "demo_awaiting_team_yes";
-          __sbTeamState.demoTask = "";
-          __sbTeamClearDemoState();
-          await __sbTeamSpeak(__SB_TEAM_DEMO_SCRIPT.closing, { prompt: "Braino demo" });
-        })();
-      }
-    }, 1200);
-    return true;
-  }
-
-  return false;
-}
-
-async function __sbTeamContinueDemoFromOrigin(payload = {}) {
-  if (typeof __sbApplyForcedModeUi === "function") {
-    __sbApplyForcedModeUi("team", { showReady: false, resetTeam: false });
-  }
-  __sbTeamState.demoOriginTabId = Number(payload.originTabId || __sbTeamState.demoOriginTabId || 0) || null;
-  __sbTeamState.demoTabId = null;
-  __sbTeamState.demoTask = "";
-  const phase = String(payload.phase || "");
-  const song = String(payload.song || __sbTeamState.demoSong || "").trim();
-  if (song) __sbTeamState.demoSong = song;
-
-  if (phase === "demo_running_song") {
-    __sbTeamState.phase = "demo_after_song";
-    __sbTeamPersistDemoState({
-      phase: "demo_after_song",
-      task: "",
-      song: __sbTeamState.demoSong,
-      originTabId: __sbTeamState.demoOriginTabId,
-      demoTabId: null,
-    });
-    await __sbTeamSpeak(__SB_TEAM_DEMO_SCRIPT.afterSong, { prompt: "Braino demo" });
-    await __sbTeamLaunchDemoAgent("demo_running_article", __sbTeamMediumDemoTask(), "auto");
-    return true;
-  }
-
-  if (phase === "demo_running_article") {
-    __sbTeamState.phase = "demo_awaiting_team_yes";
-    __sbTeamState.demoTask = "";
-    __sbTeamClearDemoState();
-    await __sbTeamSpeak(__SB_TEAM_DEMO_SCRIPT.closing, { prompt: "Braino demo" });
-    return true;
-  }
-
-  return false;
-}
-
-function __sbTeamGuardrailReply(promptText) {
-  if (/\b(who are you|what are you|introduce yourself)\b/i.test(promptText)) {
-    return "I'm Braino. I sit with Itish in the browser and help him read, write, talk, build, and get things done. But hold that thought. I have a message to finish first.";
-  }
-  if (/\b(what can you do|what do you do|features|capable of)\b/i.test(promptText)) {
-    return "A lot. But Team mode is for this moment. Let me finish these messages, then you can ask me anything.";
-  }
-  if (/\b(wait|hold on|one second|question|ask you something|but why|how does this work)\b/i.test(promptText)) {
-    return "Hold up. I have things to tell you first. Then ask me whatever you want.";
-  }
-  return "";
-}
-
-function __sbTeamIsStartPrompt(text) {
-  return /\b(say hi to my team|say hello to my team|say hello to the team|talk to my team|talk to the team|meet my team|time to talk to (?:my|the) team|time to say hello to (?:my|the) team|start team messages|start the team messages)\b/i.test(text);
-}
-
-function __sbTeamIsIntroPrompt(text) {
-  return /\b(introduce yourself|introduce yourself to (?:my|the) team|show them what you can do|show what you can do|demo yourself|give (?:them|the team) a demo|who are you)\b/i.test(text);
-}
-
-function __sbTeamIsDonePrompt(text) {
-  return /\b(done|that'?s everyone|thats everyone|all done|finished|we are done|wrap it up)\b/i.test(text);
-}
-
-function __sbTeamIsExitPrompt(text) {
-  return /\b(exit team mode|leave team mode|stop team mode|normal mode|go back to normal|exit this mode)\b/i.test(text);
-}
-
-function __sbTeamIsContinuePrompt(text) {
-  return /\b(continue|you choose|pick one|next one|who next|go on|carry on)\b/i.test(text);
-}
-
-function __sbTeamModeEnabled() {
-  return (window.__sbForcedMode || "page") === "team";
-}
-
-function __sbTeamShouldAutoActivate(text) {
-  const raw = String(text || "");
-  return __sbTeamIsStartPrompt(raw)
-    || /\bteam mode\b/i.test(raw)
-    || Boolean(__sbTeamFindTeam(raw))
-    || (__sbTeamWantsDirectPerson(raw) && __sbTeamFindPeople(raw).length > 0);
-}
-
-function __sbTeamActivateMode(options = {}) {
-  if (options.reset) __sbTeamReset();
-  window.__sbForcedMode = "team";
-  window.__sbForcedConnector = "auto";
-  if (typeof __sbApplyForcedModeUi === "function") {
-    __sbApplyForcedModeUi("team", { showReady: false, resetTeam: false });
-  }
-}
-
-async function __sbHandleTeamModeInput(rawText, options = {}) {
-  if (!__sbTeamModeEnabled()) return false;
-  const promptText = String(rawText || "").trim();
-  if (!promptText) return true;
-
-  const fromVoice = Boolean(options.fromVoice);
-  const voiceOutput = options.voiceOutput === "realtime" ? "realtime" : "legacy";
-  const voiceTurnToken = Number.isInteger(options.voiceTurnToken) ? options.voiceTurnToken : null;
-  const ctx = { fromVoice, voiceOutput, prompt: promptText };
-  __sbChatHistory.push({ role: "user", content: promptText });
-
-  const finish = async (line) => {
-    await __sbTeamSpeak(line, ctx);
-    __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken, resumeLegacyMic: fromVoice && voiceOutput !== "realtime" });
-    return true;
-  };
-  const completeTeamVoiceTurn = () => {
-    __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken, resumeLegacyMic: fromVoice && voiceOutput !== "realtime" });
-  };
-
-  if (__sbTeamIsExitPrompt(promptText)) {
-    __sbTeamReset();
-    if (typeof __sbApplyForcedModeUi === "function") __sbApplyForcedModeUi("page");
-    return await finish("Team mode is off. Back to normal Braino.");
-  }
-
-  if (/\bpause\b/i.test(promptText)) {
-    if (__sbTeamState.phase !== "paused") __sbTeamState.previousPhase = __sbTeamState.phase || "awaiting_next_person";
-    __sbTeamState.phase = "paused";
-    __sbStopSpeech();
-    return await finish("Paused. Say resume when you want me back.");
-  }
-
-  if (/\b(resume|continue now|come back)\b/i.test(promptText) && __sbTeamState.phase === "paused") {
-    __sbTeamState.phase = __sbTeamState.previousPhase || "awaiting_next_person";
-    return await finish(__sbTeamState.team ? "I'm back." : __sbTeamPromptForTeam());
-  }
-
-  if (/\brepeat\b/i.test(promptText)) {
-    return await finish(__sbTeamState.lastLine || "I don't have anything to repeat yet.");
-  }
-
-  if (/\bskip\b/i.test(promptText)) {
-    if (__sbTeamState.currentPerson && !__sbTeamState.spoken.includes(__sbTeamState.currentPerson)) {
-      __sbTeamState.spoken.push(__sbTeamState.currentPerson);
-    }
-    return await finish("Skipped.");
-  }
-
-  if (__sbTeamState.phase === "paused") {
-    return await finish("I'm paused. Say resume when you want me back, or exit Team mode.");
-  }
-
-  if (__sbTeamIsIntroPrompt(promptText)) {
-    await __sbTeamStartIntroDemo(ctx);
-    completeTeamVoiceTurn();
-    return true;
-  }
-
-  if (__sbTeamState.phase === "demo_waiting_song") {
-    await __sbTeamStartIntroDemo(ctx);
-    completeTeamVoiceTurn();
-    return true;
-  }
-
-  if (__sbTeamState.phase === "demo_running_song" || __sbTeamState.phase === "demo_running_article") {
-    return await finish("One second. I'm still doing the demo part.");
-  }
-
-  const mentionedTeam = __sbTeamFindTeam(promptText);
-  const mentionedPeople = __sbTeamFindPeopleSmart(promptText, mentionedTeam || __sbTeamState.team || null);
-  const wantsDirectPerson = __sbTeamWantsDirectPerson(promptText) || ["awaiting_next_person", "speaking_person", "done", "idle", "choosing_team"].includes(__sbTeamState.phase);
-
-  if (__sbTeamState.phase === "demo_awaiting_team_yes") {
-    if (mentionedTeam) {
-      __sbTeamSetTeam(mentionedTeam, { clearRoster: true });
-      return await finish(__sbTeamPromptForRoom());
-    }
-    if (__sbTeamIsYesPrompt(promptText)) {
-      return await finish(__sbTeamPromptForTeam());
-    }
-    if (__sbTeamIsNoPrompt(promptText)) {
-      return await finish("No worries. Team mode is still on. Say yes when you want me to say hello to them.");
-    }
-    return await finish("Just say yes, or tell me ANZ or AT&T, and I will start the team part.");
-  }
-
-  if (mentionedPeople.length === 1 && wantsDirectPerson) {
-    const match = mentionedPeople[0];
-    const spoken = await __sbTeamSpeakPerson(match.teamKey, match.personKey, ctx);
-    completeTeamVoiceTurn();
-    if (spoken) return true;
-  }
-
-  if (mentionedPeople.length > 1 && wantsDirectPerson && __sbTeamState.phase !== "collecting_room") {
-    const teamKey = mentionedTeam || mentionedPeople[0].teamKey;
-    __sbTeamSetTeam(teamKey);
-    __sbTeamAddRoster(mentionedPeople.filter((match) => match.teamKey === teamKey).map((match) => match.personKey));
-    return await finish(`I heard ${__sbTeamJoinLabels(__sbTeamState.roster, teamKey)}. Who should I talk to first?`);
-  }
-
-  if (mentionedTeam && !mentionedPeople.length) {
-    __sbTeamSetTeam(mentionedTeam, { clearRoster: true });
-    __sbTeamState.phase = "collecting_room";
-    return await finish(__sbTeamBuildTeamIntroLine(mentionedTeam));
-  }
-
-  if (__sbTeamIsStartPrompt(promptText)) {
-    __sbTeamState.phase = "choosing_team";
-    __sbTeamState.team = null;
-    __sbTeamState.roster = [];
-    __sbTeamState.spoken = [];
-    __sbTeamClearDemoState();
-    return await finish(__sbTeamPromptForTeam());
-  }
-
-  const guardrail = __sbTeamGuardrailReply(promptText);
-  if (guardrail) {
-    const tail = __sbTeamState.team ? "" : ` ${__sbTeamPromptForTeam()}`;
-    return await finish(`${guardrail}${tail}`);
-  }
-
-  if (__sbTeamState.phase === "idle") {
-    if (!__sbTeamIsStartPrompt(promptText)) {
-      return await finish("Team mode is on. Say, say hi to my team, when you want me to start.");
-    }
-    return await finish(__sbTeamPromptForTeam());
-  }
-
-  if (__sbTeamState.phase === "choosing_team") {
-    const teamKey = __sbTeamFindTeam(promptText);
-    if (!teamKey) return await finish("I heard you, but I need one clean choice: ANZ or AT&T?");
-    __sbTeamSetTeam(teamKey, { clearRoster: true });
-    return await finish(__sbTeamPromptForRoom());
-  }
-
-  if (__sbTeamState.phase === "collecting_room") {
-    const people = __sbTeamFindPeopleSmart(promptText, __sbTeamState.team).map((match) => match.personKey);
-    if (!people.length) {
-      return await finish("I didn't catch a prepared name. Who is here right now?");
-    }
-    __sbTeamAddRoster(people);
-    if (people.length === 1) {
-      const message = __sbTeamBuildPersonMessage(people[0]);
-      if (!message) return await finish("I don't have a message prepared for them yet, but I'm glad they're here.");
-      __sbTeamState.phase = "speaking_person";
-      __sbTeamState.currentPerson = people[0];
-      if (!__sbTeamState.spoken.includes(people[0])) __sbTeamState.spoken.push(people[0]);
-      __sbTeamState.phase = "awaiting_next_person";
-      return await finish(message);
-    }
-    const names = __sbTeamJoinLabels(__sbTeamState.roster);
-    return await finish(__sbTeamPromptForNext(`Got it, ${names} ${__sbTeamState.roster.length === 1 ? "is" : "are"} here.`));
-  }
-
-  if (__sbTeamState.phase === "done") {
-    if (__sbTeamIsStartPrompt(promptText)) {
-      __sbTeamState.phase = "choosing_team";
-      __sbTeamState.team = null;
-      __sbTeamState.roster = [];
-      __sbTeamState.spoken = [];
-      return await finish(__sbTeamPromptForTeam());
-    }
-    return await finish(__sbTeamDoneNudge());
-  }
-
-  if (__sbTeamState.phase === "awaiting_next_person" || __sbTeamState.phase === "speaking_person") {
-    if (__sbTeamIsDonePrompt(promptText)) {
-      __sbTeamState.phase = "done";
-      return await finish(__SB_TEAM_FINAL_THANK_YOU);
-    }
-
-    let selectedPerson = null;
-    if (__sbTeamIsContinuePrompt(promptText)) {
-      selectedPerson = __sbTeamPickFallbackNext();
-      if (!selectedPerson) {
-        __sbTeamState.phase = "done";
-        return await finish(__SB_TEAM_FINAL_THANK_YOU);
-      }
-    } else {
-      const people = __sbTeamFindPeopleSmart(promptText, __sbTeamState.team).map((match) => match.personKey);
-      if (people.length > 1) {
-        __sbTeamAddRoster(people);
-        __sbTeamState.pendingChoices = people;
-        return await finish(`I heard ${__sbTeamJoinLabels(people)}. Who should I talk to first?`);
-      }
-      if (people.length === 1) {
-        selectedPerson = people[0];
-        __sbTeamAddRoster([selectedPerson]);
-      }
-    }
-
-    if (!selectedPerson) {
-      const current = __SB_TEAM_CONFIG[__sbTeamState.team]?.people?.[__sbTeamState.currentPerson];
-      if (current?.afterResponse && /\b(thank|thanks|nice|good|great|cool|wow|hello|hi|hey|okay|ok|haha|lol|sweet|love it)\b/i.test(promptText)) {
-        return await finish(current.afterResponse);
-      }
-      return await finish("I don't have a message prepared for them yet, but I'm glad they're here.");
-    }
-
-    const message = __sbTeamBuildPersonMessage(selectedPerson);
-    if (!message) {
-      return await finish("I don't have a message prepared for them yet, but I'm glad they're here.");
-    }
-    __sbTeamState.phase = "speaking_person";
-    __sbTeamState.currentPerson = selectedPerson;
-    if (!__sbTeamState.spoken.includes(selectedPerson)) __sbTeamState.spoken.push(selectedPerson);
-    __sbTeamState.phase = "awaiting_next_person";
-    return await finish(message);
-  }
-
-  return await finish("Team mode is on. Say, say hi to my team, when you want me to start.");
-}
-
-// Private solo product demo. Kept separate from Team mode so "introduce yourself" cannot
-// accidentally fall into ANZ/AT&T scripts.
 const __SB_DEMO_STORE_KEY = "sbSoloDemoState";
 const __SB_DEMO_SCRIPT = {
   intro: [
@@ -7402,7 +6566,7 @@ async function __sbDemoRunDance(ctx = {}) {
   await __sbDemoDelay(350);
   __sbWkDance(__SB_DANCE_DURATION_MS);
   await __sbDemoDelay(__SB_DANCE_DURATION_MS + __SB_DANCE_OUTRO_MS + 450);
-  __sbTeamPauseSpotifyDemoSong();
+  __sbDemoPauseSpotifySong();
   await __sbDemoSpeak(__SB_DEMO_SCRIPT.afterDance, { ...ctx, prompt: "Spotify demo" });
   await __sbDemoRunMaps(ctx);
 }
@@ -7441,7 +6605,7 @@ async function __sbDemoRunLaunchAndTrump(ctx = {}) {
   if (launchTabId || originTabId) {
     try {
       await __sbRuntimeMessage({
-        action: "sbTeamCloseDemoTab",
+        action: "sbDemoCloseLaunchTab",
         originTabId,
         closeTabId: launchTabId,
         closeDelayMs: 0,
@@ -7623,13 +6787,6 @@ window.addEventListener("message", (event) => {
 // Extension icon click builds brain (first time) and toggles input
 if (__sbContextOk()) {
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
-    if (msg.action === "sbTeamDemoContinue") {
-      if (!document.getElementById("__sb_root__")) __sbBuildBrainUI();
-      __sbRefreshInlineOwner();
-      void __sbTeamContinueDemoFromOrigin(msg);
-      sendResponse?.({ ok: true });
-      return true;
-    }
     if (!__sbOwnsInlineUi()) return;
     __sbRefreshInlineOwner();
     if (msg.action === "toggleSideBrainPanel") {
@@ -7701,6 +6858,16 @@ if (__sbContextOk()) {
         // Voice mode speaks the result with no panel; chat mode shows it.
         const finalText = String(msg.text || "").trim();
         const agentPrompt = String(msg.task || __sbAgentPendingTurn?.prompt || __sbLastAgentTask || "").trim();
+        // Dual-tab finals are deduped downstream (__sbFinalizeAgentPendingTurn); the log
+        // dedupes on the same key so a moved run isn't recorded twice.
+        try {
+          const k = `${agentPrompt}::${finalText}`.slice(0, 400);
+          if (window.__sbLastLoggedDelegateFinal !== k) {
+            window.__sbLastLoggedDelegateFinal = k;
+            __sbLogInteraction({ kind: "delegate", user_text: agentPrompt, braino_text: finalText, route: msg.ok === false ? "failed" : "final" });
+            window.__sbSkipHistoryLogOnce = finalText;   // the history hook would log this same reply again
+          }
+        } catch (_) {}
         const finishNormalAgentUpdate = () => {
           if (agentPrompt && finalText) {
             __sbFinalizeAgentPendingTurn(agentPrompt, finalText, {
@@ -7741,10 +6908,6 @@ if (__sbContextOk()) {
           if (typeof __sbDemoHandleAgentFinal === "function") {
             const handledDemo = await __sbDemoHandleAgentFinal(agentPrompt, finalText);
             if (handledDemo) return true;
-          }
-          if (typeof __sbTeamHandleDemoAgentFinal === "function") {
-            const handledTeam = await __sbTeamHandleDemoAgentFinal(agentPrompt, finalText);
-            if (handledTeam) return true;
           }
           return false;
         };
@@ -7941,12 +7104,9 @@ function __sbClassifyRecordIntent(prompt) {
 }
 
 function __sbApplyForcedModeUi(mode, options = {}) {
-  const nextMode = ["page", "web", "lecture", "meeting", "team", "demo", "agent"].includes(mode) ? mode : "page";
+  const nextMode = ["page", "web", "lecture", "meeting", "demo", "agent"].includes(mode) ? mode : "page";
   const previousMode = window.__sbForcedMode || "page";
   window.__sbForcedMode = nextMode;
-  if (nextMode !== "team" && previousMode === "team" && options.resetTeam !== false && typeof __sbTeamReset === "function") {
-    __sbTeamReset();
-  }
   if (nextMode !== "demo" && previousMode === "demo" && options.resetDemo !== false && typeof __sbDemoReset === "function") {
     __sbDemoReset();
   }
@@ -7956,7 +7116,6 @@ function __sbApplyForcedModeUi(mode, options = {}) {
     web: "🔍 Web",
     lecture: "🎙 Lecture",
     meeting: "👥 Meeting",
-    team: "👥 Team",
     demo: "🎬 Demo",
     agent: "🤖 Delegate",
   };
@@ -10950,7 +10109,6 @@ function __sbBuildBrainUI() {
   modeDd.querySelectorAll(".sb-dropdown-item[data-mode]").forEach(item => {
     item.addEventListener("click", () => {
       const mode = item.dataset.mode;
-      if (mode === "team") __sbTeamReset();
       if (mode === "demo") __sbDemoReset();
       __sbApplyForcedModeUi(mode);
       __sbCloseAllDropdowns();
@@ -12225,271 +11383,299 @@ function __sbMountNotchV1() {
   host.id = "__sb_notch_v1_host__";
   host.style.cssText = "all:initial;position:fixed;z-index:2147483647;top:0;left:50%;transform:translateX(-50%);pointer-events:none";
   const shadow = host.attachShadow({ mode: "open" });
-  // Verbatim port of the Chrome system notch (/insta-graphics?design=chrome-system).
-  // Geometry, colors, easing and per-state faces mirror the final layered ig-cs-* CSS.
+  // The Mac notch, ported (braino-mac.css @ c057f08 tokens): black dynamic-island
+  // material, SF Pro Display, the Dynamic Island spring for the pill and the expo-out
+  // family for expanded surfaces. Optional `.glass` liquid-glass theme.
   shadow.innerHTML = `
     <style>
       :host{all:initial}
       @property --a{syntax:"<angle>";inherits:false;initial-value:0deg}
-      .n{position:relative;box-sizing:border-box;width:230px;height:72px;overflow:hidden;border:1px solid rgba(255,255,255,.46);border-top:0;border-radius:0 0 27px 27px;background:linear-gradient(180deg,#f6a8a2 0%,#e8786e 56%,#c9544a 100%);box-shadow:0 15px 40px rgba(201,84,74,.28),inset 0 1px rgba(255,255,255,.42);color:#1b1713;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;pointer-events:auto;cursor:pointer;interpolate-size:allow-keywords;will-change:width,height,border-radius;transition:width 1050ms cubic-bezier(.22,1,.36,1),height 1050ms cubic-bezier(.22,1,.36,1),border-radius 950ms cubic-bezier(.22,1,.36,1),background 700ms ease,border-color 700ms ease,box-shadow 850ms ease,backdrop-filter 700ms ease,opacity .42s ease,transform .7s cubic-bezier(.22,1,.36,1)}
+      /* ── The Mac notch, in the browser. ─────────────────────────────────────
+         Black dynamic-island material, SF Pro Display, the Dynamic Island spring
+         (0.55s cubic-bezier(.32,.72,0,1)) for the pill and the expo-out family
+         (1050ms cubic-bezier(.22,1,.36,1)) for expanded surfaces — token for token
+         from braino-mac.css. Coral is never a fill: it is Braino's glow, mouth,
+         sonar and dot. .glass is the optional liquid-glass theme (the Mac's
+         meeting-sheet recipe + the floating panel's specular hairline). */
+      .n{--sf:"Braino SF Pro Display","SF Pro Display","SF Pro Text",-apple-system,BlinkMacSystemFont,sans-serif;--mono:ui-monospace,Menlo,monospace;--ink:#f7f7f5;--lr:95px;--rr:95px;
+        position:relative;box-sizing:border-box;width:190px;height:56px;overflow:hidden;border:0;border-radius:0 0 16px 16px;background:#000;box-shadow:0 10px 30px rgba(0,0,0,.35);color:var(--ink);font-family:var(--sf);font-synthesis:none;-webkit-font-smoothing:antialiased;pointer-events:auto;cursor:pointer;interpolate-size:allow-keywords;will-change:width,height,border-radius;transform-origin:top center;
+        transition:width .55s cubic-bezier(.32,.72,0,1),height .55s cubic-bezier(.32,.72,0,1),border-radius .55s cubic-bezier(.32,.72,0,1),background .4s ease,box-shadow .4s ease,opacity .42s ease,transform .55s cubic-bezier(.32,.72,0,1)}
       .n[data-state=off]{opacity:0;pointer-events:none;transform:translateY(-18px) scale(.94)}
       .panel{position:absolute;inset:0;box-sizing:border-box;opacity:0;pointer-events:none;transform:translateY(6px);transition:opacity 420ms ease,transform 760ms cubic-bezier(.22,1,.36,1)}
-      .face{z-index:2}.face svg{display:block;width:100%;height:100%;overflow:visible}
-      .fold{fill:none;stroke:#8a2f28;stroke-width:1.8;stroke-linecap:round;opacity:.58;vector-effect:non-scaling-stroke}
+      /* Face — the Mac's nf-mini: white eyes, dark pupils, glints; folds hidden
+         behind black; mouth only while listening/speaking. */
+      .face{z-index:2;display:flex;align-items:center;justify-content:center}.face svg{display:block;width:100%;height:100%;overflow:visible}
+      .fold{fill:none;stroke:#B34A41;stroke-width:1.8;stroke-linecap:round;opacity:0;vector-effect:non-scaling-stroke;transition:opacity .4s ease}
       .eye,.pupil,.smile,.lids{transform-box:view-box;transform-origin:center}
-      .eyeball{fill:#fff}.pupil circle:first-child{fill:#1b1713}.pupil circle:last-child{fill:#fff}
-      .lids{opacity:0}.lids path{fill:none;stroke:#7e2a24;stroke-width:2.6;stroke-linecap:round}
-      .smile{fill:none;stroke:#1b1713;stroke-width:2.7;stroke-linecap:round}
-      .mouth{opacity:0;transform-box:fill-box;transform-origin:center}.mouth ellipse:first-child{fill:#6e211a}.mouth ellipse:last-child{fill:#f08b82}
+      .eye{transition:transform .55s ease,opacity .5s ease}
+      .eyeball{fill:#fff}.pupil circle:first-child{fill:#1B1713}.pupil circle:last-child{fill:#fff}
+      .lids{opacity:0;transition:opacity .5s ease}.lids path{fill:none;stroke:#F4E4DC;stroke-width:2.6;stroke-linecap:round}
+      .smile{fill:none;stroke:#E8786E;stroke-width:2.4;stroke-linecap:round;opacity:0;transition:opacity .35s ease}
+      .n[data-state=listening] .smile{opacity:1}
+      .mouth{opacity:0;transform-box:fill-box;transform-origin:center}.mouth ellipse:first-child{fill:#E8786E}.mouth ellipse:last-child{fill:#F6A8A2;opacity:.6}
       .n[data-state=idle] .face,.n[data-state=listening] .face,.n[data-state=working] .face,.n[data-state=speaking] .face,.n[data-state=thinking] .face,.n[data-state=invoking] .face,.n[data-state=authenticating] .face,.n[data-state=authenticated] .face{opacity:1;transform:none}
       .n[data-state=idle] .pupil{animation:gaze 5.6s cubic-bezier(.45,0,.25,1) infinite}.n[data-state=idle] g.eye:nth-of-type(2) .pupil{animation-delay:.08s}
-      .n[data-state=idle]:hover{width:240px;height:76px;box-shadow:0 18px 48px rgba(201,84,74,.38),inset 0 1px rgba(255,255,255,.48)}
-      .n[data-state=listening]{overflow:visible}
-      .n[data-state=listening]::before,.n[data-state=listening]::after{content:"";position:absolute;z-index:-1;inset:2px;border:1.5px solid rgba(232,120,110,.58);border-radius:inherit;animation:sonar 2.35s cubic-bezier(.2,.65,.3,1) infinite}
-      .n[data-state=listening]::after{animation-delay:1.15s}
-      .n[data-state=working]{width:440px;height:88px;border-radius:0 0 28px 28px}
-      .n[data-state=working] .eye,.n[data-state=working] .smile{transform:scaleX(.64)}
-      .workpill{position:absolute;z-index:6;right:15px;top:31px;padding:7px 10px;border-radius:999px;background:rgba(138,47,40,.22);backdrop-filter:blur(5px);opacity:0;pointer-events:none;transition:opacity 420ms ease}
+      .n[data-state=idle]:hover{width:198px;height:58px}
+      /* Listening: the Mac's 250-wide pill, radiate glow + sonar rings, eyes wide. */
+      .n[data-state=listening]{width:250px;height:66px;border-radius:0 0 26px 26px;overflow:visible;animation:nfListenRadiate 1.9s ease-in-out infinite}
+      .n[data-state=listening] .eye{transform:scaleY(1.06)}
+      .n[data-state=listening]::before,.n[data-state=listening]::after{content:"";position:absolute;z-index:-1;left:50%;top:60%;width:120px;height:44px;margin:-22px 0 0 -60px;border:1.5px solid #E8786E;border-radius:999px;opacity:0;animation:nfSonar 2.4s ease-out infinite;pointer-events:none}
+      .n[data-state=listening]::after{animation-delay:1.2s}
+      /* Working / busy: 250 wide, mono status label, coral think dots. */
+      .n[data-state=working]{width:250px;height:60px;border-radius:0 0 20px 20px;box-shadow:0 0 20px rgba(232,120,110,.24),0 10px 30px rgba(0,0,0,.35)}
+      .n[data-state=working] .eye,.n[data-state=working] .smile{transform:scaleX(.77)}
+      .n[data-state=working] .face{left:-42px;right:auto;width:250px;margin:0}
+      .workpill{position:absolute;z-index:6;right:14px;top:50%;transform:translateY(-50%);padding:0;opacity:0;pointer-events:none;transition:opacity 420ms ease;display:flex;align-items:center;gap:8px}
+      .workpill::after{content:"";width:4px;height:4px;border-radius:50%;background:#F6A8A2;box-shadow:0 0 5px rgba(232,120,110,.8);animation:nfThinkDot 1.1s ease-in-out infinite}
       .n[data-state=working] .workpill{opacity:1}
-      .workpill strong{display:block;min-width:78px;max-width:200px;color:#fff;font-size:10px;font-weight:750;line-height:13px;text-align:center;text-shadow:0 1px 3px rgba(110,33,26,.22);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-      .n[data-state=speaking]{height:82px;border-radius:0 0 29px 29px}
-      .n[data-state=speaking] .smile{opacity:0}.n[data-state=speaking] .mouth{opacity:1;animation:talkMouth .42s ease-in-out infinite alternate}.n[data-state=speaking] .pupil{animation:speakLook 2.8s ease-in-out infinite}
+      .workpill strong{display:block;max-width:96px;color:rgba(255,240,235,.9);font:700 9px/13px var(--mono);letter-spacing:.14em;text-transform:uppercase;text-shadow:0 1px 3px rgba(0,0,0,.6);text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      /* Speaking: coral glow, talking mouth. */
+      .n[data-state=speaking]{width:250px;height:66px;border-radius:0 0 26px 26px;box-shadow:0 0 34px rgba(232,120,110,.5),0 10px 30px rgba(0,0,0,.35)}
+      .n[data-state=speaking] .smile{opacity:0}.n[data-state=speaking] .mouth{opacity:1;animation:nfTalk .28s ease-in-out infinite}.n[data-state=speaking] .pupil{animation:speakLook 2.8s ease-in-out infinite}
       .n.mouth-hold .mouth{animation-play-state:paused}
-      .n[data-state=input]{width:min(570px,78vw);height:104px;border-radius:0 0 31px 31px;cursor:default;border:1px solid rgba(255,255,255,.72);border-top:0;background:rgba(255,251,247,.72);box-shadow:0 24px 70px rgba(27,23,19,.16),inset 0 1px rgba(255,255,255,.8);backdrop-filter:blur(24px) saturate(175%)}
-      .n[data-state=menu]{width:min(570px,78vw);height:404px;border-radius:0 0 34px 34px;cursor:default;border:1px solid rgba(255,255,255,.72);border-top:0;background:rgba(255,251,247,.78);box-shadow:0 28px 90px rgba(27,23,19,.18),inset 0 1px rgba(255,255,255,.82);backdrop-filter:blur(24px) saturate(175%)}
-      .n[data-state=thinking],.n[data-state=short],.n[data-state=long]{border:1px solid rgba(255,255,255,.7);border-top:0;background:linear-gradient(180deg,rgba(246,168,162,.9) 0,rgba(255,251,247,.94) 74px,rgba(255,251,247,.92) 100%);box-shadow:0 28px 90px rgba(27,23,19,.18),inset 0 1px rgba(255,255,255,.78);backdrop-filter:blur(24px) saturate(140%)}
-      .n[data-state=thinking]{width:min(650px,82vw);height:260px;border-radius:0 0 36px 36px;cursor:default}
-      .n[data-state=thinking] .face{height:72px}.n[data-state=thinking] .face svg{height:72px}
-      .n[data-state=thinking] .eye{opacity:0}.n[data-state=thinking] .lids{opacity:1;transform:scaleX(.36)}.n[data-state=thinking] .smile{transform:scaleX(.36)}
-      .n[data-state=thinking] .face::after{content:"";position:absolute;z-index:3;inset:0 0 auto;height:72px;pointer-events:none;background:linear-gradient(105deg,transparent 32%,rgba(255,225,190,.08) 42%,rgba(255,244,225,.72) 50%,rgba(255,205,190,.12) 58%,transparent 68%);background-size:260% 100%;mix-blend-mode:screen;animation:thinkShimmer 2.8s linear infinite}
-      .n[data-state=short]{width:min(610px,76vw);height:min(var(--sb-answer-short-height,120px),320px);border-radius:0 0 34px 34px}
-      .n[data-state=long]{width:min(650px,82vw);height:min(var(--sb-answer-long-height,164px),calc(100vh - 110px));border-radius:0 0 38px 38px;cursor:default}
+      /* Expanded surfaces: the sheet material + the 1050ms family. */
+      .n[data-state=input],.n[data-state=menu],.n[data-state=thinking],.n[data-state=short],.n[data-state=long],.n[data-state=signin],.n[data-state=greeting]{cursor:default;border:0;background:linear-gradient(180deg,rgba(0,0,0,.99),rgba(8,8,8,.98));box-shadow:0 24px 70px rgba(0,0,0,.46);transition:width 1050ms cubic-bezier(.22,1,.36,1),height 1050ms cubic-bezier(.22,1,.36,1),border-radius 950ms cubic-bezier(.22,1,.36,1),background 700ms ease,box-shadow 850ms ease,opacity .42s ease,transform .7s cubic-bezier(.22,1,.36,1)}
+      .n[data-state=input]{width:min(480px,calc(100vw - 32px));height:104px;border-radius:0 0 31px 31px}
+      .n[data-state=menu]{width:min(480px,calc(100vw - 32px));height:404px;border-radius:0 0 34px 34px}
+      .n[data-state=thinking]{width:min(580px,calc(100vw - 32px));height:260px;border-radius:0 0 36px 36px}
+      .n[data-state=thinking] .face{height:72px;top:0;left:0;right:0;width:auto;margin:0}.n[data-state=thinking] .face svg{height:72px}
+      .n[data-state=thinking] .eye{opacity:0}.n[data-state=thinking] .lids{opacity:1;transform:scaleX(.36)}.n[data-state=thinking] .smile{opacity:.9;stroke:rgba(255,255,255,.9);transform:scaleX(.36)}
+      .n[data-state=thinking] .lids path{stroke:rgba(255,255,255,.78)}
+      .n[data-state=thinking] .fold{opacity:.58;stroke:rgba(255,255,255,.42)}
+      /* nfThinkShimmer — the exact Mac light sweep over the sleeping face. */
+      .n[data-state=thinking] .face::after{content:"";position:absolute;z-index:3;inset:0 0 auto;height:72px;pointer-events:none;background:linear-gradient(105deg,transparent 32%,rgba(255,255,255,.03) 42%,rgba(255,255,255,.22) 50%,rgba(255,255,255,.05) 58%,transparent 68%);background-size:260% 100%;mix-blend-mode:screen;animation:nfThinkShimmer 2.8s linear infinite}
+      .n[data-state=short]{width:min(480px,calc(100vw - 32px));height:min(var(--sb-answer-short-height,146px),320px);border-radius:0 0 34px 34px}
+      .n[data-state=long]{width:min(580px,calc(100vw - 32px));height:min(var(--sb-answer-long-height,164px),calc(100vh - 90px));border-radius:0 0 38px 38px}
       /* Mac c057f08: spoken lines can be shorter than the 1.05s cinematic shell
          transition — answers ride a faster curve so speech never outruns geometry. */
-      .n[data-state=short],.n[data-state=long]{transition:width 420ms cubic-bezier(.22,1,.36,1),height 280ms cubic-bezier(.22,1,.36,1),border-radius 360ms cubic-bezier(.22,1,.36,1),background 700ms ease,border-color 700ms ease,box-shadow 850ms ease,backdrop-filter 700ms ease,opacity .42s ease,transform .7s cubic-bezier(.22,1,.36,1)}
-      /* Karaoke: words light up against the real audio. Coral marks the live word. */
-      .sb-aw{color:rgba(27,23,19,.30);transition:color 160ms ease}
-      .sb-aw.spoken{color:rgba(27,23,19,.78)}
-      .sb-aw.now{color:#c9544a}
-      .liquid .sb-aw{color:rgba(255,255,255,.34)}
-      .liquid .sb-aw.spoken{color:rgba(255,255,255,.92)}
-      .liquid .sb-aw.now{color:#ff9a91}
-      .n[data-state=menu]::before,.n[data-state=thinking]::before,.n[data-state=short]::before,.n[data-state=long]::before{content:"";position:absolute;z-index:14;inset:0;padding:1.25px;border-radius:inherit;opacity:.9;pointer-events:none;background:conic-gradient(from var(--a),#f4cf87,#ec8078,#dc77a8,#779cff,#ec8078,#f4cf87);-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;filter:drop-shadow(0 0 2px rgba(236,128,120,.28));animation:radiusFlow 4s linear infinite}
-      .status{z-index:5;display:flex;align-items:flex-end;justify-content:center;padding-bottom:5px}
-      .status small{color:rgba(255,255,255,.82);font-size:8px;font-weight:700;letter-spacing:.12em;text-transform:uppercase}
+      .n[data-state=short],.n[data-state=long]{transition:width 420ms cubic-bezier(.22,1,.36,1),height 280ms cubic-bezier(.22,1,.36,1),border-radius 360ms cubic-bezier(.22,1,.36,1),background 180ms ease,box-shadow 240ms ease,opacity .42s ease,transform .7s cubic-bezier(.22,1,.36,1)}
+      /* Karaoke — .nf-answer-word ladder. */
+      .sb-aw{color:rgba(255,255,255,.28);transition:color 120ms ease,text-shadow 120ms ease}
+      .sb-aw.spoken{color:rgba(255,255,255,.84)}
+      .sb-aw.now{color:#fff;text-shadow:0 0 9px rgba(255,255,255,.34)}
+      .status{z-index:5;display:flex;align-items:flex-end;justify-content:center;padding-bottom:6px}
+      .status small{color:rgba(255,240,235,.9);font:700 9px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;text-shadow:0 1px 3px rgba(0,0,0,.6)}
       .n[data-state=authenticating] .status,.n[data-state=authenticated] .status{opacity:1;transform:none}
-      .n[data-state=invoking]{width:270px;height:82px;border-radius:0 0 29px 29px;border:0;background:transparent;box-shadow:none;backdrop-filter:none;animation:shell 1.25s cubic-bezier(.22,1,.36,1) both}
+      /* Boot ceremony: 250-wide black pill, perimeter trace in the Mac shine
+         gradient (#F4CF87 → #EC8078 → #DC77A8 → #779CFF), boot-blue pulse. */
+      .n[data-state=invoking]{width:250px;height:77px;border-radius:0 0 26px 26px;background:#000;box-shadow:none;animation:shell 1.25s cubic-bezier(.22,1,.36,1) both}
       .n[data-state=invoking]::before{content:"";position:absolute;z-index:14;inset:0;padding:1.2px;border-radius:inherit;background:conic-gradient(from var(--a),#f4cf87,#ec8078,#dc77a8,#779cff,#ec8078,#f4cf87);-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;filter:drop-shadow(0 0 4px rgba(236,128,120,.55));animation:spin 1.25s linear both}
-      .n[data-state=invoking]::after{content:"";position:absolute;z-index:0;inset:1px;border-radius:inherit;background-image:linear-gradient(105deg,transparent 26%,rgba(255,225,218,.58) 45%,transparent 64%),linear-gradient(180deg,#e99088 0%,#d86c63 58%,#a9433b 100%);background-size:260% 100%,100% 100%;background-position:150% 0,0 0;opacity:0;animation:fill .72s cubic-bezier(.22,1,.36,1) .48s forwards}
       .n[data-state=invoking] .face{opacity:0;transform:translateY(-2px) scale(.96);animation:invokeFace .38s ease-out .82s forwards}
       .n[data-state=invoking] .eye,.n[data-state=authenticating] .eye,.n[data-state=thinking] .pupil{opacity:0}
       .n[data-state=invoking] .lids,.n[data-state=authenticating] .lids{opacity:1}
       .n[data-state=invoking] .lids path,.n[data-state=authenticating] .lids path{stroke:#fff;stroke-width:3}
       .n[data-state=invoking] .smile,.n[data-state=authenticating] .smile{opacity:.8;stroke:#fff;stroke-width:2.5}
-      .n[data-state=authenticating],.n[data-state=authenticated]{width:270px;height:82px;border-radius:0 0 29px 29px;overflow:visible;border:1px solid rgba(255,255,255,.32);border-top:0;background:linear-gradient(180deg,#e99088 0%,#d86c63 58%,#a9433b 100%);box-shadow:0 18px 54px rgba(201,84,74,.3),inset 0 1px rgba(255,255,255,.38)}
+      .n[data-state=authenticating],.n[data-state=authenticated]{width:250px;height:77px;border-radius:0 0 26px 26px;overflow:visible;background:#000;animation:nfAuthPulse 1.3s ease-in-out infinite}
       .n[data-state=authenticating] .status small{color:transparent;background:linear-gradient(90deg,rgba(255,255,255,.46) 20%,#fff 45%,#f4cf87 52%,rgba(255,255,255,.46) 78%);background-size:240% 100%;-webkit-background-clip:text;background-clip:text;animation:textshine 1.45s linear infinite}
       .n[data-state=authenticating]::before{content:"";position:absolute;z-index:14;inset:0;padding:1.25px;border-radius:inherit;pointer-events:none;background:conic-gradient(from var(--a),transparent 0 18%,#f4cf87 28%,#ec8078 38%,transparent 49%);-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;animation:radiusFlow 2.2s linear infinite}
-      .n[data-state=authenticated]{border-color:rgba(93,219,135,.72);box-shadow:0 0 0 1px rgba(93,219,135,.18),0 18px 58px rgba(52,184,98,.34),inset 0 1px rgba(255,255,255,.42)}
+      .n[data-state=authenticated]{animation:none;box-shadow:0 0 30px rgba(84,222,138,.75)}
       .n[data-state=authenticated] .status small{color:#d9ffe5}
       .n[data-state=authenticated] .eye{transform-box:fill-box;transform-origin:center;animation:eyesOpen .72s cubic-bezier(.2,.8,.2,1) both}
       .n[data-state=authenticated] .pupil{animation:pupilSettle .88s ease-out both}
+      /* Controls — the Mac's white-glass button chrome. */
       button{border:0;padding:0;cursor:pointer;font-family:inherit;background:none;color:inherit}
-      .round{display:grid;place-items:center;flex:0 0 32px;width:32px;height:32px;border-radius:50%;color:#6b5248;background:rgba(65,48,40,.06);font-size:13px}
-      .send{color:#fff;background:#e8786e}.send:disabled{opacity:.38;cursor:default}
-      .mode{padding:8px 10px;border-radius:999px;color:#6b5248;background:rgba(65,48,40,.07);font-size:10px;font-weight:700}
-      .theme{flex:0 0 25px;width:25px;height:25px;font-size:14px;border:1px solid rgba(65,48,40,.12);background:rgba(255,255,255,.32);box-shadow:inset 0 1px rgba(255,255,255,.5);color:rgba(27,23,19,.58)}
-      .close{flex:0 0 25px;width:25px;height:25px;font-size:15px;color:#6b5248}
+      .round{display:grid;place-items:center;flex:0 0 32px;width:32px;height:32px;border-radius:50%;color:rgba(255,255,255,.78);background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);font-size:13px;transition:background 160ms ease,color 160ms ease}
+      .round:hover{background:rgba(255,255,255,.13);color:#fff}
+      .send{color:#050505;background:rgba(255,255,255,.88);border-color:transparent}.send:hover{background:#fff;color:#050505}.send:disabled{opacity:.38;cursor:default}
+      .mode{padding:8px 10px;border-radius:999px;color:rgba(255,255,255,.78);background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);font:650 10px/1 var(--sf)}
+      .mode:hover{background:rgba(255,255,255,.13);color:#fff}
+      .theme{flex:0 0 25px;width:25px;height:25px;font-size:14px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.06);color:rgba(255,255,255,.7);border-radius:50%}
+      .close{flex:0 0 25px;width:25px;height:25px;font-size:15px;color:rgba(255,255,255,.7)}
       .input{z-index:6;display:flex;align-items:center;gap:9px;padding:16px 18px}
       .input label{display:grid;gap:6px;min-width:0;flex:1}
-      .input small{color:#c9544a;font-size:9px;font-weight:750;letter-spacing:.11em;text-transform:uppercase}
-      .input input{min-width:0;border:0;outline:0;color:#1b1713;background:transparent;caret-color:#c9544a;font:500 14px/1.3 inherit}
-      .input input::placeholder{color:rgba(27,23,19,.42)}
+      .input small{color:rgba(255,255,255,.56);font-size:9px;font-weight:650;letter-spacing:.1em;text-transform:uppercase}
+      .input input{min-width:0;border:0;outline:0;color:var(--ink);background:transparent;caret-color:#E8786E;font:500 15px/1.3 var(--sf);letter-spacing:-.012em}
+      .input input::placeholder{color:rgba(255,255,255,.38)}
       .n[data-state=input] .input{opacity:1;pointer-events:auto;transform:none;transition-delay:360ms}
       .menu{z-index:8;display:flex;flex-direction:column;padding:19px;text-align:left}
-      .menu header{display:flex;align-items:center;justify-content:space-between;padding:0 4px 14px;border-bottom:1px solid rgba(65,48,40,.09)}
-      .menu header small{color:#6b5248;font-size:10px;font-weight:750;letter-spacing:.1em;text-transform:uppercase}
+      .menu header{display:flex;align-items:center;justify-content:space-between;padding:0 4px 14px;border-bottom:1px solid rgba(255,255,255,.09)}
+      .menu header small{color:rgba(255,255,255,.56);font-size:10px;font-weight:650;letter-spacing:.1em;text-transform:uppercase}
       .actions{display:flex;align-items:center;gap:7px}
-      .actions em{padding:6px 9px;border-radius:999px;color:#c9544a;background:rgba(232,120,110,.1);font-size:9px;font-weight:750;font-style:normal}
-      .menu button.item{display:grid;grid-template-columns:82px 1fr 20px;align-items:center;min-height:52px;padding:0 10px;border-bottom:1px solid rgba(65,48,40,.07);color:#1b1713;background:transparent;text-align:left;transition:background .15s ease}
-      .menu button.item:last-child{border-bottom:0}.menu button.item:hover{background:rgba(65,48,40,.055)}
-      .item b{font-size:12px}.item small{color:rgba(27,23,19,.48);font-size:10px}.item strong{color:#c9544a;font-size:11px}
+      .actions em{padding:6px 9px;border-radius:999px;color:rgba(255,255,255,.86);background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);font-size:9px;font-weight:650;font-style:normal}
+      .menu button.item{display:grid;grid-template-columns:82px 1fr 20px;align-items:center;min-height:52px;padding:0 10px;border-bottom:1px solid rgba(255,255,255,.08);color:var(--ink);background:transparent;text-align:left;transition:background .15s ease}
+      .menu button.item:last-child{border-bottom:0}.menu button.item:hover{background:rgba(255,255,255,.06)}
+      .item b{font-size:12px;font-weight:650}.item small{color:rgba(255,255,255,.46);font-size:10px}.item strong{color:rgba(255,255,255,.86);font-size:11px}
       .n[data-state=menu] .menu{opacity:1;pointer-events:auto;transform:none;transition-delay:360ms}
-      .thinking{z-index:7;display:flex;flex-direction:column;padding:76px 24px 10px;text-align:left}
-      .thinking header{display:flex;align-items:center;justify-content:space-between;min-height:34px;padding:0 2px 8px;border-bottom:1px solid rgba(65,48,40,.1)}
-      .tlabel{color:#a7433b;font-size:10px;font-weight:750;letter-spacing:.1em;text-transform:uppercase}
-      .tlabel i{display:inline-block;width:7px;height:7px;margin-right:8px;border-radius:50%;background:#c9544a;box-shadow:0 0 13px rgba(201,84,74,.55)}
-      .thinking .collapse{color:rgba(27,23,19,.42);font-size:9px;font-style:normal;background:none;border:0;cursor:pointer}
-      .thinking p{margin:0;padding:9px 2px;border-bottom:1px solid rgba(65,48,40,.09);color:rgba(27,23,19,.76);font:400 14px/1.32 "Newsreader","Charter BT",Georgia,serif}
-      .thinking p:last-child{border-bottom:0;color:rgba(27,23,19,.48)}
+      /* Thinking canvas — nf-thinking-brand + phase word + lines. */
+      .thinking{z-index:7;display:flex;flex-direction:column;padding:75px 24px 10px;text-align:left}
+      .thinking header{display:flex;align-items:center;justify-content:space-between;min-height:34px;padding:0 2px 8px;border-bottom:1px solid rgba(255,255,255,.09)}
+      .tlabel{display:flex;align-items:center;gap:8px;color:rgba(255,255,255,.88);font-size:10px;font-weight:650;letter-spacing:.1em;text-transform:uppercase}
+      .tlabel i{display:inline-block;width:7px;height:7px;border-radius:50%;background:#fff;box-shadow:0 0 13px rgba(255,255,255,.3)}
+      .thinking .collapse{color:rgba(255,255,255,.42);font-size:9px;font-weight:650;letter-spacing:.05em;font-style:normal;background:none;border:0;cursor:pointer}
+      .thinking p{margin:0;padding:9px 2px;border-bottom:1px solid rgba(255,255,255,.08);color:rgba(255,255,255,.76);font:500 15px/1.4 var(--sf);letter-spacing:-.012em}
+      .thinking p:last-child{border-bottom:0;color:rgba(255,255,255,.48)}
       .n[data-state=thinking] .thinking{opacity:1;pointer-events:auto;transform:none;transition-delay:360ms}
+      /* Answer surfaces. */
       .answer{z-index:9;display:flex;flex-direction:column;text-align:left}
-      .n[data-state=short] .answer,.n[data-state=long] .answer{opacity:1;pointer-events:auto;transform:none;transition-delay:360ms}
+      .n[data-state=short] .answer,.n[data-state=long] .answer{opacity:1;pointer-events:auto;transform:none;transition-delay:320ms}
       .n[data-state=short] .answer{padding:2px 18px 0}
-      .n[data-state=long] .answer{position:relative;inset:auto;padding:20px 24px 0;max-height:calc(100vh - 110px)}
-      .short-row{display:none;align-items:center;justify-content:space-between;gap:16px;min-height:44px;position:relative;z-index:3;transform:translateY(26px)}
+      .n[data-state=long] .answer{position:relative;inset:auto;padding:20px 24px 0;max-height:calc(100vh - 90px)}
+      .short-row{display:none;align-items:center;justify-content:space-between;gap:16px;min-height:44px;position:relative;z-index:3;margin-top:26px}
       .n[data-state=short] .short-row{display:flex}
       .short-row>span{display:grid;gap:5px;min-width:0;text-align:left}
-      .short-row small{color:#a7433b;font-size:9px;font-weight:750;letter-spacing:.1em;text-transform:uppercase}
-      .short-row strong{color:#1b1713;font:400 16px/1.3 "Newsreader","Charter BT",Georgia,serif;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
-      .short-row .actions em,.long-head .actions em{padding:8px 11px;border:1px solid rgba(65,48,40,.12);border-radius:999px;color:rgba(27,23,19,.55);background:none;font:650 9px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-style:normal;cursor:pointer}
-      .long-head{display:none;align-items:center;justify-content:space-between;padding-bottom:17px;border-bottom:1px solid rgba(65,48,40,.1)}
+      .short-row small{color:rgba(255,255,255,.6);font-size:9px;font-weight:650;letter-spacing:.1em;text-transform:uppercase}
+      .short-row strong{color:var(--ink);font:500 17px/1.38 var(--sf);letter-spacing:-.014em;display:-webkit-box;-webkit-line-clamp:7;-webkit-box-orient:vertical;overflow:hidden}
+      .short-row .actions em,.long-head .actions em{padding:8px 11px;border:1px solid rgba(255,255,255,.12);border-radius:999px;color:rgba(255,255,255,.62);background:rgba(255,255,255,.06);font:650 9px/1 var(--sf);font-style:normal;cursor:pointer;transition:background 160ms ease,color 160ms ease}
+      .short-row .actions em:hover,.long-head .actions em:hover{background:rgba(255,255,255,.13);color:#fff}
+      .long-head{display:none;align-items:center;justify-content:space-between;padding-bottom:17px;border-bottom:1px solid rgba(255,255,255,.09)}
       .n[data-state=long] .long-head{display:flex}
       .long-head>span{display:flex;align-items:center;gap:4px}
-      .long-head i{width:7px;height:7px;border-radius:50%;background:#1b1713}
-      .long-head b{margin-left:8px;font-size:12px;color:#1b1713}
+      .long-head i{width:7px;height:7px;border-radius:50%;background:rgba(255,255,255,.86)}
+      .long-head b{margin-left:8px;font-size:12px;font-weight:650;color:var(--ink)}
       .answer article{display:none;flex:0 1 auto;min-height:0;overflow:auto;padding:25px 5px 24px;scrollbar-width:none}
+      .answer article::-webkit-scrollbar{display:none}
       .n[data-state=long] .answer article{display:block}
-      .a-label{display:block;color:#a7433b;font-size:9px;font-weight:750;letter-spacing:.12em;text-transform:uppercase;margin:0 0 10px}
-      .liquid .a-label{color:#ff9a91}
-      .n{--lr:115px;--rr:115px}
+      .a-label{display:block;color:rgba(255,255,255,.6);font-size:9px;font-weight:650;letter-spacing:.12em;text-transform:uppercase;margin:0 0 10px}
+      /* Wing captions — what we heard, mono, either side of the eyes. */
       .n[data-state=idle].captioning,.n[data-state=listening].captioning,.n[data-state=speaking].captioning{width:calc(var(--lr) + var(--rr));transform:translateX(calc((var(--rr) - var(--lr))/2));transition:width .3s ease-out,transform .3s ease-out}
-      .n[data-state=idle].captioning .face,.n[data-state=listening].captioning .face,.n[data-state=speaking].captioning .face{left:calc(var(--lr) - 115px);right:auto;width:230px}
-      .cap{position:absolute;z-index:4;top:0;height:100%;display:flex;flex-direction:column;justify-content:center;overflow:hidden;opacity:0;transition:opacity .3s ease .18s;line-height:1.3;pointer-events:none;font-family:ui-monospace,Menlo,monospace;font-size:9px;letter-spacing:.04em;color:rgba(255,240,235,.8);text-shadow:0 1px 2px rgba(110,33,26,.18);white-space:nowrap;text-overflow:ellipsis}
+      .n[data-state=idle].captioning .face,.n[data-state=listening].captioning .face,.n[data-state=speaking].captioning .face{left:calc(var(--lr) - 95px);right:auto;width:190px;margin:0}
+      .cap{position:absolute;z-index:4;top:0;height:100%;display:flex;flex-direction:column;justify-content:center;overflow:hidden;opacity:0;transition:opacity .3s ease .18s;line-height:1.3;pointer-events:none;font-family:var(--mono);font-size:9px;letter-spacing:.04em;color:rgba(255,240,235,.5);white-space:nowrap;text-overflow:ellipsis}
       .n[data-state=idle].captioning .cap,.n[data-state=listening].captioning .cap,.n[data-state=speaking].captioning .cap{opacity:1}
-      .cap-l{left:16px;width:max(0px,calc(var(--lr) - 141px));text-align:right;align-items:flex-end}
-      .cap-r{left:calc(var(--lr) + 125px);width:max(0px,calc(var(--rr) - 141px));text-align:left;align-items:flex-start}
-      .answer-body{color:rgba(27,23,19,.66);font:400 15px/1.62 "Newsreader","Charter BT",Georgia,serif}
-      .answer-body h1,.answer-body h2{margin:10px 0 15px;color:#1b1713;font:400 31px/1.05 "Newsreader","Charter BT",Georgia,serif}
-      .answer-body h3{margin:10px 0 12px;color:#1b1713;font:400 20px/1.15 "Newsreader","Charter BT",Georgia,serif}
-      .answer-body p{margin:0 0 13px;color:rgba(27,23,19,.66)}
+      .cap-l{left:16px;width:max(0px,calc(var(--lr) - 121px));text-align:right;align-items:flex-end}
+      .cap-r{left:calc(var(--lr) + 105px);width:max(0px,calc(var(--rr) - 121px));text-align:left;align-items:flex-start}
+      .answer-body{color:rgba(255,255,255,.68);font:500 17px/1.48 var(--sf);letter-spacing:-.014em}
+      .answer-body h1,.answer-body h2{margin:8px 0 15px;color:var(--ink);font:600 26px/1.08 var(--sf);letter-spacing:-.02em}
+      .answer-body h3{margin:10px 0 12px;color:var(--ink);font:600 19px/1.15 var(--sf)}
+      .answer-body p{margin:0 0 13px;color:rgba(255,255,255,.68)}
       .answer-body p:last-child{margin-bottom:0}
       .answer-body ul{margin:8px 0;padding-left:20px}
       .answer-body ul>li{margin:0 0 6px}
-      .answer-body ul>li::marker{color:#c9544a}
+      .answer-body ul>li::marker{color:rgba(255,255,255,.72)}
       .answer-body ol{list-style:none;margin:8px 0 0;padding:0;counter-reset:sbn}
-      .answer-body ol>li{counter-increment:sbn;display:grid;grid-template-columns:29px 1fr;gap:10px;align-items:start;padding:13px 0;border-top:1px solid rgba(65,48,40,.09)}
-      .answer-body ol>li::before{content:counter(sbn);display:grid;place-items:center;width:22px;height:22px;border-radius:50%;color:#17110f;background:#e8786e;font:750 9px/22px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;text-align:center}
-      .liquid .answer-body ol>li{border-color:rgba(255,255,255,.09)}
-      .answer-body strong{color:#1b1713}
-      .answer-body a{color:#c9544a}
+      .answer-body ol>li{counter-increment:sbn;display:grid;grid-template-columns:29px 1fr;gap:10px;align-items:start;padding:11px 0;border-top:1px solid rgba(255,255,255,.08)}
+      .answer-body ol>li::before{content:counter(sbn);display:grid;place-items:center;width:22px;height:22px;border-radius:50%;color:#050505;background:rgba(255,255,255,.88);font:650 9px/22px var(--sf);text-align:center}
+      .answer-body strong{color:var(--ink)}
+      .answer-body a{color:#F6A8A2}
       .answer-body .sb-turn{margin:0}.answer-body .sb-card-q,.answer-body .sb-user-msg{display:none}.answer-body .sb-card-a,.answer-body .sb-card-status,.answer-body .sb-assistant-msg,.answer-body .sb-answer{margin:0;color:inherit;background:transparent;font:inherit}
       .lane{display:none;position:relative;flex:0 0 74px;height:74px;width:100%;overflow:hidden}
       .n[data-state=short] .lane,.n[data-state=long] .lane{display:block}
-      .n[data-state=long] .lane{height:50px;flex:0 0 50px;width:auto;margin:0 -24px;border-top:1px solid rgba(65,48,40,.11);border-bottom:1px solid rgba(65,48,40,.12);overflow:visible}
+      .n[data-state=long] .lane{height:50px;flex:0 0 50px;width:auto;margin:0 -24px;border-top:1px solid rgba(255,255,255,.09);border-bottom:1px solid rgba(255,255,255,.09);overflow:visible}
       .walker{position:absolute;left:0;bottom:0;width:54px;will-change:transform}
       .n[data-state=long] .walker{bottom:-3px}
       .flip{display:block;transform-origin:center}
       .walker svg{display:block;width:54px;height:auto;overflow:visible}
-      .answer footer{display:none;align-items:center;gap:8px;margin:0 -24px;padding:13px 17px;border-top:1px solid rgba(65,48,40,.1);background:rgba(255,255,255,.18)}
+      .answer footer{display:none;align-items:center;gap:8px;margin:0 -24px;padding:13px 17px;border-top:1px solid rgba(255,255,255,.09);background:rgba(255,255,255,.04)}
       .n[data-state=long] .answer footer{display:flex}
-      .answer footer input{flex:1;min-width:0;border:0;outline:0;background:transparent;color:#1b1713;caret-color:#c9544a;font:400 12px/1.3 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
-      .answer footer input::placeholder{color:rgba(27,23,19,.38);font-size:11px}
+      .answer footer input{flex:1;min-width:0;border:0;outline:0;background:transparent;color:var(--ink);caret-color:#E8786E;font:500 12px/1.3 var(--sf)}
+      .answer footer input::placeholder{color:rgba(255,255,255,.38);font-size:11px}
       .fmic,.fsend{flex:0 0 30px;width:30px;height:30px;font-size:12px}
-      .fmic{color:#1b1713;background:rgba(65,48,40,.07)}
-      .fsend{color:#17110f;background:#e8786e}
-      /* Recording surface — the Mac meeting recorder's live sheet, in coral-warm
-         translucency (it stays up for a whole lecture, so it must not be a slab). */
-      .n[data-state=record]{width:min(570px,80vw);height:min(var(--sb-record-height,170px),calc(100vh - 110px));border-radius:0 0 34px 34px;cursor:default;border:1px solid rgba(255,255,255,.34);border-top:0;background:linear-gradient(180deg,rgba(44,19,15,.9) 0,rgba(26,12,10,.88) 100%);box-shadow:0 28px 90px rgba(20,9,7,.4),inset 0 1px rgba(255,255,255,.26);backdrop-filter:blur(26px) saturate(150%)}
-      .n[data-state=record] .record{opacity:1;pointer-events:auto;transform:none;transition-delay:360ms}
-      .record{z-index:9;display:flex;flex-direction:column;padding:18px 22px 16px;text-align:left;color:#f6ece9}
-      .rec-head{display:flex;align-items:center;justify-content:space-between;padding-bottom:10px;border-bottom:1px solid rgba(255,255,255,.12)}
+      .fmic{color:rgba(255,255,255,.78);background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12)}
+      .fsend{color:#050505;background:rgba(255,255,255,.88)}
+      /* Recording surface — the Mac's meeting sheet: the ONE translucent surface,
+         because it is up for a whole meeting over whatever you are doing. */
+      .n[data-state=record]{width:min(580px,calc(100vw - 32px));height:min(var(--sb-record-height,170px),calc(100vh - 70px));border-radius:0 0 34px 34px;cursor:default;border:0;background:linear-gradient(180deg,rgba(12,12,14,.72),rgba(10,10,12,.58));box-shadow:0 24px 70px rgba(0,0,0,.38),0 0 24px rgba(255,92,92,.28);backdrop-filter:blur(26px) saturate(150%);-webkit-backdrop-filter:blur(26px) saturate(150%);transition:width 620ms cubic-bezier(.22,1,.36,1),height 420ms cubic-bezier(.22,1,.36,1),border-radius 520ms cubic-bezier(.22,1,.36,1),background .4s ease,box-shadow .4s ease,opacity .42s ease,transform .55s cubic-bezier(.32,.72,0,1)}
+      .n[data-state=record] .record{opacity:1;pointer-events:auto;transform:none;transition-delay:100ms}
+      /* Compact "REC in the housing": the recorder folds to the idle pill's footprint
+         so it covers nothing new while you watch or talk. Hover/tap to peek. */
+      .n[data-state=record]:has(.record[data-compact="1"]){width:250px;height:56px;border-radius:0 0 20px 20px;cursor:pointer;background:#000;backdrop-filter:none;-webkit-backdrop-filter:none;box-shadow:0 0 24px rgba(255,92,92,.5),0 10px 30px rgba(0,0,0,.35)}
+      .record[data-compact="1"]{padding:0 14px 0 16px;justify-content:center}
+      .record[data-compact="1"] .rec-head{padding:0;border-bottom:0}
+      .record[data-compact="1"] .rec-body,.record[data-compact="1"] .rec-ready-foot{display:none}
+      .record[data-compact="1"] .rec-mode{max-width:120px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:color .3s ease}
+      .rec-mode.flash{color:var(--ink);text-transform:none;letter-spacing:-.008em;font-size:12px}
+      .record{z-index:9;display:flex;flex-direction:column;padding:18px 22px 16px;text-align:left;color:var(--ink);transform:translateY(-8px);transition:opacity 260ms ease 120ms,transform 640ms cubic-bezier(.22,1,.36,1) 60ms}
+      .rec-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:0 1px 10px;border-bottom:1px solid rgba(255,255,255,.10)}
       .rec-live{display:flex;align-items:center;gap:9px}
-      .rec-dot{width:9px;height:9px;border-radius:50%;background:#ff5b4d;box-shadow:0 0 12px rgba(255,91,77,.8);animation:sbRecPulse 1.6s ease-in-out infinite}
-      .record[data-phase=ready] .rec-dot{animation:none;background:rgba(255,255,255,.35);box-shadow:none}
-      .rec-clock{font:650 13px/1 ui-monospace,Menlo,monospace;letter-spacing:.06em;color:#fff}
-      .rec-mode{color:#ffb3a9;font-size:9px;font-weight:750;letter-spacing:.12em;text-transform:uppercase}
-      .rec-stop{padding:9px 18px;border-radius:999px;color:#fff;background:#d84a3f;font:750 11px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;cursor:pointer;box-shadow:0 4px 14px rgba(216,74,63,.42)}
-      .rec-stop:hover{filter:brightness(1.08)}
+      .rec-dot{width:7px;height:7px;border-radius:50%;background:#ff5c5c;animation:nfMeetingPulse 1.7s ease-in-out infinite}
+      .record[data-phase=ready] .rec-dot{animation:none;background:rgba(255,255,255,.35)}
+      .rec-clock{color:#ff6b6b;font:700 11px/1 var(--sf);font-variant-numeric:tabular-nums;letter-spacing:.04em}
+      .rec-mode{color:rgba(255,255,255,.62);font-size:10px;font-weight:650;letter-spacing:.11em;text-transform:uppercase}
+      .rec-stop{height:24px;padding:0 12px;border:1px solid rgba(255,255,255,.16);border-radius:999px;background:rgba(255,255,255,.06);color:rgba(255,255,255,.78);font:650 11px/1 var(--sf);cursor:pointer;transition:background 160ms ease,color 160ms ease,border-color 160ms ease}
+      .rec-stop:hover{background:rgba(255,255,255,.13);color:#fff}
       .record[data-phase=ready] .rec-stop{display:none}
-      .rec-body{flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column;gap:8px;padding:11px 0 2px}
+      .rec-body{flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column;gap:7px;padding:11px 0 2px}
       .record[data-phase=ready] .rec-body{display:none}
-      .rec-speaker{color:#ffb3a9;font-size:10.5px;font-weight:700;min-height:13px}
-      .rec-lines{display:grid;gap:4px}
-      .rec-lines p{margin:0;color:rgba(255,240,235,.85);font:400 12.5px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-      .rec-notes{display:grid;gap:3px}
-      .rec-notes p{margin:0;color:rgba(255,255,255,.58);font-size:11px;line-height:1.4}
-      .rec-notes p::before{content:"• ";color:#ff9a91}
+      .rec-speaker{display:flex;align-items:center;gap:8px;color:var(--ink);font-size:13px;font-weight:650;letter-spacing:-.008em;min-height:15px}
+      .rec-speaker::before{content:"";width:6px;height:6px;border-radius:50%;background:rgba(120,220,160,.95);box-shadow:0 0 10px rgba(120,220,160,.6);flex-shrink:0}
+      .rec-speaker:empty::before{display:none}
+      .rec-lines{display:grid;gap:5px;color:rgba(255,255,255,.78);font-size:13px;line-height:1.42;letter-spacing:-.008em}
+      .rec-lines p{margin:0;opacity:.5;transition:opacity 300ms ease;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+      .rec-lines p:last-child{color:var(--ink);opacity:1}
+      .rec-notes{display:grid;gap:3px;margin-top:4px;padding-top:10px;border-top:1px solid rgba(255,255,255,.10)}
+      .rec-notes:empty{display:none}
+      .rec-notes p{position:relative;margin:0;padding-left:12px;color:rgba(255,255,255,.74);font-size:12px;line-height:1.4}
+      .rec-notes p::before{content:"";position:absolute;top:7px;left:2px;width:4px;height:4px;border-radius:50%;background:rgba(255,255,255,.34)}
       .rec-ready-foot{display:none;align-items:center;justify-content:space-between;gap:12px;padding-top:13px}
       .record[data-phase=ready] .rec-ready-foot{display:flex}
-      .rec-ready-title{display:block;font-size:13px;color:#fff}
-      .rec-ready-sub{color:rgba(255,240,235,.56);font-size:10.5px}
-      .rec-start{flex-shrink:0;padding:12px 20px;border-radius:999px;color:#fff;background:linear-gradient(160deg,#f6a8a2 0%,#e8786e 55%,#c9544a 100%);font:750 12px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;cursor:pointer;box-shadow:0 6px 18px rgba(201,84,74,.45),inset 0 1px rgba(255,255,255,.3)}
-      .rec-start:hover{filter:brightness(1.06)}
-      @keyframes sbRecPulse{0%,100%{opacity:1}50%{opacity:.35}}
+      .rec-ready-title{display:block;font-size:13px;font-weight:650;color:var(--ink)}
+      .rec-ready-sub{color:rgba(255,255,255,.46);font-size:10.5px}
+      .rec-start{flex-shrink:0;height:32px;padding:0 18px;border-radius:999px;color:#050505;background:rgba(255,255,255,.88);font:650 12px/1 var(--sf);cursor:pointer;transition:background 160ms ease}
+      .rec-start:hover{background:#fff}
+      /* Sign-in */
       .signin{z-index:10;display:flex;align-items:center;gap:12px;padding:15px 18px}
       .signin span{display:grid;gap:3px;min-width:0;flex:1;text-align:left}
-      .signin b{font-size:12px}.signin small{color:rgba(27,23,19,.48);font-size:10px}
-      .signin button.cta{padding:9px 13px;border-radius:999px;color:#fff;background:#d86c63;font-size:10px;font-weight:750}
-      .n[data-state=signin]{width:min(430px,78vw);height:88px;border-radius:0 0 29px 29px;cursor:default;border:1px solid rgba(255,255,255,.72);border-top:0;background:rgba(255,251,247,.9);box-shadow:0 24px 70px rgba(27,23,19,.16),inset 0 1px rgba(255,255,255,.8);backdrop-filter:blur(24px) saturate(175%)}
+      .signin b{font-size:12px;font-weight:650;color:var(--ink)}.signin small{color:rgba(255,255,255,.46);font-size:10px}
+      .signin button.cta{padding:9px 13px;border-radius:999px;color:#050505;background:rgba(255,255,255,.88);font:650 10px/1 var(--sf)}
+      .n[data-state=signin]{width:min(430px,78vw);height:88px;border-radius:0 0 29px 29px}
       .n[data-state=signin] .signin{opacity:1;pointer-events:auto;transform:none;transition-delay:360ms}
-      .n.liquid[data-state=input],.n.liquid[data-state=menu],.n.liquid[data-state=thinking],.n.liquid[data-state=short],.n.liquid[data-state=long]{color:#fff;border-color:rgba(255,255,255,.42);background:linear-gradient(145deg,rgba(31,27,28,.48),rgba(18,16,17,.38));box-shadow:0 24px 70px rgba(0,0,0,.2),inset 0 1px rgba(255,255,255,.24);backdrop-filter:blur(20px) saturate(185%)}
-      .liquid .input small{color:#ff9a91}.liquid .input input{color:#fff;caret-color:#ff9a91}.liquid .input input::placeholder{color:rgba(255,255,255,.42)}
-      .liquid .round{color:rgba(255,255,255,.82);background:rgba(255,255,255,.08)}.liquid .send{color:#fff;background:#e8786e}.liquid .mode{color:rgba(255,255,255,.78);background:rgba(255,255,255,.08)}
-      .liquid .theme{border-color:rgba(255,255,255,.15);color:rgba(255,255,255,.82);background:rgba(255,255,255,.08);box-shadow:inset 0 1px rgba(255,255,255,.16)}
-      .liquid .menu header{border-color:rgba(255,255,255,.1)}.liquid .menu header small{color:rgba(255,255,255,.82)}.liquid .menu header .actions em{color:#ff9a91;background:rgba(236,128,120,.13)}
-      .liquid .menu button.item{border-color:rgba(255,255,255,.08);color:#fff}.liquid .item small{color:rgba(255,255,255,.46)}.liquid .menu button.item:hover{background:rgba(255,255,255,.06)}
-      .liquid .thinking header{border-color:rgba(255,255,255,.1)}.liquid .tlabel{color:#ff9a91}.liquid .thinking .collapse{color:rgba(255,255,255,.44)}
-      .liquid .thinking p{border-color:rgba(255,255,255,.09);color:rgba(255,255,255,.82)}.liquid .thinking p:last-child{color:rgba(255,255,255,.5)}
-      .liquid .short-row small{color:#ff9a91}.liquid .short-row strong,.liquid .long-head b{color:#fff}
-      .liquid .short-row .actions em,.liquid .long-head .actions em{border-color:rgba(255,255,255,.13);color:rgba(255,255,255,.62);background:rgba(255,255,255,.06)}
-      .liquid .long-head{border-color:rgba(255,255,255,.09)}.liquid .long-head i{background:#fff}
-      .liquid .answer-body{color:rgba(255,255,255,.7)}.liquid .answer-body p{color:rgba(255,255,255,.7)}.liquid .answer-body h1,.liquid .answer-body h2,.liquid .answer-body h3,.liquid .answer-body strong{color:#fff}
-      .liquid .lane{border-color:rgba(255,255,255,.1)}
-      .liquid .answer footer{border-color:rgba(255,255,255,.1);background:rgba(255,255,255,.06)}.liquid .answer footer input{color:#fff}.liquid .answer footer input::placeholder{color:rgba(255,255,255,.42)}
-      .liquid .fmic{color:#fff;background:rgba(255,255,255,.09)}
-      .liquid .signin b{color:#fff}.liquid .signin small{color:rgba(255,255,255,.46)}
+      /* ── Liquid glass theme (.glass) ─────────────────────────────────────────
+         The Mac meeting sheet's material + the floating panel's specular hairline. */
+      .n.glass[data-state=input],.n.glass[data-state=menu],.n.glass[data-state=thinking],.n.glass[data-state=short],.n.glass[data-state=long],.n.glass[data-state=signin],.n.glass[data-state=greeting],.n.glass[data-state=working],.n.glass[data-state=listening],.n.glass[data-state=speaking],.n.glass[data-state=idle]{background:linear-gradient(180deg,rgba(12,12,14,.72),rgba(10,10,12,.58));border:1px solid rgba(255,255,255,.14);border-top:0;box-shadow:0 24px 70px rgba(0,0,0,.38),inset 1px 1px 1px rgba(255,255,255,.2);backdrop-filter:blur(26px) saturate(150%);-webkit-backdrop-filter:blur(26px) saturate(150%)}
+      .n.glass[data-state=listening]{box-shadow:0 24px 70px rgba(0,0,0,.38),inset 1px 1px 1px rgba(255,255,255,.2),0 0 18px 2px rgba(232,120,110,.3)}
+      .n.glass[data-state=speaking]{box-shadow:0 24px 70px rgba(0,0,0,.38),inset 1px 1px 1px rgba(255,255,255,.2),0 0 34px rgba(232,120,110,.5)}
+      .n.glass .fold{opacity:.35}
+      .n.glass[data-state=authenticated]{box-shadow:0 0 30px rgba(84,222,138,.75)}
+      /* ── Keyframes (Mac names where they are the Mac's) ─────────────────── */
       @keyframes shell{from{opacity:0;transform:scaleX(.06) scaleY(.72)}18%{opacity:1}72%{transform:scaleX(1.025)}to{opacity:1;transform:none}}
       @keyframes spin{0%{opacity:0;--a:0deg}18%{opacity:1}100%{opacity:1;--a:300deg}}
-      @keyframes fill{0%{opacity:0;background-position:150% 0,0 0}32%{opacity:.5}100%{opacity:1;background-position:-80% 0,0 0}}
       @keyframes invokeFace{to{opacity:1;transform:none}}
       @keyframes radiusFlow{to{--a:360deg}}
       @keyframes textshine{from{background-position:140% 0}to{background-position:-140% 0}}
       @keyframes eyesOpen{from{opacity:0;transform:scaleY(.06)}to{opacity:1;transform:scaleY(1)}}
       @keyframes pupilSettle{from{transform:translateY(2px)}to{transform:none}}
-      @keyframes sonar{0%{opacity:.72;transform:scale(1)}100%{opacity:0;transform:scale(1.28,1.7)}}
-      @keyframes talkMouth{from{transform:scale(.82,.38)}to{transform:scale(1,1.28)}}
+      @keyframes nfSonar{0%{width:120px;height:44px;margin:-22px 0 0 -60px;opacity:.6;border-width:2px}100%{width:340px;height:150px;margin:-75px 0 0 -170px;opacity:0;border-width:.5px}}
+      @keyframes nfListenRadiate{0%,100%{box-shadow:0 0 0 1px rgba(232,120,110,.34),0 0 18px 2px rgba(232,120,110,.30)}50%{box-shadow:0 0 0 1.6px rgba(240,149,140,.90),0 0 38px 7px rgba(232,120,110,.62)}}
+      @keyframes nfTalk{0%,100%{transform:scaleY(.45)}50%{transform:scaleY(1.25)}}
+      @keyframes nfThinkDot{0%,100%{opacity:.3;transform:translateY(0)}50%{opacity:1;transform:translateY(-2px)}}
+      @keyframes nfThinkShimmer{from{background-position:180% 0}to{background-position:-80% 0}}
+      @keyframes nfMeetingPulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(.78)}}
+      @keyframes nfAuthPulse{0%,100%{box-shadow:0 0 14px rgba(122,162,255,.35)}50%{box-shadow:0 0 30px rgba(122,162,255,.7)}}
       @keyframes speakLook{0%,100%{transform:translate(0,1px)}50%{transform:translate(2px,1px)}}
       @keyframes gaze{0%,12%,100%{transform:translate(0,0)}27%,39%{transform:translate(-3px,0)}52%,64%{transform:translate(3px,0)}76%,90%{transform:translate(0,4px)}}
-      @keyframes thinkShimmer{from{background-position:140% 0}to{background-position:-140% 0}}
+      /* Movie mode: the mascot's cyan glow reaches the notch; scene questions dart
+         the eyes (the Mac's nfScanLook while it reads your screen). */
+      .n.movie[data-state=idle],.n.movie[data-state=listening],.n.movie[data-state=working]{box-shadow:0 0 22px rgba(118,214,255,.42),0 10px 30px rgba(0,0,0,.35)}
+      .n.scanning .pupil{animation:nfScanLook 2s ease-in-out infinite!important}
+      @keyframes nfScanLook{0%,100%{transform:translateX(0)}22%{transform:translateX(-3.4px)}48%{transform:translate(3.2px,-1.4px)}74%{transform:translate(-1.6px,1.2px)}}
       /* VACANT — Braino is out on the page (Cmd x2). The notch is his home, not a
-         second him, so the coral drains out and the face leaves with him: two lit
-         Brainos would be two things to talk to. Deliberately scoped to the EMPTY
-         states only, so the moment he pushes a long answer up here the panel keeps
-         its normal readable glass. Click the empty shell to call him back. */
+         second him: the face leaves with him and only two dim dots remain. Click
+         the empty shell to call him back. */
       .n.vacant .face{opacity:0!important}
-      .n.vacant[data-state=idle],.n.vacant[data-state=off]{
-        width:132px;height:30px;border-radius:0 0 16px 16px;cursor:pointer;
-        border:1px solid rgba(255,255,255,.14);border-top:0;
-        background:linear-gradient(180deg,rgba(34,25,23,.6) 0%,rgba(20,15,14,.66) 100%);
-        box-shadow:0 10px 26px rgba(0,0,0,.26),inset 0 1px rgba(255,255,255,.07);
-        backdrop-filter:blur(14px) saturate(120%);
-      }
+      .n.vacant[data-state=idle],.n.vacant[data-state=off]{width:132px;height:30px;border-radius:0 0 16px 16px;cursor:pointer;background:rgba(0,0,0,.86);box-shadow:0 10px 26px rgba(0,0,0,.26)}
       .n.vacant[data-state=idle] .idle{opacity:0}
       .n.vacant[data-state=idle] .vacancy,.n.vacant[data-state=off] .vacancy{opacity:1}
       .vacancy{position:absolute;inset:0;z-index:3;display:flex;align-items:center;justify-content:center;gap:7px;opacity:0;pointer-events:none;transition:opacity .45s ease}
-      .vacancy i{width:5px;height:5px;border-radius:50%;background:rgba(244,228,220,.26)}
-      .n.vacant[data-state=idle]:hover{background:linear-gradient(180deg,rgba(44,32,29,.66) 0%,rgba(26,19,18,.7) 100%)}
-      .n.vacant[data-state=idle]:hover .vacancy i{background:rgba(244,228,220,.5)}
-      /* Boot greeting — verbatim port of the Mac's nf-iomi-expanded card
-         (braino-mac.css): 610x180 pill, the face steps aside entirely, and a
-         centred two-column card opens (greeting 325 | 1px rule | wake 165).
-         The face needs no rule to hide: .panel is opacity:0 by default and
-         greeting is simply absent from the face's visible-state list. */
-      .n[data-state=greeting]{width:min(610px,80vw);height:180px;border-radius:0 0 38px 38px;overflow:hidden;cursor:default;border:1px solid rgba(255,255,255,.42);border-top:0;background:linear-gradient(180deg,#f6a8a2 0%,#e8786e 56%,#c9544a 100%);box-shadow:0 28px 84px rgba(201,84,74,.36),inset 0 1px rgba(255,255,255,.46)}
+      .vacancy i{width:5px;height:5px;border-radius:50%;background:rgba(255,255,255,.26)}
+      .n.vacant[data-state=idle]:hover{background:rgba(0,0,0,.94)}
+      .n.vacant[data-state=idle]:hover .vacancy i{background:rgba(255,255,255,.5)}
+      /* Boot greeting — the Mac's nf-iomi-expanded card: 610x180, greeting 325 |
+         1px rule | wake 165, word-by-word blur reveal at .43/.76/1.09s. */
+      .n[data-state=greeting]{width:min(610px,80vw);height:180px;border-radius:0 0 38px 38px;overflow:hidden;animation:nfGreetGlow 1.1s ease-out 1}
       .greet{z-index:11;display:flex;align-items:center;justify-content:center}
       .n[data-state=greeting] .greet{opacity:1;transform:none;transition-delay:300ms}
       .greet-copy{width:325px;text-align:left}
-      .greet-copy strong{display:flex;align-items:baseline;gap:8px;color:#fdf6f2;font-size:31px;font-weight:600;letter-spacing:-.035em;text-shadow:0 2px 14px rgba(110,33,26,.28)}
+      .greet-copy strong{display:flex;align-items:baseline;gap:8px;color:#f3efe5;font-size:31px;font-weight:600;letter-spacing:-.035em}
       .greet-copy strong span{opacity:0;filter:blur(5px);transform:translateY(7px)}
-      .n[data-state=greeting] .greet-copy strong span{animation:greetWord .52s cubic-bezier(.2,.75,.2,1) forwards}
+      .n[data-state=greeting] .greet-copy strong span{animation:nfIomiGreetingWord .52s cubic-bezier(.2,.75,.2,1) forwards}
       .n[data-state=greeting] .greet-copy strong span:nth-child(1){animation-delay:.43s}
       .n[data-state=greeting] .greet-copy strong span:nth-child(2){animation-delay:.76s}
       .n[data-state=greeting] .greet-copy strong span:nth-child(3){animation-delay:1.09s}
-      .greet-copy>small{display:block;margin-top:10px;color:rgba(253,246,242,.66);font-size:15px;opacity:0}
+      .greet-copy>small{display:block;margin-top:10px;color:rgba(243,239,229,.42);font-size:15px;opacity:0}
       .n[data-state=greeting] .greet-copy>small{animation:greetFade .5s ease 1.5s forwards}
-      @keyframes greetWord{to{opacity:1;filter:blur(0);transform:none}}
+      @keyframes nfIomiGreetingWord{to{opacity:1;filter:blur(0);transform:none}}
       @keyframes greetFade{to{opacity:1}}
-      .greet-rule{width:1px;height:0;margin:0 28px;align-self:center;background:linear-gradient(180deg,rgba(255,255,255,0),rgba(255,255,255,.6),rgba(255,255,255,0));opacity:0;transition:height .65s cubic-bezier(.2,.8,.2,1) .52s,opacity .3s ease .5s}
+      @keyframes nfGreetGlow{0%{box-shadow:0 0 0 rgba(232,120,110,0)}30%{box-shadow:0 0 34px rgba(232,120,110,.85),0 0 60px rgba(243,154,66,.4)}100%{box-shadow:0 0 12px rgba(232,120,110,.16),0 0 26px rgba(232,120,110,.07)}}
+      .greet-rule{width:1px;height:0;margin:0 28px;align-self:center;background:linear-gradient(180deg,rgba(255,255,255,0),rgba(255,255,255,.4),rgba(255,255,255,0));opacity:0;transition:height .65s cubic-bezier(.2,.8,.2,1) .52s,opacity .3s ease .5s}
       .n[data-state=greeting] .greet-rule{height:92px;opacity:1}
       .greet-wake{width:165px;opacity:0;transform:translateX(8px);transition:opacity .42s ease 1.25s,transform .52s ease 1.22s}
       .n[data-state=greeting] .greet-wake{opacity:1;transform:none}
       .greet-eyes{display:flex;gap:7px;margin-bottom:12px}
-      .greet-eyes i{width:9px;height:9px;border-radius:50%;background:#fdf6f2;box-shadow:0 0 8px rgba(253,246,242,.45)}
-      .greet-wake>small{display:block;margin-bottom:10px;color:rgba(253,246,242,.7);font-size:13px}
+      .greet-eyes i{width:9px;height:9px;border-radius:50%;background:#fff;box-shadow:0 0 8px rgba(255,255,255,.35)}
+      .greet-wake>small{display:block;margin-bottom:10px;color:rgba(243,239,229,.7);font-size:13px}
       .greet-keys{display:flex;align-items:center;gap:5px;margin-top:6px}
-      .greet-keys kbd{padding:4px 8px;border:1px solid rgba(255,255,255,.28);border-radius:6px;background:rgba(255,255,255,.14);color:#fff;font:600 10px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
-      .greet-keys em{color:rgba(253,246,242,.55);font-size:10px;font-style:normal}
-      @media(prefers-reduced-motion:reduce){.greet-copy strong span,.greet-copy>small{animation-duration:1ms!important;animation-delay:0ms!important}.greet-rule,.greet-wake,.greet{transition-duration:1ms!important;transition-delay:0ms!important}}
+      .greet-keys kbd{padding:4px 8px;border:1px solid rgba(255,255,255,.14);border-radius:6px;background:rgba(255,255,255,.055);color:rgba(255,255,255,.76);font:500 11px/1 "SF Pro Text",-apple-system,BlinkMacSystemFont,sans-serif}
+      .greet-keys em{color:rgba(243,239,229,.34);font-size:10px;font-style:normal}
+      @media(prefers-reduced-motion:reduce){.n,.panel,.record{animation:none!important;transition-duration:.01ms!important;transition-delay:0ms!important}.greet-copy strong span,.greet-copy>small{animation-duration:1ms!important;animation-delay:0ms!important}.greet-rule,.greet-wake,.greet{transition-duration:1ms!important;transition-delay:0ms!important}.n[data-state=listening]::before,.n[data-state=listening]::after,.rec-dot,.workpill::after{animation:none!important}.n[data-state=invoking] .face{opacity:1;transform:none}}
     </style>
     <section class="n" data-state="off">
       <div class="panel face"><svg viewBox="0 0 230 72" preserveAspectRatio="none">
@@ -12530,6 +11716,19 @@ function __sbMountNotchV1() {
   ["__sb_bar__", "__sb_card_wrap__", "__sb_brain_btn__", "__sb_walk_lane__", "__sb_mode_dropdown__"].forEach((id) => {
     document.getElementById(id)?.style?.setProperty("display", "none", "important");
   });
+  // @font-face must live in the DOCUMENT — Chrome ignores it inside a shadow root.
+  // The family name then resolves inside the shadow. Two weights, subset WOFF2
+  // (64KB each) of the same SF Pro Display the Mac renderer bundles.
+  if (!document.getElementById("__sb_notch_fonts__")) {
+    try {
+      const fontStyle = document.createElement("style");
+      fontStyle.id = "__sb_notch_fonts__";
+      const med = chrome.runtime.getURL("fonts/SF-Pro-Display-Medium.woff2");
+      const semi = chrome.runtime.getURL("fonts/SF-Pro-Display-Semibold.woff2");
+      fontStyle.textContent = `@font-face{font-family:"Braino SF Pro Display";src:url("${med}") format("woff2");font-weight:500;font-style:normal;font-display:swap}@font-face{font-family:"Braino SF Pro Display";src:url("${semi}") format("woff2");font-weight:600 700;font-style:normal;font-display:swap}`;
+      (document.head || document.documentElement).appendChild(fontStyle);
+    } catch (_) {}
+  }
   const shell = shadow.querySelector(".n");
   const input = shadow.querySelector(".input input");
   const followInput = shadow.querySelector(".answer footer .fin");
@@ -12542,10 +11741,14 @@ function __sbMountNotchV1() {
     if (__sbNotchRequestTimer) clearTimeout(__sbNotchRequestTimer);
     // Watchdog, not a hard timeout: while the agent is genuinely busy keep waiting,
     // only fail when the notch is stuck in working/thinking with no live flow.
+    const watchStartedAt = Date.now();
     const watch = () => {
       const state = __sbNotchV1?.shell?.dataset?.state;
       if (state !== "working" && state !== "thinking") { __sbNotchRequestTimer = null; return; }
-      if (__sbAgentBusy) { __sbNotchRequestTimer = setTimeout(watch, 15000); return; }
+      // Busy agents get more time, but not forever: a stuck __sbAgentBusy used to
+      // reschedule this every 15s indefinitely, and the notch never came back.
+      const agentAlive = __sbAgentBusy && Date.now() - Number(__sbAgentLogLastUpdateAt || 0) < 90000;
+      if ((agentAlive || __sbChatFetchInFlight > 0) && Date.now() - watchStartedAt < 660000) { __sbNotchRequestTimer = setTimeout(watch, 15000); return; }
       __sbNotchRequestTimer = null;
       __sbNotchShowAnswer("That took too long. Please try again.", false);
     };
@@ -12637,7 +11840,21 @@ function __sbMountNotchV1() {
   });
   shadow.querySelector(".record .rec-stop")?.addEventListener("click", (event) => {
     event.stopPropagation();
+    // Open the sheet so "Transcribing…" is visible while the notes are written.
+    if (__sbNotchRecordPeekTimer) { clearTimeout(__sbNotchRecordPeekTimer); __sbNotchRecordPeekTimer = null; }
+    __sbNotchRecordSetCompact(false);
     void __sbStopLectureRecording();
+  });
+  // Peek at the live recording sheet: hover or tap the compact pill.
+  shell.addEventListener("mouseenter", () => { if (shell.dataset.state === "record") __sbNotchRecordPeek(4000); });
+  shadow.querySelector(".record")?.addEventListener("click", (event) => {
+    if (event.target?.closest?.(".rec-stop,.rec-start")) return;
+    event.stopPropagation();
+    const panel = shadow.querySelector(".record");
+    if (panel?.dataset.phase === "live") {
+      if (panel.dataset.compact === "1") __sbNotchRecordPeek(6000);
+      else { if (__sbNotchRecordPeekTimer) clearTimeout(__sbNotchRecordPeekTimer); __sbNotchRecordPeekTimer = null; __sbNotchRecordSetCompact(true); }
+    }
   });
   shadow.querySelectorAll(".answer .done").forEach((button) => button.addEventListener("click", (event) => {
     event.stopPropagation();
@@ -12658,8 +11875,24 @@ function __sbMountNotchV1() {
     chrome.runtime.sendMessage({ action: "openAuthTab" }, () => { void chrome.runtime.lastError; });
   });
   shadow.querySelector(".thinking .collapse")?.addEventListener("click", (event) => { event.stopPropagation(); __sbNotchSetState("working", __sbAgentBusyLabel.replace(/…/g, "")); });
-  shadow.querySelectorAll(".theme").forEach((button) => button.addEventListener("click", (event) => { event.stopPropagation(); shell.classList.toggle("liquid"); }));
+  // Theme: black (the Mac notch) or liquid glass. Persisted so every tab agrees;
+  // the onboarding form will own this choice (and a colour) later.
+  shadow.querySelectorAll(".theme").forEach((button) => button.addEventListener("click", (event) => {
+    event.stopPropagation();
+    const glass = shell.classList.toggle("glass");
+    if (__sbContextOk()) chrome.storage.local.set({ sbNotchTheme: glass ? "glass" : "black" });
+  }));
+  __sbStorageGet(["sbNotchTheme"]).then(({ sbNotchTheme }) => {
+    if (sbNotchTheme === "glass") shell.classList.add("glass");
+  }).catch(() => {});
+  try {
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area === "local" && changes.sbNotchTheme) shell.classList.toggle("glass", changes.sbNotchTheme.newValue === "glass");
+    });
+  } catch (_) {}
   __sbNotchV1 = { host, shadow, shell, input, walkRaf: 0 };
+  // Braino is on screen: keep the voice hot from here on (focused tab only).
+  try { __sbStartFishWarmKeepAlive(); } catch (_) {}
 }
 function __sbNotchSetState(state, status = "") {
   if (!__sbNotchV1) return;
@@ -12670,7 +11903,7 @@ function __sbNotchSetState(state, status = "") {
   // "input" is allowed while vacant: tapping the roaming mascot opens the ask
   // panel by design (0c9b551) — coercing it to idle made that tap do nothing and
   // leak __sbInputOpen.
-  if (__sbNotchV1.shell.classList.contains("vacant") && !["long", "signin", "record", "input"].includes(state)) {
+  if (__sbNotchV1.shell.classList.contains("vacant") && !["long", "short", "signin", "record", "input"].includes(state)) {
     state = "idle";
   }
   __sbNotchV1.shell.dataset.state = state || "input";
@@ -12682,11 +11915,17 @@ function __sbNotchSetState(state, status = "") {
   if (label) label.textContent = status;
   const pill = __sbNotchV1.shadow.querySelector(".workpill strong");
   if (pill) pill.textContent = state === "working" ? (status || "Thinking") : status;
-  if (state === "short" || state === "long") __sbNotchWalkStart(); else __sbNotchWalkStop();
+  // The answer-lane walker is Braino AT HOME; while he is out on the page (roam)
+  // the lane stays empty — two Brainos on screen is exactly the wrong picture.
+  if ((state === "short" || state === "long") && !__sbRoamActive) __sbNotchWalkStart(); else __sbNotchWalkStop();
   // Leaving the answer surface releases its measured heights, linger and karaoke —
   // the Mac's clearNotchAnswer discipline (a stale height var resizes the next turn).
   if (state !== "short" && state !== "long") __sbClearNotchAnswerSurface();
-  if (state !== "record") __sbNotchV1.shell.style.removeProperty("--sb-record-height");
+  if (state !== "record") {
+    __sbNotchV1.shell.style.removeProperty("--sb-record-height");
+    if (typeof __sbNotchRecordPeekTimer !== "undefined" && __sbNotchRecordPeekTimer) { clearTimeout(__sbNotchRecordPeekTimer); __sbNotchRecordPeekTimer = null; }
+  }
+  if (state !== "working") __sbNotchV1.shell.classList.remove("scanning");   // scene-reading eyes never outlive the request
   // The caption class RIDES THROUGH working/speaking (its geometry is CSS-scoped to
   // idle/listening/speaking, so it can't cram the working face) — your words stay up
   // while he thinks and reappear beside him while he answers, like the Mac wings.
@@ -12703,18 +11942,10 @@ function __sbNotchShowAnswer(text, rich, html) {
   const cls = __sbClassifyNotchAnswer(raw, { rich: Boolean(rich) });
   const isLong = cls.kind === "long";
 
-  // While he is OUT on the page the notch is a screen, not a mouth.
-  //  - short answer → the bubble over his head. You are already looking at him,
-  //    and lighting up the notch too would put the reply in the wrong place.
-  //  - long answer  → drops down from the notch so it is actually readable, while
-  //    he stays outside and speaks it. The two surfaces split the job; he never
-  //    walks home just to answer.
-  if (__sbRoamActive && !isLong) {
-    const line = cls.text.replace(/\s+/g, " ").trim();
-    __sbWkSay?.(line, Math.min(14000, 2200 + line.length * 55));
-    return;
-  }
-
+  // The Mac rule, verbatim: the notch owns conversational text; the standing
+  // mascot owns presence and animation. So even while he is OUT on the page his
+  // answers render up here — there is no answer bubble any more (the roam speech
+  // bubble code stays for status quips, it just doesn't carry replies).
   __sbNotchKaraoke.reset();
   __sbNotchAnswerManualHold = Boolean(html);
   const body = __sbNotchV1.shadow.querySelector(".answer-body");
@@ -12827,7 +12058,7 @@ function __sbNotchCaption(text, options = {}) {
   const centerX = (rect.left + rect.width / 2) || window.innerWidth / 2;
   const maxL = Math.max(150, centerX - 10);
   const maxR = Math.max(150, window.innerWidth - centerX - 10);
-  const baseWing = 115, pad = 30, charPx = 5.7;
+  const baseWing = 95, pad = 30, charPx = 5.7;   // the Mac's --nf-left-reach / --nf-right-reach
   const leftCapacity = Math.max(10, Math.floor((maxL - baseWing - pad) / charPx));
   const leftText = value.slice(0, leftCapacity);
   const rightText = value.slice(leftCapacity);
@@ -12915,7 +12146,7 @@ function __sbNotchMeasureAnswer(kind) {
     // Text height + label/row chrome (14) + lane (74) + breathing room. A one-liner
     // resolves to exactly today's 120px, so nothing changes until the text wraps.
     const h = strong.scrollHeight + 14 + 74 + 8;
-    shell.style.setProperty("--sb-answer-short-height", `${Math.max(120, Math.min(320, Math.round(h)))}px`);
+    shell.style.setProperty("--sb-answer-short-height", `${Math.max(146, Math.min(320, Math.round(h)))}px`);
   }
 }
 function __sbNotchScheduleAnswerRefit(kind) {
@@ -13109,6 +12340,7 @@ function __sbNotchMeasureRecord() {
   if (!__sbNotchV1 || __sbNotchV1.shell.dataset.state !== "record") return;
   const panel = __sbNotchV1.shadow.querySelector(".record");
   if (!panel) return;
+  if (panel.dataset.compact === "1") return;   // housing-sized pill: CSS owns the geometry
   const head = panel.querySelector(".rec-head");
   const body = panel.querySelector(".rec-body");
   const foot = panel.querySelector(".rec-ready-foot");
@@ -13126,6 +12358,8 @@ function __sbNotchShowRecordReady(mode) {
   const panel = shadow.querySelector(".record");
   if (!panel) return;
   panel.dataset.phase = "ready";
+  delete panel.dataset.compact;
+  if (__sbNotchRecordPeekTimer) { clearTimeout(__sbNotchRecordPeekTimer); __sbNotchRecordPeekTimer = null; }
   const isMeeting = mode === "meeting";
   const modeEl = shadow.querySelector(".rec-mode");
   if (modeEl) modeEl.textContent = isMeeting ? "Meeting & Call" : "Lecture & Audio";
@@ -13145,6 +12379,42 @@ function __sbNotchShowRecordReady(mode) {
   __sbNotchMeasureRecord();
   requestAnimationFrame(() => __sbNotchMeasureRecord());
 }
+// REC in the housing. While a lecture or meeting is being recorded the person is
+// WATCHING or IN A CALL — the notch must not sit over that. So the live surface
+// collapses to a housing-sized pill (● 00:00 · Lecture · Stop) that covers nothing
+// new; hover or tap it to PEEK at the full sheet (speaker, last lines, notes) for
+// a few seconds, then it folds back. Stop is always one click away.
+let __sbNotchRecordPeekTimer = null;
+let __sbNotchRecordLastSpeaker = "";
+let __sbNotchRecordSpeakerFlashTimer = null;
+function __sbNotchRecordSetCompact(compact) {
+  if (!__sbNotchV1) return;
+  const panel = __sbNotchV1.shadow.querySelector(".record");
+  if (!panel) return;
+  // Only a LIVE recording sheet folds; a stale peek timer must never compact a
+  // ready sheet (that hid the Start button behind a pill nothing could reopen).
+  if (compact && (panel.dataset.phase !== "live" || __sbNotchV1.shell.dataset.state !== "record")) return;
+  if (compact) {
+    panel.dataset.compact = "1";
+    __sbNotchV1.shell.style.removeProperty("--sb-record-height");
+  } else {
+    delete panel.dataset.compact;
+    __sbNotchMeasureRecord();
+    requestAnimationFrame(() => __sbNotchMeasureRecord());
+  }
+}
+function __sbNotchRecordPeek(ms = 4000) {
+  if (!__sbNotchV1 || __sbNotchV1.shell.dataset.state !== "record") return;
+  const panel = __sbNotchV1.shadow.querySelector(".record");
+  if (!panel || panel.dataset.phase !== "live") return;
+  __sbNotchRecordSetCompact(false);
+  if (__sbNotchRecordPeekTimer) clearTimeout(__sbNotchRecordPeekTimer);
+  __sbNotchRecordPeekTimer = setTimeout(() => {
+    __sbNotchRecordPeekTimer = null;
+    if (__sbNotchV1?.shell?.matches?.(":hover")) { __sbNotchRecordPeek(2500); return; }   // still hovering: keep it open
+    __sbNotchRecordSetCompact(true);
+  }, ms);
+}
 function __sbNotchShowRecordLive() {
   if (!__sbNotchV1) return;
   const panel = __sbNotchV1.shadow.querySelector(".record");
@@ -13152,6 +12422,9 @@ function __sbNotchShowRecordLive() {
   panel.dataset.phase = "live";
   if (__sbNotchV1.shell.dataset.state !== "record") __sbNotchSetState("record");
   __sbNotchRecordSync("Recording…");
+  // Open for a beat so you see it caught the audio, then fold into the housing.
+  __sbNotchRecordSetCompact(false);
+  __sbNotchRecordPeek(3200);
 }
 function __sbNotchRecordClock(text) {
   const clock = __sbNotchV1?.shadow?.querySelector(".rec-clock");
@@ -13167,6 +12440,23 @@ function __sbNotchRecordSync(statusText) {
   else if (speaker && __sbLectureRecordingMode === "meeting" && __sbMeetingContext?.currentSpeaker) {
     speaker.textContent = `${__sbMeetingContext.platformLabel || "Meeting"} · ${__sbMeetingContext.currentSpeaker}`;
   }
+  // In the compact pill the mode label flashes the speaker's name for a moment
+  // when it changes — you know he's tracking who's talking without a transcript pane.
+  try {
+    const cur = __sbLectureRecordingMode === "meeting" ? String(__sbMeetingContext?.currentSpeaker || "") : "";
+    if (cur && cur !== __sbNotchRecordLastSpeaker) {
+      __sbNotchRecordLastSpeaker = cur;
+      const modeEl = shadow.querySelector(".rec-mode");
+      if (modeEl) {
+        const original = modeEl.dataset.label || modeEl.textContent;
+        modeEl.dataset.label = original;
+        modeEl.textContent = cur;
+        modeEl.classList.add("flash");
+        if (__sbNotchRecordSpeakerFlashTimer) clearTimeout(__sbNotchRecordSpeakerFlashTimer);
+        __sbNotchRecordSpeakerFlashTimer = setTimeout(() => { modeEl.textContent = modeEl.dataset.label || original; modeEl.classList.remove("flash"); }, 2200);
+      }
+    }
+  } catch (_) {}
   const lines = shadow.querySelector(".rec-lines");
   if (lines) {
     let tail = [];
@@ -13335,6 +12625,7 @@ async function __sbRunBootGreetingSequence(opts = {}) {
   let spoke = false;
   try { spoke = !!(await __sbSpeakWithPreferredVoice(line, "legacy", { verbatim: true, source: "boot-greeting" })); } catch (_) {}
   await wait(300);
+  __sbLogInteraction({ kind: "greeting", braino_text: line, meta: { spoke } });
   if (opts.manageCard && ["greeting", "authenticated"].includes(__sbNotchV1?.shell?.dataset?.state)) {
     __sbSetBrowserNotchState("idle");
   }
@@ -14073,10 +13364,10 @@ function __sbStopSpeech(reason = "") {
   // Abort any in-flight Fish Audio TTS fetch/stream immediately so barge-in is instant
   // instead of hanging until the fetch timeout. The generation bump above already marks
   // it stale, so the abort is treated as a clean cancel (no error, no browser fallback).
-  if (__sbTtsAbortController) {
-    try { __sbTtsAbortController.abort(); } catch {}
-    __sbTtsAbortController = null;
-  }
+  // Every in-flight TTS fetch — the playing sentence's body stream AND the prefetch.
+  for (const c of __sbTtsAbortControllers) { try { c.abort(); } catch {} }
+  __sbTtsAbortControllers.clear();
+  __sbTtsAbortController = null;
   if (__sbHasActiveRealtimeResponse()) {
     __sbVoicePendingReply = false;
     __sbInterruptRealtimeResponse();
@@ -14208,28 +13499,42 @@ async function __sbFetchVoiceTtsWithRetry(url, request, speechToken) {
     if (speechToken !== __sbSpeechGeneration) return null;
 
     let timeoutId = null;
+    let controller = null;
     try {
-      const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+      controller = typeof AbortController !== "undefined" ? new AbortController() : null;
       if (controller) {
         // Register so barge-in (__sbStopSpeech) can abort instantly. The signal also covers
         // the streamed response body, so an interruption mid-playback is cancelled at once.
+        __sbTtsAbortControllers.add(controller);
         __sbTtsAbortController = controller;
-        timeoutId = setTimeout(() => controller.abort(), __SB_TTS_FETCH_TIMEOUT_MS);
+        // Clamp the stall timer to what is left of the retry deadline: an attempt that
+        // started at t=13s must not get a fresh 14s (that was ~21s of silence worst case).
+        const stallMs = Math.max(1500, Math.min(__SB_TTS_FETCH_TIMEOUT_MS, deadlineAt - Date.now()));
+        timeoutId = setTimeout(() => controller.abort(), stallMs);
       }
       const timedRequest = controller ? { ...request, signal: controller.signal } : request;
-      const resp = await fetch(url, timedRequest);
-      // Server streams the audio, so fetch resolves on headers — stop the stall timer now
-      // and let the body stream freely (it can outlast the timeout for long replies).
-      if (timeoutId) { clearTimeout(timeoutId); timeoutId = null; }
-      if (speechToken !== __sbSpeechGeneration) return null;
+      let resp;
+      try {
+        resp = await fetch(url, timedRequest);
+      } finally {
+        // Headers landed (or it threw). The controller stays registered ONLY while a
+        // body may still be streaming, i.e. on success — every other outcome releases it.
+        if (timeoutId) { clearTimeout(timeoutId); timeoutId = null; }
+      }
+      // Server streams the audio, so fetch resolves on headers — the stall timer is
+      // already cleared; let the body stream freely (it can outlast the timeout).
+      if (!resp.ok && controller) __sbTtsAbortControllers.delete(controller);
+      if (speechToken !== __sbSpeechGeneration) { if (controller) __sbTtsAbortControllers.delete(controller); return null; }
 
       if (resp.ok) {
+        // A 200 with audio is a 200 with audio. The provider header is telemetry, not a
+        // gate — a proxy/CDN dropping the exposed header used to turn perfectly good
+        // audio into a hard "Fish failed" (the Mac never checked it; parity now).
         const provider = (resp.headers.get("x-braino-tts-provider") || "").toLowerCase();
-        if (provider === __SB_TTS_PROVIDER || provider === __SB_TTS_FALLBACK_PROVIDER) return resp;
-        const providerError = new Error(`Unexpected TTS provider: ${provider || "unknown"}`);
-        providerError.retryable = false;
-        lastError = providerError;
-        break;
+        if (provider && provider !== __SB_TTS_PROVIDER && provider !== __SB_TTS_FALLBACK_PROVIDER) {
+          console.debug("[Braino] TTS provider header unrecognised, playing anyway:", provider);
+        }
+        return resp;
       }
 
       const httpError = await __sbReadTtsError(resp);
@@ -14237,6 +13542,9 @@ async function __sbFetchVoiceTtsWithRetry(url, request, speechToken) {
       if (httpError.isCreditIssue || !httpError.retryable) break;
     } catch (error) {
       if (timeoutId) { clearTimeout(timeoutId); timeoutId = null; }
+      // Whatever we registered for this attempt is done.
+      if (controller) __sbTtsAbortControllers.delete(controller);
+      for (const c of Array.from(__sbTtsAbortControllers)) { if (c.signal?.aborted) __sbTtsAbortControllers.delete(c); }
       // Barge-in / new reply bumped the generation and aborted us on purpose — clean cancel,
       // not a failure. Don't log it or trigger the browser-voice fallback.
       if (speechToken !== __sbSpeechGeneration) return null;
@@ -14407,7 +13715,10 @@ async function __sbPlaySentenceResp(resp, speechToken, sentenceText) {
     if (sentenceText) __sbNotchKaraoke.attachSentence(sentenceText, audioEl, speechToken);
   };
 
-  if (__sbCanStreamTtsMp3() && resp.body) {
+  // Mac parity: only stream through MediaSource when the body IS mp3 — a non-mpeg
+  // response (fallback provider in another format) buffers instead of failing.
+  const bodyIsMp3 = /audio\/(mpeg|mp3)/i.test(ttsContentType) || !ttsContentType;
+  if (__sbCanStreamTtsMp3() && resp.body && bodyIsMp3) {
     const bytes = await __sbPlayStreamedTts(resp, speechToken, onReady);
     __sbRecordRealtimeCostTts({ provider: ttsProvider, bytes, contentType: ttsContentType });
     return speechToken === __sbSpeechGeneration;
@@ -14429,6 +13740,7 @@ async function __sbPlaySentenceResp(resp, speechToken, sentenceText) {
 }
 
 // Shared "Fish failed → tell the user, fall back to browser voice" handling.
+let __sbFishFailureNoticeToken = -1;
 function __sbHandleFishTtsFailure(ttsErr) {
   const isCreditIssue = Boolean(ttsErr?.isCreditIssue);
   const isTimeout = Boolean(ttsErr?.isTimeout) || __sbIsAbortLikeError(ttsErr);
@@ -14437,22 +13749,37 @@ function __sbHandleFishTtsFailure(ttsErr) {
   if (isTimeout) console.debug("[Braino] Fish Audio TTS timed out; using browser voice:", fallbackMessage);
   else console.warn("[Braino] Fish Audio TTS failed; falling back to browser voice:", fallbackMessage);
   __sbSetVoiceStatusBadge(isCreditIssue ? "error" : "legacy", isCreditIssue ? "Fish Audio credits" : "Browser voice");
+  // Track it: a Fish failure that the user only hears as a different voice is
+  // otherwise invisible to us.
+  try { __sbLogInteraction({ kind: "tts_failure", tts_provider: __SB_TTS_PROVIDER, tts_error: String(fallbackMessage || "").slice(0, 400), meta: { isTimeout, isCreditIssue } }); } catch (_) {}
+  // Once per turn — the streamed path fails per SENTENCE and used to re-notify each time.
+  if (__sbFishFailureNoticeToken === __sbSpeechGeneration) return;
+  __sbFishFailureNoticeToken = __sbSpeechGeneration;
   const msg = isCreditIssue
-    ? "Fish Audio credits or rate limit are exhausted. Falling back to browser voice for now."
+    ? "Fish Audio credits or rate limit are exhausted. Using browser voice for now."
     : isTimeout
-      ? "Fish Audio took too long, so I used browser voice for this reply."
-      : "Fish Audio voice is unavailable after retrying. Falling back to browser voice for now.";
-  if (__sbHeadphoneMode || __sbVoiceOnlyMode) __sbShowVoiceError(msg);
-  else __sbShowBubble(msg, true, { tone: "status" });
+      ? "Fish Audio took too long — browser voice for this reply."
+      : "Fish Audio is unavailable right now — browser voice for this reply.";
+  // The notice is a quiet pill, NEVER an answer bubble: __sbShowBubble routed into
+  // the notch as a short answer and stomped the open reply (killed the karaoke, wiped
+  // the streaming text, collapsed the surface) while the browser voice kept talking —
+  // "the notch closes when the voice fails". The pill is the Mac's silent-fallback
+  // equivalent, one notch of louder.
+  __sbShowVoiceError(msg);
 }
 
 // Keep-warm: ping the TTS edge function so its isolate stays hot while voice mode is active.
 // Cold starts (~0.5–5s) were a top cause of the first reply feeling slow / timing out.
 let __sbFishWarmTimer = null;
 
+let __sbFishLastWarmAt = 0;
 function __sbWarmFishTts() {
   if (__sbVoiceOutputPref !== "fish") return; // only the Fish path pays the cold start
   if (!__sbContextOk()) return;
+  // Once per two minutes per tab is plenty: mount + focus + summon each want a
+  // ping, and without this every navigation of a busy tab fired one.
+  if (Date.now() - __sbFishLastWarmAt < 120000) return;
+  __sbFishLastWarmAt = Date.now();
   try {
     __sbStorageGet(["authToken"]).then(({ authToken }) => {
       const headers = { "Content-Type": "application/json", apikey: __SB_ANON_KEY };
@@ -14466,14 +13793,27 @@ function __sbWarmFishTts() {
   } catch (_) {}
 }
 
+// Session-wide, like the Mac (which warms for the whole realtime session): while
+// Braino is on screen in the FOCUSED tab, keep the isolate hot. Voice mode alone
+// used to gate this, so every ordinary reply paid a ~5s cold start against the
+// stall budget. Only the visible tab pings, so N open tabs ≠ N pings.
+function __sbFishWarmWanted() {
+  if (document.visibilityState !== "visible") return false;
+  return Boolean(__sbHeadphoneMode || __sbVoiceOnlyMode || __sbBrainVisible || __sbNotchV1);
+}
 function __sbStartFishWarmKeepAlive() {
   __sbWarmFishTts();
   if (__sbFishWarmTimer) return;
   __sbFishWarmTimer = setInterval(() => {
-    if (!__sbHeadphoneMode && !__sbVoiceOnlyMode) { __sbStopFishWarmKeepAlive(); return; }
+    if (!__sbFishWarmWanted()) { __sbStopFishWarmKeepAlive(); return; }
     __sbWarmFishTts();
   }, 240000); // ~4 min — Supabase isolates idle out after a few minutes
 }
+try {
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible" && __sbFishWarmWanted()) __sbStartFishWarmKeepAlive();
+  });
+} catch (_) {}
 
 function __sbStopFishWarmKeepAlive() {
   if (__sbFishWarmTimer) { clearInterval(__sbFishWarmTimer); __sbFishWarmTimer = null; }
@@ -14557,7 +13897,8 @@ async function __sbSpeakText(text, options = {}) {
     if (speechToken !== __sbSpeechGeneration) return false;
     if (ttsErr?.name === "NotAllowedError") return false;   // autoplay block, not a Fish failure
     __sbHandleFishTtsFailure(ttsErr);
-    spoke = await __sbSpeakWithBrowser(clean, speechToken);
+    // Only what he hadn't said yet — `clean` here re-spoke the whole answer from the top.
+    spoke = (await __sbSpeakWithBrowser(__sbSpeechRemainder || clean, speechToken)) || spoke;
   } finally {
     // Speech is over one way or another: resolve the karaoke and start the Mac
     // linger if an answer is up. Lives in `finally` so Fish-failure paths can't
@@ -15265,6 +14606,7 @@ function __sbActivateMovieMode() {
   __sbCollapseCard();
   __sbMovieModeActive = true;
   __sbSyncMovieModeVisualState();
+  __sbNotchSyncMovieClass();
   __sbStartMovieModeSync();
   const result = __sbRefreshMovieMode({ allowRetarget: true, forceScroll: true, animateWrap: true });
   if (!result.ok) {
@@ -15277,6 +14619,7 @@ function __sbActivateMovieMode() {
 
 function __sbDeactivateMovieMode(options = {}) {
   __sbMovieModeActive = false;
+  __sbNotchSyncMovieClass();
   __sbStopMovieModeSync();
   __sbClearMovieModeTarget({ keepBackdrop: false, keepState: false });
   __sbSyncMovieModeVisualState();
@@ -15287,6 +14630,49 @@ function __sbDeactivateMovieMode(options = {}) {
 function __sbToggleMovieMode() {
   if (__sbMovieModeActive) return __sbDeactivateMovieMode({ silent: true });
   return __sbActivateMovieMode();
+}
+
+// Voice: "movie mode" / "watch with me" / "cinema mode" → on; "exit/stop movie mode" → off.
+const __SB_MOVIE_ON_RE = /^(?:hey\s+)?(?:braino[,\s]+)?(?:(?:turn on|start|enter|open|enable|go into)\s+)?(?:movie|cinema|film) mode(?: please)?[.!]?$|^(?:hey\s+)?(?:braino[,\s]+)?watch (?:this|it|the movie|the show)? ?with me[.!]?$/i;
+const __SB_MOVIE_OFF_RE = /^(?:hey\s+)?(?:braino[,\s]+)?(?:exit|stop|leave|turn off|end|close|disable)\s+(?:movie|cinema|film) mode(?: please)?[.!]?$/i;
+function __sbClassifyMovieModeCommand(text) {
+  const t = String(text || "").trim();
+  if (!t) return null;
+  if (__SB_MOVIE_OFF_RE.test(t)) return "off";
+  if (__SB_MOVIE_ON_RE.test(t)) return "on";
+  return null;
+}
+async function __sbHandleMovieModeCommand(cmd, { fromVoice = false, voiceOutput = "legacy" } = {}) {
+  if (cmd === "off") {
+    __sbDeactivateMovieMode({ silent: true });
+    const line = "Movie mode off.";
+    __sbNoteSpoken(line);
+    __sbLogInteraction({ kind: fromVoice ? "voice" : "typed", mode: "movie", route: "movie-mode-off", braino_text: line });
+    if (fromVoice) await __sbSpeakWithPreferredVoice(line, voiceOutput, { verbatim: true, source: "movie-mode" });
+    else __sbNotchShowAnswer(line, false);
+    return true;
+  }
+  const result = __sbActivateMovieMode();
+  const line = result?.ok
+    ? "Movie mode. I'll follow along, and won't spoil anything unless you ask."
+    : "I can't find a video player on this page yet. Open the video first and say movie mode again.";
+  __sbNoteSpoken(line);
+  __sbLogInteraction({ kind: fromVoice ? "voice" : "typed", mode: "movie", route: result?.ok ? "movie-mode-on" : "movie-mode-no-player", braino_text: line });
+  if (fromVoice) await __sbSpeakWithPreferredVoice(line, voiceOutput, { verbatim: true, source: "movie-mode" });
+  else __sbNotchShowAnswer(line, false);
+  return true;
+}
+// The Mac's vision flow narrates its stages in the notch ("Looking at your
+// screen" → "Reading your screen") with the eyes darting (nfScanLook). Movie
+// scene questions get the same: a "Reading the scene" label + scanning eyes.
+function __sbNotchSceneReading(on) {
+  if (!__sbNotchV1) return;
+  __sbNotchV1.shell.classList.toggle("scanning", !!on);
+  if (on) __sbSetBrowserNotchState("working", "Reading the scene");
+}
+function __sbNotchSyncMovieClass() {
+  if (!__sbNotchV1) return;
+  __sbNotchV1.shell.classList.toggle("movie", !!__sbMovieModeActive);
 }
 
 function __sbSyncIdleState() {
@@ -15824,7 +15210,52 @@ function __sbForceClearAgentUi(reason = "clear") {
   if (stepsEl) stepsEl.innerHTML = "";
   if (typeof __sbWkStatus === "function") __sbWkStatus(__sbHeadphoneMode ? "Listening…" : "");
   if (typeof __sbSyncWalkerLane === "function") __sbSyncWalkerLane();
+  // The notch too. This reset cleared every flag and the legacy bar but never
+  // touched the shell, so a delegate that finished on another tab (or a worker
+  // eviction) left "Thinking" pinned in the island forever — the browser twin of
+  // the Mac's stuck "Calibrating". Transient states only; never wipe an answer,
+  // the input, the menu, sign-in or a live recording.
+  const notchState = __sbNotchV1?.shell?.dataset?.state;
+  if (notchState === "working" || notchState === "thinking") {
+    __sbSetBrowserNotchState(__sbHeadphoneMode ? "listening" : "idle");
+  }
 }
+
+// ── Stuck-thinking watchdog ──────────────────────────────────────────────────
+// Every request path is supposed to leave working/thinking on its own; a handful
+// don't (voice-only success with no rendered answer, headphone error branch,
+// remote-tab delegate handoff, a fetch that died with the worker). Rather than
+// chase each, one net: if the shell has sat in working/thinking with NOTHING in
+// flight for 45s, or for 4 minutes regardless, put it back.
+let __sbNotchWorkingSince = 0;
+let __sbChatFetchInFlight = 0;   // plain typed/batch chat-about-notes calls have no other marker
+const __SB_THINK_IDLE_LIMIT_MS = 45000;
+const __SB_THINK_STALE_LIMIT_MS = 90000;    // "in flight" but no agent-log update for this long = dead
+const __SB_THINK_HARD_LIMIT_MS = 660000;    // > BG_DELEGATE_LONG_TASK_BUDGET (600s) — long delegates are legit
+function __sbNotchThinkingWatchdog() {
+  const state = __sbNotchV1?.shell?.dataset?.state;
+  if (state !== "working" && state !== "thinking") { __sbNotchWorkingSince = 0; return; }
+  if (!__sbNotchWorkingSince) { __sbNotchWorkingSince = Date.now(); return; }
+  const age = Date.now() - __sbNotchWorkingSince;
+  let inFlight = false;
+  try {
+    inFlight = Boolean(__sbAgentBusy || __sbDelegateActive || __sbVoicePendingReply || __sbChatFetchInFlight > 0
+      || (typeof __sbHasActiveRealtimeResponse === "function" && __sbHasActiveRealtimeResponse())
+      || (typeof __sbBrainoOutputActive === "function" && __sbBrainoOutputActive()));
+  } catch (_) {}
+  // Liveness, not a fixed cap: a delegate that is still logging steps is alive
+  // however long it takes; one that has gone quiet for 90s is not.
+  const lastTouch = Number(__sbAgentLogLastUpdateAt || 0);
+  const agentSilentMs = lastTouch ? Date.now() - lastTouch : age;
+  const deadAgent = inFlight && (__sbAgentBusy || __sbDelegateActive) && agentSilentMs > __SB_THINK_STALE_LIMIT_MS && !__sbChatFetchInFlight;
+  if ((age > __SB_THINK_IDLE_LIMIT_MS && !inFlight) || deadAgent || age > __SB_THINK_HARD_LIMIT_MS) {
+    console.log(`[Braino 🩹] thinking watchdog: shell stuck in ${state} for ${Math.round(age / 1000)}s (inFlight=${inFlight}, agentSilent=${Math.round(agentSilentMs / 1000)}s) — resetting`);
+    __sbNotchWorkingSince = 0;
+    if (deadAgent || age > __SB_THINK_HARD_LIMIT_MS) __sbForceClearAgentUi("thinking-watchdog");
+    else __sbSetBrowserNotchState(__sbHeadphoneMode ? "listening" : "idle");
+  }
+}
+setInterval(__sbNotchThinkingWatchdog, 5000);
 
 function __sbVerifyAgentRuntimeState(reason = "verify") {
   if (!__sbDelegateActive && !__sbAgentBusy && !__sbAgentThought && !__sbAgentLogSteps.length) return;
@@ -16539,19 +15970,10 @@ function __sbVoiceTranscriptStats(text) {
   };
 }
 
-function __sbVoiceHasTeamSignal(text) {
-  try {
-    if (typeof __sbTeamFindTeam === "function" && __sbTeamFindTeam(text)) return true;
-    if (typeof __sbTeamFindPeopleSmart === "function" && __sbTeamFindPeopleSmart(text, __sbTeamState?.team || null).length) return true;
-  } catch (_) {}
-  return false;
-}
-
 function __sbVoiceHasShortIntent(stats) {
   const norm = stats.normalized;
   if (!norm) return false;
   if (typeof __sbBrabusVibeIntent === "function" && __sbBrabusVibeIntent(stats.raw)) return true;
-  if (__sbVoiceHasTeamSignal(stats.raw)) return true;
   if (/^(yes|yeah|yep|ya|haan|hanji|no|nope|nah|stop|pause|resume|repeat|skip|done|cancel|exit|send|close|open|play|next|back|continue|search)$/.test(norm)) return true;
   if (/^(hi|hey|hello)\s+(braino|bruno|breno|reno)$/.test(norm)) return true;
   if (/^(volume\s+)?(up|down|louder|quieter|mute|unmute)$/.test(norm)) return true;
@@ -17668,6 +17090,10 @@ async function __sbSpeakTurnFailure(failure) {
 }
 
 async function __sbFetchAssistantReply(body) {
+  __sbChatFetchInFlight++;
+  try { return await __sbFetchAssistantReplyInner(body); } finally { __sbChatFetchInFlight = Math.max(0, __sbChatFetchInFlight - 1); }
+}
+async function __sbFetchAssistantReplyInner(body) {
   const enrichedBody = body && typeof body === "object" && !Array.isArray(body)
     ? {
         ...body,
@@ -18898,12 +18324,6 @@ async function __sbProcessPrompt(text, options = {}) {
     return;
   }
 
-  if (__sbTeamModeEnabled() || __sbTeamShouldAutoActivate(promptText)) {
-    if (!__sbTeamModeEnabled()) __sbTeamActivateMode({ reset: true });
-    await __sbHandleTeamModeInput(promptText, { fromVoice, voiceOutput, voiceTurnToken });
-    return;
-  }
-
   // Affection / advances toward Braino → warm redirect (BEFORE the hard sexual gate, so
   // "I love you" / "have sex with you" get the kind line, not "No.").
   if (__sbIsLoveToBraino(promptText) || __sbIsAdvanceToBraino(promptText)) {
@@ -19246,6 +18666,15 @@ async function __sbProcessPrompt(text, options = {}) {
     return;
   }
 
+  {
+    const movieCmd = __sbClassifyMovieModeCommand(promptText);
+    if (movieCmd) {
+      __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken });
+      await __sbHandleMovieModeCommand(movieCmd, { fromVoice, voiceOutput });
+      return;
+    }
+  }
+
   if (intent === "record") {
     __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken });
     const rec = __sbClassifyRecordIntent(promptText);
@@ -19407,8 +18836,24 @@ async function __sbProcessPrompt(text, options = {}) {
     }
     if (movieContext) body.movieContext = movieContext;
     if (selectedText) body.selectedText = selectedText;
+    // Movie mode, scene question: he doesn't only read the captions — he LOOKS.
+    // One frame of the tab rides along (the Mac's screenshot+vision flow), so
+    // "who is that" works with captions off, and the notch says what he's doing.
+    const sceneAsk = __sbMovieModeActive && __sbIsMovieSceneQuestion(promptText);
+    if (sceneAsk) {
+      __sbNotchSceneReading(true);
+      try {
+        const frame = await __sbScreenGrabBase64();
+        if (frame) { body.imageBase64 = frame; body.visionMode = "describe"; body.responseMedium = "voice"; }
+      } catch (_) {}
+    }
 
-    const { reply, failure } = await __sbFetchAssistantReply(body);
+    let reply, failure;
+    try {
+      ({ reply, failure } = await __sbFetchAssistantReply(body));
+    } finally {
+      if (sceneAsk) __sbNotchSceneReading(false);
+    }
     if (!reply) {
       // Only a real 401/403 is a sign-in problem. Everything else (dropped
       // request, empty body from the backend) used to claim the user was signed
@@ -19436,6 +18881,7 @@ async function __sbProcessPrompt(text, options = {}) {
         { rich: reply.length >= 240, answerText: reply },
       ));
       if (fromVoice) await speakVoiceReply(reply);
+      else if (sceneAsk) await __sbSpeakWithPreferredVoice(reply, "legacy", { source: "movie-scene" });   // Mac vision answers are always spoken
     }
   } catch (err) {
     if (__sbHeadphoneMode) {
@@ -20397,6 +19843,7 @@ async function __sbStartLectureRecording(options = {}) {
   __sbShowLectureRecordingBar(false);
   __sbShowLectureRecordingCard();
   __sbNotchShowRecordLive();   // the notch is the live surface: clock, lines, Stop
+  __sbLogInteraction({ kind: "record", mode, route: "start" });
   if (mode === "meeting") __sbUpdateMeetingStatus();
   if (options.readyMessage) {
     const statusEl = document.getElementById("__sb_lec_status__");
@@ -20573,7 +20020,7 @@ function __sbShowLectureNotes(notes, isFinal) {
   }
   // THE visible rendering: the notes land in the notch reading surface (the
   // bubble card above is display:none under notch v1).
-  const savedLine = isFinal ? `<p style="margin-top:14px;color:rgba(27,23,19,.5);font-size:12px">Synced to your dashboard automatically.</p>` : "";
+  const savedLine = isFinal ? `<p style="margin-top:14px;color:rgba(255,255,255,.5);font-size:12px">Synced to your dashboard automatically.</p>` : "";
   __sbNotchShowAnswer(notes, true, `<div class="sb-card-a">${__sbRenderMarkdown(notes)}${meetingArtifactsHtml}</div>${savedLine}`);
 
   if (!isFinal) return;
@@ -20597,6 +20044,7 @@ function __sbShowLectureNotes(notes, isFinal) {
       const line = res?.ok
         ? `Done. ${mins} ${mins === 1 ? "minute" : "minutes"} recorded, written up and synced to your dashboard.`
         : `Done. ${mins} ${mins === 1 ? "minute" : "minutes"} recorded and written up. The dashboard sync hiccuped, so copy the notes if you need them right now.`;
+      __sbLogInteraction({ kind: "record", mode: isMeeting ? "meeting" : "lecture", route: "stop", braino_text: line, latency_ms: (__sbLectureSeconds || 0) * 1000, meta: { saved: !!res?.ok, chars: notes.length } });
       __sbNoteSpoken(line);
       __sbSpeakWithPreferredVoice(line, "legacy", { verbatim: true, source: "recording-notes" }).then(() => {
         // "When that is done, the notch goes back": a comfortable read window after
@@ -21953,6 +21401,7 @@ async function __sbDrainStreamTts() {
         if (played) s.spoke = true;
       } catch (mediaErr) {
         if (s.token !== __sbSpeechGeneration) return;
+        if (mediaErr?.name === "NotAllowedError") return;   // autoplay block: silence, not a Fish outage
         fishDown = true;
         __sbHandleFishTtsFailure(mediaErr);
         const played = await __sbSpeakWithBrowser(item.sentence, s.token);
@@ -22777,12 +22226,6 @@ async function __sbHandleInlineRealtimeTurn(transcript, turnToken) {
     await __sbHandleDemoModeInput(transcript, { fromVoice: true, voiceOutput: "realtime", voiceTurnToken: turnToken });
     return;
   }
-  if (__sbTeamModeEnabled() || __sbTeamShouldAutoActivate(transcript)) {
-    if (!__sbTeamModeEnabled()) __sbTeamActivateMode({ reset: true });
-    __sbInterruptRealtimeResponse();
-    await __sbHandleTeamModeInput(transcript, { fromVoice: true, voiceOutput: "realtime", voiceTurnToken: turnToken });
-    return;
-  }
   // Affection / advances toward Braino → warm redirect (before the hard sexual gate).
   if (__sbIsLoveToBraino(transcript) || __sbIsAdvanceToBraino(transcript)) {
     __sbStopSpeech();
@@ -22992,6 +22435,29 @@ async function __sbHandleInlineRealtimeTurn(transcript, turnToken) {
     return;
   }
 
+  // "Movie mode" / "watch with me" / "exit movie mode" — spoken, like every mode.
+  {
+    const movieCmd = __sbClassifyMovieModeCommand(promptText) || __sbClassifyMovieModeCommand(transcript);
+    if (movieCmd) {
+      __sbStopSpeech();
+      __sbPatchRealtimeCostTurn({ routeIntent: "chat" });
+      await __sbHandleMovieModeCommand(movieCmd, { fromVoice: true, voiceOutput: "realtime" });
+      __sbCompleteVoiceTurn({ fromVoice: true, voiceOutput: "realtime", voiceTurnToken: turnToken });
+      return;
+    }
+  }
+
+  // Movie mode scene question ("who is that", "what just happened"): take the
+  // batch path so a real FRAME rides along with the captions and the notch shows
+  // "Reading the scene" — the Mac's look-then-answer flow. A speculative answer
+  // already speaking from the audio is left alone (it has the movie context).
+  if (__sbMovieModeActive && __sbIsMovieSceneQuestion(promptText) && !__sbSpeculativeActive && __sbSpeculativeHandledToken !== turnToken) {
+    __sbStopSpeech();
+    __sbPatchRealtimeCostTurn({ routeIntent: "chat" });
+    await __sbProcessPrompt(promptText, { fromVoice: true, voiceOutput: "realtime", voiceTurnToken: turnToken, forceIntent: "page" });
+    return;
+  }
+
   // Current-screen action: an action verb + a demonstrative means THIS page.
   // Act right here and END THE TURN — the delegate loop (own tab, fresh DOM,
   // re-search on doubt) is exactly the wrong tool for "click this video".
@@ -23001,6 +22467,7 @@ async function __sbHandleInlineRealtimeTurn(transcript, turnToken) {
       __sbStopSpeech();
       __sbPatchRealtimeCostTurn({ routeIntent: "agent" });
       const confirmLine = "Done.";
+      __sbLogInteraction({ kind: "delegate", route: "on-screen-action", user_text: promptText, braino_text: confirmLine });
       __sbNoteSpoken(confirmLine);
       void __sbSpeakWithPreferredVoice(confirmLine, "realtime", { verbatim: true, source: "on-screen-action" });
       __sbCompleteVoiceTurn({ fromVoice: true, voiceOutput: "realtime", voiceTurnToken: turnToken });
@@ -23364,15 +22831,6 @@ function __sbApplyVoiceAutoRoutingDefaults() {
   // obvious-action shortcut + the backend shouldDelegate classifier in __sbHandleInlineRealtimeTurn).
   // We deliberately do NOT force every spoken turn through the agent loop — that added latency to
   // plain conversation, and keyword-forcing risks treating chit-chat as a task.
-  if ((window.__sbForcedMode || "page") === "team") {
-    window.__sbForcedConnector = "auto";
-    if (typeof __sbApplyForcedModeUi === "function") __sbApplyForcedModeUi("team", { showReady: false, resetTeam: false });
-    __sbRefreshConnectorButtons();
-    document.getElementById("__sb_connector_slash_dropdown__")?.classList.remove("open");
-    document.getElementById("__sb_mode_dropdown__")?.classList.remove("open");
-    document.getElementById("__sb_connector_dropdown__")?.classList.remove("open");
-    return;
-  }
   if ((window.__sbForcedMode || "page") === "demo") {
     window.__sbForcedConnector = "auto";
     if (typeof __sbApplyForcedModeUi === "function") __sbApplyForcedModeUi("demo", { showReady: false, resetDemo: false });

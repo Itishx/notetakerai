@@ -323,6 +323,16 @@ verify_jwt = false
 [functions.embed-configure-bridge]
 entrypoint = "./functions/embed/embed-configure-bridge/index.ts"
 
+# ── logs (Braino's own interaction log) ─────────────────────────────────
+
+# Every interaction with Braino (Chrome, Mac, web) lands here to improve him.
+# Public on purpose: the Mac may log with only the anon key and pre-sign-in
+# events still count. A user JWT, when present, is resolved to user_id inside
+# the function; the table itself has no insert policy, so this is the only door.
+[functions.braino-interaction-log]
+entrypoint = "./functions/logs/braino-interaction-log/index.ts"
+verify_jwt = false
+
 # ── legacy (no source folder in repo) ─────────────────────────────────
 
 [functions.elevenlabs-tts]
