@@ -7,7 +7,7 @@
 
 ## The simple version
 
-`/deck` is the Braino Foundry pitch, rebuilt as a page instead of a PDF. Thirty three slides, Apple product-page design language, and the three things the original PDF left out: who Braino already is, the fact that there are two kinds of him, and the business.
+`/deck` is the Braino Foundry pitch, rebuilt as a page instead of a PDF. Thirty six slides, Apple product-page design language, and the three things the original PDF left out: who Braino already is, the fact that there are two kinds of him, and the business.
 
 `/pitch` is the same page under a friendlier URL to say out loud.
 
@@ -95,6 +95,49 @@ Static is the decision, not a limitation. The animated system on the product pag
 Below 820px the diagram is replaced by the same information as a list, because shrinking it would have made the labels unreadable rather than smaller.
 
 The loop diagram on the "how it ties together" slide works the same way: four stations on a dashed ring with Braino OS in the middle, static, with a list fallback on phones.
+
+## The three clarity slides
+
+Added 17 August 2026, after a read-through where the deck argued well but never
+stated its own thesis plainly and never answered the question every investor
+asks out loud.
+
+### Slide 01, before any act: what the market sells you versus what we sell you
+
+A four row table, read across rather than down: building the product, getting it
+seen, how your tools fit, and what it knows about you. Row aligned on purpose,
+because the contrast only lands when the same job is seen in two different
+worlds. It closes on the sentence the whole company rests on, which is that
+every company in this market sells you the building and nobody sells you the
+being seen.
+
+It sits second, immediately after the cover, so a reader can state the thesis
+before act one has even opened.
+
+### Where is the human in the loop
+
+The question most AI decks dodge. The answer has a shape, so the slide draws it:
+a four step chain colour coded by whose hands are on each step, You, then Braino,
+then You again, then public. The founder holds both ends. Underneath it, three
+columns name the split without hedging: what is always yours, what is always his,
+and the hard gates where he stops and asks, which are money, anything published,
+messaging a human, deleting anything, and changing a price or a promise.
+
+The line that carries it: he decides how, you decide whether.
+
+### The one page summary
+
+Last slide before the close, so whoever is in the room can photograph one thing
+and still have the argument a week later. Five numbered bands down a hairline
+spine: the shift, the mind, two Brainos, two engines, the money. The joins sit
+between each pair rather than beneath it, with a one way arrow for trust first
+hire later and a two way arrow for the signal loop, because a label under a row
+of two boxes reads as an arrow down to the next band.
+
+Built in markup rather than SVG, unlike the solar system and the loop. Those are
+fixed drawings with short labels; this one carries real sentences, and SVG text
+does not wrap. Grid bands wrap, reflow on a phone, and stay selectable, which
+matters for the slide someone actually copies out.
 
 ## Honest limitations
 

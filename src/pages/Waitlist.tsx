@@ -1,6 +1,16 @@
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, ReactNode, useEffect, useRef, useState } from "react";
 import { ArrowUpRight, Check, Circle, Loader2, Play } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import {
+  ANSWERED_SETS,
+  BRAINO_ORDER,
+  FAQ,
+  FaqRow,
+  HOME_TABS,
+  QUESTION_TAB,
+  isHomeTab,
+  type HomeTabId,
+} from "./homeQuestions";
 import { BRAINO_WALKER_SVG } from "../components/brainoWalkerSvg";
 import { Braino, BrainoDefs, useTime } from "../components/BrainoChar";
 import EmotionNetwork from "../components/EmotionNetwork";
@@ -15,13 +25,15 @@ const SUPABASE_KEY = (import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.
 
 type ProductId = "braino" | "macos" | "braino-os" | "hera" | "studio" | "everything";
 type SubmitState = "idle" | "loading" | "done" | "existing" | "error" | "needs-pick";
-type WaitlistSection = "character" | "braino" | "macos" | "meetings" | "braino-os" | "hera" | "studio" | "join";
+type WaitlistSection = "character" | "kinds" | "braino" | "macos" | "meetings" | "braino-os" | "hera" | "studio" | "join";
 type TeaserId = "browser" | "macos" | "os";
+const TEASER_SECTION: Record<TeaserId, string> = { browser: "braino", macos: "macos", os: "braino-os" };
 
 // Meetings sits straight after IOMI on purpose: it is the first thing the Mac does that
 // people ask for by name, and the chapter before it is what makes it possible.
 const SECTION_TABS: Array<{ id: WaitlistSection; label: string }> = [
   { id: "character", label: "Braino" },
+  { id: "kinds", label: "The family" },
   { id: "braino", label: "Browser" },
   { id: "macos", label: "IOMI" },
   { id: "meetings", label: "Meetings" },
@@ -30,6 +42,35 @@ const SECTION_TABS: Array<{ id: WaitlistSection; label: string }> = [
   { id: "hera", label: "Hera" },
   { id: "join", label: "Join" },
 ];
+
+// Each tab introduces itself. The question list under it is the answer.
+const TAB_HEADS: Record<HomeTabId, { name: string; title: string; sub: string }> = {
+  braino: {
+    name: "the introduction",
+    title: "Ask, and he opens up.",
+    sub: "The rest of this page is questions. Open the ones you care about, leave the rest closed.",
+  },
+  browser: {
+    name: "Braino Browser",
+    title: "The free one, in Chrome.",
+    sub: "He installs into your browser and works on the page you are already on. Six questions about the Braino you meet first.",
+  },
+  foundry: {
+    name: "Braino Foundry",
+    title: "The one you hire.",
+    sub: "Braino on macOS, in the notch, with your screen and your voice. Eight questions about the co-founder.",
+  },
+  hera: {
+    name: "BrainoHERA",
+    title: "Talk, and it types.",
+    sub: "System-wide dictation that lands at your cursor and never says a word back. Four questions about the quiet one.",
+  },
+  everything: {
+    name: "the whole argument",
+    title: "The entire thing, asked properly.",
+    sub: "What he is, why he exists, who pays, the arithmetic, and what is honestly still unbuilt. The deck, as questions.",
+  },
+};
 
 const WAITLIST_NOTCH_NAV = SECTION_TABS.map((section, index) => ({
   to: `#${section.id}`,
@@ -103,9 +144,9 @@ const BRAINO_FORMS: Array<{
   { number: "06", label: "Reactions", title: "One Braino. Many moods.", description: "Quiet, curious, delighted or a little mischievous. His personality changes shape without disappearing.", art: "reactions" },
 ];
 
-export function BrainoIntroduction() {
+export function BrainoIntroduction({ id = "character" }: { id?: string }) {
   return (
-    <section className="wl-chapter wl-reveal" id="character">
+    <section className="wl-chapter wl-reveal" id={id || undefined}>
       <div className="wl-chapter-number">01 / The character</div>
       <h2>Who is <span className="wl-shimmer wl-shimmer-coral">Braino</span>?</h2>
       <p className="wl-large">Before the browser, the Mac or the operating layer, there is Braino himself.</p>
@@ -139,9 +180,9 @@ export function BrainoIntroduction() {
   );
 }
 
-export function BrainoStudioChapter() {
+export function BrainoStudioChapter({ id = "studio" }: { id?: string }) {
   return (
-    <section className="wl-chapter wl-reveal" id="studio">
+    <section className="wl-chapter wl-reveal" id={id || undefined}>
       <div className="wl-chapter-number">06 / The atelier</div>
       <h2>Braino<span className="wl-shimmer wl-shimmer-studio">Studio</span>.</h2>
       <p className="wl-large">Braino is a Diva 💅 — naturally, he needs a dressing room.</p>
@@ -154,9 +195,9 @@ export function BrainoStudioChapter() {
   );
 }
 
-export function BrainoHeraChapter() {
+export function BrainoHeraChapter({ id = "hera" }: { id?: string }) {
   return (
-    <section className="wl-chapter wl-reveal" id="hera">
+    <section className="wl-chapter wl-reveal" id={id || undefined}>
       <div className="wl-chapter-number">07 / Hera</div>
       <h2 className="wl-product-title">Braino <span className="wl-shimmer wl-shimmer-green">Hera</span>.</h2>
       <p className="wl-large">A quieter, more personal side of Braino is taking shape.</p>
@@ -369,10 +410,37 @@ export function WaitlistJoin({ id = "join" }: { id?: string }) {
   );
 }
 
+// The "different kinds of Braino" tabs, answered the same way everything else is:
+// a question that opens into the map, with each card opening its own question.
+function KindsAnswer({ onOpen }: { onOpen: (id: string) => void }) {
+  return (
+    <section className="wl-chapter wl-reveal">
+      <h2>One character. <span className="wl-shimmer wl-shimmer-coral">Several bodies.</span></h2>
+      <p className="wl-large">Braino is not a product line. He is the same character learning to live in more places.</p>
+      <div className="wl-kinds-grid">
+        {PRODUCTS.filter((product) => product.id !== "everything").map((product) => (
+          <button type="button" key={product.id} onClick={() => onOpen(product.id)}>
+            <span className="wl-kinds-num">{product.number}</span>
+            <h3><ProductName product={product.id} /></h3>
+            <small>{product.eyebrow}</small>
+            <p>{product.description}</p>
+            <i>Open this question <ArrowUpRight size={14} aria-hidden="true" /></i>
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 export default function Waitlist() {
   const pageRef = useReveal();
+  const location = useLocation();
+  const navigate = useNavigate();
   const [activeSection, setActiveSection] = useState<WaitlistSection>("character");
   const [activeTeaser, setActiveTeaser] = useState<TeaserId | null>(null);
+  const [openFaqs, setOpenFaqs] = useState<Set<string>>(() => new Set());
+  const requestedTab = new URLSearchParams(location.search).get("view");
+  const view: HomeTabId = isHomeTab(requestedTab) ? requestedTab : "braino";
   const [theme, setTheme] = useState<"dark" | "light">(() => {
     if (typeof window === "undefined") return "dark";
     const saved = window.localStorage.getItem("braino-waitlist-theme");
@@ -401,26 +469,65 @@ export default function Waitlist() {
     return () => observer.disconnect();
   }, []);
 
+  // A film should never keep playing inside a question somebody just closed,
+  // or one they have scrolled well past.
   useEffect(() => {
-    const teaserSection: Record<TeaserId, WaitlistSection> = {
-      browser: "braino",
-      macos: "macos",
-      os: "braino-os",
-    };
-    if (activeTeaser && teaserSection[activeTeaser] !== activeSection) {
-      setActiveTeaser(null);
+    if (!activeTeaser) return;
+    const section = TEASER_SECTION[activeTeaser];
+    if (!openFaqs.has(section) || section !== activeSection) setActiveTeaser(null);
+  }, [activeSection, activeTeaser, openFaqs]);
+
+  // Deep links (the notch nav, /#meetings, a card in the family answer) open the
+  // question they point at instead of landing on a closed row.
+  useEffect(() => {
+    const id = location.hash.replace("#", "");
+    const owner = QUESTION_TAB[id];
+    if (!owner) return;
+    // A link into a question on another tab moves the tab first, then opens it.
+    if (owner !== view) {
+      navigate(owner === "braino" ? `/${location.hash}` : `/?view=${owner}${location.hash}`, { replace: true });
+      return;
     }
-  }, [activeSection, activeTeaser]);
+    setOpenFaqs((current) => (current.has(id) ? current : new Set(current).add(id)));
+    const frame = window.requestAnimationFrame(() => {
+      document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [location.hash, view, navigate]);
 
   useEffect(() => {
     window.localStorage.setItem("braino-waitlist-theme", theme);
   }, [theme]);
+
+  const toggleFaq = (id: string) => setOpenFaqs((current) => {
+    const next = new Set(current);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    return next;
+  });
+
+  const changeTab = (next: HomeTabId) => {
+    if (next === view) return;
+    navigate(next === "braino" ? "/" : `/?view=${next}`);
+    window.requestAnimationFrame(() => {
+      document.getElementById("questions")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  };
+
+  const openFaq = (id: string) => {
+    setOpenFaqs((current) => (current.has(id) ? current : new Set(current).add(id)));
+    window.requestAnimationFrame(() => {
+      document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  };
 
   return (
     <main className={`wl-page is-${theme}`} ref={pageRef}>
       <BrainoDefs />
       <IomiNotch
         nav={WAITLIST_NOTCH_NAV}
+        tabs={HOME_TABS.map((tab) => ({ id: tab.id, label: tab.label, to: tab.id === "braino" ? "/" : `/?view=${tab.id}` }))}
+        activeTab={view}
         sleepOnFirstVisit={false}
         theme={theme}
         onToggleTheme={() => setTheme((current) => current === "dark" ? "light" : "dark")}
@@ -460,137 +567,154 @@ export default function Waitlist() {
         </div>
       </header>
 
-      <article className="wl-article">
-        <BrainoIntroduction />
+      <div className="wl-faq-head wl-reveal" id="questions">
+        <span className="wl-faq-eyebrow">Everything about Braino</span>
+        <h2>{TAB_HEADS[view].title}</h2>
+        <p>{TAB_HEADS[view].sub}</p>
+      </div>
 
-        <section className="wl-chapter wl-reveal" id="braino">
-          <div className="wl-chapter-number">02 / The browser</div>
-          <h2 className="wl-product-title">Braino for the <span className="wl-shimmer wl-shimmer-browser">browser</span>.</h2>
-          <p className="wl-large">The Braino you can meet today: a companion who lives beside whatever you are doing on the web.</p>
-          <figure className="wl-teaser-card">
-            <TeaserPlayer
-              id="browser"
-              activeTeaser={activeTeaser}
-              onPlay={setActiveTeaser}
-              videoSrc="/Braino_Final.MP4"
-              title="Don’t Blink — Braino for the browser teaser"
-            />
-          </figure>
-          <p>Most AI waits inside a box. Braino reads the page you are already on, explains it, searches with you, remembers what matters, records a lecture, and helps turn intent into action without making you leave the work.</p>
-          <p>The useful part is not that he can answer. Plenty of things can answer. The bet is that software becomes more useful when it has continuity, character, and enough context to understand what kind of help the moment actually needs.</p>
-          <p className="wl-chapter-link">
-            <Link to="/braino">See what the browser Braino does <ArrowUpRight size={15} aria-hidden="true" /></Link>
-          </p>
-        </section>
+      <nav className="wl-qtabs" aria-label="Which Braino">
+        <div className="wl-qtabs-rail">
+          {HOME_TABS.map((tab) => (
+            <button
+              type="button"
+              key={tab.id}
+              className={`wl-qtab${tab.id === view ? " on" : ""}`}
+              aria-current={tab.id === view ? "page" : undefined}
+              onClick={() => changeTab(tab.id)}
+            >
+              <b>{tab.label}</b>
+              <small>{tab.note}</small>
+            </button>
+          ))}
+        </div>
+      </nav>
 
-        <section className="wl-chapter wl-reveal" id="macos">
-          <div className="wl-chapter-number">03 / IOMI</div>
-          <h2 className="wl-product-title">Braino <span className="wl-shimmer wl-shimmer-gold">IOMI</span>.</h2>
-          <p className="wl-large">The browser taught Braino how people move through the web. IOMI teaches him how people move through an entire day.</p>
-          <figure className="wl-teaser-card wl-macos-film">
-            <TeaserPlayer
-              id="macos"
-              activeTeaser={activeTeaser}
-              onPlay={setActiveTeaser}
-              src="/notch-teaser?embed=1"
-              title="Braino IOMI teaser"
-            />
-          </figure>
-          <p>On the Mac, IOMI lives in the notch and wakes by voice. He can work across apps, files, folders, mail, music and meetings. He sees the active work, understands where your attention is, and stays close without occupying the whole screen.</p>
-          <p>This version runs on Braino OS: the reasoning, personality, context and controls that turn separate capabilities into one coherent presence.</p>
+      {view === "braino" ? (
+      <article className="wl-article wl-faq">
+        <FaqRow item={FAQ.character} open={openFaqs.has("character")} onToggle={toggleFaq}>
+          <BrainoIntroduction id="" />
+        </FaqRow>
 
-          <BrainoGrowthDemo />
+        <FaqRow item={FAQ.kinds} open={openFaqs.has("kinds")} onToggle={toggleFaq}>
+          <KindsAnswer onOpen={openFaq} />
+        </FaqRow>
 
-          <div className="wl-status"><span /><b>In active development</b><i>IOMI · Mac · voice-first</i></div>
-          <p className="wl-chapter-link">
-            <Link to="/foundry">Meet Braino Foundry <ArrowUpRight size={15} aria-hidden="true" /></Link>
-          </p>
-        </section>
+        <FaqRow item={FAQ.braino} open={openFaqs.has("braino")} onToggle={toggleFaq}>
+          <section className="wl-chapter wl-reveal">
+            <h2 className="wl-product-title">Braino for the <span className="wl-shimmer wl-shimmer-browser">browser</span>.</h2>
+            <p className="wl-large">The Braino you can meet today: a companion who lives beside whatever you are doing on the web.</p>
+            <figure className="wl-teaser-card">
+              <TeaserPlayer
+                id="browser"
+                activeTeaser={activeTeaser}
+                onPlay={setActiveTeaser}
+                videoSrc="/Braino_Final.MP4"
+                title="Don’t Blink — Braino for the browser teaser"
+              />
+            </figure>
+            <p>Most AI waits inside a box. Braino reads the page you are already on, explains it, searches with you, remembers what matters, records a lecture, and helps turn intent into action without making you leave the work.</p>
+            <p>The useful part is not that he can answer. Plenty of things can answer. The bet is that software becomes more useful when it has continuity, character, and enough context to understand what kind of help the moment actually needs.</p>
+            <p className="wl-chapter-link">
+              <Link to="/braino">See what the browser Braino does <ArrowUpRight size={15} aria-hidden="true" /></Link>
+            </p>
+          </section>
+        </FaqRow>
 
-        <section className="wl-chapter wl-reveal" id="meetings">
-          <div className="wl-chapter-number">04 / Meetings</div>
-          <h2 className="wl-product-title">Recorded live. <span className="wl-shimmer wl-shimmer-browser">Invisible to your screen share.</span></h2>
-          <p className="wl-large">Say it out loud and Braino records the meeting. No bot joins, nothing appears in the participant list, and your notes never show up in the screen you are sharing.</p>
-          <p>Most meeting tools arrive as a guest: a notetaker in the participant list that somebody has to admit, and the first half minute of the call is about the software instead of the work. Braino listens from your Mac instead. He hears the call and he hears you as two separate streams, keeps them apart, and writes notes that say who said what.</p>
-          <p>The part people ask about twice is the screen share. Braino records in the open, on your screen, where you can watch him work. The moment you present, that overlay is not in the picture. Your live notes stay yours without you remembering to hide anything.</p>
-          <div className="wl-status"><span /><b>In active development</b><i>Mac and browser</i></div>
-          <p className="wl-chapter-link">
-            <Link to="/meetings">See how meetings work <ArrowUpRight size={15} aria-hidden="true" /></Link>
-          </p>
-        </section>
+        <FaqRow item={FAQ.macos} open={openFaqs.has("macos")} onToggle={toggleFaq}>
+          <section className="wl-chapter wl-reveal">
+            <h2 className="wl-product-title">Braino <span className="wl-shimmer wl-shimmer-gold">IOMI</span>.</h2>
+            <p className="wl-large">The browser taught Braino how people move through the web. IOMI teaches him how people move through an entire day.</p>
+            <figure className="wl-teaser-card wl-macos-film">
+              <TeaserPlayer
+                id="macos"
+                activeTeaser={activeTeaser}
+                onPlay={setActiveTeaser}
+                src="/notch-teaser?embed=1"
+                title="Braino IOMI teaser"
+              />
+            </figure>
+            <p>On the Mac, IOMI lives in the notch and wakes by voice. He can work across apps, files, folders, mail, music and meetings. He sees the active work, understands where your attention is, and stays close without occupying the whole screen.</p>
+            <p>This version runs on Braino OS: the reasoning, personality, context and controls that turn separate capabilities into one coherent presence.</p>
 
-        <section className="wl-chapter wl-reveal" id="braino-os">
-          <div className="wl-chapter-number">05 / The operating layer</div>
-          <h2>Braino<span className="wl-shimmer wl-shimmer-os">OS</span>.</h2>
-          <p className="wl-large">The intelligence and emotional operating layer underneath every version of Braino.</p>
+            <BrainoGrowthDemo />
 
-          <div className="wl-os-cards">
-            <article>
-              <div className="wl-engine-cover">
-                <span className="wl-engine-notch" aria-hidden="true"><i /><i /></span>
-                <div className="wl-engine-graphic"><EmotionNetwork caption={false} /></div>
-              </div>
-              <div className="wl-engine-copy">
-                <span>01 / The motion</span>
-                <h3>More Than Motion Engine</h3>
-                <p>Braino does not merely move, react or animate. The engine underneath him turns context into behaviour, presence and an emotionally appropriate response.</p>
-              </div>
-            </article>
-            <article>
-              <div className="wl-engine-cover">
-                <span className="wl-engine-notch" aria-hidden="true"><i /><i /></span>
-                <div className="wl-engine-graphic"><HumanIntelligence caption={false} /></div>
-              </div>
-              <div className="wl-engine-copy">
-                <span>02 / The mind</span>
-                <h3>Human Intelligence</h3>
-                <p>A reasoning layer built around how people actually communicate: incomplete thoughts, changing emotions, memory, intent and everything left unsaid.</p>
-              </div>
-            </article>
-          </div>
+            <div className="wl-status"><span /><b>In active development</b><i>IOMI · Mac · voice-first</i></div>
+            <p className="wl-chapter-link">
+              <Link to="/foundry">Meet Braino Foundry <ArrowUpRight size={15} aria-hidden="true" /></Link>
+            </p>
+          </section>
+        </FaqRow>
 
-          <p>Braino OS is what keeps the character continuous while the surface changes. It carries his memory, reasoning, personality and understanding of context from the browser to IOMI and into whatever Braino becomes next.</p>
-          <p>Its purpose is not to imitate a person. It is to make software feel present: able to notice what is happening, decide how to help, and respond with movement, language and emotion that belong to the moment.</p>
-        </section>
+        <FaqRow item={FAQ.meetings} open={openFaqs.has("meetings")} onToggle={toggleFaq}>
+          <section className="wl-chapter wl-reveal">
+            <h2 className="wl-product-title">Recorded live. <span className="wl-shimmer wl-shimmer-browser">Invisible to your screen share.</span></h2>
+            <p className="wl-large">Say it out loud and Braino records the meeting. No bot joins, nothing appears in the participant list, and your notes never show up in the screen you are sharing.</p>
+            <p>Most meeting tools arrive as a guest: a notetaker in the participant list that somebody has to admit, and the first half minute of the call is about the software instead of the work. Braino listens from your Mac instead. He hears the call and he hears you as two separate streams, keeps them apart, and writes notes that say who said what.</p>
+            <p>The part people ask about twice is the screen share. Braino records in the open, on your screen, where you can watch him work. The moment you present, that overlay is not in the picture. Your live notes stay yours without you remembering to hide anything.</p>
+            <div className="wl-status"><span /><b>In active development</b><i>Mac and browser</i></div>
+            <p className="wl-chapter-link">
+              <Link to="/meetings">See how meetings work <ArrowUpRight size={15} aria-hidden="true" /></Link>
+            </p>
+          </section>
+        </FaqRow>
+
+        <FaqRow item={FAQ["braino-os"]} open={openFaqs.has("braino-os")} onToggle={toggleFaq}>
+          <section className="wl-chapter wl-reveal">
+            <h2>Braino<span className="wl-shimmer wl-shimmer-os">OS</span>.</h2>
+            <p className="wl-large">The intelligence and emotional operating layer underneath every version of Braino.</p>
+
+            <div className="wl-os-cards">
+              <article>
+                <div className="wl-engine-cover">
+                  <span className="wl-engine-notch" aria-hidden="true"><i /><i /></span>
+                  <div className="wl-engine-graphic"><EmotionNetwork caption={false} /></div>
+                </div>
+                <div className="wl-engine-copy">
+                  <span>01 / The motion</span>
+                  <h3>More Than Motion Engine</h3>
+                  <p>Braino does not merely move, react or animate. The engine underneath him turns context into behaviour, presence and an emotionally appropriate response.</p>
+                </div>
+              </article>
+              <article>
+                <div className="wl-engine-cover">
+                  <span className="wl-engine-notch" aria-hidden="true"><i /><i /></span>
+                  <div className="wl-engine-graphic"><HumanIntelligence caption={false} /></div>
+                </div>
+                <div className="wl-engine-copy">
+                  <span>02 / The mind</span>
+                  <h3>Human Intelligence</h3>
+                  <p>A reasoning layer built around how people actually communicate: incomplete thoughts, changing emotions, memory, intent and everything left unsaid.</p>
+                </div>
+              </article>
+            </div>
+
+            <p>Braino OS is what keeps the character continuous while the surface changes. It carries his memory, reasoning, personality and understanding of context from the browser to IOMI and into whatever Braino becomes next.</p>
+            <p>Its purpose is not to imitate a person. It is to make software feel present: able to notice what is happening, decide how to help, and respond with movement, language and emotion that belong to the moment.</p>
+          </section>
+        </FaqRow>
 
         {/* Shared verbatim with Product Overview. */}
-        <BrainoStudioChapter />
-        {/*
-        <section className="wl-chapter wl-reveal" id="studio">
-          <div className="wl-chapter-number">06 / The atelier</div>
-          <h2>Braino<span className="wl-shimmer wl-shimmer-studio">Studio</span>.</h2>
-          <p className="wl-large">Braino is a Diva 💅 — naturally, he needs a dressing room.</p>
-          <p>Studio is where Braino becomes yours. Change the way he looks, dresses, moves and reacts—from the shape of an expression to the colour of a glove and the exact energy of his entrance.</p>
+        <FaqRow item={FAQ.studio} open={openFaqs.has("studio")} onToggle={toggleFaq}>
+          <BrainoStudioChapter id="" />
+        </FaqRow>
 
-          <div className="wl-studio-card">
-            <div className="wl-studio-preview" aria-label="A customizable Braino preview">
-              <MovingBraino motion="standing" />
-              <span>Live look</span>
-            </div>
-            <div className="wl-studio-controls">
-              <span>In-house Diva system</span>
-              <h3>Down to the last detail.</h3>
-              <div className="wl-studio-options">
-                <div><b>Face</b><small>eyes · mood · expression</small></div>
-                <div><b>Wardrobe</b><small>gloves · shoes · accessories</small></div>
-                <div><b>Motion</b><small>walk · dance · entrance</small></div>
-                <div><b>Palette</b><small>body · glow · accents</small></div>
-              </div>
-            </div>
-          </div>
-        </section> */}
-
-        <BrainoHeraChapter />
-        {/*
-        <section className="wl-chapter wl-reveal" id="hera">
-          <div className="wl-chapter-number">07 / Hera</div>
-          <h2 className="wl-product-title">Braino <span className="wl-shimmer wl-shimmer-green">Hera</span>.</h2>
-          <div className="wl-hera-secret">
-            <span aria-hidden="true"><i /><i /><i /></span>
-            <p className="wl-large">Coming soon.</p>
-          </div>
-        </section> */}
+        <FaqRow item={FAQ.hera} open={openFaqs.has("hera")} onToggle={toggleFaq}>
+          <BrainoHeraChapter id="" />
+        </FaqRow>
       </article>
+      ) : (
+        <article className="wl-article wl-faq">
+          {ANSWERED_SETS[view].map(({ entry, answer }) => (
+            <FaqRow key={entry.id} item={entry} open={openFaqs.has(entry.id)} onToggle={toggleFaq}>
+              {answer}
+            </FaqRow>
+          ))}
+          <div className="wl-faq-back wl-reveal in">
+            <p>That is {TAB_HEADS[view].name}. <button type="button" onClick={() => changeTab("braino")}>Back to the introduction</button>, or try {view === "everything" ? <button type="button" onClick={() => changeTab("foundry")}>Foundry</button> : <button type="button" onClick={() => changeTab("everything")}>Everything</button>}.</p>
+          </div>
+        </article>
+      )}
 
       <WaitlistJoin />
 

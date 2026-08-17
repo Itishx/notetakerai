@@ -44,6 +44,7 @@ const ExpandedThinkingCanvasDocs = lazy(() => import("./pages/ExpandedThinkingCa
 const BrainoEcosystemDocs = lazy(() => import("./pages/BrainoEcosystemDocs.tsx"));
 const WaitlistNavigationDocs = lazy(() => import("./pages/WaitlistNavigationDocs.tsx"));
 const MacCursorModeDocs = lazy(() => import("./pages/MacCursorModeDocs.tsx"));
+const Photos = lazy(() => import("./pages/Photos.tsx"));
 const Home = lazy(() => import("./pages/Home.tsx"));
 const HomeOS = lazy(() => import("./pages/HomeOS.tsx"));
 const FounderLetter = lazy(() => import("./pages/FounderLetter.tsx"));
@@ -117,6 +118,8 @@ const WholeMind = lazy(() => import("./pages/WholeMind.tsx"));
 const EngineLog = lazy(() => import("./pages/EngineLog.tsx"));
 const Commands = lazy(() => import("./pages/Commands.tsx"));
 const Deck = lazy(() => import("./pages/Deck.tsx"));
+const BrainoDeck = lazy(() => import("./pages/BrainoDeck.tsx"));
+const BrainoDeckDocs = lazy(() => import("./pages/BrainoDeckDocs.tsx"));
 const DeckDocs = lazy(() => import("./pages/DeckDocs.tsx"));
 const NotFound = lazy(() => import("./pages/NotFound.tsx"));
 const queryClient = new QueryClient();
@@ -170,6 +173,7 @@ function AppRoutes() {
         <Route path="/knowledge/two-products-and-the-browser-page" element={<TwoProductsDocs />} />
         <Route path="/knowledge/braino-foundry" element={<FoundryDocs />} />
         <Route path="/knowledge/braino-foundry-deck" element={<DeckDocs />} />
+        <Route path="/knowledge/braino-everything-deck" element={<BrainoDeckDocs />} />
         <Route path="/classes" element={<BrainoClasses />} />
         <Route path="/prelaunch" element={<PreLaunch />} />
         <Route path="/home-classic" element={<Index />} />
@@ -211,6 +215,7 @@ function AppRoutes() {
         <Route path="/use-cases" element={<UseCases />} />
         <Route path="/notion-sync" element={<NotionSync />} />
         <Route path="/glass-preview" element={<GlassPreview />} />
+        <Route path="/photos" element={<Photos />} />
         <Route path="/auth" element={<Auth />} />
         <Route path="/auth/extension" element={<ExtensionAuth />} />
         <Route path="/premium" element={<Premium />} />
@@ -258,6 +263,8 @@ function AppRoutes() {
         <Route path="/commands" element={<Commands />} />
         <Route path="/deck" element={<Deck />} />
         <Route path="/pitch" element={<Deck />} />
+        <Route path="/braino-deck" element={<BrainoDeck />} />
+        <Route path="/everything" element={<BrainoDeck />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     </Suspense>

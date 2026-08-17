@@ -1,6 +1,109 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { BRAINO_WALKER_SVG } from "@/components/brainoWalkerSvg";
+import {
+  downloadNodePng,
+  nodeToPngBlob,
+  recordNodeVideo,
+  registerReplay,
+  saveBlob,
+  supportedVideoType,
+  triggerReplay,
+  type ExportSize,
+} from "@/lib/artboardExport";
 import "./insta-graphics.css";
+
+/* Every story artboard is a true 1080 x 1920 box, previewed at 39%. Stills go
+   out at 2x that, which is the largest size Instagram will actually use. */
+const STORY_SIZE: ExportSize = { width: 1080, height: 1920 };
+const STORY_STILL: ExportSize = { width: 2160, height: 3840 };
+const CAROUSEL_STILL: ExportSize = { width: 4320, height: 5400 };
+
+/** Publishes an artboard's replay function so the export control, which lives
+    outside the scaled frame, can restart the sequence before recording. */
+function useReplayHandle(frameId: string, replay: () => void) {
+  useEffect(() => registerReplay(frameId, replay), [frameId, replay]);
+}
+
+type ArtboardExportProps = {
+  /** Element id of the .ig-frame to capture. */
+  frameId: string;
+  /** Filename stem, without extension. */
+  name: string;
+  /** Length of the artboard's animation, in milliseconds. */
+  durationMs: number;
+};
+
+/* One control per artboard: the still, and the animation as a real video file.
+   It sits in the entry copy column rather than inside the frame, because
+   anything inside the frame would be scaled to 39% on screen and would also be
+   rasterised into the export itself. */
+function ArtboardExport({ frameId, name, durationMs }: ArtboardExportProps) {
+  const [state, setState] = useState<"idle" | "png" | "video" | "done" | "error">("idle");
+  const [progress, setProgress] = useState(0);
+  const [message, setMessage] = useState("");
+  const videoType = supportedVideoType();
+  const busy = state === "png" || state === "video";
+
+  const settle = (next: "done" | "error", note: string) => {
+    setState(next);
+    setMessage(note);
+    window.setTimeout(() => { setState("idle"); setMessage(""); }, 3200);
+  };
+
+  const frame = () => {
+    const node = document.getElementById(frameId);
+    if (!node) throw new Error("This artboard is not on the page");
+    return node as HTMLElement;
+  };
+
+  const savePng = async () => {
+    if (busy) return;
+    try {
+      setState("png");
+      await downloadNodePng(frame(), STORY_STILL, `${name}-2160x3840.png`);
+      settle("done", "PNG saved");
+    } catch (error) {
+      console.error("Artboard PNG export failed", error);
+      settle("error", "PNG failed, try again");
+    }
+  };
+
+  const saveVideo = async () => {
+    if (busy || !videoType) return;
+    try {
+      setState("video");
+      setProgress(0);
+      const { blob, extension } = await recordNodeVideo(frame(), STORY_SIZE, {
+        durationMs,
+        maxFps: 30,
+        onReplay: () => triggerReplay(frameId),
+        onProgress: ({ elapsedMs }) => setProgress(Math.min(100, Math.round((elapsedMs / durationMs) * 100))),
+      });
+      saveBlob(blob, `${name}-1080x1920.${extension}`);
+      settle("done", `${extension.toUpperCase()} saved`);
+    } catch (error) {
+      console.error("Artboard video export failed", error);
+      settle("error", "Recording failed, try again");
+    }
+  };
+
+  const seconds = Math.round(durationMs / 1000);
+  return (
+    <div className="ig-export">
+      <button type="button" onClick={savePng} disabled={busy}>
+        {state === "png" ? "Rendering…" : "Download PNG"}
+        <small>2160 × 3840</small>
+      </button>
+      <button type="button" onClick={saveVideo} disabled={busy || !videoType}>
+        {state === "video" ? `Recording… ${progress}%` : videoType ? `Download ${videoType.extension.toUpperCase()}` : "Video unsupported"}
+        <small>{videoType ? `1080 × 1920 · ${seconds}s` : "Try Chrome or Safari"}</small>
+      </button>
+      <p className={`ig-export-note${state === "error" ? " is-error" : ""}`} role="status">
+        {message || (state === "video" ? "Plays the sequence once and records it in real time." : "\u00a0")}
+      </p>
+    </div>
+  );
+}
 
 type IomiBootPhase = "shimmer" | "authenticating" | "awake" | "expanded" | "mascot";
 type BrowserNotchPhase = "idle" | "input" | "listening" | "hatching" | "expanded" | "speaking" | "hopped";

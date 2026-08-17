@@ -20,13 +20,25 @@ export type KnowledgeEntry = {
 
 export const KNOWLEDGE_ENTRIES: readonly KnowledgeEntry[] = [
   {
+    slug: "braino-everything-deck",
+    title: "The Braino Deck: All of Him, Explained From Nothing",
+    category: "Design decision",
+    date: "2026-08-17",
+    dateLabel: "August 17, 2026",
+    description:
+      "A second deck at /braino-deck: fourteen slides that assume you have never heard of Braino. What he is, the three products with the price on the card, the four things he does, who pays, the market numbers, the arithmetic with its working shown, and what is honestly still unbuilt. The Foundry deck at /deck is untouched.",
+    status: "MVP",
+    platform: "Braino website",
+    number: "034",
+  },
+  {
     slug: "braino-foundry-deck",
     title: "The Foundry Deck: The Pitch, With the Missing Half Put Back",
     category: "Design decision",
     date: "2026-08-16",
     dateLabel: "August 16, 2026",
     description:
-      "The Braino Foundry pitch rebuilt as a real deck at /deck: thirty three slides, arrow keys, a static solar system, and the three things the original PDF never said, which are who Braino already is, the fact that there are two kinds of him, and the business behind it.",
+      "The Braino Foundry pitch rebuilt as a real deck at /deck: thirty six slides, arrow keys, a static solar system, and the three things the original PDF never said, which are who Braino already is, the fact that there are two kinds of him, and the business behind it. Now opens on a plain market today versus us table, answers where the human sits in the loop, and ends on a one page summary flow.",
     status: "MVP",
     platform: "Braino website",
     number: "033",

@@ -1,0 +1,88 @@
+/* BrainoDeck: the everything deck.
+   Rides deck.css for the shell, the type scale and the viewport fitting that is
+   already proven there. Only the pieces this deck needs that the Foundry deck
+   never had live here, under a bd- prefix, so the two can diverge freely. */
+
+/* ── The three products, with the price on the card ─────────────────────────── */
+
+.bd-three { display: grid; grid-template-columns: repeat(3, 1fr); gap: clamp(11px, 1.6vw, 20px); margin-top: clamp(20px, 2.6vh, 38px); }
+.bd-prod {
+  border-radius: 22px; padding: clamp(16px, 2.2vh, 26px) clamp(15px, 1.9vw, 24px);
+  background: var(--c-tint); display: flex; flex-direction: column; gap: 8px;
+}
+.bd-prod .p-where { font-size: 10px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: var(--c-accent); }
+.bd-prod h3 { margin: 0; font-size: clamp(19px, 2.2vw, 27px); font-weight: 600; letter-spacing: -0.022em; line-height: 1.04; }
+.bd-prod .p-does { margin: 0; font-size: clamp(13px, 1.4vw, 15.5px); line-height: 1.42; color: var(--dk-ink); opacity: 0.78; }
+.bd-prod .p-price {
+  margin: auto 0 0; padding-top: 10px; border-top: 1px solid var(--dk-line);
+  font-size: clamp(17px, 2vw, 23px); font-weight: 600; letter-spacing: -0.02em; color: var(--c-accent);
+}
+.bd-prod .p-price small { display: block; margin-top: 2px; font-size: clamp(11px, 1.15vw, 12.5px); font-weight: 450; letter-spacing: 0; color: var(--dk-soft); }
+.bd-prod.c-coral  { --c-accent: var(--dk-coral);  --c-tint: var(--dk-coral-tint); }
+.bd-prod.c-blue   { --c-accent: var(--dk-blue);   --c-tint: var(--dk-blue-tint); }
+.bd-prod.c-green  { --c-accent: var(--dk-green);  --c-tint: var(--dk-green-tint); }
+@media (max-width: 860px) { .bd-three { grid-template-columns: 1fr; gap: 10px; } }
+
+/* ── The four promises, numbered big ───────────────────────────────────────── */
+
+.bd-four { display: grid; grid-template-columns: repeat(2, 1fr); gap: clamp(12px, 1.8vw, 26px); margin-top: clamp(20px, 2.8vh, 40px); }
+.bd-four article { display: grid; grid-template-columns: auto 1fr; gap: clamp(12px, 1.6vw, 20px); align-items: start; padding: clamp(12px, 1.7vh, 20px) 0; border-top: 1px solid var(--dk-line-soft); }
+.bd-four b { font-size: clamp(22px, 2.8vw, 36px); font-weight: 600; letter-spacing: -0.03em; color: var(--dk-accent); line-height: 0.9; }
+.bd-four h4 { margin: 0; font-size: clamp(16px, 1.85vw, 22px); font-weight: 600; letter-spacing: -0.018em; line-height: 1.15; }
+.bd-four p { margin: 4px 0 0; font-size: clamp(13px, 1.35vw, 15px); line-height: 1.42; color: var(--dk-soft); }
+@media (max-width: 820px) { .bd-four { grid-template-columns: 1fr; gap: 0; } }
+
+/* ── The math: an arithmetic block that shows its own working ──────────────── */
+
+.bd-math { display: grid; grid-template-columns: 1.15fr 1fr; gap: clamp(16px, 2.4vw, 40px); margin-top: clamp(18px, 2.4vh, 34px); align-items: start; }
+.bd-sum { display: grid; gap: 0; }
+.bd-sum-row { display: grid; grid-template-columns: 1fr auto; gap: 14px; align-items: baseline; padding: clamp(9px, 1.3vh, 14px) 0; border-top: 1px solid var(--dk-line-soft); }
+.bd-sum-row span { font-size: clamp(13px, 1.4vw, 15.5px); color: var(--dk-soft); line-height: 1.35; }
+.bd-sum-row b { font-size: clamp(15px, 1.7vw, 20px); font-weight: 600; letter-spacing: -0.016em; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.bd-sum-row.is-total { border-top: 1.5px solid var(--dk-ink); margin-top: 2px; }
+.bd-sum-row.is-total span { color: var(--dk-ink); font-weight: 500; }
+.bd-sum-row.is-total b { font-size: clamp(20px, 2.4vw, 30px); color: var(--dk-accent); }
+.bd-math-note { margin: 0; font-size: clamp(12.5px, 1.3vw, 14.5px); line-height: 1.5; color: var(--dk-soft); }
+.bd-math-note b { display: block; margin-bottom: 6px; color: var(--dk-ink); font-weight: 600; font-size: clamp(13.5px, 1.45vw, 16px); }
+.bd-math-note + .bd-math-note { margin-top: clamp(12px, 1.6vh, 18px); }
+@media (max-width: 900px) { .bd-math { grid-template-columns: 1fr; gap: 20px; } }
+
+/* ── ICP as three widening rings ───────────────────────────────────────────── */
+
+.bd-icp { display: grid; grid-template-columns: repeat(3, 1fr); gap: clamp(12px, 1.7vw, 24px); margin-top: clamp(20px, 2.8vh, 38px); }
+.bd-icp article { position: relative; padding-top: clamp(14px, 1.8vh, 20px); border-top: 2px solid var(--i-color); }
+.bd-icp .i-tag { font-size: 10px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: var(--i-color); }
+.bd-icp h4 { margin: 5px 0 0; font-size: clamp(18px, 2.1vw, 25px); font-weight: 600; letter-spacing: -0.022em; line-height: 1.08; }
+.bd-icp p { margin: 7px 0 0; font-size: clamp(13px, 1.35vw, 15px); line-height: 1.45; color: var(--dk-soft); }
+.bd-icp .i-num { display: block; margin-top: 10px; font-size: clamp(15px, 1.7vw, 19px); font-weight: 600; color: var(--dk-ink); letter-spacing: -0.014em; }
+@media (max-width: 860px) { .bd-icp { grid-template-columns: 1fr; gap: 18px; } }
+
+/* ── Future: a plain two column now-and-later, no hype gradient ────────────── */
+
+.bd-later { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(14px, 2vw, 32px); margin-top: clamp(18px, 2.6vh, 36px); }
+.bd-later section { border-radius: 20px; padding: clamp(16px, 2.2vh, 26px) clamp(16px, 2vw, 24px); background: var(--l-tint); }
+.bd-later .l-tag { font-size: 10px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: var(--l-color); }
+.bd-later h4 { margin: 5px 0 10px; font-size: clamp(17px, 2vw, 24px); font-weight: 600; letter-spacing: -0.022em; }
+.bd-later ul { list-style: none; margin: 0; padding: 0; display: grid; gap: clamp(6px, 0.95vh, 10px); }
+.bd-later li { position: relative; padding-left: 17px; font-size: clamp(12.5px, 1.32vw, 14.5px); line-height: 1.4; opacity: 0.86; }
+.bd-later li::before { content: ""; position: absolute; left: 0; top: 0.52em; width: 5px; height: 5px; border-radius: 50%; background: var(--l-color); }
+.bd-later .is-soon { --l-color: var(--dk-blue); --l-tint: var(--dk-blue-tint); }
+.bd-later .is-far { --l-color: var(--dk-violet); --l-tint: var(--dk-violet-tint); }
+@media (max-width: 860px) { .bd-later { grid-template-columns: 1fr; } }
+
+/* ── One big number, for the slides that only need to land one fact ────────── */
+
+.bd-huge { margin: clamp(18px, 3vh, 44px) 0 0; display: grid; gap: clamp(14px, 2vh, 24px); }
+.bd-huge-row { display: grid; grid-template-columns: minmax(140px, 22%) 1fr; gap: clamp(16px, 2.4vw, 38px); align-items: baseline; padding-bottom: clamp(12px, 1.8vh, 20px); border-bottom: 1px solid var(--dk-line-soft); }
+.bd-huge-row b { font-size: clamp(30px, 5vw, 60px); font-weight: 600; letter-spacing: -0.035em; line-height: 0.92; color: var(--dk-accent); }
+.bd-huge-row div p { margin: 0; font-size: clamp(14px, 1.55vw, 18px); line-height: 1.42; }
+.bd-huge-row div small { display: block; margin-top: 5px; font-size: clamp(11.5px, 1.2vw, 13px); color: var(--dk-soft); }
+@media (max-width: 700px) { .bd-huge-row { grid-template-columns: 1fr; gap: 6px; } }
+
+/* ── A three-box band in the summary spine ──────────────────────────────────
+   deck.css only knows k-pair and k-solo. The everything deck needs a third
+   shape for the three products, so it is defined here and the Foundry deck's
+   stylesheet stays exactly as it was. */
+
+.dk-flow-boxes.k-trio { grid-template-columns: repeat(3, 1fr); }
+@media (max-width: 820px) { .dk-flow-boxes.k-trio { grid-template-columns: 1fr; } }

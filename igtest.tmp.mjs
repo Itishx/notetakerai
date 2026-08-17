@@ -1,0 +1,20 @@
+import { chromium } from '@playwright/test';
+const b = await chromium.launch();
+const p = await b.newPage({ viewport: { width: 1440, height: 900 } });
+const errs = [];
+p.on('pageerror', e => errs.push('PAGEERROR ' + e.message));
+p.on('console', m => { if (m.type()==='error') errs.push('CONSOLE ' + m.text()); });
+await p.goto('http://localhost:4173/instagraphics', { waitUntil: 'networkidle' });
+await p.waitForTimeout(2000);
+console.log('download buttons on page:', await p.locator('.ig-download-all').count());
+console.log('any other download control:', await p.locator('[download], button:has-text("Download")').count());
+// try the one download that exists
+const dlPromise = p.waitForEvent('download', { timeout: 90000 }).catch(e => 'NO DOWNLOAD: ' + e.message.split('\n')[0]);
+await p.locator('.ig-download-all').click();
+await p.waitForTimeout(3000);
+console.log('button label after click:', await p.locator('.ig-download-all').innerText().then(t=>t.replace(/\n/g,' | ')));
+const dl = await dlPromise;
+console.log('download result:', typeof dl === 'string' ? dl : 'GOT ' + dl.suggestedFilename());
+console.log('final label:', await p.locator('.ig-download-all').innerText().then(t=>t.replace(/\n/g,' | ')));
+console.log('errors:', errs.length ? errs.slice(0,8) : 'none');
+await b.close();

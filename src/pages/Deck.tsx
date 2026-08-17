@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import "./deck.css";
 
@@ -268,6 +268,229 @@ function MarketDiagram() {
   );
 }
 
+/* ── Today versus Braino ────────────────────────────────────────────────────
+   The clarity slide, and it sits second on purpose. An investor should be able
+   to state the whole thesis after this one slide and before any act begins.
+   Row aligned rather than two loose columns, because the argument only lands
+   when each pair is read across: same job, two different worlds. */
+
+const VERSUS = [
+  {
+    label: "Building the product",
+    today: "AI already does this. Everyone has the same tools, so having them is worth nothing.",
+    ours: "Same, except he does it while you talk. Building was never going to be the moat.",
+  },
+  {
+    label: "Getting it seen",
+    today: "You. By hand. At night. Across five platforms. Badly, or not at all.",
+    ours: "He does it. Every platform, every day, without being asked twice.",
+  },
+  {
+    label: "How your tools fit",
+    today: "One tool builds. Another posts. Neither knows the other exists.",
+    ours: "One mind does both, so what lands in public decides what gets built next.",
+  },
+  {
+    label: "What it knows about you",
+    today: "Nothing. A fresh tab and a blank stare every morning.",
+    ours: "You. He was on your screen for months before you ever hired him.",
+  },
+];
+
+function VersusTable() {
+  return (
+    <div className="dk-versus">
+      <div className="dk-versus-head" aria-hidden="true">
+        <span />
+        <span className="v-today">The market today</span>
+        <span className="v-ours">With Braino</span>
+      </div>
+      {VERSUS.map((row) => (
+        <div className="dk-versus-row" key={row.label}>
+          <h4>{row.label}</h4>
+          <p className="v-today"><i aria-hidden="true">Today</i>{row.today}</p>
+          <p className="v-ours"><i aria-hidden="true">Braino</i>{row.ours}</p>
+        </div>
+      ))}
+      <p className="dk-versus-foot">
+        Every company in this market sells you the building. <b>Nobody sells you the being seen.</b> That gap is the
+        entire company.
+      </p>
+    </div>
+  );
+}
+
+/* ── Where the human sits ───────────────────────────────────────────────────
+   The question every serious investor asks and most AI decks dodge. The answer
+   has a shape: Braino decides HOW, the founder decides WHETHER. So the chain
+   runs through a human twice, at the start and immediately before anything
+   becomes public, and the three columns name who holds what with no hedging. */
+
+const HIL_CHAIN = [
+  { who: "you", label: "You say it", sub: "The brief" },
+  { who: "him", label: "He does the work", sub: "Builds, writes, drafts" },
+  { who: "you", label: "You approve", sub: "Nothing public until you do" },
+  { who: "world", label: "It ships", sub: "Live" },
+];
+
+const HIL_COLUMNS = [
+  {
+    tone: "coral" as const,
+    tag: "Always yours",
+    title: "You decide whether.",
+    lines: [
+      "The idea, and whether it is worth doing",
+      "Taste. What is good and what is embarrassing",
+      "Anything that costs money",
+      "Anything with your name in public",
+      "The final no, at any point, on anything",
+    ],
+  },
+  {
+    tone: "blue" as const,
+    tag: "Always his",
+    title: "He decides how.",
+    lines: [
+      "Writing the code and shipping it",
+      "Drafting the posts and the replies",
+      "Research, scheduling, the boring ninety percent",
+      "Watching what landed and reporting back",
+      "Doing it again tomorrow without being reminded",
+    ],
+  },
+  {
+    tone: "amber" as const,
+    tag: "He stops and asks",
+    title: "The hard gates.",
+    lines: [
+      "Before spending a rupee or a dollar",
+      "Before anything is published or sent",
+      "Before emailing or messaging a human",
+      "Before deleting anything, ever",
+      "Before changing a price or a promise",
+    ],
+  },
+];
+
+function HumanInLoop() {
+  return (
+    <div className="dk-hil">
+      <ol className="dk-hil-chain">
+        {HIL_CHAIN.map((step, i) => (
+          <li key={step.label} className={`h-${step.who}`}>
+            <span className="h-badge">{step.who === "him" ? "Braino" : step.who === "world" ? "Public" : "You"}</span>
+            <b>{step.label}</b>
+            <small>{step.sub}</small>
+            {i < HIL_CHAIN.length - 1 && <i className="h-arrow" aria-hidden="true" />}
+          </li>
+        ))}
+      </ol>
+
+      <div className="dk-hil-cols">
+        {HIL_COLUMNS.map((col) => (
+          <article key={col.tag} className={`dk-hil-col c-${col.tone}`}>
+            <span className="c-tag">{col.tag}</span>
+            <h3>{col.title}</h3>
+            <ul>{col.lines.map((line) => <li key={line}>{line}</li>)}</ul>
+          </article>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ── The one page summary ───────────────────────────────────────────────────
+   The last slide before the close: the entire deck as a single flow, so
+   whoever is in the room can photograph one thing and still have the argument
+   a week later.
+
+   Built in markup rather than SVG on purpose. Every other diagram here is a
+   fixed drawing with short labels, but this one carries real sentences, and
+   SVG text does not wrap. Grid bands wrap, reflow on a phone, and stay
+   selectable, which matters for the slide someone actually copies out. */
+
+type FlowBand = {
+  no: string;
+  title: string;
+  /** "pair" sits two boxes side by side, "solo" spans the full width. */
+  kind: "pair" | "solo";
+  /** Sits between the pair. `both` is a two way loop, `right` a one way step. */
+  join?: { label: string; dir: "right" | "both" };
+  boxes: { tone: "coral" | "blue" | "green" | "amber"; head: string; line: string }[];
+};
+
+const FLOW: FlowBand[] = [
+  {
+    no: "01", title: "The shift", kind: "pair",
+    boxes: [
+      { tone: "coral", head: "Building is easy now", line: "Anyone can do it, so being able to is worth nothing." },
+      { tone: "coral", head: "Getting seen is the whole game", line: "And nobody ever built a founder the tooling for it." },
+    ],
+  },
+  {
+    no: "02", title: "The mind", kind: "solo",
+    boxes: [
+      { tone: "amber", head: "Braino OS", line: "One character, one memory, every surface. Not a tool you open. Someone who already knows you." },
+    ],
+  },
+  {
+    no: "03", title: "Two Brainos", kind: "pair", join: { label: "trust first, hire later", dir: "right" },
+    boxes: [
+      { tone: "coral", head: "Personal Braino · free", line: "Browser and Mac. How every founder meets him." },
+      { tone: "blue", head: "Founder Braino · paid", line: "The co-founder you hire once you trust him." },
+    ],
+  },
+  {
+    no: "04", title: "Two engines", kind: "pair", join: { label: "signal feeds the next build", dir: "both" },
+    boxes: [
+      { tone: "blue", head: "Braino Code", line: "You speak. He builds it and ships it." },
+      { tone: "green", head: "Distra", line: "The world finds out. Every platform, daily." },
+    ],
+  },
+  {
+    no: "05", title: "The money", kind: "solo",
+    boxes: [
+      { tone: "green", head: "Free personal. Usage priced founder.", line: "$45B already goes to tools that each do half of this job. Lovable and Cursor sell the building. The being seen has no Cursor yet." },
+    ],
+  },
+];
+
+function SummaryFlow() {
+  return (
+    <div className="dk-flow">
+      {FLOW.map((band, i) => (
+        <div className="dk-flow-band" key={band.no}>
+          <div className="dk-flow-step">
+            <b>{band.no}</b>
+            <span>{band.title}</span>
+            {i < FLOW.length - 1 && <i className="f-rail" aria-hidden="true" />}
+          </div>
+
+          <div className={`dk-flow-boxes k-${band.kind}${band.join ? " has-join" : ""}`}>
+            {band.boxes.map((box, bi) => (
+              <Fragment key={box.head}>
+                {/* The join is a sibling between the two boxes, so the grid puts
+                    it physically between them and it cannot be misread as an
+                    arrow down to the next band. */}
+                {band.join && bi === 1 && (
+                  <span className="dk-flow-join">
+                    <i aria-hidden="true">{band.join.dir === "both" ? "\u21c4" : "\u2192"}</i>
+                    {band.join.label}
+                  </span>
+                )}
+                <article className={`dk-flow-box c-${box.tone}`}>
+                  <h4>{box.head}</h4>
+                  <p>{box.line}</p>
+                </article>
+              </Fragment>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /* ── The deck ───────────────────────────────────────────────────────────────── */
 
 const DECK: Slide[] = [
@@ -278,6 +501,18 @@ const DECK: Slide[] = [
         <p className="dk-cover-mark">Creatish Inc.</p>
         <h1 className="dk-cover-title">Braino<span>Foundry</span></h1>
         <p className="dk-cover-line">Your AI co-founder.<b>Speak. Watch it happen.</b></p>
+      </>
+    ),
+  },
+
+  /* The clarity slide. Second, so the thesis is stated before any act begins. */
+  {
+    id: "clarity", chapter: "In one slide", act: "coral", fit: "dense",
+    body: (
+      <>
+        <p className="dk-kicker">Before anything else</p>
+        <h2 className="dk-h sm">What the market sells you.<br /><span className="tone">What we sell you.</span></h2>
+        <VersusTable />
       </>
     ),
   },
@@ -612,6 +847,18 @@ const DECK: Slide[] = [
     ),
   },
 
+  {
+    id: "human", chapter: "The solution", act: "coral", fit: "dense",
+    body: (
+      <>
+        <p className="dk-kicker">The question that always comes</p>
+        <h2 className="dk-h sm">Where is the human <span className="tone">in the loop?</span></h2>
+        <p className="dk-lede">At the front of it, and again before anything reaches the world. He decides how. You decide whether. Nobody should hand a company to an agent and walk away, and we are not asking anyone to.</p>
+        <HumanInLoop />
+      </>
+    ),
+  },
+
   /* ── Act five: why us, why now ── */
   {
     id: "act-now", chapter: "Why now", act: "violet", divider: true,
@@ -858,6 +1105,17 @@ const DECK: Slide[] = [
       </>
     ),
   },
+  {
+    id: "summary", chapter: "One page", act: "amber", fit: "diagram",
+    body: (
+      <>
+        <p className="dk-kicker">Take this one with you</p>
+        <h2 className="dk-h sm">The whole thing, <span className="tone">on one page.</span></h2>
+        <SummaryFlow />
+      </>
+    ),
+  },
+
   {
     id: "close", chapter: "Close", night: true, center: true,
     body: (

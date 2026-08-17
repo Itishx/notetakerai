@@ -564,3 +564,147 @@
   letter-spacing: -0.02em; line-height: 1.3; text-wrap: balance;
 }
 .dk-comps-kicker span { color: var(--dk-accent); }
+
+/* ── The clarity slide: market today versus us ──────────────────────────────
+   A three column table, not two loose lists, because the contrast only lands
+   when a reader takes each row across: same job, two different worlds. The
+   per-cell `i` labels are hidden here and revealed on the phone, where the
+   column headers are gone and each cell has to name itself. */
+
+.dk-versus { margin-top: clamp(22px, 2.8vh, 40px); }
+.dk-versus-head,
+.dk-versus-row { display: grid; grid-template-columns: clamp(140px, 17vw, 210px) 1fr 1fr; gap: clamp(14px, 2vw, 30px); align-items: start; }
+.dk-versus-head { padding-bottom: 9px; }
+.dk-versus-head span { font-size: 10.5px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; color: var(--dk-soft); }
+.dk-versus-head .v-ours { color: var(--dk-coral); }
+.dk-versus-row { padding: clamp(11px, 1.5vh, 18px) 0; border-top: 1px solid var(--dk-line-soft); }
+.dk-versus-row:last-of-type { border-bottom: 1px solid var(--dk-line-soft); }
+.dk-versus-row h4 { margin: 0; font-size: clamp(14px, 1.5vw, 17px); font-weight: 600; letter-spacing: -0.012em; }
+.dk-versus-row p { margin: 0; font-size: clamp(13px, 1.4vw, 16px); line-height: 1.45; }
+.dk-versus-row p i { display: none; }
+.dk-versus-row .v-today { color: var(--dk-soft); }
+.dk-versus-row .v-ours { color: var(--dk-ink); font-weight: 500; }
+.dk-versus-foot { margin: clamp(16px, 2.2vh, 26px) 0 0; font-size: clamp(14px, 1.6vw, 19px); line-height: 1.42; color: var(--dk-soft); max-width: 74ch; }
+.dk-versus-foot b { color: var(--dk-ink); font-weight: 600; }
+
+@media (max-width: 820px) {
+  .dk-versus-head { display: none; }
+  .dk-versus-row { grid-template-columns: 1fr; gap: 7px; }
+  .dk-versus-row p i {
+    display: inline; font-style: normal; margin-right: 8px;
+    font-size: 10px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase;
+  }
+  .dk-versus-row .v-today i { color: var(--dk-soft); }
+  .dk-versus-row .v-ours i { color: var(--dk-coral); }
+}
+
+/* ── Where the human sits ───────────────────────────────────────────────────
+   The chain is colour coded by whose hands are on each step, so the answer to
+   "where is the human" is legible before a word is read: the founder holds
+   both ends. The three columns then name it without hedging. */
+
+.dk-hil { margin-top: clamp(18px, 2.4vh, 32px); }
+
+.dk-hil-chain {
+  list-style: none; margin: 0 0 clamp(16px, 2.2vh, 30px); padding: 0;
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: clamp(10px, 1.5vw, 22px);
+}
+.dk-hil-chain li {
+  position: relative; border-radius: 15px;
+  padding: clamp(10px, 1.4vh, 15px) clamp(12px, 1.5vw, 17px);
+  background: var(--h-tint); border: 1px solid transparent;
+}
+.dk-hil-chain li .h-badge {
+  display: block; margin-bottom: 5px;
+  font-size: 9.5px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase;
+  color: var(--h-accent);
+}
+.dk-hil-chain li b { display: block; font-size: clamp(13.5px, 1.5vw, 17px); font-weight: 600; letter-spacing: -0.014em; line-height: 1.15; }
+.dk-hil-chain li small { display: block; margin-top: 3px; font-size: clamp(11px, 1.15vw, 12.5px); color: var(--dk-soft); }
+.dk-hil-chain .h-you   { --h-accent: var(--dk-coral); --h-tint: var(--dk-coral-tint); }
+.dk-hil-chain .h-him   { --h-accent: var(--dk-blue);  --h-tint: var(--dk-blue-tint); }
+.dk-hil-chain .h-world { --h-accent: var(--dk-green); --h-tint: var(--dk-green-tint); }
+.dk-hil-chain .h-arrow {
+  position: absolute; top: 50%; right: calc(-1 * clamp(10px, 1.5vw, 22px) / 2 - 4px);
+  width: 7px; height: 7px; border-top: 1.5px solid var(--dk-line);
+  border-right: 1.5px solid var(--dk-line); transform: translateY(-50%) rotate(45deg);
+}
+
+.dk-hil-cols { display: grid; grid-template-columns: repeat(3, 1fr); gap: clamp(11px, 1.6vw, 22px); }
+.dk-hil-col {
+  border-radius: 22px; padding: clamp(16px, 2.2vh, 28px) clamp(16px, 2vw, 26px);
+  background: var(--c-tint); display: flex; flex-direction: column; gap: 9px;
+}
+.dk-hil-col .c-tag { font-size: 10px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: var(--c-accent); }
+.dk-hil-col h3 { margin: 0; font-size: clamp(18px, 2.1vw, 26px); font-weight: 600; letter-spacing: -0.022em; line-height: 1.05; }
+.dk-hil-col ul { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: clamp(6px, 0.9vh, 9px); }
+.dk-hil-col ul li {
+  position: relative; padding-left: 16px;
+  font-size: clamp(12px, 1.3vw, 14.5px); line-height: 1.38; color: var(--dk-ink); opacity: 0.85;
+}
+.dk-hil-col ul li::before {
+  content: ""; position: absolute; left: 0; top: 0.52em;
+  width: 5px; height: 5px; border-radius: 50%; background: var(--c-accent);
+}
+.dk-hil-col.c-coral { --c-accent: var(--dk-coral); --c-tint: var(--dk-coral-tint); }
+.dk-hil-col.c-blue  { --c-accent: var(--dk-blue);  --c-tint: var(--dk-blue-tint); }
+.dk-hil-col.c-amber { --c-accent: var(--dk-amber); --c-tint: var(--dk-amber-tint); }
+
+@media (max-width: 900px) {
+  .dk-hil-chain { grid-template-columns: repeat(2, 1fr); }
+  .dk-hil-chain .h-arrow { display: none; }
+  .dk-hil-cols { grid-template-columns: 1fr; }
+}
+
+/* ── The one page summary ───────────────────────────────────────────────────
+   Five bands down a numbered spine. Markup rather than SVG because these boxes
+   carry sentences and SVG text will not wrap; the hairline rail in the gutter
+   does the work an arrow would. */
+
+.dk-flow { margin-top: clamp(14px, 2vh, 26px); display: grid; gap: clamp(12px, 1.8vh, 22px); }
+.dk-flow-band { display: grid; grid-template-columns: clamp(72px, 9vw, 112px) 1fr; gap: clamp(12px, 2vw, 26px); }
+.dk-flow-step { position: relative; }
+.dk-flow-step b { display: block; font-size: clamp(14px, 1.7vw, 19px); font-weight: 600; letter-spacing: -0.01em; color: var(--dk-accent); }
+.dk-flow-step span { display: block; margin-top: 1px; font-size: clamp(10.5px, 1.1vw, 12.5px); line-height: 1.25; color: var(--dk-soft); }
+/* The band stretches the gutter to full height, so 100% is the band's bottom
+   and the rail lands exactly in the gap to the next band. */
+.dk-flow-step .f-rail { position: absolute; left: 5px; top: 100%; width: 1px; height: clamp(12px, 1.8vh, 22px); background: var(--dk-line); }
+
+.dk-flow-boxes { display: grid; gap: clamp(9px, 1.3vw, 16px); align-content: start; }
+.dk-flow-boxes.k-pair { grid-template-columns: 1fr 1fr; }
+.dk-flow-boxes.k-solo { grid-template-columns: 1fr; }
+.dk-flow-box { border-radius: 17px; padding: clamp(11px, 1.5vh, 17px) clamp(14px, 1.7vw, 22px); background: var(--c-tint); }
+.dk-flow-box h4 { margin: 0; font-size: clamp(13.5px, 1.5vw, 17px); font-weight: 600; letter-spacing: -0.014em; color: var(--c-accent); }
+.dk-flow-box p { margin: 3px 0 0; font-size: clamp(12px, 1.28vw, 14px); line-height: 1.4; color: var(--dk-ink); opacity: 0.8; }
+.dk-flow-box.c-coral { --c-accent: var(--dk-coral); --c-tint: var(--dk-coral-tint); }
+.dk-flow-box.c-blue  { --c-accent: var(--dk-blue);  --c-tint: var(--dk-blue-tint); }
+.dk-flow-box.c-green { --c-accent: var(--dk-green); --c-tint: var(--dk-green-tint); }
+.dk-flow-box.c-amber { --c-accent: var(--dk-amber); --c-tint: var(--dk-amber-tint); }
+/* Between the pair, not beneath it. A label under a row of two boxes reads as
+   an arrow to the next band; a label between them can only mean the pair. */
+.dk-flow-boxes.k-pair.has-join { grid-template-columns: 1fr minmax(66px, 96px) 1fr; }
+.dk-flow-join {
+  align-self: center; text-align: center;
+  font-size: clamp(9px, 0.95vw, 10.5px); font-weight: 600; letter-spacing: 0.04em;
+  line-height: 1.3; text-transform: uppercase; color: var(--dk-soft);
+}
+.dk-flow-join i { display: block; font-style: normal; font-size: 15px; line-height: 1; margin-bottom: 3px; color: var(--dk-line); }
+@media (max-width: 820px) {
+  .dk-flow-boxes.k-pair.has-join { grid-template-columns: 1fr; }
+  .dk-flow-join { text-align: left; }
+  .dk-flow-join i { display: inline; margin-right: 6px; }
+}
+
+@media (max-width: 820px) {
+  .dk-flow-band { grid-template-columns: 1fr; gap: 8px; }
+  .dk-flow-boxes.k-pair { grid-template-columns: 1fr; }
+  .dk-flow-step { display: flex; align-items: baseline; gap: 9px; }
+  .dk-flow-step b { font-size: 13px; }
+  .dk-flow-step .f-rail { display: none; }
+}
+
+/* The summary rides has-diagram, but it is markup rather than a drawing, so it
+   needs its own height-driven tightening instead of an svg max-width cap. */
+.dk-slide.has-diagram .dk-flow { margin-top: clamp(10px, 1.6vh, 20px); gap: clamp(8px, 1.4vh, 18px); }
+.dk-slide.has-diagram .dk-flow-box { padding: clamp(9px, 1.3vh, 15px) clamp(13px, 1.6vw, 20px); }
+.dk-slide.has-diagram .dk-flow-box p { font-size: clamp(11.5px, 1.2vw, 13.5px); }

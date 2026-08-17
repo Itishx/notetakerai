@@ -1911,3 +1911,586 @@
   border-bottom-color: var(--wl-accent);
   opacity: 0.85;
 }
+
+/* ── The question page ──────────────────────────────────────────────────────
+   Everything under the hero is an answer now. The page reads as a list of
+   questions, and a chapter only exists once somebody asks for it. The answers
+   themselves are untouched: the same chapters, opened on purpose. */
+.wl-faq-head {
+  max-width: 790px;
+  margin: 0 auto;
+  padding: clamp(64px, 8vw, 104px) 28px clamp(28px, 4vw, 46px);
+}
+.wl-faq-eyebrow {
+  display: block;
+  margin-bottom: 14px;
+  color: var(--wl-accent);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}
+.wl-faq-head h2 {
+  margin: 0;
+  font-size: clamp(34px, 5vw, 56px);
+  font-weight: 600;
+  letter-spacing: -.045em;
+  line-height: 1;
+}
+.wl-faq-head p {
+  max-width: 520px;
+  margin: 18px 0 0;
+  color: var(--wl-muted);
+  font-size: clamp(16px, 1.8vw, 19px);
+  font-weight: 500;
+  line-height: 1.55;
+}
+
+.wl-faq { border-top: 1px solid var(--wl-line); }
+.wl-faq-item {
+  border-bottom: 1px solid var(--wl-line);
+  scroll-margin-top: 92px;
+}
+.wl-faq-q {
+  max-width: 790px;
+  margin: 0 auto;
+  padding: 0;
+  font-size: inherit;
+}
+.wl-faq-q > button {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px 26px;
+  width: 100%;
+  padding: clamp(26px, 3.4vw, 40px) 28px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.wl-faq-kicker {
+  grid-column: 1 / -1;
+  color: var(--wl-accent);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}
+.wl-faq-ask {
+  grid-column: 1;
+  font-size: clamp(27px, 3.7vw, 46px);
+  font-weight: 600;
+  letter-spacing: -.045em;
+  line-height: 1.02;
+  transition: color .25s ease;
+}
+.wl-faq-hint {
+  grid-column: 1;
+  max-width: 560px;
+  color: var(--wl-muted);
+  font-size: clamp(14px, 1.6vw, 17px);
+  font-weight: 500;
+  line-height: 1.5;
+  transition: opacity .35s ease;
+}
+.wl-faq-item.open .wl-faq-hint { opacity: .45; }
+.wl-faq-q > button:hover .wl-faq-ask { color: var(--wl-accent); }
+.wl-faq-q > button:focus-visible { outline: 2px solid var(--wl-accent); outline-offset: -6px; }
+
+.wl-faq-sign {
+  position: relative;
+  grid-row: 2 / span 2;
+  grid-column: 2;
+  align-self: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--wl-line);
+  border-radius: 50%;
+  transition: border-color .3s ease, background .3s ease, transform .45s cubic-bezier(.22,.61,.36,1);
+}
+.wl-faq-sign i {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 13px;
+  height: 1.5px;
+  background: var(--wl-ink);
+  border-radius: 2px;
+  transform: translate(-50%, -50%);
+  transition: transform .45s cubic-bezier(.22,.61,.36,1), opacity .3s ease, background .3s ease;
+}
+.wl-faq-sign i:last-child { transform: translate(-50%, -50%) rotate(90deg); }
+.wl-faq-q > button:hover .wl-faq-sign { border-color: var(--wl-accent); }
+.wl-faq-item.open .wl-faq-sign {
+  background: var(--wl-accent);
+  border-color: var(--wl-accent);
+  transform: rotate(180deg);
+}
+.wl-faq-item.open .wl-faq-sign i { background: #fffdf7; }
+.wl-faq-item.open .wl-faq-sign i:last-child { transform: translate(-50%, -50%) rotate(0deg); opacity: 0; }
+
+.wl-faq-answer {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows .55s cubic-bezier(.22,.61,.36,1);
+}
+.wl-faq-item.open .wl-faq-answer { grid-template-rows: 1fr; }
+.wl-faq-answer-inner {
+  overflow: hidden;
+  min-height: 0;
+  visibility: hidden;
+  transition: visibility 0s .55s;
+}
+.wl-faq-item.open .wl-faq-answer-inner { visibility: visible; transition: visibility 0s; }
+
+/* The answer is the chapter exactly as it was, minus the frame it no longer
+   needs: the question above it already carries the rule and the number. */
+.wl-faq-answer .wl-chapter {
+  padding-top: 0;
+  padding-bottom: clamp(56px, 7vw, 92px);
+  border-top: 0;
+}
+.wl-faq-answer .wl-chapter-number { display: none; }
+
+/* The kinds of Braino: the tab row, asked as a question. */
+.wl-kinds-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  margin-top: 36px;
+  border: 1px solid var(--wl-line);
+  background: var(--wl-line);
+}
+.wl-kinds-grid button {
+  display: block;
+  padding: clamp(22px, 3vw, 30px);
+  border: 0;
+  background: var(--wl-bg);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background .3s ease;
+}
+.wl-kinds-grid button:hover { background: var(--wl-panel); }
+.wl-kinds-num {
+  color: var(--wl-accent);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .12em;
+}
+.wl-kinds-grid h3 {
+  margin: 14px 0 6px;
+  font-size: clamp(21px, 2.4vw, 26px);
+  font-weight: 600;
+  letter-spacing: -.03em;
+}
+.wl-kinds-grid small {
+  display: block;
+  color: var(--wl-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+.wl-kinds-grid p {
+  margin: 14px 0 0;
+  color: #b8b9b3;
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.55;
+}
+.wl-kinds-grid i {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 18px;
+  color: var(--wl-accent);
+  font-size: 13px;
+  font-style: normal;
+  font-weight: 600;
+}
+
+.wl-page.is-light .wl-faq-head p,
+.wl-page.is-light .wl-faq-hint { color: #666861; }
+.wl-page.is-light .wl-faq-sign i { background: #161713; }
+.wl-page.is-light .wl-faq-item.open .wl-faq-sign i { background: #fffdf7; }
+.wl-page.is-light .wl-kinds-grid button { background: var(--wl-panel); }
+.wl-page.is-light .wl-kinds-grid button:hover { background: #fff; }
+.wl-page.is-light .wl-kinds-grid p { color: #4a4c46; }
+
+@media (max-width: 760px) {
+  .wl-faq-head { padding: 58px var(--wl-mobile-gutter) 24px; }
+  .wl-faq-q > button { gap: 12px 16px; padding: 26px var(--wl-mobile-gutter); }
+  .wl-faq-ask { font-size: 30px; }
+  .wl-faq-hint { font-size: 14px; }
+  .wl-faq-sign { width: 34px; height: 34px; }
+  .wl-faq-answer .wl-chapter { padding-top: 0; padding-bottom: 46px; }
+  .wl-kinds-grid { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wl-faq-answer,
+  .wl-faq-sign,
+  .wl-faq-sign i,
+  .wl-faq-hint { transition: none; }
+}
+
+/* ── The tabs ───────────────────────────────────────────────────────────────
+   The same five destinations the notch carries on /braino, on the page where
+   you can see them. Each one swaps the whole question list underneath. */
+/* Five products, one page. Clean editorial tabs with refined underline indicator.
+   Matches the page's design language: clear, minimal, purposeful. */
+.wl-qtabs {
+  max-width: 790px;
+  margin: 0 auto;
+  padding: 0 28px;
+  border-bottom: 1px solid var(--wl-line);
+}
+.wl-qtabs-rail {
+  display: flex;
+  gap: 0;
+  padding: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.wl-qtabs-rail::-webkit-scrollbar { display: none; }
+.wl-qtab {
+  flex: 0 0 auto;
+  position: relative;
+  padding: 18px 28px;
+  border: 0;
+  background: none;
+  color: var(--wl-muted);
+  font: inherit;
+  cursor: pointer;
+  transition: color .28s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.wl-qtab::after {
+  content: "";
+  position: absolute;
+  bottom: -1px;
+  left: 28px;
+  right: 28px;
+  height: 2px;
+  background: var(--wl-accent);
+  opacity: 0;
+  transition: opacity .28s ease;
+}
+.wl-qtab b {
+  display: block;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -.012em;
+}
+.wl-qtab small {
+  display: block;
+  margin-top: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .095em;
+  text-transform: uppercase;
+  opacity: .55;
+  transition: opacity .28s ease;
+}
+.wl-qtab:hover {
+  color: var(--wl-ink);
+}
+.wl-qtab:hover small {
+  opacity: .75;
+}
+.wl-qtab.on {
+  color: var(--wl-ink);
+}
+.wl-qtab.on::after {
+  opacity: 1;
+}
+.wl-qtab.on small {
+  opacity: 1;
+}
+
+/* The handoff at the bottom of a product tab, so nobody dead-ends. */
+.wl-faq-back {
+  max-width: 790px;
+  margin: 0 auto;
+  padding: clamp(40px, 5vw, 62px) 28px clamp(56px, 7vw, 88px);
+}
+.wl-faq-back p {
+  margin: 0;
+  color: var(--wl-muted);
+  font-size: clamp(17px, 2vw, 21px);
+  font-weight: 500;
+  line-height: 1.5;
+}
+.wl-faq-back button {
+  padding: 0;
+  border: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--wl-accent) 45%, transparent);
+  background: none;
+  color: var(--wl-accent);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.wl-faq-back button:hover { border-bottom-color: var(--wl-accent); }
+
+/* ── Answer parts ───────────────────────────────────────────────────────────
+   The shapes the answers on the product and argument tabs are built from. */
+.wl-answer-rows { margin-top: 34px; border-top: 1px solid var(--wl-line); }
+.wl-answer-rows article {
+  display: grid;
+  grid-template-columns: 62px 1fr;
+  gap: 18px;
+  padding: 26px 0;
+  border-bottom: 1px solid var(--wl-line);
+}
+.wl-answer-rows span {
+  color: var(--wl-accent);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .1em;
+}
+.wl-answer-rows h3 {
+  margin: 0 0 8px;
+  font-size: clamp(20px, 2.3vw, 25px);
+  font-weight: 600;
+  letter-spacing: -.03em;
+}
+.wl-answer-rows p {
+  margin: 0;
+  color: #b8b9b3;
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1.6;
+}
+
+.wl-answer-compare {
+  margin-top: 34px;
+  border: 1px solid var(--wl-line);
+}
+.wl-answer-compare-row {
+  display: grid;
+  grid-template-columns: 130px 1fr 1fr;
+  gap: 18px;
+  padding: 18px 20px;
+  border-bottom: 1px solid var(--wl-line);
+  font-size: 15px;
+  line-height: 1.5;
+}
+.wl-answer-compare-row:last-child { border-bottom: 0; }
+.wl-answer-compare-row.is-head {
+  background: var(--wl-panel);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+.wl-answer-compare-row.is-head span { color: var(--wl-muted); }
+.wl-answer-compare-row.is-head b:last-child { color: var(--wl-accent); }
+.wl-answer-compare-row strong { font-weight: 600; }
+.wl-answer-compare-row span { color: var(--wl-muted); font-weight: 500; }
+.wl-answer-compare-row span:last-child { color: var(--wl-ink); }
+
+.wl-answer-plans {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  margin-top: 34px;
+  border: 1px solid var(--wl-line);
+  background: var(--wl-line);
+}
+.wl-answer-plans article { padding: clamp(24px, 3vw, 32px); background: var(--wl-bg); }
+.wl-answer-plans article.featured { background: var(--wl-panel); }
+.wl-plan-name {
+  display: block;
+  color: var(--wl-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+.wl-answer-plans .featured .wl-plan-name { color: var(--wl-accent); }
+.wl-plan-price {
+  margin: 14px 0 0;
+  font-size: clamp(34px, 4.2vw, 46px);
+  font-weight: 600;
+  letter-spacing: -.045em;
+  line-height: 1;
+}
+.wl-plan-price small { margin-left: 8px; color: var(--wl-muted); font-size: 14px; font-weight: 500; letter-spacing: 0; }
+.wl-plan-desc { margin: 14px 0 0; color: var(--wl-muted); font-size: 15px; font-weight: 500; line-height: 1.5; }
+.wl-answer-plans ul { margin: 18px 0 0; padding: 0; list-style: none; }
+.wl-answer-plans li {
+  padding: 9px 0 9px 20px;
+  border-top: 1px solid var(--wl-line);
+  color: #b8b9b3;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.45;
+  position: relative;
+}
+.wl-answer-plans li::before {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 17px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--wl-accent);
+}
+.wl-answer-caveat { margin-top: 22px; }
+
+.wl-answer-cards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  margin-top: 34px;
+  border: 1px solid var(--wl-line);
+  background: var(--wl-line);
+}
+.wl-answer-cards article { padding: clamp(22px, 2.6vw, 28px); background: var(--wl-bg); }
+.wl-answer-cards small {
+  display: block;
+  color: var(--wl-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+.wl-answer-cards h3 {
+  margin: 12px 0 10px;
+  font-size: clamp(19px, 2.1vw, 23px);
+  font-weight: 600;
+  letter-spacing: -.03em;
+}
+.wl-answer-cards p { margin: 0; color: #b8b9b3; font-size: 14px; font-weight: 500; line-height: 1.55; }
+.wl-card-price {
+  margin-top: 18px !important;
+  padding-top: 16px;
+  border-top: 1px solid var(--wl-line);
+  color: var(--wl-ink) !important;
+  font-size: 19px !important;
+  font-weight: 600 !important;
+  letter-spacing: -.02em;
+}
+.wl-card-price i {
+  display: block;
+  margin-top: 6px;
+  color: var(--wl-muted);
+  font-size: 13px;
+  font-style: normal;
+  font-weight: 500;
+  line-height: 1.45;
+}
+
+.wl-answer-figures { margin-top: 34px; border-top: 1px solid var(--wl-line); }
+.wl-answer-figures > div {
+  display: grid;
+  grid-template-columns: 150px 1fr;
+  gap: 20px;
+  align-items: baseline;
+  padding: 26px 0;
+  border-bottom: 1px solid var(--wl-line);
+}
+.wl-answer-figures b {
+  color: var(--wl-accent);
+  font-size: clamp(34px, 4.4vw, 50px);
+  font-weight: 600;
+  letter-spacing: -.05em;
+  line-height: .9;
+}
+.wl-answer-figures p { margin: 0; color: var(--wl-ink); font-size: 16px; font-weight: 500; line-height: 1.55; }
+.wl-answer-figures small { display: block; margin-top: 10px; color: var(--wl-muted); font-size: 13px; line-height: 1.5; }
+
+.wl-answer-ledger {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  margin-top: 34px;
+  border: 1px solid var(--wl-line);
+  background: var(--wl-line);
+}
+.wl-answer-ledger section { padding: clamp(20px, 2.6vw, 26px); background: var(--wl-bg); }
+.wl-answer-ledger .wl-ledger-head { padding-bottom: 14px; border-bottom: 1px solid var(--wl-line); }
+.wl-answer-ledger .wl-ledger-head b {
+  display: block;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -.02em;
+}
+.wl-answer-ledger .wl-ledger-head span {
+  display: block;
+  margin-top: 3px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--wl-muted);
+}
+.wl-answer-ledger .is-built .wl-ledger-head b { color: #6fbf8b; }
+.wl-answer-ledger .is-now .wl-ledger-head b { color: var(--wl-accent); }
+.wl-answer-ledger .is-next .wl-ledger-head b { color: var(--wl-muted); }
+.wl-answer-ledger ul { margin: 14px 0 0; padding: 0; list-style: none; }
+.wl-answer-ledger li {
+  padding: 8px 0;
+  color: #b8b9b3;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.45;
+}
+
+.wl-answer-sum { margin-top: 34px; border-top: 1px solid var(--wl-line); }
+.wl-sum-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 18px;
+  align-items: baseline;
+  padding: 18px 0;
+  border-bottom: 1px solid var(--wl-line);
+}
+.wl-sum-row span { color: var(--wl-muted); font-size: 15px; font-weight: 500; }
+.wl-sum-row b { font-size: 20px; font-weight: 600; letter-spacing: -.02em; }
+.wl-sum-row.is-total span { color: var(--wl-ink); font-weight: 600; }
+.wl-sum-row.is-total b { color: var(--wl-accent); font-size: clamp(28px, 3.4vw, 38px); letter-spacing: -.04em; }
+.wl-sum-note { margin: 18px 0 0; color: var(--wl-muted); font-size: 13px; line-height: 1.55; }
+
+/* Three links in a chapter footer instead of one. */
+.wl-chapter-link { display: flex; flex-wrap: wrap; gap: 10px 26px; }
+
+.wl-page.is-light .wl-answer-rows p,
+.wl-page.is-light .wl-answer-cards p,
+.wl-page.is-light .wl-answer-ledger li,
+.wl-page.is-light .wl-answer-plans li { color: #4a4c46; }
+.wl-page.is-light .wl-answer-rows article,
+.wl-page.is-light .wl-answer-plans article,
+.wl-page.is-light .wl-answer-cards article,
+.wl-page.is-light .wl-answer-ledger section { background: var(--wl-panel); }
+.wl-page.is-light .wl-answer-plans article.featured { background: #fff; }
+.wl-page.is-light .wl-answer-rows,
+.wl-page.is-light .wl-answer-figures,
+.wl-page.is-light .wl-answer-sum { background: none; }
+.wl-page.is-light .wl-qtab.on { color: #fffdf7; }
+.wl-page.is-light .wl-answer-ledger .is-built .wl-ledger-head b { color: #2f7d4f; }
+
+@media (max-width: 760px) {
+  .wl-qtabs { padding: 0 0; }
+  .wl-qtab { padding: 14px 16px; font-size: 14px; }
+  .wl-qtab::after { left: 16px; right: 16px; }
+  .wl-qtab b { font-size: 13px; }
+  .wl-qtab small { margin-top: 3px; font-size: 9px; }
+  .wl-faq-back { padding: 34px var(--wl-mobile-gutter) 48px; }
+  .wl-answer-rows article { grid-template-columns: 40px 1fr; gap: 12px; }
+  .wl-answer-compare-row { grid-template-columns: 1fr; gap: 6px; }
+  .wl-answer-compare-row.is-head { display: none; }
+  .wl-answer-compare-row strong { color: var(--wl-accent); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; }
+  .wl-answer-plans,
+  .wl-answer-cards,
+  .wl-answer-ledger { grid-template-columns: minmax(0, 1fr); }
+  .wl-answer-figures > div { grid-template-columns: 1fr; gap: 10px; }
+}
