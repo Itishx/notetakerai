@@ -38,7 +38,7 @@ const LEGEND: { k: string; v: string }[] = [
 type Item = { id: string; nav: string; title: string; you?: string; me?: string; note?: string; body?: string[]; aside?: string; shimmerWord?: string };
 
 const ITEMS: Item[] = [
-  { id: "hot", nav: "Hot", title: "Hot people dating hot people", you: "12", me: "10", note: "(10/10)" },
+  { id: "hot", nav: "Hot", title: "Hot people dating hot people", you: "15", me: "10", note: "(10/10)" },
   {
     id: "backchodi",
     nav: "Backchodi",
