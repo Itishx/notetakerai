@@ -35,6 +35,13 @@ type ActivityRow = {
   target: string | null; reason: string | null; result: string; created_at: string;
 };
 
+type ReplyRow = {
+  id: string; post_author_handle: string; post_url: string; post_text: string;
+  our_reply: string; replied_at: string;
+  opportunity_score: number | null; opportunity_reason: string | null;
+  outcome: string; surface: string;
+};
+
 type Settings = {
   automation_mode: string;
   length_mode: string;
@@ -44,6 +51,7 @@ type Settings = {
   quiet_start: number;
   quiet_end: number;
   pillars: { key: string; label: string; paused?: boolean }[] | null;
+  xauto_daily_cap: number;
   voice_learned: Record<string, unknown> | null;
   voice_manual: Record<string, unknown> | null;
   voice_posts_read: number;
@@ -96,6 +104,23 @@ const DEMO_ACTIVITY: ActivityRow[] = [
   { id: "a5", agent: "x-voice-learn", action: "learned_voice", target: "brainosays", reason: "Read 200 posts and rebuilt the voice profile.", result: "success", created_at: iso(-2880) },
 ];
 
+const DEMO_REPLIES: ReplyRow[] = [
+  { id: "r1", post_author_handle: "levelsio", post_url: "#", outcome: "sent", surface: "browser",
+    post_text: "Most AI wrappers die because the model gets better and eats the wrapper. What survives?",
+    our_reply: "The part that owns the context. A wrapper dies when the model can do the same job cold. Ours can't be done cold: it needs 200 of your posts and eight months of your commits.",
+    opportunity_score: 84, opportunity_reason: "Direct question in your problem space, thread still moving", replied_at: iso(-25) },
+  { id: "r2", post_author_handle: "swyx", post_url: "#", outcome: "skipped", surface: "browser",
+    post_text: "Big congrats to the team on the raise, so well deserved.",
+    our_reply: "", opportunity_score: 18, opportunity_reason: "Congratulations post, deserves a like not a comment", replied_at: iso(-31) },
+  { id: "r3", post_author_handle: "dr_cintas", post_url: "#", outcome: "sent", surface: "browser",
+    post_text: "Everyone is building agents. Almost nobody is building the thing that makes agents trustworthy.",
+    our_reply: "Trust is just legibility with a receipt. Ours logs every refusal with the gate that caught it. Turns out people forgive a no far faster than a silent yes.",
+    opportunity_score: 79, opportunity_reason: "Contestable claim you have real evidence about", replied_at: iso(-96) },
+  { id: "r4", post_author_handle: "nutlope", post_url: "#", outcome: "skipped", surface: "browser",
+    post_text: "what's everyone shipping this weekend?",
+    our_reply: "", opportunity_score: 34, opportunity_reason: "Already 400 replies, one more is noise", replied_at: iso(-180) },
+];
+
 const FORMAT_LABELS: Record<string, string> = {
   teach: "Teach something",
   opinion: "An opinion",
@@ -124,6 +149,7 @@ const DEMO_SETTINGS = {
   },
   voice_manual: { dials: {} },
   length_mode: "substantial",
+  xauto_daily_cap: 20,
   content_mix: [
     { day: "Mon", format: "build-log" }, { day: "Tue", format: "teach" },
     { day: "Wed", format: "opinion" }, { day: "Thu", format: "story" },
@@ -154,6 +180,7 @@ export default function XDashboard() {
   const [followers, setFollowers] = useState<{ date: string; count: number }[]>([]);
   const [starredCount, setStarredCount] = useState(0);
   const [activity, setActivity] = useState<ActivityRow[]>([]);
+  const [replies, setReplies] = useState<ReplyRow[]>([]);
   const [lastCheck, setLastCheck] = useState<number | null>(null);
   const [tick, setTick] = useState(0);
   const [busy, setBusy] = useState<string | null>(null);
@@ -170,15 +197,16 @@ export default function XDashboard() {
       setFollowers(DEMO_FOLLOWERS);
       setStarredCount(4);
       setActivity(DEMO_ACTIVITY);
+      setReplies(DEMO_REPLIES);
       setLastCheck(Date.now());
       setLoading(false);
       return;
     }
     if (!user) { setLoading(false); return; }
-    const [conn, set, q, snaps, stars, acts] = await Promise.all([
+    const [conn, set, q, snaps, stars, acts, reps] = await Promise.all([
       (supabase as any).from("x_connections").select("username").eq("user_identifier", user.id).maybeSingle(),
       (supabase as any).from("x_settings").select(
-        "automation_mode,kill_switch,max_posts_per_day,quiet_start,quiet_end,pillars,voice_learned,voice_manual,voice_posts_read,voice_learned_at,setup_completed_at,length_mode,content_mix",
+        "automation_mode,kill_switch,max_posts_per_day,quiet_start,quiet_end,pillars,voice_learned,voice_manual,voice_posts_read,voice_learned_at,setup_completed_at,length_mode,content_mix,xauto_daily_cap",
       ).eq("user_id", user.id).maybeSingle(),
       (supabase as any).from("x_queue_items").select(
         "id,text,status,pillar,scheduled_publish_at,published_at,x_post_id,error,created_at",
@@ -190,6 +218,9 @@ export default function XDashboard() {
       (supabase as any).from("x_activity_feed")
         .select("id,agent,action,target,reason,result,created_at")
         .eq("user_id", user.id).limit(8),
+      (supabase as any).from("x_auto_reply_logs")
+        .select("id,post_author_handle,post_url,post_text,our_reply,replied_at,opportunity_score,opportunity_reason,outcome,surface")
+        .eq("user_id", user.id).order("replied_at", { ascending: false }).limit(12),
     ]);
 
     setConnected(Boolean(conn.data?.username));
@@ -200,6 +231,7 @@ export default function XDashboard() {
       .map((r) => ({ date: r.captured_on, count: r.followers_count })).reverse());
     setStarredCount(stars.count ?? 0);
     setActivity((acts?.data as ActivityRow[]) ?? []);
+    setReplies((reps?.data as ReplyRow[]) ?? []);
     setLastCheck(Date.now());
     setLoading(false);
   }, [user, demo]);
@@ -390,6 +422,48 @@ export default function XDashboard() {
               ))}
             </ol>
           )}
+        </section>
+
+        {/* ── xAuto ──────────────────────────────────────────────────── */}
+        <section className="xd-block">
+          <div className="xd-block-head">
+            <h2>xAuto</h2>
+            <p>
+              He reads your timeline, judges it, and drafts replies only for the few worth
+              answering. You press send. Every decision lands here, including the ones he passed on.
+            </p>
+          </div>
+          {replies.length === 0 ? (
+            <div className="xd-none">
+              Nothing yet. Open X with the extension running and he will offer to start, or say
+              "start xAuto" to Braino on your Mac.
+            </div>
+          ) : (
+            <ol className="xd-replies">
+              {replies.map((r) => (
+                <li key={r.id} className={r.outcome === "skipped" ? "is-skipped" : undefined}>
+                  <div className="xr-head">
+                    <b>@{r.post_author_handle}</b>
+                    <span className={"xr-verdict is-" + r.outcome}>
+                      {r.outcome === "sent" ? "Sent" : r.outcome === "skipped" ? "You skipped" : "Drafted"}
+                    </span>
+                    {typeof r.opportunity_score === "number" && <em>{r.opportunity_score}/100</em>}
+                    <span className="xr-when">{shortAgo(r.replied_at)}</span>
+                  </div>
+                  <p className="xr-post">{r.post_text.slice(0, 190)}{r.post_text.length > 190 ? "..." : ""}</p>
+                  {r.our_reply
+                    ? <p className="xr-reply">{r.our_reply}</p>
+                    : <p className="xr-reason">He passed: {r.opportunity_reason}</p>}
+                  {r.our_reply && r.opportunity_reason && <p className="xr-reason">Why this one: {r.opportunity_reason}</p>}
+                </li>
+              ))}
+            </ol>
+          )}
+          <p className="xd-fine">
+            Capped at <b>{settings?.xauto_daily_cap ?? 20} replies a day</b>, well under X's own
+            limits, because the goal is not to squeeze under a threshold. It is to look like a
+            person having a normal day. Braino never sends one himself.
+          </p>
         </section>
 
         {/* ── What he is doing right now ─────────────────────────────── */}

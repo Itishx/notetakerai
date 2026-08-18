@@ -6307,11 +6307,41 @@ function parseXIntent(raw) {
     || new RegExp(`\\b(?:how(?:'s| is| are)?|hows)\\b.*\\b(?:${X_WORD}\\s+account|twitter|followers?)\\b`, "i").test(source)
     || new RegExp(`\\b${X_WORD}\\b.*\\b(?:stats|doing|numbers|followers?)\\b`, "i").test(source)
     || /\bfollower (?:count|numbers?)\b/i.test(source)) return { action: "stats" };
+  // xAuto. Voice mangles it every way imaginable, so match generously:
+  // "x auto", "ex auto", "exauto", "twitter auto".
+  if (new RegExp(`\\b(?:start|run|open|begin|fire up|kick off)\\b.*\\b(?:${X_WORD}\\s*auto|auto\\s*${X_WORD})\\b`, "i").test(source)
+    || new RegExp(`^\\s*(?:${X_WORD}\\s*auto|auto\\s*${X_WORD})\\s*$`, "i").test(source)) return { action: "xauto" };
+
   const clipMatch = source.match(/\b(?:record|take|grab|start)\s+(?:a\s+)?clip(?:\s+(?:of|for)\s+(\d{1,2})\s*seconds?)?/i);
   if (clipMatch) return { action: "clip", seconds: Math.min(60, Math.max(5, Number(clipMatch[1]) || 15)) };
   const tweetClip = source.match(/\b(?:tweet|post)\s+(?:it|the clip|that)\s+(?:saying|with caption|with the caption|captioned)\s+(.+)$/i);
   if (tweetClip) return { action: "tweet_clip", caption: tweetClip[1].trim() };
   return null;
+}
+
+// xAuto from the Mac. Deliberately a handoff rather than a second
+// implementation: the extension already knows how to read a timeline and post a
+// reply in a signed-in session, and reimplementing that in Electron would mean
+// two things to keep correct and two things to get flagged. So the Mac does what
+// the Mac is good at, which is hearing you and opening the right window, then
+// tells the extension to take over.
+//
+// It is also the only safe shape. Replying is engagement, engagement automation
+// is what X suspends accounts for, and the extension version keeps a human on
+// the send key.
+async function startXAuto() {
+  try {
+    await openChromeUrl("https://x.com/home");
+    // The extension offers xAuto itself once it sees an X tab, so all the Mac
+    // has to do is get you there and say what happens next.
+    return {
+      ok: true,
+      say: "Opening X. Braino will read your timeline and draft replies to the few posts worth answering. You press enter to send each one, or escape to skip.",
+    };
+  } catch (e) {
+    logMac("xauto.open_failed", { error: String(e && e.message || e) });
+    return { ok: false, say: "I could not open X just now. Try again in a moment." };
+  }
 }
 
 async function recordScreenClip(seconds) {
@@ -14026,6 +14056,7 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
     logMac("delegate.x_intent", { raw: textForLog(raw), action: xIntent.action });
     if (xIntent.action === "stats") return speakXStats();
     if (xIntent.action === "mentions") return speakXMentions();
+    if (xIntent.action === "xauto") return startXAuto();
     if (xIntent.action === "clip") return recordScreenClip(xIntent.seconds);
     if (xIntent.action === "tweet_clip") return tweetLastClip(xIntent.caption);
   }

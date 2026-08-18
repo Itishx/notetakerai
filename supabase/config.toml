@@ -195,6 +195,10 @@ entrypoint = "./functions/x/x-status/index.ts"
 
 # Reads the user's own X history and works out how they write. Signed-in only,
 # because it spends the user's own X read quota.
+# xAuto's brain: scores the timeline, drafts only for what is worth answering.
+[functions.x-auto-reply]
+entrypoint = "./functions/x/x-auto-reply/index.ts"
+
 [functions.x-voice-learn]
 entrypoint = "./functions/x/x-voice-learn/index.ts"
 

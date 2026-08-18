@@ -44,6 +44,7 @@ export default function BrainoForX() {
           <div className="an-links">
             <a href="#why">Why</a>
             <a href="#voice">Your voice</a>
+            <a href="#xauto">xAuto</a>
             <a href="#setup">Setup</a>
             <a href="#control">Control</a>
             <Link to="/x" className="apple-cta">Open it</Link>
@@ -171,6 +172,59 @@ export default function BrainoForX() {
         </div>
       </section>
 
+      {/* ── xAuto ────────────────────────────────────────────────────── */}
+      <section className="bfx-wrap bfx-sec" id="xauto">
+        <p className="bfx-kicker">xAuto</p>
+        <h2 className="bfx-h2">Replying is where small accounts grow. <span className="tone">It is also where they die.</span></h2>
+        <p className="bfx-lede">
+          At a few hundred followers your own posts reach almost nobody. Replies are how you get
+          in front of other people's audiences, and everyone knows it, which is why the timeline is
+          full of bots saying "great point" under anything popular. X noticed too. They blocked
+          automated replies at the API level in February 2026 and spent March suspending the
+          accounts still doing it.
+        </p>
+        <p className="bfx-lede" style={{ marginTop: 18 }}>
+          The thing they detect is not how many replies you send. It is the shape: replies to
+          strangers, no selectivity, machine cadence. So xAuto changes the shape rather than the
+          ambition.
+        </p>
+
+        <ol className="bfx-steps">
+          <li><i>01</i><div><b>You open X. He offers.</b><p>No button to remember. He notices you are there and asks whether you want him to read the timeline. On the Mac, "Braino, start xAuto" does the same thing.</p></div></li>
+          <li><i>02</i><div><b>He reads and judges.</b><p>Ten posts at a time, scored out of a hundred. Most fail. Engagement bait fails, congratulations posts fail, anything with four hundred replies already fails, and anything where a reply would be a liability fails hardest.</p></div></li>
+          <li><i>03</i><div><b>He writes only for the survivors.</b><p>Twelve to forty five words, in the voice he learned from two hundred of your own posts. One specific thing from their post, taken somewhere, with something only you could add.</p></div></li>
+          <li><i>04</i><div><b>You press enter, or escape.</b><p>Enter sends it. Escape skips it, and the skip is logged too, because you rejecting a draft is the strongest signal there is that his judging was wrong.</p></div></li>
+          <li><i>05</i><div><b>Everything lands on your dashboard.</b><p>What he replied to, what he wrote, what he passed on and why. The passes are the interesting half.</p></div></li>
+        </ol>
+
+        <div className="bfx-versus">
+          <div>
+            <b>What got accounts suspended</b>
+            <ul>
+              <li>Reply to every post in the timeline</li>
+              <li>In order, top to bottom</li>
+              <li>Fixed delay between each one</li>
+              <li>Sent by a machine</li>
+            </ul>
+          </div>
+          <div className="is-on">
+            <b>What xAuto does instead</b>
+            <ul>
+              <li>Replies to the few that are worth it</li>
+              <li>Scored, most of them rejected</li>
+              <li>Capped at 20 a day, far under X's limits</li>
+              <li>Sent by you, one key at a time</li>
+            </ul>
+          </div>
+        </div>
+
+        <p className="bfx-fine" style={{ marginTop: 26 }}>
+          You are the pacing. That is deliberate: a human deciding when to hit send is the one
+          thing no detection system can pattern-match, and pressing a key was never the expensive
+          part. Finding the post and knowing what to say was.
+        </p>
+      </section>
+
       {/* ── Setup ────────────────────────────────────────────────────── */}
       <section className="bfx-wrap bfx-sec" id="setup">
         <p className="bfx-kicker">Setting it up</p>
@@ -210,7 +264,7 @@ export default function BrainoForX() {
         <ul>
           <li><b>It will not make you go viral.</b> It makes you consistent, in your own voice, without the job feeling like a job. Those are different promises and only one of them is keepable.</li>
           <li><b>Impressions and follower attribution are not available.</b> They need a paid X API tier. Engagement counts and daily follower snapshots are real and live.</li>
-          <li><b>Replies and conversation hunting are not built yet.</b> For a small account that is the bigger growth lever, and it is next.</li>
+          <li><b>xAuto never sends anything itself.</b> Automated replies are what X suspends accounts for, so he judges and drafts and you press the key. If you want hands-off sending, we will not build it.</li>
           <li><b>trybraino.com is a waitlist.</b> Braino for X runs on the founder's own account first. Distra's first customer is Braino.</li>
         </ul>
       </section>

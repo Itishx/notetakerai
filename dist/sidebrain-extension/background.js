@@ -1823,6 +1823,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       .catch(() => sendResponse({ persona: null }));
     return true;
   }
+  // xAuto's judging pass. The content script scrapes the timeline; the server
+  // decides which posts deserve a reply and writes it in the learned voice.
+  if (message.action === "scoreXTimeline") {
+    bgAuthedSupabaseFetch(`${BG_API_BASE}/x-auto-reply`, {
+      method: "POST",
+      body: JSON.stringify({ candidates: message.candidates || [], surface: "browser" }),
+    })
+      .then(async ({ res }) => sendResponse(res.ok ? await res.json() : { error: (await res.json().catch(() => ({}))).error || `x-auto-reply ${res.status}` }))
+      .catch((e) => sendResponse({ error: e.message || "Could not reach Braino." }));
+    return true;
+  }
   if (message.action === "getXStatus") {
     bgAuthedSupabaseFetch(`${BG_API_BASE}/x-status`, { method: "POST" })
       .then(async ({ res }) => sendResponse(res.ok ? await res.json() : { error: `x-status ${res.status}` }))
@@ -3062,7 +3073,7 @@ async function bgRecordXAutomationRunStats({ repliedCount, durationMs, startedAt
   if (!insertRes.ok) throw new Error(`Could not create X automation stats (${insertRes.status})`);
 }
 
-async function bgLogXReply({ postAuthorHandle, postAuthorDisplayName, postUrl, postText, ourReply, repliedAt }) {
+async function bgLogXReply({ postAuthorHandle, postAuthorDisplayName, postUrl, postText, ourReply, repliedAt, opportunityScore, opportunityReason, outcome, surface }) {
   try {
     const storage = await new Promise(r => chrome.storage.local.get(['authUserId'], r));
     const userId = storage.authUserId;
@@ -3079,6 +3090,13 @@ async function bgLogXReply({ postAuthorHandle, postAuthorDisplayName, postUrl, p
         post_text: postText || '',
         our_reply: ourReply || '',
         replied_at: repliedAt || new Date().toISOString(),
+        // xAuto's judging carried alongside the reply, so the dashboard can
+        // show WHY a post was picked, and skips are recorded too. A skip is the
+        // strongest signal there is that the judging was wrong.
+        opportunity_score: typeof opportunityScore === 'number' ? opportunityScore : null,
+        opportunity_reason: opportunityReason || null,
+        outcome: outcome === 'skipped' ? 'skipped' : outcome === 'suggested' ? 'suggested' : 'sent',
+        surface: surface === 'mac' ? 'mac' : 'browser',
       }),
     });
   } catch { /* fire-and-forget — never surface to caller */ }
