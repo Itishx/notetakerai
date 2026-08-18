@@ -1,0 +1,108 @@
+/* ============================================================================
+   Braino for X — the black skin.
+
+   /x and /x/setup are built on the warm-paper onboarding system, which is right
+   for the shape of the flow and wrong for the surface: this is X, and X is
+   black. Rather than fork the layouts, this file re-points the same tokens at
+   an X palette and then fixes the handful of places where onboarding-flow.css
+   hardcoded a light value instead of using a token.
+
+   Accent: silver. Not flat grey, which reads as disabled on black, but a real
+   metallic sheen on the display type and a cool light grey everywhere else.
+   Primary buttons stay white on black, because that is what a button looks
+   like on X.
+   ============================================================================ */
+
+.xs-doc,
+.xd-doc {
+  --ob-paper: #000000;
+  --ob-ink: #e7e9ea;        /* X's off-white body text, not pure white */
+  --ob-soft: #71767b;       /* X's muted grey */
+  --ob-coral: #c7ced8;      /* the accent slot, now silver */
+  /* The sheen: light at the top, a darker band at two thirds, a catch of light
+     at the bottom. That band is what makes it read as metal instead of grey. */
+  --x-silver: linear-gradient(177deg, #ffffff 0%, #dfe5ee 26%, #aab3c0 58%, #7d8794 72%, #eaf0f7 100%);
+  --ob-line: rgba(255, 255, 255, 0.13);
+  --ob-card: #16181c;       /* X's raised surface */
+  color-scheme: dark;
+}
+
+/* ── The silver itself ────────────────────────────────────────────────── */
+.xs-doc .ob-h1 em,
+.xd-doc .xd-headline em {
+  background: var(--x-silver);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* ── Chrome ───────────────────────────────────────────────────────────── */
+.xs-doc .ob-top,
+.xd-doc .ob-top { background: rgba(0, 0, 0, 0.72); }
+.xs-doc .ob-mark i,
+.xd-doc .ob-mark i { background: #d7dde5; box-shadow: 0 0 16px rgba(215, 221, 229, 0.5); }
+.xs-doc .ob-progress,
+.xd-doc .ob-progress { background: rgba(255, 255, 255, 0.09); }
+.xs-doc .ob-progress span,
+.xd-doc .ob-progress span { background: var(--x-silver); }
+
+/* ── Buttons: white pill on black is the X primary ────────────────────── */
+.xs-doc .ob-btn,
+.xd-doc .ob-btn { background: #eff3f4; color: #0f1419; }
+.xs-doc .ob-btn.is-coral,
+.xd-doc .ob-btn.is-coral { background: var(--x-silver); color: #0f1419; }
+.xs-doc .ob-btn.is-quiet,
+.xd-doc .ob-btn.is-quiet { background: transparent; color: var(--ob-soft); }
+.xs-doc .ob-btn.is-outline,
+.xd-doc .ob-btn.is-outline {
+  background: transparent; color: var(--ob-ink);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+.xs-doc .ob-foot,
+.xd-doc .ob-foot { background: linear-gradient(to top, #000 62%, rgba(0, 0, 0, 0)); }
+
+/* ── Selection cards: onboarding-flow.css hardcodes #fff on .is-on ────── */
+.xs-doc .ob-card.is-on {
+  background: #1a1d22;
+  box-shadow: 0 0 0 1px var(--ob-coral), 0 16px 44px rgba(199, 206, 216, 0.13);
+}
+.xs-doc .ob-card:hover { box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5); }
+.xs-doc .ob-card.is-on .ob-tick { background: var(--ob-coral); border-color: var(--ob-coral); color: #0f1419; }
+
+/* ── Chips ────────────────────────────────────────────────────────────── */
+.xs-doc .ob-chip { border-color: var(--ob-line); color: var(--ob-ink); }
+.xs-doc .ob-chip:hover { border-color: rgba(255, 255, 255, 0.4); }
+.xs-doc .ob-chip.is-on { background: var(--ob-coral); border-color: var(--ob-coral); color: #0f1419; }
+
+/* ── Inputs ───────────────────────────────────────────────────────────── */
+.xs-doc .xs-field textarea,
+.xs-doc .xs-add input,
+.xs-doc .xs-hours select,
+.xs-doc .xs-counter button {
+  background: #16181c; color: var(--ob-ink); border-color: var(--ob-line);
+}
+.xs-doc .xs-field textarea::placeholder,
+.xs-doc .xs-add input::placeholder { color: #4a5057; }
+.xs-doc .xs-dial input[type="range"] { accent-color: var(--ob-coral); }
+
+/* ── Tinted blocks that assumed a light ground ────────────────────────── */
+.xs-doc .xs-phrases span,
+.xs-doc .xs-gates span { background: rgba(199, 206, 216, 0.13); color: #d7dde5; }
+.xs-doc .xs-star.is-on { background: rgba(199, 206, 216, 0.09); }
+.xs-doc .xs-bar { background: rgba(255, 255, 255, 0.1); }
+.xd-doc .xd-alert { background: rgba(199, 206, 216, 0.12); color: #d7dde5; }
+.xd-doc .xd-pill { background: rgba(255, 255, 255, 0.08); }
+.xd-doc .xd-yes { background: #eff3f4; color: #0f1419; }
+.xd-doc .xd-no { border-color: var(--ob-line); }
+.xd-doc .xd-no:hover:not(:disabled) { color: var(--ob-coral); border-color: var(--ob-coral); }
+.xd-doc .xd-card:hover {
+  border-color: rgba(199, 206, 216, 0.4);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.6);
+}
+.xd-doc .xd-health-row.is-ok i { background: rgba(0, 186, 124, 0.18); color: #00ba7c; }
+.xd-doc .xd-health-row.is-bad i { background: rgba(244, 33, 46, 0.18); color: #f4212e; }
+
+/* ── Text that should stay quiet on black ─────────────────────────────── */
+.xs-doc .xs-found-empty p,
+.xd-doc .xd-none { color: var(--ob-soft); }
+.xd-doc .xd-none { border-color: var(--ob-line); }

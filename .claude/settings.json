@@ -1,7 +1,36 @@
 {
   "permissions": {
     "allow": [
-      "Bash(wc -l /Users/itishpande/Desktop/notely/notetakerai/extension/*.js)"
+      "Bash(wc -l /Users/itishpande/Desktop/notely/notetakerai/extension/*.js)",
+      "Bash(npx supabase:*)",
+      "Bash(supabase:*)"
     ]
   }
 }
+
+
+
+
+
+
+
+
+
+
+ 
+
+
+
+
+
+   
+      
+   
+    
+  
+
+
+
+    
+  
+

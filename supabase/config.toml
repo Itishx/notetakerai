@@ -193,6 +193,11 @@ verify_jwt = false
 [functions.x-status]
 entrypoint = "./functions/x/x-status/index.ts"
 
+# Reads the user's own X history and works out how they write. Signed-in only,
+# because it spends the user's own X read quota.
+[functions.x-voice-learn]
+entrypoint = "./functions/x/x-voice-learn/index.ts"
+
 # ── notion ─────────────────────────────────────────────────────────────
 
 [functions.notion-connection-status]

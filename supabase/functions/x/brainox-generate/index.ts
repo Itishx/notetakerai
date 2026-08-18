@@ -59,7 +59,7 @@ serve(async (req) => {
 
     // Voice profile + pillars for the prompt; recent posts for anti-repetition.
     const [{ data: settings }, { data: recentScheduled }, { data: recentQueue }] = await Promise.all([
-      supabase.from("x_settings").select("voice_profile,pillars").eq("user_id", user.id).maybeSingle(),
+      supabase.from("x_settings").select("voice_profile,pillars,voice_learned,voice_manual").eq("user_id", user.id).maybeSingle(),
       supabase
         .from("scheduled_x_posts")
         .select("content")
@@ -76,6 +76,15 @@ serve(async (req) => {
         .limit(12),
     ]);
 
+    // Posts the user starred as "this is exactly me". Real examples beat any
+    // adjective, so they go into the prompt verbatim.
+    const { data: starred } = await supabase
+      .from("x_voice_samples")
+      .select("text")
+      .eq("user_id", user.id)
+      .eq("starred", true)
+      .limit(6);
+
     const recentTexts = [
       ...(recentScheduled || []).map((row: { content: string }) => row.content),
       ...(recentQueue || []).map((row: { text: string }) => row.text),
@@ -89,6 +98,9 @@ serve(async (req) => {
 
     const systemPrompt = buildSystemPrompt({
       voiceProfile: settings?.voice_profile ?? null,
+      voiceLearned: settings?.voice_learned ?? null,
+      voiceManual: settings?.voice_manual ?? null,
+      starredExamples: (starred || []).map((row: { text: string }) => row.text).filter(Boolean),
       pillarKeys,
       recentTexts,
     });
@@ -141,6 +153,9 @@ serve(async (req) => {
 
 function buildSystemPrompt(context: {
   voiceProfile: unknown;
+  voiceLearned: unknown;
+  voiceManual: unknown;
+  starredExamples: string[];
   pillarKeys: string[];
   recentTexts: string[];
 }): string {
@@ -160,13 +175,25 @@ function buildSystemPrompt(context: {
     "- At most one hashtag, and only when it genuinely belongs. Usually zero.",
     "- Posts must be 280 characters or fewer unless the request explicitly asks for a thread.",
     "- Sound like a builder talking, not a brand. Specific beats grand.",
-    `Voice profile: ${JSON.stringify(context.voiceProfile ?? "not set, default to direct and concise")}`,
+    // Three layers, stated in priority order so the model knows which wins.
+    // What the user SAID beats what Braino INFERRED, because a person knows
+    // things about their voice that 200 old posts cannot show.
+    context.voiceManual
+      ? `HOW THEY SAY THEY WRITE (their own words, this outranks everything below): ${JSON.stringify(context.voiceManual)}`
+      : "",
+    context.voiceLearned
+      ? `HOW THEY ACTUALLY WRITE (read from their own post history): ${JSON.stringify(context.voiceLearned)}`
+      : "",
+    `Baseline voice profile: ${JSON.stringify(context.voiceProfile ?? "not set, default to direct and concise")}`,
+    context.starredExamples.length
+      ? `POSTS THEY STARRED AS "this is exactly me". Match this, do not copy it:\n${context.starredExamples.map((t, i) => `${i + 1}. ${t}`).join("\n")}`
+      : "",
     `Active content pillars (use these keys for the pillar field): ${context.pillarKeys.join(", ")}`,
     recentBlock,
     "",
     "Always answer with a single JSON object: {\"options\": [{\"text\", \"angle\", \"pillar\", \"scores\": {\"hook\": 0-20, \"originality\": 0-20, \"voice\": 0-20, \"clarity\": 0-15, \"relevance\": 0-10, \"shareability\": 0-10, \"authenticity\": 0-5}, \"total\": 0-100, \"authenticity_note\": \"which facts from the request this rests on\"}]}",
     "Score honestly. A weak option should score below 70.",
-  ].join("\n");
+  ].filter(Boolean).join("\n");
 }
 
 function buildUserPrompt(request: {

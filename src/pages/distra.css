@@ -1,0 +1,235 @@
+/* ============================================================================
+   /distra — the Distra plan, in the Apple product-page language.
+   Borrows the palette, type scale and rhythm from apple.css and adds only what
+   a plan page needs that a product page does not: a rail triptych, a phase
+   ladder, the platform explorer, and two tables. Light the whole way, because
+   a dark slab dropped into the middle of a light page reads as a mistake.
+   ============================================================================ */
+
+.distra { --ap-accent: var(--ap-green); }
+
+/* ── Shared section furniture ─────────────────────────────────────────── */
+.ds-wrap { max-width: var(--ap-maxw); margin: 0 auto; padding: 0 var(--ap-gutter); }
+.ds-sec { padding: clamp(64px, 8vw, 116px) 0; }
+.ds-sec + .ds-sec { border-top: 1px solid var(--ap-hairline); }
+
+.ds-kicker {
+  font-size: 12px; font-weight: 600; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--ap-accent);
+  margin: 0 0 14px;
+}
+.ds-h {
+  font-size: clamp(30px, 4.4vw, 50px); font-weight: 600;
+  letter-spacing: -0.025em; line-height: 1.08; margin: 0 0 18px;
+  text-wrap: balance;
+}
+.ds-h .tone { color: var(--ap-accent); }
+.ds-lede {
+  font-size: clamp(17px, 1.7vw, 21px); line-height: 1.5;
+  color: var(--ap-ink-soft); margin: 0; max-width: 62ch;
+}
+.ds-note {
+  font-size: 12px; line-height: 1.55; color: var(--ap-ink-soft);
+  margin: 18px 0 0; max-width: 70ch;
+}
+
+/* ── Hero ─────────────────────────────────────────────────────────────── */
+.ds-hero { text-align: center; padding: clamp(60px, 10vw, 120px) 0 clamp(36px, 5vw, 64px); }
+.ds-hero .ds-h { font-size: clamp(40px, 7.4vw, 88px); letter-spacing: -0.035em; line-height: 1.02; }
+.ds-hero .ds-lede { margin: 0 auto; text-align: center; max-width: 46ch; }
+.ds-hero-meta {
+  display: flex; flex-wrap: wrap; justify-content: center; gap: 8px;
+  margin-top: 30px;
+}
+.ds-chip {
+  font-size: 12px; font-weight: 500; letter-spacing: -0.005em;
+  padding: 6px 13px; border-radius: 980px;
+  border: 1px solid var(--ap-hairline); color: var(--ap-ink-soft);
+  background: var(--ap-surface);
+}
+.ds-chip.on { border-color: transparent; background: var(--ap-green-panel); color: var(--ap-green); font-weight: 600; }
+
+/* ── Numbered statement rows (the loop) ───────────────────────────────── */
+.ds-steps { list-style: none; margin: 40px 0 0; padding: 0; display: grid; gap: 0; }
+.ds-steps li {
+  display: grid; grid-template-columns: 44px 1fr; gap: 18px; align-items: baseline;
+  padding: 20px 0; border-top: 1px solid var(--ap-hairline);
+}
+.ds-steps li:last-child { border-bottom: 1px solid var(--ap-hairline); }
+.ds-steps i {
+  font-style: normal; font-size: 12px; font-weight: 600;
+  color: var(--ap-accent); letter-spacing: 0.04em; padding-top: 4px;
+}
+.ds-steps p { margin: 0; font-size: clamp(17px, 1.8vw, 21px); font-weight: 600; line-height: 1.36; }
+.ds-steps em { display: block; font-style: normal; font-weight: 400; font-size: 15px; color: var(--ap-ink-soft); margin-top: 5px; line-height: 1.5; }
+
+/* ── Rail triptych ────────────────────────────────────────────────────── */
+.ds-rails { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 44px; }
+@media (max-width: 860px) { .ds-rails { grid-template-columns: 1fr; } }
+.ds-rail {
+  border-radius: var(--ap-radius); padding: clamp(26px, 3vw, 38px);
+  background: var(--r-panel); display: flex; flex-direction: column; gap: 12px;
+  min-height: 300px;
+}
+.ds-rail .r-tag {
+  font-size: 11px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase;
+  color: var(--r-on);
+}
+.ds-rail h3 { margin: 0; font-size: clamp(22px, 2.4vw, 28px); font-weight: 600; letter-spacing: -0.02em; }
+.ds-rail > p { margin: 0; font-size: 15px; line-height: 1.55; color: var(--ap-ink-soft); }
+.ds-rail ul { margin: auto 0 0; padding: 0; list-style: none; display: grid; gap: 7px; }
+.ds-rail li { font-size: 13px; line-height: 1.45; padding-left: 15px; position: relative; color: var(--ap-ink); }
+.ds-rail li::before { content: ""; position: absolute; left: 0; top: 7px; width: 5px; height: 5px; border-radius: 50%; background: var(--r-on); }
+.r-blue  { --r-panel: var(--ap-blue-panel);  --r-on: var(--ap-blue); }
+.r-green { --r-panel: var(--ap-green-panel); --r-on: var(--ap-green); }
+.r-amber { --r-panel: var(--ap-amber-panel); --r-on: var(--ap-amber); }
+.r-coral { --r-panel: var(--ap-coral-panel); --r-on: var(--ap-coral); }
+.r-violet{ --r-panel: var(--ap-violet-panel);--r-on: var(--ap-violet); }
+
+/* ── The spine diagram ────────────────────────────────────────────────── */
+.ds-spine { margin-top: 44px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+@media (max-width: 860px) { .ds-spine { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 520px) { .ds-spine { grid-template-columns: 1fr; } }
+.ds-node {
+  border: 1px solid var(--ap-hairline); border-radius: 18px;
+  padding: 20px 18px; background: var(--ap-surface);
+}
+.ds-node b { display: block; font-size: 13px; font-weight: 600; letter-spacing: -0.005em; }
+.ds-node code { display: block; font-size: 11px; color: var(--ap-accent); margin: 6px 0 8px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.ds-node p { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--ap-ink-soft); }
+
+/* ── Autonomy ladder ──────────────────────────────────────────────────── */
+.ds-levels { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 40px; }
+@media (max-width: 860px) { .ds-levels { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 520px) { .ds-levels { grid-template-columns: 1fr; } }
+.ds-level {
+  border-radius: 20px; padding: 22px 20px; background: var(--ap-surface);
+  border: 1px solid var(--ap-hairline);
+}
+.ds-level.is-default { border-color: var(--ap-green); background: var(--ap-green-panel); }
+.ds-level .lv { font-size: 11px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: var(--ap-ink-soft); }
+.ds-level.is-default .lv { color: var(--ap-green); }
+.ds-level h4 { margin: 8px 0 6px; font-size: 17px; font-weight: 600; letter-spacing: -0.01em; }
+.ds-level p { margin: 0; font-size: 13px; line-height: 1.5; color: var(--ap-ink-soft); }
+.ds-level .badge { display: inline-block; margin-top: 12px; font-size: 11px; font-weight: 600; color: var(--ap-green); }
+
+.ds-gates { margin-top: 34px; display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
+@media (max-width: 860px) { .ds-gates { grid-template-columns: 1fr 1fr; } }
+.ds-gate {
+  border-radius: 16px; padding: 16px 16px 18px; background: var(--ap-coral-panel);
+}
+.ds-gate span { font-size: 11px; font-weight: 600; color: var(--ap-coral); letter-spacing: 0.06em; }
+.ds-gate p { margin: 6px 0 0; font-size: 13.5px; font-weight: 600; line-height: 1.35; }
+
+/* ── Phase ladder ─────────────────────────────────────────────────────── */
+.ds-phases { margin-top: 44px; }
+.ds-phase {
+  display: grid; grid-template-columns: 78px 1fr 1fr; gap: clamp(16px, 3vw, 40px);
+  padding: 26px 0; border-top: 1px solid var(--ap-hairline); align-items: start;
+}
+.ds-phase:last-child { border-bottom: 1px solid var(--ap-hairline); }
+@media (max-width: 780px) { .ds-phase { grid-template-columns: 60px 1fr; } .ds-phase .ph-exit { grid-column: 2; } }
+.ds-phase .ph-no {
+  font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--ap-accent); padding-top: 5px;
+}
+.ds-phase h4 { margin: 0 0 7px; font-size: clamp(19px, 2vw, 23px); font-weight: 600; letter-spacing: -0.015em; }
+.ds-phase p { margin: 0; font-size: 14.5px; line-height: 1.55; color: var(--ap-ink-soft); }
+.ds-phase .ph-exit {
+  border-left: 2px solid var(--ap-green); padding-left: 16px;
+}
+.ds-phase .ph-exit b { display: block; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ap-green); margin-bottom: 5px; }
+.ds-phase .ph-exit p { color: var(--ap-ink); font-size: 14px; }
+
+/* ── Platform explorer ────────────────────────────────────────────────── */
+.ds-explorer { display: grid; grid-template-columns: 300px 1fr; gap: clamp(20px, 3vw, 40px); margin-top: 44px; align-items: start; }
+@media (max-width: 900px) { .ds-explorer { grid-template-columns: 1fr; } }
+
+.ds-list { display: grid; gap: 22px; position: sticky; top: 68px; }
+@media (max-width: 900px) { .ds-list { position: static; } }
+.ds-group b {
+  display: block; font-size: 11px; font-weight: 600; letter-spacing: 0.07em;
+  text-transform: uppercase; color: var(--ap-ink-soft); margin-bottom: 8px;
+}
+.ds-group ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.ds-pill {
+  width: 100%; text-align: left; border: 0; background: transparent; cursor: pointer;
+  font: inherit; font-size: 14px; padding: 8px 12px; border-radius: 10px;
+  color: var(--ap-ink); display: flex; align-items: center; gap: 9px;
+  transition: background 0.18s ease;
+}
+.ds-pill:hover { background: rgba(0,0,0,0.04); }
+.ds-pill.on { background: var(--ap-ink); color: #fff; font-weight: 600; }
+.ds-pill .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--p-on); flex: none; }
+.ds-pill.on .dot { background: #fff; }
+
+.ds-detail {
+  border: 1px solid var(--ap-hairline); border-radius: var(--ap-radius);
+  background: var(--ap-surface); padding: clamp(26px, 3.4vw, 44px);
+  min-height: 520px;
+}
+.ds-detail-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 12px; }
+.ds-detail-head h3 { margin: 0; font-size: clamp(26px, 3.2vw, 38px); font-weight: 600; letter-spacing: -0.025em; }
+.ds-tag {
+  font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase;
+  padding: 4px 10px; border-radius: 980px; background: var(--p-panel); color: var(--p-on);
+}
+.ds-detail-sum { margin: 14px 0 0; font-size: clamp(16px, 1.7vw, 19px); line-height: 1.5; font-weight: 500; }
+
+.ds-facts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin: 26px 0 6px; padding: 20px 0; border-top: 1px solid var(--ap-hairline); border-bottom: 1px solid var(--ap-hairline); }
+@media (max-width: 620px) { .ds-facts { grid-template-columns: 1fr 1fr; } }
+.ds-fact span { display: block; font-size: 10.5px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: var(--ap-ink-soft); }
+.ds-fact p { margin: 5px 0 0; font-size: 14px; font-weight: 600; line-height: 1.35; }
+
+.ds-rows { display: grid; gap: 0; }
+.ds-row { padding: 18px 0; border-bottom: 1px solid var(--ap-hairline); display: grid; grid-template-columns: 118px 1fr; gap: 18px; }
+@media (max-width: 620px) { .ds-row { grid-template-columns: 1fr; gap: 6px; } }
+.ds-row > b { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ap-ink-soft); padding-top: 2px; }
+.ds-row p { margin: 0; font-size: 14.5px; line-height: 1.6; }
+.ds-row ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 9px; }
+.ds-row li { font-size: 14.5px; line-height: 1.55; padding-left: 16px; position: relative; }
+.ds-row li::before { content: ""; position: absolute; left: 0; top: 8px; width: 5px; height: 5px; border-radius: 50%; background: var(--ap-hairline); }
+.ds-row code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; background: rgba(0,0,0,0.045); padding: 1px 5px; border-radius: 5px; }
+.ds-win { margin-top: 22px; border-radius: 18px; background: var(--ap-green-panel); padding: 20px 22px; }
+.ds-win b { display: block; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ap-green); margin-bottom: 6px; }
+.ds-win p { margin: 0; font-size: 15px; line-height: 1.55; font-weight: 500; }
+
+/* ── Tables ───────────────────────────────────────────────────────────── */
+.ds-tablewrap { margin-top: 36px; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.ds-table { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 560px; }
+.ds-table th {
+  text-align: left; font-size: 10.5px; font-weight: 600; letter-spacing: 0.07em;
+  text-transform: uppercase; color: var(--ap-ink-soft);
+  padding: 0 16px 12px 0; border-bottom: 1px solid var(--ap-hairline); white-space: nowrap;
+}
+.ds-table td { padding: 13px 16px 13px 0; border-bottom: 1px solid var(--ap-hairline); vertical-align: top; line-height: 1.45; }
+.ds-table td:first-child { font-weight: 600; }
+.ds-table .num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ds-table tr.hl td { background: var(--ap-coral-panel); }
+.ds-table tr.hl td:first-child { border-top-left-radius: 8px; border-bottom-left-radius: 8px; }
+
+/* ── Rule list ────────────────────────────────────────────────────────── */
+.ds-rules { display: grid; grid-template-columns: 1fr 1fr; gap: 0 clamp(24px, 4vw, 56px); margin-top: 40px; }
+@media (max-width: 780px) { .ds-rules { grid-template-columns: 1fr; } }
+.ds-rules > div { padding: 18px 0; border-top: 1px solid var(--ap-hairline); }
+.ds-rules i { font-style: normal; font-size: 11px; font-weight: 600; color: var(--ap-coral); letter-spacing: 0.05em; }
+.ds-rules h5 { margin: 6px 0 5px; font-size: 16px; font-weight: 600; letter-spacing: -0.01em; }
+.ds-rules p { margin: 0; font-size: 13.5px; line-height: 1.55; color: var(--ap-ink-soft); }
+
+/* ── Ledger close ─────────────────────────────────────────────────────── */
+.ds-ledger { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 40px; }
+@media (max-width: 780px) { .ds-ledger { grid-template-columns: 1fr; } }
+.ds-ledger > div { border-radius: 20px; padding: 24px; background: var(--l-panel); }
+.ds-ledger b { display: block; font-size: 11px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: var(--l-on); margin-bottom: 10px; }
+.ds-ledger ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+.ds-ledger li { font-size: 13.5px; line-height: 1.45; }
+.l-built { --l-panel: var(--ap-green-panel); --l-on: var(--ap-green); }
+.l-building { --l-panel: var(--ap-amber-panel); --l-on: var(--ap-amber); }
+.l-next { --l-panel: #f2f2f5; --l-on: var(--ap-ink-soft); }
+
+/* ── Print: let the whole plan out on paper ───────────────────────────── */
+@media print {
+  .apple-anchors, .ds-list { display: none; }
+  .ds-explorer { grid-template-columns: 1fr; }
+  .ds-sec { padding: 24px 0; break-inside: avoid; }
+}
