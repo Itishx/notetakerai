@@ -20,6 +20,7 @@ const FOOTER_COLUMNS: Array<{ head: string; links: Array<[string, string]> }> = 
       ["Braino Browser", "/braino?view=browser"],
       ["Braino Foundry", "/braino?view=foundry"],
       ["BrainoHERA", "/braino?view=hera"],
+      ["Distribution", "/channels"],
       ["Pricing", "/premium"],
     ],
   },
@@ -29,7 +30,8 @@ const FOOTER_COLUMNS: Array<{ head: string; links: Array<[string, string]> }> = 
       ["The browser", "/braino?view=browser"],
       ["Founders & builders", "/braino?view=foundry"],
       ["Meetings", "/meetings"],
-      ["X", "/live"],
+      ["X", "/braino-for-x"],
+      ["LinkedIn", "/braino-for-linkedin"],
     ],
   },
   {

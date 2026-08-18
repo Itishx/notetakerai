@@ -210,7 +210,7 @@ export const FAQ: Record<string, FaqEntry> = {
     id: "kinds",
     kicker: "02 / The family",
     question: "How many kinds of Braino are there?",
-    hint: "Six so far. Each one opens a question of its own.",
+    hint: "Three bodies, and three things all three of them run on.",
   },
   braino: {
     id: "braino",
@@ -220,9 +220,9 @@ export const FAQ: Record<string, FaqEntry> = {
   },
   macos: {
     id: "macos",
-    kicker: "04 / IOMI",
+    kicker: "04 / The Mac",
     question: "What happens when he leaves the browser?",
-    hint: "IOMI lives in the notch of your Mac and wakes by voice.",
+    hint: "He lives in the notch of your Mac and wakes by voice.",
   },
   meetings: {
     id: "meetings",
@@ -244,9 +244,9 @@ export const FAQ: Record<string, FaqEntry> = {
   },
   hera: {
     id: "hera",
-    kicker: "08 / Hera",
-    question: "What is Braino Hera?",
-    hint: "Quieter and more personal. We are keeping this one close.",
+    kicker: "08 / HERA",
+    question: "What is BrainoHERA?",
+    hint: "Talk, and it types. Dictation that lands at your cursor and never talks back.",
   },
 };
 

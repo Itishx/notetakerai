@@ -23,7 +23,7 @@ import "./waitlist.css";
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 const SUPABASE_KEY = (import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY) as string;
 
-type ProductId = "braino" | "macos" | "braino-os" | "hera" | "studio" | "everything";
+type ProductId = "braino" | "macos" | "foundry" | "braino-os" | "hera" | "studio" | "everything";
 type SubmitState = "idle" | "loading" | "done" | "existing" | "error" | "needs-pick";
 type WaitlistSection = "character" | "kinds" | "braino" | "macos" | "meetings" | "braino-os" | "hera" | "studio" | "join";
 type TeaserId = "browser" | "macos" | "os";
@@ -198,19 +198,29 @@ export function BrainoStudioChapter({ id = "studio" }: { id?: string }) {
 export function BrainoHeraChapter({ id = "hera" }: { id?: string }) {
   return (
     <section className="wl-chapter wl-reveal" id={id || undefined}>
-      <div className="wl-chapter-number">07 / Hera</div>
-      <h2 className="wl-product-title">Braino <span className="wl-shimmer wl-shimmer-green">Hera</span>.</h2>
-      <p className="wl-large">A quieter, more personal side of Braino is taking shape.</p>
-      <p>We are keeping the details close until the idea is ready to meet people properly. Coming soon.</p>
+      <div className="wl-chapter-number">07 / HERA</div>
+      <h2 className="wl-product-title">Braino<span className="wl-shimmer wl-shimmer-green">HERA</span>.</h2>
+      <p className="wl-large">Talk, and it types.</p>
+      <p>
+        HERA is Braino with his mouth closed and his ears open. Hold a key anywhere on your Mac,
+        say the thing, and the words land at your cursor. In your email, in your editor, in a
+        Slack box, in a form. It does not answer, it does not chat, it does not put a window in
+        front of you. It just writes down what you said, in the app you were already in.
+      </p>
+      <p>
+        It is the same character underneath, which is why it punctuates the way you punctuate and
+        stops when you stop. It is not a kind of Braino. It is a mode any Braino can drop into.
+      </p>
     </section>
   );
 }
 
 function ProductName({ product }: { product: ProductId }) {
   if (product === "braino") return <span className="wl-shimmer wl-shimmer-coral">Braino</span>;
-  if (product === "macos") return <>Braino <span className="wl-shimmer wl-shimmer-gold">IOMI</span></>;
+  if (product === "macos") return <>Braino <span className="wl-shimmer wl-shimmer-gold">on your Mac</span></>;
+  if (product === "foundry") return <>Braino <span className="wl-shimmer wl-shimmer-os">Foundry</span></>;
   if (product === "braino-os") return <>Braino<span className="wl-shimmer wl-shimmer-os">OS</span></>;
-  if (product === "hera") return <>Braino <span className="wl-shimmer wl-shimmer-green">Hera</span></>;
+  if (product === "hera") return <>Braino<span className="wl-shimmer wl-shimmer-green">HERA</span></>;
   if (product === "studio") return <>Braino<span className="wl-shimmer wl-shimmer-studio">Studio</span></>;
   return <>Send me everything, DAWG</>;
 }
@@ -226,43 +236,57 @@ const PRODUCTS: Array<{
     id: "braino",
     number: "01",
     name: "Braino",
-    eyebrow: "For the browser",
-    description: "A companion for the web. He reads the page you are on, understands what you are doing, talks in his own voice, and helps without asking you to move your work into another window.",
+    eyebrow: "In your browser · free",
+    description: "The one you meet first. He lives on the page you are already on, reads it, talks in his own voice, takes your notes and runs your tabs. Free, and staying free.",
   },
   {
     id: "macos",
     number: "02",
-    name: "Braino IOMI",
-    eyebrow: "For the Mac",
-    description: "IOMI takes Braino beyond the browser: apps, files, mail, music, meetings and whatever is on your screen. Voice-first, glanceable, and built to feel present.",
+    name: "Braino on your Mac",
+    eyebrow: "The companion · macOS",
+    description: "The same character, out of the browser and into the machine. Apps, files, mail, music, meetings and whatever is on your screen. Voice first, and he lives in the notch.",
   },
   {
-    id: "braino-os",
+    id: "foundry",
     number: "03",
-    name: "Braino OS",
-    eyebrow: "The intelligence",
-    description: "The reasoning, memory, personality and motion layer underneath every version of Braino—turning separate abilities into one coherent character.",
-  },
-  {
-    id: "studio",
-    number: "04",
-    name: "Braino Studio",
-    eyebrow: "Make him yours",
-    description: "Braino is a Diva 💅. Studio lets you customize his face, colours, wardrobe, movement and presence down to the last possible detail.",
-  },
-  {
-    id: "hera",
-    number: "05",
-    name: "Braino Hera",
-    eyebrow: "Coming soon",
-    description: "We’re keeping this one quiet for now.",
+    name: "Braino Foundry",
+    eyebrow: "The co-founder · paid",
+    description: "The one you hire. Two engines under one character: Braino Code builds the product with you, Distra makes sure the world finds out. Priced on the work he does, not per seat.",
   },
   {
     id: "everything",
-    number: "06",
+    number: "04",
     name: "Send me everything, DAWG",
-    eyebrow: "All of Braino",
-    description: "Everything announced so far—and whatever strange, adorable form Braino becomes next.",
+    eyebrow: "All of it",
+    description: "Everything announced so far, and whatever strange, adorable form Braino becomes next.",
+  },
+];
+
+/* What every kind of Braino runs on, and what you dress him in. These are not
+   kinds of Braino. Braino OS is the mind inside all three, Studio is the
+   wardrobe, HERA is a mode any of them can drop into. Listing them beside the
+   bodies was the reason nobody could answer "how many Brainos are there". */
+const ECOSYSTEM: Array<{ id: string; name: string; eyebrow: string; description: string; to: string }> = [
+  {
+    id: "braino-os",
+    name: "Braino OS",
+    eyebrow: "The mind",
+    description: "The reasoning, the memory, the personality and the motion. One mind running in the browser, on the Mac and inside Foundry, which is why he is the same person in all three.",
+    to: "/braino-os",
+  },
+  {
+    id: "studio",
+    name: "BrainoStudio",
+    eyebrow: "The wardrobe",
+    description: "Braino is a Diva. Studio is where you change his face, his colours, his clothes and how he moves, down to the last detail.",
+    to: "/build-braino",
+  },
+  {
+    id: "hera",
+    name: "BrainoHERA",
+    eyebrow: "The quiet mode",
+    description: "Talk, and it types. System-wide dictation that lands text straight at your cursor in any app, and never says a word back. Braino with his mouth closed and his ears open.",
+    to: "/brainohera-teaser",
   },
 ];
 
@@ -412,20 +436,53 @@ export function WaitlistJoin({ id = "join" }: { id?: string }) {
 
 // The "different kinds of Braino" tabs, answered the same way everything else is:
 // a question that opens into the map, with each card opening its own question.
-function KindsAnswer({ onOpen }: { onOpen: (id: string) => void }) {
+function KindsAnswer({ onOpen, onTab }: { onOpen: (id: string) => void; onTab: (id: HomeTabId) => void }) {
   return (
     <section className="wl-chapter wl-reveal">
-      <h2>One character. <span className="wl-shimmer wl-shimmer-coral">Several bodies.</span></h2>
-      <p className="wl-large">Braino is not a product line. He is the same character learning to live in more places.</p>
-      <div className="wl-kinds-grid">
-        {PRODUCTS.filter((product) => product.id !== "everything").map((product) => (
-          <button type="button" key={product.id} onClick={() => onOpen(product.id)}>
+      <h2>One character. <span className="wl-shimmer wl-shimmer-coral">Three bodies.</span></h2>
+      <p className="wl-large">
+        Braino is not a product line. He is one character who has learned to live in three places,
+        and everything else on this page is what he runs on rather than another version of him.
+      </p>
+
+      <div className="wl-kinds-grid is-three wl-kinds-stagger">
+        {PRODUCTS.filter((product) => product.id !== "everything").map((product, i) => (
+          <button
+            type="button"
+            key={product.id}
+            onClick={() => (product.id === "foundry" ? onTab("foundry") : onOpen(product.id))}
+            className="wl-reveal"
+            style={{ transitionDelay: `${i * 90}ms` }}
+          >
             <span className="wl-kinds-num">{product.number}</span>
             <h3><ProductName product={product.id} /></h3>
             <small>{product.eyebrow}</small>
             <p>{product.description}</p>
-            <i>Open this question <ArrowUpRight size={14} aria-hidden="true" /></i>
+            <i>{product.id === "foundry" ? "Open the Foundry questions" : "Open this question"} <ArrowUpRight size={14} aria-hidden="true" /></i>
           </button>
+        ))}
+      </div>
+
+      <div className="wl-eco-head wl-reveal">
+        <h3>And then there is what he runs on.</h3>
+        <p>
+          These are not more Brainos. One is the mind inside all three, one is the wardrobe, one is
+          a mode any of them can drop into.
+        </p>
+      </div>
+      <div className="wl-eco-grid wl-kinds-stagger">
+        {ECOSYSTEM.map((item, i) => (
+          <Link
+            key={item.id}
+            to={item.to}
+            className="wl-eco-card wl-reveal"
+            style={{ transitionDelay: `${i * 90}ms` }}
+          >
+            <small>{item.eyebrow}</small>
+            <h4>{item.name}</h4>
+            <p>{item.description}</p>
+            <i>Read more <ArrowUpRight size={13} aria-hidden="true" /></i>
+          </Link>
         ))}
       </div>
     </section>
@@ -524,10 +581,12 @@ export default function Waitlist() {
   return (
     <main className={`wl-page is-${theme}`} ref={pageRef}>
       <BrainoDefs />
+      {/* The plain notch, same as /product-overview: click and it opens
+          downward into the nav grid with content left and right. The old
+          sideways-widening tab island is gone; the tab row lower down the page
+          already does that job and did it twice. */}
       <IomiNotch
         nav={WAITLIST_NOTCH_NAV}
-        tabs={HOME_TABS.map((tab) => ({ id: tab.id, label: tab.label, to: tab.id === "braino" ? "/" : `/?view=${tab.id}` }))}
-        activeTab={view}
         sleepOnFirstVisit={false}
         theme={theme}
         onToggleTheme={() => setTheme((current) => current === "dark" ? "light" : "dark")}
@@ -546,7 +605,7 @@ export default function Waitlist() {
             <div className="wl-hero-footnote">
               <span>One character.</span>
               <span>Everywhere you work.</span>
-              <span>Click the notch eyes to explore.</span>
+              <span>Open the notch to move around.</span>
             </div>
           </div>
 
@@ -597,7 +656,7 @@ export default function Waitlist() {
         </FaqRow>
 
         <FaqRow item={FAQ.kinds} open={openFaqs.has("kinds")} onToggle={toggleFaq}>
-          <KindsAnswer onOpen={openFaq} />
+          <KindsAnswer onOpen={openFaq} onTab={changeTab} />
         </FaqRow>
 
         <FaqRow item={FAQ.braino} open={openFaqs.has("braino")} onToggle={toggleFaq}>
