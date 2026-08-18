@@ -6,6 +6,7 @@ import {
   getAuthorizedXContext,
 } from "../../_shared/x-auto-sessions.ts";
 import { requireSupabaseServiceConfig } from "../../_shared/x-dispatch.ts";
+import { buildXStats, composeSpokenBriefing, fallbackBriefing } from "../../_shared/x-briefing.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -106,9 +107,23 @@ serve(async (req) => {
       await upsertFollowerSnapshot(supabase, user.id, followersCount);
     }
 
+    // The full picture, same source the dashboard reads. Asking out loud used
+    // to get a thinner answer than opening the page, which was backwards.
+    let briefing: string | null = null;
+    let stats: unknown = null;
+    try {
+      const built = await buildXStats(supabase, user.id);
+      stats = built;
+      briefing = (await composeSpokenBriefing(built)) ?? fallbackBriefing(built);
+    } catch (e) {
+      console.error("x-status briefing failed, returning basics:", e);
+    }
+
     return json({
       connected: true,
       degraded,
+      briefing,
+      stats,
       username,
       displayName,
       followers: { count: followersCount, delta7d },
