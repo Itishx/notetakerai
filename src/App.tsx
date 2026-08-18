@@ -122,6 +122,7 @@ const BrainoDeck = lazy(() => import("./pages/BrainoDeck.tsx"));
 const Distra = lazy(() => import("./pages/Distra.tsx"));
 const XDashboard = lazy(() => import("./pages/XDashboard.tsx"));
 const XSetup = lazy(() => import("./pages/XSetup.tsx"));
+const XVoice = lazy(() => import("./pages/XVoice.tsx"));
 const BrainoDeckDocs = lazy(() => import("./pages/BrainoDeckDocs.tsx"));
 const DeckDocs = lazy(() => import("./pages/DeckDocs.tsx"));
 const NotFound = lazy(() => import("./pages/NotFound.tsx"));
@@ -247,6 +248,7 @@ function AppRoutes() {
         <Route path="/live" element={<BrainoLive />} />
         <Route path="/x" element={<XDashboard />} />
         <Route path="/x/setup" element={<XSetup />} />
+        <Route path="/x/voice" element={<XVoice />} />
         <Route path="/x/advanced" element={<BrainoX />} />
         <Route path="/playground" element={<Playground />} />
         <Route path="/build-braino" element={<BuildYourBraino />} />

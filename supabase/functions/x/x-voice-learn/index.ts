@@ -153,17 +153,47 @@ serve(async (req) => {
       .sort((a, b) => b.avg_engagement - a.avg_engagement)
       .slice(0, 4);
 
+    // Structure is measured, not inferred. An LLM asked "how long are their
+    // posts" will produce an adjective; this produces a number the prompt can
+    // enforce against.
+    const lengths = samples.map((s) => s.text.trim().length);
+    const structure = {
+      median_length: median(lengths),
+      p25_length: percentile(lengths, 0.25),
+      p75_length: percentile(lengths, 0.75),
+      shortest: Math.min(...lengths),
+      longest: Math.max(...lengths),
+      share_under_80_chars: share(lengths, (n) => n < 80),
+      share_over_200_chars: share(lengths, (n) => n > 200),
+      share_multiline: share(samples.map((s) => s.text), (t) => String(t).includes("\n")),
+      avg_words: Math.round(
+        samples.reduce((a, s) => a + s.text.trim().split(/\s+/).filter(Boolean).length, 0) / samples.length,
+      ),
+      share_with_question: share(samples.map((s) => s.text), (t) => String(t).includes("?")),
+      share_with_number: share(samples.map((s) => s.text), (t) => /\d/.test(String(t))),
+      share_with_link: share(samples.map((s) => s.text), (t) => /https?:\/\//.test(String(t))),
+      share_with_hashtag: share(samples.map((s) => s.text), (t) => String(t).includes("#")),
+    };
+
+    // Does the length they actually write match a policy we can enforce?
+    const suggestedLengthMode =
+      structure.median_length >= 180 ? "substantial"
+      : structure.median_length >= 110 ? "balanced"
+      : "punchy";
+
     const analysis = await analyseVoice(openaiKey, {
       handle: ctx.username,
       total: samples.length,
-      top, bottom, bestHours,
+      top, bottom, bestHours, structure,
     });
 
     const learned = {
       ...analysis,
       posts_read: samples.length,
       best_hours_utc: bestHours,
-      median_length: median(samples.map((s) => s.text.length)),
+      structure,
+      suggested_length_mode: suggestedLengthMode,
+      median_length: structure.median_length,
       learned_at: new Date().toISOString(),
     };
 
@@ -203,31 +233,42 @@ async function analyseVoice(apiKey: string, input: {
   top: Sample[];
   bottom: Sample[];
   bestHours: { hour_utc: number; posts: number; avg_engagement: number }[];
+  structure: Record<string, number>;
 }) {
   const fmt = (list: Sample[]) =>
     list.map((s, i) => `${i + 1}. [${s.likes}L ${s.replies}R ${s.reposts}RT] ${s.text.replace(/\n/g, " / ")}`).join("\n");
 
   const system = [
-    "You are analysing one person's writing so another writer can imitate it convincingly.",
-    "You are NOT judging the writing and NOT giving advice on how to improve it. Describe what is actually there.",
-    "Be specific and concrete. 'Conversational' is useless. 'Starts most posts with the blunt claim, no setup line' is useful.",
-    "Quote real fragments from their posts as evidence wherever you can.",
-    "Never use em dashes or en dashes anywhere in your output.",
-    "If the evidence is thin for a field, say so in that field rather than inventing a pattern.",
-    "Answer with a single JSON object and nothing else, matching this shape:",
+    "You are building a writing profile detailed enough that another writer could produce a post this person would accept without editing.",
+    "",
+    "RULES FOR YOUR OUTPUT:",
+    "- You are NOT judging the writing and NOT advising how to improve it. Describe what is actually there.",
+    "- Be concrete to the point of being mechanical. 'Conversational' is worthless. 'Opens with the blunt claim, no setup line, then a blank line, then the consequence' is usable.",
+    "- Quote real fragments as evidence in every field where evidence exists.",
+    "- Where the evidence is thin, write \"not enough evidence\" in that field. Never invent a pattern to fill a slot.",
+    "- Never use em dashes or en dashes anywhere in your output.",
+    "- Structural measurements are supplied to you and are already correct. Interpret them, do not restate or contradict them.",
+    "",
+    "Answer with a single JSON object and nothing else, matching this shape exactly:",
     JSON.stringify({
-      summary: "one short paragraph a human reads back and recognises themselves in",
-      sentence_style: "length, rhythm, fragments or full sentences",
-      opener_style: "how posts begin",
-      closer_style: "how posts end, questions or statements",
-      humor: "is there any, what kind, how often, with a quoted example if present",
-      formatting: { hashtags: "", emoji: "", line_breaks: "", capitalisation: "", punctuation: "" },
-      signature_phrases: ["actual recurring words or phrases from the posts"],
-      never_does: ["things notably absent from their writing"],
-      topics: [{ name: "", share: "roughly what fraction of posts" }],
+      summary: "One paragraph, second person, that the author reads back and recognises themselves in. Concrete, not flattering.",
+      how_they_think: "The shape of their reasoning. Do they argue from experience, from first principles, from a number, from a contrast? Do they state the conclusion first or build to it?",
+      sentence_style: "Length, rhythm, whether full sentences or deliberate fragments, and how those alternate.",
+      paragraph_style: "How they use line breaks. Single block, two beat setup and payoff, or a list. Quote a structure.",
+      opener_style: "How posts begin. Quote three real openings.",
+      closer_style: "How posts end. Statement, question, callback, or nothing.",
+      humor: { present: "yes | no | occasionally", kind: "dry, self deprecating, absurd, deadpan, none", frequency: "roughly what share of posts", example: "a real quoted line, or empty" },
+      register: "How formal. Do they swear, use slang, contractions, first person plural?",
+      formatting: { hashtags: "", emoji: "", line_breaks: "", capitalisation: "", punctuation: "", links: "" },
+      signature_phrases: ["actual recurring words or phrases lifted from the posts"],
+      never_does: ["things conspicuously absent, stated as rules a writer could follow"],
+      topics: [{ name: "", share: "roughly what fraction of posts", angle: "what they typically say about it" }],
+      formats_they_use: [{ format: "teach | opinion | build-log | story | contrarian | proof | question", share: "", note: "" }],
       what_works: [{ pattern: "", evidence: "" }],
       what_flops: [{ pattern: "", evidence: "" }],
-      confidence: "high | medium | low, and why",
+      length_read: "What their post length says about them, interpreting the supplied measurements. Say plainly whether they are a short-post writer or not.",
+      writing_rules: ["Five to eight imperative rules another writer could follow to sound like this person. Each one specific enough to be checkable."],
+      confidence: "high | medium | low, and why in one clause",
     }),
   ].join("\n");
 
@@ -243,6 +284,9 @@ async function analyseVoice(apiKey: string, input: {
     input.bestHours.length
       ? `Posting hours with the strongest average engagement (UTC): ${input.bestHours.map((h) => `${h.hour_utc}:00 (${h.posts} posts)`).join(", ")}`
       : "Not enough posts per hour to read a timing pattern yet.",
+    "",
+    "MEASURED STRUCTURE (already computed, treat as fact):",
+    JSON.stringify(input.structure, null, 2),
   ].join("\n");
 
   const res = await fetch(OPENAI_API_URL, {
@@ -276,6 +320,15 @@ function num(v: unknown) {
 }
 function round(n: number) {
   return Math.round(n * 100) / 100;
+}
+function percentile(list: number[], p: number) {
+  if (!list.length) return 0;
+  const s = [...list].sort((a, b) => a - b);
+  return s[Math.min(s.length - 1, Math.floor(s.length * p))];
+}
+function share<T>(list: T[], test: (v: T) => boolean) {
+  if (!list.length) return 0;
+  return Math.round((list.filter(test).length / list.length) * 100);
 }
 function median(list: number[]) {
   if (!list.length) return 0;

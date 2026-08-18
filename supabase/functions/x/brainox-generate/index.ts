@@ -3,6 +3,13 @@
 // stealing the user's voice, generates pillar drafts, and writes follow-ups.
 // Never invents experiences: it may only use what the request carries.
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import {
+  buildXSystemPrompt,
+  violatesLengthPolicy,
+  DEFAULT_MIX,
+  type FormatKey,
+  type LengthMode,
+} from "../../_shared/x-voice-prompt.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { requireSupabaseServiceConfig } from "../../_shared/x-dispatch.ts";
 import { BRAINO_TEXT_MODEL, BRAINO_TEXT_REASONING_EFFORT } from "../../_shared/openai-models.ts";
@@ -59,7 +66,7 @@ serve(async (req) => {
 
     // Voice profile + pillars for the prompt; recent posts for anti-repetition.
     const [{ data: settings }, { data: recentScheduled }, { data: recentQueue }] = await Promise.all([
-      supabase.from("x_settings").select("voice_profile,pillars,voice_learned,voice_manual").eq("user_id", user.id).maybeSingle(),
+      supabase.from("x_settings").select("voice_profile,pillars,voice_learned,voice_manual,length_mode,content_mix").eq("user_id", user.id).maybeSingle(),
       supabase
         .from("scheduled_x_posts")
         .select("content")
@@ -96,13 +103,24 @@ serve(async (req) => {
           .map((entry) => `${entry.key} (${entry.label})`)
       : ["building-braino (Building Braino)", "founder (Founder Journey)", "ai-agents (AI / Agents)"];
 
-    const systemPrompt = buildSystemPrompt({
+    // Which shape of post is today's? The mix rotates the FORMAT across the
+    // week so seven posts on seven topics do not all read as seven opinions.
+    const mix = Array.isArray(settings?.content_mix) && settings.content_mix.length
+      ? settings.content_mix as { day: string; format: FormatKey }[]
+      : DEFAULT_MIX;
+    const dayIndex = (new Date().getUTCDay() + 6) % 7; // Monday first
+    const todaysFormat = mix[dayIndex]?.format ?? null;
+    const lengthMode = (settings?.length_mode ?? "balanced") as LengthMode;
+
+    const systemPrompt = buildXSystemPrompt({
       voiceProfile: settings?.voice_profile ?? null,
       voiceLearned: settings?.voice_learned ?? null,
       voiceManual: settings?.voice_manual ?? null,
       starredExamples: (starred || []).map((row: { text: string }) => row.text).filter(Boolean),
       pillarKeys,
       recentTexts,
+      format: todaysFormat,
+      lengthMode,
     });
 
     const userPrompt = buildUserPrompt({ mode, input, pillar, stats });
@@ -131,19 +149,35 @@ serve(async (req) => {
 
     const payload = await response.json();
     const rawContent = String(payload?.choices?.[0]?.message?.content || "").trim();
-    const options = parseOptions(rawContent);
-    if (!options.length) throw new Error("The model returned no usable options.");
+    const parsed = parseOptions(rawContent);
+    if (!parsed.length) throw new Error("The model returned no usable options.");
+
+    // The prompt states the length floor. This enforces it, because a stated
+    // rule a model can quietly ignore is not a rule. Options that come back as
+    // fragments are dropped rather than shown, unless dropping would leave
+    // nothing, in which case they are returned carrying the reason so the
+    // surface can say why they look thin.
+    const withVerdict = parsed.map((o) => ({
+      ...o,
+      length_warning: violatesLengthPolicy(String(o.text ?? ""), lengthMode),
+    }));
+    const clean = withVerdict.filter((o) => !o.length_warning);
+    const options = clean.length ? clean : withVerdict;
+    const dropped = withVerdict.length - clean.length;
 
     await supabase.from("x_action_log").insert({
       user_id: user.id,
       agent: "content",
       action: `generate:${mode}`,
       target: input.slice(0, 120) || pillar || "pillar draft",
-      reason: `${options.length} option(s) produced.`,
+      reason: dropped && clean.length
+        ? `${options.length} option(s) produced, ${dropped} dropped for being too short.`
+        : `${options.length} option(s) produced.`,
+      meta: { format: todaysFormat, length_mode: lengthMode, dropped_short: dropped },
       result: "success",
     });
 
-    return json({ mode, options });
+    return json({ mode, options, format: todaysFormat, length_mode: lengthMode });
   } catch (error) {
     console.error("brainox-generate error:", error);
     const message = error instanceof Error ? error.message : "Generation failed.";

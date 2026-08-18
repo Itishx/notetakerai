@@ -30,8 +30,15 @@ type QueueRow = {
   created_at: string;
 };
 
+type ActivityRow = {
+  id: string; agent: string; action: string;
+  target: string | null; reason: string | null; result: string; created_at: string;
+};
+
 type Settings = {
   automation_mode: string;
+  length_mode: string;
+  content_mix: { day: string; format: string }[] | null;
   kill_switch: boolean;
   max_posts_per_day: number;
   quiet_start: number;
@@ -81,6 +88,24 @@ const DEMO_QUEUE: QueueRow[] = [
   })),
 ];
 
+const DEMO_ACTIVITY: ActivityRow[] = [
+  { id: "a1", agent: "content", action: "generate:pillar", target: "what I'm building", reason: "3 options produced, 1 dropped for being too short.", result: "success", created_at: iso(-4) },
+  { id: "a2", agent: "scheduler", action: "scheduled", target: "Shipped voice learning today...", reason: "Placed at 2:21 AM, your strongest hour for this pillar.", result: "success", created_at: iso(-38) },
+  { id: "a3", agent: "policy", action: "blocked", target: "Three months in, no launch...", reason: "Near duplicate of a post from 6 days ago. Held, not deleted.", result: "blocked", created_at: iso(-52) },
+  { id: "a4", agent: "publisher", action: "published", target: "Braino now checks his own post...", reason: "Verified live on X, permalink stored.", result: "success", created_at: iso(-190) },
+  { id: "a5", agent: "x-voice-learn", action: "learned_voice", target: "brainosays", reason: "Read 200 posts and rebuilt the voice profile.", result: "success", created_at: iso(-2880) },
+];
+
+const FORMAT_LABELS: Record<string, string> = {
+  teach: "Teach something",
+  opinion: "An opinion",
+  "build-log": "What I shipped",
+  story: "Something that happened",
+  contrarian: "Disagree with the room",
+  proof: "Numbers and receipts",
+  question: "Ask them",
+};
+
 const DEMO_SETTINGS = {
   automation_mode: "assisted",
   kill_switch: false,
@@ -98,6 +123,13 @@ const DEMO_SETTINGS = {
     summary: "Short sentences, often fragments. Opens with the blunt fact and lets it sit, no setup line. Never uses hashtags, almost never emoji. Dry humour, usually at his own expense, roughly one post in four. Writes about building, being solo, and what he got wrong. Posts about failing outperform posts about shipping by roughly four to one.",
   },
   voice_manual: { dials: {} },
+  length_mode: "substantial",
+  content_mix: [
+    { day: "Mon", format: "build-log" }, { day: "Tue", format: "teach" },
+    { day: "Wed", format: "opinion" }, { day: "Thu", format: "story" },
+    { day: "Fri", format: "proof" }, { day: "Sat", format: "contrarian" },
+    { day: "Sun", format: "question" },
+  ],
   voice_posts_read: 200,
   voice_learned_at: new Date(DEMO_NOW - 86_400_000 * 2).toISOString(),
   setup_completed_at: new Date(DEMO_NOW - 86_400_000 * 31).toISOString(),
@@ -121,6 +153,9 @@ export default function XDashboard() {
   const [queue, setQueue] = useState<QueueRow[]>([]);
   const [followers, setFollowers] = useState<{ date: string; count: number }[]>([]);
   const [starredCount, setStarredCount] = useState(0);
+  const [activity, setActivity] = useState<ActivityRow[]>([]);
+  const [lastCheck, setLastCheck] = useState<number | null>(null);
+  const [tick, setTick] = useState(0);
   const [busy, setBusy] = useState<string | null>(null);
   const demo = typeof window !== "undefined" && new URLSearchParams(window.location.search).has("demo");
 
@@ -134,14 +169,16 @@ export default function XDashboard() {
       setQueue(DEMO_QUEUE);
       setFollowers(DEMO_FOLLOWERS);
       setStarredCount(4);
+      setActivity(DEMO_ACTIVITY);
+      setLastCheck(Date.now());
       setLoading(false);
       return;
     }
     if (!user) { setLoading(false); return; }
-    const [conn, set, q, snaps, stars] = await Promise.all([
+    const [conn, set, q, snaps, stars, acts] = await Promise.all([
       (supabase as any).from("x_connections").select("username").eq("user_identifier", user.id).maybeSingle(),
       (supabase as any).from("x_settings").select(
-        "automation_mode,kill_switch,max_posts_per_day,quiet_start,quiet_end,pillars,voice_learned,voice_manual,voice_posts_read,voice_learned_at,setup_completed_at",
+        "automation_mode,kill_switch,max_posts_per_day,quiet_start,quiet_end,pillars,voice_learned,voice_manual,voice_posts_read,voice_learned_at,setup_completed_at,length_mode,content_mix",
       ).eq("user_id", user.id).maybeSingle(),
       (supabase as any).from("x_queue_items").select(
         "id,text,status,pillar,scheduled_publish_at,published_at,x_post_id,error,created_at",
@@ -150,6 +187,9 @@ export default function XDashboard() {
         .eq("user_id", user.id).order("captured_on", { ascending: false }).limit(30),
       (supabase as any).from("x_voice_samples").select("id", { count: "exact", head: true })
         .eq("user_id", user.id).eq("starred", true),
+      (supabase as any).from("x_activity_feed")
+        .select("id,agent,action,target,reason,result,created_at")
+        .eq("user_id", user.id).limit(8),
     ]);
 
     setConnected(Boolean(conn.data?.username));
@@ -159,10 +199,25 @@ export default function XDashboard() {
     setFollowers(((snaps.data as { captured_on: string; followers_count: number }[]) ?? [])
       .map((r) => ({ date: r.captured_on, count: r.followers_count })).reverse());
     setStarredCount(stars.count ?? 0);
+    setActivity((acts?.data as ActivityRow[]) ?? []);
+    setLastCheck(Date.now());
     setLoading(false);
   }, [user, demo]);
 
   useEffect(() => { void load(); }, [load]);
+
+  // Re-read every 30 seconds so the page is current without pretending to hold
+  // a socket it does not have. The separate 1s tick only moves the "checked Ns
+  // ago" label, which is the honest way to show liveness.
+  useEffect(() => {
+    if (demo) return;
+    const poll = window.setInterval(() => { void load(); }, 30_000);
+    return () => window.clearInterval(poll);
+  }, [load, demo]);
+  useEffect(() => {
+    const t = window.setInterval(() => setTick((n) => n + 1), 1000);
+    return () => window.clearInterval(t);
+  }, []);
 
   /* ── Derived: the three questions ────────────────────────────────────── */
   const needsYou = useMemo(
@@ -185,6 +240,7 @@ export default function XDashboard() {
   const followerWeekAgo = followers.length > 7 ? followers[followers.length - 8].count : followers[0]?.count ?? null;
   const followerDelta = followerNow !== null && followerWeekAgo !== null ? followerNow - followerWeekAgo : null;
 
+  const todayIndex = (new Date().getDay() + 6) % 7; // Monday first, to match content_mix
   const voiceKnown = Boolean(settings?.voice_learned) || Boolean(settings?.voice_manual);
   const needsSetup = !connected || !settings?.setup_completed_at;
 
@@ -336,6 +392,55 @@ export default function XDashboard() {
           )}
         </section>
 
+        {/* ── What he is doing right now ─────────────────────────────── */}
+        <section className="xd-block">
+          <div className="xd-block-head">
+            <h2>What he is doing</h2>
+            <p>
+              Every decision he made, including the ones where he refused.
+              <span className="xd-live">
+                <i />{lastCheck ? `checked ${secondsAgo(lastCheck)}` : "connecting"}
+              </span>
+            </p>
+          </div>
+          {activity.length === 0 ? (
+            <div className="xd-none">Nothing yet. He logs every action here, including blocks.</div>
+          ) : (
+            <ol className="xd-activity">
+              {activity.map((a) => (
+                <li key={a.id} className={a.result === "blocked" ? "is-blocked" : a.result === "failed" ? "is-failed" : undefined}>
+                  <span className="xd-act-when">{shortAgo(a.created_at)}</span>
+                  <div>
+                    <b>{actionLabel(a)}</b>
+                    {a.reason && <p>{a.reason}</p>}
+                  </div>
+                </li>
+              ))}
+            </ol>
+          )}
+        </section>
+
+        {/* ── This week's shape ──────────────────────────────────────── */}
+        <section className="xd-block">
+          <div className="xd-block-head">
+            <h2>This week's shape</h2>
+            <p>What kind of post goes out on each day. Topics say what it's about, this says what it is.</p>
+          </div>
+          <div className="xd-mix">
+            {(settings?.content_mix ?? []).map((row, i) => (
+              <div key={row.day} className={"xd-mix-day" + (i === todayIndex ? " is-today" : "")}>
+                <span>{row.day}</span>
+                <b>{FORMAT_LABELS[row.format] ?? row.format}</b>
+                {i === todayIndex && <em>today</em>}
+              </div>
+            ))}
+          </div>
+          <p className="xd-fine">
+            Post length: <b>{lengthLabel(settings?.length_mode)}</b>. Anything shorter is thrown
+            away before you see it. <Link to="/x/voice">Change how you talk</Link>
+          </p>
+        </section>
+
         {/* ── What he knows about you ────────────────────────────────── */}
         <section className="xd-block">
           <div className="xd-block-head">
@@ -366,7 +471,7 @@ export default function XDashboard() {
               )}
             </div>
             <div className="xd-voice-actions">
-              <Link to="/x/setup" className="ob-btn is-outline">Train him</Link>
+              <Link to="/x/voice" className="ob-btn is-outline">Train him</Link>
             </div>
           </div>
         </section>
@@ -415,6 +520,37 @@ function Health({ ok, label, detail }: { ok: boolean; label: string; detail: str
       <span>{detail}</span>
     </div>
   );
+}
+
+function lengthLabel(mode?: string) {
+  if (mode === "substantial") return "Substantial, never under 180 characters";
+  if (mode === "punchy") return "Punchy, never under 60 characters";
+  return "Balanced, never under 120 characters";
+}
+
+function actionLabel(a: ActivityRow) {
+  const t = a.target ? ` ${a.target.length > 54 ? a.target.slice(0, 54) + "..." : a.target}` : "";
+  if (a.action.startsWith("generate")) return `Wrote drafts${t ? " for" + t : ""}`;
+  if (a.action === "scheduled") return `Scheduled${t}`;
+  if (a.action === "published") return `Published${t}`;
+  if (a.action === "blocked") return `Refused to post${t}`;
+  if (a.action === "learned_voice") return `Read your history${t ? " from" + t : ""}`;
+  return `${a.action}${t}`;
+}
+
+function secondsAgo(ms: number) {
+  const s = Math.max(0, Math.round((Date.now() - ms) / 1000));
+  if (s < 60) return `${s}s ago`;
+  return `${Math.round(s / 60)}m ago`;
+}
+
+function shortAgo(iso: string) {
+  const mins = Math.round((Date.now() - new Date(iso).getTime()) / 60_000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const h = Math.round(mins / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.round(h / 24)}d ago`;
 }
 
 function modeLabel(mode?: string) {
