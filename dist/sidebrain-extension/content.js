@@ -16647,6 +16647,15 @@ function __sbFormatXStatus(promptText, data) {
   const wantsLastTweet = /\blast\s+(tweet|post)\b/.test(t) || /\b(tweet|post)\s+performance\b/.test(t);
   const general = !(wantsFollowers || wantsMentions || wantsLastTweet);
 
+  // A broad "how's my X doing" now gets the full briefing the server composed
+  // from the same numbers the /x dashboard reads: the week, the queue, what
+  // Braino did on your behalf, and what he refused to post. The narrow
+  // questions below still get their one-line answers, because "how many
+  // followers do I have" should not return a paragraph.
+  if (general && typeof data?.briefing === "string" && data.briefing.trim()) {
+    return data.briefing.trim();
+  }
+
   const followerSentence = () => {
     const raw = data?.followers?.count;
     if (raw == null) return "You're connected to X, but I couldn't pull your live follower count just now — try again in a moment.";
