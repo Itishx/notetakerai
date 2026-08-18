@@ -198,6 +198,23 @@ entrypoint = "./functions/x/x-status/index.ts"
 [functions.x-voice-learn]
 entrypoint = "./functions/x/x-voice-learn/index.ts"
 
+# ── linkedin (the channel spine's first tenant) ────────────────────────
+[functions.linkedin-oauth-start]
+entrypoint = "./functions/linkedin/linkedin-oauth-start/index.ts"
+
+# LinkedIn redirects the browser here, so it cannot carry a JWT.
+[functions.linkedin-oauth-callback]
+entrypoint = "./functions/linkedin/linkedin-oauth-callback/index.ts"
+verify_jwt = false
+
+[functions.linkedin-generate]
+entrypoint = "./functions/linkedin/linkedin-generate/index.ts"
+
+# Driven by pg_cron, so no user JWT.
+[functions.dispatch-channel-posts]
+entrypoint = "./functions/linkedin/dispatch-channel-posts/index.ts"
+verify_jwt = false
+
 # ── notion ─────────────────────────────────────────────────────────────
 
 [functions.notion-connection-status]

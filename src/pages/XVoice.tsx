@@ -14,7 +14,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import "./onboarding-flow.css";
 import "./x-setup.css";
 import "./x-voice.css";
-import "./x-black.css";
+import "./channel-theme.css";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 const ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
@@ -158,7 +158,7 @@ export default function XVoice() {
   const floor = LENGTH_MODES.find((m) => m.key === lengthMode)?.floor ?? 120;
 
   return (
-    <div className="ob-doc xs-doc xv-doc">
+    <div className="ob-doc xs-doc xv-doc ch-x">
       <header className="ob-top">
         <div className="ob-top-inner">
           <Link to="/x" className="ob-mark"><i />braino for X</Link>

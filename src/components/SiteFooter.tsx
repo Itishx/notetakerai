@@ -20,7 +20,9 @@ export default function SiteFooter() {
             <div className="home-footer-col">
               <div className="home-footer-col-head">Product</div>
               <Link to="/delegate">Delegate</Link>
+              <Link to="/channels">Distribution</Link>
               <Link to="/braino-for-x">Braino for X</Link>
+              <Link to="/braino-for-linkedin">Braino for LinkedIn</Link>
               <Link to="/premium">Pricing</Link>
               <Link to="/build-braino">Build Yours</Link>
               <Link to="/changelog">Changelog</Link>

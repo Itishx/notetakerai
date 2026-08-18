@@ -1,0 +1,24 @@
+/* LinkedIn-only additions on top of the shared dashboard structure. Just the
+   comment drafter, which has no X equivalent because on LinkedIn the comment is
+   the growth lever rather than the post. */
+
+.li-comment { padding: 24px; border-radius: 22px; background: var(--ob-card); border: 1px solid var(--ob-line); }
+.li-composer { display: grid; gap: 10px; }
+.li-composer textarea, .li-composer input {
+  width: 100%; border-radius: 12px; border: 1px solid var(--ob-line);
+  background: var(--ob-paper); color: var(--ob-ink);
+  padding: 12px 14px; font: inherit; font-size: 15px; line-height: 1.5; resize: vertical;
+}
+.li-composer textarea:focus, .li-composer input:focus { outline: none; border-color: var(--ob-coral); }
+.li-composer .ob-btn { justify-self: start; padding: 12px 26px; font-size: 15px; }
+
+.li-drafts { margin-top: 22px; display: grid; gap: 12px; }
+.li-drafts article { border: 1px solid var(--ob-line); border-radius: 16px; padding: 18px 20px; background: var(--ob-paper); }
+.li-angle { display: block; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--ob-coral); margin-bottom: 8px; }
+.li-drafts p { margin: 0 0 14px; font-size: 15px; line-height: 1.55; }
+.li-drafts button {
+  border: 1px solid var(--ob-line); background: transparent; color: var(--ob-ink);
+  border-radius: 980px; padding: 7px 18px; font: inherit; font-size: 13px; font-weight: 650; cursor: pointer;
+}
+.li-drafts button:hover { border-color: var(--ob-coral); color: var(--ob-coral); }
+.li-drafts .xd-fine { margin-top: 4px; }

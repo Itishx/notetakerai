@@ -1,0 +1,184 @@
+/* ============================================================================
+   Channel themes.
+
+   Every distribution surface (setup flow, dashboard, voice settings) shares one
+   set of structural classes and differs only in tokens. X is black and silver,
+   LinkedIn is blue and white, Reddit will be orange and black. Adding a channel
+   is a token block, not a new set of pages.
+
+   ── Braino for X: the black skin ──
+
+   /x and /x/setup are built on the warm-paper onboarding system, which is right
+   for the shape of the flow and wrong for the surface: this is X, and X is
+   black. Rather than fork the layouts, this file re-points the same tokens at
+   an X palette and then fixes the handful of places where onboarding-flow.css
+   hardcoded a light value instead of using a token.
+
+   Accent: silver. Not flat grey, which reads as disabled on black, but a real
+   metallic sheen on the display type and a cool light grey everywhere else.
+   Primary buttons stay white on black, because that is what a button looks
+   like on X.
+   ============================================================================ */
+
+.ch-x {
+  --ob-paper: #000000;
+  --ob-ink: #e7e9ea;        /* X's off-white body text, not pure white */
+  --ob-soft: #71767b;       /* X's muted grey */
+  --ob-coral: #c7ced8;      /* the accent slot, now silver */
+  /* The sheen: light at the top, a darker band at two thirds, a catch of light
+     at the bottom. That band is what makes it read as metal instead of grey. */
+  --x-silver: linear-gradient(177deg, #ffffff 0%, #dfe5ee 26%, #aab3c0 58%, #7d8794 72%, #eaf0f7 100%);
+  --ob-line: rgba(255, 255, 255, 0.13);
+  --ob-card: #16181c;       /* X's raised surface */
+  color-scheme: dark;
+}
+
+/* ── The silver itself ────────────────────────────────────────────────── */
+.ch-x .ob-h1 em,
+.ch-x .xd-headline em {
+  background: var(--x-silver);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* ── Chrome ───────────────────────────────────────────────────────────── */
+.ch-x .ob-top { background: rgba(0, 0, 0, 0.72); }
+.ch-x .ob-mark i { background: #d7dde5; box-shadow: 0 0 16px rgba(215, 221, 229, 0.5); }
+.ch-x .ob-progress { background: rgba(255, 255, 255, 0.09); }
+.ch-x .ob-progress span { background: var(--x-silver); }
+
+/* ── Buttons: white pill on black is the X primary ────────────────────── */
+.ch-x .ob-btn { background: #eff3f4; color: #0f1419; }
+.ch-x .ob-btn.is-coral { background: var(--x-silver); color: #0f1419; }
+.ch-x .ob-btn.is-quiet { background: transparent; color: var(--ob-soft); }
+.ch-x .ob-btn.is-outline {
+  background: transparent; color: var(--ob-ink);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+.ch-x .ob-foot { background: linear-gradient(to top, #000 62%, rgba(0, 0, 0, 0)); }
+
+/* ── Selection cards: onboarding-flow.css hardcodes #fff on .is-on ────── */
+.ch-x .ob-card.is-on {
+  background: #1a1d22;
+  box-shadow: 0 0 0 1px var(--ob-coral), 0 16px 44px rgba(199, 206, 216, 0.13);
+}
+.ch-x .ob-card:hover { box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5); }
+.ch-x .ob-card.is-on .ob-tick { background: var(--ob-coral); border-color: var(--ob-coral); color: #0f1419; }
+
+/* ── Chips ────────────────────────────────────────────────────────────── */
+.ch-x .ob-chip { border-color: var(--ob-line); color: var(--ob-ink); }
+.ch-x .ob-chip:hover { border-color: rgba(255, 255, 255, 0.4); }
+.ch-x .ob-chip.is-on { background: var(--ob-coral); border-color: var(--ob-coral); color: #0f1419; }
+
+/* ── Inputs ───────────────────────────────────────────────────────────── */
+.ch-x .xs-field textarea,
+.ch-x .xs-add input,
+.ch-x .xs-hours select,
+.ch-x .xs-counter button {
+  background: #16181c; color: var(--ob-ink); border-color: var(--ob-line);
+}
+.ch-x .xs-field textarea::placeholder,
+.ch-x .xs-add input::placeholder { color: #4a5057; }
+.ch-x .xs-dial input[type="range"] { accent-color: var(--ob-coral); }
+
+/* ── Tinted blocks that assumed a light ground ────────────────────────── */
+.ch-x .xs-phrases span,
+.ch-x .xs-gates span { background: rgba(199, 206, 216, 0.13); color: #d7dde5; }
+.ch-x .xs-star.is-on { background: rgba(199, 206, 216, 0.09); }
+.ch-x .xs-bar { background: rgba(255, 255, 255, 0.1); }
+.ch-x .xd-alert { background: rgba(199, 206, 216, 0.12); color: #d7dde5; }
+.ch-x .xd-pill { background: rgba(255, 255, 255, 0.08); }
+.ch-x .xd-yes { background: #eff3f4; color: #0f1419; }
+.ch-x .xd-no { border-color: var(--ob-line); }
+.ch-x .xd-no:hover:not(:disabled) { color: var(--ob-coral); border-color: var(--ob-coral); }
+.ch-x .xd-card:hover {
+  border-color: rgba(199, 206, 216, 0.4);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.6);
+}
+.ch-x .xd-health-row.is-ok i { background: rgba(0, 186, 124, 0.18); color: #00ba7c; }
+.ch-x .xd-health-row.is-bad i { background: rgba(244, 33, 46, 0.18); color: #f4212e; }
+
+/* ── Text that should stay quiet on black ─────────────────────────────── */
+.ch-x .xs-found-empty p,
+.ch-x .xd-none { color: var(--ob-soft); }
+.ch-x .xd-none { border-color: var(--ob-line); }
+
+
+/* ============================================================================
+   LinkedIn: blue and white.
+
+   LinkedIn's own surface is a light warm grey with one blue. Copying that makes
+   the Braino surface feel like an extension of the place rather than a tool
+   bolted onto it. Deliberately light where X is dark, so a glance tells you
+   which channel you are looking at before you read a word.
+   ============================================================================ */
+
+.ch-linkedin {
+  --ob-paper: #f4f2ee;      /* LinkedIn's page grey */
+  --ob-ink: #1b1f23;
+  --ob-soft: #5f6b7a;
+  --ob-coral: #0a66c2;      /* the accent slot, now LinkedIn blue */
+  --ob-line: rgba(27, 31, 35, 0.13);
+  --ob-card: #ffffff;
+  color-scheme: light;
+}
+
+.ch-linkedin .ob-top { background: rgba(244, 242, 238, 0.86); }
+.ch-linkedin .ob-mark i { background: var(--ob-coral); box-shadow: 0 0 16px rgba(10, 102, 194, 0.4); }
+.ch-linkedin .ob-progress { background: rgba(27, 31, 35, 0.09); }
+.ch-linkedin .ob-progress span { background: var(--ob-coral); }
+
+.ch-linkedin .ob-btn { background: var(--ob-ink); color: #fff; }
+.ch-linkedin .ob-btn.is-coral { background: var(--ob-coral); color: #fff; }
+.ch-linkedin .ob-btn.is-quiet { background: transparent; color: var(--ob-soft); }
+.ch-linkedin .ob-btn.is-outline { background: transparent; color: var(--ob-ink); border: 1px solid var(--ob-line); }
+.ch-linkedin .ob-foot { background: linear-gradient(to top, var(--ob-paper) 62%, rgba(244, 242, 238, 0)); }
+
+.ch-linkedin .ob-card { background: #fff; }
+.ch-linkedin .ob-card.is-on {
+  background: #fff; border-color: var(--ob-coral);
+  box-shadow: 0 0 0 1px var(--ob-coral), 0 16px 44px rgba(10, 102, 194, 0.14);
+}
+.ch-linkedin .ob-card.is-on .ob-tick { background: var(--ob-coral); border-color: var(--ob-coral); color: #fff; }
+.ch-linkedin .ob-card-name, .ch-linkedin .ob-card-note { display: block; }
+
+.ch-linkedin .ob-chip { border-color: var(--ob-line); color: var(--ob-ink); background: #fff; }
+.ch-linkedin .ob-chip.is-on { background: var(--ob-coral); border-color: var(--ob-coral); color: #fff; }
+
+.ch-linkedin .xs-field textarea,
+.ch-linkedin .xs-add input,
+.ch-linkedin .xs-hours select,
+.ch-linkedin .xs-counter button,
+.ch-linkedin .xv-mix-row select { background: #fff; color: var(--ob-ink); border-color: var(--ob-line); }
+.ch-linkedin .xs-dial input[type="range"] { accent-color: var(--ob-coral); }
+
+.ch-linkedin .xs-phrases span,
+.ch-linkedin .xs-gates span { background: rgba(10, 102, 194, 0.1); color: var(--ob-coral); }
+.ch-linkedin .xs-star.is-on { background: rgba(10, 102, 194, 0.07); }
+.ch-linkedin .xd-alert { background: rgba(10, 102, 194, 0.1); color: var(--ob-coral); }
+.ch-linkedin .xd-pill { background: rgba(27, 31, 35, 0.06); }
+.ch-linkedin .xd-yes { background: var(--ob-coral); color: #fff; }
+.ch-linkedin .xd-no { border-color: var(--ob-line); }
+.ch-linkedin .xd-card:hover { border-color: rgba(10, 102, 194, 0.45); box-shadow: 0 14px 36px rgba(27, 31, 35, 0.09); }
+.ch-linkedin .xd-health-row.is-ok i { background: rgba(1, 116, 74, 0.14); color: #01744a; }
+.ch-linkedin .xd-health-row.is-bad i { background: rgba(203, 22, 43, 0.13); color: #cb162b; }
+.ch-linkedin .xd-live i { background: #01744a; box-shadow: 0 0 0 0 rgba(1, 116, 74, .5); }
+.ch-linkedin .xd-mix-day.is-today { border-color: var(--ob-coral); background: rgba(10, 102, 194, 0.05); }
+.ch-linkedin .xd-demo { background: rgba(27, 31, 35, 0.03); }
+.ch-linkedin .xv-length.is-on { border-color: var(--ob-coral); box-shadow: 0 0 0 1px var(--ob-coral); }
+.ch-linkedin .xv-rules b { color: var(--ob-coral); }
+
+/* ============================================================================
+   Reddit: orange and black. Tokens only, ready for the adapter.
+   ============================================================================ */
+
+.ch-reddit {
+  --ob-paper: #0b0b0b;
+  --ob-ink: #e6e6e6;
+  --ob-soft: #818384;
+  --ob-coral: #ff4500;      /* Reddit orange */
+  --ob-line: rgba(255, 255, 255, 0.13);
+  --ob-card: #1a1a1b;
+  color-scheme: dark;
+}

@@ -1,0 +1,21 @@
+/* /braino-for-linkedin — the X marketing page's structure, LinkedIn's palette.
+   Only the accent and the one block X does not have (the four numbers). */
+
+.bfl { --ap-accent: #0a66c2; }
+.bfl .bfx-versus > div.is-on,
+.bfl .bfx-cards article,
+.bfl .bfx-levels > div.is-on { background: #eaf1f9; }
+.bfl .bfx-cards span,
+.bfl .bfx-versus .is-on b { color: #0a66c2; }
+.bfl .bfx-gates span { background: #eaf1f9; color: #0a66c2; }
+.bfl .apple-cta { background: #0a66c2; }
+
+.bfl-numbers { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 44px; }
+@media (max-width: 880px) { .bfl-numbers { grid-template-columns: 1fr 1fr; } }
+.bfl-numbers > div { background: #eaf1f9; border-radius: var(--ap-radius); padding: clamp(22px, 3vw, 32px); }
+.bfl-numbers b {
+  display: block; font-size: clamp(34px, 4.6vw, 52px); font-weight: 600;
+  letter-spacing: -.04em; line-height: 1; color: #0a66c2;
+  font-variant-numeric: tabular-nums;
+}
+.bfl-numbers p { margin: 12px 0 0; font-size: 14px; line-height: 1.45; color: var(--ap-ink-soft); }

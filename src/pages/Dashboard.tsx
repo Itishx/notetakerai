@@ -3615,6 +3615,11 @@ export default function Dashboard() {
               <button className="grid h-8 w-8 place-items-center rounded-lg text-[var(--sb-ink-3)] transition hover:bg-[var(--sb-panel)] hover:text-[var(--sb-ink)]">
                 <HelpCircle className="h-4 w-4" />
               </button>
+              <Link to="/channels">
+                <button className="bd-btn hidden md:inline-flex">
+                  Distribution
+                </button>
+              </Link>
               <Link to="/remote-agent">
                 <button className="bd-btn dark hidden md:inline-flex">
                   <Plus className="h-3.5 w-3.5" />

@@ -124,6 +124,10 @@ const XDashboard = lazy(() => import("./pages/XDashboard.tsx"));
 const XSetup = lazy(() => import("./pages/XSetup.tsx"));
 const XVoice = lazy(() => import("./pages/XVoice.tsx"));
 const BrainoForX = lazy(() => import("./pages/BrainoForX.tsx"));
+const BrainoForLinkedIn = lazy(() => import("./pages/BrainoForLinkedIn.tsx"));
+const LinkedInSetup = lazy(() => import("./pages/LinkedInSetup.tsx"));
+const LinkedInDashboard = lazy(() => import("./pages/LinkedInDashboard.tsx"));
+const Channels = lazy(() => import("./pages/Channels.tsx"));
 const BrainoDeckDocs = lazy(() => import("./pages/BrainoDeckDocs.tsx"));
 const DeckDocs = lazy(() => import("./pages/DeckDocs.tsx"));
 const NotFound = lazy(() => import("./pages/NotFound.tsx"));
@@ -251,6 +255,10 @@ function AppRoutes() {
         <Route path="/x/setup" element={<XSetup />} />
         <Route path="/x/voice" element={<XVoice />} />
         <Route path="/braino-for-x" element={<BrainoForX />} />
+        <Route path="/braino-for-linkedin" element={<BrainoForLinkedIn />} />
+        <Route path="/linkedin" element={<LinkedInDashboard />} />
+        <Route path="/linkedin/setup" element={<LinkedInSetup />} />
+        <Route path="/channels" element={<Channels />} />
         <Route path="/x/advanced" element={<BrainoX />} />
         <Route path="/playground" element={<Playground />} />
         <Route path="/build-braino" element={<BuildYourBraino />} />

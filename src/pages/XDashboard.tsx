@@ -16,7 +16,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import "./onboarding-flow.css";
 import "./x-dashboard.css";
-import "./x-black.css";
+import "./channel-theme.css";
 
 type QueueRow = {
   id: string;
@@ -265,7 +265,7 @@ export default function XDashboard() {
   /* ── First run ───────────────────────────────────────────────────────── */
   if (!loading && needsSetup) {
     return (
-      <div className="ob-doc xd-doc">
+      <div className="ob-doc xd-doc ch-x">
         <Header handle={handle} mode={settings?.automation_mode} />
         <main className="xd-main xd-empty">
           <p className="ob-eyebrow">Braino for X</p>
@@ -286,7 +286,7 @@ export default function XDashboard() {
   }
 
   return (
-    <div className="ob-doc xd-doc">
+    <div className="ob-doc xd-doc ch-x">
       <Header handle={handle} mode={settings?.automation_mode} />
 
       <main className="xd-main">
