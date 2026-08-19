@@ -36,15 +36,6 @@
 .ld-cta { margin-top: 30px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
 .ld-cta-note { font-size: 13px; color: var(--ap-ink-soft); }
 
-/* ── Who is Braino: the stacking story cards ──────────────────────────── */
-.ld-whois { padding-top: clamp(30px, 4vw, 56px); }
-.ld-whois .story-head { text-align: left; }
-.ld-whois .story-h2 { margin-left: 0; }
-/* The voice waveform borrowed as story art needs to sit on the panel rather
-   than carry its own tinted box. */
-.ld-whois .ld-story-demo { background: transparent; height: auto; }
-.ld-whois .ld-story-demo span { height: 46px; }
-
 /* ── What he does: the bento ──────────────────────────────────────────── */
 .ld-story { padding-block: 0; }
 .ld-bento .wc-bento { grid-template-columns: repeat(2, 1fr); }

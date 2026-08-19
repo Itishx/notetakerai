@@ -2,7 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import IomiNotch from "@/components/IomiNotch";
 import BrainoFooter from "@/components/BrainoFooter";
-import { Braino, BrainoDefs } from "@/components/BrainoChar";
+import { Braino, BrainoDefs, useTime } from "@/components/BrainoChar";
+import MiniBraino from "@/components/MiniBraino";
+import { BRAINO_WALKER_SVG } from "@/components/brainoWalkerSvg";
 import { BrainoTVProvider, BrainoTVScreen } from "@/components/BrainoTV";
 import EmotionNetwork from "@/components/EmotionNetwork";
 import HumanIntelligence from "@/components/HumanIntelligence";
@@ -48,22 +50,46 @@ const ANCHORS = [
    money, so the honest shape is a real free tier and then usage-based credits.
    Saying "free forever" and then metering would be the one thing that loses
    trust permanently. */
-/* Who he is, before what he does. Four cards that stack over each other as you
-   scroll, which is the mechanic .apple-story was built for. */
-const STORY = [
-  { ac: "ac-coral", tag: "A character", title: "He is somebody, not something.",
-    p: "A face on your screen with a name, a mood and a way of moving. Not a chat box you open when you remember it exists.",
-    art: "forms" },
-  { ac: "ac-amber", tag: "A voice", title: "You talk. He talks back.",
-    p: "In his own voice, out loud, while you keep doing what you were doing. Typing is the fallback, not the interface.",
-    art: "voice" },
-  { ac: "ac-violet", tag: "An opinion", title: "He will tell you an idea is weak.",
-    p: "An assistant that agrees with everything is a slower way of talking to yourself. He pushes back, and he is right often enough to be worth it.",
-    art: "notch" },
-  { ac: "ac-blue", tag: "A memory", title: "He knows what you did last week.",
-    p: "One memory across the browser, the Mac and everything he runs. You never explain yourself twice.",
-    art: "forms" },
+/* Who he is, before what he does. Each card holds the real mascot rig doing the
+   thing the copy describes, because "he is a character" is a claim you show
+   rather than assert. Same gallery /product-overview uses. */
+type MascotMotion = "standing" | "walking" | "dancing" | "moonwalk";
+
+const STORY: Array<{ number: string; label: string; title: string; description: string; art: "face" | "reactions" | MascotMotion }> = [
+  { number: "01", label: "A character", title: "He is somebody, not something.",
+    description: "A face on your screen with a name, a mood and a way of moving. Not a chat box you open when you remember it exists.", art: "face" },
+  { number: "02", label: "A voice", title: "You talk. He talks back.",
+    description: "In his own voice, out loud, while you carry on with what you were doing. Typing is the fallback, not the interface.", art: "standing" },
+  { number: "03", label: "He is in it", title: "He walks onto the page with you.",
+    description: "Not a mascot trapped in a widget in the corner. He is on the thing you are working on, watching the same screen.", art: "walking" },
+  { number: "04", label: "An opinion", title: "He will tell you an idea is weak.",
+    description: "An assistant that agrees with everything is a slower way of talking to yourself. He pushes back, and he is right often enough to be worth it.", art: "reactions" },
+  { number: "05", label: "A memory", title: "He knows what you did last week.",
+    description: "One memory across the browser, the Mac and everything he runs. You never have to explain yourself twice.", art: "dancing" },
+  { number: "06", label: "And yes", title: "Of course he moonwalks.",
+    description: "Hat on, feet forward, gliding backward. A product you talk to every day should be allowed a little theatre.", art: "moonwalk" },
 ];
+
+function MovingBraino({ motion }: { motion: MascotMotion }) {
+  const time = useTime();
+  const beat = time * 3.4;
+  const travel = motion === "walking" ? Math.sin(time * .72) * 28 : motion === "moonwalk" ? Math.sin(time * .58) * 34 : 0;
+  const dancing = motion === "dancing";
+  return (
+    <div className={`po-moving-braino is-${motion}`} style={{ transform: `translateX(${travel}px)` }} aria-hidden="true">
+      <Braino
+        size={230} legs gloves idle
+        walk={motion === "walking"} moonwalk={motion === "moonwalk"}
+        accessory={motion === "moonwalk" ? "fedora" : "none"}
+        expr={dancing || motion === "moonwalk" ? "mischief" : "happy"}
+        lookX={motion === "walking" ? .45 : 0} lookY={dancing ? -.2 : 0}
+        leftArm={dancing ? 42 + Math.sin(beat) * 30 : null}
+        rightArm={dancing ? -42 + Math.sin(beat) * 30 : null}
+        style={dancing ? { transform: `translateY(${-Math.abs(Math.sin(beat)) * 9}px) rotate(${Math.sin(beat) * 4}deg)`, transformOrigin: "50% 80%" } : undefined}
+      />
+    </div>
+  );
+}
 
 const FEATURES = [
   { n: "01", ac: "ac-coral", name: "Chat with whatever is in front of you",
@@ -189,29 +215,30 @@ export default function Landing() {
       </div>
 
       {/* ── 2. Who is Braino ─────────────────────────────────────────── */}
-      <section className="apple-story ld-whois" id="who-is">
-        <div className="story-head apple-reveal">
-          <p className="story-eyebrow">Who is Braino</p>
-          <h2 className="story-h2">Before what he does, <span className="tone">who he is.</span></h2>
+      <section className="apple-story ac-coral" id="who-is">
+        <div className="story-intro apple-reveal">
+          <p className="bento-eyebrow">Who is Braino?</p>
+          <h2 className="story-introh">Not a tool. <span className="tone">Somebody</span> who is already there.</h2>
+          <p className="story-introp">
+            He is not another window you open and forget. He is awake to what you are doing,
+            genuinely his own person, and quietly good at getting you through the day.
+          </p>
+          <div className="bento-walker"><MiniBraino size={56} /></div>
         </div>
-        {/* Sticky stacking: each card holds near the top and the next scrolls up
-            and takes it over, with a step-down so the pile stays visible. */}
-        <div className="story-list">
-          {STORY.map((c, i) => (
-            <article className={"story-card " + c.ac + (i % 2 ? " reverse" : "")} key={c.tag}>
-              <div className="story-copy">
-                <span className="story-tag">{c.tag}</span>
-                <h3 className="story-title">{c.title}</h3>
-                <p>{c.p}</p>
+        <div className="po-character-grid">
+          {STORY.map((form) => (
+            <article className="po-character-card apple-reveal" key={form.number}>
+              <div className={`po-character-art is-${form.art}`}>
+                {form.art === "face"
+                  ? <img src="/reactions/braino-happy.svg" alt="Braino smiling" />
+                  : form.art === "reactions"
+                    ? <><img src="/reactions/braino-idle.svg" alt="Braino idle" /><img src="/reactions/braino-happy.svg" alt="Braino happy" /><span dangerouslySetInnerHTML={{ __html: BRAINO_WALKER_SVG }} /></>
+                    : <MovingBraino motion={form.art} />}
               </div>
-              <div className="story-art">
-                {c.art === "notch" ? (
-                  <div className="story-notch"><i className="sn-eye" /><i className="sn-eye" /></div>
-                ) : c.art === "voice" ? (
-                  <div className="cap-demo cap-voice ld-story-demo"><span /><span /><span /><span /><span /><span /><span /></div>
-                ) : (
-                  <div className="story-forms"><span /><span /><span /></div>
-                )}
+              <div className="po-character-copy">
+                <span>{form.number} / {form.label}</span>
+                <h3>{form.title}</h3>
+                <p>{form.description}</p>
               </div>
             </article>
           ))}
