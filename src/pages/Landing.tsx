@@ -133,6 +133,15 @@ const DISTRA = [
   ["He shows his work", "Every decision, including the ones where he refused to post something and why. An agent you cannot audit is one you cannot trust."],
 ];
 
+/* The comparison. Read across, not down: the same question answered twice. */
+const COMPARE: Array<[string, string, string]> = [
+  ["What it is for", "Getting through your day", "Getting your product seen"],
+  ["Where he lives", "Your browser, on every page", "X and LinkedIn, with Reddit and Instagram next"],
+  ["What he does", "Chats, takes notes, sits in meetings, runs errands", "Learns your writing, posts for you, finds conversations worth entering"],
+  ["Who it is for", "Anyone with a screen", "Founders who built something nobody has seen"],
+  ["What it costs", "Free to start, then credits for what you use", "Priced on the work he does, not per seat"],
+];
+
 const WHY = [
   { h: "He is already there.", p: "No tab to open, no context to paste. He is on the page you are on and in the meeting you are in, which is most of the work before any answer happens." },
   { h: "He remembers what you did, not just what you told him.", p: "Other assistants remember what you type into them. Braino remembers the pages you were on, the meetings he sat in, and the way you actually write." },
@@ -215,7 +224,7 @@ export default function Landing() {
       </div>
 
       {/* ── 2. Who is Braino ─────────────────────────────────────────── */}
-      <section className="apple-story ac-coral" id="who-is">
+      <section className="apple-story ac-coral ld-whois" id="who-is">
         <div className="story-intro apple-reveal">
           <p className="bento-eyebrow">Who is Braino?</p>
           <h2 className="story-introh">Not a tool. <span className="tone">Somebody</span> who is already there.</h2>
@@ -245,52 +254,7 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ── 3. The two Brainos ───────────────────────────────────────── */}
-      <section className="ld-kinds apple-reveal" id="kinds">
-        <div className="ld-wrap">
-          <p className="apple-eyebrow">The two Brainos</p>
-          <h2 className="ld-h2">One character. <span className="tone">Two jobs.</span></h2>
-          <p className="ld-lede">
-            The companion is how you meet him. Distra is what you hire once you trust him.
-          </p>
-        </div>
-        <div className="apple-section">
-          <div className="apple-duo">
-            <div className="apple-panel ac-coral ld-kind">
-              <div className="apple-copy">
-                <span className="ld-kind-tag">Start free</span>
-                <h3>Braino</h3>
-                <p className="ld-kind-p">
-                  The companion. Lives in your browser and does the four things below. Free to
-                  start, then credits for what you actually use, because thinking costs real money
-                  and pretending otherwise would just mean a worse product later.
-                </p>
-                <a href={EXTENSION_DOWNLOAD_URL} className="ld-btn sm">Get Braino</a>
-              </div>
-            </div>
-            <div className="apple-panel ac-blue ld-kind">
-              <div className="apple-copy">
-                <span className="ld-kind-tag">The one you hire</span>
-                <h3>Distra</h3>
-                <p className="ld-kind-p">
-                  The distribution engine. Same character, same memory, pointed at the problem of
-                  nobody knowing your product exists. Priced on the work he does.
-                </p>
-                <Link to="/channels" className="ld-btn sm ghost">See Distra</Link>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div className="ld-wrap">
-          <p className="ld-fine">
-            There is also <strong>HERA</strong>, which is not a third Braino. It is a mode either one
-            drops into: hold a key, talk, and the words land at your cursor in whatever app you were
-            already in. It never says anything back.
-          </p>
-        </div>
-      </section>
-
-      {/* ── 4. What he does ──────────────────────────────────────────── */}
+      {/* ── 3. What he does ──────────────────────────────────────────── */}
       <section className="apple-story ld-story" id="does">
         <div className="apple-whatcan ld-bento">
           <div className="wc-head apple-reveal">
@@ -311,7 +275,52 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ── 5. Same four, different person ───────────────────────────── */}
+      {/* ── 4. The two Brainos ───────────────────────────────────────── */}
+      <section className="ld-kinds apple-reveal" id="kinds">
+        <div className="ld-wrap">
+          <p className="apple-eyebrow">Braino comes in two</p>
+          <h2 className="ld-h2">Same character. <span className="tone">Two jobs.</span></h2>
+          <p className="ld-lede">
+            The companion is how you meet him. Distra is what you hire once you trust him.
+          </p>
+
+          <div className="ld-table-wrap">
+            <table className="ld-table">
+              <thead>
+                <tr>
+                  <th />
+                  <th><b>Braino</b><span>The companion</span></th>
+                  <th className="is-paid"><b>Distra</b><span>The one you hire</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                {COMPARE.map(([row, a, bb]) => (
+                  <tr key={row}>
+                    <th scope="row">{row}</th>
+                    <td>{a}</td>
+                    <td className="is-paid">{bb}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td />
+                  <td><a href={EXTENSION_DOWNLOAD_URL} className="ld-btn sm">Get Braino</a></td>
+                  <td className="is-paid"><Link to="/channels" className="ld-btn sm ghost">See Distra</Link></td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+
+          <p className="ld-fine">
+            There is also <strong>HERA</strong>, which is not a third Braino. It is a mode either one
+            drops into: hold a key, talk, and the words land at your cursor in whatever app you were
+            already in. It never says anything back.
+          </p>
+        </div>
+      </section>
+
+      {/* ── 5. Who it is for ─────────────────────────────────────────── */}
       <section className="ld-who apple-reveal" id="who">
         <div className="ld-wrap">
           <p className="apple-eyebrow">Who it is for</p>

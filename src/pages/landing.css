@@ -115,3 +115,83 @@
 
 
 .ld.dark .ld-mock { border-color: rgba(255,255,255,.1); }
+
+
+/* ── Who is Braino: the character cards, stacking ─────────────────────────
+   Two things had to come together here. The card design is the character
+   gallery's, because it holds the real mascot rig. The MOTION is the story
+   section's: each card sticks near the top and the next scrolls up and takes it
+   over, with a step-down so the pile stays visible.
+
+   Stacking only works in a single column, and a single column of 560px cards is
+   enormous, so the card lies down instead: art on one side, copy on the other,
+   about half the height. Type comes down with it. The gallery's sizes were set
+   for a two-up grid on a page that had nothing else to say. */
+.ld-whois .po-character-grid {
+  grid-template-columns: 1fr;
+  gap: clamp(12px, 1.6vw, 18px);
+  padding-bottom: clamp(50px, 7vw, 90px);
+}
+.ld-whois .po-character-card {
+  min-height: 0;
+  grid-template-rows: none;
+  grid-template-columns: 1.05fr 1fr;
+  align-items: center;
+  border-radius: 26px;
+  position: sticky;
+  top: clamp(78px, 11vh, 118px);
+  box-shadow: 0 -10px 44px rgba(0, 0, 0, .07);
+  will-change: transform;
+}
+.ld-whois .po-character-card:nth-child(2) { top: calc(clamp(78px,11vh,118px) + 14px); }
+.ld-whois .po-character-card:nth-child(3) { top: calc(clamp(78px,11vh,118px) + 28px); }
+.ld-whois .po-character-card:nth-child(4) { top: calc(clamp(78px,11vh,118px) + 42px); }
+.ld-whois .po-character-card:nth-child(5) { top: calc(clamp(78px,11vh,118px) + 56px); }
+.ld-whois .po-character-card:nth-child(6) { top: calc(clamp(78px,11vh,118px) + 70px); }
+.ld-whois .po-character-card:nth-child(even) .po-character-art { order: 2; }
+
+.ld-whois .po-character-art { min-height: clamp(230px, 30vh, 310px); }
+.ld-whois .po-character-art > img { width: 150px; height: 150px; }
+.ld-whois .po-moving-braino { min-width: 0; min-height: 220px; }
+.ld-whois .po-moving-braino svg { max-height: 200px; width: auto; }
+.ld-whois .po-character-art.is-reactions { padding: 26px; gap: 12px; }
+.ld-whois .po-character-art.is-reactions > img,
+.ld-whois .po-character-art.is-reactions > span { max-width: 96px; }
+
+.ld-whois .po-character-copy { padding: clamp(24px, 3vw, 40px); }
+.ld-whois .po-character-copy h3 {
+  margin: 10px 0 8px;
+  font-size: clamp(23px, 2.6vw, 34px);
+  letter-spacing: -.03em; line-height: 1.08;
+}
+.ld-whois .po-character-copy p { font-size: 15.5px; line-height: 1.5; max-width: 44ch; }
+
+.ld-whois .story-intro { padding-bottom: clamp(24px, 3vw, 40px); }
+.ld-whois .story-introh { font-size: clamp(30px, 4.6vw, 54px); }
+
+@media (max-width: 850px) {
+  .ld-whois .po-character-card { position: static; grid-template-columns: 1fr; }
+  .ld-whois .po-character-card:nth-child(even) .po-character-art { order: 0; }
+}
+
+/* ── The two Brainos, as a comparison ─────────────────────────────────── */
+.ld-table-wrap { margin-top: 38px; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.ld-table { width: 100%; border-collapse: collapse; min-width: 620px; text-align: left; }
+.ld-table thead th { padding: 0 20px 18px 0; vertical-align: bottom; }
+.ld-table thead th b { display: block; font-size: clamp(21px, 2.4vw, 28px); font-weight: 600; letter-spacing: -.028em; color: var(--ap-ink); }
+.ld-table thead th span { display: block; margin-top: 4px; font-size: 12px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: var(--ap-ink-soft); }
+.ld-table thead th.is-paid b { color: var(--ap-blue); }
+.ld-table tbody th {
+  width: 24%; padding: 18px 20px 18px 0; vertical-align: top;
+  font-size: 12px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase;
+  color: var(--ap-ink-soft); border-top: 1px solid var(--ap-hairline);
+}
+.ld-table tbody td {
+  padding: 18px 20px 18px 0; vertical-align: top;
+  font-size: 15.5px; line-height: 1.5; color: var(--ap-ink);
+  border-top: 1px solid var(--ap-hairline);
+}
+.ld-table tbody td.is-paid { background: var(--ap-blue-panel); padding-inline: 20px; }
+.ld-table tfoot td { padding: 22px 20px 0 0; }
+.ld-table tfoot td.is-paid { padding-inline: 20px; }
+@media (max-width: 700px) { .ld-table tbody th { width: 30%; } }
