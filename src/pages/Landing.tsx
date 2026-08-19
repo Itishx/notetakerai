@@ -38,13 +38,16 @@ const ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 const SunIcon = () => (<svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="4" stroke="currentColor" strokeWidth="1.6"/><path d="M12 2v2M12 20v2M4 12H2M22 12h-2M5 5l1.4 1.4M17.6 17.6 19 19M19 5l-1.4 1.4M6.4 17.6 5 19" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>);
 const MoonIcon = () => (<svg viewBox="0 0 24 24" fill="none"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"/></svg>);
 
-const ANCHORS = [
-  { href: "#who-is", label: "Who he is" },
-  { href: "#does", label: "What he does" },
-  { href: "#who", label: "Who it's for" },
-  { href: "#why", label: "Why him" },
-  { href: "#pricing", label: "Pricing" },
-  { href: "#hood", label: "Under the hood" },
+const NOTCH_NAV = [
+  { to: "/#who-is", label: "Who he is", note: "the character" },
+  { to: "/#does", label: "What he does", note: "the four things" },
+  { to: "/#who", label: "Who it is for", note: "tell him what you do" },
+  { to: "/#why", label: "Why him", note: "and not ChatGPT" },
+  { to: "/#kinds", label: "The two Brainos", note: "companion and Distra" },
+  { to: "/#hood", label: "Under the hood", note: "the mind and the heart" },
+  { to: "/#pricing", label: "Pricing", note: "credits, not seats" },
+  { to: "/#faq", label: "Questions", note: "the honest answers" },
+  { to: "/distra", label: "Braino Distra", note: "you built it, nobody saw it" },
 ];
 
 /* One accent per feature, the same way the deck gives one accent per act: the
@@ -224,6 +227,18 @@ function StampLine({ words, delay = 0, tone = false, whenVisible = false }: {
   );
 }
 
+/* Which button to lead with. Read once on mount; the wrong guess costs nothing
+   because both buttons are always present, only the emphasis moves. */
+function useOS(): "mac" | "windows" | "other" {
+  const [os, setOs] = useState<"mac" | "windows" | "other">("other");
+  useEffect(() => {
+    const ua = navigator.userAgent;
+    if (/Mac|iPhone|iPad/.test(ua)) setOs("mac");
+    else if (/Win/.test(ua)) setOs("windows");
+  }, []);
+  return os;
+}
+
 function useReveal() {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -241,7 +256,7 @@ function useReveal() {
 
 export default function Landing() {
   const ref = useReveal();
-  const [who, setWho] = useState(0);
+  const os = useOS();
   const [typed, setTyped] = useState("");
   const [asking, setAsking] = useState(false);
   const [pack, setPack] = useState(1);
@@ -258,7 +273,7 @@ export default function Landing() {
   }, [dark]);
   useEffect(() => { document.title = "Braino — speak, watch it happen"; }, []);
 
-  const person = custom ?? PEOPLE[who];
+  const person = custom ?? PEOPLE[PEOPLE.length - 1];
 
   const askBraino = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
@@ -285,20 +300,13 @@ export default function Landing() {
     <BrainoTVProvider>
     <div className={"apple ld" + (dark ? " dark" : "")} ref={ref}>
       <BrainoDefs />
-      <IomiNotch />
+      <IomiNotch nav={NOTCH_NAV} />
 
-      <div className="apple-anchors">
-        <div className="apple-anchors-inner">
-          <span className="ld-anchor-name">Braino</span>
-          <div className="an-links">
-            {ANCHORS.map((a) => <a key={a.href} href={a.href}>{a.label}</a>)}
-            <a href={EXTENSION_DOWNLOAD_URL} className="apple-cta">Get Braino</a>
-          </div>
-          <button className="apple-theme-toggle" onClick={() => setDark((d) => !d)} aria-label="Toggle dark mode" title="Toggle dark mode">
-            {dark ? <SunIcon /> : <MoonIcon />}
-          </button>
-        </div>
-      </div>
+      {/* One navigation, not two. The theme toggle keeps a home of its own,
+          because it is a control rather than a destination. */}
+      <button className="ld-theme" onClick={() => setDark((d) => !d)} aria-label="Toggle dark mode" title="Toggle dark mode">
+        {dark ? <SunIcon /> : <MoonIcon />}
+      </button>
 
       {/* ── 1. Hero ──────────────────────────────────────────────────── */}
       <header className="apple-hero left ac-coral" id="top">
@@ -308,22 +316,17 @@ export default function Landing() {
           Braino is an AI that lives on your screen. You talk to him like a person, and he
           actually does the work. Free to start, in your browser.
         </p>
-        <div className="apple-hero-cta">
-          <a className="apple-dl" href={EXTENSION_DOWNLOAD_URL} download={EXTENSION_DOWNLOAD_FILENAME}>
-            Download for Chrome
-            <span>v{EXTENSION_VERSION}</span>
+        <div className="ld-cta">
+          <a href={EXTENSION_DOWNLOAD_URL} download={EXTENSION_DOWNLOAD_FILENAME} className="ld-btn">
+            Get started
           </a>
-          <small>Unzip, then Chrome → Extensions → turn on Developer mode → Load unpacked.</small>
-        </div>
-        <div className="apple-hero-links">
-          <a href="#who-is">Who is Braino</a>
-          <a href="#distra">For founders</a>
+          <a href="#does" className="ld-btn ghost">See what he does</a>
         </div>
       </header>
 
       <div className="apple-boot">
         <div className="apple-macscreen apple-reveal">
-          <BrainoTVScreen className="apple-boot-video" offer={{ src: "/dontblink?embed=1", title: "Don't Blink" }} />
+          <BrainoTVScreen className="apple-boot-video" offer={{ src: "/Braino_Final.MP4", title: "Braino, in your browser" }} />
         </div>
       </div>
 
@@ -380,27 +383,12 @@ export default function Landing() {
         <div className="ld-wrap">
           <p className="apple-eyebrow">Who it is for</p>
           <h2 className="ld-h2">Same four things. <span className="tone">Different day.</span></h2>
-          <p className="ld-lede">The four things never change. Only the week around them does. Pick one, or just tell him what you do and he will write yours.</p>
-
-          <div className="ld-pills" role="tablist">
-            {PEOPLE.map((p, i) => (
-              <button key={p.id} type="button" role="tab" aria-selected={who === i}
-                className={!custom && who === i ? "is-on" : undefined}
-                onClick={() => { setWho(i); setCustom(null); setAskErr(null); }}>
-                {p.label}
-              </button>
-            ))}
-          </div>
+          <p className="ld-lede">The four things never change. Only the week around them does. Say what you do and he will write yours.</p>
 
           <form className="ld-ask" onSubmit={askBraino}>
-            <div className="ld-ask-head">
-              <span className={"ld-ask-mascot" + (asking ? " is-thinking" : "")} aria-hidden="true">
-                <MiniBraino size={46} />
-              </span>
-              <label htmlFor="ld-who-input">
-                Or just tell him what you do. <em>Braino will tell you how you can use him.</em>
-              </label>
-            </div>
+            <label htmlFor="ld-who-input">
+              Tell Braino what you do. <em>He will tell you how you would use him.</em>
+            </label>
             <div>
               <input
                 id="ld-who-input"
@@ -409,7 +397,10 @@ export default function Landing() {
                 placeholder="a paediatric nurse on night shifts"
                 disabled={asking}
               />
-              <button type="submit" className="ld-btn sm" disabled={asking || !typed.trim()}>
+              <button type="submit" className="ld-btn sm ld-ask-btn" disabled={asking || !typed.trim()}>
+                <span className={"ld-ask-mascot" + (asking ? " is-thinking" : "")} aria-hidden="true">
+                  <MiniBraino size={30} />
+                </span>
                 {asking ? "Thinking..." : "Show me"}
               </button>
             </div>
@@ -418,7 +409,7 @@ export default function Landing() {
               <p className="ld-ask-miss">
                 Written for you just now, by him.{" "}
                 <button type="button" className="ld-ask-back" onClick={() => { setCustom(null); setTyped(""); }}>
-                  Back to the examples
+                  Back to the everyday one
                 </button>
               </p>
             )}
@@ -433,13 +424,11 @@ export default function Landing() {
 
           {/* The one handoff to the second page. Everyone gets the four things;
               only people building something have the other problem. */}
-          <div className="ld-founder-note">
-            <div>
-              <b>Building something of your own?</b>
-              <p>Then you have a second problem: you shipped it and nobody saw it. We wished distribution was as easy as vibe coding, so we made it happen.</p>
-            </div>
-            <Link to="/distra" className="ld-btn sm">Meet Braino Distra</Link>
-          </div>
+          <Link to="/distra" className="ld-founder-line">
+            <b>Founder?</b>
+            <span>Explore Braino Distra</span>
+            <ArrowUpRight size={16} aria-hidden="true" />
+          </Link>
         </div>
       </section>
 
@@ -612,15 +601,35 @@ export default function Landing() {
 
       {/* ── 10. Close ────────────────────────────────────────────────── */}
       <section className="ld-close apple-reveal">
-        <div className="ld-close-art" aria-hidden="true"><Braino size={150} expr="happy" legs gloves /></div>
         <h2 className="apple-display ld-stamp-line">
           <StampLine words={["Speak,"]} whenVisible />
           {" "}
           <StampLine words={["watch", "it", "happen."]} delay={240} tone whenVisible />
         </h2>
-        <div className="ld-cta">
-          <a href={EXTENSION_DOWNLOAD_URL} className="ld-btn">Get Braino, free</a>
+        <div className="ld-cta ld-close-cta">
+          {os === "mac" ? (
+            <>
+              <Link to="/braino?view=foundry" className="ld-btn">Get the Mac app</Link>
+              <a href={EXTENSION_DOWNLOAD_URL} download={EXTENSION_DOWNLOAD_FILENAME} className="ld-btn ghost">
+                Add to Chrome
+              </a>
+            </>
+          ) : (
+            <>
+              <a href={EXTENSION_DOWNLOAD_URL} download={EXTENSION_DOWNLOAD_FILENAME} className="ld-btn">
+                Add to Chrome
+              </a>
+              <Link to="/braino?view=foundry" className="ld-btn ghost">The Mac app</Link>
+            </>
+          )}
         </div>
+        <p className="ld-close-note">
+          {os === "mac"
+            ? "The Mac companion is on the waitlist and not downloadable yet. The browser Braino works today, on this machine, right now."
+            : os === "windows"
+              ? "You are on Windows, so the browser Braino is the one for you. The Mac companion is macOS only."
+              : "The browser Braino works anywhere Chrome does. The Mac companion is macOS only."}
+        </p>
       </section>
 
       <BrainoFooter />
