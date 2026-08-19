@@ -120,7 +120,8 @@ const EngineLog = lazy(() => import("./pages/EngineLog.tsx"));
 const Commands = lazy(() => import("./pages/Commands.tsx"));
 const Deck = lazy(() => import("./pages/Deck.tsx"));
 const BrainoDeck = lazy(() => import("./pages/BrainoDeck.tsx"));
-const Distra = lazy(() => import("./pages/Distra.tsx"));
+const DistraPage = lazy(() => import("./pages/DistraPage.tsx"));
+const DistraPlan = lazy(() => import("./pages/DistraPlan.tsx"));
 const XDashboard = lazy(() => import("./pages/XDashboard.tsx"));
 const XSetup = lazy(() => import("./pages/XSetup.tsx"));
 const XVoice = lazy(() => import("./pages/XVoice.tsx"));
@@ -282,7 +283,8 @@ function AppRoutes() {
         <Route path="/commands" element={<Commands />} />
         <Route path="/deck" element={<Deck />} />
         <Route path="/pitch" element={<Deck />} />
-        <Route path="/distra" element={<Distra />} />
+        <Route path="/distra" element={<DistraPage />} />
+        <Route path="/distra/plan" element={<DistraPlan />} />
         <Route path="/braino-deck" element={<BrainoDeck />} />
         <Route path="/everything" element={<BrainoDeck />} />
         <Route path="*" element={<NotFound />} />

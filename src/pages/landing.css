@@ -41,6 +41,19 @@
 .ld-bento .wc-bento { grid-template-columns: repeat(2, 1fr); }
 @media (max-width: 800px) { .ld-bento .wc-bento { grid-template-columns: 1fr; } }
 .ld-bento .wc-card { min-height: 300px; }
+/* One black card among three white ones read as an accident rather than a
+   hierarchy: nothing about the first feature is more important than the others.
+   All four sit on their own accent tint instead, which is how the rest of the
+   page already separates ideas. */
+.ld-bento .wc-card.wc-dark {
+  background: var(--ap-panel-bg, var(--ap-coral-panel));
+  border-color: transparent;
+  color: var(--ap-ink);
+}
+.ld-bento .wc-card { background: var(--ap-panel-bg, var(--ap-coral-panel)); border-color: transparent; }
+.ld-bento .wc-card p, .ld-bento .wc-card.wc-dark p { color: var(--ap-ink-soft); }
+.ld-mock { background: var(--ap-surface); border-color: rgba(0,0,0,.06); }
+.ld-bento .wc-card.wc-dark .ld-mock { background: var(--ap-surface); border-color: rgba(0,0,0,.06); }
 /* Sized for a real clip. Honestly empty until those exist. */
 .ld-mock {
   border-radius: 14px; min-height: 120px;
@@ -119,45 +132,21 @@
 .ld.dark .ld-mock { border-color: rgba(255,255,255,.1); }
 
 
-/* ── Who is Braino: the character cards, stacking ─────────────────────────
-   The card design is the character gallery's, because it holds the real mascot
-   rig. The MOTION is the story section's: each card sticks near the top and the
-   next scrolls up and takes it over, with a step-down so the pile stays visible.
-
-   Laying the card down to save height made it crammed: the mascot needs room to
-   stand up in and the copy needs room to breathe. So it keeps the gallery's own
-   proportions, art above copy, and simply stacks. */
-.ld-whois .po-character-grid {
-  grid-template-columns: 1fr;
-  gap: clamp(14px, 1.8vw, 22px);
-  padding-bottom: clamp(60px, 8vw, 110px);
-}
-.ld-whois .po-character-card {
-  min-height: clamp(460px, 62vh, 600px);
-  grid-template-rows: minmax(300px, 1fr) auto;
-  border-radius: 30px;
-  position: sticky;
-  top: clamp(76px, 10vh, 112px);
-  box-shadow: 0 -12px 50px rgba(0, 0, 0, .09);
-  will-change: transform;
-}
-.ld-whois .po-character-card:nth-child(2) { top: calc(clamp(76px,10vh,112px) + 14px); }
-.ld-whois .po-character-card:nth-child(3) { top: calc(clamp(76px,10vh,112px) + 28px); }
-.ld-whois .po-character-card:nth-child(4) { top: calc(clamp(76px,10vh,112px) + 42px); }
-.ld-whois .po-character-card:nth-child(5) { top: calc(clamp(76px,10vh,112px) + 56px); }
-.ld-whois .po-character-card:nth-child(6) { top: calc(clamp(76px,10vh,112px) + 70px); }
-
-/* Copy sits in a column so a full-width card does not stretch a line of body
-   text across 1000px, which is unreadable however good the type is. */
-.ld-whois .po-character-copy { padding: clamp(26px, 3vw, 38px) clamp(28px, 3.4vw, 46px) clamp(32px, 3.6vw, 44px); }
-.ld-whois .po-character-copy h3 { font-size: clamp(28px, 3.2vw, 44px); margin: 12px 0 10px; }
-.ld-whois .po-character-copy p { max-width: 52ch; }
-
-.ld-whois .story-intro { padding-bottom: clamp(26px, 3vw, 44px); }
-
-@media (max-width: 850px) {
-  .ld-whois .po-character-card { position: static; min-height: 0; }
-}
+/* ── Who is Braino: the character gallery ─────────────────────────────────
+   Two up, as the gallery was designed. Stacking needs a single column, and a
+   single column of these cards reads as one long corridor rather than a set of
+   forms you can take in at once. Seeing them side by side is the point: he is
+   one character in several shapes. */
+.ld-whois { padding-top: clamp(26px, 3.5vw, 46px); }
+.ld-whois .po-character-grid { padding-bottom: clamp(50px, 6vw, 80px); }
+.ld-whois .po-character-card { min-height: clamp(420px, 52vh, 520px); border-radius: 28px; }
+.ld-whois .po-character-copy { padding: clamp(22px, 2.6vw, 32px) clamp(24px, 2.8vw, 36px) clamp(26px, 3vw, 36px); }
+.ld-whois .po-character-copy h3 { font-size: clamp(24px, 2.6vw, 34px); margin: 11px 0 9px; }
+.ld-whois .po-character-copy p { font-size: 15.5px; max-width: 40ch; }
+.ld-whois .po-character-art { min-height: clamp(230px, 28vh, 300px); }
+.ld-whois .po-moving-braino { min-width: 0; min-height: 220px; }
+.ld-whois .po-moving-braino svg { max-height: 210px; width: auto; }
+.ld-whois .story-intro { padding-bottom: clamp(20px, 2.4vw, 32px); }
 
 /* ── The hero headline stamps in ──────────────────────────────────────────
    Lifted from /notch-teaser: the word appears at full size in place and flashes
@@ -232,3 +221,15 @@
   font-size: 12px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
   vertical-align: middle;
 }
+
+/* ── The handoff to the second page ───────────────────────────────────── */
+.ld-founder-note {
+  margin-top: clamp(30px, 4vw, 46px);
+  padding: clamp(22px, 2.6vw, 30px) clamp(24px, 3vw, 34px);
+  border-radius: 22px; background: var(--ap-blue-panel);
+  display: flex; align-items: center; gap: 22px; flex-wrap: wrap;
+}
+.ld-founder-note b { display: block; font-size: clamp(17px, 1.9vw, 21px); font-weight: 600; letter-spacing: -.02em; margin-bottom: 6px; color: var(--ap-ink); }
+.ld-founder-note p { margin: 0; font-size: 15px; line-height: 1.5; color: var(--ap-ink-soft); max-width: 56ch; }
+.ld-founder-note .ld-btn { margin-left: auto; flex: 0 0 auto; background: var(--ap-blue); color: #fff; }
+@media (max-width: 640px) { .ld-founder-note .ld-btn { margin-left: 0; } }

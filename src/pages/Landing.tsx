@@ -43,7 +43,6 @@ const ANCHORS = [
   { href: "#does", label: "What he does" },
   { href: "#who", label: "Who it's for" },
   { href: "#why", label: "Why him" },
-  { href: "#distra", label: "For founders" },
   { href: "#hood", label: "Under the hood" },
 ];
 
@@ -122,30 +121,6 @@ const PEOPLE = [
       ["Meetings", "Investor calls and customer calls. Notes after, and a list of what you promised."],
       ["Delegate", "Book the flight, buy the domain, chase the renewal you keep forgetting."],
     ] },
-  { id: "job", label: "Job hunting",
-    line: "Forty applications, and every one wants something slightly different.",
-    rows: [
-      ["Chat with the page", "The job post you are looking at, read properly. What they actually want, and what they are quietly asking for."],
-      ["Notes from audio", "A founder's two hour podcast before you interview there, in the five minutes you have."],
-      ["Meetings", "The interview itself. What you said you would send, and who you spoke to."],
-      ["Delegate", "Tailor the same CV forty times, fill the portal, track who has replied."],
-    ] },
-  { id: "dev", label: "A developer",
-    line: "Twelve tabs of documentation and one bug that makes no sense.",
-    rows: [
-      ["Chat with the page", "The docs page, the stack trace, the pull request. He is on it already, so no pasting code into another window."],
-      ["Notes from audio", "A conference talk you were going to watch eventually, reduced to the part that applies to you."],
-      ["Meetings", "Standups and design reviews, with the decisions written down instead of relitigated next week."],
-      ["Delegate", "Open the ticket, chase the review, fill in the form nobody wants to fill in."],
-    ] },
-  { id: "creator", label: "A creator",
-    line: "The hard part was never making it. It was everything after.",
-    rows: [
-      ["Chat with the page", "The article you are researching, the thread you want to answer, the brief you were sent."],
-      ["Notes from audio", "Your own two hour recording, turned into the outline you were going to write from anyway."],
-      ["Meetings", "Client and sponsor calls, with what you agreed to written down."],
-      ["Delegate", "Upload it, schedule it, rename it, find the file from March."],
-    ] },
   { id: "everyone", label: "Everyone else",
     line: "Thirty small frictions a day that nobody should be doing.",
     rows: [
@@ -154,13 +129,6 @@ const PEOPLE = [
       ["Meetings", "The standup you zoned out in."],
       ["Delegate", "The booking, the form, the thing in seven tabs."],
     ] },
-];
-
-const DISTRA = [
-  ["He learns how you write", "By reading two hundred of your own posts, ranked by what actually worked. Not by asking you to describe your voice in a box."],
-  ["He writes and posts", "From what you actually shipped that week, at the hours your own numbers say, in your voice rather than a marketing one."],
-  ["He finds the conversations", "The posts worth replying to, with the reply already drafted. You press send, because that is the part that should stay human."],
-  ["He shows his work", "Every decision, including the ones where he refused to post something and why. An agent you cannot audit is one you cannot trust."],
 ];
 
 /* The comparison. Read across, not down: the same question answered twice. */
@@ -375,7 +343,7 @@ export default function Landing() {
         <div className="ld-wrap">
           <p className="apple-eyebrow">Who it is for</p>
           <h2 className="ld-h2">Same four things. <span className="tone">Different day.</span></h2>
-          <p className="ld-lede">One product. Six ways in, and the four things never change. Pick whichever sounds most like your week.</p>
+          <p className="ld-lede">The four things never change. Only the week around them does. Pick one, or just tell him what you do and he will write yours.</p>
 
           <div className="ld-pills" role="tablist">
             {PEOPLE.map((p, i) => (
@@ -417,6 +385,16 @@ export default function Landing() {
             {person.rows.map(([k, v]) => (
               <div key={k}><b>{k}</b><p>{v}</p></div>
             ))}
+          </div>
+
+          {/* The one handoff to the second page. Everyone gets the four things;
+              only people building something have the other problem. */}
+          <div className="ld-founder-note">
+            <div>
+              <b>Building something of your own?</b>
+              <p>Then you have a second problem: you shipped it and nobody saw it. That one has its own Braino.</p>
+            </div>
+            <Link to="/distra" className="ld-btn sm">Meet Distra</Link>
           </div>
         </div>
       </section>
@@ -463,7 +441,7 @@ export default function Landing() {
                 <tr>
                   <td />
                   <td><a href={EXTENSION_DOWNLOAD_URL} className="ld-btn sm">Get Braino</a></td>
-                  <td className="is-paid"><Link to="/channels" className="ld-btn sm ghost">See Distra</Link></td>
+                  <td className="is-paid"><Link to="/distra" className="ld-btn sm ghost">See Distra</Link></td>
                 </tr>
               </tfoot>
             </table>
@@ -477,34 +455,7 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ── 7. The turn ──────────────────────────────────────────────── */}
-      <div className="apple-statement apple-reveal ac-blue ld-turn">
-        That is Braino for anyone. <span className="tone">If you are building something, he has a second job.</span>
-      </div>
-
-      {/* ── 8. Distra ────────────────────────────────────────────────── */}
-      <section className="apple-section apple-reveal" id="distra">
-        <div className="apple-panel ac-blue ld-distra">
-          <div className="apple-copy">
-            <p className="apple-eyebrow">For founders</p>
-            <h2 className="ld-h2">You built it.<br /><span className="tone">Nobody saw it.</span></h2>
-            <p className="ld-lede">
-              Building got cheap. Being seen did not. Every AI company sells you the building half.
-              Nobody sells you the being seen, and posting consistently in your own voice is the
-              seventh job you are already doing badly.
-            </p>
-          </div>
-          <div className="ld-distra-grid">
-            {DISTRA.map(([h, p]) => <div key={h}><b>{h}</b><p>{p}</p></div>)}
-          </div>
-          <div className="ld-cta">
-            <Link to="/channels" className="ld-btn ghost">See how it works</Link>
-            <span className="ld-cta-note">On X and LinkedIn now. Reddit and Instagram next.</span>
-          </div>
-        </div>
-      </section>
-
-      {/* ── 9. Under the hood ────────────────────────────────────────── */}
+      {/* ── 7. Under the hood ────────────────────────────────────────── */}
       <section className="apple-blog howworks" id="hood">
         <div className="hw-title apple-reveal">
           <p className="be" style={{ color: "var(--ap-violet)" }}>Under the hood</p>
@@ -537,7 +488,7 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ── 10. Close ────────────────────────────────────────────────── */}
+      {/* ── 8. Close ─────────────────────────────────────────────────── */}
       <section className="ld-close apple-reveal">
         <div className="ld-close-art" aria-hidden="true"><Braino size={150} expr="happy" legs gloves /></div>
         <h2 className="apple-display ld-stamp-line">

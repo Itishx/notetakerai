@@ -1,10 +1,12 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import "../styles/apple.css";
-import "./distra.css";
+import "./distra-plan.css";
 
 /* ============================================================================
-   /distra — the Distra build plan as a page.
+   /distra/plan — the Distra build plan as a page.
+   The product page for Distra lives at /distra; this is the working document
+   behind it, kept public because the honesty is the point.
 
    Distra is engine two of Braino Foundry: the distribution engine. This page is
    the plan, not the product. Everything here maps to Distra.md at the repo
