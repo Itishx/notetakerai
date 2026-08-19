@@ -36,35 +36,6 @@
 .ld-cta { margin-top: 30px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
 .ld-cta-note { font-size: 13px; color: var(--ap-ink-soft); }
 
-/* ── What he does: the bento ────────────────────────────────────────────
-   This held four big empty rectangles waiting for clips that do not exist,
-   which is what made it look broken rather than pending. The copy carries the
-   card now: number, title, sentence. Real footage can come back later as a
-   band above the text without any of this changing. */
-.ld-story { padding-block: 0; }
-.ld-bento .wc-bento { grid-template-columns: repeat(2, 1fr); }
-@media (max-width: 800px) { .ld-bento .wc-bento { grid-template-columns: 1fr; } }
-.ld-bento .wc-card {
-  min-height: 0;
-  gap: 0;
-  padding: clamp(26px, 3.2vw, 40px);
-  background: var(--ap-panel-bg, var(--ap-coral-panel));
-  border-color: transparent;
-  color: var(--ap-ink);
-}
-.ld-bento .wc-card .ld-feat-n {
-  display: block; font-size: 12px; font-weight: 700; letter-spacing: .12em;
-  color: var(--ap-accent); margin-bottom: 14px;
-}
-.ld-bento .wc-card h4 {
-  font-size: clamp(21px, 2.3vw, 28px); font-weight: 600;
-  letter-spacing: -.026em; line-height: 1.15; margin: 0 0 10px;
-}
-.ld-bento .wc-card p {
-  margin: 0; font-size: 15.5px; line-height: 1.55;
-  color: var(--ap-ink-soft); font-weight: 400; max-width: 40ch;
-}
-
 /* ── Who it is for ────────────────────────────────────────────────────── */
 .ld-who { padding: clamp(64px, 9vw, 120px) 0; }
 .ld-pills { display: flex; flex-wrap: wrap; gap: 9px; margin: 34px 0 24px; }
@@ -227,11 +198,22 @@
    Keyword matched in the browser rather than sent to a model: instant, free,
    and an honest "nothing matched exactly" beats a confident wrong answer. */
 .ld-ask { margin: 0 0 26px; }
+.ld-ask-head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+/* MiniBraino draws wider than its nominal size, so the box has to reserve the
+   real width or he stands on top of the sentence. */
+.ld-ask-mascot { flex: 0 0 58px; width: 58px; height: 48px; display: grid; place-items: center; }
+/* He nods while he is working it out, so the wait has something to look at
+   other than a disabled button. */
+.ld-ask-mascot.is-thinking { animation: ldAskNod 1.1s ease-in-out infinite; }
+@keyframes ldAskNod { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+@media (prefers-reduced-motion: reduce) { .ld-ask-mascot.is-thinking { animation: none; } }
+
 .ld-ask label {
-  display: block; margin-bottom: 9px;
-  font-size: 12px; font-weight: 700; letter-spacing: .07em;
-  text-transform: uppercase; color: var(--ap-ink-soft);
+  display: block;
+  font-size: clamp(15px, 1.6vw, 17px); font-weight: 600; letter-spacing: -.01em;
+  color: var(--ap-ink); line-height: 1.4;
 }
+.ld-ask label em { font-style: normal; font-weight: 400; color: var(--ap-ink-soft); }
 .ld-ask > div { display: flex; gap: 9px; flex-wrap: wrap; }
 .ld-ask input {
   flex: 1 1 260px; min-width: 0;
@@ -270,3 +252,78 @@
 .ld-founder-note p { margin: 0; font-size: 15px; line-height: 1.5; color: var(--ap-ink-soft); max-width: 56ch; }
 .ld-founder-note .ld-btn { margin-left: auto; flex: 0 0 auto; background: var(--ap-blue); color: #fff; }
 @media (max-width: 640px) { .ld-founder-note .ld-btn { margin-left: 0; } }
+
+/* ── Pricing: a real free tier, then a dial ───────────────────────────────
+   The dial is the honest shape for a product whose cost is per use. A slider
+   with four snap points rather than a free-form number, because nobody wants to
+   guess how many credits a month of meetings costs; they want to see the four
+   answers and pick the one that sounds like them. */
+.ld-pricing { padding: clamp(56px, 8vw, 100px) 0; }
+.ld-price-grid { display: grid; grid-template-columns: .8fr 1.2fr; gap: 14px; margin-top: 38px; }
+@media (max-width: 880px) { .ld-price-grid { grid-template-columns: 1fr; } }
+
+.ld-price-free {
+  border-radius: var(--ap-radius); padding: clamp(26px, 3vw, 36px);
+  background: var(--ap-coral-panel); display: flex; flex-direction: column;
+}
+.ld-price-free > span { font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--ap-coral); }
+.ld-price-free b { display: block; margin: 12px 0 12px; font-size: clamp(40px, 5vw, 60px); font-weight: 600; letter-spacing: -.045em; line-height: 1; color: var(--ap-ink); }
+.ld-price-free p { margin: 0 0 24px; font-size: 15px; line-height: 1.55; color: var(--ap-ink-soft); }
+.ld-price-free .ld-btn { margin-top: auto; align-self: flex-start; }
+
+.ld-price-pick {
+  border-radius: var(--ap-radius); padding: clamp(26px, 3vw, 36px);
+  background: var(--ap-surface); border: 1px solid var(--ap-hairline);
+}
+.ld-price-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; flex-wrap: wrap; }
+.ld-price-head > span { font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--ap-ink-soft); }
+.ld-price-amount { display: flex; align-items: baseline; gap: 8px; }
+.ld-price-amount b { font-size: clamp(38px, 4.6vw, 56px); font-weight: 600; letter-spacing: -.045em; line-height: 1; color: var(--ap-ink); font-variant-numeric: tabular-nums; }
+.ld-price-amount em { font-style: normal; font-size: 14px; color: var(--ap-ink-soft); }
+
+.ld-price-slider { width: 100%; margin: 26px 0 8px; accent-color: var(--ap-accent); cursor: pointer; }
+.ld-price-ticks { display: flex; justify-content: space-between; gap: 6px; }
+.ld-price-ticks button {
+  border: 0; background: none; padding: 4px 6px; cursor: pointer;
+  font: inherit; font-size: 12.5px; font-weight: 600; color: var(--ap-ink-soft);
+  font-variant-numeric: tabular-nums;
+}
+.ld-price-ticks button.is-on { color: var(--ap-accent); }
+.ld-price-blurb { margin: 16px 0 0; font-size: 15px; line-height: 1.5; color: var(--ap-ink); }
+
+.ld-spend { margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--ap-hairline); }
+.ld-spend > b { display: block; font-size: 11px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; color: var(--ap-ink-soft); margin-bottom: 12px; }
+.ld-spend > div { display: flex; justify-content: space-between; gap: 18px; padding: 8px 0; font-size: 14.5px; }
+.ld-spend em { font-style: normal; color: var(--ap-ink-soft); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* ── FAQ ──────────────────────────────────────────────────────────────── */
+.ld-faq-sec { padding: clamp(56px, 8vw, 100px) 0; }
+.ld-faq { margin-top: 34px; }
+.ld-faq > div { border-top: 1px solid var(--ap-hairline); }
+.ld-faq > div:last-child { border-bottom: 1px solid var(--ap-hairline); }
+.ld-faq button {
+  width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 20px;
+  padding: 22px 0; border: 0; background: none; cursor: pointer; text-align: left;
+  font: inherit; font-size: clamp(17px, 1.9vw, 21px); font-weight: 600;
+  letter-spacing: -.018em; color: var(--ap-ink);
+}
+.ld-faq button:hover { color: var(--ap-accent); }
+.ld-faq button i {
+  position: relative; flex: 0 0 auto; width: 18px; height: 18px;
+}
+.ld-faq button i::before, .ld-faq button i::after {
+  content: ""; position: absolute; inset: 0; margin: auto;
+  background: var(--ap-accent); border-radius: 2px;
+  transition: transform .3s cubic-bezier(.16,1,.3,1);
+}
+.ld-faq button i::before { width: 100%; height: 2px; }
+.ld-faq button i::after { width: 2px; height: 100%; }
+.ld-faq .is-open button i::after { transform: scaleY(0); }
+.ld-faq-a { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .38s cubic-bezier(.16,1,.3,1); }
+.ld-faq .is-open .ld-faq-a { grid-template-rows: 1fr; }
+.ld-faq-a p {
+  overflow: hidden; margin: 0;
+  font-size: 15.5px; line-height: 1.6; color: var(--ap-ink-soft); max-width: 72ch;
+}
+.ld-faq .is-open .ld-faq-a p { padding-bottom: 24px; }
+@media (prefers-reduced-motion: reduce) { .ld-faq-a { transition: none; } }

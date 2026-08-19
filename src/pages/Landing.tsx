@@ -43,6 +43,7 @@ const ANCHORS = [
   { href: "#does", label: "What he does" },
   { href: "#who", label: "Who it's for" },
   { href: "#why", label: "Why him" },
+  { href: "#pricing", label: "Pricing" },
   { href: "#hood", label: "Under the hood" },
 ];
 
@@ -140,6 +141,43 @@ const COMPARE: Array<[string, string, string]> = [
   ["What it costs", "Free to start, then credits for what you use", "Priced on the work he does, not per seat"],
 ];
 
+/* Credits, not seats. Thinking costs real money per use, so the only honest
+   shape is a real free tier and then paying for what you actually spend. The
+   numbers are indicative and the page says so: pretending they are settled and
+   then changing them is how you lose the people who believed you first. */
+const PACKS = [
+  { credits: 500, price: 9, blurb: "A few questions a day, a couple of lectures a week." },
+  { credits: 1500, price: 20, blurb: "Daily use. Meetings, notes and the odd delegated job." },
+  { credits: 5000, price: 50, blurb: "He is in most of your day, most days." },
+  { credits: 15000, price: 120, blurb: "Everything, plus Braino Distra running your distribution." },
+];
+
+const SPEND = [
+  ["Ask about the page you are on", "1 credit"],
+  ["Turn an hour of audio into notes", "15 credits"],
+  ["Sit in a meeting and write it up", "20 credits"],
+  ["Do a job in your browser", "10 credits"],
+];
+
+const FAQ = [
+  { q: "Is it actually free?",
+    a: "There is a real free tier, not a trial. You get a monthly allowance of credits and when it runs out he stops rather than quietly billing you. If you want more, you buy more." },
+  { q: "Why credits and not a flat subscription?",
+    a: "Because thinking costs real money every single time, and a flat price only works if most people barely use the thing. We would rather charge for what you spend than build a product that quietly hopes you forget about it." },
+  { q: "What can he actually see?",
+    a: "The page you are on, when you ask. Meetings you start him in. Nothing in the background, nothing while you are not looking, and never another tab you did not point him at." },
+  { q: "Does he post or send anything on his own?",
+    a: "Not without you. Money, direct messages, deleting anything, and anything published for the first time all stop and ask, at every level of autonomy. He decides how. You decide whether." },
+  { q: "Is my data used to train anything?",
+    a: "No. What he learns about you stays yours and stays in your account, which is also the only way the memory is worth anything." },
+  { q: "Does it work on Windows?",
+    a: "The browser Braino works anywhere Chrome does. The Mac companion is macOS only for now, because doing it properly means going deep into one operating system rather than shallow into three." },
+  { q: "What happens to my meeting recordings?",
+    a: "They stay yours. He is invisible to the participant list and to screen share, there is no bot in the call, and you can delete a recording and its notes together." },
+  { q: "Who is building this?",
+    a: "One person, so far. That is why the honest sections on this site exist: it is faster to tell you what is not built than to have you find out." },
+];
+
 const WHY = [
   { h: "He is already there.", p: "No tab to open, no context to paste. He is on the page you are on and in the meeting you are in, which is most of the work before any answer happens." },
   { h: "He remembers what you did, not just what you told him.", p: "Other assistants remember what you type into them. Braino remembers the pages you were on, the meetings he sat in, and the way you actually write." },
@@ -206,6 +244,8 @@ export default function Landing() {
   const [who, setWho] = useState(0);
   const [typed, setTyped] = useState("");
   const [asking, setAsking] = useState(false);
+  const [pack, setPack] = useState(1);
+  const [openFaq, setOpenFaq] = useState<number | null>(0);
   const [askErr, setAskErr] = useState<string | null>(null);
   // A generated column sits alongside the presets rather than replacing one, so
   // the pills stay clickable and going back is one tap.
@@ -319,19 +359,17 @@ export default function Landing() {
       </section>
 
       {/* ── 3. What he does ──────────────────────────────────────────── */}
-      <section className="apple-story ld-story" id="does">
-        <div className="apple-whatcan ld-bento">
-          <div className="wc-head apple-reveal">
-            <h2>What can he do?</h2>
-            <p>Four things, every day. This is the free Braino, the one that lives in your browser.</p>
-          </div>
-          <div className="wc-bento apple-reveal">
-            {FEATURES.map((f, i) => (
-              <article className={"wc-card " + f.ac} key={f.n}>
-                <span className="ld-feat-n">{f.n}</span>
-                <h4>{f.name}</h4>
-                <p>{f.line}</p>
-              </article>
+      <section className="ld-why-sec apple-reveal" id="does">
+        <div className="ld-wrap">
+          <p className="apple-eyebrow">What he does</p>
+          <h2 className="ld-h2">Four things, <span className="tone">every day.</span></h2>
+          <p className="ld-lede">
+            This is the free Braino, the one that lives in your browser. No setup beyond installing
+            him.
+          </p>
+          <div className="ld-why">
+            {FEATURES.map((f) => (
+              <div key={f.n}><b>{f.name}</b><p>{f.line}</p></div>
             ))}
           </div>
         </div>
@@ -355,7 +393,14 @@ export default function Landing() {
           </div>
 
           <form className="ld-ask" onSubmit={askBraino}>
-            <label htmlFor="ld-who-input">Or just tell him what you do</label>
+            <div className="ld-ask-head">
+              <span className={"ld-ask-mascot" + (asking ? " is-thinking" : "")} aria-hidden="true">
+                <MiniBraino size={46} />
+              </span>
+              <label htmlFor="ld-who-input">
+                Or just tell him what you do. <em>Braino will tell you how you can use him.</em>
+              </label>
+            </div>
             <div>
               <input
                 id="ld-who-input"
@@ -487,7 +532,85 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ── 8. Close ─────────────────────────────────────────────────── */}
+      {/* ── 8. Pricing ───────────────────────────────────────────────── */}
+      <section className="ld-pricing apple-reveal" id="pricing">
+        <div className="ld-wrap">
+          <p className="apple-eyebrow">Pricing</p>
+          <h2 className="ld-h2">You pay for what <span className="tone">you actually use.</span></h2>
+          <p className="ld-lede">
+            Not per seat, not per month for a thing you opened twice. Credits, spent when he does
+            something, with a real free tier underneath.
+          </p>
+
+          <div className="ld-price-grid">
+            <div className="ld-price-free">
+              <span>Free</span>
+              <b>$0</b>
+              <p>A monthly allowance of credits, the full character, the full memory. When it runs out he stops rather than quietly billing you.</p>
+              <a href={EXTENSION_DOWNLOAD_URL} className="ld-btn sm">Start free</a>
+            </div>
+
+            <div className="ld-price-pick">
+              <div className="ld-price-head">
+                <span>Top up when you need more</span>
+                <div className="ld-price-amount">
+                  <b>${PACKS[pack].price}</b>
+                  <em>/ {PACKS[pack].credits.toLocaleString()} credits</em>
+                </div>
+              </div>
+              <input
+                className="ld-price-slider"
+                type="range" min={0} max={PACKS.length - 1} step={1} value={pack}
+                onChange={(e) => setPack(Number(e.target.value))}
+                aria-label="How many credits"
+              />
+              <div className="ld-price-ticks">
+                {PACKS.map((p, i) => (
+                  <button key={p.credits} type="button"
+                    className={i === pack ? "is-on" : undefined}
+                    onClick={() => setPack(i)}>
+                    {p.credits >= 1000 ? `${p.credits / 1000}k` : p.credits}
+                  </button>
+                ))}
+              </div>
+              <p className="ld-price-blurb">{PACKS[pack].blurb}</p>
+
+              <div className="ld-spend">
+                <b>What a credit buys</b>
+                {SPEND.map(([what, cost]) => (
+                  <div key={what}><span>{what}</span><em>{cost}</em></div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <p className="ld-fine">
+            These numbers are indicative and not settled. Publishing a price we have not tested and
+            then quietly changing it is how you lose the people who believed you first, so this says
+            so instead.
+          </p>
+        </div>
+      </section>
+
+      {/* ── 9. FAQ ───────────────────────────────────────────────────── */}
+      <section className="ld-faq-sec apple-reveal" id="faq">
+        <div className="ld-wrap">
+          <p className="apple-eyebrow">Questions</p>
+          <h2 className="ld-h2">The things people <span className="tone">actually ask.</span></h2>
+          <div className="ld-faq">
+            {FAQ.map((f, i) => (
+              <div key={f.q} className={openFaq === i ? "is-open" : undefined}>
+                <button type="button" onClick={() => setOpenFaq(openFaq === i ? null : i)} aria-expanded={openFaq === i}>
+                  {f.q}<i aria-hidden="true" />
+                </button>
+                <div className="ld-faq-a"><p>{f.a}</p></div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── 10. Close ────────────────────────────────────────────────── */}
       <section className="ld-close apple-reveal">
         <div className="ld-close-art" aria-hidden="true"><Braino size={150} expr="happy" legs gloves /></div>
         <h2 className="apple-display ld-stamp-line">
