@@ -392,9 +392,9 @@ export default function Landing() {
           <div className="ld-founder-note">
             <div>
               <b>Building something of your own?</b>
-              <p>Then you have a second problem: you shipped it and nobody saw it. That one has its own Braino.</p>
+              <p>Then you have a second problem: you shipped it and nobody saw it. We wished distribution was as easy as vibe coding, so we made it happen.</p>
             </div>
-            <Link to="/distra" className="ld-btn sm">Meet Distra</Link>
+            <Link to="/distra" className="ld-btn sm">Meet Braino Distra</Link>
           </div>
         </div>
       </section>
@@ -416,7 +416,7 @@ export default function Landing() {
           <p className="apple-eyebrow">Braino comes in two</p>
           <h2 className="ld-h2">Same character. <span className="tone">Two jobs.</span></h2>
           <p className="ld-lede">
-            The companion is how you meet him. Distra is what you hire once you trust him.
+            The companion is how you meet him. Braino Distra is what you hire once you trust him.
           </p>
 
           <div className="ld-table-wrap">
@@ -425,7 +425,7 @@ export default function Landing() {
                 <tr>
                   <th />
                   <th><b>Braino</b><span>The companion</span></th>
-                  <th className="is-paid"><b>Distra</b><span>The one you hire</span></th>
+                  <th className="is-paid"><b>Braino Distra</b><span>The one you hire</span></th>
                 </tr>
               </thead>
               <tbody>

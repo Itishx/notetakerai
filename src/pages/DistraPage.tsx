@@ -9,7 +9,7 @@ import "./landing.css";
 import "./distra-page.css";
 
 /* ============================================================================
-   /distra — the second of the two pages that matter.
+   /distra — Braino Distra. The second of the two pages that matter.
 
    The landing page is the companion: what Braino does for anyone, any day. This
    one is the other half of the company, and it exists separately because it
@@ -75,7 +75,7 @@ export default function DistraPage() {
   useEffect(() => {
     try { localStorage.setItem("braino-apple-theme", dark ? "dark" : "light"); } catch { /* ignore */ }
   }, [dark]);
-  useEffect(() => { document.title = "Distra — you built it, nobody saw it"; }, []);
+  useEffect(() => { document.title = "Braino Distra — we wished distribution was as easy as vibe coding"; }, []);
 
   return (
     <div className={"apple ld dp" + (dark ? " dark" : "")} ref={ref}>
@@ -97,11 +97,14 @@ export default function DistraPage() {
 
       {/* ── Hero ─────────────────────────────────────────────────────── */}
       <header className="apple-hero left ac-blue" id="top">
-        <p className="apple-eyebrow">Distra</p>
+        <p className="apple-eyebrow">Braino Distra</p>
         <h1 className="apple-display">You built it.<br /><span className="tone">Nobody saw it.</span></h1>
         <p className="apple-subhead">
-          The other Braino. Same character, same memory, pointed at the one problem every solo
-          founder has and nobody sells a fix for.
+          We wished distribution was as easy as vibe coding. So we made it happen.
+        </p>
+        <p className="dp-sub2">
+          Braino Distra is the same character who has been on your screen all week, pointed at the
+          one problem every solo founder has and nobody sells a fix for.
         </p>
         <div className="ld-cta">
           <Link to="/channels" className="ld-btn">Open Distra</Link>
@@ -217,7 +220,7 @@ export default function DistraPage() {
             <li><b>It will not make you go viral.</b> It makes you consistent, in your own voice, without the job feeling like a job. Only one of those is a promise anyone can keep.</li>
             <li><b>He never sends a reply or a comment himself.</b> Automated engagement is what gets accounts restricted, so he judges and drafts and you press the key.</li>
             <li><b>Some numbers are genuinely unavailable.</b> LinkedIn analytics need partner access we do not have. The dashboard shows a dash and says why rather than inventing a figure.</li>
-            <li><b>Distra's first customer is Braino.</b> It runs this company's own distribution before it runs yours.</li>
+            <li><b>Braino Distra's first customer is Braino.</b> It runs this company's own distribution before it runs yours.</li>
           </ul>
         </div>
       </section>
