@@ -36,12 +36,12 @@ const SunIcon = () => (<svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="
 const MoonIcon = () => (<svg viewBox="0 0 24 24" fill="none"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"/></svg>);
 
 const ANCHORS = [
+  { href: "#why", label: "Why him" },
   { href: "#who-is", label: "Who he is" },
   { href: "#does", label: "What he does" },
   { href: "#who", label: "Who it's for" },
   { href: "#distra", label: "For founders" },
   { href: "#hood", label: "Under the hood" },
-  { href: "#why", label: "Why him" },
 ];
 
 /* One accent per feature, the same way the deck gives one accent per act: the
@@ -149,6 +149,26 @@ const WHY = [
   { h: "He has an opinion.", p: "He will tell you an idea is weak. An assistant that agrees with everything is just a slower way of talking to yourself." },
 ];
 
+function StampLine({ words, delay = 0, tone = false }: { words: string[]; delay?: number; tone?: boolean }) {
+  const [shown, setShown] = useState(0);
+  useEffect(() => {
+    // 110ms apart: fast enough to read as one line landing, slow enough that
+    // each word registers as its own hit.
+    const timers = words.map((_, i) =>
+      window.setTimeout(() => setShown((n) => Math.max(n, i + 1)), delay + i * 110));
+    return () => timers.forEach(window.clearTimeout);
+  }, [words, delay]);
+  return (
+    <span className={tone ? "tone" : undefined}>
+      {words.map((w, i) => (
+        <span key={w + i} className={"ld-stamp" + (i < shown ? " in" : "")}>
+          {w}{i < words.length - 1 ? " " : ""}
+        </span>
+      ))}
+    </span>
+  );
+}
+
 function useReveal() {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -199,7 +219,11 @@ export default function Landing() {
       {/* ── 1. Hero ──────────────────────────────────────────────────── */}
       <header className="apple-hero left ac-coral" id="top">
         <p className="apple-eyebrow">Braino</p>
-        <h1 className="apple-display">Speak.<br /><span className="tone">Watch it happen.</span></h1>
+        <h1 className="apple-display ld-stamp-line">
+          <StampLine words={["Speak."]} />
+          <br />
+          <StampLine words={["Watch", "it", "happen."]} delay={280} tone />
+        </h1>
         <p className="apple-subhead">
           Braino is an AI that lives on your screen. You talk to him like a person, and he
           actually does the work. Free to start, in your browser.
@@ -223,7 +247,18 @@ export default function Landing() {
         </div>
       </div>
 
-      {/* ── 2. Who is Braino ─────────────────────────────────────────── */}
+      {/* ── 2. Why him ───────────────────────────────────────────────── */}
+      <section className="ld-why-sec apple-reveal" id="why">
+        <div className="ld-wrap">
+          <p className="apple-eyebrow">The obvious question</p>
+          <h2 className="ld-h2">Why not just <span className="tone">use ChatGPT?</span></h2>
+          <div className="ld-why">
+            {WHY.map((w) => <div key={w.h}><b>{w.h}</b><p>{w.p}</p></div>)}
+          </div>
+        </div>
+      </section>
+
+      {/* ── 3. Who is Braino ─────────────────────────────────────────── */}
       <section className="apple-story ac-coral ld-whois" id="who-is">
         <div className="story-intro apple-reveal">
           <p className="bento-eyebrow">Who is Braino?</p>
@@ -254,7 +289,7 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ── 3. What he does ──────────────────────────────────────────── */}
+      {/* ── 4. What he does ──────────────────────────────────────────── */}
       <section className="apple-story ld-story" id="does">
         <div className="apple-whatcan ld-bento">
           <div className="wc-head apple-reveal">
@@ -275,7 +310,32 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ── 4. The two Brainos ───────────────────────────────────────── */}
+      {/* ── 5. Who it is for ─────────────────────────────────────────── */}
+      <section className="ld-who apple-reveal" id="who">
+        <div className="ld-wrap">
+          <p className="apple-eyebrow">Who it is for</p>
+          <h2 className="ld-h2">Same four things. <span className="tone">Different day.</span></h2>
+          <p className="ld-lede">One product, three doors in. Pick the one that sounds like you.</p>
+
+          <div className="ld-pills" role="tablist">
+            {PEOPLE.map((p, i) => (
+              <button key={p.id} type="button" role="tab" aria-selected={who === i}
+                className={who === i ? "is-on" : undefined} onClick={() => setWho(i)}>
+                {p.label}
+              </button>
+            ))}
+          </div>
+
+          <p className="ld-who-line">{person.line}</p>
+          <div className="ld-rows">
+            {person.rows.map(([k, v]) => (
+              <div key={k}><b>{k}</b><p>{v}</p></div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── 6. The two Brainos ───────────────────────────────────────── */}
       <section className="ld-kinds apple-reveal" id="kinds">
         <div className="ld-wrap">
           <p className="apple-eyebrow">Braino comes in two</p>
@@ -320,37 +380,12 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ── 5. Who it is for ─────────────────────────────────────────── */}
-      <section className="ld-who apple-reveal" id="who">
-        <div className="ld-wrap">
-          <p className="apple-eyebrow">Who it is for</p>
-          <h2 className="ld-h2">Same four things. <span className="tone">Different day.</span></h2>
-          <p className="ld-lede">One product, three doors in. Pick the one that sounds like you.</p>
-
-          <div className="ld-pills" role="tablist">
-            {PEOPLE.map((p, i) => (
-              <button key={p.id} type="button" role="tab" aria-selected={who === i}
-                className={who === i ? "is-on" : undefined} onClick={() => setWho(i)}>
-                {p.label}
-              </button>
-            ))}
-          </div>
-
-          <p className="ld-who-line">{person.line}</p>
-          <div className="ld-rows">
-            {person.rows.map(([k, v]) => (
-              <div key={k}><b>{k}</b><p>{v}</p></div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── 4. The turn ──────────────────────────────────────────────── */}
+      {/* ── 7. The turn ──────────────────────────────────────────────── */}
       <div className="apple-statement apple-reveal ac-blue ld-turn">
         That is Braino for anyone. <span className="tone">If you are building something, he has a second job.</span>
       </div>
 
-      {/* ── 5. Distra ────────────────────────────────────────────────── */}
+      {/* ── 8. Distra ────────────────────────────────────────────────── */}
       <section className="apple-section apple-reveal" id="distra">
         <div className="apple-panel ac-blue ld-distra">
           <div className="apple-copy">
@@ -372,7 +407,7 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ── 7. Under the hood ────────────────────────────────────────── */}
+      {/* ── 9. Under the hood ────────────────────────────────────────── */}
       <section className="apple-blog howworks" id="hood">
         <div className="hw-title apple-reveal">
           <p className="be" style={{ color: "var(--ap-violet)" }}>Under the hood</p>
@@ -405,18 +440,7 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ── 8. Why him ───────────────────────────────────────────────── */}
-      <section className="ld-why-sec apple-reveal" id="why">
-        <div className="ld-wrap">
-          <p className="apple-eyebrow">The obvious question</p>
-          <h2 className="ld-h2">Why not just <span className="tone">use ChatGPT?</span></h2>
-          <div className="ld-why">
-            {WHY.map((w) => <div key={w.h}><b>{w.h}</b><p>{w.p}</p></div>)}
-          </div>
-        </div>
-      </section>
-
-      {/* ── 9. Close ─────────────────────────────────────────────────── */}
+      {/* ── 10. Close ────────────────────────────────────────────────── */}
       <section className="ld-close apple-reveal">
         <div className="ld-close-art" aria-hidden="true"><Braino size={150} expr="happy" legs gloves /></div>
         <h2 className="apple-display">Speak, <span className="tone">watch it happen.</span></h2>
