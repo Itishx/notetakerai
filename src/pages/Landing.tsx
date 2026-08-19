@@ -3,7 +3,11 @@ import { Link } from "react-router-dom";
 import IomiNotch from "@/components/IomiNotch";
 import BrainoFooter from "@/components/BrainoFooter";
 import { Braino, BrainoDefs } from "@/components/BrainoChar";
-import { EXTENSION_DOWNLOAD_URL } from "@/lib/extensionDownload";
+import { BrainoTVProvider, BrainoTVScreen } from "@/components/BrainoTV";
+import EmotionNetwork from "@/components/EmotionNetwork";
+import HumanIntelligence from "@/components/HumanIntelligence";
+import { ArrowUpRight } from "lucide-react";
+import { EXTENSION_DOWNLOAD_URL, EXTENSION_DOWNLOAD_FILENAME, EXTENSION_VERSION } from "@/lib/extensionDownload";
 import "../styles/apple.css";
 import "./landing.css";
 
@@ -30,14 +34,37 @@ const SunIcon = () => (<svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="
 const MoonIcon = () => (<svg viewBox="0 0 24 24" fill="none"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"/></svg>);
 
 const ANCHORS = [
+  { href: "#who-is", label: "Who he is" },
   { href: "#does", label: "What he does" },
   { href: "#who", label: "Who it's for" },
   { href: "#distra", label: "For founders" },
+  { href: "#hood", label: "Under the hood" },
   { href: "#why", label: "Why him" },
 ];
 
 /* One accent per feature, the same way the deck gives one accent per act: the
    colour is what makes four panels read as four ideas rather than one list. */
+/* Free is how you meet him, not a promise about the bill. Tokens cost real
+   money, so the honest shape is a real free tier and then usage-based credits.
+   Saying "free forever" and then metering would be the one thing that loses
+   trust permanently. */
+/* Who he is, before what he does. Four cards that stack over each other as you
+   scroll, which is the mechanic .apple-story was built for. */
+const STORY = [
+  { ac: "ac-coral", tag: "A character", title: "He is somebody, not something.",
+    p: "A face on your screen with a name, a mood and a way of moving. Not a chat box you open when you remember it exists.",
+    art: "forms" },
+  { ac: "ac-amber", tag: "A voice", title: "You talk. He talks back.",
+    p: "In his own voice, out loud, while you keep doing what you were doing. Typing is the fallback, not the interface.",
+    art: "voice" },
+  { ac: "ac-violet", tag: "An opinion", title: "He will tell you an idea is weak.",
+    p: "An assistant that agrees with everything is a slower way of talking to yourself. He pushes back, and he is right often enough to be worth it.",
+    art: "notch" },
+  { ac: "ac-blue", tag: "A memory", title: "He knows what you did last week.",
+    p: "One memory across the browser, the Mac and everything he runs. You never explain yourself twice.",
+    art: "forms" },
+];
+
 const FEATURES = [
   { n: "01", ac: "ac-coral", name: "Chat with whatever is in front of you",
     line: "Any page, any PDF, any video. He is already on it, so there is nothing to paste and nothing to upload." },
@@ -116,6 +143,7 @@ export default function Landing() {
   const person = PEOPLE[who];
 
   return (
+    <BrainoTVProvider>
     <div className={"apple ld" + (dark ? " dark" : "")} ref={ref}>
       <BrainoDefs />
       <IomiNotch />
@@ -134,48 +162,129 @@ export default function Landing() {
       </div>
 
       {/* ── 1. Hero ──────────────────────────────────────────────────── */}
-      <header className="apple-hero left ac-coral ld-hero" id="top">
-        <div className="ld-hero-grid">
-          <div className="apple-reveal">
-            <p className="apple-eyebrow">Braino</p>
-            <h1 className="apple-display">Speak,<br /><span className="tone">watch it happen.</span></h1>
-            <p className="apple-subhead">
-              Braino is an AI that lives on your screen. You talk to him like a person, and he
-              actually does the work.
-            </p>
-            <div className="ld-cta">
-              <a href={EXTENSION_DOWNLOAD_URL} className="ld-btn">Get Braino, free</a>
-              <span className="ld-cta-note">Chrome. Takes a minute. No card.</span>
-            </div>
-          </div>
-          <div className="ld-hero-art apple-reveal" aria-hidden="true">
-            <Braino size={300} expr="happy" arm="wave" legs gloves />
-          </div>
+      <header className="apple-hero left ac-coral" id="top">
+        <p className="apple-eyebrow">Braino</p>
+        <h1 className="apple-display">Speak.<br /><span className="tone">Watch it happen.</span></h1>
+        <p className="apple-subhead">
+          Braino is an AI that lives on your screen. You talk to him like a person, and he
+          actually does the work. Free to start, in your browser.
+        </p>
+        <div className="apple-hero-cta">
+          <a className="apple-dl" href={EXTENSION_DOWNLOAD_URL} download={EXTENSION_DOWNLOAD_FILENAME}>
+            Download for Chrome
+            <span>v{EXTENSION_VERSION}</span>
+          </a>
+          <small>Unzip, then Chrome → Extensions → turn on Developer mode → Load unpacked.</small>
+        </div>
+        <div className="apple-hero-links">
+          <a href="#who-is">Who is Braino</a>
+          <a href="#distra">For founders</a>
         </div>
       </header>
 
-      {/* ── 2. What he does ──────────────────────────────────────────── */}
-      <section id="does">
-        <div className="apple-statement apple-reveal ac-coral">
-          Four things, <span className="tone">every day.</span>
+      <div className="apple-boot">
+        <div className="apple-macscreen apple-reveal">
+          <BrainoTVScreen className="apple-boot-video" offer={{ src: "/dontblink?embed=1", title: "Don't Blink" }} />
         </div>
-        {FEATURES.map((f, i) => (
-          <div className="apple-section apple-reveal" key={f.n}>
-            <div className={"apple-panel ld-feature " + f.ac + (i % 2 ? " is-flip" : "")}>
-              <div className="apple-copy">
-                <span className="ld-feat-n">{f.n}</span>
-                <h3 className="ld-feat-h">{f.name}</h3>
-                <p className="ld-feat-p">{f.line}</p>
+      </div>
+
+      {/* ── 2. Who is Braino ─────────────────────────────────────────── */}
+      <section className="apple-story ld-whois" id="who-is">
+        <div className="story-head apple-reveal">
+          <p className="story-eyebrow">Who is Braino</p>
+          <h2 className="story-h2">Before what he does, <span className="tone">who he is.</span></h2>
+        </div>
+        {/* Sticky stacking: each card holds near the top and the next scrolls up
+            and takes it over, with a step-down so the pile stays visible. */}
+        <div className="story-list">
+          {STORY.map((c, i) => (
+            <article className={"story-card " + c.ac + (i % 2 ? " reverse" : "")} key={c.tag}>
+              <div className="story-copy">
+                <span className="story-tag">{c.tag}</span>
+                <h3 className="story-title">{c.title}</h3>
+                <p>{c.p}</p>
               </div>
-              {/* Sized for a real 16:9 clip of the thing happening. Until those
-                  exist, an honest empty frame rather than a stock photograph. */}
-              <div className="ld-frame" aria-hidden="true" />
-            </div>
-          </div>
-        ))}
+              <div className="story-art">
+                {c.art === "notch" ? (
+                  <div className="story-notch"><i className="sn-eye" /><i className="sn-eye" /></div>
+                ) : c.art === "voice" ? (
+                  <div className="cap-demo cap-voice ld-story-demo"><span /><span /><span /><span /><span /><span /><span /></div>
+                ) : (
+                  <div className="story-forms"><span /><span /><span /></div>
+                )}
+              </div>
+            </article>
+          ))}
+        </div>
       </section>
 
-      {/* ── 3. Same four, different person ───────────────────────────── */}
+      {/* ── 3. The two Brainos ───────────────────────────────────────── */}
+      <section className="ld-kinds apple-reveal" id="kinds">
+        <div className="ld-wrap">
+          <p className="apple-eyebrow">The two Brainos</p>
+          <h2 className="ld-h2">One character. <span className="tone">Two jobs.</span></h2>
+          <p className="ld-lede">
+            The companion is how you meet him. Distra is what you hire once you trust him.
+          </p>
+        </div>
+        <div className="apple-section">
+          <div className="apple-duo">
+            <div className="apple-panel ac-coral ld-kind">
+              <div className="apple-copy">
+                <span className="ld-kind-tag">Start free</span>
+                <h3>Braino</h3>
+                <p className="ld-kind-p">
+                  The companion. Lives in your browser and does the four things below. Free to
+                  start, then credits for what you actually use, because thinking costs real money
+                  and pretending otherwise would just mean a worse product later.
+                </p>
+                <a href={EXTENSION_DOWNLOAD_URL} className="ld-btn sm">Get Braino</a>
+              </div>
+            </div>
+            <div className="apple-panel ac-blue ld-kind">
+              <div className="apple-copy">
+                <span className="ld-kind-tag">The one you hire</span>
+                <h3>Distra</h3>
+                <p className="ld-kind-p">
+                  The distribution engine. Same character, same memory, pointed at the problem of
+                  nobody knowing your product exists. Priced on the work he does.
+                </p>
+                <Link to="/channels" className="ld-btn sm ghost">See Distra</Link>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="ld-wrap">
+          <p className="ld-fine">
+            There is also <strong>HERA</strong>, which is not a third Braino. It is a mode either one
+            drops into: hold a key, talk, and the words land at your cursor in whatever app you were
+            already in. It never says anything back.
+          </p>
+        </div>
+      </section>
+
+      {/* ── 4. What he does ──────────────────────────────────────────── */}
+      <section className="apple-story ld-story" id="does">
+        <div className="apple-whatcan ld-bento">
+          <div className="wc-head apple-reveal">
+            <h2>What can he do?</h2>
+            <p>Four things, every day. This is the free Braino, the one that lives in your browser.</p>
+          </div>
+          <div className="wc-bento apple-reveal">
+            {FEATURES.map((f, i) => (
+              <article className={"wc-card " + f.ac + (i === 0 ? " wc-dark" : "")} key={f.n}>
+                <h4>{f.name}</h4>
+                <p>{f.line}</p>
+                {/* Sized for a real clip of the thing happening. Honestly empty
+                    until those exist, rather than filled with stock. */}
+                <div className="wc-mock ld-mock" aria-hidden="true" />
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── 5. Same four, different person ───────────────────────────── */}
       <section className="ld-who apple-reveal" id="who">
         <div className="ld-wrap">
           <p className="apple-eyebrow">Who it is for</p>
@@ -227,42 +336,40 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ── 6. The two Brainos ───────────────────────────────────────── */}
-      <section className="ld-kinds apple-reveal" id="kinds">
-        <div className="ld-wrap">
-          <p className="apple-eyebrow">The two Brainos</p>
-          <h2 className="ld-h2">One character. <span className="tone">Two jobs.</span></h2>
-        </div>
-        <div className="apple-section">
-          <div className="apple-duo">
-            <div className="apple-panel ac-coral ld-kind">
-              <div className="apple-copy">
-                <span className="ld-kind-tag">Free, forever</span>
-                <h3>Braino</h3>
-                <p className="ld-kind-p">The companion. Lives in your browser, does the four things above, and is genuinely free rather than free for now.</p>
-                <a href={EXTENSION_DOWNLOAD_URL} className="ld-btn sm">Get Braino</a>
-              </div>
-            </div>
-            <div className="apple-panel ac-blue ld-kind">
-              <div className="apple-copy">
-                <span className="ld-kind-tag">The one you hire</span>
-                <h3>Distra</h3>
-                <p className="ld-kind-p">The distribution engine. Same character, same memory, pointed at the problem of nobody knowing your product exists.</p>
-                <Link to="/channels" className="ld-btn sm ghost">See Distra</Link>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div className="ld-wrap">
-          <p className="ld-fine">
-            There is also <strong>HERA</strong>, which is not a third Braino. It is a mode either one
-            drops into: hold a key, talk, and the words land at your cursor in whatever app you were
-            already in. It never says anything back.
+      {/* ── 7. Under the hood ────────────────────────────────────────── */}
+      <section className="apple-blog howworks" id="hood">
+        <div className="hw-title apple-reveal">
+          <p className="be" style={{ color: "var(--ap-violet)" }}>Under the hood</p>
+          <h2>Braino OS.</h2>
+          <p className="hw-sub">
+            Every Braino runs on the same mind. Two engines nobody else bothered to build: the one
+            that works out what you actually mean, and the one that reads the moment you are in.
+            That is why he feels like someone rather than something.
           </p>
+        </div>
+        <div className="apple-blog-grid apple-reveal">
+          <Link className="hw-card ac-coral" to="/emotional-intelligence">
+            <div className="hw-cover"><span className="hw-notch" aria-hidden="true"><i /><i /></span><EmotionNetwork /></div>
+            <div className="hw-body">
+              <span className="hw-tag"><span className="dot" />The heart</span>
+              <h3>Emotional Intelligence</h3>
+              <p>The most emotionally intelligent AI anyone has built. Twelve trait modules reorder on every message, so he meets bad news differently than he meets banter.</p>
+            </div>
+            <span className="hw-read">Explore the Emotional Engine <ArrowUpRight /></span>
+          </Link>
+          <Link className="hw-card ac-blue" to="/human-intelligence">
+            <div className="hw-cover"><span className="hw-notch" aria-hidden="true"><i /><i /></span><HumanIntelligence /></div>
+            <div className="hw-body">
+              <span className="hw-tag"><span className="dot" />The mind</span>
+              <h3>Human Intelligence</h3>
+              <p>He works a problem the way a person does. Your screen, your memory, the conversation, the time and the place, pulled together to resolve what you actually want.</p>
+            </div>
+            <span className="hw-read">Explore Human Intelligence <ArrowUpRight /></span>
+          </Link>
         </div>
       </section>
 
-      {/* ── 7. Why him ───────────────────────────────────────────────── */}
+      {/* ── 8. Why him ───────────────────────────────────────────────── */}
       <section className="ld-why-sec apple-reveal" id="why">
         <div className="ld-wrap">
           <p className="apple-eyebrow">The obvious question</p>
@@ -273,7 +380,7 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ── 8. Close ─────────────────────────────────────────────────── */}
+      {/* ── 9. Close ─────────────────────────────────────────────────── */}
       <section className="ld-close apple-reveal">
         <div className="ld-close-art" aria-hidden="true"><Braino size={150} expr="happy" legs gloves /></div>
         <h2 className="apple-display">Speak, <span className="tone">watch it happen.</span></h2>
@@ -284,5 +391,6 @@ export default function Landing() {
 
       <BrainoFooter />
     </div>
+    </BrainoTVProvider>
   );
 }

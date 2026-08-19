@@ -36,34 +36,27 @@
 .ld-cta { margin-top: 30px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
 .ld-cta-note { font-size: 13px; color: var(--ap-ink-soft); }
 
-/* ── Hero: copy left, him right ───────────────────────────────────────── */
-.ld-hero { padding-bottom: clamp(30px, 5vw, 60px); }
-.ld-hero-grid {
-  max-width: var(--ap-maxw); margin: 0 auto;
-  display: grid; grid-template-columns: 1.05fr .95fr; gap: clamp(20px, 4vw, 56px); align-items: center;
-}
-@media (max-width: 900px) { .ld-hero-grid { grid-template-columns: 1fr; } .ld-hero-art { order: -1; } }
-.ld-hero-art { display: grid; place-items: center; }
-.ld-hero .apple-subhead { max-width: 34ch; }
+/* ── Who is Braino: the stacking story cards ──────────────────────────── */
+.ld-whois { padding-top: clamp(30px, 4vw, 56px); }
+.ld-whois .story-head { text-align: left; }
+.ld-whois .story-h2 { margin-left: 0; }
+/* The voice waveform borrowed as story art needs to sit on the panel rather
+   than carry its own tinted box. */
+.ld-whois .ld-story-demo { background: transparent; height: auto; }
+.ld-whois .ld-story-demo span { height: 46px; }
 
-/* ── Feature panels: copy one side, clip frame the other ──────────────── */
-.apple-panel.ld-feature {
-  min-height: 0;
-  padding-block: clamp(34px, 4.5vw, 56px);
-  grid-template-columns: 1fr 1fr; align-items: center; gap: clamp(22px, 4vw, 52px);
+/* ── What he does: the bento ──────────────────────────────────────────── */
+.ld-story { padding-block: 0; }
+.ld-bento .wc-bento { grid-template-columns: repeat(2, 1fr); }
+@media (max-width: 800px) { .ld-bento .wc-bento { grid-template-columns: 1fr; } }
+.ld-bento .wc-card { min-height: 300px; }
+/* Sized for a real clip. Honestly empty until those exist. */
+.ld-mock {
+  border-radius: 14px; min-height: 120px;
+  background: var(--ap-panel-bg, var(--ap-coral-panel));
+  border: 1px solid rgba(0,0,0,.05);
 }
-@media (max-width: 860px) { .ld-feature { grid-template-columns: 1fr; min-height: 0; } }
-.ld-feature.is-flip .apple-copy { order: 2; }
-@media (max-width: 860px) { .ld-feature.is-flip .apple-copy { order: 0; } }
-.ld-feature .apple-copy { max-width: 34ch; }
-.ld-feat-n { display: block; font-size: 12px; font-weight: 700; letter-spacing: .12em; color: var(--ap-accent); margin-bottom: 12px; }
-.ld-feat-h { margin: 0 0 12px; font-size: clamp(24px, 3vw, 36px); font-weight: 600; letter-spacing: -.028em; line-height: 1.1; color: var(--ap-ink); }
-.ld-feat-p { margin: 0; font-size: clamp(15px, 1.7vw, 18px); line-height: 1.55; font-weight: 400; color: var(--ap-ink-soft); }
-.ld-frame {
-  aspect-ratio: 16 / 9; width: 100%; border-radius: 18px;
-  background: rgba(255,255,255,.55); border: 1px solid rgba(0,0,0,.07);
-  box-shadow: 0 20px 60px rgba(0,0,0,.07);
-}
+.wc-card.wc-dark .ld-mock { background: rgba(255,255,255,.07); border-color: rgba(255,255,255,.1); }
 
 /* ── Who it is for ────────────────────────────────────────────────────── */
 .ld-who { padding: clamp(64px, 9vw, 120px) 0; }
@@ -125,3 +118,9 @@
 .ld .apple-anchors .an-links a.apple-cta { color: #fff; opacity: 1; }
 
 @media (prefers-reduced-motion: reduce) { .ld-btn:hover { transform: none; } }
+
+
+.ld.dark .ld-story .ld-frame { background: rgba(255,255,255,.07); border-color: rgba(255,255,255,.12); box-shadow: none; }
+
+
+.ld.dark .ld-mock { border-color: rgba(255,255,255,.1); }
