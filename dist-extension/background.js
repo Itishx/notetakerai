@@ -1823,6 +1823,23 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       .catch(() => sendResponse({ persona: null }));
     return true;
   }
+  // xAuto's judging pass. The content script scrapes the timeline; the server
+  // decides which posts deserve a reply and writes it in the learned voice.
+  if (message.action === "scoreXTimeline") {
+    bgAuthedSupabaseFetch(`${BG_API_BASE}/x-auto-reply`, {
+      method: "POST",
+      body: JSON.stringify({ candidates: message.candidates || [], surface: "browser" }),
+    })
+      .then(async ({ res }) => sendResponse(res.ok ? await res.json() : { error: (await res.json().catch(() => ({}))).error || `x-auto-reply ${res.status}` }))
+      .catch((e) => sendResponse({ error: e.message || "Could not reach Braino." }));
+    return true;
+  }
+  if (message.action === "isMacAppRunning") {
+    bgIsMacAppRunning()
+      .then((running) => sendResponse({ running }))
+      .catch(() => sendResponse({ running: false }));
+    return true;
+  }
   if (message.action === "getXStatus") {
     bgAuthedSupabaseFetch(`${BG_API_BASE}/x-status`, { method: "POST" })
       .then(async ({ res }) => sendResponse(res.ok ? await res.json() : { error: `x-status ${res.status}` }))
@@ -3062,7 +3079,7 @@ async function bgRecordXAutomationRunStats({ repliedCount, durationMs, startedAt
   if (!insertRes.ok) throw new Error(`Could not create X automation stats (${insertRes.status})`);
 }
 
-async function bgLogXReply({ postAuthorHandle, postAuthorDisplayName, postUrl, postText, ourReply, repliedAt }) {
+async function bgLogXReply({ postAuthorHandle, postAuthorDisplayName, postUrl, postText, ourReply, repliedAt, opportunityScore, opportunityReason, outcome, surface }) {
   try {
     const storage = await new Promise(r => chrome.storage.local.get(['authUserId'], r));
     const userId = storage.authUserId;
@@ -3079,9 +3096,46 @@ async function bgLogXReply({ postAuthorHandle, postAuthorDisplayName, postUrl, p
         post_text: postText || '',
         our_reply: ourReply || '',
         replied_at: repliedAt || new Date().toISOString(),
+        // xAuto's judging carried alongside the reply, so the dashboard can
+        // show WHY a post was picked, and skips are recorded too. A skip is the
+        // strongest signal there is that the judging was wrong.
+        opportunity_score: typeof opportunityScore === 'number' ? opportunityScore : null,
+        opportunity_reason: opportunityReason || null,
+        outcome: outcome === 'skipped' ? 'skipped' : outcome === 'suggested' ? 'suggested' : 'sent',
+        surface: surface === 'mac' ? 'mac' : 'browser',
       }),
     });
   } catch { /* fire-and-forget — never surface to caller */ }
+}
+
+
+// ── Does the Mac app own the screen right now? ─────────────────────────────
+// Since 4.1.0 the extension's notch is a port of the Mac one, so with both
+// running you get two identical Brainos on the same screen and no way to tell
+// which is which. The Mac app wins: it is the one that can reach the whole
+// machine. It publishes a beacon on loopback; we ask, briefly cache the answer,
+// and the content script hides its own notch when the answer is yes.
+const BRAINO_MAC_PRESENCE_URL = "http://127.0.0.1:47823/";
+let bgMacPresence = { at: 0, running: false };
+
+async function bgIsMacAppRunning() {
+  // 20s cache. Long enough that we are not hammering a socket on every SPA
+  // navigation, short enough that quitting the Mac app hands the notch back
+  // while the user is still looking at the screen.
+  if (Date.now() - bgMacPresence.at < 20000) return bgMacPresence.running;
+  let running = false;
+  try {
+    const ctl = new AbortController();
+    // If the port is closed this rejects instantly; the timeout only covers the
+    // pathological case of something else squatting the port and not answering.
+    const t = setTimeout(() => ctl.abort(), 600);
+    const res = await fetch(BRAINO_MAC_PRESENCE_URL, { signal: ctl.signal, cache: "no-store" });
+    clearTimeout(t);
+    const body = await res.json().catch(() => null);
+    running = Boolean(res.ok && body && body.app === "braino-mac");
+  } catch { running = false; }
+  bgMacPresence = { at: Date.now(), running };
+  return running;
 }
 
 function bgIsScriptableUrl(url) {

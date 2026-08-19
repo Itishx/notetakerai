@@ -2168,6 +2168,10 @@ window.brainoMac.onMeeting?.((payload) => {
     // should never have to wonder whether he heard you.
     notchFace?.classList.add("recording");
     updateNotchFace();
+    // Into the notch and stay there. He is present for the whole call without
+    // being in front of it, and the REC dot plus the clock live in the notch
+    // anyway, so nothing is lost by him going home.
+    void setWalkerHomeState(true, { reason: "meeting" });
     // Then the surface drops out of it. The old corner panel is retired — it was small,
     // detached from the notch, and easy to miss entirely.
     openMeetingSurface(payload);
@@ -2184,6 +2188,9 @@ window.brainoMac.onMeeting?.((payload) => {
     notchFace?.classList.remove("recording");
     window.clearInterval(meetingClockTimer);
     nfSetStatusText("");
+    // Meeting over, the guard in setWalkerHomeState lifts with it. He does not
+    // come bounding out on his own: he waits to be called, same as any other
+    // time he is home.
   } else if (action === "notes") {
     setMeetingNotes(payload.notes);
   } else if (action === "people") {
@@ -2798,6 +2805,14 @@ async function setWalkerHomeState(wantHome, opts = {}) {
   // Monday Mode: he stays in the notch, full stop. Nothing gets him to pop
   // out and sulk on screen while this is on, whatever called this.
   if (mondayModeActive && !wantHome) {
+    walkerHome = true;
+    return;
+  }
+  // Recording a meeting: same rule. A mascot strolling across the screen while
+  // you are in a call is a distraction at best and something you have to
+  // apologise for at worst, and the notch already carries the REC state and the
+  // clock. Anything that tries to send him out mid-meeting is refused.
+  if (meetingRecording && !wantHome) {
     walkerHome = true;
     return;
   }

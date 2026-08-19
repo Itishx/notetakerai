@@ -7132,7 +7132,46 @@ function __sbApplyForcedModeUi(mode, options = {}) {
   }
 }
 
+// ── Yield to the Mac app ───────────────────────────────────────────────────
+// The extension's notch has been a port of the Mac one since 4.1.0, so running
+// both puts two identical Brainos on one screen with nothing to tell them apart.
+// The Mac app wins that tie, because it is the one that can reach the whole
+// machine. Asked once on load and re-checked when the tab comes back into
+// focus, so quitting the Mac app hands the notch straight back.
+let __sbMacOwnsScreen = false;
+
+function __sbCheckMacPresence() {
+  return new Promise((resolve) => {
+    try {
+      chrome.runtime.sendMessage({ action: "isMacAppRunning" }, (res) => {
+        void chrome.runtime.lastError;
+        resolve(Boolean(res && res.running));
+      });
+    } catch { resolve(false); }
+  });
+}
+
+function __sbApplyMacYield(running) {
+  const was = __sbMacOwnsScreen;
+  __sbMacOwnsScreen = running;
+  const root = document.getElementById("__sb_root__");
+  if (running) {
+    if (root) root.remove();
+    document.getElementById("__sb_styles__")?.remove();
+  } else if (was && !root && __sbBrainVisible && __sbOwnsInlineUi()) {
+    // Mac app quit while this tab was open: give him back.
+    __sbBuildBrainUI();
+  }
+}
+
+void __sbCheckMacPresence().then(__sbApplyMacYield);
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") void __sbCheckMacPresence().then(__sbApplyMacYield);
+});
+
 function __sbBuildBrainUI() {
+  // Never draw a second Braino over the real one.
+  if (__sbMacOwnsScreen) return;
   if (!__sbOwnsInlineUi()) return;
   if (document.getElementById("__sb_root__")) return;
 

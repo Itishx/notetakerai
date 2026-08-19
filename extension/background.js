@@ -1834,6 +1834,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       .catch((e) => sendResponse({ error: e.message || "Could not reach Braino." }));
     return true;
   }
+  if (message.action === "isMacAppRunning") {
+    bgIsMacAppRunning()
+      .then((running) => sendResponse({ running }))
+      .catch(() => sendResponse({ running: false }));
+    return true;
+  }
   if (message.action === "getXStatus") {
     bgAuthedSupabaseFetch(`${BG_API_BASE}/x-status`, { method: "POST" })
       .then(async ({ res }) => sendResponse(res.ok ? await res.json() : { error: `x-status ${res.status}` }))
@@ -3100,6 +3106,36 @@ async function bgLogXReply({ postAuthorHandle, postAuthorDisplayName, postUrl, p
       }),
     });
   } catch { /* fire-and-forget — never surface to caller */ }
+}
+
+
+// ── Does the Mac app own the screen right now? ─────────────────────────────
+// Since 4.1.0 the extension's notch is a port of the Mac one, so with both
+// running you get two identical Brainos on the same screen and no way to tell
+// which is which. The Mac app wins: it is the one that can reach the whole
+// machine. It publishes a beacon on loopback; we ask, briefly cache the answer,
+// and the content script hides its own notch when the answer is yes.
+const BRAINO_MAC_PRESENCE_URL = "http://127.0.0.1:47823/";
+let bgMacPresence = { at: 0, running: false };
+
+async function bgIsMacAppRunning() {
+  // 20s cache. Long enough that we are not hammering a socket on every SPA
+  // navigation, short enough that quitting the Mac app hands the notch back
+  // while the user is still looking at the screen.
+  if (Date.now() - bgMacPresence.at < 20000) return bgMacPresence.running;
+  let running = false;
+  try {
+    const ctl = new AbortController();
+    // If the port is closed this rejects instantly; the timeout only covers the
+    // pathological case of something else squatting the port and not answering.
+    const t = setTimeout(() => ctl.abort(), 600);
+    const res = await fetch(BRAINO_MAC_PRESENCE_URL, { signal: ctl.signal, cache: "no-store" });
+    clearTimeout(t);
+    const body = await res.json().catch(() => null);
+    running = Boolean(res.ok && body && body.app === "braino-mac");
+  } catch { running = false; }
+  bgMacPresence = { at: Date.now(), running };
+  return running;
 }
 
 function bgIsScriptableUrl(url) {

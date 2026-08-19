@@ -2069,6 +2069,52 @@ function parakeetSend(command) {
   }
 }
 
+
+// ── Presence beacon ────────────────────────────────────────────────────────
+// Since 4.1.0 the Chrome extension's notch is a faithful port of this one, which
+// means running both at once puts two identical Brainos on the same screen: the
+// real overlay from this app, and a second one painted inside the Chrome tab.
+// They are indistinguishable, so the duplicate reads as a bug rather than two
+// products.
+//
+// The Mac app wins that tie, always. It is the one that can actually reach the
+// whole machine. So it announces itself on a fixed loopback port and the
+// extension checks before drawing its own notch. Loopback only, no payload from
+// the caller, GET only: it says "Braino Mac is running here" and nothing else.
+const BRAINO_PRESENCE_PORT = 47823;
+let presenceServer = null;
+
+function startPresenceBeacon() {
+  if (presenceServer) return;
+  try {
+    presenceServer = http.createServer((req, res) => {
+      // Any page may ASK. All it learns is that the desktop app is open, which
+      // it would learn anyway the moment the notch appeared on screen.
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      res.setHeader("Cache-Control", "no-store");
+      if (req.method !== "GET") { res.writeHead(405); return res.end(); }
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ ok: true, app: "braino-mac", version: app.getVersion?.() || null }));
+    });
+    presenceServer.on("error", (e) => {
+      // A busy port means another Braino Mac is already the one on screen.
+      // Nothing to do: the extension will still see a beacon and still yield.
+      logMac("presence.listen_failed", { error: String(e && e.message || e) });
+      presenceServer = null;
+    });
+    presenceServer.listen(BRAINO_PRESENCE_PORT, "127.0.0.1", () => {
+      logMac("presence.listening", { port: BRAINO_PRESENCE_PORT });
+    });
+  } catch (e) {
+    logMac("presence.start_failed", { error: String(e && e.message || e) });
+  }
+}
+
+function stopPresenceBeacon() {
+  try { presenceServer?.close(); } catch (_) {}
+  presenceServer = null;
+}
+
 function createDockWindow() {
   const initialDisplay = displayForContext(activeMacContext);
   const initialBounds = initialDisplay.bounds;
@@ -15369,6 +15415,7 @@ app.whenReady().then(() => {
   // Compile the accessibility helper up front; every dictation press depends
   // on it and the interpreted path costs seconds per call.
   void ensureAxHelperBinary();
+  startPresenceBeacon();
   createDockWindow();
   registerHotkeys();
   startSwiftHotkeyHelper();
@@ -15443,6 +15490,7 @@ function handleTerminationSignal(signal) {
 process.once("SIGINT", () => handleTerminationSignal("SIGINT"));
 process.once("SIGTERM", () => handleTerminationSignal("SIGTERM"));
 
+app.on("will-quit", () => { stopPresenceBeacon(); });
 app.on("will-quit", () => {
   cleanupNativeHelpers();
 });

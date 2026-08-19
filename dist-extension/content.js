@@ -7132,7 +7132,46 @@ function __sbApplyForcedModeUi(mode, options = {}) {
   }
 }
 
+// ── Yield to the Mac app ───────────────────────────────────────────────────
+// The extension's notch has been a port of the Mac one since 4.1.0, so running
+// both puts two identical Brainos on one screen with nothing to tell them apart.
+// The Mac app wins that tie, because it is the one that can reach the whole
+// machine. Asked once on load and re-checked when the tab comes back into
+// focus, so quitting the Mac app hands the notch straight back.
+let __sbMacOwnsScreen = false;
+
+function __sbCheckMacPresence() {
+  return new Promise((resolve) => {
+    try {
+      chrome.runtime.sendMessage({ action: "isMacAppRunning" }, (res) => {
+        void chrome.runtime.lastError;
+        resolve(Boolean(res && res.running));
+      });
+    } catch { resolve(false); }
+  });
+}
+
+function __sbApplyMacYield(running) {
+  const was = __sbMacOwnsScreen;
+  __sbMacOwnsScreen = running;
+  const root = document.getElementById("__sb_root__");
+  if (running) {
+    if (root) root.remove();
+    document.getElementById("__sb_styles__")?.remove();
+  } else if (was && !root && __sbBrainVisible && __sbOwnsInlineUi()) {
+    // Mac app quit while this tab was open: give him back.
+    __sbBuildBrainUI();
+  }
+}
+
+void __sbCheckMacPresence().then(__sbApplyMacYield);
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") void __sbCheckMacPresence().then(__sbApplyMacYield);
+});
+
 function __sbBuildBrainUI() {
+  // Never draw a second Braino over the real one.
+  if (__sbMacOwnsScreen) return;
   if (!__sbOwnsInlineUi()) return;
   if (document.getElementById("__sb_root__")) return;
 
@@ -9486,9 +9525,9 @@ function __sbBuildBrainUI() {
       <button id="__sb_bar_close__" class="sb-bar-icon-btn" title="Dock Braino (Esc)">
         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
-      <button id="__sb_x_auto_btn__" class="sb-bar-icon-btn" title="X Automation" style="display:none;gap:4px;padding:0 8px;font-size:11px;font-weight:600;width:auto;">
+      <button id="__sb_x_auto_btn__" class="sb-bar-icon-btn" title="xAuto: read the timeline, draft replies worth sending" style="display:none;gap:4px;padding:0 8px;font-size:11px;font-weight:600;width:auto;">
         <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-        <span id="__sb_x_auto_label__">X Auto</span>
+        <span id="__sb_x_auto_label__">xAuto</span>
       </button>
       </div>
       <div id="__sb_wakeup__">
@@ -9924,7 +9963,7 @@ function __sbBuildBrainUI() {
 
   // X Auto button — show only on X/Twitter
   const xAutoBtn = document.getElementById("__sb_x_auto_btn__");
-  if (__sbIsOnX()) xAutoBtn.style.display = "flex";
+  if (__sbIsOnX()) { xAutoBtn.style.display = "flex"; __sbXAutoMaybeOffer(); }
   xAutoBtn.addEventListener("click", () => void __sbRunXAutomation());
 
   // Card footer buttons
@@ -11254,105 +11293,241 @@ async function __sbXPostReply(article, replyText) {
   return true;
 }
 
+// ── xAuto, assisted ────────────────────────────────────────────────────────
+//
+// The previous version walked the timeline top to bottom and replied to every
+// post with a fixed delay between each. That is precisely the shape X's
+// February 2026 API change blocked and the March 2026 enforcement wave
+// suspended accounts for: scripted replies to strangers, zero selectivity,
+// machine cadence. It is also why this account got flagged.
+//
+// So the work moved rather than shrank. Braino reads the timeline, sends it to
+// x-auto-reply to be judged, and only surfaces the few posts worth answering,
+// each with a reply already written in the voice he learned from 200 of your
+// own posts. You press Enter to send or Esc to skip. You are the pacing, which
+// is the one thing no detector can pattern-match, and the click was never the
+// expensive part. The reading and the writing were.
+
+let __sbXAutoQueue = [];
+let __sbXAutoIndex = 0;
+let __sbXAutoSent = 0;
+let __sbXAutoSkipped = 0;
+let __sbXAutoRemaining = null;
+let __sbXAutoKeyHandler = null;
+
+async function __sbXAutoScoreBatch(candidates) {
+  return new Promise((resolve) => {
+    chrome.runtime.sendMessage({ action: 'scoreXTimeline', candidates }, (res) => {
+      void chrome.runtime.lastError;
+      resolve(res || { error: 'Could not reach Braino.' });
+    });
+  });
+}
+
+/* Collect what is on screen right now, scrolling only as far as needed to fill
+   a batch. No infinite crawl: a session is a handful of good replies, not an
+   exhaustive sweep of the feed. */
+async function __sbXAutoCollect(limit = 10) {
+  const seen = new Set();
+  const out = [];
+  let scrolls = 0;
+  while (out.length < limit && scrolls < 6 && __sbXRunning) {
+    const selfHandles = __sbXGetCurrentUserHandles();
+    for (const { article, data } of __sbXFindTweets(selfHandles)) {
+      if (out.length >= limit) break;
+      const key = data.key || data.text;
+      if (!key || seen.has(key)) continue;
+      if (!data.text || data.text.length < 40) continue;   // too thin to answer well
+      seen.add(key);
+      await __sbXExpandShowMore(article);
+      const full = __sbXGetTweetData(article);
+      out.push({
+        id: key,
+        handle: full.handle || data.handle,
+        text: full.text || data.text,
+        url: __sbXGetTweetPermalink(article),
+        _article: article,
+        _displayName: full.displayName,
+      });
+    }
+    if (out.length >= limit) break;
+    window.scrollBy(0, 900);
+    scrolls++;
+    await __sbSleep(1200);
+  }
+  return out;
+}
+
+function __sbXAutoTeardown() {
+  __sbXRunning = false;
+  if (__sbXAutoKeyHandler) { window.removeEventListener('keydown', __sbXAutoKeyHandler, true); __sbXAutoKeyHandler = null; }
+  const btn = document.getElementById('__sb_x_auto_btn__');
+  if (btn) { btn.classList.remove('running'); document.getElementById('__sb_x_auto_label__').textContent = 'xAuto'; }
+  __sbSetStopBtn(false);
+}
+
+function __sbXAutoShowCurrent() {
+  const item = __sbXAutoQueue[__sbXAutoIndex];
+  if (!item) return __sbXAutoFinish();
+  const left = __sbXAutoQueue.length - __sbXAutoIndex;
+  __sbShowBubble(
+    `**@${item.handle}** said:\n\n"${item.text.slice(0, 220)}${item.text.length > 220 ? '…' : ''}"\n\n` +
+    `**Why this one:** ${item.reason || 'worth answering'} (${item.score}/100)\n\n` +
+    `**Your reply:**\n${item.reply}\n\n` +
+    `_Enter to send · Esc to skip · ${left} left in this batch, ${__sbXAutoRemaining} replies left today_`,
+    false,
+    { rich: true, kicker: 'xAuto' },
+  );
+}
+
+async function __sbXAutoSend() {
+  const item = __sbXAutoQueue[__sbXAutoIndex];
+  if (!item) return;
+  __sbShowBubble(`Replying to @${item.handle}…`, false, { rich: true, kicker: 'xAuto' });
+  const ok = await __sbXPostReply(item._article, String(item.reply).slice(0, 240));
+  __sbXLogReply({
+    postAuthorHandle: item.handle,
+    postAuthorDisplayName: item._displayName,
+    postUrl: item.url,
+    postText: item.text,
+    ourReply: String(item.reply).slice(0, 240),
+    repliedAt: new Date().toISOString(),
+    opportunityScore: item.score,
+    opportunityReason: item.reason,
+    outcome: ok ? 'sent' : 'skipped',
+    surface: 'browser',
+  });
+  if (ok) { __sbXAutoSent++; __sbXAutoRemaining = Math.max(0, (__sbXAutoRemaining ?? 1) - 1); }
+  __sbXAutoIndex++;
+  if (__sbXAutoRemaining !== null && __sbXAutoRemaining <= 0) return __sbXAutoFinish(true);
+  __sbXAutoShowCurrent();
+}
+
+function __sbXAutoSkip() {
+  const item = __sbXAutoQueue[__sbXAutoIndex];
+  if (item) {
+    // A rejection is the strongest training signal on this surface: it says the
+    // judging was wrong, which is the part worth improving.
+    __sbXLogReply({
+      postAuthorHandle: item.handle,
+      postAuthorDisplayName: item._displayName,
+      postUrl: item.url,
+      postText: item.text,
+      ourReply: String(item.reply || '').slice(0, 240),
+      repliedAt: new Date().toISOString(),
+      opportunityScore: item.score,
+      opportunityReason: item.reason,
+      outcome: 'skipped',
+      surface: 'browser',
+    });
+    __sbXAutoSkipped++;
+  }
+  __sbXAutoIndex++;
+  __sbXAutoShowCurrent();
+}
+
+function __sbXAutoFinish(hitCap = false) {
+  __sbXAutoTeardown();
+  const parts = [`Sent ${__sbXAutoSent}`, `skipped ${__sbXAutoSkipped}`];
+  __sbShowBubble(
+    hitCap
+      ? `That is today's ceiling. ${parts.join(', ')}. The cap is there so this never reads as a bot.`
+      : `xAuto done. ${parts.join(', ')}. Everything is on your dashboard.`,
+    true, { rich: true, kicker: 'xAuto' },
+  );
+  if (__sbXAutoSent > 0) __sbPlayReaction('celebrating', 2400);
+  return { ok: true, sent: __sbXAutoSent, skipped: __sbXAutoSkipped };
+}
+
 async function __sbRunXAutomation(options = {}) {
   if (!__sbIsOnX()) {
-    __sbShowBubble('Navigate to X (twitter.com) first, then start the automation.', true, { tone: 'status', title: 'X Automation' });
-    return { ok: false, error: "Navigate to X first." };
+    __sbShowBubble('Open X first, then start xAuto.', true, { tone: 'status', title: 'xAuto' });
+    return { ok: false, error: 'Navigate to X first.' };
   }
   if (__sbXRunning) {
     if (options.startOnly) {
-      __sbShowBubble('X Automation is already running.', false, { tone: 'status', title: 'X Automation' });
+      __sbShowBubble('xAuto is already running.', false, { tone: 'status', title: 'xAuto' });
       return { ok: true, alreadyRunning: true };
     }
-    __sbXStopReason = 'manual';
-    __sbXRunning = false;
-    const btn = document.getElementById('__sb_x_auto_btn__');
-    if (btn) { btn.classList.remove('running'); document.getElementById('__sb_x_auto_label__').textContent = 'X Auto'; }
-    __sbShowBubble('Automation stopped.', true, { tone: 'status', title: 'Stopped' });
+    __sbXAutoTeardown();
+    __sbShowBubble('xAuto stopped.', true, { tone: 'status', title: 'Stopped' });
     return { ok: true, stopped: true };
   }
 
   __sbXRunning = true;
-  __sbXStopReason = 'finished';
-  __sbXProcessedKeys.clear();
+  __sbXAutoQueue = []; __sbXAutoIndex = 0; __sbXAutoSent = 0; __sbXAutoSkipped = 0;
   const btn = document.getElementById('__sb_x_auto_btn__');
   if (btn) { btn.classList.add('running'); document.getElementById('__sb_x_auto_label__').textContent = 'Stop'; }
   __sbSetStopBtn(true);
-  __sbShowBubble('X Automation started — scanning your timeline…', false, { tone: 'status', title: 'X Automation' });
+  __sbOpenCard({ rich: true });
+  __sbShowBubble('Reading your timeline. Most posts are not worth a reply, so this takes a moment.', false, { rich: true, kicker: 'xAuto' });
 
-  let count = 0;
-  let scrollStreak = 0;
-  const runStartedAt = Date.now();
-
-  while (__sbXRunning) {
-    const selfHandles = __sbXGetCurrentUserHandles();
-    const tweets = __sbXFindTweets(selfHandles);
-    if (!tweets.length) {
-      if (++scrollStreak > 8) break; // gave up after ~24s of no new tweets
-      window.scrollBy(0, 700);
-      await __sbSleep(3000);
-      continue;
-    }
-    scrollStreak = 0;
-
-    const { article, data } = tweets[0];
-    __sbXReplied.add(article);
-    if (data.key) __sbXProcessedKeys.add(data.key);
-
-    // Expand truncated post so AI sees the full text, not just the 280-char preview
-    await __sbXExpandShowMore(article);
-    const expanded = __sbXGetTweetData(article);
-    const tweetUrl = __sbXGetTweetPermalink(article);
-
-    const { handle, isBuilderPrompt } = expanded;
-    const text = expanded.text || data.text;
-    if (!text || text.length < 8) continue;
-
-    __sbShowBubble(`@${handle}: "${text.slice(0, 60)}…" — generating reply`, false, { tone: 'status', title: 'X Automation' });
-    const reply = await __sbXGenerateReply(text, handle, { builderPrompt: isBuilderPrompt });
-    if (!reply) { await __sbSleep(2000); continue; }
-
-    if (__sbXPreReplyDelayMs > 0) {
-      const waitSeconds = Math.round(__sbXPreReplyDelayMs / 1000);
-      __sbShowBubble(`@${handle}: reply ready — waiting ${waitSeconds}s before posting`, false, { tone: 'status', title: 'X Automation' });
-      await __sbSleep(__sbXPreReplyDelayMs);
-      if (!__sbXRunning) break;
-    }
-
-    const ok = await __sbXPostReply(article, reply.slice(0, 240));
-    if (ok) {
-      count++;
-      __sbXLogReply({
-        postAuthorHandle: handle,
-        postAuthorDisplayName: expanded.displayName,
-        postUrl: tweetUrl,
-        postText: text,
-        ourReply: reply.slice(0, 240),
-        repliedAt: new Date().toISOString(),
-      });
-      __sbShowBubble(`Replied to ${count} post${count !== 1 ? 's' : ''} — scanning…`, false, { tone: 'status', title: 'X Automation' });
-      await __sbSleep(__sbXPostReplySettleMs);
-    } else {
-      await __sbSleep(3000);
-    }
+  const candidates = await __sbXAutoCollect(10);
+  if (!__sbXRunning) return { ok: true, stopped: true };
+  if (!candidates.length) {
+    __sbXAutoTeardown();
+    __sbShowBubble('Nothing readable on the timeline right now. Scroll a little and start me again.', true, { rich: true, kicker: 'xAuto' });
+    return { ok: false };
   }
 
-  __sbXRunning = false;
-  if (btn) { btn.classList.remove('running'); document.getElementById('__sb_x_auto_label__').textContent = 'X Auto'; }
-  __sbSetStopBtn(false);
-  const runFinishedAt = Date.now();
-  const durationMs = Math.max(0, runFinishedAt - runStartedAt);
-  await __sbXRecordRunStats({
-    repliedCount: count,
-    durationMs,
-    startedAt: new Date(runStartedAt).toISOString(),
-    finishedAt: new Date(runFinishedAt).toISOString(),
-  });
-  const label = __sbXStopReason === 'manual' ? 'Automation stopped' : 'Automation finished';
-  __sbShowBubble(`${label} — replied to ${count} post${count !== 1 ? 's' : ''} in ${__sbXFormatRunMinutes(durationMs)}.`, true, { tone: 'status', title: 'Done' });
-  if (__sbXStopReason !== 'manual' && count > 0) __sbPlayReaction('celebrating', 2800);
-  return { ok: true, repliedCount: count, durationMs };
+  const scored = await __sbXAutoScoreBatch(candidates.map(({ _article, _displayName, ...rest }) => rest));
+  if (!__sbXRunning) return { ok: true, stopped: true };
+  if (scored?.error) {
+    __sbXAutoTeardown();
+    __sbShowBubble(scored.error, true, { rich: true, kicker: 'xAuto' });
+    return { ok: false, error: scored.error };
+  }
+
+  __sbXAutoRemaining = scored.remaining ?? 0;
+  const byId = new Map(candidates.map((c) => [c.id, c]));
+  __sbXAutoQueue = (scored.picks || [])
+    .map((p) => ({ ...p, _article: byId.get(p.id)?._article, _displayName: byId.get(p.id)?._displayName }))
+    .filter((p) => p._article && p.reply);
+
+  if (!__sbXAutoQueue.length) {
+    __sbXAutoTeardown();
+    const skips = (scored.skipped || []).slice(0, 3).map((s) => `· @${s.handle}: ${s.reason}`).join('\n');
+    __sbShowBubble(
+      `I read ${candidates.length} posts and none were worth your reply.\n\n${skips}\n\nThat is a normal result. Scroll on and try me again.`,
+      true, { rich: true, kicker: 'xAuto' },
+    );
+    return { ok: true, sent: 0 };
+  }
+
+  __sbXAutoKeyHandler = (e) => {
+    if (!__sbXRunning) return;
+    const typing = /^(INPUT|TEXTAREA)$/.test(document.activeElement?.tagName || '')
+      || document.activeElement?.isContentEditable;
+    if (typing) return;
+    if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); void __sbXAutoSend(); }
+    else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); __sbXAutoSkip(); }
+  };
+  window.addEventListener('keydown', __sbXAutoKeyHandler, true);
+
+  __sbShowBubble(
+    `${__sbXAutoQueue.length} worth answering out of ${candidates.length}. Enter to send, Esc to skip.`,
+    false, { rich: true, kicker: 'xAuto' },
+  );
+  await __sbSleep(1400);
+  __sbXAutoShowCurrent();
+  return { ok: true, queued: __sbXAutoQueue.length };
 }
+
+/* Landing on X is the moment to offer, not a button you have to remember. Fires
+   once per tab so it never nags. */
+let __sbXAutoOffered = false;
+function __sbXAutoMaybeOffer() {
+  if (__sbXAutoOffered || !__sbIsOnX() || __sbXRunning) return;
+  __sbXAutoOffered = true;
+  setTimeout(() => {
+    if (!__sbIsOnX() || __sbXRunning) return;
+    __sbShowBubble(
+      'You are on X. Want me to read the timeline and draft replies to the few posts worth answering? You send them.\n\n_Click xAuto in the bar, or say "start xAuto"._',
+      true, { rich: true, kicker: 'xAuto' },
+    );
+  }, 4000);
+}
+
 // ===== END X AUTOMATION =====
 
 function __sbTimeGreeting() {
@@ -16646,6 +16821,15 @@ function __sbFormatXStatus(promptText, data) {
   const wantsMentions = /\bmention/.test(t);
   const wantsLastTweet = /\blast\s+(tweet|post)\b/.test(t) || /\b(tweet|post)\s+performance\b/.test(t);
   const general = !(wantsFollowers || wantsMentions || wantsLastTweet);
+
+  // A broad "how's my X doing" now gets the full briefing the server composed
+  // from the same numbers the /x dashboard reads: the week, the queue, what
+  // Braino did on your behalf, and what he refused to post. The narrow
+  // questions below still get their one-line answers, because "how many
+  // followers do I have" should not return a paragraph.
+  if (general && typeof data?.briefing === "string" && data.briefing.trim()) {
+    return data.briefing.trim();
+  }
 
   const followerSentence = () => {
     const raw = data?.followers?.count;
