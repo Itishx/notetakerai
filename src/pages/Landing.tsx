@@ -188,8 +188,8 @@ const WHY = [
   { h: "He has an opinion.", p: "He will tell you an idea is weak. An assistant that agrees with everything is just a slower way of talking to yourself." },
 ];
 
-function StampLine({ words, delay = 0, tone = false, whenVisible = false }: {
-  words: string[]; delay?: number; tone?: boolean; whenVisible?: boolean;
+function StampLine({ words, delay = 0, tone = false, whenVisible = false, per = 110 }: {
+  words: string[]; delay?: number; tone?: boolean; whenVisible?: boolean; per?: number;
 }) {
   const [shown, setShown] = useState(0);
   const hostRef = useRef<HTMLSpanElement>(null);
@@ -209,12 +209,10 @@ function StampLine({ words, delay = 0, tone = false, whenVisible = false }: {
 
   useEffect(() => {
     if (!armed) return;
-    // 110ms apart: fast enough to read as one line landing, slow enough that
-    // each word registers as its own hit.
     const timers = words.map((_, i) =>
-      window.setTimeout(() => setShown((n) => Math.max(n, i + 1)), delay + i * 110));
+      window.setTimeout(() => setShown((n) => Math.max(n, i + 1)), delay + i * per));
     return () => timers.forEach(window.clearTimeout);
-  }, [words, delay, armed]);
+  }, [words, delay, armed, per]);
   return (
     <span ref={hostRef} className={tone ? "tone" : undefined}>
       {words.map((w, i) => (
@@ -257,6 +255,15 @@ function useReveal() {
 export default function Landing() {
   const ref = useReveal();
   const os = useOS();
+  // The notch scrolls away with the page now, so once it is gone there is
+  // nothing at the top at all. This brings a slim bar in to replace it.
+  const [scrolled, setScrolled] = useState(false);
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 260);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
   const [typed, setTyped] = useState("");
   const [asking, setAsking] = useState(false);
   const [pack, setPack] = useState(1);
@@ -265,15 +272,19 @@ export default function Landing() {
   // A generated column sits alongside the presets rather than replacing one, so
   // the pills stay clickable and going back is one tap.
   const [custom, setCustom] = useState<{ label: string; line: string; rows: string[][] } | null>(null);
+  // Dark is the default now. Only an explicit "light" choice turns it off, so a
+  // first visit is dark and a returning visitor keeps whatever they picked.
   const [dark, setDark] = useState(() => {
-    try { return localStorage.getItem("braino-apple-theme") === "dark"; } catch { return false; }
+    try { return localStorage.getItem("braino-apple-theme") !== "light"; } catch { return true; }
   });
+  const [askLight, setAskLight] = useState(false);
   useEffect(() => {
     try { localStorage.setItem("braino-apple-theme", dark ? "dark" : "light"); } catch { /* ignore */ }
   }, [dark]);
+  useEffect(() => { if (!dark) setAskLight(false); }, [dark]);
   useEffect(() => { document.title = "Braino — speak, watch it happen"; }, []);
 
-  const person = custom ?? PEOPLE[PEOPLE.length - 1];
+  const person = custom;
 
   const askBraino = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
@@ -302,11 +313,34 @@ export default function Landing() {
       <BrainoDefs />
       <IomiNotch nav={NOTCH_NAV} />
 
+      <header className={"ld-bar" + (scrolled ? " is-on" : "")}>
+        <a href="#top" className="ld-bar-mark">
+          <span className="ld-bar-dot" aria-hidden="true" />
+          <span>Braino</span>
+        </a>
+      </header>
+
       {/* One navigation, not two. The theme toggle keeps a home of its own,
           because it is a control rather than a destination. */}
-      <button className="ld-theme" onClick={() => setDark((d) => !d)} aria-label="Toggle dark mode" title="Toggle dark mode">
-        {dark ? <SunIcon /> : <MoonIcon />}
-      </button>
+      {/* Going light is a decision worth one beat of friction. Going back to dark
+          is not, so that direction stays a single click. */}
+      <div className={"ld-theme-wrap" + (askLight ? " is-asking" : "")}>
+        <button
+          className="ld-theme"
+          onClick={() => { if (dark) setAskLight((a) => !a); else setDark(true); }}
+          aria-label={dark ? "Switch to the light theme" : "Switch to the dark theme"}
+          title={dark ? "Light theme" : "Dark theme"}
+        >
+          {dark ? <SunIcon /> : <MoonIcon />}
+        </button>
+        <div className="ld-theme-ask">
+          <div className="ld-theme-ask-in">
+            <span>Sure? The white one will hurt your eyes.</span>
+            <button type="button" className="ld-theme-yes" onClick={() => { setDark(false); setAskLight(false); }}>Yes</button>
+            <button type="button" className="ld-theme-no" onClick={() => setAskLight(false)}>No</button>
+          </div>
+        </div>
+      </div>
 
       {/* ── 1. Hero ──────────────────────────────────────────────────── */}
       <header className="apple-hero left ac-coral" id="top">
@@ -326,7 +360,7 @@ export default function Landing() {
 
       <div className="apple-boot">
         <div className="apple-macscreen apple-reveal">
-          <BrainoTVScreen className="apple-boot-video" offer={{ src: "/Braino_Final.MP4", title: "Braino, in your browser" }} />
+          <BrainoTVScreen className="apple-boot-video" offer={{ src: "/Braino_Final.MP4", title: "" }} />
         </div>
       </div>
 
@@ -415,12 +449,16 @@ export default function Landing() {
             )}
           </form>
 
-          <p className="ld-who-line">{custom ? <><span className="ld-who-tag">{custom.label}</span>{custom.line}</> : person.line}</p>
-          <div className="ld-rows">
-            {person.rows.map(([k, v]) => (
-              <div key={k}><b>{k}</b><p>{v}</p></div>
-            ))}
-          </div>
+          {person && (
+            <>
+              <p className="ld-who-line"><span className="ld-who-tag">{custom!.label}</span>{custom!.line}</p>
+              <div className="ld-rows">
+                {person.rows.map(([k, v]) => (
+                  <div key={k}><b>{k}</b><p>{v}</p></div>
+                ))}
+              </div>
+            </>
+          )}
 
           {/* The one handoff to the second page. Everyone gets the four things;
               only people building something have the other problem. */}
@@ -480,7 +518,7 @@ export default function Landing() {
             </table>
           </div>
 
-          <p className="ld-fine">
+          <p className="ld-hera">
             There is also <strong>HERA</strong>, which is not a third Braino. It is a mode either one
             drops into: hold a key, talk, and the words land at your cursor in whatever app you were
             already in. It never says anything back.
@@ -602,9 +640,9 @@ export default function Landing() {
       {/* ── 10. Close ────────────────────────────────────────────────── */}
       <section className="ld-close apple-reveal">
         <h2 className="apple-display ld-stamp-line">
-          <StampLine words={["Speak,"]} whenVisible />
+          <StampLine words={["Speak,"]} whenVisible per={280} />
           {" "}
-          <StampLine words={["watch", "it", "happen."]} delay={240} tone whenVisible />
+          <StampLine words={["watch", "it", "happen."]} delay={560} tone whenVisible per={280} />
         </h2>
         <div className="ld-cta ld-close-cta">
           {os === "mac" ? (

@@ -154,7 +154,7 @@
 .ld-stamp { display: inline-block; opacity: 0; }
 /* The space is a real text node between the spans rather than a margin, so it
    exists for copy and for a screen reader too, not only visually. */
-.ld-stamp.in { opacity: 1; animation: ldStamp .18s cubic-bezier(.16, 1, .3, 1) both; }
+.ld-stamp.in { opacity: 1; animation: ldStamp .42s cubic-bezier(.16, 1, .3, 1) both; }
 @keyframes ldStamp {
   0%   { opacity: 1; filter: brightness(2.4); text-shadow: 0 0 26px rgba(217,100,91,.55); }
   100% { opacity: 1; filter: brightness(1); text-shadow: none; }
@@ -329,14 +329,80 @@
 }
 
 
-/* ── The theme toggle, now that the anchor bar is gone ─────────────────── */
-.ld-theme {
-  position: fixed; top: 14px; right: 18px; z-index: 120;
-  width: 38px; height: 38px; border-radius: 50%;
-  display: grid; place-items: center; cursor: pointer;
-  border: 1px solid var(--ap-hairline); background: var(--ap-nav);
+/* ── The notch sits at the top of the page, not on the viewport ────────── */
+.ld .iomi-notch-dock, .dp .iomi-notch-dock { position: absolute; }
+
+/* ── The bar that takes over once the notch has gone ───────────────────── */
+.ld-bar {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 95;
+  height: 56px; display: flex; align-items: center; justify-content: center;
+  background: var(--ap-nav); border-bottom: 1px solid var(--ap-hairline);
   backdrop-filter: saturate(180%) blur(18px);
+  opacity: 0; transform: translateY(-100%); pointer-events: none;
+  transition: opacity .3s ease, transform .4s cubic-bezier(.16,1,.3,1);
+}
+.ld-bar.is-on { opacity: 1; transform: none; pointer-events: auto; }
+.ld-bar-dot {
+  width: 9px; height: 9px; border-radius: 50%; background: var(--ap-accent); flex: none;
+}
+.ld-bar-mark {
+  display: inline-flex; align-items: center; gap: 9px; text-decoration: none;
+  color: var(--ap-ink); font-size: 17px; font-weight: 700; letter-spacing: -.03em;
+}
+.ld-bar-mark > span { line-height: 1; }
+@media (prefers-reduced-motion: reduce) { .ld-bar { transition: none; } }
+
+/* ── The theme toggle, now that the anchor bar is gone ─────────────────── */
+.ld-theme-wrap {
+  position: fixed; top: 14px; right: 18px; z-index: 120;
+  display: flex; align-items: center; justify-content: flex-end;
+  border-radius: 980px; background: var(--ap-nav);
+  backdrop-filter: saturate(180%) blur(18px);
+  border: 1px solid var(--ap-hairline);
+}
+/* Grid columns animate from 0fr to 1fr, which is what lets the panel grow out
+   of the button leftward without knowing its width in advance. */
+.ld-theme-ask {
+  display: grid; grid-template-columns: 0fr; align-items: center;
+  transition: grid-template-columns .42s cubic-bezier(.32,.72,0,1);
+  order: -1;
+}
+.ld-theme-wrap.is-asking .ld-theme-ask { grid-template-columns: 1fr; }
+/* Everything that collapses has to sit in the ONE animating cell. Laid out as
+   separate children they became auto columns, so only the first one collapsed
+   and the buttons stayed on screen reading "YesNo". */
+.ld-theme-ask-in {
+  overflow: hidden; white-space: nowrap;
+  display: flex; align-items: center; gap: 10px; min-width: 0;
+}
+.ld-theme-ask span { font-size: 13px; color: var(--ap-ink-soft); padding-left: 16px; }
+.ld-theme-yes, .ld-theme-no {
+  border: 0; background: none; padding: 0; cursor: pointer;
+  font: inherit; font-size: 13px; font-weight: 700; color: var(--ap-ink);
+}
+.ld-theme-no { color: var(--ap-ink-soft); }
+.ld-theme-wrap.is-asking .ld-theme-no { padding-right: 4px; }
+.ld-theme-yes:hover { color: var(--ap-accent); }
+.ld-theme-no:hover { color: var(--ap-ink); }
+@media (prefers-reduced-motion: reduce) { .ld-theme-ask { transition: none; } }
+
+.ld-theme {
+  position: relative; z-index: 1;
+  width: 38px; height: 38px; border-radius: 50%; flex: none;
+  display: grid; place-items: center; cursor: pointer;
+  border: 0; background: transparent;
   color: var(--ap-ink);
 }
 .ld-theme svg { width: 18px; height: 18px; }
-.ld-theme:hover { border-color: var(--ap-ink); }
+.ld-theme:hover { color: var(--ap-accent); }
+
+
+/* ── HERA: a footnote, not a third column ─────────────────────────────── */
+.ld-hera {
+  margin: clamp(34px, 4vw, 52px) auto 0; max-width: 62ch; text-align: center;
+  font-size: 14.5px; line-height: 1.65; color: var(--ap-ink-soft);
+}
+.ld-hera strong { color: var(--ap-ink); font-weight: 700; }
+
+/* The ask box is the whole section until it is answered, so it gets room. */
+.ld-ask { margin-bottom: clamp(30px, 4vw, 46px); }
