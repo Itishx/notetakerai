@@ -36,10 +36,10 @@ const SunIcon = () => (<svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="
 const MoonIcon = () => (<svg viewBox="0 0 24 24" fill="none"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"/></svg>);
 
 const ANCHORS = [
-  { href: "#why", label: "Why him" },
   { href: "#who-is", label: "Who he is" },
   { href: "#does", label: "What he does" },
   { href: "#who", label: "Who it's for" },
+  { href: "#why", label: "Why him" },
   { href: "#distra", label: "For founders" },
   { href: "#hood", label: "Under the hood" },
 ];
@@ -103,21 +103,48 @@ const FEATURES = [
 ];
 
 const PEOPLE = [
-  { id: "founder", label: "A founder", line: "Seven jobs, no one to hand any of them to.",
-    rows: [
-      ["Chat with the page", "A competitor's pricing page, a contract, a docs page you do not have an hour for. Ask, get the answer."],
-      ["Notes from audio", "The podcast you had on at the gym becomes three things worth posting about."],
-      ["Meetings", "Investor calls and customer calls. Notes after, and a list of what you promised."],
-      ["Delegate", "Book the flight, buy the domain, chase the renewal you keep forgetting."],
-    ] },
-  { id: "student", label: "A student", line: "Too much to read, and it is all due Friday.",
+  { id: "student", label: "A student", match: ["student", "college", "university", "exam", "study", "school", "phd", "masters"],
+    line: "Too much to read, and it is all due Friday.",
     rows: [
       ["Chat with the page", "The forty page PDF you were assigned. Or the LeetCode problem you are stuck on, explained on the page you are stuck on."],
       ["Notes from audio", "A three hour recorded lecture turns into clean notes in about four minutes."],
       ["Meetings", "Group project calls you would otherwise have to remember on your own."],
       ["Delegate", "Find the paper, fill the form, book the slot, rename the forty files."],
     ] },
-  { id: "everyone", label: "Everyone else", line: "Thirty small frictions a day that nobody should be doing.",
+  { id: "founder", label: "A founder", match: ["founder", "startup", "ceo", "building", "entrepreneur", "solo", "indie"],
+    line: "Seven jobs, no one to hand any of them to.",
+    rows: [
+      ["Chat with the page", "A competitor's pricing page, a contract, a docs page you do not have an hour for. Ask, get the answer."],
+      ["Notes from audio", "The podcast you had on at the gym becomes three things worth posting about."],
+      ["Meetings", "Investor calls and customer calls. Notes after, and a list of what you promised."],
+      ["Delegate", "Book the flight, buy the domain, chase the renewal you keep forgetting."],
+    ] },
+  { id: "job", label: "Job hunting", match: ["job", "interview", "hiring", "apply", "resume", "cv", "unemployed", "internship", "placement"],
+    line: "Forty applications, and every one wants something slightly different.",
+    rows: [
+      ["Chat with the page", "The job post you are looking at, read properly. What they actually want, and what they are quietly asking for."],
+      ["Notes from audio", "A founder's two hour podcast before you interview there, in the five minutes you have."],
+      ["Meetings", "The interview itself. What you said you would send, and who you spoke to."],
+      ["Delegate", "Tailor the same CV forty times, fill the portal, track who has replied."],
+    ] },
+  { id: "dev", label: "A developer", match: ["dev", "engineer", "code", "coding", "programmer", "software", "leetcode", "backend", "frontend"],
+    line: "Twelve tabs of documentation and one bug that makes no sense.",
+    rows: [
+      ["Chat with the page", "The docs page, the stack trace, the pull request. He is on it already, so no pasting code into another window."],
+      ["Notes from audio", "A conference talk you were going to watch eventually, reduced to the part that applies to you."],
+      ["Meetings", "Standups and design reviews, with the decisions written down instead of relitigated next week."],
+      ["Delegate", "Open the ticket, chase the review, fill in the form nobody wants to fill in."],
+    ] },
+  { id: "creator", label: "A creator", match: ["creator", "writer", "content", "youtube", "newsletter", "blog", "video", "podcast", "marketing"],
+    line: "The hard part was never making it. It was everything after.",
+    rows: [
+      ["Chat with the page", "The article you are researching, the thread you want to answer, the brief you were sent."],
+      ["Notes from audio", "Your own two hour recording, turned into the outline you were going to write from anyway."],
+      ["Meetings", "Client and sponsor calls, with what you agreed to written down."],
+      ["Delegate", "Upload it, schedule it, rename it, find the file from March."],
+    ] },
+  { id: "everyone", label: "Everyone else", match: [],
+    line: "Thirty small frictions a day that nobody should be doing.",
     rows: [
       ["Chat with the page", "Whatever is in front of you. The terms nobody reads, the recipe, the tax page."],
       ["Notes from audio", "The long video you want the substance of and not the forty minutes."],
@@ -149,17 +176,35 @@ const WHY = [
   { h: "He has an opinion.", p: "He will tell you an idea is weak. An assistant that agrees with everything is just a slower way of talking to yourself." },
 ];
 
-function StampLine({ words, delay = 0, tone = false }: { words: string[]; delay?: number; tone?: boolean }) {
+function StampLine({ words, delay = 0, tone = false, whenVisible = false }: {
+  words: string[]; delay?: number; tone?: boolean; whenVisible?: boolean;
+}) {
   const [shown, setShown] = useState(0);
+  const hostRef = useRef<HTMLSpanElement>(null);
+  const [armed, setArmed] = useState(!whenVisible);
+
+  // The close sits far down the page, so the stamp waits until it is actually
+  // on screen. An animation that finished before you arrived is not one.
   useEffect(() => {
+    if (armed || !hostRef.current) return;
+    const io = new IntersectionObserver(
+      (entries) => entries.forEach((e) => e.isIntersecting && setArmed(true)),
+      { threshold: 0.5 },
+    );
+    io.observe(hostRef.current);
+    return () => io.disconnect();
+  }, [armed]);
+
+  useEffect(() => {
+    if (!armed) return;
     // 110ms apart: fast enough to read as one line landing, slow enough that
     // each word registers as its own hit.
     const timers = words.map((_, i) =>
       window.setTimeout(() => setShown((n) => Math.max(n, i + 1)), delay + i * 110));
     return () => timers.forEach(window.clearTimeout);
-  }, [words, delay]);
+  }, [words, delay, armed]);
   return (
-    <span className={tone ? "tone" : undefined}>
+    <span ref={hostRef} className={tone ? "tone" : undefined}>
       {words.map((w, i) => (
         <span key={w + i} className={"ld-stamp" + (i < shown ? " in" : "")}>
           {w}{i < words.length - 1 ? " " : ""}
@@ -184,9 +229,20 @@ function useReveal() {
   return ref;
 }
 
+function matchPerson(input: string) {
+  const q = input.toLowerCase().trim();
+  if (!q) return -1;
+  for (let i = 0; i < PEOPLE.length; i++) {
+    if (PEOPLE[i].match.some((m) => q.includes(m))) return i;
+  }
+  return -1;
+}
+
 export default function Landing() {
   const ref = useReveal();
   const [who, setWho] = useState(0);
+  const [typed, setTyped] = useState("");
+  const [noMatch, setNoMatch] = useState(false);
   const [dark, setDark] = useState(() => {
     try { return localStorage.getItem("braino-apple-theme") === "dark"; } catch { return false; }
   });
@@ -219,11 +275,7 @@ export default function Landing() {
       {/* ── 1. Hero ──────────────────────────────────────────────────── */}
       <header className="apple-hero left ac-coral" id="top">
         <p className="apple-eyebrow">Braino</p>
-        <h1 className="apple-display ld-stamp-line">
-          <StampLine words={["Speak."]} />
-          <br />
-          <StampLine words={["Watch", "it", "happen."]} delay={280} tone />
-        </h1>
+        <h1 className="apple-display">Speak.<br /><span className="tone">Watch it happen.</span></h1>
         <p className="apple-subhead">
           Braino is an AI that lives on your screen. You talk to him like a person, and he
           actually does the work. Free to start, in your browser.
@@ -247,18 +299,7 @@ export default function Landing() {
         </div>
       </div>
 
-      {/* ── 2. Why him ───────────────────────────────────────────────── */}
-      <section className="ld-why-sec apple-reveal" id="why">
-        <div className="ld-wrap">
-          <p className="apple-eyebrow">The obvious question</p>
-          <h2 className="ld-h2">Why not just <span className="tone">use ChatGPT?</span></h2>
-          <div className="ld-why">
-            {WHY.map((w) => <div key={w.h}><b>{w.h}</b><p>{w.p}</p></div>)}
-          </div>
-        </div>
-      </section>
-
-      {/* ── 3. Who is Braino ─────────────────────────────────────────── */}
+      {/* ── 2. Who is Braino ─────────────────────────────────────────── */}
       <section className="apple-story ac-coral ld-whois" id="who-is">
         <div className="story-intro apple-reveal">
           <p className="bento-eyebrow">Who is Braino?</p>
@@ -289,7 +330,7 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ── 4. What he does ──────────────────────────────────────────── */}
+      {/* ── 3. What he does ──────────────────────────────────────────── */}
       <section className="apple-story ld-story" id="does">
         <div className="apple-whatcan ld-bento">
           <div className="wc-head apple-reveal">
@@ -310,27 +351,66 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ── 5. Who it is for ─────────────────────────────────────────── */}
+      {/* ── 4. Who it is for ─────────────────────────────────────────── */}
       <section className="ld-who apple-reveal" id="who">
         <div className="ld-wrap">
           <p className="apple-eyebrow">Who it is for</p>
           <h2 className="ld-h2">Same four things. <span className="tone">Different day.</span></h2>
-          <p className="ld-lede">One product, three doors in. Pick the one that sounds like you.</p>
+          <p className="ld-lede">One product. Six ways in, and the four things never change. Pick whichever sounds most like your week.</p>
 
           <div className="ld-pills" role="tablist">
             {PEOPLE.map((p, i) => (
               <button key={p.id} type="button" role="tab" aria-selected={who === i}
-                className={who === i ? "is-on" : undefined} onClick={() => setWho(i)}>
+                className={who === i ? "is-on" : undefined}
+                onClick={() => { setWho(i); setNoMatch(false); }}>
                 {p.label}
               </button>
             ))}
           </div>
+
+          <form
+            className="ld-ask"
+            onSubmit={(e) => {
+              e.preventDefault();
+              const hit = matchPerson(typed);
+              if (hit >= 0) { setWho(hit); setNoMatch(false); }
+              else { setWho(PEOPLE.length - 1); setNoMatch(Boolean(typed.trim())); }
+            }}
+          >
+            <label htmlFor="ld-who-input">Or just tell him what you do</label>
+            <div>
+              <input
+                id="ld-who-input"
+                value={typed}
+                onChange={(e) => setTyped(e.target.value)}
+                placeholder="I'm a second year law student"
+              />
+              <button type="submit" className="ld-btn sm">Show me</button>
+            </div>
+            {noMatch && (
+              <p className="ld-ask-miss">
+                Nothing that matches exactly, so here is the everyday version. The four things do
+                not change; only the day around them does.
+              </p>
+            )}
+          </form>
 
           <p className="ld-who-line">{person.line}</p>
           <div className="ld-rows">
             {person.rows.map(([k, v]) => (
               <div key={k}><b>{k}</b><p>{v}</p></div>
             ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── 5. Why him ───────────────────────────────────────────────── */}
+      <section className="ld-why-sec apple-reveal" id="why">
+        <div className="ld-wrap">
+          <p className="apple-eyebrow">The obvious question</p>
+          <h2 className="ld-h2">Why not just <span className="tone">use ChatGPT?</span></h2>
+          <div className="ld-why">
+            {WHY.map((w) => <div key={w.h}><b>{w.h}</b><p>{w.p}</p></div>)}
           </div>
         </div>
       </section>
@@ -443,7 +523,11 @@ export default function Landing() {
       {/* ── 10. Close ────────────────────────────────────────────────── */}
       <section className="ld-close apple-reveal">
         <div className="ld-close-art" aria-hidden="true"><Braino size={150} expr="happy" legs gloves /></div>
-        <h2 className="apple-display">Speak, <span className="tone">watch it happen.</span></h2>
+        <h2 className="apple-display ld-stamp-line">
+          <StampLine words={["Speak,"]} whenVisible />
+          {" "}
+          <StampLine words={["watch", "it", "happen."]} delay={240} tone whenVisible />
+        </h2>
         <div className="ld-cta">
           <a href={EXTENSION_DOWNLOAD_URL} className="ld-btn">Get Braino, free</a>
         </div>

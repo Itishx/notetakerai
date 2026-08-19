@@ -94,14 +94,16 @@
 /* ── Close ────────────────────────────────────────────────────────────── */
 .ld-close { text-align: center; padding: clamp(64px, 9vw, 118px) var(--ap-gutter); border-top: 1px solid var(--ap-hairline); }
 .ld-close-art { display: grid; place-items: center; margin-bottom: 16px; }
-.ld-close .apple-display { margin: 0; }
+/* apple-display carries no bottom margin, so the closing line sat straight on
+   top of the button under it. */
+.ld-close .apple-display { margin: 0 0 clamp(22px, 3vw, 34px); }
 .ld-close .ld-cta { justify-content: center; }
 
 /* ── Dark ─────────────────────────────────────────────────────────────── */
 .ld.dark .ld-frame { background: rgba(255,255,255,.06); border-color: rgba(255,255,255,.12); box-shadow: none; }
 .ld.dark .ld-distra-grid > div { border-top-color: rgba(255,255,255,.14); }
 .ld.dark .ld-btn { background: var(--ap-ink); color: var(--ap-bg); }
-.ld.dark .ld-btn.ghost { color: var(--ap-ink); border-color: var(--ap-hairline); }
+.ld.dark .ld-btn.ghost { background: transparent; color: var(--ap-ink); border-color: var(--ap-hairline); }
 .ld.dark .ld-pills button.is-on { background: var(--ap-ink); color: var(--ap-bg); }
 
 /* The anchor bar sets colour and opacity on every child link, which otherwise
@@ -193,3 +195,28 @@
 .ld-table tfoot td { padding: 22px 20px 0 0; }
 .ld-table tfoot td.is-paid { padding-inline: 20px; }
 @media (max-width: 700px) { .ld-table tbody th { width: 30%; } }
+
+
+/* ── "Or just tell him what you do" ───────────────────────────────────────
+   Keyword matched in the browser rather than sent to a model: instant, free,
+   and an honest "nothing matched exactly" beats a confident wrong answer. */
+.ld-ask { margin: 0 0 26px; }
+.ld-ask label {
+  display: block; margin-bottom: 9px;
+  font-size: 12px; font-weight: 700; letter-spacing: .07em;
+  text-transform: uppercase; color: var(--ap-ink-soft);
+}
+.ld-ask > div { display: flex; gap: 9px; flex-wrap: wrap; }
+.ld-ask input {
+  flex: 1 1 260px; min-width: 0;
+  border: 1px solid var(--ap-hairline); border-radius: 980px;
+  background: var(--ap-surface); color: var(--ap-ink);
+  padding: 12px 20px; font: inherit; font-size: 15px;
+}
+.ld-ask input:focus { outline: none; border-color: var(--ap-accent); }
+.ld-ask input::placeholder { color: var(--ap-ink-soft); opacity: .7; }
+.ld-ask .ld-btn { flex: 0 0 auto; }
+.ld-ask-miss { margin: 12px 0 0; font-size: 13.5px; line-height: 1.55; color: var(--ap-ink-soft); max-width: 60ch; }
+
+/* Six pills wrap onto two rows; keep them from looking like a paragraph. */
+.ld-pills { margin-bottom: 20px; }
