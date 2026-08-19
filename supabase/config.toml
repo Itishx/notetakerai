@@ -10,6 +10,12 @@ project_id = "suwhgaxxdizowbyjlljj"
 [functions.braino-chat]
 entrypoint = "./functions/chat/braino-chat/index.ts"
 
+# The landing page's "tell him what you do". Public because nobody signs in
+# to read a landing page; rate limited per IP inside the function instead.
+[functions.braino-for-you]
+entrypoint = "./functions/chat/braino-for-you/index.ts"
+verify_jwt = false
+
 [functions.chat-about-notes]
 entrypoint = "./functions/chat/chat-about-notes/index.ts"
 

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import IomiNotch from "@/components/IomiNotch";
 import BrainoFooter from "@/components/BrainoFooter";
@@ -12,6 +12,9 @@ import { ArrowUpRight } from "lucide-react";
 import { EXTENSION_DOWNLOAD_URL, EXTENSION_DOWNLOAD_FILENAME, EXTENSION_VERSION } from "@/lib/extensionDownload";
 import "../styles/apple.css";
 import "./landing.css";
+
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
+const ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 
 /* ============================================================================
    / — the landing page.
@@ -103,7 +106,7 @@ const FEATURES = [
 ];
 
 const PEOPLE = [
-  { id: "student", label: "A student", match: ["student", "college", "university", "exam", "study", "school", "phd", "masters"],
+  { id: "student", label: "A student",
     line: "Too much to read, and it is all due Friday.",
     rows: [
       ["Chat with the page", "The forty page PDF you were assigned. Or the LeetCode problem you are stuck on, explained on the page you are stuck on."],
@@ -111,7 +114,7 @@ const PEOPLE = [
       ["Meetings", "Group project calls you would otherwise have to remember on your own."],
       ["Delegate", "Find the paper, fill the form, book the slot, rename the forty files."],
     ] },
-  { id: "founder", label: "A founder", match: ["founder", "startup", "ceo", "building", "entrepreneur", "solo", "indie"],
+  { id: "founder", label: "A founder",
     line: "Seven jobs, no one to hand any of them to.",
     rows: [
       ["Chat with the page", "A competitor's pricing page, a contract, a docs page you do not have an hour for. Ask, get the answer."],
@@ -119,7 +122,7 @@ const PEOPLE = [
       ["Meetings", "Investor calls and customer calls. Notes after, and a list of what you promised."],
       ["Delegate", "Book the flight, buy the domain, chase the renewal you keep forgetting."],
     ] },
-  { id: "job", label: "Job hunting", match: ["job", "interview", "hiring", "apply", "resume", "cv", "unemployed", "internship", "placement"],
+  { id: "job", label: "Job hunting",
     line: "Forty applications, and every one wants something slightly different.",
     rows: [
       ["Chat with the page", "The job post you are looking at, read properly. What they actually want, and what they are quietly asking for."],
@@ -127,7 +130,7 @@ const PEOPLE = [
       ["Meetings", "The interview itself. What you said you would send, and who you spoke to."],
       ["Delegate", "Tailor the same CV forty times, fill the portal, track who has replied."],
     ] },
-  { id: "dev", label: "A developer", match: ["dev", "engineer", "code", "coding", "programmer", "software", "leetcode", "backend", "frontend"],
+  { id: "dev", label: "A developer",
     line: "Twelve tabs of documentation and one bug that makes no sense.",
     rows: [
       ["Chat with the page", "The docs page, the stack trace, the pull request. He is on it already, so no pasting code into another window."],
@@ -135,7 +138,7 @@ const PEOPLE = [
       ["Meetings", "Standups and design reviews, with the decisions written down instead of relitigated next week."],
       ["Delegate", "Open the ticket, chase the review, fill in the form nobody wants to fill in."],
     ] },
-  { id: "creator", label: "A creator", match: ["creator", "writer", "content", "youtube", "newsletter", "blog", "video", "podcast", "marketing"],
+  { id: "creator", label: "A creator",
     line: "The hard part was never making it. It was everything after.",
     rows: [
       ["Chat with the page", "The article you are researching, the thread you want to answer, the brief you were sent."],
@@ -143,7 +146,7 @@ const PEOPLE = [
       ["Meetings", "Client and sponsor calls, with what you agreed to written down."],
       ["Delegate", "Upload it, schedule it, rename it, find the file from March."],
     ] },
-  { id: "everyone", label: "Everyone else", match: [],
+  { id: "everyone", label: "Everyone else",
     line: "Thirty small frictions a day that nobody should be doing.",
     rows: [
       ["Chat with the page", "Whatever is in front of you. The terms nobody reads, the recipe, the tax page."],
@@ -229,20 +232,15 @@ function useReveal() {
   return ref;
 }
 
-function matchPerson(input: string) {
-  const q = input.toLowerCase().trim();
-  if (!q) return -1;
-  for (let i = 0; i < PEOPLE.length; i++) {
-    if (PEOPLE[i].match.some((m) => q.includes(m))) return i;
-  }
-  return -1;
-}
-
 export default function Landing() {
   const ref = useReveal();
   const [who, setWho] = useState(0);
   const [typed, setTyped] = useState("");
-  const [noMatch, setNoMatch] = useState(false);
+  const [asking, setAsking] = useState(false);
+  const [askErr, setAskErr] = useState<string | null>(null);
+  // A generated column sits alongside the presets rather than replacing one, so
+  // the pills stay clickable and going back is one tap.
+  const [custom, setCustom] = useState<{ label: string; line: string; rows: string[][] } | null>(null);
   const [dark, setDark] = useState(() => {
     try { return localStorage.getItem("braino-apple-theme") === "dark"; } catch { return false; }
   });
@@ -251,7 +249,28 @@ export default function Landing() {
   }, [dark]);
   useEffect(() => { document.title = "Braino — speak, watch it happen"; }, []);
 
-  const person = PEOPLE[who];
+  const person = custom ?? PEOPLE[who];
+
+  const askBraino = useCallback(async (e: React.FormEvent) => {
+    e.preventDefault();
+    const q = typed.trim();
+    if (!q || asking) return;
+    setAsking(true); setAskErr(null);
+    try {
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/braino-for-you`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", apikey: ANON_KEY },
+        body: JSON.stringify({ who: q }),
+      });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok || !payload.rows) throw new Error(payload.error || "Could not work that one out.");
+      setCustom(payload);
+    } catch (err) {
+      setAskErr(err instanceof Error ? err.message : "Something went wrong.");
+    } finally {
+      setAsking(false);
+    }
+  }, [typed, asking]);
 
   return (
     <BrainoTVProvider>
@@ -361,41 +380,39 @@ export default function Landing() {
           <div className="ld-pills" role="tablist">
             {PEOPLE.map((p, i) => (
               <button key={p.id} type="button" role="tab" aria-selected={who === i}
-                className={who === i ? "is-on" : undefined}
-                onClick={() => { setWho(i); setNoMatch(false); }}>
+                className={!custom && who === i ? "is-on" : undefined}
+                onClick={() => { setWho(i); setCustom(null); setAskErr(null); }}>
                 {p.label}
               </button>
             ))}
           </div>
 
-          <form
-            className="ld-ask"
-            onSubmit={(e) => {
-              e.preventDefault();
-              const hit = matchPerson(typed);
-              if (hit >= 0) { setWho(hit); setNoMatch(false); }
-              else { setWho(PEOPLE.length - 1); setNoMatch(Boolean(typed.trim())); }
-            }}
-          >
+          <form className="ld-ask" onSubmit={askBraino}>
             <label htmlFor="ld-who-input">Or just tell him what you do</label>
             <div>
               <input
                 id="ld-who-input"
                 value={typed}
                 onChange={(e) => setTyped(e.target.value)}
-                placeholder="I'm a second year law student"
+                placeholder="a paediatric nurse on night shifts"
+                disabled={asking}
               />
-              <button type="submit" className="ld-btn sm">Show me</button>
+              <button type="submit" className="ld-btn sm" disabled={asking || !typed.trim()}>
+                {asking ? "Thinking..." : "Show me"}
+              </button>
             </div>
-            {noMatch && (
+            {askErr && <p className="ld-ask-miss">{askErr}</p>}
+            {custom && !asking && (
               <p className="ld-ask-miss">
-                Nothing that matches exactly, so here is the everyday version. The four things do
-                not change; only the day around them does.
+                Written for you just now, by him.{" "}
+                <button type="button" className="ld-ask-back" onClick={() => { setCustom(null); setTyped(""); }}>
+                  Back to the examples
+                </button>
               </p>
             )}
           </form>
 
-          <p className="ld-who-line">{person.line}</p>
+          <p className="ld-who-line">{custom ? <><span className="ld-who-tag">{custom.label}</span>{custom.line}</> : person.line}</p>
           <div className="ld-rows">
             {person.rows.map(([k, v]) => (
               <div key={k}><b>{k}</b><p>{v}</p></div>
