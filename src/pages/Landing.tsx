@@ -518,6 +518,27 @@ export default function Landing() {
             </table>
           </div>
 
+          {/* A 620px table is a sideways scroll in the hand. Same data, stacked. */}
+          <div className="ld-compare-stack">
+            {([["Braino", "The companion", 1], ["Braino Distra", "The one you hire", 2]] as Array<[string, string, number]>).map(([name, sub, col]) => (
+              <div key={name} className={col === 2 ? "is-paid" : undefined}>
+                <b>{name}</b>
+                <span>{sub}</span>
+                <dl>
+                  {COMPARE.map((row) => (
+                    <div key={row[0]}>
+                      <dt>{row[0]}</dt>
+                      <dd>{row[col]}</dd>
+                    </div>
+                  ))}
+                </dl>
+                {col === 1
+                  ? <a href={EXTENSION_DOWNLOAD_URL} className="ld-btn sm">Get Braino</a>
+                  : <Link to="/distra" className="ld-btn sm ghost">See Distra</Link>}
+              </div>
+            ))}
+          </div>
+
           <p className="ld-hera">
             There is also <strong>HERA</strong>, which is not a third Braino. It is a mode either one
             drops into: hold a key, talk, and the words land at your cursor in whatever app you were

@@ -80,3 +80,26 @@
   max-width: 46ch; margin: 18px 0 0;
   font-size: clamp(15px, 1.6vw, 17px); line-height: 1.55; color: var(--ap-ink-soft);
 }
+
+/* ── Mobile ───────────────────────────────────────────────────────────────
+   The Distra page carries the anchor bar as well as the notch, and on a phone
+   the two stacked on each other. Measured on 390 and 360. */
+@media (max-width: 760px) {
+  /* The anchor bar is sticky at the top and the notch is absolute at page top,
+     so the notch landed on the bar's own hairline. Push it clear. */
+  .dp .iomi-notch-dock { top: 52px; }
+  .dp .apple-hero { padding-top: 118px; }
+
+  .dp-problem, .dp-channels, .dp-control, .dp-honest { padding: 46px 0; }
+  .dp-does { padding-bottom: 40px; gap: 12px; }
+  .dp-do { padding: 24px; }
+  .dp-versus > div, .dp-levels > div { padding: 22px; }
+  .dp-chan-grid { gap: 12px; }
+  .dp-chan p { padding: 16px 18px 12px; }
+  .dp-chan i { padding: 0 18px 18px; }
+  .dp-gates span { font-size: 13px; padding: 10px 15px; }
+
+  /* Two pills sharing a row become two rows the thumb can actually hit. */
+  .dp .ld-cta .ld-btn { flex: 1 1 100%; text-align: center; padding: 16px 24px; }
+  .dp .apple-anchors-inner { height: 52px; }
+}
