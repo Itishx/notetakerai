@@ -9,29 +9,37 @@ import "./braino-footer.css";
    The navigation columns were hidden for a while, back when most of these
    destinations were unfinished. They are live pages now, so the footer carries
    them again and the game sits underneath rather than instead of them.
+
+   The columns follow the site's own shape as of the two-page rewrite: the
+   landing page's sections first, then Braino Distra and its channels, then what
+   everything runs on, then the reading. Foundry is no longer a column of its
+   own, because the landing page stopped selling it as a third product.
    The original hide/restore reasoning lives in:
    Braino Knowledge Base/design/waitlist-navigation.md#hidden-footer-link-map
    ============================================================================ */
 
 const FOOTER_COLUMNS: Array<{ head: string; links: Array<[string, string]> }> = [
   {
-    head: "Product",
+    // Two products, in the order the site now argues them: the companion is how
+    // you meet him, Distra is what you hire. Foundry is gone from the columns
+    // because the landing page no longer sells it as a third thing.
+    head: "Braino",
     links: [
-      ["Braino Browser", "/braino?view=browser"],
-      ["Braino Foundry", "/braino?view=foundry"],
-      ["BrainoHERA", "/braino?view=hera"],
-      ["Distribution", "/channels"],
-      ["Pricing", "/premium"],
+      ["What he does", "/#does"],
+      ["Who it is for", "/#who"],
+      ["Why not ChatGPT", "/#why"],
+      ["Pricing", "/#pricing"],
+      ["Questions", "/#faq"],
     ],
   },
   {
-    head: "Braino for",
+    head: "Braino Distra",
     links: [
-      ["The browser", "/braino?view=browser"],
-      ["Founders & builders", "/braino?view=foundry"],
-      ["Meetings", "/meetings"],
-      ["X", "/braino-for-x"],
-      ["LinkedIn", "/braino-for-linkedin"],
+      ["What it is", "/distra"],
+      ["All channels", "/channels"],
+      ["On X", "/braino-for-x"],
+      ["On LinkedIn", "/braino-for-linkedin"],
+      ["The full plan", "/distra/plan"],
     ],
   },
   {
@@ -40,16 +48,18 @@ const FOOTER_COLUMNS: Array<{ head: string; links: Array<[string, string]> }> = 
       ["Braino OS", "/braino-os"],
       ["Human Intelligence", "/human-intelligence"],
       ["Emotional Intelligence", "/emotional-intelligence"],
+      ["BrainoHERA", "/brainohera-teaser"],
+      ["Meetings", "/meetings"],
     ],
   },
   {
     head: "Read",
     links: [
       ["Knowledge Base", "/knowledge"],
-      ["Monday Mode", "/monday-mode"],
       ["Braino's journal", "/journal"],
       ["Changelog", "/changelog"],
       ["Founder's letter", "/founder-letter"],
+      ["The questions page", "/questions"],
     ],
   },
 ];

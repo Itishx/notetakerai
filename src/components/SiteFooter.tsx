@@ -17,16 +17,23 @@ export default function SiteFooter() {
             <Link to="/auth" className="home-cta home-footer-cta">Get started →</Link>
           </div>
           <div className="home-footer-cols">
+            {/* Two products, in the order the site argues them: the companion,
+                then Braino Distra. Same shape as BrainoFooter's columns. */}
             <div className="home-footer-col">
-              <div className="home-footer-col-head">Product</div>
+              <div className="home-footer-col-head">Braino</div>
+              <Link to="/">What he does</Link>
               <Link to="/delegate">Delegate</Link>
-              <Link to="/channels">Distribution</Link>
-              <Link to="/braino-for-x">Braino for X</Link>
-              <Link to="/braino-for-linkedin">Braino for LinkedIn</Link>
+              <Link to="/build-braino">Build yours</Link>
               <Link to="/premium">Pricing</Link>
-              <Link to="/build-braino">Build Yours</Link>
-              <Link to="/changelog">Changelog</Link>
               <Link to="/knowledge">Knowledge Base</Link>
+            </div>
+            <div className="home-footer-col">
+              <div className="home-footer-col-head">Braino Distra</div>
+              <Link to="/distra">What it is</Link>
+              <Link to="/channels">All channels</Link>
+              <Link to="/braino-for-x">On X</Link>
+              <Link to="/braino-for-linkedin">On LinkedIn</Link>
+              <Link to="/distra/plan">The full plan</Link>
             </div>
             <div className="home-footer-col">
               <div className="home-footer-col-head">Resources</div>
@@ -34,8 +41,9 @@ export default function SiteFooter() {
               <Link to="/remote-agent">Remote Agent</Link>
               <Link to="/straight-talk">Straight talk on the agent</Link>
               <Link to="/why-the-wait">Why Braino takes a beat</Link>
-              <Link to="/contact">Contact</Link>
+              <Link to="/changelog">Changelog</Link>
               <Link to="/chat">Braino Chat</Link>
+              <Link to="/contact">Contact</Link>
             </div>
             <div className="home-footer-col">
               <div className="home-footer-col-head">Legal</div>
