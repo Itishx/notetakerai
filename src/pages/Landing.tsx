@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import IomiNotch from "@/components/IomiNotch";
 import BrainoFooter from "@/components/BrainoFooter";
@@ -177,9 +177,10 @@ function StampLine({ words, delay = 0, tone = false, whenVisible = false }: {
   return (
     <span ref={hostRef} className={tone ? "tone" : undefined}>
       {words.map((w, i) => (
-        <span key={w + i} className={"ld-stamp" + (i < shown ? " in" : "")}>
-          {w}{i < words.length - 1 ? " " : ""}
-        </span>
+        <Fragment key={w + i}>
+          <span className={"ld-stamp" + (i < shown ? " in" : "")}>{w}</span>
+          {i < words.length - 1 ? " " : null}
+        </Fragment>
       ))}
     </span>
   );
@@ -326,12 +327,10 @@ export default function Landing() {
           </div>
           <div className="wc-bento apple-reveal">
             {FEATURES.map((f, i) => (
-              <article className={"wc-card " + f.ac + (i === 0 ? " wc-dark" : "")} key={f.n}>
+              <article className={"wc-card " + f.ac} key={f.n}>
+                <span className="ld-feat-n">{f.n}</span>
                 <h4>{f.name}</h4>
                 <p>{f.line}</p>
-                {/* Sized for a real clip of the thing happening. Honestly empty
-                    until those exist, rather than filled with stock. */}
-                <div className="wc-mock ld-mock" aria-hidden="true" />
               </article>
             ))}
           </div>
