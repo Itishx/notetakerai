@@ -1,156 +1,127 @@
 /* ============================================================================
-   / — the landing page.
-   Deliberately plainer than anything else on this site. The old homepage was
-   beautiful and unreadable; this one is built so a fifteen year old can scroll
-   it once and explain the product to somebody else. Big type, short lines, one
-   accent, one button repeated.
+   / — landing page additions on top of apple.css.
+
+   The page borrows the site's real system: notch, anchor bar, theme toggle,
+   full-bleed rounded colour panels, one accent per idea, the shared footer.
+   Only what a landing page needs that a product page does not lives here: the
+   split hero, the alternating feature panels with their clip frames, the
+   who-is-it-for switcher, and the comparison grid.
    ============================================================================ */
 
-.ld {
-  --ld-bg: #fbfaf8;
-  --ld-ink: #16150f;
-  --ld-soft: #6b6a63;
-  --ld-line: rgba(22, 21, 15, 0.12);
-  --ld-accent: #d9645b;
-  --ld-panel: #ffffff;
-  --ld-maxw: 1060px;
-  --ld-gutter: clamp(20px, 5vw, 44px);
-  background: var(--ld-bg);
-  color: var(--ld-ink);
-  font-family: "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  -webkit-font-smoothing: antialiased;
-  min-height: 100vh;
+.ld { --ap-accent: var(--ap-coral); }
+.ld-wrap { max-width: var(--ap-maxw); margin: 0 auto; padding: 0 var(--ap-gutter); }
+.ld-anchor-name { font-size: 19px; font-weight: 600; letter-spacing: -.01em; }
+
+/* ── Shared type ──────────────────────────────────────────────────────── */
+.ld-h2 {
+  margin: 0 0 16px; font-size: clamp(30px, 4.4vw, 52px); font-weight: 600;
+  letter-spacing: -.032em; line-height: 1.05; text-wrap: balance; color: var(--ap-ink);
 }
-.ld *, .ld *::before, .ld *::after { box-sizing: border-box; }
+.ld-h2 .tone { color: var(--ap-accent); }
+.ld-lede { margin: 0; max-width: 58ch; font-size: clamp(16px, 1.8vw, 19px); line-height: 1.55; color: var(--ap-ink-soft); }
+.ld-fine { margin: 26px 0 0; font-size: 14px; line-height: 1.65; color: var(--ap-ink-soft); max-width: 68ch; }
+.ld-fine strong { color: var(--ap-ink); font-weight: 600; }
 
-/* ── Nav ──────────────────────────────────────────────────────────────── */
-.ld-nav { position: sticky; top: 0; z-index: 50; background: rgba(251, 250, 248, .86); backdrop-filter: saturate(180%) blur(18px); border-bottom: 1px solid var(--ld-line); }
-.ld-nav-in { max-width: var(--ld-maxw); margin: 0 auto; padding: 0 var(--ld-gutter); height: 58px; display: flex; align-items: center; gap: 24px; }
-.ld-mark { display: flex; align-items: center; gap: 8px; font-size: 18px; font-weight: 700; letter-spacing: -.03em; }
-.ld-mark i { width: 8px; height: 8px; border-radius: 50%; background: var(--ld-accent); }
-.ld-nav-links { margin-left: auto; display: flex; align-items: center; gap: 22px; }
-.ld-nav-links a { font-size: 14px; color: var(--ld-ink); text-decoration: none; opacity: .78; }
-.ld-nav-links a:hover { opacity: 1; }
-/* The rule above sets colour and opacity on every child link, which otherwise
-   wins over .ld-btn's own by source order and leaves the nav button unreadable.
-   Restore it explicitly wherever a button nests inside the nav. */
-.ld-nav-links a.ld-btn { color: var(--ld-bg); opacity: 1; }
-.ld-nav-links a.ld-btn.ghost { color: var(--ld-ink); }
-@media (max-width: 760px) { .ld-nav-links a:not(.ld-btn) { display: none; } }
-
-/* ── Buttons: one shape, used everywhere ──────────────────────────────── */
+/* ── Buttons: one shape, repeated ─────────────────────────────────────── */
 .ld-btn {
-  display: inline-block; padding: 15px 32px; border-radius: 999px;
-  background: var(--ld-ink); color: var(--ld-bg); text-decoration: none;
-  font-size: 16px; font-weight: 650; letter-spacing: -.01em;
+  display: inline-block; padding: 15px 32px; border-radius: 980px;
+  background: var(--ap-ink); color: var(--ap-bg); text-decoration: none;
+  font-size: 16px; font-weight: 600; letter-spacing: -.01em;
   transition: transform .22s cubic-bezier(.16,1,.3,1);
 }
 .ld-btn:hover { transform: translateY(-2px); }
-.ld-btn.sm { padding: 9px 20px; font-size: 14px; opacity: 1; }
-.ld-btn.ghost { background: transparent; color: var(--ld-ink); border: 1px solid var(--ld-line); }
-.ld-btn.ghost:hover { border-color: var(--ld-ink); }
+.ld-btn.sm { padding: 11px 24px; font-size: 14px; }
+.ld-btn.ghost { background: transparent; color: var(--ap-ink); border: 1px solid var(--ap-hairline); }
+.ld-btn.ghost:hover { border-color: var(--ap-ink); }
 .ld-cta { margin-top: 30px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
-.ld-cta-note { font-size: 13px; color: var(--ld-soft); }
+.ld-cta-note { font-size: 13px; color: var(--ap-ink-soft); }
 
-/* ── Hero ─────────────────────────────────────────────────────────────── */
-.ld-hero {
-  max-width: var(--ld-maxw); margin: 0 auto;
-  padding: clamp(56px, 9vw, 110px) var(--ld-gutter) clamp(48px, 7vw, 90px);
-  display: grid; grid-template-columns: 1fr auto; gap: clamp(24px, 5vw, 60px); align-items: center;
+/* ── Hero: copy left, him right ───────────────────────────────────────── */
+.ld-hero { padding-bottom: clamp(30px, 5vw, 60px); }
+.ld-hero-grid {
+  max-width: var(--ap-maxw); margin: 0 auto;
+  display: grid; grid-template-columns: 1.05fr .95fr; gap: clamp(20px, 4vw, 56px); align-items: center;
 }
-@media (max-width: 860px) { .ld-hero { grid-template-columns: 1fr; } .ld-hero-art { order: -1; } }
-.ld-hero h1 {
-  margin: 0 0 22px; font-size: clamp(44px, 8vw, 92px); font-weight: 600;
-  letter-spacing: -.045em; line-height: .98; text-wrap: balance;
-}
-.ld-sub { margin: 0; max-width: 30ch; font-size: clamp(19px, 2.2vw, 25px); line-height: 1.4; color: var(--ld-soft); font-weight: 500; }
+@media (max-width: 900px) { .ld-hero-grid { grid-template-columns: 1fr; } .ld-hero-art { order: -1; } }
 .ld-hero-art { display: grid; place-items: center; }
+.ld-hero .apple-subhead { max-width: 34ch; }
 
-/* ── Section furniture ────────────────────────────────────────────────── */
-.ld-sec { max-width: var(--ld-maxw); margin: 0 auto; padding: clamp(58px, 8vw, 104px) var(--ld-gutter); border-top: 1px solid var(--ld-line); }
-.ld-kicker { margin: 0 0 12px; font-size: 12px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--ld-accent); }
-.ld-h2 { margin: 0 0 16px; font-size: clamp(30px, 4.6vw, 52px); font-weight: 600; letter-spacing: -.035em; line-height: 1.05; text-wrap: balance; }
-.ld-h2 .tone { color: var(--ld-accent); }
-.ld-lede { margin: 0; max-width: 58ch; font-size: clamp(16px, 1.8vw, 19px); line-height: 1.55; color: var(--ld-soft); }
-.ld-fine { margin: 22px 0 0; font-size: 14px; line-height: 1.6; color: var(--ld-soft); max-width: 66ch; }
-.ld-fine strong { color: var(--ld-ink); }
-
-/* ── The four ─────────────────────────────────────────────────────────── */
-.ld-feats { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(20px, 3vw, 34px); margin-top: 44px; }
-@media (max-width: 760px) { .ld-feats { grid-template-columns: 1fr; } }
-.ld-frame {
-  aspect-ratio: 16 / 9; border-radius: 16px; background: #f0eeea;
-  border: 1px solid var(--ld-line); display: grid; place-items: center; margin-bottom: 18px;
+/* ── Feature panels: copy one side, clip frame the other ──────────────── */
+.apple-panel.ld-feature {
+  min-height: 0;
+  padding-block: clamp(34px, 4.5vw, 56px);
+  grid-template-columns: 1fr 1fr; align-items: center; gap: clamp(22px, 4vw, 52px);
 }
-.ld-frame span { font-size: 13px; font-weight: 700; letter-spacing: .12em; color: rgba(22,21,15,.22); }
-.ld-feats h3 { margin: 0 0 8px; font-size: clamp(19px, 2.1vw, 23px); font-weight: 600; letter-spacing: -.022em; line-height: 1.2; }
-.ld-feats p { margin: 0; font-size: 15.5px; line-height: 1.55; color: var(--ld-soft); }
+@media (max-width: 860px) { .ld-feature { grid-template-columns: 1fr; min-height: 0; } }
+.ld-feature.is-flip .apple-copy { order: 2; }
+@media (max-width: 860px) { .ld-feature.is-flip .apple-copy { order: 0; } }
+.ld-feature .apple-copy { max-width: 34ch; }
+.ld-feat-n { display: block; font-size: 12px; font-weight: 700; letter-spacing: .12em; color: var(--ap-accent); margin-bottom: 12px; }
+.ld-feat-h { margin: 0 0 12px; font-size: clamp(24px, 3vw, 36px); font-weight: 600; letter-spacing: -.028em; line-height: 1.1; color: var(--ap-ink); }
+.ld-feat-p { margin: 0; font-size: clamp(15px, 1.7vw, 18px); line-height: 1.55; font-weight: 400; color: var(--ap-ink-soft); }
+.ld-frame {
+  aspect-ratio: 16 / 9; width: 100%; border-radius: 18px;
+  background: rgba(255,255,255,.55); border: 1px solid rgba(0,0,0,.07);
+  box-shadow: 0 20px 60px rgba(0,0,0,.07);
+}
 
 /* ── Who it is for ────────────────────────────────────────────────────── */
-.ld-pills { display: flex; flex-wrap: wrap; gap: 8px; margin: 34px 0 22px; }
+.ld-who { padding: clamp(64px, 9vw, 120px) 0; }
+.ld-pills { display: flex; flex-wrap: wrap; gap: 9px; margin: 34px 0 24px; }
 .ld-pills button {
-  border: 1px solid var(--ld-line); background: transparent; color: var(--ld-ink);
-  border-radius: 999px; padding: 10px 22px; font: inherit; font-size: 15px; font-weight: 600; cursor: pointer;
+  border: 1px solid var(--ap-hairline); background: transparent; color: var(--ap-ink);
+  border-radius: 980px; padding: 11px 24px; font: inherit; font-size: 15px; font-weight: 600; cursor: pointer;
   transition: background .2s, color .2s, border-color .2s;
 }
-.ld-pills button:hover { border-color: var(--ld-ink); }
-.ld-pills button.is-on { background: var(--ld-ink); color: var(--ld-bg); border-color: var(--ld-ink); }
-.ld-who-line { margin: 0 0 22px; font-size: clamp(18px, 2.1vw, 22px); font-weight: 600; letter-spacing: -.02em; }
+.ld-pills button:hover { border-color: var(--ap-ink); }
+.ld-pills button.is-on { background: var(--ap-ink); color: var(--ap-bg); border-color: var(--ap-ink); }
+.ld-who-line { margin: 0 0 24px; font-size: clamp(19px, 2.2vw, 24px); font-weight: 600; letter-spacing: -.022em; color: var(--ap-ink); }
 .ld-rows { display: grid; grid-template-columns: 1fr 1fr; gap: 0 clamp(24px, 4vw, 56px); }
 @media (max-width: 760px) { .ld-rows { grid-template-columns: 1fr; } }
-.ld-rows > div { padding: 18px 0; border-top: 1px solid var(--ld-line); }
-.ld-rows b { display: block; font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--ld-accent); margin-bottom: 7px; }
-.ld-rows p { margin: 0; font-size: 15.5px; line-height: 1.55; }
+.ld-rows > div { padding: 20px 0; border-top: 1px solid var(--ap-hairline); }
+.ld-rows b { display: block; font-size: 11.5px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; color: var(--ap-accent); margin-bottom: 8px; }
+.ld-rows p { margin: 0; font-size: 15.5px; line-height: 1.55; color: var(--ap-ink); }
 
-/* ── The turn ─────────────────────────────────────────────────────────── */
-.ld-turn { background: var(--ld-ink); color: var(--ld-bg); padding: clamp(52px, 7vw, 88px) var(--ld-gutter); }
-.ld-turn p {
-  max-width: var(--ld-maxw); margin: 0 auto; text-align: center;
-  font-size: clamp(22px, 3.4vw, 38px); font-weight: 500; letter-spacing: -.03em; line-height: 1.25; text-wrap: balance;
-}
-.ld-turn strong { font-weight: 600; color: #fff; display: block; margin-top: 6px; }
-.ld-turn { color: rgba(251,250,248,.6); }
-
-/* ── Distra ───────────────────────────────────────────────────────────── */
-.ld-distra { border-top: 0; }
-.ld-distra-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 clamp(24px, 4vw, 56px); margin-top: 40px; }
+/* ── Distra: one big panel rather than a wall of rows ─────────────────── */
+.ld-turn { --ap-accent: var(--ap-blue); }
+.apple-panel.ld-distra { display: block; min-height: 0; padding-block: clamp(34px, 4.5vw, 56px); }
+.ld-distra .apple-copy { max-width: 62ch; }
+.ld-distra-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 clamp(24px, 4vw, 52px); margin-top: 34px; }
 @media (max-width: 760px) { .ld-distra-grid { grid-template-columns: 1fr; } }
-.ld-distra-grid > div { padding: 22px 0; border-top: 1px solid var(--ld-line); }
-.ld-distra-grid b { display: block; font-size: clamp(17px, 1.9vw, 20px); font-weight: 600; letter-spacing: -.02em; margin-bottom: 7px; }
-.ld-distra-grid p { margin: 0; font-size: 15.5px; line-height: 1.55; color: var(--ld-soft); }
+.ld-distra-grid > div { padding: 20px 0; border-top: 1px solid rgba(0,0,0,.1); }
+.ld-distra-grid b { display: block; font-size: clamp(17px, 1.9vw, 20px); font-weight: 600; letter-spacing: -.02em; margin-bottom: 7px; color: var(--ap-ink); }
+.ld-distra-grid p { margin: 0; font-size: 15.5px; line-height: 1.55; color: var(--ap-ink-soft); }
 
-/* ── Two Brainos ──────────────────────────────────────────────────────── */
-.ld-two { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 40px; }
-@media (max-width: 760px) { .ld-two { grid-template-columns: 1fr; } }
-.ld-two article { background: var(--ld-panel); border: 1px solid var(--ld-line); border-radius: 22px; padding: clamp(24px, 3vw, 34px); }
-.ld-two article.is-paid { background: #16150f; color: #f4f1ea; border-color: #16150f; }
-.ld-two span { font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--ld-accent); }
-.ld-two h3 { margin: 10px 0 10px; font-size: clamp(26px, 3vw, 34px); font-weight: 600; letter-spacing: -.03em; }
-.ld-two p { margin: 0 0 22px; font-size: 15.5px; line-height: 1.55; color: var(--ld-soft); }
-.ld-two article.is-paid p { color: rgba(244,241,234,.72); }
-.ld-two article.is-paid .ld-btn.ghost { color: #f4f1ea; border-color: rgba(255,255,255,.28); }
-.ld-two article.is-paid .ld-btn.ghost:hover { border-color: #f4f1ea; }
+/* ── The two Brainos ──────────────────────────────────────────────────── */
+.ld-kinds { padding: clamp(56px, 8vw, 100px) 0; }
+.apple-panel.ld-kind { min-height: 0; padding-block: clamp(30px, 4vw, 48px); align-content: center; }
+.ld-kind-tag { display: block; font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--ap-accent); margin-bottom: 10px; }
+.ld-kind h3 { margin: 0 0 12px; font-size: clamp(28px, 3.4vw, 40px); font-weight: 600; letter-spacing: -.03em; color: var(--ap-ink); }
+.ld-kind-p { margin: 0 0 24px; font-size: 15.5px; line-height: 1.55; font-weight: 400; color: var(--ap-ink-soft); }
 
 /* ── Why him ──────────────────────────────────────────────────────────── */
-.ld-why { display: grid; grid-template-columns: 1fr 1fr; gap: 0 clamp(24px, 4vw, 56px); margin-top: 40px; }
+.ld-why-sec { padding: clamp(56px, 8vw, 100px) 0; }
+.ld-why { display: grid; grid-template-columns: 1fr 1fr; gap: 0 clamp(24px, 4vw, 56px); margin-top: 34px; }
 @media (max-width: 760px) { .ld-why { grid-template-columns: 1fr; } }
-.ld-why > div { padding: 22px 0; border-top: 1px solid var(--ld-line); }
-.ld-why b { display: block; font-size: clamp(18px, 2vw, 21px); font-weight: 600; letter-spacing: -.022em; margin-bottom: 8px; line-height: 1.25; }
-.ld-why p { margin: 0; font-size: 15.5px; line-height: 1.55; color: var(--ld-soft); }
+.ld-why > div { padding: 22px 0; border-top: 1px solid var(--ap-hairline); }
+.ld-why b { display: block; font-size: clamp(18px, 2vw, 22px); font-weight: 600; letter-spacing: -.022em; margin-bottom: 9px; line-height: 1.25; color: var(--ap-ink); }
+.ld-why p { margin: 0; font-size: 15.5px; line-height: 1.55; color: var(--ap-ink-soft); }
 
 /* ── Close ────────────────────────────────────────────────────────────── */
-.ld-close { text-align: center; padding: clamp(64px, 9vw, 112px) var(--ld-gutter); border-top: 1px solid var(--ld-line); }
-.ld-close-art { display: grid; place-items: center; margin-bottom: 18px; }
-.ld-close h2 { margin: 0; font-size: clamp(32px, 5.4vw, 62px); font-weight: 600; letter-spacing: -.04em; }
+.ld-close { text-align: center; padding: clamp(64px, 9vw, 118px) var(--ap-gutter); border-top: 1px solid var(--ap-hairline); }
+.ld-close-art { display: grid; place-items: center; margin-bottom: 16px; }
+.ld-close .apple-display { margin: 0; }
 .ld-close .ld-cta { justify-content: center; }
 
-/* ── Footer: six links, not thirty ────────────────────────────────────── */
-.ld-foot { border-top: 1px solid var(--ld-line); padding: 30px var(--ld-gutter) 44px; }
-.ld-foot-in { max-width: var(--ld-maxw); margin: 0 auto; display: flex; flex-wrap: wrap; align-items: center; gap: 16px 26px; }
-.ld-foot-in > span { font-weight: 700; letter-spacing: -.03em; }
-.ld-foot-in > div { margin-left: auto; display: flex; flex-wrap: wrap; gap: 20px; }
-.ld-foot a { font-size: 14px; color: var(--ld-soft); text-decoration: none; }
-.ld-foot a:hover { color: var(--ld-ink); }
-.ld-foot > p { max-width: var(--ld-maxw); margin: 22px auto 0; font-size: 12.5px; color: var(--ld-soft); }
+/* ── Dark ─────────────────────────────────────────────────────────────── */
+.ld.dark .ld-frame { background: rgba(255,255,255,.06); border-color: rgba(255,255,255,.12); box-shadow: none; }
+.ld.dark .ld-distra-grid > div { border-top-color: rgba(255,255,255,.14); }
+.ld.dark .ld-btn { background: var(--ap-ink); color: var(--ap-bg); }
+.ld.dark .ld-btn.ghost { color: var(--ap-ink); border-color: var(--ap-hairline); }
+.ld.dark .ld-pills button.is-on { background: var(--ap-ink); color: var(--ap-bg); }
+
+/* The anchor bar sets colour and opacity on every child link, which otherwise
+   wins over .apple-cta by source order and leaves the nav button unreadable. */
+.ld .apple-anchors .an-links a.apple-cta { color: #fff; opacity: 1; }
 
 @media (prefers-reduced-motion: reduce) { .ld-btn:hover { transform: none; } }
