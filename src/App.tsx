@@ -8,6 +8,7 @@ import { ThemeProvider } from "@/contexts/ThemeContext";
 import { AuthProvider } from "@/contexts/AuthContext";
 
 const Waitlist = lazy(() => import("./pages/Waitlist.tsx"));
+const Landing = lazy(() => import("./pages/Landing.tsx"));
 const BrainoThronglets = lazy(() => import("./pages/BrainoThronglets.tsx"));
 const BrainoThrongletsDocs = lazy(() => import("./pages/BrainoThrongletsDocs.tsx"));
 const ChooseYourAvatarDocs = lazy(() => import("./pages/ChooseYourAvatarDocs.tsx"));
@@ -142,7 +143,8 @@ function AppRoutes() {
         {/* The waitlist is the front door again while the five-tab Braino page
             is still being finished. Braino lives at /braino meanwhile, and
             /overview stays pointed at the same waitlist page so old links work. */}
-        <Route path="/" element={<Waitlist />} />
+        <Route path="/" element={<Landing />} />
+        <Route path="/questions" element={<Waitlist />} />
         <Route path="/overview" element={<Waitlist />} />
         <Route path="/waitlist" element={<Waitlist />} />
         <Route path="/braino-thronglets" element={<BrainoThronglets />} />
