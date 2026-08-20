@@ -144,35 +144,67 @@ const COMPARE: Array<[string, string, string]> = [
   ["What it costs", "Free, then fifteen a month", "Thirty three a month, companion included"],
 ];
 
-/* Three plans, no credit maths. The free tier caps by session rather than by
-   feature, so people meet the whole character and then hit a ceiling, instead
-   of meeting a crippled one and never finding out what he does. Distra carries
-   the companion inside it, because Distra writes from what the companion knows:
-   sold apart, it would just be a worse Distra. */
-const TIERS: Array<{
-  name: string; price: string; per?: string; hero?: boolean; badge?: string;
-  then?: string; blurb: string; lines: string[]; cta: string; href: string;
+/* Pricing as split cards: identity on the left of each card, contents on the
+   right, the way Maze does it. The tri-state comparison table this replaced was
+   accurate and unreadable — three kinds of mark in twelve rows is a puzzle, not
+   a price. "Everything in Pro, and:" carries the ladder in four words instead. */
+const PLANS: Array<{
+  badge: string; name: string; desc: string; cta: string; href: string;
+  stats: string[]; incHead: string; includes: string[]; tall?: boolean;
 }> = [
   {
-    name: "Free", price: "$0",
-    blurb: "Every feature, capped by session. Hit the ceiling and he says so, rather than quietly charging you and hoping you never open Settings.",
-    lines: ["Chat with any page", "Lectures and audio into notes", "Meetings, written up", "Errands run in your browser", "Mac and Windows"],
+    badge: "Free", name: "Free",
+    desc: "For meeting him properly, before you decide whether he is worth money.",
     cta: "Start free", href: EXTENSION_DOWNLOAD_URL,
+    stats: ["Capped by session, then it resets", "Mac and Windows"],
+    incHead: "Free includes:",
+    includes: [
+      "Chat with the page you are on",
+      "Turn a lecture into notes",
+      "Sit in your meeting, write it up",
+      "Run an errand in your browser",
+      "The whole character, not a demo of it",
+    ],
   },
   {
-    name: "Pro", price: "$15", per: "/ month",
-    blurb: "The same Braino without the ceiling. Identical on Mac and Windows, because they are one Braino in different clothes.",
-    lines: ["Everything in Free, uncapped", "Voice first, all day", "The full delegate agent", "Memory that keeps going", "Every new mode as it ships"],
+    badge: "$15 per month", name: "Pro",
+    desc: "For people who now open him more often than their email.",
     cta: "Get Pro", href: "/premium",
+    stats: ["No session ceiling", "Mac and Windows, one price"],
+    incHead: "Everything in Free, and:",
+    includes: [
+      "Voice, all day",
+      "The full delegate agent",
+      "Memory that keeps going",
+      "Every new mode as it ships",
+    ],
   },
   {
-    name: "Braino Distra", price: "$33", per: "/ month", hero: true,
-    badge: "First 100", then: "Then $83. Yours stays $33.",
-    blurb: "He learns how you write, posts as you, and finds the conversations worth entering. Runs on a server, so it works while your laptop is shut.",
-    lines: ["Everything in Pro, included", "X and LinkedIn on a schedule", "Voice learned from your last 200 posts", "Replies that sound like you, not a bot", "Reddit and Instagram next"],
-    cta: "Explore Braino Distra", href: "/distra",
+    badge: "$33 per month", name: "Braino Distra", tall: true,
+    desc: "For founders who shipped something and heard absolutely nothing back.",
+    cta: "Explore Distra", href: "/distra",
+    stats: ["First 100, then $83. Yours stays $33.", "Runs on a server, not your laptop"],
+    incHead: "Everything in Pro, and:",
+    includes: [
+      "He learns how you actually write",
+      "Posts to X and LinkedIn on a schedule",
+      "Replies in your voice, not a bot's",
+      "Finds the conversations worth entering",
+      "Works while your laptop is shut",
+      "Reddit and Instagram, next",
+    ],
   },
 ];
+
+/* The punchline under the cards. Real 2026 list prices, which is the only
+   reason the joke lands. Change these if they move. */
+const RECEIPT: Array<[string, number]> = [
+  ["Granola, for the meeting notes", 14],
+  ["ChatGPT Plus, for the asking", 20],
+  ["Otter, for the transcripts", 20],
+  ["Someone to write your posts", 500],
+];
+const RECEIPT_TOTAL = RECEIPT.reduce((n, [, c]) => n + c, 0);
 
 const FAQ = [
   { q: "Is it actually free?",
@@ -600,30 +632,58 @@ export default function Landing() {
           <p className="apple-eyebrow">Pricing</p>
           <h2 className="ld-h2">Three plans. <span className="tone">No credit maths.</span></h2>
           <p className="ld-lede">
-            Nobody has ever enjoyed working out what 1,500 credits buys them. So: a free tier that
-            caps by session instead of hiding half the product, one price for the companion, one
-            for Distra.
+            Nobody has ever enjoyed working out what 1,500 credits buys them. A free tier that caps
+            by session instead of hiding half the product, one price for the companion, one for
+            Distra. Distra has the companion inside it.
           </p>
 
-          <div className="ld-price-grid">
-            {TIERS.map((t) => (
-              <div key={t.name} className={"ld-tier" + (t.hero ? " is-hero" : "")}>
-                <div className="ld-tier-name">
-                  <span>{t.name}</span>
-                  {t.badge ? <span className="ld-tier-badge">{t.badge}</span> : null}
+          <div className="ld-plans">
+            {PLANS.map((p) => {
+              const id = (
+                <div className="ld-plan-id">
+                  <span className="ld-plan-badge">{p.badge}</span>
+                  <h3>{p.name}</h3>
+                  <p>{p.desc}</p>
+                  {p.href.startsWith("/")
+                    ? <Link to={p.href} className="ld-btn sm">{p.cta}</Link>
+                    : <a href={p.href} className="ld-btn sm">{p.cta}</a>}
                 </div>
-                <div className="ld-tier-amount">
-                  <b>{t.price}</b>
-                  {t.per ? <em>{t.per}</em> : null}
+              );
+              const body = (
+                <div className="ld-plan-body">
+                  <ul className="ld-plan-stats">
+                    {p.stats.map((t) => <li key={t}>{t}</li>)}
+                  </ul>
+                  <p className="ld-plan-inc-head">{p.incHead}</p>
+                  <ul className="ld-plan-inc">
+                    {p.includes.map((t) => <li key={t}>{t}</li>)}
+                  </ul>
                 </div>
-                {t.then ? <p className="ld-tier-then">{t.then}</p> : null}
-                <p className="ld-tier-blurb">{t.blurb}</p>
-                <ul>{t.lines.map((l) => <li key={l}>{l}</li>)}</ul>
-                {t.href.startsWith("/")
-                  ? <Link to={t.href} className="ld-btn sm">{t.cta}</Link>
-                  : <a href={t.href} className="ld-btn sm">{t.cta}</a>}
-              </div>
-            ))}
+              );
+              return (
+                <article className={"ld-plan" + (p.tall ? " is-tall" : "")} key={p.name}>
+                  {p.tall
+                    ? <><div className="ld-plan-top">{id}<div className="ld-plan-art"><MovingBraino motion="dancing" /></div></div>{body}</>
+                    : <>{id}{body}</>}
+                </article>
+              );
+            })}
+          </div>
+
+          <div className="ld-receipt apple-reveal">
+            <p className="ld-receipt-head">Or keep paying four tools that have never met each other</p>
+            <ul>
+              {RECEIPT.map(([what, cost], i) => (
+                <li key={what} style={{ ["--d" as string]: `${i * 120}ms` } as React.CSSProperties}>
+                  <span>{what}</span><em>${cost}</em>
+                </li>
+              ))}
+            </ul>
+            <div className="ld-receipt-sub"><span>Every month, forever</span><em>${RECEIPT_TOTAL}</em></div>
+            <div className="ld-receipt-us">
+              <span>Braino Distra<i>First 100, then $83. Yours stays $33.</i></span>
+              <em>$33</em>
+            </div>
           </div>
 
           <p className="ld-fine">

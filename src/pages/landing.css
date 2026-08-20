@@ -252,39 +252,123 @@
    guess how many credits a month of meetings costs; they want to see the four
    answers and pick the one that sounds like them. */
 .ld-pricing { padding: clamp(56px, 8vw, 100px) 0; }
-.ld-price-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 38px; align-items: stretch; }
-@media (max-width: 980px) { .ld-price-grid { grid-template-columns: 1fr; } }
-
-/* One card per plan, same skeleton on all three, so the eye compares prices
-   rather than layouts. The Distra card takes the coral panel because it is the
-   one the page has spent eight sections arguing towards. */
-.ld-tier {
-  display: flex; flex-direction: column;
-  border-radius: var(--ap-radius); padding: clamp(26px, 2.6vw, 34px);
-  background: var(--ap-surface); border: 1px solid var(--ap-hairline);
+/* Split cards: who the plan is for on the left, what is actually in it on the
+   right, a hairline between. Free and Pro stack in the left column, Distra takes
+   the full-height right column, because it is the one the page argues towards. */
+.ld-plans { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 42px; }
+.ld-plan {
+  display: grid; grid-template-columns: 1fr 1fr;
+  border-radius: 14px; border: 1px solid var(--ap-hairline);
+  background: var(--ap-surface); overflow: hidden;
 }
-.ld-tier.is-hero { background: var(--ap-coral-panel); border-color: transparent; }
+.ld-plan:nth-child(1) { grid-column: 1; grid-row: 1; }
+.ld-plan:nth-child(2) { grid-column: 1; grid-row: 2; }
+.ld-plan.is-tall { grid-column: 2; grid-row: 1 / span 2; grid-template-columns: 1fr; align-content: start; }
 
-.ld-tier-name { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--ap-ink-soft); }
-.ld-tier.is-hero .ld-tier-name { color: var(--ap-coral); }
-.ld-tier-badge { border-radius: 980px; padding: 4px 10px; font-size: 10px; letter-spacing: .07em; background: var(--ap-coral); color: #fff; }
-
-.ld-tier-amount { display: flex; align-items: baseline; gap: 7px; margin: 14px 0 0; }
-.ld-tier-amount b { font-size: clamp(38px, 4.2vw, 52px); font-weight: 600; letter-spacing: -.045em; line-height: 1; color: var(--ap-ink); font-variant-numeric: tabular-nums; }
-.ld-tier-amount em { font-style: normal; font-size: 14px; color: var(--ap-ink-soft); }
-.ld-tier-then { margin: 8px 0 0; font-size: 13px; color: var(--ap-ink-soft); }
-.ld-tier.is-hero .ld-tier-then { color: var(--ap-coral); font-weight: 600; }
-
-.ld-tier-blurb { margin: 14px 0 22px; font-size: 15px; line-height: 1.55; color: var(--ap-ink-soft); }
-.ld-tier ul { list-style: none; margin: 0 0 26px; padding: 0; display: grid; gap: 9px; }
-.ld-tier li { position: relative; padding-left: 22px; font-size: 14.5px; line-height: 1.5; color: var(--ap-ink); }
-.ld-tier li::before {
-  content: ""; position: absolute; left: 2px; top: .42em;
-  width: 9px; height: 5px; transform: rotate(-45deg);
-  border-left: 1.5px solid var(--ap-accent); border-bottom: 1.5px solid var(--ap-accent);
+/* Identity half. The button sits on the floor of the card, Maze-style, so the
+   three CTAs line up across the grid however tall the copy runs. */
+.ld-plan-id { display: flex; flex-direction: column; padding: clamp(22px, 2.4vw, 30px); }
+.ld-plan-badge {
+  align-self: flex-start; border-radius: 5px; padding: 5px 10px;
+  font-size: 10.5px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase;
+  background: var(--ap-coral-panel); color: var(--ap-ink-soft);
 }
-.ld-tier.is-hero li::before { border-left-color: var(--ap-coral); border-bottom-color: var(--ap-coral); }
-.ld-tier .ld-btn { margin-top: auto; align-self: flex-start; }
+.ld-plan.is-tall .ld-plan-badge { background: var(--ap-coral); color: #fff; }
+.ld-plan-id h3 { margin: 28px 0 0; font-size: clamp(30px, 3.4vw, 42px); font-weight: 600; letter-spacing: -.04em; line-height: 1.02; color: var(--ap-ink); }
+.ld-plan-id > p { margin: 12px 0 26px; font-size: 15px; line-height: 1.5; color: var(--ap-ink-soft); max-width: 30ch; }
+.ld-plan-id .ld-btn { margin-top: auto; align-self: flex-start; white-space: nowrap; }
+
+/* Contents half. */
+.ld-plan-body { padding: clamp(22px, 2.4vw, 30px); border-left: 1px solid var(--ap-hairline); }
+.ld-plan.is-tall .ld-plan-body { border-left: 0; border-top: 1px solid var(--ap-hairline); }
+
+.ld-plan-stats { list-style: none; margin: 0 0 26px; padding: 0; display: grid; gap: 10px; }
+.ld-plan-stats li { position: relative; padding-left: 20px; font-size: 14px; line-height: 1.45; color: var(--ap-ink); }
+.ld-plan-stats li::before { content: ""; position: absolute; left: 3px; top: .55em; width: 6px; height: 6px; border-radius: 50%; background: var(--ap-ink-soft); }
+
+.ld-plan-inc-head { margin: 0 0 14px; font-size: 10.5px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; color: var(--ap-ink-soft); }
+.ld-plan-inc { list-style: none; margin: 0; padding: 0; display: grid; gap: 11px; }
+.ld-plan-inc li { position: relative; padding-left: 24px; font-size: 14.5px; line-height: 1.45; color: var(--ap-ink); }
+.ld-plan-inc li::before {
+  content: ""; position: absolute; left: 0; top: .1em; width: 15px; height: 15px;
+  border-radius: 50%; border: 1.4px solid var(--ap-hairline);
+}
+.ld-plan-inc li::after {
+  content: ""; position: absolute; left: 4.5px; top: .48em; width: 6px; height: 3px;
+  border-left: 1.4px solid var(--ap-accent); border-bottom: 1.4px solid var(--ap-accent);
+  transform: rotate(-45deg);
+}
+.ld-plan.is-tall .ld-plan-inc li::after { border-left-color: var(--ap-coral); border-bottom-color: var(--ap-coral); }
+
+/* The tall card's head: identity beside a panel with the real walking rig in it,
+   the same mascot the character gallery uses. Not a stock illustration. */
+.ld-plan-top { display: grid; grid-template-columns: 1fr 1.05fr; }
+.ld-plan-art {
+  position: relative; overflow: hidden; margin: clamp(18px, 1.8vw, 22px);
+  border-radius: 9px; background: var(--ap-coral-panel);
+  min-height: 240px; display: grid; place-items: center;
+}
+.ld-plan-art .po-moving-braino { min-width: 0; min-height: 0; }
+.ld-plan-art .po-moving-braino svg { max-height: 190px; width: auto; }
+
+@media (max-width: 900px) {
+  .ld-plans { grid-template-columns: 1fr; }
+  .ld-plan, .ld-plan:nth-child(1), .ld-plan:nth-child(2), .ld-plan.is-tall { grid-column: 1; grid-row: auto; }
+}
+@media (max-width: 620px) {
+  /* One column inside the card too: the contents half cannot hold a checklist
+     at 170px wide, so it goes under the identity with a rule between. */
+  .ld-plan, .ld-plan-top { grid-template-columns: 1fr; }
+  .ld-plan-body { border-left: 0; border-top: 1px solid var(--ap-hairline); }
+  .ld-plan-id > p { max-width: none; }
+  .ld-plan-art { min-height: 180px; margin-top: 0; }
+  .ld-plan-art .po-moving-braino svg { max-height: 150px; }
+}
+
+/* ── The receipt ─────────────────────────────────────────────────────────
+   The table says what you get. This says what you already pay for a worse
+   version of it. Rows strike through as the block scrolls into view. */
+.ld-receipt {
+  margin-top: 52px; padding: clamp(26px, 3vw, 38px);
+  border-radius: 14px; border: 1px solid var(--ap-hairline);
+  background: var(--ap-surface);
+}
+.ld-receipt-head { margin: 0 0 22px; font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--ap-ink-soft); }
+.ld-receipt ul { list-style: none; margin: 0; padding: 0; }
+.ld-receipt li { display: flex; align-items: baseline; justify-content: space-between; gap: 18px; padding: 11px 0; font-size: 15.5px; color: var(--ap-ink-soft); }
+.ld-receipt li span { position: relative; }
+.ld-receipt li span::after {
+  content: ""; position: absolute; left: 0; top: 50%; width: 0; height: 1.5px;
+  background: var(--ap-coral); transition: width .6s cubic-bezier(.22,1,.36,1) var(--d, 0ms);
+}
+.ld-receipt.in li span::after { width: 100%; }
+.ld-receipt li em { font-style: normal; font-variant-numeric: tabular-nums; }
+
+.ld-receipt-sub, .ld-receipt-us { display: flex; align-items: baseline; justify-content: space-between; gap: 18px; }
+.ld-receipt-sub { margin-top: 12px; padding-top: 18px; border-top: 1px solid var(--ap-hairline); font-size: 15.5px; color: var(--ap-ink-soft); }
+.ld-receipt-sub em { font-style: normal; font-variant-numeric: tabular-nums; text-decoration: line-through; text-decoration-color: var(--ap-coral); }
+.ld-receipt-us { margin-top: 22px; padding-top: 22px; border-top: 1px solid var(--ap-hairline); }
+.ld-receipt-us > span { display: flex; flex-direction: column; gap: 5px; font-size: 17px; font-weight: 600; color: var(--ap-ink); }
+.ld-receipt-us > span i { font-style: normal; font-size: 13px; font-weight: 400; color: var(--ap-ink-soft); }
+.ld-receipt-us em { font-style: normal; font-size: clamp(30px, 3.6vw, 44px); font-weight: 600; letter-spacing: -.045em; line-height: 1; color: var(--ap-coral); font-variant-numeric: tabular-nums; }
+
+/* Below this the three plan columns cannot hold a button, so the table sheds
+   its CTA row and they stack underneath instead. */
+@media (max-width: 760px) {
+  .ld-tbl thead th, .ld-tbl tbody th[scope="row"], .ld-tbl tbody td, .ld-tbl-group th { padding-left: 10px; padding-right: 10px; }
+  .ld-tbl thead th:first-child { width: 46%; }
+  .ld-tbl tbody th[scope="row"] { font-size: 13.5px; }
+  .ld-tbl-price { display: block; }
+  .ld-tbl-price b { font-size: 26px; }
+  .ld-tbl-price i { display: block; margin-top: 3px; font-size: 11.5px; }
+  .ld-tbl-name { font-size: 10px; letter-spacing: .06em; }
+  .ld-tbl-name em { padding: 2px 6px; font-size: 8.5px; }
+  .ld-tbl tfoot { display: none; }
+  .ld-tbl-legend { padding: 0 10px; font-size: 12.5px; gap: 6px 16px; }
+  .ld-tbl-ctas { display: grid; gap: 10px; margin-top: 24px; }
+  .ld-tbl-ctas .ld-btn { width: 100%; justify-content: center; }
+  .ld-receipt li, .ld-receipt-sub { font-size: 14.5px; }
+}
 
 /* ── FAQ ──────────────────────────────────────────────────────────────── */
 .ld-faq-sec { padding: clamp(56px, 8vw, 100px) 0; }
