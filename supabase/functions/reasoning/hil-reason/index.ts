@@ -47,8 +47,27 @@ async function callModel(apiKey: string, messages: unknown[]) {
 // thing: look at the screen first. This is exactly as certain as moment
 // detection, so it gets the same treatment — a zero-cost regex, checked in
 // code, that FORCES the first step rather than hoping the model remembers.
-const SCREEN_REFERENT_RE =
-  /\b(who|what)('s|s|\s+is|\s+are)?\s+(is\s+|are\s+)?(this|that|these|those)\b|\b(who|what)('s|s|\s+is)?\s+(is\s+)?on\s+(my|the)\s+(screen|camera)\b/i;
+/* This only ever matched QUESTIONS — "who is this", "what is on my screen" —
+   and the flag is used to mean "the target is something I would have to look
+   at". Every imperative fell straight through: "rename this file", "click the
+   first video you see", "record this meeting". Across 174 logged runs it never
+   once came back true, including on commands that were nothing but a screen
+   referent. Three shapes now: the original question, a deictic attached to a
+   thing, and an ordinal that only means anything if you can see the list. */
+const SCREEN_REFERENT_RE = new RegExp([
+  // "who is this", "what's on my screen"
+  "\\b(?:who|what)(?:'s|s|\\s+is|\\s+are)?\\s+(?:is\\s+|are\\s+)?(?:this|that|these|those)\\b",
+  "\\b(?:who|what)(?:'s|s|\\s+is)?\\s+(?:is\\s+)?on\\s+(?:my|the)\\s+(?:screen|camera)\\b",
+  // "rename this file", "summarise that page", "close these tabs"
+  "\\b(?:this|that|these|those)\\s+(?:file|folder|document|doc|page|tab|tabs|window|app|image|picture|photo|video|clip|meeting|call|email|mail|message|thread|chat|song|track|playlist|screen|topic|article|post|thing|one|selection|text|code|error|link)\\b",
+  // "the first result", "the second video you see"
+  "\\b(?:the\\s+)?(?:first|second|third|last|top|bottom|next)\\s+\\w+\\s+(?:you\\s+(?:see|can\\s+see)|on\\s+(?:the\\s+)?screen|here|there)\\b",
+  "\\b(?:click|open|pick|choose|select|play)\\s+(?:on\\s+)?(?:the\\s+)?(?:first|second|third|last|top|next)\\b",
+  // "what I have open", "the one that is open"
+  "\\b(?:currently\\s+)?(?:open|highlighted|selected|visible)\\s+(?:file|folder|tab|window|page|document|app)\\b",
+  // bare deictic as the whole object: "rename this", "delete that"
+  "\\b(?:rename|delete|remove|close|save|open|summari[sz]e|read|translate|explain|fix|copy|move)\\s+(?:this|that|these|those)\\s*$",
+].join("|"), "i");
 
 const LOOK_AT_SCREEN_STEP = "Look at the screen to see who or what this refers to.";
 

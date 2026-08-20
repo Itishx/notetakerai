@@ -186,8 +186,19 @@ serve(async (req) => {
       command: commandText,
       context: JSON.stringify({ surface: surfaceObj, cascade: cascadeChoice }).slice(0, 4000),
       // Both answers in one object so the agreement view can compare them without
-      // reconstructing anything: agreed is verdict.t === cascade.tool.
-      response: { verdict, cascade: cascadeChoice, agreed: cascadeChoice ? verdict.v === "fire" && verdict.t === cascadeChoice.tool : null },
+      // reconstructing anything. agreed stays NULL until the cascade can name the
+      // branch that claimed the command, which arrives with the tool registry in
+      // stage 3; until then there is nothing to compare a tool name against.
+      // It used to fall out as false in that case, which reads as "HIL disagreed"
+      // rather than "not measurable yet" and made every shadow row look like a
+      // disagreement. Unknown and wrong are not the same answer.
+      response: {
+        verdict,
+        cascade: cascadeChoice,
+        agreed: cascadeChoice && typeof cascadeChoice.tool === "string"
+          ? verdict.v === "fire" && verdict.t === cascadeChoice.tool
+          : null,
+      },
       // The verdict column is what the agreement view groups by, so it carries
       // the tool name when there is one: "fire:spotify_play" reads better than
       // "fire" when you are scanning a week of rows for where HIL disagreed.
