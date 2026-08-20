@@ -81,8 +81,6 @@ Response:
 
 ## Setup
 
-Two secrets, both free tiers:
-
 One secret: `WATCHMODE_API_KEY` from api.watchmode.com. **Already set in production.**
 Without it the function returns `setup: true` and does nothing.
 
