@@ -124,6 +124,38 @@ with locale only as a last resort; the extension uses `bgGetUserGeo()`.
 it looks up which regions *are*, answers from one of those, and sets
 `regionSubstitutedFrom`. Refusing to answer is the worst possible outcome.
 
+## Getting to the actual episode
+
+Watchmode will not sell an episode's own Netflix id below the $349 Startup tier, and a
+**series** id at `/watch/` does not play the episode you asked for — it resumes wherever
+that account left off. Asking for S2E5 and landing in S2E3 is worse than not opening the
+player, because it looks like it worked. So when an episode is named, the resolver hands
+back the `/title/` page and the extension drives the last hop.
+
+It is a state machine, not one long script, because clicking a profile navigates and
+destroys the injected context:
+
+1. **Read the page** — profile gate, title page, player, or unrecognised
+2. **Profile gate** → click the user's own profile, wait, re-read
+3. **Title page** → pick the season, click the episode by its own number
+4. **Player** → done
+
+**The profile step only clicks when it is sure**: an exact or first-name match against
+`authDisplayName`, or a single profile with nothing to confuse it with. Otherwise it stops
+and asks, because picking wrong writes to somebody else's watch history.
+
+**Episode matching reads Netflix's own episode-number element** and falls back to position,
+never to the row's whole text — a synopsis can contain any number, and matching "5" against
+prose is how you end up back where you started.
+
+Failing leaves the user on the episode list and **Braino says so**. Sitting silently on a
+list after being asked for episode 5 is the same failure as playing the wrong one, just
+quieter.
+
+**The Mac does not do this hop.** It hands the URL to the default browser via
+`shell.openExternal`, so there is no tab to drive. If Chrome is the default browser and the
+extension is installed, the user lands on the episode list and clicks once.
+
 ## Known soft edges
 
 - **Episode-level deep links are paid-tier.** The episodes endpoint returns `web_url` as

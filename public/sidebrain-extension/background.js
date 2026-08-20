@@ -1468,11 +1468,20 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         const wantsEpisode = result.needsEpisodeNavigation && result.episode != null;
         if (tab?.id && wantsEpisode && /netflix\.com/i.test(result.pick.url)) {
           try {
-            await bgWaitForTabReady(tab.id, 20000);
-            await bgDelay(1800);
-            const nav = await bgNetflixOpenEpisode(tab.id, result.season, result.episode);
+            const who = await new Promise(r => chrome.storage.local.get(["authDisplayName", "authEmail"], r));
+            const nav = await bgNetflixDriveToEpisode(tab.id, {
+              season: result.season,
+              episode: result.episode,
+              /* He knows whose laptop this is, so he should not stall on
+                 "Who's watching?". Falls back to the email's local part when
+                 no display name was ever set. */
+              userName: who.authDisplayName || String(who.authEmail || "").split("@")[0] || "",
+            });
             result.episodeNavigated = !!nav?.ok;
-            if (!nav?.ok) result.episodeNavigationReason = nav?.reason || "unknown";
+            if (!nav?.ok) {
+              result.episodeNavigationReason = nav?.reason || "unknown";
+              result.netflixProfiles = nav?.profiles;
+            }
           } catch (error) {
             result.episodeNavigated = false;
             result.episodeNavigationReason = String(error?.message || error);
@@ -3842,100 +3851,168 @@ let bgUserGeoCache = null;
 
    Region comes from bgGetUserGeo(), never from a guess — catalogues differ
    enormously by country, and "not on Netflix in India" is a real answer. */
-/* Netflix will not give us an episode's own id without a paid Watchmode plan,
-   and a series id at /watch/ resumes wherever the account left off — ask for
-   S2E5, get S2E3. So the last hop is done in the page: open the title page,
-   which lists every episode, pick the season, and click the episode the user
-   actually named.
+/* Netflix will not sell an episode's own id below the $349 tier, and a series
+   id at /watch/ resumes wherever the account left off — ask for S2E5, get S2E3.
+   So the last hop happens in the page: land on the title page, pick the season,
+   click the episode. The user's own browser, their own account, links already
+   on their screen. Nothing scraped, no login automated.
 
-   This is the user's own browser on their own account, clicking the same links
-   they can see. Nothing is scraped and no login is automated.
+   The first attempt at this failed for a dull reason: Netflix answers a cold
+   navigation with "Who's watching?", so the script ran against a profile picker
+   and correctly reported that there was no episode list. Clicking a profile
+   then navigates and destroys the injected context. So this is a small state
+   machine that re-reads the page after every hop instead of one long script. */
 
-   Netflix ships DOM changes constantly, so every step tries several selectors
-   and the whole thing is best-effort: failing leaves them on the episode list,
-   which is a fine place to be, rather than inside the wrong episode. */
-async function bgNetflixOpenEpisode(tabId, season, episode) {
-  const [{ result } = {}] = await chrome.scripting.executeScript({
-    target: { tabId },
-    args: [season || null, episode || null],
-    func: async (wantSeason, wantEpisode) => {
-      const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-      const visible = (el) => el && el.offsetParent !== null;
+function bgNetflixReadState() {
+  const href = location.href;
+  if (/netflix\.com\/watch\//i.test(href)) return "player";
+  if (document.querySelector("[data-uia='profile-link'], .choose-profile, .profile-link, .list-profiles")) {
+    return "profile-gate";
+  }
+  if (/netflix\.com\/(?:[a-z-]+\/)?title\//i.test(href)) return "title";
+  return "unknown";
+}
 
-      const waitFor = async (find, ms = 9000) => {
-        const until = Date.now() + ms;
-        while (Date.now() < until) {
-          const found = find();
-          if (found) return found;
-          await sleep(220);
-        }
-        return null;
-      };
+/* Picking the wrong profile writes to somebody else's watch history, so this
+   only clicks when it is actually sure: a name match, or a single profile with
+   nothing to confuse it with. Otherwise it stops and says so. */
+function bgNetflixClickProfile(userName) {
+  const cards = [...document.querySelectorAll(
+    "[data-uia='profile-link'], .profile-link, .choose-profile .profile, li.profile a"
+  )].filter((el) => el.offsetParent !== null);
+  if (!cards.length) return { ok: false, reason: "no-profiles" };
 
-      // ── season ──────────────────────────────────────────────────────────
-      if (wantSeason != null) {
-        // Older layouts use a real <select>; newer ones a button + menu.
-        const select = document.querySelector("select.nfSelect, select[data-uia*='season']");
-        if (select) {
-          const option = [...select.options].find((o) =>
-            new RegExp(`(^|\\D)${wantSeason}(\\D|$)`).test(o.textContent || ""));
-          if (option) {
-            select.value = option.value;
-            select.dispatchEvent(new Event("change", { bubbles: true }));
-            await sleep(1200);
-          }
-        } else {
-          const toggle = await waitFor(() =>
-            [...document.querySelectorAll("[data-uia='dropdown-toggle'], .episodeSelector-dropdown button, button[aria-haspopup]")]
-              .find(visible), 6000);
-          if (toggle) {
-            toggle.click();
-            await sleep(600);
-            const item = await waitFor(() =>
-              [...document.querySelectorAll("[data-uia='dropdown-menu'] li, [role='menuitem'], .episodeSelector-dropdown li")]
-                .filter(visible)
-                .find((el) => new RegExp(`(^|\\D)${wantSeason}(\\D|$)`).test(el.textContent || "")), 5000);
-            if (item) { item.click(); await sleep(1400); }
-            else { toggle.click(); }   // close it again rather than leave a menu open
-          }
-        }
+  const nameOf = (el) => {
+    const n = el.querySelector("[data-uia='profile-name'], .profile-name");
+    return String((n ? n.textContent : el.getAttribute("aria-label") || el.textContent) || "")
+      .trim().toLowerCase();
+  };
+
+  const wanted = String(userName || "").trim().toLowerCase();
+  const first = wanted.split(/\s+/)[0] || "";
+
+  let target = null;
+  if (wanted) {
+    target = cards.find((el) => nameOf(el) === wanted)
+      || cards.find((el) => first && nameOf(el) === first)
+      || cards.find((el) => first && nameOf(el).split(/\s+/)[0] === first);
+  }
+  if (!target && cards.length === 1) target = cards[0];
+  if (!target) {
+    return { ok: false, reason: "profile-ambiguous", profiles: cards.map(nameOf).filter(Boolean) };
+  }
+
+  target.click();
+  return { ok: true, picked: nameOf(target) };
+}
+
+async function bgNetflixPickEpisode(wantSeason, wantEpisode) {
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const visible = (el) => el && el.offsetParent !== null;
+  const waitFor = async (find, ms = 9000) => {
+    const until = Date.now() + ms;
+    while (Date.now() < until) {
+      const found = find();
+      if (found) return found;
+      await sleep(220);
+    }
+    return null;
+  };
+
+  if (wantSeason != null) {
+    const select = document.querySelector("select.nfSelect, select[data-uia*='season']");
+    if (select) {
+      const option = [...select.options].find((o) =>
+        new RegExp(`(^|\\D)${wantSeason}(\\D|$)`).test(o.textContent || ""));
+      if (option) {
+        select.value = option.value;
+        select.dispatchEvent(new Event("change", { bubbles: true }));
+        await sleep(1400);
       }
+    } else {
+      const toggle = await waitFor(() =>
+        [...document.querySelectorAll("[data-uia='dropdown-toggle'], .episodeSelector-dropdown button, button[aria-haspopup]")]
+          .find(visible), 6000);
+      if (toggle) {
+        toggle.click();
+        await sleep(700);
+        const item = await waitFor(() =>
+          [...document.querySelectorAll("[data-uia='dropdown-menu'] li, [role='menuitem'], .episodeSelector-dropdown li")]
+            .filter(visible)
+            .find((el) => new RegExp(`(^|\\D)${wantSeason}(\\D|$)`).test(el.textContent || "")), 5000);
+        if (item) { item.click(); await sleep(1600); }
+        else { toggle.click(); }
+      }
+    }
+  }
 
-      if (wantEpisode == null) return { ok: true, did: "season-only" };
+  if (wantEpisode == null) return { ok: true, did: "season-only" };
 
-      // ── episode ─────────────────────────────────────────────────────────
-      const rows = await waitFor(() => {
-        const found = [...document.querySelectorAll(
-          "[data-uia^='episode-item'], .titleCardList--container, .episodeSelector-episode, li.titleCard"
-        )].filter(visible);
-        return found.length ? found : null;
-      }, 9000);
-      if (!rows) return { ok: false, reason: "no-episode-list" };
+  const rows = await waitFor(() => {
+    const found = [...document.querySelectorAll(
+      "[data-uia^='episode-item'], .titleCardList--container, .episodeSelector-episode, li.titleCard"
+    )].filter(visible);
+    return found.length ? found : null;
+  }, 9000);
+  if (!rows) return { ok: false, reason: "no-episode-list" };
 
-      /* Match on the episode's own number element where Netflix exposes one,
-         and fall back to position. Never match on the whole row's text: an
-         episode's synopsis can contain any number at all. */
-      const numberOf = (row, index) => {
-        const el = row.querySelector("[data-uia='episode-item-number'], .titleCard-title_index, .episodeSelector-episode-number");
-        const n = el ? parseInt(String(el.textContent).replace(/\D+/g, ""), 10) : NaN;
-        return Number.isFinite(n) ? n : index + 1;
-      };
+  /* Read Netflix's own episode-number element, fall back to position, and never
+     match against the row's whole text: a synopsis can contain any number, and
+     matching "5" against prose puts us right back where we started. */
+  const numberOf = (row, index) => {
+    const el = row.querySelector("[data-uia='episode-item-number'], .titleCard-title_index, .episodeSelector-episode-number");
+    const n = el ? parseInt(String(el.textContent).replace(/\D+/g, ""), 10) : NaN;
+    return Number.isFinite(n) ? n : index + 1;
+  };
 
-      const row = rows.find((r, i) => numberOf(r, i) === wantEpisode);
-      if (!row) return { ok: false, reason: "episode-not-listed" };
+  const row = rows.find((r, i) => numberOf(r, i) === wantEpisode);
+  if (!row) return { ok: false, reason: "episode-not-listed", listed: rows.length };
 
-      /* Prefer a real link: navigating to its href is far more predictable than
-         clicking whatever element happens to be on top. */
-      const link = row.matches("a[href*='/watch/']") ? row : row.querySelector("a[href*='/watch/']");
-      if (link && link.href) { location.assign(link.href); return { ok: true, did: "href" }; }
+  const link = row.matches("a[href*='/watch/']") ? row : row.querySelector("a[href*='/watch/']");
+  if (link && link.href) { location.assign(link.href); return { ok: true, did: "href" }; }
 
-      row.scrollIntoView({ block: "center" });
-      await sleep(300);
-      (row.querySelector("[role='button'], button, .playLink") || row).click();
-      return { ok: true, did: "click" };
-    },
-  }).catch((e) => [{ result: { ok: false, reason: String(e?.message || e) } }]);
-  return result || { ok: false, reason: "no-result" };
+  row.scrollIntoView({ block: "center" });
+  await sleep(300);
+  (row.querySelector("[role='button'], button, .playLink") || row).click();
+  return { ok: true, did: "click" };
+}
+
+async function bgInjectInto(tabId, func, args) {
+  const [{ result } = {}] = await chrome.scripting
+    .executeScript({ target: { tabId }, func, args: args || [] })
+    .catch((e) => [{ result: { ok: false, reason: String((e && e.message) || e) } }]);
+  return result;
+}
+
+async function bgNetflixDriveToEpisode(tabId, { season, episode, userName }) {
+  let lastReason = "gave-up";
+  /* Four hops is enough for the worst realistic path: profile gate, title page,
+     episode click, player. More than that and something is wrong in a way more
+     clicking will not fix. */
+  for (let hop = 0; hop < 4; hop++) {
+    await bgWaitForTabReady(tabId, 20000).catch(() => {});
+    await bgDelay(hop === 0 ? 1800 : 1400);
+
+    const state = await bgInjectInto(tabId, bgNetflixReadState);
+    if (state === "player") return { ok: true, did: "player" };
+
+    if (state === "profile-gate") {
+      const picked = await bgInjectInto(tabId, bgNetflixClickProfile, [userName || ""]);
+      if (!picked || !picked.ok) return { ok: false, reason: (picked && picked.reason) || "profile-failed", profiles: picked && picked.profiles };
+      await bgDelay(2600);          // Netflix animates the profile hand-off
+      continue;
+    }
+
+    if (state === "title") {
+      const done = await bgInjectInto(tabId, bgNetflixPickEpisode, [season || null, episode || null]);
+      if (done && done.ok) return done;
+      lastReason = (done && done.reason) || "episode-failed";
+      return { ok: false, reason: lastReason };
+    }
+
+    lastReason = "unrecognised-page";
+  }
+  return { ok: false, reason: lastReason };
 }
 
 async function bgWatchPlay(ask) {

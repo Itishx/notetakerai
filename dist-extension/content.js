@@ -18544,9 +18544,24 @@ async function __sbRunWatchPlay(ask, { fromVoice, speakVoiceReply }) {
     return say("I could not look that one up just now.");
   }
 
-  // The function already writes the one honest line for every outcome: found,
-  // wrong platform, rental only, region not covered, not found at all.
+  // The function writes the one honest line for every outcome: found, wrong
+  // platform, rental only, region not covered, not found at all.
   await say(result.speak || "Done.");
+
+  /* If the episode hop did not land, say so. Silently sitting on an episode
+     list after being asked for episode 5 is the same failure as playing the
+     wrong one — it just looks quieter. */
+  if (result.episode != null && result.episodeNavigated === false) {
+    const why = result.episodeNavigationReason;
+    const where = `Episode ${result.episode}${result.season != null ? ` of season ${result.season}` : ""}`;
+    if (why === "profile-ambiguous") {
+      const names = Array.isArray(result.netflixProfiles) && result.netflixProfiles.length
+        ? ` I can see ${result.netflixProfiles.join(", ")}.` : "";
+      setTimeout(() => __sbWkSay(`Pick your profile and I will take it from there.${names}`), 1400);
+    } else {
+      setTimeout(() => __sbWkSay(`${where} is in the list, I could not click it for you.`), 1400);
+    }
+  }
 }
 
 async function __sbProcessPrompt(text, options = {}) {
