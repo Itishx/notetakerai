@@ -365,6 +365,15 @@ entrypoint = "./functions/embed/embed-configure-bridge/index.ts"
 entrypoint = "./functions/logs/braino-interaction-log/index.ts"
 verify_jwt = false
 
+# ── media (play a title on an OTT) ─────────────────────────────────────
+
+# "Play Shawshank on Netflix": TMDB identifies the title and answers the
+# availability question for the user's country, Watchmode returns the deep link.
+# Needs TMDB_API_KEY, and WATCHMODE_API_KEY for links rather than availability
+# alone. Nothing here scrapes a streaming service.
+[functions.watch-play]
+entrypoint = "./functions/media/watch-play/index.ts"
+
 # ── legacy (no source folder in repo) ─────────────────────────────────
 
 [functions.elevenlabs-tts]
