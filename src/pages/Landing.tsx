@@ -63,17 +63,17 @@ type MascotMotion = "standing" | "walking" | "dancing" | "moonwalk";
 
 const STORY: Array<{ number: string; label: string; title: string; description: string; art: "face" | "reactions" | MascotMotion }> = [
   { number: "01", label: "A character", title: "He is somebody, not something.",
-    description: "A face on your screen with a name, a mood and a way of moving. Not a chat box you open when you remember it exists.", art: "face" },
+    description: "A face on your screen with a name, a mood and a walk. Not a chat box you remember exists twice a month.", art: "face" },
   { number: "02", label: "A voice", title: "You talk. He talks back.",
-    description: "In his own voice, out loud, while you carry on with what you were doing. Typing is the fallback, not the interface.", art: "standing" },
+    description: "Out loud, in his own voice, while you carry on doing whatever you were doing. Typing is the fallback, not the whole personality.", art: "standing" },
   { number: "03", label: "He is in it", title: "He walks onto the page with you.",
-    description: "Not a mascot trapped in a widget in the corner. He is on the thing you are working on, watching the same screen.", art: "walking" },
-  { number: "04", label: "An opinion", title: "He will tell you an idea is weak.",
-    description: "An assistant that agrees with everything is a slower way of talking to yourself. He pushes back, and he is right often enough to be worth it.", art: "reactions" },
+    description: "Not a mascot trapped in a widget in the corner like it is 2011. He is on the actual thing you are working on, looking at the same screen.", art: "walking" },
+  { number: "04", label: "An opinion", title: "He will tell you your idea is mid.",
+    description: "Respectfully. Sometimes. An assistant that says great question to everything is a very expensive mirror.", art: "reactions" },
   { number: "05", label: "A memory", title: "He knows what you did last week.",
-    description: "One memory across the browser, the Mac and everything he runs. You never have to explain yourself twice.", art: "dancing" },
+    description: "One memory across the browser, the Mac and everything he runs. You never have to introduce yourself to your own assistant again.", art: "dancing" },
   { number: "06", label: "And yes", title: "Of course he moonwalks.",
-    description: "Hat on, feet forward, gliding backward. A product you talk to every day should be allowed a little theatre.", art: "moonwalk" },
+    description: "Hat on, feet forward, gliding backwards. If you are going to talk to something every day it should at least be fun.", art: "moonwalk" },
 ];
 
 function MovingBraino({ motion }: { motion: MascotMotion }) {
@@ -99,13 +99,13 @@ function MovingBraino({ motion }: { motion: MascotMotion }) {
 
 const FEATURES = [
   { n: "01", ac: "ac-coral", name: "Chat with whatever is in front of you",
-    line: "Any page, any PDF, any video. He is already on it, so there is nothing to paste and nothing to upload." },
+    line: "Any page, any PDF, any video. He is already on it, so there is nothing to paste and nothing to upload. Revolutionary, I know." },
   { n: "02", ac: "ac-violet", name: "Notes from anything you listen to",
-    line: "A lecture, a podcast, a two hour video. He listens and hands back something you would actually read." },
+    line: "A lecture, a podcast, a two hour video you were never going to finish. He listens so you do not have to, and hands back something you would actually read." },
   { n: "03", ac: "ac-blue", name: "He sits in your meetings",
-    line: "No bot in the participant list, invisible to your screen share. Notes at the end, and what you agreed to." },
+    line: "No bot in the participant list, invisible to your screen share. Notes at the end, plus a list of everything you promised and immediately forgot." },
   { n: "04", ac: "ac-green", name: "Say it, and he does it",
-    line: "Books it, buys it, finds it, fills it in. In your browser, signed into your accounts, not a sandbox somewhere else." },
+    line: "Books it, buys it, finds it, fills it in. In your browser, signed into your accounts, not in some sandbox pretending to be the internet." },
 ];
 
 const PEOPLE = [
@@ -140,7 +140,7 @@ const COMPARE: Array<[string, string, string]> = [
   ["What it is for", "Getting through your day", "Getting your product seen"],
   ["Where he lives", "Your browser, on every page", "X and LinkedIn, with Reddit and Instagram next"],
   ["What he does", "Chats, takes notes, sits in meetings, runs errands", "Learns your writing, posts for you, finds conversations worth entering"],
-  ["Who it is for", "Anyone with a screen", "Founders who built something nobody has seen"],
+  ["Who it is for", "Anyone with a screen", "Founders who shipped something to complete silence"],
   ["What it costs", "Free to start, then credits for what you use", "Priced on the work he does, not per seat"],
 ];
 
@@ -164,28 +164,28 @@ const SPEND = [
 
 const FAQ = [
   { q: "Is it actually free?",
-    a: "There is a real free tier, not a trial. You get a monthly allowance of credits and when it runs out he stops rather than quietly billing you. If you want more, you buy more." },
+    a: "Yes, actually free. Not free-for-fourteen-days-then-we-take-your-card free. You get a monthly allowance of credits, and when it runs out he stops instead of silently billing you. Want more, buy more." },
   { q: "Why credits and not a flat subscription?",
-    a: "Because thinking costs real money every single time, and a flat price only works if most people barely use the thing. We would rather charge for what you spend than build a product that quietly hopes you forget about it." },
+    a: "Because thinking costs real money every single time, and flat pricing only works if most people barely use the thing. We would rather charge for what you spend than build a product that quietly hopes you forget it exists." },
   { q: "What can he actually see?",
-    a: "The page you are on, when you ask. Meetings you start him in. Nothing in the background, nothing while you are not looking, and never another tab you did not point him at." },
+    a: "The page you are on, when you ask. Meetings you start him in. Nothing in the background, nothing while you are not looking, and never that other tab. You know the one." },
   { q: "Does he post or send anything on his own?",
-    a: "Not without you. Money, direct messages, deleting anything, and anything published for the first time all stop and ask, at every level of autonomy. He decides how. You decide whether." },
+    a: "No. Money, DMs, deleting anything, and anything published for the first time all stop and ask, at every autonomy level. He decides how. You decide whether." },
   { q: "Is my data used to train anything?",
-    a: "No. What he learns about you stays yours and stays in your account, which is also the only way the memory is worth anything." },
+    a: "No. What he learns about you stays yours and stays in your account, which is also the only reason the memory is worth having." },
   { q: "Does it work on Windows?",
-    a: "The browser Braino works anywhere Chrome does. The Mac companion is macOS only for now, because doing it properly means going deep into one operating system rather than shallow into three." },
+    a: "The browser Braino works anywhere Chrome does. The Mac companion is macOS only for now, because doing it properly means going deep into one operating system instead of shallow into three." },
   { q: "What happens to my meeting recordings?",
-    a: "They stay yours. He is invisible to the participant list and to screen share, there is no bot in the call, and you can delete a recording and its notes together." },
+    a: "They stay yours. No bot in the call, invisible to screen share, and you can delete a recording and its notes together." },
   { q: "Who is building this?",
-    a: "One person, so far. That is why the honest sections on this site exist: it is faster to tell you what is not built than to have you find out." },
+    a: "One person, so far. Which is exactly why the honest bits on this site exist. Faster to tell you what is not built than to let you find out the hard way." },
 ];
 
 const WHY = [
-  { h: "He is already there.", p: "No tab to open, no context to paste. He is on the page you are on and in the meeting you are in, which is most of the work before any answer happens." },
-  { h: "He remembers what you did, not just what you told him.", p: "Other assistants remember what you type into them. Braino remembers the pages you were on, the meetings he sat in, and the way you actually write." },
-  { h: "He works in your browser, in your accounts.", p: "Signed in as you, on the real internet. Not a separate window that has to ask you to log in again before it can do anything." },
-  { h: "He has an opinion.", p: "He will tell you an idea is weak. An assistant that agrees with everything is just a slower way of talking to yourself." },
+  { h: "He is already there.", p: "No tab to open, no context to paste. He is on the page you are on and in the meeting you are in, which is most of the work before anyone answers anything." },
+  { h: "He remembers what you did, not what you typed.", p: "Other assistants remember what you tell them. Braino remembers the pages, the meetings, the commits, and the way you actually write. One of those is a notepad. The other is a coworker." },
+  { h: "He works in your browser, in your accounts.", p: "Signed in as you, on the real internet. Not a sandbox in a different window that hits a login wall and quietly gives up." },
+  { h: "He has opinions.", p: "He will tell you an idea is mid. An assistant that agrees with everything is just you, talking to yourself, slower." },
 ];
 
 function StampLine({ words, delay = 0, tone = false, whenVisible = false, per = 110 }: {
@@ -282,7 +282,7 @@ export default function Landing() {
     try { localStorage.setItem("braino-apple-theme", dark ? "dark" : "light"); } catch { /* ignore */ }
   }, [dark]);
   useEffect(() => { if (!dark) setAskLight(false); }, [dark]);
-  useEffect(() => { document.title = "Braino — speak, watch it happen"; }, []);
+  useEffect(() => { document.title = "Braino: speak, watch it happen"; }, []);
 
   const person = custom;
 
@@ -347,8 +347,8 @@ export default function Landing() {
         <p className="apple-eyebrow">Braino</p>
         <h1 className="apple-display">Speak.<br /><span className="tone">Watch it happen.</span></h1>
         <p className="apple-subhead">
-          Braino is an AI that lives on your screen. You talk to him like a person, and he
-          actually does the work. Free to start, in your browser.
+          Braino lives on your screen and does the boring half of your day. You talk, he
+          moves. No prompt engineering degree required.
         </p>
         <div className="ld-cta">
           <a href={EXTENSION_DOWNLOAD_URL} download={EXTENSION_DOWNLOAD_FILENAME} className="ld-btn">
@@ -370,8 +370,9 @@ export default function Landing() {
           <p className="bento-eyebrow">Who is Braino?</p>
           <h2 className="story-introh">Not a tool. <span className="tone">Somebody</span> who is already there.</h2>
           <p className="story-introp">
-            He is not another window you open and forget. He is awake to what you are doing,
-            genuinely his own person, and quietly good at getting you through the day.
+            He is not another tab you open, use once, and abandon in a graveyard of forty
+            others. He is awake to what you are doing, genuinely his own person, and weirdly
+            good at getting you through the day.
           </p>
           <div className="bento-walker"><MiniBraino size={56} /></div>
         </div>
@@ -401,8 +402,8 @@ export default function Landing() {
           <p className="apple-eyebrow">What he does</p>
           <h2 className="ld-h2">Four things, <span className="tone">every day.</span></h2>
           <p className="ld-lede">
-            This is the free Braino, the one that lives in your browser. No setup beyond installing
-            him.
+            This is the free Braino, the one in your browser. Setup is: install him. That is the
+            setup.
           </p>
           <div className="ld-why">
             {FEATURES.map((f) => (
@@ -417,7 +418,7 @@ export default function Landing() {
         <div className="ld-wrap">
           <p className="apple-eyebrow">Who it is for</p>
           <h2 className="ld-h2">Same four things. <span className="tone">Different day.</span></h2>
-          <p className="ld-lede">The four things never change. Only the week around them does. Say what you do and he will write yours.</p>
+          <p className="ld-lede">The four things never change. Only the mess around them does. Tell him what you do and he will write yours.</p>
 
           <form className="ld-ask" onSubmit={askBraino}>
             <label htmlFor="ld-who-input">
@@ -487,7 +488,8 @@ export default function Landing() {
           <p className="apple-eyebrow">Braino comes in two</p>
           <h2 className="ld-h2">Same character. <span className="tone">Two jobs.</span></h2>
           <p className="ld-lede">
-            The companion is how you meet him. Braino Distra is what you hire once you trust him.
+            The companion is how you meet him. Braino Distra is what you hire once you have
+            decided he is not a gimmick.
           </p>
 
           <div className="ld-table-wrap">
@@ -540,9 +542,9 @@ export default function Landing() {
           </div>
 
           <p className="ld-hera">
-            There is also <strong>HERA</strong>, which is not a third Braino. It is a mode either one
-            drops into: hold a key, talk, and the words land at your cursor in whatever app you were
-            already in. It never says anything back.
+            There is also <strong>HERA</strong>, which is not a third Braino, so relax. It is a mode
+            either one drops into: hold a key, talk, and the words land at your cursor in whatever app
+            you were already in. It never talks back, which some people find refreshing.
           </p>
         </div>
       </section>
@@ -553,9 +555,9 @@ export default function Landing() {
           <p className="be" style={{ color: "var(--ap-violet)" }}>Under the hood</p>
           <h2>Braino OS.</h2>
           <p className="hw-sub">
-            Every Braino runs on the same mind. Two engines nobody else bothered to build: the one
-            that works out what you actually mean, and the one that reads the moment you are in.
-            That is why he feels like someone rather than something.
+            Every Braino runs on the same mind. Two engines nobody else could be bothered to build:
+            the one that works out what you actually meant, and the one that reads the room. That is
+            why he feels like someone instead of something.
           </p>
         </div>
         <div className="apple-blog-grid apple-reveal">
@@ -564,7 +566,7 @@ export default function Landing() {
             <div className="hw-body">
               <span className="hw-tag"><span className="dot" />The heart</span>
               <h3>Emotional Intelligence</h3>
-              <p>The most emotionally intelligent AI anyone has built. Twelve trait modules reorder on every message, so he meets bad news differently than he meets banter.</p>
+              <p>The most emotionally intelligent AI anyone has built, and yes we know how that sounds. Twelve trait modules reorder on every message, so he meets bad news differently than he meets banter.</p>
             </div>
             <span className="hw-read">Explore the Emotional Engine <ArrowUpRight /></span>
           </Link>
@@ -573,7 +575,7 @@ export default function Landing() {
             <div className="hw-body">
               <span className="hw-tag"><span className="dot" />The mind</span>
               <h3>Human Intelligence</h3>
-              <p>He works a problem the way a person does. Your screen, your memory, the conversation, the time and the place, pulled together to resolve what you actually want.</p>
+              <p>He works a problem the way a person does. Your screen, your memory, the conversation, the time, the place, all pulled together to figure out what you actually want instead of what you literally typed.</p>
             </div>
             <span className="hw-read">Explore Human Intelligence <ArrowUpRight /></span>
           </Link>
@@ -586,15 +588,15 @@ export default function Landing() {
           <p className="apple-eyebrow">Pricing</p>
           <h2 className="ld-h2">You pay for what <span className="tone">you actually use.</span></h2>
           <p className="ld-lede">
-            Not per seat, not per month for a thing you opened twice. Credits, spent when he does
-            something, with a real free tier underneath.
+            Not per seat. Not fifteen dollars a month for something you opened twice in March.
+            Credits, spent when he does something, with a real free tier underneath.
           </p>
 
           <div className="ld-price-grid">
             <div className="ld-price-free">
               <span>Free</span>
               <b>$0</b>
-              <p>A monthly allowance of credits, the full character, the full memory. When it runs out he stops rather than quietly billing you.</p>
+              <p>A monthly allowance of credits, the full character, the full memory. When it runs out he stops, rather than quietly charging you and hoping you do not check.</p>
               <a href={EXTENSION_DOWNLOAD_URL} className="ld-btn sm">Start free</a>
             </div>
 
@@ -634,8 +636,8 @@ export default function Landing() {
 
           <p className="ld-fine">
             These numbers are indicative and not settled. Publishing a price we have not tested and
-            then quietly changing it is how you lose the people who believed you first, so this says
-            so instead.
+            quietly changing it later is how you lose the people who believed you first, so we are
+            saying it out loud instead.
           </p>
         </div>
       </section>

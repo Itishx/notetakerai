@@ -34,13 +34,13 @@ const ANCHORS = [
    the same shape: here is the job, four ways it gets done. */
 const DOES = [
   { n: "01", ac: "ac-blue", name: "He learns how you write",
-    line: "By reading two hundred of your own posts, ranked by what actually worked. Not by asking you to describe your own voice in a box, which nobody can do." },
+    line: "By reading two hundred of your own posts, ranked by what actually worked. Not by making you describe your own voice in a text box, which nobody alive can do." },
   { n: "02", ac: "ac-violet", name: "He writes from what you shipped",
-    line: "He reads your commits and your week, and there are drafts waiting in the morning. You are never staring at an empty box wondering what to say." },
+    line: "He reads your commits and your week, and there are drafts waiting in the morning. No more staring at an empty box at 11pm wondering what you even did." },
   { n: "03", ac: "ac-green", name: "He picks the hour and posts it",
-    line: "From your own history, not a best-practice blog post. Then he reads the post back off the platform to check it actually went live." },
+    line: "From your own history, not some best-practice blog post. Then he goes and checks it actually posted, instead of assuming." },
   { n: "04", ac: "ac-coral", name: "He finds the conversations",
-    line: "The posts worth replying to, with the reply already drafted in your voice. You press send, because that part should stay human." },
+    line: "The posts worth replying to, with the reply already written in your voice. You press send, because that part should stay human." },
 ];
 
 const CHANNELS = [
@@ -75,7 +75,7 @@ export default function DistraPage() {
   useEffect(() => {
     try { localStorage.setItem("braino-apple-theme", dark ? "dark" : "light"); } catch { /* ignore */ }
   }, [dark]);
-  useEffect(() => { document.title = "Braino Distra — we wished distribution was as easy as vibe coding"; }, []);
+  useEffect(() => { document.title = "Braino Distra: we wished distribution was as easy as vibe coding"; }, []);
 
   return (
     <div className={"apple ld dp" + (dark ? " dark" : "")} ref={ref}>
@@ -104,7 +104,7 @@ export default function DistraPage() {
         </p>
         <p className="dp-sub2">
           Braino Distra is the same character who has been on your screen all week, pointed at the
-          one problem every solo founder has and nobody sells a fix for.
+          one problem every solo founder has and nobody bothers to sell a fix for.
         </p>
         <div className="ld-cta">
           <Link to="/channels" className="ld-btn">Open Distra</Link>
@@ -120,7 +120,7 @@ export default function DistraPage() {
           <p className="ld-lede">
             You can ship a real product in a weekend now. By Friday nobody has heard of it, and the
             reason is never the product. It is that posting consistently in your own voice is a job,
-            and it is the seventh job you are already doing badly.
+            and it is the seventh one you are already doing badly.
           </p>
           <div className="dp-versus">
             <div>
@@ -129,7 +129,7 @@ export default function DistraPage() {
                 <li>Tools that help you build it</li>
                 <li>Cursor, Lovable, all of them</li>
                 <li>Funded, fast, and very good</li>
-                <li>Then they hand it to you and leave</li>
+                <li>Then they hand it over and vanish</li>
               </ul>
             </div>
             <div className="is-on">
@@ -138,7 +138,7 @@ export default function DistraPage() {
                 <li>The part where people find out</li>
                 <li>Every day, in your voice, everywhere</li>
                 <li>Without it becoming your whole week</li>
-                <li>That is the entire gap</li>
+                <li>That is the whole gap, sitting there</li>
               </ul>
             </div>
           </div>
@@ -167,8 +167,8 @@ export default function DistraPage() {
           <p className="apple-eyebrow">Where he does it</p>
           <h2 className="ld-h2">One voice. <span className="tone">Every room.</span></h2>
           <p className="ld-lede">
-            He writes for each platform the way that platform actually works. Cross-posting the same
-            text everywhere is the clearest tell that an account is automated.
+            He writes for each platform the way that platform actually works. Posting identical text
+            everywhere is the fastest way to announce that a robot runs your account.
           </p>
           <div className="dp-chan-grid">
             {CHANNELS.map((c) => (
@@ -192,9 +192,9 @@ export default function DistraPage() {
           <p className="apple-eyebrow">Where the line is</p>
           <h2 className="ld-h2">He decides how. <span className="tone">You decide whether.</span></h2>
           <p className="ld-lede">
-            Nobody should hand their accounts to an agent and walk away, and we are not asking anyone
-            to. Three levels, set per platform, changed any day. He drops back a level by himself if
-            anything looks wrong.
+            Nobody should hand their accounts to an agent and walk away, and we are not asking you to.
+            Three levels, set per platform, changed any day. He drops back a level by himself if
+            anything looks off.
           </p>
           <div className="dp-levels">
             <div><b>Ask me everything</b><p>He writes. You approve every post.</p></div>
@@ -204,9 +204,9 @@ export default function DistraPage() {
           <p className="apple-eyebrow" style={{ marginTop: 44 }}>He always stops and asks before these</p>
           <div className="dp-gates">{GATES.map((g) => <span key={g}>{g}</span>)}</div>
           <p className="ld-fine">
-            He also shows his work. Every decision lands on the dashboard, including the ones where
-            he refused to post something and which rule caught it. An agent you cannot audit is one
-            you cannot trust with your name.
+            He also shows his work. Every decision lands on the dashboard, including the ones where he
+            refused to post something and which rule stopped him. An agent you cannot audit is one you
+            should not be trusting with your name.
           </p>
         </div>
       </section>
@@ -217,9 +217,9 @@ export default function DistraPage() {
           <p className="apple-eyebrow">The honest bit</p>
           <h2 className="ld-h2 sm">What this does <span className="tone">not</span> do.</h2>
           <ul>
-            <li><b>It will not make you go viral.</b> It makes you consistent, in your own voice, without the job feeling like a job. Only one of those is a promise anyone can keep.</li>
+            <li><b>It will not make you go viral.</b> Nobody can promise that and anyone who does is selling something. It makes you consistent, in your own voice, without it feeling like a second job.</li>
             <li><b>He never sends a reply or a comment himself.</b> Automated engagement is what gets accounts restricted, so he judges and drafts and you press the key.</li>
-            <li><b>Some numbers are genuinely unavailable.</b> LinkedIn analytics need partner access we do not have. The dashboard shows a dash and says why rather than inventing a figure.</li>
+            <li><b>Some numbers are genuinely unavailable.</b> LinkedIn analytics need partner access we do not have. The dashboard shows a dash and tells you why, instead of making a number up.</li>
             <li><b>Braino Distra's first customer is Braino.</b> It runs this company's own distribution before it runs yours.</li>
           </ul>
         </div>
