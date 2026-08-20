@@ -93,11 +93,43 @@ so rather than pretending the film does not exist. Going worldwide means paying 
 as the literal string "Deeplinks available for paid plans only.", so only `web_url` is ever
 read. That is fine — Braino opens browser tabs.
 
+## Relative references
+
+Nobody says "season five episode eight". They say "the final episode", and Braino is
+expected to know that is S5E8.
+
+| Said | Resolved |
+|---|---|
+| "the final episode of Stranger Things" | S5E8 "Chapter Eight: The Rightside Up" |
+| "the first episode of Breaking Bad" | S1E1 "Pilot" |
+| "the last episode of season 2 of Stranger Things" | S2E9 "Chapter Nine: The Gate" |
+| "the finale of X" | last episode of the last season |
+| "the latest episode" | newest **already aired**, not the newest listed |
+| "episode 2 from season 4" | S4E2 — both word orders work |
+
+Resolved against `/v1/title/{id}/episodes/`, which returns every episode with real season
+and episode numbers. **That call only fires when a relative reference is present** — it is
+the most expensive request in the API and "season 2 episode 5" is already concrete.
+
+Braino says the episode's name back ("season 5, episode 8, Chapter Eight: The Rightside
+Up") because that is how he shows he understood rather than guessed.
+
+## Region
+
+**Never trust the system locale for country.** A Mac set to `en-GB` in Delhi reports GB,
+asks for the British catalogue, and gets nothing. The Mac uses ipapi (cached for the day)
+with locale only as a last resort; the extension uses `bgGetUserGeo()`.
+
+**The server also protects itself.** If the asked-for region is not on the Watchmode plan,
+it looks up which regions *are*, answers from one of those, and sets
+`regionSubstitutedFrom`. Refusing to answer is the worst possible outcome.
+
 ## Known soft edges
 
-- **Episode-level deep links are not reliable.** A show-level link lands on the series
-  page. `needsEpisodeNavigation` flags it so the delegate finishes the last hop rather
-  than Braino pretending it nailed it.
+- **Episode-level deep links are paid-tier.** The episodes endpoint returns `web_url` as
+  the literal string "Episode links available for paid plans only.", so we know exactly
+  which episode is meant but still land on the series page. `needsEpisodeNavigation` flags
+  it so the delegate finishes the last hop rather than Braino pretending it nailed it.
 - **Only Netflix gets a URL rewrite**, and it is verified: Watchmode returns
   `netflix.com/title/80057281` for Stranger Things, and the rewritten `/watch/` form
   returns HTTP 200. Every other platform passes through untouched.

@@ -6417,7 +6417,7 @@ async function playWatchTitle(intent) {
         apikey: SUPABASE_ANON_KEY,
         Authorization: `Bearer ${authToken}`,
       },
-      body: JSON.stringify({ text: intent.text, region: macWatchRegion() }),
+      body: JSON.stringify({ text: intent.text, region: await macWatchRegion() }),
     });
     data = await response.json().catch(() => null);
     if (!response.ok) {
@@ -6441,13 +6441,29 @@ async function playWatchTitle(intent) {
   return { ok: true, say: (data && data.speak) || "Done." };
 }
 
-/* Catalogues differ enormously by country and the Watchmode plan only covers
-   one, so guessing is worse than defaulting. The system locale is the best
-   signal this process has without asking for a permission. */
-function macWatchRegion() {
+/* Catalogues differ enormously by country, and the system locale is NOT the
+   country: a Mac set to en-GB in Delhi reports GB and gets the wrong catalogue,
+   or none at all. Same source the extension uses, cached for the day, with
+   locale only as the last resort. The server also falls back to a region the
+   plan actually covers, so a wrong answer here degrades rather than breaks. */
+let macGeoCache = null;
+
+async function macWatchRegion() {
+  if (macGeoCache && Date.now() - macGeoCache.at < 24 * 60 * 60 * 1000) return macGeoCache.country;
   try {
-    const locale = String(app.getLocale() || "");
-    const m = locale.match(/[-_]([A-Za-z]{2})$/);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 2500);
+    const res = await fetch("https://ipapi.co/json/", { signal: controller.signal });
+    clearTimeout(timer);
+    const j = await res.json();
+    const code = String((j && j.country_code) || "").toUpperCase();
+    if (/^[A-Z]{2}$/.test(code)) {
+      macGeoCache = { at: Date.now(), country: code };
+      return code;
+    }
+  } catch (_) {}
+  try {
+    const m = String(app.getLocale() || "").match(/[-_]([A-Za-z]{2})$/);
     if (m) return m[1].toUpperCase();
   } catch (_) {}
   return "IN";

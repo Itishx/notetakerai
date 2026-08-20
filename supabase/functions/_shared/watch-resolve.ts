@@ -68,11 +68,17 @@ export interface WatchRequest {
   kind?: WatchKind;
   season?: number;
   episode?: number;
+  /** "the final episode", "the first one" — resolved against the real episode list. */
+  episodeRef?: "first" | "last" | "latest";
+  /** "the final season". */
+  seasonRef?: "first" | "last";
   /** ISO-3166 alpha-2, from bgGetUserGeo(). Must be enabled on the plan. */
   region?: string;
   watchmodeKey: string;
   /** Optional. Enables the description fallback when the title index misses. */
   openaiKey?: string;
+  /** Internal: stops the region fallback from recursing. */
+  _retriedRegion?: boolean;
 }
 
 export interface WatchSource {
@@ -106,8 +112,14 @@ export interface WatchResult {
   episode?: number;
   /** Set when the region simply is not on the Watchmode plan. Not the user's fault. */
   regionUnsupported?: boolean;
+  /** Set when we answered from a different region than the one asked for. */
+  regionSubstitutedFrom?: string;
   /** Set when the model had to work out what film a description meant. */
   resolvedFromDescription?: string;
+  /** Title of the episode we landed on, once a relative reference was resolved. */
+  episodeName?: string;
+  /** How many seasons the show has, when we had to go and count. */
+  seasonCount?: number;
   note?: string;
 }
 
@@ -193,6 +205,24 @@ async function getJson(url: string, label: string): Promise<any> {
     throw new WatchmodeError(detail, /is not enabled for your current plan/i.test(detail));
   }
   return body;
+}
+
+/* The plan covers a subset of the 54 regions, and a client can easily report a
+   region outside it: a Mac set to en-GB in Delhi asks for GB. Refusing to
+   answer is the worst outcome, so when the asked-for region is not covered we
+   look up what IS and use that, and say which one we used. */
+let enabledRegionCache: { at: number; regions: string[] } | null = null;
+
+async function enabledRegions(key: string): Promise<string[]> {
+  if (enabledRegionCache && Date.now() - enabledRegionCache.at < 6 * 60 * 60 * 1000) {
+    return enabledRegionCache.regions;
+  }
+  const raw = await getJson(`${WATCHMODE}/regions/?apiKey=${key}`, "Watchmode regions");
+  const regions = (Array.isArray(raw) ? raw : [])
+    .filter((r: any) => r?.plan_enabled)
+    .map((r: any) => String(r.country).toUpperCase());
+  enabledRegionCache = { at: Date.now(), regions };
+  return regions;
 }
 
 /* ── 1. Identity ──────────────────────────────────────────────────────────
@@ -298,6 +328,75 @@ async function sourcesFor(
   return out.sort((a, b) => (rank[a.type] ?? 9) - (rank[b.type] ?? 9));
 }
 
+/* ── 3. Relative episode references ──────────────────────────────────────
+   "The final episode of Stranger Things" is not a number, and the user should
+   not have to know it is S5E8. The episodes endpoint returns every episode with
+   its season and episode number, so the reference resolves against real data
+   rather than a guess about how many seasons a show has.
+
+   This call is only made when a relative reference is actually present: it is
+   the most expensive request in the API and there is no reason to spend it on
+   "play Stranger Things season 2 episode 5", which is already concrete.
+
+   Episode-level deep links are paid-tier — web_url comes back as the literal
+   string "Episode links available for paid plans only." — so what this buys is
+   the right numbers and the episode's name, not a direct link to it. */
+async function resolveEpisodeRef(
+  titleId: number, req: WatchRequest, key: string,
+): Promise<{ season?: number; episode?: number; name?: string; seasonCount?: number } | null> {
+  const raw = await getJson(
+    `${WATCHMODE}/title/${titleId}/episodes/?apiKey=${key}`, "Watchmode episodes",
+  );
+  const all: any[] = Array.isArray(raw) ? raw : [];
+  const episodes = all
+    .filter((e) => Number.isFinite(Number(e?.season_number)) && Number.isFinite(Number(e?.episode_number)))
+    /* Specials live in season 0 and are never what anyone means by "the first
+       episode". Ordered by season then episode, because the API's own order is
+       not guaranteed. */
+    .filter((e) => Number(e.season_number) > 0)
+    .sort((a, b) => (a.season_number - b.season_number) || (a.episode_number - b.episode_number));
+  if (!episodes.length) return null;
+
+  const seasons = [...new Set(episodes.map((e) => Number(e.season_number)))].sort((a, b) => a - b);
+  const seasonCount = seasons.length;
+
+  let season = req.season;
+  if (season == null && req.seasonRef) {
+    season = req.seasonRef === "last" ? seasons[seasons.length - 1] : seasons[0];
+  }
+
+  const pool = season != null
+    ? episodes.filter((e) => Number(e.season_number) === season)
+    : episodes;
+  if (!pool.length) return { season, seasonCount };
+
+  let chosen: any;
+  if (req.episode != null) {
+    chosen = pool.find((e) => Number(e.episode_number) === req.episode);
+  } else if (req.episodeRef === "first") {
+    chosen = pool[0];
+  } else if (req.episodeRef === "last") {
+    chosen = pool[pool.length - 1];
+  } else if (req.episodeRef === "latest") {
+    /* "Latest" is about broadcast order, not list order: an unaired episode can
+       sit at the end of the list with a future date. Newest already released. */
+    const now = Date.now();
+    const aired = pool.filter((e) => {
+      const t = Date.parse(String(e.release_date || ""));
+      return Number.isFinite(t) && t <= now;
+    });
+    chosen = (aired.length ? aired : pool)[Math.max(0, (aired.length ? aired : pool).length - 1)];
+  }
+
+  if (!chosen) return { season, seasonCount };
+  return {
+    season: Number(chosen.season_number),
+    episode: Number(chosen.episode_number),
+    name: String(chosen.name || "") || undefined,
+    seasonCount,
+  };
+}
+
 /* ── The whole pipeline ─────────────────────────────────────────────────── */
 export async function resolveWatch(req: WatchRequest): Promise<WatchResult> {
   const region = (req.region || "IN").toUpperCase();
@@ -312,6 +411,19 @@ export async function resolveWatch(req: WatchRequest): Promise<WatchResult> {
       title: id.title, year: id.year, kind: id.kind, watchmodeId: id.id,
       resolvedFromDescription: id.viaDescription,
     };
+    /* Resolve "the final episode" into real numbers before anything else, so
+       every line spoken downstream talks about the episode we actually mean. */
+    let season = req.season, episode = req.episode, episodeName: string | undefined, seasonCount: number | undefined;
+    if (id.kind === "tv" && (req.episodeRef || req.seasonRef)) {
+      const ep = await resolveEpisodeRef(id.id, req, req.watchmodeKey).catch(() => null);
+      if (ep) {
+        season = ep.season ?? season;
+        episode = ep.episode ?? episode;
+        episodeName = ep.name;
+        seasonCount = ep.seasonCount;
+      }
+    }
+
     const sources = await sourcesFor(id.id, region, req.watchmodeKey);
 
     if (!sources.length) {
@@ -329,7 +441,7 @@ export async function resolveWatch(req: WatchRequest): Promise<WatchResult> {
        episodes counts, never an episode URL. So we say so, and the browser
        delegate — already good at clicking through a page it can see — finishes
        the last hop rather than us pretending we nailed it. */
-    const wantsEpisode = id.kind === "tv" && (req.season != null || req.episode != null);
+    const wantsEpisode = id.kind === "tv" && (season != null || episode != null);
 
     return {
       ...base, ...meta,
@@ -338,16 +450,30 @@ export async function resolveWatch(req: WatchRequest): Promise<WatchResult> {
       alternatives: sources.filter((s) => s !== pick),
       askedForAvailable: asked ? Boolean(wanted) : undefined,
       needsEpisodeNavigation: wantsEpisode || undefined,
-      season: req.season,
-      episode: req.episode,
+      season,
+      episode,
+      episodeName,
+      seasonCount,
       note: asked && !wanted ? `Not on ${platformLabel(asked)} in ${region}. It is on ${pick.name}.` : undefined,
     };
   } catch (err) {
-    if (err instanceof WatchmodeError && err.regionUnsupported) {
+    if (err instanceof WatchmodeError && err.regionUnsupported && !req._retriedRegion) {
+      /* Do not give up on a region we were never going to be able to read.
+         Ask which ones the plan covers and answer from the nearest thing we
+         have, rather than telling the user their film does not exist. */
+      const covered = await enabledRegions(req.watchmodeKey).catch(() => [] as string[]);
+      const fallback = covered.find((r) => r !== region);
+      if (fallback) {
+        const retry = await resolveWatch({ ...req, region: fallback, _retriedRegion: true });
+        return { ...retry, regionSubstitutedFrom: region };
+      }
       return {
         ...base, regionUnsupported: true,
-        note: `Watchmode's plan does not cover ${region}, so there is nothing to look up there yet.`,
+        note: `I cannot check what is streaming in ${region} yet.`,
       };
+    }
+    if (err instanceof WatchmodeError && err.regionUnsupported) {
+      return { ...base, regionUnsupported: true, note: `I cannot check what is streaming in ${region} yet.` };
     }
     throw err;
   }
@@ -360,7 +486,11 @@ export function spokenLine(r: WatchResult): string {
   if (!r.pick) return r.note || `${r.title} is not streaming in ${r.region} right now.`;
 
   const ep = r.season != null && r.episode != null
-    ? ` season ${r.season}, episode ${r.episode}` : "";
+    ? ` season ${r.season}, episode ${r.episode}`
+    : r.season != null ? ` season ${r.season}` : "";
+  /* Say the episode's name when we had to work out which one they meant. It is
+     how Braino shows he understood "the final episode" rather than guessed. */
+  const named = r.episodeName ? `, ${r.episodeName},` : "";
 
   if (r.askedFor && r.askedForAvailable === false) {
     return `${r.title} is not on ${platformLabel(r.askedFor)} in ${r.region}. It is on ${r.pick.name}, opening that.`;
@@ -370,7 +500,7 @@ export function spokenLine(r: WatchResult): string {
     return `${r.title} is only a ${r.pick.type}${price} on ${r.pick.name} here. Opening it, your call.`;
   }
   if (r.needsEpisodeNavigation || !r.pick.autoplays) {
-    return `Opening ${r.title}${ep} on ${r.pick.name}.`;
+    return `Opening ${r.title}${ep}${named} on ${r.pick.name}.`;
   }
   return `Playing ${r.title} on ${r.pick.name}.`;
 }
@@ -391,6 +521,7 @@ const SPOKEN_PLATFORMS = [
 
 export interface Parsed {
   query: string; platform?: string; season?: number; episode?: number; kind?: WatchKind;
+  episodeRef?: "first" | "last" | "latest"; seasonRef?: "first" | "last";
 }
 
 /* "play stranger things season 2 episode 5 on netflix" ->
@@ -408,17 +539,52 @@ export function parseSpoken(raw: string): Parsed {
     if (re.test(t)) { out.platform = name; t = t.replace(re, ""); break; }
   }
 
-  const se = t.match(/\bs(?:eason)?\s*(\d{1,2})\s*(?:,|\s)?\s*(?:e(?:pisode)?)\s*(\d{1,3})\b/i);
+  /* Relative references first, because "the final episode of season 2" has to
+     lose its words before the numeric matcher runs, or "2" ends up read as the
+     episode. Nobody should have to know Stranger Things ends at S5E8. */
+  const finale = t.match(/\b(?:the\s+)?(?:series\s+)?finale\b/i);
+  const relEp = t.match(/\b(?:the\s+)?(final|last|first|latest|newest|most\s+recent)\s+(?:episode|ep)\b\s*(?:of\s+)?/i);
+  if (relEp) {
+    const word = relEp[1].toLowerCase();
+    out.episodeRef = /^(final|last)$/.test(word) ? "last"
+      : word === "first" ? "first" : "latest";
+    out.kind = "tv";
+    t = t.replace(relEp[0], " ");
+  } else if (finale) {
+    out.episodeRef = "last"; out.kind = "tv";
+    t = t.replace(finale[0], " ");
+  }
+
+  const relSeason = t.match(/\b(?:the\s+)?(final|last|first|latest|newest)\s+season\b\s*(?:of\s+)?/i);
+  if (relSeason) {
+    const word = relSeason[1].toLowerCase();
+    out.seasonRef = /^(final|last|latest|newest)$/.test(word) ? "last" : "first";
+    out.kind = "tv";
+    t = t.replace(relSeason[0], " ");
+  }
+
+  /* People say it both ways round: "season 4 episode 2" and "episode 2 from
+     season 4". The reversed form has to be tried first, or the plain season
+     matcher below eats the number and the episode is lost. */
+  const es = t.match(/\b(?:e(?:pisode)?)\s*(\d{1,3})\s*(?:,|\s)?\s*(?:of|from|in)?\s*\bs(?:eason)?\s*(\d{1,2})\b/i);
+  if (es) {
+    out.episode = Number(es[1]); out.season = Number(es[2]); out.kind = "tv";
+    t = t.replace(es[0], " ");
+  }
+
+  const se = !es && t.match(/\bs(?:eason)?\s*(\d{1,2})\s*(?:,|\s)?\s*(?:e(?:pisode)?)\s*(\d{1,3})\b/i);
   if (se) {
     out.season = Number(se[1]); out.episode = Number(se[2]); out.kind = "tv";
     t = t.replace(se[0], "");
-  } else {
+  } else if (!es) {
     const sOnly = t.match(/\bseason\s*(\d{1,2})\b/i);
     if (sOnly) { out.season = Number(sOnly[1]); out.kind = "tv"; t = t.replace(sOnly[0], ""); }
     const eOnly = t.match(/\bepisode\s*(\d{1,3})\b/i);
     if (eOnly) { out.episode = Number(eOnly[1]); out.kind = "tv"; t = t.replace(eOnly[0], ""); }
   }
 
-  out.query = t.replace(/\s{2,}/g, " ").replace(/[,\s]+$/, "").trim();
+  /* Stripping "the final episode of" can leave a leading "of", and stripping a
+     season can leave one mid-string: "the last episode of season 2 of X". */
+  out.query = t.replace(/\s{2,}/g, " ").replace(/^\s*of\s+/i, "").replace(/[,\s]+$/, "").trim();
   return out;
 }

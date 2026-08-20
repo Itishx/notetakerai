@@ -69,6 +69,40 @@ describe("parseSpoken", () => {
     expect(parseSpoken("play The Amazon").query).toBe("The Amazon");
   });
 
+  /* Nobody says "season five episode eight". They say "the final episode", and
+     it is on Braino to know that is S5E8. */
+  it("reads relative episode references", () => {
+    expect(parseSpoken("play the final episode of Stranger Things"))
+      .toMatchObject({ query: "Stranger Things", episodeRef: "last", kind: "tv" });
+    expect(parseSpoken("play the first episode of Breaking Bad"))
+      .toMatchObject({ query: "Breaking Bad", episodeRef: "first" });
+    expect(parseSpoken("play the latest episode of The Daily Show"))
+      .toMatchObject({ query: "The Daily Show", episodeRef: "latest" });
+    expect(parseSpoken("play the finale of Stranger Things"))
+      .toMatchObject({ query: "Stranger Things", episodeRef: "last" });
+  });
+
+  it("combines a relative episode with an explicit season", () => {
+    expect(parseSpoken("put on the last episode of season 2 of Stranger Things"))
+      .toMatchObject({ query: "Stranger Things", season: 2, episodeRef: "last" });
+  });
+
+  it("reads a relative season", () => {
+    expect(parseSpoken("play the final season of Succession"))
+      .toMatchObject({ query: "Succession", seasonRef: "last", kind: "tv" });
+  });
+
+  /* This one shipped broken: the regex only handled "season 4 episode 2", so a
+     real request came back as the wrong thing. Both orders now. */
+  it("reads season and episode in either order", () => {
+    expect(parseSpoken("play Stranger Things episode 2 from season 4"))
+      .toMatchObject({ query: "Stranger Things", season: 4, episode: 2 });
+    expect(parseSpoken("play Stranger Things season 4 episode 2"))
+      .toMatchObject({ query: "Stranger Things", season: 4, episode: 2 });
+    expect(parseSpoken("play The Boys episode 4 of season 3"))
+      .toMatchObject({ query: "The Boys", season: 3, episode: 4 });
+  });
+
   it("survives trailing punctuation and doubled spaces", () => {
     expect(parseSpoken("Braino, play  Heat  on netflix.").query).toBe("Heat");
   });
