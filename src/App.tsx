@@ -9,6 +9,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 
 const Waitlist = lazy(() => import("./pages/Waitlist.tsx"));
 const Landing = lazy(() => import("./pages/Landing.tsx"));
+const ReceiptDemo = lazy(() => import("./pages/ReceiptDemo.tsx"));
 const BrainoThronglets = lazy(() => import("./pages/BrainoThronglets.tsx"));
 const BrainoThrongletsDocs = lazy(() => import("./pages/BrainoThrongletsDocs.tsx"));
 const ChooseYourAvatarDocs = lazy(() => import("./pages/ChooseYourAvatarDocs.tsx"));
@@ -231,6 +232,8 @@ function AppRoutes() {
         <Route path="/auth" element={<Auth />} />
         <Route path="/auth/extension" element={<ExtensionAuth />} />
         <Route path="/premium" element={<Premium />} />
+        {/* Checkout receipt animation, built to be screen-recorded. */}
+        <Route path="/receipt" element={<ReceiptDemo />} />
         <Route path="/browser-agent" element={<BrowserAgent />} />
         <Route path="/delegate" element={<Delegate />} />
         <Route path="/remote-agent" element={<RemoteAgent />} />
