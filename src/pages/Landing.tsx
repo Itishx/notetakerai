@@ -433,9 +433,10 @@ export default function Landing() {
                 disabled={asking}
               />
               <button type="submit" className="ld-btn sm ld-ask-btn" disabled={asking || !typed.trim()}>
-                <span className={"ld-ask-mascot" + (asking ? " is-thinking" : "")} aria-hidden="true">
-                  <MiniBraino size={30} />
-                </span>
+                <img
+                  className={"ld-ask-mascot" + (asking ? " is-thinking" : "")}
+                  src="/reactions/braino-happy.svg" alt="" aria-hidden="true"
+                />
                 {asking ? "Thinking..." : "Show me"}
               </button>
             </div>
