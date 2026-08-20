@@ -14812,6 +14812,8 @@ const __SB_MOVIE_ON_RE = /^(?:hey\s+)?(?:braino[,\s]+)?(?:(?:turn on|start|enter
 const __SB_MOVIE_OFF_RE = /^(?:hey\s+)?(?:braino[,\s]+)?(?:exit|stop|leave|turn off|end|close|disable)\s+(?:movie|cinema|film) mode(?: please)?[.!]?$/i;
 function __sbClassifyMovieModeCommand(text) {
   const t = String(text || "").trim();
+  // Strip the wake word first, or "Braino, what movie..." slips past the guards.
+  const t2 = t.replace(/^\s*(?:hey\s+)?braino[,\s]+/i, "").trim();
   if (!t) return null;
   if (__SB_MOVIE_OFF_RE.test(t)) return "off";
   if (__SB_MOVIE_ON_RE.test(t)) return "on";
@@ -18502,22 +18504,37 @@ const __SB_OTT_NAMES = "netflix|prime video|amazon prime|primevideo|disney\\+? ?
 
 function __sbWatchPlayIntent(text) {
   const t = String(text || "").trim();
-  if (!t || t.length > 220) return null;
+  // Strip the wake word before any test, or "Braino, what movie..." walks
+  // straight past the recommendation guard below.
+  const t2 = t.replace(/^\s*(?:hey\s+)?braino[,\s]+/i, "").trim();
+  if (!t2 || t2.length > 220) return null;
+  // Recommendations are not play requests. "What movie should I watch tonight"
+  // is a conversation, and hijacking it into a title lookup means searching the
+  // index for the literal sentence and telling the user it does not exist.
+  if (/^(?:what|which|any|got|recommend|suggest|give me|find me|show me)\b/i.test(t2)) return null;
+  if (/\b(?:recommend|recommendation|suggestion|suggest me|what should i)\b/i.test(t2)) return null;
+
+
 
   // Music owns these words. Never race the Spotify path for them.
-  if (/\b(song|track|album|playlist|spotify|tune|music)\b/i.test(t)) return null;
+  if (/\b(song|track|album|playlist|spotify|tune|music)\b/i.test(t2)) return null;
 
-  const named = new RegExp(`\\b(?:on|in|using|over)\\s+(?:${__SB_OTT_NAMES})\\b`, "i").test(t);
-  const episodic = /\bs(?:eason)?\s*\d{1,2}\s*,?\s*e(?:pisode)?\s*\d{1,3}\b/i.test(t)
-    || /\b(?:season|episode)\s+\d{1,3}\b/i.test(t);
-  const kindWord = /\b(movie|film|show|series|documentary)\b/i.test(t);
-  const playVerb = /\b(play|put on|watch|stream|start)\b/i.test(t);
-  const whereToWatch = /\bwhere\s+(?:can|do)\s+i\s+watch\b/i.test(t)
-    || /\bis\s+.+\bon\s+(?:netflix|prime|hotstar|disney)\b/i.test(t);
+  const named = new RegExp(`\\b(?:on|in|using|over)\\s+(?:${__SB_OTT_NAMES})\\b`, "i").test(t2);
+  /* Relative references carry no digits at all, so requiring a number here meant
+     "play the final episode of Stranger Things" never fired in the first place —
+     the server knew how to resolve it and was never asked. */
+  const episodic = /\bs(?:eason)?\s*\d{1,2}\s*,?\s*e(?:pisode)?\s*\d{1,3}\b/i.test(t2)
+    || /\b(?:season|episode)\s+\d{1,3}\b/i.test(t2)
+    || /\b(?:final|last|first|latest|newest|most recent)\s+(?:episode|season)\b/i.test(t2)
+    || /\bfinale\b/i.test(t2);
+  const kindWord = /\b(movie|film|show|series|documentary)\b/i.test(t2);
+  const playVerb = /\b(play|put on|watch|stream|start)\b/i.test(t2);
+  const whereToWatch = /\bwhere\s+(?:can|do)\s+i\s+watch\b/i.test(t2)
+    || /\bis\s+.+\bon\s+(?:netflix|prime|hotstar|disney)\b/i.test(t2);
 
-  if (whereToWatch) return { text: t };
+  if (whereToWatch) return { text: t2 };
   if (!playVerb) return null;
-  if (named || episodic || kindWord) return { text: t };
+  if (named || episodic || kindWord) return { text: t2 };
   return null;
 }
 

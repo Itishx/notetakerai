@@ -30,7 +30,7 @@ const WATCHMODE = "https://api.watchmode.com/v1";
    ask the model what film they meant and search again for its actual title.
    That second hop only fires on a miss, so the common case stays one request
    and no model call. */
-async function titleFromDescription(said: string, openaiKey: string): Promise<string | null> {
+async function titleFromDescription(said: string, openaiKey: string, wantsTv = false): Promise<string | null> {
   const res = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: { Authorization: `Bearer ${openaiKey}`, "Content-Type": "application/json" },
@@ -42,9 +42,12 @@ async function titleFromDescription(said: string, openaiKey: string): Promise<st
         {
           role: "system",
           content:
-            "You identify films and TV shows from vague descriptions. Reply with ONLY " +
-            "the official title. No year, no quotes, no explanation, no punctuation " +
-            "around it. If you genuinely cannot tell, reply with exactly: UNKNOWN",
+            "You identify films and TV shows from vague or wrong names and from " +
+            "descriptions. People misname things constantly: the Jack Reacher TV " +
+            "series is called Reacher. Reply with ONLY the official title. No year, " +
+            "no quotes, no explanation, no punctuation around it. If you genuinely " +
+            "cannot tell, reply with exactly: UNKNOWN" +
+            (wantsTv ? " They are asking about a TV SERIES, so give the series title." : ""),
         },
         { role: "user", content: said },
       ],
@@ -248,11 +251,22 @@ async function identify(req: WatchRequest): Promise<{
   /* Empty index result means they described it rather than named it. Ask the
      model for the title and try once more. Never a third time — if the model's
      guess also misses, we genuinely do not know and should say so. */
-  if (!results.length && req.openaiKey) {
-    const guess = await titleFromDescription(req.query, req.openaiKey).catch(() => null);
-    if (guess) {
-      results = await searchTitles(guess, req.watchmodeKey);
-      if (results.length) viaDescription = guess;
+  const isTv = (t: any) => /^tv_(series|miniseries)$/.test(String(t));
+  const wantsTvNow = req.kind === "tv" || req.season != null || req.episode != null;
+
+  /* Two ways to be wrong here, and both end in the model. Nothing came back at
+     all (they described the film instead of naming it), or a season was asked
+     for and the index only offers a movie — which is what "Jack Reacher season
+     4" looks like, because the show is actually called "Reacher". */
+  const missed = !results.length
+    || (wantsTvNow && !results.some((r: any) => isTv(r.type)));
+
+  if (missed && req.openaiKey) {
+    const guess = await titleFromDescription(req.query, req.openaiKey, wantsTvNow).catch(() => null);
+    if (guess && guess.toLowerCase() !== req.query.trim().toLowerCase()) {
+      const retry = await searchTitles(guess, req.watchmodeKey);
+      const better = wantsTvNow ? retry.filter((r: any) => isTv(r.type)) : retry;
+      if (better.length) { results = retry; viaDescription = guess; }
     }
   }
 
@@ -262,11 +276,11 @@ async function identify(req: WatchRequest): Promise<{
     /^tv_(series|miniseries)$/.test(String(t)) ? "tv" : "movie";
 
   const wantsTv = req.kind === "tv" || req.season != null || req.episode != null;
-  const usable = results.filter((r) => {
-    if (r?.result_type !== "title" || !r?.id) return false;
-    if (req.kind) return kindOf(r.type) === req.kind;
-    return true;
-  });
+  /* Kind is a PREFERENCE, never a filter. "Jack Reacher season 4" says tv, and
+     the index only has the 2012 film under that name — filtering on kind threw
+     the only match away and reported the title did not exist. Rank instead, and
+     let the miss fall through to the model, which knows the show is "Reacher". */
+  const usable = results.filter((r) => r?.result_type === "title" && r?.id);
   if (!usable.length) return null;
 
   /* A season or episode in the ask is a strong signal it is a show, whatever
@@ -546,6 +560,10 @@ export function parseSpoken(raw: string): Parsed {
 
   t = t.replace(/^\s*(?:hey\s+)?braino[,\s]+/i, "");
   t = t.replace(/^\s*(?:can you\s+)?(?:please\s+)?(?:go ahead and\s+)?/i, "");
+  /* "Where can I watch Interstellar" was searching the index for the whole
+     sentence. The question is the wrapper; the title is the payload. */
+  t = t.replace(/^\s*where\s+(?:can|do|could)\s+i\s+(?:watch|stream|find|see)\s+/i, "");
+  t = t.replace(/^\s*is\s+/i, (m) => (/\bon\b/i.test(t) ? "" : m));
   t = t.replace(/^\s*(?:play|put on|start|watch|stream|open)\s+/i, "");
 
   for (const name of SPOKEN_PLATFORMS) {
