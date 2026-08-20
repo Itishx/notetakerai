@@ -19,7 +19,44 @@
    pages or automating past a login wall is what gets accounts banned.
    ========================================================================== */
 
+import { BRAINO_TEXT_MODEL, BRAINO_TEXT_REASONING_EFFORT } from "./openai-models.ts";
+
 const WATCHMODE = "https://api.watchmode.com/v1";
+
+/* Watchmode's search is a title index, and a good one: verified live, it takes
+   "shawshank", "the shaw shank" and "spiderman no way home" straight to the
+   right film. What it cannot do is a description — "that prison movie with
+   Morgan Freeman" returns nothing at all. So when the index comes up empty we
+   ask the model what film they meant and search again for its actual title.
+   That second hop only fires on a miss, so the common case stays one request
+   and no model call. */
+async function titleFromDescription(said: string, openaiKey: string): Promise<string | null> {
+  const res = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${openaiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: BRAINO_TEXT_MODEL,
+      reasoning_effort: BRAINO_TEXT_REASONING_EFFORT,
+      max_completion_tokens: 30,
+      messages: [
+        {
+          role: "system",
+          content:
+            "You identify films and TV shows from vague descriptions. Reply with ONLY " +
+            "the official title. No year, no quotes, no explanation, no punctuation " +
+            "around it. If you genuinely cannot tell, reply with exactly: UNKNOWN",
+        },
+        { role: "user", content: said },
+      ],
+    }),
+  });
+  if (!res.ok) return null;
+  const data = await res.json().catch(() => null);
+  const text = String(data?.choices?.[0]?.message?.content || "")
+    .trim().replace(/^["'\u201c]+|["'\u201d.]+$/g, "").trim();
+  if (!text || /^unknown$/i.test(text) || text.length > 80) return null;
+  return text;
+}
 
 export type WatchKind = "movie" | "tv";
 
@@ -34,6 +71,8 @@ export interface WatchRequest {
   /** ISO-3166 alpha-2, from bgGetUserGeo(). Must be enabled on the plan. */
   region?: string;
   watchmodeKey: string;
+  /** Optional. Enables the description fallback when the title index misses. */
+  openaiKey?: string;
 }
 
 export interface WatchSource {
@@ -67,6 +106,8 @@ export interface WatchResult {
   episode?: number;
   /** Set when the region simply is not on the Watchmode plan. Not the user's fault. */
   regionUnsupported?: boolean;
+  /** Set when the model had to work out what film a description meant. */
+  resolvedFromDescription?: string;
   note?: string;
 }
 
@@ -159,15 +200,31 @@ async function getJson(url: string, label: string): Promise<any> {
    is fuzzy and relevance-ranked, and returns type and year, which is everything
    TMDB was being asked for. Verified: "shawshank" scores The Shawshank
    Redemption at 199 and the nearest decoy at 84. */
-async function identify(req: WatchRequest): Promise<{
-  id: number; kind: WatchKind; title: string; year?: number;
-} | null> {
+async function searchTitles(term: string, key: string): Promise<any[]> {
   const data = await getJson(
-    `${WATCHMODE}/autocomplete-search/?apiKey=${req.watchmodeKey}` +
-    `&search_value=${encodeURIComponent(req.query)}&search_type=2`,
+    `${WATCHMODE}/autocomplete-search/?apiKey=${key}` +
+    `&search_value=${encodeURIComponent(term)}&search_type=2`,
     "Watchmode search",
   );
-  const results: any[] = Array.isArray(data?.results) ? data.results : [];
+  return Array.isArray(data?.results) ? data.results : [];
+}
+
+async function identify(req: WatchRequest): Promise<{
+  id: number; kind: WatchKind; title: string; year?: number; viaDescription?: string;
+} | null> {
+  let results = await searchTitles(req.query, req.watchmodeKey);
+  let viaDescription: string | undefined;
+
+  /* Empty index result means they described it rather than named it. Ask the
+     model for the title and try once more. Never a third time — if the model's
+     guess also misses, we genuinely do not know and should say so. */
+  if (!results.length && req.openaiKey) {
+    const guess = await titleFromDescription(req.query, req.openaiKey).catch(() => null);
+    if (guess) {
+      results = await searchTitles(guess, req.watchmodeKey);
+      if (results.length) viaDescription = guess;
+    }
+  }
 
   /* Watchmode types: movie, tv_series, tv_miniseries, tv_special, tv_movie,
      short_film. Anything tv_series-shaped is a show for our purposes. */
@@ -198,6 +255,7 @@ async function identify(req: WatchRequest): Promise<{
     kind: kindOf(top.type),
     title: String(top.name || req.query),
     year: top.year ? Number(top.year) : undefined,
+    viaDescription,
   };
 }
 
@@ -250,7 +308,10 @@ export async function resolveWatch(req: WatchRequest): Promise<WatchResult> {
     const id = await identify(req);
     if (!id) return { ...base, note: `Could not find anything called "${req.query}".` };
 
-    const meta = { title: id.title, year: id.year, kind: id.kind, watchmodeId: id.id };
+    const meta = {
+      title: id.title, year: id.year, kind: id.kind, watchmodeId: id.id,
+      resolvedFromDescription: id.viaDescription,
+    };
     const sources = await sourcesFor(id.id, region, req.watchmodeKey);
 
     if (!sources.length) {

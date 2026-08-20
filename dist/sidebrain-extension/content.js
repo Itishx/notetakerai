@@ -18489,6 +18489,66 @@ const __SB_SURFACE_NOTE = [
   "If asked about versions, differences or upgrades, speak as the browser version and point to the Mac app IOMI as the upgrade, downloadable at trybraino.com.",
 ].join(" ");
 
+/* ── "Play Shawshank on Netflix" ─────────────────────────────────────────
+   Deliberately conservative. "play Dumbo" is a dance submode and "play Billie
+   Jean" is music, so a bare play-verb is never enough on its own: the ask has
+   to also name a streaming service, carry season/episode language, or say the
+   word movie/show/film/series. Anything mentioning a song or Spotify is left
+   to the music path entirely.
+
+   The real parsing happens server side in watch-play, so this only decides
+   whether the ask is about a film at all. */
+const __SB_OTT_NAMES = "netflix|prime video|amazon prime|primevideo|disney\\+? ?plus|disney\\+|jiohotstar|hotstar|jiocinema|apple tv\\+?|hulu|hbo max";
+
+function __sbWatchPlayIntent(text) {
+  const t = String(text || "").trim();
+  if (!t || t.length > 220) return null;
+
+  // Music owns these words. Never race the Spotify path for them.
+  if (/\b(song|track|album|playlist|spotify|tune|music)\b/i.test(t)) return null;
+
+  const named = new RegExp(`\\b(?:on|in|using|over)\\s+(?:${__SB_OTT_NAMES})\\b`, "i").test(t);
+  const episodic = /\bs(?:eason)?\s*\d{1,2}\s*,?\s*e(?:pisode)?\s*\d{1,3}\b/i.test(t)
+    || /\b(?:season|episode)\s+\d{1,3}\b/i.test(t);
+  const kindWord = /\b(movie|film|show|series|documentary)\b/i.test(t);
+  const playVerb = /\b(play|put on|watch|stream|start)\b/i.test(t);
+  const whereToWatch = /\bwhere\s+(?:can|do)\s+i\s+watch\b/i.test(t)
+    || /\bis\s+.+\bon\s+(?:netflix|prime|hotstar|disney)\b/i.test(t);
+
+  if (whereToWatch) return { text: t };
+  if (!playVerb) return null;
+  if (named || episodic || kindWord) return { text: t };
+  return null;
+}
+
+/* Ask the background to resolve and open it. The tab is opened there so it
+   survives this page navigating away mid-request. */
+async function __sbRunWatchPlay(ask, { fromVoice, speakVoiceReply }) {
+  const say = async (line) => {
+    if (fromVoice) await speakVoiceReply(line);
+    else __sbWkSay(line);
+  };
+
+  const result = await new Promise((resolve) => {
+    try {
+      chrome.runtime.sendMessage({ action: "sbWatchPlay", ask }, (resp) => {
+        void chrome.runtime.lastError;
+        resolve(resp || { ok: false, error: "no_response" });
+      });
+    } catch (_) { resolve({ ok: false, error: "no_response" }); }
+  });
+
+  if (!result.ok) {
+    if (result.error === "not_signed_in") return say("Sign in first and I will put that on for you.");
+    if (result.setup) return say("I need a Watchmode key before I can find films.");
+    return say("I could not look that one up just now.");
+  }
+
+  // The function already writes the one honest line for every outcome: found,
+  // wrong platform, rental only, region not covered, not found at all.
+  await say(result.speak || "Done.");
+}
+
 async function __sbProcessPrompt(text, options = {}) {
   const routing = __sbResolvePromptRouting(text);
   const promptText = String(routing.promptText || "").trim();
@@ -18706,6 +18766,16 @@ async function __sbProcessPrompt(text, options = {}) {
   // to that track. Otherwise he starts the fallback DAF cut and keeps dancing until stopped.
   if (__sbDanceIntent(promptText)) {
     await __sbStartDanceMode({ fromVoice, speakVoiceReply });
+    if (fromVoice) __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken });
+    return;
+  }
+
+  // "play Shawshank on Netflix" → resolve the title, open the player. Sits after
+  // the party tricks on purpose: moonwalk and dance own their own phrasings.
+  const __watchAsk = __sbWatchPlayIntent(promptText);
+  if (__watchAsk) {
+    __sbStopSpeech();
+    await __sbRunWatchPlay(__watchAsk, { fromVoice, speakVoiceReply });
     if (fromVoice) __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken });
     return;
   }

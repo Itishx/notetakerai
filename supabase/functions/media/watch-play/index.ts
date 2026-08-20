@@ -65,6 +65,7 @@ serve(async (req) => {
       episode: body?.episode ?? parsed.episode,
       region: body?.region || "IN",
       watchmodeKey,
+      openaiKey: Deno.env.get("OPENAI_API_KEY") || undefined,
     });
 
     return json({ ...result, speak: spokenLine(result) });

@@ -1448,6 +1448,20 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       .catch((e) => sendResponse({ error: e.message }));
     return true;
   }
+  if (message.action === "sbWatchPlay") {
+    (async () => {
+      const result = await bgWatchPlay(message.ask || {});
+      /* Open the tab here rather than in the content script: the page Braino is
+         standing on may be about to be navigated away from, and a tab opened
+         from the background survives that. */
+      if (result.ok && result.pick?.url) {
+        chrome.tabs.create({ url: result.pick.url, active: true }, () => { void chrome.runtime.lastError; });
+      }
+      sendResponse(result);
+    })().catch((error) => sendResponse({ ok: false, error: error?.message || String(error) }));
+    return true;
+  }
+
   if (message.action === "sbSpotifyPlaySeek") {
     // Party-trick soundtrack: play an exact track from a timestamp. Direct play first
     // (device already active = instant); otherwise open/reuse the web-player tab and
@@ -3797,6 +3811,34 @@ function bgDelegateTodayText() {
 // runs on the user's machine), coarse city/country from one cached IP lookup per day.
 // Powers local storefronts (amazon.in vs amazon.com), local-time answers, "where am I".
 let bgUserGeoCache = null;
+/* ── Watch + play ────────────────────────────────────────────────────────
+   "Play Shawshank on Netflix". The watch-play function does the thinking:
+   Watchmode identifies the title, answers whether it is streamable in this
+   user's country, and returns the deep link. Netflix links come back already
+   rewritten to /watch/, which is the form that opens the player rather than a
+   page you then have to click.
+
+   Region comes from bgGetUserGeo(), never from a guess — catalogues differ
+   enormously by country, and "not on Netflix in India" is a real answer. */
+async function bgWatchPlay(ask) {
+  const stored = await new Promise(r => chrome.storage.local.get(["authToken"], r));
+  if (!stored.authToken) return { ok: false, error: "not_signed_in" };
+
+  const geo = await bgGetUserGeo().catch(() => null);
+  const res = await fetch(`${BG_API_BASE}/watch-play`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${stored.authToken}`,
+      apikey: BG_SUPABASE_ANON_KEY,
+    },
+    body: JSON.stringify({ ...ask, region: geo?.countryCode || "IN" }),
+  });
+  const data = await res.json().catch(() => null);
+  if (!res.ok) return { ok: false, error: data?.error || `watch-play failed (${res.status})` };
+  return { ok: true, ...data };
+}
+
 async function bgGetUserGeo() {
   const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
   if (bgUserGeoCache && Date.now() - bgUserGeoCache.fetchedAt < 24 * 3600 * 1000) return bgUserGeoCache;

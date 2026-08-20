@@ -6375,6 +6375,84 @@ function parseXIntent(raw) {
 // It is also the only safe shape. Replying is engagement, engagement automation
 // is what X suspends accounts for, and the extension version keeps a human on
 // the send key.
+/* ── Watch + play ────────────────────────────────────────────────────────
+   "Play Shawshank on Netflix". Same brain as the extension: the watch-play
+   function identifies the title, checks it is streamable in this country, and
+   hands back a link that opens the player rather than a page you then click.
+
+   Deliberately conservative about firing. A bare "play something" is music on
+   this machine, so the ask has to name a streaming service, carry season or
+   episode language, or say the word movie/show/film/series. */
+const MAC_OTT_NAMES = "netflix|prime video|amazon prime|primevideo|disney ?\\+? ?plus|jiohotstar|hotstar|jiocinema|apple tv ?\\+?|hulu|hbo max";
+
+function parseWatchIntent(raw) {
+  const t = cleanPrompt(String(raw || "")).replace(/[?.!]+\s*$/, "");
+  if (!t || t.length > 220) return null;
+  if (/\b(song|track|album|playlist|spotify|tune|music)\b/i.test(t)) return null;
+
+  const named = new RegExp(`\\b(?:on|in|using|over)\\s+(?:${MAC_OTT_NAMES})\\b`, "i").test(t);
+  const episodic = /\bs(?:eason)?\s*\d{1,2}\s*,?\s*e(?:pisode)?\s*\d{1,3}\b/i.test(t)
+    || /\b(?:season|episode)\s+\d{1,3}\b/i.test(t);
+  const kindWord = /\b(movie|film|show|series|documentary)\b/i.test(t);
+  const playVerb = /\b(play|put on|watch|stream|start)\b/i.test(t);
+  const whereToWatch = /\bwhere\s+(?:can|do)\s+i\s+watch\b/i.test(t)
+    || /\bis\s+.+\bon\s+(?:netflix|prime|hotstar|disney)\b/i.test(t);
+
+  if (whereToWatch) return { text: t };
+  if (!playVerb) return null;
+  if (named || episodic || kindWord) return { text: t };
+  return null;
+}
+
+async function playWatchTitle(intent) {
+  const authToken = await getBrainoAuthToken().catch(() => "");
+  if (!authToken) return { ok: true, say: "Sign in first and I will put that on for you." };
+
+  let data = null;
+  try {
+    const response = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/watch-play`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${authToken}`,
+      },
+      body: JSON.stringify({ text: intent.text, region: macWatchRegion() }),
+    });
+    data = await response.json().catch(() => null);
+    if (!response.ok) {
+      logMac("watch.failed", { status: response.status, error: data && data.error });
+      return { ok: true, say: "I could not look that one up just now." };
+    }
+  } catch (error) {
+    logMac("watch.error", { error: String((error && error.message) || error) });
+    return { ok: true, say: "I could not reach the film service." };
+  }
+
+  if (data && data.pick && data.pick.url) {
+    try { await shell.openExternal(data.pick.url); } catch (_) {}
+  }
+  logMac("watch.resolved", {
+    title: data && data.title, source: data && data.pick && data.pick.name,
+    viaDescription: data && data.resolvedFromDescription,
+  });
+  // The function writes the one honest line for every outcome, so Braino never
+  // says "playing" when it is really a rental or the wrong country.
+  return { ok: true, say: (data && data.speak) || "Done." };
+}
+
+/* Catalogues differ enormously by country and the Watchmode plan only covers
+   one, so guessing is worse than defaulting. The system locale is the best
+   signal this process has without asking for a permission. */
+function macWatchRegion() {
+  try {
+    const locale = String(app.getLocale() || "");
+    const m = locale.match(/[-_]([A-Za-z]{2})$/);
+    if (m) return m[1].toUpperCase();
+  } catch (_) {}
+  return "IN";
+}
+
 async function startXAuto() {
   try {
     await openChromeUrl("https://x.com/home");
@@ -14105,6 +14183,12 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
     if (xIntent.action === "xauto") return startXAuto();
     if (xIntent.action === "clip") return recordScreenClip(xIntent.seconds);
     if (xIntent.action === "tweet_clip") return tweetLastClip(xIntent.caption);
+  }
+
+  const watchIntent = parseWatchIntent(raw);
+  if (watchIntent) {
+    logMac("delegate.watch_intent", { raw: textForLog(raw) });
+    return playWatchTitle(watchIntent);
   }
 
   const mesaIntent = parseMesaIntent(raw);
