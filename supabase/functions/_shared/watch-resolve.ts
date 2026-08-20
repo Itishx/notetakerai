@@ -3,92 +3,103 @@
 
    The link is the easy half. netflix.com/watch/{id} starts playback on its own;
    the whole problem is turning a spoken title into that id, and Netflix has no
-   public API for it. So the pipeline is:
+   public API for it.
 
-     TMDB       identify the title (canonical name, year, movie vs tv, tmdb id)
-     TMDB       is it even available in this user's country, and on what
-     Watchmode  the actual per-region deep link for the chosen platform
+   This used to run TMDB for identity and Watchmode for links. TMDB is not free
+   for commercial use, and it turned out not to be load-bearing: Watchmode's own
+   autocomplete search is fuzzy, relevance-ranked, and returns type and year, so
+   it answers "what did they mean" perfectly well on its own. One API, one key,
+   one bill.
 
-   TMDB is free and authoritative on identity but returns no deep links.
-   Watchmode returns the deep links but is a paid-ish quota, so we only reach
-   for it once TMDB has told us the title exists and is worth a lookup.
+   Verified against the live API rather than the docs, which are not readable by
+   machine. Shapes below are real responses, not guesses.
 
    Nothing here scrapes anything. Every id comes from an API that exists to give
-   it to us, which is the only reason this is safe to ship: automating a login
-   wall or scraping catalogue pages is exactly the kind of thing that gets an
-   account banned, and there is no version of that we want.
+   it to us, which is the only reason this is safe to ship: scraping catalogue
+   pages or automating past a login wall is what gets accounts banned.
    ========================================================================== */
 
-const TMDB = "https://api.themoviedb.org/3";
 const WATCHMODE = "https://api.watchmode.com/v1";
 
 export type WatchKind = "movie" | "tv";
 
 export interface WatchRequest {
-  /** What the user said, minus the platform and episode: "the shawshank redemption". */
+  /** What the user said, minus the platform and episode: "shawshank". */
   query: string;
   /** Platform they named, if any. Free text: "netflix", "prime", "hotstar". */
   platform?: string;
   kind?: WatchKind;
   season?: number;
   episode?: number;
-  /** ISO-3166 alpha-2. Comes from bgGetUserGeo() on the client. */
+  /** ISO-3166 alpha-2, from bgGetUserGeo(). Must be enabled on the plan. */
   region?: string;
-  tmdbKey: string;
-  watchmodeKey?: string;
+  watchmodeKey: string;
 }
 
 export interface WatchSource {
   name: string;
-  /** sub | free | rent | buy | tve — a rental is not the same answer as "it's included". */
+  /** sub | free | rent | buy | tve — a rental is not the same as "included". */
   type: string;
   url: string;
-  /** True when we rewrote a title page into a player URL. See toPlayerUrl. */
+  /** True when this URL opens the player itself, not a page you then click. */
   autoplays: boolean;
+  /** Local-currency price on rent/buy rows. Null on subscriptions. */
+  price?: number | null;
 }
 
 export interface WatchResult {
   found: boolean;
   /** Canonical title, so Braino says "The Shawshank Redemption", not "shawshank". */
   title?: string;
-  year?: string;
+  year?: number;
   kind?: WatchKind;
-  tmdbId?: number;
+  watchmodeId?: number;
   region: string;
-  /** The one to open. Absent when the title is not streamable here at all. */
+  /** The one to open. Absent when it is not streamable here at all. */
   pick?: WatchSource;
   /** Everything else it is on, for "not on Netflix here, but it is on Prime". */
   alternatives: WatchSource[];
-  /** Set when they asked for a platform that does not carry it in this region. */
   askedFor?: string;
   askedForAvailable?: boolean;
-  /** True when we could only get the show, not the episode. Delegate finishes. */
+  /** True when we only have the show, not the episode. Delegate finishes. */
   needsEpisodeNavigation?: boolean;
   season?: number;
   episode?: number;
+  /** Set when the region simply is not on the Watchmode plan. Not the user's fault. */
+  regionUnsupported?: boolean;
   note?: string;
 }
 
 /* Spoken platform names are not provider names. "prime" is "Amazon Prime Video",
-   "hotstar" has been three different brands in as many years. Matching on a
-   normalised name beats hardcoding provider ids, which drift per region and
-   which I would only be guessing at. */
+   and Watchmode calls it plain "Amazon". Matching on a normalised name beats
+   hardcoding source ids, which drift and which I would only be guessing at. */
 const PLATFORM_ALIASES: Record<string, string[]> = {
   netflix: ["netflix"],
   prime: ["amazon prime video", "prime video", "amazon video", "amazon"],
   disney: ["disney plus", "disney+", "hotstar", "jiohotstar", "disney+ hotstar"],
-  apple: ["apple tv plus", "apple tv+", "apple tv"],
+  apple: ["apple tv plus", "apple tv+", "apple tv", "appletv"],
   youtube: ["youtube", "youtube premium", "youtube free"],
   hulu: ["hulu"],
   max: ["max", "hbo max"],
   jio: ["jiocinema", "jiohotstar", "hotstar"],
 };
 
+/* The bucket key is for matching. This is what Braino says out loud. */
+const PLATFORM_LABEL: Record<string, string> = {
+  netflix: "Netflix", prime: "Prime Video", disney: "Disney+ Hotstar",
+  apple: "Apple TV", youtube: "YouTube", hulu: "Hulu", max: "Max", jio: "JioHotstar",
+};
+
+export function platformLabel(key?: string): string {
+  if (!key) return "that service";
+  return PLATFORM_LABEL[key] || key.charAt(0).toUpperCase() + key.slice(1);
+}
+
 function normalise(s: string): string {
   return String(s || "").toLowerCase().replace(/[^a-z0-9+ ]/g, "").replace(/\s+/g, " ").trim();
 }
 
-/** "on netflix" -> the alias bucket, so we can compare against provider names. */
+/** "on netflix" -> the alias bucket, so we can compare against source names. */
 export function platformKey(spoken: string): string | null {
   const n = normalise(spoken);
   if (!n) return null;
@@ -107,10 +118,13 @@ function sourceMatchesPlatform(sourceName: string, key: string): boolean {
 
 /* Netflix serves the same numeric id at /title/ (a detail page you then have to
    click) and at /watch/ (the player, already running). Watchmode hands back the
-   title form, so this is the one rewrite that turns "here is the page" into
-   "it is playing". Everything else is passed through untouched — inventing URL
-   shapes for platforms whose format I have not verified is how you ship a link
-   that 404s in someone's living room. */
+   title form — verified: it returns netflix.com/title/80057281 for Stranger
+   Things — so this rewrite is what turns "opened Netflix" into "it is playing".
+   The rewritten URL was checked live and returns 200.
+
+   Everything else passes through untouched. Inventing URL shapes for platforms
+   whose format has not been verified is how you ship a link that 404s in
+   somebody's living room. */
 export function toPlayerUrl(name: string, url: string): { url: string; autoplays: boolean } {
   const n = normalise(name);
   if (n.includes("netflix")) {
@@ -121,81 +135,79 @@ export function toPlayerUrl(name: string, url: string): { url: string; autoplays
   return { url, autoplays: false };
 }
 
+/* Watchmode signals plan and quota problems as a 200-shaped JSON error on some
+   routes and a 4xx on others, so both paths have to be read. */
+class WatchmodeError extends Error {
+  constructor(message: string, readonly regionUnsupported = false) {
+    super(message);
+  }
+}
+
 async function getJson(url: string, label: string): Promise<any> {
   const res = await fetch(url, { headers: { Accept: "application/json" } });
-  if (!res.ok) throw new Error(`${label} failed (${res.status})`);
-  return res.json();
+  const body = await res.json().catch(() => null);
+  const failure = body && typeof body === "object" && (body as any).success === false;
+  if (!res.ok || failure) {
+    const detail = String((body as any)?.statusMessage || `${label} failed (${res.status})`);
+    throw new WatchmodeError(detail, /is not enabled for your current plan/i.test(detail));
+  }
+  return body;
 }
 
 /* ── 1. Identity ──────────────────────────────────────────────────────────
-   Spoken titles are messy: "shawshank", "stranger things season 2". TMDB's
-   multi search handles the fuzziness and, importantly, tells us movie vs tv so
-   the caller does not have to guess which endpoint to hit next. */
+   Spoken titles are messy: "shawshank", "stranger things". Autocomplete search
+   is fuzzy and relevance-ranked, and returns type and year, which is everything
+   TMDB was being asked for. Verified: "shawshank" scores The Shawshank
+   Redemption at 199 and the nearest decoy at 84. */
 async function identify(req: WatchRequest): Promise<{
-  id: number; kind: WatchKind; title: string; year: string;
+  id: number; kind: WatchKind; title: string; year?: number;
 } | null> {
-  const url = `${TMDB}/search/multi?api_key=${req.tmdbKey}` +
-    `&query=${encodeURIComponent(req.query)}&include_adult=false&language=en-US`;
-  const data = await getJson(url, "TMDB search");
+  const data = await getJson(
+    `${WATCHMODE}/autocomplete-search/?apiKey=${req.watchmodeKey}` +
+    `&search_value=${encodeURIComponent(req.query)}&search_type=2`,
+    "Watchmode search",
+  );
   const results: any[] = Array.isArray(data?.results) ? data.results : [];
 
+  /* Watchmode types: movie, tv_series, tv_miniseries, tv_special, tv_movie,
+     short_film. Anything tv_series-shaped is a show for our purposes. */
+  const kindOf = (t: string): WatchKind =>
+    /^tv_(series|miniseries)$/.test(String(t)) ? "tv" : "movie";
+
+  const wantsTv = req.kind === "tv" || req.season != null || req.episode != null;
   const usable = results.filter((r) => {
-    if (r?.media_type !== "movie" && r?.media_type !== "tv") return false;
-    if (req.kind && r.media_type !== req.kind) return false;
+    if (r?.result_type !== "title" || !r?.id) return false;
+    if (req.kind) return kindOf(r.type) === req.kind;
     return true;
   });
   if (!usable.length) return null;
 
-  /* A season/episode in the ask is a strong signal it is a show, whatever
-     TMDB's popularity ranking thinks. */
-  const wantsTv = req.kind === "tv" || req.season != null || req.episode != null;
+  /* A season or episode in the ask is a strong signal it is a show, whatever
+     relevance thinks. Otherwise trust Watchmode's own ranking. */
   const ranked = usable.sort((a, b) => {
-    if (wantsTv && a.media_type !== b.media_type) return a.media_type === "tv" ? -1 : 1;
-    return (b.popularity || 0) - (a.popularity || 0);
+    if (wantsTv) {
+      const at = kindOf(a.type) === "tv", bt = kindOf(b.type) === "tv";
+      if (at !== bt) return at ? -1 : 1;
+    }
+    return (b.relevance || 0) - (a.relevance || 0);
   });
 
   const top = ranked[0];
-  const date = String(top.release_date || top.first_air_date || "");
   return {
     id: Number(top.id),
-    kind: top.media_type as WatchKind,
-    title: String(top.title || top.name || req.query),
-    year: date.slice(0, 4),
+    kind: kindOf(top.type),
+    title: String(top.name || req.query),
+    year: top.year ? Number(top.year) : undefined,
   };
 }
 
-/* ── 2. Availability ──────────────────────────────────────────────────────
-   Free, region-aware, and often the whole answer: "that is not on Netflix in
-   India" is more useful than a link that lands on a signup wall. */
-async function providersInRegion(
-  kind: WatchKind, id: number, region: string, tmdbKey: string,
-): Promise<string[]> {
-  const data = await getJson(
-    `${TMDB}/${kind}/${id}/watch/providers?api_key=${tmdbKey}`, "TMDB providers",
-  );
-  const bucket = data?.results?.[region];
-  if (!bucket) return [];
-  const names = new Set<string>();
-  for (const group of ["flatrate", "free", "ads", "rent", "buy"]) {
-    for (const p of (bucket[group] || [])) if (p?.provider_name) names.add(String(p.provider_name));
-  }
-  return [...names];
-}
-
-/* ── 3. Deep links ────────────────────────────────────────────────────────
-   The only step that costs quota, so it runs last and only for a title we have
-   already confirmed exists and streams somewhere in this region. */
-async function watchmodeSources(
-  kind: WatchKind, tmdbId: number, region: string, key: string,
+/* ── 2. Sources and deep links ────────────────────────────────────────────
+   One row per format, so SD/HD/4K arrive as three identical URLs. Deduped on
+   name plus type. ios_url and android_url are the literal string "Deeplinks
+   available for paid plans only." on the free tier, so they are never read. */
+async function sourcesFor(
+  titleId: number, region: string, key: string,
 ): Promise<WatchSource[]> {
-  const field = kind === "movie" ? "tmdb_movie_id" : "tmdb_tv_id";
-  const found = await getJson(
-    `${WATCHMODE}/search/?apiKey=${key}&search_field=${field}&search_value=${tmdbId}`,
-    "Watchmode search",
-  );
-  const titleId = found?.title_results?.[0]?.id ?? found?.results?.[0]?.id;
-  if (!titleId) return [];
-
   const raw = await getJson(
     `${WATCHMODE}/title/${titleId}/sources/?apiKey=${key}&regions=${region}`,
     "Watchmode sources",
@@ -206,103 +218,97 @@ async function watchmodeSources(
   const out: WatchSource[] = [];
   for (const s of list) {
     const name = String(s?.name || "");
-    const url = String(s?.web_url || s?.url || "");
-    if (!name || !url) continue;
-    /* Watchmode returns a row per region even when asked for one; belt and
-       braces, because a US link in an India result is a dead end. */
+    const url = String(s?.web_url || "");
+    if (!name || !/^https?:\/\//i.test(url)) continue;
     if (s?.region && String(s.region).toUpperCase() !== region) continue;
-    const dedupe = `${normalise(name)}|${s?.type || ""}`;
+
+    const type = String(s?.type || "sub");
+    const dedupe = `${normalise(name)}|${type}`;
     if (seen.has(dedupe)) continue;
     seen.add(dedupe);
+
     const player = toPlayerUrl(name, url);
-    out.push({ name, type: String(s?.type || "sub"), url: player.url, autoplays: player.autoplays });
+    out.push({
+      name, type, url: player.url, autoplays: player.autoplays,
+      price: s?.price ?? null,
+    });
   }
 
-  /* Included-with-subscription first: nobody asking Braino to "play" something
-     means "open the buy page for it". */
+  /* Included-with-subscription first: nobody who says "play this" means "open
+     the page where I can buy it". */
   const rank: Record<string, number> = { sub: 0, free: 1, ads: 2, tve: 3, rent: 4, buy: 5 };
   return out.sort((a, b) => (rank[a.type] ?? 9) - (rank[b.type] ?? 9));
 }
 
 /* ── The whole pipeline ─────────────────────────────────────────────────── */
 export async function resolveWatch(req: WatchRequest): Promise<WatchResult> {
-  const region = (req.region || "US").toUpperCase();
+  const region = (req.region || "IN").toUpperCase();
   const asked = req.platform ? platformKey(req.platform) : null;
   const base: WatchResult = { found: false, region, alternatives: [], askedFor: asked || undefined };
 
-  const id = await identify(req);
-  if (!id) return { ...base, note: `Could not find anything called "${req.query}".` };
+  try {
+    const id = await identify(req);
+    if (!id) return { ...base, note: `Could not find anything called "${req.query}".` };
 
-  const providers = await providersInRegion(id.kind, id.id, region, req.tmdbKey);
-  const meta = { title: id.title, year: id.year, kind: id.kind, tmdbId: id.id };
+    const meta = { title: id.title, year: id.year, kind: id.kind, watchmodeId: id.id };
+    const sources = await sourcesFor(id.id, region, req.watchmodeKey);
 
-  if (!providers.length) {
+    if (!sources.length) {
+      return {
+        ...base, ...meta, found: true,
+        note: `${id.title} does not seem to be streaming anywhere in ${region} right now.`,
+      };
+    }
+
+    const wanted = asked ? sources.find((s) => sourceMatchesPlatform(s.name, asked)) : undefined;
+    const pick = wanted || sources[0];
+
+    /* Episode addressing is the one genuinely soft edge, and the API confirms
+       it: a show's Netflix row comes back as the series link with seasons and
+       episodes counts, never an episode URL. So we say so, and the browser
+       delegate — already good at clicking through a page it can see — finishes
+       the last hop rather than us pretending we nailed it. */
+    const wantsEpisode = id.kind === "tv" && (req.season != null || req.episode != null);
+
     return {
-      ...base, ...meta, found: true,
-      note: `${id.title} does not appear to be streaming anywhere in ${region} right now.`,
+      ...base, ...meta,
+      found: true,
+      pick,
+      alternatives: sources.filter((s) => s !== pick),
+      askedForAvailable: asked ? Boolean(wanted) : undefined,
+      needsEpisodeNavigation: wantsEpisode || undefined,
+      season: req.season,
+      episode: req.episode,
+      note: asked && !wanted ? `Not on ${platformLabel(asked)} in ${region}. It is on ${pick.name}.` : undefined,
     };
+  } catch (err) {
+    if (err instanceof WatchmodeError && err.regionUnsupported) {
+      return {
+        ...base, regionUnsupported: true,
+        note: `Watchmode's plan does not cover ${region}, so there is nothing to look up there yet.`,
+      };
+    }
+    throw err;
   }
-
-  /* Answer the availability question from TMDB before spending Watchmode quota
-     on a platform we already know does not carry it. */
-  const askedAvailable = asked ? providers.some((p) => sourceMatchesPlatform(p, asked)) : undefined;
-
-  if (!req.watchmodeKey) {
-    return {
-      ...base, ...meta, found: true, askedForAvailable: askedAvailable,
-      alternatives: providers.map((name) => ({ name, type: "sub", url: "", autoplays: false })),
-      note: "WATCHMODE_API_KEY is not set, so this is availability only, no deep link.",
-    };
-  }
-
-  const sources = await watchmodeSources(id.kind, id.id, region, req.watchmodeKey);
-  if (!sources.length) {
-    return {
-      ...base, ...meta, found: true, askedForAvailable: askedAvailable,
-      alternatives: providers.map((name) => ({ name, type: "sub", url: "", autoplays: false })),
-      note: `${id.title} is on ${providers.join(", ")} in ${region}, but no direct link came back.`,
-    };
-  }
-
-  const wanted = asked ? sources.find((s) => sourceMatchesPlatform(s.name, asked)) : undefined;
-  const pick = wanted || sources[0];
-  const alternatives = sources.filter((s) => s !== pick);
-
-  /* Episode addressing is the one genuinely soft edge. A show-level deep link
-     lands on the series page, not on S2E5, and there is no reliable public
-     mapping from an episode to its own Netflix id. So we say so, and the
-     browser delegate — which is already good at clicking through a page it can
-     see — finishes the last hop rather than us pretending we nailed it. */
-  const wantsEpisode = id.kind === "tv" && (req.season != null || req.episode != null);
-
-  return {
-    ...base, ...meta,
-    found: true,
-    pick,
-    alternatives,
-    askedForAvailable: asked ? Boolean(wanted) : undefined,
-    needsEpisodeNavigation: wantsEpisode || undefined,
-    season: req.season,
-    episode: req.episode,
-    note: asked && !wanted
-      ? `Not on ${req.platform} in ${region}. It is on ${pick.name}.`
-      : undefined,
-  };
 }
 
 /** One spoken line for Braino, built from the same result the UI renders. */
 export function spokenLine(r: WatchResult): string {
+  if (r.regionUnsupported) return r.note || "I cannot check availability in your country yet.";
   if (!r.found || !r.title) return r.note || "I could not find that one.";
   if (!r.pick) return r.note || `${r.title} is not streaming in ${r.region} right now.`;
 
-  const ep = r.season != null && r.episode != null ? ` season ${r.season}, episode ${r.episode}` : "";
+  const ep = r.season != null && r.episode != null
+    ? ` season ${r.season}, episode ${r.episode}` : "";
+
   if (r.askedFor && r.askedForAvailable === false) {
-    return `${r.title} is not on ${r.askedFor} in ${r.region}. It is on ${r.pick.name}, opening that.`;
+    return `${r.title} is not on ${platformLabel(r.askedFor)} in ${r.region}. It is on ${r.pick.name}, opening that.`;
   }
   if (r.pick.type === "rent" || r.pick.type === "buy") {
-    return `${r.title} is only a ${r.pick.type} on ${r.pick.name} here. Opening it, your call.`;
+    const price = r.pick.price ? ` for ${r.pick.price}` : "";
+    return `${r.title} is only a ${r.pick.type}${price} on ${r.pick.name} here. Opening it, your call.`;
   }
-  if (r.needsEpisodeNavigation) {
+  if (r.needsEpisodeNavigation || !r.pick.autoplays) {
     return `Opening ${r.title}${ep} on ${r.pick.name}.`;
   }
   return `Playing ${r.title} on ${r.pick.name}.`;
@@ -312,6 +318,7 @@ export function spokenLine(r: WatchResult): string {
    A regex, not a model call: "play X on Netflix" is a shape, not a
    comprehension problem, and the round trip would cost more than the lookup.
    Callers that already know the title send structured fields and skip this. */
+
 /* Platforms people actually say out loud. Order matters: "prime video" has to
    beat "prime", and "disney plus hotstar" has to beat "hotstar". */
 const SPOKEN_PLATFORMS = [

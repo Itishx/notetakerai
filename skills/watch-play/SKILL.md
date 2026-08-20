@@ -12,9 +12,12 @@ Turn "play Shawshank on Netflix" into an open tab with the player already runnin
 The link is the easy half. `netflix.com/watch/{id}` starts playback on its own. The whole
 problem is turning a spoken title into that id, and **Netflix has no public API for it**.
 
-So: **TMDB identifies, Watchmode links.** Never scrape a streaming service for ids, never
-automate past a login wall. Both of those get accounts banned and there is no version of
-them worth shipping.
+So: **Watchmode does all of it** — fuzzy title search, availability, and the deep link.
+TMDB was in here for identity and got dropped: it is not free commercially, and Watchmode's
+own autocomplete answers "what did they mean" just as well. One API, one key, one bill.
+
+Never scrape a streaming service for ids, never automate past a login wall. Both get
+accounts banned and there is no version of them worth shipping.
 
 ## Core Flow
 
@@ -80,25 +83,28 @@ Response:
 
 Two secrets, both free tiers:
 
-| Secret | Where | Without it |
-|---|---|---|
-| `TMDB_API_KEY` | themoviedb.org/settings/api | Function returns `setup: true` and does nothing |
-| `WATCHMODE_API_KEY` | api.watchmode.com (2,500 req/month) | Availability answers still work; **no deep links** |
+One secret: `WATCHMODE_API_KEY` from api.watchmode.com. **Already set in production.**
+Without it the function returns `setup: true` and does nothing.
 
-That degradation is deliberate. With TMDB alone Braino can still say "Dune is on Prime in
-India" — he just cannot open it for you.
+**The free plan is one region.** `/v1/regions/` reports `plan_enabled` per country and on
+the current key only **IN** is true — the other 53 are false. Asking about a US catalogue
+returns `regionUnsupported`, which is a plan limit and not the user's fault, so Braino says
+so rather than pretending the film does not exist. Going worldwide means paying Watchmode.
+
+**App deeplinks (`ios_url`, `android_url`) are paid-tier.** On the free plan they come back
+as the literal string "Deeplinks available for paid plans only.", so only `web_url` is ever
+read. That is fine — Braino opens browser tabs.
 
 ## Known soft edges
 
 - **Episode-level deep links are not reliable.** A show-level link lands on the series
   page. `needsEpisodeNavigation` flags it so the delegate finishes the last hop rather
   than Braino pretending it nailed it.
-- **The JioHotstar URL format is unverified.** It passes through untouched from Watchmode
-  rather than being constructed. If it turns out to be wrong, fix it in `toPlayerUrl`.
-- **Watchmode's response shape was written against their published field names**
-  (`web_url`, `source_id`, `name`, `type`, `region`) but the parser is deliberately
-  tolerant — it accepts a bare array or `{ sources: [] }`. Tighten it once there is a real
-  key and a real response to look at.
+- **Only Netflix gets a URL rewrite**, and it is verified: Watchmode returns
+  `netflix.com/title/80057281` for Stranger Things, and the rewritten `/watch/` form
+  returns HTTP 200. Every other platform passes through untouched.
+- **Sources arrive once per format.** SD, HD and 4K come back as three rows with the same
+  URL, so they are deduped on name plus type.
 
 ## Related
 

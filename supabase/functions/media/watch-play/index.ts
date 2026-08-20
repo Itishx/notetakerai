@@ -3,7 +3,8 @@
 // Returns the URL that opens the player, plus one line for Braino to say. The
 // client opens the tab; this function never touches a streaming service beyond
 // the two metadata APIs that exist to be called. See _shared/watch-resolve.ts
-// for why the pipeline is TMDB-then-Watchmode rather than either alone.
+// for why this is Watchmode alone: TMDB is not free commercially, and it was
+// not load-bearing once Watchmode's own fuzzy search proved good enough.
 //
 // Latency is the feature here, same as vision-point: the parse is a regex, not
 // a model call, because "play X on Netflix" is a shape, not a comprehension
@@ -44,11 +45,10 @@ serve(async (req) => {
   try {
     await requireAuthedUser(req);
 
-    const tmdbKey = Deno.env.get("TMDB_API_KEY");
-    if (!tmdbKey) {
-      return json({ error: "TMDB_API_KEY is not configured.", setup: true }, 500);
+    const watchmodeKey = Deno.env.get("WATCHMODE_API_KEY");
+    if (!watchmodeKey) {
+      return json({ error: "WATCHMODE_API_KEY is not configured.", setup: true }, 500);
     }
-    const watchmodeKey = Deno.env.get("WATCHMODE_API_KEY") || "";
 
     const body = await req.json().catch(() => ({}));
     /* Structured wins over text: if HIL already worked out the title, do not
@@ -63,8 +63,7 @@ serve(async (req) => {
       kind: body?.kind || parsed.kind,
       season: body?.season ?? parsed.season,
       episode: body?.episode ?? parsed.episode,
-      region: body?.region || "US",
-      tmdbKey,
+      region: body?.region || "IN",
       watchmodeKey,
     });
 
