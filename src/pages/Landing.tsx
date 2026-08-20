@@ -45,7 +45,7 @@ const NOTCH_NAV = [
   { to: "/#why", label: "Why him", note: "and not ChatGPT" },
   { to: "/#kinds", label: "The two Brainos", note: "companion and Distra" },
   { to: "/#hood", label: "Under the hood", note: "the mind and the heart" },
-  { to: "/#pricing", label: "Pricing", note: "credits, not seats" },
+  { to: "/#pricing", label: "Pricing", note: "three plans, no maths" },
   { to: "/#faq", label: "Questions", note: "the honest answers" },
   { to: "/distra", label: "Braino Distra", note: "you built it, nobody saw it" },
 ];
@@ -53,9 +53,9 @@ const NOTCH_NAV = [
 /* One accent per feature, the same way the deck gives one accent per act: the
    colour is what makes four panels read as four ideas rather than one list. */
 /* Free is how you meet him, not a promise about the bill. Tokens cost real
-   money, so the honest shape is a real free tier and then usage-based credits.
-   Saying "free forever" and then metering would be the one thing that loses
-   trust permanently. */
+   money, so the honest shape is a real free tier that caps by session and then
+   one flat price. Saying "free forever" and then metering would be the one
+   thing that loses trust permanently. */
 /* Who he is, before what he does. Each card holds the real mascot rig doing the
    thing the copy describes, because "he is a character" is a claim you show
    rather than assert. Same gallery /product-overview uses. */
@@ -141,32 +141,44 @@ const COMPARE: Array<[string, string, string]> = [
   ["Where he lives", "Your browser, on every page", "X and LinkedIn, with Reddit and Instagram next"],
   ["What he does", "Chats, takes notes, sits in meetings, runs errands", "Learns your writing, posts for you, finds conversations worth entering"],
   ["Who it is for", "Anyone with a screen", "Founders who shipped something to complete silence"],
-  ["What it costs", "Free to start, then credits for what you use", "Priced on the work he does, not per seat"],
+  ["What it costs", "Free, then fifteen a month", "Thirty three a month, companion included"],
 ];
 
-/* Credits, not seats. Thinking costs real money per use, so the only honest
-   shape is a real free tier and then paying for what you actually spend. The
-   numbers are indicative and the page says so: pretending they are settled and
-   then changing them is how you lose the people who believed you first. */
-const PACKS = [
-  { credits: 500, price: 9, blurb: "A few questions a day, a couple of lectures a week." },
-  { credits: 1500, price: 20, blurb: "Daily use. Meetings, notes and the odd delegated job." },
-  { credits: 5000, price: 50, blurb: "He is in most of your day, most days." },
-  { credits: 15000, price: 120, blurb: "Everything, plus Braino Distra running your distribution." },
-];
-
-const SPEND = [
-  ["Ask about the page you are on", "1 credit"],
-  ["Turn an hour of audio into notes", "15 credits"],
-  ["Sit in a meeting and write it up", "20 credits"],
-  ["Do a job in your browser", "10 credits"],
+/* Three plans, no credit maths. The free tier caps by session rather than by
+   feature, so people meet the whole character and then hit a ceiling, instead
+   of meeting a crippled one and never finding out what he does. Distra carries
+   the companion inside it, because Distra writes from what the companion knows:
+   sold apart, it would just be a worse Distra. */
+const TIERS: Array<{
+  name: string; price: string; per?: string; hero?: boolean; badge?: string;
+  then?: string; blurb: string; lines: string[]; cta: string; href: string;
+}> = [
+  {
+    name: "Free", price: "$0",
+    blurb: "Every feature, capped by session. Hit the ceiling and he says so, rather than quietly charging you and hoping you never open Settings.",
+    lines: ["Chat with any page", "Lectures and audio into notes", "Meetings, written up", "Errands run in your browser", "Mac and Windows"],
+    cta: "Start free", href: EXTENSION_DOWNLOAD_URL,
+  },
+  {
+    name: "Pro", price: "$15", per: "/ month",
+    blurb: "The same Braino without the ceiling. Identical on Mac and Windows, because they are one Braino in different clothes.",
+    lines: ["Everything in Free, uncapped", "Voice first, all day", "The full delegate agent", "Memory that keeps going", "Every new mode as it ships"],
+    cta: "Get Pro", href: "/premium",
+  },
+  {
+    name: "Braino Distra", price: "$33", per: "/ month", hero: true,
+    badge: "First 100", then: "Then $83. Yours stays $33.",
+    blurb: "He learns how you write, posts as you, and finds the conversations worth entering. Runs on a server, so it works while your laptop is shut.",
+    lines: ["Everything in Pro, included", "X and LinkedIn on a schedule", "Voice learned from your last 200 posts", "Replies that sound like you, not a bot", "Reddit and Instagram next"],
+    cta: "Explore Braino Distra", href: "/distra",
+  },
 ];
 
 const FAQ = [
   { q: "Is it actually free?",
-    a: "Yes, actually free. Not free-for-fourteen-days-then-we-take-your-card free. You get a monthly allowance of credits, and when it runs out he stops instead of silently billing you. Want more, buy more." },
-  { q: "Why credits and not a flat subscription?",
-    a: "Because thinking costs real money every single time, and flat pricing only works if most people barely use the thing. We would rather charge for what you spend than build a product that quietly hopes you forget it exists." },
+    a: "Yes. Not free-for-fourteen-days-then-we-take-your-card free. Every feature is in there. It caps by session, the way a free ChatGPT window does: you get a stretch, it resets, and when you reach the end he tells you instead of silently billing you." },
+  { q: "Why is Distra more than the companion?",
+    a: "Because the companion saves you an hour and Distra does a job you would otherwise hire someone for. A ghostwriter is five hundred a month and has never once read your commits at two in the morning." },
   { q: "What can he actually see?",
     a: "The page you are on, when you ask. Meetings you start him in. Nothing in the background, nothing while you are not looking, and never that other tab. You know the one." },
   { q: "Does he post or send anything on his own?",
@@ -266,7 +278,6 @@ export default function Landing() {
   }, []);
   const [typed, setTyped] = useState("");
   const [asking, setAsking] = useState(false);
-  const [pack, setPack] = useState(1);
   const [openFaq, setOpenFaq] = useState<number | null>(0);
   const [askErr, setAskErr] = useState<string | null>(null);
   // A generated column sits alongside the presets rather than replacing one, so
@@ -587,58 +598,39 @@ export default function Landing() {
       <section className="ld-pricing apple-reveal" id="pricing">
         <div className="ld-wrap">
           <p className="apple-eyebrow">Pricing</p>
-          <h2 className="ld-h2">You pay for what <span className="tone">you actually use.</span></h2>
+          <h2 className="ld-h2">Three plans. <span className="tone">No credit maths.</span></h2>
           <p className="ld-lede">
-            Not per seat. Not fifteen dollars a month for something you opened twice in March.
-            Credits, spent when he does something, with a real free tier underneath.
+            Nobody has ever enjoyed working out what 1,500 credits buys them. So: a free tier that
+            caps by session instead of hiding half the product, one price for the companion, one
+            for Distra.
           </p>
 
           <div className="ld-price-grid">
-            <div className="ld-price-free">
-              <span>Free</span>
-              <b>$0</b>
-              <p>A monthly allowance of credits, the full character, the full memory. When it runs out he stops, rather than quietly charging you and hoping you do not check.</p>
-              <a href={EXTENSION_DOWNLOAD_URL} className="ld-btn sm">Start free</a>
-            </div>
-
-            <div className="ld-price-pick">
-              <div className="ld-price-head">
-                <span>Top up when you need more</span>
-                <div className="ld-price-amount">
-                  <b>${PACKS[pack].price}</b>
-                  <em>/ {PACKS[pack].credits.toLocaleString()} credits</em>
+            {TIERS.map((t) => (
+              <div key={t.name} className={"ld-tier" + (t.hero ? " is-hero" : "")}>
+                <div className="ld-tier-name">
+                  <span>{t.name}</span>
+                  {t.badge ? <span className="ld-tier-badge">{t.badge}</span> : null}
                 </div>
+                <div className="ld-tier-amount">
+                  <b>{t.price}</b>
+                  {t.per ? <em>{t.per}</em> : null}
+                </div>
+                {t.then ? <p className="ld-tier-then">{t.then}</p> : null}
+                <p className="ld-tier-blurb">{t.blurb}</p>
+                <ul>{t.lines.map((l) => <li key={l}>{l}</li>)}</ul>
+                {t.href.startsWith("/")
+                  ? <Link to={t.href} className="ld-btn sm">{t.cta}</Link>
+                  : <a href={t.href} className="ld-btn sm">{t.cta}</a>}
               </div>
-              <input
-                className="ld-price-slider"
-                type="range" min={0} max={PACKS.length - 1} step={1} value={pack}
-                onChange={(e) => setPack(Number(e.target.value))}
-                aria-label="How many credits"
-              />
-              <div className="ld-price-ticks">
-                {PACKS.map((p, i) => (
-                  <button key={p.credits} type="button"
-                    className={i === pack ? "is-on" : undefined}
-                    onClick={() => setPack(i)}>
-                    {p.credits >= 1000 ? `${p.credits / 1000}k` : p.credits}
-                  </button>
-                ))}
-              </div>
-              <p className="ld-price-blurb">{PACKS[pack].blurb}</p>
-
-              <div className="ld-spend">
-                <b>What a credit buys</b>
-                {SPEND.map(([what, cost]) => (
-                  <div key={what}><span>{what}</span><em>{cost}</em></div>
-                ))}
-              </div>
-            </div>
+            ))}
           </div>
 
           <p className="ld-fine">
-            These numbers are indicative and not settled. Publishing a price we have not tested and
-            quietly changing it later is how you lose the people who believed you first, so we are
-            saying it out loud instead.
+            <strong>Usage lives in Settings</strong>, so you always know where you stand. The
+            founding Distra price is a lock, not a sale that quietly ends: the first hundred people
+            are still paying thirty three dollars in 2029. Everything else on this page is honest
+            about being early.
           </p>
         </div>
       </section>

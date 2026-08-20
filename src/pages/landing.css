@@ -252,42 +252,39 @@
    guess how many credits a month of meetings costs; they want to see the four
    answers and pick the one that sounds like them. */
 .ld-pricing { padding: clamp(56px, 8vw, 100px) 0; }
-.ld-price-grid { display: grid; grid-template-columns: .8fr 1.2fr; gap: 14px; margin-top: 38px; }
-@media (max-width: 880px) { .ld-price-grid { grid-template-columns: 1fr; } }
+.ld-price-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 38px; align-items: stretch; }
+@media (max-width: 980px) { .ld-price-grid { grid-template-columns: 1fr; } }
 
-.ld-price-free {
-  border-radius: var(--ap-radius); padding: clamp(26px, 3vw, 36px);
-  background: var(--ap-coral-panel); display: flex; flex-direction: column;
-}
-.ld-price-free > span { font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--ap-coral); }
-.ld-price-free b { display: block; margin: 12px 0 12px; font-size: clamp(40px, 5vw, 60px); font-weight: 600; letter-spacing: -.045em; line-height: 1; color: var(--ap-ink); }
-.ld-price-free p { margin: 0 0 24px; font-size: 15px; line-height: 1.55; color: var(--ap-ink-soft); }
-.ld-price-free .ld-btn { margin-top: auto; align-self: flex-start; }
-
-.ld-price-pick {
-  border-radius: var(--ap-radius); padding: clamp(26px, 3vw, 36px);
+/* One card per plan, same skeleton on all three, so the eye compares prices
+   rather than layouts. The Distra card takes the coral panel because it is the
+   one the page has spent eight sections arguing towards. */
+.ld-tier {
+  display: flex; flex-direction: column;
+  border-radius: var(--ap-radius); padding: clamp(26px, 2.6vw, 34px);
   background: var(--ap-surface); border: 1px solid var(--ap-hairline);
 }
-.ld-price-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; flex-wrap: wrap; }
-.ld-price-head > span { font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--ap-ink-soft); }
-.ld-price-amount { display: flex; align-items: baseline; gap: 8px; }
-.ld-price-amount b { font-size: clamp(38px, 4.6vw, 56px); font-weight: 600; letter-spacing: -.045em; line-height: 1; color: var(--ap-ink); font-variant-numeric: tabular-nums; }
-.ld-price-amount em { font-style: normal; font-size: 14px; color: var(--ap-ink-soft); }
+.ld-tier.is-hero { background: var(--ap-coral-panel); border-color: transparent; }
 
-.ld-price-slider { width: 100%; margin: 26px 0 8px; accent-color: var(--ap-accent); cursor: pointer; }
-.ld-price-ticks { display: flex; justify-content: space-between; gap: 6px; }
-.ld-price-ticks button {
-  border: 0; background: none; padding: 4px 6px; cursor: pointer;
-  font: inherit; font-size: 12.5px; font-weight: 600; color: var(--ap-ink-soft);
-  font-variant-numeric: tabular-nums;
+.ld-tier-name { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--ap-ink-soft); }
+.ld-tier.is-hero .ld-tier-name { color: var(--ap-coral); }
+.ld-tier-badge { border-radius: 980px; padding: 4px 10px; font-size: 10px; letter-spacing: .07em; background: var(--ap-coral); color: #fff; }
+
+.ld-tier-amount { display: flex; align-items: baseline; gap: 7px; margin: 14px 0 0; }
+.ld-tier-amount b { font-size: clamp(38px, 4.2vw, 52px); font-weight: 600; letter-spacing: -.045em; line-height: 1; color: var(--ap-ink); font-variant-numeric: tabular-nums; }
+.ld-tier-amount em { font-style: normal; font-size: 14px; color: var(--ap-ink-soft); }
+.ld-tier-then { margin: 8px 0 0; font-size: 13px; color: var(--ap-ink-soft); }
+.ld-tier.is-hero .ld-tier-then { color: var(--ap-coral); font-weight: 600; }
+
+.ld-tier-blurb { margin: 14px 0 22px; font-size: 15px; line-height: 1.55; color: var(--ap-ink-soft); }
+.ld-tier ul { list-style: none; margin: 0 0 26px; padding: 0; display: grid; gap: 9px; }
+.ld-tier li { position: relative; padding-left: 22px; font-size: 14.5px; line-height: 1.5; color: var(--ap-ink); }
+.ld-tier li::before {
+  content: ""; position: absolute; left: 2px; top: .42em;
+  width: 9px; height: 5px; transform: rotate(-45deg);
+  border-left: 1.5px solid var(--ap-accent); border-bottom: 1.5px solid var(--ap-accent);
 }
-.ld-price-ticks button.is-on { color: var(--ap-accent); }
-.ld-price-blurb { margin: 16px 0 0; font-size: 15px; line-height: 1.5; color: var(--ap-ink); }
-
-.ld-spend { margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--ap-hairline); }
-.ld-spend > b { display: block; font-size: 11px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; color: var(--ap-ink-soft); margin-bottom: 12px; }
-.ld-spend > div { display: flex; justify-content: space-between; gap: 18px; padding: 8px 0; font-size: 14.5px; }
-.ld-spend em { font-style: normal; color: var(--ap-ink-soft); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ld-tier.is-hero li::before { border-left-color: var(--ap-coral); border-bottom-color: var(--ap-coral); }
+.ld-tier .ld-btn { margin-top: auto; align-self: flex-start; }
 
 /* ── FAQ ──────────────────────────────────────────────────────────────── */
 .ld-faq-sec { padding: clamp(56px, 8vw, 100px) 0; }
@@ -423,7 +420,7 @@
 
 /* iOS zooms the page in when a focused input is under 16px. */
 @media (max-width: 760px) {
-  .ld-ask input, .ld-price-slider { font-size: 16px; }
+  .ld-ask input { font-size: 16px; }
 }
 
 @media (max-width: 760px) {
@@ -483,9 +480,6 @@
    mouse's targets, not a thumb's. */
 @media (max-width: 760px) {
   .ld-price-grid { gap: 12px; }
-  .ld-price-slider { height: 34px; margin: 22px 0 6px; }
-  .ld-price-ticks button { padding: 10px 10px; font-size: 14px; }
-  .ld-spend > div { font-size: 14px; }
 }
 
 /* The theme confirm grows leftward, which on a phone means growing off the
@@ -529,8 +523,6 @@
    than a breakpoint. */
 @media (pointer: coarse) {
   .ld-theme-yes, .ld-theme-no { padding: 10px 12px; }
-  .ld-price-slider { height: 34px; }
-  .ld-price-ticks button { padding: 10px; font-size: 14px; }
   .ld-faq button { padding: 24px 0; }
   .ld .braino-footer .bf-col a, .dp .braino-footer .bf-col a { display: block; padding: 7px 0; }
   .ld-bar-mark, .ld-anchor-name { padding: 8px 12px; }
