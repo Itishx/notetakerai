@@ -98,6 +98,20 @@
               <button class="nf-ms-btn nf-ms-next" type="button" title="Next"><svg viewBox="0 0 24 24"><path d="M17 5v14h1.8V5H17zM5 5v14l10.5-7L5 5z" fill="currentColor"/></svg></button>
             </div>
           </section>
+          <!-- The mode's own command list. Fourth member of the drop-down-from-the-
+               notch family (yap / meeting / answer), because a mode that refuses
+               everything except its own phrases has to be able to show you what
+               those phrases are. Braino never reads them aloud: a list is faster
+               to scan than to listen to, and the mic stays live the whole time so
+               you can just say one. -->
+          <section class="nf-cmds-surface" aria-label="Voice mode commands">
+            <header class="nf-cmds-head">
+              <span class="nf-cmds-name">Mode</span>
+              <b class="nf-cmds-count"></b>
+            </header>
+            <div class="nf-cmds-list" role="list"></div>
+            <footer class="nf-cmds-foot">Say one, or tap it</footer>
+          </section>
           <section class="nf-yap-surface" aria-live="polite" aria-label="BrainoHERA live transcript">
             <header class="nf-yap-head">
               <span><i aria-hidden="true"></i><span class="nf-brainohera-wordmark">Braino<span class="nf-hera-shimmer">HERA</span></span></span>

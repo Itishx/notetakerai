@@ -9123,6 +9123,86 @@ window.brainoMac.onVoiceMode((payload) => {
     notchFace.classList.remove("captioning");
   }, 1800);
 });
+
+/* ── The mode's command list ─────────────────────────────────────────────
+   A Voice Command mode refuses everything except its own phrases, which is
+   only fair if you can find out what those phrases are. Asking drops this
+   panel instead of reading a list aloud: scanning is faster than listening,
+   and the mic stays live throughout so the fast path is still just saying one.
+   Tapping is the fallback, not the point. */
+let nfCmdsTimer = null;
+
+function nfCloseCommands() {
+  clearTimeout(nfCmdsTimer);
+  nfCmdsTimer = null;
+  notchFace?.classList.remove("nf-cmds-open");
+}
+
+window.brainoMac?.onModeCommands?.((payload) => {
+  if (!notchFace) return;
+  const surface = notchFace.querySelector(".nf-cmds-surface");
+  if (!surface) return;
+
+  if (!payload || payload.close || !Array.isArray(payload.commands)) { nfCloseCommands(); return; }
+
+  const list = surface.querySelector(".nf-cmds-list");
+  const commands = payload.commands.filter((c) => c && c.phrase);
+
+  surface.querySelector(".nf-cmds-name").textContent = payload.name || "Mode";
+  surface.querySelector(".nf-cmds-count").textContent =
+    commands.length ? `${commands.length} command${commands.length === 1 ? "" : "s"}` : "";
+  if (payload.color) notchFace.style.setProperty("--nf-mode-color", payload.color);
+
+  list.textContent = "";
+  if (!commands.length) {
+    const empty = document.createElement("div");
+    empty.className = "nf-cmds-empty";
+    empty.textContent = "This mode has no commands yet. Add some on the dashboard.";
+    list.appendChild(empty);
+  } else {
+    for (const cmd of commands) {
+      const row = document.createElement("button");
+      row.type = "button";
+      row.className = "nf-cmd-row";
+      row.setAttribute("role", "listitem");
+
+      const rail = document.createElement("i");
+      rail.setAttribute("aria-hidden", "true");
+      const label = document.createElement("span");
+      label.textContent = cmd.phrase;
+      row.append(rail, label);
+
+      /* How many links it opens, when that is more than one. It is the only
+         thing about a command you cannot guess from its phrase. */
+      if (cmd.links > 1) {
+        const note = document.createElement("em");
+        note.textContent = `${cmd.links} links`;
+        row.appendChild(note);
+      }
+
+      row.addEventListener("click", () => {
+        nfCloseCommands();
+        try { window.brainoMac?.delegate?.(cmd.phrase); } catch (_) {}
+      });
+      list.appendChild(row);
+    }
+  }
+
+  /* Sized to the content so four commands do not sit in a panel built for
+     twelve, and capped by the CSS so twelve still scroll. */
+  const rows = Math.min(Math.max(commands.length, 1), 8);
+  notchFace.style.setProperty("--nf-cmds-height", `${96 + rows * 31}px`);
+
+  notchFace.classList.add("nf-cmds-open");
+  clearTimeout(nfCmdsTimer);
+  /* Long enough to read a dozen phrases, short enough that it is never left
+     hanging over the screen after you have moved on. */
+  nfCmdsTimer = setTimeout(nfCloseCommands, 15000);
+});
+
+/* Leaving or entering a mode means they are done reading this list. */
+window.brainoMac?.onVoiceMode?.(() => nfCloseCommands());
+
 // Monday Mode's own class, deliberately not nf-voice-mode: that class and
 // --nf-mode-color belong to the user-configurable Voice Commands system, and
 // a real custom mode toggling off elsewhere would stomp this tint if it

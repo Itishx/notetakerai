@@ -3102,6 +3102,14 @@ body {
   border-radius: 0 0 32px 32px;
 }
 
+#notch-face.nf-cmds-open .nf-pill {
+  width: min(460px, calc(100vw - 32px));
+  height: min(var(--nf-cmds-height, 240px), calc(var(--nf-screen-h, 100vh) - 70px));
+  min-height: 150px;
+  max-height: 380px;
+  border-radius: 0 0 34px 34px;
+}
+
 #notch-face.nf-yap-open.nf-dictation .nf-pill,
 #notch-face.nf-yap-open .nf-pill {
   width: min(520px, calc(100vw - 32px));
@@ -4311,3 +4319,109 @@ body {
   #notch-face .nf-mm-eq i,
   #notch-face .nf-music-surface.playing .nf-ms-eq i { animation: none; }
 }
+
+/* ── The mode's command list ─────────────────────────────────────────────
+   Same drop-down mechanics as .nf-yap-surface, so it inherits the family's
+   timing rather than inventing its own. The mode colour tints the rail on each
+   row, which is the one thing that makes this read as belonging to THIS mode
+   and not as a generic menu. */
+#notch-face .nf-cmds-surface {
+  position: absolute;
+  z-index: 11;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  padding: var(--nf-content-top) 18px 12px;
+  color: #f7f7f5;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateY(-8px);
+  transition:
+    opacity 280ms ease 140ms,
+    transform 720ms cubic-bezier(.22,1,.36,1) 80ms,
+    visibility 0s linear 760ms;
+}
+#notch-face.nf-cmds-open .nf-cmds-surface {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+  pointer-events: auto;
+  transition-delay: 120ms, 40ms, 0ms;
+}
+
+#notch-face .nf-cmds-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex: 0 0 auto;
+  padding: 0 4px 9px;
+  border-bottom: 1px solid rgba(255,255,255,.09);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+}
+#notch-face .nf-cmds-name {
+  color: rgba(255,255,255,.92);
+  font-size: 10px; font-weight: 650; letter-spacing: .11em; text-transform: uppercase;
+}
+#notch-face .nf-cmds-count {
+  color: rgba(255,255,255,.42);
+  font-size: 9.5px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase;
+}
+
+#notch-face .nf-cmds-list {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 7px 0 4px;
+  display: flex; flex-direction: column; gap: 2px;
+}
+#notch-face .nf-cmds-list::-webkit-scrollbar { width: 0; }
+
+#notch-face .nf-cmd-row {
+  display: flex; align-items: center; gap: 9px;
+  padding: 7px 9px;
+  border: 0; border-radius: 9px;
+  background: transparent;
+  color: rgba(255,255,255,.92);
+  font: 500 13px/1.3 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+  text-align: left;
+  cursor: pointer;
+  transition: background 140ms ease;
+}
+#notch-face .nf-cmd-row:hover { background: rgba(255,255,255,.09); }
+#notch-face .nf-cmd-row:active { background: rgba(255,255,255,.14); }
+/* The rail carries the mode's own colour, set by the renderer. */
+#notch-face .nf-cmd-row i {
+  flex: 0 0 2px; align-self: stretch; min-height: 15px;
+  border-radius: 2px;
+  background: var(--nf-mode-color, #0A84FF);
+  opacity: .85;
+}
+#notch-face .nf-cmd-row span { flex: 1 1 auto; }
+#notch-face .nf-cmd-row em {
+  flex: 0 0 auto;
+  font-style: normal; font-size: 10px; letter-spacing: .04em;
+  color: rgba(255,255,255,.34);
+}
+
+#notch-face .nf-cmds-empty {
+  padding: 14px 9px;
+  color: rgba(255,255,255,.45);
+  font: 400 12.5px/1.4 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+}
+
+#notch-face .nf-cmds-foot {
+  flex: 0 0 auto;
+  padding: 8px 4px 0;
+  border-top: 1px solid rgba(255,255,255,.07);
+  color: rgba(255,255,255,.4);
+  font: 500 10px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+  letter-spacing: .08em; text-transform: uppercase;
+}
+
+/* Everything the compact notch normally shows gets out of the way, exactly as
+   it does for the other surfaces. */
+#notch-face.nf-cmds-open .nf-band,
+#notch-face.nf-cmds-open .nf-cap,
+#notch-face.nf-cmds-open #nf-status { opacity: 0; pointer-events: none; }

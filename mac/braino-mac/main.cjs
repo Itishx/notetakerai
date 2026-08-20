@@ -3787,6 +3787,32 @@ function voiceStepClear() {
   sendTaskProgress({ status: "ready", clearNotch: true });
 }
 
+/* "What are my commands?" — the one question a locked mode must always answer.
+   A mode that refuses everything except its own phrases is only reasonable if
+   you can find out what those phrases are, and nobody remembers eight of them.
+   Braino does not read them out: a list is faster to scan than to listen to. */
+function parseModeCommandsQuestion(raw) {
+  const t = cleanPrompt(String(raw || "")).replace(/[?.!]+\s*$/, "").toLowerCase();
+  if (!t) return false;
+  return /\b(what|which|list|show|tell me)\b[^]*\b(commands?|phrases?|options?)\b/.test(t)
+    || /\bwhat can i (say|do)\b/.test(t)
+    || /\bmy commands?\b/.test(t)
+    || /\bcommands? (in|for) this mode\b/.test(t)
+    || /\bhelp\b/.test(t);
+}
+
+function sendModeCommands(mode) {
+  sendToRenderer("braino-mac:mode-commands", mode
+    ? {
+        name: mode.name,
+        color: mode.notchColor || null,
+        commands: (mode.commands || [])
+          .filter((c) => c && c.phrase)
+          .map((c) => ({ phrase: c.phrase, links: (c.urls || []).filter(Boolean).length })),
+      }
+    : { close: true });
+}
+
 function sendVoiceModeState(mode) {
   sendToRenderer("braino-mac:voice-mode", mode
     ? { active: true, name: mode.name, color: mode.notchColor }
@@ -13548,6 +13574,7 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
   if (voicePhrase) {
     const picked = pickRandomUrls(voicePhrase.command.urls);
     logMac("delegate.voice_command", { mode: voicePhrase.mode.name, count: picked.length, openMode: voicePhrase.command.openMode });
+    sendModeCommands(null);   // a command landed, so the list has served its purpose
     voiceStep("Command matched");
     await voiceWait(380);
     voiceStep(picked.length > 1 ? `Opening ${picked.length} links` : "Opening");
@@ -13566,6 +13593,21 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
   // which is how "play <something>" used to land in Spotify mid-mode.
   {
     const lockMode = voiceModes.find((m) => m.isActive);
+    if (lockMode && parseModeCommandsQuestion(raw)) {
+      const count = (lockMode.commands || []).filter((c) => c && c.phrase).length;
+      logMac("delegate.voice_mode_commands", { mode: lockMode.name, count });
+      sendModeCommands(lockMode);
+      voiceStepClear();
+      /* The panel is the answer. Speaking eight phrases at a person who can
+         read them in two seconds is worse than saying nothing at all, so this
+         line stays one breath long and the mic stays live behind it. */
+      return {
+        ok: true,
+        say: count
+          ? `Here they are. Say one, or tap it.`
+          : `${lockMode.name} has no commands yet.`,
+      };
+    }
     if (lockMode) {
       logMac("delegate.voice_mode_locked", { mode: lockMode.name, raw: textForLog(raw) });
       voiceStep(`${lockMode.name} only`);
