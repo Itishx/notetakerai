@@ -1455,7 +1455,29 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
          standing on may be about to be navigated away from, and a tab opened
          from the background survives that. */
       if (result.ok && result.pick?.url) {
-        chrome.tabs.create({ url: result.pick.url, active: true }, () => { void chrome.runtime.lastError; });
+        const tab = await new Promise((resolve) => {
+          chrome.tabs.create({ url: result.pick.url, active: true }, (created) => {
+            void chrome.runtime.lastError;
+            resolve(created || null);
+          });
+        });
+
+        /* The episode hop, once the list has actually rendered. Best-effort by
+           design: if it misses, they are sitting on the episode list rather
+           than three episodes into the wrong one. */
+        const wantsEpisode = result.needsEpisodeNavigation && result.episode != null;
+        if (tab?.id && wantsEpisode && /netflix\.com/i.test(result.pick.url)) {
+          try {
+            await bgWaitForTabReady(tab.id, 20000);
+            await bgDelay(1800);
+            const nav = await bgNetflixOpenEpisode(tab.id, result.season, result.episode);
+            result.episodeNavigated = !!nav?.ok;
+            if (!nav?.ok) result.episodeNavigationReason = nav?.reason || "unknown";
+          } catch (error) {
+            result.episodeNavigated = false;
+            result.episodeNavigationReason = String(error?.message || error);
+          }
+        }
       }
       sendResponse(result);
     })().catch((error) => sendResponse({ ok: false, error: error?.message || String(error) }));
@@ -3820,6 +3842,102 @@ let bgUserGeoCache = null;
 
    Region comes from bgGetUserGeo(), never from a guess — catalogues differ
    enormously by country, and "not on Netflix in India" is a real answer. */
+/* Netflix will not give us an episode's own id without a paid Watchmode plan,
+   and a series id at /watch/ resumes wherever the account left off — ask for
+   S2E5, get S2E3. So the last hop is done in the page: open the title page,
+   which lists every episode, pick the season, and click the episode the user
+   actually named.
+
+   This is the user's own browser on their own account, clicking the same links
+   they can see. Nothing is scraped and no login is automated.
+
+   Netflix ships DOM changes constantly, so every step tries several selectors
+   and the whole thing is best-effort: failing leaves them on the episode list,
+   which is a fine place to be, rather than inside the wrong episode. */
+async function bgNetflixOpenEpisode(tabId, season, episode) {
+  const [{ result } = {}] = await chrome.scripting.executeScript({
+    target: { tabId },
+    args: [season || null, episode || null],
+    func: async (wantSeason, wantEpisode) => {
+      const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+      const visible = (el) => el && el.offsetParent !== null;
+
+      const waitFor = async (find, ms = 9000) => {
+        const until = Date.now() + ms;
+        while (Date.now() < until) {
+          const found = find();
+          if (found) return found;
+          await sleep(220);
+        }
+        return null;
+      };
+
+      // ── season ──────────────────────────────────────────────────────────
+      if (wantSeason != null) {
+        // Older layouts use a real <select>; newer ones a button + menu.
+        const select = document.querySelector("select.nfSelect, select[data-uia*='season']");
+        if (select) {
+          const option = [...select.options].find((o) =>
+            new RegExp(`(^|\\D)${wantSeason}(\\D|$)`).test(o.textContent || ""));
+          if (option) {
+            select.value = option.value;
+            select.dispatchEvent(new Event("change", { bubbles: true }));
+            await sleep(1200);
+          }
+        } else {
+          const toggle = await waitFor(() =>
+            [...document.querySelectorAll("[data-uia='dropdown-toggle'], .episodeSelector-dropdown button, button[aria-haspopup]")]
+              .find(visible), 6000);
+          if (toggle) {
+            toggle.click();
+            await sleep(600);
+            const item = await waitFor(() =>
+              [...document.querySelectorAll("[data-uia='dropdown-menu'] li, [role='menuitem'], .episodeSelector-dropdown li")]
+                .filter(visible)
+                .find((el) => new RegExp(`(^|\\D)${wantSeason}(\\D|$)`).test(el.textContent || "")), 5000);
+            if (item) { item.click(); await sleep(1400); }
+            else { toggle.click(); }   // close it again rather than leave a menu open
+          }
+        }
+      }
+
+      if (wantEpisode == null) return { ok: true, did: "season-only" };
+
+      // ── episode ─────────────────────────────────────────────────────────
+      const rows = await waitFor(() => {
+        const found = [...document.querySelectorAll(
+          "[data-uia^='episode-item'], .titleCardList--container, .episodeSelector-episode, li.titleCard"
+        )].filter(visible);
+        return found.length ? found : null;
+      }, 9000);
+      if (!rows) return { ok: false, reason: "no-episode-list" };
+
+      /* Match on the episode's own number element where Netflix exposes one,
+         and fall back to position. Never match on the whole row's text: an
+         episode's synopsis can contain any number at all. */
+      const numberOf = (row, index) => {
+        const el = row.querySelector("[data-uia='episode-item-number'], .titleCard-title_index, .episodeSelector-episode-number");
+        const n = el ? parseInt(String(el.textContent).replace(/\D+/g, ""), 10) : NaN;
+        return Number.isFinite(n) ? n : index + 1;
+      };
+
+      const row = rows.find((r, i) => numberOf(r, i) === wantEpisode);
+      if (!row) return { ok: false, reason: "episode-not-listed" };
+
+      /* Prefer a real link: navigating to its href is far more predictable than
+         clicking whatever element happens to be on top. */
+      const link = row.matches("a[href*='/watch/']") ? row : row.querySelector("a[href*='/watch/']");
+      if (link && link.href) { location.assign(link.href); return { ok: true, did: "href" }; }
+
+      row.scrollIntoView({ block: "center" });
+      await sleep(300);
+      (row.querySelector("[role='button'], button, .playLink") || row).click();
+      return { ok: true, did: "click" };
+    },
+  }).catch((e) => [{ result: { ok: false, reason: String(e?.message || e) } }]);
+  return result || { ok: false, reason: "no-result" };
+}
+
 async function bgWatchPlay(ask) {
   const stored = await new Promise(r => chrome.storage.local.get(["authToken"], r));
   if (!stored.authToken) return { ok: false, error: "not_signed_in" };

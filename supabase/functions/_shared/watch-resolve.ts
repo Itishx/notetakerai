@@ -443,10 +443,24 @@ export async function resolveWatch(req: WatchRequest): Promise<WatchResult> {
        the last hop rather than us pretending we nailed it. */
     const wantsEpisode = id.kind === "tv" && (season != null || episode != null);
 
+    /* A Netflix series id at /watch/ does NOT play the episode you asked for —
+       it plays wherever that account left off. Asking for season 2 episode 5 and
+       getting season 2 episode 3 back is worse than not opening the player at
+       all, because it looks like it worked. So when a specific episode is
+       wanted, hand back the /title/ page, which is the one that actually lists
+       the episodes, and let the client navigate from there. */
+    const pickForEpisode = wantsEpisode && pick.autoplays && /netflix\.com\/watch\/(\d+)/i.test(pick.url)
+      ? {
+          ...pick,
+          url: pick.url.replace(/netflix\.com\/watch\/(\d+)/i, "netflix.com/title/$1"),
+          autoplays: false,
+        }
+      : pick;
+
     return {
       ...base, ...meta,
       found: true,
-      pick,
+      pick: pickForEpisode,
       alternatives: sources.filter((s) => s !== pick),
       askedForAvailable: asked ? Boolean(wanted) : undefined,
       needsEpisodeNavigation: wantsEpisode || undefined,
