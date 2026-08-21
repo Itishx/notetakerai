@@ -64,6 +64,11 @@
 
 /* ── Why him ──────────────────────────────────────────────────────────── */
 .ld-why-sec { padding: clamp(56px, 8vw, 100px) 0; }
+/* Braino OS follows the obvious question directly, and apple.css gives
+   .apple-blog.howworks a full --ap-section on top. Stacked against this
+   section's own bottom padding that read as a gap rather than a break. */
+#why + .apple-blog.howworks { padding-top: clamp(10px, 1.6vw, 24px); }
+.ld #why { padding-bottom: clamp(34px, 5vw, 62px); }
 .ld-why { display: grid; grid-template-columns: 1fr 1fr; gap: 0 clamp(24px, 4vw, 56px); margin-top: 34px; }
 @media (max-width: 760px) { .ld-why { grid-template-columns: 1fr; } }
 .ld-why > div { padding: 22px 0; border-top: 1px solid var(--ap-hairline); }

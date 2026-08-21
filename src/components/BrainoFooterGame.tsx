@@ -3,7 +3,7 @@ import type { PointerEvent as ReactPointerEvent } from "react";
 import { ArrowLeft, ArrowRight, ArrowUp, RotateCcw } from "lucide-react";
 import { BRAINO_WALKER_SVG } from "./brainoWalkerSvg";
 
-type Phase = "running" | "over";
+type Phase = "idle" | "running" | "over";
 type Direction = "left" | "right";
 
 type CourseObject = {
@@ -39,7 +39,13 @@ const STORAGE_KEY = "braino-footer-best-v1";
 const FOOTER_BRAINO_SVG = BRAINO_WALKER_SVG
   .replace(/__sbwk_/g, "__bfg_")
   .replace(/sbwk-/g, "bfg-")
-  .replace(/sbb-/g, "bfg-");
+  .replace(/sbb-/g, "bfg-")
+  // He is drawn head-on, looking at you, which is wrong for someone sprinting
+  // across a footer. There is no profile drawing, so "looking ahead" is the
+  // pupils moving to the edge of the eye plus a lean, which is how a cartoon
+  // does it anyway. The rig gives the pupils no ids, so this copy adds them.
+  .replace('<circle cx="38" cy="48" r="3.2" fill="#1B1713"/>', '<circle id="__bfg_pl__" cx="38" cy="48" r="3.2" fill="#1B1713"/>')
+  .replace('<circle cx="62" cy="48" r="3.2" fill="#1B1713"/>', '<circle id="__bfg_pr__" cx="62" cy="48" r="3.2" fill="#1B1713"/>');
 
 function endLine(score: number) {
   if (score < 100) return "That pipe had excellent timing.";
@@ -47,6 +53,56 @@ function endLine(score: number) {
   if (score < 500) return "You made the footer feel enormous.";
   if (score < 900) return "I could have kept going all day.";
   return "That was not a footer. That was a journey.";
+}
+
+/* Every sound here is made from an oscillator on the spot. No files, nothing
+   to download, nothing for the CSP to block, and the whole kit is smaller than
+   one sprite would be. The context is created on the first press, because a
+   browser refuses to build one before a gesture anyway. */
+function createSounds() {
+  let ctx: AudioContext | null = null;
+  let muted = false;
+
+  const ensure = () => {
+    if (typeof window === "undefined") return null;
+    const Ctor = window.AudioContext || (window as any).webkitAudioContext;
+    if (!Ctor) return null;
+    if (!ctx) ctx = new Ctor();
+    if (ctx.state === "suspended") void ctx.resume();
+    return ctx;
+  };
+
+  const tone = (
+    freq: number, duration: number,
+    { type = "square" as OscillatorType, gain = 0.05, slideTo = 0, delay = 0 } = {},
+  ) => {
+    const audioCtx = ensure();
+    if (!audioCtx || muted) return;
+    const at = audioCtx.currentTime + delay;
+    const osc = audioCtx.createOscillator();
+    const vol = audioCtx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, at);
+    if (slideTo) osc.frequency.exponentialRampToValueAtTime(slideTo, at + duration);
+    // Ramped rather than switched, because a square wave cut dead clicks.
+    vol.gain.setValueAtTime(0.0001, at);
+    vol.gain.exponentialRampToValueAtTime(gain, at + 0.012);
+    vol.gain.exponentialRampToValueAtTime(0.0001, at + duration);
+    osc.connect(vol).connect(audioCtx.destination);
+    osc.start(at);
+    osc.stop(at + duration + 0.02);
+  };
+
+  return {
+    setMuted(next: boolean) { muted = next; },
+    isMuted() { return muted; },
+    jump() { tone(440, 0.16, { slideTo: 880, gain: 0.045 }); },
+    coin() { tone(1244, 0.07, { gain: 0.05 }); tone(1661, 0.14, { gain: 0.045, delay: 0.06 }); },
+    bump() { tone(180, 0.18, { type: "sawtooth", slideTo: 90, gain: 0.05 }); },
+    pipe()  { tone(660, 0.1, { gain: 0.04, slideTo: 330 }); tone(330, 0.22, { gain: 0.04, slideTo: 110, delay: 0.09 }); },
+    start() { [523, 659, 784].forEach((f, i) => tone(f, 0.12, { gain: 0.045, delay: i * 0.09 })); },
+    over()  { [392, 311, 233].forEach((f, i) => tone(f, 0.22, { type: "triangle", gain: 0.055, delay: i * 0.14 })); },
+  };
 }
 
 function readBestScore() {
@@ -60,10 +116,12 @@ export default function BrainoFooterGame() {
   const worldRef = useRef<HTMLDivElement>(null);
   const groundRef = useRef<HTMLDivElement>(null);
   const playerRef = useRef<HTMLDivElement>(null);
-  const actionRef = useRef({ jump: () => {}, restart: () => {} });
+  const actionRef = useRef({ jump: () => {}, restart: () => {}, start: () => {} });
+  const soundsRef = useRef<ReturnType<typeof createSounds> | null>(null);
+  const [muted, setMuted] = useState(false);
   const inputRef = useRef({ left: false, right: false });
-  const phaseRef = useRef<Phase>("running");
-  const [phase, setPhase] = useState<Phase>("running");
+  const phaseRef = useRef<Phase>("idle");
+  const [phase, setPhase] = useState<Phase>("idle");
   const [score, setScore] = useState(0);
   const [coins, setCoins] = useState(0);
   const [best, setBest] = useState(readBestScore);
@@ -76,7 +134,15 @@ export default function BrainoFooterGame() {
     const player = playerRef.current;
     if (!game || !world || !ground || !player) return;
 
+    if (!soundsRef.current) soundsRef.current = createSounds();
+    const sounds = soundsRef.current;
+
     const root = player.querySelector("#__bfg_root__");
+    // He runs to the right, so he faces right. The rig is drawn head-on, so
+    // "facing" is a flip plus a small yaw rather than a different sprite.
+    const pupilL = player.querySelector("#__bfg_pl__");
+    const pupilR = player.querySelector("#__bfg_pr__");
+    let facing = 1;
     const leftLeg = player.querySelector("#__bfg_ll__");
     const rightLeg = player.querySelector("#__bfg_rl__");
     const segmentWidth = Math.max(1900, game.clientWidth * 1.55);
@@ -244,6 +310,7 @@ export default function BrainoFooterGame() {
       if (phaseRef.current === "over") return;
       phaseRef.current = "over";
       setPhase("over");
+      sounds.over();
       const finalScore = Math.max(0, Math.floor(worldOffset / 11) + coinCount * 25);
       setScore(finalScore);
       setBrainoLine(endLine(finalScore));
@@ -252,6 +319,15 @@ export default function BrainoFooterGame() {
         try { window.localStorage.setItem(STORAGE_KEY, String(nextBest)); } catch { /* storage blocked */ }
         return nextBest;
       });
+    };
+
+    const start = () => {
+      if (phaseRef.current === "running") return;
+      resetCourse();
+      sounds.start();
+      phaseRef.current = "running";
+      setPhase("running");
+      game.focus();
     };
 
     const restart = () => {
@@ -271,7 +347,7 @@ export default function BrainoFooterGame() {
       jumpQueuedUntil = 0;
     };
 
-    actionRef.current = { jump, restart };
+    actionRef.current = { jump, restart, start };
     resetCourse();
 
     const onKeyDown = (event: KeyboardEvent) => {
@@ -323,6 +399,7 @@ export default function BrainoFooterGame() {
             pipeDive.warped = true;
             worldOffset += 780;
             coinCount += 3;
+            sounds.pipe();
             setCoins(coinCount);
           }
           if (pipeDive.elapsed >= 0.92) {
@@ -387,6 +464,7 @@ export default function BrainoFooterGame() {
             grounded = false;
             velocityY = 760;
             jumpQueuedUntil = 0;
+            sounds.jump();
           }
 
           for (const coin of courseCoins) {
@@ -398,12 +476,14 @@ export default function BrainoFooterGame() {
             coin.collected = true;
             coin.el.classList.add("collected");
             coinCount += 1;
+            sounds.coin();
             setCoins(coinCount);
           }
 
           // Pipes are obstacles, not instant deaths. A late jump gets a small
           // forgiving bounce so the course stays playful on touch screens.
           if (hitPipe && playerY < 24) {
+            sounds.bump();
             grounded = false;
             velocityY = Math.max(velocityY, 640);
             playerY = Math.max(playerY, 8);
@@ -427,7 +507,15 @@ export default function BrainoFooterGame() {
         const stride = Math.sin(worldOffset / 18);
         leftLeg?.setAttribute("transform", `translate(0 ${Math.max(0, stride) * -6}) rotate(${stride * 9} 44 74)`);
         rightLeg?.setAttribute("transform", `translate(0 ${Math.max(0, -stride) * -6}) rotate(${-stride * 9} 56 74)`);
-        root?.setAttribute("transform", `rotate(${stride * 1.8} 50 54)`);
+
+        // Held rather than read live: he is running right the whole time, and
+        // only a deliberate press the other way should turn his head.
+        const steering = (inputRef.current.right ? 1 : 0) - (inputRef.current.left ? 1 : 0);
+        if (steering !== 0) facing = steering;
+        pupilL?.setAttribute("transform", `translate(${facing * 2.7} 0)`);
+        pupilR?.setAttribute("transform", `translate(${facing * 2.7} 0)`);
+        // A lean in the direction of travel, on top of the running bob.
+        root?.setAttribute("transform", `rotate(${stride * 1.8 + facing * 5} 50 54)`);
 
         if (currentScore !== lastScore) {
           lastScore = currentScore;
@@ -490,6 +578,37 @@ export default function BrainoFooterGame() {
 
       <div className="bf-course-world" ref={worldRef} />
       <div className="bf-ground2" ref={groundRef} />
+
+      {phase === "idle" ? (
+        <div className="bf-game-launch">
+          <p>Braino runs the footer.</p>
+          <button
+            type="button"
+            className="bf-game-launch-btn"
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={() => actionRef.current.start()}
+          >
+            Start the game
+          </button>
+          <small>Arrow keys or space. Tap to jump.</small>
+        </div>
+      ) : null}
+
+      <button
+        type="button"
+        className="bf-game-sound"
+        aria-pressed={!muted}
+        aria-label={muted ? "Turn game sound on" : "Turn game sound off"}
+        title={muted ? "Sound off" : "Sound on"}
+        onPointerDown={(event) => event.stopPropagation()}
+        onClick={() => {
+          const next = !muted;
+          setMuted(next);
+          soundsRef.current?.setMuted(next);
+        }}
+      >
+        {muted ? "\u{1F507}" : "\u{1F50A}"}
+      </button>
 
       <div className="bf-game-braino" ref={playerRef}>
         {phase === "over" ? (

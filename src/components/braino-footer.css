@@ -28,7 +28,7 @@
 }
 .bf-playstrip {
   position: relative;
-  height: 286px;
+  height: 330px;
   margin-top: 8px;
   overflow: hidden;
   isolation: isolate;
@@ -192,7 +192,7 @@
   text-shadow: 0 1px rgba(255, 255, 255, 0.35);
 }
 @media (max-width: 760px) {
-  .bf-playstrip { height: 238px; }
+  .bf-playstrip { height: 300px; }
 }
 
 .bf-cols {
@@ -614,3 +614,46 @@ html.bf-footer-game-visible #sb-brain-mascot-wrapper {
   .bf-col a { margin: 0; padding: 11px 0; min-height: 44px; display: flex; align-items: center; }
   .bf-col h4 { margin-bottom: 8px; }
 }
+
+/* ── Start, rather than a game already running at somebody ────────────────── */
+.bf-game-launch {
+  position: absolute; inset: 0; z-index: 30;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 12px; text-align: center;
+  background: rgba(18, 22, 46, 0.42);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+}
+.bf-game-launch p {
+  margin: 0; font-size: 15px; font-weight: 700; letter-spacing: 0.01em;
+  color: #fff; text-shadow: 0 2px 0 rgba(31, 33, 48, 0.45);
+}
+.bf-game-launch small { font-size: 11.5px; color: rgba(255, 255, 255, 0.78); }
+.bf-game-launch-btn {
+  font: inherit; font-size: 13px; font-weight: 800; letter-spacing: 0.04em;
+  text-transform: uppercase; cursor: pointer;
+  padding: 11px 22px; border-radius: 999px;
+  color: #1f2130; background: #ffd75e;
+  border: 2px solid #1f2130;
+  box-shadow: 0 4px 0 #1f2130;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+.bf-game-launch-btn:hover { transform: translateY(-1px); box-shadow: 0 5px 0 #1f2130; }
+.bf-game-launch-btn:active { transform: translateY(3px); box-shadow: 0 1px 0 #1f2130; }
+.bf-game-launch-btn:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
+
+.bf-game-sound {
+  position: absolute; z-index: 31; right: 10px; top: 10px;
+  width: 30px; height: 30px; line-height: 1;
+  font-size: 13px; cursor: pointer;
+  border-radius: 999px;
+  border: 2px solid rgba(31, 33, 48, 0.55);
+  background: rgba(255, 255, 255, 0.82);
+  transition: transform 0.12s ease;
+}
+.bf-game-sound:hover { transform: scale(1.06); }
+.bf-game-sound:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
+
+/* Idle holds still: no run bob, no world movement, so the course reads as a
+   picture waiting for you rather than something you already lost. */
+.bf-playstrip.is-idle .bf-game-braino > div:last-child { animation: none; }
