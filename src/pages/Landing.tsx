@@ -436,11 +436,6 @@ export default function Landing() {
         <div className="ld-hero-screen apple-reveal">
           <BrainoTVScreen className="ld-hero-video" offer={{ src: "/Braino_Final.MP4", title: "" }} />
         </div>
-
-        <a className="ld-hero-more" href="#who-is">
-          <span>Who is Braino?</span>
-          <i aria-hidden="true" />
-        </a>
       </header>
 
       {/* ── 2. Who is Braino ─────────────────────────────────────────── */}

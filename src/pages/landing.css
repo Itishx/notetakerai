@@ -940,21 +940,27 @@
 .ld-hero {
   position: relative;
   display: grid;
-  /* Wider than the site column and copy-heavier than an even split, so
-     "Watch it happen." holds on one line instead of breaking to three. */
-  grid-template-columns: minmax(0, 1.12fr) minmax(0, 1fr);
+  /* Bleed right (variation C from /hero-lab): the film runs off the edge of
+     the page instead of being held in a card, so the first view reads as a
+     window onto something bigger than the page rather than a screenshot on a
+     slide. That means no max-width and no auto margin here — the right column
+     has to reach the viewport edge to work at all. */
+  grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
   align-items: center;
-  /* The row was 580px in a 900px window, so "Who is Braino?" was already
-     on screen at load and the hero read as a band rather than an opening.
-     It owns the first screen now: align-content centres the whole row in
-     whatever height is left over, and the cap stops a 27in display from
-     stranding the copy in the middle of nowhere. */
+  /* The hero owns the first screen; align-content centres the row in whatever
+     is left over, and the cap stops a 27in display stranding the copy. */
   align-content: center;
   min-height: min(100svh, 900px);
-  gap: clamp(28px, 4.5vw, 64px);
-  max-width: 1320px;
-  margin: 0 auto;
-  padding: clamp(40px, 5vh, 72px) var(--ap-gutter) clamp(104px, 13vh, 168px);
+  gap: clamp(24px, 3.5vw, 56px);
+  /* The old hero started its copy at 100px while every section below it
+     started at 248px, so the page stepped sideways under the fold. This lands
+     the headline on the same left edge as the rest of the site: the centred
+     1024px column's own gutter, falling back to the plain gutter once the
+     viewport is narrower than the column. Percentage padding resolves against
+     the parent rather than 100vw, which keeps the scrollbar out of the sum. */
+  padding-left: max(var(--ap-gutter), calc((100% - var(--ap-maxw)) / 2 + var(--ap-gutter)));
+  padding-top: clamp(40px, 5vh, 76px);
+  padding-bottom: clamp(44px, 6vh, 92px);
 }
 
 /* svh is the honest one on a phone, where the toolbars move. Older engines
@@ -964,72 +970,32 @@
   .ld-hero { min-height: min(100vh, 900px); }
 }
 
-/* The cue that says the page continues. It also names what is below, which
-   a bare chevron never does. */
-.ld-hero-more {
-  position: absolute;
-  left: 50%;
-  bottom: clamp(30px, 4vh, 52px);
-  transform: translateX(-50%);
-  display: grid;
-  justify-items: center;
-  gap: 11px;
-  text-decoration: none;
-  font-size: 13px;
-  font-weight: 500;
-  letter-spacing: 0.01em;
-  color: var(--ap-ink-soft);
-  transition: color 0.22s ease;
-}
-.ld-hero-more:hover, .ld-hero-more:focus-visible { color: var(--ap-ink); }
-.ld-hero-more i {
-  position: relative;
-  width: 1px;
-  height: 38px;
-  overflow: hidden;
-  background: linear-gradient(var(--ap-hairline), transparent);
-}
-/* One lit segment falling through the hairline, on the section's own accent. */
-.ld-hero-more i::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: -38px;
-  height: 38px;
-  background: linear-gradient(transparent, var(--ap-accent));
-  animation: ldHeroDrop 2.6s cubic-bezier(0.45, 0, 0.2, 1) infinite;
-}
-@keyframes ldHeroDrop { to { transform: translateY(76px); } }
-
-@media (prefers-reduced-motion: reduce) {
-  .ld-hero-more i::after { animation: none; top: 0; opacity: 0.5; }
-}
-
 @media (max-width: 900px) {
   .ld-hero {
     grid-template-columns: minmax(0, 1fr);
     gap: 30px;
-    /* Stacked, the copy and the video already overflow the screen, so forcing
+    /* Stacked, the copy and the film already overflow the screen, so forcing
        a viewport height only buys dead air above the fold. */
     min-height: 0;
     /* 5vh of a phone is 42px and the notch is taller than that, so the eyebrow
-       was landing underneath it. This floor clears the housing. */
+       used to land underneath the housing. This floor clears it. */
     padding-top: 96px;
+    padding-right: var(--ap-gutter);
     padding-bottom: clamp(56px, 9vw, 88px);
   }
-  .ld-hero-more { display: none; }
 }
 
 .ld-hero-h1 {
   margin: 10px 0 18px;
-  font-size: clamp(42px, 5.9vw, 80px);
+  font-size: clamp(40px, 5.2vw, 70px);
   font-weight: 600;
   letter-spacing: -0.03em;
   line-height: 1.0;
   color: var(--ap-ink);
   text-wrap: balance;
 }
+
+.ld-hero-copy { max-width: 34rem; }
 
 .ld-hero-sub {
   margin: 0 0 26px;
@@ -1049,12 +1015,27 @@
 
 /* The product, held like an object rather than bled across the page. */
 .ld-hero-screen {
-  border-radius: clamp(20px, 2.4vw, 30px);
+  border-radius: clamp(20px, 2.4vw, 30px) 0 0 clamp(20px, 2.4vw, 30px);
   overflow: hidden;
   background: var(--ap-surface);
   border: 1px solid var(--ap-hairline);
-  box-shadow: 0 40px 90px -40px rgba(0, 0, 0, 0.42);
-  aspect-ratio: 16 / 10;
+  border-right: 0;
+  /* Cast to the left, since that is the only side still on the page. */
+  box-shadow: -40px 44px 100px -52px rgba(0, 0, 0, 0.5);
+  aspect-ratio: 4 / 3;
+  max-height: min(66vh, 620px);
+}
+
+@media (max-width: 900px) {
+  /* Nothing to bleed off when it is stacked, so it goes back to being an
+     object with four corners. */
+  .ld-hero-screen {
+    border-radius: clamp(20px, 2.4vw, 30px);
+    border-right: 1px solid var(--ap-hairline);
+    box-shadow: 0 40px 90px -40px rgba(0, 0, 0, 0.42);
+    aspect-ratio: 16 / 10;
+    max-height: none;
+  }
 }
 .ld-hero-video, .ld-hero-screen video, .ld-hero-screen img {
   display: block;
