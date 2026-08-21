@@ -450,40 +450,21 @@
    inset, same z-index, so the two of them read as one row across the top with
    the notch hanging between them. */
 .ld-mark {
-  position: fixed; top: 14px; left: 18px; z-index: 120;
-  display: flex; align-items: center; gap: 8px;
-  padding: 4px 15px 4px 7px;
-  border-radius: 980px; text-decoration: none;
-  background: var(--ap-nav);
-  backdrop-filter: saturate(180%) blur(18px);
-  -webkit-backdrop-filter: saturate(180%) blur(18px);
-  border: 1px solid var(--ap-hairline);
-  transition: border-color 0.2s ease;
+  position: fixed; top: 8px; left: 18px; z-index: 120;
+  height: 40px; display: flex; align-items: center;
+  text-decoration: none;
+  transition: transform 0.2s ease;
 }
-.ld-mark:hover { border-color: color-mix(in srgb, var(--ap-coral) 55%, transparent); }
+.ld-mark:hover { transform: translateY(-1px); }
+/* He draws well outside his own box; nothing here may clip him. */
+.ld-mark svg { overflow: visible; }
 .ld-mark:focus-visible { outline: 2px solid var(--ap-coral); outline-offset: 2px; }
-/* The rig draws well outside its own box, so the face gets a fixed window to
-   sit in rather than being allowed to set the pill's height. */
-.ld-mark-face {
-  width: 34px; height: 34px;
-  display: grid; place-items: center;
-  overflow: visible;
-}
-.ld-mark-face svg { overflow: visible; }
-.ld-mark-name {
-  font-size: 14px; font-weight: 600; letter-spacing: -0.01em;
-  color: var(--ap-ink);
-}
-
 @media (max-width: 620px) {
-  /* The notch needs the middle of a narrow screen, so the wordmark drops and
-     he keeps his corner on his own. */
-  .ld-mark { top: 10px; left: 10px; padding: 0; background: none; border: 0; }
-  .ld-mark-name { display: none; }
+  .ld-mark { left: 10px; }
 }
 
 .ld-theme-wrap {
-  position: fixed; top: 14px; right: 18px; z-index: 120;
+  position: fixed; top: 8px; right: 18px; z-index: 120;
   display: flex; align-items: center; justify-content: flex-end;
   border-radius: 980px; background: var(--ap-nav);
   backdrop-filter: saturate(180%) blur(18px);
@@ -880,7 +861,7 @@
 /* The two cards under a chapter opener. .ld-whois carries the shared card
    styling; this only handles the gap above them and the fact that they sit
    inside .ld-wrap, which already has the gutter the grid tries to add again. */
-.ld-chapter-cards { margin-top: clamp(24px, 3.4vw, 44px); padding-top: 0; }
+.ld-chapter-cards { margin-top: clamp(14px, 1.8vw, 24px); padding-top: 0; }
 /* Squared, and flush to the chapter's own measure: .ld-wrap already sets the
    left edge the chapter name sits on, so the grid drops its inherited gutter
    and runs from that edge to the end of the column. The rounded frame belongs

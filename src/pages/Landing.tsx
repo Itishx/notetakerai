@@ -428,11 +428,8 @@ export default function Landing() {
       {/* Him, top left, opposite the theme control. He is the product; the
           header was the one place on the page he was not. */}
       <a className="ld-mark" href="#top" aria-label="Braino, back to the top">
-        <span className="ld-mark-face" aria-hidden="true">
-          <BrainoDefs />
-          <Braino size={34} gloves={false} expr="happy" />
-        </span>
-        <span className="ld-mark-name">Braino</span>
+        <BrainoDefs />
+        <Braino size={44} legs gloves expr="happy" />
       </a>
 
       <div className={"ld-theme-wrap" + (askLight ? " is-asking" : "")}>
@@ -699,10 +696,6 @@ export default function Landing() {
 
       <section className="ld-kinds apple-reveal" id="engines">
         <div className="ld-wrap">
-          <p className="ld-engines-head">
-            Foundry is one thing you buy, with <strong>two engines</strong> inside it. They are the
-            two places a solo founder actually gets stuck, in the order they happen.
-          </p>
 
           {ENGINE_DETAIL.map((engine) => (
             <article className={`ld-engine-full ${engine.tone}`} key={engine.name}>
