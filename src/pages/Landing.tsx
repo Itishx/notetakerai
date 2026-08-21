@@ -80,6 +80,34 @@ const STORY: Array<{ number: string; label: string; title: string; description: 
     description: "Hat on, feet forward, gliding backwards. If you are going to talk to something every day it should at least be fun.", art: "moonwalk" },
 ];
 
+/* The two cards under each chapter opener. Same markup and same classes as
+   the "Who is Braino" grid, wrapped in .ld-whois so it inherits that section's
+   overrides too: the shared 1px-gap frame, the card padding, the art height.
+   A second set of styles for a second identical grid is how two grids stop
+   looking identical. */
+function ChapterCards({ cards }: { cards: Array<{ label: string; title: string; body: string; art: MascotMotion | "face" }> }) {
+  return (
+    <div className="ld-whois ld-chapter-cards">
+      <div className="po-character-grid">
+        {cards.map((card) => (
+          <article className="po-character-card" key={card.title}>
+            <div className={`po-character-art is-${card.art}`}>
+              {card.art === "face"
+                ? <img src="/reactions/braino-happy.svg" alt="Braino smiling" />
+                : <MovingBraino motion={card.art} />}
+            </div>
+            <div className="po-character-copy">
+              <span>{card.label}</span>
+              <h3>{card.title}</h3>
+              <p>{card.body}</p>
+            </div>
+          </article>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function MovingBraino({ motion }: { motion: MascotMotion }) {
   const time = useTime();
   const beat = time * 3.4;
@@ -397,6 +425,16 @@ export default function Landing() {
           because it is a control rather than a destination. */}
       {/* Going light is a decision worth one beat of friction. Going back to dark
           is not, so that direction stays a single click. */}
+      {/* Him, top left, opposite the theme control. He is the product; the
+          header was the one place on the page he was not. */}
+      <a className="ld-mark" href="#top" aria-label="Braino, back to the top">
+        <span className="ld-mark-face" aria-hidden="true">
+          <BrainoDefs />
+          <Braino size={34} gloves={false} expr="happy" />
+        </span>
+        <span className="ld-mark-name">Braino</span>
+      </a>
+
       <div className={"ld-theme-wrap" + (askLight ? " is-asking" : "")}>
         <button
           className="ld-theme"
@@ -434,7 +472,7 @@ export default function Landing() {
         </div>
 
         <div className="ld-hero-screen apple-reveal">
-          <BrainoTVScreen className="ld-hero-video" offer={{ src: "/Braino_Final.MP4", title: "" }} />
+          <BrainoTVScreen className="ld-hero-video" autoOnce offer={{ src: "/Braino_Final.MP4", title: "" }} />
         </div>
       </header>
 
@@ -536,8 +574,18 @@ export default function Landing() {
           <p className="ld-chapter-tag">Chapter one</p>
           <h2 className="ld-chapter-name">Braino <span className="tone">Companion</span></h2>
           <p className="ld-chapter-line">
-            Free, for anyone with a screen. He handles your day.
+            Free for anyone with a screen. He handles your day.
           </p>
+          <ChapterCards
+            cards={[
+              { label: "On your screen", art: "walking",
+                title: "He is already where you are.",
+                body: "Not a tab you go and open. He is on the page you were reading and the app you were in, looking at the same thing you are." },
+              { label: "In your voice", art: "standing",
+                title: "You say it. He goes and does it.",
+                body: "Files, apps, messages, music, your calendar. He does the thing rather than telling you which menu it lives under." },
+            ]}
+          />
         </div>
       </section>
       {/* ── 4. What he does ──────────────────────────────────────────── */}
@@ -636,6 +684,16 @@ export default function Landing() {
             For founders who are actually building something. He handles the company, not just
             the day, and he does it with two engines.
           </p>
+          <ChapterCards
+            cards={[
+              { label: "Braino Code", art: "standing",
+                title: "Say it out loud. He builds it.",
+                body: "A real site with a real design system, from the brief you spoke. Then you change it by saying what is wrong, not by starting again." },
+              { label: "Distra", art: "dancing",
+                title: "Then he goes and gets it seen.",
+                body: "Six engines for the half nobody helps with. Posting is running today, and the site says plainly which of the other five are not." },
+            ]}
+          />
         </div>
       </section>
 

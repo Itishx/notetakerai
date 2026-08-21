@@ -44,3 +44,13 @@
   overflow: hidden; background: #000; margin: 8px 0 20px;
   box-shadow: 0 20px 60px rgba(0,0,0,.35);
 }
+
+/* Autoplayed-once state: a real <video>, muted, because muted is the only
+   autoplay a browser allows without a gesture. Sits exactly where the poster
+   and the iframe sit so the screen never changes size between states. */
+.btv-auto {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  display: block; object-fit: contain;
+  background: #000; border: 0;
+}

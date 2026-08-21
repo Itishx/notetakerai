@@ -412,7 +412,18 @@
 
 
 /* ── The notch sits at the top of the page, not on the viewport ────────── */
-.ld .iomi-notch-dock, .dp .iomi-notch-dock { position: absolute; }
+/* apple.css drops every notch 48px down to clear a header bar. The landing
+   page has no such bar until you scroll (.ld-bar arrives later and is fixed
+   over the top of everything), so those 48px were just a gap above a shape
+   that is supposed to hang off the top edge of the screen. Flush. */
+.ld .iomi-notch-dock, .dp .iomi-notch-dock { position: absolute; top: 0; }
+
+/* ── No fade-on-scroll here ─────────────────────────────────────────────────
+   The reveal starts every section at opacity 0 and waits for an observer, so
+   anyone landing mid-page, or scrolling faster than the 0.7s transition, sees
+   an empty screen and concludes there is nothing on it. The animation is not
+   worth that. Sections are simply present. */
+.ld .apple-reveal { opacity: 1 !important; transform: none !important; transition: none !important; }
 
 /* ── The bar that takes over once the notch has gone ───────────────────── */
 .ld-bar {
@@ -435,6 +446,42 @@
 @media (prefers-reduced-motion: reduce) { .ld-bar { transition: none; } }
 
 /* ── The theme toggle, now that the anchor bar is gone ─────────────────── */
+/* Braino, top left, mirroring the theme control on the right. Same pill, same
+   inset, same z-index, so the two of them read as one row across the top with
+   the notch hanging between them. */
+.ld-mark {
+  position: fixed; top: 14px; left: 18px; z-index: 120;
+  display: flex; align-items: center; gap: 8px;
+  padding: 4px 15px 4px 7px;
+  border-radius: 980px; text-decoration: none;
+  background: var(--ap-nav);
+  backdrop-filter: saturate(180%) blur(18px);
+  -webkit-backdrop-filter: saturate(180%) blur(18px);
+  border: 1px solid var(--ap-hairline);
+  transition: border-color 0.2s ease;
+}
+.ld-mark:hover { border-color: color-mix(in srgb, var(--ap-coral) 55%, transparent); }
+.ld-mark:focus-visible { outline: 2px solid var(--ap-coral); outline-offset: 2px; }
+/* The rig draws well outside its own box, so the face gets a fixed window to
+   sit in rather than being allowed to set the pill's height. */
+.ld-mark-face {
+  width: 34px; height: 34px;
+  display: grid; place-items: center;
+  overflow: visible;
+}
+.ld-mark-face svg { overflow: visible; }
+.ld-mark-name {
+  font-size: 14px; font-weight: 600; letter-spacing: -0.01em;
+  color: var(--ap-ink);
+}
+
+@media (max-width: 620px) {
+  /* The notch needs the middle of a narrow screen, so the wordmark drops and
+     he keeps his corner on his own. */
+  .ld-mark { top: 10px; left: 10px; padding: 0; background: none; border: 0; }
+  .ld-mark-name { display: none; }
+}
+
 .ld-theme-wrap {
   position: fixed; top: 14px; right: 18px; z-index: 120;
   display: flex; align-items: center; justify-content: flex-end;
@@ -830,6 +877,25 @@
 /* The chapter owns the sections under it, so they lose their own top rule. */
 .ld-chapter + section { padding-top: clamp(18px, 2.4vw, 30px); }
 
+/* The two cards under a chapter opener. .ld-whois carries the shared card
+   styling; this only handles the gap above them and the fact that they sit
+   inside .ld-wrap, which already has the gutter the grid tries to add again. */
+.ld-chapter-cards { margin-top: clamp(24px, 3.4vw, 44px); padding-top: 0; }
+/* Squared, and flush to the chapter's own measure: .ld-wrap already sets the
+   left edge the chapter name sits on, so the grid drops its inherited gutter
+   and runs from that edge to the end of the column. The rounded frame belongs
+   to "Who is Braino", where the grid is the section; here it is a division
+   under a heading, and a division has corners. */
+.ld-chapter-cards .po-character-grid {
+  margin: 0;
+  border-radius: 0;
+}
+.ld-chapter-cards .po-character-card { border-radius: 0; }
+/* Squared all the way through, including the art tile. A rounded panel inside
+   a squared frame is the one thing that would read as an accident. */
+.ld-chapter-cards .po-character-art { border-radius: 0; }
+
+
 /* The engines block used to follow the comparison table and carried a top
    margin to clear it. It opens the Foundry chapter now, so that margin is a
    hole between the chapter line and its own first paragraph. */
@@ -1022,7 +1088,7 @@
   border-right: 0;
   /* Cast to the left, since that is the only side still on the page. */
   box-shadow: -40px 44px 100px -52px rgba(0, 0, 0, 0.5);
-  aspect-ratio: 4 / 3;
+  aspect-ratio: 16 / 10;
   max-height: min(66vh, 620px);
 }
 

@@ -58,13 +58,57 @@ export function useBrainoTV(): BrainoTVApi {
   return ctx;
 }
 
+/* Films with a soundtrack must never start themselves out of a screen that is
+   below the fold or behind a footer, so this key is deliberately per-src and
+   per-browser rather than a global "autoplay is on" flag. */
+const AUTO_KEY = "braino-tv-autoplayed";
+
+/* The iframe path is for anything (a route, an embed). Only a real media file
+   can be handed to a <video> element, and only <video> can be muted, which is
+   the only kind of autoplay a browser will allow. */
+const MEDIA_FILE = /\.(mp4|m4v|mov|webm)(\?|#|$)/i;
+
+function alreadyAutoplayed(key: string) {
+  try { return localStorage.getItem(key) === "1"; } catch { return false; }
+}
+function rememberAutoplayed(key: string) {
+  try { localStorage.setItem(key, "1"); } catch { /* private mode: it just plays again */ }
+}
+
 /* `offer` turns the idle screen into a poster with a play button, for pages
-   that want a film to be the hero. It is deliberately a click and not an
-   autoplay: these films carry their own music, and a screen that is below the
-   fold (or below the footer) would otherwise play a soundtrack out of an
-   invisible iframe. Nothing here ever mounts the iframe on its own. */
-export function BrainoTVScreen({ className = "", offer }: { className?: string; offer?: { src: string; title: string } }) {
+   that want a film to be the hero.
+
+   `autoOnce` is opt-in per screen, and only the homepage hero uses it. On a
+   visitor's first landing the film simply runs, silently, once. Every visit
+   after that it is the poster again, where a click still gets the sound.
+   Muted is not a preference here: it is the only autoplay any browser permits
+   without a gesture, so the alternative is not sound, it is nothing. */
+export function BrainoTVScreen({ className = "", offer, autoOnce = false }: { className?: string; offer?: { src: string; title: string }; autoOnce?: boolean }) {
   const { nowPlaying, screenRef, stop, play } = useBrainoTV();
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const autoKey = `${AUTO_KEY}:${offer?.src ?? ""}`;
+
+  const [auto, setAuto] = useState(() => {
+    if (!autoOnce || !offer || !MEDIA_FILE.test(offer.src)) return false;
+    if (alreadyAutoplayed(autoKey)) return false;
+    try { if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return false; } catch { /* ignore */ }
+    return true;
+  });
+
+  useEffect(() => {
+    if (!auto) return;
+    const video = videoRef.current;
+    if (!video) return;
+    // Marked before the play attempt, not after: a visitor who lands, sees it
+    // start and reloads has had their one automatic play.
+    rememberAutoplayed(autoKey);
+    const started = video.play();
+    // iOS Low Power Mode and a few data-saver settings refuse even muted
+    // autoplay. Falling back to the poster leaves a play button rather than a
+    // frozen first frame with no way into it.
+    if (started && typeof started.catch === "function") started.catch(() => setAuto(false));
+  }, [auto, autoKey]);
+
   return (
     <div ref={screenRef} className={`btv-root ${className}`}>
       {nowPlaying ? (
@@ -79,6 +123,19 @@ export function BrainoTVScreen({ className = "", offer }: { className?: string; 
             allow="autoplay; fullscreen"
           />
           <button type="button" className="btv-close" onClick={stop} aria-label="Stop">✕</button>
+        </>
+      ) : auto && offer ? (
+        <>
+          <video
+            ref={videoRef}
+            className="btv-auto"
+            src={offer.src}
+            muted
+            playsInline
+            preload="auto"
+            onEnded={() => setAuto(false)}
+            aria-label={offer.title || "Braino"}
+          />
         </>
       ) : offer ? (
         <button type="button" className="btv-offer" onClick={() => play(offer.src, offer.title)}>
