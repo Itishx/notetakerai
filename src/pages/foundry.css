@@ -913,3 +913,36 @@
    here specifically: /distra redirects to #engines, and without this the tabs a
    visitor came for are the exact thing hidden behind the bar. */
 #engines, #two-problems, #code, #distra { scroll-margin-top: 96px; }
+
+/* The six engines. State is on the right of every row and never decorative:
+   one of these runs today and five do not, and a page that blurs that is worse
+   than a slow roadmap. */
+.fd-engines-six { list-style: none; margin: 0; padding: 0; }
+.fd-engines-six li {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: start;
+  padding: 18px 0;
+  border-top: 1px solid var(--ap-hairline);
+}
+.fd-engines-six li:first-child { border-top: 0; padding-top: 4px; }
+.fd-engines-six i {
+  font-style: normal; font-size: 14px; font-weight: 700;
+  color: var(--ap-accent); font-variant-numeric: tabular-nums; padding-top: 3px;
+}
+.fd-engines-six b { display: block; font-size: clamp(18px, 2vw, 21px); font-weight: 600; letter-spacing: -0.014em; color: var(--ap-ink); }
+.fd-six-job { display: block; margin: 2px 0 6px; font-size: 15px; font-weight: 600; color: var(--ap-accent); }
+.fd-engines-six p { margin: 0; font-size: 15px; line-height: 1.55; font-weight: 500; color: var(--ap-ink-soft); max-width: 58ch; }
+.fd-engines-six em {
+  font-style: normal; flex-shrink: 0; align-self: start; margin-top: 4px;
+  font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase;
+  color: var(--ap-ink-soft); border: 1px solid var(--ap-hairline);
+  border-radius: 999px; padding: 5px 11px; white-space: nowrap;
+}
+.fd-engines-six em.is-live { color: var(--ap-accent); border-color: var(--ap-accent); }
+
+@media (max-width: 620px) {
+  .fd-engines-six li { grid-template-columns: 32px minmax(0, 1fr); }
+  .fd-engines-six em { grid-column: 2; justify-self: start; margin-top: 10px; }
+}

@@ -1,6 +1,7 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import IomiNotch from "@/components/IomiNotch";
+import { DISTRA_ENGINES } from "@/data/distraEngines";
 import BrainoFooter from "@/components/BrainoFooter";
 import { Braino, BrainoDefs, useTime } from "@/components/BrainoChar";
 import MiniBraino from "@/components/MiniBraino";
@@ -8,6 +9,8 @@ import { BRAINO_WALKER_SVG } from "@/components/brainoWalkerSvg";
 import { BrainoTVProvider, BrainoTVScreen } from "@/components/BrainoTV";
 import EmotionNetwork from "@/components/EmotionNetwork";
 import HumanIntelligence from "@/components/HumanIntelligence";
+import MemoryEngineViz from "@/components/MemoryEngineViz";
+import HeraListening from "@/components/HeraListening";
 import { ArrowUpRight } from "lucide-react";
 import { EXTENSION_DOWNLOAD_URL, EXTENSION_DOWNLOAD_FILENAME, EXTENSION_VERSION } from "@/lib/extensionDownload";
 import "../styles/apple.css";
@@ -46,7 +49,7 @@ const NOTCH_NAV = [
   { to: "/#who", label: "Who it is for", note: "tell him what you do" },
   { to: "/#engines", label: "The two engines", note: "Braino Code and Distra" },
   { to: "/#why", label: "Why him", note: "and not another AI tool" },
-  { to: "/#hood", label: "Under the hood", note: "the mind and the heart" },
+  { to: "/#hood", label: "Under the hood", note: "the four things inside him" },
   { to: "/#pricing", label: "Pricing", note: "three plans, no maths" },
   { to: "/#faq", label: "Questions", note: "the honest answers" },
 ];
@@ -157,14 +160,9 @@ const ENGINE_DETAIL: Array<{
   },
   {
     tag: "Engine two", name: "Distra", line: "Shipped, to actually seen", tone: "ac-green",
-    body: "You can ship a real product in a weekend now, and by Friday nobody has heard of it. The reason is never the product. Posting consistently in your own voice is a job, and it is the seventh one you are already doing badly. Distra is the half of the problem nobody sells a fix for.",
-    points: [
-      ["01", "He learns how you write", "By reading two hundred of your own posts, ranked by what actually worked. Not by making you describe your own voice in a text box, which nobody alive can do."],
-      ["02", "He writes from what you shipped", "He reads your commits and your week, and there are drafts waiting in the morning. No more staring at an empty box at 11pm wondering what you even did."],
-      ["03", "He picks the hour and posts it", "From your own history, not some best practice blog post. Then he goes and checks it actually posted, instead of assuming."],
-      ["04", "He finds the conversations", "The posts worth replying to, with the reply already written in your voice. You press send, because that part should stay human."],
-    ],
-    foot: "Six engines behind it, working the same problem from different angles. All of them on the Foundry page.",
+    body: "You can ship a real product in a weekend now, and by Friday nobody has heard of it. The reason is never the product. Distribution is not one job either, it is six, each with its own pile of tools that do not talk to each other. Distra is one character running all six.",
+    points: DISTRA_ENGINES.map((e) => [e.n, `${e.name}. ${e.job}`, e.detail] as [string, string, string]),
+    foot: "Content is running today. The other five are the build, in that order, and the site will say so until they are real.",
     to: "/braino?view=foundry#distra", cta: "See Distra",
   },
 ];
@@ -699,17 +697,30 @@ export default function Landing() {
       </section>
 
       {/* ── 7. Under the hood ────────────────────────────────────────── */}
+      {/* Four, not two. The mind and the heart were the two we could point at,
+          but the memory has been in production since June and the ears ship as
+          their own thing, and a reader who only sees two engines has no idea
+          why he remembers Tuesday or how he heard you at all. */}
       <section className="apple-blog howworks" id="hood">
         <div className="hw-title apple-reveal">
           <p className="be" style={{ color: "var(--ap-violet)" }}>Under the hood</p>
           <h2>Braino OS.</h2>
           <p className="hw-sub">
-            Every Braino runs on the same mind. Two engines nobody else could be bothered to build:
-            the one that works out what you actually meant, and the one that reads the room. That is
-            why he feels like someone instead of something.
+            Every Braino runs on the same four things. A mind that works out what you meant, a
+            heart that reads the room, a memory that keeps what matters, and a pair of ears.
+            That is why he feels like someone instead of something.
           </p>
         </div>
         <div className="apple-blog-grid apple-reveal">
+          <Link className="hw-card ac-blue" to="/human-intelligence">
+            <div className="hw-cover"><span className="hw-notch" aria-hidden="true"><i /><i /></span><HumanIntelligence /></div>
+            <div className="hw-body">
+              <span className="hw-tag"><span className="dot" />The mind</span>
+              <h3>Human Intelligence</h3>
+              <p>He works a problem the way a person does. Your screen, your memory, the conversation, the time, the place, all pulled together to figure out what you actually want instead of what you literally typed.</p>
+            </div>
+            <span className="hw-read">Explore Human Intelligence <ArrowUpRight /></span>
+          </Link>
           <Link className="hw-card ac-coral" to="/emotional-intelligence">
             <div className="hw-cover"><span className="hw-notch" aria-hidden="true"><i /><i /></span><EmotionNetwork /></div>
             <div className="hw-body">
@@ -719,14 +730,23 @@ export default function Landing() {
             </div>
             <span className="hw-read">Explore the Emotional Engine <ArrowUpRight /></span>
           </Link>
-          <Link className="hw-card ac-blue" to="/human-intelligence">
-            <div className="hw-cover"><span className="hw-notch" aria-hidden="true"><i /><i /></span><HumanIntelligence /></div>
+          <Link className="hw-card ac-violet" to="/dashboard">
+            <div className="hw-cover"><span className="hw-notch" aria-hidden="true"><i /><i /></span><MemoryEngineViz /></div>
             <div className="hw-body">
-              <span className="hw-tag"><span className="dot" />The mind</span>
-              <h3>Human Intelligence</h3>
-              <p>He works a problem the way a person does. Your screen, your memory, the conversation, the time, the place, all pulled together to figure out what you actually want instead of what you literally typed.</p>
+              <span className="hw-tag"><span className="dot" />The memory</span>
+              <h3>Memory Engine</h3>
+              <p>Nobody has ever remembered to say remember this. So he decides for himself what was worth keeping, writes it down, and keeps it current. Every fact is yours to read, edit or delete.</p>
             </div>
-            <span className="hw-read">Explore Human Intelligence <ArrowUpRight /></span>
+            <span className="hw-read">See what he has kept <ArrowUpRight /></span>
+          </Link>
+          <Link className="hw-card ac-green" to="/braino?view=hera">
+            <div className="hw-cover"><span className="hw-notch" aria-hidden="true"><i /><i /></span><HeraListening /></div>
+            <div className="hw-body">
+              <span className="hw-tag"><span className="dot" />The ears</span>
+              <h3>BrainoHERA</h3>
+              <p>Hold a key anywhere on the Mac, say the thing, and the words land at your cursor in whatever app you were already in. No window, no answer, no chat. Just what you said, written down.</p>
+            </div>
+            <span className="hw-read">Explore BrainoHERA <ArrowUpRight /></span>
           </Link>
         </div>
       </section>

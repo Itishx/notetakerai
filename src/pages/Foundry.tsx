@@ -2,11 +2,14 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { ArrowUpRight } from "lucide-react";
 import IomiNotch, { type IomiNotchTab } from "@/components/IomiNotch";
+import { DISTRA_ENGINES } from "@/data/distraEngines";
 import { YapModeContent } from "./YapMode";
 import BrainoFooter from "@/components/BrainoFooter";
 import { Braino, BrainoDefs } from "@/components/BrainoChar";
 import EmotionNetwork from "@/components/EmotionNetwork";
 import HumanIntelligence from "@/components/HumanIntelligence";
+import MemoryEngineViz from "@/components/MemoryEngineViz";
+import HeraListening from "@/components/HeraListening";
 import { BRAINO_WALKER_SVG } from "@/components/brainoWalkerSvg";
 import { BrainoIntroduction } from "./Waitlist";
 import { BrainoTVProvider, BrainoTVScreen, useBrainoTV } from "@/components/BrainoTV";
@@ -109,7 +112,7 @@ const BRAINO_FAQS = [
   },
   {
     q: "What is Braino OS?",
-    a: "The layer underneath both. The Human Intelligence Layer works out what you actually meant; the Emotional Engine decides how he shows up. It is why he stays the same Braino everywhere.",
+    a: "The layer underneath every Braino, and it is four things. The Human Intelligence Layer works out what you actually meant. The Emotional Engine decides how he shows up. The Memory Engine keeps what matters without being asked. HERA is the ears. It is why he stays the same Braino everywhere.",
   },
   {
     q: "Does he always see my screen?",
@@ -372,18 +375,28 @@ function BrainoOSSection() {
       <div className="hw-title apple-reveal">
         <p className="be" style={{ color: "var(--ap-violet)" }}>What powers him</p>
         <h2>Braino OS.</h2>
-        <p className="hw-sub">One operating layer keeps Braino coherent across every capability: the mind that understands what you mean, and the heart that understands the moment.</p>
+        <p className="hw-sub">One operating layer keeps Braino coherent across every capability. Four things: the mind that understands what you mean, the heart that understands the moment, the memory that holds what matters, and the ears that hear you.</p>
       </div>
       <div className="apple-blog-grid apple-reveal">
-        <Link className="hw-card ac-coral" to="/emotional-intelligence">
-          <div className="hw-cover"><span className="hw-notch" aria-hidden="true"><i /><i /></span><EmotionNetwork /></div>
-          <div className="hw-body"><span className="hw-tag"><span className="dot" />The heart</span><h3>Emotional Engine</h3><p>Memory, personality and emotional attunement. The reason Braino feels like Braino.</p></div>
-          <span className="hw-read">Explore the Emotional Engine <ArrowUpRight /></span>
-        </Link>
         <Link className="hw-card ac-blue" to="/human-intelligence">
           <div className="hw-cover"><span className="hw-notch" aria-hidden="true"><i /><i /></span><HumanIntelligence /></div>
           <div className="hw-body"><span className="hw-tag"><span className="dot" />The mind</span><h3>Human Intelligence Layer</h3><p>Screen, memory, time and context resolve what you actually mean.</p></div>
           <span className="hw-read">Explore Human Intelligence <ArrowUpRight /></span>
+        </Link>
+        <Link className="hw-card ac-coral" to="/emotional-intelligence">
+          <div className="hw-cover"><span className="hw-notch" aria-hidden="true"><i /><i /></span><EmotionNetwork /></div>
+          <div className="hw-body"><span className="hw-tag"><span className="dot" />The heart</span><h3>Emotional Engine</h3><p>Personality and emotional attunement. The reason Braino feels like Braino.</p></div>
+          <span className="hw-read">Explore the Emotional Engine <ArrowUpRight /></span>
+        </Link>
+        <Link className="hw-card ac-violet" to="/dashboard">
+          <div className="hw-cover"><span className="hw-notch" aria-hidden="true"><i /><i /></span><MemoryEngineViz /></div>
+          <div className="hw-body"><span className="hw-tag"><span className="dot" />The memory</span><h3>Memory Engine</h3><p>He decides what was worth keeping and writes it down. Yours to read, edit or delete.</p></div>
+          <span className="hw-read">See what he has kept <ArrowUpRight /></span>
+        </Link>
+        <Link className="hw-card ac-green" to="/braino?view=hera">
+          <div className="hw-cover"><span className="hw-notch" aria-hidden="true"><i /><i /></span><HeraListening /></div>
+          <div className="hw-body"><span className="hw-tag"><span className="dot" />The ears</span><h3>BrainoHERA</h3><p>Hold a key, say the thing, and the words land at your cursor in any app.</p></div>
+          <span className="hw-read">Explore BrainoHERA <ArrowUpRight /></span>
         </Link>
       </div>
     </section>
@@ -594,7 +607,7 @@ const ECOSYSTEM_NODES: Array<{
 }> = [
   { id: "browser", number: "01", name: "Braino", place: "Browser", role: "Reads the page, talks, searches and works beside you.", color: "coral", view: "browser" },
   { id: "foundry", number: "02", name: "Braino Foundry", place: "Mac", role: "Lives in the notch and operates apps, files, mail and meetings.", color: "amber", view: "foundry" },
-  { id: "os", number: "03", name: "Braino OS", place: "Intelligence", role: "Memory, reasoning, personality and the Human Intelligence Layer.", color: "violet", to: "/human-intelligence" },
+  { id: "os", number: "03", name: "Braino OS", place: "Intelligence", role: "The mind, the heart, the memory and the ears, under every Braino.", color: "violet", to: "/human-intelligence" },
   { id: "hera", number: "04", name: "BrainoHERA", place: "Voice", role: "Talk and it types, straight into any Mac text field.", color: "green", view: "hera" },
   { id: "studio", number: "05", name: "Braino Studio", place: "Identity", role: "Face, wardrobe, movement, palette and the way he enters a room.", color: "pink", to: "/build-braino" },
 ];
@@ -1110,6 +1123,26 @@ function EngineTabs() {
                 <li key={d.n} className={d.ac}>
                   <i>{d.n}</i>
                   <div><b>{d.name}</b><p>{d.line}</p></div>
+                </li>
+              ))}
+            </ol>
+
+            <p className="apple-eyebrow fd-sub">The six engines</p>
+            <p className="fd-panel-lede sm">
+              Distribution is six separate jobs, each with its own pile of tools that do not talk
+              to each other. Running all six is the product. <b>One of them is live today</b>, and
+              this page will keep saying which until the rest are.
+            </p>
+            <ol className="fd-engines-six">
+              {DISTRA_ENGINES.map((e) => (
+                <li key={e.n}>
+                  <i>{e.n}</i>
+                  <div>
+                    <b>{e.name}</b>
+                    <span className="fd-six-job">{e.job}</span>
+                    <p>{e.detail}</p>
+                  </div>
+                  <em className={e.state === "Running" ? "is-live" : undefined}>{e.state}</em>
                 </li>
               ))}
             </ol>
