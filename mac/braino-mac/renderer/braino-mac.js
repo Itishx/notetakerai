@@ -4253,6 +4253,56 @@ function transcriptStats(text) {
 // audio being recorded, not an instruction.
 const RECORDING_CONTROL_RE = /\b(?:stop|end|finish|pause|done)\b.*\b(?:record|recording|screen|meeting)\b|\b(?:stop|done)\s+recording\b|\bthat'?s (?:enough|it)\b/i;
 
+// "Braino, stop listening" is the spoken Control-twice.
+//
+// Deliberately narrow, for two reasons. A bare "stop" has to stay a barge-in —
+// that is how you cut him off mid-sentence and it is the single most used
+// control there is — so every pattern here names what to stop. And while a
+// screen or meeting recording is running the mic also hears the tab, so a
+// podcast saying "we should stop listening to critics" must not switch him
+// off: the phrase has to be effectively the whole utterance, not buried in one.
+const STOP_LISTENING_WAKE = /^(?:hey\s+|ok(?:ay)?\s+)?(?:braino|breno|bruno|brainer|brano|braido|raino)\b[\s,.]*/i;
+const STOP_LISTENING_LEAD = /^(?:you can |please |just |now |ok(?:ay)?[,\s]+|alright[,\s]+)+/i;
+
+const STOP_LISTENING_PATTERNS = [
+  /^stop\s+listening(?:\s+to\s+me)?\b/,
+  /^(?:stop|quit|end|cut|turn off|switch off|shut off|kill)\s+(?:the\s+|your\s+|it\s+)?(?:listening|listen|mic|microphone|voice|session)\b/,
+  /^(?:stop|quit)\s+(?:hearing|recording)\s+me\b/,
+  /^(?:go (?:back )?to sleep|go to sleep)\b/,
+  /^(?:that(?:'|’)?s all|that will be all|thats all|that(?:'|’)?ll be all)\b/,
+  /^(?:i(?:'|’)?m done|we(?:'|’)?re done)(?:\s+(?:talking|here|for now))?\b/,
+];
+
+/** True when the whole utterance is "switch yourself off", not a sentence that
+ *  happens to contain those words. */
+function isStopListeningPhrase(text) {
+  let rest = String(text || "").trim().replace(/[.!?]+$/g, "");
+  if (!rest) return false;
+  const addressed = STOP_LISTENING_WAKE.test(rest);
+  rest = rest.replace(STOP_LISTENING_WAKE, "").replace(STOP_LISTENING_LEAD, "").trim().toLowerCase();
+  if (!rest) return false;
+  // Six words is room for "stop listening to me for now" and no room for a
+  // sentence with an opinion in it.
+  if (rest.split(/\s+/).length > 6) return false;
+  const hit = STOP_LISTENING_PATTERNS.some((pattern) => pattern.test(rest));
+  if (!hit) return false;
+  // The softer sign-offs ("that's all", "go to sleep") are things people say to
+  // each other, so those need his name on them. "Stop listening" does not.
+  const explicit = /^(?:stop|quit|end|cut|turn off|switch off|shut off|kill)\b/.test(rest);
+  return explicit || addressed;
+}
+
+/** The one implementation of "switch the session off", shared by the hotkey and
+ *  the spoken phrase so they can never drift apart. */
+function stopListeningNow(source) {
+  stopSpeechOutput();
+  stopRealtimeVoice();
+  stopRecognition();
+  setStatus("ready", "Double Space to show/hide");
+  setBubble("Stopped listening.", 1200);
+  logRenderer("voice.stopped", { source });
+}
+
 function shouldAcceptVoiceTranscript(text) {
   const stats = transcriptStats(text);
   if (!stats.normalized || stats.wordCount === 0) return false;
@@ -6634,6 +6684,14 @@ function flushRealtimeTranscript(reason) {
     bufferDictationTranscript(transcript);
     return;
   }
+  if (isStopListeningPhrase(transcript)) {
+    console.log(`[Braino 🎤 IN] "${transcript}" -> stop listening`);
+    logRenderer("voice.stop_phrase", { transcript: transcript.slice(0, 160), voiceTurnInFlight });
+    nfSetHeard(transcript, { durationMs: 1200 });
+    voiceTurnInFlight = false;
+    stopListeningNow("voice_phrase");
+    return;
+  }
   if (voiceTurnInFlight || !accepted) {
     if (speaking || processing || voiceTurnInFlight) {
       setStatus(speaking ? "speaking" : "thinking", speaking ? "Speaking" : "Delegating");
@@ -7756,11 +7814,7 @@ function toggleVoice() {
   }
   // Stage 2: not talking (or voice already off) — normal on/off toggle.
   if (realtimeActive || realtimeConnecting || listening) {
-    stopSpeechOutput();
-    stopRealtimeVoice();
-    stopRecognition();
-    setStatus("ready", "Double Space to show/hide");
-    setBubble("Stopped listening.", 1200);
+    stopListeningNow("control_hotkey");
     return;
   }
   void startListening();

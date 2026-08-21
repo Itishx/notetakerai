@@ -85,6 +85,7 @@ const Contact = lazy(() => import("./pages/Contact.tsx"));
 const ProductOverview = lazy(() => import("./pages/ProductOverview.tsx"));
 const ProductOverviewHomepageDocs = lazy(() => import("./pages/ProductOverviewHomepageDocs.tsx"));
 const Foundry = lazy(() => import("./pages/Foundry.tsx"));
+const HeroLab = lazy(() => import("./pages/HeroLab.tsx"));
 const FoundryDocs = lazy(() => import("./pages/FoundryDocs.tsx"));
 const MacMoonwalkPartyTrickDocs = lazy(() => import("./pages/MacMoonwalkPartyTrickDocs.tsx"));
 const MacLaunchVideoRitualDocs = lazy(() => import("./pages/MacLaunchVideoRitualDocs.tsx"));
@@ -285,6 +286,7 @@ function AppRoutes() {
         <Route path="/whole-mind" element={<WholeMind />} />
         <Route path="/engine-log" element={<EngineLog />} />
         <Route path="/code" element={<BrainoCode />} />
+        <Route path="/hero-lab" element={<HeroLab />} />
         <Route path="/site/:buildId" element={<BuiltSite />} />
         <Route path="/commands" element={<Commands />} />
         <Route path="/deck" element={<Deck />} />
