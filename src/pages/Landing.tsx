@@ -717,12 +717,6 @@ export default function Landing() {
               </div>
             </article>
           ))}
-
-          <p className="ld-hera">
-            There is also <strong className="hera-shimmer">HERA</strong>, which is not a third Braino, so relax. It is a mode
-            either one drops into: hold a key, talk, and the words land at your cursor in whatever app
-            you were already in. It never talks back, which some people find refreshing.
-          </p>
         </div>
       </section>
       {/* ── Chapter three ────────────────────────────────────────────── */}

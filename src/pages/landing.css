@@ -460,7 +460,7 @@
 .ld-mark svg { overflow: visible; }
 .ld-mark:focus-visible { outline: 2px solid var(--ap-coral); outline-offset: 2px; }
 @media (max-width: 620px) {
-  .ld-mark { left: 10px; }
+  .ld-mark { top: 10px; left: 10px; }
 }
 
 .ld-theme-wrap {
@@ -508,11 +508,6 @@
 
 
 /* ── HERA: a footnote, not a third column ─────────────────────────────── */
-.ld-hera {
-  margin: clamp(34px, 4vw, 52px) auto 0; max-width: 62ch; text-align: center;
-  font-size: 14.5px; line-height: 1.65; color: var(--ap-ink-soft);
-}
-.ld-hera strong { color: var(--ap-ink); font-weight: 700; }
 
 /* The ask box is the whole section until it is answered, so it gets room. */
 .ld-ask { margin-bottom: clamp(30px, 4vw, 46px); }
@@ -700,7 +695,7 @@
   color: var(--ap-accent);
 }
 
-.ld-engine-body {
+.ld-engine .ld-engine-body {
   margin: 6px 0 18px;
   font-size: 15px;
   line-height: 1.55;
@@ -714,19 +709,8 @@
 
 /* HERA takes the green shimmer wherever it is named, the way Iomi takes gold.
    Defined locally because braino-hera-teaser.css is not loaded on this page. */
-.ld-hera .hera-shimmer {
-  background-image: linear-gradient(100deg, #17693e 0%, #4ac784 23%, #d8ffe9 43%, #4ac784 63%, #17693e 100%);
-  background-size: 220% 100%;
-  background-clip: text;
-  -webkit-background-clip: text;
-  color: transparent;
-  -webkit-text-fill-color: transparent;
-  font-weight: 700;
-  animation: ldHeraShimmer 2.2s linear infinite;
-}
 @keyframes ldHeraShimmer { to { background-position: -220% 0; } }
 @media (prefers-reduced-motion: reduce) {
-  .ld-hera .hera-shimmer { animation: none; color: #17693e; -webkit-text-fill-color: #17693e; }
 }
 
 
@@ -942,10 +926,10 @@
 .ld-engine-points { list-style: none; margin: 0; padding: 0; }
 .ld-engine-points li {
   display: grid;
-  grid-template-columns: 44px minmax(0, 1fr);
-  gap: 12px;
+  grid-template-columns: 52px minmax(0, 1fr);
+  gap: 16px;
   align-items: start;
-  padding: 16px 0;
+  padding: 22px 0;
   border-top: 1px solid var(--ap-hairline);
 }
 .ld-engine-points li:first-child { border-top: 0; padding-top: 0; }
@@ -959,13 +943,13 @@
 }
 .ld-engine-points b {
   display: block;
-  margin-bottom: 5px;
+  margin-bottom: 8px;
   font-size: clamp(17px, 1.9vw, 20px);
   font-weight: 600;
   letter-spacing: -0.012em;
   color: var(--ap-ink);
 }
-.ld-engine-points p { margin: 0; font-size: 15px; line-height: 1.55; font-weight: 500; color: var(--ap-ink-soft); max-width: 60ch; }
+.ld-engine-points p { margin: 0; font-size: 15.5px; line-height: 1.62; font-weight: 500; color: var(--ap-ink-soft); max-width: 64ch; }
 
 .ld-engine-foot {
   margin: clamp(22px, 3vw, 28px) 0 20px;
