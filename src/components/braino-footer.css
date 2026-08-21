@@ -324,7 +324,11 @@
   border-top: 0;
 }
 .bf-legal { display: flex; gap: 16px; }
-.bf-legal a { color: inherit; text-decoration: none; transition: color .18s ease; }
+.bf-legal a {
+  color: inherit; text-decoration: none; transition: color .18s ease;
+  display: inline-flex; align-items: center;
+  min-height: 40px; padding: 0 4px;
+}
 .bf-legal a:hover { color: var(--bf-ink); }
 .bf-game-window .bf-playstrip {
   margin-top: 0;
@@ -644,7 +648,7 @@ html.bf-footer-game-visible #sb-brain-mascot-wrapper {
 
 .bf-game-sound {
   position: absolute; z-index: 31; right: 10px; top: 10px;
-  width: 30px; height: 30px; line-height: 1;
+  width: 36px; height: 36px; line-height: 1;
   font-size: 13px; cursor: pointer;
   border-radius: 999px;
   border: 2px solid rgba(31, 33, 48, 0.55);

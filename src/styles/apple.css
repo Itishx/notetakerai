@@ -558,7 +558,7 @@
   border: 1px solid rgba(29,29,31,0.1); border-radius: 16px;
   background: #fbfbfd; overflow: hidden;
   display: flex; flex-direction: column;
-  font-size: clamp(10px, 1.25vw, 13px);
+  font-size: clamp(11.5px, 1.25vw, 13px);
 }
 
 /* ---- memory ---- */
@@ -610,6 +610,18 @@
 .hera-typed { margin: 0; padding: 1.2em; font-size: 1.08em; line-height: 1.45; font-weight: 500; color: #1d1d1f; }
 .hera-caret { display: inline-block; width: 0.09em; height: 1.05em; margin-left: 0.06em; background: var(--ap-green); vertical-align: -0.16em; animation: heraCaret 1s steps(1) infinite; }
 @keyframes heraCaret { 0%,50% { opacity: 1; } 51%,100% { opacity: 0; } }
+
+/* On a phone these two cards are about 350px wide, and everything inside them
+   is sized in em off the container, so the 0.86em sub-labels were landing at
+   9.9px. The card is aspect-ratio locked, so the type cannot simply grow: it
+   grows and the list gets shorter, which is the right trade at that size
+   because three remembered facts make the point as well as five. */
+@media (max-width: 700px) {
+  .mem-viz, .hera-viz { font-size: 12.5px; }
+  .mem-rows li:nth-child(n + 4) { display: none; }
+  .mem-rows li span { font-size: 11.5px; }
+  .hera-key { font-size: 11.5px; }
+}
 
 @media (prefers-reduced-motion: reduce) {
   .mem-rows li.is-new, .hera-bars i, .hera-caret { animation: none; }

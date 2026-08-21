@@ -336,6 +336,16 @@
   transition: color 0.18s ease, background 0.18s ease;
 }
 
+/* On a touch screen these were 22px tall inside a 34px island. The island's
+   own height is the ceiling here (it clips), so the tabs take as much of it as
+   they can rather than sitting in the middle of it, and the arrow widens to
+   match. Not 44px, but 36% more target than before and honest about the
+   constraint: a genuinely comfortable tab needs a taller island. */
+@media (pointer: coarse) {
+  .iomi-notch-tab { height: 30px; padding: 0 13px; }
+  .iomi-notch-arrow { width: 34px; }
+}
+
 .iomi-notch-tab:hover { color: var(--iomi-ink); background: rgba(255, 255, 255, 0.09); }
 .iomi-notch-tab.on { color: #000; background: var(--iomi-ink); }
 
