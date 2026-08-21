@@ -118,10 +118,11 @@ const IdeaTracker = lazy(() => import("./pages/IdeaTracker.tsx"));
 const OnboardingFlow = lazy(() => import("./pages/OnboardingFlow.tsx"));
 const WholeMind = lazy(() => import("./pages/WholeMind.tsx"));
 const EngineLog = lazy(() => import("./pages/EngineLog.tsx"));
+const BrainoCode = lazy(() => import("./pages/BrainoCode.tsx"));
+const BuiltSite = lazy(() => import("./pages/BuiltSite.tsx"));
 const Commands = lazy(() => import("./pages/Commands.tsx"));
 const Deck = lazy(() => import("./pages/Deck.tsx"));
 const BrainoDeck = lazy(() => import("./pages/BrainoDeck.tsx"));
-const DistraPage = lazy(() => import("./pages/DistraPage.tsx"));
 const DistraPlan = lazy(() => import("./pages/DistraPlan.tsx"));
 const XDashboard = lazy(() => import("./pages/XDashboard.tsx"));
 const XSetup = lazy(() => import("./pages/XSetup.tsx"));
@@ -283,10 +284,12 @@ function AppRoutes() {
         <Route path="/ideas" element={<IdeaTracker />} />
         <Route path="/whole-mind" element={<WholeMind />} />
         <Route path="/engine-log" element={<EngineLog />} />
+        <Route path="/code" element={<BrainoCode />} />
+        <Route path="/site/:buildId" element={<BuiltSite />} />
         <Route path="/commands" element={<Commands />} />
         <Route path="/deck" element={<Deck />} />
         <Route path="/pitch" element={<Deck />} />
-        <Route path="/distra" element={<DistraPage />} />
+        <Route path="/distra" element={<Navigate to="/braino?view=foundry#distra" replace />} />
         <Route path="/distra/plan" element={<DistraPlan />} />
         <Route path="/braino-deck" element={<BrainoDeck />} />
         <Route path="/everything" element={<BrainoDeck />} />

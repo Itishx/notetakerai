@@ -11,7 +11,7 @@ import "./braino-footer.css";
    them again and the game sits underneath rather than instead of them.
 
    The columns follow the site's own shape as of the two-page rewrite: the
-   landing page's sections first, then Braino Distra and its channels, then what
+   landing page's sections first, then Braino Foundry and its two engines, then what
    everything runs on, then the reading. Foundry is no longer a column of its
    own, because the landing page stopped selling it as a third product.
    The original hide/restore reasoning lives in:
@@ -20,26 +20,25 @@ import "./braino-footer.css";
 
 const FOOTER_COLUMNS: Array<{ head: string; links: Array<[string, string]> }> = [
   {
-    // Two products, in the order the site now argues them: the companion is how
-    // you meet him, Distra is what you hire. Foundry is gone from the columns
-    // because the landing page no longer sells it as a third thing.
+    // Two tiers, in the order the site argues them: the companion is how you
+    // meet him, Foundry is what you hire. Distra is no longer a column of its
+    // own, because it stopped being a product and became one of Foundry's two
+    // engines, and a footer that still lists it top level teaches the old shape.
     head: "Braino",
     links: [
       ["What he does", "/#does"],
       ["Who it is for", "/#who"],
-      ["Why not ChatGPT", "/#why"],
+      ["Why not another AI tool", "/#why"],
       ["Pricing", "/#pricing"],
       ["Questions", "/#faq"],
     ],
   },
   {
-    head: "Braino Distra",
+    head: "Braino Foundry",
     links: [
-      ["What it is", "/distra"],
-      ["All channels", "/channels"],
-      ["On X", "/braino-for-x"],
-      ["On LinkedIn", "/braino-for-linkedin"],
-      ["The full plan", "/distra/plan"],
+      ["Braino Foundry", "/braino?view=foundry"],
+      ["Braino Code", "/braino?view=foundry#code"],
+      ["Braino Distra", "/braino?view=foundry#distra"],
     ],
   },
   {

@@ -38,16 +38,17 @@ const ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 const SunIcon = () => (<svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="4" stroke="currentColor" strokeWidth="1.6"/><path d="M12 2v2M12 20v2M4 12H2M22 12h-2M5 5l1.4 1.4M17.6 17.6 19 19M19 5l-1.4 1.4M6.4 17.6 5 19" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>);
 const MoonIcon = () => (<svg viewBox="0 0 24 24" fill="none"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"/></svg>);
 
+/* Follows the page's own chapters, so the menu and the scroll agree. */
 const NOTCH_NAV = [
   { to: "/#who-is", label: "Who he is", note: "the character" },
+  { to: "/#kinds", label: "Braino comes in two", note: "companion and Foundry" },
   { to: "/#does", label: "What he does", note: "the four things" },
   { to: "/#who", label: "Who it is for", note: "tell him what you do" },
-  { to: "/#why", label: "Why him", note: "and not ChatGPT" },
-  { to: "/#kinds", label: "The two Brainos", note: "companion and Distra" },
+  { to: "/#engines", label: "The two engines", note: "Braino Code and Distra" },
+  { to: "/#why", label: "Why him", note: "and not another AI tool" },
   { to: "/#hood", label: "Under the hood", note: "the mind and the heart" },
   { to: "/#pricing", label: "Pricing", note: "three plans, no maths" },
   { to: "/#faq", label: "Questions", note: "the honest answers" },
-  { to: "/distra", label: "Braino Distra", note: "you built it, nobody saw it" },
 ];
 
 /* One accent per feature, the same way the deck gives one accent per act: the
@@ -125,24 +126,49 @@ const PEOPLE = [
       ["Meetings", "Investor calls and customer calls. Notes after, and a list of what you promised."],
       ["Delegate", "Book the flight, buy the domain, chase the renewal you keep forgetting."],
     ] },
-  { id: "everyone", label: "Everyone else",
-    line: "Thirty small frictions a day that nobody should be doing.",
-    rows: [
-      ["Chat with the page", "Whatever is in front of you. The terms nobody reads, the recipe, the tax page."],
-      ["Notes from audio", "The long video you want the substance of and not the forty minutes."],
-      ["Meetings", "The standup you zoned out in."],
-      ["Delegate", "The booking, the form, the thing in seven tabs."],
-    ] },
 ];
 
 /* The comparison. Read across, not down: the same question answered twice. */
 const COMPARE: Array<[string, string, string]> = [
-  ["What it is for", "Getting through your day", "Getting your product seen"],
-  ["Where he lives", "Your browser, on every page", "X and LinkedIn, with Reddit and Instagram next"],
-  ["What he does", "Chats, takes notes, sits in meetings, runs errands", "Learns your writing, posts for you, finds conversations worth entering"],
-  ["Who it is for", "Anyone with a screen", "Founders who shipped something to complete silence"],
-  ["What it costs", "Free, then fifteen a month", "Thirty three a month, companion included"],
+  ["What it handles", "Your day", "Your company"],
+  ["What he does", "Chats with the page you are on, takes notes, sits in your meetings, runs errands", "Braino Code builds the product. Distra gets it seen."],
+  ["Who it is for", "Anyone with a screen, founders included", "Founders, from the idea to first traction"],
+  ["When you need it", "From day one", "The day you start building something real"],
 ];
+
+/* Foundry is one purchase with two engines inside it. Naming them as a pair is
+   the whole point: the reason to buy it is that one character does both ends,
+   so what Distra learns in public goes back into what Code builds next. */
+const ENGINE_DETAIL: Array<{
+  tag: string; name: string; line: string; tone: string; body: string;
+  points: Array<[string, string, string]>; foot: string; to: string; cta: string;
+}> = [
+  {
+    tag: "Engine one", name: "Braino Code", line: "Idea to a shipped MVP", tone: "ac-blue",
+    body: "Lovable, Cursor and v0 already build things, and pretending otherwise would be silly. What none of them do is disagree with you. You specify, they execute, and a badly specified idea becomes a well built wrong thing. Braino works out what you are actually building first, which is the part a co-founder does and a tool never has.",
+    points: [
+      ["01", "He asks before he builds", "You talk the idea through and he asks the questions that matter: what this is for, who it is for, and what happens if nobody wants it. He will tell you when an idea is thinner than you think it is."],
+      ["02", "He decides how it should look", "A palette, a typeface and a shape for the page, chosen from your brief rather than from habit. A security product does not come back looking like a bakery."],
+      ["03", "He writes the whole thing", "Real copy, real structure, responsive and accessible. Not a wireframe with lorem ipsum in it waiting for you to finish the job."],
+      ["04", "He changes it while you watch", "Make the background red lands in about fourteen seconds, because he edits the one line that matters instead of rebuilding the site."],
+    ],
+    foot: "Working today: a spoken sentence becomes a live, designed website in about four minutes.",
+    to: "/code", cta: "See Braino Code",
+  },
+  {
+    tag: "Engine two", name: "Distra", line: "Shipped, to actually seen", tone: "ac-green",
+    body: "You can ship a real product in a weekend now, and by Friday nobody has heard of it. The reason is never the product. Posting consistently in your own voice is a job, and it is the seventh one you are already doing badly. Distra is the half of the problem nobody sells a fix for.",
+    points: [
+      ["01", "He learns how you write", "By reading two hundred of your own posts, ranked by what actually worked. Not by making you describe your own voice in a text box, which nobody alive can do."],
+      ["02", "He writes from what you shipped", "He reads your commits and your week, and there are drafts waiting in the morning. No more staring at an empty box at 11pm wondering what you even did."],
+      ["03", "He picks the hour and posts it", "From your own history, not some best practice blog post. Then he goes and checks it actually posted, instead of assuming."],
+      ["04", "He finds the conversations", "The posts worth replying to, with the reply already written in your voice. You press send, because that part should stay human."],
+    ],
+    foot: "Six engines behind it, working the same problem from different angles. All of them on the Foundry page.",
+    to: "/braino?view=foundry#distra", cta: "See Distra",
+  },
+];
+
 
 /* Pricing as split cards: identity on the left of each card, contents on the
    right, the way Maze does it. The tri-state comparison table this replaced was
@@ -180,10 +206,10 @@ const PLANS: Array<{
     ],
   },
   {
-    badge: "$33 per month", name: "Braino Distra", tall: true,
+    badge: "$50 per month", name: "Braino Foundry", tall: true,
     desc: "For founders who shipped something and heard absolutely nothing back.",
     cta: "Explore Distra", href: "/distra",
-    stats: ["First 100, then $83. Yours stays $33.", "Runs on a server, not your laptop"],
+    stats: ["Both engines, one price", "Runs on a server, not your laptop"],
     incHead: "Everything in Pro, and:",
     includes: [
       "He learns how you actually write",
@@ -208,9 +234,13 @@ const RECEIPT_TOTAL = RECEIPT.reduce((n, [, c]) => n + c, 0);
 
 const FAQ = [
   { q: "Is it actually free?",
-    a: "Yes. Not free-for-fourteen-days-then-we-take-your-card free. Every feature is in there. It caps by session, the way a free ChatGPT window does: you get a stretch, it resets, and when you reach the end he tells you instead of silently billing you." },
-  { q: "Why is Distra more than the companion?",
-    a: "Because the companion saves you an hour and Distra does a job you would otherwise hire someone for. A ghostwriter is five hundred a month and has never once read your commits at two in the morning." },
+    a: "Yes. Not free-for-fourteen-days-then-we-take-your-card free. Every feature is in there. It caps by session, the way any free AI window does: you get a stretch, it resets, and when you reach the end he tells you instead of silently billing you." },
+  { q: "What is Braino Foundry, and do I need it?",
+    a: "Only if you are building something. The companion handles your day and is free. Foundry is the co-founder you hire when you have a company to get off the ground, and it holds both engines: Braino Code builds the product, Distra gets it seen. It includes the companion, so it is on top of what you already have, never instead of it." },
+  { q: "How is Braino Code different from Lovable or Cursor?",
+    a: "Those build what you tell them, which is genuinely useful and not what is missing. None of them ask what you are actually solving, or tell you an idea is thin before you spend a week on it. Braino works that out with you first and then builds it. A badly specified idea built well is still the wrong product." },
+  { q: "Why is Foundry more than the companion?",
+    a: "Because the companion saves you an hour and Foundry does two jobs you would otherwise hire people for. A developer is a few thousand for an MVP and a ghostwriter is five hundred a month, and neither has ever read your commits at two in the morning." },
   { q: "What can he actually see?",
     a: "The page you are on, when you ask. Meetings you start him in. Nothing in the background, nothing while you are not looking, and never that other tab. You know the one." },
   { q: "Does he post or send anything on his own?",
@@ -229,7 +259,7 @@ const WHY = [
   { h: "He is already there.", p: "No tab to open, no context to paste. He is on the page you are on and in the meeting you are in, which is most of the work before anyone answers anything." },
   { h: "He remembers what you did, not what you typed.", p: "Other assistants remember what you tell them. Braino remembers the pages, the meetings, the commits, and the way you actually write. One of those is a notepad. The other is a coworker." },
   { h: "He works in your browser, in your accounts.", p: "Signed in as you, on the real internet. Not a sandbox in a different window that hits a login wall and quietly gives up." },
-  { h: "He has opinions.", p: "He will tell you an idea is mid. An assistant that agrees with everything is just you, talking to yourself, slower." },
+  { h: "He finishes the job, not the sentence.", p: "Ask any of them how to do a thing and you get a very good paragraph about it. Ask him and the tab is open, the draft is written, the booking is made. An answer is where the others stop." },
 ];
 
 function StampLine({ words, delay = 0, tone = false, whenVisible = false, per = 110 }: {
@@ -327,7 +357,9 @@ export default function Landing() {
   useEffect(() => { if (!dark) setAskLight(false); }, [dark]);
   useEffect(() => { document.title = "Braino: speak, watch it happen"; }, []);
 
-  const person = custom;
+  // A pre-written example is on screen from the start; asking replaces it.
+  const [who, setWho] = useState(PEOPLE[0].id);
+  const person = custom ?? PEOPLE.find((x) => x.id === who) ?? PEOPLE[0];
 
   const askBraino = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
@@ -386,26 +418,27 @@ export default function Landing() {
       </div>
 
       {/* ── 1. Hero ──────────────────────────────────────────────────── */}
-      <header className="apple-hero left ac-coral" id="top">
-        <p className="apple-eyebrow">Braino</p>
-        <h1 className="apple-display">Speak.<br /><span className="tone">Watch it happen.</span></h1>
-        <p className="apple-subhead">
-          Braino lives on your screen and does the boring half of your day. You talk, he
-          moves. No prompt engineering degree required.
-        </p>
-        <div className="ld-cta">
-          <a href={EXTENSION_DOWNLOAD_URL} download={EXTENSION_DOWNLOAD_FILENAME} className="ld-btn">
-            Get started
-          </a>
-          <a href="#does" className="ld-btn ghost">See what he does</a>
+      <header className="ld-hero ac-coral" id="top">
+        <div className="ld-hero-copy">
+          <p className="apple-eyebrow">Braino</p>
+          <h1 className="ld-hero-h1">Speak.<br /><span className="tone">Watch it happen.</span></h1>
+          <p className="ld-hero-sub">
+            He lives on your screen and does the boring half of your day. You talk, he moves.
+            No prompt engineering degree required.
+          </p>
+          <div className="ld-cta">
+            <a href={EXTENSION_DOWNLOAD_URL} download={EXTENSION_DOWNLOAD_FILENAME} className="ld-btn">
+              Get started
+            </a>
+            <a href="#does" className="ld-btn ghost">See what he does</a>
+          </div>
+          <p className="ld-hero-note">Free to start. Chrome and Mac.</p>
+        </div>
+
+        <div className="ld-hero-screen apple-reveal">
+          <BrainoTVScreen className="ld-hero-video" offer={{ src: "/Braino_Final.MP4", title: "" }} />
         </div>
       </header>
-
-      <div className="apple-boot">
-        <div className="apple-macscreen apple-reveal">
-          <BrainoTVScreen className="apple-boot-video" offer={{ src: "/Braino_Final.MP4", title: "" }} />
-        </div>
-      </div>
 
       {/* ── 2. Who is Braino ─────────────────────────────────────────── */}
       <section className="apple-story ac-coral ld-whois" id="who-is">
@@ -417,7 +450,6 @@ export default function Landing() {
             others. He is awake to what you are doing, genuinely his own person, and weirdly
             good at getting you through the day.
           </p>
-          <div className="bento-walker"><MiniBraino size={56} /></div>
         </div>
         <div className="po-character-grid">
           {STORY.map((form) => (
@@ -439,7 +471,78 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ── 3. What he does ──────────────────────────────────────────── */}
+      {/* ── 2. The map ────────────────────────────────────────────────── */}
+      <section className="ld-kinds apple-reveal" id="kinds">
+        <div className="ld-wrap">
+          <p className="apple-eyebrow">Braino comes in two</p>
+          <h2 className="ld-h2">A companion for everyone. <span className="tone">A co-founder for founders.</span></h2>
+          <p className="ld-lede">
+            Foundry is not instead of the companion, it is on top of it. The companion gets you
+            through Tuesday. <b>Foundry gets the company off the ground.</b>
+          </p>
+
+          <div className="ld-table-wrap">
+            <table className="ld-table">
+              <thead>
+                <tr>
+                  <th />
+                  <th><b>Braino</b><span>The companion</span></th>
+                  <th className="is-paid"><b>Braino Foundry</b><span>The AI co-founder you hire</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                {COMPARE.map(([row, a, bb]) => (
+                  <tr key={row}>
+                    <th scope="row">{row}</th>
+                    <td>{a}</td>
+                    <td className="is-paid">{bb}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td />
+                  <td><a href={EXTENSION_DOWNLOAD_URL} className="ld-btn sm">Get Braino</a></td>
+                  <td className="is-paid"><Link to="/foundry" className="ld-btn sm ghost">See Foundry</Link></td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+
+          {/* A 620px table is a sideways scroll in the hand. Same data, stacked. */}
+          <div className="ld-compare-stack">
+            {([["Braino", "The companion", 1], ["Braino Foundry", "The AI co-founder you hire", 2]] as Array<[string, string, number]>).map(([name, sub, col]) => (
+              <div key={name} className={col === 2 ? "is-paid" : undefined}>
+                <b>{name}</b>
+                <span>{sub}</span>
+                <dl>
+                  {COMPARE.map((row) => (
+                    <div key={row[0]}>
+                      <dt>{row[0]}</dt>
+                      <dd>{row[col]}</dd>
+                    </div>
+                  ))}
+                </dl>
+                {col === 1
+                  ? <a href={EXTENSION_DOWNLOAD_URL} className="ld-btn sm">Get Braino</a>
+                  : <Link to="/foundry" className="ld-btn sm ghost">See Foundry</Link>}
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── Chapter one ──────────────────────────────────────────────── */}
+      <section className="ld-chapter ac-coral apple-reveal" id="companion">
+        <div className="ld-wrap">
+          <p className="ld-chapter-tag">Chapter one</p>
+          <h2 className="ld-chapter-name">Braino <span className="tone">Companion</span></h2>
+          <p className="ld-chapter-line">
+            Free, for anyone with a screen. He handles your day.
+          </p>
+        </div>
+      </section>
+      {/* ── 4. What he does ──────────────────────────────────────────── */}
       <section className="ld-why-sec apple-reveal" id="does">
         <div className="ld-wrap">
           <p className="apple-eyebrow">What he does</p>
@@ -456,140 +559,142 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ── 4. Who it is for ─────────────────────────────────────────── */}
+      {/* ── 5. Who it is for ─────────────────────────────────────────── */}
       <section className="ld-who apple-reveal" id="who">
         <div className="ld-wrap">
           <p className="apple-eyebrow">Who it is for</p>
           <h2 className="ld-h2">Same four things. <span className="tone">Different day.</span></h2>
           <p className="ld-lede">The four things never change. Only the mess around them does. Tell him what you do and he will write yours.</p>
 
-          <form className="ld-ask" onSubmit={askBraino}>
-            <label htmlFor="ld-who-input">
-              Tell Braino what you do. <em>He will tell you how you would use him.</em>
-            </label>
-            <div>
+          <div className="ld-who-bar">
+            <div className="ld-who-pick" role="group" aria-label="Pick someone">
+              {PEOPLE.map((x) => (
+                <button
+                  key={x.id}
+                  type="button"
+                  className={"ld-who-chip" + (!custom && who === x.id ? " is-on" : "")}
+                  onClick={() => { setCustom(null); setTyped(""); setWho(x.id); }}
+                >
+                  {x.label}
+                </button>
+              ))}
+            </div>
+
+            <form className="ld-ask" onSubmit={askBraino}>
               <input
                 id="ld-who-input"
+                aria-label="Tell Braino what you do"
                 value={typed}
                 onChange={(e) => setTyped(e.target.value)}
-                placeholder="a paediatric nurse on night shifts"
+                placeholder="Tell me what you do"
                 disabled={asking}
               />
-              <button type="submit" className="ld-btn sm ld-ask-btn" disabled={asking || !typed.trim()}>
+              <button type="submit" className="ld-ask-btn" disabled={asking || !typed.trim()}>
                 <img
                   className={"ld-ask-mascot" + (asking ? " is-thinking" : "")}
                   src="/reactions/braino-happy.svg" alt="" aria-hidden="true"
                 />
                 {asking ? "Thinking..." : "Show me"}
               </button>
-            </div>
-            {askErr && <p className="ld-ask-miss">{askErr}</p>}
-            {custom && !asking && (
-              <p className="ld-ask-miss">
-                Written for you just now, by him.{" "}
-                <button type="button" className="ld-ask-back" onClick={() => { setCustom(null); setTyped(""); }}>
-                  Back to the everyday one
-                </button>
-              </p>
-            )}
-          </form>
+            </form>
+          </div>
 
-          {person && (
-            <>
-              <p className="ld-who-line"><span className="ld-who-tag">{custom!.label}</span>{custom!.line}</p>
-              <div className="ld-rows">
-                {person.rows.map(([k, v]) => (
-                  <div key={k}><b>{k}</b><p>{v}</p></div>
-                ))}
-              </div>
-            </>
+          {askErr && <p className="ld-ask-miss">{askErr}</p>}
+          {custom && !asking && (
+            <p className="ld-ask-miss">
+              Written for you just now, by him.{" "}
+              <button type="button" className="ld-ask-back" onClick={() => { setCustom(null); setTyped(""); }}>
+                Back to the everyday one
+              </button>
+            </p>
           )}
+
+          <p className="ld-who-line">
+            <span className="ld-who-tag">{person.label}</span>{person.line}
+          </p>
+          <div className="ld-rows">
+            {person.rows.map(([k, v]) => (
+              <div key={k}><b>{k}</b><p>{v}</p></div>
+            ))}
+          </div>
 
           {/* The one handoff to the second page. Everyone gets the four things;
               only people building something have the other problem. */}
-          <Link to="/distra" className="ld-founder-line">
+          <Link to="/braino?view=foundry#distra" className="ld-founder-line">
             <b>Founder?</b>
-            <span>Explore Braino Distra</span>
+            <span>Explore Braino Foundry</span>
             <ArrowUpRight size={16} aria-hidden="true" />
           </Link>
         </div>
       </section>
 
-      {/* ── 5. Why him ───────────────────────────────────────────────── */}
-      <section className="ld-why-sec apple-reveal" id="why">
+
+      {/* ── Chapter two ──────────────────────────────────────────────── */}
+      <section className="ld-chapter ac-blue apple-reveal" id="foundry-chapter">
         <div className="ld-wrap">
-          <p className="apple-eyebrow">The obvious question</p>
-          <h2 className="ld-h2">Why not just <span className="tone">use ChatGPT?</span></h2>
-          <div className="ld-why">
-            {WHY.map((w) => <div key={w.h}><b>{w.h}</b><p>{w.p}</p></div>)}
-          </div>
+          <p className="ld-chapter-tag">Chapter two</p>
+          <h2 className="ld-chapter-name">Braino <span className="tone">Foundry</span></h2>
+          <p className="ld-chapter-line">
+            For founders who are actually building something. He handles the company, not just
+            the day, and he does it with two engines.
+          </p>
         </div>
       </section>
 
-      {/* ── 6. The two Brainos ───────────────────────────────────────── */}
-      <section className="ld-kinds apple-reveal" id="kinds">
+      <section className="ld-kinds apple-reveal" id="engines">
         <div className="ld-wrap">
-          <p className="apple-eyebrow">Braino comes in two</p>
-          <h2 className="ld-h2">Same character. <span className="tone">Two jobs.</span></h2>
-          <p className="ld-lede">
-            The companion is how you meet him. Braino Distra is what you hire once you have
-            decided he is not a gimmick.
+          <p className="ld-engines-head">
+            Foundry is one thing you buy, with <strong>two engines</strong> inside it. They are the
+            two places a solo founder actually gets stuck, in the order they happen.
           </p>
 
-          <div className="ld-table-wrap">
-            <table className="ld-table">
-              <thead>
-                <tr>
-                  <th />
-                  <th><b>Braino</b><span>The companion</span></th>
-                  <th className="is-paid"><b>Braino Distra</b><span>The one you hire</span></th>
-                </tr>
-              </thead>
-              <tbody>
-                {COMPARE.map(([row, a, bb]) => (
-                  <tr key={row}>
-                    <th scope="row">{row}</th>
-                    <td>{a}</td>
-                    <td className="is-paid">{bb}</td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr>
-                  <td />
-                  <td><a href={EXTENSION_DOWNLOAD_URL} className="ld-btn sm">Get Braino</a></td>
-                  <td className="is-paid"><Link to="/distra" className="ld-btn sm ghost">See Distra</Link></td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
+          {ENGINE_DETAIL.map((engine) => (
+            <article className={`ld-engine-full ${engine.tone}`} key={engine.name}>
+              <header>
+                <p className="ld-engine-tag">{engine.tag}</p>
+                <h3>{engine.name}</h3>
+                <p className="ld-engine-line">{engine.line}</p>
+              </header>
 
-          {/* A 620px table is a sideways scroll in the hand. Same data, stacked. */}
-          <div className="ld-compare-stack">
-            {([["Braino", "The companion", 1], ["Braino Distra", "The one you hire", 2]] as Array<[string, string, number]>).map(([name, sub, col]) => (
-              <div key={name} className={col === 2 ? "is-paid" : undefined}>
-                <b>{name}</b>
-                <span>{sub}</span>
-                <dl>
-                  {COMPARE.map((row) => (
-                    <div key={row[0]}>
-                      <dt>{row[0]}</dt>
-                      <dd>{row[col]}</dd>
-                    </div>
+              <div className="ld-engine-body">
+                <p className="ld-engine-intro">{engine.body}</p>
+                <ol className="ld-engine-points">
+                  {engine.points.map(([n, h, t]) => (
+                    <li key={n}><i>{n}</i><div><b>{h}</b><p>{t}</p></div></li>
                   ))}
-                </dl>
-                {col === 1
-                  ? <a href={EXTENSION_DOWNLOAD_URL} className="ld-btn sm">Get Braino</a>
-                  : <Link to="/distra" className="ld-btn sm ghost">See Distra</Link>}
+                </ol>
+                <p className="ld-engine-foot">{engine.foot}</p>
+                <Link to={engine.to} className="ld-btn sm ghost">{engine.cta}</Link>
               </div>
-            ))}
-          </div>
+            </article>
+          ))}
 
           <p className="ld-hera">
-            There is also <strong>HERA</strong>, which is not a third Braino, so relax. It is a mode
+            There is also <strong className="hera-shimmer">HERA</strong>, which is not a third Braino, so relax. It is a mode
             either one drops into: hold a key, talk, and the words land at your cursor in whatever app
             you were already in. It never talks back, which some people find refreshing.
           </p>
+        </div>
+      </section>
+      {/* ── Chapter three ────────────────────────────────────────────── */}
+      <section className="ld-chapter ac-violet apple-reveal" id="under">
+        <div className="ld-wrap">
+          <p className="ld-chapter-tag">Chapter three</p>
+          <h2 className="ld-chapter-name">Everything <span className="tone">else</span></h2>
+          <p className="ld-chapter-line">
+            Why he is different from the rest, and what is actually running underneath both.
+          </p>
+        </div>
+      </section>
+
+      {/* ── 6. Why him ───────────────────────────────────────────────── */}
+      <section className="ld-why-sec apple-reveal" id="why">
+        <div className="ld-wrap">
+          <p className="apple-eyebrow">The obvious question</p>
+          <h2 className="ld-h2">Why not just use <span className="tone">any other AI tool?</span></h2>
+          <div className="ld-why">
+            {WHY.map((w) => <div key={w.h}><b>{w.h}</b><p>{w.p}</p></div>)}
+          </div>
         </div>
       </section>
 
@@ -681,8 +786,8 @@ export default function Landing() {
             </ul>
             <div className="ld-receipt-sub"><span>Every month, forever</span><em>${RECEIPT_TOTAL}</em></div>
             <div className="ld-receipt-us">
-              <span>Braino Distra<i>First 100, then $83. Yours stays $33.</i></span>
-              <em>$33</em>
+              <span>Braino Foundry<i>Braino Code and Distra, one price.</i></span>
+              <em>$50</em>
             </div>
           </div>
 

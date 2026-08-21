@@ -47,6 +47,17 @@ contextBridge.exposeInMainWorld("brainoMac", {
   authStatus: () => ipcRenderer.invoke("braino-mac:auth-status"),
   parakeetState: () => ipcRenderer.invoke("braino-mac:parakeet-state"),
   parakeetControl: (payload) => ipcRenderer.invoke("braino-mac:parakeet-control", payload || {}),
+  brainoCodeStart: (brief, parentBuildId) =>
+    ipcRenderer.invoke("braino-code:start", { brief, parentBuildId: parentBuildId || null }),
+  brainoCodeStatus: (buildId) => ipcRenderer.invoke("braino-code:status", { buildId }),
+  brainoCodeSource: (buildId) => ipcRenderer.invoke("braino-code:source", { buildId }),
+  // Braino Code: main tells the dashboard which build to open after a spoken
+  // "build me a website".
+  onBrainoCodeOpen: (callback) => {
+    const handler = (_event, payload) => callback(payload || {});
+    ipcRenderer.on("braino-code:open", handler);
+    return () => ipcRenderer.removeListener("braino-code:open", handler);
+  },
   onDictationFallback: (callback) => {
     const handler = (_event, payload) => callback(payload || {});
     ipcRenderer.on("braino-mac:dictation-fallback", handler);

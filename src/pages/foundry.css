@@ -625,3 +625,291 @@
 
 .watch-empty p { margin: 0; color: #f5f5f7; font-size: clamp(18px, 2vw, 23px); font-weight: 550; }
 .watch-empty small { color: rgba(255, 255, 255, 0.44); font-size: 14px; }
+
+/* ── The two problems ───────────────────────────────────────────────────────
+   Foundry's opening argument. Two stage cards, each on its own accent, and no
+   dark slab: this is a light page and it stays one. The Code card carries a
+   tool-versus-co-founder split, because the distinction is the product claim
+   and a feature list would not make it. */
+
+.fd-two { padding: clamp(56px, 8vw, 104px) 0; }
+
+.fd-two-lede {
+  font-size: clamp(17px, 2vw, 20px);
+  line-height: 1.5;
+  font-weight: 500;
+  color: var(--ap-ink-soft);
+  max-width: 58ch;
+  margin: 14px 0 clamp(28px, 4vw, 44px);
+}
+
+.fd-two-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: clamp(14px, 2vw, 20px);
+  align-items: start;
+}
+
+.fd-stage {
+  border: 1px solid var(--ap-hairline);
+  border-radius: var(--ap-radius);
+  background: var(--ap-surface);
+  padding: clamp(26px, 3.2vw, 38px);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.fd-stage-tag {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--ap-accent);
+  margin-bottom: 10px;
+}
+
+.fd-stage h3 {
+  margin: 0 0 4px;
+  font-size: clamp(26px, 3vw, 34px);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--ap-ink);
+}
+
+.fd-stage-line {
+  margin: 0 0 14px;
+  font-size: clamp(16px, 1.8vw, 19px);
+  font-weight: 600;
+  color: var(--ap-accent);
+}
+
+.fd-stage-body {
+  margin: 0 0 22px;
+  font-size: 15.5px;
+  line-height: 1.55;
+  font-weight: 500;
+  color: var(--ap-ink-soft);
+  max-width: 46ch;
+}
+
+/* Tool on the left, co-founder on the right, the right one tinted. The whole
+   Braino Code argument is this one comparison. */
+.fd-vs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  width: 100%;
+  margin-bottom: 22px;
+}
+@media (max-width: 560px) { .fd-vs { grid-template-columns: 1fr; } }
+
+.fd-vs > div {
+  border: 1px solid var(--ap-hairline);
+  border-radius: 18px;
+  padding: 18px 18px 16px;
+  background: var(--ap-bg);
+}
+.fd-vs > div.is-on {
+  border-color: var(--ap-accent);
+  background: var(--ap-panel-bg);
+}
+
+.fd-vs b {
+  display: block;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ap-ink-soft);
+  margin-bottom: 10px;
+}
+.fd-vs > div.is-on b { color: var(--ap-accent); }
+
+.fd-vs ul { margin: 0; padding: 0; list-style: none; }
+.fd-vs li {
+  font-size: 14px;
+  line-height: 1.45;
+  font-weight: 500;
+  color: var(--ap-ink-soft);
+  padding: 6px 0;
+  border-top: 1px solid var(--ap-hairline);
+}
+.fd-vs li:first-child { border-top: 0; }
+.fd-vs > div.is-on li { color: var(--ap-ink); }
+
+.fd-six {
+  width: 100%;
+  border: 1px solid var(--ap-accent);
+  background: var(--ap-panel-bg);
+  border-radius: 18px;
+  padding: 18px 20px;
+  margin-bottom: 22px;
+}
+.fd-six b { display: block; font-size: 15px; font-weight: 700; color: var(--ap-accent); margin-bottom: 6px; }
+.fd-six p { margin: 0; font-size: 14px; line-height: 1.5; font-weight: 500; color: var(--ap-ink-soft); }
+
+.fd-stage .ld-btn { margin-top: auto; }
+
+.fd-two-foot {
+  margin: clamp(26px, 3.4vw, 38px) 0 0;
+  font-size: clamp(16px, 1.8vw, 18px);
+  line-height: 1.55;
+  font-weight: 500;
+  color: var(--ap-ink-soft);
+  max-width: 68ch;
+}
+.fd-two-foot b { color: var(--ap-ink); font-weight: 700; }
+
+/* .ld-btn is defined in landing.css, which this page does not import, so the
+   two links rendered as bare text. Defining the pill locally is right: copying
+   the class name across pages without the stylesheet is how it broke. */
+.fd-stage .ld-btn {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 22px;
+  border-radius: 999px;
+  border: 1px solid var(--ap-accent);
+  background: var(--ap-accent);
+  color: var(--ap-bg);
+  font-size: 15px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: transform 0.2s ease, filter 0.2s ease;
+}
+.fd-stage .ld-btn:hover { transform: translateY(-2px); filter: brightness(1.06); }
+.fd-stage .ld-btn.ghost { background: var(--ap-surface); color: var(--ap-ink); border-color: var(--ap-hairline); }
+.fd-stage .ld-btn.ghost:hover { border-color: var(--ap-accent); filter: none; }
+
+/* ── The engine tabs ────────────────────────────────────────────────────────
+   Distra used to be its own page. Splitting one purchase across two URLs made
+   the reader work out for themselves that they were halves of one thing, so it
+   lives here now behind a tab.
+
+   A tab, not two stacked sections: nobody reads the second engine if they have
+   to scroll past the whole of the first to reach it, and in the reader's head
+   the two are alternatives to compare, not a sequence to consume. */
+
+.fd-engines { padding: 0 0 clamp(56px, 8vw, 104px); }
+
+.fd-tabs {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 10px;
+  margin: clamp(24px, 3.4vw, 34px) 0 clamp(20px, 2.8vw, 28px);
+}
+
+.fd-tab {
+  appearance: none;
+  cursor: pointer;
+  text-align: left;
+  border: 1px solid var(--ap-hairline);
+  border-radius: 20px;
+  background: var(--ap-surface);
+  padding: 18px 22px;
+  font: inherit;
+  transition: border-color 0.2s ease, background 0.2s ease, transform 0.2s ease;
+}
+.fd-tab:hover { transform: translateY(-1px); border-color: var(--ap-ink-soft); }
+.fd-tab b { display: block; font-size: clamp(19px, 2.1vw, 23px); font-weight: 600; letter-spacing: -0.015em; color: var(--ap-ink); }
+.fd-tab span { display: block; margin-top: 3px; font-size: 14.5px; font-weight: 500; color: var(--ap-ink-soft); }
+
+/* The selected engine takes the ink fill: at this size a hairline is not enough
+   to say "you are reading this one". */
+.fd-tab.is-on { background: var(--ap-ink); border-color: var(--ap-ink); transform: none; }
+.fd-tab.is-on b { color: var(--ap-bg); }
+.fd-tab.is-on span { color: color-mix(in srgb, var(--ap-bg) 72%, var(--ap-ink)); }
+
+.fd-panel {
+  border: 1px solid var(--ap-hairline);
+  border-radius: var(--ap-radius);
+  background: var(--ap-surface);
+  padding: clamp(26px, 3.6vw, 46px);
+}
+
+.fd-panel-lede {
+  margin: 0 0 clamp(22px, 3vw, 30px);
+  font-size: clamp(16px, 1.9vw, 19px);
+  line-height: 1.55;
+  font-weight: 500;
+  color: var(--ap-ink-soft);
+  max-width: 62ch;
+}
+.fd-panel-lede.sm { font-size: 15.5px; margin-bottom: 18px; }
+.fd-panel-lede b { color: var(--ap-ink); font-weight: 700; }
+
+.fd-sub { margin: clamp(30px, 4vw, 44px) 0 14px; }
+
+.fd-does { list-style: none; margin: 0; padding: 0; display: grid; gap: 1px; }
+.fd-does li {
+  display: grid;
+  grid-template-columns: 46px 1fr;
+  gap: 14px;
+  align-items: start;
+  padding: 18px 0;
+  border-top: 1px solid var(--ap-hairline);
+}
+.fd-does li:first-child { border-top: 0; padding-top: 0; }
+.fd-does i {
+  font-style: normal;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ap-accent);
+  font-variant-numeric: tabular-nums;
+  padding-top: 2px;
+}
+.fd-does b { display: block; font-size: clamp(17px, 1.9vw, 20px); font-weight: 600; letter-spacing: -0.012em; color: var(--ap-ink); margin-bottom: 5px; }
+.fd-does p { margin: 0; font-size: 15px; line-height: 1.55; font-weight: 500; color: var(--ap-ink-soft); max-width: 62ch; }
+
+.fd-channels { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.fd-channels article { border: 1px solid var(--ap-hairline); border-radius: 18px; padding: 18px 20px; background: var(--ap-bg); }
+.fd-channels header { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+.fd-channels b { font-size: 17px; font-weight: 600; color: var(--ap-ink); }
+.fd-channels span { font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ap-ink-soft); }
+.fd-channels span.is-live { color: var(--ap-accent); }
+.fd-channels p { margin: 0; font-size: 14px; line-height: 1.5; font-weight: 500; color: var(--ap-ink-soft); }
+
+.fd-levels { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; }
+.fd-levels > div { border: 1px solid var(--ap-hairline); border-radius: 18px; padding: 18px 20px; background: var(--ap-bg); }
+.fd-levels > div.is-on { border-color: var(--ap-accent); background: var(--ap-panel-bg); }
+.fd-levels b { display: block; font-size: 16px; font-weight: 600; color: var(--ap-ink); margin-bottom: 6px; }
+.fd-levels p { margin: 0; font-size: 14px; line-height: 1.5; font-weight: 500; color: var(--ap-ink-soft); }
+
+.fd-gates { display: flex; flex-wrap: wrap; gap: 8px; }
+.fd-gates span {
+  border: 1px solid var(--ap-hairline);
+  border-radius: 999px;
+  padding: 8px 15px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ap-ink-soft);
+  background: var(--ap-bg);
+}
+
+.fd-honest { list-style: none; margin: 0; padding: 0; display: grid; gap: 1px; }
+.fd-honest li {
+  padding: 15px 0;
+  border-top: 1px solid var(--ap-hairline);
+  font-size: 15px;
+  line-height: 1.55;
+  font-weight: 500;
+  color: var(--ap-ink-soft);
+  max-width: 68ch;
+}
+.fd-honest li:first-child { border-top: 0; }
+.fd-honest b { color: var(--ap-ink); font-weight: 700; }
+
+.fd-fine {
+  margin: clamp(26px, 3.4vw, 36px) 0 0;
+  padding-top: 20px;
+  border-top: 1px solid var(--ap-hairline);
+  font-size: 15px;
+  line-height: 1.55;
+  font-weight: 500;
+  color: var(--ap-ink-soft);
+  max-width: 66ch;
+}
+.fd-fine b { color: var(--ap-ink); font-weight: 700; }
+
+/* The nav is sticky, so anything reached by anchor lands underneath it. Matters
+   here specifically: /distra redirects to #engines, and without this the tabs a
+   visitor came for are the exact thing hidden behind the bar. */
+#engines, #two-problems, #code, #distra { scroll-margin-top: 96px; }

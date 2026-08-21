@@ -4,7 +4,7 @@
 >
 > **Source of truth in this repo:** `src/styles/apple.css` (page system), `src/components/iomi-notch.css` (web notch), `extension/content.js` line ~11380 (Chrome notch), `mac/braino-mac/renderer/braino-mac.css` line ~227 (Mac notch).
 >
-> **Live references:** `/product-overview`, `/braino`, `/` (home).
+> **Live references:** `/product-overview`, `/braino`, `/` (home), `/code` (Braino Code).
 >
 > Everything below is verbatim from production. Do not "improve" the numbers. They are tuned.
 
@@ -720,7 +720,7 @@ Head gradient, verbatim: `linear-gradient(180deg,#F6A8A2 0%,#E8786E 56%,#C9544A 
 
 ## 10 — PAGE SKINS
 
-Three pages, one system, three temperatures.
+Four pages, one system, four temperatures.
 
 | Page | Wrapper | Ground | Headline | Notes |
 |---|---|---|---|---|
@@ -728,7 +728,102 @@ Three pages, one system, three temperatures.
 | `/braino` (Foundry) | `.apple .foundry` | light | `clamp(42px,6.1vw,76px)`, line-height 1.03 | Adds pill tab groups: `.foundry-page-tabs` (sticky at `top:88px`, `#f0f0f2` track, white active pill) and `.foundry-pitch-tabs` (inverted ink active). CTAs are 48px min-height, `border-radius:999px`, `translateY(-2px)` on hover. |
 | `/` (home / Waitlist) | `.wl-page` | **dark** `#080908` | `clamp(58px,9.6vw,126px)`, weight **400**, `-0.065em`, line-height **.87** | The editorial/cinematic register. Own tokens: `--wl-panel:#111210 --wl-ink:#f2f0e9 --wl-muted:#999b94 --wl-line:#292b27 --wl-accent:#e47b5f`. Hero image is `aspect-ratio:2.65/1` in a 28px-radius panel. |
 
+| `/code` (Braino Code) | `.apple` + `.ac-blue` hero | light `#fbfbfd` | `.apple-display`, two lines, one `.tone` | The waiting register. Stacked hairline cards, one accent, `980px` pill buttons. The only page whose main content is generated live, so see the pattern below. |
+
 The home page is the one deliberate exception to light-first: it is a poster, so the type goes big, light-weight and tightly tracked, and the accent warms to `#e47b5f`.
+
+### The waiting pattern (`/code`)
+
+A page that has to hold someone's attention for three to eight minutes while a
+machine works. It is not a progress bar and deliberately not a stream of code:
+Braino narrates the build out loud, so the screen holds **decisions, not
+activity**, and is something you glance at alongside him.
+
+**Split screen.** `.bc-split` is `1fr / 1.2fr`: decisions scroll on the left, the
+built site sits on the right in a `position:sticky` `.bc-stage`, because the
+rendered site is the thing you keep looking back at. Collapses to one column
+under 900px. The moment a build starts the page stops being a landing page and
+becomes a workspace: `.bc-wrap.working` widens to 1320px and `.apple-hero.bc-small`
+drops the subhead and shrinks the display type, so the hero is not eating 500px
+of the screen you are trying to watch.
+
+**Preview / Code** is an Apple segmented control (`.bc-seg`): one track, one
+moving white pill, `aria-pressed` carrying the state.
+
+Three stacked `.bc-card`s appear in order on the left, each `bcRise` on entry:
+
+1. **What you said** — the brief echoed back instantly, no model involved. A misheard brief gets caught before it costs four minutes.
+2. **How it should look** — the generated palette as swatches (`bcPop`, 70ms stagger), plus mood, type and what was taken from any named reference. This beat earns the screen: everyone has an opinion about colour, so it goes up while a correction is still cheap.
+3. **What he is writing** — the sitemap, beads pulsing on the section that is being written.
+
+Rules this page adds:
+
+- **Never fake progress.** The page arrives in one piece, so sections do not tick off one at a time. Real elapsed time (`tabular-nums`, top right of each card) is the honest substitute for a bar that cannot be filled.
+- **The generated site is quarantined in an iframe** inside `.bc-screen`. It carries its own palette, which will clash with the page tokens; the hairline border, 28px radius and long soft shadow are what keep it reading as a held object rather than a broken section.
+- **The iframe uses `srcdoc`, never `src`, and this is not a preference.** Supabase Storage serves every object as `text/plain` under `default-src 'none'; sandbox`, and the Edge Function gateway rewrites `text/html` to `text/plain` for browser navigations. Both are deliberate anti-phishing policy: no HTML may be served as HTML from a `supabase.co` domain. `curl` sees `text/html` and a browser sees source, which is a confusing way to discover this. `srcdoc` never consults a content type, and works here only because the generated site is self-contained by construction. Shareable links go to `/site/:buildId` on our own domain, which does the same thing full-bleed.
+- **Errors are prose, not codes.** `.bc-oops` uses `--ap-coral-panel`, and the copy is the reason, never a status number on its own.
+
+**Showing a generated page inside our own page: three walls, in order.** Worth writing down, because each one looks like the previous fix worked.
+
+1. **Supabase will not serve HTML as HTML.** Storage returns every object as `text/plain` under `default-src 'none'; sandbox`, and the Edge Function gateway rewrites `text/html` → `text/plain` for browser *navigations*. Deliberate anti-phishing policy. The trap: `curl` sees `text/html` and a browser sees source, so a header check "passes" while the page is still broken.
+2. **`srcdoc` fixes it on the website**, because it never consults a content type — and works only because the generated site is self-contained by construction.
+3. **`srcdoc` fails inside the Mac dashboard**, because a srcdoc document *inherits the embedder's CSP*, and that window runs `style-src 'self'`, which strips the site's own `<style>` and renders it naked. A `data:` URL does **not** rescue this: `data:`, `blob:`, `about:blank` and `about:srcdoc` are all *local schemes* and all inherit. The fix is a **custom scheme** (`brainosite://`, registered privileged in `main.cjs`), which is not a local scheme and inherits no policy.
+
+Same CSP also blocks parsed `style=""` attributes, which is why the Mac swatches are painted via the CSSOM (`el.style.background = …`) rather than an inline attribute. Script-set styles are not covered by `style-src`.
+
+---
+
+## 10b — THE MAC DASHBOARD (`renderer/dashboard.*`)
+
+Not the website's Apple tokens: its own light palette, the same philosophy.
+
+### Navigation lives across the top
+
+It used to be a 236px source list: fifteen items under four group headings.
+Every heading cut the column again, so nothing was ever more than four rows from
+a divider and the whole thing read as **chopped**. Restyling the rows could not
+fix that, because the chopping *was* the structure.
+
+Now: **six destinations** in one pill track — Home, Braino Code, Library,
+Automation, Voice, Settings — with the active one as a raised white pill. Depth
+moves to a **second row of chips** that only renders for tabs that have depth,
+so Home and Braino Code show no second row at all. The chip carries its count.
+
+The two levels both drive `data-view`, so `showView()` stays the only router.
+A tab keys off `data-group` (the views it owns), never its own `data-view` —
+otherwise opening Memory would visibly drop Library.
+
+### The feed
+
+Lists are a **card grid** (`repeat(auto-fill, minmax(330px, 1fr))`), not a
+stacked column. Four cards land in one glance where a column has to be read
+down. Each card: icon tile, date in the top corner, title at 15px/600, then the
+qualifier (`MEETING`, `POSTED`, `FAILED`) as a small uppercase lead-in on the
+preview line, clamped to three lines. Two or three lines is a glance; more is
+reading, and a list stops being scannable the moment a row needs reading.
+
+**Empty states** are a quiet centred line inside a card. Never a dashed box,
+which is a web placeholder idiom.
+
+**Light only.** The black theme's overrides remain in the stylesheet but nothing
+selects them, and a stored `black` falls back to `paper`.
+
+### The cascade trap in this window, which bit three times
+
+`.bd-root button` resets `background`, `border` and `padding` at specificity
+**(0,1,1)** — one class plus one element. That beats *any single class*. So
+`.bc-go`, `.bd-tab` and `.bd-chip` each rendered as bare text the first time
+they were written, and the tell is maddening: `.bd-chip.active` is **(0,2,0)**
+and therefore wins, so exactly one pill in the row looked correct while the
+rest looked unstyled. Prefix with `.bd-root`; never reach for `!important`.
+
+Two smaller ones from the same window:
+
+- A layout rule like `display: grid` **beats the `hidden` attribute**. `hidden`
+  is an attribute, not a style, so nothing defends it. The sheet carries
+  `[hidden] { display: none !important; }`.
+- `.bd-nav-item` carries `width: 100%`. Reusing it on a chip stacks the row
+  full-width instead of laying it out inline.
 
 ---
 

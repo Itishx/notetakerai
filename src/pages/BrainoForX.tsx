@@ -281,7 +281,7 @@ export default function BrainoForX() {
 
       <footer className="apple-foot">
         Braino for X is the first surface of Distra, the distribution engine of Braino Foundry.
-        The full plan for every other platform is at <Link to="/distra">/distra</Link>. Platform
+        The full plan for every other platform is at <Link to="/braino?view=foundry#distra">Braino Foundry</Link>. Platform
         pricing and limits were checked in August 2026 and all of them move.
       </footer>
     </div>

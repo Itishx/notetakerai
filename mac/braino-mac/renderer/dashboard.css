@@ -559,3 +559,556 @@ body { overflow: hidden; }
 .bd-nav-item.muted:hover { background: none; color: var(--ink-4); }
 .bd-nav-item.muted .bd-ic { color: var(--ink-4); }
 .bd-nav-item.muted .bd-ct { color: var(--ink-4); }
+
+/* ── Braino Code ────────────────────────────────────────────────────────────
+   The website's /code split screen, in the dashboard's own tokens rather than
+   the site's Apple ones: same shapes, native palette. Decisions scroll on the
+   left, the built site sits sticky on the right. */
+
+.bc-ask { display: grid; gap: 12px; max-width: 720px; }
+
+.bc-input {
+  width: 100%;
+  resize: vertical;
+  border: 1px solid var(--line);
+  border-radius: var(--bd-r-lg);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 15px;
+  line-height: 1.5;
+  padding: 14px 16px;
+}
+.bc-input::placeholder { color: var(--ink-3); }
+.bc-input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-color: transparent; }
+
+.bc-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+
+.bc-go {
+  font: inherit; font-size: 14px; font-weight: 550; cursor: pointer;
+  border: 1px solid var(--accent); border-radius: 980px;
+  padding: 9px 20px; background: var(--accent); color: #fff;
+  transition: filter 0.18s ease, opacity 0.18s ease;
+}
+.bc-go:hover { filter: brightness(1.06); }
+.bc-go:disabled { opacity: 0.45; cursor: not-allowed; filter: none; }
+.bc-go.quiet { background: var(--surface); color: var(--ink); border-color: var(--line); }
+.bc-go.quiet:hover { border-color: var(--accent); filter: none; }
+
+.bc-note { font-size: 13px; color: var(--ink-2); }
+
+.bc-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+  gap: 16px;
+  align-items: start;
+}
+@media (max-width: 1080px) {
+  .bc-split { grid-template-columns: minmax(0, 1fr); }
+  .bc-stage { position: static; }
+}
+
+.bc-beats { display: grid; gap: 12px; }
+.bc-stage { position: sticky; top: 8px; display: grid; gap: 10px; }
+
+.bc-card {
+  border: 1px solid var(--line);
+  border-radius: var(--bd-r-lg);
+  background: var(--surface);
+  box-shadow: var(--bd-shadow);
+  padding: 20px 22px;
+}
+
+.bc-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.bc-label { margin: 0; font-size: 12px; font-weight: 600; letter-spacing: 0.02em; color: var(--accent-ink); }
+.bc-clock { font-size: 13px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.bc-said { margin: 0; font-size: 15px; line-height: 1.5; color: var(--ink); }
+.bc-title { margin: 0 0 4px; font-size: 22px; font-weight: 600; letter-spacing: -0.015em; color: var(--ink); }
+.bc-sub { margin: 0; font-size: 14px; line-height: 1.5; color: var(--ink-2); }
+
+.bc-swatches { display: grid; grid-template-columns: repeat(auto-fit, minmax(78px, 1fr)); gap: 8px; margin: 16px 0; }
+.bc-swatch i { display: block; height: 54px; border-radius: 10px; border: 1px solid var(--line); }
+.bc-swatch b { display: block; font-size: 12px; font-weight: 600; color: var(--ink); margin-top: 7px; }
+.bc-swatch span { display: block; font-size: 11px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+
+.bc-facts { display: grid; gap: 8px; border-top: 1px solid var(--line-2); padding-top: 16px; margin: 0; }
+.bc-fact { display: flex; gap: 12px; font-size: 13px; line-height: 1.5; }
+.bc-fact dt { color: var(--ink-2); min-width: 82px; flex-shrink: 0; }
+.bc-fact dd { margin: 0; color: var(--ink); }
+
+.bc-list { list-style: none; margin: 0; padding: 0; }
+.bc-item { display: grid; grid-template-columns: 22px 1fr; gap: 12px; align-items: start; padding: 12px 0; border-bottom: 1px solid var(--line-2); }
+.bc-item:last-child { border-bottom: 0; }
+.bc-item h3 { margin: 0; font-size: 15px; font-weight: 600; color: var(--ink); }
+.bc-item p { margin: 3px 0 0; font-size: 13px; line-height: 1.5; color: var(--ink-2); }
+
+.bc-bead { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); margin-top: 6px; justify-self: center; }
+.bc-live .bc-bead { animation: bcPulse 1.5s ease-in-out infinite; }
+.bc-live .bc-item:nth-child(2) .bc-bead { animation-delay: 0.18s; }
+.bc-live .bc-item:nth-child(3) .bc-bead { animation-delay: 0.36s; }
+.bc-live .bc-item:nth-child(4) .bc-bead { animation-delay: 0.54s; }
+.bc-live .bc-item:nth-child(5) .bc-bead { animation-delay: 0.72s; }
+.bc-live .bc-item:nth-child(6) .bc-bead { animation-delay: 0.9s; }
+@keyframes bcPulse { 0%, 100% { opacity: 0.3; transform: scale(0.85); } 50% { opacity: 1; transform: scale(1.08); } }
+
+.bc-seg { display: inline-flex; padding: 3px; border-radius: 980px; background: var(--line-2); border: 1px solid var(--line); }
+.bc-seg button {
+  font: inherit; font-size: 13px; font-weight: 550; cursor: pointer;
+  border: 0; border-radius: 980px; padding: 6px 16px;
+  background: transparent; color: var(--ink-2);
+  transition: background 0.18s ease, color 0.18s ease;
+}
+.bc-seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 3px rgba(29, 29, 31, 0.12); }
+
+.bc-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+
+.bc-screen {
+  border: 1px solid var(--line);
+  border-radius: var(--bd-r-lg);
+  overflow: hidden;
+  background: var(--surface);
+  box-shadow: var(--bd-shadow);
+}
+.bc-screen iframe { display: block; width: 100%; height: min(66vh, 620px); border: 0; background: #fff; }
+
+.bc-code {
+  margin: 0; height: min(66vh, 620px); overflow: auto; padding: 18px;
+  background: var(--surface); font-family: var(--mono, "SF Mono", Menlo, monospace);
+  font-size: 12px; line-height: 1.6; color: var(--ink-2); white-space: pre; tab-size: 2;
+}
+
+.bc-holding { display: grid; place-items: center; height: min(66vh, 620px); padding: 28px; text-align: center; gap: 8px; }
+.bc-holding strong { font-size: 17px; font-weight: 600; color: var(--ink); }
+.bc-holding p { margin: 0; font-size: 14px; color: var(--ink-2); max-width: 32ch; }
+
+.bc-after { display: grid; gap: 10px; }
+.bc-oops { border: 1px solid var(--bad); background: var(--bad-soft); color: var(--ink); border-radius: var(--bd-r); padding: 16px 18px; font-size: 14px; line-height: 1.5; }
+
+@media (prefers-reduced-motion: reduce) { .bc-live .bc-bead { animation: none; opacity: 1; } }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Apple pass — how System Settings would lay this out.
+
+   Four things were making it read as cramped:
+
+     1. Source-list rows were 13.5px text on 8px padding with thin outline
+        glyphs. macOS gives a sidebar row a coloured icon tile and real height;
+        the tile is what makes a long list scannable, because you navigate by
+        colour before you read the word.
+     2. Every list was flat rows on full-width hairlines. Settings groups rows
+        into a rounded card and insets the divider so it starts at the text,
+        which is what visually binds a group together.
+     3. The content column ran the full window width, so an 1100px line of
+        text sat beside a 300px one and nothing lined up.
+     4. Empty states were dashed boxes, which is a web placeholder idiom. Apple
+        just centres a quiet line of text in the space.
+
+   Light only, per the brief. The black theme's overrides stay in the file
+   above but nothing selects them any more.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ---------- Source list ---------- */
+
+.bd-sidebar { padding: 46px 10px 12px; }
+.bd-brand { padding: 4px 10px 18px; }
+
+.bd-nav-grp {
+  padding: 22px 12px 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  text-transform: none;
+  color: var(--ink-3);
+}
+.bd-nav-grp:first-child { padding-top: 0; }
+
+.bd-nav-item {
+  gap: 10px;
+  padding: 7px 10px;
+  margin-bottom: 1px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 450;
+  color: var(--ink);
+}
+
+/* The tile, not the glyph, is the thing you aim at. */
+.bd-nav-item .bd-ic {
+  width: 22px; height: 22px; flex: 0 0 22px;
+  border-radius: 6px;
+  background: var(--tile, #8e8e93);
+  color: #fff;
+  display: grid; place-items: center;
+  box-shadow: inset 0 -0.5px 0 rgba(0, 0, 0, 0.14);
+}
+.bd-nav-item .bd-ic svg { width: 13px; height: 13px; stroke: #fff; stroke-width: 1.9; }
+.bd-nav-item:hover .bd-ic, .bd-nav-item.active .bd-ic { color: #fff; }
+
+.bd-nav-item:hover { background: rgba(120, 120, 128, 0.1); color: var(--ink); }
+
+/* Selected reads as one solid object, the way a Settings row does. */
+.bd-nav-item.active {
+  background: var(--accent);
+  color: #fff;
+  font-weight: 500;
+  box-shadow: none;
+}
+.bd-nav-item.active .bd-ic {
+  background: rgba(255, 255, 255, 0.22);
+  box-shadow: none;
+}
+.bd-nav-item.active .bd-ct { color: rgba(255, 255, 255, 0.8); }
+
+/* One colour per neighbourhood: you learn the position by hue. */
+.bd-nav-item[data-view="overview"] { --tile: #007aff; }
+.bd-nav-item[data-view="notes"]    { --tile: #ff9500; }
+.bd-nav-item[data-view="code"]     { --tile: #20a97a; }
+.bd-nav-item[data-view="tasks"]    { --tile: #5856d6; }
+.bd-nav-item[data-view="xauto"]    { --tile: #1d1d1f; }
+.bd-nav-item[data-view="rec"]      { --tile: #ff2d55; }
+.bd-nav-item[data-view="memory"]   { --tile: #af52de; }
+.bd-nav-item[data-view="coll"]     { --tile: #a2845e; }
+.bd-nav-item[data-view="search"]   { --tile: #8e8e93; }
+.bd-nav-item[data-view="high"]     { --tile: #ffcc00; }
+.bd-nav-item[data-view="voice"]    { --tile: #34c759; }
+.bd-nav-item[data-view="settings"] { --tile: #8e8e93; }
+.bd-nav-item[data-view="hera"]     { --tile: #00c7be; }
+.bd-nav-item[data-view="modes"]    { --tile: #ff375f; }
+.bd-nav-item[data-view="access"]   { --tile: #30b0c7; }
+.bd-nav-item[data-view="keys"]     { --tile: #636366; }
+.bd-nav-item[data-view="account"]  { --tile: #007aff; }
+
+.bd-nav-item.muted { color: var(--ink-4); }
+.bd-nav-item.muted .bd-ic { background: #c7c7cc; }
+.bd-nav-item .bd-ct { font-size: 12px; }
+
+/* ---------- Content column ---------- */
+
+/* A settings pane is a column, not a canvas. Capping the measure is what stops
+   a wide window from stretching one paragraph across 1100px. */
+.bd-view { max-width: 820px; }
+.bd-view[data-view="code"] { max-width: none; }
+
+.bd-phead { margin-bottom: 26px; }
+.bd-phead h1 { font-size: 27px; letter-spacing: -0.02em; font-weight: 640; }
+.bd-phead .bd-sub { font-size: 13.5px; margin-top: 6px; }
+
+/* Overview keeps its greeting: it is the one page that opens rather than
+   configures, and it earns the bigger type. */
+.bd-view[data-view="overview"] .bd-phead h1 { font-size: 40px; letter-spacing: -0.03em; }
+
+.bd-shead { margin-top: 34px; margin-bottom: 10px; }
+.bd-shead h2 { font-size: 13px; font-weight: 600; color: var(--ink-2); letter-spacing: 0; }
+
+/* ---------- Grouped rows ---------- */
+
+/* The card is the group. Rows live inside it, dividers inset to the text. */
+.bd-list {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  overflow: hidden;
+  border-top: 1px solid var(--line);
+}
+
+.bd-list .bd-row {
+  gap: 12px;
+  padding: 12px 16px;
+  margin: 0;
+  width: 100%;
+  border-radius: 0;
+  border-bottom: 1px solid var(--line-2);
+  align-items: flex-start;
+}
+.bd-list .bd-row:last-child { border-bottom: 0; }
+.bd-list .bd-row:hover { background: rgba(120, 120, 128, 0.06); }
+
+/* Divider starts where the text starts, not at the card edge. */
+.bd-list .bd-row::after {
+  content: "";
+  position: absolute;
+  left: 0; right: 0; bottom: -1px;
+  height: 1px;
+  background: var(--surface);
+  width: 44px;
+}
+.bd-list .bd-row { position: relative; }
+.bd-list .bd-row:last-child::after { display: none; }
+
+.bd-list .bd-row .bd-ic {
+  width: 20px; height: 20px; flex: 0 0 20px;
+  border-radius: 5px;
+  background: var(--line-2);
+  color: var(--ink-2);
+  display: grid; place-items: center;
+  font-size: 11px;
+  margin-top: 1px;
+}
+.bd-list .bd-row .bd-ti { font-size: 14px; font-weight: 500; line-height: 1.4; }
+.bd-list .bd-row .bd-s { font-size: 13px; color: var(--ink-2); line-height: 1.45; }
+.bd-list .bd-row .bd-tm { font-size: 12px; color: var(--ink-3); font-variant-numeric: tabular-nums; margin-top: 2px; }
+
+/* ---------- Cards and stats ---------- */
+
+.bd-card { border-radius: 12px; padding: 4px 16px; }
+.bd-card .bd-row { padding: 12px 0; }
+
+.bd-stats { border-radius: 12px; }
+
+/* ---------- Empty ---------- */
+
+.bd-empty {
+  border: 0;
+  padding: 56px 24px;
+  font-size: 14px;
+  color: var(--ink-3);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+/* The tag was sitting on a line of its own between the title and the preview,
+   which turned every row into three stacked blocks and made a five item list
+   look like a page of paragraphs. Apple runs the qualifier into the preview
+   line as a lead-in, so a row is two lines: what it is, then what it says. */
+.bd-list .bd-row .bd-mt { display: block; margin-top: 3px; }
+
+.bd-list .bd-row .bd-tag {
+  display: inline;
+  margin-right: 7px;
+  padding: 0;
+  background: none;
+  border: 0;
+  font-size: 11px;
+  font-weight: 620;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  vertical-align: baseline;
+}
+.bd-list .bd-row .bd-tag.ok { color: var(--accent); }
+.bd-list .bd-row .bd-tag.bad { color: var(--bad); }
+
+/* Two lines of preview is a glance. Four is reading, and the list stops being
+   scannable the moment a row needs reading. */
+.bd-list .bd-row .bd-s {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.bd-list .bd-row { padding: 13px 16px; }
+.bd-list .bd-row .bd-ti { font-size: 14.5px; font-weight: 550; }
+
+/* Two cascade bugs from grafting the website's Braino Code panel into this
+   window, both invisible until the panel was actually rendered:
+
+   1. `.bd-root button` resets background, border and padding, and it out
+      specifies a single class, so .bc-go lost its pill and rendered as bare
+      bold text. Matching that specificity is the fix, not !important.
+   2. `.bc-split { display: grid }` beat the hidden attribute, so the empty
+      preview stage sat on screen before any build existed. The attribute is
+      not a style, so nothing in the base sheet was defending it. */
+
+[hidden] { display: none !important; }
+
+.bd-root .bc-go {
+  border: 1px solid var(--accent);
+  border-radius: 980px;
+  padding: 9px 20px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 550;
+}
+.bd-root .bc-go:hover { filter: brightness(1.06); }
+.bd-root .bc-go:disabled { opacity: 0.45; cursor: not-allowed; filter: none; }
+.bd-root .bc-go.quiet { background: var(--surface); color: var(--ink); border-color: var(--line); }
+.bd-root .bc-go.quiet:hover { border-color: var(--accent); filter: none; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Navigation moved to the top.
+
+   The source list was fifteen items under four headings in a 236px column.
+   Every heading cut the column again, so nothing was ever more than four rows
+   from a divider and the whole thing read as chopped. Restyling rows could not
+   fix that, because the chopping was the structure.
+
+   Six destinations across the top instead, with a chip row underneath for the
+   depth inside the current one. Depth only appears where depth exists, so
+   Home and Braino Code show no second row at all.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.bd-root { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+
+.bd-top {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: saturate(180%) blur(20px);
+  border-bottom: 1px solid var(--line-2);
+  /* Traffic lights sit over the left of this bar now. */
+  padding: 30px 22px 0;
+  -webkit-app-region: drag;
+}
+.bd-top button, .bd-top input { -webkit-app-region: no-drag; }
+
+.bd-top-row { display: flex; align-items: center; gap: 18px; }
+
+.bd-brand { padding: 0; gap: 8px; flex-shrink: 0; }
+.bd-brand-wm { font-size: 15px; }
+
+/* One track, one raised pill on the active tab. */
+.bd-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 980px;
+  background: rgba(120, 120, 128, 0.09);
+  margin: 0 auto;
+}
+
+.bd-tab {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 15px;
+  border-radius: 980px;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--ink-2);
+  white-space: nowrap;
+  transition: background 0.16s, color 0.16s;
+}
+.bd-tab:hover { color: var(--ink); }
+.bd-tab.active {
+  background: var(--surface);
+  color: var(--ink);
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(29, 29, 31, 0.13);
+}
+
+.bd-tab-ic { width: 15px; height: 15px; display: grid; place-items: center; color: currentColor; }
+.bd-tab-ic svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+
+.bd-top-end { display: flex; align-items: center; gap: 12px; flex-shrink: 0; margin-left: auto; }
+.bd-top-end .bd-profile { padding: 4px 6px; gap: 8px; }
+.bd-top-end .bd-pn { font-size: 12.5px; font-weight: 550; }
+.bd-top-end .bd-pb { font-size: 11px; color: var(--ink-3); }
+
+/* Second row: only rendered for tabs that own more than one view. */
+.bd-chiprow { min-height: 0; }
+.bd-chips { display: flex; flex-wrap: wrap; gap: 7px; padding: 12px 0 13px; }
+
+.bd-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 980px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink-2);
+  transition: background 0.16s, color 0.16s, border-color 0.16s;
+}
+.bd-chip:hover { color: var(--ink); border-color: var(--ink-4); }
+.bd-chip.active {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: #fff;
+  font-weight: 550;
+}
+.bd-chip .bd-ct { font-size: 11.5px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.bd-chip.active .bd-ct { color: rgba(255, 255, 255, 0.72); }
+
+/* Nothing sits above the pane any more, so it carries its own top space. */
+.bd-pane { padding-top: 30px; }
+.bd-view { margin: 0 auto; }
+
+/* ---------- The feed ----------
+   Lists were one stacked card of rows. A grid of cards scans the way a feed
+   does: you take in four at once instead of reading down a column. Two up at
+   this window width, one up when it narrows. */
+
+.bd-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));
+  gap: 12px;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  overflow: visible;
+}
+
+.bd-list .bd-row {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 16px 17px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  min-height: 116px;
+}
+.bd-list .bd-row::after { display: none; }
+.bd-list .bd-row:hover { background: var(--surface); border-color: var(--ink-4); }
+
+.bd-list .bd-row .bd-bd { display: flex; flex-direction: column; gap: 5px; width: 100%; }
+.bd-list .bd-row .bd-ti { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
+.bd-list .bd-row .bd-s { -webkit-line-clamp: 3; }
+
+/* Time to the corner, so the card leads with what it says. */
+.bd-list .bd-row .bd-tm {
+  position: absolute;
+  top: 16px; right: 17px;
+  font-size: 11.5px;
+  margin: 0;
+}
+.bd-list .bd-row .bd-ic { margin-bottom: 2px; }
+
+@media (max-width: 900px) {
+  .bd-tabs { margin: 0; overflow-x: auto; }
+  .bd-top-end .bd-profile { display: none; }
+}
+
+/* Same trap as .bc-go, walked into twice now: `.bd-root button` resets
+   background, border and padding at (0,1,1), which beats any single class.
+   The active chip escaped only because `.bd-chip.active` is (0,2,0), which is
+   why exactly one pill looked right and the rest rendered as bare text. */
+.bd-root .bd-tab {
+  padding: 7px 15px;
+  border: 0;
+  border-radius: 980px;
+  background: transparent;
+}
+.bd-root .bd-tab.active { background: var(--surface); }
+
+.bd-root .bd-chip {
+  padding: 6px 14px;
+  border: 1px solid var(--line);
+  border-radius: 980px;
+  background: var(--surface);
+  width: auto;
+}
+.bd-root .bd-chip.active { background: var(--ink); border-color: var(--ink); color: #fff; }
+
+/* Three spacing fixes after seeing it run for real.
+
+   1. `.bd-main` still carried `height: 100vh` from when the shell was two
+      COLUMNS, both of which were full height. It is two ROWS now, so a 100vh
+      pane inside a row that is already shorter than the viewport overflows off
+      the bottom of the window: scroll to the end and the last card sits flush
+      against the edge with nothing after it. The grid row owns the height now.
+   2. The tab track sat too close to the traffic lights. It gets real room.
+   3. A scroll that ends exactly at the last pixel of content feels broken even
+      when it is correct. The pane ends on white space. */
+
+.bd-main { height: 100%; min-height: 0; }
+
+.bd-top { padding-top: 46px; }
+
+.bd-pane { padding-bottom: 180px; }

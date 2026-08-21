@@ -188,7 +188,7 @@ export default function BrainoForLinkedIn() {
 
       <footer className="apple-foot">
         Braino for LinkedIn is the second surface of Distra, the distribution engine of Braino
-        Foundry. The full plan for every platform is at <Link to="/distra">/distra</Link>. LinkedIn
+        Foundry. The full plan for every platform is at <Link to="/braino?view=foundry#distra">Braino Foundry</Link>. LinkedIn
         limits, rates and approval requirements were checked in August 2026 and all of them move.
       </footer>
     </div>

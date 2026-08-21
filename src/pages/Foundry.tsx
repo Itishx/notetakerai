@@ -34,6 +34,17 @@ function viewFromLocation(pathname: string, search: string): ProductView {
 // scroll position. BrainoHERA already has a page of its own, so that tab leaves
 // this one rather than repeating it here.
 // The notch is the only navigation on this page, and every tab stays on it.
+/* The notch menu on this page used to be the component's default, which still
+   described the old two-product site. Same treatment as the homepage now, with
+   this page's own sections in it. */
+const FOUNDRY_NOTCH_NAV = [
+  { to: "/braino?view=foundry#two-problems", label: "Why Foundry", note: "the two places it stalls" },
+  { to: "/braino?view=foundry#code", label: "Braino Code", note: "idea to a shipped MVP" },
+  { to: "/braino?view=foundry#distra", label: "Distra", note: "shipped, to actually seen" },
+  { to: "/braino?view=foundry#foundry-pricing", label: "Pricing", note: "one co-founder, one price" },
+  { to: "/", label: "The companion", note: "free, for anyone with a screen" },
+];
+
 function productNotchTabs(basePath: string): IomiNotchTab[] {
   const base = basePath.replace(/\/+$/, "") || "/";
   return [
@@ -892,9 +903,261 @@ function FoundryChoice() {
   );
 }
 
+/* ── The two problems ───────────────────────────────────────────────────────
+   Foundry's opening argument, and the reason it is one purchase rather than
+   two products: a solo founder fails in exactly two places, and there is an
+   engine pointed at each.
+
+   The Code half spends its words on a distinction, not a feature list. Lovable,
+   Cursor and v0 already build things, and pretending otherwise would insult the
+   reader. What they do not do is disagree with you. They take an instruction and
+   execute it, so a badly specified idea becomes a well built wrong thing. The
+   claim here is that Braino works out what you actually want first, which is the
+   part a co-founder does and a tool never has.
+
+   Distra's six engines are named as a count and not enumerated, because the six
+   are not decided yet and inventing them here would put fiction on a live page. */
+function TwoProblems() {
+  return (
+    <section className="fd-two apple-reveal" id="two-problems">
+      <div className="ld-wrap">
+        <p className="apple-eyebrow">Why Foundry exists</p>
+        <h2 className="cl-head">Founders get stuck in <span className="tone">exactly two places.</span></h2>
+        <p className="fd-two-lede">
+          They cannot build it, or nobody sees it. Almost everything else is survivable. Foundry is
+          one thing you buy with an engine pointed at each, in the order they actually happen.
+        </p>
+
+        <div className="fd-two-row">
+          <article className="fd-stage ac-blue">
+            <span className="fd-stage-tag">Stage one · the build</span>
+            <h3>Braino Code</h3>
+            <p className="fd-stage-line">Idea to a shipped MVP</p>
+            <p className="fd-stage-body">
+              He works out what you are actually building before he builds anything. You talk it
+              through, he asks the questions that matter and tells you when an idea is thinner than
+              you think. Then he designs it and writes it.
+            </p>
+
+          </article>
+
+          <article className="fd-stage ac-green">
+            <span className="fd-stage-tag">Stage two · the launch</span>
+            <h3>Distra</h3>
+            <p className="fd-stage-line">Shipped, to actually seen</p>
+            <p className="fd-stage-body">
+              Shipping to silence is the other way it stalls, and it is the half nobody sells.
+              Distra learns how you write, then works your distribution the way a co-founder would:
+              every day, in your voice, without becoming your whole week.
+            </p>
+
+          </article>
+        </div>
+
+        <p className="fd-two-foot">
+          The order matters. Code hands Distra a product it already understands, and what Distra
+          learns in public goes back into what Code builds next. <b>One character holds both ends</b>,
+          which is the thing a stack of separate tools structurally cannot do.
+        </p>
+      </div>
+    </section>
+  );
+}
+
+
+/* ── The two engines, in full ───────────────────────────────────────────────
+   Distra used to be its own page, which split one purchase across two URLs and
+   made a reader work out for themselves that they were halves of one thing.
+   Both engines live here now, behind a tab, so the page can say "Foundry is
+   this" without a detour.
+
+   A tab rather than two stacked walls of copy: nobody reads the second engine
+   if they have to scroll past the first one to reach it, and the two are
+   alternatives to each other in the reader's head, not a sequence to consume. */
+
+const CODE_DOES = [
+  { n: "01", ac: "ac-violet", name: "He works out what you are building",
+    line: "Before a line is written. You talk it through, he asks what it is for and who for, and says so when an idea is thinner than you think it is." },
+  { n: "02", ac: "ac-blue", name: "He decides how it should look",
+    line: "A palette, a typeface and a shape for the page, chosen from your brief rather than from habit. A security product does not come back looking like a bakery." },
+  { n: "03", ac: "ac-green", name: "He writes the whole thing",
+    line: "Real copy, real structure, responsive, accessible. Not a wireframe with lorem ipsum in it waiting for you to finish the job." },
+  { n: "04", ac: "ac-coral", name: "He changes it while you watch",
+    line: "\u201cMake the background red\u201d lands in about fourteen seconds, because he edits the one line that matters instead of rebuilding the site." },
+];
+
+const DISTRA_DOES = [
+  { n: "01", ac: "ac-blue", name: "He learns how you write",
+    line: "By reading two hundred of your own posts, ranked by what actually worked. Not by making you describe your own voice in a text box, which nobody alive can do." },
+  { n: "02", ac: "ac-violet", name: "He writes from what you shipped",
+    line: "He reads your commits and your week, and there are drafts waiting in the morning. No more staring at an empty box at 11pm wondering what you even did." },
+  { n: "03", ac: "ac-green", name: "He picks the hour and posts it",
+    line: "From your own history, not some best-practice blog post. Then he goes and checks it actually posted, instead of assuming." },
+  { n: "04", ac: "ac-coral", name: "He finds the conversations",
+    line: "The posts worth replying to, with the reply already written in your voice. You press send, because that part should stay human." },
+];
+
+const DISTRA_CHANNELS = [
+  { name: "X", state: "Live", line: "Posts, threads and xAuto: he reads your timeline, picks the few worth answering and drafts the reply." },
+  { name: "LinkedIn", state: "Live", line: "Writes for LinkedIn's room rather than cross-posting, and drafts the comments that actually grow you." },
+  { name: "Reddit", state: "Next", line: "The highest intent density anywhere. People ask for products by name, in the present tense." },
+  { name: "Instagram", state: "Next", line: "Reels cut from what you already shipped, without an editor being opened." },
+];
+
+const DISTRA_GATES = ["Anything that spends money", "Sending a DM", "Deleting anything", "Following or unfollowing", "Changing a price or a promise"];
+
+function EngineTabs() {
+  // The hash picks the tab, so a link can land on the engine it names. Without
+  // this every footer and deck link pointing here opens on Code, and half of
+  // them are about Distra.
+  const readHash = () => (window.location.hash === "#distra" ? "distra" : "code");
+  const [engine, setEngine] = useState<"code" | "distra">(readHash);
+  const isCode = engine === "code";
+
+  useEffect(() => {
+    const onHash = () => setEngine(readHash());
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
+
+  // Reflect the choice back into the URL so the tab survives a refresh and can
+  // be linked to, without pushing a history entry for every click.
+  const pick = (next: "code" | "distra") => {
+    setEngine(next);
+    window.history.replaceState(null, "", `#${next}`);
+  };
+
+  return (
+    <section className="fd-engines apple-reveal" id="engines">
+        <span id="code" aria-hidden="true" />
+        <span id="distra" aria-hidden="true" />
+      <div className="ld-wrap">
+        <p className="apple-eyebrow">Inside Foundry</p>
+        <h2 className="cl-head">Two engines. <span className="tone">One character.</span></h2>
+
+        <div className="fd-tabs" role="tablist" aria-label="Foundry engines">
+          <button
+            role="tab" aria-selected={isCode}
+            className={`fd-tab${isCode ? " is-on" : ""}`}
+            onClick={() => pick("code")}
+          >
+            <b>Braino Code</b><span>Idea to a shipped MVP</span>
+          </button>
+          <button
+            role="tab" aria-selected={!isCode}
+            className={`fd-tab${!isCode ? " is-on" : ""}`}
+            onClick={() => pick("distra")}
+          >
+            <b>Distra</b><span>Shipped, to actually seen</span>
+          </button>
+        </div>
+
+        {isCode ? (
+          <div className="fd-panel ac-blue" role="tabpanel">
+            <p className="fd-panel-lede">
+              Lovable, Cursor and v0 already build things, and pretending otherwise would be silly.
+              What none of them do is disagree with you. You specify, they execute, and a badly
+              specified idea becomes a well built wrong thing. <b>Braino works out what you actually
+              want first.</b> That is the part a co-founder does and a tool never has.
+            </p>
+
+            <div className="fd-vs">
+              <div>
+                <b>A tool</b>
+                <ul>
+                  <li>You specify, it executes</li>
+                  <li>Never asks what you are really solving</li>
+                  <li>Never pushes back on a weak idea</li>
+                  <li>A badly specified idea, built well</li>
+                </ul>
+              </div>
+              <div className="is-on">
+                <b>A co-founder</b>
+                <ul>
+                  <li>Brainstorms before a line is written</li>
+                  <li>Asks what this is for, and who for</li>
+                  <li>Disagrees with you when he should</li>
+                  <li>Then builds the thing you meant</li>
+                </ul>
+              </div>
+            </div>
+
+            <ol className="fd-does">
+              {CODE_DOES.map((d) => (
+                <li key={d.n} className={d.ac}>
+                  <i>{d.n}</i>
+                  <div><b>{d.name}</b><p>{d.line}</p></div>
+                </li>
+              ))}
+            </ol>
+
+            <p className="fd-fine">
+              <b>Working today.</b> A spoken sentence becomes a live, designed website in about four
+              minutes. It is not a mockup and not a template: one self-contained page, written for
+              that brief, that you can open and send to someone.
+            </p>
+          </div>
+        ) : (
+          <div className="fd-panel ac-green" role="tabpanel">
+            <p className="fd-panel-lede">
+              You can ship a real product in a weekend now, and by Friday nobody has heard of it. The
+              reason is never the product. <b>Posting consistently in your own voice is a job</b>, and
+              it is the seventh one you are already doing badly.
+            </p>
+
+            <ol className="fd-does">
+              {DISTRA_DOES.map((d) => (
+                <li key={d.n} className={d.ac}>
+                  <i>{d.n}</i>
+                  <div><b>{d.name}</b><p>{d.line}</p></div>
+                </li>
+              ))}
+            </ol>
+
+            <p className="apple-eyebrow fd-sub">Where he does it</p>
+            <div className="fd-channels">
+              {DISTRA_CHANNELS.map((c) => (
+                <article key={c.name}>
+                  <header><b>{c.name}</b><span className={c.state === "Live" ? "is-live" : undefined}>{c.state}</span></header>
+                  <p>{c.line}</p>
+                </article>
+              ))}
+            </div>
+
+            <p className="apple-eyebrow fd-sub">Where the line is</p>
+            <p className="fd-panel-lede sm">
+              Nobody should hand their accounts to an agent and walk away, and we are not asking you
+              to. Three levels, set per platform, changed any day. He drops back a level by himself if
+              anything looks off.
+            </p>
+            <div className="fd-levels">
+              <div><b>Ask me everything</b><p>He writes. You approve every post.</p></div>
+              <div className="is-on"><b>Approve once</b><p>You approve the post. He picks the hour, publishes it, checks it landed, reports back.</p></div>
+              <div><b>Run it</b><p>He fills the queue and publishes on his own. You can veto anything in it.</p></div>
+            </div>
+
+            <p className="apple-eyebrow fd-sub">He always stops and asks before these</p>
+            <div className="fd-gates">{DISTRA_GATES.map((g) => <span key={g}>{g}</span>)}</div>
+
+            <p className="apple-eyebrow fd-sub">The honest bit</p>
+            <ul className="fd-honest">
+              <li><b>It will not make you go viral.</b> Nobody can promise that and anyone who does is selling something. It makes you consistent, in your own voice, without it feeling like a second job.</li>
+              <li><b>He never sends a reply or a comment himself.</b> Automated engagement is what gets accounts restricted, so he judges and drafts and you press the key.</li>
+              <li><b>Some numbers are genuinely unavailable.</b> LinkedIn analytics need partner access we do not have. The dashboard shows a dash and says why, instead of making a number up.</li>
+              <li><b>Distra's first customer is Braino.</b> It runs this company's own distribution before it runs yours.</li>
+            </ul>
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
 function FoundryStory() {
   return (
     <main id="foundry-view-panel" role="tabpanel" aria-labelledby="foundry-view-tab">
+      <TwoProblems />
+      <EngineTabs />
       <ComparisonStrip />
       <div id="foundry-why"><FoundryChoice /></div>
       <CofounderHelp />
@@ -922,7 +1185,7 @@ function FoundryStory() {
           </article>
           <article className="prt-col featured">
             <div className="prt-name">Braino Foundry</div>
-            <div className="prt-price">$20<span> /month</span></div>
+            <div className="prt-price">$50<span> /month</span></div>
             <p className="prt-desc">₹799/month in India. macOS. The co-founder.</p>
             <ul className="prt-feats">
               <li>Screen awareness and voice</li>
@@ -935,6 +1198,7 @@ function FoundryStory() {
         </div>
       </section>
 
+      <BrainoFaq />
       <section className="foundry-final apple-reveal"><p>You've been the founder, the engineer, the intern, and the emotional support human.</p><h2>Hire the co-founder.</h2><Link className="foundry-primary" to="/premium">Get Braino Foundry</Link><small>Braino Foundry. Version one. Coming very soon.</small></section>
     </main>
   );
@@ -966,7 +1230,7 @@ export default function Foundry() {
     <div className={`apple foundry${dark ? " dark" : ""}`} ref={pageRef}>
       <FoundryPageMetadata view={view} />
       <BrainoDefs />
-      <IomiNotch tabs={productNotchTabs(location.pathname)} activeTab={view} />
+      <IomiNotch nav={FOUNDRY_NOTCH_NAV} tabs={productNotchTabs(location.pathname)} activeTab={view} />
       <FoundryAnchorBar view={view} dark={dark} onThemeToggle={() => setDark((value) => !value)} />
       {view !== "hera" && view !== "watch" && <ProductHero view={view} />}
 
@@ -987,8 +1251,8 @@ export default function Foundry() {
       {view === "hera" && <HeraStory />}
       {view === "watch" && <WatchStory />}
 
-      <BrainoJournal />
-      <BrainoFaq />
+      {view !== "foundry" && <BrainoJournal />}
+      {view !== "foundry" && <BrainoFaq />}
       <BrainoFooter />
       <BrainoTVScreen />
     </div>

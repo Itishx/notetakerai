@@ -135,12 +135,13 @@
 .ld-whois .po-character-art.is-reactions > img,
 .ld-whois .po-character-art.is-reactions > span { max-width: 78px; }
 
-.ld-whois .po-character-copy { padding: 18px 0 0; }
+.ld-whois .po-character-copy { padding: 12px 0 0; }
 .ld-whois .po-character-copy h3 {
-  font-size: clamp(19px, 2vw, 25px); margin: 9px 0 8px; line-height: 1.14;
-  /* Two lines on every cell so the paragraph starts on the same line across a
-     row, whether the title needs them or not. */
-  min-height: 2.15em;
+  font-size: clamp(19px, 2vw, 25px); margin: 5px 0 6px; line-height: 1.14;
+  /* The two-line min-height that used to sit here aligned the paragraphs across
+     a row, but it also reserved an empty line under every one-line title, which
+     read as a hole between the heading and its own description. Ragged
+     paragraph starts are the cheaper cost. */
 }
 .ld-whois .po-character-copy p { font-size: 14.5px; line-height: 1.5; max-width: 40ch; }
 .ld-whois .story-intro { padding-bottom: clamp(20px, 2.4vw, 32px); }
@@ -611,4 +612,398 @@
   .ld .braino-footer .bf-col a, .dp .braino-footer .bf-col a { display: block; padding: 7px 0; }
   .ld-bar-mark, .ld-anchor-name { padding: 8px 12px; }
   .ld-ask input { font-size: 16px; }
+}
+
+/* ── Foundry's two engines ──────────────────────────────────────────────────
+   Sits directly under the Companion / Foundry comparison, because "Foundry"
+   is otherwise an abstraction the reader has to hold. Naming Code and Distra
+   as a pair is the argument: one character owns both ends, which is the thing
+   a stack of separate tools cannot do. Two accents, no dark slab. */
+
+.ld-engines { margin-top: clamp(32px, 5vw, 56px); }
+
+.ld-engines-head {
+  font-size: clamp(16px, 1.9vw, 19px);
+  line-height: 1.5;
+  font-weight: 500;
+  color: var(--ap-ink-soft);
+  max-width: 56ch;
+  margin: 0 0 clamp(18px, 2.6vw, 26px);
+}
+.ld-engines-head strong { color: var(--ap-ink); font-weight: 700; }
+
+.ld-engine-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: clamp(12px, 1.8vw, 18px);
+}
+
+.ld-engine {
+  border: 1px solid var(--ap-hairline);
+  border-radius: var(--ap-radius);
+  background: var(--ap-surface);
+  padding: clamp(24px, 3vw, 34px);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.ld-engine-tag {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--ap-accent);
+  margin-bottom: 4px;
+}
+
+.ld-engine h3 {
+  margin: 0;
+  font-size: clamp(24px, 2.6vw, 30px);
+  font-weight: 600;
+  letter-spacing: -0.018em;
+  color: var(--ap-ink);
+}
+
+.ld-engine-line {
+  margin: 0;
+  font-size: clamp(16px, 1.8vw, 18px);
+  font-weight: 600;
+  color: var(--ap-accent);
+}
+
+.ld-engine-body {
+  margin: 6px 0 18px;
+  font-size: 15px;
+  line-height: 1.55;
+  font-weight: 500;
+  color: var(--ap-ink-soft);
+  max-width: 44ch;
+}
+
+.ld-engine .ld-btn { margin-top: auto; }
+
+
+/* HERA takes the green shimmer wherever it is named, the way Iomi takes gold.
+   Defined locally because braino-hera-teaser.css is not loaded on this page. */
+.ld-hera .hera-shimmer {
+  background-image: linear-gradient(100deg, #17693e 0%, #4ac784 23%, #d8ffe9 43%, #4ac784 63%, #17693e 100%);
+  background-size: 220% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  font-weight: 700;
+  animation: ldHeraShimmer 2.2s linear infinite;
+}
+@keyframes ldHeraShimmer { to { background-position: -220% 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .ld-hera .hera-shimmer { animation: none; color: #17693e; -webkit-text-fill-color: #17693e; }
+}
+
+
+/* Pick-a-person chips. The section used to render nothing until you typed,
+   which made a headline about four things sit above a blank box and a lot of
+   air. One example is on screen from the start and these switch it. */
+.ld-who-pick { display: flex; flex-wrap: wrap; gap: 8px; margin: clamp(18px, 2.4vw, 26px) 0 clamp(20px, 2.6vw, 28px); }
+
+.ld-who-chip {
+  appearance: none;
+  cursor: pointer;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  padding: 9px 18px;
+  border-radius: 999px;
+  border: 1px solid var(--ap-hairline);
+  background: var(--ap-surface);
+  color: var(--ap-ink-soft);
+  transition: border-color 0.2s ease, color 0.2s ease, background 0.2s ease;
+}
+.ld-who-chip:hover { color: var(--ap-ink); border-color: var(--ap-ink-soft); }
+.ld-who-chip.is-on {
+  background: var(--ap-ink);
+  border-color: var(--ap-ink);
+  color: var(--ap-bg);
+  font-weight: 600;
+}
+
+/* Chips and the ask are one control row: two shortcuts and a long way of saying
+   the same thing. Split across two rows the box read as a separate feature. */
+.ld-who-bar {
+  display: flex;
+  align-items: center;
+  gap: clamp(10px, 1.6vw, 18px);
+  flex-wrap: wrap;
+  margin: clamp(18px, 2.4vw, 26px) 0 clamp(22px, 2.8vw, 30px);
+}
+
+.ld-who-bar .ld-who-pick { margin: 0; }
+
+.ld-who-bar .ld-ask {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 340px;
+  min-width: 0;
+  margin: 0;
+}
+
+.ld-who-bar .ld-ask input {
+  flex: 1 1 auto;
+  min-width: 0;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ap-ink);
+  background: var(--ap-surface);
+  border: 1px solid var(--ap-hairline);
+  border-radius: 999px;
+  padding: 9px 18px;
+  transition: border-color 0.2s ease;
+}
+.ld-who-bar .ld-ask input::placeholder { color: var(--ap-ink-soft); }
+.ld-who-bar .ld-ask input:focus { outline: none; border-color: var(--ap-accent); }
+
+.ld-who-bar .ld-ask-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex-shrink: 0;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid var(--ap-ink);
+  border-radius: 999px;
+  padding: 9px 18px;
+  background: var(--ap-ink);
+  color: var(--ap-bg);
+  transition: opacity 0.2s ease;
+}
+.ld-who-bar .ld-ask-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.ld-who-bar .ld-ask-mascot { width: 18px; height: 18px; }
+
+/* ── Chapter openers ────────────────────────────────────────────────────────
+   The page tells you there are two products and then runs a dozen sections at
+   you. Without a name over each group, "Four things, every day" belongs to
+   nobody and the reader has to guess. These are the badge: after one of these,
+   every section beneath it is unambiguously owned.
+
+   An eyebrow, a name and one line. Not a slab: this is a light page and a
+   full-bleed dark band mid-scroll reads as a mistake. The accent and a hairline
+   do the separating. */
+
+.ld-chapter {
+  padding: clamp(56px, 8vw, 96px) 0 clamp(20px, 3vw, 34px);
+  border-top: 1px solid var(--ap-hairline);
+}
+
+.ld-chapter-tag {
+  margin: 0 0 12px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--ap-accent);
+}
+
+.ld-chapter-name {
+  margin: 0 0 12px;
+  font-size: clamp(38px, 6vw, 68px);
+  font-weight: 600;
+  letter-spacing: -0.028em;
+  line-height: 1.02;
+  color: var(--ap-ink);
+  text-wrap: balance;
+}
+
+.ld-chapter-line {
+  margin: 0;
+  font-size: clamp(17px, 2vw, 21px);
+  line-height: 1.45;
+  font-weight: 500;
+  color: var(--ap-ink-soft);
+  max-width: 52ch;
+}
+
+/* The chapter owns the sections under it, so they lose their own top rule. */
+.ld-chapter + section { padding-top: clamp(18px, 2.4vw, 30px); }
+
+/* The engines block used to follow the comparison table and carried a top
+   margin to clear it. It opens the Foundry chapter now, so that margin is a
+   hole between the chapter line and its own first paragraph. */
+.ld-chapter + section .ld-engines:first-child { margin-top: 0; }
+
+/* ── Chapter two: the engines, at length ────────────────────────────────────
+   These were two small cards, which is not enough room to explain either
+   engine, and the chapter was one thin section as a result. Deliberately not
+   tabs: a reader deciding between two things should not have to click to see
+   the second one. Editorial row instead, name on the left, substance on the
+   right, the way the rest of the site argues. */
+
+.ld-engine-full {
+  display: grid;
+  grid-template-columns: minmax(0, 300px) minmax(0, 1fr);
+  gap: clamp(20px, 4vw, 56px);
+  padding: clamp(32px, 5vw, 60px) 0;
+  border-top: 1px solid var(--ap-hairline);
+}
+.ld-engine-full:first-of-type { border-top: 0; }
+
+@media (max-width: 860px) {
+  .ld-engine-full { grid-template-columns: minmax(0, 1fr); gap: 18px; }
+}
+
+.ld-engine-full > header { position: sticky; top: 96px; align-self: start; }
+@media (max-width: 860px) { .ld-engine-full > header { position: static; } }
+
+.ld-engine-tag {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ap-accent);
+}
+
+.ld-engine-full h3 {
+  margin: 0 0 6px;
+  font-size: clamp(30px, 4vw, 46px);
+  font-weight: 600;
+  letter-spacing: -0.024em;
+  line-height: 1.04;
+  color: var(--ap-ink);
+}
+
+.ld-engine-line {
+  margin: 0;
+  font-size: clamp(16px, 1.9vw, 19px);
+  font-weight: 600;
+  color: var(--ap-accent);
+}
+
+.ld-engine-intro {
+  margin: 0 0 clamp(22px, 3vw, 30px);
+  font-size: clamp(16px, 1.9vw, 19px);
+  line-height: 1.55;
+  font-weight: 500;
+  color: var(--ap-ink-soft);
+  max-width: 62ch;
+}
+
+.ld-engine-points { list-style: none; margin: 0; padding: 0; }
+.ld-engine-points li {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  padding: 16px 0;
+  border-top: 1px solid var(--ap-hairline);
+}
+.ld-engine-points li:first-child { border-top: 0; padding-top: 0; }
+.ld-engine-points i {
+  font-style: normal;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ap-accent);
+  font-variant-numeric: tabular-nums;
+  padding-top: 3px;
+}
+.ld-engine-points b {
+  display: block;
+  margin-bottom: 5px;
+  font-size: clamp(17px, 1.9vw, 20px);
+  font-weight: 600;
+  letter-spacing: -0.012em;
+  color: var(--ap-ink);
+}
+.ld-engine-points p { margin: 0; font-size: 15px; line-height: 1.55; font-weight: 500; color: var(--ap-ink-soft); max-width: 60ch; }
+
+.ld-engine-foot {
+  margin: clamp(22px, 3vw, 28px) 0 20px;
+  padding-top: 18px;
+  border-top: 1px solid var(--ap-hairline);
+  font-size: 15px;
+  line-height: 1.55;
+  font-weight: 600;
+  color: var(--ap-ink);
+  max-width: 62ch;
+}
+
+/* ── Hero ───────────────────────────────────────────────────────────────────
+   It used to be a stack: headline, then a full-width video below it, so the
+   claim and the thing that proves it were a screen apart and the first view
+   was all type. One row now, copy against the product, both above the fold.
+   Stacks on narrow, where a side by side would squeeze both halves. */
+
+.ld-hero {
+  display: grid;
+  /* Wider than the site column and copy-heavier than an even split, so
+     "Watch it happen." holds on one line instead of breaking to three. */
+  grid-template-columns: minmax(0, 1.12fr) minmax(0, 1fr);
+  align-items: center;
+  gap: clamp(28px, 4.5vw, 64px);
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: clamp(48px, 8vw, 104px) var(--ap-gutter) clamp(40px, 6vw, 80px);
+}
+
+@media (max-width: 900px) {
+  .ld-hero { grid-template-columns: minmax(0, 1fr); gap: 30px; }
+}
+
+.ld-hero-h1 {
+  margin: 10px 0 18px;
+  font-size: clamp(42px, 5.6vw, 74px);
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.0;
+  color: var(--ap-ink);
+  text-wrap: balance;
+}
+
+.ld-hero-sub {
+  margin: 0 0 26px;
+  font-size: clamp(17px, 2vw, 21px);
+  line-height: 1.45;
+  font-weight: 500;
+  color: var(--ap-ink-soft);
+  max-width: 42ch;
+}
+
+.ld-hero-note {
+  margin: 16px 0 0;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ap-ink-soft);
+}
+
+/* The product, held like an object rather than bled across the page. */
+.ld-hero-screen {
+  border-radius: clamp(20px, 2.4vw, 30px);
+  overflow: hidden;
+  background: var(--ap-surface);
+  border: 1px solid var(--ap-hairline);
+  box-shadow: 0 40px 90px -40px rgba(0, 0, 0, 0.42);
+  aspect-ratio: 16 / 10;
+}
+.ld-hero-video, .ld-hero-screen video, .ld-hero-screen img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* On a phone the chips, the input and the button cannot share a row: the input
+   was holding a 340px floor and pushing the button off the right edge. Chips
+   keep their row, the ask takes its own. */
+@media (max-width: 560px) {
+  .ld-who-bar { flex-direction: column; align-items: stretch; }
+  .ld-who-bar .ld-ask { flex: 1 1 auto; width: 100%; }
+  .ld-who-bar .ld-ask input { flex: 1 1 0; min-width: 0; }
+  /* An older mobile rule sets .ld-ask-btn to width:100%, from when the input
+     and button stacked vertically. In this row that makes a 350px button that
+     runs off the right edge, so the width is handed back to the content. */
+  .ld-who-bar .ld-ask-btn { flex-shrink: 0; width: auto; padding: 10px 16px; }
 }

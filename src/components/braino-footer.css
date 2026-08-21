@@ -606,3 +606,11 @@ html.bf-footer-game-visible #sb-brain-mascot-wrapper {
 @media (max-width: 560px) {
   .bf-cols { grid-template-columns: 1fr 1fr; gap: 26px 20px; }
 }
+
+/* Footer links were ~20px tall, which is a miss on a phone. The row gets real
+   height on touch instead of a bigger font, so the footer keeps its density on
+   a desktop where a pointer is precise. */
+@media (max-width: 760px) {
+  .bf-col a { margin: 0; padding: 11px 0; min-height: 44px; display: flex; align-items: center; }
+  .bf-col h4 { margin-bottom: 8px; }
+}

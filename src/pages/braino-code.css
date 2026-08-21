@@ -1,0 +1,355 @@
+/* braino-code.css — /code. Composes apple.css tokens.
+   The wait screen: what you look at while he builds. It holds decisions, not
+   activity, because Braino narrates the build out loud and this is the thing
+   you glance at alongside him. Light throughout, no dark slab, one accent. */
+
+.bc-wrap {
+  max-width: var(--ap-maxw);
+  margin: 0 auto;
+  padding: 0 var(--ap-gutter) var(--ap-section);
+}
+
+/* Once a build exists the page stops being a landing page and becomes a
+   workspace: the hero shrinks out of the way and the column widens, because
+   the rendered site is now the point and it needs the room. */
+.bc-wrap.working { max-width: 1320px; }
+
+.apple-hero.bc-small { padding-top: clamp(20px, 3vw, 34px); padding-bottom: clamp(14px, 2vw, 22px); }
+.apple-hero.bc-small .apple-display { font-size: clamp(26px, 3.2vw, 38px); }
+.apple-hero.bc-small .apple-display br { display: none; }
+.apple-hero.bc-small .apple-display .tone::before { content: " "; }
+.apple-hero.bc-small .apple-subhead { display: none; }
+
+/* ---- the brief ---- */
+
+.bc-ask { display: grid; gap: 14px; }
+
+.bc-field {
+  border: 1px solid var(--ap-hairline);
+  border-radius: var(--ap-radius);
+  background: var(--ap-surface);
+  padding: clamp(20px, 2.6vw, 30px);
+  transition: border-color 0.2s ease;
+}
+.bc-field:focus-within { border-color: var(--ap-accent); }
+
+.bc-input {
+  width: 100%;
+  min-height: 92px;
+  resize: vertical;
+  border: 0;
+  background: transparent;
+  color: var(--ap-ink);
+  font: inherit;
+  font-size: clamp(17px, 2vw, 20px);
+  line-height: 1.5;
+  font-weight: 500;
+}
+.bc-input::placeholder { color: var(--ap-ink-soft); font-weight: 400; }
+.bc-input:focus { outline: none; }
+
+.bc-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+
+.bc-go {
+  font: inherit;
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid var(--ap-accent);
+  border-radius: 980px;
+  padding: 11px 24px;
+  background: var(--ap-accent);
+  color: var(--ap-bg);
+  transition: filter 0.2s ease, opacity 0.2s ease;
+}
+.bc-go:hover { filter: brightness(1.08); }
+.bc-go:disabled { opacity: 0.4; cursor: not-allowed; filter: none; }
+
+.bc-go.quiet { background: var(--ap-surface); color: var(--ap-ink); border-color: var(--ap-hairline); }
+.bc-go.quiet:hover { border-color: var(--ap-accent); filter: none; }
+
+.bc-note { font-size: 14px; color: var(--ap-ink-soft); font-weight: 500; }
+
+.bc-tries { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 2px; }
+.bc-try {
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid var(--ap-hairline);
+  border-radius: 980px;
+  padding: 8px 15px;
+  background: var(--ap-surface);
+  color: var(--ap-ink-soft);
+  text-align: left;
+  transition: border-color 0.2s ease, color 0.2s ease;
+}
+.bc-try:hover { border-color: var(--ap-accent); color: var(--ap-ink); }
+
+/* ---- beats ---- */
+
+.bc-beats { display: grid; gap: clamp(12px, 1.6vw, 16px); }
+
+.bc-card {
+  border: 1px solid var(--ap-hairline);
+  border-radius: var(--ap-radius);
+  background: var(--ap-surface);
+  padding: clamp(22px, 2.8vw, 34px);
+  animation: bcRise 0.5s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+@keyframes bcRise {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.bc-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.bc-label {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--ap-accent);
+}
+
+.bc-clock {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ap-ink-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+.bc-said {
+  margin: 0;
+  font-size: clamp(17px, 2vw, 20px);
+  line-height: 1.5;
+  font-weight: 500;
+  color: var(--ap-ink);
+  max-width: 62ch;
+}
+
+.bc-title {
+  margin: 0 0 6px;
+  font-size: clamp(24px, 3.2vw, 34px);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  color: var(--ap-ink);
+  text-wrap: balance;
+}
+
+.bc-sub {
+  margin: 0;
+  font-size: clamp(16px, 1.9vw, 18px);
+  line-height: 1.5;
+  font-weight: 500;
+  color: var(--ap-ink-soft);
+  max-width: 60ch;
+}
+
+/* the palette: the beat that earns the screen */
+
+.bc-swatches {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
+  gap: 10px;
+  margin: 22px 0;
+}
+
+.bc-swatch { animation: bcPop 0.45s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.bc-swatch i {
+  display: block;
+  height: 68px;
+  border-radius: 14px;
+  border: 1px solid var(--ap-hairline);
+}
+.bc-swatch b {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ap-ink);
+  margin-top: 9px;
+}
+.bc-swatch span {
+  display: block;
+  font-size: 12px;
+  color: var(--ap-ink-soft);
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+}
+
+@keyframes bcPop {
+  from { opacity: 0; transform: scale(0.94); }
+  to   { opacity: 1; transform: none; }
+}
+
+.bc-facts {
+  display: grid;
+  gap: 10px;
+  border-top: 1px solid var(--ap-hairline);
+  padding-top: 20px;
+}
+.bc-fact { display: flex; gap: 14px; font-size: 15px; line-height: 1.5; font-weight: 500; }
+.bc-fact dt { color: var(--ap-ink-soft); min-width: 92px; flex-shrink: 0; }
+.bc-fact dd { margin: 0; color: var(--ap-ink); }
+
+/* sections */
+
+.bc-list { list-style: none; margin: 0; padding: 0; }
+
+.bc-item {
+  display: grid;
+  grid-template-columns: 26px 1fr;
+  gap: 14px;
+  align-items: start;
+  padding: 15px 0;
+  border-bottom: 1px solid var(--ap-hairline);
+}
+.bc-item:last-child { border-bottom: 0; }
+.bc-item:first-child { padding-top: 4px; }
+
+.bc-bead {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--ap-accent);
+  margin-top: 7px;
+  justify-self: center;
+}
+.bc-live .bc-bead {
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--ap-accent) 22%, transparent);
+  animation: bcPulse 1.5s ease-in-out infinite;
+}
+.bc-live .bc-item:nth-child(2) .bc-bead { animation-delay: 0.18s; }
+.bc-live .bc-item:nth-child(3) .bc-bead { animation-delay: 0.36s; }
+.bc-live .bc-item:nth-child(4) .bc-bead { animation-delay: 0.54s; }
+.bc-live .bc-item:nth-child(5) .bc-bead { animation-delay: 0.72s; }
+.bc-live .bc-item:nth-child(6) .bc-bead { animation-delay: 0.9s; }
+.bc-live .bc-item:nth-child(7) .bc-bead { animation-delay: 1.08s; }
+
+@keyframes bcPulse {
+  0%, 100% { opacity: 0.35; transform: scale(0.85); }
+  50%      { opacity: 1; transform: scale(1.08); }
+}
+
+.bc-item h3 { margin: 0; font-size: 17px; font-weight: 600; letter-spacing: -0.01em; color: var(--ap-ink); }
+.bc-item p { margin: 4px 0 0; font-size: 15px; line-height: 1.5; font-weight: 500; color: var(--ap-ink-soft); }
+
+/* ---- split screen: decisions on the left, the site itself on the right ---- */
+
+.bc-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+  gap: clamp(16px, 2.4vw, 28px);
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .bc-split { grid-template-columns: minmax(0, 1fr); }
+  .bc-stage { position: static; }
+}
+
+/* The left column scrolls with the page; the right one stays put, because the
+   rendered site is the thing you keep looking back at. */
+.bc-stage {
+  position: sticky;
+  top: clamp(16px, 3vw, 32px);
+  display: grid;
+  gap: 12px;
+}
+
+.bc-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+
+/* segmented control, Apple's shape: one track, one moving white pill */
+.bc-seg {
+  display: inline-flex;
+  padding: 3px;
+  border-radius: 980px;
+  background: color-mix(in srgb, var(--ap-ink) 6%, transparent);
+  border: 1px solid var(--ap-hairline);
+}
+.bc-seg button {
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 0;
+  border-radius: 980px;
+  padding: 7px 18px;
+  background: transparent;
+  color: var(--ap-ink-soft);
+  transition: background 0.2s ease, color 0.2s ease;
+}
+.bc-seg button[aria-pressed="true"] {
+  background: var(--ap-surface);
+  color: var(--ap-ink);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.bc-screen {
+  border: 1px solid var(--ap-hairline);
+  border-radius: var(--ap-radius);
+  overflow: hidden;
+  background: var(--ap-surface);
+  box-shadow: 0 24px 60px -30px rgba(0, 0, 0, 0.34);
+  animation: bcReveal 0.75s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+.bc-screen iframe { display: block; width: 100%; height: min(74vh, 760px); border: 0; background: #fff; }
+
+/* code view: the same file, read rather than rendered */
+.bc-code {
+  margin: 0;
+  height: min(74vh, 760px);
+  overflow: auto;
+  padding: clamp(18px, 2.2vw, 26px);
+  background: var(--ap-surface);
+  font-family: "SF Mono", Menlo, Consolas, monospace;
+  font-size: 12.5px;
+  line-height: 1.65;
+  color: var(--ap-ink-soft);
+  tab-size: 2;
+  white-space: pre;
+}
+.bc-code b { color: var(--ap-ink); font-weight: 500; }
+
+/* while he is still writing, the stage holds a place rather than a spinner */
+.bc-holding {
+  display: grid;
+  place-items: center;
+  height: min(74vh, 760px);
+  padding: 32px;
+  text-align: center;
+  gap: 10px;
+}
+.bc-holding p { margin: 0; font-size: 16px; font-weight: 500; color: var(--ap-ink-soft); max-width: 32ch; }
+.bc-holding strong { font-size: 19px; font-weight: 600; color: var(--ap-ink); letter-spacing: -0.01em; }
+
+@keyframes bcReveal {
+  from { opacity: 0; transform: translateY(18px) scale(0.99); }
+  to   { opacity: 1; transform: none; }
+}
+
+.bc-after { display: grid; gap: 14px; margin-top: 4px; }
+
+.bc-oops {
+  border: 1px solid var(--ap-coral);
+  background: var(--ap-coral-panel);
+  color: var(--ap-ink);
+  border-radius: 18px;
+  padding: 20px 22px;
+  font-size: 15px;
+  line-height: 1.55;
+  font-weight: 500;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bc-card, .bc-swatch, .bc-screen { animation: none; }
+  .bc-live .bc-bead { animation: none; opacity: 1; }
+}

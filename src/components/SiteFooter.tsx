@@ -17,8 +17,11 @@ export default function SiteFooter() {
             <Link to="/auth" className="home-cta home-footer-cta">Get started →</Link>
           </div>
           <div className="home-footer-cols">
-            {/* Two products, in the order the site argues them: the companion,
-                then Braino Distra. Same shape as BrainoFooter's columns. */}
+            {/* Two tiers, in the order the site argues them: the companion,
+                then Foundry, which holds Braino Code and Distra. Same shape as
+                BrainoFooter's columns. Distra is not a top level entry any
+                more: it is an engine, and listing it as a peer of the
+                companion is exactly the confusion the homepage just fixed. */}
             <div className="home-footer-col">
               <div className="home-footer-col-head">Braino</div>
               <Link to="/">What he does</Link>
@@ -28,12 +31,10 @@ export default function SiteFooter() {
               <Link to="/knowledge">Knowledge Base</Link>
             </div>
             <div className="home-footer-col">
-              <div className="home-footer-col-head">Braino Distra</div>
-              <Link to="/distra">What it is</Link>
-              <Link to="/channels">All channels</Link>
-              <Link to="/braino-for-x">On X</Link>
-              <Link to="/braino-for-linkedin">On LinkedIn</Link>
-              <Link to="/distra/plan">The full plan</Link>
+              <div className="home-footer-col-head">Braino Foundry</div>
+              <Link to="/braino?view=foundry">Braino Foundry</Link>
+              <Link to="/braino?view=foundry#code">Braino Code</Link>
+              <Link to="/braino?view=foundry#distra">Braino Distra</Link>
             </div>
             <div className="home-footer-col">
               <div className="home-footer-col-head">Resources</div>

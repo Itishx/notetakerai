@@ -1,4 +1,4 @@
-const { app, BrowserWindow, clipboard, desktopCapturer, globalShortcut, ipcMain, screen, shell, systemPreferences } = require("electron");
+const { app, BrowserWindow, clipboard, desktopCapturer, globalShortcut, ipcMain, net, protocol, screen, shell, systemPreferences } = require("electron");
 const { execFile, spawn } = require("node:child_process");
 const crypto = require("node:crypto");
 const fs = require("node:fs");
@@ -112,6 +112,7 @@ const {
 } = require(path.join(__dirname, "dictation.cjs"));
 const { parseMusicSegmentIntent, parseMusicSegmentRange } = require(path.join(__dirname, "music-segment-intent.cjs"));
 const { parseWhatsNewIntent } = require(path.join(__dirname, "whats-new-intent.cjs"));
+const { parseBrainoCodeIntent } = require(path.join(__dirname, "braino-code-intent.cjs"));
 
 let dockWindow = null;
 let swiftHotkey = null;
@@ -13502,6 +13503,119 @@ async function runDelegate(prompt) {
   };
 }
 
+
+/* ── Braino Code ────────────────────────────────────────────────────────────
+   "Build me a website like Perfios" spoken at the Mac.
+
+   The build takes minutes, so this returns the moment the id exists and lets
+   the dashboard follow the row. Braino says one sentence and opens the window;
+   he does not narrate a four minute wait out loud.
+
+   The last build is remembered so a follow up ("make the background red") is
+   understood as a change to that site rather than a request for a new one.
+   That is the same reason the intent parser only looks for change phrasings
+   when a build is actually active. */
+
+let lastBrainoCodeBuildId = null;
+
+function hasActiveBrainoCodeBuild() {
+  return Boolean(lastBrainoCodeBuildId);
+}
+
+async function startBrainoCodeBuild({ brief, action }) {
+  const changing = action === "change" && lastBrainoCodeBuildId;
+  try {
+    const response = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/braino-code`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY },
+      body: JSON.stringify({ brief, parentBuildId: changing ? lastBrainoCodeBuildId : null }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || !data?.buildId) {
+      const why = data?.error || `status ${response.status}`;
+      logMac("braino_code.start.failed", { changing: Boolean(changing), why });
+      return { ok: true, say: changing ? "I could not make that change." : "I could not start that build." };
+    }
+
+    lastBrainoCodeBuildId = data.buildId;
+    logMac("braino_code.start", { buildId: data.buildId, changing: Boolean(changing) });
+
+    const dashboard = openDashboardWindow();
+    // The window may still be loading on a cold open, so tell it where to go
+    // once it is ready rather than firing into a page that does not exist yet.
+    const point = () => dashboard?.webContents?.send?.("braino-code:open", { buildId: data.buildId });
+    if (dashboard?.webContents?.isLoading?.()) dashboard.webContents.once("did-finish-load", point);
+    else point();
+
+    return {
+      ok: true,
+      say: changing ? "Changing it now." : "Building it now. Watch the dashboard.",
+    };
+  } catch (error) {
+    logMac("braino_code.start.error", { message: String(error?.message || error) });
+    return { ok: true, say: "Something went wrong starting that build." };
+  }
+}
+
+
+// Braino Code, from the dashboard rather than from speech. Keys stay in main:
+// the renderer never sees SUPABASE_ANON_KEY, same as every other call here.
+ipcMain.handle("braino-code:start", async (_event, payload = {}) => {
+  const brief = String(payload?.brief || "").trim();
+  if (!brief) return { ok: false, error: "Tell me what to build." };
+  const parentBuildId = payload?.parentBuildId || null;
+  try {
+    const response = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/braino-code`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY },
+      body: JSON.stringify({ brief, parentBuildId }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || !data?.buildId) {
+      return { ok: false, error: data?.error || `The build service answered ${response.status}.` };
+    }
+    lastBrainoCodeBuildId = data.buildId;
+    return { ok: true, buildId: data.buildId };
+  } catch (error) {
+    return { ok: false, error: String(error?.message || error) };
+  }
+});
+
+ipcMain.handle("braino-code:status", async (_event, payload = {}) => {
+  const buildId = String(payload?.buildId || "");
+  if (!buildId) return { ok: false, error: "Which build?" };
+  try {
+    const response = await fetch(
+      `${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/braino-code?build=${encodeURIComponent(buildId)}`,
+      { headers: { apikey: SUPABASE_ANON_KEY } },
+    );
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) return { ok: false, error: data?.error || `status ${response.status}` };
+    if (data?.build?.id) lastBrainoCodeBuildId = data.build.id;
+    return { ok: true, build: data?.build || null };
+  } catch (error) {
+    return { ok: false, error: String(error?.message || error) };
+  }
+});
+
+// The built page as text. Storage serves it as text/plain and the function
+// gateway rewrites text/html the same way for navigations, so the renderer
+// takes the string and puts it in an iframe srcdoc rather than pointing at a URL.
+ipcMain.handle("braino-code:source", async (_event, payload = {}) => {
+  const buildId = String(payload?.buildId || "");
+  if (!buildId) return { ok: false, error: "Which build?" };
+  try {
+    const response = await fetch(
+      `${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/braino-code?render=${encodeURIComponent(buildId)}`,
+      { headers: { apikey: SUPABASE_ANON_KEY } },
+    );
+    if (!response.ok) return { ok: false, error: `status ${response.status}` };
+    return { ok: true, html: await response.text() };
+  } catch (error) {
+    return { ok: false, error: String(error?.message || error) };
+  }
+});
+
 async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
   const text = raw.toLowerCase();
   const latestContext = await readActiveMacContext();
@@ -14040,6 +14154,13 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
 
   const musicSegment = parseMusicSegmentIntent(raw);
   if (musicSegment) return playMusicSegmentOnMac(musicSegment);
+
+  const brainoCode = parseBrainoCodeIntent(raw, { hasActiveBuild: hasActiveBrainoCodeBuild() });
+  if (brainoCode) {
+    logMac("delegate.braino_code_intent", { action: brainoCode.action });
+    sendTaskProgress({ status: "thinking", text: brainoCode.action === "change" ? "Changing the site" : "Designing the site" });
+    return startBrainoCodeBuild(brainoCode);
+  }
 
   const whatsNew = parseWhatsNewIntent(raw);
   if (whatsNew) {
@@ -15537,7 +15658,35 @@ app.on("second-instance", () => {
   ensureDockWindowVisible("second-instance");
 });
 
+// A built site cannot be shown with srcdoc or a data: URL. Both are "local
+// schemes", so the document inherits the dashboard's Content-Security-Policy
+// (style-src 'self'), which strips the site's own <style> and renders it naked.
+// A custom scheme is not a local scheme and inherits nothing, so the page
+// arrives exactly as written. Registered before ready, handled after.
+protocol.registerSchemesAsPrivileged([
+  { scheme: "brainosite", privileges: { standard: true, secure: true, supportFetchAPI: true } },
+]);
+
 app.whenReady().then(() => {
+  // brainosite://build/<id> -> the built page, as real text/html.
+  protocol.handle("brainosite", async (request) => {
+    try {
+      const buildId = new URL(request.url).pathname.replace(/^\/+/, "").split("/").pop() || "";
+      if (!buildId) return new Response("Not found", { status: 404 });
+      const upstream = await fetch(
+        `${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/braino-code?render=${encodeURIComponent(buildId)}`,
+        { headers: { apikey: SUPABASE_ANON_KEY } },
+      );
+      if (!upstream.ok) return new Response("Not found", { status: 404 });
+      return new Response(await upstream.text(), {
+        headers: { "content-type": "text/html; charset=utf-8" },
+      });
+    } catch (error) {
+      logMac("braino_code.protocol.error", { message: String(error?.message || error) });
+      return new Response("Error", { status: 500 });
+    }
+  });
+
   if (!hasSingleInstanceLock) return;
   setTimeout(() => void importAllContacts(), 8000);
   setInterval(() => void checkMusicState(), 5000);

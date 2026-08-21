@@ -534,7 +534,7 @@ const DECK: Slide[] = [
       <>
         <p className="dk-kicker">The problem, one of two</p>
         <h2 className="dk-h">Building is easy now.<br /><span className="tone">Anyone can build.</span></h2>
-        <p className="dk-lede">AI writes the code. Tools ship the product. What took a team and a year now takes one person and a weekend. Building is no longer where startups die.</p>
+        <p className="dk-lede">AI writes the code. Tools ship the product. What took a team and a year now takes one person and a weekend. Building is no longer where startups get stuck.</p>
         <div className="dk-facts">
           <div className="dk-fact"><b>A team</b><span>is now one person and an agent that does not sleep.</span></div>
           <div className="dk-fact"><b>A year</b><span>is now a weekend, and the weekend is getting shorter.</span></div>
@@ -747,7 +747,7 @@ const DECK: Slide[] = [
     body: (
       <>
         <p className="dk-kicker">The solution</p>
-        <h2 className="dk-h sm">Solo founders die in <span className="tone">exactly two places.</span></h2>
+        <h2 className="dk-h sm">Solo founders get stuck in <span className="tone">exactly two places.</span></h2>
         <p className="dk-lede">They cannot build it, or nobody sees it. Braino Foundry is two engines pointed at precisely those two places, run by one character who remembers both.</p>
         <div className="dk-fork">
           <article className="dk-card c-blue">

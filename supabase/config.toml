@@ -322,6 +322,15 @@ entrypoint = "./functions/research/tmdb-search/index.ts"
 [functions.web-research]
 entrypoint = "./functions/research/web-research/index.ts"
 
+# ── code (Braino Code: you say it, he builds it) ────────────────────────
+
+# Public, because signing in to try the thing is friction at exactly the wrong
+# moment. A build still spends real model tokens, so the function caps builds
+# from signed out visitors per hour and reads auth itself when a token is sent.
+[functions.braino-code]
+entrypoint = "./functions/code/braino-code/index.ts"
+verify_jwt = false
+
 # ── billing ─────────────────────────────────────────────────────────────
 
 [functions.create-checkout]

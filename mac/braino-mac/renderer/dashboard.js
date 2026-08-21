@@ -303,16 +303,27 @@ function renderSettings() {
 }
 
 function showView(name) {
-  let label = name;
-  document.querySelectorAll(".bd-nav-item").forEach((button) => {
-    const on = button.dataset.view === name;
-    button.classList.toggle("active", on);
-    if (on) label = button.querySelector(".bd-nm")?.textContent || name;
+  // Two levels now: a tab owns a group of views, chips pick one inside it. The
+  // tab cannot key off its own data-view, or opening Memory would drop Library.
+  let activeTab = null;
+  document.querySelectorAll(".bd-tab").forEach((tab) => {
+    const owns = (tab.dataset.group || "").split(" ").includes(name);
+    tab.classList.toggle("active", owns);
+    if (owns) activeTab = tab.dataset.tab;
   });
+
+  document.querySelectorAll("[data-chips]").forEach((group) => {
+    group.hidden = group.dataset.chips !== activeTab;
+  });
+
+  document.querySelectorAll(".bd-chip").forEach((chip) => {
+    chip.classList.toggle("active", chip.dataset.view === name);
+  });
+
   document.querySelectorAll(".bd-view").forEach((view) => {
     view.classList.toggle("active", view.dataset.view === name);
   });
-  el("crumb").textContent = label;
+
   document.querySelector(".bd-main").scrollTop = 0;
   LOADERS[name]?.();
 }
@@ -326,7 +337,7 @@ el("search-input").addEventListener("input", (event) => {
   void runSearch(event.target.value);
 });
 
-el("nav").addEventListener("click", (event) => {
+document.querySelector(".bd-top").addEventListener("click", (event) => {
   const button = event.target.closest("button[data-view]");
   if (button) showView(button.dataset.view);
 });
@@ -539,7 +550,9 @@ api.onTaskProgress?.((payload) => {
    Liquid keeps the real window vibrancy. White and Black are opaque, so the
    main process has to drop the vibrancy layer too — CSS alone cannot stop a
    vibrancy-backed window from showing the desktop through it. */
-const THEMES = ["paper", "white", "black"];
+// Light only, by choice. A stored "black" from before this change falls back
+// to paper rather than leaving somebody stuck in a theme with no button.
+const THEMES = ["paper", "white"];
 
 function applyTheme(theme, persist = true) {
   const next = THEMES.includes(theme) ? theme : "paper";
@@ -564,3 +577,266 @@ applyTheme(savedTheme, false);
 
 void refresh();
 setInterval(refresh, 4000);
+
+/* ── Braino Code ────────────────────────────────────────────────────────────
+   The same thing /code does on the website, native.
+
+   Everything goes through main over IPC, because the renderer has no Supabase
+   keys and should not get any. The preview is an iframe fed by srcdoc rather
+   than pointed at a URL: Supabase serves the built file as text/plain (and the
+   function gateway rewrites text/html on navigations), so a src would show
+   source instead of a site. srcdoc never consults a content type. */
+
+(function brainoCode() {
+  const api = window.brainoMac || {};
+  const el = (id) => document.getElementById(id);
+
+  const ask = el("code-ask");
+  const split = el("code-split");
+  const beats = el("code-beats");
+  const screen = el("code-screen");
+  const briefInput = el("code-brief");
+  const goButton = el("code-go");
+  const noteText = el("code-note");
+  const openButton = el("code-open");
+  const newButton = el("code-new");
+  const tabPreview = el("code-tab-preview");
+  const tabSource = el("code-tab-source");
+  if (!split || !api.brainoCodeStart) return;
+
+  const STATUS_LINE = {
+    queued: "Getting started",
+    designing: "Reading the brief",
+    writing: "Writing the page",
+    editing: "Making that change",
+    ready: "Done",
+    failed: "That did not work",
+  };
+
+  let build = null;
+  let html = null;
+  let htmlFor = null;
+  let view = "preview";
+  let timer = null;
+  let startedAt = 0;
+
+  const escape = (value) => String(value ?? "").replace(/[&<>"']/g, (c) => (
+    { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]
+  ));
+
+  const elapsed = () => {
+    if (!startedAt) return "";
+    const s = Math.max(0, Math.round((Date.now() - startedAt) / 1000));
+    return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, "0")}s`;
+  };
+
+  const isWorking = () => Boolean(build) && build.status !== "ready" && build.status !== "failed";
+
+  function renderBeats() {
+    if (!build) { beats.innerHTML = ""; return; }
+    const spec = build.spec || null;
+    const clock = isWorking() ? `<span class="bc-clock">${elapsed()}</span>` : "";
+    const parts = [];
+
+    parts.push(`<section class="bc-card">
+      <div class="bc-head"><p class="bc-label">What you said</p>${clock}</div>
+      <p class="bc-said">${escape(build.brief)}</p>
+    </section>`);
+
+    if (spec) {
+      const swatches = Object.entries(spec.palette || {}).map(([key, value]) => `
+        <div class="bc-swatch" data-colour="${escape(value)}"><i></i><b>${escape(key)}</b><span>${escape(value)}</span></div>`).join("");
+      parts.push(`<section class="bc-card">
+        <p class="bc-label">How it should look</p>
+        <h2 class="bc-title">${escape(spec.name)}</h2>
+        <p class="bc-sub">${escape(spec.tagline)}</p>
+        <div class="bc-swatches">${swatches}</div>
+        <dl class="bc-facts">
+          <div class="bc-fact"><dt>Mood</dt><dd>${escape(spec.mood)}</dd></div>
+          <div class="bc-fact"><dt>Type</dt><dd>${escape(spec.fonts?.display)} headings, ${escape(spec.fonts?.body)} text</dd></div>
+          ${spec.referenceRead ? `<div class="bc-fact"><dt>Reference</dt><dd>${escape(spec.referenceRead)}</dd></div>` : ""}
+        </dl>
+      </section>`);
+    } else {
+      parts.push(`<section class="bc-card">
+        <div class="bc-head"><p class="bc-label">${escape(STATUS_LINE[build.status] || "Working")}</p>${clock}</div>
+        <p class="bc-sub">Deciding the colours, the type and the shape of the page before writing a word of it.</p>
+      </section>`);
+    }
+
+    if (spec && Array.isArray(spec.sections) && spec.sections.length) {
+      const items = spec.sections.map((section) => `
+        <li class="bc-item"><span class="bc-bead"></span>
+          <div><h3>${escape(section.title)}</h3><p>${escape(section.intent)}</p></div>
+        </li>`).join("");
+      parts.push(`<section class="bc-card${build.status === "writing" ? " bc-live" : ""}">
+        <div class="bc-head"><p class="bc-label">${build.status === "writing" ? "Writing" : "The page"}</p>${clock}</div>
+        <ul class="bc-list">${items}</ul>
+      </section>`);
+    }
+
+    if (build.change_summary && build.status === "ready") {
+      parts.push(`<section class="bc-card"><p class="bc-label">Changed</p>
+        <p class="bc-sub">${escape(build.change_summary)}</p></section>`);
+    }
+
+    if (build.status === "ready") {
+      parts.push(`<div class="bc-after">
+        <textarea id="code-change" class="bc-input" rows="2" placeholder="make the background red. add a team section." aria-label="Change something about this site"></textarea>
+        <div class="bc-row">
+          <button class="bc-go" id="code-change-go">Change it</button>
+          <span class="bc-note">He keeps everything else the same.</span>
+        </div>
+      </div>`);
+    }
+
+    if (build.status === "failed") {
+      parts.push(`<div class="bc-oops">${escape(build.error || "That did not work.")}</div>`);
+    }
+
+    beats.innerHTML = parts.join("");
+
+    // Paint the swatches from script. A style="" attribute would be dropped by
+    // this window's Content-Security-Policy (style-src 'self'), which is why
+    // they came out blank the first time.
+    beats.querySelectorAll(".bc-swatch").forEach((swatch) => {
+      const chip = swatch.querySelector("i");
+      if (chip) chip.style.background = swatch.getAttribute("data-colour") || "transparent";
+    });
+
+    const changeGo = el("code-change-go");
+    if (changeGo) {
+      changeGo.addEventListener("click", () => {
+        const text = (el("code-change")?.value || "").trim();
+        if (text) startBuild(text, build.id);
+      });
+    }
+  }
+
+  function renderStage() {
+    openButton.hidden = !(build && build.status === "ready");
+    if (html && view === "preview") {
+      // No allow-same-origin: the built site runs in an opaque origin and
+      // cannot reach back into the dashboard.
+      const frame = document.createElement("iframe");
+      frame.setAttribute("sandbox", "allow-scripts");
+      frame.setAttribute("title", build?.spec?.name || "The website");
+      // Not srcdoc and not a data: URL. Both are local schemes, so the document
+      // inherits this window's CSP (style-src 'self') and the site's own <style>
+      // gets stripped, rendering it as naked HTML. brainosite:// is a custom
+      // scheme registered in main, inherits no policy, and serves real
+      // text/html. Still sandboxed, still no allow-same-origin.
+      frame.setAttribute("src", `brainosite://build/${build.id}`);
+      screen.replaceChildren(frame);
+      return;
+    }
+    if (html && view === "code") {
+      const pre = document.createElement("pre");
+      pre.className = "bc-code";
+      pre.textContent = html;
+      screen.replaceChildren(pre);
+      return;
+    }
+    const holding = document.createElement("div");
+    holding.className = "bc-holding";
+    holding.innerHTML = `<strong>${escape(build ? STATUS_LINE[build.status] : "Nothing yet")}</strong>
+      <p>${build && build.status === "failed" ? "Nothing to show for this one." : "The site appears here the moment he finishes it."}</p>`;
+    screen.replaceChildren(holding);
+  }
+
+  async function loadSource() {
+    if (!build || build.status !== "ready" || htmlFor === build.id) return;
+    const result = await api.brainoCodeSource(build.id);
+    if (result?.ok && result.html) {
+      html = result.html;
+      htmlFor = build.id;
+      renderStage();
+    }
+  }
+
+  async function tick() {
+    if (!build) return;
+    const result = await api.brainoCodeStatus(build.id);
+    if (result?.ok && result.build) {
+      build = { ...build, ...result.build };
+      renderBeats();
+      if (!isWorking()) {
+        window.clearInterval(timer);
+        timer = null;
+        await loadSource();
+        renderStage();
+      }
+    }
+  }
+
+  async function startBuild(brief, parentBuildId) {
+    goButton.disabled = true;
+    noteText.textContent = parentBuildId ? "Changing it..." : "Starting...";
+    const result = await api.brainoCodeStart(brief, parentBuildId);
+    goButton.disabled = false;
+    noteText.textContent = "Three to eight minutes. Changes after that are instant.";
+
+    if (!result?.ok) {
+      ask.hidden = false;
+      noteText.textContent = result?.error || "Could not start the build.";
+      return;
+    }
+
+    // On a change, keep the current site on screen. Blanking back to a spinner
+    // is what made an edit feel like starting over.
+    if (!parentBuildId) { html = null; htmlFor = null; }
+    startedAt = Date.now();
+    build = { id: result.buildId, brief, spec: null, status: "queued", error: null };
+    ask.hidden = true;
+    split.hidden = false;
+    view = "preview";
+    setTab();
+    renderBeats();
+    renderStage();
+    if (timer) window.clearInterval(timer);
+    timer = window.setInterval(tick, 2500);
+    window.setInterval(() => { if (isWorking()) renderBeats(); }, 1000);
+  }
+
+  function setTab() {
+    tabPreview.setAttribute("aria-pressed", String(view === "preview"));
+    tabSource.setAttribute("aria-pressed", String(view === "code"));
+  }
+
+  tabPreview.addEventListener("click", () => { view = "preview"; setTab(); renderStage(); });
+  tabSource.addEventListener("click", () => { view = "code"; setTab(); renderStage(); });
+  goButton.addEventListener("click", () => {
+    const text = (briefInput.value || "").trim();
+    if (text) startBuild(text, null);
+  });
+  newButton.addEventListener("click", () => {
+    if (timer) window.clearInterval(timer);
+    timer = null;
+    build = null; html = null; htmlFor = null;
+    split.hidden = true;
+    ask.hidden = false;
+    briefInput.value = "";
+  });
+
+  // Spoken "build me a website" opens this window and points it at the build.
+  if (api.onBrainoCodeOpen) {
+    api.onBrainoCodeOpen(async ({ buildId }) => {
+      if (!buildId) return;
+      document.querySelector('button[data-view="code"]')?.click();
+      const result = await api.brainoCodeStatus(buildId);
+      if (!result?.ok || !result.build) return;
+      const sameSite = build && build.id !== buildId && result.build.status !== "ready";
+      if (!sameSite) { html = null; htmlFor = null; }
+      startedAt = Date.now();
+      build = result.build;
+      ask.hidden = true;
+      split.hidden = false;
+      setTab();
+      renderBeats();
+      await loadSource();
+      renderStage();
+      if (timer) window.clearInterval(timer);
+      if (isWorking()) timer = window.setInterval(tick, 2500);
+    });
+  }
+})();

@@ -17,7 +17,7 @@ export default function Channels() {
         <div className="apple-anchors-inner">
           <span className="an-name">Distribution</span>
           <div className="an-links">
-            <Link to="/distra">The plan</Link>
+            <Link to="/braino?view=foundry#distra">The plan</Link>
             <Link to="/dashboard" className="apple-cta">Dashboard</Link>
           </div>
         </div>
@@ -61,7 +61,7 @@ export default function Channels() {
                       {c.about && <Link to={c.about} className="chh-btn is-quiet">What it does</Link>}
                     </>
                   ) : (
-                    <span className="chh-soon">Planned. See <Link to="/distra">the Distra plan</Link>.</span>
+                    <span className="chh-soon">Planned. See <Link to="/braino?view=foundry#distra">the Distra plan</Link>.</span>
                   )}
                 </div>
               </div>
@@ -73,7 +73,7 @@ export default function Channels() {
 
       <section className="chh-wrap chh-note">
         <p>
-          Twenty-two surfaces are mapped in the <Link to="/distra">Distra plan</Link>, ordered by
+          Twenty-two surfaces are mapped in the <Link to="/braino?view=foundry#distra">Distra plan</Link>, ordered by
           proof rather than ambition. Each one gets a real adapter, not a wrapper around somebody
           else's posting API, because the gates are the product.
         </p>
