@@ -219,6 +219,45 @@ tr.us td, tr.us td b { font-weight: 600; }
 .link span { font-size: 14.5px; font-weight: 500; color: var(--soft); }
 .arrow { font-size: 22px; color: #c4c4cb; }
 
+/* ── Who he is: the homepage's own grid, one hairline drawn by the gaps ──── */
+.who {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  background: var(--line);
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  overflow: hidden;
+  margin-top: 22px;
+}
+.who article {
+  background: var(--surface);
+  padding: 20px 22px 22px;
+  display: grid;
+  grid-template-rows: 74px auto;
+  align-content: start;
+  gap: 12px;
+}
+.who .art {
+  display: grid;
+  place-items: center;
+  background: var(--tint);
+  border-radius: 14px;
+  height: 74px;
+}
+.who .art img { width: 54px; height: 54px; display: block; }
+.who small {
+  display: block;
+  font-size: 11.5px; font-weight: 600; letter-spacing: 0.07em;
+  text-transform: uppercase; color: var(--accent);
+  margin-bottom: 5px;
+}
+.who h3 {
+  margin: 0 0 5px;
+  font-size: 19px; font-weight: 600; letter-spacing: -0.016em; line-height: 1.15;
+}
+.who p { margin: 0; font-size: 14px; line-height: 1.42; font-weight: 500; color: var(--soft); }
+
 /* ── Six engines ─────────────────────────────────────────────────────────── */
 .engines { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 20px; }
 .eng {
@@ -310,7 +349,48 @@ tr.us td, tr.us td b { font-weight: 600; }
     </p>
   </div>
   <span class="wm">Itish Pande · August 2026</span>
-  <span class="num">1 / 10</span>
+  <span class="num">1 / 11</span>
+</section>
+
+<!-- 2 ─ Who he is ─────────────────────────────────────────────────────────
+     The deck used to open on the problem and never say what Braino actually
+     is until slide six, so a reader spent five slides holding a word they had
+     no picture for. Same six-box grid the homepage uses, same order, same
+     claims: one hairline drawn by the gaps rather than a border per card.
+-->
+<section class="slide ac-coral">
+  <div class="body">
+    <p class="kicker">Who is Braino?</p>
+    <h2>Not a tool. <span class="tone">Somebody</span> who is already there.</h2>
+    <div class="who">
+      <article>
+        <span class="art"><img src="/Users/itishpande/Desktop/notely/notetakerai/public/reactions/braino-happy.svg" alt=""></span>
+        <div><small>01 · A character</small><h3>He is somebody, not something.</h3><p>A face with a name, a mood and a walk. Not a chat box you remember exists twice a month.</p></div>
+      </article>
+      <article>
+        <span class="art"><img src="/Users/itishpande/Desktop/notely/notetakerai/public/reactions/braino-idle.svg" alt=""></span>
+        <div><small>02 · A voice</small><h3>You talk. He talks back.</h3><p>Out loud, in his own voice, while you carry on. Typing is the fallback, not the personality.</p></div>
+      </article>
+      <article>
+        <span class="art"><img src="/Users/itishpande/Desktop/notely/notetakerai/public/reactions/braino-focus.svg" alt=""></span>
+        <div><small>03 · He is in it</small><h3>He walks onto the page with you.</h3><p>On the actual thing you are working on, looking at the same screen you are.</p></div>
+      </article>
+      <article>
+        <span class="art"><img src="/Users/itishpande/Desktop/notely/notetakerai/public/reactions/braino-shocked.svg" alt=""></span>
+        <div><small>04 · An opinion</small><h3>He will tell you your idea is mid.</h3><p>Respectfully. Sometimes. An assistant that says great question to everything is a mirror.</p></div>
+      </article>
+      <article>
+        <span class="art"><img src="/Users/itishpande/Desktop/notely/notetakerai/public/reactions/braino-celebrating.svg" alt=""></span>
+        <div><small>05 · A memory</small><h3>He knows what you did last week.</h3><p>One memory across the browser, the Mac and everything he runs. No introducing yourself twice.</p></div>
+      </article>
+      <article>
+        <span class="art"><img src="/Users/itishpande/Desktop/notely/notetakerai/public/reactions/braino-laughing.svg" alt=""></span>
+        <div><small>06 · And yes</small><h3>Of course he moonwalks.</h3><p>If you are going to talk to something every day, it should at least be fun.</p></div>
+      </article>
+    </div>
+  </div>
+  <span class="wm">Who he is</span>
+  <span class="num">2 / 11</span>
 </section>
 
 <!-- 2 ─ Problem ────────────────────────────────────────────────────────── -->
@@ -348,7 +428,7 @@ tr.us td, tr.us td b { font-weight: 600; }
     </p>
   </div>
   <span class="wm">Problem</span>
-  <span class="num">2 / 10</span>
+  <span class="num">3 / 11</span>
 </section>
 
 <!-- 3 ─ Customer ───────────────────────────────────────────────────────── -->
@@ -386,7 +466,7 @@ tr.us td, tr.us td b { font-weight: 600; }
     </p>
   </div>
   <span class="wm">Customer</span>
-  <span class="num">3 / 10</span>
+  <span class="num">4 / 11</span>
 </section>
 
 <!-- 4 ─ ICP ──────────────────────────────────────────────────────────────
@@ -423,7 +503,7 @@ tr.us td, tr.us td b { font-weight: 600; }
     </div>
   </div>
   <span class="wm">ICP</span>
-  <span class="num">4 / 10</span>
+  <span class="num">5 / 11</span>
 </section>
 
 <!-- 4 ─ Opportunity ────────────────────────────────────────────────────── -->
@@ -457,7 +537,7 @@ tr.us td, tr.us td b { font-weight: 600; }
     </p>
   </div>
   <span class="wm">Opportunity</span>
-  <span class="num">5 / 10</span>
+  <span class="num">6 / 11</span>
 </section>
 
 <!-- 5 ─ Product ────────────────────────────────────────────────────────── -->
@@ -495,7 +575,7 @@ tr.us td, tr.us td b { font-weight: 600; }
     </div>
   </div>
   <span class="wm">Product</span>
-  <span class="num">6 / 10</span>
+  <span class="num">7 / 11</span>
 </section>
 
 <!-- 6 ─ Distra ─────────────────────────────────────────────────────────── -->
@@ -520,7 +600,7 @@ tr.us td, tr.us td b { font-weight: 600; }
     </p>
   </div>
   <span class="wm">Distra</span>
-  <span class="num">7 / 10</span>
+  <span class="num">8 / 11</span>
 </section>
 
 <!-- 7 ─ Why 10x ────────────────────────────────────────────────────────── -->
@@ -545,7 +625,7 @@ tr.us td, tr.us td b { font-weight: 600; }
     </p>
   </div>
   <span class="wm">10x</span>
-  <span class="num">8 / 10</span>
+  <span class="num">9 / 11</span>
 </section>
 
 <!-- 8 ─ Money ──────────────────────────────────────────────────────────── -->
@@ -568,7 +648,7 @@ tr.us td, tr.us td b { font-weight: 600; }
     </p>
   </div>
   <span class="wm">Business model</span>
-  <span class="num">9 / 10</span>
+  <span class="num">10 / 11</span>
 </section>
 
 <!-- 9 ─ Close ──────────────────────────────────────────────────────────── -->
@@ -598,7 +678,7 @@ tr.us td, tr.us td b { font-weight: 600; }
     </p>
   </div>
   <span class="wm">Braino · trybraino.com</span>
-  <span class="num">10 / 10</span>
+  <span class="num">11 / 11</span>
 </section>
 
 </body>
