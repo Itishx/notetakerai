@@ -1,0 +1,355 @@
+<style>
+/* ============================================================================
+   Braino Foundry — founder distribution research, August 2026.
+
+   The words are the founder's, verbatim from the four-pager. Nothing was
+   rewritten, cut, reordered or added. The only substitutions are typographic:
+   "Rs." becomes the rupee sign, straight quotes become real ones, and the
+   ReportLab bullet becomes a proper marker — the glyphs the original wanted
+   and could not reach with Helvetica.
+
+   The system is the one the site and the deck run on: warm off-white, near
+   black ink, SF Pro, headlines at 600 and body at 500. One accent per page,
+   because the four pages are four arguments and the colour is what makes them
+   read as four rather than one long scroll.
+
+   Four US Letter pages at 96dpi, so page.pdf() at 816x1056 prints exactly.
+   ============================================================================ */
+
+@page { size: 816px 1056px; margin: 0; }
+
+:root {
+  --bg: #fbfbfd;
+  --surface: #ffffff;
+  --ink: #1d1d1f;
+  --soft: #62626a;
+  --mute: #86868b;
+  --line: #d9d9df;
+  --line-soft: #ebebf0;
+  --mat: #cfcfd4;
+
+  --coral: #d9645b;  --coral-tint: #fbeae8;
+  --blue: #2f6fed;   --blue-tint: #e9f0fd;
+  --green: #3a8f5f;  --green-tint: #e8f3ec;
+  --amber: #b8842a;  --amber-tint: #f6efe1;
+  --violet: #6b52c4; --violet-tint: #efeafa;
+
+  --accent: var(--violet);
+  --tint: var(--violet-tint);
+  --s: 1;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --mat: #131316; } }
+:root[data-theme="dark"] { --mat: #131316; }
+
+.ac-coral  { --accent: var(--coral);  --tint: var(--coral-tint); }
+.ac-blue   { --accent: var(--blue);   --tint: var(--blue-tint); }
+
+/* Page three is the densest of the four: three sourced lists and a nine-row
+   table. It gets a slightly tighter measure rather than a smaller face, so the
+   text stays the same size as the other pages. */
+.page.tight li { padding-bottom: 3.5px; line-height: 1.42; }
+.page.tight h2 { margin: 13px 0 8px; }
+.page.tight td { padding: 5px 8px 5px 0; }
+.ac-green  { --accent: var(--green);  --tint: var(--green-tint); }
+.ac-amber  { --accent: var(--amber);  --tint: var(--amber-tint); }
+.ac-violet { --accent: var(--violet); --tint: var(--violet-tint); }
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--mat);
+  color: var(--ink);
+  font-family: "SF Pro Text", "SF Pro Display", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* On screen the pages are a scaled stack. In print --s is 1 and the wrappers
+   are inert, so the PDF gets exactly 816x1056 pages. */
+.doc { display: flex; flex-direction: column; align-items: center; gap: 20px; padding: 20px 0 36px; }
+.fit { width: calc(816px * var(--s)); height: calc(1056px * var(--s)); }
+.fit > .page { transform: scale(var(--s)); transform-origin: top left; box-shadow: 0 10px 34px rgba(0,0,0,.14); }
+
+.page {
+  position: relative;
+  width: 816px; height: 1056px;
+  padding: 52px 62px 46px;
+  background: var(--bg);
+  overflow: hidden;
+  page-break-after: always; break-after: page;
+  display: flex; flex-direction: column;
+}
+.page:last-child { page-break-after: auto; }
+.page::before { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: var(--accent); }
+
+/* ── Running head ────────────────────────────────────────────────────────── */
+.rh {
+  display: flex; justify-content: space-between; align-items: baseline;
+  padding-bottom: 9px; margin-bottom: 22px;
+  border-bottom: 1px solid var(--line);
+  font-size: 8.5px; font-weight: 600; letter-spacing: .11em; text-transform: uppercase;
+  color: var(--mute);
+}
+.rh b { color: var(--accent); font-weight: 600; }
+
+h1 {
+  margin: 0 0 9px;
+  font-family: "SF Pro Display", -apple-system, sans-serif;
+  font-size: 33px; font-weight: 600; letter-spacing: -.028em; line-height: 1.04;
+  text-wrap: balance;
+}
+.lede { margin: 0 0 16px; font-size: 12.5px; font-weight: 500; line-height: 1.5; color: var(--soft); max-width: 86ch; }
+.lede b { color: var(--ink); font-weight: 600; }
+
+/* Section titles sit on an accent tick rather than a colour block: this is a
+   report, and a full-bleed band every three inches reads as a brochure. */
+h2 {
+  margin: 17px 0 9px; padding-left: 11px; position: relative;
+  font-family: "SF Pro Display", -apple-system, sans-serif;
+  font-size: 17px; font-weight: 600; letter-spacing: -.018em;
+}
+h2::before { content: ""; position: absolute; left: 0; top: .18em; bottom: .18em; width: 3px; border-radius: 2px; background: var(--accent); }
+h2 + .sub { margin: -6px 0 12px 11px; font-size: 11.5px; font-weight: 500; color: var(--mute); }
+
+/* ── Tables ──────────────────────────────────────────────────────────────── */
+table { width: 100%; border-collapse: collapse; margin: 0; }
+th {
+  text-align: left; padding: 0 8px 6px 0; border-bottom: 1px solid var(--line);
+  font-size: 8px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--mute);
+  vertical-align: bottom;
+}
+td { padding: 6px 8px 6px 0; border-bottom: 1px solid var(--line-soft); font-size: 10px; font-weight: 500; line-height: 1.42; color: var(--soft); vertical-align: top; }
+td:last-child, th:last-child { padding-right: 0; }
+td b { color: var(--ink); font-weight: 600; }
+td small { display: block; margin-top: 2px; font-size: 8.5px; font-weight: 500; color: var(--mute); line-height: 1.3; }
+td.hi { color: var(--accent); font-weight: 600; }
+td.c { text-align: center; }
+tr.us td { background: var(--tint); }
+tr.us td b { color: var(--accent); }
+.dash { color: var(--mate); color: #b4b4bb; }
+
+/* ── The finding bar ─────────────────────────────────────────────────────── */
+.band {
+  margin: 12px 0 0; padding: 11px 15px; border-radius: 12px; background: var(--tint);
+  font-size: 11px; font-weight: 600; line-height: 1.5; color: var(--ink);
+}
+.band.stat { display: flex; gap: 0; padding: 13px 4px; }
+.band.stat div { flex: 1; padding: 0 12px; border-right: 1px solid rgba(0,0,0,.07); text-align: center; }
+.band.stat div:last-child { border-right: 0; flex: 1.4; }
+.band.stat strong { display: block; font-family: "SF Pro Display", sans-serif; font-size: 19px; font-weight: 600; letter-spacing: -.02em; color: var(--accent); margin-bottom: 3px; }
+.band.stat em { font-style: normal; display: block; font-size: 8.5px; font-weight: 500; line-height: 1.3; color: var(--soft); }
+
+/* ── Prose blocks ────────────────────────────────────────────────────────── */
+p.body { margin: 10px 0 0; font-size: 11px; font-weight: 500; line-height: 1.55; color: var(--soft); }
+p.body b { color: var(--ink); font-weight: 600; }
+p.body .lead { color: var(--accent); font-weight: 600; }
+
+ul { margin: 0; padding: 0; list-style: none; }
+li {
+  position: relative; padding: 0 0 5px 15px;
+  font-size: 10.5px; font-weight: 500; line-height: 1.46; color: var(--soft);
+}
+li::before { content: ""; position: absolute; left: 2px; top: .55em; width: 4px; height: 4px; border-radius: 50%; background: var(--accent); }
+li b { color: var(--ink); font-weight: 600; }
+li cite { font-style: normal; color: var(--mute); font-size: 9.5px; }
+
+/* ── The three engines ───────────────────────────────────────────────────── */
+.engines { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 11px; }
+.eng { border: 1px solid var(--line); border-radius: 13px; background: var(--surface); padding: 13px 15px; }
+.eng i { font-style: normal; display: block; font-size: 8px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--accent); margin-bottom: 5px; }
+.eng b { display: block; font-family: "SF Pro Display", sans-serif; font-size: 14px; font-weight: 600; letter-spacing: -.014em; margin-bottom: 5px; }
+.eng span { display: block; font-size: 9.5px; font-weight: 500; line-height: 1.42; color: var(--soft); }
+
+.note { margin: 10px 0 0; font-size: 10px; font-weight: 500; font-style: italic; line-height: 1.5; color: var(--mute); }
+.note b { font-style: normal; color: var(--ink); font-weight: 600; }
+
+/* The last word on page four gets the weight it earned. */
+.verdict {
+  margin: 14px 0 0; padding: 14px 17px; border-radius: 14px;
+  background: var(--tint);
+  font-family: "SF Pro Display", sans-serif;
+  font-size: 14.5px; font-weight: 600; letter-spacing: -.014em; line-height: 1.42; color: var(--ink);
+}
+
+.foot { margin-top: auto; padding-top: 10px; font-size: 8.5px; font-weight: 500; color: #b4b4bb; }
+
+@media print {
+  :root { --s: 1; }
+  body { background: #fff; }
+  .doc { display: block; gap: 0; padding: 0; }
+  .fit { width: 816px; height: 1056px; }
+  .fit > .page { transform: none; box-shadow: none; }
+}
+</style>
+<body>
+<div class="doc">
+
+<!-- 1 ─ Primary research ───────────────────────────────────────────────── -->
+<div class="fit"><section class="page ac-violet">
+  <div class="rh"><span>Braino Foundry · Founder distribution research · August 2026</span><b>1 / 4</b></div>
+  <h1>Primary research.</h1>
+  <p class="lede">Fifteen hours at the 24-hour open house. Twenty-plus founder conversations. Eight structured interviews on a ten-question script, three fully transcribed — these eight are the ones that matter.</p>
+
+  <table>
+    <colgroup><col style="width:15%"><col style="width:47%"><col style="width:12%"><col style="width:12%"><col style="width:14%"></colgroup>
+    <tr><th>Founder</th><th>The key point</th><th>Pain #1</th><th>Tools paid</th><th>Would pay</th></tr>
+    <tr><td><b>Shah Rukh</b><small>Comic universe · 5y GTM</small></td><td>“Distribution is the central nervous system of any founder’s journey.” AI outreach = 40-50% manpower saved. Founders fail on unclear ICP, wrong channel, no founder brand. GTM consultants now $700-1,000/hr.</td><td>Outbound</td><td>0</td><td class="hi">~$200/mo</td></tr>
+    <tr><td><b>Sai Karan</b><small>LazyTyper</small></td><td>“Scripts are the headache” — videos are easy, writing isn’t. Launches on Product Hunt, Peerlist, five subreddits, X. Built his own agent (Lara) for X instead of paying for tools. Wants AEO maintained weekly.</td><td>Content — scripts</td><td>0 · built own</td><td class="hi">$10-15<small>(others $100+)</small></td></tr>
+    <tr><td><b>Vihar</b><small>Dinebees · 10K downloads</small></td><td>Pain: finding the right creators. Happy for AI to draft 20 personal messages — with approval: “in India, public posting needs human review.” AEO “very willing” once explained. Max 1-2 subscriptions ever. Signed for a free service month.</td><td>Content — creators</td><td>0</td><td class="hi">₹1.5-2K/mo</td></tr>
+    <tr><td><b>Sidhant</b><small>CareKin</small></td><td>Distribution and positioning are his biggest bottleneck. Learned the tools exist from this interview. “I would actually buy it.”</td><td>Positioning</td><td>0</td><td class="hi">₹2K<small>stated buyer</small></td></tr>
+    <tr><td><b>Stazey founder</b><small>Airbnb alternative</small></td><td>Loved the content engine. Reddit + LinkedIn posting is the draw — automating it “alone is worth it.”</td><td>Content — Reddit, LinkedIn</td><td>0</td><td class="hi">₹1.5-3K/mo</td></tr>
+    <tr><td><b>Vikas</b><small>XEO Rank · AEO agency</small></td><td>Expert validation: AEO is monitor-first, ongoing weekly work — not a one-time fix. Add SEO tracking to the optics engine.</td><td>Domain expert</td><td>Runs agency</td><td class="dash">—</td></tr>
+    <tr><td><b>Prithvi</b><small>Community founder</small></td><td>“Tools are separate ingredients in a kitchen. Braino is the chef — one dish, no juggling apps.” Backs voice-first Jarvis positioning. Human-in-loop is a must.</td><td>Tool juggling</td><td>0 · knew, never used</td><td class="hi">₹3K/mo</td></tr>
+    <tr><td><b>Eighth</b><small>Verbal notes</small></td><td>Same pattern — distribution pain, no tools, content-first.</td><td>Distribution</td><td>0</td><td class="dash">—</td></tr>
+  </table>
+
+  <div class="band stat">
+    <div><strong>8 / 8</strong><em>distribution pain</em></div>
+    <div><strong>0 / 8</strong><em>pay for any tool</em></div>
+    <div><strong>8 / 8</strong><em>AEO interest</em></div>
+    <div><strong>8 / 8</strong><em>demand an approval gate</em></div>
+    <div><strong>3</strong><em>stated buyers</em></div>
+    <div><strong>₹1,500-3,000</strong><em>India band, per month</em></div>
+  </div>
+
+  <h2>The other twelve-plus conversations.</h2>
+  <p class="body" style="margin-top:0">Every founder shown Braino asked to try it — the 100% trial-interest pattern held. Consensus: GTM is learnable from frameworks, but distribution is “street smartness.” Nobody named a tool they pay for. Zero contradicting signal.</p>
+
+  <h2>Five findings.</h2>
+  <p class="body" style="margin-top:0">Distribution is the pain, 8/8. Zero tools paid for — greenfield; Braino is the founder’s first system, not a replacement. Content beats outbound as pain #1. AEO excites everyone, and an expert confirms it’s weekly work. Autonomy must be approval-gated — every founder said so.</p>
+
+  <p class="foot">Braino Foundry · Founder distribution research · August 2026 · 1/4</p>
+</section></div>
+
+<!-- 2 ─ The union ──────────────────────────────────────────────────────── -->
+<div class="fit"><section class="page ac-amber">
+  <div class="rh"><span>Braino Foundry · Founder distribution research · August 2026</span><b>2 / 4</b></div>
+  <h1>The union, and the union workflow.</h1>
+  <p class="lede">Overlay all eight founders’ weeks. Whatever repeats is the union — and the union, wired together, is the machine below.</p>
+
+  <table>
+    <colgroup><col style="width:26%"><col style="width:53%"><col style="width:21%"></colgroup>
+    <tr><th>Weekly activity</th><th>Who does / wants it</th><th>In union?</th></tr>
+    <tr><td><b>Content creation + posting</b></td><td>7/8 — scripts (Sai), creators (Vihar), Stazey, Prithvi, Shah Rukh’s channel flooding</td><td class="hi">Yes — core</td></tr>
+    <tr><td><b>Platform presence — Reddit, LinkedIn, X</b></td><td>6/8 — Sai (X + subreddits, built Lara for X), Stazey (Reddit + LinkedIn), Shah Rukh (Reddit, Discord, FB), Vihar (IG, Reddit planned) + the documented r/buildinpublic grind</td><td class="hi">Yes — core</td></tr>
+    <tr><td><b>AEO / AI visibility</b></td><td>8/8 once explained — Vikas does it professionally</td><td class="hi">Yes — core</td></tr>
+    <tr><td><b>Personalized outreach</b></td><td>4/8 — Shah Rukh (40-50% saving), Sai, Vihar, Sidhant</td><td class="hi">Yes — gated</td></tr>
+    <tr><td><b>Research / listening</b></td><td>3/8 — Sai built Lara for it</td><td>Partial — feeds content</td></tr>
+    <tr><td><b>Inbound calls / paid ads</b></td><td>0/8 and 2/8 — Vihar called inbound irrelevant</td><td class="dash">No — cut</td></tr>
+  </table>
+
+  <div class="band">Union = content + Reddit/LinkedIn/X presence + AEO + gated outreach → roughly 80% of every founder’s distribution week.</div>
+
+  <h2>The full machine</h2>
+  <p class="sub">Chef metaphor (Prithvi) · approval inbox 8/8 · engines = union</p>
+  <div class="engines">
+    <div class="eng"><i>Engine 1</i><b>Content</b><span>Scripts (Sai) · creators (Vihar) · Reddit + LinkedIn (Stazey) · X (Sai)</span></div>
+    <div class="eng"><i>Engine 2</i><b>Optics, AEO + SEO</b><span>Weekly monitor-first (Vikas) · citations churn ~23%/mo</span></div>
+    <div class="eng"><i>Engine 3</i><b>Outbound</b><span>40-50% saving (Shah Rukh) · email + LinkedIn DMs · gate 8/8</span></div>
+  </div>
+
+  <p class="foot">Braino Foundry · Founder distribution research · August 2026 · 2/4</p>
+</section></div>
+
+<!-- 3 ─ Secondary research and competition ────────────────────────────── -->
+<div class="fit"><section class="page ac-blue tight">
+  <div class="rh"><span>Braino Foundry · Founder distribution research · August 2026</span><b>3 / 4</b></div>
+  <h1>Secondary research, and the competition.</h1>
+  <p class="lede">What the internet confirms — every claim sourced — and why nobody occupies Braino’s seat.</p>
+
+  <h2>Building is solved. Distribution is the bottleneck.</h2>
+  <ul>
+    <li>1 in 3 new companies in 2026 is founded by one person — AI cut dev cost ~90% and time-to-MVP ~60%. <cite>(Solo Founder Playbook 2026)</cite></li>
+    <li>A Product Hunt Top-5 finish now brings ~1,500 visits, not 15,000. The old launch playbook is dead.</li>
+    <li>A VC analysis of founder forums found ONE recurring theme: distribution — not AI, not features. <cite>(FundnAI)</cite></li>
+    <li>The “Distribution Chasm”: months of building, then launch to silence — five waitlist signups. <cite>(Before Takeoff)</cite></li>
+  </ul>
+
+  <h2>The manual grind, quantified.</h2>
+  <ul>
+    <li>Documented case: 2+ hours daily on Reddit for six months → only 2-3 usable opportunities a week. <cite>(r/buildinpublic via VibeCom)</cite></li>
+    <li>That’s ~10 hours of grinding per handful of real conversations — across Reddit, LinkedIn and X alike.</li>
+    <li>Value-first posts earn ~10x the engagement of promotional ones. It works — but eats time founders don’t have.</li>
+  </ul>
+
+  <h2>The AEO shift.</h2>
+  <ul>
+    <li>37% of product discovery now STARTS in AI interfaces like ChatGPT and Perplexity. <cite>(Profound)</cite></li>
+    <li>ChatGPT referrals convert at 14-16% vs ~1.8% for Google organic — roughly 9x. <cite>(Omnibound)</cite></li>
+    <li>Only 18% of brands have any AI-visibility strategy — 82% are invisible by default. <cite>(Erlin, 200+ marketing leaders)</cite></li>
+    <li>Citations churn ~23%/month; only ~30% of brands stay visible answer-to-answer — weekly maintenance is mandatory, which makes it recurring revenue. <cite>(AirOps)</cite></li>
+    <li>Reddit is ~10% of AI citations; brand websites only 5-10% — multi-platform content does double duty: community reach AND AI visibility. <cite>(Semrush, 100M citations)</cite></li>
+  </ul>
+
+  <h2>Competition, scored.</h2>
+  <table>
+    <colgroup><col style="width:21%"><col style="width:13%"><col style="width:14%"><col style="width:12%"><col style="width:11%"><col style="width:15%"><col style="width:14%"></colgroup>
+    <tr><th>Player</th><th>Content</th><th>AEO</th><th>Outbound</th><th>Inbound</th><th>Done-for-you</th><th>Price</th></tr>
+    <tr><td><b>Lovable</b><small>code gen</small></td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td><td>$25+</td></tr>
+    <tr><td><b>Leapd</b><small>“AI cofounder”</small></td><td>Yes</td><td>Yes</td><td>Yes</td><td class="dash">—</td><td class="dash">—</td><td>$299-999</td></tr>
+    <tr><td><b>AgentWeb</b></td><td>Yes</td><td>Partial</td><td>Partial</td><td class="dash">—</td><td class="dash">—</td><td>$299</td></tr>
+    <tr><td><b>Apollo + Clay</b></td><td class="dash">—</td><td class="dash">—</td><td>Strong</td><td class="dash">—</td><td class="dash">—</td><td>$50-100</td></tr>
+    <tr><td><b>Peec / Profound</b></td><td class="dash">—</td><td>Measure only</td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td><td>$99-399</td></tr>
+    <tr><td><b>Buffer / Postiz</b></td><td>Schedule only</td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td><td>$15-49</td></tr>
+    <tr><td><b>GTM consultants</b></td><td>Yes</td><td>Some</td><td>Yes</td><td>Some</td><td>Yes — human</td><td>$700-1,000/hr</td></tr>
+    <tr class="us"><td><b>Braino</b></td><td><b>Yes</b></td><td><b>Fixes weekly</b></td><td><b>Gated</b></td><td><b>Deferred — 0/8</b></td><td><b>Yes — agent + FDE</b></td><td><b>₹1.5K-$200/mo</b></td></tr>
+  </table>
+
+  <div class="band">Every software player sits in “you do the work.” Only human consultants are done-for-you — at $700+/hr. Full-stack, done-for-you, founder-priced is an empty quadrant. That’s Braino’s seat.</div>
+  <p class="note">Hands-on trial (per Bhaskar): trying Apollo, Buffer, Retell as a user today — friction notes to follow.</p>
+
+  <p class="foot">Braino Foundry · Founder distribution research · August 2026 · 3/4</p>
+</section></div>
+
+<!-- 4 ─ Blueprint and meaning ─────────────────────────────────────────── -->
+<div class="fit"><section class="page ac-green">
+  <div class="rh"><span>Braino Foundry · Founder distribution research · August 2026</span><b>4 / 4</b></div>
+  <h1>The open-source blueprint, and what it all means.</h1>
+  <p class="lede">The union workflow mapped to a stack we can wire this month — then the synthesis and the price.</p>
+
+  <table>
+    <colgroup><col style="width:17%"><col style="width:31%"><col style="width:37%"><col style="width:15%"></colgroup>
+    <tr><th>Job</th><th>The agent does</th><th>Open-source / stack</th><th>When</th></tr>
+    <tr><td><b>Glue / orchestration</b></td><td>Routes tasks, schedules runs, holds the approval queue</td><td>n8n (self-hosted, OSS) spine + LLM API brain</td><td class="hi">First</td></tr>
+    <tr><td><b>Content</b></td><td>Writes in the founder’s tone; platform-fit versions for Reddit, LinkedIn, X, IG</td><td>LLM writer + Postiz (OSS scheduler) for LinkedIn/X/IG; Reddit via PRAW</td><td class="hi">Wk 1-2</td></tr>
+    <tr><td><b>Research feed</b></td><td>Listens for niche keywords, surfaces threads worth joining</td><td>Reddit API keyword listeners, F5Bot-style, self-built</td><td class="hi">Wk 1-2</td></tr>
+    <tr><td><b>Optics — AEO + SEO</b></td><td>Weekly buyer-question checks, scorecard, fix drafts</td><td>Scheduled LLM queries + OSS SERP scrapers; fixes ship via content engine</td><td class="hi">Wk 3-4</td></tr>
+    <tr><td><b>Outbound</b></td><td>Researches targets, drafts 1:1 messages, tracks replies</td><td>Lead scrapers / Apollo free tier + LLM personalization + SMTP; LinkedIn DMs assisted</td><td class="hi">Wk 5-6</td></tr>
+    <tr><td><b>Approval layer</b></td><td>One inbox — approve, edit, reject; nothing posts without it</td><td>n8n wait-nodes + Braino app: voice in, tap out</td><td class="hi">Ships with v1</td></tr>
+    <tr><td><b>Inbound</b></td><td>AI calls and chat</td><td>Retell / Bland class</td><td class="dash">Deferred — 0/8 asked</td></tr>
+  </table>
+  <p class="note">This exact wiring runs by hand for Dinebees first — <b>free service month, signed</b> — then we productize what repeats. Cost stays near zero through the service phase.</p>
+
+  <h2>Synthesis.</h2>
+  <p class="body" style="margin-top:0">Founders can build in days but can’t distribute. They pay for zero tools — existing tools serve marketers with budgets, not pre-revenue founders. So they grind manually across Reddit, LinkedIn and X, or launch to silence, while discovery moves to AI answers and 82% of brands have no strategy for it. <b>The white space: be the founder’s first distribution system</b> — one voice-commanded companion that writes in their tone, keeps them visible in AI answers weekly, and drafts personal outreach. Every action approval-gated. Priced for pre-revenue.</p>
+
+  <h2>Pricing, anchored to stated numbers.</h2>
+  <table>
+    <colgroup><col style="width:27%"><col style="width:23%"><col style="width:50%"></colgroup>
+    <tr><th>Tier</th><th>Price</th><th>Anchor</th></tr>
+    <tr><td><b>India pre-revenue starter</b></td><td class="hi">₹1,499-2,999/mo</td><td>CareKin ₹2K · Stazey ₹1.5-3K · Prithvi ₹3K · Vihar ₹1.5-2K</td></tr>
+    <tr><td><b>Global solo-founder Pro</b></td><td class="hi">$49-99/mo</td><td>“A normal founder would pay $100+” — Sai Karan</td></tr>
+    <tr><td><b>Revenue-stage / GTM</b></td><td class="hi">$200+/mo</td><td>Shah Rukh’s ceiling; consultants at $700-1,000/hr</td></tr>
+    <tr><td><b>FDE service — run it for you</b></td><td class="hi">Free month → ₹25-50K/mo</td><td>Dinebees signed; YC 2026: “sell the service”</td></tr>
+  </table>
+
+  <p class="verdict">Founders don’t need another tool — they have none. They need one companion that does content, visibility, and outreach for them, with their approval, at a price they can say yes to before revenue. That’s Braino Foundry.</p>
+
+  <p class="foot">Braino Foundry · Founder distribution research · August 2026 · 4/4</p>
+</section></div>
+
+</div>
+<script>
+  (function () {
+    var fit = function () {
+      var w = document.documentElement.clientWidth;
+      var s = Math.min(1, (w - 32) / 816);
+      document.documentElement.style.setProperty('--s', s > 0.2 ? s : 0.2);
+    };
+    fit();
+    window.addEventListener('resize', fit);
+  })();
+</script>
+</body>
+</html>
