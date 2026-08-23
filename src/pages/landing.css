@@ -117,6 +117,92 @@
 }
 @media (max-width: 760px) { .ld-whois .po-character-grid { grid-template-columns: 1fr; } }
 
+/* [hidden] is a UA rule at zero specificity, so a class that sets display:grid
+   beats it and both tab panels render at once. Say it again, louder. */
+.ld-whois .po-character-grid[hidden], .ws-grid[hidden] { display: none; }
+
+/* ── "Who is Braino?" tabs ─────────────────────────────────────────────────
+   Two peers, not a heading and a footnote. The pill is the same one the
+   "who it is for" chips use, so the page has one way of asking you to pick
+   rather than two. */
+.ws-tabs {
+  display: flex; gap: 8px; flex-wrap: wrap;
+  margin: clamp(20px, 2.6vw, 30px) var(--ap-gutter) clamp(16px, 2vw, 22px);
+}
+.ws-tab {
+  appearance: none; cursor: pointer; font: inherit;
+  font-size: 14px; font-weight: 500;
+  padding: 9px 18px; border-radius: 999px;
+  border: 1px solid var(--ap-hairline);
+  background: transparent; color: var(--ap-ink-soft);
+  transition: background .18s ease, color .18s ease, border-color .18s ease;
+}
+.ws-tab:hover { color: var(--ap-ink); border-color: var(--ap-ink-soft); }
+.ws-tab.is-on {
+  background: var(--ap-ink); border-color: var(--ap-ink);
+  color: var(--ap-bg); font-weight: 600;
+}
+.ws-tab:focus-visible { outline: 2px solid var(--ap-accent); outline-offset: 3px; }
+
+/* Same frame as the character grid: one hairline background, 1px gaps, no
+   per-cell borders, so the two panels read as the same object re-filled. */
+.ws-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  background: var(--ap-hairline);
+  border: 1px solid var(--ap-hairline);
+  border-radius: 26px;
+  overflow: hidden;
+  margin: 0 var(--ap-gutter);
+}
+@media (max-width: 980px) { .ws-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 640px) { .ws-grid { grid-template-columns: 1fr; } }
+
+.ws-card { margin: 0; background: var(--ap-surface); display: flex; flex-direction: column; }
+
+/* 16:9 through aspect-ratio rather than a padding hack, so an empty slot and a
+   loaded clip occupy exactly the same space and the grid never jumps when the
+   footage lands. */
+.ws-media {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  background: var(--ap-surface-2, rgba(127, 127, 137, .07));
+  overflow: hidden;
+}
+.ws-media video {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  object-fit: cover; display: block;
+  background: #000;
+}
+
+/* The slot sits under the video and shows through only while there is nothing
+   on top of it, which means one rule covers both "not shot yet" and "the file
+   404ed". */
+.ws-slot {
+  position: absolute; inset: 0; z-index: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px;
+  color: var(--ap-ink-soft);
+}
+.ws-slot b { font-size: 13px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+.ws-slot em {
+  font-style: normal; font-size: 12px; font-weight: 500;
+  color: color-mix(in srgb, var(--ap-ink-soft) 70%, transparent);
+}
+.ws-media video { z-index: 1; }
+.ws-media.is-empty video { display: none; }
+
+.ws-card figcaption { padding: clamp(18px, 2.2vw, 26px); }
+.ws-card h3 {
+  margin: 0 0 7px;
+  font-size: clamp(17px, 1.9vw, 20px); font-weight: 600;
+  letter-spacing: -.018em; line-height: 1.25; color: var(--ap-ink);
+}
+.ws-card p { margin: 0; font-size: 15px; line-height: 1.55; color: var(--ap-ink-soft); }
+
+@media (prefers-reduced-motion: reduce) { .ws-tab { transition: none; } }
+
 .ld-whois .po-character-card {
   min-height: 0;
   border: 0;

@@ -134,6 +134,33 @@ const PEOPLE = [
     ] },
 ];
 
+/* "Watch him work" — six slots for real footage of Braino doing the thing.
+ *
+ * `src` empty means the clip is not shot yet, and the tile renders as a
+ * labelled slot instead of a dead player. Drop an .mp4 into public/work/ with
+ * the matching name and it starts playing on its own: no other change needed.
+ * A poster is optional and only ever a still from the clip itself. */
+const WORK: Array<{ id: string; label: string; title: string; line: string; src?: string; poster?: string }> = [
+  { id: "voice", label: "Voice", title: "You talk. He moves.",
+    line: "Say it out loud and watch him go and do it, on the page you are already on.",
+    src: "/work/voice.mp4" },
+  { id: "delegate", label: "Delegate", title: "He runs the errand.",
+    line: "Books it, buys it, fills the form, chases the renewal. In your browser, signed into your accounts.",
+    src: "/work/delegate.mp4" },
+  { id: "page", label: "Any page", title: "He reads what you are reading.",
+    line: "A forty page PDF, a contract, a competitor's pricing. Ask, get the answer, no pasting.",
+    src: "/work/page.mp4" },
+  { id: "meetings", label: "Meetings", title: "He sits in and takes the notes.",
+    line: "No bot in the participant list. Notes at the end, plus what you promised and forgot.",
+    src: "/work/meetings.mp4" },
+  { id: "distra", label: "Distra", title: "He writes the week's posts.",
+    line: "In your voice, from what you actually shipped. Nothing goes out without your tap.",
+    src: "/work/distra.mp4" },
+  { id: "roam", label: "Roam", title: "He walks onto the page.",
+    line: "Off the bar, onto whatever you are looking at, pointing at the thing he means.",
+    src: "/work/roam.mp4" },
+];
+
 /* The comparison. Read across, not down: the same question answered twice. */
 const COMPARE: Array<[string, string, string]> = [
   ["What it handles", "Your day", "Your company"],
@@ -359,6 +386,8 @@ export default function Landing() {
   useEffect(() => { document.title = "Braino: speak, watch it happen"; }, []);
 
   // A pre-written example is on screen from the start; asking replaces it.
+  // Which half of "Who is Braino?" is showing: the character, or the footage.
+  const [whoIsTab, setWhoIsTab] = useState<"who" | "work">("who");
   const [who, setWho] = useState(PEOPLE[0].id);
   const person = custom ?? PEOPLE.find((x) => x.id === who) ?? PEOPLE[0];
 
@@ -460,7 +489,29 @@ export default function Landing() {
             good at getting you through the day.
           </p>
         </div>
-        <div className="po-character-grid">
+
+        {/* Two ways to answer the same question: read who he is, or watch him
+            do it. The footage is the more convincing half, which is why it is
+            a peer tab rather than something buried further down. */}
+        <div className="ws-tabs apple-reveal" role="tablist" aria-label="Who is Braino">
+          <button
+            type="button" role="tab" id="ws-tab-who"
+            aria-selected={whoIsTab === "who"} aria-controls="ws-panel-who"
+            className={"ws-tab" + (whoIsTab === "who" ? " is-on" : "")}
+            onClick={() => setWhoIsTab("who")}
+          >See who he is</button>
+          <button
+            type="button" role="tab" id="ws-tab-work"
+            aria-selected={whoIsTab === "work"} aria-controls="ws-panel-work"
+            className={"ws-tab" + (whoIsTab === "work" ? " is-on" : "")}
+            onClick={() => setWhoIsTab("work")}
+          >Watch him work</button>
+        </div>
+
+        <div
+          className="po-character-grid" id="ws-panel-who" role="tabpanel"
+          aria-labelledby="ws-tab-who" hidden={whoIsTab !== "who"}
+        >
           {STORY.map((form) => (
             <article className="po-character-card apple-reveal" key={form.number}>
               <div className={`po-character-art is-${form.art}`}>
@@ -476,6 +527,41 @@ export default function Landing() {
                 <p>{form.description}</p>
               </div>
             </article>
+          ))}
+        </div>
+
+        <div
+          className="ws-grid" id="ws-panel-work" role="tabpanel"
+          aria-labelledby="ws-tab-work" hidden={whoIsTab !== "work"}
+        >
+          {WORK.map((clip) => (
+            <figure className="ws-card apple-reveal" key={clip.id}>
+              <div className="ws-media">
+                {clip.src ? (
+                  <video
+                    src={clip.src}
+                    poster={clip.poster}
+                    muted
+                    loop
+                    playsInline
+                    preload="metadata"
+                    onMouseEnter={(e) => { void e.currentTarget.play().catch(() => {}); }}
+                    onMouseLeave={(e) => { e.currentTarget.pause(); e.currentTarget.currentTime = 0; }}
+                    /* A clip that has not been shot yet is a 404, and a 404
+                       <video> renders as a black box. Swap in the slot. */
+                    onError={(e) => { e.currentTarget.closest(".ws-media")?.classList.add("is-empty"); }}
+                  />
+                ) : null}
+                <span className="ws-slot">
+                  <b>{clip.label}</b>
+                  <em>clip goes here</em>
+                </span>
+              </div>
+              <figcaption>
+                <h3>{clip.title}</h3>
+                <p>{clip.line}</p>
+              </figcaption>
+            </figure>
           ))}
         </div>
       </section>
