@@ -786,6 +786,9 @@
 
 /* Chips and the ask are one control row: two shortcuts and a long way of saying
    the same thing. Split across two rows the box read as a separate feature. */
+/* The row used to hold chips plus a text field. It is chips now, so it stops
+   pretending to be a form and just sits under the question. */
+.ld-who-bar { margin-bottom: clamp(18px, 2.4vw, 26px); }
 .ld-who-bar {
   display: flex;
   align-items: center;

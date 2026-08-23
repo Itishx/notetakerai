@@ -154,6 +154,73 @@ li::before { content: ""; position: absolute; left: 2px; top: .55em; width: 4px;
 li b { color: var(--ink); font-weight: 600; }
 li cite { font-style: normal; color: var(--mute); font-size: 9.5px; }
 
+/* ── The workflow diagrams ─────────────────────────────────────────────────
+   Redrawn from the four diagrams in the original document, node for node and
+   label for label. They were flat pictures before; here they are type and
+   hairlines, so they stay sharp at any zoom, follow the page accent, and can
+   be corrected by editing a word instead of re-exporting a PNG.
+
+   Three node roles, and the colour carries the role rather than decorating it:
+   neutral is something the founder or the world supplies, accent is Braino
+   working, coral is where the work lands in public. */
+
+.dg { display: flex; flex-direction: column; align-items: center; gap: 0; }
+.dg .row { display: flex; gap: 7px; justify-content: center; align-items: stretch; width: 100%; }
+
+.nd {
+  flex: 1; min-width: 0;
+  border: 1px solid var(--line); border-radius: 9px; background: var(--surface);
+  padding: 6px 9px; text-align: center;
+}
+.nd b { display: block; font-size: 9.5px; font-weight: 600; letter-spacing: -.008em; line-height: 1.25; color: var(--ink); }
+.nd span { display: block; margin-top: 2px; font-size: 8px; font-weight: 500; line-height: 1.3; color: var(--mute); }
+
+/* Braino, and the engines: the page accent, because this is the part that is
+   the product rather than the world around it. */
+.nd.do { background: var(--tint); border-color: transparent; }
+.nd.do b { color: var(--accent); }
+.nd.do span { color: var(--accent); opacity: .75; }
+
+/* Where it lands in public. Coral on every page, since this is the one role
+   that means the same thing in all four diagrams. */
+.nd.out { background: var(--coral-tint); border-color: transparent; }
+.nd.out b { color: #a8453d; }
+.nd.out span { color: #a8453d; opacity: .78; }
+
+/* The gate. Ink, not colour: it is the founder, and the founder is not one of
+   the machine's own boxes. */
+.nd.gate { background: #f0f0f2; border-color: transparent; }
+.nd.gate b { color: var(--ink); }
+
+/* The connector is a rule with a chevron, drawn in type rather than SVG so it
+   scales with the page and prints as vector. */
+.dg .to { height: 15px; width: 1px; background: var(--line); position: relative; margin: 0 auto; }
+.dg .to::after {
+  content: ""; position: absolute; left: 50%; bottom: 0;
+  width: 4px; height: 4px; margin-left: -2px;
+  border-right: 1px solid #a9a9b1; border-bottom: 1px solid #a9a9b1;
+  transform: rotate(45deg) translate(-1px,-1px);
+}
+/* A fan is the same rule widened into a bracket: one source, several targets. */
+.dg .fan { width: 78%; height: 13px; border-top: 1px solid var(--line); border-left: 1px solid var(--line); border-right: 1px solid var(--line); border-radius: 5px 5px 0 0; margin: 0 auto; position: relative; }
+.dg .fan.up { border-top: 0; border-bottom: 1px solid var(--line); border-radius: 0 0 5px 5px; }
+
+.dg .loop {
+  margin-top: 9px; width: 100%; text-align: center;
+  border: 1px dashed var(--line); border-radius: 9px; padding: 5px 9px;
+  font-size: 8.5px; font-weight: 500; font-style: italic; color: var(--mute);
+}
+
+/* Three engine diagrams side by side is the case-study view: same shape three
+   times, so the differences read at a glance. */
+.cases { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 10px; }
+.case > h3 {
+  margin: 0 0 3px; font-family: "SF Pro Display", sans-serif;
+  font-size: 12.5px; font-weight: 600; letter-spacing: -.014em;
+}
+.case > h3 i { font-style: normal; color: var(--accent); }
+.case > p { margin: 0 0 7px; font-size: 8.5px; font-weight: 500; line-height: 1.35; color: var(--mute); }
+
 /* ── The three engines ───────────────────────────────────────────────────── */
 .engines { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 11px; }
 .eng { border: 1px solid var(--line); border-radius: 13px; background: var(--surface); padding: 13px 15px; }
@@ -187,7 +254,7 @@ li cite { font-style: normal; color: var(--mute); font-size: 9.5px; }
 
 <!-- 1 ─ Primary research ───────────────────────────────────────────────── -->
 <div class="fit"><section class="page ac-violet">
-  <div class="rh"><span>Braino Foundry · Founder distribution research · August 2026</span><b>1 / 4</b></div>
+  <div class="rh"><span>Braino Foundry · Founder distribution research · August 2026</span><b>1 / 5</b></div>
   <h1>Primary research.</h1>
   <p class="lede">Fifteen hours at the 24-hour open house. Twenty-plus founder conversations. Eight structured interviews on a ten-question script, three fully transcribed — these eight are the ones that matter.</p>
 
@@ -219,12 +286,12 @@ li cite { font-style: normal; color: var(--mute); font-size: 9.5px; }
   <h2>Five findings.</h2>
   <p class="body" style="margin-top:0">Distribution is the pain, 8/8. Zero tools paid for — greenfield; Braino is the founder’s first system, not a replacement. Content beats outbound as pain #1. AEO excites everyone, and an expert confirms it’s weekly work. Autonomy must be approval-gated — every founder said so.</p>
 
-  <p class="foot">Braino Foundry · Founder distribution research · August 2026 · 1/4</p>
+  <p class="foot">Braino Foundry · Founder distribution research · August 2026 · 1/5</p>
 </section></div>
 
 <!-- 2 ─ The union ──────────────────────────────────────────────────────── -->
 <div class="fit"><section class="page ac-amber">
-  <div class="rh"><span>Braino Foundry · Founder distribution research · August 2026</span><b>2 / 4</b></div>
+  <div class="rh"><span>Braino Foundry · Founder distribution research · August 2026</span><b>2 / 5</b></div>
   <h1>The union, and the union workflow.</h1>
   <p class="lede">Overlay all eight founders’ weeks. Whatever repeats is the union — and the union, wired together, is the machine below.</p>
 
@@ -241,20 +308,116 @@ li cite { font-style: normal; color: var(--mute); font-size: 9.5px; }
 
   <div class="band">Union = content + Reddit/LinkedIn/X presence + AEO + gated outreach → roughly 80% of every founder’s distribution week.</div>
 
-  <h2>The full machine</h2>
-  <p class="sub">Chef metaphor (Prithvi) · approval inbox 8/8 · engines = union</p>
-  <div class="engines">
-    <div class="eng"><i>Engine 1</i><b>Content</b><span>Scripts (Sai) · creators (Vihar) · Reddit + LinkedIn (Stazey) · X (Sai)</span></div>
-    <div class="eng"><i>Engine 2</i><b>Optics, AEO + SEO</b><span>Weekly monitor-first (Vikas) · citations churn ~23%/mo</span></div>
-    <div class="eng"><i>Engine 3</i><b>Outbound</b><span>40-50% saving (Shah Rukh) · email + LinkedIn DMs · gate 8/8</span></div>
-  </div>
+  <p class="note">The full machine, and each engine end to end, are drawn on the next page.</p>
 
-  <p class="foot">Braino Foundry · Founder distribution research · August 2026 · 2/4</p>
+  <p class="foot">Braino Foundry · Founder distribution research · August 2026 · 2/5</p>
 </section></div>
 
-<!-- 3 ─ Secondary research and competition ────────────────────────────── -->
+<!-- 3 ─ The workflow diagrams ──────────────────────────────────────────── -->
+<div class="fit"><section class="page ac-green">
+  <div class="rh"><span>Braino Foundry · Founder distribution research · August 2026</span><b>3 / 5</b></div>
+  <h1>The union workflow, drawn.</h1>
+  <p class="lede">One machine, then each engine on its own. Same shape every time: something comes in, Braino works, <b>you approve, and only then does anything reach the public.</b></p>
+
+  <h2>The full machine</h2>
+  <p class="sub">Chef metaphor (Prithvi) · approval inbox 8/8 · engines = union</p>
+  <div class="dg">
+    <div class="row" style="width:72%">
+      <div class="nd"><b>You speak</b><span>One voice command</span></div>
+      <div class="nd"><b>Research listener</b><span>Reddit + forum signals</span></div>
+    </div>
+    <div class="fan up" style="width:52%"></div>
+    <div class="to"></div>
+    <div class="row" style="width:44%"><div class="nd do"><b>Braino</b><span>Memory: your voice, ICP, goals</span></div></div>
+    <div class="to"></div>
+    <div class="fan"></div>
+    <div class="row">
+      <div class="nd do"><b>1. Content</b><span>Writes in your voice</span></div>
+      <div class="nd do"><b>2. Optics</b><span>AEO + SEO weekly</span></div>
+      <div class="nd do"><b>3. Outbound</b><span>Personal outreach drafts</span></div>
+    </div>
+    <div class="fan up"></div>
+    <div class="to"></div>
+    <div class="row" style="width:50%"><div class="nd gate"><b>Approval inbox</b><span>You tap yes — nothing skips you</span></div></div>
+    <div class="to"></div>
+    <div class="fan"></div>
+    <div class="row">
+      <div class="nd out"><b>Social platforms</b><span>Reddit · LinkedIn · IG · X</span></div>
+      <div class="nd out"><b>AI answers</b><span>ChatGPT · Perplexity · AIO</span></div>
+      <div class="nd out"><b>Inboxes</b><span>Email · LinkedIn DMs</span></div>
+    </div>
+  </div>
+
+  <h2>Each engine, end to end</h2>
+  <div class="cases">
+    <div class="case">
+      <h3><i>Engine 1 —</i> Content</h3>
+      <p>Scripts (Sai) · creators (Vihar) · Reddit + LinkedIn (Stazey) · X (Sai)</p>
+      <div class="dg">
+        <div class="row">
+          <div class="nd"><b>Your update</b><span>"We shipped dark mode"</span></div>
+          <div class="nd"><b>Reddit signals</b><span>What your niche discusses</span></div>
+        </div>
+        <div class="fan up" style="width:60%"></div>
+        <div class="to"></div>
+        <div class="row"><div class="nd do"><b>Writer — your tone</b><span>Scripts, posts, threads, replies</span></div></div>
+        <div class="to"></div>
+        <div class="row"><div class="nd do"><b>Platform-fit versions</b><span>Long for Reddit, short for X</span></div></div>
+        <div class="to"></div>
+        <div class="row"><div class="nd gate"><b>You approve</b><span>Edit or one-tap yes</span></div></div>
+        <div class="to"></div>
+        <div class="row"><div class="nd out"><b>Reddit · LinkedIn · Instagram · X · Communities</b></div></div>
+        <div class="loop">Engagement data shapes next week’s posts</div>
+      </div>
+    </div>
+
+    <div class="case">
+      <h3><i>Engine 2 —</i> Optics, AEO + SEO</h3>
+      <p>Weekly monitor-first (Vikas) · citations churn ~23%/mo</p>
+      <div class="dg">
+        <div class="row"><div class="nd do"><b>Asks the buyer questions</b><span>"Best X app?" on ChatGPT · Perplexity · Google</span></div></div>
+        <div class="to"></div>
+        <div class="row"><div class="nd do"><b>Visibility scorecard</b><span>Recommended or invisible? Who wins?</span></div></div>
+        <div class="to"></div>
+        <div class="row"><div class="nd do"><b>Fix plan</b><span>Reddit posts, site pages, citations, SEO</span></div></div>
+        <div class="to"></div>
+        <div class="row"><div class="nd gate"><b>You approve the plan</b><span>5 minutes, once a week</span></div></div>
+        <div class="to"></div>
+        <div class="row"><div class="nd out"><b>Fixes go live</b><span>Via the content engine + your site</span></div></div>
+        <div class="loop">Re-checks every week — rankings shift monthly</div>
+      </div>
+    </div>
+
+    <div class="case">
+      <h3><i>Engine 3 —</i> Outbound</h3>
+      <p>40-50% saving (Shah Rukh) · email + LinkedIn DMs · gate 8/8</p>
+      <div class="dg">
+        <div class="row"><div class="nd"><b>You say who</b><span>"20 founders building consumer apps"</span></div></div>
+        <div class="to"></div>
+        <div class="row"><div class="nd do"><b>Finds + researches each person</b><span>Profile, posts, company, context</span></div></div>
+        <div class="to"></div>
+        <div class="row"><div class="nd do"><b>Drafts 20 personal messages</b><span>One per person — not one blast</span></div></div>
+        <div class="to"></div>
+        <div class="row"><div class="nd gate"><b>You swipe the stack</b><span>Approve · edit · reject each</span></div></div>
+        <div class="to"></div>
+        <div class="fan"></div>
+        <div class="row">
+          <div class="nd out"><b>Email</b></div>
+          <div class="nd out"><b>LinkedIn DMs</b></div>
+        </div>
+        <div class="fan up" style="width:60%"></div>
+        <div class="to"></div>
+        <div class="row"><div class="nd do"><b>Tracks replies + follows up</b><span>Result: booked conversations</span></div></div>
+      </div>
+    </div>
+  </div>
+
+  <p class="foot">Braino Foundry · Founder distribution research · August 2026 · 3/5</p>
+</section></div>
+
+<!-- 4 ─ Secondary research and competition ────────────────────────────── -->
 <div class="fit"><section class="page ac-blue tight">
-  <div class="rh"><span>Braino Foundry · Founder distribution research · August 2026</span><b>3 / 4</b></div>
+  <div class="rh"><span>Braino Foundry · Founder distribution research · August 2026</span><b>4 / 5</b></div>
   <h1>Secondary research, and the competition.</h1>
   <p class="lede">What the internet confirms — every claim sourced — and why nobody occupies Braino’s seat.</p>
 
@@ -299,12 +462,12 @@ li cite { font-style: normal; color: var(--mute); font-size: 9.5px; }
   <div class="band">Every software player sits in “you do the work.” Only human consultants are done-for-you — at $700+/hr. Full-stack, done-for-you, founder-priced is an empty quadrant. That’s Braino’s seat.</div>
   <p class="note">Hands-on trial (per Bhaskar): trying Apollo, Buffer, Retell as a user today — friction notes to follow.</p>
 
-  <p class="foot">Braino Foundry · Founder distribution research · August 2026 · 3/4</p>
+  <p class="foot">Braino Foundry · Founder distribution research · August 2026 · 4/5</p>
 </section></div>
 
-<!-- 4 ─ Blueprint and meaning ─────────────────────────────────────────── -->
+<!-- 5 ─ Blueprint and meaning ─────────────────────────────────────────── -->
 <div class="fit"><section class="page ac-green">
-  <div class="rh"><span>Braino Foundry · Founder distribution research · August 2026</span><b>4 / 4</b></div>
+  <div class="rh"><span>Braino Foundry · Founder distribution research · August 2026</span><b>5 / 5</b></div>
   <h1>The open-source blueprint, and what it all means.</h1>
   <p class="lede">The union workflow mapped to a stack we can wire this month — then the synthesis and the price.</p>
 
@@ -336,7 +499,7 @@ li cite { font-style: normal; color: var(--mute); font-size: 9.5px; }
 
   <p class="verdict">Founders don’t need another tool — they have none. They need one companion that does content, visibility, and outreach for them, with their approval, at a price they can say yes to before revenue. That’s Braino Foundry.</p>
 
-  <p class="foot">Braino Foundry · Founder distribution research · August 2026 · 4/4</p>
+  <p class="foot">Braino Foundry · Founder distribution research · August 2026 · 5/5</p>
 </section></div>
 
 </div>

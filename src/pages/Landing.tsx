@@ -727,8 +727,11 @@ export default function Landing() {
       <section className="ld-who apple-reveal" id="who">
         <div className="ld-wrap">
           <p className="apple-eyebrow">Who it is for</p>
-          <h2 className="ld-h2">Same four things. <span className="tone">Different day.</span></h2>
-          <p className="ld-lede">The four things never change. Only the mess around them does. Tell him what you do and he will write yours.</p>
+          <h2 className="ld-h2">Who is Braino Companion for?</h2>
+          <p className="ld-lede">
+            The four things never change. Only the mess around them does.
+            <b> Pick the one that sounds like you.</b>
+          </p>
 
           <div className="ld-who-bar">
             <div className="ld-who-pick" role="group" aria-label="Pick someone">
@@ -743,35 +746,7 @@ export default function Landing() {
                 </button>
               ))}
             </div>
-
-            <form className="ld-ask" onSubmit={askBraino}>
-              <input
-                id="ld-who-input"
-                aria-label="Tell Braino what you do"
-                value={typed}
-                onChange={(e) => setTyped(e.target.value)}
-                placeholder="Tell me what you do"
-                disabled={asking}
-              />
-              <button type="submit" className="ld-ask-btn" disabled={asking || !typed.trim()}>
-                <img
-                  className={"ld-ask-mascot" + (asking ? " is-thinking" : "")}
-                  src="/reactions/braino-happy.svg" alt="" aria-hidden="true"
-                />
-                {asking ? "Thinking..." : "Show me"}
-              </button>
-            </form>
           </div>
-
-          {askErr && <p className="ld-ask-miss">{askErr}</p>}
-          {custom && !asking && (
-            <p className="ld-ask-miss">
-              Written for you just now, by him.{" "}
-              <button type="button" className="ld-ask-back" onClick={() => { setCustom(null); setTyped(""); }}>
-                Back to the everyday one
-              </button>
-            </p>
-          )}
 
           <p className="ld-who-line">
             <span className="ld-who-tag">{person.label}</span>{person.line}
