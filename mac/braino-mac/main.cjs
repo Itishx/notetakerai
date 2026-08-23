@@ -112,6 +112,8 @@ const {
 } = require(path.join(__dirname, "dictation.cjs"));
 const { parseMusicSegmentIntent, parseMusicSegmentRange } = require(path.join(__dirname, "music-segment-intent.cjs"));
 const { parseWhatsNewIntent } = require(path.join(__dirname, "whats-new-intent.cjs"));
+const { parseTeleprompterIntent } = require(path.join(__dirname, "teleprompter-intent.cjs"));
+const teleprompter = require(path.join(__dirname, "teleprompter.cjs"));
 const { parseBrainoCodeIntent } = require(path.join(__dirname, "braino-code-intent.cjs"));
 
 let dockWindow = null;
@@ -14162,6 +14164,17 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
     return startBrainoCodeBuild(brainoCode);
   }
 
+  const prompterIntent = parseTeleprompterIntent(raw);
+  if (prompterIntent) {
+    logMac("delegate.teleprompter_intent", { action: prompterIntent.action });
+    if (prompterIntent.action === "stop") {
+      teleprompter.close();
+      return { ok: true, say: "Teleprompter closed." };
+    }
+    await teleprompter.open({ log: logMac });
+    return { ok: true, say: "Teleprompter is open. Paste your script and hit Done." };
+  }
+
   const whatsNew = parseWhatsNewIntent(raw);
   if (whatsNew) {
     logMac("delegate.whats_new_intent", { slug: whatsNew.slug, title: whatsNew.title, action: whatsNew.action });
@@ -14996,6 +15009,81 @@ ipcMain.handle("braino-mac:dictation-insert", async (_event, payload = {}) => (
 ipcMain.handle("braino-mac:dictation-refine", async (_event, payload = {}) => (
   refineDictationText(payload?.text, { timeoutMs: 3600, prefetch: true })
 ));
+
+// ── Teleprompter ───────────────────────────────────────────────────────────
+// Lay a pasted script out for reading. The model is allowed to add line breaks
+// and nothing else, so the check below compares the two with whitespace
+// removed: if a single character of the script changed, the model's answer is
+// thrown away and the founder's own text is used. A prompter that quietly
+// rewrites your words is worse than no prompter.
+
+function localScriptLayout(raw) {
+  return String(raw || "")
+    .replace(/\r\n?/g, "\n")
+    .split(/\n{2,}/)
+    .map((block) => block.replace(/\s*\n\s*/g, " ").trim())
+    .filter(Boolean)
+    // One sentence per line is what makes a wall of text readable at a glance
+    // while presenting, and it is a break, not an edit.
+    .map((block) => block.replace(/([.!?])\s+(?=[A-Z"'“])/g, "$1\n"))
+    .join("\n\n");
+}
+
+function sameWords(a, b) {
+  const strip = (s) => String(s || "").replace(/\s+/g, "").toLowerCase();
+  return strip(a) === strip(b);
+}
+
+async function formatTeleprompterScript(rawText) {
+  const raw = String(rawText || "").trim();
+  if (!raw) return { text: "", formatted: false, reason: "empty" };
+  const local = localScriptLayout(raw);
+  if (raw.length > 12000) return { text: local, formatted: false, reason: "too_long" };
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return { text: local, formatted: false, reason: "supabase_unavailable" };
+
+  const authToken = await getBrainoAuthToken().catch(() => null);
+  if (!authToken) return { text: local, formatted: false, reason: "auth_unavailable" };
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000);
+  try {
+    const response = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/dictation-refine`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${authToken}`,
+      },
+      body: JSON.stringify({ transcript: raw, mode: "teleprompter" }),
+      signal: controller.signal,
+    });
+    const data = await response.json().catch(() => ({}));
+    const candidate = String(data?.formatted || "").trim();
+    if (!response.ok || !candidate) return { text: local, formatted: false, reason: "request_failed" };
+    if (!sameWords(raw, candidate)) {
+      logMac("teleprompter.format.rejected", { chars: raw.length, candidateChars: candidate.length });
+      return { text: local, formatted: false, reason: "words_changed" };
+    }
+    return { text: candidate, formatted: true };
+  } catch (error) {
+    return { text: local, formatted: false, reason: "error" };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+ipcMain.handle("braino-mac:teleprompter-open", async () => teleprompter.open({ log: logMac }));
+
+ipcMain.handle("braino-mac:teleprompter-present", async (_event, payload = {}) => {
+  const laid = await formatTeleprompterScript(payload?.text);
+  if (!laid.text) return { ok: false, reason: "empty" };
+  logMac("teleprompter.format", { formatted: laid.formatted, reason: laid.reason || null });
+  return teleprompter.present(laid.text);
+});
+
+ipcMain.handle("braino-mac:teleprompter-edit", () => teleprompter.open({ log: logMac }));
+ipcMain.handle("braino-mac:teleprompter-close", () => teleprompter.close());
+ipcMain.handle("braino-mac:teleprompter-state", () => teleprompter.state());
 
 ipcMain.handle("braino-mac:request-accessibility", () => ({
   accessibilityTrusted: requestAccessibilityTrust(true),

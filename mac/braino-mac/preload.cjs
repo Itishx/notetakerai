@@ -98,6 +98,17 @@ contextBridge.exposeInMainWorld("brainoMac", {
   dictationControl: (payload) => ipcRenderer.invoke("braino-mac:dictation-control", payload || {}),
   dictationInsert: (payload) => ipcRenderer.invoke("braino-mac:dictation-insert", payload || {}),
   dictationRefine: (payload) => ipcRenderer.invoke("braino-mac:dictation-refine", payload || {}),
+  // Teleprompter: the compose panel and the read-along overlay both live in
+  // renderer/teleprompter.html, which loads this same preload.
+  teleprompterOpen: () => ipcRenderer.invoke("braino-mac:teleprompter-open"),
+  teleprompterPresent: (payload) => ipcRenderer.invoke("braino-mac:teleprompter-present", payload || {}),
+  teleprompterEdit: () => ipcRenderer.invoke("braino-mac:teleprompter-edit"),
+  teleprompterClose: () => ipcRenderer.invoke("braino-mac:teleprompter-close"),
+  teleprompterState: () => ipcRenderer.invoke("braino-mac:teleprompter-state"),
+  onTeleprompterMode: (handler) => {
+    ipcRenderer.on("braino-mac:teleprompter-mode", (_event, payload) => handler(payload));
+    return () => ipcRenderer.removeAllListeners("braino-mac:teleprompter-mode");
+  },
   requestAccessibility: () => ipcRenderer.invoke("braino-mac:request-accessibility"),
   requestMicrophone: () => ipcRenderer.invoke("braino-mac:request-microphone"),
   nativeListen: () => ipcRenderer.invoke("braino-mac:native-listen"),

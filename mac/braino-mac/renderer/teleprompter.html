@@ -1,0 +1,195 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Braino Teleprompter</title>
+<style>
+/* Two modes in one window. Compose is a panel you type into; prompt is the
+   overlay you read from while presenting. They share a shell so the switch
+   reads as the same object changing shape rather than a second window. */
+:root {
+  --ink: #f5f5f7;
+  --soft: #9a9aa2;
+  --coral: #e8776e;
+  --panel: rgba(18, 18, 21, 0.94);
+  --line: rgba(255, 255, 255, 0.10);
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
+body {
+  font-family: "SF Pro Text", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+}
+.shell {
+  height: 100%; display: flex; flex-direction: column;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  overflow: hidden;
+  backdrop-filter: blur(24px);
+}
+
+/* The bar is the drag handle. Without an app-region the founder cannot move a
+   frameless window, and moving it is half the point. */
+.bar {
+  -webkit-app-region: drag;
+  display: flex; align-items: center; gap: 9px;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--line);
+  font-size: 11.5px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
+  color: var(--soft);
+  flex: none;
+}
+.bar .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--coral); }
+.bar .grow { flex: 1; }
+.bar button, .btn {
+  -webkit-app-region: no-drag;
+  appearance: none; font: inherit; text-transform: none; letter-spacing: 0;
+  font-size: 12px; font-weight: 600;
+  padding: 5px 12px; border-radius: 999px; cursor: default;
+  border: 1px solid var(--line); background: rgba(255,255,255,.06); color: var(--ink);
+}
+.bar button:hover { background: rgba(255,255,255,.12); }
+.btn.go { background: var(--coral); border-color: var(--coral); color: #fff; }
+.btn.go:disabled { opacity: .4; }
+
+/* ── Compose ─────────────────────────────────────────────────────────────── */
+#compose { display: none; flex: 1; flex-direction: column; min-height: 0; }
+#compose textarea {
+  -webkit-app-region: no-drag;
+  flex: 1; min-height: 0; resize: none;
+  background: transparent; border: 0; outline: 0;
+  padding: 16px 18px;
+  font-family: inherit; font-size: 14.5px; line-height: 1.6; color: var(--ink);
+}
+#compose textarea::placeholder { color: #5f5f66; }
+.foot {
+  flex: none; display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; border-top: 1px solid var(--line);
+}
+.foot .hint { flex: 1; font-size: 11.5px; color: var(--soft); }
+
+/* ── Prompt ──────────────────────────────────────────────────────────────── */
+#prompt { display: none; flex: 1; flex-direction: column; min-height: 0; }
+#script {
+  -webkit-app-region: no-drag;
+  flex: 1; min-height: 0; overflow-y: auto;
+  padding: 14px 20px 22px;
+  font-size: var(--size, 21px); line-height: 1.55; font-weight: 500;
+  scroll-behavior: smooth;
+}
+#script::-webkit-scrollbar { width: 8px; }
+#script::-webkit-scrollbar-thumb { background: rgba(255,255,255,.16); border-radius: 4px; }
+#script p { margin: 0 0 .85em; }
+#script p:last-child { margin-bottom: 0; }
+/* The line being read. Click any line to mark it; it survives scrolling, which
+   is what makes a wall of text usable at a glance. */
+#script p.here { color: #fff; }
+#script p.here::before {
+  content: ""; position: absolute; left: 6px; width: 3px; height: 1.1em;
+  border-radius: 2px; background: var(--coral); margin-top: .18em;
+}
+#script p { position: relative; color: #cfcfd6; }
+.sizer { -webkit-app-region: no-drag; display: flex; gap: 4px; }
+.sizer button { padding: 4px 9px; font-size: 13px; line-height: 1; }
+</style>
+
+<div class="shell">
+  <div class="bar">
+    <span class="dot"></span>
+    <span id="title">Teleprompter</span>
+    <span class="grow"></span>
+    <span id="tools" class="sizer" hidden>
+      <button id="smaller" title="Smaller text">A&minus;</button>
+      <button id="bigger" title="Bigger text">A+</button>
+      <button id="edit">Edit</button>
+    </span>
+    <button id="close">Close</button>
+  </div>
+
+  <div id="compose">
+    <textarea id="input" placeholder="Paste your script. Braino will lay it out for reading, and will not rewrite a word of it."></textarea>
+    <div class="foot">
+      <span class="hint" id="hint">Nobody on the call will see this once you press Done.</span>
+      <button class="btn go" id="done" disabled>Done</button>
+    </div>
+  </div>
+
+  <div id="prompt"><div id="script"></div></div>
+</div>
+
+<script>
+  const el = (id) => document.getElementById(id);
+  const api = window.brainoMac || {};
+  let size = 21;
+
+  function setMode(mode) {
+    el("compose").style.display = mode === "compose" ? "flex" : "none";
+    el("prompt").style.display  = mode === "prompt"  ? "flex" : "none";
+    el("tools").hidden = mode !== "prompt";
+    el("title").textContent = mode === "compose" ? "Teleprompter — paste your script" : "Teleprompter";
+    if (mode === "compose") setTimeout(() => el("input").focus(), 40);
+  }
+
+  // Paragraphs, not a wall. The formatter upstream decides the breaks; this
+  // only renders them, so nothing here can alter a word of the script.
+  function render(script) {
+    const box = el("script");
+    box.innerHTML = "";
+    String(script).split(/\n{2,}|\n/).map((s) => s.trim()).filter(Boolean).forEach((line) => {
+      const p = document.createElement("p");
+      p.textContent = line;
+      p.addEventListener("click", () => {
+        box.querySelectorAll("p.here").forEach((n) => n.classList.remove("here"));
+        p.classList.add("here");
+      });
+      box.appendChild(p);
+    });
+    box.scrollTop = 0;
+  }
+
+  el("input").addEventListener("input", () => {
+    el("done").disabled = !el("input").value.trim();
+  });
+
+  el("done").addEventListener("click", async () => {
+    const text = el("input").value.trim();
+    if (!text) return;
+    el("done").disabled = true;
+    el("hint").textContent = "Laying it out…";
+    const res = await api.teleprompterPresent?.({ text });
+    if (res && res.ok === false) {
+      el("hint").textContent = "Could not start. Try again.";
+      el("done").disabled = false;
+    }
+  });
+
+  // Cmd+Enter from the textarea, because a script long enough to need a
+  // prompter is long enough that reaching for the mouse is annoying.
+  el("input").addEventListener("keydown", (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); el("done").click(); }
+  });
+
+  el("edit").addEventListener("click", () => api.teleprompterEdit?.());
+  el("close").addEventListener("click", () => api.teleprompterClose?.());
+  el("bigger").addEventListener("click", () => {
+    size = Math.min(46, size + 2); document.documentElement.style.setProperty("--size", size + "px");
+  });
+  el("smaller").addEventListener("click", () => {
+    size = Math.max(13, size - 2); document.documentElement.style.setProperty("--size", size + "px");
+  });
+  window.addEventListener("keydown", (e) => { if (e.key === "Escape") api.teleprompterClose?.(); });
+
+  api.onTeleprompterMode?.((payload) => {
+    if (payload && payload.mode === "prompt") { render(payload.script || ""); setMode("prompt"); }
+    else {
+      setMode("compose");
+      if (payload && typeof payload.text === "string") {
+        el("input").value = payload.text;
+        el("done").disabled = !payload.text.trim();
+      }
+      el("hint").textContent = "Nobody on the call will see this once you press Done.";
+    }
+  });
+
+  setMode("compose");
+</script>
