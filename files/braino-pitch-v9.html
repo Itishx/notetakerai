@@ -574,7 +574,11 @@ tr.us td, tr.us td b { font-weight: 600; }
 /* The cover splits: the name owns the left, the argument sits right and
    smaller. It used to open with a sentence about building, which made the
    reader work out who was talking. */
+/* The cover carries four things: the date, the name, his face, and the two
+   lines. It used to argue the problem in a second column, which is slide two's
+   job and made the opening page a page to study rather than read. */
 .cover { display: grid; grid-template-columns: 1.05fr 1fr; gap: 56px; align-items: center; height: 100%; }
+.cover:not(.endcover) { grid-template-columns: 1fr; }
 /* He stands next to his own name. The aside underneath is the only place in
    the deck where the writing is not the system face: it is a margin note in a
    founder's hand, and it earns the exception by admitting the obvious rather
@@ -636,7 +640,7 @@ tr.us td, tr.us td b { font-weight: 600; }
    which is right for the title and wrong for a <b> inside body copy. One guard,
    declared after them all: emphasis inside a paragraph is emphasis. */
 .fstep span b, .bigbox span b, .qcell span b, .mbox span b, .eng span b,
-.stat span b, .strip span b, .band span b, .note b, .card p b, .fgate p b {
+.stat span b, .strip span b, .band span b, .note b, .card p b {
   display: inline; font-size: inherit; line-height: inherit;
   letter-spacing: inherit; margin: 0; color: var(--ink); font-weight: 600;
 }
@@ -656,7 +660,7 @@ tr.us td, tr.us td b { font-weight: 600; }
 
 /* TAM to SAM to SOM, with the filters that do the narrowing named in between,
    because the objection was never the number. It was the missing steps. */
-.funnel { display: grid; grid-template-columns: 1fr auto 1fr auto 1fr; gap: 0 14px; align-items: stretch; margin-top: 4px; }
+.funnel { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0 18px; align-items: stretch; margin-top: 4px; }
 .fstep { border: 1px solid var(--line); border-radius: 20px; background: var(--surface); padding: 18px 20px; display: flex; flex-direction: column; }
 .fstep i { font-style: normal; font-size: 12px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: var(--accent); margin-bottom: 9px; }
 .fstep b { font-size: 36px; font-weight: 600; letter-spacing: -.03em; line-height: 1; margin-bottom: 9px; }
@@ -665,10 +669,6 @@ tr.us td, tr.us td b { font-weight: 600; }
 .fstep .bul li { font-size: 13.5px; padding: 4px 0 4px 14px; line-height: 1.35; }
 .fstep .bul li::before { top: .62em; width: 4px; height: 4px; }
 .fstep u { margin-top: auto; padding-top: 10px; text-decoration: none; font-size: 12.5px; font-weight: 600; color: var(--mute, #86868b); }
-.fgate { display: flex; flex-direction: column; justify-content: center; align-items: center; width: 132px; text-align: center; }
-.fgate em { font-style: normal; font-size: 11.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: #a6a6ad; margin-bottom: 7px; }
-.fgate p { margin: 0; font-size: 13px; font-weight: 500; line-height: 1.35; color: var(--soft); }
-.fgate .arw { margin-top: 9px; font-size: 19px; color: var(--line); }
 
 /* Quarter on quarter, product above and people below. */
 .qgrid { display: grid; grid-template-columns: 118px repeat(4, 1fr); gap: 10px; margin-top: 4px; }
@@ -790,16 +790,6 @@ tr.us td, tr.us td b { font-weight: 600; }
       </div>
       <p class="claim">A companion for everyone.<br><b>A co-founder for founders.</b></p>
     </div>
-    <div class="right">
-      <h2>Building is no longer the hard part.</h2>
-      <p>Anyone can ship a product in a weekend. Then nobody hears about it.</p>
-      <ul class="bul covbul">
-        <li><b>Writes and posts about it every week</b>, in your voice, on Reddit and LinkedIn</li>
-        <li><b>Gets you named</b> when your buyers ask ChatGPT</li>
-        <li><b>Finds the right people</b> and writes to each one personally</li>
-      </ul>
-      <p class="tap">Nothing goes out until you tap approve.</p>
-    </div>
   </div>
   <span class="wm">Itish Pande · Mesa School of Business · August 2026 · trybraino.com</span>
 </section></div>
@@ -862,7 +852,7 @@ tr.us td, tr.us td b { font-weight: 600; }
 <div class="fit"><section class="slide ac-blue dense pack">
   <div class="body">
     <p class="kicker">How big is the opportunity?</p>
-    <h2>Start with everyone. <span class="tone">Filter down to who we can actually sell to.</span></h2>
+    <h2>Big market. <span class="tone">A real slice of it.</span></h2>
     <div class="funnel">
       <div class="fstep">
         <i>TAM</i><b>$17.9B</b>
@@ -873,7 +863,6 @@ tr.us td, tr.us td b { font-weight: 600; }
         </ul>
         <u>US Census · WebFX martech benchmark</u>
       </div>
-      <div class="fgate"><em>Filter 1</em><p>Builds and sells online.<br><b>73% already use AI.</b></p><span class="arw">→</span></div>
       <div class="fstep">
         <i>SAM</i><b>$1.3B</b>
         <ul class="bul">
@@ -883,12 +872,11 @@ tr.us td, tr.us td b { font-weight: 600; }
         </ul>
         <u>Solopreneur AI adoption · DPIIT</u>
       </div>
-      <div class="fgate"><em>Filter 2</em><p>Our slice by<br>year three.<br><b>3% of SAM.</b></p><span class="arw">→</span></div>
       <div class="fstep" style="background:var(--tint);border-color:transparent">
         <i>SOM</i><b>$39M</b>
         <ul class="bul">
           <li><b>65,000 paying founders</b></li>
-          <li><b>₹1,500–3,000</b> in India, <b>$49–99</b> globally</li>
+          <li><b>$18–99 a month</b>, depending on market</li>
           <li>Reached via Mesa, agencies, the free companion</li>
         </ul>
         <u>Year three target</u>
@@ -1185,7 +1173,7 @@ tr.us td, tr.us td b { font-weight: 600; }
         </div>
         <div class="vsrow us">
           <div class="what"><b>BRAINO</b><span>Writes, posts, gets you named, reaches out</span></div>
-          <div class="price">₹1.5K–$200/mo</div>
+          <div class="price">$18–200/mo</div>
           <div class="leaves">One tap. That is the whole job.</div>
         </div>
       </div>
@@ -1234,8 +1222,8 @@ tr.us td, tr.us td b { font-weight: 600; }
       <div class="qcell"><div class="qnum"><strong>10</strong><em>clients</em></div></div>
       <div class="qcell"><div class="qnum"><strong>15</strong><em>clients</em></div></div>
       <div class="rl">Revenue</div>
-      <div class="qcell on"><div class="qnum"><strong>₹1L</strong><em>MRR</em></div></div>
-      <div class="qcell on"><div class="qnum"><strong>₹4L</strong><em>MRR</em></div></div>
+      <div class="qcell on"><div class="qnum"><strong>$1.2K</strong><em>MRR</em></div></div>
+      <div class="qcell on"><div class="qnum"><strong>$4.8K</strong><em>MRR</em></div></div>
       <div class="qcell on"><div class="qnum"><strong>$15K</strong><em>MRR</em></div></div>
       <div class="qcell on"><div class="qnum"><strong>$40K</strong><em>MRR</em></div></div>
     </div>
