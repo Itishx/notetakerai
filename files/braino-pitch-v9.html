@@ -631,6 +631,9 @@ tr.us td, tr.us td b { font-weight: 600; }
 .fstep i { font-style: normal; font-size: 12px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: var(--accent); margin-bottom: 9px; }
 .fstep b { font-size: 36px; font-weight: 600; letter-spacing: -.03em; line-height: 1; margin-bottom: 9px; }
 .fstep span { font-size: 13.5px; font-weight: 500; line-height: 1.4; color: var(--soft); }
+.fstep .bul { margin-bottom: 6px; }
+.fstep .bul li { font-size: 13.5px; padding: 4px 0 4px 14px; line-height: 1.35; }
+.fstep .bul li::before { top: .62em; width: 4px; height: 4px; }
 .fstep u { margin-top: auto; padding-top: 10px; text-decoration: none; font-size: 12.5px; font-weight: 600; color: var(--mute, #86868b); }
 .fgate { display: flex; flex-direction: column; justify-content: center; align-items: center; width: 132px; text-align: center; }
 .fgate em { font-style: normal; font-size: 11.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: #a6a6ad; margin-bottom: 7px; }
@@ -665,6 +668,31 @@ tr.us td, tr.us td b { font-weight: 600; }
 .tract4 > div:first-child { padding-left: 0; }
 .tract4 > div:last-child { border-right: 0; }
 .tract4 strong { display: block; font-size: 30px; font-weight: 600; letter-spacing: -.024em; line-height: 1; color: var(--accent); margin-bottom: 7px; }
+/* ── Competition, rebuilt ─────────────────────────────────────────────────
+   It was a seven-by-six matrix beside a 2x2: forty-two cells to read before
+   the point arrived. Nobody reads forty-two cells.
+
+   Five rows now, grouped by what a category IS rather than by brand, and each
+   row ends on the sentence that matters: what it still leaves the founder to
+   do. That last column is the whole argument. */
+.vs { display: flex; flex-direction: column; }
+.vsrow {
+  display: grid; grid-template-columns: 1.1fr .62fr 1.1fr;
+  gap: 16px; align-items: center;
+  padding: 13px 14px; border-radius: 12px;
+}
+.vsrow + .vsrow { border-top: 1px solid var(--line-soft); border-radius: 12px; }
+.vsrow .what b { display: block; font-size: 17px; font-weight: 600; letter-spacing: -.014em; }
+.vsrow .what span { display: block; margin-top: 2px; font-size: 13px; font-weight: 500; color: var(--mute, #86868b); }
+.vsrow .price { font-size: 15px; font-weight: 600; color: var(--soft); text-align: right; font-variant-numeric: tabular-nums; }
+.vsrow .leaves { font-size: 15px; font-weight: 500; line-height: 1.35; color: var(--soft); }
+.vsrow.us { background: var(--tint); border-top-color: transparent; }
+.vsrow.us .what b, .vsrow.us .price { color: var(--accent); }
+.vsrow.us .leaves { color: var(--ink); font-weight: 600; }
+.vshead { display: grid; grid-template-columns: 1.1fr .62fr 1.1fr; gap: 16px; padding: 0 14px 7px; border-bottom: 1px solid var(--line); }
+.vshead span { font-size: 11.5px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: #a6a6ad; }
+.vshead span:nth-child(2) { text-align: right; }
+
 .tract4 em { font-style: normal; display: block; font-size: 13.5px; font-weight: 500; line-height: 1.35; color: var(--soft); }
 
 </style>
@@ -783,7 +811,7 @@ tr.us td, tr.us td b { font-weight: 600; }
     </div>
     <p class="sub" style="margin-top:16px">Their three options today, and why each one fails</p>
     <div class="strip">
-      <div><b>Do it by hand</b><span>10 hrs a week. Eats the time they needed for building.</span></div>
+      <div><b>Do it all themselves</b><span>10 hrs a week. Eats the time they needed for building.</span></div>
       <div><b>Build their own hacks</b><span>Scripts and bots that break. A patch, not a system.</span></div>
       <div><b>Hire experts</b><span>$700–1,000/hr. Only funded companies can afford it.</span></div>
     </div>
@@ -799,19 +827,31 @@ tr.us td, tr.us td b { font-weight: 600; }
     <div class="funnel">
       <div class="fstep">
         <i>TAM</i><b>$17.9B</b>
-        <span><b>29.8M one-person businesses in the US alone,</b> at $600 a year each. That is one $50/mo tool, against the $200–500/mo an SMB already spends on marketing software.</span>
+        <ul class="bul">
+          <li><b>29.8M one-person businesses</b> in the US alone</li>
+          <li><b>$600 a year</b> each. One $50/mo tool</li>
+          <li>SMBs already pay <b>$200–500/mo</b> for marketing software</li>
+        </ul>
         <u>US Census · WebFX martech benchmark</u>
       </div>
       <div class="fgate"><em>Filter 1</em><p>Builds and sells online.<br><b>73% already use AI.</b></p><span class="arw">→</span></div>
       <div class="fstep">
         <i>SAM</i><b>$1.3B</b>
-        <span><b>2.2M founders</b> who build with AI and sell in markets we can reach: English-speaking plus Indian metros, where 240,000 DPIIT startups already sit.</span>
+        <ul class="bul">
+          <li><b>2.2M founders</b> who build with AI</li>
+          <li>English-speaking markets <b>+ Indian metros</b></li>
+          <li><b>240,000 DPIIT startups</b> already sit there</li>
+        </ul>
         <u>Solopreneur AI adoption · DPIIT</u>
       </div>
       <div class="fgate"><em>Filter 2</em><p>Our slice by<br>year three.<br><b>3% of SAM.</b></p><span class="arw">→</span></div>
       <div class="fstep" style="background:var(--tint);border-color:transparent">
         <i>SOM</i><b>$39M</b>
-        <span><b>65,000 paying founders</b> at ₹1,500–3,000 or $49–99 a month. Reached through Mesa, Hyderabad, agencies and the free companion.</span>
+        <ul class="bul">
+          <li><b>65,000 paying founders</b></li>
+          <li><b>₹1,500–3,000</b> in India, <b>$49–99</b> globally</li>
+          <li>Reached via Mesa, agencies, the free companion</li>
+        </ul>
         <u>Year three target</u>
       </div>
     </div>
@@ -1078,36 +1118,51 @@ tr.us td, tr.us td b { font-weight: 600; }
 </section></div>
 
 <!-- 11 ─ Competition ───────────────────────────────────────────────────── -->
-<div class="fit"><section class="slide ac-blue dense rows">
+<div class="fit"><section class="slide ac-blue dense">
   <div class="body">
     <p class="kicker">Competition</p>
-    <h2>Built for marketers with budgets. <span class="tone">Not for founders with none.</span></h2>
-    <div class="comp">
-      <table class="matrix">
-        <colgroup><col style="width:24%"><col style="width:16%"><col style="width:17%"><col style="width:14%"><col style="width:15%"><col style="width:14%"></colgroup>
-        <tr><th></th><th>Writes content</th><th>AI visibility</th><th>Outreach</th><th>Does it FOR you</th><th>Price</th></tr>
-        <tr><td><b>Buffer / Postiz</b></td><td class="part">Schedules only</td><td class="no">—</td><td class="no">—</td><td class="no">—</td><td>$15–49/mo</td></tr>
-        <tr><td><b>Apollo + Clay</b></td><td class="no">—</td><td class="no">—</td><td class="yes">Strong</td><td class="no">—</td><td>$50–100/mo</td></tr>
-        <tr><td><b>Peec / Profound</b></td><td class="no">—</td><td class="part">Measures only</td><td class="no">—</td><td class="no">—</td><td>$99–399/mo</td></tr>
-        <tr><td><b>AgentWeb</b></td><td class="yes">Yes</td><td class="part">Partial</td><td class="part">Partial</td><td class="no">—</td><td>$299/mo</td></tr>
-        <tr><td><b>Leapd</b></td><td class="yes">Yes</td><td class="yes">Yes</td><td class="yes">Yes</td><td class="no">—</td><td>$299–999/mo</td></tr>
-        <tr><td><b>Consultants</b></td><td class="yes">Yes</td><td class="part">Some</td><td class="yes">Yes</td><td class="yes">Yes · human</td><td>$700–1,000/hr</td></tr>
-        <tr class="us"><td><b>BRAINO</b></td><td><b>Your voice</b></td><td><b>Checks + fixes</b></td><td><b>Approved</b></td><td><b>AI + service</b></td><td><b>₹1.5K–$200/mo</b></td></tr>
-      </table>
+    <h2>Every tool does one piece. <span class="tone">You do the rest.</span></h2>
+    <div class="split" style="grid-template-columns:1.45fr 1fr;gap:26px;align-items:center;margin-top:2px">
+      <div class="vs">
+        <div class="vshead"><span>What it does</span><span>Price</span><span>What it leaves you</span></div>
+        <div class="vsrow">
+          <div class="what"><b>Posts for you</b><span>Buffer · Postiz</span></div>
+          <div class="price">$15–49/mo</div>
+          <div class="leaves">You still write every word.</div>
+        </div>
+        <div class="vsrow">
+          <div class="what"><b>Finds people for you</b><span>Apollo · Clay</span></div>
+          <div class="price">$50–100/mo</div>
+          <div class="leaves">You still write every message.</div>
+        </div>
+        <div class="vsrow">
+          <div class="what"><b>Measures AI visibility</b><span>Peec · Profound</span></div>
+          <div class="price">$99–399/mo</div>
+          <div class="leaves">Tells you that you are invisible. Does not fix it.</div>
+        </div>
+        <div class="vsrow">
+          <div class="what"><b>Does all of it</b><span>GTM consultants</span></div>
+          <div class="price">$700–1,000/hr</div>
+          <div class="leaves">Only funded companies can afford it.</div>
+        </div>
+        <div class="vsrow us">
+          <div class="what"><b>BRAINO</b><span>Writes, posts, gets you named, reaches out</span></div>
+          <div class="price">₹1.5K–$200/mo</div>
+          <div class="leaves">One tap. That is the whole job.</div>
+        </div>
+      </div>
       <div class="quad">
         <span class="ax t">Does the work for you</span>
         <span class="ax l">Does one thing</span>
         <span class="ax r">Does everything</span>
         <i class="dot" style="left:27%;top:22%">Consultants $700+/hr</i>
         <i class="dot us" style="left:74%;top:24%">BRAINO</i>
-        <i class="dot" style="left:19%;top:58%">Peec / Profound</i>
-        <i class="dot" style="left:25%;top:76%">Apollo + Clay</i>
-        <i class="dot" style="left:20%;top:90%">Buffer / Postiz</i>
-        <i class="dot" style="left:68%;top:66%">AgentWeb</i>
-        <i class="dot" style="left:74%;top:86%">Leapd</i>
+        <i class="dot" style="left:20%;top:58%">Peec / Profound</i>
+        <i class="dot" style="left:26%;top:78%">Apollo + Clay</i>
+        <i class="dot" style="left:21%;top:88%">Buffer / Postiz</i>
       </div>
     </div>
-    <p class="note wide">The only done-for-you option a founder can buy today is a human at $700 an hour. <b>Everything cheaper makes them do the work themselves.</b></p>
+    <p class="note wide">The only thing on the market that does the whole job is a human at $700 an hour. <b>Everything a founder can afford makes them do the work themselves.</b></p>
   </div>
   <span class="num">11 / 13</span>
 </section></div>
