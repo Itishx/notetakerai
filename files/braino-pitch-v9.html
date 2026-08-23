@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Braino, the pitch deck</title>
 <style>
+@import url('https://fonts.googleapis.com/css2?family=Caveat:wght@500;600&display=swap');
 /* ============================================================================
    Braino — pitch deck v9.
 
@@ -574,7 +575,20 @@ tr.us td, tr.us td b { font-weight: 600; }
    smaller. It used to open with a sentence about building, which made the
    reader work out who was talking. */
 .cover { display: grid; grid-template-columns: 1.05fr 1fr; gap: 56px; align-items: center; height: 100%; }
-.cover .mark { font-size: 118px; font-weight: 600; letter-spacing: -.045em; line-height: .9; margin: 0 0 18px; }
+/* He stands next to his own name. The aside underneath is the only place in
+   the deck where the writing is not the system face: it is a margin note in a
+   founder's hand, and it earns the exception by admitting the obvious rather
+   than arguing anything. */
+.markrow { display: flex; align-items: flex-end; gap: 26px; }
+.masc { margin: 0 0 6px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.masc img { width: 82px; height: 82px; display: block; }
+.masc figcaption {
+  font-family: "Caveat", "Bradley Hand", "Segoe Script", cursive;
+  font-size: 19px; font-weight: 500; color: #6a6a72;
+  white-space: nowrap; transform: rotate(-4deg);
+}
+.cover .mark { font-size: 118px; font-weight: 600; letter-spacing: -.045em; line-height: .9; margin: 0; }
+.markrow + .claim { margin-top: 20px; }
 .cover .claim { font-size: 25px; font-weight: 500; line-height: 1.34; color: #b6b6be; margin: 0; }
 .cover .claim b { color: var(--coral); font-weight: 600; }
 .cover .right { border-left: 1px solid #26262c; padding-left: 46px; }
@@ -748,7 +762,13 @@ tr.us td, tr.us td b { font-weight: 600; }
   <div class="cover">
     <div>
       <p class="live"><i></i>Going live 31 August</p>
-      <h1 class="mark">Braino</h1>
+      <div class="markrow">
+        <h1 class="mark">Braino</h1>
+        <figure class="masc">
+          <img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIiB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgcm9sZT0iaW1nIiBhcmlhLWxhYmVsPSJCcmFpbm8g4oCUIHJlc3RpbmciPgogIDxkZWZzPgogICAgPGxpbmVhckdyYWRpZW50IGlkPSJicmFpbkNvcmFsIiB4MT0iMCIgeTE9IjAiIHgyPSIwIiB5Mj0iMSI+CiAgICAgIDxzdG9wIG9mZnNldD0iMCIgc3RvcC1jb2xvcj0iI0Y2QThBMiI+PC9zdG9wPgogICAgICA8c3RvcCBvZmZzZXQ9IjAuNTUiIHN0b3AtY29sb3I9IiNFODc4NkUiPjwvc3RvcD4KICAgICAgPHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjQzk1NDRBIj48L3N0b3A+CiAgICA8L2xpbmVhckdyYWRpZW50PgogICAgPGxpbmVhckdyYWRpZW50IGlkPSJicmFpbkNvcmFsRGFyayIgeDE9IjAiIHkxPSIwIiB4Mj0iMCIgeTI9IjEiPgogICAgICA8c3RvcCBvZmZzZXQ9IjAiIHN0b3AtY29sb3I9IiNEOTY0NUEiPjwvc3RvcD4KICAgICAgPHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjOUMzRTM2Ij48L3N0b3A+CiAgICA8L2xpbmVhckdyYWRpZW50PgogICAgPHJhZGlhbEdyYWRpZW50IGlkPSJicmFpbkhpZ2hsaWdodCIgY3g9IjM1JSIgY3k9IjMwJSIgcj0iNTAlIj4KICAgICAgPHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSIjRkZEMENCIiBzdG9wLW9wYWNpdHk9IjAuNyI+PC9zdG9wPgogICAgICA8c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiNGRkQwQ0IiIHN0b3Atb3BhY2l0eT0iMCI+PC9zdG9wPgogICAgPC9yYWRpYWxHcmFkaWVudD4KICA8L2RlZnM+CgogIDxnIGNsYXNzPSJicmFpbm8iPgogICAgPGcgY2xhc3M9ImJvZHktb3V0bGluZSI+CiAgICAgIDxwYXRoIGQ9Ik0gNjAgNzggQyA2NCA4NCA3NSA4NiA4MCA4MCBDIDg2IDc2IDg1IDY3IDgxIDY1IEwgNjIgNjUgWiIgZmlsbD0iI0ZGRkZGRiI+PC9wYXRoPgogICAgICA8cGF0aCBkPSJNIDQ3IDgyIEwgNDcgOTAgUSA1MCA5MyA1MyA5MCBMIDUzIDgyIFoiIGZpbGw9IiNGRkZGRkYiPjwvcGF0aD4KICAgICAgPGcgY2xhc3M9ImFybSBhcm0tbGVmdCI+PHBhdGggZD0iTSAyMiA1MiBRIDggNTAgNiA2MCBRIDYgNjYgMTQgNjciIGZpbGw9Im5vbmUiIHN0cm9rZT0iI0ZGRkZGRiIgc3Ryb2tlLXdpZHRoPSI5IiBzdHJva2UtbGluZWNhcD0icm91bmQiPjwvcGF0aD48L2c+CiAgICAgIDxnIGNsYXNzPSJhcm0gYXJtLXJpZ2h0Ij48cGF0aCBkPSJNIDc4IDUyIFEgOTIgNTAgOTQgNjAgUSA5NCA2NiA4NiA2NyIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjRkZGRkZGIiBzdHJva2Utd2lkdGg9IjkiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCI+PC9wYXRoPjwvZz4KICAgICAgPHBhdGggZD0iTSA1MCA4IEMgNTUgNiA2NCA2IDY4IDEyIEMgNzYgMTAgODQgMTYgODIgMjQgQyA5MCAyNiA5MiAzNiA4NiA0MiBDIDkyIDQ2IDkwIDU2IDgyIDU4IEMgODYgNjAgODUgNzAgNzYgNzAgQyA3MiA3OCA2MCA4MCA1MiA3NiBDIDUwIDgwIDUwIDgwIDUwIDc4IEMgNTAgODAgNTAgODAgNDggNzYgQyA0MCA4MCAyOCA3OCAyNCA3MCBDIDE1IDcwIDE0IDYwIDE4IDU4IEMgMTAgNTYgOCA0NiAxNCA0MiBDIDggMzYgMTAgMjYgMTggMjQgQyAxNiAxNiAyNCAxMCAzMiAxMiBDIDM2IDYgNDUgNiA1MCA4IFoiIGZpbGw9IiNGRkZGRkYiIHRyYW5zZm9ybT0ic2NhbGUoMS4wOCkgdHJhbnNsYXRlKC0zLjcsIC0zLjcpIj48L3BhdGg+CiAgICA8L2c+CgogICAgPHBhdGggY2xhc3M9InN0ZW0iIGQ9Ik0gNDcgODAgTCA0NyA4OCBRIDUwIDkxIDUzIDg4IEwgNTMgODAgWiIgZmlsbD0idXJsKCNicmFpbkNvcmFsRGFyaykiPjwvcGF0aD4KCiAgICA8ZyBjbGFzcz0iY2VyZWJlbGx1bSI+CiAgICAgIDxwYXRoIGQ9Ik0gNjAgNzYgQyA2NCA4MiA3MyA4NCA3OCA3OCBDIDg0IDc0IDgzIDY3IDc5IDY1IEwgNjIgNjUgWiIgZmlsbD0idXJsKCNicmFpbkNvcmFsRGFyaykiPjwvcGF0aD4KICAgICAgPHBhdGggZD0iTSA2MyA3MCBRIDcwIDcxIDc3IDcwIiBmaWxsPSJub25lIiBzdHJva2U9IiM4QTJGMjgiIHN0cm9rZS13aWR0aD0iMC45IiBzdHJva2UtbGluZWNhcD0icm91bmQiIG9wYWNpdHk9IjAuNyI+PC9wYXRoPgogICAgICA8cGF0aCBkPSJNIDYyIDc0IFEgNzAgNzUgNzggNzQiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzhBMkYyOCIgc3Ryb2tlLXdpZHRoPSIwLjkiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgb3BhY2l0eT0iMC43Ij48L3BhdGg+CiAgICAgIDxwYXRoIGQ9Ik0gNjQgNzcgUSA3MCA3OSA3NiA3NyIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjOEEyRjI4IiBzdHJva2Utd2lkdGg9IjAuOSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBvcGFjaXR5PSIwLjciPjwvcGF0aD4KICAgIDwvZz4KCiAgICA8ZyBjbGFzcz0iYXJtIGFybS1sZWZ0Ij48cGF0aCBkPSJNIDIyIDUyIFEgOCA1MCA2IDYwIFEgNiA2NiAxNCA2NyIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ1cmwoI2JyYWluQ29yYWwpIiBzdHJva2Utd2lkdGg9IjYiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCI+PC9wYXRoPjxjaXJjbGUgY3g9IjYiIGN5PSI2MyIgcj0iNS41IiBmaWxsPSJ1cmwoI2JyYWluQ29yYWwpIj48L2NpcmNsZT48L2c+CiAgICA8ZyBjbGFzcz0iYXJtIGFybS1yaWdodCI+PHBhdGggZD0iTSA3OCA1MiBRIDkyIDUwIDk0IDYwIFEgOTQgNjYgODYgNjciIGZpbGw9Im5vbmUiIHN0cm9rZT0idXJsKCNicmFpbkNvcmFsKSIgc3Ryb2tlLXdpZHRoPSI2IiBzdHJva2UtbGluZWNhcD0icm91bmQiPjwvcGF0aD48Y2lyY2xlIGN4PSI5NCIgY3k9IjYzIiByPSI1LjUiIGZpbGw9InVybCgjYnJhaW5Db3JhbCkiPjwvY2lyY2xlPjwvZz4KCiAgICA8ZyBjbGFzcz0iYm9keSI+CiAgICAgIDxwYXRoIGQ9Ik0gNTAgOCBDIDU1IDYgNjQgNiA2OCAxMiBDIDc2IDEwIDg0IDE2IDgyIDI0IEMgOTAgMjYgOTIgMzYgODYgNDIgQyA5MiA0NiA5MCA1NiA4MiA1OCBDIDg2IDYwIDg1IDcwIDc2IDcwIEMgNzIgNzggNjAgODAgNTIgNzYgQyA1MCA4MCA1MCA4MCA1MCA3OCBDIDUwIDgwIDUwIDgwIDQ4IDc2IEMgNDAgODAgMjggNzggMjQgNzAgQyAxNSA3MCAxNCA2MCAxOCA1OCBDIDEwIDU2IDggNDYgMTQgNDIgQyA4IDM2IDEwIDI2IDE4IDI0IEMgMTYgMTYgMjQgMTAgMzIgMTIgQyAzNiA2IDQ1IDYgNTAgOCBaIiBmaWxsPSJ1cmwoI2JyYWluQ29yYWwpIj48L3BhdGg+CiAgICAgIDxwYXRoIGQ9Ik0gNTAgOCBDIDU1IDYgNjQgNiA2OCAxMiBDIDc2IDEwIDg0IDE2IDgyIDI0IEMgOTAgMjYgOTIgMzYgODYgNDIgQyA5MiA0NiA5MCA1NiA4MiA1OCBDIDg2IDYwIDg1IDcwIDc2IDcwIEMgNzIgNzggNjAgODAgNTIgNzYgQyA1MCA4MCA1MCA4MCA1MCA3OCBDIDUwIDgwIDUwIDgwIDQ4IDc2IEMgNDAgODAgMjggNzggMjQgNzAgQyAxNSA3MCAxNCA2MCAxOCA1OCBDIDEwIDU2IDggNDYgMTQgNDIgQyA4IDM2IDEwIDI2IDE4IDI0IEMgMTYgMTYgMjQgMTAgMzIgMTIgQyAzNiA2IDQ1IDYgNTAgOCBaIiBmaWxsPSJ1cmwoI2JyYWluSGlnaGxpZ2h0KSI+PC9wYXRoPgogICAgICA8ZyBjbGFzcz0iZWZmZWN0LWxpbmVzIj4KICAgICAgICA8cGF0aCBkPSJNIDUwIDggUSA0OSAzMCA1MCA1MCBRIDUxIDY1IDUwIDc4IiBmaWxsPSJub25lIiBzdHJva2U9IiM4QTJGMjgiIHN0cm9rZS13aWR0aD0iMS4xIiBzdHJva2UtbGluZWNhcD0icm91bmQiIG9wYWNpdHk9IjAuNTUiPjwvcGF0aD4KICAgICAgICA8cGF0aCBkPSJNIDMwIDE0IFEgMjYgMjIgMzAgMjggUSAyNCAzMyAyOCA0MCBRIDIyIDQ0IDI2IDUyIFEgMjIgNTggMjggNjQgUSAyNCA3MCAzMiA3MiIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjOEEyRjI4IiBzdHJva2Utd2lkdGg9IjEuMSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBvcGFjaXR5PSIwLjYiPjwvcGF0aD4KICAgICAgICA8cGF0aCBkPSJNIDM4IDEyIFEgMzYgMjIgNDIgMjYgUSAzOCAzMiA0NCAzNiBRIDM4IDQ0IDQ0IDUwIFEgMzggNTggNDQgNjQgUSA0MCA3MiA0NiA3NCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjOEEyRjI4IiBzdHJva2Utd2lkdGg9IjEiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgb3BhY2l0eT0iMC40Ij48L3BhdGg+CiAgICAgICAgPHBhdGggZD0iTSA3MCAxNCBRIDc0IDIyIDcwIDI4IFEgNzYgMzMgNzIgNDAgUSA3OCA0NCA3NCA1MiBRIDc4IDU4IDcyIDY0IFEgNzYgNzAgNjggNzIiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzhBMkYyOCIgc3Ryb2tlLXdpZHRoPSIxLjEiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgb3BhY2l0eT0iMC42Ij48L3BhdGg+CiAgICAgICAgPHBhdGggZD0iTSA2MiAxMiBRIDY0IDIyIDU4IDI2IFEgNjIgMzIgNTYgMzYgUSA2MiA0NCA1NiA1MCBRIDYyIDU4IDU2IDY0IFEgNjAgNzIgNTQgNzQiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzhBMkYyOCIgc3Ryb2tlLXdpZHRoPSIxIiBzdHJva2UtbGluZWNhcD0icm91bmQiIG9wYWNpdHk9IjAuNCI+PC9wYXRoPgogICAgICA8L2c+CiAgICA8L2c+CgogICAgPGcgY2xhc3M9ImNoZWVrcyI+CiAgICAgIDxlbGxpcHNlIGN4PSIyOCIgY3k9IjU4IiByeD0iMy4yIiByeT0iMS45IiBmaWxsPSIjRTE0QTQ4IiBvcGFjaXR5PSIwLjMiPjwvZWxsaXBzZT4KICAgICAgPGVsbGlwc2UgY3g9IjcyIiBjeT0iNTgiIHJ4PSIzLjIiIHJ5PSIxLjkiIGZpbGw9IiNFMTRBNDgiIG9wYWNpdHk9IjAuMyI+PC9lbGxpcHNlPgogICAgPC9nPgoKICAgIDxnIGNsYXNzPSJleWUgZXllLWxlZnQiPgogICAgICA8Y2lyY2xlIGN4PSIzOCIgY3k9IjQ4IiByPSI2LjUiIGZpbGw9IiNGRkZGRkYiPjwvY2lyY2xlPgogICAgICA8Y2lyY2xlIGNsYXNzPSJwdXBpbCBwdXBpbC1sZWZ0IiBjeD0iMzgiIGN5PSI0OCIgcj0iMy4yIiBmaWxsPSIjMUIxNzEzIj48L2NpcmNsZT4KICAgICAgPGNpcmNsZSBjeD0iMzkuMiIgY3k9IjQ2LjYiIHI9IjEuMSIgZmlsbD0iI0ZGRkZGRiI+PC9jaXJjbGU+CiAgICA8L2c+CiAgICA8ZyBjbGFzcz0iZXllIGV5ZS1yaWdodCI+CiAgICAgIDxjaXJjbGUgY3g9IjYyIiBjeT0iNDgiIHI9IjYuNSIgZmlsbD0iI0ZGRkZGRiI+PC9jaXJjbGU+CiAgICAgIDxjaXJjbGUgY2xhc3M9InB1cGlsIHB1cGlsLXJpZ2h0IiBjeD0iNjIiIGN5PSI0OCIgcj0iMy4yIiBmaWxsPSIjMUIxNzEzIj48L2NpcmNsZT4KICAgICAgPGNpcmNsZSBjeD0iNjMuMiIgY3k9IjQ2LjYiIHI9IjEuMSIgZmlsbD0iI0ZGRkZGRiI+PC9jaXJjbGU+CiAgICA8L2c+CgogICAgPHBhdGggY2xhc3M9Im1vdXRoIiBkPSJNIDQ1IDYxIFEgNTAgNjUgNTUgNjEiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzFCMTcxMyIgc3Ryb2tlLXdpZHRoPSIxLjgiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCI+PC9wYXRoPgogIDwvZz4KPC9zdmc+Cg==" alt="Braino, standing">
+          <figcaption>(he is adorable, we know)</figcaption>
+        </figure>
+      </div>
       <p class="claim">A companion for everyone.<br><b>A co-founder for founders.</b></p>
     </div>
     <div class="right">
@@ -1037,11 +1057,10 @@ tr.us td, tr.us td b { font-weight: 600; }
     <h2>Free companion. <span class="tone">Paid co-founder.</span></h2>
     <div class="money">
       <div class="mbox">
-        <i>Free forever</i><b>Braino Companion</b><div class="p">₹0</div>
+        <i>Free to begin with</i><b>Braino Companion</b><div class="p">₹0</div>
         <ul class="bul sm">
           <li>Everyone with a screen</li>
-          <li>Builds the user base</li>
-          <li><b>Some become founders</b></li>
+          <li><b>Capped by usage</b></li>
         </ul>
       </div>
       <div class="mbox" style="background:var(--tint);border-color:transparent">
