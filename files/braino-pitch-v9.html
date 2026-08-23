@@ -580,6 +580,15 @@ tr.us td, tr.us td b { font-weight: 600; }
 .cover .right { border-left: 1px solid #26262c; padding-left: 46px; }
 .cover .right h2 { font-size: 40px; margin-bottom: 16px; }
 .cover .right p { font-size: 18px; font-weight: 500; line-height: 1.5; color: #9a9aa2; margin: 0; }
+/* The cover used to say "gets you seen", which is a metaphor the reader has to
+   unpack. These are the three things that phrase was standing in for. */
+.covbul { margin: 20px 0 18px; }
+/* .bul li b sets ink for the light slides and sits later in the sheet, so this
+   needs the extra step of specificity or the emphasis goes dark on dark. */
+.cover .right .covbul li { font-size: 16.5px; color: #9a9aa2; padding: 6px 0 6px 18px; line-height: 1.45; }
+.cover .right .covbul li b { color: #f5f5f7; }
+.cover .right .covbul li::before { background: var(--coral); top: .78em; }
+.cover .right .tap { font-size: 15.5px; font-weight: 600; color: var(--coral); margin-top: 2px; }
 .live {
   display: inline-flex; align-items: center; gap: 8px; margin-bottom: 26px;
   padding: 7px 14px; border-radius: 999px; border: 1px solid var(--coral);
@@ -716,7 +725,13 @@ tr.us td, tr.us td b { font-weight: 600; }
     </div>
     <div class="right">
       <h2>Building is no longer the hard part.</h2>
-      <p>Anyone can ship a product in a weekend. Almost nobody gets seen.<br><br>Braino is the co-founder who gets you seen.</p>
+      <p>Anyone can ship a product in a weekend. Then nobody hears about it.</p>
+      <ul class="bul covbul">
+        <li><b>Writes and posts about it every week</b>, in your voice, on Reddit and LinkedIn</li>
+        <li><b>Gets you named</b> when your buyers ask ChatGPT</li>
+        <li><b>Finds the right people</b> and writes to each one personally</li>
+      </ul>
+      <p class="tap">Nothing goes out until you tap approve.</p>
     </div>
   </div>
   <span class="wm">Itish Pande · Mesa School of Business · August 2026 · trybraino.com</span>
@@ -726,7 +741,7 @@ tr.us td, tr.us td b { font-weight: 600; }
 <div class="fit"><section class="slide ac-coral dense">
   <div class="body">
     <p class="kicker">The problem</p>
-    <h2>Getting seen is the new hard part.</h2>
+    <h2>You ship it. <span class="tone">Nobody hears about it.</span></h2>
     <div class="stats two" style="grid-template-columns:1fr 1fr">
       <div class="stat"><b>1 in 3</b><span>new companies in 2026 has one founder. AI made building cheap and fast.</span></div>
       <div class="stat"><b>~1,500</b><span>visits from a top-5 Product Hunt launch today. It used to be 15,000.</span></div>
@@ -848,7 +863,7 @@ tr.us td, tr.us td b { font-weight: 600; }
 <div class="fit"><section class="slide ac-green dense">
   <div class="body">
     <p class="kicker">What is Braino?</p>
-    <h2>One co-founder. <span class="tone">His job is getting you seen.</span></h2>
+    <h2>One co-founder. <span class="tone">He runs your distribution.</span></h2>
     <div class="split" style="grid-template-columns:1fr 1.05fr;gap:26px;align-items:center;margin-top:2px">
       <div>
         <ul class="bul">
@@ -1055,7 +1070,7 @@ tr.us td, tr.us td b { font-weight: 600; }
       </div>
     </div>
     <div class="band">
-      <b>Why this works: 0 of 8 founders pay for a tool today, so we sell the result and not the software. “We will get you seen” is the pitch.</b>
+      <b>Why this works: 0 of 8 founders pay for a tool today, so we sell the result and not the software. “We will get your product in front of buyers” is the pitch.</b>
       <span>Every task we repeat for three clients becomes a Braino feature, which makes the service paid research.</span>
     </div>
   </div>
@@ -1140,7 +1155,7 @@ tr.us td, tr.us td b { font-weight: 600; }
 <div class="fit"><section class="slide night ac-coral">
   <div class="body">
     <p class="live"><i></i>Going live 31 August</p>
-    <h1>Let’s make being seen<br><span class="tone">the easy part.</span></h1>
+    <h1>Let’s make distribution<br><span class="tone">the easy part.</span></h1>
     <p class="lede" style="margin-top:14px">A companion for everyone. A co-founder for founders.</p>
   </div>
   <span class="wm">Itish Pande · hi@itish.io · trybraino.com</span>
