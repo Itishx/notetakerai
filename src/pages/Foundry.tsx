@@ -928,8 +928,9 @@ function FoundryChoice() {
    claim here is that Braino works out what you actually want first, which is the
    part a co-founder does and a tool never has.
 
-   Distra's six engines are named as a count and not enumerated, because the six
-   are not decided yet and inventing them here would put fiction on a live page. */
+   Distra's engines used to be six, named as a count. Eight founder interviews on
+   22 August cut that to four: inbound calling came up zero times out of eight, and
+   listening turned out to be a feed into Content rather than a job of its own. */
 function TwoProblems() {
   return (
     <section className="fd-two apple-reveal" id="two-problems">
@@ -1127,10 +1128,11 @@ function EngineTabs() {
               ))}
             </ol>
 
-            <p className="apple-eyebrow fd-sub">The six engines</p>
+            <p className="apple-eyebrow fd-sub">The four engines</p>
             <p className="fd-panel-lede sm">
-              Distribution is six separate jobs, each with its own pile of tools that do not talk
-              to each other. Running all six is the product. <b>One of them is live today</b>, and
+              We asked eight founders what their week actually contains and kept only what
+              repeated. Four jobs were left, each with its own pile of tools that do not talk to
+              each other. Running all four is the product. <b>One of them is live today</b>, and
               this page will keep saying which until the rest are.
             </p>
             <ol className="fd-engines-six">

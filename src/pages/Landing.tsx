@@ -41,16 +41,19 @@ const ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 const SunIcon = () => (<svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="4" stroke="currentColor" strokeWidth="1.6"/><path d="M12 2v2M12 20v2M4 12H2M22 12h-2M5 5l1.4 1.4M17.6 17.6 19 19M19 5l-1.4 1.4M6.4 17.6 5 19" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>);
 const MoonIcon = () => (<svg viewBox="0 0 24 24" fill="none"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"/></svg>);
 
-/* Follows the page's own chapters, so the menu and the scroll agree. */
+/* Follows the page's own order, so the menu and the scroll agree. Who he is,
+   which two he comes in, what is broken, then the free one and the paid one in
+   that order. The tour of the character sits under all of it. */
 const NOTCH_NAV = [
   { to: "/#who-is", label: "Who he is", note: "the character" },
-  { to: "/#kinds", label: "Braino comes in two", note: "companion and Foundry" },
-  { to: "/#does", label: "What he does", note: "the four things" },
-  { to: "/#who", label: "Who it is for", note: "tell him what you do" },
-  { to: "/#engines", label: "The two engines", note: "Braino Code and Distra" },
-  { to: "/#why", label: "Why him", note: "and not another AI tool" },
-  { to: "/#hood", label: "Under the hood", note: "the four things inside him" },
+  { to: "/#kinds", label: "The two Brainos", note: "free, and the one for founders" },
+  { to: "/#does", label: "Inside the free one", note: "four things, every day" },
+  { to: "/#problem", label: "The problem", note: "building is easy, being seen is not" },
+  { to: "/#engines", label: "Inside the paid one", note: "Braino Code and Distra" },
   { to: "/#pricing", label: "Pricing", note: "three plans, no maths" },
+  { to: "/#who", label: "Who it is for", note: "tell him what you do" },
+  { to: "/#why", label: "Why him", note: "and not another AI tool" },
+  { to: "/#hood", label: "Under the hood", note: "what is running inside him" },
   { to: "/#faq", label: "Questions", note: "the honest answers" },
 ];
 
@@ -79,34 +82,6 @@ const STORY: Array<{ number: string; label: string; title: string; description: 
   { number: "06", label: "And yes", title: "Of course he moonwalks.",
     description: "Hat on, feet forward, gliding backwards. If you are going to talk to something every day it should at least be fun.", art: "moonwalk" },
 ];
-
-/* The two cards under each chapter opener. Same markup and same classes as
-   the "Who is Braino" grid, wrapped in .ld-whois so it inherits that section's
-   overrides too: the shared 1px-gap frame, the card padding, the art height.
-   A second set of styles for a second identical grid is how two grids stop
-   looking identical. */
-function ChapterCards({ cards }: { cards: Array<{ label: string; title: string; body: string; art: MascotMotion | "face" }> }) {
-  return (
-    <div className="ld-whois ld-chapter-cards">
-      <div className="po-character-grid">
-        {cards.map((card) => (
-          <article className="po-character-card" key={card.title}>
-            <div className={`po-character-art is-${card.art}`}>
-              {card.art === "face"
-                ? <img src="/reactions/braino-happy.svg" alt="Braino smiling" />
-                : <MovingBraino motion={card.art} />}
-            </div>
-            <div className="po-character-copy">
-              <span>{card.label}</span>
-              <h3>{card.title}</h3>
-              <p>{card.body}</p>
-            </div>
-          </article>
-        ))}
-      </div>
-    </div>
-  );
-}
 
 function MovingBraino({ motion }: { motion: MascotMotion }) {
   const time = useTime();
@@ -162,8 +137,8 @@ const PEOPLE = [
 /* The comparison. Read across, not down: the same question answered twice. */
 const COMPARE: Array<[string, string, string]> = [
   ["What it handles", "Your day", "Your company"],
-  ["What he does", "Chats with the page you are on, takes notes, sits in your meetings, runs errands", "Braino Code builds the product. Distra gets it seen."],
-  ["Who it is for", "Anyone with a screen, founders included", "Founders, from the idea to first traction"],
+  ["What he does", "Chats with the page you are on, takes notes, sits in your meetings, runs errands", "Builds the product, then goes and gets it seen"],
+  ["Who it is for", "Anyone with a screen, founders included", "People building something, from the idea to the first customers"],
   ["When you need it", "From day one", "The day you start building something real"],
 ];
 
@@ -188,9 +163,9 @@ const ENGINE_DETAIL: Array<{
   },
   {
     tag: "Engine two", name: "Distra", line: "Shipped, to actually seen", tone: "ac-green",
-    body: "You can ship a real product in a weekend now, and by Friday nobody has heard of it. The reason is never the product. Distribution is not one job either, it is six, each with its own pile of tools that do not talk to each other. Distra is one character running all six.",
+    body: "You can ship a real product in a weekend now, and by Friday nobody has heard of it. The reason is never the product. We asked eight founders what their week actually contains, kept only the jobs that came up again and again, and cut the rest. What was left is four, and Distra is one character running all four.",
     points: DISTRA_ENGINES.map((e) => [e.n, `${e.name}. ${e.job}`, e.detail] as [string, string, string]),
-    foot: "Content is running today. The other five are the build, in that order, and the site will say so until they are real.",
+    foot: "Content is running today. The other three are the build, in that order, and this page will say so until they are real. Nothing posts anywhere without you tapping approve first.",
     to: "/braino?view=foundry#distra", cta: "See Distra",
   },
 ];
@@ -261,12 +236,12 @@ const RECEIPT_TOTAL = RECEIPT.reduce((n, [, c]) => n + c, 0);
 const FAQ = [
   { q: "Is it actually free?",
     a: "Yes. Not free-for-fourteen-days-then-we-take-your-card free. Every feature is in there. It caps by session, the way any free AI window does: you get a stretch, it resets, and when you reach the end he tells you instead of silently billing you." },
-  { q: "What is Braino Foundry, and do I need it?",
-    a: "Only if you are building something. The companion handles your day and is free. Foundry is the co-founder you hire when you have a company to get off the ground, and it holds both engines: Braino Code builds the product, Distra gets it seen. It includes the companion, so it is on top of what you already have, never instead of it." },
+  { q: "What is Braino for Founders, and do I need it?",
+    a: "Only if you are building something. The free Braino handles your day. Braino for founders, which we call Foundry, is the one you pay for when you have a company to get off the ground: it builds the product and then goes and gets it seen. It includes the free one, so it is on top of what you already have, never instead of it." },
   { q: "How is Braino Code different from Lovable or Cursor?",
     a: "Those build what you tell them, which is genuinely useful and not what is missing. None of them ask what you are actually solving, or tell you an idea is thin before you spend a week on it. Braino works that out with you first and then builds it. A badly specified idea built well is still the wrong product." },
-  { q: "Why is Foundry more than the companion?",
-    a: "Because the companion saves you an hour and Foundry does two jobs you would otherwise hire people for. A developer is a few thousand for an MVP and a ghostwriter is five hundred a month, and neither has ever read your commits at two in the morning." },
+  { q: "Why does the founder one cost more?",
+    a: "Because the free one saves you an hour, and the paid one does two jobs you would otherwise hire people for. A developer is a few thousand for an MVP and a ghostwriter is five hundred a month, and neither of them has ever read your commits at two in the morning." },
   { q: "What can he actually see?",
     a: "The page you are on, when you ask. Meetings you start him in. Nothing in the background, nothing while you are not looking, and never that other tab. You know the one." },
   { q: "Does he post or send anything on his own?",
@@ -418,6 +393,7 @@ export default function Landing() {
         <a href="#top" className="ld-bar-mark">
           <span className="ld-bar-dot" aria-hidden="true" />
           <span>Braino</span>
+          <span className="ld-bar-beta">BETA</span>
         </a>
       </header>
 
@@ -454,7 +430,7 @@ export default function Landing() {
       <header className="ld-hero ac-coral" id="top">
         <div className="ld-hero-copy">
           <p className="apple-eyebrow">Braino</p>
-          <h1 className="ld-hero-h1">Speak.<br /><span className="tone">Watch it happen.</span></h1>
+          <h1 className="ld-hero-h1">A companion for everyone.<br /><span className="tone">A co-founder for founders.</span></h1>
           <p className="ld-hero-sub">
             He lives on your screen and does the boring half of your day. You talk, he moves.
             No prompt engineering degree required.
@@ -507,11 +483,12 @@ export default function Landing() {
       {/* ── 2. The map ────────────────────────────────────────────────── */}
       <section className="ld-kinds apple-reveal" id="kinds">
         <div className="ld-wrap">
-          <p className="apple-eyebrow">Braino comes in two</p>
-          <h2 className="ld-h2">A companion for everyone. <span className="tone">A co-founder for founders.</span></h2>
+          <p className="apple-eyebrow">There are two Brainos</p>
+          <h2 className="ld-h2">One is free. <span className="tone">One builds your company.</span></h2>
           <p className="ld-lede">
-            Foundry is not instead of the companion, it is on top of it. The companion gets you
-            through Tuesday. <b>Foundry gets the company off the ground.</b>
+            The free one is for anyone with a screen. The paid one is Braino for founders, and
+            we call it Foundry. It sits on top of the free one, never instead of it.
+            <b> The free one gets you through Tuesday. The paid one gets the company off the ground.</b>
           </p>
 
           <div className="ld-table-wrap">
@@ -519,8 +496,8 @@ export default function Landing() {
               <thead>
                 <tr>
                   <th />
-                  <th><b>Braino</b><span>The companion</span></th>
-                  <th className="is-paid"><b>Braino Foundry</b><span>The AI co-founder you hire</span></th>
+                  <th><b>Braino</b><span>Free, for anyone with a screen</span></th>
+                  <th className="is-paid"><b>Braino for Founders</b><span>We call it Foundry</span></th>
                 </tr>
               </thead>
               <tbody>
@@ -544,7 +521,7 @@ export default function Landing() {
 
           {/* A 620px table is a sideways scroll in the hand. Same data, stacked. */}
           <div className="ld-compare-stack">
-            {([["Braino", "The companion", 1], ["Braino Foundry", "The AI co-founder you hire", 2]] as Array<[string, string, number]>).map(([name, sub, col]) => (
+            {([["Braino", "Free, for anyone with a screen", 1], ["Braino for Founders", "We call it Foundry", 2]] as Array<[string, string, number]>).map(([name, sub, col]) => (
               <div key={name} className={col === 2 ? "is-paid" : undefined}>
                 <b>{name}</b>
                 <span>{sub}</span>
@@ -565,40 +542,184 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ── Chapter one ──────────────────────────────────────────────── */}
-      <section className="ld-chapter ac-coral apple-reveal" id="companion">
-        <div className="ld-wrap">
-          <p className="ld-chapter-tag">Chapter one</p>
-          <h2 className="ld-chapter-name">Braino <span className="tone">Companion</span></h2>
-          <p className="ld-chapter-line">
-            Free for anyone with a screen. He handles your day.
-          </p>
-          <ChapterCards
-            cards={[
-              { label: "On your screen", art: "walking",
-                title: "He is already where you are.",
-                body: "Not a tab you go and open. He is on the page you were reading and the app you were in, looking at the same thing you are." },
-              { label: "In your voice", art: "standing",
-                title: "You say it. He goes and does it.",
-                body: "Files, apps, messages, music, your calendar. He does the thing rather than telling you which menu it lives under." },
-            ]}
-          />
-        </div>
-      </section>
-      {/* ── 4. What he does ──────────────────────────────────────────── */}
+      {/* ── Inside the free one ──────────────────────────────────────────
+          The page used to name the two Brainos and jump straight to what the
+          paid one does, leaving a reader who only wants the free one with
+          nothing to read. The free half explains itself first. */}
       <section className="ld-why-sec apple-reveal" id="does">
         <div className="ld-wrap">
-          <p className="apple-eyebrow">What he does</p>
+          <p className="apple-eyebrow">Inside Braino Companion</p>
           <h2 className="ld-h2">Four things, <span className="tone">every day.</span></h2>
           <p className="ld-lede">
-            This is the free Braino, the one in your browser. Setup is: install him. That is the
-            setup.
+            This is the Braino anyone can have, in your browser and on your Mac. Setup is:
+            install him. <b>That is the setup.</b>
           </p>
           <div className="ld-why">
             {FEATURES.map((f) => (
               <div key={f.n}><b>{f.name}</b><p>{f.line}</p></div>
             ))}
           </div>
+        </div>
+      </section>
+
+      {/* ── The problem ──────────────────────────────────────────────
+          Sits here on purpose: after the free Braino has explained itself and
+          immediately before the paid one. It is the setup for the engines, so
+          the reader meets the problem one screen before the thing that solves
+          it. Every figure is published and named on the line, or came out of
+          the eight interviews on 22 August. */}
+      <section className="ld-why-sec ac-coral apple-reveal" id="problem">
+        <div className="ld-wrap">
+          <p className="apple-eyebrow">The problem</p>
+          <h2 className="ld-h2">Anyone can build now. <span className="tone">Almost nobody gets seen.</span></h2>
+          <p className="ld-lede">
+            We sat down with eight founders in one night and asked what was actually killing
+            them. Eight said the same word. <b>Not one of them pays for anything that fixes it.</b>
+          </p>
+
+          <div className="ld-prob">
+            <div>
+              <i>Building stopped being hard</i>
+              <b>90%</b>
+              <p>Cheaper to build with AI, and 60% faster to something working. One in three new companies this year is one person. Ten times the products, the same number of people looking.</p>
+            </div>
+            <div>
+              <i>The old launch playbook died</i>
+              <b>1,500</b>
+              <p>Visits from a Product Hunt top five finish today. It used to be fifteen thousand. You ship, you post once, and the silence is total.</p>
+            </div>
+            <div>
+              <i>So the builder becomes the marketer</i>
+              <b>2 hrs a day</b>
+              <p>On Reddit for months, for two or three real conversations a week. Taken out of the only hours you had for building the thing.</p>
+            </div>
+          </div>
+
+          <p className="ld-prob-foot">
+            <b>Eight out of eight founders said getting seen was the problem. Zero out of eight
+            pay for a single tool that fixes it.</b> Not because they are careful with money.
+            Because everything on the market is sold to a marketing team with a budget, and
+            nobody sells to the person doing it alone at midnight. That gap is what Braino
+            for founders is.
+          </p>
+        </div>
+      </section>
+
+      <section className="ld-kinds apple-reveal" id="engines">
+        <div className="ld-wrap">
+        <div className="ld-engine-intro-head">
+          <p className="apple-eyebrow">Inside Braino for Founders</p>
+          <h2 className="ld-h2">Two engines. <span className="tone">One builds it. One gets it seen.</span></h2>
+          <p className="ld-lede">
+            Braino Code turns the thing you said out loud into a working product. Distra does
+            the half nobody helps with. <b>Nothing either of them writes goes anywhere until
+            you tap approve.</b>
+          </p>
+        </div>
+
+          {ENGINE_DETAIL.map((engine) => (
+            <article className={`ld-engine-full ${engine.tone}`} key={engine.name}>
+              <header>
+                <p className="ld-engine-tag">{engine.tag}</p>
+                <h3>{engine.name}</h3>
+                <p className="ld-engine-line">{engine.line}</p>
+              </header>
+
+              <div className="ld-engine-body">
+                <p className="ld-engine-intro">{engine.body}</p>
+                <ol className="ld-engine-points">
+                  {engine.points.map(([n, h, t]) => (
+                    <li key={n}><i>{n}</i><div><b>{h}</b><p>{t}</p></div></li>
+                  ))}
+                </ol>
+                <p className="ld-engine-foot">{engine.foot}</p>
+                <Link to={engine.to} className="ld-btn sm ghost">{engine.cta}</Link>
+              </div>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      {/* ── 8. Pricing ───────────────────────────────────────────────── */}
+      <section className="ld-pricing apple-reveal" id="pricing">
+        <div className="ld-wrap">
+          <p className="apple-eyebrow">Pricing</p>
+          <h2 className="ld-h2">Three plans. <span className="tone">No credit maths.</span></h2>
+          <p className="ld-lede">
+            Nobody has ever enjoyed working out what 1,500 credits buys them. A free tier that caps
+            by session instead of hiding half the product, one price for the companion, one for
+            Distra. Distra has the companion inside it.
+          </p>
+
+          <div className="ld-plans">
+            {PLANS.map((p) => {
+              const id = (
+                <div className="ld-plan-id">
+                  <span className="ld-plan-badge">{p.badge}</span>
+                  <h3>{p.name}</h3>
+                  <p>{p.desc}</p>
+                  {p.href.startsWith("/")
+                    ? <Link to={p.href} className="ld-btn sm">{p.cta}</Link>
+                    : <a href={p.href} className="ld-btn sm">{p.cta}</a>}
+                </div>
+              );
+              const body = (
+                <div className="ld-plan-body">
+                  <ul className="ld-plan-stats">
+                    {p.stats.map((t) => <li key={t}>{t}</li>)}
+                  </ul>
+                  <p className="ld-plan-inc-head">{p.incHead}</p>
+                  <ul className="ld-plan-inc">
+                    {p.includes.map((t) => <li key={t}>{t}</li>)}
+                  </ul>
+                </div>
+              );
+              return (
+                <article className={"ld-plan" + (p.tall ? " is-tall" : "")} key={p.name}>
+                  {p.tall
+                    ? <><div className="ld-plan-top">{id}<div className="ld-plan-art"><MovingBraino motion="dancing" /></div></div>{body}</>
+                    : <>{id}{body}</>}
+                </article>
+              );
+            })}
+          </div>
+
+          <div className="ld-receipt apple-reveal">
+            <p className="ld-receipt-head">Or keep paying four tools that have never met each other</p>
+            <ul>
+              {RECEIPT.map(([what, cost], i) => (
+                <li key={what} style={{ ["--d" as string]: `${i * 120}ms` } as React.CSSProperties}>
+                  <span>{what}</span><em>${cost}</em>
+                </li>
+              ))}
+            </ul>
+            <div className="ld-receipt-sub"><span>Every month, forever</span><em>${RECEIPT_TOTAL}</em></div>
+            <div className="ld-receipt-us">
+              <span>Braino Foundry<i>Braino Code and Distra, one price.</i></span>
+              <em>$50</em>
+            </div>
+          </div>
+
+          <p className="ld-fine">
+            <strong>Usage lives in Settings</strong>, so you always know where you stand. The
+            founding Distra price is a lock, not a sale that quietly ends: the first hundred people
+            are still paying thirty three dollars in 2029. Everything else on this page is honest
+            about being early.
+          </p>
+        </div>
+      </section>
+
+      {/* ── The rest of him ──────────────────────────────────────────
+          Not a chapter, because chapters were ceremony. One line that tells a
+          reader the argument is finished and the tour starts here. */}
+      <section className="ld-lead ac-violet apple-reveal" id="rest">
+        <div className="ld-wrap">
+          <p className="ld-lead-tag">The rest of him</p>
+          <h2 className="ld-lead-name">Everything <span className="tone">else</span></h2>
+          <p className="ld-lead-line">
+            Who he is for, why he is not just another AI tool, and what is actually running
+            underneath both of him.
+          </p>
         </div>
       </section>
 
@@ -671,65 +792,6 @@ export default function Landing() {
         </div>
       </section>
 
-
-      {/* ── Chapter two ──────────────────────────────────────────────── */}
-      <section className="ld-chapter ac-blue apple-reveal" id="foundry-chapter">
-        <div className="ld-wrap">
-          <p className="ld-chapter-tag">Chapter two</p>
-          <h2 className="ld-chapter-name">Braino <span className="tone">Foundry</span></h2>
-          <p className="ld-chapter-line">
-            For founders who are actually building something. He handles the company, not just
-            the day, and he does it with two engines.
-          </p>
-          <ChapterCards
-            cards={[
-              { label: "Braino Code", art: "standing",
-                title: "Say it out loud. He builds it.",
-                body: "A real site with a real design system, from the brief you spoke. Then you change it by saying what is wrong, not by starting again." },
-              { label: "Distra", art: "dancing",
-                title: "Then he goes and gets it seen.",
-                body: "Six engines for the half nobody helps with. Posting is running today, and the site says plainly which of the other five are not." },
-            ]}
-          />
-        </div>
-      </section>
-
-      <section className="ld-kinds apple-reveal" id="engines">
-        <div className="ld-wrap">
-
-          {ENGINE_DETAIL.map((engine) => (
-            <article className={`ld-engine-full ${engine.tone}`} key={engine.name}>
-              <header>
-                <p className="ld-engine-tag">{engine.tag}</p>
-                <h3>{engine.name}</h3>
-                <p className="ld-engine-line">{engine.line}</p>
-              </header>
-
-              <div className="ld-engine-body">
-                <p className="ld-engine-intro">{engine.body}</p>
-                <ol className="ld-engine-points">
-                  {engine.points.map(([n, h, t]) => (
-                    <li key={n}><i>{n}</i><div><b>{h}</b><p>{t}</p></div></li>
-                  ))}
-                </ol>
-                <p className="ld-engine-foot">{engine.foot}</p>
-                <Link to={engine.to} className="ld-btn sm ghost">{engine.cta}</Link>
-              </div>
-            </article>
-          ))}
-        </div>
-      </section>
-      {/* ── Chapter three ────────────────────────────────────────────── */}
-      <section className="ld-chapter ac-violet apple-reveal" id="under">
-        <div className="ld-wrap">
-          <p className="ld-chapter-tag">Chapter three</p>
-          <h2 className="ld-chapter-name">Everything <span className="tone">else</span></h2>
-          <p className="ld-chapter-line">
-            Why he is different from the rest, and what is actually running underneath both.
-          </p>
-        </div>
-      </section>
-
       {/* ── 6. Why him ───────────────────────────────────────────────── */}
       <section className="ld-why-sec apple-reveal" id="why">
         <div className="ld-wrap">
@@ -793,75 +855,6 @@ export default function Landing() {
             </div>
             <span className="hw-read">Explore BrainoHERA <ArrowUpRight /></span>
           </Link>
-        </div>
-      </section>
-
-      {/* ── 8. Pricing ───────────────────────────────────────────────── */}
-      <section className="ld-pricing apple-reveal" id="pricing">
-        <div className="ld-wrap">
-          <p className="apple-eyebrow">Pricing</p>
-          <h2 className="ld-h2">Three plans. <span className="tone">No credit maths.</span></h2>
-          <p className="ld-lede">
-            Nobody has ever enjoyed working out what 1,500 credits buys them. A free tier that caps
-            by session instead of hiding half the product, one price for the companion, one for
-            Distra. Distra has the companion inside it.
-          </p>
-
-          <div className="ld-plans">
-            {PLANS.map((p) => {
-              const id = (
-                <div className="ld-plan-id">
-                  <span className="ld-plan-badge">{p.badge}</span>
-                  <h3>{p.name}</h3>
-                  <p>{p.desc}</p>
-                  {p.href.startsWith("/")
-                    ? <Link to={p.href} className="ld-btn sm">{p.cta}</Link>
-                    : <a href={p.href} className="ld-btn sm">{p.cta}</a>}
-                </div>
-              );
-              const body = (
-                <div className="ld-plan-body">
-                  <ul className="ld-plan-stats">
-                    {p.stats.map((t) => <li key={t}>{t}</li>)}
-                  </ul>
-                  <p className="ld-plan-inc-head">{p.incHead}</p>
-                  <ul className="ld-plan-inc">
-                    {p.includes.map((t) => <li key={t}>{t}</li>)}
-                  </ul>
-                </div>
-              );
-              return (
-                <article className={"ld-plan" + (p.tall ? " is-tall" : "")} key={p.name}>
-                  {p.tall
-                    ? <><div className="ld-plan-top">{id}<div className="ld-plan-art"><MovingBraino motion="dancing" /></div></div>{body}</>
-                    : <>{id}{body}</>}
-                </article>
-              );
-            })}
-          </div>
-
-          <div className="ld-receipt apple-reveal">
-            <p className="ld-receipt-head">Or keep paying four tools that have never met each other</p>
-            <ul>
-              {RECEIPT.map(([what, cost], i) => (
-                <li key={what} style={{ ["--d" as string]: `${i * 120}ms` } as React.CSSProperties}>
-                  <span>{what}</span><em>${cost}</em>
-                </li>
-              ))}
-            </ul>
-            <div className="ld-receipt-sub"><span>Every month, forever</span><em>${RECEIPT_TOTAL}</em></div>
-            <div className="ld-receipt-us">
-              <span>Braino Foundry<i>Braino Code and Distra, one price.</i></span>
-              <em>$50</em>
-            </div>
-          </div>
-
-          <p className="ld-fine">
-            <strong>Usage lives in Settings</strong>, so you always know where you stand. The
-            founding Distra price is a lock, not a sale that quietly ends: the first hundred people
-            are still paying thirty three dollars in 2029. Everything else on this page is honest
-            about being early.
-          </p>
         </div>
       </section>
 

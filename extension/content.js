@@ -6272,6 +6272,7 @@ let __sbMeetingPollTimer = null;
 let __sbMeetingObserver = null;
 let __sbMeetingAutosaveTimer = null;
 let __sbMeetingSegmentBusy = false;
+let __sbMeetingPendingStreams = [];   // audio from a failed autosave, carried to the next one
 let __sbSpotifyUiState = {
   active: false,
   source: "spotify",
@@ -12011,6 +12012,10 @@ function __sbMountNotchV1() {
   }));
   shadow.querySelector(".record .rec-start")?.addEventListener("click", (event) => {
     event.stopPropagation();
+    // The surface knows which mode it is offering. Reading a global here is how a
+    // meeting got recorded as a lecture with no mic.
+    const readyPanel = shadow.querySelector(".record");
+    if (readyPanel?.dataset.mode === "meeting" || __sbOnGoogleMeetCall()) window.__sbForcedMode = "meeting";
     void __sbStartLectureRecording();   // this click IS the getDisplayMedia user gesture
   });
   shadow.querySelector(".record .rec-stop")?.addEventListener("click", (event) => {
@@ -12021,7 +12026,12 @@ function __sbMountNotchV1() {
     void __sbStopLectureRecording();
   });
   // Peek at the live recording sheet: hover or tap the compact pill.
-  shell.addEventListener("mouseenter", () => { if (shell.dataset.state === "record") __sbNotchRecordPeek(4000); });
+  shell.addEventListener("mouseenter", () => {
+    if (shell.dataset.state === "record") { __sbNotchRecordPeek(4000); return; }
+    // Still in the call and not recording? The offer comes back on hover, every time.
+    // Saying "not now" once must never be the reason an hour went unrecorded.
+    __sbMaybeOfferMeetRecording("hover");
+  });
   shadow.querySelector(".record")?.addEventListener("click", (event) => {
     if (event.target?.closest?.(".rec-stop,.rec-start")) return;
     event.stopPropagation();
@@ -12524,7 +12534,7 @@ function __sbNotchMeasureRecord() {
     + (ready ? (foot ? foot.offsetHeight + 13 : 70) : Math.max(64, (body ? body.scrollHeight : 64) + 13));
   __sbNotchV1.shell.style.setProperty("--sb-record-height", `${Math.max(150, Math.round(h))}px`);
 }
-function __sbNotchShowRecordReady(mode) {
+function __sbNotchShowRecordReady(mode, copy = {}) {
   if (!__sbNotchV1) return;
   // Belt-and-braces: while capture is live there is no "ready" — only the live
   // surface with its Stop button.
@@ -12536,12 +12546,17 @@ function __sbNotchShowRecordReady(mode) {
   delete panel.dataset.compact;
   if (__sbNotchRecordPeekTimer) { clearTimeout(__sbNotchRecordPeekTimer); __sbNotchRecordPeekTimer = null; }
   const isMeeting = mode === "meeting";
+  panel.dataset.mode = isMeeting ? "meeting" : "lecture";
   const modeEl = shadow.querySelector(".rec-mode");
   if (modeEl) modeEl.textContent = isMeeting ? "Meeting & Call" : "Lecture & Audio";
+  const titleEl = shadow.querySelector(".rec-ready-title");
+  if (titleEl) titleEl.textContent = copy.title || "Ready to record";
+  const startEl = shadow.querySelector(".rec-start");
+  if (startEl) startEl.textContent = copy.start || "Start recording";
   const sub = shadow.querySelector(".rec-ready-sub");
-  if (sub) sub.textContent = isMeeting
+  if (sub) sub.textContent = copy.sub || (isMeeting
     ? "Tab audio + your mic, written into meeting notes."
-    : "This tab's audio, captured into clean study notes.";
+    : "This tab's audio, captured into clean study notes.");
   const clock = shadow.querySelector(".rec-clock");
   if (clock) clock.textContent = "00:00";
   const speaker = shadow.querySelector(".rec-speaker");
@@ -19624,11 +19639,24 @@ function __sbExtractCaptionCandidate(el) {
   return { speaker: "", text: raw };
 }
 
+let __sbMeetScanTimer = null;
+let __sbMeetScanLastAt = 0;
+let __sbMeetPresentCheckAt = 0;
+// Trailing throttle: a burst of a thousand mutations costs one scan, not a thousand.
+function __sbScheduleMeetScan() {
+  if (__sbMeetScanTimer) return;
+  const wait = Math.max(0, 700 - (Date.now() - __sbMeetScanLastAt));
+  __sbMeetScanTimer = setTimeout(() => { __sbMeetScanTimer = null; __sbScanGoogleMeetContext(); }, wait);
+}
+
 function __sbScanGoogleMeetContext() {
   if (!__sbMeetingContext || __sbMeetingContext.platform !== "google-meet") return;
+  __sbMeetScanLastAt = Date.now();
   const attrEls = document.querySelectorAll("[aria-label],[title],[data-tooltip],[data-self-name],[data-is-speaking],[data-speaking]");
   let detectedSpeaker = "";
+  let walked = 0;
   for (const el of attrEls) {
+    if (++walked > 400) break;   // a call has a few dozen real tiles; the rest is chrome
     if (!__sbIsVisibleMeetingElement(el)) continue;
     const attrs = [
       el.getAttribute("data-self-name"),
@@ -19659,6 +19687,10 @@ function __sbScanGoogleMeetContext() {
     if (caption) __sbRecordMeetingCaption(caption.speaker, caption.text, "meet-captions");
   }
 
+  // body.innerText forces a full layout + text serialization of the whole call.
+  // Once every 8s is plenty for "is someone presenting".
+  if (Date.now() - __sbMeetPresentCheckAt < 8000) return;
+  __sbMeetPresentCheckAt = Date.now();
   const bodyText = __sbCleanMeetingText(document.body?.innerText || "");
   const isPresenting = /\b(you are presenting|you'?re presenting|stop presenting|presenting to everyone|screen is being shared)\b/i.test(bodyText);
   if (isPresenting !== __sbMeetingContext.isPresenting) {
@@ -19771,6 +19803,63 @@ function __sbSaveMeetingCheckpoint(reason = "autosave", completed = false) {
   __sbUpdateMeetingStatus();
 }
 
+// ── Google Meet: offer to record, and keep offering ─────────────────────────
+// The missed recording is the only failure mode that cannot be repaired after the
+// fact, so the offer is not a one-shot toast. It appears by itself when you land in
+// a call, and it comes back on every hover for as long as you are in that call and
+// not already recording. Declining is always temporary; the call is not.
+const __SB_MEET_CALL_PATH_RE = /^\/[a-z]{3}-[a-z]{4}-[a-z]{3}(?:$|\/)/i;
+const __SB_MEET_LEAVE_SEL = '[aria-label*="Leave call" i],[aria-label*="Leave the call" i],[aria-label*="Hang up" i],[data-tooltip*="Leave call" i]';
+let __sbMeetWatchTimer = null;
+let __sbMeetAutoOfferedFor = "";
+
+function __sbOnGoogleMeetCall() {
+  try {
+    if (location.hostname !== "meet.google.com") return false;
+    if (!__SB_MEET_CALL_PATH_RE.test(location.pathname)) return false;
+    // The lobby has the same URL as the call. The leave button only exists once
+    // you are actually in, which is also the first moment recording is worth anything.
+    return !!document.querySelector(__SB_MEET_LEAVE_SEL);
+  } catch (_) { return false; }
+}
+
+// States the offer is allowed to take over. Anything the person is holding open
+// themselves (typing, a menu, sign-in, a long answer, a live recording) is theirs.
+const __SB_MEET_OFFER_OK_STATES = ["", "idle", "short"];
+
+function __sbMaybeOfferMeetRecording(reason) {
+  if (__sbIsLectureRecording) return false;
+  if (!__sbOnGoogleMeetCall()) return false;
+  if (!__sbNotchV1 || !__sbNotchV1.shell) return false;
+  if (__sbHeadphoneMode || __sbInputOpen) return false;
+  const state = String(__sbNotchV1.shell.dataset.state || "");
+  if (!__SB_MEET_OFFER_OK_STATES.includes(state)) return false;
+  window.__sbForcedMode = "meeting";
+  __sbNotchShowRecordReady("meeting", {
+    title: "You are in a meeting",
+    sub: "Braino records the call and your mic, and writes the notes.",
+    start: "Start recording",
+  });
+  if (reason === "auto") __sbLogInteraction({ kind: "record", mode: "meeting", route: "meet-auto-offer" });
+  return true;
+}
+
+function __sbMeetWatchTick() {
+  const inCall = __sbOnGoogleMeetCall();
+  if (!inCall) { __sbMeetAutoOfferedFor = ""; return; }
+  if (__sbIsLectureRecording) return;
+  const key = location.pathname;
+  if (__sbMeetAutoOfferedFor === key) return;   // already offered for this call; hover brings it back
+  if (__sbMaybeOfferMeetRecording("auto")) __sbMeetAutoOfferedFor = key;
+}
+
+function __sbStartMeetWatcher() {
+  if (__sbMeetWatchTimer) return;
+  if (location.hostname !== "meet.google.com") return;
+  __sbMeetWatchTimer = setInterval(__sbMeetWatchTick, 2500);
+  setTimeout(__sbMeetWatchTick, 1500);
+}
+
 async function __sbStartMeetingContextTracker() {
   const info = __sbMeetingPlatformInfo();
   const checkpoint = await __sbLoadMeetingCheckpoint();
@@ -19826,8 +19915,11 @@ async function __sbStartMeetingContextTracker() {
     __sbScanGoogleMeetContext();
     __sbMeetingPollTimer = setInterval(__sbScanGoogleMeetContext, 1200);
     try {
-      __sbMeetingObserver = new MutationObserver(() => __sbScanGoogleMeetContext());
-      __sbMeetingObserver.observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true });
+      // Coalesced, never synchronous. Meet repaints its tiles, timers and captions
+      // constantly; scanning on every mutation froze the call. The observer only
+      // raises a flag and lets a trailing timer do at most one scan per 700ms.
+      __sbMeetingObserver = new MutationObserver(() => __sbScheduleMeetScan());
+      __sbMeetingObserver.observe(document.body, { childList: true, subtree: true, characterData: true });
     } catch (_) {}
   }
 
@@ -19862,16 +19954,23 @@ async function __sbCaptureMeetingCheckpointSegment(reason = "autosave") {
     const seg = __sbInPageCaptureActive
       ? await __sbGetInPageSegment()
       : { audioBase64: null, knownSpeakerReferences: [], meetingContext: __sbMeetingContextPayload() };
+    if (__sbMeetingPendingStreams.length) {
+      seg.audioStreams = [...__sbMeetingPendingStreams, ...(seg.audioStreams || [])];
+    }
     if (!seg.audioStreams?.length && !__sbMeetingPayloadHasText(seg.meetingContext)) {
       __sbSaveMeetingCheckpoint(reason);
       return;
     }
     const res = await __sbTranscribeIpSegment(seg);
     if (res.error) {
-      __sbUpdateMeetingStatus(`Autosave skipped: ${String(res.error).slice(0, 80)}`);
+      // Hold the audio, not just the apology. Two cycles of backlog max, so a long
+      // outage cannot grow a payload big enough to guarantee the next failure too.
+      __sbMeetingPendingStreams = (seg.audioStreams || []).slice(-4);
+      __sbUpdateMeetingStatus(`Retrying in a moment: ${String(res.error).slice(0, 60)}`);
       __sbSaveMeetingCheckpoint("autosave-error");
       return;
     }
+    __sbMeetingPendingStreams = [];
     if (!res.empty) {
       __sbMarkMeetingContextSent();
       if (res.notes) __sbLectureNotes = res.notes;
@@ -20051,7 +20150,10 @@ async function __sbGetInPageSegment(options = {}) {
     const audioBase64 = await __sbBlobToBase64(cut.blob);
     if (audioBase64) audioStreams.push({ role, audioBase64, mimeType: "audio/webm", durationMs: cut.durationMs });
   }
-  return { audioStreams, meetingContext };
+  const knownSpeakerReferences = Array.isArray(meetingContext?.participants)
+    ? meetingContext.participants.slice(0, 20)
+    : [];
+  return { audioStreams, meetingContext, knownSpeakerReferences };
 }
 
 async function __sbTranscribeIpSegment(seg) {
@@ -20099,6 +20201,7 @@ async function __sbStartLectureRecording(options = {}) {
   __sbLectureTranscript = "";
   __sbLecSegmentCount = 0;
   __sbMeetingArtifacts = { actionItems: [], followUps: [] };
+  __sbMeetingPendingStreams = [];
   __sbLectureRecordingMode = mode;
 
   try {
@@ -20208,6 +20311,7 @@ async function __sbCaptureLectureSegment() {
 
 async function __sbStopLectureRecording() {
   if (__sbLectureInterval) { clearInterval(__sbLectureInterval); __sbLectureInterval = null; }
+  __sbMeetAutoOfferedFor = "";   // still in the call? he will offer again.
   const brainBtnStop = document.getElementById("__sb_brain_btn__");
   if (brainBtnStop) { brainBtnStop.classList.remove("recording"); __sbRestoreWalkBrain(); }
   __sbShowLectureRecordingBar(false);
@@ -20233,6 +20337,11 @@ async function __sbStopLectureRecording() {
   if (__sbInPageCaptureActive) {
     // In-page path: flush the final segment, transcribe it, then tear the capture down.
     const seg = await __sbGetInPageSegment({ final: true });
+    // Anything a failed autosave was holding goes out with the last cut, or it is lost.
+    if (__sbMeetingPendingStreams.length) {
+      seg.audioStreams = [...__sbMeetingPendingStreams, ...(seg.audioStreams || [])];
+      __sbMeetingPendingStreams = [];
+    }
     res = (seg.audioStreams?.length || __sbMeetingPayloadHasText(seg.meetingContext))
       ? await __sbTranscribeIpSegment(seg)
       : { notes: __sbLectureNotes, transcript: __sbLectureTranscript };
@@ -25299,9 +25408,10 @@ async function __sbHandleScreenVisionRequest(promptText, ctx = {}) {
 if (__sbIsBrainoOwnSite()) {
   // dormant on Braino's own site — the website provides its own Braino experience
 } else if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", () => __sbBuildBrainUI(), { once: true });
+  document.addEventListener("DOMContentLoaded", () => { __sbBuildBrainUI(); __sbStartMeetWatcher(); }, { once: true });
 } else {
   __sbBuildBrainUI();
+  __sbStartMeetWatcher();
 }
 } // end guard
   })();

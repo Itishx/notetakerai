@@ -827,6 +827,55 @@ Two smaller ones from the same window:
 
 ---
 
+## 10c — THE CHAT SHELL (`/chat`)
+
+Not the Apple page system and deliberately not a Braino skin: the full-screen
+chat is a **ChatGPT-shaped dark app shell** with Braino's identity inside it.
+The reasoning is that people arrive at a chat page already knowing how a chat
+page works, so every pixel spent being different is a pixel spent teaching. All
+of it lives in `CHAT_CSS` at the bottom of `src/pages/BrainoChat.tsx`, scoped
+under `.bchat`, so it never touches the site tokens.
+
+### Tokens
+
+```css
+--bc-bg:#000;        /* both columns, no divider between them */
+--bc-hover:#1c1c1c;  /* row hover */
+--bc-active:#2a2a2a; /* selected chat */
+--bc-surface:#303030;/* composer and user bubble, the only raised surface */
+--bc-text:#f3f3f3;  --bc-dim:#b4b4b4;  --bc-muted:#8f8f8f;
+--bc-blue:#0285ff;   /* voice orb and the active Delegate pill only */
+```
+
+### The three numbers that make it read as ChatGPT
+
+**260px sidebar. 768px column. 56px composer.** The thread and the composer are
+the same 768px and share one centre line, which is why `.bc-scroll` uses
+`scrollbar-gutter:stable both-edges`: a one-sided gutter shifts the thread 5px
+off the composer and the whole page looks subtly broken without ever looking
+wrong.
+
+### Rules this surface adds
+
+- **The composer moves.** Empty chat: greeting, composer and suggestion rows are
+  one vertically centred stack, no bottom dock. First message: the composer
+  drops to the dock and stays. Same component, two parents.
+- **One button, two jobs.** Empty input shows the blue voice orb; typed input
+  swaps it for the white send arrow. There is never both.
+- **Delegate sits in the Think slot** and is the only tinted control on the page
+  when armed (`rgba(2,133,255,.18)`).
+- **Braino survives as the mascot, not as chrome.** Walker in the empty state,
+  small avatar on answers, full mascot in voice mode. The shell itself stays
+  neutral.
+- **Nothing dead in the sidebar.** ChatGPT's Images / Plugins / Pinned /
+  Projects rows are not cloned, because a row that does nothing costs more trust
+  than the resemblance buys.
+- **`:where(.bchat) button`, not `.bchat button`.** The reset has to lose to
+  every single-class button rule, or `color:inherit` outranks them and paints
+  the send arrow white on white. Same for the shared `svg` rule.
+
+---
+
 ## 11 — LAWS (the short version)
 
 1. **Headlines 600. Body 500.** Never 400 headlines (except the home poster H1), never 700 body.

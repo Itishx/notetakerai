@@ -1,9 +1,10 @@
-/* The six jobs inside Distra.
+/* The four jobs inside Distra.
  *
- * Distribution is not one job, it is six, and until now the site described only
- * the first of them. A founder reading "he posts for you" has no idea the other
- * five exist, which is the whole argument for buying a conductor rather than
- * another posting tool.
+ * It used to be six. Eight founder interviews on 22 August said otherwise: we
+ * overlaid what their weeks actually contain and kept only what repeated.
+ * Inbound calling came up zero times out of eight and is gone. Research is a
+ * feed into Content rather than a box of its own, and Glue is the spine the
+ * other three run on.
  *
  * Shared between the homepage and the Foundry page on purpose: two copies of
  * this list would drift the first time one of them changed.
@@ -29,47 +30,31 @@ export const DISTRA_ENGINES: DistraEngine[] = [
     name: "Content",
     job: "Post everywhere, in your voice",
     detail:
-      "He learns how you write from two hundred of your own posts, reads what you shipped that week, and puts it out on every platform that matters. You are not writing seven versions of the same thing again.",
+      "He learns how you write from two hundred of your own posts, reads what you shipped that week, and puts it out on every platform that matters. A listener watches your keywords all day and hands him the conversations worth joining, so he never starts from a blank page. Seven of the eight founders we sat down with named this as the thing hurting most.",
     state: "Running",
   },
   {
     n: "02",
     name: "Optics",
-    job: "Get recommended by the AI people ask",
+    job: "Get named when people ask an AI",
     detail:
-      "When someone asks ChatGPT for a tool like yours, it names a competitor and not you. He watches for that, works out which page is missing, and tells you the one fix that changes the answer. Most tools measure this. He acts on it.",
+      "Someone asks ChatGPT for a tool like yours and it names a competitor. He asks those questions himself every week, checks whether the answer says you, works out which page is missing, and ships the fix back through Content. Every founder we asked wanted this once it was explained. Citations churn about a quarter every month, so it is never done once.",
     state: "Next",
   },
   {
     n: "03",
     name: "Outbound",
-    job: "Find the right people and reach them",
+    job: "Find the right people and write to them",
     detail:
-      "Twenty five a day, picked because they actually fit, with a message written from what they are doing rather than a template with their first name in it.",
+      "Picked because they actually fit, with a message written from what they are doing rather than a template with their first name dropped in. He drafts. He has never sent anything on his own and he never will.",
     state: "Planned",
   },
   {
     n: "04",
-    name: "Inbound",
-    job: "Answer, qualify, book",
-    detail:
-      "Somebody lands on your site at midnight with a question. He answers it, works out whether they are real, and puts the meeting in your calendar before you wake up.",
-    state: "Planned",
-  },
-  {
-    n: "05",
-    name: "Research",
-    job: "Listen for people describing your problem",
-    detail:
-      "Reddit and the forums, all day, for someone saying the exact thing your product fixes. Those are the warmest leads there are, and they expire in about an hour.",
-    state: "Planned",
-  },
-  {
-    n: "06",
     name: "Glue",
-    job: "Make the other five talk",
+    job: "Make the other three talk, and hold the approval inbox",
     detail:
-      "What Research hears becomes what Content posts. Who Outbound reached shows up when Inbound answers. Five tools that do not know about each other is the actual problem, and this is the part nobody sells.",
-    state: "Planned",
+      "What the listener hears becomes what Content posts. What Optics finds missing becomes next week's post. Everything lands in one inbox where you approve, edit or bin it, out loud or with a tap. Three tools that do not know about each other is the actual problem, and this is the part nobody sells.",
+    state: "Next",
   },
 ];

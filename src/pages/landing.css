@@ -448,6 +448,36 @@
   color: var(--ap-ink); font-size: 17px; font-weight: 700; letter-spacing: -.03em;
 }
 .ld-bar-mark > span { line-height: 1; }
+/* The product is pre-release and the header is the one place everyone sees. */
+/* BETA, the way a car badges a trim level: no pill, no fill, no shouting. A
+   hairline divides it from the wordmark and the letters carry the weight,
+   tracked wide and set light. The filled coral chip it replaced read as a
+   startup sticker; this reads as a state the product is in.
+
+   .34em of tracking adds a trailing space after the final letter, so the right
+   padding is pulled back by roughly that much to keep the badge optically
+   centred against the divider. */
+.ld-bar-beta {
+  position: relative;
+  margin-left: 11px;
+  padding: 1px 0 1px 12px;
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: .34em;
+  text-indent: .34em;
+  text-transform: uppercase;
+  color: var(--ap-ink-soft);
+  opacity: .85;
+}
+.ld-bar-beta::before {
+  content: "";
+  position: absolute;
+  left: 0; top: 50%;
+  width: 1px; height: 11px;
+  transform: translateY(-50%);
+  background: currentColor;
+  opacity: .3;
+}
 @media (prefers-reduced-motion: reduce) { .ld-bar { transition: none; } }
 
 /* ── The theme toggle, now that the anchor bar is gone ─────────────────── */
@@ -598,7 +628,16 @@
 /* The theme confirm grows leftward, which on a phone means growing off the
    screen. It drops below the button instead, right-aligned under it. */
 @media (max-width: 760px) {
-  .ld-theme-wrap { top: 10px; right: 10px; flex-direction: column; align-items: flex-end; background: none; border: 0; }
+  /* Stacked, the wrapper is only a layout box: it goes transparent but used to
+     keep the base rule's backdrop-filter, so an invisible ~311x46 band (the
+     collapsed ask still contributes its width) sat next to the notch blurring
+     the page behind it. The blur belongs to the button and to the opened ask,
+     never to the box that holds them. */
+  .ld-theme-wrap {
+    top: 10px; right: 10px; flex-direction: column; align-items: flex-end;
+    background: none; border: 0;
+    backdrop-filter: none; -webkit-backdrop-filter: none;
+  }
   .ld-theme { background: var(--ap-nav); border: 1px solid var(--ap-hairline); backdrop-filter: saturate(180%) blur(18px); }
   .ld-theme-ask {
     order: 1; grid-template-columns: 1fr; grid-template-rows: 0fr;
@@ -801,22 +840,73 @@
 .ld-who-bar .ld-ask-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .ld-who-bar .ld-ask-mascot { width: 18px; height: 18px; }
 
-/* ── Chapter openers ────────────────────────────────────────────────────────
-   The page tells you there are two products and then runs a dozen sections at
-   you. Without a name over each group, "Four things, every day" belongs to
-   nobody and the reader has to guess. These are the badge: after one of these,
-   every section beneath it is unambiguously owned.
+/* ── The problem ───────────────────────────────────────────────────────────
+   The chapter openers are gone. They named three groups on a page that now
+   answers the only question a stranger has in the first two screens: what is
+   this, and why should I care. The order does the naming instead.
 
-   An eyebrow, a name and one line. Not a slab: this is a light page and a
-   full-bleed dark band mid-scroll reads as a mistake. The accent and a hairline
-   do the separating. */
+   Three figures, each with the thing it proves written above it rather than
+   under it, because the label is what makes 90% mean anything. Hairline rules
+   rather than cards: the section above this one is already a table, and two
+   framed grids in a row read as one long box. */
 
-.ld-chapter {
-  padding: clamp(56px, 8vw, 96px) 0 clamp(20px, 3vw, 34px);
+.ld-prob {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0 clamp(24px, 4vw, 56px);
+  margin-top: clamp(28px, 4vw, 42px);
+}
+@media (max-width: 860px) { .ld-prob { grid-template-columns: 1fr; } }
+
+.ld-prob > div { padding: 24px 0; border-top: 1px solid var(--ap-hairline); }
+
+.ld-prob i {
+  display: block;
+  font-style: normal;
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--ap-accent);
+  margin-bottom: 12px;
+}
+.ld-prob b {
+  display: block;
+  font-size: clamp(38px, 5vw, 54px);
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  color: var(--ap-ink);
+  margin-bottom: 12px;
+}
+.ld-prob p { margin: 0; font-size: 15.5px; line-height: 1.55; color: var(--ap-ink-soft); }
+
+/* The finding sits on its own rule, at reading size rather than display size:
+   it is the sentence the whole page rests on and it should be read, not
+   scanned. */
+.ld-prob-foot {
+  margin: clamp(26px, 3.5vw, 40px) 0 0;
+  padding-top: clamp(20px, 2.6vw, 28px);
+  border-top: 1px solid var(--ap-hairline);
+  font-size: clamp(16px, 1.8vw, 18.5px);
+  line-height: 1.55;
+  font-weight: 500;
+  color: var(--ap-ink-soft);
+  max-width: 78ch;
+}
+.ld-prob-foot b { color: var(--ap-ink); font-weight: 600; }
+
+/* ── The lead-in ───────────────────────────────────────────────────────────
+   One of these, once, where the argument ends and the tour begins. The old
+   version put three of them on the page and named them Chapter one, two and
+   three, which is ceremony a reader has to sit through. An eyebrow, a name and
+   a line. Not a slab: the accent and a hairline do the separating. */
+
+.ld-lead {
+  padding: clamp(56px, 8vw, 96px) 0 clamp(18px, 2.6vw, 30px);
   border-top: 1px solid var(--ap-hairline);
 }
-
-.ld-chapter-tag {
+.ld-lead-tag {
   margin: 0 0 12px;
   font-size: 13px;
   font-weight: 600;
@@ -824,8 +914,8 @@
   text-transform: uppercase;
   color: var(--ap-accent);
 }
-
-.ld-chapter-name {
+.ld-lead-name .tone { color: var(--ap-accent); }
+.ld-lead-name {
   margin: 0 0 12px;
   font-size: clamp(38px, 6vw, 68px);
   font-weight: 600;
@@ -834,42 +924,21 @@
   color: var(--ap-ink);
   text-wrap: balance;
 }
-
-.ld-chapter-line {
+.ld-lead-line {
   margin: 0;
   font-size: clamp(17px, 2vw, 21px);
   line-height: 1.45;
   font-weight: 500;
   color: var(--ap-ink-soft);
-  max-width: 52ch;
+  max-width: 56ch;
 }
+/* The lead-in owns the section under it, so that one drops its own top rule. */
+.ld-lead + section { padding-top: clamp(18px, 2.4vw, 30px); }
+.ld-lead + section > .ld-wrap > .apple-eyebrow:first-child { margin-top: 0; }
 
-/* The chapter owns the sections under it, so they lose their own top rule. */
-.ld-chapter + section { padding-top: clamp(18px, 2.4vw, 30px); }
-
-/* The two cards under a chapter opener. .ld-whois carries the shared card
-   styling; this only handles the gap above them and the fact that they sit
-   inside .ld-wrap, which already has the gutter the grid tries to add again. */
-.ld-chapter-cards { margin-top: clamp(14px, 1.8vw, 24px); padding-top: 0; }
-/* Squared, and flush to the chapter's own measure: .ld-wrap already sets the
-   left edge the chapter name sits on, so the grid drops its inherited gutter
-   and runs from that edge to the end of the column. The rounded frame belongs
-   to "Who is Braino", where the grid is the section; here it is a division
-   under a heading, and a division has corners. */
-.ld-chapter-cards .po-character-grid {
-  margin: 0;
-  border-radius: 0;
-}
-.ld-chapter-cards .po-character-card { border-radius: 0; }
-/* Squared all the way through, including the art tile. A rounded panel inside
-   a squared frame is the one thing that would read as an accident. */
-.ld-chapter-cards .po-character-art { border-radius: 0; }
-
-
-/* The engines block used to follow the comparison table and carried a top
-   margin to clear it. It opens the Foundry chapter now, so that margin is a
-   hole between the chapter line and its own first paragraph. */
-.ld-chapter + section .ld-engines:first-child { margin-top: 0; }
+/* The engines section had no heading of its own: it used to inherit one from
+   the chapter opener above it. Now it introduces itself. */
+.ld-engine-intro-head { margin-bottom: clamp(26px, 3.5vw, 44px); }
 
 /* ── Chapter two: the engines, at length ────────────────────────────────────
    These were two small cards, which is not enough room to explain either
@@ -981,7 +1050,7 @@
      window onto something bigger than the page rather than a screenshot on a
      slide. That means no max-width and no auto margin here — the right column
      has to reach the viewport edge to work at all. */
-  grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
+  grid-template-columns: minmax(0, 1.12fr) minmax(0, 0.88fr);
   align-items: center;
   /* The hero owns the first screen; align-content centres the row in whatever
      is left over, and the cap stops a 27in display stranding the copy. */
@@ -1021,17 +1090,20 @@
   }
 }
 
+/* Two full sentences, not two words. The old 70px was tuned for "Speak. /
+   Watch it happen." and shattered this headline into four ragged lines, so the
+   size now answers to the longest line rather than to the old copy. */
 .ld-hero-h1 {
   margin: 10px 0 18px;
-  font-size: clamp(40px, 5.2vw, 70px);
+  font-size: clamp(34px, 4.1vw, 54px);
   font-weight: 600;
-  letter-spacing: -0.03em;
-  line-height: 1.0;
+  letter-spacing: -0.032em;
+  line-height: 1.04;
   color: var(--ap-ink);
   text-wrap: balance;
 }
 
-.ld-hero-copy { max-width: 34rem; }
+.ld-hero-copy { max-width: 44rem; }
 
 .ld-hero-sub {
   margin: 0 0 26px;

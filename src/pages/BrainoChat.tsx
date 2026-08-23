@@ -316,34 +316,102 @@ function fmtInline(text: string): React.ReactNode[] {
   return out;
 }
 
-function Paragraphs({ text }: { text: string }) {
-  return (
-    <>
-      {text.split(/\n{2,}/).map((para, index) => (
-        <p key={index}>
-          {para.split(/\n/).map((line, lineIndex, lines) => (
-            <span key={lineIndex}>{fmtInline(line)}{lineIndex < lines.length - 1 ? <br /> : null}</span>
-          ))}
-        </p>
-      ))}
-    </>
-  );
+function Markdown({ text }: { text: string }) {
+  const blocks: React.ReactNode[] = [];
+  const lines = text.split("\n");
+  const isBlockStart = (line: string) => /^(#{1,4}\s|\s*>|\s*([-*•]|\d+\.)\s|```|\s*(---|___|\*\*\*)\s*$)/.test(line);
+  let key = 0;
+  let i = 0;
+
+  while (i < lines.length) {
+    const line = lines[i];
+    if (!line.trim()) { i += 1; continue; }
+
+    if (/^```/.test(line)) {
+      const body: string[] = [];
+      i += 1;
+      while (i < lines.length && !/^```/.test(lines[i])) { body.push(lines[i]); i += 1; }
+      i += 1;
+      blocks.push(<pre key={key++}><code>{body.join("\n")}</code></pre>);
+      continue;
+    }
+
+    if (/^\s*(---|___|\*\*\*)\s*$/.test(line)) {
+      blocks.push(<hr key={key++} />);
+      i += 1;
+      continue;
+    }
+
+    const heading = /^(#{1,4})\s+(.*)$/.exec(line);
+    if (heading) {
+      const Tag = (`h${Math.min(heading[1].length + 1, 5)}`) as "h2" | "h3" | "h4" | "h5";
+      blocks.push(<Tag key={key++}>{fmtInline(heading[2])}</Tag>);
+      i += 1;
+      continue;
+    }
+
+    if (/^\s*>\s?/.test(line)) {
+      const body: string[] = [];
+      while (i < lines.length && /^\s*>\s?/.test(lines[i])) { body.push(lines[i].replace(/^\s*>\s?/, "")); i += 1; }
+      blocks.push(
+        <blockquote key={key++}>
+          {body.filter((row) => row.trim()).map((row, index) => <p key={index}>{fmtInline(row)}</p>)}
+        </blockquote>,
+      );
+      continue;
+    }
+
+    if (/^\s*([-*•]|\d+\.)\s+/.test(line)) {
+      const ordered = /^\s*\d+\.\s+/.test(line);
+      const items: string[] = [];
+      while (i < lines.length && /^\s*([-*•]|\d+\.)\s+/.test(lines[i])) {
+        items.push(lines[i].replace(/^\s*([-*•]|\d+\.)\s+/, ""));
+        i += 1;
+      }
+      const List = ordered ? "ol" : "ul";
+      blocks.push(<List key={key++}>{items.map((item, index) => <li key={index}>{fmtInline(item)}</li>)}</List>);
+      continue;
+    }
+
+    const para: string[] = [];
+    while (i < lines.length && lines[i].trim() && !isBlockStart(lines[i])) { para.push(lines[i]); i += 1; }
+    blocks.push(
+      <p key={key++}>
+        {para.map((row, index) => (
+          <span key={index}>{fmtInline(row)}{index < para.length - 1 ? <br /> : null}</span>
+        ))}
+      </p>,
+    );
+  }
+
+  return <>{blocks}</>;
 }
 
-function Icon({ name }: { name: "new" | "search" | "library" | "menu" | "plus" | "mic" | "voice" | "send" | "bolt" | "x" | "edit" | "trash" }) {
-  const paths: Record<typeof name, React.ReactNode> = {
-    new: <><path d="M12 5v14M5 12h14" /></>,
+type IconName =
+  | "new" | "search" | "panel" | "plus" | "mic" | "voice" | "send" | "think" | "bolt"
+  | "x" | "edit" | "trash" | "share" | "dots" | "sparkle" | "down" | "copy" | "check" | "globe";
+
+function Icon({ name }: { name: IconName }) {
+  const paths: Record<IconName, React.ReactNode> = {
+    new: <><path d="M12 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-6" /><path d="M18.4 2.6a2 2 0 0 1 2.8 2.8L12.5 14 9 15l1-3.5 8.4-8.4z" /></>,
     search: <><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></>,
-    library: <><path d="M4 6h16M4 12h16M4 18h10" /></>,
-    menu: <><path d="M4 7h16M4 12h16M4 17h16" /></>,
+    panel: <><rect x="3" y="4" width="18" height="16" rx="2.5" /><path d="M9.5 4v16" /></>,
     plus: <><path d="M12 5v14M5 12h14" /></>,
     mic: <><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5 11a7 7 0 0 0 14 0M12 18v3" /></>,
-    voice: <><path d="M5 12v0M9 8v8M13 5v14M17 8v8M21 12v0" /></>,
+    voice: <><path d="M6 10v4M10 6.5v11M14 8.5v7M18 10.5v3" /></>,
     send: <><path d="M12 19V5M5 12l7-7 7 7" /></>,
+    think: <><path d="M12 5.5v13" /><path d="M9.5 5.5a3 3 0 0 0-3 3 3 3 0 0 0-.8 5.6 3 3 0 0 0 3.8 4.4" /><path d="M14.5 5.5a3 3 0 0 1 3 3 3 3 0 0 1 .8 5.6 3 3 0 0 1-3.8 4.4" /></>,
     bolt: <><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8z" /></>,
     x: <><path d="M6 6l12 12M18 6 6 18" /></>,
     edit: <><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" /></>,
     trash: <><path d="M3 6h18" /><path d="M8 6V4h8v2" /><path d="M19 6l-1 14H6L5 6" /><path d="M10 11v5M14 11v5" /></>,
+    share: <><path d="M12 15V3" /><path d="m8 7 4-4 4 4" /><path d="M4 14v4a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3v-4" /></>,
+    dots: <><circle cx="5" cy="12" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="19" cy="12" r="1.6" /></>,
+    sparkle: <><path d="m12 3 1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z" /><path d="M18.5 15.5 19 17l1.5.5-1.5.5-.5 1.5-.5-1.5L16 17l1.5-.5z" /></>,
+    down: <><path d="M12 5v14" /><path d="m6 13 6 6 6-6" /></>,
+    copy: <><rect x="9" y="9" width="12" height="12" rx="2.5" /><path d="M5 15a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2" /></>,
+    check: <><path d="m5 13 4 4L19 7" /></>,
+    globe: <><circle cx="12" cy="12" r="9" /><path d="M3 12h18" /><path d="M12 3a15 15 0 0 1 0 18 15 15 0 0 1 0-18z" /></>,
   };
   return <svg viewBox="0 0 24 24" aria-hidden="true">{paths[name]}</svg>;
 }
@@ -493,6 +561,27 @@ async function callBrainoSiteChat(args: {
   };
 }
 
+function CopyAction({ text }: { text: string }) {
+  const [done, setDone] = useState(false);
+  return (
+    <button
+      className="bc-msg-action"
+      type="button"
+      aria-label="Copy message"
+      title="Copy"
+      onClick={() => {
+        if (!navigator.clipboard) return;
+        navigator.clipboard.writeText(text).then(() => {
+          setDone(true);
+          window.setTimeout(() => setDone(false), 1400);
+        }).catch(() => {});
+      }}
+    >
+      <Icon name={done ? "check" : "copy"} />
+    </button>
+  );
+}
+
 function Turn({ message, reveal, onStop }: { message: ChatMessage; reveal: number | null; onStop: (id: string) => void }) {
   if (message.role === "user") {
     return (
@@ -507,10 +596,10 @@ function Turn({ message, reveal, onStop }: { message: ChatMessage; reveal: numbe
     const steps = (message.steps || []).filter((s) => s.description);
     return (
       <div className="bc-turn bc-turn-braino">
-        <BrainoMark size={30} expr={status === "error" ? "ohh" : status === "done" ? "grin" : "think"} />
+        <BrainoMark size={26} expr={status === "error" ? "ohh" : status === "done" ? "grin" : "think"} />
         <div className="bc-answer">
           <div className="bc-delegate-head">
-            <span>Delegate</span>
+            <span className="bc-delegate-tag">Delegate</span>
             <span>{status}</span>
             {(status === "pending" || status === "running") && message.commandId && (
               <button type="button" onClick={() => onStop(message.commandId!)}>Stop</button>
@@ -528,12 +617,15 @@ function Turn({ message, reveal, onStop }: { message: ChatMessage; reveal: numbe
   const typing = reveal != null && reveal < message.text.length;
   return (
     <div className="bc-turn bc-turn-braino">
-      <BrainoMark size={30} expr={typing ? "happy" : "grin"} />
+      <BrainoMark size={26} expr={typing ? "happy" : "grin"} />
       <div className="bc-answer">
-        <Paragraphs text={shown} />
+        <Markdown text={shown} />
         {typing && <span className="bc-caret" />}
         {!typing && message.docUrl && (
           <a className="bc-doc" href={message.docUrl} target="_blank" rel="noreferrer">{message.docName || "Open Google Doc"}</a>
+        )}
+        {!typing && message.text.trim() && (
+          <div className="bc-msg-actions"><CopyAction text={message.text} /></div>
         )}
       </div>
     </div>
@@ -543,7 +635,7 @@ function Turn({ message, reveal, onStop }: { message: ChatMessage; reveal: numbe
 function Thinking() {
   return (
     <div className="bc-turn bc-turn-braino">
-      <BrainoMark size={30} expr="think" />
+      <BrainoMark size={26} expr="think" />
       <div className="bc-thinking"><i /><i /><i /></div>
     </div>
   );
@@ -578,13 +670,19 @@ function Composer({
 }) {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const canSend = value.trim().length > 0 || attachments.length > 0;
 
   useEffect(() => {
     const input = inputRef.current;
     if (!input) return;
     input.style.height = "auto";
-    input.style.height = `${Math.min(input.scrollHeight, 180)}px`;
+    input.style.height = `${Math.min(input.scrollHeight, 200)}px`;
   }, [value]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || window.innerWidth <= 760) return;
+    inputRef.current?.focus();
+  }, []);
 
   return (
     <div className="bc-composer-wrap">
@@ -593,13 +691,13 @@ function Composer({
           {attachments.map((item) => (
             <span className="bc-attachment" key={item.id}>
               {item.name} <small>{item.size}</small>
-              <button type="button" onClick={() => onRemove(item.id)}><Icon name="x" /></button>
+              <button type="button" aria-label={`Remove ${item.name}`} onClick={() => onRemove(item.id)}><Icon name="x" /></button>
             </span>
           ))}
         </div>
       )}
       <div className={`bc-composer${voiceActive ? " is-voice" : ""}`}>
-        <button className="bc-icon-btn" type="button" aria-label="Attach" title="Attach" onClick={() => fileRef.current?.click()}>
+        <button className="bc-tool" type="button" aria-label="Add photos and files" title="Add photos and files" onClick={() => fileRef.current?.click()}>
           <Icon name="plus" />
         </button>
         <textarea
@@ -615,15 +713,24 @@ function Composer({
             }
           }}
         />
-        <button className={`bc-route-btn${delegateMode ? " is-on" : ""}`} type="button" onClick={onToggleDelegate}>
-          <Icon name="bolt" /> {delegateMode ? "Delegate" : "Instant"}
+        <button
+          className={`bc-tool bc-tool-label${delegateMode ? " is-on" : ""}`}
+          type="button"
+          title="Delegate: let Braino act in your browser"
+          aria-pressed={delegateMode}
+          onClick={onToggleDelegate}
+        >
+          <Icon name="think" /><span>Delegate</span>
         </button>
-        <button className="bc-voice-orb" type="button" aria-label="Voice conversation" title="Voice conversation" onClick={onVoiceToggle}>
-          <Icon name="voice" />
-        </button>
-        <button className="bc-send" type="button" aria-label="Send" disabled={disabled || (!value.trim() && attachments.length === 0)} onClick={onSend}>
-          <Icon name="send" />
-        </button>
+        {canSend ? (
+          <button className="bc-send" type="button" aria-label="Send" disabled={disabled} onClick={onSend}>
+            <Icon name="send" />
+          </button>
+        ) : (
+          <button className="bc-orb" type="button" aria-label="Voice conversation" title="Voice conversation" onClick={onVoiceToggle}>
+            <Icon name="voice" />
+          </button>
+        )}
       </div>
       <input ref={fileRef} type="file" multiple hidden onChange={(event) => {
         if (event.target.files) onPick(event.target.files);
@@ -676,7 +783,7 @@ function VoiceOverlay({
 }
 
 export default function BrainoChat() {
-  const { user, session } = useAuth();
+  const { user, session, isPremium } = useAuth();
   const { mascot: mascotPref } = useMascotPreference();
   const initial = useMemo(() => {
     const threads = readThreads();
@@ -695,14 +802,18 @@ export default function BrainoChat() {
   const [draft, setDraft] = useState(readDraft);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [delegateMode, setDelegateMode] = useState(readDelegateMode);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => typeof window !== "undefined" && window.innerWidth <= 860);
   const [search, setSearch] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [atBottom, setAtBottom] = useState(true);
   const [error, setError] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [reveal, setReveal] = useState<{ id: string; n: number } | null>(null);
   const [driveConnected, setDriveConnected] = useState(false);
 
-  const scrollerRef = useRef<HTMLElement>(null);
+  const scrollerRef = useRef<HTMLDivElement>(null);
   const revealTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => { document.title = "Braino Chat"; }, []);
@@ -1054,14 +1165,61 @@ export default function BrainoChat() {
     return threads.filter((thread) => thread.title.toLowerCase().includes(q));
   }, [search, threads]);
 
-  const currentTitle = useMemo(() => {
-    const currentThread = threads.find((thread) => thread.id === currentThreadId);
-    return currentThread?.title || (messages.length ? makeTitle(messages) : "New chat");
-  }, [currentThreadId, messages, threads]);
+  const currentThread = useMemo(
+    () => threads.find((thread) => thread.id === currentThreadId),
+    [currentThreadId, threads],
+  );
 
   const mascotName = MASCOTS[mascotPref].displayName;
-  const placeholder = delegateMode ? `Tell ${mascotName} what to do...` : `Message ${mascotName}`;
+  const placeholder = delegateMode ? `Tell ${mascotName} what to do...` : "Ask anything";
   const emptyGreeting = useMemo(() => buildEmptyGreeting(user), [user]);
+  const accountName = displayNameFromUser(user);
+
+  const onThreadScroll = useCallback(() => {
+    const node = scrollerRef.current;
+    if (!node) return;
+    setAtBottom(node.scrollHeight - node.scrollTop - node.clientHeight < 120);
+  }, []);
+
+  const scrollToBottom = useCallback(() => {
+    const node = scrollerRef.current;
+    if (node) node.scrollTo({ top: node.scrollHeight, behavior: "smooth" });
+  }, []);
+
+  const copyTranscript = useCallback(() => {
+    if (!navigator.clipboard) return;
+    const transcript = messages
+      .map((message) => `${message.role === "user" ? "You" : mascotName}: ${message.text}`)
+      .join("\n\n");
+    navigator.clipboard.writeText(transcript).then(() => {
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1600);
+    }).catch(() => {});
+  }, [mascotName, messages]);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const close = () => setMenuOpen(false);
+    window.addEventListener("click", close);
+    return () => window.removeEventListener("click", close);
+  }, [menuOpen]);
+
+  const composer = (
+    <Composer
+      value={draft}
+      setValue={setDraft}
+      onSend={() => send()}
+      disabled={isSending}
+      placeholder={placeholder}
+      attachments={attachments}
+      onPick={pickFiles}
+      onRemove={removeAttach}
+      delegateMode={delegateMode}
+      onToggleDelegate={() => setDelegateMode((value) => !value)}
+      voiceActive={voiceActive}
+      onVoiceToggle={voiceToggle}
+    />
+  );
 
   return (
     <div className={`bchat ${sidebarCollapsed ? "is-collapsed" : ""}`}>
@@ -1072,25 +1230,47 @@ export default function BrainoChat() {
         <VoiceOverlay status={voiceStatus} error={voiceError} signedIn={!!user} onStop={voiceStop} />
       )}
 
+      <button className="bc-scrim" type="button" aria-label="Close sidebar" onClick={() => setSidebarCollapsed(true)} />
+
       <aside className="bc-sidebar">
         <div className="bc-side-top">
           <div className="bc-brand">
-            <BrainoMark size={28} expr="happy" />
-            {!sidebarCollapsed && <strong>Braino</strong>}
+            <BrainoMark size={26} expr="happy" />
+            <strong>{mascotName}</strong>
           </div>
-          <button className="bc-side-icon" type="button" aria-label="Toggle sidebar" onClick={() => setSidebarCollapsed((value) => !value)}>
-            <Icon name="menu" />
-          </button>
+          <div className="bc-side-tools">
+            <button
+              className="bc-side-icon"
+              type="button"
+              aria-label="Search chats"
+              title="Search chats"
+              onClick={() => setSearchOpen((open) => !open)}
+            >
+              <Icon name="search" />
+            </button>
+            <button className="bc-side-icon" type="button" aria-label="Close sidebar" title="Close sidebar" onClick={() => setSidebarCollapsed(true)}>
+              <Icon name="panel" />
+            </button>
+          </div>
         </div>
 
         <nav className="bc-nav">
-          <button type="button" onClick={newChat}><Icon name="new" /><span>New chat</span></button>
-          <label className="bc-search"><Icon name="search" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search" /></label>
-          <button type="button"><Icon name="library" /><span>Library</span></button>
+          <button className="bc-nav-row" type="button" onClick={newChat}><Icon name="new" /><span>New chat</span></button>
+          {searchOpen && (
+            <label className="bc-nav-row bc-search">
+              <Icon name="search" />
+              <input
+                autoFocus
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Search chats"
+              />
+            </label>
+          )}
         </nav>
 
         <div className="bc-thread-section">
-          <p>Chats</p>
+          <p className="bc-side-label">Chats</p>
           <div className="bc-thread-list">
             {filteredThreads.length === 0 && <span className="bc-empty-chat">No chats yet</span>}
             {filteredThreads.map((thread) => (
@@ -1116,59 +1296,114 @@ export default function BrainoChat() {
           </div>
         </div>
 
-        <div className="bc-account">
-          <span>{user?.email?.slice(0, 1).toUpperCase() || "B"}</span>
-          {!sidebarCollapsed && (
-            <div>
-              <strong>{user?.email?.split("@")[0] || "Braino"}</strong>
-              <Link to={user ? "/dashboard" : "/auth?redirect=/chat"}>{user ? "Dashboard" : "Sign in"}</Link>
+        {user ? (
+          <div className="bc-account">
+            <span className="bc-account-avatar">{accountName.slice(0, 1).toUpperCase() || "B"}</span>
+            <div className="bc-account-id">
+              <strong>{accountName}</strong>
+              <small>{isPremium ? "Pro" : "Free"}</small>
             </div>
-          )}
-        </div>
+            {!isPremium && <Link className="bc-upgrade-pill" to="/premium">Upgrade</Link>}
+          </div>
+        ) : (
+          <div className="bc-account is-out">
+            <Link className="bc-signin" to="/auth?redirect=/chat">Log in</Link>
+            <Link className="bc-signup" to="/auth?redirect=/chat">Sign up for free</Link>
+          </div>
+        )}
       </aside>
 
-      <main className="bc-main" ref={scrollerRef}>
+      <main className="bc-main">
         <header className="bc-topbar">
-          <div>
-            <span className="bc-kicker">Braino Chat</span>
-            <h1>{currentTitle}</h1>
+          <div className="bc-topbar-left">
+            <button className="bc-top-icon bc-top-panel" type="button" aria-label="Open sidebar" title="Open sidebar" onClick={() => setSidebarCollapsed(false)}>
+              <Icon name="panel" />
+            </button>
+            <button className="bc-top-icon bc-top-panel" type="button" aria-label="New chat" title="New chat" onClick={newChat}>
+              <Icon name="new" />
+            </button>
+          </div>
+
+          <div className="bc-topbar-right">
+            {!isPremium && (
+              <Link className="bc-upgrade" to={user ? "/premium" : "/auth?redirect=/chat"}>
+                <Icon name="sparkle" /><span>Upgrade</span>
+              </Link>
+            )}
+            {messages.length > 0 && (
+              <button className="bc-top-btn" type="button" onClick={copyTranscript}>
+                <Icon name={copied ? "check" : "share"} /><span>{copied ? "Copied" : "Share"}</span>
+              </button>
+            )}
+            {messages.length > 0 && (
+              <div className="bc-menu-wrap">
+                <button
+                  className="bc-top-icon"
+                  type="button"
+                  aria-label="Chat options"
+                  onClick={(event) => { event.stopPropagation(); setMenuOpen((open) => !open); }}
+                >
+                  <Icon name="dots" />
+                </button>
+                {menuOpen && (
+                  <div className="bc-menu">
+                    <button type="button" onClick={newChat}><Icon name="new" /><span>New chat</span></button>
+                    {currentThread && (
+                      <button type="button" onClick={() => renameThread(currentThread)}><Icon name="edit" /><span>Rename</span></button>
+                    )}
+                    {currentThread && (
+                      <button className="is-danger" type="button" onClick={() => deleteThread(currentThread)}><Icon name="trash" /><span>Delete</span></button>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </header>
 
-        <div className="bc-scroll">
-          <div className="bc-thread">
-            {messages.length === 0 && (
-              <div className="bc-empty">
-                <div className="bc-empty-greeting-stage">
-                  <GreetingWalker />
-                  <h2>{emptyGreeting}</h2>
-                </div>
+        <div className="bc-scroll" ref={scrollerRef} onScroll={onThreadScroll}>
+          {messages.length === 0 ? (
+            <div className="bc-hero">
+              <div className="bc-empty-greeting-stage">
+                <GreetingWalker />
+                <h2>{emptyGreeting}</h2>
               </div>
-            )}
-            {messages.map((message) => (
-              <Turn key={message.id} message={message} reveal={reveal?.id === message.id ? reveal.n : null} onStop={stopTask} />
-            ))}
-            {isSending && <Thinking />}
-          </div>
+              {error && <div className="bc-error">{error}</div>}
+              {composer}
+              <div className="bc-suggests">
+                <button type="button" onClick={() => setDraft("Search the web for ")}>
+                  <Icon name="globe" /><span>Search the web</span>
+                </button>
+                <button type="button" onClick={() => { setDelegateMode(true); setDraft("Open "); }}>
+                  <Icon name="bolt" /><span>Delegate a browser task</span>
+                </button>
+                <button type="button" onClick={voiceToggle}>
+                  <Icon name="voice" /><span>Talk to {mascotName}</span>
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="bc-thread">
+              {messages.map((message) => (
+                <Turn key={message.id} message={message} reveal={reveal?.id === message.id ? reveal.n : null} onStop={stopTask} />
+              ))}
+              {isSending && <Thinking />}
+            </div>
+          )}
         </div>
 
-        <div className="bc-dock">
-          {error && <div className="bc-error">{error}</div>}
-          <Composer
-            value={draft}
-            setValue={setDraft}
-            onSend={() => send()}
-            disabled={isSending}
-            placeholder={placeholder}
-            attachments={attachments}
-            onPick={pickFiles}
-            onRemove={removeAttach}
-            delegateMode={delegateMode}
-            onToggleDelegate={() => setDelegateMode((value) => !value)}
-            voiceActive={voiceActive}
-            onVoiceToggle={voiceToggle}
-          />
-        </div>
+        {messages.length > 0 && (
+          <div className="bc-dock">
+            {!atBottom && (
+              <button className="bc-jump" type="button" aria-label="Scroll to bottom" onClick={scrollToBottom}>
+                <Icon name="down" />
+              </button>
+            )}
+            {error && <div className="bc-error">{error}</div>}
+            {composer}
+            <p className="bc-disclaimer">{mascotName} can make mistakes. Check important info.</p>
+          </div>
+        )}
       </main>
     </div>
   );
@@ -1176,105 +1411,116 @@ export default function BrainoChat() {
 
 const CHAT_CSS = `
 .bchat{
+  --bc-bg:#000;
+  --bc-side:#000;
+  --bc-hover:#1c1c1c;
+  --bc-active:#2a2a2a;
+  --bc-surface:#303030;
+  --bc-line:#2a2a2a;
+  --bc-text:#f3f3f3;
+  --bc-dim:#b4b4b4;
+  --bc-muted:#8f8f8f;
+  --bc-blue:#0285ff;
   position:fixed;
   inset:0;
   z-index:50;
   display:grid;
-  grid-template-columns:300px minmax(0,1fr);
+  grid-template-columns:260px minmax(0,1fr);
   height:100dvh;
   min-height:0;
-  background:#000;
-  color:#ececec;
-  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  background:var(--bc-bg);
+  color:var(--bc-text);
+  font-family:ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+  font-size:16px;
   overflow:hidden;
 }
 .bchat *{box-sizing:border-box}
-.bchat button{font:inherit;color:inherit}
-.bchat button svg,.bc-search svg,.bc-nav svg,.bc-route-btn svg,.bc-attachment svg{
-  width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round
+:where(.bchat) button{font:inherit;color:inherit}
+:where(.bchat) svg{
+  width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex:none;
 }
+.bchat ::-webkit-scrollbar{width:10px;height:10px}
+.bchat ::-webkit-scrollbar-thumb{background:#2f2f2f;border-radius:999px;border:3px solid transparent;background-clip:content-box}
+.bchat ::-webkit-scrollbar-thumb:hover{background:#454545;background-clip:content-box}
+.bchat ::-webkit-scrollbar-track{background:transparent}
 .braino-avatar{display:inline-flex;align-items:center;justify-content:center;flex:none}
-.braino-avatar svg{overflow:visible;width:auto;height:auto}
+.braino-avatar svg{overflow:visible;width:auto;height:auto;stroke-width:initial}
 .braino-avatar.is-talking{animation:bcTalkBob 1s ease-in-out infinite}
 @keyframes bcTalkBob{0%,100%{transform:translateY(0)}50%{transform:translateY(-3px)}}
 
+.bc-scrim{display:none;border:0;padding:0}
+
+/* ---------- sidebar ---------- */
 .bc-sidebar{
   min-width:0;
   min-height:0;
   height:100dvh;
-  background:#050505;
-  border-right:1px solid #242424;
-  padding:18px 10px 12px;
+  background:var(--bc-side);
+  padding:10px 8px 10px;
   display:flex;
   flex-direction:column;
-  gap:16px;
+  gap:6px;
 }
-.bchat.is-collapsed{grid-template-columns:72px minmax(0,1fr)}
-.bchat.is-collapsed .bc-sidebar{align-items:center;padding-inline:8px}
-.bchat.is-collapsed .bc-nav span,
-.bchat.is-collapsed .bc-thread-section,
-.bchat.is-collapsed .bc-search input{display:none}
-.bc-side-top,.bc-brand{display:flex;align-items:center;gap:10px}
-.bc-side-top{justify-content:space-between}
-.bc-brand strong{font-size:18px}
-.bc-side-icon,.bc-nav button,.bc-icon-btn,.bc-send,.bc-voice-orb,.bc-route-btn{
-  border:0;
-  background:transparent;
-  cursor:pointer;
+.bchat.is-collapsed{grid-template-columns:0 minmax(0,1fr)}
+.bchat.is-collapsed .bc-sidebar{display:none}
+.bc-side-top{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:2px 4px 6px 8px}
+.bc-brand{display:flex;align-items:center;gap:8px;min-width:0}
+.bc-brand strong{font-size:17px;font-weight:600;letter-spacing:-.01em}
+.bc-side-tools{display:flex;align-items:center;gap:2px}
+.bc-side-icon{
+  width:36px;height:36px;border:0;border-radius:9px;background:transparent;color:var(--bc-dim);
+  display:grid;place-items:center;cursor:pointer;transition:background .12s ease,color .12s ease;
 }
-.bc-side-icon,.bc-icon-btn{
-  width:38px;height:38px;border-radius:12px;display:grid;place-items:center;color:#f2f2f2;
-}
-.bc-icon-btn{
-  background:#383838;
-  border:1px solid #505050;
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.06);
-}
-.bc-composer .bc-icon-btn{
-  width:46px;
-  height:46px;
-  border-radius:50%;
-  flex:none;
-  align-self:center;
-}
-.bc-side-icon:hover,.bc-nav button:hover{background:#1d1d1d}
-.bc-icon-btn:hover{background:#464646;border-color:#666}
-.bc-nav{display:flex;flex-direction:column;gap:8px}
-.bc-nav button,.bc-search{
+.bc-side-icon:hover{background:var(--bc-hover);color:var(--bc-text)}
+.bc-nav{display:flex;flex-direction:column;gap:2px}
+.bc-nav-row{
   width:100%;
-  min-height:40px;
-  border-radius:10px;
+  min-height:38px;
+  border:0;
+  border-radius:9px;
+  background:transparent;
   display:flex;
   align-items:center;
-  gap:12px;
-  padding:0 12px;
-  color:#e8e8e8;
+  gap:10px;
+  padding:0 10px;
+  color:var(--bc-text);
+  font-size:14px;
+  cursor:pointer;
+  transition:background .12s ease;
 }
-.bc-search{background:transparent}
+.bc-nav-row:hover{background:var(--bc-hover)}
+.bc-nav-row svg{color:var(--bc-dim)}
+.bc-search{cursor:text}
 .bc-search input{
   width:100%;
   border:0;
   outline:0;
   background:transparent;
-  color:#e8e8e8;
+  color:var(--bc-text);
   font:inherit;
+  font-size:14px;
 }
-.bc-thread-section{min-height:0;display:flex;flex:1;flex-direction:column;gap:8px}
-.bc-thread-section p{
-  margin:8px 12px 4px;
-  font-size:13px;
-  font-weight:700;
-  color:#f1f1f1;
+.bc-search input::placeholder{color:var(--bc-muted)}
+.bc-thread-section{min-height:0;display:flex;flex:1;flex-direction:column;gap:2px;margin-top:14px}
+.bc-side-label{
+  margin:0 0 4px;
+  padding:0 10px;
+  font-size:12px;
+  font-weight:500;
+  color:var(--bc-muted);
+  letter-spacing:.01em;
 }
-.bc-thread-list{min-height:0;overflow:auto;display:flex;flex-direction:column;gap:4px;padding-right:2px}
+.bc-thread-list{min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:1px;padding-right:2px}
 .bc-thread-row{
   display:flex;
   align-items:center;
-  gap:4px;
-  border-radius:10px;
-  color:#d7d7d7;
+  gap:2px;
+  border-radius:9px;
+  color:var(--bc-dim);
+  transition:background .12s ease,color .12s ease;
 }
-.bc-thread-row:hover,.bc-thread-row.is-active{background:#202020;color:#fff}
+.bc-thread-row:hover{background:var(--bc-hover);color:var(--bc-text)}
+.bc-thread-row.is-active{background:var(--bc-active);color:var(--bc-text)}
 .bc-thread-open{
   border:0;
   background:transparent;
@@ -1282,8 +1528,10 @@ const CHAT_CSS = `
   flex:1;
   text-align:left;
   color:inherit;
-  border-radius:10px;
-  padding:10px 8px 10px 12px;
+  border-radius:9px;
+  padding:8px 4px 8px 10px;
+  font-size:14px;
+  line-height:1.35;
   overflow:hidden;
   white-space:nowrap;
   text-overflow:ellipsis;
@@ -1292,94 +1540,190 @@ const CHAT_CSS = `
 .bc-thread-actions{
   display:flex;
   align-items:center;
-  gap:2px;
+  gap:1px;
   flex:none;
   opacity:0;
   padding-right:4px;
-  transition:opacity .16s ease;
+  transition:opacity .14s ease;
 }
 .bc-thread-row:hover .bc-thread-actions,.bc-thread-row:focus-within .bc-thread-actions,.bc-thread-row.is-active .bc-thread-actions{opacity:1}
 .bc-thread-actions button{
-  width:30px;
-  height:30px;
-  border:0;
-  border-radius:8px;
-  background:transparent;
-  color:#bdbdbd;
-  display:grid;
-  place-items:center;
-  cursor:pointer;
+  width:26px;height:26px;border:0;border-radius:7px;background:transparent;color:var(--bc-muted);
+  display:grid;place-items:center;cursor:pointer;
 }
-.bc-thread-actions button:hover{background:#303030;color:#fff}
-.bc-thread-actions svg{width:16px;height:16px}
-.bc-empty-chat{color:#777;font-size:13px;padding:10px 12px}
+.bc-thread-actions button:hover{background:#3a3a3a;color:#fff}
+.bc-thread-actions svg{width:15px;height:15px}
+.bc-empty-chat{color:var(--bc-muted);font-size:13px;padding:8px 10px}
 .bc-account{
-  border-top:1px solid #222;
-  padding-top:12px;
   display:flex;
   align-items:center;
   gap:10px;
+  padding:8px 8px 4px;
+  margin-top:6px;
 }
-.bc-account>span{
-  width:32px;height:32px;border-radius:50%;display:grid;place-items:center;background:#2488d8;color:#fff;font-size:13px;font-weight:700;
+.bc-account-avatar{
+  width:28px;height:28px;border-radius:50%;display:grid;place-items:center;flex:none;
+  background:#3b7ff5;color:#fff;font-size:12px;font-weight:600;
 }
-.bc-account div{display:flex;flex-direction:column;min-width:0}
-.bc-account strong{font-size:14px;overflow:hidden;text-overflow:ellipsis}
-.bc-account a{font-size:12px;color:#aaa;text-decoration:none}
+.bc-account-id{display:flex;flex-direction:column;min-width:0;flex:1;line-height:1.2}
+.bc-account-id strong{font-size:14px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bc-account-id small{font-size:12px;color:var(--bc-muted)}
+.bc-upgrade-pill{
+  flex:none;
+  border-radius:999px;
+  background:#2f2f2f;
+  color:var(--bc-text);
+  font-size:13px;
+  font-weight:500;
+  padding:6px 13px;
+  text-decoration:none;
+  transition:background .12s ease;
+}
+.bc-upgrade-pill:hover{background:#3d3d3d}
+.bc-account.is-out{flex-direction:column;align-items:stretch;gap:6px;padding-bottom:8px}
+.bc-signin,.bc-signup{
+  display:block;
+  text-align:center;
+  border-radius:999px;
+  font-size:14px;
+  font-weight:500;
+  padding:9px 14px;
+  text-decoration:none;
+  transition:background .12s ease;
+}
+.bc-signin{background:#f3f3f3;color:#0d0d0d}
+.bc-signin:hover{background:#fff}
+.bc-signup{background:transparent;border:1px solid #3d3d3d;color:var(--bc-text)}
+.bc-signup:hover{background:var(--bc-hover)}
 
+/* ---------- main ---------- */
 .bc-main{
   min-width:0;
   min-height:0;
   height:100dvh;
-  position:relative;
   display:flex;
   flex-direction:column;
-  background:#000;
-  overflow-y:auto;
-  overflow-x:hidden;
-  scrollbar-gutter:stable;
-  overscroll-behavior:contain;
+  background:var(--bc-bg);
+  overflow:hidden;
 }
 .bc-topbar{
-  height:70px;
+  flex:none;
+  height:54px;
   display:flex;
   align-items:center;
-  justify-content:flex-start;
-  padding:0 28px;
-  flex:none;
-  position:sticky;
-  top:0;
-  z-index:3;
-  background:#000;
+  justify-content:space-between;
+  gap:8px;
+  padding:0 14px;
 }
-.bc-kicker{font-size:12px;color:#8c8c8c}
-.bc-topbar h1{font-size:18px;line-height:1.2;margin:2px 0 0;font-weight:650}
-.bc-scroll{min-height:0;flex:1 0 auto;overflow:visible;padding:20px 20px 180px}
-.bc-thread{width:min(1020px,100%);margin:0 auto;display:flex;flex-direction:column;gap:30px}
-.bc-empty{
-  min-height:54vh;
-  display:grid;
-  place-items:center;
-  text-align:center;
-  color:#dcdcdc;
-  align-content:center;
-  gap:18px;
-  padding-top:42px;
+.bc-topbar-left,.bc-topbar-right{display:flex;align-items:center;gap:4px}
+.bc-top-icon{
+  width:36px;height:36px;border:0;border-radius:9px;background:transparent;color:var(--bc-dim);
+  display:grid;place-items:center;cursor:pointer;transition:background .12s ease,color .12s ease;
 }
+.bc-top-icon:hover{background:var(--bc-hover);color:var(--bc-text)}
+.bc-top-panel{display:none}
+.bchat.is-collapsed .bc-top-panel{display:grid}
+.bc-top-btn{
+  height:36px;
+  border:0;
+  border-radius:9px;
+  background:transparent;
+  color:var(--bc-dim);
+  display:flex;
+  align-items:center;
+  gap:7px;
+  padding:0 11px;
+  font-size:14px;
+  cursor:pointer;
+  transition:background .12s ease,color .12s ease;
+}
+.bc-top-btn:hover{background:var(--bc-hover);color:var(--bc-text)}
+.bc-top-btn svg{width:18px;height:18px}
+.bc-upgrade{
+  height:36px;
+  display:flex;
+  align-items:center;
+  gap:7px;
+  padding:0 11px;
+  border-radius:9px;
+  color:#8ab4ff;
+  font-size:14px;
+  font-weight:500;
+  text-decoration:none;
+  transition:background .12s ease;
+}
+.bc-upgrade:hover{background:var(--bc-hover)}
+.bc-upgrade svg{width:18px;height:18px}
+.bc-menu-wrap{position:relative}
+.bc-menu{
+  position:absolute;
+  top:42px;
+  right:0;
+  z-index:20;
+  min-width:190px;
+  padding:6px;
+  border-radius:14px;
+  background:#2a2a2a;
+  border:1px solid #3d3d3d;
+  box-shadow:0 12px 40px rgba(0,0,0,.55);
+  display:flex;
+  flex-direction:column;
+  gap:1px;
+}
+.bc-menu button{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  width:100%;
+  border:0;
+  border-radius:9px;
+  background:transparent;
+  color:var(--bc-text);
+  font-size:14px;
+  padding:9px 10px;
+  text-align:left;
+  cursor:pointer;
+}
+.bc-menu button:hover{background:#3a3a3a}
+.bc-menu button svg{width:17px;height:17px;color:var(--bc-dim)}
+.bc-menu button.is-danger{color:#ff6b64}
+.bc-menu button.is-danger svg{color:#ff6b64}
+
+.bc-scroll{
+  flex:1;
+  min-height:0;
+  overflow-y:auto;
+  overflow-x:hidden;
+  overscroll-behavior:contain;
+  scrollbar-gutter:stable both-edges;
+}
+
+/* ---------- empty state ---------- */
+.bc-hero{
+  min-height:100%;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:20px;
+  padding:24px 20px 90px;
+}
+.bc-hero .bc-composer-wrap{width:min(768px,100%)}
 .bc-empty-greeting-stage{
   position:relative;
   display:inline-block;
   width:fit-content;
-  max-width:min(92vw,900px);
-  min-width:min(360px,92vw);
-  padding:78px 14px 18px;
+  max-width:min(92vw,760px);
+  min-width:min(340px,92vw);
+  padding:74px 10px 4px;
+  text-align:center;
 }
 .bc-empty-walk-track{
   position:absolute;
   top:0;
-  left:14px;
-  right:14px;
-  height:78px;
+  left:10px;
+  right:10px;
+  height:74px;
   overflow:hidden;
   pointer-events:none;
 }
@@ -1387,150 +1731,263 @@ const CHAT_CSS = `
   position:absolute;
   left:0;
   bottom:0;
-  width:64px;
+  width:60px;
   display:block;
   will-change:transform;
 }
 .bc-empty-walker #__sbwk_flip__{transform-origin:center;display:block}
-.bc-empty-walker svg{width:64px!important;height:auto!important;overflow:visible}
-.bc-empty h2{
-  font-family:"Instrument Serif",Georgia,serif;
-  font-size:clamp(34px,4.8vw,58px);
-  line-height:1.04;
-  letter-spacing:0;
+.bc-empty-walker svg{width:60px!important;height:auto!important;overflow:visible;stroke-width:initial}
+.bc-hero h2{
+  font-size:clamp(24px,3vw,30px);
+  line-height:1.25;
+  letter-spacing:-.02em;
   font-weight:400;
+  color:var(--bc-text);
   margin:0;
 }
-.bc-turn{display:flex;gap:16px;align-items:flex-start}
+.bc-suggests{
+  width:min(768px,100%);
+  display:flex;
+  flex-direction:column;
+  gap:2px;
+  padding-left:18px;
+}
+.bc-suggests button{
+  display:flex;
+  align-items:center;
+  gap:14px;
+  border:0;
+  border-radius:12px;
+  background:transparent;
+  color:var(--bc-dim);
+  font-size:15px;
+  padding:12px 14px;
+  text-align:left;
+  cursor:pointer;
+  transition:background .12s ease,color .12s ease;
+}
+.bc-suggests button:hover{background:var(--bc-hover);color:var(--bc-text)}
+.bc-suggests svg{width:19px;height:19px;color:var(--bc-muted)}
+
+/* ---------- thread ---------- */
+.bc-thread{
+  width:min(768px,100%);
+  margin:0 auto;
+  padding:16px 20px 28px;
+  display:flex;
+  flex-direction:column;
+  gap:26px;
+}
+.bc-turn{display:flex;gap:12px;align-items:flex-start}
 .bc-turn-user{justify-content:flex-end}
 .bc-user-bubble{
-  max-width:min(660px,72%);
-  padding:14px 18px;
+  max-width:min(560px,80%);
+  padding:10px 20px;
   border-radius:22px;
-  background:#2f2f2f;
-  color:#ececec;
+  background:var(--bc-surface);
+  color:var(--bc-text);
   font-size:16px;
-  line-height:1.45;
+  line-height:1.6;
+  white-space:pre-wrap;
+  word-break:break-word;
 }
+.bc-turn-braino .braino-avatar{margin-top:2px}
 .bc-answer{
-  max-width:760px;
-  color:#ececec;
+  min-width:0;
+  flex:1;
+  color:var(--bc-text);
   font-size:16px;
-  line-height:1.65;
+  line-height:1.75;
+  word-break:break-word;
 }
-.bc-answer p{margin:0 0 14px}
+.bc-answer p{margin:0 0 18px}
 .bc-answer p:last-child{margin-bottom:0}
-.bc-answer code{background:#1f1f1f;border-radius:6px;padding:2px 5px}
-.bc-answer a{color:#ff9c92}
-.bc-caret{display:inline-block;width:2px;height:1em;background:#ececec;animation:bcBlink 1s steps(2) infinite}
+.bc-answer h2,.bc-answer h3,.bc-answer h4,.bc-answer h5{
+  margin:26px 0 12px;
+  line-height:1.4;
+  font-weight:600;
+  letter-spacing:-.01em;
+}
+.bc-answer h2{font-size:20px}
+.bc-answer h3{font-size:18px}
+.bc-answer h4,.bc-answer h5{font-size:16px}
+.bc-answer>*:first-child{margin-top:0}
+.bc-answer ul,.bc-answer ol{margin:0 0 18px;padding-left:26px}
+.bc-answer ul{list-style:disc}
+.bc-answer ol{list-style:decimal}
+.bc-answer li{padding-left:4px;margin-bottom:6px}
+.bc-answer li:last-child{margin-bottom:0}
+.bc-answer li::marker{color:var(--bc-muted)}
+.bc-answer blockquote{
+  margin:0 0 18px;
+  padding:2px 0 2px 18px;
+  border-left:2px solid #4d4d4d;
+  color:var(--bc-dim);
+}
+.bc-answer blockquote p:last-child{margin-bottom:0}
+.bc-answer hr{border:0;border-top:1px solid #303030;margin:28px 0}
+.bc-answer code{background:#2a2a2a;border-radius:5px;padding:2px 6px;font-size:14px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.bc-answer pre{
+  margin:0 0 18px;
+  padding:14px 16px;
+  border-radius:14px;
+  background:#0d0d0d;
+  border:1px solid #2a2a2a;
+  overflow-x:auto;
+}
+.bc-answer pre code{background:transparent;padding:0;font-size:13.5px;line-height:1.6}
+.bc-answer a{color:#8ab4ff;text-decoration:underline;text-underline-offset:2px}
+.bc-answer strong{font-weight:600}
+.bc-caret{display:inline-block;width:2px;height:1em;background:var(--bc-text);vertical-align:text-bottom;animation:bcBlink 1s steps(2) infinite}
 @keyframes bcBlink{50%{opacity:0}}
-.bc-thinking{display:flex;gap:6px;padding-top:8px}
-.bc-thinking i{width:7px;height:7px;border-radius:50%;background:#aaa;animation:bcDot 1.1s infinite ease-in-out}
+.bc-msg-actions{display:flex;gap:2px;margin-top:10px;opacity:0;transition:opacity .14s ease}
+.bc-turn:hover .bc-msg-actions,.bc-turn:focus-within .bc-msg-actions{opacity:1}
+.bc-msg-action{
+  width:30px;height:30px;border:0;border-radius:8px;background:transparent;color:var(--bc-muted);
+  display:grid;place-items:center;cursor:pointer;
+}
+.bc-msg-action:hover{background:var(--bc-hover);color:var(--bc-text)}
+.bc-msg-action svg{width:16px;height:16px}
+.bc-thinking{display:flex;gap:6px;padding-top:10px}
+.bc-thinking i{width:7px;height:7px;border-radius:50%;background:#9a9a9a;animation:bcDot 1.1s infinite ease-in-out}
 .bc-thinking i:nth-child(2){animation-delay:.15s}
 .bc-thinking i:nth-child(3){animation-delay:.3s}
 @keyframes bcDot{0%,100%{opacity:.35;transform:translateY(0)}45%{opacity:1;transform:translateY(-5px)}}
-.bc-doc{display:inline-flex;margin-top:8px;color:#ff9c92;text-decoration:none}
-.bc-delegate-head{display:flex;align-items:center;gap:10px;color:#aaa;font-size:13px;margin-bottom:8px}
-.bc-delegate-head button{border:1px solid #444;background:#191919;border-radius:999px;padding:4px 10px;cursor:pointer}
-.bc-step{color:#aaa;font-size:14px}
-
-.bc-dock{
-  position:sticky;
-  left:0;
-  right:0;
-  bottom:0;
-  z-index:4;
-  flex:none;
-  margin-top:auto;
-  padding:24px 24px 30px;
-  background:linear-gradient(180deg,rgba(0,0,0,0),#000 34%);
-  pointer-events:none;
+.bc-doc{display:inline-flex;margin-top:8px;color:#8ab4ff;text-decoration:none}
+.bc-delegate-head{display:flex;align-items:center;gap:8px;color:var(--bc-muted);font-size:13px;margin-bottom:10px}
+.bc-delegate-tag{
+  border-radius:999px;
+  background:#2a2a2a;
+  color:var(--bc-dim);
+  padding:2px 9px;
+  font-size:12px;
+  font-weight:500;
 }
-.bc-composer-wrap{width:min(1020px,100%);margin:0 auto}
-.bc-composer-wrap,.bc-error{pointer-events:auto}
-.bc-attachments{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 8px 14px}
-.bc-attachment{display:inline-flex;align-items:center;gap:8px;border:1px solid #3a3a3a;background:#1f1f1f;border-radius:999px;padding:6px 8px 6px 12px;font-size:13px}
-.bc-attachment small{color:#999}
-.bc-attachment button{width:22px;height:22px;border:0;background:transparent;display:grid;place-items:center;cursor:pointer}
+.bc-delegate-head button{border:1px solid #3f3f3f;background:#212121;color:var(--bc-dim);border-radius:999px;padding:3px 10px;font-size:12px;cursor:pointer}
+.bc-delegate-head button:hover{background:#2d2d2d}
+.bc-step{color:var(--bc-muted);font-size:14px;margin:0 0 6px}
+
+/* ---------- dock ---------- */
+.bc-dock{
+  flex:none;
+  position:relative;
+  padding:0 20px 10px;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+}
+.bc-composer-wrap{width:min(768px,100%)}
+.bc-jump{
+  position:absolute;
+  top:-46px;
+  left:50%;
+  transform:translateX(-50%);
+  width:34px;height:34px;
+  border-radius:50%;
+  border:1px solid #3a3a3a;
+  background:#212121;
+  color:var(--bc-text);
+  display:grid;
+  place-items:center;
+  cursor:pointer;
+  box-shadow:0 6px 18px rgba(0,0,0,.45);
+}
+.bc-jump:hover{background:#2d2d2d}
+.bc-jump svg{width:17px;height:17px}
+.bc-disclaimer{
+  margin:8px 0 2px;
+  font-size:12px;
+  color:var(--bc-muted);
+  text-align:center;
+}
+.bc-attachments{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 8px 8px}
+.bc-attachment{
+  display:inline-flex;align-items:center;gap:8px;border:1px solid #3a3a3a;background:#212121;
+  border-radius:12px;padding:6px 6px 6px 12px;font-size:13px;
+}
+.bc-attachment small{color:var(--bc-muted)}
+.bc-attachment button{width:22px;height:22px;border:0;border-radius:6px;background:transparent;display:grid;place-items:center;cursor:pointer;color:var(--bc-muted)}
+.bc-attachment button:hover{background:#333;color:#fff}
 .bc-attachment svg{width:14px;height:14px}
 .bc-composer{
-  min-height:68px;
+  min-height:56px;
   display:flex;
   align-items:center;
-  gap:8px;
+  gap:4px;
   border-radius:28px;
-  background:#2a2a2a;
-  border:1px solid #3a3a3a;
-  padding:10px;
-  box-shadow:0 16px 50px rgba(0,0,0,.35);
+  background:var(--bc-surface);
+  padding:6px 10px 6px 8px;
 }
-.bc-composer.is-voice{border-color:#f4f4f4;box-shadow:0 0 0 1px #f4f4f4,0 0 38px rgba(255,255,255,.18)}
+.bc-composer.is-voice{box-shadow:0 0 0 1px #f4f4f4,0 0 34px rgba(255,255,255,.14)}
 .bc-composer textarea{
   flex:1;
   min-width:0;
-  max-height:180px;
+  max-height:200px;
   resize:none;
   border:0;
   outline:0;
   background:transparent;
-  color:#f4f4f4;
-  font-size:17px;
-  line-height:1.45;
-  padding:12px 4px;
+  color:var(--bc-text);
+  font:inherit;
+  font-size:16px;
+  line-height:1.5;
+  padding:11px 6px;
 }
-.bc-composer textarea::placeholder{color:#a5a5a5}
-.bc-route-btn{
-  height:42px;
+.bc-composer textarea::placeholder{color:#a0a0a0}
+.bc-tool{
+  height:40px;
+  min-width:40px;
+  border:0;
   border-radius:999px;
-  padding:0 12px;
+  background:transparent;
+  color:var(--bc-dim);
   display:flex;
   align-items:center;
+  justify-content:center;
   gap:7px;
-  align-self:center;
-  background:#383838;
-  border:1px solid #505050;
-  color:#f2f2f2;
-  font-weight:600;
+  padding:0 10px;
+  cursor:pointer;
+  align-self:flex-end;
+  transition:background .12s ease,color .12s ease;
 }
-.bc-route-btn.is-on{background:#4a2522;color:#ffc1bb}
-.bc-send,.bc-voice-orb{
-  width:46px;height:46px;border-radius:50%;display:grid;place-items:center;flex:none;
-  align-self:center;
-  border:1px solid #f7f7f7;
-  box-shadow:0 3px 12px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.45);
+.bc-tool:hover{background:#414141;color:var(--bc-text)}
+.bc-tool-label{font-size:14px;font-weight:400;padding:0 13px}
+.bc-tool-label.is-on{background:rgba(2,133,255,.18);color:#7fb9ff}
+.bc-tool-label.is-on:hover{background:rgba(2,133,255,.26)}
+.bc-send,.bc-orb{
+  width:40px;height:40px;border-radius:50%;border:0;display:grid;place-items:center;flex:none;
+  align-self:flex-end;cursor:pointer;transition:background .12s ease,opacity .12s ease;
 }
-.bc-send svg,.bc-voice-orb svg,.bc-icon-btn svg,.bc-route-btn svg{opacity:1;stroke:currentColor}
-.bc-composer .bc-send{background:#f4f4f4;color:#050505}
-.bc-send:disabled{
-  opacity:1;
-  cursor:default;
-  background:#515151;
-  color:#dcdcdc;
-  border-color:#696969;
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.08);
+.bc-send{background:#f3f3f3;color:#0d0d0d}
+.bc-send:hover{background:#fff}
+.bc-send:disabled{background:#565656;color:#bdbdbd;cursor:default}
+.bc-orb{background:var(--bc-blue);color:#fff}
+.bc-orb:hover{background:#2b98ff}
+.bc-composer.is-voice .bc-orb{box-shadow:0 0 0 3px rgba(2,133,255,.35),0 0 22px rgba(2,133,255,.45)}
+.bc-error{
+  width:min(768px,100%);
+  margin:0 auto 10px;
+  padding:10px 14px;
+  border-radius:12px;
+  background:#3a1f1d;
+  color:#ffb3ad;
+  font-size:14px;
 }
-.bc-composer .bc-voice-orb{background:#f7f7f7;color:#050505}
-.bc-composer.is-voice .bc-voice-orb{
-  background:#fff;
-  color:#050505;
-  box-shadow:0 0 0 3px #f3a92a,0 0 24px rgba(243,169,42,.48);
-}
-.bc-icon-btn.is-on{background:#f4f4f4;color:#000;border-color:#fff}
-.bc-error{width:min(1020px,100%);margin:0 auto 10px;padding:10px 14px;border-radius:12px;background:#3a1f1d;color:#ffb3ad}
 
+/* ---------- voice stage ---------- */
 .bc-voice-stage{
   position:fixed;
   top:0;
   right:0;
   bottom:0;
-  left:300px;
+  left:260px;
   z-index:1000;
   display:grid;
   place-items:center;
   background:#000;
   overflow:hidden;
 }
-.bchat.is-collapsed .bc-voice-stage{left:72px}
+.bchat.is-collapsed .bc-voice-stage{left:0}
 .bc-voice-glow{
   position:absolute;
   width:480px;height:480px;border-radius:50%;
@@ -1580,7 +2037,7 @@ const CHAT_CSS = `
   position:absolute;
   bottom:76px;
   z-index:2;
-  color:#888;
+  color:var(--bc-muted);
   font-size:13px;
 }
 .bc-voice-error{
@@ -1597,31 +2054,51 @@ const CHAT_CSS = `
 .bc-voice-error a{color:#fff}
 .bc-voice-close{
   position:absolute;
-  top:22px;
-  right:22px;
-  width:42px;
-  height:42px;
+  top:16px;
+  right:16px;
+  width:40px;
+  height:40px;
   border:0;
   border-radius:50%;
-  background:#1f1f1f;
-  color:#f4f4f4;
+  background:#212121;
+  color:var(--bc-text);
   display:grid;
   place-items:center;
   cursor:pointer;
   z-index:2;
 }
+.bc-voice-close:hover{background:#2d2d2d}
 
-@media (max-width:760px){
+@media (max-width:860px){
   .bchat{grid-template-columns:1fr}
-  .bc-sidebar{position:absolute;z-index:4;width:300px;inset:0 auto 0 0;transform:translateX(-100%);transition:transform .2s}
+  .bc-sidebar{
+    position:fixed;
+    z-index:60;
+    width:280px;
+    inset:0 auto 0 0;
+    transform:translateX(-100%);
+    transition:transform .22s ease;
+    box-shadow:0 0 40px rgba(0,0,0,.6);
+  }
   .bchat:not(.is-collapsed) .bc-sidebar{transform:translateX(0)}
   .bchat.is-collapsed{grid-template-columns:1fr}
+  .bchat.is-collapsed .bc-sidebar{display:flex}
+  .bchat:not(.is-collapsed) .bc-scrim{
+    display:block;
+    position:fixed;
+    inset:0;
+    z-index:55;
+    background:rgba(0,0,0,.55);
+    cursor:default;
+  }
+  .bc-top-panel{display:grid}
   .bc-voice-stage,.bchat.is-collapsed .bc-voice-stage{left:0}
-  .bc-topbar{padding-left:76px}
-  .bc-scroll{padding-inline:14px}
+  .bc-thread,.bc-hero{padding-inline:14px}
+  .bc-dock{padding-inline:12px}
   .bc-user-bubble{max-width:88%}
-  .bc-dock{padding:18px 12px}
-  .bc-route-btn{display:none}
+  .bc-tool-label span{display:none}
+  .bc-tool-label{padding:0 10px}
+  .bc-suggests{padding-left:6px}
   .bc-big-braino .braino-avatar svg{max-width:72vw}
 }
 `;
