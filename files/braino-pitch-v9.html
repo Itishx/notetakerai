@@ -1,0 +1,1162 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Braino, the pitch deck</title>
+<style>
+/* ============================================================================
+   Braino — pitch deck v9.
+
+   Rebuilt on mentor feedback, and the rebuild is one decision: Braino stops
+   being two engines and becomes one co-founder for distribution. Braino Code
+   is gone from the product story and reappears once, dated, in the roadmap.
+   Splitting the pitch was splitting the reader.
+
+   The rest is subtraction. Paragraphs became bullets, because the note was
+   that ten seconds is all anyone gives a slide. The competition slide lost the
+   line that told the reader what to conclude. The business model lost the
+   column that justified its own prices to itself.
+
+   The market slide is the one that got built rather than trimmed: TAM, then
+   named filters, then a percentage, with the arithmetic on the slide and every
+   input sourced, because "unjustified" is a layout problem as much as a number
+   problem.
+
+   Screenshots are drawn in markup rather than pasted as images: they stay
+   sharp, they follow the accent, and a wrong label is a word to fix rather
+   than a re-export.
+   ============================================================================ */
+
+@page { size: 1280px 720px; margin: 0; }
+
+:root {
+  --bg: #fbfbfd;
+  --surface: #ffffff;
+  --ink: #1d1d1f;
+  --soft: #6e6e73;
+  --line: #d9d9df;
+  --line-soft: #ebebf0;
+  --night: #0a0a0c;
+  --mat: #cfcfd4;
+
+  --coral: #d9645b;  --coral-tint: #fbeae8;
+  --blue: #2f6fed;   --blue-tint: #e9f0fd;
+  --green: #3a8f5f;  --green-tint: #e8f3ec;
+  --amber: #b8842a;  --amber-tint: #f6efe1;
+  --violet: #6b52c4; --violet-tint: #efeafa;
+
+  --accent: var(--coral);
+  --tint: var(--coral-tint);
+
+  --s: 1;
+}
+
+/* The slides are a printed object and keep their own light world in either
+   theme. Only the mat they sit on follows the viewer. */
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --mat: #131316; } }
+:root[data-theme="dark"] { --mat: #131316; }
+
+.ac-coral  { --accent: var(--coral);  --tint: var(--coral-tint); }
+.ac-blue   { --accent: var(--blue);   --tint: var(--blue-tint); }
+.ac-green  { --accent: var(--green);  --tint: var(--green-tint); }
+.ac-amber  { --accent: var(--amber);  --tint: var(--amber-tint); }
+.ac-violet { --accent: var(--violet); --tint: var(--violet-tint); }
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--mat);
+  color: var(--ink);
+  font-family: "SF Pro Display", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* On screen the deck is a stack of scaled slides. In print the scale is 1 and
+   the wrappers are inert, so page.pdf() gets exactly 1280x720 pages. */
+.deck { display: flex; flex-direction: column; align-items: center; gap: 22px; padding: 22px 0 40px; }
+.fit { width: calc(1280px * var(--s)); height: calc(720px * var(--s)); }
+.fit > .slide { transform: scale(var(--s)); transform-origin: top left; box-shadow: 0 12px 40px rgba(0,0,0,.16); border-radius: 6px; }
+
+.slide {
+  position: relative;
+  width: 1280px;
+  height: 720px;
+  padding: 72px 88px 62px;
+  background: var(--bg);
+  overflow: hidden;
+  page-break-after: always;
+  break-after: page;
+  display: flex;
+  flex-direction: column;
+}
+.slide:last-child { page-break-after: auto; }
+
+.slide.night { background: var(--night); color: #f5f5f7; }
+.slide.night .soft { color: #9a9aa2; }
+
+/* One hairline of the slide's accent along the top: the act, without a label. */
+.slide::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 4px;
+  background: var(--accent);
+}
+
+.kicker {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--accent);
+  margin: 0 0 16px;
+}
+
+h1 {
+  font-size: 70px;
+  font-weight: 600;
+  letter-spacing: -0.028em;
+  line-height: 1.02;
+  margin: 0 0 22px;
+  text-wrap: balance;
+}
+h2 {
+  font-size: 46px;
+  font-weight: 600;
+  letter-spacing: -0.024em;
+  line-height: 1.06;
+  margin: 0 0 18px;
+  text-wrap: balance;
+}
+.tone { color: var(--accent); }
+
+.lede {
+  font-size: 22px;
+  font-weight: 500;
+  line-height: 1.42;
+  color: var(--soft);
+  max-width: 48ch;
+  margin: 0;
+}
+.slide.night .lede { color: #b6b6be; }
+
+.num { font-size: 15px; color: #b4b4b9; position: absolute; bottom: 30px; right: 88px; font-variant-numeric: tabular-nums; }
+.wm  { font-size: 15px; color: #b4b4b9; position: absolute; bottom: 30px; left: 88px; font-weight: 500; }
+.slide.night .num, .slide.night .wm { color: #4a4a52; }
+
+.body { flex: 1; display: flex; flex-direction: column; justify-content: center; }
+.body.top { justify-content: flex-start; }
+
+/* ── Two-up fork ─────────────────────────────────────────────────────────── */
+.fork { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 4px; }
+.fork.three { grid-template-columns: repeat(3, 1fr); gap: 16px; }
+
+.card {
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: var(--surface);
+  padding: 26px 30px;
+}
+.card .tag {
+  display: inline-block;
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--c);
+  background: var(--t);
+  border-radius: 999px;
+  padding: 5px 12px;
+  margin-bottom: 13px;
+}
+.card h3 { font-size: 26px; font-weight: 600; letter-spacing: -0.018em; margin: 0 0 7px; }
+.card p  { font-size: 16.5px; font-weight: 500; line-height: 1.45; color: var(--soft); margin: 0 0 13px; }
+.card ul { margin: 0; padding: 0; list-style: none; }
+.card li { font-size: 15.5px; font-weight: 500; line-height: 1.5; padding: 7px 0; border-top: 1px solid var(--line-soft); }
+.card li:first-child { border-top: 0; }
+.card li b { font-weight: 600; }
+.card .breaks {
+  display: block; margin-top: 14px; padding-top: 12px;
+  border-top: 1px solid var(--line-soft);
+  font-size: 14.5px; font-weight: 600; color: var(--c);
+}
+.fork.three .card { padding: 22px 24px; display: flex; flex-direction: column; }
+.fork.three .card .breaks { margin-top: auto; }
+.fork.three .card h3 { font-size: 23px; }
+.fork.three .card p { font-size: 15.5px; margin-bottom: 0; }
+
+.c-blue  { --c: var(--blue);  --t: var(--blue-tint); }
+.c-green { --c: var(--green); --t: var(--green-tint); }
+.c-coral { --c: var(--coral); --t: var(--coral-tint); }
+.c-amber { --c: var(--amber); --t: var(--amber-tint); }
+.c-violet{ --c: var(--violet);--t: var(--violet-tint); }
+
+/* ── Table ───────────────────────────────────────────────────────────────── */
+table { width: 100%; border-collapse: collapse; margin-top: 4px; }
+th {
+  text-align: left;
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.045em;
+  text-transform: uppercase;
+  color: var(--soft);
+  padding: 0 16px 11px 0;
+  border-bottom: 1px solid var(--line);
+}
+td {
+  font-size: 17px;
+  font-weight: 500;
+  line-height: 1.4;
+  padding: 13px 16px 13px 0;
+  border-bottom: 1px solid var(--line-soft);
+  vertical-align: top;
+}
+td b { font-weight: 600; }
+td .hi, td.hi { color: var(--accent); font-weight: 600; }
+td small { display: block; font-size: 13.5px; color: var(--soft); margin-top: 3px; font-weight: 500; }
+td.price { font-variant-numeric: tabular-nums; white-space: nowrap; }
+tr.us td { background: var(--tint); }
+tr.us td:first-child { border-radius: 12px 0 0 12px; padding-left: 14px; }
+tr.us td:last-child { border-radius: 0 12px 12px 0; }
+tr.us td, tr.us td b { font-weight: 600; }
+
+/* ── Stat row ────────────────────────────────────────────────────────────── */
+.stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-top: 22px; }
+.stat {
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: var(--surface);
+  padding: 22px 24px;
+}
+.stat i { display: block; font-style: normal; font-size: 12.5px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--accent); margin-bottom: 10px; }
+.stat b { display: block; font-size: 42px; font-weight: 600; letter-spacing: -0.03em; line-height: 1; margin-bottom: 8px; }
+.stat span { font-size: 14.5px; font-weight: 500; color: var(--soft); line-height: 1.4; display: block; }
+
+/* ── Naked figure strip: numbers that are evidence, not cards ────────────── */
+.strip { display: grid; grid-template-columns: repeat(4, 1fr); margin-top: 20px; border-top: 1px solid var(--line); }
+.strip.three { grid-template-columns: repeat(3, 1fr); }
+.strip > div { padding: 15px 22px 0 0; border-right: 1px solid var(--line-soft); }
+.strip > div + div { padding-left: 22px; }
+.strip > div:last-child { border-right: 0; }
+.strip b { display: block; font-size: 32px; font-weight: 600; letter-spacing: -0.03em; line-height: 1; color: var(--accent); margin-bottom: 8px; font-variant-numeric: tabular-nums; }
+.strip span { display: block; font-size: 13.5px; font-weight: 500; line-height: 1.4; color: var(--soft); }
+.sub { font-size: 15.5px; font-weight: 600; margin: 20px 0 0; }
+.src { font-size: 13px; font-weight: 500; color: #a6a6ad; margin: 16px 0 0; }
+
+/* ── Quotes: the open house, said out loud ───────────────────────────────── */
+.heard { display: grid; grid-template-columns: 1.5fr 1fr; gap: 18px; margin-top: 4px; }
+.pull {
+  border: 1px solid var(--line); border-radius: 22px;
+  background: var(--tint); padding: 26px 30px;
+  display: flex; flex-direction: column; justify-content: center;
+}
+.pull q { display: block; font-size: 25px; font-weight: 600; letter-spacing: -0.018em; line-height: 1.28; margin-bottom: 16px; quotes: none; }
+.pull cite { font-style: normal; font-size: 14.5px; font-weight: 500; color: var(--soft); }
+.quotes { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 10px; }
+.quotes li {
+  display: grid; grid-template-columns: 1fr auto; gap: 24px; align-items: baseline;
+  border: 1px solid var(--line); border-radius: 16px; background: var(--surface);
+  padding: 14px 22px;
+}
+.quotes q { font-size: 17px; font-weight: 500; line-height: 1.4; quotes: "\201C" "\201D"; }
+.quotes cite { font-style: normal; font-size: 13.5px; font-weight: 500; color: var(--soft); text-align: right; white-space: nowrap; }
+
+/* ── A finding that needs to stop the reader, without a dark slab ────────── */
+.band {
+  margin-top: 20px; border: 1px solid var(--line); border-radius: 20px;
+  background: var(--tint); padding: 20px 26px;
+}
+.band small { display: block; font-size: 12.5px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--accent); margin-bottom: 8px; }
+.band b { display: block; font-size: 31px; font-weight: 600; letter-spacing: -0.026em; margin-bottom: 9px; }
+.band span { display: block; font-size: 15.5px; font-weight: 500; line-height: 1.45; color: var(--soft); max-width: 92ch; }
+.band span strong { color: var(--ink); font-weight: 600; }
+
+/* ── The chain ───────────────────────────────────────────────────────────── */
+.chain { display: grid; grid-template-columns: 1fr auto 1fr auto 1fr; align-items: center; gap: 12px; margin-top: 22px; }
+.link {
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: var(--surface);
+  padding: 20px 22px;
+  text-align: center;
+}
+.link b { display: block; font-size: 19px; font-weight: 600; margin-bottom: 5px; letter-spacing: -0.015em; }
+.link span { font-size: 14.5px; font-weight: 500; color: var(--soft); }
+.arrow { font-size: 22px; color: #c4c4cb; }
+
+/* ── Who he is: the homepage's own grid, one hairline drawn by the gaps ──── */
+.who {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  background: var(--line);
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  overflow: hidden;
+  margin-top: 22px;
+}
+.who article {
+  background: var(--surface);
+  padding: 20px 22px 22px;
+  display: grid;
+  grid-template-rows: 74px auto;
+  align-content: start;
+  gap: 12px;
+}
+.who .art {
+  display: grid;
+  place-items: center;
+  background: var(--tint);
+  border-radius: 14px;
+  height: 74px;
+}
+.who .art img { width: 54px; height: 54px; display: block; }
+.who small {
+  display: block;
+  font-size: 11.5px; font-weight: 600; letter-spacing: 0.07em;
+  text-transform: uppercase; color: var(--accent);
+  margin-bottom: 5px;
+}
+.who h3 {
+  margin: 0 0 5px;
+  font-size: 19px; font-weight: 600; letter-spacing: -0.016em; line-height: 1.15;
+}
+.who p { margin: 0; font-size: 14px; line-height: 1.42; font-weight: 500; color: var(--soft); }
+
+/* ── Six engines ─────────────────────────────────────────────────────────── */
+.engines { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 20px; }
+.eng {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--surface);
+  padding: 18px 20px;
+  position: relative;
+}
+.eng i { font-style: normal; font-size: 13px; font-weight: 600; color: #b4b4b9; font-variant-numeric: tabular-nums; }
+.eng b { display: block; font-size: 20px; font-weight: 600; letter-spacing: -0.015em; margin: 5px 0 5px; }
+.eng span { display: block; font-size: 14.5px; font-weight: 500; line-height: 1.4; color: var(--soft); }
+.eng { display: flex; flex-direction: column; }
+.eng u { margin-top: auto; display: block; text-decoration: none; padding-top: 8px; border-top: 1px solid var(--line-soft); font-size: 13px; font-weight: 600; color: var(--accent); line-height: 1.35; }
+.eng em {
+  position: absolute; top: 16px; right: 18px;
+  font-style: normal; font-size: 11.5px; font-weight: 600; letter-spacing: 0.04em;
+  text-transform: uppercase; color: var(--soft);
+  border: 1px solid var(--line); border-radius: 999px; padding: 3px 9px;
+}
+.eng em.live { color: var(--green); border-color: var(--green); background: var(--green-tint); }
+
+/* ── ICP: the profile on the left, the argument on the right ─────────────── */
+.icp { display: grid; grid-template-columns: 1.05fr 1fr; gap: 18px; margin-top: 4px; }
+.icp > div {
+  border: 1px solid var(--line); border-radius: 22px;
+  background: var(--surface); padding: 22px 26px;
+}
+.icp .tag {
+  display: inline-block; font-size: 12.5px; font-weight: 600; letter-spacing: 0.04em;
+  text-transform: uppercase; color: var(--c); background: var(--t);
+  border-radius: 999px; padding: 5px 12px; margin-bottom: 12px;
+}
+.icp dl { margin: 0; }
+.icp dl > div {
+  display: grid; grid-template-columns: 92px 1fr; gap: 12px;
+  padding: 8px 0; border-top: 1px solid var(--line-soft);
+}
+.icp dl > div:first-child { border-top: 0; padding-top: 2px; }
+.icp dt { font-size: 12.5px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--soft); padding-top: 2px; }
+.icp dd { margin: 0; font-size: 15.5px; font-weight: 500; line-height: 1.4; }
+.icp dd b { font-weight: 600; }
+.icp ol { margin: 0; padding: 0; list-style: none; counter-reset: why; }
+.icp ol li {
+  counter-increment: why; position: relative; padding: 9px 0 9px 30px;
+  font-size: 15.5px; font-weight: 500; line-height: 1.42; color: var(--soft);
+  border-top: 1px solid var(--line-soft);
+}
+.icp ol li:first-child { border-top: 0; padding-top: 2px; }
+.icp ol li::before {
+  content: counter(why); position: absolute; left: 0; top: 9px;
+  font-size: 12.5px; font-weight: 600; color: var(--c);
+  width: 19px; height: 19px; border-radius: 50%; background: var(--t);
+  display: grid; place-items: center;
+}
+.icp ol li:first-child::before { top: 2px; }
+.icp ol li b { color: var(--ink); font-weight: 600; }
+.icp.tight > div { padding: 18px 24px; }
+.icp.tight dl > div { padding: 6px 0; }
+.icp.tight dd, .icp.tight ol li { font-size: 15px; }
+.icp.tight ol li { padding: 8px 0 8px 30px; }
+.note.wide { max-width: none; }
+
+.note { font-size: 16.5px; font-weight: 500; color: var(--soft); margin-top: 22px; line-height: 1.45; max-width: 92ch; }
+.note b { color: var(--ink); font-weight: 600; }
+.slide.night .note { color: #b6b6be; }
+.slide.night .note b { color: #f5f5f7; }
+
+/* The evidence slides carry the most. They get their own compression rather
+   than shrinking every other slide to match them. */
+.slide.dense h2 { font-size: 41px; margin-bottom: 10px; }
+.slide.dense .kicker { margin-bottom: 11px; }
+.slide.dense .chain { margin-top: 16px; }
+.slide.dense .link { padding: 14px 18px; }
+.slide.dense .link b { font-size: 17.5px; }
+.slide.dense table { margin-top: 14px; }
+.slide.dense td { padding: 10px 14px 10px 0; font-size: 16.5px; }
+.slide.dense th { padding-bottom: 9px; }
+.slide.dense .note { margin-top: 14px; font-size: 16px; }
+.slide.dense td small { font-size: 13px; }
+.slide.dense .stats { margin-top: 16px; }
+.slide.dense .engines { margin-top: 14px; }
+.slide.dense .strip { margin-top: 16px; }
+.slide.dense .band { margin-top: 16px; }
+.slide.rows td { padding: 7px 14px 7px 0; font-size: 15.5px; }
+.slide.rows th { padding-bottom: 8px; font-size: 12px; }
+.slide.rows td small { font-size: 12.5px; }
+
+/* The eight-founder roll runs eight rows deep and still has to breathe. */
+.slide.tightrows td { padding: 6px 12px 6px 0; font-size: 14px; line-height: 1.34; }
+.slide.tightrows th { padding-bottom: 7px; font-size: 11.5px; }
+.slide.tightrows td small { font-size: 11.5px; margin-top: 1px; }
+.slide.tightrows .band.flat { margin-top: 14px; padding: 15px 24px; }
+.slide.tightrows .band.flat strong { font-size: 23px; }
+.slide.tightrows .band.flat em { font-size: 12.5px; }
+.slide.dense .band { padding: 17px 24px; }
+.slide.dense .band b { font-size: 27px; margin-bottom: 7px; }
+.slide.dense .band span { font-size: 15px; }
+
+/* Two slides carry a full table plus a summary band. They start higher up the
+   page rather than shrinking the type past reading size. */
+.slide.pack { padding-top: 54px; }
+.slide.pack h2 { font-size: 37px; margin-bottom: 9px; }
+.slide.pack .kicker { margin-bottom: 9px; }
+.slide.pack .band span { max-width: none; }
+.slide.tightrows td { padding: 5px 12px 5px 0; }
+.slide.tightrows .band.flat { padding: 13px 24px; margin-top: 12px; }
+.slide.tightrows .band.flat strong { font-size: 21px; margin-bottom: 3px; }
+.stack { display: grid; gap: 14px; }
+.stack .stat { padding: 18px 22px; }
+.stack .stat b { font-size: 34px; margin-bottom: 6px; }
+.stack .stat i { margin-bottom: 7px; }
+
+/* Scored competition matrix: names left, marks centred, price right. */
+.matrix th:not(:first-child), .matrix td:not(:first-child) { text-align: center; }
+.matrix th:last-child, .matrix td:last-child { text-align: right; }
+.matrix td { font-size: 14px; padding: 7px 6px; white-space: nowrap; }
+.matrix td:first-child { white-space: normal; }
+.matrix th { font-size: 11.5px; padding: 0 8px 8px; letter-spacing: 0.03em; }
+.matrix td:first-child { text-align: left; padding-left: 0; }
+.matrix .no { color: #c2c2c9; }
+.matrix .part { color: var(--soft); font-size: 13.5px; }
+.matrix .yes { color: var(--green); font-weight: 600; }
+.matrix tr.us td .yes { color: inherit; }
+
+/* Engines re-scored by the research: one carries a cut mark. */
+.eng em.cut { color: var(--coral); border-color: var(--coral); background: var(--coral-tint); }
+.eng em.first { color: var(--blue); border-color: var(--blue); background: var(--blue-tint); }
+.eng.off { background: #f7f7f9; }
+.eng.off b, .eng.off span { color: var(--soft); }
+
+/* Four things, not six. Two across reads as a short list rather than a grid
+   with a hole in it. */
+.engines.two { grid-template-columns: 1fr 1fr; gap: 16px; }
+.engines.two .eng { padding: 20px 24px; }
+.engines.two .eng b { font-size: 22px; }
+.engines.two .eng span { font-size: 15px; }
+.matrix .later { color: var(--soft); font-size: 13.5px; }
+
+/* Competition: the table earns its width, the 2x2 sits beside it. */
+.comp { display: grid; grid-template-columns: 1.72fr 1fr; gap: 20px; align-items: start; margin-top: 4px; }
+.comp table { margin-top: 0; }
+.quad {
+  position: relative; height: 344px;
+  border: 1px solid var(--line); border-radius: 20px; background: var(--surface);
+}
+.quad::before, .quad::after { content: ""; position: absolute; background: var(--line-soft); }
+.quad::before { left: 50%; top: 30px; bottom: 30px; width: 1px; }
+.quad::after { top: 50%; left: 30px; right: 30px; height: 1px; }
+.quad .ax {
+  position: absolute; font-size: 10.5px; font-weight: 600; letter-spacing: 0.05em;
+  text-transform: uppercase; color: #a6a6ad; white-space: nowrap;
+}
+.quad .t { top: 9px; left: 50%; transform: translateX(-50%); }
+.quad .b { bottom: 9px; left: 50%; transform: translateX(-50%); }
+.quad .l { left: 10px; top: 50%; transform: translateY(-50%) rotate(180deg); writing-mode: vertical-rl; }
+.quad .r { right: 10px; top: 50%; transform: translateY(-50%); writing-mode: vertical-rl; }
+.quad .dot {
+  position: absolute; transform: translate(-50%, -50%);
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  font-style: normal; font-size: 11px; font-weight: 600; color: var(--soft);
+  line-height: 1.15; text-align: center; width: 92px;
+}
+.quad .dot::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: #b4b4bb; }
+.quad .dot.us { color: var(--coral); font-size: 13px; width: 104px; }
+.quad .dot.us::before { width: 18px; height: 18px; background: var(--coral); }
+
+/* Traction sits under the prices, small, because it is early and says so. */
+.tract { display: grid; grid-template-columns: repeat(3, 1fr); margin-top: 16px; border-top: 1px solid var(--line); }
+.tract > div { padding: 13px 20px 0 0; border-right: 1px solid var(--line-soft); }
+.tract > div + div { padding-left: 20px; }
+.tract > div:last-child { border-right: 0; }
+.tract b { display: block; font-size: 19px; font-weight: 600; letter-spacing: -0.018em; margin-bottom: 4px; }
+.tract span { display: block; font-size: 13.5px; font-weight: 500; line-height: 1.38; color: var(--soft); }
+.tract i { font-style: normal; display: block; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--accent); margin-bottom: 6px; }
+
+.band.flat { display: grid; grid-template-columns: repeat(5, 1fr); gap: 18px; padding: 18px 26px; }
+.band.flat div { text-align: left; }
+.band.flat strong { display: block; font-size: 26px; font-weight: 600; letter-spacing: -0.02em; color: var(--accent); margin-bottom: 4px; font-variant-numeric: tabular-nums; }
+.band.flat em { font-style: normal; font-size: 13.5px; font-weight: 500; color: var(--soft); line-height: 1.35; }
+
+@media print {
+  :root { --s: 1; }
+  body { background: #fff; }
+  .deck { display: block; gap: 0; padding: 0; }
+  .fit { width: auto; height: auto; }
+  .fit > .slide { transform: none; box-shadow: none; border-radius: 0; }
+}
+
+/* ── v8 additions ─────────────────────────────────────────────────────────── */
+
+/* Slide 2 wants four figures, so the three-up becomes a square. */
+.stats.two { grid-template-columns: 1fr 1fr; gap: 16px; }
+.stats.two .stat { padding: 22px 26px; }
+.stats.two .stat b { font-size: 46px; margin-bottom: 8px; }
+
+/* Quotes are the evidence on slide 3, so they get the card and the attribution
+   gets the accent: a quote nobody can attribute is an opinion with quote marks
+   around it. */
+.quotes { display: flex; flex-direction: column; gap: 10px; }
+.quote {
+  border: 1px solid var(--line); border-radius: 15px; background: var(--surface);
+  padding: 11px 18px;
+}
+.quote p { margin: 0 0 6px; font-size: 14.5px; font-weight: 500; line-height: 1.42; font-style: italic; }
+.quote cite { font-style: normal; font-size: 12.5px; font-weight: 600; color: var(--accent); }
+
+/* v8 put the survey counts in a navy block. Tinted, it still reads as the
+   answer to the quotes beside it without punching a hole in the page. */
+.panel {
+  background: var(--tint); border-radius: 22px; padding: 22px 26px;
+  display: flex; flex-direction: column; justify-content: center; gap: 22px;
+}
+.panel > div b { display: block; font-size: 46px; font-weight: 600; letter-spacing: -0.03em; line-height: 1; color: var(--accent); margin-bottom: 10px; }
+.panel > div span { display: block; font-size: 15px; font-weight: 500; line-height: 1.45; color: var(--soft); }
+
+.split { display: grid; grid-template-columns: 1.55fr 1fr; gap: 20px; align-items: stretch; margin-top: 4px; }
+
+/* The four steps of the promise. The last one is filled because it is the one
+   the founder is buying. */
+.flow { display: flex; align-items: stretch; gap: 10px; margin: 4px 0 22px; }
+.flow > div {
+  flex: 1; border: 1px solid var(--line); border-radius: 14px; background: var(--surface);
+  padding: 14px 8px; text-align: center;
+  font-size: 17px; font-weight: 600; letter-spacing: -0.012em;
+  display: flex; align-items: center; justify-content: center;
+}
+.flow > div.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.flow i { font-style: normal; align-self: center; color: var(--mat); font-size: 19px; }
+
+/* Numbered because slide 7 is a sequence: describe, then question, then build. */
+.steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 4px; }
+.steps > div { border: 1px solid var(--line); border-radius: 20px; background: var(--surface); padding: 24px 26px; }
+.steps h3 { margin: 0 0 10px; font-size: 21px; font-weight: 600; letter-spacing: -0.016em; }
+.steps h3 i { font-style: normal; color: var(--accent); }
+.steps p { margin: 0; font-size: 15.5px; font-weight: 500; line-height: 1.5; color: var(--soft); }
+
+.pitchtable td small { display: block; margin-top: 3px; }
+.todo { margin: 12px 0 0; font-size: 14px; font-weight: 600; font-style: italic; color: var(--accent); }
+.closer { margin: 14px 0 0; font-size: 17px; font-weight: 500; font-style: italic; line-height: 1.45; color: var(--soft); max-width: 104ch; }
+.closer b { font-style: normal; font-weight: 600; color: var(--ink); }
+
+
+/* ── v9 ───────────────────────────────────────────────────────────────────── */
+
+/* The cover splits: the name owns the left, the argument sits right and
+   smaller. It used to open with a sentence about building, which made the
+   reader work out who was talking. */
+.cover { display: grid; grid-template-columns: 1.05fr 1fr; gap: 56px; align-items: center; height: 100%; }
+.cover .mark { font-size: 118px; font-weight: 600; letter-spacing: -.045em; line-height: .9; margin: 0 0 18px; }
+.cover .claim { font-size: 25px; font-weight: 500; line-height: 1.34; color: #b6b6be; margin: 0; }
+.cover .claim b { color: var(--coral); font-weight: 600; }
+.cover .right { border-left: 1px solid #26262c; padding-left: 46px; }
+.cover .right h2 { font-size: 40px; margin-bottom: 16px; }
+.cover .right p { font-size: 18px; font-weight: 500; line-height: 1.5; color: #9a9aa2; margin: 0; }
+.live {
+  display: inline-flex; align-items: center; gap: 8px; margin-bottom: 26px;
+  padding: 7px 14px; border-radius: 999px; border: 1px solid var(--coral);
+  font-size: 13px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--coral);
+}
+.live i { width: 7px; height: 7px; border-radius: 50%; background: var(--coral); font-style: normal; }
+
+/* Bullets, not paragraphs. The single most repeated note. */
+.bul { margin: 0; padding: 0; list-style: none; }
+.bul li { position: relative; padding: 6px 0 6px 17px; font-size: 16px; font-weight: 500; line-height: 1.4; color: var(--soft); }
+.bul li::before { content: ""; position: absolute; left: 2px; top: .72em; width: 5px; height: 5px; border-radius: 50%; background: var(--accent); }
+/* .eng b and .card b style their own titles at display size; a <b> inside a
+   bullet is emphasis, not a heading, so it says so explicitly. */
+/* Every component in this sheet styles its own <b> as a title at display size,
+   which is right for the title and wrong for a <b> inside body copy. One guard,
+   declared after them all: emphasis inside a paragraph is emphasis. */
+.fstep span b, .bigbox span b, .qcell span b, .mbox span b, .eng span b,
+.stat span b, .strip span b, .band span b, .note b, .card p b, .fgate p b {
+  display: inline; font-size: inherit; line-height: inherit;
+  letter-spacing: inherit; margin: 0; color: var(--ink); font-weight: 600;
+}
+.bul li b { display: inline; font-size: inherit; line-height: inherit; margin: 0; color: var(--ink); font-weight: 600; }
+.bul.sm li { font-size: 14.5px; padding: 4px 0 4px 15px; }
+/* The evidence, as the last bullet rather than a rule at the card's foot: it
+   is another thing the founders said, not a footnote about them. */
+.bul li.ev { margin-top: 6px; padding-top: 9px; border-top: 1px solid var(--line-soft); color: var(--accent); font-weight: 600; font-size: 13px; }
+.bul li.ev::before { display: none; }
+
+/* Two boxes, equal weight, ten-second read. */
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 6px; }
+.bigbox { border-radius: 22px; padding: 30px 34px; background: var(--tint); display: flex; flex-direction: column; }
+.bigbox i { font-style: normal; font-size: 12.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--accent); margin-bottom: 12px; }
+.bigbox b { font-size: 31px; font-weight: 600; letter-spacing: -.024em; line-height: 1.14; margin-bottom: 12px; }
+.bigbox span { font-size: 16.5px; font-weight: 500; line-height: 1.45; color: var(--soft); }
+
+/* TAM to SAM to SOM, with the filters that do the narrowing named in between,
+   because the objection was never the number. It was the missing steps. */
+.funnel { display: grid; grid-template-columns: 1fr auto 1fr auto 1fr; gap: 0 14px; align-items: stretch; margin-top: 4px; }
+.fstep { border: 1px solid var(--line); border-radius: 20px; background: var(--surface); padding: 18px 20px; display: flex; flex-direction: column; }
+.fstep i { font-style: normal; font-size: 12px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: var(--accent); margin-bottom: 9px; }
+.fstep b { font-size: 36px; font-weight: 600; letter-spacing: -.03em; line-height: 1; margin-bottom: 9px; }
+.fstep span { font-size: 13.5px; font-weight: 500; line-height: 1.4; color: var(--soft); }
+.fstep u { margin-top: auto; padding-top: 10px; text-decoration: none; font-size: 12.5px; font-weight: 600; color: var(--mute, #86868b); }
+.fgate { display: flex; flex-direction: column; justify-content: center; align-items: center; width: 132px; text-align: center; }
+.fgate em { font-style: normal; font-size: 11.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: #a6a6ad; margin-bottom: 7px; }
+.fgate p { margin: 0; font-size: 13px; font-weight: 500; line-height: 1.35; color: var(--soft); }
+.fgate .arw { margin-top: 9px; font-size: 19px; color: var(--line); }
+
+/* Quarter on quarter, product above and people below. */
+.qgrid { display: grid; grid-template-columns: 118px repeat(4, 1fr); gap: 10px; margin-top: 4px; }
+.qgrid .qh { font-size: 12.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--accent); padding-bottom: 6px; border-bottom: 1px solid var(--line); display: flex; align-items: flex-end; }
+.qgrid .rl { font-size: 14px; font-weight: 600; color: var(--ink); display: flex; align-items: center; }
+.qcell { border: 1px solid var(--line); border-radius: 14px; background: var(--surface); padding: 12px 14px; }
+.qcell b { display: block; font-size: 15px; font-weight: 600; letter-spacing: -.012em; margin-bottom: 4px; }
+.qcell span { display: block; font-size: 13px; font-weight: 500; line-height: 1.38; color: var(--soft); }
+.qcell.on { background: var(--tint); border-color: transparent; }
+.qcell.on b { color: var(--accent); }
+.qnum { display: flex; align-items: baseline; gap: 7px; }
+.qnum strong { font-size: 25px; font-weight: 600; letter-spacing: -.022em; }
+.qnum em { font-style: normal; font-size: 12.5px; font-weight: 500; color: var(--soft); }
+
+/* Three clean boxes plus a fourth for what is actually true today. */
+.money { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.mbox { border: 1px solid var(--line); border-radius: 20px; background: var(--surface); padding: 24px 26px; display: flex; flex-direction: column; }
+.mbox i { font-style: normal; font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--accent); margin-bottom: 8px; }
+.mbox b { font-size: 22px; font-weight: 600; letter-spacing: -.018em; margin-bottom: 5px; }
+.mbox .p { font-size: 27px; font-weight: 600; letter-spacing: -.024em; color: var(--accent); margin-bottom: 12px; }
+.mbox ul { margin-top: auto; }
+
+/* Traction, inside the tinted band. A .band.flat nested in a .band inherited
+   the outer frame and hung off its own left edge, so this is its own thing. */
+.tract4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; }
+.tract4 > div { padding: 0 18px; border-right: 1px solid rgba(0,0,0,.08); }
+.tract4 > div:first-child { padding-left: 0; }
+.tract4 > div:last-child { border-right: 0; }
+.tract4 strong { display: block; font-size: 30px; font-weight: 600; letter-spacing: -.024em; line-height: 1; color: var(--accent); margin-bottom: 7px; }
+.tract4 em { font-style: normal; display: block; font-size: 13.5px; font-weight: 500; line-height: 1.35; color: var(--soft); }
+
+</style>
+<body>
+<div class="deck">
+<!-- Screenshots. Drawn in markup, not pasted: they stay sharp, follow the
+     slide accent, and a wrong label is a word rather than a re-export. -->
+<style>
+.shot {
+  border: 1px solid var(--line); border-radius: 14px; overflow: hidden;
+  background: var(--surface); box-shadow: 0 8px 26px rgba(0,0,0,.07);
+}
+.shot .bar { display: flex; align-items: center; gap: 6px; padding: 9px 12px; background: #f5f5f7; border-bottom: 1px solid var(--line-soft); }
+.shot .bar i { width: 8px; height: 8px; border-radius: 50%; background: #d6d6dc; font-style: normal; }
+.shot .bar em { font-style: normal; margin-left: 8px; font-size: 11.5px; font-weight: 600; color: #8e8e94; }
+.shot .bar u { margin-left: auto; text-decoration: none; font-size: 10px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--accent); }
+.shot .in { padding: 11px 13px; }
+
+/* An item waiting on the founder. The tick is the product. */
+.qitem { border: 1px solid var(--line-soft); border-radius: 11px; padding: 10px 12px; margin-bottom: 7px; }
+.qitem:last-child { margin-bottom: 0; }
+.qitem .top { display: flex; align-items: center; gap: 7px; margin-bottom: 5px; }
+.qitem .plat { font-size: 9.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: #fff; background: var(--accent); border-radius: 4px; padding: 2px 6px; }
+.qitem .when { margin-left: auto; font-size: 10.5px; font-weight: 500; color: #a6a6ad; }
+.qitem p { margin: 0 0 8px; font-size: 12px; font-weight: 500; line-height: 1.42; color: var(--ink); }
+.qitem .acts { display: flex; gap: 6px; }
+.qitem .acts span { font-size: 10.5px; font-weight: 600; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--line); color: var(--soft); }
+.qitem .acts span.go { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+/* The weekly visibility check: the question, who got named, the score. */
+.score { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--line-soft); font-size: 12px; font-weight: 500; }
+.score:last-child { border-bottom: 0; }
+.score b { width: 74px; font-weight: 600; color: var(--ink); font-size: 11.5px; }
+.score .txt { flex: 1; color: var(--soft); }
+.score .tag { font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; padding: 2px 7px; border-radius: 999px; }
+.score .tag.no { background: #fbeae8; color: #b8534a; }
+.score .tag.yes { background: #e8f3ec; color: #2f7a4f; }
+.ask { font-size: 12.5px; font-weight: 600; color: var(--ink); padding: 2px 0 9px; border-bottom: 1px solid var(--line); margin-bottom: 4px; }
+.ask span { color: #a6a6ad; font-weight: 500; }
+.scorefoot { margin-top: 10px; padding-top: 9px; border-top: 1px solid var(--line); font-size: 11.5px; font-weight: 600; color: var(--accent); }
+
+/* Platform tabs: one update, fitted five ways. */
+.tabs { display: flex; gap: 5px; margin-bottom: 9px; }
+.tabs span { font-size: 10.5px; font-weight: 600; padding: 4px 9px; border-radius: 999px; color: #9a9aa2; border: 1px solid var(--line-soft); }
+.tabs span.on { background: var(--ink); border-color: var(--ink); color: #fff; }
+.draft { font-size: 12px; font-weight: 500; line-height: 1.5; color: var(--ink); }
+.draft .hl { background: var(--tint); border-radius: 3px; padding: 0 2px; }
+.metaline { margin-top: 9px; padding-top: 8px; border-top: 1px solid var(--line-soft); font-size: 10.5px; font-weight: 600; color: #a6a6ad; }
+</style>
+
+<!-- 1 ─ Cover ──────────────────────────────────────────────────────────── -->
+<div class="fit"><section class="slide night ac-coral">
+  <div class="cover">
+    <div>
+      <p class="live"><i></i>Going live 31 August</p>
+      <h1 class="mark">Braino</h1>
+      <p class="claim">A companion for everyone.<br><b>A co-founder for founders.</b></p>
+    </div>
+    <div class="right">
+      <h2>Building is no longer the hard part.</h2>
+      <p>Anyone can ship a product in a weekend. Almost nobody gets seen.<br><br>Braino is the co-founder who gets you seen.</p>
+    </div>
+  </div>
+  <span class="wm">Itish Pande · Mesa School of Business · August 2026 · trybraino.com</span>
+</section></div>
+
+<!-- 2 ─ Problem ────────────────────────────────────────────────────────── -->
+<div class="fit"><section class="slide ac-coral dense">
+  <div class="body">
+    <p class="kicker">The problem</p>
+    <h2>Getting seen is the new hard part.</h2>
+    <div class="stats two" style="grid-template-columns:1fr 1fr">
+      <div class="stat"><b>1 in 3</b><span>new companies in 2026 has one founder. AI made building cheap and fast.</span></div>
+      <div class="stat"><b>~1,500</b><span>visits from a top-5 Product Hunt launch today. It used to be 15,000.</span></div>
+      <div class="stat"><b>10 hrs/wk</b><span>posting, messaging, scrolling Reddit. For a handful of real conversations.</span></div>
+      <div class="stat"><b>#1</b><span>founder complaint online is not AI and not features. It is distribution.</span></div>
+    </div>
+    <div class="band">
+      <small>And the problem is growing, not shrinking</small>
+      <b>Solo businesses are growing 2.7% a year against 1.1% for companies that hire. India added a record 55,200 startups last year.</b>
+      <span>More founders every month, all facing the same wall: build for months, launch, hear nothing. Five signups, three are family.</span>
+    </div>
+    <p class="src">Sources: US Census non-employer establishments · DPIIT · Solo Founder Playbook 2026 · FundnAI · Before Takeoff · r/buildinpublic</p>
+  </div>
+  <span class="num">2 / 13</span>
+</section></div>
+
+<!-- 3 ─ What founders said ─────────────────────────────────────────────── -->
+<div class="fit"><section class="slide ac-violet dense">
+  <div class="body">
+    <p class="kicker">We asked 8 founders. Here is what they said.</p>
+    <h2>Nobody pays for this. <span class="tone">Everybody needs it.</span></h2>
+    <div class="two" style="margin-bottom:4px">
+      <div class="bigbox" style="background:var(--surface);border:1px solid var(--line)">
+        <i>CareKin</i>
+        <b style="font-size:22px;line-height:1.34;letter-spacing:-.014em">“Distribution is my biggest bottleneck. I would actually buy this.”</b>
+        <span>Learned these tools existed during our interview. <b>Ready at ₹2,000/mo.</b></span>
+      </div>
+      <div class="bigbox" style="background:var(--surface);border:1px solid var(--line)">
+        <i>LazyTyper</i>
+        <b style="font-size:22px;line-height:1.34;letter-spacing:-.014em">“Scripts are the headache. Making videos is easy. Knowing what to say isn’t.”</b>
+        <span>Built his own bot rather than pay for a tool. <b>Says a normal founder pays $100+.</b></span>
+      </div>
+    </div>
+    <div class="band flat">
+      <div><strong>8 / 8</strong><em>say distribution is the biggest unsolved problem</em></div>
+      <div><strong>0 / 8</strong><em>pay for a single distribution tool today</em></div>
+      <div><strong>3</strong><em>said “I would buy this” on the spot</em></div>
+      <div><strong>₹1.5–3K</strong><em>a month is the India band they named</em></div>
+    </div>
+    <p class="sub" style="margin-top:16px">Their three options today, and why each one fails</p>
+    <div class="strip">
+      <div><b>Do it by hand</b><span>10 hrs a week. Eats the time they needed for building.</span></div>
+      <div><b>Build their own hacks</b><span>Scripts and bots that break. A patch, not a system.</span></div>
+      <div><b>Hire experts</b><span>$700–1,000/hr. Only funded companies can afford it.</span></div>
+    </div>
+  </div>
+  <span class="num">3 / 13</span>
+</section></div>
+
+<!-- 4 ─ Market size ────────────────────────────────────────────────────── -->
+<div class="fit"><section class="slide ac-blue dense pack">
+  <div class="body">
+    <p class="kicker">How big is the opportunity?</p>
+    <h2>Start with everyone. <span class="tone">Filter down to who we can actually sell to.</span></h2>
+    <div class="funnel">
+      <div class="fstep">
+        <i>TAM</i><b>$17.9B</b>
+        <span><b>29.8M one-person businesses in the US alone,</b> at $600 a year each. That is one $50/mo tool, against the $200–500/mo an SMB already spends on marketing software.</span>
+        <u>US Census · WebFX martech benchmark</u>
+      </div>
+      <div class="fgate"><em>Filter 1</em><p>Builds and sells online.<br><b>73% already use AI.</b></p><span class="arw">→</span></div>
+      <div class="fstep">
+        <i>SAM</i><b>$1.3B</b>
+        <span><b>2.2M founders</b> who build with AI and sell in markets we can reach: English-speaking plus Indian metros, where 240,000 DPIIT startups already sit.</span>
+        <u>Solopreneur AI adoption · DPIIT</u>
+      </div>
+      <div class="fgate"><em>Filter 2</em><p>Our slice by<br>year three.<br><b>3% of SAM.</b></p><span class="arw">→</span></div>
+      <div class="fstep" style="background:var(--tint);border-color:transparent">
+        <i>SOM</i><b>$39M</b>
+        <span><b>65,000 paying founders</b> at ₹1,500–3,000 or $49–99 a month. Reached through Mesa, Hyderabad, agencies and the free companion.</span>
+        <u>Year three target</u>
+      </div>
+    </div>
+    <div class="band">
+      <small>The wallet exists. It is just not being spent on this.</small>
+      <b>66% of small business owners spend under $1,000 a year on marketing, and 0 of our 8 founders pay for a distribution tool at all.</b>
+      <span>We are not asking anyone to switch. We are the first thing they buy.</span>
+    </div>
+  </div>
+  <span class="num">4 / 13</span>
+</section></div>
+
+<!-- 5 ─ Persona ────────────────────────────────────────────────────────── -->
+<div class="fit"><section class="slide ac-violet dense">
+  <div class="body">
+    <p class="kicker">Who is our customer?</p>
+    <h2>The founder who built it. <span class="tone">And nobody saw it.</span></h2>
+    <div class="fork">
+      <article class="card c-coral">
+        <span class="tag">Main customer</span>
+        <h3>The Solo Builder</h3>
+        <ul class="bul sm">
+          <li>Ships fast with AI. Then hits the wall: <b>nobody sees it</b></li>
+          <li>Pays for <b>zero</b> marketing tools today</li>
+          <li>Biggest pain is <b>content</b>: what to write, what to post</li>
+          <li>Wants AI to draft everything, but <b>approves before it goes public</b></li>
+          <li>Pays <b>₹1,500–3,000/mo</b>. Wants one app, not five</li>
+        </ul>
+      </article>
+      <article class="card c-blue">
+        <span class="tag">Second customer</span>
+        <h3>The Marketing-Savvy Founder</h3>
+        <ul class="bul sm">
+          <li>Knows marketing. <b>Drowning in the daily work of it</b></li>
+          <li>Says AI outreach saves <b>40–50% of his effort</b></li>
+          <li>Already sees buyers asking ChatGPT before Google</li>
+          <li>Pays <b>$200+/mo</b>, against consultants at $700–1,000/hr</li>
+        </ul>
+      </article>
+    </div>
+    <div class="band">
+      <b>Why they are right: the pain repeats every single week, three already said they would buy, and we reach them for free through Mesa, Hyderabad and the free companion.</b>
+    </div>
+  </div>
+  <span class="num">5 / 13</span>
+</section></div>
+
+<!-- 6 ─ Positioning ────────────────────────────────────────────────────── -->
+<div class="fit"><section class="slide ac-green dense">
+  <div class="body">
+    <p class="kicker">What is Braino?</p>
+    <h2>One co-founder. <span class="tone">His job is getting you seen.</span></h2>
+    <div class="split" style="grid-template-columns:1fr 1.05fr;gap:26px;align-items:center;margin-top:2px">
+      <div>
+        <ul class="bul">
+          <li><b>You talk. He works. You approve. The world sees you.</b></li>
+          <li>Writes and posts in <b>your</b> voice, every week</li>
+          <li>Keeps you <b>named when buyers ask an AI</b></li>
+          <li>Finds the right people and <b>drafts every message</b></li>
+          <li><b>Nothing goes public without your tap.</b></li>
+        </ul>
+        <div class="two" style="margin-top:16px;gap:14px">
+          <div class="bigbox" style="padding:18px 20px;background:var(--surface);border:1px solid var(--line)">
+            <i>Free · everyone</i>
+            <b style="font-size:19px;margin-bottom:6px">Braino Companion</b>
+            <span style="font-size:14px">Reads your pages, records your meetings, learns how you write. <b>Live today.</b></span>
+          </div>
+          <div class="bigbox" style="padding:18px 20px">
+            <i>Paid · founders</i>
+            <b style="font-size:19px;margin-bottom:6px">Braino Foundry</b>
+            <span style="font-size:14px">The same companion, now running your distribution. <b>31 August.</b></span>
+          </div>
+        </div>
+      </div>
+      <div class="shot">
+        <div class="bar"><i></i><i></i><i></i><em>Braino · Approval inbox</em><u>4 waiting</u></div>
+        <div class="in">
+          <div class="qitem">
+            <div class="top"><span class="plat">Reddit</span><span class="when">r/SaaS · today 6pm</span></div>
+            <p>We shipped dark mode this week because three users asked in the same thread. Here is what changed and what broke.</p>
+            <div class="acts"><span class="go">Approve</span><span>Edit</span><span>Skip</span></div>
+          </div>
+          <div class="qitem">
+            <div class="top"><span class="plat">LinkedIn</span><span class="when">tomorrow 9am</span></div>
+            <p>Nobody asks for dark mode. They ask to stop being blinded at 1am. Same request, different words.</p>
+            <div class="acts"><span class="go">Approve</span><span>Edit</span><span>Skip</span></div>
+          </div>
+          <div class="qitem">
+            <div class="top"><span class="plat">Outreach</span><span class="when">12 drafted · 1 shown</span></div>
+            <p>Hi Neha, saw you rebuilt onboarding at Zepic last month. We hit the same drop-off at step three.</p>
+            <div class="acts"><span class="go">Approve</span><span>Edit</span><span>Skip</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <span class="num">6 / 13</span>
+</section></div>
+
+<!-- 7 ─ Deep dive ──────────────────────────────────────────────────────── -->
+<div class="fit"><section class="slide ac-amber dense pack">
+  <div class="body">
+    <p class="kicker">Inside Braino · deep dive</p>
+    <h2>Three engines. <span class="tone">One week of work, done for you.</span></h2>
+    <div class="engines" style="gap:16px">
+      <div class="eng" style="padding:16px 18px">
+        <i>Engine 1 · running today</i><b>Content</b>
+        <ul class="bul sm">
+          <li>Writes in <b>your</b> voice, from what you shipped</li>
+          <li>Reddit, LinkedIn, X, Instagram</li>
+          <li>Every week, no blank page</li>
+          <li class="ev">7 of 8 founders called this pain #1</li>
+        </ul>
+      </div>
+      <div class="eng" style="padding:16px 18px">
+        <i>Engine 2 · 31 August</i><b>Optics</b>
+        <ul class="bul sm">
+          <li>Asks ChatGPT what your buyers ask</li>
+          <li>Checks <b>whether it names you</b></li>
+          <li>Ships the fix, weekly</li>
+          <li class="ev">8 of 8 wanted it once explained</li>
+        </ul>
+      </div>
+      <div class="eng" style="padding:16px 18px">
+        <i>Engine 3 · Q4</i><b>Outreach</b>
+        <ul class="bul sm">
+          <li>You say who. He finds them</li>
+          <li><b>One message per person</b>, not a blast</li>
+          <li>Tracks replies, follows up</li>
+          <li class="ev">Saves 40–50% of the effort · GTM expert</li>
+        </ul>
+      </div>
+    </div>
+    <div class="split" style="grid-template-columns:1fr 1fr;gap:16px;margin-top:16px">
+      <div class="shot">
+        <div class="bar"><i></i><i></i><i></i><em>Content · one update, five places</em><u>Engine 1</u></div>
+        <div class="in">
+          <div class="tabs"><span class="on">Reddit</span><span>LinkedIn</span><span>X</span><span>Instagram</span></div>
+          <p class="draft">Shipped dark mode after three people asked in the same thread. <span class="hl">The hard part was not the colours</span> — it was every chart and badge we had hard-coded.</p>
+          <p class="metaline">Learned from 200 of your own posts · long for Reddit, short for X</p>
+        </div>
+      </div>
+      <div class="shot">
+        <div class="bar"><i></i><i></i><i></i><em>Optics · this week’s check</em><u>Engine 2</u></div>
+        <div class="in">
+          <p class="ask">“Best expense tracker for freelancers?” <span>· asked weekly</span></p>
+          <div class="score"><b>ChatGPT</b><span class="txt">Names 4 tools. Not you.</span><span class="tag no">Invisible</span></div>
+          <div class="score"><b>Perplexity</b><span class="txt">Cites your Reddit answer.</span><span class="tag yes">Named</span></div>
+          <div class="score"><b>Google AIO</b><span class="txt">Competitor’s pricing page wins.</span><span class="tag no">Invisible</span></div>
+          <p class="scorefoot">Fix drafted: a comparison page + 2 Reddit answers → sent to Content</p>
+        </div>
+      </div>
+    </div>
+  </div>
+  <span class="num">7 / 13</span>
+</section></div>
+
+<!-- 8 ─ Ten seconds ────────────────────────────────────────────────────── -->
+<div class="fit"><section class="slide ac-coral">
+  <div class="body">
+    <p class="kicker">Why it wins</p>
+    <h2>Two things to remember.</h2>
+    <div class="two">
+      <div class="bigbox">
+        <i>The rule above all</i>
+        <b>Nothing goes public without your approval.</b>
+        <span>Every draft lands in one inbox. You tap yes, edit, or skip. <b>All 8 founders demanded this before they asked for a single feature.</b></span>
+      </div>
+      <div class="bigbox" style="background:var(--blue-tint)">
+        <i style="color:var(--blue)">Why it is 10x better</i>
+        <b>Five tools plus ten hours a week. Or one co-founder.</b>
+        <span>Today a founder pays for five tools, gives up ten hours of their own week, and still stays invisible. <b style="color:var(--blue)">Braino does the whole job for less than any one of those tools.</b></span>
+      </div>
+    </div>
+  </div>
+  <span class="num">8 / 13</span>
+</section></div>
+
+<!-- 9 ─ Business model and traction ────────────────────────────────────── -->
+<div class="fit"><section class="slide ac-green dense">
+  <div class="body">
+    <p class="kicker">How we make money</p>
+    <h2>Free companion. <span class="tone">Paid co-founder.</span></h2>
+    <div class="money">
+      <div class="mbox">
+        <i>Free forever</i><b>Braino Companion</b><div class="p">₹0</div>
+        <ul class="bul sm">
+          <li>Everyone with a screen</li>
+          <li>Builds the user base</li>
+          <li><b>Some become founders</b></li>
+        </ul>
+      </div>
+      <div class="mbox" style="background:var(--tint);border-color:transparent">
+        <i>Subscription</i><b>Braino Foundry</b><div class="p">₹1,500–3,000</div>
+        <ul class="bul sm">
+          <li>Per month, in India</li>
+          <li><b>$49–99</b> globally</li>
+          <li><b>$200+</b> revenue stage</li>
+        </ul>
+      </div>
+      <div class="mbox">
+        <i>Done for you</i><b>We run it ourselves</b><div class="p">₹25–50K</div>
+        <ul class="bul sm">
+          <li>Per month, after a free first month</li>
+          <li>Highest margin, fastest learning</li>
+          <li><b>Whatever repeats becomes a feature</b></li>
+        </ul>
+      </div>
+    </div>
+    <div class="band">
+      <small>Where we are today</small>
+      <div class="tract4">
+        <div><strong>1</strong><em>service client signed — Dinebees, 10K downloads</em></div>
+        <div><strong>3</strong><em>founders in closing at their stated price</em></div>
+        <div><strong>25</strong><em>founder conversations banked</em></div>
+        <div><strong>120</strong><em>Mesa founders to sell into next</em></div>
+      </div>
+    </div>
+    <p class="note">Free users become founders, founders become Foundry customers, and their results bring the next ones. <b>Braino markets Braino.</b></p>
+  </div>
+  <span class="num">9 / 13</span>
+</section></div>
+
+<!-- 10 ─ Go to market ──────────────────────────────────────────────────── -->
+<div class="fit"><section class="slide ac-amber dense">
+  <div class="body">
+    <p class="kicker">How we reach them</p>
+    <h2>Three ways in. <span class="tone">All three are already open.</span></h2>
+    <div class="engines" style="gap:16px">
+      <div class="eng" style="padding:22px 24px">
+        <i>Pillar 1</i><b>Outbound</b>
+        <ul class="bul sm">
+          <li>Founders posting the problem in public, right now</li>
+          <li>Reddit, LinkedIn, X, in their own words</li>
+          <li><b>We run Braino’s outreach on Braino</b></li>
+        </ul>
+        <u>Our own engine is the first case study</u>
+      </div>
+      <div class="eng" style="padding:22px 24px">
+        <i>Pillar 2</i><b>Mesa</b>
+        <ul class="bul sm">
+          <li><b>120 founders</b> in the same building</li>
+          <li>Plus 50 in Hyderabad, inside a 700-strong ecosystem</li>
+          <li>Warm, free, and already asking</li>
+        </ul>
+        <u>1 signed, 3 in closing from here</u>
+      </div>
+      <div class="eng" style="padding:22px 24px">
+        <i>Pillar 3</i><b>Agency partnerships</b>
+        <ul class="bul sm">
+          <li>Content, personal-branding and ads agencies</li>
+          <li>They have the founders. We have the engine</li>
+          <li><b>They resell, we power it</b></li>
+        </ul>
+        <u>One distribution deal reaches dozens of founders</u>
+      </div>
+    </div>
+    <div class="band">
+      <b>Why this works: 0 of 8 founders pay for a tool today, so we sell the result and not the software. “We will get you seen” is the pitch.</b>
+      <span>Every task we repeat for three clients becomes a Braino feature, which makes the service paid research.</span>
+    </div>
+  </div>
+  <span class="num">10 / 13</span>
+</section></div>
+
+<!-- 11 ─ Competition ───────────────────────────────────────────────────── -->
+<div class="fit"><section class="slide ac-blue dense rows">
+  <div class="body">
+    <p class="kicker">Competition</p>
+    <h2>Built for marketers with budgets. <span class="tone">Not for founders with none.</span></h2>
+    <div class="comp">
+      <table class="matrix">
+        <colgroup><col style="width:24%"><col style="width:16%"><col style="width:17%"><col style="width:14%"><col style="width:15%"><col style="width:14%"></colgroup>
+        <tr><th></th><th>Writes content</th><th>AI visibility</th><th>Outreach</th><th>Does it FOR you</th><th>Price</th></tr>
+        <tr><td><b>Buffer / Postiz</b></td><td class="part">Schedules only</td><td class="no">—</td><td class="no">—</td><td class="no">—</td><td>$15–49/mo</td></tr>
+        <tr><td><b>Apollo + Clay</b></td><td class="no">—</td><td class="no">—</td><td class="yes">Strong</td><td class="no">—</td><td>$50–100/mo</td></tr>
+        <tr><td><b>Peec / Profound</b></td><td class="no">—</td><td class="part">Measures only</td><td class="no">—</td><td class="no">—</td><td>$99–399/mo</td></tr>
+        <tr><td><b>AgentWeb</b></td><td class="yes">Yes</td><td class="part">Partial</td><td class="part">Partial</td><td class="no">—</td><td>$299/mo</td></tr>
+        <tr><td><b>Leapd</b></td><td class="yes">Yes</td><td class="yes">Yes</td><td class="yes">Yes</td><td class="no">—</td><td>$299–999/mo</td></tr>
+        <tr><td><b>Consultants</b></td><td class="yes">Yes</td><td class="part">Some</td><td class="yes">Yes</td><td class="yes">Yes · human</td><td>$700–1,000/hr</td></tr>
+        <tr class="us"><td><b>BRAINO</b></td><td><b>Your voice</b></td><td><b>Checks + fixes</b></td><td><b>Approved</b></td><td><b>AI + service</b></td><td><b>₹1.5K–$200/mo</b></td></tr>
+      </table>
+      <div class="quad">
+        <span class="ax t">Does the work for you</span>
+        <span class="ax l">Does one thing</span>
+        <span class="ax r">Does everything</span>
+        <i class="dot" style="left:27%;top:22%">Consultants $700+/hr</i>
+        <i class="dot us" style="left:74%;top:24%">BRAINO</i>
+        <i class="dot" style="left:19%;top:58%">Peec / Profound</i>
+        <i class="dot" style="left:25%;top:76%">Apollo + Clay</i>
+        <i class="dot" style="left:20%;top:90%">Buffer / Postiz</i>
+        <i class="dot" style="left:68%;top:66%">AgentWeb</i>
+        <i class="dot" style="left:74%;top:86%">Leapd</i>
+      </div>
+    </div>
+    <p class="note wide">The only done-for-you option a founder can buy today is a human at $700 an hour. <b>Everything cheaper makes them do the work themselves.</b></p>
+  </div>
+  <span class="num">11 / 13</span>
+</section></div>
+
+<!-- 12 ─ Projections ───────────────────────────────────────────────────── -->
+<div class="fit"><section class="slide ac-violet dense pack">
+  <div class="body">
+    <p class="kicker">Projections · quarter on quarter</p>
+    <h2>What ships, <span class="tone">and who is paying by then.</span></h2>
+    <div class="qgrid">
+      <div class="qh"></div>
+      <div class="qh">Q3 2026</div><div class="qh">Q4 2026</div><div class="qh">Q1 2027</div><div class="qh">Q2 2027</div>
+      <div class="rl">Product</div>
+      <div class="qcell on"><b>Content + Optics live</b><span>Approval inbox ships with v1. Launch 31 August.</span></div>
+      <div class="qcell"><b>Outreach</b><span>Personal drafts at scale, gated. One dashboard across all three.</span></div>
+      <div class="qcell"><b>Braino Code</b><span>The co-founder starts building the product too, not just distributing it.</span></div>
+      <div class="qcell"><b>End to end</b><span>Idea to shipped to seen, one memory across all of it.</span></div>
+      <div class="rl">Companion</div>
+      <div class="qcell"><div class="qnum"><strong>2,000</strong><em>free users</em></div></div>
+      <div class="qcell"><div class="qnum"><strong>10,000</strong><em>free users</em></div></div>
+      <div class="qcell"><div class="qnum"><strong>30,000</strong><em>free users</em></div></div>
+      <div class="qcell"><div class="qnum"><strong>75,000</strong><em>free users</em></div></div>
+      <div class="rl">Foundry</div>
+      <div class="qcell"><div class="qnum"><strong>10</strong><em>paying</em></div></div>
+      <div class="qcell"><div class="qnum"><strong>60</strong><em>paying</em></div></div>
+      <div class="qcell"><div class="qnum"><strong>200</strong><em>paying</em></div></div>
+      <div class="qcell"><div class="qnum"><strong>500</strong><em>paying</em></div></div>
+      <div class="rl">Service</div>
+      <div class="qcell"><div class="qnum"><strong>3</strong><em>clients</em></div></div>
+      <div class="qcell"><div class="qnum"><strong>6</strong><em>clients</em></div></div>
+      <div class="qcell"><div class="qnum"><strong>10</strong><em>clients</em></div></div>
+      <div class="qcell"><div class="qnum"><strong>15</strong><em>clients</em></div></div>
+      <div class="rl">Revenue</div>
+      <div class="qcell on"><div class="qnum"><strong>₹1L</strong><em>MRR</em></div></div>
+      <div class="qcell on"><div class="qnum"><strong>₹4L</strong><em>MRR</em></div></div>
+      <div class="qcell on"><div class="qnum"><strong>$15K</strong><em>MRR</em></div></div>
+      <div class="qcell on"><div class="qnum"><strong>$40K</strong><em>MRR</em></div></div>
+    </div>
+    <p class="note">The free companion feeds Foundry, and the done-for-you service tells us what to build next. <b>Braino Code lands in Q1 2027, once distribution is working.</b></p>
+  </div>
+  <span class="num">12 / 13</span>
+</section></div>
+
+<!-- 13 ─ Close ─────────────────────────────────────────────────────────── -->
+<div class="fit"><section class="slide night ac-coral">
+  <div class="body">
+    <p class="live"><i></i>Going live 31 August</p>
+    <h1>Let’s make being seen<br><span class="tone">the easy part.</span></h1>
+    <p class="lede" style="margin-top:14px">A companion for everyone. A co-founder for founders.</p>
+  </div>
+  <span class="wm">Itish Pande · hi@itish.io · trybraino.com</span>
+</section></div>
+
+</div>
+<script>
+  (function () {
+    var fit = function () {
+      var w = document.documentElement.clientWidth;
+      var s = Math.min(1, (w - 36) / 1280);
+      document.documentElement.style.setProperty('--s', s > 0.2 ? s : 0.2);
+    };
+    fit();
+    window.addEventListener('resize', fit);
+  })();
+</script>
+</body>
+</html>
