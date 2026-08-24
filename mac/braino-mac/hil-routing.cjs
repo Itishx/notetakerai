@@ -50,7 +50,61 @@ function macLooksLikeTask(raw) {
   return true;
 }
 
+/* The fast lane.
+ *
+ * These are the things the cascade is genuinely better at than the loop, and
+ * they are all the same kind of thing: native Mac powers the loop has no verb
+ * for. Launching an app, controlling playback, the file system, calls, system
+ * toggles, Braino's own modes. They also answer in under a second, and making
+ * "play billie jean" wait on a model would be a downgrade dressed up as
+ * intelligence.
+ *
+ * Everything NOT in here is browser shaped work, which is exactly what the
+ * loop's vocabulary is: navigate, read, look, click, type, scroll, search. That
+ * work goes to the brain by default, without being asked.
+ */
+const MAC_FAST_LANE = [
+  // Playback and music
+  /\b(play|pause|resume|skip|next track|previous track|stop the music|volume|mute|unmute|spotify|moonwalk|dance)\b/,
+  // Launching, quitting and switching apps
+  /\b(launch|quit|switch to|close)\b/,
+  /\bopen\s+(?!.*\b(gmail|inbox|mail|youtube|linkedin|twitter|maps|amazon|github|medium|docs|drive|calendar|whatsapp web)\b)[a-z .]+$/,
+  // The file system
+  /\b(file|files|folder|desktop|downloads|organi[sz]e|rename|trash|screenshot|screen shot)\b/,
+  // Talking to people through the Mac
+  /\b(call|facetime|whatsapp|imessage|text|message)\b/,
+  // The machine itself
+  /\b(wifi|wi-fi|bluetooth|brightness|dark mode|do not disturb|battery|airdrop|sleep|restart)\b/,
+  // Braino's own surfaces
+  /\b(braino os|dictation|hera|yap|teleprompter|meeting|note|notes|mode|what'?s new|cursor mode|jarvis|roam)\b/,
+];
+
+/* Naming a website settles it, whatever else the sentence contains.
+   "reply to that linkedin message" is browser work that happens to say
+   "message", and the Mac's own messaging has no idea what LinkedIn is. */
+const MAC_BROWSER_TARGET = /\b(gmail|inbox|e?mail thread|youtube|linkedin|twitter|\bx\.com|instagram|reddit|maps|amazon|flipkart|zomato|swiggy|blinkit|github|medium|notion|figma|docs|sheets|drive|calendar|whatsapp web|browser|chrome|tab|website|site|url|link)\b/;
+
+function macFastLane(raw) {
+  const t = String(raw || "").toLowerCase().trim();
+  if (!t) return true;
+  if (MAC_BROWSER_TARGET.test(t)) return false;
+  return MAC_FAST_LANE.some((re) => re.test(t));
+}
+
+/* What the brain gets, without anyone asking it to.
+ *
+ * A job, not a question, and not something the cascade does better. This is the
+ * whole point: you should not have to say "use your brain" for him to use it.
+ */
+function macWantsTheBrain(raw) {
+  if (macAsksForTheBrain(String(raw || "").toLowerCase())) return true;
+  if (!macLooksLikeTask(raw)) return false;
+  return !macFastLane(raw);
+}
+
 module.exports = {
+  macFastLane,
+  macWantsTheBrain,
   macLooksMultiStep,
   macAsksForTheBrain,
   macStripBrainRequest,

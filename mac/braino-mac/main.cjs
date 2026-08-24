@@ -118,6 +118,7 @@ const {
   macAsksForTheBrain,
   macStripBrainRequest,
   macLooksLikeTask,
+  macWantsTheBrain,
 } = require(path.join(__dirname, "hil-routing.cjs"));
 const { parseBrainoOsIntent } = require(path.join(__dirname, "braino-os-intent.cjs"));
 const { parseBrainoOsColorIntent } = require(path.join(__dirname, "braino-os-color.cjs"));
@@ -14025,21 +14026,28 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
   }
 
   /* ── The brain ──────────────────────────────────────────────────────────
-     The same HIL loop the browser Delegate already runs on, now reachable
-     here, so one prompt and one version drive both surfaces.
+     The same HIL loop the browser Delegate already runs on. It is the default
+     here now, not a thing you have to ask for: having to say "use your brain"
+     is a toggle, not a mind.
 
-     Asking him to think hands it over deliberately. What it does NOT do is
-     take multi step work off the cascade on its own: that was tried and
-     reverted, and the note above macHilEnabled records why. This loop has
-     browser hands, navigate and click and type against the accessibility
-     tree. The cascade can launch apps, screenshot and search files, and it
-     answers in under a second. Handing it "open spotify and play billie jean"
-     would be a downgrade dressed up as intelligence.
+     What it does not get is the fast lane, and the fast lane is one specific
+     kind of thing: native Mac powers the loop has no verb for. Launching an
+     app, playback, the file system, calls, system toggles, Braino's own modes.
+     Those the cascade does better and answers in under a second, and an
+     earlier attempt at routing everything here was reverted for exactly that
+     reason.
+
+     Everything else is browser shaped work, which is precisely what the loop's
+     vocabulary is, so it comes here without being asked.
 
      Off with BRAINO_HIL=0. */
-  if (macHilEnabled() && macAsksForTheBrain(text)) {
-    logMac("delegate.hil_loop.front", { reason: "asked", raw: textForLog(raw) });
-    return runMacHilLoop(macStripBrainRequest(raw));
+  if (macHilEnabled() && macWantsTheBrain(raw)) {
+    const asked = macAsksForTheBrain(text);
+    logMac("delegate.hil_loop.front", {
+      reason: asked ? "asked" : "default",
+      raw: textForLog(raw),
+    });
+    return runMacHilLoop(asked ? macStripBrainRequest(raw) : raw);
   }
 
   const noteIntent = parseNoteIntent(raw);

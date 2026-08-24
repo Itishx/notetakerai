@@ -5,6 +5,8 @@ import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
 const {
+  macWantsTheBrain,
+  macFastLane,
   macLooksMultiStep,
   macAsksForTheBrain,
   macStripBrainRequest,
@@ -98,4 +100,44 @@ test("the brain is wired into the Mac router at both doors", () => {
   assert.match(main, /functions\/v1\/hil-loop/);
   // And a way to turn it off.
   assert.match(main, /BRAINO_HIL/);
+});
+
+/* The brain is the default, not a thing you ask for.
+ *
+ * Having to say "use your brain" is a toggle, not a mind. Browser shaped work
+ * is exactly what the loop's vocabulary covers, so it goes there on its own. */
+test("browser shaped work reaches the brain without being asked", () => {
+  for (const said of [
+    "open my gmail and star the newest email",
+    "find the mesa email and draft a reply",
+    "search youtube for the ultron scene",
+    "book a table on zomato for friday",
+    "reply to that linkedin message",
+  ]) {
+    assert.equal(macWantsTheBrain(said), true, said);
+  }
+});
+
+/* The fast lane is one specific kind of thing: native Mac powers the loop has
+   no verb for, which also happen to answer in under a second. */
+test("native Mac work stays with the cascade", () => {
+  for (const said of [
+    "play billie jean",
+    "open spotify",
+    "take a screenshot",
+    "call mom",
+    "rename these files",
+    "turn on dark mode",
+    "organise my desktop",
+    "start dictation",
+  ]) {
+    assert.equal(macFastLane(said), true, said);
+    assert.equal(macWantsTheBrain(said), false, said);
+  }
+});
+
+test("questions still never reach the loop", () => {
+  for (const said of ["what is the capital of france", "how are you", "why is the sky blue"]) {
+    assert.equal(macWantsTheBrain(said), false, said);
+  }
 });
