@@ -1,6 +1,6 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -141,9 +141,32 @@ const queryClient = new QueryClient();
 const SPLASH_SKIP_PATHS = new Set(["/", "/intro", "/interactive-tour", "/spiderman-brand-new-day", "/brand-new-day"]);
 const normalizePath = (path: string) => (path.length > 1 ? path.replace(/\/+$/, "") : path);
 
+/* Command O opens Braino OS from anywhere on the site, because you do not
+   always want to say it out loud. The browser's own Command O is a file picker,
+   which is not useful on a web page, so taking it costs nothing here. The Mac
+   app registers Command Shift O for the same thing system wide: a bare
+   Command O taken globally would break Open in every other application. */
+function BrainoOsShortcut() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key.toLowerCase() !== "o" || !(event.metaKey || event.ctrlKey)) return;
+      if (event.shiftKey || event.altKey) return;
+      event.preventDefault();
+      if (location.pathname === "/os") return;
+      navigate("/os");
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [location.pathname, navigate]);
+  return null;
+}
+
 function AppRoutes() {
   return (
     <Suspense fallback={<div style={{ minHeight: "100vh", background: "#090a08" }} />}>
+      <BrainoOsShortcut />
       <Routes>
         {/* The waitlist is the front door again while the five-tab Braino page
             is still being finished. Braino lives at /braino meanwhile, and

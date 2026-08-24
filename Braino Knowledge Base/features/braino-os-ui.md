@@ -34,10 +34,17 @@ Braino OS is, so it is the picture we drew.
 
 ## How to use it
 
-1. Go to `/os`.
-2. Press Ctrl twice to talk. Braino answers as the system itself.
-3. Click a system, or ask for one by name, to fly inside it.
-4. Scroll to zoom. Escape, or **PULL BACK**, to come out.
+Three ways in, because you do not always want to say it out loud.
+
+- **Say it.** "Braino, show me what Braino OS looks like." Or go straight to one
+  of the four: "show me your mind", "let me see your heart", "take me inside
+  your memory". On Mac this takes the whole display.
+- **Command Shift O**, anywhere on the machine, from the Mac app.
+- **Command O**, anywhere on the website.
+
+Once it is open: press Ctrl twice to talk, click a system or ask for it by name
+to fly inside, scroll to zoom, and **PULL BACK** to come out. On the Mac
+takeover, Escape leaves the surface entirely.
 
 Spoken navigation is handled on the page rather than sent to the model, so
 asking for the heart moves the camera immediately instead of after a round trip.
@@ -66,13 +73,27 @@ asking for the heart moves the camera immediately instead of after a round trip.
   batched into six brightness buckets and stroked once per bucket, and a bloom
   pass that copies the frame down to quarter resolution, blurs it and adds it
   back underneath itself.
-- `src/pages/BrainoOS.tsx`: the HUD, the voice, the camera commands.
+- `src/pages/BrainoOS.tsx`: the HUD, the voice, the camera commands. Reads
+  `?system=` and `?voice=1`, which is how the Mac app says where to land and
+  whether he should already be listening.
+- `mac/braino-mac/braino-os-intent.cjs`: the spoken phrases, with its own tests.
+  A sentence that takes over the whole screen has to be certain, so only the
+  possessive and article forms count: "show me your heart" opens it, "put your
+  heart into it" does not.
+- `mac/braino-mac/main.cjs`: `openBrainoOsWindow`, a frameless full screen
+  window pointed at the website route. It hides the notch while it is up and
+  puts it back afterwards, and takes its own microphone permission so he can
+  talk from in there.
 
 ## Honest limitations
 
-- It is a website page. The Mac app and the extension cannot open it yet, so
-  saying "show me what Braino OS looks like" to Braino anywhere other than this
-  page does nothing. That is the next piece.
+- The Chrome extension cannot open it yet. Mac and the website can.
+- The Mac takeover loads the live website route, so it needs the network and it
+  needs this page deployed. `BRAINO_OS_URL` points it at a dev server instead.
+- The global shortcut is Command Shift O rather than a bare Command O. Taking
+  Command O globally would steal Open from Finder, from Chrome and from the
+  editor. Inside Braino's own windows, and on the website, the bare Command O
+  works.
 - What is inside each system is a written list of its real parts, not live
   state. Nothing on this screen is reading what the engines are actually doing.
 - The four systems are placed by hand. Their positions say nothing about how
@@ -82,6 +103,6 @@ asking for the heart moves the camera immediately instead of after a round trip.
 
 ## What comes next
 
-1. Let the Mac app and the extension open this on command, full screen.
+1. Let the Chrome extension open it too.
 2. Feed it live state, so a firing signal means a real one.
 3. Let a system light up when it is genuinely the one working.

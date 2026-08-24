@@ -35,9 +35,17 @@ const SPOKEN_TARGETS: { id: SubsystemId; patterns: RegExp }[] = [
   { id: "memory", patterns: /\b(memor|remember|recall)\b/i },
 ];
 
+/* The Mac app opens this full screen and tells it what to do through the URL:
+   which system to fly into, and whether he should already be talking. */
+function initialFocus(): SubsystemId | null {
+  if (typeof window === "undefined") return null;
+  const asked = new URLSearchParams(window.location.search).get("system");
+  return SUBSYSTEMS.some((s) => s.id === asked) ? (asked as SubsystemId) : null;
+}
+
 export default function BrainoOS() {
   const { user, session } = useAuth();
-  const [focus, setFocus] = useState<SubsystemId | null>(null);
+  const [focus, setFocus] = useState<SubsystemId | null>(initialFocus);
   const [hubs, setHubs] = useState<Hub[]>([]);
   const [caption, setCaption] = useState("");
   const [booted, setBooted] = useState(false);
@@ -116,6 +124,17 @@ export default function BrainoOS() {
     toggle: voiceToggle,
     stop: voiceStop,
   } = useBrainoVoice({ accessToken: session?.access_token, onTranscript: voiceTurn });
+
+  /* Opened by voice, so he should already be listening when it appears rather
+     than making you ask a second time. */
+  const autoVoiceRef = useRef(false);
+  useEffect(() => {
+    if (autoVoiceRef.current || typeof window === "undefined") return;
+    if (new URLSearchParams(window.location.search).get("voice") !== "1") return;
+    autoVoiceRef.current = true;
+    const timer = window.setTimeout(() => voiceToggle(), 900);
+    return () => window.clearTimeout(timer);
+  }, [voiceToggle]);
 
   // Ctrl twice to talk, the same gesture as the chat page. Escape pulls out.
   useEffect(() => {
