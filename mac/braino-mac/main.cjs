@@ -1710,95 +1710,47 @@ async function dashboardStatePayload() {
 /* The one window in this app that behaves like a normal Mac app: focusable,
    resizable, real traffic lights, its own Dock icon. The notch overlay stays a
    non-focusable panel; this sits beside it, not inside it. */
-/* Braino OS, full screen.
+/* Braino OS, full screen, inside the overlay Braino already owns.
  *
- * Everything called Braino runs on four systems, and there is now a screen that
- * shows them. Asking to see it takes the whole display: no notch, no window
- * chrome, nothing but the thing itself, with Braino talking from inside it in
- * the same voice he uses everywhere else.
+ * The first cut of this opened a browser window pointed at the website route.
+ * That was the wrong thing: it is a web page in a frame, not Braino, and it
+ * needs the network to show you what he is made of. This draws into the same
+ * transparent full display window the notch lives in, so it takes the whole
+ * screen with nothing else on it, works with the wifi off, and he talks over it
+ * through the voice pipeline that is already running in that renderer.
  *
- * The surface itself is the website route, so the Mac app and the browser are
- * never two different pictures of the same anatomy. Point BRAINO_OS_URL at a
- * dev server to work on it locally.
+ * The surface itself is renderer/braino-os.js.
  */
-const BRAINO_OS_URL = ENV.BRAINO_OS_URL || "https://www.trybraino.com/os";
-let brainoOsWindow = null;
-let notchHiddenForBrainoOs = false;
+let brainoOsOpen = false;
+
+function setBrainoOsSurface(active, system = null) {
+  if (!dockWindow || dockWindow.isDestroyed()) return false;
+  const next = Boolean(active);
+  ensureDockWindowVisible(next ? "braino-os" : "braino-os-closed");
+  /* The overlay is deliberately unfocusable so it never steals the caret. A
+     surface you click into and scroll around has to take that back while it is
+     up, and give it straight back when it goes. */
+  dockWindow.setFocusable(next);
+  if (next) dockWindow.focus();
+  dockWindow.setIgnoreMouseEvents(!next, { forward: true });
+  sendToRenderer("braino-mac:braino-os", { active: next, system: system || null });
+  brainoOsOpen = next;
+  logMac(next ? "braino_os.opened" : "braino_os.closed", { system: system || "all" });
+  return true;
+}
 
 function openBrainoOsWindow(system = null) {
-  const target = new URL(BRAINO_OS_URL);
-  if (system) target.searchParams.set("system", system);
-  // He is meant to be talking the moment it appears, not waiting for a hotkey.
-  target.searchParams.set("voice", "1");
-
-  if (brainoOsWindow && !brainoOsWindow.isDestroyed()) {
-    void brainoOsWindow.loadURL(target.toString());
-    brainoOsWindow.show();
-    brainoOsWindow.focus();
-    return brainoOsWindow;
-  }
-
-  brainoOsWindow = new BrowserWindow({
-    fullscreen: true,
-    frame: false,
-    backgroundColor: "#02050a",
-    show: false,
-    webPreferences: {
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: false,
-      devTools: true,
-    },
-  });
-
-  // He speaks in there, so the surface needs the microphone in its own right.
-  brainoOsWindow.webContents.session.setPermissionRequestHandler((_wc, permission, callback) => {
-    callback(permission === "media");
-  });
-
-  brainoOsWindow.once("ready-to-show", () => {
-    /* The notch floating over a full screen takeover is exactly the thing this
-       is not. It comes back when the takeover closes. */
-    if (dockWindow && !dockWindow.isDestroyed() && dockWindow.isVisible()) {
-      notchHiddenForBrainoOs = true;
-      dockWindow.hide();
-    }
-    brainoOsWindow.show();
-    brainoOsWindow.focus();
-    logMac("braino_os.opened", { system: system || "all", url: BRAINO_OS_URL });
-  });
-
-  /* Escape leaves. Stepping back out of one system is the page's own job, so
-     this is only ever the way out of the whole surface. */
-  brainoOsWindow.webContents.on("before-input-event", (_event, input) => {
-    if (input.type !== "keyDown") return;
-    const meta = input.meta || input.control;
-    if (input.key === "Escape" || (meta && input.key.toLowerCase() === "w")) {
-      closeBrainoOsWindow();
-    }
-  });
-
-  brainoOsWindow.on("closed", () => {
-    brainoOsWindow = null;
-    if (notchHiddenForBrainoOs) {
-      notchHiddenForBrainoOs = false;
-      ensureDockWindowVisible("braino-os-closed");
-    }
-    logMac("braino_os.closed", {});
-  });
-
-  void brainoOsWindow.loadURL(target.toString());
-  return brainoOsWindow;
+  return setBrainoOsSurface(true, system);
 }
 
 function closeBrainoOsWindow() {
-  if (!brainoOsWindow || brainoOsWindow.isDestroyed()) return false;
-  brainoOsWindow.close();
+  if (!brainoOsOpen) return false;
+  setBrainoOsSurface(false);
   return true;
 }
 
 function toggleBrainoOsWindow(system = null) {
-  if (brainoOsWindow && !brainoOsWindow.isDestroyed()) {
+  if (brainoOsOpen) {
     closeBrainoOsWindow();
     return false;
   }
@@ -15388,6 +15340,16 @@ ipcMain.handle("braino-mac:request-accessibility", () => ({
 }));
 
 ipcMain.handle("braino-mac:request-microphone", async () => requestMicrophoneAccess());
+
+ipcMain.on("braino-mac:braino-os-closed", () => {
+  if (!brainoOsOpen) return;
+  brainoOsOpen = false;
+  if (dockWindow && !dockWindow.isDestroyed()) {
+    dockWindow.setFocusable(false);
+    dockWindow.setIgnoreMouseEvents(true, { forward: true });
+  }
+  logMac("braino_os.closed", { source: "renderer" });
+});
 
 ipcMain.on("braino-mac:set-mouse-passthrough", (_event, passthrough) => {
   if (!dockWindow || dockWindow.isDestroyed()) return;

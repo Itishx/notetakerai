@@ -51,17 +51,43 @@ test("closes only when Braino OS is named", () => {
   assert.equal(parseBrainoOsIntent("close this"), null);
 });
 
-/* The window is the whole point: a takeover with the notch still floating over
-   it is not the pure thing. */
-test("the takeover hides the notch and restores it on close", () => {
+/* Braino OS is not a browser pointed at the website.
+ *
+ * The first cut opened a BrowserWindow on the site route, which meant a web
+ * page in a frame that needed the network to show you what he is made of. It
+ * draws into the transparent full display overlay Braino already owns, so it is
+ * the app itself, it works offline, and the voice pipeline already running in
+ * that renderer is the one that talks over it. */
+test("the surface is drawn in the app, not loaded from the web", () => {
   const main = readFileSync(new URL("../mac/braino-mac/main.cjs", import.meta.url), "utf8");
-  const block = main.slice(main.indexOf("function openBrainoOsWindow"), main.indexOf("function closeBrainoOsWindow") + 900);
-  assert.match(block, /fullscreen: true/);
-  assert.match(block, /frame: false/);
-  // The notch goes away while it is open.
-  assert.match(block, /dockWindow\.hide\(\)/);
-  // And comes back afterwards.
-  assert.match(block, /ensureDockWindowVisible\("braino-os-closed"\)/);
-  // He talks in there, so the window needs the microphone.
-  assert.match(block, /setPermissionRequestHandler/);
+  const block = main.slice(
+    main.indexOf("function setBrainoOsSurface"),
+    main.indexOf("function openDashboardWindow"),
+  );
+  // No second window, and nothing fetched.
+  assert.doesNotMatch(block, /new BrowserWindow/);
+  assert.doesNotMatch(block, /loadURL|https?:\/\//);
+  // It drives the overlay that is already there.
+  assert.match(block, /sendToRenderer\("braino-mac:braino-os"/);
+  /* The overlay is deliberately unfocusable so it never steals the caret. A
+     surface you click into and scroll has to take that back, and give it
+     straight back afterwards. */
+  assert.match(block, /dockWindow\.setFocusable\(next\)/);
+  assert.match(block, /dockWindow\.setIgnoreMouseEvents\(!next/);
+});
+
+test("the drawn surface ships with the app", () => {
+  const surface = readFileSync(new URL("../mac/braino-mac/renderer/braino-os.js", import.meta.url), "utf8");
+  const html = readFileSync(new URL("../mac/braino-mac/renderer/index.html", import.meta.url), "utf8");
+  // Loaded by the renderer that owns the notch, not by a page on the internet.
+  assert.match(html, /braino-os\.js/);
+  assert.match(html, /braino-os\.css/);
+  // The four systems are the whole point of the picture.
+  for (const system of ["THE MIND", "THE HEART", "THE EARS", "THE MEMORY"]) {
+    assert.ok(surface.includes(system), system);
+  }
+  // It answers to the voice state rather than animating on its own.
+  assert.match(surface, /setState\(state\)/);
+  const renderer = readFileSync(new URL("../mac/braino-mac/renderer/braino-mac.js", import.meta.url), "utf8");
+  assert.match(renderer, /syncBrainoOsState\(status, text\)/);
 });

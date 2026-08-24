@@ -80,16 +80,24 @@ asking for the heart moves the camera immediately instead of after a round trip.
   A sentence that takes over the whole screen has to be certain, so only the
   possessive and article forms count: "show me your heart" opens it, "put your
   heart into it" does not.
-- `mac/braino-mac/main.cjs`: `openBrainoOsWindow`, a frameless full screen
-  window pointed at the website route. It hides the notch while it is up and
-  puts it back afterwards, and takes its own microphone permission so he can
-  talk from in there.
+- `mac/braino-mac/renderer/braino-os.js` and `braino-os.css`: the surface on
+  Mac, drawn into the transparent full display overlay Braino already owns
+  rather than in a browser. Same geometry and same drawing as the website, kept
+  deliberately identical so the app and the browser are never two different
+  pictures of the same anatomy.
+- `mac/braino-mac/main.cjs`: `setBrainoOsSurface` takes focus and mouse events
+  for the overlay while it is up and gives both straight back afterwards. There
+  is no second window and nothing is fetched.
 
 ## Honest limitations
 
 - The Chrome extension cannot open it yet. Mac and the website can.
-- The Mac takeover loads the live website route, so it needs the network and it
-  needs this page deployed. `BRAINO_OS_URL` points it at a dev server instead.
+- On Mac it is drawn by the app, so it works with the network off. The first cut
+  opened a browser window pointed at the website route, which was a web page in
+  a frame rather than Braino, and needed the wifi to show you what he is made
+  of. That is gone.
+- The geometry exists twice, once in TypeScript for the website and once in
+  plain JavaScript for the Mac renderer. They have to be changed together.
 - The global shortcut is Command Shift O rather than a bare Command O. Taking
   Command O globally would steal Open from Finder, from Chrome and from the
   editor. Inside Braino's own windows, and on the website, the bare Command O

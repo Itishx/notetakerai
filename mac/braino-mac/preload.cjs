@@ -118,6 +118,13 @@ contextBridge.exposeInMainWorld("brainoMac", {
   meetingCaptureFailed: (reason) => ipcRenderer.invoke("braino-mac:meeting-capture-failed", { reason }),
   meetingStealth: (enabled) => ipcRenderer.invoke("braino-mac:meeting-stealth", Boolean(enabled)),
   setMousePassthrough: (passthrough) => ipcRenderer.send("braino-mac:set-mouse-passthrough", Boolean(passthrough)),
+  // Braino OS: the full screen surface inside this same overlay window.
+  onBrainoOs: (callback) => {
+    const handler = (_event, payload) => callback(payload || {});
+    ipcRenderer.on("braino-mac:braino-os", handler);
+    return () => ipcRenderer.removeListener("braino-mac:braino-os", handler);
+  },
+  brainoOsClosed: () => ipcRenderer.send("braino-mac:braino-os-closed"),
   personaBundle: () => ipcRenderer.invoke("braino-mac:persona-bundle"),
   ttsConfig: () => ipcRenderer.invoke("braino-mac:tts-config"),
   tts: (text, referenceId) => ipcRenderer.invoke("braino-mac:tts", text, referenceId || ""),

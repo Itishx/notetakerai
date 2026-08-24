@@ -820,7 +820,23 @@ function pickRoamTarget(now = performance.now()) {
   nextTargetAt = now + 2600 + Math.random() * 4400;
 }
 
+/* Braino OS is his own body, so it has to answer to the same state the notch
+   does: leaning into the light while he thinks, burning while he speaks. */
+function syncBrainoOsState(status, text) {
+  const os = window.__brainoOs;
+  if (!os || !os.isOpen()) return;
+  const live = ["connecting", "listening", "hearing", "captured", "speaking"].includes(status);
+  const energy = status === "speaking" ? 1 : status === "thinking" ? 0.7 : live ? 0.35 : 0;
+  os.setState({
+    energy,
+    thinking: status === "thinking",
+    live,
+    label: (text || status || "IDLE").toUpperCase(),
+  });
+}
+
 function setStatus(status, text) {
+  syncBrainoOsState(status, text);
   statusPill.className = status;
   lane.className = status;
   // Voice is the notch's highest-priority live state. The walker mirrors it
@@ -8418,6 +8434,35 @@ window.brainoMac.onCursorTaskComplete?.((payload) => {
   void speak(line);
 });
 window.brainoMac.onDictationToggle?.((payload) => toggleYapMode(payload?.source || "double Option"));
+
+/* Braino OS: the whole screen becomes what he is made of.
+ *
+ * Drawn by renderer/braino-os.js into this same overlay window, so it is the
+ * app itself rather than a browser pointed at the site, it works offline, and
+ * he talks over it through the voice pipeline already running in here. */
+window.brainoMac.onBrainoOs?.((payload) => {
+  const os = window.__brainoOs;
+  if (!os) return;
+  if (payload && payload.active) {
+    nfClearCaptions();
+    os.open(payload.system || null);
+    logRenderer("braino_os.open", { system: (payload && payload.system) || "all" });
+  } else {
+    os.close();
+    logRenderer("braino_os.close", {});
+  }
+});
+
+/* Escape leaves the surface. Stepping back out of one system is the surface's
+   own job, so this is only ever the way out of the whole thing. */
+window.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape") return;
+  const os = window.__brainoOs;
+  if (!os || !os.isOpen()) return;
+  os.close();
+  window.brainoMac.brainoOsClosed?.();
+  logRenderer("braino_os.close", { source: "escape" });
+});
 
 /* On-device dictation runs entirely in the main process: no WebRTC session
    here, so none of the renderer's own start/stop machinery fires. This handler
