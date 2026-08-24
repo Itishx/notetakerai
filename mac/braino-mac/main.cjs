@@ -113,6 +113,12 @@ const {
 } = require(path.join(__dirname, "dictation.cjs"));
 const { parseMusicSegmentIntent, parseMusicSegmentRange } = require(path.join(__dirname, "music-segment-intent.cjs"));
 const { parseWhatsNewIntent } = require(path.join(__dirname, "whats-new-intent.cjs"));
+const {
+  macLooksMultiStep,
+  macAsksForTheBrain,
+  macStripBrainRequest,
+  macLooksLikeTask,
+} = require(path.join(__dirname, "hil-routing.cjs"));
 const { parseBrainoOsIntent } = require(path.join(__dirname, "braino-os-intent.cjs"));
 const { parseBrainoOsColorIntent } = require(path.join(__dirname, "braino-os-color.cjs"));
 const { parseTeleprompterIntent } = require(path.join(__dirname, "teleprompter-intent.cjs"));
@@ -13426,14 +13432,11 @@ async function runMacHilLoop(command) {
 // several, which sets the step budget. Routing on it stole work the cascade did
 // better, because the cascade can screenshot, launch apps and search files and
 // this loop cannot.
-function macLooksMultiStep(raw) {
-  const t = String(raw || "").toLowerCase();
-  if (t.length < 12) return false;
-  const JOB = "(send|email|play|open|search|find|save|add|move|summari[sz]e|reply|message|schedule|screenshot|download|write|draft|put)";
-  if (new RegExp("\\b(then|after that|and then|once you|followed by)\\b").test(t)) return true;
-  // A job verb on EITHER side of "and" is two jobs. Only checking after it missed
-  // "summarise this and put it in my notes", where the first verb leads.
-  return new RegExp("\\b" + JOB + "\\b.*\\band\\b.*\\b" + JOB + "\\b").test(t);
+/* Off with BRAINO_HIL=0, the way the browser has sbUseHilBrain=false. Read
+   lazily because ENV is parsed further down this file. */
+function macHilEnabled() {
+  const fromFile = typeof ENV === "object" && ENV ? ENV.BRAINO_HIL : "";
+  return String(fromFile || process.env.BRAINO_HIL || "").trim() !== "0";
 }
 
 // ── HIL in shadow ────────────────────────────────────────────────────────────
@@ -14019,6 +14022,24 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
 
   if (isFileActionUndoIntent(text) || isDesktopOrganizeUndoIntent(text)) {
     return undoLastFileAction();
+  }
+
+  /* ── The brain ──────────────────────────────────────────────────────────
+     The same HIL loop the browser Delegate already runs on, now reachable
+     here, so one prompt and one version drive both surfaces.
+
+     Asking him to think hands it over deliberately. What it does NOT do is
+     take multi step work off the cascade on its own: that was tried and
+     reverted, and the note above macHilEnabled records why. This loop has
+     browser hands, navigate and click and type against the accessibility
+     tree. The cascade can launch apps, screenshot and search files, and it
+     answers in under a second. Handing it "open spotify and play billie jean"
+     would be a downgrade dressed up as intelligence.
+
+     Off with BRAINO_HIL=0. */
+  if (macHilEnabled() && macAsksForTheBrain(text)) {
+    logMac("delegate.hil_loop.front", { reason: "asked", raw: textForLog(raw) });
+    return runMacHilLoop(macStripBrainRequest(raw));
   }
 
   const noteIntent = parseNoteIntent(raw);
@@ -14874,6 +14895,15 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
     // corpus exists to catch. Hand it to the loop instead: it can look, act, and
     // say plainly when something is genuinely beyond it.
     logMac("delegate.hil_loop.fallback", { raw: textForLog(raw) });
+    return runMacHilLoop(raw);
+  }
+
+  /* The cascade ran out of patterns. If this is a job rather than a question,
+     the loop gets it: it can look at the screen, act, verify, and say plainly
+     when something is beyond it, which beats a confident conversational
+     non-answer to a request to do something. */
+  if (macHilEnabled() && macLooksLikeTask(raw)) {
+    logMac("delegate.hil_loop.unmatched", { raw: textForLog(raw) });
     return runMacHilLoop(raw);
   }
 
