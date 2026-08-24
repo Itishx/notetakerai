@@ -91,6 +91,22 @@ function macFastLane(raw) {
   return MAC_FAST_LANE.some((re) => re.test(t));
 }
 
+/* Pointing at the screen.
+ *
+ * "rename this file", "click Done on the screen", "open that invoice you just
+ * downloaded". A referent like this cannot be answered by a pattern match,
+ * because working out what "this" is requires looking. The cascade tried
+ * anyway: the log has "rename this file to invoice one" answered with "I
+ * searched the Mac, but did not find this", which is what guessing looks like.
+ *
+ * Kept deliberately narrow. "play that song" is still the fast lane; only an
+ * explicit reference to what is on screen, or to something just done, counts. */
+const MAC_SCREEN_REFERENT = /\bon (?:my|the|this) screen\b|\byou (?:just |can )?(?:see|saw)\b|\b(?:this|that) (?:file|page|email|tab|window|invoice|document|folder|thing|one)\b|\byou just (?:downloaded|opened|made|created|found)\b|\blook at (?:my|the) screen\b/;
+
+function macNeedsScreenContext(raw) {
+  return MAC_SCREEN_REFERENT.test(String(raw || "").toLowerCase());
+}
+
 /* What the brain gets, without anyone asking it to.
  *
  * A job, not a question, and not something the cascade does better. This is the
@@ -98,11 +114,14 @@ function macFastLane(raw) {
  */
 function macWantsTheBrain(raw) {
   if (macAsksForTheBrain(String(raw || "").toLowerCase())) return true;
+  // Working out what "this" points at means looking, which only he can do.
+  if (macNeedsScreenContext(raw)) return true;
   if (!macLooksLikeTask(raw)) return false;
   return !macFastLane(raw);
 }
 
 module.exports = {
+  macNeedsScreenContext,
   macFastLane,
   macWantsTheBrain,
   macLooksMultiStep,

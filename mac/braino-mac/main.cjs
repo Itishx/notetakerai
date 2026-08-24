@@ -13223,9 +13223,25 @@ function fireHilReasonThinking(raw) {
 // look at the result before choosing the next move, anything it simply does not
 // match.
 const macHilWait = (ms) => new Promise((r) => setTimeout(r, ms));
-const MAC_HIL_MAX_STEPS = 14;          // AX calls are slow; this is a real ceiling, not a formality
-const MAC_HIL_MAX_MS = 90000;          // and a wall clock, because steps say nothing about elapsed time
-const MAC_HIL_OBSERVE_CAP = 120;
+/* No step budget worth the name.
+   A counter stopped good runs mid-work: the Meet booking took seven steps, the
+   invoice eight, and a fourteen step ceiling killed the Faro run at a hundred
+   seconds while it was still trying. What should stop him is going in circles,
+   not a number. These two are backstops for a runaway, not a budget. */
+const MAC_HIL_HARD_STOP = 60;
+const MAC_HIL_MAX_MS = 420000;
+/* Repeating yourself is the real end condition. Three identical actions inside
+   the last handful of moves means the screen is not responding to him. */
+const MAC_HIL_REPEAT_LIMIT = 3;
+const MAC_HIL_REPEAT_WINDOW = 6;
+/* 120 hid the controls he was asked to click: "Faro is still below the visible
+   element cap" is in the log, and he could not scroll to it either. */
+const MAC_HIL_OBSERVE_CAP = 220;
+
+/* A new command cancels whatever he was doing.
+   Two runs were alive at once in the log, both clicking, fighting over the same
+   screen: one trying to stop a recording while the other opened an email. */
+let macHilGeneration = 0;
 
 // The AX helper answers in one line: "observe\t{json}".
 async function macBuildObservation() {
@@ -13258,6 +13274,46 @@ async function macBuildObservation() {
     windowTitle: data?.window || "",
     browserUrl,
   };
+}
+
+/* A real look at the screen.
+ *
+ * `look` used to return the very same accessibility list that `read` returns,
+ * which is why the log has him "inspecting the screen" five times in a row and
+ * seeing the identical thing each time, then giving up. The prompt promises a
+ * screenshot handed to a vision model. This is that promise kept. */
+async function macLookAtScreen(goal = "") {
+  const shot = await captureScreenBase64();
+  if (!shot.ok) return { ok: false, error: "I could not capture the screen." };
+  const authToken = await getBrainoAuthToken();
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !authToken) {
+    return { ok: false, error: "I cannot look at the screen right now." };
+  }
+  const message = [
+    "Describe this screen for someone who has to act on it.",
+    goal ? `They are trying to: ${goal}` : "",
+    "Name the windows, every visible control and its label, and any text that matters.",
+    "Be concrete and complete. No commentary, no advice.",
+  ].filter(Boolean).join("\n");
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30000);
+    const response = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/chat-about-notes`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${authToken}` },
+      body: JSON.stringify({ notes: "", chatHistory: [], message, visionMode: "describe", imageBase64: shot.base64 }),
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    const data = await response.json().catch(() => ({}));
+    const reply = String(data?.reply || "").trim();
+    if (!response.ok || !reply) throw new Error(data?.error || `look failed (${response.status})`);
+    logMac("hil.look", { chars: reply.length });
+    return { ok: true, sees: reply.slice(0, 3000) };
+  } catch (error) {
+    logMac("hil.look.failed", { error: String(error?.message || error) });
+    return { ok: false, error: "I looked, but could not make sense of the screen." };
+  }
 }
 
 async function macExecuteHilAction(action, elements) {
@@ -13300,9 +13356,22 @@ async function macExecuteHilAction(action, elements) {
     await macHilWait(500);
     return res.status === "key" ? { ok: true } : { ok: false, error: `${res.status}: ${res.detail}` };
   }
-  if (type === "read" || type === "look") {
+  if (type === "read") {
     const obs = await macBuildObservation();
     return { ok: obs.ok, sees: obs.text.slice(0, 3000), error: obs.error };
+  }
+  if (type === "look") {
+    return macLookAtScreen(String(action.query || action.goal || ""));
+  }
+  if (type === "scroll") {
+    /* He was being told "Mac cannot run the action scroll yet" and spending
+       turns rediscovering it. There is no accessibility verb for scrolling, so
+       he scrolls the way a person does. */
+    const direction = String(action.direction || "down").toLowerCase();
+    const key = direction.startsWith("up") ? "pageup" : "pagedown";
+    const res = await runAxHelper(["key", key], 8000);
+    await macHilWait(500);
+    return res.status === "key" ? { ok: true } : { ok: false, error: `${res.status}: ${res.detail}` };
   }
   if (type === "web_search") {
     const found = await runMacWebSearch(String(action.query || ""));
@@ -13329,7 +13398,10 @@ async function runMacHilLoop(command, resume = null) {
   const runId = resume?.runId || crypto.randomUUID();
   // Several jobs need more room than one. This is the only thing the multi-step
   // read is used for now: how much rope, not which brain.
-  const maxSteps = macLooksMultiStep(command) ? MAC_HIL_MAX_STEPS : Math.ceil(MAC_HIL_MAX_STEPS / 2);
+  const myGeneration = macHilGeneration;
+  const maxSteps = MAC_HIL_HARD_STOP;
+  const recentActions = [];
+  let spokenLast = "";
   const state = resume?.state || { tasks: [], facts: [], asides: [], steps: [], budgetLeft: maxSteps };
   let lastStep = resume?.lastStep || null;
   let said = resume?.said || "";
@@ -13348,6 +13420,12 @@ async function runMacHilLoop(command, resume = null) {
     // Every turn is a model call plus two or three AX walks, and this holds the
     // single delegate IPC the whole time. A run that will not finish has to give
     // the surface back rather than leave the user talking to a frozen Braino.
+    /* Someone asked for something else. Stop cleanly rather than keep clicking
+       underneath the new job. */
+    if (macHilGeneration !== myGeneration) {
+      logMac("hil.loop.superseded", { runId, step });
+      return { ok: true, say: "", source: "hil_loop", superseded: true };
+    }
     if (Date.now() > deadline) {
       logMac("hil.loop.timeout", { runId, step });
       return { ok: false, say: said || "That was taking too long, so I stopped partway rather than leave you hanging.", source: "hil_loop" };
@@ -13394,6 +13472,15 @@ async function runMacHilLoop(command, resume = null) {
     if (thinking) {
       console.log(`[Braino HIL-LOOP] ${step + 1}: ${thinking}`);
       sendTaskProgress({ status: "thinking", text: thinking.slice(0, 140) });
+      /* Say it out loud as he works. Watching a silent thing click around your
+         screen is unnerving; hearing what it is doing is the difference between
+         a tool and someone helping you. One breath, first sentence only, and
+         never the same line twice in a row. */
+      const aloud = thinking.split(/(?<=[.!?])\s/)[0].trim().slice(0, 150);
+      if (aloud && aloud !== spokenLast) {
+        spokenLast = aloud;
+        sendToRenderer("braino-mac:speak-line", { text: aloud });
+      }
     }
     // HIL owns the plan. Its split is the job list, first turn only.
     if (turn.split?.tasks?.length && !state.tasks.length) {
@@ -13408,8 +13495,22 @@ async function runMacHilLoop(command, resume = null) {
 
     const d = turn.decision;
     if (d.type === "ask") {
-      // pendingMacWorkflow is how this app remembers it asked something. Without
-      // it the question was rhetorical: the user answered into a void.
+      /* Hold the run, the same way the gate does.
+         Only the gate was held, so a clarifying question threw everything away
+         and the answer restarted the planning from turn zero. That is the
+         delete loop in the log: "Yes please" and "Yes bro" both came back
+         resumed:false and got asked the same thing again. A question you answer
+         should continue the work, not begin it again. */
+      pendingHilRun = {
+        runId,
+        command,
+        state,
+        lastStep,
+        said,
+        stepsUsed: step,
+        gatedSig: "",
+        createdAt: Date.now(),
+      };
       setPendingMacWorkflow({ type: "hil_answer", stage: "hil_answer", data: { command, question: d.question } });
       return { ok: true, say: d.question, source: "hil_loop" };
     }
@@ -13457,6 +13558,21 @@ async function runMacHilLoop(command, resume = null) {
     }
     // A yes covers the step it was asked about, once.
     if (stepSig === approvedSig) approvedSig = "";
+    /* The same move, over and over, means the screen is not answering him. The
+       log has him clicking a stale Extensions control four times and reading the
+       same page five, which a step counter can only cut short, never explain. */
+    recentActions.push(stepSig);
+    if (recentActions.length > MAC_HIL_REPEAT_WINDOW) recentActions.shift();
+    const repeats = recentActions.filter((sig) => sig === stepSig).length;
+    if (repeats >= MAC_HIL_REPEAT_LIMIT) {
+      logMac("hil.loop.circling", { runId, step, action: stepSig });
+      return {
+        ok: false,
+        say: said || "I keep trying the same thing and the screen is not changing, so I have stopped rather than keep going.",
+        source: "hil_loop",
+      };
+    }
+
     const result = await macExecuteHilAction(stepObj.action, obs.elements);
     state.steps.push({
       intent: String(stepObj.intent || ""),
@@ -13481,6 +13597,10 @@ async function runMacHilLoop(command, resume = null) {
     const settled = verified.ok ? result : { ...result, ok: false, error: verified.why };
     lastStep = { intent: stepObj.intent || "", action: stepObj.action, expects: stepObj.expects || "", result: settled };
     state.budgetLeft = Math.max(1, maxSteps - step - 1);
+    if (macHilGeneration !== myGeneration) {
+      logMac("hil.loop.superseded", { runId, step, at: "after_step" });
+      return { ok: true, say: "", source: "hil_loop", superseded: true };
+    }
   }
   logMac("hil.loop.budget", { runId });
   return { ok: false, say: said || "That took more steps than I give myself for one task, so I stopped.", source: "hil_loop" };
@@ -13958,6 +14078,8 @@ ipcMain.handle("braino-code:source", async (_event, payload = {}) => {
 
 async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
   const text = raw.toLowerCase();
+  // Whatever he was doing, this is the new job. See macHilGeneration.
+  macHilGeneration += 1;
   const latestContext = await readActiveMacContext();
   if (latestContext && !isBrainoSelfContext(latestContext)) activeMacContext = latestContext;
   logMac("delegate.intent.start", {

@@ -718,6 +718,9 @@ func runTypeIndex(index: Int, expected: String, base64: String, cap: Int) {
 let KEY_CODES: [String: CGKeyCode] = [
   "return": 36, "enter": 36, "tab": 48, "space": 49, "escape": 53, "esc": 53,
   "delete": 51, "backspace": 51, "down": 125, "up": 126, "left": 123, "right": 124,
+  // Scrolling. The accessibility API has no scroll verb, so the loop scrolls the
+  // way a person does, by pressing the page key.
+  "pagedown": 121, "pageup": 116, "home": 115, "end": 119,
 ]
 
 func runKey(name: String) {

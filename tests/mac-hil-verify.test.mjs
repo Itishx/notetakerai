@@ -93,3 +93,45 @@ test("the gate holds the run instead of throwing it away", () => {
   // And the loop starts where it stopped.
   assert.match(main, /for \(let step = startStep; step < maxSteps/);
 });
+
+/* Everything the session log said was broken, asserted in the source.
+ *
+ * These are shape checks rather than behaviour, because each one needs a live
+ * screen to exercise. They exist so the specific regressions from 2026-08-25
+ * cannot come back quietly. */
+test("the loop keeps going, stops when circling, and says what it is doing", () => {
+  const main = readFileSync(new URL("../mac/braino-mac/main.cjs", import.meta.url), "utf8");
+  // No step budget worth the name: a counter killed the Faro run mid-work.
+  assert.match(main, /MAC_HIL_HARD_STOP = 60/);
+  // What ends a run is repeating yourself, not a number.
+  assert.match(main, /hil\.loop\.circling/);
+  assert.match(main, /repeats >= MAC_HIL_REPEAT_LIMIT/);
+  // A new command cancels whatever was running: two runs were alive at once.
+  assert.match(main, /macHilGeneration \+= 1/);
+  assert.match(main, /hil\.loop\.superseded/);
+  // He speaks his progress as he works.
+  assert.match(main, /braino-mac:speak-line", \{ text: aloud \}/);
+});
+
+test("a question holds the run, the same as the gate", () => {
+  const main = readFileSync(new URL("../mac/braino-mac/main.cjs", import.meta.url), "utf8");
+  const ask = main.slice(main.indexOf('if (d.type === "ask")'), main.indexOf('if (d.type === "answer")'));
+  assert.match(ask, /pendingHilRun = \{/);
+  assert.match(ask, /stepsUsed: step/);
+  // A question is not permission, so nothing is pre-approved by answering one.
+  assert.match(ask, /gatedSig: ""/);
+});
+
+test("he can actually look, and actually scroll", () => {
+  const main = readFileSync(new URL("../mac/braino-mac/main.cjs", import.meta.url), "utf8");
+  // look is a screenshot to a vision model, not the same list read returns.
+  assert.match(main, /async function macLookAtScreen/);
+  assert.match(main, /visionMode: "describe"/);
+  assert.doesNotMatch(main, /type === "read" \|\| type === "look"/);
+  // scroll exists at all now.
+  assert.match(main, /if \(type === "scroll"\)/);
+  const swift = readFileSync(new URL("../mac/braino-mac/native/BrainoAX.swift", import.meta.url), "utf8");
+  assert.match(swift, /"pagedown": 121/);
+  // And he can see more of the screen than before.
+  assert.match(main, /MAC_HIL_OBSERVE_CAP = 220/);
+});

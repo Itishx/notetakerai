@@ -141,3 +141,26 @@ test("questions still never reach the loop", () => {
     assert.equal(macWantsTheBrain(said), false, said);
   }
 });
+
+/* Pointing at the screen.
+ *
+ * Working out what "this" is requires looking, which a pattern match cannot do.
+ * The log has "rename this file to invoice one" answered with "I searched the
+ * Mac, but did not find this" — that is guessing. Narrow on purpose: "play that
+ * song" is still the fast lane. */
+test("anything pointing at the screen needs eyes, so it needs the loop", () => {
+  const { macNeedsScreenContext } = require("../mac/braino-mac/hil-routing.cjs");
+  for (const said of [
+    "rename this file to invoice one",
+    "click on done on the screen what you see",
+    "open that invoice which you just downloaded",
+    "look at my screen and tell me what is using energy",
+  ]) {
+    assert.equal(macNeedsScreenContext(said), true, said);
+    assert.equal(macWantsTheBrain(said), true, said);
+  }
+  for (const said of ["play that song", "take a screenshot", "open spotify"]) {
+    assert.equal(macNeedsScreenContext(said), false, said);
+    assert.equal(macWantsTheBrain(said), false, said);
+  }
+});
