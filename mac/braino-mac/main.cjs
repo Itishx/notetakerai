@@ -15383,6 +15383,33 @@ ipcMain.handle("braino-mac:request-accessibility", () => ({
 
 ipcMain.handle("braino-mac:request-microphone", async () => requestMicrophoneAccess());
 
+/* Braino OS commands, answered without going near the delegate.
+ *
+ * The voice turn checks this before it forks to chat, because chat was
+ * swallowing these: a spoken "turn yourself orange" was answered as
+ * conversation and the intent chain never saw it. Same trap the persona and
+ * grow commands already had to escape. */
+ipcMain.handle("braino-mac:braino-os-command", (_event, text) => {
+  const raw = String(text || "");
+  const colour = parseBrainoOsColorIntent(raw);
+  if (colour) {
+    logMac("braino_os.voice_color", { action: colour.action, name: colour.name || "" });
+    setBrainoOsColor(colour.action === "reset" ? null : colour.color);
+    return { handled: true, say: colour.say };
+  }
+  const surface = parseBrainoOsIntent(raw);
+  if (surface) {
+    logMac("braino_os.voice_surface", { action: surface.action, system: surface.system || "all" });
+    if (surface.action === "close") {
+      const wasOpen = closeBrainoOsWindow();
+      return { handled: true, say: wasOpen ? surface.say : "It is not open." };
+    }
+    openBrainoOsWindow(surface.system);
+    return { handled: true, say: surface.say };
+  }
+  return { handled: false };
+});
+
 ipcMain.on("braino-mac:braino-os-closed", () => {
   if (!brainoOsOpen) return;
   brainoOsOpen = false;

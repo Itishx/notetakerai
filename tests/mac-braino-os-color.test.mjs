@@ -58,3 +58,31 @@ test("talking about a colour never repaints him", () => {
     assert.equal(parseBrainoOsColorIntent(said), null, said);
   }
 });
+
+test("the shortest form works too", () => {
+  assert.equal(parseBrainoOsColorIntent("turn orange")?.name, "orange");
+  assert.equal(parseBrainoOsColorIntent("go red")?.name, "red");
+  assert.equal(parseBrainoOsColorIntent("become purple")?.name, "purple");
+});
+
+/* The parser being right is not the same as the phrase arriving.
+ *
+ * A real session logged "turn yourself orange" producing no delegate run at
+ * all: the voice turn forks to chat first, chat answered it as conversation,
+ * and the intent chain in the main process never saw a word. The persona and
+ * grow commands already had to escape that same trap, and the only thing that
+ * keeps this working is being checked before the fork. */
+test("Braino OS commands are caught before chat can swallow them", async () => {
+  const { readFileSync } = await import("node:fs");
+  const renderer = readFileSync(new URL("../mac/braino-mac/renderer/braino-mac.js", import.meta.url), "utf8");
+  const osCall = renderer.indexOf("if (await runBrainoOsVoiceCommand(turnText)) return;");
+  const chatFork = renderer.indexOf("if (shouldUseRealtimeDirectChat(turnText))");
+  assert.ok(osCall > 0, "the voice turn checks Braino OS commands");
+  assert.ok(chatFork > 0, "the chat fork is still there");
+  assert.ok(osCall < chatFork, "Braino OS has to be checked BEFORE the chat fork");
+
+  const main = readFileSync(new URL("../mac/braino-mac/main.cjs", import.meta.url), "utf8");
+  assert.match(main, /ipcMain\.handle\("braino-mac:braino-os-command"/);
+  const preload = readFileSync(new URL("../mac/braino-mac/preload.cjs", import.meta.url), "utf8");
+  assert.match(preload, /brainoOsCommand:/);
+});

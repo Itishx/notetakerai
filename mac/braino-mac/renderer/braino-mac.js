@@ -704,6 +704,28 @@ async function runBrainoGrowVoiceCommand(text) {
   return true;
 }
 
+/* Braino OS, caught before the chat fork.
+ *
+ * These have to be handled here for the same reason the persona and grow
+ * commands are: chat answers them as conversation and the intent chain in the
+ * main process never sees a word of it. A real session logged "turn yourself
+ * orange" producing no delegate run at all. */
+async function runBrainoOsVoiceCommand(text) {
+  const said = String(text || "").trim();
+  if (!said) return false;
+  let outcome = null;
+  try {
+    outcome = await window.brainoMac.brainoOsCommand?.(said);
+  } catch (error) {
+    logRenderer("braino_os.voice_command_failed", { error: String(error) });
+    return false;
+  }
+  if (!outcome || !outcome.handled) return false;
+  logRenderer("braino_os.voice_command", { chars: said.length });
+  if (outcome.say) await speak(outcome.say);
+  return true;
+}
+
 function getDockBounds() {
   const sideInset = Math.max(54, window.innerWidth * 0.03);
   const measuredDockTop = Number(displayMetrics?.dockTop || 0);
@@ -6766,6 +6788,7 @@ function flushRealtimeTranscript(reason) {
         turnText = outcome.remainder;
       }
       if (await runBrainoGrowVoiceCommand(turnText)) return;
+      if (await runBrainoOsVoiceCommand(turnText)) return;
       if (await runMacTeamInput(turnText, { keepRealtime: true, fromVoice: true })) return;
       if (shouldUseRealtimeDirectChat(turnText)) {
         const handled = await answerViaRealtimeChat(turnText);

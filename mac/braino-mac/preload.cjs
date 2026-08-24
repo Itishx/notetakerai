@@ -125,6 +125,7 @@ contextBridge.exposeInMainWorld("brainoMac", {
     return () => ipcRenderer.removeListener("braino-mac:braino-os", handler);
   },
   brainoOsClosed: () => ipcRenderer.send("braino-mac:braino-os-closed"),
+  brainoOsCommand: (text) => ipcRenderer.invoke("braino-mac:braino-os-command", text),
   onBrainoOsColor: (callback) => {
     const handler = (_event, payload) => callback(payload || {});
     ipcRenderer.on("braino-mac:braino-os-color", handler);
