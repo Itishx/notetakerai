@@ -20,6 +20,7 @@ const HilLoopDocs = lazy(() => import("./pages/HilLoopDocs.tsx"));
 const HowBrainoTalksDocs = lazy(() => import("./pages/HowBrainoTalksDocs.tsx"));
 const HumanIntelligence = lazy(() => import("./pages/HumanIntelligence.tsx"));
 const BrainoOSTeaser = lazy(() => import("./pages/BrainoOSTeaser.tsx"));
+const BrainoOSLive = lazy(() => import("./pages/BrainoOS.tsx"));
 const EcosystemTeaser = lazy(() => import("./pages/EcosystemTeaser.tsx"));
 const MoonwalkTeaser = lazy(() => import("./pages/MoonwalkTeaser.tsx"));
 const YapMode = lazy(() => import("./pages/YapMode.tsx"));
@@ -213,6 +214,7 @@ function AppRoutes() {
         <Route path="/emotional-intelligence" element={<VisualEmotionalEngine />} />
         <Route path="/Vig" element={<VisualEmotionalEngine />} />
         <Route path="/braino-os" element={<BrainoOSTeaser />} />
+        <Route path="/os" element={<BrainoOSLive />} />
         <Route path="/ecosystem-teaser" element={<EcosystemTeaser />} />
         <Route path="/moonwalk-teaser" element={<MoonwalkTeaser />} />
         <Route path="/yap-mode" element={<YapMode />} />

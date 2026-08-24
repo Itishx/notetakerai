@@ -20,6 +20,18 @@ export type KnowledgeEntry = {
 
 export const KNOWLEDGE_ENTRIES: readonly KnowledgeEntry[] = [
   {
+    slug: "braino-os-ui",
+    title: "Braino OS: The Thing Itself, Looked At Directly",
+    category: "Feature",
+    date: "2026-08-24",
+    dateLabel: "August 24, 2026",
+    description:
+      "A full screen at /os where you see what every version of Braino actually runs on: the mind, the heart, the ears and the memory, drawn as one living mass of blue filaments turning in the dark with signals firing between them. Braino talks from inside it in his own voice, and you can fly into any of the four systems by clicking it or asking for it by name.",
+    status: "MVP",
+    platform: "Braino website",
+    number: "035",
+  },
+  {
     slug: "braino-everything-deck",
     title: "The Braino Deck: All of Him, Explained From Nothing",
     category: "Design decision",
