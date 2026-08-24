@@ -1722,6 +1722,29 @@ async function dashboardStatePayload() {
  * The surface itself is renderer/braino-os.js.
  */
 let brainoOsOpen = false;
+let brainoOsEscapeBound = false;
+
+/* Escape has to work even if the panel never took keyboard focus.
+ *
+ * This is a window that covers every display and floats over fullscreen apps.
+ * The first version relied on a keydown listener in the renderer, and when that
+ * did not fire there was no way out at all: the screen was taken and the app
+ * underneath could not be seen. A surface like this needs a way out that does
+ * not depend on anything, so Escape is claimed globally, and only for exactly
+ * as long as the surface is up. */
+function bindBrainoOsEscape(active) {
+  if (active && !brainoOsEscapeBound) {
+    brainoOsEscapeBound = globalShortcut.register("Escape", () => {
+      closeBrainoOsWindow();
+    });
+    if (!brainoOsEscapeBound) logMac("braino_os.escape_unavailable", {});
+    return;
+  }
+  if (!active && brainoOsEscapeBound) {
+    try { globalShortcut.unregister("Escape"); } catch (_) {}
+    brainoOsEscapeBound = false;
+  }
+}
 
 function setBrainoOsSurface(active, system = null) {
   if (!dockWindow || dockWindow.isDestroyed()) return false;
@@ -1734,6 +1757,7 @@ function setBrainoOsSurface(active, system = null) {
   if (next) dockWindow.focus();
   dockWindow.setIgnoreMouseEvents(!next, { forward: true });
   sendToRenderer("braino-mac:braino-os", { active: next, system: system || null });
+  bindBrainoOsEscape(next);
   brainoOsOpen = next;
   logMac(next ? "braino_os.opened" : "braino_os.closed", { system: system || "all" });
   return true;
@@ -15344,6 +15368,7 @@ ipcMain.handle("braino-mac:request-microphone", async () => requestMicrophoneAcc
 ipcMain.on("braino-mac:braino-os-closed", () => {
   if (!brainoOsOpen) return;
   brainoOsOpen = false;
+  bindBrainoOsEscape(false);
   if (dockWindow && !dockWindow.isDestroyed()) {
     dockWindow.setFocusable(false);
     dockWindow.setIgnoreMouseEvents(true, { forward: true });

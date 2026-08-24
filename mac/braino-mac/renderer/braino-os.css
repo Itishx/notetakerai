@@ -94,6 +94,23 @@
 }
 .bos-status[data-live="1"]::before { background: #7dffd0; box-shadow: 0 0 10px #7dffd0; }
 
+.bos-leave {
+  position: absolute;
+  right: 34px;
+  top: 62px;
+  padding: 6px 14px;
+  font: inherit;
+  font-size: 10px;
+  letter-spacing: 0.28em;
+  color: #8fc4e4;
+  background: rgba(2, 5, 10, 0.65);
+  border: 1px solid rgba(95, 184, 232, 0.55);
+  cursor: pointer;
+  pointer-events: auto;
+  transition: color 200ms ease, border-color 200ms ease, background 200ms ease;
+}
+.bos-leave:hover { color: #eaf8ff; border-color: #8fd8ff; background: rgba(20, 60, 90, 0.7); }
+
 .bos-panel {
   position: absolute;
   left: 40px;

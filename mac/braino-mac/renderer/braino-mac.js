@@ -4994,6 +4994,14 @@ function pointHitsBrainoUi(x, y) {
 }
 
 function refreshMousePassthrough(event) {
+  /* Braino OS owns the whole screen while it is up, so the mouse belongs to it
+     and to nothing else. Without this the arbiter below handed clicks back to
+     whatever was underneath on the first mouse move, which is why PULL BACK
+     did nothing at all. */
+  if (window.__brainoOs && window.__brainoOs.isOpen()) {
+    setMousePassthrough(false);
+    return;
+  }
   if (herMode) {
     setMousePassthrough(false);
     return;
@@ -8193,7 +8201,10 @@ brainoCustomizerDone.addEventListener("click", () => {
 });
 
 window.addEventListener("mousemove", refreshMousePassthrough, { passive: true });
-window.addEventListener("mouseleave", () => setMousePassthrough(true), { passive: true });
+window.addEventListener("mouseleave", () => {
+  if (window.__brainoOs && window.__brainoOs.isOpen()) return;
+  setMousePassthrough(true);
+}, { passive: true });
 window.addEventListener("resize", () => {
   if (movementMode === "dock") {
     const dock = getDockBounds();

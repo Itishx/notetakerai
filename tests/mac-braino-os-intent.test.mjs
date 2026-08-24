@@ -91,3 +91,39 @@ test("the drawn surface ships with the app", () => {
   const renderer = readFileSync(new URL("../mac/braino-mac/renderer/braino-mac.js", import.meta.url), "utf8");
   assert.match(renderer, /syncBrainoOsState\(status, text\)/);
 });
+
+/* Getting out again.
+ *
+ * This covers every display and floats over fullscreen apps, so a version of it
+ * you cannot dismiss is not a bug, it is a trap. The first one was: the mouse
+ * arbiter runs on every mouse move and knew nothing about the surface, so it
+ * handed clicks straight back to whatever was underneath and PULL BACK did
+ * nothing, and Escape depended on a panel that had never taken keyboard focus.
+ * There are now three ways out and none of them depend on the other two. */
+test("the surface keeps the mouse it needs", () => {
+  const renderer = readFileSync(new URL("../mac/braino-mac/renderer/braino-mac.js", import.meta.url), "utf8");
+  const arbiter = renderer.slice(
+    renderer.indexOf("function refreshMousePassthrough"),
+    renderer.indexOf("function refreshMousePassthrough") + 700,
+  );
+  // Braino OS is checked before anything else decides where the mouse goes.
+  assert.match(arbiter, /__brainoOs && window\.__brainoOs\.isOpen\(\)/);
+  assert.ok(
+    arbiter.indexOf("__brainoOs") < arbiter.indexOf("herMode"),
+    "Braino OS has to be checked before the other passthrough owners",
+  );
+});
+
+test("there is always a way out", () => {
+  const main = readFileSync(new URL("../mac/braino-mac/main.cjs", import.meta.url), "utf8");
+  const surface = readFileSync(new URL("../mac/braino-mac/renderer/braino-os.js", import.meta.url), "utf8");
+  // Escape, claimed globally so it works without keyboard focus, and only for
+  // as long as the surface is up so it never shadows Escape anywhere else.
+  assert.match(main, /globalShortcut\.register\("Escape"/);
+  assert.match(main, /globalShortcut\.unregister\("Escape"\)/);
+  assert.match(main, /bindBrainoOsEscape\(next\)/);
+  // A visible control, for when you do not know the shortcut.
+  assert.match(surface, /bos-leave/);
+  // And the shortcut that opened it closes it.
+  assert.match(main, /brainoOs: globalShortcut\.register\("CommandOrControl\+Shift\+O"/);
+});

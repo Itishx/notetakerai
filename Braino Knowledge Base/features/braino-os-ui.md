@@ -43,8 +43,13 @@ Three ways in, because you do not always want to say it out loud.
 - **Command O**, anywhere on the website.
 
 Once it is open: press Ctrl twice to talk, click a system or ask for it by name
-to fly inside, scroll to zoom, and **PULL BACK** to come out. On the Mac
-takeover, Escape leaves the surface entirely.
+to fly inside, scroll to zoom, and **PULL BACK** to step out of one system
+without leaving.
+
+Three ways out of the surface itself, none of which depend on the others,
+because something that covers every display and floats over fullscreen apps has
+to be dismissable no matter what: **Escape**, the **LEAVE** control in the top
+right, or **Command Shift O** again.
 
 Spoken navigation is handled on the page rather than sent to the model, so
 asking for the heart moves the camera immediately instead of after a round trip.

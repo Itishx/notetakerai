@@ -308,6 +308,18 @@
     statusEl = el("div", "bos-status", chrome);
     statusEl.textContent = "IDLE";
 
+    /* A way out that needs no shortcut and no knowledge. This covers every
+       display and floats over fullscreen apps, so there is always something
+       visible to click to leave. */
+    const leave = el("button", "bos-leave", root);
+    leave.type = "button";
+    leave.textContent = "LEAVE  ESC";
+    leave.addEventListener("click", (event) => {
+      event.stopPropagation();
+      api.close();
+      try { window.brainoMac && window.brainoMac.brainoOsClosed(); } catch (_) {}
+    });
+
     panel = el("div", "bos-panel", root);
     captionEl = el("div", "bos-caption", root);
     captionEl.textContent = "SAY WHAT YOU WANT TO SEE / CLICK A SYSTEM TO GO INSIDE / SCROLL TO ZOOM / ESC TO LEAVE";
@@ -630,6 +642,7 @@
     close() {
       if (!root) return false;
       open = false;
+      focus = null;
       root.classList.remove("is-open");
       setFocus(null);
       try { window.brainoMac && window.brainoMac.setMousePassthrough(true); } catch (_) {}
