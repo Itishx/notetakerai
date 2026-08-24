@@ -120,6 +120,11 @@ const {
   macLooksLikeTask,
   macWantsTheBrain,
 } = require(path.join(__dirname, "hil-routing.cjs"));
+const {
+  macVerifyAssert,
+  macHilStepSignature,
+  macHilAnswerApproves,
+} = require(path.join(__dirname, "hil-verify.cjs"));
 const { parseBrainoOsIntent } = require(path.join(__dirname, "braino-os-intent.cjs"));
 const { parseBrainoOsColorIntent } = require(path.join(__dirname, "braino-os-color.cjs"));
 const { parseTeleprompterIntent } = require(path.join(__dirname, "teleprompter-intent.cjs"));
@@ -3513,20 +3518,48 @@ async function handlePendingMacWorkflow(raw) {
   }
   if (isWorkflowCancelIntent(raw)) {
     clearPendingMacWorkflow();
+    pendingHilRun = null;
     return { ok: true, say: "Cancelled. I did not do anything." };
   }
 
-  // The HIL loop asked something and stopped. Fold the answer back into the
-  // original command and run it again: the loop is stateless between calls, so
-  // the answer has to arrive as part of the command rather than as a resumption.
-  // Without this the loop's questions were rhetorical and the pending slot would
-  // sit there until it timed out.
+  /* The loop asked something and stopped. Pick the SAME run back up.
+   *
+   * This used to fold the answer into the command as text and run the loop
+   * again from turn zero, on the grounds that the loop was stateless between
+   * calls. It is, and that was the bug rather than the excuse: restarting means
+   * re-planning, which means reaching the same irreversible step and asking
+   * about it again. A real session shows five yeses in a row, each answered
+   * with the identical question, ending in "Yes you fucking idiot just close
+   * all the tabs". A gate you cannot get through is not a safeguard, it is a
+   * wall. The run is now held, and the answer resumes it where it stopped. */
   if (pending.type === "hil_answer") {
     clearPendingMacWorkflow();
+    const answer = String(raw || "").trim();
+    const held = pendingHilRun;
+    pendingHilRun = null;
+    const fresh = held && Date.now() - Number(held.createdAt || 0) <= MAC_WORKFLOW_CONFIRM_MS;
+    const approved = macHilAnswerApproves(answer);
+    logMac("hil.loop.answered", { answer: textForLog(answer), resumed: Boolean(fresh), approved });
+
+    if (fresh) {
+      return runMacHilLoop(held.command, {
+        runId: held.runId,
+        state: held.state,
+        lastStep: held.lastStep,
+        said: held.said,
+        stepsUsed: held.stepsUsed,
+        userReply: answer,
+        // A yes clears the one step it was asked about. Anything else is just an
+        // answer to a question, and the gate stays shut.
+        approvedSig: approved ? held.gatedSig : "",
+      });
+    }
+
+    // Nothing held (the app restarted, or it sat too long). The answer is all
+    // there is, so the old behaviour is still the honest fallback.
     const original = String(pending.data?.command || "").trim();
     const question = String(pending.data?.question || "").trim();
-    logMac("hil.loop.answered", { answer: textForLog(raw) });
-    return runMacHilLoop(`${original}\n\n(You asked: ${question}\nThey answered: ${raw})`);
+    return runMacHilLoop(`${original}\n\n(You asked: ${question}\nThey answered: ${answer})`);
   }
 
   if (pending.type === "music_segment" && pending.stage === "loop_range") {
@@ -13206,37 +13239,25 @@ async function macBuildObservation() {
   const lines = elements.map((e) => `[${e.index}] ${String(e.role || "").padEnd(9)} "${e.name}"`);
   if (data?.hidden > 0) lines.push(`... ${data.hidden} more elements hidden by cap`);
   const header = `APP: ${data?.app || "unknown"}${data?.window ? ` | window: ${data.window}` : ""}`;
-  return { ok: true, text: [header, ...lines].join("\n"), elements, appName: data?.app || "", windowTitle: data?.window || "" };
-}
-
-// HIL emits a machine-checkable assert on every step and the Mac was discarding
-// all of them, so the only verification was the model judging its own work on the
-// next turn. That is the failure mode where a run looks healthy while achieving
-// nothing. Mirrors extension/lib/recovery.js verifyAssertion.
-function macVerifyAssert(expect, obs) {
-  if (!expect || typeof expect !== "object" || expect.assert === "none") return { ok: true };
-  const els = Array.isArray(obs?.elements) ? obs.elements : [];
-  const hay = [obs?.appName || "", obs?.windowTitle || "", ...els.map((e) => `${e.role} ${e.name}`)].join(" ").toLowerCase();
-  const norm = (v) => String(v || "").trim().toLowerCase();
-  if (expect.assert === "text_present") {
-    return hay.includes(norm(expect.value)) ? { ok: true } : { ok: false, why: `I could not find "${expect.value}" on screen afterwards.` };
-  }
-  if (expect.assert === "url_contains") {
-    // A Mac window has no URL; its title is the closest honest equivalent.
-    return hay.includes(norm(expect.value)) ? { ok: true } : { ok: false, why: `Nothing on screen mentions "${expect.value}".` };
-  }
-  if (expect.assert === "element_exists" || expect.assert === "element_gone") {
-    const want = norm(expect.match?.name);
-    const found = !want || els.some((e) => norm(e.name).includes(want));
-    const shouldExist = expect.assert === "element_exists";
-    return found === shouldExist ? { ok: true } : { ok: false, why: shouldExist ? `"${expect.match?.name}" never appeared.` : `"${expect.match?.name}" is still there.` };
-  }
-  if (expect.assert === "value_equals") {
-    const el = els.find((e) => Number(e.index) === Number(expect.index));
-    if (!el) return { ok: false, why: `Element [${expect.index}] is no longer on screen.` };
-    return norm(el.name).includes(norm(expect.value)) ? { ok: true } : { ok: false, why: `[${expect.index}] does not hold "${expect.value}".` };
-  }
-  return { ok: true };
+  /* The real address. A Mac window has no URL in its accessibility tree, but the
+     app has always known it: readActiveMacContext parses it out of the browser.
+     Without this the loop was both blind to where it was and unable to check
+     that it had arrived. */
+  let browserUrl = "";
+  try {
+    const ctx = await readActiveMacContext();
+    if (ctx && !isBrainoSelfContext(ctx)) activeMacContext = ctx;
+  } catch (_) { /* keep the last known context */ }
+  browserUrl = String(activeMacContext?.browserUrl || "");
+  const where = browserUrl ? `Address: ${browserUrl}` : "";
+  return {
+    ok: true,
+    text: [header, where, ...lines].filter(Boolean).join("\n"),
+    elements,
+    appName: data?.app || "",
+    windowTitle: data?.window || "",
+    browserUrl,
+  };
 }
 
 async function macExecuteHilAction(action, elements) {
@@ -13299,19 +13320,31 @@ async function macExecuteHilAction(action, elements) {
 
 // One task, many turns. State lives here and is re-sent whole each turn, exactly
 // like the browser: no growing transcript, so turn nine thinks as clearly as one.
-async function runMacHilLoop(command) {
-  const runId = crypto.randomUUID();
+/* The run that is sitting on a gate, waiting for a yes.
+   Held here rather than restarted, which is the whole point: see the note in
+   handlePendingMacWorkflow. */
+let pendingHilRun = null;
+
+async function runMacHilLoop(command, resume = null) {
+  const runId = resume?.runId || crypto.randomUUID();
   // Several jobs need more room than one. This is the only thing the multi-step
   // read is used for now: how much rope, not which brain.
   const maxSteps = macLooksMultiStep(command) ? MAC_HIL_MAX_STEPS : Math.ceil(MAC_HIL_MAX_STEPS / 2);
-  const state = { tasks: [], facts: [], asides: [], steps: [], budgetLeft: maxSteps };
-  let lastStep = null;
-  let said = "";
+  const state = resume?.state || { tasks: [], facts: [], asides: [], steps: [], budgetLeft: maxSteps };
+  let lastStep = resume?.lastStep || null;
+  let said = resume?.said || "";
   let retried = false;
+  /* The signature of the one step the user has just approved. Spent on use, so
+     a yes covers the thing that was asked about and nothing else. */
+  let approvedSig = String(resume?.approvedSig || "");
+  /* Their answer, handed to the model on the next turn and then forgotten, the
+     way the browser engine does it. */
+  let pendingReply = resume?.userReply ? String(resume.userReply) : null;
+  const startStep = Math.max(0, Number(resume?.stepsUsed) || 0);
   const deadline = Date.now() + MAC_HIL_MAX_MS;
   logMac("hil.loop.start", { command: textForLog(command), runId });
 
-  for (let step = 0; step < maxSteps; step += 1) {
+  for (let step = startStep; step < maxSteps; step += 1) {
     // Every turn is a model call plus two or three AX walks, and this holds the
     // single delegate IPC the whole time. A run that will not finish has to give
     // the surface back rather than leave the user talking to a frozen Braino.
@@ -13324,8 +13357,14 @@ async function runMacHilLoop(command) {
       command,
       context: activeMacContext?.appName ? `Front app: ${activeMacContext.appName}` : "",
       runId,
-      state: { ...state, screen: obs.text, lastStep: lastStep || undefined },
+      state: {
+        ...state,
+        screen: obs.text,
+        lastStep: lastStep || undefined,
+        userReply: pendingReply || undefined,
+      },
     };
+    pendingReply = null;
     let turn = null;
     try {
       const res = await fetch(`${SUPABASE_URL}/functions/v1/hil-loop`, {
@@ -13390,13 +13429,34 @@ async function runMacHilLoop(command) {
     }
 
     const stepObj = d.step || {};
-    // The gate. A step HIL marked irreversible stops and asks, because the Mac
-    // runner has no pause-and-resume of its own and a wrong send cannot be undone.
-    if (stepObj.reversible === false) {
+    /* The gate. A step HIL marked irreversible stops and asks, because a wrong
+       send cannot be undone.
+
+       It now remembers what it asked about. It used to ask, throw the whole run
+       away, and fold the answer into the command as text, which restarted the
+       loop from turn zero: it re-planned, reached the same irreversible step,
+       and asked again. A real session shows five yeses in a row, each one
+       answered with the same question, ending in "Yes you fucking idiot just
+       close all the tabs". A gate you cannot get through is not a safeguard,
+       it is a wall. */
+    const stepSig = macHilStepSignature(stepObj);
+    if (stepObj.reversible === false && stepSig !== approvedSig) {
       const ask = `${stepObj.intent || "That next step"} cannot be undone. Want me to go ahead?`;
+      pendingHilRun = {
+        runId,
+        command,
+        state,
+        lastStep,
+        said,
+        stepsUsed: step,
+        gatedSig: stepSig,
+        createdAt: Date.now(),
+      };
       setPendingMacWorkflow({ type: "hil_answer", stage: "hil_answer", data: { command, question: ask } });
       return { ok: true, say: ask, source: "hil_loop" };
     }
+    // A yes covers the step it was asked about, once.
+    if (stepSig === approvedSig) approvedSig = "";
     const result = await macExecuteHilAction(stepObj.action, obs.elements);
     state.steps.push({
       intent: String(stepObj.intent || ""),
