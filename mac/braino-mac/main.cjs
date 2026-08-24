@@ -114,6 +114,7 @@ const {
 const { parseMusicSegmentIntent, parseMusicSegmentRange } = require(path.join(__dirname, "music-segment-intent.cjs"));
 const { parseWhatsNewIntent } = require(path.join(__dirname, "whats-new-intent.cjs"));
 const { parseBrainoOsIntent } = require(path.join(__dirname, "braino-os-intent.cjs"));
+const { parseBrainoOsColorIntent } = require(path.join(__dirname, "braino-os-color.cjs"));
 const { parseTeleprompterIntent } = require(path.join(__dirname, "teleprompter-intent.cjs"));
 const teleprompter = require(path.join(__dirname, "teleprompter.cjs"));
 const { parseBrainoCodeIntent } = require(path.join(__dirname, "braino-code-intent.cjs"));
@@ -1765,6 +1766,16 @@ function setBrainoOsSurface(active, system = null) {
 
 function openBrainoOsWindow(system = null) {
   return setBrainoOsSurface(true, system);
+}
+
+/* His colour is his, not a constant. Asking for one while he is not showing
+   opens him first, because the answer to "turn yourself orange" is to be seen
+   turning orange. */
+function setBrainoOsColor(color) {
+  if (!brainoOsOpen) openBrainoOsWindow(null);
+  sendToRenderer("braino-mac:braino-os-color", { color: color || null });
+  logMac("braino_os.color", { color: color ? color.join(",") : "reset" });
+  return true;
 }
 
 function closeBrainoOsWindow() {
@@ -14436,6 +14447,13 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
     }
     await teleprompter.open({ log: logMac });
     return { ok: true, say: "Teleprompter is open. Paste your script and hit Done." };
+  }
+
+  const osColor = parseBrainoOsColorIntent(raw);
+  if (osColor) {
+    logMac("delegate.braino_os_color_intent", { action: osColor.action, name: osColor.name || "" });
+    setBrainoOsColor(osColor.action === "reset" ? null : osColor.color);
+    return { ok: true, say: osColor.say };
   }
 
   const brainoOs = parseBrainoOsIntent(raw);

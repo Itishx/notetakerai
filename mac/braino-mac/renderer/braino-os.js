@@ -52,7 +52,69 @@
       at: [-0.04, 0.66, -0.06],
     },
   ];
-  const CORE_COLOR = [150, 226, 255];
+  /* Colour.
+   *
+   * He is blue because that is what he looks like, not because anything depends
+   * on it, so every colour on this surface is derived from one base rather than
+   * written down. Say "turn yourself orange" and the whole body follows.
+   *
+   * The four systems keep their own accents, but only just: the hue offsets are
+   * deliberately small so that asking for orange gives you something that reads
+   * as orange rather than as a rainbow with an orange middle. */
+  const BASE_COLOR = [96, 190, 240];
+  const HUE_SHIFT = { mind: 0, heart: 0.07, ears: -0.05, memory: 0.035 };
+  const SAT_SHIFT = { mind: 0.95, heart: 1.06, ears: 1, memory: 0.9 };
+  const LUM_SHIFT = { mind: 0.79, heart: 0.72, ears: 0.75, memory: 0.81 };
+
+  let paletteTarget = BASE_COLOR.slice();
+  let paletteNow = BASE_COLOR.slice();
+  let baseHsl = [0.558, 0.83, 0.66];
+
+  function rgbToHsl(rgb) {
+    const r = rgb[0] / 255, g = rgb[1] / 255, b = rgb[2] / 255;
+    const max = Math.max(r, g, b), min = Math.min(r, g, b);
+    const l = (max + min) / 2;
+    if (max === min) return [0, 0, l];
+    const d = max - min;
+    const sat = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    let h;
+    if (max === r) h = ((g - b) / d + (g < b ? 6 : 0)) / 6;
+    else if (max === g) h = ((b - r) / d + 2) / 6;
+    else h = ((r - g) / d + 4) / 6;
+    return [h, sat, l];
+  }
+
+  function hslToRgb(h, sat, l) {
+    const hh = ((h % 1) + 1) % 1;
+    const ss = Math.min(1, Math.max(0, sat));
+    const ll = Math.min(1, Math.max(0, l));
+    if (ss === 0) { const v = Math.round(ll * 255); return [v, v, v]; }
+    const q = ll < 0.5 ? ll * (1 + ss) : ll + ss - ll * ss;
+    const pp = 2 * ll - q;
+    const channel = (t) => {
+      let x = t;
+      if (x < 0) x += 1;
+      if (x > 1) x -= 1;
+      if (x < 1 / 6) return pp + (q - pp) * 6 * x;
+      if (x < 1 / 2) return q;
+      if (x < 2 / 3) return pp + (q - pp) * (2 / 3 - x) * 6;
+      return pp;
+    };
+    return [
+      Math.round(channel(hh + 1 / 3) * 255),
+      Math.round(channel(hh) * 255),
+      Math.round(channel(hh - 1 / 3) * 255),
+    ];
+  }
+
+  const systemColor = (id) => hslToRgb(
+    baseHsl[0] + (HUE_SHIFT[id] || 0),
+    Math.min(1, Math.max(0.35, baseHsl[1] * (SAT_SHIFT[id] || 1))),
+    LUM_SHIFT[id] || 0.76,
+  );
+  // The light in the filaments and at the very centre.
+  const coreLight = () => hslToRgb(baseHsl[0], baseHsl[1] * 0.55, 0.82);
+  const css = (rgb, alpha) => "rgba(" + rgb[0] + "," + rgb[1] + "," + rgb[2] + "," + alpha + ")";
 
   /* Deterministic, so the shape of Braino OS is the same body every time it
      opens. One that rearranges itself reads as noise, not as anatomy. */
@@ -327,7 +389,7 @@
     for (const system of SUBSYSTEMS) {
       const label = el("button", "bos-label", labelLayer);
       label.type = "button";
-      label.style.color = "rgb(" + system.color.join(",") + ")";
+      label.style.color = "rgb(" + systemColor(system.id).join(",") + ")";
       const name = el("span", "bos-label-name", label);
       name.textContent = system.label;
       el("span", "bos-label-rule", label);
@@ -365,7 +427,7 @@
     panel.innerHTML = "";
     const head = el("div", "bos-panel-title", panel);
     head.textContent = system.label;
-    head.style.color = "rgb(" + system.color.join(",") + ")";
+    head.style.color = "rgb(" + systemColor(system.id).join(",") + ")";
     const role = el("p", "bos-panel-role", panel);
     role.textContent = system.role;
     const list = el("ul", "bos-panel-parts", panel);
@@ -432,7 +494,7 @@
       pulses.push({
         path, head: 0,
         speed: (hot ? 15 : 9) + Math.random() * 6,
-        color: system ? system.color : CORE_COLOR,
+        color: system ? systemColor(system.id) : coreLight(),
         width: hot ? 2.1 : 1.5,
       });
     };
@@ -441,6 +503,14 @@
       const dt = Math.min(0.05, (now - last) / 1000);
       last = now;
       const nrg = energy;
+
+      /* Colour eases rather than snaps, so becoming orange is something you
+         watch happen to him. */
+      const blend = 1 - Math.pow(0.02, dt);
+      for (let c = 0; c < 3; c += 1) {
+        paletteNow[c] += (paletteTarget[c] - paletteNow[c]) * blend;
+      }
+      baseHsl = rgbToHsl(paletteNow);
 
       const spinRate = (focus ? 0.045 : 0.13) * (1 + nrg * 0.5);
       spin += dt * spinRate;
@@ -493,8 +563,10 @@
 
       const hazeFade = 1 / (1 + Math.max(0, cam.scale - 1) * 1.6);
       const haze = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius * 2.4);
-      haze.addColorStop(0, "rgba(70,160,225," + ((0.16 + nrg * 0.12) * hazeFade).toFixed(3) + ")");
-      haze.addColorStop(0.45, "rgba(30,90,150," + (0.05 * hazeFade).toFixed(3) + ")");
+      const hazeNear = hslToRgb(baseHsl[0], baseHsl[1] * 0.85, 0.58);
+      const hazeFar = hslToRgb(baseHsl[0], baseHsl[1] * 0.8, 0.35);
+      haze.addColorStop(0, css(hazeNear, ((0.16 + nrg * 0.12) * hazeFade).toFixed(3)));
+      haze.addColorStop(0.45, css(hazeFar, (0.05 * hazeFade).toFixed(3)));
       haze.addColorStop(1, "rgba(0,0,0,0)");
       ctx.fillStyle = haze;
       ctx.fillRect(0, 0, width, height);
@@ -520,8 +592,8 @@
       }
       for (let b = 0; b < BUCKETS; b += 1) {
         const t = (b + 0.5) / BUCKETS;
-        ctx.strokeStyle = "rgba(" + (52 + Math.round(t * 60)) + "," + (150 + Math.round(t * 85)) + ","
-          + (205 + Math.round(t * 50)) + "," + (0.07 + t * 0.44).toFixed(3) + ")";
+        const strand = hslToRgb(baseHsl[0], Math.min(1, Math.max(0.35, baseHsl[1] * 0.92)), 0.38 + t * 0.34);
+        ctx.strokeStyle = css(strand, (0.07 + t * 0.44).toFixed(3));
         ctx.lineWidth = t > 0.7 ? 1.15 : 0.75;
         ctx.stroke(paths[b]);
       }
@@ -539,7 +611,7 @@
         const f = flash[i];
         if (f > 0) a = Math.min(1.6, a + f * 1.5);
         if (a < 0.06) continue;
-        const colour = n.owner ? (systemById.get(n.owner) || {}).color || CORE_COLOR : CORE_COLOR;
+        const colour = n.owner ? systemColor(n.owner) : coreLight();
         const size = (n.lum > 0.8 ? 1.5 : 1) * (0.6 + pd[i] * 0.9) * (1 + f * 1.8);
         ctx.fillStyle = "rgba(" + colour[0] + "," + colour[1] + "," + colour[2] + "," + Math.min(1, a).toFixed(3) + ")";
         ctx.fillRect(x - size / 2, y - size / 2, size, size);
@@ -550,9 +622,9 @@
         const ox = cx - cam.x * cam.scale;
         const oy = cy - cam.y * cam.scale;
         const core = ctx.createRadialGradient(ox, oy, 0, ox, oy, coreR);
-        core.addColorStop(0, "rgba(232,250,255," + (0.34 + nrg * 0.26).toFixed(3) + ")");
-        core.addColorStop(0.18, "rgba(150,225,255," + (0.22 + nrg * 0.18).toFixed(3) + ")");
-        core.addColorStop(0.5, "rgba(70,170,240," + (0.09 + nrg * 0.08).toFixed(3) + ")");
+        core.addColorStop(0, css(hslToRgb(baseHsl[0], baseHsl[1] * 0.28, 0.95), (0.34 + nrg * 0.26).toFixed(3)));
+        core.addColorStop(0.18, css(hslToRgb(baseHsl[0], baseHsl[1] * 0.7, 0.78), (0.22 + nrg * 0.18).toFixed(3)));
+        core.addColorStop(0.5, css(hslToRgb(baseHsl[0], baseHsl[1] * 0.95, 0.6), (0.09 + nrg * 0.08).toFixed(3)));
         core.addColorStop(1, "rgba(0,0,0,0)");
         ctx.fillStyle = core;
         ctx.fillRect(0, 0, width, height);
@@ -618,6 +690,7 @@
         hits.push({ id: system.id, x: px[i], y: py[i] });
         const label = labelEls.get(system.id);
         if (!label) continue;
+        label.style.color = "rgb(" + systemColor(system.id).join(",") + ")";
         label.style.left = px[i] + "px";
         label.style.top = py[i] + "px";
         label.style.opacity = focus && focus !== system.id ? "0.2" : String(0.7 + pd[i] * 0.3);
@@ -649,6 +722,18 @@
       return true;
     },
     isOpen() { return open; },
+    /* "Braino, turn yourself orange." */
+    setPalette(rgb) {
+      if (!Array.isArray(rgb) || rgb.length < 3) return false;
+      paletteTarget = [rgb[0], rgb[1], rgb[2]];
+      if (panel && focus) renderPanel();
+      return true;
+    },
+    resetPalette() {
+      paletteTarget = BASE_COLOR.slice();
+      if (panel && focus) renderPanel();
+      return true;
+    },
     focus(system) { if (open) setFocus(system || null); },
     /* Driven from the voice pipeline, so the mass leans into the light while he
        is thinking and burns while he speaks. */

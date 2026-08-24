@@ -125,6 +125,11 @@ contextBridge.exposeInMainWorld("brainoMac", {
     return () => ipcRenderer.removeListener("braino-mac:braino-os", handler);
   },
   brainoOsClosed: () => ipcRenderer.send("braino-mac:braino-os-closed"),
+  onBrainoOsColor: (callback) => {
+    const handler = (_event, payload) => callback(payload || {});
+    ipcRenderer.on("braino-mac:braino-os-color", handler);
+    return () => ipcRenderer.removeListener("braino-mac:braino-os-color", handler);
+  },
   personaBundle: () => ipcRenderer.invoke("braino-mac:persona-bundle"),
   ttsConfig: () => ipcRenderer.invoke("braino-mac:tts-config"),
   tts: (text, referenceId) => ipcRenderer.invoke("braino-mac:tts", text, referenceId || ""),

@@ -46,6 +46,13 @@ Once it is open: press Ctrl twice to talk, click a system or ask for it by name
 to fly inside, scroll to zoom, and **PULL BACK** to step out of one system
 without leaving.
 
+**His colour is his.** "Braino, turn yourself orange." "Change your colour to
+crimson." "Go dark green." Every CSS colour name works, so do modifiers people
+actually say such as "hot pink" and "neon green", and so do a hex or a literal
+rgb triple. Everything on the surface is derived from that one base, so the
+whole body follows rather than an accent changing. "Be yourself" puts him back
+to blue.
+
 Three ways out of the surface itself, none of which depend on the others,
 because something that covers every display and floats over fullscreen apps has
 to be dismissable no matter what: **Escape**, the **LEAVE** control in the top
@@ -81,6 +88,10 @@ asking for the heart moves the camera immediately instead of after a round trip.
 - `src/pages/BrainoOS.tsx`: the HUD, the voice, the camera commands. Reads
   `?system=` and `?voice=1`, which is how the Mac app says where to land and
   whether he should already be listening.
+- `mac/braino-mac/braino-os-color.cjs`: colour resolution and the phrases that
+  ask for it. Repainting him is deliberate, never a side effect of saying a
+  colour out loud, so something has to point the instruction at him: "go
+  crimson" is him, "make me a green tea" is not.
 - `mac/braino-mac/braino-os-intent.cjs`: the spoken phrases, with its own tests.
   A sentence that takes over the whole screen has to be certain, so only the
   possessive and article forms count: "show me your heart" opens it, "put your
@@ -103,6 +114,7 @@ asking for the heart moves the camera immediately instead of after a round trip.
   of. That is gone.
 - The geometry exists twice, once in TypeScript for the website and once in
   plain JavaScript for the Mac renderer. They have to be changed together.
+- Changing his colour works on Mac only. The website surface is still blue.
 - The global shortcut is Command Shift O rather than a bare Command O. Taking
   Command O globally would steal Open from Finder, from Chrome and from the
   editor. Inside Braino's own windows, and on the website, the bare Command O

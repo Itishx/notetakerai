@@ -8464,6 +8464,15 @@ window.brainoMac.onBrainoOs?.((payload) => {
   }
 });
 
+/* "Braino, turn yourself orange." His colour is his to change. */
+window.brainoMac.onBrainoOsColor?.((payload) => {
+  const os = window.__brainoOs;
+  if (!os) return;
+  if (payload && Array.isArray(payload.color)) os.setPalette(payload.color);
+  else os.resetPalette();
+  logRenderer("braino_os.color", { color: (payload && payload.color) ? payload.color.join(",") : "reset" });
+});
+
 /* Escape leaves the surface. Stepping back out of one system is the surface's
    own job, so this is only ever the way out of the whole thing. */
 window.addEventListener("keydown", (event) => {
