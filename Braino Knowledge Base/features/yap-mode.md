@@ -8,9 +8,11 @@
 ## The simple version
 
 Double Option, speak, then double Option again. Braino stops capture, gives the
-final server transcript a short bounded drain, and inserts the complete session
-once where the caret is. Lossless formatting is prepared from live transcript
-deltas while you speak; Stop never waits for a formatting network request.
+final transcript a short bounded drain, and inserts the complete session once
+where the caret is. The clean-up pass runs while you speak, so what lands is
+what you meant to write rather than a literal record of your mouth: fillers
+gone, false starts gone, self-corrections resolved, punctuation and numbers as
+people write them. Stop never waits for a formatting request.
 There is no assistant answer and no spoken reply. If Braino cannot find a real
 text box, the complete transcript opens in the Notch and stays on the clipboard
 instead of disappearing.
@@ -78,6 +80,12 @@ completed transcript in the Notch for recovery and copies it automatically.
 - Keeps the WebRTC sender trackless and all pre-roll on-device until the
   Accessibility privacy gate approves the target. A secure-field rejection
   stops the microphone and discards the local buffer without uploading it.
+- Survives the input microphone changing underneath it. AVAudioEngine binds
+  its input node when it starts and never re-binds, so connecting a Bluetooth
+  headset used to leave the tap delivering nothing at all while the engine still
+  reported itself as running. Braino now rebuilds the tap on the device-change
+  notification, and a watchdog rebuilds it anyway if audio stops arriving, so a
+  session never opens on a dead microphone.
 - After approval, sends both buffered opening audio and every later live frame
   as PCM over the same ordered Realtime data channel. It never switches to a
   separate RTP audio transport, so later words cannot overtake the opening.
@@ -89,13 +97,19 @@ completed transcript in the Notch for recovery and copies it automatically.
   reduction stage instead of processing speech twice.
 - Keeps the connection transcription-only, so no conversational model can
   summarize, answer, add ideas, or rewrite the transcript downstream.
-- During a natural pause, prefetches a separate lossless formatter from the
-  streamed transcript. That pass may add punctuation, capitalization,
-  paragraph breaks, and unambiguous notation such as “five p m” → “5 p.m.”
-- Checks the formatted result locally for lexical coverage, original word
-  order, length drift, and changed emails, URLs, handles, hashtags, or
-  alphanumeric code tokens. A failed check, timeout, auth failure, or service
-  error inserts the raw transcript instead.
+- During a natural pause, prefetches the clean-up pass from the streamed
+  transcript. On device that is Apple's on-device model; the cloud fallback is
+  the `dictation-refine` endpoint. Both are given the same contract: remove
+  fillers, stutters and the abandoned half of a self-correction, fix case and
+  punctuation, write spoken numbers and times as digits, turn a dictated list
+  into a list.
+- Checks that result locally by aligning it word by word against what was
+  actually heard. The editor may drop words freely, and may correct a small
+  number of words that were plainly misheard, where the correction is the same
+  word spelled differently: “teen” to “team”, “cant” to “cannot”, “deploy” to
+  “deployment”. It may not add a word, move a word, summarize, change a number,
+  or lose an email, URL, handle, hashtag, or code token. A failed check,
+  timeout, auth failure, or service error inserts the raw transcript instead.
 - Tells the transcription model to preserve openings, fillers, repetitions,
   false starts, slang, and profanity instead of silently polishing them away.
 - Supplies a faithful-dictation context plus literal hints for Braino,
@@ -119,6 +133,38 @@ completed transcript in the Notch for recovery and copies it automatically.
   the transcript on the clipboard and in the Notch.
 - Prints each completed transcript to the renderer terminal as
   `[BrainoHERA] "…"` for direct debugging.
+
+## Measured speed
+
+Measured on an M-series MacBook Air, August 24 2026, with the real binaries.
+
+| Leg | Measured |
+| --- | --- |
+| Live words appear after you start speaking | ~900 ms |
+| Stop to full transcript available | 14 to 40 ms |
+| Stop to cleaned text, after a natural pause | 0 to 1 ms |
+| Stop to cleaned text, stopping mid-word | ~480 ms |
+| Hard cap before Braino gives up and pastes raw | 900 ms |
+| Parakeet decode speed | 0.081x real time, about 12x faster than the audio |
+| Clean-up pass, on Apple's on-device model | 664 ms median |
+
+The shape matters more than any single number. Transcription streams locally, so
+by the time the stop gesture lands there is almost nothing left to transcribe.
+The clean-up is the slow part at 664 ms, so it is started from the settled-phrase
+report during a pause rather than at stop: a user who finishes a sentence before
+reaching for the shortcut pays nothing for it.
+
+For comparison, Wispr Flow publishes a sub-700 ms p99 for its whole pipeline, and
+reviewers report one to two seconds in practice because every session makes a
+cloud round trip. BrainoHERA has no network leg on this path at all. Accuracy is
+a separate question and is not claimed here: Wispr reports about 97.2% on
+standard English audio, and BrainoHERA has no comparable measured figure yet.
+
+Two costs are real and unmeasured. The clean-up now runs on the neural engine
+while transcription is still streaming, and although Parakeet has roughly twelve
+times the headroom it needs, contention between the two has not been measured
+under load. And the 664 ms figure is with the formatter already warm, which the
+app arranges at launch.
 
 ## Honest limitations
 
@@ -153,9 +199,16 @@ completed transcript in the Notch for recovery and copies it automatically.
   macOS may still take a small hardware-dependent moment to return the live mic
   stream. Keeping the microphone permanently open would remove more latency but
   would also leave the privacy indicator on, so this MVP deliberately does not.
-- This lane transcribes faithfully. Its formatting pass is deliberately
-  lossless; semantic rewriting, summarizing, or polishing the user's thought
-  remain separate, explicit actions.
+- This lane transcribes faithfully, then edits by removing words and by
+  correcting a few that were clearly misheard. Summarizing, answering, or
+  rewriting the user's thought into different words remain separate, explicit
+  actions, and the gate rejects them outright.
+- The correction allowance is deliberately small: at most four words per
+  utterance and never more than about a sixth of it, and only where the two
+  spellings are close. Beyond that the whole edit is refused and the raw
+  transcript is inserted, because a rougher paste beats a fluent invention.
+- Numbers are never corrected. A wrong number is the one mistake nobody catches
+  by rereading, so “the 6th” can never become “the 8th”.
 
 ## Technical shape
 
@@ -227,10 +280,23 @@ The flow is:
 - **Stop during startup preserves speech.** A short phrase may finish before a
   cold authenticated session opens. Stop now freezes capture locally and queues
   the final commit; it no longer cancels startup and discards the phrase.
-- **Formatting is not rewriting.** The post-pass exists for notation people
-  expect from dictation—times, numbers, punctuation, and casing. An exact
-  canonical ordered-word gate rejects summaries, deleted fillers, invented
-  words, and jumbled clauses. Rejection always means raw-transcript insertion.
+- **Editing is deletion, not rewriting.** The first version of this shipped
+  two halves written to opposite contracts. Apple's on-device formatter was
+  instructed to remove fillers and resolve self-corrections; the gate that
+  judged it demanded the exact same words in the exact same order. So every
+  successful clean-up was rejected and the raw transcript pasted instead:
+  measured at sourceCoverage 0.71 on a real sentence, which is a guaranteed
+  rejection every time the formatter did its job. The gate now aligns the edit
+  against the speech and permits deletion plus a few close corrections, while
+  still forbidding additions, reordering, summarizing, moved numbers, and
+  dropped emails, URLs, handles or code tokens. Rejection always means
+  raw-transcript insertion.
+- **One transcript, chosen, never several joined.** FluidAudio reports the
+  whole transcript accumulated since the last reset on every end-of-utterance
+  callback, and `finish()` decodes that same accumulator again. Neither is a
+  per-phrase suffix. Collecting them in a list and joining it said everything
+  twice, which a speaker-to-microphone pass reproduced exactly. The session now
+  keeps one cumulative transcript and `finish()` supersedes it.
 - **The transcript grows down, never sideways.** Text length no longer controls
   Notch width. One stable black sheet owns BrainoHERA, with the label separated
   from a vertically stacked transcript.

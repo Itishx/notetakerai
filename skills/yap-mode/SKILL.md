@@ -63,8 +63,17 @@ while this skill is active.
   events may arrive out of order
 - Stop deadline: final events get 1.2 seconds; after that, ordered transcript
   deltas become the provisional final, and late events cannot duplicate a turn
-- Formatting: a lossless formatter is prefetched during pauses and accepted
-  only through the ordered-word faithfulness gate. Insertion never waits for it
+- Clean-up: prefetched during pauses and accepted only through a word-by-word
+  alignment gate. The editor may remove fillers, stutters, and the abandoned
+  half of a self-correction, may fix case, punctuation, and spoken numbers, and
+  may correct up to four plainly misheard words per utterance where the
+  correction is the same word spelled differently. It may not add a word, move a
+  word, summarize, change a number, or drop an email, URL, handle, or code
+  token. Insertion never waits for it, and a rejected edit means the raw
+  transcript is inserted
+- Microphone resilience: the capture tap is rebuilt when the input device
+  changes, and a watchdog rebuilds it if audio stops arriving, because
+  AVAudioEngine keeps reporting itself as running after its device disappears
 - Insertion: after double Option stops capture, macOS Accessibility validates
   the current caret, a real system paste handles broad editor compatibility,
   and a field fingerprint checks that text visibly changed. Selected-text
@@ -90,6 +99,7 @@ conversational model and every downstream rewriting pipeline.
   destination.
 - Does not send the transcript through Braino's conversational Realtime model,
   Emotional Engine, delegate router, or TTS pipeline.
+- Does not summarize, answer, or reword. Clean-up is deletion plus notation.
 
 ## Verification
 
@@ -101,6 +111,10 @@ conversational model and every downstream rewriting pipeline.
    remains active.
 5. Say "new line" and "new paragraph".
 6. Say "done" and confirm it is inserted without stopping the session.
+6b. Dictate "um so I think we should uh ship it on Friday" and confirm what
+   lands is "I think we should ship it on Friday." rather than the raw words.
+6c. Connect or disconnect a Bluetooth headset, then dictate, and confirm the
+   words still arrive.
 7. Confirm double Option removes the mint listening state immediately, drains
    the final phrase, and inserts the complete ordered session exactly once.
 8. Confirm a secure field is rejected without uploading or typing.

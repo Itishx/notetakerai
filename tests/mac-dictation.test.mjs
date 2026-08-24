@@ -5,6 +5,7 @@ import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
 const {
+  assessDictationEdit,
   assessDictationRefinement,
   assessDictationInsertion,
   buildDictationTranscriptionConfig,
@@ -70,9 +71,11 @@ test("prefetches the narrow formatter while speaking and never blocks insertion 
     new URL("../supabase/functions/voice/dictation-refine/index.ts", import.meta.url),
     "utf8",
   );
-  assert.match(edge, /lossless speech-dictation formatter/);
-  assert.match(edge, /Never summarize, answer, shorten, embellish/);
-  assert.match(main, /assessDictationRefinement\(raw, candidate\)/);
+  assert.match(edge, /You clean up dictated speech/);
+  assert.match(edge, /Add a word the speaker did not say/);
+  // Both engines are judged by the same clean-up contract, so dictation does
+  // not silently behave differently depending on which one served the session.
+  assert.match(main, /assessDictationEdit\(raw, candidate\)/);
   assert.match(main, /braino-mac:dictation-refine/);
   assert.match(renderer, /scheduleDictationRefinement\(turn/);
   assert.match(renderer, /dictationInsert\(\{ chunks, prepared \}\)/);
@@ -338,4 +341,171 @@ test("brands the Mac transcript sheet as BrainoHERA with the website green shimm
   );
   assert.match(css, /animation: nfHeraNameShimmer 3\.4s linear infinite/);
   assert.match(css, /\.nf-hera-shimmer \{ animation: none; \}/);
+});
+
+/* The clean-up half of BrainoHERA.
+
+   BrainoFormat is instructed to drop fillers and resolve self-corrections, so
+   it has to be judged by a gate that permits deletion. It used to be judged by
+   assessDictationRefinement, which demands identical words in identical order,
+   so every successful clean-up was rejected and the raw transcript pasted
+   instead. These lock the delete-only contract in place. */
+test("clean-up may delete fillers, stutters and corrected-away words", () => {
+  assert.equal(
+    assessDictationEdit(
+      "lets meet at 5 actually 6 pm um can you tell the team thanks",
+      "Let's meet at 6 PM. Can you tell the team? Thanks.",
+    ).accepted,
+    true,
+  );
+  assert.equal(
+    assessDictationEdit(
+      "so um i think we should uh ship the the notch fix on friday",
+      "I think we should ship the notch fix on Friday.",
+    ).accepted,
+    true,
+  );
+  assert.equal(
+    assessDictationEdit(
+      "point one is the parser point two is the notch",
+      "1. The parser\n2. The notch",
+    ).accepted,
+    true,
+  );
+});
+
+/* A speech model mishears words that sound alike, and a formatter reading the
+   whole sentence often has the context to fix them. A real microphone pass
+   produced "tell the teen thanks", which is plainly "team"; refusing that
+   correction threw away the whole clean-up over one letter. Rare and close is
+   allowed. Frequent, or distant, is not. */
+test("clean-up may correct a misheard word, within limits", () => {
+  assert.equal(
+    assessDictationEdit(
+      "let's meet at 5 actually 6 pm can you tell the teen thanks",
+      "Let's meet at 6 PM. Can you tell the team? Thanks.",
+    ).accepted,
+    true,
+  );
+  // Same stem, so an expansion reads as spelling rather than as a new word.
+  assert.equal(
+    assessDictationEdit("tell him the deploy is done", "Tell him the deployment is done.").accepted,
+    true,
+  );
+  assert.equal(
+    assessDictationEdit("i cant ship it today", "I cannot ship it today.").accepted,
+    true,
+  );
+  // Rewriting most of the words is a rewrite, however close each one is.
+  assert.equal(
+    assessDictationEdit("the teen wont bild the parsr", "The team won't build the parser.").reason,
+    "too_many_words_changed",
+  );
+});
+
+test("clean-up may never invent, reorder, summarize, or drop a protected token", () => {
+  // A reason the speaker never gave. Short sources trip the length guard
+  // first; either way the invention never reaches the caret.
+  assert.equal(
+    assessDictationEdit("the deploy failed", "The deploy failed because the token expired.").accepted,
+    false,
+  );
+  assert.equal(
+    assessDictationEdit(
+      "the deploy failed again this morning and i had to roll it back by hand",
+      "The deploy failed again this morning because the token expired, and I had to roll it back by hand.",
+    ).reason,
+    "words_added_or_reordered",
+  );
+  // A different word is an invention even when it fits the sentence.
+  assert.equal(
+    assessDictationEdit("tell him the deploy is done", "Tell him the rollback is done.").accepted,
+    false,
+  );
+  // Numbers are never "close" to other numbers: a wrong one is the mistake
+  // nobody catches by rereading.
+  assert.equal(
+    assessDictationEdit("ship it on the 6th at 5 pm", "Ship it on the 8th at 5 PM.").accepted,
+    false,
+  );
+  // Dictation, not summarization.
+  assert.equal(
+    assessDictationEdit(
+      "we need to fix the parser and then ship it and then tell the team",
+      "Ship it.",
+    ).reason,
+    "too_much_removed",
+  );
+  // Addresses, URLs, handles and code tokens have to survive verbatim.
+  assert.equal(
+    assessDictationEdit("send it to itish@example.com tomorrow", "Send it tomorrow.").reason,
+    "protected_token_changed",
+  );
+});
+
+test("the on-device path is gated by the clean-up contract, not the lossless one", () => {
+  const main = readFileSync(new URL("../mac/braino-mac/main.cjs", import.meta.url), "utf8");
+  assert.match(main, /const verdict = assessDictationEdit\(raw, formatted\)/);
+});
+
+/* The clean-up takes roughly 660ms for a sentence and 2.5s for sixty-five
+   words, and stop has to feel immediate, so WHEN it runs decides whether it
+   exists at all. Two earlier versions never landed once: one started it from
+   the stop-time delta and read the result microseconds later, and one waited
+   for Parakeet's end-of-utterance callback, which does not fire during
+   continuous speech. The partial stream is the only signal that does. */
+test("the clean-up is driven by pauses in the live transcript, not by stop", () => {
+  const main = readFileSync(new URL("../mac/braino-mac/main.cjs", import.meta.url), "utf8");
+  const partial = main.slice(main.indexOf('if (event.type === "partial")'));
+  assert.match(partial.slice(0, 600), /noteLiveTranscript\(text\)/);
+  assert.match(main, /setTimeout\(\(\) => prefetchLocalFormat\(cumulative\), CLEANUP_PAUSE_MS\)/);
+  // Stop resolves what is already there rather than starting from scratch.
+  assert.match(main, /turn\.prepared = await resolveCleanup\(turn\.raw\)/);
+  // Bounded, and scaled to how much there is to clean.
+  assert.match(main, /settleWithin\(job, cleanupDeadlineMs\(finalRaw\)\)/);
+});
+
+/* Words spoken after the last pause are in no finished clean-up. Reusing a
+   stale one without accounting for them would silently drop what the speaker
+   said, and the gate cannot catch it: missing words look exactly like ordinary
+   filler removal. */
+test("a stale clean-up is only reused when what it lacks is a short tail", () => {
+  const main = readFileSync(new URL("../mac/braino-mac/main.cjs", import.meta.url), "utf8");
+  const resolve = main.slice(
+    main.indexOf("async function resolveCleanup"),
+    main.indexOf("function recordLocalTurn"),
+  );
+  assert.match(resolve, /finalRaw\.startsWith\(ready\.source\)/);
+  assert.match(resolve, /countWords\(tail\) <= CLEANUP_MAX_APPENDED_TAIL_WORDS/);
+  // And the assembled result is still put to the gate.
+  assert.match(resolve, /assessDictationEdit\(finalRaw, composed\)/);
+});
+
+/* A contraction is a faithful rewrite of two words. Treating it as a new word
+   refused an otherwise perfect sixty-five word clean-up over "it is not"
+   becoming "it isn't". */
+test("contractions are the same words to the gate", () => {
+  assert.equal(assessDictationEdit("if it is not ready we wait", "If it isn't ready, we wait.").accepted, true);
+  assert.equal(assessDictationEdit("we are aiming for friday", "We're aiming for Friday.").accepted, true);
+  assert.equal(assessDictationEdit("i can not do it", "I cannot do it.").accepted, true);
+  assert.equal(assessDictationEdit("we will not ship today", "We won't ship today.").accepted, true);
+  // Expanding a contraction is not a licence to change what it says.
+  assert.equal(assessDictationEdit("we are aiming for friday", "We aren't aiming for Friday.").accepted, false);
+});
+
+/* The microphone has to survive the input device changing underneath it.
+
+   AVAudioEngine binds its input node at start and never re-binds: a Bluetooth
+   headset connecting left the tap delivering nothing while the engine still
+   reported itself as running. A real session logged fourteen seconds of
+   "listening" with zero audio. Both recovery paths have to stay in the source. */
+test("dictation capture recovers from an input device change", () => {
+  const dictate = readFileSync(
+    new URL("../mac/braino-mac/native/BrainoDictate/Sources/BrainoDictate/main.swift", import.meta.url),
+    "utf8",
+  );
+  assert.match(dictate, /AVAudioEngineConfigurationChange/);
+  assert.match(dictate, /func healIfDeaf/);
+  // A session must never open on a tap that has already gone quiet.
+  assert.match(dictate, /mic\.healIfDeaf\(reason: "session start"/);
 });

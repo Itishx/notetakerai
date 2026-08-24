@@ -101,6 +101,7 @@ const {
   selectSpotifyReturnTarget,
 } = require(path.join(__dirname, "spotify-focus-return.cjs"));
 const {
+  assessDictationEdit,
   assessDictationRefinement,
   assessDictationInsertion,
   buildDictationTranscriptionConfig,
@@ -1789,16 +1790,36 @@ function handleParakeetLine(line) {
     if (!text) return;
     parakeetPartials += 1;
     sendToRenderer("braino-mac:dictation-partial", { text });
+    // The clean-up is driven from here, because this is the only signal that
+    // actually arrives during continuous speech.
+    noteLiveTranscript(text);
+    return;
+  }
+  /* A finished phrase. Notch only — it stacks above the live line so a
+     multi-sentence session does not look like it is losing what you already
+     said. Insertion still happens exactly once, from the delta at stop. */
+  if (event.type === "utterance") {
+    const text = String(event.text || "").trim();
+    if (!text) return;
+    parakeetPartials += 1;
+    sendToRenderer("braino-mac:dictation-partial", { text, committed: true });
+    // A settled phrase, when Parakeet does report one. Continuous dictation
+    // never produces these, which is why the partial stream drives the
+    // clean-up rather than this.
+    prefetchLocalFormat(spokenNumbersToDigits(text));
     return;
   }
   // Deltas are the only thing that reaches the caret. The helper sends the new
   // suffix each time the transcript grows, so inserting a delta is always
   // correct and never repeats what is already typed.
+  //
+  // Deliberately not painted: the finished phrases are already stacked in the
+  // Notch by the `utterance` events above, and repainting the whole session
+  // here would show it twice.
   if (event.type === "delta") {
     const text = String(event.text || "");
     if (!text.trim()) return;
     heraLog(`heard: "${text.trim().slice(0, 60)}"`, { chars: text.length });
-    sendToRenderer("braino-mac:dictation-partial", { text: text.trim(), committed: true });
     if (!localDictationActive) {
       // Arrived after the session was torn down. Rather than drop it, put it
       // on the clipboard so the words are never simply lost.
@@ -1831,34 +1852,183 @@ function handleParakeetLine(line) {
    screen is identical and only the words' origin changed. */
 let localTurns = [];
 
-/* Two passes, both finishing while you are still speaking.
+/* Two passes, both aiming to finish while you are still speaking.
 
    1. Numbers, deterministically. "two point five seconds" -> "2.5 seconds" is
       arithmetic, and the model was measured getting it wrong confidently.
-   2. Punctuation and self-corrections, on Apple's on-device model — gated by
-      assessDictationRefinement, which rejects any rewrite that changes or
-      reorders the words. That guard is what stops a garbled sentence turning
-      into a fluent invention. */
+   2. Fillers, self-corrections and punctuation, on Apple's on-device model,
+      gated by assessDictationEdit. That gate lets the model delete (fillers,
+      false starts, the abandoned half of a correction) and correct a few
+      plainly misheard words, but never add a word, move a word, change a
+      number, or drop an address or code token. It is what stops a garbled
+      sentence turning into a fluent invention.
+
+   Two earlier versions of this shipped broken, in ways that cancelled each
+   other out of sight:
+
+   - It was gated by assessDictationRefinement, which demands the exact same
+     words in the same order. BrainoFormat is instructed to remove fillers, so
+     that gate rejected its output every single time.
+   - And it started from the stop-time delta, then read the result microseconds
+     later. The clean-up takes about 660ms. `prepared` was therefore empty on
+     every single session, whatever the gate said.
+
+   So the clean-up now starts from each end-of-utterance report, which arrives
+   during a natural pause while the session is still open, and stop waits only
+   for whatever is left of it. */
+/* A gap this long in the partial stream is the speaker drawing breath, which is
+   when the transcript behind them has stopped being revised. It is the only
+   usable "settled" signal there is: Parakeet's own end-of-utterance callback
+   does not fire during continuous dictation at all, measured at zero boundaries
+   across twenty seconds of ordinary speech. Waiting for it meant the clean-up
+   only ever began at stop, where a real nineteen second session logged 2566ms
+   against a 900ms budget and the raw words were pasted. */
+const CLEANUP_PAUSE_MS = 600;
+/* Below this there is nothing worth a model round trip. */
+const CLEANUP_MIN_WORDS = 3;
+/* A tail this short may be appended to an otherwise finished clean-up rather
+   than forcing the whole transcript through the model again. Longer than this
+   and the unpunctuated tail would be conspicuous. */
+const CLEANUP_MAX_APPENDED_TAIL_WORDS = 6;
+
+/* How long stop may wait, scaled to how much there is to clean, because the
+   model's cost grows with the transcript: about 660ms for a sentence and about
+   2.5s for sixty-five words. Dictation may cost a beat; it may not hang. */
+function cleanupDeadlineMs(text) {
+  return Math.min(2600, 600 + countWords(text) * 35);
+}
+
+/* One job at a time. The reports are cumulative, so a second concurrent job
+   would only re-clean a superset of the first while competing with it for the
+   same neural engine, measured as a 28% slowdown when two runs overlap.
+
+   Cleaning the transcript in segments as it arrives was tried instead, and it
+   is faster: 474ms at stop rather than 2566ms. It was rejected on quality. A
+   segment is usually the middle of a sentence, so the model punctuates each
+   fragment as a sentence of its own and a dictation reads back as "...on Friday
+   but before. That we need to check...". Cutting only at pauses did not save it
+   either: the gate then refused three segments in five, so most of the text
+   pasted raw anyway. Whole transcripts are slower and correct. */
+let localFormat = { results: new Map(), inflight: "", queued: "", latest: null, live: "" };
+let liveTranscriptTimer = null;
+
+function resetLocalFormat() {
+  clearTimeout(liveTranscriptTimer);
+  liveTranscriptTimer = null;
+  localFormat = { results: new Map(), inflight: "", queued: "", latest: null, live: "" };
+}
+
+function countWords(text) {
+  return String(text || "").split(/\s+/).filter(Boolean).length;
+}
+
+/* Every partial resets the clock. When it finally runs out the speaker has
+   paused, and the transcript is worth cleaning against a clock they are not
+   watching. */
+function noteLiveTranscript(text) {
+  const cumulative = spokenNumbersToDigits(String(text || "").trim());
+  if (!cumulative) return;
+  localFormat.live = cumulative;
+  clearTimeout(liveTranscriptTimer);
+  liveTranscriptTimer = setTimeout(() => prefetchLocalFormat(cumulative), CLEANUP_PAUSE_MS);
+}
+
+function prefetchLocalFormat(text) {
+  const raw = String(text || "").trim();
+  if (!raw || countWords(raw) < CLEANUP_MIN_WORDS || localFormat.results.has(raw)) return;
+  if (localFormat.inflight) { localFormat.queued = raw; return; }
+  runLocalFormat(raw);
+}
+
+function runLocalFormat(raw) {
+  localFormat.inflight = raw;
+  const startedAt = Date.now();
+  const job = formatDictationTurn(raw)
+    .then((formatted) => {
+      const durationMs = Date.now() - startedAt;
+      if (!formatted) {
+        heraLog(`clean-up unavailable after ${durationMs}ms`);
+        return "";
+      }
+      const verdict = assessDictationEdit(raw, formatted);
+      if (!verdict.accepted) {
+        // Logged with both texts, because a bare reason says nothing about
+        // which rule fired or whether the model was right to try.
+        heraLog(`clean-up refused (${verdict.reason}) after ${durationMs}ms`, {
+          spoken: textForLog(raw, 160),
+          offered: textForLog(formatted, 160),
+        });
+        return "";
+      }
+      localFormat.latest = { source: raw, formatted };
+      heraLog(`cleaned ${countWords(raw)} words in ${durationMs}ms`);
+      return formatted;
+    })
+    .catch(() => "")
+    .finally(() => {
+      localFormat.inflight = "";
+      const next = localFormat.queued;
+      localFormat.queued = "";
+      if (next && !localFormat.results.has(next)) runLocalFormat(next);
+    });
+  localFormat.results.set(raw, job);
+}
+
+/* Stop.
+
+   The words spoken since the last pause are not in any finished clean-up, and
+   they must never be silently dropped: an earlier version re-checked a stale
+   clean-up against the final transcript and would have accepted one missing up
+   to 45% of what was said, because losing words reads to the gate as ordinary
+   filler removal. So a stale result is only reused when everything it lacks is
+   a short tail, and that tail is appended in the speaker's own words. */
+async function resolveCleanup(finalRaw) {
+  const exact = localFormat.results.get(finalRaw);
+  if (exact) {
+    const settled = await settleWithin(exact, cleanupDeadlineMs(finalRaw));
+    if (settled) return settled;
+  }
+
+  const ready = localFormat.latest;
+  if (ready?.formatted && finalRaw.startsWith(ready.source)) {
+    const tail = finalRaw.slice(ready.source.length).trim();
+    if (!tail) return ready.formatted;
+    if (countWords(tail) <= CLEANUP_MAX_APPENDED_TAIL_WORDS) {
+      const composed = `${ready.formatted} ${tail}`.replace(/\s+/g, " ").trim();
+      if (assessDictationEdit(finalRaw, composed).accepted) {
+        heraLog(`clean-up reused with a ${countWords(tail)} word tail`);
+        return composed;
+      }
+    }
+  }
+
+  prefetchLocalFormat(finalRaw);
+  const job = localFormat.results.get(finalRaw);
+  if (!job) return "";
+  return settleWithin(job, cleanupDeadlineMs(finalRaw));
+}
+
+/* Whatever the job has by the deadline, and never longer. Dictation may cost a
+   beat at stop; it may not hang on a model. */
+function settleWithin(promise, ms) {
+  return new Promise((resolve) => {
+    let done = false;
+    const timer = setTimeout(() => {
+      if (done) return;
+      done = true;
+      resolve("");
+    }, ms);
+    promise.then(
+      (value) => { if (!done) { done = true; clearTimeout(timer); resolve(value || ""); } },
+      () => { if (!done) { done = true; clearTimeout(timer); resolve(""); } },
+    );
+  });
+}
+
 function recordLocalTurn(text) {
   const raw = String(text || "").trim();
   if (!raw) return;
-  const withDigits = spokenNumbersToDigits(raw);
-  const turn = { raw: withDigits, prepared: "" };
-  localTurns.push(turn);
-
-  void formatDictationTurn(withDigits)
-    .then((formatted) => {
-      if (!formatted) return;
-      const verdict = assessDictationRefinement(withDigits, formatted);
-      if (verdict.accepted) {
-        turn.prepared = formatted;
-        heraLog(`formatted: "${formatted.slice(0, 50)}"`);
-      } else {
-        // Refused, so the raw text is what gets pasted.
-        heraLog(`formatting rejected (${verdict.reason})`);
-      }
-    })
-    .catch(() => {});
+  localTurns.push({ raw: spokenNumbersToDigits(raw), prepared: "" });
 }
 
 /* The on-device formatter, kept warm as a child process. */
@@ -1902,7 +2072,7 @@ function startFormatter() {
   return proc;
 }
 
-function formatDictationTurn(text) {
+function formatDictationTurn(text, context = "") {
   return new Promise((resolve) => {
     const proc = startFormatter();
     if (!proc) return resolve("");
@@ -1913,7 +2083,7 @@ function formatDictationTurn(text) {
       if (formatter.pending.delete(id)) resolve("");
     }, 4000);
     try {
-      proc.stdin.write(`${JSON.stringify({ id, text })}\n`);
+      proc.stdin.write(`${JSON.stringify({ id, text, context })}\n`);
     } catch (_) {
       formatter.pending.delete(id);
       resolve("");
@@ -1971,6 +2141,7 @@ async function startLocalDictation() {
   parakeet.listening = true;
   localDictationActive = true;
   localTurns = [];
+  resetLocalFormat();
   heraSession += 1;
   parakeetPartials = 0;
   heraLog("LISTENING — speak now", { app: dictationState.targetApp });
@@ -1995,6 +2166,16 @@ async function finishLocalDictation(reason) {
   const turns = localTurns.slice();
   localTurns = [];
   if (turns.length) {
+    /* The clean-up has been running since the last pause, so this is usually
+       already resolved and costs nothing. A stop that lands mid-sentence pays
+       the remainder, up to the deadline, and then goes with the raw words. */
+    const waitedFrom = Date.now();
+    await Promise.all(turns.map(async (turn) => {
+      turn.prepared = await resolveCleanup(turn.raw);
+    }));
+    const waitedMs = Date.now() - waitedFrom;
+    logMac("dictation.local.format_wait", { waitedMs, turns: turns.length });
+    if (waitedMs > 10) heraLog(`waited ${waitedMs}ms for the clean-up`);
     const raws = turns.map((turn) => turn.raw);
     const prepared = turns.map((turn) => turn.prepared || "");
     // The same call the cloud path makes, so normalisation, verification and
@@ -6935,7 +7116,7 @@ async function refineDictationText(rawText, options = {}) {
     }
 
     const candidate = String(data?.formatted || "").trim();
-    const assessment = assessDictationRefinement(raw, candidate);
+    const assessment = assessDictationEdit(raw, candidate);
     if (!assessment.accepted) {
       logMac("dictation.refine.rejected", {
         chars: raw.length,

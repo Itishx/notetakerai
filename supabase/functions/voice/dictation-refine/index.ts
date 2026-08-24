@@ -1,9 +1,16 @@
-// dictation-refine — a lossless cleanup pass for Yap Mode transcripts.
+// dictation-refine — the clean-up pass for BrainoHERA transcripts.
 //
-// This endpoint is intentionally narrow. It can format what the speech model
-// heard, but it must never summarize, answer, reorder, or silently replace the
-// speaker's words. The Mac app performs a second deterministic lexical check
-// and falls back to the raw transcript when that contract is violated.
+// This endpoint is intentionally narrow. It may delete what people do not mean
+// to write — fillers, stutters, the abandoned half of a self-correction — and
+// it may repunctuate, recase, and write spoken numbers as digits. It must never
+// add a word, move a word, answer, or summarize. The Mac app runs a second
+// deterministic check (assessDictationEdit) and falls back to the raw
+// transcript whenever that contract is violated.
+//
+// It used to be a strictly lossless formatter, judged by a gate that demanded
+// identical words in identical order. That made the two halves of dictation
+// contradict each other: cleaning up the speech was the whole point, and every
+// clean-up was rejected. Both halves now share this contract.
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
@@ -17,19 +24,30 @@ const OPENAI_ENDPOINT = "https://api.openai.com/v1/chat/completions";
 const DICTATION_REFINEMENT_MODEL = Deno.env.get("DICTATION_REFINEMENT_MODEL") || "gpt-4.1-mini";
 const MAX_TRANSCRIPT_CHARS = 20000;
 
-const SYSTEM_PROMPT = `You are a lossless speech-dictation formatter.
+const SYSTEM_PROMPT = `You clean up dictated speech into the text the speaker meant to write.
 
 Return one JSON object with exactly one string field named "formatted".
 
-Hard rules:
-- Preserve every clearly transcribed word, filler word, repetition, false start, correction, slang term, profanity, name, uncertainty, and idea in the original order.
-- Never summarize, answer, shorten, embellish, infer missing content, fix the speaker's facts, or rewrite their style.
-- Never move a word or clause earlier or later.
-- You may change only punctuation, capitalization, paragraph breaks, and unambiguous written notation for spoken numbers, dates, times, currencies, percentages, and units.
-- Examples of allowed notation: "five p m" to "5 p.m.", "six o'clock" to "6:00", and "twenty percent" to "20%."
-- Preserve emails, URLs, handles, hashtags, file names, code, product names, and personal names exactly unless the source already makes the casing unambiguous.
-- If any edit would require guessing, preserve the source wording.
-- Output no commentary and no Markdown.`;
+Remove:
+- Filler words: um, uh, er, hmm, like, you know, I mean, sort of, kind of.
+- False starts and stuttered repeats: "the the parser" becomes "the parser".
+- The abandoned half of a self-correction. Keep only what the speaker settled on: "meet at 5 actually 6" becomes "meet at 6".
+
+Fix:
+- Sentence case, punctuation, and paragraph breaks.
+- Spoken numbers, times, currencies, percentages, and units the way people write them: "five p m" to "5 PM", "six o'clock" to "6:00", "twenty percent" to "20%", "twenty dollars" to "$20".
+- A dictated list becomes a list.
+
+Never:
+- Add a word the speaker did not say. Not a reason, not a greeting, not a closing.
+- Remove a word that carries meaning. Only fillers, false starts, and corrected-away words may go.
+- Move a word or clause earlier or later.
+- Answer, explain, comment, greet, or summarize.
+- Translate. Keep the speaker's language exactly, including Hindi or mixed Hindi and English.
+- Change emails, URLs, handles, hashtags, file names, code, product names, or personal names.
+- Guess. If an edit would require guessing, keep the source wording.
+
+Output no commentary and no Markdown.`;
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {

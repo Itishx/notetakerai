@@ -18,29 +18,71 @@ import Foundation
  */
 
 let instructions = """
-You format dictated speech into clean written text. You are not a chatbot.
+You clean up dictated speech into the text the speaker meant to write. \
+You are not a chatbot and you are not a summarizer.
 
-Do:
-- Write spoken numbers as digits: "two point five seconds" becomes "2.5 seconds", \
-"seventy four characters" becomes "74 characters", "four hundred and sixty two milliseconds" \
-becomes "462 milliseconds".
-- Add sentence case and punctuation.
-- Remove filler words and false starts.
-- If the speaker corrects themselves, keep only the corrected version.
+Remove:
+- Filler words: um, uh, er, hmm, like, you know, I mean, sort of, kind of.
+- False starts and stuttered repeats: "the the parser" becomes "the parser".
+- The abandoned half of a self-correction. Keep only what the speaker settled on: \
+"meet at 5 actually 6" becomes "meet at 6".
+
+Fix:
+- Sentence case, punctuation, and paragraph breaks.
+- Numbers, times, and units the way people write them: "6 pm" becomes "6 PM", \
+"two point five seconds" becomes "2.5 seconds", "twenty percent" becomes "20%".
+- A dictated list becomes a list.
 
 Never:
-- Add any information that was not spoken.
+- Add a word the speaker did not say. Not a reason, not a greeting, not a closing.
+- Remove a word that carries meaning. Only fillers, false starts, and \
+corrected-away words may go. Every other word the speaker said must survive.
 - Answer, explain, comment, or greet.
-- Translate. Keep the speaker's language exactly, including Hindi or mixed Hindi and English.
-- Change names, brands, or technical terms.
+- Translate. Keep the speaker's language exactly, including Hindi or mixed \
+Hindi and English.
+- Change names, brands, emails, URLs, handles, hashtags, file names, or code.
 
-Reply with the formatted text and nothing else.
+Examples.
+
+Input: so um i think we should uh ship it on friday
+Output: I think we should ship it on Friday.
+
+Input: lets meet at 5 actually 6 pm can you tell the team thanks
+Output: Let's meet at 6 PM. Can you tell the team? Thanks.
+
+Input: the the parser is broken i mean the tokenizer is broken
+Output: The tokenizer is broken.
+
+Input: point one is the parser point two is the notch point three is billing
+Output: 1. The parser
+2. The notch
+3. Billing
+
+Reply with the cleaned text and nothing else.
 """
 
-let session = LanguageModelSession(instructions: instructions)
-// Pay the model's first-token cost now, not on the user's first sentence.
-_ = try? await session.respond(to: "warm up")
+/* A fresh session per request.
+
+   Reusing one session looked like a clear win on a bench of six short,
+   unrelated utterances: 659ms against 909ms, because a new session pays for
+   prefilling these instructions every time. Measured against the way dictation
+   actually calls this — the same transcript cleaned again each time it grows —
+   it was much worse. Across one session the calls ran 644ms, 2378ms, 3235ms,
+   2269ms as the context accumulated, and the later answers degraded badly
+   enough that the caller's faithfulness gate refused three of the four.
+
+   So the prefill is paid every time, on purpose. It is the predictable cost. */
 FileHandle.standardError.write(Data("[BrainoFormat] ready\n".utf8))
+
+/* The model likes to end list lines with the two trailing spaces that mean a
+   line break in Markdown. Dictation goes into a plain text field, where they
+   are just invisible junk on the end of every line. */
+func tidy(_ text: String) -> String {
+    text.split(separator: "\n", omittingEmptySubsequences: false)
+        .map { $0.replacingOccurrences(of: "[ \t]+$", with: "", options: .regularExpression) }
+        .joined(separator: "\n")
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+}
 
 func emit(_ payload: [String: String]) {
     guard let data = try? JSONSerialization.data(withJSONObject: payload),
@@ -56,14 +98,21 @@ while let line = readLine(strippingNewline: true) {
           !text.trimmingCharacters(in: .whitespaces).isEmpty
     else { continue }
 
+    let prompt = text
+
     do {
-        // A fresh session per utterance: the previous sentence is not context
-        // for this one, and carrying it invites the model to continue rather
-        // than format.
         let turn = LanguageModelSession(instructions: instructions)
-        let reply = try await turn.respond(to: text)
-        emit(["id": id, "text": reply.content.trimmingCharacters(in: .whitespacesAndNewlines)])
+        let reply = try await turn.respond(to: prompt)
+        emit(["id": id, "text": tidy(reply.content)])
     } catch {
-        emit(["id": id, "error": "\(error)"])
+        // A transient model error must not cost the user their sentence. One
+        // more attempt, then the caller falls back to the raw transcript.
+        do {
+            let retry = LanguageModelSession(instructions: instructions)
+            let reply = try await retry.respond(to: prompt)
+            emit(["id": id, "text": tidy(reply.content)])
+        } catch {
+            emit(["id": id, "error": "\(error)"])
+        }
     }
 }
