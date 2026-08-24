@@ -11,6 +11,8 @@ import Foundation
  Protocol
    stdin   start | stop | quit
    stdout  {"type":"ready"}                  models loaded, mic already running
+           {"type":"partial","text":"..."}   running hypothesis, display only
+           {"type":"utterance","text":"..."} a finished phrase, display only
            {"type":"delta","text":"..."}     new words to append at the caret
            {"type":"final","text":"..."}     whole utterance, session closed
            {"type":"error","message":"..."}
@@ -84,27 +86,32 @@ private final class ListeningFlag: @unchecked Sendable {
     }
 }
 
-/// Utterances waiting to be committed to the caret.
+/// The session transcript, as the model actually reports it.
 ///
-/// The first design assumed FluidAudio's transcript only ever grew, and sent
-/// the new suffix each time a callback fired. It does not: the partial callback
-/// reports the current hypothesis for the window, which shrinks and rewrites
-/// itself. Diffing it produced the same words over and over —
-/// "up up up what what what".
+/// Partials are display only. The partial callback reports the current
+/// hypothesis for the window, which shrinks and rewrites itself, and diffing it
+/// produced the same words over and over — "up up up what what what".
 ///
-/// So partials are now display only, and the ONLY thing that reaches the caret
-/// is a completed utterance from the end-of-utterance callback. Each one is
-/// queued here and drained by the consumer loop, which then resets the model —
-/// on the same task that calls `process()`, so the reset can never land in the
-/// middle of a decode.
+/// What reaches the caret is the end-of-utterance transcript. The important
+/// detail, and the one the previous version got wrong: FluidAudio hands back
+/// the WHOLE transcript accumulated since the last reset on every one of those
+/// callbacks, and `finish()` decodes that same token accumulator again. Neither
+/// is a per-phrase suffix. Collecting them in a list and joining it therefore
+/// said everything twice — a real speaker-to-mic pass returned "needed five
+/// actually six pm can you tell the teen thanks" concatenated to itself, and a
+/// three-phrase session would have been far worse.
+///
+/// So the transcript is stored as one cumulative string that each callback
+/// REPLACES, and `finish()` supersedes it when it returns anything at all.
 private actor CommitQueue {
-    private var pending: [String] = []
+    private var cumulative = ""
     private var latestPartial = ""
 
-    func push(_ text: String) {
+    /// One end-of-utterance report: the session so far, not the newest phrase.
+    func commit(_ text: String) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        pending.append(trimmed)
+        cumulative = trimmed
         // The utterance is closed, so the running hypothesis is spent.
         latestPartial = ""
     }
@@ -118,18 +125,17 @@ private actor CommitQueue {
         latestPartial = trimmed
     }
 
-    func takePartial() -> String {
-        defer { latestPartial = "" }
+    /// The best full transcript available, most authoritative first. Never a
+    /// concatenation: all three sources describe the same session.
+    func resolve(tail: String) -> String {
+        let finished = tail.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !finished.isEmpty { return finished }
+        if !cumulative.isEmpty { return cumulative }
         return latestPartial
     }
 
-    func drain() -> [String] {
-        defer { pending.removeAll() }
-        return pending
-    }
-
     func clear() {
-        pending.removeAll()
+        cumulative = ""
         latestPartial = ""
     }
 }
@@ -155,7 +161,6 @@ struct BrainoDictate {
             exit(0)
         }
 
-        let engine = AVAudioEngine()
         let commits = CommitQueue()
         let listening = ListeningFlag()
         let inFlight = InFlightCounter()
@@ -174,7 +179,15 @@ struct BrainoDictate {
         }
         // A finished utterance is the only thing that gets typed.
         await asr.setEouCallback { text in
-            Task { await commits.push(text) }
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            // Announced for the Notch only, and it carries the whole settled
+            // transcript rather than one phrase, because that is what the
+            // callback provides. The display replaces what it is showing; it
+            // must not append, or the panel would repeat every earlier phrase.
+            // This is NOT what reaches the caret: insertion happens once, from
+            // the delta at stop.
+            if !trimmed.isEmpty { emit(["type": "utterance", "text": trimmed]) }
+            Task { await commits.commit(text) }
         }
 
         do {
@@ -202,16 +215,24 @@ struct BrainoDictate {
             }
         }
 
-        let format = installMicTap(on: engine, flag: listening, inFlight: inFlight, sink: continuation)
+        let mic = MicPipeline(flag: listening, inFlight: inFlight, sink: continuation)
 
-        // Mic comes up now, once, so `start` costs nothing later.
+        // Mic comes up now, once, so `start` costs nothing later. Staying up is
+        // a separate problem — see MicPipeline.
         do {
-            engine.prepare()
-            try engine.start()
-            log("engine running: \(Int(format.sampleRate))Hz, \(format.channelCount)ch")
+            try mic.start()
         } catch {
             emit(["type": "error", "message": "mic start failed: \(error)"])
             exit(1)
+        }
+
+        // A dead tap does not raise anything, so something has to keep asking
+        // whether audio is still arriving at all.
+        let watchdog = Task {
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 500_000_000)
+                mic.healIfDeaf(reason: "no audio arriving")
+            }
         }
 
         emit(["type": "ready"])
@@ -230,6 +251,10 @@ struct BrainoDictate {
         for await line in commands {
             switch line.trimmingCharacters(in: .whitespaces) {
             case "start":
+                // The input device can have changed since the last session —
+                // connecting a Bluetooth headset is enough to do it. Prove the
+                // tap is alive before the user starts talking into a dead one.
+                mic.healIfDeaf(reason: "session start", threshold: 0.75)
                 await asr.reset()
                 await commits.clear()
                 inFlight.clear()
@@ -249,14 +274,10 @@ struct BrainoDictate {
                 }
                 let drainedMs = Int(Date().timeIntervalSince(stopStartedAt) * 1000)
                 do {
-                    // Exactly the file-mode resolution, which is the one that
-                    // is known to be accurate: everything committed, plus
-                    // whatever finish() still holds, joined once.
-                    var utterances = await commits.drain()
-                    let tail = try await asr.finish().trimmingCharacters(in: .whitespacesAndNewlines)
-                    if !tail.isEmpty { utterances.append(tail) }
-                    var text = utterances.joined(separator: " ")
-                    if text.isEmpty { text = await commits.takePartial() }
+                    // One transcript, chosen — never several concatenated. See
+                    // CommitQueue: every source reports the same whole session.
+                    let tail = try await asr.finish()
+                    let text = await commits.resolve(tail: tail)
                     if !text.isEmpty {
                         emit(["type": "delta", "text": text])
                     }
@@ -276,7 +297,8 @@ struct BrainoDictate {
                 listening.set(false)
                 continuation.finish()
                 consumer.cancel()
-                engine.stop()
+                watchdog.cancel()
+                mic.stop()
                 await asr.cleanup()
                 exit(0)
 
@@ -286,7 +308,8 @@ struct BrainoDictate {
         }
 
         continuation.finish()
-        engine.stop()
+        watchdog.cancel()
+        mic.stop()
         await asr.cleanup()
     }
 }
@@ -314,7 +337,7 @@ private func transcribeFile(path: String, chunkSize: StreamingChunkSize, rounds:
     }
     await asr.setEouCallback { text in
         log("+\(Int(Date().timeIntervalSince(began) * 1000))ms EOU")
-        Task { await commits.push(text) }
+        Task { await commits.commit(text) }
     }
 
     do {
@@ -334,16 +357,13 @@ private func transcribeFile(path: String, chunkSize: StreamingChunkSize, rounds:
             if buffer.frameLength == 0 { break }
             _ = try await asr.process(audioBuffer: buffer)
         }
-        var utterances = await commits.drain()
-        let tail = try await asr.finish().trimmingCharacters(in: .whitespacesAndNewlines)
-        if !tail.isEmpty { utterances.append(tail) }
-        let joined = utterances.joined(separator: " ")
-        let result = joined.isEmpty ? await commits.takePartial() : joined
+        let tail = try await asr.finish()
+        let result = await commits.resolve(tail: tail)
         emit([
             "type": "file_result",
             "round": "\(round)",
             "chunk": "\(chunkSize.durationMs)ms",
-            "utterances": "\(utterances.count)",
+            "chars": "\(result.count)",
             "text": result,
         ])
         }
@@ -352,30 +372,135 @@ private func transcribeFile(path: String, chunkSize: StreamingChunkSize, rounds:
     }
 }
 
-private nonisolated func installMicTap(
-    on engine: AVAudioEngine,
-    flag: ListeningFlag,
-    inFlight: InFlightCounter,
-    sink: AsyncStream<AudioChunk>.Continuation
-) -> AVAudioFormat {
-    let input = engine.inputNode
-    let format = input.inputFormat(forBus: 0)
-    input.installTap(onBus: 0, bufferSize: 2048, format: format) { buffer, _ in
-        // The tap runs whether or not we are dictating; dropping the buffer
-        // here is far cheaper than starting and stopping the engine.
-        guard flag.isOn else { return }
-        if let data = buffer.floatChannelData {
-            var peak: Float = 0
-            let frames = Int(buffer.frameLength)
-            for i in 0..<frames { peak = max(peak, abs(data[0][i])) }
-            if let report = flag.note(peak: peak, frames: frames) { log(report) }
-        }
-        guard let copy = buffer.deepCopy() else { return }
-        inFlight.enter()
-        sink.yield(AudioChunk(buffer: copy))
+/// Owns the microphone for the life of the process.
+///
+/// AVAudioEngine binds its input node to whichever device was default when the
+/// engine started, and it does NOT re-bind on its own. Connect a Bluetooth
+/// headset, unplug an interface, let the system switch input for any reason,
+/// and the installed tap stops delivering buffers — while the engine still
+/// reports itself as running. That is silent, permanent deafness.
+///
+/// It is not hypothetical: on 2026-08-20 a pair of Bluetooth buds connected
+/// eight minutes before a dictation session, and the log shows fourteen seconds
+/// of "listening" with zero audio buffers and an empty transcript. The last
+/// session that ever saw audio was a week earlier, on the built-in mic.
+///
+/// So the tap is rebuilt whenever the configuration changes, and a watchdog
+/// rebuilds it anyway for the cases the notification does not cover.
+///
+/// The tap closure MUST stay free of any actor. `@main`'s `main()` is
+/// MainActor-isolated under Swift 6, so a closure written inline there inherits
+/// that isolation; CoreAudio then calls it on its own realtime queue and the
+/// process traps in `dispatch_assert_queue_fail`. Building it in here, on a
+/// type with no global actor, is what keeps it nonisolated.
+private final class MicPipeline: @unchecked Sendable {
+    private let engine = AVAudioEngine()
+    private let flag: ListeningFlag
+    private let inFlight: InFlightCounter
+    private let sink: AsyncStream<AudioChunk>.Continuation
+
+    private let lock = NSLock()
+    private var lastBufferAt = Date()
+    private var quietUntil = Date.distantPast
+    private var failures = 0
+    private var observer: NSObjectProtocol?
+
+    init(
+        flag: ListeningFlag,
+        inFlight: InFlightCounter,
+        sink: AsyncStream<AudioChunk>.Continuation
+    ) {
+        self.flag = flag
+        self.inFlight = inFlight
+        self.sink = sink
     }
-    return format
+
+    /// How long since the tap last handed over audio. Buffers arrive whether or
+    /// not a session is open, so this reads as health even while idle.
+    var silenceAge: TimeInterval {
+        lock.lock(); defer { lock.unlock() }
+        return Date().timeIntervalSince(lastBufferAt)
+    }
+
+    func start() throws {
+        try build(reason: "startup")
+        observer = NotificationCenter.default.addObserver(
+            forName: .AVAudioEngineConfigurationChange,
+            object: engine,
+            queue: nil
+        ) { [weak self] _ in
+            // By the time this lands the old tap is already dead.
+            self?.rebuild(reason: "input device changed")
+        }
+    }
+
+    /// Cheap to call on a timer: rebuilds only once audio has actually stopped.
+    func healIfDeaf(reason: String, threshold: TimeInterval = 1.2) {
+        guard silenceAge > threshold else { return }
+        rebuild(reason: reason)
+    }
+
+    func stop() {
+        if let observer { NotificationCenter.default.removeObserver(observer) }
+        engine.stop()
+    }
+
+    private func build(reason: String) throws {
+        let input = engine.inputNode
+        // Re-read every time. A new device usually means a new sample rate, and
+        // installing a tap with a stale format is its own kind of silence.
+        let format = input.inputFormat(forBus: 0)
+        guard format.sampleRate > 0, format.channelCount > 0 else {
+            throw MicError.noInputDevice
+        }
+        input.removeTap(onBus: 0)
+        input.installTap(onBus: 0, bufferSize: 2048, format: format) { [weak self] buffer, _ in
+            guard let self else { return }
+            // Recorded before the listening check, so an idle tap dying is still
+            // visible to the watchdog and gets healed before the next session.
+            self.noteBuffer()
+            guard self.flag.isOn else { return }
+            if let data = buffer.floatChannelData {
+                var peak: Float = 0
+                let frames = Int(buffer.frameLength)
+                for i in 0..<frames { peak = max(peak, abs(data[0][i])) }
+                if let report = self.flag.note(peak: peak, frames: frames) { log(report) }
+            }
+            guard let copy = buffer.deepCopy() else { return }
+            self.inFlight.enter()
+            self.sink.yield(AudioChunk(buffer: copy))
+        }
+        engine.prepare()
+        try engine.start()
+        noteBuffer()
+        lock.lock(); failures = 0; lock.unlock()
+        log("engine running (\(reason)): \(Int(format.sampleRate))Hz, \(format.channelCount)ch")
+    }
+
+    private func rebuild(reason: String) {
+        lock.lock()
+        // One device change fires several notifications; one rebuild covers
+        // them. A machine with no usable input backs off instead of spinning.
+        if Date() < quietUntil { lock.unlock(); return }
+        let backoff = failures >= 2 ? 5.0 : 0.75
+        quietUntil = Date().addingTimeInterval(backoff)
+        lock.unlock()
+
+        engine.stop()
+        do {
+            try build(reason: reason)
+        } catch {
+            lock.lock(); failures += 1; lock.unlock()
+            log("mic rebuild failed (\(reason)): \(error)")
+        }
+    }
+
+    private func noteBuffer() {
+        lock.lock(); lastBufferAt = Date(); lock.unlock()
+    }
 }
+
+private enum MicError: Error { case noInputDevice }
 
 private func emit(_ payload: [String: String]) {
     guard let data = try? JSONSerialization.data(withJSONObject: payload),

@@ -8476,6 +8476,17 @@ window.brainoMac.onDictationPartial?.((payload) => {
   const text = String(payload?.text || "").trim();
   if (!text) return;
   dictationSpeechActive = !payload?.final;
+  /* Settled text, and the live line empties so the next hypothesis starts on
+     its own row. It REPLACES rather than appends: the on-device engine reports
+     the whole transcript so far on every end-of-utterance, not the newest
+     phrase, so appending would repeat every earlier sentence. Without this the
+     panel only ever held the current hypothesis, and a long session looked like
+     it was forgetting what you had already finished saying. */
+  if (payload?.committed) {
+    dictationSessionChunks = [text];
+    nfSetHeard("");
+    return;
+  }
   nfSetHeard(text, { durationMs: 60000 });
 });
 // SKIT (TEMPORARY — Instagram demo): while SKIT.enabled is on in main.cjs,

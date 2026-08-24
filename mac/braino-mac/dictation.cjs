@@ -147,6 +147,41 @@ function dictationSemanticTokens(value) {
     .normalize("NFKC")
     .toLowerCase()
     .replace(/[’‘]/g, "'")
+    /* A contraction is a faithful rewrite of two words, so both forms have to
+       reduce to the same tokens. Without this, "if it is not" becoming "if it
+       isn't" reads as one invented word and one lost pair, and the whole
+       clean-up is refused: a real sixty-five word dictation was rejected on
+       exactly that, with the model's output otherwise perfect.
+
+       The apostrophe forms are expanded first, because "we're" and "were" are
+       different words and stripping the apostrophe would merge them. */
+    .replace(/'re\b/g, " are")
+    .replace(/'ve\b/g, " have")
+    .replace(/'ll\b/g, " will")
+    .replace(/'m\b/g, " am")
+    .replace(/'d\b/g, " would")
+    // "let's" and "lets" are the same word to this comparison. Splitting on the
+    // apostrophe instead would make "let" + "s" look like invented tokens.
+    .replace(/'/g, "")
+    /* Now the bare forms, which is how speech models write them: a transcript
+       says "cant", the clean-up says "can't", and both mean "can not". */
+    .replace(/\b(?:cannot|cant)\b/g, "can not")
+    .replace(/\b(?:wont|willnot)\b/g, "will not")
+    .replace(/\bshant\b/g, "shall not")
+    .replace(/\bisnt\b/g, "is not")
+    .replace(/\barent\b/g, "are not")
+    .replace(/\bwasnt\b/g, "was not")
+    .replace(/\bwerent\b/g, "were not")
+    .replace(/\bhasnt\b/g, "has not")
+    .replace(/\bhavent\b/g, "have not")
+    .replace(/\bhadnt\b/g, "had not")
+    .replace(/\bdoesnt\b/g, "does not")
+    .replace(/\bdont\b/g, "do not")
+    .replace(/\bdidnt\b/g, "did not")
+    .replace(/\bcouldnt\b/g, "could not")
+    .replace(/\bshouldnt\b/g, "should not")
+    .replace(/\bwouldnt\b/g, "would not")
+    .replace(/\bmustnt\b/g, "must not")
     .replace(/\b([0-9]{1,2}):00\b/g, "$1")
     .replace(/\ba\s*\.?\s*m\b\s*\.?/g, " am ")
     .replace(/\bp\s*\.?\s*m\b\s*\.?/g, " pm ")
@@ -216,6 +251,175 @@ function assessDictationRefinement(source, candidate) {
     reason: accepted ? "faithful" : "words_changed_or_reordered",
     sourceCoverage,
     candidateCoverage,
+  };
+}
+
+/* How much of what was spoken a cleaned-up version has to keep.
+   Below this it stopped being dictation and started being a summary. */
+const DICTATION_EDIT_MIN_COVERAGE = 0.55;
+
+/* Alignment prices. Dropping a word is ordinary; swapping one for a word that
+   sounds like it is a real correction but has to stay rare; adding a word that
+   was never spoken is the thing this gate exists to stop, so it is priced out
+   of every path rather than merely discouraged. */
+const DICTATION_SUBSTITUTE_COST = 10;
+const DICTATION_INSERT_COST = 1000;
+
+function characterEditDistance(left, right) {
+  const a = String(left || "");
+  const b = String(right || "");
+  if (a === b) return 0;
+  let previous = new Uint16Array(b.length + 1);
+  let current = new Uint16Array(b.length + 1);
+  for (let j = 0; j <= b.length; j += 1) previous[j] = j;
+  for (let i = 1; i <= a.length; i += 1) {
+    current[0] = i;
+    for (let j = 1; j <= b.length; j += 1) {
+      const swap = previous[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1);
+      current[j] = Math.min(swap, previous[j] + 1, current[j - 1] + 1);
+    }
+    const spent = previous; previous = current; current = spent;
+  }
+  return previous[b.length];
+}
+
+/* Two tokens close enough to be one word heard two ways.
+
+   Speech models mishear words that sound alike, and a formatter reading the
+   whole sentence often has the context to put them right: a real microphone
+   pass produced "tell the teen thanks", which is plainly "team". Refusing that
+   correction threw away the entire clean-up over one letter.
+
+   Same stem counts too, so "cant" may become "cannot" and "deploy" may become
+   "deployment". Words that merely appear in the same sentence do not: "deploy"
+   never becomes "expired", and digits never move at all, because a wrong number
+   is the one mistake nobody catches by rereading. */
+function dictationTokensAreClose(left, right) {
+  if (left === right) return true;
+  const short = left.length <= right.length ? left : right;
+  const long = left.length <= right.length ? right : left;
+  // A number is never close to another number.
+  if (/\d/.test(left) || /\d/.test(right)) return false;
+  if (short.length >= 4 && long.startsWith(short) && long.length - short.length <= 4) return true;
+  if (short.length < 3) return false;
+  return characterEditDistance(left, right) <= 2;
+}
+
+/* Aligns the spoken words against the cleaned-up ones, in order, and reports
+   what it took to get from one to the other. Order-preserving by construction,
+   so a candidate whose clauses have been shuffled can only be explained as
+   insertions, and insertions are what the caller refuses. */
+function alignDictationEdit(sourceTokens, candidateTokens) {
+  const n = sourceTokens.length;
+  const m = candidateTokens.length;
+  const cost = [];
+  const back = [];
+  for (let i = 0; i <= n; i += 1) {
+    cost.push(new Float64Array(m + 1).fill(Infinity));
+    back.push(new Array(m + 1).fill(""));
+  }
+  cost[0][0] = 0;
+  for (let i = 1; i <= n; i += 1) { cost[i][0] = i; back[i][0] = "delete"; }
+  for (let j = 1; j <= m; j += 1) { cost[0][j] = j * DICTATION_INSERT_COST; back[0][j] = "insert"; }
+
+  for (let i = 1; i <= n; i += 1) {
+    for (let j = 1; j <= m; j += 1) {
+      let best = cost[i - 1][j] + 1;
+      let move = "delete";
+      const inserted = cost[i][j - 1] + DICTATION_INSERT_COST;
+      if (inserted < best) { best = inserted; move = "insert"; }
+      const same = sourceTokens[i - 1] === candidateTokens[j - 1];
+      if (same || dictationTokensAreClose(sourceTokens[i - 1], candidateTokens[j - 1])) {
+        const diagonal = cost[i - 1][j - 1] + (same ? 0 : DICTATION_SUBSTITUTE_COST);
+        if (diagonal < best) { best = diagonal; move = same ? "match" : "substitute"; }
+      }
+      cost[i][j] = best;
+      back[i][j] = move;
+    }
+  }
+
+  let i = n;
+  let j = m;
+  const counts = { matched: 0, substituted: 0, deleted: 0, inserted: 0 };
+  while (i > 0 || j > 0) {
+    const move = back[i][j];
+    if (move === "match") { counts.matched += 1; i -= 1; j -= 1; }
+    else if (move === "substitute") { counts.substituted += 1; i -= 1; j -= 1; }
+    else if (move === "delete") { counts.deleted += 1; i -= 1; }
+    else { counts.inserted += 1; j -= 1; }
+  }
+  return counts;
+}
+
+/* The gate for cleaned-up dictation, as opposed to lossless formatting.
+
+   assessDictationRefinement above demands the exact same words in the exact
+   same order, which is right for a formatter that may only touch punctuation.
+   It is the wrong contract for the thing people actually want from dictation:
+   "meet at five, um, actually six" should arrive as "Meet at 6." Under the
+   strict gate that edit is rejected every single time — measured at
+   sourceCoverage 0.71 on a real transcript — so the raw text is what lands and
+   the clean-up may as well not exist.
+
+   So this gate is DELETE-ONLY. The editor may drop words (fillers, false
+   starts, the abandoned half of a self-correction), repunctuate, recase, and
+   write spoken numbers as digits. It may not add a word that was not spoken,
+   move a word, or quietly lose an address, URL, handle, or code token. Those
+   are the failure modes that turn a cleanup into a fabrication, and they stay
+   forbidden.
+
+   Rejection is never fatal: the caller pastes the raw transcript instead. */
+function assessDictationEdit(source, candidate) {
+  const raw = String(source || "").trim();
+  const edited = String(candidate || "").trim();
+  if (!raw) return { accepted: false, reason: "empty_source" };
+  if (!edited) return { accepted: false, reason: "empty_candidate" };
+
+  // Deleting words shortens text; punctuation and digits move it a little the
+  // other way. Growing well past the original means something was added.
+  const lengthRatio = edited.length / Math.max(1, raw.length);
+  if (lengthRatio > 1.8) return { accepted: false, reason: "length_grew", lengthRatio };
+
+  const foldedCandidate = edited.normalize("NFKC").toLowerCase();
+  const missingProtectedToken = protectedDictationTokens(raw).find(
+    (token) => !foldedCandidate.includes(token.normalize("NFKC").toLowerCase()),
+  );
+  if (missingProtectedToken) {
+    return { accepted: false, reason: "protected_token_changed", token: missingProtectedToken };
+  }
+
+  const sourceTokens = dictationSemanticTokens(raw);
+  const candidateTokens = dictationSemanticTokens(edited);
+  if (!sourceTokens.length || !candidateTokens.length) {
+    return { accepted: false, reason: "missing_words" };
+  }
+
+  const align = alignDictationEdit(sourceTokens, candidateTokens);
+
+  // A word with no counterpart in the speech is an invention, and a candidate
+  // whose clauses have moved can only be explained as one. Either way it never
+  // reaches the caret.
+  if (align.inserted > 0) {
+    return { accepted: false, reason: "words_added_or_reordered", ...align };
+  }
+
+  const sourceCoverage = (align.matched + align.substituted) / sourceTokens.length;
+  if (sourceCoverage < DICTATION_EDIT_MIN_COVERAGE) {
+    return { accepted: false, reason: "too_much_removed", sourceCoverage, ...align };
+  }
+
+  /* Correcting a misheard word is useful; correcting many is a rewrite wearing
+     a clean-up's clothes. A handful per utterance, and never most of it. */
+  const substitutionCap = Math.min(4, Math.max(1, Math.ceil(sourceTokens.length * 0.15)));
+  if (align.substituted > substitutionCap) {
+    return { accepted: false, reason: "too_many_words_changed", substitutionCap, ...align };
+  }
+
+  return {
+    accepted: true,
+    reason: align.substituted === 0 && align.deleted === 0 ? "faithful" : "cleaned",
+    sourceCoverage,
+    ...align,
   };
 }
 
@@ -329,6 +533,7 @@ function buildDictationTurnDetection() {
 
 module.exports = {
   spokenNumbersToDigits,
+  assessDictationEdit,
   assessDictationRefinement,
   assessDictationInsertion,
   buildDictationTranscriptionConfig,
