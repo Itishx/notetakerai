@@ -77,6 +77,21 @@ look at my screen and tell me what is using energy
 close all my tabs, open cursor, then play a song on spotify
 ```
 
+## Round 001b — the interruption
+
+Found immediately after the above, from the second session: giving him a new
+task while he was working did nothing at all.
+
+The main process could already drop a running loop when a new command arrived.
+The command never got that far. The renderer drops every transcript while a turn
+is in flight, and a HIL run holds that flag for minutes, so the interruption
+never left the renderer and `hil.loop.superseded` never fired once.
+
+A new instruction is now an interruption once the running turn is more than two
+and a half seconds old. Under that it is still ignored, because his own voice
+coming back through the microphone must not be able to cut him off mid-sentence.
+The abandoned turn's answer is discarded rather than spoken over the new job.
+
 ## Still open
 
 - **Stale indices.** He reads, thinks, and the page has moved by the time he

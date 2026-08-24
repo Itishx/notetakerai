@@ -135,3 +135,21 @@ test("he can actually look, and actually scroll", () => {
   // And he can see more of the screen than before.
   assert.match(main, /MAC_HIL_OBSERVE_CAP = 220/);
 });
+
+/* Being able to change your mind mid-run.
+ *
+ * The main process could already drop a running loop when a new command
+ * arrived, but the command never got that far: the renderer dropped every
+ * transcript while a turn was in flight, and a HIL run holds that flag for
+ * minutes. Giving him a second task mid-run did nothing at all. */
+test("a new command interrupts long work instead of being dropped", () => {
+  const renderer = readFileSync(new URL("../mac/braino-mac/renderer/braino-mac.js", import.meta.url), "utf8");
+  // An interruption is allowed once the running turn is genuinely long work.
+  assert.match(renderer, /VOICE_TURN_INTERRUPT_AFTER_MS = 2500/);
+  assert.match(renderer, /const interrupting = voiceTurnInFlight/);
+  // But not before, so his own voice coming back cannot cut him off.
+  assert.match(renderer, /Date\.now\(\) - voiceTurnStartedAt > VOICE_TURN_INTERRUPT_AFTER_MS/);
+  // The old turn's result is discarded rather than spoken over the new job.
+  assert.match(renderer, /voiceTurnMine === voiceTurnToken/);
+  assert.match(renderer, /voice\.stale_turn_settled/);
+});

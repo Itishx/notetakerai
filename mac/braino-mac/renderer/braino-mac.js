@@ -393,6 +393,18 @@ let rtDictationVad = null;
 let rtDictationPreroll = null;
 let voiceCycleInFlight = false;
 let voiceTurnInFlight = false;
+/* When the in-flight turn started, and which turn it is.
+ *
+ * A delegate turn used to own the microphone for as long as it took, and a HIL
+ * run takes minutes. Everything said during one was dropped on the floor at the
+ * gate below, which is why giving him a second task mid-run did nothing at all:
+ * the interruption never left this file, so the main process never got the
+ * chance to drop the old run. */
+let voiceTurnStartedAt = 0;
+let voiceTurnToken = 0;
+/* Long enough that a stray echo of his own voice cannot interrupt him, short
+   enough that a person who has changed their mind is heard immediately. */
+const VOICE_TURN_INTERRUPT_AFTER_MS = 2500;
 let realtimeResponseInFlight = false;
 let realtimeResponseWaiter = null;
 let realtimeResponseText = "";
@@ -6738,7 +6750,24 @@ function flushRealtimeTranscript(reason) {
     stopListeningNow("voice_phrase");
     return;
   }
-  if (voiceTurnInFlight || !accepted) {
+  /* A new instruction during long work is an interruption, not noise.
+     Only after the turn has been running a moment, so that his own voice coming
+     back through the microphone cannot cut him off mid-sentence. */
+  const interrupting = voiceTurnInFlight
+    && accepted
+    && Date.now() - voiceTurnStartedAt > VOICE_TURN_INTERRUPT_AFTER_MS;
+  if (interrupting) {
+    logRenderer("voice.interrupted_running_turn", {
+      transcript: transcript.slice(0, 160),
+      ranForMs: Date.now() - voiceTurnStartedAt,
+    });
+    console.log(`[Braino 🎤 IN] "${transcript}" -> interrupting what he was doing`);
+    // The old turn's answer is no longer wanted. Its token is stale from here,
+    // so whatever it eventually returns is discarded rather than spoken over
+    // the new job. The main process drops the run itself: see macHilGeneration.
+    voiceTurnInFlight = false;
+  }
+  if ((voiceTurnInFlight && !interrupting) || !accepted) {
     if (speaking || processing || voiceTurnInFlight) {
       setStatus(speaking ? "speaking" : "thinking", speaking ? "Speaking" : "Delegating");
     } else {
@@ -6751,6 +6780,8 @@ function flushRealtimeTranscript(reason) {
   markRealtimeActivity("accepted_transcript", { schedule: false });
   if (speaking) stopSpeechOutput();
   voiceTurnInFlight = true;
+  voiceTurnStartedAt = Date.now();
+  const voiceTurnMine = ++voiceTurnToken;
   // Testing tap: every accepted spoken turn, in the terminal, with the gate it
   // cleared. Rejected audio never reaches this line, so IN here means "became a
   // real turn". Pairs with the [Braino 🗣 OUT] lines in speak/stream below.
@@ -6800,12 +6831,20 @@ function flushRealtimeTranscript(reason) {
       }
       await runDelegate(turnText, { keepRealtime: true });
     } finally {
-      voiceTurnInFlight = false;
-      if (realtimeActive) {
+      /* Only the current turn gets to say it is finished.
+         An interrupted turn can still be unwinding minutes later, and clearing
+         the flag from under its replacement would leave the new job unable to
+         be interrupted in turn, and its status wrongly reset. */
+      if (voiceTurnMine === voiceTurnToken) {
+        voiceTurnInFlight = false;
+      } else {
+        logRenderer("voice.stale_turn_settled", { token: voiceTurnMine, current: voiceTurnToken });
+      }
+      if (voiceTurnMine === voiceTurnToken && realtimeActive) {
         listening = true;
         setStatus("listening", "Listening");
         scheduleRealtimeIdleShutdown("turn_done");
-      } else {
+      } else if (voiceTurnMine === voiceTurnToken) {
         // The turn may have torn the session down on its way out (her mode,
         // yap mode, an error). Whatever "thinking" it left is nobody's now.
         settleStaleThinkingStatus("voice_turn_done");
