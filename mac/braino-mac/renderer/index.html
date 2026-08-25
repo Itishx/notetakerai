@@ -199,7 +199,14 @@
           </div>
           <div class="nf-privacy"></div>
           <div class="nf-think-dots"><i></i><i></i><i></i></div>
-          <div class="nf-think-arrow"></div>
+          <!-- The thinking chip: what he is doing, centred, with the way in
+               next to it. It used to be a caption pinned to the left edge of a
+               190px housing, which cut "Reading the page and understanding what
+               matters" down to the word "READ". -->
+          <button class="nf-think-chip" type="button" aria-expanded="false" aria-label="Show what Braino is thinking">
+            <span class="nf-think-chip-text">Thinking</span>
+            <span class="nf-think-chip-arrow" aria-hidden="true"></span>
+          </button>
           <section class="nf-thinking-canvas" aria-live="polite" aria-label="Braino task progress">
             <div class="nf-response-face" aria-hidden="true">
               <svg viewBox="0 0 230 72" preserveAspectRatio="none">

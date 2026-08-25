@@ -177,11 +177,7 @@ contextBridge.exposeInMainWorld("brainoMac", {
     ipcRenderer.on("braino-mac:cursor-mode", handler);
     return () => ipcRenderer.removeListener("braino-mac:cursor-mode", handler);
   },
-  onCursorTaskComplete: (callback) => {
-    const handler = (_event, payload) => callback(payload || {});
-    ipcRenderer.on("braino-mac:cursor-task-complete", handler);
-    return () => ipcRenderer.removeListener("braino-mac:cursor-task-complete", handler);
-  },
+
   onModeCommands: (callback) => {
     const handler = (_event, payload) => callback(payload || {});
     ipcRenderer.on("braino-mac:mode-commands", handler);

@@ -71,7 +71,7 @@ assert.match(spotifyPlay, /if \(!nativeOk\) \{[\s\S]*callSpotifyFunction\("spoti
 assert.match(spotifyPlay, /deferRestore: fastStart/);
 assert.ok(
   rendererDelegate.indexOf("const delegatePromise = window.brainoMac.delegate")
-    < rendererDelegate.indexOf("openNotchThinking(text"),
+    < rendererDelegate.indexOf("scheduleNotchThinking(text"),
   "renderer dispatches the command before drawing the thinking surface",
 );
 console.log("ok  keeps thinking, focus restore, and redundant API playback off Spotify's start path");

@@ -759,3 +759,24 @@ interval you set. It is a poll, not an event, for one reason: the moment the
 human is back the screen has to be gone. Only the screen that came up by itself
 goes away by itself. It never opens over dictation, a meeting recording, the
 teleprompter, or Braino OS.
+
+## The thinking chip (Mac notch)
+
+What he is doing, centred under the housing, with the way into the rest of it
+next to it. Three decisions, each one taken because the previous version was
+wrong on the glass rather than wrong in the stylesheet:
+
+| Decision | Why |
+| --- | --- |
+| The line lives in a centred chip, not the left caption slot. | The caption was pinned to the left edge of a 190px housing, so "Reading the page and understanding what matters" reached the screen as the word **READ**. A line nobody can read is worse than no line: it takes the space and looks broken as well. The collapsed island is 430px wide and the text ellipses at 318px. |
+| The shimmer travels **through** the text (`background-clip: text`), not over it. | A highlight sliding across reads as a loading bar. A gradient moving through the letters reads as the words being alive, which is the thing being said. It also replaced the three bouncing dots, and two of anything is one too many. |
+| Nothing automatic may close a surface a person opened (`nfThinkingPinned`). | Every arriving step called `openNotchThinking`, which removed `nf-think-open` to start clean, so the panel closed itself under your hand and the next click reopened it: "it disappears, then I have to click again". The pin follows the class, so it cannot outlive the state. |
+
+**The other half of the double click was the mouse zone.** The interactive
+region hugged the physical housing, so the chip sat outside it and the first
+press landed on the desktop behind. `nfSyncThinkingZone()` sizes it to the
+island (430x92) while thinking, and hands it straight back afterwards.
+
+Prove it with `tests/tools/notch-bench.mjs`, which loads the real markup and
+stylesheet with the renderer script stripped and screenshots any combination of
+classes. Reading the CSS is how the four-character line survived.

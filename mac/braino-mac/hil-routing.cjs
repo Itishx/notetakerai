@@ -85,7 +85,7 @@ const MAC_FAST_LANE = [
 /* Naming a website settles it, whatever else the sentence contains.
    "reply to that linkedin message" is browser work that happens to say
    "message", and the Mac's own messaging has no idea what LinkedIn is. */
-const MAC_BROWSER_TARGET = /\b(gmail|inbox|e?mail thread|youtube|linkedin|twitter|\bx\.com|instagram|reddit|maps|amazon|flipkart|zomato|swiggy|blinkit|github|medium|notion|figma|docs|sheets|drive|calendar|whatsapp web|browser|chrome|tab|website|site|url|link)\b/;
+const MAC_BROWSER_TARGET = /\b(gmail|inbox|e?mail thread|youtube|linkedin|twitter|\bx\.com|instagram|reddit|maps|amazon|flipkart|zomato|swiggy|blinkit|github|medium|notion|figma|docs|sheets|drive|calendar|whatsapp web|browser|chrome|tabs?|websites?|sites?|urls?|links?)\b/;
 
 /* Work that has to be found out rather than done.
  *
@@ -127,6 +127,20 @@ function macNeedsScreenContext(raw) {
  */
 function macWantsTheBrain(raw) {
   if (macAsksForTheBrain(String(raw || "").toLowerCase())) return true;
+  /* More than one job goes to the brain, whatever the jobs are.
+   *
+   * This is the single worst failure in the 2026-08-25 session and it looks
+   * like a routing detail: "find the latest email from Anthropic, put the
+   * invoice number in a note, then play something instrumental" contains the
+   * word play, the fast lane recognises play, and so all three jobs went to a
+   * pattern match. It matched the mail pattern, asked "what should the email
+   * say", and then swallowed the next three commands as the body of an email
+   * nobody asked for.
+   *
+   * A pattern match can answer one thing. Deciding what a sentence with three
+   * things in it means is the whole job of the layer above, so it gets it
+   * before anything else is considered. */
+  if (macLooksMultiStep(raw)) return true;
   // Working out what "this" points at means looking, which only he can do.
   if (macNeedsScreenContext(raw)) return true;
   /* Finding something out IS the work, even though "compare" and "look up" are
@@ -138,6 +152,29 @@ function macWantsTheBrain(raw) {
   return !macFastLane(raw);
 }
 
+/* "Close all the tabs."
+ *
+ * A native Mac power, so it belongs in the fast lane: one AppleScript, every
+ * window, instant. It was already written and it still failed in a real
+ * session, because the matcher ended in `tabs$` and the person said "close all
+ * the tabs please". The word please sent a one second job to the app resolver,
+ * which looked for an application called "all the tabs" and said so out loud.
+ *
+ * So the phrasing is loose and the SHAPE is what stays strict: one job, no
+ * continuation, and no site named. "close the youtube tabs" is a different
+ * thing and must not match; "close all my tabs, then open cursor" is two jobs
+ * and belongs to the brain.
+ */
+const CLOSE_ALL_TABS = /^(?:hey\s+|ok\s+|okay\s+)?(?:braino[,\s]+)?(?:can you\s+|could you\s+|please\s+|just\s+)*(?:close|shut|clear|kill|get rid of)\s+(?:all\s+(?:of\s+)?)?(?:the\s+|my\s+|these\s+|those\s+)?(?:browser\s+|open\s+|chrome\s+)?(?:tabs?|every\s+tab)(?:\s+(?:in|on)\s+(?:chrome|the\s+browser|safari|brave|edge))?(?:\s+(?:please|now|for me|thanks|thank you))*[.?!]*$/i;
+
+function macClosesAllTabs(raw) {
+  const text = String(raw || "").trim();
+  if (!text) return false;
+  /* A continuation means more than one job, and the brain owns those. */
+  if (/,\s*(?:then|and)\b|\band then\b/i.test(text)) return false;
+  return CLOSE_ALL_TABS.test(text);
+}
+
 module.exports = {
   macNeedsScreenContext,
   macFastLane,
@@ -146,4 +183,6 @@ module.exports = {
   macAsksForTheBrain,
   macStripBrainRequest,
   macLooksLikeTask,
+  macClosesAllTabs,
+  CLOSE_ALL_TABS,
 };

@@ -3023,6 +3023,7 @@ body {
   font-display: swap;
 }
 #notch-face.nf-thinking.nf-think-open .nf-pill,
+#notch-face.nf-thinking:not(.nf-think-open) .nf-pill,
 #notch-face.busy.captioning.nf-thinking.nf-think-open .nf-pill,
 #notch-face.nf-yap-open.nf-dictation .nf-pill,
 #notch-face.nf-yap-open .nf-pill,
@@ -3120,6 +3121,7 @@ body {
 }
 
 #notch-face.nf-thinking.nf-think-open .nf-pill::after,
+#notch-face.nf-thinking:not(.nf-think-open) .nf-pill::after,
 #notch-face.nf-yap-open .nf-pill::after,
 #notch-face.nf-inline-open .nf-pill::after,
 #notch-face.nf-answer-open .nf-pill::after,
@@ -3142,6 +3144,7 @@ body {
 }
 
 #notch-face.nf-thinking.nf-think-open .nf-pill::before,
+#notch-face.nf-thinking:not(.nf-think-open) .nf-pill::before,
 #notch-face.nf-yap-open .nf-pill::before,
 #notch-face.nf-inline-open .nf-pill::before,
 #notch-face.nf-answer-open .nf-pill::before,
@@ -4425,3 +4428,123 @@ body {
 #notch-face.nf-cmds-open .nf-band,
 #notch-face.nf-cmds-open .nf-cap,
 #notch-face.nf-cmds-open #nf-status { opacity: 0; pointer-events: none; }
+
+/* ---------- The thinking chip ----------
+ *
+ * What he is doing, centred under the housing, with the way into the rest of it
+ * next to it. Before this it was a caption pinned to the left edge of a 190px
+ * housing: "Reading the page and understanding what matters" arrived on screen
+ * as the word "READ". A line nobody can read is worse than no line, because it
+ * still takes the space and now it also looks broken.
+ *
+ * The shimmer is the only motion. It says the thing is alive without the three
+ * bouncing dots, which said the same thing while taking the corner. */
+#notch-face.nf-thinking:not(.nf-think-open) .nf-pill {
+  width: min(430px, calc(100vw - 32px));
+  height: 84px;
+  min-height: 0;
+  border-radius: 0 0 26px 26px;
+}
+
+#notch-face .nf-think-chip {
+  display: none;
+  position: absolute;
+  z-index: 12;
+  left: 50%;
+  top: calc(var(--nf-safe-top) + 6px);
+  transform: translateX(-50%);
+  align-items: center;
+  gap: 9px;
+  max-width: calc(100% - 34px);
+  padding: 5px 6px 5px 12px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+}
+#notch-face.nf-thinking .nf-think-chip { display: flex; }
+/* Open, the sheet already carries the line in full, so the chip stops being a
+   label and becomes what it is: the way back up. */
+#notch-face.nf-think-open .nf-think-chip {
+  top: auto;
+  bottom: 12px;
+  padding: 6px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, .06);
+}
+#notch-face.nf-think-open .nf-think-chip-text { display: none; }
+
+#notch-face .nf-think-chip-text {
+  overflow: hidden;
+  max-width: 318px;
+  color: rgba(255, 240, 235, .9);
+  font-family: "Braino SF Pro Display", "SF Pro Display", -apple-system, sans-serif;
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: .01em;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  /* The shimmer travels through the text itself rather than over the top of it,
+     so it reads as the words being alive rather than a highlight sliding past. */
+  background: linear-gradient(100deg,
+    rgba(255, 240, 235, .58) 0%,
+    rgba(255, 240, 235, .58) 38%,
+    #fff6f2 50%,
+    rgba(255, 240, 235, .58) 62%,
+    rgba(255, 240, 235, .58) 100%);
+  background-size: 260% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: nfThinkShimmer 2.6s linear infinite;
+}
+@keyframes nfThinkShimmer {
+  0% { background-position: 130% 0; }
+  100% { background-position: -30% 0; }
+}
+
+#notch-face .nf-think-chip-arrow {
+  flex: 0 0 auto;
+  display: block;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: rgba(246, 168, 162, .14);
+  position: relative;
+  transition: transform 420ms cubic-bezier(.22, 1, .36, 1), background 220ms ease;
+}
+#notch-face .nf-think-chip-arrow::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 5px;
+  height: 5px;
+  margin: -4px 0 0 -3px;
+  border-right: 1.5px solid rgba(246, 168, 162, .95);
+  border-bottom: 1.5px solid rgba(246, 168, 162, .95);
+  transform: rotate(45deg);
+}
+#notch-face .nf-think-chip:hover .nf-think-chip-arrow { background: rgba(246, 168, 162, .26); }
+#notch-face.nf-think-open .nf-think-chip-arrow { transform: rotate(180deg); }
+
+/* The old furniture. The dots said "thinking" from the corner while the chip
+   says it in words, and two of anything is one too many. */
+#notch-face .nf-think-dots,
+#notch-face .nf-think-arrow { display: none !important; }
+#notch-face.nf-thinking:not(.nf-think-open) .nf-cap,
+#notch-face.nf-thinking:not(.nf-think-open) .nf-band,
+#notch-face.nf-thinking:not(.nf-think-open) #nf-status,
+#notch-face.nf-thinking:not(.nf-think-open) #nf-status-2,
+#notch-face.nf-thinking:not(.nf-think-open) .nf-folds,
+#notch-face.nf-thinking:not(.nf-think-open) .nf-tray,
+#notch-face.nf-thinking:not(.nf-think-open) .nf-privacy,
+#notch-face.nf-thinking:not(.nf-think-open) .nf-volume {
+  opacity: 0 !important;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #notch-face .nf-think-chip-text { animation: none; -webkit-text-fill-color: rgba(255, 240, 235, .9); }
+}

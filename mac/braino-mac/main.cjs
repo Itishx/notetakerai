@@ -8,6 +8,7 @@ const path = require("node:path");
 const { looksInPerson, rosterFromInviteNames, selectAudibleStreams } = require("./meeting-audio.cjs");
 const { parseMeetingIntent: parseMeetingIntentImpl, mentionsMeeting } = require("./meeting-intent.cjs");
 const { parseIdleScreenIntent } = require("./idle-screen-intent.cjs");
+const { parseInterruptIntent, workflowClaimsUtterance } = require("./interrupt-intent.cjs");
 const { parseWallpaperIntent: parseWallpaperIntentImpl } = require("./wallpaper-intent.cjs");
 
 const ROOT_DIR = path.resolve(__dirname, "../..");
@@ -122,6 +123,7 @@ const {
   macStripBrainRequest,
   macLooksLikeTask,
   macWantsTheBrain,
+  macClosesAllTabs,
 } = require(path.join(__dirname, "hil-routing.cjs"));
 const {
   macVerifyAssert,
@@ -1169,21 +1171,28 @@ async function openCursorRepository() {
   }
 }
 
-async function finishCursorTask(reason) {
+/* There is no completion announcement any more, and there should not be one.
+ *
+ * It was wrong about the only thing it claimed to know. Twenty five seconds of
+ * a quiet agent panel is not a finished task: it is a model thinking, a long
+ * tool call, a person reading a diff. In one real session it fired eight times
+ * in an hour, every time over the top of something else, and each time it
+ * spoke it interrupted a live run and cost the run its context.
+ *
+ * A thing that speaks unprompted has to be right nearly always, because the
+ * cost of being wrong is not a wrong sentence, it is the sentence he was in the
+ * middle of. This was right rarely. So it is gone rather than tuned: a longer
+ * quiet window would only have made it wrong less often.
+ *
+ * What stays is the state itself, because the dashboard shows it and the voice
+ * prompt uses it as context, and neither of those interrupts anyone.
+ */
+function endCursorTaskSilently() {
   if (!cursorModeState.active) return;
   cursorModeState.active = false;
   cursorModeState.completedAt = Date.now();
-  const payload = { ...cursorModePayload(), reason };
-  logMac("cursor_mode.task_complete", {
-    reason,
-    changedFiles: cursorModeState.changedFiles,
-    head: cursorModeState.head,
-  });
-  sendToRenderer("braino-mac:cursor-task-complete", payload);
+  logMac("cursor_mode.agent_idle", { head: cursorModeState.head });
   broadcastCursorMode();
-  if (!/cursor/i.test(String(activeMacContext?.appName || ""))) {
-    await openCursorRepository();
-  }
 }
 
 async function pollCursorMode() {
@@ -1216,9 +1225,9 @@ async function pollCursorMode() {
         cursorModeState.active
         && now - cursorModeState.agentLastGrewAt > CURSOR_AGENT_QUIET_MS
       ) {
-        // It was producing, and it has stopped. That is the end of the task.
+        // It was producing and it has stopped. Recorded, never announced.
         logMac("cursor_mode.agent_quiet", { quietMs: now - cursorModeState.agentLastGrewAt });
-        await finishCursorTask("agent_idle");
+        endCursorTaskSilently();
       }
     }
 
@@ -3896,6 +3905,22 @@ async function handlePendingMacWorkflow(raw) {
     clearPendingMacWorkflow();
     pendingHilRun = null;
     return { ok: true, say: "Cancelled. I did not do anything." };
+  }
+
+  /* A pending question may claim an ANSWER. It may not claim an INSTRUCTION.
+   *
+   * This is the worst bug in the session log. A mail workflow asked what the
+   * email should say, and then ate the next three commands as its answer: a
+   * GitHub request became the recipient, "take care of the anthropic task"
+   * became the body, and a stop became neither. Four commands, one wrong
+   * question, none of them done.
+   *
+   * hil_answer is exempt: a held run asked a real question about its own work,
+   * and "yes" is not distinguishable from an instruction by shape. */
+  if (pending.type !== "hil_answer" && !workflowClaimsUtterance(pending, raw)) {
+    logMac("mac.workflow.released", { type: pending.type, stage: pending.stage, raw: textForLog(raw) });
+    clearPendingMacWorkflow();
+    return null;
   }
 
   /* The loop asked something and stopped. Pick the SAME run back up.
@@ -11829,7 +11854,9 @@ async function closeOpenTarget(target) {
     if (retry.ok) return { ok: true, say: `Closed ${retry.appName}.` };
     return { ok: false, say: `${appBaseName(matches[0])} exists, but I do not see it running right now.` };
   }
-  return { ok: false, say: `I could not find an app or known website called ${cleaned}.` };
+  /* missed: the cascade did not understand the target, as opposed to trying and
+     being refused. See macCascadeMissed. */
+  return { ok: false, missed: true, say: `I could not find an app or known website called ${cleaned}.` };
 }
 
 function mdfindExpression(query) {
@@ -13811,6 +13838,43 @@ const MAC_HIL_OBSERVE_CAP = 220;
    Two runs were alive at once in the log, both clicking, fighting over the same
    screen: one trying to stop a recording while the other opened an email. */
 let macHilGeneration = 0;
+/* The turn in flight. A new command bumps the generation, but the loop only
+   notices between steps, and a step is an accessibility walk plus a model call
+   plus a verify walk. In the session log a run carried on for twenty seconds
+   after the user pressed stop. Holding the request lets the new command cut the
+   old one off mid sentence, which is what stop means. */
+let macHilAbort = null;
+
+/* What is allowed to stop and ask.
+ *
+ * The model decides reversible true or false, and in a real session it marked
+ * three harmless steps false in a row because the COMMAND mentioned posting:
+ * opening x.com "cannot be undone", reading the page "cannot be undone",
+ * typing into the box "cannot be undone". The user said "Yes please" four
+ * times to get one tweet drafted, which is the same wall as before wearing a
+ * different coat.
+ *
+ * Navigating, reading, looking, scrolling, waiting and searching cannot buy,
+ * publish or destroy anything, so they are forced reversible here no matter
+ * what comes back. Only a click, or a keypress that submits, can be the thing
+ * you cannot take back. */
+const MAC_HIL_GATEABLE = new Set(["click", "pressKey", "selectOption"]);
+
+function macStepCanBeIrreversible(step) {
+  const action = step?.action || {};
+  const type = String(action.type || "");
+  if (type === "type") return action.submit === true;
+  return MAC_HIL_GATEABLE.has(type);
+}
+
+/* "and leave it unsent", "without posting it", "do not send it".
+   The user has already answered the gate question in the command itself, and
+   the answer was no. Asking anyway is not caution, it is not listening. */
+const MAC_HIL_NO_SEND = /\b(?:without (?:sending|posting|publishing|submitting)|do ?n[o']?t (?:send|post|publish|submit)|leave it (?:unsent|as a draft|in drafts)|don't actually (?:send|post)|but do ?n[o']?t (?:send|post))\b/i;
+
+function macCommandForbidsSending(command) {
+  return MAC_HIL_NO_SEND.test(String(command || ""));
+}
 let macContextReadAt = 0;
 
 // The AX helper answers in one line: "observe\t{json}".
@@ -13971,6 +14035,20 @@ async function macExecuteHilAction(action, elements) {
    handlePendingMacWorkflow. */
 let pendingHilRun = null;
 
+/* Did the cascade fail to UNDERSTAND, or fail to DO?
+ *
+ * The difference decides who answers. Not understanding is a routing fact and
+ * the brain should get a turn. Being refused by macOS, or by a site, is news
+ * about the world, and repeating the attempt through a slower layer only wastes
+ * the person's time. */
+function macCascadeMissed(result) {
+  if (!result || result.ok !== false) return false;
+  if (result.missed === true) return true;
+  if (result.source === "hil_loop") return false;
+  const say = String(result.say || "");
+  return /^I could not find an app or known website called\b/i.test(say);
+}
+
 async function runMacHilLoop(command, resume = null) {
   const runId = resume?.runId || crypto.randomUUID();
   // Several jobs need more room than one. This is the only thing the multi-step
@@ -13982,7 +14060,7 @@ async function runMacHilLoop(command, resume = null) {
   const state = resume?.state || { tasks: [], facts: [], asides: [], steps: [], budgetLeft: maxSteps };
   let lastStep = resume?.lastStep || null;
   let said = resume?.said || "";
-  let retried = false;
+  let retried = 0;
   /* The signature of the one step the user has just approved. Spent on use, so
      a yes covers the thing that was asked about and nothing else. */
   let approvedSig = String(resume?.approvedSig || "");
@@ -14008,6 +14086,10 @@ async function runMacHilLoop(command, resume = null) {
       return { ok: false, say: said || "That was taking too long, so I stopped partway rather than leave you hanging.", source: "hil_loop" };
     }
     const obs = await macBuildObservation();
+    if (macHilGeneration !== myGeneration) {
+      logMac("hil.loop.superseded", { runId, step, at: "after_observe" });
+      return { ok: true, say: "", source: "hil_loop", superseded: true };
+    }
     const body = {
       command,
       /* What he just said, so "the restaurant you told me about" resolves.
@@ -14029,22 +14111,39 @@ async function runMacHilLoop(command, resume = null) {
     };
     pendingReply = null;
     let turn = null;
+    const controller = new AbortController();
+    macHilAbort = controller;
     try {
       const res = await fetch(`${SUPABASE_URL}/functions/v1/hil-loop`, {
         method: "POST",
         headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
         body: JSON.stringify(body),
+        signal: controller.signal,
       });
       if (!res.ok) throw new Error(`hil-loop ${res.status}`);
       const data = await res.json();
       turn = data?.turn;
       if (data?.meta?.parse_ok === false) throw new Error("unreadable turn");
+      retried = 0; // a good turn clears the run's hiccup budget
+      if (macHilAbort === controller) macHilAbort = null;
     } catch (error) {
+      /* Cut off on purpose, by a new command or by stop. Not a failure and not
+         worth a retry: the person has already moved on. */
+      if (macHilGeneration !== myGeneration || controller.signal.aborted) {
+        logMac("hil.loop.superseded", { runId, step, at: "in_flight" });
+        return { ok: true, say: "", source: "hil_loop", superseded: true };
+      }
       // parse_ok=false is explicitly a "retry once" signal, not a fatal one, and
       // the browser engine treats it that way. One hiccup should not end a run.
-      if (!retried) {
-        retried = true;
-        logMac("hil.loop.retry", { error: String(error?.message || error), step });
+      /* A malformed turn is a hiccup, not a verdict. It used to get one retry
+         per RUN, so the third bad JSON of a long job killed work that was
+         otherwise going fine. Two in a row is a pattern; two spread across a
+         run is a bad afternoon at the model. */
+      if (retried < 2) {
+        retried += 1;
+        logMac("hil.loop.retry", { error: String(error?.message || error), step, attempt: retried });
+        state.facts.push("Your last reply could not be read as JSON. Reply with ONLY the JSON object, no prose and no code fences.");
+        if (state.facts.length > 12) state.facts = state.facts.slice(-12);
         step -= 1;
         continue;
       }
@@ -14147,8 +14246,28 @@ async function runMacHilLoop(command, resume = null) {
        close all the tabs". A gate you cannot get through is not a safeguard,
        it is a wall. */
     const stepSig = macHilStepSignature(stepObj);
-    if (stepObj.reversible === false && stepSig !== approvedSig) {
-      const ask = `${stepObj.intent || "That next step"} cannot be undone. Want me to go ahead?`;
+    /* A step is only irreversible if the ACTION could be. See
+       macStepCanBeIrreversible: a navigate that says it cannot be undone is the
+       model being nervous about the command, not about the click. */
+    const irreversible = stepObj.reversible === false && macStepCanBeIrreversible(stepObj);
+    if (stepObj.reversible === false && !irreversible) {
+      logMac("hil.loop.gate_downgraded", { runId, step, action: String(stepObj.action?.type || "") });
+    }
+
+    /* They said not to send it. That is the gate question, answered in advance,
+       with a no. So the send never happens and is never asked about; everything
+       up to it does. */
+    if (irreversible && macCommandForbidsSending(command)) {
+      logMac("hil.loop.send_refused", { runId, step, why: "command forbids sending" });
+      state.facts.push("They told you NOT to send, post or publish this. Everything up to that is yours to do; the last step is theirs. Leave it written and say so.");
+      if (state.facts.length > 12) state.facts = state.facts.slice(-12);
+      lastStep = { intent: stepObj.intent || "", action: stepObj.action, expects: stepObj.expects || "", result: { ok: false, error: "They asked you not to send it. Stop before that step and report what is written." } };
+      continue;
+    }
+
+    if (irreversible && stepSig !== approvedSig) {
+      const intent = String(stepObj.intent || "").trim().replace(/[.!?]+$/, "");
+      const ask = intent ? `${intent}. That cannot be undone. Want me to go ahead?` : "That one cannot be undone. Want me to go ahead?";
       pendingHilRun = {
         runId,
         command,
@@ -14177,6 +14296,19 @@ async function runMacHilLoop(command, resume = null) {
         say: said || "I keep trying the same thing and the screen is not changing, so I have stopped rather than keep going.",
         source: "hil_loop",
       };
+    }
+
+    /* A plain read buys nothing here. The runner hands over a fresh observation
+       on every single turn without being asked, so reading is a turn spent
+       being told what he was told at the top of the turn. In the session log
+       this is also how runs die: four reads in a row, then the circling guard
+       stops the job. Skipped, and said so, rather than executed. */
+    if (stepObj.action?.type === "read" && stepObj.action?.index == null) {
+      logMac("hil.loop.read_skipped", { runId, step });
+      state.facts.push("You are handed a fresh view of the screen at the top of every turn, so reading again shows you nothing new. Act on what is in front of you, or say what is missing.");
+      if (state.facts.length > 12) state.facts = state.facts.slice(-12);
+      lastStep = { intent: stepObj.intent || "", action: stepObj.action, expects: stepObj.expects || "", result: { ok: true, note: "Already read. The observation above IS the fresh read." } };
+      continue;
     }
 
     const result = await macExecuteHilAction(stepObj.action, obs.elements);
@@ -14542,6 +14674,20 @@ async function runDelegate(prompt) {
     if (spiteSwap) result = { ...result, mondaySpite: { requested: fastSpotify.song, played: songToPlay } };
   } else {
     result = await routeMacDelegate(prompt, raw);
+    /* A miss is not an answer.
+     *
+     * "Close all the tabs please" came back as "I could not find an app or
+     * known website called all the tabs", spoken out loud, while the layer that
+     * had understood it perfectly sat in shadow watching. A pattern match that
+     * does not recognise something has learned one fact, that IT cannot do it,
+     * and that fact belongs to the brain rather than to the user.
+     *
+     * Only a genuine miss falls through. "macOS refused the wallpaper change"
+     * is a real answer about the real world and the loop cannot do better. */
+    if (macCascadeMissed(result) && macHilEnabled()) {
+      logMac("delegate.cascade_missed", { raw: textForLog(raw), say: textForLog(result?.say || "") });
+      result = await runMacHilLoop(raw);
+    }
   }
   // Keep both model audits completely behind the result. A short delay also
   // lets the renderer begin answer speech before background work uses network.
@@ -14686,6 +14832,10 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
   const text = raw.toLowerCase();
   // Whatever he was doing, this is the new job. See macHilGeneration.
   macHilGeneration += 1;
+  if (macHilAbort) {
+    try { macHilAbort.abort(); } catch (_) {}
+    macHilAbort = null;
+  }
   const latestContext = await readActiveMacContext();
   if (latestContext && !isBrainoSelfContext(latestContext)) activeMacContext = latestContext;
   logMac("delegate.intent.start", {
@@ -14799,6 +14949,24 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
     }
   }
 
+  /* Stop comes first, before any half finished thing can claim the word.
+     In the session log "Braino stop that task. Stop. Stop." was answered three
+     times with "I still need the email address", because a pending mail
+     workflow was reading everything as its own answer. Stop is the word people
+     reach for when something is already going wrong, so it is the one thing
+     that can never be queued behind anything else. */
+  const interrupt = parseInterruptIntent(raw);
+  if (interrupt) {
+    /* Bumping the generation is what actually kills a running loop: it checks
+       between every step and returns the moment the number moves. */
+    macHilGeneration += 1;
+    const wasRunning = Boolean(pendingHilRun || pendingMacWorkflow);
+    pendingHilRun = null;
+    clearPendingMacWorkflow();
+    logMac("delegate.stopped", { wasRunning, raw: textForLog(raw) });
+    return { ok: true, say: interrupt.say };
+  }
+
   const pendingWorkflowResult = await handlePendingMacWorkflow(raw);
   if (pendingWorkflowResult) return pendingWorkflowResult;
 
@@ -14829,6 +14997,17 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
      vocabulary is, so it comes here without being asked.
 
      Off with BRAINO_HIL=0. */
+  /* Closing every tab is a native power: one AppleScript, every window,
+     instant. It sits in front of the brain for the same reason playback does,
+     and it is matched by SHAPE rather than by an exact sentence, because the
+     version that ended in `tabs$` failed on the word "please" and told the user
+     there was no app called "all the tabs". macClosesAllTabs refuses anything
+     with a second job in it, so those still reach the brain. */
+  if (macClosesAllTabs(raw)) {
+    logMac("delegate.close_all_tabs_intent", { raw: textForLog(raw) });
+    return closeAllBrowserTabs();
+  }
+
   if (macHilEnabled() && macWantsTheBrain(raw)) {
     const asked = macAsksForTheBrain(text);
     logMac("delegate.hil_loop.front", {
@@ -15061,13 +15240,6 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
       hasBody: Boolean(mailIntent.body),
     });
     return startMailWorkflow(mailIntent);
-  }
-
-  // "Close the tabs" = wipe them all. Anchored so "close the YOUTUBE tabs"
-  // stays a site-specific close, not a scorched-earth one.
-  if (/^close\s+(?:all\s+)?(?:the\s+|my\s+)?(?:browser\s+)?tabs$/i.test(cleanPrompt(raw).replace(/[?.!]+\s*$/, ""))) {
-    logMac("delegate.close_all_tabs_intent", {});
-    return closeAllBrowserTabs();
   }
 
   // "How many tabs do I have open?" — count AND understand: he groups them by

@@ -1080,6 +1080,7 @@ let coworkThinking = "";
 let coworkThinkingHistory = [];
 let coworkCompletionTimer = 0;
 const nfThinkingCanvas = notchFace?.querySelector(".nf-thinking-canvas");
+const nfThinkChipText = notchFace?.querySelector(".nf-think-chip-text");
 const nfThinkingHead = notchFace?.querySelector(".nf-thinking-head");
 const nfThinkingLines = notchFace?.querySelector(".nf-thinking-lines");
 const nfThinkingCurrent = notchFace?.querySelector(".nf-thinking-current");
@@ -1172,6 +1173,10 @@ function renderThinkingCanvas(label, thinking) {
   const current = String(thinking || label || "Working on it").trim();
   const presentation = thinkingPresentation(label, thinking);
   if (nfThinkingCurrent) nfThinkingCurrent.textContent = current;
+  /* The collapsed line. One sentence, whole where it fits and ellipsed by CSS
+     where it does not, rather than the four characters the old caption slot
+     allowed. */
+  if (nfThinkChipText) nfThinkChipText.textContent = compactFlowText(current, 64);
   if (nfThinkingState) nfThinkingState.textContent = presentation.state;
   if (nfThinkingCanvas) nfThinkingCanvas.dataset.state = presentation.state;
   if (nfFlowPrompt) {
@@ -1252,6 +1257,52 @@ function canUseNotchResponseSurface() {
 const NF_THINKING_REVEAL_MS = 900;
 let nfThinkingOpenTimer = 0;
 
+/* Did the person open this, or did he?
+ *
+ * Every new thinking step called openNotchThinking, which removed nf-think-open
+ * to start clean. So while he worked, the panel you had just opened closed
+ * itself under your hand, and your next click opened it again: "it disappears,
+ * then it opens up again with the same thinking, and I have to click twice".
+ *
+ * Nothing automatic may close a surface a person opened. That is the whole
+ * rule, and this flag is the whole implementation. */
+let nfThinkingPinned = false;
+
+/* The chip is the only interactive thing in the collapsed island, so the
+   clickable zone has to actually cover it. Sized to the island in CSS. */
+const NF_THINK_ISLAND_WIDTH = 430;
+const NF_THINK_ISLAND_HEIGHT = 92;
+
+function nfSyncThinkingZone() {
+  if (!notchFace?.classList.contains("nf-thinking")) return;
+  if (notchFace.classList.contains("nf-think-open")) {
+    syncOpenThinkingZone();
+    return;
+  }
+  window.brainoMac.setNotchZone?.({
+    expanded: true,
+    width: NF_THINK_ISLAND_WIDTH,
+    height: NF_THINK_ISLAND_HEIGHT,
+  });
+}
+
+function nfSetThinkingOpen(open) {
+  if (!notchFace) return;
+  nfThinkingPinned = Boolean(open);
+  notchFace.classList.toggle("nf-think-open", nfThinkingPinned);
+  notchFace.classList.remove("captioning");
+  const chip = notchFace.querySelector(".nf-think-chip");
+  if (chip) chip.setAttribute("aria-expanded", nfThinkingPinned ? "true" : "false");
+  if (nfThinkingPinned) {
+    cancelNotchSurfaceExit();
+    window.requestAnimationFrame(syncOpenThinkingZone);
+  } else {
+    beginNotchSurfaceExit();
+    notchFace.querySelector(".nf-pill")?.style.removeProperty("--nf-thinking-height");
+    nfSyncThinkingZone();
+  }
+}
+
 function cancelPendingNotchThinking() {
   if (!nfThinkingOpenTimer) return;
   window.clearTimeout(nfThinkingOpenTimer);
@@ -1277,13 +1328,15 @@ function openNotchThinking(prompt, detail = "Separating the useful signal from t
   window.clearTimeout(nfThinkingTimer);
   startThinkingPhaseCycle();
   renderThinkingCanvas("Thinking", nfThinkingText);
-  notchFace.classList.remove(
-    "nf-answer-open", "nf-answer-short", "nf-answer-long", "nf-think-open", "captioning",
-  );
+  notchFace.classList.remove("nf-answer-open", "nf-answer-short", "nf-answer-long", "captioning");
+  /* nf-think-open is deliberately NOT in that list. A step arriving is not a
+     reason to close a panel the person is reading. */
+  if (!nfThinkingPinned) notchFace.classList.remove("nf-think-open");
   notchFace.classList.add("nf-thinking", "nf-think-hint");
-  // Thinking is a disclosure surface, never a prerequisite for the command.
-  // Keep the physical notch compact until the user clicks it.
-  window.brainoMac.setNotchZone?.({ expanded: false });
+  /* The chip is the one thing you can click while he works, so the zone covers
+     the island rather than hugging the physical housing. It goes back the
+     moment thinking ends. */
+  nfSyncThinkingZone();
   updateNotchFace();
   return true;
 }
@@ -1566,6 +1619,7 @@ function startNotchAnswer(text, generation, options = {}) {
     "nf-thinking", "nf-think-open", "nf-think-hint", "nf-think-waiting",
     "nf-think-failed", "nf-think-complete",
   );
+  nfThinkingPinned = false;
   notchFace.classList.add("nf-answer-open");
   renderNotchAnswer();
   window.brainoMac.setNotchZone?.({
@@ -1778,27 +1832,28 @@ if (notchFace) {
   const toggleThink = (event) => {
     const detailedText = coworkThinking || nfThinkingText || lastProcessingDetail;
     if (!notchFace.classList.contains("nf-thinking") || !detailedText) return;
-    if (!event.target.closest?.(".nf-pill")) return;
+    if (!event.target.closest?.(".nf-pill") && !event.target.closest?.(".nf-think-chip")) return;
+    /* The chip is a button and is handled below; every other button stays out
+       of this entirely. */
     if (event.target.closest?.("button, a, input, textarea, select, .nf-answer-surface")) return;
     const opening = !notchFace.classList.contains("nf-think-open");
-    if (opening) cancelNotchSurfaceExit();
-    else beginNotchSurfaceExit();
-    notchFace.classList.toggle("nf-think-open", opening);
-    notchFace.classList.remove("captioning");
-    if (opening) window.requestAnimationFrame(syncOpenThinkingZone);
-    else {
-      notchFace.querySelector(".nf-pill")?.style.removeProperty("--nf-thinking-height");
-      window.brainoMac.setNotchZone?.({ expanded: false });
-    }
+    nfSetThinkingOpen(opening);
     nfSetThinkingSticky(opening ? detailedText : coworkLabel || nfThinkingText);
   };
   notchFace.addEventListener("click", toggleThink);
+  /* The chip: the named way in, and the only one that is obvious. */
+  notchFace.querySelector(".nf-think-chip")?.addEventListener("click", (event) => {
+    event.stopPropagation();
+    event.preventDefault();
+    const detailedText = coworkThinking || nfThinkingText || lastProcessingDetail;
+    if (!detailedText) return;
+    const opening = !notchFace.classList.contains("nf-think-open");
+    nfSetThinkingOpen(opening);
+    nfSetThinkingSticky(opening ? detailedText : coworkLabel || nfThinkingText);
+  });
   document.addEventListener("pointerdown", (event) => {
     if (!notchFace.classList.contains("nf-think-open") || notchFace.contains(event.target)) return;
-    beginNotchSurfaceExit();
-    notchFace.classList.remove("nf-think-open", "captioning");
-    notchFace.querySelector(".nf-pill")?.style.removeProperty("--nf-thinking-height");
-    window.brainoMac.setNotchZone?.({ expanded: false });
+    nfSetThinkingOpen(false);
     nfSetThinkingSticky(coworkLabel);
   });
 }
@@ -2600,6 +2655,9 @@ window.setInterval(() => {
 }, NF_THINKING_WATCHDOG_TICK_MS);
 
 function updateNotchFace() {
+  // pin follows the class: nothing can be pinned open that is not thinking any
+  // more, whichever of the six teardown paths took the class away.
+  if (nfThinkingPinned && !notchFace?.classList.contains("nf-thinking")) nfThinkingPinned = false;
   if (!notchFace) return;
   const visible = notchFaceEnabled && !herMode;
   notchFace.classList.toggle("on", visible);
@@ -5287,13 +5345,17 @@ async function runDelegate(prompt, options = {}) {
       ok: false,
       error: error?.message || "delegate_error",
     });
-    await speak(`Delegate error: ${error?.message || "something broke"}.`);
+    /* Never read a stack trace out loud. One session ended with him saying
+       "Delegate error: Error invoking remote method braino-mac:delegate: Error:
+       Command failed: open -a Google Chrome file://" at a person who was
+       holding a coffee. What broke is in the log; what he says is a sentence. */
+    await speak("That one broke on my side, so I stopped. Try it once more?");
     setStatus("error", "Delegate error");
     logInteraction({
       kind: "delegate",
       route: "delegate",
       user_text: text,
-      braino_text: `Delegate error: ${error?.message || "something broke"}.`,
+      braino_text: "That one broke on my side, so I stopped. Try it once more?",
       latency_ms: voiceTurnFirstAudioMs(),
       meta: { runId, ok: false, input: options.source || (options.keepRealtime ? "voice" : "typed"), error: error?.message || "delegate_error" },
     });
@@ -8542,17 +8604,10 @@ window.brainoMac.onCursorMode?.((payload) => {
 void window.brainoMac.cursorModeState?.().then((payload) => {
   cursorModeContext = payload || null;
 }).catch(() => {});
-/* Four words, because that is the whole message.
-   It used to name the files it had seen change, which was both wrong and
-   uninteresting: a changed file is what a task in progress looks like, and
-   nobody wants a list read to them. You asked for it to be done; this says it
-   is done. */
-window.brainoMac.onCursorTaskComplete?.(() => {
-  const line = "Your task is over.";
-  void setWalkerHomeState(false);
-  setBubble(line, 5000);
-  void speak(line);
-});
+/* He no longer announces that a Cursor task is over.
+   A quiet agent panel is not a finished task, and a thing that speaks
+   unprompted has to be right nearly always: the cost of being wrong is the
+   sentence it interrupted. See the note on endCursorTaskSilently in main.cjs. */
 /* Asked to dance.
    Music starting already triggers all of this; being asked now does too, and it
    does not wait for the music to be noticed, because noticing goes through

@@ -85,7 +85,7 @@ test("the Mac renderer mounts and drives the Chrome-system response and Yap stat
   assert.match(css, /Braino SF Pro Display/);
   assert.match(css, /font: 500 17px\/1\.48/);
   assert.match(css, /width 1050ms cubic-bezier\(\.22,1,\.36,1\)/);
-  assert.match(js, /openNotchThinking\(text,/);
+  assert.match(js, /scheduleNotchThinking\(text,/);
   assert.match(js, /startNotchAnswer\(line, generation, \{\s*rich:/);
   assert.match(js, /updateNotchAnswerText\(nfFlowResponseText, streamState\.generation\)/);
   assert.match(js, /trackNotchAnswerAudio\(audio, spokenText, generation\)/);
@@ -102,7 +102,10 @@ test("the Mac renderer mounts and drives the Chrome-system response and Yap stat
   assert.doesNotMatch(js, /notchFixedHeight: 240/);
   assert.match(main, /present front document[\s\S]{0,80}play front document/);
   assert.match(hotkey, /printLine\("double-shift"\)/);
-  assert.match(main, /trimmed === "double-shift"[\s\S]{0,220}?launch-demo-start/);
+  /* Shift twice used to introduce the launch film. It belongs to the idle
+     screen now, and the film moved to Command Shift L, which
+     tests/mac-idle-screen.test.mjs holds to account. */
+  assert.match(main, /trimmed === "double-shift"[\s\S]{0,220}?toggleIdleScreen/);
   assert.doesNotMatch(main, /trimmed === "double-space"[\s\S]{0,180}?launch-demo-start/);
   assert.match(css, /#notch-face\.nf-answer-exiting \.nf-pill/);
   assert.match(css, /#notch-face\.nf-surface-exiting \.nf-pill/);
@@ -129,7 +132,7 @@ test("voice subtitles stay inside Braino's box and expanded thinking fits its co
   assert.match(css, /#notch-face\.nf-inline-open \.nf-inline-caption/);
   assert.match(css, /#notch-face\.nf-inline-open \.nf-cap,[\s\S]{0,500}?display: none !important/);
   assert.match(css, /\.nf-answer-short-text \.nf-answer-word:not\(:last-child\) \{ margin-right: \.24em; \}/);
-  assert.match(updateFace, /syncInlineVoiceSurface\(inlineMode, inlineText\)/);
+  assert.match(updateFace, /syncInlineVoiceSurface\(inlineMode, inlineText,/);
   assert.match(updateFace, /layoutNotchCaption\(""\)/);
   assert.match(updateFace, /classList\.remove\("captioning"\)/);
   assert.doesNotMatch(updateFace, /layoutNotchCaption\(yapOwnsNotch \? "" : caption\)/);
@@ -144,7 +147,7 @@ test("voice subtitles stay inside Braino's box and expanded thinking fits its co
   assert.match(css, /padding: var\(--nf-content-top\) 18px 14px/);
 });
 
-test("thinking stays collapsed until click and command IPC is queued before presentation", () => {
+test("thinking stays collapsed until click, and the chip is clickable", () => {
   const js = readFileSync(new URL("../mac/braino-mac/renderer/braino-mac.js", import.meta.url), "utf8");
   const openThinking = js.slice(
     js.indexOf("function openNotchThinking"),
@@ -155,11 +158,15 @@ test("thinking stays collapsed until click and command IPC is queued before pres
     js.indexOf("async function answerViaRealtimeChat"),
   );
   assert.doesNotMatch(openThinking, /classList\.add\([^)]*nf-think-open/);
-  assert.match(openThinking, /setNotchZone\?\.\(\{ expanded: false \}\)/);
+  /* The zone used to hug the physical housing, which put the chip outside the
+     clickable area: the first press landed on the desktop behind it and only the
+     second one opened anything. It now covers the island, and goes back the
+     moment thinking ends. */
+  assert.match(openThinking, /nfSyncThinkingZone\(\)/);
   assert.match(js, /event\.target\.closest\?\.\("\.nf-pill"\)/);
   assert.ok(
     delegate.indexOf("const delegatePromise = window.brainoMac.delegate")
-      < delegate.indexOf("openNotchThinking(text"),
+      < delegate.indexOf("scheduleNotchThinking(text"),
   );
 });
 
@@ -167,7 +174,7 @@ test("Mac answer and thinking sheets use a fixed black material", () => {
   const css = readFileSync(new URL("../mac/braino-mac/renderer/braino-mac.css", import.meta.url), "utf8");
   const responseSection = css.slice(css.indexOf("Chrome-system response surfaces on Mac IOMI"));
   assert.match(responseSection, /linear-gradient\(180deg,rgba\(0,0,0,\.99\)/);
-  assert.match(responseSection, /\.nf-yap-open \.nf-pill::before,[\s\S]{0,500}?background: linear-gradient\(180deg,rgba\(0,0,0,\.99\)/);
+  assert.match(responseSection, /\.nf-yap-open \.nf-pill::before,[\s\S]{0,1400}?background: linear-gradient\(180deg,rgba\(0,0,0,\.99\)/);
   assert.doesNotMatch(responseSection, /conic-gradient/);
   assert.doesNotMatch(responseSection, /#ec8078|#dc77a8|#779cff|#f4cf87/i);
 });
