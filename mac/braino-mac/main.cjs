@@ -2570,6 +2570,12 @@ function registerHotkeys() {
       sendToRenderer("braino-mac:her-toggle", { source: "Command+Shift+H" });
       ensureDockWindowVisible("her-hotkey");
     }),
+    /* Braino ↔ Brainelle. Same mind, different name and voice, so it is a
+       toggle rather than a mode: no takeover, nothing to exit. */
+    characterToggle: globalShortcut.register("CommandOrControl+Shift+B", () => {
+      sendToRenderer("braino-mac:character-toggle", { source: "Command+Shift+B" });
+      ensureDockWindowVisible("character-hotkey");
+    }),
     /* Braino OS without saying anything.
        Shift is in there deliberately. A bare Command+O registered globally is
        taken from every other app on the machine, and Command+O is Open
@@ -3912,7 +3918,7 @@ async function loadMascotPreference(options = {}) {
     if (!res.ok) throw new Error(`profiles ${res.status}`);
     const rows = await res.json();
     const stored = rows?.[0]?.mascot;
-    const id = stored === "webb" || stored === "ferro" ? stored : "braino";
+    const id = stored === "webb" || stored === "ferro" || stored === "brainelle" ? stored : "braino";
     mascotCache = { id, fetchedAt: Date.now() };
     saveCachedMascot(id);
     return id;
@@ -3923,7 +3929,7 @@ async function loadMascotPreference(options = {}) {
 }
 
 async function saveMascotPreference(id) {
-  const mascot = id === "webb" || id === "ferro" ? id : "braino";
+  const mascot = id === "webb" || id === "ferro" || id === "brainelle" ? id : "braino";
   mascotCache = { id: mascot, fetchedAt: Date.now() };
   saveCachedMascot(mascot);
   const auth = authStatusPayload();
@@ -10282,6 +10288,32 @@ async function createSpotifyPlaylistOnMac(name, options = {}) {
   return { ok: true, say: `Created the playlist ${created.playlistName || playlistName} on Spotify.` };
 }
 
+/* Every way of playing a song on this Mac goes through AppleScript, and
+   AppleScript is the one thing macOS will refuse outright. A session with
+   Automation denied logged the state script failing twenty one times and
+   `spotify-playback` never being called once: he searched, found the track, and
+   then had no hand to play it with. The web path was there the whole time and
+   was answering 200 for reads in the same session. */
+async function playSpotifyViaWebApi(uri, positionMs = 0) {
+  const result = await callSpotifyFunction("spotify-playback", {
+    action: "play",
+    uri: String(uri || ""),
+    positionMs: Math.max(0, Math.round(Number(positionMs) || 0)),
+  });
+  const ok = Boolean(result?.ok ?? result?.success ?? result);
+  logMac("spotify.web_playback", { ok, uri: textForLog(uri) });
+  return ok;
+}
+
+/* macOS refusing to talk to another app, as opposed to Spotify being unhappy.
+   Worth telling apart, because one of them the user can fix in two minutes. */
+function looksLikeAutomationDenied(error) {
+  const message = String(error?.message || error || "");
+  return /not authori[sz]ed|Automation|-1743|not allowed to send Apple events|errAEEventNotPermitted/i.test(message);
+}
+
+let warnedAutomationDenied = false;
+
 async function playSpotifyTrackInMacApp(uri, positionMs = 0, { activate = true, stabilityLock = true } = {}) {
   const safeUri = escapeAppleScriptString(uri);
   const positionSeconds = Math.max(0, Math.round(Number(positionMs) || 0) / 1000);
@@ -10322,7 +10354,22 @@ ${activate ? "  activate" : ""}
   play track "${safeUri}"
 ${seekLine}
 end tell`;
-  await execFileP("/usr/bin/osascript", ["-e", script], { timeout: positionSeconds > 0 ? 22000 : 10000 });
+  try {
+    await execFileP("/usr/bin/osascript", ["-e", script], { timeout: positionSeconds > 0 ? 22000 : 10000 });
+  } catch (error) {
+    /* The local app is unreachable. Play it through the account instead rather
+       than reporting failure with a perfectly good second route unused. */
+    logMac("spotify.mac_app.play_failed", { denied: looksLikeAutomationDenied(error), error });
+    const played = await playSpotifyViaWebApi(uri, positionMs).catch(() => false);
+    if (played) return;
+    if (looksLikeAutomationDenied(error) && !warnedAutomationDenied) {
+      warnedAutomationDenied = true;
+      sendToRenderer("braino-mac:speak-line", {
+        text: "macOS is blocking me from controlling Spotify. Turn me on under Privacy and Security, then Automation.",
+      });
+    }
+    throw error;
+  }
   // Immediately hide the window after the script runs (don't wait for it)
   if (!activate) {
     try {
@@ -13223,6 +13270,18 @@ function fireHilReasonThinking(raw) {
 // look at the result before choosing the next move, anything it simply does not
 // match.
 const macHilWait = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/* The last few things said, both ways, as plain lines.
+   Short on purpose: this is for resolving a referent to something he just told
+   you, not for giving him a transcript to reason over. */
+function macRecentExchanges(turns = 4) {
+  const recent = (macChatHistory || []).slice(-turns * 2);
+  if (!recent.length) return "";
+  const lines = recent
+    .map((m) => `${m.role === "assistant" ? "You said" : "They said"}: ${String(m.content || "").slice(0, 220)}`)
+    .filter((line) => line.length > 12);
+  return lines.length ? `Just before this:\n${lines.join("\n")}` : "";
+}
 /* No step budget worth the name.
    A counter stopped good runs mid-work: the Meet booking took seven steps, the
    invoice eight, and a fourteen step ceiling killed the Faro run at a hundred
@@ -13242,6 +13301,7 @@ const MAC_HIL_OBSERVE_CAP = 220;
    Two runs were alive at once in the log, both clicking, fighting over the same
    screen: one trying to stop a recording while the other opened an email. */
 let macHilGeneration = 0;
+let macContextReadAt = 0;
 
 // The AX helper answers in one line: "observe\t{json}".
 async function macBuildObservation() {
@@ -13259,11 +13319,18 @@ async function macBuildObservation() {
      app has always known it: readActiveMacContext parses it out of the browser.
      Without this the loop was both blind to where it was and unable to check
      that it had arrived. */
+  /* The address, cached for a beat.
+     Reading it is an AppleScript call, observations happen twice per step, and
+     when Automation is denied that call fails slowly rather than instantly. It
+     does not change between the two halves of one step. */
   let browserUrl = "";
-  try {
-    const ctx = await readActiveMacContext();
-    if (ctx && !isBrainoSelfContext(ctx)) activeMacContext = ctx;
-  } catch (_) { /* keep the last known context */ }
+  if (Date.now() - macContextReadAt > 1500) {
+    macContextReadAt = Date.now();
+    try {
+      const ctx = await readActiveMacContext();
+      if (ctx && !isBrainoSelfContext(ctx)) activeMacContext = ctx;
+    } catch (_) { /* keep the last known context */ }
+  }
   browserUrl = String(activeMacContext?.browserUrl || "");
   const where = browserUrl ? `Address: ${browserUrl}` : "";
   return {
@@ -13433,7 +13500,15 @@ async function runMacHilLoop(command, resume = null) {
     const obs = await macBuildObservation();
     const body = {
       command,
-      context: activeMacContext?.appName ? `Front app: ${activeMacContext.appName}` : "",
+      /* What he just said, so "the restaurant you told me about" resolves.
+         Without this he had the screen and the command and nothing else, and a
+         real session has him trying to READ his own previous answer off the
+         screen, failing, and asking "which Italian restaurant do you mean?"
+         fourteen seconds after naming it himself. */
+      context: [
+        activeMacContext?.appName ? `Front app: ${activeMacContext.appName}` : "",
+        macRecentExchanges(),
+      ].filter(Boolean).join("\n"),
       runId,
       state: {
         ...state,
@@ -13476,8 +13551,14 @@ async function runMacHilLoop(command, resume = null) {
          screen is unnerving; hearing what it is doing is the difference between
          a tool and someone helping you. One breath, first sentence only, and
          never the same line twice in a row. */
+      /* Show every step, say the first one only.
+         Speaking each step read well on paper and cost six seconds a turn in
+         practice, serially, while he stood still waiting to finish a sentence.
+         Seeing it is instant; hearing all of it is slow. So he says what he is
+         setting out to do, then works in front of you. */
+      sendToRenderer("braino-mac:thinking-step", { text: thinking.slice(0, 240), step: step + 1 });
       const aloud = thinking.split(/(?<=[.!?])\s/)[0].trim().slice(0, 150);
-      if (aloud && aloud !== spokenLast) {
+      if (!spokenLast && aloud) {
         spokenLast = aloud;
         sendToRenderer("braino-mac:speak-line", { text: aloud });
       }

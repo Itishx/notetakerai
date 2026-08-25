@@ -153,3 +153,35 @@ test("a new command interrupts long work instead of being dropped", () => {
   assert.match(renderer, /voiceTurnMine === voiceTurnToken/);
   assert.match(renderer, /voice\.stale_turn_settled/);
 });
+
+/* The three things that made him feel slow and scattered. */
+test("he plays music even when macOS blocks AppleScript", () => {
+  const main = readFileSync(new URL("../mac/braino-mac/main.cjs", import.meta.url), "utf8");
+  // A second route, used when the local app refuses.
+  assert.match(main, /async function playSpotifyViaWebApi/);
+  assert.match(main, /spotify-playback/);
+  assert.match(main, /spotify\.mac_app\.play_failed/);
+  // And it says what is wrong once, rather than failing silently thousands of times.
+  assert.match(main, /looksLikeAutomationDenied/);
+  assert.match(main, /warnedAutomationDenied/);
+});
+
+test("he remembers what he just said", () => {
+  const main = readFileSync(new URL("../mac/braino-mac/main.cjs", import.meta.url), "utf8");
+  assert.match(main, /function macRecentExchanges/);
+  // Handed to the loop as context, which had only the screen and the command.
+  assert.match(main, /macRecentExchanges\(\),/);
+});
+
+test("thinking is shown, not waited for", () => {
+  const main = readFileSync(new URL("../mac/braino-mac/main.cjs", import.meta.url), "utf8");
+  const renderer = readFileSync(new URL("../mac/braino-mac/renderer/braino-mac.js", import.meta.url), "utf8");
+  // Every step goes to the screen.
+  assert.match(main, /braino-mac:thinking-step/);
+  assert.match(renderer, /onThinkingStep/);
+  // Only the first is spoken: speaking each one cost about six seconds a turn.
+  assert.match(main, /if \(!spokenLast && aloud\)/);
+  // And a sound made while thinking is not an instruction.
+  assert.match(renderer, /VOICE_FILLER_ONLY/);
+  assert.match(renderer, /voice\.filler_ignored/);
+});

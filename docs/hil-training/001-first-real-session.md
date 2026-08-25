@@ -92,6 +92,36 @@ and a half seconds old. Under that it is still ignored, because his own voice
 coming back through the microphone must not be able to cut him off mid-sentence.
 The abandoned turn's answer is discarded rather than spoken over the new job.
 
+## Round 001c — the six that made him feel slow
+
+From a third session, mostly latency and mis-hearing rather than reasoning.
+
+- **Spotify had no hands.** Every route to it goes through AppleScript, which
+  macOS was refusing: the state script failed 21 times and `spotify-playback`,
+  the web route that was answering 200 for reads in the same session, was never
+  called once. He searched, found the track, and had nothing to play it with.
+  He now falls back to the account when the app refuses, and says what is wrong
+  once instead of failing silently.
+- **He could not remember his own answer.** Asked for "the Italian restaurant
+  you just told me about", fourteen seconds after saying Tre-Forni, he tried to
+  read it off the screen and then asked which restaurant was meant. The loop got
+  the screen and the command and nothing else. It now gets the last few
+  exchanges too.
+- **Six of twenty four commands went to the pattern matcher.** "find three
+  dictation apps and tell me what they charge" was answered about the local
+  disk. Two causes: research verbs like "compare" and "look up" did not count as
+  a task at all, and the app-launch pattern was swallowing any lowercase
+  sentence beginning with "open".
+- **Speaking every step cost about six seconds a turn**, serially, while the
+  work waited. Every step is now shown in the notch as it happens and only the
+  first is spoken.
+- **"well" started a whole turn.** Sounds people make while thinking are now
+  ignored. "yes", "okay" and "no" deliberately are not, because that is how you
+  answer him.
+- **The address was re-read on every observation**, twice per step, through an
+  AppleScript call that fails slowly when Automation is denied. My own fix from
+  round 001 caused that. Cached for a beat now.
+
 ## Still open
 
 - **Stale indices.** He reads, thinks, and the page has moved by the time he

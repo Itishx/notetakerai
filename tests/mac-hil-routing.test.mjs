@@ -164,3 +164,32 @@ test("anything pointing at the screen needs eyes, so it needs the loop", () => {
     assert.equal(macWantsTheBrain(said), false, said);
   }
 });
+
+/* Finding something out is work.
+ *
+ * Six of twenty four commands went to the pattern matcher: "find three
+ * dictation apps and tell me what they charge" was answered about the local
+ * disk, because "find" belongs to file search and "compare" is not a verb you
+ * can do to a Mac at all. What marks these is not the opening verb but that
+ * they end in a judgement. */
+test("research reaches the brain, however it opens", () => {
+  for (const said of [
+    "read whatever is open right now and tell me if it contradicts itself anywhere",
+    "compare trybraino.com with wisprflow.ai and tell me which explains itself faster",
+    "find three AI dictation apps and tell me what each one charges",
+    "look up Parakeet and Whisper word error rates and tell me which you would pick",
+    "check if trybraino.com is up and how fast it loads",
+    "open a new Google Doc and write three lines about what you did in the last hour",
+  ]) {
+    assert.equal(macWantsTheBrain(said), true, said);
+  }
+});
+
+/* And the fast lane survives it. "open cursor" is an app name; the pattern that
+   matched it was also swallowing whole lowercase sentences beginning with
+   "open". */
+test("launching an app is still a launch, not a sentence", () => {
+  for (const said of ["open cursor", "open safari", "open spotify", "play billie jean", "pause", "take a screenshot", "call mom", "turn on dark mode"]) {
+    assert.equal(macWantsTheBrain(said), false, said);
+  }
+});

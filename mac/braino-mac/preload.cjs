@@ -15,7 +15,7 @@ const MASCOT_STATE_PATH = path.join(AUTH_STORE_DIR, "mascot.json");
 function loadCachedMascotSync() {
   try {
     const id = JSON.parse(fs.readFileSync(MASCOT_STATE_PATH, "utf8"))?.id;
-    return id === "webb" || id === "ferro" ? id : "braino";
+    return id === "webb" || id === "ferro" || id === "brainelle" ? id : "braino";
   } catch (_) {
     return "braino";
   }
@@ -29,6 +29,7 @@ function loadWalkerSvgSource(fileName, exportName) {
 }
 
 function walkerSvgFor(mascotId) {
+  if (mascotId === "brainelle") return loadWalkerSvgSource("brainelleWalkerSvg.ts", "BRAINELLE_WALKER_SVG");
   if (mascotId === "webb") return loadWalkerSvgSource("webbWalkerSvg.ts", "WEBB_WALKER_SVG");
   if (mascotId === "ferro") return loadWalkerSvgSource("ferroWalkerSvg.ts", "FERRO_WALKER_SVG");
   return loadWalkerSvgSource("brainoWalkerSvg.ts", "BRAINO_WALKER_SVG");
@@ -126,6 +127,12 @@ contextBridge.exposeInMainWorld("brainoMac", {
   },
   brainoOsClosed: () => ipcRenderer.send("braino-mac:braino-os-closed"),
   brainoOsCommand: (text) => ipcRenderer.invoke("braino-mac:braino-os-command", text),
+  // Each step of a HIL run, shown as it happens rather than waited for.
+  onThinkingStep: (callback) => {
+    const handler = (_event, payload) => callback(payload || {});
+    ipcRenderer.on("braino-mac:thinking-step", handler);
+    return () => ipcRenderer.removeListener("braino-mac:thinking-step", handler);
+  },
   onBrainoOsColor: (callback) => {
     const handler = (_event, payload) => callback(payload || {});
     ipcRenderer.on("braino-mac:braino-os-color", handler);
@@ -180,6 +187,11 @@ contextBridge.exposeInMainWorld("brainoMac", {
     const handler = (_event, payload) => callback(payload || {});
     ipcRenderer.on("braino-mac:her-toggle", handler);
     return () => ipcRenderer.removeListener("braino-mac:her-toggle", handler);
+  },
+  onCharacterToggle: (callback) => {
+    const handler = (_event, payload) => callback(payload || {});
+    ipcRenderer.on("braino-mac:character-toggle", handler);
+    return () => ipcRenderer.removeListener("braino-mac:character-toggle", handler);
   },
   onMondayMode: (callback) => {
     const handler = (_event, payload) => callback(payload || {});

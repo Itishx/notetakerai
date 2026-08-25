@@ -68,7 +68,10 @@ const MAC_FAST_LANE = [
   /\b(play|pause|resume|skip|next track|previous track|stop the music|volume|mute|unmute|spotify|moonwalk|dance)\b/,
   // Launching, quitting and switching apps
   /\b(launch|quit|switch to|close)\b/,
-  /\bopen\s+(?!.*\b(gmail|inbox|mail|youtube|linkedin|twitter|maps|amazon|github|medium|docs|drive|calendar|whatsapp web)\b)[a-z .]+$/,
+  /* An app name, not any sentence that happens to begin with "open". This was
+     matching "open a new google doc and write three lines about what you did in
+     the last hour" whole, because it is all lowercase letters to the end. */
+  /\bopen\s+(?!.*\b(?:gmail|inbox|mail|youtube|linkedin|twitter|maps|amazon|github|medium|docs?|drive|calendar|whatsapp web)\b)(?!.*\band\b)[a-z .]{2,22}$/,
   // The file system
   /\b(file|files|folder|desktop|downloads|organi[sz]e|rename|trash|screenshot|screen shot)\b/,
   // Talking to people through the Mac
@@ -84,10 +87,20 @@ const MAC_FAST_LANE = [
    "message", and the Mac's own messaging has no idea what LinkedIn is. */
 const MAC_BROWSER_TARGET = /\b(gmail|inbox|e?mail thread|youtube|linkedin|twitter|\bx\.com|instagram|reddit|maps|amazon|flipkart|zomato|swiggy|blinkit|github|medium|notion|figma|docs|sheets|drive|calendar|whatsapp web|browser|chrome|tab|website|site|url|link)\b/;
 
+/* Work that has to be found out rather than done.
+ *
+ * "find three dictation apps and tell me what they charge" contains "find", and
+ * the fast lane's file search grabbed it and answered about the local disk. Six
+ * of twenty four commands went the wrong way for reasons like that. What marks
+ * these is not the verb at the front but that they end in a judgement: compare,
+ * rank, tell me which, how much, is it up. No pattern can answer that. */
+const MAC_RESEARCH = /\b(compare|look up|find out|research|and tell me|and then tell|summari[sz]e|rank (?:them|these|by)|which (?:one|is|of)|how (?:much|many|fast|long|old)|check (?:if|whether)|word error|charges?|pric(?:e|ing)|versus|vs\.?)\b/;
+
 function macFastLane(raw) {
   const t = String(raw || "").toLowerCase().trim();
   if (!t) return true;
   if (MAC_BROWSER_TARGET.test(t)) return false;
+  if (MAC_RESEARCH.test(t)) return false;
   return MAC_FAST_LANE.some((re) => re.test(t));
 }
 
@@ -116,6 +129,11 @@ function macWantsTheBrain(raw) {
   if (macAsksForTheBrain(String(raw || "").toLowerCase())) return true;
   // Working out what "this" points at means looking, which only he can do.
   if (macNeedsScreenContext(raw)) return true;
+  /* Finding something out IS the work, even though "compare" and "look up" are
+     not in the list of things you can do to a Mac. Checked before the task gate
+     for exactly that reason: it was rejecting them as not-a-task and handing
+     them to a pattern match. */
+  if (MAC_RESEARCH.test(String(raw || "").toLowerCase())) return true;
   if (!macLooksLikeTask(raw)) return false;
   return !macFastLane(raw);
 }

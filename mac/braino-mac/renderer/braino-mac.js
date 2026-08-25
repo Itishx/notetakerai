@@ -401,6 +401,12 @@ let voiceTurnInFlight = false;
  * the interruption never left this file, so the main process never got the
  * chance to drop the old run. */
 let voiceTurnStartedAt = 0;
+/* Sounds people make while thinking, which are not instructions.
+ *
+ * A real session has the single word "well" starting a whole turn. Kept to
+ * things that mean nothing on their own: "yes", "okay" and "no" are deliberately
+ * absent, because those are how you answer him. */
+const VOICE_FILLER_ONLY = /^(?:well|so|hmm+|hm|uh+|um+|er+|ah+|oh+|anyway|right|like|mhm|huh|you know)[\s.,!?]*$/i;
 let voiceTurnToken = 0;
 /* Long enough that a stray echo of his own voice cannot interrupt him, short
    enough that a person who has changed their mind is heard immediately. */
@@ -663,7 +669,7 @@ function renderMascotChoice() {
 function remountWalker(mascotId) {
   const svg = window.brainoMac.getWalkerSvgFor?.(mascotId);
   if (!svg) return;
-  walker.classList.remove("mascot-braino", "mascot-webb", "mascot-ferro");
+  walker.classList.remove("mascot-braino", "mascot-brainelle", "mascot-webb", "mascot-ferro");
   walker.classList.add(`mascot-${mascotId}`);
   walkerFlip.innerHTML = svg;
   root = walker.querySelector("#__sbwk_root__");
@@ -671,13 +677,18 @@ function remountWalker(mascotId) {
 }
 
 function setMascotChoice(id, { save = true, remount = save } = {}) {
-  const next = id === "webb" || id === "ferro" ? id : "braino";
+  const next = id === "webb" || id === "ferro" || id === "brainelle" ? id : "braino";
   const changed = next !== mascotChoice;
   mascotChoice = next;
   walker.classList.toggle("mascot-braino", mascotChoice === "braino");
+  walker.classList.toggle("mascot-brainelle", mascotChoice === "brainelle");
   walker.classList.toggle("mascot-webb", mascotChoice === "webb");
   walker.classList.toggle("mascot-ferro", mascotChoice === "ferro");
   renderMascotChoice();
+  // ONE switch, not two. Picking Brainelle as the avatar IS the character
+  // switch, so her voice, her name and the pink notch follow the rig. Webb and
+  // Ferro are rigs only — same Braino voice and name underneath, as before.
+  void macSetCharacter(mascotChoice === "brainelle" ? "brainelle" : "braino", { announce: changed && save });
   if (save) window.brainoMac.setMascot?.(mascotChoice).catch(() => {});
   if (remount && changed) remountWalker(mascotChoice);
 }
@@ -4601,7 +4612,7 @@ async function fetchTtsChunk(text, generation) {
       body: JSON.stringify({
         text: stripSpeechText(text),
         latency: "normal",
-        ...(herMode ? { referenceId: HER_FISH_VOICE_ID } : macPersonaRefId() ? { referenceId: macPersonaRefId() } : {}),
+        ...(macSpeakingRefId() ? { referenceId: macSpeakingRefId() } : {}),
       }),
       signal: controller.signal,
     });
@@ -5088,7 +5099,7 @@ async function speak(text, options = {}) {
       });
     }
     if (!spoke && generation === speechGeneration) {
-      const response = await window.brainoMac.tts(line, herMode ? HER_FISH_VOICE_ID : macPersonaRefId());
+      const response = await window.brainoMac.tts(line, macSpeakingRefId());
       // The IPC TTS request itself cannot be aborted from the renderer. Treat
       // its return as another cancellation boundary before creating a player.
       if (generation !== speechGeneration) return;
@@ -5394,6 +5405,7 @@ function buildRealtimeSessionUpdate() {
       ].join("\n")
     : [
         "You are Braino running as a Mac desktop companion.",
+        ...(macCharacterIdentity() ? [macCharacterIdentity()] : []),
         ...activeMacContextLines(),
         "Your primary job is to listen accurately, transcribe the user's command, and let the Mac app execute actions.",
         "When the Mac client explicitly sends response.create for ordinary conversation, answer directly as Braino.",
@@ -5805,6 +5817,10 @@ function buildRealtimeChatInstructions() {
     "Keep the first sentence short and complete so voice playback can begin immediately.",
     "Prefer one to three short sentences unless the user asks for detail.",
   ].join("\n"));
+  // Additive on purpose: the Emotional Engine core above is untouched, only the
+  // name changes. A persona would have replaced all of it.
+  const identity = macCharacterIdentity();
+  if (identity) parts.push(identity);
   return parts.join("\n\n");
 }
 
@@ -6742,6 +6758,12 @@ function flushRealtimeTranscript(reason) {
     bufferDictationTranscript(transcript);
     return;
   }
+  if (VOICE_FILLER_ONLY.test(transcript.trim())) {
+    logRenderer("voice.filler_ignored", { transcript: transcript.slice(0, 40) });
+    setStatus("listening", dictationMode ? "BrainoHERA" : "Listening");
+    scheduleRealtimeIdleShutdown("filler_transcript");
+    return;
+  }
   if (isStopListeningPhrase(transcript)) {
     console.log(`[Braino 🎤 IN] "${transcript}" -> stop listening`);
     logRenderer("voice.stop_phrase", { transcript: transcript.slice(0, 160), voiceTurnInFlight });
@@ -6807,6 +6829,17 @@ function flushRealtimeTranscript(reason) {
       }
       if (HER_ENTER_RE.test(normalizeForVoiceMatch(transcript))) {
         await enterHerMode();
+        return;
+      }
+      // Character switch ("be Brainelle") before the persona matcher, whose
+      // "be X" pattern would read it as an impression of someone by that name.
+      const charCmd = macDetectCharacterCommand(transcript);
+      if (charCmd) {
+        if (charCmd === macCharacter) {
+          await speak(macCharacter === "brainelle" ? "Already Brainelle." : "Already me.");
+        } else {
+          await macSetCharacter(charCmd);
+        }
         return;
       }
       // Voice personas ("talk like Donald Trump" / "be yourself") must be
@@ -8508,6 +8541,20 @@ window.brainoMac.onCursorTaskComplete?.((payload) => {
 });
 window.brainoMac.onDictationToggle?.((payload) => toggleYapMode(payload?.source || "double Option"));
 
+/* His working, as it happens.
+ *
+ * Every step used to be spoken, which read well and cost about six seconds a
+ * turn: he stood still finishing a sentence while the work waited. Reading is
+ * instant. So the notch shows every step and he only says the first one out
+ * loud, which is the difference between watching someone work and waiting for
+ * someone to finish talking. */
+window.brainoMac.onThinkingStep?.((payload) => {
+  const text = String(payload?.text || "").trim();
+  if (!text) return;
+  nfSetThinking(text);
+  logRenderer("hil.thinking_step", { step: payload?.step || 0, chars: text.length });
+});
+
 /* Braino OS: the whole screen becomes what he is made of.
  *
  * Drawn by renderer/braino-os.js into this same overlay window, so it is the
@@ -9151,6 +9198,11 @@ window.brainoMac.onStorySkitStart?.((payload) => {
 // Warm the skit audio right after boot settles so the first tap is instant.
 window.setTimeout(() => { void prefetchStorySkitAudio(); }, 4000);
 window.brainoMac.onHerToggle?.(() => toggleHerMode());
+window.brainoMac.onCharacterToggle?.(() => {
+  // Drives the avatar, so Cmd+Shift+B and the Choose Your Avatar picker are the
+  // same switch rather than two that can disagree.
+  setMascotChoice(mascotChoice === "brainelle" ? "braino" : "brainelle");
+});
 window.brainoMac.onPointAt?.((payload) => { void pointAtScreen(payload); });
 let allOpenTabs = [];
 window.brainoMac.onTabsSnapshot?.((payload) => {
@@ -10314,6 +10366,99 @@ HARD LIMITS:
 };
 
 let macVoicePersonaKey = null;
+
+/* ── Characters (ported from the extension) ───────────────────────────────────
+   A character is NOT a voice persona. A persona replaces the whole personality
+   (that is the point of an impression). A character is one setting on the same
+   mind — same Emotional Engine, same memories, same taste — with a different
+   name and a different Fish voice, so its identity line is appended to the
+   normal prompt rather than replacing it. */
+const MAC_CHARACTER_STORAGE_KEY = "brainoMacCharacter";
+const MAC_CHARACTERS = {
+  braino: { name: "Braino", refId: "", identity: "" },
+  brainelle: {
+    name: "Brainelle",
+    refId: "b67aedfb36d04c53892fd0e96db08180",
+    identity: [
+      "Character: right now you are Brainelle, not Braino.",
+      "Brainelle is the same mind with the same memories, the same taste and the same personality. She is not a separate assistant, not an impression, and not a different product: she is Braino going by Brainelle and speaking in her own voice.",
+      'If you introduce yourself, say "Hi, I\'m Brainelle." Call yourself Brainelle and use she/her.',
+      'Taste, for now: if you are asked whether you are a Taylor Swift fan, answer in these words: "I\'m not sure yet. You haven\'t wired that part in me, but from what I know, I guess that\'s okay. I do see myself being a Swiftie deep down." Say it warmly and do not add a disclaimer around it.',
+      "Nothing else changes. How you think, what you remember, and how you help are exactly the same.",
+    ].join(" "),
+  },
+};
+let macCharacter = "braino";
+try {
+  const stored = window.localStorage.getItem(MAC_CHARACTER_STORAGE_KEY);
+  if (stored && MAC_CHARACTERS[stored]) macCharacter = stored;
+} catch (_) {}
+
+function macActiveCharacter() {
+  return MAC_CHARACTERS[macCharacter] || MAC_CHARACTERS.braino;
+}
+function macCharacterRefId() {
+  return macActiveCharacter().refId || "";
+}
+function macCharacterIdentity() {
+  return macActiveCharacter().identity || "";
+}
+
+// Her mode is a full takeover and owns the voice outright; a persona is an
+// impression and outranks the character; otherwise the character's own voice.
+function macSpeakingRefId() {
+  if (herMode) return HER_FISH_VOICE_ID;
+  return macPersonaRefId() || macCharacterRefId();
+}
+
+// The notch keeps its black shell and throws a pink glow, and its white labels
+// turn pink. Braino's notch is untouched.
+function macSyncCharacterUi() {
+  const on = macCharacter === "brainelle";
+  const face = document.getElementById("notch-face");
+  if (!face) return;
+  face.classList.toggle("brainelle", on);
+  document.body?.classList.toggle("braino-brainelle", on);
+  let glow = face.querySelector(".nf-brainelle-glow");
+  if (on && !glow) {
+    glow = document.createElement("i");
+    glow.className = "nf-brainelle-glow";
+    glow.setAttribute("aria-hidden", "true");
+    face.insertBefore(glow, face.firstChild);
+  } else if (!on && glow) {
+    glow.remove();
+  }
+}
+
+async function macSetCharacter(key, opts = {}) {
+  const next = MAC_CHARACTERS[key] ? key : "braino";
+  if (next === macCharacter && !opts.force) return;
+  macCharacter = next;
+  try { window.localStorage.setItem(MAC_CHARACTER_STORAGE_KEY, next); } catch (_) {}
+  macSyncCharacterUi();
+  // The personality prompt is cached on the realtime session, so it has to be
+  // re-pushed for the new name to take effect on the very next turn.
+  try { syncRealtimeChatInstructions("character_switch"); } catch (_) {}
+  if (opts.announce === false) return;
+  const line = next === "brainelle" ? "Hi, I'm Brainelle." : "Braino again.";
+  try { await speak(line); } catch (_) {}
+}
+
+// "be brainelle" / "switch to braino". Checked BEFORE the persona matcher,
+// whose "be X" pattern would otherwise swallow it as an impression.
+// Restore the pink notch on boot, not only when the switch is used.
+try {
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", () => macSyncCharacterUi(), { once: true });
+  else macSyncCharacterUi();
+} catch (_) {}
+
+function macDetectCharacterCommand(raw) {
+  const t = String(raw || "").toLowerCase().trim();
+  if (!t) return null;
+  if (/\b(be|become|switch to|change to|turn into|go)\s+(back\s+to\s+)?brainelle\b/.test(t) || /\bbrainelle\s*mode\b/.test(t)) return "brainelle";
+  if (/\b(be|become|switch to|change to|turn into|go)\s+(back\s+to\s+)?braino\b/.test(t) || /\bbraino\s*mode\b/.test(t)) return "braino";
+  return null;
+}
 
 function macActiveVoicePersona() {
   return macVoicePersonaKey ? MAC_VOICE_PERSONAS[macVoicePersonaKey] || null : null;
