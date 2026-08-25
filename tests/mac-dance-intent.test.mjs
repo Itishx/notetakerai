@@ -58,3 +58,30 @@ test("the whole trick is wired, and does not wait to be noticed", () => {
   assert.match(renderer, /onDance\?\.\(/);
   assert.match(renderer, /beginMusicTheatrics\(\)/);
 });
+
+/* The trap that ate it the first time.
+ *
+ * The voice turn forks to realtime chat before it forks to the delegate, so a
+ * politely phrased request gets answered with words instead of being done. The
+ * log has "Braino, can you please dance?" routed straight to realtime_chat,
+ * never reaching the intent chain. That is a class of bug: every new trick
+ * phrased politely lands in it. */
+test("a party trick is caught before chat can answer it", () => {
+  const renderer = readFileSync(new URL("../mac/braino-mac/renderer/braino-mac.js", import.meta.url), "utf8");
+  const quick = renderer.indexOf("if (await runQuickVoiceCommand(turnText)) return;");
+  const chatFork = renderer.indexOf("if (shouldUseRealtimeDirectChat(turnText))");
+  assert.ok(quick > 0, "the quick door exists");
+  assert.ok(quick < chatFork, "and it comes before the chat fork");
+
+  const main = readFileSync(new URL("../mac/braino-mac/main.cjs", import.meta.url), "utf8");
+  const door = main.slice(
+    main.indexOf('ipcMain.handle("braino-mac:quick-command"'),
+    main.indexOf('ipcMain.handle("braino-mac:quick-command"') + 1400,
+  );
+  // Dance is behind that door, and first, being the most conversational.
+  assert.match(door, /parseDanceIntent\(raw\)/);
+  assert.ok(
+    door.indexOf("parseDanceIntent") < door.indexOf("parseBrainoOsColorIntent"),
+    "party tricks are checked first",
+  );
+});

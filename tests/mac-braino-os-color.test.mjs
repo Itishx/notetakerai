@@ -75,14 +75,14 @@ test("the shortest form works too", () => {
 test("Braino OS commands are caught before chat can swallow them", async () => {
   const { readFileSync } = await import("node:fs");
   const renderer = readFileSync(new URL("../mac/braino-mac/renderer/braino-mac.js", import.meta.url), "utf8");
-  const osCall = renderer.indexOf("if (await runBrainoOsVoiceCommand(turnText)) return;");
+  const osCall = renderer.indexOf("if (await runQuickVoiceCommand(turnText)) return;");
   const chatFork = renderer.indexOf("if (shouldUseRealtimeDirectChat(turnText))");
   assert.ok(osCall > 0, "the voice turn checks Braino OS commands");
   assert.ok(chatFork > 0, "the chat fork is still there");
   assert.ok(osCall < chatFork, "Braino OS has to be checked BEFORE the chat fork");
 
   const main = readFileSync(new URL("../mac/braino-mac/main.cjs", import.meta.url), "utf8");
-  assert.match(main, /ipcMain\.handle\("braino-mac:braino-os-command"/);
+  assert.match(main, /ipcMain\.handle\("braino-mac:quick-command"/);
   const preload = readFileSync(new URL("../mac/braino-mac/preload.cjs", import.meta.url), "utf8");
-  assert.match(preload, /brainoOsCommand:/);
+  assert.match(preload, /quickCommand:/);
 });

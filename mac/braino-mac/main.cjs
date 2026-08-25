@@ -15794,14 +15794,36 @@ ipcMain.handle("braino-mac:request-accessibility", () => ({
 
 ipcMain.handle("braino-mac:request-microphone", async () => requestMicrophoneAccess());
 
-/* Braino OS commands, answered without going near the delegate.
+/* The deterministic commands, answered before chat can swallow them.
  *
- * The voice turn checks this before it forks to chat, because chat was
- * swallowing these: a spoken "turn yourself orange" was answered as
- * conversation and the intent chain never saw it. Same trap the persona and
- * grow commands already had to escape. */
-ipcMain.handle("braino-mac:braino-os-command", (_event, text) => {
+ * The voice turn forks to the realtime chat before it forks to the delegate, so
+ * anything phrased like conversation gets answered with words instead of being
+ * done. "turn yourself orange" hit this, and so did "Braino, can you please
+ * dance?", which the log shows was routed straight to realtime_chat and never
+ * reached the intent chain at all.
+ *
+ * That is a class of bug, not an instance: every new trick phrased politely will
+ * land in it. So this is the one door, and any command that is cheap, certain
+ * and deterministic belongs behind it. */
+ipcMain.handle("braino-mac:quick-command", async (_event, text) => {
   const raw = String(text || "");
+
+  /* Party tricks first. They are the most conversational in phrasing and so the
+     most likely to be mistaken for small talk. */
+  const dance = parseDanceIntent(raw);
+  if (dance) {
+    logMac("dance.voice_command", { action: dance.action });
+    if (dance.action === "stop") {
+      sendToRenderer("braino-mac:dance", { on: false });
+      return { handled: true, say: dance.say };
+    }
+    const track = pickDanceTrack();
+    logMac("dance.start", { track, source: "voice" });
+    sendToRenderer("braino-mac:dance", { on: true });
+    const played = await playSpotifySongOnMac(track, { fastStart: true }).catch(() => null);
+    return { handled: true, say: played?.ok ? "Watch this." : "No music, but I am still dancing." };
+  }
+
   const colour = parseBrainoOsColorIntent(raw);
   if (colour) {
     logMac("braino_os.voice_color", { action: colour.action, name: colour.name || "" });

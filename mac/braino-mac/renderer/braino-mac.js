@@ -727,24 +727,29 @@ async function runBrainoGrowVoiceCommand(text) {
   return true;
 }
 
-/* Braino OS, caught before the chat fork.
+/* The deterministic commands, caught before the chat fork.
  *
  * These have to be handled here for the same reason the persona and grow
  * commands are: chat answers them as conversation and the intent chain in the
- * main process never sees a word of it. A real session logged "turn yourself
- * orange" producing no delegate run at all. */
-async function runBrainoOsVoiceCommand(text) {
+ * main process never sees a word. A real session logged "turn yourself orange"
+ * producing no delegate run at all, and "Braino, can you please dance?" going
+ * straight to realtime_chat.
+ *
+ * It is a class of bug rather than an instance. Every new trick phrased politely
+ * lands in it, so this is one door and everything cheap and certain goes behind
+ * it, rather than a new special case each time. */
+async function runQuickVoiceCommand(text) {
   const said = String(text || "").trim();
   if (!said) return false;
   let outcome = null;
   try {
-    outcome = await window.brainoMac.brainoOsCommand?.(said);
+    outcome = await window.brainoMac.quickCommand?.(said);
   } catch (error) {
-    logRenderer("braino_os.voice_command_failed", { error: String(error) });
+    logRenderer("voice.quick_command_failed", { error: String(error) });
     return false;
   }
   if (!outcome || !outcome.handled) return false;
-  logRenderer("braino_os.voice_command", { chars: said.length });
+  logRenderer("voice.quick_command", { chars: said.length });
   if (outcome.say) await speak(outcome.say);
   return true;
 }
@@ -6858,7 +6863,7 @@ function flushRealtimeTranscript(reason) {
         turnText = outcome.remainder;
       }
       if (await runBrainoGrowVoiceCommand(turnText)) return;
-      if (await runBrainoOsVoiceCommand(turnText)) return;
+      if (await runQuickVoiceCommand(turnText)) return;
       if (await runMacTeamInput(turnText, { keepRealtime: true, fromVoice: true })) return;
       if (shouldUseRealtimeDirectChat(turnText)) {
         const handled = await answerViaRealtimeChat(turnText);

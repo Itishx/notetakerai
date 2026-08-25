@@ -126,7 +126,8 @@ contextBridge.exposeInMainWorld("brainoMac", {
     return () => ipcRenderer.removeListener("braino-mac:braino-os", handler);
   },
   brainoOsClosed: () => ipcRenderer.send("braino-mac:braino-os-closed"),
-  brainoOsCommand: (text) => ipcRenderer.invoke("braino-mac:braino-os-command", text),
+  // Anything cheap, certain and deterministic, answered before chat can take it.
+  quickCommand: (text) => ipcRenderer.invoke("braino-mac:quick-command", text),
   onDance: (callback) => {
     const handler = (_event, payload) => callback(payload || {});
     ipcRenderer.on("braino-mac:dance", handler);
