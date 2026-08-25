@@ -116,12 +116,7 @@ const Team = lazy(() => import("./pages/Team.tsx"));
 const Shankar = lazy(() => import("./pages/Shankar.tsx"));
 const InstaGraphics = lazy(() => import("./pages/InstaGraphics.tsx"));
 const InstaPosts = lazy(() => import("./pages/InstaPosts.tsx"));
-const BrainelleStage = lazy(() => import("./pages/InstaGraphics.tsx").then((m) => ({ default: m.BrainelleStage })));
-const BrainelleHairCompare = lazy(() => import("./pages/InstaGraphics.tsx").then((m) => ({ default: m.BrainelleHairCompare })));
 const InstaGraphicsArchiveDocs = lazy(() => import("./pages/InstaGraphicsArchiveDocs.tsx"));
-const BrainoOsCarousels = lazy(() => import("./pages/BrainoOsCarousels.tsx"));
-const MeetBrainoCarousels = lazy(() => import("./pages/MeetBrainoCarousels.tsx"));
-const SpeakTeaser = lazy(() => import("./pages/SpeakTeaser.tsx"));
 const KnowledgeBase = lazy(() => import("./pages/KnowledgeBase.tsx"));
 const IdeaTracker = lazy(() => import("./pages/IdeaTracker.tsx"));
 const OnboardingFlow = lazy(() => import("./pages/OnboardingFlow.tsx"));
@@ -314,12 +309,6 @@ function AppRoutes() {
         <Route path="/InstaGraphics" element={<InstaGraphics />} />
         <Route path="/instagraphics" element={<InstaGraphics />} />
         <Route path="/instaposts" element={<InstaPosts />} />
-        <Route path="/instagraphics/braino-os" element={<BrainoOsCarousels />} />
-        <Route path="/instagraphics/meet-braino" element={<MeetBrainoCarousels />} />
-        <Route path="/speak-teaser" element={<SpeakTeaser />} />
-        <Route path="/instagraphics/brainelle" element={<BrainelleStage />} />
-        <Route path="/instagraphics/brainelle/hair" element={<BrainelleHairCompare />} />
-        <Route path="/instagraphics/ms-braino" element={<BrainelleStage />} />{/* she was Ms Braino for one afternoon */}
         <Route path="/instagraphics/onboarding" element={<OnboardingFlow />} />
         <Route path="/onboarding" element={<OnboardingFlow />} />
         <Route path="/ideas" element={<IdeaTracker />} />

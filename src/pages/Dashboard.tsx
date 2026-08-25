@@ -9,7 +9,6 @@ import WallpaperShortcutsCard from "@/components/WallpaperShortcutsCard";
 import { Braino, BrainoDefs } from "@/components/BrainoChar";
 import { Webb, WebbDefs } from "@/components/WebbChar";
 import { FERRO_WALKER_SVG } from "@/components/ferroWalkerSvg";
-import { Brainelle } from "@/components/Brainelle";
 import { MASCOTS, useMascotPreference, type MascotId } from "@/lib/mascotPreference";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -5728,9 +5727,7 @@ export default function Dashboard() {
                           )}
                         >
                           <div className="grid h-14 w-14 flex-shrink-0 place-items-end justify-center overflow-visible">
-                            {id === "brainelle"
-                              ? <Brainelle size={46} legs idle expr="happy" style={{ width: "auto", height: "100%" }} />
-                              : id === "webb"
+                            {id === "webb"
                               ? <Webb size={46} idle style={{ width: "auto", height: "100%" }} />
                               : id === "ferro"
                                 ? <span style={{ width: 46, height: 56, display: "block" }} dangerouslySetInnerHTML={{ __html: FERRO_WALKER_SVG.replace('width="64" height="78"', 'width="46" height="56"') }} />
