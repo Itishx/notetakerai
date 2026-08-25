@@ -8548,6 +8548,21 @@ window.brainoMac.onCursorTaskComplete?.(() => {
   setBubble(line, 5000);
   void speak(line);
 });
+/* Asked to dance.
+   Music starting already triggers all of this; being asked now does too, and it
+   does not wait for the music to be noticed, because noticing goes through
+   AppleScript and that is exactly what gets refused. */
+window.brainoMac.onDance?.((payload) => {
+  if (payload && payload.on) {
+    void setWalkerHomeState(false);
+    beginMusicTheatrics();
+    logRenderer("dance.start", {});
+  } else {
+    reactToMusicStop();
+    logRenderer("dance.stop", {});
+  }
+});
+
 window.brainoMac.onDictationToggle?.((payload) => toggleYapMode(payload?.source || "double Option"));
 
 /* His working, as it happens.

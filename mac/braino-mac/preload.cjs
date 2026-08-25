@@ -127,6 +127,11 @@ contextBridge.exposeInMainWorld("brainoMac", {
   },
   brainoOsClosed: () => ipcRenderer.send("braino-mac:braino-os-closed"),
   brainoOsCommand: (text) => ipcRenderer.invoke("braino-mac:braino-os-command", text),
+  onDance: (callback) => {
+    const handler = (_event, payload) => callback(payload || {});
+    ipcRenderer.on("braino-mac:dance", handler);
+    return () => ipcRenderer.removeListener("braino-mac:dance", handler);
+  },
   // Each step of a HIL run, shown as it happens rather than waited for.
   onThinkingStep: (callback) => {
     const handler = (_event, payload) => callback(payload || {});

@@ -113,6 +113,7 @@ const {
 } = require(path.join(__dirname, "dictation.cjs"));
 const { parseMusicSegmentIntent, parseMusicSegmentRange } = require(path.join(__dirname, "music-segment-intent.cjs"));
 const { parseWhatsNewIntent } = require(path.join(__dirname, "whats-new-intent.cjs"));
+const { parseDanceIntent, pickDanceTrack } = require(path.join(__dirname, "dance-intent.cjs"));
 const {
   macLooksMultiStep,
   macAsksForTheBrain,
@@ -14394,6 +14395,32 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
       raw: textForLog(raw),
     });
     return runMacHilLoop(asked ? macStripBrainRequest(raw) : raw);
+  }
+
+  /* "Braino, can you please dance?"
+     The rig has been able to do this the whole time; music starting is what
+     turns it on. Nobody had wired the asking, so the only way in was to already
+     be playing something. He puts something on and goes.
+
+     The renderer is told directly rather than left to notice the music, because
+     noticing runs through AppleScript and AppleScript is the thing macOS
+     refuses. A party trick that depends on a permission dialogue is not a party
+     trick. */
+  const danceIntent = parseDanceIntent(raw);
+  if (danceIntent) {
+    if (danceIntent.action === "stop") {
+      logMac("dance.stop", {});
+      sendToRenderer("braino-mac:dance", { on: false });
+      return { ok: true, say: danceIntent.say };
+    }
+    const track = pickDanceTrack();
+    logMac("dance.start", { track });
+    sendToRenderer("braino-mac:dance", { on: true });
+    const played = await playSpotifySongOnMac(track, { fastStart: true }).catch(() => null);
+    return {
+      ok: true,
+      say: played?.ok ? "Watch this." : "No music, but I am still dancing.",
+    };
   }
 
   const noteIntent = parseNoteIntent(raw);
