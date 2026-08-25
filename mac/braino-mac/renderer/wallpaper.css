@@ -1,0 +1,133 @@
+/* The idle screen.
+ *
+ * Painted, never photographed: layered gradients scale to any display and weigh
+ * nothing, and they can be recoloured in a line. Lives in the same transparent
+ * full-display window as the notch, so it costs nothing while hidden.
+ */
+
+.bwp-root {
+  position: fixed;
+  inset: 0;
+  z-index: 2147482000;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 900ms cubic-bezier(0.22, 1, 0.36, 1), visibility 0s linear 900ms;
+  user-select: none;
+  background: #0b0b0d;
+}
+
+.bwp-root.is-open {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transition: opacity 900ms cubic-bezier(0.22, 1, 0.36, 1), visibility 0s;
+}
+
+.bwp-look {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity 1100ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.bwp-look.is-on { opacity: 1; }
+
+/* Without this a pure gradient reads as a screenshot of a gradient. With it, it
+   reads as a surface. */
+.bwp-grain {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.55'/%3E%3C/svg%3E");
+}
+.bwp-vignette { position: absolute; inset: 0; pointer-events: none; }
+
+/* Centred, because a Mac is not a phone. The phone puts the clock in the upper
+   third, which strands it on something wide. */
+.bwp-face {
+  position: relative;
+  display: flex;
+  height: 100%;
+  width: 100%;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 0 32px;
+}
+
+.bwp-date {
+  font-family: "SF Pro Display", -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  transition: color 700ms ease;
+}
+
+.bwp-clock {
+  position: relative;
+  margin-top: 4px;
+  transition: color 700ms ease;
+}
+
+.bwp-time {
+  display: block;
+  font-family: "Instrument Serif", Georgia, serif;
+  font-size: clamp(96px, 20vw, 288px);
+  line-height: 0.86;
+  letter-spacing: -0.022em;
+}
+
+/* Hangs off the numerals rather than sharing their row: in the row it dragged
+   the whole clock visibly left of centre. */
+.bwp-meridiem {
+  position: absolute;
+  left: 100%;
+  top: 0.42em;
+  margin-left: 12px;
+  font-family: "SF Pro Display", -apple-system, sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+}
+
+.bwp-actions { margin-top: 64px; display: flex; align-items: center; gap: 20px; }
+
+.bwp-action {
+  display: grid;
+  place-items: center;
+  height: 66px;
+  width: 66px;
+  padding: 0;
+  overflow: hidden;
+  border-radius: 50%;
+  cursor: pointer;
+  backdrop-filter: blur(22px);
+  -webkit-backdrop-filter: blur(22px);
+  transition: transform 300ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.bwp-action:hover { transform: scale(1.07); }
+.bwp-action:active { transform: scale(0.95); }
+.bwp-action img { width: 26px; height: 26px; border-radius: 6px; }
+.bwp-action .bwp-emoji { font-size: 26px; line-height: 1; }
+.bwp-action .bwp-letter { font-size: 22px; font-weight: 500; line-height: 1; font-family: "SF Pro Display", -apple-system, sans-serif; }
+
+.bwp-hint {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 40px;
+  text-align: center;
+  font-family: "SF Pro Display", -apple-system, sans-serif;
+  font-size: 10px;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 700ms ease;
+}
+.bwp-root.is-open .bwp-hint { opacity: 0.55; }
+
+@media (prefers-reduced-motion: reduce) {
+  .bwp-root, .bwp-look { transition-duration: 1ms; }
+}

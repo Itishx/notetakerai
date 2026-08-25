@@ -1,4 +1,4 @@
-const { app, BrowserWindow, clipboard, desktopCapturer, globalShortcut, ipcMain, net, protocol, screen, shell, systemPreferences } = require("electron");
+const { app, BrowserWindow, clipboard, desktopCapturer, globalShortcut, ipcMain, net, powerMonitor, protocol, screen, shell, systemPreferences } = require("electron");
 const { execFile, spawn } = require("node:child_process");
 const crypto = require("node:crypto");
 const fs = require("node:fs");
@@ -7,6 +7,7 @@ const os = require("node:os");
 const path = require("node:path");
 const { looksInPerson, rosterFromInviteNames, selectAudibleStreams } = require("./meeting-audio.cjs");
 const { parseMeetingIntent: parseMeetingIntentImpl, mentionsMeeting } = require("./meeting-intent.cjs");
+const { parseIdleScreenIntent } = require("./idle-screen-intent.cjs");
 
 const ROOT_DIR = path.resolve(__dirname, "../..");
 const PRELOAD_PATH = path.join(__dirname, "preload.cjs");
@@ -1817,6 +1818,9 @@ function bindBrainoOsEscape(active) {
 function setBrainoOsSurface(active, system = null) {
   if (!dockWindow || dockWindow.isDestroyed()) return false;
   const next = Boolean(active);
+  /* Both of these take the whole screen in the same window, and both claim
+     Escape while they are up. Whoever is asked for last wins. */
+  if (next && idleScreenOpen) closeIdleScreen("braino-os");
   ensureDockWindowVisible(next ? "braino-os" : "braino-os-closed");
   /* The overlay is deliberately unfocusable so it never steals the caret. A
      surface you click into and scroll around has to take that back while it is
@@ -2612,6 +2616,215 @@ function toggleDockWindowVisibility(source) {
   });
 }
 
+/* ── The idle screen ───────────────────────────────────────────────────────
+ *
+ * The face the Mac wears when nobody is at it: the date, a very large clock,
+ * and the few things you actually reach for. It comes up on its own once the
+ * machine has been quiet for a while, and on Shift twice whenever you want it.
+ *
+ * Not the same thing as the desktop-background feature further down this file,
+ * which is what macOS means by "wallpaper". This is Braino's own screen, drawn
+ * by renderer/wallpaper.js into the overlay he already owns, so there is no
+ * second window to keep alive and it costs nothing while it is down.
+ */
+const IDLE_SCREEN_PATH = path.join(AUTH_STORE_DIR, "idle-screen.json");
+
+const IDLE_SCREEN_DEFAULT_SHORTCUTS = Object.freeze([
+  { id: "speak", label: "Speak", kind: "action", action: "speak" },
+  { id: "ask", label: "Ask", kind: "action", action: "ask" },
+  { id: "play", label: "Play", kind: "action", action: "play" },
+  { id: "os", label: "Braino OS", kind: "action", action: "os" },
+]);
+const IDLE_SCREEN_ACTIONS = new Set(["speak", "ask", "play", "os"]);
+const IDLE_SCREEN_MAX_SHORTCUTS = 8;
+
+function usableShortcut(entry) {
+  if (!entry || typeof entry !== "object") return false;
+  if (!entry.id || !entry.label) return false;
+  if (entry.kind === "action") return IDLE_SCREEN_ACTIONS.has(entry.action);
+  return entry.kind === "link" && Boolean(entry.url);
+}
+
+function readIdleScreenSettings() {
+  const fallback = {
+    look: "aurora",
+    idleEnabled: true,
+    idleMinutes: 5,
+    shortcuts: IDLE_SCREEN_DEFAULT_SHORTCUTS.slice(),
+  };
+  try {
+    const raw = JSON.parse(fs.readFileSync(IDLE_SCREEN_PATH, "utf8"));
+    const rows = Array.isArray(raw?.shortcuts)
+      ? raw.shortcuts.filter(usableShortcut).slice(0, IDLE_SCREEN_MAX_SHORTCUTS)
+      : [];
+    return {
+      look: typeof raw?.look === "string" && raw.look ? raw.look : fallback.look,
+      idleEnabled: raw?.idleEnabled !== false,
+      idleMinutes: Math.min(120, Math.max(1, Number(raw?.idleMinutes) || fallback.idleMinutes)),
+      /* An empty row is a bad edit, not a preference. Nobody wants the clock
+         sitting on nothing because one save went wrong. */
+      shortcuts: rows.length ? rows : fallback.shortcuts,
+    };
+  } catch (_) {
+    return fallback;
+  }
+}
+
+function writeIdleScreenSettings(patch) {
+  const next = { ...readIdleScreenSettings(), ...(patch || {}) };
+  if (Array.isArray(next.shortcuts)) {
+    next.shortcuts = next.shortcuts.filter(usableShortcut).slice(0, IDLE_SCREEN_MAX_SHORTCUTS);
+    if (!next.shortcuts.length) next.shortcuts = IDLE_SCREEN_DEFAULT_SHORTCUTS.slice();
+  }
+  try {
+    fs.mkdirSync(AUTH_STORE_DIR, { recursive: true });
+    fs.writeFileSync(IDLE_SCREEN_PATH, JSON.stringify(next, null, 2));
+  } catch (error) {
+    logMac("idle_screen.save_failed", { error });
+  }
+  /* It is usually up on another display while you are editing it. */
+  if (idleScreenOpen) sendToRenderer("braino-mac:idle-screen", { active: true, ...next, reason: "settings" });
+  return next;
+}
+
+let idleScreenOpen = false;
+let idleScreenReason = "";
+let idleScreenEscapeBound = false;
+let idleScreenWatch = null;
+
+/* Escape works even if the surface never took keyboard focus, for the same
+   reason Braino OS claims it: this covers every display, and a screen you
+   cannot get out of is worse than no screen at all. */
+function bindIdleScreenEscape(active) {
+  if (active && !idleScreenEscapeBound) {
+    idleScreenEscapeBound = globalShortcut.register("Escape", () => closeIdleScreen("escape"));
+    if (!idleScreenEscapeBound) logMac("idle_screen.escape_unavailable", {});
+    return;
+  }
+  if (!active && idleScreenEscapeBound) {
+    try { globalShortcut.unregister("Escape"); } catch (_) {}
+    idleScreenEscapeBound = false;
+  }
+}
+
+function setIdleScreenSurface(active, reason = "") {
+  if (!dockWindow || dockWindow.isDestroyed()) return false;
+  const next = Boolean(active);
+  if (next === idleScreenOpen) return false;
+  /* Braino OS is also a full-screen takeover in this same window. Two of them
+     at once is one of them broken. */
+  if (next && brainoOsOpen) return false;
+
+  ensureDockWindowVisible(next ? "idle-screen" : "idle-screen-closed");
+  dockWindow.setFocusable(next);
+  if (next) dockWindow.focus();
+  dockWindow.setIgnoreMouseEvents(!next, { forward: true });
+
+  const settings = readIdleScreenSettings();
+  sendToRenderer("braino-mac:idle-screen", { active: next, reason, ...settings });
+  bindIdleScreenEscape(next);
+  idleScreenOpen = next;
+  idleScreenReason = next ? reason : "";
+  logMac(next ? "idle_screen.opened" : "idle_screen.closed", { reason });
+  return true;
+}
+
+function openIdleScreen(reason = "asked") {
+  return setIdleScreenSurface(true, reason);
+}
+
+function closeIdleScreen(reason = "asked") {
+  if (!idleScreenOpen) return false;
+  return setIdleScreenSurface(false, reason);
+}
+
+function toggleIdleScreen(reason = "asked") {
+  if (idleScreenOpen) {
+    closeIdleScreen(reason);
+    return false;
+  }
+  return openIdleScreen(reason);
+}
+
+/* Nothing that is mid-flight should be covered up. He is allowed to put a
+   screen over an empty desk, never over work in progress. */
+function idleScreenWouldInterrupt() {
+  if (brainoOsOpen) return true;
+  if (localDictationActive || localDictationStarting) return true;
+  if (meetingState) return true;
+  if (teleprompter && typeof teleprompter.state === "function") {
+    try { if (teleprompter.state()?.open) return true; } catch (_) {}
+  }
+  return false;
+}
+
+/* The screensaver rule, and it is the whole reason this is a poll rather than
+   an event: the system tells you how long the human has been away, and the
+   moment they are back the screen has to be gone. */
+function startIdleScreenWatch() {
+  if (idleScreenWatch) return;
+  idleScreenWatch = setInterval(() => {
+    let idle = 0;
+    try { idle = powerMonitor.getSystemIdleTime(); } catch (_) { return; }
+
+    if (idleScreenOpen) {
+      /* Only the one that came up by itself goes away by itself. If you asked
+         for it, moving the mouse is not a request to close it. */
+      if (idleScreenReason === "idle" && idle < 4) closeIdleScreen("activity");
+      return;
+    }
+
+    const settings = readIdleScreenSettings();
+    if (!settings.idleEnabled) return;
+    if (idle < settings.idleMinutes * 60) return;
+    if (idleScreenWouldInterrupt()) return;
+    openIdleScreen("idle");
+  }, 3000);
+}
+
+/* What the row under the clock does when you press it. */
+async function runIdleScreenShortcut(shortcut) {
+  const row = shortcut && typeof shortcut === "object" ? shortcut : {};
+  logMac("idle_screen.shortcut", { id: String(row.id || ""), kind: String(row.kind || "") });
+
+  if (row.kind === "link" && row.url) {
+    const url = /^https?:\/\//i.test(String(row.url)) ? String(row.url) : `https://${row.url}`;
+    closeIdleScreen("shortcut");
+    try { await shell.openExternal(url); } catch (error) { logMac("idle_screen.link_failed", { error }); }
+    return { ok: true };
+  }
+
+  switch (row.action) {
+    case "speak":
+      closeIdleScreen("shortcut");
+      sendToRenderer("braino-mac:voice-toggle", { source: "idle screen" });
+      ensureDockWindowVisible("idle-screen-voice");
+      return { ok: true };
+    case "ask":
+      closeIdleScreen("shortcut");
+      sendToRenderer("braino-mac:summon-toggle", { source: "idle screen" });
+      ensureDockWindowVisible("idle-screen-summon");
+      return { ok: true };
+    case "play":
+      /* Deliberately does not close: music under the clock is the one thing
+         you want to start without sending the screen away. */
+      try {
+        const state = await readSpotifyMacState().catch(() => null);
+        const playing = state?.ok && /playing/i.test(state.state || "");
+        await controlSpotifyPlaybackOnMac(playing ? "pause" : "play");
+      } catch (error) {
+        logMac("idle_screen.play_failed", { error });
+      }
+      return { ok: true };
+    case "os":
+      closeIdleScreen("shortcut");
+      openBrainoOsWindow(null);
+      return { ok: true };
+    default:
+      return { ok: false };
+  }
+}
+
 function registerHotkeys() {
   const registered = {
     controlSpace: globalShortcut.register("CommandOrControl+Space", () => {
@@ -2639,6 +2852,15 @@ function registerHotkeys() {
        still works, which is the case that was actually asked for. */
     brainoOs: globalShortcut.register("CommandOrControl+Shift+O", () => {
       toggleBrainoOsWindow();
+    }),
+    /* The launch film used to be Shift twice. The idle screen is the thing you
+       reach for daily and the film is a party piece, so the one-key press went
+       to the screen and the film moved here. */
+    launchDemo: globalShortcut.register("CommandOrControl+Shift+L", () => {
+      if (!LAUNCH_DEMO.enabled) return;
+      logMac("hotkey.launch_demo", { skill: "launch-demo" });
+      sendToRenderer("braino-mac:launch-demo-start", {});
+      ensureDockWindowVisible("launch-demo-hotkey");
     }),
     bareControl: false,
     controlHandler: "swift-event-tap",
@@ -2694,10 +2916,8 @@ function startSwiftHotkeyHelper() {
         return;
       }
       if (trimmed === "double-shift") {
-        if (!LAUNCH_DEMO.enabled) return;
-        logMac("hotkey.double_shift", { skill: "launch-demo" });
-        sendToRenderer("braino-mac:launch-demo-start", {});
-        ensureDockWindowVisible("launch-demo-hotkey");
+        logMac("hotkey.double_shift", { skill: "idle-screen" });
+        toggleIdleScreen("double Shift");
         return;
       }
       if (trimmed === "double-space") {
@@ -15824,6 +16044,17 @@ ipcMain.handle("braino-mac:quick-command", async (_event, text) => {
     return { handled: true, say: played?.ok ? "Watch this." : "No music, but I am still dancing." };
   }
 
+  const idleScreen = parseIdleScreenIntent(raw);
+  if (idleScreen) {
+    logMac("idle_screen.voice", { action: idleScreen.action });
+    if (idleScreen.action === "close") {
+      const wasOpen = closeIdleScreen("voice");
+      return { handled: true, say: wasOpen ? idleScreen.say : "It is not up." };
+    }
+    openIdleScreen("voice");
+    return { handled: true, say: idleScreen.say };
+  }
+
   const colour = parseBrainoOsColorIntent(raw);
   if (colour) {
     logMac("braino_os.voice_color", { action: colour.action, name: colour.name || "" });
@@ -15853,6 +16084,24 @@ ipcMain.on("braino-mac:braino-os-closed", () => {
   }
   logMac("braino_os.closed", { source: "renderer" });
 });
+
+ipcMain.on("braino-mac:idle-screen-closed", () => {
+  if (!idleScreenOpen) return;
+  idleScreenOpen = false;
+  idleScreenReason = "";
+  bindIdleScreenEscape(false);
+  if (dockWindow && !dockWindow.isDestroyed()) {
+    dockWindow.setFocusable(false);
+    dockWindow.setIgnoreMouseEvents(true, { forward: true });
+  }
+  logMac("idle_screen.closed", { reason: "renderer" });
+});
+
+ipcMain.handle("braino-mac:idle-screen-action", async (_event, shortcut) => runIdleScreenShortcut(shortcut));
+ipcMain.handle("braino-mac:idle-screen-settings", async (_event, patch) => (
+  patch ? writeIdleScreenSettings(patch) : readIdleScreenSettings()
+));
+ipcMain.handle("braino-mac:idle-screen-toggle", async () => ({ open: toggleIdleScreen("dashboard") }));
 
 ipcMain.on("braino-mac:set-mouse-passthrough", (_event, passthrough) => {
   if (!dockWindow || dockWindow.isDestroyed()) return;
@@ -16579,6 +16828,7 @@ app.whenReady().then(() => {
   startXStatsPolling();
   startDesktopOverlaySync();
   startCursorModeMonitoring();
+  startIdleScreenWatch();
   /* Voice wake costs ~4.7s, and the auth token is 444ms of it — paid on the
      keypress because the token is only fetched when the session starts.
      Refreshing it in the background means it is already valid when you ask.

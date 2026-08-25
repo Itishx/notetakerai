@@ -1112,3 +1112,57 @@ body { overflow: hidden; }
 .bd-top { padding-top: 46px; }
 
 .bd-pane { padding-bottom: 180px; }
+
+/* ---------- Idle screen editor ---------- */
+
+.bd-idle { padding: 20px 22px; }
+.bd-idle-lede { margin: 0 0 14px; font-size: 13px; line-height: 1.55; color: var(--ink-2); max-width: 62ch; }
+.bd-idle-rows { display: flex; flex-direction: column; gap: 6px; }
+
+.bd-idle-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--bd-r);
+  background: var(--bg-2, transparent);
+}
+
+.bd-idle-ic {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1px solid var(--line-2);
+  background: var(--surface);
+  color: var(--ink-2);
+  font-size: 15px;
+  overflow: hidden;
+}
+.bd-idle-ic svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.bd-idle-ic img { width: 17px; height: 17px; border-radius: 4px; }
+
+.bd-idle-row input[type="text"] {
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-radius: var(--bd-r-sm);
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  color: var(--ink);
+}
+.bd-idle-row input[type="text"]:focus { outline: none; border-color: var(--line-2); }
+.bd-idle-name { flex: 0 0 140px; }
+.bd-idle-url { flex: 1 1 auto; color: var(--ink-2); }
+.bd-idle-emoji { flex: 0 0 52px; text-align: center; font-size: 15px; }
+.bd-idle-built { flex: 1 1 auto; font-size: 11px; letter-spacing: 0.13em; text-transform: uppercase; color: var(--ink-3); }
+.bd-idle-x { flex: 0 0 auto; padding: 2px 8px; border: 0; background: none; font-size: 16px; line-height: 1; color: var(--ink-3); cursor: pointer; }
+.bd-idle-x:hover { color: var(--ink); }
+
+.bd-idle-foot { display: flex; align-items: center; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+.bd-idle-auto { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--ink-2); margin-left: auto; }
+.bd-idle-auto input[type="number"] { width: 52px; padding: 4px 6px; border: 1px solid var(--line); border-radius: var(--bd-r-sm); background: var(--surface); font: inherit; font-size: 12.5px; color: var(--ink); }

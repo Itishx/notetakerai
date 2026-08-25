@@ -10,10 +10,11 @@ const SHORTCUTS = [
   ["Option Option", "BrainoHERA", "Dictate into whatever field the caret is in."],
   ["Control Control", "Voice", "Talk to Braino and hear him answer."],
   ["Option Option Option", "Jarvis", "Full-screen, voice-first takeover."],
-  ["Shift Shift", "Roam", "Braino leaves the bar and walks your screen."],
+  ["Shift Shift", "Idle screen", "The clock and your shortcuts, over everything."],
   ["Command Space", "Summon", "Bring Braino to the front."],
   ["Command Shift H", "Her mode", "Samantha takes the Mac."],
   ["Command Shift D", "This window", "Open the Braino dashboard."],
+  ["Command Shift L", "Launch film", "Braino introduces the film, then plays it."],
 ];
 
 /* Starters, not a fixed menu — these are things the Mac side genuinely does
@@ -239,7 +240,10 @@ const LOADERS = {
   xauto: () => loadXAuto(),
   high: () => loadFeed("high", "high-list", noteCard, "No highlights yet. Anything Braino marks as worth keeping shows up here."),
   search: () => { el("search-input").focus(); },
-  settings: () => renderSettings(),
+  settings: () => {
+    renderSettings();
+    if (!idleSettings) void loadIdleEditor();
+  },
 };
 
 const xautoCard = (row) => card({
@@ -300,6 +304,156 @@ function renderSettings() {
     ["Microphone", lastState.permissions?.microphone || "unknown"],
     ["Log file", lastState.paths?.log || "—", true],
   ]);
+}
+
+/* ── The idle screen editor ────────────────────────────────────────────────
+   Saves as you type. A Save button over eight rows of text is a button nobody
+   needs, and the screen it edits is usually up on another display. */
+
+const IDLE_ICONS = {
+  speak: "M12 3a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3ZM5 11a7 7 0 0 0 14 0M12 18v3",
+  ask: "M4 5h16v11H8l-4 4V5Z",
+  play: "M8 5.5v13l11-6.5-11-6.5Z",
+  os: "M12 3.5c2 0 3 1.4 3 2.8 1.7.2 3 1.6 3 3.4 0 1-.4 1.9-1 2.5.6.6 1 1.5 1 2.5 0 1.9-1.6 3.4-3.5 3.4-.6 1.3-1.9 2-3.5 2s-2.9-.7-3.5-2C5.6 18.1 4 16.6 4 14.7c0-1 .4-1.9 1-2.5-.6-.6-1-1.5-1-2.5 0-1.8 1.3-3.2 3-3.4 0-1.4 1-2.8 3-2.8Z",
+};
+
+const IDLE_DEFAULTS = [
+  { id: "speak", label: "Speak", kind: "action", action: "speak" },
+  { id: "ask", label: "Ask", kind: "action", action: "ask" },
+  { id: "play", label: "Play", kind: "action", action: "play" },
+  { id: "os", label: "Braino OS", kind: "action", action: "os" },
+];
+
+let idleSettings = null;
+let idleSaveTimer = null;
+
+function idleFavicon(url) {
+  try {
+    const value = String(url || "").trim();
+    if (!value) return "";
+    const host = new URL(/^https?:\/\//i.test(value) ? value : `https://${value}`).hostname;
+    return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(host)}&sz=64`;
+  } catch { return ""; }
+}
+
+/* Typing a URL should not write a file on every keystroke. */
+function idleSave() {
+  if (idleSaveTimer) clearTimeout(idleSaveTimer);
+  idleSaveTimer = setTimeout(() => {
+    idleSaveTimer = null;
+    api.idleScreenSettings?.(idleSettings);
+  }, 350);
+}
+
+function renderIdleEditor() {
+  const host = el("idle-rows");
+  if (!host || !idleSettings) return;
+  host.innerHTML = "";
+
+  idleSettings.shortcuts.forEach((row, index) => {
+    const line = document.createElement("div");
+    line.className = "bd-idle-row";
+
+    const icon = document.createElement("span");
+    icon.className = "bd-idle-ic";
+    const path = row.kind === "action" ? IDLE_ICONS[row.action] : "";
+    const favicon = row.kind === "link" && !row.emoji ? idleFavicon(row.url) : "";
+    if (path) icon.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${path}"/></svg>`;
+    else if (row.emoji) icon.textContent = row.emoji;
+    else if (favicon) icon.innerHTML = `<img src="${esc(favicon)}" alt="" />`;
+    else icon.textContent = (row.label || "?").slice(0, 1).toUpperCase();
+    line.appendChild(icon);
+
+    const name = document.createElement("input");
+    name.type = "text";
+    name.className = "bd-idle-name";
+    name.placeholder = "Name";
+    name.value = row.label || "";
+    name.addEventListener("input", () => { idleSettings.shortcuts[index].label = name.value; idleSave(); });
+    line.appendChild(name);
+
+    if (row.kind === "link") {
+      const url = document.createElement("input");
+      url.type = "text";
+      url.className = "bd-idle-url";
+      url.placeholder = "example.com";
+      url.value = row.url || "";
+      url.addEventListener("input", () => { idleSettings.shortcuts[index].url = url.value; idleSave(); });
+      url.addEventListener("change", renderIdleEditor);
+      line.appendChild(url);
+
+      const emoji = document.createElement("input");
+      emoji.type = "text";
+      emoji.className = "bd-idle-emoji";
+      emoji.placeholder = "🙂";
+      emoji.value = row.emoji || "";
+      emoji.setAttribute("aria-label", "Emoji instead of the site icon");
+      emoji.addEventListener("input", () => {
+        idleSettings.shortcuts[index].emoji = emoji.value.slice(0, 2);
+        idleSave();
+        renderIdleEditor();
+      });
+      line.appendChild(emoji);
+    } else {
+      const built = document.createElement("span");
+      built.className = "bd-idle-built";
+      built.textContent = "Built in";
+      line.appendChild(built);
+    }
+
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "bd-idle-x";
+    remove.textContent = "×";
+    remove.setAttribute("aria-label", `Remove ${row.label || "shortcut"}`);
+    remove.addEventListener("click", () => {
+      idleSettings.shortcuts.splice(index, 1);
+      renderIdleEditor();
+      idleSave();
+    });
+    line.appendChild(remove);
+
+    host.appendChild(line);
+  });
+
+  const add = el("idle-add");
+  if (add) add.hidden = idleSettings.shortcuts.length >= 8;
+  const auto = el("idle-auto");
+  if (auto) auto.checked = idleSettings.idleEnabled !== false;
+  const mins = el("idle-mins");
+  if (mins) mins.value = String(idleSettings.idleMinutes || 5);
+}
+
+async function loadIdleEditor() {
+  if (!api.idleScreenSettings) return;
+  idleSettings = await api.idleScreenSettings(null).catch(() => null);
+  if (!idleSettings) return;
+  if (!Array.isArray(idleSettings.shortcuts) || !idleSettings.shortcuts.length) {
+    idleSettings.shortcuts = IDLE_DEFAULTS.slice();
+  }
+  renderIdleEditor();
+
+  el("idle-add")?.addEventListener("click", () => {
+    if (idleSettings.shortcuts.length >= 8) return;
+    idleSettings.shortcuts.push({ id: `link-${Date.now().toString(36)}`, label: "", kind: "link", url: "", emoji: "" });
+    renderIdleEditor();
+  });
+  el("idle-reset")?.addEventListener("click", () => {
+    idleSettings.shortcuts = IDLE_DEFAULTS.slice();
+    renderIdleEditor();
+    idleSave();
+  });
+  el("idle-auto")?.addEventListener("change", (event) => {
+    idleSettings.idleEnabled = Boolean(event.target.checked);
+    idleSave();
+  });
+  el("idle-mins")?.addEventListener("change", (event) => {
+    const value = Math.min(120, Math.max(1, Number(event.target.value) || 5));
+    idleSettings.idleMinutes = value;
+    event.target.value = String(value);
+    idleSave();
+  });
+  el("idle-preview")?.addEventListener("click", () => { void api.idleScreenToggle?.(); });
 }
 
 function showView(name) {

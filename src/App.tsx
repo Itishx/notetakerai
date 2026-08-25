@@ -90,6 +90,7 @@ const Foundry = lazy(() => import("./pages/Foundry.tsx"));
 const HeroLab = lazy(() => import("./pages/HeroLab.tsx"));
 const FoundryDocs = lazy(() => import("./pages/FoundryDocs.tsx"));
 const MacMoonwalkPartyTrickDocs = lazy(() => import("./pages/MacMoonwalkPartyTrickDocs.tsx"));
+const MacIdleScreenDocs = lazy(() => import("./pages/MacIdleScreenDocs.tsx"));
 const MacLaunchVideoRitualDocs = lazy(() => import("./pages/MacLaunchVideoRitualDocs.tsx"));
 const MoonwalkEcosystemTeaserDocs = lazy(() => import("./pages/MoonwalkEcosystemTeaserDocs.tsx"));
 const Automations = lazy(() => import("./pages/Automations.tsx"));
@@ -191,6 +192,7 @@ function AppRoutes() {
         <Route path="/knowledge/insta-graphics-editorial-archive" element={<InstaGraphicsArchiveDocs />} />
         <Route path="/knowledge/product-overview-homepage" element={<ProductOverviewHomepageDocs />} />
         <Route path="/knowledge/mac-moonwalk-party-trick" element={<MacMoonwalkPartyTrickDocs />} />
+        <Route path="/knowledge/mac-idle-screen" element={<MacIdleScreenDocs />} />
         <Route path="/knowledge/mac-launch-video-ritual" element={<MacLaunchVideoRitualDocs />} />
         <Route path="/knowledge/moonwalk-ecosystem-teaser" element={<MoonwalkEcosystemTeaserDocs />} />
         <Route path="/knowledge/choose-your-avatar" element={<ChooseYourAvatarDocs />} />

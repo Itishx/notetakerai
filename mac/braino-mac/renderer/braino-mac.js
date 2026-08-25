@@ -8568,6 +8568,28 @@ window.brainoMac.onDance?.((payload) => {
   }
 });
 
+/* The idle screen. Shown when asked, or when the Mac has been left alone. */
+window.brainoMac.onIdleScreen?.((payload) => {
+  const screen = window.__brainoWallpaper;
+  if (!screen) return;
+  if (payload && payload.active) {
+    screen.open({ look: payload.look, shortcuts: payload.shortcuts });
+    logRenderer("idle_screen.open", { look: payload?.look || "", reason: payload?.reason || "" });
+  } else {
+    screen.close();
+    logRenderer("idle_screen.close", {});
+  }
+});
+
+/* Any key sends it away. An idle screen is in the way on purpose, and must
+   never be in the way for longer than a keystroke. */
+window.addEventListener("keydown", () => {
+  const screen = window.__brainoWallpaper;
+  if (!screen || !screen.isOpen()) return;
+  screen.close();
+  window.brainoMac.idleScreenClosed?.();
+});
+
 window.brainoMac.onDictationToggle?.((payload) => toggleYapMode(payload?.source || "double Option"));
 
 /* His working, as it happens.

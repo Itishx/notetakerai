@@ -691,3 +691,43 @@ The distribution OS surface from BrainoX.md, kept in the `/live` family: full-bl
 - **Queue**: status sections with uppercase 12px ink/40 headers (Scheduled → Approved → Drafts → Needs review → Paused → Failed → Published → Rejected). Items are draggable cards (`cursor-grab`) in the pre-scheduled states; fractional-position drops, one-row updates. Right rail of pill `ItemButton`s per status; subtle variant is borderless ink/40. Policy holds surface inline in amber ("Held: ..."), errors in red, published items link out to X.
 - **Idea inbox** and **activity log** ride the same card language; log rows lead with a result dot (emerald success / amber blocked / red failed) and show agent · action · target with the reason in ink/35 beneath.
 - Footer note names the honest boundaries: connection managed on /dashboard, public stats on /live.
+
+## The idle screen (Mac + `/wallpaper`)
+
+The face the Mac wears when nobody is at it: the date, a clock at
+`clamp(96px, 20vw, 288px)` in Instrument Serif, and a row of 66px frosted
+circles under it. Five looks (`aurora`, `dusk`, `paper`, `coral`, `mind`), each
+one a stack of `radial-gradient`s over a `linear-gradient` base plus its own
+`ink` / `inkSoft` / `glass` / `glassBorder` / `grain` / `vignette` tokens, so a
+whole look is one object and nothing is hard-coded per element.
+
+Three rules that were arrived at the hard way:
+
+| Decision | Why |
+| --- | --- |
+| **Painted, never photographed.** Gradients, an SVG turbulence grain at 5-9% under `mix-blend-mode: overlay`, and a vignette. | An image has a resolution and a display does not. Gradients scale to any Mac, weigh nothing, and a look can be recoloured in a line. Without the grain a gradient reads as a *screenshot* of a gradient; with it, as a surface. |
+| **The clock is centred, not upper-third.** | The iPhone lock screen is the reference and this is the one thing not copied from it. On a display three times as wide, upper-third strands the clock on a large empty rectangle. |
+| **The meridiem hangs off the numerals** (`position: absolute; left: 100%`), it does not share their row. | In the row, AM/PM is part of the flex line, so the numerals sit visibly left of centre and the whole screen looks misaligned. |
+
+**One surface, drawn twice, deliberately.** `src/pages/Wallpaper.tsx` is the bench
+and `mac/braino-mac/renderer/wallpaper.{js,css}` is the real thing, a direct port
+with the same look names and the same measurements. The Mac copy draws into the
+transparent full-display window the notch already owns (the Braino OS pattern),
+so there is no second `BrowserWindow`, no network, and no cost while it is down.
+`z-index: 2147482000` — under Braino OS at `2147483000`, over the notch and the
+mascot, and the two full-screen surfaces are mutually exclusive: opening either
+closes the other, because both claim Escape.
+
+**The row under the clock** is data, not markup: four built-in actions (speak,
+ask, play, os) plus up to four links, each rendering as its site's favicon, an
+emoji, or its first letter, in that order, so a link is never a blank circle.
+Shape in `src/lib/wallpaperShortcuts.ts`; the Mac's copy lives in
+`~/Library/Application Support/Braino Mac/idle-screen.json`, and both dashboards
+edit it under Settings. Deleting every row restores the four defaults, because
+an empty row is a bad edit rather than a preference.
+
+**Coming and going.** Shift twice, or `powerMonitor.getSystemIdleTime()` past the
+interval you set. It is a poll, not an event, for one reason: the moment the
+human is back the screen has to be gone. Only the screen that came up by itself
+goes away by itself. It never opens over dictation, a meeting recording, the
+teleprompter, or Braino OS.

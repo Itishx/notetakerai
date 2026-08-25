@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; frame-src brainosite:;" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: https:; font-src 'self'; frame-src brainosite:;" />
     <title>Braino</title>
     <link rel="stylesheet" href="dashboard.css" />
   </head>
@@ -153,6 +153,19 @@
             <dl class="bd-card" id="settings-appearance"></dl>
             <div class="bd-shead"><h2>Behaviour</h2></div>
             <dl class="bd-card" id="settings-behaviour"></dl>
+
+            <!-- ── The idle screen. What sits under the clock, and when the
+                 screen comes up on its own. ── -->
+            <div class="bd-shead"><h2>Idle screen</h2><span class="bd-more" id="idle-preview">Shift twice to see it</span></div>
+            <div class="bd-card bd-idle">
+              <p class="bd-idle-lede">The row under the clock. Four of them are things Braino does himself; add any link beside them and it shows up with that site's own icon, or an emoji instead.</p>
+              <div class="bd-idle-rows" id="idle-rows"></div>
+              <div class="bd-idle-foot">
+                <button class="bd-btn" type="button" id="idle-add">Add a link</button>
+                <button class="bd-btn" type="button" id="idle-reset">Reset</button>
+                <label class="bd-idle-auto"><input type="checkbox" id="idle-auto" /> Come up on its own after <input type="number" id="idle-mins" min="1" max="120" /> minutes</label>
+              </div>
+            </div>
           </section>
 
           <section class="bd-view" data-view="hera">

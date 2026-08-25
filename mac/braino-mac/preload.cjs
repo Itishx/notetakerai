@@ -128,6 +128,18 @@ contextBridge.exposeInMainWorld("brainoMac", {
   brainoOsClosed: () => ipcRenderer.send("braino-mac:braino-os-closed"),
   // Anything cheap, certain and deterministic, answered before chat can take it.
   quickCommand: (text) => ipcRenderer.invoke("braino-mac:quick-command", text),
+  /* The idle screen: the clock-and-shortcuts face he puts up when the Mac is
+     left alone, or on Shift twice. Not the macOS desktop background, which is
+     a different feature that unfortunately owns the word "wallpaper". */
+  onIdleScreen: (callback) => {
+    const handler = (_event, payload) => callback(payload || {});
+    ipcRenderer.on("braino-mac:idle-screen", handler);
+    return () => ipcRenderer.removeListener("braino-mac:idle-screen", handler);
+  },
+  idleScreenClosed: () => ipcRenderer.send("braino-mac:idle-screen-closed"),
+  idleScreenAction: (shortcut) => ipcRenderer.invoke("braino-mac:idle-screen-action", shortcut || {}),
+  idleScreenSettings: (patch) => ipcRenderer.invoke("braino-mac:idle-screen-settings", patch || null),
+  idleScreenToggle: () => ipcRenderer.invoke("braino-mac:idle-screen-toggle"),
   onDance: (callback) => {
     const handler = (_event, payload) => callback(payload || {});
     ipcRenderer.on("braino-mac:dance", handler);

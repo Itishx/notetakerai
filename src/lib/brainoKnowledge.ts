@@ -20,6 +20,18 @@ export type KnowledgeEntry = {
 
 export const KNOWLEDGE_ENTRIES: readonly KnowledgeEntry[] = [
   {
+    slug: "mac-idle-screen",
+    title: "The Idle Screen: The Face The Mac Wears When You Are Not There",
+    category: "Feature",
+    date: "2026-08-26",
+    dateLabel: "August 26, 2026",
+    description:
+      "Shift twice, or leave the Mac alone for five minutes, and Braino puts his own screen up: the date, a clock big enough to read across a room, and a row of round buttons for the things you actually reach for. Four are things he does himself; the rest are any links you add, in either dashboard. Drawn, not photographed, and it works with the wifi off.",
+    status: "MVP",
+    platform: "Braino for Mac",
+    number: "036",
+  },
+  {
     slug: "braino-os-ui",
     title: "Braino OS: The Thing Itself, Looked At Directly",
     category: "Feature",
