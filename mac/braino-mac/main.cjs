@@ -15008,6 +15008,20 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
     return closeAllBrowserTabs();
   }
 
+  /* His own surfaces are native powers too. The idle screen was reachable by
+     voice through the quick command door and not through this one, so asking
+     for it in a sentence sent it to a loop with no verb for it. */
+  const idleScreenIntent = parseIdleScreenIntent(raw);
+  if (idleScreenIntent) {
+    logMac("idle_screen.delegate", { action: idleScreenIntent.action });
+    if (idleScreenIntent.action === "close") {
+      const wasOpen = closeIdleScreen("voice");
+      return { ok: true, say: wasOpen ? idleScreenIntent.say : "It is not up." };
+    }
+    openIdleScreen("voice");
+    return { ok: true, say: idleScreenIntent.say };
+  }
+
   if (macHilEnabled() && macWantsTheBrain(raw)) {
     const asked = macAsksForTheBrain(text);
     logMac("delegate.hil_loop.front", {

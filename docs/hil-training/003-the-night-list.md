@@ -20,19 +20,24 @@ read at a glance rather than reconstructed from a diff.
 | 9 | Reads burned turns and then tripped the circling guard | Harness | **Done** |
 | 10 | One malformed turn per run was fatal; a 37s run died on it | Harness | **Done** |
 | 11 | "Delegate error: Error invoking remote method..." read out loud | Harness | **Done** |
-| 12 | Thinking chip is left aligned and cut to four characters | UI | **In progress** |
-| 13 | Opening the thinking takes two clicks: it collapses, then reopens | UI | **In progress** |
-| 14 | Thinking chip wants centring, a shimmer, and a down arrow that expands it | UI | **In progress** |
+| 12 | Thinking chip is left aligned and cut to four characters | UI | **Done** |
+| 13 | Opening the thinking takes two clicks: it collapses, then reopens | UI | **Done** |
+| 14 | Thinking chip wants centring, a shimmer, and a down arrow that expands it | UI | **Done** |
 | 15 | Superseded runs spoke an empty answer and logged 139s of work | Harness | **Done** |
 | 16 | Automation permission denied: tab scans, Spotify state and screen reads all fail | Environment | Yours |
 | 17 | HIL has no verb for native powers, so multi job commands that include one cannot finish | Architecture | Next round |
 
-## Still to do tonight
+| 18 | "Put up the idle screen" in a sentence went to a loop with no verb for it | Harness | **Done** |
 
-- [ ] 12, 13, 14: the notch thinking surface
-- [ ] Re-run every test, including a clean worktree build
-- [ ] Write round 003 properly from the fixes, with the new eval commands
-- [ ] Commit and push, leaving the working tree's own changes alone
+## Done tonight
+
+- [x] 1 to 15, and 18, which turned up while checking the routing of 2
+- [x] 169 tests passing, five of which had been red long enough to hide the rest
+- [x] Verified twice: the working tree, then a clean checkout of the commit
+- [x] The notch proved with screenshots rather than by reading CSS
+      (`tests/tools/notch-bench.mjs`, now a committed tool)
+- [x] Tomorrow's commands, every one of them routed and checked for a real path
+      to completion: [004](./004-commands-that-finish.md)
 
 ## Not tonight, and why
 
