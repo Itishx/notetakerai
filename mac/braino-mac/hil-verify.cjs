@@ -54,43 +54,16 @@ function macVerifyAssert(expect, obs) {
   return { ok: true };
 }
 
-/* One step, identified. Used to tell "the thing you just said yes to" apart
-   from "some other irreversible thing the model chose next". */
-function macHilStepSignature(step) {
-  const a = step?.action || {};
-  return [a.type || "", a.index ?? "", a.url || "", a.key || "", String(a.text || "").slice(0, 40)].join("|");
-}
-
-/* A yes.
+/* Shared with the browser extension, on purpose.
  *
- * Generous about how it is phrased, strict about what it means: it approves the
- * one step that was described, once. A no is caught before this by
- * isWorkflowCancelIntent, and anything that is neither is treated as an answer
- * to a question rather than as permission. */
-function macHilAnswerApproves(text) {
-  const t = String(text || "").toLowerCase().trim().replace(/[.!]+$/, "");
-  if (!t) return false;
-  if (/\b(no|nope|don'?t|do not|stop|cancel|wait|hold on|never ?mind)\b/.test(t)) return false;
-  return /\b(yes|yeah|yep|yup|sure|ok|okay|go ahead|go on|do it|please do|confirm|confirmed|proceed|carry on|continue|absolutely|of course)\b/.test(t);
-}
-
-/* Saying it is not doing it.
- *
- * Asked to run task 49, he replied "Task 49 is open a site that does not exist
- * and tell me what happened. I'm starting that now." and then the run ended.
- * Nothing was started. An answer that describes what he is about to do is not
- * an answer at all, it is a step he has not taken yet.
- *
- * Deliberately about the future. "I opened it" and "I have sent it" are
- * reports of work done and end the run correctly. */
-const PROMISE = /\b(?:i'?ll\b|i will\b|i'?m going to\b|i am going to\b|let me\b|i'?m starting\b|starting (?:that|it|this) now\b|i'?ll get (?:right )?on\b|on it\b|right away\b|give me a (?:second|moment)\b)/i;
-const ALREADY_DONE = /\b(?:i (?:have |'?ve )?(?:opened|sent|closed|played|found|downloaded|deleted|added|saved|started|stopped|switched|created)|done\b|finished\b|here (?:it|they) (?:is|are)\b)/i;
-
-function macPromisesAction(text) {
-  const said = String(text || "").trim();
-  if (!said) return false;
-  if (ALREADY_DONE.test(said)) return false;
-  return PROMISE.test(said);
-}
+ * These are judgements about the loop rather than about a particular pair of
+ * hands, and a fix to one surface that does not reach the other is how the same
+ * bug gets found twice. extension/lib/hilShared.js is the single copy; this
+ * file adds only what is genuinely Mac-shaped, which is the assertion checker
+ * above (a Mac window has no URL until you ask the browser for it). */
+const shared = require("../../extension/lib/hilShared.js");
+const macPromisesAction = shared.promisesAction;
+const macHilStepSignature = shared.stepSignature;
+const macHilAnswerApproves = shared.answerApproves;
 
 module.exports = { macVerifyAssert, macHilStepSignature, macHilAnswerApproves, macPromisesAction };
