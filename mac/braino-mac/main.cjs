@@ -1082,9 +1082,24 @@ const CURSOR_MODE_POLL_MS = 3000;
 const CURSOR_MODE_QUIET_MS = 45000;
 let cursorModeTimer = null;
 let cursorModePolling = false;
+/* Cursor Mode watches the agent, not the disk.
+ *
+ * It used to poll `git status` and announce "your task is over" at the first
+ * changed file. That is meaningless: files change constantly WHILE the work is
+ * happening, which is exactly when the task is not over. What ends a task is
+ * the agent stopping, and the honest sign of that is its own panel going quiet.
+ *
+ * Cursor's agent panel is a webview, so accessibility cannot see a "generating"
+ * control. What it can see is the conversation growing: every reply adds
+ * elements, and every code block adds a "Copy code to clipboard" button. Output
+ * appearing means work; output stopping for a while means done. */
+const CURSOR_AGENT_QUIET_MS = 25000;
+
 const cursorModeState = {
   enabled: true,
   active: false,
+  agentSignal: 0,
+  agentLastGrewAt: 0,
   baselineSignature: null,
   head: "",
   changedFiles: [],
@@ -1111,6 +1126,21 @@ async function readCursorRepoSnapshot() {
     changedFiles,
     lastCommit: String(commit).trim(),
   };
+}
+
+/* How much the agent has produced, as one number.
+   Element count catches new messages; the copy buttons catch code blocks, which
+   typing in the composer never creates. That distinction is what keeps a person
+   editing a prompt from looking like an agent at work. */
+async function readCursorAgentSignal() {
+  const res = await runAxHelper(["observeapp", "Cursor", "400"], 12000);
+  if (res.status !== "observe") return null;
+  let data = null;
+  try { data = JSON.parse(res.detail); } catch (_) { return null; }
+  const elements = Array.isArray(data?.elements) ? data.elements : [];
+  if (!elements.length) return null;
+  const codeBlocks = elements.filter((e) => /copy code to clipboard/i.test(String(e.name || ""))).length;
+  return elements.length + codeBlocks * 4;
 }
 
 function cursorModePayload() {
@@ -1155,8 +1185,39 @@ async function pollCursorMode() {
   if (!cursorModeState.enabled || cursorModePolling) return;
   cursorModePolling = true;
   try {
-    const snapshot = await readCursorRepoSnapshot();
     const now = Date.now();
+
+    /* The agent itself. This is the signal that matters; the repository below is
+       kept only so the dashboard can still say which files moved. */
+    const signal = await readCursorAgentSignal();
+    if (signal !== null) {
+      if (!cursorModeState.agentSignal) {
+        cursorModeState.agentSignal = signal;
+        cursorModeState.agentLastGrewAt = now;
+      } else if (signal > cursorModeState.agentSignal) {
+        // Output appeared. Work is happening.
+        cursorModeState.agentSignal = signal;
+        cursorModeState.agentLastGrewAt = now;
+        if (!cursorModeState.active) {
+          cursorModeState.active = true;
+          logMac("cursor_mode.agent_started", {});
+          broadcastCursorMode();
+        }
+      } else if (signal < cursorModeState.agentSignal) {
+        // A new session, or the panel was cleared. Start again from here.
+        cursorModeState.agentSignal = signal;
+        cursorModeState.agentLastGrewAt = now;
+      } else if (
+        cursorModeState.active
+        && now - cursorModeState.agentLastGrewAt > CURSOR_AGENT_QUIET_MS
+      ) {
+        // It was producing, and it has stopped. That is the end of the task.
+        logMac("cursor_mode.agent_quiet", { quietMs: now - cursorModeState.agentLastGrewAt });
+        await finishCursorTask("agent_idle");
+      }
+    }
+
+    const snapshot = await readCursorRepoSnapshot();
     if (cursorModeState.baselineSignature === null) {
       cursorModeState.baselineSignature = snapshot.signature;
       cursorModeState.head = snapshot.head;
@@ -1166,29 +1227,21 @@ async function pollCursorMode() {
       return;
     }
 
-    const previousHead = cursorModeState.head;
     if (snapshot.signature !== cursorModeState.baselineSignature) {
+      /* Files moved. Recorded, never announced: a changed file is what a task in
+         progress looks like, not what a finished one looks like. */
       cursorModeState.baselineSignature = snapshot.signature;
       cursorModeState.head = snapshot.head;
       cursorModeState.changedFiles = snapshot.changedFiles;
       cursorModeState.lastCommit = snapshot.lastCommit;
       cursorModeState.lastActivityAt = now;
-      cursorModeState.active = true;
-      logMac("cursor_mode.activity", {
-        activeApp: activeMacContext?.appName || "",
-        changedFiles: snapshot.changedFiles,
-        headChanged: Boolean(previousHead && previousHead !== snapshot.head),
-      });
       broadcastCursorMode();
-      if (previousHead && previousHead !== snapshot.head) {
-        await finishCursorTask("commit");
-      }
       return;
     }
 
-    if (cursorModeState.active && now - cursorModeState.lastActivityAt >= CURSOR_MODE_QUIET_MS) {
-      await finishCursorTask("quiet");
-    }
+    /* Deliberately no completion from the repository going quiet.
+       Files stop changing all the time mid-task: while a model is thinking, while
+       you read a diff, between two edits. Only the agent going quiet ends a task. */
   } catch (error) {
     logMac("cursor_mode.poll_failed", { error });
   } finally {

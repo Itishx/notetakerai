@@ -499,8 +499,16 @@ func collectEditables(from root: AXUIElement) -> [Candidate] {
 // the act commands build it the same way, so index N means the same element in
 // both, as long as the screen has not changed underneath (which is exactly what
 // the loop's re-observation each turn is for).
-func hilCandidates() -> (app: String, window: String, items: [Candidate])? {
-  guard let (appElement, _) = frontAppElement() else { return nil }
+/* Cursor Mode has to watch Cursor while you are looking at something else, so
+   observing cannot mean "whatever happens to be in front". */
+func hilCandidates(appQuery: String = "") -> (app: String, window: String, items: [Candidate])? {
+  let resolved: AXUIElement?
+  if appQuery.isEmpty {
+    resolved = frontAppElement()?.0
+  } else {
+    resolved = targetAppElement(query: appQuery)
+  }
+  guard let appElement = resolved else { return nil }
   wakeLazyAccessibility(appElement)
   let appName = axString(appElement, kAXTitleAttribute as String)
   var root = appElement
@@ -624,9 +632,9 @@ func runMeeting(appQuery: String) {
 }
 
 // Emitted as ONE line of JSON because the Node bridge reads only the first line.
-func runObserve(cap: Int) {
-  guard let ctx = hilCandidates() else {
-    out("error\tno front app")
+func runObserve(cap: Int, appQuery: String = "") {
+  guard let ctx = hilCandidates(appQuery: appQuery) else {
+    out("error\t\(appQuery.isEmpty ? "no front app" : "app not found")")
     return
   }
   var rows: [String] = []
@@ -770,6 +778,12 @@ case "key":
   runKey(name: arguments.dropFirst(2).joined(separator: " "))
 case "observe":
   runObserve(cap: arguments.count > 2 ? (Int(arguments[2]) ?? 120) : 120)
+case "observeapp":
+  // observeapp <app> <cap> — the same map, for an app that is not in front.
+  runObserve(
+    cap: arguments.count > 3 ? (Int(arguments[3]) ?? 200) : 200,
+    appQuery: arguments.count > 2 ? arguments[2] : ""
+  )
 case "meeting":
   let appQuery = arguments.dropFirst(2).joined(separator: " ")
   runMeeting(appQuery: appQuery.isEmpty ? "front" : appQuery)

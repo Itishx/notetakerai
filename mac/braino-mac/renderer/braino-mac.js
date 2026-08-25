@@ -8537,12 +8537,15 @@ window.brainoMac.onCursorMode?.((payload) => {
 void window.brainoMac.cursorModeState?.().then((payload) => {
   cursorModeContext = payload || null;
 }).catch(() => {});
-window.brainoMac.onCursorTaskComplete?.((payload) => {
-  const files = Array.isArray(payload?.changedFiles) ? payload.changedFiles.slice(0, 3) : [];
-  const detail = files.length ? ` I saw updates in ${files.join(", ")}.` : "";
-  const line = `Hey, your task is over. Please take a look.${detail}`;
+/* Four words, because that is the whole message.
+   It used to name the files it had seen change, which was both wrong and
+   uninteresting: a changed file is what a task in progress looks like, and
+   nobody wants a list read to them. You asked for it to be done; this says it
+   is done. */
+window.brainoMac.onCursorTaskComplete?.(() => {
+  const line = "Your task is over.";
   void setWalkerHomeState(false);
-  setBubble(line, 6200);
+  setBubble(line, 5000);
   void speak(line);
 });
 window.brainoMac.onDictationToggle?.((payload) => toggleYapMode(payload?.source || "double Option"));
