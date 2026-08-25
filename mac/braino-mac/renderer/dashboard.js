@@ -418,6 +418,8 @@ function renderIdleEditor() {
 
   const add = el("idle-add");
   if (add) add.hidden = idleSettings.shortcuts.length >= 8;
+  const cycle = el("idle-cycle");
+  if (cycle) cycle.checked = idleSettings.cycle !== false;
   const auto = el("idle-auto");
   if (auto) auto.checked = idleSettings.idleEnabled !== false;
   const mins = el("idle-mins");
@@ -441,6 +443,10 @@ async function loadIdleEditor() {
   el("idle-reset")?.addEventListener("click", () => {
     idleSettings.shortcuts = IDLE_DEFAULTS.slice();
     renderIdleEditor();
+    idleSave();
+  });
+  el("idle-cycle")?.addEventListener("change", (event) => {
+    idleSettings.cycle = Boolean(event.target.checked);
     idleSave();
   });
   el("idle-auto")?.addEventListener("change", (event) => {

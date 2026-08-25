@@ -8573,7 +8573,7 @@ window.brainoMac.onIdleScreen?.((payload) => {
   const screen = window.__brainoWallpaper;
   if (!screen) return;
   if (payload && payload.active) {
-    screen.open({ look: payload.look, shortcuts: payload.shortcuts });
+    screen.open({ look: payload.look, cycle: payload.cycle, shortcuts: payload.shortcuts });
     logRenderer("idle_screen.open", { look: payload?.look || "", reason: payload?.reason || "" });
   } else {
     screen.close();

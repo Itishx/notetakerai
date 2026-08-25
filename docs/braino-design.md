@@ -708,6 +708,7 @@ Three rules that were arrived at the hard way:
 | **Painted, never photographed.** Gradients, an SVG turbulence grain at 5-9% under `mix-blend-mode: overlay`, and a vignette. | An image has a resolution and a display does not. Gradients scale to any Mac, weigh nothing, and a look can be recoloured in a line. Without the grain a gradient reads as a *screenshot* of a gradient; with it, as a surface. |
 | **The clock is centred, not upper-third.** | The iPhone lock screen is the reference and this is the one thing not copied from it. On a display three times as wide, upper-third strands the clock on a large empty rectangle. |
 | **The meridiem hangs off the numerals** (`position: absolute; left: 100%`), it does not share their row. | In the row, AM/PM is part of the flex line, so the numerals sit visibly left of centre and the whole screen looks misaligned. |
+| **The five looks take turns every 10s**, cross-fading over 1.1s. | Only one of five can be up, and nobody picks a wallpaper from a menu every morning. Ten seconds is long enough to read as a picture rather than a slideshow. A turn calls `paintLook()` **only** — rebuilding the shortcut row on every tick would refetch each favicon and flash the buttons. |
 
 **One surface, drawn twice, deliberately.** `src/pages/Wallpaper.tsx` is the bench
 and `mac/braino-mac/renderer/wallpaper.{js,css}` is the real thing, a direct port

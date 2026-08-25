@@ -15,7 +15,10 @@ comes up whenever you want it.
 It is his screen, not a picture. Everything on it is drawn: layered gradients
 that scale to any display, a film of grain over the top so it reads as a surface
 rather than a screenshot of a gradient, and a vignette holding the middle. Five
-looks ship with it, from a pale aurora to something almost black.
+looks ship with it, from a pale aurora to something almost black, and **they
+take turns every ten seconds**, cross-fading over about a second. Long enough to
+be a picture rather than a slideshow, short enough that you see a second one
+before you look away. Switch it off in Settings and it holds the one it is on.
 
 ## Why it exists
 
@@ -32,7 +35,8 @@ that strands it, so it is centred here.
 
 ## How to use it
 
-- **Shift twice** puts it up, anywhere on the machine.
+- **Shift twice** puts it up, anywhere on the machine, on whichever look is next
+  in the rotation.
 - **Leave the Mac alone.** After five minutes it comes up on its own. That
   interval is yours to set, or to switch off, in Settings.
 - **Say it.** "Braino, put up the idle screen." "Show me the lock screen." "Close

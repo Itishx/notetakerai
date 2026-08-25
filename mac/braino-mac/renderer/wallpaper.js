@@ -102,9 +102,15 @@
   let meridiemEl = null;
   let actionsEl = null;
   let clockTimer = 0;
+  let lookTimer = 0;
   let open = false;
   let lookIndex = 0;
+  let cycle = true;
   let shortcuts = DEFAULT_SHORTCUTS;
+
+/* Long enough to be a picture rather than a slideshow, short enough that you
+   see a second one before you look away. The cross-fade takes 1.1s of it. */
+  const LOOK_EVERY_MS = 10000;
 
   function el(tag, className, parent) {
     const node = document.createElement(tag);
@@ -145,7 +151,10 @@
     document.body.appendChild(root);
   }
 
-  function paint() {
+  /* Only the look. Called on open and again on every turn of the cycle, so it
+     must never touch the row itself: rebuilding those buttons every ten seconds
+     would refetch each favicon and flash the whole row. */
+  function paintLook() {
     const look = LOOKS[lookIndex];
     lookEls.forEach((node, i) => node.classList.toggle("is-on", i === lookIndex));
     grainEl.style.opacity = String(look.grain);
@@ -154,18 +163,23 @@
     timeEl.parentElement.style.color = look.ink;
     meridiemEl.style.color = look.inkSoft;
     document.querySelectorAll(".bwp-hint").forEach((node) => { node.style.color = look.inkSoft; });
-    renderActions(look);
+    styleActions(look);
   }
 
-  function renderActions(look) {
+  function styleActions(look) {
+    actionsEl.querySelectorAll(".bwp-action").forEach((button) => {
+      button.style.background = look.glass;
+      button.style.border = "1px solid " + look.glassBorder;
+      button.style.color = look.ink;
+    });
+  }
+
+  function renderActions() {
     actionsEl.innerHTML = "";
     for (const shortcut of shortcuts) {
       const button = el("button", "bwp-action", actionsEl);
       button.type = "button";
       button.title = shortcut.label || "";
-      button.style.background = look.glass;
-      button.style.border = "1px solid " + look.glassBorder;
-      button.style.color = look.ink;
 
       const icon = shortcut.action ? ACTION_ICONS[shortcut.action] : "";
       if (icon) {
@@ -205,6 +219,17 @@
     meridiemEl.textContent = now.getHours() >= 12 ? "PM" : "AM";
   }
 
+  /* Five looks were drawn and only one of them can be up. So they take turns. */
+  function startCycle() {
+    if (lookTimer) window.clearInterval(lookTimer);
+    lookTimer = 0;
+    if (!cycle || LOOKS.length < 2) return;
+    lookTimer = window.setInterval(() => {
+      lookIndex = (lookIndex + 1) % LOOKS.length;
+      paintLook();
+    }, LOOK_EVERY_MS);
+  }
+
   const api = {
     open(options) {
       if (!root) build();
@@ -212,13 +237,16 @@
         const found = LOOKS.findIndex((entry) => entry.id === options.look);
         if (found >= 0) lookIndex = found;
       }
+      if (options && typeof options.cycle === "boolean") cycle = options.cycle;
       if (options && Array.isArray(options.shortcuts) && options.shortcuts.length) {
         shortcuts = options.shortcuts;
       }
       open = true;
-      paint();
+      renderActions();
+      paintLook();
       tick();
       if (!clockTimer) clockTimer = window.setInterval(tick, 1000);
+      startCycle();
       root.classList.add("is-open");
       try { window.brainoMac && window.brainoMac.setMousePassthrough(false); } catch (_) {}
       return true;
@@ -228,6 +256,7 @@
       open = false;
       root.classList.remove("is-open");
       if (clockTimer) { window.clearInterval(clockTimer); clockTimer = 0; }
+      if (lookTimer) { window.clearInterval(lookTimer); lookTimer = 0; }
       try { window.brainoMac && window.brainoMac.setMousePassthrough(true); } catch (_) {}
       return true;
     },
@@ -236,8 +265,16 @@
       const found = LOOKS.findIndex((entry) => entry.id === id);
       if (found < 0) return false;
       lookIndex = found;
-      if (root) paint();
+      if (root) paintLook();
+      /* Asking for a look restarts the clock rather than being overwritten a
+         second later by a turn that was already halfway through. */
+      if (open) startCycle();
       return true;
+    },
+    setCycle(on) {
+      cycle = Boolean(on);
+      if (open) startCycle();
+      return cycle;
     },
   };
 

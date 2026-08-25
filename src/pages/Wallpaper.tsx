@@ -135,6 +135,15 @@ export default function Wallpaper() {
       window.removeEventListener("storage", refresh);
     };
   }, []);
+  /* Five looks were drawn and only one of them can be up, so they take turns.
+     Keyed on the index rather than mounted once, so choosing one by hand
+     restarts the ten seconds instead of being overwritten by a turn that was
+     already halfway through. */
+  useEffect(() => {
+    const timer = window.setTimeout(() => setIndex((i) => (i + 1) % LOOKS.length), 10000);
+    return () => window.clearTimeout(timer);
+  }, [index]);
+
   const [chromeVisible, setChromeVisible] = useState(true);
   const hideTimer = useRef<number | undefined>(undefined);
   const now = useClock();

@@ -76,3 +76,28 @@ test("a bad save never leaves the clock sitting on nothing", () => {
   assert.match(store, /rows\.length \? rows : fallback\.shortcuts/);
   assert.match(store, /IDLE_SCREEN_DEFAULT_SHORTCUTS/);
 });
+
+/* Five looks were drawn and only one of them can be up at a time. */
+test("the looks take turns, without rebuilding the row underneath", () => {
+  assert.match(surface, /LOOK_EVERY_MS = 10000/);
+  assert.match(surface, /setInterval\([\s\S]{0,160}paintLook\(\)[\s\S]{0,40}LOOK_EVERY_MS/);
+  /* Rebuilding the buttons every ten seconds would refetch every favicon and
+     flash the whole row, so a turn repaints the look and restyles what is
+     already there. */
+  const turn = surface.slice(surface.indexOf("function paintLook"), surface.indexOf("function renderActions"));
+  assert.doesNotMatch(turn, /renderActions\(/);
+  assert.match(turn, /styleActions\(look\)/);
+  /* And it stops when the screen goes, rather than turning over an empty page
+     for as long as the app is running. */
+  assert.match(surface, /lookTimer\) \{ window\.clearInterval\(lookTimer\)/);
+
+  /* Off is a setting, and it reaches the surface. */
+  assert.match(main, /cycle: raw\?\.cycle !== false/);
+  assert.match(renderer, /screen\.open\(\{ look: payload\.look, cycle: payload\.cycle/);
+  const dashboard = read("../mac/braino-mac/renderer/dashboard.js");
+  assert.match(dashboard, /idle-cycle/);
+
+  /* The bench on the site turns at the same rate as the real thing. */
+  const web = read("../src/pages/Wallpaper.tsx");
+  assert.match(web, /setIndex\(\(i\) => \(i \+ 1\) % LOOKS\.length\), 10000\)/);
+});

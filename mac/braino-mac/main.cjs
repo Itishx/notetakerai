@@ -2648,6 +2648,9 @@ function usableShortcut(entry) {
 function readIdleScreenSettings() {
   const fallback = {
     look: "aurora",
+    /* Five looks were drawn and only one of them can be up at a time, so by
+       default they take turns. */
+    cycle: true,
     idleEnabled: true,
     idleMinutes: 5,
     shortcuts: IDLE_SCREEN_DEFAULT_SHORTCUTS.slice(),
@@ -2659,6 +2662,7 @@ function readIdleScreenSettings() {
       : [];
     return {
       look: typeof raw?.look === "string" && raw.look ? raw.look : fallback.look,
+      cycle: raw?.cycle !== false,
       idleEnabled: raw?.idleEnabled !== false,
       idleMinutes: Math.min(120, Math.max(1, Number(raw?.idleMinutes) || fallback.idleMinutes)),
       /* An empty row is a bad edit, not a preference. Nobody wants the clock
