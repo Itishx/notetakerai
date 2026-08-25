@@ -70,6 +70,8 @@
   transition: color 700ms ease;
 }
 
+/* Face, size and tracking all come from the look, because a clock in a mono
+   face and a clock in a serif want different measurements. */
 .bwp-time {
   display: block;
   font-family: "Instrument Serif", Georgia, serif;
@@ -77,6 +79,89 @@
   line-height: 0.86;
   letter-spacing: -0.022em;
 }
+
+/* One look is the wordmark rather than wearing it: the clock steps back and
+   the name takes the middle of the glass. */
+.bwp-signature {
+  display: none;
+  font-family: "Instrument Serif", Georgia, serif;
+  font-style: italic;
+  font-size: clamp(64px, 13vw, 190px);
+  line-height: 0.9;
+  letter-spacing: -0.03em;
+  transition: color 700ms ease;
+}
+.bwp-root.is-signature .bwp-signature { display: block; }
+.bwp-root.is-signature .bwp-date { margin-top: 26px; }
+.bwp-root.is-signature .bwp-time { font-size: clamp(48px, 7vw, 104px); }
+.bwp-root.is-signature .bwp-wordmark { display: none; }
+
+.bwp-quote {
+  margin-top: 28px;
+  max-width: 34ch;
+  text-align: center;
+  font-family: "Instrument Serif", Georgia, serif;
+  font-style: italic;
+  font-size: 17px;
+  line-height: 1.4;
+  transition: color 700ms ease;
+}
+
+/* Signed, quietly. Apple never puts a word on a wallpaper and they are right,
+   so this is as small as a signature on a print. */
+.bwp-wordmark {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 26px;
+  text-align: center;
+  font-family: "SF Pro Display", -apple-system, sans-serif;
+  font-size: 10px;
+  letter-spacing: 0.42em;
+  text-transform: uppercase;
+  opacity: 0.5;
+  pointer-events: none;
+  transition: color 700ms ease;
+}
+
+/* ---------- Battery ----------
+   Three states and no more: filling, emptying, or it wants you. Anything
+   further belongs in the menu bar, not on a screen you look at from a metre
+   away. */
+.bwp-battery {
+  position: absolute;
+  top: 32px;
+  right: 36px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: "SF Pro Display", -apple-system, sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+  transition: color 700ms ease;
+}
+.bwp-batt-glyph { position: relative; display: inline-flex; align-items: center; }
+.bwp-batt-shell {
+  position: relative;
+  display: block;
+  width: 26px;
+  height: 13px;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+}
+.bwp-batt-fill {
+  position: absolute;
+  top: 1.5px;
+  left: 1.5px;
+  display: block;
+  height: 8px;
+  border-radius: 2px;
+  transition: width 700ms cubic-bezier(0.22, 1, 0.36, 1), background 400ms ease;
+}
+.bwp-batt-cap { display: block; width: 2px; height: 5px; margin-left: 2px; border-radius: 1px; }
+.bwp-batt-bolt { position: absolute; top: -1px; left: 7px; display: none; }
 
 /* Hangs off the numerals rather than sharing their row: in the row it dragged
    the whole clock visibly left of centre. */
@@ -91,7 +176,7 @@
   letter-spacing: 0.18em;
 }
 
-.bwp-actions { margin-top: 64px; display: flex; align-items: center; gap: 20px; }
+.bwp-actions { margin-top: 56px; display: flex; align-items: center; gap: 20px; }
 
 .bwp-action {
   display: grid;

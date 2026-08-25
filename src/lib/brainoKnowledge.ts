@@ -20,6 +20,18 @@ export type KnowledgeEntry = {
 
 export const KNOWLEDGE_ENTRIES: readonly KnowledgeEntry[] = [
   {
+    slug: "braino-os-wallpapers",
+    title: "Braino OS Wallpapers: Eleven Pictures, None Of Them Photographs",
+    category: "Feature",
+    date: "2026-08-26",
+    dateLabel: "August 26, 2026",
+    description:
+      "His own set of desktop pictures, drawn as gradients rather than downloaded, so each one is rendered at your display's exact size when you ask for it. Say \"Braino, change my wallpaper\" and he hangs one; name one and he hangs that one. The same eleven are what the screensaver shows, which is Apple's idea and the right one.",
+    status: "MVP",
+    platform: "Braino for Mac",
+    number: "037",
+  },
+  {
     slug: "mac-idle-screen",
     title: "The Idle Screen: The Face The Mac Wears When You Are Not There",
     category: "Feature",

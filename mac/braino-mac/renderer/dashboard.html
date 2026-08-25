@@ -154,19 +154,48 @@
             <div class="bd-shead"><h2>Behaviour</h2></div>
             <dl class="bd-card" id="settings-behaviour"></dl>
 
-            <!-- ── The idle screen. What sits under the clock, and when the
-                 screen comes up on its own. ── -->
-            <div class="bd-shead"><h2>Idle screen</h2><span class="bd-more" id="idle-preview">Shift twice to see it</span></div>
+            <!-- ── Wallpaper. What sits behind your work all day. ── -->
+            <div class="bd-shead"><h2>Wallpaper</h2><span class="bd-more" id="wp-restore">Put the old one back</span></div>
             <div class="bd-card bd-idle">
-              <p class="bd-idle-lede">The row under the clock. Four of them are things Braino does himself; add any link beside them and it shows up with that site's own icon, or an emoji instead.</p>
+              <p class="bd-idle-lede">The desktop behind your work, drawn by Braino OS rather than photographed, so it redraws at your display's exact size and never looks soft. Pick one, or just say "Braino, change my wallpaper".</p>
+              <div class="bd-swatches" id="wp-swatches"></div>
+              <div class="bd-idle-foot">
+                <label class="bd-idle-auto"><input type="checkbox" id="wp-dynamic" /> Follow the hour, the way Apple's dynamic ones do</label>
+              </div>
+            </div>
+
+            <!-- ── Screensaver. What he shows when you are not there. ── -->
+            <div class="bd-shead"><h2>Screensaver</h2><span class="bd-more" id="idle-preview">Shift twice to see it</span></div>
+            <div class="bd-card bd-idle">
+              <p class="bd-idle-lede">The same looks, moving: the date, the time, your battery and the row you keep below. It comes up on Shift twice, or on its own once the Mac has been quiet.</p>
+              <div class="bd-seg" id="idle-mode" role="group" aria-label="Which looks to show">
+                <button type="button" data-mode="shuffle">Shuffle all</button>
+                <button type="button" data-mode="one">Just one</button>
+                <button type="button" data-mode="dynamic">Follow the hour</button>
+              </div>
+              <div class="bd-swatches" id="idle-swatches"></div>
+              <div class="bd-idle-foot">
+                <label class="bd-idle-auto">Change every
+                  <select id="idle-every">
+                    <option value="5">5 seconds</option>
+                    <option value="10">10 seconds</option>
+                    <option value="30">30 seconds</option>
+                    <option value="60">1 minute</option>
+                    <option value="300">5 minutes</option>
+                  </select>
+                </label>
+                <label class="bd-idle-auto"><input type="checkbox" id="idle-quotes" /> Show a line under the clock</label>
+                <label class="bd-idle-auto"><input type="checkbox" id="idle-auto" /> Come up on its own after <input type="number" id="idle-mins" min="1" max="120" /> minutes</label>
+              </div>
+
+              <div class="bd-idle-sub">Under the clock</div>
               <div class="bd-idle-rows" id="idle-rows"></div>
               <div class="bd-idle-foot">
                 <button class="bd-btn" type="button" id="idle-add">Add a link</button>
                 <button class="bd-btn" type="button" id="idle-reset">Reset</button>
-                <label class="bd-idle-auto"><input type="checkbox" id="idle-cycle" /> Change look every 10 seconds</label>
-                <label class="bd-idle-auto"><input type="checkbox" id="idle-auto" /> Come up on its own after <input type="number" id="idle-mins" min="1" max="120" /> minutes</label>
               </div>
             </div>
+
           </section>
 
           <section class="bd-view" data-view="hera">

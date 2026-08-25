@@ -8573,7 +8573,14 @@ window.brainoMac.onIdleScreen?.((payload) => {
   const screen = window.__brainoWallpaper;
   if (!screen) return;
   if (payload && payload.active) {
-    screen.open({ look: payload.look, cycle: payload.cycle, shortcuts: payload.shortcuts });
+    screen.open({
+      looks: payload.looks,
+      rotation: payload.rotation,
+      cycleSeconds: payload.cycleSeconds,
+      quotes: payload.quotes,
+      battery: payload.battery,
+      shortcuts: payload.shortcuts,
+    });
     logRenderer("idle_screen.open", { look: payload?.look || "", reason: payload?.reason || "" });
   } else {
     screen.close();
@@ -10198,6 +10205,8 @@ function nfRenderSys() {
 
 window.brainoMac.onPower?.((payload) => {
   nfPowerState = payload || null;
+  /* The idle screen wears the same reading, quietly, in its top corner. */
+  try { window.__brainoWallpaper?.setBattery(payload || null); } catch (_) {}
   if (payload?.event === "plugged") nfShowTransient(`⚡ ${payload.percent != null ? `${payload.percent}% · ` : ""}charging`);
   else if (payload?.event === "unplugged") nfShowTransient(`on battery · ${payload.percent ?? "?"}%`);
   else if (payload?.event === "low") nfShowTransient(`battery ${payload.percent}%`, 8000);

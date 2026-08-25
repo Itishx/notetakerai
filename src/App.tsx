@@ -22,6 +22,7 @@ const HumanIntelligence = lazy(() => import("./pages/HumanIntelligence.tsx"));
 const BrainoOSTeaser = lazy(() => import("./pages/BrainoOSTeaser.tsx"));
 const BrainoOSLive = lazy(() => import("./pages/BrainoOS.tsx"));
 const Wallpaper = lazy(() => import("./pages/Wallpaper.tsx"));
+const Wallpapers = lazy(() => import("./pages/Wallpapers.tsx"));
 const EcosystemTeaser = lazy(() => import("./pages/EcosystemTeaser.tsx"));
 const MoonwalkTeaser = lazy(() => import("./pages/MoonwalkTeaser.tsx"));
 const YapMode = lazy(() => import("./pages/YapMode.tsx"));
@@ -91,6 +92,7 @@ const HeroLab = lazy(() => import("./pages/HeroLab.tsx"));
 const FoundryDocs = lazy(() => import("./pages/FoundryDocs.tsx"));
 const MacMoonwalkPartyTrickDocs = lazy(() => import("./pages/MacMoonwalkPartyTrickDocs.tsx"));
 const MacIdleScreenDocs = lazy(() => import("./pages/MacIdleScreenDocs.tsx"));
+const BrainoOsWallpapersDocs = lazy(() => import("./pages/BrainoOsWallpapersDocs.tsx"));
 const MacLaunchVideoRitualDocs = lazy(() => import("./pages/MacLaunchVideoRitualDocs.tsx"));
 const MoonwalkEcosystemTeaserDocs = lazy(() => import("./pages/MoonwalkEcosystemTeaserDocs.tsx"));
 const Automations = lazy(() => import("./pages/Automations.tsx"));
@@ -188,6 +190,7 @@ function AppRoutes() {
         <Route path="/knowledge/product-overview-homepage" element={<ProductOverviewHomepageDocs />} />
         <Route path="/knowledge/mac-moonwalk-party-trick" element={<MacMoonwalkPartyTrickDocs />} />
         <Route path="/knowledge/mac-idle-screen" element={<MacIdleScreenDocs />} />
+        <Route path="/knowledge/braino-os-wallpapers" element={<BrainoOsWallpapersDocs />} />
         <Route path="/knowledge/mac-launch-video-ritual" element={<MacLaunchVideoRitualDocs />} />
         <Route path="/knowledge/moonwalk-ecosystem-teaser" element={<MoonwalkEcosystemTeaserDocs />} />
         <Route path="/knowledge/choose-your-avatar" element={<ChooseYourAvatarDocs />} />
@@ -242,6 +245,7 @@ function AppRoutes() {
         <Route path="/braino-os" element={<BrainoOSTeaser />} />
         <Route path="/os" element={<BrainoOSLive />} />
         <Route path="/wallpaper" element={<Wallpaper />} />
+        <Route path="/wallpapers" element={<Wallpapers />} />
         <Route path="/ecosystem-teaser" element={<EcosystemTeaser />} />
         <Route path="/moonwalk-teaser" element={<MoonwalkTeaser />} />
         <Route path="/yap-mode" element={<YapMode />} />

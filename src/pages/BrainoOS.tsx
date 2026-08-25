@@ -250,6 +250,14 @@ export default function BrainoOS() {
           </div>
         </div>
 
+        {/* The set he dresses your Mac in lives one click from the thing that
+            draws it. */}
+        <a
+          href="/wallpapers"
+          className="pointer-events-auto absolute right-8 top-6 text-[10px] tracking-[0.3em] text-[#4f97c4] transition-colors hover:text-[#bfe8ff]"
+        >
+          WALLPAPERS →
+        </a>
         <div className="absolute bottom-6 left-8 text-[10px] tracking-[0.3em] text-[#4f97c4]">
           {focused ? focused.label : "FOUR SYSTEMS / ONE MIND"}
         </div>

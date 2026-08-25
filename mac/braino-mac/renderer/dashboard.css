@@ -1166,3 +1166,86 @@ body { overflow: hidden; }
 .bd-idle-foot { display: flex; align-items: center; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
 .bd-idle-auto { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--ink-2); margin-left: auto; }
 .bd-idle-auto input[type="number"] { width: 52px; padding: 4px 6px; border: 1px solid var(--line); border-radius: var(--bd-r-sm); background: var(--surface); font: inherit; font-size: 12.5px; color: var(--ink); }
+
+/* ---------- Wallpaper and screensaver pickers ---------- */
+
+.bd-seg {
+  display: inline-flex;
+  gap: 2px;
+  margin-bottom: 14px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--bg-2, transparent);
+}
+.bd-seg button {
+  padding: 6px 14px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--ink-3);
+  cursor: pointer;
+  transition: background 200ms ease, color 200ms ease;
+}
+.bd-seg button.active { background: var(--surface); color: var(--ink); box-shadow: var(--bd-shadow); }
+
+/* The picture is the label. A name under a swatch is only there to be said out
+   loud later, which is exactly what the voice command needs. */
+.bd-swatches {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  gap: 10px;
+}
+
+.bd-swatch {
+  padding: 0;
+  border: 0;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+.bd-swatch-art {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  border-radius: 10px;
+  border: 1px solid var(--line-2);
+  overflow: hidden;
+  transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 260ms ease;
+}
+.bd-swatch:hover .bd-swatch-art { transform: translateY(-2px); box-shadow: var(--bd-shadow); }
+.bd-swatch.active .bd-swatch-art { outline: 2px solid var(--accent, #e8786e); outline-offset: 2px; }
+.bd-swatch-mark {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 6px;
+  text-align: center;
+  font-size: 6px;
+  letter-spacing: 0.36em;
+  text-transform: uppercase;
+  opacity: 0.55;
+}
+.bd-swatch-name { display: block; margin-top: 6px; font-size: 12px; color: var(--ink-2); }
+.bd-swatch-family { font-size: 11px; color: var(--ink-3); }
+
+.bd-idle-sub {
+  margin: 20px 0 10px;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.bd-idle-auto select {
+  padding: 4px 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--bd-r-sm);
+  background: var(--surface);
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--ink);
+}

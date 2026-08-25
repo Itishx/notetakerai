@@ -14,11 +14,17 @@ comes up whenever you want it.
 
 It is his screen, not a picture. Everything on it is drawn: layered gradients
 that scale to any display, a film of grain over the top so it reads as a surface
-rather than a screenshot of a gradient, and a vignette holding the middle. Five
-looks ship with it, from a pale aurora to something almost black, and **they
-take turns every ten seconds**, cross-fading over about a second. Long enough to
-be a picture rather than a slideshow, short enough that you see a second one
-before you look away. Switch it off in Settings and it holds the one it is on.
+rather than a screenshot of a gradient, and a vignette holding the middle.
+**Eleven looks** ship with it, and they are the same eleven he uses as desktop
+wallpapers: see [[braino-os-wallpapers]]. By default they **take turns every ten
+seconds**, cross-fading over about a second. Long enough to be a picture rather
+than a slideshow, short enough that you see a second one before you look away.
+In Settings you can hold one instead, follow the hour, or change how often it
+turns.
+
+Your **battery** sits quietly in the top right, and says one of three things and
+no more: it is filling, it is emptying, or it wants you. Anything further
+belongs in the menu bar rather than on a screen you read from a metre away.
 
 ## Why it exists
 
@@ -46,6 +52,13 @@ Anything at all sends it away: a key, a click, moving the mouse if it came up by
 itself. Escape works too, and is claimed globally for exactly as long as the
 screen is up, because a surface that covers every display and floats over
 fullscreen apps has to be dismissable no matter what has focus.
+
+## The line under the clock
+
+Each look carries a line in his voice, set in italic serif under the time.
+"Begin before you are ready." "Nothing is urgent at two in the morning." "Do
+less, better." Turn them off in Settings if you would rather have the clock on
+its own.
 
 ## The row under the clock
 

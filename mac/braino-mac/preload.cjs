@@ -140,6 +140,12 @@ contextBridge.exposeInMainWorld("brainoMac", {
   idleScreenAction: (shortcut) => ipcRenderer.invoke("braino-mac:idle-screen-action", shortcut || {}),
   idleScreenSettings: (patch) => ipcRenderer.invoke("braino-mac:idle-screen-settings", patch || null),
   idleScreenToggle: () => ipcRenderer.invoke("braino-mac:idle-screen-toggle"),
+  /* The Braino OS wallpapers: the same looks as the screensaver, standing
+     still. The dashboards list them and put one on the desktop. */
+  wallpaperLooks: () => ipcRenderer.invoke("braino-mac:wallpaper-looks"),
+  wallpaperApply: (look) => ipcRenderer.invoke("braino-mac:wallpaper-apply", { look }),
+  wallpaperRestore: () => ipcRenderer.invoke("braino-mac:wallpaper-restore"),
+  powerState: () => ipcRenderer.invoke("braino-mac:power-state"),
   onDance: (callback) => {
     const handler = (_event, payload) => callback(payload || {});
     ipcRenderer.on("braino-mac:dance", handler);

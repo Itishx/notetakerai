@@ -727,6 +727,33 @@ Shape in `src/lib/wallpaperShortcuts.ts`; the Mac's copy lives in
 edit it under Settings. Deleting every row restores the four defaults, because
 an empty row is a bad edit rather than a preference.
 
+**The set.** Eleven looks live in `shared/wallpaperLooks.json`, read by the site
+(`src/lib/wallpaperLooks.ts`) and by the Mac (`main.cjs`, handed to the renderer
+on open), so the Mac renderer keeps no copy and the two cannot drift. Each look
+carries its own clock face as well as its own colours, because a clock in mono
+and a clock in a serif want different measurements. Families are Light, Dark,
+Colour and Editorial; each also declares a time of day, which is what the
+Dynamic mode spends.
+
+**Wallpapers are the same pictures, standing still.** Apple's aerials slow into
+the still desktop picture on login, and that is the good idea: one set, two jobs.
+`renderBrainoWallpaper()` draws a look into an offscreen `BrowserWindow` at the
+display's **point** size (it inherits the scale factor, so asking in pixels
+renders at 2x and writes a 24MB file), captures the first `paint`, and keeps the
+PNG per look per display. "Braino, change my wallpaper" now means one of his;
+naming a look by name picks it; naming anything else still searches the web
+(`wallpaper-intent.cjs`).
+
+**Battery.** Top right, `pmset -g batt` for level and charge, `system_profiler
+SPPowerDataType` for the condition, asked at most every six hours because a
+battery does not become unwell between two blinks. Three states and no more.
+
+**`/wallpapers`.** The set as a page: one fixed gradient stack cross-fading as
+each section takes the screen, rather than a background per section, because a
+background that scrolls away is a picture of a wallpaper and one that stays is
+the wallpaper. Parallax is one number per section (`--p`) written on a frame and
+spent in CSS. Tabs switch the mock between screensaver and wallpaper.
+
 **Coming and going.** Shift twice, or `powerMonitor.getSystemIdleTime()` past the
 interval you set. It is a poll, not an event, for one reason: the moment the
 human is back the screen has to be gone. Only the screen that came up by itself

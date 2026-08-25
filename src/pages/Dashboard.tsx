@@ -5,7 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import "./braino-dash.css";
 import SpotifyPanel, { type SpotifyConnectionSummary } from "@/components/SpotifyPanel";
-import WallpaperShortcutsCard from "@/components/WallpaperShortcutsCard";
+import WallpaperSettingsCards from "@/components/WallpaperSettingsCards";
 import { Braino, BrainoDefs } from "@/components/BrainoChar";
 import { Webb, WebbDefs } from "@/components/WebbChar";
 import { FERRO_WALKER_SVG } from "@/components/ferroWalkerSvg";
@@ -5586,7 +5586,7 @@ export default function Dashboard() {
                   <h1>Settings.</h1>
                   <div className="bd-sub">Account, connections, and how Braino sounds.</div>
                 </div>
-                <WallpaperShortcutsCard />
+                <WallpaperSettingsCards />
                 <div className="rounded-[18px] border border-[var(--sb-line-2)] bg-[var(--sb-panel-2)] p-6 xl:col-span-2">
                   <div className="flex items-start justify-between gap-4">
                     <div>

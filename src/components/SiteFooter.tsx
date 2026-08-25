@@ -28,6 +28,7 @@ export default function SiteFooter() {
               <Link to="/delegate">Delegate</Link>
               <Link to="/build-braino">Build yours</Link>
               <Link to="/premium">Pricing</Link>
+              <Link to="/wallpapers">Wallpapers</Link>
               <Link to="/knowledge">Knowledge Base</Link>
             </div>
             <div className="home-footer-col">

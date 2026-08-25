@@ -8,6 +8,7 @@ const path = require("node:path");
 const { looksInPerson, rosterFromInviteNames, selectAudibleStreams } = require("./meeting-audio.cjs");
 const { parseMeetingIntent: parseMeetingIntentImpl, mentionsMeeting } = require("./meeting-intent.cjs");
 const { parseIdleScreenIntent } = require("./idle-screen-intent.cjs");
+const { parseWallpaperIntent: parseWallpaperIntentImpl } = require("./wallpaper-intent.cjs");
 
 const ROOT_DIR = path.resolve(__dirname, "../..");
 const PRELOAD_PATH = path.join(__dirname, "preload.cjs");
@@ -2629,6 +2630,60 @@ function toggleDockWindowVisibility(source) {
  */
 const IDLE_SCREEN_PATH = path.join(AUTH_STORE_DIR, "idle-screen.json");
 
+/* The looks themselves live in one file that the website reads too, so a look
+   cannot mean two different things on two screens. */
+const WALLPAPER_LOOKS_PATH = path.join(ROOT_DIR, "shared", "wallpaperLooks.json");
+let wallpaperLooksCache = null;
+
+function brainoWallpaperLooks() {
+  if (wallpaperLooksCache) return wallpaperLooksCache;
+  try {
+    const parsed = JSON.parse(fs.readFileSync(WALLPAPER_LOOKS_PATH, "utf8"));
+    const looks = Array.isArray(parsed?.looks) ? parsed.looks.filter((look) => look && look.id) : [];
+    if (looks.length) wallpaperLooksCache = looks;
+    return wallpaperLooksCache || [];
+  } catch (error) {
+    logMac("wallpaper.looks_unreadable", { error });
+    return [];
+  }
+}
+
+function brainoLookById(id) {
+  const looks = brainoWallpaperLooks();
+  return looks.find((look) => look.id === id) || looks[0] || null;
+}
+
+/* Apple's dynamic wallpaper moves with the sun, and it is the one thing about
+   their set that people genuinely notice. Same idea, off the clock the machine
+   already has rather than a location it would have to ask for. */
+function wallpaperTimeOfDay(date = new Date()) {
+  const hour = date.getHours();
+  if (hour < 7) return "night";
+  if (hour < 10) return "dawn";
+  if (hour < 17) return "day";
+  if (hour < 21) return "dusk";
+  return "night";
+}
+
+function looksForNow() {
+  const looks = brainoWallpaperLooks();
+  const when = wallpaperTimeOfDay();
+  const matching = looks.filter((look) => look.timeOfDay === when);
+  return matching.length ? matching : looks;
+}
+
+/* Which looks the screensaver may show, in the order it shows them. */
+function idleScreenRotation(settings) {
+  const looks = brainoWallpaperLooks();
+  if (!looks.length) return [];
+  if (settings.mode === "one") {
+    const chosen = brainoLookById(settings.look);
+    return chosen ? [chosen.id] : [looks[0].id];
+  }
+  if (settings.mode === "dynamic") return looksForNow().map((look) => look.id);
+  return looks.map((look) => look.id);
+}
+
 const IDLE_SCREEN_DEFAULT_SHORTCUTS = Object.freeze([
   { id: "speak", label: "Speak", kind: "action", action: "speak" },
   { id: "ask", label: "Ask", kind: "action", action: "ask" },
@@ -2647,12 +2702,19 @@ function usableShortcut(entry) {
 
 function readIdleScreenSettings() {
   const fallback = {
-    look: "aurora",
-    /* Five looks were drawn and only one of them can be up at a time, so by
-       default they take turns. */
-    cycle: true,
+    /* Eleven looks were drawn and only one of them can be up at a time, so by
+       default they take turns. "one" holds the look you picked; "dynamic"
+       follows the hour, the way Apple's set does. */
+    mode: "shuffle",
+    look: "mind",
+    cycleSeconds: 10,
+    quotes: true,
     idleEnabled: true,
     idleMinutes: 5,
+    /* The desktop behind your work is a different job from the screen he shows
+       when you are gone, so it is chosen separately out of the same set. */
+    wallpaperMode: "one",
+    wallpaperLook: "mind",
     shortcuts: IDLE_SCREEN_DEFAULT_SHORTCUTS.slice(),
   };
   try {
@@ -2661,8 +2723,16 @@ function readIdleScreenSettings() {
       ? raw.shortcuts.filter(usableShortcut).slice(0, IDLE_SCREEN_MAX_SHORTCUTS)
       : [];
     return {
+      /* Files written before there were modes said cycle:false to mean "hold
+         this one", so they still do. */
+      mode: raw?.mode === "one" || raw?.mode === "dynamic" ? raw.mode
+        : raw?.cycle === false ? "one" : fallback.mode,
       look: typeof raw?.look === "string" && raw.look ? raw.look : fallback.look,
-      cycle: raw?.cycle !== false,
+      cycleSeconds: Math.min(3600, Math.max(3, Number(raw?.cycleSeconds) || fallback.cycleSeconds)),
+      quotes: raw?.quotes !== false,
+      wallpaperMode: raw?.wallpaperMode === "dynamic" ? "dynamic" : fallback.wallpaperMode,
+      wallpaperLook: typeof raw?.wallpaperLook === "string" && raw.wallpaperLook
+        ? raw.wallpaperLook : fallback.wallpaperLook,
       idleEnabled: raw?.idleEnabled !== false,
       idleMinutes: Math.min(120, Math.max(1, Number(raw?.idleMinutes) || fallback.idleMinutes)),
       /* An empty row is a bad edit, not a preference. Nobody wants the clock
@@ -2687,7 +2757,16 @@ function writeIdleScreenSettings(patch) {
     logMac("idle_screen.save_failed", { error });
   }
   /* It is usually up on another display while you are editing it. */
-  if (idleScreenOpen) sendToRenderer("braino-mac:idle-screen", { active: true, ...next, reason: "settings" });
+  if (idleScreenOpen) {
+    sendToRenderer("braino-mac:idle-screen", {
+      active: true,
+      reason: "settings",
+      ...next,
+      looks: brainoWallpaperLooks(),
+      rotation: idleScreenRotation(next),
+      battery: lastPowerState,
+    });
+  }
   return next;
 }
 
@@ -2725,7 +2804,15 @@ function setIdleScreenSurface(active, reason = "") {
   dockWindow.setIgnoreMouseEvents(!next, { forward: true });
 
   const settings = readIdleScreenSettings();
-  sendToRenderer("braino-mac:idle-screen", { active: next, reason, ...settings });
+  if (next) void checkPowerState();
+  sendToRenderer("braino-mac:idle-screen", {
+    active: next,
+    reason,
+    ...settings,
+    looks: brainoWallpaperLooks(),
+    rotation: idleScreenRotation(settings),
+    battery: lastPowerState,
+  });
   bindIdleScreenEscape(next);
   idleScreenOpen = next;
   idleScreenReason = next ? reason : "";
@@ -6043,19 +6130,138 @@ async function restoreWallpaper() {
   }
 }
 
+
+// ── Braino OS wallpapers: the same looks as the screensaver, standing still.
+//
+// Apple's rule, and it is the right one: the screensaver and the wallpaper are
+// the same picture, one of them moving and one of them still, so logging in
+// feels like the screen settling rather than switching. Ours are painted, so
+// there is nothing to download: the look is drawn into an offscreen window at
+// the exact pixel size of the display and captured to a PNG once, then reused.
+const BRAINO_WALLPAPER_DIR = path.join(AUTH_STORE_DIR, "wallpapers", "braino-os");
+
+const WALLPAPER_GRAIN = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.55'/%3E%3C/svg%3E";
+
+function wallpaperHtml(look, width, height) {
+  const signature = look.signature
+    ? `<p class="mark-big">Braino OS</p>`
+    : `<p class="mark">Braino OS</p>`;
+  return `<!doctype html><html><head><meta charset="utf-8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<style>
+  html,body { margin:0; padding:0; width:${width}px; height:${height}px; overflow:hidden; background:#0b0b0d; }
+  .sheet { position:relative; width:100%; height:100%; }
+  .bg { position:absolute; inset:0; background:${look.background}; }
+  .grain { position:absolute; inset:0; mix-blend-mode:overlay; opacity:${look.grain};
+    background-image:url("${WALLPAPER_GRAIN}"); background-size:140px; }
+  .vig { position:absolute; inset:0; background:${look.vignette}; }
+  /* Signed, quietly. Apple never puts a word on a wallpaper and they are right,
+     so on all but one of these it is as small as a signature on a print. */
+  .mark { position:absolute; left:0; right:0; bottom:${Math.round(height * 0.045)}px; margin:0;
+    text-align:center; color:${look.inkSoft}; opacity:.55;
+    font-family:"SF Pro Display",-apple-system,sans-serif; font-size:${Math.round(height * 0.0115)}px;
+    letter-spacing:.42em; text-transform:uppercase; }
+  .mark-big { position:absolute; inset:0; margin:0; display:flex; align-items:center; justify-content:center;
+    color:${look.ink}; font-family:"Instrument Serif",Georgia,serif; font-style:italic;
+    font-size:${Math.round(height * 0.19)}px; letter-spacing:-0.03em; }
+</style></head>
+<body><div class="sheet"><div class="bg"></div><div class="grain"></div><div class="vig"></div>${signature}</div></body></html>`;
+}
+
+/* One picture per look per display size, drawn once and kept. */
+async function renderBrainoWallpaper(look, width, height) {
+  fs.mkdirSync(BRAINO_WALLPAPER_DIR, { recursive: true });
+  const file = path.join(BRAINO_WALLPAPER_DIR, `${look.id}-${width}x${height}@${screen.getPrimaryDisplay().scaleFactor}x.png`);
+  try {
+    const drawn = fs.statSync(file).mtimeMs;
+    const source = fs.statSync(WALLPAPER_LOOKS_PATH).mtimeMs;
+    if (drawn > source) return file;
+  } catch (_) { /* not drawn yet */ }
+
+  const win = new BrowserWindow({
+    show: false,
+    width,
+    height,
+    useContentSize: true,
+    webPreferences: { offscreen: true, backgroundThrottling: false },
+  });
+  try {
+    const painted = new Promise((resolve) => {
+      win.webContents.once("paint", (_event, _dirty, image) => resolve(image));
+      setTimeout(() => resolve(null), 4000);
+    });
+    await win.loadURL("data:text/html;charset=utf-8," + encodeURIComponent(wallpaperHtml(look, width, height)));
+    /* The wordmark is a webfont on one of these, so give it a moment to land
+       rather than capturing Georgia and calling it done. */
+    await new Promise((resolve) => setTimeout(resolve, 700));
+    let image = await painted;
+    if (!image || image.isEmpty()) image = await win.webContents.capturePage();
+    if (!image || image.isEmpty()) throw new Error("nothing painted");
+    fs.writeFileSync(file, image.toPNG());
+    logMac("wallpaper.rendered", { look: look.id, width, height });
+    return file;
+  } finally {
+    if (!win.isDestroyed()) win.destroy();
+  }
+}
+
+async function applyBrainoWallpaper(lookId) {
+  const look = brainoLookById(lookId) || null;
+  if (!look) return { ok: false, say: "I could not find my wallpapers just now." };
+  const display = screen.getPrimaryDisplay();
+  /* Points, not pixels: an offscreen window inherits the display's scale, so a
+     2940 point wide screen captures at 5880 pixels on its own. Asking in pixels
+     draws it at twice the size it needs and writes a 24MB file. */
+  const width = Math.round(display.size.width);
+  const height = Math.round(display.size.height);
+  try {
+    const file = await renderBrainoWallpaper(look, width, height);
+    await setWallpaper(file);
+    writeIdleScreenSettings({ wallpaperLook: look.id });
+    return { ok: true, say: `That is ${look.name}, one of mine.` };
+  } catch (error) {
+    logMac("wallpaper.braino_failed", { look: look.id, error });
+    return {
+      ok: false,
+      say: "I drew it, but macOS would not let me set it. It wants Automation permission for System Events, under System Settings, Privacy.",
+    };
+  }
+}
+
+/* "Change my wallpaper" with nothing else said means: give me a different one
+   of yours. Which one is whichever is not up now. */
+async function nextBrainoWallpaper() {
+  const settings = readIdleScreenSettings();
+  const pool = settings.wallpaperMode === "dynamic" ? looksForNow() : brainoWallpaperLooks();
+  if (!pool.length) return { ok: false, say: "I could not find my wallpapers just now." };
+  const at = pool.findIndex((look) => look.id === settings.wallpaperLook);
+  const next = pool[(at + 1) % pool.length];
+  return applyBrainoWallpaper(next.id);
+}
+
+/* Apple's dynamic wallpaper moves with the sun. This checks four times an hour,
+   which is often enough to catch a boundary and rare enough to be free. */
+let wallpaperDynamicWatch = null;
+let wallpaperDynamicAt = "";
+function startWallpaperDynamicWatch() {
+  if (wallpaperDynamicWatch) return;
+  wallpaperDynamicWatch = setInterval(() => {
+    const settings = readIdleScreenSettings();
+    if (settings.wallpaperMode !== "dynamic") return;
+    const when = wallpaperTimeOfDay();
+    if (when === wallpaperDynamicAt) return;
+    wallpaperDynamicAt = when;
+    const pool = looksForNow();
+    if (!pool.length) return;
+    void applyBrainoWallpaper(pool[0].id);
+  }, 15 * 60 * 1000);
+}
+
+/* The sentence itself is parsed in wallpaper-intent.cjs, which has no idea
+   where the looks live; this hands them over. */
 function parseWallpaperIntent(raw) {
-  const source = cleanPrompt(String(raw || "")).replace(/[?.!]+\s*$/, "");
-  if (!/\b(?:wallpaper|desktop background|background image)\b/i.test(source)) return null;
-  if (/^(?:what|which|whats|what'?s)\b/i.test(source)) return null; // a question, not a command
-  if (/\b(?:back|previous|restore|undo|old)\b/i.test(source)) return { mode: "restore" };
-  if (/\b(?:random|different|new|change|switch|another|surprise)\b/i.test(source)
-    && !/\bto\b/i.test(source)) return { mode: "random" };
-  // "set my wallpaper to spider man" / "make spider man my wallpaper"
-  let subject = source.match(/\bwallpaper\s+to\s+(?:a|an|the\s+)?(.+)$/i)?.[1]
-    || source.match(/\bmake\s+(.+?)\s+my\s+(?:wallpaper|desktop background)\b/i)?.[1]
-    || source.match(/\bset\s+(.+?)\s+as\s+(?:my\s+)?wallpaper\b/i)?.[1];
-  if (subject) return { mode: "web", subject: subject.replace(/^(?:a|an|the)\s+/i, "").trim() };
-  return { mode: "random" };
+  return parseWallpaperIntentImpl(cleanPrompt(String(raw || "")), brainoWallpaperLooks());
 }
 
 // ── Meeting recorder: detect the meeting, offer, record (on-device
@@ -15213,6 +15419,11 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
     logMac("delegate.wallpaper_intent", { mode: wallpaperIntent.mode, subject: textForLog(wallpaperIntent.subject || "") });
     if (wallpaperIntent.mode === "restore") return restoreWallpaper();
     if (wallpaperIntent.mode === "web") return setWallpaperFromWeb(wallpaperIntent.subject);
+    /* His own set is the default now. Asking for the Mac's own pictures by name
+       still gets those. */
+    if (wallpaperIntent.mode === "braino") {
+      return wallpaperIntent.look ? applyBrainoWallpaper(wallpaperIntent.look) : nextBrainoWallpaper();
+    }
     return setRandomOfficialWallpaper();
   }
 
@@ -16106,6 +16317,16 @@ ipcMain.handle("braino-mac:idle-screen-settings", async (_event, patch) => (
   patch ? writeIdleScreenSettings(patch) : readIdleScreenSettings()
 ));
 ipcMain.handle("braino-mac:idle-screen-toggle", async () => ({ open: toggleIdleScreen("dashboard") }));
+ipcMain.handle("braino-mac:wallpaper-looks", async () => ({ looks: brainoWallpaperLooks() }));
+ipcMain.handle("braino-mac:wallpaper-apply", async (_event, payload = {}) => {
+  const lookId = String(payload?.look || "");
+  return lookId ? applyBrainoWallpaper(lookId) : nextBrainoWallpaper();
+});
+ipcMain.handle("braino-mac:wallpaper-restore", async () => restoreWallpaper());
+ipcMain.handle("braino-mac:power-state", async () => {
+  if (!lastPowerState) await checkPowerState();
+  return lastPowerState || null;
+});
 
 ipcMain.on("braino-mac:set-mouse-passthrough", (_event, passthrough) => {
   if (!dockWindow || dockWindow.isDestroyed()) return;
@@ -16578,6 +16799,26 @@ setInterval(() => {
 // Power watcher: percent + charging state. Events fire on plug/unplug and on
 // crossing the 20% / 10% lines while discharging, so the island can react.
 let lastPowerState = null;
+
+/* Whether the battery itself wants looking at, which pmset does not say.
+   system_profiler does, and it takes a second or two, so it is asked rarely
+   and remembered: a battery does not become unwell between two blinks. */
+let batteryCondition = "";
+let batteryConditionAt = 0;
+async function readBatteryCondition() {
+  if (batteryCondition && Date.now() - batteryConditionAt < 6 * 60 * 60 * 1000) return batteryCondition;
+  try {
+    const { stdout } = await execFileP("/usr/sbin/system_profiler", ["SPPowerDataType"], { timeout: 12000 });
+    const found = String(stdout || "").match(/Condition:\s*(.+)/i)?.[1]?.trim() || "";
+    batteryCondition = found;
+    batteryConditionAt = Date.now();
+    if (found && !/^normal$/i.test(found)) logMac("power.condition", { condition: found });
+  } catch (_) {
+    batteryConditionAt = Date.now();
+  }
+  return batteryCondition;
+}
+
 async function checkPowerState() {
   try {
     const { stdout } = await execFileP("/usr/bin/pmset", ["-g", "batt"], { timeout: 4000 });
@@ -16586,6 +16827,13 @@ async function checkPowerState() {
     const percent = pctMatch ? Number(pctMatch[1]) : null;
     const onAc = /AC Power/i.test(text);
     const charging = /;\s*charging/i.test(text);
+    const condition = await readBatteryCondition();
+    /* Three states and no more: it is filling, it is emptying, or it wants you.
+       Wanting you is either genuinely low or a battery macOS is unhappy with. */
+    const needsAttention = Boolean(
+      (condition && !/^normal$/i.test(condition))
+      || (!onAc && percent !== null && percent <= 20),
+    );
     let event = "";
     if (lastPowerState) {
       if (onAc && !lastPowerState.onAc) event = "plugged";
@@ -16595,11 +16843,12 @@ async function checkPowerState() {
         else if (percent <= 20 && lastPowerState.percent > 20) event = "low";
       }
     }
-    const next = { percent, onAc, charging };
+    const next = { percent, onAc, charging, condition, needsAttention };
     const changed = !lastPowerState
       || lastPowerState.percent !== percent
       || lastPowerState.onAc !== onAc
-      || lastPowerState.charging !== charging;
+      || lastPowerState.charging !== charging
+      || lastPowerState.needsAttention !== needsAttention;
     lastPowerState = next;
     if (changed || event) {
       if (event) logMac("tray.power", { ...next, event });
@@ -16833,6 +17082,7 @@ app.whenReady().then(() => {
   startDesktopOverlaySync();
   startCursorModeMonitoring();
   startIdleScreenWatch();
+  startWallpaperDynamicWatch();
   /* Voice wake costs ~4.7s, and the auth token is 444ms of it — paid on the
      keypress because the token is only fetched when the session starts.
      Refreshing it in the background means it is already valid when you ask.

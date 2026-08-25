@@ -306,9 +306,12 @@ function renderSettings() {
   ]);
 }
 
-/* ── The idle screen editor ────────────────────────────────────────────────
-   Saves as you type. A Save button over eight rows of text is a button nobody
-   needs, and the screen it edits is usually up on another display. */
+/* ── Wallpaper and screensaver ─────────────────────────────────────────────
+   Two jobs, kept apart because they are genuinely different: the wallpaper sits
+   behind your work all day, the screensaver is what the Mac shows when you are
+   not there. They draw from the same set of looks, which is the whole trick.
+   Saves as you touch it: a Save button over a grid of pictures is a button
+   nobody needs, and the screen it edits is usually up on another display. */
 
 const IDLE_ICONS = {
   speak: "M12 3a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3ZM5 11a7 7 0 0 0 14 0M12 18v3",
@@ -325,6 +328,7 @@ const IDLE_DEFAULTS = [
 ];
 
 let idleSettings = null;
+let idleLooks = [];
 let idleSaveTimer = null;
 
 function idleFavicon(url) {
@@ -343,6 +347,40 @@ function idleSave() {
     idleSaveTimer = null;
     api.idleScreenSettings?.(idleSettings);
   }, 350);
+}
+
+/* A swatch is the picture itself, at a tenth of the size. The name under it is
+   there to be said out loud later: "Braino, set my wallpaper to Obsidian". */
+function renderSwatches(host, selectedId, onPick) {
+  if (!host) return;
+  host.innerHTML = "";
+  for (const look of idleLooks) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "bd-swatch" + (look.id === selectedId ? " active" : "");
+
+    const art = document.createElement("span");
+    art.className = "bd-swatch-art";
+    art.style.background = look.background;
+    const mark = document.createElement("span");
+    mark.className = "bd-swatch-mark";
+    mark.style.color = look.inkSoft;
+    mark.textContent = "Braino OS";
+    art.appendChild(mark);
+    button.appendChild(art);
+
+    const name = document.createElement("span");
+    name.className = "bd-swatch-name";
+    name.textContent = look.name;
+    const family = document.createElement("span");
+    family.className = "bd-swatch-family";
+    family.textContent = " " + look.family;
+    name.appendChild(family);
+    button.appendChild(name);
+
+    button.addEventListener("click", () => onPick(look));
+    host.appendChild(button);
+  }
 }
 
 function renderIdleEditor() {
@@ -418,8 +456,36 @@ function renderIdleEditor() {
 
   const add = el("idle-add");
   if (add) add.hidden = idleSettings.shortcuts.length >= 8;
-  const cycle = el("idle-cycle");
-  if (cycle) cycle.checked = idleSettings.cycle !== false;
+}
+
+function renderWallpaperPanels() {
+  if (!idleSettings) return;
+
+  document.querySelectorAll("#idle-mode button").forEach((button) => {
+    button.classList.toggle("active", button.dataset.mode === idleSettings.mode);
+  });
+  /* Picking one look only means anything when you are showing one look. */
+  const swatches = el("idle-swatches");
+  if (swatches) swatches.hidden = idleSettings.mode !== "one";
+  renderSwatches(swatches, idleSettings.look, (look) => {
+    idleSettings.look = look.id;
+    renderWallpaperPanels();
+    idleSave();
+  });
+
+  renderSwatches(el("wp-swatches"), idleSettings.wallpaperLook, (look) => {
+    idleSettings.wallpaperLook = look.id;
+    renderWallpaperPanels();
+    /* Picking a wallpaper means putting it on, not saving a preference. */
+    void api.wallpaperApply?.(look.id);
+  });
+
+  const every = el("idle-every");
+  if (every) every.value = String(idleSettings.cycleSeconds || 10);
+  const quotes = el("idle-quotes");
+  if (quotes) quotes.checked = idleSettings.quotes !== false;
+  const dynamic = el("wp-dynamic");
+  if (dynamic) dynamic.checked = idleSettings.wallpaperMode === "dynamic";
   const auto = el("idle-auto");
   if (auto) auto.checked = idleSettings.idleEnabled !== false;
   const mins = el("idle-mins");
@@ -433,7 +499,9 @@ async function loadIdleEditor() {
   if (!Array.isArray(idleSettings.shortcuts) || !idleSettings.shortcuts.length) {
     idleSettings.shortcuts = IDLE_DEFAULTS.slice();
   }
+  idleLooks = (await api.wallpaperLooks?.().catch(() => null))?.looks || [];
   renderIdleEditor();
+  renderWallpaperPanels();
 
   el("idle-add")?.addEventListener("click", () => {
     if (idleSettings.shortcuts.length >= 8) return;
@@ -445,10 +513,26 @@ async function loadIdleEditor() {
     renderIdleEditor();
     idleSave();
   });
-  el("idle-cycle")?.addEventListener("change", (event) => {
-    idleSettings.cycle = Boolean(event.target.checked);
+  document.querySelectorAll("#idle-mode button").forEach((button) => {
+    button.addEventListener("click", () => {
+      idleSettings.mode = button.dataset.mode || "shuffle";
+      renderWallpaperPanels();
+      idleSave();
+    });
+  });
+  el("idle-every")?.addEventListener("change", (event) => {
+    idleSettings.cycleSeconds = Number(event.target.value) || 10;
     idleSave();
   });
+  el("idle-quotes")?.addEventListener("change", (event) => {
+    idleSettings.quotes = Boolean(event.target.checked);
+    idleSave();
+  });
+  el("wp-dynamic")?.addEventListener("change", (event) => {
+    idleSettings.wallpaperMode = event.target.checked ? "dynamic" : "one";
+    idleSave();
+  });
+  el("wp-restore")?.addEventListener("click", () => { void api.wallpaperRestore?.(); });
   el("idle-auto")?.addEventListener("change", (event) => {
     idleSettings.idleEnabled = Boolean(event.target.checked);
     idleSave();
