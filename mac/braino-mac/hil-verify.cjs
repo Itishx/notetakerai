@@ -74,4 +74,23 @@ function macHilAnswerApproves(text) {
   return /\b(yes|yeah|yep|yup|sure|ok|okay|go ahead|go on|do it|please do|confirm|confirmed|proceed|carry on|continue|absolutely|of course)\b/.test(t);
 }
 
-module.exports = { macVerifyAssert, macHilStepSignature, macHilAnswerApproves };
+/* Saying it is not doing it.
+ *
+ * Asked to run task 49, he replied "Task 49 is open a site that does not exist
+ * and tell me what happened. I'm starting that now." and then the run ended.
+ * Nothing was started. An answer that describes what he is about to do is not
+ * an answer at all, it is a step he has not taken yet.
+ *
+ * Deliberately about the future. "I opened it" and "I have sent it" are
+ * reports of work done and end the run correctly. */
+const PROMISE = /\b(?:i'?ll\b|i will\b|i'?m going to\b|i am going to\b|let me\b|i'?m starting\b|starting (?:that|it|this) now\b|i'?ll get (?:right )?on\b|on it\b|right away\b|give me a (?:second|moment)\b)/i;
+const ALREADY_DONE = /\b(?:i (?:have |'?ve )?(?:opened|sent|closed|played|found|downloaded|deleted|added|saved|started|stopped|switched|created)|done\b|finished\b|here (?:it|they) (?:is|are)\b)/i;
+
+function macPromisesAction(text) {
+  const said = String(text || "").trim();
+  if (!said) return false;
+  if (ALREADY_DONE.test(said)) return false;
+  return PROMISE.test(said);
+}
+
+module.exports = { macVerifyAssert, macHilStepSignature, macHilAnswerApproves, macPromisesAction };

@@ -185,3 +185,46 @@ test("thinking is shown, not waited for", () => {
   assert.match(renderer, /VOICE_FILLER_ONLY/);
   assert.match(renderer, /voice\.filler_ignored/);
 });
+
+/* Saying it is not doing it.
+ *
+ * Asked to run task 49 he replied "Task 49 is open a site that does not exist
+ * and tell me what happened. I'm starting that now." and the run ended with
+ * nothing started. */
+test("a promise continues the run instead of ending it", async () => {
+  const { macPromisesAction } = (await import("node:module")).createRequire(import.meta.url)("../mac/braino-mac/hil-verify.cjs");
+  for (const said of [
+    "Task 49 is open a site that does not exist. I'm starting that now.",
+    "I will open LinkedIn for you",
+    "Let me check that",
+    "On it",
+  ]) {
+    assert.equal(macPromisesAction(said), true, said);
+  }
+  // Reports of work already done are proper endings.
+  for (const said of [
+    "I opened Medium in a new tab. The page is ready.",
+    "Your Google Meet is ready: https://meet.google.com/x",
+    "Tomorrow is 32 degrees, so not over 35.",
+    "I have sent it.",
+  ]) {
+    assert.equal(macPromisesAction(said), false, said);
+  }
+  const main = readFileSync(new URL("../mac/braino-mac/main.cjs", import.meta.url), "utf8");
+  assert.match(main, /hil\.loop\.promise_not_kept/);
+});
+
+/* Not knowing is not the same as knowing there is nothing.
+ *
+ * Both media probes run through AppleScript. When macOS refuses Automation they
+ * failed and the app reported "nothing is playing", which switched off the very
+ * guard that stops speaker audio being heard as a command. */
+test("when he cannot tell what is playing, he guards anyway", () => {
+  const main = readFileSync(new URL("../mac/braino-mac/main.cjs", import.meta.url), "utf8");
+  assert.match(main, /spotifyProbeFailed/);
+  assert.match(main, /youtubeProbeFailed/);
+  assert.match(main, /const uncertain = !playing && \(spotifyProbeFailed \|\| youtubeProbeFailed\)/);
+  const renderer = readFileSync(new URL("../mac/braino-mac/renderer/braino-mac.js", import.meta.url), "utf8");
+  assert.match(renderer, /mediaAudioUncertain/);
+  assert.match(renderer, /\(mediaAudioPlaying \|\| mediaAudioUncertain\)/);
+});

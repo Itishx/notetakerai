@@ -124,6 +124,7 @@ const {
   macVerifyAssert,
   macHilStepSignature,
   macHilAnswerApproves,
+  macPromisesAction,
 } = require(path.join(__dirname, "hil-verify.cjs"));
 const { parseBrainoOsIntent } = require(path.join(__dirname, "braino-os-intent.cjs"));
 const { parseBrainoOsColorIntent } = require(path.join(__dirname, "braino-os-color.cjs"));
@@ -8394,8 +8395,13 @@ async function checkMusicState() {
   let track = "";
   let artist = "";
   let uri = "";
+  /* Whether each probe could answer at all. Both go through AppleScript, and a
+     refusal has to read as "I do not know", never as "nothing is playing". */
+  let spotifyProbeFailed = false;
+  let youtubeProbeFailed = false;
   try {
     const state = await readSpotifyMacState();
+    if (!state?.ok) spotifyProbeFailed = true;
     if (state.ok && /playing/i.test(state.state || "")) {
       const onThisMac = await isSpotifyOnThisMac();
       if (onThisMac === false) {
@@ -8408,9 +8414,10 @@ async function checkMusicState() {
         uri = String(state.uri || "").trim();
       }
     }
-  } catch (_) {}
+  } catch (_) { spotifyProbeFailed = true; }
   if (!playing) {
     const scanned = await findPlayingYouTubeTab().catch(() => undefined);
+    if (scanned === undefined) youtubeProbeFailed = true;
     if (scanned !== undefined) {
       // A real cross-tab result: trust it fully, present or absent, even if
       // the playing tab is currently in the background. Only actual MUSIC
@@ -8437,7 +8444,13 @@ async function checkMusicState() {
       }
     }
   }
-  const key = `${playing}|${source}|${track}|${artist}`;
+  /* Not knowing is not the same as knowing there is nothing.
+     Both probes here run through AppleScript, and when macOS refuses Automation
+     they fail and this reported "nothing is playing" — which switched off the
+     guard that stops speaker audio being heard as commands, at exactly the
+     moment the machine had no idea what was coming out of the speakers. */
+  const uncertain = !playing && (spotifyProbeFailed || youtubeProbeFailed);
+  const key = `${playing}|${source}|${track}|${artist}|${uncertain}`;
   if (key !== musicTrackKey) {
     musicTrackKey = key;
     musicPlaying = playing;
@@ -8449,7 +8462,9 @@ async function checkMusicState() {
     if (playing && source === "spotify" && uri) {
       features = await fetchAudioFeaturesForUri(uri).catch(() => null);
     }
+    logMac("music.state.uncertain", { uncertain });
     sendToRenderer("braino-mac:music-state", {
+      uncertain,
       playing,
       source,
       track,
@@ -13595,7 +13610,22 @@ async function runMacHilLoop(command, resume = null) {
       setPendingMacWorkflow({ type: "hil_answer", stage: "hil_answer", data: { command, question: d.question } });
       return { ok: true, say: d.question, source: "hil_loop" };
     }
-    if (d.type === "answer") return { ok: true, say: d.text, source: "hil_loop" };
+    if (d.type === "answer") {
+      /* An answer that promises is not an answer.
+         "Task 49 is ... I'm starting that now" ended a run in which nothing was
+         started. Announcing the work and doing the work are different things,
+         and only one of them is an ending. */
+      const answerText = String(d.text || "");
+      if (macPromisesAction(answerText) && step < maxSteps - 1) {
+        logMac("hil.loop.promise_not_kept", { runId, step, said: textForLog(answerText) });
+        said = answerText;
+        lastStep = null;
+        state.facts.push("You just said you were about to do this. Saying it is not doing it. Take the next real action now.");
+        if (state.facts.length > 12) state.facts = state.facts.slice(-12);
+        continue;
+      }
+      return { ok: true, say: answerText, source: "hil_loop" };
+    }
     if (d.type === "blocked") return { ok: false, say: d.message, source: "hil_loop" };
     if (d.type === "all_done") return { ok: true, say: d.message || said || "Done.", source: "hil_loop" };
     if (d.type === "task_done") {

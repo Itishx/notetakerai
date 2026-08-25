@@ -1864,6 +1864,11 @@ function fmtMeetingClock(ms) {
 let meetingRecording = false;
 let screenRecording = false;
 let mediaAudioPlaying = false;
+/* True when the Mac could not tell whether anything is playing, which happens
+   whenever macOS refuses Automation. Treated as "probably playing", because the
+   alternative is trusting a guess made with no information and letting the
+   speakers talk to him. */
+let mediaAudioUncertain = false;
 let screenRecStartedAt = 0;
 let screenRecClockTimer = 0;
 
@@ -4381,11 +4386,12 @@ function shouldAcceptVoiceTranscript(text) {
   // "randomly listen". When media is playing and he is NOT mid-exchange with
   // you, require him to be addressed or given a clear (3+ word) command — bare
   // fragments picked off the speakers are dropped.
-  if (mediaAudioPlaying && !herMode && !voiceTurnInFlight && !hasPendingDelegateFollowup()) {
+  if ((mediaAudioPlaying || mediaAudioUncertain) && !herMode && !voiceTurnInFlight && !hasPendingDelegateFollowup()) {
     if (!explicitlyAddressed && (stats.wordCount < 3 || actionLike)) {
       logRenderer("voice.media_bleed_ignored", {
         chars: stats.normalized.length,
         actionLike,
+        uncertain: mediaAudioUncertain && !mediaAudioPlaying,
       });
       return false;
     }
@@ -9218,6 +9224,7 @@ window.brainoMac.onMusicState?.((payload) => {
   lightShow.energy = Number.isFinite(payload?.energy) ? payload.energy : null;
   lightShow.valence = Number.isFinite(payload?.valence) ? payload.valence : null;
   mediaAudioPlaying = Boolean(payload?.playing);
+  mediaAudioUncertain = Boolean(payload?.uncertain);
   setMusicMode(Boolean(payload?.playing));
 });
 window.brainoMac.onWalkerToggle?.(() => toggleWalkerHome());

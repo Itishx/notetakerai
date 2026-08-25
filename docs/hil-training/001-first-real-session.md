@@ -122,6 +122,24 @@ From a third session, mostly latency and mis-hearing rather than reasoning.
   AppleScript call that fails slowly when Automation is denied. My own fix from
   round 001 caused that. Cached for a beat now.
 
+## Round 001d — saying it, and mishearing it
+
+- **He announced work and then stopped.** "Task 49 is open a site that does not
+  exist and tell me what happened. I'm starting that now." The run ended there
+  and nothing was started. An answer that describes what he is about to do is
+  not an answer, it is a step he has not taken. A promise now continues the run,
+  with the model told plainly that saying it is not doing it. Reports of work
+  already done still end it, because those are real endings.
+- **He was acting on what the speakers said.** There is a guard for exactly
+  this, and it was switched off at the worst possible moment: both media probes
+  run through AppleScript, and when macOS refuses Automation they fail and the
+  app reported "nothing is playing" rather than "I cannot tell". Not knowing is
+  now its own state, and it guards as if media were playing.
+
+Screen and tab audio never reached the voice model, incidentally: loopback
+capture only ever feeds the meeting recorder. What he was hearing was his own
+speakers through the microphone.
+
 ## Still open
 
 - **Stale indices.** He reads, thinks, and the page has moved by the time he
