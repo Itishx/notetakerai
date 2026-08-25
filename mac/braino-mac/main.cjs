@@ -288,16 +288,14 @@ function redact(value) {
   return text;
 }
 
-// Hidden voice modes are private. They have to reach the model that acts on them,
-// but they have no business sitting in a log file, scrolling past in a terminal,
-// or being shipped to engine_runs. Redacting inside sanitizeForLog catches every
-// payload on its way out, whatever key the text arrived under — voice.in,
+// Hidden modes and anything explicit are private. They have to reach the model
+// that acts on them, but they have no business sitting in a log file, scrolling
+// past in a terminal behind you, or being shipped to engine_runs. The rules
+// live in log-privacy.cjs; redacting inside sanitizeForLog catches every payload
+// on its way out, whatever key the text arrived under — voice.in,
 // delegate.intent.start, feature.executed, hil.reason, or anything added later.
-const PERSONAL_MODE_RE = /\bmode\s*\d+\b/gi;
-
-function redactPersonalModes(text) {
-  return text.replace(PERSONAL_MODE_RE, "mode [redacted]");
-}
+const { scrubForLog, mentionsPrivateTopic } = require(path.join(__dirname, "log-privacy.cjs"));
+const redactPersonalModes = scrubForLog;
 
 function sanitizeForLog(value) {
   if (typeof value === "string") return redactPersonalModes(value);
@@ -495,13 +493,17 @@ function shouldPrintFailure(event) {
   return suppressed ? ` ${C.dim(`(+${suppressed} more since last shown)`)}` : "";
 }
 
-function consoleLogMac(event, payload) {
+function consoleLogMac(event, rawPayload) {
   if (LOG_STYLE === "off") return;
+  /* The screen gets the same treatment as the file. This used to describe the
+     raw payload, so a hidden mode was redacted on disk and read out in full in
+     the terminal, which is the one place someone else can see it. */
+  const payload = sanitizeForLog(rawPayload || {});
   if (LOG_STYLE === "raw") {
     safeConsole("log", "[Braino Mac]", event, payload);
     return;
   }
-  const described = describeLogEvent(event, payload || {});
+  const described = describeLogEvent(event, payload);
   if (LOG_STYLE === "chat" && !described?.chat) return;
 
   const time = C.dim(clockForLog());
@@ -2265,7 +2267,9 @@ let lastDictationEndedAt = 0;
 function heraLog(message, extra = {}) {
   const line = `[HERA #${heraSession}] ${message}`;
   logMac("hera", { session: heraSession, message, ...extra });
-  console.log(line, Object.keys(extra).length ? extra : "");
+  /* Dictation is the one place where every word you say is the payload, so the
+     screen gets the same scrub the file gets. */
+  console.log(scrubForLog(line), Object.keys(extra).length ? sanitizeForLog(extra) : "");
 }
 
 async function startLocalDictation() {
@@ -13734,6 +13738,13 @@ async function runMacConversation(prompt) {
 // thinking sheet; this audit is logged for diagnosis and engine history only.
 function fireHilReasonThinking(raw) {
   if (!raw || !SUPABASE_URL || !SUPABASE_ANON_KEY) return;
+  /* This call exists only to write a row someone will read later. A private
+     command has nothing to gain from being in that row, so it is not sent at
+     all rather than sent and then starred out. */
+  if (mentionsPrivateTopic(raw)) {
+    logMac("hil.reason.skipped_private", {});
+    return;
+  }
   // browserTitle is where a browser's tab title lives; windowTitle is often blank
   // there. Every other reader of this object falls back the same way.
   const surfaceTitle = activeMacContext?.windowTitle || activeMacContext?.browserTitle || "";
@@ -13751,7 +13762,7 @@ function fireHilReasonThinking(raw) {
     if (!r) return;
     // Always log. The terminal record is the point of this for testing, and it is
     // free of any timing concerns.
-    console.log(`[Braino HIL] ${r.verdict} — ${r.restated_goal}${r.clarifying_question ? ` | would have asked: ${r.clarifying_question}` : ""}`);
+    console.log(`[Braino HIL] ${r.verdict} — ${scrubForLog(r.restated_goal)}${r.clarifying_question ? ` | would have asked: ${scrubForLog(r.clarifying_question)}` : ""}`);
     logMac("hil.reason", { verdict: r.verdict, goal: textForLog(r.restated_goal || "") });
   }).catch((error) => console.log("[Braino HIL] reason failed:", error?.message || error));
 }
@@ -14044,7 +14055,7 @@ async function runMacHilLoop(command, resume = null) {
 
     const thinking = String(turn.thinking || "").trim();
     if (thinking) {
-      console.log(`[Braino HIL-LOOP] ${step + 1}: ${thinking}`);
+      console.log(`[Braino HIL-LOOP] ${step + 1}: ${scrubForLog(thinking)}`);
       sendTaskProgress({ status: "thinking", text: thinking.slice(0, 140) });
       /* Say it out loud as he works. Watching a silent thing click around your
          screen is unnerving; hearing what it is doing is the difference between

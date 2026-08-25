@@ -48,8 +48,28 @@ const MAX_TEXT = 8000;
 // know a mode command happened, never which one.
 const PERSONAL_MODE_RE = /\bmode\s*\d+\b/gi;
 
+// The same rule for anything explicit, and for the same reason: this table is
+// read on a web page. The whole value goes rather than the matched word, since a
+// sentence with one word starred out still says what it said. Mishearings are
+// half of why this is here.
+//
+// Kept in step by hand with mac/braino-mac/log-privacy.cjs, which does this for
+// the terminal and the log file; tests/mac-log-privacy.test.mjs fails if the two
+// lists drift apart.
+const PRIVATE_TOPIC_RE = new RegExp(
+  "\\b(?:"
+  + "porn\\w*|pornhub|onlyfans|nsfw|xvideos|xhamster|redtube|hentai|camgirl|camgirls"
+  + "|nude|nudes|naked|topless|lingerie"
+  + "|sex|sexual|sexting|sext|threesome|orgasm\\w*|masturbat\\w*|blowjob|handjob"
+  + "|erotic|erotica|bdsm|fetish|kink|horny|boobs|tits|dick\\s*pic|genital\\w*"
+  + "|escort\\s*service|hookup|hookups"
+  + ")\\b",
+  "i",
+);
+
 function redactPersonalModes(value: string): string {
-  return value.replace(PERSONAL_MODE_RE, "mode [redacted]");
+  if (PRIVATE_TOPIC_RE.test(value)) return "[private]";
+  return value.replace(PERSONAL_MODE_RE, (match) => match.replace(/\d+/, "[redacted]"));
 }
 
 function clip(value: unknown, limit = MAX_TEXT): string | null {
