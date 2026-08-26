@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Braino, BrainoDefs } from "@/components/BrainoChar";
 import { Webb, WebbDefs } from "@/components/WebbChar";
 import { FERRO_WALKER_SVG } from "@/components/ferroWalkerSvg";
+import { Brainelle } from "@/components/Brainelle";
 import { BRAINO_WALKER_SVG } from "@/components/brainoWalkerSvg";
 import { useBrainoVoice } from "@/hooks/useBrainoVoice";
 import { MASCOTS, useMascotPreference } from "@/lib/mascotPreference";
@@ -420,7 +421,9 @@ function BrainoMark({ size = 30, expr = "happy", talking = false }: { size?: num
   const { mascot } = useMascotPreference();
   return (
     <span className={`braino-avatar${talking ? " is-talking" : ""}`}>
-      {mascot === "webb"
+      {mascot === "brainelle"
+        ? <Brainelle size={size} expr={expr} arm="none" talk={talking} legs idle bobAmp={talking ? 0.75 : 0.45} />
+        : mascot === "webb"
         ? <Webb size={size} arm="none" talk={talking} idle bobAmp={talking ? 0.75 : 0.45} />
         : mascot === "ferro"
           ? <span style={{ width: size, height: size * 1.22, display: "block" }} dangerouslySetInnerHTML={{ __html: FERRO_WALKER_SVG.replace('width="64" height="78"', `width="${size}" height="${Math.round(size * 1.22)}"`) }} />

@@ -1,0 +1,27 @@
+@font-face {
+  font-family: "SF Pro Display";
+  src: url("/fonts/SF-Pro-Display-Semibold.otf") format("opentype");
+  font-weight: 600; font-style: normal; font-display: block;
+}
+
+/* SPEAK teaser — page chrome only. The film itself is drawn on a canvas in
+   SpeakTeaser.tsx at a true 1080 x 1920, which is what gets recorded, so the
+   type system (SF Pro Display at 600, -.025em tracking, white on black) lives
+   in the draw call rather than here. The face is declared above because
+   document.fonts.load needs something to load before the first frame. */
+
+.st-page { min-height: 100vh; padding: 0 clamp(16px, 4vw, 48px) 40px; color: #f6f1ea; background: #0b0a09; font-family: "SF Pro Display", -apple-system, BlinkMacSystemFont, sans-serif; }
+.st-nav { display: flex; align-items: center; justify-content: space-between; padding: 20px 0; font-size: 13px; letter-spacing: .06em; text-transform: uppercase; }
+.st-nav a { display: flex; align-items: center; gap: 10px; color: inherit; font-weight: 700; text-decoration: none; }
+.st-nav a i { width: 10px; height: 10px; border-radius: 50%; background: #ef897e; }
+.st-nav span { color: rgba(246,241,234,.45); }
+
+.st-holder { display: flex; justify-content: center; }
+.st-canvas { display: block; border-radius: 18px; background: #000; box-shadow: 0 40px 100px rgba(0,0,0,.6); }
+
+.st-controls { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 12px; padding-top: 26px; }
+.st-controls button { padding: 12px 20px; border: 1px solid rgba(246,241,234,.2); border-radius: 999px; color: #f6f1ea; background: transparent; font: 650 13px/1 "SF Pro Display", -apple-system, sans-serif; cursor: pointer; }
+.st-controls button:hover { border-color: #ef897e; }
+.st-controls button.is-primary { color: #171412; background: #f7f3ec; border-color: transparent; }
+.st-controls button:disabled { opacity: .6; cursor: wait; }
+.st-controls span { color: rgba(246,241,234,.4); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; }

@@ -2058,13 +2058,16 @@ body {
   text-transform: uppercase;
 }
 
+/* Four characters no longer fit on one row without the names wrapping, so the
+   picker is a 2x2 grid. */
 .braino-character-row {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
 .braino-character-option {
-  flex: 1;
+  flex: 1 1 calc(50% - 4px);
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -4428,6 +4431,61 @@ body {
 #notch-face.nf-cmds-open .nf-band,
 #notch-face.nf-cmds-open .nf-cap,
 #notch-face.nf-cmds-open #nf-status { opacity: 0; pointer-events: none; }
+
+/* ── Brainelle: the notch goes pink ───────────────────────────────────────────
+   The shell stays black — the Mac notch is always black, and coral never
+   belonged to the shell either. What changes is a pink glow thrown from the
+   housing, and every white label inside turning pink. Braino's notch is
+   untouched, so this is purely additive on the .brainelle class. */
+/* A real element, not a pseudo. `.nf-pill::before` already belongs to the open
+   surfaces (thinking / yap / inline / answer) and `box-shadow` on the pill
+   belongs to the recording and listening states — overriding either would break
+   them whenever Brainelle happened to be on. */
+.nf-brainelle-glow {
+  position: absolute;
+  z-index: 0;
+  top: -18px;
+  left: 50%;
+  width: calc(var(--nf-notch-w, 190px) + 120px);
+  height: calc(var(--nf-notch-h, 38px) + 120px);
+  transform: translateX(-50%);
+  pointer-events: none;
+  border-radius: 50%;
+  background: radial-gradient(50% 50% at 50% 34%, rgba(236, 124, 164, 0.46), rgba(236, 124, 164, 0) 70%);
+  animation: nfBrainelleBreathe 3.6s ease-in-out infinite;
+}
+@keyframes nfBrainelleBreathe { 50% { opacity: 0.6; } }
+
+/* White text inside the notch turns pink — status, captions, thinking lines,
+   answer headings and the karaoke word-highlight. */
+#notch-face.brainelle #nf-status,
+#notch-face.brainelle .nf-cap,
+#notch-face.brainelle .nf-answer-long-head b,
+#notch-face.brainelle .nf-answer-heading { color: #F7B4CE; }
+#notch-face.brainelle .nf-yap-transcript p:not(:last-child) { color: rgba(247, 180, 206, 0.46); }
+#notch-face.brainelle .nf-yap-transcript .nf-yap-empty { color: rgba(247, 180, 206, 0.36); }
+#notch-face.brainelle .nf-thinking-lines p:last-child { color: rgba(247, 180, 206, 0.56); }
+#notch-face.brainelle .nf-answer-bullet::before { color: rgba(247, 180, 206, 0.78); }
+#notch-face.brainelle .nf-answer-word { color: rgba(247, 180, 206, 0.3); }
+#notch-face.brainelle .nf-answer-word.spoken { color: rgba(247, 180, 206, 0.86); }
+#notch-face.brainelle .nf-answer-word.speaking-now { color: #FFD3E4; text-shadow: 0 0 9px rgba(247, 180, 206, 0.4); }
+#notch-face.brainelle .nf-response-fold { stroke: rgba(247, 180, 206, 0.46); }
+#notch-face.brainelle .nf-response-lid { stroke: rgba(247, 180, 206, 0.82); }
+#notch-face.brainelle .nf-response-smile { stroke: rgba(247, 180, 206, 0.92); }
+#notch-face.brainelle .nf-sonar i { border-color: rgba(236, 124, 164, 0.62); }
+
+@media (prefers-reduced-motion: reduce) {
+  .nf-brainelle-glow { animation: none; }
+}
+
+/* Brainelle's chip carries her pink when selected, so the picker reads at a
+   glance which character owns the pink notch. */
+.braino-character-option[data-mascot="brainelle"].active {
+  border-color: rgba(236, 124, 164, 0.5);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.12), 0 0 16px rgba(236, 124, 164, 0.22);
+}
+.braino-character-option[data-mascot="brainelle"].active .braino-character-name { color: #F7B4CE; }
+
 
 /* ---------- The thinking chip ----------
  *

@@ -1,5 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { BRAINO_WALKER_SVG } from "@/components/brainoWalkerSvg";
+import { Braino, BrainoDefs } from "@/components/BrainoChar";
+import { Brainelle } from "@/components/Brainelle";
 import {
   downloadNodePng,
   nodeToPngBlob,
@@ -731,6 +733,174 @@ function TwinModePrototype() {
 }
 
 
+/* ── 007 · Brainelle ────────────────────────────────────────────────────────
+   A character sheet, not a mascot variant page. The point of the artboard is
+   the claim in its footer: she is the same parametric character, so every pose
+   he owns already works on her. Both columns of the comparison row therefore
+   render the live component rather than exported artwork.
+
+   The hero smiles through every beat — the range lives in the mood row below
+   it, so the headline portrait never catches her mid-shock. */
+
+type BrainelleBeat = { pose: Record<string, unknown>; line: string; caption: string };
+
+const BRAINELLE_BEATS: ReadonlyArray<BrainelleBeat> = [
+  { pose: { arm: "wave", talk: true }, line: "Hi. I'm Brainelle.", caption: "Talking · waving" },
+  { pose: { talk: true }, line: "Same brain. Same gradients. Better bow.", caption: "Talking" },
+  { pose: { expr: "happy" }, line: "She isn't a costume. She's the same character, dressed.", caption: "Listening" },
+  { pose: { arm: "wave", talk: true }, line: "Every move he knows is already mine.", caption: "Talking · waving" },
+];
+
+const BRAINELLE_MOODS: ReadonlyArray<{ expr: string; label: string; lookX?: number }> = [
+  { expr: "happy", label: "Happy" },
+  { expr: "grin", label: "Grin", lookX: 0.5 },
+  { expr: "mischief", label: "Mischief", lookX: -0.6 },
+  { expr: "wow", label: "Wow" },
+];
+
+const BRAINELLE_BEAT_MS = 3000;
+
+export function BrainellePrototype() {
+  const [beat, setBeat] = useState(0);
+  const [runId, setRunId] = useState(0);
+
+  const replay = useCallback(() => {
+    setBeat(0);
+    setRunId((value) => value + 1);
+  }, []);
+  useReplayHandle("ig-brainelle", replay);
+
+  useEffect(() => {
+    const timers = BRAINELLE_BEATS.slice(1).map((_, index) =>
+      window.setTimeout(() => setBeat(index + 1), (index + 1) * BRAINELLE_BEAT_MS)
+    );
+    return () => timers.forEach((timer) => window.clearTimeout(timer));
+  }, [runId]);
+
+  const current = BRAINELLE_BEATS[beat];
+
+  return (
+    <div className="ig-frame ig-brainelle-frame" id="ig-brainelle">
+      <BrainoDefs />
+      <header className="ig-story-header">
+        <span className="ig-wordmark">braino</span>
+        <span className="ig-prelaunch">Character study · 007</span>
+      </header>
+
+      <div className="ig-brainelle-head">
+        <span>New character</span>
+        <h2>Meet<br /><em>Brainelle.</em></h2>
+        <p key={beat}>{current.line}</p>
+      </div>
+
+      <div className="ig-brainelle-stage">
+        <span className="ig-brainelle-halo" aria-hidden="true" />
+        <span className="ig-brainelle-sonar" aria-hidden="true"><i /><i /><i /></span>
+        <Brainelle size={430} legs idle gaze="wander" {...current.pose} />
+        <span className="ig-brainelle-wave" aria-hidden="true"><i /><i /><i /><i /><i /></span>
+        <b className="ig-brainelle-caption">{current.caption}</b>
+      </div>
+
+      <div className="ig-brainelle-moods">
+        {BRAINELLE_MOODS.map((mood) => (
+          <span key={mood.label}>
+            <Brainelle size={128} expr={mood.expr} idle gaze="wander" />
+            <i>{mood.label}</i>
+          </span>
+        ))}
+      </div>
+
+      <div className="ig-brainelle-pair">
+        <span className="ig-brainelle-pair-cell">
+          <Braino size={172} legs walk expr="happy" />
+          <i>Braino</i>
+        </span>
+        <em aria-hidden="true" />
+        <span className="ig-brainelle-pair-cell">
+          <Brainelle size={172} legs walk expr="happy" />
+          <i>Brainelle</i>
+        </span>
+      </div>
+
+      <footer className="ig-brainelle-foot">
+        <p>Honey hair, a silk bow, a scalloped polka dot skirt, round specs, longer lashes, pink shoes. A skirt and not a dress, because she has no shoulders for one to hang from. Nothing about the character underneath is redrawn.</p>
+        <span>trybraino.com</span>
+      </footer>
+    </div>
+  );
+}
+
+
+/* A · B · C side by side, so the hair call can be made by looking rather than
+   by describing. Route: /instagraphics/brainelle/hair */
+/* Every hair weight against every colour, so the call is made by looking.
+   Route: /instagraphics/brainelle/hair */
+const HAIR_WEIGHTS: ReadonlyArray<{ key: string; label: string; note: string }> = [
+  { key: "wispy", label: "Wispy", note: "tips at y 73" },
+  { key: "trim", label: "Trim", note: "tips at y 81" },
+  { key: "long", label: "Full", note: "tips at y 88" },
+  { key: "bob", label: "Fringe", note: "cap only" },
+  { key: "trimsweep", label: "Trim, swept", note: "side part" },
+  { key: false as unknown as string, label: "None", note: "bow and skirt only" },
+];
+const HAIR_COLOURS: ReadonlyArray<{ key: string; label: string }> = [
+  { key: "blonde", label: "Blonde" },
+  { key: "honey", label: "Honey" },
+  { key: "rose", label: "Rose" },
+  { key: "auburn", label: "Auburn" },
+  { key: "espresso", label: "Espresso" },
+];
+
+export function BrainelleHairCompare() {
+  return (
+    <main className="ig-hair-compare">
+      <BrainoDefs />
+      <header>
+        <a href="/instagraphics/brainelle">← Brainelle</a>
+        <p>Hair · {HAIR_WEIGHTS.length} weights × {HAIR_COLOURS.length} colours</p>
+      </header>
+      <div className="ig-hair-matrix" style={{ "--ig-cols": HAIR_COLOURS.length } as React.CSSProperties}>
+        <span className="ig-hair-corner" />
+        {HAIR_COLOURS.map((colour) => <span key={colour.key} className="ig-hair-colhead">{colour.label}</span>)}
+        {HAIR_WEIGHTS.map((weight) => (
+          <Fragment key={weight.label}>
+            <span className="ig-hair-rowhead"><strong>{weight.label}</strong><em>{weight.note}</em></span>
+            {HAIR_COLOURS.map((colour) => (
+              <span key={colour.key} className="ig-hair-cell">
+                <Brainelle size={168} legs idle expr="happy" hair={weight.key} hairColor={colour.key} />
+              </span>
+            ))}
+          </Fragment>
+        ))}
+      </div>
+    </main>
+  );
+}
+
+/* The same artboard, alone on a black viewport and scaled to fit it, for when
+   the 39% archive preview is too small to judge. Route: /instagraphics/brainelle
+   The fit is measured in JS rather than CSS because `scale()` needs a unitless
+   number, and `calc(100vw / 1080)` resolves to a length. */
+export function BrainelleStage() {
+  const [scale, setScale] = useState(() =>
+    typeof window === "undefined" ? 0.39 : Math.min(window.innerWidth / 1080, window.innerHeight / 1920)
+  );
+
+  useEffect(() => {
+    const fit = () => setScale(Math.min(window.innerWidth / 1080, window.innerHeight / 1920));
+    fit();
+    window.addEventListener("resize", fit);
+    return () => window.removeEventListener("resize", fit);
+  }, []);
+
+  return (
+    <main className="ig-brainelle-preview" style={{ "--ig-scale": scale } as React.CSSProperties}>
+      <BrainellePrototype />
+      <a className="ig-brainelle-preview-back" href="/instagraphics">← Archive</a>
+    </main>
+  );
+}
+
 const BRAINO_INTRO_SLIDES = [
   {
     number: "01",
@@ -881,8 +1051,13 @@ export default function InstaGraphics() {
           { number: "004", type: "System study", title: "Braino in Chrome.", note: "One connected lifecycle for listening, thinking, answering, and getting out of the way.", content: <ChromeSystemPrototype /> },
           { number: "005", type: "Companion study", title: "Two Brainos. One mind.", note: "A visual exploration of discovery, connection, and handoff between companion instances.", content: <TwinModePrototype /> },
           { number: "006", type: "Onboarding study", title: "Yours before you install him.", note: "An Apple-style setup flow that runs after sign-in and before the download, so Braino arrives already knowing you.", content: <a className="ig-fullpage-link" href="/instagraphics/onboarding"><span>Full-page flow</span><strong>Set up Braino</strong><em>8 steps · opens in its own tab →</em></a> },
+          { number: "009", type: "Carousel", title: "Meet Braino.", content: <a className="ig-fullpage-link" href="/instagraphics/meet-braino"><span>New post · 1080 × 1350</span><strong>Open Meet Braino</strong><em>11 slides · 4K PNG ZIP →</em></a>, note: "The whole introduction in one post. Opens white on his face and the Jarvis line, splits him into the website’s two chapters, lays the four things out as a bento, walks each one, then spends chapter two on the co-founder: the engine cards, the seven jobs nobody can do alone, and what eight founder interviews actually said." },
+          { number: "008", type: "Carousel", title: "Braino OS, in seven slides.", note: "The site’s own Under the hood section ported to 4:5: what the operating layer is, the four pillars as one table, then a slide each for the mind, the heart, the memory and the ears.", content: <a className="ig-fullpage-link" href="/instagraphics/braino-os"><span>New post · 1080 × 1350</span><strong>Open the Braino OS post</strong><em>7 slides · 4K PNG ZIP →</em></a> },
+          { number: "007", type: "Character study", title: "Meet Brainelle.", note: "Not a second mascot. The same parametric character wearing clothes, so every pose, walk cycle, and expression he owns already works on her.", content: <BrainellePrototype />, fullPage: "/instagraphics/brainelle", export: { name: "brainelle-character-sheet", frameId: "ig-brainelle", durationMs: BRAINELLE_BEATS.length * BRAINELLE_BEAT_MS } },
         ].map((item) => <article className="ig-archive-entry" key={item.number}>
-          <div className="ig-entry-copy"><span>{item.number} · {item.type}</span><h2>{item.title}</h2><p>{item.note}</p></div>
+          <div className="ig-entry-copy"><span>{item.number} · {item.type}</span><h2>{item.title}</h2><p>{item.note}</p>
+            {"fullPage" in item && item.fullPage ? <a className="ig-entry-fullscreen" href={item.fullPage}>Open full screen ↗</a> : null}
+            {"export" in item && item.export ? <ArtboardExport frameId={item.export.frameId} name={item.export.name} durationMs={item.export.durationMs} /> : null}</div>
           <div className="ig-artboard-stage">{item.content}</div>
         </article>)}
       </section>

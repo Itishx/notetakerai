@@ -77,6 +77,42 @@ The public documentation is registered in `src/lib/brainoKnowledge.ts` and rende
 
 The gallery is deliberately block-based: compact enough to scan, but visual enough to recognize a carousel before opening it. Editing happens in context beside the real post preview instead of in a disconnected form.
 
+## Archive entry 007: Brainelle
+
+The archive's newest study is a character sheet rather than a flow. It introduces Brainelle and makes one argument: she is not a second mascot, she is the existing parametric character with a couple of props flipped.
+
+Her design is honey-blonde hair, a silk bow tied on the crown where the brain's midline seam parts, a scalloped polka dot skirt, round wire specs, outward-flicking lashes, a warmer blush, and pink shoes. The outfit follows the Minnie Mouse rule: Minnie is Mickey with clothing on, not a redrawn anatomy, so clothing carries the difference and the character underneath is untouched. It is a skirt rather than a dress for a structural reason: Braino has no neck and no shoulders, his arms leave the body above the mouth, so a dress neckline can only ever land on her face. A skirt sits on the base instead of hanging. Hair took the longest to get right, because Braino's outer gyri are already bumpy hair-shaped forms and a dark mass laid over them reads as a painted edge rather than hair. What worked: the fringe is the only piece drawn in front of the head and stops above her eyes, and the length is drawn behind everything and only opens out below the head where the body narrows. Every fall weight against every colour is rendered at `/instagraphics/brainelle/hair`. The bow uses the same white-with-coral-trim material as Braino's gloves and shoes, so she reads as the same species rather than a sticker applied to him. The body, gradients, silhouette and footprint are untouched, which means she still fits the browser notch, the floating bar, and small icon sizes.
+
+On the artboard she looks around rather than staring off to one side: her eyes flick between fixed targets and hold, her mouth moves while she is speaking, and she has her own listening state — the same sonar rings and wave bars as the Chrome system's listening phase, but pink end to end rather than his gold, coral and periwinkle.
+
+The 1080 × 1920 artboard sits on a white ground with ink type and the coral signature, so the coral character is the only saturated thing on the page. It shows her full body over a four-beat loop, a four-up mood row, and a side-by-side walk cycle against Braino. Both figures in that comparison are the live component, not exported artwork, which is the whole point of the sheet. The hero smiles through every beat deliberately; the expression range belongs to the mood row, not the headline portrait.
+
+The entry carries the archive's first working export control: a 2160 × 3840 PNG still, and a twelve-second 1080 × 1920 MP4 recorded from the live artboard. It also has an **Open full screen** doorway to `/instagraphics/brainelle`, where the same artboard fills the viewport instead of sitting at the archive's 39% preview scale.
+
+Technical shape: `src/components/Brainelle.tsx` is a thin preset over `Braino` from `src/components/BrainoChar.tsx`, which gained `femme`, `specs`, `dress` and `hair` flags, a `bow` accessory, a pink shoe tone, and the `brainSilk`, `brainPink`, `brainDressCloth`, `brainDressTuck`, `brainHair` and `brainHairDeep` gradients in `<BrainoDefs/>`. A hair A/B/C compare surface lives at `/instagraphics/brainelle/hair`. `src/pages/InstaGraphics.tsx` owns the artboard; `src/pages/insta-graphics.css` owns its `.ig-brainelle-*` layout. The character contract is documented in `docs/braino-design.md` section 20.
+
+## Archive entry 008: Braino OS
+
+The archive's first post that invents nothing. It ports the website's own **Under the hood**
+section (`src/pages/Landing.tsx`) into a seven slide 1080 x 1350 carousel: what Braino OS is, the
+four pillars as one table, then a slide each for the mind, the heart, the memory and the ears,
+and the site's own close. Same Apple tokens, same four accents the site already assigns (blue for
+the mind, coral for the heart, violet for the memory, green for the ears), same words.
+
+Two rules the artboard obeys that the website does not. Every value inside a slide is a real pixel
+at 1080 x 1350, because the export renders the same node with the preview scale removed and a
+viewport unit would resize between what was approved and what lands in the ZIP. And nothing
+animates: the four engine visuals on the site are live canvases and intervals, and a still PNG of
+a live canvas is whatever frame it happened to be on, so the artboard carries deterministic
+redraws of the same four pictures.
+
+It lives at `/instagraphics/braino-os` with its own **Download all · 4K PNG ZIP** control, which
+renders seven files at 4320 x 5400. Copy and captions are in
+`Braino Knowledge Base/design/brainoos-instagram-carousels.md`.
+
+Technical shape: `src/pages/BrainoOsCarousels.tsx` owns the slides, the four still visuals, the
+carousel and the ZIP export; `src/pages/braino-os-carousels.css` owns the artboard.
+
 ## What comes next
 
 A future export pass can turn any selected slide into a downloadable production asset without changing the archive itself.

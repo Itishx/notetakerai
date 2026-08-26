@@ -82,6 +82,22 @@ describe("useMascotPreference", () => {
     expect(fromMock).not.toHaveBeenCalled();
   });
 
+  it("reads Brainelle from localStorage", () => {
+    localStorage.setItem("brainoMascotPref", "brainelle");
+    __resetMascotPreferenceForTests();
+    const { result } = renderHook(() => useMascotPreference());
+    expect(result.current.mascot).toBe("brainelle");
+  });
+
+  it("signed out: setMascot('brainelle') is stored and broadcast to every mounted hook", async () => {
+    const a = renderHook(() => useMascotPreference());
+    const b = renderHook(() => useMascotPreference());
+    await act(async () => { await a.result.current.setMascot("brainelle"); });
+    expect(a.result.current.mascot).toBe("brainelle");
+    expect(b.result.current.mascot).toBe("brainelle"); // b never called setMascot itself
+    expect(localStorage.getItem("brainoMascotPref")).toBe("brainelle");
+  });
+
   it("signed in: setMascot persists to profiles.mascot for the current user", async () => {
     mockUser = { id: "user-123" };
     const eqMock = vi.fn().mockResolvedValue({ error: null });

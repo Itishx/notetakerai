@@ -692,6 +692,74 @@ The distribution OS surface from BrainoX.md, kept in the `/live` family: full-bl
 - **Idea inbox** and **activity log** ride the same card language; log rows lead with a result dot (emerald success / amber blocked / red failed) and show agent · action · target with the reason in ink/35 beneath.
 - Footer note names the honest boundaries: connection managed on /dashboard, public stats on /live.
 
+---
+
+## 20. Brainelle — the `femme` flag (`src/components/Brainelle.tsx`)
+
+Brainelle is **not a second character**. She is `Braino` from `src/components/BrainoChar.tsx` with a couple of props flipped, so every pose, walk cycle, moonwalk, dance and expression he already owns works on her with no new artwork. (She was called Ms Braino for one afternoon; `/instagraphics/ms-braino` still resolves.)
+
+- **`femme` prop on `Braino`** — turns on the lashes, swaps the blush, and puts her in pink shoes. Nothing in the body, gradients, silhouette or footprint changes, so she still fits the notch, the bar, and small favicon sizes.
+- **`accessory="bow"`** — a silk bow tied on the crown, exactly where the midline gyri seam parts. Same material vocabulary as his gloves and shoes: `url(#brainSilk)` fill (white → `#F9DED8`), `rgba(176,86,78,.45)` trim, `#C9544A` fold lines at 50% opacity, and a `url(#brainCoralDark)` knot with an `#F6A8A2` highlight. Two short tails fall over the forehead so the ribbon lies on the head instead of floating above it.
+- **`dress`** (`false | "bell" | "skirt" | true`) — **`"bell"` is her default and the locked design: a scalloped polka dot SKIRT.** The Minnie lesson got her dressed: Minnie is Mickey with clothing on, not a redrawn anatomy. Same ears, same face, no hair. So the dress does the work, and nothing about the body changes. Minnie is Mickey with clothing on, not a redrawn anatomy — same ears, same face, no hair — so clothing carries the difference and the character underneath is untouched.
+
+  **It is a skirt, not a dress, and that is anatomy not taste.** She has no neck and no shoulders: her arms leave the body at y 53, *above* her mouth at y 61. A dress hangs from shoulders, so its neckline can only ever land on her face — `dress={true}` renders that version and it is kept only to show why it fails. A skirt does not hang, it sits: top edge at y 70, nine units clear of the mouth, legs coming out below.
+
+  Making cloth read as worn rather than pasted on:
+  - `url(#brainDressCloth)` is a *horizontal* gradient (`#8E3129` → `#E26658` → `#8E3129`), so flat fabric wraps a round form.
+  - `url(#brainDressTuck)` fades a shadow under the waistband, so the brain reads as continuing behind the cloth.
+  - The white sticker rim follows only the OUTER contour, as an open path. Ringing the whole shape draws a white line across the waist and the skirt reads as an object laid on top of her.
+  - The scallops ARE the silhouette (`BELL_HEM`), not circles laid over a smooth arc, and the sides bell outward rather than running straight. `"skirt"` is the earlier smooth-hem version, kept for comparison. Dots are a staggered lattice that shrinks and tilts toward the edges and runs off the hem — a dot cut by the edge is what proves it is printed on the cloth. Scallops sit *on* the hem curve so only their top halves show.
+  Four things make a dress read as worn rather than pasted on, and none of them is the outline: cloth shading across the width, the tuck shadow, gathers falling from the neckline, and a scalloped trim for hem thickness. A flat waistband block does the opposite — it reads as a dress placed on top of her.
+- **No sleeves** — Braino has no shoulder. y 54 is her cheek, so a sleeve there is a lump on her face. Minnie can wear them because her head is a separate ball.
+- **`hair`** (`false | "bob" | "sweep" | "trim" | "trimsweep" | "long" | "longsweep" | "wispy" | "wispysweep"`) + **`hairColor`** (`blonde | honey | rose | auburn | espresso`) — **`hair="trim"` with `hairColor="honey"` is her locked design.** Three fall weights, each thinner as well as shorter: wispy tips at y 73, trim at y 81, full at y 88. Blonde loses contrast against the coral body at small sizes; honey holds its edge, which is why it won. Every weight × colour is rendered at `/instagraphics/brainelle/hair`. Hair is genuinely hard on this character because the outer gyri are already bumpy hair-shaped forms, so a dark mass over them reads as a painted edge. The rules that finally made it work: the cap is the ONLY piece in front of the body and must stop at y 41, because anything lower runs beside her eyes and reads as sideburns; the length is drawn behind everything, before the legs, and only opens out below y 60 where the body narrows toward the legs. Drawn behind the body entirely it is invisible except for a sliver, which reads as two straps.
+- **`gaze="wander"`** — deterministic saccades: the eyes flick to a target and *hold*, easing over the last 22% of a 1.45s beat. A smooth sine drift reads as seasick rather than alive, and the targets are a fixed list rather than random so a recorded artboard replays identically.
+- **`talk`** — the existing mouth rig; her beats use it so she is speaking rather than frozen mid-smile.
+- **Her listening state** — same language as the Chrome system's listening phase (sonar rings plus wave bars) in *pink*, not his gold → coral → periwinkle. Rings `rgba(233,110,157,.8)`, bars `#FBD3E2 → #EC7CA4 → #C4507B`. `.ig-brainelle-sonar` / `.ig-brainelle-wave` in `insta-graphics.css`.
+- **`specs`** — round wire glasses, `r 9.4` lenses on the eye centres, `#1B1713` at `strokeWidth 1.45`, a `17%` white lens fill, and two white arcs for glare. Drawn after the eyes so the rim sits over the lashes. On by default in `Brainelle`; pass `specs={false}` to take them off.
+- **Lashes** — three strokes per eye, `#1B1713` at `strokeWidth 1.5`, flicking outward from the upper-outer edge. They live inside the eye's blink transform, so they close with the lid.
+- **Blush** — moved inboard to `cx 30 / 70`, widened to `rx 4.4 / ry 2.5`, warmed to `#E85450` at `0.5` opacity (his stays `28 / 72`, `3.5 × 2`, `#E14A48` at `0.35`).
+- **Pink shoes** — `LegShoe` takes a `pink` tone: `url(#brainPink)` upper (`#FFC0D6` → `#F58FB2` → `#DE6C93`), `#FFE3EC` sole, `rgba(160,58,94,.42)` trim, `#C4507B` laces. The ankle above the shoe stays coral, because that is her leg, not her shoe.
+- **New gradients** — `brainSilk`, `brainPink`, `brainDressCloth`, `brainDressTuck`, `brainHair` and `brainHairDeep` added to `<BrainoDefs/>`. Any page rendering her must still render `<BrainoDefs/>` once.
+
+Usage: `<Brainelle size={430} legs idle expr="happy" />` — honey trim hair, bow, skirt and specs all on by default. Note the skirt hides her legs, so the walk cycle is not visible while she wears it. Every other `Braino` prop passes straight through, and `accessory` can be overridden (`accessory="fedora"` for her moonwalk).
+
+Character sheet artboard: entry **007** of the InstaGraphics archive (`/instagraphics`), 1080 × 1920 on a **white** ground with ink type and the coral signature, so the character is the only saturated thing on the page. The hero smiles through all four beats on purpose; the expression range lives in the mood row beneath it. Exportable as 2160 × 3840 PNG or a 12s 1080 × 1920 MP4.
+
+Full-screen view: `/instagraphics/brainelle` (`BrainelleStage`). The artboard is contain-fitted to the viewport with a JS-measured `--ig-scale`, because `scale()` needs a unitless number and `calc(100vw / 1080)` resolves to a length. It is centred with `position: absolute` + `translate(-50%, -50%)`, not grid/flex centring, which grows its track around an oversized item instead of centring inside it.
+
+---
+
+## 21. Character switch — Braino ↔ Brainelle (`extension/content.js`)
+
+**A character is not a voice persona, and that distinction is the whole design.**
+
+- A **voice persona** ("talk like Trump") sends `personaSystem`, which **replaces Braino's entire system prompt server-side** — no emotional engine, no memory engine, no base personality. `chat-about-notes/index.ts` branches away from `buildBrainoSystemPrompt` completely.
+- A **character** is one setting on the same mind. Same engine, same memories, same taste. Two things change: the **Fish voice** and the **name**.
+
+So the character identity does NOT ride on `personaSystem`. It rides additively on `__SB_SURFACE_NOTE`, which already appends to the normal prompt on all three surfaces (text chat, realtime boot, persona voice instructions). The constant became `__SB_SURFACE_NOTE_BASE` and the three call sites now call `__sbSurfaceNote()`, which appends the active character's identity line.
+
+| Piece | Where |
+| --- | --- |
+| Registry | `__SB_CHARACTERS` — `{ name, refId, identity }`. Braino's `refId` is `""` so the server falls back to `FISH_AUDIO_REFERENCE_ID`; Brainelle's is `b67aedfb36d04c53892fd0e96db08180`. |
+| State | `let __sbCharacter` — persisted to `chrome.storage.local` under `sbCharacter`, so a reload keeps whoever you picked. Voice personas are session-only by contrast. |
+| Voice | `__sbFetchSentenceTts` — `__sbActiveVoiceRefId \|\| __sbCharacterVoiceRefId()`. **A persona outranks the character**: an impression is temporary, the character is who you are underneath it. |
+| Identity | `__sbSurfaceNote()` — additive. Brainelle's line says same mind, same memories, introduce yourself as "Hi, I'm Brainelle", she/her, *nothing else changes*. |
+| UI | `#__sb_character_btn__` — a dot in the bar row beside the glass toggle. Coral `#E8786E` = Braino, pink `#EC7CA4` = Brainelle. A dot rather than a mode chip, because it is one setting and not a mode. |
+| Spoken switch | `__sbDetectCharacterCommand` — "be/become/switch to/change to brainelle", "brainelle mode", and the same for braino. Checked in `__sbProcessPrompt` **before** the persona matcher, whose `be X` pattern would otherwise swallow "be Brainelle" as an impression of someone by that name. |
+| Announce | `__sbSetCharacter` speaks the greeting immediately in the new voice, so the switch is audible. |
+
+**Mac parity** (`mac/braino-mac/renderer/braino-mac.js`): `MAC_CHARACTERS` mirrors the registry, `macCharacter` persists to `localStorage` under `brainoMacCharacter`, and `macSpeakingRefId()` collapses the whole voice decision into one resolver used by both TTS sites — **her mode > persona > character**, because her mode is a full takeover, a persona is a temporary impression, and the character is who you are underneath either. The identity line is pushed onto `parts` at the end of `buildRealtimeChatInstructions()` (after the Emotional Engine core, so the cached token prefix does not move) and into the realtime session instructions. `macDetectCharacterCommand` runs before `macDetectPersonaCommand` in the voice transcript route.
+
+**Brainelle is a mascot, not a parallel switch.** She is a first-class `MascotId` in `src/lib/mascotPreference.ts` beside braino / webb / ferro, persisted to `profiles.mascot` (no migration needed: that column is plain `text` with no CHECK constraint). Picking her in Choose Your Avatar **is** the character switch, so her voice, her name and the pink notch follow the rig; `Cmd+Shift+B` drives the same avatar setting rather than a parallel flag, so the hotkey and the picker cannot disagree. Webb and Ferro stay rigs only, same Braino voice and name underneath.
+
+Her walker rig is `src/components/brainelleWalkerSvg.ts`, **generated from `brainoWalkerSvg.ts`** so it stays a mirror rather than a redrawing — every `__sbwk_*` id survives, so walk, blink, talk, drag and moonwalk drive her unchanged. Two things about it that are easy to get wrong: the hair FALL is injected right after `<g id="__sbwk_root__">` so it sits behind the legs and body (appended at the end it covers her face), and the shoes are recoloured by matching the shoe path exactly, because a blind `fill="white"` swap also repaints the gloves and the sticker outline. The Mac picker markup in `renderer/index.html` is static, not registry-driven, so a new character needs a button added there too; four options no longer fit one row, hence the 2x2 grid.
+
+**The pink notch.** `.brainelle` on `#notch-face` (Mac) / `.sb-brainelle` on `#__sb_bar__` (browser). The shell stays black; a `.nf-brainelle-glow` / `.sb-brainelle-glow` element is injected behind it for the glow, and every white label inside turns `#F7B4CE`. The glow is a **real element, not a pseudo**: `.nf-pill::before` already belongs to the Mac's open surfaces (thinking / yap / inline / answer) and five browser states already own `#__sb_bar__::after` (invoking, listening, agent-busy, dance, music). The pill's `box-shadow` is likewise left alone, because it carries the recording and listening state colours.
+
+**Taste stub.** Brainelle's identity carries one canned answer for now: asked whether she is a Taylor Swift fan she says she is not sure yet, that part is not wired in her, but she sees herself being a Swiftie deep down. It lives in the registry entry on both surfaces, so there is one place to change it.
+
+Not wired yet: the web `/chat` voice hook (`src/hooks/useBrainoVoice.ts:115` sends `{ text }` with no `referenceId`, so it always speaks in Braino's voice), and the mascot artwork — `<Brainelle>` is a drop-in for `<Braino>` on the site, but the extension walker is a separate static SVG rig with only a `trump` costume group, so swapping the visual there is real work.
+
 ## The idle screen (Mac + `/wallpaper`)
 
 The face the Mac wears when nobody is at it: the date, a clock at

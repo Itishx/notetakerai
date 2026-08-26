@@ -13,6 +13,7 @@ const SHORTCUTS = [
   ["Shift Shift", "Idle screen", "The clock and your shortcuts, over everything."],
   ["Command Space", "Summon", "Bring Braino to the front."],
   ["Command Shift H", "Her mode", "Samantha takes the Mac."],
+  ["Command Shift B", "Brainelle", "Same mind, her name and her voice."],
   ["Command Shift D", "This window", "Open the Braino dashboard."],
   ["Command Shift L", "Launch film", "Braino introduces the film, then plays it."],
 ];

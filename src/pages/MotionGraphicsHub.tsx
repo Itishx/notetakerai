@@ -19,6 +19,10 @@ type TeaserEntry =
 
 const TEASERS: TeaserEntry[] = [
   {
+    id: "speak", title: "Speak.", to: "/speak-teaser", date: "August 2026", tag: "story film",
+    dek: "Five seconds, 1080 \u00d7 1920. Two lines fade in, then the name lands in the chunked stamp with him standing beside it. Downloads as a video.",
+  },
+  {
     id: "brainohera", title: "BrainoHERA", src: "/brainohera-teaser?embed=1", date: "August 2026", tag: "film",
     dek: "Stop scrolling. Braino can type while you speak—even when the Wi-Fi cannot.",
   },

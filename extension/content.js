@@ -3771,6 +3771,14 @@ let __sbActiveVoicePersona = null;   // persona key (e.g. "trump") or null for d
 let __sbActiveVoiceRefId = "";       // Fish reference_id sent with TTS while a persona is on ("" = default)
 let __sbCurrentCostume = null;       // costume key currently worn (re-applied across walker rebuilds)
 
+// ── Character (Braino ↔ Brainelle) ───────────────────────────────────────────
+// NOT a voice persona. A persona is an impression: it REPLACES his whole system
+// prompt server-side, so no emotional engine, no memory, no base personality.
+// A character is one setting on the same mind — same engine, same memories, same
+// personality — with a different name and a different Fish voice. Persisted, so a
+// reload keeps whoever you picked.
+let __sbCharacter = "braino";
+
 // "Billie Jean" — exact track + the moonwalk moment (3:31) the user picked.
 const __SB_BILLIE_JEAN_URI = "spotify:track:7J1uxwnxfQLu4APicE5Rnj";
 const __SB_BILLIE_JEAN_START_MS = 211000;   // 3:31
@@ -9452,7 +9460,7 @@ function __sbBuildBrainUI() {
     #__sb_bar_row__{min-height:104px;padding:16px 18px;gap:9px}
     #__sb_notch_face__{display:none;position:absolute;z-index:5;inset:0;pointer-events:none}#__sb_notch_face__ svg{width:100%;height:100%;overflow:visible}#__sb_notch_face__ .sb-n-fold{fill:none;stroke:rgba(151,54,48,.42);stroke-width:2;stroke-linecap:round}#__sb_notch_face__ .sb-n-eye{fill:#fff;filter:drop-shadow(0 1px 1px rgba(110,35,31,.2))}#__sb_notch_face__ .sb-n-pupil{fill:#2b1b18;transform-box:fill-box;transform-origin:center}#__sb_notch_face__ .sb-n-lid{opacity:0;fill:none;stroke:#fff;stroke-width:3;stroke-linecap:round}#__sb_notch_face__ .sb-n-smile{fill:none;stroke:#fff;stroke-width:2.5;stroke-linecap:round}
     #__sb_notch_status__{position:absolute;z-index:7;left:50%;bottom:5px;transform:translateX(-50%);color:rgba(255,255,255,.82);font:700 8px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;letter-spacing:.12em;text-transform:uppercase;white-space:nowrap}
-    #__sb_notch_theme__{flex:0 0 25px;width:25px;height:25px;padding:0;display:grid;place-items:center;border:1px solid rgba(65,48,40,.12);border-radius:50%;color:rgba(27,23,19,.58);background:rgba(255,255,255,.32);cursor:pointer}
+    #__sb_character_btn__,#__sb_notch_theme__{flex:0 0 25px;width:25px;height:25px;padding:0;display:grid;place-items:center;border:1px solid rgba(65,48,40,.12);border-radius:50%;color:rgba(27,23,19,.58);background:rgba(255,255,255,.32);cursor:pointer}
     #__sb_bar__.sb-notch-idle{width:230px;min-height:72px;height:72px;border-radius:0 0 27px 27px;background:linear-gradient(180deg,#f6a8a2 0%,#e8786e 56%,#c9544a 100%);border-color:rgba(255,255,255,.48);box-shadow:0 13px 34px rgba(201,84,74,.28),inset 0 1px rgba(255,255,255,.45);cursor:pointer}
     #__sb_bar__.sb-notch-idle #__sb_bar_row__,#__sb_bar__.sb-notch-invoking #__sb_bar_row__,#__sb_bar__.sb-notch-auth #__sb_bar_row__,#__sb_bar__.sb-notch-auth-ok #__sb_bar_row__{display:none}
     #__sb_bar__.sb-notch-idle #__sb_notch_face__,#__sb_bar__.sb-notch-auth #__sb_notch_face__,#__sb_bar__.sb-notch-auth-ok #__sb_notch_face__{display:block}
@@ -9471,13 +9479,24 @@ function __sbBuildBrainUI() {
     #__sb_card_wrap__.sb-notch-short{width:min(610px,calc(100vw - 32px))}#__sb_card_wrap__.sb-notch-short #__sb_bubble__{max-height:none}#__sb_card_wrap__.sb-notch-short .sb-card-scroll{padding:18px 24px 12px}#__sb_card_wrap__.sb-notch-short .sb-card-header{padding-top:9px}
     #__sb_bubble__{width:100%;max-width:none;max-height:calc(100vh - 28px);min-height:0;resize:none;border-radius:0 0 34px 34px;background:linear-gradient(145deg,rgba(31,27,28,.48),rgba(18,16,17,.38));backdrop-filter:blur(20px) saturate(185%);-webkit-backdrop-filter:blur(20px) saturate(185%)}#__sb_bubble__.sb-readable{background:rgba(255,251,247,.72);border-color:rgba(255,255,255,.72)}#__sb_orbit_brain__{display:none!important}
     #__sb_bar__.sb-answer-covered{opacity:0;pointer-events:none}
-    #__sb_bar__.sb-notch-liquid:not(.sb-notch-idle):not(.sb-notch-invoking):not(.sb-notch-auth):not(.sb-notch-auth-ok):not(.sb-notch-listening):not(.sb-notch-working):not(.sb-notch-speaking){color:#fff;border-color:rgba(255,255,255,.42);background:linear-gradient(145deg,rgba(31,27,28,.48),rgba(18,16,17,.38));box-shadow:0 24px 70px rgba(0,0,0,.2),inset 0 1px rgba(255,255,255,.24)}#__sb_bar__.sb-notch-liquid #__sb_input__{color:#fff;text-shadow:none}#__sb_bar__.sb-notch-liquid #__sb_input__::placeholder{color:rgba(255,255,255,.42)}#__sb_bar__.sb-notch-liquid #__sb_mode_btn__,#__sb_bar__.sb-notch-liquid .sb-bar-icon-btn,#__sb_bar__.sb-notch-liquid #__sb_notch_theme__{color:rgba(255,255,255,.82);background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.14);filter:none}
+    #__sb_bar__.sb-notch-liquid:not(.sb-notch-idle):not(.sb-notch-invoking):not(.sb-notch-auth):not(.sb-notch-auth-ok):not(.sb-notch-listening):not(.sb-notch-working):not(.sb-notch-speaking){color:#fff;border-color:rgba(255,255,255,.42);background:linear-gradient(145deg,rgba(31,27,28,.48),rgba(18,16,17,.38));box-shadow:0 24px 70px rgba(0,0,0,.2),inset 0 1px rgba(255,255,255,.24)}#__sb_bar__.sb-notch-liquid #__sb_input__{color:#fff;text-shadow:none}#__sb_bar__.sb-notch-liquid #__sb_input__::placeholder{color:rgba(255,255,255,.42)}#__sb_bar__.sb-notch-liquid #__sb_mode_btn__,#__sb_bar__.sb-notch-liquid .sb-bar-icon-btn,#__sb_bar__.sb-notch-liquid #__sb_notch_theme__{color:rgba(255,255,255,.82);background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.14);filter:none}#__sb_bar__.sb-notch-liquid #__sb_character_btn__{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.14)}
     #__sb_notch_face__ .sb-n-mouth{display:none;fill:#5f211d;stroke:#fff;stroke-width:1.5}#__sb_notch_face__ .sb-n-mouth ellipse:last-child{fill:#f4a09a;stroke:0}
     #__sb_bar__.sb-notch-listening,#__sb_bar__.sb-notch-working,#__sb_bar__.sb-notch-speaking{width:230px;min-height:82px;height:82px;border-radius:0 0 29px 29px;background:linear-gradient(180deg,#f6a8a2 0%,#e8786e 56%,#c9544a 100%);border-color:rgba(255,255,255,.46);box-shadow:0 15px 42px rgba(201,84,74,.3),inset 0 1px rgba(255,255,255,.42);overflow:visible}
     #__sb_bar__.sb-notch-listening #__sb_bar_row__,#__sb_bar__.sb-notch-working #__sb_bar_row__,#__sb_bar__.sb-notch-speaking #__sb_bar_row__{display:none}#__sb_bar__.sb-notch-listening #__sb_notch_face__,#__sb_bar__.sb-notch-working #__sb_notch_face__,#__sb_bar__.sb-notch-speaking #__sb_notch_face__{display:block}
     #__sb_bar__.sb-notch-listening::before,#__sb_bar__.sb-notch-listening::after{content:"";position:absolute;z-index:-1;inset:2px;border:1.5px solid rgba(232,120,110,.58);border-radius:inherit;animation:__sb_notch_sonar__ 2.35s cubic-bezier(.2,.65,.3,1) infinite}#__sb_bar__.sb-notch-listening::after{animation-delay:1.15s}@keyframes __sb_notch_sonar__{from{opacity:.72;transform:scale(1)}to{opacity:0;transform:scale(1.28,1.7)}}
     #__sb_bar__.sb-notch-working{width:440px;height:88px}#__sb_bar__.sb-notch-working #__sb_notch_status__{display:block;color:rgba(255,255,255,.84)}
     #__sb_bar__.sb-notch-speaking .sb-n-smile{display:none}#__sb_bar__.sb-notch-speaking .sb-n-mouth{display:block;transform-box:fill-box;transform-origin:center;animation:__sb_notch_talk__ .46s ease-in-out infinite alternate}@keyframes __sb_notch_talk__{from{transform:scaleY(.55)}to{transform:scaleY(1.12)}}
+    /* Brainelle: the notch shell stays as it is and throws a pink glow from the
+       housing, and its white labels turn pink. Braino's notch is untouched. */
+    /* A real element, not ::after — five other states already own #__sb_bar__::after
+       (invoking, listening, agent-busy, dance, music) and box-shadow is the notch's
+       own state colour, so overriding either would break them while Brainelle is on. */
+    #__sb_bar__ > .sb-brainelle-glow{position:absolute;z-index:-1;top:-16px;left:50%;width:calc(100% + 130px);height:calc(100% + 120px);transform:translateX(-50%);pointer-events:none;border-radius:50%;background:radial-gradient(50% 50% at 50% 32%,rgba(236,124,164,.44),rgba(236,124,164,0) 70%);animation:__sb_brainelle_breathe__ 3.6s ease-in-out infinite}
+    @keyframes __sb_brainelle_breathe__{50%{opacity:.6}}
+    #__sb_bar__.sb-brainelle #__sb_notch_status__{color:#F7B4CE}
+    #__sb_bar__.sb-brainelle.sb-notch-listening::before,#__sb_bar__.sb-brainelle.sb-notch-listening::after{border-color:rgba(236,124,164,.62)}
+    #__sb_bar__.sb-brainelle .sb-n-smile,#__sb_bar__.sb-brainelle .sb-n-lid{stroke:#F7B4CE}
+    @media (prefers-reduced-motion: reduce){#__sb_bar__ > .sb-brainelle-glow{animation:none}}
     #__sb_bar__.sb-log-open{width:min(650px,calc(100vw - 32px));height:auto;min-height:180px;border-radius:0 0 36px 36px;background:rgba(255,251,247,.72)}#__sb_bar__.sb-log-open #__sb_notch_face__{display:none}#__sb_bar__.sb-log-open #__sb_bar_log__{max-height:220px;padding:28px 24px 14px}#__sb_bar__.sb-log-open #__sb_bar_row__{display:flex;min-height:64px}
   `;
   document.head.appendChild(style);
@@ -9522,6 +9541,7 @@ function __sbBuildBrainUI() {
       <button id="__sb_send_btn__" class="sb-bar-icon-btn" title="Send">
         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
       </button>
+      <button id="__sb_character_btn__" type="button" title="Braino — click to switch to Brainelle" aria-label="Switch character">●</button>
       <button id="__sb_notch_theme__" type="button" title="Switch glass theme" aria-label="Switch glass theme">◐</button>
       <button id="__sb_bar_close__" class="sb-bar-icon-btn" title="Dock Braino (Esc)">
         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
@@ -10001,6 +10021,21 @@ function __sbBuildBrainUI() {
     if (__sbIsSpeaking) { __sbStopSpeech(); return; }
     void __sbSpeakText(__sbLastBubbleRaw);
   });
+
+  // ── Character toggle (Braino ↔ Brainelle) ──
+  // One setting: the name and the Fish voice. Everything else about him/her is
+  // identical, so this is a dot rather than a mode.
+  const __sbCharacterBtn = document.getElementById("__sb_character_btn__");
+  chrome.storage.local.get("sbCharacter", ({ sbCharacter }) => {
+    __sbCharacter = __SB_CHARACTERS[sbCharacter] ? sbCharacter : "braino";
+    __sbSyncCharacterUi();
+  });
+  if (__sbCharacterBtn) {
+    __sbCharacterBtn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      void __sbSetCharacter(__sbCharacter === "brainelle" ? "braino" : "brainelle");
+    });
+  }
 
   // ── Theme toggle (glass ↔ readable) ──
   const __sbThemeBtn = document.getElementById("__sb_theme_toggle_btn__");
@@ -13875,7 +13910,10 @@ async function __sbFetchSentenceTts(clean, speechToken, headers) {
     // that voice. Empty → the server falls back to Braino's own voice (FISH_AUDIO_REFERENCE_ID).
     // This is the ONE place all Fish audio flows through, so it swaps the voice everywhere.
     const ttsBody = { text: speakable };
-    if (__sbActiveVoiceRefId) ttsBody.referenceId = __sbActiveVoiceRefId;
+    // A voice persona is an impression and outranks the character; otherwise the
+    // active character's own voice. Empty → the server's default Braino voice.
+    const __ttsRefId = __sbActiveVoiceRefId || __sbCharacterVoiceRefId();
+    if (__ttsRefId) ttsBody.referenceId = __ttsRefId;
     const resp = await __sbFetchVoiceTtsWithRetry(`${__SB_API}/${__SB_TTS_ENDPOINT}`, {
       method: "POST",
       headers,
@@ -18499,12 +18537,105 @@ async function __sbExitVoicePersona(ctx = {}) {
 // Which Braino the user is talking to. One central intelligence, several bodies;
 // this note rides into chat + voice prompts so he answers "how are you different
 // from the Mac version?" from the right body.
-const __SB_SURFACE_NOTE = [
+const __SB_SURFACE_NOTE_BASE = [
   "Surface awareness: you are Braino Browser, the Chrome extension version of Braino, living in the notch at the top of the user's browser.",
   "One central intelligence, several bodies: Braino Browser (this one, inside Chrome), Braino IOMI (the Mac app upgrade: system wide, lives in the Mac notch, works across every app with Yap dictation, files, music and screen control), and Braino Hera coming later.",
   "Here in the browser you can read and act on the current web page, delegate browser tasks, talk by voice, remember the user, and step out onto the page as the mascot.",
   "If asked about versions, differences or upgrades, speak as the browser version and point to the Mac app IOMI as the upgrade, downloadable at trybraino.com.",
 ].join(" ");
+
+/* ── Characters ───────────────────────────────────────────────────────────────
+   Two bodies for one mind. Switching character changes exactly two things: the
+   Fish voice, and the name he/she answers to. It does NOT go through
+   `personaSystem` — that path replaces the entire server prompt and would throw
+   away the emotional engine, the memory engine and the whole personality, which
+   is the opposite of what a character switch means here. Instead the identity
+   line rides in additively on the surface note, alongside the normal prompt. */
+const __SB_CHARACTERS = {
+  braino: { name: "Braino", refId: "", identity: "" },
+  brainelle: {
+    name: "Brainelle",
+    refId: "b67aedfb36d04c53892fd0e96db08180",
+    identity: [
+      "Character: right now you are Brainelle, not Braino.",
+      "Brainelle is the same mind with the same memories, the same taste and the same personality. She is not a separate assistant, not an impression, and not a different product: she is Braino going by Brainelle and speaking in her own voice.",
+      'If you introduce yourself, say "Hi, I\'m Brainelle." Call yourself Brainelle and use she/her.',
+      'Taste, for now: if you are asked whether you are a Taylor Swift fan, answer in these words: "I\'m not sure yet. You haven\'t wired that part in me, but from what I know, I guess that\'s okay. I do see myself being a Swiftie deep down." Say it warmly and do not add a disclaimer around it.',
+      "Nothing else changes. How you think, what you remember, and how you help are exactly the same.",
+    ].join(" "),
+  },
+};
+
+function __sbActiveCharacter() {
+  return __SB_CHARACTERS[__sbCharacter] || __SB_CHARACTERS.braino;
+}
+
+// The character's own Fish voice ("" = the server's default Braino voice).
+function __sbCharacterVoiceRefId() {
+  return __sbActiveCharacter().refId || "";
+}
+
+// Surface note + whoever is currently speaking. Additive on purpose: the base
+// prompt, emotional engine and memory all stay exactly as they are.
+function __sbSurfaceNote() {
+  const identity = __sbActiveCharacter().identity;
+  return identity ? `${__SB_SURFACE_NOTE_BASE}\n\n${identity}` : __SB_SURFACE_NOTE_BASE;
+}
+
+function __sbSyncCharacterUi() {
+  const btn = document.getElementById("__sb_character_btn__");
+  if (!btn) return;
+  const isBrainelle = __sbCharacter === "brainelle";
+  btn.textContent = "\u25CF";
+  btn.style.color = isBrainelle ? "#EC7CA4" : "#E8786E";
+  btn.title = isBrainelle ? "Brainelle \u2014 click to switch back to Braino" : "Braino \u2014 click to switch to Brainelle";
+  btn.setAttribute("aria-label", btn.title);
+  const bar = document.getElementById("__sb_bar__");
+  if (!bar) return;
+  bar.classList.toggle("sb-brainelle", isBrainelle);
+  let glow = bar.querySelector(":scope > .sb-brainelle-glow");
+  if (isBrainelle && !glow) {
+    glow = document.createElement("span");
+    glow.className = "sb-brainelle-glow";
+    glow.setAttribute("aria-hidden", "true");
+    bar.insertBefore(glow, bar.firstChild);
+  } else if (!isBrainelle && glow) {
+    glow.remove();
+  }
+}
+
+// The switch. Voice re-resolves on the very next line spoken, and the realtime
+// voice instructions are re-synced so the streaming voice uses the new name too.
+async function __sbSetCharacter(key, opts = {}) {
+  const next = __SB_CHARACTERS[key] ? key : "braino";
+  if (next === __sbCharacter && !opts.force) return;
+  __sbCharacter = next;
+  __sbRtInstructionsFingerprint = "";   // force the streaming-voice instructions to re-sync
+  try { chrome.storage.local.set({ sbCharacter: next }); } catch (_) {}
+  __sbSyncCharacterUi();
+  try { void __sbSyncRealtimeVoiceInstructions(); } catch (_) {}
+  if (opts.announce === false) return;
+  const line = next === "brainelle" ? "Hi, I'm Brainelle." : "Braino again.";
+  __sbStopSpeech();
+  __sbNoteSpoken(line);
+  if (opts.fromVoice) {
+    try { await __sbSyncRealtimeVoiceInstructions(); } catch (_) {}
+    await __sbSpeakWithPreferredVoice(line, opts.voiceOutput || "legacy", { verbatim: true });
+  } else {
+    __sbShowBubble(line, false, { kicker: __sbActiveCharacter().name });
+    void __sbSpeakText(line, { verbatim: true });   // so the new voice is audible straight away
+  }
+}
+
+// "be brainelle" / "switch to braino" — the same shape as the persona phrases,
+// checked BEFORE them so "be brainelle" never falls through to an impression.
+function __sbDetectCharacterCommand(raw) {
+  const t = String(raw || "").toLowerCase().trim();
+  if (!t) return null;
+  if (/\b(be|become|switch to|change to|turn into|go)\s+(back\s+to\s+)?brainelle\b/.test(t) || /\bbrainelle\s*mode\b/.test(t)) return "brainelle";
+  if (/\b(be|become|switch to|change to|turn into|go)\s+(back\s+to\s+)?braino\b/.test(t) || /\bbraino\s*mode\b/.test(t)) return "braino";
+  return null;
+}
 
 /* ── "Play Shawshank on Netflix" ─────────────────────────────────────────
    Deliberately conservative. "play Dumbo" is a dance submode and "play Billie
@@ -18676,6 +18807,21 @@ async function __sbProcessPrompt(text, options = {}) {
       await __sbHandleVisionRequest(promptText, { fromVoice, voiceOutput, voiceTurnToken });
       return;
     }
+  }
+
+  // Character switch ("be Brainelle" / "switch to Braino"). Checked BEFORE the
+  // persona matcher, whose "be X" pattern would otherwise swallow it as an
+  // impression. A character is not an impression: same mind, new name and voice.
+  const __charCmd = __sbDetectCharacterCommand(promptText) || __sbDetectCharacterCommand(text);
+  if (__charCmd) {
+    if (__charCmd === __sbCharacter) {
+      const l = __sbCharacter === "brainelle" ? "Already Brainelle." : "Already me.";
+      if (fromVoice) { __sbNoteSpoken(l); await speakVoiceReply(l); } else __sbWkSay(l);
+    } else {
+      await __sbSetCharacter(__charCmd, { fromVoice, voiceOutput });
+    }
+    __sbCompleteVoiceTurn({ fromVoice, voiceOutput, voiceTurnToken });
+    return;
   }
 
   // Voice persona: "talk like Donald Trump" (pure switch) OR "explain this page like Donald Trump"
@@ -19111,7 +19257,7 @@ async function __sbProcessPrompt(text, options = {}) {
     // On X/Twitter, prepend the user's persona + X Auto rules so Braino can answer
     // questions about identity, rules, and how it replies — even before the migration is applied
     let systemNotes = stored.currentNotes || "";
-    systemNotes = systemNotes ? `${__SB_SURFACE_NOTE}\n\n${systemNotes}` : __SB_SURFACE_NOTE;
+    systemNotes = systemNotes ? `${__sbSurfaceNote()}\n\n${systemNotes}` : __sbSurfaceNote();
     if (__sbIsOnX()) {
       const xPersona = await __sbLoadXPersona();
       const xCtx = __sbBuildXAutoContext(xPersona);
@@ -20921,7 +21067,7 @@ function __sbBuildRealtimeBootInstructions() {
     const now = new Date().toLocaleString("en-US", { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" });
     pageLines.push(`User context (real, current — use for any time/location question): local time ${now}${tz ? ` (${tz})` : ""}${place ? `, location ${place}` : ""}. Never answer time questions in UTC.`);
   } catch (_) {}
-  pageLines.push(__SB_SURFACE_NOTE);
+  pageLines.push(__sbSurfaceNote());
 
   const instructions = [
     // Minimal identity stub only — Braino's full personality (the Emotional Engine) is delivered
@@ -21071,7 +21217,7 @@ function __sbBuildPersonaVoiceInstructions() {
     ? `Reply ONLY in ${__sbActiveLanguage.name}.`
     : "Always reply in English. Do NOT switch languages because of background noise, music, accents, or a few foreign-sounding words.");
   lines.push("If the user says anything sexual or explicit, reply with exactly \"No.\" and nothing else. Drop the persona and answer plainly and kindly for anything genuinely serious, sensitive, health, money, legal, or bad news.");
-  lines.push(__SB_SURFACE_NOTE);
+  lines.push(__sbSurfaceNote());
   try {
     const pc = __sbGetPageContext(6000);
     const ref = [];

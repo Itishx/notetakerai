@@ -1819,3 +1819,175 @@
 .ig-fullpage-link span { color: var(--ig-coral); font-size: 12px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
 .ig-fullpage-link strong { font-size: clamp(34px, 5vw, 58px); font-weight: 600; letter-spacing: -.05em; line-height: .95; }
 .ig-fullpage-link em { color: var(--ig-soft); font-style: normal; font-size: 15px; }
+
+/* ── 007 · Brainelle character sheet ──────────────────────────────────────────
+   A 1080x1920 artboard laid out as one vertical column: title, hero, mood row,
+   comparison row, claim. White ground, ink type, coral signature — the same
+   light editorial system as the rest of the archive, so the coral character is
+   the only saturated thing on the page. Everything inside is the live
+   parametric character, so the PNG and the recorded MP4 come from the same DOM. */
+.ig-brainelle-frame {
+  display: flex;
+  flex-direction: column;
+  padding: 190px 76px 62px;
+  box-sizing: border-box;
+  background:
+    radial-gradient(118% 74% at 50% 4%, rgba(232,120,110,.11), transparent 58%),
+    radial-gradient(88% 56% at 50% 104%, rgba(232,120,110,.07), transparent 58%),
+    #ffffff;
+  color: #1d1d1f;
+}
+/* The shared frame vignette is tuned for the dark artboards. */
+.ig-brainelle-frame::before { display: none; }
+.ig-brainelle-frame .ig-wordmark { color: #1d1d1f; }
+.ig-brainelle-frame .ig-prelaunch { color: rgba(29,29,31,.42); }
+
+.ig-brainelle-head > span { display: block; color: #d9645b; font-size: 22px; font-weight: 800; letter-spacing: .16em; text-transform: uppercase; }
+.ig-brainelle-head h2 { margin: 26px 0 0; font-size: 128px; font-weight: 600; letter-spacing: -.055em; line-height: .84; }
+.ig-brainelle-head h2 em { color: #d9645b; font-style: normal; }
+.ig-brainelle-head p {
+  max-width: 760px; margin: 30px 0 0; min-height: 76px;
+  color: rgba(29,29,31,.6); font-size: 33px; line-height: 1.28; letter-spacing: -.01em;
+  animation: igBrainelleLine .5s cubic-bezier(.16,1,.3,1) both;
+}
+@keyframes igBrainelleLine { from { opacity: 0; transform: translateY(9px); } to { opacity: 1; transform: none; } }
+
+.ig-brainelle-stage { position: relative; flex: 1 1 auto; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px; }
+.ig-brainelle-halo {
+  position: absolute; top: 50%; left: 50%; width: 640px; height: 640px; margin: -330px 0 0 -320px;
+  border-radius: 50%; pointer-events: none;
+  background: radial-gradient(circle, rgba(232,120,110,.15), rgba(232,120,110,0) 66%);
+}
+.ig-brainelle-stage > svg { position: relative; filter: drop-shadow(0 34px 58px rgba(154,62,54,.2)); }
+.ig-brainelle-caption { color: rgba(29,29,31,.38); font-size: 20px; font-weight: 700; letter-spacing: .13em; text-transform: uppercase; }
+
+.ig-brainelle-moods { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; margin-top: 8px; }
+.ig-brainelle-moods > span {
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+  padding: 26px 0 20px; border: 1px solid rgba(29,29,31,.11); border-radius: 26px;
+  background: rgba(245,241,233,.62);
+}
+.ig-brainelle-moods i { color: rgba(29,29,31,.5); font-size: 19px; font-style: normal; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
+
+.ig-brainelle-pair { display: flex; align-items: flex-end; justify-content: center; gap: 44px; margin-top: 34px; }
+.ig-brainelle-pair-cell { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+.ig-brainelle-pair-cell i { color: #1d1d1f; font-size: 24px; font-style: normal; font-weight: 700; letter-spacing: -.02em; }
+.ig-brainelle-pair > em { width: 1px; height: 190px; margin-bottom: 26px; background: linear-gradient(rgba(29,29,31,0), rgba(29,29,31,.2), rgba(29,29,31,0)); }
+
+.ig-brainelle-foot { margin-top: 40px; padding-top: 26px; border-top: 1px solid rgba(29,29,31,.14); display: flex; align-items: flex-end; justify-content: space-between; gap: 40px; }
+.ig-brainelle-foot p { max-width: 690px; margin: 0; color: rgba(29,29,31,.5); font-size: 23px; line-height: 1.35; }
+.ig-brainelle-foot span { flex: 0 0 auto; color: #d9645b; font-size: 23px; font-weight: 700; letter-spacing: -.01em; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ig-brainelle-head p { animation-duration: 1ms !important; }
+}
+
+/* Export control for an archive entry. Lives in the sticky copy column, outside
+   the 39%-scaled frame, so it never lands inside the capture. */
+.ig-export { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 28px; }
+.ig-export button {
+  display: flex; flex-direction: column; gap: 3px; padding: 12px 18px;
+  border: 1px solid var(--ig-line); border-radius: 13px; background: rgba(255,255,255,.72);
+  color: var(--ig-ink); font: 600 14px/1.15 inherit; letter-spacing: -.01em; text-align: left;
+  cursor: pointer; transition: transform .25s cubic-bezier(.16,1,.3,1), box-shadow .25s, background .25s;
+}
+.ig-export button:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 14px 30px rgba(29,29,31,.12); background: #fff; }
+.ig-export button:disabled { opacity: .55; cursor: default; }
+.ig-export button small { color: var(--ig-soft); font-size: 11px; font-weight: 600; letter-spacing: .05em; }
+.ig-export-note { flex: 1 0 100%; margin: 2px 0 0; color: var(--ig-soft); font-size: 12px; }
+.ig-export-note.is-error { color: var(--ig-coral); }
+
+/* Full-viewport view of the 007 artboard: the true 1080x1920 box, scaled to
+   contain the viewport rather than the archive's fixed 39%. */
+.ig-brainelle-preview {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  background: #ffffff;
+}
+/* Absolute + translate(-50%,-50%) rather than grid/flex centring: the artboard
+   is always taller than the viewport, and an oversized grid item grows its row
+   instead of centring inside it. --ig-scale is set inline by BrainelleStage,
+   because scale() needs a unitless number and calc(100vw / 1080) is a length. */
+.ig-brainelle-preview > .ig-frame {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(var(--ig-scale, .39));
+}
+.ig-brainelle-preview > .ig-frame::before { display: none; }
+.ig-brainelle-preview-back {
+  position: fixed; z-index: 5; top: 22px; left: 24px;
+  padding: 9px 15px; border: 1px solid rgba(29,29,31,.16); border-radius: 999px;
+  color: rgba(29,29,31,.6); font: 600 13px/1 "SF Pro Display", -apple-system, sans-serif;
+  letter-spacing: -.01em; text-decoration: none; backdrop-filter: blur(12px);
+  transition: color .25s, border-color .25s;
+}
+.ig-brainelle-preview-back:hover { color: #1d1d1f; border-color: rgba(29,29,31,.4); }
+
+/* Doorway to the full-screen view, in the archive's sticky copy column. */
+.ig-entry-fullscreen {
+  display: inline-block; margin-top: 26px; padding-bottom: 3px;
+  border-bottom: 1px solid var(--ig-coral);
+  color: var(--ig-coral); font-size: 15px; font-weight: 700; letter-spacing: -.01em; text-decoration: none;
+}
+.ig-entry-fullscreen:hover { opacity: .7; }
+
+/* Hair A/B/C compare — a decision surface, not a design. Deliberately plain so
+   the only thing worth looking at is the four figures. */
+.ig-hair-compare { min-height: 100vh; padding: 26px clamp(20px, 4vw, 56px) 80px; box-sizing: border-box; background: #fff; color: #1d1d1f; font-family: "SF Pro Display", -apple-system, BlinkMacSystemFont, sans-serif; }
+.ig-hair-compare > header { display: flex; align-items: center; justify-content: space-between; padding-bottom: 22px; border-bottom: 1px solid rgba(29,29,31,.12); }
+.ig-hair-compare > header a { color: rgba(29,29,31,.6); font-size: 14px; font-weight: 600; text-decoration: none; }
+.ig-hair-compare > header a:hover { color: #1d1d1f; }
+.ig-hair-compare > header p { margin: 0; color: #d9645b; font-size: 12px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
+.ig-hair-matrix {
+  display: grid;
+  grid-template-columns: 128px repeat(var(--ig-cols), minmax(0, 1fr));
+  gap: 10px;
+  align-items: center;
+  margin-top: 34px;
+}
+.ig-hair-colhead, .ig-hair-rowhead { color: rgba(29,29,31,.5); font-size: 12px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+.ig-hair-colhead { text-align: center; padding-bottom: 6px; }
+.ig-hair-rowhead { display: flex; flex-direction: column; gap: 3px; padding-right: 12px; text-align: right; align-items: flex-end; }
+.ig-hair-rowhead strong { color: #1d1d1f; font-size: 15px; font-weight: 650; letter-spacing: -.02em; text-transform: none; }
+.ig-hair-rowhead em { color: rgba(29,29,31,.4); font-size: 11px; font-style: normal; font-weight: 600; letter-spacing: .04em; text-transform: none; }
+.ig-hair-cell {
+  display: flex; align-items: flex-end; justify-content: center; min-height: 214px; padding: 12px 4px 8px;
+  border: 1px solid rgba(29,29,31,.09); border-radius: 20px; background: rgba(245,241,233,.45);
+}
+@media (max-width: 900px) {
+  .ig-hair-matrix { grid-template-columns: 74px repeat(var(--ig-cols), minmax(0, 1fr)); gap: 6px; }
+  .ig-hair-cell { min-height: 150px; }
+}
+
+/* Her listening state. Same sonar and wave-bar language as the Chrome system's
+   listening phase (igCsSonar / igCsWave), but pink: his bars run gold → coral →
+   periwinkle, hers stay in the rose family end to end. */
+.ig-brainelle-sonar { position: absolute; top: 45%; left: 50%; width: 250px; height: 250px; margin: -125px 0 0 -125px; pointer-events: none; }
+.ig-brainelle-sonar i {
+  position: absolute; inset: 0; border: 2.5px solid rgba(233,110,157,.8); border-radius: 50%;
+  transform: translate(-50%, -50%) scale(.3); left: 50%; top: 50%;
+  animation: igBrainelleSonar 2.6s cubic-bezier(.2,.65,.3,1) infinite;
+}
+.ig-brainelle-sonar i:nth-child(2) { animation-delay: .87s; }
+.ig-brainelle-sonar i:nth-child(3) { animation-delay: 1.74s; }
+@keyframes igBrainelleSonar {
+  0% { opacity: .7; transform: translate(-50%,-50%) scale(.42); }
+  100% { opacity: 0; transform: translate(-50%,-50%) scale(1.6); }
+}
+
+.ig-brainelle-wave { display: flex; align-items: center; gap: 7px; height: 46px; }
+.ig-brainelle-wave i {
+  width: 6px; height: 26px; border-radius: 9px;
+  background: linear-gradient(180deg, #FBD3E2, #EC7CA4 58%, #C4507B);
+  animation: igBrainelleWave 1.2s ease-in-out infinite alternate;
+}
+.ig-brainelle-wave i:nth-child(2), .ig-brainelle-wave i:nth-child(4) { height: 40px; animation-delay: -.5s; }
+.ig-brainelle-wave i:nth-child(3) { height: 52px; animation-delay: -.8s; }
+@keyframes igBrainelleWave { to { height: 12px; opacity: .45; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .ig-brainelle-sonar i, .ig-brainelle-wave i { animation: none; }
+  .ig-brainelle-sonar i { opacity: .18; transform: translate(-50%,-50%) scale(1); }
+}

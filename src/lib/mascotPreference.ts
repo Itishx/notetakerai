@@ -1,19 +1,25 @@
 /* mascotPreference.ts — which character rides on Braino OS for this user.
-   Same voice, memory, and actions underneath (see BrainoChar.tsx / WebbChar.tsx /
-   ferroWalkerSvg.ts);
-   this only decides which rig renders and what he's called. Signed-in users
+   Same memory and actions underneath (see BrainoChar.tsx / Brainelle.tsx /
+   WebbChar.tsx / ferroWalkerSvg.ts); this decides which rig renders and what
+   they are called. Brainelle additionally carries her own Fish voice, because
+   she is the same mind under a different name rather than a costume \u2014 see
+   docs/braino-design.md section 21. Signed-in users
    persist to profiles.mascot (the source both the website and the Mac app read
    from); signed-out falls back to localStorage, mirroring brainoVoicePref. */
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 
-export type MascotId = "braino" | "webb" | "ferro";
+export type MascotId = "braino" | "brainelle" | "webb" | "ferro";
 
 export const MASCOTS: Record<MascotId, { displayName: string; blurb: string }> = {
   braino: {
     displayName: "Braino",
     blurb: "Soft coral shell, gloved hands — the original face of Braino OS.",
+  },
+  brainelle: {
+    displayName: "Brainelle",
+    blurb: "Honey hair, a silk bow, round specs and a polka dot skirt \u2014 the same mind, her name and her voice.",
   },
   webb: {
     displayName: "Webb",
@@ -29,11 +35,11 @@ const STORAGE_KEY = "brainoMascotPref";
 
 function readStored(): MascotId {
   const stored = localStorage.getItem(STORAGE_KEY);
-  return stored === "webb" || stored === "ferro" ? stored : "braino";
+  return stored === "webb" || stored === "ferro" || stored === "brainelle" ? stored : "braino";
 }
 
 function isMascotId(value: unknown): value is MascotId {
-  return value === "braino" || value === "webb" || value === "ferro";
+  return value === "braino" || value === "brainelle" || value === "webb" || value === "ferro";
 }
 
 // Module-level shared state + subscribers (same pattern as BrainoChar.tsx's
