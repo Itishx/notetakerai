@@ -848,3 +848,42 @@ island (430x92) while thinking, and hands it straight back afterwards.
 Prove it with `tests/tools/notch-bench.mjs`, which loads the real markup and
 stylesheet with the renderer script stripped and screenshots any combination of
 classes. Reading the CSS is how the four-character line survived.
+
+**`/notch-lab` is the browsable version of that bench.** `src/pages/NotchLab.tsx`
+imports `mac/braino-mac/renderer/braino-mac.css` as raw text and injects it into
+a **shadow root**, with markup lifted verbatim from the Mac's `index.html`. Same
+CSS, same DOM, in a browser you can measure. The shadow root is not optional:
+importing that stylesheet globally applies its `body { pointer-events: none }` to
+the whole site and every page stops responding. It shows the four states in the
+order they happen — You said, Thinking, Extended thinking, his reply — so the
+sequence can be reviewed before anything is ported back.
+
+**He is coral while he thinks.** The sleeping face at the top of the open panel
+was a near-black plate with a coral light swept over it, which reads as a stain
+rather than as Braino. It is now painted in the mascot's own gradient
+(`#F6A8A2 → #EE8B82 → #E8786E`), which forces two things that are easy to miss:
+the fold and smile strokes have to be **ink** (`rgba(92,28,22,…)`) to survive on
+a light surface, and the sweep has to be **white with `mix-blend-mode:
+soft-light`**, because coral light on a coral plate is invisible. The collapse
+arrow gets 46px of canvas padding under the last line of reasoning; without it
+the arrow sits against the text.
+
+Repainting him also exposed a geometry bug this file's own contract had already
+called: *the top `--nf-notch-h` hides behind the physical housing, the face band
+lives on the chin below.* `.nf-response-face` ignored it, starting at the pill's
+y=0 with the closed lids at **y 29-36** of a 72-unit viewBox against a **33px**
+housing, so the notch ate two thirds of both eyes and left a 3px sliver. It read
+as part of the housing while the plate was near-black. The plate still runs to
+y=0 (coral edge to edge, no black band above him) but is now
+`calc(72px + var(--nf-notch-h))` tall with `margin-top: var(--nf-notch-h)` on its
+`svg`, so only the drawing moves down. The canvas padding-top carries the same
+term or "BRAINO IS THINKING" lands on his face. Measured on `/notch-lab`: lids
+**29px clear** of the housing line, header **4px clear** of the plate.
+
+**One state at a time.** The caption used to stay open through processing so your
+sentence never disappeared. That put the phase on screen twice, once in the chip
+and once in the caption's own state slot, and left no moment that reads as *he is
+working*. `updateNotchFace` now hands the box over: your sentence holds it for at
+least `NF_HEARD_MIN_MS` (1100ms, so a fast route cannot swap it out before you
+read it), then the thinking chip owns it alone. Your words are not lost, they are
+the first line of the panel behind the arrow.

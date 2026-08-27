@@ -69,3 +69,60 @@ test("the chip is the named way in, and takes one press", () => {
   assert.match(js, /function nfSetThinkingOpen/);
   assert.match(js, /aria-expanded/);
 });
+
+/* ── The /notch-lab port ────────────────────────────────────────────────────
+   Signed off on the lab page before it landed here. These pin the three things
+   that were reviewed, so a later edit cannot quietly undo them. */
+
+/* He was a black plate with a coral light on it, which read as a stain rather
+   than as Braino. The plate is now painted in the mascot's own gradient. */
+test("he is coral while he thinks, not a black plate", () => {
+  const face = css.slice(css.indexOf("#notch-face.nf-thinking .nf-response-face {"));
+  assert.match(face, /#f6a8a2/i);
+  assert.match(face, /#e8786e/i);
+  /* On a light plate the fold and smile have to be ink, or they vanish. */
+  assert.match(css, /#notch-face\.nf-thinking \.nf-response-fold,[\s\S]{0,80}stroke: rgba\(92, ?28, ?22/);
+  /* Coral light over a coral plate is invisible, so the sweep is white and
+     blended rather than drawn on top. */
+  assert.match(css, /#notch-face\.nf-thinking \.nf-response-face::after \{[\s\S]{0,400}mix-blend-mode: soft-light/);
+});
+
+/* The collapse arrow sat against the last line of reasoning with nothing
+   between them. */
+test("the arrow that closes the panel has room under the last line", () => {
+  assert.match(css, /#notch-face\.nf-think-open \.nf-thinking-canvas \{[\s\S]{0,120}padding-bottom: 46px/);
+  assert.match(css, /#notch-face\.nf-think-open \.nf-think-chip \{[\s\S]{0,80}bottom: 14px/);
+});
+
+/* You said -> Thinking -> his reply, one at a time. The caption used to stay
+   open through processing, which put the phase in the box twice and left no
+   moment that reads as "he is working". */
+test("your sentence hands the box over to the thinking chip", () => {
+  assert.match(js, /NF_HEARD_MIN_MS = \d+/);
+  assert.match(js, /const heldRecently = nfHeardShownAt > 0/);
+  /* Processing owns the box once the floor has passed, so the caption closes. */
+  assert.match(js, /\(processingActive && !heldRecently\) \? ""/);
+  /* And it cannot open itself as a second phase display any more. */
+  assert.doesNotMatch(js, /mode === "thinking"/);
+  assert.doesNotMatch(js, /"Braino is thinking" : "You said"/);
+});
+
+/* A floor with no repaint behind it leaves your sentence on screen until some
+   unrelated redraw happens to come along. */
+test("the floor schedules its own handover", () => {
+  assert.match(js, /inlineMode === "heard" && processingActive\) window\.setTimeout/);
+});
+
+/* His closed eyes were being eaten by the physical notch. The lids sit at y
+   29-36 of the viewBox and the housing is 33px, so two thirds of both eyes were
+   behind it and a 3px sliver showed. This file's own contract at the top says
+   the top --nf-notch-h hides behind the housing and the face lives on the chin
+   below; .nf-response-face was the one element ignoring it. */
+test("his face clears the physical notch", () => {
+  /* Coral still runs to the pill's y=0, so there is no black band above him. */
+  assert.match(css, /#notch-face \.nf-response-face \{[\s\S]{0,220}height: calc\(72px \+ var\(--nf-notch-h\)\)/);
+  /* Only the drawing moves down. */
+  assert.match(css, /#notch-face \.nf-response-face svg \{[\s\S]{0,160}margin-top: var\(--nf-notch-h\)/);
+  /* And the header has to clear the taller plate, or it lands on his face. */
+  assert.match(css, /padding: calc\(var\(--nf-safe-top\) \+ var\(--nf-notch-h\) \+ 43px\) 24px 10px;/);
+});

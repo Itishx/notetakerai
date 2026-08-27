@@ -228,6 +228,13 @@
               <p class="nf-flow-prompt"><span>Reading the page and understanding what matters.</span></p>
               <p class="nf-thinking-current">Separating the useful signal from the repetition.</p>
               <p class="nf-flow-response"><span>Preparing the answer in your context.</span></p>
+              <!-- His earlier steps. renderThinkingCanvas has queried
+                   .nf-thinking-trail since it was written, but the element was
+                   never in this file, so the query returned null and every step
+                   he took was silently discarded. Inside .nf-thinking-lines on
+                   purpose: renderedThinkingHeight measures that container, so
+                   the sheet grows to fit the reasoning instead of clipping it. -->
+              <div class="nf-thinking-trail" aria-label="Earlier steps"></div>
             </div>
           </section>
           <section class="nf-answer-surface" aria-live="polite" aria-label="Braino answer">

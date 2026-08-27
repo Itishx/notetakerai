@@ -125,6 +125,7 @@ const {
   macWantsTheBrain,
   macClosesAllTabs,
 } = require(path.join(__dirname, "hil-routing.cjs"));
+const { UNDERSTAND_PROMPT, parseUnderstanding } = require(path.join(__dirname, "hil-understand.cjs"));
 const {
   macVerifyAssert,
   macHilStepSignature,
@@ -13838,6 +13839,77 @@ const MAC_HIL_OBSERVE_CAP = 220;
    Two runs were alive at once in the log, both clicking, fighting over the same
    screen: one trying to stop a recording while the other opened an email. */
 let macHilGeneration = 0;
+/* The job that is running right now, reachable while it runs.
+ *
+ * Until this existed, anything said during a run went to a separate
+ * conversation and the run never heard it. The 2026-08-27 booking session is
+ * the proof: "It is the first one Braino, Insidious: The Further" — the exact
+ * answer he was stuck on — arrived 24 seconds before he gave up saying the film
+ * was not showing. He was told, and there was nowhere to put it. */
+let macActiveHilRun = null;
+
+/* Ask HIL what was just said, instead of matching it against a list.
+ *
+ * Runs on the same model path Monday Mode uses, so this needed no new endpoint
+ * and no deploy. It returns null on any failure, and every caller treats null
+ * as "carry on as before" — a classifier that is down must not be able to
+ * swallow a command. */
+async function macUnderstandUtterance(text, options = {}) {
+  const said = String(text || "").trim();
+  if (!said) return null;
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return null;
+  const running = Boolean(options.running);
+  const startedAt = Date.now();
+  try {
+    const authToken = await getBrainoAuthToken();
+    const context = running
+      ? `Braino is in the middle of this job right now: "${String(options.command || "").slice(0, 300)}"`
+      : "Braino is not working on anything right now.";
+    const response = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/chat-about-notes`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: SUPABASE_ANON_KEY,
+        ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+      },
+      body: JSON.stringify({
+        notes: "",
+        message: `${context}\n\nThey just said: "${said}"`,
+        responseMedium: "text",
+        personaSystem: UNDERSTAND_PROMPT,
+      }),
+    });
+    const data = await response.json().catch(() => ({}));
+    const understanding = parseUnderstanding(data?.reply, { running });
+    logMac("hil.understand", {
+      running,
+      kind: understanding?.kind || "unreadable",
+      said: textForLog(said, 160),
+      ms: Date.now() - startedAt,
+    });
+    return understanding;
+  } catch (error) {
+    logMac("hil.understand.failed", { error: String(error?.message || error), ms: Date.now() - startedAt });
+    return null;
+  }
+}
+
+/* Hand something to the job that is already running.
+ *
+ * state.facts is how the loop has always told itself things mid-run ("saying it
+ * is not doing it"), so a correction from the person goes in the same way and
+ * is read on the very next turn. */
+function macTellRunningJob(note) {
+  const line = String(note || "").trim();
+  if (!line || !macActiveHilRun) return false;
+  if (macActiveHilRun.generation !== macHilGeneration) return false;
+  macActiveHilRun.state.facts.push(`They just told you, while you were working: ${line}`);
+  if (macActiveHilRun.state.facts.length > 12) {
+    macActiveHilRun.state.facts = macActiveHilRun.state.facts.slice(-12);
+  }
+  logMac("hil.loop.told", { runId: macActiveHilRun.runId, note: textForLog(line, 160) });
+  return true;
+}
 /* The turn in flight. A new command bumps the generation, but the loop only
    notices between steps, and a step is an accessibility walk plus a model call
    plus a verify walk. In the session log a run carried on for twenty seconds
@@ -14070,7 +14142,9 @@ async function runMacHilLoop(command, resume = null) {
   const startStep = Math.max(0, Number(resume?.stepsUsed) || 0);
   const deadline = Date.now() + MAC_HIL_MAX_MS;
   logMac("hil.loop.start", { command: textForLog(command), runId });
+  macActiveHilRun = { runId, state, generation: myGeneration, command: String(command || "") };
 
+  try {
   for (let step = startStep; step < maxSteps; step += 1) {
     // Every turn is a model call plus two or three AX walks, and this holds the
     // single delegate IPC the whole time. A run that will not finish has to give
@@ -14342,6 +14416,12 @@ async function runMacHilLoop(command, resume = null) {
   }
   logMac("hil.loop.budget", { runId });
   return { ok: false, say: said || "That took more steps than I give myself for one task, so I stopped.", source: "hil_loop" };
+  } finally {
+    /* Only ever clear my own registration. A superseding run registers itself
+       before this one unwinds, and clearing unconditionally would delete the
+       new job's handle the moment the old one noticed it had been replaced. */
+    if (macActiveHilRun?.runId === runId) macActiveHilRun = null;
+  }
 }
 
 // The cascade handles a huge amount well and instantly. This decides when a
@@ -14603,7 +14683,7 @@ async function mondayifyReply(raw, result) {
   return said ? { ...result, say: said } : result;
 }
 
-async function runDelegate(prompt) {
+async function runDelegate(prompt, options = {}) {
   const raw = cleanPrompt(prompt);
 
   // Checked first, unconditionally: this is a meta-command about Braino
@@ -14624,6 +14704,21 @@ async function runDelegate(prompt) {
     const result = { ok: true, source: "monday_mode", say: "Monday Mode off. Back to normal." };
     if (raw) { rememberMacChat("user", raw); rememberMacChat("assistant", result.say); }
     return { ...result, delegateState: delegateStatePayload() };
+  }
+
+  /* He said he would do it, so this IS the doing.
+   *
+   * Escalated from a conversation that turned out to contain a job (see
+   * answerViaRealtimeChat). It must not re-enter the cascade below: the whole
+   * reason the job was missed the first time is that a keyword list decided a
+   * sentence about booking tickets was small talk. Sending it back through the
+   * same lists would let the same words lose it again, and this time silently,
+   * because he has already promised out loud. So it goes straight to the brain,
+   * which is the layer that can read "book my show" as a job without anyone
+   * having added the word "book" to a list. */
+  if (options.forceBrain && macHilEnabled()) {
+    logMac("delegate.forced_brain", { reason: options.reason || "promise", raw: textForLog(raw) });
+    return runMacHilLoop(raw);
   }
 
   // Snapshotted before routing, because routeMacDelegate's first act is to
@@ -16099,11 +16194,48 @@ function featureEfficiencyPct(ok, durationMs) {
   return 60;
 }
 
-ipcMain.handle("braino-mac:delegate", async (event, prompt) => {
+/* Is a job running right now? No model call, no await worth the name.
+ *
+ * Asking HIL what a sentence meant costs 3.6 to 6.5 seconds in the real logs.
+ * That is fine while he is already working and worth every millisecond, and it
+ * is intolerable in front of "how are you". So the renderer checks this first
+ * and only pays for the question when there is a job for the answer to change. */
+ipcMain.handle("braino-mac:job-running", async () => ({
+  running: Boolean(macActiveHilRun) && macActiveHilRun.generation === macHilGeneration,
+}));
+
+/* The renderer asks HIL what was just said, and acts on the answer. */
+ipcMain.handle("braino-mac:understand", async (event, payload) => {
+  const running = Boolean(macActiveHilRun) && macActiveHilRun.generation === macHilGeneration;
+  const understanding = await macUnderstandUtterance(payload?.text, {
+    running,
+    command: macActiveHilRun?.command || payload?.command || "",
+  });
+  return { running, understanding };
+});
+
+/* A correction or an addition, handed to the job in flight. */
+ipcMain.handle("braino-mac:tell-running-job", async (event, payload) => ({
+  ok: macTellRunningJob(payload?.note),
+}));
+
+/* Stop. The generation bump is how a run has always been cancelled, and every
+   turn of the loop checks it, so this lands within one step rather than at the
+   end. */
+ipcMain.handle("braino-mac:stop-running-job", async () => {
+  const had = Boolean(macActiveHilRun) && macActiveHilRun.generation === macHilGeneration;
+  if (had) logMac("hil.loop.stopped_by_user", { runId: macActiveHilRun.runId });
+  macHilGeneration += 1;
+  macActiveHilRun = null;
+  settleTaskProgress("stopped_by_user");
+  return { ok: had };
+});
+
+ipcMain.handle("braino-mac:delegate", async (event, prompt, options) => {
   const startedAt = Date.now();
   let result;
   try {
-    result = await runDelegate(prompt);
+    result = await runDelegate(prompt, options || {});
   } finally {
     // Whatever the handler did (or threw), a "thinking" it did not close is
     // closed here, before the renderer gets the result. See lastTaskProgressStatus.

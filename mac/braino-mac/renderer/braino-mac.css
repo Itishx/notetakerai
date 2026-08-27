@@ -949,6 +949,58 @@ body {
 
 #notch-face .nf-thinking-step::before { content: none; }
 
+/* Opened, the trail stops being a progress meter and becomes the reasoning.
+ *
+ * Collapsed it is deliberately four-pixel dots: a glance should say "he is
+ * several steps in", nothing more. But opening the panel is a request to read
+ * what he actually did, and dots cannot answer that. Same element, two jobs. */
+#notch-face.nf-think-open .nf-thinking-trail {
+  flex-direction: column;
+  justify-content: flex-start;
+  align-items: stretch;
+  gap: 0;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255,255,255,.08);
+  max-height: 40vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+}
+#notch-face.nf-think-open .nf-thinking-trail::-webkit-scrollbar { display: none; }
+
+#notch-face.nf-think-open .nf-thinking-step {
+  display: grid;
+  grid-template-columns: 14px 1fr;
+  gap: 8px;
+  width: auto;
+  height: auto;
+  border-radius: 0;
+  background: none;
+  color: rgba(255,255,255,.58);
+  font-size: 12.5px;
+  line-height: 1.4;
+  padding: 5px 0;
+  overflow: visible;
+}
+/* A dot per row, so the collapsed language survives into the open state. */
+#notch-face.nf-think-open .nf-thinking-step::before {
+  content: "";
+  width: 4px;
+  height: 4px;
+  margin-top: .5em;
+  border-radius: 50%;
+  background: rgba(126,220,164,.5);
+}
+#notch-face.nf-think-open .nf-thinking-step span {
+  display: block;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+/* The most recent completed step is the one you are most likely reading. */
+#notch-face.nf-think-open .nf-thinking-step:last-child { color: rgba(255,255,255,.82); }
+#notch-face.nf-think-open .nf-thinking-step:last-child::before { background: rgba(126,220,164,.9); }
+
 #notch-face.nf-think-waiting .nf-thinking-orb {
   background: linear-gradient(145deg, #ffd38d, #c7832d);
   box-shadow: 0 0 16px rgba(255,190,92,.34);
@@ -3291,6 +3343,74 @@ body {
   opacity: 0 !important;
 }
 
+/* One surface owns the box at a time.
+ *
+ * .nf-inline-caption and .nf-thinking-canvas are BOTH position:absolute inset:0,
+ * at z-index 12 and 8. The hide-list above sends nine other elements away when
+ * the caption opens and forgot the thinking canvas, so "YOU SAID" and
+ * "Reading the current context and understanding what matters…" painted straight
+ * through each other, plus two state chips ("Live" over "Deciding") in the same
+ * corner. That is the doubled, unreadable notch.
+ *
+ * Collapsed, the caption wins: it is already showing his phase in its own state
+ * chip, so the canvas underneath is pure duplication. Opened by hand
+ * (.nf-think-open) the canvas wins instead, because the trail is the entire
+ * reason someone clicked, and it carries "Understanding: <what you said>" as its
+ * own first line — so your words are never lost, they move into the sheet. */
+#notch-face.nf-inline-open:not(.nf-think-open) .nf-thinking-canvas {
+  display: none !important;
+  opacity: 0 !important;
+}
+#notch-face.nf-inline-open.nf-think-open .nf-inline-caption {
+  display: none !important;
+  opacity: 0 !important;
+}
+
+/* Thinking is its own state: centred label, down arrow, nothing else.
+ *
+ * The chip was pushed hard right and stripped of its text while the caption was
+ * open, because the two were painting over each other. They no longer coexist —
+ * the caption hands the box to the chip — so the chip is centred again and says
+ * what he is doing, which is the whole point of it. */
+
+
+/* Line the arrow up with the header it now sits in.
+   Header baseline is --nf-content-top (= --nf-safe-top + 20px); the chip was
+   parked at --nf-safe-top + 6px for a centred pill that no longer exists. */
+
+
+/* The phase keeps its shimmer — it just moved house.
+ *
+ * "Thinking / Hatching / Deciding / Calibrating" cycles in the caption's own
+ * state chip, and the shimmer used to live on .nf-think-chip-text. Hiding that
+ * text to stop the doubling took the animation with it, so the phase went
+ * static and the notch stopped looking alive while he worked. Same gradient,
+ * same 2.6s travel, applied where the words actually are now. */
+#notch-face.nf-inline-open.nf-inline-working .nf-inline-caption-state {
+  font-size: 10.5px;
+  font-weight: 650;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: rgba(255, 240, 235, .9);
+  background: linear-gradient(100deg,
+    rgba(255, 240, 235, .5) 0%,
+    rgba(255, 240, 235, .5) 38%,
+    #fff6f2 50%,
+    rgba(255, 240, 235, .5) 62%,
+    rgba(255, 240, 235, .5) 100%);
+  background-size: 260% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: nfThinkShimmer 2.6s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  #notch-face.nf-inline-open.nf-inline-working .nf-inline-caption-state {
+    animation: none;
+    -webkit-text-fill-color: rgba(255, 240, 235, .9);
+  }
+}
+
 /* Yap owns one stable black sheet. The width never follows transcript length;
    new speech stacks downward in short readable turns, using the same spring
    geometry as answer surfaces. */
@@ -3442,19 +3562,26 @@ body {
   z-index: 8;
   display: flex;
   justify-content: flex-start;
-  padding: calc(var(--nf-safe-top) + 43px) 24px 10px;
+  padding: calc(var(--nf-safe-top) + var(--nf-notch-h) + 43px) 24px 10px;
   box-sizing: border-box;
   color: #f7f7f5;
   font-family: "Braino SF Pro Display", "SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, sans-serif;
   font-synthesis: none;
 }
 
+/* The plate runs to the pill's y=0 so coral fills the strip with no black band
+   above him, but the FACE is drawn --nf-notch-h lower. This file's own contract
+   is "the top --nf-notch-h hides behind the physical housing, the face band
+   lives on the chin below", and this element was breaking it: the closed lids
+   sit at y 29-36 of the viewBox against a 33px housing, so the notch ate two
+   thirds of both eyes and left a 3px sliver. Invisible while the plate was
+   near-black; obvious the moment he was painted coral. */
 #notch-face .nf-response-face {
   position: absolute;
   z-index: 2;
   inset: 0 0 auto;
   width: 100%;
-  height: 72px;
+  height: calc(72px + var(--nf-notch-h));
   overflow: hidden;
   pointer-events: auto;
   cursor: pointer;
@@ -3481,6 +3608,8 @@ body {
   display: block;
   width: 100%;
   height: 72px;
+  /* Clears the housing. The plate above this stays coral. */
+  margin-top: var(--nf-notch-h);
 }
 
 #notch-face .nf-response-fold,
@@ -4606,3 +4735,87 @@ body {
 @media (prefers-reduced-motion: reduce) {
   #notch-face .nf-think-chip-text { animation: none; -webkit-text-fill-color: rgba(255, 240, 235, .9); }
 }
+
+/* Thinking, at the size it deserves.
+ *
+ * The phase was 12.5px because it used to share the strip with a whole sentence
+ * of his working. It is the only thing in the box now, centred, so it can be
+ * read at a glance from a laptop's distance rather than squinted at. */
+#notch-face.nf-thinking:not(.nf-think-open) .nf-think-chip-text {
+  font-size: 18px;
+  letter-spacing: -.012em;
+}
+#notch-face.nf-thinking:not(.nf-think-open) .nf-think-chip {
+  gap: 11px;
+  padding: 7px 8px 7px 16px;
+}
+
+/* He is asleep on the thinking sheet, and now he breathes.
+ *
+ * .nf-response-face::after already carried a shimmer — white, mix-blend screen —
+ * and a later rule killed it with `animation: none` because it ran on every
+ * surface at once and read as glare. It belongs to exactly one moment: the
+ * panel you opened to watch him work. Coral, because that is his colour, and
+ * slow enough at 3.4s to read as breathing rather than a loading bar. */
+#notch-face.nf-thinking .nf-response-face::after {
+  /* The sweep, over a plate that is now his own colour rather than black. */
+  background: linear-gradient(105deg,
+    transparent 18%,
+    rgba(232,120,110,.18) 34%,
+    rgba(255,190,182,.95) 50%,
+    rgba(232,120,110,.20) 66%,
+    transparent 82%);
+  background-size: 220% 100%;
+  mix-blend-mode: screen;
+  animation: nfThinkShimmer 3.4s linear infinite;
+}
+/* The fold and the smile catch the same light, so the shimmer looks like it is
+   passing THROUGH him rather than sliding over a flat plate. */
+#notch-face.nf-thinking .nf-response-fold { animation: nfFaceBreathe 3.4s ease-in-out infinite; }
+#notch-face.nf-thinking .nf-response-smile { animation: nfFaceBreathe 3.4s ease-in-out infinite .4s; }
+@keyframes nfFaceBreathe {
+  0%, 100% { stroke: rgba(255,255,255,.38); opacity: .5; }
+  50%      { stroke: #ffb4ab; opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  #notch-face.nf-thinking .nf-response-face::after,
+  #notch-face.nf-thinking .nf-response-fold,
+  #notch-face.nf-thinking .nf-response-smile { animation: none; }
+}
+
+/* He is coral, not a black plate.
+ *
+ * The sleeping face sat on the pill's near-black, so a coral sweep over it read
+ * as a faint stain instead of him breathing. While he thinks, the strip takes
+ * the same gradient the mascot is drawn in — #F6A8A2 into #E8786E — and the
+ * sweep travels across that. Same two colours the character uses, so the panel
+ * looks like Braino rather than like a dark surface with a light on it. */
+#notch-face.nf-thinking .nf-response-face {
+  background: linear-gradient(168deg, #f6a8a2 0%, #ee8b82 46%, #e8786e 100%);
+}
+/* Ink on coral, not white on black: the fold and smile need to read against a
+   light plate now, so they darken instead of glowing. */
+#notch-face.nf-thinking .nf-response-fold,
+#notch-face.nf-thinking .nf-response-smile { stroke: rgba(92,28,22,.55); }
+@keyframes nfFaceBreathe {
+  0%, 100% { stroke: rgba(92,28,22,.42); opacity: .72; }
+  50%      { stroke: rgba(92,28,22,.86); opacity: 1; }
+}
+/* The sweep is now light passing over a lit surface, so it whitens rather than
+   colours: coral on coral would be invisible. */
+#notch-face.nf-thinking .nf-response-face::after {
+  background: linear-gradient(105deg,
+    transparent 18%,
+    rgba(255,255,255,.10) 34%,
+    rgba(255,255,255,.62) 50%,
+    rgba(255,255,255,.12) 66%,
+    transparent 82%);
+  background-size: 220% 100%;
+  mix-blend-mode: soft-light;
+}
+
+/* The collapse arrow was 12px off the floor, which put it on top of the last
+   step. Give the trail room to end before the control begins. */
+#notch-face.nf-think-open .nf-think-chip { bottom: 14px; }
+#notch-face.nf-think-open .nf-thinking-canvas { padding-bottom: 46px; }
+#notch-face.nf-think-open .nf-thinking-trail { padding-bottom: 4px; }

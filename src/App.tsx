@@ -146,6 +146,7 @@ const Channels = lazy(() => import("./pages/Channels.tsx"));
 const BrainoDeckDocs = lazy(() => import("./pages/BrainoDeckDocs.tsx"));
 const DeckDocs = lazy(() => import("./pages/DeckDocs.tsx"));
 const NotFound = lazy(() => import("./pages/NotFound.tsx"));
+const NotchLab = lazy(() => import("./pages/NotchLab.tsx"));
 const queryClient = new QueryClient();
 const SPLASH_SKIP_PATHS = new Set(["/", "/intro", "/interactive-tour", "/spiderman-brand-new-day", "/brand-new-day"]);
 const normalizePath = (path: string) => (path.length > 1 ? path.replace(/\/+$/, "") : path);
@@ -180,6 +181,7 @@ function AppRoutes() {
         {/* The waitlist is the front door again while the five-tab Braino page
             is still being finished. Braino lives at /braino meanwhile, and
             /overview stays pointed at the same waitlist page so old links work. */}
+        <Route path="/notch-lab" element={<NotchLab />} />
         <Route path="/" element={<Landing />} />
         <Route path="/questions" element={<Waitlist />} />
         <Route path="/overview" element={<Waitlist />} />

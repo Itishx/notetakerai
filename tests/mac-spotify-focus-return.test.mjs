@@ -50,7 +50,7 @@ console.log("ok  empty return targets are ignored safely");
 const main = readFileSync(new URL("../mac/braino-mac/main.cjs", import.meta.url), "utf8");
 const renderer = readFileSync(new URL("../mac/braino-mac/renderer/braino-mac.js", import.meta.url), "utf8");
 const runDelegate = main.slice(
-  main.indexOf("async function runDelegate(prompt)"),
+  main.indexOf("async function runDelegate("),
   main.indexOf("async function routeMacDelegate"),
 );
 const spotifyPlay = main.slice(

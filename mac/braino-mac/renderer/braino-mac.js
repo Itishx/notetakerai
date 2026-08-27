@@ -344,6 +344,26 @@ let rtDc = null;
 let rtMic = null;
 let rtRemoteAudio = null;
 let rtUserTranscript = "";
+/* You cut him off, so the next thing transcribed is yours.
+ *
+ * Barge-in stopped his AUDIO and then shouldAcceptVoiceTranscript threw the
+ * words away, because `speaking` was still true when they arrived and the
+ * command was not addressed to him by name. So he went quiet, looked like he
+ * was listening, and did nothing — the command only landed if you repeated it
+ * after he finished. This flag carries "the interruption was real" across that
+ * gap. Set only by a genuine speech_started barge-in, consumed once, and it
+   expires: a cough that cuts him off must not hand a free pass to whatever is
+   transcribed a minute later. */
+let rtBargeInAt = 0;
+/* When your sentence first appeared, and the shortest time it may hold the box.
+ *
+ * The three states hand over: You said -> Thinking -> his reply. Without a floor
+ * a fast route swapped the caption out in a couple of hundred milliseconds and
+ * you never read your own words back. Slow work still moves on the instant it
+ * passes the floor, so this costs nothing on the runs that matter. */
+let nfHeardShownAt = 0;
+const NF_HEARD_MIN_MS = 1100;
+const BARGE_IN_TRANSCRIPT_WINDOW_MS = 8000;
 let rtTranscriptFinal = false;
 let rtTranscriptFlushTimer = 0;
 let rtIdleTimer = 0;
@@ -1078,6 +1098,15 @@ window.brainoMac.onCowork?.((state) => {
 let coworkLabel = "";
 let coworkThinking = "";
 let coworkThinkingHistory = [];
+/* His working, kept.
+ *
+ * The expanded sheet used to render coworkThinkingHistory.slice(-2) — a
+ * DIFFERENT feature's history, capped at two rows. HIL's own steps arrived
+ * through nfSetThinking and were written straight over the top of each other,
+ * so opening the panel showed one line and two stale cowork rows, never the
+ * reasoning. Collapsed shows the latest step alone; open shows all of it. */
+let hilThinkingHistory = [];
+const HIL_THINKING_HISTORY_MAX = 40;
 let coworkCompletionTimer = 0;
 const nfThinkingCanvas = notchFace?.querySelector(".nf-thinking-canvas");
 const nfThinkChipText = notchFace?.querySelector(".nf-think-chip-text");
@@ -1103,6 +1132,14 @@ let thinkingPhaseTimer = 0;
 let nfFlowPromptText = "";
 let nfFlowResponseText = "";
 let nfAnswerMode = "";
+/* The short/long class, frozen for the life of one answer.
+ *
+ * renderNotchAnswer reclassifies from whatever text it currently holds, and
+ * streaming used to call it per token, so a reply crossed the 100-char boundary
+ * mid-sentence and the sheet re-laid-out under the words. One session logged a
+ * reply going short -> long -> short while it was being typed. Decide once on
+ * the first paint, and revisit only when the answer is complete. */
+let nfAnswerModeLocked = "";
 let nfAnswerText = "";
 let nfAnswerGeneration = 0;
 let nfAnswerCompletedWords = 0;
@@ -1160,6 +1197,12 @@ function thinkingPresentation(label, thinking) {
   if (/\b(done|complete|completed|finished|ready)\b/.test(source)) {
     return { state: "Complete", className: "nf-think-complete" };
   }
+  /* The moment a conversation turns out to have contained a job. Same look as
+     Thinking and Calibrating on purpose: it is the same shimmer, so it reads as
+     one more phase of him working rather than a different kind of event. */
+  if (/\btaking it on\b/.test(source)) {
+    return { state: "Taking it on", className: "" };
+  }
   return { state: THINKING_PHASES[thinkingPhaseIndex], className: "" };
 }
 
@@ -1176,12 +1219,18 @@ function renderThinkingCanvas(label, thinking) {
   /* The collapsed line. One sentence, whole where it fits and ellipsed by CSS
      where it does not, rather than the four characters the old caption slot
      allowed. */
-  if (nfThinkChipText) nfThinkChipText.textContent = compactFlowText(current, 64);
+  /* The chip is the phase word and nothing else: Thinking, Hatching, Deciding,
+     Calibrating. It used to carry his actual step ("Reading the current context
+     and understanding what matters"), truncated at 64 characters, which is a
+     sentence nobody can read in the second it is on screen and is the reason
+     the collapsed notch looked busy. The step text still exists — it is what
+     the arrow opens. */
+  if (nfThinkChipText) nfThinkChipText.textContent = presentation.state;
   if (nfThinkingState) nfThinkingState.textContent = presentation.state;
   if (nfThinkingCanvas) nfThinkingCanvas.dataset.state = presentation.state;
   if (nfFlowPrompt) {
     nfFlowPrompt.textContent = nfFlowPromptText
-      ? `Understanding: ${compactFlowText(nfFlowPromptText, 102)}`
+      ? `You said: ${compactFlowText(nfFlowPromptText, 102)}`
       : "Reading the page and understanding what matters.";
   }
   if (nfFlowResponse) {
@@ -1193,7 +1242,12 @@ function renderThinkingCanvas(label, thinking) {
   if (presentation.className) notchFace?.classList.add(presentation.className);
 
   if (nfThinkingTrail) {
-    nfThinkingTrail.replaceChildren(...coworkThinkingHistory.slice(-2).map((step) => {
+    /* Open means "show me everything you did"; collapsed keeps one line in the
+       chip above and at most a hint of the two before it. */
+    const opened = Boolean(notchFace?.classList.contains("nf-think-open"));
+    const source = hilThinkingHistory.length ? hilThinkingHistory : coworkThinkingHistory;
+    const steps = opened ? source.slice(0, -1) : source.slice(-2);
+    nfThinkingTrail.replaceChildren(...steps.map((step) => {
       const row = document.createElement("div");
       row.className = "nf-thinking-step";
       const text = document.createElement("span");
@@ -1320,6 +1374,7 @@ function scheduleNotchThinking(prompt, detail) {
 function openNotchThinking(prompt, detail = "Separating the useful signal from the repetition.") {
   cancelPendingNotchThinking();
   if (!canUseNotchResponseSurface()) return false;
+  hilThinkingHistory = [];
   cancelNotchSurfaceExit();
   window.clearTimeout(nfAnswerLingerTimer);
   nfFlowPromptText = String(prompt || nfFlowPromptText || "").trim();
@@ -1442,7 +1497,17 @@ function refitOpenLongAnswer(generation = nfAnswerGeneration) {
 function renderNotchAnswer() {
   if (!nfAnswerSurface || !nfAnswerShortText || !nfAnswerBody) return;
   const presentation = classifyMacNotchAnswer(nfAnswerText, { rich: nfAnswerForcedLong });
-  nfAnswerMode = presentation.kind;
+  /* One way only: short may become long, long never goes back.
+   *
+   * The lock was added because reclassifying on every streamed token made the
+   * notch flap between two surfaces mid-sentence. It was too strong. A reply
+   * is classified from its first few words, and a reply that starts short and
+   * keeps going stayed pinned to the small single-row surface, so the text ran
+   * out past the rounded edges and over the page behind it. Growing is not
+   * flapping: it happens at most once per reply and only in the direction that
+   * makes room. */
+  nfAnswerMode = nfAnswerModeLocked === "long" || presentation.kind === "long" ? "long" : "short";
+  nfAnswerModeLocked = nfAnswerMode;
   nfAnswerText = presentation.text;
   notchFace?.classList.toggle("nf-answer-short", nfAnswerMode === "short");
   notchFace?.classList.toggle("nf-answer-long", nfAnswerMode === "long");
@@ -1612,6 +1677,7 @@ function startNotchAnswer(text, generation, options = {}) {
   if (!sameAnswer || options.replace) {
     nfAnswerCompletedWords = 0;
     nfAnswerLastScrollIndex = -1;
+    nfAnswerModeLocked = "";
   }
   window.clearTimeout(nfThinkingTimer);
   stopThinkingPhaseCycle();
@@ -1637,9 +1703,30 @@ function startNotchAnswer(text, generation, options = {}) {
   return true;
 }
 
+/* A streaming delta is an APPEND. It used to be a re-open.
+ *
+ * Every token called startNotchAnswer, which cancels timers, rebuilds classes,
+ * reclassifies short/long from a half-finished sentence, calls setNotchZone —
+ * resizing the real OS-level overlay window — and logs notch.answer.start. One
+ * session recorded 414 starts against 22 finishes, twenty of them inside 52ms
+ * for a single reply. That is the notch visibly tearing itself apart while it
+ * types, and it is what put two layers of text on top of each other.
+ *
+ * Open once. After that, set the words and repaint. Nothing else moves. */
 function updateNotchAnswerText(text, generation, options = {}) {
   if (!text || generation !== speechGeneration) return false;
-  return startNotchAnswer(text, generation, options);
+  const alreadyOpen = nfAnswerGeneration === generation
+    && Boolean(notchFace?.classList.contains("nf-answer-open"))
+    && !options.replace;
+  if (!alreadyOpen) return startNotchAnswer(text, generation, options);
+  const normalized = normalizedNotchAnswer(text);
+  if (!normalized || normalized === nfAnswerText) return true;
+  cancelNotchSurfaceExit();
+  window.clearTimeout(nfAnswerLingerTimer);
+  nfAnswerText = normalized;
+  if (options.rich) nfAnswerForcedLong = true;
+  renderNotchAnswer();
+  return true;
 }
 
 function trackNotchAnswerAudio(audio, spokenText, generation) {
@@ -1681,6 +1768,13 @@ function animateNotchAnswerEstimate(text, generation, durationMs) {
 function finishNotchAnswer(generation) {
   if (generation !== nfAnswerGeneration || !notchFace?.classList.contains("nf-answer-open")) return;
   window.cancelAnimationFrame(nfAnswerRaf);
+  /* Deliberately NOT reclassified here.
+   *
+   * An earlier pass re-ran the short/long call once the full sentence had
+   * landed, on the theory that one transition at the end beats N mid-stream.
+   * It does — but the user still sees the reply change shape as it finishes,
+   * and a sheet that resizes under a sentence you are reading is worse than a
+   * sheet that guessed slightly wrong at the start. Decide once, stay put. */
   paintNotchAnswer(nfAnswerWords.length);
   const lingerMs = typeof notchResponseApi.notchAnswerLingerMs === "function"
     ? notchResponseApi.notchAnswerLingerMs(nfAnswerText, nfAnswerMode)
@@ -2405,29 +2499,21 @@ function refitOpenInlineCaption() {
   notchFace.style.setProperty("--nf-inline-height", `${measureInlineCaptionHeight()}px`);
 }
 
-function syncInlineVoiceSurface(mode = "", text = "", options = {}) {
+function syncInlineVoiceSurface(mode = "", text = "") {
   if (!notchFace || !nfInlineCaptionEl) return;
   const value = String(text || "").trim().replace(/\s+/g, " ");
   const active = Boolean(mode && value);
   const wasActive = notchFace.classList.contains("nf-inline-open");
-  const thinking = active && mode === "thinking";
-  // While he thinks we now keep YOUR words in the body and move the phase into
-  // the little state chip, so a command no longer vanishes the instant
-  // processing starts. `showsTranscript` says which of those two we are doing.
-  const showsTranscript = Boolean(options.showsTranscript);
+  /* This surface is now only ever your own sentence read back to you. The
+     phase belongs to the centred chip, and the panel behind the arrow keeps
+     the full reasoning, so the caption no longer tries to be both. */
 
   if (active) cancelNotchSurfaceExit();
   else if (wasActive) beginNotchSurfaceExit();
   notchFace.classList.toggle("nf-inline-open", active);
-  notchFace.classList.toggle("nf-inline-thinking", thinking && !showsTranscript);
-  if (nfInlineCaptionLabelEl) {
-    nfInlineCaptionLabelEl.textContent = thinking && !showsTranscript ? "Braino is thinking" : "You said";
-  }
-  if (nfInlineCaptionStateEl) {
-    nfInlineCaptionStateEl.textContent = thinking
-      ? String(options.state || "Thinking")
-      : "Live";
-  }
+  notchFace.classList.remove("nf-inline-thinking", "nf-inline-working");
+  if (nfInlineCaptionLabelEl) nfInlineCaptionLabelEl.textContent = "You said";
+  if (nfInlineCaptionStateEl) nfInlineCaptionStateEl.textContent = "Live";
   if (nfInlineCaptionTextEl) nfInlineCaptionTextEl.textContent = value;
 
   // Height AFTER the text lands, or we would measure the previous sentence.
@@ -2531,10 +2617,14 @@ function layoutNotchCaption(text) {
 }
 
 function nfSetHeard(text, options = {}) {
+  const previous = nfHeardText;
   nfHeardText = String(text || "").trim();
   if (nfHeardText) {
+    if (nfHeardText !== previous) nfHeardShownAt = Date.now();
     nfFlowPromptText = nfHeardText;
     nfFlowResponseText = "";
+  } else {
+    nfHeardShownAt = 0;
   }
   if (dictationMode || dictationStopping) {
     layoutNotchCaption("");
@@ -2579,6 +2669,10 @@ let nfThinkingTimer = 0;
 
 function nfSetThinking(text) {
   nfThinkingText = String(text || "").trim();
+  if (nfThinkingText && hilThinkingHistory[hilThinkingHistory.length - 1] !== nfThinkingText) {
+    hilThinkingHistory.push(nfThinkingText);
+    if (hilThinkingHistory.length > HIL_THINKING_HISTORY_MAX) hilThinkingHistory.shift();
+  }
   window.clearTimeout(nfThinkingTimer);
   window.clearTimeout(nfThinkingOpenTimer);
   if (nfThinkingText) {
@@ -2722,9 +2816,21 @@ function updateNotchFace() {
     && Boolean(nfHeardText)
     && (sessionEngaged || ["listening", "hearing", "captured"].includes(lastGlowStatus));
   const thinkingOpen = notchFace.classList.contains("nf-think-open");
+  /* You said -> Thinking -> his reply, one at a time.
+   *
+   * The caption used to stay open through processing so your sentence never
+   * disappeared. That put the caption and the centred phase chip in the same
+   * box, which showed the phase twice — once in the chip, once in the caption's
+   * own state slot — and left no moment that reads as "he is working". Proved
+   * on /notch-lab before this landed. Your sentence is not lost: it is the
+   * first line of the panel behind the arrow. */
+  const heldRecently = nfHeardShownAt > 0 && Date.now() - nfHeardShownAt < NF_HEARD_MIN_MS;
   const inlineMode = visible && !herMode && !answerOwnsNotch && !yapOwnsNotch && !thinkingOpen
-    ? (processingActive ? "thinking" : (conversationOwnsNotch ? "heard" : ""))
+    ? ((processingActive && !heldRecently) ? "" : (conversationOwnsNotch ? "heard" : ""))
     : "";
+  /* Come back when the floor expires, or the caption would sit there until the
+     next unrelated repaint. */
+  if (inlineMode === "heard" && processingActive) window.setTimeout(() => updateNotchFace(), 140);
   // Keep YOUR words on screen while he thinks. This used to replace the
   // transcript with the single word "Thinking" the moment processing began,
   // which is why a command you had just spoken disappeared before you could
@@ -2735,15 +2841,9 @@ function updateNotchFace() {
   // now grow; it still trims from the FRONT, so the newest words you are
   // speaking are always the ones on screen.
   const heardForInline = compactNotchCaption(nfHeardText, NF_INLINE_MAX_CHARS);
-  const showsTranscript = inlineMode === "thinking" && Boolean(heardForInline);
-  const inlineText = inlineMode === "thinking"
-    ? (heardForInline || THINKING_PHASES[thinkingPhaseIndex])
-    : (inlineMode === "heard" ? heardForInline : "");
+  const inlineText = inlineMode === "heard" ? heardForInline : "";
   layoutNotchCaption("");
-  syncInlineVoiceSurface(inlineMode, inlineText, {
-    showsTranscript,
-    state: THINKING_PHASES[thinkingPhaseIndex],
-  });
+  syncInlineVoiceSurface(inlineMode, inlineText);
   const yapWasOpen = notchFace.classList.contains("nf-yap-open");
   notchFace.classList.toggle("nf-yap-open", yapOwnsNotch);
   if (yapOwnsNotch) cancelNotchSurfaceExit();
@@ -4335,6 +4435,68 @@ async function runMacTeamInput(rawText, options = {}) {
   }
 }
 
+/* "Go ahead do it."
+ *
+ * A bare affirmative has no object, so isLikelyMacActionTranscript sees no verb
+ * and no target and shouldUseRealtimeDirectChat sends it to chat. He then
+ * *talks* about doing the thing instead of doing it. The 2026-08-26 session
+ * caught it exactly: at 20:35:01 "Go ahead do it." produced
+ * realtime.chat.response_started and no delegate.start at all, right after he
+ * had said "Got it. The filename is BrainoSuperFinal.pdf. I'll use that."
+ *
+ * hasPendingDelegateFollowup only knows about a pending WORKFLOW or file
+ * confirmation. It does not know he just asked you a question, or gave up, or
+ * promised to use something. So we remember the last task that was left owing,
+ * and let a plain yes re-dispatch THAT — never the word "yes" itself, which the
+ * router could do nothing with. */
+let owedTask = null;
+/* One escalation per turn. The brain cannot reach this path, so this cannot
+   recurse today; it is here so it still cannot if that ever changes. */
+let promiseEscalated = false;
+
+/* What to actually run when a conversation turns out to have contained a job.
+ *
+ * The last thing said is often not the job. The real session that prompted this
+ * asked for movie tickets, he asked which cinema, and the reply was "PVR Atrium
+ * anytime after 4 pm" — meaningless on its own, and useless as a command. The
+ * job is the exchange, so the last thing the user asked for is carried forward
+ * and this turn is appended to it. */
+function escalationPrompt(text) {
+  const now = String(text || "").trim();
+  const priorUser = [...localChatMemory].reverse().find((turn) => turn.role === "user" && turn.content.trim() !== now);
+  if (!priorUser) return now;
+  const lead = priorUser.content.trim().replace(/[.!?]*$/, "");
+  return `${lead}. ${now}`;
+}
+const OWED_TASK_WINDOW_MS = 180000;
+/* Lead-ins are optional and repeatable, then one or more "act on it" phrases,
+   then nothing. "Go ahead do it." stacks two of them, which an either/or
+   pattern missed — and that is the exact sentence from the session that started
+   this. The trailing anchor is what keeps "go ahead and open Netflix" out: that
+   one carries its own object and must run as spoken, not resume anything. */
+const AFFIRMATIVE_ONLY = /^(?:(?:ok(?:ay)?|yes|yeah|yep|sure|alright|right|please|now|then|and)[\s,]*)*(?:(?:go\s+(?:ahead|on)|do\s+it|do\s+that|carry\s+on|continue|proceed|get\s+on\s+with\s+it|try\s+again|go\s+for\s+it|please\s+do)[\s,]*)+[.!?]*$/i;
+
+function rememberOwedTask(text, reason) {
+  const value = String(text || "").trim();
+  if (!value || AFFIRMATIVE_ONLY.test(value)) return;
+  owedTask = { text: value, at: Date.now(), reason };
+  logRenderer("voice.owed_task.remembered", { chars: value.length, reason });
+}
+
+function takeOwedTask(said) {
+  if (!owedTask) return "";
+  if (!AFFIRMATIVE_ONLY.test(String(said || "").trim())) return "";
+  if (Date.now() - owedTask.at > OWED_TASK_WINDOW_MS) {
+    logRenderer("voice.owed_task.expired", { ageMs: Date.now() - owedTask.at });
+    owedTask = null;
+    return "";
+  }
+  const { text, reason } = owedTask;
+  owedTask = null;
+  logRenderer("voice.owed_task.resumed", { chars: text.length, reason, said: String(said).slice(0, 60) });
+  return text;
+}
+
 function hasPendingDelegateFollowup() {
   return Boolean(pendingDelegateState?.hasPendingWorkflow || pendingDelegateState?.hasPendingFileConfirmation);
 }
@@ -4507,7 +4669,32 @@ function shouldAcceptVoiceTranscript(text) {
     });
     return false;
   }
-  if ((speaking || processing || voiceTurnInFlight) && !addressed) return false;
+  /* An interruption you actually made outranks every busy flag below it.
+     Without this the barge-in silenced him and binned your sentence. */
+  const bargedIn = rtBargeInAt > 0 && Date.now() - rtBargeInAt <= BARGE_IN_TRANSCRIPT_WINDOW_MS;
+  if (bargedIn) {
+    rtBargeInAt = 0;
+    logRenderer("voice.barge_in.transcript_kept", {
+      chars: stats.normalized.length,
+      speaking,
+      processing,
+      voiceTurnInFlight,
+    });
+    return true;
+  }
+  if ((speaking || processing || voiceTurnInFlight) && !addressed) {
+    /* This was the deck's quietest bug: a bare `return false` with no log. Every
+       command spoken over him vanished with no record that it had existed, so
+       the log showed a silent user and the user saw an agent ignoring them. */
+    logRenderer("voice.transcript_dropped_busy", {
+      chars: stats.normalized.length,
+      text: String(text || "").replace(/\s+/g, " ").trim().slice(0, 120),
+      speaking,
+      processing,
+      voiceTurnInFlight,
+    });
+    return false;
+  }
   if (/^(hi|hello|hey|yo|braino|bruno|breno|reno)$/i.test(stats.normalized)) return true;
   if (stats.wordCount === 1 && !addressed) return false;
   if (stats.normalized.length < 3 && !addressed) return false;
@@ -5268,7 +5455,10 @@ async function runDelegate(prompt, options = {}) {
   nfFlowResponseText = "";
   // Queue the command in main before doing any response-surface presentation.
   // Electron IPC is now ahead of Notch rendering in the event queue.
-  const delegatePromise = window.brainoMac.delegate(nfShelfWrapPrompt(text));
+  const delegatePromise = window.brainoMac.delegate(nfShelfWrapPrompt(text), {
+    forceBrain: Boolean(options.forceBrain),
+    reason: options.reason || "",
+  });
   setStatus("thinking", "Delegating");
   scheduleNotchThinking(text, "Reading the current context and understanding what matters.");
   setBubble(text, 1400);
@@ -5299,6 +5489,13 @@ async function runDelegate(prompt, options = {}) {
       ok: Boolean(result?.ok),
       sayChars: String(result?.say || "").length,
     });
+    /* Did that finish, or is he waiting on you? A question back, or a run that
+       ended not-ok, both mean the job is still owed. Remember the ORIGINAL
+       instruction so a later "go ahead" has something real to run. */
+    const reply = String(result?.say || "");
+    if (!result?.ok) rememberOwedTask(text, "delegate_not_ok");
+    else if (/\?\s*$/.test(reply.trim())) rememberOwedTask(text, "asked_a_question");
+    else owedTask = null;
     showFiles(result?.files || []);
     await speak(result?.say || "Done.");
     logInteraction({
@@ -5886,7 +6083,21 @@ function buildRealtimeChatInstructions() {
   if (brainoPersona?.userContext) parts.push(brainoPersona.userContext);
   parts.push([
     "Right now you are on the Mac: your walker body is on their screen and the notch is your home.",
-    "Do not invent Mac actions. If the user asks to operate the Mac, say you can help and let the app route the action next time.",
+    /* This line used to end "say you can help and let the app route the action
+       next time", and that is what he did: asked to book a cinema ticket he
+       explained he had no access to booking systems and talked the user through
+       doing it themselves. He does have hands, and by the time he speaks the
+       job is already on its way to them, so telling him to defer made him
+       contradict his own behaviour out loud. */
+    "You can operate this Mac and its browser: open things, click, type, search, book. When they ask for something done, the job is already being handed to your hands as you speak.",
+    "So never say you cannot do it, that you lack access, or that you can only guide them. Do not talk them through doing it themselves unless they ask how. Say you are on it, in a few words, and let the work happen.",
+    "Do not claim a job is done either. Starting is what you are announcing; the result is reported when it is real.",
+    /* The house rule lives in diction.ts and rides in on the Emotional Engine
+       persona, and it still is not enough: this branch is the only one of the
+       four that never restated it, and he said "Insidious-right, that's got a
+       creepy vibe" out loud. Monday Mode, Her Mode and the voice personas all
+       carry the line. This one now does too. */
+    "No lists, no markdown, no emoji, and never use em dashes or en dashes.",
     "Keep the first sentence short and complete so voice playback can begin immediately.",
     "Prefer one to three short sentences unless the user asks for detail.",
   ].join("\n"));
@@ -5924,6 +6135,21 @@ async function answerViaRealtimeChat(prompt) {
   // turn are built below.
   macCurrentMoment = macDetectMoment(text);
   if (macCurrentMoment !== "neutral") logRenderer("moment.voice", { moment: macCurrentMoment });
+  /* Asked now, read after he has spoken.
+   *
+   * "How are you, and could you grab that coffee from the table" is one breath
+   * with two things in it, and a person does both: answers, then fetches. So
+   * the conversational reply is never made to wait for this — it is started
+   * here and collected at the bottom, which costs nothing on the turns that are
+   * only talk. It is also what stops him refusing: whether he says "I can't
+   * book that from here" or "on it", HIL has independently seen a job in what
+   * YOU said, and the job runs either way. */
+  const understandingPromise = lastUnderstanding.text === text && lastUnderstanding.verdict
+    ? Promise.resolve(lastUnderstanding.verdict)
+    : window.brainoMac.understand({ text }).catch((error) => {
+      logRenderer("hil.understand.renderer_failed", { error: String(error?.message || error) });
+      return null;
+    });
   const runId = ++delegateGeneration;
   stopSpeechOutput();
   const generation = speechGeneration;
@@ -6000,6 +6226,17 @@ async function answerViaRealtimeChat(prompt) {
     if (finalText) noteSpoken(finalText);
     rememberLocalChat("user", text);
     if (finalText) rememberLocalChat("assistant", finalText);
+    /* What HE said, in the log, not just what you said and what HIL decided.
+       speak() logs this for the delegate path, but a chat reply is spoken by the
+       streamer and never went through speak(), so half of every conversation was
+       missing from the record: the 2026-08-27 booking session shows the question
+       "why do you say you can't book it?" with no trace of him having said he
+       could not. Logged only when the streamer actually spoke, because the
+       fallback below goes through speak() and would log it twice. */
+    if (finalText && streamState?.spoke) {
+      console.log(`[Braino 🗣 OUT] (chat) "${finalText.slice(0, 200)}"`);
+      logRenderer("voice.out", { text: finalText.slice(0, 200), route: "realtime_chat" });
+    }
     if (streamState?.error && !streamState.spoke && finalText && generation === speechGeneration) {
       await speak(finalText);
     } else if (!streamState?.spoke && finalText && generation === speechGeneration) {
@@ -6020,6 +6257,45 @@ async function answerViaRealtimeChat(prompt) {
         moment: macCurrentMoment,
       },
     });
+    /* He just said he would do it. So do it.
+     *
+     * This is the whole follow-through fix and it is deliberately NOT another
+     * word list. Asking "is this sentence a task" is what failed: "book my show
+     * and book me tickets" was read as small talk because the word "book" is
+     * not in isLikelyMacActionTranscript, so the job never left the chat, he
+     * said give me a moment, and the session idled out 26 seconds later.
+     *
+     * A promise is self-evidence that work is owed. It does not need a
+     * vocabulary, because HE is the one who just said it, and he only says it
+     * when he has understood a job. So the trigger is his own sentence. */
+    const verdict = await understandingPromise;
+    const seen = !verdict?.running ? verdict?.understanding : null;
+    /* HIL's task is already written to stand on its own, so it beats stitching
+       the last two things you said together. That fallback stays for the case
+       where only his own promise gave him away. */
+    const hilTask = seen && (seen.kind === "task" || seen.kind === "chat_and_task") ? seen.task : "";
+    const promised = Boolean(finalText) && window.brainoMac.promisesAction(finalText);
+    if (!promiseEscalated && (hilTask || promised)) {
+      const job = hilTask || escalationPrompt(text);
+      promiseEscalated = true;
+      logRenderer("voice.promise.escalated", {
+        saidChars: finalText.length,
+        jobChars: job.length,
+        why: hilTask ? (promised ? "hil_and_promise" : "hil_saw_a_job") : "he_promised",
+      });
+      /* Say so on the glass. "He agreed to do it" and "he is doing it" look
+         identical from outside otherwise, which is the whole complaint. */
+      renderThinkingCanvas("Taking it on", "You asked for this while we were talking. Passing it to my hands now.");
+      /* Recorded before the run, not after, so a "go ahead" still has something
+         real to resume if the run below never lands. */
+      rememberOwedTask(job, "promised_in_chat");
+      try {
+        await runDelegate(job, { keepRealtime: true, forceBrain: true, reason: "promise" });
+      } finally {
+        promiseEscalated = false;
+      }
+      return true;
+    }
     return Boolean(finalText || streamState?.spoke);
   } catch (error) {
     logRenderer("realtime.chat.error", { error: errorForLog(error) });
@@ -6803,7 +7079,67 @@ async function flushBufferedDictationTranscript() {
   return inserted;
 }
 
-function flushRealtimeTranscript(reason) {
+/* Returns true when the words belonged to the job he is already doing, and have
+   been dealt with. False means "treat this as a new turn", which is what the
+   caller did before this existed. */
+let interjectionInFlight = false;
+/* The one question asked about this sentence, kept so the chat path does not
+   ask it again three seconds later. */
+let lastUnderstanding = { text: "", verdict: null };
+async function routeInterjectionIntoRunningJob(transcript) {
+  /* Asking HIL takes a moment, and the flush that called this is now async, so
+     a second sentence can arrive mid-question. One at a time: the second one
+     becomes a normal turn rather than a second opinion about the same job. */
+  if (interjectionInFlight) return false;
+  /* Cheap question first. Asking HIL what a sentence meant costs seconds, and
+     with no job running there is nothing for the answer to change: the chat
+     path asks the same question in parallel and escalates from there, which
+     costs nothing. Only pay for the wait when he is actually working. */
+  try {
+    const busy = await window.brainoMac.jobRunning();
+    if (!busy?.running) return false;
+  } catch {
+    return false;
+  }
+  interjectionInFlight = true;
+  let verdict = null;
+  try {
+    verdict = await window.brainoMac.understand({ text: transcript });
+    lastUnderstanding = { text: String(transcript || ""), verdict };
+  } catch (error) {
+    logRenderer("hil.understand.renderer_failed", { error: String(error?.message || error) });
+    return false;
+  } finally {
+    interjectionInFlight = false;
+  }
+  if (!verdict?.running || !verdict.understanding) return false;
+  const { kind, task } = verdict.understanding;
+  if (kind === "stop") {
+    const stopped = await window.brainoMac.stopRunningJob();
+    logRenderer("voice.interjection", { kind, stopped: Boolean(stopped?.ok) });
+    voiceTurnInFlight = false;
+    processing = false;
+    cancelPendingNotchThinking();
+    nfSetThinking("");
+    setStatus("listening", "Listening");
+    await speak("Stopped.");
+    return true;
+  }
+  if (kind === "correction" || kind === "addition") {
+    const told = await window.brainoMac.tellRunningJob(task);
+    logRenderer("voice.interjection", { kind, told: Boolean(told?.ok), chars: task.length });
+    /* If the job finished between him speaking and this landing there is
+       nothing to fold into, so let it become a normal turn instead of
+       swallowing it. */
+    return Boolean(told?.ok);
+  }
+  /* "chat" while working, or a different job entirely: both mean this is a turn
+     of its own, which is what the caller already does. */
+  logRenderer("voice.interjection", { kind, told: false });
+  return false;
+}
+
+async function flushRealtimeTranscript(reason) {
   const transcript = String(rtUserTranscript || "").trim();
   if (reason === "speech_stopped" && transcript && !rtTranscriptFinal) {
     scheduleRealtimeTranscriptFlush("waiting_final_transcript", REALTIME_TRANSCRIPT_IDLE_FLUSH_MS);
@@ -6845,6 +7181,30 @@ function flushRealtimeTranscript(reason) {
     stopListeningNow("voice_phrase");
     return;
   }
+  /* Talking to him while he works is not always a new job.
+   *
+   * This used to hang off "he is being interrupted mid-sentence", which is the
+   * wrong moment: during the BookMyShow run he was not speaking, he was
+   * WORKING, so it never fired once. HIL read all three corrections correctly
+   * and every one of them went to a side conversation instead — "I said
+   * insidious" answered with "that's got a creepy vibe" while the job carried
+   * on searching NCDS, deaf.
+   *
+   * A job being in flight is the condition, not his mouth being open. A person
+   * folds a correction into what they are doing, stops when told to stop, and
+   * ignores a remark that was not about the job. Which of those it is cannot be
+   * pattern matched, so HIL is asked. If HIL cannot answer, the old behaviour
+   * stands: a classifier that is down must never swallow a command. */
+  if (accepted) {
+    const handled = await routeInterjectionIntoRunningJob(transcript);
+    if (handled) {
+      nfSetHeard(transcript, { durationMs: 1400 });
+      setStatus("thinking", "Working on it");
+      markRealtimeActivity("interjection_folded", { schedule: false });
+      return;
+    }
+  }
+
   /* A new instruction during long work is an interruption, not noise.
      Only after the turn has been running a moment, so that his own voice coming
      back through the microphone cannot cut him off mid-sentence. */
@@ -6927,6 +7287,12 @@ function flushRealtimeTranscript(reason) {
       if (await runBrainoGrowVoiceCommand(turnText)) return;
       if (await runQuickVoiceCommand(turnText)) return;
       if (await runMacTeamInput(turnText, { keepRealtime: true, fromVoice: true })) return;
+      /* Before the chat fork, because chat is exactly what swallows this. */
+      const resumed = takeOwedTask(turnText);
+      if (resumed) {
+        await runDelegate(resumed, { keepRealtime: true });
+        return;
+      }
       if (shouldUseRealtimeDirectChat(turnText)) {
         const handled = await answerViaRealtimeChat(turnText);
         if (handled) return;
@@ -7036,6 +7402,7 @@ function handleRealtimeEvent(event) {
         hadStreamTts: Boolean(realtimeStreamTts),
         responseInFlight: realtimeResponseInFlight,
       });
+      rtBargeInAt = Date.now();
       interruptVoiceTurn("barge_in", "speech_started");
       setStatus("hearing", "Hearing you");
       return;

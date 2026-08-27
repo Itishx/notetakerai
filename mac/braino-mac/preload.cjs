@@ -2,6 +2,13 @@ const { contextBridge, ipcRenderer, webUtils } = require("electron");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
+/* The promise detector, bridged rather than copied.
+ *
+ * extension/lib/hilShared.js is the single copy of these judgements and
+ * hil-verify.cjs says so out loud. The renderer is context-isolated so it
+ * cannot require it, and a second regex living over there is exactly how the
+ * same bug gets found twice. */
+const { macPromisesAction } = require(path.join(__dirname, "hil-verify.cjs"));
 
 // Same userData path main.cjs writes profiles.mascot's local cache to
 // (mascot.json) — read here, synchronously, so the walker mounts with the
@@ -88,7 +95,14 @@ contextBridge.exposeInMainWorld("brainoMac", {
   revealPath: (target) => ipcRenderer.invoke("braino-mac:reveal-path", target),
   authSignOut: () => ipcRenderer.invoke("braino-mac:auth-sign-out"),
   ensureAuth: (reason) => ipcRenderer.invoke("braino-mac:ensure-auth", reason),
-  delegate: (prompt) => ipcRenderer.invoke("braino-mac:delegate", prompt),
+  delegate: (prompt, options) => ipcRenderer.invoke("braino-mac:delegate", prompt, options || {}),
+  /* "Give me a moment" is a promise, "here they are" is not. */
+  promisesAction: (text) => macPromisesAction(text),
+  /* What did they just say — asked, not matched. */
+  jobRunning: () => ipcRenderer.invoke("braino-mac:job-running"),
+  understand: (payload) => ipcRenderer.invoke("braino-mac:understand", payload || {}),
+  tellRunningJob: (note) => ipcRenderer.invoke("braino-mac:tell-running-job", { note }),
+  stopRunningJob: () => ipcRenderer.invoke("braino-mac:stop-running-job"),
   demoAction: (action, payload) => ipcRenderer.invoke("braino-mac:demo-action", action, payload),
   delegateState: () => ipcRenderer.invoke("braino-mac:delegate-state"),
   cursorModeState: () => ipcRenderer.invoke("braino-mac:cursor-mode-state"),

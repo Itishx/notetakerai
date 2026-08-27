@@ -1,0 +1,27 @@
+/* The stage only. Everything inside #notch-face is the Mac's own CSS. */
+.nl { min-height: 100vh; padding: 40px 44px 80px; background: #0d0d0f; color: #f5f5f7;
+      font-family: "SF Pro Display", -apple-system, BlinkMacSystemFont, sans-serif; }
+.nl-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; }
+.nl-head h1 { margin: 0; font-size: 28px; font-weight: 600; letter-spacing: -.02em; }
+.nl-head p { margin: 6px 0 0; font-size: 14px; color: rgba(255,255,255,.5); }
+.nl-toggle { display: flex; align-items: center; gap: 8px; font-size: 13px; color: rgba(255,255,255,.6); }
+
+.nl-states { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 26px; }
+.nl-states button { padding: 9px 16px; border-radius: 999px; cursor: pointer;
+  border: 1px solid rgba(255,255,255,.14); background: rgba(255,255,255,.04);
+  color: rgba(255,255,255,.68); font-size: 13px; font-weight: 500; }
+.nl-states button.is-on { background: #e8786e; border-color: #e8786e; color: #17110f; font-weight: 600; }
+.nl-hint { margin: 14px 0 0; font-size: 13.5px; color: rgba(255,255,255,.44); }
+
+/* A stand-in Mac screen, so the notch hangs off a menu bar like it really does. */
+.nl-stage { position: relative; margin-top: 22px; height: 560px; border-radius: 14px; overflow: hidden;
+  background: linear-gradient(160deg, #6f86d6, #48c6ef 60%, #96c8ff); }
+.nl-menubar { display: flex; align-items: center; gap: 20px; height: 32px; padding: 0 18px;
+  background: rgba(0,0,0,.34); backdrop-filter: blur(12px);
+  font-size: 12.5px; font-weight: 600; color: rgba(255,255,255,.86); }
+/* The shadow host is the only thing the page positions; everything inside it
+   is the Mac's own CSS, which cannot reach back out. */
+.nl-host { position: absolute; inset: 0; pointer-events: none; }
+
+.nl-foot { margin-top: 20px; }
+.nl-foot code { font-size: 12px; color: rgba(255,255,255,.4); font-family: ui-monospace, SFMono-Regular, monospace; }
