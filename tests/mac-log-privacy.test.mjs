@@ -52,7 +52,10 @@ test("the screen gets the same treatment as the file", () => {
   /* Dictation is the one place where every word you say is the payload. */
   assert.match(main, /console\.log\(scrubForLog\(line\), Object\.keys\(extra\)\.length \? sanitizeForLog\(extra\)/);
   /* HIL says the sentence back in its own words, in the terminal, twice. */
-  assert.match(main, /\[Braino HIL\] \$\{r\.verdict\} — \$\{scrubForLog\(r\.restated_goal\)\}/);
+  /* The line now names the command it belongs to, because it is fire and forget
+     and lands after whatever was said next. Both halves are scrubbed: the goal
+     as always, and the command that was added beside it. */
+  assert.match(main, /\[Braino HIL\] \$\{r\.verdict\} on "\$\{scrubForLog\(String\(raw \|\| ""\)\.slice\(0, 60\)\)\}" — \$\{scrubForLog\(r\.restated_goal\)\}/);
   assert.match(main, /\[Braino HIL-LOOP\][\s\S]{0,40}scrubForLog\(thinking\)/);
 });
 

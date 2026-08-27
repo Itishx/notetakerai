@@ -216,3 +216,52 @@ test("a name that matches nothing twice ends the search", () => {
   assert.match(prompt, /Do not run the same search a third time/);
   assert.match(prompt, /HIL_LOOP_VERSION = "2\.7\.0"/);
 });
+
+/* Round 010. The Book tickets button was in the middle of the screen and he
+   scrolled five times looking for it, because Chrome had given the
+   accessibility tree browser furniture and nothing else. He was not blind: the
+   look action screenshots the screen and has always worked. He simply never
+   chose it, and a tree with nothing in it looks exactly like a page not
+   scrolled far enough. */
+test("he looks as he starts, and again instead of giving up", () => {
+  const main_ = read("../mac/braino-mac/main.cjs");
+  /* Exactly one implementation. An earlier attempt at this round added a
+     second macLookAtScreen and the later declaration silently won. */
+  assert.equal((main_.match(/async function macLookAtScreen/g) || []).length, 1);
+  const loop = main_.slice(main_.indexOf("async function runMacHilLoop"));
+  /* Grounded before the first move, and not on a resumed run. */
+  assert.match(loop, /if \(!resume\) \{[\s\S]{0,320}macLookAtScreen\(String\(command \|\| ""\)\)/);
+  assert.match(loop, /Looking at the screen before I start, I can see:/);
+  /* Circling is the moment a person stops and looks properly. */
+  const circling = loop.slice(loop.indexOf('logMac("hil.loop.circling"'));
+  assert.ok(circling.indexOf("macLookAtScreen") < circling.indexOf('say: said ||'), "it must look BEFORE it gives up");
+  assert.match(circling, /rescuedByLooking = true/);
+  /* One rescue, and a ceiling for the run. */
+  assert.match(main_, /const MAC_HIL_MAX_LOOKS = 3;/);
+  assert.match(circling, /!rescuedByLooking && looks < MAC_HIL_MAX_LOOKS/);
+});
+
+/* A page with nothing on it and a page whose content fell off the end of the
+   cap need opposite fixes, and the log could tell them apart. */
+test("what he was handed is on the record", () => {
+  const main_ = read("../mac/braino-mac/main.cjs");
+  assert.match(main_, /logMac\("hil\.observed", \{[\s\S]{0,200}hidden: Number\(data\?\.hidden\) \|\| 0,[\s\S]{0,60}cap: MAC_HIL_OBSERVE_CAP,/);
+});
+
+/* "Deciding" was printed through his reply. */
+test("thinking never draws over an answer", () => {
+  const css = read("../mac/braino-mac/renderer/braino-mac.css");
+  const hide = css.slice(css.indexOf("#notch-face.nf-answer-open .nf-band,"));
+  const block = hide.slice(0, hide.indexOf("}") + 1);
+  /* The list was written against the old furniture and never updated. */
+  assert.match(block, /#notch-face\.nf-answer-open \.nf-think-chip,/);
+  assert.match(block, /#notch-face\.nf-answer-open \.nf-thinking-canvas,/);
+  assert.match(block, /display: none !important/);
+});
+
+/* A run that stood down because you asked for something else is not a failure
+   with an empty answer. */
+test("a handover reads as a handover", () => {
+  const main_ = read("../mac/braino-mac/main.cjs");
+  assert.match(main_, /result\?\.superseded[\s\S]{0,80}\(stood down, you asked for something else\)/);
+});

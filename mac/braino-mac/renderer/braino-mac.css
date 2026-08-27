@@ -3246,6 +3246,18 @@ body {
 #notch-face.nf-answer-open .nf-volume,
 #notch-face.nf-answer-open .nf-think-dots,
 #notch-face.nf-answer-open .nf-think-arrow,
+/* The two that were missing, and the reason his reply had "Deciding" printed
+   through it.
+ *
+ * This list was written against .nf-think-dots and .nf-think-arrow, the old
+ * furniture. The chip and the canvas replaced them and were never added, so
+ * an answer opening did not put the thinking layer away: startNotchAnswer
+ * drops the nf-thinking classes, but anything that sets a phase again after
+ * that (a late step, or the "Taking it on" line) puts the chip straight back
+ * on top of an open answer. Guaranteed here in CSS rather than by winning a
+ * race in JS: while an answer is up, thinking does not draw. */
+#notch-face.nf-answer-open .nf-think-chip,
+#notch-face.nf-answer-open .nf-thinking-canvas,
 #notch-face.nf-answer-open .nf-tray,
 #notch-face.nf-answer-open .nf-sonar {
   display: none !important;

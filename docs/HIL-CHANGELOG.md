@@ -11,6 +11,91 @@ memory of what a session felt like.
 
 ---
 
+## 2026-08-27 · Round 010 — the eyes were already there
+
+**What triggered it:** *"the book tickets button was right there on the screen
+and bro could not see it, kept scrolling. did bro take a look at the screen
+using vision?"* And the principle behind it: every part of him is supposed to be
+connected, the way a brain is connected to its hands and its eyes.
+
+**Round 009 landed first, and it works.** The interjection path executed in a
+real session for the first time:
+
+```
+09:23:00  hil.understand    running:true  kind:correction  "I meant to say itishpande21@gmail.com"
+09:23:00  hil.loop.told     note:"Use itishpande21@gmail.com as the r..."
+09:23:00  voice.interjection  kind:correction  told:true  chars:122
+```
+
+A correction went into the running job instead of into a side chat. That had
+never once happened.
+
+**I got the diagnosis wrong first and said so.** I told the founder the loop had
+no vision and could not look. False. `macLookAtScreen` has been in main.cjs the
+whole time, it screenshots the screen and hands it to a vision model, and it
+works: it ran successfully 32 seconds later on the very next command. During the
+booking run he chose `scroll`, `read`, `scroll`, `read`, `scroll` and never once
+chose `look`.
+
+So the gap was not a missing sense. **He had eyes and did not think to use
+them**, and the reason is worth keeping: when Chrome does not expose page
+content to the accessibility tree, the tree he gets is browser furniture, and a
+tree with nothing in it looks exactly like a page that has not been scrolled far
+enough. His reasoning was correct every step. The input was empty.
+
+**So looking stops being a decision he has to remember.**
+
+- **He looks as he starts.** One look before the first move, pushed into
+  `state.facts`, so the opening move is grounded in what is actually on screen.
+  Not on a resumed run.
+- **He looks instead of giving up.** Circling is precisely the moment a person
+  stops and looks properly. The guard now takes one screenshot, pushes what it
+  sees, clears the repeat window and continues. One rescue per run: if he
+  circles again after actually seeing the screen, the screen really is not
+  answering and stopping is right. `MAC_HIL_MAX_LOOKS = 3` caps the run.
+- **What he was handed is logged.** `hil.observed` records the element count,
+  the hidden count and the cap. The Book tickets run could not be diagnosed from
+  the log at all: there was no way to tell a page with nothing on it from a page
+  whose content fell off the end of a 220 element cap, and those need opposite
+  fixes.
+
+**A near miss worth recording.** Building this I added a second
+`macLookAtScreen` without noticing the first, and in JavaScript the later
+declaration silently wins. `node --check` passes that happily. Caught by reading
+the grep output rather than the file. There is now a test asserting exactly one
+definition exists.
+
+**The overlapping notch, properly this time.** Round 009 fixed the wrong thing:
+both overlapping replies were 140 and 118 characters against a threshold of 100,
+so they were already classified long and the short-to-long promotion never
+applied to them. The real fault is a CSS list. `#notch-face.nf-answer-open`
+hides `.nf-think-dots` and `.nf-think-arrow`, the old furniture. The chip and
+the canvas replaced those and were never added, so anything that set a phase
+after an answer opened put the thinking layer straight back on top of it, and
+"Deciding" printed through his reply. Guaranteed in CSS rather than by winning a
+race in JS. Verified by forcing the exact bad state on `/notch-lab`: with
+`nf-answer-open` and `nf-thinking` both set, the chip and canvas measure 0x0 and
+`display: none` while the answer sits at 480x146.
+
+**Two small ones from the same log.** *"Turn it off"* logging as a 10.3 second
+job with an empty answer was a correct handover reading as a silent failure: the
+run was superseded when the next command arrived, and a superseded run answers
+with nothing on purpose. It now says so. And the fire and forget `[Braino HIL]`
+line, which lands after whatever was said next, now names the command it belongs
+to: *"proceed, check Google Calendar"* printed under an unrelated sentence and
+read as though he had answered that sentence with a calendar.
+
+**Verified:** 203 tests, 202 pass, 4 new. Lint clean. The privacy test pinning
+the `[Braino HIL]` format was updated, and still asserts the goal is scrubbed,
+plus the command now beside it. The one failure is the same `lib/hilShared.js`
+drift in the built extension copy, unrelated, now seven rounds old.
+
+**Not verified on hardware.** In particular the start-of-run look adds a
+screenshot and a vision call to the front of every job, and how much that costs
+in felt latency can only be judged from a real session.
+
+---
+
 ## 2026-08-27 · Round 009 — I built the same bug I had just named
 
 **What triggered it:** the second BookMyShow run. He escalated correctly, worked

@@ -1146,6 +1146,16 @@ async function readCursorAgentSignal() {
   let data = null;
   try { data = JSON.parse(res.detail); } catch (_) { return null; }
   const elements = Array.isArray(data?.elements) ? data.elements : [];
+  /* What he was actually handed. Without this there is no way to tell a page
+     with nothing on it from a page whose content fell off the end of the cap,
+     and those need opposite fixes. The Book tickets run could not be diagnosed
+     from the log at all. */
+  logMac("hil.observed", {
+    app: data?.app || "",
+    elements: elements.length,
+    hidden: Number(data?.hidden) || 0,
+    cap: MAC_HIL_OBSERVE_CAP,
+  });
   if (!elements.length) return null;
   const codeBlocks = elements.filter((e) => /copy code to clipboard/i.test(String(e.name || ""))).length;
   return elements.length + codeBlocks * 4;
@@ -13790,7 +13800,12 @@ function fireHilReasonThinking(raw) {
     if (!r) return;
     // Always log. The terminal record is the point of this for testing, and it is
     // free of any timing concerns.
-    console.log(`[Braino HIL] ${r.verdict} — ${scrubForLog(r.restated_goal)}${r.clarifying_question ? ` | would have asked: ${scrubForLog(r.clarifying_question)}` : ""}`);
+    /* This is fire and forget, so it lands whenever it lands, which is often
+       after the next thing has been said. In one session "proceed, check Google
+       Calendar" printed underneath an unrelated sentence and read as though he
+       had answered that sentence with a calendar. It costs four words to say
+       which command it belongs to. */
+    console.log(`[Braino HIL] ${r.verdict} on "${scrubForLog(String(raw || "").slice(0, 60))}" — ${scrubForLog(r.restated_goal)}${r.clarifying_question ? ` | would have asked: ${scrubForLog(r.clarifying_question)}` : ""}`);
     logMac("hil.reason", { verdict: r.verdict, goal: textForLog(r.restated_goal || "") });
   }).catch((error) => console.log("[Braino HIL] reason failed:", error?.message || error));
 }
@@ -13834,6 +13849,9 @@ const MAC_HIL_REPEAT_WINDOW = 6;
 /* 120 hid the controls he was asked to click: "Faro is still below the visible
    element cap" is in the log, and he could not scroll to it either. */
 const MAC_HIL_OBSERVE_CAP = 220;
+/* A look is a screenshot, a downscale and a model call, so a run gets a few
+   rather than one per turn. */
+const MAC_HIL_MAX_LOOKS = 3;
 
 /* A new command cancels whatever he was doing.
    Two runs were alive at once in the log, both clicking, fighting over the same
@@ -14133,6 +14151,21 @@ async function runMacHilLoop(command, resume = null) {
   let lastStep = resume?.lastStep || null;
   let said = resume?.said || "";
   let retried = 0;
+  /* Every part of him is supposed to be connected. The eyes were not.
+   *
+   * `look` has always existed and has always worked: it screenshots the screen
+   * and hands it to a vision model. The loop simply did not choose it. A real
+   * run scrolled five times hunting a Book tickets button that was in the
+   * middle of the screen, because Chrome had given the accessibility tree
+   * nothing but browser furniture and a tree with nothing in it looks exactly
+   * like a page not scrolled far enough.
+   *
+   * So looking stops being a decision he has to remember to make. He looks once
+   * as he starts, so the first move is grounded in what is actually there, and
+   * he looks again instead of giving up when he catches himself repeating.
+   * Bounded, because each look is a screenshot and a model call. */
+  let looks = 0;
+  let rescuedByLooking = false;
   /* The signature of the one step the user has just approved. Spent on use, so
      a yes covers the thing that was asked about and nothing else. */
   let approvedSig = String(resume?.approvedSig || "");
@@ -14143,6 +14176,16 @@ async function runMacHilLoop(command, resume = null) {
   const deadline = Date.now() + MAC_HIL_MAX_MS;
   logMac("hil.loop.start", { command: textForLog(command), runId });
   macActiveHilRun = { runId, state, generation: myGeneration, command: String(command || "") };
+  if (!resume) {
+    looks += 1;
+    const first = await macLookAtScreen(String(command || ""));
+    if (first?.ok && first.sees) {
+      state.facts.push(`Looking at the screen before I start, I can see: ${first.sees}`);
+      logMac("hil.loop.looked", { runId, reason: "start", chars: first.sees.length });
+    } else {
+      logMac("hil.loop.look_failed", { runId, reason: "start", why: first?.error || "no answer" });
+    }
+  }
 
   try {
   for (let step = startStep; step < maxSteps; step += 1) {
@@ -14365,6 +14408,23 @@ async function runMacHilLoop(command, resume = null) {
     const repeats = recentActions.filter((sig) => sig === stepSig).length;
     if (repeats >= MAC_HIL_REPEAT_LIMIT) {
       logMac("hil.loop.circling", { runId, step, action: stepSig });
+      /* Going in circles is the exact moment a person stops and looks properly.
+         One rescue per run: if he circles again after having actually seen the
+         screen, the screen really is not answering and stopping is right. */
+      if (!rescuedByLooking && looks < MAC_HIL_MAX_LOOKS) {
+        looks += 1;
+        rescuedByLooking = true;
+        const seen = await macLookAtScreen(String(command || ""));
+        if (seen?.ok && seen.sees) {
+          state.facts.push(`I was repeating myself, so I looked at the screen properly. It shows: ${seen.sees}`);
+          state.facts.push("Act on what is actually on the screen above. Do not scroll or read again looking for something that is already in view.");
+          if (state.facts.length > 12) state.facts = state.facts.slice(-12);
+          recentActions.length = 0;
+          logMac("hil.loop.looked", { runId, reason: "circling", step, chars: seen.sees.length });
+          continue;
+        }
+        logMac("hil.loop.look_failed", { runId, reason: "circling", why: seen?.error || "no answer" });
+      }
       return {
         ok: false,
         say: said || "I keep trying the same thing and the screen is not changing, so I have stopped rather than keep going.",
@@ -16246,7 +16306,13 @@ ipcMain.handle("braino-mac:delegate", async (event, prompt, options) => {
   if (result?.say && String(result.say).trim()) lastDelegateSay = String(result.say).trim();
   logMac("feature.executed", {
     heard: textForLog(String(prompt || "").slice(0, 160)),
-    responded: textForLog(String(result?.say || "").slice(0, 160)),
+    /* A superseded run answers with nothing on purpose: you asked for something
+       else and this one stood down. Printing that as an empty result made a
+       correct handover look like a job that failed silently. */
+    responded: result?.superseded
+      ? "(stood down, you asked for something else)"
+      : textForLog(String(result?.say || "").slice(0, 160)),
+    superseded: Boolean(result?.superseded),
     ok,
     durationMs,
     efficiencyPct: featureEfficiencyPct(ok, durationMs),
