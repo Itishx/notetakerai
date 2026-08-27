@@ -576,13 +576,20 @@ const GAZE_TARGETS: ReadonlyArray<[number, number]> = [
 const GAZE_HOLD = 1.45;
 
 function wanderingGaze(t: number) {
-  const step = t / GAZE_HOLD;
-  const index = Math.floor(step) % GAZE_TARGETS.length;
-  const next = (index + 1) % GAZE_TARGETS.length;
+  /* `%` keeps the sign of its left operand in JS, so a negative or NaN `t` gave
+     a negative index, GAZE_TARGETS[-1] came back undefined, and `from[0]` threw
+     "Cannot read properties of undefined (reading '0')" — which took the whole
+     <Braino> subtree with it and rendered /instagraphics as a blank page. The
+     clock can go negative on a remount, so guard the arithmetic, not the caller. */
+  const count = GAZE_TARGETS.length;
+  const step = Number.isFinite(t) ? t / GAZE_HOLD : 0;
+  const index = ((Math.floor(step) % count) + count) % count;
+  const next = (index + 1) % count;
   // ease over the last 22% of each hold, so the flick is quick and the hold long
   const p = clamp((step - Math.floor(step) - 0.78) / 0.22, 0, 1);
   const e = p * p * (3 - 2 * p);
-  const from = GAZE_TARGETS[index], to = GAZE_TARGETS[next];
+  const from = GAZE_TARGETS[index] ?? GAZE_TARGETS[0];
+  const to = GAZE_TARGETS[next] ?? GAZE_TARGETS[0];
   return { x: from[0] + (to[0] - from[0]) * e, y: from[1] + (to[1] - from[1]) * e };
 }
 
