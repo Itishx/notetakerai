@@ -223,15 +223,17 @@ test("a name that matches nothing twice ends the search", () => {
    look action screenshots the screen and has always worked. He simply never
    chose it, and a tree with nothing in it looks exactly like a page not
    scrolled far enough. */
-test("he looks as he starts, and again instead of giving up", () => {
+test("he looks when he is stuck, and not before", () => {
   const main_ = read("../mac/braino-mac/main.cjs");
   /* Exactly one implementation. An earlier attempt at this round added a
      second macLookAtScreen and the later declaration silently won. */
   assert.equal((main_.match(/async function macLookAtScreen/g) || []).length, 1);
   const loop = main_.slice(main_.indexOf("async function runMacHilLoop"));
-  /* Grounded before the first move, and not on a resumed run. */
-  assert.match(loop, /if \(!resume\) \{[\s\S]{0,320}macLookAtScreen\(String\(command \|\| ""\)\)/);
-  assert.match(loop, /Looking at the screen before I start, I can see:/);
+  /* Never at the top of a run. A screenshot and a vision call on every job
+     buys nothing on the runs that were already working, which is most of
+     them, and the cost is paid before anything has gone wrong. */
+  const start = loop.slice(0, loop.indexOf("for (let step = startStep"));
+  assert.doesNotMatch(start, /macLookAtScreen/);
   /* Circling is the moment a person stops and looks properly. */
   const circling = loop.slice(loop.indexOf('logMac("hil.loop.circling"'));
   assert.ok(circling.indexOf("macLookAtScreen") < circling.indexOf('say: said ||'), "it must look BEFORE it gives up");

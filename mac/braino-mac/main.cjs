@@ -14160,10 +14160,13 @@ async function runMacHilLoop(command, resume = null) {
    * nothing but browser furniture and a tree with nothing in it looks exactly
    * like a page not scrolled far enough.
    *
-   * So looking stops being a decision he has to remember to make. He looks once
-   * as he starts, so the first move is grounded in what is actually there, and
-   * he looks again instead of giving up when he catches himself repeating.
-   * Bounded, because each look is a screenshot and a model call. */
+   * So looking stops being a decision he has to remember to make, WITHOUT
+   * becoming a toll on every job. A screenshot and a vision call at the top of
+   * every run would buy nothing on the runs that were already working, which is
+   * most of them. It happens when it is needed instead: he looks when he
+   * catches himself repeating, which is exactly the moment a person stops and
+   * looks properly, and it is the moment the Book tickets run reached at step
+   * four and answered by giving up. */
   let looks = 0;
   let rescuedByLooking = false;
   /* The signature of the one step the user has just approved. Spent on use, so
@@ -14176,16 +14179,7 @@ async function runMacHilLoop(command, resume = null) {
   const deadline = Date.now() + MAC_HIL_MAX_MS;
   logMac("hil.loop.start", { command: textForLog(command), runId });
   macActiveHilRun = { runId, state, generation: myGeneration, command: String(command || "") };
-  if (!resume) {
-    looks += 1;
-    const first = await macLookAtScreen(String(command || ""));
-    if (first?.ok && first.sees) {
-      state.facts.push(`Looking at the screen before I start, I can see: ${first.sees}`);
-      logMac("hil.loop.looked", { runId, reason: "start", chars: first.sees.length });
-    } else {
-      logMac("hil.loop.look_failed", { runId, reason: "start", why: first?.error || "no answer" });
-    }
-  }
+
 
   try {
   for (let step = startStep; step < maxSteps; step += 1) {

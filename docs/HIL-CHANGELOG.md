@@ -45,9 +45,6 @@ enough. His reasoning was correct every step. The input was empty.
 
 **So looking stops being a decision he has to remember.**
 
-- **He looks as he starts.** One look before the first move, pushed into
-  `state.facts`, so the opening move is grounded in what is actually on screen.
-  Not on a resumed run.
 - **He looks instead of giving up.** Circling is precisely the moment a person
   stops and looks properly. The guard now takes one screenshot, pushes what it
   sees, clears the repeat window and continues. One rescue per run: if he
@@ -90,9 +87,20 @@ the `[Braino HIL]` format was updated, and still asserts the goal is scrubbed,
 plus the command now beside it. The one failure is the same `lib/hilShared.js`
 drift in the built extension copy, unrelated, now seven rounds old.
 
-**Not verified on hardware.** In particular the start-of-run look adds a
-screenshot and a vision call to the front of every job, and how much that costs
-in felt latency can only be judged from a real session.
+**A look at the top of every run was built and then removed**, same session, on
+the founder's call and correctly: *"I don't want him to look at every single
+job, that's just wasting time."* It would have bought nothing on the runs that
+were already working, which is most of them, and charged a screenshot and a
+vision call before anything had gone wrong. Looking now happens only where the
+need is proven: when he catches himself repeating. That is the exact point the
+Book tickets run reached at step four and answered by giving up.
+
+A second trigger is tempting and deliberately not built yet: looking when the
+observation comes back with no page content in it, which is the underlying fault.
+It needs a threshold, and picking one today would be a guess. `hil.observed` was
+added this round precisely to gather that, so it can be set from real numbers.
+
+**Not verified on hardware.**
 
 ---
 
