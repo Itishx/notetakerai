@@ -72,3 +72,11 @@ test("what a delegated job spent is on the record", () => {
   assert.match(main, /costUsd: run\.usage\?\.estimated_cost_usd \?\? null/);
   assert.match(main, /model: run\.usage\?\.model \|\| ""/);
 });
+
+/* Verified against a real install, v0.20.6. The first live run failed with no
+   provider configured, and the useful sentence was in the usage file rather
+   than on stderr: all the exit code told us was "1". */
+test("his own words about the failure beat our guess", () => {
+  const bridge = readFileSync(new URL("../mac/braino-mac/hermes.cjs", import.meta.url), "utf8");
+  assert.match(bridge, /detail: String\(usage\?\.failure \|\| stderr \|\| error\.message \|\| ""\)/);
+});

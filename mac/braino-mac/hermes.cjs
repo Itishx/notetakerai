@@ -97,9 +97,13 @@ function runHermes(task, options = {}) {
            telling apart from a backend that is simply down. */
         const code = typeof error.code === "number" ? error.code : null;
         const reason = error.killed ? "timeout" : code === 2 ? "bad_invocation" : "backend_failed";
+        /* The usage file carries Hermes's own sentence about what went wrong,
+           and it is far better than our guess: a first real run against the
+           binary said "No inference provider configured. Run 'hermes model'..."
+           while all we knew was exit code 1. Prefer his words to ours. */
         return resolve({
           ok: false, reason, code, ms, usage,
-          detail: String(stderr || error.message || "").slice(0, 400),
+          detail: String(usage?.failure || stderr || error.message || "").slice(0, 400),
         });
       }
       if (text.length < MIN_USEFUL_CHARS) return resolve({ ok: false, reason: "empty_answer", ms, usage });
