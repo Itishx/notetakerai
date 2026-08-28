@@ -40,7 +40,7 @@ export type HilTool = {
   handler?: string;
 };
 
-export const HIL_CATALOG_VERSION = "1.2.0";
+export const HIL_CATALOG_VERSION = "1.3.0";
 
 export const HIL_TOOL_CATALOG: HilTool[] = [
   // Split, because one entry covering both halves of actOnSelectedText made the
@@ -84,6 +84,11 @@ export const HIL_TOOL_CATALOG: HilTool[] = [
   { name: "cursor_mode_set", params: ["enabled"], gloss: "Toggle Cursor Mode: watch the git repo, announce when work settles", stateful: true, zeroNetwork: true, },
   { name: "cursor_mode_status", params: [], gloss: "Report whether a coding task is active and which files changed", stateful: true, zeroNetwork: true, },
   { name: "deep_research", params: ["query"], gloss: "Open source tabs, read them, and speak a synthesised comparison", handler: "runResearch", },
+  // The general "go and get this for me" hand. Not logo-specific: it takes names
+  // or URLs and ends with an organised folder. Reversible — everything lands in
+  // one new directory and nothing existing is touched — so the router may fire
+  // it directly. Needs the network by definition.
+  { name: "fetch_assets", params: ["items", "folder", "kind"], gloss: "Download things named or linked by the user and organise them into one folder, with a sources manifest", handler: "runFetchAssets", },
   { name: "delete_current_finder_folder", params: [], gloss: "Trash the folder open in the frontmost Finder window", irreversible: true, zeroNetwork: true, handler: "deleteCurrentFinderFolder", },
   { name: "delete_file", params: ["query", "kind"], gloss: "Find a file and stage deletion, awaiting spoken confirmation", stateful: true, zeroNetwork: true, handler: "requestDeleteConfirmation", },
   { name: "design_cowork", params: [], gloss: "Screenshot the frontmost website and hand it to Claude Design for redesign", irreversible: true, stateful: true, handler: "runDesignCowork", },
