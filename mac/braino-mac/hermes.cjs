@@ -32,7 +32,19 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 
-const HERMES_TIMEOUT_MS = 180000;
+/* Fifteen minutes, not three.
+ *
+ * Three minutes was a guess and it was wrong in the worst way: a real
+ * BookMyShow run was killed at exactly 180019ms, mid-browse, with the browser
+ * open and the job part done. Braino shot his own delegate. A booking that
+ * loads a cinema, picks a showtime and reaches a seat map is minutes of real
+ * page loads, and the earlier run that DID finish still took 99 seconds for a
+ * simpler job.
+ *
+ * A long ceiling is safe here because the heartbeat means a slow job looks
+ * like a slow job rather than a hang, and because a killed job loses all its
+ * work while a slow one only costs patience. */
+const HERMES_TIMEOUT_MS = 900000;
 /* A refusal to answer is not an answer. If Hermes returns nothing usable we
    fall back rather than speak an empty sentence. */
 const MIN_USEFUL_CHARS = 2;

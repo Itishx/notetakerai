@@ -140,3 +140,14 @@ test("Hermes is visible in the terminal, not just the log file", () => {
   /* Cost and duration are the two numbers worth seeing on a finished job. */
   assert.match(done.slice(0, 420), /\$\{secs\}s/);
 });
+
+/* A real BookMyShow run was killed at exactly 180019ms, mid-browse, with the
+   browser open and the job half done. Braino shot his own delegate. */
+test("a long browser job is not killed for being long", () => {
+  const bridge = readFileSync(new URL("../mac/braino-mac/hermes.cjs", import.meta.url), "utf8");
+  const m = bridge.match(/const HERMES_TIMEOUT_MS = (\d+);/);
+  assert.ok(m, "timeout constant must exist");
+  assert.ok(Number(m[1]) >= 600000, `ceiling is ${Number(m[1])}ms, too low for a real booking`);
+  /* Safe because a slow job still looks alive. */
+  assert.match(bridge, /the heartbeat means a slow job looks/);
+});
