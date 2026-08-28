@@ -21,7 +21,11 @@
     "mac:format:build": "cd mac/braino-mac/native/BrainoFormat && swiftc -O -o BrainoFormat main.swift",
     "mac:dev": "env -u ELECTRON_RUN_AS_NODE electron mac/braino-mac/main.cjs",
     "mac:cloud": "env -u ELECTRON_RUN_AS_NODE BRAINO_PARAKEET=0 electron mac/braino-mac/main.cjs",
-    "mac:dashboard": "env -u ELECTRON_RUN_AS_NODE BRAINO_MAC_DASHBOARD=1 electron mac/braino-mac/main.cjs"
+    "mac:dashboard": "env -u ELECTRON_RUN_AS_NODE BRAINO_MAC_DASHBOARD=1 electron mac/braino-mac/main.cjs",
+    "pdf:pitchdeck": "node scripts/build-pitchdeck-pdf.mjs public/braino-pitchdeck.pdf",
+    "pdf:v10": "node scripts/print-deck.mjs files/braino-pitch-v10.html public/braino-pitch-v10.pdf",
+    "pdf:v11": "node scripts/print-deck.mjs files/braino-pitch-v11.html public/braino-pitch-v11.pdf",
+    "logos:v10": "node scripts/inline-deck-logos.mjs files/braino-pitch-v10.html"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

@@ -1,0 +1,55 @@
+{
+  "fetchedFor": [
+    "LinkedIn",
+    "OpenAI",
+    "ZoomInfo",
+    "Gmail"
+  ],
+  "kind": "logo",
+  "folder": "public/logos",
+  "assets": [
+    {
+      "name": "LinkedIn",
+      "query": "LinkedIn",
+      "file": "public/logos/linkedin.svg",
+      "source": "wikimedia",
+      "ext": "svg",
+      "licence": "Public domain",
+      "credit": "LinkedIn 2021.svg",
+      "pageUrl": "https://commons.wikimedia.org/wiki/File%3ALinkedIn%202021.svg",
+      "family": "images"
+    },
+    {
+      "name": "OpenAI",
+      "query": "OpenAI",
+      "file": "public/logos/openai.svg",
+      "source": "wikimedia",
+      "ext": "svg",
+      "licence": "Public domain",
+      "credit": "OpenAI Logo 2015.svg",
+      "pageUrl": "https://commons.wikimedia.org/wiki/File%3AOpenAI%20Logo%202015.svg",
+      "family": "images"
+    },
+    {
+      "name": "ZoomInfo",
+      "query": "ZoomInfo",
+      "file": "public/logos/zoominfo.svg",
+      "source": "wikimedia",
+      "ext": "svg",
+      "licence": "Public domain",
+      "credit": "ZoomInfo logo.svg",
+      "pageUrl": "https://commons.wikimedia.org/wiki/File%3AZoomInfo%20logo.svg",
+      "family": "images"
+    },
+    {
+      "name": "Gmail",
+      "query": "Gmail",
+      "file": "public/logos/gmail.svg",
+      "source": "simple-icons",
+      "ext": "svg",
+      "licence": "CC0 1.0",
+      "credit": "Gmail",
+      "family": "images"
+    }
+  ]
+}
