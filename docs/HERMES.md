@@ -16,31 +16,55 @@ Braino looks for the binary on every command and does nothing at all when it is
 absent, so installing it mid-session is enough. `BRAINO_HERMES=0` turns the
 whole path off. `BRAINO_HERMES_BIN=/path/to/hermes` points at a custom install.
 
-## The split, and why it is not "easy here, hard there"
+## The split, and the correction that produced it
 
-The obvious division is quick jobs for Braino and hard ones for Hermes. That
-division is wrong, and shipping it would have made Braino worse.
+The first version of this integration was built on "Hermes has no hands", and
+that was **wrong**. It was inferred from a README that did not mention them
+rather than checked. Hermes has:
 
-**Braino has hands on this Mac.** He clicks, types, scrolls, opens apps, plays
-music, reads files, and drives the browser you are already signed into.
-**Hermes has none of that.** Sending "book the tickets on BookMyShow" to Hermes
-hands it to an agent with no access to the session you are logged into, and it
-fails in a way that reads as Braino refusing.
+- **twelve browser tools**, including `browser_vision` (screenshot plus AI)
+- **computer use** via `cua-driver`, clicking and typing in the background
+  without moving your cursor or switching Spaces
+- **`browser.use_real_profile`**, which snapshots your actual browser profile,
+  cookies and logins included, and drives the snapshot while your live profile
+  stays untouched
 
-So the question is not how hard the job is. It is **whether the job needs your
-screen**.
+So he can book the tickets, signed in as you, without taking over your screen.
+The division is therefore what each is genuinely better at, not who has hands.
 
 | | Braino | Hermes |
 | --- | --- | --- |
-| Anything on your screen or in an account you are signed into | yes | never |
-| Clicking, typing, opening, playing, booking, messaging | yes | no |
-| A quick answer | yes | no |
-| Research across many sources, comparison, analysis | no | yes |
-| Long reasoning, planning, substantial writing, code | no | yes |
-| Something you will want remembered and built on later | no | yes |
+| Booking, buying, ordering, checking out | no | **yes** |
+| Forms, signing up, applying, submitting | no | **yes** |
+| Posting or sending through a website | no | **yes** |
+| Research, comparison, long reasoning, code | no | **yes** |
+| Apps, windows, playback, files, screenshots | **yes** | no |
+| System settings, calls, texts, dictation, meetings | **yes** | no |
+| Quick answers, and anything about Braino himself | **yes** | no |
+| The approval gate | **yes** | never |
 
-When both apply, it is Braino: a job that needs the screen at any point cannot
-be done by a worker without one. When the router is unsure, it is Braino.
+When the router is unsure, it is Braino. Cost is never a routing reason: you
+approve before anything is paid for, so the router decides on what the job *is*.
+
+## Watching him work
+
+Two things, because a job that takes two minutes must not look like Braino
+having gone quiet.
+
+**A visible browser.** `browser.headed: true` in `~/.hermes/config.yaml` gives a
+real Chromium window you can watch, and it stays open between turns so you can
+step in for a sign-in challenge or a CAPTCHA and keep the login warm.
+
+**The notch narrates.** `hermes -z` is silent until it finishes, and `hermes
+chat` prints previews onto the same stdout as the answer with its own furniture
+mixed in, then exits 0 even when the run failed. So the answer comes from `-z`
+and the narration is tailed from `~/.hermes/logs/agent.log`, reading only what
+is appended after the run starts. Each line goes into the same thinking panel
+Braino uses for his own steps.
+
+The log filter is deliberately loose, because what a tool call looks like in
+that file cannot be known until a real job has run, and a filter that is too
+strict shows nothing at all.
 
 ## How a command reaches him
 
@@ -79,8 +103,9 @@ not that Hermes is down. Worth telling apart when reading a log.
 - **No `hermes serve`.** The daemon speaks JSON-RPC over WebSocket on
   `127.0.0.1:9119` and would let a job stream progress instead of arriving whole
   after a silence. The one-shot was the honest thing to build first.
-- **Nothing has run against a real Hermes install**, because it is not installed
-  on this machine yet. The bridge is covered by tests against the documented
-  contract, which is not the same as having seen it work.
+- **No job has completed yet.** Hermes v0.20.6 is installed and the failure path
+  is verified against the real binary, but nothing has run end to end because no
+  inference provider is configured. The narration filter in particular is
+  guesswork until a real job writes real lines.
 - **No shared memory.** Hermes remembers its own sessions; Braino remembers his.
   Neither can read the other's.

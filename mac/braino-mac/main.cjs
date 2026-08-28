@@ -14840,7 +14840,12 @@ async function runDelegate(prompt, options = {}) {
     if (route) {
       logMac("hermes.start", { task: textForLog(route.task, 160), why: route.why });
       sendTaskProgress({ status: "thinking", text: "Hermes is on it" });
-      const run = await runHermes(route.task);
+      /* Every line he writes while working goes to the same thinking panel
+         Braino uses for his own steps, so a two minute job reads as work
+         happening rather than as Braino having gone quiet. */
+      const run = await runHermes(route.task, {
+        onProgress: (line) => sendTaskProgress({ status: "thinking", text: line }),
+      });
       if (run.ok) {
         logMac("hermes.done", {
           chars: run.text.length,

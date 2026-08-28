@@ -5,22 +5,19 @@
  * this loop: it keeps what it learns across sessions and will happily spend
  * minutes on one job.
  *
- * WHY IT IS NOT SIMPLY "the hard half".
+ * WHAT HE IS FOR, AFTER ONE CORRECTION.
  *
- * The obvious split is easy here, hard there. That split is wrong and it would
- * make Braino worse. This loop drives THIS Mac and THIS screen: the browser the
- * user is already signed into, their windows, their files. Hermes has none of
- * that. Sending "book the tickets on BookMyShow" to Hermes hands it to an agent
- * with no access to the session where the user is logged in, and it fails in a
- * way that looks like Braino refusing.
+ * The first version of this file said Hermes had no hands and kept every job
+ * that touched a browser here. That was wrong, and it was inferred rather than
+ * checked: Hermes has twelve browser tools including vision, computer use that
+ * clicks and types in the background without moving the cursor, and a real
+ * profile mode that snapshots the user's own browser so it works signed in as
+ * them. It can book the tickets, and without taking over the screen.
  *
- * So the split is by KIND:
- *
- *   Braino keeps  anything that touches this screen or this machine. Clicking,
- *                 typing, opening, playback, files, and quick answers.
- *   Hermes gets   work that needs no screen but needs depth or time. Research
- *                 across many sources, long reasoning, drafting, code, and
- *                 anything worth remembering between sessions.
+ * So the division is what each is better at. Anything multi step in a browser
+ * is his: booking, buying, forms, posting, research, long reasoning, code.
+ * This machine stays with Braino: apps, playback, files, system settings,
+ * dictation, meetings, quick answers, and the person themselves.
  *
  * The command surface is `hermes -z`, which the CLI reference calls the purest
  * one-shot: a prompt in, the final response text out, and nothing else on
@@ -73,6 +70,13 @@ function runHermes(task, options = {}) {
     const bin = options.binary || hermesBinary();
     if (!bin) return resolve({ ok: false, reason: "not_installed" });
 
+    /* Narration runs beside the job, from the agent log, starting at whatever
+       the file already contained so an earlier run cannot bleed into this one. */
+    const stopTail = typeof options.onProgress === "function"
+      ? tailAgentLog(agentLogSize(), options.onProgress)
+      : null;
+    const done = (result) => { if (stopTail) stopTail(); resolve(result); };
+
     const usagePath = path.join(os.tmpdir(), `braino-hermes-${Date.now()}.json`);
     const args = ["-z", prompt, "--usage-file", usagePath];
     const startedAt = Date.now();
@@ -101,15 +105,73 @@ function runHermes(task, options = {}) {
            and it is far better than our guess: a first real run against the
            binary said "No inference provider configured. Run 'hermes model'..."
            while all we knew was exit code 1. Prefer his words to ours. */
-        return resolve({
+        return done({
           ok: false, reason, code, ms, usage,
           detail: String(usage?.failure || stderr || error.message || "").slice(0, 400),
         });
       }
-      if (text.length < MIN_USEFUL_CHARS) return resolve({ ok: false, reason: "empty_answer", ms, usage });
-      return resolve({ ok: true, text, ms, usage });
+      if (text.length < MIN_USEFUL_CHARS) return done({ ok: false, reason: "empty_answer", ms, usage });
+      return done({ ok: true, text, ms, usage });
     });
   });
 }
 
-module.exports = { runHermes, hermesBinary, hermesEnabled, HERMES_TIMEOUT_MS };
+/* Watching him work.
+ *
+ * `hermes -z` is silent until it is finished, by design: prompt in, final text
+ * out, nothing else. That is exactly what we want for the answer and exactly
+ * wrong for the notch, which would sit blank through a two minute job and make
+ * Braino look asleep.
+ *
+ * `hermes chat` does print tool previews, but it prints them onto the same
+ * stdout as the answer, with its own furniture mixed in ("Query:", "Goodbye"),
+ * and it exits 0 even when the run failed. Parsing the answer back out of that
+ * would be guesswork on top of a stream that lies about its exit code.
+ *
+ * So the answer comes from -z, and the narration comes from the agent log,
+ * which is written as the run happens. We note where the file ends before
+ * starting, and read only what is appended after that, so nothing from an
+ * earlier run leaks into this one.
+ *
+ * The filter is deliberately loose. What a tool call looks like in this log
+ * cannot be known until a real job has run, and a filter that is too strict
+ * shows nothing at all, which is the failure we are trying to avoid. */
+const NOISE = /plugin|registered|discovery|journal_mode|state\.db|deprecat|urllib3|httpx|asyncio/i;
+
+function tailAgentLog(fromByte, onLine) {
+  const file = path.join(os.homedir(), ".hermes", "logs", "agent.log");
+  let at = fromByte;
+  let stopped = false;
+  const tick = () => {
+    if (stopped) return;
+    try {
+      const size = fs.statSync(file).size;
+      if (size > at) {
+        const fd = fs.openSync(file, "r");
+        const buf = Buffer.alloc(size - at);
+        fs.readSync(fd, buf, 0, buf.length, at);
+        fs.closeSync(fd);
+        at = size;
+        for (const raw of buf.toString("utf8").split("\n")) {
+          const line = raw.trim();
+          if (!line || NOISE.test(line)) continue;
+          /* Drop the timestamp, level and logger name: "2026-08-28 23:28:08,238
+             INFO hermes_cli.plugins: ..." is furniture, the sentence after the
+             colon is the part a person would read. */
+          const said = line.replace(/^\S+ \S+ [A-Z]+ [\w.]+: ?/, "").trim();
+          if (said.length > 3) onLine(said.slice(0, 200));
+        }
+      }
+    } catch { /* the log not existing is not a reason to fail a job */ }
+    if (!stopped) timer = setTimeout(tick, 600);
+  };
+  let timer = setTimeout(tick, 600);
+  return () => { stopped = true; clearTimeout(timer); };
+}
+
+function agentLogSize() {
+  try { return fs.statSync(path.join(os.homedir(), ".hermes", "logs", "agent.log")).size; }
+  catch { return 0; }
+}
+
+module.exports = { runHermes, hermesBinary, hermesEnabled, tailAgentLog, agentLogSize, HERMES_TIMEOUT_MS };

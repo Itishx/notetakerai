@@ -1,52 +1,67 @@
 /* Who should do this: Braino, or Hermes?
  *
- * Asked, not matched. The whole 2026-08-27 run of failures came from keyword
- * lists deciding routing, and a list here would be the same mistake wearing a
- * new hat: the word "research" in a sentence does not mean the job needs an
- * agent, and a job that needs one often contains no special word at all.
+ * Asked, not matched. A keyword list here would be the same mistake that caused
+ * every routing failure in the previous rounds, wearing a new hat.
  *
- * The question is NOT "is this hard". It is "does this need the user's own
- * screen". Braino is the one with hands on this Mac and this signed-in
- * browser. Hermes has neither, and no amount of capability changes that.
+ * THE SPLIT CHANGED ONCE, AND THE FIRST VERSION WAS WRONG.
+ *
+ * It was built on "Hermes has no hands", inferred from a README that did not
+ * mention them. False. Hermes has twelve browser tools including a vision one,
+ * computer use through cua-driver that clicks and types in the BACKGROUND
+ * without moving the cursor, and `browser.use_real_profile`, which snapshots
+ * the user's actual browser profile so it acts inside accounts they are already
+ * signed into. It can book the tickets, and it does it without taking over the
+ * screen, which is better than this loop can manage.
+ *
+ * So the question is not "does this need the screen". It is what each one is
+ * genuinely better at. Hermes is better at anything multi step in a browser.
+ * Braino is better at this machine, and he is the one who knows the person.
  */
 
 const HERMES_ROUTING_PROMPT = `You decide who should do a job.
 
-There are two workers.
+There are two workers, and both have hands.
 
-BRAINO has hands on the user's own Mac. He can click, type, scroll, open apps,
-play music, read files, and drive the browser the user is already signed into.
-Anything that has to happen ON THEIR SCREEN, or in an account they are logged
-into, or on this machine, is his and only his. He is also the fast one, so
-quick answers and small jobs stay with him.
+BRAINO lives on this Mac. He controls the machine itself: apps, playback, the
+file system, screenshots, system settings, dictation, meetings, and his own
+modes. He is fast, he knows this person, and he is the one who talks to them.
 
-HERMES is a separate agent with its own memory, tools and skills. He has NO
-access to the user's screen, browser session, or logged-in accounts. What he
-has is depth and patience: he will work a problem across many steps and many
-sources, and he remembers between sessions.
+HERMES is an agent with his own memory, skills and tools. He drives a browser
+properly: he can navigate, click, type, read a page, look at it with vision,
+and work signed in as this person, because he uses a snapshot of their real
+browser profile. He works in the background without taking over the screen, and
+he will stay on a job for minutes. He remembers between sessions.
 
 Answer with ONLY a JSON object. No prose, no code fences.
 
 { "who": "braino" | "hermes", "task": "", "why": "" }
 
-Send it to HERMES when it needs no screen and does need depth or time:
-- research across several sources, comparisons, market or competitor work
+Send it to HERMES when the job lives in a browser or needs real depth:
+- booking, buying, ordering, reserving, checking out
+- filling in forms, signing up, applying, submitting
+- posting, publishing, or sending through a website
+- research across several sources, comparisons, competitor or market work
 - long reasoning, planning, analysis, or writing something substantial
 - writing code or working through a technical problem
-- anything the user will want remembered and built on later
+- anything the person will want remembered and built on later
 
-Keep it with BRAINO when:
-- it touches this Mac, this screen, or a site the user is signed into
-- it is booking, buying, posting, messaging, playing, opening or finding
-- it is a quick question with a short answer
+Keep it with BRAINO when the job is this machine, or him:
+- playing, pausing, or controlling music and video
+- opening, closing, quitting or switching apps and windows
+- files, folders, screenshots, the desktop, disk space
+- system settings: wifi, bluetooth, brightness, do not disturb, volume
+- calls, texts and messages sent through the Mac's own apps
+- dictation, meetings, his own modes and surfaces
+- a quick question with a short answer
+- anything about Braino himself
 - you are not sure
 
 "task" is the job written so it stands alone, with anything it refers to
-spelled out, because Hermes cannot see the conversation. Leave it empty when
+spelled out, because Hermes cannot see this conversation. Leave it empty when
 the answer is braino. "why" is one short clause.
 
-If both apply, it is Braino: a job that needs the screen at any point cannot be
-done by a worker without one.`;
+Money is not a reason to refuse: the person approves before anything is paid
+for. Route on what the job IS, not on what it might cost.`;
 
 function parseHermesRoute(raw) {
   const text = String(raw || "").trim();
