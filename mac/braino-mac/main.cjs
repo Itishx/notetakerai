@@ -126,6 +126,8 @@ const {
   macClosesAllTabs,
 } = require(path.join(__dirname, "hil-routing.cjs"));
 const { UNDERSTAND_PROMPT, parseUnderstanding } = require(path.join(__dirname, "hil-understand.cjs"));
+const { HERMES_ROUTING_PROMPT, parseHermesRoute } = require(path.join(__dirname, "hermes-routing.cjs"));
+const { runHermes, hermesBinary, hermesEnabled } = require(path.join(__dirname, "hermes.cjs"));
 const {
   macVerifyAssert,
   macHilStepSignature,
@@ -13912,6 +13914,52 @@ async function macUnderstandUtterance(text, options = {}) {
   }
 }
 
+/* Should Hermes take this one?
+ *
+ * Only asked when Hermes is actually installed and switched on, so the common
+ * case costs nothing at all: no binary, no question, no latency. Returns null
+ * for "no", and every failure path returns null too, because a router that is
+ * down must never be able to swallow a command. */
+async function macRouteToHermes(raw) {
+  if (!hermesEnabled(typeof ENV === "object" ? ENV : null)) return null;
+  if (!hermesBinary()) return null;
+  const said = String(raw || "").trim();
+  if (!said || !SUPABASE_URL || !SUPABASE_ANON_KEY) return null;
+  const startedAt = Date.now();
+  try {
+    const authToken = await getBrainoAuthToken();
+    const surface = activeMacContext || {};
+    const where = surface.appName
+      ? `On screen right now: ${surface.appName}${surface.browserUrl ? ` at ${surface.browserUrl}` : ""}`
+      : "Nothing notable is open.";
+    const response = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/chat-about-notes`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: SUPABASE_ANON_KEY,
+        ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+      },
+      body: JSON.stringify({
+        notes: "",
+        message: `${where}\n\nThe job: "${said}"`,
+        responseMedium: "text",
+        personaSystem: HERMES_ROUTING_PROMPT,
+      }),
+    });
+    const data = await response.json().catch(() => ({}));
+    const route = parseHermesRoute(data?.reply);
+    logMac("hermes.route", {
+      who: route?.who || "unreadable",
+      why: route?.why || "",
+      ms: Date.now() - startedAt,
+    });
+    return route && route.who === "hermes" ? route : null;
+  } catch (error) {
+    logMac("hermes.route.failed", { error: String(error?.message || error), ms: Date.now() - startedAt });
+    return null;
+  }
+}
+
 /* Hand something to the job that is already running.
  *
  * state.facts is how the loop has always told itself things mid-run ("saying it
@@ -14773,6 +14821,40 @@ async function runDelegate(prompt, options = {}) {
   if (options.forceBrain && macHilEnabled()) {
     logMac("delegate.forced_brain", { reason: options.reason || "promise", raw: textForLog(raw) });
     return runMacHilLoop(raw);
+  }
+
+  /* Deep work with no screen in it goes to Hermes.
+   *
+   * Placed after the forced-brain handover above and before the cascade, so a
+   * correction folded into a running job still reaches the job, and a plain
+   * command still gets the fast path when the answer is "braino".
+   *
+   * Three guards, all deliberate. It is skipped entirely when Hermes is not
+   * installed, so nobody who has not opted in pays a millisecond. It is
+   * skipped for anything already escalated to the loop, because that job has
+   * hands in it. And if Hermes fails for any reason the command carries on
+   * down the cascade exactly as it would have, because a delegated agent being
+   * down must never be the reason a command disappears. */
+  if (!options.forceBrain) {
+    const route = await macRouteToHermes(raw);
+    if (route) {
+      logMac("hermes.start", { task: textForLog(route.task, 160), why: route.why });
+      sendTaskProgress({ status: "thinking", text: "Hermes is on it" });
+      const run = await runHermes(route.task);
+      if (run.ok) {
+        logMac("hermes.done", {
+          chars: run.text.length,
+          ms: run.ms,
+          model: run.usage?.model || "",
+          costUsd: run.usage?.estimated_cost_usd ?? null,
+        });
+        rememberMacChat("user", raw);
+        rememberMacChat("assistant", run.text);
+        return { ok: true, say: run.text, source: "hermes", delegateState: delegateStatePayload() };
+      }
+      /* Say why in the log, then carry on as if Hermes had never been asked. */
+      logMac("hermes.failed", { reason: run.reason, ms: run.ms || 0, detail: run.detail || "" });
+    }
   }
 
   // Snapshotted before routing, because routeMacDelegate's first act is to
