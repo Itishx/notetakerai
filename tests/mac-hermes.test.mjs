@@ -40,8 +40,10 @@ test("a delegated agent that is down cannot swallow a command", () => {
   assert.doesNotMatch(bridge, /throw new Error/);
   assert.match(bridge, /return resolve\(\{ ok: false, reason: "not_installed" \}\)/);
   /* And the caller falls through to the cascade rather than stopping. */
-  const block = main.slice(main.indexOf("Deep work with no screen in it goes to Hermes"));
-  assert.match(block.slice(0, 2000), /logMac\("hermes\.failed"/);
+  /* Sliced from the code rather than the comment, because the comment above it
+     grew and a fixed-length window stopped reaching the code underneath. */
+  const block = main.slice(main.indexOf("const route = await macRouteToHermes(raw);"));
+  assert.match(block.slice(0, 1600), /logMac\("hermes\.failed"/);
   const failIdx = block.indexOf('logMac("hermes.failed"');
   const returnIdx = block.indexOf('return { ok: true, say: run.text');
   assert.ok(returnIdx > 0 && returnIdx < failIdx, "the only early return is the success path");
