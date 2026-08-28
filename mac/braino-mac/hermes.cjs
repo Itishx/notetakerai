@@ -72,10 +72,34 @@ function runHermes(task, options = {}) {
 
     /* Narration runs beside the job, from the agent log, starting at whatever
        the file already contained so an earlier run cannot bleed into this one. */
+    /* Two sources, because neither is enough alone.
+     *
+     * The log tail catches real tool activity, but `hermes -z` on a quiet job
+     * writes NOTHING: measured, the file grew by exactly 0 bytes across a nine
+     * second run, and the sessions directory stayed empty. The burst that made
+     * this look workable came from `hermes chat`, which is a different path.
+     *
+     * So a heartbeat carries the floor. It says what he is working on and how
+     * long he has been at it, which is the honest minimum: the notch is never
+     * blank, and it never claims a step that did not happen. For browser jobs
+     * the visible Chromium window is the real narration anyway. */
     const stopTail = typeof options.onProgress === "function"
       ? tailAgentLog(agentLogSize(), options.onProgress)
       : null;
-    const done = (result) => { if (stopTail) stopTail(); resolve(result); };
+    let beat = null;
+    if (typeof options.onProgress === "function") {
+      const short = prompt.length > 54 ? `${prompt.slice(0, 53)}\u2026` : prompt;
+      const began = Date.now();
+      options.onProgress(`Hermes: ${short}`);
+      beat = setInterval(() => {
+        options.onProgress(`Hermes, ${Math.round((Date.now() - began) / 1000)}s in: ${short}`);
+      }, 5000);
+    }
+    const done = (result) => {
+      if (stopTail) stopTail();
+      if (beat) clearInterval(beat);
+      resolve(result);
+    };
 
     const usagePath = path.join(os.tmpdir(), `braino-hermes-${Date.now()}.json`);
     const args = ["-z", prompt, "--usage-file", usagePath];

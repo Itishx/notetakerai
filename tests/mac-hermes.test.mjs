@@ -103,3 +103,15 @@ test("he narrates from the log, not from the answer stream", () => {
   const main_ = readFileSync(new URL("../mac/braino-mac/main.cjs", import.meta.url), "utf8");
   assert.match(main_, /onProgress: \(line\) => sendTaskProgress\(\{ status: "thinking", text: line \}\)/);
 });
+
+/* Measured against the real binary: a nine second `hermes -z` run grew
+   agent.log by exactly 0 bytes and left ~/.hermes/sessions empty. A quiet job
+   has nothing to narrate from, so the notch needs a floor of its own. */
+test("the notch is never blank, and never invents a step", () => {
+  const bridge = readFileSync(new URL("../mac/braino-mac/hermes.cjs", import.meta.url), "utf8");
+  assert.match(bridge, /the file grew by exactly 0 bytes/);
+  /* The heartbeat says only what is true: the task, and elapsed seconds. */
+  assert.match(bridge, /Hermes, \$\{Math\.round\(\(Date\.now\(\) - began\) \/ 1000\)\}s in: \$\{short\}/);
+  /* Both sources are torn down on every exit path, success or failure. */
+  assert.match(bridge, /if \(stopTail\) stopTail\(\);\s*\n\s*if \(beat\) clearInterval\(beat\);/);
+});

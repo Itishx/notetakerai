@@ -8,8 +8,20 @@ its own tools, and the patience to work a problem for minutes.
 
 ```bash
 curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash
-hermes model            # pick a provider and model
-hermes -z "say hello"   # prove the one-shot works
+```
+
+Then point it at a provider. **The provider name is not what you would guess**:
+the registry calls OpenAI `openai-api`, and `openai` is rejected outright with
+"Unknown provider". A vendor-prefixed model slug like `openai/gpt-5` is also
+refused unless the provider is an aggregator such as OpenRouter, so the slug
+must be bare. `hermes doctor` diagnoses both, and is worth running first.
+
+```bash
+hermes config set model.provider openai-api
+hermes config set model.default  gpt-5
+hermes config set model.base_url https://api.openai.com/v1
+echo 'OPENAI_API_KEY=sk-...' >> ~/.hermes/.env   # chmod 600
+hermes -z "say hello"                            # prove the one-shot works
 ```
 
 Braino looks for the binary on every command and does nothing at all when it is
@@ -55,16 +67,23 @@ having gone quiet.
 real Chromium window you can watch, and it stays open between turns so you can
 step in for a sign-in challenge or a CAPTCHA and keep the login warm.
 
-**The notch narrates.** `hermes -z` is silent until it finishes, and `hermes
-chat` prints previews onto the same stdout as the answer with its own furniture
-mixed in, then exits 0 even when the run failed. So the answer comes from `-z`
-and the narration is tailed from `~/.hermes/logs/agent.log`, reading only what
-is appended after the run starts. Each line goes into the same thinking panel
-Braino uses for his own steps.
+**The notch narrates, from two sources, because neither is enough alone.**
 
-The log filter is deliberately loose, because what a tool call looks like in
-that file cannot be known until a real job has run, and a filter that is too
-strict shows nothing at all.
+`hermes -z` is silent until it finishes, and `hermes chat` prints previews onto
+the same stdout as the answer with its own furniture mixed in, then exits 0 even
+when the run failed. So the answer comes from `-z`.
+
+For narration, the agent log is tailed from wherever it already ended, so an
+earlier run cannot bleed in. **But a quiet job writes nothing to it.** Measured
+against the real binary: a nine second run grew `agent.log` by exactly **0
+bytes** and left `~/.hermes/sessions` empty. The burst that made this look
+workable came from `hermes chat`, which is a different code path.
+
+So a heartbeat carries the floor: what he is working on, and how long he has
+been at it, every five seconds. The notch is never blank and never claims a step
+that did not happen. When a job does use tools the tailed lines appear as well.
+
+For browser jobs the visible Chromium window is the real narration anyway.
 
 ## How a command reaches him
 
@@ -103,9 +122,11 @@ not that Hermes is down. Worth telling apart when reading a log.
 - **No `hermes serve`.** The daemon speaks JSON-RPC over WebSocket on
   `127.0.0.1:9119` and would let a job stream progress instead of arriving whole
   after a silence. The one-shot was the honest thing to build first.
-- **No job has completed yet.** Hermes v0.20.6 is installed and the failure path
-  is verified against the real binary, but nothing has run end to end because no
-  inference provider is configured. The narration filter in particular is
-  guesswork until a real job writes real lines.
+- **Tool-level narration is unproven.** The heartbeat works. Whether a browser
+  job writes usable lines to `agent.log` has not been seen, because the only
+  jobs run so far were quiet ones that wrote nothing at all.
+- **`hermes serve` is still the proper answer.** The daemon speaks JSON-RPC over
+  WebSocket on `127.0.0.1:9119` and would give real structured progress instead
+  of a heartbeat. Worth doing if the heartbeat proves too thin.
 - **No shared memory.** Hermes remembers its own sessions; Braino remembers his.
   Neither can read the other's.
