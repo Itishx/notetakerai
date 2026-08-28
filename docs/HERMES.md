@@ -123,6 +123,24 @@ For browser jobs the visible Chromium window is the real narration anyway.
 **A job already escalated to the loop is never intercepted**, because that job
 has hands in it by definition.
 
+## Talking while he works
+
+A Hermes job can run for minutes, so what happens when you speak during one
+matters as much as the job itself.
+
+Speaking reaches the interjection router, the same one that serves the HIL loop:
+HIL is asked whether you just made a **correction**, added something, said
+**stop**, or started a **different job**. A Hermes run is registered as work in
+flight for exactly this reason, because it is not a HIL loop and would otherwise
+look like nothing was happening.
+
+The escalation guard is released the moment a job is **handed over**, not when
+it finishes. Holding it for the whole run was a real bug: a fifteen minute
+Hermes job silently refused escalation to every command spoken in that window. A
+session lost "search Product Hunt for AI writing tools" that way, with HIL having
+read it as a task and Braino having said "on it" out loud. Nothing ran, and
+nothing said why.
+
 ## When it fails
 
 Every failure returns a value rather than throwing, and the caller carries on

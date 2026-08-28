@@ -6289,11 +6289,21 @@ async function answerViaRealtimeChat(prompt) {
       /* Recorded before the run, not after, so a "go ahead" still has something
          real to resume if the run below never lands. */
       rememberOwedTask(job, "promised_in_chat");
-      try {
-        await runDelegate(job, { keepRealtime: true, forceBrain: true, reason: "promise" });
-      } finally {
-        promiseEscalated = false;
-      }
+      /* Released as soon as the job is HANDED OVER, not when it finishes.
+       *
+       * This guard exists to stop one chat turn escalating twice. Holding it
+       * for the whole run turned it into something else entirely: a Hermes job
+       * can take fifteen minutes, and every command spoken in that window was
+       * silently refused escalation. A real session lost "search Product Hunt"
+       * that way, with HIL having read it as a task and Braino having said "on
+       * it" out loud. Nothing ran, and nothing said why.
+       *
+       * Talking during a job is not lost now either: it reaches the
+       * interjection router, which asks whether it is a correction, a stop, or
+       * a different job. */
+      const handedOver = runDelegate(job, { keepRealtime: true, forceBrain: true, reason: "promise" });
+      promiseEscalated = false;
+      await handedOver;
       return true;
     }
     return Boolean(finalText || streamState?.spoke);

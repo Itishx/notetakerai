@@ -151,3 +151,28 @@ test("a long browser job is not killed for being long", () => {
   /* Safe because a slow job still looks alive. */
   assert.match(bridge, /the heartbeat means a slow job looks/);
 });
+
+/* A real session: HIL read "search Product Hunt" as a task, Braino said "on it"
+   out loud, and nothing ran. The escalation guard was still held by a Hermes
+   job started two commands earlier. Harmless at ten seconds a job; toxic once
+   the Hermes ceiling went to fifteen minutes. */
+test("a long job does not block the next command", () => {
+  const renderer = readFileSync(new URL("../mac/braino-mac/renderer/braino-mac.js", import.meta.url), "utf8");
+  const block = renderer.slice(renderer.indexOf("if (!promiseEscalated && (hilTask || promised))"));
+  const release = block.indexOf("promiseEscalated = false;");
+  const awaited = block.indexOf("await handedOver;");
+  assert.ok(release > 0 && awaited > 0, "the handover must be split from the wait");
+  assert.ok(release < awaited, "the guard must be released before waiting on the job");
+  assert.doesNotMatch(block.slice(0, 1400), /finally \{\s*\n\s*promiseEscalated = false;/);
+});
+
+/* And talking during a Hermes job must reach the interjection router, which is
+   gated on jobRunning(). A Hermes job is not a HIL loop, so it had to be
+   counted explicitly. */
+test("a Hermes job counts as a job in flight", () => {
+  const main_ = readFileSync(new URL("../mac/braino-mac/main.cjs", import.meta.url), "utf8");
+  assert.match(main_, /\|\| Boolean\(macActiveHermesJob\)/);
+  /* Registered when it starts, cleared on every exit path including failure. */
+  assert.match(main_, /macActiveHermesJob = \{ task: route\.task, startedAt: Date\.now\(\) \};/);
+  assert.match(main_, /\} finally \{\s*\n\s*macActiveHermesJob = null;\s*\n\s*\}/);
+});

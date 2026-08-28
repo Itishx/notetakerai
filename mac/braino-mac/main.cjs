@@ -13885,6 +13885,13 @@ let macHilGeneration = 0;
  * answer he was stuck on — arrived 24 seconds before he gave up saying the film
  * was not showing. He was told, and there was nowhere to put it. */
 let macActiveHilRun = null;
+/* A Hermes job is a job, even though it is not a HIL loop.
+ *
+ * Without this, speaking while Hermes worked went nowhere: jobRunning() said
+ * no, so the words were not treated as an interjection, and the escalation
+ * guard in the renderer refused them as well. A real session lost a whole
+ * command that way. */
+let macActiveHermesJob = null;
 
 /* Ask HIL what was just said, instead of matching it against a list.
  *
@@ -14849,13 +14856,19 @@ async function runDelegate(prompt, options = {}) {
     const route = await macRouteToHermes(raw);
     if (route) {
       logMac("hermes.start", { task: textForLog(route.task, 160), why: route.why });
+      macActiveHermesJob = { task: route.task, startedAt: Date.now() };
       sendTaskProgress({ status: "thinking", text: "Hermes is on it" });
       /* Every line he writes while working goes to the same thinking panel
          Braino uses for his own steps, so a two minute job reads as work
          happening rather than as Braino having gone quiet. */
-      const run = await runHermes(route.task, {
-        onProgress: (line) => sendTaskProgress({ status: "thinking", text: line }),
-      });
+      let run;
+      try {
+        run = await runHermes(route.task, {
+          onProgress: (line) => sendTaskProgress({ status: "thinking", text: line }),
+        });
+      } finally {
+        macActiveHermesJob = null;
+      }
       if (run.ok) {
         logMac("hermes.done", {
           chars: run.text.length,
@@ -16367,7 +16380,9 @@ function featureEfficiencyPct(ok, durationMs) {
  * is intolerable in front of "how are you". So the renderer checks this first
  * and only pays for the question when there is a job for the answer to change. */
 ipcMain.handle("braino-mac:job-running", async () => ({
-  running: Boolean(macActiveHilRun) && macActiveHilRun.generation === macHilGeneration,
+  running: (Boolean(macActiveHilRun) && macActiveHilRun.generation === macHilGeneration)
+    || Boolean(macActiveHermesJob),
+  kind: macActiveHermesJob ? "hermes" : macActiveHilRun ? "loop" : "",
 }));
 
 /* The renderer asks HIL what was just said, and acts on the answer. */
