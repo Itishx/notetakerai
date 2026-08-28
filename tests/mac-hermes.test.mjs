@@ -55,10 +55,17 @@ test("nobody who has not installed it pays anything", () => {
   assert.match(body, /if \(!hermesEnabled\([\s\S]{0,60}\)\) return null;/);
 });
 
-test("an escalated job keeps its hands", () => {
-  /* forceBrain means a promise was escalated to the loop, which drives the
-     screen. Hermes has no screen, so it must not intercept those. */
-  assert.match(main, /if \(!options\.forceBrain\) \{[\s\S]{0,200}macRouteToHermes\(raw\)/);
+/* A spoken "book me tickets" ALWAYS arrives escalated, so while the Hermes
+   check sat below the forceBrain handover, booking could never reach Hermes:
+   forceBrain returned into the loop first. Confirmed in a real session, where
+   the whole turn logged zero hermes.* events. */
+test("an escalated job still gets offered to Hermes", () => {
+  const hermesAt = main.indexOf("Deep work with no screen in it goes to Hermes");
+  const forcedAt = main.indexOf("if (options.forceBrain && macHilEnabled())");
+  assert.ok(hermesAt > 0 && forcedAt > 0);
+  assert.ok(hermesAt < forcedAt, "Hermes must be asked BEFORE the forced-brain handover");
+  /* And the old guard that caused it must not come back. */
+  assert.doesNotMatch(main, /if \(!options\.forceBrain\) \{[\s\S]{0,200}macRouteToHermes/);
 });
 
 test("a handover with nothing to hand over is not a handover", () => {

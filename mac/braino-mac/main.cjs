@@ -14808,34 +14808,26 @@ async function runDelegate(prompt, options = {}) {
     return { ...result, delegateState: delegateStatePayload() };
   }
 
-  /* He said he would do it, so this IS the doing.
-   *
-   * Escalated from a conversation that turned out to contain a job (see
-   * answerViaRealtimeChat). It must not re-enter the cascade below: the whole
-   * reason the job was missed the first time is that a keyword list decided a
-   * sentence about booking tickets was small talk. Sending it back through the
-   * same lists would let the same words lose it again, and this time silently,
-   * because he has already promised out loud. So it goes straight to the brain,
-   * which is the layer that can read "book my show" as a job without anyone
-   * having added the word "book" to a list. */
-  if (options.forceBrain && macHilEnabled()) {
-    logMac("delegate.forced_brain", { reason: options.reason || "promise", raw: textForLog(raw) });
-    return runMacHilLoop(raw);
-  }
-
   /* Deep work with no screen in it goes to Hermes.
    *
-   * Placed after the forced-brain handover above and before the cascade, so a
-   * correction folded into a running job still reaches the job, and a plain
-   * command still gets the fast path when the answer is "braino".
+   * Asked BEFORE the forced-brain handover below, and that order is the whole
+   * fix. A spoken "book me tickets" always arrives escalated, so while this sat
+   * underneath, forceBrain returned into the loop first and booking could never
+   * reach Hermes at all. Whichever way the router answers, the command still
+   * lands somewhere: Hermes takes it, or the handover below does.
    *
-   * Three guards, all deliberate. It is skipped entirely when Hermes is not
-   * installed, so nobody who has not opted in pays a millisecond. It is
-   * skipped for anything already escalated to the loop, because that job has
-   * hands in it. And if Hermes fails for any reason the command carries on
-   * down the cascade exactly as it would have, because a delegated agent being
-   * down must never be the reason a command disappears. */
-  if (!options.forceBrain) {
+   * It used to be skipped for anything escalated with forceBrain, on the
+   * reasoning that such a job "has hands in it". That was left over from the
+   * premise that Hermes has none, and it quietly broke the main case: a spoken
+   * "book me tickets" ALWAYS arrives escalated, so booking could never reach
+   * Hermes at all. forceBrain means "do not let the keyword cascade have this",
+   * which is an argument for asking Hermes, not against it.
+   *
+   * Two guards remain. It is skipped entirely when Hermes is not installed, so
+   * nobody who has not opted in pays a millisecond. And if Hermes fails for any
+   * reason the command carries on exactly as it would have, because a delegated
+   * agent being down must never be the reason a command disappears. */
+  {
     const route = await macRouteToHermes(raw);
     if (route) {
       logMac("hermes.start", { task: textForLog(route.task, 160), why: route.why });
@@ -14860,6 +14852,21 @@ async function runDelegate(prompt, options = {}) {
       /* Say why in the log, then carry on as if Hermes had never been asked. */
       logMac("hermes.failed", { reason: run.reason, ms: run.ms || 0, detail: run.detail || "" });
     }
+  }
+
+  /* He said he would do it, so this IS the doing.
+   *
+   * Escalated from a conversation that turned out to contain a job (see
+   * answerViaRealtimeChat). It must not re-enter the cascade below: the whole
+   * reason the job was missed the first time is that a keyword list decided a
+   * sentence about booking tickets was small talk. Sending it back through the
+   * same lists would let the same words lose it again, and this time silently,
+   * because he has already promised out loud. So it goes straight to the brain,
+   * which is the layer that can read "book my show" as a job without anyone
+   * having added the word "book" to a list. */
+  if (options.forceBrain && macHilEnabled()) {
+    logMac("delegate.forced_brain", { reason: options.reason || "promise", raw: textForLog(raw) });
+    return runMacHilLoop(raw);
   }
 
   // Snapshotted before routing, because routeMacDelegate's first act is to
