@@ -421,6 +421,24 @@ function describeLogEvent(event, p) {
       return { icon: "🎧", label: "Listening", detail: "" };
     case "voice.in":
       return { icon: "👂", label: C.you("You said"), detail: `"${textForLog(p.transcript, 160)}"`, chat: true };
+    /* Hermes had no lines here at all, so a job could route to him, run for 99
+       seconds and finish, and the terminal would show none of it. The events
+       were in the log file the whole time; nobody could see them. */
+    case "hermes.route":
+      return p.who === "hermes"
+        ? { icon: "🜂", label: C.him("Handing to Hermes"), detail: C.dim(p.why || ""), chat: true }
+        : { icon: "🜂", label: C.dim("Braino keeps this"), detail: C.dim(p.why || ""), chat: false };
+    case "hermes.start":
+      return { icon: "⚗️", label: C.him("Hermes is working"), detail: `"${textForLog(p.task, 140)}"`, chat: true };
+    case "hermes.done": {
+      const secs = Math.round((Number(p.ms) || 0) / 1000);
+      const cost = p.costUsd === null || p.costUsd === undefined ? "" : ` · $${Number(p.costUsd).toFixed(4)}`;
+      return { icon: "✅", label: C.good("Hermes finished"), detail: C.dim(`${secs}s · ${p.model || "?"}${cost}`), chat: true };
+    }
+    case "hermes.failed":
+      return { icon: "⚠️", label: C.bad(`Hermes could not (${p.reason || "?"})`), detail: C.dim(textForLog(p.detail || "", 160)), chat: true };
+    case "hermes.route.failed":
+      return { icon: "⚠️", label: C.dim("Hermes routing failed, carrying on"), detail: C.dim(textForLog(p.error || "", 120)), chat: false };
     case "voice.out":
       return { icon: "💬", label: C.him("Braino said"), detail: `"${textForLog(p.text, 160)}"`, chat: true };
     case "voice.post_reply_action_ignored": {

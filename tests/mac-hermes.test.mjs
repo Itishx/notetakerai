@@ -124,3 +124,19 @@ test("the notch is never blank, and never invents a step", () => {
   /* Both sources are torn down on every exit path, success or failure. */
   assert.match(bridge, /if \(stopTail\) stopTail\(\);\s*\n\s*if \(beat\) clearInterval\(beat\);/);
 });
+
+/* A job routed to Hermes, ran for 99 seconds and finished, and the terminal
+   showed none of it: the pretty-printer had no hermes.* cases at all, so the
+   events reached the log file and nowhere a person would look. */
+test("Hermes is visible in the terminal, not just the log file", () => {
+  for (const ev of ["hermes.route", "hermes.start", "hermes.done", "hermes.failed"]) {
+    assert.match(main, new RegExp(`case "${ev.replace(".", "\\.")}":`), `no formatter for ${ev}`);
+  }
+  /* The two that a person is waiting on must reach chat mode, not just debug. */
+  const start = main.slice(main.indexOf('case "hermes.start":'));
+  assert.match(start.slice(0, 260), /chat: true/);
+  const done = main.slice(main.indexOf('case "hermes.done":'));
+  assert.match(done.slice(0, 420), /chat: true/);
+  /* Cost and duration are the two numbers worth seeing on a finished job. */
+  assert.match(done.slice(0, 420), /\$\{secs\}s/);
+});

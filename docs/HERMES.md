@@ -63,9 +63,31 @@ approve before anything is paid for, so the router decides on what the job *is*.
 Two things, because a job that takes two minutes must not look like Braino
 having gone quiet.
 
-**A visible browser.** `browser.headed: true` in `~/.hermes/config.yaml` gives a
-real Chromium window you can watch, and it stays open between turns so you can
-step in for a sign-in challenge or a CAPTCHA and keep the login warm.
+**A visible browser, driving a copy of your profile.** Two settings, and the
+second one is not optional:
+
+```yaml
+browser:
+  headed: true             # a real Chromium window you can watch
+  use_real_profile: true   # signed in as you
+```
+
+Without `use_real_profile`, the agent browses in a clean throwaway profile that
+is logged into nothing, and to reach your accounts it tries to attach to your
+live Chrome instead. **Chrome 136+ blocks remote-debugging the default profile
+directory**, so that ends with Hermes opening `chrome://inspect` and asking you
+to enable a system permission it cannot click. A real booking run died exactly
+there after 99 seconds.
+
+With it on, Hermes copies your active profile (cookies, logins, preferences)
+into a snapshot under `~/.hermes/browser-profile/` and drives that with its own
+Chromium. Your live profile is never opened, so there is no lock fight and no
+`chrome://inspect`. Auth is re-synced from your real profile on each fresh
+session, so a login you do yourself shows up in the agent's next run. Turning
+the toggle off deletes the snapshot.
+
+The headed window also stays open between turns, so you can step in for a
+sign-in challenge or a CAPTCHA and keep the login warm.
 
 **The notch narrates, from two sources, because neither is enough alone.**
 
