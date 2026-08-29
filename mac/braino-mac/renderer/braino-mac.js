@@ -9034,11 +9034,11 @@ window.brainoMac.onTypeToggle?.((payload) => {
   openTyping(payload?.source || "hotkey");
 });
 
-/* Clicking the notch is NOT a way in, and that was a mistake worth recording.
-   A click on the island has meant "talk to me" since long before typing existed
-   (see the tray.click_talk handler), so adding a second meaning did not replace
-   the first, it ran alongside it: the field opened AND the microphone started.
-   The gesture was already spoken for. */
+/* The click went to typing outright rather than being shared.
+   Sharing it was the first attempt and it did not work: a click on the island
+   had meant "talk to me" for far longer, so adding a second meaning ran
+   alongside the first instead of replacing it, and the field opened AND the
+   microphone started. A gesture holds one meaning. */
 document.addEventListener("keydown", (event) => {
   if (!typingOpen) return;
   if (event.key === "Escape") { event.preventDefault(); closeTyping("escape"); return; }
