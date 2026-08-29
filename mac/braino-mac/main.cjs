@@ -16336,6 +16336,28 @@ function featureEfficiencyPct(ok, durationMs) {
  * That is fine while he is already working and worth every millisecond, and it
  * is intolerable in front of "how are you". So the renderer checks this first
  * and only pays for the question when there is a job for the answer to change. */
+/* The notch has to take the keyboard while you are typing into it, and hand it
+ * straight back afterwards.
+ *
+ * The dock window is created focusable:false on purpose, so it never steals the
+ * caret from whatever you are working in. That is right for a floating overlay
+ * and fatal for a text field: focus() in the renderer does nothing, and every
+ * keystroke goes to the app in front instead. The shortcut fired, the field
+ * opened, and the letters landed in Cursor.
+ *
+ * Braino OS already does this dance for the same reason, and this is the same
+ * three lines: take focus while the surface is up, give it back when it goes. */
+ipcMain.handle("braino-mac:typing-focus", async (event, payload) => {
+  const on = Boolean(payload?.on);
+  if (!dockWindow || dockWindow.isDestroyed()) return { ok: false };
+  ensureDockWindowVisible(on ? "typing" : "typing-closed");
+  dockWindow.setFocusable(on);
+  if (on) dockWindow.focus();
+  dockWindow.setIgnoreMouseEvents(!on, { forward: true });
+  logMac("type.focus", { on });
+  return { ok: true };
+});
+
 ipcMain.handle("braino-mac:job-running", async () => ({
   running: Boolean(macActiveHilRun) && macActiveHilRun.generation === macHilGeneration,
 }));

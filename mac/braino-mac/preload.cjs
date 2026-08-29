@@ -100,6 +100,7 @@ contextBridge.exposeInMainWorld("brainoMac", {
   promisesAction: (text) => macPromisesAction(text),
   /* What did they just say — asked, not matched. */
   jobRunning: () => ipcRenderer.invoke("braino-mac:job-running"),
+  typingFocus: (on) => ipcRenderer.invoke("braino-mac:typing-focus", { on }),
   understand: (payload) => ipcRenderer.invoke("braino-mac:understand", payload || {}),
   tellRunningJob: (note) => ipcRenderer.invoke("braino-mac:tell-running-job", { note }),
   stopRunningJob: () => ipcRenderer.invoke("braino-mac:stop-running-job"),

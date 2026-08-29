@@ -77,3 +77,34 @@ test("the hotkey is the way in, and the click is left alone", () => {
   assert.match(renderer, /Clicking the notch is NOT a way in/);
   assert.match(renderer, /tray\.click_talk/);
 });
+
+/* The field opened and vanished in the same tick: openTyping added
+   nf-inline-open, then updateNotchFace recomputed that class from whether
+   anything had been SPOKEN, found nothing, and took it back off. The log said
+   type.open twelve times and the screen never changed. */
+test("typing holds the caption surface open on its own", () => {
+  assert.match(renderer, /const active = typingOpen \|\| Boolean\(mode && value\)/);
+  assert.match(renderer, /nfInlineCaptionLabelEl\.textContent = typingOpen \? "You typed" : "You said"/);
+});
+
+/* `let` is not hoisted, and syncInlineVoiceSurface sits far above openTyping. */
+test("typingOpen is declared before anything reads it", () => {
+  const decl = renderer.indexOf("let typingOpen = false;");
+  const uses = [...renderer.matchAll(/\btypingOpen\b/g)].map((m) => m.index).filter((i) => i !== decl + 4);
+  assert.ok(decl > 0, "typingOpen must exist");
+  assert.ok(decl < Math.min(...uses), "declaration must come before every read");
+});
+
+/* The dock window is created focusable:false so it never steals the caret.
+   Right for an overlay, fatal for a text field: focus() did nothing and every
+   letter went to the app in front. Braino OS already does this dance. */
+test("the notch takes the keyboard while you type, and gives it back", () => {
+  assert.match(main, /ipcMain\.handle\("braino-mac:typing-focus"/);
+  const h = main.slice(main.indexOf('ipcMain.handle("braino-mac:typing-focus"'));
+  const body = h.slice(0, h.indexOf("\n});") + 4);
+  assert.match(body, /dockWindow\.setFocusable\(on\)/);
+  assert.match(body, /if \(on\) dockWindow\.focus\(\)/);
+  assert.match(body, /dockWindow\.setIgnoreMouseEvents\(!on/);
+  /* And it is handed back on close, not left held. */
+  assert.match(renderer, /typingFocus\?\.\(false\)/);
+});

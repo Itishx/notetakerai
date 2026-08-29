@@ -2499,10 +2499,22 @@ function refitOpenInlineCaption() {
   notchFace.style.setProperty("--nf-inline-height", `${measureInlineCaptionHeight()}px`);
 }
 
+/* Is the typing field up? It sits here because syncInlineVoiceSurface just
+   below is the earliest thing that reads it, and `let` is not hoisted: declared
+   any lower, a call during startup would throw instead of reading false. */
+let typingOpen = false;
+
 function syncInlineVoiceSurface(mode = "", text = "") {
   if (!notchFace || !nfInlineCaptionEl) return;
   const value = String(text || "").trim().replace(/\s+/g, " ");
-  const active = Boolean(mode && value);
+  /* Typing holds the surface open on its own.
+   *
+   * Without this the field opened and vanished in the same tick: openTyping
+   * added nf-inline-open, then updateNotchFace ran and recomputed that class
+   * from whether anything had been SPOKEN, found nothing, and took it straight
+   * back off. The shortcut fired, the log said type.open, and the screen never
+   * changed. */
+  const active = typingOpen || Boolean(mode && value);
   const wasActive = notchFace.classList.contains("nf-inline-open");
   /* This surface is now only ever your own sentence read back to you. The
      phase belongs to the centred chip, and the panel behind the arrow keeps
@@ -2512,8 +2524,8 @@ function syncInlineVoiceSurface(mode = "", text = "") {
   else if (wasActive) beginNotchSurfaceExit();
   notchFace.classList.toggle("nf-inline-open", active);
   notchFace.classList.remove("nf-inline-thinking", "nf-inline-working");
-  if (nfInlineCaptionLabelEl) nfInlineCaptionLabelEl.textContent = "You said";
-  if (nfInlineCaptionStateEl) nfInlineCaptionStateEl.textContent = "Live";
+  if (nfInlineCaptionLabelEl) nfInlineCaptionLabelEl.textContent = typingOpen ? "You typed" : "You said";
+  if (nfInlineCaptionStateEl) nfInlineCaptionStateEl.textContent = typingOpen ? "Typing" : "Live";
   if (nfInlineCaptionTextEl) nfInlineCaptionTextEl.textContent = value;
 
   // Height AFTER the text lands, or we would measure the previous sentence.
@@ -7099,7 +7111,6 @@ async function flushBufferedDictationTranscript() {
  * Only two things change. The answer is shown rather than spoken, because you
  * reached for the keyboard to avoid noise. And the microphone is never touched:
  * typing must not start him listening. */
-let typingOpen = false;
 
 function nfTypeField() {
   return notchFace?.querySelector(".nf-type-field") || null;
@@ -7113,9 +7124,13 @@ function openTyping(source) {
   if (nfInlineCaptionLabelEl) nfInlineCaptionLabelEl.textContent = "You typed";
   if (nfInlineCaptionStateEl) nfInlineCaptionStateEl.textContent = "Typing";
   field.value = "";
-  /* The window is click-through until something in it needs a cursor. */
+  /* The window is unfocusable by default, so focus() here does nothing until
+     main hands the keyboard over. Without this the field opened and every
+     letter went to whatever app was in front. */
   window.brainoMac.setNotchZone?.({ expanded: true, width: NF_COMPACT_SURFACE_WIDTH, height: 150 });
-  window.setTimeout(() => field.focus(), 30);
+  void window.brainoMac.typingFocus?.(true).then(() => {
+    window.setTimeout(() => field.focus(), 40);
+  }).catch(() => window.setTimeout(() => field.focus(), 40));
   logRenderer("type.open", { source: source || "" });
   updateNotchFace();
   return true;
@@ -7127,6 +7142,7 @@ function closeTyping(reason) {
   typingOpen = false;
   notchFace.classList.remove("nf-typing");
   if (field) { field.value = ""; field.blur(); }
+  void window.brainoMac.typingFocus?.(false).catch(() => {});
   if (nfInlineCaptionLabelEl) nfInlineCaptionLabelEl.textContent = "You said";
   logRenderer("type.close", { reason: reason || "" });
   nfSyncThinkingZone?.();
