@@ -126,7 +126,7 @@ const {
   macClosesAllTabs,
 } = require(path.join(__dirname, "hil-routing.cjs"));
 const { UNDERSTAND_PROMPT, parseUnderstanding } = require(path.join(__dirname, "hil-understand.cjs"));
-const { readChromePage, actOnChrome, chromePointFor, pageSignature, isChromeApp } = require(path.join(__dirname, "chrome-page.cjs"));
+const { readChromePage, actOnChrome, chromePointFor, focusChrome, pageSignature, isChromeApp } = require(path.join(__dirname, "chrome-page.cjs"));
 const {
   macVerifyAssert,
   macHilStepSignature,
@@ -14144,6 +14144,15 @@ async function macExecuteHilAction(action, elements) {
      * Reading stays with the page, which is the half the accessibility tree was
      * never any good at. Eyes from the DOM, hands from the OS. */
     if (kind === "click") {
+      /* A coordinate click lands on whatever is on top of the screen. If the
+         browser is behind something, the press goes into that instead: a test
+         of this typed into the user's editor. Nothing is clicked until the
+         browser is confirmed frontmost. */
+      const front = await focusChrome(macLastReadWasPage.app);
+      if (!front.ok) {
+        logMac("hil.page_click.blocked", { front: front.front || "unknown" });
+        return { ok: false, error: `I could not bring the browser to the front (${front.front || "unknown"} is in front), so I did not click.` };
+      }
       const point = await chromePointFor(action.index, macLastReadWasPage.app);
       if (!point.ok) return { ok: false, error: point.error };
       const before = await pageSignature(macLastReadWasPage.app);

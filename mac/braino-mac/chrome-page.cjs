@@ -84,6 +84,25 @@ const READ_JS = `(function(){
       out.push('[' + n + '] ' + e.tagName.toLowerCase() + (onScreen ? '' : ' (offscreen)') + ' "' + t.slice(0, 70) + '"');
       n++;
     }
+    /* The middle of the page, always offered last.
+     *
+     * Some editors have nothing to click. Google Docs draws its body on a
+     * canvas: no contenteditable, no textbox role, no accessible region at all,
+     * so the ONLY text field on the page is the title input. That is why a
+     * whole document got typed into its own name. There was nothing else to aim
+     * at.
+     *
+     * A person does not look for an element. They click the middle of the page
+     * and start typing. This is that, and it is not specific to any site:
+     * elementFromPoint at the centre is whatever is actually under the cursor
+     * there, which is exactly what a click would hit. */
+    var cx = Math.round(innerWidth / 2), cy = Math.round(innerHeight / 2);
+    var mid = document.elementFromPoint(cx, cy);
+    if (mid && n < ${READ_CAP}) {
+      mid.setAttribute('data-braino-idx', String(n));
+      out.push('[' + n + '] region "the page body, click here to put the cursor in it"');
+      n++;
+    }
     var head = document.title + ' :: ' + location.href;
     return head + '\\n' + out.join('\\n');
   } catch (err) { return 'BRAINO_ERR ' + err.message; }
@@ -173,6 +192,35 @@ const POINT_JS = (idx) => `(function(){
    and nothing like enough to be a fingerprint. */
 const SIGNATURE_JS = "location.href + '|' + document.body.innerText.length + '|' + document.querySelectorAll('*').length";
 
+/* Bring the browser to the front, and say whether it got there.
+ *
+ * A coordinate click lands on whatever is on TOP of the screen, not on the
+ * window we read the page from. Testing this typed a sentence into the user's
+ * Cursor chat because Chrome was behind it, and the same mistake is the likely
+ * cause of an earlier "Braino messed up my cursor command". Clicking blind into
+ * another app is the one failure here that can do real damage, so nothing is
+ * clicked until the browser is confirmed frontmost. */
+function frontAppName() {
+  return new Promise((resolve) => {
+    execFile("/usr/bin/osascript", ["-e", 'tell application "System Events" to name of first application process whose frontmost is true'],
+      { timeout: 8000 }, (error, stdout) => resolve(error ? "" : String(stdout || "").trim()));
+  });
+}
+
+async function focusChrome(app) {
+  const target = chromeScriptName(app);
+  await new Promise((resolve) => {
+    execFile("/usr/bin/osascript", ["-e", `tell application ${JSON.stringify(target)} to activate`],
+      { timeout: 8000 }, () => resolve());
+  });
+  for (let tries = 0; tries < 12; tries += 1) {
+    const front = await frontAppName();
+    if (front && (front === target || target.startsWith(front) || front.startsWith(target))) return { ok: true, front };
+    await new Promise((r) => setTimeout(r, 150));
+  }
+  return { ok: false, front: await frontAppName() };
+}
+
 /* Where the element is, in screen points a real mouse can be sent to. */
 async function chromePointFor(idx, app) {
   const res = await runJs(POINT_JS(idx), chromeScriptName(app));
@@ -222,4 +270,4 @@ function chromeScriptName(appName) {
   return CHROME_APPS[String(appName || "").trim()] || "Google Chrome";
 }
 
-module.exports = { readChromePage, actOnChrome, chromePointFor, pageSignature, isChromeApp, chromeScriptName, runJs, CHROME_APPS };
+module.exports = { readChromePage, actOnChrome, chromePointFor, focusChrome, pageSignature, isChromeApp, chromeScriptName, runJs, CHROME_APPS };
