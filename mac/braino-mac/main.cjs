@@ -126,6 +126,7 @@ const {
   macClosesAllTabs,
 } = require(path.join(__dirname, "hil-routing.cjs"));
 const { UNDERSTAND_PROMPT, parseUnderstanding } = require(path.join(__dirname, "hil-understand.cjs"));
+const { readChromePage, actOnChrome, isChromeApp } = require(path.join(__dirname, "chrome-page.cjs"));
 const {
   macVerifyAssert,
   macHilStepSignature,
@@ -1146,16 +1147,6 @@ async function readCursorAgentSignal() {
   let data = null;
   try { data = JSON.parse(res.detail); } catch (_) { return null; }
   const elements = Array.isArray(data?.elements) ? data.elements : [];
-  /* What he was actually handed. Without this there is no way to tell a page
-     with nothing on it from a page whose content fell off the end of the cap,
-     and those need opposite fixes. The Book tickets run could not be diagnosed
-     from the log at all. */
-  logMac("hil.observed", {
-    app: data?.app || "",
-    elements: elements.length,
-    hidden: Number(data?.hidden) || 0,
-    cap: MAC_HIL_OBSERVE_CAP,
-  });
   if (!elements.length) return null;
   const codeBlocks = elements.filter((e) => /copy code to clipboard/i.test(String(e.name || ""))).length;
   return elements.length + codeBlocks * 4;
@@ -13865,6 +13856,14 @@ let macHilGeneration = 0;
  * answer he was stuck on — arrived 24 seconds before he gave up saying the film
  * was not showing. He was told, and there was nowhere to put it. */
 let macActiveHilRun = null;
+/* Which world the last observation came from.
+ *
+ * The indexes in a page read belong to the DOM; the indexes in a window read
+ * belong to the accessibility tree. They are different numbers for different
+ * things, so an action has to be sent back through the same door the reading
+ * came through, or index [12] means one thing to the model and another to the
+ * hands. */
+let macLastReadWasPage = null;
 
 /* Ask HIL what was just said, instead of matching it against a list.
  *
@@ -13973,7 +13972,43 @@ async function macBuildObservation() {
   if (res.status !== "observe") return { ok: false, error: res.detail || res.status, text: "", elements: [] };
   let data = null;
   try { data = JSON.parse(res.detail); } catch (_) { return { ok: false, error: "unreadable observation", text: "", elements: [] }; }
-  const elements = Array.isArray(data?.elements) ? data.elements : [];
+  let elements = Array.isArray(data?.elements) ? data.elements : [];
+  let sawPage = false;
+  /* On the web, read the PAGE, not the window.
+   *
+   * Chrome puts its own furniture in the accessibility tree and almost none of
+   * the page, which is how a BookMyShow run got handed browser chrome and spent
+   * five steps hunting a button that was in the middle of the screen. Asking
+   * Chrome to run JavaScript in the tab returns the real DOM instead: every
+   * link, button and field with the words actually printed on it.
+   *
+   * It is the user's own tab, so it is already signed in, and they watch it
+   * happen in the window they were looking at. If the door is shut (the
+   * "Allow JavaScript from Apple Events" switch) this falls back to the tree,
+   * which is no worse than before. */
+  if (isChromeApp(data?.app)) {
+    const page = await readChromePage(data.app);
+    if (page.ok && page.elements.length) {
+      elements = page.elements;
+      sawPage = true;
+      macLastReadWasPage = { app: data.app, at: Date.now() };
+      logMac("hil.page_read", { app: data.app, elements: elements.length, url: textForLog(page.url, 90) });
+    } else if (!page.ok) {
+      macLastReadWasPage = null;
+      logMac("hil.page_read.failed", { app: data.app, reason: page.reason, detail: textForLog(page.detail || "", 120) });
+    }
+  }
+  /* What he was actually handed. Without this there is no way to tell a page
+     with nothing on it from a page whose content fell off the end of the cap,
+     and those need opposite fixes. The Book tickets run could not be diagnosed
+     from the log at all. */
+  logMac("hil.observed", {
+    source: sawPage ? "page" : "window",
+    app: data?.app || "",
+    elements: elements.length,
+    hidden: Number(data?.hidden) || 0,
+    cap: MAC_HIL_OBSERVE_CAP,
+  });
   // Serialized in the browser's format so the prompt's targeting rules read the
   // same way on both surfaces.
   const lines = elements.map((e) => `[${e.index}] ${String(e.role || "").padEnd(9)} "${e.name}"`);
@@ -14055,6 +14090,24 @@ async function macExecuteHilAction(action, elements) {
     await openChromeUrl(String(action.url || ""));
     await macHilWait(1400);
     return { ok: true };
+  }
+  /* Same door in, same door out. */
+  const onPage = Boolean(macLastReadWasPage) && Date.now() - macLastReadWasPage.at < 60000;
+  if (onPage && (type === "click" || type === "type" || type === "pressKey")) {
+    const el = byIndex(action.index);
+    if (type !== "pressKey" && !el) {
+      return { ok: false, error: `There is no element [${action.index}] on the page.` };
+    }
+    const kind = type === "click" ? "click" : type === "type" ? "type" : "press";
+    const value = type === "type" ? String(action.text || "") : String(action.key || "Enter");
+    const res = await actOnChrome(action.index, kind, value, macLastReadWasPage.app);
+    if (!res.ok) return { ok: false, error: res.error };
+    if (type === "type" && action.submit) {
+      await actOnChrome(action.index, "press", "Enter", macLastReadWasPage.app);
+    }
+    await macHilWait(900);
+    logMac("hil.page_act", { kind, index: action.index, did: textForLog(res.did || "", 80) });
+    return type === "type" ? { ok: true, typedInto: res.did || el?.name || "" } : { ok: true, pressed: res.did };
   }
   if (type === "click") {
     const el = byIndex(action.index);
