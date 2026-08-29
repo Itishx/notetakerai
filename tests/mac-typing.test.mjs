@@ -65,17 +65,15 @@ test("typing mid-job is the same conversation as speaking mid-job", () => {
   assert.match(body, /if \(!answered\) await runDelegate\(said/);
 });
 
-test("the hotkey is the way in, and the click is left alone", () => {
+test("both ways in are wired", () => {
   assert.match(renderer, /window\.brainoMac\.onTypeToggle\?\.\(/);
   /* Escape closes, Enter sends. */
   assert.match(renderer, /event\.key === "Escape"[\s\S]{0,80}closeTyping\("escape"\)/);
   assert.match(renderer, /event\.key === "Enter" && !event\.shiftKey/);
-  /* A click on the island has meant "talk to me" since long before typing
-     existed, so adding a second meaning did not replace the first: the field
-     opened AND the microphone started. */
-  assert.doesNotMatch(renderer, /openTyping\("click"\)/);
-  assert.match(renderer, /Clicking the notch is NOT a way in/);
-  assert.match(renderer, /tray\.click_talk/);
+  /* The click was handed to typing outright rather than being shared with
+     voice: sharing it was what started the microphone as well as the field. */
+  assert.match(renderer, /openTyping\("click"\)/);
+  assert.doesNotMatch(renderer, /tray\.click_talk/);
 });
 
 /* The field opened and vanished in the same tick: openTyping added
@@ -112,8 +110,10 @@ test("the notch takes the keyboard while you type, and gives it back", () => {
 /* Clicking INTO the text box to place the caret was starting the microphone,
    which is the opposite of what reaching for the keyboard means. */
 test("the field owns its own clicks", () => {
-  const h = renderer.slice(renderer.indexOf('logRenderer("tray.click_talk"') - 1400);
-  const guards = h.slice(0, h.indexOf('logRenderer("tray.click_talk"'));
+  /* Clicking INTO the box to place the caret must not re-open or re-trigger
+     anything: the field, once up, owns every click inside the caption. */
+  const h = renderer.slice(renderer.indexOf('logRenderer("tray.click_type"') - 1600);
+  const guards = h.slice(0, h.indexOf('logRenderer("tray.click_type"'));
   assert.match(guards, /if \(typingOpen \|\| event\.target\.closest\("\.nf-inline-caption"\)\) return;/);
 });
 
