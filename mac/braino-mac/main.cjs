@@ -126,7 +126,7 @@ const {
   macClosesAllTabs,
 } = require(path.join(__dirname, "hil-routing.cjs"));
 const { UNDERSTAND_PROMPT, parseUnderstanding } = require(path.join(__dirname, "hil-understand.cjs"));
-const { readChromePage, actOnChrome, isChromeApp } = require(path.join(__dirname, "chrome-page.cjs"));
+const { readChromePage, actOnChrome, chromePointFor, pageSignature, isChromeApp } = require(path.join(__dirname, "chrome-page.cjs"));
 const {
   macVerifyAssert,
   macHilStepSignature,
@@ -14129,6 +14129,38 @@ async function macExecuteHilAction(action, elements) {
     }
     const kind = type === "click" ? "click" : type === "type" ? "type" : "press";
     const value = type === "type" ? String(action.text || "") : String(action.key || "Enter");
+
+    /* A click goes through the real mouse, not through JavaScript.
+     *
+     * A dispatched click is synthetic and serious sites refuse it. Google Docs
+     * was pressed on "Blank document" four times, reported success four times,
+     * and never opened a document, because the page can see the event was not
+     * genuine and no amount of faking the sequence changes that.
+     *
+     * So the page says WHERE the thing is and the operating system does the
+     * pressing, which is a real event and works everywhere. Proven on the exact
+     * tile that failed: the click landed and the document opened.
+     *
+     * Reading stays with the page, which is the half the accessibility tree was
+     * never any good at. Eyes from the DOM, hands from the OS. */
+    if (kind === "click") {
+      const point = await chromePointFor(action.index, macLastReadWasPage.app);
+      if (!point.ok) return { ok: false, error: point.error };
+      const before = await pageSignature(macLastReadWasPage.app);
+      const hit = await runAxHelper(["clickat", String(point.x), String(point.y)], 12000);
+      logMac("hil.page_click", { index: action.index, x: point.x, y: point.y,
+        label: textForLog(point.label, 60), status: hit.status });
+      if (hit.status !== "clicked") return { ok: false, error: `${hit.status}: ${hit.detail}` };
+      await macHilWait(900);
+      const after = await pageSignature(macLastReadWasPage.app);
+      /* Saying "nothing happened" is the point. Reporting a dead click as a
+         good one is what made him press the same tile four times. */
+      if (before && after && before === after) {
+        return { ok: false, error: `I clicked "${point.label}" and nothing on the page changed.` };
+      }
+      return { ok: true, pressed: point.label };
+    }
+
     const res = await actOnChrome(action.index, kind, value, macLastReadWasPage.app);
     if (!res.ok) return { ok: false, error: res.error };
     if (type === "type" && action.submit) {

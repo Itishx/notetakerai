@@ -122,16 +122,94 @@ function actionJs(idx, kind, value) {
       if(k==='Enter'&&e.form)e.form.requestSubmit&&e.form.requestSubmit();
       return 'BRAINO_OK '+k;})()`;
   }
-  return `(function(){var e=${target};if(!e)return 'BRAINO_GONE';
-    e.scrollIntoView({block:'center'});e.click();
-    return 'BRAINO_OK '+(e.innerText||e.value||'').trim().slice(0,60);})()`;
+  /* A real press, not element.click().
+   *
+   * element.click() is a synthetic shortcut, and serious web apps ignore it:
+   * they listen for the sequence a mouse actually produces. Google Docs was
+   * clicked on "Blank document" four times, reported success four times, and
+   * never opened a document. He was not blind and he was not stupid. He was
+   * given a hand that does not press.
+   *
+   * The whole sequence goes out, and on the nearest thing above the element
+   * that looks clickable, because these tiles are usually a plain div with the
+   * handler sitting on an ancestor. */
+  return `(function(){
+    var e=${target};if(!e)return 'BRAINO_GONE';
+    e.scrollIntoView({block:'center'});
+    var t=e.closest('a,button,[role="button"],[role="link"],[onclick],[jsaction]')||e;
+    var r=t.getBoundingClientRect(), x=r.left+r.width/2, y=r.top+r.height/2;
+    var o={bubbles:true,cancelable:true,composed:true,view:window,clientX:x,clientY:y,button:0,buttons:1};
+    try{ t.focus({preventScroll:true}); }catch(_){}
+    ['pointerover','pointerenter','pointerdown','mousedown','pointerup','mouseup','click'].forEach(function(type){
+      var Ctor = type.indexOf('pointer')===0 && window.PointerEvent ? PointerEvent : MouseEvent;
+      var init = Ctor===PointerEvent ? Object.assign({pointerId:1,pointerType:'mouse',isPrimary:true},o) : o;
+      if(type==='pointerup'||type==='mouseup'||type==='click') init=Object.assign({},init,{buttons:0});
+      t.dispatchEvent(new Ctor(type,init));
+    });
+    return 'BRAINO_OK '+(t.innerText||t.value||t.getAttribute('aria-label')||'').trim().slice(0,60);
+  })()`;
+}
+
+/* Where an element actually is on the screen.
+ *
+ * The DOM gives viewport coordinates; a real mouse needs screen ones. The gap
+ * between them is the browser's own chrome, which outerHeight minus
+ * innerHeight measures without having to know anything about toolbars. */
+const POINT_JS = (idx) => `(function(){
+  var e=document.querySelector('[data-braino-idx="${idx}"]');
+  if(!e) return 'BRAINO_GONE';
+  e.scrollIntoView({block:'center'});
+  var r=e.getBoundingClientRect();
+  if(!r.width||!r.height) return 'BRAINO_GONE';
+  var chromeH = window.outerHeight - window.innerHeight;
+  var x = Math.round(window.screenX + r.left + r.width/2);
+  var y = Math.round(window.screenY + chromeH + r.top + r.height/2);
+  var label=(e.innerText||e.value||e.getAttribute('aria-label')||'').trim().slice(0,60);
+  return x+','+y+'|'+label;
+})()`;
+
+/* What the page looks like right now, cheaply. Address, how much text, how many
+   nodes: enough to tell "the click did something" from "the click did nothing",
+   and nothing like enough to be a fingerprint. */
+const SIGNATURE_JS = "location.href + '|' + document.body.innerText.length + '|' + document.querySelectorAll('*').length";
+
+/* Where the element is, in screen points a real mouse can be sent to. */
+async function chromePointFor(idx, app) {
+  const res = await runJs(POINT_JS(idx), chromeScriptName(app));
+  if (!res.ok) return { ok: false, error: `${res.reason}: ${res.detail}` };
+  if (res.out === "BRAINO_GONE") return { ok: false, error: "That element is no longer on the page." };
+  const [coords, label] = String(res.out).split("|");
+  const [x, y] = coords.split(",").map((n) => Number(n));
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return { ok: false, error: "Could not place that element on screen." };
+  return { ok: true, x, y, label: label || "" };
+}
+
+/* A cheap before/after fingerprint, so "it did nothing" is detectable. */
+async function pageSignature(app) {
+  const r = await runJs(SIGNATURE_JS, chromeScriptName(app));
+  return r.ok ? r.out : null;
 }
 
 async function actOnChrome(idx, kind, value, app) {
-  const res = await runJs(actionJs(idx, kind, value), chromeScriptName(app));
+  const target = chromeScriptName(app);
+  /* Success used to mean "the call did not throw", which is how four dead
+     clicks were reported as four good ones. Sample before, act, wait, sample
+     again: if the page did not move, say so, so he tries something else
+     instead of repeating a lie. */
+  const before = kind === "click" ? await runJs(SIGNATURE_JS, target) : null;
+  const res = await runJs(actionJs(idx, kind, value), target);
   if (!res.ok) return { ok: false, error: `${res.reason}: ${res.detail}` };
   if (res.out === "BRAINO_GONE") return { ok: false, error: "That element is no longer on the page." };
-  if (res.out.startsWith("BRAINO_OK")) return { ok: true, did: res.out.slice(10) };
+  if (res.out.startsWith("BRAINO_OK")) {
+    const did = res.out.slice(10);
+    if (kind !== "click" || !before?.ok) return { ok: true, did };
+    await new Promise((r) => setTimeout(r, 800));
+    const after = await runJs(SIGNATURE_JS, target);
+    if (after.ok && after.out && after.out === before.out) {
+      return { ok: false, moved: false, error: `I pressed "${did}" and nothing on the page changed.` };
+    }
+    return { ok: true, did, moved: true };
+  }
   return { ok: false, error: res.out.slice(0, 160) };
 }
 
@@ -144,4 +222,4 @@ function chromeScriptName(appName) {
   return CHROME_APPS[String(appName || "").trim()] || "Google Chrome";
 }
 
-module.exports = { readChromePage, actOnChrome, isChromeApp, chromeScriptName, runJs, CHROME_APPS };
+module.exports = { readChromePage, actOnChrome, chromePointFor, pageSignature, isChromeApp, chromeScriptName, runJs, CHROME_APPS };

@@ -48,6 +48,31 @@ worse than before. The log says which happened:
 | `hil.page_read.failed  reason: chrome_not_running` | no Chrome to read |
 | `hil.page_act` | he clicked or typed on the page |
 
+## Eyes from the DOM, hands from the OS
+
+Reading and clicking do not go the same way, and finding that out cost a whole
+session.
+
+A JavaScript-dispatched click is **synthetic**, and serious sites refuse it.
+Google Docs was pressed on "Blank document" four times, reported success four
+times, and never opened a document. Dispatching the full mouse sequence
+(pointerdown, mousedown, mouseup, click) on the tile and on its ancestors does
+not help either: the page can see the event was not genuine, and nothing done
+from inside the page can change that.
+
+So the page is asked **where** the element is, in screen points, and the
+operating system does the pressing through `clickat`. That is a real event and
+works everywhere. Proven on the exact tile that had failed: the click landed and
+a blank document opened.
+
+Reading stays with the page, which is the half the accessibility tree was never
+any good at.
+
+**And a click that changes nothing is reported as changing nothing.** The page
+is fingerprinted before and after (address, text length, node count) and if
+neither moved, he is told so. Reporting a dead click as a good one is what made
+him press the same tile four times.
+
 ## Same door in, same door out
 
 The numbers in a page read belong to the DOM. The numbers in a window read
