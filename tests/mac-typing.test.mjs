@@ -108,3 +108,24 @@ test("the notch takes the keyboard while you type, and gives it back", () => {
   /* And it is handed back on close, not left held. */
   assert.match(renderer, /typingFocus\?\.\(false\)/);
 });
+
+/* Clicking INTO the text box to place the caret was starting the microphone,
+   which is the opposite of what reaching for the keyboard means. */
+test("the field owns its own clicks", () => {
+  const h = renderer.slice(renderer.indexOf('logRenderer("tray.click_talk"') - 1400);
+  const guards = h.slice(0, h.indexOf('logRenderer("tray.click_talk"'));
+  assert.match(guards, /if \(typingOpen \|\| event\.target\.closest\("\.nf-inline-caption"\)\) return;/);
+});
+
+/* The field and his reply were drawn on top of each other: two labels and two
+   paragraphs in the same absolutely positioned box. The caption used to close
+   itself when an answer arrived, so it never needed listing; typing holds it
+   open on purpose, which broke that assumption. */
+test("an answer owns the box, whatever is holding it", () => {
+  const css = readFileSync(new URL("../mac/braino-mac/renderer/braino-mac.css", import.meta.url), "utf8");
+  const hide = css.slice(css.indexOf("#notch-face.nf-answer-open .nf-band,"));
+  assert.match(hide.slice(0, hide.indexOf("}") + 1), /#notch-face\.nf-answer-open \.nf-inline-caption,/);
+  /* And the state matches the pixels: the field stands down rather than being
+     hidden underneath, so the keyboard is handed back. */
+  assert.match(renderer, /if \(typingOpen\) closeTyping\("answer"\);/);
+});

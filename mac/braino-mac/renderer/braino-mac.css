@@ -3246,6 +3246,12 @@ body {
 #notch-face.nf-answer-open .nf-volume,
 #notch-face.nf-answer-open .nf-think-dots,
 #notch-face.nf-answer-open .nf-think-arrow,
+/* The caption too, and this one only started mattering when typing arrived.
+   It used to close itself whenever an answer took the box, so it never needed
+   listing here. Typing holds it open on purpose, which put the field and the
+   reply in the same absolutely positioned box: two labels and two paragraphs
+   drawn on top of each other. An answer owns the box, whatever is holding it. */
+#notch-face.nf-answer-open .nf-inline-caption,
 /* The two that were missing, and the reason his reply had "Deciding" printed
    through it.
  *

@@ -1140,6 +1140,15 @@ let nfAnswerMode = "";
  * reply going short -> long -> short while it was being typed. Decide once on
  * the first paint, and revisit only when the answer is complete. */
 let nfAnswerModeLocked = "";
+/* Is the typing field up?
+ *
+ * Right at the top with the other notch state, because three different things
+ * read it and they are scattered: startNotchAnswer (which puts the field away
+ * when a reply takes the box), syncInlineVoiceSurface (which keeps the caption
+ * open while it is up), and the click-to-talk handler (which must not start the
+ * microphone when you click into a text box). `let` is not hoisted, so any of
+ * those running above the declaration would throw rather than read false. */
+let typingOpen = false;
 let nfAnswerText = "";
 let nfAnswerGeneration = 0;
 let nfAnswerCompletedWords = 0;
@@ -1686,6 +1695,10 @@ function startNotchAnswer(text, generation, options = {}) {
     "nf-think-failed", "nf-think-complete",
   );
   nfThinkingPinned = false;
+  /* His reply takes the box, so the field stands down rather than being merely
+     hidden underneath it: leaving typingOpen true would keep the keyboard held
+     and the caption forced open behind the answer. */
+  if (typingOpen) closeTyping("answer");
   notchFace.classList.add("nf-answer-open");
   renderNotchAnswer();
   window.brainoMac.setNotchZone?.({
@@ -2498,11 +2511,6 @@ function refitOpenInlineCaption() {
   if (!notchFace?.classList.contains("nf-inline-open")) return;
   notchFace.style.setProperty("--nf-inline-height", `${measureInlineCaptionHeight()}px`);
 }
-
-/* Is the typing field up? It sits here because syncInlineVoiceSurface just
-   below is the earliest thing that reads it, and `let` is not hoisted: declared
-   any lower, a call during startup would throw instead of reading false. */
-let typingOpen = false;
 
 function syncInlineVoiceSurface(mode = "", text = "") {
   if (!notchFace || !nfInlineCaptionEl) return;
@@ -10312,6 +10320,10 @@ document.addEventListener("click", (event) => {
   // Open music player: the surface owns every click (transport buttons keep
   // their own handlers) — a stray tap must not flip a voice session on.
   if (nfMusicOpen || event.target.closest(".nf-music-surface")) return;
+  /* The typing field owns every click while it is up, for exactly the same
+     reason. Clicking INTO a text box to put the caret in it was starting the
+     microphone, which is the opposite of what reaching for the keyboard means. */
+  if (typingOpen || event.target.closest(".nf-inline-caption")) return;
   if (nfExpanded && nfPill) {
     const rect = nfPill.getBoundingClientRect();
     const bandBottom = rect.top + (parseFloat(getComputedStyle(notchFace).getPropertyValue("--nf-notch-h")) || 33) + 34;
