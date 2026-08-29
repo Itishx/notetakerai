@@ -6054,6 +6054,53 @@ async function readGmailThread() {
   try { return { status: "ok", ...JSON.parse(raw) }; } catch (_) { return { status: "__parse__" }; }
 }
 
+/* A Notion page through the API, not by driving the site.
+ *
+ * Notion's editor is a canvas with no accessible body, so clicking through it
+ * means fighting a page that cannot reliably be typed into: a real run spent
+ * its whole budget there and produced nothing. The OAuth connection and the
+ * sync function have existed for months with nothing calling them.
+ *
+ * Registered in the tool catalogue WITH this handler. fetch_assets is in that
+ * catalogue with no handler behind it, which means the model can choose a tool
+ * that cannot run, and that is worth not repeating. */
+async function runNotionPage(title, markdown) {
+  const heading = String(title || "").trim() || "Braino note";
+  const body = String(markdown || "").trim();
+  if (!body) return { ok: false, say: "Tell me what should go in the page and I will write it." };
+  const session = loadAuthSession();
+  const userId = session?.user?.id;
+  if (!userId) return { ok: false, say: "Sign in to Braino first so I know which Notion workspace is yours." };
+  try {
+    const token = await getBrainoAuthToken();
+    const res = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/sync-to-notion`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: SUPABASE_ANON_KEY,
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ userIdentifier: userId, title: heading, markdown: body }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const why = String(data?.error || `Notion refused that (${res.status}).`);
+      logMac("notion.page.failed", { status: res.status, error: textForLog(why, 160) });
+      /* The one failure worth naming precisely, because it has a fix the person
+         can actually carry out. */
+      if (/not connected|no connection|connection/i.test(why)) {
+        return { ok: false, say: "Notion is not connected yet. Open the Braino dashboard settings and press Connect on Notion." };
+      }
+      return { ok: false, say: why };
+    }
+    logMac("notion.page.created", { title: textForLog(heading, 80), chars: body.length });
+    return { ok: true, say: `Written to Notion: ${heading}.`, url: data?.url || data?.pageUrl || "" };
+  } catch (error) {
+    logMac("notion.page.failed", { error: String(error?.message || error) });
+    return { ok: false, say: "I could not reach Notion just then." };
+  }
+}
+
 async function replyToOpenGmail(userInstruction) {
   const onGmail = /mail\.google\.com/.test(activeMacContext?.browserUrl || "");
   if (!onGmail) {

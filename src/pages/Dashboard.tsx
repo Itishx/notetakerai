@@ -1372,6 +1372,11 @@ export default function Dashboard() {
   const [calendarConnectLoading, setCalendarConnectLoading] = useState(false);
   const [xConnectLoading, setXConnectLoading] = useState(false);
   const [spotifyConnectLoading, setSpotifyConnectLoading] = useState(false);
+  /* Notion. The OAuth functions have existed for months and nothing ever called
+     them, so a fully working backend sat unreachable: no button, no way in. */
+  const [notionConn, setNotionConn] = useState<{ workspaceName: string | null } | null>(null);
+  const [notionConnectLoading, setNotionConnectLoading] = useState(false);
+  const notionPollRef = useRef<number | null>(null);
   const [xPostDraft, setXPostDraft] = useState("");
   const [xScheduledAt, setXScheduledAt] = useState(() => defaultScheduledAtValue());
   const [xScheduling, setXScheduling] = useState(false);
@@ -1670,6 +1675,7 @@ export default function Dashboard() {
           .eq("user_identifier", user.id)
           .maybeSingle(),
         refreshGoogleCalendarConnection(user.id).catch(() => null),
+        refreshNotionConnection(user.id).catch(() => null),
         refreshBrainoContacts(user.id).catch(() => []),
         supabase
           .from("spotify_connections")
@@ -1905,6 +1911,75 @@ export default function Dashboard() {
       console.error("google drive connect failed:", error);
       setDriveConnectLoading(false);
       window.alert(error instanceof Error ? error.message : "Failed to connect Google Drive");
+    }
+  }
+
+  async function refreshNotionConnection(userId: string) {
+    try {
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/notion-connection-status`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+          Authorization: `Bearer ${session?.access_token}`,
+        },
+        body: JSON.stringify({ userIdentifier: userId }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      const connected = Boolean(payload?.connected);
+      setNotionConn(connected ? { workspaceName: payload?.workspaceName ?? null } : null);
+      return connected;
+    } catch (error) {
+      console.error("notion status failed:", error);
+      return false;
+    }
+  }
+
+  function stopNotionPolling() {
+    if (notionPollRef.current) {
+      window.clearInterval(notionPollRef.current);
+      notionPollRef.current = null;
+    }
+  }
+
+  async function handleConnectNotion() {
+    if (!user) return;
+    setNotionConnectLoading(true);
+    try {
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/notion-oauth-start`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+          Authorization: `Bearer ${session?.access_token}`,
+        },
+        body: JSON.stringify({ userIdentifier: user.id }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload.authUrl) {
+        throw new Error(payload.error || "Failed to start Notion OAuth");
+      }
+      window.open(payload.authUrl, "_blank", "noopener,noreferrer");
+      /* Notion redirects back to the callback, which writes the row. Poll for it
+         rather than asking the person to refresh. */
+      stopNotionPolling();
+      const startedAt = Date.now();
+      notionPollRef.current = window.setInterval(async () => {
+        if (await refreshNotionConnection(user.id)) {
+          stopNotionPolling();
+          setNotionConnectLoading(false);
+          toast({ title: "Notion connected", description: "Braino can create and update pages now." });
+          return;
+        }
+        if (Date.now() - startedAt > 2 * 60 * 1000) {
+          stopNotionPolling();
+          setNotionConnectLoading(false);
+        }
+      }, 2000);
+    } catch (error) {
+      console.error("notion connect failed:", error);
+      setNotionConnectLoading(false);
+      toast({ title: "Could not start Notion", description: error instanceof Error ? error.message : "Try again." });
     }
   }
 
@@ -5940,6 +6015,28 @@ export default function Dashboard() {
                         className="rounded-full border-[var(--sb-line)] bg-[var(--sb-panel-2)] text-xs text-[var(--sb-ink)] hover:bg-[var(--sb-bg-2)]"
                       >
                         {spotifyConnectLoading ? "Waiting…" : spotifyConn ? "Reconnect" : "Connect"}
+                      </Button>
+                    </div>
+
+                    <div className="flex items-center justify-between rounded-xl border border-[var(--sb-line-2)] bg-[var(--sb-panel)] p-4">
+                      <div>
+                        <div className="flex items-center gap-2 text-sm font-medium text-[var(--sb-ink)]">
+                          <span className={cn("h-2 w-2 rounded-full", notionConn ? "bg-emerald-500" : "bg-[var(--sb-ink-4)]")} />
+                          Notion
+                        </div>
+                        <div style={monoStyle} className="mt-1 text-[11px] text-[var(--sb-ink-3)]">
+                          {notionConn
+                            ? `${notionConn.workspaceName || "Workspace"} connected`
+                            : "Let Braino create and update pages through the Notion API, instead of clicking through the site"}
+                        </div>
+                      </div>
+                      <Button
+                        variant="outline"
+                        onClick={handleConnectNotion}
+                        disabled={notionConnectLoading}
+                        className="rounded-full border-[var(--sb-line)] bg-[var(--sb-panel-2)] text-xs text-[var(--sb-ink)] hover:bg-[var(--sb-bg-2)]"
+                      >
+                        {notionConnectLoading ? "Waiting…" : notionConn ? "Reconnect" : "Connect"}
                       </Button>
                     </div>
 

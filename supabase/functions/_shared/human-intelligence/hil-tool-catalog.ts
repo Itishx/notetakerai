@@ -98,6 +98,11 @@ export const HIL_TOOL_CATALOG: HilTool[] = [
   { name: "file_action_undo", params: [], gloss: "Reverse the last file move, rename, delete, or desktop organize", stateful: true, zeroNetwork: true, handler: "undoLastFileAction", },
   { name: "file_find", params: ["query", "kind", "shouldOpen"], gloss: "Find files on the Mac and optionally open the top hit", zeroNetwork: true, },
   { name: "front_window_summary", params: [], gloss: "Say which app, window title and URL is currently in front", zeroNetwork: true, memoSafe: true, handler: "frontWindowSummary", },
+  /* Through the API, not by clicking the site. Notion's editor is a canvas with
+     no accessible body, so driving it by hand means fighting a page that cannot
+     be typed into; the OAuth connection has existed for months and had nothing
+     calling it. */
+  { name: "notion_page", params: ["title", "markdown"], gloss: "Create a page in the connected Notion workspace with a title and markdown body", handler: "runNotionPage", },
   { name: "gmail_reply", params: ["userInstruction"], gloss: "Draft and send a reply to the Gmail thread open in Chrome", irreversible: true, handler: "replyToOpenGmail", },
   { name: "hide_braino", params: [], gloss: "Hide the Braino window until the user calls it back", stateful: true, zeroNetwork: true, },
   { name: "mac_skills_list", params: [], gloss: "Recite the canned list of what Braino does on this Mac", zeroNetwork: true, memoSafe: true, },
