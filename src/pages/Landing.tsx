@@ -465,9 +465,12 @@ export default function Landing() {
             No prompt engineering degree required.
           </p>
           <div className="ld-cta">
-            <a href={EXTENSION_DOWNLOAD_URL} download={EXTENSION_DOWNLOAD_FILENAME} className="ld-btn">
+            {/* Get Started is the front door, not a download. Handing someone a
+                zip before they have an account skips every decision that makes
+                Braino theirs, and there is a whole onboarding built for it. */}
+            <Link to="/onboarding" className="ld-btn">
               Get started
-            </a>
+            </Link>
             <a href="#does" className="ld-btn ghost">See what he does</a>
           </div>
           <p className="ld-hero-note">Free to start. Chrome and Mac.</p>
