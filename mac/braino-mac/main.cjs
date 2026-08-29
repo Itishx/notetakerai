@@ -64,6 +64,42 @@ const AUTH_CALLBACK_PATH = "/braino-mac-auth-callback";
 // To remove the trick entirely, delete this block, the SKIT branch in the
 // double-option handler, the "braino-mac:skit-step" ipcMain handler,
 // preload's skit bridge, and runSkit() in the renderer.
+/* ── THE PITCH MINUTE ──────────────────────────────────────────────────────
+ *
+ * Sixty seconds, on Cmd+Shift+P, in front of investors. Every word is written
+ * here rather than generated: a model call inside this minute is a chance for
+ * him to say something nobody has read, and that risk buys nothing. The only
+ * live thing is the post, which is the entire point of the demo.
+ *
+ * Not Shift twice. A bare double-modifier can fire while you are typing, and
+ * this is the one gesture that must never go off by accident.
+ *
+ * BRAINO_PITCH_REHEARSE=1 runs everything except the publish, so it can be
+ * practised without burning the post. */
+const PITCH = {
+  post: [
+    "Just pitched Braino at Mesa.",
+    "",
+    "The problem: founders can build now. They still can't get seen.",
+    "",
+    "So I built a co-founder who does distribution.",
+    "",
+    "He wrote this and posted it himself. I'm still on stage.",
+  ].join("\n"),
+  lines: {
+    hello: "Hi. I'm your co-founder. Or at least, I aspire to be.",
+    claim: "Itish just told you I write his posts. Let me stop being a claim.",
+    live: "That is live right now. Go take a look.",
+    /* If the account is not linked yet, he says the true version instead of
+       the triumphant one. Claiming a post that did not go out, on stage, in
+       front of people who can check, is the worst failure available here. */
+    notLinked: "He published it to my account, which he connects tomorrow. For now, just see here.",
+    close: "And while all this is cool, let me leave you with something. You'll remember me forever.",
+  },
+  rehearse: () => String(process.env.BRAINO_PITCH_REHEARSE || "").trim() === "1",
+};
+let pitchDemoRunning = false;
+
 const SKIT = {
   // Double Option belongs to BrainoHERA. Keep the recording-only skit code
   // available for an explicit demo trigger, but never let it take the global
@@ -2955,6 +2991,16 @@ function registerHotkeys() {
       }
       return false;
     })(),
+    pitchDemo: globalShortcut.register("CommandOrControl+Shift+P", () => {
+      pitchDemoRunning = true;
+      logMac("pitch.start", { rehearse: PITCH.rehearse() });
+      sendToRenderer("braino-mac:pitch-demo", {
+        post: PITCH.post,
+        lines: PITCH.lines,
+        rehearse: PITCH.rehearse(),
+      });
+      ensureDockWindowVisible("pitch-demo");
+    }),
     dashboard: globalShortcut.register("CommandOrControl+Shift+D", () => {
       openDashboardWindow();
     }),
@@ -17143,8 +17189,65 @@ ipcMain.handle("braino-mac:calendar-join", async () => {
 // SKIT (TEMPORARY — Instagram demo): renderer-driven steps between spoken
 // lines. "send" reuses the real WhatsApp machinery (draft in dry runs, real
 // auto-send otherwise); "close" Cmd+Ws the chat window and hides WhatsApp.
+/* Publish the pitch post, for real, and say honestly whether it went. */
+ipcMain.handle("braino-mac:pitch-post", async (_event, payload) => {
+  const text = String(payload?.text || "").trim();
+  if (!text) return { ok: false, reason: "empty" };
+  if (payload?.rehearse) {
+    logMac("pitch.post.rehearsed", { chars: text.length });
+    return { ok: true, rehearsed: true };
+  }
+  try {
+    const auth = authStatusPayload();
+    const authToken = await getBrainoAuthToken();
+    if (!authToken || !auth?.userId) {
+      logMac("pitch.post.not_linked", { why: "no auth" });
+      return { ok: false, reason: "not_linked" };
+    }
+    const base = SUPABASE_URL.replace(/\/$/, "");
+    const insert = await fetch(`${base}/rest/v1/scheduled_x_posts`, {
+      method: "POST",
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${authToken}`,
+        "Content-Type": "application/json",
+        Prefer: "return=representation",
+      },
+      body: JSON.stringify({
+        user_id: auth.userId,
+        content: text,
+        scheduled_at: new Date().toISOString(),
+        thread_mode: false,
+      }),
+    });
+    if (!insert.ok) {
+      const detail = await insert.text().catch(() => "");
+      logMac("pitch.post.failed", { stage: "insert", status: insert.status, detail: textForLog(detail, 120) });
+      return { ok: false, reason: "not_linked" };
+    }
+    const dispatch = await fetch(`${base}/functions/v1/dispatch-scheduled-x-posts`, {
+      method: "POST",
+      headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${authToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    const result = await dispatch.json().catch(() => ({}));
+    const posted = dispatch.ok && !result?.error;
+    logMac(posted ? "pitch.post.sent" : "pitch.post.failed", {
+      stage: "dispatch", status: dispatch.status, detail: textForLog(JSON.stringify(result || {}), 140),
+    });
+    return posted ? { ok: true } : { ok: false, reason: "not_linked" };
+  } catch (error) {
+    logMac("pitch.post.failed", { error: String(error?.message || error) });
+    return { ok: false, reason: "not_linked" };
+  }
+});
+
+ipcMain.handle("braino-mac:pitch-done", async () => { pitchDemoRunning = false; logMac("pitch.done", {}); return { ok: true }; });
+
 ipcMain.handle("braino-mac:skit-step", async (_event, step) => {
-  if (!SKIT.enabled) return { ok: false, say: "" };
+  /* The pitch minute borrows the moonwalk's music cue. It is the same Billie
+     Jean at 3:31 that the skit uses, and there is no reason to have two. */
+  if (!SKIT.enabled && !pitchDemoRunning) return { ok: false, say: "" };
   if (step === "prewarm") {
     // Boot Spotify and SHOW IT visibly for the moonwalk.
     try { await execFileP("open", ["-b", "com.spotify.client"], { timeout: 8000 }); } catch (error) { logMac("skit.prewarm_failed", { error }); }

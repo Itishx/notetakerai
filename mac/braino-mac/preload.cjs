@@ -213,6 +213,13 @@ contextBridge.exposeInMainWorld("brainoMac", {
     ipcRenderer.on("braino-mac:voice-toggle", handler);
     return () => ipcRenderer.removeListener("braino-mac:voice-toggle", handler);
   },
+  onPitchDemo: (callback) => {
+    const handler = (_event, payload) => callback(payload || {});
+    ipcRenderer.on("braino-mac:pitch-demo", handler);
+    return () => ipcRenderer.removeListener("braino-mac:pitch-demo", handler);
+  },
+  pitchPost: (payload) => ipcRenderer.invoke("braino-mac:pitch-post", payload || {}),
+  pitchDone: () => ipcRenderer.invoke("braino-mac:pitch-done"),
   onTypeToggle: (callback) => {
     const handler = (_event, payload) => callback(payload || {});
     ipcRenderer.on("braino-mac:type-toggle", handler);

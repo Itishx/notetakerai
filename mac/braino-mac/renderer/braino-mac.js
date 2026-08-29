@@ -9049,6 +9049,90 @@ document.addEventListener("keydown", (event) => {
   }
 });
 
+/* ── THE PITCH MINUTE ──────────────────────────────────────────────────────
+ *
+ * Sixty seconds on stage. Nothing here is generated: every word arrives from
+ * PITCH in main.cjs, so the only uncertain thing in the minute is the post
+ * itself, which is the point of showing it.
+ *
+ * The shape, in order: he introduces himself, says he will stop being a claim,
+ * the notch opens into its thinking panel and writes the post, turns green when
+ * it lands, he says it is live, then Billie Jean and the moonwalk.
+ *
+ * Every step is guarded. If the music will not start he moonwalks in silence.
+ * If the account is not linked he says so plainly instead of claiming a post
+ * that did not go out, because the room can check. */
+let pitchRunning = false;
+
+function pitchWait(ms) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+async function runPitchDemo(payload) {
+  if (pitchRunning) return;
+  pitchRunning = true;
+  const lines = payload?.lines || {};
+  const post = String(payload?.post || "");
+  const rehearse = Boolean(payload?.rehearse);
+  logRenderer("pitch.run", { rehearse });
+
+  try {
+    /* Music is opened first and quietly: Spotify takes seconds to wake, and
+       the moonwalk is at the end. Asking for it now means it is ready then. */
+    void window.brainoMac.skitStep?.("prewarm");
+
+    await speak(lines.hello || "Hi. I'm your co-founder.");
+    await pitchWait(400);
+    await speak(lines.claim || "Let me stop being a claim.");
+
+    /* The notch takes over: his own thinking panel, opened, writing the post. */
+    openNotchThinking("Writing the post", "Putting it in your voice.");
+    nfSetThinkingOpen(true);
+    await pitchWait(700);
+    renderThinkingCanvas("Writing the post", post.split("\n").filter(Boolean)[0] || "Writing the post");
+    await pitchWait(900);
+    for (const para of post.split("\n").filter(Boolean)) {
+      renderThinkingCanvas("Writing the post", para);
+      await pitchWait(950);
+    }
+
+    const sent = await window.brainoMac.pitchPost?.({ text: post, rehearse });
+    const ok = Boolean(sent?.ok);
+
+    if (ok) {
+      /* Green, and only when it actually went. */
+      renderThinkingCanvas("Complete", "Post sent.");
+      notchFace?.classList.add("nf-think-complete");
+      await pitchWait(1400);
+      await speak(lines.live || "That is live right now. Go take a look.");
+    } else {
+      renderThinkingCanvas("Needs attention", "Account not linked yet.");
+      await pitchWait(1200);
+      await speak(lines.notLinked || "He published it to my account, which he connects tomorrow.");
+    }
+
+    notchFace?.classList.remove("nf-think-complete");
+    nfSetThinkingOpen(false);
+    nfSetThinking("");
+    await pitchWait(500);
+
+    /* The last twelve seconds. Music, then the glide, then the line. */
+    void window.brainoMac.skitStep?.("play");
+    await pitchWait(1200);
+    skitPerformMoonwalk(11000);
+    await pitchWait(1500);
+    await speak(lines.close || "You'll remember me forever.");
+  } catch (error) {
+    logRenderer("pitch.failed", { error: String(error?.message || error) });
+  } finally {
+    pitchRunning = false;
+    notchFace?.classList.remove("nf-think-complete");
+    void window.brainoMac.pitchDone?.();
+  }
+}
+
+window.brainoMac.onPitchDemo?.((payload) => { void runPitchDemo(payload); });
+
 window.brainoMac.onVoiceToggle(() => {
   /* Waking the voice takes a few seconds no matter what, and most of that is
      OpenAI minting the session. The shimmer is the honest acknowledgement in
