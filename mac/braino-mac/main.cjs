@@ -2941,10 +2941,20 @@ function registerHotkeys() {
        registering that would take "new tab" away from every browser, editor and
        terminal on the machine. Add Option and it collides with nothing. To make
        it plain Cmd+T anyway, drop the "Alt+" below and accept the trade. */
-    typeToBraino: globalShortcut.register("CommandOrControl+Alt+T", () => {
-      sendToRenderer("braino-mac:type-toggle", { source: "Cmd+Alt+T" });
-      ensureDockWindowVisible("type-hotkey");
-    }),
+    typeToBraino: (() => {
+      /* Try the good one, then fall back rather than leaving him with no way in.
+         register() returns false when another app already owns the combination,
+         and a silent false is exactly how this shipped broken the first time. */
+      for (const combo of ["CommandOrControl+Alt+T", "CommandOrControl+Shift+Space", "CommandOrControl+Alt+K"]) {
+        const took = globalShortcut.register(combo, () => {
+          sendToRenderer("braino-mac:type-toggle", { source: combo });
+          ensureDockWindowVisible("type-hotkey");
+        });
+        if (took) { logMac("hotkeys.typing", { combo }); return combo; }
+        logMac("hotkeys.typing.taken", { combo });
+      }
+      return false;
+    })(),
     dashboard: globalShortcut.register("CommandOrControl+Shift+D", () => {
       openDashboardWindow();
     }),
@@ -2980,6 +2990,17 @@ function registerHotkeys() {
     controlHandler: "swift-event-tap",
   };
 
+  /* Which ones actually took. globalShortcut.register returns false when
+     another app already owns the combination, and until this line that failure
+     was invisible: Cmd+Alt+T did nothing and there was no way to tell whether
+     it had failed to register or failed to reach the renderer. */
+  const failed = Object.entries(registered)
+    .filter(([name, ok]) => ok === false && name !== "bareControl")
+    .map(([name]) => name);
+  logMac("hotkeys.registered", {
+    ok: Object.entries(registered).filter(([, v]) => v === true).length,
+    failed: failed.join(",") || "none",
+  });
   sendToRenderer("braino-mac:helper-status", { type: "electron-hotkeys", registered });
   return registered;
 }

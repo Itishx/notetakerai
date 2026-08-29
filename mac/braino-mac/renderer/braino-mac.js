@@ -9010,14 +9010,11 @@ window.brainoMac.onTypeToggle?.((payload) => {
   openTyping(payload?.source || "hotkey");
 });
 
-/* And clicking him opens the same field, so nobody has to know the shortcut. */
-notchFace?.addEventListener("click", (event) => {
-  if (typingOpen) return;
-  if (event.target?.closest?.(".nf-think-chip, .nf-answer-done, .nf-ms-btn, .nf-ib, .nf-meeting-stop, .nf-meeting-stealth, .nf-join")) return;
-  if (dictationMode || herMode || notchFace.classList.contains("nf-answer-open")) return;
-  openTyping("click");
-});
-
+/* Clicking the notch is NOT a way in, and that was a mistake worth recording.
+   A click on the island has meant "talk to me" since long before typing existed
+   (see the tray.click_talk handler), so adding a second meaning did not replace
+   the first, it ran alongside it: the field opened AND the microphone started.
+   The gesture was already spoken for. */
 document.addEventListener("keydown", (event) => {
   if (!typingOpen) return;
   if (event.key === "Escape") { event.preventDefault(); closeTyping("escape"); return; }

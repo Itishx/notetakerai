@@ -13,9 +13,23 @@ const css = read("../mac/braino-mac/renderer/braino-mac.css");
 test("the shortcut cannot steal new tab from every app", () => {
   /* Electron shortcuts are system wide, so plain Cmd+T would take "new tab"
      from every browser, editor and terminal on the machine. */
-  assert.match(main, /globalShortcut\.register\("CommandOrControl\+Alt\+T"/);
+  assert.match(main, /"CommandOrControl\+Alt\+T"/);
   assert.doesNotMatch(main, /globalShortcut\.register\("CommandOrControl\+T"/);
   assert.match(main, /would take "new tab" away from every browser/);
+});
+
+/* register() returns false when another app already owns a combination, and a
+   silent false is how this shipped broken: Cmd+Alt+T did nothing and there was
+   no way to tell whether it failed to register or failed to reach the
+   renderer. */
+test("a blocked shortcut is neither silent nor fatal", () => {
+  const block = main.slice(main.indexOf("typeToBraino: (() => {"));
+  const body = block.slice(0, block.indexOf("dashboard: globalShortcut"));
+  assert.ok((body.match(/"CommandOrControl[^"]+"/g) || []).length >= 2, "needs a fallback combo");
+  assert.match(body, /logMac\("hotkeys\.typing", \{ combo \}\)/);
+  assert.match(body, /logMac\("hotkeys\.typing\.taken", \{ combo \}\)/);
+  /* And every registration reports whether it took. */
+  assert.match(main, /logMac\("hotkeys\.registered"/);
 });
 
 test("typing lands in the box speech lands in", () => {
@@ -51,12 +65,15 @@ test("typing mid-job is the same conversation as speaking mid-job", () => {
   assert.match(body, /if \(!answered\) await runDelegate\(said/);
 });
 
-test("both ways in are wired", () => {
+test("the hotkey is the way in, and the click is left alone", () => {
   assert.match(renderer, /window\.brainoMac\.onTypeToggle\?\.\(/);
-  assert.match(renderer, /openTyping\("click"\)/);
   /* Escape closes, Enter sends. */
   assert.match(renderer, /event\.key === "Escape"[\s\S]{0,80}closeTyping\("escape"\)/);
   assert.match(renderer, /event\.key === "Enter" && !event\.shiftKey/);
-  /* Clicking a control inside the notch must not open the field. */
-  assert.match(renderer, /\.nf-think-chip, \.nf-answer-done/);
+  /* A click on the island has meant "talk to me" since long before typing
+     existed, so adding a second meaning did not replace the first: the field
+     opened AND the microphone started. */
+  assert.doesNotMatch(renderer, /openTyping\("click"\)/);
+  assert.match(renderer, /Clicking the notch is NOT a way in/);
+  assert.match(renderer, /tray\.click_talk/);
 });
