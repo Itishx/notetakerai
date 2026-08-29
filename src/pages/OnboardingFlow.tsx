@@ -103,7 +103,9 @@ export default function OnboardingFlow() {
      is done and the name question is next. Without this you land back on the
      sign-in screen you just completed. */
   useEffect(() => {
-    if (user && step === 0) setStep(1);
+    if (!user) return;
+    try { sessionStorage.removeItem("braino.onboarding"); } catch { /* private mode */ }
+    if (step === 0) setStep(1);
   }, [user, step]);
 
   useEffect(() => {
@@ -113,6 +115,10 @@ export default function OnboardingFlow() {
   const signInWithGoogle = useCallback(async () => {
     setAuthBusy(true);
     setAuthError(null);
+    /* Supabase only returns people to URLs on its allow list. If /onboarding is
+       not on it yet, Google drops them on the homepage instead and the flow is
+       lost. This breadcrumb lets the homepage put them back. */
+    try { sessionStorage.setItem("braino.onboarding", "1"); } catch { /* private mode */ }
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: { redirectTo: `${window.location.origin}/onboarding` },

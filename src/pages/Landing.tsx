@@ -1,5 +1,6 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
 import IomiNotch from "@/components/IomiNotch";
 import { DISTRA_ENGINES } from "@/data/distraEngines";
 import BrainoFooter from "@/components/BrainoFooter";
@@ -355,6 +356,21 @@ function useReveal() {
 }
 
 export default function Landing() {
+  /* Someone who signed in from the onboarding flow can land here instead of
+     back in it, because Supabase sends people to the site root when the return
+     URL is not on its allow list. Carry them back where they were. */
+  const navigate = useNavigate();
+  useEffect(() => {
+    let pending = false;
+    try { pending = sessionStorage.getItem("braino.onboarding") === "1"; } catch { /* private mode */ }
+    if (!pending) return;
+    supabase.auth.getSession().then(({ data }) => {
+      if (!data.session) return;
+      try { sessionStorage.removeItem("braino.onboarding"); } catch { /* private mode */ }
+      navigate("/onboarding", { replace: true });
+    });
+  }, [navigate]);
+
   const ref = useReveal();
   const os = useOS();
   // The notch scrolls away with the page now, so once it is gone there is
