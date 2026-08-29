@@ -3330,7 +3330,9 @@ body {
 #notch-face .nf-type-field {
   display: none;
   width: 100%;
-  margin: 0;
+  /* Clear of the header rule above it. With no margin the caret and the hairline
+     touched, which reads as broken rather than tight. */
+  margin: 10px 0 0;
   padding: 0;
   border: 0;
   outline: none;
@@ -3762,6 +3764,23 @@ body {
   font-weight: 650;
   letter-spacing: .1em;
   text-transform: uppercase;
+}
+
+/* Nothing he says can be wider than the box he says it in.
+ *
+ * None of these surfaces had a wrapping rule, so a single unbreakable token had
+ * nothing to break on and simply ran past the edge. His replies carry URLs and
+ * file paths constantly — "Booked, here is the link" is the normal shape of a
+ * finished job — and a booking URL is one 90 character word. */
+#notch-face .nf-answer-short-text,
+#notch-face .nf-answer-body,
+#notch-face .nf-inline-caption-text,
+#notch-face .nf-thinking-current,
+#notch-face .nf-flow-prompt span,
+#notch-face .nf-flow-response span,
+#notch-face .nf-thinking-trail p {
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 #notch-face .nf-answer-short-text {

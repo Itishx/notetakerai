@@ -10320,19 +10320,26 @@ document.addEventListener("click", (event) => {
   // Open music player: the surface owns every click (transport buttons keep
   // their own handlers) — a stray tap must not flip a voice session on.
   if (nfMusicOpen || event.target.closest(".nf-music-surface")) return;
-  /* The typing field owns every click while it is up, for exactly the same
-     reason. Clicking INTO a text box to put the caret in it was starting the
-     microphone, which is the opposite of what reaching for the keyboard means. */
+  /* The typing field owns every click while it is up. Clicking INTO a text box
+     to put the caret in it was starting the microphone, which is the opposite
+     of what reaching for the keyboard means. */
   if (typingOpen || event.target.closest(".nf-inline-caption")) return;
   if (nfExpanded && nfPill) {
     const rect = nfPill.getBoundingClientRect();
     const bandBottom = rect.top + (parseFloat(getComputedStyle(notchFace).getPropertyValue("--nf-notch-h")) || 33) + 34;
     if (event.clientY > bandBottom) return;
   }
-  logRenderer("tray.click_talk", { expanded: nfExpanded });
+  /* A click TYPES. It used to start the microphone, and it does not any more.
+   *
+   * There are already two ways to start listening (Control twice, and
+   * Command+Space) and no way at all to type, so the gesture with no keyboard
+   * behind it goes to the keyboard. It also removes the trap: reaching for the
+   * notch because you missed the typing shortcut used to open the mic instead,
+   * which is the opposite of what the reach meant. */
+  logRenderer("tray.click_type", { expanded: nfExpanded });
   notchFace?.classList.add("nf-press");
   window.setTimeout(() => notchFace?.classList.remove("nf-press"), 170);
-  toggleVoice();
+  openTyping("click");
 });
 
 // ── Scroll on the island: system output volume, with a tiny HUD. ──

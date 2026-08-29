@@ -129,3 +129,32 @@ test("an answer owns the box, whatever is holding it", () => {
      hidden underneath, so the keyboard is handed back. */
   assert.match(renderer, /if \(typingOpen\) closeTyping\("answer"\);/);
 });
+
+/* Two ways to start listening already exist (Control twice, Command+Space) and
+   none to type, so the gesture with no keyboard behind it goes to the keyboard.
+   It also removes the trap: reaching for the notch because you missed the
+   typing shortcut used to open the microphone instead. */
+test("clicking the notch types, it does not listen", () => {
+  assert.match(renderer, /logRenderer\("tray\.click_type"/);
+  const h = renderer.slice(renderer.indexOf('logRenderer("tray.click_type"'));
+  assert.match(h.slice(0, 400), /openTyping\("click"\)/);
+  assert.doesNotMatch(h.slice(0, 400), /toggleVoice\(\)/);
+});
+
+test("the field is not jammed against the rule above it", () => {
+  const css = readFileSync(new URL("../mac/braino-mac/renderer/braino-mac.css", import.meta.url), "utf8");
+  const rule = css.slice(css.indexOf("#notch-face .nf-type-field {"));
+  assert.match(rule.slice(0, 400), /margin: 10px 0 0;/);
+});
+
+/* Measured: a booking URL is one 90 character word, and none of these surfaces
+   had a wrapping rule, so it ran past the edge and was cut off. */
+test("nothing he says can be wider than the box he says it in", () => {
+  const css = readFileSync(new URL("../mac/braino-mac/renderer/braino-mac.css", import.meta.url), "utf8");
+  const block = css.slice(css.indexOf("Nothing he says can be wider"));
+  const rule = block.slice(0, block.indexOf("}") + 1);
+  for (const sel of ["nf-answer-short-text", "nf-answer-body", "nf-inline-caption-text", "nf-thinking-current"]) {
+    assert.ok(rule.includes(sel), `${sel} must be allowed to wrap`);
+  }
+  assert.match(rule, /overflow-wrap: anywhere/);
+});
