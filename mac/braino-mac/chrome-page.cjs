@@ -23,7 +23,26 @@
 
 const { execFile } = require("node:child_process");
 
-const CHROME_APPS = ["Google Chrome", "Google Chrome Beta", "Google Chrome Canary", "Brave Browser"];
+/* Two different names for the same browser, and both are needed.
+ *
+ * The accessibility helper reports the front app as "Chrome". AppleScript will
+ * only answer to "Google Chrome". Matching one against the other is why the
+ * page reading never fired once in a real session: isChromeApp("Chrome") was
+ * false, so every observation silently fell back to the accessibility tree and
+ * a whole Notion run was done blind.
+ *
+ * Left is what the Mac calls it, right is what AppleScript needs. */
+const CHROME_APPS = {
+  "Chrome": "Google Chrome",
+  "Google Chrome": "Google Chrome",
+  "Chrome Beta": "Google Chrome Beta",
+  "Google Chrome Beta": "Google Chrome Beta",
+  "Chrome Canary": "Google Chrome Canary",
+  "Google Chrome Canary": "Google Chrome Canary",
+  "Brave": "Brave Browser",
+  "Brave Browser": "Brave Browser",
+  "Chromium": "Chromium",
+};
 const READ_CAP = 120;
 
 function runJs(js, app = "Google Chrome", timeoutMs = 15000) {
@@ -71,7 +90,7 @@ const READ_JS = `(function(){
 })()`;
 
 async function readChromePage(app) {
-  const res = await runJs(READ_JS, app || "Google Chrome");
+  const res = await runJs(READ_JS, chromeScriptName(app));
   if (!res.ok) return { ok: false, reason: res.reason, detail: res.detail, elements: [], text: "" };
   if (res.out.startsWith("BRAINO_ERR")) return { ok: false, reason: "page_error", detail: res.out.slice(0, 200), elements: [], text: "" };
   const lines = res.out.split("\n");
@@ -109,7 +128,7 @@ function actionJs(idx, kind, value) {
 }
 
 async function actOnChrome(idx, kind, value, app) {
-  const res = await runJs(actionJs(idx, kind, value), app || "Google Chrome");
+  const res = await runJs(actionJs(idx, kind, value), chromeScriptName(app));
   if (!res.ok) return { ok: false, error: `${res.reason}: ${res.detail}` };
   if (res.out === "BRAINO_GONE") return { ok: false, error: "That element is no longer on the page." };
   if (res.out.startsWith("BRAINO_OK")) return { ok: true, did: res.out.slice(10) };
@@ -117,7 +136,12 @@ async function actOnChrome(idx, kind, value, app) {
 }
 
 function isChromeApp(appName) {
-  return CHROME_APPS.includes(String(appName || "").trim());
+  return Boolean(CHROME_APPS[String(appName || "").trim()]);
 }
 
-module.exports = { readChromePage, actOnChrome, isChromeApp, runJs, CHROME_APPS };
+/* What AppleScript has to be told to talk to it. */
+function chromeScriptName(appName) {
+  return CHROME_APPS[String(appName || "").trim()] || "Google Chrome";
+}
+
+module.exports = { readChromePage, actOnChrome, isChromeApp, chromeScriptName, runJs, CHROME_APPS };

@@ -214,7 +214,11 @@ test("a name that matches nothing twice ends the search", () => {
   const prompt = read("../supabase/functions/_shared/human-intelligence/hil-loop-prompt.ts");
   assert.match(prompt, /IF THE NAME MATCHES NOTHING AT ALL, THE NAME IS WRONG, NOT THE SITE/);
   assert.match(prompt, /Do not run the same search a third time/);
-  assert.match(prompt, /HIL_LOOP_VERSION = "2\.7\.0"/);
+  /* Not pinned to an exact version: the prompt is deployed and versioned, and
+     an exact pin turns every legitimate bump into a red test. */
+  const v = prompt.match(/HIL_LOOP_VERSION = "(\d+)\.(\d+)\.\d+"/);
+  assert.ok(v, "the prompt must carry a version");
+  assert.ok(Number(v[1]) > 2 || Number(v[2]) >= 7, `version ${v[0]} predates this rule`);
 });
 
 /* Round 010. The Book tickets button was in the middle of the screen and he

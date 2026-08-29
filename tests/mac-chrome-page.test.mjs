@@ -61,3 +61,30 @@ test("the reader hands back what the loop already understands", () => {
   assert.equal(isChromeApp("Google Chrome"), true);
   assert.equal(isChromeApp("Cursor"), false);
 });
+
+/* The page reading never fired once in a real session. The accessibility helper
+   reports the front app as "Chrome"; the check looked for "Google Chrome", so
+   every observation silently fell back to the tree and a whole Notion run was
+   done blind. AppleScript, meanwhile, only answers to the full name. */
+test("the name the Mac reports and the name AppleScript needs are both handled", () => {
+  const { isChromeApp, chromeScriptName } = require_("../mac/braino-mac/chrome-page.cjs");
+  assert.equal(isChromeApp("Chrome"), true, "the Mac reports it as Chrome");
+  assert.equal(chromeScriptName("Chrome"), "Google Chrome", "AppleScript needs the full name");
+  assert.equal(chromeScriptName("Brave"), "Brave Browser");
+  assert.equal(isChromeApp("Electron"), false);
+  /* And nothing may pass the reported name straight to AppleScript. */
+  assert.doesNotMatch(page, /runJs\(READ_JS, app \|\| "Google Chrome"\)/);
+  assert.match(page, /runJs\(READ_JS, chromeScriptName\(app\)\)/);
+});
+
+/* A real run navigated to Notion perfectly, then judged itself failed because
+   it asked for notion.so and arrived at app.notion.com, and spent the rest of
+   its budget circling over a redirect that had worked. */
+test("a redirect is not a failure", () => {
+  const prompt = readFileSync(new URL("../supabase/functions/_shared/human-intelligence/hil-loop-prompt.ts", import.meta.url), "utf8");
+  assert.match(prompt, /A SITE THAT MOVES YOU IS NOT A SITE THAT FAILED YOU/);
+  assert.match(prompt, /assert on the part that identifies the SERVICE/);
+  assert.match(prompt, /believe the page. The assert is a helper, not a judge/);
+  const v = prompt.match(/HIL_LOOP_VERSION = "(\d+)\.(\d+)\.\d+"/);
+  assert.ok(v && (Number(v[1]) > 2 || Number(v[2]) >= 8), `version ${v?.[0]} predates this rule`);
+});

@@ -21,6 +21,19 @@ Three things follow from that, and they are the whole point:
   profile, and none of Chrome 136's remote-debugging consent sheet.
 - **You watch it happen** in the window you were already looking at.
 
+## The name trap
+
+The Mac reports the front app as **`Chrome`**. AppleScript will only answer to
+**`Google Chrome`**. Both names are needed and they are not the same string,
+which is how this shipped doing nothing at all: the check looked for the
+AppleScript name, never matched, and every observation fell back to the
+accessibility tree in silence. A whole Notion run was done blind before anyone
+noticed, because falling back looks exactly like working.
+
+`CHROME_APPS` maps one to the other. `isChromeApp` takes what the Mac says;
+`chromeScriptName` returns what AppleScript needs. Nothing passes the reported
+name straight through.
+
 ## Turning it on
 
 Chrome needs one switch: **View > Developer > Allow JavaScript from Apple
