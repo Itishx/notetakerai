@@ -2937,6 +2937,14 @@ function registerHotkeys() {
       sendToRenderer("braino-mac:voice-toggle", { source: "Control+Space" });
       ensureDockWindowVisible("voice-hotkey");
     }),
+    /* T for type. NOT plain Cmd+T: Electron shortcuts are system wide, so
+       registering that would take "new tab" away from every browser, editor and
+       terminal on the machine. Add Option and it collides with nothing. To make
+       it plain Cmd+T anyway, drop the "Alt+" below and accept the trade. */
+    typeToBraino: globalShortcut.register("CommandOrControl+Alt+T", () => {
+      sendToRenderer("braino-mac:type-toggle", { source: "Cmd+Alt+T" });
+      ensureDockWindowVisible("type-hotkey");
+    }),
     dashboard: globalShortcut.register("CommandOrControl+Shift+D", () => {
       openDashboardWindow();
     }),

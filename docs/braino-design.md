@@ -828,6 +828,42 @@ human is back the screen has to be gone. Only the screen that came up by itself
 goes away by itself. It never opens over dictation, a meeting recording, the
 teleprompter, or Braino OS.
 
+## Typing to him (Mac notch)
+
+The Mac app was voice only: the single `<input>` in the whole renderer was a
+size slider. **Cmd+Alt+T**, or a click anywhere on the notch, now opens a text
+field.
+
+**The shortcut is not plain Cmd+T**, which is what was asked for and what T for
+type deserves. Electron registers global shortcuts system wide, so Cmd+T would
+take "new tab" away from every browser, editor and terminal on the machine. A
+double-tap of T is worse: all four existing double-taps are MODIFIER keys
+(Control voice, Shift idle screen, Option Jarvis, Command come out) and
+modifiers type nothing, while a bare letter would fire inside "better",
+"matter" and "written".
+
+**It lands in the box speech lands in.** The field sits inside
+`.nf-inline-caption`, the same section that shows "You said" for a spoken turn,
+so everything past that point is identical: the same understanding call, the
+same routing, the same thinking panel, the same reply. The two never show at
+once, because two lines of text in one box is the overlap that took three
+rounds to remove.
+
+Three deliberate differences, and only three:
+
+- **The answer is shown, not spoken.** You reached for the keyboard to avoid
+  noise. `answerViaRealtimeChat(text, { silent: true })` skips the streamer and
+  the speak fallback, and logs the reply with `route: "typed"` instead.
+- **The microphone is never touched.** Opening the field must not start him
+  listening, and there is a test asserting the open path contains no call that
+  could.
+- **Typing mid-job is the same conversation as speaking mid-job.** A typed
+  sentence goes through the interjection router first, so a correction reaches
+  the running job rather than starting a new one.
+
+If there is no realtime session open there is no chat path, so a typed job goes
+straight to `runDelegate` rather than being silently dropped.
+
 ## The thinking chip (Mac notch)
 
 What he is doing, centred under the housing, with the way into the rest of it

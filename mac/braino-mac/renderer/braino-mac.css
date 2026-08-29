@@ -3316,6 +3316,32 @@ body {
   font-weight: 600;
 }
 
+/* Typing, in the same box that shows what you said out loud.
+ *
+ * Hidden unless .nf-typing is on, so the caption behaves exactly as before for
+ * every voice turn. The field borrows the caption's own type so a typed
+ * sentence and a spoken one look identical once they land. */
+#notch-face .nf-type-field {
+  display: none;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: #f7f7f5;
+  font-family: inherit;
+  font-size: 21px;
+  line-height: 1.28;
+  letter-spacing: -.012em;
+  caret-color: #E8786E;
+}
+#notch-face .nf-type-field::placeholder { color: rgba(247,247,245,.34); }
+#notch-face.nf-typing .nf-type-field { display: block; }
+/* The spoken caption steps aside while you type: two lines of text in one box
+   is the overlap that took three rounds to get rid of. */
+#notch-face.nf-typing .nf-inline-caption-text { display: none; }
+
 #notch-face .nf-inline-caption-text {
   display: -webkit-box;
   margin: 8px 0 0;

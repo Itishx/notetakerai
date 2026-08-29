@@ -6128,7 +6128,11 @@ function buildRealtimeTurnContext() {
   return lines.filter(Boolean).join("\n");
 }
 
-async function answerViaRealtimeChat(prompt) {
+async function answerViaRealtimeChat(prompt, options = {}) {
+  /* Typed turns are silent on purpose. You reached for the keyboard because you
+     did not want noise, so the answer is shown and not spoken. Everything else
+     about the turn is identical to a spoken one. */
+  const silent = Boolean(options.silent);
   const text = String(prompt || "").trim();
   if (!text || !shouldUseRealtimeDirectChat(text)) return false;
   // Read the moment from what was just said, before the instructions for this
@@ -6167,7 +6171,7 @@ async function answerViaRealtimeChat(prompt) {
   markVoiceLatency("delegate_started", { route: "realtime_chat", runId });
 
   const waiter = createRealtimeResponseWaiter();
-  beginRealtimeStreamTts(generation);
+  if (!silent) beginRealtimeStreamTts(generation);
   // Put the personality on the SESSION (only when it actually changed), then ask
   // for the response without repeating it. `instructions` on response.create
   // overrides the session for that response, so this has to be omitted entirely,
@@ -6222,7 +6226,7 @@ async function answerViaRealtimeChat(prompt) {
       responseChars: finalText.length,
     });
     endRealtimeStreamTts();
-    const streamState = await waitForRealtimeStreamTts(generation);
+    const streamState = silent ? { spoke: false, error: null } : await waitForRealtimeStreamTts(generation);
     if (finalText) noteSpoken(finalText);
     rememberLocalChat("user", text);
     if (finalText) rememberLocalChat("assistant", finalText);
@@ -6237,10 +6241,15 @@ async function answerViaRealtimeChat(prompt) {
       console.log(`[Braino 🗣 OUT] (chat) "${finalText.slice(0, 200)}"`);
       logRenderer("voice.out", { text: finalText.slice(0, 200), route: "realtime_chat" });
     }
-    if (streamState?.error && !streamState.spoke && finalText && generation === speechGeneration) {
-      await speak(finalText);
-    } else if (!streamState?.spoke && finalText && generation === speechGeneration) {
-      await speak(finalText);
+    if (!silent) {
+      if (streamState?.error && !streamState.spoke && finalText && generation === speechGeneration) {
+        await speak(finalText);
+      } else if (!streamState?.spoke && finalText && generation === speechGeneration) {
+        await speak(finalText);
+      }
+    } else if (finalText) {
+      console.log(`[Braino ⌨ OUT] "${finalText.slice(0, 200)}"`);
+      logRenderer("voice.out", { text: finalText.slice(0, 200), route: "typed" });
     }
     logInteraction({
       kind: "voice",
@@ -7082,6 +7091,68 @@ async function flushBufferedDictationTranscript() {
 /* Returns true when the words belonged to the job he is already doing, and have
    been dealt with. False means "treat this as a new turn", which is what the
    caller did before this existed. */
+/* ── Typing ────────────────────────────────────────────────────────────────
+ *
+ * Cmd+Alt+T, or a click on the notch. The words land in the same box a spoken
+ * sentence lands in, and from there nothing is different: the same
+ * understanding, the same routing, the same thinking panel, the same reply.
+ * Only two things change. The answer is shown rather than spoken, because you
+ * reached for the keyboard to avoid noise. And the microphone is never touched:
+ * typing must not start him listening. */
+let typingOpen = false;
+
+function nfTypeField() {
+  return notchFace?.querySelector(".nf-type-field") || null;
+}
+
+function openTyping(source) {
+  const field = nfTypeField();
+  if (!field || !notchFaceEnabled || herMode || dictationMode) return false;
+  typingOpen = true;
+  notchFace.classList.add("nf-typing", "nf-inline-open");
+  if (nfInlineCaptionLabelEl) nfInlineCaptionLabelEl.textContent = "You typed";
+  if (nfInlineCaptionStateEl) nfInlineCaptionStateEl.textContent = "Typing";
+  field.value = "";
+  /* The window is click-through until something in it needs a cursor. */
+  window.brainoMac.setNotchZone?.({ expanded: true, width: NF_COMPACT_SURFACE_WIDTH, height: 150 });
+  window.setTimeout(() => field.focus(), 30);
+  logRenderer("type.open", { source: source || "" });
+  updateNotchFace();
+  return true;
+}
+
+function closeTyping(reason) {
+  const field = nfTypeField();
+  if (!typingOpen) return;
+  typingOpen = false;
+  notchFace.classList.remove("nf-typing");
+  if (field) { field.value = ""; field.blur(); }
+  if (nfInlineCaptionLabelEl) nfInlineCaptionLabelEl.textContent = "You said";
+  logRenderer("type.close", { reason: reason || "" });
+  nfSyncThinkingZone?.();
+  updateNotchFace();
+}
+
+async function submitTyped(text) {
+  const said = String(text || "").trim();
+  if (!said) return;
+  console.log(`[Braino ⌨ IN] "${said}"`);
+  logRenderer("type.in", { chars: said.length });
+  nfSetHeard(said, { durationMs: 1600 });
+  closeTyping("submitted");
+  /* Talking to him while he works is the same conversation whether you speak or
+     type, so a typed sentence goes through the interjection router first. */
+  const handled = await routeInterjectionIntoRunningJob(said);
+  if (handled) {
+    setStatus("thinking", "Working on it");
+    return;
+  }
+  const answered = await answerViaRealtimeChat(said, { silent: true });
+  /* No realtime session open means no chat path, so the job goes straight to
+     his hands rather than being dropped. */
+  if (!answered) await runDelegate(said, { keepRealtime: realtimeActive });
+}
+
 let interjectionInFlight = false;
 /* The one question asked about this sentence, kept so the chat path does not
    ask it again three seconds later. */
@@ -8930,6 +9001,32 @@ async function pointAtScreen(payload) {
     pickRoamTarget();
   }, 14000);
 }
+
+/* Cmd+Alt+T. Not plain Cmd+T: that is "new tab" in every browser and editor,
+   and an Electron shortcut is system wide, so it would take it from all of
+   them. */
+window.brainoMac.onTypeToggle?.((payload) => {
+  if (typingOpen) { closeTyping("hotkey"); return; }
+  openTyping(payload?.source || "hotkey");
+});
+
+/* And clicking him opens the same field, so nobody has to know the shortcut. */
+notchFace?.addEventListener("click", (event) => {
+  if (typingOpen) return;
+  if (event.target?.closest?.(".nf-think-chip, .nf-answer-done, .nf-ms-btn, .nf-ib, .nf-meeting-stop, .nf-meeting-stealth, .nf-join")) return;
+  if (dictationMode || herMode || notchFace.classList.contains("nf-answer-open")) return;
+  openTyping("click");
+});
+
+document.addEventListener("keydown", (event) => {
+  if (!typingOpen) return;
+  if (event.key === "Escape") { event.preventDefault(); closeTyping("escape"); return; }
+  if (event.key === "Enter" && !event.shiftKey) {
+    event.preventDefault();
+    const field = nfTypeField();
+    void submitTyped(field?.value || "");
+  }
+});
 
 window.brainoMac.onVoiceToggle(() => {
   /* Waking the voice takes a few seconds no matter what, and most of that is

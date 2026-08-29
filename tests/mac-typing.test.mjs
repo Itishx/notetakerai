@@ -1,0 +1,62 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import test from "node:test";
+
+const read = (rel) => readFileSync(new URL(rel, import.meta.url), "utf8");
+const main = read("../mac/braino-mac/main.cjs");
+const renderer = read("../mac/braino-mac/renderer/braino-mac.js");
+const html = read("../mac/braino-mac/renderer/index.html");
+const css = read("../mac/braino-mac/renderer/braino-mac.css");
+
+/* The Mac app was voice only. The one input in it was a size slider. */
+
+test("the shortcut cannot steal new tab from every app", () => {
+  /* Electron shortcuts are system wide, so plain Cmd+T would take "new tab"
+     from every browser, editor and terminal on the machine. */
+  assert.match(main, /globalShortcut\.register\("CommandOrControl\+Alt\+T"/);
+  assert.doesNotMatch(main, /globalShortcut\.register\("CommandOrControl\+T"/);
+  assert.match(main, /would take "new tab" away from every browser/);
+});
+
+test("typing lands in the box speech lands in", () => {
+  /* Same caption section, so understanding, routing, the thinking panel and
+     the reply are all identical past this point. */
+  const caption = html.slice(html.indexOf('class="nf-inline-caption"'));
+  assert.match(caption.slice(0, 900), /class="nf-type-field"/);
+  /* And the two never show at once: two lines of text in one box is the
+     overlap that took three rounds to remove. */
+  assert.match(css, /#notch-face\.nf-typing \.nf-inline-caption-text \{ display: none; \}/);
+  assert.match(css, /#notch-face \.nf-type-field \{[\s\S]{0,120}display: none;/);
+});
+
+test("a typed turn is a quiet turn", () => {
+  assert.match(renderer, /async function answerViaRealtimeChat\(prompt, options = \{\}\)/);
+  assert.match(renderer, /if \(!silent\) beginRealtimeStreamTts\(generation\);/);
+  /* The answer is still logged, just not spoken. */
+  assert.match(renderer, /route: "typed"/);
+  assert.match(renderer, /answerViaRealtimeChat\(said, \{ silent: true \}\)/);
+});
+
+test("typing never starts him listening", () => {
+  const open = renderer.slice(renderer.indexOf("function openTyping"));
+  const body = open.slice(0, open.indexOf("\n}\n"));
+  assert.doesNotMatch(body, /startVoice|toggleVoice|startRecognition|realtimeStart/);
+});
+
+test("typing mid-job is the same conversation as speaking mid-job", () => {
+  const submit = renderer.slice(renderer.indexOf("async function submitTyped"));
+  const body = submit.slice(0, submit.indexOf("\n}\n"));
+  assert.match(body, /routeInterjectionIntoRunningJob\(said\)/);
+  /* And a typed job is never dropped when there is no chat session open. */
+  assert.match(body, /if \(!answered\) await runDelegate\(said/);
+});
+
+test("both ways in are wired", () => {
+  assert.match(renderer, /window\.brainoMac\.onTypeToggle\?\.\(/);
+  assert.match(renderer, /openTyping\("click"\)/);
+  /* Escape closes, Enter sends. */
+  assert.match(renderer, /event\.key === "Escape"[\s\S]{0,80}closeTyping\("escape"\)/);
+  assert.match(renderer, /event\.key === "Enter" && !event\.shiftKey/);
+  /* Clicking a control inside the notch must not open the field. */
+  assert.match(renderer, /\.nf-think-chip, \.nf-answer-done/);
+});

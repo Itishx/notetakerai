@@ -212,6 +212,11 @@ contextBridge.exposeInMainWorld("brainoMac", {
     ipcRenderer.on("braino-mac:voice-toggle", handler);
     return () => ipcRenderer.removeListener("braino-mac:voice-toggle", handler);
   },
+  onTypeToggle: (callback) => {
+    const handler = (_event, payload) => callback(payload || {});
+    ipcRenderer.on("braino-mac:type-toggle", handler);
+    return () => ipcRenderer.removeListener("braino-mac:type-toggle", handler);
+  },
   onDictationToggle: (callback) => {
     const handler = (_event, payload) => callback(payload || {});
     ipcRenderer.on("braino-mac:dictation-toggle", handler);
