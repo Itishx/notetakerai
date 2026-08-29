@@ -158,3 +158,30 @@ test("nothing he says can be wider than the box he says it in", () => {
   }
   assert.match(rule, /overflow-wrap: anywhere/);
 });
+
+/* Nobody added a box. The phase chip is a <button>, and the window used to be
+   unfocusable so a click could never leave focus on it. Typing made the notch
+   focusable, so a clicked chip keeps focus and the browser draws its ring —
+   which is why it appeared only after the chip had been pressed. */
+test("making the notch focusable must not draw rings on its buttons", () => {
+  const css = readFileSync(new URL("../mac/braino-mac/renderer/braino-mac.css", import.meta.url), "utf8");
+  assert.match(css, /#notch-face button:focus:not\(:focus-visible\) \{ outline: none; box-shadow: none; \}/);
+  /* A real keyboard user still gets a ring: only the mouse ring goes. */
+  assert.doesNotMatch(css, /#notch-face button:focus \{ outline: none/);
+});
+
+/* His reasoning can be longer than the sheet, and the overflow was unreachable:
+   the last steps sat below the fold with nothing to scroll. */
+test("a long chain of thinking can be scrolled", () => {
+  const css = readFileSync(new URL("../mac/braino-mac/renderer/braino-mac.css", import.meta.url), "utf8");
+  const rule = css.slice(css.indexOf("#notch-face .nf-thinking-lines {"));
+  const body = rule.slice(0, rule.indexOf("}") + 1);
+  assert.match(body, /overflow-y: auto/);
+  assert.match(body, /max-height: 100%/);
+  /* A flex item refuses to shrink below its content without this, so the
+     overflow escapes instead of scrolling. */
+  /* This selector appears twice; the later one wins the cascade and is the one
+     that had to change. */
+  const canvas = css.slice(css.lastIndexOf("#notch-face .nf-thinking-canvas {"));
+  assert.match(canvas.slice(0, canvas.indexOf("}") + 1), /min-height: 0;/);
+});

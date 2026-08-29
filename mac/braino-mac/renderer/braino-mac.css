@@ -3608,6 +3608,11 @@ body {
   z-index: 8;
   display: flex;
   justify-content: flex-start;
+  /* min-height:0 so the scrolling child can actually be bounded: without it a
+     flex item refuses to shrink below its content and the overflow escapes
+     instead of scrolling. */
+  align-items: stretch;
+  min-height: 0;
   padding: calc(var(--nf-safe-top) + var(--nf-notch-h) + 43px) 24px 10px;
   box-sizing: border-box;
   color: #f7f7f5;
@@ -3703,7 +3708,23 @@ body {
   letter-spacing: .05em;
 }
 
-#notch-face .nf-thinking-lines { display: block; min-height: 0; }
+/* His reasoning can be longer than the sheet, and until now the overflow was
+   simply unreachable: the canvas grows to fit up to a ceiling, and past that
+   the last steps sat below the fold with nothing to scroll. */
+#notch-face .nf-thinking-lines {
+  display: block;
+  min-height: 0;
+  max-height: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,.22) transparent;
+}
+#notch-face .nf-thinking-lines::-webkit-scrollbar { width: 6px; }
+#notch-face .nf-thinking-lines::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,.18); border-radius: 999px;
+}
+#notch-face .nf-thinking-lines::-webkit-scrollbar-track { background: transparent; }
 #notch-face .nf-thinking-lines p {
   margin: 0;
   padding: 9px 2px;
@@ -4714,6 +4735,16 @@ body {
   -webkit-app-region: no-drag;
 }
 #notch-face.nf-thinking .nf-think-chip { display: flex; }
+/* No ring around the phase word.
+ *
+ * Nobody added a box: the chip is a <button>, and the window used to be
+ * unfocusable so a click could never leave focus on it. Typing made the notch
+ * focusable, so now a clicked button keeps focus and the browser draws its ring
+ * around "Deciding" — which is also why it appeared only sometimes, after the
+ * chip had been pressed. :focus-visible is kept, so a real keyboard user still
+ * gets a ring; only the mouse ring goes. */
+#notch-face .nf-think-chip:focus:not(:focus-visible),
+#notch-face button:focus:not(:focus-visible) { outline: none; box-shadow: none; }
 /* Open, the sheet already carries the line in full, so the chip stops being a
    label and becomes what it is: the way back up. */
 #notch-face.nf-think-open .nf-think-chip {
