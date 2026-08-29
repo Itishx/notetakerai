@@ -1372,9 +1372,9 @@ export default function Dashboard() {
   const [calendarConnectLoading, setCalendarConnectLoading] = useState(false);
   const [xConnectLoading, setXConnectLoading] = useState(false);
   const [spotifyConnectLoading, setSpotifyConnectLoading] = useState(false);
-  /* Notion. The OAuth functions have existed for months and nothing ever called
-     them, so a fully working backend sat unreachable: no button, no way in. */
-  const [notionConn, setNotionConn] = useState<{ workspaceName: string | null } | null>(null);
+  /* The page already tracked notionConn from the database. What it never had
+     was a way to CONNECT: the OAuth functions existed for months with nothing
+     calling them, and the button pointed at a page instead of the flow. */
   const [notionConnectLoading, setNotionConnectLoading] = useState(false);
   const notionPollRef = useRef<number | null>(null);
   const [xPostDraft, setXPostDraft] = useState("");
@@ -1927,7 +1927,9 @@ export default function Dashboard() {
       });
       const payload = await response.json().catch(() => ({}));
       const connected = Boolean(payload?.connected);
-      setNotionConn(connected ? { workspaceName: payload?.workspaceName ?? null } : null);
+      setNotionConn(connected
+        ? { workspace_name: payload?.workspaceName ?? null, workspace_id: payload?.workspaceId ?? null }
+        : null);
       return connected;
     } catch (error) {
       console.error("notion status failed:", error);
@@ -5947,11 +5949,14 @@ export default function Dashboard() {
                           {notionConn ? notionConn.workspace_name || notionConn.workspace_id || "Workspace connected" : "Send structured notes into your workspace"}
                         </div>
                       </div>
-                      <Link to="/notion-sync">
-                        <Button variant="outline" className="rounded-full border-[var(--sb-line)] bg-[var(--sb-panel-2)] text-xs text-[var(--sb-ink)] hover:bg-[var(--sb-bg-2)]">
-                          {notionConn ? "Manage" : "Connect"}
-                        </Button>
-                      </Link>
+                      <Button
+                        variant="outline"
+                        onClick={handleConnectNotion}
+                        disabled={notionConnectLoading}
+                        className="rounded-full border-[var(--sb-line)] bg-[var(--sb-panel-2)] text-xs text-[var(--sb-ink)] hover:bg-[var(--sb-bg-2)]"
+                      >
+                        {notionConnectLoading ? "Waiting…" : notionConn ? "Reconnect" : "Connect"}
+                      </Button>
                     </div>
 
                     <div className="flex items-center justify-between rounded-xl border border-[var(--sb-line-2)] bg-[var(--sb-panel)] p-4">
@@ -6015,28 +6020,6 @@ export default function Dashboard() {
                         className="rounded-full border-[var(--sb-line)] bg-[var(--sb-panel-2)] text-xs text-[var(--sb-ink)] hover:bg-[var(--sb-bg-2)]"
                       >
                         {spotifyConnectLoading ? "Waiting…" : spotifyConn ? "Reconnect" : "Connect"}
-                      </Button>
-                    </div>
-
-                    <div className="flex items-center justify-between rounded-xl border border-[var(--sb-line-2)] bg-[var(--sb-panel)] p-4">
-                      <div>
-                        <div className="flex items-center gap-2 text-sm font-medium text-[var(--sb-ink)]">
-                          <span className={cn("h-2 w-2 rounded-full", notionConn ? "bg-emerald-500" : "bg-[var(--sb-ink-4)]")} />
-                          Notion
-                        </div>
-                        <div style={monoStyle} className="mt-1 text-[11px] text-[var(--sb-ink-3)]">
-                          {notionConn
-                            ? `${notionConn.workspaceName || "Workspace"} connected`
-                            : "Let Braino create and update pages through the Notion API, instead of clicking through the site"}
-                        </div>
-                      </div>
-                      <Button
-                        variant="outline"
-                        onClick={handleConnectNotion}
-                        disabled={notionConnectLoading}
-                        className="rounded-full border-[var(--sb-line)] bg-[var(--sb-panel-2)] text-xs text-[var(--sb-ink)] hover:bg-[var(--sb-bg-2)]"
-                      >
-                        {notionConnectLoading ? "Waiting…" : notionConn ? "Reconnect" : "Connect"}
                       </Button>
                     </div>
 
