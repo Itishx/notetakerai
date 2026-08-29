@@ -1,4 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
+import { EXTENSION_DOWNLOAD_URL, EXTENSION_DOWNLOAD_FILENAME } from "@/lib/extensionDownload";
 import { Link } from "react-router-dom";
 import { BRAINO_WALKER_SVG } from "@/components/brainoWalkerSvg";
 import "./onboarding-flow.css";
@@ -9,7 +12,10 @@ import "./onboarding-flow.css";
    Everything is local state here; wiring writes these to the profile, the
    emotional engine, and the memory engine when "Get Started" points at it. */
 
-const USER = { name: "Itish", email: "itishpande21@gmail.com" };
+/* The signed-in person, from Supabase rather than a placeholder. This file
+   shipped with a hardcoded "Itish" because it was built as a look-and-feel
+   prototype and never wired to auth, which is why Get Started could not point
+   at it and pointed at the extension download instead. */
 
 type Device = "chrome" | "mac" | "both";
 
@@ -70,7 +76,13 @@ function Walker() {
 }
 
 export default function OnboardingFlow() {
+  const { user } = useAuth();
   const [step, setStep] = useState(0);
+  const [authBusy, setAuthBusy] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
+  /* What he calls you. Seeded from the name Google already gave us, so the
+     question is a confirmation rather than a form to fill in. */
+  const [callMe, setCallMe] = useState("");
   const [device, setDevice] = useState<Device | null>(null);
   const [voice, setVoice] = useState<string | null>(null);
   const [tone, setTone] = useState<string | null>(null);
@@ -80,6 +92,36 @@ export default function OnboardingFlow() {
   const [memory, setMemory] = useState("");
 
   useEffect(() => { document.title = "Set up Braino"; }, []);
+
+  const googleName = String(
+    user?.user_metadata?.full_name || user?.user_metadata?.name || "",
+  ).trim();
+  const firstName = googleName.split(" ")[0] || "";
+  const email = user?.email || "";
+
+  /* Signing in returns to this page, so the moment a user exists the auth step
+     is done and the name question is next. Without this you land back on the
+     sign-in screen you just completed. */
+  useEffect(() => {
+    if (user && step === 0) setStep(1);
+  }, [user, step]);
+
+  useEffect(() => {
+    if (firstName && !callMe) setCallMe(firstName);
+  }, [firstName, callMe]);
+
+  const signInWithGoogle = useCallback(async () => {
+    setAuthBusy(true);
+    setAuthError(null);
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: `${window.location.origin}/onboarding` },
+    });
+    if (error) {
+      setAuthError(error.message);
+      setAuthBusy(false);
+    }
+  }, []);
   useEffect(() => { window.scrollTo({ top: 0, behavior: "smooth" }); }, [step]);
 
   const toggleInterest = useCallback((label: string) => {
@@ -87,19 +129,33 @@ export default function OnboardingFlow() {
   }, []);
 
   const steps = useMemo(() => [
-    "hello", "device", "voice", "tone", "interests", "permissions", "keys", "memory", "done",
+    "auth", "name", "device", "voice", "tone", "interests", "permissions", "keys", "memory", "done",
   ] as const, []);
   const total = steps.length;
   const current = steps[step];
 
   const canContinue =
+    current === "auth" ? Boolean(user) :
+    current === "name" ? callMe.trim().length > 0 :
     current === "device" ? Boolean(device) :
     current === "voice" ? Boolean(voice) :
     current === "tone" ? Boolean(tone) :
     current === "interests" ? interests.length > 0 :
     true;
 
-  const next = () => setStep((s) => Math.min(s + 1, total - 1));
+  /* Save the name the moment they leave that step. display_name is the field
+     Braino already greets people by, so answering the question actually
+     changes what he calls you rather than filling in a form that goes nowhere. */
+  const saveCallMe = useCallback(async () => {
+    const value = callMe.trim();
+    if (!user || !value) return;
+    await supabase.from("profiles").update({ display_name: value }).eq("user_id", user.id);
+  }, [callMe, user]);
+
+  const next = () => {
+    if (current === "name") void saveCallMe();
+    setStep((s) => Math.min(s + 1, total - 1));
+  };
   const back = () => setStep((s) => Math.max(s - 1, 0));
 
   const voiceName = VOICES.find((v) => v.id === voice)?.name ?? "Braino";
@@ -119,16 +175,50 @@ export default function OnboardingFlow() {
       </header>
 
       <main className="ob-stage">
-        {current === "hello" && (
+        {current === "auth" && (
+          /* Split: him on the left, the door on the right. The left half is the
+             product doing the one thing the page is asking you to trust it
+             with, which argues better than a paragraph about it would. */
+          <section className="ob-step ob-auth">
+            <div className="ob-auth-show">
+              <Walker />
+              <p className="ob-auth-say">&ldquo;Tell me what you shipped. I will write the post, find the people, and wait for your yes.&rdquo;</p>
+              <span className="ob-auth-tag">Braino, your co-founder</span>
+            </div>
+            <div className="ob-auth-door">
+              <p className="ob-eyebrow">Get started</p>
+              <h1 className="ob-h1">Make him <em>yours</em>.</h1>
+              <p className="ob-lede">
+                Sign in first, so he knows whose voice to learn. Nothing installs yet.
+              </p>
+              <button type="button" className="ob-btn ob-google" onClick={signInWithGoogle} disabled={authBusy}>
+                {authBusy ? "Opening Google…" : "Continue with Google"}
+              </button>
+              {authError && <p className="ob-auth-error">{authError}</p>}
+              <p className="ob-fineprint">
+                Already have an account? <Link to="/auth">Sign in another way</Link>
+              </p>
+            </div>
+          </section>
+        )}
+
+        {current === "name" && (
           <section className="ob-step ob-hello">
             <Walker />
-            <p className="ob-eyebrow">Welcome</p>
-            <h1 className="ob-h1">Hello, <em>{USER.name}</em>.</h1>
+            <p className="ob-eyebrow">One thing first</p>
+            <h1 className="ob-h1">What should I <em>call you?</em></h1>
             <p className="ob-lede">
-              Before you install anything, let us make him yours. Eight quick questions,
-              about two minutes, and he will already know how you like to work.
+              Google says {googleName || "nothing yet"}. Change it to whatever you actually go by.
             </p>
-            <div className="ob-avatar"><b>{USER.name.charAt(0)}</b>Signed in<small>{USER.email}</small></div>
+            <input
+              className="ob-name-input"
+              value={callMe}
+              onChange={(event) => setCallMe(event.target.value)}
+              placeholder="Your name"
+              aria-label="What should Braino call you"
+              autoFocus
+            />
+            {email && <div className="ob-avatar"><b>{(callMe || "?").charAt(0).toUpperCase()}</b>Signed in<small>{email}</small></div>}
           </section>
         )}
 
@@ -287,8 +377,17 @@ export default function OnboardingFlow() {
               {memory.trim() && <div><span>Remembers</span><b>{memory.trim()}</b></div>}
             </div>
             <div className="ob-installs">
-              {device !== "mac" && <button type="button" className="ob-btn">Add to Chrome</button>}
-              {device !== "chrome" && <button type="button" className="ob-btn is-outline">Download for Mac</button>}
+              {/* These were placeholder buttons that did nothing. Now that Get
+                  Started routes here instead of straight to the zip, this is
+                  the only place the download happens, so it has to be real. */}
+              {device !== "mac" && (
+                <a href={EXTENSION_DOWNLOAD_URL} download={EXTENSION_DOWNLOAD_FILENAME} className="ob-btn">
+                  Add to Chrome
+                </a>
+              )}
+              {device !== "chrome" && (
+                <Link to="/braino?view=foundry" className="ob-btn is-outline">Download for Mac</Link>
+              )}
             </div>
           </section>
         )}
@@ -296,7 +395,7 @@ export default function OnboardingFlow() {
 
       <footer className="ob-foot">
         <button type="button" className="ob-btn is-quiet" onClick={back} style={{ visibility: step === 0 ? "hidden" : "visible" }}>← Back</button>
-        {current === "done" ? (
+        {current === "auth" ? null : current === "done" ? (
           <Link to="/" className="ob-skip">Back to trybraino.com</Link>
         ) : (
           <span style={{ display: "flex", alignItems: "center", gap: 20 }}>
@@ -304,7 +403,7 @@ export default function OnboardingFlow() {
               <button type="button" className="ob-skip" onClick={next}>Skip</button>
             )}
             <button type="button" className="ob-btn" onClick={next} disabled={!canContinue}>
-              {current === "hello" ? "Get started" : "Continue"}
+              {current === "name" ? "Get started" : "Continue"}
             </button>
           </span>
         )}

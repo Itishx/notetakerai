@@ -146,3 +146,68 @@
   .ob-perm, .ob-key { flex-direction: column; align-items: flex-start; gap: 12px; }
   .ob-btn { padding: 14px 24px; font-size: 15px; }
 }
+
+/* ── The door ──────────────────────────────────────────────────────────────
+   Split screen: him on the left, sign-in on the right. The left half shows the
+   product doing the thing the page is asking you to trust it with, which
+   argues better than a paragraph about it would. */
+.ob-auth {
+  display: grid;
+  grid-template-columns: 1.05fr 1fr;
+  gap: clamp(28px, 5vw, 64px);
+  align-items: center;
+  text-align: left;
+  max-width: 1040px;
+  width: 100%;
+}
+.ob-auth-show {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  padding: clamp(28px, 4vw, 44px);
+  border-radius: 26px;
+  background: linear-gradient(168deg, #fdf0ee 0%, #f7e2df 52%, #f2d6d2 100%);
+  border: 1px solid rgba(200, 128, 118, .28);
+}
+.ob-auth-say {
+  margin: 0;
+  max-width: 30ch;
+  text-align: center;
+  font-size: clamp(17px, 2vw, 21px);
+  line-height: 1.42;
+  font-weight: 500;
+  letter-spacing: -.014em;
+  color: #6b2a24;
+}
+.ob-auth-tag {
+  font-size: 12px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: rgba(107, 42, 36, .62);
+}
+.ob-auth-door { display: flex; flex-direction: column; align-items: flex-start; gap: 14px; }
+.ob-auth-door .ob-h1, .ob-auth-door .ob-lede, .ob-auth-door .ob-eyebrow { text-align: left; margin-left: 0; margin-right: 0; }
+.ob-google { align-self: stretch; justify-content: center; }
+.ob-auth-error { margin: 0; font-size: 13px; color: #b4342b; }
+
+/* What he should call you: one field, prefilled, so it reads as a confirmation
+   rather than a form. */
+.ob-name-input {
+  width: min(420px, 100%);
+  margin-top: 6px;
+  padding: 14px 18px;
+  border-radius: 14px;
+  border: 1px solid var(--ob-line, #ddd8d4);
+  background: #fff;
+  font: inherit;
+  font-size: 19px;
+  letter-spacing: -.01em;
+  color: inherit;
+}
+.ob-name-input:focus { outline: 2px solid rgba(232, 120, 110, .5); outline-offset: 2px; }
+
+@media (max-width: 860px) {
+  .ob-auth { grid-template-columns: 1fr; }
+  .ob-auth-show { order: 2; }
+}
