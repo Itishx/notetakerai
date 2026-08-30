@@ -102,10 +102,11 @@ test("the Mac renderer mounts and drives the Chrome-system response and Yap stat
   assert.doesNotMatch(js, /notchFixedHeight: 240/);
   assert.match(main, /present front document[\s\S]{0,80}play front document/);
   assert.match(hotkey, /printLine\("double-shift"\)/);
-  /* Shift twice used to introduce the launch film. It belongs to the idle
-     screen now, and the film moved to Command Shift L, which
-     tests/mac-idle-screen.test.mjs holds to account. */
-  assert.match(main, /trimmed === "double-shift"[\s\S]{0,220}?toggleIdleScreen/);
+  /* Shift twice has been the launch film, then the idle screen, and is now the
+     pitch demo. What this test cares about is only that the Swift helper's
+     signal reaches one handler and is not dropped; which handler it is belongs
+     to tests/mac-pitch-demo.test.mjs. */
+  assert.match(main, /trimmed === "double-shift"[\s\S]{0,500}?(?:startPitchDemo|toggleIdleScreen)/);
   assert.doesNotMatch(main, /trimmed === "double-space"[\s\S]{0,180}?launch-demo-start/);
   assert.match(css, /#notch-face\.nf-answer-exiting \.nf-pill/);
   assert.match(css, /#notch-face\.nf-surface-exiting \.nf-pill/);

@@ -134,9 +134,8 @@ export default function WallpaperShortcutsCard() {
       ) : null}
 
       <p className="mt-3 text-[12px] text-[var(--sb-ink-3)]">
-        On the Mac it comes up on{" "}
-        <span style={monoStyle} className="text-[var(--sb-ink-2)]">Shift twice</span>, or on its own
-        once the machine has been quiet for a while.{" "}
+        On the Mac it comes up on its own once the machine has been quiet for a while, or when you
+        ask him for it out loud. Shift twice used to open it and now belongs to something else.{" "}
         <a href="/wallpaper" className="underline underline-offset-2 hover:text-[var(--sb-ink)]">
           Preview it
         </a>

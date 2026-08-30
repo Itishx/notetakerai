@@ -43,10 +43,16 @@ test("there is always a way out", () => {
   assert.match(surface, /addEventListener\("click"/);
 });
 
-test("one key opens it, and the film moved off that key", () => {
+/* Shift twice opened this. It now runs the pitch demo, so the screen is down to
+   the two ways in that never needed a shortcut. Both have to keep working, and
+   nothing may still be telling people to press Shift twice for it. */
+test("it kept a way in after losing its key", () => {
   const swift = main.slice(main.indexOf('if (trimmed === "double-shift")'), main.indexOf('if (trimmed === "double-space")'));
-  assert.match(swift, /toggleIdleScreen/);
+  assert.doesNotMatch(swift, /toggleIdleScreen/);
   assert.doesNotMatch(swift, /launch-demo-start/);
+  /* It still comes up on its own, and still answers being asked for. */
+  assert.match(main, /idleScreenIntent/);
+  assert.match(main, /parseIdleScreenIntent/);
   assert.match(main, /globalShortcut\.register\("CommandOrControl\+Shift\+L"/);
 });
 
@@ -67,7 +73,8 @@ test("both dashboards can edit the row under the clock", () => {
   const dashboard = read("../mac/braino-mac/renderer/dashboard.js");
   assert.match(dashboard, /loadIdleEditor/);
   const web = read("../src/components/WallpaperShortcutsCard.tsx");
-  assert.match(web, /Shift twice/);
+  /* It must not tell people to press Shift twice, which now runs the pitch. */
+  assert.doesNotMatch(web, /comes up on\{" "\}\s*<span[^>]*>Shift twice<\/span>/);
 });
 
 /* An empty row is a bad edit, not a preference. */

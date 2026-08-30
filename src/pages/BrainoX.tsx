@@ -4,6 +4,7 @@
 // path to X and every schedule/publish carries its policy decision back here.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
+import { xAutoVisible, setXAutoVisible } from "@/lib/xAutoVisibility";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -153,6 +154,7 @@ export default function BrainoX() {
   const [editText, setEditText] = useState("");
   const [schedulingId, setSchedulingId] = useState<string | null>(null);
   const [scheduleAt, setScheduleAt] = useState("");
+  const [showXAuto, setShowXAuto] = useState(() => xAutoVisible());
   const [busyId, setBusyId] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [ideaText, setIdeaText] = useState("");
@@ -686,6 +688,33 @@ export default function BrainoX() {
             </div>
           )}
           {briefing && <p className="mt-4 text-sm leading-relaxed text-white/85">{briefing}</p>}
+        </section>
+
+        {/* What /x shows. Advanced Controls is where the calm page gets its
+            edges put back on, so the switch for the block we took off it
+            belongs here rather than on the page it hides. */}
+        <section className="rounded-2xl border border-white/8 bg-white/4 p-4 sm:p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold">Show xAuto on /x</p>
+              <p className="text-[12px] text-white/40">
+                Off by default. xAuto needs explaining before it makes sense, and the rest of /x
+                explains itself, so it stays off that page until you want it. Nothing about how
+                xAuto runs changes either way. This is only what the page shows, and only in this
+                browser.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => { const next = !showXAuto; setShowXAuto(next); setXAutoVisible(next); }}
+              className={
+                "rounded-full px-4 py-2 text-sm font-medium " +
+                (showXAuto ? "bg-white text-black" : "border border-white/20 text-white/70")
+              }
+            >
+              {showXAuto ? "Showing" : "Hidden"}
+            </button>
+          </div>
         </section>
 
         {/* Composer */}

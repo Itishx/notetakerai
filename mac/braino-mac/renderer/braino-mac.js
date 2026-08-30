@@ -9068,68 +9068,115 @@ function pitchWait(ms) {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
+/* Raised on every restart so a run already in flight stops talking instead of
+   doubling up with the new one. Every wait and every line checks it. */
+let pitchGeneration = 0;
+
+function pitchStale(mine) { return mine !== pitchGeneration; }
+
+async function pitchSay(mine, line) {
+  if (!line || pitchStale(mine)) return;
+  await speak(line);
+}
+
 async function runPitchDemo(payload) {
-  if (pitchRunning) return;
+  const mine = ++pitchGeneration;
   pitchRunning = true;
   const lines = payload?.lines || {};
   const post = String(payload?.post || "");
   const rehearse = Boolean(payload?.rehearse);
-  logRenderer("pitch.run", { rehearse });
+  logRenderer("pitch.run", { rehearse, generation: mine });
 
   try {
     /* Music is opened first and quietly: Spotify takes seconds to wake, and
        the moonwalk is at the end. Asking for it now means it is ready then. */
     void window.brainoMac.skitStep?.("prewarm");
 
-    await speak(lines.hello || "Hi. I'm your co-founder.");
-    await pitchWait(400);
-    await speak(lines.claim || "Let me stop being a claim.");
+    /* 0:00 — he introduces himself. */
+    await pitchSay(mine, lines.hello);
+    if (pitchStale(mine)) return;
 
-    /* The notch takes over: his own thinking panel, opened, writing the post. */
-    openNotchThinking("Writing the post", "Putting it in your voice.");
+    /* 0:10 — he opens the page himself. */
+    void window.brainoMac.pitchOpen?.({ where: "dashboard" });
+    await pitchWait(1600);
+    if (pitchStale(mine)) return;
+    await pitchSay(mine, lines.open);
+
+    /* 0:18 — the post appears a line at a time, nobody at the keyboard. */
+    openNotchThinking("Writing the post", "Putting it in his voice.");
     nfSetThinkingOpen(true);
     await pitchWait(700);
-    renderThinkingCanvas("Writing the post", post.split("\n").filter(Boolean)[0] || "Writing the post");
-    await pitchWait(900);
     for (const para of post.split("\n").filter(Boolean)) {
+      if (pitchStale(mine)) return;
       renderThinkingCanvas("Writing the post", para);
       await pitchWait(950);
     }
+    if (pitchStale(mine)) return;
+    await pitchSay(mine, lines.voice);
 
+    /* 0:35 — the only live thing in the whole minute. */
+    await pitchSay(mine, lines.posting);
+    if (pitchStale(mine)) return;
     const sent = await window.brainoMac.pitchPost?.({ text: post, rehearse });
+    if (pitchStale(mine)) return;
     const ok = Boolean(sent?.ok);
 
     if (ok) {
-      /* Green, and only when it actually went. */
       renderThinkingCanvas("Complete", "Post sent.");
       notchFace?.classList.add("nf-think-complete");
-      await pitchWait(1400);
-      await speak(lines.live || "That is live right now. Go take a look.");
+      await pitchWait(1200);
+      await pitchSay(mine, lines.done);
     } else {
       renderThinkingCanvas("Needs attention", "Account not linked yet.");
-      await pitchWait(1200);
-      await speak(lines.notLinked || "He published it to my account, which he connects tomorrow.");
+      await pitchWait(1000);
+      await pitchSay(mine, lines.notLinked);
     }
 
     notchFace?.classList.remove("nf-think-complete");
     nfSetThinkingOpen(false);
     nfSetThinking("");
-    await pitchWait(500);
+    if (pitchStale(mine)) return;
 
-    /* The last twelve seconds. Music, then the glide, then the line. */
+    /* 0:45 — proof, on a site he does not control. Only when it really went:
+       opening X to show a post that is not there is worse than saying nothing. */
+    if (ok) {
+      void window.brainoMac.pitchOpen?.({ where: "profile" });
+      await pitchWait(2400);
+      if (pitchStale(mine)) return;
+      await pitchSay(mine, lines.live);
+      await pitchSay(mine, lines.proof);
+    }
+
+    /* 1:00 — the part they remember. He dances on top of the proof, so the
+       X profile stays on screen behind him rather than our own site. */
+    if (pitchStale(mine)) return;
+    await pitchSay(mine, lines.closeSetup);
+    await pitchWait(300);
+    await pitchSay(mine, lines.closeGo);
+    if (pitchStale(mine)) return;
     void window.brainoMac.skitStep?.("play");
     await pitchWait(1200);
+    if (pitchStale(mine)) return;
     skitPerformMoonwalk(11000);
-    await pitchWait(1500);
-    await speak(lines.close || "You'll remember me forever.");
   } catch (error) {
     logRenderer("pitch.failed", { error: String(error?.message || error) });
   } finally {
-    pitchRunning = false;
-    notchFace?.classList.remove("nf-think-complete");
-    void window.brainoMac.pitchDone?.();
+    if (!pitchStale(mine)) {
+      pitchRunning = false;
+      notchFace?.classList.remove("nf-think-complete");
+      void window.brainoMac.pitchDone?.();
+    }
   }
 }
+
+/* A restart bumps the generation, which every step above is watching. */
+window.brainoMac.onPitchStop?.(() => {
+  pitchGeneration += 1;
+  logRenderer("pitch.stopped", { generation: pitchGeneration });
+  notchFace?.classList.remove("nf-think-complete");
+  nfSetThinkingOpen(false);
+  nfSetThinking("");
+});
 
 window.brainoMac.onPitchDemo?.((payload) => { void runPitchDemo(payload); });
 

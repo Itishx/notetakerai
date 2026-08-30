@@ -66,13 +66,20 @@ const AUTH_CALLBACK_PATH = "/braino-mac-auth-callback";
 // preload's skit bridge, and runSkit() in the renderer.
 /* ── THE PITCH MINUTE ──────────────────────────────────────────────────────
  *
- * Sixty seconds, on Cmd+Shift+P, in front of investors. Every word is written
- * here rather than generated: a model call inside this minute is a chance for
- * him to say something nobody has read, and that risk buys nothing. The only
- * live thing is the post, which is the entire point of the demo.
+ * Seventy-five seconds, on Shift twice, in front of investors. Braino does all
+ * of the talking. Nobody narrates him, because a demo that needs a narrator is
+ * a demo of a narrator.
  *
- * Not Shift twice. A bare double-modifier can fire while you are typing, and
- * this is the one gesture that must never go off by accident.
+ * Every word is written here rather than generated. A model call inside this
+ * minute is a chance for him to say something nobody has read, and that risk
+ * buys nothing. The only live thing is the post, which is the whole point.
+ *
+ * Shift twice was the idle screen and is now this. It was deliberately avoided
+ * once, because a bare double-modifier can fire while you are typing capitals,
+ * and that reasoning still holds: this gesture publishes to a real account.
+ * What makes it safe enough is that publishing is the last thing it does and
+ * BRAINO_PITCH_REHEARSE=1 runs the whole thing without it. Rehearse with the
+ * flag on, take the flag off when you walk on stage.
  *
  * BRAINO_PITCH_REHEARSE=1 runs everything except the publish, so it can be
  * practised without burning the post. */
@@ -87,15 +94,23 @@ const PITCH = {
     "He wrote this and posted it himself. I'm still on stage.",
   ].join("\n"),
   lines: {
-    hello: "Hi. I'm your co-founder. Or at least, I aspire to be.",
-    claim: "Itish just told you I write his posts. Let me stop being a claim.",
-    live: "That is live right now. Go take a look.",
-    /* If the account is not linked yet, he says the true version instead of
-       the triumphant one. Claiming a post that did not go out, on stage, in
-       front of people who can check, is the worst failure available here. */
-    notLinked: "He published it to my account, which he connects tomorrow. For now, just see here.",
-    close: "And while all this is cool, let me leave you with something. You'll remember me forever.",
+    hello: "Hi. I am Braino. I take care of distribution for Itish. I could take care of it for you.",
+    open: "This is his account. Watch me write a post.",
+    voice: "That is how he sounds, not how I sound. I learned it off him.",
+    posting: "Posting it.",
+    done: "Done.",
+    live: "That is live. Go and look for yourself.",
+    proof: "Forty seconds, and he never touched it. I could do that for you every day.",
+    /* If the account is not linked, he says the true version instead of the
+       triumphant one. Claiming a post that did not go out, on stage, in front
+       of people who can check, is the worst failure available here. */
+    notLinked: "That one did not go out. His account is not linked to me yet, and I am not going to tell you it worked when it did not.",
+    closeSetup: "One more thing, so you remember me. Here is something no other AI can do.",
+    closeGo: "Ready? Watch.",
   },
+  /* Where he goes, in order. The dashboard to show whose account it is, then X
+     itself to prove the post exists somewhere he does not control. */
+  dashboard: "https://trybraino.com/x",
   rehearse: () => String(process.env.BRAINO_PITCH_REHEARSE || "").trim() === "1",
 };
 let pitchDemoRunning = false;
@@ -2992,14 +3007,9 @@ function registerHotkeys() {
       return false;
     })(),
     pitchDemo: globalShortcut.register("CommandOrControl+Shift+P", () => {
-      pitchDemoRunning = true;
-      logMac("pitch.start", { rehearse: PITCH.rehearse() });
-      sendToRenderer("braino-mac:pitch-demo", {
-        post: PITCH.post,
-        lines: PITCH.lines,
-        rehearse: PITCH.rehearse(),
-      });
-      ensureDockWindowVisible("pitch-demo");
+      /* Kept alongside Shift twice. If a room's keyboard fights the bare
+         double-modifier, there is a combination that cannot be misread. */
+      startPitchDemo("Cmd+Shift+P");
     }),
     dashboard: globalShortcut.register("CommandOrControl+Shift+D", () => {
       openDashboardWindow();
@@ -3097,8 +3107,12 @@ function startSwiftHotkeyHelper() {
         return;
       }
       if (trimmed === "double-shift") {
-        logMac("hotkey.double_shift", { skill: "idle-screen" });
-        toggleIdleScreen("double Shift");
+        /* Shift twice belongs to the pitch until after the pitch. The idle
+           screen still comes up on its own when the machine goes quiet, and
+           still answers "put your screen up", so it lost a shortcut rather
+           than a way in. */
+        logMac("hotkey.double_shift", { skill: "pitch-demo" });
+        startPitchDemo("double Shift");
         return;
       }
       if (trimmed === "double-space") {
@@ -17243,6 +17257,75 @@ ipcMain.handle("braino-mac:pitch-post", async (_event, payload) => {
 });
 
 ipcMain.handle("braino-mac:pitch-done", async () => { pitchDemoRunning = false; logMac("pitch.done", {}); return { ok: true }; });
+
+/* The two places he goes on stage. He opens them himself, because a demo where
+   a human drives the browser is a demo of a human driving a browser. */
+ipcMain.handle("braino-mac:pitch-open", async (_event, payload) => {
+  const where = String(payload?.where || "dashboard");
+  try {
+    const url = where === "profile" ? await pitchProfileUrl() : PITCH.dashboard;
+    await shell.openExternal(url);
+    /* Chrome comes forward and stays forward. Without this the page loads
+       behind whatever was in front, and the room watches nothing happen. */
+    await focusChrome("Google Chrome").catch(() => {});
+    logMac("pitch.open", { where, url });
+    return { ok: true, url };
+  } catch (error) {
+    logMac("pitch.open.failed", { where, error: String(error?.message || error) });
+    return { ok: false };
+  }
+});
+
+/* His profile, by the handle actually connected to this account. Hardcoding a
+   handle here would survive exactly until the account changed, and then he
+   would open a stranger's profile in front of a room. */
+let pitchProfileCache = "";
+async function pitchProfileUrl() {
+  if (pitchProfileCache) return pitchProfileCache;
+  try {
+    const auth = authStatusPayload();
+    const authToken = await getBrainoAuthToken();
+    if (authToken && auth?.userId) {
+      const base = SUPABASE_URL.replace(/\/$/, "");
+      const res = await fetch(
+        `${base}/rest/v1/x_connections?user_identifier=eq.${encodeURIComponent(auth.userId)}&select=username`,
+        { headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${authToken}` } },
+      );
+      const rows = await res.json().catch(() => []);
+      const handle = String(rows?.[0]?.username || "").replace(/^@/, "").trim();
+      if (handle) {
+        pitchProfileCache = `https://x.com/${handle}`;
+        logMac("pitch.profile", { handle });
+        return pitchProfileCache;
+      }
+    }
+  } catch (error) {
+    logMac("pitch.profile.failed", { error: String(error?.message || error) });
+  }
+  /* No handle means no profile to open. Home still shows his own timeline with
+     the post at the top, which is enough to prove it went. */
+  return "https://x.com/home";
+}
+
+/* One way in, so the hotkey and the key combination cannot drift apart. */
+function startPitchDemo(source) {
+  if (pitchDemoRunning) {
+    /* Pressing it again restarts rather than stacking. Rehearsing means
+       running it over and over, and a second run landing on top of a first is
+       two voices at once. */
+    logMac("pitch.restart", { source });
+    sendToRenderer("braino-mac:pitch-stop", {});
+  }
+  pitchDemoRunning = true;
+  pitchProfileCache = "";
+  logMac("pitch.start", { source, rehearse: PITCH.rehearse() });
+  sendToRenderer("braino-mac:pitch-demo", {
+    post: PITCH.post,
+    lines: PITCH.lines,
+    rehearse: PITCH.rehearse(),
+  });
+  ensureDockWindowVisible("pitch-demo");
+}
 
 ipcMain.handle("braino-mac:skit-step", async (_event, step) => {
   /* The pitch minute borrows the moonwalk's music cue. It is the same Billie
