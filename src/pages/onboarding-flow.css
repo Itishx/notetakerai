@@ -34,7 +34,7 @@
 .ob-progress span { display: block; height: 100%; background: var(--ob-coral); border-radius: 0 2px 2px 0; transition: width .55s cubic-bezier(.16,1,.3,1); }
 
 /* ── Stage ── */
-.ob-stage { flex: 1; width: min(860px, calc(100% - 40px)); margin: 0 auto; padding: clamp(44px, 8vh, 92px) 0 40px; display: flex; flex-direction: column; justify-content: center; }
+.ob-stage { flex: 1; width: min(860px, calc(100% - 40px)); margin: 0 auto; padding: clamp(44px, 8vh, 92px) 0 118px; display: flex; flex-direction: column; justify-content: center; }
 .ob-step { animation: ob-in .6s cubic-bezier(.16,1,.3,1) both; }
 @keyframes ob-in { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: none; } }
 
@@ -65,41 +65,11 @@
 .ob-tick { position: absolute; top: 18px; right: 18px; width: 21px; height: 21px; border-radius: 50%; border: 1px solid var(--ob-line); display: grid; place-items: center; color: transparent; font-size: 12px; transition: .2s; }
 .ob-card.is-on .ob-tick { background: var(--ob-coral); border-color: var(--ob-coral); color: #fff; }
 
-/* ── Voice rows ── */
-.ob-voices { display: grid; gap: 12px; }
-.ob-voice { display: flex; align-items: center; gap: 18px; padding: 18px 22px; text-align: left; border: 1px solid var(--ob-line); border-radius: 18px; background: var(--ob-card); cursor: pointer; font: inherit; color: inherit; transition: .28s cubic-bezier(.16,1,.3,1); }
-.ob-voice:hover { transform: translateY(-2px); }
-.ob-voice.is-on { border-color: var(--ob-coral); background: #fff; box-shadow: 0 0 0 1px var(--ob-coral); }
-.ob-wave { display: flex; align-items: center; gap: 3px; width: 38px; height: 34px; flex: none; }
-.ob-wave i { flex: 1; border-radius: 2px; background: rgba(29,29,31,.24); height: 30%; transition: background .2s; }
-.ob-voice.is-on .ob-wave i { background: var(--ob-coral); animation: ob-bar 1.05s ease-in-out infinite; }
-.ob-voice.is-on .ob-wave i:nth-child(2) { animation-delay: .14s; }
-.ob-voice.is-on .ob-wave i:nth-child(3) { animation-delay: .28s; }
-.ob-voice.is-on .ob-wave i:nth-child(4) { animation-delay: .42s; }
-@keyframes ob-bar { 0%, 100% { height: 26%; } 50% { height: 92%; } }
-.ob-voice-copy { flex: 1; min-width: 0; }
-.ob-voice-copy strong { display: block; font-size: 18px; font-weight: 650; letter-spacing: -.02em; }
-.ob-voice-copy span { color: var(--ob-soft); font-size: 14.5px; }
-.ob-play { flex: none; padding: 8px 15px; border: 1px solid var(--ob-line); border-radius: 999px; background: transparent; font: inherit; font-size: 12.5px; font-weight: 650; color: var(--ob-soft); }
-
 /* ── Chips ── */
 .ob-chips { display: flex; flex-wrap: wrap; gap: 11px; }
 .ob-chip { padding: 12px 20px; border: 1px solid var(--ob-line); border-radius: 999px; background: var(--ob-card); font: inherit; font-size: 15.5px; font-weight: 600; color: inherit; cursor: pointer; transition: .22s; }
 .ob-chip:hover { transform: translateY(-2px); }
 .ob-chip.is-on { border-color: var(--ob-ink); background: var(--ob-ink); color: var(--ob-paper); }
-
-/* ── Permission rows ── */
-.ob-perms { display: grid; gap: 2px; border: 1px solid var(--ob-line); border-radius: 20px; background: var(--ob-card); overflow: hidden; }
-.ob-perm { display: flex; align-items: center; gap: 18px; padding: 20px 22px; border-bottom: 1px solid var(--ob-line); }
-.ob-perm:last-child { border-bottom: 0; }
-.ob-perm-copy { flex: 1; min-width: 0; }
-.ob-perm-copy strong { display: block; font-size: 17px; font-weight: 650; letter-spacing: -.02em; }
-.ob-perm-copy span { color: var(--ob-soft); font-size: 14.5px; line-height: 1.4; }
-.ob-switch { flex: none; width: 50px; height: 30px; padding: 3px; border: 0; border-radius: 999px; background: rgba(29,29,31,.17); cursor: pointer; transition: background .25s; }
-.ob-switch i { display: block; width: 24px; height: 24px; border-radius: 50%; background: #fff; box-shadow: 0 2px 6px rgba(0,0,0,.2); transition: transform .25s cubic-bezier(.16,1,.3,1); }
-.ob-switch.is-on { background: var(--ob-coral); }
-.ob-switch.is-on i { transform: translateX(20px); }
-.ob-fineprint { margin: 18px 0 0; color: var(--ob-soft); font-size: 13.5px; line-height: 1.5; }
 
 /* ── Hotkeys ── */
 .ob-keys { display: grid; gap: 14px; }
@@ -129,7 +99,16 @@
 .ob-summary div:last-child { border-bottom: 0; }
 .ob-summary span { color: var(--ob-soft); }
 .ob-summary b { font-weight: 650; text-align: right; }
-.ob-installs { margin-top: 30px; display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; }
+.ob-installs { margin-top: 34px; display: flex; flex-wrap: wrap; gap: 12px; }
+.ob-btn.is-big { padding: 18px 40px; font-size: 17.5px; }
+
+/* The hotkeys, compact. They matter, but not as much as the button above them. */
+.ob-keystrip { margin-top: 38px; display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
+.ob-keychip { display: flex; align-items: center; gap: 13px; padding: 14px 16px; border: 1px solid var(--ob-line); border-radius: 15px; background: var(--ob-card); }
+.ob-keychip .ob-caps { flex: none; }
+.ob-keychip .ob-cap { min-width: 40px; padding: 7px 9px; font-size: 11.5px; }
+.ob-keychip .ob-key-copy strong { font-size: 14.5px; }
+.ob-keychip .ob-key-copy span { font-size: 12.5px; line-height: 1.35; display: block; }
 
 /* ── Footer nav ── */
 .ob-foot { position: sticky; bottom: 0; padding: 20px clamp(20px, 5vw, 56px) 26px; display: flex; align-items: center; justify-content: space-between; gap: 16px; background: linear-gradient(to top, var(--ob-paper) 62%, rgba(245,241,233,0)); }
@@ -210,4 +189,83 @@
 @media (max-width: 860px) {
   .ob-auth { grid-template-columns: 1fr; }
   .ob-auth-show { order: 2; }
+}
+
+/* ── The looping job on the sign-in panel ─────────────────────────────────
+   A scripted run: you say a thing, he works, it is done. None of it is real,
+   which is the point: it costs nothing and it says what he is for. */
+.ob-loop { display: flex; flex-direction: column; align-items: center; gap: 12px; width: 100%; }
+.ob-loop-notch {
+  display: flex; align-items: center; gap: 12px;
+  min-height: 46px; padding: 10px 20px;
+  border-radius: 999px;
+  background: #16161a;
+  color: #f2ece6;
+  font-size: 14.5px; font-weight: 550; letter-spacing: -.01em;
+  box-shadow: 0 14px 34px rgba(22, 22, 26, .28);
+  transition: background .5s cubic-bezier(.16,1,.3,1);
+}
+.ob-loop.is-done .ob-loop-notch { background: #16352a; }
+.ob-loop-eyes { display: flex; gap: 5px; flex: none; }
+.ob-loop-eyes i { width: 7px; height: 7px; border-radius: 50%; background: #f2ece6; animation: ob-blink 4s infinite; }
+.ob-loop.is-thinking .ob-loop-eyes i { animation: ob-blink 4s infinite, ob-glance 1.6s ease-in-out infinite; }
+@keyframes ob-blink { 0%, 92%, 100% { transform: scaleY(1); } 95% { transform: scaleY(.14); } }
+@keyframes ob-glance { 0%, 100% { transform: translateX(-1px); } 50% { transform: translateX(2px); } }
+.ob-loop-line { white-space: nowrap; }
+.ob-loop-dots { display: inline-flex; gap: 4px; align-items: center; flex: none; }
+.ob-loop-dots i { width: 5px; height: 5px; border-radius: 50%; background: currentColor; opacity: .35; animation: ob-pulse 1.15s ease-in-out infinite; }
+.ob-loop-dots i:nth-child(2) { animation-delay: .16s; }
+.ob-loop-dots i:nth-child(3) { animation-delay: .32s; }
+@keyframes ob-pulse { 0%, 100% { opacity: .25; transform: translateY(0); } 50% { opacity: 1; transform: translateY(-3px); } }
+.ob-loop-check { color: #64d29a; font-weight: 700; }
+.ob-loop-who { margin: 0; font-size: 11.5px; letter-spacing: .1em; text-transform: uppercase; color: rgba(107, 42, 36, .6); }
+
+/* ── Ask him something ── */
+.ob-ask { display: flex; gap: 10px; padding: 8px 8px 8px 22px; border: 1px solid var(--ob-line); border-radius: 999px; background: #fff; box-shadow: 0 14px 40px rgba(29,29,31,.07); }
+.ob-ask input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; font: inherit; font-size: 17px; color: inherit; }
+.ob-ask input::placeholder { color: rgba(110,106,101,.72); }
+.ob-ask .ob-btn { flex: none; padding-inline: 26px; }
+
+.ob-reply { margin-top: 22px; padding: 22px 26px; border: 1px solid var(--ob-line); border-radius: 20px; background: var(--ob-card); animation: ob-in .5s cubic-bezier(.16,1,.3,1) both; }
+.ob-reply.is-waiting { display: grid; place-items: center; min-height: 84px; color: var(--ob-ink); }
+.ob-reply-who { display: block; margin-bottom: 8px; font-size: 11.5px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--ob-coral); }
+/* His answer, rendered as markdown the way the chat page does. Capped, because
+   he sometimes runs long and the Continue button must stay in view. */
+.ob-reply-body { max-height: 40vh; overflow-y: auto; margin-bottom: 12px; font-size: 16.5px; line-height: 1.55; }
+.ob-reply-body > *:first-child { margin-top: 0; }
+.ob-reply-body > *:last-child { margin-bottom: 0; }
+.ob-reply-body p { margin: 0 0 12px; }
+.ob-reply-body ul, .ob-reply-body ol { margin: 0 0 12px; padding-left: 22px; }
+.ob-reply-body li { margin-bottom: 5px; }
+.ob-reply-body h2, .ob-reply-body h3, .ob-reply-body h4, .ob-reply-body h5 { margin: 16px 0 8px; font-size: 17px; font-weight: 650; letter-spacing: -.02em; }
+.ob-reply-body blockquote { margin: 0 0 12px; padding-left: 14px; border-left: 2px solid var(--ob-coral); color: var(--ob-soft); }
+.ob-reply-body blockquote p { margin: 0; }
+.ob-reply-body code { padding: 1px 5px; border-radius: 5px; background: rgba(29,29,31,.07); font-size: .92em; }
+.ob-reply-body pre { margin: 0 0 12px; padding: 12px 14px; border-radius: 12px; background: rgba(29,29,31,.06); overflow-x: auto; }
+.ob-reply-body pre code { background: none; padding: 0; }
+.ob-reply-body a { color: var(--ob-coral); }
+.ob-reply-body hr { border: 0; border-top: 1px solid var(--ob-line); margin: 14px 0; }
+
+/* ── Two fields, his turn to ask ── */
+.ob-fields { display: grid; gap: 22px; justify-items: start; }
+.ob-field { display: grid; gap: 9px; width: min(520px, 100%); }
+.ob-field > span { font-size: 15.5px; font-weight: 600; letter-spacing: -.01em; }
+.ob-field .ob-name-input { width: 100%; margin-top: 0; }
+
+/* ── Manner: real samples, not adjectives ── */
+.ob-manner { display: flex; flex-direction: column; }
+.ob-sample { margin: 12px 0 14px; font-size: 15px; line-height: 1.5; color: var(--ob-ink); }
+.ob-manner .ob-card-note { margin-top: auto; font-size: 13.5px; }
+.ob-sample-wait { display: block; height: 44px; border-radius: 10px; background: linear-gradient(90deg, rgba(29,29,31,.06) 25%, rgba(29,29,31,.11) 50%, rgba(29,29,31,.06) 75%); background-size: 240% 100%; animation: ob-shimmer 1.3s linear infinite; }
+@keyframes ob-shimmer { from { background-position: 120% 0; } to { background-position: -120% 0; } }
+
+/* ── Footer ── */
+.ob-foot-right { display: flex; align-items: center; gap: 20px; }
+
+@media (max-width: 640px) {
+  .ob-loop-line { white-space: normal; }
+  .ob-ask { flex-direction: column; border-radius: 22px; padding: 16px; }
+  .ob-ask input { padding: 4px 6px; }
+  .ob-ask .ob-btn { width: 100%; }
+  .ob-foot-right { flex-direction: column-reverse; align-items: stretch; gap: 10px; }
 }

@@ -1,21 +1,29 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { EXTENSION_DOWNLOAD_URL, EXTENSION_DOWNLOAD_FILENAME } from "@/lib/extensionDownload";
-import { Link } from "react-router-dom";
 import { BRAINO_WALKER_SVG } from "@/components/brainoWalkerSvg";
+import { Markdown } from "@/components/BrainoMarkdown";
 import "./onboarding-flow.css";
 
-/* Braino setup flow — design study.
-   Runs after Google sign-in (so the name and photo are already ours) and
-   before any install button appears: he is yours before you have installed him.
-   Everything is local state here; wiring writes these to the profile, the
-   emotional engine, and the memory engine when "Get Started" points at it. */
+/* Braino setup.
+ *
+ * The old version of this file asked eight questions and saved one answer, and
+ * two of its screens promised things a web page cannot do: permission toggles
+ * that grant nothing, and a choice of four voices when he has one. It was a
+ * form standing in front of a product whose whole pitch is "say it and it
+ * happens".
+ *
+ * This version makes him do something real before it asks for anything. Step
+ * two is him actually answering, out of the same brain the chat page uses. Only
+ * then does he ask your name, and the manner screen shows you his real answer
+ * written three ways instead of three adjectives. Every answer here is written
+ * to the profile the engine actually reads.
+ */
 
-/* The signed-in person, from Supabase rather than a placeholder. This file
-   shipped with a hardcoded "Itish" because it was built as a look-and-feel
-   prototype and never wired to auth, which is why Get Started could not point
-   at it and pointed at the extension download instead. */
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
+const SUPABASE_KEY = (import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY) as string;
 
 type Device = "chrome" | "mac" | "both";
 
@@ -23,28 +31,6 @@ const DEVICES: { id: Device; icon: string; name: string; note: string }[] = [
   { id: "chrome", icon: "◎", name: "In my browser", note: "He rides along in Chrome: reads the page, does the tab work, talks." },
   { id: "mac", icon: "⌘", name: "On my Mac", note: "The full companion. Files, apps, screen, voice, the whole machine." },
   { id: "both", icon: "◈", name: "Both", note: "One Braino, one memory, wherever you are working." },
-];
-
-const VOICES: { id: string; name: string; note: string }[] = [
-  { id: "braino", name: "Braino", note: "His own voice. Warm, a little dry." },
-  { id: "calm", name: "Calm", note: "Slower, softer. Good for late nights." },
-  { id: "bright", name: "Bright", note: "Quick and awake. Good for mornings." },
-  { id: "low", name: "Low", note: "Deeper, steady, fewer words." },
-];
-
-const TONES: { id: string; icon: string; name: string; note: string }[] = [
-  { id: "warm", icon: "◐", name: "Warm", note: "Reads the room. Checks in when the day looks heavy." },
-  { id: "direct", icon: "→", name: "Direct", note: "Answer first, no preamble, no cheerleading." },
-  { id: "playful", icon: "✦", name: "Playful", note: "Jokes back. Still gets the work done." },
-];
-
-const INTERESTS = ["Studying", "Coding", "Meetings", "Writing", "Shopping", "Staying focused", "Music", "Email", "Research"];
-
-const PERMISSIONS: { id: string; name: string; note: string; on: boolean }[] = [
-  { id: "page", name: "The page you are on", on: true, note: "So you never have to paste anything in. Read when you ask, not stored." },
-  { id: "screen", name: "Your screen", on: false, note: "Only in the moment you ask him to look. Nothing is recorded." },
-  { id: "mic", name: "Your microphone", on: true, note: "For voice. It stays off until you press the hotkey or say his name." },
-  { id: "files", name: "Your files", on: false, note: "Mac only. Lets him open, find, and file things for you." },
 ];
 
 const HOTKEYS: Record<Device, { caps: string[]; name: string; note: string }[]> = {
@@ -65,33 +51,170 @@ const HOTKEYS: Record<Device, { caps: string[]; name: string; note: string }[]> 
   ],
 };
 
-const MEMORY_HINTS = [
-  "I am building a company called Braino.",
-  "I study at night and sleep badly.",
-  "Keep answers short, I get headaches.",
+/* Things worth asking a stranger's assistant on the first go: each one gets a
+   real answer in a few seconds without needing anything installed. */
+const ASK_EXAMPLES = [
+  "Explain what a term sheet actually is, like I am 12.",
+  "Give me three names for an app that reads my meetings.",
+  "What should I do first if I have one hour and a big deadline?",
+];
+
+/* These are not adjectives, they are the engine's real knobs. humor, pushback
+   and warmth are read by the emotional engine on every reply, so picking one of
+   these genuinely changes how he talks to you. */
+type MannerId = "warm" | "direct" | "playful";
+
+const MANNERS: {
+  id: MannerId;
+  name: string;
+  note: string;
+  fallback: string;
+  settings: { humor: "off" | "dry" | "playful"; pushback: "gentle" | "direct"; warmth: "measured" | "warm" };
+}[] = [
+  {
+    id: "warm",
+    name: "Warm",
+    note: "Reads the room. Softer landing on a hard day.",
+    fallback: "Here is how I would think about it, and take your time with it. There is no rush on my end.",
+    settings: { humor: "dry", pushback: "gentle", warmth: "warm" },
+  },
+  {
+    id: "direct",
+    name: "Direct",
+    note: "Answer first. No preamble, no cheerleading.",
+    fallback: "Short version: do the first one. The other two cost you a week and buy you nothing.",
+    settings: { humor: "dry", pushback: "direct", warmth: "measured" },
+  },
+  {
+    id: "playful",
+    name: "Playful",
+    note: "Jokes back. Still gets the work done.",
+    fallback: "Right, so the good news is this is easy. The bad news is you are not going to like why.",
+    settings: { humor: "playful", pushback: "direct", warmth: "warm" },
+  },
 ];
 
 function Walker() {
   return <div className="ob-walker" aria-hidden dangerouslySetInnerHTML={{ __html: BRAINO_WALKER_SVG }} />;
 }
 
+/* The left half of the sign-in screen. A scripted job on a loop: you say a
+   thing, he works, it is done. Argues for him better than a sentence about him
+   would, and it costs nothing because none of it is real. */
+const JOB_BEATS = [
+  { face: "listening", line: "Post that we shipped voice mode today.", who: "you" as const },
+  { face: "thinking", line: "Writing the post", who: "him" as const },
+  { face: "thinking", line: "Checking how you usually say it", who: "him" as const },
+  { face: "done", line: "Posted to X", who: "him" as const },
+];
+
+function JobLoop() {
+  const [beat, setBeat] = useState(0);
+  useEffect(() => {
+    const hold = beat === JOB_BEATS.length - 1 ? 2200 : 1700;
+    const timer = window.setTimeout(() => setBeat((b) => (b + 1) % JOB_BEATS.length), hold);
+    return () => window.clearTimeout(timer);
+  }, [beat]);
+
+  const current = JOB_BEATS[beat];
+  return (
+    <div className={`ob-loop is-${current.face}`} aria-hidden>
+      <div className="ob-loop-notch">
+        <span className="ob-loop-eyes"><i /><i /></span>
+        <span className="ob-loop-line">{current.line}</span>
+        {current.face === "thinking" && <span className="ob-loop-dots"><i /><i /><i /></span>}
+        {current.face === "done" && <span className="ob-loop-check">✓</span>}
+      </div>
+      <p className="ob-loop-who">{current.who === "you" ? "You said it" : "He is doing it"}</p>
+    </div>
+  );
+}
+
+/* One way in to the brain, the same endpoint the chat page uses. */
+async function askBraino(message: string, notes: string) {
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  const response = await fetch(`${SUPABASE_URL}/functions/v1/chat-about-notes`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      apikey: SUPABASE_KEY,
+      Authorization: `Bearer ${token || SUPABASE_KEY}`,
+    },
+    body: JSON.stringify({
+      message,
+      chatHistory: [],
+      notes,
+      userId: data.session?.user?.id,
+      clientTimeZone: typeof Intl !== "undefined" ? Intl.DateTimeFormat().resolvedOptions().timeZone : null,
+      clientUtcOffsetMinutes: new Date().getTimezoneOffset() * -1,
+      pageContext: {
+        title: "Braino setup",
+        url: typeof window !== "undefined" ? window.location.href : "https://trybraino.com/onboarding",
+        text: "Someone is meeting Braino for the first time, during setup, before installing anything.",
+      },
+    }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    if (response.status === 429) throw new Error("He is thinking too fast for his own good. Give it a moment.");
+    throw new Error(typeof payload?.error === "string" ? payload.error : "He could not reach the brain just now.");
+  }
+  return String(payload.reply || "").trim();
+}
+
+/* Models wander. Take the JSON if it is there, walk away quietly if it is not. */
+function readThreeWays(reply: string): Record<MannerId, string> | null {
+  const start = reply.indexOf("{");
+  const end = reply.lastIndexOf("}");
+  if (start < 0 || end <= start) return null;
+  try {
+    const parsed = JSON.parse(reply.slice(start, end + 1));
+    const out = {} as Record<MannerId, string>;
+    for (const manner of MANNERS) {
+      const value = parsed?.[manner.id];
+      if (typeof value !== "string" || !value.trim()) return null;
+      out[manner.id] = value.trim();
+    }
+    return out;
+  } catch {
+    return null;
+  }
+}
+
+function guessDevice(): Device {
+  if (typeof navigator === "undefined") return "chrome";
+  return /Mac/i.test(navigator.userAgent) ? "mac" : "chrome";
+}
+
 export default function OnboardingFlow() {
   const { user } = useAuth();
+
+  const steps = useMemo(() => ["auth", "ask", "you", "manner", "install"] as const, []);
   const [step, setStep] = useState(0);
+  const current = steps[step];
+  const total = steps.length;
+
   const [authBusy, setAuthBusy] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
-  /* What he calls you. Seeded from the name Google already gave us, so the
-     question is a confirmation rather than a form to fill in. */
+
+  const [askText, setAskText] = useState("");
+  const [askReply, setAskReply] = useState("");
+  const [askBusy, setAskBusy] = useState(false);
+  const [askError, setAskError] = useState<string | null>(null);
+  const askedRef = useRef("");
+
   const [callMe, setCallMe] = useState("");
-  const [device, setDevice] = useState<Device | null>(null);
-  const [voice, setVoice] = useState<string | null>(null);
-  const [tone, setTone] = useState<string | null>(null);
-  const [interests, setInterests] = useState<string[]>([]);
-  const [perms, setPerms] = useState<Record<string, boolean>>(() =>
-    Object.fromEntries(PERMISSIONS.map((p) => [p.id, p.on])));
-  const [memory, setMemory] = useState("");
+  const [aboutYou, setAboutYou] = useState("");
+
+  const [manner, setManner] = useState<MannerId | null>(null);
+  const [samples, setSamples] = useState<Record<MannerId, string> | null>(null);
+  const [samplesBusy, setSamplesBusy] = useState(false);
+
+  const [device, setDevice] = useState<Device>(guessDevice);
 
   useEffect(() => { document.title = "Set up Braino"; }, []);
+  useEffect(() => { window.scrollTo({ top: 0, behavior: "smooth" }); }, [step]);
 
   const googleName = String(
     user?.user_metadata?.full_name || user?.user_metadata?.name || "",
@@ -99,9 +222,7 @@ export default function OnboardingFlow() {
   const firstName = googleName.split(" ")[0] || "";
   const email = user?.email || "";
 
-  /* Signing in returns to this page, so the moment a user exists the auth step
-     is done and the name question is next. Without this you land back on the
-     sign-in screen you just completed. */
+  /* Signing in returns here, so the moment a user exists the door is behind us. */
   useEffect(() => {
     if (!user) return;
     try { sessionStorage.removeItem("braino.onboarding"); } catch { /* private mode */ }
@@ -128,74 +249,124 @@ export default function OnboardingFlow() {
       setAuthBusy(false);
     }
   }, []);
-  useEffect(() => { window.scrollTo({ top: 0, behavior: "smooth" }); }, [step]);
 
-  const toggleInterest = useCallback((label: string) => {
-    setInterests((list) => (list.includes(label) ? list.filter((i) => i !== label) : [...list, label]));
-  }, []);
+  const runAsk = useCallback(async (text: string) => {
+    const question = text.trim();
+    if (!question || askBusy) return;
+    setAskBusy(true);
+    setAskError(null);
+    setAskReply("");
+    askedRef.current = question;
+    try {
+      const reply = await askBraino(
+        question,
+        "This is the first thing this person has ever asked Braino. Answer it properly, in his own voice, in four sentences or fewer. No welcome speech, no mention of setup, no offer to help further.",
+      );
+      setAskReply(reply);
+    } catch (error) {
+      setAskError(error instanceof Error ? error.message : "That did not go through.");
+    } finally {
+      setAskBusy(false);
+    }
+  }, [askBusy]);
 
-  const steps = useMemo(() => [
-    "auth", "name", "device", "voice", "tone", "interests", "permissions", "keys", "memory", "done",
-  ] as const, []);
-  const total = steps.length;
-  const current = steps[step];
+  /* The manner screen wants his real answer written three ways. Asked once, on
+     arrival. If the model will not hand back clean JSON, or takes too long, the
+     written samples stand in and the screen still works: this is a nice touch,
+     never a thing that can block someone from finishing setup. */
+  const askedForSamplesRef = useRef(false);
+  useEffect(() => {
+    if (current !== "manner" || askedForSamplesRef.current || !askReply) return;
+    askedForSamplesRef.current = true;
+    setSamplesBusy(true);
+    const giveUp = new Promise<string>((resolve) => window.setTimeout(() => resolve(""), 25000));
+    Promise.race([
+      askBraino(
+        `Here is something you just told someone:\n\n"${askReply.slice(0, 700)}"\n\n` +
+          "Write the opening two sentences of that same answer three ways: warm (reads the room, gentle), " +
+          "direct (answer first, no preamble), playful (jokes, still useful). " +
+          'Reply with only a JSON object and nothing else, in this exact shape: {"warm":"...","direct":"...","playful":"..."}',
+        "Return raw JSON only. No commentary before or after it.",
+      ),
+      giveUp,
+    ])
+      .then((reply) => setSamples(readThreeWays(reply)))
+      .catch(() => setSamples(null))
+      .finally(() => setSamplesBusy(false));
+  }, [current, askReply]);
+
+  /* Saving happens as you go, not at the end, so leaving halfway still keeps
+     what you told him. These are the columns the engine reads: user-knowledge
+     picks up display_name and overall_memory, the emotional engine reads
+     personality_settings. */
+  const saveAboutYou = useCallback(async () => {
+    if (!user) return;
+    const patch: { display_name?: string; overall_memory?: string } = {};
+    if (callMe.trim()) patch.display_name = callMe.trim();
+    if (aboutYou.trim()) patch.overall_memory = aboutYou.trim();
+    if (!Object.keys(patch).length) return;
+    await supabase.from("profiles").update(patch).eq("user_id", user.id);
+  }, [user, callMe, aboutYou]);
+
+  const saveManner = useCallback(async (id: MannerId) => {
+    if (!user) return;
+    const chosen = MANNERS.find((m) => m.id === id);
+    if (!chosen) return;
+    const { data } = await supabase.from("profiles").select("personality_settings").eq("user_id", user.id).maybeSingle();
+    const existing = (data as { personality_settings?: Record<string, unknown> } | null)?.personality_settings || {};
+    await supabase
+      .from("profiles")
+      .update({ personality_settings: { ...existing, ...chosen.settings } })
+      .eq("user_id", user.id);
+  }, [user]);
+
+  const chooseManner = useCallback((id: MannerId) => {
+    setManner(id);
+    void saveManner(id);
+  }, [saveManner]);
+
+  const next = useCallback(() => {
+    if (current === "you") void saveAboutYou();
+    setStep((s) => Math.min(s + 1, total - 1));
+  }, [current, saveAboutYou, total]);
+
+  const back = useCallback(() => setStep((s) => Math.max(s - 1, 0)), []);
+
+  /* Anyone who wants the product now should get it now. */
+  const skipToInstall = useCallback(() => {
+    void saveAboutYou();
+    setStep(total - 1);
+  }, [saveAboutYou, total]);
 
   const canContinue =
     current === "auth" ? Boolean(user) :
-    current === "name" ? callMe.trim().length > 0 :
-    current === "device" ? Boolean(device) :
-    current === "voice" ? Boolean(voice) :
-    current === "tone" ? Boolean(tone) :
-    current === "interests" ? interests.length > 0 :
+    current === "you" ? callMe.trim().length > 0 :
     true;
 
-  /* Save the name the moment they leave that step. display_name is the field
-     Braino already greets people by, so answering the question actually
-     changes what he calls you rather than filling in a form that goes nowhere. */
-  const saveCallMe = useCallback(async () => {
-    const value = callMe.trim();
-    if (!user || !value) return;
-    await supabase.from("profiles").update({ display_name: value }).eq("user_id", user.id);
-  }, [callMe, user]);
-
-  const next = () => {
-    if (current === "name") void saveCallMe();
-    setStep((s) => Math.min(s + 1, total - 1));
-  };
-  const back = () => setStep((s) => Math.max(s - 1, 0));
-
-  const voiceName = VOICES.find((v) => v.id === voice)?.name ?? "Braino";
-  const toneName = TONES.find((t) => t.id === tone)?.name ?? "Warm";
-  const deviceName = device === "chrome" ? "Chrome" : device === "mac" ? "Mac" : "Chrome + Mac";
-  const liveKeys = HOTKEYS[device ?? "both"];
-  const onCount = PERMISSIONS.filter((p) => perms[p.id]).length;
+  const liveKeys = HOTKEYS[device];
 
   return (
     <div className="ob-doc">
       <header className="ob-top">
         <div className="ob-top-inner">
           <Link to="/" className="ob-mark"><i />braino</Link>
-          <span className="ob-count">{current === "done" ? "All set" : `Step ${step + 1} of ${total - 1}`}</span>
+          <span className="ob-count">Step {step + 1} of {total}</span>
         </div>
         <div className="ob-progress"><span style={{ width: `${((step + 1) / total) * 100}%` }} /></div>
       </header>
 
       <main className="ob-stage">
         {current === "auth" && (
-          /* Split: him on the left, the door on the right. The left half is the
-             product doing the one thing the page is asking you to trust it
-             with, which argues better than a paragraph about it would. */
           <section className="ob-step ob-auth">
             <div className="ob-auth-show">
               <Walker />
-              <p className="ob-auth-say">&ldquo;Tell me what you shipped. I will write the post, find the people, and wait for your yes.&rdquo;</p>
-              <span className="ob-auth-tag">Braino, your co-founder</span>
+              <JobLoop />
             </div>
             <div className="ob-auth-door">
               <p className="ob-eyebrow">Get started</p>
               <h1 className="ob-h1">Make him <em>yours</em>.</h1>
               <p className="ob-lede">
-                Sign in first, so he knows whose voice to learn. Nothing installs yet.
+                Sign in, ask him something, and see whether you like him. Nothing installs until the end.
               </p>
               <button type="button" className="ob-btn ob-google" onClick={signInWithGoogle} disabled={authBusy}>
                 {authBusy ? "Opening Google…" : "Continue with Google"}
@@ -208,34 +379,161 @@ export default function OnboardingFlow() {
           </section>
         )}
 
-        {current === "name" && (
-          <section className="ob-step ob-hello">
-            <Walker />
-            <p className="ob-eyebrow">One thing first</p>
-            <h1 className="ob-h1">What should I <em>call you?</em></h1>
+        {current === "ask" && (
+          <section className="ob-step">
+            <p className="ob-eyebrow">Him, actually working</p>
+            <h1 className="ob-h1">Ask him <em>for something.</em></h1>
             <p className="ob-lede">
-              Google says {googleName || "nothing yet"}. Change it to whatever you actually go by.
+              Anything at all. He answers here, right now, with nothing installed. This is the part everyone
+              skips to, so it may as well come first.
             </p>
-            <input
-              className="ob-name-input"
-              value={callMe}
-              onChange={(event) => setCallMe(event.target.value)}
-              placeholder="Your name"
-              aria-label="What should Braino call you"
-              autoFocus
-            />
-            {email && <div className="ob-avatar"><b>{(callMe || "?").charAt(0).toUpperCase()}</b>Signed in<small>{email}</small></div>}
+
+            <div className="ob-body">
+              <form
+                className="ob-ask"
+                onSubmit={(event) => { event.preventDefault(); void runAsk(askText); }}
+              >
+                <input
+                  value={askText}
+                  onChange={(event) => setAskText(event.target.value)}
+                  placeholder="Ask me for something…"
+                  aria-label="Ask Braino for something"
+                  autoFocus
+                />
+                <button type="submit" className="ob-btn is-coral" disabled={!askText.trim() || askBusy}>
+                  {askBusy ? "Thinking…" : "Ask"}
+                </button>
+              </form>
+
+              {!askReply && !askBusy && (
+                <div className="ob-suggests">
+                  {ASK_EXAMPLES.map((example) => (
+                    <button
+                      type="button"
+                      key={example}
+                      className="ob-suggest"
+                      onClick={() => { setAskText(example); void runAsk(example); }}
+                    >
+                      {example}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {askBusy && (
+                <div className="ob-reply is-waiting">
+                  <span className="ob-loop-dots"><i /><i /><i /></span>
+                </div>
+              )}
+
+              {askReply && !askBusy && (
+                <div className="ob-reply">
+                  <span className="ob-reply-who">Braino</span>
+                  <div className="ob-reply-body"><Markdown text={askReply} /></div>
+                  <button type="button" className="ob-skip" onClick={() => { setAskReply(""); setAskText(""); }}>
+                    Ask him something else
+                  </button>
+                </div>
+              )}
+
+              {askError && (
+                <p className="ob-auth-error">
+                  {askError} You can carry on, this does not hold anything up.
+                </p>
+              )}
+            </div>
           </section>
         )}
 
-        {current === "device" && (
+        {current === "you" && (
           <section className="ob-step">
-            <p className="ob-eyebrow">Where he lives</p>
-            <h1 className="ob-h1">Where do you<br /><em>want him?</em></h1>
-            <p className="ob-lede">You can add the other one later. Nothing gets left behind, he shares one memory.</p>
+            <p className="ob-eyebrow">His turn</p>
+            <h1 className="ob-h1">Now he asks <em>about you.</em></h1>
+            <p className="ob-lede">
+              Two things and he stops asking. Both go into his memory, so they show up the first time they matter.
+            </p>
+
+            <div className="ob-body ob-fields">
+              <label className="ob-field">
+                <span>What should I call you?</span>
+                <input
+                  className="ob-name-input"
+                  value={callMe}
+                  onChange={(event) => setCallMe(event.target.value)}
+                  placeholder="Your name"
+                  autoFocus
+                />
+              </label>
+              <label className="ob-field">
+                <span>Anything I should know about you?</span>
+                <input
+                  className="ob-name-input"
+                  value={aboutYou}
+                  onChange={(event) => setAboutYou(event.target.value)}
+                  onKeyDown={(event) => { if (event.key === "Enter" && canContinue) next(); }}
+                  placeholder="I am building a company and I sleep badly…"
+                />
+              </label>
+              {email && (
+                <div className="ob-avatar">
+                  <b>{(callMe || "?").charAt(0).toUpperCase()}</b>Signed in<small>{email}</small>
+                </div>
+              )}
+            </div>
+          </section>
+        )}
+
+        {current === "manner" && (
+          <section className="ob-step">
+            <p className="ob-eyebrow">His manner</p>
+            <h1 className="ob-h1">Which one <em>sounds right?</em></h1>
+            <p className="ob-lede">
+              {samples
+                ? "The same answer he just gave you, said three ways. Pick the one you would rather read."
+                : "Pick the one you would rather read. He still reads the moment, so a heavy day sounds different from a good one."}
+            </p>
+
+            <div className="ob-body ob-cards">
+              {MANNERS.map((m) => (
+                <button
+                  type="button"
+                  key={m.id}
+                  className={`ob-card ob-manner${manner === m.id ? " is-on" : ""}`}
+                  onClick={() => chooseManner(m.id)}
+                >
+                  <span className="ob-tick">✓</span>
+                  <p className="ob-card-name">{m.name}</p>
+                  <p className="ob-sample">
+                    {samplesBusy && !samples
+                      ? <span className="ob-sample-wait" aria-label="Loading" />
+                      : `“${samples?.[m.id] || m.fallback}”`}
+                  </p>
+                  <p className="ob-card-note">{m.note}</p>
+                </button>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {current === "install" && (
+          <section className="ob-step">
+            <p className="ob-eyebrow">Last thing</p>
+            <h1 className="ob-h1">
+              {callMe.trim() ? <>Take him with you, <em>{callMe.trim()}.</em></> : <>Take him <em>with you.</em></>}
+            </h1>
+            <p className="ob-lede">
+              He already knows what you told him. Installing is the only thing left, and you can add the other
+              side any time. He shares one memory across both.
+            </p>
+
             <div className="ob-body ob-cards">
               {DEVICES.map((d) => (
-                <button type="button" key={d.id} className={`ob-card${device === d.id ? " is-on" : ""}`} onClick={() => setDevice(d.id)}>
+                <button
+                  type="button"
+                  key={d.id}
+                  className={`ob-card${device === d.id ? " is-on" : ""}`}
+                  onClick={() => setDevice(d.id)}
+                >
                   <span className="ob-tick">✓</span>
                   <span className="ob-card-icon">{d.icon}</span>
                   <p className="ob-card-name">{d.name}</p>
@@ -243,92 +541,26 @@ export default function OnboardingFlow() {
                 </button>
               ))}
             </div>
-          </section>
-        )}
 
-        {current === "voice" && (
-          <section className="ob-step">
-            <p className="ob-eyebrow">His voice</p>
-            <h1 className="ob-h1">How should<br /><em>he sound?</em></h1>
-            <p className="ob-lede">Tap one to hear a line. You can change it any time by just asking him to.</p>
-            <div className="ob-body ob-voices">
-              {VOICES.map((v) => (
-                <button type="button" key={v.id} className={`ob-voice${voice === v.id ? " is-on" : ""}`} onClick={() => setVoice(v.id)}>
-                  <span className="ob-wave" aria-hidden><i /><i /><i /><i /></span>
-                  <span className="ob-voice-copy"><strong>{v.name}</strong><span>{v.note}</span></span>
-                  <span className="ob-play">{voice === v.id ? "Playing" : "Hear it"}</span>
-                </button>
-              ))}
+            <div className="ob-installs">
+              {device !== "mac" && (
+                <a href={EXTENSION_DOWNLOAD_URL} download={EXTENSION_DOWNLOAD_FILENAME} className="ob-btn is-coral is-big">
+                  Add to Chrome
+                </a>
+              )}
+              {device !== "chrome" && (
+                <Link to="/braino?view=foundry" className={`ob-btn is-big${device === "mac" ? " is-coral" : " is-outline"}`}>
+                  Download for Mac
+                </Link>
+              )}
             </div>
-          </section>
-        )}
 
-        {current === "tone" && (
-          <section className="ob-step">
-            <p className="ob-eyebrow">His manner</p>
-            <h1 className="ob-h1">How should<br /><em>he talk to you?</em></h1>
-            <p className="ob-lede">This sets his default. He still reads the moment, so a heavy day sounds different from a good one.</p>
-            <div className="ob-body ob-cards">
-              {TONES.map((t) => (
-                <button type="button" key={t.id} className={`ob-card${tone === t.id ? " is-on" : ""}`} onClick={() => setTone(t.id)}>
-                  <span className="ob-tick">✓</span>
-                  <span className="ob-card-icon">{t.icon}</span>
-                  <p className="ob-card-name">{t.name}</p>
-                  <p className="ob-card-note">{t.note}</p>
-                </button>
-              ))}
-            </div>
-          </section>
-        )}
-
-        {current === "interests" && (
-          <section className="ob-step">
-            <p className="ob-eyebrow">Your work</p>
-            <h1 className="ob-h1">What should he<br /><em>be good at first?</em></h1>
-            <p className="ob-lede">Pick anything that fits. He starts here and learns the rest by watching how you actually work.</p>
-            <div className="ob-body ob-chips">
-              {INTERESTS.map((label) => (
-                <button type="button" key={label} className={`ob-chip${interests.includes(label) ? " is-on" : ""}`} onClick={() => toggleInterest(label)}>
-                  {label}
-                </button>
-              ))}
-            </div>
-          </section>
-        )}
-
-        {current === "permissions" && (
-          <section className="ob-step">
-            <p className="ob-eyebrow">Trust</p>
-            <h1 className="ob-h1">What he<br /><em>can see.</em></h1>
-            <p className="ob-lede">Plainly, with no fine print. Say no to any of it and he still works, just with less to go on.</p>
-            <div className="ob-body ob-perms">
-              {PERMISSIONS.map((p) => (
-                <div className="ob-perm" key={p.id}>
-                  <span className="ob-perm-copy"><strong>{p.name}</strong><span>{p.note}</span></span>
-                  <button
-                    type="button"
-                    aria-label={`${perms[p.id] ? "Turn off" : "Turn on"} ${p.name}`}
-                    className={`ob-switch${perms[p.id] ? " is-on" : ""}`}
-                    onClick={() => setPerms((state) => ({ ...state, [p.id]: !state[p.id] }))}
-                  ><i /></button>
-                </div>
-              ))}
-            </div>
-            <p className="ob-fineprint">
-              {onCount} of {PERMISSIONS.length} on. Every one of these is asked for again by your operating system,
-              and you can pull any of them back from his dashboard in one tap.
-            </p>
-          </section>
-        )}
-
-        {current === "keys" && (
-          <section className="ob-step">
-            <p className="ob-eyebrow">Muscle memory</p>
-            <h1 className="ob-h1">Three keys,<br /><em>that is the manual.</em></h1>
-            <p className="ob-lede">Tapped twice, quickly. Same everywhere he lives, so your hands only learn this once.</p>
-            <div className="ob-body ob-keys">
+            {/* Three keys is the whole manual, so they earn a line here. Kept as
+                a compact strip: this screen already carries the download, and
+                the download is what people came for. */}
+            <div className="ob-keystrip">
               {liveKeys.map((k) => (
-                <div className="ob-key" key={k.name}>
+                <div className="ob-keychip" key={k.name}>
                   <span className="ob-caps">
                     {k.caps.map((cap, i) => (
                       <span key={`${cap}-${i}`}>
@@ -341,76 +573,30 @@ export default function OnboardingFlow() {
                 </div>
               ))}
             </div>
-          </section>
-        )}
 
-        {current === "memory" && (
-          <section className="ob-step">
-            <p className="ob-eyebrow">His first memory</p>
-            <h1 className="ob-h1">Tell him one<br /><em>thing about you.</em></h1>
-            <p className="ob-lede">Anything. He keeps it, and it shows up the first time it matters. This is the moment he stops being a download.</p>
-            <div className="ob-body">
-              <div className="ob-memory">
-                <input
-                  value={memory}
-                  onChange={(e) => setMemory(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter" && memory.trim()) next(); }}
-                  placeholder="I am building a company and I sleep badly…"
-                />
-                <button type="button" className="ob-btn is-coral" onClick={next} disabled={!memory.trim()}>Save</button>
-              </div>
-              <div className="ob-suggests">
-                {MEMORY_HINTS.map((hint) => (
-                  <button type="button" key={hint} className="ob-suggest" onClick={() => setMemory(hint)}>{hint}</button>
-                ))}
-              </div>
-            </div>
-          </section>
-        )}
-
-        {current === "done" && (
-          <section className="ob-step ob-done">
-            <Walker />
-            <p className="ob-eyebrow">Ready</p>
-            <h1 className="ob-h1">Braino is <em>yours.</em></h1>
-            <p className="ob-lede">He is set up and waiting. Installing him is the last thing, not the first.</p>
-            <div className="ob-summary">
-              <div><span>Voice</span><b>{voiceName}</b></div>
-              <div><span>Manner</span><b>{toneName}</b></div>
-              <div><span>Lives in</span><b>{deviceName}</b></div>
-              <div><span>Good at</span><b>{interests.length ? interests.slice(0, 3).join(", ") : "Learning as he goes"}</b></div>
-              <div><span>He can see</span><b>{onCount} of {PERMISSIONS.length}</b></div>
-              {memory.trim() && <div><span>Remembers</span><b>{memory.trim()}</b></div>}
-            </div>
-            <div className="ob-installs">
-              {/* These were placeholder buttons that did nothing. Now that Get
-                  Started routes here instead of straight to the zip, this is
-                  the only place the download happens, so it has to be real. */}
-              {device !== "mac" && (
-                <a href={EXTENSION_DOWNLOAD_URL} download={EXTENSION_DOWNLOAD_FILENAME} className="ob-btn">
-                  Add to Chrome
-                </a>
-              )}
-              {device !== "chrome" && (
-                <Link to="/braino?view=foundry" className="ob-btn is-outline">Download for Mac</Link>
-              )}
-            </div>
+            <p className="ob-fineprint">
+              Chrome asks for the page and the microphone at install, and a Mac asks the first time he needs
+              each one. This page grants none of it, and would not want to.
+            </p>
           </section>
         )}
       </main>
 
       <footer className="ob-foot">
-        <button type="button" className="ob-btn is-quiet" onClick={back} style={{ visibility: step === 0 ? "hidden" : "visible" }}>← Back</button>
-        {current === "auth" ? null : current === "done" ? (
-          <Link to="/" className="ob-skip">Back to trybraino.com</Link>
+        <button
+          type="button"
+          className="ob-btn is-quiet"
+          onClick={back}
+          style={{ visibility: step === 0 ? "hidden" : "visible" }}
+        >
+          ← Back
+        </button>
+        {current === "auth" ? null : current === "install" ? (
+          <Link to="/dashboard" className="ob-skip">Open his dashboard instead</Link>
         ) : (
-          <span style={{ display: "flex", alignItems: "center", gap: 20 }}>
-            {(current === "interests" || current === "memory") && (
-              <button type="button" className="ob-skip" onClick={next}>Skip</button>
-            )}
-            <button type="button" className="ob-btn" onClick={next} disabled={!canContinue}>
-              {current === "name" ? "Get started" : "Continue"}
-            </button>
+          <span className="ob-foot-right">
+            <button type="button" className="ob-skip" onClick={skipToInstall}>Skip setup, just give me him</button>
+            <button type="button" className="ob-btn" onClick={next} disabled={!canContinue}>Continue</button>
           </span>
         )}
       </footer>
