@@ -13,7 +13,7 @@ test("nothing in the minute is generated", () => {
      for him to say something nobody has read, and that risk buys nothing. */
   assert.match(main, /const PITCH = \{/);
   assert.match(main, /Just pitched Braino at Mesa/);
-  for (const line of ["hello:", "open:", "posting:", "live:", "notLinked:", "closeSetup:", "closeGo:"]) {
+  for (const line of ["hello:", "claim:", "writing:", "approve:", "live:", "proof:", "notLinked:", "closeSetup:", "closeGo:"]) {
     assert.ok(main.includes(line), `PITCH.lines is missing ${line}`);
   }
   const fn = renderer.slice(renderer.indexOf("async function runPitchDemo"));
@@ -48,41 +48,80 @@ test("a restart stops the run already talking", () => {
   assert.match(renderer, /onPitchStop\?\.\(\(\) => \{[\s\S]{0,140}pitchGeneration \+= 1/);
 });
 
-/* He opens both pages himself. A demo where a human drives the browser is a
-   demo of a human driving a browser. */
-test("he opens the pages himself, and only shows X when the post really went", () => {
+/* He opens the page himself. A demo where a human drives the browser is a demo
+   of a human driving a browser. */
+test("he opens the page, and only one thing navigates", () => {
   assert.match(main, /ipcMain\.handle\("braino-mac:pitch-open"/);
-  /* The profile comes from the connected account. A hardcoded handle survives
-     until the account changes, and then he opens a stranger's profile. */
-  assert.match(main, /x_connections\?user_identifier=eq\./);
   const fn = renderer.slice(renderer.indexOf("async function runPitchDemo"));
   const body = fn.slice(0, fn.indexOf("\n}\n"));
-  assert.ok(
-    body.indexOf('pitchOpen?.({ where: "dashboard" })') < body.indexOf('pitchOpen?.({ where: "profile" })'),
-    "the dashboard comes before the profile",
-  );
-  /* Opening X to show a post that is not there is worse than saying nothing. */
-  assert.match(body, /if \(ok\) \{[\s\S]{0,240}pitchOpen\?\.\(\{ where: "profile" \}\)/);
+  assert.match(body, /pitchOpen\?\.\(\{ where: "dashboard" \}\)/);
+  /* The page takes the room to the post. Two things navigating the same tab
+     is a race, so this app must not also be doing it. */
+  assert.doesNotMatch(body, /where: "profile"/);
+  const modal = read("../src/components/XPitchModal.tsx");
+  assert.match(modal, /status\/\$\{payload\.xPostId\}/);
+});
+
+/* The visible half is on the page, not in the notch. From the back of a room a
+   notch moving reads as nothing happening, which is how the first version of
+   this failed in front of a real audience. */
+test("the writing happens where the room can see it", () => {
+  const fn = renderer.slice(renderer.indexOf("async function runPitchDemo"));
+  const body = fn.slice(0, fn.indexOf("\n}\n"));
+  assert.doesNotMatch(body, /renderThinkingCanvas|openNotchThinking/);
+  const modal = read("../src/components/XPitchModal.tsx");
+  assert.match(modal, /Just pitched Braino at Mesa/);
+  /* He writes it, then asks, and will not publish before the click. */
+  assert.ok(modal.indexOf('setPhase("approve")') < modal.indexOf("const publish"), "approve comes before publish");
+  assert.match(modal, /onClick=\{publish\}/);
 });
 
 /* Claiming a post that did not go out, on stage, in front of people who can
    check, is the worst failure available here. */
-test("green only when it actually went", () => {
+test("he only claims it went if it went", () => {
   const fn = renderer.slice(renderer.indexOf("async function runPitchDemo"));
   const body = fn.slice(0, fn.indexOf("\n}\n"));
-  assert.match(body, /const ok = Boolean\(sent\?\.ok\);/);
-  assert.match(body, /if \(ok\) \{[\s\S]{0,240}nf-think-complete/);
-  /* And the honest line when it did not. */
-  assert.match(body, /lines\.notLinked/);
-  /* The green class never survives the run. */
-  assert.match(body, /finally \{[\s\S]{0,300}classList\.remove\("nf-think-complete"\)/);
+  assert.match(body, /const ok = Boolean\(published\?\.ok\);/);
+  assert.match(body, /if \(ok\) \{[\s\S]{0,200}lines\.live/);
+  assert.match(body, /\} else \{[\s\S]{0,120}lines\.notLinked/);
+});
+
+/* The Mac used to publish. It does not any more: the page writes the post where
+   the room can read it and publishes when a human presses yes. A path in this
+   app that posts to X on its own would be a loaded gun on a hotkey. */
+test("this app can no longer post to X by itself", () => {
+  assert.doesNotMatch(main, /braino-mac:pitch-post/);
+  assert.doesNotMatch(read("../mac/braino-mac/preload.cjs"), /pitchPost/);
+  /* What it does instead is watch for the post the page made. */
+  assert.match(main, /ipcMain\.handle\("braino-mac:pitch-await-post"/);
+  assert.match(main, /status=eq\.published/);
+});
+
+/* He asks, then stops talking, because the next thing that happens is a human
+   pressing a button and narrating over it is talking through his own point. */
+test("he waits for the post to exist, not for a countdown", () => {
+  const fn = renderer.slice(renderer.indexOf("async function runPitchDemo"));
+  const body = fn.slice(0, fn.indexOf("\n}\n"));
+  assert.ok(
+    body.indexOf("lines.approve") < body.indexOf("pitchAwaitPost"),
+    "he asks before he waits",
+  );
+  assert.match(body, /await window\.brainoMac\.pitchAwaitPost\?\.\(\{ rehearse \}\)/);
 });
 
 /* It can be practised without burning the post, which can only go out once. */
 test("it can be rehearsed", () => {
   assert.match(main, /BRAINO_PITCH_REHEARSE/);
-  const handler = main.slice(main.indexOf('ipcMain.handle("braino-mac:pitch-post"'));
-  assert.match(handler.slice(0, 500), /if \(payload\?\.rehearse\)[\s\S]{0,140}rehearsed: true/);
+  /* Rehearsing opens the page in a mode that will not publish. */
+  assert.match(main, /dashboardRehearse: "https:\/\/trybraino\.com\/x\?pitch=rehearse"/);
+  assert.match(main, /PITCH\.rehearse\(\) \? PITCH\.dashboardRehearse : PITCH\.dashboard/);
+  /* And the wait resolves instead of hanging on a post that will never come. */
+  const handler = main.slice(main.indexOf('ipcMain.handle("braino-mac:pitch-await-post"'));
+  assert.match(handler.slice(0, 500), /if \(payload\?\.rehearse\)[\s\S]{0,400}rehearsed: true/);
+  /* The page half has the same switch, and it is the half that publishes. */
+  const modal = read("../src/components/XPitchModal.tsx");
+  assert.match(modal, /if \(rehearse\) \{/);
+  assert.ok(modal.indexOf("if (rehearse) {") < modal.indexOf("x_queue_items"), "rehearsal returns before it queues anything");
 });
 
 /* Spotify takes seconds to wake and the moonwalk is at the end, so it is asked

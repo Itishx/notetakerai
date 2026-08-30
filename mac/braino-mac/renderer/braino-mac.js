@@ -9083,7 +9083,6 @@ async function runPitchDemo(payload) {
   const mine = ++pitchGeneration;
   pitchRunning = true;
   const lines = payload?.lines || {};
-  const post = String(payload?.post || "");
   const rehearse = Boolean(payload?.rehearse);
   logRenderer("pitch.run", { rehearse, generation: mine });
 
@@ -9092,63 +9091,43 @@ async function runPitchDemo(payload) {
        the moonwalk is at the end. Asking for it now means it is ready then. */
     void window.brainoMac.skitStep?.("prewarm");
 
-    /* 0:00 — he introduces himself. */
+    /* 0:00 — he introduces himself, and says what he is about to prove. */
     await pitchSay(mine, lines.hello);
+    await pitchSay(mine, lines.claim);
     if (pitchStale(mine)) return;
 
-    /* 0:10 — he opens the page himself. */
+    /* 0:20 — the page takes over the visible half. He writes into a panel the
+       whole room can read, rather than into the notch, which from the back of
+       a room looks like nothing happening at all. */
     void window.brainoMac.pitchOpen?.({ where: "dashboard" });
-    await pitchWait(1600);
+    await pitchWait(2600);
     if (pitchStale(mine)) return;
-    await pitchSay(mine, lines.open);
+    await pitchSay(mine, lines.writing);
 
-    /* 0:18 — the post appears a line at a time, nobody at the keyboard. */
-    openNotchThinking("Writing the post", "Putting it in his voice.");
-    nfSetThinkingOpen(true);
-    await pitchWait(700);
-    for (const para of post.split("\n").filter(Boolean)) {
-      if (pitchStale(mine)) return;
-      renderThinkingCanvas("Writing the post", para);
-      await pitchWait(950);
-    }
+    /* 0:32 — the one moment that needs a human. He asks, then stops talking:
+       the next thing that happens is Itish pressing a button, and Braino
+       narrating over that would be him talking through his own point. */
+    await pitchWait(2600);
     if (pitchStale(mine)) return;
-    await pitchSay(mine, lines.voice);
+    await pitchSay(mine, lines.approve);
 
-    /* 0:35 — the only live thing in the whole minute. */
-    await pitchSay(mine, lines.posting);
+    /* He waits for the post to actually exist rather than for a countdown to
+       finish, so the next line lands after the thing it describes. */
+    const published = await window.brainoMac.pitchAwaitPost?.({ rehearse });
     if (pitchStale(mine)) return;
-    const sent = await window.brainoMac.pitchPost?.({ text: post, rehearse });
-    if (pitchStale(mine)) return;
-    const ok = Boolean(sent?.ok);
+    const ok = Boolean(published?.ok);
 
     if (ok) {
-      renderThinkingCanvas("Complete", "Post sent.");
-      notchFace?.classList.add("nf-think-complete");
-      await pitchWait(1200);
-      await pitchSay(mine, lines.done);
+      /* The page has already taken the room to the post itself. */
+      await pitchWait(1400);
+      await pitchSay(mine, lines.live);
+      await pitchSay(mine, lines.proof);
     } else {
-      renderThinkingCanvas("Needs attention", "Account not linked yet.");
-      await pitchWait(1000);
       await pitchSay(mine, lines.notLinked);
     }
 
-    notchFace?.classList.remove("nf-think-complete");
-    nfSetThinkingOpen(false);
-    nfSetThinking("");
-    if (pitchStale(mine)) return;
-
-    /* 0:45 — proof, on a site he does not control. Only when it really went:
-       opening X to show a post that is not there is worse than saying nothing. */
-    if (ok) {
-      void window.brainoMac.pitchOpen?.({ where: "profile" });
-      await pitchWait(2400);
-      if (pitchStale(mine)) return;
-      await pitchSay(mine, lines.live);
-      await pitchSay(mine, lines.proof);
-    }
-
-    /* 1:00 — the part they remember. He dances on top of the proof, so the
-       X profile stays on screen behind him rather than our own site. */
+    /* The part they remember. He dances on top of the proof, so the post stays
+       on screen behind him rather than our own site. */
     if (pitchStale(mine)) return;
     await pitchSay(mine, lines.closeSetup);
     await pitchWait(300);

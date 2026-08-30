@@ -1,0 +1,110 @@
+/* The pitch modal. Dark, so it reads from the back of a room against the pale
+   dashboard behind it, and big, because the post is the thing everyone is
+   supposed to be reading. */
+
+.xpm-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  /* Light enough that the room can still see this is sitting on his real
+     dashboard. Crushing the page behind it turns the demo into a video. */
+  background: rgba(20, 17, 15, .34);
+  backdrop-filter: blur(7px) saturate(115%);
+  animation: xpm-in .45s cubic-bezier(.16, 1, .3, 1) both;
+}
+@keyframes xpm-in { from { opacity: 0; } to { opacity: 1; } }
+
+.xpm-card {
+  width: min(680px, 100%);
+  border-radius: 26px;
+  background: #16161a;
+  color: #f3efe9;
+  box-shadow: 0 40px 120px rgba(0, 0, 0, .55);
+  overflow: hidden;
+  font-family: "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  animation: xpm-rise .55s cubic-bezier(.16, 1, .3, 1) both;
+}
+@keyframes xpm-rise { from { opacity: 0; transform: translateY(22px) scale(.97); } to { opacity: 1; transform: none; } }
+
+.xpm-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 18px 22px;
+  border-bottom: 1px solid rgba(255, 255, 255, .08);
+}
+.xpm-dot { width: 10px; height: 10px; border-radius: 50%; background: #d9645b; box-shadow: 0 0 16px rgba(217, 100, 91, .6); flex: none; }
+.xpm-head > div { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.xpm-head b { font-size: 15px; font-weight: 650; letter-spacing: -.01em; }
+.xpm-head span { font-size: 12.5px; color: rgba(243, 239, 233, .5); }
+.xpm-state {
+  flex: none;
+  padding: 6px 13px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, .16);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: rgba(243, 239, 233, .68);
+}
+.xpm-state.is-approve { border-color: rgba(217, 100, 91, .55); color: #f0a49c; }
+.xpm-state.is-done { border-color: rgba(100, 210, 154, .5); color: #64d29a; }
+.xpm-state.is-failed { border-color: rgba(240, 164, 156, .5); color: #f0a49c; }
+
+.xpm-post {
+  padding: 30px 26px;
+  min-height: 210px;
+  font-size: clamp(18px, 2.2vw, 22px);
+  line-height: 1.5;
+  letter-spacing: -.012em;
+  white-space: pre-wrap;
+}
+.xpm-caret {
+  display: inline-block;
+  width: 2px;
+  height: 1.05em;
+  margin-left: 2px;
+  vertical-align: -.16em;
+  background: #d9645b;
+  animation: xpm-blink 1s steps(1) infinite;
+}
+@keyframes xpm-blink { 0%, 50% { opacity: 1; } 51%, 100% { opacity: 0; } }
+
+.xpm-foot { padding: 18px 22px 22px; border-top: 1px solid rgba(255, 255, 255, .08); }
+.xpm-note { margin: 0; font-size: 14px; color: rgba(243, 239, 233, .58); }
+.xpm-working { display: flex; align-items: center; gap: 10px; }
+.xpm-ok { display: flex; align-items: center; gap: 9px; color: #64d29a; }
+.xpm-tick { font-weight: 700; }
+.xpm-bad { color: #f0a49c; }
+
+.xpm-dots { display: inline-flex; gap: 4px; }
+.xpm-dots i { width: 5px; height: 5px; border-radius: 50%; background: currentColor; opacity: .4; animation: xpm-pulse 1.1s ease-in-out infinite; }
+.xpm-dots i:nth-child(2) { animation-delay: .15s; }
+.xpm-dots i:nth-child(3) { animation-delay: .3s; }
+@keyframes xpm-pulse { 0%, 100% { opacity: .3; transform: translateY(0); } 50% { opacity: 1; transform: translateY(-3px); } }
+
+.xpm-actions { margin-top: 16px; display: flex; gap: 12px; justify-content: flex-end; }
+.xpm-yes, .xpm-no {
+  padding: 14px 30px;
+  border-radius: 999px;
+  border: 0;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 650;
+  cursor: pointer;
+  transition: transform .2s cubic-bezier(.16, 1, .3, 1), opacity .2s;
+}
+.xpm-yes { background: #d9645b; color: #fff; }
+.xpm-no { background: transparent; color: rgba(243, 239, 233, .55); border: 1px solid rgba(255, 255, 255, .18); }
+.xpm-yes:hover, .xpm-no:hover { transform: translateY(-2px); }
+.xpm-yes:focus-visible { outline: 2px solid #f0a49c; outline-offset: 3px; }
+
+@media (max-width: 640px) {
+  .xpm-post { padding: 22px 18px; font-size: 17px; min-height: 170px; }
+  .xpm-actions { flex-direction: column-reverse; }
+  .xpm-yes, .xpm-no { width: 100%; }
+}

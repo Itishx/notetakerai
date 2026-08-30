@@ -94,23 +94,28 @@ const PITCH = {
     "He wrote this and posted it himself. I'm still on stage.",
   ].join("\n"),
   lines: {
-    hello: "Hi. I am Braino. I take care of distribution for Itish. I could take care of it for you.",
-    open: "This is his account. Watch me write a post.",
-    voice: "That is how he sounds, not how I sound. I learned it off him.",
-    posting: "Posting it.",
-    done: "Done.",
-    live: "That is live. Go and look for yourself.",
-    proof: "Forty seconds, and he never touched it. I could do that for you every day.",
-    /* If the account is not linked, he says the true version instead of the
-       triumphant one. Claiming a post that did not go out, on stage, in front
-       of people who can check, is the worst failure available here. */
-    notLinked: "That one did not go out. His account is not linked to me yet, and I am not going to tell you it worked when it did not.",
+    hello: "Hi, my name is Braino, and I am your co-founder. Or at least, I aspire to be.",
+    claim: "If you actually paid attention to the pitch Itish just gave, then you know I can run your entire distribution for you. Let me show you how that actually works.",
+    writing: "This is his account. I am writing a post about the pitch he just gave, in the way he would have written it.",
+    /* The one moment in the minute that needs a human. Said, then he stops
+       talking and waits, because the next thing is Itish pressing a button. */
+    approve: "I do not post anything without him. Itish, say yes.",
+    live: "That is live. You are looking at it.",
+    proof: "He never touched it. I could do that for you every day.",
+    /* If it never went out he says so. Claiming a post that did not publish,
+       on stage, in front of people who can check, is the worst failure here. */
+    notLinked: "That one did not go out, and I am not going to tell you it worked when it did not.",
     closeSetup: "One more thing, so you remember me. Here is something no other AI can do.",
     closeGo: "Ready? Watch.",
   },
   /* Where he goes, in order. The dashboard to show whose account it is, then X
      itself to prove the post exists somewhere he does not control. */
-  dashboard: "https://trybraino.com/x",
+  /* The page runs the visible half: he writes into a panel everyone in the
+     room can read, and it publishes when Itish says yes. Putting the writing
+     in the notch read as nothing happening, which is how the first version of
+     this failed. */
+  dashboard: "https://trybraino.com/x?pitch=1",
+  dashboardRehearse: "https://trybraino.com/x?pitch=rehearse",
   rehearse: () => String(process.env.BRAINO_PITCH_REHEARSE || "").trim() === "1",
 };
 let pitchDemoRunning = false;
@@ -17203,58 +17208,9 @@ ipcMain.handle("braino-mac:calendar-join", async () => {
 // SKIT (TEMPORARY — Instagram demo): renderer-driven steps between spoken
 // lines. "send" reuses the real WhatsApp machinery (draft in dry runs, real
 // auto-send otherwise); "close" Cmd+Ws the chat window and hides WhatsApp.
-/* Publish the pitch post, for real, and say honestly whether it went. */
-ipcMain.handle("braino-mac:pitch-post", async (_event, payload) => {
-  const text = String(payload?.text || "").trim();
-  if (!text) return { ok: false, reason: "empty" };
-  if (payload?.rehearse) {
-    logMac("pitch.post.rehearsed", { chars: text.length });
-    return { ok: true, rehearsed: true };
-  }
-  try {
-    const auth = authStatusPayload();
-    const authToken = await getBrainoAuthToken();
-    if (!authToken || !auth?.userId) {
-      logMac("pitch.post.not_linked", { why: "no auth" });
-      return { ok: false, reason: "not_linked" };
-    }
-    const base = SUPABASE_URL.replace(/\/$/, "");
-    const insert = await fetch(`${base}/rest/v1/scheduled_x_posts`, {
-      method: "POST",
-      headers: {
-        apikey: SUPABASE_ANON_KEY,
-        Authorization: `Bearer ${authToken}`,
-        "Content-Type": "application/json",
-        Prefer: "return=representation",
-      },
-      body: JSON.stringify({
-        user_id: auth.userId,
-        content: text,
-        scheduled_at: new Date().toISOString(),
-        thread_mode: false,
-      }),
-    });
-    if (!insert.ok) {
-      const detail = await insert.text().catch(() => "");
-      logMac("pitch.post.failed", { stage: "insert", status: insert.status, detail: textForLog(detail, 120) });
-      return { ok: false, reason: "not_linked" };
-    }
-    const dispatch = await fetch(`${base}/functions/v1/dispatch-scheduled-x-posts`, {
-      method: "POST",
-      headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${authToken}`, "Content-Type": "application/json" },
-      body: JSON.stringify({}),
-    });
-    const result = await dispatch.json().catch(() => ({}));
-    const posted = dispatch.ok && !result?.error;
-    logMac(posted ? "pitch.post.sent" : "pitch.post.failed", {
-      stage: "dispatch", status: dispatch.status, detail: textForLog(JSON.stringify(result || {}), 140),
-    });
-    return posted ? { ok: true } : { ok: false, reason: "not_linked" };
-  } catch (error) {
-    logMac("pitch.post.failed", { error: String(error?.message || error) });
-    return { ok: false, reason: "not_linked" };
-  }
-});
+/* Publishing moved to the page. It writes the post where the room can read it
+   and publishes when a human says yes, so this app no longer has a path that
+   posts to X on its own. Leaving one behind would be a loaded gun on a hotkey. */
 
 ipcMain.handle("braino-mac:pitch-done", async () => { pitchDemoRunning = false; logMac("pitch.done", {}); return { ok: true }; });
 
@@ -17263,7 +17219,9 @@ ipcMain.handle("braino-mac:pitch-done", async () => { pitchDemoRunning = false; 
 ipcMain.handle("braino-mac:pitch-open", async (_event, payload) => {
   const where = String(payload?.where || "dashboard");
   try {
-    const url = where === "profile" ? await pitchProfileUrl() : PITCH.dashboard;
+    /* Only one place he goes. The page takes the room to the post itself once
+       it publishes, and two things navigating the same tab is a race. */
+    const url = PITCH.rehearse() ? PITCH.dashboardRehearse : PITCH.dashboard;
     await shell.openExternal(url);
     /* Chrome comes forward and stays forward. Without this the page loads
        behind whatever was in front, and the room watches nothing happen. */
@@ -17276,36 +17234,51 @@ ipcMain.handle("braino-mac:pitch-open", async (_event, payload) => {
   }
 });
 
-/* His profile, by the handle actually connected to this account. Hardcoding a
-   handle here would survive exactly until the account changed, and then he
-   would open a stranger's profile in front of a room. */
-let pitchProfileCache = "";
-async function pitchProfileUrl() {
-  if (pitchProfileCache) return pitchProfileCache;
+/* He stops talking and waits for the human.
+ *
+ * The page publishes, not this app, so the only honest way to know it happened
+ * is to watch the same database the page writes to. That is better than a timer
+ * for the reason that matters on stage: Itish presses yes when he is ready, not
+ * when a countdown says so, and Braino's next line has to land after the post
+ * exists rather than hopefully near it. */
+let pitchStartedAt = "";
+ipcMain.handle("braino-mac:pitch-await-post", async (_event, payload) => {
+  if (payload?.rehearse) {
+    /* Nothing will ever appear in a rehearsal, so give the click somewhere to
+       land and carry on. */
+    await new Promise((resolve) => setTimeout(resolve, 6000));
+    logMac("pitch.await.rehearsed", {});
+    return { ok: true, rehearsed: true };
+  }
+  const deadline = Date.now() + 120000;
   try {
     const auth = authStatusPayload();
     const authToken = await getBrainoAuthToken();
-    if (authToken && auth?.userId) {
-      const base = SUPABASE_URL.replace(/\/$/, "");
+    if (!authToken || !auth?.userId) return { ok: false, reason: "not_linked" };
+    const base = SUPABASE_URL.replace(/\/$/, "");
+    const since = pitchStartedAt || new Date(Date.now() - 300000).toISOString();
+    while (Date.now() < deadline) {
       const res = await fetch(
-        `${base}/rest/v1/x_connections?user_identifier=eq.${encodeURIComponent(auth.userId)}&select=username`,
+        `${base}/rest/v1/x_queue_items?user_id=eq.${encodeURIComponent(auth.userId)}` +
+          `&status=eq.published&published_at=gte.${encodeURIComponent(since)}` +
+          `&select=x_post_id,published_at&order=published_at.desc&limit=1`,
         { headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${authToken}` } },
       );
       const rows = await res.json().catch(() => []);
-      const handle = String(rows?.[0]?.username || "").replace(/^@/, "").trim();
-      if (handle) {
-        pitchProfileCache = `https://x.com/${handle}`;
-        logMac("pitch.profile", { handle });
-        return pitchProfileCache;
+      const id = rows?.[0]?.x_post_id;
+      if (id) {
+        logMac("pitch.await.published", { xPostId: String(id) });
+        return { ok: true, xPostId: String(id) };
       }
+      await new Promise((resolve) => setTimeout(resolve, 1500));
     }
+    logMac("pitch.await.timeout", {});
+    return { ok: false, reason: "timeout" };
   } catch (error) {
-    logMac("pitch.profile.failed", { error: String(error?.message || error) });
+    logMac("pitch.await.failed", { error: String(error?.message || error) });
+    return { ok: false, reason: "error" };
   }
-  /* No handle means no profile to open. Home still shows his own timeline with
-     the post at the top, which is enough to prove it went. */
-  return "https://x.com/home";
-}
+});
 
 /* One way in, so the hotkey and the key combination cannot drift apart. */
 function startPitchDemo(source) {
@@ -17317,7 +17290,7 @@ function startPitchDemo(source) {
     sendToRenderer("braino-mac:pitch-stop", {});
   }
   pitchDemoRunning = true;
-  pitchProfileCache = "";
+  pitchStartedAt = new Date().toISOString();
   logMac("pitch.start", { source, rehearse: PITCH.rehearse() });
   sendToRenderer("braino-mac:pitch-demo", {
     post: PITCH.post,

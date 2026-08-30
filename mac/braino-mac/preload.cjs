@@ -218,8 +218,8 @@ contextBridge.exposeInMainWorld("brainoMac", {
     ipcRenderer.on("braino-mac:pitch-demo", handler);
     return () => ipcRenderer.removeListener("braino-mac:pitch-demo", handler);
   },
-  pitchPost: (payload) => ipcRenderer.invoke("braino-mac:pitch-post", payload || {}),
   pitchOpen: (payload) => ipcRenderer.invoke("braino-mac:pitch-open", payload || {}),
+  pitchAwaitPost: (payload) => ipcRenderer.invoke("braino-mac:pitch-await-post", payload || {}),
   pitchDone: () => ipcRenderer.invoke("braino-mac:pitch-done"),
   onPitchStop: (handler) => {
     ipcRenderer.on("braino-mac:pitch-stop", handler);
