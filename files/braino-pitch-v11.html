@@ -970,12 +970,9 @@ tr.us td, tr.us td b { font-weight: 600; }
 .omt { display: flex; flex-direction: column; align-items: center; gap: 34px; text-align: center; width: 100%; }
 .slide.onemore h1 { font-size: 84px; font-weight: 600; letter-spacing: -.045em; line-height: 1.02; margin: 0; }
 .slide.onemore .tone { color: var(--coral); }
-/* The recorded run, embedded. Sized so it never pushes the line off the top. */
-.demovid { margin: 0; width: min(760px, 100%); display: flex; flex-direction: column; align-items: center; gap: 12px; }
-/* Holds the right shape before the recording exists, so the slide can be
-   judged now and the file dropped in later. */
-.demovid video { width: 100%; height: 400px; object-fit: contain; display: block; border-radius: 14px; background: #0d0d0f; border: 1px solid #26262c; }
-.demovid figcaption { margin: 0; font-size: 15px; color: #8a8a92; letter-spacing: -.005em; }
+/* The video slide is the video. Edge to edge, no padding, nothing over it. */
+.slide.videoslide { padding: 0; background: #000; display: block; }
+.fullvid { width: 100%; height: 100%; object-fit: cover; display: block; background: #000; }
 
 /* The founder photo. A placeholder frame until the real picture is dropped in,
    so a missing file reads as "photo goes here" rather than a broken slide. */
@@ -1584,14 +1581,10 @@ tr.us td, tr.us td b { font-weight: 600; }
   </div>
 </section>
 
-<section class="slide night ac-coral onemore">
-  <div class="omt">
-    <h1>Here is Braino <span class="tone">in action.</span></h1>
-    <figure class="demovid">
-      <video src="videos/braino-demo.mp4" controls playsinline preload="metadata"></video>
-      <figcaption>Shift twice. He writes the post, publishes it, and takes you to it.</figcaption>
-    </figure>
-  </div>
+<section class="slide night ac-coral videoslide">
+  <!-- The whole slide is the recording. No heading, no caption: the room has
+       just been told one more thing is coming, and then it happens. -->
+  <video class="fullvid" src="videos/braino-demo.mp4" playsinline preload="auto"></video>
 </section></div>
 
 </div>
@@ -1604,6 +1597,35 @@ tr.us td, tr.us td b { font-weight: 600; }
     };
     fit();
     window.addEventListener('resize', fit);
+  })();
+
+  /* The last slide plays itself when you reach it, and starts from the top
+     every time you come back to it, so a second pass is not half a video.
+     Sound is the point of the recording, so it tries unmuted first: browsers
+     allow that once anything on the page has been clicked, which by that slide
+     it has. If the browser still refuses, it falls back to muted rather than
+     showing a frozen frame. */
+  (function () {
+    var video = document.querySelector('.fullvid');
+    if (!video || !('IntersectionObserver' in window)) return;
+    var start = function () {
+      video.currentTime = 0;
+      video.muted = false;
+      var attempt = video.play();
+      if (attempt && attempt.catch) {
+        attempt.catch(function () {
+          video.muted = true;
+          var quiet = video.play();
+          if (quiet && quiet.catch) quiet.catch(function () {});
+        });
+      }
+    };
+    new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (entry.isIntersecting && entry.intersectionRatio > 0.55) start();
+        else video.pause();
+      });
+    }, { threshold: [0, 0.55, 1] }).observe(video);
   })();
 </script>
 </body>
