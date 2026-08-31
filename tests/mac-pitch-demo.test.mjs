@@ -219,6 +219,21 @@ test("the moonwalk does not depend on the music", () => {
   assert.ok(body.indexOf('skitStep?.("play")') < body.indexOf("pitchFront"), "music first, then he comes to the front");
 });
 
+/* His voice follows two settings that have nothing to do with the pitch: the
+   character, which survives restarts, and a voice persona, which is whatever
+   impression he was last asked to do. Either one left alone means he introduces
+   himself as Braino in somebody else's voice, in front of the room. */
+test("the demo speaks as Braino whatever he was set to", () => {
+  const fn = renderer.slice(renderer.indexOf("async function runPitchDemo"));
+  const body = fn.slice(0, fn.indexOf("\n}\n"));
+  assert.ok(body.indexOf('macSetCharacter("braino"') < body.indexOf("lines.hello"), "forced before he speaks");
+  assert.match(body, /macVoicePersonaKey = null;/);
+  /* And put back exactly as they were, without announcing it: an announcement
+     is him saying "Hi, I'm Brainelle" straight after the moonwalk. */
+  assert.match(body, /macVoicePersonaKey = personaBefore;/);
+  assert.match(body, /macSetCharacter\(characterBefore, \{ announce: false \}\)/);
+});
+
 /* The one that made the moonwalk impossible.
  *
  * The glide loop asks every frame whether it should keep going, and it used to

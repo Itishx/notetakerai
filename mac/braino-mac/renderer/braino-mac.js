@@ -9107,6 +9107,22 @@ async function runPitchDemo(payload) {
   const rehearse = Boolean(payload?.rehearse);
   logRenderer("pitch.run", { rehearse, generation: mine });
 
+  /* This is Braino's demo, in Braino's voice.
+   *
+   * The voice follows two settings that have nothing to do with the pitch: the
+   * character, which is remembered across restarts, and a voice persona, which
+   * is whatever impression he was last asked to do. Leave either one alone and
+   * he introduces himself as Braino in somebody else's voice, on stage. Both
+   * are forced here and both are put back at the end, so this costs the user
+   * nothing outside the demo. */
+  const characterBefore = macCharacter;
+  const personaBefore = macVoicePersonaKey;
+  macVoicePersonaKey = null;
+  if (characterBefore !== "braino") {
+    await macSetCharacter("braino", { announce: false });
+  }
+  logRenderer("pitch.voice", { characterBefore, personaBefore, using: "braino" });
+
   try {
     /* Nothing listens during this. It is a script from the first word to the
        last, and a live microphone in a room full of people is a stray sentence
@@ -9229,6 +9245,13 @@ async function runPitchDemo(payload) {
       pitchRunning = false;
       notchFace?.classList.remove("nf-think-complete");
       void window.brainoMac.pitchDone?.();
+      /* Whatever he was before the demo, he is again. Silently: an announcement
+         here would be him saying "Hi, I'm Brainelle" straight after the
+         moonwalk. */
+      macVoicePersonaKey = personaBefore;
+      if (characterBefore !== "braino") {
+        void macSetCharacter(characterBefore, { announce: false });
+      }
     }
   }
 }
