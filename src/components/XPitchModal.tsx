@@ -1,6 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/contexts/AuthContext";
+import { useEffect, useRef, useState } from "react";
 import "./x-pitch-modal.css";
 
 /* The pitch demo: a compose window that writes itself and posts itself.
@@ -10,16 +8,15 @@ import "./x-pitch-modal.css";
  * Braino writes into it, presses Post himself, and the button turns green.
  * Nobody touches the keyboard.
  *
- * The publish is real, through the same policy checks as any other post. The
- * writing is not: the words are fixed below, because a model call in the middle
- * of a pitch is a chance for him to say something nobody has read.
+ * Both halves are fixed, deliberately. The words are written below rather than
+ * generated, because a model call in the middle of a pitch is a chance for him
+ * to say something nobody has read. And the post is already live on the
+ * account, so the ending lands on a real post instead of on whatever a publish
+ * call managed in that moment.
  *
- *   /x?pitch           the real thing, it posts
- *   /x?pitch=rehearse  everything except the posting
+ *   /x?pitch           runs it
+ *   /x?pitch=rehearse  identical, and there is nothing left to keep out of it
  */
-
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
-const SUPABASE_KEY = (import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY) as string;
 
 /* Eight lines, in his voice, about the pitch that just happened in the room. */
 export const PITCH_POST = [
@@ -53,75 +50,26 @@ const POSTING_MS = 1600;
 /* And how long the green is held before the tab leaves for X. */
 const GREEN_MS = 2800;
 
-export default function XPitchModal({ rehearse, handle }: { rehearse: boolean; handle: string | null }) {
-  const { user, session } = useAuth();
+/* The post this demo ends on. It is already live on the account, published the
+ * night before, so the room lands on a real post with a real timestamp and real
+ * replies rather than on whatever a publish call managed in that moment.
+ *
+ * This is why nothing here posts any more. It used to queue and publish for
+ * real, which now means posting the same words a second time in front of an
+ * audience: a duplicate on the account and two identical posts on the profile
+ * we are about to open. The publish path is deliberately gone. The words on
+ * screen and the words on X are the same words, and the only thing this page
+ * does is show them being written and then take you to them. */
+const PITCH_POST_URL = "https://x.com/creatishhh/status/2094538802429898850";
+
+/* rehearse is still accepted so ?pitch=rehearse keeps working from the Mac, but
+   there is nothing left for it to hold back: nothing here publishes any more,
+   so a rehearsal and the real run are the same thing. */
+export default function XPitchModal({ handle }: { rehearse?: boolean; handle: string | null }) {
   const [phase, setPhase] = useState<Phase>("writing");
   const [typed, setTyped] = useState("");
   const bodyRef = useRef<HTMLDivElement | null>(null);
   const ranRef = useRef(false);
-  /* Where the tab goes at the end. The real post if it went out, his profile
-     if it did not. */
-  const destinationRef = useRef<string>(handle ? `https://x.com/${handle}` : "https://x.com/home");
-  const attemptRef = useRef<() => void>(() => {});
-
-  /* The publish runs beside the timeline, never in front of it.
-   *
-   * This is a demo. It gets one run, in front of a room, and a red box saying
-   * his own policy held the post back is not something anyone needs to watch
-   * from a stage. So the button always lands green on a fixed clock. If the
-   * post really went out the tab goes to the post; if it did not, it goes to
-   * the profile, and the only person who knows the difference is the one
-   * holding the microphone.
-   *
-   * Everything underneath is still real: the real account, the real queue, the
-   * real publish, the real policy checks. Only the face it wears is fixed. */
-  const attemptPublish = useCallback(async () => {
-    if (rehearse) return;
-    try {
-      if (!user || !session?.access_token) throw new Error("not signed in on this browser");
-
-      const { data: row, error: insertError } = await (supabase as any)
-        .from("x_queue_items")
-        .insert({
-          user_id: user.id,
-          text: PITCH_POST,
-          original_input: PITCH_POST,
-          source: "authored",
-          pillar: "building-braino",
-          status: "approved",
-          position: -999,
-        })
-        .select("id")
-        .single();
-      if (insertError || !row?.id) throw new Error(insertError?.message || "queue insert failed");
-
-      const res = await fetch(`${SUPABASE_URL}/functions/v1/brainox-schedule`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-          "Content-Type": "application/json",
-          apikey: SUPABASE_KEY,
-        },
-        body: JSON.stringify({ action: "publish_now", itemId: row.id }),
-      });
-      const payload = await res.json().catch(() => ({}));
-
-      if (payload?.published && payload?.xPostId) {
-        destinationRef.current = handle
-          ? `https://x.com/${handle}/status/${payload.xPostId}`
-          : `https://x.com/i/web/status/${payload.xPostId}`;
-        return;
-      }
-      /* Written down, not shown. Someone will want to know afterwards why the
-         post is not on the account, and a stage is the wrong place to find
-         out. */
-      console.warn("[pitch] the post did not go out:", payload?.error || payload?.decision || payload);
-    } catch (caught) {
-      console.warn("[pitch] the post did not go out:", caught);
-    }
-  }, [rehearse, user, session, handle]);
-
-  attemptRef.current = () => { void attemptPublish(); };
 
   /* Writes, presses its own button, goes green, leaves. One effect start to
      finish, on a clock that nothing outside it can stall. */
@@ -148,13 +96,12 @@ export default function XPitchModal({ rehearse, handle }: { rehearse: boolean; h
       if (cancelled) return;
 
       setPhase("posting");
-      attemptRef.current();
       await wait(POSTING_MS);
       if (cancelled) return;
       setPhase("posted");
       await wait(GREEN_MS);
       if (cancelled) return;
-      window.location.href = destinationRef.current;
+      window.location.href = PITCH_POST_URL;
     })();
 
     return () => { cancelled = true; timers.forEach(window.clearTimeout); };
@@ -190,7 +137,7 @@ export default function XPitchModal({ rehearse, handle }: { rehearse: boolean; h
         <footer className="xpm-foot">
           <span className="xpm-note">
             {phase === "writing" ? "Braino is writing this."
-              : phase === "posted" ? (rehearse ? "Rehearsal. Nothing went out." : "It is on X. Taking you to it.")
+              : phase === "posted" ? "It is on X. Taking you to it."
               : phase === "posting" ? "Sending it to X"
               : "He is about to post it himself."}
           </span>

@@ -977,13 +977,16 @@ tr.us td, tr.us td b { font-weight: 600; }
 /* The founder photo. A placeholder frame until the real picture is dropped in,
    so a missing file reads as "photo goes here" rather than a broken slide. */
 .founderpix { margin: 0; display: flex; flex-direction: column; gap: 10px; }
-.founderpix { gap: 10px; }
 /* The frame is the placeholder. A missing photo reads as "picture goes here"
    rather than a broken image icon, and the moment the real file exists it
    simply covers the frame. */
-.pixframe { position: relative; width: 100%; height: 392px; border-radius: 14px; background: var(--surface); border: 1px dashed var(--line); overflow: hidden; display: grid; place-items: center; }
+.pixframe { position: relative; width: 100%; height: 400px; border-radius: 14px; background: var(--surface); border: 1px solid var(--line); overflow: hidden; }
 .pixframe::before { content: attr(data-empty); position: absolute; inset: 0; display: grid; place-items: center; padding: 0 28px; text-align: center; font-size: 14px; line-height: 1.5; color: var(--muted); }
-.pixframe img { position: relative; z-index: 1; width: 100%; height: 100%; object-fit: cover; display: block; }
+/* Absolutely filled rather than laid out. As a grid item the image kept its
+   own aspect and hung out of the frame, so a tall portrait cropped to its own
+   middle, which here is a picture of the ceiling. */
+.founderpix .pixframe img { position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; display: block;
+  object-fit: cover; object-position: 50% 26%; }
 </style>
 <body>
 <a class="dl" href="/braino-pitch-v11.pdf" download="Braino-pitch-deck.pdf">
