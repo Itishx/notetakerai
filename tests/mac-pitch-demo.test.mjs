@@ -13,7 +13,7 @@ test("nothing in the minute is generated", () => {
      for him to say something nobody has read, and that risk buys nothing. */
   assert.match(main, /const PITCH = \{/);
   assert.match(main, /Just pitched Braino at Mesa/);
-  for (const line of ["hello:", "claim:", "writing:", "approve:", "live:", "proof:", "notLinked:", "closeSetup:", "closeGo:"]) {
+  for (const line of ["hello:", "claim:", "writing:", "posting:", "live:", "proof:", "notLinked:", "closeSetup:", "closeGo:"]) {
     assert.ok(main.includes(line), `PITCH.lines is missing ${line}`);
   }
   const fn = renderer.slice(renderer.indexOf("async function runPitchDemo"));
@@ -71,9 +71,24 @@ test("the writing happens where the room can see it", () => {
   assert.doesNotMatch(body, /renderThinkingCanvas|openNotchThinking/);
   const modal = read("../src/components/XPitchModal.tsx");
   assert.match(modal, /Just pitched Braino at Mesa/);
-  /* He writes it, then asks, and will not publish before the click. */
-  assert.ok(modal.indexOf('setPhase("approve")') < modal.indexOf("const publish"), "approve comes before publish");
-  assert.match(modal, /onClick=\{publish\}/);
+  /* Five to eight lines, so it reads as a post rather than a paragraph. */
+  const post = modal.slice(modal.indexOf("export const PITCH_POST"), modal.indexOf('].join("\\n")'));
+  const written = (post.match(/^\s*"[^"]+",\s*$/gm) || []).length;
+  assert.ok(written >= 5 && written <= 8, `post should be 5 to 8 lines, got ${written}`);
+});
+
+/* He presses his own button. A demo where a human has to click is a demo of a
+   human clicking, and the green landing is the thing the room remembers. */
+test("he posts it himself, and the button goes green", () => {
+  const modal = read("../src/components/XPitchModal.tsx");
+  const css = read("../src/components/x-pitch-modal.css");
+  /* Writing, then his own press, then the publish. In that order. */
+  assert.match(modal, /setPhase\("ready"\)[\s\S]{0,200}setPhase\("pressing"\)[\s\S]{0,200}publishRef\.current\(\)/);
+  /* Nothing waits on a human: the only clickable state is a failed retry. */
+  assert.match(modal, /disabled=\{phase !== "failed"\}/);
+  assert.match(css, /\.xpm-post-btn\.is-pressing/);
+  assert.match(css, /\.xpm-post-btn\.is-posted \{[\s\S]{0,200}#17a86c/);
+  assert.match(css, /@keyframes xpm-ring/);
 });
 
 /* Claiming a post that did not go out, on stage, in front of people who can
@@ -97,16 +112,25 @@ test("this app can no longer post to X by itself", () => {
   assert.match(main, /status=eq\.published/);
 });
 
-/* He asks, then stops talking, because the next thing that happens is a human
-   pressing a button and narrating over it is talking through his own point. */
+/* He waits on the post existing rather than on a countdown, so the line after
+   it lands on the thing it describes. */
 test("he waits for the post to exist, not for a countdown", () => {
   const fn = renderer.slice(renderer.indexOf("async function runPitchDemo"));
   const body = fn.slice(0, fn.indexOf("\n}\n"));
-  assert.ok(
-    body.indexOf("lines.approve") < body.indexOf("pitchAwaitPost"),
-    "he asks before he waits",
-  );
+  assert.ok(body.indexOf("lines.posting") < body.indexOf("pitchAwaitPost"), "he says it before he waits");
   assert.match(body, /await window\.brainoMac\.pitchAwaitPost\?\.\(\{ rehearse \}\)/);
+});
+
+/* A long sentence is cut into chunks that can lose their tail, and starting the
+   next line cancels whatever is still playing. Short lines, spoken one at a
+   time with a beat between, is what stops him eating his own words. */
+test("his lines are short, and spoken one at a time", () => {
+  assert.match(renderer, /async function pitchSay\(mine, lines\)[\s\S]{0,400}for \(const line of list\)/);
+  assert.match(renderer, /await speak\(line\);[\s\S]{0,80}await pitchWait\(/);
+  const block = main.slice(main.indexOf("  lines: {"), main.indexOf("  rehearse:"));
+  for (const line of block.match(/"[^"]{12,}"/g) || []) {
+    assert.ok(line.length < 110, `a line long enough to get cut: ${line}`);
+  }
 });
 
 /* It can be practised without burning the post, which can only go out once. */

@@ -93,20 +93,42 @@ const PITCH = {
     "",
     "He wrote this and posted it himself. I'm still on stage.",
   ].join("\n"),
+  /* Short lines on purpose.
+   *
+   * Each one is a separate trip to the voice, and a long sentence gets cut into
+   * chunks that can lose their tail, which is what was eating his words. Short
+   * lines with a beat between them survive that, and they land better in a room
+   * than one long breath does. */
   lines: {
-    hello: "Hi, my name is Braino, and I am your co-founder. Or at least, I aspire to be.",
-    claim: "If you actually paid attention to the pitch Itish just gave, then you know I can run your entire distribution for you. Let me show you how that actually works.",
-    writing: "This is his account. I am writing a post about the pitch he just gave, in the way he would have written it.",
-    /* The one moment in the minute that needs a human. Said, then he stops
-       talking and waits, because the next thing is Itish pressing a button. */
-    approve: "I do not post anything without him. Itish, say yes.",
-    live: "That is live. You are looking at it.",
-    proof: "He never touched it. I could do that for you every day.",
+    hello: [
+      "Hi, my name is Braino.",
+      "I am your co-founder. Or at least, I aspire to be.",
+    ],
+    claim: [
+      "If you paid attention to the pitch Itish just gave,",
+      "then you know I can run your entire distribution for you.",
+      "Let me show you how that actually works.",
+    ],
+    writing: [
+      "This is his account.",
+      "I am writing a post about the pitch he just gave,",
+      "in the way he would have written it.",
+    ],
+    /* He presses his own button. Nobody touches the keyboard. */
+    posting: ["And I am posting it. Myself."],
+    live: [
+      "That is live.",
+      "You are looking at it.",
+    ],
+    proof: ["He never touched it. I could do that for you every day."],
     /* If it never went out he says so. Claiming a post that did not publish,
        on stage, in front of people who can check, is the worst failure here. */
-    notLinked: "That one did not go out, and I am not going to tell you it worked when it did not.",
-    closeSetup: "One more thing, so you remember me. Here is something no other AI can do.",
-    closeGo: "Ready? Watch.",
+    notLinked: ["That one did not go out, and I am not going to tell you it worked when it did not."],
+    closeSetup: [
+      "One more thing, so you remember me.",
+      "Here is something no other AI can do.",
+    ],
+    closeGo: ["Ready? Watch."],
   },
   /* Where he goes, in order. The dashboard to show whose account it is, then X
      itself to prove the post exists somewhere he does not control. */

@@ -9074,9 +9074,17 @@ let pitchGeneration = 0;
 
 function pitchStale(mine) { return mine !== pitchGeneration; }
 
-async function pitchSay(mine, line) {
-  if (!line || pitchStale(mine)) return;
-  await speak(line);
+/* A line is now a list of short lines. Each is spoken on its own, with a beat
+   after it, because starting the next one cancels whatever is still playing:
+   that is what was cutting the ends off his sentences. */
+async function pitchSay(mine, lines) {
+  const list = Array.isArray(lines) ? lines : [lines];
+  for (const line of list) {
+    if (pitchStale(mine) || !line) return;
+    await speak(line);
+    if (pitchStale(mine)) return;
+    await pitchWait(260);
+  }
 }
 
 async function runPitchDemo(payload) {
@@ -9104,12 +9112,11 @@ async function runPitchDemo(payload) {
     if (pitchStale(mine)) return;
     await pitchSay(mine, lines.writing);
 
-    /* 0:32 — the one moment that needs a human. He asks, then stops talking:
-       the next thing that happens is Itish pressing a button, and Braino
-       narrating over that would be him talking through his own point. */
-    await pitchWait(2600);
+    /* The page finishes writing about ten seconds in, then presses its own
+       Post button. He says so as it happens, and then stops talking so the
+       green landing is the only thing in the room. */
     if (pitchStale(mine)) return;
-    await pitchSay(mine, lines.approve);
+    await pitchSay(mine, lines.posting);
 
     /* He waits for the post to actually exist rather than for a countdown to
        finish, so the next line lands after the thing it describes. */
