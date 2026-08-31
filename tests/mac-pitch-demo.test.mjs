@@ -160,9 +160,12 @@ test("everything the moonwalk needs is arranged before it starts", () => {
 /* A long sentence is cut into chunks that can lose their tail, and starting the
    next line cancels whatever is still playing. Short lines, spoken one at a
    time with a beat between, is what stops him eating his own words. */
-test("his lines are short, and spoken one at a time", () => {
-  assert.match(renderer, /async function pitchSay\(mine, lines\)[\s\S]{0,400}for \(const line of list\)/);
-  assert.match(renderer, /await speak\(line\);[\s\S]{0,80}await pitchWait\(/);
+test("his lines are short, and spoken in one breath", () => {
+  /* One trip to the voice per group. Every extra call is a round trip of dead
+     air, and `speaking` drops to false in the gap between them, which is the
+     signal that lets him wander off mid-sentence. */
+  assert.match(renderer, /async function pitchSay\(mine, lines\)[\s\S]{0,400}\.join\(" "\)/);
+  assert.match(renderer, /await speak\(said\);/);
   const block = main.slice(main.indexOf("  lines: {"), main.indexOf("  rehearse:"));
   for (const line of block.match(/"[^"]{12,}"/g) || []) {
     assert.ok(line.length < 110, `a line long enough to get cut: ${line}`);
@@ -203,7 +206,27 @@ test("nothing on screen can fail in front of the room", () => {
 test("the moonwalk does not depend on the music", () => {
   const fn = renderer.slice(renderer.indexOf("async function runPitchDemo"));
   const body = fn.slice(0, fn.indexOf("\n}\n"));
-  assert.ok(body.indexOf('skitStep?.("prewarm")') < body.indexOf("lines.hello"), "music is woken first");
-  assert.match(body, /void window\.brainoMac\.skitStep\?\.\("play"\)/);
-  assert.match(body, /skitPerformMoonwalk\(11000\)/);
+  /* Spotify is not touched until the end. Prewarming does not quietly warm
+     anything, it opens Spotify and brings it to the front, so the demo used to
+     begin by throwing a music player over the screen and talking on top of it. */
+  assert.doesNotMatch(body, /skitStep\?\.\("prewarm"\)/);
+  assert.match(body, /skitStep\?\.\("play"\)/);
+  assert.match(body, /await skitPerformMoonwalk\(11000\)/);
+  /* He is raised after the music, not before it: the play step pulls Spotify
+     forward, so raising him first puts him back underneath it. */
+  assert.ok(body.indexOf('skitStep?.("play")') < body.indexOf("pitchFront"), "music first, then he comes to the front");
+});
+
+/* Billie Jean is his own cue, and the music-reaction system used to hear it,
+   walk him home into the notch and start the generic dance instead. The trick
+   ran invisibly behind a mascot that had just been sent away. */
+test("nothing else gets to move him while the script runs", () => {
+  assert.match(renderer, /async function reactToMusicStart[\s\S]{0,900}if \(pitchRunning\) return;/);
+  assert.match(renderer, /shouldHoldAttention = [^;]*\|\| pitchRunning/);
+  const fn = renderer.slice(renderer.indexOf("async function runPitchDemo"));
+  const body2 = fn.slice(0, fn.indexOf("\n}\n"));
+  assert.match(body2, /stopMusicDance\(\)/);
+  /* Awaited, so the guards stay up for the whole eleven seconds rather than
+     handing him back mid-glide. */
+  assert.match(body2, /await skitPerformMoonwalk/);
 });

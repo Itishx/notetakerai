@@ -3659,6 +3659,15 @@ let musicSessionId = 0;
 async function reactToMusicStart(session) {
   // Skit isolation: no music detection during demo or after until Cmd+2 dismissed him
   if (skitRunning || skitJustCompleted) return;
+  // Pitch isolation, for exactly the same reason and one more.
+  //
+  // The pitch demo cues Billie Jean itself and then moonwalks to it. Without
+  // this line the music-reaction system hears its own cue, walks him home into
+  // the notch, and starts the generic dance instead: the trick ran, invisibly,
+  // behind a mascot that had just been sent away, and what the room saw was
+  // him bopping on the spot. He is running a script here. Nothing else gets to
+  // move him.
+  if (pitchRunning) return;
   if (herMode || walkerHome || speaking || processing || voiceTurnInFlight) {
     if (session === musicSessionId) beginMusicTheatrics();
     return;
@@ -8864,7 +8873,11 @@ function tick(now) {
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now;
   const t = (now - start) / 1000;
-  const shouldHoldAttention = listening || realtimeConnecting || processing || speaking;
+  /* pitchRunning holds him still for the whole demo, not just while a line is
+     playing. He speaks in short lines with beats between them, and `speaking`
+     goes false in every one of those beats, so he was setting off on a little
+     walk between every sentence. He stands and delivers. */
+  const shouldHoldAttention = listening || realtimeConnecting || processing || speaking || pitchRunning;
   let walkingNow = false;
 
   if (!dragState && scriptedWalk) {
@@ -9074,17 +9087,17 @@ let pitchGeneration = 0;
 
 function pitchStale(mine) { return mine !== pitchGeneration; }
 
-/* A line is now a list of short lines. Each is spoken on its own, with a beat
-   after it, because starting the next one cancels whatever is still playing:
-   that is what was cutting the ends off his sentences. */
+/* One trip to the voice per group, not one per sentence.
+ *
+ * Splitting his lines up stopped him losing their tails, and bought two worse
+ * problems: every extra call is another round trip of dead air, and `speaking`
+ * drops to false in every gap, which is the signal that lets him wander off.
+ * So the short lines are joined back into one utterance here. He still gets the
+ * pauses, because full stops are pauses, and the voice reads them. */
 async function pitchSay(mine, lines) {
-  const list = Array.isArray(lines) ? lines : [lines];
-  for (const line of list) {
-    if (pitchStale(mine) || !line) return;
-    await speak(line);
-    if (pitchStale(mine)) return;
-    await pitchWait(260);
-  }
+  const said = (Array.isArray(lines) ? lines : [lines]).filter(Boolean).join(" ");
+  if (!said || pitchStale(mine)) return;
+  await speak(said);
 }
 
 async function runPitchDemo(payload) {
@@ -9101,9 +9114,12 @@ async function runPitchDemo(payload) {
     stopRealtimeVoice({ reason: "pitch-demo" });
     logRenderer("pitch.mic_off", {});
 
-    /* Music is opened first and quietly: Spotify takes seconds to wake, and
-       the moonwalk is at the end. Asking for it now means it is ready then. */
-    void window.brainoMac.skitStep?.("prewarm");
+    /* Spotify is NOT touched here.
+     *
+     * This used to prewarm it, which does not quietly warm anything: it opens
+     * Spotify and brings it to the front. So the demo began by throwing a music
+     * player over the screen and then talking on top of it. Spotify belongs at
+     * the end, with the music, and nowhere else. */
 
     /* 0:00 — he introduces himself, and says what he is about to prove. */
     await pitchSay(mine, lines.hello);
@@ -9150,12 +9166,7 @@ async function runPitchDemo(payload) {
     /* One: he has to be out of the notch, because that is where he lives. */
     if (walkerHome) await setWalkerHomeState(false);
 
-    /* Two: he has to be on top of Chrome. Braino's window drops behind the
-       browser when Chrome is brought forward, and a moonwalk behind a full
-       screen X page is a moonwalk nobody sees. */
-    await window.brainoMac.pitchFront?.();
-
-    /* Three: the rig has to exist. Only some characters carry the moonwalk
+    /* Two: the rig has to exist. Only some characters carry the moonwalk
        legs and the hat, so if the current one does not, put the character that
        does on screen for the trick. */
     let rigReady = Boolean(q("#__sbwk_moonlegs__") && q("#__sbwk_mw_r__") && q("#__sbwk_mw_l__"));
@@ -9172,10 +9183,32 @@ async function runPitchDemo(payload) {
     await pitchWait(500);
     if (pitchStale(mine)) return;
 
-    void window.brainoMac.skitStep?.("play");
-    await pitchWait(1200);
+    /* Anything the music system already started gets shut down first. It reacts
+       to Billie Jean by dancing him on the spot, which is not the trick. */
+    stopMusicDance();
+
+    /* Waited for, but not indefinitely. A warm Spotify answers in a moment and
+       the glide starts on the beat; a cold one can take fifteen seconds to
+       launch, and standing there in silence for fifteen seconds is worse than
+       dancing a little early. */
+    await Promise.race([
+      window.brainoMac.skitStep?.("play"),
+      new Promise((resolve) => window.setTimeout(resolve, 3500)),
+    ]).catch(() => {});
     if (pitchStale(mine)) return;
-    skitPerformMoonwalk(11000);
+
+    /* Only now does he come to the front. The play step deliberately pulls
+       Spotify forward while the track loads, so raising him before it puts him
+       straight back underneath a music player. */
+    await window.brainoMac.pitchFront?.();
+    stopMusicDance();
+    await pitchWait(700);
+    if (pitchStale(mine)) return;
+
+    /* Awaited, so pitchRunning stays true for the whole eleven seconds. It is
+       what keeps the roam loop and the music reaction off him while he glides;
+       letting it clear here hands him back mid-moonwalk. */
+    await skitPerformMoonwalk(11000);
   } catch (error) {
     logRenderer("pitch.failed", { error: String(error?.message || error) });
   } finally {
