@@ -121,14 +121,11 @@ const PITCH = {
       "You are looking at it.",
     ],
     proof: ["He never touched it. I could do that for you every day."],
-    /* If it never went out he says so. Claiming a post that did not publish,
-       on stage, in front of people who can check, is the worst failure here. */
-    notLinked: ["That one did not go out, and I am not going to tell you it worked when it did not."],
     closeSetup: [
-      "One more thing, so you remember me.",
-      "Here is something no other AI can do.",
+      "And while all of this was cool, do you know what is cooler?",
+      "I am the only AI in the history of AI and mankind combined to do the moonwalk.",
     ],
-    closeGo: ["Ready? Watch."],
+    closeGo: ["Ready? Let's go."],
   },
   /* Where he goes, in order. The dashboard to show whose account it is, then X
      itself to prove the post exists somewhere he does not control. */
@@ -17235,6 +17232,17 @@ ipcMain.handle("braino-mac:calendar-join", async () => {
    posts to X on its own. Leaving one behind would be a loaded gun on a hotkey. */
 
 ipcMain.handle("braino-mac:pitch-done", async () => { pitchDemoRunning = false; logMac("pitch.done", {}); return { ok: true }; });
+
+/* On top of Chrome, for the last ten seconds.
+ *
+ * His window sits behind the browser the moment Chrome is brought forward, and
+ * the moonwalk happens after we have deliberately put a full screen X page in
+ * front of the room. Dancing behind that is dancing where nobody can see. */
+ipcMain.handle("braino-mac:pitch-front", async () => {
+  ensureDockWindowVisible("pitch-moonwalk");
+  raiseDockWindow("pitch-moonwalk");
+  return { ok: true };
+});
 
 /* The two places he goes on stage. He opens them himself, because a demo where
    a human drives the browser is a demo of a human driving a browser. */

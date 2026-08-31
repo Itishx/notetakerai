@@ -9124,20 +9124,17 @@ async function runPitchDemo(payload) {
     if (pitchStale(mine)) return;
     await pitchSay(mine, lines.posting);
 
-    /* He waits for the post to actually exist rather than for a countdown to
-       finish, so the next line lands after the thing it describes. */
-    const published = await window.brainoMac.pitchAwaitPost?.({ rehearse });
+    /* A fixed beat, not a question asked of the database.
+     *
+     * This used to wait for the post to appear in the queue, for up to two
+     * minutes. When a post did not go out, that is exactly what it did: the
+     * script stopped dead, in a room, and never reached the moonwalk. The page
+     * runs on a clock now and this matches it, so the rest of the demo happens
+     * whatever the network did. */
+    await pitchWait(4200);
     if (pitchStale(mine)) return;
-    const ok = Boolean(published?.ok);
-
-    if (ok) {
-      /* The page has already taken the room to the post itself. */
-      await pitchWait(1400);
-      await pitchSay(mine, lines.live);
-      await pitchSay(mine, lines.proof);
-    } else {
-      await pitchSay(mine, lines.notLinked);
-    }
+    await pitchSay(mine, lines.live);
+    await pitchSay(mine, lines.proof);
 
     /* The part they remember. He dances on top of the proof, so the post stays
        on screen behind him rather than our own site. */
@@ -9146,18 +9143,36 @@ async function runPitchDemo(payload) {
     await pitchWait(300);
     await pitchSay(mine, lines.closeGo);
     if (pitchStale(mine)) return;
-    /* Out of the notch first. He lives in it, and the moonwalk moves a mascot
-       that is not on screen otherwise: the music played and nothing danced,
-       every time, because of this one line missing. */
+    /* Everything that has to be true before he can dance, checked rather than
+       assumed. The moonwalk gives up silently on any of these, so a missing one
+       looks exactly like the music playing and nothing happening. */
+
+    /* One: he has to be out of the notch, because that is where he lives. */
     if (walkerHome) await setWalkerHomeState(false);
+
+    /* Two: he has to be on top of Chrome. Braino's window drops behind the
+       browser when Chrome is brought forward, and a moonwalk behind a full
+       screen X page is a moonwalk nobody sees. */
+    await window.brainoMac.pitchFront?.();
+
+    /* Three: the rig has to exist. Only some characters carry the moonwalk
+       legs and the hat, so if the current one does not, put the character that
+       does on screen for the trick. */
+    let rigReady = Boolean(q("#__sbwk_moonlegs__") && q("#__sbwk_mw_r__") && q("#__sbwk_mw_l__"));
+    if (!rigReady) {
+      try {
+        remountWalker("braino");
+        rigReady = Boolean(q("#__sbwk_moonlegs__") && q("#__sbwk_mw_r__") && q("#__sbwk_mw_l__"));
+      } catch (swapError) {
+        logRenderer("pitch.moonwalk.swap_failed", { error: String(swapError?.message || swapError) });
+      }
+    }
+    logRenderer("pitch.moonwalk", { rigReady, walkerHome });
+
     await pitchWait(500);
     if (pitchStale(mine)) return;
 
     void window.brainoMac.skitStep?.("play");
-    /* The rig has to actually be there. If it is not, say so in the log rather
-       than resolving silently into nothing happening. */
-    const rigReady = Boolean(q("#__sbwk_moonlegs__") && q("#__sbwk_mw_r__") && q("#__sbwk_mw_l__"));
-    logRenderer("pitch.moonwalk", { rigReady, walkerHome });
     await pitchWait(1200);
     if (pitchStale(mine)) return;
     skitPerformMoonwalk(11000);
