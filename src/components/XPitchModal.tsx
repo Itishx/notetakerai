@@ -41,7 +41,9 @@ type Phase = "writing" | "ready" | "pressing" | "posting" | "posted" | "failed";
 /* Deliberate, readable pacing. The room has to be able to follow the words
    appearing, which is slower than a machine would type them. */
 const TYPE_MS = 26;
-const BEAT_BEFORE_PRESS = 900;
+/* Two seconds between the last word landing and him pressing Post. Long enough
+   that the room reads the finished post and understands nobody touched it. */
+const BEAT_BEFORE_PRESS = 2000;
 const PRESS_HOLD = 420;
 
 export default function XPitchModal({ rehearse, handle }: { rehearse: boolean; handle: string | null }) {
