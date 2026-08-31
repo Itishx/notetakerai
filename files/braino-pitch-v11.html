@@ -962,6 +962,31 @@ tr.us td, tr.us td b { font-weight: 600; }
   margin: 0; text-align: center; font-size: 13px; line-height: 1.35;
   color: var(--muted); letter-spacing: -.005em;
 }
+
+/* ── The two statement slides at the end ──────────────────────────────────
+   Pure black, one line, dead centre, nothing else on the slide. The whole
+   point is that the room stops reading and looks up. */
+.slide.onemore { background: #000; color: #f5f5f7; display: flex; align-items: center; justify-content: center; padding: 60px 88px; }
+.omt { display: flex; flex-direction: column; align-items: center; gap: 34px; text-align: center; width: 100%; }
+.slide.onemore h1 { font-size: 84px; font-weight: 600; letter-spacing: -.045em; line-height: 1.02; margin: 0; }
+.slide.onemore .tone { color: var(--coral); }
+/* The recorded run, embedded. Sized so it never pushes the line off the top. */
+.demovid { margin: 0; width: min(760px, 100%); display: flex; flex-direction: column; align-items: center; gap: 12px; }
+/* Holds the right shape before the recording exists, so the slide can be
+   judged now and the file dropped in later. */
+.demovid video { width: 100%; height: 400px; object-fit: contain; display: block; border-radius: 14px; background: #0d0d0f; border: 1px solid #26262c; }
+.demovid figcaption { margin: 0; font-size: 15px; color: #8a8a92; letter-spacing: -.005em; }
+
+/* The founder photo. A placeholder frame until the real picture is dropped in,
+   so a missing file reads as "photo goes here" rather than a broken slide. */
+.founderpix { margin: 0; display: flex; flex-direction: column; gap: 10px; }
+.founderpix { gap: 10px; }
+/* The frame is the placeholder. A missing photo reads as "picture goes here"
+   rather than a broken image icon, and the moment the real file exists it
+   simply covers the frame. */
+.pixframe { position: relative; width: 100%; height: 392px; border-radius: 14px; background: var(--surface); border: 1px dashed var(--line); overflow: hidden; display: grid; place-items: center; }
+.pixframe::before { content: attr(data-empty); position: absolute; inset: 0; display: grid; place-items: center; padding: 0 28px; text-align: center; font-size: 14px; line-height: 1.5; color: var(--muted); }
+.pixframe img { position: relative; z-index: 1; width: 100%; height: 100%; object-fit: cover; display: block; }
 </style>
 <body>
 <a class="dl" href="/braino-pitch-v11.pdf" download="Braino-pitch-deck.pdf">
@@ -1267,7 +1292,7 @@ tr.us td, tr.us td b { font-weight: 600; }
     </div>
     <p class="src">Sources: US Census non-employer establishments &middot; DPIIT &middot; Solo Founder Playbook 2026 &middot; r/buildinpublic</p>
   </div>
-  <span class="num">2 / 10</span>
+  <span class="num">2 / 13</span>
 </section></div>
 
 <div class="fit"><section class="slide ac-violet dense">
@@ -1293,7 +1318,7 @@ tr.us td, tr.us td b { font-weight: 600; }
       <div><strong>$16–32</strong><em>a month is the India band they named</em></div>
     </div>
   </div>
-  <span class="num">3 / 10</span>
+  <span class="num">3 / 13</span>
 </section></div>
 
 <div class="fit"><section class="slide ac-green">
@@ -1330,7 +1355,7 @@ tr.us td, tr.us td b { font-weight: 600; }
       </figure>
     </div>
   </div>
-  <span class="num">4 / 10</span>
+  <span class="num">4 / 13</span>
 </section></div>
 
 <div class="fit"><section class="slide ac-amber dense pack">
@@ -1368,7 +1393,7 @@ tr.us td, tr.us td b { font-weight: 600; }
     </div>
     <p class="note wide" style="margin-top:16px"><b>Human in the loop — nothing goes public without your approval.</b></p>
   </div>
-  <span class="num">5 / 10</span>
+  <span class="num">5 / 13</span>
 </section></div>
 
 <div class="fit"><section class="slide ac-blue dense pack">
@@ -1410,7 +1435,7 @@ tr.us td, tr.us td b { font-weight: 600; }
       <span>We are not asking anyone to switch. We are the first thing they buy.</span>
     </div>
   </div>
-  <span class="num">6 / 10</span>
+  <span class="num">6 / 13</span>
 </section></div>
 
 <div class="fit"><section class="slide ac-green dense">
@@ -1453,7 +1478,7 @@ tr.us td, tr.us td b { font-weight: 600; }
     </div>
     <p class="note">The free tier does two jobs. <b>It brings us the founders who later pay</b>, and every free session shows us what to fix, <b>so the product gets better the more it is used.</b></p>
   </div>
-  <span class="num">7 / 10</span>
+  <span class="num">7 / 13</span>
 </section></div>
 
 <div class="fit"><section class="slide ac-amber dense">
@@ -1492,7 +1517,7 @@ tr.us td, tr.us td b { font-weight: 600; }
     </div>
     <p class="note wide">In India we meet them where they already gather: <b>Headstart, TiE and Nasscom 10K</b>. And the free companion does the selling: it learns your voice, then shows you a week of posts you did not ask for. <b>The upgrade is approving them.</b></p>
   </div>
-  <span class="num">8 / 10</span>
+  <span class="num">8 / 13</span>
 </section></div>
 
 <div class="fit"><section class="slide ac-blue dense">
@@ -1541,10 +1566,44 @@ tr.us td, tr.us td b { font-weight: 600; }
     </div>
     <p class="note wide"><b>Why this is 10x better:</b> five tools and ten hours of your own week, or one co-founder who already knows your company. <b>Braino does the whole job for less than any single tool on this list.</b></p>
   </div>
-  <span class="num">9 / 10</span>
+  <span class="num">9 / 13</span>
 </section></div>
 
-<div class="fit"><section class="slide night ac-coral">
+<div class="fit"><section class="slide ac-violet dense">
+  <div class="body">
+    <p class="kicker">Who is building it</p>
+    <h2>Five years of AI. <span class="tone">All of it, nothing else.</span></h2>
+    <div class="split" style="grid-template-columns:1.15fr .85fr;gap:30px;align-items:start;margin-top:18px">
+      <div style="display:grid;gap:13px;align-content:start">
+        <div class="bigbox" style="padding:19px 23px;background:var(--surface);border:1px solid var(--line)">
+          <i>Trained for this</i>
+          <b style="font-size:19px;margin-bottom:4px">B.Tech, Data Science and Artificial Intelligence</b>
+          <span style="font-size:14.5px">Not a founder who picked up AI last year. It is the degree.</span>
+        </div>
+        <div class="bigbox" style="padding:19px 23px;background:var(--surface);border:1px solid var(--line)">
+          <i>Shipped it in industry</i>
+          <b style="font-size:19px;margin-bottom:4px">One year at Amdocs, Pune, on an AI project</b>
+          <span style="font-size:14.5px">Production AI, on a real team, with real users at the other end.</span>
+        </div>
+        <div class="bigbox" style="padding:19px 23px">
+          <i>And then all of it</i>
+          <b style="font-size:19px;margin-bottom:4px">Braino is roughly 950 commits old</b>
+          <span style="font-size:14.5px">Built by the person standing here, most nights, for months.</span>
+        </div>
+      </div>
+      <figure class="prodshot founderpix">
+        <div class="pixframe" data-empty="Drop your photo at files/images/founder-1.jpg">
+          <img src="images/founder-1.jpg" alt="" onerror="this.style.display='none'">
+        </div>
+        <figcaption>Itish Pande &middot; founder</figcaption>
+      </figure>
+    </div>
+    <p class="note" style="margin-top:18px">I am deep enough into AI that it honestly scares me. <b>If it is not scary, it is not worth building.</b></p>
+  </div>
+  <span class="num">10 / 13</span>
+</section>
+
+<section class="slide night ac-coral">
   <div class="cover endcover">
     <div>
       <h1>Speak.<br><span class="tone">Watch it happen.</span></h1>
@@ -1556,6 +1615,22 @@ tr.us td, tr.us td b { font-weight: 600; }
     </figure>
   </div>
   <span class="wm">Itish Pande · trybraino.com</span>
+</section>
+
+<section class="slide night ac-coral onemore">
+  <div class="omt">
+    <h1>One more thing.</h1>
+  </div>
+</section>
+
+<section class="slide night ac-coral onemore">
+  <div class="omt">
+    <h1>Here is Braino <span class="tone">in action.</span></h1>
+    <figure class="demovid">
+      <video src="videos/braino-demo.mp4" controls playsinline preload="metadata"></video>
+      <figcaption>Shift twice. He writes the post, publishes it, and takes you to it.</figcaption>
+    </figure>
+  </div>
 </section></div>
 
 </div>
