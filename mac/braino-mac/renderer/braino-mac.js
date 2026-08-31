@@ -9205,10 +9205,23 @@ async function runPitchDemo(payload) {
     await pitchWait(700);
     if (pitchStale(mine)) return;
 
-    /* Awaited, so pitchRunning stays true for the whole eleven seconds. It is
-       what keeps the roam loop and the music reaction off him while he glides;
-       letting it clear here hands him back mid-moonwalk. */
-    await skitPerformMoonwalk(11000);
+    /* The same three lines the working skit runs before its moonwalk, for the
+       same three reasons. Bumping the music session throws away any reaction
+       already queued against the track we just started; the flag stops the
+       music system deciding to walk him home; and skitMoonwalk is what locks
+       him facing forward while he glides backwards, which is the difference
+       between a moonwalk and a man walking backwards. */
+    musicSessionId += 1;
+    walkerAutoHomedByMusic = false;
+    skitMoonwalk = true;
+
+    try {
+      /* Awaited, so pitchRunning stays true for the whole eleven seconds. The
+         glide loop reads it every frame to decide whether to keep going. */
+      await skitPerformMoonwalk(11000);
+    } finally {
+      skitMoonwalk = false;
+    }
   } catch (error) {
     logRenderer("pitch.failed", { error: String(error?.message || error) });
   } finally {
@@ -9638,7 +9651,13 @@ function skitPerformMoonwalk(durationMs = 15000) {
       const breath = 1 + 0.014 * Math.sin(t * 1.7);
       const bob = Math.sin(t * 1.7 + 0.6) * 0.8;
       setStartupPose({ rootRot: waddle, rootY: bob + walkBob, rootScale: breath, gazeX: 0.95, gazeY: 0, eyeScale: 1 });
-      if (now - start < durationMs && skitRunning) {
+      /* Whoever is driving has to still be driving. This read `skitRunning`
+         alone, which is set by the double Option skit and by nothing else, so
+         when the pitch demo called this the very first frame found it false,
+         ended the moonwalk and reset the rig. The hat appeared and vanished
+         inside one frame, every single time, and what the room saw was
+         whatever else happened to be animating him. */
+      if (now - start < durationMs && (skitRunning || pitchRunning)) {
         skitMoonRaf = requestAnimationFrame(step);
       } else {
         skitEndMoonwalk();

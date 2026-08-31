@@ -219,6 +219,36 @@ test("the moonwalk does not depend on the music", () => {
   assert.ok(body.indexOf('skitStep?.("play")') < body.indexOf("pitchFront"), "music first, then he comes to the front");
 });
 
+/* The one that made the moonwalk impossible.
+ *
+ * The glide loop asks every frame whether it should keep going, and it used to
+ * ask only whether the SKIT was running. The pitch demo does not set that flag,
+ * so the first frame found it false, ended the moonwalk and put the rig back:
+ * the hat appeared and vanished inside a sixtieth of a second, every single
+ * time, and the room saw whatever else was animating him.
+ *
+ * If this ever reads one flag again, the trick silently stops working. */
+test("the moonwalk keeps going for whoever started it", () => {
+  const loop = renderer.slice(renderer.indexOf("function skitPerformMoonwalk"));
+  assert.match(loop.slice(0, 3200), /now - start < durationMs && \(skitRunning \|\| pitchRunning\)/);
+});
+
+/* skitMoonwalk is what locks him facing forward while he glides backwards. It
+   is the difference between a moonwalk and a man walking backwards, it is set
+   by the caller rather than by the moonwalk itself, and the pitch demo has to
+   set it exactly the way the working skit does. */
+test("he faces forward while he glides", () => {
+  const fn = renderer.slice(renderer.indexOf("async function runPitchDemo"));
+  const body = fn.slice(0, fn.indexOf("\n}\n"));
+  assert.ok(body.indexOf("skitMoonwalk = true") < body.indexOf("skitPerformMoonwalk"), "set before the glide");
+  assert.match(body, /finally \{\s*\n\s*skitMoonwalk = false;/);
+  /* And the same two lines the skit runs to stop the music system stealing
+     him back the moment his own cue starts playing. */
+  assert.match(body, /musicSessionId \+= 1;/);
+  assert.match(body, /walkerAutoHomedByMusic = false;/);
+  assert.match(renderer, /walkerFlip\.style\.transform = [^;]*skitMoonwalk/);
+});
+
 /* Billie Jean is his own cue, and the music-reaction system used to hear it,
    walk him home into the notch and start the generic dance instead. The trick
    ran invisibly behind a mascot that had just been sent away. */
