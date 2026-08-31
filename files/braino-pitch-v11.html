@@ -970,9 +970,21 @@ tr.us td, tr.us td b { font-weight: 600; }
 .omt { display: flex; flex-direction: column; align-items: center; gap: 34px; text-align: center; width: 100%; }
 .slide.onemore h1 { font-size: 84px; font-weight: 600; letter-spacing: -.045em; line-height: 1.02; margin: 0; }
 .slide.onemore .tone { color: var(--coral); }
-/* The video slide is the video. Edge to edge, no padding, nothing over it. */
-.slide.videoslide { padding: 0; background: #000; display: block; }
-.fullvid { width: 100%; height: 100%; object-fit: cover; display: block; background: #000; }
+/* The video slide is the video. Edge to edge, no padding, nothing over it.
+ *
+ * The recording is a phone-shaped file with a landscape screen recording
+ * letterboxed inside it: measured, the picture occupies rows 31.67% to 68.33%
+ * and nothing but black sits above and below. Shown whole it would be a
+ * postage stamp in the middle of the slide, and cropped to fill the width it
+ * would lose the menu bar and the dock, which is where he actually is.
+ *
+ * So the video is blown up and pulled up until that band fills the slide, with
+ * three percent of margin added on each side of the measurement so that even
+ * if the measurement is off, nothing of the picture can be cut. Only black is
+ * ever removed. What is left over sits either side, black on a black slide,
+ * where it cannot be seen. */
+.slide.videoslide { padding: 0; background: #000; display: block; position: relative; overflow: hidden; }
+.fullvid { position: absolute; left: 165px; top: -484px; width: 949px; height: 1688px; object-fit: fill; display: block; background: #000; }
 
 /* The founder photo. A placeholder frame until the real picture is dropped in,
    so a missing file reads as "photo goes here" rather than a broken slide. */
@@ -1602,17 +1614,33 @@ tr.us td, tr.us td b { font-weight: 600; }
     window.addEventListener('resize', fit);
   })();
 
-  /* The last slide plays itself when you reach it, and starts from the top
-     every time you come back to it, so a second pass is not half a video.
-     Sound is the point of the recording, so it tries unmuted first: browsers
-     allow that once anything on the page has been clicked, which by that slide
-     it has. If the browser still refuses, it falls back to muted rather than
-     showing a frozen frame. */
+  /* The last slide is the recording, and it has to play.
+   *
+   * It starts itself when you scroll onto it, from the top, so a second pass is
+   * not half a video. Sound is the whole point, so it tries unmuted first:
+   * browsers allow that once anything on the page has been clicked, which by
+   * the last slide it has.
+   *
+   * And then the belt and braces, because this runs once in front of a room. If
+   * the browser refuses anyway it retries muted rather than showing a frozen
+   * frame, and any key or any click while that slide is up starts it by hand.
+   * A key press is a real gesture as far as the browser is concerned, so the
+   * fallback is allowed to do what the automatic attempt was not. */
   (function () {
     var video = document.querySelector('.fullvid');
-    if (!video || !('IntersectionObserver' in window)) return;
-    var start = function () {
-      video.currentTime = 0;
+    if (!video) return;
+    var slide = video.closest('section');
+    var playing = false;
+
+    var onScreen = function () {
+      if (!slide) return false;
+      var r = slide.getBoundingClientRect();
+      var seen = Math.min(r.bottom, window.innerHeight) - Math.max(r.top, 0);
+      return seen > 0 && seen > Math.min(r.height, window.innerHeight) * 0.5;
+    };
+
+    var start = function (restart) {
+      if (restart) { try { video.currentTime = 0; } catch (e) {} }
       video.muted = false;
       var attempt = video.play();
       if (attempt && attempt.catch) {
@@ -1623,12 +1651,31 @@ tr.us td, tr.us td b { font-weight: 600; }
         });
       }
     };
-    new IntersectionObserver(function (entries) {
-      entries.forEach(function (entry) {
-        if (entry.isIntersecting && entry.intersectionRatio > 0.55) start();
-        else video.pause();
-      });
-    }, { threshold: [0, 0.55, 1] }).observe(video);
+
+    video.addEventListener('playing', function () { playing = true; });
+    video.addEventListener('pause', function () { playing = false; });
+
+    if ('IntersectionObserver' in window) {
+      new IntersectionObserver(function (entries) {
+        entries.forEach(function (entry) {
+          if (entry.isIntersecting && entry.intersectionRatio > 0.5) start(true);
+          else video.pause();
+        });
+      }, { threshold: [0, 0.5, 1] }).observe(video);
+    }
+
+    /* The hand crank. Any key, any click, as long as that slide is what you are
+       looking at and it is not already running. */
+    var nudge = function () {
+      if (!onScreen() || playing) return;
+      start(video.currentTime > 0.2 ? false : true);
+    };
+    window.addEventListener('keydown', nudge);
+    window.addEventListener('click', nudge);
+    video.addEventListener('click', function (event) {
+      event.stopPropagation();
+      if (playing) video.pause(); else start(false);
+    });
   })();
 </script>
 </body>

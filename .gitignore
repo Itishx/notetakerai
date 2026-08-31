@@ -42,3 +42,8 @@ mac/braino-mac/native/bin/
 
 # Swift build tree for the on-device dictation helper (machine-specific, ~1GB)
 mac/braino-mac/native/BrainoDictate/.build/
+
+# Raw phone recordings dropped in the repo root for the deck. The converted
+# copy that the deck actually uses lives at files/videos/.
+brainoitish.JPG
+brainodemovideo.MP4
