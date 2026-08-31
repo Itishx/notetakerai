@@ -59,7 +59,9 @@ test("he opens the page, and only one thing navigates", () => {
      is a race, so this app must not also be doing it. */
   assert.doesNotMatch(body, /where: "profile"/);
   const modal = read("../src/components/XPitchModal.tsx");
-  assert.match(modal, /status\/\$\{payload\.xPostId\}/);
+  /* It ends on the post that is actually on the account. */
+  assert.match(modal, /const PITCH_POST_URL = "https:\/\/x\.com\/[^"]+\/status\/\d+";/);
+  assert.match(modal, /window\.location\.href = PITCH_POST_URL;/);
 });
 
 /* The visible half is on the page, not in the notch. From the back of a room a
@@ -178,26 +180,26 @@ test("it can be rehearsed", () => {
   /* Rehearsing opens the page in a mode that will not publish. */
   assert.match(main, /dashboardRehearse: "https:\/\/trybraino\.com\/x\?pitch=rehearse"/);
   assert.match(main, /PITCH\.rehearse\(\) \? PITCH\.dashboardRehearse : PITCH\.dashboard/);
-  /* The page half has the same switch, and it is the half that publishes. */
+  /* Nothing on the page publishes any more, so there is nothing a rehearsal
+     needs to hold back and the two runs are identical. */
   const modal = read("../src/components/XPitchModal.tsx");
-  assert.match(modal, /if \(rehearse\) return;/);
-  assert.ok(modal.indexOf("if (rehearse) return;") < modal.indexOf("x_queue_items"), "rehearsal returns before it queues anything");
+  assert.doesNotMatch(modal, /x_queue_items|publish_now/);
 });
 
 /* It is a demo. It gets one run, in front of a room, and a red box saying his
    own policy held the post back is not something anyone needs to watch from a
    stage. The button lands green on a clock the network cannot touch. */
+/* It is a demo. It gets one run, in front of a room, and nothing on screen may
+   depend on a network call landing in that moment. */
 test("nothing on screen can fail in front of the room", () => {
   const modal = read("../src/components/XPitchModal.tsx");
   assert.doesNotMatch(modal, /Try again|"failed"/);
-  /* The publish runs beside the timeline, never in front of it. */
-  assert.match(modal, /setPhase\("posting"\);\s*\n\s*attemptRef\.current\(\);\s*\n\s*await wait\(POSTING_MS\)/);
-  assert.match(modal, /setPhase\("posted"\)/);
-  /* It still really posts, and where the tab lands is the honest part: the
-     post itself if it went out, the profile if it did not. */
-  assert.match(modal, /action: "publish_now"/);
-  assert.match(modal, /destinationRef\.current = handle/);
-  assert.match(modal, /console\.warn\("\[pitch\] the post did not go out:/);
+  /* The whole run is a fixed clock with nothing awaited inside it. */
+  assert.match(modal, /setPhase\("posting"\);\s*\n\s*await wait\(POSTING_MS\);[\s\S]{0,120}setPhase\("posted"\)/);
+  /* And it does not post. The words are already live on the account, so
+     publishing again would put the same post out twice, in front of an
+     audience, on the profile we are about to open. */
+  assert.doesNotMatch(modal, /x_queue_items|publish_now|brainox-schedule/);
 });
 
 /* Spotify takes seconds to wake and the moonwalk is at the end, so it is asked
