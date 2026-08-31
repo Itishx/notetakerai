@@ -11224,10 +11224,27 @@ const MAC_CHARACTERS = {
     ].join(" "),
   },
 };
+/* Brainelle is off.
+ *
+ * She is a saved setting that owns the voice, and once she is on she is on for
+ * everything: good morning, are you there, the pitch demo, all of it, in her
+ * voice rather than his. Turned on once and forgotten, there is no obvious way
+ * back, and the symptom does not point at a setting.
+ *
+ * So she is switched off at the source rather than at each of the places that
+ * can turn her on. Nothing reads a stored character, nothing can set one, and
+ * the stored value is cleared on the way past so an old one cannot come back
+ * later. Set this to true to have her again. */
+const BRAINELLE_ENABLED = false;
+
 let macCharacter = "braino";
 try {
-  const stored = window.localStorage.getItem(MAC_CHARACTER_STORAGE_KEY);
-  if (stored && MAC_CHARACTERS[stored]) macCharacter = stored;
+  if (BRAINELLE_ENABLED) {
+    const stored = window.localStorage.getItem(MAC_CHARACTER_STORAGE_KEY);
+    if (stored && MAC_CHARACTERS[stored]) macCharacter = stored;
+  } else {
+    window.localStorage.removeItem(MAC_CHARACTER_STORAGE_KEY);
+  }
 } catch (_) {}
 
 function macActiveCharacter() {
@@ -11267,7 +11284,9 @@ function macSyncCharacterUi() {
 }
 
 async function macSetCharacter(key, opts = {}) {
-  const next = MAC_CHARACTERS[key] ? key : "braino";
+  /* One gate, so the avatar picker, the hotkey and "be Brainelle" all land on
+     the same answer instead of each needing its own. */
+  const next = (BRAINELLE_ENABLED && MAC_CHARACTERS[key]) ? key : "braino";
   if (next === macCharacter && !opts.force) return;
   macCharacter = next;
   try { window.localStorage.setItem(MAC_CHARACTER_STORAGE_KEY, next); } catch (_) {}
