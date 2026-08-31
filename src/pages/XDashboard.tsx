@@ -12,6 +12,8 @@
 // invented to make the page look busier.
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { xAutoVisible } from "@/lib/xAutoVisibility";
+import XPitchModal from "@/components/XPitchModal";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import "./onboarding-flow.css";
@@ -276,6 +278,19 @@ export default function XDashboard() {
   const voiceKnown = Boolean(settings?.voice_learned) || Boolean(settings?.voice_manual);
   const needsSetup = !connected || !settings?.setup_completed_at;
 
+  /* Hidden unless someone turned it on from /x/advanced. Read once per mount:
+     the switch lives on another page, so it cannot change under this one. */
+  const showXAuto = useMemo(() => xAutoVisible(), []);
+
+  /* The pitch demo rides on top of the real page, so what is behind the modal
+     is his actual account rather than a mock of it. ?pitch=rehearse runs the
+     whole thing without publishing. */
+  const pitchMode = useMemo(() => {
+    const value = new URLSearchParams(window.location.search).get("pitch");
+    if (value === null) return null;
+    return value === "rehearse" ? "rehearse" : "live";
+  }, []);
+
   const approve = useCallback(async (id: string) => {
     if (demo) { setQueue((q) => q.map((r) => (r.id === id ? { ...r, status: "approved", scheduled_publish_at: iso(240) } : r))); return; }
     if (!user) return;
@@ -320,6 +335,7 @@ export default function XDashboard() {
   return (
     <div className="ob-doc xd-doc ch-x">
       <Header handle={handle} mode={settings?.automation_mode} />
+      {pitchMode && <XPitchModal rehearse={pitchMode === "rehearse"} handle={handle} />}
 
       <main className="xd-main">
         {demo && (
@@ -425,7 +441,7 @@ export default function XDashboard() {
         </section>
 
         {/* ── xAuto ──────────────────────────────────────────────────── */}
-        <section className="xd-block">
+        {showXAuto && <section className="xd-block">
           <div className="xd-block-head">
             <h2>xAuto</h2>
             <p>
@@ -464,7 +480,7 @@ export default function XDashboard() {
             limits, because the goal is not to squeeze under a threshold. It is to look like a
             person having a normal day. Braino never sends one himself.
           </p>
-        </section>
+        </section>}
 
         {/* ── What he is doing right now ─────────────────────────────── */}
         <section className="xd-block">
