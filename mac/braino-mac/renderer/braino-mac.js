@@ -9095,6 +9095,12 @@ async function runPitchDemo(payload) {
   logRenderer("pitch.run", { rehearse, generation: mine });
 
   try {
+    /* Nothing listens during this. It is a script from the first word to the
+       last, and a live microphone in a room full of people is a stray sentence
+       waiting to derail it. */
+    stopRealtimeVoice({ reason: "pitch-demo" });
+    logRenderer("pitch.mic_off", {});
+
     /* Music is opened first and quietly: Spotify takes seconds to wake, and
        the moonwalk is at the end. Asking for it now means it is ready then. */
     void window.brainoMac.skitStep?.("prewarm");
@@ -9140,7 +9146,18 @@ async function runPitchDemo(payload) {
     await pitchWait(300);
     await pitchSay(mine, lines.closeGo);
     if (pitchStale(mine)) return;
+    /* Out of the notch first. He lives in it, and the moonwalk moves a mascot
+       that is not on screen otherwise: the music played and nothing danced,
+       every time, because of this one line missing. */
+    if (walkerHome) await setWalkerHomeState(false);
+    await pitchWait(500);
+    if (pitchStale(mine)) return;
+
     void window.brainoMac.skitStep?.("play");
+    /* The rig has to actually be there. If it is not, say so in the log rather
+       than resolving silently into nothing happening. */
+    const rigReady = Boolean(q("#__sbwk_moonlegs__") && q("#__sbwk_mw_r__") && q("#__sbwk_mw_l__"));
+    logRenderer("pitch.moonwalk", { rigReady, walkerHome });
     await pitchWait(1200);
     if (pitchStale(mine)) return;
     skitPerformMoonwalk(11000);

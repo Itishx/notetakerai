@@ -91,6 +91,24 @@ test("he posts it himself, and the button goes green", () => {
   assert.match(css, /@keyframes xpm-ring/);
 });
 
+/* Nothing listens while a script is running. A live microphone in a room full
+   of people is a stray sentence waiting to derail the one minute that counts.
+   And he has to leave the notch before he dances, or the music plays over a
+   mascot nobody can see. */
+test("mic off, and he comes out of the notch to dance", () => {
+  const fn = renderer.slice(renderer.indexOf("async function runPitchDemo"));
+  const body = fn.slice(0, fn.indexOf("\n}\n"));
+  assert.match(body, /stopRealtimeVoice\(\{ reason: "pitch-demo" \}\)/);
+  assert.ok(body.indexOf("stopRealtimeVoice") < body.indexOf("lines.hello"), "the mic goes before he speaks");
+  assert.match(body, /if \(walkerHome\) await setWalkerHomeState\(false\)/);
+  assert.ok(
+    body.indexOf("setWalkerHomeState(false)") < body.indexOf("skitPerformMoonwalk"),
+    "he is out before the moonwalk starts",
+  );
+  /* The hat is part of the trick. */
+  assert.match(renderer, /__sbwk_fedora__[\s\S]{0,60}"inline"/);
+});
+
 /* Claiming a post that did not go out, on stage, in front of people who can
    check, is the worst failure available here. */
 test("he only claims it went if it went", () => {
