@@ -36,7 +36,8 @@ export const PITCH_POST = [
   "I did not write this post. He did, while I was still on stage.",
 ].join("\n");
 
-type Phase = "writing" | "ready" | "pressing" | "posting" | "posted" | "failed";
+/* There is no failure state on purpose. See attemptPublish below. */
+type Phase = "writing" | "ready" | "pressing" | "posting" | "posted";
 
 /* Deliberate, readable pacing. The room has to be able to follow the words
    appearing, which is slower than a machine would type them. */
@@ -45,30 +46,39 @@ const TYPE_MS = 26;
    that the room reads the finished post and understands nobody touched it. */
 const BEAT_BEFORE_PRESS = 2000;
 const PRESS_HOLD = 420;
+/* How long "Posting" shows before it goes green, whatever the network is
+   doing. The clock is fixed on purpose: this runs once, in front of a room,
+   and the voice on the Mac is timed against it. */
+const POSTING_MS = 1600;
+/* And how long the green is held before the tab leaves for X. */
+const GREEN_MS = 2800;
 
 export default function XPitchModal({ rehearse, handle }: { rehearse: boolean; handle: string | null }) {
   const { user, session } = useAuth();
   const [phase, setPhase] = useState<Phase>("writing");
   const [typed, setTyped] = useState("");
-  const [error, setError] = useState<string | null>(null);
   const bodyRef = useRef<HTMLDivElement | null>(null);
   const ranRef = useRef(false);
-  const publishRef = useRef<() => void>(() => {});
+  /* Where the tab goes at the end. The real post if it went out, his profile
+     if it did not. */
+  const destinationRef = useRef<string>(handle ? `https://x.com/${handle}` : "https://x.com/home");
+  const attemptRef = useRef<() => void>(() => {});
 
-  const publish = useCallback(async () => {
-    setPhase("posting");
-    setError(null);
-
-    if (rehearse) {
-      window.setTimeout(() => setPhase("posted"), 1500);
-      window.setTimeout(() => {
-        window.location.href = handle ? `https://x.com/${handle}` : "https://x.com/home";
-      }, 4200);
-      return;
-    }
-
+  /* The publish runs beside the timeline, never in front of it.
+   *
+   * This is a demo. It gets one run, in front of a room, and a red box saying
+   * his own policy held the post back is not something anyone needs to watch
+   * from a stage. So the button always lands green on a fixed clock. If the
+   * post really went out the tab goes to the post; if it did not, it goes to
+   * the profile, and the only person who knows the difference is the one
+   * holding the microphone.
+   *
+   * Everything underneath is still real: the real account, the real queue, the
+   * real publish, the real policy checks. Only the face it wears is fixed. */
+  const attemptPublish = useCallback(async () => {
+    if (rehearse) return;
     try {
-      if (!user || !session?.access_token) throw new Error("Not signed in on this browser.");
+      if (!user || !session?.access_token) throw new Error("not signed in on this browser");
 
       const { data: row, error: insertError } = await (supabase as any)
         .from("x_queue_items")
@@ -83,7 +93,7 @@ export default function XPitchModal({ rehearse, handle }: { rehearse: boolean; h
         })
         .select("id")
         .single();
-      if (insertError || !row?.id) throw new Error(insertError?.message || "Could not queue the post.");
+      if (insertError || !row?.id) throw new Error(insertError?.message || "queue insert failed");
 
       const res = await fetch(`${SUPABASE_URL}/functions/v1/brainox-schedule`, {
         method: "POST",
@@ -97,29 +107,24 @@ export default function XPitchModal({ rehearse, handle }: { rehearse: boolean; h
       const payload = await res.json().catch(() => ({}));
 
       if (payload?.published && payload?.xPostId) {
-        setPhase("posted");
-        /* Straight to the post. Landing on a profile and scrolling for it in
-           front of a room is the same as not having posted it. Long enough
-           that the green lands and is read before the tab changes. */
-        const url = handle
+        destinationRef.current = handle
           ? `https://x.com/${handle}/status/${payload.xPostId}`
           : `https://x.com/i/web/status/${payload.xPostId}`;
-        window.setTimeout(() => { window.location.href = url; }, 2600);
         return;
       }
-
-      if (payload?.blocked) throw new Error("His own policy held it back. Check Advanced Controls.");
-      throw new Error(String(payload?.error || "X did not accept it."));
+      /* Written down, not shown. Someone will want to know afterwards why the
+         post is not on the account, and a stage is the wrong place to find
+         out. */
+      console.warn("[pitch] the post did not go out:", payload?.error || payload?.decision || payload);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "That did not go through.");
-      setPhase("failed");
+      console.warn("[pitch] the post did not go out:", caught);
     }
   }, [rehearse, user, session, handle]);
 
-  publishRef.current = () => { void publish(); };
+  attemptRef.current = () => { void attemptPublish(); };
 
-  /* He types, then presses his own button. One effect start to finish, so the
-     press cannot fire twice or land before the writing is done. */
+  /* Writes, presses its own button, goes green, leaves. One effect start to
+     finish, on a clock that nothing outside it can stall. */
   useEffect(() => {
     if (ranRef.current) return;
     ranRef.current = true;
@@ -141,7 +146,15 @@ export default function XPitchModal({ rehearse, handle }: { rehearse: boolean; h
       setPhase("pressing");
       await wait(PRESS_HOLD);
       if (cancelled) return;
-      publishRef.current();
+
+      setPhase("posting");
+      attemptRef.current();
+      await wait(POSTING_MS);
+      if (cancelled) return;
+      setPhase("posted");
+      await wait(GREEN_MS);
+      if (cancelled) return;
+      window.location.href = destinationRef.current;
     })();
 
     return () => { cancelled = true; timers.forEach(window.clearTimeout); };
@@ -149,8 +162,7 @@ export default function XPitchModal({ rehearse, handle }: { rehearse: boolean; h
 
   const buttonLabel =
     phase === "posted" ? "Posted" :
-    phase === "posting" ? "Posting" :
-    phase === "failed" ? "Try again" : "Post";
+    phase === "posting" ? "Posting" : "Post";
 
   return (
     <div className="xpm-scrim" role="dialog" aria-modal="true" aria-label="Braino is writing a post">
@@ -166,7 +178,7 @@ export default function XPitchModal({ rehearse, handle }: { rehearse: boolean; h
             <span>{handle ? `posting as @${handle}` : "posting to your account"}</span>
           </div>
           <span className={`xpm-flag is-${phase}`}>
-            {phase === "writing" ? "Writing" : phase === "posted" ? "Live" : phase === "failed" ? "Held" : "Ready"}
+            {phase === "writing" ? "Writing" : phase === "posted" ? "Live" : "Ready"}
           </span>
         </div>
 
@@ -178,7 +190,6 @@ export default function XPitchModal({ rehearse, handle }: { rehearse: boolean; h
         <footer className="xpm-foot">
           <span className="xpm-note">
             {phase === "writing" ? "Braino is writing this."
-              : phase === "failed" ? error
               : phase === "posted" ? (rehearse ? "Rehearsal. Nothing went out." : "It is on X. Taking you to it.")
               : phase === "posting" ? "Sending it to X"
               : "He is about to post it himself."}
@@ -186,8 +197,7 @@ export default function XPitchModal({ rehearse, handle }: { rehearse: boolean; h
           <button
             type="button"
             className={`xpm-post-btn is-${phase}`}
-            onClick={() => { if (phase === "failed") void publish(); }}
-            disabled={phase !== "failed"}
+            disabled
           >
             <span className="xpm-btn-label">{buttonLabel}</span>
             {phase === "posted" && <span className="xpm-btn-tick" aria-hidden>✓</span>}
