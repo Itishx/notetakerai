@@ -16,11 +16,15 @@
 }
 @keyframes bd-in { from { opacity: 0; } to { opacity: 1; } }
 
+/* Two themes, both deliberate. Paper for reading in daylight, and a proper
+   dark that is warm rather than blue, because he is read at 4am more often than
+   anyone plans for. Every colour is a token so the two stay in step. */
 .bd-sheet {
   --bd-paper: #fbfaf8;
   --bd-ink: #17171a;
   --bd-soft: #6b6862;
   --bd-line: rgba(23, 23, 26, .1);
+  --bd-chip: rgba(23, 23, 26, .045);
   --bd-coral: #d9645b;
   width: min(880px, 100%);
   margin-bottom: clamp(16px, 4vh, 46px);
@@ -34,7 +38,32 @@
   overflow: hidden;
 }
 @keyframes bd-rise { from { opacity: 0; transform: translateY(18px) scale(.99); } to { opacity: 1; transform: none; } }
-.bd-page { min-height: 100vh; background: #f1efeb; padding: 0; }
+.bd-page { min-height: 100vh; background: #f1efeb; padding: 0; transition: background .3s; }
+
+/* ── Dark ── */
+.bd-sheet.is-dark {
+  --bd-paper: #16151a;
+  --bd-ink: #f2efec;
+  --bd-soft: #9b968f;
+  --bd-line: rgba(242, 239, 236, .12);
+  --bd-chip: rgba(242, 239, 236, .07);
+  --bd-coral: #ef8279;
+  box-shadow: 0 40px 120px rgba(0, 0, 0, .55), 0 1px 0 rgba(255, 255, 255, .05) inset;
+}
+/* The theme is stamped on the root by the sheet, so the page and the scrim
+   behind it follow without being told separately. */
+:root[data-bd-theme="dark"] .bd-page { background: #0d0c10; }
+:root[data-bd-theme="dark"] .bd-scrim { background: rgba(6, 6, 8, .55); }
+:root[data-bd-theme="dark"] .bd-empty { color: #9b968f; }
+.bd-sheet.is-dark .bd-bar { background: rgba(22, 21, 26, .82); }
+.bd-sheet.is-dark .bd-act { background: rgba(242, 239, 236, .06); border-color: var(--bd-line); }
+.bd-sheet.is-dark .bd-act:hover:not(:disabled) { background: rgba(242, 239, 236, .1); }
+.bd-sheet.is-dark .bd-act.is-on { background: var(--bd-ink); color: #16151a; border-color: var(--bd-ink); }
+.bd-sheet.is-dark .bd-edit,
+.bd-sheet.is-dark .bd-comment-box input { background: rgba(242, 239, 236, .04); color: var(--bd-ink); }
+.bd-sheet.is-dark .bd-prose code,
+.bd-sheet.is-dark .bd-prose pre { background: rgba(242, 239, 236, .07); }
+.bd-sheet.is-dark .bd-prose li::marker { color: rgba(242, 239, 236, .4); }
 .bd-page .bd-scrim { position: static; background: none; backdrop-filter: none; animation: none; }
 
 /* ── Bar ── */
@@ -139,3 +168,69 @@
   .bd-body { padding: 24px 18px 34px; }
   .bd-prose { font-size: 16.5px; }
 }
+
+
+/* ── Overview: the two or three sentences that decide whether the rest gets
+   read. Set apart from the body so it reads as the answer, not the opening. ── */
+.bd-overview {
+  margin: 26px 0 0;
+  padding: 20px 24px;
+  border-radius: 16px;
+  background: var(--bd-chip);
+  border: 1px solid var(--bd-line);
+  font-size: 17px;
+  line-height: 1.6;
+  letter-spacing: -.006em;
+}
+.bd-overview b {
+  display: block;
+  margin-bottom: 7px;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: .13em;
+  text-transform: uppercase;
+  color: var(--bd-coral);
+}
+
+/* ── The stat line: how much work this actually was ── */
+.bd-stats { margin: 18px 0 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.bd-stat {
+  padding: 6px 13px;
+  border-radius: 999px;
+  background: var(--bd-chip);
+  border: 1px solid var(--bd-line);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--bd-soft);
+}
+.bd-stat b { color: var(--bd-ink); font-weight: 700; }
+
+/* ── Source bubbles: who he actually read, as marks rather than a list.
+   The list underneath is still there for anyone checking a claim; these are
+   for the glance that says how wide he went. ── */
+.bd-bubbles { margin: 22px 0 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.bd-bubble {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 13px 6px 7px;
+  border-radius: 999px;
+  background: var(--bd-chip);
+  border: 1px solid var(--bd-line);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--bd-soft);
+  text-decoration: none;
+  transition: transform .18s cubic-bezier(.16,1,.3,1), color .18s, border-color .18s;
+}
+.bd-bubble:hover { transform: translateY(-2px); color: var(--bd-ink); border-color: rgba(217,100,91,.5); }
+.bd-bubble img, .bd-bubble i {
+  width: 18px; height: 18px; flex: none;
+  border-radius: 50%;
+  display: grid; place-items: center;
+  background: var(--bd-paper);
+  border: 1px solid var(--bd-line);
+  font-style: normal; font-size: 10px; font-weight: 700; color: var(--bd-soft);
+  object-fit: cover;
+}
+.bd-bubble-more { color: var(--bd-soft); font-size: 12.5px; align-self: center; padding-left: 4px; }

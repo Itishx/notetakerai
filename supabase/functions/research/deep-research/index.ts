@@ -173,6 +173,7 @@ async function synthesise(question: string, findings: { question: string; findin
       "",
       "Return exactly:",
       "TITLE: <a specific title, not the question repeated>",
+      "OVERVIEW: <two or three sentences saying what was found, for someone deciding whether to read on. State the finding, not that a document exists.>",
       "BODY:",
       "<the document>",
       "",
@@ -184,11 +185,32 @@ async function synthesise(question: string, findings: { question: string; findin
   }, "writing");
 
   const text = outputText(data);
-  const match = text.match(/TITLE:\s*(.+?)\s*\nBODY:\s*([\s\S]*)$/i);
+  const match = text.match(/TITLE:\s*(.+?)\s*\nOVERVIEW:\s*([\s\S]*?)\s*\nBODY:\s*([\s\S]*)$/i);
+  if (match) {
+    return {
+      title: compact(match[1], 160),
+      overview: compact(match[2], 700),
+      markdown: match[3].trim(),
+    };
+  }
+  /* A reply that will not parse still has a document in it. Better a document
+     with no overview than no document. */
+  const loose = text.match(/TITLE:\s*(.+?)\s*\nBODY:\s*([\s\S]*)$/i);
   return {
-    title: compact(match?.[1] || question, 160),
-    markdown: (match?.[2] || text).trim(),
+    title: compact(loose?.[1] || question, 160),
+    overview: "",
+    markdown: (loose?.[2] || text).trim(),
   };
+}
+
+/* Counted here so the number on the page and the number in the database cannot
+   disagree. Markdown syntax is not words. */
+function countWords(markdown: string) {
+  const prose = markdown
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/[#>*_`|-]/g, " ");
+  return prose.split(/\s+/).filter(Boolean).length;
 }
 
 serve(async (req) => {
@@ -226,8 +248,9 @@ serve(async (req) => {
 
     if (!findings.length) return json({ error: "Every search came back empty. Try again in a moment." }, 502);
 
-    const { title, markdown } = await synthesise(question, findings);
+    const { title, overview, markdown } = await synthesise(question, findings);
     const sourceList = [...sources.values()];
+    const wordCount = countWords(markdown);
 
     let doc: { id: string; slug: string } | null = null;
     if (userId) {
@@ -238,8 +261,10 @@ serve(async (req) => {
           user_id: userId,
           slug,
           title,
+          overview,
           question,
           markdown,
+          word_count: wordCount,
           sources: sourceList,
           questions_asked: questions,
           kind: "research",
@@ -253,6 +278,8 @@ serve(async (req) => {
     return json({
       ok: true,
       title,
+      overview,
+      wordCount,
       markdown,
       sources: sourceList,
       questionsAsked: questions,

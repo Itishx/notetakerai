@@ -20,6 +20,8 @@ const DEMO: BrainoDoc = {
   created_at: new Date().toISOString(),
   title: "AI Note-Taking Apps in 2026: Leaders, Pricing and What Changed",
   question: "What is the state of AI note taking apps in 2026, who leads and what do they charge?",
+  overview: "The market stopped having one winner and split by job: Granola for bot-free capture, Fathom for the only genuinely unlimited free tier, Fireflies for anything that has to land in a CRM. Prices moved with that split, and the free tiers tightened everywhere except Fathom.",
+  word_count: 412,
   questions_asked: [
     "Which AI note-taking apps lead in 2026 and what do they do?",
     "What do the leaders charge, and what is in the free tiers?",
@@ -29,6 +31,9 @@ const DEMO: BrainoDoc = {
     { title: "AI notetaking app Granola raises $43M at $250M valuation", url: "https://techcrunch.com/example", snippet: "Granola raised a Series B and launched collaborative features for teams." },
     { title: "Otter.ai pricing and plans", url: "https://otter.ai/pricing", snippet: "Free plan capped by monthly minutes; Pro adds unlimited transcription." },
     { title: "AI note takers are flooding calls as workers skip meetings", url: "https://www.theverge.com/example", snippet: "Adoption climbed sharply through 2025 as bots joined calls on behalf of staff." },
+    { title: "Granola pricing", url: "https://www.granola.ai/pricing", snippet: "Individual and team plans, billed per seat." },
+    { title: "Fathom free plan details", url: "https://fathom.video/pricing", snippet: "Unlimited recordings and transcripts on the free tier." },
+    { title: "Fireflies CRM integrations", url: "https://fireflies.ai/integrations", snippet: "Writes call notes into Salesforce and HubSpot automatically." },
   ],
   markdown: [
     "## Answer",
@@ -64,7 +69,7 @@ export default function BrainoDocPage() {
       if (!slug) { setState("missing"); return; }
       const { data } = await (supabase as any)
         .from("braino_docs")
-        .select("id, slug, title, question, markdown, sources, questions_asked, is_public, created_at, user_id")
+        .select("id, slug, title, question, overview, markdown, sources, questions_asked, word_count, is_public, created_at, user_id")
         .eq("slug", slug)
         .maybeSingle();
       if (cancelled) return;

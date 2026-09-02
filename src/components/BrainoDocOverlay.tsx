@@ -24,13 +24,46 @@ export type BrainoDoc = {
   slug: string;
   title: string;
   question: string | null;
+  overview?: string | null;
   markdown: string;
   sources: DocSource[];
   questions_asked?: string[];
+  word_count?: number | null;
   is_public: boolean;
   created_at: string;
   user_id: string;
 };
+
+const THEME_KEY = "braino.doc.theme";
+
+/* Follows the system by default and remembers a deliberate choice. Reading is
+   the whole job here, so the one setting that matters is the one that decides
+   whether it hurts to look at. */
+function useDocTheme() {
+  const [theme, setTheme] = useState<"light" | "dark">(() => {
+    try {
+      const saved = localStorage.getItem(THEME_KEY);
+      if (saved === "light" || saved === "dark") return saved;
+    } catch { /* private mode */ }
+    return typeof matchMedia === "function" && matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  });
+  /* The page behind the sheet has to follow, or a dark document sits in a pale
+     frame. Stamped on the root so the page, the scrim and anything else can
+     read it without being handed the state. */
+  useEffect(() => {
+    document.documentElement.dataset.bdTheme = theme;
+    return () => { delete document.documentElement.dataset.bdTheme; };
+  }, [theme]);
+
+  const toggle = useCallback(() => {
+    setTheme((current) => {
+      const next = current === "dark" ? "light" : "dark";
+      try { localStorage.setItem(THEME_KEY, next); } catch { /* private mode */ }
+      return next;
+    });
+  }, []);
+  return { theme, toggle };
+}
 
 type DocComment = {
   id: string;
@@ -51,6 +84,30 @@ const host = (url: string) => {
   try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return url; }
 };
 
+/* One mark per site he read, not per citation: eleven links to the same paper
+   is one source as far as a reader glancing at this is concerned. */
+function bubblesFrom(sources: DocSource[]) {
+  const seen = new Map<string, { domain: string; url: string }>();
+  for (const source of sources) {
+    const domain = host(source.url);
+    if (!domain || seen.has(domain)) continue;
+    seen.set(domain, { domain, url: source.url });
+  }
+  return [...seen.values()];
+}
+
+/* DuckDuckGo rather than Google's favicon service: same job, and it does not
+   hand every reader of a shared document to an ad network. */
+const faviconFor = (domain: string) => `https://icons.duckduckgo.com/ip3/${domain}.ico`;
+
+const countWords = (markdown: string) =>
+  markdown
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/[#>*_`|-]/g, " ")
+    .split(/\s+/)
+    .filter(Boolean).length;
+
 export default function BrainoDocOverlay({
   doc,
   embedded = false,
@@ -62,6 +119,7 @@ export default function BrainoDocOverlay({
 }) {
   const { user } = useAuth();
   const mine = Boolean(user && user.id === doc.user_id);
+  const { theme, toggle } = useDocTheme();
 
   const [markdown, setMarkdown] = useState(doc.markdown);
   const [editing, setEditing] = useState(false);
@@ -154,9 +212,15 @@ export default function BrainoDocOverlay({
   }, [mine, loadComments]);
 
   const open = useMemo(() => comments.filter((c) => !c.resolved).length, [comments]);
+  const bubbles = useMemo(() => bubblesFrom(doc.sources || []), [doc.sources]);
+  /* The stored count is what he wrote; recount only if an edit changed it. */
+  const words = useMemo(
+    () => (markdown === doc.markdown && doc.word_count ? doc.word_count : countWords(markdown)),
+    [markdown, doc.markdown, doc.word_count],
+  );
 
   const sheet = (
-    <div className="bd-sheet">
+    <div className={`bd-sheet${theme === "dark" ? " is-dark" : ""}`}>
       <header className="bd-bar">
         <div className="bd-who">
           <span className="bd-dot" aria-hidden />
@@ -170,6 +234,16 @@ export default function BrainoDocOverlay({
         </div>
 
         {flash && <span className="bd-flash">{flash}</span>}
+
+        <button
+          type="button"
+          className="bd-act is-quiet"
+          onClick={toggle}
+          aria-label={theme === "dark" ? "Switch to the light theme" : "Switch to the dark theme"}
+          title={theme === "dark" ? "Light" : "Dark"}
+        >
+          {theme === "dark" ? "☀" : "☾"}
+        </button>
 
         {mine && !editing && (
           <button type="button" className="bd-act" onClick={() => { setDraft(markdown); setEditing(true); }}>
@@ -200,6 +274,44 @@ export default function BrainoDocOverlay({
         <p className="bd-eyebrow">Brainotes</p>
         <h1 className="bd-title">{doc.title}</h1>
         {doc.question && <p className="bd-question">You asked: {doc.question}</p>}
+
+        {!editing && doc.overview && (
+          <div className="bd-overview">
+            <b>In short</b>
+            {doc.overview}
+          </div>
+        )}
+
+        {!editing && (
+          <>
+            <div className="bd-stats">
+              <span className="bd-stat"><b>{words.toLocaleString()}</b> words</span>
+              {bubbles.length > 0 && <span className="bd-stat"><b>{bubbles.length}</b> {bubbles.length === 1 ? "site" : "sites"} read</span>}
+              {doc.sources?.length > 0 && <span className="bd-stat"><b>{doc.sources.length}</b> sources</span>}
+              {doc.questions_asked?.length ? (
+                <span className="bd-stat"><b>{doc.questions_asked.length}</b> lines of enquiry</span>
+              ) : null}
+            </div>
+
+            {bubbles.length > 0 && (
+              <div className="bd-bubbles">
+                {bubbles.slice(0, 14).map((bubble) => (
+                  <a key={bubble.domain} className="bd-bubble" href={bubble.url} target="_blank" rel="noreferrer" title={bubble.domain}>
+                    <img
+                      src={faviconFor(bubble.domain)}
+                      alt=""
+                      loading="lazy"
+                      onError={(event) => { (event.currentTarget as HTMLImageElement).style.display = "none"; }}
+                    />
+                    {bubble.domain}
+                  </a>
+                ))}
+                {bubbles.length > 14 && <span className="bd-bubble-more">and {bubbles.length - 14} more</span>}
+              </div>
+            )}
+          </>
+        )}
+
         <hr className="bd-rule" />
 
         {editing ? (
