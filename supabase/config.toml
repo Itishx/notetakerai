@@ -322,6 +322,11 @@ entrypoint = "./functions/research/tmdb-search/index.ts"
 [functions.web-research]
 entrypoint = "./functions/research/web-research/index.ts"
 
+# Deep Work: research as a loop rather than a lookup. Several searches in
+# parallel, then written up as a document. Takes about a minute by design.
+[functions.deep-research]
+entrypoint = "./functions/research/deep-research/index.ts"
+
 # ── code (Braino Code: you say it, he builds it) ────────────────────────
 
 # Public, because signing in to try the thing is friction at exactly the wrong

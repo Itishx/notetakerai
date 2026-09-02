@@ -1,0 +1,141 @@
+/* Brainotes: a document Braino wrote, over whatever you were doing.
+   Warm paper, one column, big readable type. Nothing on it that is not the
+   document, the sources, or a way to change it. */
+
+.bd-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+  display: flex;
+  justify-content: center;
+  padding: clamp(16px, 4vh, 46px) 16px 0;
+  background: rgba(24, 21, 19, .42);
+  backdrop-filter: blur(10px) saturate(120%);
+  animation: bd-in .32s cubic-bezier(.16, 1, .3, 1) both;
+  overflow-y: auto;
+}
+@keyframes bd-in { from { opacity: 0; } to { opacity: 1; } }
+
+.bd-sheet {
+  --bd-paper: #fbfaf8;
+  --bd-ink: #17171a;
+  --bd-soft: #6b6862;
+  --bd-line: rgba(23, 23, 26, .1);
+  --bd-coral: #d9645b;
+  width: min(880px, 100%);
+  margin-bottom: clamp(16px, 4vh, 46px);
+  border-radius: 20px;
+  background: var(--bd-paper);
+  color: var(--bd-ink);
+  box-shadow: 0 40px 120px rgba(0, 0, 0, .34), 0 1px 0 rgba(255, 255, 255, .6) inset;
+  font-family: "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  animation: bd-rise .42s cubic-bezier(.16, 1, .3, 1) both;
+  overflow: hidden;
+}
+@keyframes bd-rise { from { opacity: 0; transform: translateY(18px) scale(.99); } to { opacity: 1; transform: none; } }
+.bd-page { min-height: 100vh; background: #f1efeb; padding: 0; }
+.bd-page .bd-scrim { position: static; background: none; backdrop-filter: none; animation: none; }
+
+/* ── Bar ── */
+.bd-bar {
+  position: sticky; top: 0; z-index: 2;
+  display: flex; align-items: center; gap: 12px;
+  padding: 13px 18px 13px 22px;
+  background: rgba(251, 250, 248, .84);
+  backdrop-filter: blur(18px) saturate(160%);
+  border-bottom: 1px solid var(--bd-line);
+}
+.bd-who { flex: 1; min-width: 0; display: flex; align-items: center; gap: 9px; }
+.bd-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--bd-coral); flex: none; }
+.bd-who b { font-size: 13px; font-weight: 650; letter-spacing: -.01em; }
+.bd-who span { font-size: 12px; color: var(--bd-soft); }
+.bd-act {
+  border: 1px solid var(--bd-line); background: #fff; color: var(--bd-ink);
+  border-radius: 999px; padding: 7px 15px; font: inherit; font-size: 13px; font-weight: 600;
+  cursor: pointer; transition: transform .18s cubic-bezier(.16,1,.3,1), background .18s, border-color .18s;
+  white-space: nowrap;
+}
+.bd-act:hover:not(:disabled) { transform: translateY(-1px); background: #fff; border-color: rgba(23,23,26,.2); }
+.bd-act:disabled { opacity: .45; cursor: default; }
+.bd-act.is-on { background: var(--bd-ink); border-color: var(--bd-ink); color: var(--bd-paper); }
+.bd-act.is-quiet { border-color: transparent; background: transparent; color: var(--bd-soft); }
+
+/* ── Document ── */
+.bd-body { padding: clamp(28px, 5vw, 54px) clamp(24px, 6vw, 70px) 44px; }
+.bd-eyebrow { margin: 0 0 12px; font-size: 11.5px; font-weight: 700; letter-spacing: .13em; text-transform: uppercase; color: var(--bd-coral); }
+.bd-title { margin: 0; font-size: clamp(30px, 4.4vw, 44px); font-weight: 650; letter-spacing: -.032em; line-height: 1.08; }
+.bd-question { margin: 14px 0 0; font-size: 16.5px; line-height: 1.5; color: var(--bd-soft); }
+.bd-rule { margin: 30px 0; border: 0; border-top: 1px solid var(--bd-line); }
+
+.bd-prose { font-size: 17.5px; line-height: 1.66; letter-spacing: -.006em; }
+.bd-prose > *:first-child { margin-top: 0; }
+/* The shared markdown renderer shifts headings down a level, so a "##" in the
+   document arrives as an h3. The scale is written against what actually lands
+   on the page rather than against the markdown. */
+.bd-prose h2 { margin: 38px 0 12px; font-size: 28px; font-weight: 650; letter-spacing: -.026em; }
+.bd-prose h3 { margin: 36px 0 12px; font-size: 24px; font-weight: 650; letter-spacing: -.022em; }
+.bd-prose h4 { margin: 28px 0 10px; font-size: 19.5px; font-weight: 650; letter-spacing: -.016em; }
+.bd-prose h5 { margin: 22px 0 8px; font-size: 17px; font-weight: 650; }
+.bd-prose p { margin: 0 0 17px; }
+/* The site resets list markers globally, which leaves research bullets as
+   unexplained indents. A list in a document has to look like a list. */
+.bd-prose ul { margin: 0 0 17px; padding-left: 24px; list-style: disc; }
+.bd-prose ol { margin: 0 0 17px; padding-left: 24px; list-style: decimal; }
+.bd-prose li::marker { color: rgba(23, 23, 26, .38); }
+.bd-prose li { margin-bottom: 8px; }
+.bd-prose blockquote { margin: 0 0 17px; padding: 4px 0 4px 18px; border-left: 2px solid var(--bd-coral); color: var(--bd-soft); }
+.bd-prose blockquote p { margin: 0; }
+.bd-prose code { padding: 2px 6px; border-radius: 6px; background: rgba(23,23,26,.06); font-size: .9em; }
+.bd-prose pre { margin: 0 0 17px; padding: 15px 17px; border-radius: 12px; background: rgba(23,23,26,.05); overflow-x: auto; }
+.bd-prose pre code { background: none; padding: 0; }
+.bd-prose a { color: var(--bd-coral); text-underline-offset: 3px; }
+.bd-prose hr { margin: 26px 0; border: 0; border-top: 1px solid var(--bd-line); }
+.bd-prose table { width: 100%; border-collapse: collapse; margin: 0 0 17px; font-size: 15.5px; }
+.bd-prose th, .bd-prose td { padding: 9px 12px; border-bottom: 1px solid var(--bd-line); text-align: left; }
+
+.bd-edit {
+  width: 100%; min-height: 58vh; padding: 18px 20px;
+  border: 1px solid var(--bd-line); border-radius: 14px; background: #fff;
+  font: inherit; font-size: 15.5px; line-height: 1.62; color: var(--bd-ink);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  resize: vertical;
+}
+.bd-edit:focus { outline: 2px solid rgba(217, 100, 91, .45); outline-offset: 2px; }
+
+/* ── Sources ── */
+.bd-sources { margin-top: 40px; padding-top: 26px; border-top: 1px solid var(--bd-line); }
+.bd-sources h3 { margin: 0 0 4px; font-size: 15px; font-weight: 700; letter-spacing: .01em; }
+.bd-sources p { margin: 0 0 16px; font-size: 13.5px; color: var(--bd-soft); }
+.bd-src { display: block; padding: 12px 0; border-bottom: 1px solid var(--bd-line); text-decoration: none; color: inherit; }
+.bd-src:last-child { border-bottom: 0; }
+.bd-src b { display: block; font-size: 15px; font-weight: 600; letter-spacing: -.01em; }
+.bd-src span { display: block; margin-top: 2px; font-size: 12.5px; color: var(--bd-soft); word-break: break-all; }
+.bd-src em { display: block; margin-top: 5px; font-size: 13.5px; font-style: normal; line-height: 1.5; color: var(--bd-soft); }
+.bd-src:hover b { color: var(--bd-coral); }
+
+/* ── Comments ── */
+.bd-comments { margin-top: 34px; padding-top: 26px; border-top: 1px solid var(--bd-line); }
+.bd-comments h3 { margin: 0 0 14px; font-size: 15px; font-weight: 700; }
+.bd-comment { padding: 13px 0; border-bottom: 1px solid var(--bd-line); }
+.bd-comment:last-of-type { border-bottom: 0; }
+.bd-comment.is-resolved { opacity: .48; }
+.bd-comment-head { display: flex; align-items: center; gap: 9px; margin-bottom: 5px; }
+.bd-comment-head b { font-size: 13.5px; font-weight: 650; }
+.bd-comment-head time { font-size: 12px; color: var(--bd-soft); }
+.bd-comment p { margin: 0; font-size: 15px; line-height: 1.55; }
+.bd-comment-box { margin-top: 14px; display: flex; gap: 10px; }
+.bd-comment-box input {
+  flex: 1; min-width: 0; padding: 12px 16px; border: 1px solid var(--bd-line);
+  border-radius: 999px; background: #fff; font: inherit; font-size: 15px; color: inherit;
+}
+.bd-comment-box input:focus { outline: 2px solid rgba(217,100,91,.4); outline-offset: 2px; }
+
+.bd-empty { padding: 60px 20px; text-align: center; color: var(--bd-soft); font-size: 15px; }
+.bd-flash { margin: 0 18px 0 0; font-size: 12.5px; color: var(--bd-soft); }
+
+@media (max-width: 640px) {
+  .bd-bar { flex-wrap: wrap; gap: 8px; padding: 11px 14px; }
+  .bd-body { padding: 24px 18px 34px; }
+  .bd-prose { font-size: 16.5px; }
+}
