@@ -2036,7 +2036,13 @@ function handleParakeetLine(line) {
     const text = String(event.text || "").trim();
     liveStats.segments += 1;
     logMac("live.segment", { chars: text.length, segment: liveStats.segments });
-    if (text) sendToRenderer("braino-mac:live-segment", { text });
+    if (text) {
+      const id = liveStats.segments;
+      /* Raw first, always. The words on screen never wait for anything. */
+      sendToRenderer("braino-mac:live-segment", { id, text });
+      /* Then tidied, quietly, behind them. */
+      void tidyLiveSegment(id, text);
+    }
     return;
   }
   if (event.type === "partial") {
@@ -2509,6 +2515,45 @@ function setLiveInteractive(mode) {
   }
 }
 
+/* The subject of the lecture, if anyone said what it was. It is the only thing
+   that lets the clean-up put "gradient descent" where the ear heard "radiant
+   descent": the ear is guessing at sounds and has no idea what the room is
+   about. */
+let liveSubject = "";
+
+/* Tidy a finished segment, well behind the live words.
+ *
+ * This is the same clean-up that runs on dictation, and it is why it was
+ * switched off during a lecture: it ran at every pause and each call held the
+ * next words for about 600ms. Here nothing waits for it. The segment is already
+ * on screen and already banked; when the tidier answers, the segment is
+ * replaced in place, and if it never answers the lecture is untouched.
+ *
+ * The faithfulness gate still applies. It may only delete fillers and repair a
+ * few plainly misheard words, never add or reorder, which is exactly the
+ * licence a transcript wants and exactly the licence a summary must not have. */
+async function tidyLiveSegment(id, raw) {
+  if (!raw || countWords(raw) < CLEANUP_MIN_WORDS) return;
+  const startedAt = Date.now();
+  try {
+    const formatted = await formatDictationTurn(raw, liveSubject);
+    const durationMs = Date.now() - startedAt;
+    if (!formatted) {
+      logMac("live.tidy.none", { id, durationMs });
+      return;
+    }
+    const verdict = assessDictationEdit(raw, formatted);
+    if (!verdict.accepted) {
+      logMac("live.tidy.refused", { id, durationMs, reason: verdict.reason });
+      return;
+    }
+    logMac("live.tidy.ok", { id, durationMs, before: countWords(raw), after: countWords(formatted) });
+    sendToRenderer("braino-mac:live-segment-tidied", { id, text: formatted });
+  } catch (error) {
+    logMac("live.tidy.failed", { id, error: String(error?.message || error) });
+  }
+}
+
 /* One way out, whoever asked. Called by Escape, the close button, the hotkey
    and the IPC, so they cannot leave the flag and the window disagreeing, which
    is the other way to end up stuck. */
@@ -2521,6 +2566,7 @@ async function endLiveTranscript(reason = "stop") {
     return { ok: true, already: true };
   }
   liveTranscriptMode = false;
+  liveSubject = "";
   stopLiveRotation();
   logMac("live.stop", { reason });
   sendToRenderer("braino-mac:live-mode", { open: false, save: true });
@@ -17481,6 +17527,15 @@ ipcMain.handle("braino-mac:live-start", async () => {
 /* Minimising is not closing. Full screen while you are only listening; the bar
    when you need the machine back, and then the window has to stop taking
    clicks or "minimised" means nothing. */
+/* What the lecture is about, so the clean-up can spell its words. Set from the
+   overlay, and cleared when the lecture ends so the next one does not inherit
+   the last one's vocabulary. */
+ipcMain.handle("braino-mac:live-subject", async (_event, payload = {}) => {
+  liveSubject = String(payload?.subject || "").trim().slice(0, 200);
+  logMac("live.subject", { subject: liveSubject || null });
+  return { ok: true, subject: liveSubject };
+});
+
 ipcMain.handle("braino-mac:live-size", async (_event, payload = {}) => {
   if (!liveTranscriptMode) return { ok: false };
   const mode = payload?.mode === "mini" ? "mini" : "full";

@@ -9485,9 +9485,14 @@ let liveOn = false;
    sets it: the heartbeat above reads it, and state read from two places should
    be declared before either. */
 let liveMini = false;
-/* Everything finished and banked, from segments the decoder has already been
-   reset behind. This is what gets saved. */
-let liveBanked = "";
+/* Finished segments, in order, each one able to be replaced later.
+ *
+ * They arrive raw so the words are on screen immediately, and a tidied version
+ * lands a second or two behind: fillers gone, punctuation in, technical terms
+ * spelled the way the subject says they should be. Kept as a list rather than
+ * one string precisely so a segment can be swapped for its cleaner self without
+ * disturbing the ones around it. */
+let liveSegments = [];
 /* The current segment as the decoder reports it: replaced on every utterance,
    never appended, because it is the whole segment each time. */
 let liveSettled = "";
@@ -9528,7 +9533,7 @@ function liveRender() {
   /* Only the tail is painted. An hour of speech is tens of thousands of words
      and rewriting all of it on every partial is the lag: the full transcript
      lives in liveSettled and is saved whole at the end. */
-  const whole = `${liveBanked} ${liveSettled}`.replace(/\s+/g, " ").trim();
+  const whole = `${liveSegments.map((seg) => seg.text).join(" ")} ${liveSettled}`.replace(/\s+/g, " ").trim();
   const tail = whole.length > 1200 ? whole.slice(-1200) : whole;
   livePara.replaceChildren();
   if (tail) livePara.append(document.createTextNode(tail.endsWith(" ") ? tail : tail + " "));
@@ -9559,7 +9564,7 @@ function liveOpen() {
   liveOn = true;
   startLiveMetrics();
   liveSetSize(false);
-  liveBanked = "";
+  liveSegments = [];
   liveSettled = "";
   liveNowText = "";
   liveStartedAt = Date.now();
@@ -9582,11 +9587,11 @@ async function liveClose(save = true) {
 
   /* The last hypothesis was still speech. Dropping it loses the closing
      sentence of every lecture. */
-  const full = `${liveBanked} ${liveSettled} ${liveNowText}`.replace(/\s+/g, " ").trim();
+  const full = `${liveSegments.map((seg) => seg.text).join(" ")} ${liveSettled} ${liveNowText}`.replace(/\s+/g, " ").trim();
   const minutes = Math.max(1, Math.round((Date.now() - liveStartedAt) / 60000));
   logRenderer("live.close", { chars: full.length, minutes, save });
   if (save && full) await window.brainoMac.liveSave?.({ transcript: full, minutes });
-  liveBanked = "";
+  liveSegments = [];
   liveSettled = "";
   liveNowText = "";
   liveStartedAt = 0;
@@ -9598,9 +9603,21 @@ async function liveClose(save = true) {
 window.brainoMac.onLiveSegment?.((payload) => {
   if (!liveOn) return;
   const text = String(payload?.text || "").trim();
-  if (text) liveBanked = `${liveBanked} ${text}`.replace(/\s+/g, " ").trim();
+  if (text) liveSegments.push({ id: payload?.id ?? liveSegments.length + 1, text });
   liveSettled = "";
   liveNowText = "";
+  liveRender();
+});
+
+/* The same segment, tidied. It replaces itself in place, so the paragraph
+   quietly improves behind the live words rather than jumping or repeating.
+   If it never arrives the raw words simply stay, which is the right failure. */
+window.brainoMac.onLiveSegmentTidied?.((payload) => {
+  if (!liveOn) return;
+  const text = String(payload?.text || "").trim();
+  const seg = liveSegments.find((s) => s.id === payload?.id);
+  if (!seg || !text) return;
+  seg.text = text;
   liveRender();
 });
 
