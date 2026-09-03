@@ -167,7 +167,19 @@ struct BrainoDictate {
         // 700ms: long enough that a mid-sentence breath is not treated as the
         // end of a thought, short enough to still feel immediate. EOU now only
         // paces commits — correctness no longer depends on it.
-        let asr = StreamingEouAsrManager(chunkSize: .ms160, eouDebounceMs: 700)
+        /* 320ms rather than 160ms.
+         *
+         * Halving the number of decoder invocations per second of audio is the
+         * cheapest way to stay ahead of real time, and it is what this file's
+         * own offline path already defaults to. The cost is that the running
+         * hypothesis updates about three times a second instead of six, which
+         * is still faster than anyone reads. The benefit is that the machine
+         * stops falling behind, and falling behind was not costing granularity,
+         * it was costing whole sentences.
+         *
+         * Bigger chunks also give the model more context per inference, so this
+         * is not a trade of accuracy for speed. */
+        let asr = StreamingEouAsrManager(chunkSize: .ms320, eouDebounceMs: 700)
 
         // Partials are for the Notch only — never inserted, because they get
         // rewritten as the model firms up its guess.
@@ -431,6 +443,12 @@ private func transcribeFile(path: String, chunkSize: StreamingChunkSize, rounds:
 /// process traps in `dispatch_assert_queue_fail`. Building it in here, on a
 /// type with no global actor, is what keeps it nonisolated.
 private final class MicPipeline: @unchecked Sendable {
+    /* How far the decoder may fall behind before audio starts being dropped.
+       The tap fires roughly twenty times a second, so this is about half a
+       second of slack: enough to ride out a hiccup, not enough to build the
+       kind of backlog that never drains. */
+    static let maxBacklog = 12
+
     private let engine = AVAudioEngine()
     private let flag: ListeningFlag
     private let inFlight: InFlightCounter
@@ -441,6 +459,22 @@ private final class MicPipeline: @unchecked Sendable {
     private var quietUntil = Date.distantPast
     private var failures = 0
     private var observer: NSObjectProtocol?
+    private var dropped = 0
+    private var lastDropReport = Date.distantPast
+
+    /* Dropping is worth knowing about: a session that drops steadily is a
+       machine that cannot decode as fast as it hears, which is a different
+       problem from a session that drops once. Reported at most every few
+       seconds so the log stays readable. */
+    func noteDropped() {
+        lock.lock()
+        dropped += 1
+        let count = dropped
+        let due = Date().timeIntervalSince(lastDropReport) > 5
+        if due { lastDropReport = Date() }
+        lock.unlock()
+        if due { log("dropped \(count) buffers so far (decoder behind)") }
+    }
 
     init(
         flag: ListeningFlag,
@@ -502,6 +536,24 @@ private final class MicPipeline: @unchecked Sendable {
                 let frames = Int(buffer.frameLength)
                 for i in 0..<frames { peak = max(peak, abs(data[0][i])) }
                 if let report = self.flag.note(peak: peak, frames: frames) { log(report) }
+            }
+            /* Real time means dropping, not queueing.
+             *
+             * This tap fires about twenty times a second and used to yield into
+             * an unbounded stream while the decoder consumed it one buffer at a
+             * time. Nothing anywhere applied backpressure. So the moment a
+             * decode took longer than a buffer took to arrive — a busy machine,
+             * a thermal dip, another app on the Neural Engine — the queue grew,
+             * and it never recovered: every second after that added more
+             * backlog than it cleared. That is why it was fine for two minutes
+             * and then permanently behind.
+             *
+             * Falling behind IS losing the words, just later and with a worse
+             * feeling. So past a small allowance the newest audio is dropped
+             * and the transcript stays live. */
+            if self.inFlight.count > MicPipeline.maxBacklog {
+                self.noteDropped()
+                return
             }
             guard let copy = buffer.deepCopy() else { return }
             self.inFlight.enter()
