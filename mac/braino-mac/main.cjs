@@ -2036,13 +2036,7 @@ function handleParakeetLine(line) {
     const text = String(event.text || "").trim();
     liveStats.segments += 1;
     logMac("live.segment", { chars: text.length, segment: liveStats.segments });
-    if (text) {
-      const id = liveStats.segments;
-      /* Raw first, always. The words on screen never wait for anything. */
-      sendToRenderer("braino-mac:live-segment", { id, text });
-      /* Then tidied, quietly, behind them. */
-      void tidyLiveSegment(id, text);
-    }
+    if (text) sendToRenderer("braino-mac:live-segment", { text });
     return;
   }
   if (event.type === "partial") {
@@ -2375,17 +2369,10 @@ function formatDictationTurn(text, context = "") {
    still runs whenever Parakeet is not ready — which is also the Hinglish
    answer, since Parakeet has no Hindi. */
 let localDictationActive = false;
-/* BrainoHERA has two modes, one engine.
- *
- * DICTATE (double Option) hears you and types at the caret. LISTEN
- * (Cmd+Shift+E) hears the room, shows it, and saves it as a lecture. Same
- * microphone, same on-device model, same audio path, and every fix to that path
- * is a fix to both: the backpressure that stopped it falling behind, the 320ms
- * chunks, the rotate that stops the decoder accumulating.
- *
- * The flag is what tells them apart, and it exists because dictation's whole job
- * is to insert at the caret. In a lecture theatre that would type the lecture
- * into whatever window happened to be focused. */
+/* LIVE mode: the same on-device transcription, shown full screen and typed
+   nowhere. The flag exists because dictation's whole job is to insert at the
+   caret, and in a lecture theatre that would type the lecture into whatever
+   window happened to be focused. */
 let liveTranscriptMode = false;
 let liveEscapeBound = false;
 /* Rotation state. See rotateLiveIfDue: the decoder is recycled every so often
@@ -2515,45 +2502,6 @@ function setLiveInteractive(mode) {
   }
 }
 
-/* The subject of the lecture, if anyone said what it was. It is the only thing
-   that lets the clean-up put "gradient descent" where the ear heard "radiant
-   descent": the ear is guessing at sounds and has no idea what the room is
-   about. */
-let liveSubject = "";
-
-/* Tidy a finished segment, well behind the live words.
- *
- * This is the same clean-up that runs on dictation, and it is why it was
- * switched off during a lecture: it ran at every pause and each call held the
- * next words for about 600ms. Here nothing waits for it. The segment is already
- * on screen and already banked; when the tidier answers, the segment is
- * replaced in place, and if it never answers the lecture is untouched.
- *
- * The faithfulness gate still applies. It may only delete fillers and repair a
- * few plainly misheard words, never add or reorder, which is exactly the
- * licence a transcript wants and exactly the licence a summary must not have. */
-async function tidyLiveSegment(id, raw) {
-  if (!raw || countWords(raw) < CLEANUP_MIN_WORDS) return;
-  const startedAt = Date.now();
-  try {
-    const formatted = await formatDictationTurn(raw, liveSubject);
-    const durationMs = Date.now() - startedAt;
-    if (!formatted) {
-      logMac("live.tidy.none", { id, durationMs });
-      return;
-    }
-    const verdict = assessDictationEdit(raw, formatted);
-    if (!verdict.accepted) {
-      logMac("live.tidy.refused", { id, durationMs, reason: verdict.reason });
-      return;
-    }
-    logMac("live.tidy.ok", { id, durationMs, before: countWords(raw), after: countWords(formatted) });
-    sendToRenderer("braino-mac:live-segment-tidied", { id, text: formatted });
-  } catch (error) {
-    logMac("live.tidy.failed", { id, error: String(error?.message || error) });
-  }
-}
-
 /* One way out, whoever asked. Called by Escape, the close button, the hotkey
    and the IPC, so they cannot leave the flag and the window disagreeing, which
    is the other way to end up stuck. */
@@ -2566,7 +2514,6 @@ async function endLiveTranscript(reason = "stop") {
     return { ok: true, already: true };
   }
   liveTranscriptMode = false;
-  liveSubject = "";
   stopLiveRotation();
   logMac("live.stop", { reason });
   sendToRenderer("braino-mac:live-mode", { open: false, save: true });
@@ -2587,11 +2534,8 @@ let lastDictationEndedAt = 0;
 /* One readable line per thing that happens in a HERA session, so a bad run can
    be understood by reading rather than by cross-referencing six event names. */
 function heraLog(message, extra = {}) {
-  /* One name in the log, whichever mode is running: they are the same system
-     and a bug in the audio path shows up in both. */
-  const mode = liveTranscriptMode ? "listen" : "dictate";
-  const line = `[HERA #${heraSession} ${mode}] ${message}`;
-  logMac("hera", { session: heraSession, mode, message, ...extra });
+  const line = `[HERA #${heraSession}] ${message}`;
+  logMac("hera", { session: heraSession, message, ...extra });
   /* Dictation is the one place where every word you say is the payload, so the
      screen gets the same scrub the file gets. */
   console.log(scrubForLog(line), Object.keys(extra).length ? sanitizeForLog(extra) : "");
@@ -17527,15 +17471,6 @@ ipcMain.handle("braino-mac:live-start", async () => {
 /* Minimising is not closing. Full screen while you are only listening; the bar
    when you need the machine back, and then the window has to stop taking
    clicks or "minimised" means nothing. */
-/* What the lecture is about, so the clean-up can spell its words. Set from the
-   overlay, and cleared when the lecture ends so the next one does not inherit
-   the last one's vocabulary. */
-ipcMain.handle("braino-mac:live-subject", async (_event, payload = {}) => {
-  liveSubject = String(payload?.subject || "").trim().slice(0, 200);
-  logMac("live.subject", { subject: liveSubject || null });
-  return { ok: true, subject: liveSubject };
-});
-
 ipcMain.handle("braino-mac:live-size", async (_event, payload = {}) => {
   if (!liveTranscriptMode) return { ok: false };
   const mode = payload?.mode === "mini" ? "mini" : "full";
@@ -17549,9 +17484,74 @@ ipcMain.handle("braino-mac:live-stop", async () => endLiveTranscript("ipc"));
 /* The lecture becomes a note. Not a transcript sitting in a log somewhere: a
    document on the shelf with the rest of them, which is the only version of
    this that is worth anything the following week. */
+/* Tidy the lecture once, after it is over.
+ *
+ * The first attempt at this ran the clean-up during the lecture, segment by
+ * segment. It broke the thing it was meant to improve: the live state and the
+ * dictation state got out of step, the transcript stopped counting, and the
+ * lecture ended up pasted into a text box. Forty minutes of working software
+ * traded for punctuation.
+ *
+ * So it happens here instead, when there is no live session left to confuse.
+ * The words are already safe, already on screen, already saved if this fails.
+ * A whole transcript is also far better material than a 45 second slice: the
+ * model can see the subject from the words themselves rather than being told.
+ *
+ * Long transcripts go in pieces because the model has a context limit, and each
+ * piece is checked by the same faithfulness gate the dictation path uses, so it
+ * may drop fillers and repair a misheard word but never add, reorder, or
+ * summarise. Anything it refuses simply keeps its raw text. */
+const LECTURE_PIECE_WORDS = 220;
+
+function splitForTidying(transcript) {
+  const words = transcript.split(/\s+/).filter(Boolean);
+  const pieces = [];
+  for (let i = 0; i < words.length; i += LECTURE_PIECE_WORDS) {
+    pieces.push(words.slice(i, i + LECTURE_PIECE_WORDS).join(" "));
+  }
+  return pieces;
+}
+
+async function tidyLecture(transcript) {
+  const pieces = splitForTidying(transcript);
+  if (!pieces.length) return { text: transcript, tidied: 0, refused: 0 };
+  const startedAt = Date.now();
+  let tidied = 0;
+  let refused = 0;
+
+  const out = [];
+  for (const piece of pieces) {
+    if (countWords(piece) < CLEANUP_MIN_WORDS) { out.push(piece); continue; }
+    try {
+      const formatted = await formatDictationTurn(piece);
+      const verdict = formatted ? assessDictationEdit(piece, formatted) : { accepted: false, reason: "empty" };
+      if (verdict.accepted) { out.push(formatted); tidied += 1; }
+      else { out.push(piece); refused += 1; }
+    } catch (error) {
+      /* One failed piece costs its own punctuation and nothing else. */
+      out.push(piece);
+      refused += 1;
+    }
+  }
+
+  logMac("lecture.tidy", {
+    pieces: pieces.length, tidied, refused, ms: Date.now() - startedAt,
+    before: countWords(transcript), after: countWords(out.join("\n\n")),
+  });
+  return { text: out.join("\n\n"), tidied, refused };
+}
+
 ipcMain.handle("braino-mac:live-save", async (_event, payload = {}) => {
-  const transcript = String(payload?.transcript || "").trim();
-  if (!transcript) return { ok: false, reason: "empty" };
+  const raw = String(payload?.transcript || "").trim();
+  if (!raw) return { ok: false, reason: "empty" };
+  /* Tidied if it can be, raw if it cannot. The lecture is never lost to this. */
+  let transcript = raw;
+  try {
+    const tidy = await tidyLecture(raw);
+    if (tidy.text && tidy.text.trim()) transcript = tidy.text;
+  } catch (error) {
+    logMac("lecture.tidy.failed", { error: String(error?.message || error) });
+  }
   try {
     const auth = authStatusPayload();
     const authToken = await getBrainoAuthToken();

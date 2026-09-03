@@ -98,22 +98,7 @@ while let line = readLine(strippingNewline: true) {
           !text.trimmingCharacters(in: .whitespaces).isEmpty
     else { continue }
 
-    /* The subject, when the caller knows it.
-     *
-     * The ear is guessing at sounds and has no idea what the words are about,
-     * which is why a lecture on machine learning comes back with "radiant
-     * descent" and "parrot keet". Telling the model what the room was about is
-     * the whole reason it can put those right, and it is the one thing an
-     * on-device model can do that better hearing cannot.
-     *
-     * Deliberately one short line and not a growing history: this file already
-     * learned that lesson. Accumulated context ran 644ms, 2378ms, 3235ms across
-     * one session and the answers got worse as it grew. A fixed subject costs a
-     * few tokens and never grows. */
-    let context = (request["context"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-    let prompt = context.isEmpty
-        ? text
-        : "The speaker is talking about: \(context)\nUse that only to spell names and technical terms correctly. Do not add anything from it.\n\n\(text)"
+    let prompt = text
 
     do {
         let turn = LanguageModelSession(instructions: instructions)
