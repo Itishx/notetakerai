@@ -234,3 +234,12 @@
   object-fit: cover;
 }
 .bd-bubble-more { color: var(--bd-soft); font-size: 12.5px; align-self: center; padding-left: 4px; }
+
+/* ── Editing: the tools that only exist while you are writing ── */
+.bd-edit-tools { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+.bd-edit-tools .bd-act { cursor: pointer; }
+.bd-edit-hint { font-size: 13px; color: var(--bd-soft); }
+
+/* Pictures inside a note: a photographed slide is usually the widest thing on
+   the page, so it is bounded rather than allowed to set the column width. */
+.bd-prose img { max-width: 100%; height: auto; display: block; margin: 6px 0 18px; border-radius: 12px; border: 1px solid var(--bd-line); }

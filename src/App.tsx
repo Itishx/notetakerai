@@ -9,6 +9,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 
 const Waitlist = lazy(() => import("./pages/Waitlist.tsx"));
 const BrainoDocPage = lazy(() => import("./pages/BrainoDocPage.tsx"));
+const BrainotesPage = lazy(() => import("./pages/BrainotesPage.tsx"));
 const Landing = lazy(() => import("./pages/Landing.tsx"));
 const ReceiptDemo = lazy(() => import("./pages/ReceiptDemo.tsx"));
 const BrainoThronglets = lazy(() => import("./pages/BrainoThronglets.tsx"));
@@ -300,6 +301,7 @@ function AppRoutes() {
         <Route path="/straight-talk" element={<StraightTalk />} />
         <Route path="/why-the-wait" element={<WhyTheWait />} />
         <Route path="/live" element={<BrainoLive />} />
+        <Route path="/notes" element={<BrainotesPage />} />
         {/* Brainotes. Short on purpose: the link gets read out loud. */}
         <Route path="/d/:slug" element={<BrainoDocPage />} />
         <Route path="/x" element={<XDashboard />} />

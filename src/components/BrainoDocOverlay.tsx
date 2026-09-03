@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Markdown } from "@/components/BrainoMarkdown";
+import { uploadDocImage } from "@/lib/brainotes";
 import "./braino-doc.css";
 
 /* A document Braino wrote, laid over whatever you were doing.
@@ -130,6 +131,7 @@ export default function BrainoDocOverlay({
 
   const [comments, setComments] = useState<DocComment[]>([]);
   const [note, setNote] = useState("");
+  const editRef = useRef<HTMLTextAreaElement | null>(null);
 
   const say = useCallback((message: string) => {
     setFlash(message);
@@ -155,6 +157,40 @@ export default function BrainoDocOverlay({
   }, [doc.id]);
 
   useEffect(() => { void loadComments(); }, [loadComments]);
+
+  /* A photograph of a slide, dropped straight where the cursor is.
+   *
+   * In a lecture theatre the picture arrives before the words do: you shoot the
+   * slide, then write underneath it. So paste and drop both work, the upload
+   * happens while you keep typing, and the markdown lands at the caret rather
+   * than at the end of the document. */
+  const insertImage = useCallback(async (file: File) => {
+    if (!mine || !user) return;
+    const field = editRef.current;
+    const at = field ? field.selectionStart : draft.length;
+    const placeholder = `\n![uploading ${file.name}…]()\n`;
+    setDraft((current) => current.slice(0, at) + placeholder + current.slice(at));
+    setBusy(true);
+    try {
+      const url = await uploadDocImage(user.id, file);
+      const markdownImage = `\n![](${url})\n`;
+      setDraft((current) => current.replace(placeholder, markdownImage));
+      say("Image added.");
+    } catch (error) {
+      /* Take the placeholder back out. A note reading "uploading…" forever is
+         worse than a note with no picture in it. */
+      setDraft((current) => current.replace(placeholder, ""));
+      say(error instanceof Error ? error.message : "That image did not upload.");
+    } finally {
+      setBusy(false);
+    }
+  }, [mine, user, draft.length, say]);
+
+  const onPasteOrDrop = useCallback((files: FileList | null) => {
+    const images = [...(files || [])].filter((file) => file.type.startsWith("image/"));
+    for (const image of images) void insertImage(image);
+    return images.length > 0;
+  }, [insertImage]);
 
   const save = useCallback(async () => {
     if (!mine) return;
@@ -315,13 +351,32 @@ export default function BrainoDocOverlay({
         <hr className="bd-rule" />
 
         {editing ? (
-          <textarea
-            className="bd-edit"
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-            spellCheck
-            autoFocus
-          />
+          <>
+            <div className="bd-edit-tools">
+              <label className="bd-act">
+                Add image
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  hidden
+                  onChange={(event) => { onPasteOrDrop(event.target.files); event.target.value = ""; }}
+                />
+              </label>
+              <span className="bd-edit-hint">Markdown. Paste or drop a photo of the slide straight in.</span>
+            </div>
+            <textarea
+              ref={editRef}
+              className="bd-edit"
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              onPaste={(event) => { if (onPasteOrDrop(event.clipboardData?.files ?? null)) event.preventDefault(); }}
+              onDrop={(event) => { if (onPasteOrDrop(event.dataTransfer?.files ?? null)) event.preventDefault(); }}
+              onDragOver={(event) => event.preventDefault()}
+              spellCheck
+              autoFocus
+            />
+          </>
         ) : (
           <div className="bd-prose"><Markdown text={markdown} /></div>
         )}
