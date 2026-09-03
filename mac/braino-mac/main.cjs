@@ -2034,7 +2034,8 @@ function handleParakeetLine(line) {
      and it is appended rather than replacing what came before. */
   if (event.type === "segment") {
     const text = String(event.text || "").trim();
-    logMac("live.segment", { chars: text.length });
+    liveStats.segments += 1;
+    logMac("live.segment", { chars: text.length, segment: liveStats.segments });
     if (text) sendToRenderer("braino-mac:live-segment", { text });
     return;
   }
@@ -2042,6 +2043,7 @@ function handleParakeetLine(line) {
     const text = String(event.text || "").trim();
     if (!text) return;
     liveLastPartialAt = Date.now();
+    if (liveTranscriptMode) noteLivePartial(text);
     parakeetPartials += 1;
     sendToRenderer("braino-mac:dictation-partial", { text });
     // The clean-up is driven from here, because this is the only signal that
@@ -2055,6 +2057,7 @@ function handleParakeetLine(line) {
   if (event.type === "utterance") {
     const text = String(event.text || "").trim();
     if (!text) return;
+    if (liveTranscriptMode) liveStats.utterances += 1;
     parakeetPartials += 1;
     sendToRenderer("braino-mac:dictation-partial", { text, committed: true });
     // A settled phrase, when Parakeet does report one. Continuous dictation
@@ -2381,6 +2384,48 @@ let liveRotatedAt = 0;
 const LIVE_ROTATE_AFTER_MS = 45000;   // a segment is about this long
 const LIVE_QUIET_MS = 900;            // and only rotated once nobody is mid-word
 
+/* What the next run needs to answer without another round trip: are the words
+   arriving from the helper, and are they arriving on time? The helper logs how
+   long the model takes; this logs whether that reaches this process, and how
+   far apart the arrivals are. If partials land steadily here and the screen
+   still lags, the render is the slow part. */
+const liveStats = { partials: 0, utterances: 0, segments: 0, lastPartialAt: 0, worstGapMs: 0, chars: 0 };
+let liveStatsTimer = 0;
+
+function noteLivePartial(text) {
+  const now = Date.now();
+  if (liveStats.lastPartialAt) {
+    liveStats.worstGapMs = Math.max(liveStats.worstGapMs, now - liveStats.lastPartialAt);
+  }
+  liveStats.lastPartialAt = now;
+  liveStats.partials += 1;
+  liveStats.chars = text.length;
+}
+
+function startLiveStats() {
+  Object.assign(liveStats, { partials: 0, utterances: 0, segments: 0, lastPartialAt: 0, worstGapMs: 0, chars: 0 });
+  if (liveStatsTimer) clearInterval(liveStatsTimer);
+  liveStatsTimer = setInterval(() => {
+    if (!liveTranscriptMode) return;
+    const silentFor = liveStats.lastPartialAt ? Date.now() - liveStats.lastPartialAt : null;
+    logMac("live.health", {
+      partialsPer5s: liveStats.partials,
+      utterances: liveStats.utterances,
+      segments: liveStats.segments,
+      worstGapMs: liveStats.worstGapMs,
+      silentForMs: silentFor,
+      transcriptChars: liveStats.chars,
+    });
+    liveStats.partials = 0;
+    liveStats.utterances = 0;
+    liveStats.worstGapMs = 0;
+  }, 5000);
+}
+
+function stopLiveStats() {
+  if (liveStatsTimer) { clearInterval(liveStatsTimer); liveStatsTimer = 0; }
+}
+
 /* Recycle the decoder between utterances.
  *
  * The helper never resets mid-session, deliberately: resetting under in-flight
@@ -2400,12 +2445,14 @@ function rotateLiveIfDue() {
   const now = Date.now();
   if (now - liveRotatedAt < LIVE_ROTATE_AFTER_MS) return;
   if (liveLastPartialAt && now - liveLastPartialAt < LIVE_QUIET_MS) return;
+  const sinceLast = now - liveRotatedAt;
   liveRotatedAt = now;
-  logMac("live.rotate", { afterMs: now - liveRotatedAt });
+  logMac("live.rotate", { sinceLastMs: sinceLast, quietForMs: liveLastPartialAt ? now - liveLastPartialAt : null });
   parakeetSend("rotate");
 }
 
 function startLiveRotation() {
+  startLiveStats();
   liveRotatedAt = Date.now();
   liveLastPartialAt = 0;
   if (liveRotateTimer) clearInterval(liveRotateTimer);
@@ -2413,6 +2460,7 @@ function startLiveRotation() {
 }
 
 function stopLiveRotation() {
+  stopLiveStats();
   if (liveRotateTimer) { clearInterval(liveRotateTimer); liveRotateTimer = 0; }
   liveRotatedAt = 0;
   liveLastPartialAt = 0;

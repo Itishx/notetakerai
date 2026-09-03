@@ -9480,6 +9480,10 @@ const liveStopBtn = liveEl?.querySelector(".lt-close");
 const liveMinBtn = liveEl?.querySelector(".lt-min");
 
 let liveOn = false;
+/* Declared with the rest of the live state rather than beside the button that
+   sets it: the heartbeat above reads it, and state read from two places should
+   be declared before either. */
+let liveMini = false;
 /* Everything finished and banked, from segments the decoder has already been
    reset behind. This is what gets saved. */
 let liveBanked = "";
@@ -9490,8 +9494,36 @@ let liveNowText = "";
 let liveStartedAt = 0;
 let liveTimer = 0;
 
+/* The third of three heartbeats. The helper reports how long the model takes,
+   main reports whether those words arrive here on time, and this reports how
+   long they take to reach the glass. Between them the next run says which of
+   the three is slow instead of it being argued about. */
+const liveMetrics = { paints: 0, worstPaintMs: 0, chars: 0, since: 0 };
+let liveMetricsTimer = 0;
+
+function startLiveMetrics() {
+  Object.assign(liveMetrics, { paints: 0, worstPaintMs: 0, chars: 0, since: Date.now() });
+  if (liveMetricsTimer) window.clearInterval(liveMetricsTimer);
+  liveMetricsTimer = window.setInterval(() => {
+    if (!liveOn) return;
+    logRenderer("live.paint", {
+      paintsPer5s: liveMetrics.paints,
+      worstPaintMs: Math.round(liveMetrics.worstPaintMs),
+      chars: liveMetrics.chars,
+      mini: liveMini,
+    });
+    liveMetrics.paints = 0;
+    liveMetrics.worstPaintMs = 0;
+  }, 5000);
+}
+
+function stopLiveMetrics() {
+  if (liveMetricsTimer) { window.clearInterval(liveMetricsTimer); liveMetricsTimer = 0; }
+}
+
 function liveRender() {
   if (!livePara) return;
+  const paintBegan = performance.now();
   /* Only the tail is painted. An hour of speech is tens of thousands of words
      and rewriting all of it on every partial is the lag: the full transcript
      lives in liveSettled and is saved whole at the end. */
@@ -9509,6 +9541,9 @@ function liveRender() {
     const words = whole.split(/\s+/).filter(Boolean).length;
     liveCount.textContent = words ? `${words.toLocaleString()} words` : "";
   }
+  liveMetrics.paints += 1;
+  liveMetrics.worstPaintMs = Math.max(liveMetrics.worstPaintMs, performance.now() - paintBegan);
+  liveMetrics.chars = whole.length;
 }
 
 function liveTick() {
@@ -9521,6 +9556,7 @@ function liveTick() {
 function liveOpen() {
   if (liveOn || !liveEl) return;
   liveOn = true;
+  startLiveMetrics();
   liveSetSize(false);
   liveBanked = "";
   liveSettled = "";
@@ -9537,6 +9573,7 @@ function liveOpen() {
 async function liveClose(save = true) {
   if (!liveOn || !liveEl) return;
   liveOn = false;
+  stopLiveMetrics();
   if (liveTimer) { window.clearInterval(liveTimer); liveTimer = 0; }
   liveEl.classList.remove("on");
   liveEl.setAttribute("aria-hidden", "true");
@@ -9577,7 +9614,6 @@ liveStopBtn?.addEventListener("click", () => { void window.brainoMac.liveStop?.(
 
 /* Minimise is not stop. Full screen while you are only listening; the bar when
    you want the machine back. */
-let liveMini = false;
 function liveSetSize(mini) {
   if (!liveEl) return;
   liveMini = mini;

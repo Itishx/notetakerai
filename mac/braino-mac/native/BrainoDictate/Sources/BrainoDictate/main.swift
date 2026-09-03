@@ -211,15 +211,23 @@ struct BrainoDictate {
             exit(1)
         }
 
+        /* Everything the next test run needs to answer one question: is the
+           machine keeping up, or is the screen the slow part?
+           Decode time is measured here because this is the only place that
+           knows how long the model actually took. */
+        let health = DecodeHealth()
+
         let (stream, continuation) = AsyncStream<AudioChunk>.makeStream()
         let consumer = Task {
             for await chunk in stream {
                 defer { inFlight.leave() }
+                let began = Date()
                 do {
                     _ = try await asr.process(audioBuffer: chunk.buffer)
                 } catch {
                     emit(["type": "error", "message": "process failed: \(error)"])
                 }
+                health.noteDecode(seconds: Date().timeIntervalSince(began), backlog: inFlight.count)
                 // Deliberately no reset here. Resetting between utterances
                 // corrupted the decoder mid-stream, which is what produced
                 // "up up up what what what" and the empty finishes. Committed
@@ -442,6 +450,46 @@ private func transcribeFile(path: String, chunkSize: StreamingChunkSize, rounds:
 /// that isolation; CoreAudio then calls it on its own realtime queue and the
 /// process traps in `dispatch_assert_queue_fail`. Building it in here, on a
 /// type with no global actor, is what keeps it nonisolated.
+/* A five second heartbeat while listening.
+ *
+ * Two numbers decide whether real-time transcription is working, and neither of
+ * them is visible from the outside: how long a decode actually takes, and how
+ * deep the backlog is. If decode time is under the chunk length and the backlog
+ * is near zero, the machine is keeping up and any lag is further downstream. If
+ * decode is over and the backlog climbs, nothing downstream can save it.
+ *
+ * Written as one line rather than per event, because a per-chunk log is three
+ * lines a second and nobody reads that. */
+private final class DecodeHealth: @unchecked Sendable {
+    private let lock = NSLock()
+    private var decodes = 0
+    private var totalSeconds = 0.0
+    private var worstSeconds = 0.0
+    private var deepestBacklog = 0
+    private var since = Date()
+
+    func noteDecode(seconds: Double, backlog: Int) {
+        var line: String?
+        lock.lock()
+        decodes += 1
+        totalSeconds += seconds
+        worstSeconds = max(worstSeconds, seconds)
+        deepestBacklog = max(deepestBacklog, backlog)
+        let elapsed = Date().timeIntervalSince(since)
+        if elapsed >= 5 {
+            let mean = decodes > 0 ? (totalSeconds / Double(decodes)) * 1000 : 0
+            let rate = Double(decodes) / elapsed
+            line = String(
+                format: "health: %.1f decodes/s, mean %.0fms, worst %.0fms, backlog peak %d",
+                rate, mean, worstSeconds * 1000, deepestBacklog
+            )
+            decodes = 0; totalSeconds = 0; worstSeconds = 0; deepestBacklog = 0; since = Date()
+        }
+        lock.unlock()
+        if let line { log(line) }
+    }
+}
+
 private final class MicPipeline: @unchecked Sendable {
     /* How far the decoder may fall behind before audio starts being dropped.
        The tap fires roughly twenty times a second, so this is about half a
