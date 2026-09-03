@@ -274,7 +274,94 @@ type XSessionSortKey =
   | "replies_received"
   | "total_views";
 
-type DashboardTab = "overview" | "notes" | "tasks" | "xAutomation" | "settings" | "memory" | "highlights" | "voiceCommands";
+/* The two worlds. Everything he is for you, and everything he is for the
+   company. They are different jobs with different vocabularies, so they are
+   different trees rather than one long list. */
+type DashboardWorld = "companion" | "foundry";
+
+type DashboardTab =
+  /* Companion */
+  | "overview" | "notes" | "meetings" | "lectures" | "highlights"
+  | "tasks" | "voiceCommands"
+  | "memory" | "heart" | "eyes" | "ears"
+  | "settings"
+  /* Foundry */
+  | "distraOverview" | "distraJobs"
+  | "engineContent" | "engineSeo" | "engineAeo" | "engineOutreach"
+  | "brandLinkedin" | "founderProfile"
+  /* The old X command centre, now one engine among several. */
+  | "xAutomation";
+
+type NavNode = { id?: DashboardTab; label: string; children?: NavNode[]; badge?: "notes" | "tasks" | "memory" };
+
+/* The shape of the product, written down once. The sidebar renders this and
+   nothing else, so adding a section is a line here rather than markup in three
+   places. */
+const NAV: Record<DashboardWorld, NavNode[]> = {
+  companion: [
+    { label: "The basics", children: [{ id: "overview", label: "Overview" }] },
+    {
+      label: "Notes",
+      children: [
+        { id: "notes", label: "All notes", badge: "notes" },
+        { id: "meetings", label: "Meetings" },
+        { id: "lectures", label: "Lectures & audio" },
+        { id: "highlights", label: "Highlights" },
+      ],
+    },
+    {
+      label: "Agentic commands",
+      children: [
+        { id: "tasks", label: "Tasks" },
+        { id: "voiceCommands", label: "What you can say" },
+      ],
+    },
+    {
+      label: "Braino OS",
+      children: [
+        { id: "memory", label: "Memory", badge: "memory" },
+        { id: "heart", label: "Heart" },
+        { id: "eyes", label: "Eyes" },
+        { id: "ears", label: "Ears" },
+      ],
+    },
+    { label: "Settings", children: [{ id: "settings", label: "Account" }] },
+  ],
+  foundry: [
+    {
+      label: "Distra",
+      children: [
+        { id: "distraOverview", label: "Overview" },
+        { id: "distraJobs", label: "Tasks & jobs" },
+      ],
+    },
+    {
+      label: "Engines",
+      children: [
+        { id: "engineContent", label: "1. Content" },
+        { id: "xAutomation", label: "X command centre" },
+        { id: "engineSeo", label: "2.1 Optics · SEO" },
+        { id: "engineAeo", label: "2.2 Optics · AEO" },
+        { id: "engineOutreach", label: "3. Outreach" },
+      ],
+    },
+    {
+      label: "Lock in",
+      children: [
+        { id: "brandLinkedin", label: "Personal branding" },
+        { id: "founderProfile", label: "Founder profile" },
+      ],
+    },
+  ],
+};
+
+const COMPANION_TABS = new Set<DashboardTab>(
+  NAV.companion.flatMap((group) => (group.children || []).map((child) => child.id!)).filter(Boolean),
+);
+
+function worldOf(tab: DashboardTab): DashboardWorld {
+  return COMPANION_TABS.has(tab) ? "companion" : "foundry";
+}
 type NoteView = "list" | "grid";
 
 type ActivityPoint = {
@@ -285,8 +372,13 @@ type ActivityPoint = {
   totalCount: number;
 };
 
-const serifStyle = { fontFamily: "Newsreader, Georgia, serif" } as const;
-const monoStyle = { fontFamily: "JetBrains Mono, monospace" } as const;
+/* These two are applied inline in a few hundred places. Rather than touch every
+   call site, they are redefined: the display style is the same typeface at a
+   heading weight with tight tracking, and the label style keeps the small,
+   spaced, technical feel without being monospaced. Renaming them would be a
+   thousand-line diff for no behaviour change. */
+const serifStyle = { fontWeight: 650, letterSpacing: "-0.028em" } as const;
+const monoStyle = { fontWeight: 600, letterSpacing: "0.02em", fontVariantNumeric: "tabular-nums" } as const;
 const BRAINO_CONTACT_PHOTO_BUCKET = "braino-contact-photos";
 const BRAINO_CONTACT_PHOTO_MAX_BYTES = 5 * 1024 * 1024;
 const BRAINO_CONTACT_PHOTO_PUBLIC_PREFIX = `${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/public/${BRAINO_CONTACT_PHOTO_BUCKET}/`;
@@ -300,11 +392,17 @@ const brainoRpId = () => {
   return host.replace(/^www\./, "");
 };
 
+/* The name in the top bar comes from the same tree the sidebar draws, so the
+   two cannot disagree and a new section does not arrive titled
+   "DistraOverview". */
 function dashboardTabLabel(tab: DashboardTab) {
-  if (tab === "tasks") return "Agent Tasks";
-  if (tab === "xAutomation") return "X Automation";
-  if (tab === "highlights") return "Highlights";
-  if (tab === "voiceCommands") return "Voice Commands";
+  for (const groups of Object.values(NAV)) {
+    for (const group of groups) {
+      for (const child of group.children || []) {
+        if (child.id === tab) return child.label;
+      }
+    }
+  }
   return tab.charAt(0).toUpperCase() + tab.slice(1);
 }
 
@@ -990,6 +1088,24 @@ function TaskRow({ command }: { command: Command }) {
   );
 }
 
+/* A section that exists in the shape of the product but has nothing behind it
+   yet. It says what will live here and what to use meanwhile, because a blank
+   panel reads as a bug and a fake one is worse than either. */
+function SoonPanel({ title, what, meanwhile }: { title: string; what: string; meanwhile?: React.ReactNode }) {
+  return (
+    <div>
+      <div className="bd-phead">
+        <h1>{title}</h1>
+        <div className="bd-sub">{what}</div>
+      </div>
+      <div className="bd-soon">
+        <p>Not built yet. It has a place here so the shape of the product is honest about what is coming.</p>
+        {meanwhile ? <p className="bd-soon-alt">{meanwhile}</p> : null}
+      </div>
+    </div>
+  );
+}
+
 function SidebarItem({
   icon,
   label,
@@ -1306,6 +1422,11 @@ export default function Dashboard() {
   const { toast } = useToast();
 
   const [activeTab, setActiveTab] = useState<DashboardTab>("overview");
+  /* Which half of the product you are in. Derived from the tab so that landing
+     on a Foundry tab from anywhere shows the Foundry tree, rather than the two
+     drifting apart. */
+  const [world, setWorld] = useState<DashboardWorld>("companion");
+  useEffect(() => { setWorld(worldOf(activeTab)); }, [activeTab]);
   const [xSubTab, setXSubTab] = useState<"settings" | "activity">("activity");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [notes, setNotes] = useState<Note[]>([]);
@@ -3395,141 +3516,51 @@ export default function Dashboard() {
             )}
           </button>
 
+          {/* Two worlds, then the tree beneath the one you are in. A single
+              flat list of twenty items is a filing cabinet; this is a product
+              with two halves that happen to share a character. */}
+          {!sidebarCollapsed && (
+            <div className="bd-worlds">
+              {(["companion", "foundry"] as DashboardWorld[]).map((w) => (
+                <button
+                  key={w}
+                  type="button"
+                  className={cn("bd-world", world === w && "active")}
+                  onClick={() => {
+                    setWorld(w);
+                    const first = NAV[w][0]?.children?.[0]?.id;
+                    if (first) setActiveTab(first);
+                  }}
+                >
+                  {w === "companion" ? "Companion" : "Foundry"}
+                </button>
+              ))}
+            </div>
+          )}
+
           <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-          {!sidebarCollapsed && (
-            <div className="bd-nav-grp">
-              Workspace
-            </div>
-          )}
-          <div className="space-y-0.5 w-full">
-            <SidebarItem
-              collapsed={sidebarCollapsed}
-              label="Overview"
-              active={activeTab === "overview"}
-              onClick={() => setActiveTab("overview")}
-              icon={<LayoutGrid className="h-3.5 w-3.5" />}
-            />
-            <SidebarItem
-              collapsed={sidebarCollapsed}
-              label="Notes"
-              active={activeTab === "notes"}
-              onClick={() => setActiveTab("notes")}
-              icon={<FileText className="h-3.5 w-3.5" />}
-              badge={
-                <span style={monoStyle} className={cn("rounded-full px-2 py-0.5 text-[10px]", activeTab === "notes" ? "bg-white/12 text-white/80" : "bg-[var(--sb-accent-soft)] text-[var(--sb-accent-deep)]")}>
-                  {notes.length}
-                </span>
-              }
-            />
-            <SidebarItem
-              collapsed={sidebarCollapsed}
-              label="Agent Tasks"
-              active={activeTab === "tasks"}
-              onClick={() => setActiveTab("tasks")}
-              icon={<Bot className="h-3.5 w-3.5" />}
-              badge={
-                runningTasks.length > 0 ? (
-                  <span className={cn("h-2 w-2 rounded-full", activeTab === "tasks" ? "bg-white" : "bg-[var(--sb-accent)]")} />
-                ) : undefined
-              }
-            />
-            <SidebarItem
-              collapsed={sidebarCollapsed}
-              label="X Automation"
-              active={activeTab === "xAutomation"}
-              onClick={() => setActiveTab("xAutomation")}
-              icon={<Zap className="h-3.5 w-3.5" />}
-              badge={
-                xTotalReplies > 0 ? (
-                  <span style={monoStyle} className={cn("rounded-full px-2 py-0.5 text-[10px]", activeTab === "xAutomation" ? "bg-white/12 text-white/80" : "bg-[var(--sb-accent-soft)] text-[var(--sb-accent-deep)]")}>
-                    {xTotalReplies}
-                  </span>
-                ) : undefined
-              }
-            />
-            <SidebarItem collapsed={sidebarCollapsed} label="Recordings" muted icon={<Mic className="h-3.5 w-3.5" />} badge={<span style={monoStyle} className="text-[10px] text-[var(--sb-ink-4)]">Soon</span>} />
-            <SidebarItem
-              collapsed={sidebarCollapsed}
-              label="Memory"
-              active={activeTab === "memory"}
-              onClick={() => setActiveTab("memory")}
-              icon={<Sparkles className="h-3.5 w-3.5" />}
-              badge={
-                memoryEntryCount > 0 ? (
-                  <span style={monoStyle} className={cn("rounded-full px-2 py-0.5 text-[10px]", activeTab === "memory" ? "bg-white/12 text-white/80" : "bg-[var(--sb-accent-soft)] text-[var(--sb-accent-deep)]")}>
-                    {memoryEntryCount}
-                  </span>
-                ) : undefined
-              }
-            />
-          </div>
-
-          {!sidebarCollapsed && (
-            <div className="bd-nav-grp">
-              Library
-            </div>
-          )}
-          <div className={cn("space-y-0.5 w-full", sidebarCollapsed && "pt-3")}>
-            <SidebarItem collapsed={sidebarCollapsed} label="Collections" muted icon={<FolderOpen className="h-3.5 w-3.5" />} />
-            <SidebarItem
-              collapsed={sidebarCollapsed}
-              label="Search"
-              muted={false}
-              onClick={() => {
-                setActiveTab("notes");
-                window.scrollTo({ top: 0, behavior: "smooth" });
-              }}
-              icon={<Search className="h-3.5 w-3.5" />}
-              badge={
-                <span style={monoStyle} className="rounded bg-[var(--sb-bg-2)] px-1.5 py-0.5 text-[10px] text-[var(--sb-ink-3)]">
-                  CMD F
-                </span>
-              }
-            />
-            <SidebarItem
-              collapsed={sidebarCollapsed}
-              label="Highlights"
-              active={activeTab === "highlights"}
-              onClick={() => setActiveTab("highlights")}
-              icon={<Highlighter className="h-3.5 w-3.5" />}
-              badge={
-                highlights.length > 0 ? (
-                  <span style={monoStyle} className={cn("rounded-full px-2 py-0.5 text-[10px]", activeTab === "highlights" ? "bg-white/12 text-white/80" : "bg-[var(--sb-accent-soft)] text-[var(--sb-accent-deep)]")}>
-                    {highlights.length}
-                  </span>
-                ) : undefined
-              }
-            />
-            <SidebarItem
-              collapsed={sidebarCollapsed}
-              label="Voice Commands"
-              active={activeTab === "voiceCommands"}
-              onClick={() => setActiveTab("voiceCommands")}
-              icon={<Zap className="h-3.5 w-3.5" />}
-              badge={
-                voiceModes.length > 0 ? (
-                  <span style={monoStyle} className={cn("rounded-full px-2 py-0.5 text-[10px]", activeTab === "voiceCommands" ? "bg-white/12 text-white/80" : "bg-[var(--sb-accent-soft)] text-[var(--sb-accent-deep)]")}>
-                    {voiceModes.length}
-                  </span>
-                ) : undefined
-              }
-            />
-          </div>
-
-          {!sidebarCollapsed && (
-            <div className="bd-nav-grp">
-              Account
-            </div>
-          )}
-          <div className={cn("w-full", sidebarCollapsed && "pt-3")}>
-            <SidebarItem
-              collapsed={sidebarCollapsed}
-              label="Settings"
-              active={activeTab === "settings"}
-              onClick={() => setActiveTab("settings")}
-              icon={<Settings className="h-3.5 w-3.5" />}
-            />
-          </div>
+            {NAV[world].map((group) => (
+              <div key={group.label} className="bd-nav-sec">
+                {!sidebarCollapsed && <div className="bd-nav-grp">{group.label}</div>}
+                <div className="space-y-0.5 w-full">
+                  {(group.children || []).map((child) => (
+                    <SidebarItem
+                      key={child.id}
+                      collapsed={sidebarCollapsed}
+                      label={child.label}
+                      active={activeTab === child.id}
+                      onClick={() => child.id && setActiveTab(child.id)}
+                      icon={<span className="bd-nav-dot" aria-hidden />}
+                      badge={
+                        child.badge === "notes" ? <span style={monoStyle}>{notes.length}</span>
+                        : child.badge === "memory" ? <span style={monoStyle}>{brainoMemories.length}</span>
+                        : undefined
+                      }
+                    />
+                  ))}
+                </div>
+              </div>
+            ))}
           </div>
 
           <div className="bd-side-foot mt-auto w-full">
@@ -4289,7 +4320,7 @@ export default function Dashboard() {
               </div>
             )}
 
-            {activeTab === "notes" && (
+            {(activeTab === "notes" || activeTab === "meetings" || activeTab === "lectures") && (
               <div>
                 <div className="bd-phead">
                   <h1>Everything, <span className="bd-serif-i">remembered.</span></h1>
@@ -6451,6 +6482,89 @@ export default function Dashboard() {
                   </div>
                 )}
               </div>
+            )}
+
+            {activeTab === "heart" && (
+              <SoonPanel
+                title="His heart"
+                what="How he reads the moment: the traits, the tone, and the toggles that decide how he talks to you."
+                meanwhile="The emotional engine is live everywhere he speaks. What is missing is the panel to see and change it."
+              />
+            )}
+
+            {activeTab === "eyes" && (
+              <SoonPanel
+                title="His eyes"
+                what="What he can see: the page you are on, your screen when you ask, and the camera when you point him at it."
+                meanwhile="Ask him to look at your screen or your camera and he already will. This is where you will decide when he may."
+              />
+            )}
+
+            {activeTab === "ears" && (
+              <SoonPanel
+                title="His ears"
+                what="Listening: the wake word, what he hears, and what he does not."
+                meanwhile="Double Control talks to him now. The microphone is off until you press it."
+              />
+            )}
+
+            {activeTab === "distraOverview" && (
+              <SoonPanel
+                title="Distra"
+                what="The distribution co-founder: what went out, what is queued, and how it landed, across every channel rather than one."
+                meanwhile="The X command centre under Engines is the part that runs today."
+              />
+            )}
+
+            {activeTab === "distraJobs" && (
+              <SoonPanel
+                title="Tasks & jobs"
+                what="Everything Distra is doing on its own, and everything waiting on you."
+                meanwhile="Posts waiting on approval are on the X page for now."
+              />
+            )}
+
+            {activeTab === "engineContent" && (
+              <SoonPanel
+                title="Content"
+                what="Five posts a week, drafted from what you actually shipped, fitted to each platform you care about."
+                meanwhile="X is the channel that runs today. The rest of the engine is next."
+              />
+            )}
+
+            {activeTab === "engineSeo" && (
+              <SoonPanel
+                title="Optics · SEO"
+                what="Being findable the old way: what you rank for, what you do not, and what to write about it."
+              />
+            )}
+
+            {activeTab === "engineAeo" && (
+              <SoonPanel
+                title="Optics · AEO"
+                what="Being named when a buyer asks an AI. Whether you come up, who comes up instead, and what to do about it."
+              />
+            )}
+
+            {activeTab === "engineOutreach" && (
+              <SoonPanel
+                title="Outreach"
+                what="The right people found, written to one at a time, and followed up. Nothing sends without you."
+              />
+            )}
+
+            {activeTab === "brandLinkedin" && (
+              <SoonPanel
+                title="Personal branding"
+                what="Your LinkedIn, in your voice, on a schedule you do not have to think about."
+              />
+            )}
+
+            {activeTab === "founderProfile" && (
+              <SoonPanel
+                title="Founder profile"
+                what="Who you are and what you are building, in one place, so everything he writes sounds like you rather than like a template."
+              />
             )}
 
             {activeTab === "voiceCommands" && (
