@@ -4915,68 +4915,79 @@ body {
 #notch-face.nf-think-open .nf-thinking-trail { padding-bottom: 4px; }
 
 /* ── LIVE: the lecture as it is being said ────────────────────────────────
-   Black, edge to edge, and nothing on it but the words. Wispr Flow's trick is
-   that you watch it happen, and the whole effect dies the moment there is a
-   toolbar to look at instead. */
+   A panel low on the screen, the way subtitles work: one place your eyes rest,
+   sized so it never becomes the whole display. The first version took the
+   entire screen, which buries whatever you were doing and makes you chase the
+   words around instead of reading them.
+
+   One paragraph, not stacked lines. Settled text and the running hypothesis are
+   the same sentence being finished, so they are one flowing paragraph with the
+   newest words brighter, rather than a list that scrolls. */
 #live-transcript {
   position: fixed;
-  inset: 0;
+  inset: auto 0 0 0;
   z-index: 9000;
   display: none;
+  justify-content: center;
+  padding: 0 24px 34px;
+  pointer-events: none;
+}
+#live-transcript.on { display: flex; animation: lt-in .34s cubic-bezier(.16,1,.3,1) both; }
+@keyframes lt-in { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+
+.lt-panel {
+  pointer-events: auto;
+  width: min(900px, 100%);
+  max-height: 38vh;
+  display: flex;
   flex-direction: column;
-  padding: 6vh 7vw 4vh;
-  background: #000;
+  padding: 16px 22px 20px;
+  border-radius: 20px;
+  background: rgba(8, 8, 10, .93);
+  border: 1px solid rgba(255, 255, 255, .09);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, .55);
+  backdrop-filter: blur(24px) saturate(140%);
   color: #f4f2ee;
   font-family: "SF Pro Display", -apple-system, BlinkMacSystemFont, sans-serif;
-  -webkit-app-region: no-drag;
 }
-#live-transcript.on { display: flex; animation: lt-in .5s cubic-bezier(.16,1,.3,1) both; }
-@keyframes lt-in { from { opacity: 0; } to { opacity: 1; } }
 
-.lt-head { display: flex; align-items: center; gap: 12px; font-size: 13px; color: rgba(244,242,238,.5); flex: none; }
-.lt-dot { width: 9px; height: 9px; border-radius: 50%; background: #d9645b; animation: lt-pulse 1.6s ease-in-out infinite; }
+.lt-head { display: flex; align-items: center; gap: 11px; font-size: 12px; color: rgba(244,242,238,.5); flex: none; margin-bottom: 10px; }
+.lt-dot { width: 8px; height: 8px; border-radius: 50%; background: #d9645b; animation: lt-pulse 1.6s ease-in-out infinite; flex: none; }
 @keyframes lt-pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .45; transform: scale(.82); } }
-.lt-label { font-weight: 600; letter-spacing: .04em; text-transform: uppercase; font-size: 11.5px; }
+.lt-label { font-weight: 600; letter-spacing: .06em; text-transform: uppercase; font-size: 10.5px; }
 .lt-clock { font-variant-numeric: tabular-nums; }
-.lt-hint { margin-left: auto; }
+.lt-count { margin-left: auto; }
 
-/* The words. Bottom-anchored, so the newest line sits where your eyes already
-   are rather than making you chase it down the screen. */
-.lt-body {
-  flex: 1; min-height: 0;
-  display: flex; flex-direction: column; justify-content: flex-end;
-  overflow: hidden;
-  padding-bottom: 2vh;
-}
-.lt-lines { display: flex; flex-direction: column; gap: 14px; }
-.lt-line {
-  margin: 0;
-  font-size: clamp(26px, 3.1vw, 44px);
+/* The way out, drawn. There are two others that do not need drawing, and this
+   is the one you find without being told. */
+.lt-close {
+  flex: none;
+  padding: 5px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, .18);
+  background: rgba(255, 255, 255, .07);
+  color: #f4f2ee;
+  font: inherit;
+  font-size: 12px;
   font-weight: 600;
-  letter-spacing: -.026em;
-  line-height: 1.22;
-  color: rgba(244, 242, 238, .42);
-  animation: lt-rise .34s cubic-bezier(.16,1,.3,1) both;
+  cursor: pointer;
+  transition: background .18s, border-color .18s;
 }
-/* What is being said right now, bright, with the rest settling back behind it. */
-.lt-now {
-  margin: 14px 0 0;
-  font-size: clamp(28px, 3.4vw, 50px);
-  font-weight: 650;
-  letter-spacing: -.03em;
-  line-height: 1.2;
+.lt-close:hover { background: rgba(255, 255, 255, .14); border-color: rgba(255,255,255,.3); }
+
+/* One paragraph. It scrolls itself, bottom anchored, so the newest words sit
+   where your eyes already are. */
+.lt-para {
+  margin: 0;
+  overflow-y: auto;
+  font-size: 22px;
+  font-weight: 550;
+  letter-spacing: -.014em;
+  line-height: 1.45;
+  color: rgba(244, 242, 238, .52);
+}
+.lt-para b {
+  font-weight: 600;
   color: #fff;
 }
-.lt-now::after {
-  content: "";
-  display: inline-block;
-  width: 3px; height: .82em;
-  margin-left: 6px;
-  vertical-align: -.1em;
-  background: #d9645b;
-  animation: lt-blink 1s steps(1) infinite;
-}
-@keyframes lt-blink { 0%, 50% { opacity: 1; } 51%, 100% { opacity: 0; } }
-@keyframes lt-rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
-
-.lt-foot { flex: none; font-size: 12.5px; color: rgba(244,242,238,.34); }
+.lt-para::-webkit-scrollbar { width: 0; }

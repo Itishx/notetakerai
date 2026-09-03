@@ -293,6 +293,43 @@ struct BrainoDictate {
                 await commits.clear()
                 log("stopped")
 
+            /* Rotate: end the segment, reset the decoder, keep listening.
+             *
+             * The model is never reset mid-session because resetting under
+             * in-flight `process()` calls corrupts the decoder. That is right,
+             * and it is also why a long session degrades: FluidAudio's
+             * transcript grows monotonically, every end-of-utterance callback
+             * hands back the WHOLE session again, and by minute three the
+             * decoder is carrying thousands of tokens it will never need and
+             * re-emitting them several times a second. Dictation never noticed
+             * because dictation is ten seconds long. An hour of lecture is a
+             * different machine.
+             *
+             * So this does exactly what `stop` does — stop feeding, wait for
+             * the backlog to drain, finish, reset — and then starts listening
+             * again. Same proven order, no race, and the caller keeps the
+             * finished segment. Asked for between utterances, so the gap lands
+             * in a pause rather than mid-word. */
+            case "rotate":
+                listening.set(false)
+                var rotateSettle = 0
+                while inFlight.count > 0 && rotateSettle < 60 {
+                    try? await Task.sleep(nanoseconds: 25_000_000)
+                    rotateSettle += 1
+                }
+                do {
+                    let tail = try await asr.finish()
+                    let text = await commits.resolve(tail: tail)
+                    if !text.isEmpty { emit(["type": "segment", "text": text]) }
+                    log("rotate: \(text.count) chars")
+                } catch {
+                    emit(["type": "error", "message": "rotate failed: \(error)"])
+                }
+                await asr.reset()
+                await commits.clear()
+                inFlight.clear()
+                listening.set(true)
+
             case "quit":
                 listening.set(false)
                 continuation.finish()

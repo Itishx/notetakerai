@@ -274,21 +274,20 @@
         </svg>
       </div>
       <!-- LIVE: the lecture, as it is being said.
-           Black, edge to edge, one column of words appearing at the speed of
-           the room. Nothing else on it: no chrome, no controls, no mascot. The
-           point is that you watch it happen. -->
+           A panel, not the whole screen. Subtitles are read in one place at the
+           bottom of your vision; spreading them over a display means your eyes
+           chase them, and it buries everything else you were doing. -->
       <section id="live-transcript" aria-hidden="true" aria-live="polite" aria-label="Live transcript">
-        <div class="lt-head">
-          <span class="lt-dot" aria-hidden></span>
-          <span class="lt-label">Listening</span>
-          <span class="lt-clock">0:00</span>
-          <span class="lt-hint">Esc to stop</span>
+        <div class="lt-panel">
+          <div class="lt-head">
+            <span class="lt-dot" aria-hidden></span>
+            <span class="lt-label">Listening</span>
+            <span class="lt-clock">0:00</span>
+            <span class="lt-count"></span>
+            <button type="button" class="lt-close" aria-label="Stop and save">Stop</button>
+          </div>
+          <p class="lt-para"></p>
         </div>
-        <div class="lt-body">
-          <div class="lt-lines"></div>
-          <p class="lt-now"></p>
-        </div>
-        <div class="lt-foot"><span class="lt-count"></span></div>
       </section>
 
       <section id="status-pill">

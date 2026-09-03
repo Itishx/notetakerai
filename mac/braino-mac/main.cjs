@@ -2029,9 +2029,19 @@ function handleParakeetLine(line) {
   /* The running hypothesis, roughly every 150-500ms. Display only — it gets
      rewritten as the model firms up its guess, so it must never reach the
      caret — but it is what makes the Notch show words as they are spoken. */
+  /* A finished segment from a rotate. The decoder has been reset behind it, so
+     this is a completed piece of the lecture rather than the session so far,
+     and it is appended rather than replacing what came before. */
+  if (event.type === "segment") {
+    const text = String(event.text || "").trim();
+    logMac("live.segment", { chars: text.length });
+    if (text) sendToRenderer("braino-mac:live-segment", { text });
+    return;
+  }
   if (event.type === "partial") {
     const text = String(event.text || "").trim();
     if (!text) return;
+    liveLastPartialAt = Date.now();
     parakeetPartials += 1;
     sendToRenderer("braino-mac:dictation-partial", { text });
     // The clean-up is driven from here, because this is the only signal that
@@ -2351,6 +2361,101 @@ let localDictationActive = false;
    caret, and in a lecture theatre that would type the lecture into whatever
    window happened to be focused. */
 let liveTranscriptMode = false;
+let liveEscapeBound = false;
+/* Rotation state. See rotateLiveIfDue: the decoder is recycled every so often
+   so an hour of lecture never becomes one enormous accumulator. */
+let liveRotateTimer = 0;
+let liveLastPartialAt = 0;
+let liveRotatedAt = 0;
+
+const LIVE_ROTATE_AFTER_MS = 45000;   // a segment is about this long
+const LIVE_QUIET_MS = 900;            // and only rotated once nobody is mid-word
+
+/* Recycle the decoder between utterances.
+ *
+ * The helper never resets mid-session, deliberately: resetting under in-flight
+ * work corrupts it. The cost is that FluidAudio's transcript grows
+ * monotonically and every end-of-utterance callback returns the WHOLE session
+ * again, so by minute three the decoder carries thousands of tokens it will
+ * never need and re-emits them several times a second. That is the lag, and
+ * the words getting worse, and eventually the stall. Dictation never hit it
+ * because dictation is ten seconds long.
+ *
+ * `rotate` runs the same drain-finish-reset the stop path already proved safe
+ * and then keeps listening. It is asked for only when nothing has been heard
+ * for a moment, so the small gap lands in a pause between sentences rather
+ * than inside a word. */
+function rotateLiveIfDue() {
+  if (!liveTranscriptMode || !parakeet?.listening) return;
+  const now = Date.now();
+  if (now - liveRotatedAt < LIVE_ROTATE_AFTER_MS) return;
+  if (liveLastPartialAt && now - liveLastPartialAt < LIVE_QUIET_MS) return;
+  liveRotatedAt = now;
+  logMac("live.rotate", { afterMs: now - liveRotatedAt });
+  parakeetSend("rotate");
+}
+
+function startLiveRotation() {
+  liveRotatedAt = Date.now();
+  liveLastPartialAt = 0;
+  if (liveRotateTimer) clearInterval(liveRotateTimer);
+  liveRotateTimer = setInterval(rotateLiveIfDue, 1000);
+}
+
+function stopLiveRotation() {
+  if (liveRotateTimer) { clearInterval(liveRotateTimer); liveRotateTimer = 0; }
+  liveRotatedAt = 0;
+  liveLastPartialAt = 0;
+}
+
+/* Getting out has to work, and it has to work three different ways.
+ *
+ * The first version had exactly one: a keydown listener in the renderer. The
+ * overlay window is deliberately setFocusable(false) so it never steals the
+ * caret, which means it never receives a keystroke either, so Escape did
+ * nothing and there was no button because the same window ignores mouse events.
+ * A full screen black surface with no way out is the worst bug this app can
+ * have, and it cost a restart.
+ *
+ * So while LIVE is up the window takes focus and takes clicks, Escape is bound
+ * globally as well, and the hotkey still toggles. Any one of the three is
+ * enough on its own. */
+function setLiveInteractive(on) {
+  if (!dockWindow || dockWindow.isDestroyed()) return;
+  dockWindow.setFocusable(on);
+  if (on) dockWindow.focus();
+  dockWindow.setIgnoreMouseEvents(!on, { forward: true });
+
+  if (on && !liveEscapeBound) {
+    liveEscapeBound = globalShortcut.register("Escape", () => { void endLiveTranscript("escape"); });
+    if (!liveEscapeBound) logMac("live.escape_unavailable", {});
+  } else if (!on && liveEscapeBound) {
+    try { globalShortcut.unregister("Escape"); } catch (_) {}
+    liveEscapeBound = false;
+  }
+}
+
+/* One way out, whoever asked. Called by Escape, the close button, the hotkey
+   and the IPC, so they cannot leave the flag and the window disagreeing, which
+   is the other way to end up stuck. */
+async function endLiveTranscript(reason = "stop") {
+  if (!liveTranscriptMode) {
+    /* Belt and braces: if the surface is somehow up with the flag already
+       cleared, still put the window back and tell the renderer to close. */
+    setLiveInteractive(false);
+    sendToRenderer("braino-mac:live-mode", { open: false, save: false });
+    return { ok: true, already: true };
+  }
+  liveTranscriptMode = false;
+  stopLiveRotation();
+  logMac("live.stop", { reason });
+  sendToRenderer("braino-mac:live-mode", { open: false, save: true });
+  setLiveInteractive(false);
+  try { await stopLocalDictation("live-" + reason); } catch (error) {
+    logMac("live.stop.failed", { error: String(error?.message || error) });
+  }
+  return { ok: true };
+}
 let localDictationStarting = false;
 let heraSession = 0;
 /* Counted per session so a silent Notch can be told apart from a silent model. */
@@ -3081,10 +3186,8 @@ function registerHotkeys() {
        thing you reach for at the start of a class and E is not taken. */
     liveTranscript: globalShortcut.register("CommandOrControl+Shift+E", () => {
       if (liveTranscriptMode) {
-        sendToRenderer("braino-mac:live-mode", { open: false, save: true });
-        void stopLocalDictation("live-hotkey");
-        liveTranscriptMode = false;
         logMac("hotkey.live", { action: "stop" });
+        void endLiveTranscript("hotkey");
         return;
       }
       logMac("hotkey.live", { action: "start" });
@@ -3092,12 +3195,14 @@ function registerHotkeys() {
         liveTranscriptMode = true;
         sendToRenderer("braino-mac:live-mode", { open: true });
         ensureDockWindowVisible("live-transcript");
+        setLiveInteractive(true);
         const started = await startLocalDictation();
         if (!started?.ok && started?.error) {
-          liveTranscriptMode = false;
-          sendToRenderer("braino-mac:live-mode", { open: false, save: false });
           logMac("live.start.failed", { error: started.error });
+          await endLiveTranscript("start-failed");
+          return;
         }
+        startLiveRotation();
       })();
     }),
     bareControl: false,
@@ -17285,23 +17390,18 @@ ipcMain.handle("braino-mac:live-start", async () => {
   logMac("live.start", {});
   sendToRenderer("braino-mac:live-mode", { open: true });
   ensureDockWindowVisible("live-transcript");
+  setLiveInteractive(true);
   const started = await startLocalDictation();
   if (!started?.ok && started?.error) {
-    liveTranscriptMode = false;
-    sendToRenderer("braino-mac:live-mode", { open: false, save: false });
     logMac("live.start.failed", { error: started.error });
+    await endLiveTranscript("start-failed");
     return { ok: false, error: started.error };
   }
+  startLiveRotation();
   return { ok: true };
 });
 
-ipcMain.handle("braino-mac:live-stop", async () => {
-  if (!liveTranscriptMode) return { ok: true };
-  liveTranscriptMode = false;
-  logMac("live.stop", {});
-  await stopLocalDictation("live-stop");
-  return { ok: true };
-});
+ipcMain.handle("braino-mac:live-stop", async () => endLiveTranscript("ipc"));
 
 /* The lecture becomes a note. Not a transcript sitting in a log somewhere: a
    document on the shelf with the rest of them, which is the only version of

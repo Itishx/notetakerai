@@ -9463,42 +9463,49 @@ window.brainoMac.onDictationFallback?.((payload) => {
    while the speaker is still going. The session end clears it explicitly. */
 /* ── LIVE: the lecture as it is being said ──────────────────────────────────
  *
- * The on-device engine already reports a running hypothesis every few hundred
- * milliseconds and a settled phrase at the end of each utterance. Dictation
- * uses those to type at your caret. LIVE uses the same stream to do nothing at
- * all except show it, full screen, on black.
+ * The on-device engine reports a running hypothesis every few hundred
+ * milliseconds and, at the end of each utterance, the whole transcript so far.
+ * LIVE shows that and does nothing else with it.
  *
- * Two rows, deliberately. Settled phrases stack and fade back; the running
- * hypothesis sits underneath in white and is rewritten constantly. Painting
- * only the hypothesis makes a long lecture look like it is forgetting what you
- * already said, which is the thing that made the first version unusable.
+ * One paragraph rather than a list of lines: settled text and the hypothesis
+ * are the same sentence being finished, so the settled part is dimmed and the
+ * newest words are bright, in one flow. A stack of separate lines made a
+ * lecture look like a chat log.
  */
 const liveEl = document.getElementById("live-transcript");
-const liveLines = liveEl?.querySelector(".lt-lines");
-const liveNow = liveEl?.querySelector(".lt-now");
+const livePara = liveEl?.querySelector(".lt-para");
 const liveClock = liveEl?.querySelector(".lt-clock");
 const liveCount = liveEl?.querySelector(".lt-count");
-const liveLabel = liveEl?.querySelector(".lt-label");
+const liveStopBtn = liveEl?.querySelector(".lt-close");
 
 let liveOn = false;
-let liveSettled = [];
+/* Everything finished and banked, from segments the decoder has already been
+   reset behind. This is what gets saved. */
+let liveBanked = "";
+/* The current segment as the decoder reports it: replaced on every utterance,
+   never appended, because it is the whole segment each time. */
+let liveSettled = "";
+let liveNowText = "";
 let liveStartedAt = 0;
 let liveTimer = 0;
 
 function liveRender() {
-  if (!liveLines) return;
-  /* Only the last handful stay on screen. A two hour lecture is thousands of
-     lines and the DOM is not the transcript: the whole thing is kept in
-     liveSettled and saved at the end. */
-  const tail = liveSettled.slice(-6);
-  liveLines.replaceChildren(...tail.map((text) => {
-    const p = document.createElement("p");
-    p.className = "lt-line";
-    p.textContent = text;
-    return p;
-  }));
+  if (!livePara) return;
+  /* Only the tail is painted. An hour of speech is tens of thousands of words
+     and rewriting all of it on every partial is the lag: the full transcript
+     lives in liveSettled and is saved whole at the end. */
+  const whole = `${liveBanked} ${liveSettled}`.replace(/\s+/g, " ").trim();
+  const tail = whole.length > 1200 ? whole.slice(-1200) : whole;
+  livePara.replaceChildren();
+  if (tail) livePara.append(document.createTextNode(tail.endsWith(" ") ? tail : tail + " "));
+  if (liveNowText) {
+    const b = document.createElement("b");
+    b.textContent = liveNowText;
+    livePara.append(b);
+  }
+  livePara.scrollTop = livePara.scrollHeight;
   if (liveCount) {
-    const words = liveSettled.join(" ").split(/\s+/).filter(Boolean).length;
+    const words = whole.split(/\s+/).filter(Boolean).length;
     liveCount.textContent = words ? `${words.toLocaleString()} words` : "";
   }
 }
@@ -9506,16 +9513,17 @@ function liveRender() {
 function liveTick() {
   if (!liveClock || !liveStartedAt) return;
   const seconds = Math.floor((Date.now() - liveStartedAt) / 1000);
-  liveClock.textContent = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+  const m = Math.floor(seconds / 60);
+  liveClock.textContent = `${m}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
 function liveOpen() {
   if (liveOn || !liveEl) return;
   liveOn = true;
-  liveSettled = [];
+  liveBanked = "";
+  liveSettled = "";
+  liveNowText = "";
   liveStartedAt = Date.now();
-  if (liveNow) liveNow.textContent = "";
-  if (liveLabel) liveLabel.textContent = "Listening";
   liveRender();
   liveTick();
   liveTimer = window.setInterval(liveTick, 1000);
@@ -9531,34 +9539,38 @@ async function liveClose(save = true) {
   liveEl.classList.remove("on");
   liveEl.setAttribute("aria-hidden", "true");
 
-  /* Whatever the last hypothesis was, it was still speech. Dropping it loses
-     the final sentence of every lecture. */
-  const trailing = String(liveNow?.textContent || "").trim();
-  if (trailing && liveSettled[liveSettled.length - 1] !== trailing) liveSettled.push(trailing);
-
-  const transcript = liveSettled.join("\n\n").trim();
+  /* The last hypothesis was still speech. Dropping it loses the closing
+     sentence of every lecture. */
+  const full = `${liveBanked} ${liveSettled} ${liveNowText}`.replace(/\s+/g, " ").trim();
   const minutes = Math.max(1, Math.round((Date.now() - liveStartedAt) / 60000));
-  logRenderer("live.close", { chars: transcript.length, minutes, save });
-  if (save && transcript) {
-    await window.brainoMac.liveSave?.({ transcript, minutes });
-  }
-  liveSettled = [];
+  logRenderer("live.close", { chars: full.length, minutes, save });
+  if (save && full) await window.brainoMac.liveSave?.({ transcript: full, minutes });
+  liveBanked = "";
+  liveSettled = "";
+  liveNowText = "";
   liveStartedAt = 0;
 }
+
+/* A rotate finished a segment and reset the decoder behind it. Bank it and
+   start the next one empty, which is what stops an hour of lecture becoming one
+   accumulator that gets slower every minute. */
+window.brainoMac.onLiveSegment?.((payload) => {
+  if (!liveOn) return;
+  const text = String(payload?.text || "").trim();
+  if (text) liveBanked = `${liveBanked} ${text}`.replace(/\s+/g, " ").trim();
+  liveSettled = "";
+  liveNowText = "";
+  liveRender();
+});
 
 window.brainoMac.onLiveMode?.((payload) => {
   if (payload?.open) liveOpen(); else void liveClose(payload?.save !== false);
 });
 
-/* Escape stops it. It is the only control on the screen and it does not need
-   to be drawn to be found. */
-window.addEventListener("keydown", (event) => {
-  if (liveOn && event.key === "Escape") {
-    event.preventDefault();
-    void liveClose(true);
-    void window.brainoMac.liveStop?.();
-  }
-});
+/* Three ways out, and this is the one you can see. The other two are Escape,
+   bound globally in main because this window does not get keystrokes on its
+   own, and the hotkey. */
+liveStopBtn?.addEventListener("click", () => { void window.brainoMac.liveStop?.(); });
 
 window.brainoMac.onDictationPartial?.((payload) => {
   if (!dictationMode && !dictationStopping) return;
@@ -9587,13 +9599,15 @@ window.brainoMac.onDictationPartial?.((payload) => {
   if (!text) return;
   if (payload?.committed || payload?.final) {
     /* The engine reports the whole transcript so far at the end of an
-       utterance, not the newest phrase, so this replaces rather than appends. */
-    liveSettled = text.split(/\n+/).map((line) => line.trim()).filter(Boolean);
-    if (liveNow) liveNow.textContent = "";
+       utterance, not the newest phrase, so this replaces rather than appends.
+       Appending here is what said every earlier sentence again. */
+    liveSettled = text.replace(/\s+/g, " ").trim();
+    liveNowText = "";
     liveRender();
     return;
   }
-  if (liveNow) liveNow.textContent = text;
+  liveNowText = text;
+  liveRender();
 });
 // SKIT (TEMPORARY — Instagram demo): while SKIT.enabled is on in main.cjs,
 // double Option fires this fully scripted bit instead of BrainoHERA. No mic,
