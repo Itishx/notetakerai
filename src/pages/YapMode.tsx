@@ -36,6 +36,15 @@ const FLOW = [
   { icon: Check, label: "Double Option", note: "The session closes" },
 ];
 
+/* Hearing a room is the same capability pointed somewhere else, which is why it
+   is a section on this page rather than a second product with a second name. */
+const ROOM = [
+  { icon: Keyboard, label: "Command Shift E", note: "The room, not you" },
+  { icon: Mic, label: "The lecture runs", note: "Words appear as they are said" },
+  { icon: Square, label: "Minimise", note: "Keep working, it keeps listening" },
+  { icon: Check, label: "Stop", note: "It becomes a note you can search" },
+];
+
 const HERO_SPECS = [
   { icon: Cpu, label: "On-device", note: "Apple Neural Engine" },
   { icon: WifiOff, label: "No connection", note: "Works with the wifi off" },
@@ -277,6 +286,40 @@ function ReadView() {
         English runs entirely on your Mac. Hindi and mixed Hinglish still route through
         Braino's cloud model, because no local model reads them well yet. Braino tells you
         which one is listening instead of quietly picking for you.
+      </p>
+
+      {/* One capability, two places the words can land. Not two products: the
+          microphone, the model and the machine are the same, and only the
+          destination changes. */}
+      <article className="yap-read">
+        <p className="yap-kicker yap-reveal">The same ears, pointed outward</p>
+        <h2 className="yap-h2 yap-reveal">It hears you. It also hears the room.</h2>
+        <p className="yap-p yap-reveal">
+          Dictation is BrainoHERA listening to one person a foot from the microphone. A lecture
+          is the same thing, further away and for longer. Nothing about the machine changes, so
+          nothing about the setup does either. Where the words land is the only difference:
+          in a document they get typed, in a lecture hall they go on the screen and become a
+          note you can search afterwards.
+        </p>
+      </article>
+
+      <section className="yap-flow yap-reveal" aria-label="Hearing a room">
+        {ROOM.map(({ icon: Icon, label, note }, index) => (
+          <div className="yap-flow-step" key={label}>
+            <span className="yap-flow-number">{String(index + 1).padStart(2, "0")}</span>
+            <Icon aria-hidden="true" />
+            <strong>{label}</strong>
+            <small>{note}</small>
+          </div>
+        ))}
+      </section>
+
+      <p className="yap-local-foot yap-reveal">
+        A forty minute lecture, transcribed on the machine, is the run this was tuned against.
+        Around eighty eight percent of the words came back right, and the ones that did not were
+        names and technical terms rather than ordinary English. No connection was involved and
+        nothing was billed by the minute, which is the part that matters when the thing you are
+        recording is three hours of a course you are paying for anyway.
       </p>
 
       <section className="yap-claims" aria-label="Why on-device matters">
