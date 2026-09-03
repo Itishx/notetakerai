@@ -475,7 +475,7 @@ export default function Landing() {
       <header className="ld-hero ac-coral" id="top">
         <div className="ld-hero-copy">
           <p className="apple-eyebrow">Braino</p>
-          <h1 className="ld-hero-h1">A companion for everyone.<br /><span className="tone">A co-founder for founders.</span></h1>
+          <h1 className="ld-hero-h1">A <span className="ld-shimmer-red">companion</span> for everyone.<br /><span className="tone">A <span className="ld-shimmer-blue">co-founder</span> for founders.</span></h1>
           <p className="ld-hero-sub">
             He lives on your screen and does the boring half of your day. You talk, he moves.
             No prompt engineering degree required.
