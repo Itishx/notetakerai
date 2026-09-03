@@ -4977,7 +4977,10 @@ body {
 .lt-head { display: flex; align-items: center; gap: 11px; font-size: 12px; color: rgba(244,242,238,.5); flex: none; margin-bottom: 10px; }
 .lt-dot { width: 8px; height: 8px; border-radius: 50%; background: #d9645b; animation: lt-pulse 1.6s ease-in-out infinite; flex: none; }
 @keyframes lt-pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .45; transform: scale(.82); } }
-.lt-label { font-weight: 600; letter-spacing: .06em; text-transform: uppercase; font-size: 10.5px; }
+/* His name, then what he is doing. The name is the thing you recognise across
+   a room; the state is the thing you check. */
+.lt-label { font-weight: 700; letter-spacing: -.005em; font-size: 12.5px; color: rgba(244,242,238,.9); }
+.lt-state { font-weight: 600; letter-spacing: .06em; text-transform: uppercase; font-size: 10.5px; }
 .lt-clock { font-variant-numeric: tabular-nums; }
 .lt-count { margin-left: auto; }
 

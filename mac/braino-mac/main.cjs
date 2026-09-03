@@ -2369,10 +2369,17 @@ function formatDictationTurn(text, context = "") {
    still runs whenever Parakeet is not ready — which is also the Hinglish
    answer, since Parakeet has no Hindi. */
 let localDictationActive = false;
-/* LIVE mode: the same on-device transcription, shown full screen and typed
-   nowhere. The flag exists because dictation's whole job is to insert at the
-   caret, and in a lecture theatre that would type the lecture into whatever
-   window happened to be focused. */
+/* BrainoHERA has two modes, one engine.
+ *
+ * DICTATE (double Option) hears you and types at the caret. LISTEN
+ * (Cmd+Shift+E) hears the room, shows it, and saves it as a lecture. Same
+ * microphone, same on-device model, same audio path, and every fix to that path
+ * is a fix to both: the backpressure that stopped it falling behind, the 320ms
+ * chunks, the rotate that stops the decoder accumulating.
+ *
+ * The flag is what tells them apart, and it exists because dictation's whole job
+ * is to insert at the caret. In a lecture theatre that would type the lecture
+ * into whatever window happened to be focused. */
 let liveTranscriptMode = false;
 let liveEscapeBound = false;
 /* Rotation state. See rotateLiveIfDue: the decoder is recycled every so often
@@ -2534,8 +2541,11 @@ let lastDictationEndedAt = 0;
 /* One readable line per thing that happens in a HERA session, so a bad run can
    be understood by reading rather than by cross-referencing six event names. */
 function heraLog(message, extra = {}) {
-  const line = `[HERA #${heraSession}] ${message}`;
-  logMac("hera", { session: heraSession, message, ...extra });
+  /* One name in the log, whichever mode is running: they are the same system
+     and a bug in the audio path shows up in both. */
+  const mode = liveTranscriptMode ? "listen" : "dictate";
+  const line = `[HERA #${heraSession} ${mode}] ${message}`;
+  logMac("hera", { session: heraSession, mode, message, ...extra });
   /* Dictation is the one place where every word you say is the payload, so the
      screen gets the same scrub the file gets. */
   console.log(scrubForLog(line), Object.keys(extra).length ? sanitizeForLog(extra) : "");

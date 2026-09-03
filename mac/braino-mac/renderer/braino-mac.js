@@ -9475,6 +9475,7 @@ window.brainoMac.onDictationFallback?.((payload) => {
 const liveEl = document.getElementById("live-transcript");
 const livePara = liveEl?.querySelector(".lt-para");
 const liveClock = liveEl?.querySelector(".lt-clock");
+const liveState = liveEl?.querySelector(".lt-state");
 const liveCount = liveEl?.querySelector(".lt-count");
 const liveStopBtn = liveEl?.querySelector(".lt-close");
 const liveMinBtn = liveEl?.querySelector(".lt-min");
