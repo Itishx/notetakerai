@@ -9461,6 +9461,105 @@ window.brainoMac.onDictationFallback?.((payload) => {
    The long durationMs matters: nfSetHeard arms a clear-timer sized to the text
    length, and without overriding it the caption can wipe itself mid-sentence
    while the speaker is still going. The session end clears it explicitly. */
+/* ── LIVE: the lecture as it is being said ──────────────────────────────────
+ *
+ * The on-device engine already reports a running hypothesis every few hundred
+ * milliseconds and a settled phrase at the end of each utterance. Dictation
+ * uses those to type at your caret. LIVE uses the same stream to do nothing at
+ * all except show it, full screen, on black.
+ *
+ * Two rows, deliberately. Settled phrases stack and fade back; the running
+ * hypothesis sits underneath in white and is rewritten constantly. Painting
+ * only the hypothesis makes a long lecture look like it is forgetting what you
+ * already said, which is the thing that made the first version unusable.
+ */
+const liveEl = document.getElementById("live-transcript");
+const liveLines = liveEl?.querySelector(".lt-lines");
+const liveNow = liveEl?.querySelector(".lt-now");
+const liveClock = liveEl?.querySelector(".lt-clock");
+const liveCount = liveEl?.querySelector(".lt-count");
+const liveLabel = liveEl?.querySelector(".lt-label");
+
+let liveOn = false;
+let liveSettled = [];
+let liveStartedAt = 0;
+let liveTimer = 0;
+
+function liveRender() {
+  if (!liveLines) return;
+  /* Only the last handful stay on screen. A two hour lecture is thousands of
+     lines and the DOM is not the transcript: the whole thing is kept in
+     liveSettled and saved at the end. */
+  const tail = liveSettled.slice(-6);
+  liveLines.replaceChildren(...tail.map((text) => {
+    const p = document.createElement("p");
+    p.className = "lt-line";
+    p.textContent = text;
+    return p;
+  }));
+  if (liveCount) {
+    const words = liveSettled.join(" ").split(/\s+/).filter(Boolean).length;
+    liveCount.textContent = words ? `${words.toLocaleString()} words` : "";
+  }
+}
+
+function liveTick() {
+  if (!liveClock || !liveStartedAt) return;
+  const seconds = Math.floor((Date.now() - liveStartedAt) / 1000);
+  liveClock.textContent = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+}
+
+function liveOpen() {
+  if (liveOn || !liveEl) return;
+  liveOn = true;
+  liveSettled = [];
+  liveStartedAt = Date.now();
+  if (liveNow) liveNow.textContent = "";
+  if (liveLabel) liveLabel.textContent = "Listening";
+  liveRender();
+  liveTick();
+  liveTimer = window.setInterval(liveTick, 1000);
+  liveEl.classList.add("on");
+  liveEl.setAttribute("aria-hidden", "false");
+  logRenderer("live.open", {});
+}
+
+async function liveClose(save = true) {
+  if (!liveOn || !liveEl) return;
+  liveOn = false;
+  if (liveTimer) { window.clearInterval(liveTimer); liveTimer = 0; }
+  liveEl.classList.remove("on");
+  liveEl.setAttribute("aria-hidden", "true");
+
+  /* Whatever the last hypothesis was, it was still speech. Dropping it loses
+     the final sentence of every lecture. */
+  const trailing = String(liveNow?.textContent || "").trim();
+  if (trailing && liveSettled[liveSettled.length - 1] !== trailing) liveSettled.push(trailing);
+
+  const transcript = liveSettled.join("\n\n").trim();
+  const minutes = Math.max(1, Math.round((Date.now() - liveStartedAt) / 60000));
+  logRenderer("live.close", { chars: transcript.length, minutes, save });
+  if (save && transcript) {
+    await window.brainoMac.liveSave?.({ transcript, minutes });
+  }
+  liveSettled = [];
+  liveStartedAt = 0;
+}
+
+window.brainoMac.onLiveMode?.((payload) => {
+  if (payload?.open) liveOpen(); else void liveClose(payload?.save !== false);
+});
+
+/* Escape stops it. It is the only control on the screen and it does not need
+   to be drawn to be found. */
+window.addEventListener("keydown", (event) => {
+  if (liveOn && event.key === "Escape") {
+    event.preventDefault();
+    void liveClose(true);
+    void window.brainoMac.liveStop?.();
+  }
+});
+
 window.brainoMac.onDictationPartial?.((payload) => {
   if (!dictationMode && !dictationStopping) return;
   const text = String(payload?.text || "").trim();
@@ -9478,6 +9577,23 @@ window.brainoMac.onDictationPartial?.((payload) => {
     return;
   }
   nfSetHeard(text, { durationMs: 60000 });
+});
+
+/* LIVE listens to the same stream, and separately: it runs when dictation mode
+   does not, so it cannot hang off the handler above. */
+window.brainoMac.onDictationPartial?.((payload) => {
+  if (!liveOn) return;
+  const text = String(payload?.text || "").trim();
+  if (!text) return;
+  if (payload?.committed || payload?.final) {
+    /* The engine reports the whole transcript so far at the end of an
+       utterance, not the newest phrase, so this replaces rather than appends. */
+    liveSettled = text.split(/\n+/).map((line) => line.trim()).filter(Boolean);
+    if (liveNow) liveNow.textContent = "";
+    liveRender();
+    return;
+  }
+  if (liveNow) liveNow.textContent = text;
 });
 // SKIT (TEMPORARY — Instagram demo): while SKIT.enabled is on in main.cjs,
 // double Option fires this fully scripted bit instead of BrainoHERA. No mic,

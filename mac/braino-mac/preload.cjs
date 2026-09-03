@@ -113,6 +113,15 @@ contextBridge.exposeInMainWorld("brainoMac", {
   dictationIntent: (text, active) => ipcRenderer.invoke("braino-mac:dictation-intent", text, Boolean(active)),
   dictationControl: (payload) => ipcRenderer.invoke("braino-mac:dictation-control", payload || {}),
   dictationInsert: (payload) => ipcRenderer.invoke("braino-mac:dictation-insert", payload || {}),
+  // LIVE: the lecture as it is being said.
+  liveStart: () => ipcRenderer.invoke("braino-mac:live-start"),
+  liveStop: () => ipcRenderer.invoke("braino-mac:live-stop"),
+  liveSave: (payload) => ipcRenderer.invoke("braino-mac:live-save", payload || {}),
+  onLiveMode: (callback) => {
+    const handler = (_event, payload) => callback(payload || {});
+    ipcRenderer.on("braino-mac:live-mode", handler);
+    return () => ipcRenderer.removeListener("braino-mac:live-mode", handler);
+  },
   dictationRefine: (payload) => ipcRenderer.invoke("braino-mac:dictation-refine", payload || {}),
   // Teleprompter: the compose panel and the read-along overlay both live in
   // renderer/teleprompter.html, which loads this same preload.

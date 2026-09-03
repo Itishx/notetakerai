@@ -2064,6 +2064,12 @@ function handleParakeetLine(line) {
     const text = String(event.text || "");
     if (!text.trim()) return;
     heraLog(`heard: "${text.trim().slice(0, 60)}"`, { chars: text.length });
+    if (liveTranscriptMode) {
+      // LIVE shows words, it does not type them. The partial and utterance
+      // events above already drive the screen; this branch is the one that
+      // would put the lecture into someone's open document.
+      return;
+    }
     if (!localDictationActive) {
       // Arrived after the session was torn down. Rather than drop it, put it
       // on the clipboard so the words are never simply lost.
@@ -2340,6 +2346,11 @@ function formatDictationTurn(text, context = "") {
    still runs whenever Parakeet is not ready — which is also the Hinglish
    answer, since Parakeet has no Hindi. */
 let localDictationActive = false;
+/* LIVE mode: the same on-device transcription, shown full screen and typed
+   nowhere. The flag exists because dictation's whole job is to insert at the
+   caret, and in a lecture theatre that would type the lecture into whatever
+   window happened to be focused. */
+let liveTranscriptMode = false;
 let localDictationStarting = false;
 let heraSession = 0;
 /* Counted per session so a silent Notch can be told apart from a silent model. */
@@ -3065,6 +3076,29 @@ function registerHotkeys() {
       logMac("hotkey.launch_demo", { skill: "launch-demo" });
       sendToRenderer("braino-mac:launch-demo-start", {});
       ensureDockWindowVisible("launch-demo-hotkey");
+    }),
+    /* LIVE: the lecture as it is being said. Cmd+Shift+E, because it is a
+       thing you reach for at the start of a class and E is not taken. */
+    liveTranscript: globalShortcut.register("CommandOrControl+Shift+E", () => {
+      if (liveTranscriptMode) {
+        sendToRenderer("braino-mac:live-mode", { open: false, save: true });
+        void stopLocalDictation("live-hotkey");
+        liveTranscriptMode = false;
+        logMac("hotkey.live", { action: "stop" });
+        return;
+      }
+      logMac("hotkey.live", { action: "start" });
+      void (async () => {
+        liveTranscriptMode = true;
+        sendToRenderer("braino-mac:live-mode", { open: true });
+        ensureDockWindowVisible("live-transcript");
+        const started = await startLocalDictation();
+        if (!started?.ok && started?.error) {
+          liveTranscriptMode = false;
+          sendToRenderer("braino-mac:live-mode", { open: false, save: false });
+          logMac("live.start.failed", { error: started.error });
+        }
+      })();
     }),
     bareControl: false,
     controlHandler: "swift-event-tap",
@@ -17230,6 +17264,94 @@ ipcMain.handle("braino-mac:calendar-join", async () => {
 /* Publishing moved to the page. It writes the post where the room can read it
    and publishes when a human says yes, so this app no longer has a path that
    posts to X on its own. Leaving one behind would be a loaded gun on a hotkey. */
+
+/* ── LIVE: the lecture as it is being said ──────────────────────────────────
+ *
+ * Physical lectures are the point. A room, an hour, and a phone-shaped window
+ * of attention: you cannot type and listen, and you certainly cannot type fast
+ * enough. So the machine listens, the words appear, and the whole thing lands
+ * in Brainotes as a lecture note when you stop.
+ *
+ * It rides the on-device transcription that already exists rather than a new
+ * pipeline, with one difference that matters: it never inserts anything
+ * anywhere. */
+ipcMain.handle("braino-mac:live-start", async () => {
+  if (liveTranscriptMode) return { ok: true, already: true };
+  if (!parakeetEnabled() || !parakeet.ready) {
+    logMac("live.unavailable", { enabled: parakeetEnabled(), ready: Boolean(parakeet.ready) });
+    return { ok: false, error: "On-device transcription is not running." };
+  }
+  liveTranscriptMode = true;
+  logMac("live.start", {});
+  sendToRenderer("braino-mac:live-mode", { open: true });
+  ensureDockWindowVisible("live-transcript");
+  const started = await startLocalDictation();
+  if (!started?.ok && started?.error) {
+    liveTranscriptMode = false;
+    sendToRenderer("braino-mac:live-mode", { open: false, save: false });
+    logMac("live.start.failed", { error: started.error });
+    return { ok: false, error: started.error };
+  }
+  return { ok: true };
+});
+
+ipcMain.handle("braino-mac:live-stop", async () => {
+  if (!liveTranscriptMode) return { ok: true };
+  liveTranscriptMode = false;
+  logMac("live.stop", {});
+  await stopLocalDictation("live-stop");
+  return { ok: true };
+});
+
+/* The lecture becomes a note. Not a transcript sitting in a log somewhere: a
+   document on the shelf with the rest of them, which is the only version of
+   this that is worth anything the following week. */
+ipcMain.handle("braino-mac:live-save", async (_event, payload = {}) => {
+  const transcript = String(payload?.transcript || "").trim();
+  if (!transcript) return { ok: false, reason: "empty" };
+  try {
+    const auth = authStatusPayload();
+    const authToken = await getBrainoAuthToken();
+    if (!authToken || !auth?.userId) {
+      logMac("live.save.not_linked", {});
+      return { ok: false, reason: "not_linked" };
+    }
+    const now = new Date();
+    const title = `Lecture, ${now.toLocaleDateString(undefined, { day: "numeric", month: "long" })}`;
+    const slug = crypto.randomUUID().replace(/-/g, "").slice(0, 8);
+    const words = transcript.split(/\s+/).filter(Boolean).length;
+    const base = SUPABASE_URL.replace(/\/$/, "");
+    const res = await fetch(`${base}/rest/v1/braino_docs`, {
+      method: "POST",
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${authToken}`,
+        "Content-Type": "application/json",
+        Prefer: "return=representation",
+      },
+      body: JSON.stringify({
+        user_id: auth.userId,
+        slug,
+        kind: "lecture",
+        title,
+        markdown: transcript,
+        word_count: words,
+        happened_on: now.toISOString().slice(0, 10),
+        overview: `${words.toLocaleString()} words, taken down live over ${payload?.minutes || 1} minutes.`,
+      }),
+    });
+    if (!res.ok) {
+      const detail = await res.text().catch(() => "");
+      logMac("live.save.failed", { status: res.status, detail: textForLog(detail, 160) });
+      return { ok: false, reason: "rejected" };
+    }
+    logMac("live.save.ok", { words, slug });
+    return { ok: true, slug, url: `https://trybraino.com/d/${slug}` };
+  } catch (error) {
+    logMac("live.save.failed", { error: String(error?.message || error) });
+    return { ok: false, reason: "error" };
+  }
+});
 
 ipcMain.handle("braino-mac:pitch-done", async () => { pitchDemoRunning = false; logMac("pitch.done", {}); return { ok: true }; });
 
