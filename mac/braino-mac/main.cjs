@@ -2186,6 +2186,15 @@ function countWords(text) {
    paused, and the transcript is worth cleaning against a clock they are not
    watching. */
 function noteLiveTranscript(text) {
+  /* Not while LIVE is up.
+   *
+   * This exists to polish dictated words before they are inserted at the
+   * caret: a model call, every pause, carrying the whole transcript so far.
+   * LIVE inserts nothing anywhere, so every one of those calls is pure cost,
+   * and in a lecture it fires every few seconds against a transcript that only
+   * grows. The log fills with "cleaned 21 words in 629ms" and "clean-up
+   * refused" while the only thing anyone wants is the next word on screen. */
+  if (liveTranscriptMode) return;
   const cumulative = spokenNumbersToDigits(String(text || "").trim());
   if (!cumulative) return;
   localFormat.live = cumulative;
@@ -2194,6 +2203,7 @@ function noteLiveTranscript(text) {
 }
 
 function prefetchLocalFormat(text) {
+  if (liveTranscriptMode) return;
   const raw = String(text || "").trim();
   if (!raw || countWords(raw) < CLEANUP_MIN_WORDS || localFormat.results.has(raw)) return;
   if (localFormat.inflight) { localFormat.queued = raw; return; }
@@ -2420,11 +2430,20 @@ function stopLiveRotation() {
  * So while LIVE is up the window takes focus and takes clicks, Escape is bound
  * globally as well, and the hotkey still toggles. Any one of the three is
  * enough on its own. */
-function setLiveInteractive(on) {
+function setLiveInteractive(mode) {
   if (!dockWindow || dockWindow.isDestroyed()) return;
-  dockWindow.setFocusable(on);
-  if (on) dockWindow.focus();
-  dockWindow.setIgnoreMouseEvents(!on, { forward: true });
+  const on = mode !== "off";
+  /* Full screen owns the display, so it may as well own the pointer: there is
+     nothing behind it to click. Minimised must NOT, and this is where the
+     "I could not do anything" came from — telling a full-screen transparent
+     window to stop ignoring the mouse makes it swallow every click on the
+     machine, panel or not. Minimised goes back to passthrough, and the
+     renderer lifts it only while the pointer is actually over the panel, which
+     is the same trick the mascot already uses. */
+  const full = mode === "full";
+  dockWindow.setFocusable(full);
+  if (full) dockWindow.focus();
+  dockWindow.setIgnoreMouseEvents(!full, { forward: true });
 
   if (on && !liveEscapeBound) {
     liveEscapeBound = globalShortcut.register("Escape", () => { void endLiveTranscript("escape"); });
@@ -2442,7 +2461,7 @@ async function endLiveTranscript(reason = "stop") {
   if (!liveTranscriptMode) {
     /* Belt and braces: if the surface is somehow up with the flag already
        cleared, still put the window back and tell the renderer to close. */
-    setLiveInteractive(false);
+    setLiveInteractive("off");
     sendToRenderer("braino-mac:live-mode", { open: false, save: false });
     return { ok: true, already: true };
   }
@@ -2450,7 +2469,7 @@ async function endLiveTranscript(reason = "stop") {
   stopLiveRotation();
   logMac("live.stop", { reason });
   sendToRenderer("braino-mac:live-mode", { open: false, save: true });
-  setLiveInteractive(false);
+  setLiveInteractive("off");
   try { await stopLocalDictation("live-" + reason); } catch (error) {
     logMac("live.stop.failed", { error: String(error?.message || error) });
   }
@@ -3195,7 +3214,7 @@ function registerHotkeys() {
         liveTranscriptMode = true;
         sendToRenderer("braino-mac:live-mode", { open: true });
         ensureDockWindowVisible("live-transcript");
-        setLiveInteractive(true);
+        setLiveInteractive("full");
         const started = await startLocalDictation();
         if (!started?.ok && started?.error) {
           logMac("live.start.failed", { error: started.error });
@@ -17390,7 +17409,7 @@ ipcMain.handle("braino-mac:live-start", async () => {
   logMac("live.start", {});
   sendToRenderer("braino-mac:live-mode", { open: true });
   ensureDockWindowVisible("live-transcript");
-  setLiveInteractive(true);
+  setLiveInteractive("full");
   const started = await startLocalDictation();
   if (!started?.ok && started?.error) {
     logMac("live.start.failed", { error: started.error });
@@ -17399,6 +17418,17 @@ ipcMain.handle("braino-mac:live-start", async () => {
   }
   startLiveRotation();
   return { ok: true };
+});
+
+/* Minimising is not closing. Full screen while you are only listening; the bar
+   when you need the machine back, and then the window has to stop taking
+   clicks or "minimised" means nothing. */
+ipcMain.handle("braino-mac:live-size", async (_event, payload = {}) => {
+  if (!liveTranscriptMode) return { ok: false };
+  const mode = payload?.mode === "mini" ? "mini" : "full";
+  setLiveInteractive(mode);
+  logMac("live.size", { mode });
+  return { ok: true, mode };
 });
 
 ipcMain.handle("braino-mac:live-stop", async () => endLiveTranscript("ipc"));

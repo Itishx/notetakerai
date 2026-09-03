@@ -4915,28 +4915,52 @@ body {
 #notch-face.nf-think-open .nf-thinking-trail { padding-bottom: 4px; }
 
 /* ── LIVE: the lecture as it is being said ────────────────────────────────
-   A panel low on the screen, the way subtitles work: one place your eyes rest,
-   sized so it never becomes the whole display. The first version took the
-   entire screen, which buries whatever you were doing and makes you chase the
-   words around instead of reading them.
-
-   One paragraph, not stacked lines. Settled text and the running hypothesis are
-   the same sentence being finished, so they are one flowing paragraph with the
-   newest words brighter, rather than a list that scrolls. */
+   Two sizes. Full screen is the point of the thing: black, edge to edge, the
+   words at the size of the room. Minimised is for when you need the machine
+   back, and then it is a bar that lets everything through except itself. */
 #live-transcript {
   position: fixed;
-  inset: auto 0 0 0;
   z-index: 9000;
   display: none;
   justify-content: center;
-  padding: 0 24px 34px;
-  pointer-events: none;
+  font-family: "SF Pro Display", -apple-system, BlinkMacSystemFont, sans-serif;
 }
-#live-transcript.on { display: flex; animation: lt-in .34s cubic-bezier(.16,1,.3,1) both; }
-@keyframes lt-in { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+#live-transcript.on { display: flex; }
+
+/* Full: the whole display. */
+#live-transcript.is-full {
+  inset: 0;
+  align-items: stretch;
+  padding: 0;
+  background: #000;
+  animation: lt-in .4s cubic-bezier(.16,1,.3,1) both;
+}
+#live-transcript.is-full .lt-panel {
+  width: 100%;
+  max-height: none;
+  padding: 5vh 7vw 5vh;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  justify-content: flex-end;
+}
+#live-transcript.is-full .lt-para { font-size: clamp(28px, 3.2vw, 46px); line-height: 1.34; }
+#live-transcript.is-full .lt-head { margin-bottom: auto; }
+
+/* Mini: a bar, and nothing but the bar takes the pointer. */
+#live-transcript.is-mini {
+  inset: auto 0 0 0;
+  padding: 0 24px 28px;
+  background: none;
+  pointer-events: none;
+  animation: lt-in .3s cubic-bezier(.16,1,.3,1) both;
+}
+#live-transcript.is-mini .lt-panel { pointer-events: auto; }
+@keyframes lt-in { from { opacity: 0; } to { opacity: 1; } }
 
 .lt-panel {
-  pointer-events: auto;
   width: min(900px, 100%);
   max-height: 38vh;
   display: flex;
@@ -4948,7 +4972,6 @@ body {
   box-shadow: 0 24px 70px rgba(0, 0, 0, .55);
   backdrop-filter: blur(24px) saturate(140%);
   color: #f4f2ee;
-  font-family: "SF Pro Display", -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
 .lt-head { display: flex; align-items: center; gap: 11px; font-size: 12px; color: rgba(244,242,238,.5); flex: none; margin-bottom: 10px; }
@@ -4958,9 +4981,7 @@ body {
 .lt-clock { font-variant-numeric: tabular-nums; }
 .lt-count { margin-left: auto; }
 
-/* The way out, drawn. There are two others that do not need drawing, and this
-   is the one you find without being told. */
-.lt-close {
+.lt-min, .lt-close {
   flex: none;
   padding: 5px 14px;
   border-radius: 999px;
@@ -4973,10 +4994,9 @@ body {
   cursor: pointer;
   transition: background .18s, border-color .18s;
 }
-.lt-close:hover { background: rgba(255, 255, 255, .14); border-color: rgba(255,255,255,.3); }
+.lt-min:hover, .lt-close:hover { background: rgba(255, 255, 255, .14); border-color: rgba(255,255,255,.3); }
 
-/* One paragraph. It scrolls itself, bottom anchored, so the newest words sit
-   where your eyes already are. */
+/* One paragraph, bottom anchored, settled words dimmed and the newest bright. */
 .lt-para {
   margin: 0;
   overflow-y: auto;
@@ -4984,10 +5004,7 @@ body {
   font-weight: 550;
   letter-spacing: -.014em;
   line-height: 1.45;
-  color: rgba(244, 242, 238, .52);
+  color: rgba(244, 242, 238, .5);
 }
-.lt-para b {
-  font-weight: 600;
-  color: #fff;
-}
+.lt-para b { font-weight: 600; color: #fff; }
 .lt-para::-webkit-scrollbar { width: 0; }

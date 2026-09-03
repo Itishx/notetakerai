@@ -9477,6 +9477,7 @@ const livePara = liveEl?.querySelector(".lt-para");
 const liveClock = liveEl?.querySelector(".lt-clock");
 const liveCount = liveEl?.querySelector(".lt-count");
 const liveStopBtn = liveEl?.querySelector(".lt-close");
+const liveMinBtn = liveEl?.querySelector(".lt-min");
 
 let liveOn = false;
 /* Everything finished and banked, from segments the decoder has already been
@@ -9520,6 +9521,7 @@ function liveTick() {
 function liveOpen() {
   if (liveOn || !liveEl) return;
   liveOn = true;
+  liveSetSize(false);
   liveBanked = "";
   liveSettled = "";
   liveNowText = "";
@@ -9538,6 +9540,7 @@ async function liveClose(save = true) {
   if (liveTimer) { window.clearInterval(liveTimer); liveTimer = 0; }
   liveEl.classList.remove("on");
   liveEl.setAttribute("aria-hidden", "true");
+  if (liveMini) { liveMini = false; setMousePassthrough(true); }
 
   /* The last hypothesis was still speech. Dropping it loses the closing
      sentence of every lecture. */
@@ -9572,7 +9575,32 @@ window.brainoMac.onLiveMode?.((payload) => {
    own, and the hotkey. */
 liveStopBtn?.addEventListener("click", () => { void window.brainoMac.liveStop?.(); });
 
+/* Minimise is not stop. Full screen while you are only listening; the bar when
+   you want the machine back. */
+let liveMini = false;
+function liveSetSize(mini) {
+  if (!liveEl) return;
+  liveMini = mini;
+  liveEl.classList.toggle("is-mini", mini);
+  liveEl.classList.toggle("is-full", !mini);
+  if (liveMinBtn) liveMinBtn.textContent = mini ? "Expand" : "Minimise";
+  void window.brainoMac.liveSize?.({ mode: mini ? "mini" : "full" });
+}
+liveMinBtn?.addEventListener("click", () => liveSetSize(!liveMini));
+
+/* While minimised the window is passthrough so every click reaches whatever is
+   underneath. It has to stop being passthrough for exactly as long as the
+   pointer is over the bar, or the buttons on it are decorative. Same trick the
+   mascot uses. */
+const livePanel = liveEl?.querySelector(".lt-panel");
+livePanel?.addEventListener("mouseenter", () => { if (liveMini) setMousePassthrough(false); });
+livePanel?.addEventListener("mouseleave", () => { if (liveMini) setMousePassthrough(true); });
+
 window.brainoMac.onDictationPartial?.((payload) => {
+  /* LIVE owns the transcript while it is up. The notch has its own live
+     surface, and both of them painting the same words several times a second
+     is the duplicate on screen and twice the work for one transcript. */
+  if (liveOn) return;
   if (!dictationMode && !dictationStopping) return;
   const text = String(payload?.text || "").trim();
   if (!text) return;

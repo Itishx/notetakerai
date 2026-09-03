@@ -274,16 +274,17 @@
         </svg>
       </div>
       <!-- LIVE: the lecture, as it is being said.
-           A panel, not the whole screen. Subtitles are read in one place at the
-           bottom of your vision; spreading them over a display means your eyes
-           chase them, and it buries everything else you were doing. -->
-      <section id="live-transcript" aria-hidden="true" aria-live="polite" aria-label="Live transcript">
+           Full screen while you are only listening, because that is the whole
+           effect. Minimise when you need the machine back and it becomes a bar
+           at the bottom that lets every click through except its own. -->
+      <section id="live-transcript" class="is-full" aria-hidden="true" aria-live="polite" aria-label="Live transcript">
         <div class="lt-panel">
           <div class="lt-head">
             <span class="lt-dot" aria-hidden></span>
             <span class="lt-label">Listening</span>
             <span class="lt-clock">0:00</span>
             <span class="lt-count"></span>
+            <button type="button" class="lt-min" aria-label="Minimise">Minimise</button>
             <button type="button" class="lt-close" aria-label="Stop and save">Stop</button>
           </div>
           <p class="lt-para"></p>

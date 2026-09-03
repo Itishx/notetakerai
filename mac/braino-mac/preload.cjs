@@ -117,6 +117,7 @@ contextBridge.exposeInMainWorld("brainoMac", {
   liveStart: () => ipcRenderer.invoke("braino-mac:live-start"),
   liveStop: () => ipcRenderer.invoke("braino-mac:live-stop"),
   liveSave: (payload) => ipcRenderer.invoke("braino-mac:live-save", payload || {}),
+  liveSize: (payload) => ipcRenderer.invoke("braino-mac:live-size", payload || {}),
   onLiveSegment: (callback) => {
     const handler = (_event, payload) => callback(payload || {});
     ipcRenderer.on("braino-mac:live-segment", handler);
