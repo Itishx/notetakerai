@@ -2946,8 +2946,12 @@ function updateNotchFace() {
   notchFace.classList.toggle("busy", visible && walkerHome && processingActive);
   notchFace.classList.remove("nf-processing-caption");
   notchFace.classList.toggle("mic-live", visible && sessionEngaged);
-  notchFace.classList.toggle("nf-dictation", visible && dictationCapturing);
-  walker.classList.toggle("dictation-listening", visible && !walkerHome && dictationCapturing);
+  /* LIVE owns the transcript while it is up. The notch has its own HERA surface
+     and it runs off the same dictation session, so leaving it on painted the
+     same lecture twice: once on the black screen and once in the island. */
+  const liveOwnsIt = Boolean(document.getElementById("live-transcript")?.classList.contains("on"));
+  notchFace.classList.toggle("nf-dictation", visible && dictationCapturing && !liveOwnsIt);
+  walker.classList.toggle("dictation-listening", visible && !walkerHome && dictationCapturing && !liveOwnsIt);
   notchFace.classList.toggle("wake-armed", visible && wakeWordArmed);
   // Sleepy shade by default whenever he's home with nothing going on; a real
   // session snaps the eyes open ("he wakes up") before the island itself
@@ -5344,15 +5348,18 @@ function refreshMousePassthrough(event) {
     setMousePassthrough(false);
     return;
   }
-  /* The live panel, in both sizes. It is a rectangle now, not a takeover, so
-     the rule is the same either way: the panel takes the pointer and every
-     other pixel on the display falls through to whatever is underneath. That
-     is what stops this window from ever capturing the machine again. */
+  /* Full screen, the display is genuinely black and there is nothing behind it
+     worth clicking, so it takes the pointer. That is safe here in a way it was
+     not before only because the exits do not depend on this window: Escape and
+     the hotkey are registered globally, and main hands the mouse back itself if
+     this renderer ever stops answering.
+     Minimised is the opposite and has to be: the bar takes its own pixels and
+     every other click goes through to the machine. */
   if (liveOn) {
-    setMousePassthrough(
-      !pointHitsLivePanel(event.clientX, event.clientY)
-      && !pointHitsBrainoUi(event.clientX, event.clientY),
-    );
+    setMousePassthrough(liveMini
+      ? !pointHitsLivePanel(event.clientX, event.clientY)
+        && !pointHitsBrainoUi(event.clientX, event.clientY)
+      : false);
     return;
   }
   if (dragState) {
@@ -9505,6 +9512,15 @@ const liveMinBtn = liveEl?.querySelector(".lt-min");
    stuck, not any of the theories about focus. */
 const liveState = liveEl?.querySelector(".lt-label");
 const livePanelEl = liveEl?.querySelector(".lt-panel");
+const liveFoot = liveEl?.querySelector(".lt-foot");
+
+/* The line at the bottom of the black screen has one job: say how to get out of
+   whatever it is currently doing. */
+function liveFootSays(html) {
+  if (liveFoot) liveFoot.innerHTML = html;
+}
+const LIVE_FOOT_LISTENING = '<kbd>esc</kbd> to stop and save <span>\u00b7</span> <kbd>\u2318\u21e7E</kbd> to toggle';
+const LIVE_FOOT_CLOSING = '<kbd>esc</kbd> to close';
 
 let liveOn = false;
 /* Between pressing stop and the panel actually going away. liveOn stays true
@@ -9541,9 +9557,14 @@ let liveCarry = [];
 let liveChunkTarget = 5;
 let liveWordsSeen = 0;
 let liveChunkStamp = -1;
-let liveCutIn = 6;
 let liveCutTimer = 0;
 let liveStuckTimer = 0;
+/* The match cut is on a clock, not a word count: it is a cut in an edit, and an
+   edit is paced in seconds. Somewhere between ten and thirty of them, picked
+   fresh each time so it never settles into a beat you can predict. */
+let liveCutClock = 0;
+let liveCutAtChunk = -1;
+let liveHearingTimer = 0;
 
 function liveChunkSizeFor(index) {
   return LIVE_CHUNK_MIN + ((index * 5 + 2) % LIVE_CHUNK_SPREAD);
@@ -9556,11 +9577,28 @@ function liveResetChunks() {
   liveChunkTarget = 5;
   liveWordsSeen = 0;
   liveChunkStamp = -1;
-  liveCutIn = 6;
+  liveCutAtChunk = -1;
 }
 
 /* A cut, not a transition. Restart it by hand because the class is often
    already there from the last one. */
+function startLiveCuts() {
+  stopLiveCuts();
+  liveCutClock = window.setTimeout(() => {
+    /* Only cut if something was actually said since the last one. Cutting a
+       still frame is just a flinch. */
+    if (liveChunkNo !== liveCutAtChunk) {
+      liveCutAtChunk = liveChunkNo;
+      liveMatchCut();
+    }
+    startLiveCuts();
+  }, 10000 + Math.random() * 20000);
+}
+
+function stopLiveCuts() {
+  if (liveCutClock) { window.clearTimeout(liveCutClock); liveCutClock = 0; }
+}
+
 function liveMatchCut() {
   if (!livePanelEl || liveStill?.matches) return;
   const cut = LIVE_CUTS[Math.floor(Math.random() * LIVE_CUTS.length)];
@@ -9588,11 +9626,6 @@ function liveFeedChunks(whole) {
     liveChunkNo += 1;
     liveCarry = [];
     liveChunkTarget = liveChunkSizeFor(liveChunkNo);
-    liveCutIn -= 1;
-    if (liveCutIn <= 0) {
-      liveMatchCut();
-      liveCutIn = 4 + Math.floor(Math.random() * 5);
-    }
   }
   if (liveChunks.length > 8) liveChunks = liveChunks.slice(-8);
 }
@@ -9668,7 +9701,15 @@ function liveRender() {
   const now = livePara.lastElementChild;
   if (now && now.classList.contains("is-now")) {
     const forming = `${liveCarry.join(" ")} ${liveNowText}`.replace(/\s+/g, " ").trim();
-    if (now.textContent !== forming) now.textContent = forming;
+    if (now.textContent !== forming) {
+      now.textContent = forming;
+      /* Words just landed, so the meter moves. It goes flat on its own after a
+         second of nothing, which is how the screen says "still here, room has
+         gone quiet" rather than leaving you to guess. */
+      liveEl?.classList.add("is-hearing");
+      if (liveHearingTimer) window.clearTimeout(liveHearingTimer);
+      liveHearingTimer = window.setTimeout(() => liveEl?.classList.remove("is-hearing"), 900);
+    }
   }
   if (liveCount) {
     const words = whole.split(/\s+/).filter(Boolean).length;
@@ -9696,6 +9737,7 @@ function liveOpen() {
   liveSettled = "";
   liveNowText = "";
   liveResetChunks();
+  startLiveCuts();
   liveStartedAt = Date.now();
   liveRender();
   liveTick();
@@ -9708,6 +9750,9 @@ function liveOpen() {
 /* The three things the panel can say once the recording has stopped. It stops
    listening either way; what changes is whether there is anything to show. */
 function liveShowWorking() {
+  stopLiveCuts();
+  liveFootSays(LIVE_FOOT_CLOSING);
+  liveEl?.classList.remove("is-hearing");
   if (liveState) liveState.textContent = "Writing your notes";
   if (liveDot) liveDot.classList.add("is-working");
   if (liveMinBtn) liveMinBtn.hidden = true;
@@ -9755,7 +9800,10 @@ function liveShowFailed(reason) {
 function liveHide() {
   liveOn = false;
   liveClosing = false;
+  stopLiveCuts();
   if (liveStuckTimer) { window.clearTimeout(liveStuckTimer); liveStuckTimer = 0; }
+  if (liveHearingTimer) { window.clearTimeout(liveHearingTimer); liveHearingTimer = 0; }
+  liveEl?.classList.remove("is-hearing");
   if (!liveEl) return;
   liveEl.classList.remove("on");
   liveEl.setAttribute("aria-hidden", "true");
@@ -9765,6 +9813,7 @@ function liveHide() {
   if (liveMinBtn) liveMinBtn.hidden = false;
   if (liveStopBtn) { liveStopBtn.disabled = false; liveStopBtn.textContent = "Stop"; liveStopBtn.onclick = null; }
   if (liveState) liveState.textContent = "Listening";
+  liveFootSays(LIVE_FOOT_LISTENING);
   liveMini = false;
   liveResetChunks();
   liveBanked = "";

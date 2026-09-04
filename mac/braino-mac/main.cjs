@@ -2481,20 +2481,18 @@ function stopLiveRotation() {
 function setLiveInteractive(mode) {
   if (!dockWindow || dockWindow.isDestroyed()) return;
   const on = mode !== "off";
-  /* This used to make the window focusable and stop it ignoring the mouse while
-     the overlay was full screen. Both are gone, and neither is missed.
+  /* Deliberately no setFocusable here. raiseDockWindow sets focusable false and
+     the overlay poll runs it every 900 milliseconds, so anything set true here
+     was taken away again a second later, which is why the keyboard used to die
+     about a second into every lecture. Every way out of this mode is registered
+     globally instead, and a global shortcut does not care about focus. */
+  const full = mode === "full";
+  /* Full screen the display is actually black, so the window takes the pointer:
+     there is nothing behind it left to click. Minimised and off go back to
+     passthrough. The renderer arbitrates from here on, and main can always take
+     it back (see handBackTheMouse) if the renderer stops answering. */
+  try { dockWindow.setIgnoreMouseEvents(!full, { forward: true }); } catch (_) {}
 
-     The window is not focusable because it never was: raiseDockWindow sets
-     focusable false and the overlay poll runs it every 900 milliseconds, so
-     anything set true here was taken away again a second later. That is why the
-     keyboard died a second into every lecture. Escape is registered globally
-     instead, which is the only thing that works on a window that does not get
-     keystrokes of its own.
-
-     The mouse is left to the renderer, which lifts passthrough only while the
-     pointer is inside the panel. The panel is a rectangle in the middle of the
-     screen now, so there is no case where this window should be taking clicks
-     that land anywhere else, and no way for it to capture the machine. */
   if (on && !liveEscapeBound) {
     liveEscapeBound = globalShortcut.register("Escape", () => {
       /* Two jobs, and which one it is depends on whether anything is still
@@ -2503,6 +2501,7 @@ function setLiveInteractive(mode) {
          already ended, which would do nothing and leave it on screen. */
       if (liveTranscriptMode) { void endLiveTranscript("escape"); return; }
       sendToRenderer("braino-mac:live-dismiss", {});
+      handBackTheMouse("escape-dismiss");
       releaseLiveEscape("dismiss");
     });
     if (!liveEscapeBound) logMac("live.escape_unavailable", {});
@@ -2516,6 +2515,18 @@ function setLiveInteractive(mode) {
    panel is gone, and given back anyway after a minute if the renderer never
    says so. */
 let liveEscapeHoldTimer = null;
+let livePanelFailsafe = null;
+
+/* The one thing main can do about a wedged renderer. Nothing in here depends on
+   the renderer answering, so if the live code ever throws again the machine
+   comes back even though the screen has not. */
+function handBackTheMouse(reason) {
+  if (!dockWindow || dockWindow.isDestroyed()) return;
+  try {
+    dockWindow.setIgnoreMouseEvents(true, { forward: true });
+    logMac("live.mouse.released", { reason });
+  } catch (_) {}
+}
 
 function releaseLiveEscape(reason) {
   if (liveEscapeHoldTimer) { clearTimeout(liveEscapeHoldTimer); liveEscapeHoldTimer = null; }
@@ -2550,6 +2561,16 @@ async function endLiveTranscript(reason = "stop") {
      Escape back at this exact moment is half of how it used to trap the
      machine. The renderer reports when the panel is actually gone. */
   holdLiveEscapeWhilePanelFinishes();
+  /* If the panel has not reported itself gone within a minute of the recording
+     ending, something in the renderer is stuck and the machine gets its mouse
+     back whether the screen agrees or not. */
+  if (livePanelFailsafe) clearTimeout(livePanelFailsafe);
+  livePanelFailsafe = setTimeout(() => {
+    livePanelFailsafe = null;
+    logMac("live.panel.failsafe", {});
+    sendToRenderer("braino-mac:live-dismiss", {});
+    handBackTheMouse("failsafe");
+  }, 60000);
   try { await stopLocalDictation("live-" + reason); } catch (error) {
     logMac("live.stop.failed", { error: String(error?.message || error) });
   }
@@ -17534,7 +17555,9 @@ ipcMain.handle("braino-mac:live-stop", async () => endLiveTranscript("ipc"));
 
 /* The panel is off the screen, so nothing needs Escape any more. */
 ipcMain.handle("braino-mac:live-done", async () => {
+  if (livePanelFailsafe) { clearTimeout(livePanelFailsafe); livePanelFailsafe = null; }
   releaseLiveEscape("panel-closed");
+  handBackTheMouse("panel-closed");
   return { ok: true };
 });
 

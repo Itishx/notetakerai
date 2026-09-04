@@ -4927,31 +4927,45 @@ body {
 }
 #live-transcript.on { display: flex; }
 
-/* Full: a rectangle in the middle of the display, about a paragraph's worth.
-   It used to be the whole screen, and a full-screen surface has to own the
-   mouse and the keyboard to be usable, which is exactly how it managed to trap
-   the machine twice. A panel this size needs neither: everything outside it
-   stays click-through at all times, so the Mac carries on working underneath
-   while the lecture runs. */
+/* Full: the whole display goes black. The words do NOT: they live in a column
+   in the middle and never leave it however long the lecture runs, because text
+   that spans a 15 inch screen is text nobody can take in at a glance. */
 #live-transcript.is-full {
   inset: 0;
-  align-items: center;
-  justify-content: center;
+  align-items: stretch;
   padding: 0;
-  background: none;
-  pointer-events: none;
+  background: #000;
+  /* The window is transparent and click-through by default: html and body are
+     pointer-events none, and every piece of Braino's UI opts back in. This one
+     never did, which is why Stop and Minimise did nothing on the full screen
+     for as long as it has existed. The black screen takes clicks because it
+     covers everything and there is nothing behind it left to press. */
+  pointer-events: auto;
   animation: lt-in .4s cubic-bezier(.16,1,.3,1) both;
 }
 #live-transcript.is-full .lt-panel {
-  pointer-events: auto;
-  width: min(640px, 58vw);
-  /* Tall enough to hold three lines and steady enough not to jump about, but
-     it grows if the big line wraps rather than keeping a fixed cavern of empty
-     black above the words. */
-  min-height: 186px;
-  max-height: 300px;
-  justify-content: flex-end;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  max-height: none;
+  padding: 3.2vh 3.6vw;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  justify-content: flex-start;
 }
+/* The rectangle. */
+#live-transcript.is-full .lt-para {
+  width: min(760px, 64vw);
+  margin: auto;
+  flex: 0 0 auto;
+  min-height: 210px;
+  justify-content: center;
+}
+#live-transcript.is-full .lt-foot { display: flex; }
+#live-transcript.is-full .lt-brand { display: inline-flex; }
 
 /* Mini: a bar, and nothing but the bar takes the pointer. */
 #live-transcript.is-mini {
@@ -4962,6 +4976,8 @@ body {
   animation: lt-in .3s cubic-bezier(.16,1,.3,1) both;
 }
 #live-transcript.is-mini .lt-panel { pointer-events: auto; }
+#live-transcript.is-mini .lt-brand,
+#live-transcript.is-mini .lt-foot { display: none; }
 @keyframes lt-in { from { opacity: 0; } to { opacity: 1; } }
 
 .lt-panel {
@@ -4979,12 +4995,65 @@ body {
   color: #f4f2ee;
 }
 
-.lt-head { display: flex; align-items: center; gap: 11px; font-size: 12px; color: rgba(244,242,238,.5); flex: none; margin-bottom: 10px; }
-.lt-dot { width: 8px; height: 8px; border-radius: 50%; background: #d9645b; animation: lt-pulse 1.6s ease-in-out infinite; flex: none; }
-@keyframes lt-pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .45; transform: scale(.82); } }
+.lt-head { display: flex; align-items: center; gap: 14px; font-size: 12px; color: rgba(244,242,238,.5); flex: none; margin-bottom: 10px; }
+
+/* Its own name, because this is a mode you turn on rather than a panel that
+   appeared, and on a black screen there is nothing else to tell you what you
+   are looking at. */
+.lt-brand {
+  display: none;
+  align-items: baseline;
+  gap: .12em;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -.01em;
+  color: rgba(244,242,238,.42);
+}
+.lt-brand b { font-weight: 700; color: rgba(244,242,238,.92); letter-spacing: .01em; }
+
+/* Listening, and it means it: the bars move when words are actually arriving
+   and settle flat when the room goes quiet, so the screen tells you whether it
+   is still hearing you without you having to read the transcript to find out. */
+.lt-live { display: inline-flex; align-items: center; gap: 8px; }
+.lt-dot { width: 7px; height: 7px; border-radius: 50%; background: #d9645b; box-shadow: 0 0 0 0 rgba(217,100,91,.5); animation: lt-pulse 1.6s ease-in-out infinite; flex: none; }
+@keyframes lt-pulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(217,100,91,.45); }
+  70% { opacity: .6; box-shadow: 0 0 0 7px rgba(217,100,91,0); }
+}
+.lt-bars { display: inline-flex; align-items: center; gap: 2.5px; height: 14px; }
+.lt-bars s { width: 2.5px; height: 3px; border-radius: 2px; background: rgba(244,242,238,.34); text-decoration: none; transition: height .16s ease, background .3s; }
+#live-transcript.is-hearing .lt-bars s { background: rgba(244,242,238,.8); animation: lt-bar .62s ease-in-out infinite; }
+#live-transcript.is-hearing .lt-bars s:nth-child(2) { animation-duration: .48s; }
+#live-transcript.is-hearing .lt-bars s:nth-child(3) { animation-duration: .74s; }
+#live-transcript.is-hearing .lt-bars s:nth-child(4) { animation-duration: .54s; }
+#live-transcript.is-hearing .lt-bars s:nth-child(5) { animation-duration: .68s; }
+@keyframes lt-bar { 0%, 100% { height: 3px; } 50% { height: 13px; } }
+/* Nothing is being heard once the recording has stopped, so the meter goes. */
+.lt-dot.is-working ~ .lt-bars, .lt-dot.is-done ~ .lt-bars { display: none; }
 .lt-label { font-weight: 600; letter-spacing: .06em; text-transform: uppercase; font-size: 10.5px; }
 .lt-clock { font-variant-numeric: tabular-nums; }
 .lt-count { margin-left: auto; }
+
+/* The way out, written down, because a black screen with no chrome is exactly
+   where somebody needs to be told how to leave. */
+.lt-foot {
+  display: none;
+  margin: 0;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: rgba(244,242,238,.3);
+}
+.lt-foot kbd {
+  font: inherit;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 6px;
+  border: 1px solid rgba(255,255,255,.14);
+  background: rgba(255,255,255,.05);
+  color: rgba(244,242,238,.6);
+}
 
 .lt-min, .lt-close {
   flex: none;
@@ -5026,9 +5095,9 @@ body {
   color: #fff;
   text-wrap: balance;
 }
-#live-transcript.is-full .lt-chunk.is-past { font-size: clamp(14px, 1.05vw, 18px); color: rgba(244,242,238,.26); }
-#live-transcript.is-full .lt-chunk.is-recent { font-size: clamp(18px, 1.45vw, 24px); color: rgba(244,242,238,.52); }
-#live-transcript.is-full .lt-chunk.is-now { font-size: clamp(26px, 2.15vw, 36px); color: #fff; }
+#live-transcript.is-full .lt-chunk.is-past { font-size: clamp(17px, 1.3vw, 22px); color: rgba(244,242,238,.24); }
+#live-transcript.is-full .lt-chunk.is-recent { font-size: clamp(22px, 1.8vw, 30px); color: rgba(244,242,238,.5); }
+#live-transcript.is-full .lt-chunk.is-now { font-size: clamp(32px, 2.7vw, 46px); color: #fff; }
 #live-transcript.is-mini .lt-chunk.is-past { display: none; }
 #live-transcript.is-mini .lt-chunk.is-recent { font-size: 13px; color: rgba(244,242,238,.42); }
 #live-transcript.is-mini .lt-chunk.is-now { font-size: 17px; color: #fff; }
