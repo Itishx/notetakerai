@@ -82,6 +82,7 @@ const BrowserAgent = lazy(() => import("./pages/BrowserAgent.tsx"));
 const Delegate = lazy(() => import("./pages/Delegate.tsx"));
 const RemoteAgent = lazy(() => import("./pages/RemoteAgent.tsx"));
 const Dashboard = lazy(() => import("./pages/Dashboard.tsx"));
+const DashboardDesign = lazy(() => import("./pages/DashboardDesign.tsx"));
 const BuildPlan = lazy(() => import("./pages/BuildPlan.tsx"));
 const Reddit = lazy(() => import("./pages/Reddit.tsx"));
 const Privacy = lazy(() => import("./pages/Privacy.tsx"));
@@ -282,6 +283,8 @@ function AppRoutes() {
         <Route path="/delegate" element={<Delegate />} />
         <Route path="/remote-agent" element={<RemoteAgent />} />
         <Route path="/dashboard" element={<Dashboard />} />
+        {/* Design sandbox for the dashboard redesign. Mock data, no auth. */}
+        <Route path="/dd" element={<DashboardDesign />} />
         <Route path="/build-plan" element={<BuildPlan />} />
         <Route path="/reddit" element={<Reddit />} />
         <Route path="/privacy" element={<Privacy />} />
