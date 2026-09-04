@@ -7,13 +7,16 @@ import { useEffect, useRef, useState } from "react";
 import {
   LayoutGrid, FileText, Bot, Brain, Sparkles, Zap, Linkedin, Search, Settings,
   Plus, Mic, ArrowUpRight, CheckCircle2, Clock, ChevronDown, Check, Users,
-  NotebookPen, Presentation,
+  NotebookPen, Presentation, Circle, Loader, Globe, MessageSquare, Briefcase,
+  Heart, XCircle, LogOut, ChevronRight,
 } from "lucide-react";
 import "./dashboard-design.css";
 
 type World = "companion" | "foundry";
 type Tab = "overview" | "notes" | "tasks" | "memory" | "x" | "linkedin" | "research" | "settings";
 type NotesTab = "all" | "lectures" | "meetings";
+type TasksTab = "all" | "running" | "queued" | "done";
+type MemoryTab = "all" | "you" | "preferences" | "projects";
 
 const WORLDS: { key: World; name: string; blurb: string; icon: typeof Brain }[] = [
   { key: "companion", name: "Braino Companion", blurb: "Your notes, lectures and everything he does for you", icon: Brain },
@@ -80,6 +83,65 @@ const TASKS = [
   { title: "Summarise the founder interviews", state: "Done", ok: true, when: "1h ago" },
 ];
 
+const TASKS_TABS: { key: TasksTab; label: string; count: number }[] = [
+  { key: "all", label: "All", count: 12 },
+  { key: "running", label: "Running", count: 1 },
+  { key: "queued", label: "Queued", count: 3 },
+  { key: "done", label: "Done", count: 8 },
+];
+
+type AgentTask = {
+  title: string;
+  where: string;
+  state: TasksTab;
+  when: string;
+  steps?: { label: string; state: "done" | "now" | "next"; took?: string }[];
+};
+
+const AGENT_TASKS: AgentTask[] = [
+  {
+    title: "Draft the investor update for September",
+    where: "Google Docs",
+    state: "running",
+    when: "started 2m ago",
+    steps: [
+      { label: "Read last month's update", state: "done", took: "4s" },
+      { label: "Pulled the numbers from Polar", state: "done", took: "11s" },
+      { label: "Writing the first section", state: "now" },
+      { label: "Share the draft with you", state: "next" },
+    ],
+  },
+  { title: "Pull last month's numbers from Polar", where: "Polar", state: "queued", when: "in 5m" },
+  { title: "Reply to the three intro emails", where: "Gmail", state: "queued", when: "in 12m" },
+  { title: "Book a table for Saturday, 4 people", where: "Google Maps", state: "queued", when: "tonight" },
+  { title: "Summarise the founder interviews", where: "Brainotes", state: "done", when: "1h ago" },
+  { title: "Booked the Bengaluru flight for Friday", where: "MakeMyTrip", state: "done", when: "today, 11:02" },
+  { title: "Ordered the dark chocolate again", where: "Amazon", state: "done", when: "yesterday" },
+  { title: "Cleaned up the Notion inbox", where: "Notion", state: "done", when: "yesterday" },
+  { title: "Found three papers on streaming ASR", where: "Deep work", state: "done", when: "Tuesday" },
+];
+
+const MEMORY_TABS: { key: MemoryTab; label: string; icon: typeof Brain; count: number }[] = [
+  { key: "all", label: "All", icon: Brain, count: 91 },
+  { key: "you", label: "About you", icon: Heart, count: 34 },
+  { key: "preferences", label: "How you work", icon: MessageSquare, count: 29 },
+  { key: "projects", label: "Projects", icon: Briefcase, count: 28 },
+];
+
+type Memory = { text: string; kind: MemoryTab; from: string; when: string };
+
+const MEMORIES: Memory[] = [
+  { text: "Lives in Bengaluru, and books flights out on Friday evenings when he can.", kind: "you", from: "Chat", when: "2d ago" },
+  { text: "Doing the PGP in Venture Building at Mesa School of Business. Mentor feedback counts as a spec change, not an opinion.", kind: "you", from: "Chat", when: "5d ago" },
+  { text: "Wants replies short. Five or six bullets, the answer first, no preamble.", kind: "preferences", from: "Correction", when: "1w ago" },
+  { text: "Plain language, no jargon and no code names. Simple is not the same as vague.", kind: "preferences", from: "Correction", when: "1w ago" },
+  { text: "Ask before changing code. Propose it and wait for an explicit go.", kind: "preferences", from: "Correction", when: "1w ago" },
+  { text: "Braino is about three months old. trybraino.com is a waitlist, so never say the product is usable today.", kind: "projects", from: "Chat", when: "2w ago" },
+  { text: "BrainoHERA is the live lecture mode. It ran forty minutes at about 88 percent on 3 September.", kind: "projects", from: "Mac app", when: "yesterday" },
+  { text: "Production deploys from main. Shipping means merging to main.", kind: "projects", from: "Chat", when: "3w ago" },
+  { text: "Prefers a black coffee in the morning and stops drinking it after four.", kind: "you", from: "Voice", when: "3w ago" },
+];
+
 const ACTIONS = [
   { icon: Plus, label: "New task", key: "N" },
   { icon: Mic, label: "Start a lecture", key: "⌘⇧E" },
@@ -87,10 +149,45 @@ const ACTIONS = [
   { icon: FileText, label: "New note", key: "⌘K" },
 ];
 
+/* Every control the live Settings tab actually has, in the order it has them.
+   The values are made up; the controls are not. */
+const CONNECTORS = [
+  { name: "X", on: true, note: "@creatishhh · posting and replies" },
+  { name: "Notion", on: true, note: "3 databases · synced 12 minutes ago" },
+  { name: "Google Drive", on: false, note: "Read and write files he works on" },
+  { name: "Google Calendar", on: true, note: "itish@gmail.com · watch live until Friday" },
+  { name: "Spotify", on: false, note: "Play, pause and queue what you ask for" },
+];
+
+const SURFACES = [
+  { label: "amazon.in", color: "#e8a33d", count: 14 },
+  { label: "mail.google.com", color: "#c9544a", count: 11 },
+  { label: "notion.so", color: "#6e6e73", count: 9 },
+  { label: "linkedin.com", color: "#3b7bbf", count: 6 },
+  { label: "makemytrip.com", color: "#34936a", count: 4 },
+];
+
+const AVATARS = [
+  { id: "braino", name: "Braino", desc: "The original" },
+  { id: "brainelle", name: "Brainelle", desc: "Her voice" },
+  { id: "webb", name: "Webb", desc: "Web slinger" },
+  { id: "ferro", name: "Ferro", desc: "Flight suit" },
+];
+
+function Switch({ on, onClick }: { on: boolean; onClick: () => void }) {
+  return (
+    <button type="button" className={`dd-sw${on ? " on" : ""}`} onClick={onClick} aria-pressed={on}>
+      <i />
+    </button>
+  );
+}
+
 export default function DashboardDesign() {
   const [world, setWorld] = useState<World>("companion");
   const [tab, setTab] = useState<Tab>("overview");
   const [notesTab, setNotesTab] = useState<NotesTab>("all");
+  const [tasksTab, setTasksTab] = useState<TasksTab>("all");
+  const [memoryTab, setMemoryTab] = useState<MemoryTab>("all");
   const [worldOpen, setWorldOpen] = useState(false);
   const worldRef = useRef<HTMLDivElement>(null);
 
@@ -106,14 +203,20 @@ export default function DashboardDesign() {
   }, [worldOpen]);
 
   const current = WORLDS.find((w) => w.key === world)!;
+  const label = NAV[world].find((i) => i.key === tab)?.label ?? "Settings";
 
   return (
     <div className="dd">
       <div className="dd-shell">
-        <aside className="dd-side">
+        <aside className="dd-left">
           <div className="dd-brand">
             <span className="dd-brand-mark">B</span>
             <span className="dd-brand-name">Braino</span>
+          </div>
+
+          <h1 className="dd-hello">Good afternoon,<br />Itish.</h1>
+          <div className="dd-hello-s">
+            <b>Day 118</b> · last active 4 minutes ago
           </div>
 
           <nav className="dd-nav">
@@ -143,53 +246,63 @@ export default function DashboardDesign() {
             </button>
           </nav>
 
-          <div className="dd-me">
-            <span className="dd-me-av">I</span>
-            <span>
-              <div className="dd-me-n">Itish Pande</div>
-              <div className="dd-me-p">Founding</div>
-            </span>
+          <div className="dd-hero">
+            <div className="dd-hero-l">Done for you this month</div>
+            <div className="dd-hero-v">128</div>
+            <div className="dd-hero-s">of 400 delegate runs · 32 hours back</div>
+            <div className="dd-hero-bar"><div className="dd-hero-fill" style={{ width: "32%" }} /></div>
+            <div className="dd-hero-rule">
+              <span className="dd-me-av">I</span>
+              <span>
+                <div className="dd-me-n">Itish Pande</div>
+                <div className="dd-me-p">Founding</div>
+              </span>
+            </div>
           </div>
         </aside>
 
-        <div>
+        <div className="dd-right">
           <header className="dd-top">
-            <div className="dd-world" ref={worldRef}>
-              <button
-                type="button"
-                className={`dd-world-btn${worldOpen ? " open" : ""}`}
-                onClick={() => setWorldOpen((v) => !v)}
-              >
-                {current.name}
-                <ChevronDown />
-              </button>
-              {worldOpen ? (
-                <div className="dd-world-menu">
-                  {WORLDS.map((w) => {
-                    const Icon = w.icon;
-                    return (
-                      <button
-                        key={w.key}
-                        type="button"
-                        className={`dd-world-opt${w.key === world ? " on" : ""}`}
-                        onClick={() => { setWorld(w.key); setTab("overview"); setWorldOpen(false); }}
-                      >
-                        <Icon />
-                        <span>
-                          <div className="dd-world-n">{w.name}</div>
-                          <div className="dd-world-d">{w.blurb}</div>
-                        </span>
-                        {w.key === world ? <Check className="dd-world-tick" /> : null}
-                      </button>
-                    );
-                  })}
-                </div>
-              ) : null}
+            <div className="dd-crumb">
+              <span className="dd-crumb-t">{label}</span>
+              <span className="dd-crumb-sep">/</span>
+              <div className="dd-world" ref={worldRef}>
+                <button
+                  type="button"
+                  className={`dd-world-btn${worldOpen ? " open" : ""}`}
+                  onClick={() => setWorldOpen((v) => !v)}
+                >
+                  {current.name}
+                  <ChevronDown />
+                </button>
+                {worldOpen ? (
+                  <div className="dd-world-menu">
+                    {WORLDS.map((w) => {
+                      const Icon = w.icon;
+                      return (
+                        <button
+                          key={w.key}
+                          type="button"
+                          className={`dd-world-opt${w.key === world ? " on" : ""}`}
+                          onClick={() => { setWorld(w.key); setTab("overview"); setWorldOpen(false); }}
+                        >
+                          <Icon />
+                          <span>
+                            <div className="dd-world-n">{w.name}</div>
+                            <div className="dd-world-d">{w.blurb}</div>
+                          </span>
+                          {w.key === world ? <Check className="dd-world-tick" /> : null}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : null}
+              </div>
             </div>
 
             <div className="dd-search">
               <Search style={{ width: 15, height: 15 }} />
-              <input placeholder="Search notes, tasks, memory" />
+              <input placeholder="Search" />
               <span className="dd-kbd">/</span>
             </div>
             <button type="button" className="dd-btn solid">
@@ -202,8 +315,14 @@ export default function DashboardDesign() {
             <Overview />
           ) : tab === "notes" ? (
             <Notes active={notesTab} onTab={setNotesTab} />
+          ) : tab === "tasks" ? (
+            <Tasks active={tasksTab} onTab={setTasksTab} />
+          ) : tab === "memory" ? (
+            <Memory active={memoryTab} onTab={setMemoryTab} />
+          ) : tab === "settings" ? (
+            <SettingsScreen />
           ) : (
-            <Soon label={NAV[world].find((i) => i.key === tab)?.label ?? "Settings"} />
+            <Soon label={label} />
           )}
         </div>
       </div>
@@ -215,34 +334,62 @@ function Overview() {
   return (
     <main className="dd-page">
       <section className="dd-sec">
-        <div className="dd-mast">
-          <div>
-            <h1 className="dd-h1">Good afternoon, Itish.</h1>
-            <div className="dd-mast-meta">
-              <span>Day 118</span>
-              <span className="dd-dot" />
-              <span>last active 4 minutes ago</span>
+        <div className="dd-grid-2" style={{ gridTemplateColumns: "1fr 1fr" }}>
+          <div className="dd-card">
+            <div className="dd-led-h">
+              <span className="dd-led-t">This week</span>
+              <span className="dd-pill good">On pace</span>
             </div>
+            <div className="dd-led-r"><span className="dd-led-l">Tasks done</span><span className="dd-led-v">14</span></div>
+            <div className="dd-led-r"><span className="dd-led-l">Notes kept</span><span className="dd-led-v">3</span></div>
+            <div className="dd-led-r"><span className="dd-led-l">Hours listened</span><span className="dd-led-v">2.4</span></div>
+            <div className="dd-led-r"><span className="dd-led-l">Needed you</span><span className="dd-pill good">Once</span></div>
           </div>
-          <div className="dd-quota">
-            <div className="dd-quota-h">
-              <span className="dd-label">Delegate this month</span>
-              <span className="dd-num" style={{ fontSize: 13, fontWeight: 550 }}>128 / 400</span>
+
+          <div className="dd-card">
+            <div className="dd-led-h">
+              <span className="dd-led-t">This month</span>
+              <span className="dd-pill warn">1 running</span>
             </div>
-            <div className="dd-quota-bar"><div className="dd-quota-fill" style={{ width: "32%" }} /></div>
+            <div className="dd-led-r"><span className="dd-led-l">Tasks done</span><span className="dd-led-v">128</span></div>
+            <div className="dd-led-r"><span className="dd-led-l">Finished alone</span><span className="dd-led-v">94%</span></div>
+            <div className="dd-led-r"><span className="dd-led-l">Median run</span><span className="dd-led-v">3m 12s</span></div>
+            <div className="dd-led-r"><span className="dd-led-l">Longest lecture</span><span className="dd-led-v">51m</span></div>
           </div>
         </div>
       </section>
 
       <section className="dd-sec">
-        <div className="dd-grid-4">
-          {STATS.map((s) => (
-            <div key={s.label} className={`dd-card${s.focus ? " dd-focus" : ""}`}>
-              <div className="dd-label">{s.label}</div>
-              <div className="dd-num dd-stat-v">{s.value}</div>
-              <div className="dd-stat-d">{s.delta}</div>
+        <div className="dd-card">
+          <div className="dd-led-h">
+            <span className="dd-led-k">Where the 32 hours went</span>
+          </div>
+          <div className="dd-chips">
+            <span className="dd-chip dd-pill good">48% Listening</span>
+            <span className="dd-chip dd-pill cool">31% Delegate</span>
+            <span className="dd-chip dd-pill plum">21% Research</span>
+          </div>
+          <div className="dd-why good">
+            <div className="dd-why-t">Listening · 48%</div>
+            <div className="dd-why-b">
+              Nine lectures and four meetings, written up while you were still in the room. This is the
+              largest share because it is the one thing he does that you cannot do at the same time as
+              paying attention.
             </div>
-          ))}
+          </div>
+          <div className="dd-why cool">
+            <div className="dd-why-t">Delegate · 31%</div>
+            <div className="dd-why-b">
+              128 runs across nine sites. 94 percent finished without coming back to ask you anything,
+              which is the number worth watching: a run that needs you saved you nothing.
+            </div>
+          </div>
+          <div className="dd-why plum">
+            <div className="dd-why-t">Research · 21%</div>
+            <div className="dd-why-b">
+              Three deep work sessions, 41 sources apiece on average. Slower than the rest and meant to be.
+            </div>
+          </div>
         </div>
       </section>
 
@@ -336,11 +483,6 @@ function Notes({ active, onTab }: { active: NotesTab; onTab: (t: NotesTab) => vo
   return (
     <main className="dd-page">
       <section className="dd-sec">
-        <h1 className="dd-h1">Notes</h1>
-        <div className="dd-mast-meta">Everything he wrote down for you, however it arrived.</div>
-      </section>
-
-      <section className="dd-sec">
         <div className="dd-tabs">
           {NOTES_TABS.map((t) => {
             const Icon = t.icon;
@@ -368,6 +510,331 @@ function Notes({ active, onTab }: { active: NotesTab; onTab: (t: NotesTab) => vo
                 <ArrowUpRight style={{ width: 15, height: 15, color: "var(--ink-4)", flex: "none" }} />
               </div>
             ))}
+          </div>
+        </div>
+      </section>
+    </main>
+  );
+}
+
+function Tasks({ active, onTab }: { active: TasksTab; onTab: (t: TasksTab) => void }) {
+  const rows = active === "all" ? AGENT_TASKS : AGENT_TASKS.filter((t) => t.state === active);
+  return (
+    <main className="dd-page">
+      <section className="dd-sec">
+        <div className="dd-tabs">
+          {TASKS_TABS.map((t) => {
+            const on = t.key === active;
+            return (
+              <button key={t.key} type="button" className={`dd-tab${on ? " on" : ""}`} onClick={() => onTab(t.key)}>
+                {t.label}
+                <span className="dd-tab-c">{t.count}</span>
+                {on ? <span className="dd-tab-u" /> : null}
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="dd-card">
+          <div className="dd-facts">
+            <div>
+              <div className="dd-fact-v">128</div>
+              <div className="dd-fact-l">Done all time</div>
+            </div>
+            <div>
+              <div className="dd-fact-v">94%</div>
+              <div className="dd-fact-l">Finished without you</div>
+            </div>
+            <div>
+              <div className="dd-fact-v">3m 12s</div>
+              <div className="dd-fact-l">Median run</div>
+            </div>
+          </div>
+
+          <div className="dd-rows">
+            {rows.map((t) => (
+              <div key={t.title} style={{ borderTop: "1px solid var(--line-2)", paddingTop: "var(--s2)", paddingBottom: "var(--s2)" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "var(--s2)" }}>
+                  <span className="dd-row-ic">
+                    {t.state === "done" ? <CheckCircle2 /> : t.state === "running" ? <Loader /> : <Clock />}
+                  </span>
+                  <span className="dd-row-b">
+                    <div className="dd-row-t">{t.title}</div>
+                    <div className="dd-row-s">{t.where}</div>
+                  </span>
+                  <span className={`dd-tag${t.state === "running" ? " live" : ""}${t.state === "done" ? " ok" : ""}`}>
+                    {t.state === "running" ? "Running" : t.state === "queued" ? "Queued" : "Done"}
+                  </span>
+                  <span className="dd-row-r">{t.when}</span>
+                </div>
+                {t.steps ? (
+                  <div className="dd-steps">
+                    {t.steps.map((s) => (
+                      <div key={s.label} className={`dd-step ${s.state}`}>
+                        {s.state === "done" ? <CheckCircle2 /> : s.state === "now" ? <Loader /> : <Circle />}
+                        {s.label}
+                        {s.took ? <span className="dd-step-d">{s.took}</span> : null}
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+    </main>
+  );
+}
+
+function Memory({ active, onTab }: { active: MemoryTab; onTab: (t: MemoryTab) => void }) {
+  const rows = active === "all" ? MEMORIES : MEMORIES.filter((m) => m.kind === active);
+  return (
+    <main className="dd-page">
+      <section className="dd-sec">
+        <div className="dd-tabs">
+          {MEMORY_TABS.map((t) => {
+            const Icon = t.icon;
+            const on = t.key === active;
+            return (
+              <button key={t.key} type="button" className={`dd-tab${on ? " on" : ""}`} onClick={() => onTab(t.key)}>
+                <Icon />
+                {t.label}
+                <span className="dd-tab-c">{t.count}</span>
+                {on ? <span className="dd-tab-u" /> : null}
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="dd-card" style={{ marginBottom: "var(--s2)" }}>
+          <div className="dd-sec-h">
+            <h2 className="dd-h2">What he should know about you</h2>
+            <span className="dd-link">412 chars</span>
+          </div>
+          <textarea
+            className="dd-area"
+            defaultValue={"I am building Braino and studying at Mesa. I ship faster than I plan, so hold me to shipping rather than rebuilding. Keep answers short and say the answer first."}
+            placeholder="Who are you, really? What are you building, what should he hold you to?"
+          />
+          <div style={{ display: "flex", alignItems: "center", gap: "var(--s2)", marginTop: "var(--s2)" }}>
+            <button type="button" className="dd-btn solid">Save</button>
+            <span className="dd-hint">He reads this before everything else he does for you.</span>
+          </div>
+        </div>
+
+        <div className="dd-card">
+          {rows.map((m) => (
+            <div className="dd-mem" key={m.text}>
+              <span className="dd-mem-b">
+                <div className="dd-mem-t">{m.text}</div>
+                <div className="dd-mem-s">
+                  <Globe style={{ width: 13, height: 13 }} />
+                  {m.from}
+                  <span className="dd-dot" />
+                  {m.when}
+                </div>
+              </span>
+              <button type="button" className="dd-forget">
+                <XCircle style={{ width: 12, height: 12, display: "inline", verticalAlign: "-2px", marginRight: 4 }} />
+                Forget
+              </button>
+            </div>
+          ))}
+        </div>
+      </section>
+    </main>
+  );
+}
+
+function SettingsScreen() {
+  const [swear, setSwear] = useState(true);
+  const [remember, setRemember] = useState(true);
+  const [voice, setVoice] = useState("fish");
+  const [avatar, setAvatar] = useState("braino");
+
+  return (
+    <main className="dd-page">
+      <section className="dd-sec">
+        <div className="dd-group">
+          <div className="dd-group-h">
+            <div className="dd-group-t">Profile</div>
+            <div className="dd-group-d">How he refers to you, and the account everything is saved against.</div>
+          </div>
+          <div className="dd-list">
+            <div className="dd-field">
+              <label htmlFor="dd-name">Display name</label>
+              <input id="dd-name" className="dd-input" defaultValue="Itish Pande" placeholder="Display name" />
+            </div>
+            <div className="dd-li">
+              <span className="dd-li-b">
+                <div className="dd-li-t">Email</div>
+                <div className="dd-li-s">Used to sign in. Cannot be changed here.</div>
+              </span>
+              <span className="dd-li-v">itishpande21@gmail.com</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="dd-group">
+          <div className="dd-group-h">
+            <div className="dd-group-t">Personality</div>
+            <div className="dd-group-d">Two switches that change how he talks and what he keeps.</div>
+          </div>
+          <div className="dd-list">
+            <div className="dd-li">
+              <span className="dd-li-b">
+                <div className="dd-li-t">Let him swear</div>
+                <div className="dd-li-s">He stays himself either way. This only decides the language.</div>
+              </span>
+              <Switch on={swear} onClick={() => setSwear((v) => !v)} />
+            </div>
+            <div className="dd-li">
+              <span className="dd-li-b">
+                <div className="dd-li-t">Remember what you tell him</div>
+                <div className="dd-li-s">Turning this off stops new memories. The 91 he has stay until you forget them.</div>
+              </span>
+              <Switch on={remember} onClick={() => setRemember((v) => !v)} />
+            </div>
+          </div>
+        </div>
+
+        <div className="dd-group">
+          <div className="dd-group-h">
+            <div className="dd-group-t">Voice and language</div>
+            <div className="dd-group-d">
+              Which voice he uses in live voice mode. Same realtime mechanism either way, only the speaking voice changes.
+            </div>
+          </div>
+          <div className="dd-list">
+            <button type="button" className={`dd-li tap${voice === "fish" ? " on" : ""}`} onClick={() => setVoice("fish")} style={{ width: "100%", border: 0, background: "none", textAlign: "left" }}>
+              <span className="dd-li-b">
+                <div className="dd-li-t">Fish Audio</div>
+                <div className="dd-li-s">His default. Realtime listens, Fish Audio speaks.</div>
+              </span>
+              <span className="dd-radio" />
+            </button>
+            <button type="button" className={`dd-li tap${voice === "realtime" ? " on" : ""}`} onClick={() => setVoice("realtime")} style={{ width: "100%", background: "none", textAlign: "left" }}>
+              <span className="dd-li-b">
+                <div className="dd-li-t">Realtime AI</div>
+                <div className="dd-li-s">OpenAI's native voice. Lowest latency, but it uses OpenAI audio output.</div>
+              </span>
+              <span className="dd-radio" />
+            </button>
+            <div className="dd-li">
+              <span className="dd-li-b">
+                <div className="dd-li-t">Language</div>
+                <div className="dd-li-s">English (US)</div>
+              </span>
+              <span className="dd-tag">Soon</span>
+            </div>
+            <div className="dd-li">
+              <span className="dd-li-b">
+                <div className="dd-li-t">Speech rate</div>
+                <div className="dd-li-s">1.0x, natural</div>
+              </span>
+              <span className="dd-tag">Soon</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="dd-group">
+          <div className="dd-group-h">
+            <div className="dd-group-t">Choose your avatar</div>
+            <div className="dd-group-d">Same voice, memory and actions underneath. This only changes which face turns up.</div>
+          </div>
+          <div className="dd-list">
+            <div className="dd-avatars">
+              {AVATARS.map((a) => (
+                <button
+                  key={a.id}
+                  type="button"
+                  className={`dd-avatar${avatar === a.id ? " on" : ""}`}
+                  onClick={() => setAvatar(a.id)}
+                >
+                  <span className="dd-avatar-n">{a.name}</span>
+                  <span className="dd-avatar-d">{a.desc}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="dd-group">
+          <div className="dd-group-h">
+            <div className="dd-group-t">Connectors</div>
+            <div className="dd-group-d">What he is allowed to reach on your behalf.</div>
+          </div>
+          <div className="dd-list">
+            {CONNECTORS.map((c) => (
+              <div className="dd-li" key={c.name}>
+                <span className={`dd-conn${c.on ? " on" : ""}`} />
+                <span className="dd-li-b">
+                  <div className="dd-li-t">{c.name}</div>
+                  <div className="dd-li-s">{c.note}</div>
+                </span>
+                <button type="button" className="dd-btn">{c.on ? "Reconnect" : "Connect"}</button>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="dd-group">
+          <div className="dd-group-h">
+            <div className="dd-group-t">Braino contacts</div>
+            <div className="dd-group-d">People he can message for you by name.</div>
+          </div>
+          <div className="dd-list">
+            <div className="dd-li">
+              <span className="dd-li-b">
+                <div className="dd-li-t">No contacts saved yet</div>
+                <div className="dd-li-s">Say "save Arjun as a contact" while you are talking to him.</div>
+              </span>
+              <button type="button" className="dd-btn"><Plus />Add</button>
+            </div>
+          </div>
+        </div>
+
+        <div className="dd-group">
+          <div className="dd-group-h">
+            <div className="dd-group-t">Delegate surfaces</div>
+            <div className="dd-group-d">
+              Per site permissions are coming. For now these are the domains your task history touches most.
+            </div>
+          </div>
+          <div className="dd-list">
+            {SURFACES.map((site) => (
+              <div className="dd-li" key={site.label}>
+                <span className="dd-swatch" style={{ background: site.color }} />
+                <span className="dd-li-b"><div className="dd-li-t">{site.label}</div></span>
+                <span className="dd-li-v">{site.count} tasks</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="dd-group">
+          <div className="dd-group-h">
+            <div className="dd-group-t">Plan</div>
+            <div className="dd-group-d">Free plan. Delegate runs are capped, and your whole note history stays available.</div>
+          </div>
+          <div className="dd-list">
+            <div className="dd-plan">
+              <div className="dd-plan-tier">Free</div>
+              <div className="dd-plan-price">$0</div>
+              <div className="dd-plan-note">128 of 400 Delegate runs used this month.</div>
+              <button type="button" className="dd-btn solid">Go Pro, $15 a month</button>
+            </div>
+          </div>
+        </div>
+
+        <div className="dd-group">
+          <div className="dd-list">
+            <button type="button" className="dd-li tap" style={{ width: "100%", background: "none", textAlign: "left" }}>
+              <LogOut style={{ width: 16, height: 16 }} className="dd-danger" />
+              <span className="dd-li-b"><div className="dd-li-t dd-danger">Sign out</div></span>
+              <ChevronRight style={{ width: 16, height: 16, color: "var(--ink-4)" }} />
+            </button>
           </div>
         </div>
       </section>
