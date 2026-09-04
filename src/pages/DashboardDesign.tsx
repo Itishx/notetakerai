@@ -202,18 +202,66 @@ export default function DashboardDesign() {
     return () => { document.removeEventListener("mousedown", away); document.removeEventListener("keydown", esc); };
   }, [worldOpen]);
 
-  const current = WORLDS.find((w) => w.key === world)!;
   const label = NAV[world].find((i) => i.key === tab)?.label ?? "Settings";
+
+  const current = WORLDS.find((w) => w.key === world)!;
 
   return (
     <div className="dd">
+      <header className="dd-head">
+        <div className="dd-head-brand">
+          <span className="dd-brand-mark">B</span>
+          <span className="dd-brand-name">Braino</span>
+        </div>
+
+        {/* The switch lives here because it changes what every column below is
+            about, not just the one it sits in. */}
+        <div className="dd-world" ref={worldRef}>
+          <button
+            type="button"
+            className={`dd-world-btn${worldOpen ? " open" : ""}`}
+            onClick={() => setWorldOpen((v) => !v)}
+          >
+            {current.name}
+            <ChevronDown />
+          </button>
+          {worldOpen ? (
+            <div className="dd-world-menu">
+              {WORLDS.map((w) => {
+                const Icon = w.icon;
+                return (
+                  <button
+                    key={w.key}
+                    type="button"
+                    className={`dd-world-opt${w.key === world ? " on" : ""}`}
+                    onClick={() => { setWorld(w.key); setTab("overview"); setWorldOpen(false); }}
+                  >
+                    <Icon />
+                    <span>
+                      <div className="dd-world-n">{w.name}</div>
+                      <div className="dd-world-d">{w.blurb}</div>
+                    </span>
+                    {w.key === world ? <Check className="dd-world-tick" /> : null}
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
+        </div>
+
+        <div className="dd-search">
+          <Search style={{ width: 15, height: 15 }} />
+          <input placeholder="Search" />
+          <span className="dd-kbd">/</span>
+        </div>
+        <button type="button" className="dd-btn solid">
+          <Plus />
+          New task
+        </button>
+      </header>
+
       <div className="dd-shell">
         <aside className="dd-left">
-          <div className="dd-brand">
-            <span className="dd-brand-mark">B</span>
-            <span className="dd-brand-name">Braino</span>
-          </div>
-
           <h1 className="dd-hello">Good afternoon,<br />Itish.</h1>
           <div className="dd-hello-s">
             <b>Day 118</b> · last active 4 minutes ago
@@ -262,55 +310,6 @@ export default function DashboardDesign() {
         </aside>
 
         <div className="dd-right">
-          <header className="dd-top">
-            <div className="dd-crumb">
-              <span className="dd-crumb-t">{label}</span>
-              <span className="dd-crumb-sep">/</span>
-              <div className="dd-world" ref={worldRef}>
-                <button
-                  type="button"
-                  className={`dd-world-btn${worldOpen ? " open" : ""}`}
-                  onClick={() => setWorldOpen((v) => !v)}
-                >
-                  {current.name}
-                  <ChevronDown />
-                </button>
-                {worldOpen ? (
-                  <div className="dd-world-menu">
-                    {WORLDS.map((w) => {
-                      const Icon = w.icon;
-                      return (
-                        <button
-                          key={w.key}
-                          type="button"
-                          className={`dd-world-opt${w.key === world ? " on" : ""}`}
-                          onClick={() => { setWorld(w.key); setTab("overview"); setWorldOpen(false); }}
-                        >
-                          <Icon />
-                          <span>
-                            <div className="dd-world-n">{w.name}</div>
-                            <div className="dd-world-d">{w.blurb}</div>
-                          </span>
-                          {w.key === world ? <Check className="dd-world-tick" /> : null}
-                        </button>
-                      );
-                    })}
-                  </div>
-                ) : null}
-              </div>
-            </div>
-
-            <div className="dd-search">
-              <Search style={{ width: 15, height: 15 }} />
-              <input placeholder="Search" />
-              <span className="dd-kbd">/</span>
-            </div>
-            <button type="button" className="dd-btn solid">
-              <Plus />
-              New task
-            </button>
-          </header>
-
           {tab === "overview" ? (
             <Overview />
           ) : tab === "notes" ? (
@@ -322,7 +321,7 @@ export default function DashboardDesign() {
           ) : tab === "settings" ? (
             <SettingsScreen />
           ) : (
-            <Soon label={label} />
+            <Soon label={NAV[world].find((i) => i.key === tab)?.label ?? "Settings"} />
           )}
         </div>
       </div>
