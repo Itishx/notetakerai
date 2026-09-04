@@ -5296,8 +5296,8 @@ function rectContains(rect, x, y, pad = 0) {
     && y <= rect.bottom + pad;
 }
 
-/* Is the pointer over the live bar? Only asked while minimised, where the rest
-   of the window has to stay invisible to the mouse. */
+/* Is the pointer over the live panel? Asked in both sizes: the rest of the
+   window has to stay invisible to the mouse whatever the panel is doing. */
 function pointHitsLivePanel(x, y) {
   const panel = liveEl?.querySelector(".lt-panel");
   if (!panel) return false;
@@ -5344,14 +5344,15 @@ function refreshMousePassthrough(event) {
     setMousePassthrough(false);
     return;
   }
-  /* The live overlay, for exactly the reason written above about Braino OS.
-     Full screen it owns the display, so it owns the pointer. Minimised it owns
-     only its own bar and everything else must fall through, which is the whole
-     point of minimising. Without this the first mouse move handed the clicks
-     back and the Minimise and Stop buttons were dead the moment you reached for
-     them. */
+  /* The live panel, in both sizes. It is a rectangle now, not a takeover, so
+     the rule is the same either way: the panel takes the pointer and every
+     other pixel on the display falls through to whatever is underneath. That
+     is what stops this window from ever capturing the machine again. */
   if (liveOn) {
-    setMousePassthrough(liveMini ? !pointHitsLivePanel(event.clientX, event.clientY) : false);
+    setMousePassthrough(
+      !pointHitsLivePanel(event.clientX, event.clientY)
+      && !pointHitsBrainoUi(event.clientX, event.clientY),
+    );
     return;
   }
   if (dragState) {
@@ -9497,8 +9498,18 @@ const liveCount = liveEl?.querySelector(".lt-count");
 const liveStopBtn = liveEl?.querySelector(".lt-close");
 const liveDot = liveEl?.querySelector(".lt-dot");
 const liveMinBtn = liveEl?.querySelector(".lt-min");
+/* This was being used by three functions and declared by none of them, so the
+   first line of liveShowWorking threw a ReferenceError the instant stop was
+   pressed. Nothing after it ran: no save, no close, and a panel left on screen
+   that the pointer had already been taken back from. That was the app getting
+   stuck, not any of the theories about focus. */
+const liveState = liveEl?.querySelector(".lt-label");
+const livePanelEl = liveEl?.querySelector(".lt-panel");
 
 let liveOn = false;
+/* Between pressing stop and the panel actually going away. liveOn stays true
+   through it, so the panel keeps the pointer for as long as it is visible. */
+let liveClosing = false;
 /* Declared with the rest of the live state rather than beside the button that
    sets it: the heartbeat above reads it, and state read from two places should
    be declared before either. */
@@ -9512,6 +9523,94 @@ let liveSettled = "";
 let liveNowText = "";
 let liveStartedAt = 0;
 let liveTimer = 0;
+
+/* Captions in chunks of three to six words rather than one growing paragraph.
+   Sizes vary by position so the rhythm is not a metronome, and the panel keeps
+   only the last few: an hour of lecture is tens of thousands of words and none
+   of the old ones are worth painting again. */
+const LIVE_CHUNK_MIN = 3;
+const LIVE_CHUNK_SPREAD = 4;
+const LIVE_CUTS = ["cut-snap", "cut-slide", "cut-track"];
+const liveStill = window.matchMedia?.("(prefers-reduced-motion: reduce)");
+let liveChunks = [];
+/* Counts every chunk ever made, which the array cannot: it is trimmed to the
+   last few, so using its length for the rhythm pinned the index and every
+   chunk came out the same six words long. */
+let liveChunkNo = 0;
+let liveCarry = [];
+let liveChunkTarget = 5;
+let liveWordsSeen = 0;
+let liveChunkStamp = -1;
+let liveCutIn = 6;
+let liveCutTimer = 0;
+let liveStuckTimer = 0;
+
+function liveChunkSizeFor(index) {
+  return LIVE_CHUNK_MIN + ((index * 5 + 2) % LIVE_CHUNK_SPREAD);
+}
+
+function liveResetChunks() {
+  liveChunks = [];
+  liveChunkNo = 0;
+  liveCarry = [];
+  liveChunkTarget = 5;
+  liveWordsSeen = 0;
+  liveChunkStamp = -1;
+  liveCutIn = 6;
+}
+
+/* A cut, not a transition. Restart it by hand because the class is often
+   already there from the last one. */
+function liveMatchCut() {
+  if (!livePanelEl || liveStill?.matches) return;
+  const cut = LIVE_CUTS[Math.floor(Math.random() * LIVE_CUTS.length)];
+  livePanelEl.classList.remove(...LIVE_CUTS);
+  void livePanelEl.offsetWidth;
+  livePanelEl.classList.add(cut);
+  if (liveCutTimer) window.clearTimeout(liveCutTimer);
+  liveCutTimer = window.setTimeout(() => livePanelEl.classList.remove(...LIVE_CUTS), 260);
+}
+
+/* Words only ever arrive. The decoder rewrites the tail of the current segment
+   as it re-hears it, so the settled text can change without growing; when that
+   happens the glass is left alone rather than reshuffled, because the saved
+   transcript is a separate thing and the reshuffle is only ever visible as a
+   jump. */
+function liveFeedChunks(whole) {
+  const words = whole ? whole.split(/\s+/).filter(Boolean) : [];
+  if (words.length <= liveWordsSeen) return;
+  const fresh = words.slice(liveWordsSeen);
+  liveWordsSeen = words.length;
+  for (const word of fresh) {
+    liveCarry.push(word);
+    if (liveCarry.length < liveChunkTarget) continue;
+    liveChunks.push(liveCarry.join(" "));
+    liveChunkNo += 1;
+    liveCarry = [];
+    liveChunkTarget = liveChunkSizeFor(liveChunkNo);
+    liveCutIn -= 1;
+    if (liveCutIn <= 0) {
+      liveMatchCut();
+      liveCutIn = 4 + Math.floor(Math.random() * 5);
+    }
+  }
+  if (liveChunks.length > 8) liveChunks = liveChunks.slice(-8);
+}
+
+function liveChunkEl(cls, text) {
+  const el = document.createElement("span");
+  el.className = `lt-chunk ${cls}`;
+  el.textContent = text;
+  return el;
+}
+
+/* Only one line changes on most frames. Rebuilding all three would restart the
+   entry animation twenty times a second and the panel would strobe. */
+function liveSay(text) {
+  if (!livePara) return;
+  livePara.replaceChildren(liveChunkEl("is-now", text));
+  liveChunkStamp = -1;
+}
 
 /* The third of three heartbeats. The helper reports how long the model takes,
    main reports whether those words arrive here on time, and this reports how
@@ -9547,15 +9646,30 @@ function liveRender() {
      and rewriting all of it on every partial is the lag: the full transcript
      lives in liveSettled and is saved whole at the end. */
   const whole = `${liveBanked} ${liveSettled}`.replace(/\s+/g, " ").trim();
-  const tail = whole.length > 1200 ? whole.slice(-1200) : whole;
-  livePara.replaceChildren();
-  if (tail) livePara.append(document.createTextNode(tail.endsWith(" ") ? tail : tail + " "));
-  if (liveNowText) {
-    const b = document.createElement("b");
-    b.textContent = liveNowText;
-    livePara.append(b);
+  liveFeedChunks(whole);
+
+  /* The two settled lines are rebuilt only when a chunk actually finishes.
+     The bottom line is the one being spoken, so it is written in place. */
+  if (liveChunks.length !== liveChunkStamp) {
+    liveChunkStamp = liveChunks.length;
+    /* Two settled lines plus the one being spoken. Three in total: any more and
+       it stops being a glance and starts being reading. */
+    const shown = liveChunks.slice(-2);
+    livePara.replaceChildren();
+    shown.slice(0, -1).forEach((text) => livePara.append(liveChunkEl("is-past", text)));
+    if (shown.length) livePara.append(liveChunkEl("is-recent", shown[shown.length - 1]));
+    livePara.append(liveChunkEl("is-now", ""));
+    if (!liveStill?.matches) {
+      livePara.classList.remove("lt-beat");
+      void livePara.offsetWidth;
+      livePara.classList.add("lt-beat");
+    }
   }
-  livePara.scrollTop = livePara.scrollHeight;
+  const now = livePara.lastElementChild;
+  if (now && now.classList.contains("is-now")) {
+    const forming = `${liveCarry.join(" ")} ${liveNowText}`.replace(/\s+/g, " ").trim();
+    if (now.textContent !== forming) now.textContent = forming;
+  }
   if (liveCount) {
     const words = whole.split(/\s+/).filter(Boolean).length;
     liveCount.textContent = words ? `${words.toLocaleString()} words` : "";
@@ -9575,11 +9689,13 @@ function liveTick() {
 function liveOpen() {
   if (liveOn || !liveEl) return;
   liveOn = true;
+  liveClosing = false;
   startLiveMetrics();
   liveSetSize(false);
   liveBanked = "";
   liveSettled = "";
   liveNowText = "";
+  liveResetChunks();
   liveStartedAt = Date.now();
   liveRender();
   liveTick();
@@ -9594,22 +9710,23 @@ function liveOpen() {
 function liveShowWorking() {
   if (liveState) liveState.textContent = "Writing your notes";
   if (liveDot) liveDot.classList.add("is-working");
-  if (liveStopBtn) { liveStopBtn.disabled = true; liveStopBtn.textContent = "Working"; }
   if (liveMinBtn) liveMinBtn.hidden = true;
+  /* Never disabled, at any point, in any state. Whatever this panel happens to
+     be doing, the button on it closes it, and closing it does not cancel the
+     save: that is finishing in the main process either way. A disabled button
+     on a panel that holds part of the screen is the shape of the bug that cost
+     two restarts. */
+  if (liveStopBtn) { liveStopBtn.disabled = false; liveStopBtn.textContent = "Close"; liveStopBtn.onclick = liveHide; }
+  liveSay("One moment.");
 }
 
 function liveShowSaved(saved) {
   if (liveState) liveState.textContent = saved.notes ? "Notes ready" : "Saved";
   if (liveDot) { liveDot.classList.remove("is-working"); liveDot.classList.add("is-done"); }
   if (liveCount) liveCount.textContent = `${(saved.words || 0).toLocaleString()} words · ${saved.minutes || 1} min`;
-  if (livePara) {
-    livePara.replaceChildren();
-    const line = document.createElement("b");
-    line.textContent = saved.notes
-      ? "Your notes are written. The transcript is underneath them."
-      : "The transcript is saved. The notes did not come back this time.";
-    livePara.append(line);
-  }
+  liveSay(saved.notes
+    ? "Your notes are written. The transcript is underneath them."
+    : "The transcript is saved. The notes did not come back this time.");
   /* One button, one obvious thing to do with it. */
   if (liveStopBtn) {
     liveStopBtn.disabled = false;
@@ -9620,37 +9737,57 @@ function liveShowSaved(saved) {
     };
   }
   /* It does not sit there forever. Long enough to read and click. */
-  window.setTimeout(() => { if (!liveOn) liveHide(); }, 20000);
+  window.setTimeout(liveHide, 20000);
 }
 
 function liveShowFailed(reason) {
   if (liveState) liveState.textContent = "Not saved";
   if (liveDot) liveDot.classList.remove("is-working");
-  if (livePara) {
-    livePara.replaceChildren(document.createTextNode(
-      reason === "not_linked"
-        ? "The lecture was not saved because this Mac is not signed in."
-        : "The lecture was not saved. The words are still in the log.",
-    ));
-  }
+  liveSay(reason === "not_linked"
+    ? "The lecture was not saved because this Mac is not signed in."
+    : "The lecture was not saved. The words are still in the log.");
   if (liveStopBtn) { liveStopBtn.disabled = false; liveStopBtn.textContent = "Close"; liveStopBtn.onclick = liveHide; }
-  window.setTimeout(() => { if (!liveOn) liveHide(); }, 12000);
+  window.setTimeout(liveHide, 12000);
 }
 
+/* The single place the panel goes away, and therefore the single place the
+   pointer is handed back. Safe to call twice. */
 function liveHide() {
+  liveOn = false;
+  liveClosing = false;
+  if (liveStuckTimer) { window.clearTimeout(liveStuckTimer); liveStuckTimer = 0; }
   if (!liveEl) return;
   liveEl.classList.remove("on");
   liveEl.setAttribute("aria-hidden", "true");
+  livePanelEl?.classList.remove(...LIVE_CUTS);
+  livePara?.classList.remove("lt-beat");
   if (liveDot) liveDot.classList.remove("is-working", "is-done");
   if (liveMinBtn) liveMinBtn.hidden = false;
   if (liveStopBtn) { liveStopBtn.disabled = false; liveStopBtn.textContent = "Stop"; liveStopBtn.onclick = null; }
   if (liveState) liveState.textContent = "Listening";
-  if (liveMini) { liveMini = false; setMousePassthrough(true); }
+  liveMini = false;
+  liveResetChunks();
+  liveBanked = "";
+  liveSettled = "";
+  liveNowText = "";
+  liveStartedAt = 0;
+  /* Main is holding Escape away from the rest of the Mac until it hears this. */
+  void window.brainoMac.liveDone?.();
+  /* Hand the mouse back unconditionally. The next mouse move re-decides it in
+     a frame, so the worst this can be wrong by is one frame over the mascot,
+     and the alternative is the window keeping clicks it no longer draws
+     anything for. */
+  setMousePassthrough(true);
 }
 
 async function liveClose(save = true) {
-  if (!liveOn || !liveEl) return;
-  liveOn = false;
+  if (!liveOn || liveClosing || !liveEl) return;
+  /* liveOn deliberately stays true until liveHide runs. It used to be cleared
+     right here, and that one line was enough to strand the machine: the pointer
+     arbiter reads it, so the moment stop was pressed every click went straight
+     through a panel that was still on screen, while main had already handed
+     Escape back to the rest of the Mac. Nothing left to press. */
+  liveClosing = true;
   stopLiveMetrics();
   if (liveTimer) { window.clearInterval(liveTimer); liveTimer = 0; }
 
@@ -9666,17 +9803,32 @@ async function liveClose(save = true) {
        database and the screen simply cleared, so there was no reason to believe
        any of it had happened. */
     liveShowWorking();
-    const saved = await window.brainoMac.liveSave?.({ transcript: full, minutes });
-    if (saved?.ok) liveShowSaved(saved);
-    else liveShowFailed(saved?.reason);
+    /* Nothing below here is allowed to leave the panel on screen. A throw used
+       to do exactly that, and the save is a network call, so it also gets an
+       outer limit of its own on top of the one main keeps. */
+    if (liveStuckTimer) window.clearTimeout(liveStuckTimer);
+    liveStuckTimer = window.setTimeout(() => {
+      logRenderer("live.save.stuck", { chars: full.length });
+      liveShowFailed("slow");
+    }, 40000);
+    let saved = null;
+    try {
+      saved = await window.brainoMac.liveSave?.({ transcript: full, minutes });
+    } catch (error) {
+      logRenderer("live.save.threw", { error: String(error?.message || error) });
+    }
+    if (liveStuckTimer) { window.clearTimeout(liveStuckTimer); liveStuckTimer = 0; }
+    try {
+      if (saved?.ok) liveShowSaved(saved);
+      else liveShowFailed(saved?.reason || "error");
+    } catch (error) {
+      logRenderer("live.show.threw", { error: String(error?.message || error) });
+      liveHide();
+    }
     return;
   }
 
   liveHide();
-  liveBanked = "";
-  liveSettled = "";
-  liveNowText = "";
-  liveStartedAt = 0;
 }
 
 /* A rotate finished a segment and reset the decoder behind it. Bank it and
@@ -9695,10 +9847,19 @@ window.brainoMac.onLiveMode?.((payload) => {
   if (payload?.open) liveOpen(); else void liveClose(payload?.save !== false);
 });
 
+/* Escape pressed while the panel is finishing up. It is not a stop, the stop
+   already happened; it is "get off my screen". */
+window.brainoMac.onLiveDismiss?.(() => { liveHide(); });
+
 /* Three ways out, and this is the one you can see. The other two are Escape,
    bound globally in main because this window does not get keystrokes on its
    own, and the hotkey. */
-liveStopBtn?.addEventListener("click", () => { void window.brainoMac.liveStop?.(); });
+liveStopBtn?.addEventListener("click", () => {
+  /* Once the recording has stopped this button belongs to whatever state the
+     panel is in, and that state wires its own onclick. */
+  if (liveClosing) return;
+  void window.brainoMac.liveStop?.();
+});
 
 /* Minimise is not stop. Full screen while you are only listening; the bar when
    you want the machine back. */

@@ -2481,25 +2481,53 @@ function stopLiveRotation() {
 function setLiveInteractive(mode) {
   if (!dockWindow || dockWindow.isDestroyed()) return;
   const on = mode !== "off";
-  /* Full screen owns the display, so it may as well own the pointer: there is
-     nothing behind it to click. Minimised must NOT, and this is where the
-     "I could not do anything" came from — telling a full-screen transparent
-     window to stop ignoring the mouse makes it swallow every click on the
-     machine, panel or not. Minimised goes back to passthrough, and the
-     renderer lifts it only while the pointer is actually over the panel, which
-     is the same trick the mascot already uses. */
-  const full = mode === "full";
-  dockWindow.setFocusable(full);
-  if (full) dockWindow.focus();
-  dockWindow.setIgnoreMouseEvents(!full, { forward: true });
+  /* This used to make the window focusable and stop it ignoring the mouse while
+     the overlay was full screen. Both are gone, and neither is missed.
 
+     The window is not focusable because it never was: raiseDockWindow sets
+     focusable false and the overlay poll runs it every 900 milliseconds, so
+     anything set true here was taken away again a second later. That is why the
+     keyboard died a second into every lecture. Escape is registered globally
+     instead, which is the only thing that works on a window that does not get
+     keystrokes of its own.
+
+     The mouse is left to the renderer, which lifts passthrough only while the
+     pointer is inside the panel. The panel is a rectangle in the middle of the
+     screen now, so there is no case where this window should be taking clicks
+     that land anywhere else, and no way for it to capture the machine. */
   if (on && !liveEscapeBound) {
-    liveEscapeBound = globalShortcut.register("Escape", () => { void endLiveTranscript("escape"); });
+    liveEscapeBound = globalShortcut.register("Escape", () => {
+      /* Two jobs, and which one it is depends on whether anything is still
+         being recorded. After stop the panel is still up writing the notes, so
+         Escape has to dismiss that rather than try to stop a recording that has
+         already ended, which would do nothing and leave it on screen. */
+      if (liveTranscriptMode) { void endLiveTranscript("escape"); return; }
+      sendToRenderer("braino-mac:live-dismiss", {});
+      releaseLiveEscape("dismiss");
+    });
     if (!liveEscapeBound) logMac("live.escape_unavailable", {});
-  } else if (!on && liveEscapeBound) {
-    try { globalShortcut.unregister("Escape"); } catch (_) {}
-    liveEscapeBound = false;
+  } else if (!on) {
+    releaseLiveEscape("off");
   }
+}
+
+/* Escape is registered globally, which means it is taken away from every other
+   app on the Mac for as long as it is held. So it is given back the moment the
+   panel is gone, and given back anyway after a minute if the renderer never
+   says so. */
+let liveEscapeHoldTimer = null;
+
+function releaseLiveEscape(reason) {
+  if (liveEscapeHoldTimer) { clearTimeout(liveEscapeHoldTimer); liveEscapeHoldTimer = null; }
+  if (!liveEscapeBound) return;
+  try { globalShortcut.unregister("Escape"); } catch (_) {}
+  liveEscapeBound = false;
+  logMac("live.escape.released", { reason });
+}
+
+function holdLiveEscapeWhilePanelFinishes() {
+  if (liveEscapeHoldTimer) clearTimeout(liveEscapeHoldTimer);
+  liveEscapeHoldTimer = setTimeout(() => releaseLiveEscape("timeout"), 60000);
 }
 
 /* One way out, whoever asked. Called by Escape, the close button, the hotkey
@@ -2517,7 +2545,11 @@ async function endLiveTranscript(reason = "stop") {
   stopLiveRotation();
   logMac("live.stop", { reason });
   sendToRenderer("braino-mac:live-mode", { open: false, save: true });
-  setLiveInteractive("off");
+  /* Deliberately NOT setLiveInteractive("off") here. The recording has stopped
+     but the panel has not: it is still on screen writing the notes, and taking
+     Escape back at this exact moment is half of how it used to trap the
+     machine. The renderer reports when the panel is actually gone. */
+  holdLiveEscapeWhilePanelFinishes();
   try { await stopLocalDictation("live-" + reason); } catch (error) {
     logMac("live.stop.failed", { error: String(error?.message || error) });
   }
@@ -17500,6 +17532,12 @@ ipcMain.handle("braino-mac:live-size", async (_event, payload = {}) => {
 
 ipcMain.handle("braino-mac:live-stop", async () => endLiveTranscript("ipc"));
 
+/* The panel is off the screen, so nothing needs Escape any more. */
+ipcMain.handle("braino-mac:live-done", async () => {
+  releaseLiveEscape("panel-closed");
+  return { ok: true };
+});
+
 /* The lecture becomes a note. Not a transcript sitting in a log somewhere: a
    document on the shelf with the rest of them, which is the only version of
    this that is worth anything the following week. */
@@ -17517,18 +17555,31 @@ ipcMain.handle("braino-mac:live-stop", async () => endLiveTranscript("ipc"));
  * The transcript is kept underneath the notes, always. Notes are an
  * interpretation and the transcript is the evidence: the moment a student
  * doubts a line, they need the words that were actually said. */
+const LECTURE_NOTES_TIMEOUT_MS = 20000;
+
 async function lectureNotes(transcript, subject) {
   const base = SUPABASE_URL.replace(/\/$/, "");
   const authToken = await getBrainoAuthToken();
-  const res = await fetch(`${base}/functions/v1/lecture-notes`, {
-    method: "POST",
-    headers: {
-      apikey: SUPABASE_ANON_KEY,
-      Authorization: `Bearer ${authToken || SUPABASE_ANON_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ transcript, subject: subject || "" }),
-  });
+  /* Twenty seconds and then it is not happening. The panel is on screen waiting
+     for this, so a request that never comes back is a panel that never goes
+     away, and the transcript below is saved with or without the notes. */
+  const stopWaiting = new AbortController();
+  const bell = setTimeout(() => stopWaiting.abort(), LECTURE_NOTES_TIMEOUT_MS);
+  let res;
+  try {
+    res = await fetch(`${base}/functions/v1/lecture-notes`, {
+      method: "POST",
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${authToken || SUPABASE_ANON_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ transcript, subject: subject || "" }),
+      signal: stopWaiting.signal,
+    });
+  } finally {
+    clearTimeout(bell);
+  }
   const data = await res.json().catch(() => ({}));
   if (!res.ok || !data?.notes) throw new Error(String(data?.error || `status ${res.status}`));
   return { notes: String(data.notes).trim(), overview: String(data.overview || "").trim() };
