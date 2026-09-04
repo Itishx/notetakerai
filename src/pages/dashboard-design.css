@@ -65,17 +65,33 @@
    somewhere to be dense, instead of doing both badly in one column. */
 /* One header across the whole width, because switching between Companion and
    Foundry changes what every column below it is about. */
+/* The name sits in the middle and nothing shares the line with it, the way a
+   masthead works. The controls hold the two ends. */
 .dd-head {
+  position: relative;
   flex: none;
   display: flex; align-items: center; gap: var(--s2);
-  height: 58px; padding: 0 var(--s4) 0 var(--s5);
+  height: 68px; padding: 0 var(--s4) 0 var(--s5);
   background: var(--surface);
   border-bottom: 1px solid var(--line-2);
 }
-.dd-head-brand { display: flex; align-items: center; gap: 7px; width: 336px; margin-left: calc(var(--s5) * -1 + var(--s5)); flex: none; }
+.dd-head-brand {
+  position: absolute; left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+  display: flex; align-items: center; gap: 9px;
+  pointer-events: none;
+}
+.dd-wordmark {
+  font-size: 25px;
+  font-weight: 600;
+  letter-spacing: -0.045em;
+  line-height: 1;
+}
+.dd-brand-mark { width: 22px; height: 22px; border-radius: 7px; background: var(--ink); color: #fff; display: grid; place-items: center; font-size: 12px; font-weight: 600; flex: none; }
 
 /* The columns scroll independently. The panel on the left holds still. */
 .dd-shell { flex: 1; min-height: 0; display: grid; grid-template-columns: 336px 1fr; }
+.dd-head-r { margin-left: auto; display: flex; align-items: center; gap: var(--s2); }
 
 .dd-left {
   position: relative;
@@ -91,7 +107,7 @@
 }
 .dd-left::-webkit-scrollbar { width: 0; }
 .dd-left::after {
-  content: ""; position: fixed; width: 336px; top: 58px; bottom: 0; left: 0;
+  content: ""; position: fixed; width: 336px; top: 68px; bottom: 0; left: 0;
   background: radial-gradient(120% 60% at 0% 0%, rgba(255,255,255,.85), transparent 60%);
   pointer-events: none;
 }
@@ -169,7 +185,7 @@
 .dd-world-tick { margin-left: auto; width: 15px; height: 15px; color: var(--accent); flex: none; margin-top: 2px; }
 
 .dd-search {
-  margin-left: auto; display: flex; align-items: center; gap: var(--s1);
+  display: flex; align-items: center; gap: var(--s1);
   width: 220px; padding: 6px var(--s2);
   background: var(--bg); border: 1px solid var(--line-2); border-radius: var(--r-sm);
   color: var(--ink-3);

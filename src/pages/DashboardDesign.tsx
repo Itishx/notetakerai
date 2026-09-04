@@ -209,9 +209,10 @@ export default function DashboardDesign() {
   return (
     <div className="dd">
       <header className="dd-head">
+        {/* Centred and on its own line, the way a masthead sits. */}
         <div className="dd-head-brand">
           <span className="dd-brand-mark">B</span>
-          <span className="dd-brand-name">Braino</span>
+          <span className="dd-wordmark">Braino</span>
         </div>
 
         {/* The switch lives here because it changes what every column below is
@@ -249,15 +250,17 @@ export default function DashboardDesign() {
           ) : null}
         </div>
 
-        <div className="dd-search">
-          <Search style={{ width: 15, height: 15 }} />
-          <input placeholder="Search" />
-          <span className="dd-kbd">/</span>
+        <div className="dd-head-r">
+          <div className="dd-search">
+            <Search style={{ width: 15, height: 15 }} />
+            <input placeholder="Search" />
+            <span className="dd-kbd">/</span>
+          </div>
+          <button type="button" className="dd-btn solid">
+            <Plus />
+            New task
+          </button>
         </div>
-        <button type="button" className="dd-btn solid">
-          <Plus />
-          New task
-        </button>
       </header>
 
       <div className="dd-shell">
