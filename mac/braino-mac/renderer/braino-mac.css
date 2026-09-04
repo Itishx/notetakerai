@@ -4956,13 +4956,15 @@ body {
   backdrop-filter: none;
   justify-content: flex-start;
 }
-/* The rectangle. */
+/* The rectangle: the words never leave this column however long the lecture
+   runs, and it sits in the middle of the black. */
 #live-transcript.is-full .lt-para {
   width: min(760px, 64vw);
   margin: auto;
   flex: 0 0 auto;
   min-height: 210px;
-  justify-content: center;
+  max-height: 54vh;
+  font-size: clamp(26px, 2.2vw, 38px);
 }
 #live-transcript.is-full .lt-foot { display: flex; }
 #live-transcript.is-full .lt-brand { display: inline-flex; }
@@ -4978,6 +4980,7 @@ body {
 #live-transcript.is-mini .lt-panel { pointer-events: auto; }
 #live-transcript.is-mini .lt-brand,
 #live-transcript.is-mini .lt-foot { display: none; }
+#live-transcript.is-mini .lt-para { font-size: 17px; max-height: 24vh; }
 @keyframes lt-in { from { opacity: 0; } to { opacity: 1; } }
 
 .lt-panel {
@@ -5070,58 +5073,24 @@ body {
 }
 .lt-min:hover, .lt-close:hover { background: rgba(255, 255, 255, .14); border-color: rgba(255,255,255,.3); }
 
-/* Captions do not scroll here, they cut. Three lines at a time, bottom
-   anchored: the two things just said sit above in smaller, dimmer type and the
-   words arriving now are the big bright ones. A wall of text sliding upward is
-   unreadable at a glance, and glancing is the entire reason this is on screen
-   while somebody is talking. */
+/* The lecture as one flow, bottom anchored, in a column that never widens: the
+   settled words dimmed and the ones still being said in white. Chunking these
+   into cut cards was too much to have in the corner of your eye while somebody
+   is actually talking. The column is the part that was right; the typography
+   competing with the room was not. */
 .lt-para {
   margin: 0;
-  flex: 1;
-  min-height: 0;
-  overflow: hidden;
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
   justify-content: flex-end;
-  gap: 7px;
+  overflow-y: auto;
+  font-weight: 600;
+  letter-spacing: -.018em;
+  line-height: 1.42;
+  color: rgba(244, 242, 238, .5);
 }
-.lt-chunk {
-  display: block;
-  max-width: 100%;
-  font-weight: 620;
-  letter-spacing: -.02em;
-  line-height: 1.18;
-  color: #fff;
-  text-wrap: balance;
-}
-#live-transcript.is-full .lt-chunk.is-past { font-size: clamp(17px, 1.3vw, 22px); color: rgba(244,242,238,.24); }
-#live-transcript.is-full .lt-chunk.is-recent { font-size: clamp(22px, 1.8vw, 30px); color: rgba(244,242,238,.5); }
-#live-transcript.is-full .lt-chunk.is-now { font-size: clamp(32px, 2.7vw, 46px); color: #fff; }
-#live-transcript.is-mini .lt-chunk.is-past { display: none; }
-#live-transcript.is-mini .lt-chunk.is-recent { font-size: 13px; color: rgba(244,242,238,.42); }
-#live-transcript.is-mini .lt-chunk.is-now { font-size: 17px; color: #fff; }
-
-/* The beat: every finished chunk lands with a hard snap rather than a fade, so
-   the words read as cut in. steps() is doing the work, not easing. */
-@keyframes lt-beat { 0% { transform: translateY(7px); opacity: .5; } 100% { transform: none; opacity: 1; } }
-.lt-para.lt-beat { animation: lt-beat .13s steps(3, end) both; }
-
-/* The match cuts: now and then the whole block cuts rather than the line, one
-   of three at random, so a long lecture stays something you keep looking at. */
-@keyframes lt-cut-snap { 0% { transform: scale(1.05); } 55% { transform: scale(.985); } 100% { transform: none; } }
-@keyframes lt-cut-slide { 0% { transform: translateX(-16px); opacity: .7; } 100% { transform: none; opacity: 1; } }
-@keyframes lt-cut-track { 0% { letter-spacing: .18em; opacity: .55; } 100% { letter-spacing: -.02em; opacity: 1; } }
-.lt-panel.cut-snap { animation: lt-cut-snap .22s steps(4, end) both; }
-.lt-panel.cut-slide { animation: lt-cut-slide .2s steps(4, end) both; }
-.lt-panel.cut-track .lt-para { animation: lt-cut-track .22s steps(4, end) both; }
-
-@media (prefers-reduced-motion: reduce) {
-  .lt-para.lt-beat,
-  .lt-panel.cut-snap,
-  .lt-panel.cut-slide,
-  .lt-panel.cut-track .lt-para { animation: none; }
-}
+.lt-para b { font-weight: 650; color: #fff; }
+.lt-para::-webkit-scrollbar { width: 0; }
 
 /* The dot after the recording stops: amber while the notes are written, green
    once they are there. The panel stays up through both, because pressing stop

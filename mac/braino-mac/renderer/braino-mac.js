@@ -9540,109 +9540,30 @@ let liveNowText = "";
 let liveStartedAt = 0;
 let liveTimer = 0;
 
-/* Captions in chunks of three to six words rather than one growing paragraph.
-   Sizes vary by position so the rhythm is not a metronome, and the panel keeps
-   only the last few: an hour of lecture is tens of thousands of words and none
-   of the old ones are worth painting again. */
-const LIVE_CHUNK_MIN = 3;
-const LIVE_CHUNK_SPREAD = 4;
-const LIVE_CUTS = ["cut-snap", "cut-slide", "cut-track"];
+/* The words arrive one after another, the way they are said. Chunking them into
+   three to six word cards read as a cut edit and was too much to have in the
+   corner of your eye during an actual lecture: you end up watching the
+   typography instead of listening to the room. The column it sits in is the
+   part that was right, so that stays exactly where it is. */
 const liveStill = window.matchMedia?.("(prefers-reduced-motion: reduce)");
-let liveChunks = [];
-/* Counts every chunk ever made, which the array cannot: it is trimmed to the
-   last few, so using its length for the rhythm pinned the index and every
-   chunk came out the same six words long. */
-let liveChunkNo = 0;
-let liveCarry = [];
-let liveChunkTarget = 5;
-let liveWordsSeen = 0;
-let liveChunkStamp = -1;
-let liveCutTimer = 0;
-let liveStuckTimer = 0;
-/* The match cut is on a clock, not a word count: it is a cut in an edit, and an
-   edit is paced in seconds. Somewhere between ten and thirty of them, picked
-   fresh each time so it never settles into a beat you can predict. */
-let liveCutClock = 0;
-let liveCutAtChunk = -1;
 let liveHearingTimer = 0;
+let liveStuckTimer = 0;
 
-function liveChunkSizeFor(index) {
-  return LIVE_CHUNK_MIN + ((index * 5 + 2) % LIVE_CHUNK_SPREAD);
-}
-
-function liveResetChunks() {
-  liveChunks = [];
-  liveChunkNo = 0;
-  liveCarry = [];
-  liveChunkTarget = 5;
-  liveWordsSeen = 0;
-  liveChunkStamp = -1;
-  liveCutAtChunk = -1;
-}
-
-/* A cut, not a transition. Restart it by hand because the class is often
-   already there from the last one. */
-function startLiveCuts() {
-  stopLiveCuts();
-  liveCutClock = window.setTimeout(() => {
-    /* Only cut if something was actually said since the last one. Cutting a
-       still frame is just a flinch. */
-    if (liveChunkNo !== liveCutAtChunk) {
-      liveCutAtChunk = liveChunkNo;
-      liveMatchCut();
-    }
-    startLiveCuts();
-  }, 10000 + Math.random() * 20000);
-}
-
-function stopLiveCuts() {
-  if (liveCutClock) { window.clearTimeout(liveCutClock); liveCutClock = 0; }
-}
-
-function liveMatchCut() {
-  if (!livePanelEl || liveStill?.matches) return;
-  const cut = LIVE_CUTS[Math.floor(Math.random() * LIVE_CUTS.length)];
-  livePanelEl.classList.remove(...LIVE_CUTS);
-  void livePanelEl.offsetWidth;
-  livePanelEl.classList.add(cut);
-  if (liveCutTimer) window.clearTimeout(liveCutTimer);
-  liveCutTimer = window.setTimeout(() => livePanelEl.classList.remove(...LIVE_CUTS), 260);
-}
-
-/* Words only ever arrive. The decoder rewrites the tail of the current segment
-   as it re-hears it, so the settled text can change without growing; when that
-   happens the glass is left alone rather than reshuffled, because the saved
-   transcript is a separate thing and the reshuffle is only ever visible as a
-   jump. */
-function liveFeedChunks(whole) {
-  const words = whole ? whole.split(/\s+/).filter(Boolean) : [];
-  if (words.length <= liveWordsSeen) return;
-  const fresh = words.slice(liveWordsSeen);
-  liveWordsSeen = words.length;
-  for (const word of fresh) {
-    liveCarry.push(word);
-    if (liveCarry.length < liveChunkTarget) continue;
-    liveChunks.push(liveCarry.join(" "));
-    liveChunkNo += 1;
-    liveCarry = [];
-    liveChunkTarget = liveChunkSizeFor(liveChunkNo);
-  }
-  if (liveChunks.length > 8) liveChunks = liveChunks.slice(-8);
-}
-
-function liveChunkEl(cls, text) {
-  const el = document.createElement("span");
-  el.className = `lt-chunk ${cls}`;
-  el.textContent = text;
-  return el;
-}
-
-/* Only one line changes on most frames. Rebuilding all three would restart the
-   entry animation twenty times a second and the panel would strobe. */
+/* One line, used by the states after the recording stops. */
 function liveSay(text) {
   if (!livePara) return;
-  livePara.replaceChildren(liveChunkEl("is-now", text));
-  liveChunkStamp = -1;
+  const b = document.createElement("b");
+  b.textContent = text;
+  livePara.replaceChildren(b);
+}
+
+/* Words just landed, so the meter moves. It goes flat on its own after a second
+   of nothing, which is how the screen says "still here, the room has gone
+   quiet" rather than leaving you to guess. */
+function liveHeardSomething() {
+  liveEl?.classList.add("is-hearing");
+  if (liveHearingTimer) window.clearTimeout(liveHearingTimer);
+  liveHearingTimer = window.setTimeout(() => liveEl?.classList.remove("is-hearing"), 900);
 }
 
 /* The third of three heartbeats. The helper reports how long the model takes,
@@ -9677,40 +9598,19 @@ function liveRender() {
   const paintBegan = performance.now();
   /* Only the tail is painted. An hour of speech is tens of thousands of words
      and rewriting all of it on every partial is the lag: the full transcript
-     lives in liveSettled and is saved whole at the end. */
+     lives in liveBanked and liveSettled and is saved whole at the end. */
   const whole = `${liveBanked} ${liveSettled}`.replace(/\s+/g, " ").trim();
-  liveFeedChunks(whole);
-
-  /* The two settled lines are rebuilt only when a chunk actually finishes.
-     The bottom line is the one being spoken, so it is written in place. */
-  if (liveChunks.length !== liveChunkStamp) {
-    liveChunkStamp = liveChunks.length;
-    /* Two settled lines plus the one being spoken. Three in total: any more and
-       it stops being a glance and starts being reading. */
-    const shown = liveChunks.slice(-2);
-    livePara.replaceChildren();
-    shown.slice(0, -1).forEach((text) => livePara.append(liveChunkEl("is-past", text)));
-    if (shown.length) livePara.append(liveChunkEl("is-recent", shown[shown.length - 1]));
-    livePara.append(liveChunkEl("is-now", ""));
-    if (!liveStill?.matches) {
-      livePara.classList.remove("lt-beat");
-      void livePara.offsetWidth;
-      livePara.classList.add("lt-beat");
-    }
+  const tail = whole.length > 1200 ? whole.slice(-1200) : whole;
+  const before = livePara.textContent;
+  livePara.replaceChildren();
+  if (tail) livePara.append(document.createTextNode(tail.endsWith(" ") ? tail : tail + " "));
+  if (liveNowText) {
+    const b = document.createElement("b");
+    b.textContent = liveNowText;
+    livePara.append(b);
   }
-  const now = livePara.lastElementChild;
-  if (now && now.classList.contains("is-now")) {
-    const forming = `${liveCarry.join(" ")} ${liveNowText}`.replace(/\s+/g, " ").trim();
-    if (now.textContent !== forming) {
-      now.textContent = forming;
-      /* Words just landed, so the meter moves. It goes flat on its own after a
-         second of nothing, which is how the screen says "still here, room has
-         gone quiet" rather than leaving you to guess. */
-      liveEl?.classList.add("is-hearing");
-      if (liveHearingTimer) window.clearTimeout(liveHearingTimer);
-      liveHearingTimer = window.setTimeout(() => liveEl?.classList.remove("is-hearing"), 900);
-    }
-  }
+  livePara.scrollTop = livePara.scrollHeight;
+  if (livePara.textContent !== before) liveHeardSomething();
   if (liveCount) {
     const words = whole.split(/\s+/).filter(Boolean).length;
     liveCount.textContent = words ? `${words.toLocaleString()} words` : "";
@@ -9736,8 +9636,6 @@ function liveOpen() {
   liveBanked = "";
   liveSettled = "";
   liveNowText = "";
-  liveResetChunks();
-  startLiveCuts();
   liveStartedAt = Date.now();
   liveRender();
   liveTick();
@@ -9750,7 +9648,6 @@ function liveOpen() {
 /* The three things the panel can say once the recording has stopped. It stops
    listening either way; what changes is whether there is anything to show. */
 function liveShowWorking() {
-  stopLiveCuts();
   liveFootSays(LIVE_FOOT_CLOSING);
   liveEl?.classList.remove("is-hearing");
   if (liveState) liveState.textContent = "Writing your notes";
@@ -9800,22 +9697,18 @@ function liveShowFailed(reason) {
 function liveHide() {
   liveOn = false;
   liveClosing = false;
-  stopLiveCuts();
   if (liveStuckTimer) { window.clearTimeout(liveStuckTimer); liveStuckTimer = 0; }
   if (liveHearingTimer) { window.clearTimeout(liveHearingTimer); liveHearingTimer = 0; }
   liveEl?.classList.remove("is-hearing");
   if (!liveEl) return;
   liveEl.classList.remove("on");
   liveEl.setAttribute("aria-hidden", "true");
-  livePanelEl?.classList.remove(...LIVE_CUTS);
-  livePara?.classList.remove("lt-beat");
   if (liveDot) liveDot.classList.remove("is-working", "is-done");
   if (liveMinBtn) liveMinBtn.hidden = false;
   if (liveStopBtn) { liveStopBtn.disabled = false; liveStopBtn.textContent = "Stop"; liveStopBtn.onclick = null; }
   if (liveState) liveState.textContent = "Listening";
   liveFootSays(LIVE_FOOT_LISTENING);
   liveMini = false;
-  liveResetChunks();
   liveBanked = "";
   liveSettled = "";
   liveNowText = "";
