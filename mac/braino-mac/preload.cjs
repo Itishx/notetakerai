@@ -120,6 +120,12 @@ contextBridge.exposeInMainWorld("brainoMac", {
   liveSize: (payload) => ipcRenderer.invoke("braino-mac:live-size", payload || {}),
   liveOpen: (payload) => ipcRenderer.invoke("braino-mac:live-open", payload || {}),
   liveDone: () => ipcRenderer.invoke("braino-mac:live-done"),
+  pickerMode: (payload) => ipcRenderer.invoke("braino-mac:picker-mode", payload || {}),
+  onPickerDismiss: (fn) => {
+    const handler = () => fn();
+    ipcRenderer.on("braino-mac:picker-dismiss", handler);
+    return () => ipcRenderer.removeListener("braino-mac:picker-dismiss", handler);
+  },
   onTypingDismiss: (fn) => {
     const handler = () => fn();
     ipcRenderer.on("braino-mac:typing-dismiss", handler);

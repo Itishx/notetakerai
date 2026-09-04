@@ -296,6 +296,23 @@
         </div>
       </section>
 
+      <!-- Picking his patch. The screen dims, you drag a box, and that is where
+           he walks from then on. A single click instead of a drag pins him to
+           that spot and he stops walking altogether. Escape always leaves. -->
+      <section id="walk-picker" aria-hidden="true">
+        <div class="wp-dim"></div>
+        <div class="wp-box" hidden><span class="wp-size"></span></div>
+        <div class="wp-hint">
+          <b>Drag a box</b> where you want him to walk
+          <span class="wp-or">or</span>
+          <b>click once</b> to stand him in one place
+          <span class="wp-actions">
+            <button type="button" class="wp-whole">Whole screen</button>
+            <button type="button" class="wp-cancel">Cancel</button>
+          </span>
+        </div>
+      </section>
+
       <section id="status-pill">
         <span id="status-dot"></span>
         <span id="status-text">Starting Braino Mac</span>
@@ -371,6 +388,13 @@
               <span class="braino-character-blurb">Flight suit</span>
             </button>
           </div>
+        </div>
+        <div class="braino-customizer-section">
+          <div class="braino-customizer-section-title">Walkable area</div>
+          <button type="button" id="braino-walk-area" class="braino-walk-btn">
+            <span class="braino-walk-name">Where you want him to walk</span>
+            <span class="braino-walk-blurb">Whole screen</span>
+          </button>
         </div>
         <div class="braino-customizer-actions">
           <button id="braino-size-reset" type="button">Reset</button>

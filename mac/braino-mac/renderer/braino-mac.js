@@ -589,6 +589,61 @@ function markVoiceLatency(stage, data = {}) {
   }
 }
 
+/* Where he is allowed to walk, as fractions of the screen rather than pixels,
+   so the patch still means the same thing on a different display or after a
+   monitor is plugged in.
+     { mode: "screen" }                the whole thing, the default
+     { mode: "area", x, y, w, h }      a box he keeps to
+     { mode: "pin", x, y }             one spot, standing, no walking          */
+const WALK_AREA_STORAGE_KEY = "braino-mac-walk-area-v1";
+let walkArea = { mode: "screen" };
+/* The line he is currently walking along. He keeps to one until he decides to
+   change level, and he never changes level mid stride. */
+let roamFloorY = null;
+
+function readWalkArea() {
+  try {
+    const raw = JSON.parse(window.localStorage.getItem(WALK_AREA_STORAGE_KEY) || "null");
+    if (!raw || typeof raw !== "object") return { mode: "screen" };
+    if (raw.mode === "pin" && Number.isFinite(raw.x) && Number.isFinite(raw.y)) {
+      return { mode: "pin", x: clamp(raw.x, 0, 1), y: clamp(raw.y, 0, 1) };
+    }
+    if (raw.mode === "area" && [raw.x, raw.y, raw.w, raw.h].every(Number.isFinite) && raw.w > 0 && raw.h > 0) {
+      return { mode: "area", x: clamp(raw.x, 0, 1), y: clamp(raw.y, 0, 1), w: clamp(raw.w, 0, 1), h: clamp(raw.h, 0, 1) };
+    }
+  } catch (_) {}
+  return { mode: "screen" };
+}
+
+function saveWalkArea(next) {
+  walkArea = next;
+  try { window.localStorage.setItem(WALK_AREA_STORAGE_KEY, JSON.stringify(next)); } catch (_) {}
+  roamFloorY = null;
+  nextTargetAt = 0;
+  renderWalkAreaButton();
+  logRenderer("walk.area", next);
+}
+
+/* Deliberately separate from getMoveBounds. That one clamps every setPosition
+   there is, including drags, scripted walks and the moonwalk, and a patch is
+   about where he chooses to wander, not a cage that fights everything else. */
+function getRoamBounds() {
+  const full = getMoveBounds();
+  if (!walkArea || walkArea.mode === "screen") return full;
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  if (walkArea.mode === "pin") {
+    const x = clamp(walkArea.x * vw - W / 2, full.minX, full.maxX);
+    const y = clamp(walkArea.y * vh - H / 2, full.minY, full.maxY);
+    return { minX: x, maxX: x, minY: y, maxY: y };
+  }
+  const minX = clamp(walkArea.x * vw, full.minX, full.maxX);
+  const maxX = clamp((walkArea.x + walkArea.w) * vw - W, minX, full.maxX);
+  const minY = clamp(walkArea.y * vh, full.minY, full.maxY);
+  const maxY = clamp((walkArea.y + walkArea.h) * vh - H, minY, full.maxY);
+  return { minX, maxX, minY, maxY };
+}
+
 function getMoveBounds() {
   return {
     minX: 10,
@@ -651,6 +706,117 @@ function setBrainoCustomizerOpen(open) {
     setMousePassthrough(true);
   }
 }
+
+/* ── Picking his patch ────────────────────────────────────────────────────
+   Drag a box and that is where he walks. Click once instead and he stands
+   there. Escape leaves, the button leaves, and main takes the mouse back on
+   its own if this ever stops answering. */
+const walkPicker = document.getElementById("walk-picker");
+const wpBox = walkPicker?.querySelector(".wp-box");
+const wpSize = walkPicker?.querySelector(".wp-size");
+const brainoWalkBtn = document.getElementById("braino-walk-area");
+const brainoWalkBlurb = brainoWalkBtn?.querySelector(".braino-walk-blurb");
+
+let walkPickerOpen = false;
+let wpDrag = null;
+
+function renderWalkAreaButton() {
+  if (!brainoWalkBlurb) return;
+  if (walkArea?.mode === "pin") brainoWalkBlurb.textContent = "Standing in one place";
+  else if (walkArea?.mode === "area") {
+    brainoWalkBlurb.textContent = `A patch, ${Math.round(walkArea.w * 100)}% by ${Math.round(walkArea.h * 100)}% of the screen`;
+  } else brainoWalkBlurb.textContent = "Whole screen";
+}
+
+function openWalkPicker() {
+  if (!walkPicker || walkPickerOpen) return;
+  walkPickerOpen = true;
+  setBrainoCustomizerOpen(false);
+  wpDrag = null;
+  if (wpBox) wpBox.hidden = true;
+  walkPicker.classList.add("on");
+  walkPicker.setAttribute("aria-hidden", "false");
+  setMousePassthrough(false);
+  void window.brainoMac.pickerMode?.({ on: true });
+  logRenderer("walk.picker.open", {});
+}
+
+function closeWalkPicker(reason) {
+  if (!walkPickerOpen) return;
+  walkPickerOpen = false;
+  wpDrag = null;
+  walkPicker?.classList.remove("on");
+  walkPicker?.setAttribute("aria-hidden", "true");
+  if (wpBox) wpBox.hidden = true;
+  setMousePassthrough(true);
+  void window.brainoMac.pickerMode?.({ on: false });
+  logRenderer("walk.picker.close", { reason: reason || "" });
+}
+
+function wpPaint(a, b) {
+  if (!wpBox) return;
+  const left = Math.min(a.x, b.x);
+  const top = Math.min(a.y, b.y);
+  const width = Math.abs(b.x - a.x);
+  const height = Math.abs(b.y - a.y);
+  wpBox.hidden = false;
+  wpBox.style.left = `${left}px`;
+  wpBox.style.top = `${top}px`;
+  wpBox.style.width = `${width}px`;
+  wpBox.style.height = `${height}px`;
+  if (wpSize) wpSize.textContent = `${Math.round(width)} by ${Math.round(height)}`;
+  return { left, top, width, height };
+}
+
+walkPicker?.addEventListener("pointerdown", (event) => {
+  if (event.target.closest(".wp-hint")) return;
+  event.preventDefault();
+  wpDrag = { x: event.clientX, y: event.clientY };
+  wpPaint(wpDrag, wpDrag);
+});
+
+walkPicker?.addEventListener("pointermove", (event) => {
+  if (!wpDrag) return;
+  wpPaint(wpDrag, { x: event.clientX, y: event.clientY });
+});
+
+walkPicker?.addEventListener("pointerup", (event) => {
+  if (!wpDrag) return;
+  const start = wpDrag;
+  wpDrag = null;
+  const width = Math.abs(event.clientX - start.x);
+  const height = Math.abs(event.clientY - start.y);
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  /* Too small to be a box means it was a click, and a click means stand here.
+     He needs somewhere to stand, not a patch he cannot turn around in. */
+  if (width < 40 || height < 40) {
+    saveWalkArea({ mode: "pin", x: clamp(event.clientX / vw, 0, 1), y: clamp(event.clientY / vh, 0, 1) });
+    closeWalkPicker("pin");
+    return;
+  }
+  saveWalkArea({
+    mode: "area",
+    x: clamp(Math.min(start.x, event.clientX) / vw, 0, 1),
+    y: clamp(Math.min(start.y, event.clientY) / vh, 0, 1),
+    w: clamp(width / vw, 0, 1),
+    h: clamp(height / vh, 0, 1),
+  });
+  closeWalkPicker("area");
+});
+
+walkPicker?.querySelector(".wp-whole")?.addEventListener("click", () => {
+  saveWalkArea({ mode: "screen" });
+  closeWalkPicker("whole");
+});
+walkPicker?.querySelector(".wp-cancel")?.addEventListener("click", () => closeWalkPicker("cancel"));
+brainoWalkBtn?.addEventListener("click", openWalkPicker);
+/* Escape, bound globally in main because this window does not get keystrokes
+   of its own. */
+window.brainoMac.onPickerDismiss?.(() => closeWalkPicker("escape"));
+
+walkArea = readWalkArea();
+renderWalkAreaButton();
 
 function setBrainoScale(nextScale, persist = true) {
   brainoScale = clamp(Number(nextScale) || BRAINO_SCALE_MIN, BRAINO_SCALE_MIN, BRAINO_SCALE_MAX);
@@ -884,9 +1050,29 @@ function pickRoamTarget(now = performance.now()) {
     return;
   }
 
-  const bounds = getMoveBounds();
+  const bounds = getRoamBounds();
+
+  /* Standing in one place is a mode, not an absence of one. */
+  if (walkArea?.mode === "pin") {
+    targetX = bounds.minX;
+    targetY = bounds.minY;
+    roamFloorY = bounds.minY;
+    nextTargetAt = now + 60000;
+    return;
+  }
+
+  /* He used to get a random X AND a random Y and set off along the straight
+     line between here and there, which meant walking diagonally through empty
+     space. A character with legs moving on a slant reads as floating, not
+     walking. So: he walks along a floor, and picking a new floor is something
+     that happens between walks rather than during one. */
+  const room = Math.max(0, bounds.maxY - bounds.minY);
+  if (roamFloorY === null) roamFloorY = clamp(posY, bounds.minY, bounds.maxY);
+  if (room > 8 && Math.random() < 0.28) roamFloorY = bounds.minY + Math.random() * room;
+  roamFloorY = clamp(roamFloorY, bounds.minY, bounds.maxY);
+
   targetX = clamp(bounds.minX + Math.random() * (bounds.maxX - bounds.minX), bounds.minX, bounds.maxX);
-  targetY = clamp(bounds.minY + Math.random() * (bounds.maxY - bounds.minY), bounds.minY, bounds.maxY);
+  targetY = roamFloorY;
   nextTargetAt = now + 2600 + Math.random() * 4400;
 }
 
@@ -5348,6 +5534,12 @@ function refreshMousePassthrough(event) {
     setMousePassthrough(false);
     return;
   }
+  /* Picking his patch is a whole-screen gesture, so it owns the pointer for as
+     long as it is up and not a moment longer. */
+  if (walkPickerOpen) {
+    setMousePassthrough(false);
+    return;
+  }
   /* Full screen, the display is genuinely black and there is nothing behind it
      worth clicking, so it takes the pointer. That is safe here in a way it was
      not before only because the exits do not depend on this window: Escape and
@@ -8946,7 +9138,7 @@ function tick(now) {
       walkingNow = false;
       resolve();
     }
-  } else if (!dragState && !brainoCustomizerOpen && !shouldHoldAttention && !skitMoonwalk && !skitJustCompleted && !musicDancing) {
+  } else if (!dragState && !brainoCustomizerOpen && !walkPickerOpen && !shouldHoldAttention && !skitMoonwalk && !skitJustCompleted && !musicDancing) {
     if (movementMode === "dock") {
       targetY = getDockBounds().y;
     }
@@ -8955,11 +9147,19 @@ function tick(now) {
     const speed = 76;
     const dx = targetX - posX;
     const dy = targetY - posY;
-    const dist = Math.max(0.01, Math.hypot(dx, dy));
-    const step = Math.min(dist, speed * dt);
-    setPosition(posX + (dx / dist) * step, posY + (dy / dist) * step);
-    if (Math.abs(dx) > 0.25) dirX = dx >= 0 ? 1 : -1;
-    walkingNow = step > 0.05 && dist > 0.5;
+    /* One axis at a time, and height first. Settling onto the line reads as
+       stepping up or down; walking along it is the only time his legs move.
+       Both at once was the diagonal drift. */
+    if (Math.abs(dy) > 0.5) {
+      const rise = Math.min(Math.abs(dy), 150 * dt);
+      setPosition(posX, posY + Math.sign(dy) * rise);
+      walkingNow = false;
+    } else {
+      const stride = Math.min(Math.abs(dx), speed * dt);
+      setPosition(posX + Math.sign(dx) * stride, posY);
+      if (Math.abs(dx) > 0.25) dirX = dx >= 0 ? 1 : -1;
+      walkingNow = stride > 0.05 && Math.abs(dx) > 0.5;
+    }
   }
 
   walker.style.transform = `translate3d(${posX}px, ${posY}px, 0)`;

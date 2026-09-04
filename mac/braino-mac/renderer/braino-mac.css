@@ -5098,3 +5098,94 @@ body {
 .lt-dot.is-working { background: #e0a13f; }
 .lt-dot.is-done { background: #17a86c; animation: none; }
 .lt-close:disabled { opacity: .55; cursor: default; }
+
+
+/* ── Where he walks ───────────────────────────────────────────────────────
+   The menu button that opens the picker, and the picker itself. */
+.braino-walk-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  padding: 9px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, .12);
+  background: rgba(255, 255, 255, .06);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background .18s, border-color .18s;
+}
+.braino-walk-btn:hover { background: rgba(255, 255, 255, .12); border-color: rgba(255,255,255,.26); }
+.braino-walk-name { font-size: 12.5px; font-weight: 600; }
+.braino-walk-blurb { font-size: 11px; opacity: .55; }
+
+/* The picker takes the whole screen while it is up, and only while it is up.
+   Same rule as everything else here: one visible way out, one on the keyboard,
+   and main can take the mouse back on its own if this stops answering. */
+#walk-picker {
+  position: fixed;
+  inset: 0;
+  z-index: 9400;
+  display: none;
+  pointer-events: auto;
+  cursor: crosshair;
+  font-family: "SF Pro Display", -apple-system, BlinkMacSystemFont, sans-serif;
+}
+#walk-picker.on { display: block; }
+.wp-dim { position: absolute; inset: 0; background: rgba(0, 0, 0, .5); }
+.wp-box {
+  position: absolute;
+  border: 1.5px solid rgba(255, 255, 255, .92);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, .1);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, .4) inset;
+}
+.wp-size {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 12px;
+  font-weight: 600;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, .7);
+}
+.wp-hint {
+  position: absolute;
+  left: 50%;
+  bottom: 9vh;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 18px;
+  border-radius: 999px;
+  background: rgba(12, 12, 14, .92);
+  border: 1px solid rgba(255, 255, 255, .1);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, .5);
+  backdrop-filter: blur(20px) saturate(140%);
+  color: rgba(244, 242, 238, .62);
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+.wp-hint b { color: #fff; font-weight: 620; }
+.wp-or { opacity: .45; }
+.wp-actions { display: inline-flex; gap: 8px; margin-left: 6px; }
+.wp-hint button {
+  padding: 5px 13px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, .18);
+  background: rgba(255, 255, 255, .07);
+  color: #f4f2ee;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .18s, border-color .18s;
+}
+.wp-hint button:hover { background: rgba(255, 255, 255, .15); border-color: rgba(255, 255, 255, .3); }

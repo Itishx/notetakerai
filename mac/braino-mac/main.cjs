@@ -17583,6 +17583,48 @@ ipcMain.handle("braino-mac:live-size", async (_event, payload = {}) => {
 ipcMain.handle("braino-mac:live-stop", async () => endLiveTranscript("ipc"));
 
 /* The panel is off the screen, so nothing needs Escape any more. */
+/* Picking where he walks. Same contract as everything else that covers the
+   screen: Escape is registered globally because this window is not focusable,
+   the mouse comes back the moment it closes, and if the renderer never says it
+   closed then main closes it anyway. */
+let pickerEscapeBound = false;
+let pickerFailsafe = null;
+
+function releasePickerEscape(reason) {
+  if (pickerFailsafe) { clearTimeout(pickerFailsafe); pickerFailsafe = null; }
+  if (!pickerEscapeBound) return;
+  try { globalShortcut.unregister("Escape"); } catch (_) {}
+  pickerEscapeBound = false;
+  logMac("walk.picker.escape_released", { reason });
+}
+
+ipcMain.handle("braino-mac:picker-mode", async (_event, payload = {}) => {
+  const on = Boolean(payload?.on);
+  logMac("walk.picker", { on });
+  if (!on) {
+    releasePickerEscape("closed");
+    handBackTheMouse("picker-closed");
+    return { ok: true };
+  }
+  if (!pickerEscapeBound) {
+    pickerEscapeBound = globalShortcut.register("Escape", () => {
+      sendToRenderer("braino-mac:picker-dismiss", {});
+      releasePickerEscape("escape");
+      handBackTheMouse("picker-escape");
+    });
+    if (!pickerEscapeBound) logMac("walk.picker.escape_unavailable", {});
+  }
+  if (pickerFailsafe) clearTimeout(pickerFailsafe);
+  pickerFailsafe = setTimeout(() => {
+    pickerFailsafe = null;
+    logMac("walk.picker.failsafe", {});
+    sendToRenderer("braino-mac:picker-dismiss", {});
+    releasePickerEscape("failsafe");
+    handBackTheMouse("picker-failsafe");
+  }, 120000);
+  return { ok: true };
+});
+
 ipcMain.handle("braino-mac:live-done", async () => {
   if (livePanelFailsafe) { clearTimeout(livePanelFailsafe); livePanelFailsafe = null; }
   releaseLiveEscape("panel-closed");
