@@ -17471,6 +17471,25 @@ ipcMain.handle("braino-mac:live-start", async () => {
 /* Minimising is not closing. Full screen while you are only listening; the bar
    when you need the machine back, and then the window has to stop taking
    clicks or "minimised" means nothing. */
+/* Open the notes. Restricted to our own document links, because a renderer
+   that can ask the main process to open any URL is a renderer that can be
+   talked into opening anything. */
+ipcMain.handle("braino-mac:live-open", async (_event, payload = {}) => {
+  const url = String(payload?.url || "");
+  if (!/^https:\/\/trybraino\.com\/d\/[A-Za-z0-9]+$/.test(url)) {
+    logMac("live.open.refused", { url: textForLog(url, 120) });
+    return { ok: false };
+  }
+  try {
+    await shell.openExternal(url);
+    logMac("live.open", { url });
+    return { ok: true };
+  } catch (error) {
+    logMac("live.open.failed", { error: String(error?.message || error) });
+    return { ok: false };
+  }
+});
+
 ipcMain.handle("braino-mac:live-size", async (_event, payload = {}) => {
   if (!liveTranscriptMode) return { ok: false };
   const mode = payload?.mode === "mini" ? "mini" : "full";
@@ -17484,74 +17503,57 @@ ipcMain.handle("braino-mac:live-stop", async () => endLiveTranscript("ipc"));
 /* The lecture becomes a note. Not a transcript sitting in a log somewhere: a
    document on the shelf with the rest of them, which is the only version of
    this that is worth anything the following week. */
-/* Tidy the lecture once, after it is over.
+/* The lecture, turned into something worth reading.
  *
- * The first attempt at this ran the clean-up during the lecture, segment by
- * segment. It broke the thing it was meant to improve: the live state and the
- * dictation state got out of step, the transcript stopped counting, and the
- * lecture ended up pasted into a text box. Forty minutes of working software
- * traded for punctuation.
+ * Nothing used to happen when you pressed stop. The transcript went into the
+ * database and that was the end of it: most of an hour of speech and no reason
+ * to ever open it again. Nobody revises from raw speech.
  *
- * So it happens here instead, when there is no live session left to confuse.
- * The words are already safe, already on screen, already saved if this fails.
- * A whole transcript is also far better material than a 45 second slice: the
- * model can see the subject from the words themselves rather than being told.
+ * So the notes are made here, once, after the recording has stopped. Not
+ * during. The listening path is load-bearing and verified, and a lecture that
+ * transcribes for forty minutes is worth far more than one with better
+ * punctuation that falls over after five.
  *
- * Long transcripts go in pieces because the model has a context limit, and each
- * piece is checked by the same faithfulness gate the dictation path uses, so it
- * may drop fillers and repair a misheard word but never add, reorder, or
- * summarise. Anything it refuses simply keeps its raw text. */
-const LECTURE_PIECE_WORDS = 220;
-
-function splitForTidying(transcript) {
-  const words = transcript.split(/\s+/).filter(Boolean);
-  const pieces = [];
-  for (let i = 0; i < words.length; i += LECTURE_PIECE_WORDS) {
-    pieces.push(words.slice(i, i + LECTURE_PIECE_WORDS).join(" "));
-  }
-  return pieces;
-}
-
-async function tidyLecture(transcript) {
-  const pieces = splitForTidying(transcript);
-  if (!pieces.length) return { text: transcript, tidied: 0, refused: 0 };
-  const startedAt = Date.now();
-  let tidied = 0;
-  let refused = 0;
-
-  const out = [];
-  for (const piece of pieces) {
-    if (countWords(piece) < CLEANUP_MIN_WORDS) { out.push(piece); continue; }
-    try {
-      const formatted = await formatDictationTurn(piece);
-      const verdict = formatted ? assessDictationEdit(piece, formatted) : { accepted: false, reason: "empty" };
-      if (verdict.accepted) { out.push(formatted); tidied += 1; }
-      else { out.push(piece); refused += 1; }
-    } catch (error) {
-      /* One failed piece costs its own punctuation and nothing else. */
-      out.push(piece);
-      refused += 1;
-    }
-  }
-
-  logMac("lecture.tidy", {
-    pieces: pieces.length, tidied, refused, ms: Date.now() - startedAt,
-    before: countWords(transcript), after: countWords(out.join("\n\n")),
+ * The transcript is kept underneath the notes, always. Notes are an
+ * interpretation and the transcript is the evidence: the moment a student
+ * doubts a line, they need the words that were actually said. */
+async function lectureNotes(transcript, subject) {
+  const base = SUPABASE_URL.replace(/\/$/, "");
+  const authToken = await getBrainoAuthToken();
+  const res = await fetch(`${base}/functions/v1/lecture-notes`, {
+    method: "POST",
+    headers: {
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${authToken || SUPABASE_ANON_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ transcript, subject: subject || "" }),
   });
-  return { text: out.join("\n\n"), tidied, refused };
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data?.notes) throw new Error(String(data?.error || `status ${res.status}`));
+  return { notes: String(data.notes).trim(), overview: String(data.overview || "").trim() };
 }
 
 ipcMain.handle("braino-mac:live-save", async (_event, payload = {}) => {
-  const raw = String(payload?.transcript || "").trim();
-  if (!raw) return { ok: false, reason: "empty" };
-  /* Tidied if it can be, raw if it cannot. The lecture is never lost to this. */
-  let transcript = raw;
+  const transcript = String(payload?.transcript || "").trim();
+  if (!transcript) return { ok: false, reason: "empty" };
+
+  const minutes = Number(payload?.minutes) || 1;
+  const words = transcript.split(/\s+/).filter(Boolean).length;
+
+  /* Ask for the notes, but never let their absence cost the lecture. */
+  let notes = "";
+  let overview = "";
+  const notesStartedAt = Date.now();
   try {
-    const tidy = await tidyLecture(raw);
-    if (tidy.text && tidy.text.trim()) transcript = tidy.text;
+    const made = await lectureNotes(transcript, String(payload?.subject || ""));
+    notes = made.notes;
+    overview = made.overview;
+    logMac("lecture.notes.ok", { ms: Date.now() - notesStartedAt, chars: notes.length });
   } catch (error) {
-    logMac("lecture.tidy.failed", { error: String(error?.message || error) });
+    logMac("lecture.notes.failed", { ms: Date.now() - notesStartedAt, error: String(error?.message || error) });
   }
+
   try {
     const auth = authStatusPayload();
     const authToken = await getBrainoAuthToken();
@@ -17562,7 +17564,7 @@ ipcMain.handle("braino-mac:live-save", async (_event, payload = {}) => {
     const now = new Date();
     const title = `Lecture, ${now.toLocaleDateString(undefined, { day: "numeric", month: "long" })}`;
     const slug = crypto.randomUUID().replace(/-/g, "").slice(0, 8);
-    const words = transcript.split(/\s+/).filter(Boolean).length;
+    const body = notes ? `${notes}\n\n---\n\n## Transcript\n\n${transcript}` : transcript;
     const base = SUPABASE_URL.replace(/\/$/, "");
     const res = await fetch(`${base}/rest/v1/braino_docs`, {
       method: "POST",
@@ -17577,10 +17579,10 @@ ipcMain.handle("braino-mac:live-save", async (_event, payload = {}) => {
         slug,
         kind: "lecture",
         title,
-        markdown: transcript,
+        markdown: body,
         word_count: words,
         happened_on: now.toISOString().slice(0, 10),
-        overview: `${words.toLocaleString()} words, taken down live over ${payload?.minutes || 1} minutes.`,
+        overview: overview || `${words.toLocaleString()} words, taken down live over ${minutes} minutes.`,
       }),
     });
     if (!res.ok) {
@@ -17588,8 +17590,8 @@ ipcMain.handle("braino-mac:live-save", async (_event, payload = {}) => {
       logMac("live.save.failed", { status: res.status, detail: textForLog(detail, 160) });
       return { ok: false, reason: "rejected" };
     }
-    logMac("live.save.ok", { words, slug });
-    return { ok: true, slug, url: `https://trybraino.com/d/${slug}` };
+    logMac("live.save.ok", { words, slug, notes: Boolean(notes) });
+    return { ok: true, slug, words, minutes, notes: Boolean(notes), url: `https://trybraino.com/d/${slug}` };
   } catch (error) {
     logMac("live.save.failed", { error: String(error?.message || error) });
     return { ok: false, reason: "error" };

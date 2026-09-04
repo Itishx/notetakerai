@@ -19,6 +19,10 @@ verify_jwt = false
 [functions.chat-about-notes]
 entrypoint = "./functions/chat/chat-about-notes/index.ts"
 
+# A lecture becomes revision notes, once, after the recording stops.
+[functions.lecture-notes]
+entrypoint = "./functions/chat/lecture-notes/index.ts"
+
 [functions.vision-point]
 entrypoint = "./functions/chat/vision-point/index.ts"
 verify_jwt = false

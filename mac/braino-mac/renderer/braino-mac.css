@@ -5008,3 +5008,10 @@ body {
 }
 .lt-para b { font-weight: 600; color: #fff; }
 .lt-para::-webkit-scrollbar { width: 0; }
+
+/* The dot after the recording stops: amber while the notes are written, green
+   once they are there. The panel stays up through both, because pressing stop
+   and being shown nothing is what this used to do. */
+.lt-dot.is-working { background: #e0a13f; }
+.lt-dot.is-done { background: #17a86c; animation: none; }
+.lt-close:disabled { opacity: .55; cursor: default; }

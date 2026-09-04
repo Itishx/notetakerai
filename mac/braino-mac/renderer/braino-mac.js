@@ -5296,6 +5296,14 @@ function rectContains(rect, x, y, pad = 0) {
     && y <= rect.bottom + pad;
 }
 
+/* Is the pointer over the live bar? Only asked while minimised, where the rest
+   of the window has to stay invisible to the mouse. */
+function pointHitsLivePanel(x, y) {
+  const panel = liveEl?.querySelector(".lt-panel");
+  if (!panel) return false;
+  return rectContains(panel.getBoundingClientRect(), x, y, 6);
+}
+
 function pointHitsBrainoUi(x, y) {
   const walkerRect = walkerFlip.getBoundingClientRect();
   if (rectContains(walkerRect, x, y, 18)) return true;
@@ -5334,6 +5342,16 @@ function refreshMousePassthrough(event) {
   }
   if (herMode) {
     setMousePassthrough(false);
+    return;
+  }
+  /* The live overlay, for exactly the reason written above about Braino OS.
+     Full screen it owns the display, so it owns the pointer. Minimised it owns
+     only its own bar and everything else must fall through, which is the whole
+     point of minimising. Without this the first mouse move handed the clicks
+     back and the Minimise and Stop buttons were dead the moment you reached for
+     them. */
+  if (liveOn) {
+    setMousePassthrough(liveMini ? !pointHitsLivePanel(event.clientX, event.clientY) : false);
     return;
   }
   if (dragState) {
@@ -9477,6 +9495,7 @@ const livePara = liveEl?.querySelector(".lt-para");
 const liveClock = liveEl?.querySelector(".lt-clock");
 const liveCount = liveEl?.querySelector(".lt-count");
 const liveStopBtn = liveEl?.querySelector(".lt-close");
+const liveDot = liveEl?.querySelector(".lt-dot");
 const liveMinBtn = liveEl?.querySelector(".lt-min");
 
 let liveOn = false;
@@ -9570,21 +9589,90 @@ function liveOpen() {
   logRenderer("live.open", {});
 }
 
+/* The three things the panel can say once the recording has stopped. It stops
+   listening either way; what changes is whether there is anything to show. */
+function liveShowWorking() {
+  if (liveState) liveState.textContent = "Writing your notes";
+  if (liveDot) liveDot.classList.add("is-working");
+  if (liveStopBtn) { liveStopBtn.disabled = true; liveStopBtn.textContent = "Working"; }
+  if (liveMinBtn) liveMinBtn.hidden = true;
+}
+
+function liveShowSaved(saved) {
+  if (liveState) liveState.textContent = saved.notes ? "Notes ready" : "Saved";
+  if (liveDot) { liveDot.classList.remove("is-working"); liveDot.classList.add("is-done"); }
+  if (liveCount) liveCount.textContent = `${(saved.words || 0).toLocaleString()} words · ${saved.minutes || 1} min`;
+  if (livePara) {
+    livePara.replaceChildren();
+    const line = document.createElement("b");
+    line.textContent = saved.notes
+      ? "Your notes are written. The transcript is underneath them."
+      : "The transcript is saved. The notes did not come back this time.";
+    livePara.append(line);
+  }
+  /* One button, one obvious thing to do with it. */
+  if (liveStopBtn) {
+    liveStopBtn.disabled = false;
+    liveStopBtn.textContent = "Open notes";
+    liveStopBtn.onclick = () => {
+      void window.brainoMac.liveOpen?.({ url: saved.url });
+      liveHide();
+    };
+  }
+  /* It does not sit there forever. Long enough to read and click. */
+  window.setTimeout(() => { if (!liveOn) liveHide(); }, 20000);
+}
+
+function liveShowFailed(reason) {
+  if (liveState) liveState.textContent = "Not saved";
+  if (liveDot) liveDot.classList.remove("is-working");
+  if (livePara) {
+    livePara.replaceChildren(document.createTextNode(
+      reason === "not_linked"
+        ? "The lecture was not saved because this Mac is not signed in."
+        : "The lecture was not saved. The words are still in the log.",
+    ));
+  }
+  if (liveStopBtn) { liveStopBtn.disabled = false; liveStopBtn.textContent = "Close"; liveStopBtn.onclick = liveHide; }
+  window.setTimeout(() => { if (!liveOn) liveHide(); }, 12000);
+}
+
+function liveHide() {
+  if (!liveEl) return;
+  liveEl.classList.remove("on");
+  liveEl.setAttribute("aria-hidden", "true");
+  if (liveDot) liveDot.classList.remove("is-working", "is-done");
+  if (liveMinBtn) liveMinBtn.hidden = false;
+  if (liveStopBtn) { liveStopBtn.disabled = false; liveStopBtn.textContent = "Stop"; liveStopBtn.onclick = null; }
+  if (liveState) liveState.textContent = "Listening";
+  if (liveMini) { liveMini = false; setMousePassthrough(true); }
+}
+
 async function liveClose(save = true) {
   if (!liveOn || !liveEl) return;
   liveOn = false;
   stopLiveMetrics();
   if (liveTimer) { window.clearInterval(liveTimer); liveTimer = 0; }
-  liveEl.classList.remove("on");
-  liveEl.setAttribute("aria-hidden", "true");
-  if (liveMini) { liveMini = false; setMousePassthrough(true); }
 
   /* The last hypothesis was still speech. Dropping it loses the closing
      sentence of every lecture. */
   const full = `${liveBanked} ${liveSettled} ${liveNowText}`.replace(/\s+/g, " ").trim();
   const minutes = Math.max(1, Math.round((Date.now() - liveStartedAt) / 60000));
   logRenderer("live.close", { chars: full.length, minutes, save });
-  if (save && full) await window.brainoMac.liveSave?.({ transcript: full, minutes });
+
+  if (save && full) {
+    /* The panel stays up while the notes are made. Pressing stop and being shown
+       nothing at all is what this looked like before: the lecture went into the
+       database and the screen simply cleared, so there was no reason to believe
+       any of it had happened. */
+    liveShowWorking();
+    const saved = await window.brainoMac.liveSave?.({ transcript: full, minutes });
+    if (saved?.ok) liveShowSaved(saved);
+    else liveShowFailed(saved?.reason);
+    return;
+  }
+
+  liveHide();
   liveBanked = "";
   liveSettled = "";
   liveNowText = "";
