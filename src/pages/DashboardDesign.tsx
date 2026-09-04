@@ -10,6 +10,7 @@ import {
   NotebookPen, Presentation, Circle, Loader, Globe, MessageSquare, Briefcase,
   Heart, XCircle, LogOut, ChevronRight,
 } from "lucide-react";
+import { BRAINO_WALKER_SVG } from "../components/brainoWalkerSvg";
 import "./dashboard-design.css";
 
 type World = "companion" | "foundry";
@@ -209,45 +210,43 @@ export default function DashboardDesign() {
   return (
     <div className="dd">
       <header className="dd-head">
-        {/* Centred and on its own line, the way a masthead sits. */}
+        {/* Him, the name, and the switch, all in the middle. Standing still:
+            the walk cycle belongs to the mascot on the page, not to a logo. */}
         <div className="dd-head-brand">
-          <span className="dd-brand-mark">B</span>
+          <span className="dd-mascot" aria-hidden dangerouslySetInnerHTML={{ __html: BRAINO_WALKER_SVG }} />
           <span className="dd-wordmark">Braino</span>
-        </div>
-
-        {/* The switch lives here because it changes what every column below is
-            about, not just the one it sits in. */}
-        <div className="dd-world" ref={worldRef}>
-          <button
-            type="button"
-            className={`dd-world-btn${worldOpen ? " open" : ""}`}
-            onClick={() => setWorldOpen((v) => !v)}
-          >
-            {current.name}
-            <ChevronDown />
-          </button>
-          {worldOpen ? (
-            <div className="dd-world-menu">
-              {WORLDS.map((w) => {
-                const Icon = w.icon;
-                return (
-                  <button
-                    key={w.key}
-                    type="button"
-                    className={`dd-world-opt${w.key === world ? " on" : ""}`}
-                    onClick={() => { setWorld(w.key); setTab("overview"); setWorldOpen(false); }}
-                  >
-                    <Icon />
-                    <span>
-                      <div className="dd-world-n">{w.name}</div>
-                      <div className="dd-world-d">{w.blurb}</div>
-                    </span>
-                    {w.key === world ? <Check className="dd-world-tick" /> : null}
-                  </button>
-                );
-              })}
-            </div>
-          ) : null}
+          <div className="dd-world" ref={worldRef}>
+            <button
+              type="button"
+              className={`dd-world-btn${worldOpen ? " open" : ""}`}
+              onClick={() => setWorldOpen((v) => !v)}
+              aria-label="Switch between Companion and Foundry"
+            >
+              <ChevronDown />
+            </button>
+            {worldOpen ? (
+              <div className="dd-world-menu">
+                {WORLDS.map((w) => {
+                  const Icon = w.icon;
+                  return (
+                    <button
+                      key={w.key}
+                      type="button"
+                      className={`dd-world-opt${w.key === world ? " on" : ""}`}
+                      onClick={() => { setWorld(w.key); setTab("overview"); setWorldOpen(false); }}
+                    >
+                      <Icon />
+                      <span>
+                        <div className="dd-world-n">{w.name}</div>
+                        <div className="dd-world-d">{w.blurb}</div>
+                      </span>
+                      {w.key === world ? <Check className="dd-world-tick" /> : null}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
+          </div>
         </div>
 
         <div className="dd-head-r">
@@ -265,6 +264,7 @@ export default function DashboardDesign() {
 
       <div className="dd-shell">
         <aside className="dd-left">
+          <div className="dd-world-tag">{current.name}</div>
           <h1 className="dd-hello">Good afternoon,<br />Itish.</h1>
           <div className="dd-hello-s">
             <b>Day 118</b> · last active 4 minutes ago
