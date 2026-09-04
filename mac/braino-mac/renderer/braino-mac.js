@@ -7159,10 +7159,27 @@ function nfTypeField() {
   return notchFace?.querySelector(".nf-type-field") || null;
 }
 
+/* Last resort, and it does not depend on focus, blur or the keyboard working.
+   An empty field nobody has touched for a minute is an abandoned field, and it
+   sat on screen for twenty nine minutes once. If there is text in it he is
+   still thinking, so it stays. */
+let typingIdleTimer = 0;
+
+function armTypingIdleClose() {
+  if (typingIdleTimer) window.clearTimeout(typingIdleTimer);
+  typingIdleTimer = window.setTimeout(() => {
+    const field = nfTypeField();
+    if (!typingOpen) return;
+    if (field && field.value.trim()) { armTypingIdleClose(); return; }
+    closeTyping("idle");
+  }, 60000);
+}
+
 function openTyping(source) {
   const field = nfTypeField();
   if (!field || !notchFaceEnabled || herMode || dictationMode) return false;
   typingOpen = true;
+  armTypingIdleClose();
   notchFace.classList.add("nf-typing", "nf-inline-open");
   if (nfInlineCaptionLabelEl) nfInlineCaptionLabelEl.textContent = "You typed";
   if (nfInlineCaptionStateEl) nfInlineCaptionStateEl.textContent = "Typing";
@@ -7183,6 +7200,7 @@ function closeTyping(reason) {
   const field = nfTypeField();
   if (!typingOpen) return;
   typingOpen = false;
+  if (typingIdleTimer) { window.clearTimeout(typingIdleTimer); typingIdleTimer = 0; }
   notchFace.classList.remove("nf-typing");
   if (field) { field.value = ""; field.blur(); }
   void window.brainoMac.typingFocus?.(false).catch(() => {});
@@ -7191,6 +7209,10 @@ function closeTyping(reason) {
   nfSyncThinkingZone?.();
   updateNotchFace();
 }
+
+/* Main saw the window lose focus. The field cannot be typed in or escaped out
+   of once that happens, so it goes rather than sitting there. */
+window.brainoMac.onTypingDismiss?.(() => { if (typingOpen) closeTyping("blur"); });
 
 async function submitTyped(text) {
   const said = String(text || "").trim();
@@ -9080,6 +9102,8 @@ window.brainoMac.onTypeToggle?.((payload) => {
    microphone started. A gesture holds one meaning. */
 document.addEventListener("keydown", (event) => {
   if (!typingOpen) return;
+  /* Any keystroke means it is not abandoned. */
+  armTypingIdleClose();
   if (event.key === "Escape") { event.preventDefault(); closeTyping("escape"); return; }
   if (event.key === "Enter" && !event.shiftKey) {
     event.preventDefault();

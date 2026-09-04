@@ -1677,9 +1677,23 @@ function sendOverlayState(reason, display = displayForContext(activeMacContext))
   });
 }
 
+/* True only while the typing field is up and holding the keyboard. It exists
+   because raiseDockWindow runs on a 900ms poll and used to take focusability
+   away every time it did, which is how the typing notch ended up on screen for
+   twenty nine minutes with no way to dismiss it: the field's Escape is a
+   renderer keydown, and a window that cannot be focused never sees one. */
+let typingHoldsKeyboard = false;
+
 function raiseDockWindow(reason = "raise") {
   if (!dockWindow || dockWindow.isDestroyed() || dockWindowHiddenByUser) return;
   try {
+    if (typingHoldsKeyboard) {
+      /* The field is up and holding the keyboard. It is already visible, already
+         on top and already focused, and re-asserting all three every 900ms is
+         only a way to bounce the keyboard back out of it. Leave it alone. */
+      if (!dockWindow.isVisible()) dockWindow.showInactive();
+      return;
+    }
     dockWindow.setFocusable(false);
     dockWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true });
     dockWindow.setAlwaysOnTop(false);
@@ -2831,6 +2845,18 @@ function createDockWindow() {
     positionDockWindow(initialDisplay, "ready-to-show");
   });
   dockWindow.on("blur", () => {
+    /* Focus went somewhere else, so the typing field can no longer be typed in
+       or escaped out of. Every input overlay on this machine closes at this
+       moment and so does this one: leaving it up is how it got stuck. */
+    if (typingHoldsKeyboard) {
+      typingHoldsKeyboard = false;
+      logMac("type.blur_close", {});
+      sendToRenderer("braino-mac:typing-dismiss", {});
+      try {
+        dockWindow.setFocusable(false);
+        dockWindow.setIgnoreMouseEvents(true, { forward: true });
+      } catch (_) {}
+    }
     positionDockWindow(undefined, "blur");
   });
   positionDockWindow(initialDisplay, "create");
@@ -16781,7 +16807,10 @@ function featureEfficiencyPct(ok, durationMs) {
 ipcMain.handle("braino-mac:typing-focus", async (event, payload) => {
   const on = Boolean(payload?.on);
   if (!dockWindow || dockWindow.isDestroyed()) return { ok: false };
+  /* The raise happens first and the hold is taken after it, or opening the
+     field would skip the very raise that brings the window forward. */
   ensureDockWindowVisible(on ? "typing" : "typing-closed");
+  typingHoldsKeyboard = on;
   dockWindow.setFocusable(on);
   if (on) dockWindow.focus();
   dockWindow.setIgnoreMouseEvents(!on, { forward: true });

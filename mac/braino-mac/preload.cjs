@@ -120,6 +120,11 @@ contextBridge.exposeInMainWorld("brainoMac", {
   liveSize: (payload) => ipcRenderer.invoke("braino-mac:live-size", payload || {}),
   liveOpen: (payload) => ipcRenderer.invoke("braino-mac:live-open", payload || {}),
   liveDone: () => ipcRenderer.invoke("braino-mac:live-done"),
+  onTypingDismiss: (fn) => {
+    const handler = () => fn();
+    ipcRenderer.on("braino-mac:typing-dismiss", handler);
+    return () => ipcRenderer.removeListener("braino-mac:typing-dismiss", handler);
+  },
   onLiveDismiss: (fn) => {
     const handler = () => fn();
     ipcRenderer.on("braino-mac:live-dismiss", handler);
