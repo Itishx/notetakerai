@@ -1260,3 +1260,11 @@
    row's top hairline and none of a section's padding. */
 .ld-engine-tail { margin-top: clamp(26px, 3.5vw, 40px); }
 .ld-engine-tail-cta { margin: 22px 0 0; display: flex; flex-wrap: wrap; gap: 10px; }
+
+/* The two directions, as tab panels. The tabs sit under the section lede and
+   above two panels of identical shape, so switching sides never moves the
+   page under the reader's cursor. */
+.ld-sidetabs { margin-top: clamp(26px, 3.5vw, 40px); }
+.ld-side-head { margin: clamp(30px, 4vw, 46px) 0 clamp(18px, 2.5vw, 28px); }
+.ld-side-head .ld-h2 { margin-top: 6px; }
+.ld-side-head .ld-lede { margin-top: 14px; }

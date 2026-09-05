@@ -48,12 +48,8 @@ const MoonIcon = () => (<svg viewBox="0 0 24 24" fill="none"><path d="M21 12.8A9
    that order. The tour of the character sits under all of it. */
 const NOTCH_NAV = [
   { to: "/#who-is", label: "Who he is", note: "the character" },
+  { to: "/#can", label: "What he can do", note: "screen, notes, dictation, tasks" },
   { to: "/#kinds", label: "The two Brainos", note: "one runs your day, one gets you found" },
-  { to: "/#day", label: "Your day", note: "the problem nothing is watching" },
-  { to: "/#does", label: "Inside the companion", note: "habits, focus and routines" },
-  { to: "/#tools", label: "What he can do", note: "pages, notes, meetings, errands" },
-  { to: "/#problem", label: "The founder problem", note: "building is easy, being seen is not" },
-  { to: "/#engines", label: "Inside Foundry", note: "content, optics and outbound" },
   { to: "/#pricing", label: "Pricing", note: "three plans, no maths" },
   { to: "/#who", label: "Who it is for", note: "tell him what you do" },
   { to: "/#why", label: "Why him", note: "and not another AI tool" },
@@ -109,14 +105,14 @@ function MovingBraino({ motion }: { motion: MascotMotion }) {
 }
 
 const FEATURES = [
-  { n: "01", ac: "ac-coral", name: "Chat with whatever is in front of you",
-    line: "Any page, any PDF, any video. He is already on it, so there is nothing to paste and nothing to upload. Revolutionary, I know." },
-  { n: "02", ac: "ac-violet", name: "Notes from anything you listen to",
-    line: "A lecture, a podcast, a two hour video you were never going to finish. He listens so you do not have to, and hands back something you would actually read." },
-  { n: "03", ac: "ac-blue", name: "He sits in your meetings",
-    line: "No bot in the participant list, invisible to your screen share. Notes at the end, plus a list of everything you promised and immediately forgot." },
-  { n: "04", ac: "ac-green", name: "Say it, and he does it",
-    line: "Books it, buys it, finds it, fills it in. In your browser, signed into your accounts, not in some sandbox pretending to be the internet." },
+  { n: "01", ac: "ac-coral", name: "He is always on the screen",
+    line: "Whatever is in front of you, he is already looking at it. Any page, any PDF, any video, no pasting and no uploading. Ask him about it the way you would ask a person sitting next to you." },
+  { n: "02", ac: "ac-violet", name: "He writes down anything you listen to",
+    line: "A lecture, a meeting, a two hour video you were never going to finish. He listens the whole way through and hands back notes you would actually read, plus everything you promised and immediately forgot." },
+  { n: "03", ac: "ac-blue", name: "He types what you say",
+    line: "Hold a key and talk. It comes out clean, punctuated and in the box you were already in, anywhere on your Mac. Faster than you type and it does not mind that you said um." },
+  { n: "04", ac: "ac-green", name: "He does things for you",
+    line: "Books it, buys it, finds it, fills it in. In your own browser, signed into your own accounts, not in some sandbox pretending to be the internet." },
 ];
 
 const PEOPLE = [
@@ -166,17 +162,6 @@ const WORK: Array<{ id: string; label: string; title: string; line: string; src?
 ];
 
 /* The comparison. Read across, not down: the same question answered twice. */
-/* The two halves, said in the same four rows. The table used to describe each
-   side in its own terms, which is exactly how you end up with a free half that
-   sounds like a browser extension and a paid half that sounds like a product.
-   Same questions, two answers, so a reader can hold them side by side. */
-const COMPARE: Array<[string, string, string]> = [
-  ["What he runs", "Your day", "Your distribution"],
-  ["His three jobs", "Habits, focus and routines", "Content, optics and outbound"],
-  ["What that means", "The things you meant to do get done, and the boring half of the day stops being yours", "You show up every week without writing a post, and people find you when they go looking"],
-  ["Who it is for", "Anyone with a screen, founders included", "People building something and tired of shouting into nothing"],
-  ["When you need it", "From day one", "The day you have something worth showing"],
-];
 
 /* Both halves of Braino, rendered by the same component and shaped by the same
    type. The homepage's one job is to make "companion" and "Foundry" legible as
@@ -473,6 +458,8 @@ export default function Landing() {
   useEffect(() => { document.title = "Braino: speak, watch it happen"; }, []);
 
   // A pre-written example is on screen from the start; asking replaces it.
+  // Which of the two directions is showing: the day, or the distribution.
+  const [sideTab, setSideTab] = useState<"companion" | "foundry">("companion");
   // Which half of "Who is Braino?" is showing: the character, or the footage.
   const [whoIsTab, setWhoIsTab] = useState<"who" | "work">("who");
   const [who, setWho] = useState(PEOPLE[0].id);
@@ -558,7 +545,7 @@ export default function Landing() {
             <Link to="/onboarding" className="ld-btn">
               Get started
             </Link>
-            <a href="#does" className="ld-btn ghost">See what he does</a>
+            <a href="#can" className="ld-btn ghost">See what he does</a>
           </div>
           <p className="ld-hero-note">Free to start. Chrome and Mac.</p>
         </div>
@@ -656,147 +643,18 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ── 2. The map ────────────────────────────────────────────────── */}
-      <section className="ld-kinds apple-reveal" id="kinds">
+      {/* ── What he can do ────────────────────────────────────────────
+          Capabilities before direction. The page used to open on "there are
+          two Brainos", which asks a reader to choose a side before they know
+          what the thing is. These four are what he can already do; the two
+          directions below are what we point them at. */}
+      <section className="ld-why-sec apple-reveal" id="can">
         <div className="ld-wrap">
-          <p className="apple-eyebrow">There are two Brainos</p>
-          <h2 className="ld-h2">One runs your day. <span className="tone">One gets you found.</span></h2>
+          <p className="apple-eyebrow">What Braino can do</p>
+          <h2 className="ld-h2">Four things, <span className="tone">before any of the rest.</span></h2>
           <p className="ld-lede">
-            The free one is for anyone with a screen. The paid one is Braino for founders, and
-            we call it Foundry. It sits on top of the free one, never instead of it.
-            <b> The free one gets you through Tuesday. The paid one makes sure the work you did
-            on Tuesday gets seen.</b>
-          </p>
-
-          <div className="ld-table-wrap">
-            <table className="ld-table">
-              <thead>
-                <tr>
-                  <th />
-                  <th><b>Braino</b><span>Free, for anyone with a screen</span></th>
-                  <th className="is-paid"><b>Braino for Founders</b><span>We call it Foundry</span></th>
-                </tr>
-              </thead>
-              <tbody>
-                {COMPARE.map(([row, a, bb]) => (
-                  <tr key={row}>
-                    <th scope="row">{row}</th>
-                    <td>{a}</td>
-                    <td className="is-paid">{bb}</td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr>
-                  <td />
-                  <td><a href={EXTENSION_DOWNLOAD_URL} className="ld-btn sm">Get Braino</a></td>
-                  <td className="is-paid"><Link to="/foundry" className="ld-btn sm ghost">See Foundry</Link></td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-
-          {/* A 620px table is a sideways scroll in the hand. Same data, stacked. */}
-          <div className="ld-compare-stack">
-            {([["Braino", "Free, for anyone with a screen", 1], ["Braino for Founders", "We call it Foundry", 2]] as Array<[string, string, number]>).map(([name, sub, col]) => (
-              <div key={name} className={col === 2 ? "is-paid" : undefined}>
-                <b>{name}</b>
-                <span>{sub}</span>
-                <dl>
-                  {COMPARE.map((row) => (
-                    <div key={row[0]}>
-                      <dt>{row[0]}</dt>
-                      <dd>{row[col]}</dd>
-                    </div>
-                  ))}
-                </dl>
-                {col === 1
-                  ? <a href={EXTENSION_DOWNLOAD_URL} className="ld-btn sm">Get Braino</a>
-                  : <Link to="/foundry" className="ld-btn sm ghost">See Foundry</Link>}
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── The companion's problem ───────────────────────────────────
-          The page used to jump from the map straight into what the free half
-          does, so its four features arrived with nothing to be an answer to.
-          Foundry had a problem section and the companion did not, which is the
-          real reason one half read as a product and the other as an extension.
-          No figures here on purpose: the founder problem earns its statistics
-          because the reader is being asked to believe something about a market.
-          This one is just Tuesday, and the reader already knows. */}
-      <section className="ld-why-sec apple-reveal" id="day">
-        <div className="ld-wrap">
-          <p className="apple-eyebrow">The other problem</p>
-          <h2 className="ld-h2">You did not plan your day. <span className="tone">It just happened to you.</span></h2>
-          <p className="ld-lede">
-            You know how the good version goes. You have written it down before, in an app you
-            no longer open. <b>Nothing on your computer is paying attention to whether it
-            actually happens.</b>
-          </p>
-          <div className="ld-why">
-            <div><b>Everything wants you to log it</b><p>The tracker, the planner, the timer. Each one hands you an empty box and asks you to remember, at the end of a day where remembering is precisely what you ran out of.</p></div>
-            <div><b>The one thing watching cannot help</b><p>Your screen time knows exactly where the afternoon went. It tells you on Sunday, in a chart, long after anything could have been done about it.</p></div>
-          </div>
-        </div>
-      </section>
-
-      {/* ── Inside the companion ──────────────────────────────────────────
-          Three jobs, rendered by the same block as Foundry's three, because the
-          symmetry is the argument. Habits is the goal and the other two serve
-          it: the footer says so, since three equal cards invite the reader to
-          ask why they are in one app. */}
-      <section className="ld-kinds apple-reveal" id="does">
-        <div className="ld-wrap">
-          <div className="ld-engine-intro-head">
-            <p className="apple-eyebrow">Inside Braino Companion</p>
-            <h2 className="ld-h2">Three jobs. <span className="tone">He runs your day with you.</span></h2>
-            <p className="ld-lede">
-              He is already on the screen you are working on, so he can see how the day is
-              actually going. <b>You never fill in a form. There is nothing to log.</b>
-            </p>
-          </div>
-
-          {COMPANION_DETAIL.map((engine) => (
-            <article className={`ld-engine-full ${engine.tone}`} key={engine.name}>
-              <header>
-                <p className="ld-engine-tag">{engine.tag}</p>
-                <h3>{engine.name}</h3>
-                <p className="ld-engine-line">{engine.line}</p>
-              </header>
-
-              <div className="ld-engine-body">
-                <p className="ld-engine-intro">{engine.body}</p>
-                <ol className="ld-engine-points">
-                  {engine.points.map(([n, h, t]) => (
-                    <li key={n}><i>{n}</i><div><b>{h}</b><p>{t}</p></div></li>
-                  ))}
-                </ol>
-                <p className="ld-engine-foot">{engine.foot}</p>
-              </div>
-            </article>
-          ))}
-
-          <p className="ld-lede ld-engine-tail">
-            <b>Habits is the one you actually want.</b> Focus is how he keeps you at it, and
-            routines is how he clears the time to get to it.
-          </p>
-        </div>
-      </section>
-
-      {/* ── The four tools ────────────────────────────────────────────────
-          These used to be the whole answer to "what is the companion", which
-          is why the free half read as a feature list. They are what he picks
-          up while doing the three jobs above, and they now say so. */}
-      <section className="ld-why-sec apple-reveal" id="tools">
-        <div className="ld-wrap">
-          <p className="apple-eyebrow">What he uses to do it</p>
-          <h2 className="ld-h2">Four things he can already do, <span className="tone">any time you ask.</span></h2>
-          <p className="ld-lede">
-            These are not separate apps you go and open. They are what he reaches for while he
-            is getting you through the day. <b>Setup is: install him.</b>
+            This is him at his simplest, in your browser and on your Mac. <b>Setup is: install
+            him. That is the setup.</b>
           </p>
           <div className="ld-why">
             {FEATURES.map((f) => (
@@ -806,91 +664,135 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ── The problem ──────────────────────────────────────────────
-          Sits here on purpose: after the free Braino has explained itself and
-          immediately before the paid one. It is the setup for the engines, so
-          the reader meets the problem one screen before the thing that solves
-          it. Every figure is published and named on the line, or came out of
-          the eight interviews on 22 August. */}
-      <section className="ld-why-sec ac-coral apple-reveal" id="problem">
+      {/* ── The bridge ────────────────────────────────────────────────────
+          One short section between what he can do and what we do with it.
+          Without it the tabs below arrive as a menu rather than a decision. */}
+      <section className="ld-lead ac-violet apple-reveal" id="direction">
         <div className="ld-wrap">
-          <p className="apple-eyebrow">The problem</p>
-          <h2 className="ld-h2">Anyone can build now. <span className="tone">Almost nobody gets seen.</span></h2>
-          <p className="ld-lede">
-            We sat down with eight founders in one night and asked what was actually killing
-            them. Eight said the same word. <b>Not one of them pays for anything that fixes it.</b>
-          </p>
-
-          <div className="ld-prob">
-            <div>
-              <i>Building stopped being hard</i>
-              <b>90%</b>
-              <p>Cheaper to build with AI, and 60% faster to something working. One in three new companies this year is one person. Ten times the products, the same number of people looking.</p>
-            </div>
-            <div>
-              <i>The old launch playbook died</i>
-              <b>1,500</b>
-              <p>Visits from a Product Hunt top five finish today. It used to be fifteen thousand. You ship, you post once, and the silence is total.</p>
-            </div>
-            <div>
-              <i>So the builder becomes the marketer</i>
-              <b>2 hrs a day</b>
-              <p>On Reddit for months, for two or three real conversations a week. Taken out of the only hours you had for building the thing.</p>
-            </div>
-          </div>
-
-          <p className="ld-prob-foot">
-            <b>Eight out of eight founders said getting seen was the problem. Zero out of eight
-            pay for a single tool that fixes it.</b> Not because they are careful with money.
-            Because everything on the market is sold to a marketing team with a budget, and
-            nobody sells to the person doing it alone at midnight. That gap is what Braino
-            for founders is.
+          <p className="ld-lead-tag">Where this goes</p>
+          <h2 className="ld-lead-name">That is what he <span className="tone">can</span> do</h2>
+          <p className="ld-lead-line">
+            Any of it is useful on its own. What makes him a companion rather than a very good
+            tool is what he does with it when nobody has asked him anything. So we pointed him
+            at two things: the day you are having, and the company you are building.
           </p>
         </div>
       </section>
 
-      <section className="ld-kinds apple-reveal" id="engines">
+      {/* ── The two directions, as tabs ───────────────────────────────────
+          One section, two panels, identical shape: a problem, then three jobs.
+          They used to be four separate sections interleaved with each other,
+          which meant a reader who only wanted the free half had to scroll past
+          the founder argument to get through their own. */}
+      <section className="ld-kinds apple-reveal" id="kinds">
         <div className="ld-wrap">
-        <div className="ld-engine-intro-head">
-          <p className="apple-eyebrow">Inside Braino for Founders</p>
-          <h2 className="ld-h2">Three jobs. <span className="tone">He runs your distribution.</span></h2>
+          <p className="apple-eyebrow">There are two Brainos</p>
+          <h2 className="ld-h2">One runs your day. <span className="tone">One gets you found.</span></h2>
           <p className="ld-lede">
-            The same companion, pointed at the part of the week you keep losing. He writes,
-            he checks, he reaches out. <b>Nothing he writes goes anywhere until you tap
-            approve.</b>
+            The first is free and it is for anyone with a screen. The second is Braino for
+            founders, and we call it Foundry. <b>It sits on top of the first one, never instead
+            of it.</b>
           </p>
-        </div>
 
-          {FOUNDRY_DETAIL.map((engine) => (
-            <article className={`ld-engine-full ${engine.tone}`} key={engine.name}>
-              <header>
-                <p className="ld-engine-tag">{engine.tag}</p>
-                <h3>{engine.name}</h3>
-                <p className="ld-engine-line">{engine.line}</p>
-              </header>
+          <div className="ws-tabs apple-reveal ld-sidetabs" role="tablist" aria-label="Which Braino">
+            <button
+              type="button" role="tab" id="side-tab-companion"
+              aria-selected={sideTab === "companion"} aria-controls="side-panel-companion"
+              className={"ws-tab" + (sideTab === "companion" ? " is-on" : "")}
+              onClick={() => setSideTab("companion")}
+            >Braino Companion</button>
+            <button
+              type="button" role="tab" id="side-tab-foundry"
+              aria-selected={sideTab === "foundry"} aria-controls="side-panel-foundry"
+              className={"ws-tab" + (sideTab === "foundry" ? " is-on" : "")}
+              onClick={() => setSideTab("foundry")}
+            >Braino for Founders</button>
+          </div>
 
-              <div className="ld-engine-body">
-                <p className="ld-engine-intro">{engine.body}</p>
-                {engine.points.length > 0 && (
+          <div
+            className="ld-side" id="side-panel-companion" role="tabpanel"
+            aria-labelledby="side-tab-companion" hidden={sideTab !== "companion"}
+          >
+            <div className="ld-side-head">
+              <p className="apple-eyebrow">Free, for anyone with a screen</p>
+              <h3 className="ld-h2">You did not plan your day. <span className="tone">It just happened to you.</span></h3>
+              <p className="ld-lede">
+                You know how the good version goes. You have written it down before, in an app you
+                no longer open. <b>Nothing on your computer is paying attention to whether it
+                actually happens.</b> He is on the same screen you are, so he can be.
+              </p>
+            </div>
+
+            {COMPANION_DETAIL.map((engine) => (
+              <article className={`ld-engine-full ${engine.tone}`} key={engine.name}>
+                <header>
+                  <p className="ld-engine-tag">{engine.tag}</p>
+                  <h3>{engine.name}</h3>
+                  <p className="ld-engine-line">{engine.line}</p>
+                </header>
+                <div className="ld-engine-body">
+                  <p className="ld-engine-intro">{engine.body}</p>
                   <ol className="ld-engine-points">
                     {engine.points.map(([n, h, t]) => (
                       <li key={n}><i>{n}</i><div><b>{h}</b><p>{t}</p></div></li>
                     ))}
                   </ol>
-                )}
-                <p className="ld-engine-foot">{engine.foot}</p>
-              </div>
-            </article>
-          ))}
+                  <p className="ld-engine-foot">{engine.foot}</p>
+                </div>
+              </article>
+            ))}
 
-          <div className="ld-why ld-engine-tail">
-            <div><b>All three land in one inbox</b><p>What the listener hears becomes what he posts. What is missing becomes next week. You approve, edit or bin it, out loud or with a tap, and nothing leaves without that.</p></div>
-            <div><b>And then there is Braino Code</b><p>Say the thing out loud and he builds it: a real, designed, working site in about four minutes. It is not part of the three jobs above and it arrives after them, but it is real and you can watch it work.</p></div>
+            <p className="ld-lede ld-engine-tail">
+              <b>Habits is the one you actually want.</b> Focus is how he keeps you at it, and
+              routines is how he clears the time to get to it.
+            </p>
+            <p className="ld-engine-tail-cta">
+              <Link to="/onboarding" className="ld-btn sm">Get started</Link>
+            </p>
           </div>
-          <p className="ld-engine-tail-cta">
-            <Link to="/braino?view=foundry#distra" className="ld-btn sm">See Foundry</Link>
-            <Link to="/code" className="ld-btn sm ghost">See Braino Code</Link>
-          </p>
+
+          <div
+            className="ld-side" id="side-panel-foundry" role="tabpanel"
+            aria-labelledby="side-tab-foundry" hidden={sideTab !== "foundry"}
+          >
+            <div className="ld-side-head">
+              <p className="apple-eyebrow">For people building something</p>
+              <h3 className="ld-h2">Anyone can build now. <span className="tone">Almost nobody gets seen.</span></h3>
+              <p className="ld-lede">
+                You ship it, you post once, and the silence is total. We sat down with eight
+                founders and every one of them said the same word. <b>Not one of them pays for
+                anything that fixes it.</b>
+              </p>
+            </div>
+
+            {FOUNDRY_DETAIL.map((engine) => (
+              <article className={`ld-engine-full ${engine.tone}`} key={engine.name}>
+                <header>
+                  <p className="ld-engine-tag">{engine.tag}</p>
+                  <h3>{engine.name}</h3>
+                  <p className="ld-engine-line">{engine.line}</p>
+                </header>
+                <div className="ld-engine-body">
+                  <p className="ld-engine-intro">{engine.body}</p>
+                  <ol className="ld-engine-points">
+                    {engine.points.map(([n, h, t]) => (
+                      <li key={n}><i>{n}</i><div><b>{h}</b><p>{t}</p></div></li>
+                    ))}
+                  </ol>
+                  <p className="ld-engine-foot">{engine.foot}</p>
+                </div>
+              </article>
+            ))}
+
+            <div className="ld-why ld-engine-tail">
+              <div><b>All three land in one inbox</b><p>What the listener hears becomes what he posts. What is missing becomes next week. You approve, edit or bin it, out loud or with a tap, and nothing leaves without that.</p></div>
+              <div><b>And then there is Braino Code</b><p>Say the thing out loud and he builds it: a real, designed, working site in about four minutes. It is not one of the three jobs above and it arrives after them, but it is real and you can watch it work.</p></div>
+            </div>
+            <p className="ld-engine-tail-cta">
+              <Link to="/braino?view=foundry#distra" className="ld-btn sm">See Foundry</Link>
+              <Link to="/code" className="ld-btn sm ghost">See Braino Code</Link>
+            </p>
+          </div>
         </div>
       </section>
 

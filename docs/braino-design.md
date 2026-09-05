@@ -979,6 +979,17 @@ The page used to explain the free Braino as **four features** and the paid one a
 half read as a browser extension and the paid half read as a product, and a
 reader had no way to hold them side by side.
 
+**Capabilities first, then the two directions as tabs.** The page opens on what
+he can do at all (`#can`: always on the screen, writes down what you listen to,
+types what you say, does things for you), then one short bridge (`#direction`),
+then a single tabbed section (`#kinds`) whose two panels are the companion and
+Foundry. It used to open on "there are two Brainos", which asks a reader to pick
+a side before they know what the thing is, and it used to interleave four
+sections so somebody who only wanted the free half had to scroll through the
+founder argument to finish their own.
+
+The comparison table is gone. The tabs are the comparison.
+
 **One Braino, two jobs, three engines each.**
 
 | | Companion | Foundry |
