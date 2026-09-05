@@ -25,7 +25,8 @@
     "pdf:pitchdeck": "node scripts/build-pitchdeck-pdf.mjs public/braino-pitchdeck.pdf",
     "pdf:v10": "node scripts/print-deck.mjs files/braino-pitch-v10.html public/braino-pitch-v10.pdf",
     "pdf:v11": "node scripts/print-deck.mjs files/braino-pitch-v11.html public/braino-pitch-v11.pdf",
-    "logos:v10": "node scripts/inline-deck-logos.mjs files/braino-pitch-v10.html"
+    "logos:v10": "node scripts/inline-deck-logos.mjs files/braino-pitch-v10.html",
+    "pdf:companion": "node scripts/print-deck.mjs files/braino-companion-deck.html public/braino-companion-deck.pdf"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

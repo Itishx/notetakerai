@@ -923,3 +923,39 @@ working*. `updateNotchFace` now hands the box over: your sentence holds it for a
 least `NF_HEARD_MIN_MS` (1100ms, so a fast route cannot swap it out before you
 read it), then the thinking chip owns it alone. Your words are not lost, they are
 the first line of the panel behind the arrow.
+
+## 22. Braino Companion pitch deck (`files/braino-companion-deck.html`)
+
+The companion-side sibling of the v10 Foundry deck. Twelve slides, 1280x720,
+printed with `npm run pdf:companion` to `public/braino-companion-deck.pdf`, and
+served as a real page at `/companion-deck.html` (a byte copy of the same file).
+
+**The stylesheet is v10's, lifted whole and unedited.** Everything companion-only
+lives in one `<style>` block at the top of `<body>`, so a change to the base sheet
+in v10 can be re-lifted without merging by hand. Do not fork the base sheet.
+
+**The argument** is a hierarchy, not a list of three. Habits is the goal; focus
+keeps you at it and routines clear the time to get to it. Slide 7 says this in
+its footer and the engine cards carry a rank chip ("The goal" / "Serves habits").
+Presenting the three as peers is what made the earlier version read as a feature
+list.
+
+**The through-line** is that nobody logs anything. Slide 2 is the problem
+(43% quit a habit app within 30 days; manual logging is the top churn driver),
+slide 8 is the loop, slide 9 is why no existing category closes it.
+
+**Numbers** are all third-party and sourced on the slide: retention from
+Userpilot/Sahha/UXCam, market from Gartner, Grand View and Straits, the $20 AI
+spending ceiling from the BofA Institute consumer AI profile. TAM/SAM/SOM is
+bottom-up ($12.0B / $1.3B / $18M) with the arithmetic printed, the same shape
+v10 uses. **Prices in USD.**
+
+**Two collisions to know about** if you add a card to this deck. `.fork.three .card`
+is a column flexbox, so an inline-block `.tag` stretches to the card's width and
+stops looking like a pill; and `.card li` draws a hairline between rows, which
+doubles up when the list is a `.bul`. Both are corrected in the companion style
+block. Every slide is `overflow:hidden` at a fixed 720px, so content is **clipped
+silently** — measure `.body` scrollHeight against `720 - padding` before shipping,
+never trust the eye.
+
+Obey `docs/BHASKAR-DECK-RULES.md` before touching a line of the copy.

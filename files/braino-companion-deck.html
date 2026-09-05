@@ -1,0 +1,1450 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Braino Companion, the pitch deck</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Caveat:wght@500;600&display=swap');
+/* ============================================================================
+   Braino — pitch deck v9.
+
+   Rebuilt on mentor feedback, and the rebuild is one decision: Braino stops
+   being two engines and becomes one co-founder for distribution. Braino Code
+   is gone from the product story and reappears once, dated, in the roadmap.
+   Splitting the pitch was splitting the reader.
+
+   The rest is subtraction. Paragraphs became bullets, because the note was
+   that ten seconds is all anyone gives a slide. The competition slide lost the
+   line that told the reader what to conclude. The business model lost the
+   column that justified its own prices to itself.
+
+   The market slide is the one that got built rather than trimmed: TAM, then
+   named filters, then a percentage, with the arithmetic on the slide and every
+   input sourced, because "unjustified" is a layout problem as much as a number
+   problem.
+
+   Screenshots are drawn in markup rather than pasted as images: they stay
+   sharp, they follow the accent, and a wrong label is a word to fix rather
+   than a re-export.
+   ============================================================================ */
+
+@page { size: 1280px 720px; margin: 0; }
+
+:root {
+  --bg: #fbfbfd;
+  --surface: #ffffff;
+  --ink: #1d1d1f;
+  --soft: #6e6e73;
+  --line: #d9d9df;
+  --line-soft: #ebebf0;
+  --night: #0a0a0c;
+  --mat: #cfcfd4;
+
+  --coral: #d9645b;  --coral-tint: #fbeae8;
+  --blue: #2f6fed;   --blue-tint: #e9f0fd;
+  --green: #3a8f5f;  --green-tint: #e8f3ec;
+  --amber: #b8842a;  --amber-tint: #f6efe1;
+  --violet: #6b52c4; --violet-tint: #efeafa;
+
+  --accent: var(--coral);
+  --tint: var(--coral-tint);
+
+  --s: 1;
+}
+
+/* The slides are a printed object and keep their own light world in either
+   theme. Only the mat they sit on follows the viewer. */
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --mat: #131316; } }
+:root[data-theme="dark"] { --mat: #131316; }
+
+.ac-coral  { --accent: var(--coral);  --tint: var(--coral-tint); }
+.ac-blue   { --accent: var(--blue);   --tint: var(--blue-tint); }
+.ac-green  { --accent: var(--green);  --tint: var(--green-tint); }
+.ac-amber  { --accent: var(--amber);  --tint: var(--amber-tint); }
+.ac-violet { --accent: var(--violet); --tint: var(--violet-tint); }
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--mat);
+  color: var(--ink);
+  font-family: "SF Pro Display", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* On screen the deck is a stack of scaled slides. In print the scale is 1 and
+   the wrappers are inert, so page.pdf() gets exactly 1280x720 pages. */
+.deck { display: flex; flex-direction: column; align-items: center; gap: 22px; padding: 22px 0 40px; }
+.fit { width: calc(1280px * var(--s)); height: calc(720px * var(--s)); }
+.fit > .slide { transform: scale(var(--s)); transform-origin: top left; box-shadow: 0 12px 40px rgba(0,0,0,.16); border-radius: 6px; }
+
+.slide {
+  position: relative;
+  width: 1280px;
+  height: 720px;
+  padding: 72px 88px 62px;
+  background: var(--bg);
+  overflow: hidden;
+  page-break-after: always;
+  break-after: page;
+  display: flex;
+  flex-direction: column;
+}
+.slide:last-child { page-break-after: auto; }
+
+.slide.night { background: var(--night); color: #f5f5f7; }
+.slide.night .soft { color: #9a9aa2; }
+
+/* One hairline of the slide's accent along the top: the act, without a label. */
+.slide::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 4px;
+  background: var(--accent);
+}
+
+.kicker {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--accent);
+  margin: 0 0 16px;
+}
+
+h1 {
+  font-size: 70px;
+  font-weight: 600;
+  letter-spacing: -0.028em;
+  line-height: 1.02;
+  margin: 0 0 22px;
+  text-wrap: balance;
+}
+h2 {
+  font-size: 46px;
+  font-weight: 600;
+  letter-spacing: -0.024em;
+  line-height: 1.06;
+  margin: 0 0 18px;
+  text-wrap: balance;
+}
+.tone { color: var(--accent); }
+
+.lede {
+  font-size: 22px;
+  font-weight: 500;
+  line-height: 1.42;
+  color: var(--soft);
+  max-width: 48ch;
+  margin: 0;
+}
+.slide.night .lede { color: #b6b6be; }
+
+.num { font-size: 15px; color: #b4b4b9; position: absolute; bottom: 30px; right: 88px; font-variant-numeric: tabular-nums; }
+.wm  { font-size: 15px; color: #b4b4b9; position: absolute; bottom: 30px; left: 88px; font-weight: 500; }
+.slide.night .num, .slide.night .wm { color: #4a4a52; }
+
+.body { flex: 1; display: flex; flex-direction: column; justify-content: center; }
+.body.top { justify-content: flex-start; }
+
+/* ── Two-up fork ─────────────────────────────────────────────────────────── */
+.fork { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 4px; }
+.fork.three { grid-template-columns: repeat(3, 1fr); gap: 16px; }
+
+.card {
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: var(--surface);
+  padding: 26px 30px;
+}
+.card .tag {
+  display: inline-block;
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--c);
+  background: var(--t);
+  border-radius: 999px;
+  padding: 5px 12px;
+  margin-bottom: 13px;
+}
+.card h3 { font-size: 26px; font-weight: 600; letter-spacing: -0.018em; margin: 0 0 7px; }
+.card p  { font-size: 16.5px; font-weight: 500; line-height: 1.45; color: var(--soft); margin: 0 0 13px; }
+.card ul { margin: 0; padding: 0; list-style: none; }
+.card li { font-size: 15.5px; font-weight: 500; line-height: 1.5; padding: 7px 0; border-top: 1px solid var(--line-soft); }
+.card li:first-child { border-top: 0; }
+.card li b { font-weight: 600; }
+.card .breaks {
+  display: block; margin-top: 14px; padding-top: 12px;
+  border-top: 1px solid var(--line-soft);
+  font-size: 14.5px; font-weight: 600; color: var(--c);
+}
+.fork.three .card { padding: 22px 24px; display: flex; flex-direction: column; }
+.fork.three .card .breaks { margin-top: auto; }
+.fork.three .card h3 { font-size: 23px; }
+.fork.three .card p { font-size: 15.5px; margin-bottom: 0; }
+
+.c-blue  { --c: var(--blue);  --t: var(--blue-tint); }
+.c-green { --c: var(--green); --t: var(--green-tint); }
+.c-coral { --c: var(--coral); --t: var(--coral-tint); }
+.c-amber { --c: var(--amber); --t: var(--amber-tint); }
+.c-violet{ --c: var(--violet);--t: var(--violet-tint); }
+
+/* ── Table ───────────────────────────────────────────────────────────────── */
+table { width: 100%; border-collapse: collapse; margin-top: 4px; }
+th {
+  text-align: left;
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.045em;
+  text-transform: uppercase;
+  color: var(--soft);
+  padding: 0 16px 11px 0;
+  border-bottom: 1px solid var(--line);
+}
+td {
+  font-size: 17px;
+  font-weight: 500;
+  line-height: 1.4;
+  padding: 13px 16px 13px 0;
+  border-bottom: 1px solid var(--line-soft);
+  vertical-align: top;
+}
+td b { font-weight: 600; }
+td .hi, td.hi { color: var(--accent); font-weight: 600; }
+td small { display: block; font-size: 13.5px; color: var(--soft); margin-top: 3px; font-weight: 500; }
+td.price { font-variant-numeric: tabular-nums; white-space: nowrap; }
+tr.us td { background: var(--tint); }
+tr.us td:first-child { border-radius: 12px 0 0 12px; padding-left: 14px; }
+tr.us td:last-child { border-radius: 0 12px 12px 0; }
+tr.us td, tr.us td b { font-weight: 600; }
+
+/* ── Stat row ────────────────────────────────────────────────────────────── */
+.stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-top: 22px; }
+.stat {
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: var(--surface);
+  padding: 22px 24px;
+}
+.stat i { display: block; font-style: normal; font-size: 12.5px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--accent); margin-bottom: 10px; }
+.stat b { display: block; font-size: 42px; font-weight: 600; letter-spacing: -0.03em; line-height: 1; margin-bottom: 8px; }
+.stat span { font-size: 14.5px; font-weight: 500; color: var(--soft); line-height: 1.4; display: block; }
+
+/* ── Naked figure strip: numbers that are evidence, not cards ────────────── */
+.strip { display: grid; grid-template-columns: repeat(4, 1fr); margin-top: 20px; border-top: 1px solid var(--line); }
+.strip.three { grid-template-columns: repeat(3, 1fr); }
+.strip > div { padding: 15px 22px 0 0; border-right: 1px solid var(--line-soft); }
+.strip > div + div { padding-left: 22px; }
+.strip > div:last-child { border-right: 0; }
+.strip b { display: block; font-size: 32px; font-weight: 600; letter-spacing: -0.03em; line-height: 1; color: var(--accent); margin-bottom: 8px; font-variant-numeric: tabular-nums; }
+.strip span { display: block; font-size: 13.5px; font-weight: 500; line-height: 1.4; color: var(--soft); }
+.sub { font-size: 15.5px; font-weight: 600; margin: 20px 0 0; }
+.src { font-size: 13px; font-weight: 500; color: #a6a6ad; margin: 16px 0 0; }
+
+/* ── Quotes: the open house, said out loud ───────────────────────────────── */
+.heard { display: grid; grid-template-columns: 1.5fr 1fr; gap: 18px; margin-top: 4px; }
+.pull {
+  border: 1px solid var(--line); border-radius: 22px;
+  background: var(--tint); padding: 26px 30px;
+  display: flex; flex-direction: column; justify-content: center;
+}
+.pull q { display: block; font-size: 25px; font-weight: 600; letter-spacing: -0.018em; line-height: 1.28; margin-bottom: 16px; quotes: none; }
+.pull cite { font-style: normal; font-size: 14.5px; font-weight: 500; color: var(--soft); }
+.quotes { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 10px; }
+.quotes li {
+  display: grid; grid-template-columns: 1fr auto; gap: 24px; align-items: baseline;
+  border: 1px solid var(--line); border-radius: 16px; background: var(--surface);
+  padding: 14px 22px;
+}
+.quotes q { font-size: 17px; font-weight: 500; line-height: 1.4; quotes: "\201C" "\201D"; }
+.quotes cite { font-style: normal; font-size: 13.5px; font-weight: 500; color: var(--soft); text-align: right; white-space: nowrap; }
+
+/* ── A finding that needs to stop the reader, without a dark slab ────────── */
+.band {
+  margin-top: 20px; border: 1px solid var(--line); border-radius: 20px;
+  background: var(--tint); padding: 20px 26px;
+}
+.band small { display: block; font-size: 12.5px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--accent); margin-bottom: 8px; }
+.band b { display: block; font-size: 31px; font-weight: 600; letter-spacing: -0.026em; margin-bottom: 9px; }
+.band span { display: block; font-size: 15.5px; font-weight: 500; line-height: 1.45; color: var(--soft); max-width: 92ch; }
+.band span strong { color: var(--ink); font-weight: 600; }
+
+/* ── The chain ───────────────────────────────────────────────────────────── */
+.chain { display: grid; grid-template-columns: 1fr auto 1fr auto 1fr; align-items: center; gap: 12px; margin-top: 22px; }
+.link {
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: var(--surface);
+  padding: 20px 22px;
+  text-align: center;
+}
+.link b { display: block; font-size: 19px; font-weight: 600; margin-bottom: 5px; letter-spacing: -0.015em; }
+.link span { font-size: 14.5px; font-weight: 500; color: var(--soft); }
+.arrow { font-size: 22px; color: #c4c4cb; }
+
+/* ── Who he is: the homepage's own grid, one hairline drawn by the gaps ──── */
+.who {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  background: var(--line);
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  overflow: hidden;
+  margin-top: 22px;
+}
+.who article {
+  background: var(--surface);
+  padding: 20px 22px 22px;
+  display: grid;
+  grid-template-rows: 74px auto;
+  align-content: start;
+  gap: 12px;
+}
+.who .art {
+  display: grid;
+  place-items: center;
+  background: var(--tint);
+  border-radius: 14px;
+  height: 74px;
+}
+.who .art img { width: 54px; height: 54px; display: block; }
+.who small {
+  display: block;
+  font-size: 11.5px; font-weight: 600; letter-spacing: 0.07em;
+  text-transform: uppercase; color: var(--accent);
+  margin-bottom: 5px;
+}
+.who h3 {
+  margin: 0 0 5px;
+  font-size: 19px; font-weight: 600; letter-spacing: -0.016em; line-height: 1.15;
+}
+.who p { margin: 0; font-size: 14px; line-height: 1.42; font-weight: 500; color: var(--soft); }
+
+/* ── Six engines ─────────────────────────────────────────────────────────── */
+.engines { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 20px; }
+.eng {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--surface);
+  padding: 18px 20px;
+  position: relative;
+}
+.eng i { font-style: normal; font-size: 13px; font-weight: 600; color: #b4b4b9; font-variant-numeric: tabular-nums; }
+.eng b { display: block; font-size: 20px; font-weight: 600; letter-spacing: -0.015em; margin: 5px 0 5px; }
+.eng span { display: block; font-size: 14.5px; font-weight: 500; line-height: 1.4; color: var(--soft); }
+.eng { display: flex; flex-direction: column; }
+.eng u { margin-top: auto; display: block; text-decoration: none; padding-top: 8px; border-top: 1px solid var(--line-soft); font-size: 13px; font-weight: 600; color: var(--accent); line-height: 1.35; }
+.eng em {
+  position: absolute; top: 16px; right: 18px;
+  font-style: normal; font-size: 11.5px; font-weight: 600; letter-spacing: 0.04em;
+  text-transform: uppercase; color: var(--soft);
+  border: 1px solid var(--line); border-radius: 999px; padding: 3px 9px;
+}
+.eng em.live { color: var(--green); border-color: var(--green); background: var(--green-tint); }
+
+/* ── ICP: the profile on the left, the argument on the right ─────────────── */
+.icp { display: grid; grid-template-columns: 1.05fr 1fr; gap: 18px; margin-top: 4px; }
+.icp > div {
+  border: 1px solid var(--line); border-radius: 22px;
+  background: var(--surface); padding: 22px 26px;
+}
+.icp .tag {
+  display: inline-block; font-size: 12.5px; font-weight: 600; letter-spacing: 0.04em;
+  text-transform: uppercase; color: var(--c); background: var(--t);
+  border-radius: 999px; padding: 5px 12px; margin-bottom: 12px;
+}
+.icp dl { margin: 0; }
+.icp dl > div {
+  display: grid; grid-template-columns: 92px 1fr; gap: 12px;
+  padding: 8px 0; border-top: 1px solid var(--line-soft);
+}
+.icp dl > div:first-child { border-top: 0; padding-top: 2px; }
+.icp dt { font-size: 12.5px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--soft); padding-top: 2px; }
+.icp dd { margin: 0; font-size: 15.5px; font-weight: 500; line-height: 1.4; }
+.icp dd b { font-weight: 600; }
+.icp ol { margin: 0; padding: 0; list-style: none; counter-reset: why; }
+.icp ol li {
+  counter-increment: why; position: relative; padding: 9px 0 9px 30px;
+  font-size: 15.5px; font-weight: 500; line-height: 1.42; color: var(--soft);
+  border-top: 1px solid var(--line-soft);
+}
+.icp ol li:first-child { border-top: 0; padding-top: 2px; }
+.icp ol li::before {
+  content: counter(why); position: absolute; left: 0; top: 9px;
+  font-size: 12.5px; font-weight: 600; color: var(--c);
+  width: 19px; height: 19px; border-radius: 50%; background: var(--t);
+  display: grid; place-items: center;
+}
+.icp ol li:first-child::before { top: 2px; }
+.icp ol li b { color: var(--ink); font-weight: 600; }
+.icp.tight > div { padding: 18px 24px; }
+.icp.tight dl > div { padding: 6px 0; }
+.icp.tight dd, .icp.tight ol li { font-size: 15px; }
+.icp.tight ol li { padding: 8px 0 8px 30px; }
+.note.wide { max-width: none; }
+
+.note { font-size: 16.5px; font-weight: 500; color: var(--soft); margin-top: 22px; line-height: 1.45; max-width: 92ch; }
+.note b { color: var(--ink); font-weight: 600; }
+.slide.night .note { color: #b6b6be; }
+.slide.night .note b { color: #f5f5f7; }
+
+/* The evidence slides carry the most. They get their own compression rather
+   than shrinking every other slide to match them. */
+.slide.dense h2 { font-size: 41px; margin-bottom: 10px; }
+.slide.dense .kicker { margin-bottom: 11px; }
+.slide.dense .chain { margin-top: 16px; }
+.slide.dense .link { padding: 14px 18px; }
+.slide.dense .link b { font-size: 17.5px; }
+.slide.dense table { margin-top: 14px; }
+.slide.dense td { padding: 10px 14px 10px 0; font-size: 16.5px; }
+.slide.dense th { padding-bottom: 9px; }
+.slide.dense .note { margin-top: 14px; font-size: 16px; }
+.slide.dense td small { font-size: 13px; }
+.slide.dense .stats { margin-top: 16px; }
+.slide.dense .engines { margin-top: 14px; }
+.slide.dense .strip { margin-top: 16px; }
+.slide.dense .band { margin-top: 16px; }
+.slide.rows td { padding: 7px 14px 7px 0; font-size: 15.5px; }
+.slide.rows th { padding-bottom: 8px; font-size: 12px; }
+.slide.rows td small { font-size: 12.5px; }
+
+/* The eight-founder roll runs eight rows deep and still has to breathe. */
+.slide.tightrows td { padding: 6px 12px 6px 0; font-size: 14px; line-height: 1.34; }
+.slide.tightrows th { padding-bottom: 7px; font-size: 11.5px; }
+.slide.tightrows td small { font-size: 11.5px; margin-top: 1px; }
+.slide.tightrows .band.flat { margin-top: 14px; padding: 15px 24px; }
+.slide.tightrows .band.flat strong { font-size: 23px; }
+.slide.tightrows .band.flat em { font-size: 12.5px; }
+.slide.dense .band { padding: 17px 24px; }
+.slide.dense .band b { font-size: 27px; margin-bottom: 7px; }
+.slide.dense .band span { font-size: 15px; }
+
+/* Two slides carry a full table plus a summary band. They start higher up the
+   page rather than shrinking the type past reading size. */
+.slide.pack { padding-top: 54px; }
+.slide.pack h2 { font-size: 37px; margin-bottom: 9px; }
+.slide.pack .kicker { margin-bottom: 9px; }
+.slide.pack .band span { max-width: none; }
+.slide.tightrows td { padding: 5px 12px 5px 0; }
+.slide.tightrows .band.flat { padding: 13px 24px; margin-top: 12px; }
+.slide.tightrows .band.flat strong { font-size: 21px; margin-bottom: 3px; }
+.stack { display: grid; gap: 14px; }
+.stack .stat { padding: 18px 22px; }
+.stack .stat b { font-size: 34px; margin-bottom: 6px; }
+.stack .stat i { margin-bottom: 7px; }
+
+/* Scored competition matrix: names left, marks centred, price right. */
+.matrix th:not(:first-child), .matrix td:not(:first-child) { text-align: center; }
+.matrix th:last-child, .matrix td:last-child { text-align: right; }
+.matrix td { font-size: 14px; padding: 7px 6px; white-space: nowrap; }
+.matrix td:first-child { white-space: normal; }
+.matrix th { font-size: 11.5px; padding: 0 8px 8px; letter-spacing: 0.03em; }
+.matrix td:first-child { text-align: left; padding-left: 0; }
+.matrix .no { color: #c2c2c9; }
+.matrix .part { color: var(--soft); font-size: 13.5px; }
+.matrix .yes { color: var(--green); font-weight: 600; }
+.matrix tr.us td .yes { color: inherit; }
+
+/* Engines re-scored by the research: one carries a cut mark. */
+.eng em.cut { color: var(--coral); border-color: var(--coral); background: var(--coral-tint); }
+.eng em.first { color: var(--blue); border-color: var(--blue); background: var(--blue-tint); }
+.eng.off { background: #f7f7f9; }
+.eng.off b, .eng.off span { color: var(--soft); }
+
+/* Four things, not six. Two across reads as a short list rather than a grid
+   with a hole in it. */
+.engines.two { grid-template-columns: 1fr 1fr; gap: 16px; }
+.engines.two .eng { padding: 20px 24px; }
+.engines.two .eng b { font-size: 22px; }
+.engines.two .eng span { font-size: 15px; }
+.matrix .later { color: var(--soft); font-size: 13.5px; }
+
+/* Competition: the table earns its width, the 2x2 sits beside it. */
+.comp { display: grid; grid-template-columns: 1.72fr 1fr; gap: 20px; align-items: start; margin-top: 4px; }
+.comp table { margin-top: 0; }
+.quad {
+  position: relative; height: 344px;
+  border: 1px solid var(--line); border-radius: 20px; background: var(--surface);
+}
+.quad::before, .quad::after { content: ""; position: absolute; background: var(--line-soft); }
+.quad::before { left: 50%; top: 30px; bottom: 30px; width: 1px; }
+.quad::after { top: 50%; left: 30px; right: 30px; height: 1px; }
+.quad .ax {
+  position: absolute; font-size: 10.5px; font-weight: 600; letter-spacing: 0.05em;
+  text-transform: uppercase; color: #a6a6ad; white-space: nowrap;
+}
+.quad .t { top: 9px; left: 50%; transform: translateX(-50%); }
+.quad .b { bottom: 9px; left: 50%; transform: translateX(-50%); }
+.quad .l { left: 10px; top: 50%; transform: translateY(-50%) rotate(180deg); writing-mode: vertical-rl; }
+.quad .r { right: 10px; top: 50%; transform: translateY(-50%); writing-mode: vertical-rl; }
+.quad .dot {
+  position: absolute; transform: translate(-50%, -50%);
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  font-style: normal; font-size: 11px; font-weight: 600; color: var(--soft);
+  line-height: 1.15; text-align: center; width: 92px;
+}
+.quad .dot::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: #b4b4bb; }
+.quad .dot.us { color: var(--coral); font-size: 13px; width: 104px; }
+.quad .dot.us::before { width: 18px; height: 18px; background: var(--coral); }
+
+/* Traction sits under the prices, small, because it is early and says so. */
+.tract { display: grid; grid-template-columns: repeat(3, 1fr); margin-top: 16px; border-top: 1px solid var(--line); }
+.tract > div { padding: 13px 20px 0 0; border-right: 1px solid var(--line-soft); }
+.tract > div + div { padding-left: 20px; }
+.tract > div:last-child { border-right: 0; }
+.tract b { display: block; font-size: 19px; font-weight: 600; letter-spacing: -0.018em; margin-bottom: 4px; }
+.tract span { display: block; font-size: 13.5px; font-weight: 500; line-height: 1.38; color: var(--soft); }
+.tract i { font-style: normal; display: block; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--accent); margin-bottom: 6px; }
+
+.band.flat { display: grid; grid-template-columns: repeat(5, 1fr); gap: 18px; padding: 18px 26px; }
+.band.flat div { text-align: left; }
+.band.flat strong { display: block; font-size: 26px; font-weight: 600; letter-spacing: -0.02em; color: var(--accent); margin-bottom: 4px; font-variant-numeric: tabular-nums; }
+.band.flat em { font-style: normal; font-size: 13.5px; font-weight: 500; color: var(--soft); line-height: 1.35; }
+
+@media print {
+  :root { --s: 1; }
+  body { background: #fff; }
+  .deck { display: block; gap: 0; padding: 0; }
+  .fit { width: auto; height: auto; }
+  .fit > .slide { transform: none; box-shadow: none; border-radius: 0; }
+}
+
+/* ── v8 additions ─────────────────────────────────────────────────────────── */
+
+/* Slide 2 wants four figures, so the three-up becomes a square. */
+.stats.two { grid-template-columns: 1fr 1fr; gap: 16px; }
+.stats.two .stat { padding: 22px 26px; }
+.stats.two .stat b { font-size: 46px; margin-bottom: 8px; }
+
+/* Quotes are the evidence on slide 3, so they get the card and the attribution
+   gets the accent: a quote nobody can attribute is an opinion with quote marks
+   around it. */
+.quotes { display: flex; flex-direction: column; gap: 10px; }
+.quote {
+  border: 1px solid var(--line); border-radius: 15px; background: var(--surface);
+  padding: 11px 18px;
+}
+.quote p { margin: 0 0 6px; font-size: 14.5px; font-weight: 500; line-height: 1.42; font-style: italic; }
+.quote cite { font-style: normal; font-size: 12.5px; font-weight: 600; color: var(--accent); }
+
+/* v8 put the survey counts in a navy block. Tinted, it still reads as the
+   answer to the quotes beside it without punching a hole in the page. */
+.panel {
+  background: var(--tint); border-radius: 22px; padding: 22px 26px;
+  display: flex; flex-direction: column; justify-content: center; gap: 22px;
+}
+.panel > div b { display: block; font-size: 46px; font-weight: 600; letter-spacing: -0.03em; line-height: 1; color: var(--accent); margin-bottom: 10px; }
+.panel > div span { display: block; font-size: 15px; font-weight: 500; line-height: 1.45; color: var(--soft); }
+
+.split { display: grid; grid-template-columns: 1.55fr 1fr; gap: 20px; align-items: stretch; margin-top: 4px; }
+
+/* The four steps of the promise. The last one is filled because it is the one
+   the founder is buying. */
+.flow { display: flex; align-items: stretch; gap: 10px; margin: 4px 0 22px; }
+.flow > div {
+  flex: 1; border: 1px solid var(--line); border-radius: 14px; background: var(--surface);
+  padding: 14px 8px; text-align: center;
+  font-size: 17px; font-weight: 600; letter-spacing: -0.012em;
+  display: flex; align-items: center; justify-content: center;
+}
+.flow > div.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.flow i { font-style: normal; align-self: center; color: var(--mat); font-size: 19px; }
+
+/* Numbered because slide 7 is a sequence: describe, then question, then build. */
+.steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 4px; }
+.steps > div { border: 1px solid var(--line); border-radius: 20px; background: var(--surface); padding: 24px 26px; }
+.steps h3 { margin: 0 0 10px; font-size: 21px; font-weight: 600; letter-spacing: -0.016em; }
+.steps h3 i { font-style: normal; color: var(--accent); }
+.steps p { margin: 0; font-size: 15.5px; font-weight: 500; line-height: 1.5; color: var(--soft); }
+
+.pitchtable td small { display: block; margin-top: 3px; }
+.todo { margin: 12px 0 0; font-size: 14px; font-weight: 600; font-style: italic; color: var(--accent); }
+.closer { margin: 14px 0 0; font-size: 17px; font-weight: 500; font-style: italic; line-height: 1.45; color: var(--soft); max-width: 104ch; }
+.closer b { font-style: normal; font-weight: 600; color: var(--ink); }
+
+
+/* ── v9 ───────────────────────────────────────────────────────────────────── */
+
+/* The cover splits: the name owns the left, the argument sits right and
+   smaller. It used to open with a sentence about building, which made the
+   reader work out who was talking. */
+/* The cover carries four things: the date, the name, his face, and the two
+   lines. It used to argue the problem in a second column, which is slide two's
+   job and made the opening page a page to study rather than read. */
+.cover { display: grid; grid-template-columns: 1.05fr 1fr; gap: 56px; align-items: center; height: 100%; }
+.cover:not(.endcover) { grid-template-columns: 1fr; }
+/* He stands next to his own name. The aside underneath is the only place in
+   the deck where the writing is not the system face: it is a margin note in a
+   founder's hand, and it earns the exception by admitting the obvious rather
+   than arguing anything. */
+.markrow { display: flex; align-items: flex-end; gap: 26px; }
+.masc { margin: 0 0 2px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.masc img { width: 104px; height: 127px; display: block; }
+.masc figcaption {
+  font-family: "Caveat", "Bradley Hand", "Segoe Script", cursive;
+  font-size: 19px; font-weight: 500; color: #6a6a72;
+  white-space: nowrap; transform: rotate(-4deg);
+}
+.cover .mark { font-size: 118px; font-weight: 600; letter-spacing: -.045em; line-height: .9; margin: 0; }
+.markrow + .claim { margin-top: 20px; }
+.cover .claim { font-size: 25px; font-weight: 500; line-height: 1.34; color: #b6b6be; margin: 0; }
+.cover .claim b { color: var(--coral); font-weight: 600; }
+.cover .right { border-left: 1px solid #26262c; padding-left: 46px; }
+.cover .right h2 { font-size: 40px; margin-bottom: 16px; }
+.cover .right p { font-size: 18px; font-weight: 500; line-height: 1.5; color: #9a9aa2; margin: 0; }
+/* The cover used to say "gets you seen", which is a metaphor the reader has to
+   unpack. These are the three things that phrase was standing in for. */
+.covbul { margin: 20px 0 18px; }
+/* .bul li b sets ink for the light slides and sits later in the sheet, so this
+   needs the extra step of specificity or the emphasis goes dark on dark. */
+.cover .right .covbul li { font-size: 16.5px; color: #9a9aa2; padding: 6px 0 6px 18px; line-height: 1.45; }
+.cover .right .covbul li b { color: #f5f5f7; }
+.cover .right .covbul li::before { background: var(--coral); top: .78em; }
+/* The last line of the deck, in the same hand as the aside on the cover: the
+   two ends of the deck are the only places it appears. */
+/* Same face as the line above it. It is the last thing the deck says, so it
+   is said in the deck's own voice rather than in the margin. */
+.speak { margin: 10px 0 0; font-size: 22px; font-weight: 600; letter-spacing: -.015em; color: var(--coral); }
+
+/* The close mirrors the cover: text left, Braino right, and the aside that
+   opened the deck lands here instead. */
+/* Named for what it is, not for what it is near. ".closer" was already the
+   italic closing line on four other slides, and reusing the name inherited its
+   font-style into every word on the final page. */
+.endcover { grid-template-columns: 1.35fr .65fr; align-items: center; }
+.endmasc { align-self: center; }
+.endmasc img { width: 132px; height: 161px; }
+.endmasc figcaption { font-size: 20px; color: #8a8a92; }
+.masc.nocap { margin-bottom: 2px; }
+.cover .right .tap { font-size: 15.5px; font-weight: 600; color: var(--coral); margin-top: 2px; }
+.live {
+  display: inline-flex; align-self: flex-start; align-items: center; gap: 8px; margin-bottom: 26px;
+  padding: 7px 14px; border-radius: 999px; border: 1px solid var(--coral);
+  font-size: 13px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--coral);
+}
+.live i { width: 7px; height: 7px; border-radius: 50%; background: var(--coral); font-style: normal; }
+
+/* Bullets, not paragraphs. The single most repeated note. */
+.bul { margin: 0; padding: 0; list-style: none; }
+.bul li { position: relative; padding: 6px 0 6px 17px; font-size: 16px; font-weight: 500; line-height: 1.4; color: var(--soft); }
+.bul li::before { content: ""; position: absolute; left: 2px; top: .72em; width: 5px; height: 5px; border-radius: 50%; background: var(--accent); }
+/* .eng b and .card b style their own titles at display size; a <b> inside a
+   bullet is emphasis, not a heading, so it says so explicitly. */
+/* Every component in this sheet styles its own <b> as a title at display size,
+   which is right for the title and wrong for a <b> inside body copy. One guard,
+   declared after them all: emphasis inside a paragraph is emphasis. */
+.fstep span b, .bigbox span b, .qcell span b, .mbox span b, .eng span b,
+.stat span b, .strip span b, .band span b, .note b, .card p b {
+  display: inline; font-size: inherit; line-height: inherit;
+  letter-spacing: inherit; margin: 0; color: var(--ink); font-weight: 600;
+}
+.bul li b { display: inline; font-size: inherit; line-height: inherit; margin: 0; color: var(--ink); font-weight: 600; }
+.bul.sm li { font-size: 14.5px; padding: 4px 0 4px 15px; }
+/* The evidence, as the last bullet rather than a rule at the card's foot: it
+   is another thing the founders said, not a footnote about them. */
+.bul li.ev { margin-top: 6px; padding-top: 9px; border-top: 1px solid var(--line-soft); color: var(--accent); font-weight: 600; font-size: 13px; }
+.bul li.ev::before { display: none; }
+
+/* Two boxes, equal weight, ten-second read. */
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 6px; }
+.bigbox { border-radius: 22px; padding: 30px 34px; background: var(--tint); display: flex; flex-direction: column; }
+.bigbox i { font-style: normal; font-size: 12.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--accent); margin-bottom: 12px; }
+.bigbox b { font-size: 31px; font-weight: 600; letter-spacing: -.024em; line-height: 1.14; margin-bottom: 12px; }
+.bigbox span { font-size: 16.5px; font-weight: 500; line-height: 1.45; color: var(--soft); }
+
+/* TAM to SAM to SOM, with the filters that do the narrowing named in between,
+   because the objection was never the number. It was the missing steps. */
+.funnel { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0 18px; align-items: stretch; margin-top: 4px; }
+.fstep { border: 1px solid var(--line); border-radius: 20px; background: var(--surface); padding: 18px 20px; display: flex; flex-direction: column; }
+.fstep i { font-style: normal; font-size: 12px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: var(--accent); margin-bottom: 9px; }
+.fstep b { font-size: 36px; font-weight: 600; letter-spacing: -.03em; line-height: 1; margin-bottom: 9px; }
+.fstep span { font-size: 13.5px; font-weight: 500; line-height: 1.4; color: var(--soft); }
+.fstep .bul { margin-bottom: 6px; }
+.fstep .bul li { font-size: 13.5px; padding: 4px 0 4px 14px; line-height: 1.35; }
+.fstep .bul li::before { top: .62em; width: 4px; height: 4px; }
+.fstep u { margin-top: auto; padding-top: 10px; text-decoration: none; font-size: 12.5px; font-weight: 600; color: var(--mute, #86868b); }
+
+/* Quarter on quarter, product above and people below. */
+.qgrid { display: grid; grid-template-columns: 118px repeat(4, 1fr); gap: 10px; margin-top: 4px; }
+.qgrid .qh { font-size: 12.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--accent); padding-bottom: 6px; border-bottom: 1px solid var(--line); display: flex; align-items: flex-end; }
+.qgrid .rl { font-size: 14px; font-weight: 600; color: var(--ink); display: flex; align-items: center; }
+.qcell { border: 1px solid var(--line); border-radius: 14px; background: var(--surface); padding: 12px 14px; }
+.qcell b { display: block; font-size: 15px; font-weight: 600; letter-spacing: -.012em; margin-bottom: 4px; }
+.qcell span { display: block; font-size: 13px; font-weight: 500; line-height: 1.38; color: var(--soft); }
+.qcell.on { background: var(--tint); border-color: transparent; }
+.qcell.on b { color: var(--accent); }
+.qnum { display: flex; align-items: baseline; gap: 7px; }
+.qnum strong { font-size: 25px; font-weight: 600; letter-spacing: -.022em; }
+.qnum em { font-style: normal; font-size: 12.5px; font-weight: 500; color: var(--soft); }
+
+/* Three clean boxes plus a fourth for what is actually true today. */
+.money { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.mbox { border: 1px solid var(--line); border-radius: 20px; background: var(--surface); padding: 24px 26px; display: flex; flex-direction: column; }
+.mbox i { font-style: normal; font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--accent); margin-bottom: 8px; }
+.mbox b { font-size: 22px; font-weight: 600; letter-spacing: -.018em; margin-bottom: 5px; }
+.mbox .p { font-size: 27px; font-weight: 600; letter-spacing: -.024em; color: var(--accent); margin-bottom: 12px; }
+.mbox ul { margin-top: auto; }
+
+/* Traction, inside the tinted band. A .band.flat nested in a .band inherited
+   the outer frame and hung off its own left edge, so this is its own thing. */
+.tract4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; }
+.tract4 > div { padding: 0 18px; border-right: 1px solid rgba(0,0,0,.08); }
+.tract4 > div:first-child { padding-left: 0; }
+.tract4 > div:last-child { border-right: 0; }
+.tract4 strong { display: block; font-size: 30px; font-weight: 600; letter-spacing: -.024em; line-height: 1; color: var(--accent); margin-bottom: 7px; }
+/* ── Competition, rebuilt ─────────────────────────────────────────────────
+   It was a seven-by-six matrix beside a 2x2: forty-two cells to read before
+   the point arrived. Nobody reads forty-two cells.
+
+   Five rows now, grouped by what a category IS rather than by brand, and each
+   row ends on the sentence that matters: what it still leaves the founder to
+   do. That last column is the whole argument. */
+.vs { display: flex; flex-direction: column; }
+.vsrow {
+  display: grid; grid-template-columns: 1.1fr .62fr 1.1fr;
+  gap: 16px; align-items: center;
+  padding: 13px 14px; border-radius: 12px;
+}
+.vsrow + .vsrow { border-top: 1px solid var(--line-soft); border-radius: 12px; }
+.vsrow .what b { display: block; font-size: 17px; font-weight: 600; letter-spacing: -.014em; }
+.vsrow .what span { display: block; margin-top: 2px; font-size: 13px; font-weight: 500; color: var(--mute, #86868b); }
+.vsrow .price { font-size: 15px; font-weight: 600; color: var(--soft); text-align: right; font-variant-numeric: tabular-nums; }
+.vsrow .leaves { font-size: 15px; font-weight: 500; line-height: 1.35; color: var(--soft); }
+.vsrow.us { background: var(--tint); border-top-color: transparent; }
+.vsrow.us .what b, .vsrow.us .price { color: var(--accent); }
+.vsrow.us .leaves { color: var(--ink); font-weight: 600; }
+.vshead { display: grid; grid-template-columns: 1.1fr .62fr 1.1fr; gap: 16px; padding: 0 14px 7px; border-bottom: 1px solid var(--line); }
+.vshead span { font-size: 11.5px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: #a6a6ad; }
+.vshead span:nth-child(2) { text-align: right; }
+
+.tract4 em { font-style: normal; display: block; font-size: 13.5px; font-weight: 500; line-height: 1.35; color: var(--soft); }
+
+
+/* Platform marks. Brand colour on the mark, grey on the name: familiar at a
+   glance without turning the slide into a rainbow. `is-slot` is a placeholder
+   for a mark we could not generate — scripts/inline-deck-logos.mjs swaps any
+   file dropped into public/logos/ into place. */
+.lgs { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 10px; padding-top: 9px; border-top: 1px solid var(--line-soft); }
+.lg { display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; border-radius: 999px;
+      border: 1px solid var(--line-soft); background: var(--surface);
+      font-size: 10px; font-weight: 600; letter-spacing: .01em; color: var(--soft); white-space: nowrap; }
+.lg svg { width: 11px; height: 11px; display: block; flex: none; }
+.lg.is-slot { border-style: dashed; }
+/* v9 sets `.eng span { display:block; font-size:15px }` — that turns every chip
+   into a full-width 15px block and wraps the mark onto its own line. */
+.eng .lgs .lg, .lgs .lg {
+  display: inline-flex; flex-wrap: nowrap; align-items: center; gap: 5px;
+  font-size: 10.5px; line-height: 1; white-space: nowrap; width: auto;
+}
+.eng .lgs .lg svg, .lgs .lg svg,
+.eng .lgs .lg img, .lgs .lg img { width: 11px; height: 11px; flex: none; object-fit: contain; display: block; }
+/* A wordmark is not an icon. Crushing "zoominfo" into an 11px square makes
+   it a grey smudge, so wide marks keep their shape, get a little more
+   height, and drop the text label — the wordmark already says the name. */
+.eng .lgs .lg.is-wide img, .lgs .lg.is-wide img { width: auto; height: 13px; max-width: 66px; }
+.eng .lgs .lg.is-wide, .lgs .lg.is-wide { padding: 3px 9px; gap: 0; }
+/* Same story for `.bigbox b`, which is a 20px block heading in v9. */
+.bigbox .ticks li b, .ticks li b {
+  display: inline; font-size: inherit; font-weight: 600; line-height: inherit;
+  margin: 0; letter-spacing: inherit; color: var(--ink);
+}
+
+/* Outcome ticks: the left box on "What is Braino". */
+.ticks { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 11px; }
+.ticks li { position: relative; padding-left: 27px; font-size: 16px; font-weight: 500; line-height: 1.4; color: var(--ink); }
+.ticks li::before { content: ""; position: absolute; left: 0; top: 2px; width: 18px; height: 18px; border-radius: 50%;
+                    background: var(--tint); }
+.ticks li::after { content: ""; position: absolute; left: 5.5px; top: 7px; width: 7px; height: 3.5px;
+                   border-left: 2px solid var(--accent); border-bottom: 2px solid var(--accent);
+                   transform: rotate(-45deg); }
+.ticks li b { font-weight: 600; }
+
+/* Companion is two tiers side by side, so nobody reads the free one as the
+   whole offer. */
+.tiersplit { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+.tiersplit > div { border: 1px solid var(--line-soft); border-radius: 12px; padding: 11px 12px; background: var(--bg); }
+.tiersplit u { display: block; text-decoration: none; font-size: 10px; font-weight: 700; letter-spacing: .1em;
+               text-transform: uppercase; color: var(--accent); margin-bottom: 5px; }
+.tiersplit strong { display: block; font-size: 24px; font-weight: 600; letter-spacing: -.03em; color: var(--ink); }
+/* The free tier shows no price at all — a "$0" reads as free forever, which
+   is not the model. The word sits where the number would have. */
+.tiersplit strong.word { font-size: 21px; letter-spacing: -.022em; margin-top: 1px; }
+.tiersplit > div { display: flex; flex-direction: column; justify-content: flex-end; }
+.tiersplit strong i { font-style: normal; font-size: 13px; font-weight: 500; color: var(--soft); }
+.tiersplit span { display: block; margin-top: 4px; font-size: 12px; font-weight: 500; line-height: 1.35; color: var(--soft); }
+
+/* Download control. Fixed to the viewport so it follows you down the deck,
+   and removed for print so it never lands in the PDF of itself. */
+.dl {
+  position: fixed; top: 18px; right: 18px; z-index: 50;
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 11px 18px; border-radius: 999px; text-decoration: none;
+  background: var(--ink); color: #fff;
+  font: 600 13.5px/1 "SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  letter-spacing: .01em; box-shadow: 0 6px 22px rgba(0,0,0,.22);
+  transition: transform .16s ease, box-shadow .16s ease;
+}
+.dl:hover { transform: translateY(-1px); box-shadow: 0 9px 28px rgba(0,0,0,.28); }
+.dl:focus-visible { outline: 2px solid var(--coral); outline-offset: 3px; }
+.dl svg { width: 14px; height: 14px; }
+@media print { .dl { display: none !important; } }
+@media (max-width: 700px) { .dl { top: 10px; right: 10px; padding: 9px 14px; font-size: 12px; } }
+
+
+
+/* v9 pins every money-box list to the bottom with `margin-top: auto`, so the
+   three boxes bottom-align their bullets. Once the Companion box grew the two
+   tier cards it became the tallest, and the other two opened a hole between
+   their price and their first bullet. Let the copy sit under the price. */
+.mbox ul { margin-top: 0; }
+.mbox .p { margin-bottom: 9px; }
+
+/* The cover lost its launch pill, so it had a third of the slide sitting empty.
+   Scale the whole lockup rather than nudging one piece — scoped to the cover so
+   the close, which shares .cover, keeps its own proportions. */
+.cover:not(.endcover) .mark { font-size: 168px; }
+.cover:not(.endcover) .masc img { width: 150px; height: 183px; }
+.cover:not(.endcover) .markrow { gap: 34px; }
+.cover:not(.endcover) .markrow + .claim { margin-top: 28px; }
+.cover:not(.endcover) .claim { font-size: 34px; line-height: 1.3; }
+
+/* The founder-research numbers were unreadable from a seat.
+ *
+ * .slide.dense shrinks .stat b to 34px and leaves the caption at 14.5px, which
+ * is fine for a paragraph and wrong for the four numbers the whole primary
+ * research rests on. Same for the three status-quo columns underneath: 13.5px
+ * captions in three narrow tracks read as grey noise. These two slides carry
+ * the proof, so the proof gets the size. */
+.slide.dense .stats .stat b { font-size: 44px; margin-bottom: 8px; }
+.slide.dense .stats .stat span { font-size: 16px; line-height: 1.38; }
+.slide.dense .strip b { font-size: 22px; line-height: 1.15; margin-bottom: 7px; }
+.slide.dense .strip span { font-size: 15px; line-height: 1.42; }
+.slide.dense .strip > div { padding-top: 18px; }
+/* Three columns of equal width, so the options read as a set rather than
+   whatever the text happened to make them. */
+.slide.dense .strip.three { grid-template-columns: repeat(3, 1fr); gap: 0; }
+
+/* "Table को ही clearly दिखा दो" — the comparison is the argument on this slide,
+   so it gets the width and the type, and the 2x2 goes back to being a picture
+   beside it rather than a second thing to read. */
+.slide.dense .vsrow .what b { font-size: 17px; }
+.slide.dense .vsrow .what span { font-size: 13px; }
+.slide.dense .vsrow .price { font-size: 16px; }
+.slide.dense .vsrow .leaves { font-size: 15px; line-height: 1.4; }
+.slide.dense .vsrow { padding: 11px 0; }
+
+/* Slide 3 carries the primary research, and its two most quotable things — the
+   four headline numbers and the three status-quo columns — were rendering at
+   26px and 14px. Slide 2's equivalents are 44px. From a seat they were grey.
+ *
+ * The earlier pass sized `.stats .stat`, which slide 3 does not use: its
+ * numbers live in `.band.flat strong/em`. That is why nothing changed.
+ *
+ * The slide was also within 18px of its ceiling, so this is a trade, not just a
+ * bump: the two founder quotes come down from 22px (they are already the
+ * largest type on the slide and read fine smaller) and their boxes tighten,
+ * which pays for the numbers underneath. */
+.slide.dense .band.flat strong { font-size: 36px; line-height: 1; letter-spacing: -.028em; }
+.slide.dense .band.flat em { font-size: 15.5px; line-height: 1.36; }
+.slide.dense .band.flat > div { padding-top: 4px; padding-bottom: 4px; }
+
+.slide.dense .two .bigbox { padding: 16px 18px; }
+.slide.dense .two .bigbox > b { font-size: 19px !important; line-height: 1.32 !important; }
+.slide.dense .two .bigbox span { font-size: 13.5px; line-height: 1.4; }
+.slide.dense .two .bigbox i { margin-bottom: 5px; }
+
+.slide.dense .sub { margin-top: 12px !important; }
+.slide.dense .strip > div { padding-top: 14px; }
+
+/* Grids that fit however many items they actually hold.
+ *
+ * .strip is declared as 4 columns and .band.flat as 5, because that is what the
+ * slides they were built for contain. Slide 3 has 3 status-quo columns and 4
+ * stats, so each grid left a whole empty track on the right and shoved its
+ * content into the left two-thirds. That is the "lots of space on the right"
+ * and the numbers looking bunched together.
+ *
+ * Counting with :has beats adding a .three class to the markup, because the next
+ * slide that carries five of something gets it right without anyone remembering. */
+.strip:has(> div:nth-child(3):last-child)  { grid-template-columns: repeat(3, 1fr); }
+.strip:has(> div:nth-child(2):last-child)  { grid-template-columns: repeat(2, 1fr); }
+.band.flat:has(> div:nth-child(4):last-child) { grid-template-columns: repeat(4, 1fr); }
+.band.flat:has(> div:nth-child(3):last-child) { grid-template-columns: repeat(3, 1fr); }
+
+/* The quote captions got big by accident.
+ *
+ * .bigbox b is the quote itself, sized large on purpose. The caption underneath
+ * is a <span> with its own <b> inside for the money line, and that <b> inherited
+ * the quote's size — so "Ready at $21 a month." shouted while the sentence
+ * around it whispered. The reset that already covers .stat/.strip/.band never
+ * listed .bigbox. It emphasises now by weight, not by scale. */
+.bigbox span b {
+  display: inline; font-size: inherit; line-height: inherit;
+  letter-spacing: inherit; margin: 0; font-weight: 650;
+  /* Emphasis by weight and colour, not by scale. At 19px inside a 14px
+     sentence the money line broke the caption's rhythm and read as a second
+     headline; in the accent it still lands first without the jump. */
+  color: var(--accent);
+}
+
+/* Primary research, sized to be read from a seat.
+ *
+ * The status-quo row that used to sit under the stats has gone: "$700-1,000/hr,
+ * only funded companies can afford it" is on the competition slide word for
+ * word, so it was costing 130px to say the same thing twice. That space pays
+ * for everything below.
+ *
+ * The two quotes were 131px strips of text. They are the closest thing this
+ * deck has to a customer in the room, so they get real cards — squarer, with
+ * the founder's name, the sentence at a size you can read, and the money line
+ * sitting on its own at the bottom instead of trailing off a caption. */
+.slide.dense .research-quotes { gap: 20px; }
+.slide.dense .research-quotes .bigbox {
+  min-height: 172px;
+  padding: 20px 24px !important;
+  display: flex;
+  flex-direction: column;
+}
+.slide.dense .research-quotes .bigbox i { font-size: 12px; margin-bottom: 14px !important; }
+.slide.dense .research-quotes .bigbox > b {
+  font-size: 22px !important;
+  line-height: 1.3 !important;
+  letter-spacing: -.018em;
+}
+/* Pushed to the bottom of the card, so both cards line their evidence up. */
+.slide.dense .research-quotes .bigbox span {
+  margin-top: auto !important;
+  padding-top: 12px;
+  border-top: 1px solid var(--line-soft);
+  font-size: 15px !important;
+  line-height: 1.45 !important;
+}
+
+/* The four numbers carry the whole finding, so they get headline size. */
+.slide.dense .band.flat { padding: 18px 26px; margin-top: 14px; }
+.slide.dense .band.flat strong { font-size: 42px; margin-bottom: 7px; }
+.slide.dense .band.flat em { font-size: 16px; line-height: 1.32; }
+
+/* The three alternatives, back and legible.
+ *
+ * They repeat the competition slide, which is why they were cut — but a VC
+ * reading the research wants the status quo beside it, so they stay and the
+ * three blocks share the height instead of two blocks hogging it. Every size
+ * here is still well above where this slide started (quote 19 -> 22, stat
+ * 26 -> 42, option body 13.5 -> 15.5). */
+.slide.dense .research-sub { margin-top: 14px !important; font-size: 15px; }
+.slide.dense .research-strip { margin-top: 10px; }
+.slide.dense .research-strip > div { padding-top: 13px; }
+.slide.dense .research-strip b { font-size: 19px; line-height: 1.2; margin-bottom: 5px; }
+.slide.dense .research-strip span { font-size: 15.5px; line-height: 1.4; }
+</style>
+</head>
+<body>
+<a class="dl" href="/braino-companion-deck.pdf" download="Braino-Companion-deck.pdf">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <path d="M12 3v12m0 0 4-4m-4 4-4-4M4 19h16"/>
+  </svg>Download PDF</a>
+<div class="deck">
+
+<style>
+/* Companion-only additions. Everything else is the v9/v10 sheet, unchanged. */
+
+/* Outcome ticks: reused from v10's "What is Braino" slide. */
+.ticks { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 11px; }
+.ticks li { position: relative; padding-left: 27px; font-size: 16px; font-weight: 500; line-height: 1.4; color: var(--ink); }
+.ticks li::before { content: ""; position: absolute; left: 0; top: 2px; width: 18px; height: 18px; border-radius: 50%; background: var(--tint); }
+.ticks li::after { content: ""; position: absolute; left: 5.5px; top: 7px; width: 7px; height: 3.5px;
+                   border-left: 2px solid var(--accent); border-bottom: 2px solid var(--accent);
+                   transform: rotate(-45deg); }
+/* .bigbox b is a 20px block heading in the base sheet, so a <b> used as
+   emphasis inside a tick has to say it is inline. */
+.bigbox .ticks li b, .ticks li b { display: inline; font-size: inherit; font-weight: 600; line-height: inherit; margin: 0; letter-spacing: inherit; color: var(--ink); }
+
+/* Free and paid, side by side, so nobody reads the free tier as the whole
+   offer. Ported from v10's business-model slide. */
+.tiersplit { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+.tiersplit > div { border: 1px solid var(--line-soft); border-radius: 13px; padding: 12px 14px; }
+.tiersplit > div.on { background: var(--tint); border-color: transparent; }
+.tiersplit em { font-style: normal; display: block; font-size: 11.5px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--soft); margin-bottom: 5px; }
+.tiersplit strong { display: block; font-size: 20px; font-weight: 600; letter-spacing: -.02em; margin-bottom: 3px; }
+.tiersplit small { display: block; font-size: 12.5px; font-weight: 500; line-height: 1.38; color: var(--soft); }
+.tiersplit > div.on strong { color: var(--accent); }
+
+/* The three pillars are not peers: habits is the goal, the other two serve it.
+   The engines grid says so with a rank chip rather than a sentence. */
+.eng .rank {
+  position: absolute; top: 16px; right: 18px;
+  font-style: normal; font-size: 11px; font-weight: 600; letter-spacing: .05em;
+  text-transform: uppercase; color: var(--soft);
+  border: 1px solid var(--line); border-radius: 999px; padding: 3px 9px;
+}
+.eng .rank.goal { color: var(--amber); border-color: var(--amber); background: var(--amber-tint); }
+
+/* Two collisions from putting a `.bul` list inside a `.fork.three` card, which
+   the base sheet never had to handle:
+
+   1. `.fork.three .card` is a column flexbox, so the inline-block `.tag`
+      becomes a flex item and stretches the full width of the card. It has to
+      say it is a pill again.
+   2. `.card li` draws a hairline between plain list rows. A bulleted list
+      already separates itself with its dots, so the rule doubles up. */
+.fork.three .card .tag { align-self: flex-start; }
+.card .bul li { border-top: 0; }
+
+/* The three-up roadmap cards want to fill the slide, not float in it. The
+   left padding is the bullet's gutter and has to survive the resize. */
+.fork.three.tall { align-items: stretch; }
+.fork.three.tall .card { padding: 20px 22px; }
+.fork.three.tall .card ul { margin-top: 2px; }
+.fork.three.tall .card li { font-size: 14.5px; padding: 6px 0 6px 15px; }
+</style>
+
+<!-- 1 ─ Cover ─────────────────────────────────────────────────────────── -->
+<div class="fit"><section class="slide night ac-coral">
+  <div class="cover">
+    <div>
+      <div class="markrow">
+        <h1 class="mark">Braino</h1>
+        <figure class="masc nocap">
+          <img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9Ii04IC0zNCAxMTYgMTQyIiB3aWR0aD0iNjQiIGhlaWdodD0iNzgiIG92ZXJmbG93PSJ2aXNpYmxlIiBzdHlsZT0iZGlzcGxheTpibG9jayI+PGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJzYndrLWZpbGwiIHgxPSIwIiB5MT0iMCIgeDI9IjAiIHkyPSIxIj48c3RvcCBvZmZzZXQ9IjAiIHN0b3AtY29sb3I9IiNGNkE4QTIiLz48c3RvcCBvZmZzZXQ9IjAuNTUiIHN0b3AtY29sb3I9IiNFODc4NkUiLz48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiNDOTU0NEEiLz48L2xpbmVhckdyYWRpZW50PjxsaW5lYXJHcmFkaWVudCBpZD0ic2J3ay1kYXJrIiB4MT0iMCIgeTE9IjAiIHgyPSIwIiB5Mj0iMSI+PHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSIjRDk2NDVBIi8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjOUMzRTM2Ii8+PC9saW5lYXJHcmFkaWVudD48cmFkaWFsR3JhZGllbnQgaWQ9InNid2stZ2xvdyIgY3g9IjM1JSIgY3k9IjMwJSIgcj0iNTAlIj48c3RvcCBvZmZzZXQ9IjAiIHN0b3AtY29sb3I9IiNGRkQwQ0IiIHN0b3Atb3BhY2l0eT0iMC43Ii8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjRkZEMENCIiBzdG9wLW9wYWNpdHk9IjAiLz48L3JhZGlhbEdyYWRpZW50PjwvZGVmcz48ZyBpZD0iX19zYndrX3Jvb3RfXyI+PGcgaWQ9Il9fc2J3a19tb29ubGVnc19fIiBkaXNwbGF5PSJub25lIj48ZyB0cmFuc2Zvcm09InRyYW5zbGF0ZSgxMDAsMCkgc2NhbGUoLTEsMSkiPjxnIGlkPSJfX3Nid2tfbXdfcl9fIiB0cmFuc2Zvcm09InRyYW5zbGF0ZSgxMiAwKSI+PGcgaWQ9Il9fc2J3a19td19yaF9fIiB0cmFuc2Zvcm09InJvdGF0ZSgwIDI0IDEwMSkiPjxwYXRoIGQ9Ik0gNDUgNzQgTCA0Mi41IDg3IiBmaWxsPSJub25lIiBzdHJva2U9IndoaXRlIiBzdHJva2Utd2lkdGg9IjgiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPjxwYXRoIGQ9Ik0gNDUgNzQgTCA0Mi41IDg3IiBmaWxsPSJub25lIiBzdHJva2U9InVybCgjc2J3ay1maWxsKSIgc3Ryb2tlLXdpZHRoPSI1LjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPjxwYXRoIGQ9Ik0gNDcuNSA4OSBDIDQ3LjUgODcgNDQuNSA4Ni40IDQyIDg3LjQgQyAzNiA4OS4yIDI5LjYgOTAuNiAyNS4yIDk0LjIgQyAyMi4yIDk2LjcgMjEuOCA5OS40IDI1IDEwMC44IEMgMjcgMTAxLjYgMzEgMTAxLjYgMzUgMTAxLjYgTCA0NS42IDEwMS42IEMgNDcuMSAxMDEuNiA0Ny44IDEwMC42IDQ3LjUgOTkuMSBaIiBmaWxsPSJ3aGl0ZSIgc3Ryb2tlPSJyZ2JhKDE3Niw4Niw3OCwuNDIpIiBzdHJva2Utd2lkdGg9IjAuOSIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPjxwYXRoIGQ9Ik0gMjMgOTguNiBRIDIxLjIgMTAxLjIgMjUuNiAxMDEuNSBMIDQ1LjYgMTAxLjUgUSA0Ny44IDEwMS4zIDQ3LjQgOTguOSBRIDM0LjUgMTAwLjEgMjMgOTguNiBaIiBmaWxsPSIjRjZFMkRDIiBzdHJva2U9InJnYmEoMTc2LDg2LDc4LC40MikiIHN0cm9rZS13aWR0aD0iMC44IiBzdHJva2UtbGluZWpvaW49InJvdW5kIi8+PGcgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjQzk1NDRBIiBzdHJva2Utd2lkdGg9IjAuODUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgb3BhY2l0eT0iMC43Ij48cGF0aCBkPSJNIDI5LjUgOTAgUSAzNiA4OC41IDQzIDg5LjIiLz48cGF0aCBkPSJNIDMyIDkyLjcgUSAzNy41IDkxLjcgNDMgOTIuMiIgb3BhY2l0eT0iMC42Ii8+PC9nPjxlbGxpcHNlIGN4PSIzMCIgY3k9IjkyLjQiIHJ4PSIzIiByeT0iMS40IiBmaWxsPSIjZmZmIiBvcGFjaXR5PSIwLjYiIHRyYW5zZm9ybT0icm90YXRlKC0xMiAzMCA5Mi40KSIvPjwvZz48L2c+PGcgaWQ9Il9fc2J3a19td19sX18iIHRyYW5zZm9ybT0idHJhbnNsYXRlKDAgMCkiPjxnIGlkPSJfX3Nid2tfbXdfbGhfXyIgdHJhbnNmb3JtPSJyb3RhdGUoMCAyNCAxMDEpIj48cGF0aCBkPSJNIDQ1IDc0IEwgNDIuNSA4NyIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSI4IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz48cGF0aCBkPSJNIDQ1IDc0IEwgNDIuNSA4NyIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ1cmwoI3Nid2stZmlsbCkiIHN0cm9rZS13aWR0aD0iNS41IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz48cGF0aCBkPSJNIDQ3LjUgODkgQyA0Ny41IDg3IDQ0LjUgODYuNCA0MiA4Ny40IEMgMzYgODkuMiAyOS42IDkwLjYgMjUuMiA5NC4yIEMgMjIuMiA5Ni43IDIxLjggOTkuNCAyNSAxMDAuOCBDIDI3IDEwMS42IDMxIDEwMS42IDM1IDEwMS42IEwgNDUuNiAxMDEuNiBDIDQ3LjEgMTAxLjYgNDcuOCAxMDAuNiA0Ny41IDk5LjEgWiIgZmlsbD0id2hpdGUiIHN0cm9rZT0icmdiYSgxNzYsODYsNzgsLjQyKSIgc3Ryb2tlLXdpZHRoPSIwLjkiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz48cGF0aCBkPSJNIDIzIDk4LjYgUSAyMS4yIDEwMS4yIDI1LjYgMTAxLjUgTCA0NS42IDEwMS41IFEgNDcuOCAxMDEuMyA0Ny40IDk4LjkgUSAzNC41IDEwMC4xIDIzIDk4LjYgWiIgZmlsbD0iI0Y2RTJEQyIgc3Ryb2tlPSJyZ2JhKDE3Niw4Niw3OCwuNDIpIiBzdHJva2Utd2lkdGg9IjAuOCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPjxnIGZpbGw9Im5vbmUiIHN0cm9rZT0iI0M5NTQ0QSIgc3Ryb2tlLXdpZHRoPSIwLjg1IiBzdHJva2UtbGluZWNhcD0icm91bmQiIG9wYWNpdHk9IjAuNyI+PHBhdGggZD0iTSAyOS41IDkwIFEgMzYgODguNSA0MyA4OS4yIi8+PHBhdGggZD0iTSAzMiA5Mi43IFEgMzcuNSA5MS43IDQzIDkyLjIiIG9wYWNpdHk9IjAuNiIvPjwvZz48ZWxsaXBzZSBjeD0iMzAiIGN5PSI5Mi40IiByeD0iMyIgcnk9IjEuNCIgZmlsbD0iI2ZmZiIgb3BhY2l0eT0iMC42IiB0cmFuc2Zvcm09InJvdGF0ZSgtMTIgMzAgOTIuNCkiLz48L2c+PC9nPjwvZz48L2c+PGcgaWQ9Il9fc2J3a19sbF9fIj48cGF0aCBkPSJNIDQ1IDc0IEwgNDIuNSA4NyIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSI4IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz48cGF0aCBkPSJNIDQ1IDc0IEwgNDIuNSA4NyIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ1cmwoI3Nid2stZmlsbCkiIHN0cm9rZS13aWR0aD0iNS41IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz48cGF0aCBkPSJNIDQ3LjUgODkgQyA0Ny41IDg3IDQ0LjUgODYuNCA0MiA4Ny40IEMgMzYgODkuMiAyOS42IDkwLjYgMjUuMiA5NC4yIEMgMjIuMiA5Ni43IDIxLjggOTkuNCAyNSAxMDAuOCBDIDI3IDEwMS42IDMxIDEwMS42IDM1IDEwMS42IEwgNDUuNiAxMDEuNiBDIDQ3LjEgMTAxLjYgNDcuOCAxMDAuNiA0Ny41IDk5LjEgWiIgZmlsbD0id2hpdGUiIHN0cm9rZT0icmdiYSgxNzYsODYsNzgsLjQyKSIgc3Ryb2tlLXdpZHRoPSIwLjkiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz48cGF0aCBkPSJNIDIzIDk4LjYgUSAyMS4yIDEwMS4yIDI1LjYgMTAxLjUgTCA0NS42IDEwMS41IFEgNDcuOCAxMDEuMyA0Ny40IDk4LjkgUSAzNC41IDEwMC4xIDIzIDk4LjYgWiIgZmlsbD0iI0Y2RTJEQyIgc3Ryb2tlPSJyZ2JhKDE3Niw4Niw3OCwuNDIpIiBzdHJva2Utd2lkdGg9IjAuOCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPjxnIGZpbGw9Im5vbmUiIHN0cm9rZT0iI0M5NTQ0QSIgc3Ryb2tlLXdpZHRoPSIwLjg1IiBzdHJva2UtbGluZWNhcD0icm91bmQiIG9wYWNpdHk9IjAuNyI+PHBhdGggZD0iTSAyOS41IDkwIFEgMzYgODguNSA0MyA4OS4yIi8+PHBhdGggZD0iTSAzMiA5Mi43IFEgMzcuNSA5MS43IDQzIDkyLjIiIG9wYWNpdHk9IjAuNiIvPjwvZz48ZWxsaXBzZSBjeD0iMzAiIGN5PSI5Mi40IiByeD0iMyIgcnk9IjEuNCIgZmlsbD0iI2ZmZiIgb3BhY2l0eT0iMC42IiB0cmFuc2Zvcm09InJvdGF0ZSgtMTIgMzAgOTIuNCkiLz48L2c+PGcgaWQ9Il9fc2J3a19ybF9fIj48ZyB0cmFuc2Zvcm09InRyYW5zbGF0ZSgxMDAsMCkgc2NhbGUoLTEsMSkiPjxwYXRoIGQ9Ik0gNDUgNzQgTCA0Mi41IDg3IiBmaWxsPSJub25lIiBzdHJva2U9IndoaXRlIiBzdHJva2Utd2lkdGg9IjgiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPjxwYXRoIGQ9Ik0gNDUgNzQgTCA0Mi41IDg3IiBmaWxsPSJub25lIiBzdHJva2U9InVybCgjc2J3ay1maWxsKSIgc3Ryb2tlLXdpZHRoPSI1LjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPjxwYXRoIGQ9Ik0gNDcuNSA4OSBDIDQ3LjUgODcgNDQuNSA4Ni40IDQyIDg3LjQgQyAzNiA4OS4yIDI5LjYgOTAuNiAyNS4yIDk0LjIgQyAyMi4yIDk2LjcgMjEuOCA5OS40IDI1IDEwMC44IEMgMjcgMTAxLjYgMzEgMTAxLjYgMzUgMTAxLjYgTCA0NS42IDEwMS42IEMgNDcuMSAxMDEuNiA0Ny44IDEwMC42IDQ3LjUgOTkuMSBaIiBmaWxsPSJ3aGl0ZSIgc3Ryb2tlPSJyZ2JhKDE3Niw4Niw3OCwuNDIpIiBzdHJva2Utd2lkdGg9IjAuOSIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPjxwYXRoIGQ9Ik0gMjMgOTguNiBRIDIxLjIgMTAxLjIgMjUuNiAxMDEuNSBMIDQ1LjYgMTAxLjUgUSA0Ny44IDEwMS4zIDQ3LjQgOTguOSBRIDM0LjUgMTAwLjEgMjMgOTguNiBaIiBmaWxsPSIjRjZFMkRDIiBzdHJva2U9InJnYmEoMTc2LDg2LDc4LC40MikiIHN0cm9rZS13aWR0aD0iMC44IiBzdHJva2UtbGluZWpvaW49InJvdW5kIi8+PGcgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjQzk1NDRBIiBzdHJva2Utd2lkdGg9IjAuODUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgb3BhY2l0eT0iMC43Ij48cGF0aCBkPSJNIDI5LjUgOTAgUSAzNiA4OC41IDQzIDg5LjIiLz48cGF0aCBkPSJNIDMyIDkyLjcgUSAzNy41IDkxLjcgNDMgOTIuMiIgb3BhY2l0eT0iMC42Ii8+PC9nPjxlbGxpcHNlIGN4PSIzMCIgY3k9IjkyLjQiIHJ4PSIzIiByeT0iMS40IiBmaWxsPSIjZmZmIiBvcGFjaXR5PSIwLjYiIHRyYW5zZm9ybT0icm90YXRlKC0xMiAzMCA5Mi40KSIvPjwvZz48L2c+PGcgaWQ9Il9fc2J3a19sYV9iZ19fIj48cGF0aCBkPSJNIDIzIDUzIFEgMTEgNTIgOCA1OSIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSI5IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz48L2c+PGcgaWQ9Il9fc2J3a19yYV9iZ19fIj48cGF0aCBkPSJNIDc3IDUzIFEgODkgNTIgOTIgNTkiIGZpbGw9Im5vbmUiIHN0cm9rZT0id2hpdGUiIHN0cm9rZS13aWR0aD0iOSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+PC9nPjxwYXRoIGQ9Ik0gNTAgOCBDIDU1IDYgNjQgNiA2OCAxMiBDIDc2IDEwIDg0IDE2IDgyIDI0IEMgOTAgMjYgOTIgMzYgODYgNDIgQyA5MiA0NiA5MCA1NiA4MiA1OCBDIDg2IDYwIDg1IDcwIDc2IDcwIEMgNjggODAuNSA2MCA3OS41IDUwIDc5IEMgNDAgNzkuNSAzMiA4MC41IDI0IDcwIEMgMTUgNzAgMTQgNjAgMTggNTggQyAxMCA1NiA4IDQ2IDE0IDQyIEMgOCAzNiAxMCAyNiAxOCAyNCBDIDE2IDE2IDI0IDEwIDMyIDEyIEMgMzYgNiA0NSA2IDUwIDggWiIgZmlsbD0id2hpdGUiIHRyYW5zZm9ybT0ic2NhbGUoMS4wOCkgdHJhbnNsYXRlKC0zLjcsLTMuNykiLz48ZyBpZD0iX19zYndrX2xhX18iPjxwYXRoIGQ9Ik0gMjMgNTMgUSAxMSA1MiA4IDU5IiBmaWxsPSJub25lIiBzdHJva2U9InVybCgjc2J3ay1maWxsKSIgc3Ryb2tlLXdpZHRoPSI2IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz48ZyB0cmFuc2Zvcm09InRyYW5zbGF0ZSg3IDY0KSIgc3Ryb2tlPSJyZ2JhKDE3Niw4Niw3OCwuNDIpIiBzdHJva2Utd2lkdGg9IjAuNyI+PGNpcmNsZSBjeD0iNSIgY3k9Ii0xLjQiIHI9IjMiIGZpbGw9IndoaXRlIi8+PGNpcmNsZSBjeD0iMCIgY3k9IjAuNiIgcj0iNyIgZmlsbD0id2hpdGUiLz48ZyBmaWxsPSJub25lIiBzdHJva2U9IiNDOTU0NEEiIHN0cm9rZS13aWR0aD0iMC44IiBzdHJva2UtbGluZWNhcD0icm91bmQiIG9wYWNpdHk9IjAuNTUiPjxwYXRoIGQ9Ik0gLTIuOSAzIFEgLTIuNyA1LjQgLTEuNyA2LjgiLz48cGF0aCBkPSJNIDAuMiAzLjYgUSAwLjIgNS44IDAuMiA3LjIiLz48cGF0aCBkPSJNIDIuOSAzIFEgMi43IDUuNCAxLjcgNi44Ii8+PC9nPjxwYXRoIGQ9Ik0gLTUgLTUgUSAwIC0zLjIgNSAtNSIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjQzk1NDRBIiBzdHJva2Utd2lkdGg9IjEuMSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+PC9nPjwvZz48ZyBpZD0iX19zYndrX3JhX18iPjxwYXRoIGQ9Ik0gNzcgNTMgUSA4OSA1MiA5MiA1OSIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ1cmwoI3Nid2stZmlsbCkiIHN0cm9rZS13aWR0aD0iNiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+PGcgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoOTMgNjQpIiBzdHJva2U9InJnYmEoMTc2LDg2LDc4LC40MikiIHN0cm9rZS13aWR0aD0iMC43Ij48Y2lyY2xlIGN4PSItNSIgY3k9Ii0xLjQiIHI9IjMiIGZpbGw9IndoaXRlIi8+PGNpcmNsZSBjeD0iMCIgY3k9IjAuNiIgcj0iNyIgZmlsbD0id2hpdGUiLz48ZyBmaWxsPSJub25lIiBzdHJva2U9IiNDOTU0NEEiIHN0cm9rZS13aWR0aD0iMC44IiBzdHJva2UtbGluZWNhcD0icm91bmQiIG9wYWNpdHk9IjAuNTUiPjxwYXRoIGQ9Ik0gLTIuOSAzIFEgLTIuNyA1LjQgLTEuNyA2LjgiLz48cGF0aCBkPSJNIDAuMiAzLjYgUSAwLjIgNS44IDAuMiA3LjIiLz48cGF0aCBkPSJNIDIuOSAzIFEgMi43IDUuNCAxLjcgNi44Ii8+PC9nPjxwYXRoIGQ9Ik0gLTUgLTUgUSAwIC0zLjIgNSAtNSIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjQzk1NDRBIiBzdHJva2Utd2lkdGg9IjEuMSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+PC9nPjwvZz48cGF0aCBkPSJNIDUwIDggQyA1NSA2IDY0IDYgNjggMTIgQyA3NiAxMCA4NCAxNiA4MiAyNCBDIDkwIDI2IDkyIDM2IDg2IDQyIEMgOTIgNDYgOTAgNTYgODIgNTggQyA4NiA2MCA4NSA3MCA3NiA3MCBDIDY4IDgwLjUgNjAgNzkuNSA1MCA3OSBDIDQwIDc5LjUgMzIgODAuNSAyNCA3MCBDIDE1IDcwIDE0IDYwIDE4IDU4IEMgMTAgNTYgOCA0NiAxNCA0MiBDIDggMzYgMTAgMjYgMTggMjQgQyAxNiAxNiAyNCAxMCAzMiAxMiBDIDM2IDYgNDUgNiA1MCA4IFoiIGZpbGw9InVybCgjc2J3ay1maWxsKSIvPjxwYXRoIGQ9Ik0gNTAgOCBDIDU1IDYgNjQgNiA2OCAxMiBDIDc2IDEwIDg0IDE2IDgyIDI0IEMgOTAgMjYgOTIgMzYgODYgNDIgQyA5MiA0NiA5MCA1NiA4MiA1OCBDIDg2IDYwIDg1IDcwIDc2IDcwIEMgNjggODAuNSA2MCA3OS41IDUwIDc5IEMgNDAgNzkuNSAzMiA4MC41IDI0IDcwIEMgMTUgNzAgMTQgNjAgMTggNTggQyAxMCA1NiA4IDQ2IDE0IDQyIEMgOCAzNiAxMCAyNiAxOCAyNCBDIDE2IDE2IDI0IDEwIDMyIDEyIEMgMzYgNiA0NSA2IDUwIDggWiIgZmlsbD0idXJsKCNzYndrLWdsb3cpIi8+PHBhdGggZD0iTSA1MCA4IFEgNDkgMzAgNTAgNTAgUSA1MC41IDYwIDUwIDY1IiBmaWxsPSJub25lIiBzdHJva2U9IiM4QTJGMjgiIHN0cm9rZS13aWR0aD0iMS4xIiBzdHJva2UtbGluZWNhcD0icm91bmQiIG9wYWNpdHk9IjAuNTUiLz48cGF0aCBkPSJNIDMwIDE0IFEgMjYgMjIgMzAgMjggUSAyNCAzMyAyOCA0MCBRIDIyIDQ0IDI2IDUyIFEgMjIgNTggMjggNjQgUSAyNCA3MCAzMiA3MiIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjOEEyRjI4IiBzdHJva2Utd2lkdGg9IjEuMSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBvcGFjaXR5PSIwLjYiLz48cGF0aCBkPSJNIDM4IDEyIFEgMzYgMjIgNDIgMjYgUSAzOCAzMiA0NCAzNiBRIDM4IDQ0IDQ0IDUwIFEgMzggNTggNDQgNjQgUSA0MCA3MiA0NiA3NCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjOEEyRjI4IiBzdHJva2Utd2lkdGg9IjEiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgb3BhY2l0eT0iMC40Ii8+PHBhdGggZD0iTSA3MCAxNCBRIDc0IDIyIDcwIDI4IFEgNzYgMzMgNzIgNDAgUSA3OCA0NCA3NCA1MiBRIDc4IDU4IDcyIDY0IFEgNzYgNzAgNjggNzIiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzhBMkYyOCIgc3Ryb2tlLXdpZHRoPSIxLjEiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgb3BhY2l0eT0iMC42Ii8+PHBhdGggZD0iTSA2MiAxMiBRIDY0IDIyIDU4IDI2IFEgNjIgMzIgNTYgMzYgUSA2MiA0NCA1NiA1MCBRIDYyIDU4IDU2IDY0IFEgNjAgNzIgNTQgNzQiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzhBMkYyOCIgc3Ryb2tlLXdpZHRoPSIxIiBzdHJva2UtbGluZWNhcD0icm91bmQiIG9wYWNpdHk9IjAuNCIvPjxnIGlkPSJfX3Nid2tfZXllX2xfXyI+PGNpcmNsZSBjeD0iMzgiIGN5PSI0OCIgcj0iNi41IiBmaWxsPSJ3aGl0ZSIvPjxnIGlkPSJfX3Nid2tfcHVwaWxfbF9fIj48Y2lyY2xlIGN4PSIzOCIgY3k9IjQ4IiByPSIzLjIiIGZpbGw9IiMxQjE3MTMiLz48Y2lyY2xlIGN4PSIzOSIgY3k9IjQ2LjYiIHI9IjEuMSIgZmlsbD0id2hpdGUiLz48L2c+PC9nPjxnIGlkPSJfX3Nid2tfZXllX3JfXyI+PGNpcmNsZSBjeD0iNjIiIGN5PSI0OCIgcj0iNi41IiBmaWxsPSJ3aGl0ZSIvPjxnIGlkPSJfX3Nid2tfcHVwaWxfcl9fIj48Y2lyY2xlIGN4PSI2MiIgY3k9IjQ4IiByPSIzLjIiIGZpbGw9IiMxQjE3MTMiLz48Y2lyY2xlIGN4PSI2MyIgY3k9IjQ2LjYiIHI9IjEuMSIgZmlsbD0id2hpdGUiLz48L2c+PC9nPjxlbGxpcHNlIGN4PSIyOCIgY3k9IjU4IiByeD0iMy41IiByeT0iMiIgZmlsbD0iI0UxNEE0OCIgb3BhY2l0eT0iMC4zNSIvPjxlbGxpcHNlIGN4PSI3MiIgY3k9IjU4IiByeD0iMy41IiByeT0iMiIgZmlsbD0iI0UxNEE0OCIgb3BhY2l0eT0iMC4zNSIvPjxnIGlkPSJfX3Nid2tfbW91dGhfXyI+PHBhdGggaWQ9Il9fc2J3a19zbWlsZV9fIiBkPSJNIDQzLjUgNjAgUSA1MCA2Ny41IDU2LjUgNjAiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzFCMTcxMyIgc3Ryb2tlLXdpZHRoPSIxLjkiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPjxnIGlkPSJfX3Nid2tfdGFsa19fIiBzdHlsZT0iZGlzcGxheTpub25lIj48ZWxsaXBzZSBpZD0iX19zYndrX3RlX18iIGN4PSI1MCIgY3k9IjYxLjgiIHJ4PSIzLjUiIHJ5PSIxLjQiIGZpbGw9IiM4QTJGMjgiLz48ZWxsaXBzZSBpZD0iX19zYndrX3RpX18iIGN4PSI1MCIgY3k9IjYyLjUiIHJ4PSIyLjIiIHJ5PSIwLjciIGZpbGw9IiNFODc3NkUiLz48L2c+PC9nPjxnIGlkPSJfX3Nid2tfcmVhY3RfXyIgZGlzcGxheT0ibm9uZSI+PGcgaWQ9Il9fc2J3a19yc19fIiBkaXNwbGF5PSJub25lIj48Y2lyY2xlIGN4PSIzOCIgY3k9IjQ3LjQiIHI9IjcuOCIgZmlsbD0id2hpdGUiLz48Y2lyY2xlIGN4PSI2MiIgY3k9IjQ3LjQiIHI9IjcuOCIgZmlsbD0id2hpdGUiLz48Y2lyY2xlIGN4PSIzOSIgY3k9IjQ2LjQiIHI9IjIuNCIgZmlsbD0iIzFCMTcxMyIvPjxjaXJjbGUgY3g9IjM5LjgiIGN5PSI0NS40IiByPSIwLjkiIGZpbGw9IndoaXRlIi8+PGNpcmNsZSBjeD0iNjEiIGN5PSI0Ni40IiByPSIyLjQiIGZpbGw9IiMxQjE3MTMiLz48Y2lyY2xlIGN4PSI2MS44IiBjeT0iNDUuNCIgcj0iMC45IiBmaWxsPSJ3aGl0ZSIvPjxwYXRoIGQ9Ik0gMzIgNDEuNSBRIDM3IDQwIDQzIDQxLjgiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzhBMkYyOCIgc3Ryb2tlLXdpZHRoPSIxLjQiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgb3BhY2l0eT0iMC44NSIvPjxwYXRoIGQ9Ik0gNjggNDEuNSBRIDYzIDQwIDU3IDQxLjgiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzhBMkYyOCIgc3Ryb2tlLXdpZHRoPSIxLjQiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgb3BhY2l0eT0iMC44NSIvPjxlbGxpcHNlIGN4PSI1MCIgY3k9IjY0IiByeD0iMyIgcnk9IjMuOCIgZmlsbD0iIzZFMjExQSIvPjxwYXRoIGlkPSJfX3Nid2tfc3dlYXRfXyIgZD0iTSA3OSAzOSBDIDgyIDQzIDgyIDQ2IDc5IDQ3IEMgNzYgNDYgNzYgNDMgNzkgMzkgWiIgZmlsbD0iI0NGRUZGRiIvPjwvZz48ZyBpZD0iX19zYndrX3JjX18iIGRpc3BsYXk9Im5vbmUiPjxwYXRoIGQ9Ik0gMzIuNSA0OSBRIDM4IDU0LjUgNDMuNSA0OSIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjMUIxNzEzIiBzdHJva2Utd2lkdGg9IjIuNCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+PHBhdGggZD0iTSA1Ni41IDQ5IFEgNjIgNTQuNSA2Ny41IDQ5IiBmaWxsPSJub25lIiBzdHJva2U9IiMxQjE3MTMiIHN0cm9rZS13aWR0aD0iMi40IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz48cGF0aCBkPSJNIDQyIDU5IFEgNTAgNzMuNSA1OCA1OSBRIDUwIDYyIDQyIDU5IFoiIGZpbGw9IiM2RTIxMUEiLz48cGF0aCBkPSJNIDQ1LjUgNjQuNSBRIDUwIDcwIDU0LjUgNjQuNSBRIDUwIDY2LjUgNDUuNSA2NC41IFoiIGZpbGw9IiNFODc4NkUiLz48cGF0aCBkPSJNIDQzIDYwIFEgNTAgNjIuNCA1NyA2MCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPjxnIGlkPSJfX3Nid2tfY29uZmV0dGlfXyI+PGNpcmNsZSBjeD0iMTIiIGN5PSIyMiIgcj0iMi41IiBmaWxsPSIjRkZENzAwIi8+PGNpcmNsZSBjeD0iODgiIGN5PSIyMCIgcj0iMiIgZmlsbD0iI0ZGNjlCNCIvPjxjaXJjbGUgY3g9IjYiIGN5PSI0NCIgcj0iMiIgZmlsbD0iIzdFQzhFMyIvPjxjaXJjbGUgY3g9Ijk0IiBjeT0iNDIiIHI9IjIuMiIgZmlsbD0iIzkwRUU5MCIvPjxjaXJjbGUgY3g9IjIwIiBjeT0iMTAiIHI9IjEuOCIgZmlsbD0iI0ZGOEM0MiIvPjxjaXJjbGUgY3g9IjgwIiBjeT0iMTAiIHI9IjEuOCIgZmlsbD0iI0UxNEE0OCIvPjwvZz48L2c+PGcgaWQ9Il9fc2J3a19ydF9fIiBkaXNwbGF5PSJub25lIj48cGF0aCBkPSJNIDMyLjUgNDkgUSAzOCA1NC41IDQzLjUgNDkiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzFCMTcxMyIgc3Ryb2tlLXdpZHRoPSIyLjQiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPjxwYXRoIGQ9Ik0gNTYuNSA0OSBRIDYyIDU0LjUgNjcuNSA0OSIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjMUIxNzEzIiBzdHJva2Utd2lkdGg9IjIuNCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+PHBhdGggZD0iTSA0MiA1OSBRIDUwIDczLjUgNTggNTkgUSA1MCA2MiA0MiA1OSBaIiBmaWxsPSIjNkUyMTFBIi8+PHBhdGggZD0iTSA0NS41IDY0LjUgUSA1MCA3MCA1NC41IDY0LjUgUSA1MCA2Ni41IDQ1LjUgNjQuNSBaIiBmaWxsPSIjRTg3ODZFIi8+PHBhdGggZD0iTSA0MyA2MCBRIDUwIDYyLjQgNTcgNjAiIGZpbGw9Im5vbmUiIHN0cm9rZT0id2hpdGUiIHN0cm9rZS13aWR0aD0iMS41IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz48cGF0aCBpZD0iX19zYndrX3RlYXJfbF9fIiBkPSJNIDMwIDUwLjUgQyAzMyA1NC41IDMzIDU3IDMwIDU4IEMgMjcgNTcgMjcgNTQuNSAzMCA1MC41IFoiIGZpbGw9IiNERkY0RkYiLz48cGF0aCBpZD0iX19zYndrX3RlYXJfcl9fIiBkPSJNIDcwIDUwLjUgQyA3MyA1NC41IDczIDU3IDcwIDU4IEMgNjcgNTcgNjcgNTQuNSA3MCA1MC41IFoiIGZpbGw9IiNERkY0RkYiLz48L2c+PC9nPjxnIGlkPSJfX3Nid2tfc3BlY3NfXyIgZGlzcGxheT0ibm9uZSI+PGNpcmNsZSBjeD0iMzgiIGN5PSI0OCIgcj0iOS4yIiBmaWxsPSJub25lIiBzdHJva2U9IiMxQjE3MTMiIHN0cm9rZS13aWR0aD0iMyIgb3BhY2l0eT0iMC45MiIvPjxjaXJjbGUgY3g9IjYyIiBjeT0iNDgiIHI9IjkuMiIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjMUIxNzEzIiBzdHJva2Utd2lkdGg9IjMiIG9wYWNpdHk9IjAuOTIiLz48cGF0aCBkPSJNIDQ3LjIgNDggTCA1Mi44IDQ4IiBmaWxsPSJub25lIiBzdHJva2U9IiMxQjE3MTMiIHN0cm9rZS13aWR0aD0iMi4yIiBzdHJva2UtbGluZWNhcD0icm91bmQiIG9wYWNpdHk9IjAuOTIiLz48cGF0aCBkPSJNIDI4LjggNDYgUSAyNCA0NSAyMSA0OSIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjMUIxNzEzIiBzdHJva2Utd2lkdGg9IjIuMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBvcGFjaXR5PSIwLjkyIi8+PHBhdGggZD0iTSA3MS4yIDQ2IFEgNzYgNDUgNzkgNDkiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzFCMTcxMyIgc3Ryb2tlLXdpZHRoPSIyLjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgb3BhY2l0eT0iMC45MiIvPjwvZz48ZyBpZD0iX19zYndrX2ZlZG9yYV9fIiBkaXNwbGF5PSJub25lIiB0cmFuc2Zvcm09InJvdGF0ZSgtMTIgNTAgMikiPjxwYXRoIGQ9Ik0gMzEgNCBDIDMxIC0xNyAzOSAtMjQgNTAgLTI0IEMgNjEgLTI0IDY5IC0xNyA2OSA0IFoiIGZpbGw9IiMxNDExMGYiIHN0cm9rZT0iIzAwMCIgc3Ryb2tlLXdpZHRoPSIwLjYiLz48cGF0aCBkPSJNIDQ0IC0yMiBRIDUwIC0xOCA1NiAtMjIiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzJjMjcyMyIgc3Ryb2tlLXdpZHRoPSIxLjYiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPjxwYXRoIGQ9Ik0gMzEgMyBRIDUwIDkgNjkgMyBMIDY5IC0yIFEgNTAgNCAzMSAtMiBaIiBmaWxsPSIjMDAwIi8+PGVsbGlwc2UgY3g9IjUwIiBjeT0iNCIgcng9IjQ1IiByeT0iOC41IiBmaWxsPSIjMTQxMTBmIiBzdHJva2U9IiMwMDAiIHN0cm9rZS13aWR0aD0iMC42Ii8+PGVsbGlwc2UgY3g9IjUwIiBjeT0iMyIgcng9IjMyIiByeT0iNSIgZmlsbD0iIzAwMCIgb3BhY2l0eT0iMC42Ii8+PHBhdGggZD0iTSAzNyAtMjAgUSAzNSAtOCAzOCAyIiBmaWxsPSJub25lIiBzdHJva2U9IiMzYTMzMmUiIHN0cm9rZS13aWR0aD0iMi4yIiBzdHJva2UtbGluZWNhcD0icm91bmQiIG9wYWNpdHk9IjAuNyIvPjxwYXRoIGQ9Ik0gMTIgNSBRIDUwIDEyIDg4IDUiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzNhMzMyZSIgc3Ryb2tlLXdpZHRoPSIxLjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgb3BhY2l0eT0iMC42Ii8+PC9nPjwvZz48L3N2Zz4=" alt="Braino, standing">
+        </figure>
+      </div>
+      <p class="claim">A companion who runs your day with you.<br><b>Habits, focus and daily routines. Nobody logs anything.</b></p>
+    </div>
+  </div>
+  <span class="wm">Itish Pande · Mesa School of Business · September 2026 · trybraino.com</span>
+</section></div>
+
+<!-- 2 ─ Problem ───────────────────────────────────────────────────────── -->
+<div class="fit"><section class="slide ac-coral dense">
+  <div class="body">
+    <p class="kicker">The problem</p>
+    <h2>Everyone downloads one. <span class="tone">Everyone quits within a month.</span></h2>
+    <div class="stats two" style="grid-template-columns:1fr 1fr">
+      <div class="stat"><b>43%</b><span>abandon a habit tracking app inside 30 days. 52% inside 60.</span></div>
+      <div class="stat"><b>4.1%</b><span>of productivity app users are still there on day 30. The category average is 7%.</span></div>
+      <div class="stat"><b>72%</b><span>disengage from lifestyle and wellbeing apps within 90 days.</span></div>
+      <div class="stat"><b>#1</b><span>reason given for quitting is the daily logging itself. Not the price, not the features.</span></div>
+    </div>
+    <div class="band">
+      <small>And it is the same failure every time</small>
+      <b>These apps report your past. They do not do anything about your present.</b>
+      <span>You are asked to remember, open the app, and type in what you already did. The one moment you needed help was an hour ago, and nothing was watching.</span>
+    </div>
+    <p class="src" style="margin-top:11px">Sources: Userpilot app retention benchmarks 2026 · Sahha health app churn study · UXCam retention by industry · SpendTrak churn analysis</p>
+  </div>
+  <span class="num">2 / 12</span>
+</section></div>
+
+<!-- 3 ─ The alternatives ──────────────────────────────────────────────── -->
+<div class="fit"><section class="slide ac-violet dense">
+  <div class="body">
+    <p class="kicker">What people use today</p>
+    <h2>Three options. <span class="tone">Every one of them waits for you.</span></h2>
+    <div class="fork three" style="margin-top:14px">
+      <article class="card c-violet">
+        <span class="tag">Option one</span>
+        <h3>Track it yourself</h3>
+        <p>Streaks, Habitica, Notion, Todoist.</p>
+        <ul class="bul sm">
+          <li>A grid you tick and a list you keep</li>
+          <li><b>You do the logging</b>, every single day</li>
+          <li>Break the streak and 44% never come back</li>
+        </ul>
+      </article>
+      <article class="card c-blue">
+        <span class="tag">Option two</span>
+        <h3>Block and measure</h3>
+        <p>Freedom, Forest, Rize, Screen Time.</p>
+        <ul class="bul sm">
+          <li>Blunt blocking, or a report after the fact</li>
+          <li><b>No idea what you were trying to do</b></li>
+          <li>It tells you the week went badly. Nothing else</li>
+        </ul>
+      </article>
+      <article class="card c-coral">
+        <span class="tag">Option three</span>
+        <h3>Pay a person</h3>
+        <p>A coach, a therapist, an accountability partner.</p>
+        <ul class="bul sm">
+          <li>It works, and everybody knows it works</li>
+          <li><b>$100 an hour</b>, once a week at best</li>
+          <li>Not there at 3pm on a Tuesday, which is when you need it</li>
+        </ul>
+      </article>
+    </div>
+    <div class="band">
+      <b>All three need you to show up, remember, and type. The person who has already run out of discipline is the person being asked to supply it.</b>
+    </div>
+  </div>
+  <span class="num">3 / 12</span>
+</section></div>
+
+<!-- 4 ─ Market size ───────────────────────────────────────────────────── -->
+<div class="fit"><section class="slide ac-blue dense pack">
+  <div class="body">
+    <p class="kicker">How big is the opportunity?</p>
+    <h2>The market, <span class="tone">in three numbers.</span></h2>
+    <div class="funnel">
+      <div class="fstep">
+        <i>TAM</i><b>$12.0B</b>
+        <ul class="bul">
+          <li><b>1 billion knowledge workers</b> worldwide</li>
+          <li><b>10%</b> already pay for a habit, focus or productivity app</li>
+          <li><b>$120 a year</b> each. One $10 a month tool</li>
+        </ul>
+        <u>Gartner · Grand View · Straits Research</u>
+      </div>
+      <div class="fstep">
+        <i>SAM</i><b>$1.3B</b>
+        <ul class="bul">
+          <li><b>11M desktop-first workers</b> we can actually run on</li>
+          <li>English-speaking markets <b>+ Indian metros</b></li>
+          <li>Already paying for <b>at least one</b> subscription</li>
+        </ul>
+        <u>Mac and Chrome installed base</u>
+      </div>
+      <div class="fstep" style="background:var(--tint);border-color:transparent">
+        <i>SOM</i><b>$18M</b>
+        <ul class="bul">
+          <li><b>100,000 paying users</b></li>
+          <li><b>$15 a month</b></li>
+          <li>Reached via Mesa, campuses and the free tier</li>
+        </ul>
+        <u>Year three target</u>
+      </div>
+    </div>
+    <div class="band">
+      <small>The wallet is already open. It is being spent on things people quit.</small>
+      <b>Habit tracking apps alone are $2.2B in 2026, inside a $53.7B personal development industry. 60% of everyone who pays for AI spends $20 a month or less.</b>
+      <span>We are not asking for a new budget. We are asking for the $15 that is currently going to an app nobody opened this week.</span>
+    </div>
+  </div>
+  <span class="num">4 / 12</span>
+</section></div>
+
+<!-- 5 ─ Customer ──────────────────────────────────────────────────────── -->
+<div class="fit"><section class="slide ac-violet dense">
+  <div class="body">
+    <p class="kicker">Our customer</p>
+    <h2>Two customers. <span class="tone">One problem.</span></h2>
+    <div class="fork">
+      <article class="card c-coral">
+        <span class="tag">Primary</span>
+        <h3>The student and the young professional</h3>
+        <ul class="bul sm">
+          <li>Lives on a laptop <b>eight hours a day</b></li>
+          <li>Has tried <b>three habit apps</b> and quit all of them</li>
+          <li>Already pays for ChatGPT or Notion, so <b>the habit of paying exists</b></li>
+          <li>Wants a routine, <b>not another dashboard to fill in</b></li>
+          <li>Pays <b>$5 to $15 a month</b> for something that saves time</li>
+        </ul>
+      </article>
+      <article class="card c-blue">
+        <span class="tag">Secondary</span>
+        <h3>The solo builder</h3>
+        <ul class="bul sm">
+          <li>Nobody sets their day for them, so <b>the day sets itself</b></li>
+          <li>Loses the afternoon and cannot say where it went</li>
+          <li>Wants <b>the repeated parts of the day gone</b>, not tracked</li>
+          <li>Pays more, and is <b>already our Foundry customer</b></li>
+        </ul>
+      </article>
+    </div>
+    <div class="band">
+      <b>Both spend their whole day in front of the one machine Braino already runs on, and both have already paid for a tool that asked them to log and got abandoned.</b>
+    </div>
+  </div>
+  <span class="num">5 / 12</span>
+</section></div>
+
+<!-- 6 ─ What is the companion ─────────────────────────────────────────── -->
+<div class="fit"><section class="slide ac-green">
+  <div class="body">
+    <p class="kicker">What is Braino Companion?</p>
+    <h2>One companion. <span class="tone">He runs your day with you.</span></h2>
+    <p class="lede" style="margin-top:-11px">He is already on the screen you are working on. He sees what you did, so you never have to tell him.</p>
+    <div class="split" style="grid-template-columns:1.16fr 1fr;gap:24px;align-items:stretch;margin-top:10px">
+      <div class="bigbox" style="padding:22px 26px;background:var(--surface);border:1px solid var(--line);justify-content:flex-start">
+        <i>What the companion does for you</i>
+        <ul class="ticks">
+          <li>Sets your whole tracker up in <b>one conversation, out loud</b></li>
+          <li>Watches your screen, so he <b>knows what you actually did</b></li>
+          <li>Speaks up <b>once</b>, when it matters, and then goes quiet</li>
+          <li>Runs your <b>focus sessions</b>, your music and your breaks</li>
+          <li>Takes the <b>repeated parts of your day</b> off you entirely</li>
+          <li><b>You never fill in a form</b></li>
+        </ul>
+      </div>
+      <div style="display:grid;gap:14px;align-content:center">
+        <div class="bigbox" style="padding:20px 22px;background:var(--surface);border:1px solid var(--line)">
+          <i>Free · everyone</i>
+          <b style="font-size:20px;margin-bottom:6px">Braino Companion</b>
+          <span style="font-size:14.5px">Your tracker, your morning list and one focus session a day. <b>Our acquisition channel, at zero CAC.</b></span>
+        </div>
+        <div class="bigbox" style="padding:20px 22px">
+          <i>Paid · $15 a month</i>
+          <b style="font-size:20px;margin-bottom:6px">Braino Pro</b>
+          <span style="font-size:14.5px">Unlimited focus, full voice, and the routines that run themselves.</span>
+        </div>
+      </div>
+    </div>
+    <p class="note wide" style="margin-top:14px"><b>He watches only when you switch him on, and nothing runs on your machine until you say yes.</b></p>
+  </div>
+  <span class="num">6 / 12</span>
+</section></div>
+
+<!-- 7 ─ Three engines ─────────────────────────────────────────────────
+     The parallel to Foundry's Content / Optics / Outreach. Outcomes, not
+     mechanics. The three are not peers and the footer says which is which. -->
+<div class="fit"><section class="slide ac-amber dense pack">
+  <div class="body">
+    <p class="kicker">Inside the companion</p>
+    <h2>Three jobs. <span class="tone">One day, run with you.</span></h2>
+    <div class="engines" style="gap:16px;margin-top:12px">
+      <div class="eng" style="padding:18px 20px;display:flex;flex-direction:column">
+        <em class="rank goal">The goal</em>
+        <i>Habits</i><b>You keep the promises you made out loud</b>
+        <ul class="bul sm">
+          <li>One voice conversation builds <b>the whole tracker</b></li>
+          <li>Broken into <b>daily, weekly and monthly</b> targets you can edit</li>
+          <li>At night you say what you did. <b>He fills it in while you speak</b></li>
+        </ul>
+      </div>
+      <div class="eng" style="padding:18px 20px;display:flex;flex-direction:column">
+        <em class="rank">Serves habits</em>
+        <i>Focus</i><b>You stay in the thing you sat down to do</b>
+        <ul class="bul sm">
+          <li>Notifications off, <b>your music on</b>, a timer you can see</li>
+          <li>He notices you drift and <b>asks once</b>, without blocking anything</li>
+          <li>Breaks you actually take, because he takes them with you</li>
+        </ul>
+      </div>
+      <div class="eng" style="padding:18px 20px;display:flex;flex-direction:column">
+        <em class="rank">Serves habits</em>
+        <i>Routines</i><b>The repeated parts of your day stop being yours</b>
+        <ul class="bul sm">
+          <li>He learns <b>what you do every morning</b> by watching you do it</li>
+          <li>Offers to take it over, then <b>does it</b></li>
+          <li>The email triage, the news, the same four tabs, every day</li>
+        </ul>
+      </div>
+    </div>
+    <p class="note wide" style="margin-top:16px"><b>Habits is what you want. Focus keeps you at it, and routines clear the time to get to it.</b></p>
+  </div>
+  <span class="num">7 / 12</span>
+</section></div>
+
+<!-- 8 ─ The loop ──────────────────────────────────────────────────────── -->
+<div class="fit"><section class="slide ac-blue dense">
+  <div class="body">
+    <p class="kicker">How it works</p>
+    <h2>You talk. He watches. <span class="tone">Nobody logs anything.</span></h2>
+    <div class="flow" style="margin-top:14px">
+      <div>You say it, once</div><i>›</i>
+      <div>He watches the day</div><i>›</i>
+      <div>He speaks up once</div><i>›</i>
+      <div class="on">You say how it went</div>
+    </div>
+    <div class="steps">
+      <div>
+        <h3><i>Morning.</i> The list finds you</h3>
+        <p>He greets you and asks if you want today. The list drops down from the notch. You did not open an app or type a word.</p>
+      </div>
+      <div>
+        <h3><i>All day.</i> One suggestion, not a stream</h3>
+        <p>He checks the screen every half hour and usually says nothing. When it matters the notch shows one suggestion, you read it when you want, and then he is quiet again.</p>
+      </div>
+      <div>
+        <h3><i>Evening.</i> You talk, the bars move</h3>
+        <p>He asks what you got done. You just speak. The tracker fills in live in front of you, and tomorrow starts from what you did not finish.</p>
+      </div>
+    </div>
+    <p class="note wide"><b>Setup is one conversation. Everything after it is him.</b></p>
+  </div>
+  <span class="num">8 / 12</span>
+</section></div>
+
+<!-- 9 ─ Competition ───────────────────────────────────────────────────── -->
+<div class="fit"><section class="slide ac-amber dense pack rows">
+  <div class="body">
+    <p class="kicker">Why nothing else does this</p>
+    <h2>Every tool does one piece. <span class="tone">You are still the glue.</span></h2>
+    <table class="pitchtable">
+      <thead>
+        <tr><th style="width:23%">Category</th><th style="width:26%">What it does</th><th>What it still leaves you</th><th style="width:15%;text-align:right">Price</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><b>Habit trackers</b><small>Streaks, Habitica, Way of Life</small></td>
+          <td>A grid you tick</td>
+          <td>The logging. Every day, forever, by hand</td>
+          <td class="price" style="text-align:right">$3&ndash;5</td>
+        </tr>
+        <tr>
+          <td><b>Planners</b><small>Sunsama, Motion, Todoist</small></td>
+          <td>Plans your calendar</td>
+          <td>It plans. It never watches, and it cannot act</td>
+          <td class="price" style="text-align:right">$8&ndash;25</td>
+        </tr>
+        <tr>
+          <td><b>Focus blockers</b><small>Freedom, Forest, Opal</small></td>
+          <td>Blocks apps, runs a timer</td>
+          <td>No idea what you are working on. Blunt by design</td>
+          <td class="price" style="text-align:right">$3&ndash;9</td>
+        </tr>
+        <tr>
+          <td><b>Time trackers</b><small>Rize, RescueTime, Screen Time</small></td>
+          <td>Reports where the time went</td>
+          <td>A verdict after the fact. Nothing changes on the day</td>
+          <td class="price" style="text-align:right">$10&ndash;17</td>
+        </tr>
+        <tr>
+          <td><b>AI chat</b><small>ChatGPT, Claude, Gemini</small></td>
+          <td>Answers when you open it</td>
+          <td>It does not know your day, and it never starts the conversation</td>
+          <td class="price" style="text-align:right">$20</td>
+        </tr>
+        <tr class="us">
+          <td><b>Braino Companion</b><small>Mac and Chrome</small></td>
+          <td>Watches, remembers, and acts</td>
+          <td>Nothing. He sets it up, sees it, and does it</td>
+          <td class="price" style="text-align:right">$15</td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="band">
+      <b>Every one of these has to be opened and told what happened. Braino is already on the screen and already knows.</b>
+    </div>
+  </div>
+  <span class="num">9 / 12</span>
+</section></div>
+
+<!-- 10 ─ Business model ───────────────────────────────────────────────── -->
+<div class="fit"><section class="slide ac-green dense">
+  <div class="body">
+    <p class="kicker">How we make money</p>
+    <h2>Free to start. <span class="tone">Paid when it works for you.</span></h2>
+    <div class="money">
+      <div class="mbox">
+        <i>Everyone</i><b>Braino Companion</b>
+        <div class="p">Free, capped</div>
+        <ul class="bul sm">
+          <li>The tracker, built by voice</li>
+          <li>Morning list and evening check-in</li>
+          <li><b>One focus session a day</b></li>
+          <li>Capped, not unlimited. It is the top of the funnel</li>
+        </ul>
+      </div>
+      <div class="mbox" style="background:var(--tint);border-color:transparent">
+        <i>Most people</i><b>Braino Pro</b>
+        <div class="p">$15 / month</div>
+        <ul class="bul sm">
+          <li>Unlimited focus and full voice</li>
+          <li><b>Routines that run themselves</b></li>
+          <li>The agent that opens, reads and does</li>
+          <li>Our core number. Everything is priced off this</li>
+        </ul>
+      </div>
+      <div class="mbox">
+        <i>Founders</i><b>Braino Foundry</b>
+        <div class="p">$49 to $99 / month</div>
+        <ul class="bul sm">
+          <li>The same companion, now running distribution</li>
+          <li><b>Pro is included</b></li>
+          <li>The companion is how a founder meets us at zero cost</li>
+        </ul>
+      </div>
+    </div>
+    <div class="band">
+      <small>Why $15 clears</small>
+      <b>60% of everybody who pays for AI already spends $20 a month or less, and the median AI household spends exactly $20.</b>
+      <span>$15 sits inside a budget that exists. We are replacing an abandoned subscription, not asking for a new one. Prices in USD.</span>
+    </div>
+  </div>
+  <span class="num">10 / 12</span>
+</section></div>
+
+<!-- 11 ─ Roadmap ──────────────────────────────────────────────────────── -->
+<div class="fit"><section class="slide ac-violet dense">
+  <div class="body">
+    <p class="kicker">What we ship</p>
+    <h2>Most of this <span class="tone">already runs.</span></h2>
+    <div class="fork three tall" style="margin-top:14px">
+      <article class="card c-green">
+        <span class="tag">Built and running</span>
+        <h3>The hard parts</h3>
+        <ul class="bul sm">
+          <li><b>Screen watching</b> on the Mac, every 90 seconds</li>
+          <li><b>Voice and dictation</b>, one shortcut, no typing</li>
+          <li>The <b>notch</b> on Mac and Chrome</li>
+          <li><b>Memory</b> that keeps facts about you from ordinary talk</li>
+          <li>The <b>agent</b> that opens apps, plays music and runs tasks</li>
+        </ul>
+      </article>
+      <article class="card c-amber">
+        <span class="tag">Shipping now</span>
+        <h3>The companion</h3>
+        <ul class="bul sm">
+          <li>The <b>habit tracker</b> and its data model</li>
+          <li>The <b>onboarding conversation</b> that builds it</li>
+          <li><b>Silent suggestions</b> in the notch, every 30 minutes</li>
+          <li>The <b>evening check-in</b> that fills the bars by voice</li>
+          <li>Focus sessions and breaks</li>
+        </ul>
+      </article>
+      <article class="card c-blue">
+        <span class="tag">Next</span>
+        <h3>Routines</h3>
+        <ul class="bul sm">
+          <li>He <b>spots the pattern himself</b> and offers to take it over</li>
+          <li>Focus that carries to the <b>phone</b></li>
+          <li>Routines people can <b>share with each other</b></li>
+          <li>The dashboard as the record of a year, not a week</li>
+        </ul>
+      </article>
+    </div>
+    <div class="band">
+      <b>The companion is not a new product. It is a direction for the machine we already built: the watching, the voice and the agent already run, and the tracker sits on top of them.</b>
+    </div>
+  </div>
+  <span class="num">11 / 12</span>
+</section></div>
+
+<!-- 12 ─ Close ────────────────────────────────────────────────────────── -->
+<div class="fit"><section class="slide night ac-coral">
+  <div class="cover endcover">
+    <div>
+      <p class="live"><i></i>Private testing · waitlist open</p>
+      <h1>Talk.<br><span class="tone">He does the rest.</span></h1>
+      <p class="lede" style="margin-top:14px">One companion for your habits, your focus, and the parts of your day you never wanted to do yourself.</p>
+      <p class="speak">Make every day feel a little less boring.</p>
+    </div>
+    <figure class="masc endmasc">
+      <img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9Ii04IC0zNCAxMTYgMTQyIiB3aWR0aD0iNjQiIGhlaWdodD0iNzgiIG92ZXJmbG93PSJ2aXNpYmxlIiBzdHlsZT0iZGlzcGxheTpibG9jayI+PGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJzYndrLWZpbGwiIHgxPSIwIiB5MT0iMCIgeDI9IjAiIHkyPSIxIj48c3RvcCBvZmZzZXQ9IjAiIHN0b3AtY29sb3I9IiNGNkE4QTIiLz48c3RvcCBvZmZzZXQ9IjAuNTUiIHN0b3AtY29sb3I9IiNFODc4NkUiLz48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiNDOTU0NEEiLz48L2xpbmVhckdyYWRpZW50PjxsaW5lYXJHcmFkaWVudCBpZD0ic2J3ay1kYXJrIiB4MT0iMCIgeTE9IjAiIHgyPSIwIiB5Mj0iMSI+PHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSIjRDk2NDVBIi8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjOUMzRTM2Ii8+PC9saW5lYXJHcmFkaWVudD48cmFkaWFsR3JhZGllbnQgaWQ9InNid2stZ2xvdyIgY3g9IjM1JSIgY3k9IjMwJSIgcj0iNTAlIj48c3RvcCBvZmZzZXQ9IjAiIHN0b3AtY29sb3I9IiNGRkQwQ0IiIHN0b3Atb3BhY2l0eT0iMC43Ii8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjRkZEMENCIiBzdG9wLW9wYWNpdHk9IjAiLz48L3JhZGlhbEdyYWRpZW50PjwvZGVmcz48ZyBpZD0iX19zYndrX3Jvb3RfXyI+PGcgaWQ9Il9fc2J3a19tb29ubGVnc19fIiBkaXNwbGF5PSJub25lIj48ZyB0cmFuc2Zvcm09InRyYW5zbGF0ZSgxMDAsMCkgc2NhbGUoLTEsMSkiPjxnIGlkPSJfX3Nid2tfbXdfcl9fIiB0cmFuc2Zvcm09InRyYW5zbGF0ZSgxMiAwKSI+PGcgaWQ9Il9fc2J3a19td19yaF9fIiB0cmFuc2Zvcm09InJvdGF0ZSgwIDI0IDEwMSkiPjxwYXRoIGQ9Ik0gNDUgNzQgTCA0Mi41IDg3IiBmaWxsPSJub25lIiBzdHJva2U9IndoaXRlIiBzdHJva2Utd2lkdGg9IjgiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPjxwYXRoIGQ9Ik0gNDUgNzQgTCA0Mi41IDg3IiBmaWxsPSJub25lIiBzdHJva2U9InVybCgjc2J3ay1maWxsKSIgc3Ryb2tlLXdpZHRoPSI1LjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPjxwYXRoIGQ9Ik0gNDcuNSA4OSBDIDQ3LjUgODcgNDQuNSA4Ni40IDQyIDg3LjQgQyAzNiA4OS4yIDI5LjYgOTAuNiAyNS4yIDk0LjIgQyAyMi4yIDk2LjcgMjEuOCA5OS40IDI1IDEwMC44IEMgMjcgMTAxLjYgMzEgMTAxLjYgMzUgMTAxLjYgTCA0NS42IDEwMS42IEMgNDcuMSAxMDEuNiA0Ny44IDEwMC42IDQ3LjUgOTkuMSBaIiBmaWxsPSJ3aGl0ZSIgc3Ryb2tlPSJyZ2JhKDE3Niw4Niw3OCwuNDIpIiBzdHJva2Utd2lkdGg9IjAuOSIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPjxwYXRoIGQ9Ik0gMjMgOTguNiBRIDIxLjIgMTAxLjIgMjUuNiAxMDEuNSBMIDQ1LjYgMTAxLjUgUSA0Ny44IDEwMS4zIDQ3LjQgOTguOSBRIDM0LjUgMTAwLjEgMjMgOTguNiBaIiBmaWxsPSIjRjZFMkRDIiBzdHJva2U9InJnYmEoMTc2LDg2LDc4LC40MikiIHN0cm9rZS13aWR0aD0iMC44IiBzdHJva2UtbGluZWpvaW49InJvdW5kIi8+PGcgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjQzk1NDRBIiBzdHJva2Utd2lkdGg9IjAuODUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgb3BhY2l0eT0iMC43Ij48cGF0aCBkPSJNIDI5LjUgOTAgUSAzNiA4OC41IDQzIDg5LjIiLz48cGF0aCBkPSJNIDMyIDkyLjcgUSAzNy41IDkxLjcgNDMgOTIuMiIgb3BhY2l0eT0iMC42Ii8+PC9nPjxlbGxpcHNlIGN4PSIzMCIgY3k9IjkyLjQiIHJ4PSIzIiByeT0iMS40IiBmaWxsPSIjZmZmIiBvcGFjaXR5PSIwLjYiIHRyYW5zZm9ybT0icm90YXRlKC0xMiAzMCA5Mi40KSIvPjwvZz48L2c+PGcgaWQ9Il9fc2J3a19td19sX18iIHRyYW5zZm9ybT0idHJhbnNsYXRlKDAgMCkiPjxnIGlkPSJfX3Nid2tfbXdfbGhfXyIgdHJhbnNmb3JtPSJyb3RhdGUoMCAyNCAxMDEpIj48cGF0aCBkPSJNIDQ1IDc0IEwgNDIuNSA4NyIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSI4IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz48cGF0aCBkPSJNIDQ1IDc0IEwgNDIuNSA4NyIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ1cmwoI3Nid2stZmlsbCkiIHN0cm9rZS13aWR0aD0iNS41IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz48cGF0aCBkPSJNIDQ3LjUgODkgQyA0Ny41IDg3IDQ0LjUgODYuNCA0MiA4Ny40IEMgMzYgODkuMiAyOS42IDkwLjYgMjUuMiA5NC4yIEMgMjIuMiA5Ni43IDIxLjggOTkuNCAyNSAxMDAuOCBDIDI3IDEwMS42IDMxIDEwMS42IDM1IDEwMS42IEwgNDUuNiAxMDEuNiBDIDQ3LjEgMTAxLjYgNDcuOCAxMDAuNiA0Ny41IDk5LjEgWiIgZmlsbD0id2hpdGUiIHN0cm9rZT0icmdiYSgxNzYsODYsNzgsLjQyKSIgc3Ryb2tlLXdpZHRoPSIwLjkiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz48cGF0aCBkPSJNIDIzIDk4LjYgUSAyMS4yIDEwMS4yIDI1LjYgMTAxLjUgTCA0NS42IDEwMS41IFEgNDcuOCAxMDEuMyA0Ny40IDk4LjkgUSAzNC41IDEwMC4xIDIzIDk4LjYgWiIgZmlsbD0iI0Y2RTJEQyIgc3Ryb2tlPSJyZ2JhKDE3Niw4Niw3OCwuNDIpIiBzdHJva2Utd2lkdGg9IjAuOCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPjxnIGZpbGw9Im5vbmUiIHN0cm9rZT0iI0M5NTQ0QSIgc3Ryb2tlLXdpZHRoPSIwLjg1IiBzdHJva2UtbGluZWNhcD0icm91bmQiIG9wYWNpdHk9IjAuNyI+PHBhdGggZD0iTSAyOS41IDkwIFEgMzYgODguNSA0MyA4OS4yIi8+PHBhdGggZD0iTSAzMiA5Mi43IFEgMzcuNSA5MS43IDQzIDkyLjIiIG9wYWNpdHk9IjAuNiIvPjwvZz48ZWxsaXBzZSBjeD0iMzAiIGN5PSI5Mi40IiByeD0iMyIgcnk9IjEuNCIgZmlsbD0iI2ZmZiIgb3BhY2l0eT0iMC42IiB0cmFuc2Zvcm09InJvdGF0ZSgtMTIgMzAgOTIuNCkiLz48L2c+PC9nPjwvZz48L2c+PGcgaWQ9Il9fc2J3a19sbF9fIj48cGF0aCBkPSJNIDQ1IDc0IEwgNDIuNSA4NyIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSI4IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz48cGF0aCBkPSJNIDQ1IDc0IEwgNDIuNSA4NyIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ1cmwoI3Nid2stZmlsbCkiIHN0cm9rZS13aWR0aD0iNS41IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz48cGF0aCBkPSJNIDQ3LjUgODkgQyA0Ny41IDg3IDQ0LjUgODYuNCA0MiA4Ny40IEMgMzYgODkuMiAyOS42IDkwLjYgMjUuMiA5NC4yIEMgMjIuMiA5Ni43IDIxLjggOTkuNCAyNSAxMDAuOCBDIDI3IDEwMS42IDMxIDEwMS42IDM1IDEwMS42IEwgNDUuNiAxMDEuNiBDIDQ3LjEgMTAxLjYgNDcuOCAxMDAuNiA0Ny41IDk5LjEgWiIgZmlsbD0id2hpdGUiIHN0cm9rZT0icmdiYSgxNzYsODYsNzgsLjQyKSIgc3Ryb2tlLXdpZHRoPSIwLjkiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz48cGF0aCBkPSJNIDIzIDk4LjYgUSAyMS4yIDEwMS4yIDI1LjYgMTAxLjUgTCA0NS42IDEwMS41IFEgNDcuOCAxMDEuMyA0Ny40IDk4LjkgUSAzNC41IDEwMC4xIDIzIDk4LjYgWiIgZmlsbD0iI0Y2RTJEQyIgc3Ryb2tlPSJyZ2JhKDE3Niw4Niw3OCwuNDIpIiBzdHJva2Utd2lkdGg9IjAuOCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPjxnIGZpbGw9Im5vbmUiIHN0cm9rZT0iI0M5NTQ0QSIgc3Ryb2tlLXdpZHRoPSIwLjg1IiBzdHJva2UtbGluZWNhcD0icm91bmQiIG9wYWNpdHk9IjAuNyI+PHBhdGggZD0iTSAyOS41IDkwIFEgMzYgODguNSA0MyA4OS4yIi8+PHBhdGggZD0iTSAzMiA5Mi43IFEgMzcuNSA5MS43IDQzIDkyLjIiIG9wYWNpdHk9IjAuNiIvPjwvZz48ZWxsaXBzZSBjeD0iMzAiIGN5PSI5Mi40IiByeD0iMyIgcnk9IjEuNCIgZmlsbD0iI2ZmZiIgb3BhY2l0eT0iMC42IiB0cmFuc2Zvcm09InJvdGF0ZSgtMTIgMzAgOTIuNCkiLz48L2c+PGcgaWQ9Il9fc2J3a19ybF9fIj48ZyB0cmFuc2Zvcm09InRyYW5zbGF0ZSgxMDAsMCkgc2NhbGUoLTEsMSkiPjxwYXRoIGQ9Ik0gNDUgNzQgTCA0Mi41IDg3IiBmaWxsPSJub25lIiBzdHJva2U9IndoaXRlIiBzdHJva2Utd2lkdGg9IjgiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPjxwYXRoIGQ9Ik0gNDUgNzQgTCA0Mi41IDg3IiBmaWxsPSJub25lIiBzdHJva2U9InVybCgjc2J3ay1maWxsKSIgc3Ryb2tlLXdpZHRoPSI1LjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPjxwYXRoIGQ9Ik0gNDcuNSA4OSBDIDQ3LjUgODcgNDQuNSA4Ni40IDQyIDg3LjQgQyAzNiA4OS4yIDI5LjYgOTAuNiAyNS4yIDk0LjIgQyAyMi4yIDk2LjcgMjEuOCA5OS40IDI1IDEwMC44IEMgMjcgMTAxLjYgMzEgMTAxLjYgMzUgMTAxLjYgTCA0NS42IDEwMS42IEMgNDcuMSAxMDEuNiA0Ny44IDEwMC42IDQ3LjUgOTkuMSBaIiBmaWxsPSJ3aGl0ZSIgc3Ryb2tlPSJyZ2JhKDE3Niw4Niw3OCwuNDIpIiBzdHJva2Utd2lkdGg9IjAuOSIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPjxwYXRoIGQ9Ik0gMjMgOTguNiBRIDIxLjIgMTAxLjIgMjUuNiAxMDEuNSBMIDQ1LjYgMTAxLjUgUSA0Ny44IDEwMS4zIDQ3LjQgOTguOSBRIDM0LjUgMTAwLjEgMjMgOTguNiBaIiBmaWxsPSIjRjZFMkRDIiBzdHJva2U9InJnYmEoMTc2LDg2LDc4LC40MikiIHN0cm9rZS13aWR0aD0iMC44IiBzdHJva2UtbGluZWpvaW49InJvdW5kIi8+PGcgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjQzk1NDRBIiBzdHJva2Utd2lkdGg9IjAuODUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgb3BhY2l0eT0iMC43Ij48cGF0aCBkPSJNIDI5LjUgOTAgUSAzNiA4OC41IDQzIDg5LjIiLz48cGF0aCBkPSJNIDMyIDkyLjcgUSAzNy41IDkxLjcgNDMgOTIuMiIgb3BhY2l0eT0iMC42Ii8+PC9nPjxlbGxpcHNlIGN4PSIzMCIgY3k9IjkyLjQiIHJ4PSIzIiByeT0iMS40IiBmaWxsPSIjZmZmIiBvcGFjaXR5PSIwLjYiIHRyYW5zZm9ybT0icm90YXRlKC0xMiAzMCA5Mi40KSIvPjwvZz48L2c+PGcgaWQ9Il9fc2J3a19sYV9iZ19fIj48cGF0aCBkPSJNIDIzIDUzIFEgMTEgNTIgOCA1OSIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSI5IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz48L2c+PGcgaWQ9Il9fc2J3a19yYV9iZ19fIj48cGF0aCBkPSJNIDc3IDUzIFEgODkgNTIgOTIgNTkiIGZpbGw9Im5vbmUiIHN0cm9rZT0id2hpdGUiIHN0cm9rZS13aWR0aD0iOSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+PC9nPjxwYXRoIGQ9Ik0gNTAgOCBDIDU1IDYgNjQgNiA2OCAxMiBDIDc2IDEwIDg0IDE2IDgyIDI0IEMgOTAgMjYgOTIgMzYgODYgNDIgQyA5MiA0NiA5MCA1NiA4MiA1OCBDIDg2IDYwIDg1IDcwIDc2IDcwIEMgNjggODAuNSA2MCA3OS41IDUwIDc5IEMgNDAgNzkuNSAzMiA4MC41IDI0IDcwIEMgMTUgNzAgMTQgNjAgMTggNTggQyAxMCA1NiA4IDQ2IDE0IDQyIEMgOCAzNiAxMCAyNiAxOCAyNCBDIDE2IDE2IDI0IDEwIDMyIDEyIEMgMzYgNiA0NSA2IDUwIDggWiIgZmlsbD0id2hpdGUiIHRyYW5zZm9ybT0ic2NhbGUoMS4wOCkgdHJhbnNsYXRlKC0zLjcsLTMuNykiLz48ZyBpZD0iX19zYndrX2xhX18iPjxwYXRoIGQ9Ik0gMjMgNTMgUSAxMSA1MiA4IDU5IiBmaWxsPSJub25lIiBzdHJva2U9InVybCgjc2J3ay1maWxsKSIgc3Ryb2tlLXdpZHRoPSI2IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz48ZyB0cmFuc2Zvcm09InRyYW5zbGF0ZSg3IDY0KSIgc3Ryb2tlPSJyZ2JhKDE3Niw4Niw3OCwuNDIpIiBzdHJva2Utd2lkdGg9IjAuNyI+PGNpcmNsZSBjeD0iNSIgY3k9Ii0xLjQiIHI9IjMiIGZpbGw9IndoaXRlIi8+PGNpcmNsZSBjeD0iMCIgY3k9IjAuNiIgcj0iNyIgZmlsbD0id2hpdGUiLz48ZyBmaWxsPSJub25lIiBzdHJva2U9IiNDOTU0NEEiIHN0cm9rZS13aWR0aD0iMC44IiBzdHJva2UtbGluZWNhcD0icm91bmQiIG9wYWNpdHk9IjAuNTUiPjxwYXRoIGQ9Ik0gLTIuOSAzIFEgLTIuNyA1LjQgLTEuNyA2LjgiLz48cGF0aCBkPSJNIDAuMiAzLjYgUSAwLjIgNS44IDAuMiA3LjIiLz48cGF0aCBkPSJNIDIuOSAzIFEgMi43IDUuNCAxLjcgNi44Ii8+PC9nPjxwYXRoIGQ9Ik0gLTUgLTUgUSAwIC0zLjIgNSAtNSIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjQzk1NDRBIiBzdHJva2Utd2lkdGg9IjEuMSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+PC9nPjwvZz48ZyBpZD0iX19zYndrX3JhX18iPjxwYXRoIGQ9Ik0gNzcgNTMgUSA4OSA1MiA5MiA1OSIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ1cmwoI3Nid2stZmlsbCkiIHN0cm9rZS13aWR0aD0iNiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+PGcgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoOTMgNjQpIiBzdHJva2U9InJnYmEoMTc2LDg2LDc4LC40MikiIHN0cm9rZS13aWR0aD0iMC43Ij48Y2lyY2xlIGN4PSItNSIgY3k9Ii0xLjQiIHI9IjMiIGZpbGw9IndoaXRlIi8+PGNpcmNsZSBjeD0iMCIgY3k9IjAuNiIgcj0iNyIgZmlsbD0id2hpdGUiLz48ZyBmaWxsPSJub25lIiBzdHJva2U9IiNDOTU0NEEiIHN0cm9rZS13aWR0aD0iMC44IiBzdHJva2UtbGluZWNhcD0icm91bmQiIG9wYWNpdHk9IjAuNTUiPjxwYXRoIGQ9Ik0gLTIuOSAzIFEgLTIuNyA1LjQgLTEuNyA2LjgiLz48cGF0aCBkPSJNIDAuMiAzLjYgUSAwLjIgNS44IDAuMiA3LjIiLz48cGF0aCBkPSJNIDIuOSAzIFEgMi43IDUuNCAxLjcgNi44Ii8+PC9nPjxwYXRoIGQ9Ik0gLTUgLTUgUSAwIC0zLjIgNSAtNSIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjQzk1NDRBIiBzdHJva2Utd2lkdGg9IjEuMSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+PC9nPjwvZz48cGF0aCBkPSJNIDUwIDggQyA1NSA2IDY0IDYgNjggMTIgQyA3NiAxMCA4NCAxNiA4MiAyNCBDIDkwIDI2IDkyIDM2IDg2IDQyIEMgOTIgNDYgOTAgNTYgODIgNTggQyA4NiA2MCA4NSA3MCA3NiA3MCBDIDY4IDgwLjUgNjAgNzkuNSA1MCA3OSBDIDQwIDc5LjUgMzIgODAuNSAyNCA3MCBDIDE1IDcwIDE0IDYwIDE4IDU4IEMgMTAgNTYgOCA0NiAxNCA0MiBDIDggMzYgMTAgMjYgMTggMjQgQyAxNiAxNiAyNCAxMCAzMiAxMiBDIDM2IDYgNDUgNiA1MCA4IFoiIGZpbGw9InVybCgjc2J3ay1maWxsKSIvPjxwYXRoIGQ9Ik0gNTAgOCBDIDU1IDYgNjQgNiA2OCAxMiBDIDc2IDEwIDg0IDE2IDgyIDI0IEMgOTAgMjYgOTIgMzYgODYgNDIgQyA5MiA0NiA5MCA1NiA4MiA1OCBDIDg2IDYwIDg1IDcwIDc2IDcwIEMgNjggODAuNSA2MCA3OS41IDUwIDc5IEMgNDAgNzkuNSAzMiA4MC41IDI0IDcwIEMgMTUgNzAgMTQgNjAgMTggNTggQyAxMCA1NiA4IDQ2IDE0IDQyIEMgOCAzNiAxMCAyNiAxOCAyNCBDIDE2IDE2IDI0IDEwIDMyIDEyIEMgMzYgNiA0NSA2IDUwIDggWiIgZmlsbD0idXJsKCNzYndrLWdsb3cpIi8+PHBhdGggZD0iTSA1MCA4IFEgNDkgMzAgNTAgNTAgUSA1MC41IDYwIDUwIDY1IiBmaWxsPSJub25lIiBzdHJva2U9IiM4QTJGMjgiIHN0cm9rZS13aWR0aD0iMS4xIiBzdHJva2UtbGluZWNhcD0icm91bmQiIG9wYWNpdHk9IjAuNTUiLz48cGF0aCBkPSJNIDMwIDE0IFEgMjYgMjIgMzAgMjggUSAyNCAzMyAyOCA0MCBRIDIyIDQ0IDI2IDUyIFEgMjIgNTggMjggNjQgUSAyNCA3MCAzMiA3MiIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjOEEyRjI4IiBzdHJva2Utd2lkdGg9IjEuMSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBvcGFjaXR5PSIwLjYiLz48cGF0aCBkPSJNIDM4IDEyIFEgMzYgMjIgNDIgMjYgUSAzOCAzMiA0NCAzNiBRIDM4IDQ0IDQ0IDUwIFEgMzggNTggNDQgNjQgUSA0MCA3MiA0NiA3NCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjOEEyRjI4IiBzdHJva2Utd2lkdGg9IjEiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgb3BhY2l0eT0iMC40Ii8+PHBhdGggZD0iTSA3MCAxNCBRIDc0IDIyIDcwIDI4IFEgNzYgMzMgNzIgNDAgUSA3OCA0NCA3NCA1MiBRIDc4IDU4IDcyIDY0IFEgNzYgNzAgNjggNzIiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzhBMkYyOCIgc3Ryb2tlLXdpZHRoPSIxLjEiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgb3BhY2l0eT0iMC42Ii8+PHBhdGggZD0iTSA2MiAxMiBRIDY0IDIyIDU4IDI2IFEgNjIgMzIgNTYgMzYgUSA2MiA0NCA1NiA1MCBRIDYyIDU4IDU2IDY0IFEgNjAgNzIgNTQgNzQiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzhBMkYyOCIgc3Ryb2tlLXdpZHRoPSIxIiBzdHJva2UtbGluZWNhcD0icm91bmQiIG9wYWNpdHk9IjAuNCIvPjxnIGlkPSJfX3Nid2tfZXllX2xfXyI+PGNpcmNsZSBjeD0iMzgiIGN5PSI0OCIgcj0iNi41IiBmaWxsPSJ3aGl0ZSIvPjxnIGlkPSJfX3Nid2tfcHVwaWxfbF9fIj48Y2lyY2xlIGN4PSIzOCIgY3k9IjQ4IiByPSIzLjIiIGZpbGw9IiMxQjE3MTMiLz48Y2lyY2xlIGN4PSIzOSIgY3k9IjQ2LjYiIHI9IjEuMSIgZmlsbD0id2hpdGUiLz48L2c+PC9nPjxnIGlkPSJfX3Nid2tfZXllX3JfXyI+PGNpcmNsZSBjeD0iNjIiIGN5PSI0OCIgcj0iNi41IiBmaWxsPSJ3aGl0ZSIvPjxnIGlkPSJfX3Nid2tfcHVwaWxfcl9fIj48Y2lyY2xlIGN4PSI2MiIgY3k9IjQ4IiByPSIzLjIiIGZpbGw9IiMxQjE3MTMiLz48Y2lyY2xlIGN4PSI2MyIgY3k9IjQ2LjYiIHI9IjEuMSIgZmlsbD0id2hpdGUiLz48L2c+PC9nPjxlbGxpcHNlIGN4PSIyOCIgY3k9IjU4IiByeD0iMy41IiByeT0iMiIgZmlsbD0iI0UxNEE0OCIgb3BhY2l0eT0iMC4zNSIvPjxlbGxpcHNlIGN4PSI3MiIgY3k9IjU4IiByeD0iMy41IiByeT0iMiIgZmlsbD0iI0UxNEE0OCIgb3BhY2l0eT0iMC4zNSIvPjxnIGlkPSJfX3Nid2tfbW91dGhfXyI+PHBhdGggaWQ9Il9fc2J3a19zbWlsZV9fIiBkPSJNIDQzLjUgNjAgUSA1MCA2Ny41IDU2LjUgNjAiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzFCMTcxMyIgc3Ryb2tlLXdpZHRoPSIxLjkiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPjxnIGlkPSJfX3Nid2tfdGFsa19fIiBzdHlsZT0iZGlzcGxheTpub25lIj48ZWxsaXBzZSBpZD0iX19zYndrX3RlX18iIGN4PSI1MCIgY3k9IjYxLjgiIHJ4PSIzLjUiIHJ5PSIxLjQiIGZpbGw9IiM4QTJGMjgiLz48ZWxsaXBzZSBpZD0iX19zYndrX3RpX18iIGN4PSI1MCIgY3k9IjYyLjUiIHJ4PSIyLjIiIHJ5PSIwLjciIGZpbGw9IiNFODc3NkUiLz48L2c+PC9nPjxnIGlkPSJfX3Nid2tfcmVhY3RfXyIgZGlzcGxheT0ibm9uZSI+PGcgaWQ9Il9fc2J3a19yc19fIiBkaXNwbGF5PSJub25lIj48Y2lyY2xlIGN4PSIzOCIgY3k9IjQ3LjQiIHI9IjcuOCIgZmlsbD0id2hpdGUiLz48Y2lyY2xlIGN4PSI2MiIgY3k9IjQ3LjQiIHI9IjcuOCIgZmlsbD0id2hpdGUiLz48Y2lyY2xlIGN4PSIzOSIgY3k9IjQ2LjQiIHI9IjIuNCIgZmlsbD0iIzFCMTcxMyIvPjxjaXJjbGUgY3g9IjM5LjgiIGN5PSI0NS40IiByPSIwLjkiIGZpbGw9IndoaXRlIi8+PGNpcmNsZSBjeD0iNjEiIGN5PSI0Ni40IiByPSIyLjQiIGZpbGw9IiMxQjE3MTMiLz48Y2lyY2xlIGN4PSI2MS44IiBjeT0iNDUuNCIgcj0iMC45IiBmaWxsPSJ3aGl0ZSIvPjxwYXRoIGQ9Ik0gMzIgNDEuNSBRIDM3IDQwIDQzIDQxLjgiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzhBMkYyOCIgc3Ryb2tlLXdpZHRoPSIxLjQiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgb3BhY2l0eT0iMC44NSIvPjxwYXRoIGQ9Ik0gNjggNDEuNSBRIDYzIDQwIDU3IDQxLjgiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzhBMkYyOCIgc3Ryb2tlLXdpZHRoPSIxLjQiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgb3BhY2l0eT0iMC44NSIvPjxlbGxpcHNlIGN4PSI1MCIgY3k9IjY0IiByeD0iMyIgcnk9IjMuOCIgZmlsbD0iIzZFMjExQSIvPjxwYXRoIGlkPSJfX3Nid2tfc3dlYXRfXyIgZD0iTSA3OSAzOSBDIDgyIDQzIDgyIDQ2IDc5IDQ3IEMgNzYgNDYgNzYgNDMgNzkgMzkgWiIgZmlsbD0iI0NGRUZGRiIvPjwvZz48ZyBpZD0iX19zYndrX3JjX18iIGRpc3BsYXk9Im5vbmUiPjxwYXRoIGQ9Ik0gMzIuNSA0OSBRIDM4IDU0LjUgNDMuNSA0OSIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjMUIxNzEzIiBzdHJva2Utd2lkdGg9IjIuNCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+PHBhdGggZD0iTSA1Ni41IDQ5IFEgNjIgNTQuNSA2Ny41IDQ5IiBmaWxsPSJub25lIiBzdHJva2U9IiMxQjE3MTMiIHN0cm9rZS13aWR0aD0iMi40IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz48cGF0aCBkPSJNIDQyIDU5IFEgNTAgNzMuNSA1OCA1OSBRIDUwIDYyIDQyIDU5IFoiIGZpbGw9IiM2RTIxMUEiLz48cGF0aCBkPSJNIDQ1LjUgNjQuNSBRIDUwIDcwIDU0LjUgNjQuNSBRIDUwIDY2LjUgNDUuNSA2NC41IFoiIGZpbGw9IiNFODc4NkUiLz48cGF0aCBkPSJNIDQzIDYwIFEgNTAgNjIuNCA1NyA2MCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPjxnIGlkPSJfX3Nid2tfY29uZmV0dGlfXyI+PGNpcmNsZSBjeD0iMTIiIGN5PSIyMiIgcj0iMi41IiBmaWxsPSIjRkZENzAwIi8+PGNpcmNsZSBjeD0iODgiIGN5PSIyMCIgcj0iMiIgZmlsbD0iI0ZGNjlCNCIvPjxjaXJjbGUgY3g9IjYiIGN5PSI0NCIgcj0iMiIgZmlsbD0iIzdFQzhFMyIvPjxjaXJjbGUgY3g9Ijk0IiBjeT0iNDIiIHI9IjIuMiIgZmlsbD0iIzkwRUU5MCIvPjxjaXJjbGUgY3g9IjIwIiBjeT0iMTAiIHI9IjEuOCIgZmlsbD0iI0ZGOEM0MiIvPjxjaXJjbGUgY3g9IjgwIiBjeT0iMTAiIHI9IjEuOCIgZmlsbD0iI0UxNEE0OCIvPjwvZz48L2c+PGcgaWQ9Il9fc2J3a19ydF9fIiBkaXNwbGF5PSJub25lIj48cGF0aCBkPSJNIDMyLjUgNDkgUSAzOCA1NC41IDQzLjUgNDkiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzFCMTcxMyIgc3Ryb2tlLXdpZHRoPSIyLjQiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPjxwYXRoIGQ9Ik0gNTYuNSA0OSBRIDYyIDU0LjUgNjcuNSA0OSIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjMUIxNzEzIiBzdHJva2Utd2lkdGg9IjIuNCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+PHBhdGggZD0iTSA0MiA1OSBRIDUwIDczLjUgNTggNTkgUSA1MCA2MiA0MiA1OSBaIiBmaWxsPSIjNkUyMTFBIi8+PHBhdGggZD0iTSA0NS41IDY0LjUgUSA1MCA3MCA1NC41IDY0LjUgUSA1MCA2Ni41IDQ1LjUgNjQuNSBaIiBmaWxsPSIjRTg3ODZFIi8+PHBhdGggZD0iTSA0MyA2MCBRIDUwIDYyLjQgNTcgNjAiIGZpbGw9Im5vbmUiIHN0cm9rZT0id2hpdGUiIHN0cm9rZS13aWR0aD0iMS41IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz48cGF0aCBpZD0iX19zYndrX3RlYXJfbF9fIiBkPSJNIDMwIDUwLjUgQyAzMyA1NC41IDMzIDU3IDMwIDU4IEMgMjcgNTcgMjcgNTQuNSAzMCA1MC41IFoiIGZpbGw9IiNERkY0RkYiLz48cGF0aCBpZD0iX19zYndrX3RlYXJfcl9fIiBkPSJNIDcwIDUwLjUgQyA3MyA1NC41IDczIDU3IDcwIDU4IEMgNjcgNTcgNjcgNTQuNSA3MCA1MC41IFoiIGZpbGw9IiNERkY0RkYiLz48L2c+PC9nPjxnIGlkPSJfX3Nid2tfc3BlY3NfXyIgZGlzcGxheT0ibm9uZSI+PGNpcmNsZSBjeD0iMzgiIGN5PSI0OCIgcj0iOS4yIiBmaWxsPSJub25lIiBzdHJva2U9IiMxQjE3MTMiIHN0cm9rZS13aWR0aD0iMyIgb3BhY2l0eT0iMC45MiIvPjxjaXJjbGUgY3g9IjYyIiBjeT0iNDgiIHI9IjkuMiIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjMUIxNzEzIiBzdHJva2Utd2lkdGg9IjMiIG9wYWNpdHk9IjAuOTIiLz48cGF0aCBkPSJNIDQ3LjIgNDggTCA1Mi44IDQ4IiBmaWxsPSJub25lIiBzdHJva2U9IiMxQjE3MTMiIHN0cm9rZS13aWR0aD0iMi4yIiBzdHJva2UtbGluZWNhcD0icm91bmQiIG9wYWNpdHk9IjAuOTIiLz48cGF0aCBkPSJNIDI4LjggNDYgUSAyNCA0NSAyMSA0OSIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjMUIxNzEzIiBzdHJva2Utd2lkdGg9IjIuMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBvcGFjaXR5PSIwLjkyIi8+PHBhdGggZD0iTSA3MS4yIDQ2IFEgNzYgNDUgNzkgNDkiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzFCMTcxMyIgc3Ryb2tlLXdpZHRoPSIyLjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgb3BhY2l0eT0iMC45MiIvPjwvZz48ZyBpZD0iX19zYndrX2ZlZG9yYV9fIiBkaXNwbGF5PSJub25lIiB0cmFuc2Zvcm09InJvdGF0ZSgtMTIgNTAgMikiPjxwYXRoIGQ9Ik0gMzEgNCBDIDMxIC0xNyAzOSAtMjQgNTAgLTI0IEMgNjEgLTI0IDY5IC0xNyA2OSA0IFoiIGZpbGw9IiMxNDExMGYiIHN0cm9rZT0iIzAwMCIgc3Ryb2tlLXdpZHRoPSIwLjYiLz48cGF0aCBkPSJNIDQ0IC0yMiBRIDUwIC0xOCA1NiAtMjIiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzJjMjcyMyIgc3Ryb2tlLXdpZHRoPSIxLjYiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPjxwYXRoIGQ9Ik0gMzEgMyBRIDUwIDkgNjkgMyBMIDY5IC0yIFEgNTAgNCAzMSAtMiBaIiBmaWxsPSIjMDAwIi8+PGVsbGlwc2UgY3g9IjUwIiBjeT0iNCIgcng9IjQ1IiByeT0iOC41IiBmaWxsPSIjMTQxMTBmIiBzdHJva2U9IiMwMDAiIHN0cm9rZS13aWR0aD0iMC42Ii8+PGVsbGlwc2UgY3g9IjUwIiBjeT0iMyIgcng9IjMyIiByeT0iNSIgZmlsbD0iIzAwMCIgb3BhY2l0eT0iMC42Ii8+PHBhdGggZD0iTSAzNyAtMjAgUSAzNSAtOCAzOCAyIiBmaWxsPSJub25lIiBzdHJva2U9IiMzYTMzMmUiIHN0cm9rZS13aWR0aD0iMi4yIiBzdHJva2UtbGluZWNhcD0icm91bmQiIG9wYWNpdHk9IjAuNyIvPjxwYXRoIGQ9Ik0gMTIgNSBRIDUwIDEyIDg4IDUiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzNhMzMyZSIgc3Ryb2tlLXdpZHRoPSIxLjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgb3BhY2l0eT0iMC42Ii8+PC9nPjwvZz48L3N2Zz4=" alt="Braino, standing">
+      <figcaption>(he is adorable, we know)</figcaption>
+    </figure>
+  </div>
+  <span class="wm">Itish Pande · trybraino.com</span>
+</section></div>
+
+</div>
+<script>
+  (function () {
+    var fit = function () {
+      var w = document.documentElement.clientWidth;
+      var s = Math.min(1, (w - 36) / 1280);
+      document.documentElement.style.setProperty('--s', s > 0.2 ? s : 0.2);
+    };
+    fit();
+    window.addEventListener('resize', fit);
+  })();
+</script>
+</body>
+</html>
