@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import IomiNotch from "@/components/IomiNotch";
 import { DISTRA_ENGINES } from "@/data/distraEngines";
+import { COMPANION_ENGINES } from "@/data/companionEngines";
 import BrainoFooter from "@/components/BrainoFooter";
 import { Braino, BrainoDefs, useTime } from "@/components/BrainoChar";
 import MiniBraino from "@/components/MiniBraino";
@@ -47,10 +48,12 @@ const MoonIcon = () => (<svg viewBox="0 0 24 24" fill="none"><path d="M21 12.8A9
    that order. The tour of the character sits under all of it. */
 const NOTCH_NAV = [
   { to: "/#who-is", label: "Who he is", note: "the character" },
-  { to: "/#kinds", label: "The two Brainos", note: "free, and the one for founders" },
-  { to: "/#does", label: "Inside the free one", note: "four things, every day" },
-  { to: "/#problem", label: "The problem", note: "building is easy, being seen is not" },
-  { to: "/#engines", label: "Inside the paid one", note: "Braino Code and Distra" },
+  { to: "/#kinds", label: "The two Brainos", note: "one runs your day, one gets you found" },
+  { to: "/#day", label: "Your day", note: "the problem nothing is watching" },
+  { to: "/#does", label: "Inside the companion", note: "habits, focus and routines" },
+  { to: "/#tools", label: "What he can do", note: "pages, notes, meetings, errands" },
+  { to: "/#problem", label: "The founder problem", note: "building is easy, being seen is not" },
+  { to: "/#engines", label: "Inside Foundry", note: "content, optics and outbound" },
   { to: "/#pricing", label: "Pricing", note: "three plans, no maths" },
   { to: "/#who", label: "Who it is for", note: "tell him what you do" },
   { to: "/#why", label: "Why him", note: "and not another AI tool" },
@@ -163,41 +166,109 @@ const WORK: Array<{ id: string; label: string; title: string; line: string; src?
 ];
 
 /* The comparison. Read across, not down: the same question answered twice. */
+/* The two halves, said in the same four rows. The table used to describe each
+   side in its own terms, which is exactly how you end up with a free half that
+   sounds like a browser extension and a paid half that sounds like a product.
+   Same questions, two answers, so a reader can hold them side by side. */
 const COMPARE: Array<[string, string, string]> = [
-  ["What it handles", "Your day", "Your company"],
-  ["What he does", "Chats with the page you are on, takes notes, sits in your meetings, runs errands", "Builds the product, then goes and gets it seen"],
-  ["Who it is for", "Anyone with a screen, founders included", "People building something, from the idea to the first customers"],
-  ["When you need it", "From day one", "The day you start building something real"],
+  ["What he runs", "Your day", "Your distribution"],
+  ["His three jobs", "Habits, focus and routines", "Content, optics and outbound"],
+  ["What that means", "The things you meant to do get done, and the boring half of the day stops being yours", "You show up every week without writing a post, and people find you when they go looking"],
+  ["Who it is for", "Anyone with a screen, founders included", "People building something and tired of shouting into nothing"],
+  ["When you need it", "From day one", "The day you have something worth showing"],
 ];
 
-/* Foundry is one purchase with two engines inside it. Naming them as a pair is
-   the whole point: the reason to buy it is that one character does both ends,
-   so what Distra learns in public goes back into what Code builds next. */
-const ENGINE_DETAIL: Array<{
+/* Both halves of Braino, rendered by the same component and shaped by the same
+   type. The homepage's one job is to make "companion" and "Foundry" legible as
+   two answers to the same question, and a shared renderer is the cheapest way
+   to guarantee they never drift apart again.
+
+   Braino Code is not in here on purpose. It is real and it has its own page,
+   but leading Foundry with it put the reader in front of a build tool before
+   they had met the problem Foundry exists for. It comes back further down the
+   page, once, as something that arrives later. */
+type EngineBlock = {
   tag: string; name: string; line: string; tone: string; body: string;
   points: Array<[string, string, string]>; foot: string; to: string; cta: string;
-}> = [
+};
+
+const COMPANION_DETAIL: EngineBlock[] = [
   {
-    tag: "Engine one", name: "Braino Code", line: "Idea to a shipped MVP", tone: "ac-blue",
-    body: "Lovable, Cursor and v0 already build things, and pretending otherwise would be silly. What none of them do is disagree with you. You specify, they execute, and a badly specified idea becomes a well built wrong thing. Braino works out what you are actually building first, which is the part a co-founder does and a tool never has.",
+    tag: "Job one", name: "Habits", line: COMPANION_ENGINES[0].job, tone: "ac-coral",
+    body: "Everyone has a list of things they meant to become. The apps for it all work the same way: they hand you an empty grid and ask you to fill it in every night, forever. He does the opposite. You tell him once, and then he is the one paying attention.",
     points: [
-      ["01", "He asks before he builds", "You talk the idea through and he asks the questions that matter: what this is for, who it is for, and what happens if nobody wants it. He will tell you when an idea is thinner than you think it is."],
-      ["02", "He decides how it should look", "A palette, a typeface and a shape for the page, chosen from your brief rather than from habit. A security product does not come back looking like a bakery."],
-      ["03", "He writes the whole thing", "Real copy, real structure, responsive and accessible. Not a wireframe with lorem ipsum in it waiting for you to finish the job."],
-      ["04", "He changes it while you watch", "Make the background red lands in about fourteen seconds, because he edits the one line that matters instead of rebuilding the site."],
+      ["01", "One conversation sets it up", "You talk. He listens to the whole thing, then shows you what he heard, laid out. Change anything that is wrong and you are done."],
+      ["02", "He breaks it into a real week", "Daily, weekly and monthly, with times that suit you rather than times that suit a template. All of it yours to move."],
+      ["03", "He fills it in while you talk", "At the end of the day you say how it went, in a sentence, and watch it land. There is no form anywhere in this."],
     ],
-    foot: "Working today: a spoken sentence becomes a live, designed website in about four minutes.",
-    to: "/code", cta: "See Braino Code",
+    foot: "Coming with the first release. You have quit three of these before, and it was the typing, not the wanting.",
+    to: "/onboarding", cta: "Get started",
   },
   {
-    tag: "Engine two", name: "Distra", line: "Shipped, to actually seen", tone: "ac-green",
-    body: "You can ship a real product in a weekend now, and by Friday nobody has heard of it. The reason is never the product. We asked eight founders what their week actually contains, kept only the jobs that came up again and again, and cut the rest. What was left is four, and Distra is one character running all four.",
-    points: DISTRA_ENGINES.map((e) => [e.n, `${e.name}. ${e.job}`, e.detail] as [string, string, string]),
-    foot: "Content is running today. The other three are the build, in that order, and this page will say so until they are real. Nothing posts anywhere without you tapping approve first.",
-    to: "/braino?view=foundry#distra", cta: "See Distra",
+    tag: "Job two", name: "Focus", line: COMPANION_ENGINES[1].job, tone: "ac-blue",
+    body: "A blocker treats you like a problem to be contained. He is on the same screen as you instead, and he knows what you sat down to do, so he can tell the difference between a detour and a distraction.",
+    points: [
+      ["01", "He sets the room", "Notifications off, your music on, a clock you can see. One sentence starts it."],
+      ["02", "He says something once", "Twenty minutes somewhere else and he mentions it, and offers to clear it away. He does not lock you out of your own computer."],
+      ["03", "He takes the break with you", "The timer runs out and he asks. If you want the five minutes he will spend them doing something ridiculous."],
+    ],
+    foot: "Coming with the first release.",
+    to: "/onboarding", cta: "Get started",
+  },
+  {
+    tag: "Job three", name: "Routines", line: COMPANION_ENGINES[2].job, tone: "ac-green",
+    body: "Some of your morning is not work, it is just admin you have done so many times you stopped noticing. He notices, because he has been sitting there watching you do it every day.",
+    points: [
+      ["01", "He spots it before you ask", "The same tabs, the same order, the same fifteen minutes. He brings it up rather than waiting for you to think of it."],
+      ["02", "You say yes once", "And then it is his. Every morning, without a setup screen, a trigger or a flowchart anywhere."],
+      ["03", "He asks the once", "He will never start something on his own, and he will not ask you twice about the same thing."],
+    ],
+    foot: "After the first release. Some of your day should be yours, and this is not the part.",
+    to: "/onboarding", cta: "Get started",
   },
 ];
 
+/* Three jobs. The names, the one-liners and the order come from the shared
+   list so they can never drift from the Foundry page, but the copy is written
+   for this page: shorter, second person, and without the interview counts and
+   churn figures that belong in a deck. Glue is the fourth entry there and is
+   not an engine here — it is the approval inbox the other three run through,
+   which is a note under the cards rather than a card of its own. */
+const FOUNDRY_DETAIL: EngineBlock[] = [
+  {
+    tag: "Job one", name: DISTRA_ENGINES[0].name, line: DISTRA_ENGINES[0].job, tone: "ac-violet",
+    body: "You shipped something good this week and told nobody, because writing about it is a second job and you already have one. He reads what you built and writes it up the way you would have.",
+    points: [
+      ["01", "He writes like you, not like LinkedIn", "He learns your voice from a couple of hundred of your own posts, so what goes out sounds like you on a good day rather than a brand account."],
+      ["02", "One thing you shipped, five places", "The same update, fitted to each platform properly, instead of the same paragraph pasted everywhere."],
+      ["03", "He never starts from nothing", "Something is always listening for the conversations worth joining, so there is a reason to post before there is a post."],
+    ],
+    foot: "Working today.",
+    to: "/braino?view=foundry#distra", cta: "See Foundry",
+  },
+  {
+    tag: "Job two", name: DISTRA_ENGINES[1].name, line: DISTRA_ENGINES[1].job, tone: "ac-amber",
+    body: "People do not open Google first any more. They ask an assistant for something like yours, and it confidently names three companies. Right now you are probably not one of them.",
+    points: [
+      ["01", "He checks, every week", "He asks the questions your buyers would ask, and reads back whether the answer mentions you."],
+      ["02", "He works out why not", "Usually it is a missing page, a thin listing or a review nobody chased. He finds the specific gap."],
+      ["03", "Then he fixes it", "The fix goes back out through Content, so the thing that got you named is also the thing you posted."],
+    ],
+    foot: "Next up.",
+    to: "/braino?view=foundry#distra", cta: "See Foundry",
+  },
+  {
+    tag: "Job three", name: DISTRA_ENGINES[2].name, line: DISTRA_ENGINES[2].job, tone: "ac-blue",
+    body: "The cold message everyone hates is the one that was clearly sent to four hundred people. He writes the other kind, which is slow, which is why nobody does it.",
+    points: [
+      ["01", "He picks people who actually fit", "Not a list bought by job title. People with the problem you solve, doing something you can point at."],
+      ["02", "One message, about them", "Written from what they are working on, not a template with their first name dropped into it."],
+      ["03", "He drafts, you send", "He has never sent anything on his own and he never will."],
+    ],
+    foot: "After the first two.",
+    to: "/braino?view=foundry#distra", cta: "See Foundry",
+  },
+];
 
 /* Pricing as split cards: identity on the left of each card, contents on the
    right, the way Maze does it. The tri-state comparison table this replaced was
@@ -589,11 +660,12 @@ export default function Landing() {
       <section className="ld-kinds apple-reveal" id="kinds">
         <div className="ld-wrap">
           <p className="apple-eyebrow">There are two Brainos</p>
-          <h2 className="ld-h2">One is free. <span className="tone">One builds your company.</span></h2>
+          <h2 className="ld-h2">One runs your day. <span className="tone">One gets you found.</span></h2>
           <p className="ld-lede">
             The free one is for anyone with a screen. The paid one is Braino for founders, and
             we call it Foundry. It sits on top of the free one, never instead of it.
-            <b> The free one gets you through Tuesday. The paid one gets the company off the ground.</b>
+            <b> The free one gets you through Tuesday. The paid one makes sure the work you did
+            on Tuesday gets seen.</b>
           </p>
 
           <div className="ld-table-wrap">
@@ -647,17 +719,84 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ── Inside the free one ──────────────────────────────────────────
-          The page used to name the two Brainos and jump straight to what the
-          paid one does, leaving a reader who only wants the free one with
-          nothing to read. The free half explains itself first. */}
-      <section className="ld-why-sec apple-reveal" id="does">
+      {/* ── The companion's problem ───────────────────────────────────
+          The page used to jump from the map straight into what the free half
+          does, so its four features arrived with nothing to be an answer to.
+          Foundry had a problem section and the companion did not, which is the
+          real reason one half read as a product and the other as an extension.
+          No figures here on purpose: the founder problem earns its statistics
+          because the reader is being asked to believe something about a market.
+          This one is just Tuesday, and the reader already knows. */}
+      <section className="ld-why-sec apple-reveal" id="day">
         <div className="ld-wrap">
-          <p className="apple-eyebrow">Inside Braino Companion</p>
-          <h2 className="ld-h2">Four things, <span className="tone">every day.</span></h2>
+          <p className="apple-eyebrow">The other problem</p>
+          <h2 className="ld-h2">You did not plan your day. <span className="tone">It just happened to you.</span></h2>
           <p className="ld-lede">
-            This is the Braino anyone can have, in your browser and on your Mac. Setup is:
-            install him. <b>That is the setup.</b>
+            You know how the good version goes. You have written it down before, in an app you
+            no longer open. <b>Nothing on your computer is paying attention to whether it
+            actually happens.</b>
+          </p>
+          <div className="ld-why">
+            <div><b>Everything wants you to log it</b><p>The tracker, the planner, the timer. Each one hands you an empty box and asks you to remember, at the end of a day where remembering is precisely what you ran out of.</p></div>
+            <div><b>The one thing watching cannot help</b><p>Your screen time knows exactly where the afternoon went. It tells you on Sunday, in a chart, long after anything could have been done about it.</p></div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Inside the companion ──────────────────────────────────────────
+          Three jobs, rendered by the same block as Foundry's three, because the
+          symmetry is the argument. Habits is the goal and the other two serve
+          it: the footer says so, since three equal cards invite the reader to
+          ask why they are in one app. */}
+      <section className="ld-kinds apple-reveal" id="does">
+        <div className="ld-wrap">
+          <div className="ld-engine-intro-head">
+            <p className="apple-eyebrow">Inside Braino Companion</p>
+            <h2 className="ld-h2">Three jobs. <span className="tone">He runs your day with you.</span></h2>
+            <p className="ld-lede">
+              He is already on the screen you are working on, so he can see how the day is
+              actually going. <b>You never fill in a form. There is nothing to log.</b>
+            </p>
+          </div>
+
+          {COMPANION_DETAIL.map((engine) => (
+            <article className={`ld-engine-full ${engine.tone}`} key={engine.name}>
+              <header>
+                <p className="ld-engine-tag">{engine.tag}</p>
+                <h3>{engine.name}</h3>
+                <p className="ld-engine-line">{engine.line}</p>
+              </header>
+
+              <div className="ld-engine-body">
+                <p className="ld-engine-intro">{engine.body}</p>
+                <ol className="ld-engine-points">
+                  {engine.points.map(([n, h, t]) => (
+                    <li key={n}><i>{n}</i><div><b>{h}</b><p>{t}</p></div></li>
+                  ))}
+                </ol>
+                <p className="ld-engine-foot">{engine.foot}</p>
+              </div>
+            </article>
+          ))}
+
+          <p className="ld-lede ld-engine-tail">
+            <b>Habits is the one you actually want.</b> Focus is how he keeps you at it, and
+            routines is how he clears the time to get to it.
+          </p>
+        </div>
+      </section>
+
+      {/* ── The four tools ────────────────────────────────────────────────
+          These used to be the whole answer to "what is the companion", which
+          is why the free half read as a feature list. They are what he picks
+          up while doing the three jobs above, and they now say so. */}
+      <section className="ld-why-sec apple-reveal" id="tools">
+        <div className="ld-wrap">
+          <p className="apple-eyebrow">What he uses to do it</p>
+          <h2 className="ld-h2">Four things he can already do, <span className="tone">any time you ask.</span></h2>
+          <p className="ld-lede">
+            These are not separate apps you go and open. They are what he reaches for while he
+            is getting you through the day. <b>Setup is: install him.</b>
           </p>
           <div className="ld-why">
             {FEATURES.map((f) => (
@@ -714,15 +853,15 @@ export default function Landing() {
         <div className="ld-wrap">
         <div className="ld-engine-intro-head">
           <p className="apple-eyebrow">Inside Braino for Founders</p>
-          <h2 className="ld-h2">Two engines. <span className="tone">One builds it. One gets it seen.</span></h2>
+          <h2 className="ld-h2">Three jobs. <span className="tone">He runs your distribution.</span></h2>
           <p className="ld-lede">
-            Braino Code turns the thing you said out loud into a working product. Distra does
-            the half nobody helps with. <b>Nothing either of them writes goes anywhere until
-            you tap approve.</b>
+            The same companion, pointed at the part of the week you keep losing. He writes,
+            he checks, he reaches out. <b>Nothing he writes goes anywhere until you tap
+            approve.</b>
           </p>
         </div>
 
-          {ENGINE_DETAIL.map((engine) => (
+          {FOUNDRY_DETAIL.map((engine) => (
             <article className={`ld-engine-full ${engine.tone}`} key={engine.name}>
               <header>
                 <p className="ld-engine-tag">{engine.tag}</p>
@@ -732,16 +871,26 @@ export default function Landing() {
 
               <div className="ld-engine-body">
                 <p className="ld-engine-intro">{engine.body}</p>
-                <ol className="ld-engine-points">
-                  {engine.points.map(([n, h, t]) => (
-                    <li key={n}><i>{n}</i><div><b>{h}</b><p>{t}</p></div></li>
-                  ))}
-                </ol>
+                {engine.points.length > 0 && (
+                  <ol className="ld-engine-points">
+                    {engine.points.map(([n, h, t]) => (
+                      <li key={n}><i>{n}</i><div><b>{h}</b><p>{t}</p></div></li>
+                    ))}
+                  </ol>
+                )}
                 <p className="ld-engine-foot">{engine.foot}</p>
-                <Link to={engine.to} className="ld-btn sm ghost">{engine.cta}</Link>
               </div>
             </article>
           ))}
+
+          <div className="ld-why ld-engine-tail">
+            <div><b>All three land in one inbox</b><p>What the listener hears becomes what he posts. What is missing becomes next week. You approve, edit or bin it, out loud or with a tap, and nothing leaves without that.</p></div>
+            <div><b>And then there is Braino Code</b><p>Say the thing out loud and he builds it: a real, designed, working site in about four minutes. It is not part of the three jobs above and it arrives after them, but it is real and you can watch it work.</p></div>
+          </div>
+          <p className="ld-engine-tail-cta">
+            <Link to="/braino?view=foundry#distra" className="ld-btn sm">See Foundry</Link>
+            <Link to="/code" className="ld-btn sm ghost">See Braino Code</Link>
+          </p>
         </div>
       </section>
 
@@ -752,8 +901,8 @@ export default function Landing() {
           <h2 className="ld-h2">Three plans. <span className="tone">No credit maths.</span></h2>
           <p className="ld-lede">
             Nobody has ever enjoyed working out what 1,500 credits buys them. A free tier that caps
-            by session instead of hiding half the product, one price for the companion, one for
-            Distra. Distra has the companion inside it.
+            by session instead of hiding half the product, one price for the companion who runs your
+            day, one for the one who runs your distribution. <b>The second has the first inside it.</b>
           </p>
 
           <div className="ld-plans">
@@ -800,7 +949,7 @@ export default function Landing() {
             </ul>
             <div className="ld-receipt-sub"><span>Every month, forever</span><em>${RECEIPT_TOTAL}</em></div>
             <div className="ld-receipt-us">
-              <span>Braino Foundry<i>Braino Code and Distra, one price.</i></span>
+              <span>Braino Foundry<i>All three jobs, and the companion inside it.</i></span>
               <em>$50</em>
             </div>
           </div>

@@ -1253,3 +1253,10 @@
      runs off the right edge, so the width is handed back to the content. */
   .ld-who-bar .ld-ask-btn { flex-shrink: 0; width: auto; padding: 10px 16px; }
 }
+
+/* The line that follows a run of engine cards: the sentence that says how the
+   three relate, or the pair of notes that sit behind Foundry's three. It hangs
+   off the last card rather than starting a new section, so it takes the card
+   row's top hairline and none of a section's padding. */
+.ld-engine-tail { margin-top: clamp(26px, 3.5vw, 40px); }
+.ld-engine-tail-cta { margin: 22px 0 0; display: flex; flex-wrap: wrap; gap: 10px; }

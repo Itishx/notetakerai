@@ -971,3 +971,46 @@ silently** — measure `.body` scrollHeight against `720 - padding` before shipp
 never trust the eye.
 
 Obey `docs/BHASKAR-DECK-RULES.md` before touching a line of the copy.
+
+## 23. Homepage: the two halves, said in one shape (`src/pages/Landing.tsx`)
+
+The page used to explain the free Braino as **four features** and the paid one as
+**two engines**, one of which was Braino Code. Two different shapes, so the free
+half read as a browser extension and the paid half read as a product, and a
+reader had no way to hold them side by side.
+
+**One Braino, two jobs, three engines each.**
+
+| | Companion | Foundry |
+|---|---|---|
+| runs | your day | your distribution |
+| engines | Habits, Focus, Routines | Content, Optics, Outbound |
+| problem section | `#day` | `#problem` |
+| engine section | `#does` | `#engines` |
+
+Both engine runs are the **same `EngineBlock` type rendered by the same markup**
+(`.ld-engine-full`). That is the argument, not a convenience: two lists of
+different shapes is what caused the problem in the first place. `COMPANION_ENGINES`
+in `src/data/companionEngines.ts` is deliberately a sibling of `distraEngines.ts`.
+
+**The three are not peers.** Habits is the goal; focus keeps you at it, routines
+clear the time to get to it. The `.ld-engine-tail` line under the companion cards
+says so, because three equal cards invite "why are these in one app".
+
+**The four old features did not die**, they moved to `#tools` under the heading
+"what he uses to do it". They are what he reaches for while doing the three jobs.
+
+**Braino Code is not an engine here.** Leading Foundry with it put a build tool in
+front of a reader who had not met the problem Foundry exists for. It appears once,
+after the three jobs, as something that arrives later, and keeps its own page.
+
+**Website voice, not deck voice.** The landing copy for Foundry is written on this
+page rather than reusing `DISTRA_ENGINES[].detail`: the names, one-liners and order
+come from the shared list so they cannot drift, but the interview counts and churn
+figures stay in the deck. The companion's problem section carries **no statistics at
+all** — the founder problem earns its numbers because the reader is being asked to
+believe something about a market; the companion's problem is just Tuesday, and the
+reader already knows.
+
+`NOTCH_NAV` carries a note per section and goes stale silently. Check it whenever a
+section id or heading changes.
