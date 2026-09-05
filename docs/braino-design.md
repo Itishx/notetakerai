@@ -930,6 +930,13 @@ The companion-side sibling of the v10 Foundry deck. Twelve slides, 1280x720,
 printed with `npm run pdf:companion` to `public/braino-companion-deck.pdf`, and
 served as a real page at `/companion-deck.html` (a byte copy of the same file).
 
+**Solution before market.** Cover, the problem, the three options people use
+today, what the companion is, the three jobs, the day end to end, the customer,
+the market, competition, the model, what already runs, close. The market slide
+sat at 4 in the first cut and was moved to 8: a reader who has not yet met the
+product has no way to judge whether the number is a real one. v11 of the Foundry
+deck makes the same move.
+
 **The stylesheet is v10's, lifted whole and unedited.** Everything companion-only
 lives in one `<style>` block at the top of `<body>`, so a change to the base sheet
 in v10 can be re-lifted without merging by hand. Do not fork the base sheet.
