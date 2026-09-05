@@ -926,16 +926,21 @@ the first line of the panel behind the arrow.
 
 ## 22. Braino Companion pitch deck (`files/braino-companion-deck.html`)
 
-The companion-side sibling of the v10 Foundry deck. Twelve slides, 1280x720,
+The companion-side sibling of the v10 Foundry deck. Eleven slides, 1280x720,
 printed with `npm run pdf:companion` to `public/braino-companion-deck.pdf`, and
 served as a real page at `/companion-deck.html` (a byte copy of the same file).
 
 **Solution before market.** Cover, the problem, the three options people use
 today, what the companion is, the three jobs, the day end to end, the customer,
-the market, competition, the model, what already runs, close. The market slide
-sat at 4 in the first cut and was moved to 8: a reader who has not yet met the
-product has no way to judge whether the number is a real one. v11 of the Foundry
-deck makes the same move.
+the market, competition, the model, close. The market slide sat at 4 in the
+first cut and was moved to 8: a reader who has not yet met the product has no
+way to judge whether the number is a real one. v11 of the Foundry deck makes the
+same move.
+
+A roadmap slide ("what is built, what is next") sat at 11 and was cut. If it
+comes back, note that the deck no longer says anywhere that the watching, the
+voice and the agent already run, which is the deck's only defence against
+reading as a plan rather than a product.
 
 **The stylesheet is v10's, lifted whole and unedited.** Everything companion-only
 lives in one `<style>` block at the top of `<body>`, so a change to the base sheet
