@@ -14584,6 +14584,43 @@ async function macLookAtScreen(goal = "") {
   }
 }
 
+/* Braino's own hands, reachable from the loop.
+ *
+ * The catalog names 115 abilities and every one of them was locked behind the
+ * regex cascade, so the brain could not open Notes or play a song: not because
+ * it chose not to, but because those verbs were not in the vocabulary it was
+ * shown. It read as a model failing at a job it was never offered.
+ *
+ * A map rather than a lookup by handler name, because these are module-scoped
+ * functions in a CommonJS file and cannot be reached by string, and because
+ * every one takes different arguments. There is no generic call here to write:
+ * openChromeUrl wants a url, startAlarm wants an epoch and a label. The
+ * adapter IS the work, which is why this list is short and honest rather than
+ * ninety-three entries of guesswork.
+ *
+ * A tool that is not in here is not a crash. It comes back as a plain refusal
+ * the loop can read and route around, and it is logged by name, so what to
+ * wire next is decided by what Braino actually reached for rather than by
+ * whichever ones seemed important on a Tuesday.
+ */
+const MAC_HIL_TOOLS = {
+  notes_create: (a) => startNoteWorkflow({ title: String(a.title || ""), body: String(a.body || "") }),
+  open_url: (a) => openChromeUrl(String(a.url || a.target || "")),
+  chrome_search_google: (a) => openChromeUrl(`https://www.google.com/search?q=${encodeURIComponent(String(a.query || ""))}`),
+  web_search: (a) => runMacWebSearch(String(a.query || "")),
+  deep_research: (a) => runResearch(String(a.query || a.topic || "")),
+  amazon_search: (a) => runAmazonSearch(String(a.product || a.query || "")),
+  spotify_play: (a) => playSpotifySongOnMac(String(a.query || a.song || a.track || "")),
+  spotify_control: (a) => controlSpotifyPlaybackOnMac(String(a.control || a.action || "")),
+  spotify_now_playing: () => describeSpotifyNowPlaying(),
+  screen_vision: (a) => runScreenVision(String(a.question || a.prompt || "")),
+  front_window_summary: () => frontWindowSummary(),
+  take_screenshot: () => takeScreenshot(),
+  read_selection: (a) => actOnSelectedText({ verb: String(a.verb || "summarise"), language: a.language, speakOnly: true }),
+  alarm_set: (a) => startAlarm(Number(a.fireAt), String(a.label || "")),
+  whatsapp_send: (a) => sendWhatsAppMessage(String(a.recipient || ""), String(a.message || "")),
+};
+
 async function macExecuteHilAction(action, elements) {
   const type = String(action?.type || "");
   const byIndex = (i) => elements.find((e) => Number(e.index) === Number(i));
@@ -14700,6 +14737,31 @@ async function macExecuteHilAction(action, elements) {
     await macHilWait(500);
     return res.status === "key" ? { ok: true } : { ok: false, error: `${res.status}: ${res.detail}` };
   }
+  if (type === "tool") {
+    const name = String(action.tool || "");
+    const args = (action.args && typeof action.args === "object") ? action.args : {};
+    const run = MAC_HIL_TOOLS[name];
+    if (!run) {
+      // Named, real, and not wired here yet. Said plainly so the loop can pick
+      // another route instead of retrying the same unavailable thing, and
+      // logged so the gap is a number rather than a hunch.
+      logMac("hil.tool.unwired", { tool: name });
+      return { ok: false, error: `The tool ${name} is not wired into this Mac yet. Do it another way, or tell the user you cannot do that part.` };
+    }
+    try {
+      const out = await run(args);
+      logMac("hil.tool.done", { tool: name, ok: out?.ok !== false });
+      if (out && out.ok === false) return { ok: false, error: String(out.say || out.error || `${name} did not work.`) };
+      // .say carries whatever the tool found out. It goes back as answer, the
+      // same field a search uses, so the loop folds it into facts and it
+      // survives the turn instead of being learned and forgotten.
+      const said = out && typeof out.say === "string" ? out.say.trim() : "";
+      return said ? { ok: true, answer: said } : { ok: true };
+    } catch (error) {
+      logMac("hil.tool.failed", { tool: name, error: String(error?.message || error) });
+      return { ok: false, error: `${name} threw: ${String(error?.message || error)}` };
+    }
+  }
   if (type === "web_search") {
     const found = await runMacWebSearch(String(action.query || ""));
     // .say is the real field, and ok matters: a failed search recorded as a fact
@@ -14815,6 +14877,10 @@ async function runMacHilLoop(command, resume = null) {
         lastStep: lastStep || undefined,
         userReply: pendingReply || undefined,
       },
+      // This caller has Braino's real hands, so the server sends the tool
+      // catalog with the prompt. Without it the brain is offered a browser and
+      // nothing else, which is what made it look unable to open Notes.
+      hands: "mac",
     };
     pendingReply = null;
     let turn = null;

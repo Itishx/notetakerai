@@ -11,6 +11,12 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { HIL_LOOP_PROMPT, HIL_LOOP_VERSION } from "../../_shared/human-intelligence/hil-loop-prompt.ts";
 import { logEngineRun } from "../../_shared/engine-log.ts";
+import {
+  HIL_TOOL_CATALOG,
+  HIL_CATALOG_VERSION,
+  findTool,
+  isIrreversible,
+} from "../../_shared/human-intelligence/hil-tool-catalog.ts";
 import { buildEmotionalCore } from "../../_shared/emotional-engine/engine.ts";
 import { detectMoment, MOMENT_EMPHASIS, MOMENT_LABEL } from "../../_shared/emotional-engine/moments.ts";
 import {
@@ -48,7 +54,37 @@ const OPENAI_ENDPOINT = "https://api.openai.com/v1/chat/completions";
 // and to the world before it was added here, and the symptom was Braino
 // appearing to fail at the new skill while actually performing it perfectly.
 // Anything taught in hil-loop-prompt.ts must be listed here in the same change.
-const ACTION_TYPES = new Set(["navigate", "read", "look", "click", "type", "pressKey", "scroll", "wait", "web_search", "selectOption", "downloadImage"]);
+const ACTION_TYPES = new Set(["navigate", "read", "look", "click", "type", "pressKey", "scroll", "wait", "web_search", "selectOption", "downloadImage", "tool"]);
+
+// ── Braino's own hands ───────────────────────────────────────────────────────
+// The loop could drive a browser and nothing else, while everything Braino can
+// actually DO on a Mac lived in a catalog only the regex cascade could reach.
+// So the brain could not open Notes, play a song or send a message: not because
+// it decided against it, but because those verbs did not exist in the vocabulary
+// it was shown. It looked like a model failing at a task it was never offered.
+//
+// One "tool" action fixes that. The catalog is rendered into the prompt and the
+// tool name is validated against it here, so a hallucinated tool is a rejected
+// turn rather than a request the Mac has to defend itself from.
+//
+// Only sent when the caller says it HAS these hands. The extension runs in a
+// browser and cannot fire spotify_play, so teaching it the tool would only
+// invite a turn nothing can execute.
+function renderToolCatalog(): string {
+  const lines = HIL_TOOL_CATALOG.map((t) => {
+    const args = t.params.length ? `(${t.params.join(", ")})` : "()";
+    const flag = t.irreversible ? "  [IRREVERSIBLE, must be reversible:false]" : "";
+    return `- ${t.name}${args}: ${t.gloss}${flag}`;
+  });
+  return [
+    "=== YOUR OWN HANDS ON THIS MAC ===",
+    'Alongside the browser actions you have Braino\'s real abilities. Fire one with {"type":"tool","tool":"<name>","args":{...}}, as an ordinary step, one per turn, judged next turn like any other.',
+    "Prefer a tool over doing the same thing by hand in a browser. Opening Notes and typing is worse than notes_create in every way: faster, and it cannot half-fail.",
+    "A tool not on this list does not exist. Never invent one.",
+    "",
+    lines.join("\n"),
+  ].join("\n");
+}
 
 // Reversibility is decided by WHAT is being clicked, and the element name lives on
 // the client (it holds the live observation), so the final say is enforced there in
@@ -357,10 +393,26 @@ function coerceTurn(rawContent: string, hadLastStep: boolean): { turn: LoopTurn;
     const action = s.action && typeof s.action === "object" && !Array.isArray(s.action) ? s.action : null;
     const actionType = action && typeof action.type === "string" ? action.type.trim() : "";
     if (!action || !ACTION_TYPES.has(actionType)) return { turn: fallback, parseOk: false };
+    // A tool call is only a step if the tool is real. Rejecting the whole turn
+    // rather than dropping the action is deliberate: a half-understood turn that
+    // silently becomes a no-op is the hardest kind of bug to see from outside.
+    if (actionType === "tool") {
+      const toolName = String((action as Record<string, unknown>).tool || "");
+      if (!findTool(toolName)) return { turn: fallback, parseOk: false };
+    }
     // A click on a send/buy/publish/destroy control is gated even if the model said
     // otherwise. The element NAME is the real test and lives on the client, which
     // has the last word (isIrreversibleClick); this is the server-side floor.
-    const looksIrreversible = IRREVERSIBLE_HINT.test(JSON.stringify(action)) || IRREVERSIBLE_HINT.test(String(s.intent || ""));
+    // The catalog already knows which tools cannot be taken back, and it knows it
+    // better than a regex over the intent ever will. Its verdict is not advice:
+    // a tool marked irreversible is forced to reversible:false whatever the model
+    // claimed, so the confirmation gate fires on a delete even when the model
+    // was sure it was harmless.
+    const toolIrreversible = actionType === "tool"
+      && isIrreversible(String((action as Record<string, unknown>).tool || ""));
+    const looksIrreversible = toolIrreversible
+      || IRREVERSIBLE_HINT.test(JSON.stringify(action))
+      || IRREVERSIBLE_HINT.test(String(s.intent || ""));
     decision = {
       type: "step",
       step: {
@@ -430,7 +482,12 @@ serve(async (req) => {
   }
 
   try {
-    const { command, context, state, runId, rescue, rescueReason } = await req.json();
+    const { command, context, state, runId, rescue, rescueReason, hands } = await req.json();
+    // Which hands the caller actually has. "mac" gets the tool catalog; anything
+    // else gets the browser vocabulary alone. Opt-in rather than opt-out on
+    // purpose: a caller that forgets to say loses abilities, which is visible,
+    // instead of being taught tools it cannot run, which is not.
+    const hasMacHands = hands === "mac";
     // Escalation is a claim by the client, so it is treated as one. The flag only
     // ever swaps the model and appends the brief; it can never widen what an action
     // is allowed to do, because the allowlist and the gate below do not read it.
@@ -481,6 +538,10 @@ serve(async (req) => {
     const emotionalCore = buildEmotionalCore({ medium: "text", moment: momentId, intensity: reading.intensity });
     const systemPrompt = [
       HIL_LOOP_PROMPT,
+      // Before the personality, because it is capability rather than character,
+      // and after the loop rules, because how to take a turn has to be settled
+      // before what can be done in one.
+      ...(hasMacHands ? [renderToolCatalog()] : []),
       "=== WHO YOU ARE (the Emotional Engine, appended live for this request) ===",
       emotionalCore,
     ].join("\n\n");
@@ -579,6 +640,10 @@ serve(async (req) => {
         elapsed_ms: Date.now() - started,
         hil_loop_version: HIL_LOOP_VERSION,
         parse_ok: parseOk,
+        // So the Mac can tell whether the brain it just spoke to actually knew
+        // about its hands, rather than inferring it from a turn that happened
+        // not to use one.
+        tools: hasMacHands ? HIL_CATALOG_VERSION : null,
         log_id: logId,
       },
     }), {
