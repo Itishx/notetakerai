@@ -333,3 +333,39 @@
   border-color: color-mix(in srgb, var(--ap-violet, #6b52c4) 25%, var(--ap-hairline, #d2d2d7));
 }
 .hil-screen::placeholder { opacity: 0.75; }
+
+/* ── The handoff to Astra ────────────────────────────────────────────────────
+   Gold, and the only gold on this page. Every other state here is coral or ink,
+   so the one card that means "this turn costs real money" is the one card that
+   does not look like the rest. The shimmer sweeps once per pass rather than
+   pulsing: a run can sit in rescue for ten actions, and something that throbs
+   for ten actions stops reading as important and starts reading as broken. */
+.hil-loop-card.handoff {
+  border-color: #d9a441;
+  background: linear-gradient(180deg, #fffaf0 0%, #fdf3df 100%);
+}
+.hil-loop-handoff-label {
+  display: inline-block;
+  margin-bottom: 6px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .13em;
+  text-transform: uppercase;
+  background: linear-gradient(100deg, #a8792a 0%, #f0cf7d 22%, #fff6de 34%, #f0cf7d 46%, #a8792a 68%, #a8792a 100%);
+  background-size: 280% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: hil-handoff-shimmer 2.6s linear infinite;
+}
+.hil-loop-card.handoff p { margin: 0; font-size: 14px; color: #6b4c12; }
+@keyframes hil-handoff-shimmer {
+  from { background-position: 140% 0; }
+  to { background-position: -140% 0; }
+}
+/* A shimmer is decoration. Anyone who has asked for less motion still needs to
+   read the words, so the gradient collapses to a flat gold rather than the text
+   staying transparent. */
+@media (prefers-reduced-motion: reduce) {
+  .hil-loop-handoff-label { animation: none; background: none; -webkit-text-fill-color: #a8792a; color: #a8792a; }
+}

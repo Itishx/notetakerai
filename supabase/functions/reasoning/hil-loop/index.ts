@@ -13,7 +13,13 @@ import { HIL_LOOP_PROMPT, HIL_LOOP_VERSION } from "../../_shared/human-intellige
 import { logEngineRun } from "../../_shared/engine-log.ts";
 import { buildEmotionalCore } from "../../_shared/emotional-engine/engine.ts";
 import { detectMoment, MOMENT_EMPHASIS, MOMENT_LABEL } from "../../_shared/emotional-engine/moments.ts";
-import { BRAINO_TEXT_MODEL, BRAINO_TEXT_REASONING_EFFORT } from "../../_shared/openai-models.ts";
+import {
+  BRAINO_TEXT_MODEL,
+  BRAINO_TEXT_REASONING_EFFORT,
+  BRAINO_RESCUE_MODEL,
+  BRAINO_RESCUE_REASONING_EFFORT,
+  BRAINO_RESCUE_MAX_TOKENS,
+} from "../../_shared/openai-models.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -24,6 +30,10 @@ const corsHeaders = {
 // One model, chosen server-side. This endpoint is deliberately public (verify_jwt=false)
 // so the lab works for anyone, which means the caller must NOT get to pick the model.
 const HIL_LOOP_MODEL = BRAINO_TEXT_MODEL;
+// The rescue model is likewise NOT caller-selectable. The client may ask to
+// escalate, and the escalation is rationed here rather than there, because the
+// client is a web page anyone can open and edit.
+const HIL_RESCUE_MODEL = BRAINO_RESCUE_MODEL;
 const OPENAI_ENDPOINT = "https://api.openai.com/v1/chat/completions";
 
 // The action vocabulary, matching the real extension's BG_DELEGATE_ACTIONS.
@@ -70,7 +80,7 @@ function isUsableAssert(a: unknown): boolean {
   return true; // "none"
 }
 
-async function callModel(apiKey: string, messages: unknown[]) {
+async function callModel(apiKey: string, messages: unknown[], rescue = false) {
   return await fetch(OPENAI_ENDPOINT, {
     method: "POST",
     headers: {
@@ -83,11 +93,15 @@ async function callModel(apiKey: string, messages: unknown[]) {
     // Raised with the observation cap and the answer channel: 1200 was set when the
     // screen was 3000 chars and no turn ever had to carry findings. An answer that
     // runs out of tokens mid-sentence is indistinguishable from a broken turn.
+    // On a rescue every one of these three changes together, and they have to.
+    // Astra has no "none" effort level and its reasoning is billed as completion,
+    // so sending the standard loop's effort would be rejected outright and the
+    // standard ceiling could be eaten by the thinking before any JSON is written.
     body: JSON.stringify({
-      model: HIL_LOOP_MODEL,
-      reasoning_effort: BRAINO_TEXT_REASONING_EFFORT,
+      model: rescue ? HIL_RESCUE_MODEL : HIL_LOOP_MODEL,
+      reasoning_effort: rescue ? BRAINO_RESCUE_REASONING_EFFORT : BRAINO_TEXT_REASONING_EFFORT,
       messages,
-      max_completion_tokens: 2400,
+      max_completion_tokens: rescue ? BRAINO_RESCUE_MAX_TOKENS : 2400,
     }),
   });
 }
@@ -163,6 +177,104 @@ function renderState(command: string, context: string, state: LoopState | null):
   }
 
   parts.push("Return the JSON for this turn now.");
+  return parts.join("\n\n");
+}
+
+// ── Is this rescue earned? ───────────────────────────────────────────────────
+// This endpoint is verify_jwt=false so the lab works for anyone, which means the
+// rescue flag arrives from a caller that can send anything it likes. The client
+// rations escalation honestly; a curl does not. Without a check here, the whole
+// cost design is one line of JSON away from being bypassed by a stranger, and
+// the model on the other side of that line bills output at $50/M.
+//
+// Two gates, in cost order.
+//
+// One, free: a rescue only makes sense partway through a run. A cold call with no
+// jobs and no steps has nothing to be rescued from, and that is the shape of every
+// trivial abuse of this flag.
+const RESCUE_HARD_CAP = 12;
+
+function rescueLooksReal(state: LoopState | null): boolean {
+  if (!state) return false;
+  const steps = Array.isArray(state.steps) ? state.steps.length : 0;
+  const tasks = Array.isArray(state.tasks) ? state.tasks.length : 0;
+  return steps > 0 || tasks > 0;
+}
+
+// Two, one indexed read: the client's 10-action ceiling is enforced in a file
+// anyone can edit, so the real ceiling lives here. Counting rows already written
+// for this run makes the cap survive a client that simply refuses to stop.
+//
+// Fails CLOSED. If the count cannot be read, the turn runs on the standard model
+// rather than the expensive one: a rescue that quietly degrades to him is a worse
+// answer, and an unbounded bill is a worse problem.
+async function rescueTurnsUsed(runId: string | null): Promise<number> {
+  if (!runId) return RESCUE_HARD_CAP;
+  const url = Deno.env.get("SUPABASE_URL");
+  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!url || !key) return RESCUE_HARD_CAP;
+  try {
+    const res = await fetch(
+      `${url}/rest/v1/engine_runs?select=id&run_id=eq.${encodeURIComponent(runId)}&model=eq.${encodeURIComponent(HIL_RESCUE_MODEL)}`,
+      {
+        headers: {
+          apikey: key,
+          Authorization: `Bearer ${key}`,
+          // head+exact gets the count from the Content-Range header without
+          // shipping the rows, so this stays one cheap indexed read.
+          Prefer: "count=exact",
+          Range: "0-0",
+        },
+        method: "HEAD",
+      },
+    );
+    const range = res.headers.get("content-range") || "";
+    const total = Number(range.split("/")[1]);
+    return Number.isFinite(total) ? total : RESCUE_HARD_CAP;
+  } catch {
+    return RESCUE_HARD_CAP;
+  }
+}
+
+// ── The rescue brief ─────────────────────────────────────────────────────────
+// Appended to the ordinary state render when the loop escalates. It is deliberately
+// short: Astra already receives the whole run above it, and repeating that in prose
+// would cost input tokens to say what the state block just said.
+//
+// The one thing it MUST carry is the difference between an action that is known to
+// have worked and an action whose outcome was never confirmed. A step sitting at
+// ok:null was executed and never judged, which is the exact shape of "the message
+// may or may not have sent". Told nothing, the sensible move looks like doing it
+// again, and doing it again is how a rescue turns one unsent message into two sent
+// ones. So the unverified steps are named, and looking is made the required first
+// move rather than a suggestion.
+function renderRescueBrief(state: LoopState | null, reason: string): string {
+  const parts: string[] = [];
+  parts.push([
+    "=== YOU ARE BEING HANDED A RUN THAT IS STUCK ===",
+    `Braino's own loop could not get through this and handed it to you. Why: ${reason}`,
+    "Everything above is real. Those jobs were really attempted, on a real screen, by him.",
+  ].join("\n"));
+
+  const steps = Array.isArray(state?.steps) ? state!.steps : [];
+  const unverified = steps.filter((s) => s && s.ok === null);
+  if (unverified.length) {
+    parts.push([
+      "NOT CONFIRMED, and this is the dangerous part:",
+      ...unverified.map((s) => `- ${s.intent} [${s.action}] ran, and nothing ever confirmed whether it worked.`),
+      "Any of these may have SUCCEEDED. Doing one again could send a second message, place a second order, or post twice.",
+      "Before you repeat anything on that list, look at the screen and find out. If you cannot tell, ask. Never assume it failed just because nobody wrote down that it worked.",
+    ].join("\n"));
+  }
+
+  parts.push([
+    "How to take over:",
+    "1. Read the failures above and work out what he misread, not just what he clicked.",
+    "2. Your first action should usually be to look, because his picture of the screen is the thing that failed.",
+    "3. Same rules as him. Same actions, same one-decision-per-turn, same JSON. You are not exempt from the confirmation gate: anything that spends money, sends, posts or deletes is still reversible:false and still waits for the human.",
+    "4. Finish the job. Do not hand it back half done.",
+  ].join("\n"));
+
   return parts.join("\n\n");
 }
 
@@ -293,7 +405,14 @@ serve(async (req) => {
   }
 
   try {
-    const { command, context, state, runId } = await req.json();
+    const { command, context, state, runId, rescue, rescueReason } = await req.json();
+    // Escalation is a claim by the client, so it is treated as one. The flag only
+    // ever swaps the model and appends the brief; it can never widen what an action
+    // is allowed to do, because the allowlist and the gate below do not read it.
+    const rescueAsked = rescue === true;
+    const rescueWhy = typeof rescueReason === "string" && rescueReason.trim()
+      ? rescueReason.trim().slice(0, 400)
+      : "his loop stopped making progress";
     const commandText = typeof command === "string" ? command.trim() : "";
     const contextText = typeof context === "string" ? context.trim() : "";
     const loopState: LoopState | null = state && typeof state === "object" ? state as LoopState : null;
@@ -309,6 +428,14 @@ serve(async (req) => {
       });
     }
 
+    // Both gates are evaluated before a single expensive token is spent, and a
+    // refused escalation is not an error: the turn simply runs on the standard
+    // model, which is what would have happened anyway a moment earlier.
+    const isRescue = rescueAsked
+      && rescueLooksReal(loopState)
+      && (await rescueTurnsUsed(logRunId)) < RESCUE_HARD_CAP;
+    if (rescueAsked && !isRescue) console.warn("hil-loop: rescue refused", { runId: logRunId });
+
     const started = Date.now();
     const reading = detectMoment(commandText);
     const momentId = reading.moment;
@@ -322,7 +449,16 @@ serve(async (req) => {
       emotionalCore,
     ].join("\n\n");
 
-    const userMessage = renderState(commandText.slice(0, 2000), contextText.slice(0, 2000), loopState);
+    const baseMessage = renderState(commandText.slice(0, 2000), contextText.slice(0, 2000), loopState);
+    // The brief goes AFTER the state, not before it: the last thing in the prompt is
+    // the thing most likely to be obeyed, and what matters most here is the warning
+    // about repeating an action nobody confirmed.
+    const userMessage = isRescue
+      ? `${baseMessage}\n\n${renderRescueBrief(loopState, rescueWhy)}`
+      : baseMessage;
+    // Recorded rather than recomputed, so the row in engine_runs says which brain
+    // actually answered this turn. That column is the whole cost report.
+    const turnModel = isRescue ? HIL_RESCUE_MODEL : HIL_LOOP_MODEL;
 
     const apiKey = Deno.env.get("OPENAI_API_KEY");
     if (!apiKey) throw new Error("API key not configured");
@@ -330,7 +466,7 @@ serve(async (req) => {
     const aiRes = await callModel(apiKey, [
       { role: "system", content: systemPrompt },
       { role: "user", content: userMessage },
-    ]);
+    ], isRescue);
 
     if (!aiRes.ok) {
       if (aiRes.status === 429) {
@@ -352,7 +488,7 @@ serve(async (req) => {
         command: commandText,
         context: contextText,
         moment_id: momentId,
-        model: HIL_LOOP_MODEL,
+        model: turnModel,
         elapsed_ms: Date.now() - started,
         ok: false,
         error: `AI ${aiRes.status}`,
@@ -381,7 +517,7 @@ serve(async (req) => {
       // finish, or give up. Stored flat so a session can be scanned without
       // opening every row.
       verdict: turn?.decision?.type ?? null,
-      model: HIL_LOOP_MODEL,
+      model: turnModel,
       usage: aiData?.usage,
       elapsed_ms: Date.now() - started,
       ok: parseOk,
@@ -398,7 +534,8 @@ serve(async (req) => {
         intensity: reading.intensity,
       },
       meta: {
-        model: HIL_LOOP_MODEL,
+        model: turnModel,
+        rescue: isRescue,
         elapsed_ms: Date.now() - started,
         hil_loop_version: HIL_LOOP_VERSION,
         parse_ok: parseOk,

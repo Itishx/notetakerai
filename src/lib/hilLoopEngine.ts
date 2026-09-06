@@ -34,6 +34,27 @@ import {
 const BUDGET_PER_TASK = 14;
 const MAX_TURNS = 45;
 
+// ── Escalation to Astra ─────────────────────────────────────────────────────
+// The loop does not get a second executor when it escalates. It gets a better
+// thinker behind the same one. Every guarantee in this file — the confirmation
+// gate, the repeat guard, tier-zero verification, the budget — is a code path
+// below, so they all keep holding for Astra exactly as they hold for him. That
+// is the whole reason the handoff is a flag on the turn rather than a separate
+// runner: a second runner would be a second set of gates to get wrong, and the
+// one it would get wrong is the one that spends money.
+//
+// Two repeats, not three. Three is where the run DIES; escalating there would
+// mean Astra only ever arrives to be told the patient is gone. Two is the last
+// moment a rescue can still be a rescue.
+const RESCUE_AT_REPEATS = 2;
+// Escalate before the budget is spent, not after, for the same reason. Handing
+// Astra a job with one action left is not a handoff, it is a blame transfer.
+const RESCUE_BUDGET_FLOOR = 3;
+// What Astra gets to spend. It REPLACES what is left rather than adding to it,
+// so a rescue costs the same whether it was called early or late, and one stuck
+// run can never cost more than this many turns of the expensive model.
+const RESCUE_BUDGET = 10;
+
 export type LoopTask = { desc: string; status: "pending" | "active" | "done" };
 
 export type StepEvent = {
@@ -61,6 +82,7 @@ export type LoopEvent =
   | { kind: "ask"; id: number; thinking: string; question: string; answer: string | null }
   | { kind: "task_done"; thinking: string; message: string; taskIndex: number }
   | { kind: "sabotage"; text: string }
+  | { kind: "handoff"; reason: string; budget: number }
   | { kind: "ending"; outcome: "all_done" | "declined" | "blocked" | "budget" | "error"; message: string; thinking: string | null };
 
 export type LoopPhase = "idle" | "thinking" | "awaiting_answer" | "awaiting_confirm" | "ended";
@@ -81,7 +103,7 @@ type ServerTurn = {
 type ServerResponse = {
   turn: ServerTurn;
   moment: { id: string; label: string; leads: string[]; intensity: number };
-  meta: { model: string; elapsed_ms: number; hil_loop_version: string; parse_ok: boolean };
+  meta: { model: string; elapsed_ms: number; hil_loop_version: string; parse_ok: boolean; rescue?: boolean };
   error?: string;
 };
 
@@ -127,6 +149,12 @@ export class HilLoopRunner {
   private stopped = false;
   private lastStepFailed = false;
   private lastActionSig: string | null = null;
+  // Astra is either driving this run or it is not, and it can only become true
+  // once. A rescue that also gets stuck must end the run: retrying the expensive
+  // model against the same wall is how one bad task quietly bills like fifty.
+  private rescueActive = false;
+  private rescueUsed = false;
+  private rescueReason = "";
 
   constructor(
     private supabaseUrl: string,
@@ -138,6 +166,11 @@ export class HilLoopRunner {
   // run marks the whole thing rather than whichever turn happened to be last.
   get currentRunId(): string {
     return this.runId;
+  }
+
+  // For the UI. The notch and the run panel both need to say who is driving.
+  get onAstra(): boolean {
+    return this.rescueActive;
   }
 
   // What he can see right now, for the live screen panel in the UI.
@@ -167,6 +200,9 @@ export class HilLoopRunner {
     this.pendingGatedStep = null;
     this.stopped = false;
     this.lastStepFailed = false;
+    this.rescueActive = false;
+    this.rescueUsed = false;
+    this.rescueReason = "";
     this.onChange();
     await this.turn();
   }
@@ -236,6 +272,12 @@ export class HilLoopRunner {
       command: this.command,
       context: this.context || undefined,
       runId: this.runId,
+      // Sent on EVERY turn once the handoff happens, not just the first one. The
+      // server holds no session, so a flag sent once would put Astra on the turn
+      // that took over and quietly drop back to him for the rest of the rescue,
+      // which reads as Astra being erratic rather than as a bug here.
+      rescue: this.rescueActive || undefined,
+      rescueReason: this.rescueActive ? this.rescueReason : undefined,
       state: {
         tasks: this.tasks,
         facts: this.facts.slice(-20),
@@ -390,6 +432,12 @@ export class HilLoopRunner {
       return;
     }
 
+    // "blocked" is him saying he cannot see a way through. That is a request for
+    // a better thinker, not a reason to stop, so it becomes one the first time.
+    if (this.escalate(`he stopped and said: "${String(d.message || "").slice(0, 200)}"`)) {
+      await this.turn();
+      return;
+    }
     this.end("blocked", d.message, turn.thinking);
   }
 
@@ -429,6 +477,17 @@ export class HilLoopRunner {
       const sig = `${card.action.type}:${errText}`;
       const n = (this.failureCounts.get(sig) || 0) + 1;
       this.failureCounts.set(sig, n);
+      // The strongest stuck signal there is: the same move failing the same way.
+      // Escalate one strike before the backstop kills the run.
+      if (n === RESCUE_AT_REPEATS && this.escalate(`${card.actionLabel} failed twice with the same error: "${errText}"`)) {
+        // Recorded here rather than at the bottom because this path returns, and
+        // a handoff that loses the failure it was called for would hand Astra a
+        // run with no visible reason to have been handed anything.
+        this.stepRecords.push({ intent: card.intent, action: card.actionLabel, ok: false, why: errText });
+        this.pendingLastStep = { intent: card.intent, action: card.action, expects: card.expects, result };
+        await this.turn();
+        return;
+      }
       if (n >= 3) {
         this.stepRecords.push({ intent: card.intent, action: card.actionLabel, ok: false, why: errText });
         this.end("blocked", `The same thing failed three times: ${card.actionLabel} kept saying "${errText}". I stopped instead of looping.`, null);
@@ -460,10 +519,52 @@ export class HilLoopRunner {
     this.budgetLeft -= 1;
     this.onChange();
     if (this.budgetLeft <= 0) {
-      this.end("budget", `The budget for this job ran out (${BUDGET_PER_TASK} actions). I stopped cleanly instead of grinding.`, null);
+      // Astra exhausting its own budget is the cap doing its job, and it reads
+      // differently to the user, so it says so. There is no second rescue: this
+      // is where a run that beat both brains stops costing money.
+      this.end(
+        "budget",
+        this.rescueActive
+          ? `Astra took over and still could not finish inside ${RESCUE_BUDGET} actions. I stopped rather than keep spending on it.`
+          : `The budget for this job ran out (${BUDGET_PER_TASK} actions). I stopped cleanly instead of grinding.`,
+        null,
+      );
+      return;
+    }
+    // Grinding towards the end of the budget with the job still open is the
+    // quiet kind of stuck: nothing errored, nothing worked either. Escalate with
+    // enough left to matter rather than at zero, where there is nothing to hand over.
+    if (this.budgetLeft <= RESCUE_BUDGET_FLOOR && this.escalate(`the job is still not done with only ${this.budgetLeft} of ${BUDGET_PER_TASK} actions left`)) {
+      await this.turn();
       return;
     }
     await this.turn();
+  }
+
+  // Hand the wheel to Astra. Returns false when the run has already used its one
+  // rescue, which is the caller's signal to fall through to whatever it would
+  // have done anyway — normally ending the run.
+  //
+  // Nothing is executed here and nothing is undone. The next turn simply goes to
+  // a different model with the failure spelled out, and the loop carries on from
+  // exactly where it stood. That matters: the alternative, tearing down and
+  // restarting, is what leaves half-filled forms and double-sent messages behind.
+  private escalate(reason: string): boolean {
+    if (this.rescueUsed || this.phase === "ended") return false;
+    this.rescueUsed = true;
+    this.rescueActive = true;
+    this.rescueReason = reason;
+    // A fresh budget, not a top-up. See RESCUE_BUDGET.
+    this.budgetLeft = RESCUE_BUDGET;
+    // The repeat tally belongs to the brain that ran into it. Carrying his
+    // failures forward would end Astra's run on its first stumble, at the third
+    // strike he earned rather than the third strike it did.
+    this.failureCounts.clear();
+    // The repeat guard is deliberately NOT cleared. A second identical read is
+    // still pointless when Astra does it, and its first move is usually a look.
+    this.events.push({ kind: "handoff", reason, budget: RESCUE_BUDGET });
+    this.onChange();
+    return true;
   }
 
   private activeTaskIndex(): number {

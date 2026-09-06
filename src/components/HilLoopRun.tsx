@@ -359,6 +359,14 @@ export default function HilLoopRun({ autoRun }: { autoRun?: { command: string; p
                 </div>
               );
             }
+            if (e.kind === "handoff") {
+              return (
+                <div className="hil-loop-card handoff" key={i}>
+                  <span className="hil-loop-handoff-label">handing off to astra</span>
+                  <p>{e.reason}. Astra has {e.budget} actions and the same gate he has.</p>
+                </div>
+              );
+            }
             if (e.kind === "sabotage") {
               return (
                 <div className="hil-loop-card sabotage" key={i}>

@@ -9485,6 +9485,11 @@ function __sbBuildBrainUI() {
     #__sb_bar__.sb-notch-listening #__sb_bar_row__,#__sb_bar__.sb-notch-working #__sb_bar_row__,#__sb_bar__.sb-notch-speaking #__sb_bar_row__{display:none}#__sb_bar__.sb-notch-listening #__sb_notch_face__,#__sb_bar__.sb-notch-working #__sb_notch_face__,#__sb_bar__.sb-notch-speaking #__sb_notch_face__{display:block}
     #__sb_bar__.sb-notch-listening::before,#__sb_bar__.sb-notch-listening::after{content:"";position:absolute;z-index:-1;inset:2px;border:1.5px solid rgba(232,120,110,.58);border-radius:inherit;animation:__sb_notch_sonar__ 2.35s cubic-bezier(.2,.65,.3,1) infinite}#__sb_bar__.sb-notch-listening::after{animation-delay:1.15s}@keyframes __sb_notch_sonar__{from{opacity:.72;transform:scale(1)}to{opacity:0;transform:scale(1.28,1.7)}}
     #__sb_bar__.sb-notch-working{width:440px;height:88px}#__sb_bar__.sb-notch-working #__sb_notch_status__{display:block;color:rgba(255,255,255,.84)}
+    #__sb_bar__.sb-notch-rescue{width:440px;min-height:88px;height:88px;border-radius:0 0 29px 29px;background:linear-gradient(180deg,#f4d9a0 0%,#d9a441 58%,#a8792a 100%);border-color:rgba(255,246,222,.5);box-shadow:0 15px 42px rgba(168,121,42,.34),inset 0 1px rgba(255,255,255,.44);overflow:visible}
+    #__sb_bar__.sb-notch-rescue #__sb_bar_row__{display:none}#__sb_bar__.sb-notch-rescue #__sb_notch_face__{display:block}
+    #__sb_bar__.sb-notch-rescue #__sb_notch_status__{display:block;background:linear-gradient(100deg,#6b4c12 0%,#fff6de 26%,#fffdf6 36%,#fff6de 46%,#6b4c12 72%,#6b4c12 100%);background-size:280% 100%;-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent;animation:__sb_astra_shimmer__ 2.6s linear infinite}
+    @keyframes __sb_astra_shimmer__{from{background-position:140% 0}to{background-position:-140% 0}}
+    @media(prefers-reduced-motion:reduce){#__sb_bar__.sb-notch-rescue #__sb_notch_status__{animation:none;background:none;-webkit-text-fill-color:#4a340a;color:#4a340a}}
     #__sb_bar__.sb-notch-speaking .sb-n-smile{display:none}#__sb_bar__.sb-notch-speaking .sb-n-mouth{display:block;transform-box:fill-box;transform-origin:center;animation:__sb_notch_talk__ .46s ease-in-out infinite alternate}@keyframes __sb_notch_talk__{from{transform:scaleY(.55)}to{transform:scaleY(1.12)}}
     /* Brainelle: the notch shell stays as it is and throws a pink glow from the
        housing, and its white labels turn pink. Braino's notch is untouched. */
@@ -11639,6 +11644,19 @@ function __sbMountNotchV1() {
       .workpill{position:absolute;z-index:6;right:14px;top:50%;transform:translateY(-50%);padding:0;opacity:0;pointer-events:none;transition:opacity 420ms ease;display:flex;align-items:center;gap:8px}
       .workpill::after{content:"";width:4px;height:4px;border-radius:50%;background:#F6A8A2;box-shadow:0 0 5px rgba(232,120,110,.8);animation:nfThinkDot 1.1s ease-in-out infinite}
       .n[data-state=working] .workpill{opacity:1}
+      /* The handoff to Astra. Gold because nothing else in this notch is gold:
+         coral is him, and the one moment a different brain is driving should not
+         wear his colour. Rides data-rescue rather than a state of its own so it
+         cannot be stomped by the state machine mid-rescue, and so the work pill
+         keeps behaving exactly as it does for him. */
+      .n[data-rescue] .workpill{opacity:1}
+      .n[data-rescue] .workpill::after{background:#F0CF7D;box-shadow:0 0 6px rgba(240,207,125,.9)}
+      /* 96px is sized for "THINKING". "HANDING OFF TO ASTRA" is more than twice
+         that and would ellipsis away to "HANDING OF..." at the one moment the
+         words are the whole point. */
+      .n[data-rescue] .workpill strong{max-width:200px;background:linear-gradient(100deg,#A8792A 0%,#F0CF7D 22%,#FFF6DE 34%,#F0CF7D 46%,#A8792A 68%,#A8792A 100%);background-size:280% 100%;-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent;text-shadow:none;animation:nfAstraShimmer 2.6s linear infinite}
+      .n[data-rescue]{box-shadow:0 14px 40px rgba(168,121,42,.32),inset 0 0 0 1px rgba(240,207,125,.5)}
+      @keyframes nfAstraShimmer{from{background-position:140% 0}to{background-position:-140% 0}}
       .workpill strong{display:block;max-width:96px;color:rgba(255,240,235,.9);font:700 9px/13px var(--mono);letter-spacing:.14em;text-transform:uppercase;text-shadow:0 1px 3px rgba(0,0,0,.6);text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
       /* Speaking: coral glow, talking mouth. */
       .n[data-state=speaking]{width:250px;height:66px;border-radius:0 0 26px 26px;box-shadow:0 0 34px rgba(232,120,110,.5),0 10px 30px rgba(0,0,0,.35)}
@@ -11886,7 +11904,7 @@ function __sbMountNotchV1() {
       .greet-keys{display:flex;align-items:center;gap:5px;margin-top:6px}
       .greet-keys kbd{padding:4px 8px;border:1px solid rgba(255,255,255,.14);border-radius:6px;background:rgba(255,255,255,.055);color:rgba(255,255,255,.76);font:500 11px/1 "SF Pro Text",-apple-system,BlinkMacSystemFont,sans-serif}
       .greet-keys em{color:rgba(243,239,229,.34);font-size:10px;font-style:normal}
-      @media(prefers-reduced-motion:reduce){.n,.panel,.record{animation:none!important;transition-duration:.01ms!important;transition-delay:0ms!important}.greet-copy strong span,.greet-copy>small{animation-duration:1ms!important;animation-delay:0ms!important}.greet-rule,.greet-wake,.greet{transition-duration:1ms!important;transition-delay:0ms!important}.n[data-state=listening]::before,.n[data-state=listening]::after,.rec-dot,.workpill::after{animation:none!important}.n[data-state=invoking] .face{opacity:1;transform:none}}
+      @media(prefers-reduced-motion:reduce){.n,.panel,.record{animation:none!important;transition-duration:.01ms!important;transition-delay:0ms!important}.greet-copy strong span,.greet-copy>small{animation-duration:1ms!important;animation-delay:0ms!important}.greet-rule,.greet-wake,.greet{transition-duration:1ms!important;transition-delay:0ms!important}.n[data-state=listening]::before,.n[data-state=listening]::after,.rec-dot,.workpill::after{animation:none!important}.n[data-rescue] .workpill strong{animation:none!important;background:none;-webkit-text-fill-color:#F0CF7D;color:#F0CF7D}.n[data-state=invoking] .face{opacity:1;transform:none}}
     </style>
     <section class="n" data-state="off">
       <div class="panel face"><svg viewBox="0 0 230 72" preserveAspectRatio="none">
@@ -12738,7 +12756,7 @@ function __sbNotchFillGreeting() {
   }).catch(() => {});
 }
 
-const __SB_NOTCH_CLASSES = ["sb-notch-invoking", "sb-notch-auth", "sb-notch-auth-ok", "sb-notch-greeting", "sb-notch-idle", "sb-notch-listening", "sb-notch-working", "sb-notch-speaking"];
+const __SB_NOTCH_CLASSES = ["sb-notch-invoking", "sb-notch-auth", "sb-notch-auth-ok", "sb-notch-greeting", "sb-notch-idle", "sb-notch-listening", "sb-notch-working", "sb-notch-speaking", "sb-notch-rescue"];
 function __sbSetBrowserNotchState(state, status = "") {
   const bar = document.getElementById("__sb_bar__");
   if (!bar) return;
@@ -12746,8 +12764,33 @@ function __sbSetBrowserNotchState(state, status = "") {
   if (state) bar.classList.add(`sb-notch-${state}`);
   const label = document.getElementById("__sb_notch_status__");
   if (label) label.textContent = status;
-  const mapped = state === "auth" ? "authenticating" : state === "auth-ok" ? "authenticated" : state;
+  // "rescue" is a skin over "working", not a state the machine has to learn. It
+  // maps to working so every existing rule about the work pill, the vacant-notch
+  // coercion and the answer surface keeps applying, and the gold is carried by a
+  // separate data attribute that the state machine never clears.
+  const mapped = state === "auth" ? "authenticating"
+    : state === "auth-ok" ? "authenticated"
+    : state === "rescue" ? "working"
+    : state;
   __sbNotchSetState(mapped || "input", status);
+  const shell = (typeof __sbNotchV1 !== "undefined" && __sbNotchV1) ? __sbNotchV1.shell : null;
+  if (shell) {
+    if (state === "rescue") shell.dataset.rescue = "1";
+    else delete shell.dataset.rescue;
+  }
+}
+
+// ── The handoff to Astra ────────────────────────────────────────────────────
+// One entry point, so a rescue can never be shown without being real and can
+// never be left on. The delegate calls this true when the loop escalates and
+// false when the run ends, whatever the ending was: a gold notch left burning
+// after a finished run would say Astra is still spending when it is not.
+//
+// The words are fixed on purpose. This is the one label a user learns to read as
+// "this cost money", and a label that varies is a label nobody learns.
+function __sbNotchAstraHandoff(on, previousState = "working", previousStatus = "") {
+  if (on) __sbSetBrowserNotchState("rescue", "Handing off to Astra");
+  else __sbSetBrowserNotchState(previousState, previousStatus);
 }
 
 // ── Spoken boot greeting + mascot cameo (Mac parity) ────────────────────────
