@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import SideBrainLogo from "@/components/SideBrainLogo";
 import { supabase } from "@/integrations/supabase/client";
+import { readPendingMacHandoff, savePendingMacHandoff, clearPendingMacHandoff, postMacHandoff } from "@/lib/macAuthHandoff";
 
 type AuthView = "login" | "signup" | "forgot";
 const SUPABASE_AUTH_STORAGE_KEY = "sb-suwhgaxxdizowbyjlljj-auth-token";
@@ -51,8 +52,12 @@ const ExtensionAuth = () => {
 
   const params = new URLSearchParams(window.location.search);
   const extensionId = params.get("ext");
-  const macCallback = params.get("macCallback");
-  const macNonce = params.get("macNonce");
+  /* The query string is the normal path. The stored copy is what saves the
+     sign-in when Supabase ignores redirect_to and drops us on the Site URL with
+     none of these parameters left. */
+  const pendingHandoff = readPendingMacHandoff();
+  const macCallback = params.get("macCallback") || pendingHandoff?.macCallback || null;
+  const macNonce = params.get("macNonce") || pendingHandoff?.macNonce || null;
   const isMacAuth = Boolean(macCallback && macNonce);
   const showGoogle = view === "login" || view === "signup";
 
@@ -122,16 +127,8 @@ const ExtensionAuth = () => {
     const relayToMac = async () => {
       if (!macCallback || !macNonce) return false;
       try {
-        const url = new URL(macCallback);
-        if (url.protocol !== "http:" || !["127.0.0.1", "localhost"].includes(url.hostname)) {
-          throw new Error("Invalid Braino Mac callback URL.");
-        }
-        const response = await fetch(url.toString(), {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ...payload, nonce: macNonce }),
-        });
-        if (!response.ok) throw new Error(`Braino Mac callback failed (${response.status}).`);
+        await postMacHandoff(macCallback, macNonce, payload);
+        clearPendingMacHandoff();
         setTimeout(() => {
           window.close();
         }, 700);
@@ -207,6 +204,9 @@ const ExtensionAuth = () => {
     setError("");
     setSuccess("");
     setSubmitting(true);
+
+    /* Written down before we leave, because we may not come back to this URL. */
+    if (macCallback && macNonce) savePendingMacHandoff(macCallback, macNonce);
 
     const { error: googleError } = await supabase.auth.signInWithOAuth({
       provider: "google",

@@ -281,9 +281,11 @@ const SUPABASE_URL = ENV.VITE_SUPABASE_URL || ENV.SUPABASE_URL || "https://suwhg
 const SUPABASE_ANON_KEY = ENV.VITE_SUPABASE_ANON_KEY || ENV.VITE_SUPABASE_PUBLISHABLE_KEY || ENV.SUPABASE_ANON_KEY || "";
 const OPENAI_API_KEY = ENV.OPENAI_API_KEY || ENV.OPENAI_REALTIME_API_KEY || ENV.VITE_OPENAI_API_KEY || "";
 const ENV_BRAINO_AUTH_TOKEN = ENV.BRAINO_AUTH_TOKEN || ENV.BRAINO_SUPABASE_AUTH_TOKEN || ENV.VITE_BRAINO_AUTH_TOKEN || ENV.VITE_BRAINO_SUPABASE_AUTH_TOKEN || "";
-const DEFAULT_BRAINO_AUTH_ORIGINS = app.isPackaged
-  ? "https://www.trybraino.com"
-  : "https://www.trybraino.com,https://braino-git-cinemamode-itishs-projects.vercel.app";
+/* One origin, both packaged and not. The cinemamode preview that used to be
+   here was deleted and now returns 410, so every dev sign-in opened a dead tab
+   next to the real one. Point dev at a preview with BRAINO_MAC_AUTH_ORIGINS
+   when you actually have one running. */
+const DEFAULT_BRAINO_AUTH_ORIGINS = "https://www.trybraino.com";
 const BRAINO_AUTH_ORIGINS = (ENV.BRAINO_MAC_AUTH_ORIGINS || DEFAULT_BRAINO_AUTH_ORIGINS)
   .split(",")
   .map((origin) => origin.trim().replace(/\/+$/, ""))
