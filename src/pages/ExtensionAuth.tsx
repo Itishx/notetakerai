@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import SideBrainLogo from "@/components/SideBrainLogo";
 import { supabase } from "@/integrations/supabase/client";
-import { readPendingMacHandoff, savePendingMacHandoff, clearPendingMacHandoff, postMacHandoff } from "@/lib/macAuthHandoff";
+import { readPendingMacHandoff, savePendingMacHandoff, clearPendingMacHandoff, postMacHandoff, macDeepLinkUrl } from "@/lib/macAuthHandoff";
 
 type AuthView = "login" | "signup" | "forgot";
 const SUPABASE_AUTH_STORAGE_KEY = "sb-suwhgaxxdizowbyjlljj-auth-token";
@@ -125,17 +125,30 @@ const ExtensionAuth = () => {
     };
 
     const relayToMac = async () => {
-      if (!macCallback || !macNonce) return false;
+      if (!macNonce) return false;
+      /* First choice, and it still works in browsers that allow it. */
+      if (macCallback) {
+        try {
+          await postMacHandoff(macCallback, macNonce, payload);
+          clearPendingMacHandoff();
+          setTimeout(() => window.close(), 700);
+          return true;
+        } catch (relayError) {
+          console.log("Braino Mac local callback unavailable, handing over to macOS:", relayError);
+        }
+      }
+      /* Chrome blocks a public page from calling 127.0.0.1, and it blocks it
+         before the request leaves the browser. Hand the session to macOS
+         instead and let it wake the app. */
       try {
-        await postMacHandoff(macCallback, macNonce, payload);
         clearPendingMacHandoff();
-        setTimeout(() => {
-          window.close();
-        }, 700);
+        setSuccess("Opening Braino…");
+        window.location.href = macDeepLinkUrl(macNonce, payload);
+        setTimeout(() => window.close(), 1500);
         return true;
-      } catch (relayError) {
-        console.log("Braino Mac auth relay failed:", relayError);
-        setError(relayError instanceof Error ? relayError.message : "Braino Mac did not accept the sign-in yet.");
+      } catch (linkError) {
+        console.log("Braino Mac deep link failed:", linkError);
+        setError("Braino did not open. Make sure the app is running, then try again.");
         return false;
       }
     };

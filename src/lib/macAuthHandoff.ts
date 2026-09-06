@@ -73,3 +73,24 @@ export async function postMacHandoff(macCallback: string, macNonce: string, payl
   if (!response.ok) throw new Error(`Braino Mac callback failed (${response.status}).`);
   return true;
 }
+
+
+/* The way in that Chrome cannot block.
+ *
+ * Chrome no longer lets a public https page reach http://127.0.0.1 — it stops
+ * the request inside the browser, before our app is ever contacted, so no
+ * header on the app's side can help. Handing the session to macOS as a
+ * braino:// link is not a network request at all, so there is nothing to
+ * block. The nonce goes with it and the app checks it, so a link that did not
+ * come from the sign-in the app started is ignored. */
+export function macDeepLinkUrl(macNonce: string, payload: MacAuthPayload) {
+  const q = new URLSearchParams();
+  q.set("nonce", macNonce);
+  q.set("token", payload.token);
+  if (payload.refreshToken) q.set("refresh", payload.refreshToken);
+  if (payload.expiresAt) q.set("expires", String(payload.expiresAt));
+  q.set("uid", payload.userId);
+  q.set("name", payload.displayName);
+  if (payload.email) q.set("email", payload.email);
+  return `braino://auth?${q.toString()}`;
+}

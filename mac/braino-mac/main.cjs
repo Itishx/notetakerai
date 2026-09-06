@@ -749,7 +749,13 @@ async function supabaseAuthFetch(pathname, body) {
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(data?.error_description || data?.msg || data?.error || `Auth failed (${response.status}).`);
+    const error = new Error(data?.error_description || data?.msg || data?.error || `Auth failed (${response.status}).`);
+    /* Supabase answered and said no. That is a real sign-out. A fetch that
+       throws instead never reached Supabase at all, and means nothing about
+       whether the session is still good. */
+    error.authRejected = response.status === 400 || response.status === 401 || response.status === 403;
+    error.status = response.status;
+    throw error;
   }
   return data;
 }
@@ -780,9 +786,18 @@ async function getBrainoAuthToken(options = {}) {
     session = await refreshStoredBrainoSession(session);
     return session?.access_token || "";
   } catch (error) {
-    logMac("auth.refresh.failed", { error });
-    clearAuthSession();
-    return "";
+    /* This used to clear the session on any failure at all, so one second
+       without wifi signed you out and the only way back was a browser flow
+       that Chrome has been blocking for months. Now the login is only thrown
+       away when Supabase itself says the refresh token is no good. */
+    logMac("auth.refresh.failed", { error, rejected: Boolean(error?.authRejected), status: error?.status || null });
+    if (error?.authRejected) {
+      clearAuthSession();
+      return "";
+    }
+    /* Keep what we have. It may still be valid for a little longer, and the
+       next call tries the refresh again. */
+    return session?.access_token || "";
   }
 }
 
@@ -18290,8 +18305,65 @@ ipcMain.handle("braino-mac:system-say-stop", () => ({
   stopped: stopSystemSayProcesses(),
 }));
 
-app.on("second-instance", () => {
+/* ── Signing in without asking the browser to call us ──────────────────────
+   The old handoff had the website POST the session to a local port. Chrome
+   blocks that now: a public https page may not reach 127.0.0.1, and it stops
+   the request inside the browser, so no header on our side can help. Proved
+   with the same server and the check disabled, where it goes through.
+
+   So the browser hands the session to macOS instead, as braino://auth?…, and
+   macOS hands it to us. No network request, nothing to block. The nonce is
+   still checked, so a link that did not come from the sign-in we started is
+   ignored. */
+function handleBrainoDeepLink(rawUrl) {
+  let url;
+  try { url = new URL(rawUrl); } catch (_) { return false; }
+  if (url.protocol !== "braino:") return false;
+  const kind = (url.hostname || url.pathname.replace(/^\/+/, "")).toLowerCase();
+  if (kind !== "auth") { logMac("deeplink.ignored", { kind }); return false; }
+
+  const q = url.searchParams;
+  const nonce = q.get("nonce") || "";
+  if (!authBrowserFlow || nonce !== authBrowserFlow.nonce) {
+    logMac("deeplink.auth.bad_nonce", { hasFlow: Boolean(authBrowserFlow), hasNonce: Boolean(nonce) });
+    return false;
+  }
+
+  try {
+    const session = authSessionFromRelayPayload({
+      token: q.get("token"),
+      refreshToken: q.get("refresh"),
+      expiresAt: Number(q.get("expires")) || undefined,
+      userId: q.get("uid"),
+      displayName: q.get("name"),
+      email: q.get("email"),
+    });
+    if (!session?.access_token) throw new Error("missing_token");
+    saveAuthSession(session);
+    logMac("deeplink.auth.ok", { email: session.user?.email || null });
+    resolveAuthWaiters({ ok: true, source: "deeplink", email: session.user?.email || null });
+    stopAuthBrowserFlow({ closeTabs: true });
+    ensureDockWindowVisible("signed-in");
+    return true;
+  } catch (error) {
+    logMac("deeplink.auth.failed", { error });
+    return false;
+  }
+}
+
+app.setAsDefaultProtocolClient("braino", process.execPath, [path.resolve(process.argv[1] || "")]);
+
+app.on("open-url", (event, openedUrl) => {
+  event.preventDefault();
+  logMac("deeplink.received", { scheme: "braino" });
+  handleBrainoDeepLink(openedUrl);
+});
+
+app.on("second-instance", (_event, argv) => {
   logMac("app.second_instance.blocked", {});
+  /* A cold app opened by the link gets it in argv rather than through open-url. */
+  const link = (argv || []).find((arg) => typeof arg === "string" && arg.startsWith("braino://"));
+  if (link) handleBrainoDeepLink(link);
   ensureDockWindowVisible("second-instance");
 });
 
