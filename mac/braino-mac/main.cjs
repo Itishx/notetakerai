@@ -14818,6 +14818,8 @@ async function runMacHilLoop(command, resume = null) {
     };
     pendingReply = null;
     let turn = null;
+    let turnBrain = "hil";
+    let turnModel = "";
     const controller = new AbortController();
     macHilAbort = controller;
     try {
@@ -14830,6 +14832,13 @@ async function runMacHilLoop(command, resume = null) {
       if (!res.ok) throw new Error(`hil-loop ${res.status}`);
       const data = await res.json();
       turn = data?.turn;
+      // Which brain actually answered. The server is the only thing that knows:
+      // the model is chosen there on purpose, so this side must never infer it
+      // from a constant. Without this the log said "HIL-LOOP" whichever model
+      // replied, which is exactly how you end up unable to tell whether an
+      // expensive experiment is even running.
+      turnBrain = data?.meta?.brain === "astra" ? "astra" : "hil";
+      turnModel = String(data?.meta?.model || "");
       if (data?.meta?.parse_ok === false) throw new Error("unreadable turn");
       retried = 0; // a good turn clears the run's hiccup budget
       if (macHilAbort === controller) macHilAbort = null;
@@ -14861,8 +14870,14 @@ async function runMacHilLoop(command, resume = null) {
 
     const thinking = String(turn.thinking || "").trim();
     if (thinking) {
-      console.log(`[Braino HIL-LOOP] ${step + 1}: ${scrubForLog(thinking)}`);
-      sendTaskProgress({ status: "thinking", text: thinking.slice(0, 140) });
+      // The tag names the brain, not the endpoint. Reading "[Braino HIL-LOOP]"
+      // while Astra was driving is what made a deployed experiment invisible.
+      const tag = turnBrain === "astra" ? "Braino ASTRA" : "Braino HIL-LOOP";
+      console.log(`[${tag}] ${step + 1}: ${scrubForLog(thinking)}`);
+      logMac("hil.loop.turn", { step: step + 1, brain: turnBrain, model: turnModel });
+      // brain rides the same payload the caption does, so the notch can show who
+      // is thinking without a second channel that could disagree with this one.
+      sendTaskProgress({ status: "thinking", text: thinking.slice(0, 140), brain: turnBrain, model: turnModel });
       /* Say it out loud as he works. Watching a silent thing click around your
          screen is unnerving; hearing what it is doing is the difference between
          a tool and someone helping you. One breath, first sentence only, and

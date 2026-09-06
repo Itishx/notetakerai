@@ -10746,9 +10746,16 @@ window.brainoMac.onTaskProgress((progress) => {
       if (progress.status && progress.status !== "ready") setStatus(progress.status, progress.text || progress.status);
       cancelPendingNotchThinking();
       nfSetThinking("");
+      notchFace?.classList.remove("nf-astra");
       settleStaleThinkingStatus("task_progress.clear_notch");
     } catch (_) {}
     return;
+  }
+  // Who is thinking, carried on the same payload as the caption. Only ever set
+  // from what the server said, and cleared the moment a turn comes back on the
+  // ordinary brain, so the gold can never be left burning over a cheap run.
+  if (notchFace && progress.brain) {
+    notchFace.classList.toggle("nf-astra", progress.brain === "astra");
   }
   if (progress.status) setStatus(progress.status, progress.text || progress.status);
   if (progress.text) {
