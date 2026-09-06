@@ -6,6 +6,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { AuthProvider } from "@/contexts/AuthContext";
+import MacAuthCompleter from "./components/MacAuthCompleter";
 
 const Waitlist = lazy(() => import("./pages/Waitlist.tsx"));
 const BrainotesPage = lazy(() => import("./pages/BrainotesPage.tsx"));
@@ -336,6 +337,9 @@ export default function App() {
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
         <AuthProvider>
+          {/* Completes a Mac sign-in even when Supabase lands us somewhere
+              other than the page that started it. */}
+          <MacAuthCompleter />
           <TooltipProvider>
             <Toaster />
             <Sonner />

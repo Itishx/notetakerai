@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import SideBrainLogo from "@/components/SideBrainLogo";
 import { supabase } from "@/integrations/supabase/client";
+import { readPendingMacHandoff, savePendingMacHandoff, clearPendingMacHandoff, postMacHandoff, macDeepLinkUrl } from "@/lib/macAuthHandoff";
 
 type AuthView = "login" | "signup" | "forgot";
 const SUPABASE_AUTH_STORAGE_KEY = "sb-suwhgaxxdizowbyjlljj-auth-token";
@@ -51,8 +52,12 @@ const ExtensionAuth = () => {
 
   const params = new URLSearchParams(window.location.search);
   const extensionId = params.get("ext");
-  const macCallback = params.get("macCallback");
-  const macNonce = params.get("macNonce");
+  /* The query string is the normal path. The stored copy is what saves the
+     sign-in when Supabase ignores redirect_to and drops us on the Site URL with
+     none of these parameters left. */
+  const pendingHandoff = readPendingMacHandoff();
+  const macCallback = params.get("macCallback") || pendingHandoff?.macCallback || null;
+  const macNonce = params.get("macNonce") || pendingHandoff?.macNonce || null;
   const isMacAuth = Boolean(macCallback && macNonce);
   const showGoogle = view === "login" || view === "signup";
 
@@ -120,25 +125,30 @@ const ExtensionAuth = () => {
     };
 
     const relayToMac = async () => {
-      if (!macCallback || !macNonce) return false;
-      try {
-        const url = new URL(macCallback);
-        if (url.protocol !== "http:" || !["127.0.0.1", "localhost"].includes(url.hostname)) {
-          throw new Error("Invalid Braino Mac callback URL.");
+      if (!macNonce) return false;
+      /* First choice, and it still works in browsers that allow it. */
+      if (macCallback) {
+        try {
+          await postMacHandoff(macCallback, macNonce, payload);
+          clearPendingMacHandoff();
+          setTimeout(() => window.close(), 700);
+          return true;
+        } catch (relayError) {
+          console.log("Braino Mac local callback unavailable, handing over to macOS:", relayError);
         }
-        const response = await fetch(url.toString(), {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ...payload, nonce: macNonce }),
-        });
-        if (!response.ok) throw new Error(`Braino Mac callback failed (${response.status}).`);
-        setTimeout(() => {
-          window.close();
-        }, 700);
+      }
+      /* Chrome blocks a public page from calling 127.0.0.1, and it blocks it
+         before the request leaves the browser. Hand the session to macOS
+         instead and let it wake the app. */
+      try {
+        clearPendingMacHandoff();
+        setSuccess("Opening Braino…");
+        window.location.href = macDeepLinkUrl(macNonce, payload);
+        setTimeout(() => window.close(), 1500);
         return true;
-      } catch (relayError) {
-        console.log("Braino Mac auth relay failed:", relayError);
-        setError(relayError instanceof Error ? relayError.message : "Braino Mac did not accept the sign-in yet.");
+      } catch (linkError) {
+        console.log("Braino Mac deep link failed:", linkError);
+        setError("Braino did not open. Make sure the app is running, then try again.");
         return false;
       }
     };
@@ -207,6 +217,9 @@ const ExtensionAuth = () => {
     setError("");
     setSuccess("");
     setSubmitting(true);
+
+    /* Written down before we leave, because we may not come back to this URL. */
+    if (macCallback && macNonce) savePendingMacHandoff(macCallback, macNonce);
 
     const { error: googleError } = await supabase.auth.signInWithOAuth({
       provider: "google",
