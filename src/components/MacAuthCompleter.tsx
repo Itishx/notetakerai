@@ -8,7 +8,7 @@
  * details up out of storage and finishes the handoff anyway. */
 import { useEffect, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { readPendingMacHandoff, clearPendingMacHandoff, postMacHandoff } from "@/lib/macAuthHandoff";
+import { readPendingMacHandoff, clearPendingMacHandoff, postMacHandoff, leaveSessionForMac } from "@/lib/macAuthHandoff";
 
 export default function MacAuthCompleter() {
   const { user, session, profile } = useAuth();
@@ -33,7 +33,7 @@ export default function MacAuthCompleter() {
       user.email?.split("@")[0] ||
       "User";
 
-    void postMacHandoff(pending.macCallback, pending.macNonce, {
+    const payload = {
       action: "authToken",
       token: session.access_token,
       refreshToken: session.refresh_token,
@@ -41,11 +41,14 @@ export default function MacAuthCompleter() {
       userId: user.id,
       displayName,
       email: user.email,
-    })
+    } as const;
+
+    /* The local port first for browsers that still allow it, then the place the
+       app actually looks. */
+    void postMacHandoff(pending.macCallback, pending.macNonce, payload)
+      .catch(() => leaveSessionForMac(pending.macNonce, payload, session.access_token))
       .then(() => clearPendingMacHandoff())
       .catch((error) => {
-        /* The app may have given up and be on a new port by now. Nothing to
-           show here: the person is on a normal page and is signed in. */
         console.log("Braino Mac handoff from fallback page failed:", error);
         clearPendingMacHandoff();
       });
