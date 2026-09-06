@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import SideBrainLogo from "@/components/SideBrainLogo";
 import { supabase } from "@/integrations/supabase/client";
-import { readPendingMacHandoff, savePendingMacHandoff, clearPendingMacHandoff, postMacHandoff, macDeepLinkUrl } from "@/lib/macAuthHandoff";
+import { readPendingMacHandoff, savePendingMacHandoff, clearPendingMacHandoff, postMacHandoff, leaveSessionForMac } from "@/lib/macAuthHandoff";
 
 type AuthView = "login" | "signup" | "forgot";
 const SUPABASE_AUTH_STORAGE_KEY = "sb-suwhgaxxdizowbyjlljj-auth-token";
@@ -138,17 +138,17 @@ const ExtensionAuth = () => {
         }
       }
       /* Chrome blocks a public page from calling 127.0.0.1, and it blocks it
-         before the request leaves the browser. Hand the session to macOS
-         instead and let it wake the app. */
+         before the request leaves the browser, so leave the session where the
+         app can come and collect it instead. */
       try {
+        await leaveSessionForMac(macNonce, payload, authSession.access_token);
         clearPendingMacHandoff();
-        setSuccess("Opening Braino…");
-        window.location.href = macDeepLinkUrl(macNonce, payload);
+        setSuccess("Signed in. You can close this tab.");
         setTimeout(() => window.close(), 1500);
         return true;
-      } catch (linkError) {
-        console.log("Braino Mac deep link failed:", linkError);
-        setError("Braino did not open. Make sure the app is running, then try again.");
+      } catch (handoffError) {
+        console.log("Braino Mac handoff failed:", handoffError);
+        setError(handoffError instanceof Error ? handoffError.message : "Braino did not pick up the sign-in.");
         return false;
       }
     };

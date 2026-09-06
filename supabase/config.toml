@@ -229,6 +229,13 @@ entrypoint = "./functions/linkedin/linkedin-generate/index.ts"
 entrypoint = "./functions/linkedin/dispatch-channel-posts/index.ts"
 verify_jwt = false
 
+# ── mac sign-in handoff ────────────────────────────────────────────────
+# The app polls this with a nonce and no JWT, because having no session is
+# exactly why it is asking. The nonce is the credential and it is spent on use.
+[functions.mac-auth-handoff]
+entrypoint = "./functions/auth/mac-auth-handoff/index.ts"
+verify_jwt = false
+
 # ── notion ─────────────────────────────────────────────────────────────
 
 [functions.notion-connection-status]

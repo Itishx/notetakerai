@@ -915,6 +915,7 @@ function stopAuthBrowserFlow(options = {}) {
   if (!flow) return;
   authBrowserFlow = null;
   if (flow.timeout) clearTimeout(flow.timeout);
+  if (flow.poll) clearInterval(flow.poll);
   if (flow.server) {
     try { flow.server.close(); } catch (_) {}
   }
@@ -1001,8 +1002,47 @@ async function startBrowserAuthFlow(reason = "realtime") {
   });
 
   const port = server.address()?.port;
+
+  /* The local port above is kept for browsers that still allow a page to reach
+     it, but Chrome does not, so this is the path that actually works: the
+     browser leaves the session under this nonce and we come and collect it.
+     Nothing has to reach us, which is the whole point. */
+  const claimHandoff = async () => {
+    const res = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/mac-auth-handoff`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+      },
+      body: JSON.stringify({ action: "claim", nonce }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data?.error || `claim failed (${res.status})`);
+    return data;
+  };
+
+  const poll = setInterval(async () => {
+    if (!authBrowserFlow || authBrowserFlow.nonce !== nonce) { clearInterval(poll); return; }
+    try {
+      const result = await claimHandoff();
+      if (!result?.ok) return;
+      const session = authSessionFromRelayPayload(result.payload || {});
+      if (!session?.access_token) return;
+      saveAuthSession(session);
+      logMac("auth.handoff.claimed", { email: session.user?.email || null });
+      resolveAuthWaiters({ ok: true, source: "handoff", email: session.user?.email || null });
+      stopAuthBrowserFlow({ closeTabs: true });
+    } catch (error) {
+      /* Waiting is the normal answer here, and a blip is not worth a line in
+         the log every two seconds. */
+      logMac("auth.handoff.poll_failed", { error: String(error?.message || error) });
+    }
+  }, 2000);
+
   authBrowserFlow = {
     server,
+    poll,
     port,
     nonce,
     reason,

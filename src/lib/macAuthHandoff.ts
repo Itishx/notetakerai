@@ -75,14 +75,12 @@ export async function postMacHandoff(macCallback: string, macNonce: string, payl
 }
 
 
-/* The way in that Chrome cannot block.
+/* Leaving the session where the app can come and collect it.
  *
- * Chrome no longer lets a public https page reach http://127.0.0.1 — it stops
- * the request inside the browser, before our app is ever contacted, so no
- * header on the app's side can help. Handing the session to macOS as a
- * braino:// link is not a network request at all, so there is nothing to
- * block. The nonce goes with it and the app checks it, so a link that did not
- * come from the sign-in the app started is ignored. */
+ * Chrome will not let a public https page reach http://127.0.0.1, and macOS has
+ * no braino:// binding while the Mac app runs from source, so neither side can
+ * call the other. They meet in the middle instead: the browser leaves the
+ * session under the app's own nonce and the app claims it once. */
 export function macDeepLinkUrl(macNonce: string, payload: MacAuthPayload) {
   const q = new URLSearchParams();
   q.set("nonce", macNonce);
@@ -93,4 +91,23 @@ export function macDeepLinkUrl(macNonce: string, payload: MacAuthPayload) {
   q.set("name", payload.displayName);
   if (payload.email) q.set("email", payload.email);
   return `braino://auth?${q.toString()}`;
+}
+
+
+export async function leaveSessionForMac(macNonce: string, payload: MacAuthPayload, accessToken: string) {
+  const base = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.replace(/\/$/, "");
+  const anon = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
+  if (!base) throw new Error("Supabase is not configured.");
+  const res = await fetch(`${base}/functions/v1/mac-auth-handoff`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(anon ? { apikey: anon } : {}),
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({ action: "put", nonce: macNonce, payload }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || data?.error) throw new Error(data?.error || `Handoff failed (${res.status}).`);
+  return true;
 }
