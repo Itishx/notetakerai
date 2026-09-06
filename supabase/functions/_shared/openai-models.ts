@@ -30,3 +30,23 @@ export const BRAINO_RESCUE_REASONING_EFFORT = "medium" as const;
 // for the JSON. The turn then comes back empty and reads exactly like a broken
 // model. Roomier than the standard loop for that reason alone.
 export const BRAINO_RESCUE_MAX_TOKENS = 6000;
+
+// ── Which brain drives ───────────────────────────────────────────────────────
+// "hil"   — he thinks, and Astra is called in only when he gets stuck.
+// "astra" — Astra thinks on every turn and he never touches the wheel.
+//
+// This branch runs "astra" on purpose, to find out how good the ceiling actually
+// is when nothing cheap is in the way. It is an experiment, not a default, and
+// the two numbers that decide whether it survives are both worse than his:
+// roughly 5.5s a turn against 1.7s, and roughly a dollar a task against cents.
+//
+// Read once here rather than per call so both surfaces that share hil-loop, the
+// lab and the extension's delegate, can never disagree about who is driving.
+export const BRAINO_BRAIN: "hil" | "astra" = "astra";
+
+// Effort is the cost dial, and it is set differently for the two modes on
+// purpose. A rescue is one hard judgement after a wall, and worth medium. Every
+// turn of an ordinary run is not: most of them are "click the obvious button",
+// and paying medium reasoning for those is how a task that should cost cents
+// costs a dollar. Low is the default when Astra drives everything.
+export const BRAINO_ASTRA_ALL_REASONING_EFFORT = "low" as const;

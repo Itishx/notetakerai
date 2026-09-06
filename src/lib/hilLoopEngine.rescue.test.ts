@@ -72,6 +72,28 @@ describe("handing off to Astra", () => {
     expect(sent).toHaveLength(2);
   });
 
+  it("does not offer a handoff when Astra is already driving", async () => {
+    // The mode where Astra thinks on every turn. A run that gets stuck here has
+    // nothing better to be handed to, and dressing that up as a rescue would be
+    // a gold card promising a brain that is already on the job.
+    const astraTurn = (decision: Decision) => {
+      const b = turnBody(decision) as any;
+      b.meta.brain = "astra";
+      b.meta.model = "gpt-6-astra";
+      return b;
+    };
+    mockServer([astraTurn({ type: "blocked", message: "no way in" })]);
+    const runner = new HilLoopRunner("http://x", "k", () => {});
+    await runner.start("do the thing", "");
+
+    expect(runner.events.filter((e) => e.kind === "handoff")).toHaveLength(0);
+    // It still reads as Astra, it just was not handed over.
+    expect(runner.onAstra).toBe(true);
+    expect(runner.handedOff).toBe(false);
+    // And a wall still ends the run rather than looping for a rescue that cannot come.
+    expect(runner.events.some((e) => e.kind === "ending" && e.outcome === "blocked")).toBe(true);
+  });
+
   it("sends the flag on every turn of a rescue, not just the first", async () => {
     const sent = mockServer([
       turnBody({ type: "blocked", message: "no way in" }),

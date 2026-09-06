@@ -369,3 +369,18 @@
 @media (prefers-reduced-motion: reduce) {
   .hil-loop-handoff-label { animation: none; background: none; -webkit-text-fill-color: #a8792a; color: #a8792a; }
 }
+
+/* Astra driving the whole run. Same gold as the handoff, quieter: a handoff is a
+   moment and earns the shimmer, this is a condition and would only nag. */
+.hil-astra-badge {
+  padding: 3px 9px;
+  border: 1px solid #d9a441;
+  border-radius: 999px;
+  background: #fdf3df;
+  color: #6b4c12;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .11em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
