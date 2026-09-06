@@ -664,49 +664,51 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ── The bridge ────────────────────────────────────────────────────
-          One short section between what he can do and what we do with it.
-          Without it the tabs below arrive as a menu rather than a decision. */}
-      <section className="ld-lead ac-violet apple-reveal" id="direction">
-        <div className="ld-wrap">
-          <p className="ld-lead-tag">Where this goes</p>
-          <h2 className="ld-lead-name">That is what he <span className="tone">can</span> do</h2>
-          <p className="ld-lead-line">
-            Any of it is useful on its own. What makes him a companion rather than a very good
-            tool is what he does with it when nobody has asked him anything. So we pointed him
-            at two things: the day you are having, and the company you are building.
-          </p>
-        </div>
-      </section>
-
-      {/* ── The two directions, as tabs ───────────────────────────────────
-          One section, two panels, identical shape: a problem, then three jobs.
-          They used to be four separate sections interleaved with each other,
-          which meant a reader who only wanted the free half had to scroll past
-          the founder argument to get through their own. */}
+      {/* ── Where this goes: the split, and the split is the tabs ────────
+          This was two stacked sections, a bridge and then a tab strip, which
+          put two headings back to back and read as cramped. It is one section
+          now, and the fork in the picture IS the tab control: the reader picks
+          a branch rather than reading a paragraph about there being two. Copy
+          is down to a heading and one line, because the diagram is the
+          argument. */}
       <section className="ld-kinds apple-reveal" id="kinds">
         <div className="ld-wrap">
-          <p className="apple-eyebrow">There are two Brainos</p>
-          <h2 className="ld-h2">One runs your day. <span className="tone">One gets you found.</span></h2>
-          <p className="ld-lede">
-            The first is free and it is for anyone with a screen. The second is Braino for
-            founders, and we call it Foundry. <b>It sits on top of the first one, never instead
-            of it.</b>
-          </p>
+          <div className="ld-split-head">
+            <p className="apple-eyebrow">Where this goes</p>
+            <h2 className="ld-h2">One Braino. <span className="tone">Two jobs.</span></h2>
+            <p className="ld-lede">Pick the one you came for.</p>
+          </div>
 
-          <div className="ws-tabs apple-reveal ld-sidetabs" role="tablist" aria-label="Which Braino">
-            <button
-              type="button" role="tab" id="side-tab-companion"
-              aria-selected={sideTab === "companion"} aria-controls="side-panel-companion"
-              className={"ws-tab" + (sideTab === "companion" ? " is-on" : "")}
-              onClick={() => setSideTab("companion")}
-            >Braino Companion</button>
-            <button
-              type="button" role="tab" id="side-tab-foundry"
-              aria-selected={sideTab === "foundry"} aria-controls="side-panel-foundry"
-              className={"ws-tab" + (sideTab === "foundry" ? " is-on" : "")}
-              onClick={() => setSideTab("foundry")}
-            >Braino for Founders</button>
+          <div className="ld-split">
+            <figure className="ld-split-node">
+              <img src="/braino-standing.svg" alt="" aria-hidden="true" />
+            </figure>
+            <span className="ld-split-stem" aria-hidden="true" />
+
+            <div className="ld-split-forks" role="tablist" aria-label="Which Braino">
+              <button
+                type="button" role="tab" id="side-tab-companion"
+                aria-selected={sideTab === "companion"} aria-controls="side-panel-companion"
+                className={"ld-fork" + (sideTab === "companion" ? " is-on" : "")}
+                onClick={() => setSideTab("companion")}
+              >
+                <i>Free</i>
+                <b>Braino Companion</b>
+                <span>He runs your day</span>
+                <em>Habits · Focus · Routines</em>
+              </button>
+              <button
+                type="button" role="tab" id="side-tab-foundry"
+                aria-selected={sideTab === "foundry"} aria-controls="side-panel-foundry"
+                className={"ld-fork is-paid" + (sideTab === "foundry" ? " is-on" : "")}
+                onClick={() => setSideTab("foundry")}
+              >
+                <i>Paid</i>
+                <b>Braino for Founders</b>
+                <span>He gets you found</span>
+                <em>Content · Optics · Outbound</em>
+              </button>
+            </div>
           </div>
 
           <div
