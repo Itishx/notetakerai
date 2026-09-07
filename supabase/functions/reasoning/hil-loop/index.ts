@@ -96,6 +96,7 @@ function renderExecJs(): string {
     "",
     "Rules:",
     "- Return the ANSWER, not a dump. You get back exactly what you return. An expression or an (function(){...})() both work.",
+    "- There is room for a real result, around twelve thousand characters. If you go past it you are TOLD so, in the result, with the real length. That is not a failure and not a reason to run a smaller version of the same script: use what you got, or pick fewer fields next time.",
     "- Anything thrown comes back to you with its message, so you do not need your own try/catch.",
     "- Navigation ends the script. Do the work on this page, return what you learned, move on next turn.",
     "- If a selector might miss, check and return that fact. Knowing the button was not there is worth a turn; a stack trace is not.",
@@ -256,7 +257,13 @@ function renderState(command: string, context: string, state: LoopState | null):
       `intent: ${state!.lastStep.intent}`,
       `action: ${JSON.stringify(state!.lastStep.action ?? {}).slice(0, 400)}`,
       `expected: ${state!.lastStep.expects}`,
-      `result: ${JSON.stringify(state!.lastStep.result ?? null).slice(0, 1500)}`,
+      /* 1500 was sized for a click, whose result is the word "ok". A script's
+         result IS the work: twenty listings read in one pass is legitimately
+         twelve thousand characters, and cutting that here undid the whole point
+         of letting it write a script. It was the tightest of the three places
+         the same result got trimmed, so it decided what the model actually saw,
+         and what it saw was one listing and a sentence that stopped mid-word. */
+      `result: ${JSON.stringify(state!.lastStep.result ?? null).slice(0, 14000)}`,
     ].join("\n"));
   }
 

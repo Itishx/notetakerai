@@ -97,3 +97,25 @@ test("a script's return value survives the wrapper", () => {
   assert.equal(eval(wrap("undefined")), "(the script returned nothing)");
   assert.match(eval(wrap("null.x")), /^BRAINO_ERR /);
 });
+
+test("a cut-off script result says it was cut off", () => {
+  /* Nine straight turns of "the output was cut off, I will try a shorter
+     extraction" came from silence, not from the cut. A 26,269 character result
+     was trimmed to 1,500 with no marker, so the model could see its answer stop
+     mid-word and had no way to learn why. Being told the real length turns a
+     wall into a fact it can act on. */
+  const main = readFileSync(new URL("../mac/braino-mac/main.cjs", import.meta.url), "utf8");
+  assert.match(main, /CUT OFF HERE/, "an over-long exec_js result must announce the cut");
+  assert.match(main, /of \$\{said\.length\} characters/, "and must say how much there really was");
+
+  /* The three places the same result was trimmed, all of which had to move.
+     The server one decided what the model actually saw. */
+  const server = readFileSync(
+    new URL("../supabase/functions/reasoning/hil-loop/index.ts", import.meta.url), "utf8");
+  const lastStep = server.match(/result: \$\{JSON\.stringify\(state!\.lastStep\.result \?\? null\)\.slice\(0, (\d+)\)\}/);
+  assert.ok(lastStep && Number(lastStep[1]) >= 12000,
+    `lastStep result budget is ${lastStep && lastStep[1]}, too small to carry a script's findings`);
+
+  assert.match(main, /My script returned: \$\{String\(result\.answer\)\.slice\(0, 4000\)\}/,
+    "script findings must be filed as script findings, not as a search answer");
+});

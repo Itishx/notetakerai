@@ -14851,10 +14851,29 @@ async function macExecuteHilAction(action, elements) {
       return { ok: false, error: `The script threw: ${said.replace("BRAINO_ERR ", "")}` };
     }
     logMac("hil.exec_js.done", { chars: said.length });
-    // Truncated at the same 3000 the look action uses: a script that returns a
-    // whole page has misunderstood the instruction, and forwarding all of it
-    // would spend the turn's budget proving that.
-    return { ok: true, answer: said.slice(0, 3000) || "The script ran and returned nothing." };
+    /* Generous, and never silent about the cut.
+     *
+     * 3000 was borrowed from the look action, where it is right: a screen
+     * description that long has said everything. A script reading twenty Amazon
+     * listings legitimately returns twenty five thousand characters, and cutting
+     * that to three thousand mid-listing produced nine straight turns of "the
+     * output was cut off, I will try a shorter extraction" against a wall it
+     * could not see. It was not failing at the task, it was failing to find out
+     * what had happened to its own result.
+     *
+     * So the budget is real, and when it is exceeded the result SAYS so. A model
+     * told it got the first third of something can ask for the rest. A model
+     * handed a sentence that stops mid-word has to guess, and it guessed wrong
+     * eight times. */
+    const EXEC_JS_MAX = 12000;
+    if (said.length > EXEC_JS_MAX) {
+      logMac("hil.exec_js.truncated", { chars: said.length, kept: EXEC_JS_MAX });
+      return {
+        ok: true,
+        answer: `${said.slice(0, EXEC_JS_MAX)}\n\n[CUT OFF HERE. That was the first ${EXEC_JS_MAX} of ${said.length} characters. Nothing is wrong: your script returned more than fits in one turn. Do not retry it smaller for its own sake. Either use what is above, or return fewer fields next time.]`,
+      };
+    }
+    return { ok: true, answer: said || "The script ran and returned nothing." };
   }
   if (type === "tool") {
     const name = String(action.tool || "");
@@ -15248,7 +15267,18 @@ async function runMacHilLoop(command, resume = null) {
     // A look or a search is worthless if it evaporates next turn, so its content
     // is promoted into facts, which DO persist.
     if (result?.sees) state.facts.push(`I looked and saw: ${String(result.sees).slice(0, 600)}`);
-    if (result?.answer) state.facts.push(`Search "${stepObj.action?.query}" answered: ${String(result.answer).slice(0, 600)}`);
+    /* A script result is not a search result and must not be filed as one.
+     *
+     * Both arrive as .answer, so an exec_js return was being written into facts
+     * as 'Search "undefined" answered:' and cut at 600 characters. That is the
+     * third and smallest of the three places the same result was being trimmed,
+     * and the one that decided what survived past the next turn. Findings from a
+     * script are the whole point of running it, so they get room. */
+    if (result?.answer && stepObj.action?.type === "exec_js") {
+      state.facts.push(`My script returned: ${String(result.answer).slice(0, 4000)}`);
+    } else if (result?.answer) {
+      state.facts.push(`Search "${stepObj.action?.query}" answered: ${String(result.answer).slice(0, 600)}`);
+    }
     if (state.facts.length > 12) state.facts = state.facts.slice(-12);
     // Verify against a FRESH observation, the way the browser does: the point of an
     // assert is what the screen looks like after, not whether the call returned.
