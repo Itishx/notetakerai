@@ -159,3 +159,22 @@ test("a run reports where its time went", () => {
   const tail = main.slice(main.indexOf('logMac("hil.loop.budget"'));
   assert.match(tail.slice(0, 900), /finally \{[\s\S]*macReportRunSpeed/);
 });
+
+test("a search hands over its links, and they survive the turn", () => {
+  /* "The news search returned summaries but no usable article links on both
+     attempts. I could not verify the reported stories, so I stopped rather than
+     build a briefing from unsupported claims."
+
+     That was not a failed search. web_search counted its sources for the log
+     line and then returned only the prose, so the loop got four thousand
+     characters of summary and not one URL: nothing to read, nothing to check,
+     and refusing to invent it was the right call. Two places had to change,
+     because handing the links over is undone if the next line trims them. */
+  const main = readFileSync(new URL("../mac/braino-mac/main.cjs", import.meta.url), "utf8");
+  assert.match(main, /SOURCES, real URLs you can read with __brainoPage\(url\)/,
+    "search results must carry their links, and say what to do with them");
+
+  const factLine = main.match(/Search "\$\{stepObj\.action\?\.query\}" answered: \$\{String\(result\.answer\)\.slice\(0, (\d+)\)\}/);
+  assert.ok(factLine && Number(factLine[1]) >= 2000,
+    `search findings are kept at ${factLine && factLine[1]} chars, which cuts the links off the end`);
+});

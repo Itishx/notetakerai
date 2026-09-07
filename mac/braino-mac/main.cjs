@@ -11033,7 +11033,38 @@ async function runMacWebSearch(query) {
       durationMs: Date.now() - startedAt,
     });
     sendTaskProgress({ status: "done", text: "Found it" });
-    return { ok: true, say: say || `I searched but did not find a clear answer for ${trimmed}.` };
+    /* The sources were being counted for the log and then thrown away.
+     *
+     * That was fine when the only consumer was a person hearing an answer out
+     * loud. It is not fine now: a loop that is asked to write a briefing gets
+     * four thousand characters of summary and not one link, so it cannot read a
+     * single article, cannot check a single claim, and correctly refuses to
+     * write the thing rather than invent it. "The news search returned summaries
+     * but no usable article links on both attempts" was not a failure to search.
+     * It was the search withholding what it had already found.
+     *
+     * Handing the URLs over is also what makes __brainoPage worth having: search
+     * for the stories, fetch the five articles in one script, write from what
+     * they actually say. */
+    const sources = Array.isArray(data.sources) ? data.sources.slice(0, 8) : [];
+    const sourceLines = sources
+      .map((src) => {
+        const url = String(src?.url || "").trim();
+        if (!url) return "";
+        const title = String(src?.title || "").trim();
+        return title ? `- ${title} :: ${url}` : `- ${url}`;
+      })
+      .filter(Boolean);
+    const withSources = sourceLines.length
+      ? `${say}\n\nSOURCES, real URLs you can read with __brainoPage(url):\n${sourceLines.join("\n")}`
+      : say;
+    return {
+      ok: true,
+      say: withSources || `I searched but did not find a clear answer for ${trimmed}.`,
+      // Kept separate too, so a caller that wants the links rather than the
+      // prose does not have to parse them back out of a sentence.
+      sources,
+    };
   } catch (error) {
     logMac("web_search.failed", { query: textForLog(trimmed), error });
     return googleFallback(error?.message || "error");
@@ -15362,7 +15393,11 @@ async function runMacHilLoop(command, resume = null) {
     if (result?.answer && stepObj.action?.type === "exec_js") {
       state.facts.push(`My script returned: ${String(result.answer).slice(0, 4000)}`);
     } else if (result?.answer) {
-      state.facts.push(`Search "${stepObj.action?.query}" answered: ${String(result.answer).slice(0, 600)}`);
+      /* 600 was sized for a spoken answer, and the sources are appended to the
+         END of one, so at 600 every link was cut off before it could be used.
+         Fixing the search to hand over its URLs would have changed nothing while
+         this line quietly removed them one turn later. */
+      state.facts.push(`Search "${stepObj.action?.query}" answered: ${String(result.answer).slice(0, 2500)}`);
     }
     if (state.facts.length > 12) state.facts = state.facts.slice(-12);
     // Verify against a FRESH observation, the way the browser does: the point of an
