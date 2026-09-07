@@ -204,3 +204,33 @@ test("no tool is a website, not a dead end", () => {
      being silently stripped down to nothing by a filter it does not know about. */
   assert.match(server, /have \? HIL_TOOL_CATALOG\.filter\(\(t\) => have\.has\(t\.name\)\) : HIL_TOOL_CATALOG/);
 });
+
+test("a page that builds itself in the browser says so, once", () => {
+  /* Product Hunt is React, so its HTML is a shell and __brainoPage came back
+     with an empty object. Twice, at seven and a half seconds each, because
+     "nothing" and "nothing yet" look identical and the sensible answer to an
+     empty result is to try again. Fifteen seconds and two turns to learn what
+     the first attempt already knew. */
+  const main = readFileSync(new URL("../mac/braino-mac/main.cjs", import.meta.url), "utf8");
+  const helpers = main.slice(main.indexOf("const helpers = `"), main.indexOf("const wrapped = `"));
+  assert.match(helpers, /empty shell/, "an unrenderable page must be named, not returned empty");
+  assert.match(helpers, /Do not retry this/, "and must say not to retry, or it will be");
+  assert.match(helpers, /Navigate to it instead/, "and must name the way round");
+});
+
+test("Google Docs is written through the API, never typed into", () => {
+  /* Five turns and two minutes of clicking at a canvas, ending in an empty
+     document. Docs has no contenteditable to focus. The endpoints to do it
+     properly had been deployed for months and nothing told the model. */
+  const main = readFileSync(new URL("../mac/braino-mac/main.cjs", import.meta.url), "utf8");
+  assert.match(main, /google_doc_create: \(a\) => createGoogleDocWithText/);
+  assert.match(main, /google-drive-create-doc/);
+  assert.match(main, /google-docs-append/);
+
+  const catalog = readFileSync(
+    new URL("../supabase/functions/_shared/human-intelligence/hil-tool-catalog.ts", import.meta.url), "utf8");
+  const line = catalog.split("\n").find((l) => l.includes('name: "google_doc_create"'));
+  assert.ok(line, "the tool must be in the catalog or the model is never told it exists");
+  assert.match(line, /never try to type into the page/,
+    "the gloss must say why, or it will reach for the page again");
+});

@@ -14643,6 +14643,57 @@ async function macLookAtScreen(goal = "") {
   }
 }
 
+/* Writing a Google Doc, through the API rather than through the page.
+ *
+ * The Product Hunt run found its five products, opened a doc, and then spent
+ * five turns and about two minutes failing to type into it: click the body,
+ * no cursor; click again, no cursor; turn on screen-reader mode; insert into
+ * the editable frame; rejected. It gave up honestly and left an empty document.
+ *
+ * None of that was going to work. Google Docs draws its body on a canvas, so
+ * there is no contenteditable and nothing to focus. It is the one page on the
+ * web where "drive the site" is the wrong instinct, and the model reached for
+ * it because nobody had offered it anything else.
+ *
+ * The endpoints existed the whole time. google-drive-create-doc and
+ * google-docs-append have been deployed for months, and neither the Mac nor the
+ * tool catalog mentioned them, so the brain could not know.
+ */
+async function createGoogleDocWithText(title, text) {
+  const auth = authStatusPayload();
+  if (!auth.userId) return { ok: false, say: "You are not signed in, so I cannot make a Google Doc." };
+  const authToken = await getBrainoAuthToken();
+  if (!authToken) return { ok: false, say: "I could not authenticate to Google, so I cannot make the doc." };
+  const base = SUPABASE_URL.replace(/\/$/, "");
+  const headers = {
+    "Content-Type": "application/json",
+    apikey: SUPABASE_ANON_KEY,
+    Authorization: `Bearer ${authToken}`,
+  };
+  const call = async (fn, body) => {
+    const res = await fetch(`${base}/functions/v1/${fn}`, { method: "POST", headers, body: JSON.stringify(body) });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data?.error || `${fn} failed (${res.status})`);
+    return data;
+  };
+  try {
+    const doc = await call("google-drive-create-doc", { userIdentifier: auth.userId, docName: title });
+    /* Appended in one call rather than paragraph by paragraph. A report is one
+       thing, and splitting it into fifteen requests is fifteen chances for half
+       a document to exist. */
+    if (text.trim()) {
+      await call("google-docs-append", { userIdentifier: auth.userId, docId: doc.id, text });
+    }
+    logMac("google_doc.created", { docId: doc.id, chars: text.length });
+    return { ok: true, say: `Created the Google Doc "${doc.name || title}"${doc.url ? `: ${doc.url}` : ""}` };
+  } catch (error) {
+    logMac("google_doc.failed", { error: String(error?.message || error) });
+    /* Named, because the fix is a consent screen and no amount of retrying is
+       going to get past one. */
+    return { ok: false, say: `I could not write the Google Doc: ${String(error?.message || error)}. If Drive is not connected yet, that is done once on the website.` };
+  }
+}
+
 /* Braino's own hands, reachable from the loop.
  *
  * The catalog names 115 abilities and every one of them was locked behind the
@@ -14678,6 +14729,7 @@ const MAC_HIL_TOOLS = {
   read_selection: (a) => actOnSelectedText({ verb: String(a.verb || "summarise"), language: a.language, speakOnly: true }),
   alarm_set: (a) => startAlarm(Number(a.fireAt), String(a.label || "")),
   whatsapp_send: (a) => sendWhatsAppMessage(String(a.recipient || ""), String(a.message || "")),
+  google_doc_create: (a) => createGoogleDocWithText(String(a.title || "Untitled"), String(a.text || "")),
   timer_set: (a) => startReminder(Number(a.seconds || a.duration || 0), String(a.label || "")),
   /* One name, two doors. The catalog calls it "open a named app, known website
      or local file", and the loop reached for it and was told it did not exist,
@@ -14926,7 +14978,22 @@ async function macExecuteHilAction(action, elements) {
       + `var x=new XMLHttpRequest();x.open("GET",u,false);x.send();`
       + `if(x.status>=400)throw new Error("__brainoGet "+x.status+" for "+u);return x.responseText}`
       + `function __brainoDoc(h){return new DOMParser().parseFromString(h,"text/html")}`
-      + `function __brainoPage(u){return __brainoDoc(__brainoGet(u))}`;
+      /* A page that renders itself in the browser has no content to fetch, and
+       * saying so is the whole value of this check.
+       *
+       * Product Hunt is React: the HTML is a shell and the products arrive
+       * later, so __brainoPage came back with an empty object. Twice, seven and
+       * a half seconds each, because "nothing" and "nothing yet" look identical
+       * and the sensible response to an empty result is to try again. Fifteen
+       * seconds and two turns to learn something the first attempt knew.
+       *
+       * Thrown rather than returned empty, with the way round in the message: a
+       * site like this has to be OPENED, and then read from the live DOM, which
+       * is a thing this loop is already good at. */
+      + `function __brainoPage(u){var h=__brainoGet(u);var d=__brainoDoc(h);`
+      + `var t=(d.body&&d.body.innerText||d.body&&d.body.textContent||"").trim();`
+      + `if(t.length<200)throw new Error("__brainoPage got an empty shell from "+u+" ("+t.length+" chars of text). That site builds its page in the browser, so there is nothing in the HTML to read. Do not retry this. Navigate to it instead and read the live page.");`
+      + `return d}`;
     const wrapped = `(function(){try{${helpers}\nvar __r=eval(${JSON.stringify(code)});`
       + `return __r===undefined?"(the script returned nothing)":(typeof __r==="string"?__r:JSON.stringify(__r))}`
       + `catch(e){return "BRAINO_ERR "+(e&&e.message?e.message:String(e))}})()`;

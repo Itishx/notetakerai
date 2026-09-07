@@ -40,7 +40,7 @@ export type HilTool = {
   handler?: string;
 };
 
-export const HIL_CATALOG_VERSION = "1.3.0";
+export const HIL_CATALOG_VERSION = "1.4.0";
 
 export const HIL_TOOL_CATALOG: HilTool[] = [
   // Split, because one entry covering both halves of actOnSelectedText made the
@@ -103,6 +103,13 @@ export const HIL_TOOL_CATALOG: HilTool[] = [
      be typed into; the OAuth connection has existed for months and had nothing
      calling it. */
   { name: "notion_page", params: ["title", "markdown"], gloss: "Create a page in the connected Notion workspace with a title and markdown body", handler: "runNotionPage", },
+  /* Google Docs is the one page where "drive the site" is the wrong instinct.
+     It draws its body on a canvas, so there is no contenteditable and nothing
+     to focus, and a run spent five turns and two minutes discovering that:
+     click the body, no cursor; click again; screen-reader mode; insert into the
+     editable frame; rejected. It left an empty document and said so honestly.
+     The endpoints had been deployed for months and nothing listed them. */
+  { name: "google_doc_create", params: ["title", "text"], gloss: "Create a Google Doc and write the whole text into it in one go. ALWAYS use this for Google Docs, never try to type into the page: Docs renders on a canvas and cannot be typed into with a script", handler: "createGoogleDocWithText", },
   { name: "gmail_reply", params: ["userInstruction"], gloss: "Draft and send a reply to the Gmail thread open in Chrome", irreversible: true, handler: "replyToOpenGmail", },
   { name: "hide_braino", params: [], gloss: "Hide the Braino window until the user calls it back", stateful: true, zeroNetwork: true, },
   { name: "mac_skills_list", params: [], gloss: "Recite the canned list of what Braino does on this Mac", zeroNetwork: true, memoSafe: true, },
