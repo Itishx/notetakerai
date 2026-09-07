@@ -7446,7 +7446,29 @@ let interjectionInFlight = false;
 /* The one question asked about this sentence, kept so the chat path does not
    ask it again three seconds later. */
 let lastUnderstanding = { text: "", verdict: null };
+/* His name, and nothing else.
+ *
+ * "Braino" on its own is someone getting his attention, or the mic catching the
+ * wake word twice. It is never an instruction, and it destroyed a 34 second
+ * research run by being treated as one: it superseded the job, then started a
+ * fresh HIL run whose entire command was the word "Braino", which he then
+ * reasonably asked a clarifying question about.
+ *
+ * This was survivable when a turn took under two seconds, because there was
+ * barely a window to interrupt. Astra takes five to ten, so every run is long
+ * enough to be killed by the next thing the room says. */
+const BARE_WAKE_WORD = /^(?:hey\s+|ok\s+|okay\s+|yo\s+)?brain[oa]\s*[.,!?]*$/i;
+
+function isBareWakeWord(text) {
+  return BARE_WAKE_WORD.test(String(text || "").trim());
+}
+
 async function routeInterjectionIntoRunningJob(transcript) {
+  // Handled, in the sense that it must not reach anything else.
+  if (isBareWakeWord(transcript)) {
+    logRenderer("voice.wake_word_only", { ignored: true });
+    return true;
+  }
   /* Asking HIL takes a moment, and the flush that called this is now async, so
      a second sentence can arrive mid-question. One at a time: the second one
      becomes a normal turn rather than a second opinion about the same job. */
@@ -7493,8 +7515,21 @@ async function routeInterjectionIntoRunningJob(transcript) {
        swallowing it. */
     return Boolean(told?.ok);
   }
-  /* "chat" while working, or a different job entirely: both mean this is a turn
-     of its own, which is what the caller already does. */
+  /* Chat while he is working is a remark, not a new job.
+   *
+   * It used to fall through here, and the caller reads a false as "not an
+   * interjection, so it is a new command", which supersedes the run. So saying
+   * anything conversational mid-task killed the task. Every test in the
+   * 07-09 session died this way: seventeen seconds, thirty four seconds, six
+   * seconds, all of them "stood down, you asked for something else" when
+   * nothing else had been asked for.
+   *
+   * The job is worth more than the remark. A genuinely different JOB still
+   * supersedes, which is the behaviour that was actually wanted here. */
+  if (kind === "chat") {
+    logRenderer("voice.interjection", { kind, told: false, protectedJob: true });
+    return true;
+  }
   logRenderer("voice.interjection", { kind, told: false });
   return false;
 }
@@ -7568,6 +7603,15 @@ async function flushRealtimeTranscript(reason) {
   /* A new instruction during long work is an interruption, not noise.
      Only after the turn has been running a moment, so that his own voice coming
      back through the microphone cannot cut him off mid-sentence. */
+  /* Nothing to do with a running job: his name alone is never a command, so it
+     must not start a run either. The log had hil.loop.start with command
+     "Braino", which is a whole model call spent asking what was meant. */
+  if (isBareWakeWord(transcript)) {
+    logRenderer("voice.wake_word_only", { ignored: true, hadJob: voiceTurnInFlight });
+    setStatus(voiceTurnInFlight ? "thinking" : "listening", voiceTurnInFlight ? "Working on it" : "Listening");
+    return;
+  }
+
   const interrupting = voiceTurnInFlight
     && accepted
     && Date.now() - voiceTurnStartedAt > VOICE_TURN_INTERRUPT_AFTER_MS;
