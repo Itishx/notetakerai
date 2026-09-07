@@ -267,10 +267,21 @@ test("Luna drives, Astra is called in, and the notch says which", () => {
      Everything built while chasing Astra is an endpoint or a prompt, so Luna
      gets all of it at a fiftieth of the price, and Astra goes back to being the
      rescue, which is where this started. */
+  /* Stronger than a switch set to the right value: there is no switch. The
+     "Astra drives every turn" mode is gone rather than turned off, because a
+     live toggle that costs six dollars a day does not belong in a file people
+     edit for other reasons. Git has it if the question needs asking again. */
   const models = readFileSync(
     new URL("../supabase/functions/_shared/openai-models.ts", import.meta.url), "utf8");
-  assert.match(models, /BRAINO_BRAIN: "hil" \| "astra" = "hil"/,
-    "the cheap brain drives by default");
+  assert.doesNotMatch(models, /BRAINO_BRAIN/, "the drives-everything switch must be gone, not merely off");
+  assert.match(models, /BRAINO_RESCUE_MODEL = "gpt-6-astra"/, "Astra stays reachable, as the rescue");
+
+  const loop = readFileSync(
+    new URL("../supabase/functions/reasoning/hil-loop/index.ts", import.meta.url), "utf8");
+  assert.doesNotMatch(loop, /ASTRA_DRIVES_ALL|astraDriving/,
+    "no path may put the expensive model on an ordinary turn");
+  assert.match(loop, /const turnModel = isRescue \? HIL_RESCUE_MODEL : HIL_LOOP_MODEL;/,
+    "a rescue is the only way to the expensive model");
 
   /* Searching inside the turn is an endpoint feature, not an Astra one, so it
      must not be gated on which model is answering. */
@@ -286,6 +297,6 @@ test("Luna drives, Astra is called in, and the notch says which", () => {
     "the Mac must be able to ask for the better brain");
   assert.match(main, /if \(!rescueRequested\) \{/, "and only once per run");
 
-  assert.match(server, /brain: astraDriving \|\| isRescue \? "astra" : "hil"/,
+  assert.match(server, /brain: isRescue \? "astra" : "hil"/,
     "a rescue must read as Astra, or the gold badge never appears on the Mac");
 });

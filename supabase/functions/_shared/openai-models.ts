@@ -31,37 +31,14 @@ export const BRAINO_RESCUE_REASONING_EFFORT = "medium" as const;
 // model. Roomier than the standard loop for that reason alone.
 export const BRAINO_RESCUE_MAX_TOKENS = 6000;
 
-// ── Which brain drives ───────────────────────────────────────────────────────
-// "hil"   — he thinks, and Astra is called in only when he gets stuck.
-// "astra" — Astra thinks on every turn and he never touches the wheel.
-//
-// Back to "hil", and the experiment answered its question.
-//
-// Astra is 50x Luna's input price and 42x its output: $10 and $50 per million
-// against $0.20 and $1.20. A thirteen turn run that cost a dollar and a half is
-// about three cents on Luna. Six dollars in a day of testing is not a pricing
-// problem to solve later, it is the answer.
-//
-// What the experiment was actually worth is everything built while chasing it,
-// and none of it is Astra-shaped: writing scripts instead of clicking, reading
-// ten pages in one script, the 115 tool catalog, Google Docs through the API,
-// searching inside the turn. Every one of those is an endpoint or a prompt, so
-// Luna gets all of it, today, at a fiftieth of the price.
-//
-// Astra stays as the rescue, which is where this started: he thinks, and the
-// expensive brain is called in when he gets stuck. That design was right before
-// there was a bill to prove it.
-//
-// Read once here rather than per call so both surfaces that share hil-loop, the
-// lab and the extension's delegate, can never disagree about who is driving.
-export const BRAINO_BRAIN: "hil" | "astra" = "hil";
-
-// Effort is the cost dial, and it is set differently for the two modes on
-// purpose. A rescue is one hard judgement after a wall, and worth medium. Every
-// turn of an ordinary run is not: most of them are "click the obvious button",
-// and paying medium reasoning for those is how a task that should cost cents
-// costs a dollar. Low is the default when Astra drives everything.
-export const BRAINO_ASTRA_ALL_REASONING_EFFORT = "low" as const;
+// The "Astra drives every turn" experiment lived here and is gone. It answered
+// its question: 50x Luna's input price and 42x its output, six dollars in a day
+// of testing, for judgement that four written rules recover most of. Everything
+// it was actually worth is still here and is not Astra-shaped, because it was
+// the endpoint and the prompt all along. Astra remains the rescue above, which
+// is where it started. Git has the mode if the question ever needs asking again;
+// a live switch that costs six dollars a day does not belong in a file people
+// edit for other reasons.
 
 // ── The fast lane for search ─────────────────────────────────────────────────
 // A quick search is a lookup, not an essay, and it was being answered by the

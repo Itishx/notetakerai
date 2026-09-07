@@ -25,8 +25,6 @@ import {
   BRAINO_RESCUE_MODEL,
   BRAINO_RESCUE_REASONING_EFFORT,
   BRAINO_RESCUE_MAX_TOKENS,
-  BRAINO_BRAIN,
-  BRAINO_ASTRA_ALL_REASONING_EFFORT,
 } from "../../_shared/openai-models.ts";
 
 const corsHeaders = {
@@ -42,10 +40,6 @@ const HIL_LOOP_MODEL = BRAINO_TEXT_MODEL;
 // escalate, and the escalation is rationed here rather than there, because the
 // client is a web page anyone can open and edit.
 const HIL_RESCUE_MODEL = BRAINO_RESCUE_MODEL;
-// When Astra drives everything there is nothing to escalate TO, so the whole
-// rescue path stands down: no second model, no handoff, no gold. The loop is
-// simply Astra's from turn one.
-const ASTRA_DRIVES_ALL = BRAINO_BRAIN === "astra";
 const OPENAI_ENDPOINT = "https://api.openai.com/v1/chat/completions";
 // Astra searches inside its own turn here, rather than us spending a turn asking
 // for a search, a whole separate model answering it, and another turn reading
@@ -199,19 +193,15 @@ async function callModel(apiKey: string, messages: unknown[], rescue = false) {
     // so sending the standard loop's effort would be rejected outright and the
     // standard ceiling could be eaten by the thinking before any JSON is written.
     body: JSON.stringify({
-      model: rescue || ASTRA_DRIVES_ALL ? HIL_RESCUE_MODEL : HIL_LOOP_MODEL,
-      // Low when Astra is doing the whole run, medium when it was called in after
-      // a wall. Most turns of an ordinary run are obvious and do not deserve the
-      // expensive setting; the turn after a failure does.
-      reasoning_effort: rescue
-        ? BRAINO_RESCUE_REASONING_EFFORT
-        : ASTRA_DRIVES_ALL
-          ? BRAINO_ASTRA_ALL_REASONING_EFFORT
-          : BRAINO_TEXT_REASONING_EFFORT,
+      model: rescue ? HIL_RESCUE_MODEL : HIL_LOOP_MODEL,
+      // Medium only on a rescue. He runs at his own effort the rest of the time,
+      // and a rescue is the one turn that has earned the expensive setting: it
+      // only happens after a wall.
+      reasoning_effort: rescue ? BRAINO_RESCUE_REASONING_EFFORT : BRAINO_TEXT_REASONING_EFFORT,
       messages,
       // Astra bills reasoning as completion either way, so the roomier ceiling
       // applies whenever Astra is the one answering.
-      max_completion_tokens: rescue || ASTRA_DRIVES_ALL ? BRAINO_RESCUE_MAX_TOKENS : 2400,
+      max_completion_tokens: rescue ? BRAINO_RESCUE_MAX_TOKENS : 2400,
     }),
   });
 }
@@ -371,16 +361,6 @@ function renderState(command: string, context: string, state: LoopState | null):
 // jobs and no steps has nothing to be rescued from, and that is the shape of every
 // trivial abuse of this flag.
 const RESCUE_HARD_CAP = 12;
-// The same ceiling for the mode where Astra drives everything. It sits above the
-// client's own MAX_TURNS of 45 so an honest run never reaches it, and it is here
-// for the dishonest one: this endpoint is public, and without a ceiling a single
-// run id could be walked forever on a model that bills output at $50/M.
-//
-// Worth being straight about what this does and does not cover: it bounds one
-// RUN. It does not bound someone who keeps inventing new run ids. That needs
-// auth on the endpoint, which is a decision about the public lab, not something
-// a constant can fix.
-const ASTRA_RUN_CAP = 60;
 
 function rescueLooksReal(state: LoopState | null): boolean {
   if (!state) return false;
@@ -652,21 +632,14 @@ serve(async (req) => {
     // Both gates are evaluated before a single expensive token is spent, and a
     // refused escalation is not an error: the turn simply runs on the standard
     // model, which is what would have happened anyway a moment earlier.
-    // Astra is either already driving, in which case there is nothing to escalate
-    // to and the flag is ignored outright, or it is being called in and has to
-    // earn it. The two modes never both apply.
-    const isRescue = !ASTRA_DRIVES_ALL
-      && rescueAsked
+    // Escalation has to be earned. The flag is a claim by a client that can be
+    // edited, so it is checked against the run's own state and against how many
+    // expensive turns this run has already had.
+    const isRescue = rescueAsked
       && rescueLooksReal(loopState)
       && (await rescueTurnsUsed(logRunId)) < RESCUE_HARD_CAP;
-    if (rescueAsked && !isRescue && !ASTRA_DRIVES_ALL) console.warn("hil-loop: rescue refused", { runId: logRunId });
+    if (rescueAsked && !isRescue) console.warn("hil-loop: rescue refused", { runId: logRunId });
 
-    // In astra mode the ceiling applies to the run itself, since every turn of it
-    // is expensive. Over the cap the turn falls back to the standard model rather
-    // than failing, so a run that somehow gets there degrades instead of dying.
-    const overAstraCap = ASTRA_DRIVES_ALL && (await rescueTurnsUsed(logRunId)) >= ASTRA_RUN_CAP;
-    if (overAstraCap) console.warn("hil-loop: astra run cap hit", { runId: logRunId });
-    const astraDriving = ASTRA_DRIVES_ALL && !overAstraCap;
 
     const started = Date.now();
     const reading = detectMoment(commandText);
@@ -694,7 +667,7 @@ serve(async (req) => {
       : baseMessage;
     // Recorded rather than recomputed, so the row in engine_runs says which brain
     // actually answered this turn. That column is the whole cost report.
-    const turnModel = isRescue || astraDriving ? HIL_RESCUE_MODEL : HIL_LOOP_MODEL;
+    const turnModel = isRescue ? HIL_RESCUE_MODEL : HIL_LOOP_MODEL;
 
     const apiKey = Deno.env.get("OPENAI_API_KEY");
     if (!apiKey) throw new Error("API key not configured");
@@ -713,12 +686,8 @@ serve(async (req) => {
      * feature, and the whole reason a lookup cost three model calls was that we
      * were on the wrong endpoint. Luna searching for itself is the same saving
      * at a fiftieth of the price. */
-    const bigBrain = astraDriving || isRescue;
-    const effort = isRescue
-      ? BRAINO_RESCUE_REASONING_EFFORT
-      : astraDriving
-        ? BRAINO_ASTRA_ALL_REASONING_EFFORT
-        : BRAINO_TEXT_REASONING_EFFORT;
+    const bigBrain = isRescue;
+    const effort = isRescue ? BRAINO_RESCUE_REASONING_EFFORT : BRAINO_TEXT_REASONING_EFFORT;
     const ceiling = bigBrain ? BRAINO_RESCUE_MAX_TOKENS : 2400;
     let aiRes = await callResponsesApi(apiKey, turnModel, systemPrompt, userMessage, effort, ceiling);
     let viaResponses = true;
@@ -813,7 +782,7 @@ serve(async (req) => {
         // is the one moment the notch says it is not, and the gold badge would
         // never appear on the Mac at all now that rescues are how Astra is
         // reached.
-        brain: astraDriving || isRescue ? "astra" : "hil",
+        brain: isRescue ? "astra" : "hil",
         elapsed_ms: Date.now() - started,
         hil_loop_version: HIL_LOOP_VERSION,
         parse_ok: parseOk,
