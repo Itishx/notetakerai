@@ -50,3 +50,15 @@ export const BRAINO_BRAIN: "hil" | "astra" = "astra";
 // and paying medium reasoning for those is how a task that should cost cents
 // costs a dollar. Low is the default when Astra drives everything.
 export const BRAINO_ASTRA_ALL_REASONING_EFFORT = "low" as const;
+
+// ── The fast lane for search ─────────────────────────────────────────────────
+// A quick search is a lookup, not an essay, and it was being answered by the
+// full model because the fast lane defaulted back to it whenever the env var
+// was unset. Measured on the Mac that is nine to twenty three seconds per
+// search, and a search sits between two Astra turns, so one lookup costs the
+// better part of a minute of someone waiting.
+//
+// A named default rather than a fallback to the big model. An unset secret
+// should cost a little quality, not the entire point of the setting, and the
+// silent version of this has been shipping for weeks.
+export const BRAINO_WEB_SEARCH_FAST_MODEL = "gpt-5.4-mini";
