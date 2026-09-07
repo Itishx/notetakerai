@@ -2868,6 +2868,15 @@ function nfClearCaptions() {
 // should always be able to SEE what he understood and what he's doing.
 let nfThinkingText = "";
 let nfThinkingTimer = 0;
+/* Is a real job running right now, as opposed to a caption that happens to be
+ * on screen? Set only from what main.cjs says, because the renderer cannot see
+ * a model call and would otherwise be guessing from how long the words have
+ * been up. */
+let hilTaskRunning = false;
+/* The backstop for the case main never says the job ended: a crash, a reload, a
+ * turn that threw somewhere unusual. Long enough that no honest turn reaches it,
+ * short enough that a stuck notch is a minute of wrong rather than forever. */
+const NF_THINKING_STUCK_MS = 60000;
 // nfThinkingOpenTimer is declared with the reveal-delay helpers above, next to
 // NF_THINKING_REVEAL_MS, so the timer and the thing that sets it live together.
 // nfSetThinking still clears it below: showing live thinking text means the
@@ -2885,6 +2894,13 @@ function nfSetThinking(text) {
     startThinkingPhaseCycle();
     renderThinkingCanvas(nfThinkingText, nfThinkingText);
     notchFace?.classList.add("nf-thinking", "nf-think-hint");
+    /* Six seconds was right when a turn took under two.
+     *
+     * Astra takes five to ten, so the timer fired in the GAP between turns: the
+     * sheet collapsed, the next turn reopened it, and a running job looked like
+     * it kept stopping and starting. The auto-clear is for a caption nobody
+     * cleaned up, not for a job that is genuinely still going, so while one is
+     * running it stretches to the stuck-backstop instead of firing on time. */
     nfThinkingTimer = window.setTimeout(() => {
       nfThinkingText = "";
       if (!coworkLabel) {
@@ -2900,7 +2916,7 @@ function nfSetThinking(text) {
         settleStaleThinkingStatus("nf_thinking.auto_clear");
       }
       updateNotchFace();
-    }, 6000);
+    }, hilTaskRunning ? NF_THINKING_STUCK_MS : 6000);
   } else if (!coworkLabel) {
     stopThinkingPhaseCycle();
     notchFace?.classList.remove(
@@ -7430,7 +7446,29 @@ let interjectionInFlight = false;
 /* The one question asked about this sentence, kept so the chat path does not
    ask it again three seconds later. */
 let lastUnderstanding = { text: "", verdict: null };
+/* His name, and nothing else.
+ *
+ * "Braino" on its own is someone getting his attention, or the mic catching the
+ * wake word twice. It is never an instruction, and it destroyed a 34 second
+ * research run by being treated as one: it superseded the job, then started a
+ * fresh HIL run whose entire command was the word "Braino", which he then
+ * reasonably asked a clarifying question about.
+ *
+ * This was survivable when a turn took under two seconds, because there was
+ * barely a window to interrupt. Astra takes five to ten, so every run is long
+ * enough to be killed by the next thing the room says. */
+const BARE_WAKE_WORD = /^(?:hey\s+|ok\s+|okay\s+|yo\s+)?brain[oa]\s*[.,!?]*$/i;
+
+function isBareWakeWord(text) {
+  return BARE_WAKE_WORD.test(String(text || "").trim());
+}
+
 async function routeInterjectionIntoRunningJob(transcript) {
+  // Handled, in the sense that it must not reach anything else.
+  if (isBareWakeWord(transcript)) {
+    logRenderer("voice.wake_word_only", { ignored: true });
+    return true;
+  }
   /* Asking HIL takes a moment, and the flush that called this is now async, so
      a second sentence can arrive mid-question. One at a time: the second one
      becomes a normal turn rather than a second opinion about the same job. */
@@ -7477,8 +7515,21 @@ async function routeInterjectionIntoRunningJob(transcript) {
        swallowing it. */
     return Boolean(told?.ok);
   }
-  /* "chat" while working, or a different job entirely: both mean this is a turn
-     of its own, which is what the caller already does. */
+  /* Chat while he is working is a remark, not a new job.
+   *
+   * It used to fall through here, and the caller reads a false as "not an
+   * interjection, so it is a new command", which supersedes the run. So saying
+   * anything conversational mid-task killed the task. Every test in the
+   * 07-09 session died this way: seventeen seconds, thirty four seconds, six
+   * seconds, all of them "stood down, you asked for something else" when
+   * nothing else had been asked for.
+   *
+   * The job is worth more than the remark. A genuinely different JOB still
+   * supersedes, which is the behaviour that was actually wanted here. */
+  if (kind === "chat") {
+    logRenderer("voice.interjection", { kind, told: false, protectedJob: true });
+    return true;
+  }
   logRenderer("voice.interjection", { kind, told: false });
   return false;
 }
@@ -7552,6 +7603,15 @@ async function flushRealtimeTranscript(reason) {
   /* A new instruction during long work is an interruption, not noise.
      Only after the turn has been running a moment, so that his own voice coming
      back through the microphone cannot cut him off mid-sentence. */
+  /* Nothing to do with a running job: his name alone is never a command, so it
+     must not start a run either. The log had hil.loop.start with command
+     "Braino", which is a whole model call spent asking what was meant. */
+  if (isBareWakeWord(transcript)) {
+    logRenderer("voice.wake_word_only", { ignored: true, hadJob: voiceTurnInFlight });
+    setStatus(voiceTurnInFlight ? "thinking" : "listening", voiceTurnInFlight ? "Working on it" : "Listening");
+    return;
+  }
+
   const interrupting = voiceTurnInFlight
     && accepted
     && Date.now() - voiceTurnStartedAt > VOICE_TURN_INTERRUPT_AFTER_MS;
@@ -10746,9 +10806,29 @@ window.brainoMac.onTaskProgress((progress) => {
       if (progress.status && progress.status !== "ready") setStatus(progress.status, progress.text || progress.status);
       cancelPendingNotchThinking();
       nfSetThinking("");
+      hilTaskRunning = false;
+      notchFace?.classList.remove("nf-astra", "nf-task");
       settleStaleThinkingStatus("task_progress.clear_notch");
     } catch (_) {}
     return;
+  }
+  // Who is thinking, carried on the same payload as the caption. Only ever set
+  // from what the server said, and cleared the moment a turn comes back on the
+  // ordinary brain, so the gold can never be left burning over a cheap run.
+  if (notchFace && progress.brain) {
+    notchFace.classList.toggle("nf-astra", progress.brain === "astra");
+  }
+  /* A job is running, and it stays running until main says otherwise.
+   *
+   * This drives two things that used to be inferred and got it wrong: the
+   * auto-clear timer above, and the blue that says work is happening. Blue
+   * rather than amber because amber already means cowork is watching the
+   * screen, and two ambient colours meaning different things is how you end up
+   * having to remember which is which. */
+  if (typeof progress.running === "boolean") {
+    hilTaskRunning = progress.running;
+    notchFace?.classList.toggle("nf-task", hilTaskRunning);
+    if (hilTaskRunning) window.clearTimeout(nfThinkingTimer);
   }
   if (progress.status) setStatus(progress.status, progress.text || progress.status);
   if (progress.text) {

@@ -30,3 +30,24 @@ export const BRAINO_RESCUE_REASONING_EFFORT = "medium" as const;
 // for the JSON. The turn then comes back empty and reads exactly like a broken
 // model. Roomier than the standard loop for that reason alone.
 export const BRAINO_RESCUE_MAX_TOKENS = 6000;
+
+// The "Astra drives every turn" experiment lived here and is gone. It answered
+// its question: 50x Luna's input price and 42x its output, six dollars in a day
+// of testing, for judgement that four written rules recover most of. Everything
+// it was actually worth is still here and is not Astra-shaped, because it was
+// the endpoint and the prompt all along. Astra remains the rescue above, which
+// is where it started. Git has the mode if the question ever needs asking again;
+// a live switch that costs six dollars a day does not belong in a file people
+// edit for other reasons.
+
+// ── The fast lane for search ─────────────────────────────────────────────────
+// A quick search is a lookup, not an essay, and it was being answered by the
+// full model because the fast lane defaulted back to it whenever the env var
+// was unset. Measured on the Mac that is nine to twenty three seconds per
+// search, and a search sits between two Astra turns, so one lookup costs the
+// better part of a minute of someone waiting.
+//
+// A named default rather than a fallback to the big model. An unset secret
+// should cost a little quality, not the entire point of the setting, and the
+// silent version of this has been shipping for weeks.
+export const BRAINO_WEB_SEARCH_FAST_MODEL = "gpt-5.4-mini";

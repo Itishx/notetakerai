@@ -11,6 +11,12 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { HIL_LOOP_PROMPT, HIL_LOOP_VERSION } from "../../_shared/human-intelligence/hil-loop-prompt.ts";
 import { logEngineRun } from "../../_shared/engine-log.ts";
+import {
+  HIL_TOOL_CATALOG,
+  HIL_CATALOG_VERSION,
+  findTool,
+  isIrreversible,
+} from "../../_shared/human-intelligence/hil-tool-catalog.ts";
 import { buildEmotionalCore } from "../../_shared/emotional-engine/engine.ts";
 import { detectMoment, MOMENT_EMPHASIS, MOMENT_LABEL } from "../../_shared/emotional-engine/moments.ts";
 import {
@@ -35,6 +41,10 @@ const HIL_LOOP_MODEL = BRAINO_TEXT_MODEL;
 // client is a web page anyone can open and edit.
 const HIL_RESCUE_MODEL = BRAINO_RESCUE_MODEL;
 const OPENAI_ENDPOINT = "https://api.openai.com/v1/chat/completions";
+// Astra searches inside its own turn here, rather than us spending a turn asking
+// for a search, a whole separate model answering it, and another turn reading
+// the answer. Three model calls become one.
+const OPENAI_RESPONSES_ENDPOINT = "https://api.openai.com/v1/responses";
 
 // The action vocabulary, matching the real extension's BG_DELEGATE_ACTIONS.
 // The allowlist is the last word: an action not named here is rejected as an
@@ -42,7 +52,92 @@ const OPENAI_ENDPOINT = "https://api.openai.com/v1/chat/completions";
 // and to the world before it was added here, and the symptom was Braino
 // appearing to fail at the new skill while actually performing it perfectly.
 // Anything taught in hil-loop-prompt.ts must be listed here in the same change.
-const ACTION_TYPES = new Set(["navigate", "read", "look", "click", "type", "pressKey", "scroll", "wait", "web_search", "selectOption", "downloadImage"]);
+const ACTION_TYPES = new Set(["navigate", "read", "look", "click", "type", "pressKey", "scroll", "wait", "web_search", "selectOption", "downloadImage", "tool", "exec_js"]);
+
+// ── Braino's own hands ───────────────────────────────────────────────────────
+// The loop could drive a browser and nothing else, while everything Braino can
+// actually DO on a Mac lived in a catalog only the regex cascade could reach.
+// So the brain could not open Notes, play a song or send a message: not because
+// it decided against it, but because those verbs did not exist in the vocabulary
+// it was shown. It looked like a model failing at a task it was never offered.
+//
+// One "tool" action fixes that. The catalog is rendered into the prompt and the
+// tool name is validated against it here, so a hallucinated tool is a rejected
+// turn rather than a request the Mac has to defend itself from.
+//
+// Only sent when the caller says it HAS these hands. The extension runs in a
+// browser and cannot fire spotify_play, so teaching it the tool would only
+// invite a turn nothing can execute.
+// ── Writing code instead of clicking ────────────────────────────────────────
+// OpenAI's own guidance for Astra is code execution rather than one structured
+// action at a time, and the difference is not stylistic. One action per turn
+// means a ten step job costs ten model calls, and at five to ten seconds each
+// that is a minute and a half of waiting to do something a script does in one.
+//
+// Braino already runs JavaScript inside the real tab, through the AppleScript
+// door chrome-page.cjs uses to read the page. So this needs no new dependency
+// and no second browser: the same channel, handed a script the model wrote
+// rather than one we wrote for it.
+function renderExecJs(): string {
+  return [
+    "=== ON A WEB PAGE, WRITE A SCRIPT. THIS IS THE DEFAULT. ===",
+    'Run JavaScript in the page with {"type":"exec_js","code":"...","expects":"..."}. It runs in the real tab, signed in as them, and whatever it RETURNS comes back to you.',
+    "",
+    "A script takes a third of a second. A single click costs a whole turn, which is ten seconds of them waiting. So a script is not the clever option, it is the ordinary one: clicking is what you do when a script genuinely cannot.",
+    "",
+    "Do the WHOLE step in one script. Not 'find the button'. Find it, click it, and return what the page said afterwards. Not 'read one price'. Read all of them and return the comparison. If you find yourself about to click something and then look at what happened, that was one script.",
+    "",
+    "Worked examples of the difference:",
+    "- Comparing products: one script that reads every result's title, price and rating and returns them as a list. Not one click per product.",
+    "- Filling a form: one script that sets every field and reports which ones it could not find. Not one field per turn.",
+    "- Finding and following a link: one script that locates it, returns its href and text, then navigate next turn.",
+    "",
+    "Rules:",
+    "- Return the ANSWER, not a dump. You get back exactly what you return. An expression or an (function(){...})() both work.",
+    "- There is room for a real result, around twelve thousand characters. If you go past it you are TOLD so, in the result, with the real length. That is not a failure and not a reason to run a smaller version of the same script: use what you got, or pick fewer fields next time.",
+    "- Anything thrown comes back to you with its message, so you do not need your own try/catch.",
+    "- You can read OTHER pages without leaving this one. __brainoPage(url) returns a parsed Document you can querySelector, __brainoGet(url) returns the raw HTML. Same tab, no navigation, up to 12 pages in one script.",
+    "- This is the single biggest thing you can do for them. Ten product pages opened one at a time is ten turns, which is a hundred seconds of someone waiting. The same ten read with __brainoPage in one script is one turn. When you catch yourself about to open a link to check something, fetch it instead.",
+    "- Relative links need to be absolute: new URL(href, location.href).href.",
+    "- Actually NAVIGATING still ends the script, because the page is replaced. So navigate only when you need to BE somewhere, to click or to type. To read, fetch.",
+    "- If a selector might miss, check and return that fact. Knowing the button was not there is worth a turn; a stack trace is not.",
+    "- Reading is free. Anything that spends money, sends, posts or deletes is not: say so plainly and set reversible:false. A script that clicks Buy is still clicking Buy.",
+  ].join("\n");
+}
+
+function renderToolCatalog(available?: string[]): string {
+  /* Only what this machine can actually run.
+   *
+   * The catalog is what Braino can ever do; the caller says what it can do
+   * today. Listing the difference is not harmless: being offered a tool that
+   * does not exist costs a whole turn to find out, ten seconds of someone
+   * waiting to learn a hand is missing.
+   *
+   * No list means an older caller that does not send one, and the whole catalog
+   * is the right answer there: better to over-offer than to silently strip a
+   * client of everything it had. */
+  const have = Array.isArray(available) && available.length ? new Set(available) : null;
+  const tools = have ? HIL_TOOL_CATALOG.filter((t) => have.has(t.name)) : HIL_TOOL_CATALOG;
+  const lines = tools.map((t) => {
+    const args = t.params.length ? `(${t.params.join(", ")})` : "()";
+    const flag = t.irreversible ? "  [IRREVERSIBLE, must be reversible:false]" : "";
+    return `- ${t.name}${args}: ${t.gloss}${flag}`;
+  });
+  return [
+    "=== YOUR OWN HANDS ON THIS MAC ===",
+    'Alongside the browser actions you have Braino\'s real abilities. Fire one with {"type":"tool","tool":"<name>","args":{...}}, as an ordinary step, one per turn, judged next turn like any other.',
+    "Prefer a tool over doing the same thing by hand in a browser. Opening Notes and typing is worse than notes_create in every way: faster, and it cannot half-fail.",
+    "You can also SEARCH THE WEB YOURSELF, in this turn, without asking for it. If you need a fact, just use it and answer: no action, no waiting, no separate step.",
+    "So do not fire the web_search action for something you can look up yourself. That one hands the question to a different model and costs two extra turns, roughly forty seconds. Searching here costs you nothing but the search.",
+    "",
+    "This list is everything you can call DIRECTLY. It is short on purpose: it is what is wired on this machine today, not everything Braino will ever do.",
+    "Anything not on it, you do in the browser, and that is not a lesser way of doing it. A Google Doc is docs.google.com plus a script. A spreadsheet, a calendar invite, a form, an order: all websites, and driving a website is the thing you are best at.",
+    "So never say you cannot do something because there is no tool for it. Either there is a tool, or there is a site. Reach for the tool first because it is faster and cannot half-fail; reach for the browser the moment there is not one.",
+    "Never invent a tool name. If you want one that is not here, that is your signal to open the site instead.",
+    "",
+    lines.join("\n"),
+  ].join("\n");
+}
 
 // Reversibility is decided by WHAT is being clicked, and the element name lives on
 // the client (it holds the live observation), so the final say is enforced there in
@@ -99,11 +194,78 @@ async function callModel(apiKey: string, messages: unknown[], rescue = false) {
     // standard ceiling could be eaten by the thinking before any JSON is written.
     body: JSON.stringify({
       model: rescue ? HIL_RESCUE_MODEL : HIL_LOOP_MODEL,
+      // Medium only on a rescue. He runs at his own effort the rest of the time,
+      // and a rescue is the one turn that has earned the expensive setting: it
+      // only happens after a wall.
       reasoning_effort: rescue ? BRAINO_RESCUE_REASONING_EFFORT : BRAINO_TEXT_REASONING_EFFORT,
       messages,
+      // Astra bills reasoning as completion either way, so the roomier ceiling
+      // applies whenever Astra is the one answering.
       max_completion_tokens: rescue ? BRAINO_RESCUE_MAX_TOKENS : 2400,
     }),
   });
+}
+
+/* The same turn, asked for through the Responses API so the model can search.
+ *
+ * A search used to cost three model calls: Astra spends a turn deciding to
+ * search, web-research runs its own model to answer it, and Astra spends
+ * another turn reading that answer. Nine to twenty three seconds in the middle,
+ * two turns of about fifteen either side. The hosted tool folds all of it into
+ * one turn, and the second model disappears entirely.
+ *
+ * No response_format. Structured output is not documented as working alongside
+ * web search, and coerceTurn has always been tolerant by design: it strips
+ * fences, finds the object, and tells the client to retry once when it cannot.
+ * That tolerance is what makes this safe to try.
+ */
+async function callResponsesApi(apiKey: string, model: string, system: string, user: string, effort: string, maxTokens: number) {
+  const res = await fetch(OPENAI_RESPONSES_ENDPOINT, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model,
+      instructions: system,
+      input: user,
+      tools: [{ type: "web_search" }],
+      reasoning: { effort },
+      max_output_tokens: maxTokens,
+    }),
+  });
+  return res;
+}
+
+/* The final text, out of an output array that also carries reasoning items and
+ * the search calls themselves. Walked backwards for the last assistant message:
+ * a turn that searched twice has several items before the one that matters. */
+function readResponsesText(data: any): { content: string; searches: number } {
+  const output = Array.isArray(data?.output) ? data.output : [];
+  const searches = output.filter((i: any) => i?.type === "web_search_call").length;
+  if (typeof data?.output_text === "string" && data.output_text.trim()) {
+    return { content: data.output_text, searches };
+  }
+  for (let i = output.length - 1; i >= 0; i--) {
+    const item = output[i];
+    if (item?.type !== "message") continue;
+    const parts = Array.isArray(item?.content) ? item.content : [];
+    const text = parts.map((c: any) => (typeof c?.text === "string" ? c.text : "")).join("").trim();
+    if (text) return { content: text, searches };
+  }
+  return { content: "", searches };
+}
+
+/* Responses counts tokens under different names. Mapped rather than left blank,
+ * because engine_runs is where the cost of all this gets read, and a run that
+ * reports no tokens looks free. */
+function normaliseUsage(usage: any) {
+  if (!usage) return usage;
+  if (usage.prompt_tokens !== undefined) return usage;
+  return {
+    prompt_tokens: usage.input_tokens,
+    completion_tokens: usage.output_tokens,
+    total_tokens: usage.total_tokens,
+    prompt_tokens_details: usage.input_tokens_details,
+  };
 }
 
 // ── State rendering ──────────────────────────────────────────────────────────
@@ -172,7 +334,13 @@ function renderState(command: string, context: string, state: LoopState | null):
       `intent: ${state!.lastStep.intent}`,
       `action: ${JSON.stringify(state!.lastStep.action ?? {}).slice(0, 400)}`,
       `expected: ${state!.lastStep.expects}`,
-      `result: ${JSON.stringify(state!.lastStep.result ?? null).slice(0, 1500)}`,
+      /* 1500 was sized for a click, whose result is the word "ok". A script's
+         result IS the work: twenty listings read in one pass is legitimately
+         twelve thousand characters, and cutting that here undid the whole point
+         of letting it write a script. It was the tightest of the three places
+         the same result got trimmed, so it decided what the model actually saw,
+         and what it saw was one listing and a sentence that stopped mid-word. */
+      `result: ${JSON.stringify(state!.lastStep.result ?? null).slice(0, 14000)}`,
     ].join("\n"));
   }
 
@@ -332,10 +500,34 @@ function coerceTurn(rawContent: string, hadLastStep: boolean): { turn: LoopTurn;
     const action = s.action && typeof s.action === "object" && !Array.isArray(s.action) ? s.action : null;
     const actionType = action && typeof action.type === "string" ? action.type.trim() : "";
     if (!action || !ACTION_TYPES.has(actionType)) return { turn: fallback, parseOk: false };
+    // A tool call is only a step if the tool is real. Rejecting the whole turn
+    // rather than dropping the action is deliberate: a half-understood turn that
+    // silently becomes a no-op is the hardest kind of bug to see from outside.
+    if (actionType === "tool") {
+      const toolName = String((action as Record<string, unknown>).tool || "");
+      if (!findTool(toolName)) return { turn: fallback, parseOk: false };
+    }
+    // A script with no code is not a step, it is a turn that would run nothing
+    // and be judged as if it had. The cap is a sanity bound, not a security
+    // one: what makes this safe is the gate below and the fact that a person is
+    // watching, not the length.
+    if (actionType === "exec_js") {
+      const code = String((action as Record<string, unknown>).code || "");
+      if (!code.trim() || code.length > 8000) return { turn: fallback, parseOk: false };
+    }
     // A click on a send/buy/publish/destroy control is gated even if the model said
     // otherwise. The element NAME is the real test and lives on the client, which
     // has the last word (isIrreversibleClick); this is the server-side floor.
-    const looksIrreversible = IRREVERSIBLE_HINT.test(JSON.stringify(action)) || IRREVERSIBLE_HINT.test(String(s.intent || ""));
+    // The catalog already knows which tools cannot be taken back, and it knows it
+    // better than a regex over the intent ever will. Its verdict is not advice:
+    // a tool marked irreversible is forced to reversible:false whatever the model
+    // claimed, so the confirmation gate fires on a delete even when the model
+    // was sure it was harmless.
+    const toolIrreversible = actionType === "tool"
+      && isIrreversible(String((action as Record<string, unknown>).tool || ""));
+    const looksIrreversible = toolIrreversible
+      || IRREVERSIBLE_HINT.test(JSON.stringify(action))
+      || IRREVERSIBLE_HINT.test(String(s.intent || ""));
     decision = {
       type: "step",
       step: {
@@ -405,7 +597,16 @@ serve(async (req) => {
   }
 
   try {
-    const { command, context, state, runId, rescue, rescueReason } = await req.json();
+    const { command, context, state, runId, rescue, rescueReason, hands, tools } = await req.json();
+    // Which hands the caller actually has. "mac" gets the tool catalog; anything
+    // else gets the browser vocabulary alone. Opt-in rather than opt-out on
+    // purpose: a caller that forgets to say loses abilities, which is visible,
+    // instead of being taught tools it cannot run, which is not.
+    const hasMacHands = hands === "mac";
+    // Which of the catalog's tools this caller can really run. See renderToolCatalog.
+    const macTools = Array.isArray(tools)
+      ? (tools as unknown[]).filter((t): t is string => typeof t === "string")
+      : undefined;
     // Escalation is a claim by the client, so it is treated as one. The flag only
     // ever swaps the model and appends the brief; it can never widen what an action
     // is allowed to do, because the allowlist and the gate below do not read it.
@@ -431,10 +632,14 @@ serve(async (req) => {
     // Both gates are evaluated before a single expensive token is spent, and a
     // refused escalation is not an error: the turn simply runs on the standard
     // model, which is what would have happened anyway a moment earlier.
+    // Escalation has to be earned. The flag is a claim by a client that can be
+    // edited, so it is checked against the run's own state and against how many
+    // expensive turns this run has already had.
     const isRescue = rescueAsked
       && rescueLooksReal(loopState)
       && (await rescueTurnsUsed(logRunId)) < RESCUE_HARD_CAP;
     if (rescueAsked && !isRescue) console.warn("hil-loop: rescue refused", { runId: logRunId });
+
 
     const started = Date.now();
     const reading = detectMoment(commandText);
@@ -445,6 +650,10 @@ serve(async (req) => {
     const emotionalCore = buildEmotionalCore({ medium: "text", moment: momentId, intensity: reading.intensity });
     const systemPrompt = [
       HIL_LOOP_PROMPT,
+      // Before the personality, because it is capability rather than character,
+      // and after the loop rules, because how to take a turn has to be settled
+      // before what can be done in one.
+      ...(hasMacHands ? [renderExecJs(), renderToolCatalog(macTools)] : []),
       "=== WHO YOU ARE (the Emotional Engine, appended live for this request) ===",
       emotionalCore,
     ].join("\n\n");
@@ -463,10 +672,34 @@ serve(async (req) => {
     const apiKey = Deno.env.get("OPENAI_API_KEY");
     if (!apiKey) throw new Error("API key not configured");
 
-    const aiRes = await callModel(apiKey, [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: userMessage },
-    ], isRescue);
+    /* Astra goes through Responses so it can search mid-turn; everything else
+     * keeps the chat endpoint it has always used.
+     *
+     * Falling back rather than failing is the whole safety of this change. A new
+     * endpoint can be wrong in ways a test does not find, and the old path is
+     * known to work, so a bad Responses call costs one extra call and not the
+     * run. It is logged, because a fallback that fires every time is a bug
+     * wearing a safety net. */
+    /* Everyone gets the Responses endpoint, not just Astra.
+     *
+     * Searching inside the turn is not an Astra feature, it is an endpoint
+     * feature, and the whole reason a lookup cost three model calls was that we
+     * were on the wrong endpoint. Luna searching for itself is the same saving
+     * at a fiftieth of the price. */
+    const bigBrain = isRescue;
+    const effort = isRescue ? BRAINO_RESCUE_REASONING_EFFORT : BRAINO_TEXT_REASONING_EFFORT;
+    const ceiling = bigBrain ? BRAINO_RESCUE_MAX_TOKENS : 2400;
+    let aiRes = await callResponsesApi(apiKey, turnModel, systemPrompt, userMessage, effort, ceiling);
+    let viaResponses = true;
+    if (!aiRes.ok) {
+      const why = await aiRes.text();
+      console.warn("hil-loop: responses failed, falling back to chat", aiRes.status, why.slice(0, 300));
+      viaResponses = false;
+      aiRes = await callModel(apiKey, [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userMessage },
+      ], bigBrain);
+    }
 
     if (!aiRes.ok) {
       if (aiRes.status === 429) {
@@ -500,10 +733,11 @@ serve(async (req) => {
     }
 
     const aiData = await aiRes.json();
-    const { turn, parseOk } = coerceTurn(
-      aiData?.choices?.[0]?.message?.content || "",
-      Boolean(loopState?.lastStep),
-    );
+    const read = viaResponses
+      ? readResponsesText(aiData)
+      : { content: aiData?.choices?.[0]?.message?.content || "", searches: 0 };
+    if (read.searches) console.log("hil-loop: searched mid-turn", { searches: read.searches, runId: logRunId });
+    const { turn, parseOk } = coerceTurn(read.content, Boolean(loopState?.lastStep));
 
     const logId = logEngineRun({
       engine: "hil-loop",
@@ -518,7 +752,7 @@ serve(async (req) => {
       // opening every row.
       verdict: turn?.decision?.type ?? null,
       model: turnModel,
-      usage: aiData?.usage,
+      usage: normaliseUsage(aiData?.usage),
       elapsed_ms: Date.now() - started,
       ok: parseOk,
       error: parseOk ? null : "decision JSON came back unreadable",
@@ -536,9 +770,26 @@ serve(async (req) => {
       meta: {
         model: turnModel,
         rescue: isRescue,
+        // So the Mac can say "searched" in the terminal, and so a fallback that
+        // fires constantly is visible rather than merely survivable.
+        searched: read.searches || 0,
+        via: viaResponses ? "responses" : "chat",
+        // Which brain answered THIS turn. The client reads it to decide whether
+        // escalation is even a thing here: when Astra is already driving there is
+        // nothing better to hand over to, and offering a handoff would be a lie.
+        // A rescue IS Astra answering, so it must read as Astra. Without the
+        // isRescue half, the one moment the expensive brain is actually driving
+        // is the one moment the notch says it is not, and the gold badge would
+        // never appear on the Mac at all now that rescues are how Astra is
+        // reached.
+        brain: isRescue ? "astra" : "hil",
         elapsed_ms: Date.now() - started,
         hil_loop_version: HIL_LOOP_VERSION,
         parse_ok: parseOk,
+        // So the Mac can tell whether the brain it just spoke to actually knew
+        // about its hands, rather than inferring it from a turn that happened
+        // not to use one.
+        tools: hasMacHands ? HIL_CATALOG_VERSION : null,
         log_id: logId,
       },
     }), {

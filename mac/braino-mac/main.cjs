@@ -201,7 +201,7 @@ const {
   macClosesAllTabs,
 } = require(path.join(__dirname, "hil-routing.cjs"));
 const { UNDERSTAND_PROMPT, parseUnderstanding } = require(path.join(__dirname, "hil-understand.cjs"));
-const { readChromePage, actOnChrome, chromePointFor, focusChrome, pageSignature, isChromeApp } = require(path.join(__dirname, "chrome-page.cjs"));
+const { readChromePage, actOnChrome, chromePointFor, focusChrome, pageSignature, isChromeApp, runJs, chromeScriptName } = require(path.join(__dirname, "chrome-page.cjs"));
 const {
   macVerifyAssert,
   macHilStepSignature,
@@ -1130,7 +1130,10 @@ function sendTaskProgress(payload) {
 function settleTaskProgress(reason) {
   if (lastTaskProgressStatus !== "thinking") return false;
   logMac("task_progress.settled", { reason });
-  sendTaskProgress({ status: "ready", clearNotch: true });
+  /* running:false is the other half of the running:true every turn sends. The
+     renderer holds the notch open and the blue on for as long as a job is
+     running, so the one thing it must never miss is being told it ended. */
+  sendTaskProgress({ status: "ready", clearNotch: true, running: false });
   return true;
 }
 
@@ -11030,7 +11033,38 @@ async function runMacWebSearch(query) {
       durationMs: Date.now() - startedAt,
     });
     sendTaskProgress({ status: "done", text: "Found it" });
-    return { ok: true, say: say || `I searched but did not find a clear answer for ${trimmed}.` };
+    /* The sources were being counted for the log and then thrown away.
+     *
+     * That was fine when the only consumer was a person hearing an answer out
+     * loud. It is not fine now: a loop that is asked to write a briefing gets
+     * four thousand characters of summary and not one link, so it cannot read a
+     * single article, cannot check a single claim, and correctly refuses to
+     * write the thing rather than invent it. "The news search returned summaries
+     * but no usable article links on both attempts" was not a failure to search.
+     * It was the search withholding what it had already found.
+     *
+     * Handing the URLs over is also what makes __brainoPage worth having: search
+     * for the stories, fetch the five articles in one script, write from what
+     * they actually say. */
+    const sources = Array.isArray(data.sources) ? data.sources.slice(0, 8) : [];
+    const sourceLines = sources
+      .map((src) => {
+        const url = String(src?.url || "").trim();
+        if (!url) return "";
+        const title = String(src?.title || "").trim();
+        return title ? `- ${title} :: ${url}` : `- ${url}`;
+      })
+      .filter(Boolean);
+    const withSources = sourceLines.length
+      ? `${say}\n\nSOURCES, real URLs you can read with __brainoPage(url):\n${sourceLines.join("\n")}`
+      : say;
+    return {
+      ok: true,
+      say: withSources || `I searched but did not find a clear answer for ${trimmed}.`,
+      // Kept separate too, so a caller that wants the links rather than the
+      // prose does not have to parse them back out of a sentence.
+      sources,
+    };
   } catch (error) {
     logMac("web_search.failed", { query: textForLog(trimmed), error });
     return googleFallback(error?.message || "error");
@@ -14468,10 +14502,32 @@ function macCommandForbidsSending(command) {
 }
 let macContextReadAt = 0;
 
+/* The last observation, and when it was taken.
+ *
+ * Reading the page is not cheap: it is an osascript round trip into Chrome plus
+ * a DOM walk, three to four seconds on a real page. It was being paid TWICE per
+ * turn, because verifying an assert takes a fresh look and then the next turn
+ * takes its own. Same URL, same element count, three seconds apart, all through
+ * the Amazon run: about a fifth of that four and a half minutes was spent
+ * reading a page it had just read.
+ *
+ * The window is deliberately short. A page that changed in the last second and
+ * a half is a page mid-navigation, and a stale map means clicking by an index
+ * that has moved, which is the one mistake worth engineering against. */
+let macLastObservation = null;
+const MAC_OBSERVATION_REUSE_MS = 1800;
+
+function macCachedObservation() {
+  if (!macLastObservation) return null;
+  if (Date.now() - macLastObservation.at > MAC_OBSERVATION_REUSE_MS) return null;
+  return macLastObservation.obs;
+}
+
 // The AX helper answers in one line: "observe\t{json}".
 async function macBuildObservation() {
   const res = await runAxHelper(["observe", String(MAC_HIL_OBSERVE_CAP)], 20000);
   if (res.status !== "observe") return { ok: false, error: res.detail || res.status, text: "", elements: [] };
+  // Set at the end of this function, below, once there is something worth reusing.
   let data = null;
   try { data = JSON.parse(res.detail); } catch (_) { return { ok: false, error: "unreadable observation", text: "", elements: [] }; }
   let elements = Array.isArray(data?.elements) ? data.elements : [];
@@ -14534,7 +14590,7 @@ async function macBuildObservation() {
   }
   browserUrl = String(activeMacContext?.browserUrl || "");
   const where = browserUrl ? `Address: ${browserUrl}` : "";
-  return {
+  const obs = {
     ok: true,
     text: [header, where, ...lines].filter(Boolean).join("\n"),
     elements,
@@ -14542,6 +14598,9 @@ async function macBuildObservation() {
     windowTitle: data?.window || "",
     browserUrl,
   };
+  // One place, so nothing can take an observation without it being the newest.
+  macLastObservation = { at: Date.now(), obs };
+  return obs;
 }
 
 /* A real look at the screen.
@@ -14584,8 +14643,172 @@ async function macLookAtScreen(goal = "") {
   }
 }
 
+/* Writing a Google Doc, through the API rather than through the page.
+ *
+ * The Product Hunt run found its five products, opened a doc, and then spent
+ * five turns and about two minutes failing to type into it: click the body,
+ * no cursor; click again, no cursor; turn on screen-reader mode; insert into
+ * the editable frame; rejected. It gave up honestly and left an empty document.
+ *
+ * None of that was going to work. Google Docs draws its body on a canvas, so
+ * there is no contenteditable and nothing to focus. It is the one page on the
+ * web where "drive the site" is the wrong instinct, and the model reached for
+ * it because nobody had offered it anything else.
+ *
+ * The endpoints existed the whole time. google-drive-create-doc and
+ * google-docs-append have been deployed for months, and neither the Mac nor the
+ * tool catalog mentioned them, so the brain could not know.
+ */
+async function createGoogleDocWithText(title, text) {
+  const auth = authStatusPayload();
+  if (!auth.userId) return { ok: false, say: "You are not signed in, so I cannot make a Google Doc." };
+  const authToken = await getBrainoAuthToken();
+  if (!authToken) return { ok: false, say: "I could not authenticate to Google, so I cannot make the doc." };
+  const base = SUPABASE_URL.replace(/\/$/, "");
+  const headers = {
+    "Content-Type": "application/json",
+    apikey: SUPABASE_ANON_KEY,
+    Authorization: `Bearer ${authToken}`,
+  };
+  const call = async (fn, body) => {
+    const res = await fetch(`${base}/functions/v1/${fn}`, { method: "POST", headers, body: JSON.stringify(body) });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data?.error || `${fn} failed (${res.status})`);
+    return data;
+  };
+  try {
+    const doc = await call("google-drive-create-doc", { userIdentifier: auth.userId, docName: title });
+    /* Appended in one call rather than paragraph by paragraph. A report is one
+       thing, and splitting it into fifteen requests is fifteen chances for half
+       a document to exist. */
+    if (text.trim()) {
+      await call("google-docs-append", { userIdentifier: auth.userId, docId: doc.id, text });
+    }
+    logMac("google_doc.created", { docId: doc.id, chars: text.length });
+    return { ok: true, say: `Created the Google Doc "${doc.name || title}"${doc.url ? `: ${doc.url}` : ""}` };
+  } catch (error) {
+    logMac("google_doc.failed", { error: String(error?.message || error) });
+    /* Named, because the fix is a consent screen and no amount of retrying is
+       going to get past one. */
+    return { ok: false, say: `I could not write the Google Doc: ${String(error?.message || error)}. If Drive is not connected yet, that is done once on the website.` };
+  }
+}
+
+/* Braino's own hands, reachable from the loop.
+ *
+ * The catalog names 115 abilities and every one of them was locked behind the
+ * regex cascade, so the brain could not open Notes or play a song: not because
+ * it chose not to, but because those verbs were not in the vocabulary it was
+ * shown. It read as a model failing at a job it was never offered.
+ *
+ * A map rather than a lookup by handler name, because these are module-scoped
+ * functions in a CommonJS file and cannot be reached by string, and because
+ * every one takes different arguments. There is no generic call here to write:
+ * openChromeUrl wants a url, startAlarm wants an epoch and a label. The
+ * adapter IS the work, which is why this list is short and honest rather than
+ * ninety-three entries of guesswork.
+ *
+ * A tool that is not in here is not a crash. It comes back as a plain refusal
+ * the loop can read and route around, and it is logged by name, so what to
+ * wire next is decided by what Braino actually reached for rather than by
+ * whichever ones seemed important on a Tuesday.
+ */
+const MAC_HIL_TOOLS = {
+  notes_create: (a) => startNoteWorkflow({ title: String(a.title || ""), body: String(a.body || "") }),
+  open_url: (a) => openChromeUrl(String(a.url || a.target || "")),
+  chrome_search_google: (a) => openChromeUrl(`https://www.google.com/search?q=${encodeURIComponent(String(a.query || ""))}`),
+  web_search: (a) => runMacWebSearch(String(a.query || "")),
+  deep_research: (a) => runResearch(String(a.query || a.topic || "")),
+  amazon_search: (a) => runAmazonSearch(String(a.product || a.query || "")),
+  spotify_play: (a) => playSpotifySongOnMac(String(a.query || a.song || a.track || "")),
+  spotify_control: (a) => controlSpotifyPlaybackOnMac(String(a.control || a.action || "")),
+  spotify_now_playing: () => describeSpotifyNowPlaying(),
+  screen_vision: (a) => runScreenVision(String(a.question || a.prompt || "")),
+  front_window_summary: () => frontWindowSummary(),
+  take_screenshot: () => takeScreenshot(),
+  read_selection: (a) => actOnSelectedText({ verb: String(a.verb || "summarise"), language: a.language, speakOnly: true }),
+  alarm_set: (a) => startAlarm(Number(a.fireAt), String(a.label || "")),
+  whatsapp_send: (a) => sendWhatsAppMessage(String(a.recipient || ""), String(a.message || "")),
+  google_doc_create: (a) => createGoogleDocWithText(String(a.title || "Untitled"), String(a.text || "")),
+  timer_set: (a) => startReminder(Number(a.seconds || a.duration || 0), String(a.label || "")),
+  /* One name, two doors. The catalog calls it "open a named app, known website
+     or local file", and the loop reached for it and was told it did not exist,
+     which cost a whole turn to discover. A dot means the web; anything else is
+     an app. Crude, and right for every real case: "Spotify" has no dot,
+     "amazon.in" does. */
+  open_target: (a) => {
+    const target = String(a.target || a.name || "").trim();
+    if (!target) return { ok: false, say: "Nothing named to open." };
+    return /^https?:\/\//i.test(target) || /\.[a-z]{2,}(\/|$)/i.test(target)
+      ? openChromeUrl(target.startsWith("http") ? target : `https://${target}`)
+      : openApp(target);
+  },
+};
+
+/* Where a run's time actually went.
+ *
+ * Two numbers decide everything about speed here: how many turns there were,
+ * and how long each one spent waiting on the model. Scripts are the third
+ * number and they are always tiny, which is the point being made. */
+let macRunThinkMs = 0;
+let macRunTurns = 0;
+let macRunScriptMs = 0;
+let macRunStartedAt = 0;
+
+function macResetRunSpeed() {
+  macRunThinkMs = 0;
+  macRunTurns = 0;
+  macRunScriptMs = 0;
+  macRunStartedAt = Date.now();
+}
+
+function macReportRunSpeed(runId) {
+  if (!macRunStartedAt || !macRunTurns) return;
+  const total = (Date.now() - macRunStartedAt) / 1000;
+  const think = macRunThinkMs / 1000;
+  const script = macRunScriptMs / 1000;
+  // Everything that is neither the model nor a script: reading the page,
+  // clicking, waiting for Chrome. Worth naming, because when it is large the
+  // fix is not a faster model.
+  const other = Math.max(0, total - think - script);
+  logMac("hil.loop.speed", {
+    runId, turns: macRunTurns,
+    totalMs: Math.round(total * 1000),
+    thinkMs: Math.round(macRunThinkMs),
+    scriptMs: Math.round(macRunScriptMs),
+  });
+  console.log(
+    `[Braino ⏱ RUN] ${total.toFixed(1)}s total · ${macRunTurns} turns · `
+    + `thinking ${think.toFixed(1)}s · scripts ${script.toFixed(1)}s · everything else ${other.toFixed(1)}s`
+  );
+  if (macRunTurns > 0) {
+    console.log(`[Braino ⏱ RUN] ${(think / macRunTurns).toFixed(1)}s of thinking per turn. Fewer turns is the only thing that makes this faster.`);
+  }
+  macRunStartedAt = 0;
+}
+
+/* Is the run this action belongs to still the run? */
+function macHilRunIsCurrent() {
+  return Boolean(macActiveHilRun) && macActiveHilRun.generation === macHilGeneration;
+}
+
 async function macExecuteHilAction(action, elements) {
   const type = String(action?.type || "");
+  /* Whatever this does, the screen after it is not the screen before it. Held
+     here rather than in each branch so a new action type cannot forget, which
+     is the failure that turns a saved three seconds into a click on the wrong
+     row. */
+  macLastObservation = null;
+  /* Checked here rather than only between turns.
+   *
+   * The decision to click was made before the person said stop; firing it after
+   * is the difference between a job that ends and a job that gets one more
+   * click in on the way out. With tools in the vocabulary that click can now be
+   * a message sent or a folder deleted, so the check earns its place. */
+  if (!macHilRunIsCurrent()) {
+    logMac("hil.action.dropped_after_stop", { type });
+    return { ok: false, error: "The run was stopped before this could happen." };
+  }
   const byIndex = (i) => elements.find((e) => Number(e.index) === Number(i));
 
   if (type === "navigate") {
@@ -14684,6 +14907,9 @@ async function macExecuteHilAction(action, elements) {
     return res.status === "key" ? { ok: true } : { ok: false, error: `${res.status}: ${res.detail}` };
   }
   if (type === "read") {
+    /* An explicit read is the model asking to look again, so it never reuses
+       the cache: answering "you already know" to a deliberate look is how a
+       loop ends up certain about a page that has since changed. */
     const obs = await macBuildObservation();
     return { ok: obs.ok, sees: obs.text.slice(0, 3000), error: obs.error };
   }
@@ -14699,6 +14925,158 @@ async function macExecuteHilAction(action, elements) {
     const res = await runAxHelper(["key", key], 8000);
     await macHilWait(500);
     return res.status === "key" ? { ok: true } : { ok: false, error: `${res.status}: ${res.detail}` };
+  }
+  if (type === "exec_js") {
+    /* The model writes the script; we run it in the tab they are already
+     * looking at, signed in as them. This is the whole reason a ten step job
+     * stops costing ten model calls.
+     *
+     * Wrapped rather than trusted to wrap itself. A script that throws would
+     * come back as an osascript error with no page context, which reads to the
+     * loop as "the browser is broken" rather than "my selector was wrong", and
+     * it retries the wrong thing. Wrapping turns a throw into a sentence it can
+     * act on.
+     *
+     * Logged in full, on purpose. This is the one action whose intent cannot be
+     * read from its name, and a session where something went wrong is worth
+     * being able to reconstruct exactly.
+     */
+    const code = String(action.code || "");
+    if (!code.trim()) return { ok: false, error: "No script to run." };
+    const app = isChromeApp(activeMacContext?.appName) ? chromeScriptName(activeMacContext.appName) : "Google Chrome";
+    logMac("hil.exec_js.start", { chars: code.length, app, code: textForLog(code, 2000) });
+    /* eval, not a function body, and the difference is not cosmetic.
+     *
+     * The model writes either an IIFE or a bare expression, both of which are
+     * natural JavaScript and neither of which survives being pasted into a
+     * function body: "(function(){return x})()" as a statement evaluates and
+     * throws the value away, so every script would have come back empty and
+     * looked like the page was broken. eval returns the completion value of
+     * both shapes. It adds no risk that running the script did not already
+     * carry. */
+    /* Two helpers, injected rather than asked for.
+     *
+     * The expensive thing is never the script, it is the TURN: ten seconds of
+     * thinking to decide the next one. So the way to get faster is to let one
+     * script do what used to take ten turns, and the thing that stopped that was
+     * navigation. Opening a product page ends the script, which is why comparing
+     * ten keyboards cost ten turns of ten seconds to run ten scripts of a third
+     * of a second each.
+     *
+     * A script does not have to navigate to read another page. It can ask for it.
+     * Synchronous XHR rather than fetch because this channel returns the
+     * completion value immediately: a promise comes back as "[object Promise]"
+     * and everything the model wrote is thrown away. Sync is deprecated in
+     * browsers and exactly right here, where the caller is osascript and there is
+     * no user interaction to block.
+     *
+     * The cap is a real limit, not politeness. Sync XHR cannot time out, so
+     * twelve slow pages is a hung osascript, and the counter is the only thing
+     * between a curious script and a wedged Chrome tab. */
+    const helpers = `var __n=0;`
+      + `function __brainoGet(u){if(++__n>12)throw new Error("__brainoGet limit: 12 pages per script. Return what you have.");`
+      + `var x=new XMLHttpRequest();x.open("GET",u,false);x.send();`
+      + `if(x.status>=400)throw new Error("__brainoGet "+x.status+" for "+u);return x.responseText}`
+      + `function __brainoDoc(h){return new DOMParser().parseFromString(h,"text/html")}`
+      /* A page that renders itself in the browser has no content to fetch, and
+       * saying so is the whole value of this check.
+       *
+       * Product Hunt is React: the HTML is a shell and the products arrive
+       * later, so __brainoPage came back with an empty object. Twice, seven and
+       * a half seconds each, because "nothing" and "nothing yet" look identical
+       * and the sensible response to an empty result is to try again. Fifteen
+       * seconds and two turns to learn something the first attempt knew.
+       *
+       * Thrown rather than returned empty, with the way round in the message: a
+       * site like this has to be OPENED, and then read from the live DOM, which
+       * is a thing this loop is already good at. */
+      + `function __brainoPage(u){var h=__brainoGet(u);var d=__brainoDoc(h);`
+      + `var t=(d.body&&d.body.innerText||d.body&&d.body.textContent||"").trim();`
+      + `if(t.length<200)throw new Error("__brainoPage got an empty shell from "+u+" ("+t.length+" chars of text). That site builds its page in the browser, so there is nothing in the HTML to read. Do not retry this. Navigate to it instead and read the live page.");`
+      + `return d}`;
+    const wrapped = `(function(){try{${helpers}\nvar __r=eval(${JSON.stringify(code)});`
+      + `return __r===undefined?"(the script returned nothing)":(typeof __r==="string"?__r:JSON.stringify(__r))}`
+      + `catch(e){return "BRAINO_ERR "+(e&&e.message?e.message:String(e))}})()`;
+    const startedJs = Date.now();
+    // 15s was sized for a script touching one page. Reading a dozen is slower
+    // and still enormously cheaper than a dozen turns.
+    const out = await runJs(wrapped, app, 45000);
+    if (!out.ok) {
+      logMac("hil.exec_js.failed", { reason: out.reason, detail: out.detail });
+      /* javascript_not_allowed is a checkbox in Chrome, not a bug, and it is
+         the one failure the loop can neither retry nor route around. Saying so
+         in the result is the difference between it asking the person to tick it
+         and it trying the same script four more times. */
+      const why = out.reason === "javascript_not_allowed"
+        ? "Chrome will not run scripts yet. The user must turn on View > Developer > Allow JavaScript from Apple Events. Tell them that, do not retry."
+        : out.reason === "chrome_not_running" ? "Chrome is not running."
+        : `The script did not run: ${out.detail || out.reason}`;
+      return { ok: false, error: why };
+    }
+    const said = String(out.out || "").trim();
+    if (said.startsWith("BRAINO_ERR")) {
+      logMac("hil.exec_js.threw", { error: said.slice(0, 200) });
+      return { ok: false, error: `The script threw: ${said.replace("BRAINO_ERR ", "")}` };
+    }
+    const jsMs = Date.now() - startedJs;
+    logMac("hil.exec_js.done", { chars: said.length, ms: jsMs });
+    macRunScriptMs += jsMs;
+    console.log(`[Braino ⚡ SCRIPT] ran in ${(jsMs / 1000).toFixed(1)}s, returned ${said.length} chars`);
+    /* Generous, and never silent about the cut.
+     *
+     * 3000 was borrowed from the look action, where it is right: a screen
+     * description that long has said everything. A script reading twenty Amazon
+     * listings legitimately returns twenty five thousand characters, and cutting
+     * that to three thousand mid-listing produced nine straight turns of "the
+     * output was cut off, I will try a shorter extraction" against a wall it
+     * could not see. It was not failing at the task, it was failing to find out
+     * what had happened to its own result.
+     *
+     * So the budget is real, and when it is exceeded the result SAYS so. A model
+     * told it got the first third of something can ask for the rest. A model
+     * handed a sentence that stops mid-word has to guess, and it guessed wrong
+     * eight times. */
+    const EXEC_JS_MAX = 12000;
+    if (said.length > EXEC_JS_MAX) {
+      logMac("hil.exec_js.truncated", { chars: said.length, kept: EXEC_JS_MAX });
+      return {
+        ok: true,
+        answer: `${said.slice(0, EXEC_JS_MAX)}\n\n[CUT OFF HERE. That was the first ${EXEC_JS_MAX} of ${said.length} characters. Nothing is wrong: your script returned more than fits in one turn. Do not retry it smaller for its own sake. Either use what is above, or return fewer fields next time.]`,
+      };
+    }
+    return { ok: true, answer: said || "The script ran and returned nothing." };
+  }
+  if (type === "tool") {
+    const name = String(action.tool || "");
+    const args = (action.args && typeof action.args === "object") ? action.args : {};
+    const run = MAC_HIL_TOOLS[name];
+    if (!run) {
+      // Named, real, and not wired here yet. Said plainly so the loop can pick
+      // another route instead of retrying the same unavailable thing, and
+      // logged so the gap is a number rather than a hunch.
+      logMac("hil.tool.unwired", { tool: name });
+      /* "Tell them you cannot" was an exit, and it got taken. A missing tool is
+         not a missing ability: almost everything one would do is a website, and
+         driving a website is the thing this loop is best at. So the way round is
+         named, rather than left as an option. */
+      return {
+        ok: false,
+        error: `There is no ${name} tool on this Mac. That is not a dead end: do it in the browser instead, which you are good at. Open the site it belongs to and use exec_js. Never tell them you cannot do something just because a tool is missing.`,
+      };
+    }
+    try {
+      const out = await run(args);
+      logMac("hil.tool.done", { tool: name, ok: out?.ok !== false });
+      if (out && out.ok === false) return { ok: false, error: String(out.say || out.error || `${name} did not work.`) };
+      // .say carries whatever the tool found out. It goes back as answer, the
+      // same field a search uses, so the loop folds it into facts and it
+      // survives the turn instead of being learned and forgotten.
+      const said = out && typeof out.say === "string" ? out.say.trim() : "";
+      return said ? { ok: true, answer: said } : { ok: true };
+    } catch (error) {
+      logMac("hil.tool.failed", { tool: name, error: String(error?.message || error) });
+      return { ok: false, error: `${name} threw: ${String(error?.message || error)}` };
+    }
   }
   if (type === "web_search") {
     const found = await runMacWebSearch(String(action.query || ""));
@@ -14765,6 +15143,15 @@ async function runMacHilLoop(command, resume = null) {
    * four and answered by giving up. */
   let looks = 0;
   let rescuedByLooking = false;
+  /* The expensive brain, asked for once, only when he is genuinely stuck.
+   *
+   * This is the design from the start: he thinks, and Astra is called in when he
+   * cannot get through. It was only ever wired into the lab, so on the Mac a
+   * circling run looked at the screen once and then died. Astra is fifty times
+   * the price per token, which is exactly why it belongs here and not on every
+   * turn: a rescue that fires on one run in ten costs a tenth of nothing, and
+   * the same brain driving everything cost six dollars in a day. */
+  let rescueRequested = false;
   /* The signature of the one step the user has just approved. Spent on use, so
      a yes covers the thing that was asked about and nothing else. */
   let approvedSig = String(resume?.approvedSig || "");
@@ -14774,6 +15161,7 @@ async function runMacHilLoop(command, resume = null) {
   const startStep = Math.max(0, Number(resume?.stepsUsed) || 0);
   const deadline = Date.now() + MAC_HIL_MAX_MS;
   logMac("hil.loop.start", { command: textForLog(command), runId });
+  macResetRunSpeed();
   macActiveHilRun = { runId, state, generation: myGeneration, command: String(command || "") };
 
 
@@ -14792,7 +15180,9 @@ async function runMacHilLoop(command, resume = null) {
       logMac("hil.loop.timeout", { runId, step });
       return { ok: false, say: said || "That was taking too long, so I stopped partway rather than leave you hanging.", source: "hil_loop" };
     }
-    const obs = await macBuildObservation();
+    const cached = macCachedObservation();
+    if (cached) logMac("hil.observe.reused", { step });
+    const obs = cached || await macBuildObservation();
     if (macHilGeneration !== myGeneration) {
       logMac("hil.loop.superseded", { runId, step, at: "after_observe" });
       return { ok: true, say: "", source: "hil_loop", superseded: true };
@@ -14815,9 +15205,34 @@ async function runMacHilLoop(command, resume = null) {
         lastStep: lastStep || undefined,
         userReply: pendingReply || undefined,
       },
+      // This caller has Braino's real hands, so the server sends the tool
+      // catalog with the prompt. Without it the brain is offered a browser and
+      // nothing else, which is what made it look unable to open Notes.
+      hands: "mac",
+      // Set only after circling, and only once. The server rations it again on
+      // its own side, because a client is a thing that can be edited.
+      rescue: rescueRequested || undefined,
+      rescueReason: rescueRequested ? "he circled on the same action after looking at the screen properly" : undefined,
+      /* The names actually wired on THIS Mac, not the catalog's full 115.
+       *
+       * Being shown a tool that does not exist costs a whole turn to discover,
+       * and it happened repeatedly: open_target, then something else, each one
+       * ten seconds spent learning a hand is missing. The catalog is the menu of
+       * what Braino can ever do; this is what he can do today. */
+      tools: Object.keys(MAC_HIL_TOOLS),
     };
     pendingReply = null;
     let turn = null;
+    let turnBrain = "hil";
+    let turnModel = "";
+    /* Where the time goes, printed while it goes.
+     *
+     * The whole speed argument is: a script is a third of a second and a TURN is
+     * ten, so fewer turns is the only thing that matters. That was worked out by
+     * reading timestamps out of a log file afterwards. It should be visible in
+     * the terminal while it happens, because a number you can see is the only
+     * thing that stops "it feels slow" being an argument. */
+    const turnStartedAt = Date.now();
     const controller = new AbortController();
     macHilAbort = controller;
     try {
@@ -14830,6 +15245,13 @@ async function runMacHilLoop(command, resume = null) {
       if (!res.ok) throw new Error(`hil-loop ${res.status}`);
       const data = await res.json();
       turn = data?.turn;
+      // Which brain actually answered. The server is the only thing that knows:
+      // the model is chosen there on purpose, so this side must never infer it
+      // from a constant. Without this the log said "HIL-LOOP" whichever model
+      // replied, which is exactly how you end up unable to tell whether an
+      // expensive experiment is even running.
+      turnBrain = data?.meta?.brain === "astra" ? "astra" : "hil";
+      turnModel = String(data?.meta?.model || "");
       if (data?.meta?.parse_ok === false) throw new Error("unreadable turn");
       retried = 0; // a good turn clears the run's hiccup budget
       if (macHilAbort === controller) macHilAbort = null;
@@ -14861,8 +15283,17 @@ async function runMacHilLoop(command, resume = null) {
 
     const thinking = String(turn.thinking || "").trim();
     if (thinking) {
-      console.log(`[Braino HIL-LOOP] ${step + 1}: ${scrubForLog(thinking)}`);
-      sendTaskProgress({ status: "thinking", text: thinking.slice(0, 140) });
+      // The tag names the brain, not the endpoint. Reading "[Braino HIL-LOOP]"
+      // while Astra was driving is what made a deployed experiment invisible.
+      const tag = turnBrain === "astra" ? "Braino ASTRA" : "Braino HIL-LOOP";
+      const thoughtMs = Date.now() - turnStartedAt;
+      macRunThinkMs += thoughtMs;
+      macRunTurns += 1;
+      console.log(`[${tag}] ${step + 1} (thought ${(thoughtMs / 1000).toFixed(1)}s): ${scrubForLog(thinking)}`);
+      logMac("hil.loop.turn", { step: step + 1, brain: turnBrain, model: turnModel });
+      // brain rides the same payload the caption does, so the notch can show who
+      // is thinking without a second channel that could disagree with this one.
+      sendTaskProgress({ status: "thinking", text: thinking.slice(0, 140), brain: turnBrain, model: turnModel, running: true });
       /* Say it out loud as he works. Watching a silent thing click around your
          screen is unnerving; hearing what it is doing is the difference between
          a tool and someone helping you. One breath, first sentence only, and
@@ -15015,6 +15446,18 @@ async function runMacHilLoop(command, resume = null) {
         }
         logMac("hil.loop.look_failed", { runId, reason: "circling", why: seen?.error || "no answer" });
       }
+      /* Looking did not break the circle, so hand it to the better thinker
+         rather than stopping. One per run: if Astra circles too, the screen
+         really is not answering and stopping is the honest end. */
+      if (!rescueRequested) {
+        rescueRequested = true;
+        recentActions.length = 0;
+        state.facts.push("You were going in circles, so a stronger model has taken over this run. Look at what is actually on the screen and try a different approach from the one that kept failing.");
+        if (state.facts.length > 12) state.facts = state.facts.slice(-12);
+        logMac("hil.loop.escalated", { runId, step, action: stepSig });
+        console.log("[Braino ✨ HANDOFF] he circled, handing this run to Astra");
+        continue;
+      }
       return {
         ok: false,
         say: said || "I keep trying the same thing and the screen is not changing, so I have stopped rather than keep going.",
@@ -15046,7 +15489,22 @@ async function runMacHilLoop(command, resume = null) {
     // A look or a search is worthless if it evaporates next turn, so its content
     // is promoted into facts, which DO persist.
     if (result?.sees) state.facts.push(`I looked and saw: ${String(result.sees).slice(0, 600)}`);
-    if (result?.answer) state.facts.push(`Search "${stepObj.action?.query}" answered: ${String(result.answer).slice(0, 600)}`);
+    /* A script result is not a search result and must not be filed as one.
+     *
+     * Both arrive as .answer, so an exec_js return was being written into facts
+     * as 'Search "undefined" answered:' and cut at 600 characters. That is the
+     * third and smallest of the three places the same result was being trimmed,
+     * and the one that decided what survived past the next turn. Findings from a
+     * script are the whole point of running it, so they get room. */
+    if (result?.answer && stepObj.action?.type === "exec_js") {
+      state.facts.push(`My script returned: ${String(result.answer).slice(0, 4000)}`);
+    } else if (result?.answer) {
+      /* 600 was sized for a spoken answer, and the sources are appended to the
+         END of one, so at 600 every link was cut off before it could be used.
+         Fixing the search to hand over its URLs would have changed nothing while
+         this line quietly removed them one turn later. */
+      state.facts.push(`Search "${stepObj.action?.query}" answered: ${String(result.answer).slice(0, 2500)}`);
+    }
     if (state.facts.length > 12) state.facts = state.facts.slice(-12);
     // Verify against a FRESH observation, the way the browser does: the point of an
     // assert is what the screen looks like after, not whether the call returned.
@@ -15067,6 +15525,10 @@ async function runMacHilLoop(command, resume = null) {
   logMac("hil.loop.budget", { runId });
   return { ok: false, say: said || "That took more steps than I give myself for one task, so I stopped.", source: "hil_loop" };
   } finally {
+    /* Reported here rather than at each return, because a run has seven ways to
+       end and the interesting ones are the endings nobody planned. Measuring
+       only the tidy exit is how a slow failure stays invisible. */
+    macReportRunSpeed(runId);
     /* Only ever clear my own registration. A superseding run registers itself
        before this one unwinds, and clearing unconditionally would delete the
        new job's handle the moment the old one noticed it had been replaced. */
@@ -16902,7 +17364,22 @@ ipcMain.handle("braino-mac:stop-running-job", async () => {
   if (had) logMac("hil.loop.stopped_by_user", { runId: macActiveHilRun.runId });
   macHilGeneration += 1;
   macActiveHilRun = null;
+  /* Abort the call in flight, which stop never did.
+   *
+   * Bumping the generation only makes the NEXT turn notice, and a turn is
+   * however long the model takes. On Luna that was about 1.7s and "stop" felt
+   * instant. On Astra it is 5 to 10, so the same code reads as stop being
+   * ignored while he carries on working. A new command has always aborted the
+   * fetch here (see runDelegate); stop, which is the one place a person is
+   * actively asking for it to end, did not. */
+  if (macHilAbort) {
+    try { macHilAbort.abort(); } catch (_) {}
+    macHilAbort = null;
+  }
   settleTaskProgress("stopped_by_user");
+  // The renderer clears the working glow off this, rather than waiting for a
+  // turn that is never coming back to tell it the job is over.
+  sendTaskProgress({ status: "ready", clearNotch: true, running: false });
   return { ok: had };
 });
 

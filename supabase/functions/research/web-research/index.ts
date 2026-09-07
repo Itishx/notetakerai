@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
-import { BRAINO_TEXT_MODEL } from "../../_shared/openai-models.ts";
+import { BRAINO_TEXT_MODEL, BRAINO_WEB_SEARCH_FAST_MODEL } from "../../_shared/openai-models.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -203,7 +203,14 @@ function toolConfigForPurpose(purpose: Purpose) {
 function modelForPurpose(purpose: Purpose) {
   const deep = purpose === "google_doc" || purpose === "compare";
   if (deep) return Deno.env.get("OPENAI_WEB_SEARCH_MODEL") || BRAINO_TEXT_MODEL;
-  return Deno.env.get("OPENAI_WEB_SEARCH_FAST_MODEL") || Deno.env.get("OPENAI_WEB_SEARCH_MODEL") || BRAINO_TEXT_MODEL;
+  /* Falls back to a named fast model, not to the big one.
+   *
+   * This line read "|| BRAINO_TEXT_MODEL", so with the secret unset every quick
+   * search quietly ran on the full model at default reasoning: nine to twenty
+   * three seconds each in the Mac logs. The whole fast lane existed and did
+   * nothing, which is worse than not having built it, because it read as done.
+   * An unset secret should cost some quality, never the entire point. */
+  return Deno.env.get("OPENAI_WEB_SEARCH_FAST_MODEL") || BRAINO_WEB_SEARCH_FAST_MODEL;
 }
 
 async function sha256(value: string) {

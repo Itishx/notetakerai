@@ -103,7 +103,7 @@ type ServerTurn = {
 type ServerResponse = {
   turn: ServerTurn;
   moment: { id: string; label: string; leads: string[]; intensity: number };
-  meta: { model: string; elapsed_ms: number; hil_loop_version: string; parse_ok: boolean; rescue?: boolean };
+  meta: { model: string; elapsed_ms: number; hil_loop_version: string; parse_ok: boolean; rescue?: boolean; brain?: "hil" | "astra" };
   error?: string;
 };
 
@@ -155,6 +155,12 @@ export class HilLoopRunner {
   private rescueActive = false;
   private rescueUsed = false;
   private rescueReason = "";
+  // Who the server says is driving. When Astra already has the wheel there is
+  // nothing better to escalate to, so the whole rescue path stands down rather
+  // than offering a handoff that would hand the run to the brain already running
+  // it. The server is the authority on this, not a constant compiled in here:
+  // the two surfaces sharing hil-loop must never disagree about who is thinking.
+  private brain: "hil" | "astra" = "hil";
 
   constructor(
     private supabaseUrl: string,
@@ -170,6 +176,12 @@ export class HilLoopRunner {
 
   // For the UI. The notch and the run panel both need to say who is driving.
   get onAstra(): boolean {
+    return this.rescueActive || this.brain === "astra";
+  }
+
+  // True only when Astra took over mid-run. Astra driving from turn one is not a
+  // handoff and must not be dressed as one.
+  get handedOff(): boolean {
     return this.rescueActive;
   }
 
@@ -203,6 +215,7 @@ export class HilLoopRunner {
     this.rescueActive = false;
     this.rescueUsed = false;
     this.rescueReason = "";
+    this.brain = "hil";
     this.onChange();
     await this.turn();
   }
@@ -318,6 +331,7 @@ export class HilLoopRunner {
     }
     if (!data || this.stopped) return;
 
+    if (data.meta?.brain) this.brain = data.meta.brain;
     this.moment = data.moment || null;
     this.meta = data.meta ? { model: data.meta.model, version: data.meta.hil_loop_version } : this.meta;
     const turn = data.turn;
@@ -550,6 +564,8 @@ export class HilLoopRunner {
   // exactly where it stood. That matters: the alternative, tearing down and
   // restarting, is what leaves half-filled forms and double-sent messages behind.
   private escalate(reason: string): boolean {
+    // Nothing to escalate to when Astra is already the one thinking.
+    if (this.brain === "astra") return false;
     if (this.rescueUsed || this.phase === "ended") return false;
     this.rescueUsed = true;
     this.rescueActive = true;

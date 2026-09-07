@@ -257,6 +257,13 @@ export default function HilLoopRun({ autoRun }: { autoRun?: { command: string; p
               {running ? "Working" : "Run the loop"}
             </button>
             {runner.phase === "thinking" && <span className="hil-pulse" aria-hidden="true" />}
+            {/* Astra driving from turn one is a standing fact about the run, not
+                an event in it, so it sits in the controls rather than in the
+                stream. The gold handoff card stays for the other case: Astra
+                arriving partway through, which IS an event. */}
+            {runner.onAstra && !runner.handedOff && (
+              <span className="hil-astra-badge">astra is driving</span>
+            )}
             {running && (
               <div className="hil-loop-sabotage">
                 <span>Break his world:</span>

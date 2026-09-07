@@ -5189,3 +5189,76 @@ body {
   transition: background .18s, border-color .18s;
 }
 .wp-hint button:hover { background: rgba(255, 255, 255, .15); border-color: rgba(255, 255, 255, .3); }
+
+/* ── Astra is thinking ───────────────────────────────────────────────────────
+   The notch has to say WHICH brain is driving, because the two are
+   indistinguishable from the outside apart from being slower, and "it feels
+   slower" is not evidence that an expensive experiment is running.
+
+   Gold, and the only gold on this face: coral is him, so the one condition
+   where a different model is doing the thinking should not wear his colour.
+   A word rather than a colour alone, because a tint is something you learn and
+   a word is something you read. */
+#notch-face.nf-astra .nf-think-chip {
+  padding-left: 8px;
+  background: linear-gradient(180deg, rgba(240, 207, 125, .20), rgba(168, 121, 42, .14));
+  box-shadow: inset 0 0 0 1px rgba(240, 207, 125, .46);
+}
+#notch-face.nf-astra .nf-think-chip::before {
+  content: "ASTRA";
+  flex: 0 0 auto;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #f4d9a0, #d9a441);
+  color: #3d2a06;
+  font: 800 8px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: .12em;
+}
+/* The dot that pulses while he thinks, in gold to match, so the whole chip
+   reads as one state rather than a coral chip wearing a gold label. */
+#notch-face.nf-astra .nf-think-dot,
+#notch-face.nf-astra .nf-think-chip .nf-dot {
+  background: #f0cf7d;
+  box-shadow: 0 0 6px rgba(240, 207, 125, .85);
+}
+
+/* ── A job is running ────────────────────────────────────────────────────────
+   Blue, and only blue, for "work is happening right now". Amber already means
+   cowork is watching the screen, and two ambient colours that mean different
+   things is how you end up having to remember which is which.
+
+   It breathes rather than flashes. This can be on for two minutes, and anything
+   that blinks for two minutes stops reading as information and starts reading
+   as a fault. */
+#notch-face.nf-task .nf-pill {
+  box-shadow:
+    0 0 0 1px rgba(88, 156, 255, .40),
+    0 0 22px rgba(56, 128, 255, .34),
+    0 10px 34px rgba(0, 0, 0, .28);
+  animation: nfTaskBreathe 2.8s ease-in-out infinite;
+}
+@keyframes nfTaskBreathe {
+  0%, 100% {
+    box-shadow:
+      0 0 0 1px rgba(88, 156, 255, .34),
+      0 0 16px rgba(56, 128, 255, .24),
+      0 10px 34px rgba(0, 0, 0, .28);
+  }
+  50% {
+    box-shadow:
+      0 0 0 1px rgba(120, 178, 255, .58),
+      0 0 30px rgba(56, 128, 255, .48),
+      0 10px 34px rgba(0, 0, 0, .28);
+  }
+}
+/* Wherever he is. Out on the screen the pill is not what you are looking at,
+   he is, so the same blue rides the mascot. */
+#notch-face.nf-task .nf-walker,
+#notch-face.nf-task .nf-face-svg {
+  filter: drop-shadow(0 0 9px rgba(88, 156, 255, .52));
+}
+/* A breathing glow is decoration; the fact that a job is running is not. Anyone
+   who has asked for less motion keeps the colour and loses the pulse. */
+@media (prefers-reduced-motion: reduce) {
+  #notch-face.nf-task .nf-pill { animation: none; }
+}

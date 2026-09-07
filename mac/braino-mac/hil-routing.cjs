@@ -148,8 +148,42 @@ function macWantsTheBrain(raw) {
      for exactly that reason: it was rejecting them as not-a-task and handing
      them to a pattern match. */
   if (MAC_RESEARCH.test(String(raw || "").toLowerCase())) return true;
-  if (!macLooksLikeTask(raw)) return false;
-  return !macFastLane(raw);
+  /* The default flipped here, and this is the whole change.
+   *
+   * It used to be: reach the brain only if the sentence carries one of the verbs
+   * on a list. That list is a guess about how people talk, and every phrasing it
+   * missed silently fell through to a pattern match. "Get me a Canva document
+   * for the pitch" has no listed verb. Neither does "I need three keyboards
+   * under ten thousand". Both are obviously work.
+   *
+   * It is now: the fast lane keeps what it is genuinely better at, conversation
+   * stays conversation, and everything else is the brain's. The brain has the
+   * whole tool catalog and can answer conversationally itself, so an over-send
+   * costs a few seconds. An under-send costs a wrong answer delivered
+   * confidently, which is what the old default kept producing. */
+  if (macFastLane(raw)) return false;
+  return !macIsConversation(raw);
+}
+
+/* Talking TO Braino rather than asking him to do something.
+ *
+ * "how are you", "what is the capital of France", "who made you". Routing these
+ * through a fourteen step agent loop would make a one second answer take five,
+ * and would be worse: the loop's job is to act, and there is nothing here to do.
+ *
+ * Narrow on purpose. A question that names work is still work: "how much does
+ * Astra cost" is caught by MAC_RESEARCH above and never reaches this. */
+const MAC_CHITCHAT = /^(?:hey\s+|ok\s+|okay\s+)?(?:braino[,\s]+)?(?:how (?:are|do) you|who (?:are|made) you|what (?:are|can) you|are you |good (?:morning|evening|night)|hello|hi\b|thanks|thank you|nice|cool|nothing|never ?mind)/i;
+
+function macIsConversation(raw) {
+  const t = String(raw || "").trim();
+  if (!t) return true;
+  if (MAC_CHITCHAT.test(t)) return true;
+  /* A bare question about the world, with no job in it. "what is X" is a
+     question; "what is X, then put it in a note" is two jobs and already went
+     to the brain above, because a continuation is caught before this. */
+  if (/^(?:what|who|when|where|why|whose)\b/i.test(t) && !MAC_TASK_VERB.test(t.toLowerCase())) return true;
+  return false;
 }
 
 /* "Close all the tabs."
@@ -177,6 +211,7 @@ function macClosesAllTabs(raw) {
 
 module.exports = {
   macNeedsScreenContext,
+  macIsConversation,
   macFastLane,
   macWantsTheBrain,
   macLooksMultiStep,
