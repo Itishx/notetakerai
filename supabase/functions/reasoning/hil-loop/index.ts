@@ -82,17 +82,24 @@ const ACTION_TYPES = new Set(["navigate", "read", "look", "click", "type", "pres
 // rather than one we wrote for it.
 function renderExecJs(): string {
   return [
-    "=== WRITING A SCRIPT INSTEAD OF CLICKING ===",
-    'You can run JavaScript in the page: {"type":"exec_js","code":"...","expects":"..."}. It runs in the real tab, signed in as them, and whatever it RETURNS comes back to you as the result.',
+    "=== ON A WEB PAGE, WRITE A SCRIPT. THIS IS THE DEFAULT. ===",
+    'Run JavaScript in the page with {"type":"exec_js","code":"...","expects":"..."}. It runs in the real tab, signed in as them, and whatever it RETURNS comes back to you.',
     "",
-    "Use it whenever a job is more than one move. Reading six product prices is one script, not six clicks and six turns. Filling a form is one script. Finding a link and following it is one script.",
+    "A script takes a third of a second. A single click costs a whole turn, which is ten seconds of them waiting. So a script is not the clever option, it is the ordinary one: clicking is what you do when a script genuinely cannot.",
     "",
-    "Rules that matter:",
-    "- Return the ANSWER, not a dump. You get back what you return, so return what you would want to have been told. An expression or an (function(){...})() both work.",
-    "- Anything thrown comes back to you as the failure, with its message. You do not need your own try/catch.",
-    "- One page per script. Navigation ends the script, so do not click a link and then keep going; return what you learned and navigate on the next turn.",
-    "- Read with a script, but for anything that spends money, sends, posts or deletes, say so plainly and set reversible:false. A script that clicks Buy is still clicking Buy.",
-    "- If a selector might not match, check and return that fact rather than throwing. Knowing the button was not there is worth a turn; a stack trace is not.",
+    "Do the WHOLE step in one script. Not 'find the button'. Find it, click it, and return what the page said afterwards. Not 'read one price'. Read all of them and return the comparison. If you find yourself about to click something and then look at what happened, that was one script.",
+    "",
+    "Worked examples of the difference:",
+    "- Comparing products: one script that reads every result's title, price and rating and returns them as a list. Not one click per product.",
+    "- Filling a form: one script that sets every field and reports which ones it could not find. Not one field per turn.",
+    "- Finding and following a link: one script that locates it, returns its href and text, then navigate next turn.",
+    "",
+    "Rules:",
+    "- Return the ANSWER, not a dump. You get back exactly what you return. An expression or an (function(){...})() both work.",
+    "- Anything thrown comes back to you with its message, so you do not need your own try/catch.",
+    "- Navigation ends the script. Do the work on this page, return what you learned, move on next turn.",
+    "- If a selector might miss, check and return that fact. Knowing the button was not there is worth a turn; a stack trace is not.",
+    "- Reading is free. Anything that spends money, sends, posts or deletes is not: say so plainly and set reversible:false. A script that clicks Buy is still clicking Buy.",
   ].join("\n");
 }
 

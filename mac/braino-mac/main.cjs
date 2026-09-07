@@ -14471,10 +14471,32 @@ function macCommandForbidsSending(command) {
 }
 let macContextReadAt = 0;
 
+/* The last observation, and when it was taken.
+ *
+ * Reading the page is not cheap: it is an osascript round trip into Chrome plus
+ * a DOM walk, three to four seconds on a real page. It was being paid TWICE per
+ * turn, because verifying an assert takes a fresh look and then the next turn
+ * takes its own. Same URL, same element count, three seconds apart, all through
+ * the Amazon run: about a fifth of that four and a half minutes was spent
+ * reading a page it had just read.
+ *
+ * The window is deliberately short. A page that changed in the last second and
+ * a half is a page mid-navigation, and a stale map means clicking by an index
+ * that has moved, which is the one mistake worth engineering against. */
+let macLastObservation = null;
+const MAC_OBSERVATION_REUSE_MS = 1800;
+
+function macCachedObservation() {
+  if (!macLastObservation) return null;
+  if (Date.now() - macLastObservation.at > MAC_OBSERVATION_REUSE_MS) return null;
+  return macLastObservation.obs;
+}
+
 // The AX helper answers in one line: "observe\t{json}".
 async function macBuildObservation() {
   const res = await runAxHelper(["observe", String(MAC_HIL_OBSERVE_CAP)], 20000);
   if (res.status !== "observe") return { ok: false, error: res.detail || res.status, text: "", elements: [] };
+  // Set at the end of this function, below, once there is something worth reusing.
   let data = null;
   try { data = JSON.parse(res.detail); } catch (_) { return { ok: false, error: "unreadable observation", text: "", elements: [] }; }
   let elements = Array.isArray(data?.elements) ? data.elements : [];
@@ -14537,7 +14559,7 @@ async function macBuildObservation() {
   }
   browserUrl = String(activeMacContext?.browserUrl || "");
   const where = browserUrl ? `Address: ${browserUrl}` : "";
-  return {
+  const obs = {
     ok: true,
     text: [header, where, ...lines].filter(Boolean).join("\n"),
     elements,
@@ -14545,6 +14567,9 @@ async function macBuildObservation() {
     windowTitle: data?.window || "",
     browserUrl,
   };
+  // One place, so nothing can take an observation without it being the newest.
+  macLastObservation = { at: Date.now(), obs };
+  return obs;
 }
 
 /* A real look at the screen.
@@ -14622,6 +14647,19 @@ const MAC_HIL_TOOLS = {
   read_selection: (a) => actOnSelectedText({ verb: String(a.verb || "summarise"), language: a.language, speakOnly: true }),
   alarm_set: (a) => startAlarm(Number(a.fireAt), String(a.label || "")),
   whatsapp_send: (a) => sendWhatsAppMessage(String(a.recipient || ""), String(a.message || "")),
+  timer_set: (a) => startReminder(Number(a.seconds || a.duration || 0), String(a.label || "")),
+  /* One name, two doors. The catalog calls it "open a named app, known website
+     or local file", and the loop reached for it and was told it did not exist,
+     which cost a whole turn to discover. A dot means the web; anything else is
+     an app. Crude, and right for every real case: "Spotify" has no dot,
+     "amazon.in" does. */
+  open_target: (a) => {
+    const target = String(a.target || a.name || "").trim();
+    if (!target) return { ok: false, say: "Nothing named to open." };
+    return /^https?:\/\//i.test(target) || /\.[a-z]{2,}(\/|$)/i.test(target)
+      ? openChromeUrl(target.startsWith("http") ? target : `https://${target}`)
+      : openApp(target);
+  },
 };
 
 /* Is the run this action belongs to still the run? */
@@ -14631,6 +14669,11 @@ function macHilRunIsCurrent() {
 
 async function macExecuteHilAction(action, elements) {
   const type = String(action?.type || "");
+  /* Whatever this does, the screen after it is not the screen before it. Held
+     here rather than in each branch so a new action type cannot forget, which
+     is the failure that turns a saved three seconds into a click on the wrong
+     row. */
+  macLastObservation = null;
   /* Checked here rather than only between turns.
    *
    * The decision to click was made before the person said stop; firing it after
@@ -14739,6 +14782,9 @@ async function macExecuteHilAction(action, elements) {
     return res.status === "key" ? { ok: true } : { ok: false, error: `${res.status}: ${res.detail}` };
   }
   if (type === "read") {
+    /* An explicit read is the model asking to look again, so it never reuses
+       the cache: answering "you already know" to a deliberate look is how a
+       loop ends up certain about a page that has since changed. */
     const obs = await macBuildObservation();
     return { ok: obs.ok, sees: obs.text.slice(0, 3000), error: obs.error };
   }
@@ -14927,7 +14973,9 @@ async function runMacHilLoop(command, resume = null) {
       logMac("hil.loop.timeout", { runId, step });
       return { ok: false, say: said || "That was taking too long, so I stopped partway rather than leave you hanging.", source: "hil_loop" };
     }
-    const obs = await macBuildObservation();
+    const cached = macCachedObservation();
+    if (cached) logMac("hil.observe.reused", { step });
+    const obs = cached || await macBuildObservation();
     if (macHilGeneration !== myGeneration) {
       logMac("hil.loop.superseded", { runId, step, at: "after_observe" });
       return { ok: true, say: "", source: "hil_loop", superseded: true };
