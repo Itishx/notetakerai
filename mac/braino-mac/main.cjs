@@ -15236,9 +15236,24 @@ async function runMacHilLoop(command, resume = null) {
     const controller = new AbortController();
     macHilAbort = controller;
     try {
+      /* Signed in as the person, not as the app.
+       *
+       * The loop sent the anon key here, which resolves to no user, so the
+       * server could not look up a single thing Braino remembers about them.
+       * "Send it to Ilu" then costs a whole turn working out who Ilu is, at ten
+       * seconds a turn, for something already sitting in braino_memories.
+       *
+       * Falls back to anon rather than failing: a signed-out Braino should still
+       * be able to work, just without knowing anything about you. RLS on the far
+       * side means this token can only ever fetch that person's own rows. */
+      const userToken = await getBrainoAuthToken().catch(() => "");
       const res = await fetch(`${SUPABASE_URL}/functions/v1/hil-loop`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
+        headers: {
+          "Content-Type": "application/json",
+          apikey: SUPABASE_ANON_KEY,
+          Authorization: `Bearer ${userToken || SUPABASE_ANON_KEY}`,
+        },
         body: JSON.stringify(body),
         signal: controller.signal,
       });

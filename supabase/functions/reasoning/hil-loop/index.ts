@@ -10,7 +10,10 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { HIL_LOOP_PROMPT, HIL_LOOP_VERSION } from "../../_shared/human-intelligence/hil-loop-prompt.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
 import { logEngineRun } from "../../_shared/engine-log.ts";
+import { loadUserKnowledge } from "../../_shared/user-knowledge.ts";
+import { recallLessons, recordLesson, scopeFromUrl } from "../../_shared/human-intelligence/lessons.ts";
 import {
   HIL_TOOL_CATALOG,
   HIL_CATALOG_VERSION,
@@ -418,6 +421,52 @@ async function rescueTurnsUsed(runId: string | null): Promise<number> {
   }
 }
 
+/* What Braino already knows about the person, handed to the brain doing the work.
+ *
+ * The memory engine has been filling braino_memories for months, and the loop
+ * has never seen a line of it. So "send it to Ilu" costs a whole turn working
+ * out who Ilu is, at ten seconds a turn, to look up something already stored.
+ * Braino's own contacts, the user's name, what they are building: all of it sat
+ * one table away from the brain that needed it.
+ *
+ * Read as the USER, not with a service key. The caller passes its own token,
+ * RLS decides what comes back, and a caller with no token gets nothing. That is
+ * what makes it safe to do this in a function that is deliberately public: the
+ * lab still works, and it simply has no memories to draw on.
+ */
+async function loadWhatBrainoKnows(req: Request, command: string): Promise<string> {
+  const auth = req.headers.get("Authorization") || "";
+  const url = Deno.env.get("SUPABASE_URL");
+  const anon = Deno.env.get("SUPABASE_ANON_KEY");
+  if (!auth.startsWith("Bearer ") || !url || !anon) return "";
+  try {
+    const supabase = createClient(url, anon, { global: { headers: { Authorization: auth } } });
+    const { data } = await supabase.auth.getUser();
+    const userId = data?.user?.id;
+    // The anon key is a perfectly valid Bearer token and resolves to no user,
+    // which is exactly the right answer: the public lab gets no memories.
+    if (!userId) return "";
+    const knowledge = await loadUserKnowledge(supabase, userId, {
+      currentMessage: command,
+      includeMemoryNotes: false,   // note summaries are for chat; a task needs facts and people
+      includeXPersona: false,
+      includeContacts: true,
+      includeMemories: true,
+    });
+    const block = String(knowledge.combinedContext || "").trim();
+    if (!block) return "";
+    return [
+      "=== WHAT YOU ALREADY KNOW ABOUT THEM ===",
+      "Braino remembers this from earlier. Use it instead of asking, and instead of spending a step finding out something you were already told.",
+      "",
+      block,
+    ].join("\n");
+  } catch (_) {
+    // Never fail a turn over this. A run without memories is worse, not broken.
+    return "";
+  }
+}
+
 // ── The rescue brief ─────────────────────────────────────────────────────────
 // Appended to the ordinary state render when the loop escalates. It is deliberately
 // short: Astra already receives the whole run above it, and repeating that in prose
@@ -473,7 +522,7 @@ type LoopTurn = {
     | { type: "step"; step: { intent: string; action: Record<string, unknown>; expects: string; reversible: boolean; assert?: Record<string, unknown> } }
     | { type: "ask"; question: string }
     | { type: "answer"; text: string }
-    | { type: "task_done" | "all_done" | "blocked"; message: string };
+    | { type: "task_done" | "all_done" | "blocked"; message: string; lesson?: string };
 };
 
 function coerceTurn(rawContent: string, hadLastStep: boolean): { turn: LoopTurn; parseOk: boolean } {
@@ -568,9 +617,20 @@ function coerceTurn(rawContent: string, hadLastStep: boolean): { turn: LoopTurn;
     decision = { type: "answer", text: t || "I found what was asked for, but my answer text came back empty." };
   } else {
     const m = typeof rawDecision.message === "string" ? rawDecision.message.trim() : "";
+    /* The one line that would have saved this run, offered when he gives up.
+     *
+     * Written by the model rather than derived from the error, because the error
+     * says what happened and a lesson has to say what to do instead. "Docs
+     * rejected the insertion" is a symptom; "Docs draws on a canvas, use
+     * google_doc_create" is the thing worth keeping. Optional: a block without
+     * one is still a valid block. */
+    const lesson = type === "blocked" && typeof rawDecision.lesson === "string"
+      ? rawDecision.lesson.trim().slice(0, 600)
+      : "";
     decision = {
       type,
       message: m || (type === "all_done" ? "Everything asked for is finished." : type === "task_done" ? "That job is finished." : "I stopped, and I am not sure of the reason my own turn gave."),
+      ...(lesson ? { lesson } : {}),
     };
   }
 
@@ -662,12 +722,32 @@ serve(async (req) => {
     // floor — so buildEmotionalCore always assembled at its default of 2 and a
     // panic-level command produced a byte-identical personality to a mild one.
     const emotionalCore = buildEmotionalCore({ medium: "text", moment: momentId, intensity: reading.intensity });
+    /* Fetched in parallel with nothing else, but before the prompt is built, and
+       only on the first turn's worth of cost: it is one indexed read and it
+       replaces turns, which are ten seconds each. */
+    const knownBlock = await loadWhatBrainoKnows(req, commandText);
+
+    /* Scopes for recall: the site he is on, plus the tools he can reach for.
+     * Keyed rather than global, because a lesson that has to be injected on
+     * every turn forever is how a prompt becomes a landfill. */
+    const screenText = String(loopState?.screen || "");
+    const urlMatch = screenText.match(/https?:\/\/[^\s"']+/);
+    const hostScope = urlMatch ? scopeFromUrl(urlMatch[0]) : "";
+    const lessonScopes = [hostScope, ...(macTools || []).slice(0, 4).map((t) => `tool:${t}`)];
+    const lessonBlock = await recallLessons(lessonScopes);
+
     const systemPrompt = [
       HIL_LOOP_PROMPT,
       // Before the personality, because it is capability rather than character,
       // and after the loop rules, because how to take a turn has to be settled
       // before what can be done in one.
       ...(hasMacHands ? [renderExecJs(), renderToolCatalog(macTools)] : []),
+      // After the rules and the abilities, before the personality: it is context
+      // about the person, and it should not be able to displace how a turn works.
+      ...(knownBlock ? [knownBlock] : []),
+      // After what he knows about the person, because a lesson is about the
+      // world rather than about them, and both sit under the rules.
+      ...(lessonBlock ? [lessonBlock] : []),
       "=== WHO YOU ARE (the Emotional Engine, appended live for this request) ===",
       emotionalCore,
     ].join("\n\n");
@@ -763,6 +843,24 @@ serve(async (req) => {
     if (read.searches) console.log("hil-loop: searched mid-turn", { searches: read.searches, runId: logRunId });
     const { turn, parseOk } = coerceTurn(read.content, Boolean(loopState?.lastStep));
 
+    /* Written when he gives up, not when he succeeds.
+     *
+     * A run that worked teaches nothing anyone needs; a wall teaches everyone
+     * who comes after. Fire and forget, and scoped to the host, so the next
+     * person on this site is handed what this run paid two minutes to find out.
+     * It goes in as proposed and only reaches other people on its second
+     * independent hit: one run is an anecdote. */
+    const blockedLesson = turn?.decision?.type === "blocked" ? (turn.decision as { lesson?: string }).lesson : "";
+    if (blockedLesson && hostScope) {
+      recordLesson({
+        scope: hostScope,
+        trigger: String((turn.decision as { message?: string }).message || commandText),
+        lesson: blockedLesson,
+        runId: logRunId,
+      });
+      console.log("hil-loop: lesson recorded", { scope: hostScope, runId: logRunId });
+    }
+
     const logId = logEngineRun({
       engine: "hil-loop",
       run_id: logRunId,
@@ -814,6 +912,9 @@ serve(async (req) => {
         // about its hands, rather than inferring it from a turn that happened
         // not to use one.
         tools: hasMacHands ? HIL_CATALOG_VERSION : null,
+        // So it is visible whether the brain had anything to go on, rather than
+        // being inferred from whether it happened to need it.
+        knows: knownBlock ? knownBlock.length : 0,
         log_id: logId,
       },
     }), {
