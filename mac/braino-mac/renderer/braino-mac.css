@@ -5221,3 +5221,44 @@ body {
   background: #f0cf7d;
   box-shadow: 0 0 6px rgba(240, 207, 125, .85);
 }
+
+/* ── A job is running ────────────────────────────────────────────────────────
+   Blue, and only blue, for "work is happening right now". Amber already means
+   cowork is watching the screen, and two ambient colours that mean different
+   things is how you end up having to remember which is which.
+
+   It breathes rather than flashes. This can be on for two minutes, and anything
+   that blinks for two minutes stops reading as information and starts reading
+   as a fault. */
+#notch-face.nf-task .nf-pill {
+  box-shadow:
+    0 0 0 1px rgba(88, 156, 255, .40),
+    0 0 22px rgba(56, 128, 255, .34),
+    0 10px 34px rgba(0, 0, 0, .28);
+  animation: nfTaskBreathe 2.8s ease-in-out infinite;
+}
+@keyframes nfTaskBreathe {
+  0%, 100% {
+    box-shadow:
+      0 0 0 1px rgba(88, 156, 255, .34),
+      0 0 16px rgba(56, 128, 255, .24),
+      0 10px 34px rgba(0, 0, 0, .28);
+  }
+  50% {
+    box-shadow:
+      0 0 0 1px rgba(120, 178, 255, .58),
+      0 0 30px rgba(56, 128, 255, .48),
+      0 10px 34px rgba(0, 0, 0, .28);
+  }
+}
+/* Wherever he is. Out on the screen the pill is not what you are looking at,
+   he is, so the same blue rides the mascot. */
+#notch-face.nf-task .nf-walker,
+#notch-face.nf-task .nf-face-svg {
+  filter: drop-shadow(0 0 9px rgba(88, 156, 255, .52));
+}
+/* A breathing glow is decoration; the fact that a job is running is not. Anyone
+   who has asked for less motion keeps the colour and loses the pulse. */
+@media (prefers-reduced-motion: reduce) {
+  #notch-face.nf-task .nf-pill { animation: none; }
+}

@@ -1130,7 +1130,10 @@ function sendTaskProgress(payload) {
 function settleTaskProgress(reason) {
   if (lastTaskProgressStatus !== "thinking") return false;
   logMac("task_progress.settled", { reason });
-  sendTaskProgress({ status: "ready", clearNotch: true });
+  /* running:false is the other half of the running:true every turn sends. The
+     renderer holds the notch open and the blue on for as long as a job is
+     running, so the one thing it must never miss is being told it ended. */
+  sendTaskProgress({ status: "ready", clearNotch: true, running: false });
   return true;
 }
 
@@ -14621,8 +14624,23 @@ const MAC_HIL_TOOLS = {
   whatsapp_send: (a) => sendWhatsAppMessage(String(a.recipient || ""), String(a.message || "")),
 };
 
+/* Is the run this action belongs to still the run? */
+function macHilRunIsCurrent() {
+  return Boolean(macActiveHilRun) && macActiveHilRun.generation === macHilGeneration;
+}
+
 async function macExecuteHilAction(action, elements) {
   const type = String(action?.type || "");
+  /* Checked here rather than only between turns.
+   *
+   * The decision to click was made before the person said stop; firing it after
+   * is the difference between a job that ends and a job that gets one more
+   * click in on the way out. With tools in the vocabulary that click can now be
+   * a message sent or a folder deleted, so the check earns its place. */
+  if (!macHilRunIsCurrent()) {
+    logMac("hil.action.dropped_after_stop", { type });
+    return { ok: false, error: "The run was stopped before this could happen." };
+  }
   const byIndex = (i) => elements.find((e) => Number(e.index) === Number(i));
 
   if (type === "navigate") {
@@ -14943,7 +14961,7 @@ async function runMacHilLoop(command, resume = null) {
       logMac("hil.loop.turn", { step: step + 1, brain: turnBrain, model: turnModel });
       // brain rides the same payload the caption does, so the notch can show who
       // is thinking without a second channel that could disagree with this one.
-      sendTaskProgress({ status: "thinking", text: thinking.slice(0, 140), brain: turnBrain, model: turnModel });
+      sendTaskProgress({ status: "thinking", text: thinking.slice(0, 140), brain: turnBrain, model: turnModel, running: true });
       /* Say it out loud as he works. Watching a silent thing click around your
          screen is unnerving; hearing what it is doing is the difference between
          a tool and someone helping you. One breath, first sentence only, and
@@ -16983,7 +17001,22 @@ ipcMain.handle("braino-mac:stop-running-job", async () => {
   if (had) logMac("hil.loop.stopped_by_user", { runId: macActiveHilRun.runId });
   macHilGeneration += 1;
   macActiveHilRun = null;
+  /* Abort the call in flight, which stop never did.
+   *
+   * Bumping the generation only makes the NEXT turn notice, and a turn is
+   * however long the model takes. On Luna that was about 1.7s and "stop" felt
+   * instant. On Astra it is 5 to 10, so the same code reads as stop being
+   * ignored while he carries on working. A new command has always aborted the
+   * fetch here (see runDelegate); stop, which is the one place a person is
+   * actively asking for it to end, did not. */
+  if (macHilAbort) {
+    try { macHilAbort.abort(); } catch (_) {}
+    macHilAbort = null;
+  }
   settleTaskProgress("stopped_by_user");
+  // The renderer clears the working glow off this, rather than waiting for a
+  // turn that is never coming back to tell it the job is over.
+  sendTaskProgress({ status: "ready", clearNotch: true, running: false });
   return { ok: had };
 });
 

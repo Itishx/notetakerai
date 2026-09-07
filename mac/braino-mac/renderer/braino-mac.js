@@ -2868,6 +2868,15 @@ function nfClearCaptions() {
 // should always be able to SEE what he understood and what he's doing.
 let nfThinkingText = "";
 let nfThinkingTimer = 0;
+/* Is a real job running right now, as opposed to a caption that happens to be
+ * on screen? Set only from what main.cjs says, because the renderer cannot see
+ * a model call and would otherwise be guessing from how long the words have
+ * been up. */
+let hilTaskRunning = false;
+/* The backstop for the case main never says the job ended: a crash, a reload, a
+ * turn that threw somewhere unusual. Long enough that no honest turn reaches it,
+ * short enough that a stuck notch is a minute of wrong rather than forever. */
+const NF_THINKING_STUCK_MS = 60000;
 // nfThinkingOpenTimer is declared with the reveal-delay helpers above, next to
 // NF_THINKING_REVEAL_MS, so the timer and the thing that sets it live together.
 // nfSetThinking still clears it below: showing live thinking text means the
@@ -2885,6 +2894,13 @@ function nfSetThinking(text) {
     startThinkingPhaseCycle();
     renderThinkingCanvas(nfThinkingText, nfThinkingText);
     notchFace?.classList.add("nf-thinking", "nf-think-hint");
+    /* Six seconds was right when a turn took under two.
+     *
+     * Astra takes five to ten, so the timer fired in the GAP between turns: the
+     * sheet collapsed, the next turn reopened it, and a running job looked like
+     * it kept stopping and starting. The auto-clear is for a caption nobody
+     * cleaned up, not for a job that is genuinely still going, so while one is
+     * running it stretches to the stuck-backstop instead of firing on time. */
     nfThinkingTimer = window.setTimeout(() => {
       nfThinkingText = "";
       if (!coworkLabel) {
@@ -2900,7 +2916,7 @@ function nfSetThinking(text) {
         settleStaleThinkingStatus("nf_thinking.auto_clear");
       }
       updateNotchFace();
-    }, 6000);
+    }, hilTaskRunning ? NF_THINKING_STUCK_MS : 6000);
   } else if (!coworkLabel) {
     stopThinkingPhaseCycle();
     notchFace?.classList.remove(
@@ -10746,7 +10762,8 @@ window.brainoMac.onTaskProgress((progress) => {
       if (progress.status && progress.status !== "ready") setStatus(progress.status, progress.text || progress.status);
       cancelPendingNotchThinking();
       nfSetThinking("");
-      notchFace?.classList.remove("nf-astra");
+      hilTaskRunning = false;
+      notchFace?.classList.remove("nf-astra", "nf-task");
       settleStaleThinkingStatus("task_progress.clear_notch");
     } catch (_) {}
     return;
@@ -10756,6 +10773,18 @@ window.brainoMac.onTaskProgress((progress) => {
   // ordinary brain, so the gold can never be left burning over a cheap run.
   if (notchFace && progress.brain) {
     notchFace.classList.toggle("nf-astra", progress.brain === "astra");
+  }
+  /* A job is running, and it stays running until main says otherwise.
+   *
+   * This drives two things that used to be inferred and got it wrong: the
+   * auto-clear timer above, and the blue that says work is happening. Blue
+   * rather than amber because amber already means cowork is watching the
+   * screen, and two ambient colours meaning different things is how you end up
+   * having to remember which is which. */
+  if (typeof progress.running === "boolean") {
+    hilTaskRunning = progress.running;
+    notchFace?.classList.toggle("nf-task", hilTaskRunning);
+    if (hilTaskRunning) window.clearTimeout(nfThinkingTimer);
   }
   if (progress.status) setStatus(progress.status, progress.text || progress.status);
   if (progress.text) {
