@@ -260,3 +260,32 @@ test("Astra searches inside its own turn, and falls back if it cannot", () => {
      would report zero tokens and look free, in the one table where cost is read. */
   assert.match(server, /prompt_tokens: usage\.input_tokens/);
 });
+
+test("Luna drives, Astra is called in, and the notch says which", () => {
+  /* Astra is 50x Luna's input price and 42x its output: $10/$50 per million
+     against $0.20/$1.20. Six dollars in a day of testing answered the question.
+     Everything built while chasing Astra is an endpoint or a prompt, so Luna
+     gets all of it at a fiftieth of the price, and Astra goes back to being the
+     rescue, which is where this started. */
+  const models = readFileSync(
+    new URL("../supabase/functions/_shared/openai-models.ts", import.meta.url), "utf8");
+  assert.match(models, /BRAINO_BRAIN: "hil" \| "astra" = "hil"/,
+    "the cheap brain drives by default");
+
+  /* Searching inside the turn is an endpoint feature, not an Astra one, so it
+     must not be gated on which model is answering. */
+  const server = readFileSync(
+    new URL("../supabase/functions/reasoning/hil-loop/index.ts", import.meta.url), "utf8");
+  assert.match(server, /let aiRes = await callResponsesApi\(apiKey, turnModel/,
+    "every model goes through the endpoint that can search");
+
+  /* The Mac could never reach Astra at all: escalation existed only in the lab,
+     so a circling run looked at the screen once and then died. */
+  const main = readFileSync(new URL("../mac/braino-mac/main.cjs", import.meta.url), "utf8");
+  assert.match(main, /rescue: rescueRequested \|\| undefined/,
+    "the Mac must be able to ask for the better brain");
+  assert.match(main, /if \(!rescueRequested\) \{/, "and only once per run");
+
+  assert.match(server, /brain: astraDriving \|\| isRescue \? "astra" : "hil"/,
+    "a rescue must read as Astra, or the gold badge never appears on the Mac");
+});

@@ -35,14 +35,26 @@ export const BRAINO_RESCUE_MAX_TOKENS = 6000;
 // "hil"   — he thinks, and Astra is called in only when he gets stuck.
 // "astra" — Astra thinks on every turn and he never touches the wheel.
 //
-// This branch runs "astra" on purpose, to find out how good the ceiling actually
-// is when nothing cheap is in the way. It is an experiment, not a default, and
-// the two numbers that decide whether it survives are both worse than his:
-// roughly 5.5s a turn against 1.7s, and roughly a dollar a task against cents.
+// Back to "hil", and the experiment answered its question.
+//
+// Astra is 50x Luna's input price and 42x its output: $10 and $50 per million
+// against $0.20 and $1.20. A thirteen turn run that cost a dollar and a half is
+// about three cents on Luna. Six dollars in a day of testing is not a pricing
+// problem to solve later, it is the answer.
+//
+// What the experiment was actually worth is everything built while chasing it,
+// and none of it is Astra-shaped: writing scripts instead of clicking, reading
+// ten pages in one script, the 115 tool catalog, Google Docs through the API,
+// searching inside the turn. Every one of those is an endpoint or a prompt, so
+// Luna gets all of it, today, at a fiftieth of the price.
+//
+// Astra stays as the rescue, which is where this started: he thinks, and the
+// expensive brain is called in when he gets stuck. That design was right before
+// there was a bill to prove it.
 //
 // Read once here rather than per call so both surfaces that share hil-loop, the
 // lab and the extension's delegate, can never disagree about who is driving.
-export const BRAINO_BRAIN: "hil" | "astra" = "astra";
+export const BRAINO_BRAIN: "hil" | "astra" = "hil";
 
 // Effort is the cost dial, and it is set differently for the two modes on
 // purpose. A rescue is one hard judgement after a wall, and worth medium. Every

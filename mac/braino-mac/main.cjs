@@ -15143,6 +15143,15 @@ async function runMacHilLoop(command, resume = null) {
    * four and answered by giving up. */
   let looks = 0;
   let rescuedByLooking = false;
+  /* The expensive brain, asked for once, only when he is genuinely stuck.
+   *
+   * This is the design from the start: he thinks, and Astra is called in when he
+   * cannot get through. It was only ever wired into the lab, so on the Mac a
+   * circling run looked at the screen once and then died. Astra is fifty times
+   * the price per token, which is exactly why it belongs here and not on every
+   * turn: a rescue that fires on one run in ten costs a tenth of nothing, and
+   * the same brain driving everything cost six dollars in a day. */
+  let rescueRequested = false;
   /* The signature of the one step the user has just approved. Spent on use, so
      a yes covers the thing that was asked about and nothing else. */
   let approvedSig = String(resume?.approvedSig || "");
@@ -15200,6 +15209,10 @@ async function runMacHilLoop(command, resume = null) {
       // catalog with the prompt. Without it the brain is offered a browser and
       // nothing else, which is what made it look unable to open Notes.
       hands: "mac",
+      // Set only after circling, and only once. The server rations it again on
+      // its own side, because a client is a thing that can be edited.
+      rescue: rescueRequested || undefined,
+      rescueReason: rescueRequested ? "he circled on the same action after looking at the screen properly" : undefined,
       /* The names actually wired on THIS Mac, not the catalog's full 115.
        *
        * Being shown a tool that does not exist costs a whole turn to discover,
@@ -15432,6 +15445,18 @@ async function runMacHilLoop(command, resume = null) {
           continue;
         }
         logMac("hil.loop.look_failed", { runId, reason: "circling", why: seen?.error || "no answer" });
+      }
+      /* Looking did not break the circle, so hand it to the better thinker
+         rather than stopping. One per run: if Astra circles too, the screen
+         really is not answering and stopping is the honest end. */
+      if (!rescueRequested) {
+        rescueRequested = true;
+        recentActions.length = 0;
+        state.facts.push("You were going in circles, so a stronger model has taken over this run. Look at what is actually on the screen and try a different approach from the one that kept failing.");
+        if (state.facts.length > 12) state.facts = state.facts.slice(-12);
+        logMac("hil.loop.escalated", { runId, step, action: stepSig });
+        console.log("[Braino ✨ HANDOFF] he circled, handing this run to Astra");
+        continue;
       }
       return {
         ok: false,

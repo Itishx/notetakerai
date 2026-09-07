@@ -229,12 +229,12 @@ async function callModel(apiKey: string, messages: unknown[], rescue = false) {
  * fences, finds the object, and tells the client to retry once when it cannot.
  * That tolerance is what makes this safe to try.
  */
-async function callResponsesApi(apiKey: string, system: string, user: string, effort: string, maxTokens: number) {
+async function callResponsesApi(apiKey: string, model: string, system: string, user: string, effort: string, maxTokens: number) {
   const res = await fetch(OPENAI_RESPONSES_ENDPOINT, {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: HIL_RESCUE_MODEL,
+      model,
       instructions: system,
       input: user,
       tools: [{ type: "web_search" }],
@@ -707,23 +707,29 @@ serve(async (req) => {
      * known to work, so a bad Responses call costs one extra call and not the
      * run. It is logged, because a fallback that fires every time is a bug
      * wearing a safety net. */
-    const useResponses = astraDriving || isRescue;
-    const effort = isRescue ? BRAINO_RESCUE_REASONING_EFFORT : BRAINO_ASTRA_ALL_REASONING_EFFORT;
-    let aiRes = useResponses
-      ? await callResponsesApi(apiKey, systemPrompt, userMessage, effort, BRAINO_RESCUE_MAX_TOKENS)
-      : await callModel(apiKey, [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userMessage },
-        ], false);
-    let viaResponses = useResponses;
-    if (useResponses && !aiRes.ok) {
+    /* Everyone gets the Responses endpoint, not just Astra.
+     *
+     * Searching inside the turn is not an Astra feature, it is an endpoint
+     * feature, and the whole reason a lookup cost three model calls was that we
+     * were on the wrong endpoint. Luna searching for itself is the same saving
+     * at a fiftieth of the price. */
+    const bigBrain = astraDriving || isRescue;
+    const effort = isRescue
+      ? BRAINO_RESCUE_REASONING_EFFORT
+      : astraDriving
+        ? BRAINO_ASTRA_ALL_REASONING_EFFORT
+        : BRAINO_TEXT_REASONING_EFFORT;
+    const ceiling = bigBrain ? BRAINO_RESCUE_MAX_TOKENS : 2400;
+    let aiRes = await callResponsesApi(apiKey, turnModel, systemPrompt, userMessage, effort, ceiling);
+    let viaResponses = true;
+    if (!aiRes.ok) {
       const why = await aiRes.text();
       console.warn("hil-loop: responses failed, falling back to chat", aiRes.status, why.slice(0, 300));
       viaResponses = false;
       aiRes = await callModel(apiKey, [
         { role: "system", content: systemPrompt },
         { role: "user", content: userMessage },
-      ], true);
+      ], bigBrain);
     }
 
     if (!aiRes.ok) {
@@ -802,7 +808,12 @@ serve(async (req) => {
         // Which brain answered THIS turn. The client reads it to decide whether
         // escalation is even a thing here: when Astra is already driving there is
         // nothing better to hand over to, and offering a handoff would be a lie.
-        brain: astraDriving ? "astra" : "hil",
+        // A rescue IS Astra answering, so it must read as Astra. Without the
+        // isRescue half, the one moment the expensive brain is actually driving
+        // is the one moment the notch says it is not, and the gold badge would
+        // never appear on the Mac at all now that rescues are how Astra is
+        // reached.
+        brain: astraDriving || isRescue ? "astra" : "hil",
         elapsed_ms: Date.now() - started,
         hil_loop_version: HIL_LOOP_VERSION,
         parse_ok: parseOk,
