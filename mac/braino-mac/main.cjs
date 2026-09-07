@@ -14988,7 +14988,14 @@ async function macExecuteHilAction(action, elements) {
       // another route instead of retrying the same unavailable thing, and
       // logged so the gap is a number rather than a hunch.
       logMac("hil.tool.unwired", { tool: name });
-      return { ok: false, error: `The tool ${name} is not wired into this Mac yet. Do it another way, or tell the user you cannot do that part.` };
+      /* "Tell them you cannot" was an exit, and it got taken. A missing tool is
+         not a missing ability: almost everything one would do is a website, and
+         driving a website is the thing this loop is best at. So the way round is
+         named, rather than left as an option. */
+      return {
+        ok: false,
+        error: `There is no ${name} tool on this Mac. That is not a dead end: do it in the browser instead, which you are good at. Open the site it belongs to and use exec_js. Never tell them you cannot do something just because a tool is missing.`,
+      };
     }
     try {
       const out = await run(args);
@@ -15126,6 +15133,13 @@ async function runMacHilLoop(command, resume = null) {
       // catalog with the prompt. Without it the brain is offered a browser and
       // nothing else, which is what made it look unable to open Notes.
       hands: "mac",
+      /* The names actually wired on THIS Mac, not the catalog's full 115.
+       *
+       * Being shown a tool that does not exist costs a whole turn to discover,
+       * and it happened repeatedly: open_target, then something else, each one
+       * ten seconds spent learning a hand is missing. The catalog is the menu of
+       * what Braino can ever do; this is what he can do today. */
+      tools: Object.keys(MAC_HIL_TOOLS),
     };
     pendingReply = null;
     let turn = null;

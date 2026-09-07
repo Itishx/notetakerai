@@ -178,3 +178,29 @@ test("a search hands over its links, and they survive the turn", () => {
   assert.ok(factLine && Number(factLine[1]) >= 2000,
     `search findings are kept at ${factLine && factLine[1]} chars, which cuts the links off the end`);
 });
+
+test("no tool is a website, not a dead end", () => {
+  /* Two halves of the same complaint. The model was shown all 115 catalog
+     entries while 17 were wired, so it reached for ones that did not exist and
+     spent a turn each finding out. And when it hit one, it was told it could
+     say it was unable to do that part, so it did.
+
+     Almost everything anyone asks for is a website, and driving a website is
+     what this loop is for. A missing tool is a slower route, not a wall. */
+  const main = readFileSync(new URL("../mac/braino-mac/main.cjs", import.meta.url), "utf8");
+  assert.match(main, /tools: Object\.keys\(MAC_HIL_TOOLS\)/,
+    "the Mac must declare which tools it actually has, not let the model guess");
+  assert.match(main, /do it in the browser instead/,
+    "a missing tool must name the way round");
+  assert.doesNotMatch(main, /tell the user you cannot do that part/,
+    "an exit that easy gets taken");
+
+  const server = readFileSync(
+    new URL("../supabase/functions/reasoning/hil-loop/index.ts", import.meta.url), "utf8");
+  assert.match(server, /const have = Array\.isArray\(available\)/,
+    "the server must narrow the catalog to what the caller can run");
+  assert.match(server, /never say you cannot do something because there is no tool for it/i);
+  /* An older caller that sends no list must keep everything it had, rather than
+     being silently stripped down to nothing by a filter it does not know about. */
+  assert.match(server, /have \? HIL_TOOL_CATALOG\.filter\(\(t\) => have\.has\(t\.name\)\) : HIL_TOOL_CATALOG/);
+});

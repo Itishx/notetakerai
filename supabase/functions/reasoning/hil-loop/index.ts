@@ -107,8 +107,20 @@ function renderExecJs(): string {
   ].join("\n");
 }
 
-function renderToolCatalog(): string {
-  const lines = HIL_TOOL_CATALOG.map((t) => {
+function renderToolCatalog(available?: string[]): string {
+  /* Only what this machine can actually run.
+   *
+   * The catalog is what Braino can ever do; the caller says what it can do
+   * today. Listing the difference is not harmless: being offered a tool that
+   * does not exist costs a whole turn to find out, ten seconds of someone
+   * waiting to learn a hand is missing.
+   *
+   * No list means an older caller that does not send one, and the whole catalog
+   * is the right answer there: better to over-offer than to silently strip a
+   * client of everything it had. */
+  const have = Array.isArray(available) && available.length ? new Set(available) : null;
+  const tools = have ? HIL_TOOL_CATALOG.filter((t) => have.has(t.name)) : HIL_TOOL_CATALOG;
+  const lines = tools.map((t) => {
     const args = t.params.length ? `(${t.params.join(", ")})` : "()";
     const flag = t.irreversible ? "  [IRREVERSIBLE, must be reversible:false]" : "";
     return `- ${t.name}${args}: ${t.gloss}${flag}`;
@@ -117,7 +129,10 @@ function renderToolCatalog(): string {
     "=== YOUR OWN HANDS ON THIS MAC ===",
     'Alongside the browser actions you have Braino\'s real abilities. Fire one with {"type":"tool","tool":"<name>","args":{...}}, as an ordinary step, one per turn, judged next turn like any other.',
     "Prefer a tool over doing the same thing by hand in a browser. Opening Notes and typing is worse than notes_create in every way: faster, and it cannot half-fail.",
-    "A tool not on this list does not exist. Never invent one.",
+    "This list is everything you can call DIRECTLY. It is short on purpose: it is what is wired on this machine today, not everything Braino will ever do.",
+    "Anything not on it, you do in the browser, and that is not a lesser way of doing it. A Google Doc is docs.google.com plus a script. A spreadsheet, a calendar invite, a form, an order: all websites, and driving a website is the thing you are best at.",
+    "So never say you cannot do something because there is no tool for it. Either there is a tool, or there is a site. Reach for the tool first because it is faster and cannot half-fail; reach for the browser the moment there is not one.",
+    "Never invent a tool name. If you want one that is not here, that is your signal to open the site instead.",
     "",
     lines.join("\n"),
   ].join("\n");
@@ -533,12 +548,16 @@ serve(async (req) => {
   }
 
   try {
-    const { command, context, state, runId, rescue, rescueReason, hands } = await req.json();
+    const { command, context, state, runId, rescue, rescueReason, hands, tools } = await req.json();
     // Which hands the caller actually has. "mac" gets the tool catalog; anything
     // else gets the browser vocabulary alone. Opt-in rather than opt-out on
     // purpose: a caller that forgets to say loses abilities, which is visible,
     // instead of being taught tools it cannot run, which is not.
     const hasMacHands = hands === "mac";
+    // Which of the catalog's tools this caller can really run. See renderToolCatalog.
+    const macTools = Array.isArray(tools)
+      ? (tools as unknown[]).filter((t): t is string => typeof t === "string")
+      : undefined;
     // Escalation is a claim by the client, so it is treated as one. The flag only
     // ever swaps the model and appends the brief; it can never widen what an action
     // is allowed to do, because the allowlist and the gate below do not read it.
@@ -592,7 +611,7 @@ serve(async (req) => {
       // Before the personality, because it is capability rather than character,
       // and after the loop rules, because how to take a turn has to be settled
       // before what can be done in one.
-      ...(hasMacHands ? [renderExecJs(), renderToolCatalog()] : []),
+      ...(hasMacHands ? [renderExecJs(), renderToolCatalog(macTools)] : []),
       "=== WHO YOU ARE (the Emotional Engine, appended live for this request) ===",
       emotionalCore,
     ].join("\n\n");
