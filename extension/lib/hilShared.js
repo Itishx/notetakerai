@@ -38,12 +38,29 @@
    * and over. A yes must cover exactly what was asked about, once. */
   function stepSignature(step) {
     var a = (step && step.action) || {};
+    /* code and tool are part of what a step IS, and leaving them out was fatal.
+     *
+     * This signature answers two questions: is this the thing you said yes to,
+     * and are you doing the same move over and over. Every field it reads
+     * belongs to a click or a keystroke, so an exec_js step, whose only content
+     * is its code, always came out as "exec_js||||" and a tool call as
+     * "tool||||". Three in a row is the circling limit, so once scripts became
+     * the normal way to work, three DIFFERENT scripts doing three different
+     * things read as one thing tried three times, and the run was stopped with
+     * "I keep trying the same thing and the screen is not changing".
+     *
+     * Sliced rather than hashed: this is compared, printed and read by a human
+     * in a log, and the first hundred characters of a script are the part that
+     * says what it does. */
     return [
       a.type || "",
       a.index === undefined || a.index === null ? "" : a.index,
       a.url || "",
       a.key || "",
       String(a.text || "").slice(0, 40),
+      a.tool || "",
+      a.tool ? JSON.stringify(a.args || {}).slice(0, 60) : "",
+      String(a.code || "").replace(/\s+/g, " ").slice(0, 100),
     ].join("|");
   }
 
