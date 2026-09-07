@@ -300,3 +300,24 @@ test("Luna drives, Astra is called in, and the notch says which", () => {
   assert.match(server, /brain: isRescue \? "astra" : "hil"/,
     "a rescue must read as Astra, or the gold badge never appears on the Mac");
 });
+
+test("the turn is constrained to JSON, and degrades in the right order", () => {
+  /* Measured over five identical turns on the Responses endpoint, one in five
+     came back unparseable. That is not a small tax: the turn ends as "I could
+     not read my own reasoning", the client burns its retry, three seconds go
+     with it. The prompt had always asked for JSON, and asking is not
+     constraining. */
+  const server = readFileSync(
+    new URL("../supabase/functions/reasoning/hil-loop/index.ts", import.meta.url), "utf8");
+  assert.match(server, /body\.text = \{ format: \{ type: "json_object" \} \}/);
+
+  /* Two fallbacks, and the order is the point. Rejected for asking for JSON:
+     drop that field, keep the endpoint. Rejected for anything else: only then
+     go back to chat. Falling all the way back on a formatting complaint would
+     trade a nicety for the search that made this endpoint worth using. */
+  assert.match(server, /retrying without/, "a json rejection must retry without json, not abandon search");
+  const order = server.indexOf("retrying without");
+  const chatFallback = server.indexOf("falling back to chat");
+  assert.ok(order > 0 && chatFallback > order,
+    "the json retry must come before the chat fallback, or search is lost on a formatting error");
+});

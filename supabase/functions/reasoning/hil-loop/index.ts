@@ -219,20 +219,34 @@ async function callModel(apiKey: string, messages: unknown[], rescue = false) {
  * fences, finds the object, and tells the client to retry once when it cannot.
  * That tolerance is what makes this safe to try.
  */
-async function callResponsesApi(apiKey: string, model: string, system: string, user: string, effort: string, maxTokens: number) {
-  const res = await fetch(OPENAI_RESPONSES_ENDPOINT, {
+async function callResponsesApi(
+  apiKey: string, model: string, system: string, user: string,
+  effort: string, maxTokens: number, json = true,
+) {
+  const body: Record<string, unknown> = {
+    model,
+    instructions: system,
+    input: user,
+    tools: [{ type: "web_search" }],
+    reasoning: { effort },
+    max_output_tokens: maxTokens,
+  };
+  /* Asked for as JSON rather than merely instructed to be JSON.
+   *
+   * Measured over five identical turns, one in five came back unparseable, and
+   * an unreadable turn is not a small tax: it ends as "I could not read my own
+   * reasoning", the client burns a retry, and three seconds go with it. The
+   * prompt has always asked for JSON and asking is not the same as constraining.
+   *
+   * Documented as maybe-unsupported alongside web search, which is exactly why
+   * it is a flag: the caller drops it and retries once if the API says no,
+   * rather than losing search or the turn. */
+  if (json) body.text = { format: { type: "json_object" } };
+  return await fetch(OPENAI_RESPONSES_ENDPOINT, {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model,
-      instructions: system,
-      input: user,
-      tools: [{ type: "web_search" }],
-      reasoning: { effort },
-      max_output_tokens: maxTokens,
-    }),
+    body: JSON.stringify(body),
   });
-  return res;
 }
 
 /* The final text, out of an output array that also carries reasoning items and
@@ -691,6 +705,16 @@ serve(async (req) => {
     const ceiling = bigBrain ? BRAINO_RESCUE_MAX_TOKENS : 2400;
     let aiRes = await callResponsesApi(apiKey, turnModel, systemPrompt, userMessage, effort, ceiling);
     let viaResponses = true;
+    /* Rejected for asking for JSON, not for anything else: drop that one field
+       and keep the endpoint. Falling all the way back to chat here would trade a
+       formatting nicety for the search that made this endpoint worth using. */
+    if (!aiRes.ok) {
+      const first = await aiRes.clone().text().catch(() => "");
+      if (/text|format|json/i.test(first)) {
+        console.warn("hil-loop: responses rejected json_object, retrying without", first.slice(0, 200));
+        aiRes = await callResponsesApi(apiKey, turnModel, systemPrompt, userMessage, effort, ceiling, false);
+      }
+    }
     if (!aiRes.ok) {
       const why = await aiRes.text();
       console.warn("hil-loop: responses failed, falling back to chat", aiRes.status, why.slice(0, 300));
