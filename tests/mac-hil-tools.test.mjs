@@ -76,3 +76,24 @@ test("the irreversible ones are still marked irreversible", () => {
   const line = catalog.split("\n").find((l) => l.includes('name: "whatsapp_send"'));
   assert.ok(line && line.includes("irreversible: true"), "whatsapp_send must stay irreversible");
 });
+
+test("a script's return value survives the wrapper", () => {
+  /* The bug this pins: pasting model-written code into a function BODY throws
+     away the value of an IIFE, which is the shape a model naturally writes. So
+     every script would have come back empty and read as a broken page rather
+     than as a wrapper bug. eval returns the completion value of both shapes. */
+  const main = readFileSync(new URL("../mac/braino-mac/main.cjs", import.meta.url), "utf8");
+  assert.match(main, /var __r=eval\(\$\{JSON\.stringify\(code\)\}\)/,
+    "exec_js must eval the script, not inline it into a function body");
+
+  const wrap = (code) =>
+    `(function(){try{var __r=eval(${JSON.stringify(code)});`
+    + `return __r===undefined?"(the script returned nothing)":(typeof __r==="string"?__r:JSON.stringify(__r))}`
+    + `catch(e){return "BRAINO_ERR "+(e&&e.message?e.message:String(e))}})()`;
+
+  assert.equal(eval(wrap('(function(){ return "hello" })()')), "hello");
+  assert.equal(eval(wrap("1 + 1")), "2");
+  assert.equal(eval(wrap("({a:1})")), '{"a":1}');
+  assert.equal(eval(wrap("undefined")), "(the script returned nothing)");
+  assert.match(eval(wrap("null.x")), /^BRAINO_ERR /);
+});

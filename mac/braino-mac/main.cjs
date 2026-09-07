@@ -201,7 +201,7 @@ const {
   macClosesAllTabs,
 } = require(path.join(__dirname, "hil-routing.cjs"));
 const { UNDERSTAND_PROMPT, parseUnderstanding } = require(path.join(__dirname, "hil-understand.cjs"));
-const { readChromePage, actOnChrome, chromePointFor, focusChrome, pageSignature, isChromeApp } = require(path.join(__dirname, "chrome-page.cjs"));
+const { readChromePage, actOnChrome, chromePointFor, focusChrome, pageSignature, isChromeApp, runJs, chromeScriptName } = require(path.join(__dirname, "chrome-page.cjs"));
 const {
   macVerifyAssert,
   macHilStepSignature,
@@ -14754,6 +14754,61 @@ async function macExecuteHilAction(action, elements) {
     const res = await runAxHelper(["key", key], 8000);
     await macHilWait(500);
     return res.status === "key" ? { ok: true } : { ok: false, error: `${res.status}: ${res.detail}` };
+  }
+  if (type === "exec_js") {
+    /* The model writes the script; we run it in the tab they are already
+     * looking at, signed in as them. This is the whole reason a ten step job
+     * stops costing ten model calls.
+     *
+     * Wrapped rather than trusted to wrap itself. A script that throws would
+     * come back as an osascript error with no page context, which reads to the
+     * loop as "the browser is broken" rather than "my selector was wrong", and
+     * it retries the wrong thing. Wrapping turns a throw into a sentence it can
+     * act on.
+     *
+     * Logged in full, on purpose. This is the one action whose intent cannot be
+     * read from its name, and a session where something went wrong is worth
+     * being able to reconstruct exactly.
+     */
+    const code = String(action.code || "");
+    if (!code.trim()) return { ok: false, error: "No script to run." };
+    const app = isChromeApp(activeMacContext?.appName) ? chromeScriptName(activeMacContext.appName) : "Google Chrome";
+    logMac("hil.exec_js.start", { chars: code.length, app, code: textForLog(code, 2000) });
+    /* eval, not a function body, and the difference is not cosmetic.
+     *
+     * The model writes either an IIFE or a bare expression, both of which are
+     * natural JavaScript and neither of which survives being pasted into a
+     * function body: "(function(){return x})()" as a statement evaluates and
+     * throws the value away, so every script would have come back empty and
+     * looked like the page was broken. eval returns the completion value of
+     * both shapes. It adds no risk that running the script did not already
+     * carry. */
+    const wrapped = `(function(){try{var __r=eval(${JSON.stringify(code)});`
+      + `return __r===undefined?"(the script returned nothing)":(typeof __r==="string"?__r:JSON.stringify(__r))}`
+      + `catch(e){return "BRAINO_ERR "+(e&&e.message?e.message:String(e))}})()`;
+    const out = await runJs(wrapped, app);
+    if (!out.ok) {
+      logMac("hil.exec_js.failed", { reason: out.reason, detail: out.detail });
+      /* javascript_not_allowed is a checkbox in Chrome, not a bug, and it is
+         the one failure the loop can neither retry nor route around. Saying so
+         in the result is the difference between it asking the person to tick it
+         and it trying the same script four more times. */
+      const why = out.reason === "javascript_not_allowed"
+        ? "Chrome will not run scripts yet. The user must turn on View > Developer > Allow JavaScript from Apple Events. Tell them that, do not retry."
+        : out.reason === "chrome_not_running" ? "Chrome is not running."
+        : `The script did not run: ${out.detail || out.reason}`;
+      return { ok: false, error: why };
+    }
+    const said = String(out.out || "").trim();
+    if (said.startsWith("BRAINO_ERR")) {
+      logMac("hil.exec_js.threw", { error: said.slice(0, 200) });
+      return { ok: false, error: `The script threw: ${said.replace("BRAINO_ERR ", "")}` };
+    }
+    logMac("hil.exec_js.done", { chars: said.length });
+    // Truncated at the same 3000 the look action uses: a script that returns a
+    // whole page has misunderstood the instruction, and forwarding all of it
+    // would spend the turn's budget proving that.
+    return { ok: true, answer: said.slice(0, 3000) || "The script ran and returned nothing." };
   }
   if (type === "tool") {
     const name = String(action.tool || "");

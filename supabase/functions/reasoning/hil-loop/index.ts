@@ -54,7 +54,7 @@ const OPENAI_ENDPOINT = "https://api.openai.com/v1/chat/completions";
 // and to the world before it was added here, and the symptom was Braino
 // appearing to fail at the new skill while actually performing it perfectly.
 // Anything taught in hil-loop-prompt.ts must be listed here in the same change.
-const ACTION_TYPES = new Set(["navigate", "read", "look", "click", "type", "pressKey", "scroll", "wait", "web_search", "selectOption", "downloadImage", "tool"]);
+const ACTION_TYPES = new Set(["navigate", "read", "look", "click", "type", "pressKey", "scroll", "wait", "web_search", "selectOption", "downloadImage", "tool", "exec_js"]);
 
 // ── Braino's own hands ───────────────────────────────────────────────────────
 // The loop could drive a browser and nothing else, while everything Braino can
@@ -70,6 +70,32 @@ const ACTION_TYPES = new Set(["navigate", "read", "look", "click", "type", "pres
 // Only sent when the caller says it HAS these hands. The extension runs in a
 // browser and cannot fire spotify_play, so teaching it the tool would only
 // invite a turn nothing can execute.
+// ── Writing code instead of clicking ────────────────────────────────────────
+// OpenAI's own guidance for Astra is code execution rather than one structured
+// action at a time, and the difference is not stylistic. One action per turn
+// means a ten step job costs ten model calls, and at five to ten seconds each
+// that is a minute and a half of waiting to do something a script does in one.
+//
+// Braino already runs JavaScript inside the real tab, through the AppleScript
+// door chrome-page.cjs uses to read the page. So this needs no new dependency
+// and no second browser: the same channel, handed a script the model wrote
+// rather than one we wrote for it.
+function renderExecJs(): string {
+  return [
+    "=== WRITING A SCRIPT INSTEAD OF CLICKING ===",
+    'You can run JavaScript in the page: {"type":"exec_js","code":"...","expects":"..."}. It runs in the real tab, signed in as them, and whatever it RETURNS comes back to you as the result.',
+    "",
+    "Use it whenever a job is more than one move. Reading six product prices is one script, not six clicks and six turns. Filling a form is one script. Finding a link and following it is one script.",
+    "",
+    "Rules that matter:",
+    "- Return the ANSWER, not a dump. You get back what you return, so return what you would want to have been told. An expression or an (function(){...})() both work.",
+    "- Anything thrown comes back to you as the failure, with its message. You do not need your own try/catch.",
+    "- One page per script. Navigation ends the script, so do not click a link and then keep going; return what you learned and navigate on the next turn.",
+    "- Read with a script, but for anything that spends money, sends, posts or deletes, say so plainly and set reversible:false. A script that clicks Buy is still clicking Buy.",
+    "- If a selector might not match, check and return that fact rather than throwing. Knowing the button was not there is worth a turn; a stack trace is not.",
+  ].join("\n");
+}
+
 function renderToolCatalog(): string {
   const lines = HIL_TOOL_CATALOG.map((t) => {
     const args = t.params.length ? `(${t.params.join(", ")})` : "()";
@@ -400,6 +426,14 @@ function coerceTurn(rawContent: string, hadLastStep: boolean): { turn: LoopTurn;
       const toolName = String((action as Record<string, unknown>).tool || "");
       if (!findTool(toolName)) return { turn: fallback, parseOk: false };
     }
+    // A script with no code is not a step, it is a turn that would run nothing
+    // and be judged as if it had. The cap is a sanity bound, not a security
+    // one: what makes this safe is the gate below and the fact that a person is
+    // watching, not the length.
+    if (actionType === "exec_js") {
+      const code = String((action as Record<string, unknown>).code || "");
+      if (!code.trim() || code.length > 8000) return { turn: fallback, parseOk: false };
+    }
     // A click on a send/buy/publish/destroy control is gated even if the model said
     // otherwise. The element NAME is the real test and lives on the client, which
     // has the last word (isIrreversibleClick); this is the server-side floor.
@@ -541,7 +575,7 @@ serve(async (req) => {
       // Before the personality, because it is capability rather than character,
       // and after the loop rules, because how to take a turn has to be settled
       // before what can be done in one.
-      ...(hasMacHands ? [renderToolCatalog()] : []),
+      ...(hasMacHands ? [renderExecJs(), renderToolCatalog()] : []),
       "=== WHO YOU ARE (the Emotional Engine, appended live for this request) ===",
       emotionalCore,
     ].join("\n\n");
