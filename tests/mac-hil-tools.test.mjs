@@ -119,3 +119,43 @@ test("a cut-off script result says it was cut off", () => {
   assert.match(main, /My script returned: \$\{String\(result\.answer\)\.slice\(0, 4000\)\}/,
     "script findings must be filed as script findings, not as a search answer");
 });
+
+test("a script can read other pages without navigating away", () => {
+  /* The last big cost. A script is a third of a second and a TURN is ten, so
+     the only thing that makes a run faster is fewer turns, and what forced
+     turns was navigation: opening a product page ends the script, so comparing
+     ten keyboards cost ten turns to run ten scripts of a third of a second.
+     Reading a page does not require being on it. */
+  const main = readFileSync(new URL("../mac/braino-mac/main.cjs", import.meta.url), "utf8");
+  const helpers = main.slice(main.indexOf("const helpers = `"), main.indexOf("const wrapped = `"));
+
+  assert.match(helpers, /__brainoGet/, "scripts need a way to read another page");
+  assert.match(helpers, /__brainoPage/, "and a parsed one, so they are not regexing HTML");
+  /* Sync, not fetch, and this is the whole reason it works: the channel returns
+     the completion value immediately, so a promise comes back as
+     "[object Promise]" and everything the script did is thrown away. */
+  assert.match(helpers, /x\.open\("GET",u,false\)/, "must be synchronous XHR, not fetch");
+  /* Sync XHR cannot time out, so the counter is the only thing between a
+     curious script and a wedged Chrome tab. */
+  assert.match(helpers, /__n>12/, "must cap how many pages one script can pull");
+
+  const server = readFileSync(
+    new URL("../supabase/functions/reasoning/hil-loop/index.ts", import.meta.url), "utf8");
+  assert.match(server, /__brainoPage\(url\)/, "and the model has to be told the helper exists");
+});
+
+test("a run reports where its time went", () => {
+  // "It feels slow" is not a number. This makes it one, in the terminal, while
+  // it happens: turns, thinking, scripts, and everything else named separately,
+  // because when the last one is large the fix is not a faster model.
+  const main = readFileSync(new URL("../mac/braino-mac/main.cjs", import.meta.url), "utf8");
+  assert.match(main, /function macReportRunSpeed/);
+  assert.match(main, /hil\.loop\.speed/);
+  for (const part of ["turns", "thinking", "scripts", "everything else"]) {
+    assert.ok(main.includes(part), `the speed line must break out ${part}`);
+  }
+  // Reported from the finally, because a run has several ways to end and the
+  // slow ones are the endings nobody planned.
+  const tail = main.slice(main.indexOf('logMac("hil.loop.budget"'));
+  assert.match(tail.slice(0, 900), /finally \{[\s\S]*macReportRunSpeed/);
+});

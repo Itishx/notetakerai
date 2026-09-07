@@ -14662,6 +14662,48 @@ const MAC_HIL_TOOLS = {
   },
 };
 
+/* Where a run's time actually went.
+ *
+ * Two numbers decide everything about speed here: how many turns there were,
+ * and how long each one spent waiting on the model. Scripts are the third
+ * number and they are always tiny, which is the point being made. */
+let macRunThinkMs = 0;
+let macRunTurns = 0;
+let macRunScriptMs = 0;
+let macRunStartedAt = 0;
+
+function macResetRunSpeed() {
+  macRunThinkMs = 0;
+  macRunTurns = 0;
+  macRunScriptMs = 0;
+  macRunStartedAt = Date.now();
+}
+
+function macReportRunSpeed(runId) {
+  if (!macRunStartedAt || !macRunTurns) return;
+  const total = (Date.now() - macRunStartedAt) / 1000;
+  const think = macRunThinkMs / 1000;
+  const script = macRunScriptMs / 1000;
+  // Everything that is neither the model nor a script: reading the page,
+  // clicking, waiting for Chrome. Worth naming, because when it is large the
+  // fix is not a faster model.
+  const other = Math.max(0, total - think - script);
+  logMac("hil.loop.speed", {
+    runId, turns: macRunTurns,
+    totalMs: Math.round(total * 1000),
+    thinkMs: Math.round(macRunThinkMs),
+    scriptMs: Math.round(macRunScriptMs),
+  });
+  console.log(
+    `[Braino ⏱ RUN] ${total.toFixed(1)}s total · ${macRunTurns} turns · `
+    + `thinking ${think.toFixed(1)}s · scripts ${script.toFixed(1)}s · everything else ${other.toFixed(1)}s`
+  );
+  if (macRunTurns > 0) {
+    console.log(`[Braino ⏱ RUN] ${(think / macRunTurns).toFixed(1)}s of thinking per turn. Fewer turns is the only thing that makes this faster.`);
+  }
+  macRunStartedAt = 0;
+}
+
 /* Is the run this action belongs to still the run? */
 function macHilRunIsCurrent() {
   return Boolean(macActiveHilRun) && macActiveHilRun.generation === macHilGeneration;
@@ -14829,10 +14871,38 @@ async function macExecuteHilAction(action, elements) {
      * looked like the page was broken. eval returns the completion value of
      * both shapes. It adds no risk that running the script did not already
      * carry. */
-    const wrapped = `(function(){try{var __r=eval(${JSON.stringify(code)});`
+    /* Two helpers, injected rather than asked for.
+     *
+     * The expensive thing is never the script, it is the TURN: ten seconds of
+     * thinking to decide the next one. So the way to get faster is to let one
+     * script do what used to take ten turns, and the thing that stopped that was
+     * navigation. Opening a product page ends the script, which is why comparing
+     * ten keyboards cost ten turns of ten seconds to run ten scripts of a third
+     * of a second each.
+     *
+     * A script does not have to navigate to read another page. It can ask for it.
+     * Synchronous XHR rather than fetch because this channel returns the
+     * completion value immediately: a promise comes back as "[object Promise]"
+     * and everything the model wrote is thrown away. Sync is deprecated in
+     * browsers and exactly right here, where the caller is osascript and there is
+     * no user interaction to block.
+     *
+     * The cap is a real limit, not politeness. Sync XHR cannot time out, so
+     * twelve slow pages is a hung osascript, and the counter is the only thing
+     * between a curious script and a wedged Chrome tab. */
+    const helpers = `var __n=0;`
+      + `function __brainoGet(u){if(++__n>12)throw new Error("__brainoGet limit: 12 pages per script. Return what you have.");`
+      + `var x=new XMLHttpRequest();x.open("GET",u,false);x.send();`
+      + `if(x.status>=400)throw new Error("__brainoGet "+x.status+" for "+u);return x.responseText}`
+      + `function __brainoDoc(h){return new DOMParser().parseFromString(h,"text/html")}`
+      + `function __brainoPage(u){return __brainoDoc(__brainoGet(u))}`;
+    const wrapped = `(function(){try{${helpers}\nvar __r=eval(${JSON.stringify(code)});`
       + `return __r===undefined?"(the script returned nothing)":(typeof __r==="string"?__r:JSON.stringify(__r))}`
       + `catch(e){return "BRAINO_ERR "+(e&&e.message?e.message:String(e))}})()`;
-    const out = await runJs(wrapped, app);
+    const startedJs = Date.now();
+    // 15s was sized for a script touching one page. Reading a dozen is slower
+    // and still enormously cheaper than a dozen turns.
+    const out = await runJs(wrapped, app, 45000);
     if (!out.ok) {
       logMac("hil.exec_js.failed", { reason: out.reason, detail: out.detail });
       /* javascript_not_allowed is a checkbox in Chrome, not a bug, and it is
@@ -14850,7 +14920,10 @@ async function macExecuteHilAction(action, elements) {
       logMac("hil.exec_js.threw", { error: said.slice(0, 200) });
       return { ok: false, error: `The script threw: ${said.replace("BRAINO_ERR ", "")}` };
     }
-    logMac("hil.exec_js.done", { chars: said.length });
+    const jsMs = Date.now() - startedJs;
+    logMac("hil.exec_js.done", { chars: said.length, ms: jsMs });
+    macRunScriptMs += jsMs;
+    console.log(`[Braino ⚡ SCRIPT] ran in ${(jsMs / 1000).toFixed(1)}s, returned ${said.length} chars`);
     /* Generous, and never silent about the cut.
      *
      * 3000 was borrowed from the look action, where it is right: a screen
@@ -14974,6 +15047,7 @@ async function runMacHilLoop(command, resume = null) {
   const startStep = Math.max(0, Number(resume?.stepsUsed) || 0);
   const deadline = Date.now() + MAC_HIL_MAX_MS;
   logMac("hil.loop.start", { command: textForLog(command), runId });
+  macResetRunSpeed();
   macActiveHilRun = { runId, state, generation: myGeneration, command: String(command || "") };
 
 
@@ -15026,6 +15100,14 @@ async function runMacHilLoop(command, resume = null) {
     let turn = null;
     let turnBrain = "hil";
     let turnModel = "";
+    /* Where the time goes, printed while it goes.
+     *
+     * The whole speed argument is: a script is a third of a second and a TURN is
+     * ten, so fewer turns is the only thing that matters. That was worked out by
+     * reading timestamps out of a log file afterwards. It should be visible in
+     * the terminal while it happens, because a number you can see is the only
+     * thing that stops "it feels slow" being an argument. */
+    const turnStartedAt = Date.now();
     const controller = new AbortController();
     macHilAbort = controller;
     try {
@@ -15079,7 +15161,10 @@ async function runMacHilLoop(command, resume = null) {
       // The tag names the brain, not the endpoint. Reading "[Braino HIL-LOOP]"
       // while Astra was driving is what made a deployed experiment invisible.
       const tag = turnBrain === "astra" ? "Braino ASTRA" : "Braino HIL-LOOP";
-      console.log(`[${tag}] ${step + 1}: ${scrubForLog(thinking)}`);
+      const thoughtMs = Date.now() - turnStartedAt;
+      macRunThinkMs += thoughtMs;
+      macRunTurns += 1;
+      console.log(`[${tag}] ${step + 1} (thought ${(thoughtMs / 1000).toFixed(1)}s): ${scrubForLog(thinking)}`);
       logMac("hil.loop.turn", { step: step + 1, brain: turnBrain, model: turnModel });
       // brain rides the same payload the caption does, so the notch can show who
       // is thinking without a second channel that could disagree with this one.
@@ -15299,6 +15384,10 @@ async function runMacHilLoop(command, resume = null) {
   logMac("hil.loop.budget", { runId });
   return { ok: false, say: said || "That took more steps than I give myself for one task, so I stopped.", source: "hil_loop" };
   } finally {
+    /* Reported here rather than at each return, because a run has seven ways to
+       end and the interesting ones are the endings nobody planned. Measuring
+       only the tidy exit is how a slow failure stays invisible. */
+    macReportRunSpeed(runId);
     /* Only ever clear my own registration. A superseding run registers itself
        before this one unwinds, and clearing unconditionally would delete the
        new job's handle the moment the old one noticed it had been replaced. */

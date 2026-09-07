@@ -98,7 +98,10 @@ function renderExecJs(): string {
     "- Return the ANSWER, not a dump. You get back exactly what you return. An expression or an (function(){...})() both work.",
     "- There is room for a real result, around twelve thousand characters. If you go past it you are TOLD so, in the result, with the real length. That is not a failure and not a reason to run a smaller version of the same script: use what you got, or pick fewer fields next time.",
     "- Anything thrown comes back to you with its message, so you do not need your own try/catch.",
-    "- Navigation ends the script. Do the work on this page, return what you learned, move on next turn.",
+    "- You can read OTHER pages without leaving this one. __brainoPage(url) returns a parsed Document you can querySelector, __brainoGet(url) returns the raw HTML. Same tab, no navigation, up to 12 pages in one script.",
+    "- This is the single biggest thing you can do for them. Ten product pages opened one at a time is ten turns, which is a hundred seconds of someone waiting. The same ten read with __brainoPage in one script is one turn. When you catch yourself about to open a link to check something, fetch it instead.",
+    "- Relative links need to be absolute: new URL(href, location.href).href.",
+    "- Actually NAVIGATING still ends the script, because the page is replaced. So navigate only when you need to BE somewhere, to click or to type. To read, fetch.",
     "- If a selector might miss, check and return that fact. Knowing the button was not there is worth a turn; a stack trace is not.",
     "- Reading is free. Anything that spends money, sends, posts or deletes is not: say so plainly and set reversible:false. A script that clicks Buy is still clicking Buy.",
   ].join("\n");
