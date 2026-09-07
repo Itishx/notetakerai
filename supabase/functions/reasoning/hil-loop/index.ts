@@ -47,6 +47,10 @@ const HIL_RESCUE_MODEL = BRAINO_RESCUE_MODEL;
 // simply Astra's from turn one.
 const ASTRA_DRIVES_ALL = BRAINO_BRAIN === "astra";
 const OPENAI_ENDPOINT = "https://api.openai.com/v1/chat/completions";
+// Astra searches inside its own turn here, rather than us spending a turn asking
+// for a search, a whole separate model answering it, and another turn reading
+// the answer. Three model calls become one.
+const OPENAI_RESPONSES_ENDPOINT = "https://api.openai.com/v1/responses";
 
 // The action vocabulary, matching the real extension's BG_DELEGATE_ACTIONS.
 // The allowlist is the last word: an action not named here is rejected as an
@@ -129,6 +133,9 @@ function renderToolCatalog(available?: string[]): string {
     "=== YOUR OWN HANDS ON THIS MAC ===",
     'Alongside the browser actions you have Braino\'s real abilities. Fire one with {"type":"tool","tool":"<name>","args":{...}}, as an ordinary step, one per turn, judged next turn like any other.',
     "Prefer a tool over doing the same thing by hand in a browser. Opening Notes and typing is worse than notes_create in every way: faster, and it cannot half-fail.",
+    "You can also SEARCH THE WEB YOURSELF, in this turn, without asking for it. If you need a fact, just use it and answer: no action, no waiting, no separate step.",
+    "So do not fire the web_search action for something you can look up yourself. That one hands the question to a different model and costs two extra turns, roughly forty seconds. Searching here costs you nothing but the search.",
+    "",
     "This list is everything you can call DIRECTLY. It is short on purpose: it is what is wired on this machine today, not everything Braino will ever do.",
     "Anything not on it, you do in the browser, and that is not a lesser way of doing it. A Google Doc is docs.google.com plus a script. A spreadsheet, a calendar invite, a form, an order: all websites, and driving a website is the thing you are best at.",
     "So never say you cannot do something because there is no tool for it. Either there is a tool, or there is a site. Reach for the tool first because it is faster and cannot half-fail; reach for the browser the moment there is not one.",
@@ -207,6 +214,68 @@ async function callModel(apiKey: string, messages: unknown[], rescue = false) {
       max_completion_tokens: rescue || ASTRA_DRIVES_ALL ? BRAINO_RESCUE_MAX_TOKENS : 2400,
     }),
   });
+}
+
+/* The same turn, asked for through the Responses API so the model can search.
+ *
+ * A search used to cost three model calls: Astra spends a turn deciding to
+ * search, web-research runs its own model to answer it, and Astra spends
+ * another turn reading that answer. Nine to twenty three seconds in the middle,
+ * two turns of about fifteen either side. The hosted tool folds all of it into
+ * one turn, and the second model disappears entirely.
+ *
+ * No response_format. Structured output is not documented as working alongside
+ * web search, and coerceTurn has always been tolerant by design: it strips
+ * fences, finds the object, and tells the client to retry once when it cannot.
+ * That tolerance is what makes this safe to try.
+ */
+async function callResponsesApi(apiKey: string, system: string, user: string, effort: string, maxTokens: number) {
+  const res = await fetch(OPENAI_RESPONSES_ENDPOINT, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: HIL_RESCUE_MODEL,
+      instructions: system,
+      input: user,
+      tools: [{ type: "web_search" }],
+      reasoning: { effort },
+      max_output_tokens: maxTokens,
+    }),
+  });
+  return res;
+}
+
+/* The final text, out of an output array that also carries reasoning items and
+ * the search calls themselves. Walked backwards for the last assistant message:
+ * a turn that searched twice has several items before the one that matters. */
+function readResponsesText(data: any): { content: string; searches: number } {
+  const output = Array.isArray(data?.output) ? data.output : [];
+  const searches = output.filter((i: any) => i?.type === "web_search_call").length;
+  if (typeof data?.output_text === "string" && data.output_text.trim()) {
+    return { content: data.output_text, searches };
+  }
+  for (let i = output.length - 1; i >= 0; i--) {
+    const item = output[i];
+    if (item?.type !== "message") continue;
+    const parts = Array.isArray(item?.content) ? item.content : [];
+    const text = parts.map((c: any) => (typeof c?.text === "string" ? c.text : "")).join("").trim();
+    if (text) return { content: text, searches };
+  }
+  return { content: "", searches };
+}
+
+/* Responses counts tokens under different names. Mapped rather than left blank,
+ * because engine_runs is where the cost of all this gets read, and a run that
+ * reports no tokens looks free. */
+function normaliseUsage(usage: any) {
+  if (!usage) return usage;
+  if (usage.prompt_tokens !== undefined) return usage;
+  return {
+    prompt_tokens: usage.input_tokens,
+    completion_tokens: usage.output_tokens,
+    total_tokens: usage.total_tokens,
+    prompt_tokens_details: usage.input_tokens_details,
+  };
 }
 
 // ── State rendering ──────────────────────────────────────────────────────────
@@ -630,10 +699,32 @@ serve(async (req) => {
     const apiKey = Deno.env.get("OPENAI_API_KEY");
     if (!apiKey) throw new Error("API key not configured");
 
-    const aiRes = await callModel(apiKey, [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: userMessage },
-    ], isRescue || astraDriving);
+    /* Astra goes through Responses so it can search mid-turn; everything else
+     * keeps the chat endpoint it has always used.
+     *
+     * Falling back rather than failing is the whole safety of this change. A new
+     * endpoint can be wrong in ways a test does not find, and the old path is
+     * known to work, so a bad Responses call costs one extra call and not the
+     * run. It is logged, because a fallback that fires every time is a bug
+     * wearing a safety net. */
+    const useResponses = astraDriving || isRescue;
+    const effort = isRescue ? BRAINO_RESCUE_REASONING_EFFORT : BRAINO_ASTRA_ALL_REASONING_EFFORT;
+    let aiRes = useResponses
+      ? await callResponsesApi(apiKey, systemPrompt, userMessage, effort, BRAINO_RESCUE_MAX_TOKENS)
+      : await callModel(apiKey, [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userMessage },
+        ], false);
+    let viaResponses = useResponses;
+    if (useResponses && !aiRes.ok) {
+      const why = await aiRes.text();
+      console.warn("hil-loop: responses failed, falling back to chat", aiRes.status, why.slice(0, 300));
+      viaResponses = false;
+      aiRes = await callModel(apiKey, [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userMessage },
+      ], true);
+    }
 
     if (!aiRes.ok) {
       if (aiRes.status === 429) {
@@ -667,10 +758,11 @@ serve(async (req) => {
     }
 
     const aiData = await aiRes.json();
-    const { turn, parseOk } = coerceTurn(
-      aiData?.choices?.[0]?.message?.content || "",
-      Boolean(loopState?.lastStep),
-    );
+    const read = viaResponses
+      ? readResponsesText(aiData)
+      : { content: aiData?.choices?.[0]?.message?.content || "", searches: 0 };
+    if (read.searches) console.log("hil-loop: searched mid-turn", { searches: read.searches, runId: logRunId });
+    const { turn, parseOk } = coerceTurn(read.content, Boolean(loopState?.lastStep));
 
     const logId = logEngineRun({
       engine: "hil-loop",
@@ -685,7 +777,7 @@ serve(async (req) => {
       // opening every row.
       verdict: turn?.decision?.type ?? null,
       model: turnModel,
-      usage: aiData?.usage,
+      usage: normaliseUsage(aiData?.usage),
       elapsed_ms: Date.now() - started,
       ok: parseOk,
       error: parseOk ? null : "decision JSON came back unreadable",
@@ -703,6 +795,10 @@ serve(async (req) => {
       meta: {
         model: turnModel,
         rescue: isRescue,
+        // So the Mac can say "searched" in the terminal, and so a fallback that
+        // fires constantly is visible rather than merely survivable.
+        searched: read.searches || 0,
+        via: viaResponses ? "responses" : "chat",
         // Which brain answered THIS turn. The client reads it to decide whether
         // escalation is even a thing here: when Astra is already driving there is
         // nothing better to hand over to, and offering a handoff would be a lie.

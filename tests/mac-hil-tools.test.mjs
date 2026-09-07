@@ -234,3 +234,29 @@ test("Google Docs is written through the API, never typed into", () => {
   assert.match(line, /never try to type into the page/,
     "the gloss must say why, or it will reach for the page again");
 });
+
+test("Astra searches inside its own turn, and falls back if it cannot", () => {
+  /* A search used to cost three model calls: a turn to decide to search, a
+     whole separate model to answer it, and a turn to read the answer. Nine to
+     twenty three seconds in the middle, fifteen either side, for one lookup.
+     The hosted tool folds that into one turn and deletes the second model. */
+  const server = readFileSync(
+    new URL("../supabase/functions/reasoning/hil-loop/index.ts", import.meta.url), "utf8");
+
+  assert.match(server, /v1\/responses/, "the hosted search tool needs the Responses endpoint");
+  assert.match(server, /tools: \[\{ type: "web_search" \}\]/);
+  assert.match(server, /You can also SEARCH THE WEB YOURSELF/,
+    "and the model has to be told, or it keeps using the slow action");
+
+  /* The safety of the whole change. A new endpoint can be wrong in ways a test
+     does not find, and the old path is known to work, so a bad call costs one
+     extra request rather than the run. */
+  assert.match(server, /responses failed, falling back to chat/,
+    "a Responses failure must fall back, not fail the turn");
+  assert.match(server, /via: viaResponses \? "responses" : "chat"/,
+    "and must report which path answered, or a fallback firing every time is invisible");
+
+  /* Responses names its token counts differently. Left unmapped, every Astra run
+     would report zero tokens and look free, in the one table where cost is read. */
+  assert.match(server, /prompt_tokens: usage\.input_tokens/);
+});
