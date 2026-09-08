@@ -6,6 +6,8 @@ This is the complete handoff for building Braino Companion as a **fresh repo**. 
 
 It is deliberately **time-agnostic**. There are no days in it. Build in dependency order, ship when the loop works.
 
+> **The code lives in [BRAINO-COMPANION-BUILD.md](BRAINO-COMPANION-BUILD.md).** This file is what to build and why. That one is how, with the schema, the prompts, the voice config, the notch state machine and the turn-flow diagram. Read this first, build from that.
+
 > **Read this first if you are an agent picking this up cold.** Sections 1 to 9 are the product. Sections 10 to 15 are the systems you inherit from the existing Braino repo. Section 16 tells you exactly which files to copy rather than rewrite. Do not invent a personality, a voice, or a colour palette. They already exist and they are specified below.
 
 ---
