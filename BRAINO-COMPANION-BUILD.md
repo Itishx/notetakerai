@@ -7,6 +7,33 @@ Two kinds of thing are in here:
 - **PORTED** means it exists and works in the current repo. The code below is the real thing, trimmed to what matters. Copy it.
 - **NEW** means it does not exist yet. The code below is the design, written out. Type it in.
 
+## What a clone needs
+
+Everything below has to exist for him to be Braino rather than a chatbot with a logo. Tick them off.
+
+| | Piece | Section | Ported or new |
+|---|---|---|---|
+| ☐ | **His body.** Walker rig, walk cycle, walking over to things, reactions | 8 | ported |
+| ☐ | **His face.** The notch: states, geometry, hold guard, eyes and mouth | 14 | ported |
+| ☐ | **His mind.** Traits, moment routing, diction, memory | 6 | ported |
+| ☐ | **Him talking.** Sentence chunking, prefetch, playback, mouth sync | 9 | ported |
+| ☐ | **Him shutting up.** Generation token, abort, barge-in | 9 | ported |
+| ☐ | **Him listening.** Mic capture, backpressure, self-echo filter, hotkey | 10 | ported |
+| ☐ | **His voice.** Fish TTS, the reference IDs, the fallback chain | 7 | ported |
+| ☐ | **Hera.** Dictation session, parallel cleaning, insert at caret | 7 | ported + new |
+| ☐ | **His window.** Transparent always-on-top panel that survives fullscreen | 11 | ported |
+| ☐ | **His turn.** Where personality, notebook and context become one prompt | 12 | new |
+| ☐ | **Signing in.** One Supabase session, and the 30-day refresh setting | 13 | ported |
+| ☐ | **The notebook.** Schema, and the yap that fills it | 1, 2 | new |
+| ☐ | **The three moments.** Morning, stuck, night | 3, 4, 5 | new + ported |
+| ☐ | **His look.** Tokens, both themes, the split screen | 15 | ported |
+
+If you skip one, skip a **new** one. Every ported row is something that already cost weeks, and none of them are the interesting part of your hackathon.
+
+The four that will hurt most if you improvise them, in order: **him shutting up** (section 9), **his window** (11), **him listening** (10), **his mind** (6). Each is a day or more of finding out why something almost works.
+
+---
+
 ---
 
 ## 0. How a turn actually flows
@@ -768,7 +795,661 @@ class ParallelDictation {
 
 ---
 
-## 8. The notch (PORTED)
+## 8. The mascot (PORTED)
+
+He is a character, not an icon. He walks, he walks **over to things**, he reacts, and he plants himself when you talk to him. This is the part people call alive, and it is about 120 lines of maths.
+
+### The rig
+
+One SVG, `viewBox="-8 -34 116 142"`, intrinsic 64x78. The animation never touches paths, only transforms on named groups, so the art can be redrawn without touching a line of motion code.
+
+| id | what it is |
+|---|---|
+| `__sbwk_root__` | everything. Takes waddle, bob and breath |
+| `__sbwk_ll__` / `__sbwk_rl__` | left and right leg |
+| `__sbwk_la__` / `__sbwk_ra__` (+ `_bg`) | arms, with a back layer each |
+| `__sbwk_eye_l__` / `__sbwk_eye_r__` | eyeballs. Scaled on Y to blink |
+| `__sbwk_pupil_l__` / `__sbwk_pupil_r__` | pupils. Translated to look around |
+| `__sbwk_mouth__` (`__sbwk_smile__`, `__sbwk_talk__`) | smile vs talking ellipse |
+| `__sbwk_flip__` | the wrapper. `scaleX(±1)` to face left or right |
+| `__sbwk_react__`, `__sbwk_sweat__`, `__sbwk_tear_l/r__`, `__sbwk_confetti__` | reaction overlays |
+| `__sbwk_specs__`, `__sbwk_fedora__`, `__sbwk_moonlegs__` | costumes |
+
+`__sbwk_flip__` is a **wrapper div**, not an SVG group, because flipping the whole SVG element is one transform instead of a group transform that fights the root's rotate.
+
+### The walk cycle
+
+The whole gait, verbatim. Nothing here is tuned by feel any more, so do not adjust the constants without watching it at 60fps.
+
+```ts
+const step = (now: number) => {
+  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  const t = (now - start) / 1000;
+
+  // One phase drives everything. 4.5 is the stride rate; legs are pi apart.
+  const s  = t * 4.5;
+  const Lp = Math.sin(s), Rp = Math.sin(s + Math.PI);
+
+  // Legs LIFT (translate) and SWING (rotate) on the same phase. Only the
+  // positive half of the sine is used, so a leg lifts and comes back down
+  // rather than sinking through the floor on the negative half.
+  const ll = Math.max(0, Lp) * 5, rl = Math.max(0, Rp) * 5;   // lift, px
+  const ls = Math.max(0, Lp) * 8, rs = Math.max(0, Rp) * 8;   // swing, deg
+
+  // The three body motions. Waddle is the one doing the work: without the
+  // rotation he reads as a sprite sliding along, legs or no legs.
+  const waddle  = Math.sin(s) * 3.4;                      // deg, side to side
+  const walkBob = -Math.abs(Math.sin(s)) * 2 - 0.4;       // px, up on each step
+  const breath  = 1 + 0.014 * Math.sin(t * 1.7);          // scale, always on
+  const bob     = Math.sin(t * 1.7 + 0.6) * 0.8;          // px, idle float
+
+  // Blink every 3.4s, 130ms, shaped as half a sine so the lid accelerates.
+  const bp    = t % 3.4;
+  const blink = bp < 0.13 ? Math.sin((bp / 0.13) * Math.PI) : 0;
+  const eyeSy = Math.max(0.06, 1 - blink);                // never fully zero
+
+  root.setAttribute("transform",
+    `rotate(${waddle} 50 50) translate(0 ${bob + walkBob}) scale(${breath})`);
+  q("#__sbwk_ll__")?.setAttribute("transform", `translate(0 ${-ll}) rotate(${ls} 44 74)`);
+  q("#__sbwk_rl__")?.setAttribute("transform", `translate(0 ${-rl}) rotate(${rs} 56 74)`);
+  // Scale about the eye's own centre, or the blink slides the eye up the face.
+  q("#__sbwk_eye_l__")?.setAttribute("transform", `translate(38,48) scale(1,${eyeSy}) translate(-38,-48)`);
+  q("#__sbwk_eye_r__")?.setAttribute("transform", `translate(62,48) scale(1,${eyeSy}) translate(-62,-48)`);
+
+  raf = requestAnimationFrame(step);
+};
+```
+
+`breath` and `bob` run whether or not he is walking. Standing perfectly still is what makes a character read as an asset.
+
+Respect the setting, and bail before the loop rather than inside it:
+
+```ts
+if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+```
+
+### Walking over to something
+
+This is the difference between a mascot and a someone. He picks a destination, walks the diagonal at a real pace, and arrives.
+
+```ts
+// px/s. Slow enough to read as walking. Faster and he skates, slower and the
+// user is waiting for him, which is the wrong feeling entirely.
+const SPEED = 76;
+
+function tick(now: number) {
+  const dt = Math.min(0.05, (now - lastTs) / 1000); lastTs = now;
+
+  // If he is heading for a real element, re-measure it every frame. Pages
+  // scroll and reflow, and a target captured once leaves him walking to where
+  // a card used to be.
+  if (perchEl?.isConnected) {
+    const r = perchEl.getBoundingClientRect();
+    if (r.width >= 60 && r.top > 40 && r.top < innerHeight - 60) {
+      // Stand toward one END of the thing, not dead centre. Off-centre reads
+      // as deliberate; centred reads as a watermark.
+      const frac = (r.left + r.width / 2) < innerWidth / 2 ? 0.78 : 0.22;
+      targetX = clampX(r.left + r.width * frac - W / 2);
+      targetY = clampY(r.top - (H - 6));
+    } else {
+      perchEl = null;              // it scrolled away, go wander instead
+    }
+  }
+
+  // Get out of the user's way. If the cursor comes close he steps aside, and
+  // he never becomes something you have to move the mouse around.
+  const feetX = curX + W / 2, feetY = curY + H;
+  if (Math.hypot(feetX - mouseX, feetY - mouseY) < 120) {
+    targetX = fenceX(targetX + (curX < mouseX ? -140 : 140));
+  }
+
+  // FEET PLANTED FOR THE WHOLE CONVERSATION, not just while sound is playing.
+  // Gating on TTS alone made him resume strolling in every gap: while
+  // listening, while thinking, between two sentences of one answer. Those gaps
+  // are exactly when you are looking at him, so it read as him wandering off
+  // mid-sentence. Voice engaged means planted.
+  const inConversation = voiceActive || speaking || thinking;
+  if (inConversation) {
+    targetX = curX; targetY = curY;   // drop the pending destination too, or he
+    nextWander = now + 1500;          // darts off the instant you stop talking
+  }
+
+  const dx = targetX - curX, dy = targetY - curY;
+  const dist = Math.hypot(dx, dy);
+  const moving = !inConversation && dist > 3;
+
+  if (moving) {
+    if (Math.abs(dx) > 2) facing = dx > 0 ? 1 : -1;
+    const stepPx = Math.min(dist, SPEED * dt);       // min() so he never overshoots
+    curX = clampX(curX + (dx / dist) * stepPx);
+    curY = clampY(curY + (dy / dist) * stepPx);
+    sitting = false;
+  } else if (perchEl) {
+    sitting = true;
+  }
+
+  walker.style.transform = `translate(${curX}px, ${curY}px)`;
+  flip.style.transform = `scaleX(${facing})`;
+  applyPose(now, moving, sitting);                   // the walk cycle above
+
+  // Arrive, breathe, then pick somewhere else.
+  if (!moving && now > nextWander) pickNewDestination();
+
+  raf = requestAnimationFrame(tick);
+}
+```
+
+Note he walks the **diagonal**, one vector, with the leg cycle running. Vertical change reads as a gentle climb. Splitting it into a horizontal walk and then a vertical float looks like a bug.
+
+### Picking somewhere to walk to
+
+Two modes. Free roam picks open space. Perching picks a real element.
+
+```ts
+// Score every visible ledge. A good perch is a wide, stable, horizontal top
+// edge that FRAMES content: never the logo, never what the user is reading or
+// typing, never dead centre.
+function scorePerch() {
+  const vw = innerWidth, vh = innerHeight;
+  const sel = 'video, img, [role="img"], article, section, header, aside, figure, '
+    + '[class*="card"], [class*="thumbnail"], [class*="player"], [class*="banner"], '
+    + '[class*="hero"], [class*="poster"], h1, h2';
+
+  let best = null, bestScore = 0, scanned = 0;
+  for (const el of document.querySelectorAll(sel)) {
+    if (scanned++ > 1200) break;                       // a hard budget, every frame counts
+    const r = el.getBoundingClientRect();
+    if (r.width < 90 || r.height < 44) continue;       // big enough to stand on
+    if (r.top < 56 || r.top > vh - 110) continue;      // comfortably in view
+    if (r.left > vw - 60 || r.left + r.width < 60) continue;
+
+    const idc = ((el.id || "") + " " + (el.className || "")).toLowerCase();
+    if (/logo|brand|masthead/.test(idc)) continue;     // never obstruct the mark
+    if (["input","textarea","select","button","a"].includes(el.tagName.toLowerCase())) continue;
+
+    const st = getComputedStyle(el);
+    if (st.visibility === "hidden" || st.opacity === "0" || st.display === "none") continue;
+
+    // Never where the cursor is. That is where the user is engaged.
+    const footX0 = r.left + r.width * 0.5;
+    if (Math.hypot(footX0 - mouseX, r.top - mouseY) < 150) continue;
+
+    let score = Math.min(r.width, 420) / 4;                    // wide is good
+    if (/video|img|figure/.test(el.tagName.toLowerCase()) || /player|poster|thumb|hero/.test(idc))
+      score += 90;                                             // visual blocks are great
+    score += Math.abs(r.left + r.width / 2 - vw / 2) / vw * 80;  // reward off-centre
+    score -= Math.abs(r.top - vh * 0.32) / vh * 30;              // prefer the upper third
+    score += Math.random() * 40;                                 // never the same ledge twice
+
+    if (score > bestScore) {
+      bestScore = score;
+      const cx = r.left + r.width / 2;
+      const frac = cx < vw / 2 ? 0.78 : 0.22;
+      best = { el, footX: r.left + r.width * frac, topY: r.top };
+    }
+  }
+  return best;
+}
+```
+
+**A lesson already paid for.** Perching was the original design and it was wrong most of the time: he would park on a random card for a minute at a stretch, which read as *he got stuck somewhere* rather than *he is out here with me*. Free roam is now the default. Walk to an open spot, pause a beat, walk somewhere else. Perch **only** when he has a reason to be at a specific element, which for the companion is exactly one case: the stuck nudge, where he walks over to the tab that is eating the afternoon and stands on it.
+
+### Leaving the notch
+
+He does not appear. He climbs out.
+
+```ts
+// A step DOWN out of the notch, landing just below it. 900ms.
+const LAUNCH_MS = 900;
+
+function launch(now: number) {
+  fromX = curX; fromY = curY;
+  toX = clampX(curX);
+  toY = clampY(curY + 150);          // a short drop from where he stepped out
+  t0 = now;
+  notch.classList.add("is-collapsed"); // the notch folds shut as he leaves
+}
+
+function launchFrame(now: number) {
+  const pr = (now - t0) / LAUNCH_MS;
+  if (pr >= 1) { curX = toX; curY = toY; launching = false; return; }
+
+  curX = fromX + (toX - fromX) * pr;
+  const flatY = fromY + (toY - fromY) * pr;
+  // 18px of arc, no more. The first version used 95px, which lifted him above
+  // his own start point mid-flight, which is off the top of the screen when he
+  // launches from the notch. That is what read as him flying away rather than
+  // climbing out.
+  curY = flatY - 18 * Math.sin(Math.PI * pr);
+  facing = toX >= fromX ? 1 : -1;
+}
+```
+
+### Reactions
+
+The reaction overlays are the cheapest character work in the product and the highest return.
+
+| Companion moment | What he does |
+|---|---|
+| morning greet | walks out of the notch, waves, waits |
+| you hit a streak | `__sbwk_confetti__`, arms up, faster stride |
+| pomodoro break | the dance rig for the full five minutes |
+| you ghosted him for two days | `__sbwk_sweat__`, slower stride, dramatic |
+| stuck nudge | walks over to the offending tab and stands on it |
+| night debrief | plants, faces you, `__sbwk_talk__` mouth while reacting |
+
+The dance and the moonwalk already exist as party tricks. `__sbwk_moonlegs__` is a separate leg overlay because the moonwalk needs a different rig and swapping the whole SVG mid-animation drops a frame.
+
+### Where to put him
+
+Fixed-position layer, `pointer-events: none`, above the page and below the notch.
+
+```css
+.braino-walker {
+  position: fixed;
+  left: 0; top: 0;                 /* all movement is transform, never left/top */
+  width: 64px; height: 78px;
+  z-index: 2147483000;             /* under the notch, over everything else */
+  pointer-events: none;            /* he is never something you have to click past */
+  will-change: transform;
+}
+```
+
+Move him with `transform` only. Animating `left` and `top` relayouts the page 60 times a second and on a heavy page he stutters exactly when someone is watching him.
+
+---
+
+## 9. Him talking (PORTED)
+
+The server function in section 7 returns audio. This is the client half, and it is where "responsive" is actually won or lost.
+
+Three ideas, all load-bearing:
+
+1. **Split into sentences and fetch one at a time.** First audio then costs one short sentence, not the whole reply.
+2. **Prefetch the next sentence while the current one plays.** N+1 look-ahead, at most one fetch in flight. Any more and Fish rate-limits you with a 429.
+3. **A generation token.** Every speech job carries a number. Bump it and every in-flight callback checks itself out. This is what makes barge-in instant instead of "instant after the fetch times out".
+
+```ts
+let generation = 0;                      // bumped by every stop
+let currentAudio: HTMLAudioElement | null = null;
+let currentUrl: string | null = null;
+const abortControllers = new Set<AbortController>();
+let remainder = "";                      // what he has not said yet
+
+export async function speak(text: string): Promise<boolean> {
+  const clean = stripMarkdownForSpeech(text);
+  if (!clean) return false;
+
+  // Tell the self-echo filter what he is about to say. Any spoken line the
+  // filter does not know about comes back in through the mic as a command.
+  noteSpoken(clean);
+
+  stopSpeech("new utterance");
+  const token = ++generation;
+  const sentences = splitSentencesForTts(clean);
+  let spoke = false;
+
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    apikey: ANON_KEY,
+  };
+  const auth = await getAuthTokenFast();   // warm cache, never a storage read on the audio path
+  if (token !== generation) return false;
+  if (auth) headers.Authorization = `Bearer ${auth}`;
+
+  let pending: Promise<TtsResult> | null = null;
+
+  for (let i = 0; i < sentences.length; i++) {
+    if (token !== generation) return spoke;
+
+    // Refreshed before every sentence. If you cut him off, this is what he
+    // picks up from when the interruption turns out to have been nothing.
+    remainder = sentences.slice(i).join(" ");
+
+    const cur = await (pending || fetchSentenceTts(sentences[i], token, headers));
+    pending = null;
+    if (token !== generation) return spoke;
+
+    if (cur.error) {
+      // Fish failed on this sentence. Finish the rest with the browser voice so
+      // the reply never stops half-said.
+      spoke = (await speakWithBrowser(sentences.slice(i).join(" "), token)) || spoke;
+      return spoke;
+    }
+
+    // Start the NEXT fetch now, so it overlaps this one's playback. This is the
+    // line that removes the pause between sentences.
+    if (i + 1 < sentences.length) {
+      pending = fetchSentenceTts(sentences[i + 1], token, headers);
+    }
+
+    try {
+      if (await playSentence(cur.resp, token)) spoke = true;
+    } catch (err: any) {
+      if (token !== generation) return spoke;
+      // NotAllowedError is the autoplay policy, not a Fish outage. No error
+      // card, no fallback (the browser voice is gesture-gated too). Just say
+      // honestly that he did not speak.
+      if (err?.name === "NotAllowedError") return spoke;
+      spoke = (await speakWithBrowser(sentences.slice(i).join(" "), token)) || spoke;
+      return spoke;
+    }
+  }
+
+  remainder = "";           // said it all, nothing to resume
+  return spoke;
+}
+```
+
+### Stopping, and why it is not just `audio.pause()`
+
+```ts
+export function stopSpeech(reason = "") {
+  // Every "his mouth moves but nothing comes out" report has turned out to be
+  // speech cancelled by something. Without this line the only way to find the
+  // culprit is to guess.
+  console.log(`[Braino] speech stopped${reason ? `: ${reason}` : ""}`);
+
+  generation += 1;                        // everything in flight is now stale
+
+  // Abort every in-flight fetch: the playing sentence's body stream AND the
+  // prefetch. Without this, barge-in waits for the network.
+  for (const c of abortControllers) { try { c.abort(); } catch {} }
+  abortControllers.clear();
+
+  if (currentAudio) {
+    try { currentAudio.pause(); } catch {}
+    currentAudio.src = "";
+    currentAudio = null;
+  }
+  if (currentUrl) { URL.revokeObjectURL(currentUrl); currentUrl = null; }
+  if (window.speechSynthesis) window.speechSynthesis.cancel();
+
+  // The mouth follows the voice. Clear it here or he flaps in silence after
+  // every interruption.
+  isSpeaking = false;
+  walkTalking = false;
+  setNotchMouth("closed");
+}
+```
+
+**The bug that lived here for weeks.** `isSpeaking = false` used to sit inside a token check, so a barge-in (which bumps the generation) left it stuck `true` forever. Everything downstream then believed he was permanently mid-sentence: the self-echo filter swallowed every later turn, and the barge-confirm branch stayed armed for the rest of the session. Clear that flag unconditionally.
+
+### Mouth sync
+
+The mouth is driven by playback, not by the text.
+
+```ts
+async function playSentence(resp: Response, token: number): Promise<boolean> {
+  const blob = await resp.blob();
+  if (token !== generation) return false;
+
+  currentUrl = URL.createObjectURL(blob);
+  const audio = new Audio(currentUrl);
+  currentAudio = audio;
+
+  audio.addEventListener("play",  () => { walkTalking = true;  setNotchMouth("talk"); });
+  audio.addEventListener("ended", () => { walkTalking = false; setNotchMouth("closed"); });
+
+  await audio.play();
+  await new Promise<void>((r) => audio.addEventListener("ended", () => r(), { once: true }));
+  return true;
+}
+```
+
+`walkTalking` drives the mascot's `__sbwk_talk__` mouth, `setNotchMouth` drives the notch face. **Two separate mouths on two separate bodies.** Both have to be cleared on stop, and forgetting one is the most common way this breaks.
+
+---
+
+## 10. Him listening (PORTED)
+
+### The MV3 rule
+
+In a browser extension, the mic works from a **content script** and nowhere else. Content scripts inherit the page's permissions. Offscreen documents and side panels fail, and they fail confusingly, which is why this cost a week the first time.
+
+```ts
+// content script
+chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  if (msg.action === "startVoiceListening") {
+    sendResponse(startPageVoiceRecognition(msg.mode || "manual"));
+    return true;
+  }
+  if (msg.action === "stopVoiceListening") {
+    stopPageVoiceRecognition();
+    sendResponse({ success: true });
+    return true;
+  }
+});
+```
+
+On the Mac there is no such restriction: capture in the renderer with `getUserMedia` directly.
+
+### Backpressure: drop, never queue
+
+The one rule that made 40-minute lectures work at about 88%. It was never the model.
+
+```ts
+// A queue that grows is a queue that is already broken. If the encoder is
+// behind, the OLDEST audio is the least useful thing you own: throw it away
+// and stay current. Buffering it means drifting further behind forever, and
+// the transcript ends up describing something that happened a minute ago.
+const MAX_QUEUED = 3;
+
+function onAudioChunk(chunk: Float32Array) {
+  if (queue.length >= MAX_QUEUED) {
+    queue.shift();                 // drop the oldest, keep the newest
+    dropped++;
+  }
+  queue.push(chunk);
+}
+```
+
+### The self-echo filter
+
+He hears himself through the mic and treats it as a command. Every line he speaks gets registered before it plays:
+
+```ts
+const recentlySpoken: Array<{ text: string; at: number }> = [];
+
+export function noteSpoken(text: string) {
+  recentlySpoken.push({ text: normalize(text), at: Date.now() });
+  while (recentlySpoken.length > 8) recentlySpoken.shift();
+}
+
+export function isSelfEcho(heard: string): boolean {
+  const h = normalize(heard);
+  const now = Date.now();
+  return recentlySpoken.some(
+    (s) => now - s.at < 15000 && (s.text.includes(h) || h.includes(s.text)),
+  );
+}
+```
+
+Register **every** spoken line, including greetings and error lines. A line the filter does not know about re-enters as a user command, and he answers himself.
+
+### The hotkey
+
+Double-Option, globally, on the Mac. Not a shortcut anyone can type by accident, and it needs no modifier chord.
+
+```js
+// main.cjs. A tap is Option down then up under 300ms with nothing else pressed.
+// Two of those inside 400ms is the gesture.
+let lastTap = 0;
+
+function onOptionTap() {
+  const now = Date.now();
+  if (now - lastTap < 400) { lastTap = 0; toggleDictation(); }
+  else { lastTap = now; }
+}
+```
+
+`Ctrl` twice is the same gesture in the browser, where a global Option hook is not available.
+
+---
+
+## 11. The Mac shell (PORTED)
+
+Every option here is load-bearing. This is the single hardest-won block of configuration in the product.
+
+```js
+dockWindow = new BrowserWindow({
+  // MUST be a panel. Only panels join fullscreen Spaces, which is the only way
+  // Braino stays visible over a fullscreen app. A normal window vanishes the
+  // moment someone opens anything fullscreen, which is most of the day.
+  type: "panel",
+
+  // Without this, any setBounds after show lets macOS clamp the frame below the
+  // menu bar. Verified empirically. Notch UI ends up exiled off screen.
+  enableLargerThanScreen: true,
+
+  frame: false,
+  transparent: true,
+  backgroundColor: "#00000000",
+  alwaysOnTop: true,
+  skipTaskbar: true,
+  resizable: false,
+  movable: false,
+  minimizable: false,
+  maximizable: false,
+  fullscreenable: false,
+  hasShadow: false,
+  focusable: false,                 // he never steals focus from what you are typing in
+  acceptFirstMouse: true,           // first click acts, it does not just focus
+  show: false,
+  trafficLightPosition: { x: -100, y: -100 },   // hide the stoplights off-frame
+
+  webPreferences: {
+    preload: PRELOAD_PATH,
+    contextIsolation: true,
+    nodeIntegration: false,
+    sandbox: false,
+    backgroundThrottling: false,    // or the walk cycle stutters when unfocused
+    devTools: true,
+  },
+});
+
+app.dock?.hide?.();
+dockWindow.setVisibleOnAllWorkspaces(true, {
+  visibleOnFullScreen: true,
+  skipTransformProcessType: true,   // without this the app flashes in the dock
+});
+dockWindow.setAlwaysOnTop(true, "screen-saver", 1);   // above almost everything
+dockWindow.setFocusable(false);
+dockWindow.setIgnoreMouseEvents(true, { forward: true });   // clicks pass through
+```
+
+### Click-through, and turning it off
+
+He is transparent to the mouse by default, or he is furniture you have to work around. Turn it off only while something is genuinely interactive.
+
+```js
+// forward:true keeps hover events arriving even while clicks pass through, so
+// he can still react to the cursor coming near.
+function setInteractive(on) {
+  dockWindow.setIgnoreMouseEvents(!on, { forward: true });
+}
+```
+
+Turn it on for the suggestion panel, the input field and the menu. Turn it off the instant they close. Leaving it on is how the notch becomes a dead zone on the screen.
+
+### The permissions trap
+
+Screen recording and accessibility grants are keyed to the **binary**. In development, every rebuild voids them, and the symptom is not a permission dialog. It is a bare `Command failed` from `osascript`, which is actually a consent prompt hanging invisibly.
+
+If you see that error and the code looks right, the code is right. Re-grant.
+
+---
+
+## 12. The turn endpoint (NEW, but assembled from ported parts)
+
+Where the personality, the notebook and the context become one prompt. Small, and everything routes through it.
+
+```ts
+// supabase/functions/companion/turn/index.ts
+import { buildEmotionalCore } from "../../_shared/emotional-engine/engine.ts";
+import { detectMomentDetailed } from "../../_shared/emotional-engine/moments.ts";
+import { retrieveMemories, renderMemories } from "../../_shared/memory-engine/index.ts";
+import { captureMemories } from "../../_shared/memory-engine/capture.ts";
+import { BRAINO_TEXT_MODEL, BRAINO_TEXT_REASONING_EFFORT } from "../../_shared/openai-models.ts";
+
+export async function turn(req: TurnRequest): Promise<string> {
+  const medium = req.medium === "voice" ? "voice" : "text";
+
+  // 1. What kind of moment is this. Plain word cues, no model call, no latency.
+  //    RUN THIS FOR VOICE TOO. The current repo only runs it for text, which is
+  //    the single reason voice Braino is emotionally flat.
+  const { moment, intensity } = detectMomentDetailed(req.text);
+
+  // 2. Personality. Traits reordered so the ones this moment needs lead.
+  const core = buildEmotionalCore({
+    medium,
+    moment,
+    intensity,
+    settings: req.settings,
+  });
+
+  // 3. Who they are. The notebook is the companion's whole point.
+  const notebook = await getNotebook(req.userId);
+  const memories = renderMemories(await retrieveMemories(req.userId, req.text));
+
+  // 4. What is happening right now.
+  const context = [
+    `Today is ${req.today}. Their day starts at ${notebook.startTime}.`,
+    req.calendar?.length ? `On their calendar: ${describeEvents(req.calendar)}.` : "",
+    req.screen ? `What is on their screen: ${req.screen}.` : "",
+    goalsDueToday(notebook).length
+      ? `Due today: ${goalsDueToday(notebook).map(g => g.title).join(", ")}.`
+      : "",
+    memories,
+  ].filter(Boolean).join("\n");
+
+  const system = [core, WHO_HE_IS, context].join("\n\n");
+
+  const reply = await callModel({
+    model: BRAINO_TEXT_MODEL,
+    reasoning: { effort: BRAINO_TEXT_REASONING_EFFORT },   // "none", or it defaults to medium
+    system,
+    messages: req.history.concat({ role: "user", content: req.text }),
+  });
+
+  // 5. Learn. Fire and forget: the reply must never wait on memory capture.
+  captureMemories(req.userId, req.text, reply).catch(() => {});
+  logInteraction(req.userId, { medium, moment, text: req.text, reply }).catch(() => {});
+
+  return reply;
+}
+```
+
+`WHO_HE_IS` is the one static block the emotional engine does not own: he is Braino, he lives on this machine, here is what he can actually do. Keep it short. The personality is the engine's job, and duplicating it here is how the two drift apart.
+
+---
+
+## 13. Auth (PORTED)
+
+Supabase, one session shared across every surface.
+
+**The trap that locked people out repeatedly.** The extension and the website share a session. The extension refreshing its token rotated it, which invalidated the website's copy, so people got logged out of the site over and over. The fix is to widen the **refresh-token reuse interval to 30 days** in the Supabase auth settings. It is a dashboard setting, not code, so it does not travel with the repo and it will bite the new one too.
+
+```ts
+// One client, and always the warm token on the audio path. A storage read
+// between two sentences is an audible gap.
+let cachedToken: { value: string; exp: number } | null = null;
+
+export async function getAuthTokenFast(): Promise<string | null> {
+  if (cachedToken && Date.now() < cachedToken.exp - 60_000) return cachedToken.value;
+  const { data } = await supabase.auth.getSession();
+  if (!data.session) return null;
+  cachedToken = {
+    value: data.session.access_token,
+    exp: (data.session.expires_at ?? 0) * 1000,
+  };
+  return cachedToken.value;
+}
+```
+
+---
+
+## 14. The notch (PORTED)
 
 Take `mac/braino-mac/renderer/braino-mac.css` as the source of truth. The browser version is already a token-for-token port of it.
 
@@ -863,7 +1544,7 @@ Once it is opened or dismissed, log the show-up and start the 30-minute cooldown
 
 ---
 
-## 9. Design tokens (PORTED)
+## 15. Design tokens (PORTED)
 
 ```css
 :root {
@@ -933,7 +1614,7 @@ Once it is opened or dismissed, log the show-up and start the 30-minute cooldown
 
 ---
 
-## 10. Repo shape
+## 16. Repo shape
 
 ```
 braino-companion/
@@ -943,6 +1624,8 @@ braino-companion/
 │  └─ renderer/
 │     ├─ notch.css               # ← port braino-mac.css whole
 │     ├─ notch.js                # state machine + hold guard
+│     ├─ walker.svg              # ← port brainoWalkerSvg.ts (the rig)
+│     ├─ walker.js               # walk cycle + walk-to-target + reactions
 │     └─ onboarding.html         # the split screen
 ├─ web/                          # the notebook, read-back, settings
 ├─ supabase/
@@ -968,7 +1651,7 @@ braino-companion/
 
 ---
 
-## 11. How to know it works
+## 17. How to know it works
 
 Not "does it run". These are the four things that decide whether the product exists.
 
