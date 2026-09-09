@@ -1,0 +1,183 @@
+/* Braino OS taking over a Mac.
+ *
+ * The host desktop is real DOM rather than an image, for two reasons: the
+ * tendrils read its window frames out of the layout to grow along, and the
+ * desaturation of a living desktop reads as something being drained where a
+ * cross-fade between two pictures reads as a slideshow.
+ */
+
+.tk {
+  min-height: 100vh;
+  background: #050506;
+  color: #f5f5f7;
+  display: grid;
+  align-content: center;
+  gap: 26px;
+  padding: clamp(24px, 4vw, 54px);
+  font-family: "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.tk-screen {
+  position: relative;
+  width: 100%;
+  max-width: 1100px;
+  margin: 0 auto;
+  aspect-ratio: 16 / 10;
+  border-radius: 18px;
+  overflow: hidden;
+  background: #0a0a0c;
+  box-shadow: 0 40px 120px -30px rgba(0,0,0,.9), 0 0 0 1px rgba(255,255,255,.06);
+}
+
+/* ── The host ─────────────────────────────────────────────────────────────── */
+
+.tk-desktop {
+  position: absolute; inset: 0;
+  background:
+    radial-gradient(120% 80% at 30% 10%, #4a6fa5 0%, #2d4468 45%, #1b2740 100%);
+  /* Draining rather than dissolving. The colour goes first, the light second,
+     which is the order a living thing loses them in. */
+  transition: filter 2.2s ease, opacity 1.1s ease .2s;
+}
+.tk-screen.is-taken .tk-desktop { filter: saturate(.12) brightness(.42); }
+.tk-screen.is-resolved .tk-desktop { opacity: 0; }
+
+.tk-menubar {
+  position: absolute; top: 0; left: 0; right: 0; height: 26px;
+  display: flex; align-items: center; gap: 18px;
+  padding: 0 16px;
+  background: rgba(255,255,255,.14);
+  backdrop-filter: blur(14px);
+  font-size: 11.5px; font-weight: 500; color: rgba(255,255,255,.92);
+}
+.tk-apple { width: 11px; height: 11px; border-radius: 50%; background: rgba(255,255,255,.9); }
+.tk-menu-right { margin-left: auto; font-variant-numeric: tabular-nums; letter-spacing: .02em; }
+
+/* The seed. Black, notch-shaped, dead centre of the menu bar. */
+.tk-notch {
+  position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+  width: 150px; height: 26px;
+  background: #000; border-radius: 0 0 10px 10px;
+  z-index: 3;
+}
+
+.tk-win {
+  position: absolute;
+  background: rgba(250,250,252,.97);
+  border-radius: 11px;
+  overflow: hidden;
+  box-shadow: 0 24px 60px -18px rgba(0,0,0,.55), 0 0 0 .5px rgba(0,0,0,.14);
+}
+.tk-win-a { left: 7%;  top: 20%; width: 44%; height: 52%; }
+.tk-win-b { right: 8%; top: 32%; width: 36%; height: 40%; }
+
+.tk-bar {
+  display: flex; align-items: center; gap: 6px;
+  height: 27px; padding: 0 11px;
+  background: #ececef; border-bottom: 1px solid #dcdce0;
+}
+.tk-bar i { width: 9px; height: 9px; border-radius: 50%; background: #c9c9cf; }
+.tk-bar i:nth-child(1) { background: #ff5f57; }
+.tk-bar i:nth-child(2) { background: #febc2e; }
+.tk-bar i:nth-child(3) { background: #28c840; }
+.tk-bar em {
+  margin-left: auto; margin-right: auto;
+  font-style: normal; font-size: 11px; font-weight: 600; color: #55555c;
+}
+
+.tk-body { padding: 16px 18px; display: grid; gap: 9px; }
+.tk-body .l { height: 7px; border-radius: 3px; background: #e0e0e5; margin: 0; }
+.w40 { width: 40%; } .w50 { width: 50%; } .w60 { width: 60%; }
+.w70 { width: 70%; } .w80 { width: 80%; } .w85 { width: 85%; } .w90 { width: 90%; }
+
+.tk-dock {
+  position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%);
+  display: flex; gap: 9px; padding: 7px 11px;
+  background: rgba(255,255,255,.2);
+  backdrop-filter: blur(18px);
+  border-radius: 15px;
+  box-shadow: 0 0 0 .5px rgba(255,255,255,.2);
+}
+.tk-dock span {
+  width: 32px; height: 32px; border-radius: 8px;
+  background: linear-gradient(180deg, rgba(255,255,255,.85), rgba(255,255,255,.6));
+}
+
+/* ── The takeover ─────────────────────────────────────────────────────────── */
+
+.tk-canvas { position: absolute; inset: 0; pointer-events: none; }
+.tk-dark { z-index: 4; }
+/* Additive, so crossings burn toward white on their own rather than being
+   painted white. Same trick the real OS surface uses. */
+.tk-lit  { z-index: 5; mix-blend-mode: screen; }
+
+/* ── The anatomy, once it settles ─────────────────────────────────────────── */
+
+.tk-labels { position: absolute; inset: 0; z-index: 6; pointer-events: none; }
+.tk-label {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  animation: tkLabel .9s cubic-bezier(.22,1,.36,1) both;
+}
+.tk-label b {
+  display: block;
+  font-size: clamp(11px, 1.1vw, 14px); font-weight: 600;
+  letter-spacing: .16em;
+  color: var(--c);
+  text-shadow: 0 0 22px var(--c);
+}
+.tk-label span {
+  display: block; margin-top: 5px;
+  font-size: clamp(10px, .9vw, 12px); font-weight: 500;
+  color: rgba(255,255,255,.5);
+}
+@keyframes tkLabel {
+  from { opacity: 0; transform: translate(-50%, -50%) scale(.9); filter: blur(6px); }
+  to   { opacity: 1; transform: translate(-50%, -50%) scale(1);  filter: blur(0); }
+}
+
+/* ── Controls ─────────────────────────────────────────────────────────────── */
+
+.tk-go {
+  position: absolute; inset: 0; z-index: 7;
+  display: grid; place-items: center;
+  appearance: none; border: 0; cursor: pointer;
+  background: rgba(5,5,6,.28);
+  font: inherit;
+}
+.tk-go span {
+  font-size: 15px; font-weight: 600; color: #0a0a0c;
+  background: #f5f5f7; border-radius: 999px; padding: 13px 28px;
+  box-shadow: 0 10px 40px rgba(0,0,0,.5);
+  transition: transform .16s ease;
+}
+.tk-go:hover span { transform: translateY(-1px); }
+
+.tk-under { max-width: 1100px; width: 100%; margin: 0 auto; display: grid; gap: 16px; }
+.tk-caption {
+  margin: 0; min-height: 1.5em;
+  font-size: clamp(15px, 1.5vw, 18px); font-weight: 500; line-height: 1.5;
+  color: #9a9aa2;
+}
+.tk-actions { display: flex; gap: 10px; }
+.tk-btn {
+  appearance: none; cursor: pointer; font: inherit; text-decoration: none;
+  font-size: 14.5px; font-weight: 600; padding: 10px 20px; border-radius: 999px;
+  background: #f5f5f7; color: #0a0a0c; border: 0;
+}
+.tk-btn.ghost { background: transparent; color: #f5f5f7; box-shadow: inset 0 0 0 1px #26262c; }
+
+/* The whole piece is one long animation, so there is no reduced-motion variant
+   that still means anything. It stops instead, on the last frame's argument. */
+@media (prefers-reduced-motion: reduce) {
+  .tk-desktop { transition: none; }
+  .tk-label { animation: none; }
+}
+
+@media (max-width: 720px) {
+  .tk-screen { aspect-ratio: 4 / 3; border-radius: 12px; }
+  .tk-dock span { width: 22px; height: 22px; }
+  .tk-win-a { width: 48%; } .tk-win-b { width: 40%; }
+}

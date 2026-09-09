@@ -132,6 +132,7 @@ const KnowledgeBase = lazy(() => import("./pages/KnowledgeBase.tsx"));
 const IdeaTracker = lazy(() => import("./pages/IdeaTracker.tsx"));
 const OnboardingFlow = lazy(() => import("./pages/OnboardingFlow.tsx"));
 const Onb = lazy(() => import("./pages/Onb.tsx"));
+const Takeover = lazy(() => import("./pages/Takeover.tsx"));
 const WholeMind = lazy(() => import("./pages/WholeMind.tsx"));
 const EngineLog = lazy(() => import("./pages/EngineLog.tsx"));
 const BrainoCode = lazy(() => import("./pages/BrainoCode.tsx"));
@@ -339,6 +340,7 @@ function AppRoutes() {
         <Route path="/instagraphics/onboarding" element={<OnboardingFlow />} />
         <Route path="/onboarding" element={<OnboardingFlow />} />
         <Route path="/onb" element={<Onb />} />
+        <Route path="/takeover" element={<Takeover />} />
         <Route path="/ideas" element={<IdeaTracker />} />
         <Route path="/whole-mind" element={<WholeMind />} />
         <Route path="/engine-log" element={<EngineLog />} />
