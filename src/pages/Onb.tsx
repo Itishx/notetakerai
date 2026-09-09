@@ -462,87 +462,123 @@ export default function Onb() {
         )}
       </div>
 
-      {/* RIGHT: your side. Paper, because the notebook is yours, not his. */}
+      {/* RIGHT: your side. Paper, because the notebook is yours, not his.
+          Every section is shaped to its own data rather than to a common row:
+          confirmed patterns get a tick, things you owe get a box, people and
+          taste get chips, and the priority gets the only tinted card on the
+          page because it is the payoff. A uniform list of hairlines made all
+          eight sections read as equally important, which is another way of
+          saying none of them did. */}
       <aside className="onb-book">
         <div className="onb-book-head">
-          <p className="onb-book-title">Your notebook</p>
-          <p className="onb-book-sub">Building as you go</p>
+          <div>
+            <p className="onb-book-title">Your notebook</p>
+            <p className="onb-book-sub">{filled ? "Filling in as you talk" : "Nothing in it yet"}</p>
+          </div>
+          <div className="onb-fill" aria-label={`${filled} of 7 sections`}>
+            {[0,1,2,3,4,5,6].map((n) => <i key={n} className={n < filled ? "is-on" : undefined} />)}
+          </div>
         </div>
 
-        {filled === 0 && <p className="onb-empty">Nothing yet. He hasn't met you.</p>}
+        {filled === 0 && (
+          <div className="onb-empty">
+            <span className="onb-empty-mark" />
+            <p>He hasn't met you yet.</p>
+          </div>
+        )}
 
         {nb.name && (
-          <section>
-            <h3>Who you are</h3>
-            <Row k={nb.name + (nb.persona || "")}>
+          <div className="onb-id">
+            <img src="/braino-standing.svg" alt="" />
+            <div>
               <b>{nb.name}</b>
               {nb.persona && <span>{PERSONAS.find((p) => p.id === nb.persona)?.label}</span>}
-            </Row>
-          </section>
+            </div>
+          </div>
         )}
 
         {nb.persona && step >= 2 && (
-          <section>
-            <h3>What a day looks like</h3>
-            {PERSONAS.find((p) => p.id === nb.persona)!.demo.map((d) => (
-              <Row k={d} key={d}><span>{d}</span></Row>
-            ))}
+          <section className="onb-sec c-blue">
+            <h3><i />What a day looks like</h3>
+            <div className="onb-day">
+              {PERSONAS.find((p) => p.id === nb.persona)!.demo.map((d) => {
+                const [when, ...rest] = d.split(/\s{2,}/);
+                return (
+                  <Row k={d} key={d}>
+                    <em className="onb-when">{when}</em>
+                    <span>{rest.join(" ")}</span>
+                  </Row>
+                );
+              })}
+            </div>
           </section>
         )}
 
-        {nb.patterns.length > 0 && (
-          <section>
-            <h3>Your week</h3>
+        {nb.patterns.some((c) => c.kind === "pattern") && (
+          <section className="onb-sec c-coral">
+            <h3><i />Your week</h3>
             {nb.patterns.filter((c) => c.kind === "pattern").map((c) => (
               <Row k={c.text + c.ok} key={c.id}>
-                <span>{c.text}</span>
-                {c.ok === true && <em className="ok">confirmed</em>}
-                {c.ok === false && <em className="fix">fixing</em>}
+                <span className={"onb-tick" + (c.ok ? " is-on" : "")} aria-hidden="true" />
+                <span className="onb-txt">{c.text}</span>
               </Row>
             ))}
           </section>
         )}
 
         {nb.tasks.length > 0 && (
-          <section>
-            <h3>Already on your plate</h3>
-            {nb.tasks.map((t) => <Row k={t} key={t}><span>{t}</span></Row>)}
+          <section className="onb-sec c-amber">
+            <h3><i />Already on your plate</h3>
+            {nb.tasks.map((t) => (
+              <Row k={t} key={t}>
+                <span className="onb-box" aria-hidden="true" />
+                <span className="onb-txt">{t}</span>
+              </Row>
+            ))}
           </section>
         )}
 
         {nb.people.length > 0 && (
-          <section>
-            <h3>People</h3>
-            <Row k={nb.people.join()}><span>{nb.people.join(" · ")}</span></Row>
+          <section className="onb-sec c-violet">
+            <h3><i />People</h3>
+            <div className="onb-chips">
+              {nb.people.map((x) => <span className="onb-chip" key={x}>{x}</span>)}
+            </div>
           </section>
         )}
 
         {nb.music.length > 0 && (
-          <section>
-            <h3>What you listen to</h3>
-            {nb.music.map((m) => <Row k={m} key={m}><span>{m}</span></Row>)}
+          <section className="onb-sec c-green">
+            <h3><i />What you listen to</h3>
+            <div className="onb-chips">
+              {nb.music.map((x) => <span className="onb-chip" key={x}>{x}</span>)}
+            </div>
           </section>
         )}
 
         {nb.projects.length > 0 && (
-          <section>
-            <h3>What you're working on</h3>
-            {nb.projects.map((p) => <Row k={p} key={p}><span>{p}</span></Row>)}
+          <section className="onb-sec c-blue">
+            <h3><i />What you're working on</h3>
+            <div className="onb-chips">
+              {nb.projects.map((x) => <span className="onb-chip" key={x}>{x}</span>)}
+            </div>
           </section>
         )}
 
         {nb.imported.length > 0 && (
-          <section>
-            <h3>Brought over</h3>
-            {nb.imported.map((i, n) => <Row k={i + n} key={i + n}><span>{i}</span></Row>)}
+          <section className="onb-sec c-violet">
+            <h3><i />Brought over</h3>
+            {nb.imported.map((x, n) => (
+              <Row k={x + n} key={x + n}><span className="onb-quote">{x}</span></Row>
+            ))}
           </section>
         )}
 
         {nb.priority && (
-          <section>
-            <h3>First thing off your plate</h3>
-            <Row k={nb.priority}><b>{nb.priority}</b></Row>
-          </section>
+          <div className="onb-payoff">
+            <p>First thing off your plate</p>
+            <b>{nb.priority}</b>
+          </div>
         )}
       </aside>
     </div>

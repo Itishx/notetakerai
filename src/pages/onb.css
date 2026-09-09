@@ -245,48 +245,156 @@
 }
 .onb-progress i.is-done { background: var(--coral); }
 
-/* ── Your side: the notebook ──────────────────────────────────────────────── */
+/* ── Your side: the notebook ──────────────────────────────────────────────
+   Warm paper rather than the site's cool off-white, because it sits against
+   pure black and a cool white next to #0a0a0c reads blue.
+
+   Each section is shaped to its data. A uniform list of hairline rows made all
+   eight read as equally important, which is the same as none of them being
+   important, and it was the reason the panel looked bland with the right
+   content in it. */
 
 .onb-book {
-  background: var(--paper); color: var(--paper-ink);
-  padding: clamp(30px, 4vw, 56px);
+  background: #fdfdfb; color: var(--paper-ink);
+  padding: clamp(28px, 3.4vw, 48px);
   overflow-y: auto; max-height: 100vh;
-  border-left: 1px solid #000;
+  box-shadow: inset 14px 0 26px -18px rgba(0,0,0,.5);   /* the fold, not a border */
 }
-.onb-book-head { margin-bottom: 30px; }
-.onb-book-title { margin: 0; font-size: 21px; font-weight: 600; letter-spacing: -.02em; }
-.onb-book-sub { margin: 3px 0 0; font-size: 13px; color: var(--paper-soft); }
-.onb-empty { font-size: 15px; color: #a6a6ad; }
 
-.onb-book section { margin-bottom: 26px; }
-.onb-book h3 {
-  margin: 0 0 9px;
+.onb-book-head {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 16px;
+  padding-bottom: 18px; margin-bottom: 26px;
+  border-bottom: 1px solid var(--paper-hair);
+}
+.onb-book-title { margin: 0; font-size: 20px; font-weight: 600; letter-spacing: -.022em; }
+.onb-book-sub { margin: 3px 0 0; font-size: 13px; color: var(--paper-soft); }
+
+/* Seven marks for seven sections. A bar would imply a task being completed;
+   these are just how much he knows. */
+.onb-fill { display: flex; gap: 4px; padding-top: 6px; flex: none; }
+.onb-fill i {
+  width: 6px; height: 6px; border-radius: 50%; background: #dcdce2;
+  transition: background .4s ease, transform .4s ease;
+}
+.onb-fill i.is-on { background: var(--coral); transform: scale(1.15); }
+
+.onb-empty { display: grid; gap: 14px; justify-items: start; padding: 22px 0; }
+.onb-empty p { margin: 0; font-size: 15px; color: #a6a6ad; }
+.onb-empty-mark {
+  width: 30px; height: 2px; border-radius: 2px; background: #e2e2e8;
+}
+
+/* ── Identity: the only card at the top, so the page has a subject ──────── */
+
+.onb-id {
+  display: flex; align-items: center; gap: 15px;
+  background: #fff; border: 1px solid var(--paper-hair); border-radius: 18px;
+  padding: 15px 18px; margin-bottom: 26px;
+  box-shadow: 0 1px 2px rgba(0,0,0,.03), 0 8px 22px -14px rgba(0,0,0,.22);
+}
+.onb-id img { width: 38px; height: auto; display: block; flex: none; }
+.onb-id b { display: block; font-size: 20px; font-weight: 600; letter-spacing: -.02em; line-height: 1.2; }
+.onb-id span {
+  display: inline-block; margin-top: 5px;
+  font-size: 11.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--coral); background: #fbeae8; border-radius: 999px; padding: 3px 10px;
+}
+
+/* ── Sections: a coloured dot per kind, so the panel is scannable ───────── */
+
+.onb-sec { margin-bottom: 24px; --c: #6e6e73; --ct: #f2f2f5; }
+.onb-sec.c-coral  { --c: #d9645b; --ct: #fbeae8; }
+.onb-sec.c-blue   { --c: #2f6fed; --ct: #e9f0fd; }
+.onb-sec.c-green  { --c: #3a8f5f; --ct: #e8f3ec; }
+.onb-sec.c-amber  { --c: #b8842a; --ct: #f6efe1; }
+.onb-sec.c-violet { --c: #6b52c4; --ct: #efeafa; }
+
+.onb-sec h3 {
+  display: flex; align-items: center; gap: 8px;
+  margin: 0 0 10px;
   font-size: 11.5px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase;
   color: var(--paper-soft);
 }
+.onb-sec h3 i { width: 6px; height: 6px; border-radius: 50%; background: var(--c); flex: none; }
 
 .onb-row {
-  display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
-  padding: 10px 0; border-top: 1px solid var(--paper-hair);
-  font-size: 15px; line-height: 1.45;
+  display: flex; align-items: baseline; gap: 10px;
+  padding: 7px 0;
+  font-size: 15px; line-height: 1.45; color: #33333a;
 }
-.onb-row:first-of-type { border-top: 0; }
-.onb-row b { font-weight: 600; }
-.onb-row span { color: #3a3a40; }
-.onb-row em { font-style: normal; font-size: 11.5px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; }
-.onb-row em.ok  { color: #3a8f5f; }
-.onb-row em.fix { color: #b8842a; }
+.onb-txt { flex: 1; }
 
-/* Only rows that actually CHANGED animate. Animating on every render makes the
-   whole panel strobe on each answer and the effect is gone. */
+/* A pattern he got right earns a drawn tick. An unconfirmed one keeps a hollow
+   ring, so "he thinks this" and "we agreed this" are different at a glance. */
+.onb-tick {
+  position: relative; flex: none;
+  width: 16px; height: 16px; border-radius: 50%;
+  border: 1.5px solid #d6d6dc; align-self: center;
+  transition: background .25s ease, border-color .25s ease;
+}
+.onb-tick.is-on { background: var(--c); border-color: var(--c); }
+.onb-tick.is-on::after {
+  content: ""; position: absolute; left: 4.5px; top: 4px;
+  width: 5px; height: 2.5px;
+  border-left: 1.8px solid #fff; border-bottom: 1.8px solid #fff;
+  transform: rotate(-45deg);
+}
+
+/* Things you owe get a square, because a circle already means "agreed". */
+.onb-box {
+  flex: none; width: 15px; height: 15px; border-radius: 4px;
+  border: 1.5px solid #d6d6dc; align-self: center;
+}
+
+/* The day preview reads as a timetable: the time is set apart and tabular so
+   the hours line up down the column. */
+.onb-day .onb-row { align-items: baseline; }
+.onb-when {
+  flex: none; width: 62px;
+  font-style: normal; font-size: 12.5px; font-weight: 600;
+  font-variant-numeric: tabular-nums; color: var(--c);
+}
+
+/* Chips for the things that are a set rather than a list: people, taste,
+   projects. As rows they were three identical hairlines saying nothing. */
+.onb-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.onb-chip {
+  font-size: 13.5px; font-weight: 500;
+  background: var(--ct); color: #33333a;
+  border-radius: 999px; padding: 6px 13px;
+  animation: onbLand .5s cubic-bezier(.22,1,.36,1) both;
+}
+
+.onb-quote {
+  display: block; padding-left: 13px;
+  border-left: 2px solid var(--ct);
+  font-size: 14.5px; line-height: 1.5; color: #4a4a52;
+}
+
+/* ── The payoff: the only tinted card, and the last thing on the page ───── */
+
+.onb-payoff {
+  background: linear-gradient(180deg, #fbeae8, #fdf4f3);
+  border: 1px solid #f2d4d1; border-radius: 18px;
+  padding: 17px 20px; margin-top: 30px;
+  animation: onbLand .55s cubic-bezier(.22,1,.36,1) both;
+}
+.onb-payoff p {
+  margin: 0 0 5px;
+  font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase;
+  color: #b8534a;
+}
+.onb-payoff b { font-size: 21px; font-weight: 600; letter-spacing: -.022em; color: #1d1d1f; }
+
 @keyframes onbLand {
-  from { opacity: 0; transform: translateY(8px); background: #fbeae8; }
-  to   { opacity: 1; transform: none;            background: transparent; }
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: none; }
 }
 .onb-row.is-new { animation: onbLand .5s cubic-bezier(.22,1,.36,1) both; }
 
 @media (prefers-reduced-motion: reduce) {
-  .onb-row.is-new, .onb-notch, .onb-eye, .onb-dots i, .onb-caret { animation: none; }
+  .onb-row.is-new, .onb-chip, .onb-payoff,
+  .onb-notch, .onb-eye, .onb-dots i, .onb-caret { animation: none; }
 }
 
 /* ── Narrow ───────────────────────────────────────────────────────────────── */
