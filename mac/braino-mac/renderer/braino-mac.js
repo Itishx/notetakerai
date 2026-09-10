@@ -9099,28 +9099,19 @@ async function runStartupSequence(config = {}) {
        he settles into the notch while the screen is still covered, so when the
        black lifts he is already home and awake. Playing the two in sequence
        instead made the user watch the same character arrive twice. */
+    /* Started, NOT awaited.
+     *
+     * The bar used to wait for this whole thing and it made the boot screen
+     * feel broken. runNotchBoot is ten seconds of perimeter trace, auth
+     * letters, a wake beat and a greeting — and almost none of that is work. It
+     * is a performance, and it plays perfectly well in the notch on its own.
+     * The cover's job is the seconds where the app genuinely is not ready yet,
+     * which on a launch with a saved session is barely one. So it tracks that,
+     * gets out of the way, and the notch finishes waking up underneath. */
     const notchBootPromise = runNotchBoot();
-    if (introUp) {
-      intro.progress(0.55);
-      notchBootPromise.then(() => intro.progress(0.9)).catch(() => {});
-    }
-    /* Capped, but generously. runNotchBoot legitimately takes ten seconds or
-       more — 1.5s of perimeter trace, an auth round trip, a 2.2s hold on the
-       letters, a wake beat — and a 12s cap fired on a perfectly healthy boot,
-       dropped the cover, and took the whole onboarding with it.
-       The deadlock this was guarding is already caught precisely by
-       onAuthRequired above, and Escape plus main's watchdog are the real net.
-       This is only a backstop, so it sits well clear of normal. */
-    const authResult = introUp
-      ? await capped(notchBootPromise, 45000, "notch-boot")
-      : await notchBootPromise;
-    if (introUp && !authResult) dropCover("notch-boot-slow");
-    logRenderer("startup.auth.result", {
-      ok: Boolean(authResult?.ok),
-      source: authResult?.source || "unknown",
-      error: authResult?.error || null,
-    });
-    await runNotchGreeting(authResult);
+    notchBootPromise.catch(() => {});
+    if (introUp) intro.progress(0.9);
+
     if (introKilled) {
       /* The cover is already down and the machine is the user's again. Let the
          notch finish quietly; first run will simply offer itself next launch. */
@@ -9151,6 +9142,19 @@ async function runStartupSequence(config = {}) {
       try { window.brainoMac?.introGuard?.(false); } catch (_) {}
       void window.brainoMac?.introDone?.().catch(() => {});
     }
+
+    /* Picked up here, with the cover long gone. On first run the questions took
+       far longer than the notch needed, so this is already settled; on a normal
+       launch he finishes waking in the notch while the desktop is back. Still
+       capped, as a backstop only — Escape and main's watchdog are the real net,
+       and onAuthRequired catches the one case that genuinely never returns. */
+    const authResult = await capped(notchBootPromise, 45000, "notch-boot");
+    logRenderer("startup.auth.result", {
+      ok: Boolean(authResult?.ok),
+      source: authResult?.source || "unknown",
+      error: authResult?.error || null,
+    });
+    await runNotchGreeting(authResult);
     notchBootDone = true;
     lastEngagedAt = Date.now(); // awake + ambient from birth
     updateNotchFace();

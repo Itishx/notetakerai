@@ -21,9 +21,11 @@
  */
 
 (function () {
-  /* Short. A boot screen still must not flash, but 1.5s of held black before
-     anything happens felt like the app was stuck rather than starting. */
-  const MIN_VISIBLE_MS = 650;
+  /* The floor exists only so the screen cannot flash. It is no longer doing the
+     waiting — the cover stopped tracking the notch's ten-second waking-up
+     animation, which was never work — so it can sit right on the edge of
+     readable. */
+  const MIN_VISIBLE_MS = 500;
   const LINE_HOLD_MS = 2200;     // long enough to read nine words, first run only
 
   let root = null;
@@ -129,7 +131,7 @@
     if (fillEl) fillEl.style.width = "100%";
     const elapsed = Date.now() - shownAt;
     if (elapsed < MIN_VISIBLE_MS) await wait(MIN_VISIBLE_MS - elapsed);
-    await wait(120);
+    await wait(80);
 
     barEl?.classList.add("bi-bar-out");
 

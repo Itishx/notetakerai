@@ -45,7 +45,7 @@
   display: block;
   transform-origin: 50% 50%;
   opacity: 0;
-  animation: biArrive .5s cubic-bezier(.22, 1, .36, 1) both;
+  animation: biArrive .42s cubic-bezier(.22, 1, .36, 1) both;
 }
 .bi-mascot svg { width: 100%; height: auto; display: block; position: relative; z-index: 1; }
 
@@ -100,7 +100,7 @@
   background: rgba(255, 255, 255, .16);
   overflow: hidden;
   opacity: 0;
-  animation: biFade .3s ease .12s both;
+  animation: biFade .26s ease .08s both;
 }
 .bi-fill {
   height: 100%;
@@ -109,7 +109,7 @@
   background: #f2f2f4;
   /* Long and eased, so a milestone landing early glides rather than snapping.
      A bar that jumps in steps reads as fake even when the steps are real. */
-  transition: width .3s cubic-bezier(.4, 0, .2, 1);
+  transition: width .24s cubic-bezier(.4, 0, .2, 1);
 }
 /* Explicit from/to, and its own keyframe rather than a class.
    The arrival animation runs with fill-mode `both`, which keeps opacity pinned
