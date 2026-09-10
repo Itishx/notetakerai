@@ -9061,11 +9061,31 @@ async function runStartupSequence(config = {}) {
       error: authResult?.error || null,
     });
     await runNotchGreeting(authResult);
-    /* Black comes off here, with him already in the notch. finish() completes
-       the bar, gives first-run its one line, and flies him home. */
-    if (introUp) {
-      await intro.finish({ firstRun });
-      if (firstRun) void window.brainoMac?.introDone?.().catch(() => {});
+    if (introUp && !firstRun) {
+      /* Every launch after the first: bar completes, he flies into the notch,
+         black lifts. That is the whole boot. */
+      await intro.finish({ firstRun: false });
+    } else if (introUp) {
+      /* FIRST RUN. The bar hands over to white rather than flying him home:
+         black -> white -> the questions -> a cursive hello -> and only then
+         does he go and live in the notch. Flying first would put him away and
+         immediately drag him back out for six questions. */
+      const onb = window.__brainoOnboarding || null;
+      await intro.handoff();
+      if (onb) {
+        const auth = await window.brainoMac.authStatus().catch(() => null);
+        const first = String(auth?.displayName || "").split(" ")[0]?.trim() || "there";
+        const out = await onb.run({ name: first });
+        logRenderer("onboarding.answers", out?.answers || {});
+        /* The white owns the ending now: he appears on it, flies to the notch,
+           and the white lifts with him. The boot screen is only hidden here,
+           never faded, because the white has been covering it the whole time. */
+        intro.hideNow();
+        await onb.goHome();
+      } else {
+        await intro.flyHome();
+      }
+      void window.brainoMac?.introDone?.().catch(() => {});
     }
     notchBootDone = true;
     lastEngagedAt = Date.now(); // awake + ambient from birth
@@ -9099,6 +9119,7 @@ async function runStartupSequence(config = {}) {
        startup used to be survivable because the notch simply never appeared;
        with a full-screen cover it would leave the user looking at nothing. */
     if (introUp) intro.abort();
+    window.__brainoOnboarding?.abort?.();
   }
 }
 

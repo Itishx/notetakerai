@@ -21,8 +21,10 @@
  */
 
 (function () {
-  const MIN_VISIBLE_MS = 1500;   // a boot screen that flashes reads as a glitch
-  const LINE_HOLD_MS = 2500;     // long enough to read nine words, first run only
+  /* Short. A boot screen still must not flash, but 1.5s of held black before
+     anything happens felt like the app was stuck rather than starting. */
+  const MIN_VISIBLE_MS = 850;
+  const LINE_HOLD_MS = 2200;     // long enough to read nine words, first run only
 
   let root = null;
   let mascotEl = null;
@@ -116,7 +118,7 @@
     if (fillEl) fillEl.style.width = "100%";
     const elapsed = Date.now() - shownAt;
     if (elapsed < MIN_VISIBLE_MS) await wait(MIN_VISIBLE_MS - elapsed);
-    await wait(360);
+    await wait(180);
 
     barEl?.classList.add("bi-bar-out");
 
@@ -157,5 +159,41 @@
     setTimeout(() => { if (root) root.hidden = true; }, 640);
   }
 
-  window.__brainoBootIntro = { show, progress, finish, abort };
+  /* First run does not fly him home from here. The bar finishes, the black
+     hands over to the white onboarding, and the flight happens at the very end
+     after the hello — otherwise he arrives in the notch and is then dragged
+     back out for six questions. */
+  async function handoff() {
+    if (!armed || !root) return;
+    armed = false;
+    lastPct = 1;
+    if (fillEl) fillEl.style.width = "100%";
+    const elapsed = Date.now() - shownAt;
+    if (elapsed < MIN_VISIBLE_MS) await wait(MIN_VISIBLE_MS - elapsed);
+    await wait(240);
+  }
+
+  /* The flight, on its own, for whoever owns the ending. On a normal launch
+     that is finish(); on first run it is the hello. */
+  async function flyHome() {
+    if (!root || !mascotEl) return;
+    const f = flightToNotch();
+    mascotEl.style.setProperty("--bi-dx", f.dx.toFixed(1) + "px");
+    mascotEl.style.setProperty("--bi-dy", f.dy.toFixed(1) + "px");
+    mascotEl.style.setProperty("--bi-scale", f.scale.toFixed(3));
+    mascotEl.classList.add("bi-fly");
+    await wait(340);
+    root.classList.add("bi-out");
+    await wait(640);
+    root.hidden = true;
+  }
+
+  /* No fade: the white is already covering it, so a transition here would only
+     be a cross-fade nobody can see. */
+  function hideNow() {
+    armed = false;
+    if (root) root.hidden = true;
+  }
+
+  window.__brainoBootIntro = { show, progress, finish, handoff, flyHome, hideNow, abort };
 })();

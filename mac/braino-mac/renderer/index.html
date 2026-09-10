@@ -15,6 +15,7 @@
     <link rel="stylesheet" href="./braino-os.css" />
     <link rel="stylesheet" href="./wallpaper.css" />
     <link rel="stylesheet" href="./boot-intro.css" />
+    <link rel="stylesheet" href="./onboarding.css" />
   </head>
   <body>
     <!-- The boot screen. Black, him, a bar, nothing else — and it lives in this
@@ -26,6 +27,20 @@
         <div class="bi-bar"><div class="bi-fill"></div></div>
       </div>
       <p class="bi-line">Hey. I'm Braino. I run your day so it runs itself.</p>
+    </div>
+
+    <!-- First run, the white half. The ground changes from his black to your
+         white the moment the bar finishes, because that turn is what says the
+         machine has stopped starting and a conversation has begun. -->
+    <div id="onb-mac" hidden aria-hidden="true">
+      <div class="onbm-stage"></div>
+      <div class="onbm-dots"></div>
+      <div class="onbm-mascot" aria-hidden="true"></div>
+      <div id="onb-hello">
+        <svg class="onbm-hello-svg" viewBox="40 20 410 240" fill="none" aria-label="hello">
+          <path d="M 62 220 C 64 176, 74 108, 90 62 C 98 38, 74 30, 70 58 C 66 88, 78 168, 82 220 C 84 176, 98 148, 120 150 C 142 152, 146 190, 140 220 C 138 231, 150 234, 160 226 C 172 218, 186 190, 196 168 C 206 150, 184 146, 174 164 C 164 182, 174 220, 196 223 C 210 226, 222 218, 230 208 C 246 180, 258 112, 270 64 C 278 40, 254 32, 250 60 C 246 90, 258 168, 262 220 C 264 232, 278 235, 288 226 C 304 180, 316 112, 328 64 C 336 40, 312 32, 308 60 C 304 90, 316 168, 320 220 C 322 232, 336 235, 346 225 C 356 214, 366 196, 378 186 C 394 172, 416 180, 420 200 C 424 220, 408 234, 390 230 C 372 226, 366 206, 374 192 C 384 176, 408 174, 418 188 C 426 199, 428 214, 422 224" />
+        </svg>
+      </div>
     </div>
 
     <main id="dock-stage" aria-label="Braino Mac dock companion">
@@ -420,6 +435,7 @@
     <script src="./her-presence.js"></script>
     <script src="./her-mode.js"></script>
     <script src="./boot-intro.js"></script>
+    <script src="./onboarding.js"></script>
     <script type="module" src="./braino-mac.js"></script>
   </body>
 </html>

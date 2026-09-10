@@ -1,0 +1,229 @@
+/* First run, the white half.
+ *
+ * The boot screen is his: black, his colour, his character. This is yours, so
+ * it is white. Apple makes the same turn — the machine boots dark and then
+ * Setup Assistant is a bright room you are being shown around — and the change
+ * of ground is what tells you the machine has finished starting and a
+ * conversation has begun.
+ *
+ * The cursive hello lands at the END here rather than the beginning. Apple
+ * greets you before it asks anything; he earns it by asking first.
+ */
+
+#onb-mac {
+  position: fixed;
+  inset: 0;
+  /* OVER the boot screen, not under it. Underneath, the black stayed opaque on
+     top and the entire white half rendered invisible: the questions were
+     running, nobody could see them. White washing over black is also the
+     "screen turns white" beat itself. */
+  z-index: 1000000;
+  background: #fdfdfb;
+  color: #1d1d1f;
+  font-family: "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  display: grid;
+  place-items: center;
+  opacity: 0;
+  transition: opacity .74s cubic-bezier(.4, 0, .2, 1);
+}
+#onb-mac[hidden] { display: none; }
+#onb-mac.onb-in { opacity: 1; }
+#onb-mac.onb-out { opacity: 0; transition: opacity .6s ease; }
+
+.onbm-stage {
+  width: min(760px, 78vw);
+  display: grid;
+  justify-items: center;
+  text-align: center;
+  gap: 26px;
+}
+
+/* One step at a time. Only the live one is in the layout, so nothing below it
+   shifts when a longer step follows a shorter one. */
+.onbm-step { display: none; width: 100%; }
+.onbm-step.is-live { display: grid; justify-items: center; gap: 22px; animation: onbmIn .62s cubic-bezier(.22, 1, .36, 1) both; }
+
+@keyframes onbmIn {
+  from { opacity: 0; transform: translateY(12px); filter: blur(6px); }
+  to   { opacity: 1; transform: none;             filter: blur(0); }
+}
+
+.onbm-kicker {
+  margin: 0;
+  font-size: 12px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase;
+  color: #d9645b;
+}
+.onbm-h {
+  margin: 0;
+  font-size: clamp(30px, 3.6vw, 46px); font-weight: 600;
+  letter-spacing: -.03em; line-height: 1.08;
+  max-width: 18ch;
+}
+.onbm-sub {
+  margin: 0;
+  font-size: clamp(16px, 1.5vw, 19px); line-height: 1.5;
+  color: #6e6e73;
+  max-width: 46ch;
+}
+.onbm-fine { margin: 0; font-size: 13px; color: #96969c; max-width: 48ch; }
+
+/* ── Choices ──────────────────────────────────────────────────────────────── */
+
+.onbm-choices { display: flex; flex-wrap: wrap; gap: 9px; justify-content: center; max-width: 620px; }
+.onbm-choice {
+  appearance: none; cursor: pointer; font: inherit;
+  font-size: 15px; font-weight: 500;
+  padding: 11px 20px; border-radius: 999px;
+  background: #fff; color: #1d1d1f;
+  border: 1px solid #e2e2e8;
+  transition: border-color .15s ease, background .15s ease, transform .15s ease;
+}
+.onbm-choice:hover { transform: translateY(-1px); border-color: #c8c8d0; }
+.onbm-choice.is-on { border-color: #d9645b; background: #fbeae8; }
+
+.onbm-actions { display: flex; gap: 10px; align-items: center; margin-top: 4px; }
+.onbm-btn {
+  appearance: none; cursor: pointer; font: inherit;
+  font-size: 15.5px; font-weight: 600;
+  padding: 13px 28px; border-radius: 999px;
+  background: #1d1d1f; color: #fff; border: 0;
+  transition: transform .15s ease, opacity .15s ease;
+}
+.onbm-btn:hover:not(:disabled) { transform: translateY(-1px); }
+.onbm-btn:disabled { opacity: .3; cursor: default; }
+.onbm-btn.ghost { background: transparent; color: #6e6e73; box-shadow: inset 0 0 0 1px #e2e2e8; }
+
+/* ── Showcase: the picture a feature step gets instead of a paragraph ─────── */
+
+.onbm-show {
+  width: 100%; max-width: 560px;
+  border-radius: 16px;
+  border: 1px solid #e8e8ee;
+  background: #fff;
+  box-shadow: 0 20px 50px -28px rgba(0,0,0,.3);
+  overflow: hidden;
+}
+.onbm-show-bar {
+  display: flex; align-items: center; gap: 6px;
+  padding: 9px 12px; background: #f4f4f7; border-bottom: 1px solid #e8e8ee;
+}
+.onbm-show-bar i { width: 9px; height: 9px; border-radius: 50%; background: #d8d8de; }
+.onbm-show-bar em {
+  margin-left: 6px; font-style: normal;
+  font-size: 11.5px; font-weight: 600; color: #7a7a82;
+}
+.onbm-show-body { padding: 20px; display: grid; gap: 12px; text-align: left; }
+
+/* Faces in a call. The point of the picture is the ABSENCE of a recording
+   badge: he is in the room and the room cannot tell. */
+.onbm-faces { display: flex; gap: 8px; }
+.onbm-faces span {
+  flex: 1; height: 54px; border-radius: 9px;
+  background: linear-gradient(160deg, #e9edf5, #dfe4ee);
+}
+.onbm-note {
+  display: flex; align-items: center; gap: 9px;
+  font-size: 13.5px; color: #3a3a40;
+  padding: 10px 12px; border-radius: 10px;
+  background: #f7f7fa;
+}
+.onbm-note b { color: #d9645b; font-weight: 600; }
+.onbm-invisible {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-size: 12px; font-weight: 600; letter-spacing: .04em;
+  color: #3a8f5f; background: #e8f3ec; border-radius: 999px; padding: 5px 12px;
+  /* The body is a grid, so align-self runs the wrong axis and the pill stretched
+     the full width — which made a small aside read as a banner. */
+  justify-self: start;
+}
+
+/* Time saved: a row per feature, the number doing the talking. */
+.onbm-saves { display: grid; gap: 2px; width: 100%; max-width: 520px; text-align: left; }
+.onbm-save {
+  display: flex; align-items: baseline; gap: 14px;
+  padding: 13px 0; border-top: 1px solid #ececf1;
+  font-size: 15.5px;
+}
+.onbm-save:first-child { border-top: 0; }
+.onbm-save b { flex: none; width: 92px; font-weight: 600; font-variant-numeric: tabular-nums; color: #d9645b; }
+.onbm-save span { color: #3a3a40; }
+
+/* ── Progress ─────────────────────────────────────────────────────────────── */
+
+.onbm-dots { display: flex; gap: 6px; margin-top: 34px; }
+.onbm-dots i {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: #dcdce2; transition: background .35s ease, transform .35s ease;
+}
+.onbm-dots i.is-on { background: #d9645b; transform: scale(1.2); }
+
+/* ── The hello ────────────────────────────────────────────────────────────── */
+
+#onb-hello {
+  position: absolute; inset: 0;
+  display: grid; place-items: center;
+  background: #fdfdfb;
+  opacity: 0; pointer-events: none;
+  transition: opacity .7s ease;
+}
+#onb-hello.is-on { opacity: 1; }
+.onbm-hello-svg { width: min(560px, 62vw); height: auto; overflow: visible; }
+.onbm-hello-svg path {
+  fill: none;
+  stroke: #1d1d1f;
+  stroke-width: 9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  /* Set from JS off the real measured length, because a hardcoded dash offset
+     is wrong the moment the path is edited. */
+  stroke-dasharray: var(--len, 2000);
+  stroke-dashoffset: var(--len, 2000);
+}
+.onbm-hello-svg.is-writing path {
+  animation: onbmWrite 2.5s cubic-bezier(.55, .1, .35, 1) forwards;
+}
+@keyframes onbmWrite { to { stroke-dashoffset: 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .onbm-step.is-live { animation: none; }
+  .onbm-hello-svg.is-writing path { animation: none; stroke-dashoffset: 0; }
+}
+
+/* ── Going home, from the white ───────────────────────────────────────────── */
+
+/* He flies from HERE rather than from the boot screen. Handing the ending back
+   to the black layer meant fading the white out first, which revealed the boot
+   screen again and read as the sequence going backwards a step. */
+.onbm-mascot {
+  position: absolute;
+  left: 50%; top: 50%;
+  width: 172px;
+  transform: translate(-50%, -50%);
+  opacity: 0;
+  pointer-events: none;
+}
+.onbm-mascot svg { width: 100%; height: auto; display: block; }
+.onbm-mascot.is-in { animation: onbmArrive .6s cubic-bezier(.22, 1, .36, 1) both; }
+.onbm-mascot.is-fly { animation: onbmFly .95s cubic-bezier(.6, 0, .2, 1) both; }
+
+@keyframes onbmArrive {
+  from { opacity: 0; transform: translate(-50%, -50%) scale(.92); filter: blur(8px); }
+  to   { opacity: 1; transform: translate(-50%, -50%) scale(1);   filter: blur(0); }
+}
+@keyframes onbmFly {
+  from { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  72%  { opacity: 1; }
+  to   {
+    opacity: 0;
+    transform:
+      translate(calc(-50% + var(--onbm-dx, 0px)), calc(-50% + var(--onbm-dy, -40vh)))
+      scale(var(--onbm-scale, .12));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .onbm-mascot.is-in { animation: none; opacity: 1; }
+  .onbm-mascot.is-fly { animation: onbmFadeOut .4s ease both; }
+  @keyframes onbmFadeOut { from { opacity: 1; } to { opacity: 0; } }
+}
