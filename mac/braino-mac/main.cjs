@@ -52,6 +52,7 @@ if (!hasSingleInstanceLock) app.quit();
 const AUTH_STORE_PATH = path.join(AUTH_STORE_DIR, "auth-session.json");
 const FILE_ACTION_HISTORY_PATH = path.join(AUTH_STORE_DIR, "file-actions.json");
 const USAGE_STATS_PATH = path.join(AUTH_STORE_DIR, "usage-stats.json");
+const BOOT_STATE_PATH = path.join(AUTH_STORE_DIR, "boot-state.json");
 const FILE_ACTION_CONFIRM_MS = 120000;
 const MAC_WORKFLOW_CONFIRM_MS = 300000;
 const MAX_FILE_ACTION_HISTORY = 80;
@@ -17290,6 +17291,39 @@ end tell`;
   return { ok: false, error: `Unknown demo action: ${name || "empty"}` };
 }
 
+
+/* Has he ever introduced himself on this machine?
+ *
+ * This one flag is the whole difference between a boot screen and a first-run
+ * intro, which is the same split macOS makes: the Apple logo comes up on every
+ * boot, Setup Assistant comes up once. Both draw from here — the black screen
+ * and the bar always play, his opening line only the first time. */
+function loadFirstRun() {
+  try {
+    return JSON.parse(fs.readFileSync(BOOT_STATE_PATH, "utf8"))?.introDone !== true;
+  } catch (_) {
+    return true; // no file, never run
+  }
+}
+
+function markIntroDone() {
+  try {
+    fs.mkdirSync(AUTH_STORE_DIR, { recursive: true });
+    fs.writeFileSync(
+      BOOT_STATE_PATH,
+      JSON.stringify({ introDone: true, at: new Date().toISOString(), version: APP_VERSION }, null, 2),
+    );
+  } catch (error) {
+    logMac("boot.intro.mark_failed", { error: String(error?.message || error) });
+  }
+}
+
+ipcMain.handle("braino-mac:intro-done", async () => {
+  markIntroDone();
+  logMac("boot.intro.done", {});
+  return { ok: true };
+});
+
 ipcMain.handle("braino-mac:get-config", async () => {
   const auth = authStatusPayload();
   const display = displayForContext(activeMacContext);
@@ -17305,6 +17339,7 @@ ipcMain.handle("braino-mac:get-config", async () => {
     accessibilityTrusted: systemPreferences.isTrustedAccessibilityClient(false),
     microphoneStatus: process.platform === "darwin" ? systemPreferences.getMediaAccessStatus("microphone") : "unsupported",
     mascot: await loadMascotPreference(),
+    firstRun: loadFirstRun(),
     logPath: LOG_PATH,
   };
 });

@@ -14,8 +14,20 @@
     <link rel="stylesheet" href="./her-mode.css" />
     <link rel="stylesheet" href="./braino-os.css" />
     <link rel="stylesheet" href="./wallpaper.css" />
+    <link rel="stylesheet" href="./boot-intro.css" />
   </head>
   <body>
+    <!-- The boot screen. Black, him, a bar, nothing else — and it lives in this
+         document so that at the end he can fly into the notch below rather than
+         cross-fading into it. Hidden until startup() calls for it. -->
+    <div id="boot-intro" hidden aria-hidden="true">
+      <div class="bi-stack">
+        <div class="bi-mascot"></div>
+        <div class="bi-bar"><div class="bi-fill"></div></div>
+      </div>
+      <p class="bi-line">Hey. I'm Braino. I run your day so it runs itself.</p>
+    </div>
+
     <main id="dock-stage" aria-label="Braino Mac dock companion">
       <div id="edge-glow" aria-hidden="true"></div>
       <div id="notch-face" class="nf-core-only" aria-label="Braino status">
@@ -407,6 +419,7 @@
     <script src="./wallpaper.js"></script>
     <script src="./her-presence.js"></script>
     <script src="./her-mode.js"></script>
+    <script src="./boot-intro.js"></script>
     <script type="module" src="./braino-mac.js"></script>
   </body>
 </html>

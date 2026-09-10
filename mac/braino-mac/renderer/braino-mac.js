@@ -9028,21 +9028,45 @@ function runWakeupClimb(config = {}) {
 
 async function runStartupSequence(config = {}) {
   startupActive = true;
+  /* The boot screen goes up before anything else is drawn, because its whole
+     job is to be the first thing on the display. It wraps the real startup work
+     rather than running beside it: every progress() call below is a step that
+     actually completed, so a cold sign-in genuinely holds the bar and a warm
+     one genuinely races it. */
+  const intro = window.__brainoBootIntro || null;
+  const firstRun = Boolean(config.firstRun);
+  const introUp = Boolean(intro?.show({ firstRun }));
   try {
     applyDisplayMetrics(config.displayMetrics);
+    if (introUp) intro.progress(0.18);
     movementMode = "dock";
     setStatus("connecting", "Starting");
     // He is born from the notch: closed eyes fade in → authenticate (~1s,
     // green or red verdict) → eyes open. Silent boot — no spoken greeting, no
     // auto voice session; Double-Control starts realtime. He STAYS home until
     // summoned by voice.
-    const authResult = await runNotchBoot();
+    /* The notch boot runs UNDER the black. He authenticates, his eyes bloom and
+       he settles into the notch while the screen is still covered, so when the
+       black lifts he is already home and awake. Playing the two in sequence
+       instead made the user watch the same character arrive twice. */
+    const notchBootPromise = runNotchBoot();
+    if (introUp) {
+      intro.progress(0.55);
+      notchBootPromise.then(() => intro.progress(0.9)).catch(() => {});
+    }
+    const authResult = await notchBootPromise;
     logRenderer("startup.auth.result", {
       ok: Boolean(authResult?.ok),
       source: authResult?.source || "unknown",
       error: authResult?.error || null,
     });
     await runNotchGreeting(authResult);
+    /* Black comes off here, with him already in the notch. finish() completes
+       the bar, gives first-run its one line, and flies him home. */
+    if (introUp) {
+      await intro.finish({ firstRun });
+      if (firstRun) void window.brainoMac?.introDone?.().catch(() => {});
+    }
     notchBootDone = true;
     lastEngagedAt = Date.now(); // awake + ambient from birth
     updateNotchFace();
@@ -9071,6 +9095,10 @@ async function runStartupSequence(config = {}) {
     pickRoamTarget();
   } finally {
     startupActive = false;
+    /* Whatever happened above, the display does not stay black. A crash during
+       startup used to be survivable because the notch simply never appeared;
+       with a full-screen cover it would leave the user looking at nothing. */
+    if (introUp) intro.abort();
   }
 }
 
