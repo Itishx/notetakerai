@@ -9104,11 +9104,15 @@ async function runStartupSequence(config = {}) {
       intro.progress(0.55);
       notchBootPromise.then(() => intro.progress(0.9)).catch(() => {});
     }
-    /* Capped, because runNotchBoot awaits sign-in and sign-in can wait forever.
-       Losing the race means the cover comes down and the notch finishes on its
-       own underneath; it never means the machine stays covered. */
+    /* Capped, but generously. runNotchBoot legitimately takes ten seconds or
+       more — 1.5s of perimeter trace, an auth round trip, a 2.2s hold on the
+       letters, a wake beat — and a 12s cap fired on a perfectly healthy boot,
+       dropped the cover, and took the whole onboarding with it.
+       The deadlock this was guarding is already caught precisely by
+       onAuthRequired above, and Escape plus main's watchdog are the real net.
+       This is only a backstop, so it sits well clear of normal. */
     const authResult = introUp
-      ? await capped(notchBootPromise, 12000, "notch-boot")
+      ? await capped(notchBootPromise, 45000, "notch-boot")
       : await notchBootPromise;
     if (introUp && !authResult) dropCover("notch-boot-slow");
     logRenderer("startup.auth.result", {

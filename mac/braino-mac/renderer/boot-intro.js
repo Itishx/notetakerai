@@ -23,7 +23,7 @@
 (function () {
   /* Short. A boot screen still must not flash, but 1.5s of held black before
      anything happens felt like the app was stuck rather than starting. */
-  const MIN_VISIBLE_MS = 850;
+  const MIN_VISIBLE_MS = 650;
   const LINE_HOLD_MS = 2200;     // long enough to read nine words, first run only
 
   let root = null;
@@ -35,6 +35,17 @@
   let armed = false;
 
   function el(id) { return document.getElementById(id); }
+
+  /* The walker art carries its own gradients (sbwk-fill, sbwk-dark, sbwk-glow).
+     Injecting it twice puts two elements with each id in one document, and a
+     fill of url(#sbwk-fill) resolves to whichever came first — which, once the
+     boot screen is hidden, is a paint server inside a display:none subtree.
+     That is why he lost his coral the moment the screen turned white. Each copy
+     gets its own namespace instead. */
+  function uniqueGradients(svg, tag) {
+    return String(svg).replace(/sbwk-(fill|dark|glow)/g, "sbwk-$1-" + tag);
+  }
+  window.__brainoUniqueGradients = uniqueGradients;
 
   function mount() {
     root = el("boot-intro");
@@ -52,7 +63,7 @@
   function paintMascot() {
     try {
       const svg = window.brainoMac?.getWalkerSvg?.();
-      if (svg && typeof svg === "string") { mascotEl.innerHTML = svg; return; }
+      if (svg && typeof svg === "string") { mascotEl.innerHTML = uniqueGradients(svg, "boot"); return; }
     } catch (_) { /* fall through to the dot */ }
     /* No markup available. A plain coral dot is a poor Braino but an honest
        one, and it is better than an empty black screen while he boots. */
@@ -118,7 +129,7 @@
     if (fillEl) fillEl.style.width = "100%";
     const elapsed = Date.now() - shownAt;
     if (elapsed < MIN_VISIBLE_MS) await wait(MIN_VISIBLE_MS - elapsed);
-    await wait(180);
+    await wait(120);
 
     barEl?.classList.add("bi-bar-out");
 

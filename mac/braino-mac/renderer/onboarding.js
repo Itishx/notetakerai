@@ -237,7 +237,9 @@
 
     try {
       const svg = window.brainoMac?.getWalkerSvg?.();
-      if (svg) mascot.innerHTML = svg;
+      // Own gradient namespace, or he inherits the boot screen's — which is
+      // hidden by now, and a hidden paint server paints nothing.
+      if (svg) mascot.innerHTML = window.__brainoUniqueGradients?.(svg, "onb") || svg;
     } catch (_) { /* he can arrive as nothing rather than not at all */ }
     mascot.classList.add("is-in");
     await wait(760);
