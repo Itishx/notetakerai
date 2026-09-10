@@ -9035,7 +9035,57 @@ async function runStartupSequence(config = {}) {
      one genuinely races it. */
   const intro = window.__brainoBootIntro || null;
   const firstRun = Boolean(config.firstRun);
-  const introUp = Boolean(intro?.show({ firstRun }));
+
+  /* THE CAUSE, removed rather than handled.
+   *
+   * Startup sign-in opens a BROWSER and waits for it with no timeout. Covering
+   * every display at that moment puts the cover on top of the page the user has
+   * to click, so the wait can never end: the Mac is unusable until it is
+   * restarted, which is exactly what happened.
+   *
+   * config.auth.authenticated says up front whether this launch will need that
+   * browser. If it will, no cover goes up at all. The boot theatre is worth a
+   * lot; it is not worth any chance of taking somebody's machine away. It plays
+   * on the next launch, when there is a session and nothing has to be asked. */
+  const authReady = Boolean(config?.auth?.authenticated);
+  if (!authReady) logRenderer("boot.intro.skipped", { why: "sign-in-needed" });
+  const introUp = authReady ? Boolean(intro?.show({ firstRun })) : false;
+
+  /* Everything that can strand someone behind the cover, handled in one place.
+     This surface takes the whole machine, so the rule is that it comes down on
+     its own no matter what happens above it. */
+  let introKilled = false;
+  const dropCover = (why) => {
+    if (introKilled) return;
+    introKilled = true;
+    logRenderer("boot.intro.drop", { why });
+    try { window.brainoMac?.setMousePassthrough?.(true); } catch (_) {}
+    try { window.brainoMac?.introGuard?.(false); } catch (_) {}
+    intro?.abort?.();
+    window.__brainoOnboarding?.abort?.();
+  };
+
+  if (introUp) {
+    // Main holds Escape and a watchdog for as long as this is up, because the
+    // renderer is the thing that gets stuck and cannot be its own way out.
+    try { window.brainoMac?.introGuard?.(true); } catch (_) {}
+    try { window.brainoMac?.onIntroKill?.((p) => dropCover(p?.why || "main")); } catch (_) {}
+
+    /* THE deadlock this is here to prevent: startup sign-in opens a browser and
+       waits for it, and the cover was on top of the browser, so it could never
+       be answered and the Mac had to be restarted. The moment auth says it
+       needs a browser, the cover gets out of the way. */
+    try { window.brainoMac?.onAuthRequired?.(() => dropCover("auth-needs-browser")); } catch (_) {}
+  }
+
+  /* No await in this path is allowed to be unbounded. */
+  const capped = (promise, ms, label) => Promise.race([
+    promise,
+    new Promise((resolve) => setTimeout(() => {
+      logRenderer("boot.intro.timeout", { label, ms });
+      resolve(null);
+    }, ms)),
+  ]);
   try {
     applyDisplayMetrics(config.displayMetrics);
     if (introUp) intro.progress(0.18);
@@ -9054,14 +9104,23 @@ async function runStartupSequence(config = {}) {
       intro.progress(0.55);
       notchBootPromise.then(() => intro.progress(0.9)).catch(() => {});
     }
-    const authResult = await notchBootPromise;
+    /* Capped, because runNotchBoot awaits sign-in and sign-in can wait forever.
+       Losing the race means the cover comes down and the notch finishes on its
+       own underneath; it never means the machine stays covered. */
+    const authResult = introUp
+      ? await capped(notchBootPromise, 12000, "notch-boot")
+      : await notchBootPromise;
+    if (introUp && !authResult) dropCover("notch-boot-slow");
     logRenderer("startup.auth.result", {
       ok: Boolean(authResult?.ok),
       source: authResult?.source || "unknown",
       error: authResult?.error || null,
     });
     await runNotchGreeting(authResult);
-    if (introUp && !firstRun) {
+    if (introKilled) {
+      /* The cover is already down and the machine is the user's again. Let the
+         notch finish quietly; first run will simply offer itself next launch. */
+    } else if (introUp && !firstRun) {
       /* Every launch after the first: bar completes, he flies into the notch,
          black lifts. That is the whole boot. */
       await intro.finish({ firstRun: false });
@@ -9085,6 +9144,7 @@ async function runStartupSequence(config = {}) {
       } else {
         await intro.flyHome();
       }
+      try { window.brainoMac?.introGuard?.(false); } catch (_) {}
       void window.brainoMac?.introDone?.().catch(() => {});
     }
     notchBootDone = true;
@@ -9118,8 +9178,11 @@ async function runStartupSequence(config = {}) {
     /* Whatever happened above, the display does not stay black. A crash during
        startup used to be survivable because the notch simply never appeared;
        with a full-screen cover it would leave the user looking at nothing. */
-    if (introUp) intro.abort();
-    window.__brainoOnboarding?.abort?.();
+    /* Whatever happened above, the cover comes down and the machine is usable.
+       A crash used to just mean no notch; with a full-screen cover it means a
+       restart, which is what this exists to make impossible. */
+    if (introUp) dropCover("finally");
+    try { window.brainoMac?.introGuard?.(false); } catch (_) {}
   }
 }
 

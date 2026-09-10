@@ -17318,6 +17318,66 @@ function markIntroDone() {
   }
 }
 
+
+/* ── The first-run cover, and getting out of it ────────────────────────────
+ *
+ * The boot screen and the onboarding cover every display and float over
+ * fullscreen apps, which makes them the most dangerous surface in the app: if
+ * the renderer stops advancing, the Mac is unusable and a restart is the only
+ * way out. That is not a hypothetical — it happened, because the boot screen
+ * awaited startup sign-in, sign-in opens a BROWSER, and the cover was on top of
+ * the browser. Nothing could ever resolve it.
+ *
+ * So the way out cannot live in the renderer, which is the thing that gets
+ * stuck. Escape is claimed globally for exactly as long as the cover is up, and
+ * a watchdog here tears it down whether or not the renderer ever answers. The
+ * same lesson bindBrainoOsEscape() above already learned. */
+let introEscapeBound = false;
+let introWatchdog = null;
+const INTRO_MAX_MS = 30000;
+
+function killIntroCover(why) {
+  bindIntroEscape(false);
+  if (introWatchdog) { clearTimeout(introWatchdog); introWatchdog = null; }
+  try {
+    if (dockWindow && !dockWindow.isDestroyed()) {
+      // Clicks go back to the machine first, so the user has their Mac back
+      // even if the renderer never processes the teardown below.
+      dockWindow.setIgnoreMouseEvents(true, { forward: true });
+    }
+  } catch (_) {}
+  sendToRenderer("braino-mac:intro-kill", { why });
+  logMac("boot.intro.killed", { why });
+}
+
+function bindIntroEscape(active) {
+  if (active && !introEscapeBound) {
+    introEscapeBound = globalShortcut.register("Escape", () => killIntroCover("escape"));
+    if (!introEscapeBound) logMac("boot.intro.escape_unavailable", {});
+    return;
+  }
+  if (!active && introEscapeBound) {
+    try { globalShortcut.unregister("Escape"); } catch (_) {}
+    introEscapeBound = false;
+  }
+}
+
+/* Every call restarts the clock, so the onboarding heartbeats on each answer.
+   The boot phase gets a hard 30s because nothing there should take that long;
+   the questions get a long idle cap instead, since a person reading a screen is
+   not a stuck app and killing the flow under them would be its own bug. */
+ipcMain.on("braino-mac:intro-guard", (_event, up, ms) => {
+  if (introWatchdog) { clearTimeout(introWatchdog); introWatchdog = null; }
+  if (up) {
+    bindIntroEscape(true);
+    const wait = Math.min(180000, Math.max(5000, Number(ms) || INTRO_MAX_MS));
+    introWatchdog = setTimeout(() => killIntroCover("watchdog"), wait);
+  } else {
+    bindIntroEscape(false);
+    logMac("boot.intro.guard_down", {});
+  }
+});
+
 ipcMain.handle("braino-mac:intro-done", async () => {
   markIntroDone();
   logMac("boot.intro.done", {});
@@ -19016,7 +19076,10 @@ function handleTerminationSignal(signal) {
 process.once("SIGINT", () => handleTerminationSignal("SIGINT"));
 process.once("SIGTERM", () => handleTerminationSignal("SIGTERM"));
 
-app.on("will-quit", () => { stopPresenceBeacon(); });
+app.on("will-quit", () => {
+  bindIntroEscape(false);
+  stopPresenceBeacon();
+});
 app.on("will-quit", () => {
   cleanupNativeHelpers();
 });

@@ -100,7 +100,8 @@
 
   let root = null, stage = null, dotsEl = null, helloEl = null;
   let idx = 0;
-  let resolveDone = null;
+  let aborted = false;
+  let releaseStep = null;   // resolves whatever click the run is waiting on
   const answers = {};
 
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -131,7 +132,16 @@
     stage.innerHTML = render(s, name);
     paintDots();
 
+    /* Each answer is a heartbeat: the cover is allowed to stay up because
+       somebody is visibly still using it. Stop answering and the watchdog in
+       main takes it down on its own. */
+    try { window.brainoMac?.introGuard?.(true, 120000); } catch (_) {}
+
     const pick = await new Promise((resolve) => {
+      /* Held so an abort can release it. Without this the run stayed parked on
+         a click that was never coming, and startup never finished even after
+         the cover was gone. */
+      releaseStep = () => resolve(-1);
       stage.querySelectorAll(".onbm-choice").forEach((btn) => {
         btn.addEventListener("click", () => {
           btn.classList.add("is-on");
@@ -141,13 +151,22 @@
         }, { once: true });
       });
     });
+    releaseStep = null;
+    if (aborted || pick < 0) return null;
 
     if (s.capture) answers[s.capture] = s.choices[pick];
 
     /* The native prompts fire from the step that asked for them, so the macOS
        dialog lands while the sentence explaining it is still on screen. */
     if (s.native === "calendar" && pick === 0) {
-      try { await window.brainoMac?.permissionAsk?.("calendar"); } catch (_) {}
+      /* Capped: a macOS prompt the user never answers is still a prompt that
+         never returns, and the cover is on screen while it waits. */
+      try {
+        await Promise.race([
+          window.brainoMac?.permissionAsk?.("calendar") ?? Promise.resolve(),
+          new Promise((r) => setTimeout(r, 20000)),
+        ]);
+      } catch (_) {}
     }
 
     idx += 1;
@@ -167,8 +186,9 @@
     }
     helloEl.classList.add("is-on");
     await wait(60);
+    if (aborted) return;
     helloEl.querySelector("svg")?.classList.add("is-writing");
-    await wait(3100);
+    for (let i = 0; i < 31 && !aborted; i++) await wait(100);
   }
 
   /* Runs the whole white half and resolves when he is ready to go home. */
@@ -191,6 +211,10 @@
 
     try {
       await step(String(opts?.name || "there"));
+      /* An abort means somebody wants their Mac back, so the run ENDS here.
+         Playing the hello anyway kept the cover on screen for three more
+         seconds after the thing that was meant to take it down. */
+      if (aborted) return { aborted: true, answers };
       stage.innerHTML = "";
       dotsEl.innerHTML = "";
       await hello();
@@ -251,10 +275,14 @@
   }
 
   function abort() {
+    aborted = true;
+    try { releaseStep?.(); } catch (_) {}
     try { window.brainoMac?.setMousePassthrough?.(true); } catch (_) {}
     if (!root) return;
-    root.classList.add("onb-out");
-    setTimeout(() => { if (root) root.hidden = true; }, 620);
+    /* Hidden outright rather than faded. An abort is someone wanting their Mac
+       back, and a 600ms fade is 600ms of still not having it. */
+    root.classList.remove("onb-in");
+    root.hidden = true;
   }
 
   window.__brainoOnboarding = { run, goHome, dismiss, abort, HELLO_PATH, STEPS };

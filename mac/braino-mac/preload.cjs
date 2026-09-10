@@ -47,6 +47,12 @@ const walkerSvg = walkerSvgFor(loadCachedMascotSync());
 contextBridge.exposeInMainWorld("brainoMac", {
   getConfig: () => ipcRenderer.invoke("braino-mac:get-config"),
   introDone: () => ipcRenderer.invoke("braino-mac:intro-done"),
+  introGuard: (up, ms) => ipcRenderer.send("braino-mac:intro-guard", Boolean(up), Number(ms) || 0),
+  onIntroKill: (callback) => {
+    const handler = (_event, payload) => callback(payload || {});
+    ipcRenderer.on("braino-mac:intro-kill", handler);
+    return () => ipcRenderer.removeListener("braino-mac:intro-kill", handler);
+  },
   setMascot: (id) => ipcRenderer.invoke("braino-mac:set-mascot", id),
   getWalkerSvg: () => walkerSvg,
   getWalkerSvgFor: (mascotId) => walkerSvgFor(mascotId),
