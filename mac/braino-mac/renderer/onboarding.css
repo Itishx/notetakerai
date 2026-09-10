@@ -26,10 +26,20 @@
   place-items: center;
   opacity: 0;
   transition: opacity .74s cubic-bezier(.4, 0, .2, 1);
+
+  /* braino-mac.css sets `body { pointer-events: none }` because this whole
+     window is click-through by design — the notch lets you use the Mac behind
+     it. The onboarding inherited that and its buttons could not be clicked at
+     all, no matter what the window-level passthrough said. Two separate gates
+     have to open for a click here: setIgnoreMouseEvents(false) so macOS hands
+     the event to the window, and this so the DOM will take it. */
+  pointer-events: none;
 }
 #onb-mac[hidden] { display: none; }
-#onb-mac.onb-in { opacity: 1; }
-#onb-mac.onb-out { opacity: 0; transition: opacity .6s ease; }
+/* Only while it is actually up. Fading out it stops taking clicks again, so it
+   never swallows one on its way off screen. */
+#onb-mac.onb-in { opacity: 1; pointer-events: auto; }
+#onb-mac.onb-out { opacity: 0; pointer-events: none; transition: opacity .6s ease; }
 
 .onbm-stage {
   width: min(760px, 78vw);
