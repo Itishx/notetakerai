@@ -160,6 +160,14 @@
        main takes it down on its own. */
     try { window.brainoMac?.introGuard?.(true, 120000); } catch (_) {}
 
+    /* Re-asserted every step, not claimed once at the start.
+       Anything that takes focus away takes the clicks with it and does not give
+       them back — the macOS permission prompt on the calendar step is exactly
+       that, which is why the buttons worked for four screens and then stopped
+       dead on the fifth. Asking again each step costs one IPC and means no
+       single interruption can strand the rest of the run. */
+    try { await window.brainoMac?.onbInteractive?.(true); } catch (_) {}
+
     const pick = await new Promise((resolve) => {
       /* Held so an abort can release it. Without this the run stayed parked on
          a click that was never coming, and startup never finished even after
@@ -204,6 +212,10 @@
           new Promise((r) => setTimeout(r, 20000)),
         ]);
       } catch (_) {}
+      /* The system dialog took focus and macOS does not hand it back. Taking it
+         straight away rather than on the next step means the screen the user is
+         already looking at is clickable, not the one after it. */
+      try { await window.brainoMac?.onbInteractive?.(true); } catch (_) {}
     }
 
     idx += 1;

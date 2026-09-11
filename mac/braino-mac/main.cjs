@@ -1745,6 +1745,9 @@ function sendOverlayState(reason, display = displayForContext(activeMacContext))
    twenty nine minutes with no way to dismiss it: the field's Escape is a
    renderer keydown, and a window that cannot be focused never sees one. */
 let typingHoldsKeyboard = false;
+/* Its sibling, for the onboarding: true only while the questions are on screen
+   and expecting clicks. The dock window's blur handler reads it. */
+let onboardingHoldsMouse = false;
 
 function raiseDockWindow(reason = "raise") {
   if (!dockWindow || dockWindow.isDestroyed() || dockWindowHiddenByUser) return;
@@ -2918,6 +2921,25 @@ function createDockWindow() {
         dockWindow.setFocusable(false);
         dockWindow.setIgnoreMouseEvents(true, { forward: true });
       } catch (_) {}
+    }
+    /* While the questions are up there is nothing else on screen to click — it
+       covers every display — so losing focus is never the user choosing to go
+       elsewhere, it is something taking it from them. macOS does not give it
+       back on its own, and without it the remaining screens are dead. The
+       permission prompt on the calendar step did exactly this: four screens
+       worked, then nothing.
+       Deliberately after the prompt has had its turn, so the dialog is not
+       fought for focus while the user is still answering it. */
+    if (onboardingHoldsMouse) {
+      setTimeout(() => {
+        if (!onboardingHoldsMouse || !dockWindow || dockWindow.isDestroyed()) return;
+        try {
+          dockWindow.setFocusable(true);
+          dockWindow.focus();
+          dockWindow.setIgnoreMouseEvents(false, { forward: true });
+          logMac("onboarding.focus_reclaimed", {});
+        } catch (_) {}
+      }, 400);
     }
     positionDockWindow(undefined, "blur");
   });
@@ -17346,6 +17368,7 @@ function killIntroCover(why) {
       // even if the renderer never processes the teardown below. Focusable goes
       // with it: leaving the panel focusable after a kill means it can still
       // steal the keyboard from whatever the user switches to next.
+      onboardingHoldsMouse = false;   // or the blur handler keeps taking focus back
       dockWindow.setIgnoreMouseEvents(true, { forward: true });
       dockWindow.setFocusable(false);
     }
@@ -17418,6 +17441,7 @@ function saveNamedMode(enabled) {
 ipcMain.handle("braino-mac:onb-interactive", async (_event, payload = {}) => {
   const on = Boolean(payload?.on);
   if (!dockWindow || dockWindow.isDestroyed()) return { ok: false };
+  onboardingHoldsMouse = on;
   try {
     ensureDockWindowVisible(on ? "onboarding" : "onboarding-done");
     dockWindow.setFocusable(on);
