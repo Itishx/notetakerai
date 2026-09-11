@@ -48,6 +48,12 @@ contextBridge.exposeInMainWorld("brainoMac", {
   getConfig: () => ipcRenderer.invoke("braino-mac:get-config"),
   introDone: () => ipcRenderer.invoke("braino-mac:intro-done"),
   introGuard: (up, ms) => ipcRenderer.send("braino-mac:intro-guard", Boolean(up), Number(ms) || 0),
+  namedMode: (payload) => ipcRenderer.invoke("braino-mac:named-mode", payload || {}),
+  onNamedMode: (callback) => {
+    const handler = (_event, p) => callback(p || {});
+    ipcRenderer.on("braino-mac:named-mode", handler);
+    return () => ipcRenderer.removeListener("braino-mac:named-mode", handler);
+  },
   onIntroKill: (callback) => {
     const handler = (_event, payload) => callback(payload || {});
     ipcRenderer.on("braino-mac:intro-kill", handler);

@@ -24,7 +24,10 @@ import Speech
 // Same fuzzy variants voiceAddressesBraino() already accepts in the renderer,
 // plus "raino" (the founder's own casual pronunciation) — kept in one place
 // here since this runs before anything ever reaches the renderer.
-let WAKE_WORDS = ["braino", "bruno", "breno", "reno", "dino", "raino"]
+// "reno" and "dino" were in here and they are ordinary words, so he woke up
+// inside other people's conversations. With contextualStrings telling the
+// recogniser that "Braino" exists, these are only the close acoustic misses.
+let WAKE_WORDS = ["braino", "brayno", "bruno", "breno", "raino"]
 
 func argumentValue(_ name: String) -> String? {
   guard let index = CommandLine.arguments.firstIndex(of: name),
@@ -146,6 +149,14 @@ final class BrainoWakeWord: NSObject {
     let req = SFSpeechAudioBufferRecognitionRequest()
     req.shouldReportPartialResults = true
     req.requiresOnDeviceRecognition = true
+    /* Apple's model has never heard of "Braino", so it substitutes the nearest
+       word it does know. Across 184 real wakes on the founder's Mac it
+       transcribed "Reno" 46 times, "Bruno" 42, and "Braino" exactly zero — which
+       is why WAKE_WORDS below has to carry a list of misspellings, and why real
+       words like "Reno" and "Dino" in that list wake him during other people's
+       conversations. Telling the recogniser the word exists is the fix at the
+       source; the variants stay as a safety net underneath it. */
+    req.contextualStrings = ["Braino", "Hey Braino", "Braino,"]
     request = req
 
     task = recognizer.recognitionTask(with: req) { [weak self] result, error in

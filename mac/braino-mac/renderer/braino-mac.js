@@ -4173,16 +4173,72 @@ function noteSpeechEnded() {
   if (lastSpokenLine.ts) lastSpokenLine.endedTs = Date.now();
 }
 
+/* His name, and only his name.
+ *
+ * "reno" and "dino" used to be in here as mishearings, and they are ordinary
+ * English words, so he woke up inside other people's sentences: "I told him
+ * Reno", "Reno book", "Hello Reno". They are gone. BrainoWakeWord.swift now
+ * tells Apple's recogniser the word "Braino" exists (contextualStrings), which
+ * is the fix at the source — the remaining variants are the close acoustic
+ * misses that are still worth catching. */
 function voiceExplicitlyAddressesBraino(text) {
   const normalized = normalizeForVoiceMatch(text);
-  return Boolean(normalized && /\b(braino|bruno|breno|reno|dino)\b/.test(normalized));
+  return Boolean(normalized && /\b(braino|brayno|braino's|breno|braino|raino|bruno)\b/.test(normalized));
 }
 
+/* There used to be a second way to "address" him: a list of ordinary words —
+ * stop, wait, listen, open, send, make, note, music, sound — any one of which
+ * counted as talking to him. One sentence from somebody standing near you
+ * ("wait, listen, I'll send you the notes") hit four of them, and he answered.
+ * That list is gone. Being addressed means his name was said. Nothing else. */
 function voiceAddressesBraino(text) {
-  const normalized = normalizeForVoiceMatch(text);
-  if (!normalized) return false;
-  if (voiceExplicitlyAddressesBraino(normalized)) return true;
-  return /\b(stop|pause|wait|hold on|listen|repeat|cancel|enough|organize|organise|open|search|find|clean|undo|create|make|note|notes|mail|gmail|email|send|draft|compose|volume|sound|louder|quieter|mute|spotify|playlist|song|music)\b/.test(normalized);
+  return voiceExplicitlyAddressesBraino(text);
+}
+
+
+/* ── Named mode: he answers when called, and only then ─────────────────────
+ *
+ * The loop, and it is the whole feature:
+ *
+ *   asleep  --- hears his name ---> awake
+ *   awake   --- 5s with nothing ---> asleep
+ *
+ * Asleep does not mean deaf. The session can be open and he can be hearing
+ * every word in the room; he simply does not answer any of it. That is the
+ * difference people actually wanted: not a microphone that switches off, but a
+ * person who does not interrupt.
+ *
+ * The five seconds are counted from the last thing that happened between the
+ * two of you, NOT from the moment you said his name. Counting from the wake
+ * would close the window while he was still answering a question — you would
+ * say "Braino, what's my day", he would talk for eight seconds, and your
+ * follow-up would land on a closed door. */
+const NAMED_WINDOW_MS = 5000;
+let namedModeOn = false;
+let namedAddressedAt = 0;
+
+function namedWindowOpen() {
+  if (!namedModeOn) return true;
+  /* Mid-turn is always open. He is talking to you right now, so "stop" or
+     "no, the other one" needs no name in front of it. */
+  if (speaking || processing || voiceTurnInFlight) return true;
+  /* Timestamps rather than a timer, so a lid closing for an hour cannot leave
+     the window standing open when it opens again. */
+  const since = Math.max(namedAddressedAt, lastSpokenLine?.endedTs || 0);
+  return since > 0 && Date.now() - since <= NAMED_WINDOW_MS;
+}
+
+function namedWake(why) {
+  const wasAsleep = !namedWindowOpen();
+  namedAddressedAt = Date.now();
+  if (wasAsleep) logRenderer("named.awake", { why });
+  updateNotchFace();
+}
+
+/* A new session starts asleep. Without this, ending a session inside the window
+   and starting a new one left him already awake and answering the room. */
+function namedReset() {
+  namedAddressedAt = 0;
 }
 
 function rememberLocalChat(role, content) {
@@ -4824,6 +4880,7 @@ function stopListeningNow(source) {
   stopSpeechOutput();
   stopRealtimeVoice();
   stopRecognition();
+  namedReset();
   setStatus("ready", "Double Space to show/hide");
   setBubble("Stopped listening.", 1200);
   logRenderer("voice.stopped", { source });
@@ -4832,6 +4889,33 @@ function stopListeningNow(source) {
 function shouldAcceptVoiceTranscript(text) {
   const stats = transcriptStats(text);
   if (!stats.normalized || stats.wordCount === 0) return false;
+
+  /* NAMED MODE. Before anything else, because everything else in this function
+     assumes he is allowed to answer.
+     Order matters and is the difference between working and looping forever:
+     his own voice is checked FIRST, because he says his own name out loud
+     ("Braino here", "this is Braino") and would otherwise hear it through the
+     speakers and wake himself up, answer, say it again, and never stop. */
+  if (namedModeOn && !herMode && !hasPendingDelegateFollowup()) {
+    if (isSelfEcho(text)) {
+      logRenderer("named.self_echo", { chars: stats.normalized.length });
+      return false;
+    }
+    if (voiceExplicitlyAddressesBraino(text)) {
+      namedWake("name");
+    } else if (!namedWindowOpen()) {
+      logRenderer("named.ignored", {
+        // Logged in full: these drops are the feature working, and the only way
+        // to tell that from the feature eating your sentence is to read them.
+        text: String(text || "").replace(/\s+/g, " ").trim().slice(0, 120),
+      });
+      return false;
+    } else {
+      // Inside the window and clearly aimed at him: keep it open.
+      namedWake("follow-up");
+    }
+  }
+
   const addressed = voiceAddressesBraino(text);
   const explicitlyAddressed = voiceExplicitlyAddressesBraino(text);
   const actionLike = isLikelyMacActionTranscript(text);
@@ -8498,6 +8582,11 @@ async function startListening() {
   if (skitRunning || skitJustCompleted) return;
   if (processing || realtimeConnecting || realtimeActive || voiceCycleInFlight) return;
   voiceCycleInFlight = true;
+  /* Opening the session by hand — double Control — IS calling him. Requiring
+     his name on top of a deliberate keypress would be asking twice, and it is
+     also the escape hatch: named mode can never leave you unable to reach him,
+     because the hotkey always wakes him for the next five seconds. */
+  namedWake("manual");
   logRenderer("voice.toggle.start_listening");
   // Music drowns the mic (VAD fires on the song, turns never survive) — duck
   // the player to ~20% for the session; restored on stopRealtimeVoice.
@@ -9088,6 +9177,8 @@ async function runStartupSequence(config = {}) {
   ]);
   try {
     applyDisplayMetrics(config.displayMetrics);
+    namedModeOn = Boolean(config.namedMode);
+    logRenderer("named.mode", { on: namedModeOn });
     if (introUp) intro.progress(0.18);
     movementMode = "dock";
     setStatus("connecting", "Starting");
@@ -10860,12 +10951,25 @@ window.brainoMac.onWakeStatus?.((payload) => {
     logRenderer("wakeword.unavailable", { reason: payload?.reason || "" });
   }
 });
+window.brainoMac.onNamedMode?.((payload) => {
+  namedModeOn = Boolean(payload?.enabled);
+  /* Turning it on mid-session must not leave the window standing open from
+     whatever was said before it was switched on. */
+  namedReset();
+  logRenderer("named.mode_changed", { on: namedModeOn });
+  updateNotchFace();
+});
 window.brainoMac.onWakeDetected?.((payload) => {
   // The wake phrase was heard ON-DEVICE (BrainoWakeWord.swift requires
   // requiresOnDeviceRecognition=true) — nothing about it was sent anywhere.
   // Only NOW does a real (cloud, paid) realtime session open, exactly like
   // pressing double-Control by hand.
   logRenderer("wakeword.wake", { transcriptChars: String(payload?.transcript || "").length });
+  /* The helper heard his name a moment ago, out here, before any session
+     existed. The renderer will never see that word in its own transcript, so
+     without this the session would open ASLEEP and quietly bin the very command
+     that woke him. */
+  namedWake("wake-word");
   if (!realtimeActive && !realtimeConnecting && !processing) void startListening();
 });
 window.brainoMac.onTimers?.((payload) => {

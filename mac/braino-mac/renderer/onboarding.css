@@ -139,6 +139,8 @@
   background: #f7f7fa;
 }
 .onbm-note b { color: #d9645b; font-weight: 600; }
+/* The sentence he is supposed to ignore, shown as ignored. */
+.onbm-quiet { color: #9a9aa2; font-style: italic; }
 .onbm-invisible {
   display: inline-flex; align-items: center; gap: 7px;
   font-size: 12px; font-weight: 600; letter-spacing: .04em;

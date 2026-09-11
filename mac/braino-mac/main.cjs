@@ -53,6 +53,7 @@ const AUTH_STORE_PATH = path.join(AUTH_STORE_DIR, "auth-session.json");
 const FILE_ACTION_HISTORY_PATH = path.join(AUTH_STORE_DIR, "file-actions.json");
 const USAGE_STATS_PATH = path.join(AUTH_STORE_DIR, "usage-stats.json");
 const BOOT_STATE_PATH = path.join(AUTH_STORE_DIR, "boot-state.json");
+const NAMED_MODE_PATH = path.join(AUTH_STORE_DIR, "named-mode.json");
 const FILE_ACTION_CONFIRM_MS = 120000;
 const MAC_WORKFLOW_CONFIRM_MS = 300000;
 const MAX_FILE_ACTION_HISTORY = 80;
@@ -17378,6 +17379,51 @@ ipcMain.on("braino-mac:intro-guard", (_event, up, ms) => {
   }
 });
 
+
+/* Named mode: he answers when called, and only then.
+ *
+ * Off by default, and it has to be. Turning this on is what makes him sit in a
+ * room hearing everything and staying quiet, which is the behaviour people
+ * want — but it is also a promise about a microphone, and a promise like that
+ * is made by the person, in onboarding or in settings, never by a default. */
+function loadNamedMode() {
+  try {
+    return JSON.parse(fs.readFileSync(NAMED_MODE_PATH, "utf8"))?.enabled === true;
+  } catch (_) {
+    return false;
+  }
+}
+
+function saveNamedMode(enabled) {
+  try {
+    fs.mkdirSync(AUTH_STORE_DIR, { recursive: true });
+    fs.writeFileSync(NAMED_MODE_PATH, JSON.stringify({ enabled: Boolean(enabled) }, null, 2));
+    logMac("named.mode_saved", { enabled: Boolean(enabled) });
+  } catch (error) {
+    logMac("named.mode_save_failed", { error: String(error?.message || error) });
+  }
+}
+
+/* One switch, both halves. Named mode without the wake word is a mode that can
+   only start from a keypress, and the wake word without named mode is what
+   people already had: he wakes on his name and then answers the whole room. */
+ipcMain.handle("braino-mac:named-mode", async (_event, payload = {}) => {
+  if (payload && Object.prototype.hasOwnProperty.call(payload, "enabled")) {
+    const on = Boolean(payload.enabled);
+    saveNamedMode(on);
+    saveWakeWordState(on);
+    if (on) {
+      wakeWordGaveUp = false;
+      wakeWordCrashCount = 0;
+      startBrainoWakeWord();
+    } else {
+      stopBrainoWakeWord();
+    }
+    sendToRenderer("braino-mac:named-mode", { enabled: on });
+  }
+  return { enabled: loadNamedMode(), wakeWord: loadWakeWordState() };
+});
+
 ipcMain.handle("braino-mac:intro-done", async () => {
   markIntroDone();
   logMac("boot.intro.done", {});
@@ -17400,6 +17446,7 @@ ipcMain.handle("braino-mac:get-config", async () => {
     microphoneStatus: process.platform === "darwin" ? systemPreferences.getMediaAccessStatus("microphone") : "unsupported",
     mascot: await loadMascotPreference(),
     firstRun: loadFirstRun(),
+    namedMode: loadNamedMode(),
     logPath: LOG_PATH,
   };
 });

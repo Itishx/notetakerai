@@ -66,8 +66,21 @@
       id: "voice",
       kicker: "Step 5",
       title: "Hold Control twice and just talk.",
-      sub: "That's the whole thing. No wake word to remember, no button to find.",
+      sub: "That's the whole thing. No button to find.",
       choices: ["Got it"],
+    },
+    {
+      id: "always",
+      kicker: "Step 6",
+      title: "Or I can just be here.",
+      sub: "Say my name and I answer. I ignore everything else in the room, and nothing leaves this Mac until I hear it. Your call.",
+      show: "always",
+      /* The quiet option is deliberately first and worded as a real choice
+         rather than a decline. A microphone question where one answer reads as
+         the sensible one is not a question. */
+      choices: ["Only when I press Control twice", "Yes, listen for my name"],
+      capture: "alwaysOn",
+      native: "namedMode",
     },
   ];
 
@@ -81,6 +94,16 @@
           <div class="onbm-faces"><span></span><span></span><span></span><span></span></div>
           <span class="onbm-invisible">No bot in the room</span>
           <div class="onbm-note"><b>Braino</b> You said you'd send the deck by Thursday.</div>
+        </div>
+      </div>`,
+    always: () => `
+      <div class="onbm-show">
+        <div class="onbm-show-bar"><i></i><i></i><i></i><em>Someone talking near you</em></div>
+        <div class="onbm-show-body">
+          <div class="onbm-note onbm-quiet">"Wait, listen, I'll send you the notes."</div>
+          <span class="onbm-invisible">He says nothing</span>
+          <div class="onbm-note"><b>"Braino,</b> what's my day?"</div>
+          <div class="onbm-note"><b>Braino</b> Standup at 11, then you're clear.</div>
         </div>
       </div>`,
     time: () => `
@@ -158,6 +181,20 @@
 
     /* The native prompts fire from the step that asked for them, so the macOS
        dialog lands while the sentence explaining it is still on screen. */
+    if (s.native === "namedMode") {
+      /* Only the second choice turns it on, and this is the one place in
+         onboarding that changes a setting rather than just recording an answer,
+         so it is written through immediately rather than at the end — a person
+         who quits here has still had their answer respected. */
+      const on = pick === 1;
+      try {
+        await Promise.race([
+          window.brainoMac?.namedMode?.({ enabled: on }) ?? Promise.resolve(),
+          new Promise((r) => setTimeout(r, 8000)),
+        ]);
+      } catch (_) {}
+    }
+
     if (s.native === "calendar" && pick === 0) {
       /* Capped: a macOS prompt the user never answers is still a prompt that
          never returns, and the cover is on screen while it waits. */
