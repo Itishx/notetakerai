@@ -239,3 +239,136 @@
   .onbm-mascot.is-fly { animation: onbmFadeOut .4s ease both; }
   @keyframes onbmFadeOut { from { opacity: 1; } to { opacity: 0; } }
 }
+
+/* ── The Mac mockups ───────────────────────────────────────────────────────
+   These sit on the white onboarding rather than on his black side, so they get
+   a drawn edge and a soft shadow instead of glowing off a dark ground — a
+   window floating on paper, which is what a Mac window on a light desktop
+   actually looks like. */
+
+.mac-pair {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+  align-items: start; width: 100%; max-width: 620px;
+}
+.mac-figure { margin: 0; display: grid; gap: 7px; text-align: left; }
+.mac-figure figcaption {
+  font-size: 10.5px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase;
+  color: #9a9aa2;
+}
+.mac-figure.is-him figcaption { color: #d9645b; }
+
+.mac-win {
+  border-radius: 11px; overflow: hidden; background: #fff;
+  border: 1px solid #e4e4ea;
+  box-shadow: 0 14px 34px -20px rgba(0,0,0,.35);
+}
+/* His side of the comparison is the one you are meant to look at. */
+.mac-figure.is-him .mac-win {
+  border-color: #f0cdc8;
+  box-shadow: 0 16px 40px -20px rgba(217,100,91,.4);
+}
+
+.mac-bar {
+  display: flex; align-items: center; gap: 5px;
+  height: 24px; padding: 0 9px;
+  background: #f2f2f5; border-bottom: 1px solid #e6e6ec;
+}
+.mac-bar i { width: 8px; height: 8px; border-radius: 50%; background: #d6d6dc; }
+.mac-bar i:nth-child(1) { background: #ff5f57; }
+.mac-bar i:nth-child(2) { background: #febc2e; }
+.mac-bar i:nth-child(3) { background: #28c840; }
+.mac-bar em {
+  margin: 0 auto; font-style: normal;
+  font-size: 10.5px; font-weight: 600; color: #7a7a82;
+}
+
+/* The banner every other tool is obliged to put on screen. */
+.mac-rec {
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 11px; background: #fdecea;
+  border-bottom: 1px solid #f6d5d1;
+  font-size: 10.5px; font-weight: 600; color: #c0392b;
+}
+.mac-dot { width: 6px; height: 6px; border-radius: 50%; background: #e0483a; }
+
+.mac-people { list-style: none; margin: 0; padding: 8px 10px; display: grid; gap: 1px; }
+.mac-people li {
+  display: flex; align-items: center; gap: 7px;
+  font-size: 12px; color: #3a3a40;
+  padding: 5px 7px; border-radius: 6px;
+}
+.mac-people li::before {
+  content: ""; flex: none; width: 15px; height: 15px; border-radius: 50%;
+  background: linear-gradient(160deg, #e6ebf4, #d8dfea);
+}
+/* The uninvited guest, labelled as one. */
+.mac-people li.is-bot { background: #fdecea; color: #c0392b; font-weight: 600; }
+.mac-people li.is-bot::before { background: #f3b8b1; }
+.mac-people li.is-bot span {
+  margin-left: auto;
+  font-size: 9px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase;
+  background: #e0483a; color: #fff; border-radius: 4px; padding: 1px 5px;
+}
+
+.mac-note {
+  margin: 0; padding: 8px 11px 11px;
+  border-top: 1px solid #f0f0f4;
+  font-size: 11.5px; line-height: 1.45; color: #7a7a82;
+}
+
+.mac-solo { width: 100%; max-width: 420px; }
+
+.mac-mail { padding: 11px 13px; display: grid; gap: 6px; text-align: left; }
+.mac-field {
+  margin: 0; font-size: 11.5px; color: #6e6e73;
+  padding-bottom: 5px; border-bottom: 1px solid #f0f0f4;
+}
+.mac-field b { color: #a6a6ad; font-weight: 500; margin-right: 8px; }
+.mac-typed { margin: 3px 0 0; font-size: 13px; line-height: 1.5; color: #1d1d1f; }
+.mac-caret {
+  display: inline-block; width: 2px; height: 1em; margin-left: 2px;
+  background: #d9645b; vertical-align: -.14em;
+  animation: macCaret 1s steps(1) infinite;
+}
+@keyframes macCaret { 50% { opacity: 0; } }
+
+.mac-mic {
+  display: flex; align-items: center; gap: 3px;
+  padding: 8px 13px; background: #f1f7f3; border-top: 1px solid #e0ece5;
+  font-size: 10.5px; font-weight: 600; color: #3a8f5f;
+}
+.mac-mic span {
+  width: 2.5px; border-radius: 2px; background: #3a8f5f;
+  animation: macLevel 1s ease-in-out infinite;
+}
+.mac-mic span:nth-child(1) { height: 7px;  animation-delay: 0s; }
+.mac-mic span:nth-child(2) { height: 13px; animation-delay: .12s; }
+.mac-mic span:nth-child(3) { height: 9px;  animation-delay: .24s; }
+.mac-mic span:nth-child(4) { height: 15px; animation-delay: .36s; }
+.mac-mic span:nth-child(5) { height: 8px;  animation-delay: .48s; margin-right: 7px; }
+@keyframes macLevel { 0%, 100% { transform: scaleY(.4); } 50% { transform: scaleY(1); } }
+
+.mac-files { padding: 8px 10px; display: grid; gap: 1px; text-align: left; }
+.mac-file {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 12px; color: #3a3a40; padding: 5px 7px; border-radius: 6px;
+}
+.mac-ico {
+  flex: none; width: 14px; height: 17px; border-radius: 2px;
+  background: linear-gradient(160deg, #e2e8f2, #d2daea);
+}
+.mac-doing {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 13px; background: #fbeae8; border-top: 1px solid #f4d6d2;
+  font-size: 11px; font-weight: 600; color: #b8534a;
+}
+.mac-spin {
+  flex: none; width: 11px; height: 11px; border-radius: 50%;
+  border: 2px solid rgba(184,83,74,.26); border-top-color: #b8534a;
+  animation: macSpin .8s linear infinite;
+}
+@keyframes macSpin { to { transform: rotate(360deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .mac-mic span, .mac-spin, .mac-caret { animation: none; }
+}

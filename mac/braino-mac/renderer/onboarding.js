@@ -46,16 +46,24 @@
       choices: ["Good"],
     },
     {
-      id: "time",
+      id: "dictate",
       kicker: "Step 3",
-      title: "Here's where your week goes.",
-      sub: "Rough, from what these do for people already using them.",
-      show: "time",
+      title: "Talk into any box on the Mac.",
+      sub: "Double-tap Option and say it. Mail, Slack, a form, a commit message. It types.",
+      show: "dictate",
+      choices: ["Nice"],
+    },
+    {
+      id: "does",
+      kicker: "Step 4",
+      title: "And I'll work the Mac myself.",
+      sub: "Not a chat window that tells you how. Ask out loud and the thing is done.",
+      show: "does",
       choices: ["Alright, go on"],
     },
     {
       id: "permissions",
-      kicker: "Step 4",
+      kicker: "Step 5",
       title: "Now I'll need your calendar.",
       sub: "Calendar, Reminders and Contacts. One ask, and it never leaves this Mac.",
       choices: ["Allow", "Not now"],
@@ -64,14 +72,14 @@
     },
     {
       id: "voice",
-      kicker: "Step 5",
+      kicker: "Step 6",
       title: "Hold Control twice and just talk.",
       sub: "That's the whole thing. No button to find.",
       choices: ["Got it"],
     },
     {
       id: "always",
-      kicker: "Step 6",
+      kicker: "Step 7",
       title: "Or I can just be here.",
       sub: "Say my name and I answer. I ignore everything else in the room, and nothing leaves this Mac until I hear it. Your call.",
       show: "always",
@@ -85,15 +93,63 @@
   ];
 
   const SHOWS = {
-    /* The picture argues the thing the sentence claims: he is in the call, and
-       the call has no idea. The missing recording badge is the whole point. */
+    /* A before and after, because "he takes meeting notes invisibly" is a
+       sentence every notetaker on the market writes. What none of them can show
+       is the picture: their bot sitting in the participant list with a name and
+       a badge, under a recording banner, beside the same call with three people
+       in it and nothing else. The difference between the two lists is the whole
+       pitch and it needs no caption. */
     meeting: () => `
-      <div class="onbm-show">
-        <div class="onbm-show-bar"><i></i><i></i><i></i><em>Weekly sync · 4 people</em></div>
-        <div class="onbm-show-body">
-          <div class="onbm-faces"><span></span><span></span><span></span><span></span></div>
-          <span class="onbm-invisible">No bot in the room</span>
-          <div class="onbm-note"><b>Braino</b> You said you'd send the deck by Thursday.</div>
+      <div class="mac-pair">
+        <figure class="mac-figure is-them">
+          <figcaption>Every other notetaker</figcaption>
+          <div class="mac-win">
+            <div class="mac-bar"><i></i><i></i><i></i><em>Weekly sync</em></div>
+            <div class="mac-rec"><span class="mac-dot"></span>Recording</div>
+            <ul class="mac-people">
+              <li>Ananya Rao</li><li>Bhaskar M</li><li>You</li>
+              <li class="is-bot">Otter Notetaker<span>bot</span></li>
+            </ul>
+          </div>
+        </figure>
+        <figure class="mac-figure is-him">
+          <figcaption>Braino</figcaption>
+          <div class="mac-win">
+            <div class="mac-bar"><i></i><i></i><i></i><em>Weekly sync</em></div>
+            <ul class="mac-people">
+              <li>Ananya Rao</li><li>Bhaskar M</li><li>You</li>
+            </ul>
+            <p class="mac-note">Three people in the call. Three in the list.</p>
+          </div>
+        </figure>
+      </div>`,
+
+    /* A live level meter rather than a mic icon. A static icon does not say
+       "it is listening right now" — the movement is the message. */
+    dictate: () => `
+      <div class="mac-solo">
+        <div class="mac-win">
+          <div class="mac-bar"><i></i><i></i><i></i><em>New Message</em></div>
+          <div class="mac-mail">
+            <p class="mac-field"><b>To</b> bhaskar@mesa.school</p>
+            <p class="mac-field"><b>Subject</b> Thursday</p>
+            <p class="mac-typed">Hey Bhaskar, I can't make Thursday. Can we push it to Monday morning<span class="mac-caret"></span></p>
+          </div>
+          <div class="mac-mic"><span></span><span></span><span></span><span></span><span></span>Listening</div>
+        </div>
+      </div>`,
+
+    does: () => `
+      <div class="mac-solo">
+        <div class="mac-win">
+          <div class="mac-bar"><i></i><i></i><i></i><em>Finder — Downloads</em></div>
+          <div class="mac-files">
+            <div class="mac-file"><span class="mac-ico"></span>Screenshot 2026-09-02.png</div>
+            <div class="mac-file"><span class="mac-ico"></span>deck-v4-FINAL.key</div>
+            <div class="mac-file"><span class="mac-ico"></span>invoice_8821.pdf</div>
+            <div class="mac-file"><span class="mac-ico"></span>IMG_4471.HEIC</div>
+          </div>
+          <div class="mac-doing"><span class="mac-spin"></span>Sorting 184 files into folders</div>
         </div>
       </div>`,
     always: () => `
