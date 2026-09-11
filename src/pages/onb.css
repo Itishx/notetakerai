@@ -406,3 +406,157 @@
   .onb-progress { position: static; margin-top: 30px; }
   .onb-ups { grid-template-columns: 1fr; }
 }
+
+/* ── What changes about your Mac ───────────────────────────────────────────
+   Mockups on his black side, so they read as windows lit on a dark desk rather
+   than as screenshots pasted onto a page. */
+
+.mac-show { display: grid; gap: 18px; }
+
+.mac-tabs { display: flex; gap: 6px; }
+.mac-tab {
+  appearance: none; cursor: pointer; font: inherit;
+  font-size: 13px; font-weight: 600;
+  padding: 7px 14px; border-radius: 999px;
+  background: transparent; border: 1px solid var(--hair); color: var(--soft);
+  transition: color .15s ease, border-color .15s ease, background .15s ease;
+}
+.mac-tab:hover { color: var(--ink); border-color: #3a3a42; }
+.mac-tab.is-on { color: #0a0a0c; background: var(--ink); border-color: var(--ink); }
+
+.mac-claim {
+  margin: 0;
+  font-size: clamp(19px, 2.1vw, 24px); font-weight: 600;
+  letter-spacing: -.022em; color: var(--ink);
+}
+
+/* Two windows, side by side, same call. The whole argument is the difference
+   between the two participant lists. */
+.mac-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: start; }
+.mac-figure { margin: 0; display: grid; gap: 8px; }
+.mac-figure figcaption {
+  font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase;
+  color: #6a6a72;
+}
+.mac-figure.is-him figcaption { color: var(--coral); }
+
+.mac-win {
+  border-radius: 11px; overflow: hidden;
+  background: #fbfbfd; color: #1d1d1f;
+  box-shadow: 0 18px 44px -22px rgba(0,0,0,.9), 0 0 0 1px rgba(255,255,255,.07);
+}
+.mac-figure.is-him .mac-win { box-shadow: 0 18px 50px -20px rgba(232,120,110,.45), 0 0 0 1px rgba(232,120,110,.28); }
+
+.mac-bar {
+  display: flex; align-items: center; gap: 5px;
+  height: 24px; padding: 0 9px;
+  background: #ececef; border-bottom: 1px solid #dfdfe4;
+}
+.mac-bar i { width: 8px; height: 8px; border-radius: 50%; background: #d4d4da; }
+.mac-bar i:nth-child(1) { background: #ff5f57; }
+.mac-bar i:nth-child(2) { background: #febc2e; }
+.mac-bar i:nth-child(3) { background: #28c840; }
+.mac-bar em {
+  margin: 0 auto; font-style: normal;
+  font-size: 10.5px; font-weight: 600; color: #6a6a72;
+}
+
+/* The banner everyone else has to show you. */
+.mac-rec {
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 11px; background: #fdecea;
+  font-size: 11px; font-weight: 600; color: #c0392b;
+  border-bottom: 1px solid #f6d5d1;
+}
+.mac-dot { width: 6px; height: 6px; border-radius: 50%; background: #e0483a; }
+
+.mac-people { list-style: none; margin: 0; padding: 9px 11px; display: grid; gap: 1px; }
+.mac-people li {
+  font-size: 12.5px; color: #3a3a40;
+  padding: 6px 8px; border-radius: 6px;
+  display: flex; align-items: center; gap: 7px;
+}
+.mac-people li::before {
+  content: ""; width: 16px; height: 16px; border-radius: 50%;
+  background: linear-gradient(160deg, #e4e9f2, #d6dce8); flex: none;
+}
+/* The uninvited guest, marked as one. */
+.mac-people li.is-bot { background: #fdecea; color: #c0392b; font-weight: 600; }
+.mac-people li.is-bot::before { background: #f3b8b1; }
+.mac-people li.is-bot span {
+  margin-left: auto; font-size: 9.5px; letter-spacing: .06em; text-transform: uppercase;
+  background: #e0483a; color: #fff; border-radius: 4px; padding: 1px 5px;
+}
+
+.mac-note {
+  margin: 0; padding: 9px 12px 12px;
+  font-size: 12px; line-height: 1.45; color: #6e6e73;
+  border-top: 1px solid #ececf1;
+}
+
+/* ── Single-window mockups ────────────────────────────────────────────────── */
+
+.mac-solo { display: grid; gap: 10px; max-width: 430px; }
+.mac-foot { margin: 0; font-size: 13px; color: #6a6a72; }
+
+.mac-mail { padding: 11px 13px; display: grid; gap: 7px; }
+.mac-field {
+  margin: 0; font-size: 12px; color: #6e6e73;
+  padding-bottom: 6px; border-bottom: 1px solid #ececf1;
+}
+.mac-field b { color: #9a9aa2; font-weight: 500; margin-right: 8px; }
+.mac-typed { margin: 4px 0 0; font-size: 13.5px; line-height: 1.5; color: #1d1d1f; }
+.mac-caret {
+  display: inline-block; width: 2px; height: 1em; margin-left: 2px;
+  background: var(--coral); vertical-align: -.14em;
+  animation: onbCaret 1s steps(1) infinite;
+}
+
+/* Live level meter, because a static mic icon does not say "it is listening
+   right now" — the movement is the whole message. */
+.mac-mic {
+  display: flex; align-items: center; gap: 3px;
+  padding: 8px 13px; background: #f2f7f4;
+  border-top: 1px solid #e2ece7;
+  font-size: 11px; font-weight: 600; color: #3a8f5f;
+}
+.mac-mic span {
+  width: 2.5px; border-radius: 2px; background: #3a8f5f;
+  animation: macLevel 1s ease-in-out infinite;
+}
+.mac-mic span:nth-child(1) { height: 7px;  animation-delay: 0s; }
+.mac-mic span:nth-child(2) { height: 13px; animation-delay: .12s; }
+.mac-mic span:nth-child(3) { height: 9px;  animation-delay: .24s; }
+.mac-mic span:nth-child(4) { height: 15px; animation-delay: .36s; }
+.mac-mic span:nth-child(5) { height: 8px;  animation-delay: .48s; margin-right: 7px; }
+@keyframes macLevel { 0%, 100% { transform: scaleY(.4); } 50% { transform: scaleY(1); } }
+
+.mac-files { padding: 9px 11px; display: grid; gap: 1px; }
+.mac-file {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 12.5px; color: #3a3a40; padding: 6px 8px; border-radius: 6px;
+}
+.mac-ico {
+  width: 15px; height: 18px; border-radius: 2px; flex: none;
+  background: linear-gradient(160deg, #dfe5f0, #cfd7e6);
+}
+.mac-doing {
+  display: flex; align-items: center; gap: 8px;
+  padding: 9px 13px; background: #fbeae8;
+  border-top: 1px solid #f4d6d2;
+  font-size: 11.5px; font-weight: 600; color: #b8534a;
+}
+.mac-spin {
+  width: 11px; height: 11px; border-radius: 50%; flex: none;
+  border: 2px solid rgba(184,83,74,.28); border-top-color: #b8534a;
+  animation: macSpin .8s linear infinite;
+}
+@keyframes macSpin { to { transform: rotate(360deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .mac-mic span, .mac-spin, .mac-caret { animation: none; }
+}
+
+@media (max-width: 900px) {
+  .mac-pair { grid-template-columns: 1fr; }
+}

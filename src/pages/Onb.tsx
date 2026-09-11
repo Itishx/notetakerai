@@ -143,6 +143,122 @@ function Row({ children, k }: { children: React.ReactNode; k: string }) {
   return <div className={"onb-row" + (fresh ? " is-new" : "")}>{children}</div>;
 }
 
+
+/* ── What changes about your Mac ───────────────────────────────────────────
+ *
+ * Three mockups, and each one has to make its own argument without the caption.
+ * A screenshot that only makes sense once you have read the sentence above it
+ * is decoration; the picture is supposed to be the evidence.
+ *
+ * The meetings one is a BEFORE and AFTER for that reason. "He takes meeting
+ * notes invisibly" is a sentence every notetaker writes. Showing the other
+ * tool's bot sitting in the participant list with a name and a recording banner,
+ * next to the same call with four people in it and nothing else, is the part
+ * nobody else can show.
+ */
+
+const SHOWCASE = [
+  { id: "meetings", label: "Meetings", claim: "Nobody knows he was there." },
+  { id: "dictate",  label: "Dictation", claim: "Talk into any box on the Mac." },
+  { id: "does",     label: "Doing",     claim: "He works the Mac himself." },
+];
+
+function MacShowcase({ onDone }: { onDone: () => void }) {
+  const [i, setI] = useState(0);
+  const item = SHOWCASE[i];
+  const last = i === SHOWCASE.length - 1;
+
+  return (
+    <div className="mac-show">
+      <div className="mac-tabs">
+        {SHOWCASE.map((s, n) => (
+          <button
+            key={s.id}
+            className={"mac-tab" + (n === i ? " is-on" : "")}
+            onClick={() => setI(n)}
+          >
+            {s.label}
+          </button>
+        ))}
+      </div>
+
+      <p className="mac-claim">{item.claim}</p>
+
+      {item.id === "meetings" && (
+        <div className="mac-pair">
+          {/* Every other notetaker. The bot has a NAME and it is in the list. */}
+          <figure className="mac-figure is-them">
+            <figcaption>Every other notetaker</figcaption>
+            <div className="mac-win">
+              <div className="mac-bar"><i /><i /><i /><em>Weekly sync</em></div>
+              <div className="mac-rec"><span className="mac-dot" />Recording</div>
+              <ul className="mac-people">
+                <li>Ananya Rao</li>
+                <li>Bhaskar M</li>
+                <li>You</li>
+                <li className="is-bot">Otter Notetaker<span>bot</span></li>
+              </ul>
+            </div>
+          </figure>
+
+          <figure className="mac-figure is-him">
+            <figcaption>Braino</figcaption>
+            <div className="mac-win">
+              <div className="mac-bar"><i /><i /><i /><em>Weekly sync</em></div>
+              <ul className="mac-people">
+                <li>Ananya Rao</li>
+                <li>Bhaskar M</li>
+                <li>You</li>
+              </ul>
+              <p className="mac-note">
+                Three people in the call. Three people in the list.
+              </p>
+            </div>
+          </figure>
+        </div>
+      )}
+
+      {item.id === "dictate" && (
+        <div className="mac-solo">
+          <div className="mac-win">
+            <div className="mac-bar"><i /><i /><i /><em>New Message</em></div>
+            <div className="mac-mail">
+              <p className="mac-field"><b>To</b> bhaskar@mesa.school</p>
+              <p className="mac-field"><b>Subject</b> Thursday</p>
+              <p className="mac-typed">
+                Hey Bhaskar, I can't make Thursday. Can we push it to Monday
+                morning<span className="mac-caret" />
+              </p>
+            </div>
+            <div className="mac-mic"><span /><span /><span /><span /><span />Listening</div>
+          </div>
+          <p className="mac-foot">Double-tap Option. Any app, any text field.</p>
+        </div>
+      )}
+
+      {item.id === "does" && (
+        <div className="mac-solo">
+          <div className="mac-win">
+            <div className="mac-bar"><i /><i /><i /><em>Finder — Downloads</em></div>
+            <div className="mac-files">
+              {["Screenshot 2026-09-02.png", "deck-v4-FINAL.key", "invoice_8821.pdf", "IMG_4471.HEIC"].map((f) => (
+                <div className="mac-file" key={f}><span className="mac-ico" />{f}</div>
+              ))}
+            </div>
+            <div className="mac-doing"><span className="mac-spin" />Sorting 184 files into folders</div>
+          </div>
+          <p className="mac-foot">You asked out loud. He opened it and did it.</p>
+        </div>
+      )}
+
+      <div className="onb-actions">
+        {!last && <button className="onb-btn ghost" onClick={() => setI(i + 1)}>Next</button>}
+        <button className="onb-btn" onClick={onDone}>{last ? "Got it" : "Skip ahead"}</button>
+      </div>
+    </div>
+  );
+}
+
 export default function Onb() {
   const [step, setStep] = useState(0);           // 0..6, 6 = next morning
   const [nb, setNb] = useState<Notebook>(EMPTY);
@@ -175,7 +291,7 @@ export default function Onb() {
     ).join(", and ");
     return `Okay, I see it. ${said}. That about right?`;
   }, [persona]);
-  const t3 = useTyped(briefLine, step === 3 && granted && !reading);
+  const t3 = useTyped(briefLine, step === 4 && granted && !reading);
 
   /* The grant is one button because it is one decision. Calendar, Reminders and
      Contacts are all EventKit-family on the Mac, so they are one native prompt
@@ -286,9 +402,18 @@ export default function Onb() {
             </div>
           )}
 
+
           {step === 3 && (
             <div className="onb-block">
               <p className="onb-kicker">Step 3</p>
+              <h2 className="onb-h2">What changes about your Mac.</h2>
+              <p className="onb-sub">Three things you cannot do today. Tap through them.</p>
+              <MacShowcase onDone={() => go(4)} />
+            </div>
+          )}
+          {step === 4 && (
+            <div className="onb-block">
+              <p className="onb-kicker">Step 4</p>
               {!granted && (
                 <>
                   <h2 className="onb-h2">I'll need your calendar.</h2>
@@ -301,7 +426,7 @@ export default function Onb() {
                   </div>
                   <div className="onb-actions">
                     <button className="onb-btn" onClick={grant}>Allow</button>
-                    <button className="onb-btn ghost" onClick={() => go(4)}>Not now</button>
+                    <button className="onb-btn ghost" onClick={() => go(5)}>Not now</button>
                   </div>
                   <p className="onb-native">simulated here. EventKit on the Mac, no OAuth</p>
                 </>
@@ -347,7 +472,7 @@ export default function Onb() {
                         ))}
                       </div>
                       <p className="onb-fine">Correct anything. On the Mac you just say it out loud.</p>
-                      <button className="onb-btn" onClick={() => go(4)}>That's my week</button>
+                      <button className="onb-btn" onClick={() => go(5)}>That's my week</button>
                     </>
                   )}
                 </>
@@ -355,9 +480,9 @@ export default function Onb() {
             </div>
           )}
 
-          {step === 4 && (
+          {step === 5 && (
             <div className="onb-block">
-              <p className="onb-kicker">Step 4</p>
+              <p className="onb-kicker">Step 5</p>
               <h2 className="onb-h2">Anything else you want me to know?</h2>
               <p className="onb-sub">All optional. Skip the lot if you like.</p>
 
@@ -385,25 +510,25 @@ export default function Onb() {
                 <div className="onb-up is-soon"><b>Gmail</b><span>soon</span></div>
               </div>
 
-              <button className="onb-btn" onClick={() => go(5)}>Done here</button>
+              <button className="onb-btn" onClick={() => go(6)}>Done here</button>
             </div>
           )}
 
-          {step === 5 && (
+          {step === 6 && (
             <div className="onb-block">
-              <p className="onb-kicker">Step 5</p>
+              <p className="onb-kicker">Step 6</p>
               <h2 className="onb-h2">Here's everything I know so far.</h2>
               <p className="onb-sub">It's all on the right. Change anything that's wrong.</p>
               <p className="onb-fine">
                 {filled} of 7 sections filled, and you have not typed a form field once.
               </p>
-              <button className="onb-btn" onClick={() => go(6)}>Looks right</button>
+              <button className="onb-btn" onClick={() => go(7)}>Looks right</button>
             </div>
           )}
 
-          {step === 6 && !nb.priority && (
+          {step === 7 && !nb.priority && (
             <div className="onb-block">
-              <p className="onb-kicker">Step 6</p>
+              <p className="onb-kicker">Step 7</p>
               <h2 className="onb-h2">What should I take off your plate first?</h2>
               <p className="onb-sub">On the Mac you say it. Here, pick one.</p>
               <div className="onb-priorities">
@@ -417,16 +542,16 @@ export default function Onb() {
             </div>
           )}
 
-          {step === 6 && nb.priority && (
+          {step === 7 && nb.priority && (
             <div className="onb-say">
               <img className="onb-masc" src="/braino-standing.svg" alt="" />
               <p className="onb-line">Done. See you tomorrow at nine.</p>
               <p className="onb-fine">He never says "setup complete". He goes back into the notch.</p>
-              <button className="onb-btn" onClick={() => go(7)}>Skip to tomorrow morning</button>
+              <button className="onb-btn" onClick={() => go(8)}>Skip to tomorrow morning</button>
             </div>
           )}
 
-          {step === 7 && (
+          {step === 8 && (
             <div className="onb-morning">
               <p className="onb-kicker">Next morning, 9:00</p>
               <div className="onb-greet">
@@ -453,9 +578,9 @@ export default function Onb() {
           )}
         </div>
 
-        {step > 0 && step < 7 && (
+        {step > 0 && step < 8 && (
           <div className="onb-progress">
-            {[1, 2, 3, 4, 5, 6].map((n) => (
+            {[1, 2, 3, 4, 5, 6, 7].map((n) => (
               <i key={n} className={n <= step ? "is-done" : undefined} />
             ))}
           </div>
