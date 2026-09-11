@@ -17343,8 +17343,11 @@ function killIntroCover(why) {
   try {
     if (dockWindow && !dockWindow.isDestroyed()) {
       // Clicks go back to the machine first, so the user has their Mac back
-      // even if the renderer never processes the teardown below.
+      // even if the renderer never processes the teardown below. Focusable goes
+      // with it: leaving the panel focusable after a kill means it can still
+      // steal the keyboard from whatever the user switches to next.
       dockWindow.setIgnoreMouseEvents(true, { forward: true });
+      dockWindow.setFocusable(false);
     }
   } catch (_) {}
   sendToRenderer("braino-mac:intro-kill", { why });
@@ -17407,6 +17410,27 @@ function saveNamedMode(enabled) {
 /* One switch, both halves. Named mode without the wake word is a mode that can
    only start from a keypress, and the wake word without named mode is what
    people already had: he wakes on his name and then answers the whole room. */
+/* Making the onboarding clickable takes the same four steps the typing field
+   already uses, and I had only done the last one. On macOS a panel that is not
+   focusable and is not frontmost does not reliably receive clicks, however
+   agreeable setIgnoreMouseEvents is being — so the window has to be raised,
+   made focusable and focused as well. That is why the buttons did nothing. */
+ipcMain.handle("braino-mac:onb-interactive", async (_event, payload = {}) => {
+  const on = Boolean(payload?.on);
+  if (!dockWindow || dockWindow.isDestroyed()) return { ok: false };
+  try {
+    ensureDockWindowVisible(on ? "onboarding" : "onboarding-done");
+    dockWindow.setFocusable(on);
+    if (on) dockWindow.focus();
+    dockWindow.setIgnoreMouseEvents(!on, { forward: true });
+    logMac("onboarding.interactive", { on });
+    return { ok: true };
+  } catch (error) {
+    logMac("onboarding.interactive_failed", { on, error: String(error?.message || error) });
+    return { ok: false };
+  }
+});
+
 ipcMain.handle("braino-mac:named-mode", async (_event, payload = {}) => {
   if (payload && Object.prototype.hasOwnProperty.call(payload, "enabled")) {
     const on = Boolean(payload.enabled);

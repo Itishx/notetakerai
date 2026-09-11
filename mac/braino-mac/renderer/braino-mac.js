@@ -9148,6 +9148,9 @@ async function runStartupSequence(config = {}) {
     if (introKilled) return;
     introKilled = true;
     logRenderer("boot.intro.drop", { why });
+    /* Focus goes back with the clicks. A panel left focusable after a kill can
+       still take the keyboard from whatever the user switches to next. */
+    try { window.brainoMac?.onbInteractive?.(false); } catch (_) {}
     try { window.brainoMac?.setMousePassthrough?.(true); } catch (_) {}
     try { window.brainoMac?.introGuard?.(false); } catch (_) {}
     intro?.abort?.();
@@ -9168,13 +9171,21 @@ async function runStartupSequence(config = {}) {
   }
 
   /* No await in this path is allowed to be unbounded. */
-  const capped = (promise, ms, label) => Promise.race([
-    promise,
-    new Promise((resolve) => setTimeout(() => {
-      logRenderer("boot.intro.timeout", { label, ms });
-      resolve(null);
-    }, ms)),
-  ]);
+  const capped = (promise, ms, label) => {
+    /* The timer has to be cleared when the promise wins, or it fires anyway
+       and logs a timeout for something that finished long ago. Two of those
+       are in the log for boots that were completely healthy. */
+    let timer = null;
+    return Promise.race([
+      promise.finally(() => { if (timer) clearTimeout(timer); }),
+      new Promise((resolve) => {
+        timer = setTimeout(() => {
+          logRenderer("boot.intro.timeout", { label, ms });
+          resolve(null);
+        }, ms);
+      }),
+    ]);
+  };
   try {
     applyDisplayMetrics(config.displayMetrics);
     namedModeOn = Boolean(config.namedMode);
@@ -9222,6 +9233,13 @@ async function runStartupSequence(config = {}) {
         const first = String(auth?.displayName || "").split(" ")[0]?.trim() || "there";
         const out = await onb.run({ name: first });
         logRenderer("onboarding.answers", out?.answers || {});
+        /* Escape during the questions used to still mark first run complete, so
+           one press meant never being offered onboarding again — which is
+           exactly what happened. Quitting is not finishing. */
+        if (out?.aborted || introKilled) {
+          logRenderer("onboarding.abandoned", {});
+          return;
+        }
         /* The white owns the ending now: he appears on it, flies to the notch,
            and the white lifts with him. The boot screen is only hidden here,
            never faded, because the white has been covering it the whole time. */
@@ -9231,7 +9249,7 @@ async function runStartupSequence(config = {}) {
         await intro.flyHome();
       }
       try { window.brainoMac?.introGuard?.(false); } catch (_) {}
-      void window.brainoMac?.introDone?.().catch(() => {});
+      if (!introKilled) void window.brainoMac?.introDone?.().catch(() => {});
     }
 
     /* Picked up here, with the cover long gone. On first run the questions took

@@ -236,8 +236,12 @@
     dotsEl = root.querySelector(".onbm-dots");
     helloEl = document.getElementById("onb-hello");
 
-    // The window forwards every click by default, so nothing here is tappable
-    // until this is turned off. It goes back on before the notch takes over.
+    /* Raise, focus, and accept the mouse — all three, not just the last. The
+       window forwards every click by default AND is created non-focusable, and
+       on macOS a panel that is neither frontmost nor focusable ignores clicks
+       whatever the mouse setting says. It is all handed back before the notch
+       takes over. */
+    try { await window.brainoMac?.onbInteractive?.(true); } catch (_) {}
     try { window.brainoMac?.setMousePassthrough?.(false); } catch (_) {}
 
     root.hidden = false;
@@ -259,6 +263,7 @@
       try { window.brainoMac?.log?.("onboarding.failed", { error: String(error?.message || error) }); } catch (_) {}
     }
 
+    try { window.brainoMac?.onbInteractive?.(false); } catch (_) {}
     try { window.brainoMac?.setMousePassthrough?.(true); } catch (_) {}
     return { answers };
   }
@@ -316,6 +321,7 @@
   function abort() {
     aborted = true;
     try { releaseStep?.(); } catch (_) {}
+    try { window.brainoMac?.onbInteractive?.(false); } catch (_) {}
     try { window.brainoMac?.setMousePassthrough?.(true); } catch (_) {}
     if (!root) return;
     /* Hidden outright rather than faded. An abort is someone wanting their Mac

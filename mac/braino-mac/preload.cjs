@@ -48,6 +48,7 @@ contextBridge.exposeInMainWorld("brainoMac", {
   getConfig: () => ipcRenderer.invoke("braino-mac:get-config"),
   introDone: () => ipcRenderer.invoke("braino-mac:intro-done"),
   introGuard: (up, ms) => ipcRenderer.send("braino-mac:intro-guard", Boolean(up), Number(ms) || 0),
+  onbInteractive: (on) => ipcRenderer.invoke("braino-mac:onb-interactive", { on: Boolean(on) }),
   namedMode: (payload) => ipcRenderer.invoke("braino-mac:named-mode", payload || {}),
   onNamedMode: (callback) => {
     const handler = (_event, p) => callback(p || {});
