@@ -342,6 +342,7 @@ function AppRoutes() {
         <Route path="/onboarding" element={<OnboardingFlow />} />
         <Route path="/onb" element={<Onb />} />
         <Route path="/brainotes" element={<Brainotes />} />
+        <Route path="/brainotes/:slug" element={<Brainotes />} />
         <Route path="/brainonotes" element={<Brainotes />} />
         <Route path="/takeover" element={<Takeover />} />
         <Route path="/ideas" element={<IdeaTracker />} />

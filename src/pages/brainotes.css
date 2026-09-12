@@ -244,3 +244,112 @@
 @media (prefers-reduced-motion: reduce) {
   .bn-shelf, .bn-note, .bn-primary, .bn-secondary { transition: none; }
 }
+
+/* ── The reader ────────────────────────────────────────────────────────────
+   Narrow and large. The measure is about 62 characters because that is where
+   prose stops being work, and everything that is not the note is removed
+   rather than styled — no sidebar, no share row, no related rail down the
+   side. Somebody came here to read one thing. */
+
+.bn-read { padding-bottom: clamp(80px, 10vw, 140px); }
+.bn-read-inner {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: clamp(34px, 5vw, 58px) var(--ap-gutter) 0;
+}
+
+.bn-back {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-size: 14.5px; font-weight: 600; text-decoration: none;
+  color: var(--ap-ink-soft);
+  transition: color .15s ease;
+}
+.bn-back:hover { color: var(--ap-accent); }
+.bn-back span { font-size: 16px; }
+
+.bn-read-head {
+  padding: clamp(28px, 4vw, 48px) 0 clamp(24px, 3vw, 34px);
+  border-bottom: 1px solid var(--ap-hairline);
+}
+.bn-read-head h1 {
+  margin: 0;
+  font-size: clamp(32px, 4.4vw, 52px);
+  font-weight: 600;
+  letter-spacing: -.032em;
+  line-height: 1.08;
+}
+.bn-read-meta {
+  margin: 16px 0 0;
+  display: flex; align-items: center; gap: 9px;
+  font-size: 14px; color: #96969c;
+}
+.bn-read-meta i { font-style: normal; color: var(--ap-hairline); }
+
+.bn-body { padding-top: clamp(28px, 4vw, 40px); }
+.bn-body p {
+  margin: 0 0 22px;
+  font-size: 18.5px;
+  line-height: 1.68;
+  color: #2b2b2f;
+}
+/* The opening paragraph carries the weight, the way a printed article's does. */
+.bn-body > p:first-child {
+  font-size: 21px;
+  line-height: 1.58;
+  color: var(--ap-ink);
+}
+.bn-body h2 {
+  margin: 40px 0 16px;
+  font-size: clamp(21px, 2.2vw, 25px);
+  font-weight: 600;
+  letter-spacing: -.022em;
+}
+.bn-body blockquote {
+  margin: 30px 0;
+  padding-left: 20px;
+  border-left: 2px solid var(--ap-accent);
+  font-size: 20px;
+  line-height: 1.55;
+  color: var(--ap-ink);
+}
+.bn-body ul { margin: 0 0 24px; padding-left: 20px; }
+.bn-body li {
+  margin-bottom: 10px;
+  font-size: 18px;
+  line-height: 1.62;
+  color: #2b2b2f;
+}
+
+/* Kept to the end and kept small: it is a way out, not a feed. */
+.bn-more {
+  margin-top: clamp(48px, 6vw, 74px);
+  padding-top: 26px;
+  border-top: 1px solid var(--ap-hairline);
+}
+.bn-more h2 {
+  margin: 0 0 4px;
+  font-size: 11.5px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--ap-ink-soft);
+}
+.bn-more ul { list-style: none; margin: 0; padding: 0; }
+.bn-more li { border-top: 1px solid var(--ap-hairline); }
+.bn-more li:first-child { border-top: 0; }
+.bn-more a {
+  display: grid; gap: 3px;
+  padding: 16px 0;
+  text-decoration: none;
+  transition: opacity .15s ease;
+}
+.bn-more a:hover { opacity: .6; }
+.bn-more-title { font-size: 17px; font-weight: 600; letter-spacing: -.018em; color: var(--ap-ink); }
+.bn-more-meta { font-size: 13.5px; color: #96969c; }
+
+.bn-missing { text-align: center; padding-top: clamp(90px, 12vw, 160px); }
+.bn-missing h1 {
+  margin: 0; font-size: clamp(28px, 3.4vw, 40px); font-weight: 600; letter-spacing: -.03em;
+}
+.bn-missing p { margin: 12px 0 26px; font-size: 17px; color: var(--ap-ink-soft); }
+.bn-missing .bn-primary { display: inline-block; }
+
+/* The row is a link now, so it must not inherit link colour or underline. */
+a.bn-note { text-decoration: none; color: inherit; }
