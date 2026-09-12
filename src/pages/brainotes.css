@@ -1,139 +1,246 @@
-/* The shelf. Warm paper, cards that look like paper, and enough air that a
-   long list of lectures does not read as a database table. */
+/* Brainotes — a public library, laid out like one.
+ *
+ * Restraint is the whole design. A library page earns nothing from cards with
+ * shadows and gradients; it earns everything from space, one good typeface size
+ * ladder, and hairlines where a box would have been. Apple sets a page this way
+ * because it wants you reading the words, and so does this.
+ */
 
-.bn-page {
-  --bn-paper: #f4f2ee;
-  --bn-card: #fbfaf8;
-  --bn-ink: #17171a;
-  --bn-soft: #6b6862;
-  --bn-line: rgba(23, 23, 26, .1);
-  --bn-coral: #d9645b;
+.bn {
+  background: var(--ap-bg);
+  color: var(--ap-ink);
   min-height: 100vh;
-  background: var(--bn-paper);
-  color: var(--bn-ink);
-  font-family: "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  -webkit-font-smoothing: antialiased;
-}
-:root[data-bd-theme="dark"] .bn-page {
-  --bn-paper: #0d0c10;
-  --bn-card: #17161c;
-  --bn-ink: #f2efec;
-  --bn-soft: #9b968f;
-  --bn-line: rgba(242, 239, 236, .12);
-  --bn-coral: #ef8279;
 }
 
-/* ── Bar ── */
-.bn-top {
-  position: sticky; top: 0; z-index: 10;
-  background: color-mix(in srgb, var(--bn-paper) 86%, transparent);
-  backdrop-filter: blur(20px) saturate(150%);
-  border-bottom: 1px solid var(--bn-line);
-}
-.bn-top-inner {
-  height: 62px;
-  padding: 0 clamp(18px, 5vw, 46px);
-  display: flex; align-items: center; gap: 14px;
-  max-width: 1240px; margin: 0 auto;
-}
-.bn-mark { display: flex; align-items: center; gap: 9px; font-size: 17px; font-weight: 700; letter-spacing: -.035em; color: inherit; text-decoration: none; flex: none; }
-.bn-mark i { width: 9px; height: 9px; border-radius: 50%; background: var(--bn-coral); }
-.bn-search { flex: 1; min-width: 0; display: flex; justify-content: center; }
-.bn-search input {
-  width: min(420px, 100%);
-  padding: 9px 16px;
-  border: 1px solid var(--bn-line);
-  border-radius: 999px;
-  background: var(--bn-card);
-  font: inherit; font-size: 14.5px; color: inherit;
-}
-.bn-search input:focus { outline: 2px solid rgba(217, 100, 91, .4); outline-offset: 1px; }
+/* ── The wordmark ─────────────────────────────────────────────────────────── */
 
-.bn-btn {
-  flex: none;
-  padding: 9px 18px;
-  border: 1px solid var(--bn-line);
-  border-radius: 999px;
-  background: var(--bn-card);
-  color: inherit;
-  font: inherit; font-size: 14.5px; font-weight: 600;
-  cursor: pointer; text-decoration: none;
-  transition: transform .18s cubic-bezier(.16,1,.3,1), opacity .18s;
+.bn-hero {
+  max-width: var(--ap-maxw);
+  margin: 0 auto;
+  padding: clamp(76px, 11vw, 148px) var(--ap-gutter) clamp(46px, 6vw, 74px);
+  text-align: center;
 }
-.bn-btn:hover:not(:disabled) { transform: translateY(-1px); }
-.bn-btn:disabled { opacity: .5; cursor: default; }
-.bn-btn.is-solid { background: var(--bn-ink); border-color: var(--bn-ink); color: var(--bn-paper); }
 
-/* ── Head ── */
-.bn-main { max-width: 1240px; margin: 0 auto; padding: clamp(30px, 6vh, 60px) clamp(18px, 5vw, 46px) 80px; }
-.bn-h1 { margin: 0; font-size: clamp(34px, 5vw, 52px); font-weight: 650; letter-spacing: -.04em; line-height: 1; }
-.bn-lede { margin: 14px 0 0; max-width: 60ch; font-size: 17px; line-height: 1.5; color: var(--bn-soft); }
-
-.bn-filters { margin: 26px 0 30px; display: flex; flex-wrap: wrap; gap: 8px; }
-.bn-tab {
-  display: inline-flex; align-items: center; gap: 8px;
-  padding: 8px 15px;
-  border: 1px solid var(--bn-line);
-  border-radius: 999px;
-  background: var(--bn-card);
-  font: inherit; font-size: 14px; font-weight: 600; color: var(--bn-soft);
-  cursor: pointer; transition: .18s;
+/* BRAINOTES is "Braino" and "notes" sharing one "no". Setting that "no" in the
+   accent is the entire explanation — the reader finds both words on their own,
+   which is the difference between a wordmark and a pun with a caption. */
+.bn-mark {
+  margin: 14px 0 0;
+  font-size: clamp(52px, 10vw, 118px);
+  font-weight: 600;
+  letter-spacing: -.045em;
+  line-height: .96;
 }
-.bn-tab em { font-style: normal; font-size: 12px; font-weight: 700; opacity: .6; }
-.bn-tab:hover { color: var(--bn-ink); }
-.bn-tab.is-on { background: var(--bn-ink); border-color: var(--bn-ink); color: var(--bn-paper); }
-.bn-tab.is-on em { opacity: .7; }
+.bn-mark em {
+  font-style: normal;
+  color: var(--ap-accent);
+}
 
-/* ── Cards ── */
-.bn-grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(288px, 1fr)); }
-.bn-card {
+.bn-lede {
+  margin: clamp(20px, 2.6vw, 30px) auto 0;
+  max-width: 46ch;
+  font-size: clamp(17px, 1.7vw, 21px);
+  line-height: 1.55;
+  color: var(--ap-ink-soft);
+}
+
+/* ── Shelves ──────────────────────────────────────────────────────────────── */
+
+.bn-shelves {
+  max-width: var(--ap-maxw);
+  margin: 0 auto;
+  padding: 0 var(--ap-gutter);
+}
+.bn-shelf-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(232px, 1fr));
+  gap: 12px;
+}
+
+.bn-shelf {
   position: relative;
-  border: 1px solid var(--bn-line);
-  border-radius: 18px;
-  background: var(--bn-card);
-  overflow: hidden;
-  transition: transform .24s cubic-bezier(.16,1,.3,1), box-shadow .24s;
+  appearance: none;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  display: grid;
+  gap: 5px;
+  padding: 22px 24px 24px;
+  border-radius: 20px;
+  background: var(--ap-surface);
+  border: 1px solid var(--ap-hairline);
+  color: var(--ap-ink);
+  transition: border-color .18s ease, transform .18s ease, box-shadow .18s ease;
 }
-.bn-card:hover { transform: translateY(-3px); box-shadow: 0 18px 44px rgba(23, 23, 26, .1); }
-:root[data-bd-theme="dark"] .bn-card:hover { box-shadow: 0 18px 44px rgba(0, 0, 0, .5); }
-
-.bn-card-open {
-  display: block; width: 100%;
-  padding: 20px 22px 18px;
-  border: 0; background: none; color: inherit; font: inherit;
-  text-align: left; cursor: pointer;
+.bn-shelf:hover { transform: translateY(-2px); box-shadow: 0 14px 34px -26px rgba(0,0,0,.4); }
+.bn-shelf.is-on {
+  border-color: var(--ap-accent);
+  background: var(--ap-panel-bg);
 }
-.bn-card-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-.bn-kind { font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--bn-coral); }
-.bn-card.is-note .bn-kind { color: var(--bn-soft); }
-.bn-card.is-lecture .bn-kind { color: #7a6cd6; }
-.bn-when { font-size: 12px; color: var(--bn-soft); }
-.bn-card h2 { margin: 11px 0 0; font-size: 19px; font-weight: 650; letter-spacing: -.02em; line-height: 1.25; }
-.bn-subject { margin: 5px 0 0; font-size: 13px; font-weight: 600; color: var(--bn-soft); }
-.bn-preview { margin: 9px 0 0; font-size: 14.5px; line-height: 1.5; color: var(--bn-soft); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
-.bn-meta { margin: 14px 0 0; display: flex; flex-wrap: wrap; gap: 12px; font-size: 12.5px; color: var(--bn-soft); }
-.bn-shared { color: var(--bn-coral); font-weight: 600; }
 
-.bn-remove {
-  position: absolute; top: 10px; right: 10px;
-  width: 26px; height: 26px;
-  border: 0; border-radius: 50%;
-  background: transparent; color: var(--bn-soft);
-  font-size: 19px; line-height: 1; cursor: pointer;
-  opacity: 0; transition: opacity .18s, background .18s, color .18s;
+.bn-shelf-name { font-size: 19px; font-weight: 600; letter-spacing: -.02em; }
+.bn-shelf-blurb { font-size: 14px; line-height: 1.45; color: var(--ap-ink-soft); }
+
+/* The count sits quietly in the corner. An em dash for an empty shelf reads as
+   "not counted yet" where a 0 reads as a failure. */
+.bn-shelf-count {
+  position: absolute;
+  top: 20px; right: 22px;
+  font-size: 12.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--ap-ink-soft);
 }
-.bn-card:hover .bn-remove { opacity: 1; }
-.bn-remove:hover { background: rgba(217, 100, 91, .12); color: var(--bn-coral); }
+.bn-shelf.is-on .bn-shelf-count { color: var(--ap-accent); }
 
-/* ── Empty ── */
-.bn-empty { padding: 70px 20px; text-align: center; color: var(--bn-soft); }
-.bn-empty h1 { margin: 0 0 12px; font-size: 34px; font-weight: 650; letter-spacing: -.03em; color: var(--bn-ink); }
-.bn-empty p { margin: 0 0 8px; font-size: 16px; }
-.bn-empty-note { max-width: 46ch; margin: 0 auto 20px; line-height: 1.5; }
-.bn-empty .bn-btn { margin-top: 8px; display: inline-block; }
+/* Room built, not subjects promised. */
+.bn-shelf.is-next {
+  cursor: default;
+  background: transparent;
+  border-style: dashed;
+  border-color: var(--ap-hairline);
+}
+.bn-shelf.is-next:hover { transform: none; box-shadow: none; }
+.bn-shelf.is-next .bn-shelf-name { color: var(--ap-ink-soft); font-weight: 500; }
 
-@media (max-width: 640px) {
-  .bn-top-inner { flex-wrap: wrap; height: auto; padding-block: 10px; gap: 10px; }
-  .bn-search { order: 3; width: 100%; }
-  .bn-search input { width: 100%; }
+/* ── The shelf itself ─────────────────────────────────────────────────────── */
+
+.bn-stack {
+  max-width: var(--ap-maxw);
+  margin: 0 auto;
+  padding: clamp(52px, 7vw, 90px) var(--ap-gutter) 0;
+}
+.bn-stack-head {
+  padding-bottom: 22px;
+  border-bottom: 1px solid var(--ap-hairline);
+}
+.bn-stack-title {
+  margin: 0;
+  font-size: clamp(30px, 3.4vw, 42px);
+  font-weight: 600;
+  letter-spacing: -.03em;
+}
+.bn-stack-blurb {
+  margin: 7px 0 0;
+  font-size: 16.5px;
+  color: var(--ap-ink-soft);
+}
+
+/* Notes are a list with rules between them, not a grid of cards. A library is
+   a stack of things to read; cards make eight equal advertisements. */
+.bn-notes { list-style: none; margin: 0; padding: 0; }
+.bn-notes li { border-bottom: 1px solid var(--ap-hairline); }
+
+.bn-note {
+  padding: 26px 0;
+  display: grid;
+  gap: 8px;
+  cursor: pointer;
+  transition: opacity .16s ease;
+}
+.bn-note:hover { opacity: .62; }
+.bn-note h3 {
+  margin: 0;
+  font-size: clamp(21px, 2.1vw, 26px);
+  font-weight: 600;
+  letter-spacing: -.022em;
+  line-height: 1.25;
+}
+.bn-note-sum {
+  margin: 0;
+  max-width: 62ch;
+  font-size: 16px;
+  line-height: 1.55;
+  color: var(--ap-ink-soft);
+}
+.bn-note-meta {
+  margin: 2px 0 0;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 13.5px;
+  color: #96969c;
+}
+.bn-note-meta i { font-style: normal; color: var(--ap-hairline); }
+
+/* Every shelf opens here, so it says what the shelf is for rather than
+   apologising for being empty. */
+.bn-empty {
+  padding: clamp(56px, 8vw, 96px) 0;
+  text-align: center;
+}
+.bn-empty-lead {
+  margin: 0;
+  font-size: clamp(22px, 2.4vw, 28px);
+  font-weight: 600;
+  letter-spacing: -.024em;
+}
+.bn-empty-sub {
+  margin: 10px auto 0;
+  max-width: 44ch;
+  font-size: 16.5px;
+  line-height: 1.55;
+  color: var(--ap-ink-soft);
+}
+
+/* ── Adding yours ─────────────────────────────────────────────────────────── */
+
+.bn-give {
+  max-width: var(--ap-maxw);
+  margin: 0 auto;
+  padding: clamp(72px, 9vw, 132px) var(--ap-gutter) clamp(84px, 10vw, 140px);
+}
+.bn-give-inner {
+  padding: clamp(40px, 5vw, 64px);
+  border-radius: var(--ap-radius);
+  background: var(--ap-surface);
+  border: 1px solid var(--ap-hairline);
+  text-align: center;
+}
+.bn-give-title {
+  margin: 0;
+  font-size: clamp(28px, 3.2vw, 40px);
+  font-weight: 600;
+  letter-spacing: -.03em;
+}
+.bn-give-sub {
+  margin: 12px auto 0;
+  max-width: 42ch;
+  font-size: 17px;
+  line-height: 1.55;
+  color: var(--ap-ink-soft);
+}
+.bn-give-actions {
+  margin-top: 26px;
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.bn-primary, .bn-secondary {
+  appearance: none;
+  cursor: pointer;
+  font: inherit;
+  text-decoration: none;
+  font-size: 15.5px;
+  font-weight: 600;
+  padding: 13px 26px;
+  border-radius: 999px;
+  border: 0;
+  transition: transform .16s ease;
+}
+.bn-primary { background: var(--ap-ink); color: #fff; }
+.bn-secondary { background: transparent; color: var(--ap-ink); box-shadow: inset 0 0 0 1px var(--ap-hairline); }
+.bn-primary:hover, .bn-secondary:hover { transform: translateY(-1px); }
+
+.bn-give-fine {
+  margin: 22px auto 0;
+  max-width: 46ch;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: #96969c;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bn-shelf, .bn-note, .bn-primary, .bn-secondary { transition: none; }
 }
