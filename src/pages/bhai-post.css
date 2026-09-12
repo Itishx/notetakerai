@@ -31,35 +31,90 @@
   -webkit-font-smoothing: antialiased;
 }
 
-/* ── The words ────────────────────────────────────────────────────────────── */
+/* ── The thought ──────────────────────────────────────────────────────────── */
 
-.bp-words {
+/* Sits above him and reads down into his head. Everything here is measured
+   against the dome top so the tail lands on him rather than near him. */
+.bp-thought {
   position: absolute;
   left: 0; right: 0;
-  top: 150px;
+  top: 70px;
   z-index: 2;
+  display: grid;
+  justify-items: center;
+  /* The last dot has to stop just short of his dome. It was landing 47px
+     INSIDE his head, which reads as a bubble resting on him rather than a
+     thought rising off him. */
+  gap: 14px;
+}
+
+/* White on white, so the edge has to come from a hairline and a soft shadow
+   rather than a fill. A grey bubble would put a second background in a picture
+   whose whole subject is one horizon on one sheet of paper. */
+.bp-bubble {
+  max-width: 900px;
+  padding: 44px 60px 40px;
+  border-radius: 76px;
+  background: #ffffff;
+  border: 1px solid #ececf0;
+  box-shadow: 0 24px 60px -34px rgba(0, 0, 0, .26);
   text-align: center;
-  padding: 0 80px;
+  /* A drift, not a bounce. Small enough that any frame the exporter catches is
+     a good one, which is the same rule his breathing follows. */
+  animation: bpFloat 6.4s ease-in-out infinite;
 }
 
 .bp-line {
   margin: 0;
-  font-size: 86px;
+  font-size: 82px;
   font-weight: 700;
   letter-spacing: -.035em;
-  line-height: 1.12;
+  line-height: 1.06;
   color: #1d1d1f;
 }
 
-/* An aside, set like one. At the same weight as the lines above it, it stops
-   being a wink and becomes a third claim. */
+/* An aside, set like one. At the weight of the lines above it, it stops being a
+   wink and becomes a third claim. */
 .bp-aside {
-  margin: 30px 0 0;
-  font-size: 30px;
+  margin: 20px 0 0;
+  font-size: 29px;
   font-weight: 400;
   font-style: italic;
   letter-spacing: -.012em;
   color: #a6a6ad;
+}
+
+/* The three dots are what make it a thought rather than a speech box, so they
+   are drawn as real bubbles — same white, same hairline, same shadow — and they
+   shrink as they approach his head. */
+.bp-tail {
+  display: grid;
+  justify-items: center;
+  gap: 9px;
+}
+.bp-tail span {
+  display: block;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 1px solid #ececf0;
+  box-shadow: 0 8px 18px -12px rgba(0, 0, 0, .3);
+  /* Staggered, so the thought reads as travelling downward into him rather
+     than three lights blinking together. */
+  animation: bpThink 2.6s ease-in-out infinite;
+}
+.bp-tail span:nth-child(1) { width: 34px; height: 34px; animation-delay: 0s; }
+.bp-tail span:nth-child(2) { width: 24px; height: 24px; animation-delay: .28s; }
+.bp-tail span:nth-child(3) { width: 15px; height: 15px; animation-delay: .56s; }
+
+@keyframes bpFloat {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-9px); }
+}
+/* Never to nothing. A dot that disappears entirely reads as a missing element
+   in a still, and every frame of this has to export. */
+@keyframes bpThink {
+  0%, 100% { transform: scale(.92); opacity: .78; }
+  50%      { transform: scale(1);   opacity: 1; }
 }
 
 /* ── The horizon ──────────────────────────────────────────────────────────── */
@@ -119,7 +174,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .bp-braino { animation: none; }
+  .bp-braino, .bp-bubble, .bp-tail span { animation: none; }
 }
 .bp-braino svg {
   width: 100%;
