@@ -133,6 +133,7 @@ const IdeaTracker = lazy(() => import("./pages/IdeaTracker.tsx"));
 const OnboardingFlow = lazy(() => import("./pages/OnboardingFlow.tsx"));
 const Onb = lazy(() => import("./pages/Onb.tsx"));
 const Brainotes = lazy(() => import("./pages/Brainotes.tsx"));
+const BhaiPost = lazy(() => import("./pages/BhaiPost.tsx"));
 const Takeover = lazy(() => import("./pages/Takeover.tsx"));
 const WholeMind = lazy(() => import("./pages/WholeMind.tsx"));
 const EngineLog = lazy(() => import("./pages/EngineLog.tsx"));
@@ -341,6 +342,7 @@ function AppRoutes() {
         <Route path="/instagraphics/onboarding" element={<OnboardingFlow />} />
         <Route path="/onboarding" element={<OnboardingFlow />} />
         <Route path="/onb" element={<Onb />} />
+        <Route path="/instagraphics/bhai" element={<BhaiPost />} />
         <Route path="/brainotes" element={<Brainotes />} />
         <Route path="/brainotes/:slug" element={<Brainotes />} />
         <Route path="/brainonotes" element={<Brainotes />} />

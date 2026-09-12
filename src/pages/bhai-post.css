@@ -1,0 +1,121 @@
+/* "Braino tumhara bhai hai" — one post, built as a horizon.
+ *
+ * Everything here serves one idea: he rises into the frame from the bottom edge
+ * the way a sun sits on the sea. Full width, cropped through, dome and eyes
+ * above the line. No logo, no footer, no gradient — a rising sun with a line
+ * over it does not need furniture.
+ */
+
+.bp-page {
+  min-height: 100vh;
+  background: #e8e8ec;
+  display: grid;
+  justify-items: center;
+  align-content: start;
+  gap: 22px;
+  padding: clamp(24px, 4vw, 56px);
+}
+
+/* The post itself. Fixed 4:5 at 1080 wide, scaled to fit the screen — the
+   export reads this node's real width, so the ratio has to be exact here. */
+.bp-frame {
+  position: relative;
+  width: 1080px;
+  height: 1350px;
+  background: #ffffff;
+  overflow: hidden;
+  transform-origin: top center;
+  /* Fit the viewport without changing the node's layout size. */
+  zoom: min(1, calc((100vh - 210px) / 1350));
+  font-family: "SF Pro Display", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── The words ────────────────────────────────────────────────────────────── */
+
+.bp-words {
+  position: absolute;
+  left: 0; right: 0;
+  top: 150px;
+  z-index: 2;
+  text-align: center;
+  padding: 0 80px;
+}
+
+.bp-line {
+  margin: 0;
+  font-size: 86px;
+  font-weight: 700;
+  letter-spacing: -.035em;
+  line-height: 1.12;
+  color: #1d1d1f;
+}
+
+/* An aside, set like one. At the same weight as the lines above it, it stops
+   being a wink and becomes a third claim. */
+.bp-aside {
+  margin: 30px 0 0;
+  font-size: 30px;
+  font-weight: 400;
+  font-style: italic;
+  letter-spacing: -.012em;
+  color: #a6a6ad;
+}
+
+/* ── The horizon ──────────────────────────────────────────────────────────── */
+
+/* Full frame, not a band at the bottom. A short container clipped him at the
+   TOP as well as the bottom the moment he was pushed up far enough for the eyes
+   to clear the cut — so the frame is the only thing that crops him. */
+.bp-horizon {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+/* Sunk by a measured amount, not a guessed one.
+ *
+ * The art carries ~32% transparent padding above the ink, so every offset
+ * reasoned from the SVG box was wrong: the first attempt put his eyes 300px
+ * BELOW the cut and the post was a blank dome. Measured off the real ink
+ * instead — eyes sit at 52% of the drawn height — these numbers land the crop
+ * about 80px under his eyes, which is the horizon line.
+ *
+ * 1340px wide against a 1080 frame so the dome bleeds off both edges. He should
+ * be too big for the picture; that is the whole joke. */
+.bp-braino {
+  position: absolute;
+  left: 50%;
+  bottom: -531px;
+  transform: translateX(-50%);
+  width: 1340px;
+}
+.bp-braino svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+/* ── Page furniture, never exported ───────────────────────────────────────── */
+
+.bp-tools {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding-bottom: 40px;
+}
+.bp-btn {
+  appearance: none; border: 0; cursor: pointer;
+  font: inherit; font-size: 15px; font-weight: 600;
+  padding: 12px 24px; border-radius: 999px;
+  background: #1d1d1f; color: #fff;
+  transition: transform .16s ease, opacity .16s ease;
+}
+.bp-btn:hover:not(:disabled) { transform: translateY(-1px); }
+.bp-btn:disabled { opacity: .4; cursor: default; }
+.bp-note {
+  margin: 0;
+  font-size: 12.5px;
+  color: #6e6e73;
+  font-family: "SF Pro Text", -apple-system, BlinkMacSystemFont, sans-serif;
+}
