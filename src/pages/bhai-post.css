@@ -38,14 +38,15 @@
 .bp-thought {
   position: absolute;
   left: 0; right: 0;
-  top: 70px;
+  top: 54px;
   z-index: 2;
   display: grid;
   justify-items: center;
   /* The last dot has to stop just short of his dome. It was landing 47px
      INSIDE his head, which reads as a bubble resting on him rather than a
-     thought rising off him. */
-  gap: 14px;
+     thought rising off him, and sizing the dots big enough to actually SEE put
+     it straight back there. The space came out of the gaps, never out of him. */
+  gap: 10px;
 }
 
 /* White on white, so the edge has to come from a hairline and a soft shadow
@@ -56,7 +57,7 @@
   padding: 44px 60px 40px;
   border-radius: 76px;
   background: #ffffff;
-  border: 1px solid #ececf0;
+  border: 2px solid #e4e4ea;
   box-shadow: 0 24px 60px -34px rgba(0, 0, 0, .26);
   text-align: center;
   /* A drift, not a bounce. Small enough that any frame the exporter catches is
@@ -90,21 +91,28 @@
 .bp-tail {
   display: grid;
   justify-items: center;
-  gap: 9px;
+  gap: 7px;
 }
+/* A border thick enough to survive being small.
+ *
+ * These were the bubble's own 1px hairline, which reads fine around 900px of
+ * white and vanishes completely around 15px of it — the tail was effectively
+ * invisible. An outline has to be sized against the shape it is drawing, not
+ * copied from the shape next to it. Bigger dots, a 3px edge and a real shadow,
+ * and they read as bubbles at a glance. */
 .bp-tail span {
   display: block;
   border-radius: 50%;
   background: #ffffff;
-  border: 1px solid #ececf0;
-  box-shadow: 0 8px 18px -12px rgba(0, 0, 0, .3);
-  /* Staggered, so the thought reads as travelling downward into him rather
-     than three lights blinking together. */
+  border: 3px solid #cfcfd6;
+  box-shadow: 0 6px 14px -6px rgba(0, 0, 0, .22);
   animation: bpThink 2.6s ease-in-out infinite;
 }
-.bp-tail span:nth-child(1) { width: 34px; height: 34px; animation-delay: 0s; }
-.bp-tail span:nth-child(2) { width: 24px; height: 24px; animation-delay: .28s; }
-.bp-tail span:nth-child(3) { width: 15px; height: 15px; animation-delay: .56s; }
+/* Staggered, so the thought reads as travelling down into him rather than three
+   lights blinking together. */
+.bp-tail span:nth-child(1) { width: 46px; height: 46px; animation-delay: 0s; }
+.bp-tail span:nth-child(2) { width: 32px; height: 32px; animation-delay: .28s; }
+.bp-tail span:nth-child(3) { width: 21px; height: 21px; animation-delay: .56s; }
 
 @keyframes bpFloat {
   0%, 100% { transform: translateY(0); }
