@@ -23,7 +23,9 @@ import { BRAINO_WALKER_SVG } from "@/components/brainoWalkerSvg";
 import "./bhai-post.css";
 
 const LINES = ["Kaam hamara AI hai", "Itish tumhara bhai hai"];
-const ASIDE = "(aur Itish tumhara president)";
+/* Carries back to the line above without saying the name twice, which is what
+   made the first version read as two separate claims about the same person. */
+const ASIDE = "(aur president bhi, dil se at least)";
 
 export default function BhaiPost() {
   const frame = useRef<HTMLDivElement>(null);
