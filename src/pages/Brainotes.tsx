@@ -10,10 +10,11 @@
  * shelf, not wanting "recent uploads". Labels are therefore the navigation, not
  * a filter bolted onto a feed.
  *
- * NOTES is empty on purpose. The shelf is built and waiting for real ones; a
- * library that opens with invented notes is a mockup pretending to be a
- * library, and the empty state has to be good anyway because every new label
- * starts there.
+ * NOTES currently holds DEMO rows so the layout can be judged with weight on
+ * it. They are invented, names included, and must be replaced before this is
+ * shown to anyone outside the team — a public library with made-up authors is a
+ * lie about who wrote what. The empty state below still matters regardless,
+ * because every new shelf opens on it.
  */
 
 import { useMemo, useState } from "react";
@@ -49,8 +50,73 @@ type Note = {
   updated: string;
 };
 
-/* Filled as notes arrive. Shaped now so adding one is only ever a row. */
-const NOTES: Note[] = [];
+/* DEMO CONTENT — placeholders so the shelf can be judged with weight on it.
+   Every one of these is invented, names included. Replace the array wholesale
+   when the real Forge notes arrive; do not ship this list to anyone outside the
+   team, because a public library with made-up authors on it is a lie about who
+   wrote what. */
+const NOTES: Note[] = [
+  {
+    id: "f1",
+    label: "forge",
+    title: "Eight interviews. Eight yeses. Zero cards.",
+    summary:
+      "Everyone had the problem and described it unprompted. Nobody reached for a wallet. What we changed after, and the question we should have asked in interview one.",
+    author: "Itish Pande",
+    minutes: 9,
+    updated: "Sept 2026",
+  },
+  {
+    id: "f2",
+    label: "forge",
+    title: "The demo broke on stage. Twice.",
+    summary:
+      "A live failure in front of the room, the actual root cause, and why rehearsing the happy path is how you guarantee it.",
+    author: "Itish Pande",
+    minutes: 6,
+    updated: "Aug 2026",
+  },
+  {
+    id: "f3",
+    label: "forge",
+    title: "Deleting three weeks of work in one afternoon",
+    summary:
+      "Team mode was finished, tested and shipped. It made the product worse. Notes on how we decided, and how long it took to admit it.",
+    author: "Bhaskar M",
+    minutes: 11,
+    updated: "Aug 2026",
+  },
+  {
+    id: "f4",
+    label: "forge",
+    title: "You cannot price what you cannot name",
+    summary:
+      "Three months of pricing pages that all failed for the same reason. The fix was not a number.",
+    author: "Ananya Rao",
+    minutes: 7,
+    updated: "Jul 2026",
+  },
+  {
+    id: "f5",
+    label: "forge",
+    title: "Mentor feedback is a spec change, not an opinion",
+    summary:
+      "How we started treating reviews as requirements, and what stopped going in circles once we did.",
+    author: "Itish Pande",
+    minutes: 4,
+    updated: "Jul 2026",
+  },
+  {
+    id: "f6",
+    label: "forge",
+    title: "Two months of decks before one line of code",
+    summary:
+      "What the delay actually bought, what it cost, and the honest split between the two.",
+    author: "Dev Patel",
+    minutes: 8,
+    updated: "Jun 2026",
+  },
+];
 
 export default function Brainotes() {
   const [labelId, setLabelId] = useState(LABELS[0].id);
