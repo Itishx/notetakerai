@@ -78,17 +78,48 @@
  * The art carries ~32% transparent padding above the ink, so every offset
  * reasoned from the SVG box was wrong: the first attempt put his eyes 300px
  * BELOW the cut and the post was a blank dome. Measured off the real ink
- * instead — eyes sit at 52% of the drawn height — these numbers land the crop
- * about 80px under his eyes, which is the horizon line.
+ * instead — eyes sit at 52% of the drawn height — so the crop lands just under
+ * them, which is the horizon line.
  *
- * 1340px wide against a 1080 frame so the dome bleeds off both edges. He should
- * be too big for the picture; that is the whole joke. */
+ * The gap above him closed by making him BIGGER rather than by lifting him.
+ * Lifting him would have raised the eye line off the horizon and turned a sun
+ * on the sea into a character standing behind a wall. Scaling around the eyes
+ * keeps them exactly where they were and brings the dome up to meet the words.
+ *
+ * 1700px against a 1080 frame: he is far too big for the picture, which is the
+ * joke. */
 .bp-braino {
   position: absolute;
   left: 50%;
-  bottom: -531px;
+  bottom: -700px;
   transform: translateX(-50%);
-  width: 1340px;
+  width: 1700px;
+}
+
+/* ── A little alive ───────────────────────────────────────────────────────── */
+
+/* He looks UP, at the line about him. A still with the pupils centred reads as
+   a logo; the same still with the eyes raised reads as somebody listening. It
+   also ties the two halves of the picture together, which nothing else does. */
+.bp-braino #__sbwk_pupil_l__,
+.bp-braino #__sbwk_pupil_r__ {
+  transform: translateY(-1.1px);
+}
+
+/* Breathing, for the page. Small enough that any frame the exporter catches is
+   a good one — an animation that must be paused to export is a still that only
+   looks right by luck. */
+.bp-braino {
+  animation: bpBreathe 5.2s ease-in-out infinite;
+  transform-origin: 50% 100%;
+}
+@keyframes bpBreathe {
+  0%, 100% { transform: translateX(-50%) scale(1); }
+  50%      { transform: translateX(-50%) scale(1.012); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bp-braino { animation: none; }
 }
 .bp-braino svg {
   width: 100%;
