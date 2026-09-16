@@ -58,6 +58,7 @@ const HomeOS = lazy(() => import("./pages/HomeOS.tsx"));
 const FounderLetter = lazy(() => import("./pages/FounderLetter.tsx"));
 const JarvisOS = lazy(() => import("./pages/JarvisOS.tsx"));
 const NotchTeaser = lazy(() => import("./pages/NotchTeaser.tsx"));
+const DontBlink = lazy(() => import("./pages/DontBlink.tsx"));
 const IntroTeaser = lazy(() => import("./pages/IntroTeaser.tsx"));
 const EmotionTeaser = lazy(() => import("./pages/EmotionTeaser.tsx"));
 const Letter = lazy(() => import("./pages/Letter.tsx"));
@@ -242,6 +243,7 @@ function AppRoutes() {
         <Route path="/founder-letter" element={<FounderLetter />} />
         <Route path="/jarvis" element={<JarvisOS />} />
         <Route path="/notch-teaser" element={<NotchTeaser />} />
+        <Route path="/launch" element={<DontBlink />} />
         <Route path="/dontblink" element={<IntroTeaser />} />
         <Route path="/aware" element={<EmotionTeaser />} />
         {/* /n is the letter now; the film is parked at /n/film until the 22nd */}

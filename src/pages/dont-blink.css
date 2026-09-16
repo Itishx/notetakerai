@@ -1,0 +1,153 @@
+/* /launch-teaser — positions only. Everything about how the TYPE looks comes
+ * from notch-teaser.css, which this file imports alongside.
+ *
+ * The rule the whole format rests on: every line shares ONE dead-centre spot,
+ * one size, one weight. Nothing sits above or below anything else. A phrase
+ * clears and the next takes its place in exactly the same position — that
+ * replacement IS the mechanic, and a line that drifts even slightly breaks it.
+ *
+ * So these five scenes are five elements stacked on the same point with only
+ * one visible at a time, NOT five positions. They join the shared selector
+ * block below rather than getting rules of their own.
+ */
+
+/* The shared spot, copied in shape from notch-teaser.css's own block so both
+   films centre identically. Any new scene joins this list; it never gets a
+   bespoke position. */
+.lt .lt-line1,
+.lt .lt-line2,
+.lt .lt-name,
+.lt .lt-date,
+.lt .lt-tag {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  display: flex; flex-wrap: nowrap; justify-content: center; align-items: center;
+  gap: 0 .2em; opacity: 0; color: #fff; text-align: center; white-space: nowrap;
+  font-weight: 600; letter-spacing: -.025em; line-height: 1; z-index: 2;
+  font-size: clamp(28px, 4.6vw, 58px);
+  will-change: opacity;
+}
+
+/* The payload gets the one size override in the film. A modest bump, not an
+   extreme one: the reference learned that 10x runs out of proportion and
+   overflows the frame, while 1.5x still reads unmistakably as "bigger".
+   Position untouched, still the same centre. Digits get a small positive
+   tracking because tight negative letter-spacing on numerals reads as cramped
+   where it reads as sharp on words. */
+.lt .lt-date {
+  /* Smaller than the digit version was. "16th October 2026" is fifteen
+     characters where "16102026" was eight, so the same 92px overflowed the
+     frame rather than reading big. */
+  font-size: clamp(34px, 5.4vw, 68px);
+  letter-spacing: -.015em;
+  /* Tighter than it was: the only gaps left are the two BETWEEN groups (every
+     digit inside a group is fused), so .34em read as three separate numbers
+     floating apart rather than one date. */
+  gap: 0 .2em;
+  font-variant-numeric: tabular-nums;
+}
+/* No override here on purpose. notch-teaser.css gives .nt-fuse a -.2em left
+   margin, which exists to CANCEL the container's .2em gap — setting it to 0
+   does not fuse the digits, it un-fuses them, and every digit drifted apart
+   into "1 6 1 0 2 0 2 6". The container gap below is kept at .2em precisely so
+   that inherited cancellation lands exactly on zero. */
+
+/* The name sits a step up from the body lines, a step under the date. */
+.lt .lt-name { font-size: clamp(34px, 5.6vw, 72px); }
+
+/* The graphic is ONE persistent element across boot and the closing wink,
+   never duplicated, so it can never hard-cut between two different states of
+   itself — which reads as a mistake rather than a transition. */
+
+/* The frame flip. ONE overlay reused by every match cut in the film, because
+   they never overlap in time. Pure opacity so it costs nothing per frame. */
+.lt .lt-invert {
+  position: absolute; inset: 0;
+  background: #fff;
+  mix-blend-mode: difference;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 9;
+  will-change: opacity;
+}
+
+/* NO GLITTER.
+ *
+ * notch-teaser.css stamps every word in with brightness(2.2) and a 22px white
+ * text-shadow, which is the sparkle on each reveal. On a film where almost
+ * every word is chunked, that fires twice per word and the whole thing
+ * shimmers. The stamp should be a cut, not a twinkle: the word is either there
+ * or it is not.
+ *
+ * Scoped to .lt so NotchTeaser keeps its own look, and !important because the
+ * rule it overrides has identical specificity and ships later in source order.
+ */
+.lt .nt-word.in { animation: none !important; }
+
+/* ── He stands, then black ────────────────────────────────────────────────
+   The film ends on the character rather than on copy about him. One second of
+   him alone on white, then the frame goes black under him. */
+.lt .lt-stand {
+  position: absolute; left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+  /* Small. He is a sign-off, not the subject — at 190 he filled the same
+     optical space the sentences had just been using and read as another line
+     of the film rather than the thing that closes it. */
+  width: 132px;
+  opacity: 0;
+  z-index: 4;
+  line-height: 0;
+  will-change: opacity;
+}
+.lt .lt-stand svg { width: 100%; height: auto; display: block; }
+
+/* A hard cut, not a fade: no transition on this at all. The last frame of the
+   film should be a decision. */
+.lt .lt-black {
+  position: absolute; inset: 0;
+  background: #000;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 10;
+}
+
+/* ── The wink ──────────────────────────────────────────────────────────────
+   One eye group squashed to nothing about its OWN centre and let back up.
+   transform-box: view-box is what makes that centre expressible at all — the
+   default (stroke-box) would resolve 38px 48px against the element's own tiny
+   bounding box and the eye would fly off the face instead of closing. */
+.lt-stand #__sbwk_eye_r__,
+.lt-stand #__sbwk_eye_l__ {
+  transform-box: view-box;
+  transition: transform .085s ease-in-out;
+}
+/* Each eye squashes about ITS OWN centre — the two circles sit at x=62 and
+   x=38 in the viewBox, so one shared origin would slide the far eye sideways
+   across the face as it closed instead of shutting it. */
+.lt-stand #__sbwk_eye_r__ { transform-origin: 62px 48px; }
+.lt-stand #__sbwk_eye_l__ { transform-origin: 38px 48px; }
+
+.lt-stand.is-wink-r #__sbwk_eye_r__ { transform: scaleY(.06); }
+
+@media (prefers-reduced-motion: reduce) {
+  .lt-stand #__sbwk_eye_r__, .lt-stand #__sbwk_eye_l__ { transition: none; }
+}
+
+/* Only ever seen when the browser refused to autoplay. Sits outside the film's
+   centre and fades the moment sound starts, so it is never part of a frame
+   anyone would export. */
+.lt .lt-sound {
+  position: absolute;
+  left: 50%; bottom: 26px;
+  transform: translateX(-50%);
+  padding: 7px 15px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .08);
+  border: 1px solid rgba(255, 255, 255, .16);
+  font: 500 12px/1 "SF Pro Text", -apple-system, BlinkMacSystemFont, sans-serif;
+  letter-spacing: .01em;
+  color: rgba(255, 255, 255, .62);
+  opacity: 0;
+  transition: opacity .3s ease;
+  pointer-events: none;
+  z-index: 11;
+}

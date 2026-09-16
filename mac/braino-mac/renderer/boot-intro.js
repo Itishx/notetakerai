@@ -38,14 +38,40 @@
 
   function el(id) { return document.getElementById(id); }
 
-  /* The walker art carries its own gradients (sbwk-fill, sbwk-dark, sbwk-glow).
-     Injecting it twice puts two elements with each id in one document, and a
-     fill of url(#sbwk-fill) resolves to whichever came first — which, once the
-     boot screen is hidden, is a paint server inside a display:none subtree.
-     That is why he lost his coral the moment the screen turned white. Each copy
-     gets its own namespace instead. */
+  /* Every copy of the mascot gets its own names for everything it paints with.
+   *
+   * The art defines its own gradients and clip paths, and a fill of url(#x)
+   * resolves to the FIRST element in the document with that id. This boot
+   * screen and the onboarding mascot both sit above the real walker in
+   * index.html, and both are display:none once they are done — and a paint
+   * server inside a hidden subtree paints nothing. So the real mascot's fill
+   * resolved to a hidden copy and only the white sticker outline underneath
+   * was left.
+   *
+   * This used to rename three names, sbwk-fill, sbwk-dark and sbwk-glow, which
+   * are Braino's. Brainelle paints her hair, bow and dress with seven of her
+   * own (blwk-hair, blwk-silk, blwk-pink...), none of which were renamed, so
+   * the moment she was the chosen mascot her hair went white and her dress
+   * went black and white. Renaming whatever ids the art actually defines works
+   * for every mascot, including ones that do not exist yet.
+   *
+   * Ids starting with "__" are left alone: those are the rig's element hooks,
+   * which the animation code always looks up inside its own walker. */
   function uniqueGradients(svg, tag) {
-    return String(svg).replace(/sbwk-(fill|dark|glow)/g, "sbwk-$1-" + tag);
+    let out = String(svg);
+    const defined = new Set();
+    for (const m of out.matchAll(/(?:^|\s)id="([^"]+)"/g)) {
+      if (!m[1].startsWith("__")) defined.add(m[1]);
+    }
+    for (const id of defined) {
+      const esc = id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const next = id + "--" + tag;
+      out = out
+        .replace(new RegExp('(^|\\s)id="' + esc + '"', "g"), '$1id="' + next + '"')
+        .replace(new RegExp("url\\(#" + esc + "\\)", "g"), "url(#" + next + ")")
+        .replace(new RegExp('((?:xlink:)?href)="#' + esc + '"', "g"), '$1="#' + next + '"');
+    }
+    return out;
   }
   window.__brainoUniqueGradients = uniqueGradients;
 

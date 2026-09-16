@@ -4,24 +4,34 @@ import test from "node:test";
 
 const renderer = readFileSync(new URL("../mac/braino-mac/renderer/braino-mac.js", import.meta.url), "utf8");
 
-/* Brainelle is a saved setting that owns the voice.
+/* Brainelle's voice belongs to her body.
  *
- * Once she is on she is on for everything, in her voice rather than his: good
- * morning, are you there, the pitch demo, all of it. She survives restarts, the
- * only ways back are a hotkey and a spoken phrase, and the symptom does not
- * point at a setting, so from the outside it reads as Braino being broken.
- *
- * She is off at the source rather than at each of the places that can turn her
- * on, which is what these hold. Flip BRAINELLE_ENABLED to have her back. */
-test("Braino speaks as Braino", () => {
-  assert.match(renderer, /const BRAINELLE_ENABLED = false;/);
+ * The character (who you hear) and the avatar (who you see) used to be two
+ * settings, and each way they fell apart looked like Braino being broken: her
+ * voice coming out of his rig, or her rig speaking in his voice. These hold the
+ * one rule that keeps them together — the avatar decides the character, and
+ * nothing sets the character any other way. */
+test("Brainelle is on", () => {
+  assert.match(renderer, /const BRAINELLE_ENABLED = true;/);
+  assert.match(renderer, /brainelle: \{\s*name: "Brainelle",\s*refId: "b67aedfb36d04c53892fd0e96db08180"/);
+});
 
-  /* Nothing may set the character except through the one gate. */
+test("the character is only ever set through the one gate", () => {
   const assignments = renderer.match(/^\s*macCharacter = .*$/gm) || [];
   assert.equal(assignments.length, 1, `character assigned outside the gate: ${assignments.join(" | ")}`);
   assert.match(renderer, /const next = \(BRAINELLE_ENABLED && MAC_CHARACTERS\[key\]\) \? key : "braino";/);
+});
 
-  /* And a value stored before she was switched off cannot bring her back. */
-  assert.match(renderer, /if \(BRAINELLE_ENABLED\) \{[\s\S]{0,200}getItem\(MAC_CHARACTER_STORAGE_KEY\)/);
-  assert.match(renderer, /\} else \{[\s\S]{0,120}removeItem\(MAC_CHARACTER_STORAGE_KEY\)/);
+test("picking the avatar is what switches the voice", () => {
+  const pick = renderer.match(/function setMascotChoice\([\s\S]*?\n\}/)?.[0] || "";
+  assert.match(pick, /macSetCharacter\(mascotChoice === "brainelle" \? "brainelle" : "braino"/);
+  // Cmd+Shift+B drives the avatar, not the character.
+  assert.match(renderer, /onCharacterToggle\?\.\(\(\) => \{[\s\S]{0,240}setMascotChoice\(/);
+});
+
+test("saying 'be Brainelle' moves the avatar too, so voice and body never disagree", () => {
+  const block = renderer.match(/const charCmd = macDetectCharacterCommand\(transcript\);[\s\S]*?return;\n\s*\}/)?.[0] || "";
+  assert.ok(block, "spoken character switch not found");
+  assert.match(block, /setMascotChoice\(charCmd\)/);
+  assert.doesNotMatch(block, /macSetCharacter\(charCmd\)/);
 });
