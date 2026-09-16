@@ -1,0 +1,76 @@
+/* /launch-teaser — positions only. Everything about how the TYPE looks comes
+ * from notch-teaser.css, which this file imports alongside.
+ *
+ * The rule the whole format rests on: every line shares ONE dead-centre spot,
+ * one size, one weight. Nothing sits above or below anything else. A phrase
+ * clears and the next takes its place in exactly the same position — that
+ * replacement IS the mechanic, and a line that drifts even slightly breaks it.
+ *
+ * So these five scenes are five elements stacked on the same point with only
+ * one visible at a time, NOT five positions. They join the shared selector
+ * block below rather than getting rules of their own.
+ */
+
+/* The shared spot, copied in shape from notch-teaser.css's own block so both
+   films centre identically. Any new scene joins this list; it never gets a
+   bespoke position. */
+.lt .lt-wait,
+.lt .lt-awake,
+.lt .lt-name,
+.lt .lt-date,
+.lt .lt-tag {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  display: flex; flex-wrap: nowrap; justify-content: center; align-items: center;
+  gap: 0 .2em; opacity: 0; color: #fff; text-align: center; white-space: nowrap;
+  font-weight: 600; letter-spacing: -.025em; line-height: 1; z-index: 2;
+  font-size: clamp(28px, 4.6vw, 58px);
+  will-change: opacity;
+}
+
+/* The payload gets the one size override in the film. A modest bump, not an
+   extreme one: the reference learned that 10x runs out of proportion and
+   overflows the frame, while 1.5x still reads unmistakably as "bigger".
+   Position untouched, still the same centre. Digits get a small positive
+   tracking because tight negative letter-spacing on numerals reads as cramped
+   where it reads as sharp on words. */
+.lt .lt-date {
+  font-size: clamp(44px, 7.4vw, 92px);
+  letter-spacing: .01em;
+  /* Tighter than it was: the only gaps left are the two BETWEEN groups (every
+     digit inside a group is fused), so .34em read as three separate numbers
+     floating apart rather than one date. */
+  gap: 0 .2em;
+  font-variant-numeric: tabular-nums;
+}
+/* No override here on purpose. notch-teaser.css gives .nt-fuse a -.2em left
+   margin, which exists to CANCEL the container's .2em gap — setting it to 0
+   does not fuse the digits, it un-fuses them, and every digit drifted apart
+   into "1 6 1 0 2 0 2 6". The container gap below is kept at .2em precisely so
+   that inherited cancellation lands exactly on zero. */
+
+/* The name sits a step up from the body lines, a step under the date. */
+.lt .lt-name { font-size: clamp(34px, 5.6vw, 72px); }
+
+/* The graphic is ONE persistent element across boot and the closing wink,
+   never duplicated, so it can never hard-cut between two different states of
+   itself — which reads as a mistake rather than a transition. */
+.lt .lt-graphic {
+  position: absolute; left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+  opacity: 0;
+  transition: opacity .18s linear;
+  z-index: 3;
+  will-change: opacity;
+}
+
+/* The frame flip. ONE overlay reused by every match cut in the film, because
+   they never overlap in time. Pure opacity so it costs nothing per frame. */
+.lt .lt-invert {
+  position: absolute; inset: 0;
+  background: #fff;
+  mix-blend-mode: difference;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 9;
+  will-change: opacity;
+}
