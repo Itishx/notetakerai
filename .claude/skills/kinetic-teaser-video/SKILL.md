@@ -44,7 +44,29 @@ A word prefixed with `+` in a phrase array fuses flush against the previous word
 
 Use this for any "build a word in front of the viewer" beat. Don't use it for two words that should just read as two words with normal spacing — combine those into ONE array entry instead if they need to land simultaneously (e.g. `"Like crazy"` as one string reveals both words together, not staggered).
 
-**Keep it simple by default.** Only reach for the fuse trick when asked for it explicitly ("Bo/om" style notation) — a plain two-word phrase (`["Cooking", "Next"]`) is the right call unless told otherwise. When in doubt, simple wins.
+**CHUNK BY DEFAULT — this is the format, not a flourish.** Any word of four or more letters breaks into two stamps: `Every` → `["Eve", "+ry"]`, `waits.` → `["wai", "+ts."]`, `Braino.` → `["Brai", "+no."]`. Short words (to, be, app) stay whole because there is nothing to build. A film where words simply *appear* is not this format, however good the cadence is.
+
+Write it as a function, never by hand. Hand-picking "the important words" to chunk is how a film ends up with three built words and everything else just landing:
+
+```ts
+const chunk = (word: string): string[] => {
+  const m = word.match(/^([A-Za-z0-9']+)(.*)$/);
+  if (!m) return [word];
+  const [, core, tail] = m;
+  if (core.length < 4) return [word];
+  // Straight down the middle, head rounded up. FOUR is the threshold to split
+  // at all, not the size of a chunk. Fixing the head at four letters instead
+  // means only six-letter words ever qualify, and a script is mostly fours and
+  // fives, so almost nothing chunks.
+  const at = Math.ceil(core.length / 2);
+  return [core.slice(0, at), "+" + core.slice(at) + tail];
+};
+const chunked = (words: string[]) => words.flatMap(chunk);
+```
+
+**Chunking roughly doubles the stamps per line, so halve the per-stamp cadence** or the film reads at half speed. A 3-word line at 360ms becomes a 5-stamp line at ~215ms for the same reading pace.
+
+**Match cuts stay locked to the chunks.** Compute the flip from the SAME starts array that drives the stamps, so a cut can never drift out of sync with the chunk it belongs to. A sentence gets ONE cut, on its final chunk, held a little longer — two flashes inside a line that is still assembling read as a stutter, not a hit. A number or a date can strobe per chunk, because there every chunk IS a beat.
 
 ## Match cuts (frame inversion)
 

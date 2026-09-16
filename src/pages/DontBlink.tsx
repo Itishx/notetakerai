@@ -22,62 +22,105 @@ import "./dont-blink.css";
 
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 
+/* THE CHUNKING RULE, applied to everything rather than to favourite words.
+ *
+ * Any word of four or more letters breaks into two stamps: "Every" becomes
+ * "Eve" then "+ry", "waits." becomes "wa" then "+its." The "+" fuses the tail
+ * flush against the head, so it still reads as one word while arriving as two
+ * hits. Short words (to, be, app) stay whole because there is nothing to
+ * build.
+ *
+ * Written as a function on purpose. Hand-splitting the words I happened to
+ * think were important is exactly how the film ended up with three chunked
+ * words and everything else just appearing, which is the note this fixes.
+ * Trailing punctuation rides with the tail so "waits." never becomes "wa its ."
+ */
+const chunk = (word: string): string[] => {
+  const m = word.match(/^([A-Za-z0-9']+)(.*)$/);
+  if (!m) return [word];
+  const [, core, tail] = m;
+  if (core.length < 4) return [word];   // to, be, app: nothing to build
+  /* Straight down the middle, head rounded up. Four letters is the threshold
+     to split at all, not the size of a chunk — "Eve"/"ry", "wai"/"ts.",
+     "Brai"/"no." A brief detour fixed the head at four letters instead, which
+     stopped almost every word in the script from chunking at all: at that size
+     only a six-letter word qualifies, and this script is mostly fours and
+     fives. */
+  const at = Math.ceil(core.length / 2);
+  return [core.slice(0, at), "+" + core.slice(at) + tail];
+};
+const chunked = (words: string[]) => words.flatMap(chunk);
+
 /* ── The script ─────────────────────────────────────────────────────────── */
 
 // The triple. Same shape three times, tightening each time: that acceleration
 // is the energy, and it argues the point rather than decorating it.
-const WAIT_PHRASES = [["Every", "app", "waits."], ["To", "be", "opened."], ["To", "be", "asked."], ["To", "be", "told."]];
-const WAIT_SW = [330, 260, 240, 215];
-const WAIT_GAPS: number[] = []; WAIT_GAPS[0] = 300; WAIT_GAPS[1] = 210; WAIT_GAPS[2] = 190; WAIT_GAPS[3] = 90;   // was 260 plus a hold on top: the triple landed then sat there. The boot should cut in almost on top of "told."
+const WAIT_PHRASES = [["Every", "app", "waits."], ["To", "be", "opened."], ["To", "be", "asked."], ["To", "be", "told."]].map(chunked);
+// The "To be ..." lines are SLOWER than the opener, not faster. They were 330
+// / 310 / 290 on the theory that a triple should accelerate, but these are
+// three-word lines where the last word is the whole point ("opened", "asked",
+// "told") — rushing to it is what made them read as one blurred line rather
+// than three separate refusals. The acceleration lives in the trailing gaps
+// below instead, which tighten 260 -> 150 across the triple.
+const WAIT_SW = [300, 320, 310, 295];
+const WAIT_GAPS: number[] = []; WAIT_GAPS[0] = 260; WAIT_GAPS[1] = 230; WAIT_GAPS[2] = 210; WAIT_GAPS[3] = 150;
+// Back to the house GAP after an over-correction: asked to kill a pause, I
+// stripped these to 90 and the whole opening started reading as a stutter.
+// The last one stays tighter than the rest so the boot still interrupts.
 
 // The hinge. Everything before waits, everything after is already happening,
 // and the boot is what the sentence turns on rather than a graphic over it.
-const BOOT_DUR = 2100;
+const BOOT_DUR = 1150;
 
 // The turn, and the last word builds: "awa" lands, "+ke." completes it. The
 // sentence arrives, then the word that matters assembles.
-const AWAKE_PHRASES = [["This", "one's", "already", "awa", "+ke."]];
+const AWAKE_PHRASES = [chunked(["This", "one's", "already", "awake."])];
 const AWAKE_SW = 265;
-const AWAKE_HOLD = 700;
+const AWAKE_HOLD = 420;
 
 // The name AFTER you know what it does, so it means something when you hear it,
 // and CHUNKED: "Brai" lands, then "no." joins flush against it and completes
 // the word in front of you. Two stamps, one word. That build is the mechanic;
 // a flash on a whole word is just a flash.
-const NAME_PHRASES = [["Brai", "+no."]];
-const NAME_SW = 300;
-const NAME_HOLD = 620;
+const NAME_PHRASES = [chunked(["Braino."])];
+const NAME_SW = 330;
+const NAME_HOLD = 520;
 
 // THE PAYLOAD, digit by digit.
 //
-// Eight stamps, not three: 1 6 1 0 2 0 2 6, each its own match cut. The "+"
-// fuses a digit flush against the one before it so the groups still read as
-// 16 10 2026 rather than eight loose numerals — the space only falls where a
-// digit does NOT carry the prefix.
+// Six stamps: 16 · th · Octo · ber · 20 · 26, each its own match cut. The "+"
+// fuses a chunk flush against the one before it so the groups still read as
+// "16th October 2026" rather than six loose pieces — the space only falls
+// where a chunk does NOT carry the prefix.
 //
 // The cadence is deliberately uneven, which a single `sw` cannot express, so
 // the starts are written out. The date walks in at 400ms a digit, then 2026
 // arrives at 190 — the year is the part that accelerates, so the film speeds
 // up into its own last frame instead of landing flat.
-const DATE_CHUNKS = ["1", "+6", "1", "+0", "2", "+0", "+2", "+6"];
+const DATE_CHUNKS = ["16", "+th", "Octo", "+ber", "20", "+26"];
 const DATE_SLOW = 400;
-const DATE_FAST = 190;
-const DATE_STARTS = DATE_CHUNKS.map((_, i) => (i < 4 ? i * DATE_SLOW : 4 * DATE_SLOW + (i - 4) * DATE_FAST));
+const DATE_FAST = 200;
+// Everything up to the year walks; the year runs. Same rule as the digits it
+// replaces, just fewer and longer stamps, so the split moves from index 4 to
+// index 4 of six rather than of eight.
+const DATE_FAST_FROM = 4;
+const DATE_STARTS = DATE_CHUNKS.map((_, i) =>
+  i < DATE_FAST_FROM ? i * DATE_SLOW : DATE_FAST_FROM * DATE_SLOW + (i - DATE_FAST_FROM) * DATE_FAST);
 const DATE_SPAN = DATE_STARTS[DATE_STARTS.length - 1] + DATE_FAST;
-const DATE_HOLD = 1100;
+const DATE_HOLD = 1500;
 const STOMP_MS = 130;   // how long the frame stays inverted per stamp
 
 // "Don't" takes a normal space, then "Bli" lands and "+nk." completes it. The
 // word the whole format is named after gets built rather than stated.
-const TAG_PHRASES = [["Don't", "Bli", "+nk."]];
-const TAG_SW = 270;
-const TAG_HOLD = 600;
+const TAG_PHRASES = [chunked(["Don't", "Blink."])];
+const TAG_SW = 275;
+const TAG_HOLD = 700;
 
 const WINK_TAIL = 900;
 
 /* ── Timing ─────────────────────────────────────────────────────────────── */
 
-const GAP = 240;
+const GAP = 260;
 const phraseSw = (sw: number | number[], i: number) =>
   Array.isArray(sw) ? (sw[i] ?? sw[sw.length - 1]) : sw;
 const phraseSeq = (phrases: string[][], sw: number | number[], gaps?: number[]) => {
@@ -92,9 +135,14 @@ const phraseSeq = (phrases: string[][], sw: number | number[], gaps?: number[]) 
 
 const WAIT_TOTAL = phraseSeq(WAIT_PHRASES, WAIT_SW, WAIT_GAPS).total;
 
-// One tunable hold flexes to hit the target; word cadences never move. It is
-// spent only on the beats that should breathe (boot, date, wink), never on the
-// talky parts, which chain tight.
+// One tunable hold flexes to hit the target; word cadences never move.
+//
+// The H multipliers are now DELIBERATELY small everywhere. They were up at
+// 0.38 between the name and the date, which put 3.5 seconds of "Braino."
+// sitting on screen doing nothing — at this pace a single second off reads as
+// the film having crashed. Every beat that needs weight states it as an
+// explicit *_HOLD instead, so the numbers are visible and tunable rather than
+// falling out of whatever the target happens to be.
 const buildTimeline = (H: number) => {
   let last = -1;
   const S = (ms: number) => {
@@ -105,11 +153,11 @@ const buildTimeline = (H: number) => {
   };
   const wait  = S(250);
   const boot  = S(wait + WAIT_TOTAL);          // no hold here at all: the turn interrupts the triple, it does not wait politely for it
-  const awake = S(boot + BOOT_DUR + H * 0.16);
-  const name  = S(awake + AWAKE_PHRASES[0].length * AWAKE_SW + AWAKE_HOLD + H * 0.18);
-  const date  = S(name + NAME_PHRASES[0].length * NAME_SW + NAME_HOLD + H * 0.30);
-  const tag   = S(date + DATE_SPAN + DATE_HOLD + H * 0.20);
-  const wink  = S(tag + TAG_PHRASES[0].length * TAG_SW + TAG_HOLD + H * 0.14);
+  const awake = S(boot + BOOT_DUR);
+  const name  = S(awake + AWAKE_PHRASES[0].length * AWAKE_SW + AWAKE_HOLD + H * 0.04);
+  const date  = S(name + NAME_PHRASES[0].length * NAME_SW + NAME_HOLD + H * 0.06);
+  const tag   = S(date + DATE_SPAN + DATE_HOLD + H * 0.06);
+  const wink  = S(tag + TAG_PHRASES[0].length * TAG_SW + TAG_HOLD + H * 0.05);
   const end   = Math.round(wink + WINK_TAIL);
   return { wait, boot, awake, name, date, tag, wink, end };
 };
@@ -119,7 +167,7 @@ const solveHold = (target: number) => {
   return clamp((target - e0) / ((e1 - e0) / 1000), 100, 8000);
 };
 
-const TARGET_MS = 18000;
+const TARGET_MS = 21000;
 const H = solveHold(TARGET_MS);
 const T = buildTimeline(H);
 
@@ -242,6 +290,13 @@ export default function DontBlink() {
         const rel = t - from;
         return starts.some((at) => rel >= at && rel < at + STOMP_MS);
       };
+      /* One cut, at one offset, with its own length — for a beat that should
+         land once and land heavier. */
+      const stompOnce = (from: number, to: number, at: number, ms: number) => {
+        if (t < from || t >= to) return false;
+        const rel = t - from;
+        return rel >= at && rel < at + ms;
+      };
       const stomp = (from: number, to: number, count: number, sw: number, skip = 0) => {
         if (t < from || t >= to) return false;
         const rel = t - from;
@@ -253,8 +308,13 @@ export default function DontBlink() {
       };
 
       const inv =
-        // the turn: only the two chunks that build "awake.", not the whole line
-        stomp(T.awake, T.name, AWAKE_PHRASES[0].length, AWAKE_SW, 3) ||
+        /* The turn gets ONE cut, on the last chunk, and a longer one.
+           It was firing on both "awa" and "ke." 265ms apart, and two flashes
+           inside a sentence that is still assembling reads as a stutter, not a
+           hit — a glitch in the render rather than a decision. The date can
+           strobe per digit because every digit IS a beat; a sentence has one
+           beat, at the end, when it finishes being a sentence. */
+        stompOnce(T.awake, T.name, (AWAKE_PHRASES[0].length - 1) * AWAKE_SW, 220) ||
         // the name assembling: Brai, then no.
         stomp(T.name, T.date, NAME_PHRASES[0].length, NAME_SW) ||
         // the payload: three numbers, three hits
