@@ -44,31 +44,23 @@ A word prefixed with `+` in a phrase array fuses flush against the previous word
 
 Use this for any "build a word in front of the viewer" beat. Don't use it for two words that should just read as two words with normal spacing — combine those into ONE array entry instead if they need to land simultaneously (e.g. `"Like crazy"` as one string reveals both words together, not staggered).
 
-**CHUNK BY DEFAULT — this is the format, not a flourish.** Any word of four or more letters breaks into two stamps: `Every` → `["Eve", "+ry"]`, `waits.` → `["wai", "+ts."]`, `Braino.` → `["Brai", "+no."]`. Short words (to, be, app) stay whole because there is nothing to build. A film where words simply *appear* is not this format, however good the cadence is.
+**Chunking is chosen, not computed, and it is RARE.** Across IntroTeaser (1543 lines) and NotchTeaser (1085) there are seven chunked pairs between them:
 
-Write it as a function, never by hand. Hand-picking "the important words" to chunk is how a film ends up with three built words and everything else just landing:
-
-```ts
-const chunk = (word: string): string[] => {
-  const m = word.match(/^([A-Za-z0-9']+)(.*)$/);
-  if (!m) return [word];
-  const [, core, tail] = m;
-  if (core.length < 4) return [word];
-  // Straight down the middle, head rounded up. FOUR is the threshold to split
-  // at all, not the size of a chunk. Fixing the head at four letters instead
-  // means only six-letter words ever qualify, and a script is mostly fours and
-  // fives, so almost nothing chunks.
-  const at = Math.ceil(core.length / 2);
-  return [core.slice(0, at), "+" + core.slice(at) + tail];
-};
-const chunked = (words: string[]) => words.flatMap(chunk);
+```
+do|ing.    un|der    Fast|er.    As|k.    Bli|nk.    Braino|OS    Braino|Notch
 ```
 
-**Chunking roughly doubles the stamps per line, so halve the per-stamp cadence** or the film reads at half speed. A 3-word line at 360ms becomes a 5-stamp line at ~215ms for the same reading pace.
+The head is a chunk you can already read and the tail is usually the **suffix**, so the second stamp completes a word rather than finishing a spelling. Split on meaning: `wait`+`s.`, `open`+`ed.`, `al`+`ready`, `a`+`wake.`, `Brain`+`o.` — that last one works because the word *Brain* is already sitting inside the name and the split just shows you.
 
-**Match cuts stay locked to the chunks.** Compute the flip from the SAME starts array that drives the stamps, so a cut can never drift out of sync with the chunk it belongs to. A sentence gets ONE cut, on its final chunk, held a little longer — two flashes inside a line that is still assembling read as a stutter, not a hit. A number or a date can strobe per chunk, because there every chunk IS a beat.
+**Never write a formula for this.** A rule that halves every word of four-plus letters produces `Bra`/`ino.`, `Th`/`is`, `one`/`'s` — a machine spelling words out, which is exactly how it reads on screen. Words with no natural break (`told.`, `This`, `app`) stay whole, and most words in a script stay whole.
+
+**Chunking adds stamps to a line, so bring that line's cadence down** or it plays at half speed. A 3-word line at 360ms becomes a 4-stamp line at ~300ms for the same reading pace.
 
 ## Match cuts (frame inversion)
+
+**Invert sparingly — usually ONE beat in the film.** Flipping on every chunk of every line means the frame strobes for most of the run and nothing reads as a hit. Pick the payload (the date, the mic-drop word) and let everything else stay on white.
+
+**The completed line must land on WHITE.** With an `idx % 2` alternation, check the parity against the chunk count: on the wrong one the frame goes black at the exact moment a sentence finishes, and the film reads as ending mid-sentence. This is the single easiest thing to get backwards here.
 
 The white/black full-frame flip, held while a specific word/phrase is the active one. Reuse the ONE shared `invert2` overlay element across every match-cut moment in the film (they never overlap in time, so one element suffices) — see `render()`'s consolidated block right after the intro's own invert logic.
 

@@ -23,46 +23,36 @@ import "./dont-blink.css";
 
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 
-/* THE CHUNKING RULE, applied to everything rather than to favourite words.
+/* CHUNKING, hand-authored, the way IntroTeaser and NotchTeaser do it.
  *
- * Any word of four or more letters breaks into two stamps: "Every" becomes
- * "Eve" then "+ry", "waits." becomes "wa" then "+its." The "+" fuses the tail
- * flush against the head, so it still reads as one word while arriving as two
- * hits. Short words (to, be, app) stay whole because there is nothing to
- * build.
+ * There was a formula here that split every word of four-plus letters down the
+ * middle. It was wrong twice over. Their films chunk RARELY — five pairs in
+ * 1543 lines — and they split on MEANING, not on character count:
  *
- * Written as a function on purpose. Hand-splitting the words I happened to
- * think were important is exactly how the film ended up with three chunked
- * words and everything else just appearing, which is the note this fixes.
- * Trailing punctuation rides with the tail so "waits." never becomes "wa its ."
+ *     do|ing.    un|der    Fast|er.    As|k.    Bli|nk.
+ *
+ * The head is a chunk you can already read and the tail is usually the suffix,
+ * so the second stamp completes a word rather than finishing a spelling. A
+ * formula gave "Bra"/"ino.", "Th"/"is", "one"/"'s" — a machine spelling words
+ * out, which is exactly what it read as.
+ *
+ * So these are chosen. "wait"+"s.", "open"+"ed.", "ask"+"ed." are the Fast|er
+ * pattern. "al"+"ready" and "a"+"wake." are the real morpheme boundaries.
+ * "Brain"+"o." is the best of them, because the word Brain is already sitting
+ * inside the name and the split just shows you. Words with no natural break
+ * ("told.", "This", "app") stay whole.
  */
-const chunk = (word: string): string[] => {
-  const m = word.match(/^([A-Za-z0-9']+)(.*)$/);
-  if (!m) return [word];
-  const [, core, tail] = m;
-  /* LETTERS, not characters, and five rather than four. At four an apostrophe
-     counted toward the threshold and "one's" split into "one" + "'s", which is
-     a machine spelling a word out rather than building one. Four-letter words
-     ("This", "told") have nothing to build either — the head would be two
-     letters and two letters is a stutter. */
-  const letters = core.replace(/'/g, "").length;
-  if (letters < 5) return [word];
-  /* Straight down the middle, head rounded up. Four letters is the threshold
-     to split at all, not the size of a chunk — "Eve"/"ry", "wai"/"ts.",
-     "Brai"/"no." A brief detour fixed the head at four letters instead, which
-     stopped almost every word in the script from chunking at all: at that size
-     only a six-letter word qualifies, and this script is mostly fours and
-     fives. */
-  const at = Math.ceil(core.length / 2);
-  return [core.slice(0, at), "+" + core.slice(at) + tail];
-};
-const chunked = (words: string[]) => words.flatMap(chunk);
 
 /* ── The script ─────────────────────────────────────────────────────────── */
 
 // The triple. Same shape three times, tightening each time: that acceleration
 // is the energy, and it argues the point rather than decorating it.
-const WAIT_PHRASES = [["Every", "app", "waits."], ["To", "be", "opened."], ["To", "be", "asked."], ["To", "be", "told."]].map(chunked);
+const WAIT_PHRASES = [
+  ["Every", "app", "wait", "+s."],
+  ["To", "be", "open", "+ed."],
+  ["To", "be", "ask", "+ed."],
+  ["To", "be", "told."],
+];
 // The "To be ..." lines are SLOWER than the opener, not faster. They were 330
 // / 310 / 290 on the theory that a triple should accelerate, but these are
 // three-word lines where the last word is the whole point ("opened", "asked",
@@ -81,12 +71,14 @@ const BOOT_DUR = 1150;
 
 // The turn, and the last word builds: "awa" lands, "+ke." completes it. The
 // sentence arrives, then the word that matters assembles.
-const AWAKE_PHRASES = [chunked(["This", "one's", "already", "awake."])];
+const AWAKE_PHRASES = [["This", "one's", "al", "+ready", "a", "+wake."]];
 // Not a metronome. Eight identical beats is what made this line read as a
 // machine reciting: the setup should move and the payoff should land. "This
 // one's" goes past quickly because it is only there to carry you to "already
 // awake", which then takes its time.
-const AWAKE_STARTS = [0, 175, 370, 640, 930, 1230];
+// Six stamps: This / one's / al / ready / a / wake. The setup moves, the two
+// builds take their time, so it speaks instead of ticking.
+const AWAKE_STARTS = [0, 200, 420, 620, 900, 1120];
 const AWAKE_SW = 265;
 const AWAKE_SPAN = AWAKE_STARTS[AWAKE_STARTS.length - 1] + 300;
 const AWAKE_HOLD = 420;
@@ -95,7 +87,7 @@ const AWAKE_HOLD = 420;
 // and CHUNKED: "Brai" lands, then "no." joins flush against it and completes
 // the word in front of you. Two stamps, one word. That build is the mechanic;
 // a flash on a whole word is just a flash.
-const NAME_PHRASES = [chunked(["Braino."])];
+const NAME_PHRASES = [["Brain", "+o."]];
 const NAME_SW = 330;
 const NAME_HOLD = 520;
 
@@ -289,48 +281,25 @@ export default function DontBlink() {
         graphic.classList.remove("is-waking");
       }
 
-      /* MATCH CUTS, locked to the chunking.
-         Every stamp in a chunked scene gets its own flip, computed straight
-         off t rather than off the kinetic latch — the latch stays true for the
-         rest of the film once a word lands, so gating on it alone pins the
-         frame inverted to the end (the one bug this format keeps repeating).
-         Each window is bounded by its own scene, so nothing can leak forward. */
-      /* Reads the very array that drives the stamps, so a cut can never drift
-         out of sync with the chunk it belongs to. */
-      const stompAt = (from: number, to: number, starts: number[]) => {
-        if (t < from || t >= to) return false;
+      /* Which stamp is active, from t alone. */
+      const idxAt = (from: number, starts: number[]) => {
         const rel = t - from;
-        return starts.some((at) => rel >= at && rel < at + STOMP_MS);
+        let a = -1;
+        for (let i = 0; i < starts.length; i++) if (rel >= starts[i]) a = i;
+        return a;
       };
-      /* One cut, at one offset, with its own length — for a beat that should
-         land once and land heavier. */
-      const stompOnce = (from: number, to: number, at: number, ms: number) => {
-        if (t < from || t >= to) return false;
-        const rel = t - from;
-        return rel >= at && rel < at + ms;
-      };
-      const stomp = (from: number, to: number, count: number, sw: number, skip = 0) => {
-        if (t < from || t >= to) return false;
-        const rel = t - from;
-        for (let i = skip; i < count; i++) {
-          const at = i * sw;
-          if (rel >= at && rel < at + STOMP_MS) return true;
-        }
-        return false;
-      };
-
-      const inv =
-        /* The turn gets ONE cut, on the last chunk, and a longer one.
-           It was firing on both "awa" and "ke." 265ms apart, and two flashes
-           inside a sentence that is still assembling reads as a stutter, not a
-           hit — a glitch in the render rather than a decision. The date can
-           strobe per digit because every digit IS a beat; a sentence has one
-           beat, at the end, when it finishes being a sentence. */
-        stompOnce(T.awake, T.name, AWAKE_STARTS[AWAKE_STARTS.length - 1], 220) ||
-        // the name assembling: Brai, then no.
-        stomp(T.name, T.date, NAME_PHRASES[0].length, NAME_SW) ||
-        // the payload: three numbers, three hits
-        stompAt(T.date, T.stand, DATE_STARTS);
+      /* ONE beat inverts, not every line.
+       *
+       * Flipping on every chunk of every line meant the frame was strobing for
+       * most of the film, which makes none of it feel like a hit. The date is
+       * the payload and the only thing here worth cutting on, so it keeps its
+       * per-chunk rhythm and everything else stays on white.
+       *
+       * Even parity, so the completed date lands on WHITE and stays there. On
+       * odd it went black at the exact moment the line finished, and the film
+       * read as ending mid-sentence. */
+      const dateIdx = idxAt(T.date, DATE_STARTS);
+      const inv = t >= T.date && t < T.stand && dateIdx >= 0 && dateIdx % 2 === 0;
 
       invert.style.opacity = inv ? "1" : "0";
     };
