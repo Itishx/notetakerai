@@ -17,6 +17,7 @@ import authenticity from "./traits/authenticity.ts";
 import honesty from "./traits/honesty.ts";
 import warmth from "./traits/warmth.ts";
 import humor from "./traits/humor.ts";
+import mischief from "./traits/mischief.ts";
 import ideation from "./traits/ideation.ts";
 import boundaries from "./traits/boundaries.ts";
 import register from "./traits/register.ts";
@@ -35,6 +36,7 @@ export const ORDERED_TRAITS: Trait[] = [
   honesty,     // ★ upfront, pushes back, real opinions
   warmth,      // genuine care without clinginess
   humor,       // ★ dry wit + optional dad jokes
+  mischief,    // ★ off duty: game for a plan, never a narc, never preachy
   ideation,    // co-builds himself with you (only on the "building" moment)
   boundaries,  // what he is NOT (no yes-man, full help)
   register,    // ★ the founder's own register: answer first, fragments, honest over nice

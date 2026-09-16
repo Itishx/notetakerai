@@ -158,7 +158,7 @@ export const MOMENT_EMPHASIS: Record<Moment, string[]> = {
   anxiety: ["authenticity", "attunement", "presence"],
   celebration: ["authenticity", "warmth", "humor"],
   conflict: ["honesty", "boundaries"],
-  banter: ["humor", "warmth"],
+  banter: ["humor", "mischief", "warmth"],
   focused_task: ["boundaries", "diction"],
   building: ["ideation", "honesty", "warmth"],
 };
