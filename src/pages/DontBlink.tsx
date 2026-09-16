@@ -3,7 +3,7 @@
  * Same DNA as NotchTeaser (.claude/skills/kinetic-teaser-video): one dead
  * centre spot, one size, words ACCUMULATE inside a phrase and phrases hard-cut
  * in the same place. Reuses notch-teaser.css so the type is literally the same
- * block, and the real NotchFace rather than a mock of one.
+ * block. It closes on the real walking mascot, who winks.
  *
  * The script is built on ONE contrast, which is why every line pulls the same
  * direction: three things that WAIT, then the one already awake. An earlier
@@ -16,7 +16,6 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import NotchFace, { setNotchStatus } from "@/components/NotchFace";
 import { BRAINO_WALKER_SVG } from "@/components/brainoWalkerSvg";
 import "./notch-teaser.css";
 import "./dont-blink.css";
@@ -63,9 +62,6 @@ const LINE2_PHRASES = [["St", "+art", "talk", "+ing", "to", "it."]];
 const LINE2_SW = 300;
 const LINE2_HOLD = 800;
 
-// The boot IS the film's middle, not a transition inside it: six seconds of
-// the real notch, beat for beat as the Mac app's own runNotchBoot runs.
-const BOOT_DUR = 6200;
 
 // The word Brain is already sitting inside the name; the split just shows you.
 const NAME_PHRASES = [["Bra", "+ino."]];
@@ -83,11 +79,24 @@ const DATE_FAST_FROM = 4;
 const DATE_STARTS = DATE_CHUNKS.map((_, i) =>
   i < DATE_FAST_FROM ? i * DATE_SLOW : DATE_FAST_FROM * DATE_SLOW + (i - DATE_FAST_FROM) * DATE_FAST);
 const DATE_SPAN = DATE_STARTS[DATE_STARTS.length - 1] + DATE_FAST;
-const DATE_HOLD = 1500;
+const DATE_HOLD = 1900;
+/* A hard beat of nothing between the date clearing and him walking on. Without
+   it the mascot lands the instant 2026 leaves, in the same spot, and the swap
+   reads as Braino REPLACING the year rather than following it — which is
+   exactly how it played once the notch that used to separate them was cut. */
+const AFTER_DATE = 300;
 const STOMP_MS = 130;
 
-// He walks on, alone on white, and then the frame goes black under him.
-const STAND_DUR = 1150;
+/* He walks on alone, settles, winks, and the frame goes black under him.
+ *
+ * The wink is the whole ending. A mascot that just stands there is a logo; the
+ * same mascot closing one eye is somebody who knows something you don't, which
+ * is the only note a teaser thirty days out should end on. It is one eye group
+ * squashed to nothing about its own centre and let back up, which is why it
+ * reads as a blink rather than a shape changing. */
+const STAND_DUR = 1900;
+const WINK_AT = 700;
+const WINK_MS = 190;
 const CUT_TAIL = 420;
 
 /* ── Timing ─────────────────────────────────────────────────────────────── */
@@ -114,14 +123,13 @@ const buildTimeline = (H: number) => {
     return v;
   };
   const line1 = S(250);
-  const boot  = S(line1 + LINE1_PHRASES[0].length * LINE1_SW + LINE1_HOLD);
-  const line2 = S(boot + BOOT_DUR);
+  const line2 = S(line1 + LINE1_PHRASES[0].length * LINE1_SW + LINE1_HOLD);
   const name  = S(line2 + LINE2_PHRASES[0].length * LINE2_SW + LINE2_HOLD);
   const date  = S(name + NAME_PHRASES[0].length * NAME_SW + NAME_HOLD + H * 0.06);
-  const stand = S(date + DATE_SPAN + DATE_HOLD + H * 0.06);
+  const stand = S(date + DATE_SPAN + DATE_HOLD + AFTER_DATE + H * 0.06);
   const black = S(stand + STAND_DUR);
   const end   = Math.round(black + CUT_TAIL);
-  return { line1, boot, line2, name, date, stand, black, end };
+  return { line1, line2, name, date, stand, black, end };
 };
 
 const solveHold = (target: number) => {
@@ -129,7 +137,7 @@ const solveHold = (target: number) => {
   return clamp((target - e0) / ((e1 - e0) / 1000), 100, 8000);
 };
 
-const TARGET_MS = 18000;
+const TARGET_MS = 13500;
 const H = solveHold(TARGET_MS);
 const T = buildTimeline(H);
 
@@ -153,7 +161,6 @@ export default function DontBlink() {
     const dateEl = $(".lt-date");
     const standEl = $(".lt-stand");
     const blackEl = $(".lt-black");
-    const graphic = $(".lt-graphic");
     const invert = $(".lt-invert");
 
     /* These caches latch the LAST REACHED index on purpose, so revealed words
@@ -210,31 +217,24 @@ export default function DontBlink() {
     const show = (el: HTMLElement, on: boolean) => { el.style.opacity = on ? "1" : "0"; };
 
     const render = (t: number) => {
-      show(line1El, t >= T.line1 && t < T.boot);
+      show(line1El, t >= T.line1 && t < T.line2);
       show(line2El, t >= T.line2 && t < T.name);
       show(nameEl,  t >= T.name  && t < T.date);
-      show(dateEl,  t >= T.date  && t < T.stand);
-      show(graphic, t >= T.boot && t < T.line2);
+      show(dateEl,  t >= T.date  && t < T.stand - AFTER_DATE);
       /* He stands, alone on white, then the frame goes black under him. */
       show(standEl, t >= T.stand && t < T.black);
       blackEl.style.opacity = t >= T.black ? "1" : "0";
 
-      if (t >= T.line1 && t < T.boot)  sequence(line1El, LINE1_PHRASES, [0], T.line1, LINE1_SW, t);
+      if (t >= T.line1 && t < T.line2) sequence(line1El, LINE1_PHRASES, [0], T.line1, LINE1_SW, t);
       if (t >= T.line2 && t < T.name)  sequence(line2El, LINE2_PHRASES, [0], T.line2, LINE2_SW, t);
       if (t >= T.name  && t < T.date)  sequence(nameEl, NAME_PHRASES, [0], T.name, NAME_SW, t);
       if (t >= T.date  && t < T.stand) kineticStarts(dateEl, DATE_STARTS, T.date, t);
 
-      /* The notch's own boot, driven off the same clock. setNotchStatus takes
-         the host element, not just a string — it writes into the face's own
-         .nf-status node. */
-      const notch = graphic.querySelector<HTMLElement>(".nf");
-      if (t >= T.boot && t < T.line2) {
-        const p = (t - T.boot) / BOOT_DUR;
-        graphic.classList.toggle("is-waking", p < 0.5);
-        if (notch) setNotchStatus(notch, "");
-      } else {
-        graphic.classList.remove("is-waking");
-      }
+      /* One eye, closed and reopened. Bounded by the stand window so the
+         class can never be left on by a scrub or a loop wrap. */
+      const winkRel = t - T.stand;
+      standEl.classList.toggle("is-wink",
+        t >= T.stand && t < T.black && winkRel >= WINK_AT && winkRel < WINK_AT + WINK_MS);
 
       /* ONE CUT PER NUMBER on the date, and nothing anywhere else.
        *
@@ -282,7 +282,6 @@ export default function DontBlink() {
       <div className="nt-films">
         <div className="nt-frame">
           <div className="nt-stage">
-            <div className="lt-graphic"><NotchFace /></div>
             <div className="lt-line1" />
             <div className="lt-line2" />
             <div className="lt-name" />

@@ -57,14 +57,6 @@
 /* The graphic is ONE persistent element across boot and the closing wink,
    never duplicated, so it can never hard-cut between two different states of
    itself — which reads as a mistake rather than a transition. */
-.lt .lt-graphic {
-  position: absolute; left: 50%; top: 50%;
-  transform: translate(-50%, -50%);
-  opacity: 0;
-  transition: opacity .18s linear;
-  z-index: 3;
-  will-change: opacity;
-}
 
 /* The frame flip. ONE overlay reused by every match cut in the film, because
    they never overlap in time. Pure opacity so it costs nothing per frame. */
@@ -113,4 +105,20 @@
   opacity: 0;
   pointer-events: none;
   z-index: 10;
+}
+
+/* ── The wink ──────────────────────────────────────────────────────────────
+   One eye group squashed to nothing about its OWN centre and let back up.
+   transform-box: view-box is what makes that centre expressible at all — the
+   default (stroke-box) would resolve 38px 48px against the element's own tiny
+   bounding box and the eye would fly off the face instead of closing. */
+.lt-stand #__sbwk_eye_l__ {
+  transform-box: view-box;
+  transform-origin: 38px 48px;
+  transition: transform .085s ease-in-out;
+}
+.lt-stand.is-wink #__sbwk_eye_l__ { transform: scaleY(.06); }
+
+@media (prefers-reduced-motion: reduce) {
+  .lt-stand #__sbwk_eye_l__ { transition: none; }
 }
