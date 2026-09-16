@@ -380,6 +380,23 @@ let wakeWordArmed = false;
    recent history and says "You can speak now" only once the session is really
    live, so it never tells you to talk into a microphone that is not open yet. */
 let voiceStart = { phase: "", startedAt: 0, estimateMs: 0, readyAt: 0 };
+/* HERA, live, while you talk to him. OpenAI's transcript only arrives after a
+   pause, so the notch showed your words late and in chunks; HERA runs on this
+   Mac and reports them as you say them. See heraVoiceStart. */
+let heraVoice = { on: false };
+let heraVoiceStarting = false;
+let heraVoiceStartTries = 0;
+const HERA_ROTATE_EXPIRE_MS = 2500;
+const HERA_SEGMENT_WAIT_MS = 600;
+const HERA_SAFETY_ROTATE_MS = 45000;
+const HERA_ECHO_TAIL_MS = 700;
+/* The caption is words still being spoken ("You're saying") rather than a
+   finished sentence ("You said"). */
+let nfHeardLive = false;
+/* Long speech gets the wide sheet, and keeps it until the caption closes, so
+   the box does not jump sideways the moment a sentence crosses the line. */
+let nfInlineLongLatched = false;
+const NF_INLINE_LONG_CHARS = 110;
 let voiceStartTicker = 0;
 const VOICE_CONNECT_HISTORY_KEY = "brainoVoiceConnectMs";
 const VOICE_CONNECT_DEFAULT_MS = 3800;
@@ -2757,15 +2774,27 @@ function syncInlineVoiceSurface(mode = "", text = "", options = {}) {
      is never painted twice. */
   const voiceMode = active && (mode === "starting" || mode === "ready");
 
+  const spoken = active && !typingOpen && (mode === "heard" || mode === "thinking");
+  const liveWords = spoken && mode === "heard" && nfHeardLive;
+  /* Let long speech breathe: the wide sheet, larger line spacing, and the
+     oldest line fading out at the top instead of a cramped block. */
+  if (!active) nfInlineLongLatched = false;
+  else if (spoken && value.length > NF_INLINE_LONG_CHARS) nfInlineLongLatched = true;
+  const wide = active && nfInlineLongLatched;
+
   if (active) cancelNotchSurfaceExit();
   else if (wasActive) beginNotchSurfaceExit();
   notchFace.classList.toggle("nf-inline-open", active);
   notchFace.classList.remove("nf-inline-thinking");
+  notchFace.classList.toggle("nf-inline-long", wide);
+  notchFace.classList.toggle("nf-inline-trimmed", spoken && Boolean(options.trimmed));
+  notchFace.classList.toggle("nf-inline-hera", liveWords);
   notchFace.classList.toggle("nf-inline-working", active && !typingOpen && (mode === "thinking" || mode === "starting"));
   notchFace.classList.toggle("nf-voice-starting", active && !typingOpen && mode === "starting");
   notchFace.classList.toggle("nf-voice-ready", active && !typingOpen && mode === "ready");
   if (nfInlineCaptionLabelEl) {
-    nfInlineCaptionLabelEl.textContent = typingOpen ? "You typed" : (voiceMode ? "Voice" : "You said");
+    const spokenLabel = liveWords ? "You're saying" : "You said";
+    nfInlineCaptionLabelEl.textContent = typingOpen ? "You typed" : (voiceMode ? "Voice" : spokenLabel);
   }
   if (nfInlineCaptionStateEl) {
     nfInlineCaptionStateEl.textContent = typingOpen ? "Typing" : String(options.state || "Live");
@@ -2785,7 +2814,8 @@ function syncInlineVoiceSurface(mode = "", text = "", options = {}) {
       window.setTimeout(() => refitOpenInlineCaption(), delay);
     });
   }
-  const key = active ? `${mode}:${height}` : "closed";
+  const zoneWidth = wide ? NF_READING_SURFACE_WIDTH : NF_COMPACT_SURFACE_WIDTH;
+  const key = active ? `${mode}:${height}:${zoneWidth}` : "closed";
 
   // The notch is the only conversational text surface. A partial transcript
   // can arrive one frame after an older mascot bubble was painted; clear that
@@ -2800,7 +2830,7 @@ function syncInlineVoiceSurface(mode = "", text = "", options = {}) {
   if (key === nfInlineZoneKey) return;
   nfInlineZoneKey = key;
   if (active) {
-    window.brainoMac.setNotchZone?.({ expanded: true, width: NF_COMPACT_SURFACE_WIDTH, height });
+    window.brainoMac.setNotchZone?.({ expanded: true, width: zoneWidth, height });
   } else if (
     !nfAnswerMode
     && !notchFace.classList.contains("nf-answer-open")
@@ -2875,6 +2905,7 @@ function layoutNotchCaption(text) {
 function nfSetHeard(text, options = {}) {
   const previous = nfHeardText;
   nfHeardText = String(text || "").trim();
+  nfHeardLive = Boolean(options.live) && Boolean(nfHeardText);
   if (nfHeardText) {
     if (nfHeardText !== previous) nfHeardShownAt = Date.now();
     // Your words take over from "You can speak now" the moment they arrive.
@@ -3123,7 +3154,15 @@ function updateNotchFace() {
    *
    * The character budget is NF_INLINE_MAX_CHARS and trims from the FRONT, so the
    * newest words you are speaking are always the ones on screen. */
-  const heardForInline = compactNotchCaption(nfHeardText, NF_INLINE_MAX_CHARS);
+  /* Trimmed from the FRONT so the newest words stay on screen, at a word
+     boundary, and without the "..." — the top line fades out instead. */
+  let heardForInline = String(nfHeardText || "").trim();
+  const heardTrimmed = heardForInline.length > NF_INLINE_MAX_CHARS;
+  if (heardTrimmed) {
+    const tail = heardForInline.slice(-NF_INLINE_MAX_CHARS);
+    const cut = tail.indexOf(" ");
+    heardForInline = (cut > 0 && cut < 24 ? tail.slice(cut + 1) : tail).trim();
+  }
   const voiceStartMode = dictationMode ? "" : voiceStartPhase();
   let inlineMode = "";
   if (visible && !herMode && !answerOwnsNotch && !yapOwnsNotch && !thinkingOpen) {
@@ -3136,9 +3175,12 @@ function updateNotchFace() {
     : (inlineMode ? voiceStartText(inlineMode) : "");
   const inlineState = inlineMode === "thinking"
     ? THINKING_PHASES[thinkingPhaseIndex]
-    : (inlineMode === "starting" ? "Starting" : "Live");
+    : (inlineMode === "starting" ? "Starting" : (inlineMode === "heard" && nfHeardLive ? "HERA" : "Live"));
   layoutNotchCaption("");
-  syncInlineVoiceSurface(inlineMode, inlineText, { state: inlineState });
+  syncInlineVoiceSurface(inlineMode, inlineText, {
+    state: inlineState,
+    trimmed: heardTrimmed && (inlineMode === "heard" || inlineMode === "thinking"),
+  });
   const yapWasOpen = notchFace.classList.contains("nf-yap-open");
   notchFace.classList.toggle("nf-yap-open", yapOwnsNotch);
   if (yapOwnsNotch) cancelNotchSurfaceExit();
@@ -5950,6 +5992,7 @@ async function speak(text, options = {}) {
       currentSpeechAudio = null;
       setTalk(false);
       logRenderer("speech.done", { chars: line.length, durationMs: Math.round(performance.now() - startedAt) });
+      heraVoiceRotate("braino_spoke", { echoTail: true });
       if (showReplyCaption) finishReplyCaption(generation);
       if (realtimeActive && !processing) {
         setStatus("listening", "Listening");
@@ -6956,6 +6999,7 @@ function markRealtimeActivity(reason, options = {}) {
 
 function stopRealtimeVoice(options = {}) {
   voiceStartEnd();
+  heraVoiceStop("session_end");
   // This bump is what cancels any start still in flight, and for a long time it
   // happened in total silence. Tracing "why did realtime.start.cancelled fire"
   // meant reasoning backwards from the absence of a log line, twice, across two
@@ -7838,7 +7882,7 @@ async function routeInterjectionIntoRunningJob(transcript) {
 }
 
 async function flushRealtimeTranscript(reason) {
-  const transcript = String(rtUserTranscript || "").trim();
+  let transcript = String(rtUserTranscript || "").trim();
   if (reason === "speech_stopped" && transcript && !rtTranscriptFinal) {
     scheduleRealtimeTranscriptFlush("waiting_final_transcript", REALTIME_TRANSCRIPT_IDLE_FLUSH_MS);
     return;
@@ -7871,6 +7915,9 @@ async function flushRealtimeTranscript(reason) {
     scheduleRealtimeIdleShutdown("filler_transcript");
     return;
   }
+  // OpenAI decided whether this was for him; HERA says what the words were.
+  if (accepted) transcript = await heraCommandText(transcript);
+  else if (heraVoice.on) heraVoice.turnRotate = null;
   if (isStopListeningPhrase(transcript)) {
     console.log(`[Braino 🎤 IN] "${transcript}" -> stop listening`);
     logRenderer("voice.stop_phrase", { transcript: transcript.slice(0, 160), voiceTurnInFlight });
@@ -8089,6 +8136,7 @@ function handleRealtimeEvent(event) {
       rtUserTranscript = "";
       rtTranscriptFinal = false;
       clearRealtimeTranscriptFlush();
+      if (heraVoice.on) heraVoice.userSpeaking = true;
     }
     // Trust the physical audio state, not just the flags: `speaking` can go
     // stale while a long Fish stream is still audible, which used to make
@@ -8113,6 +8161,9 @@ function handleRealtimeEvent(event) {
         responseInFlight: realtimeResponseInFlight,
       });
       rtBargeInAt = Date.now();
+      // His voice is in HERA's segment; drop it. The reset can eat your first
+      // words, so the next segment is not trusted as a command either.
+      heraVoiceRotate("barge_in", { clipsNext: true });
       interruptVoiceTurn("barge_in", "speech_started");
       setStatus("hearing", "Hearing you");
       return;
@@ -8128,6 +8179,11 @@ function handleRealtimeEvent(event) {
   if (event.type === "input_audio_buffer.speech_stopped") {
     markRealtimeActivity("speech_stopped", { schedule: false });
     markVoiceLatency("speech_stopped");
+    // One HERA segment per turn: the words of this turn, closed at the pause.
+    if (!dictationMode && heraVoice.on) {
+      heraVoice.userSpeaking = false;
+      heraVoice.turnRotate = heraVoiceRotate("turn_end");
+    }
     if (dictationMode) {
       dictationSpeechActive = false;
       // Server VAD emits `committed` immediately after `speech_stopped`.
@@ -8170,7 +8226,8 @@ function handleRealtimeEvent(event) {
         rtTranscriptFinal = false;
         rtUserTranscript += delta;
         if (herMode) window.HerMode?.setHeard(rtUserTranscript.trim());
-        nfSetHeard(rtUserTranscript.trim());
+        // HERA is already showing these words, earlier; two sources in one box flicker.
+        if (!heraVoice.on) nfSetHeard(rtUserTranscript.trim());
         scheduleRealtimeTranscriptFlush("transcript_idle", REALTIME_TRANSCRIPT_IDLE_FLUSH_MS);
       }
     }
@@ -8650,6 +8707,7 @@ async function startRealtimeVoice(options = {}) {
     if (!isDictation) {
       voiceStartReady();
       namedOpenAtReady();
+      void heraVoiceStart("session_ready");
     }
     markRealtimeActivity("realtime_ready");
     if (!isDictation) startFishWarmKeepAlive();
@@ -10069,6 +10127,195 @@ function stopVoiceWakeShimmer() {
   voiceWakeShimmerAdded = [];
 }
 
+/* ── HERA, live, while you talk to him ─────────────────────────────────────
+ *
+ * One live transcript, two endings. Option twice: HERA's words are cleaned up
+ * and typed where your cursor is (unchanged, main's dictation path). Talking to
+ * Braino: the same live words show in the notch as "You're saying", and when
+ * you stop, that sentence is the command.
+ *
+ * HERA runs beside the voice session in a display-only mode, rotated into one
+ * segment per turn at every pause. The turn's segment becomes the command
+ * unless something says it cannot be trusted, and then OpenAI's transcript of
+ * the same turn is used instead:
+ *   - Braino was audible during it (HERA has no echo cancellation, so his own
+ *     voice through the speakers is in there),
+ *   - it began with a barge-in (the reset gap can eat your first words),
+ *   - it has clearly fewer words than OpenAI heard, or it never arrived. */
+function heraVoiceReset(on) {
+  heraVoice = {
+    on,
+    settled: "",
+    partial: "",
+    raw: false,
+    dirty: false,
+    clipped: false,
+    userSpeaking: false,
+    rotates: [],
+    turnRotate: null,
+    lastRotateAt: Date.now(),
+    lastRawAt: 0,
+    ignoreUntil: 0,
+  };
+}
+
+async function heraVoiceStart(reason) {
+  if (heraVoice.on || heraVoiceStarting || dictationMode || herMode || !realtimeActive) return;
+  heraVoiceStarting = true;
+  try {
+    const result = await window.brainoMac.voiceCaption?.({ action: "start" });
+    if (result?.ok && realtimeActive && !dictationMode) {
+      heraVoiceReset(true);
+      heraVoiceStartTries = 0;
+    }
+    logRenderer("hera_voice.start", { ok: Boolean(result?.ok), why: result?.reason || "", reason });
+    // The models load once at launch; a session that opens first waits for them.
+    if (!result?.ok && result?.reason === "warming" && realtimeActive && heraVoiceStartTries < 20) {
+      heraVoiceStartTries += 1;
+      window.setTimeout(() => void heraVoiceStart("warming_retry"), 3000);
+    }
+  } catch (error) {
+    logRenderer("hera_voice.start_failed", { error: errorForLog(error) });
+  } finally {
+    heraVoiceStarting = false;
+  }
+}
+
+function heraVoiceStop(reason) {
+  if (!heraVoice.on) return;
+  heraVoiceReset(false);
+  nfHeardLive = false;
+  void window.brainoMac.voiceCaption?.({ action: "stop", reason })?.catch?.(() => {});
+}
+
+/* Close the current segment and start a fresh one. The closing segment's
+   trust flags are captured here, at the request, because the helper sends
+   nothing at all for a segment with no words in it. */
+function heraVoiceRotate(reason, options = {}) {
+  if (!heraVoice.on) return null;
+  const now = Date.now();
+  const request = {
+    reason,
+    at: now,
+    dirty: heraVoice.dirty,
+    clipped: heraVoice.clipped,
+    text: "",
+    done: !heraVoice.raw,
+  };
+  heraVoice.rotates = heraVoice.rotates.filter((r) => !r.done && now - r.at < HERA_ROTATE_EXPIRE_MS);
+  heraVoice.rotates.push(request);
+  heraVoice.settled = "";
+  heraVoice.partial = "";
+  heraVoice.raw = false;
+  heraVoice.dirty = false;
+  heraVoice.clipped = Boolean(options.clipsNext);
+  heraVoice.lastRotateAt = now;
+  if (options.echoTail) heraVoice.ignoreUntil = now + HERA_ECHO_TAIL_MS;
+  void window.brainoMac.voiceCaption?.({ action: "rotate", reason })?.catch?.(() => {});
+  return request;
+}
+
+function brainoAudible() {
+  return Boolean(activeSpeechJobGeneration)
+    || speaking
+    || Boolean(currentSpeechAudio)
+    || Boolean(realtimeStreamTts)
+    || activeSpeechAudios.size > 0;
+}
+
+/* The phrase HERA has settled, then the words it is still hearing. The running
+   hypothesis can repeat the end of the settled phrase, so the overlap is
+   dropped rather than shown twice. */
+function heraVoiceLiveText() {
+  const settled = String(heraVoice.settled || "").trim();
+  const partial = String(heraVoice.partial || "").trim();
+  if (!settled) return partial;
+  if (!partial) return settled;
+  const a = settled.split(/\s+/);
+  const b = partial.split(/\s+/);
+  const norm = (w) => w.toLowerCase().replace(/[^\p{L}\p{N}']/gu, "");
+  let overlap = 0;
+  for (let n = Math.min(8, a.length, b.length); n > 0; n -= 1) {
+    const tail = a.slice(-n).map(norm).join(" ");
+    const head = b.slice(0, n).map(norm).join(" ");
+    if (tail && tail === head) { overlap = n; break; }
+  }
+  return [settled, b.slice(overlap).join(" ")].filter(Boolean).join(" ");
+}
+
+/* Which words become the command. HERA's, unless it cannot be trusted. */
+async function heraCommandText(openaiText) {
+  const request = heraVoice.turnRotate;
+  heraVoice.turnRotate = null;
+  const openaiWords = openaiText.split(/\s+/).filter(Boolean).length;
+  const useOpenAi = (why, extra = {}) => {
+    logRenderer("voice.command_text", { source: "openai", why, openaiWords, ...extra });
+    return openaiText;
+  };
+  if (!heraVoice.on) return useOpenAi("hera_off");
+  if (!request) return useOpenAi("no_turn_boundary");
+  if (!request.done) {
+    const until = Date.now() + HERA_SEGMENT_WAIT_MS;
+    while (!request.done && Date.now() < until) await wait(40);
+  }
+  const text = String(request.text || "").trim();
+  if (!text) return useOpenAi(request.done ? "hera_heard_nothing" : "hera_too_slow");
+  const heraWords = text.split(/\s+/).filter(Boolean).length;
+  if (request.dirty) return useOpenAi("braino_was_audible", { heraWords });
+  if (request.clipped) return useOpenAi("started_with_barge_in", { heraWords });
+  if (openaiWords >= 3 && heraWords < openaiWords * 0.7) return useOpenAi("hera_missed_words", { heraWords });
+  logRenderer("voice.command_text", { source: "hera", heraWords, openaiWords });
+  return text;
+}
+
+window.brainoMac.onVoiceCaption?.((event) => {
+  const type = String(event?.type || "");
+  if (type === "stopped") {
+    // Dictation or LIVE took HERA over, or the helper went away.
+    if (heraVoice.on) heraVoiceReset(false);
+    nfHeardLive = false;
+    logRenderer("hera_voice.stopped", { reason: String(event?.reason || "") });
+    return;
+  }
+  if (!heraVoice.on) return;
+  const text = String(event?.text || "").trim();
+  const now = Date.now();
+  if (type === "segment") {
+    const request = heraVoice.rotates.find((r) => !r.done && now - r.at < HERA_ROTATE_EXPIRE_MS);
+    if (request) {
+      request.text = text;
+      request.done = true;
+    }
+    return;
+  }
+  if (type !== "partial" && type !== "utterance") return;
+  heraVoice.raw = true;
+  heraVoice.lastRawAt = now;
+  if (brainoAudible() || now < heraVoice.ignoreUntil) {
+    heraVoice.dirty = true;
+    return;
+  }
+  if (type === "utterance") {
+    heraVoice.settled = text;
+    heraVoice.partial = "";
+  } else {
+    heraVoice.partial = text;
+  }
+  const live = heraVoiceLiveText();
+  if (live && !dictationMode && !herMode) nfSetHeard(live, { live: true });
+});
+
+/* A decoder that is never reset gets slower the longer it runs. Turns rotate
+   it constantly; this covers the stretches with no turns, such as music HERA
+   can hear and OpenAI ignores. Never while you are mid-sentence. */
+window.setInterval(() => {
+  if (!heraVoice.on || heraVoice.userSpeaking) return;
+  const now = Date.now();
+  if (now - heraVoice.lastRotateAt < HERA_SAFETY_ROTATE_MS) return;
+  if (heraVoice.lastRawAt && now - heraVoice.lastRawAt < 1500) return;
+  heraVoiceRotate("housekeeping");
+}, 5000);
+
 /* How long this Mac usually takes to open a voice session. The median of the
    last dozen, so one slow morning does not turn every countdown pessimistic. */
 function voiceConnectEstimateMs() {
@@ -10267,6 +10514,8 @@ window.brainoMac.onDictationUi?.((payload) => {
   } else {
     // The words have gone to the caret; the Notch should not keep holding them.
     window.setTimeout(() => { if (!dictationMode) nfClearCaptions(); }, 1200);
+    // Dictation borrowed HERA from the voice session; give it back.
+    if (realtimeActive) window.setTimeout(() => void heraVoiceStart("after_dictation"), 1500);
   }
   logRenderer("dictation.ui.local", { active, engine: "parakeet" });
   setStatus(active ? "listening" : "", active ? "BrainoHERA" : "");

@@ -135,7 +135,7 @@ test("voice subtitles stay inside Braino's box and expanded thinking fits its co
   assert.match(css, /\.nf-answer-short-text \.nf-answer-word:not\(:last-child\) \{ margin-right: \.24em; \}/);
   /* The caption carries your sentence, the voice countdown, and the phase in
      its own chip, so the call passes that chip's text. */
-  assert.match(updateFace, /syncInlineVoiceSurface\(inlineMode, inlineText, \{ state: inlineState \}\)/);
+  assert.match(updateFace, /syncInlineVoiceSurface\(inlineMode, inlineText, \{\s*state: inlineState,\s*trimmed:/);
   assert.match(updateFace, /layoutNotchCaption\(""\)/);
   assert.match(updateFace, /classList\.remove\("captioning"\)/);
   assert.doesNotMatch(updateFace, /layoutNotchCaption\(yapOwnsNotch \? "" : caption\)/);

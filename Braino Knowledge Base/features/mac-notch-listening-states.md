@@ -11,7 +11,8 @@ The notch now says what Braino's ears are doing, all the way through:
 
 - **Waking up.** Press Control twice, or say "Hey Braino". The outline of the notch lights up, a sheet drops down, and it counts down: *Live in 3, 2, 1*.
 - **Ready.** The moment the voice is actually live it says *You can speak now*.
-- **Hearing you.** Your words appear under *You said*, and they stay there while he works on them, with a small shimmering *Thinking* beside them.
+- **Hearing you, live.** While you talk, HERA (on this Mac) shows your words as you say them under *You're saying*, with a mint HERA chip. When you stop they become *You said*, and they stay there while he works on them, with a small shimmering *Thinking* beside them.
+- **Long sentences breathe.** Past about 110 characters the sheet widens, the lines get more room, and the oldest line fades out at the top instead of cramming.
 - **Asleep.** With "listen for my name" on, the notch reads *Say "Hey Braino" to wake me* while he is ignoring the room. Say his name and the outline lights up the way it does at boot.
 - **Stop the task.** "Braino, stop the task" stops a running job straight away, and he says *I stopped the task.*
 
@@ -35,14 +36,26 @@ Voice takes 2 to 6 seconds to come up (3.7 seconds median across the last 194 se
 - The thinking chip is one word. It used to cycle Thinking, Hatching, Deciding, Calibrating on a timer, which looked like progress and meant nothing.
 - A stopped job stays quiet. It used to finish with an empty answer, which he filled with "Done."
 
+### One live transcript, two endings
+
+- **Option twice** (dictation): HERA's words are cleaned up and typed where your cursor is. Unchanged.
+- **Talking to Braino**: the same live words show in the notch, and when you stop, that sentence is the command.
+
+OpenAI still decides whether a sentence was meant for him (it has echo cancellation). HERA's words become the command unless they cannot be trusted: Braino was audible while you spoke (HERA would have heard him), the turn began with you cutting him off (the reset can eat your first words), HERA clearly heard fewer words than OpenAI, or it did not answer within 600ms. Then OpenAI's words are used. Each choice is logged as `voice.command_text` with its reason.
+
 ## Honest limitations
 
 - The countdown is an estimate. It is honest about being late, but it cannot know the future.
 - Waking her from cold with "Hey Brainelle" needs the on-device listener to learn her name, which means rebuilding that helper and macOS asking for microphone access once more. Inside an open session her name already works.
 - A bare "stop" or "never mind" needs his name on it, because people say those to each other.
+- HERA's live words are a running guess and can change as you speak.
+- If HERA is still loading when voice opens, the notch falls back to OpenAI's words until it is ready (it retries every 3 seconds).
 - The stop phrase matches words, not meaning. Anything longer than six words goes to the normal understanding path.
 
 ## Technical shape
+
+- `mac/braino-mac/main.cjs`: `voiceCaptionMode` runs HERA display-only beside a voice session (`startVoiceCaption / stopVoiceCaption / rotateVoiceCaption / yieldVoiceCaption`, IPC `braino-mac:voice-caption`). Its partials, phrases and segments go to the renderer; its delta and final are swallowed, so nothing is typed or put on the clipboard. Dictation and LIVE take HERA over when they start.
+- Renderer: `heraVoiceStart / heraVoiceStop / heraVoiceRotate / heraVoiceLiveText / heraCommandText`. Rotated at each pause (`turn_end`), after he speaks (`braino_spoke`, with a 700ms echo tail), on a barge-in, and every 45s of quiet.
 
 - `mac/braino-mac/renderer/braino-mac.js`
   - `voiceStartBegin / voiceStartReady / voiceStartEnd / voiceStartPhase / voiceStartText`, history in localStorage `brainoVoiceConnectMs`.

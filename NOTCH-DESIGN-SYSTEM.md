@@ -511,8 +511,11 @@ All of these live in the inline caption sheet (`.nf-inline-open`, 480 wide, min 
 |---|---|---|---|
 | `.nf-voice-starting` + `.nf-inline-working` | Voice · STARTING (shimmer) | `Live in 3` → `Almost there` | 22px/600 at 70% white, tabular numbers. The boot trace draws around the sheet, growing on the sheet's 1050ms curve |
 | `.nf-voice-ready` | Voice · ● LIVE | `You can speak now` | coral chip with a pulsing dot (`nfMeetingPulse`). Holds 2.4s, or until your words arrive |
-| *(heard)* | You said · Live | your words | unchanged |
+| `.nf-inline-hera` | You're saying · ● HERA (mint) | your words, live | HERA on this Mac, while you are still talking. Mint is HERA's colour everywhere in the notch |
+| *(heard)* | You said · Live | your words | once you stop |
 | `.nf-inline-working` (+ `.nf-thinking`) | You said · THINKING (shimmer) | your words | the sentence stays for the whole job. A rule at the end of the stylesheet makes the open sheet win over the collapsed thinking pill (430×84) and hides the centred chip |
+
+**Long speech: `.nf-inline-long` + `.nf-inline-trimmed`.** Past 110 characters the sheet takes the 580 reading width (latched until the caption closes, so it never jumps sideways mid-sentence), 28px side padding, 16px text at 1.55 line height. Text is trimmed from the front at a word, no "...", and the top 1.6em fades out with a mask.
 
 The countdown starts from the median of the last 12 connect times on this Mac (`localStorage.brainoVoiceConnectMs`, clamped 1.5–7s) and never reaches "live" on its own.
 

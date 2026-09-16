@@ -5368,3 +5368,58 @@ body {
     height 1050ms cubic-bezier(.22,1,.36,1);
 }
 #notch-face.nf-voice-starting .nf-shine path { vector-effect: non-scaling-stroke; }
+
+/* ── Your words, live, with room to breathe ────────────────────────────────
+ *
+ * While you are still talking the caption reads YOU'RE SAYING, with a mint
+ * HERA chip: mint is HERA's colour everywhere else in the notch, and the words
+ * are coming from this Mac, not the cloud.
+ *
+ * Long speech used to be a dense 15px block clamped at six lines in a 480px
+ * box. Past NF_INLINE_LONG_CHARS it takes the 580px reading sheet, more air
+ * around it and between the lines, and the text is trimmed from the front at a
+ * word with the oldest line fading out at the top, so the newest words are
+ * always the ones in view and nothing looks jammed in. */
+#notch-face.nf-inline-open.nf-inline-long .nf-pill,
+#notch-face.nf-inline-open.nf-inline-long.nf-thinking:not(.nf-think-open) .nf-pill {
+  width: var(--nf-reading-surface-w);
+}
+#notch-face.nf-inline-long .nf-inline-caption {
+  padding-left: 28px;
+  padding-right: 28px;
+  padding-bottom: 18px;
+}
+#notch-face.nf-inline-long .nf-inline-caption-text {
+  margin-top: 12px;
+  font-size: 16px;
+  line-height: 1.55;
+  letter-spacing: -.008em;
+  color: rgba(255, 255, 255, .88);
+}
+#notch-face.nf-inline-trimmed .nf-inline-caption-text {
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 1.6em);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 1.6em);
+}
+
+#notch-face.nf-inline-hera .nf-inline-caption-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #8FF0CF;
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+#notch-face.nf-inline-hera .nf-inline-caption-state::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #3DE8B2;
+  box-shadow: 0 0 8px rgba(61, 232, 178, .8);
+  animation: nfMeetingPulse 1.7s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  #notch-face.nf-inline-hera .nf-inline-caption-state::before { animation: none; }
+}

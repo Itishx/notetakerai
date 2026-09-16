@@ -90,6 +90,13 @@ contextBridge.exposeInMainWorld("brainoMac", {
     ipcRenderer.on("braino-mac:dictation-ui", handler);
     return () => ipcRenderer.removeListener("braino-mac:dictation-ui", handler);
   },
+  /* HERA alongside voice mode: display only. See voiceCaptionMode in main. */
+  voiceCaption: (payload) => ipcRenderer.invoke("braino-mac:voice-caption", payload || {}),
+  onVoiceCaption: (callback) => {
+    const handler = (_event, payload) => callback(payload || {});
+    ipcRenderer.on("braino-mac:voice-caption", handler);
+    return () => ipcRenderer.removeListener("braino-mac:voice-caption", handler);
+  },
   onDictationPartial: (callback) => {
     const handler = (_event, payload) => callback(payload || {});
     ipcRenderer.on("braino-mac:dictation-partial", handler);

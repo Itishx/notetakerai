@@ -21,7 +21,7 @@ type State = {
   id: string; label: string; hint: string; classes: string;
   said?: string; phase?: string; answer?: string; steps?: string[];
   /* The caption's own label, chip and line when they are not "You said". */
-  caption?: { label: string; state: string; text?: string; countdown?: boolean };
+  caption?: { label: string; state: string; text?: string; countdown?: boolean; height?: number };
   /* The pill's one-line ticker (#nf-status). */
   status?: string;
   /* Replays the perimeter trace, the way a heard name does. */
@@ -41,7 +41,16 @@ const STATES: State[] = [
     hint: "The session is live. Holds long enough to read, then the listening pill takes over, or your words do.",
     classes: "on awake mic-live nf-inline-open nf-voice-ready",
     caption: { label: "Voice", state: "Live", text: "You can speak now" } },
-  { id: "heard", label: "3 \u00b7 He hears you",
+  { id: "saying", label: "3 \u00b7 You're saying",
+    hint: "HERA, on this Mac, shows your words while you are still saying them. The mint chip is HERA's colour everywhere in the notch.",
+    classes: "on awake mic-live nf-inline-open nf-inline-hera",
+    caption: { label: "You're saying", state: "HERA", text: "book me a table for two at" } },
+  { id: "long", label: "3b \u00b7 A long sentence",
+    hint: "Past 110 characters the sheet widens, the lines get air, and the oldest line fades out at the top instead of cramming.",
+    classes: "on awake mic-live nf-inline-open nf-inline-hera nf-inline-long nf-inline-trimmed",
+    caption: { label: "You're saying", state: "HERA", height: 214,
+      text: "the one near the office, not the one we went to last time, and if they have nothing at eight then try the Italian place on the corner, and send the confirmation to my email so I can forward it to Kalika" } },
+  { id: "heard", label: "3c \u00b7 You said",
     hint: "Your words land immediately, under You said.",
     classes: "on awake nf-inline-open busy",
     said: "organize my desktop really quick", phase: "Live" },
@@ -159,7 +168,7 @@ export default function NotchLab() {
       }));
     }
     // The renderer measures and sets these; without them the pill cannot grow.
-    nf.style.setProperty("--nf-inline-height", cap ? "140px" : "168px");
+    nf.style.setProperty("--nf-inline-height", cap?.height ? `${cap.height}px` : (cap ? "140px" : "168px"));
     nf.style.setProperty("--nf-compact-surface-w", "480px");
     nf.style.setProperty("--nf-screen-h", "900px");
     // syncOpenThinkingZone measures the real content and sets this; a fixed

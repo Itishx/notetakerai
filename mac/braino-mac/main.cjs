@@ -2081,6 +2081,67 @@ function openDashboardWindow() {
    Hinglish still goes down the existing cloud path. */
 let parakeet = { proc: null, ready: false, listening: false, buffer: "", startedAt: 0 };
 
+/* ── HERA under voice mode ─────────────────────────────────────────────────
+ *
+ * Voice mode's own transcription is OpenAI's, and it only answers after you
+ * pause: one 36-second stretch in the log came back as a single 531-character
+ * block at the very end, so the notch showed your words late and in chunks.
+ * HERA runs on this Mac and reports words while you are still saying them.
+ *
+ * So while a voice session is open, HERA listens alongside it in a mode that
+ * only DISPLAYS: partials and phrases go to the notch, and nothing is ever
+ * typed, pasted or put on the clipboard. The renderer rotates it at each pause
+ * (one segment per turn) and after Braino speaks (so his own voice through the
+ * speakers is thrown away rather than shown as yours).
+ *
+ * Dictation and LIVE take HERA over whenever they start: a `start` resets the
+ * decoder without emitting anything, so no voice-mode words leak into them. */
+let voiceCaptionMode = false;
+/* A `stop` makes the helper emit the session's delta and final. Those belong to
+   voice mode and must be swallowed: the delta path's "arrived after close"
+   branch would otherwise write them to the clipboard. */
+let voiceCaptionStopping = false;
+
+function startVoiceCaption() {
+  if (voiceCaptionMode) return { ok: true, already: true };
+  if (!parakeetEnabled()) return { ok: false, reason: "disabled" };
+  if (!parakeet.ready) return { ok: false, reason: "warming" };
+  if (localDictationActive || localDictationStarting || liveTranscriptMode || parakeet.listening) {
+    return { ok: false, reason: "busy" };
+  }
+  if (!parakeetSend("start")) return { ok: false, reason: "helper_down" };
+  parakeet.listening = true;
+  voiceCaptionMode = true;
+  logMac("voice_caption.start", {});
+  return { ok: true };
+}
+
+function stopVoiceCaption(reason) {
+  if (!voiceCaptionMode) return { ok: true, already: true };
+  voiceCaptionMode = false;
+  voiceCaptionStopping = true;
+  parakeetSend("stop");
+  parakeet.listening = false;
+  logMac("voice_caption.stop", { reason });
+  return { ok: true };
+}
+
+function rotateVoiceCaption(reason) {
+  if (!voiceCaptionMode || !parakeet.listening) return { ok: false };
+  parakeetSend("rotate");
+  return { ok: true };
+}
+
+/* Dictation or LIVE is about to own HERA. Their own `start` resets the decoder,
+   which discards the voice-mode session without emitting it. */
+function yieldVoiceCaption(to) {
+  if (!voiceCaptionMode) return;
+  voiceCaptionMode = false;
+  parakeet.listening = false;
+  logMac("voice_caption.yield", { to });
+  sendToRenderer("braino-mac:voice-caption", { type: "stopped", reason: to });
+}
+
 function parakeetAvailable() {
   try {
     return fs.existsSync(PARAKEET_BIN);
@@ -2111,6 +2172,15 @@ function handleParakeetLine(line) {
   /* A finished segment from a rotate. The decoder has been reset behind it, so
      this is a completed piece of the lecture rather than the session so far,
      and it is appended rather than replacing what came before. */
+  if (voiceCaptionMode && ["segment", "partial", "utterance"].includes(event.type)) {
+    sendToRenderer("braino-mac:voice-caption", { type: event.type, text: String(event.text || "").trim() });
+    return;
+  }
+  if (event.type === "delta" && (voiceCaptionMode || voiceCaptionStopping)) return;
+  if (event.type === "final" && voiceCaptionStopping) {
+    voiceCaptionStopping = false;
+    return;
+  }
   if (event.type === "segment") {
     const text = String(event.text || "").trim();
     liveStats.segments += 1;
@@ -2689,8 +2759,17 @@ async function startLocalDictation() {
     heraLog("previous close timer cancelled");
   }
   localDictationStarting = true;
+  const tookFromVoice = voiceCaptionMode;
+  yieldVoiceCaption(liveTranscriptMode ? "live" : "dictation");
   const started = await startDictationSkill().finally(() => { localDictationStarting = false; });
   if (!started.ok) {
+    /* It was listening for voice mode and dictation never took it: stop it,
+       with the stop's own output swallowed, rather than leave it running with
+       nobody reading it. */
+    if (tookFromVoice) {
+      voiceCaptionStopping = true;
+      parakeetSend("stop");
+    }
     sendToRenderer("braino-mac:dictation-ui", { active: false, engine: "parakeet" });
     return started;
   }
@@ -2799,6 +2878,9 @@ function startParakeet() {
   proc.on("exit", (code) => {
     logMac("parakeet.exit", { code });
     parakeet = { proc: null, ready: false, listening: false, buffer: "", startedAt: 0 };
+    if (voiceCaptionMode) sendToRenderer("braino-mac:voice-caption", { type: "stopped", reason: "helper_exit" });
+    voiceCaptionMode = false;
+    voiceCaptionStopping = false;
   });
   return proc;
 }
@@ -17662,6 +17744,14 @@ ipcMain.handle("braino-mac:log-interaction", async (_event, payload = {}) => {
 });
 
 ipcMain.handle("braino-mac:auth-status", async () => authStatusPayload());
+
+ipcMain.handle("braino-mac:voice-caption", async (_event, payload = {}) => {
+  const action = String(payload?.action || "");
+  if (action === "start") return startVoiceCaption();
+  if (action === "stop") return stopVoiceCaption(String(payload?.reason || "renderer"));
+  if (action === "rotate") return rotateVoiceCaption(String(payload?.reason || "renderer"));
+  return { ok: false, reason: "unknown_action" };
+});
 
 ipcMain.handle("braino-mac:parakeet-state", async () => ({
   available: parakeetAvailable(),
