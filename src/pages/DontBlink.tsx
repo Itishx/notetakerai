@@ -95,7 +95,9 @@ const STOMP_MS = 130;
  * squashed to nothing about its own centre and let back up, which is why it
  * reads as a blink rather than a shape changing. */
 const STAND_DUR = 1900;
-const WINK_AT = 700;
+/* ONE eye. Both of them is a blink, and a blink is just a mascot being alive;
+   the whole point of the beat is that he knows something. */
+const WINK_R_AT = 680;
 const WINK_MS = 190;
 const CUT_TAIL = 420;
 
@@ -138,6 +140,10 @@ const solveHold = (target: number) => {
 };
 
 const TARGET_MS = 13500;
+
+// Seconds into "Tiger Rhythm" where the film starts. See the note at the
+// audio setup for why this number and not 0.
+const TRACK_IN = 34;
 const H = solveHold(TARGET_MS);
 const T = buildTimeline(H);
 
@@ -162,6 +168,34 @@ export default function DontBlink() {
     const standEl = $(".lt-stand");
     const blackEl = $(".lt-black");
     const invert = $(".lt-invert");
+    const audio = $(".lt-audio") as HTMLAudioElement;
+    const sound = $(".lt-sound");
+
+    /* Surkin, "Tiger Rhythm". Restarted at the top of every loop rather than
+       left running, so the track and the film never drift apart — the film is
+       short enough that you only ever hear the opening, which is the part that
+       works under it. Browsers block sound until the page has been interacted
+       with, so if play() is refused the film runs silent and the first click or
+       key anywhere starts it; nothing about the picture waits on the audio. */
+    audio.volume = 0.85;
+    /* Not from the top. Measured off the decoded waveform: the track breaks
+       down at 33s and rebuilds from 34, climbing to its strongest sustained
+       run by 36 and holding it past 60 — so entering at 34 gives a two-second
+       lift under the opening line and puts the whole 14s film inside one
+       unbroken stretch, with no drop landing in the middle of it.
+       currentTime cannot be set before metadata exists, hence the guard. */
+    const seekIn = () => { try { audio.currentTime = TRACK_IN; } catch { /* not ready */ } };
+    if (audio.readyState >= 1) seekIn();
+    else audio.addEventListener("loadedmetadata", seekIn, { once: true });
+    let unblock: (() => void) | null = null;
+    const start = () => { seekIn(); return audio.play().then(() => { sound.style.opacity = "0"; }, () => {}); };
+    start().then(() => {
+      if (!audio.paused) return;
+      sound.style.opacity = "1";
+      unblock = () => { start(); };
+      window.addEventListener("pointerdown", unblock, { once: true });
+      window.addEventListener("keydown", unblock, { once: true });
+    });
 
     /* These caches latch the LAST REACHED index on purpose, so revealed words
        stay revealed. That makes them history-dependent rather than t-dependent,
@@ -230,11 +264,12 @@ export default function DontBlink() {
       if (t >= T.name  && t < T.date)  sequence(nameEl, NAME_PHRASES, [0], T.name, NAME_SW, t);
       if (t >= T.date  && t < T.stand) kineticStarts(dateEl, DATE_STARTS, T.date, t);
 
-      /* One eye, closed and reopened. Bounded by the stand window so the
-         class can never be left on by a scrub or a loop wrap. */
+      /* Bounded by the stand window on both sides, so neither class can be
+         left on by a scrub or a loop wrap and strand him with an eye shut. */
       const winkRel = t - T.stand;
-      standEl.classList.toggle("is-wink",
-        t >= T.stand && t < T.black && winkRel >= WINK_AT && winkRel < WINK_AT + WINK_MS);
+      const onStand = t >= T.stand && t < T.black;
+      const winking = (at: number) => onStand && winkRel >= at && winkRel < at + WINK_MS;
+      standEl.classList.toggle("is-wink-r", winking(WINK_R_AT));
 
       /* ONE CUT PER NUMBER on the date, and nothing anywhere else.
        *
@@ -274,7 +309,14 @@ export default function DontBlink() {
     resetSceneCaches();
     render(0);
     raf = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(raf);
+    return () => {
+      cancelAnimationFrame(raf);
+      audio.pause();
+      if (unblock) {
+        window.removeEventListener("pointerdown", unblock);
+        window.removeEventListener("keydown", unblock);
+      }
+    };
   }, [runId]);
 
   return (
@@ -289,6 +331,8 @@ export default function DontBlink() {
             <div className="lt-stand" dangerouslySetInnerHTML={{ __html: BRAINO_WALKER_SVG }} />
             <div className="lt-black" />
             <div className="lt-invert" />
+            <audio className="lt-audio" src="/surkin.mp3" preload="auto" />
+            <div className="lt-sound">Tap for sound</div>
           </div>
         </div>
       </div>

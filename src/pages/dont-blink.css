@@ -89,7 +89,10 @@
 .lt .lt-stand {
   position: absolute; left: 50%; top: 50%;
   transform: translate(-50%, -50%);
-  width: 190px;
+  /* Small. He is a sign-off, not the subject — at 190 he filled the same
+     optical space the sentences had just been using and read as another line
+     of the film rather than the thing that closes it. */
+  width: 132px;
   opacity: 0;
   z-index: 4;
   line-height: 0;
@@ -112,13 +115,39 @@
    transform-box: view-box is what makes that centre expressible at all — the
    default (stroke-box) would resolve 38px 48px against the element's own tiny
    bounding box and the eye would fly off the face instead of closing. */
+.lt-stand #__sbwk_eye_r__,
 .lt-stand #__sbwk_eye_l__ {
   transform-box: view-box;
-  transform-origin: 38px 48px;
   transition: transform .085s ease-in-out;
 }
-.lt-stand.is-wink #__sbwk_eye_l__ { transform: scaleY(.06); }
+/* Each eye squashes about ITS OWN centre — the two circles sit at x=62 and
+   x=38 in the viewBox, so one shared origin would slide the far eye sideways
+   across the face as it closed instead of shutting it. */
+.lt-stand #__sbwk_eye_r__ { transform-origin: 62px 48px; }
+.lt-stand #__sbwk_eye_l__ { transform-origin: 38px 48px; }
+
+.lt-stand.is-wink-r #__sbwk_eye_r__ { transform: scaleY(.06); }
 
 @media (prefers-reduced-motion: reduce) {
-  .lt-stand #__sbwk_eye_l__ { transition: none; }
+  .lt-stand #__sbwk_eye_r__, .lt-stand #__sbwk_eye_l__ { transition: none; }
+}
+
+/* Only ever seen when the browser refused to autoplay. Sits outside the film's
+   centre and fades the moment sound starts, so it is never part of a frame
+   anyone would export. */
+.lt .lt-sound {
+  position: absolute;
+  left: 50%; bottom: 26px;
+  transform: translateX(-50%);
+  padding: 7px 15px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .08);
+  border: 1px solid rgba(255, 255, 255, .16);
+  font: 500 12px/1 "SF Pro Text", -apple-system, BlinkMacSystemFont, sans-serif;
+  letter-spacing: .01em;
+  color: rgba(255, 255, 255, .62);
+  opacity: 0;
+  transition: opacity .3s ease;
+  pointer-events: none;
+  z-index: 11;
 }
