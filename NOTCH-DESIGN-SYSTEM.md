@@ -503,6 +503,27 @@ It settles exactly onto the `nfIslandBreath` resting values, so the greeting han
 
 ---
 
+## 12b. Listening, from waking to asleep
+
+All of these live in the inline caption sheet (`.nf-inline-open`, 480 wide, min 136 tall, radius `0 0 32 32`), so nothing changes shape when your words arrive.
+
+| Class | Label · chip | Line | Notes |
+|---|---|---|---|
+| `.nf-voice-starting` + `.nf-inline-working` | Voice · STARTING (shimmer) | `Live in 3` → `Almost there` | 22px/600 at 70% white, tabular numbers. The boot trace draws around the sheet, growing on the sheet's 1050ms curve |
+| `.nf-voice-ready` | Voice · ● LIVE | `You can speak now` | coral chip with a pulsing dot (`nfMeetingPulse`). Holds 2.4s, or until your words arrive |
+| *(heard)* | You said · Live | your words | unchanged |
+| `.nf-inline-working` (+ `.nf-thinking`) | You said · THINKING (shimmer) | your words | the sentence stays for the whole job. A rule at the end of the stylesheet makes the open sheet win over the collapsed thinking pill (430×84) and hides the centred chip |
+
+The countdown starts from the median of the last 12 connect times on this Mac (`localStorage.brainoVoiceConnectMs`, clamped 1.5–7s) and never reaches "live" on its own.
+
+**Asleep, listening for his name: `.nf-name-asleep`.** 284 wide, `+30` tall, radius `0 0 20 20`, no animation. The ticker line reads `Say “Hey Braino” to wake me` (Brainelle's name when she is the avatar) at 60% opacity. It is the lowest-priority ticker slot. Deliberately not the listening look: `.listen` is suppressed while asleep.
+
+**His name, heard: `.nf-name-wake`.** The boot trace (`.nf-shine`), once, stretched to the listening pill (250 × `+44`) over 1.1s with a non-scaling stroke, then `.listen` takes over. The trace SVG has `preserveAspectRatio="none"`, so any state can size it.
+
+The thinking chip is one word, `Thinking`. The old four-word cycle is gone.
+
+---
+
 ## 13. Other states
 
 | Animation | Where | Note |

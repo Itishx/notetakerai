@@ -358,14 +358,10 @@ let rtUserTranscript = "";
    expires: a cough that cuts him off must not hand a free pass to whatever is
    transcribed a minute later. */
 let rtBargeInAt = 0;
-/* When your sentence first appeared, and the shortest time it may hold the box.
- *
- * The three states hand over: You said -> Thinking -> his reply. Without a floor
- * a fast route swapped the caption out in a couple of hundred milliseconds and
- * you never read your own words back. Slow work still moves on the instant it
- * passes the floor, so this costs nothing on the runs that matter. */
+/* When your sentence first appeared. There used to be a floor here that let the
+   caption hold the box for 1.1s before the thinking chip took it; the caption
+   now stays for the whole job (see updateNotchFace), so the floor went. */
 let nfHeardShownAt = 0;
-const NF_HEARD_MIN_MS = 1100;
 const BARGE_IN_TRANSCRIPT_WINDOW_MS = 8000;
 let rtTranscriptFinal = false;
 let rtTranscriptFlushTimer = 0;
@@ -378,6 +374,27 @@ let rtUsageSessionId = null;
 let rtHeartbeatTimer = null;
 let realtimeActive = false;
 let wakeWordArmed = false;
+/* Voice waking up. Pressing Control twice (or saying his name to the on-device
+   listener) opens a session that takes 2 to 6 seconds to come up — 3.7s median
+   over the last 194 in the log. The notch counts that down from this Mac's own
+   recent history and says "You can speak now" only once the session is really
+   live, so it never tells you to talk into a microphone that is not open yet. */
+let voiceStart = { phase: "", startedAt: 0, estimateMs: 0, readyAt: 0 };
+let voiceStartTicker = 0;
+const VOICE_CONNECT_HISTORY_KEY = "brainoVoiceConnectMs";
+const VOICE_CONNECT_DEFAULT_MS = 3800;
+const VOICE_READY_HOLD_MS = 2400;
+/* Named mode, as the notch shows it. Declared here rather than beside the rest
+   of named mode because updateNotchFace reads them, and it runs long before that
+   part of the file has been evaluated. */
+let namedAsleepPainted = false;
+let nameWakeFlashTimer = 0;
+let nameWakeFlashAdded = [];
+/* Her name wakes her. Apple's recogniser has never heard "Brainelle" and writes
+   what it knows instead: the log has "Brunel", "Brinell" and "Pranil" for her,
+   all dropped as room chatter. These count only while she is the one on screen,
+   and "Pranil" is left out because it is a real name people say. */
+const BRAINELLE_NAME_RE = /\b(brainelle|brainel|brainell|brainele|brinell|brinelle|brunelle|brunel)\b/;
 let realtimeConnecting = false;
 let realtimeVoiceEngine = "fish";
 let herMode = false;
@@ -1313,7 +1330,12 @@ const nfAnswerLabel = notchFace?.querySelector(".nf-answer-label");
 const nfAnswerArticle = notchFace?.querySelector(".nf-answer-surface article");
 const nfAnswerLongHead = notchFace?.querySelector(".nf-answer-long-head");
 const notchResponseApi = window.BrainoNotchResponse || {};
-const THINKING_PHASES = ["Thinking", "Hatching", "Deciding", "Calibrating"];
+/* One word. The chip used to cycle Thinking -> Hatching -> Deciding ->
+   Calibrating every 1.65s, and none of those words meant anything: they were a
+   clock. A two-second reply showed "Thinking", a slow one reached "Calibrating",
+   and the list read as the thing slowing him down. Real states ("Needs
+   approval", "Taking it on") still come from thinkingPresentation. */
+const THINKING_PHASES = ["Thinking"];
 const NF_COMPACT_SURFACE_WIDTH = 480;
 const NF_READING_SURFACE_WIDTH = 580;
 let thinkingPhaseIndex = 0;
@@ -2701,7 +2723,7 @@ function refitOpenInlineCaption() {
   notchFace.style.setProperty("--nf-inline-height", `${measureInlineCaptionHeight()}px`);
 }
 
-function syncInlineVoiceSurface(mode = "", text = "") {
+function syncInlineVoiceSurface(mode = "", text = "", options = {}) {
   if (!notchFace || !nfInlineCaptionEl) return;
   const value = String(text || "").trim().replace(/\s+/g, " ");
   /* Typing holds the surface open on its own.
@@ -2713,16 +2735,29 @@ function syncInlineVoiceSurface(mode = "", text = "") {
    * changed. */
   const active = typingOpen || Boolean(mode && value);
   const wasActive = notchFace.classList.contains("nf-inline-open");
-  /* This surface is now only ever your own sentence read back to you. The
-     phase belongs to the centred chip, and the panel behind the arrow keeps
-     the full reasoning, so the caption no longer tries to be both. */
+  /* One box, and the modes it carries, in order:
+       starting  Voice     · STARTING (shimmer)   "Live in 3"
+       ready     Voice     · ● LIVE                "You can speak now"
+       heard     You said  · Live                  your words
+       thinking  You said  · THINKING (shimmer)   your words
+     The phase lives in this box's own chip. The thinking canvas underneath is
+     hidden while the box is open (see .nf-inline-open in the CSS), so the phase
+     is never painted twice. */
+  const voiceMode = active && (mode === "starting" || mode === "ready");
 
   if (active) cancelNotchSurfaceExit();
   else if (wasActive) beginNotchSurfaceExit();
   notchFace.classList.toggle("nf-inline-open", active);
-  notchFace.classList.remove("nf-inline-thinking", "nf-inline-working");
-  if (nfInlineCaptionLabelEl) nfInlineCaptionLabelEl.textContent = typingOpen ? "You typed" : "You said";
-  if (nfInlineCaptionStateEl) nfInlineCaptionStateEl.textContent = typingOpen ? "Typing" : "Live";
+  notchFace.classList.remove("nf-inline-thinking");
+  notchFace.classList.toggle("nf-inline-working", active && !typingOpen && (mode === "thinking" || mode === "starting"));
+  notchFace.classList.toggle("nf-voice-starting", active && !typingOpen && mode === "starting");
+  notchFace.classList.toggle("nf-voice-ready", active && !typingOpen && mode === "ready");
+  if (nfInlineCaptionLabelEl) {
+    nfInlineCaptionLabelEl.textContent = typingOpen ? "You typed" : (voiceMode ? "Voice" : "You said");
+  }
+  if (nfInlineCaptionStateEl) {
+    nfInlineCaptionStateEl.textContent = typingOpen ? "Typing" : String(options.state || "Live");
+  }
   if (nfInlineCaptionTextEl) nfInlineCaptionTextEl.textContent = value;
 
   // Height AFTER the text lands, or we would measure the previous sentence.
@@ -2830,6 +2865,8 @@ function nfSetHeard(text, options = {}) {
   nfHeardText = String(text || "").trim();
   if (nfHeardText) {
     if (nfHeardText !== previous) nfHeardShownAt = Date.now();
+    // Your words take over from "You can speak now" the moment they arrive.
+    if (voiceStart.phase === "ready") voiceStartEnd();
     nfFlowPromptText = nfHeardText;
     nfFlowResponseText = "";
   } else {
@@ -2848,10 +2885,17 @@ function nfSetHeard(text, options = {}) {
     const duration = Number.isFinite(requestedDuration)
       ? Math.max(500, requestedDuration)
       : Math.max(3600, Math.min(9000, nfHeardText.length * 58));
-    nfCaptionClearTimer = window.setTimeout(
-      () => nfClearCaptions(),
-      duration,
-    );
+    /* Not while he is still working on it. The clear used to run on a timer
+       that knew nothing about the job, so a twenty-second task lost the thing
+       you asked for at second four and the notch showed a chip with nothing to
+       say what it was for. */
+    nfCaptionClearTimer = window.setTimeout(function clearUnlessWorking() {
+      if (voiceTurnInFlight || processing) {
+        nfCaptionClearTimer = window.setTimeout(clearUnlessWorking, 1200);
+        return;
+      }
+      nfClearCaptions();
+    }, duration);
   }
   updateNotchFace();
 }
@@ -3033,42 +3077,56 @@ function updateNotchFace() {
       "nf-think-waiting", "nf-think-failed", "nf-think-complete",
     );
   }
+  /* Asleep: he hears the room and is choosing not to answer it. Either the
+     on-device wake word is waiting with no session open, or a session is open
+     in named mode with its five-second window shut. It has to look different
+     from listening, or there is nothing to see when his name wakes him — which
+     is exactly why the mode looked broken: the coral listening pulse ran the
+     whole time he was ignoring you. */
+  /* Not gated on walkerHome: after boot he walks out onto the screen, and the
+     notch is still where you look to see whether he is listening. */
+  const namedAsleep = visible && !herMode && !dictationMode
+    && !processingActive && !speaking && !voiceTurnInFlight && !answerOwnsNotch
+    && ((realtimeActive && namedAsleepForNotch()) || (!sessionEngaged && wakeWordArmed));
+  namedAsleepPainted = namedAsleep;
   // Conversation owns one central black subtitle box while a transcript is
   // live. The old left/right wings are explicitly cleared and never receive
-  // ordinary voice or thinking copy.
+  // ordinary voice or thinking copy. While he is asleep only a sentence with
+  // his name in it may open the box: the room is heard and dropped, and must
+  // not flash up in the notch on its way to being ignored.
   const conversationOwnsNotch = visible
     && !dictationMode
     && Boolean(nfHeardText)
-    && (sessionEngaged || ["listening", "hearing", "captured"].includes(lastGlowStatus));
+    && (sessionEngaged || ["listening", "hearing", "captured"].includes(lastGlowStatus))
+    && (!namedAsleep || voiceExplicitlyAddressesBraino(nfHeardText));
   const thinkingOpen = notchFace.classList.contains("nf-think-open");
-  /* You said -> Thinking -> his reply, one at a time.
+  /* Your sentence is never taken away while he works on it.
    *
-   * The caption used to stay open through processing so your sentence never
-   * disappeared. That put the caption and the centred phase chip in the same
-   * box, which showed the phase twice — once in the chip, once in the caption's
-   * own state slot — and left no moment that reads as "he is working". Proved
-   * on /notch-lab before this landed. Your sentence is not lost: it is the
-   * first line of the panel behind the arrow. */
-  const heldRecently = nfHeardShownAt > 0 && Date.now() - nfHeardShownAt < NF_HEARD_MIN_MS;
-  const inlineMode = visible && !herMode && !answerOwnsNotch && !yapOwnsNotch && !thinkingOpen
-    ? ((processingActive && !heldRecently) ? "" : (conversationOwnsNotch ? "heard" : ""))
-    : "";
-  /* Come back when the floor expires, or the caption would sit there until the
-     next unrelated repaint. */
-  if (inlineMode === "heard" && processingActive) window.setTimeout(() => updateNotchFace(), 140);
-  // Keep YOUR words on screen while he thinks. This used to replace the
-  // transcript with the single word "Thinking" the moment processing began,
-  // which is why a command you had just spoken disappeared before you could
-  // read it. The phase now goes in the small state chip instead, so the
-  // sentence stays put from the first partial through to his reply.
-  //
-  // The character budget went 180 -> NF_INLINE_MAX_CHARS because the panel can
-  // now grow; it still trims from the FRONT, so the newest words you are
-  // speaking are always the ones on screen.
+   * 1aaedb2 closed this box 1.1s into every job and handed it to the centred
+   * chip, so a command vanished the moment he started on it. main kept it, with
+   * the phase in the box's own chip, and that is the behaviour restored here.
+   * The doubling that change was fixing (the phase in the chip AND in the
+   * thinking canvas) is prevented in the CSS, which hides the canvas while this
+   * box is open. With no sentence to show, the centred chip still takes over.
+   *
+   * The character budget is NF_INLINE_MAX_CHARS and trims from the FRONT, so the
+   * newest words you are speaking are always the ones on screen. */
   const heardForInline = compactNotchCaption(nfHeardText, NF_INLINE_MAX_CHARS);
-  const inlineText = inlineMode === "heard" ? heardForInline : "";
+  const voiceStartMode = dictationMode ? "" : voiceStartPhase();
+  let inlineMode = "";
+  if (visible && !herMode && !answerOwnsNotch && !yapOwnsNotch && !thinkingOpen) {
+    if (processingActive) inlineMode = heardForInline ? "thinking" : "";
+    else if (conversationOwnsNotch) inlineMode = "heard";
+    else if (voiceStartMode) inlineMode = voiceStartMode;
+  }
+  const inlineText = inlineMode === "heard" || inlineMode === "thinking"
+    ? heardForInline
+    : (inlineMode ? voiceStartText(inlineMode) : "");
+  const inlineState = inlineMode === "thinking"
+    ? THINKING_PHASES[thinkingPhaseIndex]
+    : (inlineMode === "starting" ? "Starting" : "Live");
   layoutNotchCaption("");
-  syncInlineVoiceSurface(inlineMode, inlineText);
+  syncInlineVoiceSurface(inlineMode, inlineText, { state: inlineState });
   const yapWasOpen = notchFace.classList.contains("nf-yap-open");
   notchFace.classList.toggle("nf-yap-open", yapOwnsNotch);
   if (yapOwnsNotch) cancelNotchSurfaceExit();
@@ -3140,6 +3198,11 @@ function updateNotchFace() {
       }
     }
   }
+  /* The asleep hint is the quietest thing the ticker can show, so a timer, the
+     music or a meeting all outrank it. */
+  const showNameHint = namedAsleep && !slots.length;
+  if (showNameHint) slots.push(`Say \u201cHey ${activeWakeName()}\u201d to wake me`);
+  notchFace.classList.toggle("nf-name-asleep", showNameHint);
   const line = processingActive ? "" : slots[0] || "";
   nfSetStatus2Text(slots[1] || "");
   notchFace.classList.toggle("dual", visible && slots.length > 1);
@@ -3174,7 +3237,8 @@ function updateNotchFace() {
   const notchVoice = visible && walkerHome && !herMode;
   notchFace.classList.toggle(
     "listen",
-    notchVoice && !answerOwnsNotch && sessionEngaged && (dictationCapturing || ["listening", "hearing"].includes(lastGlowStatus)),
+    notchVoice && !answerOwnsNotch && sessionEngaged && !namedAsleep
+      && (dictationCapturing || ["listening", "hearing"].includes(lastGlowStatus)),
   );
   notchFace.classList.toggle("speak", notchVoice && !answerOwnsNotch && lastGlowStatus === "speaking");
   nfSetStatusText(line);
@@ -4186,7 +4250,9 @@ function noteSpeechEnded() {
  * misses that are still worth catching. */
 function voiceExplicitlyAddressesBraino(text) {
   const normalized = normalizeForVoiceMatch(text);
-  return Boolean(normalized && /\b(braino|brayno|braino's|breno|braino|raino|bruno)\b/.test(normalized));
+  if (!normalized) return false;
+  if (/\b(braino|brayno|braino's|breno|braino|raino|bruno)\b/.test(normalized)) return true;
+  return activeWakeName() === "Brainelle" && BRAINELLE_NAME_RE.test(normalized);
 }
 
 /* There used to be a second way to "address" him: a list of ordinary words —
@@ -4234,9 +4300,66 @@ function namedWindowOpen() {
 function namedWake(why) {
   const wasAsleep = !namedWindowOpen();
   namedAddressedAt = Date.now();
-  if (wasAsleep) logRenderer("named.awake", { why });
+  if (wasAsleep) {
+    logRenderer("named.awake", { why });
+    /* The moment he wakes is the one thing this mode has to show. A wake-word
+       wake gets the voice shimmer on its own path, because it opens a session. */
+    if (why === "name") flashNameWake();
+  }
   updateNotchFace();
 }
+
+/* The window starts when you can actually talk. Saying his name opens it, but
+   a session then takes 2 to 6 seconds to come up, so five seconds counted from
+   the name had mostly gone by the time the notch said to speak, and the
+   command that followed landed on a closed door. */
+function namedOpenAtReady() {
+  if (!namedModeOn || !namedAddressedAt) return;
+  if (Date.now() - namedAddressedAt > 30000) return;
+  namedAddressedAt = Date.now();
+}
+
+/* updateNotchFace can run before this part of the module has been evaluated,
+   and reading a `let` that early throws. */
+function namedAsleepForNotch() {
+  try {
+    return namedModeOn && !namedWindowOpen();
+  } catch {
+    return false;
+  }
+}
+
+function activeWakeName() {
+  try {
+    return macCharacter === "brainelle" ? "Brainelle" : "Braino";
+  } catch {
+    return "Braino";
+  }
+}
+
+/* The perimeter trace from the boot, once, sized to the listening pill he is
+   about to become (the trace stretches to its box: preserveAspectRatio="none"
+   in index.html). Only the classes this flash added are taken off again, so a
+   trace some other state owns is left alone. */
+function flashNameWake() {
+  if (!notchFace) return;
+  window.clearTimeout(nameWakeFlashTimer);
+  if (nameWakeFlashAdded.length) notchFace.classList.remove(...nameWakeFlashAdded);
+  nameWakeFlashAdded = ["nf-shining", "nf-name-wake"].filter((name) => !notchFace.classList.contains(name));
+  void notchFace.offsetWidth; // restart the draw even if a trace just ran
+  notchFace.classList.add(...nameWakeFlashAdded);
+  logRenderer("named.wake_light", {});
+  nameWakeFlashTimer = window.setTimeout(() => {
+    notchFace.classList.remove(...nameWakeFlashAdded);
+    nameWakeFlashAdded = [];
+  }, 1700);
+}
+
+/* The window closes on a clock nobody repaints for, so look twice a second and
+   repaint only when asleep/awake actually changed. */
+window.setInterval(() => {
+  if (namedAsleepForNotch() !== namedAsleepPainted) updateNotchFace();
+}, 500);
 
 /* A new session starts asleep. Without this, ending a session inside the window
    and starting a new one left him already awake and answering the room. */
@@ -4857,6 +4980,32 @@ const STOP_LISTENING_PATTERNS = [
   /^(?:that(?:'|’)?s all|that will be all|thats all|that(?:'|’)?ll be all)\b/,
   /^(?:i(?:'|’)?m done|we(?:'|’)?re done)(?:\s+(?:talking|here|for now))?\b/,
 ];
+
+/* "Braino, stop the task." Matched on the words, like stop listening, because
+ * the only other route was asking HIL what "stop" meant, which is a model call
+ * of 5 to 10 seconds on Astra while the job carries on clicking.
+ *
+ * Two strengths. Naming the job ("stop the task", "cancel the search") is clear
+ * enough on its own. A bare "stop" or "never mind" is something people say to
+ * each other, so it needs his name on it. */
+const STOP_TASK_NAMED_JOB = /^(?:stop|cancel|abort|end|kill|quit|halt|drop)(?:\s+(?:the|this|that|your|my))?\s+(?:task|tasks|job|run|delegation|delegating|search|searching)\b/;
+const STOP_TASK_BARE = [
+  /^(?:stop|cancel|abort|halt)(?:\s+(?:stop|now|please|right now|immediately))*$/,
+  /^(?:stop|cancel|abort|halt)\s+(?:it|that|this|everything|all of it|what you(?:'|\u2019)?re doing|doing that|doing this|working)\b/,
+  /^(?:never ?mind|forget it|forget about it|leave it)\b/,
+];
+const STOP_TASK_BRAINELLE_WAKE = /^(?:hey\s+)?(?:brainelle|brainel|brainell|brinell|brunel|brunelle)\b[\s,.]*/i;
+
+function isStopTaskPhrase(text) {
+  let rest = String(text || "").trim().replace(/[.!?]+$/g, "").replace(/,/g, " ").replace(/\s+/g, " ");
+  if (!rest) return false;
+  const addressed = STOP_LISTENING_WAKE.test(rest) || STOP_TASK_BRAINELLE_WAKE.test(rest);
+  rest = rest.replace(STOP_LISTENING_WAKE, "").replace(STOP_TASK_BRAINELLE_WAKE, "")
+    .replace(STOP_LISTENING_LEAD, "").trim().toLowerCase();
+  if (!rest || rest.split(/\s+/).length > 6) return false;
+  if (STOP_TASK_NAMED_JOB.test(rest)) return true;
+  return addressed && STOP_TASK_BARE.some((pattern) => pattern.test(rest));
+}
 
 /** True when the whole utterance is "switch yourself off", not a sentence that
  *  happens to contain those words. */
@@ -5847,6 +5996,10 @@ async function runDelegate(prompt, options = {}) {
     else if (/\?\s*$/.test(reply.trim())) rememberOwedTask(text, "asked_a_question");
     else owedTask = null;
     showFiles(result?.files || []);
+    if (result?.superseded && !result?.say) {
+      logRenderer("delegate.superseded_quiet", { runId });
+      return;
+    }
     await speak(result?.say || "Done.");
     logInteraction({
       kind: "delegate",
@@ -6766,6 +6919,7 @@ function markRealtimeActivity(reason, options = {}) {
 }
 
 function stopRealtimeVoice(options = {}) {
+  voiceStartEnd();
   // This bump is what cancels any start still in flight, and for a long time it
   // happened in total silence. Tracing "why did realtime.start.cancelled fire"
   // meant reasoning backwards from the absence of a log line, twice, across two
@@ -7516,6 +7670,7 @@ async function submitTyped(text) {
   logRenderer("type.in", { chars: said.length });
   nfSetHeard(said, { durationMs: 1600 });
   closeTyping("submitted");
+  if (isStopTaskPhrase(said) && await stopTaskNow("typed", said)) return;
   /* Talking to him while he works is the same conversation whether you speak or
      type, so a typed sentence goes through the interjection router first. */
   const handled = await routeInterjectionIntoRunningJob(said);
@@ -7544,10 +7699,41 @@ let lastUnderstanding = { text: "", verdict: null };
  * This was survivable when a turn took under two seconds, because there was
  * barely a window to interrupt. Astra takes five to ten, so every run is long
  * enough to be killed by the next thing the room says. */
-const BARE_WAKE_WORD = /^(?:hey\s+|ok\s+|okay\s+|yo\s+)?brain[oa]\s*[.,!?]*$/i;
+const BARE_WAKE_WORD = /^(?:hey\s+|ok\s+|okay\s+|yo\s+)?(?:brain[oa]|brainelle)\s*[.,!?]*$/i;
 
 function isBareWakeWord(text) {
   return BARE_WAKE_WORD.test(String(text || "").trim());
+}
+
+/* Stop the job in flight, now, and say so. Returns false when there was no
+   job, so the sentence can carry on to wherever it was going. */
+async function stopTaskNow(source, transcript = "") {
+  let running = false;
+  try {
+    running = Boolean((await window.brainoMac.jobRunning())?.running);
+  } catch {
+    running = false;
+  }
+  if (!running && !voiceTurnInFlight) return false;
+  if (transcript) {
+    console.log(`[Braino 🎤 IN] "${transcript}" -> stop the task`);
+    nfSetHeard(transcript, { durationMs: 1400 });
+  }
+  const result = await window.brainoMac.stopRunningJob().catch(() => null);
+  logRenderer("voice.stop_task", { source, stopped: Boolean(result?.ok), wasRunning: running, hadTurn: voiceTurnInFlight });
+  /* Everything that started this job is stale from here. The run comes back
+     with an empty "stood down" answer, and without these runDelegate filled the
+     silence with "Done." straight after "I stopped the task." */
+  delegateGeneration += 1;
+  voiceTurnToken += 1;
+  voiceTurnInFlight = false;
+  processing = false;
+  stopSpeechOutput();
+  cancelPendingNotchThinking();
+  nfSetThinking("");
+  setStatus(realtimeActive ? "listening" : "ready", realtimeActive ? "Listening" : "Double Space to show/hide");
+  await speak("I stopped the task.");
+  return true;
 }
 
 async function routeInterjectionIntoRunningJob(transcript) {
@@ -7584,14 +7770,8 @@ async function routeInterjectionIntoRunningJob(transcript) {
   if (!verdict?.running || !verdict.understanding) return false;
   const { kind, task } = verdict.understanding;
   if (kind === "stop") {
-    const stopped = await window.brainoMac.stopRunningJob();
-    logRenderer("voice.interjection", { kind, stopped: Boolean(stopped?.ok) });
-    voiceTurnInFlight = false;
-    processing = false;
-    cancelPendingNotchThinking();
-    nfSetThinking("");
-    setStatus("listening", "Listening");
-    await speak("Stopped.");
+    logRenderer("voice.interjection", { kind });
+    await stopTaskNow("hil_understood");
     return true;
   }
   if (kind === "correction" || kind === "addition") {
@@ -7663,6 +7843,7 @@ async function flushRealtimeTranscript(reason) {
     stopListeningNow("voice_phrase");
     return;
   }
+  if (isStopTaskPhrase(transcript) && await stopTaskNow("voice_phrase", transcript)) return;
   /* Talking to him while he works is not always a new job.
    *
    * This used to hang off "he is being interrupted mid-sentence", which is the
@@ -8223,6 +8404,7 @@ async function startRealtimeVoice(options = {}) {
   realtimeConnecting = true;
   listening = true;
   setStatus("connecting", isDictation ? "Starting BrainoHERA" : "Waking voice");
+  if (!isDictation) voiceStartBegin();
   if (!isDictation) setBubble("Voice is waking up.", 1300);
   logRenderer("realtime.start", {
     purpose,
@@ -8429,6 +8611,10 @@ async function startRealtimeVoice(options = {}) {
     realtimeConnecting = false;
     listening = true;
     lastEngagedAt = Date.now();
+    if (!isDictation) {
+      voiceStartReady();
+      namedOpenAtReady();
+    }
     markRealtimeActivity("realtime_ready");
     if (!isDictation) startFishWarmKeepAlive();
     setStatus("listening", isDictation ? "BrainoHERA" : "Listening");
@@ -8436,6 +8622,7 @@ async function startRealtimeVoice(options = {}) {
     logRenderer("realtime.ready", { purpose });
   } catch (error) {
     const cancelled = isRealtimeStartCancelled(error) || startGeneration !== realtimeStartGeneration;
+    if (startGeneration === realtimeStartGeneration) voiceStartEnd();
     logRenderer(cancelled ? "realtime.start.cancelled" : "realtime.start.error", {
       purpose,
       error: errorForLog(error),
@@ -9845,6 +10032,80 @@ function stopVoiceWakeShimmer() {
   notchFace.classList.remove(...voiceWakeShimmerAdded);
   voiceWakeShimmerAdded = [];
 }
+
+/* How long this Mac usually takes to open a voice session. The median of the
+   last dozen, so one slow morning does not turn every countdown pessimistic. */
+function voiceConnectEstimateMs() {
+  try {
+    const history = JSON.parse(window.localStorage.getItem(VOICE_CONNECT_HISTORY_KEY) || "[]")
+      .map(Number)
+      .filter((ms) => Number.isFinite(ms) && ms > 0);
+    if (history.length < 3) return VOICE_CONNECT_DEFAULT_MS;
+    const sorted = [...history].sort((a, b) => a - b);
+    const median = sorted[Math.floor(sorted.length / 2)];
+    return Math.max(1500, Math.min(7000, median));
+  } catch {
+    return VOICE_CONNECT_DEFAULT_MS;
+  }
+}
+
+function recordVoiceConnectMs(ms) {
+  if (!Number.isFinite(ms) || ms <= 0 || ms > 30000) return;
+  try {
+    const history = JSON.parse(window.localStorage.getItem(VOICE_CONNECT_HISTORY_KEY) || "[]");
+    history.push(Math.round(ms));
+    window.localStorage.setItem(VOICE_CONNECT_HISTORY_KEY, JSON.stringify(history.slice(-12)));
+  } catch {
+    // The default estimate is fine.
+  }
+}
+
+function voiceStartTicking(on) {
+  if (on && !voiceStartTicker) voiceStartTicker = window.setInterval(() => updateNotchFace(), 250);
+  if (!on && voiceStartTicker) {
+    window.clearInterval(voiceStartTicker);
+    voiceStartTicker = 0;
+  }
+}
+
+function voiceStartBegin() {
+  voiceStart = { phase: "starting", startedAt: Date.now(), estimateMs: voiceConnectEstimateMs(), readyAt: 0 };
+  voiceStartTicking(true);
+  updateNotchFace();
+}
+
+function voiceStartReady() {
+  if (voiceStart.phase !== "starting") return;
+  recordVoiceConnectMs(Date.now() - voiceStart.startedAt);
+  voiceStart = { ...voiceStart, phase: "ready", readyAt: Date.now() };
+  updateNotchFace();
+}
+
+function voiceStartEnd() {
+  if (!voiceStart.phase) return;
+  voiceStart = { phase: "", startedAt: 0, estimateMs: 0, readyAt: 0 };
+  voiceStartTicking(false);
+  updateNotchFace();
+}
+
+/* "You can speak now" is a moment: it holds long enough to read, then the
+   listening pill takes over. Read-only apart from that expiry, because
+   updateNotchFace calls it. */
+function voiceStartPhase() {
+  if (voiceStart.phase === "ready" && Date.now() - voiceStart.readyAt > VOICE_READY_HOLD_MS) {
+    voiceStart = { phase: "", startedAt: 0, estimateMs: 0, readyAt: 0 };
+    voiceStartTicking(false);
+  }
+  return voiceStart.phase;
+}
+
+/* The count never reaches zero on its own. If the session is slower than
+   usual it says so rather than claiming to be live. */
+function voiceStartText(phase) {
+  if (phase === "ready") return "You can speak now";
+  const left = Math.ceil((voiceStart.estimateMs - (Date.now() - voiceStart.startedAt)) / 1000);
+  return left >= 1 ? `Live in ${left}` : "Almost there";
+}
 window.brainoMac.onCursorMode?.((payload) => {
   cursorModeContext = payload || null;
 });
@@ -10993,7 +11254,11 @@ window.brainoMac.onWakeDetected?.((payload) => {
      without this the session would open ASLEEP and quietly bin the very command
      that woke him. */
   namedWake("wake-word");
-  if (!realtimeActive && !realtimeConnecting && !processing) void startListening();
+  if (!realtimeActive && !realtimeConnecting && !processing) {
+    // The same light as Control twice: pressed, heard, waking.
+    startVoiceWakeShimmer();
+    void startListening();
+  }
 });
 window.brainoMac.onTimers?.((payload) => {
   nfTimers = Array.isArray(payload?.timers) ? payload.timers : [];

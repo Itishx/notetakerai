@@ -94,23 +94,36 @@ test("the arrow that closes the panel has room under the last line", () => {
   assert.match(css, /#notch-face\.nf-think-open \.nf-think-chip \{[\s\S]{0,80}bottom: 14px/);
 });
 
-/* You said -> Thinking -> his reply, one at a time. The caption used to stay
-   open through processing, which put the phase in the box twice and left no
-   moment that reads as "he is working". */
-test("your sentence hands the box over to the thinking chip", () => {
-  assert.match(js, /NF_HEARD_MIN_MS = \d+/);
-  assert.match(js, /const heldRecently = nfHeardShownAt > 0/);
-  /* Processing owns the box once the floor has passed, so the caption closes. */
-  assert.match(js, /\(processingActive && !heldRecently\) \? ""/);
-  /* And it cannot open itself as a second phase display any more. */
-  assert.doesNotMatch(js, /mode === "thinking"/);
-  assert.doesNotMatch(js, /"Braino is thinking" : "You said"/);
+/* Your sentence stays while he works on it.
+   1aaedb2 handed the box to the centred chip 1.1s into every job, so a command
+   vanished the moment he started on it. main kept it, with the phase in the
+   box's own chip, and that is the rule again. */
+test("your sentence stays in the box while he works", () => {
+  assert.doesNotMatch(js, /NF_HEARD_MIN_MS/);
+  assert.doesNotMatch(js, /heldRecently/);
+  assert.match(js, /if \(processingActive\) inlineMode = heardForInline \? "thinking" : ""/);
+  /* The phase goes in the caption's own chip, shimmering. */
+  assert.match(js, /classList\.toggle\("nf-inline-working", active && !typingOpen && \(mode === "thinking"/);
+  /* And the caption is not cleared by a timer while the job is still running. */
+  assert.match(js, /function clearUnlessWorking\(\) \{\s*if \(voiceTurnInFlight \|\| processing\)/);
 });
 
-/* A floor with no repaint behind it leaves your sentence on screen until some
-   unrelated redraw happens to come along. */
-test("the floor schedules its own handover", () => {
-  assert.match(js, /inlineMode === "heard" && processingActive\) window\.setTimeout/);
+/* With the caption open, the thinking canvas and the centred chip must not
+   paint the phase a second and third time, and the collapsed thinking pill
+   must not shrink the box to a strip. */
+test("the open caption owns the shape while he thinks", () => {
+  assert.match(css, /#notch-face\.nf-inline-open:not\(\.nf-think-open\) \.nf-thinking-canvas \{[\s\S]{0,60}display: none !important/);
+  assert.match(css, /#notch-face\.nf-inline-open:not\(\.nf-think-open\) \.nf-think-chip \{ display: none; \}/);
+  const collapsed = css.indexOf("#notch-face.nf-thinking:not(.nf-think-open) .nf-pill {\n  width: min(430px");
+  const override = css.indexOf("#notch-face.nf-inline-open.nf-thinking:not(.nf-think-open) .nf-pill {");
+  assert.ok(collapsed > 0 && override > collapsed, "the caption rule must come after the collapsed thinking pill");
+});
+
+/* The chip used to cycle four words on a clock. None meant anything. */
+test("thinking is one word", () => {
+  assert.match(js, /const THINKING_PHASES = \["Thinking"\];/);
+  // No list anywhere still carries the old clock words.
+  assert.doesNotMatch(js, /\[[^\]\n]*"(?:Hatching|Deciding|Calibrating)"/);
 });
 
 /* His closed eyes were being eaten by the physical notch. The lids sit at y

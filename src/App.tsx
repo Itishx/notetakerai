@@ -19,6 +19,7 @@ const ChooseYourAvatarDocs = lazy(() => import("./pages/ChooseYourAvatarDocs.tsx
 const IomiBootIdentityDocs = lazy(() => import("./pages/IomiBootIdentityDocs.tsx"));
 const BrowserNotchPresenceDocs = lazy(() => import("./pages/BrowserNotchPresenceDocs.tsx"));
 const VoiceCommandEchoGuardDocs = lazy(() => import("./pages/VoiceCommandEchoGuardDocs.tsx"));
+const MacNotchListeningStatesDocs = lazy(() => import("./pages/MacNotchListeningStatesDocs.tsx"));
 const HilLoopDocs = lazy(() => import("./pages/HilLoopDocs.tsx"));
 const HowBrainoTalksDocs = lazy(() => import("./pages/HowBrainoTalksDocs.tsx"));
 const HumanIntelligence = lazy(() => import("./pages/HumanIntelligence.tsx"));
@@ -213,6 +214,7 @@ function AppRoutes() {
         <Route path="/knowledge/iomi-boot-identity" element={<IomiBootIdentityDocs />} />
         <Route path="/knowledge/browser-notch-presence" element={<BrowserNotchPresenceDocs />} />
         <Route path="/knowledge/voice-command-echo-guard" element={<VoiceCommandEchoGuardDocs />} />
+        <Route path="/knowledge/mac-notch-listening-states" element={<MacNotchListeningStatesDocs />} />
         <Route path="/knowledge/hil-version-1" element={<HilLoopDocs />} />
         <Route path="/knowledge/how-braino-talks" element={<HowBrainoTalksDocs />} />
         <Route path="/human-intelligence" element={<HumanIntelligence />} />

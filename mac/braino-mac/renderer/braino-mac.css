@@ -3457,6 +3457,83 @@ body {
   }
 }
 
+/* ── Voice waking up, then ready ──────────────────────────────────────────
+ *
+ * Same box as "You said", so nothing changes shape when your words arrive:
+ *   Voice · STARTING   Live in 3          (the chip shimmers, the trace draws)
+ *   Voice · ● LIVE     You can speak now
+ *   You said · Live    <your words>
+ * The line is the one thing to read, so it is set larger than a transcript. */
+#notch-face.nf-voice-starting .nf-inline-caption-text,
+#notch-face.nf-voice-ready .nf-inline-caption-text {
+  margin-top: 10px;
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -.02em;
+  font-variant-numeric: tabular-nums;
+}
+/* Still waiting, so a step back from white. */
+#notch-face.nf-voice-starting .nf-inline-caption-text { color: rgba(247, 247, 245, .7); }
+#notch-face.nf-voice-ready .nf-inline-caption-text { color: #f7f7f5; }
+
+#notch-face.nf-voice-ready .nf-inline-caption-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #F0958C;
+  font-size: 10.5px;
+  font-weight: 650;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+#notch-face.nf-voice-ready .nf-inline-caption-state::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #E8786E;
+  box-shadow: 0 0 8px rgba(232, 120, 110, .9);
+  animation: nfMeetingPulse 1.7s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  #notch-face.nf-voice-ready .nf-inline-caption-state::before { animation: none; }
+}
+
+/* ── Asleep: listening for his name ───────────────────────────────────────
+ *
+ * Deliberately NOT the listening look. No coral, no radiate, no sonar: he can
+ * hear the room and is choosing not to answer it, and the one line says how to
+ * change that. A touch wider than .live so the sentence fits without a
+ * marquee, and still, because an idle notch that breathes all day is noise. */
+#notch-face.nf-name-asleep .nf-pill {
+  width: 284px;
+  height: calc(var(--nf-notch-h) + 30px);
+  border-radius: 0 0 20px 20px;
+  animation: none;
+}
+#notch-face.nf-name-asleep #nf-status {
+  bottom: 8px;
+  color: rgba(255, 240, 235, .6);
+  letter-spacing: .12em;
+}
+
+/* ── His name, heard ──────────────────────────────────────────────────────
+ *
+ * The boot's perimeter trace, once, drawn around the listening pill he is
+ * about to become rather than the idle notch. The trace SVG stretches to its
+ * box (preserveAspectRatio="none" in index.html); the stroke is kept from
+ * stretching with it. */
+#notch-face.nf-name-wake .nf-shine {
+  width: 250px;
+  height: calc(var(--nf-notch-h) + 44px);
+  opacity: 1;
+}
+#notch-face.nf-name-wake .nf-shine path {
+  vector-effect: non-scaling-stroke;
+  animation-duration: 1.1s;
+}
+
 /* Yap owns one stable black sheet. The width never follows transcript length;
    new speech stacks downward in short readable turns, using the same spring
    geometry as answer surfaces. */
@@ -5262,3 +5339,32 @@ body {
 @media (prefers-reduced-motion: reduce) {
   #notch-face.nf-task .nf-pill { animation: none; }
 }
+
+/* ── Your sentence, while he works ─────────────────────────────────────────
+ *
+ * The caption box stays open through a job now ("You said" + a shimmering
+ * THINKING chip), and a job also sets .nf-thinking, whose collapsed pill
+ * (430 x 84) and centred chip are both declared further up this file than the
+ * caption and would otherwise win: the box shrank to a strip and "Thinking"
+ * showed three times. Last in the file so the open caption owns the shape. */
+#notch-face.nf-inline-open.nf-thinking:not(.nf-think-open) .nf-pill {
+  width: var(--nf-compact-surface-w);
+  height: min(var(--nf-inline-height, 136px), calc(var(--nf-screen-h, 100vh) - 70px));
+  min-height: 136px;
+  max-height: 300px;
+  border-radius: 0 0 32px 32px;
+}
+#notch-face.nf-inline-open:not(.nf-think-open) .nf-think-chip { display: none; }
+
+/* While voice wakes, the boot trace draws around the sheet it is opening,
+   growing on the sheet's own curve, instead of around the idle notch where it
+   floated inside the box. */
+#notch-face.nf-voice-starting .nf-shine {
+  width: var(--nf-compact-surface-w);
+  height: min(var(--nf-inline-height, 136px), 300px);
+  transition:
+    opacity .25s ease,
+    width 1050ms cubic-bezier(.22,1,.36,1),
+    height 1050ms cubic-bezier(.22,1,.36,1);
+}
+#notch-face.nf-voice-starting .nf-shine path { vector-effect: non-scaling-stroke; }

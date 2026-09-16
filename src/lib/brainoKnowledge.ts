@@ -20,6 +20,18 @@ export type KnowledgeEntry = {
 
 export const KNOWLEDGE_ENTRIES: readonly KnowledgeEntry[] = [
   {
+    slug: "mac-notch-listening-states",
+    title: "The Notch Tells You When He Can Hear You",
+    category: "Feature",
+    date: "2026-09-17",
+    dateLabel: "September 17, 2026",
+    description:
+      "A countdown while voice wakes up, \"You can speak now\" only once it is live, your words kept on screen while he works, a quiet \"Say Hey Braino to wake me\" while he is ignoring the room, the boot light when he hears his name, and \"Braino, stop the task\" that stops it straight away.",
+    status: "MVP",
+    platform: "Braino for Mac",
+    number: "038",
+  },
+  {
     slug: "braino-os-wallpapers",
     title: "Braino OS Wallpapers: Eleven Pictures, None Of Them Photographs",
     category: "Feature",

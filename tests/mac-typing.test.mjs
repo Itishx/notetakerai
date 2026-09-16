@@ -82,7 +82,8 @@ test("both ways in are wired", () => {
    type.open twelve times and the screen never changed. */
 test("typing holds the caption surface open on its own", () => {
   assert.match(renderer, /const active = typingOpen \|\| Boolean\(mode && value\)/);
-  assert.match(renderer, /nfInlineCaptionLabelEl\.textContent = typingOpen \? "You typed" : "You said"/);
+  /* Typing wins over every other label the box can carry (Voice, You said). */
+  assert.match(renderer, /nfInlineCaptionLabelEl\.textContent = typingOpen \? "You typed" : \(voiceMode \? "Voice" : "You said"\)/);
 });
 
 /* `let` is not hoisted, and syncInlineVoiceSurface sits far above openTyping. */
