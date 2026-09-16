@@ -90,3 +90,27 @@
  * rule it overrides has identical specificity and ships later in source order.
  */
 .lt .nt-word.in { animation: none !important; }
+
+/* ── He stands, then black ────────────────────────────────────────────────
+   The film ends on the character rather than on copy about him. One second of
+   him alone on white, then the frame goes black under him. */
+.lt .lt-stand {
+  position: absolute; left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+  width: 190px;
+  opacity: 0;
+  z-index: 4;
+  line-height: 0;
+  will-change: opacity;
+}
+.lt .lt-stand svg { width: 100%; height: auto; display: block; }
+
+/* A hard cut, not a fade: no transition on this at all. The last frame of the
+   film should be a decision. */
+.lt .lt-black {
+  position: absolute; inset: 0;
+  background: #000;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 10;
+}

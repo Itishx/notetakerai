@@ -17,6 +17,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import NotchFace, { setNotchStatus } from "@/components/NotchFace";
+import { BRAINO_WALKER_SVG } from "@/components/brainoWalkerSvg";
 import "./notch-teaser.css";
 import "./dont-blink.css";
 
@@ -39,7 +40,13 @@ const chunk = (word: string): string[] => {
   const m = word.match(/^([A-Za-z0-9']+)(.*)$/);
   if (!m) return [word];
   const [, core, tail] = m;
-  if (core.length < 4) return [word];   // to, be, app: nothing to build
+  /* LETTERS, not characters, and five rather than four. At four an apostrophe
+     counted toward the threshold and "one's" split into "one" + "'s", which is
+     a machine spelling a word out rather than building one. Four-letter words
+     ("This", "told") have nothing to build either — the head would be two
+     letters and two letters is a stutter. */
+  const letters = core.replace(/'/g, "").length;
+  if (letters < 5) return [word];
   /* Straight down the middle, head rounded up. Four letters is the threshold
      to split at all, not the size of a chunk — "Eve"/"ry", "wai"/"ts.",
      "Brai"/"no." A brief detour fixed the head at four letters instead, which
@@ -75,7 +82,13 @@ const BOOT_DUR = 1150;
 // The turn, and the last word builds: "awa" lands, "+ke." completes it. The
 // sentence arrives, then the word that matters assembles.
 const AWAKE_PHRASES = [chunked(["This", "one's", "already", "awake."])];
+// Not a metronome. Eight identical beats is what made this line read as a
+// machine reciting: the setup should move and the payoff should land. "This
+// one's" goes past quickly because it is only there to carry you to "already
+// awake", which then takes its time.
+const AWAKE_STARTS = [0, 175, 370, 640, 930, 1230];
 const AWAKE_SW = 265;
+const AWAKE_SPAN = AWAKE_STARTS[AWAKE_STARTS.length - 1] + 300;
 const AWAKE_HOLD = 420;
 
 // The name AFTER you know what it does, so it means something when you hear it,
@@ -110,13 +123,14 @@ const DATE_SPAN = DATE_STARTS[DATE_STARTS.length - 1] + DATE_FAST;
 const DATE_HOLD = 1500;
 const STOMP_MS = 130;   // how long the frame stays inverted per stamp
 
-// "Don't" takes a normal space, then "Bli" lands and "+nk." completes it. The
-// word the whole format is named after gets built rather than stated.
-const TAG_PHRASES = [chunked(["Don't", "Blink."])];
-const TAG_SW = 275;
-const TAG_HOLD = 700;
+// No tagline. "Don't blink." was the format's name doing duty as a line, and
+// it says nothing about a launch — after a date has landed, another slogan is
+// just more words. He stands there instead: one second of the actual character
+// on an empty white frame, then black. The last thing you see is him, not copy
+// about him.
+const STAND_DUR = 1150;
 
-const WINK_TAIL = 900;
+const CUT_TAIL = 420;   // the black, held briefly so the cut reads as a decision
 
 /* ── Timing ─────────────────────────────────────────────────────────────── */
 
@@ -154,12 +168,12 @@ const buildTimeline = (H: number) => {
   const wait  = S(250);
   const boot  = S(wait + WAIT_TOTAL);          // no hold here at all: the turn interrupts the triple, it does not wait politely for it
   const awake = S(boot + BOOT_DUR);
-  const name  = S(awake + AWAKE_PHRASES[0].length * AWAKE_SW + AWAKE_HOLD + H * 0.04);
+  const name  = S(awake + AWAKE_SPAN + AWAKE_HOLD + H * 0.04);
   const date  = S(name + NAME_PHRASES[0].length * NAME_SW + NAME_HOLD + H * 0.06);
-  const tag   = S(date + DATE_SPAN + DATE_HOLD + H * 0.06);
-  const wink  = S(tag + TAG_PHRASES[0].length * TAG_SW + TAG_HOLD + H * 0.05);
-  const end   = Math.round(wink + WINK_TAIL);
-  return { wait, boot, awake, name, date, tag, wink, end };
+  const stand = S(date + DATE_SPAN + DATE_HOLD + H * 0.06);
+  const black = S(stand + STAND_DUR);
+  const end   = Math.round(black + CUT_TAIL);
+  return { wait, boot, awake, name, date, stand, black, end };
 };
 
 const solveHold = (target: number) => {
@@ -189,7 +203,8 @@ export default function DontBlink() {
     const awakeEl = $(".lt-awake");
     const nameEl = $(".lt-name");
     const dateEl = $(".lt-date");
-    const tagEl = $(".lt-tag");
+    const standEl = $(".lt-stand");
+    const blackEl = $(".lt-black");
     const graphic = $(".lt-graphic");
     const invert = $(".lt-invert");
 
@@ -251,15 +266,16 @@ export default function DontBlink() {
       show(waitEl,  t >= T.wait  && t < T.boot);
       show(awakeEl, t >= T.awake && t < T.name);
       show(nameEl,  t >= T.name  && t < T.date);
-      show(dateEl,  t >= T.date  && t < T.tag);
-      show(tagEl,   t >= T.tag   && t < T.wink);
-      show(graphic, (t >= T.boot && t < T.awake) || t >= T.wink);
+      show(dateEl,  t >= T.date  && t < T.stand);
+      show(graphic, t >= T.boot && t < T.awake);
+      /* He stands, alone on white, then the frame goes black under him. */
+      show(standEl, t >= T.stand && t < T.black);
+      blackEl.style.opacity = t >= T.black ? "1" : "0";
 
       if (t >= T.wait  && t < T.boot)  sequence(waitEl, WAIT_PHRASES, WAIT_S, T.wait, WAIT_SW, t);
-      if (t >= T.awake && t < T.name)  sequence(awakeEl, AWAKE_PHRASES, [0], T.awake, AWAKE_SW, t);
+      if (t >= T.awake && t < T.name)  kineticStarts(awakeEl, AWAKE_STARTS, T.awake, t);
       if (t >= T.name  && t < T.date)  sequence(nameEl, NAME_PHRASES, [0], T.name, NAME_SW, t);
-      if (t >= T.date  && t < T.tag)   kineticStarts(dateEl, DATE_STARTS, T.date, t);
-      if (t >= T.tag   && t < T.wink)  sequence(tagEl, TAG_PHRASES, [0], T.tag, TAG_SW, t);
+      if (t >= T.date  && t < T.stand) kineticStarts(dateEl, DATE_STARTS, T.date, t);
 
       /* The notch's own boot, driven off the same clock. setNotchStatus takes
          the host element, not just a string — it writes into the face's own
@@ -269,12 +285,8 @@ export default function DontBlink() {
         const p = (t - T.boot) / BOOT_DUR;
         graphic.classList.toggle("is-waking", p < 0.5);
         if (notch) setNotchStatus(notch, "");
-      } else if (t >= T.wink) {
-        graphic.classList.remove("is-waking");
-        graphic.classList.add("is-wink");
-        if (notch) setNotchStatus(notch, "");
       } else {
-        graphic.classList.remove("is-waking", "is-wink");
+        graphic.classList.remove("is-waking");
       }
 
       /* MATCH CUTS, locked to the chunking.
@@ -314,13 +326,11 @@ export default function DontBlink() {
            hit — a glitch in the render rather than a decision. The date can
            strobe per digit because every digit IS a beat; a sentence has one
            beat, at the end, when it finishes being a sentence. */
-        stompOnce(T.awake, T.name, (AWAKE_PHRASES[0].length - 1) * AWAKE_SW, 220) ||
+        stompOnce(T.awake, T.name, AWAKE_STARTS[AWAKE_STARTS.length - 1], 220) ||
         // the name assembling: Brai, then no.
         stomp(T.name, T.date, NAME_PHRASES[0].length, NAME_SW) ||
         // the payload: three numbers, three hits
-        stompAt(T.date, T.tag, DATE_STARTS) ||
-        // Don't, Bli, nk.
-        stomp(T.tag, T.wink, TAG_PHRASES[0].length, TAG_SW);
+        stompAt(T.date, T.stand, DATE_STARTS);
 
       invert.style.opacity = inv ? "1" : "0";
     };
@@ -346,10 +356,11 @@ export default function DontBlink() {
           <div className="nt-stage">
             <div className="lt-graphic"><NotchFace /></div>
             <div className="lt-wait" />
-            <div className="lt-awake" />
+            <div className="lt-awake">{AWAKE_PHRASES[0].map((w, i) => <span key={i} className={"nt-word" + (w.startsWith("+") ? " nt-fuse" : "")}>{w.replace("+", "")}</span>)}</div>
             <div className="lt-name" />
             <div className="lt-date">{DATE_CHUNKS.map((w, i) => <span key={i} className={"nt-word" + (w.startsWith("+") ? " nt-fuse" : "")}>{w.replace("+", "")}</span>)}</div>
-            <div className="lt-tag" />
+            <div className="lt-stand" dangerouslySetInnerHTML={{ __html: BRAINO_WALKER_SVG }} />
+            <div className="lt-black" />
             <div className="lt-invert" />
           </div>
         </div>
