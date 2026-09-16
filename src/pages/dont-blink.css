@@ -14,8 +14,8 @@
 /* The shared spot, copied in shape from notch-teaser.css's own block so both
    films centre identically. Any new scene joins this list; it never gets a
    bespoke position. */
-.lt .lt-wait,
-.lt .lt-awake,
+.lt .lt-line1,
+.lt .lt-line2,
 .lt .lt-name,
 .lt .lt-date,
 .lt .lt-tag {

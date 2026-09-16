@@ -23,130 +23,79 @@ import "./dont-blink.css";
 
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 
-/* CHUNKING, hand-authored, the way IntroTeaser and NotchTeaser do it.
+/* ── The script ─────────────────────────────────────────────────────────
  *
- * There was a formula here that split every word of four-plus letters down the
- * middle. It was wrong twice over. Their films chunk RARELY — five pairs in
- * 1543 lines — and they split on MEANING, not on character count:
+ *     Stop using your Mac.
+ *     [ the notch wakes ]
+ *     Start talking to it.
+ *     Braino.
+ *     16th October 2026
  *
- *     do|ing.    un|der    Fast|er.    As|k.    Bli|nk.
+ * Two lines mirrored with the boot in the hinge, so you watch the turn happen
+ * rather than being told about it. Nothing is explained: a teaser thirty days
+ * out is for curiosity, and five earlier drafts failed by trying to sell in
+ * twenty seconds, which is what adverts do.
  *
- * The head is a chunk you can already read and the tail is usually the suffix,
- * so the second stamp completes a word rather than finishing a spelling. A
- * formula gave "Bra"/"ino.", "Th"/"is", "one"/"'s" — a machine spelling words
- * out, which is exactly what it read as.
+ * Both lines are built from St+, so the second sentence starts by rebuilding
+ * the first one's opening in front of you and then going somewhere else. And
+ * "using" is the one word here that cannot be split, because "Stop us" is a
+ * whole sentence and the eye would finish the line there.
  *
- * So these are chosen. "wait"+"s.", "open"+"ed.", "ask"+"ed." are the Fast|er
- * pattern. "al"+"ready" and "a"+"wake." are the real morpheme boundaries.
- * "Brain"+"o." is the best of them, because the word Brain is already sitting
- * inside the name and the split just shows you. Words with no natural break
- * ("told.", "This", "app") stay whole.
+ * CHUNKING is hand-picked, the way IntroTeaser and NotchTeaser do it
+ * (seven pairs across 2628 lines), split on meaning rather than on letter
+ * count. And the head must never be a word that completes a phrase on its own:
+ * "using" cannot be split, because "Stop us" is a whole sentence and the eye
+ * would finish it there. That exact trap is what made an earlier line read as
+ * ending on "This one's already".
  */
 
-/* ── The script ─────────────────────────────────────────────────────────── */
+const LINE1_PHRASES = [["St", "+op", "using", "your", "Mac."]];
+const LINE1_SW = 330;
+// Short. This line is the setup, not the punch: its words have accumulated as
+// you read them, so by the time the full stop lands there is nothing left to
+// read and any hold past the cut is just the film waiting. The second line
+// gets the long hold, because that one is the turn.
+const LINE1_HOLD = 300;
 
-// The triple. Same shape three times, tightening each time: that acceleration
-// is the energy, and it argues the point rather than decorating it.
-const WAIT_PHRASES = [
-  ["Every", "app", "wait", "+s."],
-  ["To", "be", "open", "+ed."],
-  ["To", "be", "ask", "+ed."],
-  ["To", "be", "told."],
-];
-// The "To be ..." lines are SLOWER than the opener, not faster. They were 330
-// / 310 / 290 on the theory that a triple should accelerate, but these are
-// three-word lines where the last word is the whole point ("opened", "asked",
-// "told") — rushing to it is what made them read as one blurred line rather
-// than three separate refusals. The acceleration lives in the trailing gaps
-// below instead, which tighten 260 -> 150 across the triple.
-const WAIT_SW = [300, 320, 310, 295];
-const WAIT_GAPS: number[] = []; WAIT_GAPS[0] = 260; WAIT_GAPS[1] = 230; WAIT_GAPS[2] = 210; WAIT_GAPS[3] = 150;
-// Back to the house GAP after an over-correction: asked to kill a pause, I
-// stripped these to 90 and the whole opening started reading as a stutter.
-// The last one stays tighter than the rest so the boot still interrupts.
+// "talk" + "ing" is the Fast|er pattern, and "Start talk" is visibly
+// unfinished, so the eye waits for the rest.
+const LINE2_PHRASES = [["St", "+art", "talk", "+ing", "to", "it."]];
+const LINE2_SW = 300;
+const LINE2_HOLD = 800;
 
-// The hinge. Everything before waits, everything after is already happening,
-// and the boot is what the sentence turns on rather than a graphic over it.
-const BOOT_DUR = 1150;
+// The boot IS the film's middle, not a transition inside it: six seconds of
+// the real notch, beat for beat as the Mac app's own runNotchBoot runs.
+const BOOT_DUR = 6200;
 
-// The turn, and the last word builds: "awa" lands, "+ke." completes it. The
-// sentence arrives, then the word that matters assembles.
-/* "awake." lands WHOLE, and this is the fix for the line reading as if it ends
-   early. Split as "a" + "+wake." the head is itself a word, so the line passed
-   through "This one's already a" on its way, and before that it sat on "This
-   one's already" — a complete-looking sentence — for a quarter of a second.
-   The eye finishes it there and the rest looks like a stutter.
-   A chunk is only safe when the head is NOT a word on its own: "al" is
-   nonsense, so "This one's al" is visibly unfinished and the eye waits. */
-const AWAKE_PHRASES = [["This", "one's", "al", "+ready", "awake."]];
-// Not a metronome. Eight identical beats is what made this line read as a
-// machine reciting: the setup should move and the payoff should land. "This
-// one's" goes past quickly because it is only there to carry you to "already
-// awake", which then takes its time.
-// Six stamps: This / one's / al / ready / a / wake. The setup moves, the two
-// builds take their time, so it speaks instead of ticking.
-const AWAKE_STARTS = [0, 200, 420, 620, 790];   // 790, not 1000: at 1000 the line sat on "This one's already" for 354ms, long enough to read as finished
-const AWAKE_SW = 265;
-const AWAKE_SPAN = AWAKE_STARTS[AWAKE_STARTS.length - 1] + 300;
-const AWAKE_HOLD = 420;
+// The word Brain is already sitting inside the name; the split just shows you.
+const NAME_PHRASES = [["Bra", "+ino."]];
+const NAME_SW = 340;
+const NAME_HOLD = 900;
 
-// The name AFTER you know what it does, so it means something when you hear it,
-// and CHUNKED: "Brai" lands, then "no." joins flush against it and completes
-// the word in front of you. Two stamps, one word. That build is the mechanic;
-// a flash on a whole word is just a flash.
-const NAME_PHRASES = [["Brain", "+o."]];
-const NAME_SW = 330;
-const NAME_HOLD = 520;
-
-// THE PAYLOAD, digit by digit.
-//
-// Six stamps: 16 · th · Octo · ber · 20 · 26, each its own match cut. The "+"
-// fuses a chunk flush against the one before it so the groups still read as
-// "16th October 2026" rather than six loose pieces — the space only falls
-// where a chunk does NOT carry the prefix.
-//
-// The cadence is deliberately uneven, which a single `sw` cannot express, so
-// the starts are written out. The date walks in at 400ms a digit, then 2026
-// arrives at 190 — the year is the part that accelerates, so the film speeds
-// up into its own last frame instead of landing flat.
+/* The date is the only line that gets match cuts, and it gets one PER CHUNK.
+ * It also walks before it runs: 16 / th / Octo / ber at 400ms, then 20 / 26 at
+ * 200 — a date read aloud is not a metronome, and the year is the part you
+ * already know is coming. */
 const DATE_CHUNKS = ["16", "+th", "Octo", "+ber", "20", "+26"];
 const DATE_SLOW = 400;
 const DATE_FAST = 200;
-// Everything up to the year walks; the year runs. Same rule as the digits it
-// replaces, just fewer and longer stamps, so the split moves from index 4 to
-// index 4 of six rather than of eight.
 const DATE_FAST_FROM = 4;
 const DATE_STARTS = DATE_CHUNKS.map((_, i) =>
   i < DATE_FAST_FROM ? i * DATE_SLOW : DATE_FAST_FROM * DATE_SLOW + (i - DATE_FAST_FROM) * DATE_FAST);
 const DATE_SPAN = DATE_STARTS[DATE_STARTS.length - 1] + DATE_FAST;
 const DATE_HOLD = 1500;
-const STOMP_MS = 130;   // how long the frame stays inverted per stamp
+const STOMP_MS = 130;
 
-// No tagline. "Don't blink." was the format's name doing duty as a line, and
-// it says nothing about a launch — after a date has landed, another slogan is
-// just more words. He stands there instead: one second of the actual character
-// on an empty white frame, then black. The last thing you see is him, not copy
-// about him.
+// He walks on, alone on white, and then the frame goes black under him.
 const STAND_DUR = 1150;
-
-const CUT_TAIL = 420;   // the black, held briefly so the cut reads as a decision
+const CUT_TAIL = 420;
 
 /* ── Timing ─────────────────────────────────────────────────────────────── */
 
 const GAP = 260;
 const phraseSw = (sw: number | number[], i: number) =>
   Array.isArray(sw) ? (sw[i] ?? sw[sw.length - 1]) : sw;
-const phraseSeq = (phrases: string[][], sw: number | number[], gaps?: number[]) => {
-  const starts: number[] = [];
-  let acc = 0;
-  phrases.forEach((ph, i) => {
-    starts.push(acc);
-    acc += ph.length * phraseSw(sw, i) + (gaps?.[i] ?? GAP);
-  });
-  return { starts, total: acc };
-};
 
-const WAIT_TOTAL = phraseSeq(WAIT_PHRASES, WAIT_SW, WAIT_GAPS).total;
 
 // One tunable hold flexes to hit the target; word cadences never move.
 //
@@ -164,15 +113,15 @@ const buildTimeline = (H: number) => {
     last = v;
     return v;
   };
-  const wait  = S(250);
-  const boot  = S(wait + WAIT_TOTAL);          // no hold here at all: the turn interrupts the triple, it does not wait politely for it
-  const awake = S(boot + BOOT_DUR);
-  const name  = S(awake + AWAKE_SPAN + AWAKE_HOLD + H * 0.04);
+  const line1 = S(250);
+  const boot  = S(line1 + LINE1_PHRASES[0].length * LINE1_SW + LINE1_HOLD);
+  const line2 = S(boot + BOOT_DUR);
+  const name  = S(line2 + LINE2_PHRASES[0].length * LINE2_SW + LINE2_HOLD);
   const date  = S(name + NAME_PHRASES[0].length * NAME_SW + NAME_HOLD + H * 0.06);
   const stand = S(date + DATE_SPAN + DATE_HOLD + H * 0.06);
   const black = S(stand + STAND_DUR);
   const end   = Math.round(black + CUT_TAIL);
-  return { wait, boot, awake, name, date, stand, black, end };
+  return { line1, boot, line2, name, date, stand, black, end };
 };
 
 const solveHold = (target: number) => {
@@ -180,7 +129,7 @@ const solveHold = (target: number) => {
   return clamp((target - e0) / ((e1 - e0) / 1000), 100, 8000);
 };
 
-const TARGET_MS = 21000;
+const TARGET_MS = 18000;
 const H = solveHold(TARGET_MS);
 const T = buildTimeline(H);
 
@@ -198,8 +147,8 @@ export default function DontBlink() {
     if (!root) return;
     const $ = (s: string) => root.querySelector<HTMLElement>(s)!;
 
-    const waitEl = $(".lt-wait");
-    const awakeEl = $(".lt-awake");
+    const line1El = $(".lt-line1");
+    const line2El = $(".lt-line2");
     const nameEl = $(".lt-name");
     const dateEl = $(".lt-date");
     const standEl = $(".lt-stand");
@@ -258,21 +207,20 @@ export default function DontBlink() {
       kinetic(host, sceneStart + starts[idx], phraseSw(sw, idx), t);
     };
 
-    const WAIT_S = phraseSeq(WAIT_PHRASES, WAIT_SW, WAIT_GAPS).starts;
     const show = (el: HTMLElement, on: boolean) => { el.style.opacity = on ? "1" : "0"; };
 
     const render = (t: number) => {
-      show(waitEl,  t >= T.wait  && t < T.boot);
-      show(awakeEl, t >= T.awake && t < T.name);
+      show(line1El, t >= T.line1 && t < T.boot);
+      show(line2El, t >= T.line2 && t < T.name);
       show(nameEl,  t >= T.name  && t < T.date);
       show(dateEl,  t >= T.date  && t < T.stand);
-      show(graphic, t >= T.boot && t < T.awake);
+      show(graphic, t >= T.boot && t < T.line2);
       /* He stands, alone on white, then the frame goes black under him. */
       show(standEl, t >= T.stand && t < T.black);
       blackEl.style.opacity = t >= T.black ? "1" : "0";
 
-      if (t >= T.wait  && t < T.boot)  sequence(waitEl, WAIT_PHRASES, WAIT_S, T.wait, WAIT_SW, t);
-      if (t >= T.awake && t < T.name)  kineticStarts(awakeEl, AWAKE_STARTS, T.awake, t);
+      if (t >= T.line1 && t < T.boot)  sequence(line1El, LINE1_PHRASES, [0], T.line1, LINE1_SW, t);
+      if (t >= T.line2 && t < T.name)  sequence(line2El, LINE2_PHRASES, [0], T.line2, LINE2_SW, t);
       if (t >= T.name  && t < T.date)  sequence(nameEl, NAME_PHRASES, [0], T.name, NAME_SW, t);
       if (t >= T.date  && t < T.stand) kineticStarts(dateEl, DATE_STARTS, T.date, t);
 
@@ -280,7 +228,7 @@ export default function DontBlink() {
          the host element, not just a string — it writes into the face's own
          .nf-status node. */
       const notch = graphic.querySelector<HTMLElement>(".nf");
-      if (t >= T.boot && t < T.awake) {
+      if (t >= T.boot && t < T.line2) {
         const p = (t - T.boot) / BOOT_DUR;
         graphic.classList.toggle("is-waking", p < 0.5);
         if (notch) setNotchStatus(notch, "");
@@ -301,10 +249,16 @@ export default function DontBlink() {
        *
        * Everything else in the film stays white. Flipping on every line meant
        * the frame strobed throughout and nothing read as a hit. */
+      const stomp = (at: number) => t >= at && t < at + STOMP_MS;
       const dateRel = t - T.date;
       const inv =
-        t >= T.date && t < T.stand &&
-        DATE_STARTS.some((at) => dateRel >= at && dateRel < at + STOMP_MS);
+        // The full stop of each sentence, and only the full stop. The cut is
+        // what finishes the line, so the hold that follows sits on white and
+        // the finished sentence is read on white rather than through a flash.
+        stomp(T.line1 + (LINE1_PHRASES[0].length - 1) * LINE1_SW) ||
+        stomp(T.line2 + (LINE2_PHRASES[0].length - 1) * LINE2_SW) ||
+        (t >= T.date && t < T.stand &&
+         DATE_STARTS.some((at) => dateRel >= at && dateRel < at + STOMP_MS));
 
       invert.style.opacity = inv ? "1" : "0";
     };
@@ -329,8 +283,8 @@ export default function DontBlink() {
         <div className="nt-frame">
           <div className="nt-stage">
             <div className="lt-graphic"><NotchFace /></div>
-            <div className="lt-wait" />
-            <div className="lt-awake">{AWAKE_PHRASES[0].map((w, i) => <span key={i} className={"nt-word" + (w.startsWith("+") ? " nt-fuse" : "")}>{w.replace("+", "")}</span>)}</div>
+            <div className="lt-line1" />
+            <div className="lt-line2" />
             <div className="lt-name" />
             <div className="lt-date">{DATE_CHUNKS.map((w, i) => <span key={i} className={"nt-word" + (w.startsWith("+") ? " nt-fuse" : "")}>{w.replace("+", "")}</span>)}</div>
             <div className="lt-stand" dangerouslySetInnerHTML={{ __html: BRAINO_WALKER_SVG }} />
