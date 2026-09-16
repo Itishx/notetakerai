@@ -388,6 +388,18 @@ const VOICE_READY_HOLD_MS = 2400;
    of named mode because updateNotchFace reads them, and it runs long before that
    part of the file has been evaluated. */
 let namedAsleepPainted = false;
+/* After a deliberate wake (his name to the on-device listener, or Control
+   twice) the first thing you say is for him, however long you take to say it.
+   Five seconds was not enough: in the log the voice came up at :17 and the
+   sentence started at :29, by which time he had gone back to sleep. */
+let namedGraceUntil = 0;
+const NAMED_FIRST_COMMAND_MS = 15000;
+/* His name as the cloud transcriber sometimes writes it despite language:"en".
+   The on-device listener is told "Braino" exists; this one is not, and a short
+   "Hey Braino" in an Indian accent can come back in Devanagari or Urdu script,
+   which has no a-z in it and used to be dropped without a word in the log. */
+const BRAINO_SCRIPT_RE = /(?:ब्रेनो|ब्रैनो|ब्रेनों|ब्रैनों|ब्रेइनो|ब्रीनो|बरेनो|ब्रेनौ|برینو|براینو|بریںو|برائنو)/;
+const BRAINELLE_SCRIPT_RE = /(?:ब्रेनेल|ब्रैनेल|ब्रेनेले|برینیل|براینیل)/;
 let nameWakeFlashTimer = 0;
 let nameWakeFlashAdded = [];
 /* Her name wakes her. Apple's recogniser has never heard "Brainelle" and writes
@@ -4249,6 +4261,9 @@ function noteSpeechEnded() {
  * is the fix at the source — the remaining variants are the close acoustic
  * misses that are still worth catching. */
 function voiceExplicitlyAddressesBraino(text) {
+  const raw = String(text || "");
+  if (BRAINO_SCRIPT_RE.test(raw)) return true;
+  if (activeWakeName() === "Brainelle" && BRAINELLE_SCRIPT_RE.test(raw)) return true;
   const normalized = normalizeForVoiceMatch(text);
   if (!normalized) return false;
   if (/\b(braino|brayno|braino's|breno|braino|raino|bruno)\b/.test(normalized)) return true;
@@ -4293,6 +4308,7 @@ function namedWindowOpen() {
   if (speaking || processing || voiceTurnInFlight) return true;
   /* Timestamps rather than a timer, so a lid closing for an hour cannot leave
      the window standing open when it opens again. */
+  if (Date.now() < namedGraceUntil) return true;
   const since = Math.max(namedAddressedAt, lastSpokenLine?.endedTs || 0);
   return since > 0 && Date.now() - since <= NAMED_WINDOW_MS;
 }
@@ -4300,6 +4316,8 @@ function namedWindowOpen() {
 function namedWake(why) {
   const wasAsleep = !namedWindowOpen();
   namedAddressedAt = Date.now();
+  // The first real sentence has arrived; from here the normal five seconds apply.
+  if (why === "name" || why === "follow-up") namedGraceUntil = 0;
   if (wasAsleep) {
     logRenderer("named.awake", { why });
     /* The moment he wakes is the one thing this mode has to show. A wake-word
@@ -4317,6 +4335,7 @@ function namedOpenAtReady() {
   if (!namedModeOn || !namedAddressedAt) return;
   if (Date.now() - namedAddressedAt > 30000) return;
   namedAddressedAt = Date.now();
+  namedGraceUntil = Date.now() + NAMED_FIRST_COMMAND_MS;
 }
 
 /* updateNotchFace can run before this part of the module has been evaluated,
@@ -4365,6 +4384,7 @@ window.setInterval(() => {
    and starting a new one left him already awake and answering the room. */
 function namedReset() {
   namedAddressedAt = 0;
+  namedGraceUntil = 0;
 }
 
 function rememberLocalChat(role, content) {
@@ -5040,7 +5060,21 @@ function stopListeningNow(source) {
 
 function shouldAcceptVoiceTranscript(text) {
   const stats = transcriptStats(text);
-  if (!stats.normalized || stats.wordCount === 0) return false;
+  if (!stats.normalized || stats.wordCount === 0) {
+    /* Words with no a-z in them. This used to be a silent return false, which
+       is how "Hey Braino" written in another script vanished: the log showed a
+       12-character sentence, rejected, and nothing to say why. A name here
+       still wakes him; it is not a command, so nothing runs, but the next
+       sentence gets through. */
+    const raw = String(text || "").replace(/\s+/g, " ").trim();
+    if (raw && namedModeOn && !herMode && voiceExplicitlyAddressesBraino(raw)) {
+      namedWake("name");
+      logRenderer("named.awake_other_script", { text: raw.slice(0, 60) });
+    } else if (raw) {
+      logRenderer("voice.transcript_unreadable", { text: raw.slice(0, 120) });
+    }
+    return false;
+  }
 
   /* NAMED MODE. Before anything else, because everything else in this function
      assumes he is allowed to answer.
@@ -6211,6 +6245,8 @@ function buildRealtimeSessionUpdate() {
                 ].join(" ")
               : [
                   "Transcribe the user's direct command to Braino.",
+                  "The assistant is called Braino (and sometimes Brainelle). People say \"Braino\" or \"Hey Braino\" to call him: always write that name as Braino, in English letters.",
+                  "Write everything in English letters, even if the accent is Indian.",
                   "Ignore music, fans, coughs, accidental noises, and unrelated background speech.",
                   "Keep names, app names, URLs, file names, and code tokens intact.",
                   "If the input is not a clear user command, leave it empty.",

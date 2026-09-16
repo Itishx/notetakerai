@@ -29,6 +29,8 @@ Voice takes 2 to 6 seconds to come up (3.7 seconds median across the last 194 se
 
 - The countdown starts from the median of this Mac's last 12 connect times, and never says "speak now" before the session is live. If it is slower than usual it says *Almost there*.
 - The five-second "I'm listening" window after his name now starts when the notch says *You can speak now*, not when you said his name. Before, most of those five seconds were spent connecting.
+- After a deliberate wake (his name, or Control twice) the first sentence gets through however long you take to say it, up to 15 seconds. After that the normal five seconds apply.
+- His name counts in any script. The cloud transcriber sometimes writes a short "Hey Braino" in Devanagari or Urdu despite being told English, and it is now told the name exists and to write it as Braino. A sentence with no English letters is logged instead of vanishing.
 - While he is asleep, only a sentence with his name in it can open the caption, so other people's conversation is never shown on its way to being ignored.
 - The thinking chip is one word. It used to cycle Thinking, Hatching, Deciding, Calibrating on a timer, which looked like progress and meant nothing.
 - A stopped job stays quiet. It used to finish with an empty answer, which he filled with "Done."

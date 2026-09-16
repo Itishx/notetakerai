@@ -131,6 +131,8 @@ test("the five seconds start when you can talk, not when you said his name", () 
 test("her name wakes her, and only while she is the one on screen", () => {
   const make = (name) => Function("activeWakeName", `
     ${liftLine("const BRAINELLE_NAME_RE =")}
+    ${liftLine("const BRAINO_SCRIPT_RE =")}
+    ${liftLine("const BRAINELLE_SCRIPT_RE =")}
     ${lift("function normalizeForVoiceMatch(value) {")}
     ${lift("function voiceExplicitlyAddressesBraino(text) {")}
     return voiceExplicitlyAddressesBraino;
@@ -142,4 +144,51 @@ test("her name wakes her, and only while she is the one on screen", () => {
   assert.equal(asBrainelle("Braino, what's up"), true);
   assert.equal(asBraino("Brinell, are you listening?"), false);
   assert.equal(asBrainelle("Pranil, are you listening?"), false);
+});
+
+/* ── Waking by name, for real ─────────────────────────────────────────────── */
+
+test("after a deliberate wake, the first sentence gets through however long it takes", () => {
+  let now = 1_000_000;  // a real clock is never 0, and 0 reads as "never woken"
+  const env = Function("Date", `
+    let namedModeOn = true, namedAddressedAt = 0, namedGraceUntil = 0;
+    let speaking = false, processing = false, voiceTurnInFlight = false;
+    let lastSpokenLine = { endedTs: 0 };
+    const NAMED_WINDOW_MS = 5000;
+    const NAMED_FIRST_COMMAND_MS = 15000;
+    const logRenderer = () => {};
+    const flashNameWake = () => {};
+    const updateNotchFace = () => {};
+    ${lift("function namedWindowOpen() {")}
+    ${lift("function namedWake(why) {")}
+    ${lift("function namedOpenAtReady() {")}
+    return { namedWindowOpen, namedWake, namedOpenAtReady };
+  `)({ now: () => now });
+  env.namedWake("wake-word");          // "Hey Braino", on-device
+  now += 4300; env.namedOpenAtReady(); // voice live 4.3s later
+  now += 12000;                        // you start talking 12s after "speak now"
+  assert.equal(env.namedWindowOpen(), true);
+  env.namedWake("follow-up");          // that sentence lands
+  now += 6000;                         // and after it, the normal five seconds
+  assert.equal(env.namedWindowOpen(), false);
+});
+
+test("his name wakes him in any script, and nothing is dropped without a log", () => {
+  const addressed = Function("activeWakeName", `
+    ${liftLine("const BRAINELLE_NAME_RE =")}
+    ${liftLine("const BRAINO_SCRIPT_RE =")}
+    ${liftLine("const BRAINELLE_SCRIPT_RE =")}
+    ${lift("function normalizeForVoiceMatch(value) {")}
+    ${lift("function voiceExplicitlyAddressesBraino(text) {")}
+    return voiceExplicitlyAddressesBraino;
+  `)(() => "Braino");
+  assert.equal(addressed("हेलो ब्रेनो।"), true);
+  assert.equal(addressed("हे ब्रैनो"), true);
+  assert.equal(addressed("ہیلو برینو"), true);
+  assert.equal(addressed("नमस्ते"), false);
+  const accept = lift("function shouldAcceptVoiceTranscript(text) {");
+  assert.match(accept, /named\.awake_other_script/);
+  assert.match(accept, /voice\.transcript_unreadable/);
+  /* And the transcriber is told the name exists. */
+  assert.match(js, /always write that name as Braino, in English letters/);
 });
