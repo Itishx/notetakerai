@@ -71,14 +71,21 @@ const BOOT_DUR = 1150;
 
 // The turn, and the last word builds: "awa" lands, "+ke." completes it. The
 // sentence arrives, then the word that matters assembles.
-const AWAKE_PHRASES = [["This", "one's", "al", "+ready", "a", "+wake."]];
+/* "awake." lands WHOLE, and this is the fix for the line reading as if it ends
+   early. Split as "a" + "+wake." the head is itself a word, so the line passed
+   through "This one's already a" on its way, and before that it sat on "This
+   one's already" — a complete-looking sentence — for a quarter of a second.
+   The eye finishes it there and the rest looks like a stutter.
+   A chunk is only safe when the head is NOT a word on its own: "al" is
+   nonsense, so "This one's al" is visibly unfinished and the eye waits. */
+const AWAKE_PHRASES = [["This", "one's", "al", "+ready", "awake."]];
 // Not a metronome. Eight identical beats is what made this line read as a
 // machine reciting: the setup should move and the payoff should land. "This
 // one's" goes past quickly because it is only there to carry you to "already
 // awake", which then takes its time.
 // Six stamps: This / one's / al / ready / a / wake. The setup moves, the two
 // builds take their time, so it speaks instead of ticking.
-const AWAKE_STARTS = [0, 200, 420, 620, 900, 1120];
+const AWAKE_STARTS = [0, 200, 420, 620, 790];   // 790, not 1000: at 1000 the line sat on "This one's already" for 354ms, long enough to read as finished
 const AWAKE_SW = 265;
 const AWAKE_SPAN = AWAKE_STARTS[AWAKE_STARTS.length - 1] + 300;
 const AWAKE_HOLD = 420;
@@ -281,25 +288,23 @@ export default function DontBlink() {
         graphic.classList.remove("is-waking");
       }
 
-      /* Which stamp is active, from t alone. */
-      const idxAt = (from: number, starts: number[]) => {
-        const rel = t - from;
-        let a = -1;
-        for (let i = 0; i < starts.length; i++) if (rel >= starts[i]) a = i;
-        return a;
-      };
-      /* ONE beat inverts, not every line.
+      /* ONE CUT PER NUMBER on the date, and nothing anywhere else.
        *
-       * Flipping on every chunk of every line meant the frame was strobing for
-       * most of the film, which makes none of it feel like a hit. The date is
-       * the payload and the only thing here worth cutting on, so it keeps its
-       * per-chunk rhythm and everything else stays on white.
+       * A pulse per chunk, not an alternation: alternating only fires on half
+       * of them, which is what dropped the cuts on 6, ber and 26. A date wants
+       * a hit on every piece, because every piece IS a beat.
        *
-       * Even parity, so the completed date lands on WHITE and stays there. On
-       * odd it went black at the exact moment the line finished, and the film
-       * read as ending mid-sentence. */
-      const dateIdx = idxAt(T.date, DATE_STARTS);
-      const inv = t >= T.date && t < T.stand && dateIdx >= 0 && dateIdx % 2 === 0;
+       * The pulse is short and the last one finishes ~1.4s before the line
+       * clears, so the completed date still sits on WHITE — landing black on
+       * the final chunk is what made an earlier cut read as ending
+       * mid-sentence.
+       *
+       * Everything else in the film stays white. Flipping on every line meant
+       * the frame strobed throughout and nothing read as a hit. */
+      const dateRel = t - T.date;
+      const inv =
+        t >= T.date && t < T.stand &&
+        DATE_STARTS.some((at) => dateRel >= at && dateRel < at + STOMP_MS);
 
       invert.style.opacity = inv ? "1" : "0";
     };
