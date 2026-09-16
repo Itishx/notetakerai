@@ -7759,7 +7759,9 @@ async function flushRealtimeTranscript(reason) {
         if (charCmd === macCharacter) {
           await speak(macCharacter === "brainelle" ? "Already Brainelle." : "Already me.");
         } else {
-          await macSetCharacter(charCmd);
+          // Through the avatar, never straight to the character: setting only
+          // the character is what put her voice in Braino's body.
+          setMascotChoice(charCmd);
         }
         return;
       }
@@ -12155,18 +12157,22 @@ const MAC_CHARACTERS = {
     ].join(" "),
   },
 };
-/* Brainelle is off.
+/* Brainelle is on, and her voice belongs to her body.
  *
- * She is a saved setting that owns the voice, and once she is on she is on for
- * everything: good morning, are you there, the pitch demo, all of it, in her
- * voice rather than his. Turned on once and forgotten, there is no obvious way
- * back, and the symptom does not point at a setting.
+ * She was switched off on Sept 1 because her voice could be on with nothing on
+ * screen to say so: the character was a setting of its own, so "be Brainelle"
+ * left Braino's rig walking around talking in her voice, and it read as Braino
+ * being broken. Switching her off fixed that but split the other way — the
+ * avatar picker still offered her, so she walked on screen and spoke in HIS
+ * voice.
  *
- * So she is switched off at the source rather than at each of the places that
- * can turn her on. Nothing reads a stored character, nothing can set one, and
- * the stored value is cleared on the way past so an old one cannot come back
- * later. Set this to true to have her again. */
-const BRAINELLE_ENABLED = false;
+ * The real fix is that there is only one switch. The avatar decides the
+ * character: the picker, Cmd+Shift+B and the spoken "be Brainelle" all go
+ * through setMascotChoice, which sets the character from the rig. So if you
+ * hear her, she is the one on screen, with the pink notch. The pitch demo still
+ * forces Braino for its duration and puts her back afterwards. Set this to
+ * false to take her out again. */
+const BRAINELLE_ENABLED = true;
 
 let macCharacter = "braino";
 try {
