@@ -47,6 +47,11 @@ const LOG_DIR = path.join(os.homedir(), "Library", "Logs", "Braino Mac");
 const LOG_PATH = path.join(LOG_DIR, "braino-mac.log");
 const AUTH_STORE_DIR = path.join(os.homedir(), "Library", "Application Support", "Braino Mac");
 app.setPath("userData", AUTH_STORE_DIR);
+/* Chromium's own error lines ("Failed to unprotect RTP packet", from the voice
+   connection's encryption layer) filled the terminal during a network blip and
+   read like Braino failing. They are the engine's, not ours, and the session
+   carried on through them. BRAINO_CHROMIUM_LOGS=1 brings them back. */
+if (process.env.BRAINO_CHROMIUM_LOGS !== "1") app.commandLine.appendSwitch("log-level", "3");
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 if (!hasSingleInstanceLock) app.quit();
 const AUTH_STORE_PATH = path.join(AUTH_STORE_DIR, "auth-session.json");
@@ -535,6 +540,8 @@ function describeLogEvent(event, p) {
       return { icon: "🎤", label: "Mic ready", detail: `echo-cancel ${p.echoCancellation ? "on" : "off"} · noise-suppress ${p.noiseSuppression ? "on" : "off"} · auto-gain ${p.autoGainControl ? "on" : "off"}` };
     case "realtime.session.ok":
       return { icon: "🔗", label: C.good("Voice is live"), detail: "" };
+    case "realtime.session.unreachable":
+      return { icon: "📶", label: C.warn("Can't reach Braino's server"), detail: `voice keeps going (${p.code || "network"})` };
     case "realtime.idle.stop":
       return { icon: "😴", label: C.warn("Voice went to sleep"), detail: `nothing for ${secsForLog(p.idleMs)} (${p.reason || "idle"})` };
     case "speech.start":
@@ -14424,19 +14431,30 @@ async function updateRealtimeSession({ action, sessionId, reason } = {}) {
     return { ok: false, error: "Unsupported realtime session action." };
   }
 
-  const response = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/openai-realtime-session`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      apikey: SUPABASE_ANON_KEY,
-      Authorization: `Bearer ${authToken}`,
-    },
-    body: JSON.stringify({
-      action: normalizedAction,
-      sessionId: id,
-      reason: String(reason || "mac_client").trim(),
-    }),
-  });
+  /* A dropped connection is one line in the log, not an unhandled error with
+     a stack trace: the check-in is bookkeeping, and the voice session itself
+     runs straight to OpenAI and carries on without it. */
+  let response;
+  try {
+    response = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/openai-realtime-session`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${authToken}`,
+      },
+      body: JSON.stringify({
+        action: normalizedAction,
+        sessionId: id,
+        reason: String(reason || "mac_client").trim(),
+      }),
+      signal: AbortSignal.timeout(10000),
+    });
+  } catch (error) {
+    const code = String(error?.cause?.code || error?.name || "network_error");
+    logMac("realtime.session.unreachable", { action: normalizedAction, sessionId: id, code });
+    return { ok: false, error: `Braino's server could not be reached (${code}).` };
+  }
 
   const data = await response.json().catch(() => ({}));
   logMac(response.ok ? "realtime.session.ok" : "realtime.session.failed", {

@@ -115,3 +115,16 @@ test("HERA is off in voice mode", () => {
   /* And the waiting line says what is true. */
   assert.match(lift(js, "function voiceStartText(phase) {"), /return heraVoice\.on \? "Go ahead, I'm listening" : "Connecting";/);
 });
+
+/* A 35 second internet drop printed an unhandled error with a stack trace and a
+   wall of Chromium "Failed to unprotect RTP packet" lines, while voice carried
+   on fine. */
+test("a network blip is one readable line, not a stack trace", () => {
+  const main = readFileSync(new URL("../mac/braino-mac/main.cjs", import.meta.url), "utf8");
+  const update = main.slice(main.indexOf("async function updateRealtimeSession("));
+  assert.match(update.slice(0, 2200), /\} catch \(error\) \{\s*const code = String\(error\?\.cause\?\.code \|\| error\?\.name \|\| "network_error"\);\s*logMac\("realtime\.session\.unreachable"/);
+  assert.match(update.slice(0, 2200), /signal: AbortSignal\.timeout\(10000\)/);
+  assert.match(main, /case "realtime\.session\.unreachable":\s*return \{ icon: "📶", label: C\.warn\("Can't reach Braino's server"\)/);
+  assert.match(main, /if \(process\.env\.BRAINO_CHROMIUM_LOGS !== "1"\) app\.commandLine\.appendSwitch\("log-level", "3"\);/);
+  assert.ok(main.indexOf('app.commandLine.appendSwitch("log-level", "3")') < main.indexOf("app.whenReady()"));
+});
