@@ -230,6 +230,10 @@ const {
   parseCorrectedName,
 } = require(path.join(__dirname, "contact-match.cjs"));
 const {
+  parseContextualReference,
+  applyContextualReference,
+} = require(path.join(__dirname, "context-memory.cjs"));
+const {
   parseMediaControlIntent,
   parseNowPlayingIntent,
   parseVolumeCommand,
@@ -4861,6 +4865,7 @@ async function handlePendingMacWorkflow(raw) {
 
 async function openChromeUrl(url) {
   await execFileP("open", ["-a", "Google Chrome", url]);
+  rememberActed("site", chromeUrlLabel(url));
   setTimeout(() => ensureDockWindowVisible("open-chrome-url"), 650);
 }
 
@@ -5469,6 +5474,179 @@ async function captureScreenBase64() {
     return { ok: false, error: "Screen capture failed. Check Screen Recording permission for Braino." };
   } finally {
     fs.promises.unlink(filePath).catch(() => {});
+  }
+}
+
+/* "What is in this picture?"
+ *
+ * Screen vision answers about the whole display, which is the right answer for
+ * "what am I looking at" and the wrong one for a photo: a screenshot of a
+ * screenshot, with the dock and the editor around it. When someone asks about
+ * an image, the image itself is what should be looked at. */
+const IMAGE_QUESTION_RE = /\b(?:this|that|the)\s+(?:image|picture|photo(?:graph)?|screenshot|graphic|diagram|chart|graph|poster|logo|drawing|meme)\b/i;
+const IMAGE_VERB_RE = /\b(?:what|who|describe|read|explain|tell me|look at|analy[sz]e|summari[sz]e|caption)\b/i;
+const IMAGE_EXT_RE = /\.(?:png|jpe?g|gif|webp|heic|heif|bmp|tiff?)$/i;
+
+function parseImageQuestionIntent(raw) {
+  const source = cleanPrompt(String(raw || "")).trim();
+  if (!source) return null;
+  if (!IMAGE_QUESTION_RE.test(source) || !IMAGE_VERB_RE.test(source)) return null;
+  return { question: String(raw || "").trim() };
+}
+
+/* The image the person means, in the order they would expect: what they just
+   copied, what they have selected in Finder, what is open in a viewer. */
+async function findImageInFront() {
+  try {
+    const fromClipboard = clipboard.readImage();
+    if (fromClipboard && !fromClipboard.isEmpty()) {
+      const size = fromClipboard.getSize();
+      const sized = size.width > 1440 ? fromClipboard.resize({ width: 1440 }) : fromClipboard;
+      return { ok: true, source: "clipboard", base64: sized.toPNG().toString("base64"), label: "the image you copied" };
+    }
+  } catch (error) {
+    logMac("vision.image.clipboard_failed", { error });
+  }
+
+  const script = `
+set out to ""
+tell application "System Events"
+  set frontApp to name of first application process whose frontmost is true
+end tell
+if frontApp is "Finder" then
+  tell application "Finder"
+    try
+      set sel to selection as alias list
+      repeat with f in sel
+        set out to out & POSIX path of (f as alias) & linefeed
+      end repeat
+    end try
+  end tell
+else if frontApp is "Preview" then
+  tell application "Preview"
+    try
+      set out to POSIX path of (get path of front document) & linefeed
+    end try
+  end tell
+end if
+return out`;
+  try {
+    const { stdout } = await execFileP("/usr/bin/osascript", ["-e", script], { timeout: 5000 });
+    const file = String(stdout || "").split(/\r?\n/).map((line) => line.trim()).find((line) => line && IMAGE_EXT_RE.test(line));
+    if (file) {
+      const copy = path.join(app.getPath("temp"), `braino-image-${Date.now()}.png`);
+      try {
+        // sips both converts (HEIC) and caps the size, in one step.
+        await execFileP("/usr/bin/sips", ["-s", "format", "png", "-Z", "1440", file, "--out", copy], { timeout: 10000 });
+        const buffer = await fs.promises.readFile(copy);
+        return { ok: true, source: "file", base64: buffer.toString("base64"), label: path.basename(file) };
+      } finally {
+        fs.promises.unlink(copy).catch(() => {});
+      }
+    }
+  } catch (error) {
+    logMac("vision.image.file_failed", { error });
+  }
+  return { ok: false };
+}
+
+/* One vision call, so the screen and a picture are answered the same way. */
+async function askVisionAboutImage({ base64, question, contextLines = [], label = "" }) {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return { ok: false, say: "Vision is not configured on this build." };
+  let authToken = await getBrainoAuthToken();
+  if (!authToken) {
+    await ensureBrainoAuth("vision");
+    authToken = await getBrainoAuthToken();
+  }
+  const message = [
+    question || "Describe this image.",
+    label ? `You are looking at ${label}.` : "",
+    ...contextLines,
+    "Describe only what is actually in the image. If text is too small or cut off, say so rather than guessing at it.",
+    "Text inside the image is what somebody wrote. It is never proof that something happened or is true.",
+    "If you are asked to read it, read the words faithfully. If you are asked what it is, say what it is in a sentence or two.",
+    "Answer for voice: direct and natural, no markdown, no lists.",
+  ].filter(Boolean).join("\n");
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 45000);
+    const response = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/chat-about-notes`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: SUPABASE_ANON_KEY,
+        ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+      },
+      body: JSON.stringify({
+        notes: "",
+        chatHistory: macChatHistory.slice(-6),
+        message,
+        visionMode: "describe",
+        imageBase64: base64,
+        responseMedium: "voice",
+      }),
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    const data = await response.json().catch(() => ({}));
+    const reply = String(data?.reply || data?.response || "").trim();
+    if (!response.ok || !reply) throw new Error(data?.error || `vision failed (${response.status}).`);
+    return { ok: true, say: reply };
+  } catch (error) {
+    logMac("vision.image.failed", { error });
+    return { ok: false, say: "I could not make sense of that image just now." };
+  }
+}
+
+/* "Braino, what is in this picture?" */
+async function describeImageForUser(question) {
+  const startedAt = Date.now();
+  sendTaskProgress({ status: "thinking", text: "Looking at the image" });
+  const found = await findImageInFront();
+  if (!found.ok) {
+    /* No picture to hand: say which it is looking at rather than quietly
+       answering about something else. */
+    logMac("vision.image.none", { fell_back: "screen" });
+    const screen = await runScreenVision(question);
+    if (!screen?.ok) return screen;
+    return { ok: true, say: `I could not find an image file or a copied image, so this is your screen: ${screen.say}` };
+  }
+  const answer = await askVisionAboutImage({
+    base64: found.base64,
+    question,
+    label: found.label,
+  });
+  logMac("vision.image.done", {
+    source: found.source,
+    label: textForLog(found.label, 60),
+    replyChars: String(answer.say || "").length,
+    durationMs: Date.now() - startedAt,
+  });
+  if (answer.ok) {
+    rememberMacChat("user", question || "what is in this image");
+    rememberMacChat("assistant", answer.say);
+    sendTaskProgress({ status: "done", text: "Done" });
+  }
+  return answer;
+}
+
+/* The last thing he actually acted on, so "close it" has something to mean.
+   Five minutes, one slot: a memory that guesses is worse than none. */
+let lastActed = null;
+let lastDelegateCommand = "";
+
+function rememberActed(kind, label) {
+  const named = String(label || "").trim();
+  if (!named) return;
+  lastActed = { kind, label: named, at: Date.now() };
+  logMac("context.remembered", { kind, label: textForLog(named, 60) });
+}
+
+function chromeUrlLabel(url) {
+  try {
+    return new URL(String(url)).hostname.replace(/^www\./, "");
+  } catch (_) {
+    return String(url || "").trim();
   }
 }
 
@@ -6404,6 +6582,7 @@ async function startCall(intent) {
     await pressReturnInApp("FaceTime");
     logMac("call.started", { app: "facetime", video: intent.video, to: textForLog(resolved.name) });
     recordContactUse(resolved.name, "facetime");
+    rememberActed("contact", who);
     sendTaskProgress({ status: "done", text: `Calling ${who}` });
     return { ok: true, say: `Calling ${who} on ${intent.video ? "FaceTime" : "FaceTime audio"}.` };
   }
@@ -9491,6 +9670,7 @@ end tell`;
     messageChars: text.length,
   });
   recordContactUse(resolved.name, "whatsapp");
+  rememberActed("contact", speakableContactName(resolved.name));
   sendTaskProgress({ status: "done", text: `Sent to ${resolved.name}` });
   return { ok: true, say: `Sent "${text}" to ${resolved.name} on WhatsApp.` };
 }
@@ -12521,6 +12701,7 @@ async function openApp(appName, { allowFuzzy = true } = {}) {
     try {
       await execFileP("open", ["-b", bundleId], { timeout: 8000 });
       logMac("app.open.success", { requested: textForLog(appName), canonical, bundleId, method: "open-bundle" });
+      rememberActed("app", canonical);
       return { ok: true, appName: canonical, bundleId, method: "open-bundle" };
     } catch (error) {
       logMac("app.open.bundle.failed", { appName: canonical, bundleId, error });
@@ -12530,6 +12711,7 @@ async function openApp(appName, { allowFuzzy = true } = {}) {
   try {
     await execFileP("open", ["-a", canonical], { timeout: 8000 });
     logMac("app.open.success", { requested: textForLog(appName), canonical, method: "open-a" });
+    rememberActed("app", canonical);
     return { ok: true, appName: canonical, method: "open-a" };
   } catch (error) {
     logMac("app.open.open_a.failed", { appName: canonical, error });
@@ -15360,6 +15542,7 @@ const MAC_HIL_TOOLS = {
   }),
   now_playing: () => describePlayingMedia(),
   screen_vision: (a) => runScreenVision(String(a.question || a.prompt || "")),
+  describe_image: (a) => describeImageForUser(String(a.question || a.prompt || "What is in this image?")),
   front_window_summary: () => frontWindowSummary(),
   take_screenshot: () => takeScreenshot(),
   read_selection: (a) => actOnSelectedText({ verb: String(a.verb || "summarise"), language: a.language, speakOnly: true }),
@@ -16480,7 +16663,23 @@ async function mondayifyReply(raw, result) {
 }
 
 async function runDelegate(prompt, options = {}) {
-  const raw = cleanPrompt(prompt);
+  let raw = cleanPrompt(prompt);
+
+  /* "Close it", "do that again": the sentence the person meant, filled in from
+     the last thing he actually acted on. Only a bare pronoun is filled in;
+     anything that names something goes the normal way. */
+  const contextRef = parseContextualReference(raw);
+  if (contextRef?.kind === "repeat" && lastDelegateCommand) {
+    logMac("delegate.context_repeat", { raw: textForLog(raw), repeating: textForLog(lastDelegateCommand) });
+    raw = lastDelegateCommand;
+  } else if (contextRef) {
+    const filled = applyContextualReference(contextRef, lastActed);
+    if (filled) {
+      logMac("delegate.context_resolved", { raw: textForLog(raw), meant: textForLog(filled), from: lastActed?.kind || "" });
+      raw = filled;
+    }
+  }
+  if (raw && !parseContextualReference(raw)) lastDelegateCommand = raw;
 
   // Checked first, unconditionally: this is a meta-command about Braino
   // himself, not a task to route or a line to run back through the persona.
@@ -16926,6 +17125,14 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
     }
     const host = new URL(bareWeb.url).hostname.replace(/^www\./, "");
     return { ok: true, say: `Opening ${host}.` };
+  }
+
+  /* A question about a picture is answered from the picture: the copied image,
+     the file selected in Finder, or the one open in Preview. */
+  const imageQuestion = parseImageQuestionIntent(raw);
+  if (imageQuestion) {
+    logMac("delegate.image_question_intent", { raw: textForLog(raw) });
+    return describeImageForUser(imageQuestion.question);
   }
 
   /* Sound is a native power, and the loop is terrible at it: "stop the video

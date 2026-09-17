@@ -151,6 +151,7 @@ export const HIL_TOOL_CATALOG: HilTool[] = [
   { name: "repeat_last", params: [], gloss: "Re-speak the last thing Braino said out loud", stateful: true, zeroNetwork: true, },
   { name: "screen_clip_record", params: ["seconds"], gloss: "Record a screen clip of N seconds, clamped five to sixty", zeroNetwork: true, handler: "recordScreenClip", },
   { name: "screen_point", params: ["target", "raw"], gloss: "Screenshot and laser-point at a named UI element; stores it for clicking", stateful: true, handler: "runScreenPoint", },
+  { name: "describe_image", params: ["question"], gloss: "Answer about a picture rather than the whole screen: the copied image, the file selected in Finder, or the one open in Preview. Use this when they say image, picture, photo or screenshot", memoSafe: true, handler: "describeImageForUser", },
   { name: "screen_vision", params: ["question"], gloss: "Screenshot the display and answer a free-form question about what is shown", handler: "runScreenVision", },
   { name: "semantic_open", params: ["site", "subject"], gloss: "Open a described page on a known site like Amazon, IMDb", },
   { name: "send_to_phone", params: ["content"], gloss: "iMessage the current Chrome URL or given text to your phone", irreversible: true, stateful: true, handler: "sendToPhone", },
