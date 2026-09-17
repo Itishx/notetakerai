@@ -104,8 +104,9 @@ test("your sentence stays in the box while he works", () => {
   assert.match(js, /if \(processingActive\) inlineMode = heardForInline \? "thinking" : ""/);
   /* The phase goes in the caption's own chip, shimmering. */
   assert.match(js, /classList\.toggle\("nf-inline-working", active && !typingOpen && \(mode === "thinking"/);
-  /* And the caption is not cleared by a timer while the job is still running. */
-  assert.match(js, /function clearUnlessWorking\(\) \{\s*if \(voiceTurnInFlight \|\| processing\)/);
+  /* And the caption is not cleared by a timer while the job is still running,
+     up to a ceiling, so a long or stuck job cannot freeze it on screen. */
+  assert.match(js, /function clearUnlessWorking\(\) \{[\s\S]{0,500}if \(\(voiceTurnInFlight \|\| processing\) && heldFor < NF_HEARD_MAX_WORKING_MS\)/);
 });
 
 /* With the caption open, the thinking canvas and the centred chip must not

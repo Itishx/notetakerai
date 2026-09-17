@@ -3000,7 +3000,12 @@ function nfSetHeard(text, options = {}) {
        you asked for at second four and the notch showed a chip with nothing to
        say what it was for. */
     nfCaptionClearTimer = window.setTimeout(function clearUnlessWorking() {
-      if (voiceTurnInFlight || processing) {
+      /* Held while he works, but not forever: a long job, or one whose end
+         never arrives, left your last sentence frozen over the top of the
+         screen. After NF_HEARD_MAX_WORKING_MS the small thinking chip is
+         enough to say he is on it. */
+      const heldFor = nfHeardShownAt ? Date.now() - nfHeardShownAt : 0;
+      if ((voiceTurnInFlight || processing) && heldFor < NF_HEARD_MAX_WORKING_MS) {
         nfCaptionClearTimer = window.setTimeout(clearUnlessWorking, 1200);
         return;
       }
@@ -3009,6 +3014,8 @@ function nfSetHeard(text, options = {}) {
   }
   updateNotchFace();
 }
+
+const NF_HEARD_MAX_WORKING_MS = 15000;
 
 function nfClearCaptions() {
   window.clearTimeout(nfCaptionClearTimer);
@@ -12712,26 +12719,21 @@ document.addEventListener("click", (event) => {
   // Open music player: the surface owns every click (transport buttons keep
   // their own handlers) — a stray tap must not flip a voice session on.
   if (nfMusicOpen || event.target.closest(".nf-music-surface")) return;
-  /* The typing field owns every click while it is up. Clicking INTO a text box
-     to put the caret in it was starting the microphone, which is the opposite
-     of what reaching for the keyboard means. */
-  if (typingOpen || event.target.closest(".nf-inline-caption")) return;
-  if (nfExpanded && nfPill) {
-    const rect = nfPill.getBoundingClientRect();
-    const bandBottom = rect.top + (parseFloat(getComputedStyle(notchFace).getPropertyValue("--nf-notch-h")) || 33) + 34;
-    if (event.clientY > bandBottom) return;
+  /* The typing field owns every click while it is up. */
+  if (typingOpen) return;
+  /* A click puts your sentence away. It is the notch's biggest sheet and it
+     sits over the tabs of whatever is behind it. */
+  if (nfHeardText && notchFace?.classList.contains("nf-inline-open")
+    && !notchFace.classList.contains("nf-thinking")) {
+    logRenderer("notch.caption_dismissed", {});
+    nfClearCaptions();
+    return;
   }
-  /* A click TYPES. It used to start the microphone, and it does not any more.
-   *
-   * There are already two ways to start listening (Control twice, and
-   * Command+Space) and no way at all to type, so the gesture with no keyboard
-   * behind it goes to the keyboard. It also removes the trap: reaching for the
-   * notch because you missed the typing shortcut used to open the mic instead,
-   * which is the opposite of what the reach meant. */
-  logRenderer("tray.click_type", { expanded: nfExpanded });
-  notchFace?.classList.add("nf-press");
-  window.setTimeout(() => notchFace?.classList.remove("nf-press"), 170);
-  openTyping("click");
+  /* A click no longer TYPES. Typing into this overlay never worked well (it
+     cannot hold the keyboard the way a real window does), and every reach for
+     a browser tab near the notch opened "Type what you need", which then sat
+     over those tabs. A plain click on the notch does nothing now; Command
+     Option T still opens the field on purpose. */
 });
 
 // ── Scroll on the island: system output volume, with a tiny HUD. ──

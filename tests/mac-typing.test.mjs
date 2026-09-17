@@ -70,10 +70,8 @@ test("both ways in are wired", () => {
   /* Escape closes, Enter sends. */
   assert.match(renderer, /event\.key === "Escape"[\s\S]{0,80}closeTyping\("escape"\)/);
   assert.match(renderer, /event\.key === "Enter" && !event\.shiftKey/);
-  /* The click was handed to typing outright rather than being shared with
-     voice: sharing it was what started the microphone as well as the field. */
-  assert.match(renderer, /openTyping\("click"\)/);
-  assert.doesNotMatch(renderer, /tray\.click_talk/);
+  /* The hotkey is the one way in now; the click was removed. */
+  assert.doesNotMatch(renderer, /openTyping\("click"\)|tray\.click_talk/);
 });
 
 /* The field opened and vanished in the same tick: openTyping added
@@ -108,14 +106,14 @@ test("the notch takes the keyboard while you type, and gives it back", () => {
   assert.match(renderer, /typingFocus\?\.\(false\)/);
 });
 
-/* Clicking INTO the text box to place the caret was starting the microphone,
-   which is the opposite of what reaching for the keyboard means. */
+const notchClick = () => {
+  const at = renderer.indexOf("if (!nfPointInNotchZone(event.clientX, event.clientY)) return;");
+  return renderer.slice(at, renderer.indexOf("\n});\n", at));
+};
+
+/* Clicking INTO the text box to place the caret must not re-trigger anything. */
 test("the field owns its own clicks", () => {
-  /* Clicking INTO the box to place the caret must not re-open or re-trigger
-     anything: the field, once up, owns every click inside the caption. */
-  const h = renderer.slice(renderer.indexOf('logRenderer("tray.click_type"') - 1600);
-  const guards = h.slice(0, h.indexOf('logRenderer("tray.click_type"'));
-  assert.match(guards, /if \(typingOpen \|\| event\.target\.closest\("\.nf-inline-caption"\)\) return;/);
+  assert.match(notchClick(), /if \(typingOpen\) return;/);
 });
 
 /* The field and his reply were drawn on top of each other: two labels and two
@@ -131,15 +129,22 @@ test("an answer owns the box, whatever is holding it", () => {
   assert.match(renderer, /if \(typingOpen\) closeTyping\("answer"\);/);
 });
 
-/* Two ways to start listening already exist (Control twice, Command+Space) and
-   none to type, so the gesture with no keyboard behind it goes to the keyboard.
-   It also removes the trap: reaching for the notch because you missed the
-   typing shortcut used to open the microphone instead. */
-test("clicking the notch types, it does not listen", () => {
-  assert.match(renderer, /logRenderer\("tray\.click_type"/);
-  const h = renderer.slice(renderer.indexOf('logRenderer("tray.click_type"'));
-  assert.match(h.slice(0, 400), /openTyping\("click"\)/);
-  assert.doesNotMatch(h.slice(0, 400), /toggleVoice\(\)/);
+/* Tap to type is gone: every reach for a browser tab near the notch opened
+   "Type what you need", which then sat over those tabs. A click neither types
+   nor listens; on your last sentence it puts the sentence away. Command
+   Option T still opens the field. */
+test("clicking the notch neither types nor listens", () => {
+  const click = notchClick();
+  assert.doesNotMatch(click, /openTyping\(|toggleVoice\(\)|tray\.click_type/);
+  assert.match(click, /if \(nfHeardText && notchFace\?\.classList\.contains\("nf-inline-open"\)\s*&& !notchFace\.classList\.contains\("nf-thinking"\)\) \{\s*logRenderer\("notch\.caption_dismissed", \{\}\);\s*nfClearCaptions\(\);/);
+  assert.match(main, /hotkeys\.typing/);
+});
+
+/* "It just sticks there, frozen with what we said last." */
+test("your sentence never stays up for more than fifteen seconds of work", () => {
+  assert.match(renderer, /const NF_HEARD_MAX_WORKING_MS = 15000;/);
+  const heard = renderer.slice(renderer.indexOf("function nfSetHeard(text, options = {}) {"));
+  assert.match(heard.slice(0, 2600), /if \(\(voiceTurnInFlight \|\| processing\) && heldFor < NF_HEARD_MAX_WORKING_MS\) \{/);
 });
 
 test("the field is not jammed against the rule above it", () => {
