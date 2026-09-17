@@ -22,7 +22,12 @@ const BRAINO_SCALE_MAX = 5;
 const TTS_CHUNK_MAX_CHARS = 240;
 const TTS_FETCH_TIMEOUT_MS = 14000;
 const TTS_WARM_INTERVAL_MS = 240000;
-const REALTIME_IDLE_TIMEOUT_MS = 15000;
+/* How long a voice session stays open after the last exchange. Fifteen
+   seconds dated from before "his name in every sentence": a back-and-forth
+   closed between turns, and every reply had to wake him again through the
+   on-device listener and a 2.5 to 5 second reconnect. A minute, the same as
+   Her mode, costs about half a cent more per conversation. */
+const REALTIME_IDLE_TIMEOUT_MS = 60000;
 const HER_FISH_VOICE_ID = "046164e7366a4dc899b69a9887d9f7c0";
 const HER_IDLE_TIMEOUT_MS = 60000;
 const HER_ENTER_RE = /\b(her mode|call her|talk to her|open her|start her)\b/;

@@ -3692,6 +3692,13 @@ function handleWakeWordLine(raw) {
     logMac(type === "healed" ? "wakeword.healed" : "wakeword.heal_failed", { reason: value });
     return;
   }
+  /* A word where his name goes that was close but did not wake him. One word,
+     never the sentence: this is how a "Hey Braino" that did nothing becomes
+     something we can see and add to the list. */
+  if (type === "nearmiss") {
+    logMac("wakeword.near_miss", { heard: value.replace(/[^a-z]/gi, "").slice(0, 20) });
+    return;
+  }
   if (type === "wake") {
     const transcript = value;
     const front = String(activeMacContext?.appName || "");

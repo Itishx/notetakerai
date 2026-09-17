@@ -44,6 +44,45 @@ func containsWakeWord(_ text: String) -> Bool {
   return WAKE_WORDS.contains { lower.contains($0) }
 }
 
+/* "Hey Braino" that did not wake him leaves no trace, so there was no way to
+   tell what the recogniser heard instead. A near miss is a word in the place
+   his name goes (first, or after hey / hi / ok / yo) that is close to it.
+   Only that one word is reported, never the sentence around it. */
+let NEAR_MISS_WORDS: Set<String> = ["reno", "rhino", "dino", "brian", "bryan", "brain", "draino", "drano", "baino", "bravo", "brenno", "brano"]
+let ADDRESS_WORDS: Set<String> = ["hey", "hi", "ok", "okay", "yo"]
+
+func editDistance(_ a: String, _ b: String) -> Int {
+  let a = Array(a), b = Array(b)
+  if a.isEmpty { return b.count }
+  if b.isEmpty { return a.count }
+  var previous = Array(0...b.count)
+  for i in 1...a.count {
+    var current = [i] + Array(repeating: 0, count: b.count)
+    for j in 1...b.count {
+      current[j] = a[i - 1] == b[j - 1]
+        ? previous[j - 1]
+        : 1 + min(previous[j - 1], previous[j], current[j - 1])
+    }
+    previous = current
+  }
+  return previous[b.count]
+}
+
+func nearMisses(in text: String) -> [String] {
+  let words = text.lowercased()
+    .components(separatedBy: CharacterSet.letters.inverted)
+    .filter { !$0.isEmpty }
+  var found: [String] = []
+  for (index, word) in words.enumerated() {
+    let addressed = index == 0 || ADDRESS_WORDS.contains(words[index - 1])
+    guard addressed, (3...9).contains(word.count), !WAKE_WORDS.contains(where: { word.contains($0) }) else { continue }
+    if NEAR_MISS_WORDS.contains(word) || editDistance(word, "braino") <= 2 {
+      found.append(word)
+    }
+  }
+  return found
+}
+
 final class BrainoWakeWord: NSObject {
   private let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "en_US"))
   private let audioEngine = AVAudioEngine()
@@ -59,6 +98,8 @@ final class BrainoWakeWord: NSObject {
   /* Which recognition cycle is current. Every callback checks it, so a task
      that has been replaced can no longer touch the one that replaced it. */
   private var cycleGeneration = 0
+  /* Near misses already reported in this cycle: partial results repeat. */
+  private var nearMissesReported = Set<String>()
   /* When the tap last delivered audio. It delivers buffers continuously, even
      in silence, so a long gap means the microphone was taken away from it. */
   private let bufferLock = NSLock()
@@ -221,6 +262,7 @@ final class BrainoWakeWord: NSObject {
     guard !stopped else { return }
     cycleGeneration += 1
     let generation = cycleGeneration
+    nearMissesReported.removeAll()
     let req = SFSpeechAudioBufferRecognitionRequest()
     req.shouldReportPartialResults = true
     req.requiresOnDeviceRecognition = true
@@ -258,6 +300,10 @@ final class BrainoWakeWord: NSObject {
             // cannot wake him twice.
             self.scheduleRestart(after: 1.2, with: recognizer)
             return
+          }
+          for word in nearMisses(in: text) where !self.nearMissesReported.contains(word) {
+            self.nearMissesReported.insert(word)
+            self.printLine("nearmiss\t\(word)")
           }
           if result.isFinal {
             self.scheduleRestart(after: 0.1, with: recognizer)

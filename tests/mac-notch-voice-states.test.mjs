@@ -236,3 +236,25 @@ test("the wake listener cannot cancel its own replacement", () => {
   assert.match(handler, /DispatchQueue\.main\.async \{/);
   assert.doesNotMatch(handler, /self\.restartCycle\(/);
 });
+
+/* A back-and-forth closed between turns: fifteen seconds of quiet ended the
+   session, and every reply had to wake him again. */
+test("a voice session stays open a minute after the last exchange", () => {
+  assert.match(js, /const REALTIME_IDLE_TIMEOUT_MS = 60000;/);
+  assert.match(js, /const idleTimeoutMs = herMode \? HER_IDLE_TIMEOUT_MS : REALTIME_IDLE_TIMEOUT_MS;/);
+});
+
+/* "Hey Braino" sometimes did nothing, and left no trace of what was heard. */
+test("a near miss of his name is logged, as one word and nothing else", () => {
+  const swift = readFileSync(new URL("../mac/braino-mac/native/BrainoWakeWord.swift", import.meta.url), "utf8");
+  assert.match(swift, /let NEAR_MISS_WORDS: Set<String> = \["reno", "rhino", "dino", "brian"/);
+  const near = swift.slice(swift.indexOf("func nearMisses(in text: String)"), swift.indexOf("final class BrainoWakeWord"));
+  assert.match(near, /let addressed = index == 0 \|\| ADDRESS_WORDS\.contains\(words\[index - 1\]\)/);
+  assert.match(near, /NEAR_MISS_WORDS\.contains\(word\) \|\| editDistance\(word, "braino"\) <= 2/);
+  assert.match(swift, /for word in nearMisses\(in: text\) where !self\.nearMissesReported\.contains\(word\) \{\s*self\.nearMissesReported\.insert\(word\)\s*self\.printLine\("nearmiss\\t\\\(word\)"\)/);
+  assert.match(swift, /let generation = cycleGeneration\s*nearMissesReported\.removeAll\(\)/);
+  const main = readFileSync(new URL("../mac/braino-mac/main.cjs", import.meta.url), "utf8");
+  assert.match(main, /if \(type === "nearmiss"\) \{\s*logMac\("wakeword\.near_miss", \{ heard: value\.replace\(\/\[\^a-z\]\/gi, ""\)\.slice\(0, 20\) \}\);/);
+  /* The list itself is unchanged: Reno and Dino stay out until the log says otherwise. */
+  assert.match(swift, /let WAKE_WORDS = \["braino", "brayno", "bruno", "breno", "raino", "brainelle"\]/);
+});
