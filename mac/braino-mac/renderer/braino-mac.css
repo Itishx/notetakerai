@@ -3785,6 +3785,29 @@ body {
   letter-spacing: .05em;
 }
 
+/* Stop, in the open sheet only. The collapsed chip is the way in, not a place
+   for a button you could hit on the way to reading. */
+#notch-face .nf-thinking-stop {
+  display: none;
+  flex: 0 0 auto;
+  align-items: center;
+  padding: 7px 12px;
+  border: 1px solid rgba(255,139,131,.34);
+  border-radius: 999px;
+  color: #ff9f97;
+  background: rgba(255,120,110,.12);
+  font: 650 9px/1 "Braino SF Pro Display", "SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, sans-serif;
+  letter-spacing: .02em;
+  cursor: pointer;
+  pointer-events: auto;
+  transition: background .16s ease, color .16s ease;
+}
+#notch-face.nf-think-open .nf-thinking-stop { display: inline-flex; }
+#notch-face .nf-thinking-stop:hover { background: rgba(255,120,110,.22); color: #ffb8b1; }
+#notch-face .nf-thinking-stop:disabled { opacity: .5; cursor: default; }
+#notch-face.nf-think-complete .nf-thinking-stop,
+#notch-face.nf-think-failed .nf-thinking-stop { display: none; }
+
 /* His reasoning can be longer than the sheet, and until now the overflow was
    simply unreachable: the canvas grows to fit up to a ceiling, and past that
    the last steps sat below the fold with nothing to scroll. */

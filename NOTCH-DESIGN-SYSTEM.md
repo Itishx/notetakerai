@@ -527,6 +527,8 @@ There is no countdown: a number made a slow connection look slower. HERA listens
 
 The thinking chip is one word, `Thinking`. The old four-word cycle is gone.
 
+**Stop, in the open sheet: `.nf-thinking-stop`.** Right end of `.nf-thinking-head`, after the state word. Pill, 7×12 padding, 9px/650, coral text `#ff9f97` on `rgba(255,120,110,.12)` with a `.34` coral hairline; hover to `.22`. Shown only under `.nf-think-open`, hidden again on `.nf-think-complete` / `.nf-think-failed`. Never on the collapsed chip, where it could be hit on the way to reading. Same stop as "Braino, stop the task".
+
 ---
 
 ## 13. Other states

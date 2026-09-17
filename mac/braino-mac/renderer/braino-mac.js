@@ -408,6 +408,10 @@ let heraVoiceStarting = false;
 /* Between OpenAI's speech_started and speech_stopped. */
 let rtUserSpeakingNow = false;
 function rtSpeechInProgress() { return rtUserSpeakingNow; }
+/* How long the last turn of speech lasted, for looksLikeNoise. */
+let rtSpeechStartedAt = 0;
+let rtSpeechAudioStartMs = null;
+let rtLastSpeechMs = 0;
 let heraVoiceStartTries = 0;
 const HERA_ROTATE_EXPIRE_MS = 2500;
 const HERA_SEGMENT_WAIT_MS = 600;
@@ -2240,6 +2244,23 @@ if (notchFace) {
     const opening = !notchFace.classList.contains("nf-think-open");
     nfSetThinkingOpen(opening);
     nfSetThinkingSticky(opening ? detailedText : coworkLabel || nfThinkingText);
+  });
+  /* Stop, from the open sheet: the same stop as "Braino, stop the task". */
+  notchFace.querySelector(".nf-thinking-stop")?.addEventListener("click", async (event) => {
+    event.stopPropagation();
+    event.preventDefault();
+    const button = event.currentTarget;
+    if (button.disabled) return;
+    button.disabled = true;
+    logRenderer("thinking.stop_button", {});
+    try {
+      // Nothing left to stop: the sheet was just out of date, so it goes.
+      if (!await stopTaskNow("thinking_button")) nfSetThinking("");
+    } finally {
+      nfSetThinkingOpen(false);
+      button.disabled = false;
+      updateNotchFace();
+    }
   });
   document.addEventListener("pointerdown", (event) => {
     if (!notchFace.classList.contains("nf-think-open") || notchFace.contains(event.target)) return;
@@ -4386,13 +4407,16 @@ function voiceAddressesBraino(text) {
  * something to the audience" was sent to him as a command. No window now: the
  * way Siri and Alexa work, no name, no action.
  *
- * Four exceptions, each for a moment where you are plainly talking to him:
+ * Exceptions, each for a moment where you are plainly talking to him:
  *   - the first sentence after you woke him ("Hey Braino", or Control twice),
  *   - while he is talking or working (cutting in, "stop", "no, the other one"),
- *   - answering a question he just asked,
- *   - a sentence you began during one of the above.
+ *   - a sentence you began during one of the above,
+ *   - a yes, a no or "the second one" right after he asked you something
+ *     (answersHisQuestion; anything longer needs his name, because his chat
+ *     replies end in a question all the time and the TV then answered it).
  * A pending delegate follow-up is handled before this, in
  * shouldAcceptVoiceTranscript, and stop phrases are checked on their own.
+ * Every one of these is also run past looksLikeNoise.
  *
  * NAMED_WINDOW_MS survives only to tell a real sleep from a pause, for the
  * wake light. */
@@ -4404,11 +4428,22 @@ function namedWindowOpen() {
   if (!namedModeOn) return true;
   if (speaking || processing || voiceTurnInFlight) return true;
   if (Date.now() < namedGraceUntil) return true;
-  if (namedSpeechAwake) return true;
-  const answering = lastSpokenLine?.asked
+  return Boolean(namedSpeechAwake);
+}
+
+/* He finished a question a moment ago. */
+function namedAnswerWindowOpen() {
+  return Boolean(lastSpokenLine?.asked
     && lastSpokenLine.endedTs > 0
-    && Date.now() - lastSpokenLine.endedTs <= NAMED_ANSWER_WINDOW_MS;
-  return Boolean(answering);
+    && Date.now() - lastSpokenLine.endedTs <= NAMED_ANSWER_WINDOW_MS);
+}
+
+const ANSWER_REPLY = /^(?:yes|yeah|yep|yup|yes please|sure|ok|okay|alright|all right|no|nope|nah|no thanks|not now|go ahead|do it|please do|go for it|cancel|never ?mind|that one|this one|(?:the )?(?:first|second|third|fourth|fifth|last|other)(?: one)?|(?:number )?(?:one|two|three|four|five|1|2|3|4|5))\b/i;
+
+function answersHisQuestion(text) {
+  if (!namedAnswerWindowOpen()) return false;
+  const value = String(text || "").trim().replace(/[.!?,]+$/g, "");
+  return value.split(/\s+/).filter(Boolean).length <= 5 && ANSWER_REPLY.test(value);
 }
 
 function namedWake(why) {
@@ -4445,7 +4480,7 @@ function namedOpenAtReady() {
    and reading a `let` that early throws. */
 function namedAsleepForNotch() {
   try {
-    return namedModeOn && !namedWindowOpen();
+    return namedModeOn && !namedWindowOpen() && !namedAnswerWindowOpen();
   } catch {
     return false;
   }
@@ -5191,18 +5226,35 @@ function shouldAcceptVoiceTranscript(text) {
       logRenderer("named.self_echo", { chars: stats.normalized.length });
       return false;
     }
+    const named = voiceExplicitlyAddressesBraino(text);
     const heardOnDevice = namedHeardOnDeviceAt > 0 && Date.now() - namedHeardOnDeviceAt <= NAMED_ON_DEVICE_MATCH_MS;
-    if (voiceExplicitlyAddressesBraino(text) || heardOnDevice) {
-      if (heardOnDevice && !voiceExplicitlyAddressesBraino(text)) {
+    if (named || heardOnDevice) {
+      /* "Hey Braino" made out of four seconds of room noise, which is what
+         the transcriber writes when its prompt is all it has to go on. */
+      if (named && isBareWakeWord(text) && looksLikeNoise(text, rtLastSpeechMs)) {
+        logRenderer("named.noise_ignored", { text: String(text || "").trim().slice(0, 80), speechMs: rtLastSpeechMs });
+        return false;
+      }
+      if (heardOnDevice && !named) {
         logRenderer("named.heard_on_device", { text: String(text || "").trim().slice(0, 80) });
       }
-      namedHeardOnDeviceAt = 0;
+      // His name on its own leaves the on-device match for the sentence after it.
+      if (!isBareWakeWord(text)) namedHeardOnDeviceAt = 0;
       namedWake("name");
-    } else if (!namedWindowOpen()) {
+    } else if (!namedWindowOpen() && !answersHisQuestion(text)) {
       logRenderer("named.ignored", {
         // Logged in full: these drops are the feature working, and the only way
         // to tell that from the feature eating your sentence is to read them.
         text: String(text || "").replace(/\s+/g, " ").trim().slice(0, 120),
+      });
+      return false;
+    } else if (looksLikeNoise(text, rtLastSpeechMs)) {
+      /* No name, so it only got this far on an exception: right after a wake,
+         mid-turn, or answering him. Those are exactly the moments the room's
+         noise was being turned into commands. */
+      logRenderer("named.noise_ignored", {
+        text: String(text || "").replace(/\s+/g, " ").trim().slice(0, 120),
+        speechMs: rtLastSpeechMs,
       });
       return false;
     } else {
@@ -6373,8 +6425,11 @@ function buildRealtimeSessionUpdate() {
                 ].join(" ")
               : [
                   "Transcribe the user's direct command to Braino.",
-                  "The assistant is called Braino (and sometimes Brainelle). People say \"Braino\" or \"Hey Braino\" to call him: always write that name as Braino, in English letters.",
-                  "Write everything in English letters, even if the accent is Indian.",
+                  // Names only, no sentences about them. The transcriber
+                  // repeats its prompt when all it hears is noise: "Write
+                  // everything in English letters" came back as "Use English as
+                  // the language.", and "Hey Braino" came back out of silence.
+                  "Vocabulary: Braino, Brainelle.",
                   "Ignore music, fans, coughs, accidental noises, and unrelated background speech.",
                   "Keep names, app names, URLs, file names, and code tokens intact.",
                   "If the input is not a clear user command, leave it empty.",
@@ -7839,7 +7894,10 @@ async function submitTyped(text) {
   logRenderer("type.in", { chars: said.length });
   nfSetHeard(said, { durationMs: 1600 });
   closeTyping("submitted");
-  if (isStopTaskPhrase(said) && await stopTaskNow("typed", said)) return;
+  if (isStopTaskPhrase(said)) {
+    if (!await stopTaskNow("typed", said)) await nothingToStop("typed", said);
+    return;
+  }
   /* Talking to him while he works is the same conversation whether you speak or
      type, so a typed sentence goes through the interjection router first. */
   const handled = await routeInterjectionIntoRunningJob(said);
@@ -7903,6 +7961,21 @@ async function stopTaskNow(source, transcript = "") {
   setStatus(realtimeActive ? "listening" : "ready", realtimeActive ? "Listening" : "Double Space to show/hide");
   await speak("I stopped the task.");
   return true;
+}
+
+/* "Stop the task" with no task. This used to carry on to the chat and the
+   planner, which read it as a job: ten seconds of work to stop nothing, then
+   his first thought ("The user wants the current task stopped.") read aloud. */
+async function nothingToStop(source, transcript = "") {
+  logRenderer("voice.stop_task", { source, stopped: false, wasRunning: false, speaking });
+  if (transcript) nfSetHeard(transcript, { durationMs: 1400 });
+  if (speaking) {
+    // "Braino, stop" while he talks means stop talking.
+    stopSpeechOutput();
+    setStatus(realtimeActive ? "listening" : "ready", realtimeActive ? "Listening" : "Ready");
+    return;
+  }
+  await speak("Nothing's running right now.");
 }
 
 async function routeInterjectionIntoRunningJob(transcript) {
@@ -8040,12 +8113,17 @@ async function flushRealtimeTranscript(reason, textOverride) {
     stopListeningNow("voice_phrase");
     return;
   }
-  if (isStopTaskPhrase(transcript) && await stopTaskNow("voice_phrase", transcript)) return;
+  if (isStopTaskPhrase(transcript)) {
+    if (await stopTaskNow("voice_phrase", transcript)) return;
+    if (accepted) {
+      await nothingToStop("voice_phrase", transcript);
+      return;
+    }
+  }
   /* Half a sentence waits for the rest. Not an answer to his question or a
      follow-up he is waiting on — those are often a single word — and never
      twice. */
-  const answering = lastSpokenLine?.asked && lastSpokenLine.endedTs > 0
-    && Date.now() - lastSpokenLine.endedTs <= NAMED_ANSWER_WINDOW_MS;
+  const answering = namedAnswerWindowOpen();
   if (accepted && !dictationMode && !fromHold && !answering && !hasPendingDelegateFollowup()
     && !isBareWakeWord(transcript) && looksUnfinished(transcript)) {
     nfSetHeard(transcript);
@@ -8262,6 +8340,8 @@ function handleRealtimeEvent(event) {
       rtTranscriptFinal = false;
       clearRealtimeTranscriptFlush();
       rtUserSpeakingNow = true;
+      rtSpeechStartedAt = Date.now();
+      rtSpeechAudioStartMs = Number.isFinite(event.audio_start_ms) ? event.audio_start_ms : null;
       if (heraVoice.on) {
         heraVoice.userSpeaking = true;
         heraVoice.sawOpenAiSpeech = true;
@@ -8310,6 +8390,12 @@ function handleRealtimeEvent(event) {
     markRealtimeActivity("speech_stopped", { schedule: false });
     markVoiceLatency("speech_stopped");
     rtUserSpeakingNow = false;
+    // The audio clock when OpenAI sends it, our own clock when it does not.
+    if (rtSpeechStartedAt) {
+      rtLastSpeechMs = Math.max(0, Number.isFinite(event.audio_end_ms) && rtSpeechAudioStartMs !== null
+        ? event.audio_end_ms - rtSpeechAudioStartMs
+        : Date.now() - rtSpeechStartedAt);
+    }
     // One HERA segment per turn: the words of this turn, closed at the pause.
     if (!dictationMode && heraVoice.on) {
       heraVoice.userSpeaking = false;
@@ -9560,7 +9646,11 @@ async function runStartupSequence(config = {}) {
    * on the next launch, when there is a session and nothing has to be asked. */
   const authReady = Boolean(config?.auth?.authenticated);
   if (!authReady) logRenderer("boot.intro.skipped", { why: "sign-in-needed" });
-  const introUp = authReady ? Boolean(intro?.show({ firstRun })) : false;
+  /* The black screen and the flight into the notch are the first-run
+     ceremony, ending in onboarding. Every launch after that, he simply wakes
+     up in the notch. */
+  else if (!firstRun) logRenderer("boot.intro.skipped", { why: "not-first-run" });
+  const introUp = authReady && firstRun ? Boolean(intro?.show({ firstRun })) : false;
 
   /* Everything that can strand someone behind the cover, handled in one place.
      This surface takes the whole machine, so the rule is that it comes down on
@@ -9639,10 +9729,6 @@ async function runStartupSequence(config = {}) {
     if (introKilled) {
       /* The cover is already down and the machine is the user's again. Let the
          notch finish quietly; first run will simply offer itself next launch. */
-    } else if (introUp && !firstRun) {
-      /* Every launch after the first: bar completes, he flies into the notch,
-         black lifts. That is the whole boot. */
-      await intro.finish({ firstRun: false });
     } else if (introUp) {
       /* FIRST RUN. The bar hands over to white rather than flying him home:
          black -> white -> the questions -> a cursive hello -> and only then
@@ -10579,6 +10665,31 @@ function stopVoiceWakeShimmer() {
   if (!notchFace || !voiceWakeShimmerAdded.length) return;
   notchFace.classList.remove(...voiceWakeShimmerAdded);
   voiceWakeShimmerAdded = [];
+}
+
+/* ── Noise that came back as words ─────────────────────────────────────────
+ *
+ * The transcriber writes something for almost any sound. Nine seconds of room
+ * noise came back as "Hold the line", four as "Open the language.", and its
+ * own prompt as "Use English as the language." The first two ran as commands,
+ * because each landed in a moment that needs no name: right after a wake, and
+ * right after he asked a question.
+ *
+ * People talk at two or three words a second; those came in under one. So a
+ * turn that took seconds and has almost no words in it is noise, and so is
+ * anything that sounds like the prompt or the classic lines these models
+ * write over silence. */
+const NOISE_PROMPT_ECHO = /\b(?:english|language|letters|accent|vocabulary|transcri\w*)\b/i;
+const NOISE_CLASSIC = /^(?:you|thank you|thanks|thanks for watching|thank you for watching|bye|bye bye|hold the line|please subscribe|subtitles? by\b.*)[\s.!]*$/i;
+const NOISE_MIN_SPEECH_MS = 3000;
+const NOISE_MIN_WORDS_PER_SEC = 0.8;
+
+function looksLikeNoise(text, speechMs = 0) {
+  const value = String(text || "").trim();
+  if (!value) return false;
+  if (NOISE_CLASSIC.test(value) || NOISE_PROMPT_ECHO.test(value)) return true;
+  const words = value.split(/\s+/).filter(Boolean).length;
+  return speechMs >= NOISE_MIN_SPEECH_MS && words / (speechMs / 1000) < NOISE_MIN_WORDS_PER_SEC;
 }
 
 /* ── Half a sentence, waiting for the rest ─────────────────────────────────

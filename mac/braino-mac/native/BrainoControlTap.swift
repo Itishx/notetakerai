@@ -7,6 +7,7 @@ final class BrainoControlTap {
   private var runLoopSource: CFRunLoopSource?
   private var lastControlDown: TimeInterval = 0
   private var lastSpaceDown: TimeInterval = 0
+  private var lastKeyDownAt: TimeInterval = 0
   private var shiftIsDown = false
   private var shiftTapPoisoned = false
   private var lastShiftTap: TimeInterval = 0
@@ -181,14 +182,25 @@ final class BrainoControlTap {
     if shiftIsDown { shiftTapPoisoned = true }
     let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
     let isAutoRepeat = event.getIntegerValueField(.keyboardEventAutorepeat) != 0
-    guard keyCode == 49, !isAutoRepeat else { return }
-
     let now = ProcessInfo.processInfo.systemUptime
-    if now - lastSpaceDown < 0.52 {
+    let previousKeyAt = lastKeyDownAt
+    if !isAutoRepeat { lastKeyDownAt = now }
+
+    // Double Space is two taps of Space on their own, not two spaces in a
+    // sentence. Any key between them means typing, and so does a first tap
+    // that lands straight after a letter: "is a bug" typed quickly used to
+    // count, and sent Braino in and out of the notch every few seconds.
+    guard keyCode == 49, !isAutoRepeat else {
+      if !isAutoRepeat { lastSpaceDown = 0 }
+      return
+    }
+    if lastSpaceDown > 0 && now - lastSpaceDown < 0.52 {
       printLine("double-space")
       lastSpaceDown = 0
-    } else {
+    } else if now - previousKeyAt >= 0.6 {
       lastSpaceDown = now
+    } else {
+      lastSpaceDown = 0
     }
   }
 

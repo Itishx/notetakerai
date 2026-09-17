@@ -65,7 +65,7 @@ test("stopping is instant, says so, and nothing says Done after it", () => {
   assert.match(stop, /await speak\("I stopped the task\."\)/);
   /* Checked before HIL is asked anything: that question costs 5 to 10 seconds. */
   const flush = js.slice(js.indexOf("async function flushRealtimeTranscript"));
-  const stopAt = flush.indexOf('isStopTaskPhrase(transcript) && await stopTaskNow("voice_phrase", transcript)');
+  const stopAt = flush.indexOf('if (await stopTaskNow("voice_phrase", transcript)) return;');
   const hilAt = flush.indexOf("routeInterjectionIntoRunningJob(transcript)");
   assert.ok(stopAt > 0 && stopAt < hilAt);
   assert.match(js, /if \(result\?\.superseded && !result\?\.say\) \{[\s\S]{0,120}return;/);
@@ -194,15 +194,17 @@ test("his name wakes him in any script, and nothing is dropped without a log", (
   const accept = lift("function shouldAcceptVoiceTranscript(text) {");
   assert.match(accept, /named\.awake_other_script/);
   assert.match(accept, /voice\.transcript_unreadable/);
-  /* And the transcriber is told the name exists. */
-  assert.match(js, /always write that name as Braino, in English letters/);
+  /* And the transcriber is told the name exists, as a word and not a
+     sentence it can repeat back over silence. */
+  assert.match(js, /"Vocabulary: Braino, Brainelle\."/);
+  assert.doesNotMatch(js, /always write that name as Braino|Write everything in English letters/);
 });
 
 /* A sentence that STARTS while he is awake is his, however long it runs; and
    the window is long enough for a real back-and-forth. */
 test("a sentence begun while awake is never cut off for ending late", () => {
   assert.match(js, /const NAMED_WINDOW_MS = 12000;/);
-  assert.match(lift("function namedWindowOpen() {"), /if \(namedSpeechAwake\) return true;/);
+  assert.match(lift("function namedWindowOpen() {"), /return Boolean\(namedSpeechAwake\);/);
   assert.match(js, /if \(namedModeOn && namedWindowOpen\(\)\) namedSpeechAwake = true;/);
   assert.match(lift("async function flushRealtimeTranscript(reason, textOverride) {"), /if \(transcript\) namedSpeechAwake = false;/);
 });

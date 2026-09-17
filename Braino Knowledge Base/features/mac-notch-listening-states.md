@@ -32,9 +32,12 @@ Voice takes 2 to 6 seconds to come up (3.7 seconds median across the last 194 se
 - **No name, no action (September 17).** A 12-second "conversation window" after his name let a video playing on the Mac through as a command, and no audio trick can tell a video's voice from yours. So every sentence needs his name, with five exceptions:
   - the first sentence after a deliberate wake ("Hey Braino" or Control twice), however long it takes to say, up to 15 seconds;
   - anything you say while he is talking or working, so you can cut in;
-  - your answer to a question he just asked, within 10 seconds of him finishing it;
+  - a short answer (yes, no, go ahead, the second one) to a question he just asked, within 10 seconds of him finishing it. Anything longer needs his name: his chat replies end in "What's on your mind?" all the time, and a TV "answered" one with "Open the language.";
   - "stop the task" and "stop listening";
   - the reply to a question a running task asked you.
+- **Noise is not a command (September 17, later).** The cloud transcriber writes words for almost any sound: nine seconds of room noise came back as "Hold the line", and its own prompt came back as "Use English as the language." A sentence without his name is dropped (`named.noise_ignored`) when it took 3 seconds or more at under 0.8 words a second, when it mentions the prompt's words (English, language, letters, accent), or when it is a classic silence line ("Thank you.", "you", "Thanks for watching"). A bare "Hey Braino" made of noise is dropped the same way. The prompt itself is now a word list (`Vocabulary: Braino, Brainelle.`) rather than sentences it can repeat.
+- **Stop with nothing running.** "Braino, stop the task" when no task is running answers *Nothing's running right now.* straight away (or just stops him talking, if he is). It used to go to the planner as a task, take 10 seconds, and read his first thought aloud.
+- **A Stop button** sits in the open thinking sheet (click the thinking chip). It is the same stop as saying it.
 - **His name is heard twice.** The on-device "Hey Braino" listener runs during a voice session too. If it heard his name in the last 8 seconds, the sentence counts even when the cloud transcriber spelt the name wrong (`named.heard_on_device`).
 - **Half sentences are held, then joined.** A sentence with no full stop or question mark that is either two words or fewer, or ends on a word like "the", "to", "and" or "my", waits 1.5 seconds (`voice.fragment_held`). If you keep talking, the two halves become one command (`voice.fragment_joined`). If you don't, the half is sent as it is (`voice.fragment_released`), never dropped. It waits up to 6 seconds while you are still mid-word. Answers to his questions, stop phrases and bare "Hey Braino" are never held.
 - The gold outline plays only when he wakes from a real sleep (a minute or more), not on every "Braino, …" in a conversation, which is now every sentence. The 90-second idle shimmer that used the same outline is off.
@@ -58,6 +61,7 @@ OpenAI's words are the command. HERA's were tried as the command first and lost 
 - A bare "stop" or "never mind" needs his name on it, because people say those to each other.
 - Forgetting his name means the sentence is ignored. That is the price of a video never giving him orders.
 - A half sentence costs 1.5 seconds before he acts on it. Short complete commands with no full stop, like "play music", wait too, because the transcriber does not always add one.
+- A slow, hesitant sentence without his name (three words over four seconds) can be dropped as noise. Saying his name skips that check.
 - A video saying "Braino" would still get through. That is rare, and it is the same limit Siri has.
 - HERA's live words are a running guess and can change as you speak.
 - If HERA is still loading when voice opens, the notch falls back to OpenAI's words until it is ready (it retries every 3 seconds).
@@ -73,6 +77,7 @@ OpenAI's words are the command. HERA's were tried as the command first and lost 
   - `updateNotchFace`: `namedAsleep`, the inline modes `starting | ready | heard | thinking`, and the asleep hint as the lowest-priority ticker slot.
   - `namedOpenAtReady`, `flashNameWake`, `activeWakeName`, `BRAINELLE_NAME_RE`.
   - `namedWindowOpen`: the name-every-time rule and its exceptions (`namedGraceUntil`, `namedSpeechAwake`, `lastSpokenLine.asked` with `NAMED_ANSWER_WINDOW_MS`). `namedHeardOnDeviceAt` is set by `onWakeDetected` during a session and read in `shouldAcceptVoiceTranscript`.
+  - `looksLikeNoise` (turn length from OpenAI's `audio_start_ms`/`audio_end_ms`, kept in `rtLastSpeechMs`), `answersHisQuestion`, `namedAnswerWindowOpen`, `nothingToStop`, and the `.nf-thinking-stop` button.
   - `looksUnfinished`, `holdFragment`, `releaseHeldFragment`, `clearHeldFragment` (`FRAGMENT_HOLD_MS` 1500, `FRAGMENT_MAX_HOLD_MS` 6000). `flushRealtimeTranscript(reason, textOverride)` joins a held half to the next transcript and keeps the half's acceptance, so the joined sentence is not re-judged for a name.
   - `isStopTaskPhrase` and `stopTaskNow`, checked in `flushRealtimeTranscript` before HIL is asked, and in `submitTyped`. The HIL "stop" verdict uses the same `stopTaskNow`.
 - `mac/braino-mac/renderer/braino-mac.css`: `.nf-voice-starting`, `.nf-voice-ready`, `.nf-name-asleep`, `.nf-name-wake`, and the rule that lets the open caption own the pill over `.nf-thinking`.

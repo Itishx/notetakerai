@@ -23,7 +23,7 @@ export default function MacNotchListeningStatesDocs() {
         <section className="kb-article-block kb-dark-block">
           <p className="kb-article-eyebrow">Listening for his name</p>
           <h2>“Listening for Braino.”</h2>
-          <p>Say his name in every sentence, the way you would with Siri. That is how he knows a video playing on your Mac is not talking to him. You can skip it right after you wake him, while he is talking, and when you are answering his question. After a long quiet, his name lights up the outline of the notch, the same light you see when he boots.</p>
+          <p>Say his name in every sentence, the way you would with Siri. That is how he knows a video playing on your Mac is not talking to him. You can skip it right after you wake him, while he is talking, and for a quick yes or no to his question. Background noise the transcriber turns into words is ignored. After a long quiet, his name lights up the outline of the notch, the same light you see when he boots.</p>
         </section>
         <section className="kb-article-block">
           <p className="kb-article-eyebrow">Pausing mid-sentence</p>
@@ -33,7 +33,7 @@ export default function MacNotchListeningStatesDocs() {
         <section className="kb-article-block">
           <p className="kb-article-eyebrow">Stopping</p>
           <h2>“Braino, stop the task.”</h2>
-          <p>He stops right away and tells you he did. No waiting for him to think about what stop means.</p>
+          <p>He stops right away and tells you he did. No waiting for him to think about what stop means. If nothing is running, he says so. While he works, the open thinking sheet has a Stop button too.</p>
         </section>
         <section className="kb-article-block">
           <aside className="kb-honesty"><strong>Honest limitation</strong><p>A sentence without his name is ignored, and a half sentence costs about a second and a half before he acts on it. A bare “stop” needs his name on it, because people say that to each other.</p></aside>
