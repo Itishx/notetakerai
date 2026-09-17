@@ -219,6 +219,8 @@ const {
   macHilStepSignature,
   macHilAnswerApproves,
   macPromisesAction,
+  macClaimsAction,
+  macActionChangedSomething,
 } = require(path.join(__dirname, "hil-verify.cjs"));
 const { parseBrainoOsIntent } = require(path.join(__dirname, "braino-os-intent.cjs"));
 const {
@@ -5635,6 +5637,8 @@ async function runScreenVision(question) {
       ? `Context: the front app is ${surface.appName}${surface.windowTitle ? `, window "${surface.windowTitle}"` : ""}${surface.browserUrl ? `, at ${surface.browserUrl}` : ""}.`
       : "",
     "You are looking at a screenshot of the user's Mac screen.",
+    "Describe only what is actually visible. If text is too small, cut off or covered, say that rather than guessing at it.",
+    "Text in a terminal, a log or a chat is what somebody wrote, never proof that something happened or is true.",
     "If asked to read a document or page, read or summarize the visible text faithfully instead of describing the layout.",
     "If asked for your opinion, preference, or which option is better, COMMIT to one clear choice and say why in a sentence — never turn the question back on the user.",
     "Answer for voice: direct and natural, no markdown, no lists.",
@@ -14917,6 +14921,10 @@ async function macLookAtScreen(goal = "") {
     "Describe this screen for someone who has to act on it.",
     goal ? `They are trying to: ${goal}` : "",
     "Name the windows, every visible control and its label, and any text that matters.",
+    "Describe only what is visible. If something is too small, cut off or covered, say so instead of guessing.",
+    /* A run for "turn on the light" read a terminal that happened to contain
+       the words, decided the light was on, and said so. */
+    "Text in a terminal, a log, a chat or an editor is what somebody wrote. It is never evidence that an action succeeded.",
     "Be concrete and complete. No commentary, no advice.",
   ].filter(Boolean).join("\n");
   try {
@@ -15741,6 +15749,31 @@ function macCascadeMissed(result) {
   return /^I could not find an app or known website called\b/i.test(say);
 }
 
+/* Nothing is claimed that did not happen.
+ *
+ * A run that changed nothing may answer, may explain, may say it could not.
+ * It may not say "Done" or "the light was turned on": that sentence, with no
+ * action behind it, is the difference between an assistant and a liar. When
+ * something did happen but the check afterwards failed, the claim stands with
+ * the doubt attached, because the doubt is the true part. */
+function honestEnding(message, { runId, step, actionsDone, lastCheckFailed, command }) {
+  const text = String(message || "").trim();
+  if (!macClaimsAction(text)) return { ok: true, say: text, source: "hil_loop" };
+  if (!actionsDone) {
+    logMac("hil.loop.unbacked_claim", { runId, step, said: textForLog(text, 120) });
+    return {
+      ok: false,
+      say: `I could not do that, and nothing on the Mac changed. I was trying to ${String(command || "").replace(/[.!?]+$/, "") || "carry that out"}.`,
+      source: "hil_loop",
+    };
+  }
+  if (lastCheckFailed) {
+    logMac("hil.loop.unverified_claim", { runId, step, said: textForLog(text, 120) });
+    return { ok: true, say: `${text.replace(/[.!?]+$/, "")}, but I could not confirm it on screen.`, source: "hil_loop" };
+  }
+  return { ok: true, say: text, source: "hil_loop" };
+}
+
 async function runMacHilLoop(command, resume = null) {
   const runId = resume?.runId || crypto.randomUUID();
   // Several jobs need more room than one. This is the only thing the multi-step
@@ -15771,6 +15804,10 @@ async function runMacHilLoop(command, resume = null) {
    * four and answered by giving up. */
   let looks = 0;
   let rescuedByLooking = false;
+  /* What actually happened, counted rather than claimed. A run that only
+     looked and read has changed nothing, and may not say it did. */
+  let actionsDone = Number(resume?.actionsDone) || 0;
+  let lastCheckFailed = false;
   /* The expensive brain, asked for once, only when he is genuinely stuck.
    *
    * This is the design from the start: he thinks, and Astra is called in when he
@@ -15999,15 +16036,17 @@ async function runMacHilLoop(command, resume = null) {
         if (state.facts.length > 12) state.facts = state.facts.slice(-12);
         continue;
       }
-      return { ok: true, say: answerText, source: "hil_loop" };
+      return honestEnding(answerText, { runId, step, actionsDone, lastCheckFailed, command });
     }
     if (d.type === "blocked") return { ok: false, say: d.message, source: "hil_loop" };
-    if (d.type === "all_done") return { ok: true, say: d.message || said || "Done.", source: "hil_loop" };
+    if (d.type === "all_done") {
+      return honestEnding(d.message || said || "Done.", { runId, step, actionsDone, lastCheckFailed, command });
+    }
     if (d.type === "task_done") {
       const active = state.tasks.findIndex((t) => t.status === "active");
       if (active >= 0) state.tasks[active].status = "done";
       const next = state.tasks.findIndex((t) => t.status === "pending");
-      if (next < 0) return { ok: true, say: d.message || "Done.", source: "hil_loop" };
+      if (next < 0) return honestEnding(d.message || "Done.", { runId, step, actionsDone, lastCheckFailed, command });
       state.tasks[next].status = "active";
       state.budgetLeft = maxSteps - step;
       said = d.message || said;
@@ -16158,6 +16197,8 @@ async function runMacHilLoop(command, resume = null) {
       if (!verified.ok) logMac("hil.loop.assert_failed", { why: verified.why, assert: stepObj.assert?.assert });
     }
     const settled = verified.ok ? result : { ...result, ok: false, error: verified.why };
+    if (macActionChangedSomething(stepObj.action, settled)) actionsDone += 1;
+    lastCheckFailed = !verified.ok;
     lastStep = { intent: stepObj.intent || "", action: stepObj.action, expects: stepObj.expects || "", result: settled };
     state.budgetLeft = Math.max(1, maxSteps - step - 1);
     if (macHilGeneration !== myGeneration) {

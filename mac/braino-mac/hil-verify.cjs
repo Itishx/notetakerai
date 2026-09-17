@@ -66,4 +66,46 @@ const macPromisesAction = shared.promisesAction;
 const macHilStepSignature = shared.stepSignature;
 const macHilAnswerApproves = shared.answerApproves;
 
-module.exports = { macVerifyAssert, macHilStepSignature, macHilAnswerApproves, macPromisesAction };
+/* A claim that something WAS done, as opposed to an answer, a plan or a
+   question.
+ *
+ * "Turn on the light" ended with "Done. The light was turned on through the Mac
+ * controls." Nothing had been turned on: the run had opened the Home app,
+ * looked at the screen, read a terminal that happened to contain the words, and
+ * believed it. A claim like that has to be backed by an action that actually
+ * ran, and this is the half that recognises the claim.
+ *
+ * First person or passive completion only. An answer that happens to contain
+ * "set" ("the meeting is set for five") is not a claim. */
+const CLAIM_PATTERNS = [
+  /^(?:ok(?:ay)?,?\s*)?(?:all\s+)?done\b/i,
+  /^(?:ok(?:ay)?,?\s*)?(?:just\s+)?(?:turned|switched|opened|closed|sent|posted|played|paused|stopped|created|saved|deleted|renamed|moved|updated|changed|installed|activated|enabled|disabled|added|submitted|uploaded|downloaded|booked|ordered)\b/i,
+  /\bI (?:have |'ve )?(?:just )?(?:turned|switched|opened|closed|sent|posted|played|paused|stopped|created|saved|deleted|renamed|moved|updated|changed|installed|activated|enabled|disabled|added|submitted|uploaded|downloaded|booked|ordered|set it)\b/i,
+  /\b(?:it|that|the [\w' ]{1,24}) (?:was|has been|is now|are now) (?:turned|switched|opened|closed|sent|posted|played|paused|stopped|created|saved|deleted|renamed|moved|updated|changed|installed|activated|enabled|disabled|added)\b/i,
+];
+const NOT_A_CLAIM = /\b(?:could ?n[o']t|could not|cannot|can[''`]?t|unable|failed|did ?n[o']t|did not|will|would|should|want me to|do you want|shall I|about to|going to|trying to|next step)\b/i;
+
+function macClaimsAction(text) {
+  const line = String(text || "").replace(/\s+/g, " ").trim();
+  if (!line) return false;
+  if (NOT_A_CLAIM.test(line)) return false;
+  return CLAIM_PATTERNS.some((pattern) => pattern.test(line));
+}
+
+/* Observations are not actions. A run that only looked and read has changed
+   nothing, whatever it says at the end. */
+const OBSERVATION_ACTIONS = new Set(["read", "look", "observe", "screenshot", "wait", "think", "note"]);
+
+function macActionChangedSomething(action, result) {
+  if (!result || result.ok === false) return false;
+  const type = String(action?.type || "").toLowerCase();
+  if (!type || OBSERVATION_ACTIONS.has(type)) return false;
+  if (type === "tool") {
+    const tool = String(action.tool || "").toLowerCase();
+    // Tools that only report back leave the Mac exactly as it was.
+    if (/^(?:now_playing|spotify_now_playing|screen_vision|front_window_summary|take_screenshot|tabs_census|read_selection|web_search|deep_research)$/.test(tool)) return false;
+  }
+  return true;
+}
+
+module.exports = { macVerifyAssert, macHilStepSignature, macHilAnswerApproves, macPromisesAction, macClaimsAction, macActionChangedSomething };
