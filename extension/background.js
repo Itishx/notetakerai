@@ -3001,6 +3001,192 @@ async function bgAuthedSupabaseFetch(url, options = {}) {
   return { res, token, userId: stored.authUserId || null };
 }
 
+// ── Your timetable, wherever it lives ───────────────────────────────────────
+// Mesa's LMS is the first source, not a special case. Everything below writes
+// into schedule_events with source:"mesa", so the next source (a PDF timetable,
+// Google Calendar, something spoken) is another function next to this one and
+// nothing downstream changes.
+//
+// Why the extension and not the Mac app or a server: the login already lives in
+// this browser. Nexus keeps its refresh token in an httpOnly cookie, so no
+// script can read it and no server can be handed it, but the extension shares
+// Chrome's cookie jar. It can do exactly what the page does, in the background,
+// without the Nexus tab being open.
+//
+// That shared jar also removes the problem it looked like it created: Nexus
+// rotates the refresh token on every use, so a server holding a copy would
+// invalidate the browser's and log him out mid-class. Here there is only one
+// copy, in one jar, so there is nothing to fight over.
+const BG_MESA_PAGE = "https://students.mesaschool.co.in";
+const BG_MESA_API = "https://api-students.mesaschool.co.in/api/v1";
+// Far enough ahead to cover a term's deadlines, far enough back that last
+// week's classes are still answerable ("what did I miss on Tuesday").
+const BG_MESA_DAYS_BACK = 30;
+const BG_MESA_DAYS_AHEAD = 120;
+const BG_MESA_SYNC_ALARM = "brainoMesaSchedule";
+
+/* A fresh pass, the same way the page gets one.
+ *
+ * Nexus access tokens live fifteen minutes, so there is nothing worth storing:
+ * every sync mints its own. The cookie is httpOnly and path-scoped to
+ * /api/auth, and credentials:"include" is what makes the browser attach it.
+ *
+ * The field name is guessed generously on purpose. The response is 0.6kB of
+ * JSON and the exact key is the one thing DevTools did not show; accepting the
+ * three plausible spellings is cheaper than being wrong on the first run.
+ */
+async function bgMesaAccessToken() {
+  try {
+    const res = await fetch(`${BG_MESA_PAGE}/api/auth/refresh`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+    });
+    if (!res.ok) return { token: "", why: `refresh ${res.status}` };
+    const data = await res.json().catch(() => ({}));
+    const token = data?.accessToken || data?.access_token || data?.token
+      || data?.data?.accessToken || data?.data?.access_token || "";
+    return token
+      ? { token, why: "" }
+      : { token: "", why: `refresh gave no token, keys: ${Object.keys(data || {}).join(",")}` };
+  } catch (error) {
+    return { token: "", why: String(error?.message || error) };
+  }
+}
+
+/* Nexus calls everything an "event" and distinguishes them by eventType. The
+ * one that matters most is assignment: a deadline needs warning about, a class
+ * needs a room. Mapped rather than stored raw so every reader, and every future
+ * source, filters on the same small set of words. */
+const BG_MESA_KIND = {
+  session: "class",
+  assignment: "assignment",
+  exam: "exam",
+  workshop: "workshop",
+  event: "event",
+};
+
+function bgMesaRowFromEvent(event, userId) {
+  const kind = BG_MESA_KIND[String(event?.eventType || "")] || "event";
+  const startsAt = event?.startAt || null;
+  if (!startsAt || !event?.id) return null;
+  /* A deadline is a moment, and Nexus sends the same value for start and end.
+     Nulled rather than copied so "no end" stays distinguishable from "ends when
+     it starts", which is what lets a briefing say "due at" instead of "from,
+     until". */
+  const endsAt = event?.endAt && event.endAt !== startsAt ? event.endAt : null;
+  return {
+    user_id: userId,
+    source: "mesa",
+    source_ref: String(event.id),
+    title: String(event.title || "Untitled"),
+    kind,
+    course: event.courseName || event.courseLabel || null,
+    instructor: event.instructorName || null,
+    room: event.room || null,
+    link: event.meetingLink || event.gcalEventLink || null,
+    starts_at: startsAt,
+    ends_at: endsAt,
+    timezone: event.timezone || "Asia/Kolkata",
+    all_day: false,
+    attendance_required: Boolean(event.attendanceRequired),
+    source_updated_at: event.updatedAt || null,
+    // Kept whole. Four sources are coming and guessing at columns for them now
+    // would be worse than keeping what was actually sent.
+    raw: event,
+  };
+}
+
+/* Pull the term and write it down.
+ *
+ * Upserted on (user_id, source, source_ref), which is the only reason an hourly
+ * sync is safe: without it a week of syncing produces a hundred and sixty
+ * copies of Monday's lecture.
+ */
+async function bgSyncMesaSchedule(reason = "manual") {
+  const stored = await new Promise((r) => chrome.storage.local.get(["authUserId"], r));
+  const userId = stored.authUserId;
+  if (!userId) return { ok: false, why: "not signed in to Braino" };
+
+  const { token, why } = await bgMesaAccessToken();
+  /* Not signed in to Nexus is the ordinary case, not a failure: it happens every
+     time the session lapses, and the right response is to skip this sync and try
+     again in an hour rather than surface an error nobody can act on. */
+  if (!token) return { ok: false, why: why || "not signed in to Nexus", skipped: true };
+
+  const from = new Date(Date.now() - BG_MESA_DAYS_BACK * 86400000).toISOString();
+  const to = new Date(Date.now() + BG_MESA_DAYS_AHEAD * 86400000).toISOString();
+  let events = [];
+  try {
+    const url = `${BG_MESA_API}/events/my?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    });
+    if (!res.ok) return { ok: false, why: `events ${res.status}` };
+    const body = await res.json().catch(() => ({}));
+    events = Array.isArray(body?.data?.events) ? body.data.events : [];
+  } catch (error) {
+    return { ok: false, why: String(error?.message || error) };
+  }
+
+  const rows = events.map((e) => bgMesaRowFromEvent(e, userId)).filter(Boolean);
+  if (!rows.length) return { ok: true, count: 0, reason };
+
+  try {
+    const { res } = await bgAuthedSupabaseFetch(
+      `${BG_SUPABASE_URL}/rest/v1/schedule_events?on_conflict=user_id,source,source_ref`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          // merge-duplicates is the upsert. Without it this is an insert and the
+          // unique index turns every sync after the first into a 409.
+          Prefer: "resolution=merge-duplicates,return=minimal",
+        },
+        body: JSON.stringify(rows),
+      },
+    );
+    if (!res.ok) {
+      const detail = await res.text().catch(() => "");
+      return { ok: false, why: `save ${res.status} ${detail.slice(0, 160)}` };
+    }
+  } catch (error) {
+    return { ok: false, why: String(error?.message || error) };
+  }
+
+  // Recorded so the source can say when it last worked, and so a source that
+  // has been quietly failing for a week is visible rather than assumed fine.
+  try {
+    await bgAuthedSupabaseFetch(
+      `${BG_SUPABASE_URL}/rest/v1/schedule_sources?on_conflict=user_id,source`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=minimal" },
+        body: JSON.stringify([{
+          user_id: userId, source: "mesa", enabled: true,
+          last_synced_at: new Date().toISOString(), last_error: null,
+        }]),
+      },
+    );
+  } catch (_) { /* the schedule is saved; bookkeeping is not worth failing over */ }
+
+  console.log(`[Braino] Mesa schedule synced: ${rows.length} events (${reason})`);
+  return { ok: true, count: rows.length, reason };
+}
+
+/* Hourly while Chrome is open, and once on startup.
+ *
+ * Deliberately not more often. A timetable changes a few times a term, and the
+ * thing this exists to catch, a deadline appearing overnight, is caught by the
+ * first sync after the browser opens. An alarm rather than a timer because a
+ * service worker is unloaded when idle and a setInterval dies with it.
+ */
+chrome.alarms.create(BG_MESA_SYNC_ALARM, { periodInMinutes: 60, delayInMinutes: 1 });
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm?.name !== BG_MESA_SYNC_ALARM) return;
+  bgSyncMesaSchedule("alarm").catch(() => {});
+});
+
 async function bgCallXAssistant(body) {
   const { res } = await bgAuthedSupabaseFetch(`${BG_API_BASE}/x-assistant`, {
     method: "POST",
@@ -9793,6 +9979,15 @@ chrome.runtime.onMessageExternal?.addListener((message, sender, sendResponse) =>
 
 // ===== AUTH — relay from content script (primary, more reliable) =====
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  /* Sync on demand, so a first run does not mean waiting an hour to find out
+     whether any of this works. Also what an onboarding "connect my timetable"
+     button calls, and what a spoken "sync my calendar" ends up at. */
+  if (message.action === "syncMesaSchedule") {
+    bgSyncMesaSchedule(message.reason || "requested")
+      .then((r) => sendResponse(r))
+      .catch((e) => sendResponse({ ok: false, why: String(e?.message || e) }));
+    return true;
+  }
   if (message.action === "authTokenRelay") {
     storeAuthData(message);
     sendResponse({ success: true });
