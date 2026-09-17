@@ -3684,6 +3684,13 @@ function handleWakeWordLine(raw) {
     sendToRenderer("braino-mac:wake-status", { armed: true });
     return;
   }
+  /* The helper lost the microphone (a voice session reconfigured it) and
+     re-attached. Logged so "the wake word went deaf" is visible and provably
+     recovered rather than guessed at. */
+  if (type === "healed" || type === "healfailed") {
+    logMac(type === "healed" ? "wakeword.healed" : "wakeword.heal_failed", { reason: value });
+    return;
+  }
   if (type === "wake") {
     const transcript = value;
     const front = String(activeMacContext?.appName || "");

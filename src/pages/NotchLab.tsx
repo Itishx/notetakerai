@@ -36,9 +36,9 @@ const COUNTDOWN = ["Live in 4", "Live in 3", "Live in 2", "Live in 1"];
 
 const STATES: State[] = [
   { id: "waking", label: "1 \u00b7 Voice waking up",
-    hint: "Control twice. The trace draws and the count runs from this Mac's own recent connect times. It never says speak before the session is live.",
+    hint: "Control twice (blue trace) or \u201cHey Braino\u201d (gold). HERA is already listening, so you can talk now: what you say goes through the moment the session is up. No countdown.",
     classes: "on awake nf-inline-open nf-inline-working nf-voice-starting nf-shining nf-shine-slow nf-waking-voice",
-    caption: { label: "Voice", state: "Starting", countdown: true } },
+    caption: { label: "Voice", state: "Connecting", text: "Go ahead, I\u2019m listening" } },
   { id: "ready", label: "2 \u00b7 You can speak now",
     hint: "The session is live. Holds long enough to read, then the listening pill takes over, or your words do.",
     classes: "on awake mic-live nf-inline-open nf-voice-ready",

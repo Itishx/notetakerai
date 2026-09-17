@@ -16,36 +16,30 @@ const lift = (src, start, endMarker = "\n}\n") => {
    path, unchanged); talking to Braino shows it live and sends it as the
    command. These hold the second ending. */
 
-const makeCommandText = (state) => Function("heraVoice", "logRenderer", "wait", `
-  const HERA_SEGMENT_WAIT_MS = 60;
+const makeCommandText = (state) => Function("heraVoice", "logRenderer", `
   ${lift(js, "async function heraCommandText(openaiText) {")}
   return heraCommandText;
-`)(state, (event, data) => state.logs.push({ event, ...data }), (ms) => new Promise((r) => setTimeout(r, ms)));
+`)(state, (event, data) => state.logs.push({ event, ...data }));
 
-const turn = (text, flags = {}) => ({ text, done: true, dirty: false, clipped: false, ...flags });
-
-test("the command is HERA's words when HERA can be trusted", async () => {
-  const state = { on: true, turnRotate: turn("open my notes from yesterday"), logs: [] };
-  assert.equal(await makeCommandText(state)("Open my notes from yesterday."), "open my notes from yesterday");
-  assert.equal(state.logs.at(-1).source, "hera");
-  assert.equal(state.turnRotate, null, "a turn's words are used once");
+/* The command is OpenAI's words. HERA's were tried and lost on the evidence:
+   his own voice in them after most replies, his name misheard, and up to 600ms
+   of waiting on every turn. HERA stays as what you see while you talk. */
+test("the command is OpenAI's words, with nothing to wait for", async () => {
+  const state = { on: true, earlyText: "", logs: [] };
+  assert.equal(await makeCommandText(state)("Open my notes from yesterday."), "Open my notes from yesterday.");
+  assert.equal(state.logs.at(-1).source, "openai");
+  assert.doesNotMatch(lift(js, "async function heraCommandText(openaiText) {"), /await wait|setTimeout/);
 });
 
-test("OpenAI's words are used when HERA's cannot be", async () => {
-  const cases = [
-    [{ on: false }, "hera_off"],
-    [{ on: true, turnRotate: null }, "no_turn_boundary"],
-    [{ on: true, turnRotate: turn("open my notes", { dirty: true }) }, "braino_was_audible"],
-    [{ on: true, turnRotate: turn("my notes", { clipped: true }) }, "started_with_barge_in"],
-    [{ on: true, turnRotate: turn("open") }, "hera_missed_words"],
-    [{ on: true, turnRotate: turn("") }, "hera_heard_nothing"],
-    [{ on: true, turnRotate: { text: "", done: false } }, "hera_too_slow"],
-  ];
-  for (const [partial, why] of cases) {
-    const state = { logs: [], ...partial };
-    assert.equal(await makeCommandText(state)("Open my notes from yesterday."), "Open my notes from yesterday.", why);
-    assert.equal(state.logs.at(-1).why, why);
-  }
+/* Except what you said while the session was still connecting: OpenAI never
+   heard it, HERA did, and he had not spoken yet so there was no echo. */
+test("words said while connecting come from HERA", async () => {
+  const state = { on: true, earlyText: "book a table for two at eight", logs: [] };
+  assert.equal(await makeCommandText(state)("at eight"), "book a table for two at eight");
+  assert.equal(state.logs.at(-1).source, "hera_early");
+  assert.equal(state.earlyText, "", "used once");
+  const shorter = { on: true, earlyText: "book", logs: [] };
+  assert.equal(await makeCommandText(shorter)("book a table for two"), "book a table for two");
 });
 
 test("the live line does not say the end of a phrase twice", () => {
@@ -61,12 +55,22 @@ test("the live line does not say the end of a phrase twice", () => {
 
 test("HERA is rotated at every pause, after he speaks, and on a barge-in", () => {
   const stopped = js.slice(js.indexOf('if (event.type === "input_audio_buffer.speech_stopped")'));
-  assert.match(stopped.slice(0, 600), /heraVoice\.turnRotate = heraVoiceRotate\("turn_end"\)/);
+  assert.match(stopped.slice(0, 900), /heraVoiceRotate\("turn_end"\)/);
+  /* A line begun while connecting is taken whole at the first pause. */
+  assert.match(stopped.slice(0, 900), /if \(heraVoice\.early\) \{\s*heraVoice\.earlyText = heraVoiceLiveText\(\);/);
   assert.match(js, /heraVoiceRotate\("barge_in", \{ clipsNext: true \}\);\s*interruptVoiceTurn\("barge_in", "speech_started"\)/);
-  // Only when he was actually audible: a silent reply leaves nothing to clear.
-  assert.match(js, /logRenderer\("speech\.done"[^\n]*\n\s*if \(!quiet\) heraVoiceRotate\("braino_spoke", \{ echoTail: true \}\);/);
-  /* His voice through the speakers marks the segment rather than showing up as yours. */
+  assert.match(js, /if \(!quiet\) heraVoiceRotate\("braino_spoke", \{ echoTail: true \}\);/);
   assert.match(lift(js, "window.brainoMac.onVoiceCaption?.((event) => {", "\n});\n"), /if \(brainoAudible\(\) \|\| now < heraVoice\.ignoreUntil\) \{\s*heraVoice\.dirty = true;/);
+});
+
+/* You can talk the moment you press: HERA is on the Mac and ready, the
+   session takes seconds. */
+test("HERA starts at the press, and a sentence finished before ready is sent at ready", () => {
+  assert.match(lift(js, "function voiceStartBegin() {"), /void heraVoiceStart\("press"\);/);
+  assert.match(lift(js, "async function heraVoiceStart(reason) {"), /heraVoice\.early = !realtimeActive;/);
+  const ready = lift(js, "function heraVoiceAtReady() {");
+  assert.match(ready, /rtUserTranscript = text;[\s\S]*void flushRealtimeTranscript\("early_hera"\);/);
+  assert.match(ready, /if \(heraVoice\.sawOpenAiSpeech\) return;/);
 });
 
 test("OpenAI decides whether it was for him; HERA says what was said", () => {

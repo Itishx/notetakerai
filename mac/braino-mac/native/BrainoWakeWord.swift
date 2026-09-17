@@ -12,6 +12,7 @@
 // Prints one line per event:
 //   armed                 — listening started, on-device, nothing sent anywhere
 //   wake\t<transcript>     — the wake phrase was heard in this utterance
+//   healed\t<reason>      — the microphone was re-attached after it went quiet
 //   unavailable\t<reason> — on-device recognition isn't usable on this Mac;
 //                           caller should NOT fall back to a cloud path here,
 //                           that would silently break the privacy guarantee —
@@ -27,7 +28,10 @@ import Speech
 // "reno" and "dino" were in here and they are ordinary words, so he woke up
 // inside other people's conversations. With contextualStrings telling the
 // recogniser that "Braino" exists, these are only the close acoustic misses.
-let WAKE_WORDS = ["braino", "brayno", "bruno", "breno", "raino"]
+// "brainelle" is her name when she is the avatar. Only the name itself: the
+// spellings Apple writes for it ("Brunel", "Brinell") are real words, and this
+// listener runs all day.
+let WAKE_WORDS = ["braino", "brayno", "bruno", "breno", "raino", "brainelle"]
 
 func argumentValue(_ name: String) -> String? {
   guard let index = CommandLine.arguments.firstIndex(of: name),
@@ -50,7 +54,12 @@ final class BrainoWakeWord: NSObject {
   private var task: SFSpeechRecognitionTask?
   private var cycleTimer: Timer?
   private var parentTimer: Timer?
+  private var healTimer: Timer?
   private var stopped = false
+  /* When the tap last delivered audio. It delivers buffers continuously, even
+     in silence, so a long gap means the microphone was taken away from it. */
+  private let bufferLock = NSLock()
+  private var lastBufferAt = Date()
 
   func start() {
     printLine("starting\t\(ProcessInfo.processInfo.processIdentifier)")
@@ -78,6 +87,7 @@ final class BrainoWakeWord: NSObject {
       try startEngineIfNeeded()
       try startCycle(with: recognizer)
       startParentMonitor()
+      startHealing()
       printLine("armed\t\(ProcessInfo.processInfo.processIdentifier)")
     } catch {
       printLine("unavailable\t\(clean(error.localizedDescription))")
@@ -129,16 +139,76 @@ final class BrainoWakeWord: NSObject {
 
   private func startEngineIfNeeded() throws {
     guard !audioEngine.isRunning else { return }
+    try attachMicrophone()
+  }
+
+  private func attachMicrophone() throws {
     let inputNode = audioEngine.inputNode
+    inputNode.removeTap(onBus: 0)
     let format = inputNode.outputFormat(forBus: 0)
     guard format.sampleRate > 0 else {
       throw NSError(domain: "BrainoWakeWord", code: 2, userInfo: [NSLocalizedDescriptionKey: "Could not read the microphone audio format."])
     }
     inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
-      self?.request?.append(buffer)
+      guard let self else { return }
+      self.bufferLock.lock()
+      self.lastBufferAt = Date()
+      self.bufferLock.unlock()
+      self.request?.append(buffer)
     }
     audioEngine.prepare()
     try audioEngine.start()
+    bufferLock.lock()
+    lastBufferAt = Date()
+    bufferLock.unlock()
+  }
+
+  /* Staying attached to the microphone.
+   *
+   * Opening a voice session opens the same microphone with echo cancellation,
+   * and macOS reconfigures the device underneath this engine to do it. The
+   * engine stops, the tap goes quiet, and nothing here ever noticed: the
+   * recognition cycle kept restarting every 45 seconds on no audio at all. In
+   * the log that is a wake word that works exactly once, until the first voice
+   * session, and never again — "the mic is off".
+   *
+   * So: re-attach on every configuration change, and independently, if the tap
+   * has delivered nothing for five seconds or the engine is not running, treat
+   * it as detached and re-attach. The recognition request is restarted with it,
+   * because the input format can change along with the device. */
+  private func startHealing() {
+    NotificationCenter.default.addObserver(
+      forName: .AVAudioEngineConfigurationChange,
+      object: audioEngine,
+      queue: .main
+    ) { [weak self] _ in
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { self?.heal("config-change") }
+    }
+    healTimer?.invalidate()
+    healTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: true) { [weak self] _ in
+      guard let self, !self.stopped else { return }
+      self.bufferLock.lock()
+      let quietFor = Date().timeIntervalSince(self.lastBufferAt)
+      self.bufferLock.unlock()
+      if !self.audioEngine.isRunning {
+        self.heal("engine-stopped")
+      } else if quietFor > 5 {
+        self.heal("no-audio-\(Int(quietFor))s")
+      }
+    }
+  }
+
+  private func heal(_ reason: String) {
+    guard !stopped, let recognizer else { return }
+    audioEngine.stop()
+    do {
+      try attachMicrophone()
+      restartCycle(with: recognizer)
+      printLine("healed\t\(reason)")
+    } catch {
+      // Not fatal: the timer tries again in three seconds.
+      printLine("healfailed\t\(clean(error.localizedDescription))")
+    }
   }
 
   // SFSpeechRecognitionTask has a practical duration ceiling; a long-running
@@ -156,7 +226,7 @@ final class BrainoWakeWord: NSObject {
        words like "Reno" and "Dino" in that list wake him during other people's
        conversations. Telling the recogniser the word exists is the fix at the
        source; the variants stay as a safety net underneath it. */
-    req.contextualStrings = ["Braino", "Hey Braino", "Braino,"]
+    req.contextualStrings = ["Braino", "Hey Braino", "Braino,", "Brainelle", "Hey Brainelle"]
     request = req
 
     task = recognizer.recognitionTask(with: req) { [weak self] result, error in

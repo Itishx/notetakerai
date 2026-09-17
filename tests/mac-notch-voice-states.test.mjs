@@ -73,19 +73,17 @@ test("stopping is instant, says so, and nothing says Done after it", () => {
 
 /* ── Voice waking up ───────────────────────────────────────────────────────── */
 
-test("the countdown never claims to be live, and speak-now only follows ready", () => {
-  let now = 0;
-  const voiceStartText = Function("voiceStart", "Date", `
+/* No countdown: a number made a slow connection look slower and was a guess
+   anyway. With HERA listening from the press there is nothing to wait for. */
+test("waking says go ahead, not a countdown, and speak-now only follows ready", () => {
+  const text = (heraOn) => Function("heraVoice", `
     ${lift("function voiceStartText(phase) {")}
     return voiceStartText;
-  `)({ startedAt: 0, estimateMs: 3800 }, { now: () => now });
-  assert.equal(voiceStartText("starting"), "Live in 4");
-  now = 1000; assert.equal(voiceStartText("starting"), "Live in 3");
-  now = 3500; assert.equal(voiceStartText("starting"), "Live in 1");
-  now = 3900; assert.equal(voiceStartText("starting"), "Almost there");
-  now = 9000; assert.equal(voiceStartText("starting"), "Almost there");
-  assert.equal(voiceStartText("ready"), "You can speak now");
-  /* "ready" is set in exactly one place: once the session is really up. */
+  `)({ on: heraOn });
+  assert.equal(text(true)("starting"), "Go ahead, I'm listening");
+  assert.equal(text(false)("starting"), "Connecting");
+  assert.equal(text(true)("ready"), "You can speak now");
+  assert.doesNotMatch(lift("function voiceStartText(phase) {"), /Live in|Almost there/);
   const ready = js.slice(js.indexOf("realtimeActive = true;\n    // The session is genuinely live"), js.indexOf('logRenderer("realtime.ready"'));
   assert.match(ready, /voiceStartReady\(\);\s*namedOpenAtReady\(\);/);
 });
@@ -115,8 +113,12 @@ test("asleep does not look like listening, and the room does not flash up", () =
 });
 
 test("his name lights the notch, and a wake word lights it like Control twice", () => {
-  assert.match(lift("function namedWake(why) {"), /if \(why === "name"\) flashNameWake\(\);/);
-  assert.match(js, /namedWake\("wake-word"\);\s*if \(!realtimeActive && !realtimeConnecting && !processing\) \{\s*\/\/[^\n]*\n\s*startVoiceWakeShimmer\(\);/);
+  /* Only a real wake: not every "Braino, …" in a conversation that paused. */
+  assert.match(lift("function namedWake(why) {"), /if \(why === "name" && asleepFor >= NAME_WAKE_LIGHT_AFTER_MS\) flashNameWake\(\);/);
+  /* "Hey Braino" gets the gold trace; the hotkey keeps the blue. */
+  assert.match(js, /startVoiceWakeShimmer\(\{ golden: true \}\);\s*void startListening\(\);/);
+  /* And nothing else plays that trace on a timer. */
+  assert.match(js, /\/\/ window\.setInterval\(\(\) => void runNotchShimmer\(\), 90 \* 1000\);/);
   assert.match(css, /#notch-face\.nf-name-wake \.nf-shine \{/);
   /* The trace stretches to whatever box a state gives it. */
   const html = readFileSync(new URL("../mac/braino-mac/renderer/index.html", import.meta.url), "utf8");
@@ -151,10 +153,11 @@ test("her name wakes her, and only while she is the one on screen", () => {
 test("after a deliberate wake, the first sentence gets through however long it takes", () => {
   let now = 1_000_000;  // a real clock is never 0, and 0 reads as "never woken"
   const env = Function("Date", `
-    let namedModeOn = true, namedAddressedAt = 0, namedGraceUntil = 0;
+    let namedModeOn = true, namedAddressedAt = 0, namedGraceUntil = 0, namedSpeechAwake = false;
+    const NAME_WAKE_LIGHT_AFTER_MS = 20000;
     let speaking = false, processing = false, voiceTurnInFlight = false;
     let lastSpokenLine = { endedTs: 0 };
-    const NAMED_WINDOW_MS = 5000;
+    const NAMED_WINDOW_MS = 12000;
     const NAMED_FIRST_COMMAND_MS = 15000;
     const logRenderer = () => {};
     const flashNameWake = () => {};
@@ -169,7 +172,7 @@ test("after a deliberate wake, the first sentence gets through however long it t
   now += 12000;                        // you start talking 12s after "speak now"
   assert.equal(env.namedWindowOpen(), true);
   env.namedWake("follow-up");          // that sentence lands
-  now += 6000;                         // and after it, the normal five seconds
+  now += 13000;                        // and after it, the normal window
   assert.equal(env.namedWindowOpen(), false);
 });
 
@@ -191,4 +194,24 @@ test("his name wakes him in any script, and nothing is dropped without a log", (
   assert.match(accept, /voice\.transcript_unreadable/);
   /* And the transcriber is told the name exists. */
   assert.match(js, /always write that name as Braino, in English letters/);
+});
+
+/* A sentence that STARTS while he is awake is his, however long it runs; and
+   the window is long enough for a real back-and-forth. */
+test("a sentence begun while awake is never cut off for ending late", () => {
+  assert.match(js, /const NAMED_WINDOW_MS = 12000;/);
+  assert.match(lift("function namedWindowOpen() {"), /if \(namedSpeechAwake\) return true;/);
+  assert.match(js, /if \(namedModeOn && namedWindowOpen\(\)\) namedSpeechAwake = true;/);
+  assert.match(lift("async function flushRealtimeTranscript(reason) {"), /if \(transcript\) namedSpeechAwake = false;/);
+});
+
+/* "Hey Braino" worked once, until the first voice session took the mic, and
+   never again. The listener now re-attaches. */
+test("the wake listener re-attaches to the microphone", () => {
+  const swift = readFileSync(new URL("../mac/braino-mac/native/BrainoWakeWord.swift", import.meta.url), "utf8");
+  assert.match(swift, /forName: \.AVAudioEngineConfigurationChange/);
+  assert.match(swift, /else if quietFor > 5 \{\s*self\.heal\(/);
+  assert.match(swift, /func heal\(_ reason: String\) \{[\s\S]*try attachMicrophone\(\)[\s\S]*restartCycle\(with: recognizer\)/);
+  assert.match(swift, /"Brainelle", "Hey Brainelle"/);
+  assert.match(js, /if \(brainoAudible\(\)\) \{\s*logRenderer\("wakeword\.self_heard"/);
 });

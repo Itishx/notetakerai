@@ -509,7 +509,7 @@ All of these live in the inline caption sheet (`.nf-inline-open`, 480 wide, min 
 
 | Class | Label · chip | Line | Notes |
 |---|---|---|---|
-| `.nf-voice-starting` + `.nf-inline-working` | Voice · STARTING (shimmer) | `Live in 3` → `Almost there` | 22px/600 at 70% white, tabular numbers. The boot trace draws around the sheet, growing on the sheet's 1050ms curve |
+| `.nf-voice-starting` + `.nf-inline-working` | Voice · CONNECTING (shimmer) | `Go ahead, I'm listening` (HERA on) or `Connecting` | 22px/600 at 70% white. No countdown. The boot trace draws around the sheet: gold for "Hey Braino", blue (`.nf-waking-voice`) for Control twice |
 | `.nf-voice-ready` | Voice · ● LIVE | `You can speak now` | coral chip with a pulsing dot (`nfMeetingPulse`). Holds 2.4s, or until your words arrive |
 | `.nf-inline-hera` | You're saying · ● HERA (mint) | your words, live | HERA on this Mac, while you are still talking. Mint is HERA's colour everywhere in the notch |
 | *(heard)* | You said · Live | your words | once you stop |
@@ -517,11 +517,11 @@ All of these live in the inline caption sheet (`.nf-inline-open`, 480 wide, min 
 
 **Long speech: `.nf-inline-long` + `.nf-inline-trimmed`.** Past 110 characters the sheet takes the 580 reading width (latched until the caption closes, so it never jumps sideways mid-sentence), 28px side padding, 16px text at 1.55 line height. Text is trimmed from the front at a word, no "...", and the top 1.6em fades out with a mask.
 
-The countdown starts from the median of the last 12 connect times on this Mac (`localStorage.brainoVoiceConnectMs`, clamped 1.5–7s) and never reaches "live" on its own.
+There is no countdown: a number made a slow connection look slower. HERA listens from the press, so what you say while it connects is sent the moment the session is live.
 
 **Asleep, listening for his name: `.nf-name-asleep`.** 284 wide, `+30` tall, radius `0 0 20 20`, no animation. The ticker line reads `Say “Hey Braino” to wake me` (Brainelle's name when she is the avatar) at 60% opacity. It is the lowest-priority ticker slot. Deliberately not the listening look: `.listen` is suppressed while asleep.
 
-**His name, heard: `.nf-name-wake`.** The boot trace (`.nf-shine`), once, stretched to the listening pill (250 × `+44`) over 1.1s with a non-scaling stroke, then `.listen` takes over. The trace SVG has `preserveAspectRatio="none"`, so any state can size it.
+**His name, heard: `.nf-name-wake`.** Only after a real sleep (20s+), never on every named sentence; the 90s idle shimmer is off so the gold trace means only this. The boot trace (`.nf-shine`), once, stretched to the listening pill (250 × `+44`) over 1.1s with a non-scaling stroke, then `.listen` takes over. The trace SVG has `preserveAspectRatio="none"`, so any state can size it.
 
 The thinking chip is one word, `Thinking`. The old four-word cycle is gone.
 

@@ -9,8 +9,8 @@
 
 The notch now says what Braino's ears are doing, all the way through:
 
-- **Waking up.** Press Control twice, or say "Hey Braino". The outline of the notch lights up, a sheet drops down, and it counts down: *Live in 3, 2, 1*.
-- **Ready.** The moment the voice is actually live it says *You can speak now*.
+- **Waking up.** Press Control twice (blue outline) or say "Hey Braino" (gold outline). A sheet drops down saying *Go ahead, I'm listening*: HERA is already listening on the Mac, so you can talk straight away and it goes through the moment the voice session is up. There is no countdown; one made a slow connection look slower, and the connection time is OpenAI's (1s this morning, 3-8s tonight).
+- **Ready.** If you have not started talking yet, it says *You can speak now* once the session is live.
 - **Hearing you, live.** While you talk, HERA (on this Mac) shows your words as you say them under *You're saying*, with a mint HERA chip. When you stop they become *You said*, and they stay there while he works on them, with a small shimmering *Thinking* beside them.
 - **Long sentences breathe.** Past about 110 characters the sheet widens, the lines get more room, and the oldest line fades out at the top instead of cramming.
 - **Asleep.** With "listen for my name" on, the notch reads *Say "Hey Braino" to wake me* while he is ignoring the room. Say his name and the outline lights up the way it does at boot.
@@ -28,8 +28,9 @@ Voice takes 2 to 6 seconds to come up (3.7 seconds median across the last 194 se
 
 ## What Braino knows or does
 
-- The countdown starts from the median of this Mac's last 12 connect times, and never says "speak now" before the session is live. If it is slower than usual it says *Almost there*.
-- The five-second "I'm listening" window after his name now starts when the notch says *You can speak now*, not when you said his name. Before, most of those five seconds were spent connecting.
+- After his name, he listens for 12 seconds from the last thing either of you said, and a sentence you start inside that window counts however long it runs. Five seconds closed between ordinary turns and dropped real sentences.
+- The gold outline plays only when he wakes from a real sleep (20 seconds or more), not on every "Braino, …" in a conversation. The 90-second idle shimmer that used the same outline is off.
+- "Hey Braino" keeps working after a voice session: the on-device listener used to lose the microphone when a session reconfigured it, and never got it back. It now re-attaches on every change, and whenever it has heard nothing for five seconds (`wakeword.healed` in the log).
 - After a deliberate wake (his name, or Control twice) the first sentence gets through however long you take to say it, up to 15 seconds. After that the normal five seconds apply.
 - His name counts in any script. The cloud transcriber sometimes writes a short "Hey Braino" in Devanagari or Urdu despite being told English, and it is now told the name exists and to write it as Braino. A sentence with no English letters is logged instead of vanishing.
 - While he is asleep, only a sentence with his name in it can open the caption, so other people's conversation is never shown on its way to being ignored.
@@ -41,12 +42,12 @@ Voice takes 2 to 6 seconds to come up (3.7 seconds median across the last 194 se
 - **Option twice** (dictation): HERA's words are cleaned up and typed where your cursor is. Unchanged.
 - **Talking to Braino**: the same live words show in the notch, and when you stop, that sentence is the command.
 
-OpenAI still decides whether a sentence was meant for him (it has echo cancellation). HERA's words become the command unless they cannot be trusted: Braino was audible while you spoke (HERA would have heard him), the turn began with you cutting him off (the reset can eat your first words), HERA clearly heard fewer words than OpenAI, or it did not answer within 600ms. Then OpenAI's words are used. Each choice is logged as `voice.command_text` with its reason.
+OpenAI's words are the command. HERA's were tried as the command first and lost on the evidence: with no echo cancellation they carried Braino's own reply on most turns, HERA wrote his name as "we don't", and waiting for its segment added up to 600ms to every reply. The one exception is what you said while the session was still connecting, which only HERA heard. Each choice is logged as `voice.command_text`.
 
 ## Honest limitations
 
-- The countdown is an estimate. It is honest about being late, but it cannot know the future.
-- Waking her from cold with "Hey Brainelle" needs the on-device listener to learn her name, which means rebuilding that helper and macOS asking for microphone access once more. Inside an open session her name already works.
+- The voice session itself can take several seconds to connect; that time is on OpenAI's side and your network. HERA covers it by listening from the press.
+- The on-device listener was rebuilt to fix the microphone and learn "Brainelle", so macOS may ask once more for microphone and speech recognition access.
 - A bare "stop" or "never mind" needs his name on it, because people say those to each other.
 - HERA's live words are a running guess and can change as you speak.
 - If HERA is still loading when voice opens, the notch falls back to OpenAI's words until it is ready (it retries every 3 seconds).

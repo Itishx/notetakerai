@@ -423,6 +423,13 @@ let namedAsleepPainted = false;
    Five seconds was not enough: in the log the voice came up at :17 and the
    sentence started at :29, by which time he had gone back to sleep. */
 let namedGraceUntil = 0;
+/* A sentence you started while he was awake is his, however long it runs.
+   The window used to be checked when the sentence ENDED, so a long one that
+   began in time was thrown away for finishing late. */
+let namedSpeechAwake = false;
+/* The golden trace means one thing: he just woke up. Not on every "Braino, …"
+   in a conversation that paused for a few seconds. */
+const NAME_WAKE_LIGHT_AFTER_MS = 20000;
 const NAMED_FIRST_COMMAND_MS = 15000;
 /* His name as the cloud transcriber sometimes writes it despite language:"en".
    The on-device listener is told "Braino" exists; this one is not, and a short
@@ -2269,7 +2276,10 @@ function runNotchShimmer() {
 // The 90-second resting heartbeat. The boot sequence draws its own slow line,
 // so there is no bootstrap firing — the first idle shimmer lands 90s after
 // launch, and never on top of anything.
-window.setInterval(() => void runNotchShimmer(), 90 * 1000);
+/* Off. The same golden trace now means exactly one thing, that he heard his
+   name, and a trace every 90 seconds made it look like he kept waking up. The
+   function stays for anything that wants a one-off flourish. */
+// window.setInterval(() => void runNotchShimmer(), 90 * 1000);
 
 // ── Meeting recorder panel ──
 const meetingPanel = document.getElementById("meeting-panel");
@@ -3188,7 +3198,7 @@ function updateNotchFace() {
     : (inlineMode ? voiceStartText(inlineMode) : "");
   const inlineState = inlineMode === "thinking"
     ? THINKING_PHASES[thinkingPhaseIndex]
-    : (inlineMode === "starting" ? "Starting" : (inlineMode === "heard" && nfHeardLive ? "HERA" : "Live"));
+    : (inlineMode === "starting" ? "Connecting" : (inlineMode === "heard" && nfHeardLive ? "HERA" : "Live"));
   layoutNotchCaption("");
   syncInlineVoiceSurface(inlineMode, inlineText, {
     state: inlineState,
@@ -4355,7 +4365,11 @@ function voiceAddressesBraino(text) {
  * would close the window while he was still answering a question — you would
  * say "Braino, what's my day", he would talk for eight seconds, and your
  * follow-up would land on a closed door. */
-const NAMED_WINDOW_MS = 5000;
+/* Twelve seconds, not five. Five closed between ordinary turns of a real
+   conversation — "My computer is not working", "Please close all my tabs"
+   were both dropped in the log, and 15s of dropped speech then shut the
+   session. Counted from the last thing either of you said. */
+const NAMED_WINDOW_MS = 12000;
 let namedModeOn = false;
 let namedAddressedAt = 0;
 
@@ -4367,12 +4381,15 @@ function namedWindowOpen() {
   /* Timestamps rather than a timer, so a lid closing for an hour cannot leave
      the window standing open when it opens again. */
   if (Date.now() < namedGraceUntil) return true;
+  if (namedSpeechAwake) return true;
   const since = Math.max(namedAddressedAt, lastSpokenLine?.endedTs || 0);
   return since > 0 && Date.now() - since <= NAMED_WINDOW_MS;
 }
 
 function namedWake(why) {
   const wasAsleep = !namedWindowOpen();
+  const lastExchange = Math.max(namedAddressedAt, lastSpokenLine?.endedTs || 0);
+  const asleepFor = lastExchange > 0 ? Date.now() - (lastExchange + NAMED_WINDOW_MS) : Infinity;
   namedAddressedAt = Date.now();
   // The first real sentence has arrived; from here the normal five seconds apply.
   if (why === "name" || why === "follow-up") namedGraceUntil = 0;
@@ -4380,7 +4397,7 @@ function namedWake(why) {
     logRenderer("named.awake", { why });
     /* The moment he wakes is the one thing this mode has to show. A wake-word
        wake gets the voice shimmer on its own path, because it opens a session. */
-    if (why === "name") flashNameWake();
+    if (why === "name" && asleepFor >= NAME_WAKE_LIGHT_AFTER_MS) flashNameWake();
   }
   updateNotchFace();
 }
@@ -4443,6 +4460,7 @@ window.setInterval(() => {
 function namedReset() {
   namedAddressedAt = 0;
   namedGraceUntil = 0;
+  namedSpeechAwake = false;
 }
 
 function rememberLocalChat(role, content) {
@@ -7928,6 +7946,8 @@ async function flushRealtimeTranscript(reason) {
   rtTranscriptFinal = false;
   clearRealtimeTranscriptFlush();
   const accepted = dictationMode ? Boolean(transcript) : shouldAcceptVoiceTranscript(transcript);
+  // That sentence has been judged; the next one is judged on its own start.
+  if (transcript) namedSpeechAwake = false;
   logRenderer("realtime.transcript.flush", {
     reason,
     transcriptChars: transcript.length,
@@ -8173,7 +8193,11 @@ function handleRealtimeEvent(event) {
       rtUserTranscript = "";
       rtTranscriptFinal = false;
       clearRealtimeTranscriptFlush();
-      if (heraVoice.on) heraVoice.userSpeaking = true;
+      if (heraVoice.on) {
+        heraVoice.userSpeaking = true;
+        heraVoice.sawOpenAiSpeech = true;
+      }
+      if (namedModeOn && namedWindowOpen()) namedSpeechAwake = true;
     }
     // Trust the physical audio state, not just the flags: `speaking` can go
     // stale while a long Fish stream is still audible, which used to make
@@ -8219,7 +8243,11 @@ function handleRealtimeEvent(event) {
     // One HERA segment per turn: the words of this turn, closed at the pause.
     if (!dictationMode && heraVoice.on) {
       heraVoice.userSpeaking = false;
-      heraVoice.turnRotate = heraVoiceRotate("turn_end");
+      if (heraVoice.early) {
+        heraVoice.earlyText = heraVoiceLiveText();
+        heraVoice.early = false;
+      }
+      heraVoiceRotate("turn_end");
     }
     if (dictationMode) {
       dictationSpeechActive = false;
@@ -8744,7 +8772,8 @@ async function startRealtimeVoice(options = {}) {
     if (!isDictation) {
       voiceStartReady();
       namedOpenAtReady();
-      void heraVoiceStart("session_ready");
+      if (heraVoice.on) heraVoiceAtReady();
+      else void heraVoiceStart("session_ready");
     }
     markRealtimeActivity("realtime_ready");
     if (!isDictation) startFishWarmKeepAlive();
@@ -10463,10 +10492,11 @@ let voiceWakeShimmerTimer = 0;
    notch radiated for the whole call instead of just the wake. */
 let voiceWakeShimmerAdded = [];
 
-function startVoiceWakeShimmer() {
+function startVoiceWakeShimmer(options = {}) {
   if (!notchFace) return;
-  voiceWakeShimmerAdded = ["nf-shining", "nf-shine-slow", "nf-waking-voice"]
-    .filter((name) => !notchFace.classList.contains(name));
+  /* His name gets the gold boot trace; the hotkey keeps the blue. */
+  const classes = options.golden ? ["nf-shining", "nf-shine-slow"] : ["nf-shining", "nf-shine-slow", "nf-waking-voice"];
+  voiceWakeShimmerAdded = classes.filter((name) => !notchFace.classList.contains(name));
   notchFace.classList.add(...voiceWakeShimmerAdded);
   window.clearTimeout(voiceWakeShimmerTimer);
   // The wake is a moment, not a state: it clears the instant voice is live,
@@ -10505,6 +10535,9 @@ function heraVoiceReset(on) {
     dirty: false,
     clipped: false,
     userSpeaking: false,
+    sawOpenAiSpeech: false,
+    early: false,
+    earlyText: "",
     rotates: [],
     turnRotate: null,
     lastRotateAt: Date.now(),
@@ -10514,17 +10547,22 @@ function heraVoiceReset(on) {
 }
 
 async function heraVoiceStart(reason) {
-  if (heraVoice.on || heraVoiceStarting || dictationMode || herMode || !realtimeActive) return;
+  if (heraVoice.on || heraVoiceStarting || dictationMode || herMode) return;
+  if (!realtimeActive && !realtimeConnecting) return;
   heraVoiceStarting = true;
   try {
     const result = await window.brainoMac.voiceCaption?.({ action: "start" });
-    if (result?.ok && realtimeActive && !dictationMode) {
+    if (result?.ok && (realtimeActive || realtimeConnecting) && !dictationMode) {
       heraVoiceReset(true);
+      // Listening before the session is: whatever you say now is kept.
+      heraVoice.early = !realtimeActive;
       heraVoiceStartTries = 0;
+    } else if (result?.ok) {
+      void window.brainoMac.voiceCaption?.({ action: "stop", reason: "session_gone" })?.catch?.(() => {});
     }
     logRenderer("hera_voice.start", { ok: Boolean(result?.ok), why: result?.reason || "", reason });
     // The models load once at launch; a session that opens first waits for them.
-    if (!result?.ok && result?.reason === "warming" && realtimeActive && heraVoiceStartTries < 20) {
+    if (!result?.ok && result?.reason === "warming" && (realtimeActive || realtimeConnecting) && heraVoiceStartTries < 20) {
       heraVoiceStartTries += 1;
       window.setTimeout(() => void heraVoiceStart("warming_retry"), 3000);
     }
@@ -10597,29 +10635,52 @@ function heraVoiceLiveText() {
   return [settled, b.slice(overlap).join(" ")].filter(Boolean).join(" ");
 }
 
-/* Which words become the command. HERA's, unless it cannot be trusted. */
+/* Which words become the command: OpenAI's.
+ *
+ * HERA's were tried and lost on the evidence. It has no echo cancellation, so
+ * most turns after a reply carried Braino's own words ("braino_was_audible" on
+ * five turns in a row), it writes his name as "we don't", and waiting for its
+ * segment added up to 600ms to every reply. OpenAI's transcript is what the
+ * voice path was built around and it is already there. HERA stays as what you
+ * SEE while you talk.
+ *
+ * One exception: words you said while the session was still connecting. OpenAI
+ * never heard those, HERA did, and there was no echo to hear yet. */
 async function heraCommandText(openaiText) {
-  const request = heraVoice.turnRotate;
+  const early = String(heraVoice.earlyText || "").trim();
+  heraVoice.earlyText = "";
   heraVoice.turnRotate = null;
   const openaiWords = openaiText.split(/\s+/).filter(Boolean).length;
-  const useOpenAi = (why, extra = {}) => {
-    logRenderer("voice.command_text", { source: "openai", why, openaiWords, ...extra });
-    return openaiText;
-  };
-  if (!heraVoice.on) return useOpenAi("hera_off");
-  if (!request) return useOpenAi("no_turn_boundary");
-  if (!request.done) {
-    const until = Date.now() + HERA_SEGMENT_WAIT_MS;
-    while (!request.done && Date.now() < until) await wait(40);
+  const earlyWords = early ? early.split(/\s+/).filter(Boolean).length : 0;
+  if (early && earlyWords > openaiWords) {
+    logRenderer("voice.command_text", { source: "hera_early", heraWords: earlyWords, openaiWords });
+    return early;
   }
-  const text = String(request.text || "").trim();
-  if (!text) return useOpenAi(request.done ? "hera_heard_nothing" : "hera_too_slow");
-  const heraWords = text.split(/\s+/).filter(Boolean).length;
-  if (request.dirty) return useOpenAi("braino_was_audible", { heraWords });
-  if (request.clipped) return useOpenAi("started_with_barge_in", { heraWords });
-  if (openaiWords >= 3 && heraWords < openaiWords * 0.7) return useOpenAi("hera_missed_words", { heraWords });
-  logRenderer("voice.command_text", { source: "hera", heraWords, openaiWords });
-  return text;
+  logRenderer("voice.command_text", { source: "openai", openaiWords });
+  return openaiText;
+}
+
+/* The session is live. If you already said something while it connected,
+   send it now; if you are still saying it, OpenAI hears the rest and the
+   first pause takes the whole line. */
+function heraVoiceAtReady() {
+  if (!heraVoice.on || !heraVoice.early) return;
+  const text = heraVoiceLiveText();
+  if (!text) {
+    heraVoice.early = false;
+    return;
+  }
+  if (heraVoice.sawOpenAiSpeech) return;
+  if (Date.now() - (heraVoice.lastRawAt || 0) < 900) {
+    window.setTimeout(heraVoiceAtReady, 1000);
+    return;
+  }
+  heraVoice.early = false;
+  logRenderer("voice.early_turn", { words: text.split(/\s+/).length });
+  rtUserTranscript = text;
+  rtTranscriptFinal = true;
+  heraVoiceRotate("early_turn");
+  void flushRealtimeTranscript("early_hera");
 }
 
 window.brainoMac.onVoiceCaption?.((event) => {
@@ -10698,7 +10759,7 @@ function recordVoiceConnectMs(ms) {
 }
 
 function voiceStartTicking(on) {
-  if (on && !voiceStartTicker) voiceStartTicker = window.setInterval(() => updateNotchFace(), 250);
+  if (on && !voiceStartTicker) voiceStartTicker = window.setInterval(() => updateNotchFace(), 500);
   if (!on && voiceStartTicker) {
     window.clearInterval(voiceStartTicker);
     voiceStartTicker = 0;
@@ -10708,6 +10769,9 @@ function voiceStartTicking(on) {
 function voiceStartBegin() {
   voiceStart = { phase: "starting", startedAt: Date.now(), estimateMs: voiceConnectEstimateMs(), readyAt: 0 };
   voiceStartTicking(true);
+  // HERA is on this Mac and ready now; the session takes seconds. Start
+  // listening at the press so you can start talking at the press.
+  void heraVoiceStart("press");
   updateNotchFace();
 }
 
@@ -10736,12 +10800,13 @@ function voiceStartPhase() {
   return voiceStart.phase;
 }
 
-/* The count never reaches zero on its own. If the session is slower than
-   usual it says so rather than claiming to be live. */
+/* No countdown. A number counting down made a slow connection look slower,
+   and it was a guess anyway (OpenAI took 1s this morning and 3-8s tonight).
+   With HERA listening from the press there is nothing to wait for: say it, and
+   it goes through the moment the session is up. Without HERA, plainly say so. */
 function voiceStartText(phase) {
   if (phase === "ready") return "You can speak now";
-  const left = Math.ceil((voiceStart.estimateMs - (Date.now() - voiceStart.startedAt)) / 1000);
-  return left >= 1 ? `Live in ${left}` : "Almost there";
+  return heraVoice.on ? "Go ahead, I'm listening" : "Connecting";
 }
 window.brainoMac.onCursorMode?.((payload) => {
   cursorModeContext = payload || null;
@@ -11884,6 +11949,11 @@ window.brainoMac.onNamedMode?.((payload) => {
   updateNotchFace();
 });
 window.brainoMac.onWakeDetected?.((payload) => {
+  /* His own voice saying his name through the speakers is not you calling him. */
+  if (brainoAudible()) {
+    logRenderer("wakeword.self_heard", {});
+    return;
+  }
   // The wake phrase was heard ON-DEVICE (BrainoWakeWord.swift requires
   // requiresOnDeviceRecognition=true) — nothing about it was sent anywhere.
   // Only NOW does a real (cloud, paid) realtime session open, exactly like
@@ -11895,8 +11965,8 @@ window.brainoMac.onWakeDetected?.((payload) => {
      that woke him. */
   namedWake("wake-word");
   if (!realtimeActive && !realtimeConnecting && !processing) {
-    // The same light as Control twice: pressed, heard, waking.
-    startVoiceWakeShimmer();
+    // The golden trace: he heard his name and is waking up.
+    startVoiceWakeShimmer({ golden: true });
     void startListening();
   }
 });
