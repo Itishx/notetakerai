@@ -227,6 +227,13 @@ const {
   speakableContactName,
   parseCorrectedName,
 } = require(path.join(__dirname, "contact-match.cjs"));
+const {
+  parseMediaControlIntent,
+  parseNowPlayingIntent,
+  parseVolumeCommand,
+  applyVolumeCommand,
+  speakableMediaTitle,
+} = require(path.join(__dirname, "media-control.cjs"));
 const { parseBrainoOsColorIntent } = require(path.join(__dirname, "braino-os-color.cjs"));
 const { parseTeleprompterIntent } = require(path.join(__dirname, "teleprompter-intent.cjs"));
 const teleprompter = require(path.join(__dirname, "teleprompter.cjs"));
@@ -15003,6 +15010,326 @@ async function createGoogleDocWithText(title, text) {
  * wire next is decided by what Braino actually reached for rather than by
  * whichever ones seemed important on a Tuesday.
  */
+
+/* ── Where the sound is actually coming from ───────────────────────────────
+ *
+ * "Stop the video playing on YouTube" paused Spotify, then spent 53 seconds in
+ * the loop and gave up. "Reduce the volume" changed Spotify while a YouTube
+ * video was the thing making noise. Both because Spotify was assumed.
+ *
+ * So: ask, do not assume. Spotify answers in about 300ms. A browser is asked
+ * which of its tabs has a <video> or <audio> that is actually running, which
+ * is the truth rather than a guess from the tab title. Both are asked at once,
+ * so the whole thing fits inside the two seconds this has to take. */
+const BROWSER_MEDIA_APPS = ["Google Chrome", "Brave Browser", "Chromium"];
+/* Tabs worth asking when there are many: the one in front of each window, and
+   anything that looks like it plays something. */
+const MEDIA_TAB_HINT = /(youtube|youtu\.be|netflix|primevideo|hotstar|jiocinema|soundcloud|spotify|vimeo|twitch|music|podcast|player|watch|video|episode|live)/i;
+const MEDIA_TAB_CAP = 8;
+/* What Spotify was at before a mute, so unmute can put it back. */
+let mutedSpotifyVolume = null;
+
+/* Returns "playing|<volume 0-100>|<muted 0|1>" for the first running element. */
+const MEDIA_FIND_JS = "(function(){var m=document.querySelectorAll('video,audio');for(var i=0;i<m.length;i++){var e=m[i];if(!e.paused&&!e.ended&&e.readyState>2){return 'playing|'+Math.round((e.volume||0)*100)+'|'+(e.muted?1:0);}}return '';})()";
+const MEDIA_PAUSE_JS = "(function(){var m=document.querySelectorAll('video,audio'),n=0;for(var i=0;i<m.length;i++){var e=m[i];if(!e.paused&&!e.ended){e.pause();n++;}}return ''+n;})()";
+const MEDIA_PLAY_JS = "(function(){var m=document.querySelectorAll('video,audio'),n=0;for(var i=0;i<m.length;i++){var e=m[i];if(e.paused&&e.readyState>2){e.play();n++;}}return ''+n;})()";
+const mediaMuteJs = (muted) => `(function(){var m=document.querySelectorAll('video,audio'),n=0;for(var i=0;i<m.length;i++){m[i].muted=${muted ? "true" : "false"};n++;}return ''+n;})()`;
+const mediaVolumeJs = (percent) => `(function(){var v=${Math.max(0, Math.min(100, Math.round(percent)))}/100,m=document.querySelectorAll('video,audio'),n=0;for(var i=0;i<m.length;i++){var e=m[i];if(!e.ended){e.volume=v;if(v>0)e.muted=false;n++;}}return ''+n;})()`;
+
+/* One AppleScript per browser: find the tabs, then run `js` in the ones worth
+   asking. Kept in AppleScript rather than one call per tab, because each call
+   costs a process and the whole answer has to arrive inside two seconds. */
+/* Not `tab`, which inside a `tell application "Google Chrome"` block is
+   Chrome's TAB CLASS, not a tab character: every row came back reading
+   "1tab3tabplaying" and parsed into nothing, so a playing video looked like
+   silence. Unit separator, chosen once, outside the tell block. */
+const MEDIA_FIELD_SEP = "\u0001";
+
+function browserMediaScript(app, js) {
+  return `
+set SEP to (ASCII character 1)
+set out to ""
+set asked to 0
+tell application ${JSON.stringify(app)}
+  if (count of windows) is 0 then return ""
+  set wi to 0
+  repeat with w in windows
+    set wi to wi + 1
+    set ti to 0
+    set activeIndex to 0
+    try
+      set activeIndex to active tab index of w
+    end try
+    repeat with t in tabs of w
+      set ti to ti + 1
+      set u to ""
+      set ttl to ""
+      try
+        set u to URL of t
+        set ttl to title of t
+      end try
+      set worthAsking to (ti is activeIndex)
+      if not worthAsking then
+        if u contains "youtube" or u contains "netflix" or u contains "spotify" or u contains "soundcloud" or u contains "twitch" or u contains "vimeo" or u contains "hotstar" or u contains "primevideo" or u contains "music" or u contains "podcast" or u contains "video" or u contains "watch" then set worthAsking to true
+      end if
+      if worthAsking and asked < ${MEDIA_TAB_CAP} then
+        set asked to asked + 1
+        set r to ""
+        try
+          set r to (execute t javascript ${JSON.stringify(js)}) as text
+        end try
+        if r is not "" and r is not "0" then
+          set out to out & wi & SEP & ti & SEP & r & SEP & ttl & SEP & u & linefeed
+        end if
+      end if
+    end repeat
+  end repeat
+end tell
+return out`;
+}
+
+async function runBrowserMediaScript(app, js, timeoutMs = 4000) {
+  try {
+    const { stdout } = await execFileP("/usr/bin/osascript", ["-e", browserMediaScript(app, js)], { timeout: timeoutMs, maxBuffer: 1024 * 1024 });
+    return String(stdout || "").split(/\r?\n/).filter(Boolean).map((line) => {
+      const [windowIndex, tabIndex, result, title = "", url = ""] = line.split(MEDIA_FIELD_SEP);
+      const [state = "", volume = "", muted = ""] = String(result || "").split("|");
+      return {
+        kind: "browser",
+        app,
+        windowIndex: Number(windowIndex) || 1,
+        tabIndex: Number(tabIndex) || 1,
+        state,
+        volumePercent: Number(volume),
+        muted: muted === "1",
+        title: String(title || "").trim(),
+        url: String(url || "").trim(),
+        raw: String(result || "").trim(),
+      };
+    });
+  } catch (error) {
+    logMac("media.browser.scan_failed", { app, error: String(error?.message || error).slice(0, 120) });
+    return [];
+  }
+}
+
+/* Which browsers are open, in one question. Asking a browser that is not
+   running costs a second and a half of nothing, three times over. */
+async function runningBrowsers() {
+  try {
+    const { stdout } = await execFileP("/usr/bin/osascript", ["-e",
+      'tell application "System Events" to get name of every application process'], { timeout: 3000 });
+    const names = String(stdout || "").split(",").map((name) => name.trim());
+    return BROWSER_MEDIA_APPS.filter((app) => names.includes(app));
+  } catch (_) {
+    return BROWSER_MEDIA_APPS;
+  }
+}
+
+/* Every browser that is running, asked at the same time. */
+async function findBrowserMediaPlaying() {
+  const apps = await runningBrowsers();
+  if (!apps.length) return [];
+  const results = await Promise.all(apps.map((app) => runBrowserMediaScript(app, MEDIA_FIND_JS)));
+  return results.flat().filter((row) => row.state === "playing");
+}
+
+async function readSystemVolume() {
+  try {
+    const { stdout } = await execFileP("/usr/bin/osascript", ["-e", "output volume of (get volume settings)"], { timeout: 3000 });
+    const value = Number(String(stdout).trim());
+    return Number.isFinite(value) ? value : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+async function writeSystemVolume(percent) {
+  const target = Math.max(0, Math.min(100, Math.round(percent)));
+  await execFileP("/usr/bin/osascript", ["-e", `set volume output volume ${target}`], { timeout: 3000 });
+  const after = await readSystemVolume();
+  return after === null ? target : after;
+}
+
+/* Everything making a noise, with Spotify and the browsers asked together. */
+async function resolveAudioSources(hint = "any") {
+  const wantSpotify = hint === "any" || hint === "spotify";
+  const wantBrowser = hint === "any" || hint === "browser";
+  const [spotify, browser] = await Promise.all([
+    wantSpotify ? readSpotifyMacState().catch(() => null) : Promise.resolve(null),
+    wantBrowser ? findBrowserMediaPlaying().catch(() => []) : Promise.resolve([]),
+  ]);
+  const sources = [];
+  if (spotify?.ok && /playing/i.test(spotify.state || "")) {
+    sources.push({
+      kind: "spotify",
+      label: spotify.name ? `Spotify (${spotify.name})` : "Spotify",
+      volumePercent: spotify.volumePercent,
+      track: spotify.name || "",
+      artist: spotify.artist || "",
+    });
+  }
+  for (const row of browser) {
+    const named = speakableMediaTitle(row.title);
+    const where = /youtube/i.test(row.url) ? "the YouTube video"
+      : /netflix/i.test(row.url) ? "Netflix"
+        : `the video in ${row.app}`;
+    sources.push({ ...row, label: named ? `${where}, ${named}` : where });
+  }
+  logMac("media.sources", {
+    hint,
+    playing: sources.map((row) => row.kind),
+    spotify: spotify?.ok ? spotify.state : "unreadable",
+    browserTabs: browser.length,
+  });
+  return sources;
+}
+
+function joinLabels(labels) {
+  if (labels.length <= 1) return labels[0] || "";
+  return `${labels.slice(0, -1).join(", ")} and ${labels[labels.length - 1]}`;
+}
+
+function startsCapital(line) {
+  const text = String(line || "").trim();
+  return text ? text[0].toUpperCase() + text.slice(1) : text;
+}
+
+/* Pause, resume, mute, skip: on whatever is actually playing, then checked. */
+async function controlPlayingMedia(action, hint = "any") {
+  const normalized = String(action || "").toLowerCase();
+  const startedAt = Date.now();
+  const sources = await resolveAudioSources(hint);
+
+  if (normalized === "play") {
+    // Resuming is the one case where nothing is playing yet: the browser tab
+    // that was paused, or Spotify.
+    if (hint !== "spotify") {
+      const paused = (await Promise.all((await runningBrowsers()).map((app) => runBrowserMediaScript(app, MEDIA_PLAY_JS)))).flat();
+      if (paused.length) {
+        const label = paused.map((row) => (/youtube/i.test(row.url) ? "the YouTube video" : `the video in ${row.app}`))[0];
+        logMac("media.control.done", { action: normalized, on: "browser", ms: Date.now() - startedAt });
+        return { ok: true, say: `Playing ${label} again.` };
+      }
+    }
+    if (hint !== "browser") return controlSpotifyPlaybackOnMac("play");
+    return { ok: false, say: "I could not find a paused video to start again." };
+  }
+
+  /* Skipping a track is Spotify's alone, and it works while paused. */
+  if (normalized === "next" || normalized === "previous") {
+    if (hint === "browser" && !sources.some((row) => row.kind === "spotify")) {
+      return { ok: false, say: "I can skip tracks on Spotify, not inside a video." };
+    }
+    return controlSpotifyPlaybackOnMac(normalized);
+  }
+
+  if (normalized === "unmute") {
+    const browsers = (await Promise.all((await runningBrowsers()).map((app) => runBrowserMediaScript(app, mediaMuteJs(false))))).flat();
+    const spotify = mutedSpotifyVolume !== null ? await setSpotifyVolumeInMacApp(mutedSpotifyVolume).catch(() => null) : null;
+    if (spotify !== null) mutedSpotifyVolume = null;
+    logMac("media.control.done", { action: normalized, browsers: browsers.length, spotify, ms: Date.now() - startedAt });
+    if (!browsers.length && spotify === null) return { ok: true, say: "Nothing was muted." };
+    return { ok: true, say: spotify !== null ? `Sound back on, Spotify at ${spotify}%.` : "Sound back on." };
+  }
+
+  if (!sources.length) {
+    logMac("media.control.nothing_playing", { action: normalized, hint });
+    return { ok: true, nothingPlaying: true, say: "Nothing is playing." };
+  }
+
+  const done = [];
+  const failed = [];
+  for (const source of sources) {
+    if (source.kind === "spotify") {
+      if (normalized === "mute") {
+        /* Muting is not pausing: the track keeps going, quietly, and the
+           volume it had is remembered so unmute can put it back. */
+        mutedSpotifyVolume = Number.isFinite(source.volumePercent) ? source.volumePercent : 50;
+        const actual = await setSpotifyVolumeInMacApp(0).catch(() => null);
+        if (actual === 0) done.push(source.label);
+        else failed.push(source.label);
+        continue;
+      }
+      const out = await controlSpotifyPlaybackOnMac(normalized).catch(() => null);
+      const after = await readSpotifyMacState().catch(() => null);
+      if (out?.ok && after?.ok && !/playing/i.test(after.state || "")) done.push(source.label);
+      else failed.push(source.label);
+      continue;
+    }
+    const js = normalized === "mute" ? mediaMuteJs(true) : MEDIA_PAUSE_JS;
+    const acted = await runBrowserMediaScript(source.app, js);
+    // Said only after looking again: the check is the difference between
+    // "paused it" and "claimed to".
+    const still = (await runBrowserMediaScript(source.app, MEDIA_FIND_JS))
+      .filter((row) => row.state === "playing" && (normalized !== "mute" || !row.muted));
+    if (acted.length && !still.length) done.push(source.label);
+    else failed.push(source.label);
+  }
+
+  logMac("media.control.done", {
+    action: normalized,
+    hint,
+    done: done.length,
+    failed: failed.length,
+    ms: Date.now() - startedAt,
+  });
+  const verb = normalized === "mute" ? "Muted" : "Paused";
+  if (done.length && !failed.length) return { ok: true, say: `${verb} ${joinLabels(done)}.` };
+  if (done.length) return { ok: true, say: `${verb} ${joinLabels(done)}. ${joinLabels(failed)} would not stop.` };
+  return { ok: false, say: `I could not stop ${joinLabels(failed)}.` };
+}
+
+/* Volume, on the thing making the noise, worked out from where it really is. */
+async function setPlayingMediaVolume(command) {
+  const startedAt = Date.now();
+  const hint = command?.target || "any";
+  const sources = await resolveAudioSources(hint);
+  const source = sources[0] || null;
+
+  if (source?.kind === "spotify") {
+    const current = Number.isFinite(source.volumePercent) ? source.volumePercent : (await readSpotifyMacState())?.volumePercent ?? 50;
+    const next = applyVolumeCommand(command, current);
+    const actual = await setSpotifyVolumeInMacApp(next).catch(() => null);
+    logMac("media.volume.done", { on: "spotify", from: current, asked: next, actual, ms: Date.now() - startedAt });
+    if (actual === null) return { ok: false, say: "Spotify would not take the volume change." };
+    return { ok: true, say: `Spotify volume ${actual}%.` };
+  }
+
+  if (source?.kind === "browser") {
+    const current = Number.isFinite(source.volumePercent) ? source.volumePercent : 100;
+    const next = applyVolumeCommand(command, current);
+    await runBrowserMediaScript(source.app, mediaVolumeJs(next));
+    const after = (await runBrowserMediaScript(source.app, MEDIA_FIND_JS))
+      .find((row) => row.tabIndex === source.tabIndex && row.windowIndex === source.windowIndex);
+    const actual = Number.isFinite(after?.volumePercent) ? after.volumePercent : null;
+    logMac("media.volume.done", { on: "browser", app: source.app, from: current, asked: next, actual, ms: Date.now() - startedAt });
+    if (actual === null) return { ok: false, say: startsCapital(`I set ${source.label} to ${next}%, but could not read it back.`) };
+    return { ok: true, say: startsCapital(`${source.label} at ${actual}%.`) };
+  }
+
+  // Nothing is playing: the system volume is what "the volume" means.
+  const current = await readSystemVolume();
+  if (current === null) return { ok: false, say: "I could not read the volume." };
+  const next = applyVolumeCommand(command, current);
+  const actual = await writeSystemVolume(next).catch(() => null);
+  logMac("media.volume.done", { on: "system", from: current, asked: next, actual, ms: Date.now() - startedAt });
+  if (actual === null) return { ok: false, say: "macOS would not let me change the volume." };
+  return { ok: true, say: `Volume ${actual}%.` };
+}
+
+async function describePlayingMedia() {
+  const sources = await resolveAudioSources("any");
+  if (!sources.length) return { ok: true, say: "Nothing is playing." };
+  const spotify = sources.find((row) => row.kind === "spotify");
+  if (spotify) {
+    const named = spotify.track ? `${spotify.track}${spotify.artist ? ` by ${spotify.artist}` : ""}` : "something";
+    const others = sources.filter((row) => row.kind !== "spotify").map((row) => row.label);
+    return { ok: true, say: others.length ? `${named} on Spotify, and ${joinLabels(others)}.` : `${named} on Spotify.` };
+  }
+  return { ok: true, say: startsCapital(`${joinLabels(sources.map((row) => row.label))}.`) };
+}
+
 const MAC_HIL_TOOLS = {
   notes_create: (a) => startNoteWorkflow({ title: String(a.title || ""), body: String(a.body || "") }),
   open_url: (a) => openChromeUrl(String(a.url || a.target || "")),
@@ -15013,6 +15340,17 @@ const MAC_HIL_TOOLS = {
   spotify_play: (a) => playSpotifySongOnMac(String(a.query || a.song || a.track || "")),
   spotify_control: (a) => controlSpotifyPlaybackOnMac(String(a.control || a.action || "")),
   spotify_now_playing: () => describeSpotifyNowPlaying(),
+  /* The same common sense the fast lane uses: find what is playing, act on
+     that, check it. The loop should never have to reason about Spotify
+     against a YouTube tab again. */
+  media_control: (a) => controlPlayingMedia(String(a.action || a.control || "pause"), String(a.target || "any")),
+  media_volume: (a) => setPlayingMediaVolume({
+    mode: String(a.mode || "absolute"),
+    value: Number(a.value ?? a.percent ?? 0),
+    direction: Number(a.direction) === -1 ? -1 : 1,
+    target: String(a.target || "any"),
+  }),
+  now_playing: () => describePlayingMedia(),
   screen_vision: (a) => runScreenVision(String(a.question || a.prompt || "")),
   front_window_summary: () => frontWindowSummary(),
   take_screenshot: () => takeScreenshot(),
@@ -16549,6 +16887,32 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
     return { ok: true, say: `Opening ${host}.` };
   }
 
+  /* Sound is a native power, and the loop is terrible at it: "stop the video
+     playing on YouTube" went to the loop, paused Spotify, and gave up after 53
+     seconds. Finding what is playing and stopping it takes about a second. */
+  const mediaIntent = parseMediaControlIntent(raw);
+  if (mediaIntent) {
+    logMac("delegate.media_control_intent", { action: mediaIntent.action, target: mediaIntent.target, raw: textForLog(raw) });
+    return controlPlayingMedia(mediaIntent.action, mediaIntent.target);
+  }
+
+  const volumeCommand = parseVolumeCommand(raw);
+  if (volumeCommand) {
+    logMac("delegate.volume_intent", {
+      raw: textForLog(raw),
+      mode: volumeCommand.mode,
+      value: volumeCommand.value,
+      direction: volumeCommand.direction || 1,
+      target: volumeCommand.target,
+    });
+    return setPlayingMediaVolume(volumeCommand);
+  }
+
+  if (parseNowPlayingIntent(raw)) {
+    logMac("delegate.now_playing_intent", { raw: textForLog(raw) });
+    return describePlayingMedia();
+  }
+
   if (macHilEnabled() && macWantsTheBrain(raw)) {
     const asked = macAsksForTheBrain(text);
     logMac("delegate.hil_loop.front", {
@@ -17052,16 +17416,9 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
     return playYouTubeVideo(youtubeIntent.query);
   }
 
-  const spotifyVolume = parseSpotifyVolumeIntent(raw);
-  if (spotifyVolume) {
-    logMac("delegate.spotify_volume_intent", {
-      raw: textForLog(raw),
-      volumePercent: spotifyVolume.volumePercent,
-      volumeStep: spotifyVolume.volumeStep,
-    });
-    return controlSpotifyVolumeOnMac(spotifyVolume);
-  }
-
+  /* Volume and playback are handled before the brain now, by the code that
+     first asks what is actually making the noise. parseSpotifyVolumeIntent
+     stays for "spotify volume 40" through the quick-command door. */
   if (parseSpotifyWhatsPlayingIntent(raw)) {
     logMac("delegate.spotify_whats_playing_intent", { raw: textForLog(raw) });
     return describeSpotifyNowPlaying();
@@ -17825,6 +18182,18 @@ ipcMain.handle("braino-mac:typing-focus", async (event, payload) => {
   dockWindow.setIgnoreMouseEvents(!on, { forward: true });
   logMac("type.focus", { on });
   return { ok: true };
+});
+
+/* "Braino, stop" with no job running means the sound, not a task. */
+ipcMain.handle("braino-mac:media-control", async (_event, payload = {}) => {
+  const action = String(payload?.action || "pause");
+  const target = String(payload?.target || "any");
+  try {
+    return await controlPlayingMedia(action, target);
+  } catch (error) {
+    logMac("media.control.failed", { action, target, error });
+    return { ok: false, say: "" };
+  }
 });
 
 ipcMain.handle("braino-mac:job-running", async () => ({

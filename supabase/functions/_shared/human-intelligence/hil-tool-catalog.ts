@@ -137,6 +137,15 @@ export const HIL_TOOL_CATALOG: HilTool[] = [
   { name: "open_folder", params: ["folder"], gloss: "Open Downloads, Documents, Desktop, Applications or Home in Finder", zeroNetwork: true, },
   { name: "open_target", params: ["target"], gloss: "Open a named app, known website, or local file by name", },
   { name: "open_url", params: ["url"], gloss: "Open a spoken domain or full URL in Chrome", handler: "openChromeUrl", },
+  /* Sound, without assuming Spotify. Three real failures on 2026-09-17 came
+     from reasoning about Spotify while a YouTube video was the thing making
+     noise: "stop the video playing on YouTube" paused Spotify and then took 53
+     seconds to give up. These find what is actually playing (Spotify and every
+     browser tab, asked at once), act on that, and check it afterwards. Reach
+     for them before thinking about a player by name. */
+  { name: "media_control", params: ["action", "target"], gloss: "Pause, resume, mute, unmute or skip whatever is actually playing, anywhere: Spotify or a video in any browser tab. action: pause | play | mute | unmute | next | previous. target: any | spotify | browser. Prefer this over spotify_control", zeroNetwork: true, handler: "controlPlayingMedia", },
+  { name: "media_volume", params: ["mode", "value", "direction", "target"], gloss: "Set the volume of whatever is actually playing, else the Mac's own. mode: absolute (value is the volume) | points (move by value) | percent (value is a share of the current volume, so 50 with direction -1 is half). direction: 1 or -1. Prefer this over spotify_set_volume", zeroNetwork: true, handler: "setPlayingMediaVolume", },
+  { name: "now_playing", params: [], gloss: "Say what is playing right now anywhere: the Spotify track, the YouTube video, or nothing", zeroNetwork: true, memoSafe: true, handler: "describePlayingMedia", },
   { name: "recent_download", params: ["action", "destination"], gloss: "Open, reveal, name, or move the most recent download", stateful: true, zeroNetwork: true, handler: "handleRecentDownloadIntent", },
   { name: "rename_file", params: ["query", "kind", "newName"], gloss: "Find a file by name and rename the first match", zeroNetwork: true, handler: "renameMacFile", },
   { name: "repeat_last", params: [], gloss: "Re-speak the last thing Braino said out loud", stateful: true, zeroNetwork: true, },

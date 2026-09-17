@@ -8317,6 +8317,14 @@ async function nothingToStop(source, transcript = "") {
     setStatus(realtimeActive ? "listening" : "ready", realtimeActive ? "Listening" : "Ready");
     return;
   }
+  /* No job, but a video or a song playing is the other thing "stop" means.
+     Main finds what is actually making the noise and stops that. */
+  const media = await window.brainoMac.mediaControl?.({ action: "pause", target: "any" }).catch(() => null);
+  if (media?.ok && !media.nothingPlaying) {
+    logRenderer("voice.stop_media", { say: String(media.say || "").slice(0, 80) });
+    await speak(media.say || "Paused it.");
+    return;
+  }
   await speak("Nothing's running right now.");
 }
 
