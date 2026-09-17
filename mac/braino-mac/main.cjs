@@ -18901,8 +18901,10 @@ ipcMain.on("braino-mac:notch-zone-size", (_event, payload) => {
   notchZoneExpandedWidth = Number.isFinite(requestedWidth)
     ? Math.max(220, Math.min(900, requestedWidth))
     : 680;
+  /* 30, not 90: the quiet notch asks for just its menu bar band, and a 90pt
+     floor put the tab strip under Braino's clicks again. */
   notchZoneExpandedHeight = Number.isFinite(requestedHeight)
-    ? Math.max(90, Math.min(900, requestedHeight))
+    ? Math.max(30, Math.min(900, requestedHeight))
     : 260;
 });
 

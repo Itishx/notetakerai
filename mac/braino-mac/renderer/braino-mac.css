@@ -5756,3 +5756,182 @@ body {
 @media (prefers-reduced-motion: reduce) {
   #walker.nf-jump-in svg { animation: none; }
 }
+
+/* ── The quiet notch ──────────────────────────────────────────────────────
+   His status lives in the menu bar band, as two ears either side of the camera
+   housing. Your sentence and his answer get one line under it that leaves on
+   its own. Nothing else drops down, so the tab strip underneath stays visible
+   and clickable: only the band and real buttons take the pointer. The full
+   surfaces still run underneath, hidden, for when you ask for them. */
+#notch-face .nf-q {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: var(--nf-q-w, 350px);
+  height: var(--nf-notch-h);
+  background: #000;
+  border-radius: 0 0 14px 14px;
+  color: #fff;
+  overflow: hidden;
+  z-index: 5;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    width 320ms cubic-bezier(.3,.9,.3,1),
+    height 280ms cubic-bezier(.3,.9,.3,1),
+    border-radius 280ms ease,
+    opacity 180ms ease,
+    visibility 0s linear 180ms;
+}
+#notch-face.nf-quiet-on .nf-q {
+  opacity: 1;
+  visibility: visible;
+  transition-delay: 0s;
+}
+#notch-face.nf-quiet-on.nfq-line .nf-q {
+  height: calc(var(--nf-notch-h) + 38px);
+  border-radius: 0 0 20px 20px;
+}
+/* What it stands in for is still there, just not shown. */
+#notch-face.nf-quiet-on .nf-pill,
+#notch-face.nf-quiet-on .nf-pill *,
+#notch-face.nf-quiet-on .nf-sonar,
+#notch-face.nf-quiet-on.nf-inline-open .nf-inline-caption,
+#notch-face.nf-quiet-on.nf-answer-open .nf-answer-surface {
+  visibility: hidden;
+}
+/* The wake trace keeps playing, drawn around the band instead. */
+#notch-face.nf-quiet-on .nf-shine {
+  width: var(--nf-q-w, 350px);
+  height: calc(var(--nf-notch-h) + 2px);
+}
+#notch-face.nf-quiet-on.nfq-line .nf-shine {
+  height: calc(var(--nf-notch-h) + 38px);
+}
+
+#notch-face .nf-q-band {
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: var(--nf-notch-h);
+  pointer-events: auto;
+}
+#notch-face.nfq-work .nf-q-band { cursor: pointer; }
+#notch-face .nf-q-left,
+#notch-face .nf-q-right {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: rgba(255,255,255,.9);
+  font: 600 11px/1 "Braino SF Pro Display", "SF Pro Display", -apple-system, BlinkMacSystemFont, sans-serif;
+  letter-spacing: .01em;
+  white-space: nowrap;
+}
+#notch-face .nf-q-left { left: 13px; }
+#notch-face .nf-q-right { right: 13px; }
+
+#notch-face .nf-q-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #e8786e;
+  box-shadow: 0 0 10px rgba(232,120,110,.8);
+  animation: nfqPulse 1.6s ease-in-out infinite;
+}
+#notch-face .nf-q-dot.idle {
+  background: rgba(255,255,255,.34);
+  box-shadow: none;
+  animation: none;
+}
+#notch-face .nf-q-think {
+  width: 30px;
+  height: 8px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, rgba(240,178,90,.22), #f0b25a, rgba(240,178,90,.22));
+  background-size: 200% 100%;
+  animation: nfqShimmer 1.4s linear infinite;
+}
+#notch-face .nf-q-speak {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #fff;
+  animation: nfqPulse 0.9s ease-in-out infinite;
+}
+#notch-face .nf-q-step {
+  font: 500 10.5px/1 ui-monospace, "SF Mono", Menlo, monospace;
+  color: rgba(255,255,255,.62);
+}
+@keyframes nfqPulse { 50% { opacity: .45; } }
+@keyframes nfqShimmer { to { background-position: -200% 0; } }
+
+/* The one line. It lets clicks through; only its buttons do not. */
+#notch-face .nf-q-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: var(--nf-notch-h);
+  height: 38px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px 2px 20px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 180ms ease;
+}
+#notch-face.nfq-line .nf-q-line { opacity: 1; }
+#notch-face .nf-q-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: clip;
+  color: #fff;
+  font: 500 14px/1.2 "Braino SF Pro Display", "SF Pro Display", -apple-system, BlinkMacSystemFont, sans-serif;
+  letter-spacing: -.005em;
+}
+#notch-face .nf-q-text.trimmed {
+  -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 22px);
+  mask-image: linear-gradient(90deg, transparent 0, #000 22px);
+}
+#notch-face .nf-q-more,
+#notch-face .nf-q-x {
+  display: none;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  cursor: pointer;
+  pointer-events: auto;
+  color: rgba(255,255,255,.78);
+  background: rgba(255,255,255,.12);
+  font: 600 10px/1 "Braino SF Pro Display", "SF Pro Display", -apple-system, BlinkMacSystemFont, sans-serif;
+}
+#notch-face .nf-q-more { height: 20px; padding: 0 9px; border-radius: 999px; }
+#notch-face .nf-q-x { width: 20px; height: 20px; border-radius: 50%; }
+#notch-face .nf-q-more:hover,
+#notch-face .nf-q-x:hover { background: rgba(255,255,255,.22); color: #fff; }
+#notch-face .nf-q-more:focus-visible,
+#notch-face .nf-q-x:focus-visible { outline: 2px solid #e8786e; outline-offset: 2px; }
+#notch-face.nfq-answer .nf-q-x { display: inline-flex; }
+#notch-face.nfq-answer.nfq-long .nf-q-more { display: inline-flex; }
+
+/* ── Stealth ──────────────────────────────────────────────────────────────
+   Everything he draws in the notch at 1%, back in 180ms when the pointer is
+   over it. Anything you opened on purpose, and anything going wrong, stays at
+   full strength. */
+#notch-face.nf-stealth { transition: opacity 180ms ease; }
+#notch-face.on.nf-stealth:not(.nf-reveal):not(.nf-think-open):not(.nf-panel-open):not(.nf-music-open):not(.expanded):not(.nf-typing):not(.nf-yap-open):not(.nf-meeting-open):not(.nf-cmds-open):not(.alarming):not(.nf-auth-err):not(.nf-think-failed) {
+  opacity: .01;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #notch-face .nf-q-dot,
+  #notch-face .nf-q-think,
+  #notch-face .nf-q-speak { animation: none; }
+}

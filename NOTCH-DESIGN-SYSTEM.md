@@ -533,6 +533,26 @@ The thinking chip is one word, `Thinking`. The old four-word cycle is gone.
 
 ---
 
+## 12c. The quiet notch, and stealth
+
+The default since September 17. A layer over everything above (`.nf-q`, drawn by `renderQuietNotch`); the full surfaces still run underneath with `visibility: hidden`, and take over whenever something is opened on purpose (think-open, More, panel, dictation, meeting, music, tray, alarm, boot). Resting is unchanged.
+
+| Quiet state | Size | Left ear | Right ear | Below the menu bar |
+|---|---|---|---|---|
+| `nfq-listen` | housing + 80 + 80 (≈340 × notch h) | `Listening` | coral dot | nothing |
+| `nfq-asleep` | same | `Listening` | grey dot (say his name) | nothing |
+| `nfq-starting` | same | `Connecting` | grey dot | nothing |
+| `nfq-work` | same, click opens steps | amber shimmer | `Step N` (mono) | nothing |
+| `nfq-speak` | same | white dot | his name | nothing |
+| `nfq-heard` + `nfq-line` | max(band, 420) × notch h + 38 | `You said` | coral dot | one line, 2.2s |
+| `nfq-answer` + `nfq-line` | same | white dot while speaking | his name | one line, ✕, `More` when it does not fit |
+
+Ears are 11px/600 SF Pro Display at 90% white, 13px from the edge. The line is 14px/500, trimmed from the front by measured width with a 22px left fade. **Clicks:** the band and `.nf-q button` only; the line is `pointer-events: none`, and main is asked for the band as the zone (`nfSetZone` → `nfPushZone`).
+
+**Stealth: `.nf-stealth`.** `#notch-face` at `opacity: .01`, 180ms, except under `.nf-reveal` (pointer in main's notch zone) and any opened or failing surface (`nf-think-open`, `nf-panel-open`, `nf-music-open`, `expanded`, `nf-typing`, `nf-yap-open`, `nf-meeting-open`, `nf-cmds-open`, `alarming`, `nf-auth-err`, `nf-think-failed`).
+
+---
+
 ## 13. Other states
 
 | Animation | Where | Note |

@@ -20,6 +20,18 @@ export type KnowledgeEntry = {
 
 export const KNOWLEDGE_ENTRIES: readonly KnowledgeEntry[] = [
   {
+    slug: "mac-quiet-notch",
+    title: "A Notch That Stays Out Of Your Way",
+    category: "Feature",
+    date: "2026-09-17",
+    dateLabel: "September 17, 2026",
+    description:
+      "Listening, working and speaking now live in the menu bar band beside the camera, what you said and his answer get one line that leaves on its own, clicks go straight through to the tabs underneath, and \"Braino, go stealth\" fades the notch to 1% until you point at it.",
+    status: "MVP",
+    platform: "Braino for Mac",
+    number: "039",
+  },
+  {
     slug: "mac-notch-listening-states",
     title: "The Notch Tells You When He Can Hear You",
     category: "Feature",

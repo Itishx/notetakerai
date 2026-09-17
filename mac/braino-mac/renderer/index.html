@@ -215,6 +215,10 @@
                 <button type="button" class="nf-switch" data-setting="voice" role="switch" aria-checked="true" aria-label="Talk out loud"><i></i></button>
               </div>
               <div class="nf-panel-row">
+                <span class="nf-panel-label">Stealth<small>The notch fades to almost nothing. Hover it to look</small></span>
+                <button type="button" class="nf-switch" data-setting="stealth" role="switch" aria-checked="false" aria-label="Stealth"><i></i></button>
+              </div>
+              <div class="nf-panel-row">
                 <span class="nf-panel-label">Stay where you drop me<small>Off and I walk around</small></span>
                 <div class="nf-panel-control">
                   <button type="button" class="nf-panel-link" data-action="patch">Pick a patch</button>
@@ -335,6 +339,19 @@
               <div class="nf-answer-body"></div>
             </article>
           </section>
+        </div>
+        <!-- The quiet notch: his status in the menu bar band, and one line
+             under it for your sentence or his answer. See renderQuietNotch. -->
+        <div class="nf-q" aria-live="polite">
+          <div class="nf-q-band">
+            <span class="nf-q-left"></span>
+            <span class="nf-q-right"></span>
+          </div>
+          <div class="nf-q-line">
+            <span class="nf-q-text"></span>
+            <button class="nf-q-more" type="button">More</button>
+            <button class="nf-q-x" type="button" aria-label="Dismiss">✕</button>
+          </div>
         </div>
         <!-- The keynote shimmer: a white-to-blue light that traces the island's
              outline, verbatim from the trybraino.com reveal. Fired by JS via

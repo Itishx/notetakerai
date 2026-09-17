@@ -389,6 +389,21 @@ let nfPanelReturn = null;
 const NF_PANEL_WIDTH = 560;
 const TALK_OUT_LOUD_KEY = "brainoTalkOutLoud";
 const STAY_PUT_KEY = "brainoStayPut";
+/* The quiet notch and stealth. See renderQuietNotch. */
+const QUIET_NOTCH_KEY = "brainoQuietNotch";
+const STEALTH_KEY = "brainoStealth";
+const NF_QUIET_STATES = ["listen", "asleep", "starting", "work", "speak", "heard", "answer"];
+const NF_QUIET_HEARD_MS = 2200;
+const NF_QUIET_EAR_W = 80;
+const NF_QUIET_LINE_W = 420;
+let nfQuietMeasure = null;
+let nfQuietState = "";
+let nfQuietLastCtx = null;
+let nfQuietTimer = 0;
+let nfQuietEls = null;
+let nfQuietAnswerOpenGen = -1;
+let nfQuietSpokenWords = 0;
+let nfLastZoneRequest = { expanded: false };
 const EDGE_SNAP_PX = 56;
 /* A reply shown but not spoken, when "Talk out loud" is off. He is not
    audible, so nothing that listens for his voice should treat him as such. */
@@ -1577,7 +1592,7 @@ function syncOpenThinkingZone() {
     "--nf-thinking-height",
     `${nfThinkingPanelHeight}px`,
   );
-  window.brainoMac.setNotchZone?.({
+  nfSetZone({
     expanded: true,
     width: NF_READING_SURFACE_WIDTH,
     height: nfThinkingPanelHeight,
@@ -1629,7 +1644,7 @@ function nfSyncThinkingZone() {
     syncOpenThinkingZone();
     return;
   }
-  window.brainoMac.setNotchZone?.({
+  nfSetZone({
     expanded: true,
     width: NF_THINK_ISLAND_WIDTH,
     height: NF_THINK_ISLAND_HEIGHT,
@@ -1787,7 +1802,7 @@ function refitOpenLongAnswer(generation = nfAnswerGeneration) {
   const measured = renderedLongAnswerHeight();
   if (!measured || measured === nfAnswerPanelHeight) return;
   applyLongAnswerHeight(measured);
-  window.brainoMac.setNotchZone?.({ expanded: true, width: NF_READING_SURFACE_WIDTH, height: measured });
+  nfSetZone({ expanded: true, width: NF_READING_SURFACE_WIDTH, height: measured });
 }
 
 function renderNotchAnswer() {
@@ -1918,6 +1933,10 @@ function applyShortAnswerHeight(height) {
 function paintNotchAnswer(highlightedWords) {
   if (!nfAnswerWords.length) return;
   const count = Math.max(0, Math.min(nfAnswerWords.length, Math.floor(highlightedWords)));
+  if (count !== nfQuietSpokenWords) {
+    nfQuietSpokenWords = count;
+    if (nfQuietState === "answer") renderQuietNotch();
+  }
   nfAnswerWords.forEach((word, index) => {
     word.classList.toggle("spoken", index < count);
     word.classList.toggle("speaking-now", index === count && count < nfAnswerWords.length);
@@ -1971,6 +1990,7 @@ function startNotchAnswer(text, generation, options = {}) {
     ? Math.max(164, Math.min(notchViewportHeight() - 90, requestedFixedHeight))
     : 0;
   if (!sameAnswer || options.replace) {
+    nfQuietSpokenWords = 0;
     nfAnswerCompletedWords = 0;
     nfAnswerLastScrollIndex = -1;
     nfAnswerModeLocked = "";
@@ -1988,7 +2008,7 @@ function startNotchAnswer(text, generation, options = {}) {
   if (typingOpen) closeTyping("answer");
   notchFace.classList.add("nf-answer-open");
   renderNotchAnswer();
-  window.brainoMac.setNotchZone?.({
+  nfSetZone({
     expanded: true,
     width: nfAnswerMode === "long" ? NF_READING_SURFACE_WIDTH : NF_COMPACT_SURFACE_WIDTH,
     height: nfAnswerPanelHeight,
@@ -2127,7 +2147,7 @@ nfAnswerSurface?.addEventListener("click", (event) => {
   if (!notchFace?.classList.contains("nf-answer-short")) return;
   nfAnswerForcedLong = true;
   renderNotchAnswer();
-  window.brainoMac.setNotchZone?.({ expanded: true, width: NF_READING_SURFACE_WIDTH, height: nfAnswerPanelHeight });
+  nfSetZone({ expanded: true, width: NF_READING_SURFACE_WIDTH, height: nfAnswerPanelHeight });
 });
 
 window.brainoMac.onCoworkLabel?.((payload) => {
@@ -2266,6 +2286,7 @@ if (notchFace) {
     if (!notchFace.classList.contains("nf-think-open") || notchFace.contains(event.target)) return;
     nfSetThinkingOpen(false);
     nfSetThinkingSticky(coworkLabel);
+    updateNotchFace();
   });
 }
 
@@ -2478,7 +2499,7 @@ function syncMeetingNotchZone(active, height) {
   if (key === nfMeetingZoneKey) return;
   nfMeetingZoneKey = key;
   if (active) {
-    window.brainoMac.setNotchZone?.({ expanded: true, width: NF_READING_SURFACE_WIDTH, height });
+    nfSetZone({ expanded: true, width: NF_READING_SURFACE_WIDTH, height });
   } else if (!nfAnswerMode && !notchFace?.classList.contains("nf-think-open")) {
     nfCollapseNotchZone();
   }
@@ -2779,7 +2800,7 @@ function syncYapNotchZone(active, height = 172) {
   nfYapZoneKey = key;
   if (active) {
     cancelNotchSurfaceExit();
-    window.brainoMac.setNotchZone?.({ expanded: true, width: NF_COMPACT_SURFACE_WIDTH, height: normalizedHeight });
+    nfSetZone({ expanded: true, width: NF_COMPACT_SURFACE_WIDTH, height: normalizedHeight });
   } else if (!nfAnswerMode && !nfMeetingOpen && !notchFace?.classList.contains("nf-think-open")) {
     // The meeting surface is up for the length of a meeting and updateNotchFace runs every
     // second inside one, so without this guard the click zone was torn down a second after
@@ -2897,7 +2918,7 @@ function syncInlineVoiceSurface(mode = "", text = "", options = {}) {
   if (key === nfInlineZoneKey) return;
   nfInlineZoneKey = key;
   if (active) {
-    window.brainoMac.setNotchZone?.({ expanded: true, width: zoneWidth, height });
+    nfSetZone({ expanded: true, width: zoneWidth, height });
   } else if (
     !nfAnswerMode
     && !notchFace.classList.contains("nf-answer-open")
@@ -3133,6 +3154,244 @@ window.setInterval(() => {
   nfSetThinking("");
   settleStaleThinkingStatus("thinking.watchdog");
 }, NF_THINKING_WATCHDOG_TICK_MS);
+
+/* ── The quiet notch ─────────────────────────────────────────────────────
+ *
+ * Every sheet that dropped out of the notch sat over the tabs of whatever was
+ * behind it, and took their clicks. The quiet notch keeps his status in the
+ * menu bar band, as two ears either side of the camera housing, and gives your
+ * sentence and his answer one line under it that leaves on its own. Only the
+ * band and real buttons take a click; the line lets clicks through.
+ *
+ * It is a layer, not a rewrite. The full surfaces still run underneath,
+ * hidden, and come back whenever you ask for them: the thinking steps (click
+ * the band), the whole of a long answer (More), the panel, dictation,
+ * meetings and music. Off with localStorage brainoQuietNotch = "0".
+ *
+ * The ears are 80pt each because the camera housing hides the middle of the
+ * band: the mock had 40pt ears, and "Listening" would have been cut in half. */
+function quietNotchOn() { return readBoolSetting(QUIET_NOTCH_KEY, true); }
+function stealthOn() { return readBoolSetting(STEALTH_KEY, false); }
+
+function nfNotchHeight() {
+  return parseFloat(getComputedStyle(notchFace || document.body).getPropertyValue("--nf-notch-h")) || 33;
+}
+
+function nfNotchWidth() {
+  return parseFloat(getComputedStyle(notchFace || document.body).getPropertyValue("--nf-notch-w")) || 190;
+}
+
+function nfQuietWidth(state = nfQuietState) {
+  const band = Math.round(nfNotchWidth() + NF_QUIET_EAR_W * 2);
+  return state === "heard" || state === "answer" ? Math.max(band, NF_QUIET_LINE_W) : band;
+}
+
+/* Every zone request goes through here, so the quiet notch can keep the
+   clickable area to its band while a bigger surface is open underneath. */
+function nfSetZone(payload) {
+  nfLastZoneRequest = payload || { expanded: false };
+  nfPushZone();
+}
+
+function nfPushZone() {
+  if (nfQuietState) {
+    window.brainoMac.setNotchZone?.({ expanded: true, width: nfQuietWidth() + 16, height: nfNotchHeight() + 6 });
+    return;
+  }
+  window.brainoMac.setNotchZone?.(nfLastZoneRequest);
+}
+
+/* The surfaces that stay as they are: you opened them, or they are a mode of
+   their own. */
+const NF_QUIET_STANDS_DOWN = [
+  "expanded", "nf-music-open", "nf-meeting-open", "nf-cmds-open", "alarming", "live",
+  "nf-iomi-booting", "nf-iomi-expanded", "nf-auth", "nf-auth-err", "nf-greet", "dropping",
+];
+
+function quietStateFor(c) {
+  if (!c || !c.visible || !quietNotchOn() || herMode || dictationMode) return "";
+  if (c.yapOwnsNotch || c.thinkingOpen || nfPanelOpen || typingOpen) return "";
+  if (NF_QUIET_STANDS_DOWN.some((name) => notchFace.classList.contains(name))) return "";
+  if (c.answerOwnsNotch) return nfQuietAnswerOpenGen === nfAnswerGeneration ? "" : "answer";
+  if ((c.inlineMode === "heard" || c.inlineMode === "thinking") && nfHeardText
+    && Date.now() - nfHeardShownAt < NF_QUIET_HEARD_MS) return "heard";
+  if (c.processingActive) return "work";
+  if (speaking) return "speak";
+  if (c.inlineMode === "starting") return "starting";
+  if (c.sessionEngaged) return c.namedAsleep ? "asleep" : "listen";
+  return "";
+}
+
+/* Measured, not counted: a character budget let the newest words run off the
+   right edge, which is the one end of a caption that has to stay. */
+function nfTextWidth(text, font) {
+  nfQuietMeasure = nfQuietMeasure || document.createElement("canvas").getContext("2d");
+  nfQuietMeasure.font = font;
+  return nfQuietMeasure.measureText(text).width;
+}
+
+/* Trimmed from the front a word at a time, so the newest words are shown. */
+function nfFitFront(text, maxWidth, font) {
+  let value = String(text || "").replace(/\s+/g, " ").trim();
+  let trimmed = false;
+  while (value && nfTextWidth(value, font) > maxWidth) {
+    const cut = value.indexOf(" ");
+    if (cut < 0) break;
+    value = value.slice(cut + 1);
+    trimmed = true;
+  }
+  return { text: value, trimmed };
+}
+
+/* The room the line has: the island less its padding, and less the cross and
+   More when they are showing. */
+function nfQuietLineRoom(state, long) {
+  const buttons = state === "answer" ? 28 + (long ? 54 : 0) : 0;
+  return nfQuietWidth(state) - 32 - buttons;
+}
+
+/* One line of his answer: all of it when it fits, otherwise the words he has
+   said so far, like a caption, with More for the rest. */
+function quietAnswerLine(font) {
+  const words = String(nfAnswerText || "").replace(/\s+/g, " ").trim().split(" ").filter(Boolean);
+  const full = words.join(" ");
+  const long = nfTextWidth(full, font) > nfQuietLineRoom("answer", false);
+  if (!long) return { text: full, trimmed: false, long };
+  const said = words.slice(0, Math.max(1, nfQuietSpokenWords, nfAnswerCompletedWords)).join(" ");
+  return { ...nfFitFront(said, nfQuietLineRoom("answer", true), font), long };
+}
+
+function nfQuietElements() {
+  if (nfQuietEls) return nfQuietEls;
+  const root = notchFace?.querySelector(".nf-q");
+  if (!root) return null;
+  nfQuietEls = {
+    root,
+    band: root.querySelector(".nf-q-band"),
+    left: root.querySelector(".nf-q-left"),
+    right: root.querySelector(".nf-q-right"),
+    text: root.querySelector(".nf-q-text"),
+    more: root.querySelector(".nf-q-more"),
+    close: root.querySelector(".nf-q-x"),
+  };
+  /* Working: the band is the way into his steps, with the Stop button. */
+  nfQuietEls.band?.addEventListener("click", (event) => {
+    if (nfQuietState !== "work") return;
+    event.stopPropagation();
+    const detailedText = coworkThinking || nfThinkingText || lastProcessingDetail;
+    if (!detailedText) return;
+    logRenderer("notch.quiet_steps", {});
+    nfSetThinkingOpen(true);
+    nfSetThinkingSticky(detailedText);
+    updateNotchFace();
+  });
+  nfQuietEls.more?.addEventListener("click", (event) => {
+    event.stopPropagation();
+    nfQuietAnswerOpenGen = nfAnswerGeneration;
+    logRenderer("notch.quiet_more", {});
+    updateNotchFace();
+  });
+  nfQuietEls.close?.addEventListener("click", (event) => {
+    event.stopPropagation();
+    logRenderer("notch.quiet_dismiss", {});
+    clearNotchAnswer();
+  });
+  return nfQuietEls;
+}
+
+function nfSetQuietSide(el, html) {
+  if (el && el.innerHTML !== html) el.innerHTML = html;
+}
+
+function renderQuietNotch(ctx) {
+  if (ctx) nfQuietLastCtx = ctx;
+  if (!notchFace) return;
+  try {
+    const els = nfQuietElements();
+    if (!els) return;
+    const state = quietStateFor(nfQuietLastCtx);
+    const changed = state !== nfQuietState;
+    nfQuietState = state;
+    notchFace.classList.toggle("nf-quiet-on", Boolean(state));
+    for (const name of NF_QUIET_STATES) notchFace.classList.toggle(`nfq-${name}`, state === name);
+    notchFace.classList.toggle("nfq-line", state === "heard" || state === "answer");
+    notchFace.style.setProperty("--nf-q-w", `${nfQuietWidth(state)}px`);
+
+    let left = "";
+    let right = "";
+    let line = { text: "", trimmed: false, long: false };
+    if (state === "listen" || state === "asleep") {
+      // Coral: the next thing you say is his. Grey: say his name first.
+      left = "Listening";
+      right = `<i class="nf-q-dot${state === "asleep" ? " idle" : ""}"></i>`;
+    } else if (state === "starting") {
+      left = "Connecting";
+      right = '<i class="nf-q-dot idle"></i>';
+    } else if (state === "work") {
+      left = '<i class="nf-q-think"></i>';
+      right = hilThinkingHistory.length ? `<span class="nf-q-step">Step ${hilThinkingHistory.length}</span>` : "";
+    } else if (state === "speak") {
+      left = '<i class="nf-q-speak"></i>';
+      right = activeWakeName();
+    } else if (state === "heard") {
+      left = "You said";
+      right = '<i class="nf-q-dot"></i>';
+      const font = getComputedStyle(els.text).font;
+      line = { ...nfFitFront(nfHeardText, nfQuietLineRoom(state, false), font), long: false };
+    } else if (state === "answer") {
+      left = speaking ? '<i class="nf-q-speak"></i>' : "";
+      right = activeWakeName();
+      line = quietAnswerLine(getComputedStyle(els.text).font);
+    }
+    nfSetQuietSide(els.left, left);
+    nfSetQuietSide(els.right, right);
+    if (els.text && els.text.textContent !== line.text) els.text.textContent = line.text;
+    els.text?.classList.toggle("trimmed", line.trimmed);
+    notchFace.classList.toggle("nfq-long", Boolean(line.long));
+    if (changed) nfPushZone();
+
+    /* "You said" stays two seconds, then gives the band back. */
+    window.clearTimeout(nfQuietTimer);
+    if (state === "heard") {
+      const remaining = NF_QUIET_HEARD_MS - (Date.now() - nfHeardShownAt);
+      nfQuietTimer = window.setTimeout(() => updateNotchFace(), Math.max(40, remaining + 30));
+    }
+  } catch {
+    /* A notch that cannot draw its quiet layer falls back to the full one. */
+  }
+}
+
+/* Stealth: everything he draws in the notch at 1%, back when you hover. */
+function applyStealth() {
+  notchFace?.classList.toggle("nf-stealth", stealthOn());
+}
+
+function setStealth(on, source) {
+  writeBoolSetting(STEALTH_KEY, on);
+  applyStealth();
+  logRenderer("notch.stealth", { on, source });
+  renderBrainoPanel();
+}
+
+const STEALTH_LEAD = /^(?:(?:hey|ok|okay)\s+)?(?:brain(?:o|elle)\b)?[\s,.!]*(?:(?:can|could|will|would)\s+you\s+)?(?:please\s+)?/i;
+
+/* "Braino, go stealth" / "stealth mode off". "Come back" only means this while
+   he is hidden; otherwise it belongs to the walker. */
+function parseStealthPhrase(text) {
+  const rest = String(text || "").trim().replace(/[.!?]+$/g, "").replace(/,/g, " ")
+    .replace(STEALTH_LEAD, "").replace(/\s+please$/i, "").replace(/\s+/g, " ").trim().toLowerCase();
+  if (!rest || rest.split(" ").length > 5) return "";
+  if (/^(?:(?:go|turn on|switch on|enable|start|enter|use)\s+)?(?:the\s+)?stealth(?:\s+mode)?(?:\s+on)?$/.test(rest)) return "on";
+  if (/^(?:(?:turn|switch)\s+off|disable|stop|exit|leave|end)\s+(?:the\s+)?stealth(?:\s+mode)?$|^stealth(?:\s+mode)?\s+off$/.test(rest)) return "off";
+  if (stealthOn() && /^(?:come back|show yourself|unhide|be visible)$/.test(rest)) return "off";
+  return "";
+}
+
+async function handleStealthPhrase(which, transcript, source) {
+  if (transcript) nfSetHeard(transcript, { durationMs: 1200 });
+  setStealth(which === "on", source);
+  await speak(which === "on" ? "Stealth on. Hover the notch to see me." : "I'm back.");
+}
 
 function updateNotchFace() {
   // pin follows the class: nothing can be pinned open that is not thinking any
@@ -3375,6 +3634,10 @@ function updateNotchFace() {
   notchFace.classList.toggle("speak", notchVoice && !answerOwnsNotch && lastGlowStatus === "speaking");
   nfSetStatusText(line);
   nfTraySyncFromState(visible);
+  renderQuietNotch({
+    visible, inlineMode, processingActive, answerOwnsNotch, namedAsleep,
+    sessionEngaged, yapOwnsNotch, thinkingOpen,
+  });
 }
 
 function nfShowTransient(text, ms = 6000) {
@@ -7866,7 +8129,7 @@ function openTyping(source) {
   /* The window is unfocusable by default, so focus() here does nothing until
      main hands the keyboard over. Without this the field opened and every
      letter went to whatever app was in front. */
-  window.brainoMac.setNotchZone?.({ expanded: true, width: NF_COMPACT_SURFACE_WIDTH, height: 150 });
+  nfSetZone({ expanded: true, width: NF_COMPACT_SURFACE_WIDTH, height: 150 });
   void window.brainoMac.typingFocus?.(true).then(() => {
     window.setTimeout(() => field.focus(), 40);
   }).catch(() => window.setTimeout(() => field.focus(), 40));
@@ -7905,6 +8168,11 @@ async function submitTyped(text) {
   closeTyping("submitted");
   if (isStopTaskPhrase(said)) {
     if (!await stopTaskNow("typed", said)) await nothingToStop("typed", said);
+    return;
+  }
+  const stealthAsk = parseStealthPhrase(said);
+  if (stealthAsk) {
+    await handleStealthPhrase(stealthAsk, "", "typed");
     return;
   }
   /* Talking to him while he works is the same conversation whether you speak or
@@ -8130,6 +8398,11 @@ async function flushRealtimeTranscript(reason, textOverride) {
       await nothingToStop("voice_phrase", transcript);
       return;
     }
+  }
+  const stealthAsk = accepted ? parseStealthPhrase(transcript) : "";
+  if (stealthAsk) {
+    await handleStealthPhrase(stealthAsk, transcript, "voice");
+    return;
   }
   /* Half a sentence waits for the rest. Not an answer to his question or a
      follow-up he is waiting on — those are often a single word — and never
@@ -9641,6 +9914,7 @@ function runWakeupClimb(config = {}) {
 
 async function runStartupSequence(config = {}) {
   startupActive = true;
+  applyStealth();
   /* The boot screen goes up before anything else is drawn, because its whole
      job is to be the first thing on the display. It wraps the real startup work
      rather than running beside it: every progress() call below is a step that
@@ -9913,7 +10187,7 @@ function stayPut() { return readBoolSetting(STAY_PUT_KEY, true); }
 
 function nfCollapseNotchZone() {
   if (nfPanelOpen) return;
-  window.brainoMac.setNotchZone?.({ expanded: false });
+  nfSetZone({ expanded: false });
 }
 
 const nfPanel = notchFace?.querySelector(".nf-panel-surface");
@@ -9942,6 +10216,7 @@ function renderBrainoPanel() {
   };
   setSwitch("named", namedModeOn);
   setSwitch("voice", talkOutLoud());
+  setSwitch("stealth", stealthOn());
   setSwitch("stay", stayPut() && walkArea?.mode === "pin");
 }
 
@@ -9969,13 +10244,13 @@ function nfSetPanelOpen(open, options = {}) {
     notchFace.classList.add("nf-panel-open");
     const height = measurePanelHeight();
     notchFace.style.setProperty("--nf-panel-height", `${height}px`);
-    window.brainoMac.setNotchZone?.({ expanded: true, width: NF_PANEL_WIDTH, height });
+    nfSetZone({ expanded: true, width: NF_PANEL_WIDTH, height });
     setMousePassthrough(false);
     void window.brainoMac.typingFocus?.(true)?.catch?.(() => {});
   } else {
     notchFace.classList.remove("nf-panel-open");
     beginNotchSurfaceExit();
-    window.brainoMac.setNotchZone?.({ expanded: false });
+    nfSetZone({ expanded: false });
     void window.brainoMac.typingFocus?.(false)?.catch?.(() => {});
     setMousePassthrough(true);
   }
@@ -10099,6 +10374,8 @@ async function applyPanelSetting(name, on) {
     await window.brainoMac.namedMode?.({ enabled: on })?.catch?.(() => null);
   } else if (name === "voice") {
     writeBoolSetting(TALK_OUT_LOUD_KEY, on);
+  } else if (name === "stealth") {
+    setStealth(on, "panel");
   } else if (name === "stay") {
     writeBoolSetting(STAY_PUT_KEY, on);
     if (on) {
@@ -12582,6 +12859,11 @@ let nfMusicMiniArt = null;
 
 function nfPointInNotchZone(x, y) {
   if (!notchFace?.classList.contains("on") || herMode || !nfPill) return false;
+  if (nfQuietState && nfQuietEls?.root) {
+    const band = nfQuietEls.root.getBoundingClientRect();
+    if (x >= band.left - 4 && x <= band.right + 4 && y <= band.top + nfNotchHeight() + 4) return true;
+    return Boolean(document.elementFromPoint(x, y)?.closest?.(".nf-q button"));
+  }
   const rect = nfPill.getBoundingClientRect();
   // Collapsed: the pill itself, nearly edge-to-edge — a padded zone was
   // stealing clicks from Chrome tabs that sit beside/below the housing.
@@ -12614,7 +12896,7 @@ function nfTrayExpand() {
   if (nfExpanded || herMode || !notchFace?.classList.contains("on")) return;
   nfExpanded = true;
   notchFace.classList.add("expanded");
-  window.brainoMac.setNotchZone?.({ expanded: true });
+  nfSetZone({ expanded: true });
   nfRenderTray();
   logRenderer("tray.expand", {});
 }
@@ -12654,6 +12936,7 @@ function nfTraySyncFromState(visible) {
 // ── Zone events from the main process (real cursor position, drag-proof) ──
 window.brainoMac.onNotchZone?.((payload) => {
   nfZoneInsideMain = Boolean(payload?.inside);
+  notchFace?.classList.toggle("nf-reveal", nfZoneInsideMain);
   if (nfZoneInsideMain) {
     if (!herMode) setMousePassthrough(false);
     window.clearTimeout(nfCollapseTimer);
@@ -12906,7 +13189,7 @@ function nfMusicExpandPlayer() {
   if (nfMusicOpen || herMode || !notchFace?.classList.contains("on")) return;
   nfMusicOpen = true;
   notchFace.classList.add("nf-music-open");
-  window.brainoMac.setNotchZone?.({ expanded: true, width: 440, height: 240 });
+  nfSetZone({ expanded: true, width: 440, height: 240 });
   nfRenderMusicSurface();
   logRenderer("music.island.expand", { source: nfMusicData()?.source || "" });
 }
@@ -13187,7 +13470,7 @@ document.addEventListener("dragover", (event) => {
     if (nfDropDepth === 0) {
       nfDropDepth = 1;
       notchFace?.classList.add("dropping");
-      window.brainoMac.setNotchZone?.({ expanded: true });
+      nfSetZone({ expanded: true });
     }
   } else if (nfDropDepth > 0) {
     nfDropDepth = 0;
