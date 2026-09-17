@@ -82,6 +82,14 @@ That made a request such as “summarise this Medium article” harder to follow
   focus return, native playback as the primary success path, deferred focus
   restore, and Web API playback only if native playback failed.
 
+### Money, said like a person (September 17)
+
+What he **says** now reads amounts the way people in India say them; what the notch **shows** is unchanged. `speakableAmounts` runs first inside `stripSpeechText`, so every Fish Audio request gets it:
+
+- "₹2,00,000" → "2 lakh rupees", "₹1,97,287.00" → "1.97 lakh rupees", "INR 2,50,00,000" → "2.5 crore rupees", "₹2,713.00" → "2,713 rupees" (paise dropped above ₹100), "₹5k" → "5 thousand rupees", "₹1" → "1 rupee".
+- "$1.2M" → "1.2 million dollars", "$0.05" → "5 cents".
+- Indian-grouped numbers without a currency ("2,00,000 users") → "2 lakh users". Western grouping ("1,200 people") is left alone.
+
 ## Honest limitations
 
 This is an MVP visual and state-machine port. A long answer can only be as useful as the context the Mac delegate received; page extraction still depends on the active Braino browser/Mac context bridge. The overlay imitates the notch because macOS does not expose the physical notch as a public third-party UI surface. Macs without a physical notch receive the same content rhythm in a normal rounded floating sheet.

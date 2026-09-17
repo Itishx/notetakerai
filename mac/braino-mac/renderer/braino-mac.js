@@ -5689,8 +5689,60 @@ function stopSpeechOutput() {
   clearNotchAnswer({ invalidate: true });
 }
 
-function stripSpeechText(text) {
+/* ── Money and big numbers, said the way a person says them ───────────────
+ *
+ * "₹2,00,000" went to the voice as written: read out group by group, and with
+ * no "rupees" at all. Nobody in India says that; they say "2 lakh rupees".
+ * Only what he SAYS changes. The notch still shows the figure as written. */
+function nfTrimAmount(value) {
+  return String(Number(value.toFixed(2)));
+}
+
+function nfSpokenIndianAmount(value) {
+  if (value >= 1e7) return `${nfTrimAmount(value / 1e7)} crore`;
+  if (value >= 1e5) return `${nfTrimAmount(value / 1e5)} lakh`;
+  // Paise are noise above a hundred rupees; below it they are the price.
+  const rounded = value >= 100 ? Math.round(value) : Math.round(value * 100) / 100;
+  return Number.isInteger(rounded) ? rounded.toLocaleString("en-US") : String(rounded);
+}
+
+function nfSpokenWesternAmount(value) {
+  if (value >= 1e9) return `${nfTrimAmount(value / 1e9)} billion`;
+  if (value >= 1e6) return `${nfTrimAmount(value / 1e6)} million`;
+  const rounded = value >= 100 ? Math.round(value) : Math.round(value * 100) / 100;
+  return Number.isInteger(rounded) ? rounded.toLocaleString("en-US") : String(rounded);
+}
+
+const NF_SPOKEN_SUFFIX = {
+  k: "thousand", thousand: "thousand", l: "lakh", lakh: "lakh", lakhs: "lakh", lac: "lakh", lacs: "lakh",
+  cr: "crore", crore: "crore", crores: "crore", m: "million", mn: "million", million: "million",
+  b: "billion", bn: "billion", billion: "billion",
+};
+
+function speakableAmounts(text) {
+  // A number never ends on a comma: "₹2,00,000, you still need" keeps its pause.
   return String(text || "")
+    // Rupees: "₹2,00,000", "Rs. 1,97,287.00/-", "INR 5k", "₹1.2 cr".
+    .replace(/(?:₹|\bRs\.?|\bINR)\s?(\d(?:[\d,]*\d)?(?:\.\d+)?)(?:\s?(k|thousand|lakhs?|lacs?|l|crores?|cr|mn|m|million|bn|b|billion)\b)?(?:\/-)?/gi, (all, digits, suffix) => {
+      const value = Number(String(digits).replace(/,/g, ""));
+      if (!Number.isFinite(value)) return all;
+      if (suffix) return `${digits.replace(/,/g, "")} ${NF_SPOKEN_SUFFIX[suffix.toLowerCase()] || suffix} rupees`;
+      return `${nfSpokenIndianAmount(value)} ${value === 1 ? "rupee" : "rupees"}`;
+    })
+    // Dollars: "$1.2M", "$15", "$0.05".
+    .replace(/\$\s?(\d(?:[\d,]*\d)?(?:\.\d+)?)(?:\s?(k|thousand|mn|m|million|bn|b|billion)\b)?/gi, (all, digits, suffix) => {
+      const value = Number(String(digits).replace(/,/g, ""));
+      if (!Number.isFinite(value)) return all;
+      if (suffix) return `${digits.replace(/,/g, "")} ${NF_SPOKEN_SUFFIX[suffix.toLowerCase()] || suffix} dollars`;
+      if (value > 0 && value < 1) return `${nfTrimAmount(value * 100)} cents`;
+      return `${nfSpokenWesternAmount(value)} ${value === 1 ? "dollar" : "dollars"}`;
+    })
+    // Indian grouping without a currency ("2,00,000 users") is unambiguous.
+    .replace(/\b\d{1,2}(?:,\d{2})+,\d{3}(?:\.\d+)?\b/g, (all) => nfSpokenIndianAmount(Number(all.replace(/,/g, ""))));
+}
+
+function stripSpeechText(text) {
+  return speakableAmounts(text)
     .replace(/```[\s\S]*?```/g, " ")
     .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
     .replace(/https?:\/\/\S+/gi, " ")
