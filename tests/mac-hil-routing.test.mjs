@@ -204,6 +204,8 @@ test("just opening a known website skips the loop", () => {
     ["open gmail", "https://mail.google.com"],
     ["go to linkedin", "https://linkedin.com"],
     ["open youtube music", "https://music.youtube.com"],
+    ["Braino can you please open Google Meet?", "https://meet.google.com"],
+    ["open gmeet", "https://meet.google.com"],
   ]) {
     assert.equal(macBareWebOpen(said)?.url, url, said);
   }
@@ -223,4 +225,16 @@ test("just opening a known website skips the loop", () => {
   const fast = main.indexOf("const bareWeb = macBareWebOpen(raw);");
   assert.ok(fast > 0 && fast < main.indexOf("if (macHilEnabled() && macWantsTheBrain(raw)) {"));
   assert.match(main, /logMac\("delegate\.web_open_fast"[\s\S]{0,200}await openChromeUrl\(bareWeb\.url\);/);
+});
+
+/* "Open Google Meet" was searched for as the word "Meet". */
+test("opening a Google product is never a search", () => {
+  const main = readFileSync(new URL("../mac/braino-mac/main.cjs", import.meta.url), "utf8");
+  assert.match(main, /const webQuery = opensGoogleProduct \? "" : extractAfter\(raw, \[/);
+  const opens = /\b(?:open|launch|start|go to|visit|pull up|join)\s+(?:the\s+|my\s+|a\s+)?google\s+\w/i;
+  for (const said of ["open Google Meet", "Braino can you please open google docs", "join a google meet"]) assert.ok(opens.test(said), said);
+  for (const said of ["google the weather in Hyderabad", "search google for cats"]) assert.ok(!opens.test(said), said);
+  /* Starting an instant meeting is still a job for the brain. */
+  assert.equal(macBareWebOpen("start an instant Google Meet and send the link to me on WhatsApp"), null);
+  assert.equal(macWantsTheBrain("start an instant Google Meet and send the link to me on WhatsApp"), true);
 });

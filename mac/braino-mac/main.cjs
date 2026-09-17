@@ -16795,7 +16795,11 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
     return { ok: true, say: `Opening ${urlTarget} in Chrome.` };
   }
 
-  const webQuery = extractAfter(raw, [
+  /* "Google" is a verb here only when nothing is being opened. "Open Google
+     Meet" matched it, searched the web for the word "Meet", and read out a
+     708-character dictionary definition. */
+  const opensGoogleProduct = /\b(?:open|launch|start|go to|visit|pull up|join)\s+(?:the\s+|my\s+|a\s+)?google\s+\w/i.test(raw);
+  const webQuery = opensGoogleProduct ? "" : extractAfter(raw, [
     /\b(?:google|search google for|search the web for|look up|find online)\s+(.+)$/i,
     /\b(?:open chrome and search|search chrome for)\s+(.+)$/i,
   ]);
