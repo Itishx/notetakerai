@@ -56,6 +56,9 @@ const BOOT_STATE_PATH = path.join(AUTH_STORE_DIR, "boot-state.json");
 const NAMED_MODE_PATH = path.join(AUTH_STORE_DIR, "named-mode.json");
 const FILE_ACTION_CONFIRM_MS = 120000;
 const MAC_WORKFLOW_CONFIRM_MS = 300000;
+/* A misheard name waits this long for the right one. Short on purpose: while a
+   follow-up is pending, sentences are accepted without his name. */
+const CALL_REPAIR_MS = 45000;
 const MAX_FILE_ACTION_HISTORY = 80;
 const AUTH_CALLBACK_PATH = "/braino-mac-auth-callback";
 
@@ -213,6 +216,12 @@ const {
   macPromisesAction,
 } = require(path.join(__dirname, "hil-verify.cjs"));
 const { parseBrainoOsIntent } = require(path.join(__dirname, "braino-os-intent.cjs"));
+const {
+  cleanContactName,
+  findContactBySound,
+  speakableContactName,
+  parseCorrectedName,
+} = require(path.join(__dirname, "contact-match.cjs"));
 const { parseBrainoOsColorIntent } = require(path.join(__dirname, "braino-os-color.cjs"));
 const { parseTeleprompterIntent } = require(path.join(__dirname, "teleprompter-intent.cjs"));
 const teleprompter = require(path.join(__dirname, "teleprompter.cjs"));
@@ -4500,7 +4509,7 @@ async function startMailWorkflow(intent = {}) {
 async function handlePendingMacWorkflow(raw) {
   const pending = pendingMacWorkflow;
   if (!pending) return null;
-  if (Date.now() - Number(pending.createdAt || 0) > MAC_WORKFLOW_CONFIRM_MS) {
+  if (Date.now() - Number(pending.createdAt || 0) > (Number(pending.ttlMs) || MAC_WORKFLOW_CONFIRM_MS)) {
     clearPendingMacWorkflow();
     return null;
   }
@@ -4523,7 +4532,24 @@ async function handlePendingMacWorkflow(raw) {
   if (pending.type !== "hil_answer" && !workflowClaimsUtterance(pending, raw)) {
     logMac("mac.workflow.released", { type: pending.type, stage: pending.stage, raw: textForLog(raw) });
     clearPendingMacWorkflow();
+    /* It only got here without his name because a name was being waited
+       for. Not a name, and not addressed to him: dropped, never run. */
+    if (pending.type === "call" && !/\bbrain(?:o|elle)\b/i.test(String(raw || ""))) {
+      return { ok: true, superseded: true, say: "" };
+    }
     return null;
+  }
+
+  /* "FaceTime Elu" found nobody. "Ilu", "ILU Braino", "no, I said Ilu": the
+     call that was asked for, with the name they meant. */
+  if (pending.type === "call" && pending.stage === "call_recipient") {
+    clearPendingMacWorkflow();
+    const name = parseCorrectedName(raw);
+    if (!name) {
+      return /\bbrain(?:o|elle)\b/i.test(String(raw || "")) ? null : { ok: true, superseded: true, say: "" };
+    }
+    logMac("call.recipient_corrected", { from: textForLog(pending.data?.intent?.recipient || ""), to: textForLog(name) });
+    return startCall({ ...pending.data.intent, recipient: name });
   }
 
   /* The loop asked something and stopped. Pick the SAME run back up.
@@ -5659,6 +5685,64 @@ function saveWhatsAppContact(alias, entry) {
 }
 
 const CONTACTS_CACHE_PATH = path.join(AUTH_STORE_DIR, "contacts-cache.json");
+/* Who you call and message, so "Iloo" resolves to the Ilu you actually call. */
+const CONTACT_HISTORY_PATH = path.join(AUTH_STORE_DIR, "contact-history.json");
+let contactHistory = null;
+
+function loadContactHistory() {
+  if (contactHistory) return contactHistory;
+  try {
+    const parsed = JSON.parse(fs.readFileSync(CONTACT_HISTORY_PATH, "utf8"));
+    contactHistory = parsed && typeof parsed === "object" ? parsed : {};
+  } catch (_) {
+    contactHistory = {};
+  }
+  return contactHistory;
+}
+
+function recordContactUse(name, kind) {
+  const key = cleanContactName(name);
+  if (!key) return;
+  const history = loadContactHistory();
+  const row = history[key] || { name: String(name), count: 0 };
+  row.count += 1;
+  row.lastAt = Date.now();
+  row.kind = kind;
+  history[key] = row;
+  try {
+    fs.mkdirSync(AUTH_STORE_DIR, { recursive: true });
+    fs.writeFileSync(CONTACT_HISTORY_PATH, JSON.stringify(history, null, 2));
+  } catch (error) {
+    logMac("contacts.history_save_failed", { error });
+  }
+}
+
+/* Once, on a Mac that has no history yet: the log already knows who was
+   called and messaged. */
+async function seedContactHistoryFromLog() {
+  if (fs.existsSync(CONTACT_HISTORY_PATH) || !fs.existsSync(LOG_PATH)) return;
+  try {
+    const { stdout } = await execFileP("/usr/bin/grep", ["-h", "-E", '"event":"(call\\.started|whatsapp\\.sent)"', LOG_PATH], { timeout: 15000, maxBuffer: 16 * 1024 * 1024 });
+    const history = {};
+    for (const line of String(stdout || "").split(/\r?\n/)) {
+      const match = line.match(/"(?:to|recipient)":"([^"]+)"/);
+      const key = cleanContactName(match?.[1]);
+      if (!key) continue;
+      const row = history[key] || { name: match[1], count: 0 };
+      row.count += 1;
+      history[key] = row;
+    }
+    contactHistory = history;
+    fs.mkdirSync(AUTH_STORE_DIR, { recursive: true });
+    fs.writeFileSync(CONTACT_HISTORY_PATH, JSON.stringify(history, null, 2));
+    logMac("contacts.history_seeded", { people: Object.keys(history).length });
+  } catch (error) {
+    // grep exits 1 when nothing matched; an empty history is the right answer.
+    contactHistory = {};
+    try { fs.writeFileSync(CONTACT_HISTORY_PATH, "{}"); } catch (_) {}
+    logMac("contacts.history_seed_skipped", { error: String(error?.message || error).slice(0, 80) });
+  }
+}
 const WA_LISTENER_STATE_PATH = path.join(AUTH_STORE_DIR, "whatsapp-listener.json");
 const WAKE_WORD_STATE_PATH = path.join(AUTH_STORE_DIR, "wake-word.json");
 
@@ -6277,11 +6361,20 @@ async function startCall(intent) {
 
   const resolved = await resolveWhatsAppRecipient(intent.recipient);
   if (!resolved.ok) {
+    /* The call stays asked for. "Ilu", or "no, I said Ilu", straight after
+       this is the name to use, not a new conversation about Ilu. */
+    setPendingMacWorkflow({ type: "call", stage: "call_recipient", ttlMs: CALL_REPAIR_MS, data: { intent } });
+    if (resolved.ambiguous?.length) {
+      const names = resolved.ambiguous.map(speakableContactName);
+      const list = names.length > 1 ? `${names.slice(0, -1).join(", ")} or ${names[names.length - 1]}` : names[0];
+      return { ok: false, say: `Which one, ${list}?` };
+    }
     return {
       ok: false,
-      say: `I could not find a number for ${intent.recipient}. Say "Braino, remember ${intent.recipient}'s number is" and the number.`,
+      say: `I couldn't find ${intent.recipient} in your contacts. Say the name again, or "remember ${intent.recipient}'s number is" and the number.`,
     };
   }
+  const who = speakableContactName(resolved.name);
   const phone = normalizeWhatsAppPhone(resolved.phone);
   if (!phone || phone.length < 10) {
     return { ok: false, say: `The number I have for ${resolved.name} does not look complete. Teach me the full one with country code.` };
@@ -6292,8 +6385,9 @@ async function startCall(intent) {
     await new Promise((resolve) => setTimeout(resolve, 2200));
     await pressReturnInApp("FaceTime");
     logMac("call.started", { app: "facetime", video: intent.video, to: textForLog(resolved.name) });
-    sendTaskProgress({ status: "done", text: `Calling ${resolved.name}` });
-    return { ok: true, say: `Calling ${resolved.name} on ${intent.video ? "FaceTime" : "FaceTime audio"}.` };
+    recordContactUse(resolved.name, "facetime");
+    sendTaskProgress({ status: "done", text: `Calling ${who}` });
+    return { ok: true, say: `Calling ${who} on ${intent.video ? "FaceTime" : "FaceTime audio"}.` };
   }
 
   if (intent.app === "phone") {
@@ -6301,8 +6395,9 @@ async function startCall(intent) {
     await new Promise((resolve) => setTimeout(resolve, 2000));
     await pressReturnInApp("FaceTime");
     logMac("call.started", { app: "phone", to: textForLog(resolved.name) });
-    sendTaskProgress({ status: "done", text: `Calling ${resolved.name}` });
-    return { ok: true, say: `Calling ${resolved.name} through your iPhone.` };
+    recordContactUse(resolved.name, "phone");
+    sendTaskProgress({ status: "done", text: `Calling ${who}` });
+    return { ok: true, say: `Calling ${who} through your iPhone.` };
   }
 
   const wasRunning = await isMacApplicationRunning("WhatsApp");
@@ -6317,8 +6412,9 @@ async function startCall(intent) {
     };
   }
   logMac("call.started", { app: "whatsapp", video: intent.video, to: textForLog(resolved.name) });
-  sendTaskProgress({ status: "done", text: `Calling ${resolved.name}` });
-  return { ok: true, say: `Starting a ${intent.video ? "video" : "voice"} call with ${resolved.name} on WhatsApp.` };
+  recordContactUse(resolved.name, "whatsapp_call");
+  sendTaskProgress({ status: "done", text: `Calling ${who}` });
+  return { ok: true, say: `Starting a ${intent.video ? "video" : "voice"} call with ${who} on WhatsApp.` };
 }
 
 // ── Notch live activities: timers/reminders, calendar peek, unread badge ──
@@ -9224,6 +9320,18 @@ async function resolveWhatsAppRecipient(recipientRaw) {
   const alias = contacts[key];
   if (alias?.phone) return { ok: true, name: alias.name || recipientRaw, phone: alias.phone, source: "alias" };
 
+  /* By sound, and by who you contact: "Iloo" and "Elu" are the Ilu you call.
+     Two equally good people you have never contacted come back as a question. */
+  const bySound = contactsCache ? findContactBySound(alias?.name || recipientRaw, contactsCache, loadContactHistory()) : null;
+  if (bySound?.contact?.phone) {
+    logMac("whatsapp.contact.resolved", { query: textForLog(recipientRaw), name: textForLog(bySound.contact.name), source: "sound", score: bySound.score });
+    return { ok: true, name: bySound.contact.name, phone: bySound.contact.phone, source: "sound" };
+  }
+  if (bySound?.ambiguous?.length > 1) {
+    logMac("whatsapp.contact.ambiguous", { query: textForLog(recipientRaw), count: bySound.ambiguous.length });
+    return { ok: false, ambiguous: bySound.ambiguous.map((row) => row.name), error: "ambiguous" };
+  }
+
   const cached = findContactInCache(alias?.name || recipientRaw);
   if (cached?.phone) {
     logMac("whatsapp.contact.resolved", { query: textForLog(recipientRaw), name: textForLog(cached.name), source: "cache" });
@@ -9297,6 +9405,11 @@ async function sendWhatsAppMessage(recipientRaw, message) {
 
   const resolved = await resolveWhatsAppRecipient(recipientRaw);
   if (!resolved.ok) {
+    if (resolved.ambiguous?.length) {
+      const names = resolved.ambiguous.map(speakableContactName);
+      const list = names.length > 1 ? `${names.slice(0, -1).join(", ")} or ${names[names.length - 1]}` : names[0];
+      return { ok: false, say: `Which ${recipientRaw}, ${list}? Say it again with the full name.` };
+    }
     return {
       ok: false,
       say: `I could not find a number for ${recipientRaw}. Say "Braino, remember ${recipientRaw}'s number is" and the number, and I will keep it.`,
@@ -9359,6 +9472,7 @@ end tell`;
     source: resolved.source,
     messageChars: text.length,
   });
+  recordContactUse(resolved.name, "whatsapp");
   sendTaskProgress({ status: "done", text: `Sent to ${resolved.name}` });
   return { ok: true, say: `Sent "${text}" to ${resolved.name} on WhatsApp.` };
 }
@@ -19226,6 +19340,7 @@ app.whenReady().then(() => {
 
   if (!hasSingleInstanceLock) return;
   setTimeout(() => void importAllContacts(), 8000);
+  setTimeout(() => void seedContactHistoryFromLog(), 12000);
   setInterval(() => void checkMusicState(), 5000);
   setInterval(() => void checkAllTabsSnapshot(), 8000);
   void measureNotch();

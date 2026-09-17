@@ -68,7 +68,7 @@ function workflowClaimsUtterance(pending, raw) {
   if (stage === "mail_email") return /[^\s@]+@[^\s@]+\.[^\s@]+/.test(text) || /\b(?:at|dot)\b/i.test(text) === false && text.split(/\s+/).length <= 4;
 
   /* A recipient is a name. Names are short and do not name places. */
-  if (stage === "mail_recipient" || stage === "playlist_name") {
+  if (stage === "mail_recipient" || stage === "playlist_name" || stage === "call_recipient") {
     if (text.split(/\s+/).length > 6) return false;
     return !(NEW_COMMAND_VERB.test(text) && NAMES_A_PLACE.test(text));
   }
