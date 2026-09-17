@@ -405,6 +405,9 @@ let heraVoice = { on: false };
    and LIVE still use HERA; they are unaffected. Flip to true to bring it back. */
 const HERA_LIVE_IN_VOICE = false;
 let heraVoiceStarting = false;
+/* Between OpenAI's speech_started and speech_stopped. */
+let rtUserSpeakingNow = false;
+function rtSpeechInProgress() { return rtUserSpeakingNow; }
 let heraVoiceStartTries = 0;
 const HERA_ROTATE_EXPIRE_MS = 2500;
 const HERA_SEGMENT_WAIT_MS = 600;
@@ -437,6 +440,19 @@ let namedSpeechAwake = false;
 /* The golden trace means one thing: he just woke up. Not on every "Braino, …"
    in a conversation that paused for a few seconds. */
 const NAME_WAKE_LIGHT_AFTER_MS = 20000;
+/* He asked you something: the answer needs no name for this long after he
+   finishes the question. */
+const NAMED_ANSWER_WINDOW_MS = 10000;
+/* The on-device listener heard his name. Its spelling of "Braino" is better
+   than the cloud's, so an utterance it caught counts as addressed even when
+   the transcript wrote the name as something else. */
+let namedHeardOnDeviceAt = 0;
+const NAMED_ON_DEVICE_MATCH_MS = 8000;
+/* Half a sentence, waiting for the rest. See holdFragment. */
+let heldFragment = null;
+let heldFragmentTimer = 0;
+const FRAGMENT_HOLD_MS = 1500;
+const FRAGMENT_MAX_HOLD_MS = 6000;
 const NAMED_FIRST_COMMAND_MS = 15000;
 /* His name as the cloud transcriber sometimes writes it despite language:"en".
    The on-device listener is told "Braino" exists; this one is not, and a short
@@ -521,7 +537,7 @@ let voiceLatencyTurn = null;
 // `ts` is when the reply was ISSUED; `endedTs` is when his voice actually stopped coming
 // out of the speakers. The echo guard anchors to endedTs, because those two can be twenty
 // seconds apart on a long answer. See shouldAcceptVoiceTranscript.
-let lastSpokenLine = { text: "", ts: 0, endedTs: 0, duringRealtime: false };
+let lastSpokenLine = { text: "", ts: 0, endedTs: 0, duringRealtime: false, asked: false };
 // How long his voice can still be arriving at the mic after he stops speaking. This covers
 // speaker ring-out and the transcription lag on his last few words, nothing more.
 const POST_SPEECH_ECHO_MS = 2000;
@@ -3285,7 +3301,11 @@ function updateNotchFace() {
   /* The asleep hint is the quietest thing the ticker can show, so a timer, the
      music or a meeting all outrank it. */
   const showNameHint = namedAsleep && !slots.length;
-  if (showNameHint) slots.push(`Say \u201cHey ${activeWakeName()}\u201d to wake me`);
+  if (showNameHint) {
+    slots.push(realtimeActive
+      ? `Listening for \u201c${activeWakeName()}\u201d`
+      : `Say \u201cHey ${activeWakeName()}\u201d to wake me`);
+  }
   notchFace.classList.toggle("nf-name-asleep", showNameHint);
   const line = processingActive ? "" : slots[0] || "";
   nfSetStatus2Text(slots[1] || "");
@@ -4315,6 +4335,8 @@ function noteSpoken(text) {
       // when his last words are still arriving at the mic. Read the flag, don't assume.
       endedTs: speaking ? 0 : Date.now(),
       duringRealtime: Boolean(realtimeActive || realtimeConnecting),
+      // Normalising strips the question mark, so remember it separately.
+      asked: /\?["')\]]*\s*$/.test(String(text || "").trim()),
     };
   }
 }
@@ -4355,42 +4377,38 @@ function voiceAddressesBraino(text) {
 }
 
 
-/* ── Named mode: he answers when called, and only then ─────────────────────
+/* ── Named mode: his name, every time ─────────────────────────────────────
  *
- * The loop, and it is the whole feature:
+ * The session can be open and he can hear every word in the room; he answers
+ * only a sentence with his name in it. This used to open a conversation window
+ * after each exchange (five seconds, then twelve), and inside it anything
+ * counted — including a video playing on the Mac, whose "I think he is saying
+ * something to the audience" was sent to him as a command. No window now: the
+ * way Siri and Alexa work, no name, no action.
  *
- *   asleep  --- hears his name ---> awake
- *   awake   --- 5s with nothing ---> asleep
+ * Four exceptions, each for a moment where you are plainly talking to him:
+ *   - the first sentence after you woke him ("Hey Braino", or Control twice),
+ *   - while he is talking or working (cutting in, "stop", "no, the other one"),
+ *   - answering a question he just asked,
+ *   - a sentence you began during one of the above.
+ * A pending delegate follow-up is handled before this, in
+ * shouldAcceptVoiceTranscript, and stop phrases are checked on their own.
  *
- * Asleep does not mean deaf. The session can be open and he can be hearing
- * every word in the room; he simply does not answer any of it. That is the
- * difference people actually wanted: not a microphone that switches off, but a
- * person who does not interrupt.
- *
- * The five seconds are counted from the last thing that happened between the
- * two of you, NOT from the moment you said his name. Counting from the wake
- * would close the window while he was still answering a question — you would
- * say "Braino, what's my day", he would talk for eight seconds, and your
- * follow-up would land on a closed door. */
-/* Twelve seconds, not five. Five closed between ordinary turns of a real
-   conversation — "My computer is not working", "Please close all my tabs"
-   were both dropped in the log, and 15s of dropped speech then shut the
-   session. Counted from the last thing either of you said. */
+ * NAMED_WINDOW_MS survives only to tell a real sleep from a pause, for the
+ * wake light. */
 const NAMED_WINDOW_MS = 12000;
 let namedModeOn = false;
 let namedAddressedAt = 0;
 
 function namedWindowOpen() {
   if (!namedModeOn) return true;
-  /* Mid-turn is always open. He is talking to you right now, so "stop" or
-     "no, the other one" needs no name in front of it. */
   if (speaking || processing || voiceTurnInFlight) return true;
-  /* Timestamps rather than a timer, so a lid closing for an hour cannot leave
-     the window standing open when it opens again. */
   if (Date.now() < namedGraceUntil) return true;
   if (namedSpeechAwake) return true;
-  const since = Math.max(namedAddressedAt, lastSpokenLine?.endedTs || 0);
-  return since > 0 && Date.now() - since <= NAMED_WINDOW_MS;
+  const answering = lastSpokenLine?.asked
+    && lastSpokenLine.endedTs > 0
+    && Date.now() - lastSpokenLine.endedTs <= NAMED_ANSWER_WINDOW_MS;
+  return Boolean(answering);
 }
 
 function namedWake(why) {
@@ -4404,7 +4422,10 @@ function namedWake(why) {
     logRenderer("named.awake", { why });
     /* The moment he wakes is the one thing this mode has to show. A wake-word
        wake gets the voice shimmer on its own path, because it opens a session. */
-    if (why === "name" && asleepFor >= NAME_WAKE_LIGHT_AFTER_MS) flashNameWake();
+    // Every sentence carries his name now, so a name in a session is not a
+    // wake. The gold trace belongs to "Hey Braino" from cold (the wake-word
+    // path), and to a name after a long quiet stretch.
+    if (why === "name" && asleepFor >= NAME_WAKE_LIGHT_AFTER_MS * 3) flashNameWake();
   }
   updateNotchFace();
 }
@@ -5170,7 +5191,12 @@ function shouldAcceptVoiceTranscript(text) {
       logRenderer("named.self_echo", { chars: stats.normalized.length });
       return false;
     }
-    if (voiceExplicitlyAddressesBraino(text)) {
+    const heardOnDevice = namedHeardOnDeviceAt > 0 && Date.now() - namedHeardOnDeviceAt <= NAMED_ON_DEVICE_MATCH_MS;
+    if (voiceExplicitlyAddressesBraino(text) || heardOnDevice) {
+      if (heardOnDevice && !voiceExplicitlyAddressesBraino(text)) {
+        logRenderer("named.heard_on_device", { text: String(text || "").trim().slice(0, 80) });
+      }
+      namedHeardOnDeviceAt = 0;
       namedWake("name");
     } else if (!namedWindowOpen()) {
       logRenderer("named.ignored", {
@@ -7058,6 +7084,7 @@ function markRealtimeActivity(reason, options = {}) {
 
 function stopRealtimeVoice(options = {}) {
   voiceStartEnd();
+  clearHeldFragment();
   heraVoiceStop("session_end");
   // This bump is what cancels any start still in flight, and for a long time it
   // happened in total silence. Tracing "why did realtime.start.cancelled fire"
@@ -7943,16 +7970,39 @@ async function routeInterjectionIntoRunningJob(transcript) {
   return false;
 }
 
-async function flushRealtimeTranscript(reason) {
-  let transcript = String(rtUserTranscript || "").trim();
-  if (reason === "speech_stopped" && transcript && !rtTranscriptFinal) {
+async function flushRealtimeTranscript(reason, textOverride) {
+  const fromHold = typeof textOverride === "string";
+  let transcript = String(fromHold ? textOverride : (rtUserTranscript || "")).trim();
+  if (!fromHold && reason === "speech_stopped" && transcript && !rtTranscriptFinal) {
     scheduleRealtimeTranscriptFlush("waiting_final_transcript", REALTIME_TRANSCRIPT_IDLE_FLUSH_MS);
     return;
   }
-  rtUserTranscript = "";
-  rtTranscriptFinal = false;
-  clearRealtimeTranscriptFlush();
-  const accepted = dictationMode ? Boolean(transcript) : shouldAcceptVoiceTranscript(transcript);
+  if (!fromHold) {
+    rtUserTranscript = "";
+    rtTranscriptFinal = false;
+    clearRealtimeTranscriptFlush();
+  }
+  // The rest of a held half-sentence: one command. The held part was already
+  // accepted, and whatever let it through (his name, the first sentence after
+  // a wake) may have passed by now, so the whole line keeps that verdict.
+  let heldWasAccepted = fromHold;
+  if (!fromHold && !dictationMode && heldFragment) {
+    if (transcript) {
+      heldWasAccepted = true;
+      logRenderer("voice.fragment_joined", { heldWords: heldFragment.text.split(/\s+/).length });
+      transcript = `${heldFragment.text} ${transcript}`.replace(/\s+/g, " ").trim();
+      clearHeldFragment();
+    } else {
+      // A turn with no words (a cough, a breath): the held part goes now.
+      const held = heldFragment.text;
+      clearHeldFragment();
+      void flushRealtimeTranscript("held_fragment", held);
+      return;
+    }
+  }
+  const accepted = dictationMode
+    ? Boolean(transcript)
+    : (heldWasAccepted ? Boolean(transcript) : shouldAcceptVoiceTranscript(transcript));
   // That sentence has been judged; the next one is judged on its own start.
   if (transcript) namedSpeechAwake = false;
   logRenderer("realtime.transcript.flush", {
@@ -7991,6 +8041,17 @@ async function flushRealtimeTranscript(reason) {
     return;
   }
   if (isStopTaskPhrase(transcript) && await stopTaskNow("voice_phrase", transcript)) return;
+  /* Half a sentence waits for the rest. Not an answer to his question or a
+     follow-up he is waiting on — those are often a single word — and never
+     twice. */
+  const answering = lastSpokenLine?.asked && lastSpokenLine.endedTs > 0
+    && Date.now() - lastSpokenLine.endedTs <= NAMED_ANSWER_WINDOW_MS;
+  if (accepted && !dictationMode && !fromHold && !answering && !hasPendingDelegateFollowup()
+    && !isBareWakeWord(transcript) && looksUnfinished(transcript)) {
+    nfSetHeard(transcript);
+    holdFragment(transcript);
+    return;
+  }
   /* Talking to him while he works is not always a new job.
    *
    * This used to hang off "he is being interrupted mid-sentence", which is the
@@ -8200,6 +8261,7 @@ function handleRealtimeEvent(event) {
       rtUserTranscript = "";
       rtTranscriptFinal = false;
       clearRealtimeTranscriptFlush();
+      rtUserSpeakingNow = true;
       if (heraVoice.on) {
         heraVoice.userSpeaking = true;
         heraVoice.sawOpenAiSpeech = true;
@@ -8247,6 +8309,7 @@ function handleRealtimeEvent(event) {
   if (event.type === "input_audio_buffer.speech_stopped") {
     markRealtimeActivity("speech_stopped", { schedule: false });
     markVoiceLatency("speech_stopped");
+    rtUserSpeakingNow = false;
     // One HERA segment per turn: the words of this turn, closed at the pause.
     if (!dictationMode && heraVoice.on) {
       heraVoice.userSpeaking = false;
@@ -10518,6 +10581,69 @@ function stopVoiceWakeShimmer() {
   voiceWakeShimmerAdded = [];
 }
 
+/* ── Half a sentence, waiting for the rest ─────────────────────────────────
+ *
+ * Voice mode ends a turn at a pause, so a pause mid-thought used to send the
+ * first half as its own command: "I need", "Regarding the", "Can you please
+ * close all" all went to him in one run. The transcripts tell you which is
+ * which: a finished sentence ends with a full stop or a question mark, and
+ * these did not.
+ *
+ * So a sentence that looks unfinished is held for a moment. More speech
+ * inside that moment is joined to it; silence sends it as it is, so nothing is
+ * ever lost. A finished sentence goes straight through, so ordinary replies
+ * are not slowed down at all. */
+const FRAGMENT_TAIL_WORDS = new Set([
+  "the", "a", "an", "to", "and", "or", "but", "of", "for", "with", "on", "in",
+  "at", "from", "by", "about", "into", "onto", "my", "your", "his", "her", "our",
+  "their", "its", "this", "that", "these", "those", "all", "some", "any", "every",
+  "need", "want", "wanna", "gonna", "can", "could", "would", "should", "will",
+  "please", "is", "are", "was", "were", "be", "been", "if", "so", "because",
+  "like", "than", "then", "also", "just", "i", "you", "we", "they", "he", "she",
+  "it's", "i'm", "let's", "regarding", "including", "maybe", "um", "uh",
+]);
+
+function looksUnfinished(text) {
+  const value = String(text || "").trim();
+  if (!value) return false;
+  if (/[.?!\u2026]["')\]]*$/.test(value)) return false;
+  const words = value.replace(/[^\p{L}\p{N}'\s]/gu, " ").trim().split(/\s+/).filter(Boolean);
+  const content = words.filter((w) => !/^(hey|braino|brainelle)$/i.test(w));
+  if (content.length <= 2) return true;
+  return FRAGMENT_TAIL_WORDS.has(String(words.at(-1) || "").toLowerCase());
+}
+
+function clearHeldFragment() {
+  window.clearTimeout(heldFragmentTimer);
+  heldFragmentTimer = 0;
+  heldFragment = null;
+}
+
+function holdFragment(text) {
+  const now = Date.now();
+  heldFragment = { text, at: heldFragment?.at || now };
+  window.clearTimeout(heldFragmentTimer);
+  heldFragmentTimer = window.setTimeout(releaseHeldFragment, FRAGMENT_HOLD_MS);
+  logRenderer("voice.fragment_held", { words: text.split(/\s+/).length });
+  setStatus("listening", "Listening");
+}
+
+/* Nothing more came: it goes as it is. */
+function releaseHeldFragment() {
+  if (!heldFragment) return;
+  // Still talking: wait for that turn to end and join it there, within reason.
+  if (heraVoice.userSpeaking || rtSpeechInProgress()) {
+    if (Date.now() - heldFragment.at < FRAGMENT_MAX_HOLD_MS) {
+      heldFragmentTimer = window.setTimeout(releaseHeldFragment, 500);
+      return;
+    }
+  }
+  const text = heldFragment.text;
+  clearHeldFragment();
+  logRenderer("voice.fragment_released", { words: text.split(/\s+/).length });
+  void flushRealtimeTranscript("held_fragment", text);
+}
+
 /* ── HERA, live, while you talk to him ─────────────────────────────────────
  *
  * One live transcript, two endings. Option twice: HERA's words are cleaned up
@@ -11967,6 +12093,7 @@ window.brainoMac.onWakeDetected?.((payload) => {
   // Only NOW does a real (cloud, paid) realtime session open, exactly like
   // pressing double-Control by hand.
   logRenderer("wakeword.wake", { transcriptChars: String(payload?.transcript || "").length });
+  if (realtimeActive) namedHeardOnDeviceAt = Date.now();
   /* The helper heard his name a moment ago, out here, before any session
      existed. The renderer will never see that word in its own transcript, so
      without this the session would open ASLEEP and quietly bin the very command

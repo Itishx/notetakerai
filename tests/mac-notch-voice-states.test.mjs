@@ -108,13 +108,15 @@ test("asleep does not look like listening, and the room does not flash up", () =
   assert.match(face, /const namedAsleep = visible && !herMode && !dictationMode/);
   assert.match(face, /&& \(!namedAsleep \|\| voiceExplicitlyAddressesBraino\(nfHeardText\)\)/);
   assert.match(face, /sessionEngaged && !namedAsleep\s*&& \(dictationCapturing/);
+  assert.match(face, /Listening for \\u201c\$\{activeWakeName\(\)\}\\u201d/);
   assert.match(face, /Say \\u201cHey \$\{activeWakeName\(\)\}\\u201d to wake me/);
   assert.match(css, /#notch-face\.nf-name-asleep \.nf-pill \{[\s\S]{0,160}animation: none;/);
 });
 
 test("his name lights the notch, and a wake word lights it like Control twice", () => {
-  /* Only a real wake: not every "Braino, …" in a conversation that paused. */
-  assert.match(lift("function namedWake(why) {"), /if \(why === "name" && asleepFor >= NAME_WAKE_LIGHT_AFTER_MS\) flashNameWake\(\);/);
+  /* Only a real wake after a long quiet: his name is now in every sentence, so
+     lighting up on each one would flash the notch all conversation. */
+  assert.match(lift("function namedWake(why) {"), /if \(why === "name" && asleepFor >= NAME_WAKE_LIGHT_AFTER_MS \* 3\) flashNameWake\(\);/);
   /* "Hey Braino" gets the gold trace; the hotkey keeps the blue. */
   assert.match(js, /startVoiceWakeShimmer\(\{ golden: true \}\);\s*void startListening\(\);/);
   /* And nothing else plays that trace on a timer. */
@@ -202,7 +204,7 @@ test("a sentence begun while awake is never cut off for ending late", () => {
   assert.match(js, /const NAMED_WINDOW_MS = 12000;/);
   assert.match(lift("function namedWindowOpen() {"), /if \(namedSpeechAwake\) return true;/);
   assert.match(js, /if \(namedModeOn && namedWindowOpen\(\)\) namedSpeechAwake = true;/);
-  assert.match(lift("async function flushRealtimeTranscript(reason) {"), /if \(transcript\) namedSpeechAwake = false;/);
+  assert.match(lift("async function flushRealtimeTranscript(reason, textOverride) {"), /if \(transcript\) namedSpeechAwake = false;/);
 });
 
 /* "Hey Braino" worked once, until the first voice session took the mic, and

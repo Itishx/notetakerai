@@ -519,9 +519,11 @@ All of these live in the inline caption sheet (`.nf-inline-open`, 480 wide, min 
 
 There is no countdown: a number made a slow connection look slower. HERA listens from the press, so what you say while it connects is sent the moment the session is live.
 
-**Asleep, listening for his name: `.nf-name-asleep`.** 284 wide, `+30` tall, radius `0 0 20 20`, no animation. The ticker line reads `Say “Hey Braino” to wake me` (Brainelle's name when she is the avatar) at 60% opacity. It is the lowest-priority ticker slot. Deliberately not the listening look: `.listen` is suppressed while asleep.
+**Asleep, listening for his name: `.nf-name-asleep`.** 284 wide, `+30` tall, radius `0 0 20 20`, no animation. The ticker line reads `Listening for “Braino”` while a voice session is open (his name is needed in every sentence) and `Say “Hey Braino” to wake me` when there is none; Brainelle's name when she is the avatar. 60% opacity. It is the lowest-priority ticker slot. Deliberately not the listening look: `.listen` is suppressed while asleep.
 
-**His name, heard: `.nf-name-wake`.** Only after a real sleep (20s+), never on every named sentence; the 90s idle shimmer is off so the gold trace means only this. The boot trace (`.nf-shine`), once, stretched to the listening pill (250 × `+44`) over 1.1s with a non-scaling stroke, then `.listen` takes over. The trace SVG has `preserveAspectRatio="none"`, so any state can size it.
+**Half sentence, held.** No new state: the words show as *You said* (`nfSetHeard`) and the chip stays on listening for the 1.5s hold, so a joined sentence simply grows in place.
+
+**His name, heard: `.nf-name-wake`.** Only after a real sleep (60s+), never on every named sentence, which is now every sentence; the 90s idle shimmer is off so the gold trace means only this. The boot trace (`.nf-shine`), once, stretched to the listening pill (250 × `+44`) over 1.1s with a non-scaling stroke, then `.listen` takes over. The trace SVG has `preserveAspectRatio="none"`, so any state can size it.
 
 The thinking chip is one word, `Thinking`. The old four-word cycle is gone.
 

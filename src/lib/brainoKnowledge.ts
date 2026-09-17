@@ -26,7 +26,7 @@ export const KNOWLEDGE_ENTRIES: readonly KnowledgeEntry[] = [
     date: "2026-09-17",
     dateLabel: "September 17, 2026",
     description:
-      "A countdown while voice wakes up, \"You can speak now\" only once it is live, your words kept on screen while he works, a quiet \"Say Hey Braino to wake me\" while he is ignoring the room, the boot light when he hears his name, and \"Braino, stop the task\" that stops it straight away.",
+      "\"You can speak now\" only once voice is live, your words kept on screen while he works, his name in every sentence so a video never gives him orders, half sentences joined instead of acted on, and \"Braino, stop the task\" that stops it straight away.",
     status: "MVP",
     platform: "Braino for Mac",
     number: "038",

@@ -74,7 +74,7 @@ test("HERA starts at the press, and a sentence finished before ready is sent at 
 });
 
 test("OpenAI decides whether it was for him; HERA says what was said", () => {
-  const flush = lift(js, "async function flushRealtimeTranscript(reason) {");
+  const flush = lift(js, "async function flushRealtimeTranscript(reason, textOverride) {");
   assert.match(flush, /if \(accepted\) transcript = await heraCommandText\(transcript\);/);
   const acceptAt = flush.indexOf("shouldAcceptVoiceTranscript(transcript)");
   const swapAt = flush.indexOf("await heraCommandText(transcript)");
