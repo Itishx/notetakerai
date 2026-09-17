@@ -527,6 +527,7 @@ test("stop waits for a running clean-up, then uses the final one", async () => {
     const heraLog = () => {};
     const textForLog = (t) => t;
     const assessDictationEdit = () => ({ accepted: true, reason: "cleaned" });
+    const stripFormatterChatter = (text) => text;
     let localFormat = { results: new Map(), inflight: "", queued: "", latest: null, live: "" };
     ${lift("function cleanupDeadlineMs(text) {")}
     ${lift("function countWords(text) {")}
@@ -552,4 +553,25 @@ test("a text box Accessibility cannot see still gets a paste, and the words are 
   assert.match(insert.slice(0, 3000), /return \{ \.\.\.keepDictationFallback\(text, focus\.status\), blindPaste \};/);
   /* And the log no longer calls the notch fallback a paste. */
   assert.match(main, /inserted\?\.fallback\s*\? \(inserted\.blindPaste \? "pasted without confirmation, also in the notch and on the clipboard" : "no text box found/);
+});
+
+/* "Sure! Here's the cleaned text: ..." and "we can maybe go" -> "maybe we can
+   go" refused clean-ups that were otherwise exactly right. */
+test("a chatty preamble is removed and harmless words may move", async () => {
+  const { stripFormatterChatter } = await import("../mac/braino-mac/dictation.cjs");
+  const spoken = "okay so i think we can go home tomorrow and then you know we can maybe go for dinner tonight at 7 p m at uh be our own booze restaurant in jubilee hills in hyderabad";
+  const chatty = "Sure! Here's the cleaned text: I think we can go home tomorrow. Then we can maybe go for dinner tonight at 7 PM at our own booze restaurant in Jubilee Hills, Hyderabad.";
+  assert.equal(assessDictationEdit(spoken, chatty).accepted, false, "the gate itself still refuses invented words");
+  assert.equal(assessDictationEdit(spoken, stripFormatterChatter(chatty)).accepted, true);
+  const moved = assessDictationEdit(spoken, "I think we can go home tomorrow, and then maybe we can go for dinner tonight at 7 PM at our own booze restaurant in Jubilee Hills, Hyderabad.");
+  assert.equal(moved.accepted, true);
+  assert.equal(moved.moved, 1);
+  assert.equal(stripFormatterChatter('Sure, here is your cleaned-up transcript: "Hello there." Let me know if you need anything else.'), "Hello there.");
+  assert.equal(stripFormatterChatter("Here is my plan: go home."), "Here is my plan: go home.");
+  // Moves that change the meaning stay refused.
+  assert.equal(assessDictationEdit("the dog bit the man", "The man bit the dog.").accepted, false);
+  assert.equal(assessDictationEdit("i do not think we can go", "I think we cannot go.").accepted, false);
+  assert.equal(assessDictationEdit("we meet at 5 and leave at 6", "We meet at 6 and leave at 5.").accepted, false);
+  const main = readFileSync(new URL("../mac/braino-mac/main.cjs", import.meta.url), "utf8");
+  assert.match(main, /formatDictationTurn\(raw\)\s*\.then\(\(offered\) => stripFormatterChatter\(offered\)\)/);
 });

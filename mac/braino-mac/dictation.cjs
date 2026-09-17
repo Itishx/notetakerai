@@ -341,14 +341,56 @@ function alignDictationEdit(sourceTokens, candidateTokens) {
   let i = n;
   let j = m;
   const counts = { matched: 0, substituted: 0, deleted: 0, inserted: 0 };
+  const insertedTokens = [];
+  const deletedTokens = [];
   while (i > 0 || j > 0) {
     const move = back[i][j];
     if (move === "match") { counts.matched += 1; i -= 1; j -= 1; }
     else if (move === "substitute") { counts.substituted += 1; i -= 1; j -= 1; }
-    else if (move === "delete") { counts.deleted += 1; i -= 1; }
-    else { counts.inserted += 1; j -= 1; }
+    else if (move === "delete") { counts.deleted += 1; deletedTokens.push(sourceTokens[i - 1]); i -= 1; }
+    else { counts.inserted += 1; insertedTokens.push(candidateTokens[j - 1]); j -= 1; }
   }
-  return counts;
+  return { counts, insertedTokens, deletedTokens };
+}
+
+/* Words a clean-up may move, a short list on purpose: moving any of them keeps
+   the meaning. Negations, numbers, names and every other word stay where they
+   were said. */
+const DICTATION_MOVABLE_WORDS = new Set([
+  "maybe", "perhaps", "probably", "also", "just", "really", "actually", "still",
+  "then", "too", "definitely", "basically", "literally", "again", "already",
+  "honestly", "obviously", "anyway",
+]);
+const DICTATION_MAX_MOVES = 3;
+
+/* How many inserted words are really moved ones, or 0 when any of them is not.
+   Each inserted word must be a movable word that the alignment also deleted
+   elsewhere. */
+function dictationHarmlessMoves(insertedTokens = [], deletedTokens = []) {
+  if (!insertedTokens.length || insertedTokens.length > DICTATION_MAX_MOVES) return 0;
+  const available = [...deletedTokens];
+  for (const token of insertedTokens) {
+    if (!DICTATION_MOVABLE_WORDS.has(token)) return 0;
+    const at = available.indexOf(token);
+    if (at < 0) return 0;
+    available.splice(at, 1);
+  }
+  return insertedTokens.length;
+}
+
+/* Clean-up models sometimes answer like a chat assistant: "Sure! Here's the
+   cleaned text: ...". The text after that is often exactly right, and those
+   five unspoken words were enough to refuse all of it. The preamble, wrapping
+   quotes and a "let me know" tail are removed before anything is judged. */
+const FORMATTER_PREAMBLE = /^\s*(?:(?:sure|okay|ok|certainly|of course|absolutely|alright|got it)\s*[!.,]*\s*)?(?:here(?:'s|’s|\s+is)\s+(?:the|your|a)\s+(?:cleaned(?:[- ]up)?|corrected|formatted|edited|polished|clean|tidied(?:[- ]up)?)\s+(?:up\s+)?(?:text|transcript|version|dictation|sentence|transcription)(?:\s+of\s+[^:\n]{0,40})?\s*[:：]\s*)/i;
+const FORMATTER_SIGNOFF = /\s*(?:let me know if[^\n]*|i hope this helps[^\n]*)$/i;
+
+function stripFormatterChatter(text) {
+  const value = String(text || "").trim();
+  let cleaned = value.replace(FORMATTER_PREAMBLE, "").replace(FORMATTER_SIGNOFF, "").trim();
+  const quoted = cleaned.match(/^["“](.+)["”]$/s);
+  if (quoted) cleaned = quoted[1].trim();
+  return cleaned || value;
 }
 
 /* The gate for cleaned-up dictation, as opposed to lossless formatting.
@@ -394,13 +436,21 @@ function assessDictationEdit(source, candidate) {
     return { accepted: false, reason: "missing_words" };
   }
 
-  const align = alignDictationEdit(sourceTokens, candidateTokens);
+  const aligned = alignDictationEdit(sourceTokens, candidateTokens);
+  const align = aligned.counts;
 
   // A word with no counterpart in the speech is an invention, and a candidate
   // whose clauses have moved can only be explained as one. Either way it never
-  // reaches the caret.
+  // reaches the caret, with one exception: a few words that sit anywhere in a
+  // sentence without changing who did what ("we can maybe go" -> "maybe we
+  // can go"). Those are moves, not inventions, and refusing them refused
+  // otherwise perfect clean-ups.
   if (align.inserted > 0) {
-    return { accepted: false, reason: "words_added_or_reordered", ...align };
+    const moves = dictationHarmlessMoves(aligned.insertedTokens, aligned.deletedTokens);
+    if (!moves) return { accepted: false, reason: "words_added_or_reordered", ...align };
+    align.inserted = 0;
+    align.deleted -= moves;
+    align.moved = moves;
   }
 
   const sourceCoverage = (align.matched + align.substituted) / sourceTokens.length;
@@ -533,6 +583,7 @@ function buildDictationTurnDetection() {
 
 module.exports = {
   spokenNumbersToDigits,
+  stripFormatterChatter,
   assessDictationEdit,
   assessDictationRefinement,
   assessDictationInsertion,

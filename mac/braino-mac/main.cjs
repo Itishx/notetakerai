@@ -182,6 +182,7 @@ const {
 } = require(path.join(__dirname, "spotify-focus-return.cjs"));
 const {
   assessDictationEdit,
+  stripFormatterChatter,
   assessDictationRefinement,
   assessDictationInsertion,
   buildDictationTranscriptionConfig,
@@ -2371,6 +2372,7 @@ function runLocalFormat(raw) {
   localFormat.inflight = raw;
   const startedAt = Date.now();
   const job = formatDictationTurn(raw)
+    .then((offered) => stripFormatterChatter(offered))
     .then((formatted) => {
       const durationMs = Date.now() - startedAt;
       if (!formatted) {
