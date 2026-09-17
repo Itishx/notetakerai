@@ -8269,8 +8269,21 @@ async function nothingToStop(source, transcript = "") {
 }
 
 async function routeInterjectionIntoRunningJob(transcript) {
-  // Handled, in the sense that it must not reach anything else.
+  /* His name alone, while he works: handled, so it cannot replace the job.
+     With nothing running it is not an interjection at all. Returning true then
+     told the caller to show "Working on it", and the notch sat on that with
+     no job behind it until someone pressed Stop. The caller's own bare-name
+     branch settles it as listening instead. */
   if (isBareWakeWord(transcript)) {
+    let busy = voiceTurnInFlight || processing;
+    if (!busy) {
+      try {
+        busy = Boolean((await window.brainoMac.jobRunning())?.running);
+      } catch {
+        busy = false;
+      }
+    }
+    if (!busy) return false;
     logRenderer("voice.wake_word_only", { ignored: true });
     return true;
   }

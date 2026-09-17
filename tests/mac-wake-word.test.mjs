@@ -45,3 +45,17 @@ test("a remark while working protects the job instead of replacing it", () => {
   assert.match(body, /if \(kind === "chat"\)[\s\S]{0,400}return true;/,
     "chat while working must return handled, or the caller kills the running job");
 });
+
+/* "Braino" on its own showed "Working on it" with nothing running, and the
+   notch sat there until Stop was pressed. */
+test("his name alone only counts as an interjection while he is working", () => {
+  const fn = src.slice(src.indexOf("async function routeInterjectionIntoRunningJob"));
+  const bare = fn.slice(0, fn.indexOf("if (interjectionInFlight) return false;"));
+  assert.match(bare, /let busy = voiceTurnInFlight \|\| processing;/);
+  assert.match(bare, /busy = Boolean\(\(await window\.brainoMac\.jobRunning\(\)\)\?\.running\);/);
+  assert.match(bare, /if \(!busy\) return false;\s*logRenderer\("voice\.wake_word_only", \{ ignored: true \}\);\s*return true;/);
+  /* And the caller settles a bare name as listening when nothing is running. */
+  const flush = src.slice(src.indexOf("async function flushRealtimeTranscript("));
+  const afterRoute = flush.slice(flush.indexOf("const handled = await routeInterjectionIntoRunningJob(transcript);"));
+  assert.match(afterRoute.slice(0, 1600), /if \(isBareWakeWord\(transcript\)\) \{\s*logRenderer\("voice\.wake_word_only", \{ ignored: true, hadJob: voiceTurnInFlight \}\);\s*setStatus\(voiceTurnInFlight \? "thinking" : "listening"/);
+});
