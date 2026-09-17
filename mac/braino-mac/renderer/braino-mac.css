@@ -5423,3 +5423,313 @@ body {
 @media (prefers-reduced-motion: reduce) {
   #notch-face.nf-inline-hera .nf-inline-caption-state::before { animation: none; }
 }
+
+/* ── The panel: his settings, in the notch ─────────────────────────────────
+ *
+ * The first piece of the app moving out of the dashboard window. Same family
+ * as every other drop from the notch: the pill sheds its own body, a black
+ * sheet grows from y=0 with square top corners, and a patch hides the join
+ * with the housing. Declared here as one block rather than threaded through
+ * the shared lists above, and last in the file, so it owns the shape while it
+ * is open whatever else is on. */
+#notch-face { --nf-panel-w: min(560px, calc(100vw - 32px)); }
+
+#notch-face.nf-panel-open .nf-pill {
+  width: var(--nf-panel-w);
+  height: min(var(--nf-panel-height, 330px), calc(var(--nf-screen-h, 100vh) - 70px));
+  min-height: 220px;
+  max-height: calc(var(--nf-screen-h, 100vh) - 70px);
+  border-radius: 0 0 34px 34px;
+  overflow: visible;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  animation: none;
+  pointer-events: auto;
+  transition:
+    width 1050ms cubic-bezier(.22,1,.36,1),
+    height 1050ms cubic-bezier(.22,1,.36,1),
+    border-radius 950ms cubic-bezier(.22,1,.36,1);
+}
+#notch-face.nf-panel-open .nf-pill::before {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  display: block;
+  border-radius: 0 0 34px 34px;
+  background: linear-gradient(180deg, rgba(0,0,0,.99), rgba(8,8,8,.98));
+  box-shadow: 0 24px 70px rgba(0,0,0,.46);
+  pointer-events: none;
+}
+#notch-face.nf-panel-open .nf-pill::after {
+  content: "";
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  left: 50%;
+  width: var(--nf-notch-w, 190px);
+  height: calc(var(--nf-safe-top) + 24px);
+  border-radius: 0 0 18px 18px;
+  background: #000;
+  transform: translateX(-50%);
+  animation: none;
+}
+#notch-face.no-notch.nf-panel-open .nf-pill::after { display: none; }
+#notch-face.no-notch.nf-panel-open .nf-pill::before { inset: 8px 0 0; border-radius: 26px; }
+
+/* Nothing else paints while the panel is up. */
+#notch-face.nf-panel-open .nf-band,
+#notch-face.nf-panel-open .nf-cap,
+#notch-face.nf-panel-open #nf-status,
+#notch-face.nf-panel-open #nf-status-2,
+#notch-face.nf-panel-open .nf-folds,
+#notch-face.nf-panel-open .nf-privacy,
+#notch-face.nf-panel-open .nf-volume,
+#notch-face.nf-panel-open .nf-viz,
+#notch-face.nf-panel-open .nf-tray,
+#notch-face.nf-panel-open .nf-sonar,
+#notch-face.nf-panel-open .nf-think-dots,
+#notch-face.nf-panel-open .nf-think-chip,
+#notch-face.nf-panel-open .nf-thinking-canvas,
+#notch-face.nf-panel-open .nf-inline-caption,
+#notch-face.nf-panel-open .nf-answer-surface,
+#notch-face.nf-panel-open .nf-yap-surface,
+#notch-face.nf-panel-open .nf-cmds-surface,
+#notch-face.nf-panel-open .nf-music-mini,
+#notch-face.nf-panel-open .nf-shine {
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+#notch-face .nf-panel-surface {
+  position: absolute;
+  z-index: 13;
+  inset: 0;
+  box-sizing: border-box;
+  padding: var(--nf-content-top) 24px 20px;
+  color: #f7f7f5;
+  font-family: "Braino SF Pro Display", "SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, sans-serif;
+  font-synthesis: none;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateY(-8px);
+  transition:
+    opacity 280ms ease 140ms,
+    transform 720ms cubic-bezier(.22,1,.36,1) 80ms,
+    visibility 0s linear 760ms;
+}
+#notch-face.nf-panel-open .nf-panel-surface {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: none;
+  transition-delay: 160ms, 60ms, 0ms;
+}
+
+#notch-face .nf-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 2px 10px;
+  border-bottom: 1px solid rgba(255,255,255,.09);
+}
+#notch-face .nf-panel-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+/* His two eyes as the mark: the notch face, not a logo. */
+#notch-face .nf-panel-brand i {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: inset 0 0 0 2.6px #fff, inset 1.5px 1px 0 3.6px #1B1713;
+}
+#notch-face .nf-panel-brand b {
+  margin-left: 5px;
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,.9);
+}
+#notch-face .nf-panel-done {
+  appearance: none;
+  border: 0;
+  border-radius: 999px;
+  padding: 5px 12px;
+  background: rgba(255,255,255,.1);
+  color: #fff;
+  font: 600 11px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+  cursor: pointer;
+  transition: background 140ms ease;
+}
+#notch-face .nf-panel-done:hover { background: rgba(255,255,255,.18); }
+
+#notch-face .nf-panel-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  min-height: 44px;
+  padding: 6px 2px;
+}
+#notch-face .nf-panel-row + .nf-panel-row { border-top: 1px solid rgba(255,255,255,.05); }
+#notch-face .nf-panel-rule {
+  display: block;
+  height: 1px;
+  margin: 4px 0;
+  background: rgba(255,255,255,.09);
+}
+#notch-face .nf-panel-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 13.5px;
+  font-weight: 560;
+  letter-spacing: -.01em;
+  color: rgba(255,255,255,.94);
+}
+#notch-face .nf-panel-label small {
+  font-size: 11px;
+  font-weight: 450;
+  letter-spacing: 0;
+  color: rgba(255,255,255,.44);
+}
+#notch-face .nf-panel-control {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Size: a thin coral track, the one accent in the panel. */
+#notch-face .nf-panel-size {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 190px;
+  height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #E8786E var(--nf-size-fill, 0%), rgba(255,255,255,.14) var(--nf-size-fill, 0%));
+  outline: none;
+  cursor: pointer;
+}
+#notch-face .nf-panel-size::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(0,0,0,.5);
+}
+#notch-face .nf-panel-size-value {
+  min-width: 38px;
+  text-align: right;
+  font-size: 11.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: rgba(255,255,255,.6);
+}
+
+/* Character: a segmented control. */
+#notch-face .nf-panel-chars {
+  display: inline-flex;
+  padding: 2px;
+  border-radius: 10px;
+  background: rgba(255,255,255,.07);
+}
+#notch-face .nf-panel-chars button {
+  appearance: none;
+  border: 0;
+  border-radius: 8px;
+  padding: 6px 11px;
+  background: transparent;
+  color: rgba(255,255,255,.62);
+  font: 560 12px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+  cursor: pointer;
+  transition: background 160ms ease, color 160ms ease;
+}
+#notch-face .nf-panel-chars button:hover { color: #fff; }
+#notch-face .nf-panel-chars button.active {
+  background: rgba(255,255,255,.16);
+  color: #fff;
+  box-shadow: 0 1px 2px rgba(0,0,0,.4);
+}
+#notch-face .nf-panel-chars button[data-mascot="brainelle"].active { color: #FFC4DD; }
+
+/* Switches: macOS-shaped, coral when on. */
+#notch-face .nf-switch {
+  appearance: none;
+  position: relative;
+  flex: 0 0 auto;
+  width: 38px;
+  height: 22px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255,255,255,.16);
+  cursor: pointer;
+  transition: background 200ms ease;
+}
+#notch-face .nf-switch i {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0,0,0,.4);
+  transition: transform 260ms cubic-bezier(.32,.72,0,1);
+}
+#notch-face .nf-switch[aria-checked="true"] { background: #E8786E; }
+#notch-face .nf-switch[aria-checked="true"] i { transform: translateX(16px); }
+
+#notch-face .nf-panel-button,
+#notch-face .nf-panel-link {
+  appearance: none;
+  border: 0;
+  cursor: pointer;
+  font: 560 12px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+  transition: background 140ms ease, color 140ms ease;
+}
+#notch-face .nf-panel-button {
+  border-radius: 999px;
+  padding: 7px 13px;
+  background: rgba(255,255,255,.08);
+  color: rgba(255,255,255,.86);
+}
+#notch-face .nf-panel-button:hover { background: rgba(255,255,255,.15); }
+#notch-face .nf-panel-button-primary { background: rgba(255,255,255,.92); color: #0b0b0b; }
+#notch-face .nf-panel-button-primary:hover { background: #fff; }
+#notch-face .nf-panel-button.done { background: rgba(61,232,178,.2); color: #8FF0CF; }
+#notch-face .nf-panel-link {
+  padding: 4px 2px;
+  background: transparent;
+  color: rgba(255,255,255,.5);
+}
+#notch-face .nf-panel-link:hover { color: #fff; }
+
+@media (prefers-reduced-motion: reduce) {
+  #notch-face.nf-panel-open .nf-pill,
+  #notch-face .nf-panel-surface,
+  #notch-face .nf-switch,
+  #notch-face .nf-switch i { transition-duration: .01ms; transition-delay: 0ms; }
+}
+
+/* ── Jumping into the notch ─────────────────────────────────────────────────
+   The boot's jump out, backwards: he rises, shrinks and is gone into the
+   housing as the panel opens under him. */
+#walker.nf-jump-in svg {
+  animation: nfWalkerJumpIn .62s cubic-bezier(.5,0,.75,.2) forwards;
+}
+@keyframes nfWalkerJumpIn {
+  0% { transform: none; opacity: 1; }
+  35% { transform: translateY(8px) scale(1.04, .94); opacity: 1; }
+  100% { transform: translateY(-26px) scale(.2); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  #walker.nf-jump-in svg { animation: none; }
+}

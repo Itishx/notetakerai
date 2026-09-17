@@ -63,7 +63,8 @@ test("HERA is rotated at every pause, after he speaks, and on a barge-in", () =>
   const stopped = js.slice(js.indexOf('if (event.type === "input_audio_buffer.speech_stopped")'));
   assert.match(stopped.slice(0, 600), /heraVoice\.turnRotate = heraVoiceRotate\("turn_end"\)/);
   assert.match(js, /heraVoiceRotate\("barge_in", \{ clipsNext: true \}\);\s*interruptVoiceTurn\("barge_in", "speech_started"\)/);
-  assert.match(js, /logRenderer\("speech\.done"[^\n]*\n\s*heraVoiceRotate\("braino_spoke", \{ echoTail: true \}\);/);
+  // Only when he was actually audible: a silent reply leaves nothing to clear.
+  assert.match(js, /logRenderer\("speech\.done"[^\n]*\n\s*if \(!quiet\) heraVoiceRotate\("braino_spoke", \{ echoTail: true \}\);/);
   /* His voice through the speakers marks the segment rather than showing up as yours. */
   assert.match(lift(js, "window.brainoMac.onVoiceCaption?.((event) => {", "\n});\n"), /if \(brainoAudible\(\) \|\| now < heraVoice\.ignoreUntil\) \{\s*heraVoice\.dirty = true;/);
 });

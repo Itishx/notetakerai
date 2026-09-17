@@ -380,6 +380,19 @@ let wakeWordArmed = false;
    recent history and says "You can speak now" only once the session is really
    live, so it never tells you to talk into a microphone that is not open yet. */
 let voiceStart = { phase: "", startedAt: 0, estimateMs: 0, readyAt: 0 };
+/* The notch panel: his settings, in the notch. See nfSetPanelOpen. */
+let nfPanelOpen = false;
+let nfPanelBusy = false;
+/* Where he was standing when a double-click sent him up into the notch, so
+   closing the panel sends him back to exactly that spot. */
+let nfPanelReturn = null;
+const NF_PANEL_WIDTH = 560;
+const TALK_OUT_LOUD_KEY = "brainoTalkOutLoud";
+const STAY_PUT_KEY = "brainoStayPut";
+const EDGE_SNAP_PX = 56;
+/* A reply shown but not spoken, when "Talk out loud" is off. He is not
+   audible, so nothing that listens for his voice should treat him as such. */
+let speakingSilently = false;
 /* HERA, live, while you talk to him. OpenAI's transcript only arrives after a
    pause, so the notch showed your words late and in chunks; HERA runs on this
    Mac and reports them as you say them. See heraVoiceStart. */
@@ -2046,7 +2059,7 @@ function clearNotchAnswer(options = {}) {
   notchFace?.classList.add("nf-answer-exiting");
   notchFace?.classList.remove("nf-answer-open", "nf-answer-short", "nf-answer-long");
   if (!notchFace?.classList.contains("nf-think-open")) {
-    window.brainoMac.setNotchZone?.({ expanded: false });
+    nfCollapseNotchZone();
   }
   notchFace?.querySelector(".nf-pill")?.style.removeProperty("--nf-answer-long-height");
   // Same reset for the short sheet, or the next one-liner opens at the height
@@ -2122,7 +2135,7 @@ window.brainoMac.onCoworkLabel?.((payload) => {
     startThinkingPhaseCycle();
     if (!wasActive) {
       notchFace?.classList.remove("nf-think-open", "captioning");
-      window.brainoMac.setNotchZone?.({ expanded: false });
+      nfCollapseNotchZone();
     }
   }
   // an arrow hint appears only when there's a full thought to read
@@ -2413,7 +2426,7 @@ function syncMeetingNotchZone(active, height) {
   if (active) {
     window.brainoMac.setNotchZone?.({ expanded: true, width: NF_READING_SURFACE_WIDTH, height });
   } else if (!nfAnswerMode && !notchFace?.classList.contains("nf-think-open")) {
-    window.brainoMac.setNotchZone?.({ expanded: false });
+    nfCollapseNotchZone();
   }
 }
 
@@ -2717,7 +2730,7 @@ function syncYapNotchZone(active, height = 172) {
     // The meeting surface is up for the length of a meeting and updateNotchFace runs every
     // second inside one, so without this guard the click zone was torn down a second after
     // it was claimed and the Stop button stopped responding.
-    window.brainoMac.setNotchZone?.({ expanded: false });
+    nfCollapseNotchZone();
   }
 }
 
@@ -2838,7 +2851,7 @@ function syncInlineVoiceSurface(mode = "", text = "", options = {}) {
     && !dictationMode
     && !dictationStopping
   ) {
-    window.brainoMac.setNotchZone?.({ expanded: false });
+    nfCollapseNotchZone();
   }
 }
 
@@ -2999,7 +3012,7 @@ function nfSetThinking(text) {
           "nf-thinking", "nf-think-open", "nf-think-hint", "captioning",
           "nf-think-waiting", "nf-think-failed", "nf-think-complete",
         );
-        window.brainoMac.setNotchZone?.({ expanded: false });
+        nfCollapseNotchZone();
         // Clearing the text is not enough on its own: updateNotchFace below
         // would rebuild the sheet from a stale "thinking" status. Settle that
         // too, but only when nothing is actually running (the helper checks).
@@ -3013,7 +3026,7 @@ function nfSetThinking(text) {
       "nf-thinking", "nf-think-open", "nf-think-hint", "captioning",
       "nf-think-waiting", "nf-think-failed", "nf-think-complete",
     );
-    if (!nfAnswerMode) window.brainoMac.setNotchZone?.({ expanded: false });
+    if (!nfAnswerMode) nfCollapseNotchZone();
     settleStaleThinkingStatus("nf_thinking.cleared");
   }
   updateNotchFace();
@@ -3165,7 +3178,7 @@ function updateNotchFace() {
   }
   const voiceStartMode = dictationMode ? "" : voiceStartPhase();
   let inlineMode = "";
-  if (visible && !herMode && !answerOwnsNotch && !yapOwnsNotch && !thinkingOpen) {
+  if (visible && !herMode && !answerOwnsNotch && !yapOwnsNotch && !thinkingOpen && !nfPanelOpen) {
     if (processingActive) inlineMode = heardForInline ? "thinking" : "";
     else if (conversationOwnsNotch) inlineMode = "heard";
     else if (voiceStartMode) inlineMode = voiceStartMode;
@@ -3526,15 +3539,18 @@ async function runIomiBootMascotExit() {
   notchFace?.classList.remove("nf-iomi-expanded");
   const startX = Math.round(window.innerWidth / 2 - W / 2);
   const faceH = parseFloat(getComputedStyle(notchFace || document.body).getPropertyValue("--nf-notch-h")) || 33;
-  const landingY = Math.min(260, Math.max(150, Math.round(window.innerHeight * 0.27)));
+  const pinnedSpot = walkArea?.mode === "pin" ? getRoamBounds() : null;
+  const landingY = pinnedSpot
+    ? pinnedSpot.minY
+    : Math.min(260, Math.max(150, Math.round(window.innerHeight * 0.27)));
   walkerHome = false;
   movementMode = "free";
   setPosition(startX, faceH + 7, { allowOffscreen: true });
   targetX = startX;
   targetY = landingY;
   walker.classList.add("visible", "nf-iomi-boot-jump");
-  logRenderer("boot.iomi.mascot_exit.start", { landingY });
-  await walkTo(startX, landingY, { speed: 420, allowOffscreen: true });
+  logRenderer("boot.iomi.mascot_exit.start", { landingY, pinned: Boolean(pinnedSpot) });
+  await walkTo(pinnedSpot ? pinnedSpot.minX : startX, landingY, { speed: 420, allowOffscreen: true });
   walker.classList.remove("nf-iomi-boot-jump");
   targetX = posX;
   targetY = posY;
@@ -5862,6 +5878,13 @@ function refreshMousePassthrough(event) {
     setMousePassthrough(false);
     return;
   }
+  /* The notch panel is a popover: while it is up the pointer is ours, so a
+     click outside it lands here and closes it rather than reaching the app
+     underneath half the time. */
+  if (nfPanelOpen) {
+    setMousePassthrough(false);
+    return;
+  }
   /* Picking his patch is a whole-screen gesture, so it owns the pointer for as
      long as it is up and not a moment longer. */
   if (walkPickerOpen) {
@@ -5910,11 +5933,21 @@ async function speak(text, options = {}) {
     fixedHeight: Number(options.notchFixedHeight) || 0,
   });
   if (showReplyCaption) startReplyCaption(line, generation);
+  /* "Talk out loud" off: the reply is shown in the notch and not spoken.
+     Her mode and the pitch demo are performances, so they always speak. */
+  const quiet = !options.forceVoice && !herMode && !pitchRunning && !talkOutLoud();
   speaking = true;
+  speakingSilently = quiet;
   setStatus("speaking", "Speaking");
-  setTalk(true);
-  logRenderer("speech.start", { chars: line.length });
+  setTalk(!quiet);
+  logRenderer("speech.start", { chars: line.length, quiet });
   try {
+    if (quiet) {
+      const readMs = Math.min(20000, Math.max(1800, line.length * 55));
+      animateNotchAnswerEstimate(line, generation, readMs);
+      await wait(readMs);
+      return;
+    }
     let spoke = false;
     try {
       spoke = await speakWithStreamingTts(line, generation);
@@ -5992,7 +6025,8 @@ async function speak(text, options = {}) {
       currentSpeechAudio = null;
       setTalk(false);
       logRenderer("speech.done", { chars: line.length, durationMs: Math.round(performance.now() - startedAt) });
-      heraVoiceRotate("braino_spoke", { echoTail: true });
+      if (!quiet) heraVoiceRotate("braino_spoke", { echoTail: true });
+      speakingSilently = false;
       if (showReplyCaption) finishReplyCaption(generation);
       if (realtimeActive && !processing) {
         setStatus("listening", "Listening");
@@ -7741,7 +7775,10 @@ function closeTyping(reason) {
 
 /* Main saw the window lose focus. The field cannot be typed in or escaped out
    of once that happens, so it goes rather than sitting there. */
-window.brainoMac.onTypingDismiss?.(() => { if (typingOpen) closeTyping("blur"); });
+window.brainoMac.onTypingDismiss?.(() => {
+  if (typingOpen) closeTyping("blur");
+  if (nfPanelOpen) void nfClosePanel("blur");
+});
 
 async function submitTyped(text) {
   const said = String(text || "").trim();
@@ -9592,6 +9629,10 @@ async function runStartupSequence(config = {}) {
 function handleDragMove(event) {
   if (!dragState || event.pointerId !== dragState.pointerId) return;
   event.preventDefault();
+  // A click is not a drop: only a real move pins him.
+  if (!dragState.moved && Math.hypot(event.clientX - dragState.startX, event.clientY - dragState.startY) > 4) {
+    dragState.moved = true;
+  }
   setPosition(event.clientX - dragState.offsetX, event.clientY - dragState.offsetY);
   targetX = posX;
   targetY = posY;
@@ -9603,14 +9644,26 @@ function endDrag(event) {
   if (!dragState || event.pointerId !== dragState.pointerId) return;
   try { walker.releasePointerCapture(event.pointerId); } catch (_) {}
   walker.classList.remove("dragging");
+  const moved = Boolean(dragState.moved);
   dragState = null;
-  // A manual placement is exact: do not snap to a computed rail. Resume normal
-  // roaming from the dropped point after a short beat so he never freezes.
-  movementMode = "free";
-  targetX = posX;
-  targetY = posY;
-  nextTargetAt = performance.now() + 1200;
-  setBubble("Starting from here.", 1600);
+  /* Wispr-style: where you drop him is where he stays, and near an edge he
+     lands against it. Remembered across restarts (it is the "pin" walk area).
+     "Stay where you drop me" off gives the old behaviour: he sets off again
+     from the drop. */
+  if (moved && stayPut()) {
+    const spot = snapToEdge(posX, posY);
+    pinWalkerAt(spot.x, spot.y);
+    if (spot.x !== posX || spot.y !== posY) void walkTo(spot.x, spot.y, { speed: 900 });
+    setBubble("I'll stay here.", 1400);
+  } else {
+    // A manual placement is exact: do not snap to a computed rail. Resume normal
+    // roaming from the dropped point after a short beat so he never freezes.
+    movementMode = "free";
+    targetX = posX;
+    targetY = posY;
+    nextTargetAt = performance.now() + 1200;
+    if (moved) setBubble("Starting from here.", 1600);
+  }
   refreshMousePassthrough(event);
 }
 
@@ -9620,6 +9673,9 @@ walker.addEventListener("pointerdown", (event) => {
     pointerId: event.pointerId,
     offsetX: event.clientX - posX,
     offsetY: event.clientY - posY,
+    startX: event.clientX,
+    startY: event.clientY,
+    moved: false,
   };
   setMousePassthrough(false);
   walker.classList.add("dragging");
@@ -9630,6 +9686,299 @@ walker.addEventListener("pointerdown", (event) => {
 walker.addEventListener("pointermove", handleDragMove);
 walker.addEventListener("pointerup", endDrag);
 walker.addEventListener("pointercancel", endDrag);
+/* ── The notch panel ─────────────────────────────────────────────────────────
+ *
+ * The app moves into the notch, starting here. Double-click Braino and he
+ * jumps up into the notch as it drops open into his settings; close it and he
+ * jumps back out to where he was. Double-click the notch itself when he is
+ * already home. It replaces the floating card that used to open beside him.
+ *
+ * While it is open the overlay takes the keyboard and the mouse, the way the
+ * typing field does, so Escape closes it, a click anywhere outside closes it,
+ * and switching to another app closes it. */
+function readBoolSetting(key, fallback) {
+  try {
+    const value = window.localStorage.getItem(key);
+    return value === null ? fallback : value === "1";
+  } catch {
+    return fallback;
+  }
+}
+function writeBoolSetting(key, on) {
+  try { window.localStorage.setItem(key, on ? "1" : "0"); } catch { /* the switch still works this session */ }
+}
+function talkOutLoud() { return readBoolSetting(TALK_OUT_LOUD_KEY, true); }
+function stayPut() { return readBoolSetting(STAY_PUT_KEY, true); }
+
+function nfCollapseNotchZone() {
+  if (nfPanelOpen) return;
+  window.brainoMac.setNotchZone?.({ expanded: false });
+}
+
+const nfPanel = notchFace?.querySelector(".nf-panel-surface");
+const nfPanelInner = nfPanel?.querySelector(".nf-panel-inner");
+const nfPanelSize = nfPanel?.querySelector(".nf-panel-size");
+const nfPanelSizeValue = nfPanel?.querySelector(".nf-panel-size-value");
+const nfPanelChars = nfPanel?.querySelector(".nf-panel-chars");
+const nfPanelNameHint = nfPanel?.querySelector(".nf-panel-name-hint");
+
+function renderBrainoPanel() {
+  if (!nfPanel) return;
+  if (nfPanelSize) {
+    nfPanelSize.value = String(brainoScale);
+    const fill = ((brainoScale - BRAINO_SCALE_MIN) / (BRAINO_SCALE_MAX - BRAINO_SCALE_MIN)) * 100;
+    nfPanelSize.style.setProperty("--nf-size-fill", `${Math.round(fill)}%`);
+  }
+  if (nfPanelSizeValue) nfPanelSizeValue.textContent = `${Math.round(brainoScale * 100)}%`;
+  nfPanelChars?.querySelectorAll("button[data-mascot]").forEach((button) => {
+    const on = button.dataset.mascot === mascotChoice;
+    button.classList.toggle("active", on);
+    button.setAttribute("aria-pressed", String(on));
+  });
+  if (nfPanelNameHint) nfPanelNameHint.textContent = `Say \u201cHey ${activeWakeName()}\u201d and I wake up`;
+  const setSwitch = (name, on) => {
+    nfPanel.querySelector(`.nf-switch[data-setting="${name}"]`)?.setAttribute("aria-checked", String(Boolean(on)));
+  };
+  setSwitch("named", namedModeOn);
+  setSwitch("voice", talkOutLoud());
+  setSwitch("stay", stayPut() && walkArea?.mode === "pin");
+}
+
+function measurePanelHeight() {
+  if (!nfPanel || !nfPanelInner) return 330;
+  const style = window.getComputedStyle(nfPanel);
+  const content = (Number.parseFloat(style.paddingTop) || 0)
+    + nfPanelInner.scrollHeight
+    + (Number.parseFloat(style.paddingBottom) || 0);
+  return Math.round(Math.max(220, Math.min(window.innerHeight - 70, content)));
+}
+
+function nfSetPanelOpen(open, options = {}) {
+  if (!notchFace || !nfPanel) return;
+  const next = Boolean(open);
+  if (next === nfPanelOpen) return;
+  nfPanelOpen = next;
+  logRenderer(next ? "panel.open" : "panel.close", { via: options.via || "" });
+  if (next) {
+    if (brainoCustomizerOpen) setBrainoCustomizerOpen(false);
+    if (typingOpen) closeTyping("panel");
+    if (notchFace.classList.contains("nf-think-open")) nfSetThinkingOpen(false);
+    renderBrainoPanel();
+    cancelNotchSurfaceExit();
+    notchFace.classList.add("nf-panel-open");
+    const height = measurePanelHeight();
+    notchFace.style.setProperty("--nf-panel-height", `${height}px`);
+    window.brainoMac.setNotchZone?.({ expanded: true, width: NF_PANEL_WIDTH, height });
+    setMousePassthrough(false);
+    void window.brainoMac.typingFocus?.(true)?.catch?.(() => {});
+  } else {
+    notchFace.classList.remove("nf-panel-open");
+    beginNotchSurfaceExit();
+    window.brainoMac.setNotchZone?.({ expanded: false });
+    void window.brainoMac.typingFocus?.(false)?.catch?.(() => {});
+    setMousePassthrough(true);
+  }
+  updateNotchFace();
+}
+
+/* He goes up into the housing: the boot's jump, backwards. Shares the lock
+   that setWalkerHomeState uses, so the two never fight over one walk. */
+async function walkerJumpIntoNotch() {
+  if (walkerHome || walkerHomeBusy) return false;
+  walkerHomeBusy = true;
+  try {
+    const startX = Math.round(window.innerWidth / 2 - W / 2);
+    const faceH = parseFloat(getComputedStyle(notchFace || document.body).getPropertyValue("--nf-notch-h")) || 33;
+    walker.classList.add("nf-jump-in");
+    await Promise.all([
+      walkTo(startX, faceH + 6, { speed: 620, allowOffscreen: true }),
+      wait(620),
+    ]);
+    walker.classList.remove("nf-jump-in", "visible");
+    walkerHome = true;
+    logRenderer("walker.jump_in", {});
+    updateNotchFace();
+    return true;
+  } finally {
+    walkerHomeBusy = false;
+    const queued = walkerHomeQueued;
+    walkerHomeQueued = null;
+    if (queued !== null && queued !== walkerHome) void setWalkerHomeState(queued);
+  }
+}
+
+/* And back out, to a spot, landing the way he lands at boot. */
+async function walkerJumpOutTo(spot) {
+  if (!walkerHome || walkerHomeBusy || !spot) return;
+  // The same modes that keep him in the notch keep him there now.
+  if (mondayModeActive || meetingRecording || herMode || skitRunning) return;
+  walkerHomeBusy = true;
+  try {
+    const startX = Math.round(window.innerWidth / 2 - W / 2);
+    const faceH = parseFloat(getComputedStyle(notchFace || document.body).getPropertyValue("--nf-notch-h")) || 33;
+    walkerHome = false;
+    movementMode = "free";
+    setPosition(startX, faceH + 7, { allowOffscreen: true });
+    targetX = startX;
+    targetY = faceH + 7;
+    walker.classList.add("visible", "nf-iomi-boot-jump");
+    updateNotchFace();
+    await walkTo(spot.x, spot.y, { speed: 520, allowOffscreen: true });
+    walker.classList.remove("nf-iomi-boot-jump");
+    targetX = posX;
+    targetY = posY;
+    nextTargetAt = performance.now() + 4000;
+    logRenderer("walker.jump_out", { x: Math.round(posX), y: Math.round(posY) });
+  } finally {
+    walkerHomeBusy = false;
+    const queued = walkerHomeQueued;
+    walkerHomeQueued = null;
+    if (queued !== null && queued !== walkerHome) void setWalkerHomeState(queued);
+  }
+}
+
+async function nfOpenPanelFromBraino() {
+  if (nfPanelOpen || nfPanelBusy) return;
+  nfPanelBusy = true;
+  try {
+    nfPanelReturn = { x: posX, y: posY };
+    const jumped = await walkerJumpIntoNotch();
+    if (!jumped) nfPanelReturn = null;
+    nfSetPanelOpen(true, { via: "braino" });
+  } finally {
+    nfPanelBusy = false;
+  }
+}
+
+async function nfClosePanel(via) {
+  if (!nfPanelOpen || nfPanelBusy) return;
+  nfPanelBusy = true;
+  try {
+    nfSetPanelOpen(false, { via });
+    const pinned = walkArea?.mode === "pin" ? getRoamBounds() : null;
+    const spot = nfPanelReturn && (pinned ? { x: pinned.minX, y: pinned.minY } : nfPanelReturn);
+    nfPanelReturn = null;
+    if (spot) {
+      // Let the sheet start folding before he comes out of it.
+      await wait(260);
+      await walkerJumpOutTo(spot);
+    }
+  } finally {
+    nfPanelBusy = false;
+  }
+}
+
+/* Stand here, as fractions of the screen, the way "Pick a patch" stores it. */
+function pinWalkerAt(x, y) {
+  saveWalkArea({
+    mode: "pin",
+    x: clamp((x + W / 2) / Math.max(1, window.innerWidth), 0, 1),
+    y: clamp((y + H / 2) / Math.max(1, window.innerHeight), 0, 1),
+  });
+  movementMode = "free";
+  targetX = x;
+  targetY = y;
+}
+
+/* Thrown near an edge, he lands against it. */
+function snapToEdge(x, y) {
+  const bounds = getMoveBounds();
+  let sx = x;
+  let sy = y;
+  if (x - bounds.minX < EDGE_SNAP_PX) sx = bounds.minX;
+  else if (bounds.maxX - x < EDGE_SNAP_PX) sx = bounds.maxX;
+  if (bounds.maxY - y < EDGE_SNAP_PX) sy = bounds.maxY;
+  return { x: sx, y: sy };
+}
+
+async function applyPanelSetting(name, on) {
+  if (name === "named") {
+    namedModeOn = on;
+    renderBrainoPanel();
+    await window.brainoMac.namedMode?.({ enabled: on })?.catch?.(() => null);
+  } else if (name === "voice") {
+    writeBoolSetting(TALK_OUT_LOUD_KEY, on);
+  } else if (name === "stay") {
+    writeBoolSetting(STAY_PUT_KEY, on);
+    if (on) {
+      const spot = nfPanelReturn || { x: posX, y: posY };
+      pinWalkerAt(spot.x, spot.y);
+    } else {
+      saveWalkArea({ mode: "screen" });
+    }
+  }
+  logRenderer("panel.setting", { name, on });
+  renderBrainoPanel();
+}
+
+async function runPanelAction(action, button) {
+  if (action === "patch") {
+    await nfClosePanel("patch");
+    openWalkPicker();
+    return;
+  }
+  if (action === "wallpaper-next" || action === "wallpaper-restore") {
+    const result = action === "wallpaper-next"
+      ? await window.brainoMac.wallpaperApply?.("")?.catch?.(() => null)
+      : await window.brainoMac.wallpaperRestore?.()?.catch?.(() => null);
+    logRenderer("panel.action", { action, ok: Boolean(result?.ok ?? result) });
+    if (button) {
+      const label = button.textContent;
+      button.classList.add("done");
+      button.textContent = action === "wallpaper-next" ? "Changed" : "Done";
+      window.setTimeout(() => {
+        button.classList.remove("done");
+        button.textContent = label;
+      }, 1400);
+    }
+  }
+}
+
+nfPanelSize?.addEventListener("input", (event) => {
+  setBrainoScale(event.currentTarget.value);
+  renderBrainoPanel();
+});
+nfPanel?.addEventListener("click", (event) => {
+  const character = event.target.closest?.(".nf-panel-chars button[data-mascot]");
+  if (character) {
+    setMascotChoice(character.dataset.mascot);
+    renderBrainoPanel();
+    return;
+  }
+  const toggle = event.target.closest?.(".nf-switch[data-setting]");
+  if (toggle) {
+    void applyPanelSetting(toggle.dataset.setting, toggle.getAttribute("aria-checked") !== "true");
+    return;
+  }
+  const action = event.target.closest?.("[data-action]");
+  if (action) {
+    void runPanelAction(action.dataset.action, action);
+    return;
+  }
+  if (event.target.closest?.(".nf-panel-done")) void nfClosePanel("done");
+});
+/* The notch itself, when he is already home. Buttons and open surfaces keep
+   their own double-clicks. */
+notchFace?.addEventListener("dblclick", (event) => {
+  if (!event.target.closest?.(".nf-pill")) return;
+  if (nfPanelOpen) {
+    if (event.target.closest?.(".nf-panel-surface")) return;
+    void nfClosePanel("notch_dblclick");
+    return;
+  }
+  if (event.target.closest?.("button, input, a, .nf-answer-surface, .nf-music-surface, .nf-meeting-surface, .nf-cmds-surface")) return;
+  event.preventDefault();
+  nfSetPanelOpen(true, { via: "notch" });
+});
+/* A click anywhere else closes it; the overlay holds the mouse while it is up,
+   so that click lands here instead of in whatever app is underneath. */
+document.addEventListener("pointerdown", (event) => {
+  if (!nfPanelOpen || nfPanelBusy) return;
+  const pill = notchFace?.querySelector(".nf-pill");
+  if (pill && pill.contains(event.target)) return;
+  void nfClosePanel("outside");
+}, true);
+
 walker.addEventListener("dblclick", (event) => {
   event.preventDefault();
   event.stopPropagation();
@@ -9639,7 +9988,7 @@ walker.addEventListener("dblclick", (event) => {
   targetY = posY;
   nextTargetAt = performance.now() + 2200;
   walker.classList.remove("dragging");
-  setBrainoCustomizerOpen(!brainoCustomizerOpen);
+  void nfOpenPanelFromBraino();
 });
 
 brainoSizeRange.addEventListener("input", (event) => {
@@ -9673,6 +10022,11 @@ window.addEventListener("resize", () => {
 });
 
 window.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && nfPanelOpen) {
+    event.preventDefault();
+    void nfClosePanel("escape");
+    return;
+  }
   if (event.key === "Escape" && brainoCustomizerOpen) {
     setBrainoCustomizerOpen(false);
     return;
@@ -10216,8 +10570,8 @@ function heraVoiceRotate(reason, options = {}) {
 }
 
 function brainoAudible() {
-  return Boolean(activeSpeechJobGeneration)
-    || speaking
+  return Boolean(activeSpeechJobGeneration && !speakingSilently)
+    || (speaking && !speakingSilently)
     || Boolean(currentSpeechAudio)
     || Boolean(realtimeStreamTts)
     || activeSpeechAudios.size > 0;
@@ -11525,6 +11879,7 @@ window.brainoMac.onNamedMode?.((payload) => {
   /* Turning it on mid-session must not leave the window standing open from
      whatever was said before it was switched on. */
   namedReset();
+  if (nfPanelOpen) renderBrainoPanel();
   logRenderer("named.mode_changed", { on: namedModeOn });
   updateNotchFace();
 });
@@ -11934,7 +12289,7 @@ function nfTrayCollapse() {
   if (!nfExpanded) return;
   nfExpanded = false;
   notchFace?.classList.remove("expanded");
-  window.brainoMac.setNotchZone?.({ expanded: false });
+  nfCollapseNotchZone();
   logRenderer("tray.collapse", {});
 }
 
@@ -12231,7 +12586,7 @@ function nfMusicCollapsePlayer() {
   if (!nfMusicOpen) return;
   nfMusicOpen = false;
   notchFace?.classList.remove("nf-music-open");
-  if (!nfExpanded) window.brainoMac.setNotchZone?.({ expanded: false });
+  if (!nfExpanded) nfCollapseNotchZone();
   logRenderer("music.island.collapse", {});
 }
 
@@ -12508,7 +12863,7 @@ document.addEventListener("dragover", (event) => {
   } else if (nfDropDepth > 0) {
     nfDropDepth = 0;
     notchFace?.classList.remove("dropping");
-    if (!nfExpanded) window.brainoMac.setNotchZone?.({ expanded: false });
+    if (!nfExpanded) nfCollapseNotchZone();
   }
 });
 
@@ -12516,7 +12871,7 @@ document.addEventListener("dragleave", (event) => {
   if (event.relatedTarget) return;
   nfDropDepth = 0;
   notchFace?.classList.remove("dropping");
-  if (!nfExpanded) window.brainoMac.setNotchZone?.({ expanded: false });
+  if (!nfExpanded) nfCollapseNotchZone();
 });
 
 document.addEventListener("drop", (event) => {

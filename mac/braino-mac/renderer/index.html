@@ -179,6 +179,57 @@
               <ul></ul>
             </div>
           </section>
+          <!-- The panel. Double-click Braino (he jumps up into the notch) or
+               double-click the notch, and the island drops open into his
+               settings: the first piece of the app moving out of the dashboard
+               window and into the notch. -->
+          <section class="nf-panel-surface" aria-label="Braino settings">
+            <div class="nf-panel-inner">
+              <header class="nf-panel-head">
+                <span class="nf-panel-brand"><i aria-hidden="true"></i><i aria-hidden="true"></i><b>Braino</b></span>
+                <button type="button" class="nf-panel-done">Done</button>
+              </header>
+              <div class="nf-panel-row">
+                <span class="nf-panel-label">Size</span>
+                <div class="nf-panel-control">
+                  <input class="nf-panel-size" type="range" min="1" max="5" step="0.05" value="1" aria-label="Braino size" />
+                  <output class="nf-panel-size-value">100%</output>
+                </div>
+              </div>
+              <div class="nf-panel-row nf-panel-row-chars">
+                <span class="nf-panel-label">Character</span>
+                <div class="nf-panel-chars" role="group" aria-label="Character">
+                  <button type="button" data-mascot="braino">Braino</button>
+                  <button type="button" data-mascot="brainelle">Brainelle</button>
+                  <button type="button" data-mascot="webb">Webb</button>
+                  <button type="button" data-mascot="ferro">Ferro</button>
+                </div>
+              </div>
+              <i class="nf-panel-rule" aria-hidden="true"></i>
+              <div class="nf-panel-row">
+                <span class="nf-panel-label">Listen for my name<small class="nf-panel-name-hint">Say “Hey Braino” and I wake up</small></span>
+                <button type="button" class="nf-switch" data-setting="named" role="switch" aria-checked="false" aria-label="Listen for my name"><i></i></button>
+              </div>
+              <div class="nf-panel-row">
+                <span class="nf-panel-label">Talk out loud<small>Off and I answer in the notch only</small></span>
+                <button type="button" class="nf-switch" data-setting="voice" role="switch" aria-checked="true" aria-label="Talk out loud"><i></i></button>
+              </div>
+              <div class="nf-panel-row">
+                <span class="nf-panel-label">Stay where you drop me<small>Off and I walk around</small></span>
+                <div class="nf-panel-control">
+                  <button type="button" class="nf-panel-link" data-action="patch">Pick a patch</button>
+                  <button type="button" class="nf-switch" data-setting="stay" role="switch" aria-checked="true" aria-label="Stay where you drop me"><i></i></button>
+                </div>
+              </div>
+              <div class="nf-panel-row">
+                <span class="nf-panel-label">Wallpaper</span>
+                <div class="nf-panel-control">
+                  <button type="button" class="nf-panel-button" data-action="wallpaper-restore">Put back</button>
+                  <button type="button" class="nf-panel-button nf-panel-button-primary" data-action="wallpaper-next">Change</button>
+                </div>
+              </div>
+            </div>
+          </section>
           <section class="nf-inline-caption" aria-live="polite" aria-label="Braino live voice caption">
             <header>
               <small class="nf-inline-caption-label">You said</small>
