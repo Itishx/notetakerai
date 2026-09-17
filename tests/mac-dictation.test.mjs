@@ -462,7 +462,8 @@ test("the clean-up is driven by pauses in the live transcript, not by stop", () 
   // Stop resolves what is already there rather than starting from scratch.
   assert.match(main, /turn\.prepared = await resolveCleanup\(turn\.raw\)/);
   // Bounded, and scaled to how much there is to clean.
-  assert.match(main, /settleWithin\(job, cleanupDeadlineMs\(finalRaw\)\)/);
+  assert.match(main, /const budgetMs = Math\.min\(CLEANUP_STOP_BUDGET_MS, cleanupDeadlineMs\(finalRaw\) \+ 1200\);/);
+  assert.match(main, /return settleWithin\(job, Math\.max\(0, budgetMs - \(Date\.now\(\) - startedAt\)\)\);/);
 });
 
 /* Words spoken after the last pause are in no finished clean-up. Reusing a
@@ -508,4 +509,47 @@ test("dictation capture recovers from an input device change", () => {
   assert.match(dictate, /func healIfDeaf/);
   // A session must never open on a tap that has already gone quiet.
   assert.match(dictate, /mic\.healIfDeaf\(reason: "session start"/);
+});
+
+/* A clean-up of an earlier transcript was still running at stop, the final one
+   was queued behind it, and stop returned nothing at once: the raw words were
+   pasted (preparedTurns 0). */
+test("stop waits for a running clean-up, then uses the final one", async () => {
+  const main = readFileSync(new URL("../mac/braino-mac/main.cjs", import.meta.url), "utf8");
+  const lift = (start, end = "\n}\n") => {
+    const at = main.indexOf(start);
+    assert.ok(at >= 0, start);
+    return main.slice(at, main.indexOf(end, at) + end.length);
+  };
+  const make = Function("formatDictationTurn", `
+    const CLEANUP_MIN_WORDS = 3, CLEANUP_MAX_APPENDED_TAIL_WORDS = 6, CLEANUP_STOP_BUDGET_MS = 3000;
+    const liveTranscriptMode = false;
+    const heraLog = () => {};
+    const textForLog = (t) => t;
+    const assessDictationEdit = () => ({ accepted: true, reason: "cleaned" });
+    let localFormat = { results: new Map(), inflight: "", queued: "", latest: null, live: "" };
+    ${lift("function cleanupDeadlineMs(text) {")}
+    ${lift("function countWords(text) {")}
+    ${lift("function prefetchLocalFormat(text) {")}
+    ${lift("function runLocalFormat(raw) {")}
+    ${lift("async function resolveCleanup(finalRaw) {")}
+    ${lift("function settleWithin(promise, ms) {")}
+    return { prefetchLocalFormat, resolveCleanup };
+  `);
+  const api = make((text) => new Promise((done) => setTimeout(() => done(text.toUpperCase()), 150)));
+  api.prefetchLocalFormat("so this is braino hera to see");
+  const cleaned = await api.resolveCleanup("so this is braino hera to see if it works and if the words are pasted");
+  assert.equal(cleaned, "SO THIS IS BRAINO HERA TO SEE IF IT WORKS AND IF THE WORDS ARE PASTED");
+});
+
+/* Cursor's side panels report no focused field while the caret is in one. */
+test("a text box Accessibility cannot see still gets a paste, and the words are kept", () => {
+  const main = readFileSync(new URL("../mac/braino-mac/main.cjs", import.meta.url), "utf8");
+  assert.match(main, /const DICTATION_BLIND_PASTE_APPS = \/\^\(\?:cursor\|code\|visual studio code\|windsurf\|google chrome/);
+  assert.doesNotMatch(main.match(/const DICTATION_BLIND_PASTE_APPS = .*$/m)[0], /electron/i, "never Braino's own dev window");
+  const insert = main.slice(main.indexOf("async function insertDictationText"));
+  assert.match(insert.slice(0, 3000), /if \(focus\.status === "no_focus" && DICTATION_BLIND_PASTE_APPS\.test\(front\)\) \{\s*const pasted = await pasteDictationFallback\(text, front\);/);
+  assert.match(insert.slice(0, 3000), /return \{ \.\.\.keepDictationFallback\(text, focus\.status\), blindPaste \};/);
+  /* And the log no longer calls the notch fallback a paste. */
+  assert.match(main, /inserted\?\.fallback\s*\? \(inserted\.blindPaste \? "pasted without confirmation, also in the notch and on the clipboard" : "no text box found/);
 });

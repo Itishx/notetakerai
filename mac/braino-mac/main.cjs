@@ -2303,6 +2303,10 @@ const CLEANUP_MIN_WORDS = 3;
    than forcing the whole transcript through the model again. Longer than this
    and the unpunctuated tail would be conspicuous. */
 const CLEANUP_MAX_APPENDED_TAIL_WORDS = 6;
+/* The longest stop may wait when a clean-up has to finish before the final one
+   can run. A cleaned paste is the point of dictation; three seconds is a beat,
+   not a hang. */
+const CLEANUP_STOP_BUDGET_MS = 3000;
 
 /* How long stop may wait, scaled to how much there is to clean, because the
    model's cost grows with the transcript: about 660ms for a sentence and about
@@ -2426,9 +2430,21 @@ async function resolveCleanup(finalRaw) {
   }
 
   prefetchLocalFormat(finalRaw);
-  const job = localFormat.results.get(finalRaw);
+  let job = localFormat.results.get(finalRaw);
+  const budgetMs = Math.min(CLEANUP_STOP_BUDGET_MS, cleanupDeadlineMs(finalRaw) + 1200);
+  const startedAt = Date.now();
+  /* A clean-up of an earlier, shorter transcript was still running at stop, so
+     the final one was queued behind it and this returned nothing straight
+     away: the raw words were pasted while the clean-up that would have fixed
+     them waited its turn (preparedTurns 0, waited 0ms). Wait for the running
+     one, which starts ours as it finishes, then for ours, inside one budget. */
+  if (!job && localFormat.inflight) {
+    const running = localFormat.results.get(localFormat.inflight);
+    if (running) await settleWithin(running, budgetMs);
+    job = localFormat.results.get(finalRaw);
+  }
   if (!job) return "";
-  return settleWithin(job, cleanupDeadlineMs(finalRaw));
+  return settleWithin(job, Math.max(0, budgetMs - (Date.now() - startedAt)));
 }
 
 /* Whatever the job has by the deadline, and never longer. Dictation may cost a
@@ -2825,9 +2841,13 @@ async function finishLocalDictation(reason) {
       logMac("dictation.local.insert_failed", { error });
       return null;
     });
+    /* "Pasted into the text box" was logged for the notch fallback too, which
+       is how a dictation that never reached a text box read as a success. */
     heraLog(
-      inserted?.ok ? "pasted into the text box" : "COULD NOT PASTE — text is on the clipboard",
-      { ok: Boolean(inserted?.ok), turns: turns.length },
+      inserted?.fallback
+        ? (inserted.blindPaste ? "pasted without confirmation, also in the notch and on the clipboard" : "no text box found — shown in the notch and on the clipboard")
+        : inserted?.ok ? "pasted into the text box" : "COULD NOT PASTE — text is on the clipboard",
+      { ok: Boolean(inserted?.ok), turns: turns.length, cleaned: prepared.filter(Boolean).length },
     );
   }
   lastDictationEndedAt = Date.now();
@@ -8459,6 +8479,8 @@ function preparedDictationSession(value, preparedValue) {
   };
 }
 
+const DICTATION_BLIND_PASTE_APPS = /^(?:cursor|code|visual studio code|windsurf|google chrome|arc|safari|slack|notion|claude|chatgpt|linear)$/i;
+
 async function insertDictationText(value, preparedValue = []) {
   if (!dictationState.active) {
     return { ok: false, error: "BrainoHERA is not active.", ...dictationStatePayload() };
@@ -8501,7 +8523,20 @@ async function insertDictationText(value, preparedValue = []) {
   if (focusTarget.appName) dictationState.targetApp = focusTarget.appName;
   dictationState.focusStatus = focus.status;
   if (focus.status !== "editable") {
-    return keepDictationFallback(text, focus.status);
+    /* Text boxes inside web views (Cursor's side panels, a Chrome page, Slack)
+       often report no focused field to Accessibility while the caret is
+       blinking in one. In an editor or a browser a plain paste lands wherever
+       the keyboard is, and does nothing if nowhere, so it is sent anyway. It
+       cannot be verified, so the notch still shows the words and they stay on
+       the clipboard. Never in Braino's own window (a dev build is "Electron"). */
+    const front = focusTarget.appName || dictationState.targetApp || "";
+    let blindPaste = false;
+    if (focus.status === "no_focus" && DICTATION_BLIND_PASTE_APPS.test(front)) {
+      const pasted = await pasteDictationFallback(text, front);
+      blindPaste = Boolean(pasted.ok);
+      logMac("dictation.insert.blind_paste", { ok: blindPaste, app: front, error: pasted.error || "" });
+    }
+    return { ...keepDictationFallback(text, focus.status), blindPaste };
   }
 
   // A real paste event is the most compatible insertion path for native,

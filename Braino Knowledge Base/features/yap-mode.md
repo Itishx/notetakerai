@@ -134,6 +134,12 @@ completed transcript in the Notch for recovery and copies it automatically.
 - Prints each completed transcript to the renderer terminal as
   `[BrainoHERA] "…"` for direct debugging.
 
+### Fixed September 17 (HERA, on-device)
+
+- **Stop waits for the clean-up.** If a clean-up of an earlier, shorter transcript was still running when you stopped, the final one was queued behind it and stop used the raw words straight away (`preparedTurns: 0`). Stop now waits for the running clean-up and then the final one, inside a 3 second budget (`CLEANUP_STOP_BUDGET_MS`).
+- **Text boxes Accessibility cannot see.** Cursor's side panels, some Chrome pages and Slack report no focused field while the caret is in one (`no_focus`), so the words only went to the notch and the clipboard. In those apps (Cursor, VS Code, Windsurf, Chrome, Arc, Safari, Slack, Notion, Claude, ChatGPT, Linear) a normal paste is now sent anyway (`dictation.insert.blind_paste`); it cannot be confirmed, so the notch and clipboard keep the words too. Never in Braino's own window.
+- **Honest log line.** HERA logged "pasted into the text box" for the notch fallback as well. It now says "no text box found" or "pasted without confirmation", with how many phrases were cleaned.
+
 ## Measured speed
 
 Measured on an M-series MacBook Air, August 24 2026, with the real binaries.
