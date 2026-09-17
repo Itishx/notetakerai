@@ -215,3 +215,16 @@ test("the wake listener re-attaches to the microphone", () => {
   assert.match(swift, /"Brainelle", "Hey Brainelle"/);
   assert.match(js, /if \(brainoAudible\(\)\) \{\s*logRenderer\("wakeword\.self_heard"/);
 });
+
+/* It woke him once per launch: restarting from inside the recognition
+   callback cancelled the new task, whose callback restarted again, forever. */
+test("the wake listener cannot cancel its own replacement", () => {
+  const swift = readFileSync(new URL("../mac/braino-mac/native/BrainoWakeWord.swift", import.meta.url), "utf8");
+  assert.match(swift, /guard let self, !self\.stopped, generation == self\.cycleGeneration else \{ return \}/);
+  assert.match(swift, /func scheduleRestart\(after delay: TimeInterval, with recognizer: SFSpeechRecognizer\) \{[\s\S]*cycleGeneration \+= 1[\s\S]*task\?\.cancel\(\)/);
+  assert.match(swift, /if result\.isFinal \{\s*self\.scheduleRestart\(after: 0\.1, with: recognizer\)/);
+  /* No restart is called straight from inside the handler any more. */
+  const handler = swift.slice(swift.indexOf("task = recognizer.recognitionTask(with: req)"), swift.indexOf("cycleTimer?.invalidate()", swift.indexOf("task = recognizer.recognitionTask(with: req)")));
+  assert.match(handler, /DispatchQueue\.main\.async \{/);
+  assert.doesNotMatch(handler, /self\.restartCycle\(/);
+});

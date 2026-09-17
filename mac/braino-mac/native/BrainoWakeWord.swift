@@ -56,6 +56,9 @@ final class BrainoWakeWord: NSObject {
   private var parentTimer: Timer?
   private var healTimer: Timer?
   private var stopped = false
+  /* Which recognition cycle is current. Every callback checks it, so a task
+     that has been replaced can no longer touch the one that replaced it. */
+  private var cycleGeneration = 0
   /* When the tap last delivered audio. It delivers buffers continuously, even
      in silence, so a long gap means the microphone was taken away from it. */
   private let bufferLock = NSLock()
@@ -216,6 +219,8 @@ final class BrainoWakeWord: NSObject {
   // Every cycle is independent and still on-device-only.
   private func startCycle(with recognizer: SFSpeechRecognizer) throws {
     guard !stopped else { return }
+    cycleGeneration += 1
+    let generation = cycleGeneration
     let req = SFSpeechAudioBufferRecognitionRequest()
     req.shouldReportPartialResults = true
     req.requiresOnDeviceRecognition = true
@@ -229,37 +234,71 @@ final class BrainoWakeWord: NSObject {
     req.contextualStrings = ["Braino", "Hey Braino", "Braino,", "Brainelle", "Hey Brainelle"]
     request = req
 
+    /* Why this only ever woke him once.
+     *
+     * The handler used to restart the cycle from inside itself, and restarting
+     * cancels the task — which calls this same handler again with a
+     * cancellation error, which restarted again, cancelling the NEW task, and so
+     * on forever. After the first wake (or the first 45-second refresh) the
+     * listener spent its life cancelling tasks that never lived long enough to
+     * hear anything: one "wake" in the events file, then twenty minutes of
+     * nothing, with the process alive and burning a little CPU.
+     *
+     * Now every callback belongs to one generation and is ignored once that
+     * generation is over, and restarts happen on the main queue, after the
+     * callback has returned. */
     task = recognizer.recognitionTask(with: req) { [weak self] result, error in
-      guard let self, !self.stopped else { return }
-      if let result {
-        let text = result.bestTranscription.formattedString
-        if containsWakeWord(text) {
-          self.printLine("wake\t\(self.clean(text))")
-          self.restartCycle(with: recognizer)
+      DispatchQueue.main.async {
+        guard let self, !self.stopped, generation == self.cycleGeneration else { return }
+        if let result {
+          let text = result.bestTranscription.formattedString
+          if containsWakeWord(text) {
+            self.printLine("wake\t\(self.clean(text))")
+            // A beat before listening again, so the tail of the same phrase
+            // cannot wake him twice.
+            self.scheduleRestart(after: 1.2, with: recognizer)
+            return
+          }
+          if result.isFinal {
+            self.scheduleRestart(after: 0.1, with: recognizer)
+            return
+          }
         }
-      }
-      if error != nil {
-        self.restartCycle(with: recognizer)
+        if error != nil {
+          self.scheduleRestart(after: 0.3, with: recognizer)
+        }
       }
     }
 
     cycleTimer?.invalidate()
     cycleTimer = Timer.scheduledTimer(withTimeInterval: 45.0, repeats: false) { [weak self] _ in
-      self?.restartCycle(with: recognizer)
+      self?.scheduleRestart(after: 0, with: recognizer)
     }
   }
 
   private func restartCycle(with recognizer: SFSpeechRecognizer) {
+    scheduleRestart(after: 0, with: recognizer)
+  }
+
+  /* End the current cycle now (its callbacks stop counting immediately) and
+     start the next one after `delay`. */
+  private func scheduleRestart(after delay: TimeInterval, with recognizer: SFSpeechRecognizer) {
     guard !stopped else { return }
+    cycleGeneration += 1
+    let generation = cycleGeneration
+    cycleTimer?.invalidate()
     request?.endAudio()
     task?.cancel()
     task = nil
     request = nil
-    do {
-      try startCycle(with: recognizer)
-    } catch {
-      printLine("unavailable\t\(clean(error.localizedDescription))")
-      exit(1)
+    DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+      guard let self, !self.stopped, generation == self.cycleGeneration else { return }
+      do {
+        try self.startCycle(with: recognizer)
+      } catch {
+        self.printLine("unavailable\t\(self.clean(error.localizedDescription))")
+        exit(1)
+      }
     }
   }
 

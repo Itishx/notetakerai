@@ -104,3 +104,14 @@ test("the caption says you're still speaking, and long speech gets room", () => 
   /* Trimmed at a word, with no dots. */
   assert.match(js, /const heardTrimmed = heardForInline\.length > NF_INLINE_MAX_CHARS;/);
 });
+
+/* Switched off after it showed a video's audio as the user's words. Voice
+   mode shows OpenAI's transcript only; dictation and LIVE keep HERA. */
+test("HERA is off in voice mode", () => {
+  assert.match(js, /const HERA_LIVE_IN_VOICE = false;/);
+  assert.match(lift(js, "async function heraVoiceStart(reason) {"), /^async function heraVoiceStart\(reason\) \{\s*if \(!HERA_LIVE_IN_VOICE\) return;/);
+  /* With it off, OpenAI's words paint the notch, as before. */
+  assert.match(js, /if \(!heraVoice\.on\) nfSetHeard\(rtUserTranscript\.trim\(\)\);/);
+  /* And the waiting line says what is true. */
+  assert.match(lift(js, "function voiceStartText(phase) {"), /return heraVoice\.on \? "Go ahead, I'm listening" : "Connecting";/);
+});

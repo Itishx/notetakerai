@@ -9,9 +9,9 @@
 
 The notch now says what Braino's ears are doing, all the way through:
 
-- **Waking up.** Press Control twice (blue outline) or say "Hey Braino" (gold outline). A sheet drops down saying *Go ahead, I'm listening*: HERA is already listening on the Mac, so you can talk straight away and it goes through the moment the voice session is up. There is no countdown; one made a slow connection look slower, and the connection time is OpenAI's (1s this morning, 3-8s tonight).
+- **Waking up.** Press Control twice (blue outline) or say "Hey Braino" (gold outline). A sheet drops down saying *Connecting*, then *You can speak now* once the session is live. There is no countdown; one made a slow connection look slower, and the connection time is OpenAI's (1s this morning, 3-8s tonight).
 - **Ready.** If you have not started talking yet, it says *You can speak now* once the session is live.
-- **Hearing you, live.** While you talk, HERA (on this Mac) shows your words as you say them under *You're saying*, with a mint HERA chip. When you stop they become *You said*, and they stay there while he works on them, with a small shimmering *Thinking* beside them.
+- **Hearing you.** *(Live HERA words in voice mode are switched off, September 17: a video playing on the Mac showed up as "You're saying". Voice mode shows OpenAI's transcript, as before; Option-twice dictation and LIVE still use HERA.)* When you stop they become *You said*, and they stay there while he works on them, with a small shimmering *Thinking* beside them.
 - **Long sentences breathe.** Past about 110 characters the sheet widens, the lines get more room, and the oldest line fades out at the top instead of cramming.
 - **Asleep.** With "listen for my name" on, the notch reads *Say "Hey Braino" to wake me* while he is ignoring the room. Say his name and the outline lights up the way it does at boot.
 - **Stop the task.** "Braino, stop the task" stops a running job straight away, and he says *I stopped the task.*
@@ -30,7 +30,7 @@ Voice takes 2 to 6 seconds to come up (3.7 seconds median across the last 194 se
 
 - After his name, he listens for 12 seconds from the last thing either of you said, and a sentence you start inside that window counts however long it runs. Five seconds closed between ordinary turns and dropped real sentences.
 - The gold outline plays only when he wakes from a real sleep (20 seconds or more), not on every "Braino, …" in a conversation. The 90-second idle shimmer that used the same outline is off.
-- "Hey Braino" keeps working after a voice session: the on-device listener used to lose the microphone when a session reconfigured it, and never got it back. It now re-attaches on every change, and whenever it has heard nothing for five seconds (`wakeword.healed` in the log).
+- "Hey Braino" keeps working, all day. The on-device listener woke him once per launch: it restarted itself from inside its own recognition callback, which cancelled the new task and restarted again, forever. Each recognition cycle now has a generation and a replaced one can no longer touch its successor. It also re-attaches to the microphone when a voice session reconfigures it, or when it has heard nothing for five seconds (`wakeword.healed`).
 - After a deliberate wake (his name, or Control twice) the first sentence gets through however long you take to say it, up to 15 seconds. After that the normal five seconds apply.
 - His name counts in any script. The cloud transcriber sometimes writes a short "Hey Braino" in Devanagari or Urdu despite being told English, and it is now told the name exists and to write it as Braino. A sentence with no English letters is logged instead of vanishing.
 - While he is asleep, only a sentence with his name in it can open the caption, so other people's conversation is never shown on its way to being ignored.

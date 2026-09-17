@@ -397,6 +397,13 @@ let speakingSilently = false;
    pause, so the notch showed your words late and in chunks; HERA runs on this
    Mac and reports them as you say them. See heraVoiceStart. */
 let heraVoice = { on: false };
+/* OFF. HERA's live words in voice mode showed things nobody in the room had
+   said to Braino — a video playing on the Mac came up as "You're saying" in
+   Hindi and English — and there was no way to tell from the notch where a
+   word had come from. Until that can be made trustworthy, voice mode shows
+   OpenAI's transcript only, the way it did before. Dictation (Option twice)
+   and LIVE still use HERA; they are unaffected. Flip to true to bring it back. */
+const HERA_LIVE_IN_VOICE = false;
 let heraVoiceStarting = false;
 let heraVoiceStartTries = 0;
 const HERA_ROTATE_EXPIRE_MS = 2500;
@@ -10547,6 +10554,7 @@ function heraVoiceReset(on) {
 }
 
 async function heraVoiceStart(reason) {
+  if (!HERA_LIVE_IN_VOICE) return;
   if (heraVoice.on || heraVoiceStarting || dictationMode || herMode) return;
   if (!realtimeActive && !realtimeConnecting) return;
   heraVoiceStarting = true;
