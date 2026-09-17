@@ -535,7 +535,7 @@ The thinking chip is one word, `Thinking`. The old four-word cycle is gone.
 
 ## 12c. The quiet notch, and stealth
 
-The default since September 17. A layer over everything above (`.nf-q`, drawn by `renderQuietNotch`); the full surfaces still run underneath with `visibility: hidden`, and take over whenever something is opened on purpose (think-open, More, panel, dictation, meeting, music, tray, alarm, boot). Resting is unchanged.
+**Switched off by default** (September 17, evening): on the real screen the band read too small, so the full surfaces above are the notch again. `localStorage.brainoQuietNotch = "1"` brings it back. Stealth below is independent and stays on. A layer over everything above (`.nf-q`, drawn by `renderQuietNotch`); the full surfaces still run underneath with `visibility: hidden`, and take over whenever something is opened on purpose (think-open, More, panel, dictation, meeting, music, tray, alarm, boot). Resting is unchanged.
 
 | Quiet state | Size | Left ear | Right ear | Below the menu bar |
 |---|---|---|---|---|

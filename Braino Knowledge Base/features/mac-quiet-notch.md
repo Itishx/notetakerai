@@ -2,12 +2,14 @@
 
 **Type:** Feature  
 **Platform:** Braino for Mac  
-**Status:** MVP  
+**Status:** Stealth live; quiet notch switched off  
 **Released:** September 17, 2026
+
+> **September 17, evening:** the quiet notch was tried on the real screen and switched off: the band read as too small. The notch is back to the full surfaces exactly as they were. **Stealth stays**, and works with the full notch. The quiet layer is still in the code, off, and comes back with `localStorage.brainoQuietNotch = "1"`.
 
 ## The simple version
 
-The notch stops covering what you are doing.
+What the quiet notch did (now off by default):
 
 - **Status lives in the menu bar.** While he listens, the black band beside the camera housing says *Listening* with a dot on the right: coral means the next thing you say is his, grey means say "Braino" first. While he connects it says *Connecting*. While he works, an amber shimmer and the step he is on. While he talks, a white dot and his name.
 - **One line, then gone.** What you said shows as one line under the band for about two seconds. His answer shows as one line for as long as he is saying it, with **✕** to dismiss it and **More** when it is too long for one line.
@@ -21,7 +23,7 @@ Every sheet that dropped out of the notch (listening at 250 × 76, "You said" at
 
 ## How to use it
 
-- Nothing to turn on: it is the default.
+- The quiet notch is off by default (see the note at the top).
 - Click the band while he works to see every step, with the Stop button.
 - Click **More** on a long answer to read all of it in the full sheet.
 - **Stealth:** say *"Braino, go stealth"* (or *"stealth mode"*), or flip **Stealth** in the settings panel (double-click Braino). Say *"Braino, stealth mode off"*, *"come back"* while hidden, or flip it back.

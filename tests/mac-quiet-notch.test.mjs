@@ -26,6 +26,12 @@ const stateFor = (over = {}, env = {}) => Function("e", `
 })({ visible: true, inlineMode: "", processingActive: false, answerOwnsNotch: false, namedAsleep: false,
   sessionEngaged: false, yapOwnsNotch: false, thinkingOpen: false, ...over });
 
+/* Tried on the real screen and switched off: the band read too small. */
+test("the quiet notch is off unless asked for, so the notch is what it was", () => {
+  assert.match(lift("function quietNotchOn() {", "}\n"), /readBoolSetting\(QUIET_NOTCH_KEY, false\)/);
+  assert.match(lift("function nfPushZone() {"), /window\.brainoMac\.setNotchZone\?\.\(nfLastZoneRequest\);/);
+});
+
 test("each moment gets its quiet state", () => {
   assert.equal(stateFor(), "", "resting stays as it is today");
   assert.equal(stateFor({ sessionEngaged: true }), "listen");

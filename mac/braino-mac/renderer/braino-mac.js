@@ -3166,11 +3166,17 @@ window.setInterval(() => {
  * It is a layer, not a rewrite. The full surfaces still run underneath,
  * hidden, and come back whenever you ask for them: the thinking steps (click
  * the band), the whole of a long answer (More), the panel, dictation,
- * meetings and music. Off with localStorage brainoQuietNotch = "0".
+ * meetings and music.
+ *
+ * OFF by default since the evening it shipped: on the real screen the band
+ * read as too small, and the notch went back to the full surfaces. On with
+ * localStorage brainoQuietNotch = "1". With it off, every path below is inert
+ * (no state, zone requests pass straight through), so the notch is exactly
+ * what it was before. Stealth does not depend on it.
  *
  * The ears are 80pt each because the camera housing hides the middle of the
  * band: the mock had 40pt ears, and "Listening" would have been cut in half. */
-function quietNotchOn() { return readBoolSetting(QUIET_NOTCH_KEY, true); }
+function quietNotchOn() { return readBoolSetting(QUIET_NOTCH_KEY, false); }
 function stealthOn() { return readBoolSetting(STEALTH_KEY, false); }
 
 function nfNotchHeight() {
