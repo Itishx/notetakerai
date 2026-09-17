@@ -55,6 +55,7 @@ test("after his question, only a short reply needs no name", () => {
 test("noise that came back as words is not a command", () => {
   const looksLikeNoise = Function(`
     ${liftLine("const NOISE_PROMPT_ECHO =")}
+    ${liftLine("const NOISE_NAME_PAIR =")}
     ${liftLine("const NOISE_CLASSIC =")}
     ${liftLine("const NOISE_MIN_SPEECH_MS =")}
     ${liftLine("const NOISE_MIN_WORDS_PER_SEC =")}
@@ -67,6 +68,8 @@ test("noise that came back as words is not a command", () => {
   assert.equal(looksLikeNoise("Hey Braino", 4331), true);
   assert.equal(looksLikeNoise("Thank you.", 800), true);
   assert.equal(looksLikeNoise("you", 1306), true);
+  assert.equal(looksLikeNoise("Braino, Brainelle.", 1049), true);
+  assert.equal(looksLikeNoise("C++", 4041), true);
   assert.equal(looksLikeNoise("Braino stop the task", 2585), false);
   assert.equal(looksLikeNoise("Hey Braino", 1473), false);
   assert.equal(looksLikeNoise("Yes.", 900), false);
@@ -172,4 +175,23 @@ test("double Space is two taps on their own, never two spaces in a sentence", ()
   assert.match(keyDown, /guard keyCode == 49, !isAutoRepeat else \{\s*if !isAutoRepeat \{ lastSpaceDown = 0 \}\s*return\s*\}/);
   assert.match(keyDown, /if lastSpaceDown > 0 && now - lastSpaceDown < 0\.52 \{\s*printLine\("double-space"\)/);
   assert.match(keyDown, /\} else if now - previousKeyAt >= 0\.6 \{\s*lastSpaceDown = now/);
+});
+
+test("a string of names is still only his name", () => {
+  const bare = Function(`${liftLine("const BARE_WAKE_WORD =")} return (t) => BARE_WAKE_WORD.test(t);`)();
+  for (const said of ["Hey Braino", "Braino.", "Braino, Brainelle.", "hey braino, hey braino", "Brainelle"]) {
+    assert.equal(bare(said), true, said);
+  }
+  for (const said of ["Braino, open YouTube", "Braino stop", "Hey Braino what time is it"]) {
+    assert.equal(bare(said), false, said);
+  }
+});
+
+/* "You said C++": noise was dropped, but its words were already on screen. */
+test("noise never reaches the notch or cuts him off", () => {
+  const delta = js.slice(js.indexOf('if (event.type === "conversation.item.input_audio_transcription.delta") {'),
+    js.indexOf('if (event.type === "conversation.item.input_audio_transcription.completed") {'));
+  assert.match(delta, /const noiseSoFar = !dictationMode && namedModeOn && !herMode\s*&& looksLikeNoise\(`\$\{rtUserTranscript\}\$\{delta\}`, rtLastSpeechMs\);/);
+  assert.match(delta, /if \(!noiseSoFar && \(speaking \|\| currentSpeechAudio \|\| realtimeStreamTts\)\) \{/);
+  assert.match(delta, /if \(!heraVoice\.on && !noiseSoFar\) nfSetHeard\(rtUserTranscript\.trim\(\)\);/);
 });

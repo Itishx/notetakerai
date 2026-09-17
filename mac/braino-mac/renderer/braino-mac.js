@@ -6424,12 +6424,14 @@ function buildRealtimeSessionUpdate() {
                   "If the audio is not clear speech from the user, leave it empty.",
                 ].join(" ")
               : [
-                  "Transcribe the user's direct command to Braino.",
-                  // Names only, no sentences about them. The transcriber
+                  // No names and no sentences about them. The transcriber
                   // repeats its prompt when all it hears is noise: "Write
                   // everything in English letters" came back as "Use English as
-                  // the language.", and "Hey Braino" came back out of silence.
-                  "Vocabulary: Braino, Brainelle.",
+                  // the language.", a line with "Hey Braino" in it came back as
+                  // "Hey Braino", and "Vocabulary: Braino, Brainelle." came
+                  // back as "Braino, Brainelle." Other scripts are handled by
+                  // BRAINO_SCRIPT_RE instead.
+                  "Transcribe the user's direct command to Braino.",
                   "Ignore music, fans, coughs, accidental noises, and unrelated background speech.",
                   "Keep names, app names, URLs, file names, and code tokens intact.",
                   "If the input is not a clear user command, leave it empty.",
@@ -7926,7 +7928,9 @@ let lastUnderstanding = { text: "", verdict: null };
  * This was survivable when a turn took under two seconds, because there was
  * barely a window to interrupt. Astra takes five to ten, so every run is long
  * enough to be killed by the next thing the room says. */
-const BARE_WAKE_WORD = /^(?:hey\s+|ok\s+|okay\s+|yo\s+)?(?:brain[oa]|brainelle)\s*[.,!?]*$/i;
+/* One name or a string of them: "Braino, Brainelle." is still nobody asking
+   for anything. */
+const BARE_WAKE_WORD = /^(?:(?:hey|hi|ok|okay|yo)\s+)?(?:brain[oa]|brainelle)(?:[\s.,!?]+(?:(?:hey|hi|ok|okay|yo)\s+)?(?:brain[oa]|brainelle))*\s*[.,!?]*$/i;
 
 function isBareWakeWord(text) {
   return BARE_WAKE_WORD.test(String(text || "").trim());
@@ -8424,9 +8428,14 @@ function handleRealtimeEvent(event) {
   if (event.type === "conversation.item.input_audio_transcription.delta") {
     const delta = typeof event.delta === "string" ? event.delta : "";
     if (delta) {
+      /* Noise that came back as words ("C++" out of four seconds of room
+         sound) neither cuts him off nor shows up as something you said. The
+         flush drops it; this keeps it off the screen on the way there. */
+      const noiseSoFar = !dictationMode && namedModeOn && !herMode
+        && looksLikeNoise(`${rtUserTranscript}${delta}`, rtLastSpeechMs);
       // Second tripwire: if user words are arriving while any audio is still
       // playing, cut the speech even if speech_started was missed or mishandled.
-      if (speaking || currentSpeechAudio || realtimeStreamTts) {
+      if (!noiseSoFar && (speaking || currentSpeechAudio || realtimeStreamTts)) {
         logRenderer("realtime.barge_in", {
           via: "transcript_delta",
           speaking,
@@ -8448,7 +8457,7 @@ function handleRealtimeEvent(event) {
         rtUserTranscript += delta;
         if (herMode) window.HerMode?.setHeard(rtUserTranscript.trim());
         // HERA is already showing these words, earlier; two sources in one box flicker.
-        if (!heraVoice.on) nfSetHeard(rtUserTranscript.trim());
+        if (!heraVoice.on && !noiseSoFar) nfSetHeard(rtUserTranscript.trim());
         scheduleRealtimeTranscriptFlush("transcript_idle", REALTIME_TRANSCRIPT_IDLE_FLUSH_MS);
       }
     }
@@ -10680,6 +10689,8 @@ function stopVoiceWakeShimmer() {
  * anything that sounds like the prompt or the classic lines these models
  * write over silence. */
 const NOISE_PROMPT_ECHO = /\b(?:english|language|letters|accent|vocabulary|transcri\w*)\b/i;
+/* Both names at once is the prompt talking, never a person. */
+const NOISE_NAME_PAIR = /^(?=.*\bbrain[oa]\b)(?=.*\bbrainelle\b)[\p{L}\s.,!?]{0,40}$/iu;
 const NOISE_CLASSIC = /^(?:you|thank you|thanks|thanks for watching|thank you for watching|bye|bye bye|hold the line|please subscribe|subtitles? by\b.*)[\s.!]*$/i;
 const NOISE_MIN_SPEECH_MS = 3000;
 const NOISE_MIN_WORDS_PER_SEC = 0.8;
@@ -10687,7 +10698,7 @@ const NOISE_MIN_WORDS_PER_SEC = 0.8;
 function looksLikeNoise(text, speechMs = 0) {
   const value = String(text || "").trim();
   if (!value) return false;
-  if (NOISE_CLASSIC.test(value) || NOISE_PROMPT_ECHO.test(value)) return true;
+  if (NOISE_CLASSIC.test(value) || NOISE_PROMPT_ECHO.test(value) || NOISE_NAME_PAIR.test(value)) return true;
   const words = value.split(/\s+/).filter(Boolean).length;
   return speechMs >= NOISE_MIN_SPEECH_MS && words / (speechMs / 1000) < NOISE_MIN_WORDS_PER_SEC;
 }

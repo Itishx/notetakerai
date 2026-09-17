@@ -201,6 +201,7 @@ const {
   macLooksLikeTask,
   macWantsTheBrain,
   macClosesAllTabs,
+  macBareWebOpen,
 } = require(path.join(__dirname, "hil-routing.cjs"));
 const { UNDERSTAND_PROMPT, parseUnderstanding } = require(path.join(__dirname, "hil-understand.cjs"));
 const { readChromePage, actOnChrome, chromePointFor, focusChrome, pageSignature, isChromeApp, runJs, chromeScriptName } = require(path.join(__dirname, "chrome-page.cjs"));
@@ -16355,6 +16356,21 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
     }
     openIdleScreen("voice");
     return { ok: true, say: idleScreenIntent.say };
+  }
+
+  /* "Open YouTube": straight to Chrome, no loop. `open -a` needs no
+     AppleScript, so it works even when Chrome stops answering scripts. */
+  const bareWeb = macBareWebOpen(raw);
+  if (bareWeb) {
+    logMac("delegate.web_open_fast", { raw: textForLog(raw), url: bareWeb.url });
+    try {
+      await openChromeUrl(bareWeb.url);
+    } catch (error) {
+      logMac("delegate.web_open_fast_failed", { url: bareWeb.url, error });
+      return { ok: false, say: "Chrome would not open that." };
+    }
+    const host = new URL(bareWeb.url).hostname.replace(/^www\./, "");
+    return { ok: true, say: `Opening ${host}.` };
   }
 
   if (macHilEnabled() && macWantsTheBrain(raw)) {

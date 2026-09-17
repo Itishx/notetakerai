@@ -11,6 +11,7 @@ const {
   macAsksForTheBrain,
   macStripBrainRequest,
   macLooksLikeTask,
+  macBareWebOpen,
 } = require("../mac/braino-mac/hil-routing.cjs");
 
 /* Several jobs in one breath is the thing the cascade cannot do: it does the
@@ -192,4 +193,34 @@ test("launching an app is still a launch, not a sentence", () => {
   for (const said of ["open cursor", "open safari", "open spotify", "play billie jean", "pause", "take a screenshot", "call mom", "turn on dark mode"]) {
     assert.equal(macWantsTheBrain(said), false, said);
   }
+});
+
+/* "Open YouTube" took 4 to 40 seconds through the loop, and 141 once. Opening
+   a site we know is a one second job and never waits on a model. */
+test("just opening a known website skips the loop", () => {
+  for (const [said, url] of [
+    ["Braino can you please open youtube", "https://youtube.com"],
+    ["Could you please open YouTube for me?", "https://youtube.com"],
+    ["open gmail", "https://mail.google.com"],
+    ["go to linkedin", "https://linkedin.com"],
+    ["open youtube music", "https://music.youtube.com"],
+  ]) {
+    assert.equal(macBareWebOpen(said)?.url, url, said);
+  }
+  for (const said of [
+    "open spotify",                     // the Mac app, via the cascade
+    "can you open whatsapp for me",     // same
+    "open youtube and play lofi",       // two jobs: the brain
+    "open youtube then search cats",
+    "search youtube for cats",
+    "use your brain to open youtube",
+    "open razorpay",                    // not a site we know
+    "open the language",
+  ]) {
+    assert.equal(macBareWebOpen(said), null, said);
+  }
+  const main = readFileSync(new URL("../mac/braino-mac/main.cjs", import.meta.url), "utf8");
+  const fast = main.indexOf("const bareWeb = macBareWebOpen(raw);");
+  assert.ok(fast > 0 && fast < main.indexOf("if (macHilEnabled() && macWantsTheBrain(raw)) {"));
+  assert.match(main, /logMac\("delegate\.web_open_fast"[\s\S]{0,200}await openChromeUrl\(bareWeb\.url\);/);
 });

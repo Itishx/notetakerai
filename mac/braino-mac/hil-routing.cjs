@@ -1,5 +1,8 @@
 "use strict";
 
+const path = require("path");
+const { resolveWebTarget } = require(path.join(__dirname, "..", "..", "extension", "lib", "openTargets.js"));
+
 /* Which commands the brain gets.
  *
  * The HIL loop is the same brain the browser Delegate already runs on, and on
@@ -209,7 +212,38 @@ function macClosesAllTabs(raw) {
   return CLOSE_ALL_TABS.test(text);
 }
 
+/* "Open YouTube" is one second of work.
+ *
+ * Naming a website sends a sentence to the brain (MAC_BROWSER_TARGET), which is
+ * right for "reply to that LinkedIn message" and wrong for just opening the
+ * site: the loop took 4 to 40 seconds a time the week of 2026-09-10, and 141
+ * once, when Chrome's AppleScript stopped answering and the loop could not
+ * confirm a page it had already opened. A sentence that is only "open <a site
+ * we know>" opens it, and anything more than that still goes to the brain. */
+const BARE_WEB_OPEN = /^(?:open up|open|go to|pull up|bring up|launch|visit)\s+(?:the\s+|my\s+)?(.+?)(?:\s+(?:website|site|page|tab))?$/i;
+
+function macBareWebOpen(raw) {
+  const text = String(raw || "").trim()
+    .replace(/^(?:hey\s+)?brain(?:o|elle)\b[\s,.!]*/i, "")
+    .replace(/^(?:(?:can|could|would|will)\s+you\s+)?(?:please\s+)?/i, "")
+    .replace(/[.?!]+$/, "")
+    .replace(/(?:\s+(?:for me|please|pls|now|right now))+$/i, "")
+    .trim();
+  const lower = text.toLowerCase();
+  if (!text || macAsksForTheBrain(lower) || macLooksMultiStep(text)) return null;
+  const match = text.match(BARE_WEB_OPEN);
+  if (!match) return null;
+  const target = match[1].trim();
+  if (target.split(/\s+/).length > 3 || /\b(?:and|then|to|with|about|for|search|play|find)\b/i.test(target)) return null;
+  /* Apps first: "open spotify" and "open whatsapp" are the Mac apps, and the
+     cascade already opens those in under a second. */
+  if (macFastLane(text)) return null;
+  const url = resolveWebTarget(target);
+  return url ? { url, target } : null;
+}
+
 module.exports = {
+  macBareWebOpen,
   macNeedsScreenContext,
   macIsConversation,
   macFastLane,

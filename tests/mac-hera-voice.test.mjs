@@ -80,7 +80,7 @@ test("OpenAI decides whether it was for him; HERA says what was said", () => {
   const swapAt = flush.indexOf("await heraCommandText(transcript)");
   assert.ok(acceptAt > 0 && acceptAt < swapAt);
   /* And the notch is painted by one source at a time. */
-  assert.match(js, /if \(!heraVoice\.on\) nfSetHeard\(rtUserTranscript\.trim\(\)\);/);
+  assert.match(js, /if \(!heraVoice\.on && !noiseSoFar\) nfSetHeard\(rtUserTranscript\.trim\(\)\);/);
 });
 
 test("in voice mode HERA only displays: nothing typed, pasted, or put on the clipboard", () => {
@@ -111,7 +111,7 @@ test("HERA is off in voice mode", () => {
   assert.match(js, /const HERA_LIVE_IN_VOICE = false;/);
   assert.match(lift(js, "async function heraVoiceStart(reason) {"), /^async function heraVoiceStart\(reason\) \{\s*if \(!HERA_LIVE_IN_VOICE\) return;/);
   /* With it off, OpenAI's words paint the notch, as before. */
-  assert.match(js, /if \(!heraVoice\.on\) nfSetHeard\(rtUserTranscript\.trim\(\)\);/);
+  assert.match(js, /if \(!heraVoice\.on && !noiseSoFar\) nfSetHeard\(rtUserTranscript\.trim\(\)\);/);
   /* And the waiting line says what is true. */
   assert.match(lift(js, "function voiceStartText(phase) {"), /return heraVoice\.on \? "Go ahead, I'm listening" : "Connecting";/);
 });

@@ -196,8 +196,12 @@ test("his name wakes him in any script, and nothing is dropped without a log", (
   assert.match(accept, /voice\.transcript_unreadable/);
   /* And the transcriber is told the name exists, as a word and not a
      sentence it can repeat back over silence. */
-  assert.match(js, /"Vocabulary: Braino, Brainelle\."/);
-  assert.doesNotMatch(js, /always write that name as Braino|Write everything in English letters/);
+  /* No names in the prompt beyond the one line it always had: every name
+     sentence we added came back out of silence as something "you said". */
+  const prompt = js.slice(js.indexOf('"Transcribe the user\'s words in a quiet personal voice conversation."'), js.indexOf("turn_detection: {", js.indexOf('"Transcribe the user\'s words in a quiet personal voice conversation."')))
+    .split("\n").filter((line) => !line.trim().startsWith("//")).join("\n");
+  assert.doesNotMatch(prompt, /Vocabulary|Brainelle|Hey Braino|English letters/);
+  assert.match(prompt, /"Transcribe the user's direct command to Braino\.",\s*"Ignore music, fans, coughs/);
 });
 
 /* A sentence that STARTS while he is awake is his, however long it runs; and
