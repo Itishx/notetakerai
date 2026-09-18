@@ -103,3 +103,22 @@ test("Braino reads the timetable instead of visiting a website", () => {
     new URL("../supabase/functions/_shared/human-intelligence/hil-tool-catalog.ts", import.meta.url), "utf8");
   assert.match(catalog, /name: "schedule_lookup"/, "the model is never told about a tool the catalog omits");
 });
+
+test("connecting a timetable is not a setup step", () => {
+  /* The alternative was a button, a field to paste an LMS link into, or a
+     console command. All of it asks someone to tell Braino something Braino can
+     already see: they are looking at their own timetable, signed in, right now.
+     So the first time the calendar is opened it is already connected. */
+  assert.match(bg, /chrome\.tabs\.onUpdated\.addListener/);
+  assert.match(bg, /BG_MESA_HOSTS/);
+  assert.match(bg, /saw-nexus/);
+
+  /* Throttled, because a Next.js app fires that listener several times per
+     navigation and the answer cannot change in ten minutes. */
+  assert.match(bg, /BG_MESA_AUTO_SYNC_GAP_MS/);
+  assert.match(bg, /changeInfo\.status !== "complete"/);
+
+  // And once at startup, so a morning briefing has something to read before
+  // anybody has opened anything.
+  assert.match(bg, /chrome\.runtime\.onStartup\?\.addListener/);
+});

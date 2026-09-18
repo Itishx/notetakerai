@@ -3187,6 +3187,37 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   bgSyncMesaSchedule("alarm").catch(() => {});
 });
 
+/* Connecting your timetable is not a setup step.
+ *
+ * The alternative was a button, or a field to paste an LMS link into, or worse
+ * a console command. All of that asks someone to tell Braino something Braino
+ * can see: they are looking at their own timetable, signed in, right now. So
+ * the first time the calendar is opened it is already connected, and there was
+ * never a thing to set up.
+ *
+ * Throttled because a Next.js app fires this listener several times per
+ * navigation, and because the answer cannot meaningfully change in ten minutes.
+ */
+const BG_MESA_HOSTS = ["students.mesaschool.co.in"];
+let bgMesaLastAutoSync = 0;
+const BG_MESA_AUTO_SYNC_GAP_MS = 10 * 60 * 1000;
+
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (changeInfo.status !== "complete" || !tab?.url) return;
+  let host = "";
+  try { host = new URL(tab.url).hostname; } catch (_) { return; }
+  if (!BG_MESA_HOSTS.includes(host)) return;
+  if (Date.now() - bgMesaLastAutoSync < BG_MESA_AUTO_SYNC_GAP_MS) return;
+  bgMesaLastAutoSync = Date.now();
+  bgSyncMesaSchedule("saw-nexus").catch(() => {});
+});
+
+// And once when Chrome starts, so a morning briefing has something to read
+// before anybody opens anything.
+chrome.runtime.onStartup?.addListener(() => {
+  bgSyncMesaSchedule("startup").catch(() => {});
+});
+
 async function bgCallXAssistant(body) {
   const { res } = await bgAuthedSupabaseFetch(`${BG_API_BASE}/x-assistant`, {
     method: "POST",
