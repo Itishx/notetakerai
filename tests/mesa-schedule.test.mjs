@@ -269,3 +269,32 @@ test("an empty timetable never sends it hunting the web", () => {
     new URL("../supabase/functions/_shared/human-intelligence/hil-tool-catalog.ts", import.meta.url), "utf8");
   assert.match(catalog, /never search the web for it and never guess at its address/);
 });
+
+test("one letter must not empty the whole timetable", () => {
+  /* kind=eq.classes against rows stored as class. The filter matched nothing,
+     the sixty day widen also matched nothing, and it ended up clicking a
+     calendar event from eighteen days ago and calling it the next class.
+
+     A model says classes, lectures, deadlines, homework and tests for things
+     stored under three names. Accept how people speak, and drop anything still
+     unrecognised: a filter nobody understands should widen the answer, never
+     silently empty it. */
+  const main = readFileSync(new URL("../mac/braino-mac/main.cjs", import.meta.url), "utf8");
+  const table = main.slice(main.indexOf("const MAC_SCHEDULE_KINDS"), main.indexOf("function macNormaliseKind"));
+  for (const [said, stored] of [
+    ["classes", "class"], ["lectures", "class"], ["sessions", "class"],
+    ["deadlines", "assignment"], ["homework", "assignment"], ["due", "assignment"],
+    ["exams", "exam"], ["tests", "exam"], ["workshops", "workshop"],
+  ]) {
+    assert.match(table, new RegExp(`${said}: "${stored}"`), `${said} must map to ${stored}`);
+  }
+
+  /* The important half: an unknown word drops the filter rather than applying
+     it. Otherwise the next unanticipated synonym empties the timetable again. */
+  const fn = main.slice(main.indexOf("function macNormaliseKind"), main.indexOf("async function lookupSchedule"));
+  assert.match(fn, /logMac\("schedule\.kind\.unknown"/);
+  assert.match(fn, /return "";\s*\}/, "an unrecognised kind must fall through to no filter");
+
+  // And the query logs itself, which is the only reason this was findable.
+  assert.match(main, /logMac\("schedule\.query", \{ count:/);
+});

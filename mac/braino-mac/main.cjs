@@ -15529,6 +15529,40 @@ function macResolveWhen(word, fallbackDays) {
   return startOfToday;
 }
 
+/* What the caller meant by a kind of thing.
+ *
+ * The whole feature was defeated by one letter: the model asked for
+ * kind=classes and every row is stored as class, so the filter matched nothing,
+ * the sixty day widen also matched nothing, and it eventually clicked an event
+ * from eighteen days ago and called it the next class.
+ *
+ * Words are how a model talks, and a model will say classes, lectures,
+ * deadlines, homework and tests for four things stored under three names. The
+ * fix is to accept how people speak rather than to insist on an enum, and,
+ * crucially, to DROP a kind that is still unrecognised afterwards: a filter
+ * nobody understands should widen the answer, never silently empty it. */
+const MAC_SCHEDULE_KINDS = {
+  class: "class", classes: "class", lecture: "class", lectures: "class",
+  session: "class", sessions: "class",
+  assignment: "assignment", assignments: "assignment", deadline: "assignment",
+  deadlines: "assignment", homework: "assignment", submission: "assignment",
+  submissions: "assignment", due: "assignment",
+  exam: "exam", exams: "exam", test: "exam", tests: "exam",
+  workshop: "workshop", workshops: "workshop",
+  event: "event", events: "event",
+};
+
+function macNormaliseKind(raw) {
+  const t = String(raw || "").trim().toLowerCase();
+  if (!t || t === "all" || t === "any") return "";
+  const mapped = MAC_SCHEDULE_KINDS[t];
+  if (mapped) return mapped;
+  // Unrecognised: no filter at all, and say so. Answering "nothing on your
+  // timetable" because of a word nobody recognised is the worst of both.
+  logMac("schedule.kind.unknown", { kind: t });
+  return "";
+}
+
 async function lookupSchedule(args = {}) {
   const auth = authStatusPayload();
   if (!auth.userId) return { ok: false, say: "You are not signed in, so I cannot see your timetable." };
@@ -15543,7 +15577,7 @@ async function lookupSchedule(args = {}) {
   // through Sunday night, not up to Sunday at midnight exactly.
   const toEnd = new Date(to.getTime() + 86400000 - 1);
 
-  const kind = String(args.kind || "").trim().toLowerCase();
+  const kind = macNormaliseKind(args.kind);
   const base = SUPABASE_URL.replace(/\/$/, "");
   const ask = async (startAt, endAt) => {
     const params = [
@@ -15553,7 +15587,7 @@ async function lookupSchedule(args = {}) {
       `order=starts_at.asc`,
       `limit=120`,
     ];
-    if (kind && kind !== "all") params.push(`kind=eq.${encodeURIComponent(kind)}`);
+    if (kind) params.push(`kind=eq.${encodeURIComponent(kind)}`);
     const query = params.join("&");
     const res = await fetch(`${base}/rest/v1/schedule_events?${query}`, {
       headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${authToken}` },
