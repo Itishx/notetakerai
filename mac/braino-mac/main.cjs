@@ -6373,6 +6373,63 @@ function findContactInCache(query) {
   return contains ? contactsCache[contains] : null;
 }
 
+/* Saved this morning, called this afternoon.
+ *
+ * A name Braino does not know used to be the end of it until the next launch.
+ * Reading the address book again costs nine milliseconds, so a miss is worth
+ * one more look before he says "who's that?". Once every half minute, so a
+ * wrong name said five times does not read the database five times. */
+let lastContactRefreshAt = 0;
+async function refreshContactsIfStale() {
+  if (Date.now() - lastContactRefreshAt < 30000) return false;
+  lastContactRefreshAt = Date.now();
+  try {
+    const fresh = await importContactsFromDatabase();
+    const count = Object.keys(fresh).length;
+    if (!count) return false;
+    const before = contactsCache ? Object.keys(contactsCache).length : 0;
+    contactsCache = fresh;
+    fs.promises.writeFile(CONTACTS_CACHE_PATH, JSON.stringify(fresh, null, 2)).catch(() => {});
+    logMac("contacts.refreshed", { count, before });
+    return true;
+  } catch (error) {
+    logMac("contacts.refresh_failed", { error: String(error?.message || error).slice(0, 120) });
+    return false;
+  }
+}
+
+/* "Who is Ilu?", "what is Prakhar's number?"
+ *
+ * Everything on the card, not just the first number: the whole point of
+ * reading the address book properly is that the second number and the email
+ * are there too. */
+async function lookupContactDetails(query) {
+  const asked = String(query || "").trim();
+  if (!asked) return { ok: false, say: "Say who you mean." };
+  if (!contactsCache) await importAllContacts();
+  let hit = contactsCache ? findContactBySound(asked, contactsCache, loadContactHistory()) : null;
+  if (!hit && await refreshContactsIfStale()) {
+    hit = findContactBySound(asked, contactsCache, loadContactHistory());
+  }
+  if (hit?.ambiguous?.length > 1) {
+    const names = hit.ambiguous.map(speakableContactName);
+    return { ok: true, say: `I have ${names.length}: ${names.join(", ")}. Which one?` };
+  }
+  const contact = hit?.contact || findContactInCache(asked);
+  if (!contact) return { ok: false, say: `${asked} is not in your contacts.` };
+  const who = speakableContactName(contact.name);
+  const phones = (contact.phones?.length ? contact.phones : (contact.phone ? [{ label: "", value: contact.phone }] : []))
+    .map((row) => (row.label ? `${row.label} ${row.value}` : String(row.value || "")))
+    .filter(Boolean);
+  const parts = [];
+  if (phones.length) parts.push(phones.join(", "));
+  if (contact.emails?.length) parts.push(contact.emails.join(", "));
+  if (contact.company) parts.push(contact.company);
+  logMac("contacts.lookup", { query: textForLog(asked), name: textForLog(contact.name), phones: phones.length, emails: contact.emails?.length || 0 });
+  if (!parts.length) return { ok: true, say: `${who} is in your contacts, with no number saved.` };
+  return { ok: true, say: `${who}: ${parts.join(". ")}` };
+}
+
 async function notificationDbPath() {
   const grouped = path.join(os.homedir(), "Library", "Group Containers", "group.com.apple.usernoted", "db2", "db");
   if (fs.existsSync(grouped)) return grouped;
@@ -9645,6 +9702,24 @@ async function resolveWhatsAppRecipient(recipientRaw) {
   if (cached?.phone) {
     logMac("whatsapp.contact.resolved", { query: textForLog(recipientRaw), name: textForLog(cached.name), source: "cache" });
     return { ok: true, name: cached.name, phone: cached.phone, source: "cache" };
+  }
+
+  /* Not in the copy we hold: read the address book again before giving up,
+     because the person may have been saved minutes ago. */
+  if (await refreshContactsIfStale()) {
+    const again = findContactBySound(alias?.name || recipientRaw, contactsCache, loadContactHistory());
+    if (again?.contact?.phone) {
+      logMac("whatsapp.contact.resolved", { query: textForLog(recipientRaw), name: textForLog(again.contact.name), source: "refresh" });
+      return { ok: true, name: again.contact.name, phone: again.contact.phone, source: "refresh" };
+    }
+    if (again?.ambiguous?.length > 1) {
+      return { ok: false, ambiguous: again.ambiguous.map((row) => row.name), error: "ambiguous" };
+    }
+    const fresh = findContactInCache(alias?.name || recipientRaw);
+    if (fresh?.phone) {
+      logMac("whatsapp.contact.resolved", { query: textForLog(recipientRaw), name: textForLog(fresh.name), source: "refresh" });
+      return { ok: true, name: fresh.name, phone: fresh.phone, source: "refresh" };
+    }
   }
 
   const lookupName = alias?.name || recipientRaw;
@@ -15907,6 +15982,18 @@ const MAC_HIL_TOOLS = {
   read_selection: (a) => actOnSelectedText({ verb: String(a.verb || "summarise"), language: a.language, speakOnly: true }),
   alarm_set: (a) => startAlarm(Number(a.fireAt), String(a.label || "")),
   whatsapp_send: (a) => sendWhatsAppMessage(String(a.recipient || ""), String(a.message || "")),
+  /* The address book, out loud. Named in the catalog, so without this the loop
+     was told "there is no such tool" and went looking on the web for a number
+     that was sitting on the Mac. */
+  contact_lookup: (a) => lookupContactDetails(String(a.name || a.contact || a.query || "")),
+  call_start: (a) => {
+    const app = String(a.app || "").toLowerCase();
+    return startCall({
+      recipient: String(a.recipient || a.name || a.contact || ""),
+      app: /phone|iphone|cell/.test(app) ? "phone" : /whats/.test(app) ? "whatsapp" : "facetime",
+      video: a.video === true || /video/.test(app),
+    });
+  },
   google_doc_create: (a) => createGoogleDocWithText(String(a.title || "Untitled"), String(a.text || "")),
   schedule_lookup: (a) => lookupSchedule(a),
   schedule_sync: () => syncScheduleFromNexus(),
@@ -18808,6 +18895,28 @@ ipcMain.handle("braino-mac:media-control", async (_event, payload = {}) => {
 ipcMain.handle("braino-mac:job-running", async () => ({
   running: Boolean(macActiveHilRun) && macActiveHilRun.generation === macHilGeneration,
 }));
+
+/* One router, asked by both sides.
+ *
+ * There were two, with opposite defaults. This process decides the brain gets
+ * anything that is not fast-lane or small talk. The renderer's voice fork
+ * decided the opposite: chat unless one narrow check said otherwise. So the
+ * same sentence went two different ways depending on which door it came
+ * through, and "what class do I have next" reached the timetable one time and
+ * was answered from thin air the next.
+ *
+ * Duplicating the rules into the renderer would have made a third thing to keep
+ * in step. Asking across is a sub-millisecond call in the same app, and it means
+ * the routing words only ever have to be right in one file. */
+ipcMain.handle("braino-mac:wants-brain", async (_event, text) => {
+  try {
+    return { brain: Boolean(macWantsTheBrain(String(text || ""))) };
+  } catch (error) {
+    logMac("routing.wants_brain_failed", { error: String(error?.message || error) });
+    // Fail open to the old behaviour rather than sending everything one way.
+    return { brain: false, failed: true };
+  }
+});
 
 /* The renderer asks HIL what was just said, and acts on the answer. */
 ipcMain.handle("braino-mac:understand", async (event, payload) => {

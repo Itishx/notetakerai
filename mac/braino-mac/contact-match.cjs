@@ -59,6 +59,13 @@ function editDistance(a, b) {
   return previous[right.length];
 }
 
+/* Every part of a name, not only the first.
+ *
+ * People are called by a surname, a nickname, or where they work. The lookup
+ * only ever read the first word of a contact, so "Salvaji" and "Tarkshaya"
+ * came back as "who's that?" while both were sitting in the address book. A
+ * later word scores below a first word, so a real first name always wins. */
+
 /* How well a spoken name fits a saved contact, 0 when it does not. */
 function scoreContactName(query, contactName) {
   const q = cleanContactName(query);
@@ -78,7 +85,51 @@ function scoreContactName(query, contactName) {
   // One slip on a longer name, never on a short one: "Elu" is two letters from
   // half the phone book.
   if (queryKey.length >= 5 && editDistance(queryKey, leadKey) <= 1) return 60;
+
+  if (queryTokens.length === 1) {
+    // A surname or a middle name: "Salvaji" is Balraj Salvaji.
+    const laterKeys = tokens.slice(1).map(soundKey);
+    if (tokens.slice(1).includes(q)) return 80;
+    if (laterKeys.includes(queryKey)) return 70;
+    if (queryKey.length >= 5 && laterKeys.some((key) => editDistance(queryKey, key) <= 1)) return 62;
+    return 0;
+  }
+  // The same words in another order: "Salvaji Balraj" is the same person.
+  const spare = tokens.map(soundKey);
+  const allFit = queryTokens.map(soundKey).every((key) => {
+    const at = spare.indexOf(key);
+    if (at === -1) return false;
+    spare.splice(at, 1);
+    return true;
+  });
+  if (allFit) return 78;
   return 0;
+}
+
+/* The number to ring, whichever field it is sitting in. */
+function contactPhone(entry) {
+  if (!entry) return "";
+  const direct = String(entry.phone || "").trim();
+  if (direct) return direct;
+  const first = (entry.phones || []).map((row) => String(row?.value || "").trim()).find(Boolean);
+  return first || "";
+}
+
+/* A nickname is nearly as good as a name; a company is a long way behind one,
+   because everyone at a company shares it. */
+const NICKNAME_CEILING = 88;
+const COMPANY_CEILING = 62;
+
+function scoreContactEntry(query, entry) {
+  if (!entry?.name) return 0;
+  let best = scoreContactName(query, entry.name);
+  if (entry.nickname) {
+    best = Math.max(best, Math.min(NICKNAME_CEILING, scoreContactName(query, entry.nickname)));
+  }
+  if (entry.company && cleanContactName(query).length >= 4) {
+    best = Math.max(best, Math.min(COMPANY_CEILING, scoreContactName(query, entry.company)));
+  }
+  return best;
 }
 
 const CONTACT_MATCH_MIN_SCORE = 60;
@@ -91,17 +142,24 @@ function findContactBySound(query, contacts, history = {}) {
   const scored = [];
   for (const entry of Object.values(contacts || {})) {
     if (!entry?.name) continue;
-    const base = scoreContactName(q, entry.name);
+    const base = scoreContactEntry(q, entry);
     if (base < CONTACT_MATCH_MIN_SCORE) continue;
     const used = Number(history?.[cleanContactName(entry.name)]?.count) || 0;
     scored.push({ entry, base, used, score: base + Math.min(20, used * 5) });
   }
   if (!scored.length) return null;
-  scored.sort((a, b) => b.score - a.score || a.entry.name.length - b.entry.name.length);
-  const [best, next] = scored;
+  // A tie goes to the person you can actually reach: a contact saved with no
+  // number is a name, not a way to call anybody.
+  scored.sort((a, b) => b.score - a.score
+    || (contactPhone(b.entry) ? 1 : 0) - (contactPhone(a.entry) ? 1 : 0)
+    || a.entry.name.length - b.entry.name.length);
+  const [best] = scored;
+  const tied = scored.filter((row) => row.score === best.score && Boolean(contactPhone(row.entry)) === Boolean(contactPhone(best.entry)));
+  // The same person saved twice is not two people: one number, no question.
+  const numbers = new Set(tied.map((row) => contactPhone(row.entry)).filter(Boolean));
   // Two people who fit equally well, and you have called neither: ask.
-  if (next && next.score === best.score && !best.used) {
-    return { ambiguous: scored.filter((row) => row.score === best.score).slice(0, 3).map((row) => row.entry) };
+  if (tied.length > 1 && !best.used && numbers.size !== 1) {
+    return { ambiguous: tied.slice(0, 3).map((row) => row.entry) };
   }
   return { contact: best.entry, score: best.score };
 }
@@ -140,6 +198,8 @@ module.exports = {
   cleanContactName,
   soundKey,
   scoreContactName,
+  scoreContactEntry,
+  contactPhone,
   findContactBySound,
   speakableContactName,
   parseCorrectedName,

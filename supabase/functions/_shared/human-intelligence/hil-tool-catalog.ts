@@ -62,6 +62,7 @@ export const HIL_TOOL_CATALOG: HilTool[] = [
   { name: "braino_return_to_notch", params: [], gloss: "Send the mascot back home into the notch", stateful: true, zeroNetwork: true, },
   { name: "braino_summon", params: [], gloss: "Make the mascot step out of the notch onto the screen", stateful: true, zeroNetwork: true, },
   { name: "call_start", params: ["recipient", "app", "video"], gloss: "Place a phone, FaceTime, or WhatsApp voice or video call", irreversible: true, handler: "startCall", },
+  { name: "contact_lookup", params: ["name"], gloss: "Read someone out of the Mac address book: every number, email and company, matched by sound so a mis-heard name still finds them", zeroNetwork: true, memoSafe: true, handler: "lookupContactDetails", },
   { name: "chrome_search_google", params: ["query"], gloss: "Open a Google results tab in Chrome instead of answering aloud", handler: "openChromeUrl", },
   { name: "clean_screenshots", params: [], gloss: "Move Desktop screenshots and recordings into the Redundant Files folder", irreversible: true, zeroNetwork: true, handler: "cleanScreenshots", },
   { name: "cleanup_create_folder", params: [], gloss: "Move all stale files into Redundant Files now, no confirmation", irreversible: true, zeroNetwork: true, },
