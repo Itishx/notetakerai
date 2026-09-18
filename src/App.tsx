@@ -93,6 +93,7 @@ const Privacy = lazy(() => import("./pages/Privacy.tsx"));
 const Terms = lazy(() => import("./pages/Terms.tsx"));
 const Contact = lazy(() => import("./pages/Contact.tsx"));
 const ProductOverview = lazy(() => import("./pages/ProductOverview.tsx"));
+const Affective = lazy(() => import("./pages/Affective.tsx"));
 const ProductOverviewHomepageDocs = lazy(() => import("./pages/ProductOverviewHomepageDocs.tsx"));
 const Foundry = lazy(() => import("./pages/Foundry.tsx"));
 const HeroLab = lazy(() => import("./pages/HeroLab.tsx"));
@@ -302,6 +303,7 @@ function AppRoutes() {
         <Route path="/terms" element={<Terms />} />
         <Route path="/contact" element={<Contact />} />
         <Route path="/product-overview" element={<ProductOverview />} />
+        <Route path="/affective" element={<Affective />} />
         {/* The page is Braino's, and Foundry is one of its three tabs. It lived at
             /foundry for a while, which made every conversation about it circular.
             The old URL still works and still opens the Foundry tab. */}
