@@ -15545,23 +15545,45 @@ async function lookupSchedule(args = {}) {
 
   const kind = String(args.kind || "").trim().toLowerCase();
   const base = SUPABASE_URL.replace(/\/$/, "");
-  const params = [
-    `select=title,kind,course,room,instructor,starts_at,ends_at,timezone,attendance_required`,
-    `starts_at=gte.${encodeURIComponent(from.toISOString())}`,
-    `starts_at=lte.${encodeURIComponent(toEnd.toISOString())}`,
-    `order=starts_at.asc`,
-    `limit=120`,
-  ];
-  if (kind && kind !== "all") params.push(`kind=eq.${encodeURIComponent(kind)}`);
-
-  try {
+  const ask = async (startAt, endAt) => {
+    const params = [
+      `select=title,kind,course,room,instructor,starts_at,ends_at,timezone,attendance_required`,
+      `starts_at=gte.${encodeURIComponent(startAt.toISOString())}`,
+      `starts_at=lte.${encodeURIComponent(endAt.toISOString())}`,
+      `order=starts_at.asc`,
+      `limit=120`,
+    ];
+    if (kind && kind !== "all") params.push(`kind=eq.${encodeURIComponent(kind)}`);
     const res = await fetch(`${base}/rest/v1/schedule_events?${params.join("&")}`, {
       headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${authToken}` },
     });
     if (!res.ok) throw new Error(`schedule ${res.status}`);
     const rows = await res.json();
-    if (!Array.isArray(rows) || !rows.length) {
-      logMac("schedule.lookup", { from: from.toISOString(), to: toEnd.toISOString(), count: 0 });
+    return Array.isArray(rows) ? rows : [];
+  };
+
+  try {
+    let rows = await ask(from, toEnd);
+    /* Nothing in the window asked for, so look further before giving up.
+     *
+     * "What is my next class" was answered with "no classes between Friday 18
+     * September and Friday 18 September". The window was one day, the day was
+     * nearly over, and the honest answer to a question about what is NEXT was
+     * sitting the following morning. A person asked that at five to three does
+     * not report that the afternoon is empty, they look at tomorrow.
+     *
+     * Only widens a short window, and only when it found nothing. "What is on
+     * this week" returning nothing is a real answer about this week and must not
+     * quietly become a month. */
+    let widened = false;
+    const windowDays = (toEnd - from) / 86400000;
+    if (!rows.length && windowDays <= 8) {
+      const further = new Date(from.getTime() + 60 * 86400000);
+      rows = await ask(from, further);
+      widened = rows.length > 0;
+    }
+    if (!rows.length) {
+      logMac("schedule.lookup", { from: from.toISOString(), to: toEnd.toISOString(), count: 0, widened: true });
       /* Empty and "never synced" are different problems with different fixes,
          and the loop cannot tell them apart from a blank answer. */
       return {
@@ -15585,6 +15607,12 @@ async function lookupSchedule(args = {}) {
     const now = new Date();
     const zone = rows[0]?.timezone || "Asia/Kolkata";
     const nowLine = `Right now it is ${macFriendlyDay(now.toISOString(), zone)}, ${macFriendlyTime(now.toISOString(), zone)}.`;
+    // Said plainly, because "nothing today, here is tomorrow" and "here is
+    // today" are different answers and the reader cannot tell them apart from
+    // the rows alone.
+    const scopeLine = widened
+      ? `Nothing left in the window you asked about, so this is what comes after it.`
+      : "";
 
     // Grouped by day, because that is how a person holds a week in their head.
     const byDay = new Map();
@@ -15606,8 +15634,12 @@ async function lookupSchedule(args = {}) {
         : `  ${time}: ${r.title}${who}${where}${must}${gone}`;
       byDay.get(day).push(line);
     }
-    const out = [nowLine, "", ...[...byDay.entries()].map(([day, lines]) => `${day}\n${lines.join("\n")}`)].join("\n\n");
-    logMac("schedule.lookup", { from: from.toISOString(), to: toEnd.toISOString(), count: rows.length });
+    // filter(Boolean) rather than a positional trick: the scope line is usually
+    // absent, and an empty string left in the middle prints as a blank paragraph.
+    const out = [nowLine, scopeLine, ...[...byDay.entries()].map(([day, lines]) => `${day}\n${lines.join("\n")}`)]
+      .filter(Boolean)
+      .join("\n\n");
+    logMac("schedule.lookup", { from: from.toISOString(), to: toEnd.toISOString(), count: rows.length, widened });
     return { ok: true, say: out };
   } catch (error) {
     logMac("schedule.lookup.failed", { error: String(error?.message || error) });

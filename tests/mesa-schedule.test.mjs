@@ -217,3 +217,35 @@ test("a timetable read knows what time it is", () => {
     new URL("../supabase/functions/_shared/human-intelligence/hil-tool-catalog.ts", import.meta.url), "utf8");
   assert.match(catalog, /Use from:now for anything about what is NEXT/);
 });
+
+test("an empty window looks further before giving up", () => {
+  /* "What is my next class" was answered with "no classes between Friday 18
+     September and Friday 18 September". The window was one day, the day was
+     nearly over, and the answer to a question about what is NEXT was sitting
+     the following morning. Asked at five to three, a person does not report
+     that the afternoon is empty. They look at tomorrow. */
+  const main = readFileSync(new URL("../mac/braino-mac/main.cjs", import.meta.url), "utf8");
+  assert.match(main, /if \(!rows\.length && windowDays <= 8\)/);
+  assert.match(main, /Nothing left in the window you asked about/,
+    "and it must say it widened, or two different answers look identical");
+
+  /* Only a short window, and only when empty. "What is on this week" coming
+     back empty is a real answer about this week and must not quietly become a
+     month. */
+  assert.match(main, /const windowDays = \(toEnd - from\) \/ 86400000;/);
+});
+
+test("the rest of today is a schedule question too", () => {
+  // None of these carry a word from the original list, and they are all the
+  // same question.
+  const routing = require("../mac/braino-mac/hil-routing.cjs");
+  for (const said of [
+    "what is left today",
+    "what have I got for the rest of the day",
+    "am I free today",
+  ]) {
+    assert.equal(routing.macWantsTheBrain(said), true, said);
+  }
+  // And the fast lane is still the fast lane.
+  assert.equal(routing.macWantsTheBrain("play billie jean"), false);
+});
