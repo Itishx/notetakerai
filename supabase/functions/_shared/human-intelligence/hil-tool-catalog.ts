@@ -40,7 +40,7 @@ export type HilTool = {
   handler?: string;
 };
 
-export const HIL_CATALOG_VERSION = "1.7.0";
+export const HIL_CATALOG_VERSION = "1.8.0";
 
 export const HIL_TOOL_CATALOG: HilTool[] = [
   // Split, because one entry covering both halves of actOnSelectedText made the
@@ -117,7 +117,7 @@ export const HIL_TOOL_CATALOG: HilTool[] = [
   /* The Mac's own way in, so nobody has to open an extension console to find
      out whether their calendar synced. Opens Nexus, asks the page to mint a
      token and hand over the term, saves it. */
-  { name: "schedule_sync", params: [], gloss: "Pull the user's timetable from their college LMS into Braino. Opens their Nexus calendar in Chrome to do it. Use when they ask to sync, refresh or connect their timetable, or when schedule_lookup came back empty and they expected something", handler: "syncScheduleFromNexus", },
+  { name: "schedule_sync", params: [], gloss: "Pull the user's timetable from their college LMS into Braino. Opens their real Nexus calendar in Chrome to do it. Use when they ask to sync, refresh or connect their timetable, or when schedule_lookup came back empty and they expected something. This is the ONLY way to reach the LMS: it is behind a login, so never search the web for it and never guess at its address", handler: "syncScheduleFromNexus", },
   { name: "schedule_lookup", params: ["from", "to", "kind"], gloss: "Read the user's own timetable: classes, deadlines, exams and events between two dates. from/to are ISO dates or plain words: now, today, tomorrow, this week. Use from:now for anything about what is NEXT or still to come, because today starts at midnight and half of it may already be over. The result says what time it is and marks anything that has already finished", handler: "lookupSchedule", },
   { name: "google_doc_create", params: ["title", "text"], gloss: "Create a Google Doc and write the whole text into it in one go. ALWAYS use this for Google Docs, never try to type into the page: Docs renders on a canvas and cannot be typed into with a script", handler: "createGoogleDocWithText", },
   { name: "gmail_reply", params: ["userInstruction"], gloss: "Draft and send a reply to the Gmail thread open in Chrome", irreversible: true, handler: "replyToOpenGmail", },

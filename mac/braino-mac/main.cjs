@@ -15554,11 +15554,20 @@ async function lookupSchedule(args = {}) {
       `limit=120`,
     ];
     if (kind && kind !== "all") params.push(`kind=eq.${encodeURIComponent(kind)}`);
-    const res = await fetch(`${base}/rest/v1/schedule_events?${params.join("&")}`, {
+    const query = params.join("&");
+    const res = await fetch(`${base}/rest/v1/schedule_events?${query}`, {
       headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${authToken}` },
     });
-    if (!res.ok) throw new Error(`schedule ${res.status}`);
+    if (!res.ok) {
+      const detail = await res.text().catch(() => "");
+      logMac("schedule.query.failed", { status: res.status, detail: textForLog(detail, 200), query: textForLog(query, 300) });
+      throw new Error(`schedule ${res.status}`);
+    }
     const rows = await res.json();
+    /* Logged with the query, because 125 rows written and 0 read back is not
+       something anyone can reason about from the outside. A filter that matches
+       nothing and a permission that hides everything look identical from here. */
+    logMac("schedule.query", { count: Array.isArray(rows) ? rows.length : -1, query: textForLog(query, 300) });
     return Array.isArray(rows) ? rows : [];
   };
 
@@ -15586,9 +15595,16 @@ async function lookupSchedule(args = {}) {
       logMac("schedule.lookup", { from: from.toISOString(), to: toEnd.toISOString(), count: 0, widened: true });
       /* Empty and "never synced" are different problems with different fixes,
          and the loop cannot tell them apart from a blank answer. */
+      /* Naming the tool, not a website.
+       *
+       * This used to end with "open Chrome and sign in to Nexus", and the loop
+       * did exactly that: it went looking for Nexus on the open web, invented
+       * nexus.ifheindia.org, which is a different college entirely, and reported
+       * that the timetable was blank. An empty result should point at the one
+       * thing that fixes it, and forbid the thing that looks like it might. */
       return {
         ok: true,
-        say: `Nothing on the timetable between ${macFriendlyDay(from, "Asia/Kolkata")} and ${macFriendlyDay(toEnd, "Asia/Kolkata")}. If that seems wrong, the timetable may not have synced yet: open Chrome with Braino installed and signed in to Nexus.`,
+        say: `Nothing on the timetable between ${macFriendlyDay(from, "Asia/Kolkata")} and ${macFriendlyDay(toEnd, "Asia/Kolkata")}. If that seems wrong, run the schedule_sync tool to pull it again. Do NOT go looking for the LMS on the web: it is behind a login, only schedule_sync can reach it, and any site you find by searching will be a different school's.`,
       };
     }
 

@@ -249,3 +249,22 @@ test("the rest of today is a schedule question too", () => {
   // And the fast lane is still the fast lane.
   assert.equal(routing.macWantsTheBrain("play billie jean"), false);
 });
+
+test("an empty timetable never sends it hunting the web", () => {
+  /* The empty message used to end with "open Chrome and sign in to Nexus", and
+     the loop did exactly that: went looking for Nexus on the open web, invented
+     nexus.ifheindia.org, which is a different college entirely, and reported
+     that the timetable was blank.
+
+     An empty result has to point at the one thing that fixes it and forbid the
+     thing that looks like it might. */
+  const main = readFileSync(new URL("../mac/braino-mac/main.cjs", import.meta.url), "utf8");
+  assert.match(main, /run the schedule_sync tool to pull it again/);
+  assert.match(main, /Do NOT go looking for the LMS on the web/);
+  assert.doesNotMatch(main, /open Chrome with Braino installed and signed in to Nexus/,
+    "the old wording is what caused the invented URL");
+
+  const catalog = readFileSync(
+    new URL("../supabase/functions/_shared/human-intelligence/hil-tool-catalog.ts", import.meta.url), "utf8");
+  assert.match(catalog, /never search the web for it and never guess at its address/);
+});
