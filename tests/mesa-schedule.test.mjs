@@ -96,8 +96,9 @@ test("Braino reads the timetable instead of visiting a website", () => {
   assert.match(main, /DUE \$\{time\}/);
 
   /* Empty and never-synced are different problems with different fixes, and a
-     blank answer cannot tell them apart. */
-  assert.match(main, /may not have synced yet/);
+     blank answer cannot tell them apart. It names the tool that fixes it, not a
+     website: pointing at Nexus is what made it invent a URL. */
+  assert.match(main, /run the schedule_sync tool to pull it again/);
 
   const catalog = readFileSync(
     new URL("../supabase/functions/_shared/human-intelligence/hil-tool-catalog.ts", import.meta.url), "utf8");
