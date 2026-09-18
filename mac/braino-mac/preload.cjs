@@ -122,6 +122,9 @@ contextBridge.exposeInMainWorld("brainoMac", {
   /* What did they just say — asked, not matched. */
   jobRunning: () => ipcRenderer.invoke("braino-mac:job-running"),
   mediaControl: (payload) => ipcRenderer.invoke("braino-mac:media-control", payload),
+  // The tray's transport buttons. A separate channel because it is a separate
+  // contract: {action, source} against media-control's {action, target}.
+  trayMediaControl: (payload) => ipcRenderer.invoke("braino-mac:tray-media", payload),
   typingFocus: (on) => ipcRenderer.invoke("braino-mac:typing-focus", { on }),
   understand: (payload) => ipcRenderer.invoke("braino-mac:understand", payload || {}),
   tellRunningJob: (note) => ipcRenderer.invoke("braino-mac:tell-running-job", { note }),
@@ -451,6 +454,9 @@ contextBridge.exposeInMainWorld("brainoMac", {
   },
   // ── Notch tray ──
   mediaControl: (payload) => ipcRenderer.invoke("braino-mac:media-control", payload),
+  // The tray's transport buttons. A separate channel because it is a separate
+  // contract: {action, source} against media-control's {action, target}.
+  trayMediaControl: (payload) => ipcRenderer.invoke("braino-mac:tray-media", payload),
   timerCancel: (payload) => ipcRenderer.invoke("braino-mac:timer-cancel", payload),
   stopwatchControl: (payload) => ipcRenderer.invoke("braino-mac:stopwatch-control", payload),
   onStopwatch: (callback) => {

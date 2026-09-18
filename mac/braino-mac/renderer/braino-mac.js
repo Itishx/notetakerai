@@ -13199,7 +13199,7 @@ for (const [selector, action] of [[".nf-prev", "previous"], [".nf-play", "toggle
       nfRenderNowPlaying();
     }
     logRenderer("tray.media", { action, source });
-    void window.brainoMac.mediaControl?.({ action, source });
+    void window.brainoMac.trayMediaControl?.({ action, source });
   });
 }
 
@@ -13341,7 +13341,7 @@ for (const [selector, action] of [[".nf-ms-prev", "previous"], [".nf-ms-play", "
       nfRenderMusicSurface();
     }
     logRenderer("music.island.media", { action, source });
-    void window.brainoMac.mediaControl?.({ action, source });
+    void window.brainoMac.trayMediaControl?.({ action, source });
   });
 }
 

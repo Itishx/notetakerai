@@ -19213,7 +19213,18 @@ ipcMain.handle("braino-mac:stopwatch-control", (_event, payload = {}) => {
   return handleStopwatch({ action: String(payload?.action || "read") });
 });
 
-ipcMain.handle("braino-mac:media-control", async (_event, payload = {}) => {
+/* The tray's own channel, not the general one.
+ *
+ * This was registered as braino-mac:media-control, which was already taken by
+ * "pause whatever is playing" ({action, target}) since before the tray existed.
+ * Electron refuses a second handler on one channel, so the app would not boot
+ * at all. Two different features with two different payload shapes had ended up
+ * sharing a name, and neither could be deleted: both have live callers.
+ *
+ * Renamed rather than merged. One handler serving two contracts, branching on
+ * which field happens to be present, is the same collision written down more
+ * politely. */
+ipcMain.handle("braino-mac:tray-media", async (_event, payload = {}) => {
   const action = String(payload?.action || "").toLowerCase();
   const source = String(payload?.source || "spotify").toLowerCase();
   logMac("tray.media_control", { action, source });
