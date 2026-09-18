@@ -20,6 +20,7 @@ const IomiBootIdentityDocs = lazy(() => import("./pages/IomiBootIdentityDocs.tsx
 const BrowserNotchPresenceDocs = lazy(() => import("./pages/BrowserNotchPresenceDocs.tsx"));
 const VoiceCommandEchoGuardDocs = lazy(() => import("./pages/VoiceCommandEchoGuardDocs.tsx"));
 const HilLoopDocs = lazy(() => import("./pages/HilLoopDocs.tsx"));
+const HilMemoryDocs = lazy(() => import("./pages/HilMemoryDocs.tsx"));
 const HowBrainoTalksDocs = lazy(() => import("./pages/HowBrainoTalksDocs.tsx"));
 const HumanIntelligence = lazy(() => import("./pages/HumanIntelligence.tsx"));
 const BrainoOSTeaser = lazy(() => import("./pages/BrainoOSTeaser.tsx"));
@@ -214,6 +215,7 @@ function AppRoutes() {
         <Route path="/knowledge/browser-notch-presence" element={<BrowserNotchPresenceDocs />} />
         <Route path="/knowledge/voice-command-echo-guard" element={<VoiceCommandEchoGuardDocs />} />
         <Route path="/knowledge/hil-version-1" element={<HilLoopDocs />} />
+        <Route path="/knowledge/hil-version-2-memory" element={<HilMemoryDocs />} />
         <Route path="/knowledge/how-braino-talks" element={<HowBrainoTalksDocs />} />
         <Route path="/human-intelligence" element={<HumanIntelligence />} />
         <Route path="/knowledge/jyoti-sir-team-demo" element={<JyotiSirTeamDemoDocs />} />
