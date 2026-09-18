@@ -399,29 +399,56 @@
   letter-spacing: -0.004em; max-width: 46ch; line-height: 1.5;
 }
 
-/* ── What is ours, honestly ─────────────────────────────────────────────────
-   A definition list, because that is what it is: a claim and the thing behind
-   it. Rules rather than cells, so it reads as a statement and not as more
-   product tiles. */
-.aff-honest { margin: clamp(30px, 3.6vw, 46px) 0 0; }
-.aff-honest-row {
-  display: grid; grid-template-columns: minmax(0, 24ch) 1fr;
-  gap: 18px clamp(28px, 4vw, 64px);
-  padding: clamp(24px, 2.8vw, 34px) 0;
-  border-top: 1px solid var(--a-line);
+/* ── What changes about your day ───────────────────────────────────────────
+   The section that has to land in a second, so each cell is built to be read
+   in one glance and then, optionally, in full: a bold outcome, the small grey
+   line admitting what today is like, and the paragraph underneath.
+
+   Today is set smaller and struck through with a label rather than styled as
+   prose, because it is the thing being replaced. Making it look like a caption
+   rather than a claim is what keeps the eye moving to the line below it. */
+.aff-day-cell {
+  padding: clamp(28px, 3.4vw, 46px);
+  display: flex; flex-direction: column; gap: 14px;
 }
-.aff-honest-row:last-child { border-bottom: 1px solid var(--a-line); }
-.aff-honest dt {
-  margin: 0; font-size: clamp(17px, 1.7vw, 21px); font-weight: 600;
-  letter-spacing: -0.02em; line-height: 1.24; text-wrap: balance;
+.aff-day-cell h3 {
+  margin: 0;
+  font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  font-size: clamp(23px, 2.5vw, 33px);
+  font-weight: 400; letter-spacing: -0.018em; line-height: 1.14;
+  text-wrap: balance;
 }
-.aff-honest dd {
-  margin: 0; font-size: 15.5px; line-height: 1.56;
-  color: var(--a-ink-soft); letter-spacing: -0.006em; max-width: 52ch;
+.aff-day-now {
+  margin: 0; display: flex; gap: 12px; align-items: baseline;
+  font-size: 14px; line-height: 1.5; color: var(--a-ink-faint);
+  letter-spacing: -0.004em;
 }
-@media (max-width: 720px) {
-  .aff-honest-row { grid-template-columns: 1fr; gap: 8px; }
+.aff-day-now span {
+  flex: none;
+  font-size: 10.5px; font-weight: 600; letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--a-ink-faint);
+  border: 1px solid var(--a-line-strong);
+  border-radius: 3px; padding: 3px 6px;
 }
+.aff-day-next {
+  margin: 0; color: var(--a-ink);
+  font-size: clamp(15px, 1.4vw, 16.5px); line-height: 1.55;
+  letter-spacing: -0.006em;
+}
+/* Where the six land. A full-width rule under the grid rather than a seventh
+   cell, so it reads as the conclusion of the section instead of one more item
+   in it. */
+.aff-day-foot {
+  margin: 0; padding: clamp(24px, 2.8vw, 34px) 0 0;
+  font-size: clamp(16px, 1.5vw, 19px); line-height: 1.5;
+  letter-spacing: -0.01em; color: var(--a-ink-soft);
+}
+.aff-day-foot a {
+  color: var(--a-ink); text-decoration: none; font-weight: 500;
+  box-shadow: inset 0 -0.08em 0 0 var(--a-line-strong);
+}
+.aff-day-foot a:hover { box-shadow: inset 0 -0.08em 0 0 var(--a-ink); }
 
 /* ── Footer ──────────────────────────────────────────────────────────────── */
 .aff-foot {

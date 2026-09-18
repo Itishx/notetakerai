@@ -119,25 +119,59 @@ const BRAINO_BRIEFS = [
 
 /* What "hands" means, said plainly. A metaphor on its own leaves the statement
    looking like a pull quote nobody finished. */
+/* The middle of the story, and the part that was missing.
+ *
+ * The page went promise, then argument, then capability list, and never once
+ * showed a Tuesday. This is not a tour of what the software does; it is what
+ * changes about a normal day on a normal Mac. Each one is written as an outcome
+ * somebody would notice, with the version everybody has today beside it, so the
+ * value lands before a single word of how it works.
+ *
+ * Deliberately not phrased as "ask it to X". A list of commands is a manual,
+ * and a manual is a thing you read after you have already been convinced. */
+const THE_DAY = [
+  {
+    h: "Meetings become invisible.",
+    now: "You half-listen and half-type, and end up doing neither well.",
+    next:
+      "It listens for the whole hour. You shut the laptop and the notes are already written, with what was decided and who said they would do what.",
+  },
+  {
+    h: "Typing becomes optional.",
+    now: "Everything you want to say has to go through your hands first.",
+    next:
+      "Talk anywhere on your Mac and the words land where the cursor is. In the email, in the doc, in the message box. An hour of it, not a sentence.",
+  },
+  {
+    h: "Nothing needs explaining twice.",
+    now: "Copy it out, paste it in, describe the bit it cannot see, try again.",
+    next:
+      "It is looking at the same screen you are. Ask about this email, this page, this invoice, and there is no step where you set the scene.",
+  },
+  {
+    h: "The errands stop being yours.",
+    now: "The booking, the form, the six tabs, the reply you have been putting off.",
+    next:
+      "You say it once and it goes and does it, and it stops to ask before anything gets bought, sent or deleted.",
+  },
+  {
+    h: "Your week keeps itself.",
+    now: "A calendar is only as good as the last time you remembered to update it.",
+    next:
+      "It reads the timetable your college or your company already keeps, so it knows what is on today without you entering anything.",
+  },
+  {
+    h: "And you are not talking to a tool.",
+    now: "A blank box and a blinking cursor, every single morning, forever.",
+    next:
+      "A face, a voice, and a read on what kind of day you are having. It knows what you told it last month, and it is the same one tomorrow.",
+  },
+];
+
 const HANDS = [
   { k: "It sees the real screen.", v: "The page you are on, not a box you paste into." },
   { k: "It acts, then checks.", v: "Does the thing, then looks again to see whether it worked." },
   { k: "It stops itself.", v: "Before anything that spends, sends, posts or deletes." },
-];
-
-const HONEST = [
-  {
-    k: "We did not build the AI.",
-    v: "The models are bought, the same ones anybody can buy. Nobody has an advantage there, and anyone claiming one is selling something.",
-  },
-  {
-    k: "We did not invent speech, or vision.",
-    v: "We made them survive an hour in a real room, on a real laptop, with a real person interrupting. That part nobody sells you.",
-  },
-  {
-    k: "What is ours is everything in between.",
-    v: "The bit that stops it buying the wrong thing. The bit that checks its own work. The bit that still knows you next month. Twenty unglamorous parts, and they are the whole product.",
-  },
 ];
 
 /* The questions people actually ask, answered without a single word anybody
@@ -158,6 +192,14 @@ const FAQ = [
   {
     q: "Can it do something I did not ask for?",
     a: "No. Anything that spends money, sends a message, posts publicly or deletes something stops and waits for you to say yes. That is enforced in the code, not requested in an instruction.",
+  },
+  {
+    q: "Did you build the AI itself?",
+    a: "No, and neither did almost anybody saying they did. The models are bought, the same ones anybody can buy. There is no advantage there and anyone claiming one is selling something.",
+  },
+  {
+    q: "Then what is actually yours?",
+    a: "Everything in between. Speech and vision exist; making them survive an hour in a real room, on a real laptop, with a real person interrupting, does not come in a box. Nor does the part that stops it buying the wrong thing, or checks its own work, or still knows you next month. It is about twenty unglamorous pieces and they are the entire product.",
   },
   {
     q: "What can I actually use today?",
@@ -213,8 +255,8 @@ export default function Affective() {
         <div className="aff-nav-in">
           <Link to="/affective" className="aff-logo">Affective</Link>
           <div className="aff-nav-links">
-            <a href="#honest">What is ours</a>
-            <a href="#stack">What it does</a>
+            <a href="#day">What changes</a>
+            <a href="#stack">How it works</a>
             <a href="#characters">Characters</a>
             <a href="#faq">Questions</a>
             <Link to="/waitlist">Early access</Link>
@@ -261,24 +303,35 @@ export default function Affective() {
         </div>
       </header>
 
-      {/* ── What is ours ───────────────────────────────────────────────────── */}
-      <section className="aff-sec" id="honest">
+      {/* ── What changes ──────────────────────────────────────────────────── */}
+      <section className="aff-sec aff-day" id="day">
         <div className="aff-wrap">
           <div className="aff-sec-head aff-reveal">
-            <h2>What is ours, and what is not.</h2>
+            <h2>What changes about your day.</h2>
             <p>
-              Worth saying before anything else, because it is the only question about an
-              AI company that matters.
+              Not features. The six things you would actually notice by Friday, and what
+              each one looks like right now, on the Mac you already own.
             </p>
           </div>
-          <dl className="aff-honest aff-reveal">
-            {HONEST.map((h) => (
-              <div className="aff-honest-row" key={h.k}>
-                <dt>{h.k}</dt>
-                <dd>{h.v}</dd>
-              </div>
+        </div>
+        <div className="aff-wrap">
+          <div className="aff-grid aff-grid-2 aff-reveal">
+            {THE_DAY.map((d) => (
+              <article className="aff-day-cell" key={d.h}>
+                <h3>{d.h}</h3>
+                {/* Today first, so the reader recognises themselves before
+                    being sold anything. */}
+                <p className="aff-day-now"><span>Today</span>{d.now}</p>
+                <p className="aff-day-next">{d.next}</p>
+              </article>
             ))}
-          </dl>
+          </div>
+          {/* Where all of it lands. The point of the section is not six
+              separate tricks, it is that one character performs all of them. */}
+          <p className="aff-day-foot aff-reveal">
+            All six, in one place, done by one character. That one is called{" "}
+            <Link to="/braino">Braino</Link>.
+          </p>
         </div>
       </section>
 
@@ -304,10 +357,10 @@ export default function Affective() {
       <section className="aff-sec" id="stack">
         <div className="aff-wrap">
           <div className="aff-sec-head aff-reveal">
-            <h2>Six things, and you only get an assistant worth having with all six.</h2>
+            <h2>None of that works unless six things are true at once.</h2>
             <p>
-              Most of these exist somewhere on their own. Nobody had put them in one place
-              and made them survive a normal Tuesday.
+              Each one exists somewhere on its own. The work is holding all six together on
+              a normal Tuesday, which is the part that had not been done.
             </p>
           </div>
         </div>
