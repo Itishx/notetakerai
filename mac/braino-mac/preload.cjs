@@ -122,6 +122,8 @@ contextBridge.exposeInMainWorld("brainoMac", {
   /* What did they just say — asked, not matched. */
   jobRunning: () => ipcRenderer.invoke("braino-mac:job-running"),
   mediaControl: (payload) => ipcRenderer.invoke("braino-mac:media-control", payload),
+  // The routing decision, so the voice fork and the intent chain cannot disagree.
+  wantsBrain: (text) => ipcRenderer.invoke("braino-mac:wants-brain", text),
   // The tray's transport buttons. A separate channel because it is a separate
   // contract: {action, source} against media-control's {action, target}.
   trayMediaControl: (payload) => ipcRenderer.invoke("braino-mac:tray-media", payload),
@@ -454,6 +456,8 @@ contextBridge.exposeInMainWorld("brainoMac", {
   },
   // ── Notch tray ──
   mediaControl: (payload) => ipcRenderer.invoke("braino-mac:media-control", payload),
+  // The routing decision, so the voice fork and the intent chain cannot disagree.
+  wantsBrain: (text) => ipcRenderer.invoke("braino-mac:wants-brain", text),
   // The tray's transport buttons. A separate channel because it is a separate
   // contract: {action, source} against media-control's {action, target}.
   trayMediaControl: (payload) => ipcRenderer.invoke("braino-mac:tray-media", payload),

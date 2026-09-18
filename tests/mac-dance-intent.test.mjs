@@ -69,7 +69,11 @@ test("the whole trick is wired, and does not wait to be noticed", () => {
 test("a party trick is caught before chat can answer it", () => {
   const renderer = readFileSync(new URL("../mac/braino-mac/renderer/braino-mac.js", import.meta.url), "utf8");
   const quick = renderer.indexOf("if (await runQuickVoiceCommand(turnText)) return;");
-  const chatFork = renderer.indexOf("if (shouldUseRealtimeDirectChat(turnText))");
+  /* Matched by shape rather than by an exact string: the fork became
+     "await shouldUseRealtimeDirectChat" when it started asking the main process
+     for the routing decision, and an indexOf on the old literal silently
+     returned -1, which made this ordering check pass by accident. */
+  const chatFork = renderer.search(/if \((?:await )?shouldUseRealtimeDirectChat\(turnText\)\)/);
   assert.ok(quick > 0, "the quick door exists");
   assert.ok(quick < chatFork, "and it comes before the chat fork");
 

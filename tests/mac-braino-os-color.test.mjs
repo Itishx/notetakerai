@@ -76,7 +76,11 @@ test("Braino OS commands are caught before chat can swallow them", async () => {
   const { readFileSync } = await import("node:fs");
   const renderer = readFileSync(new URL("../mac/braino-mac/renderer/braino-mac.js", import.meta.url), "utf8");
   const osCall = renderer.indexOf("if (await runQuickVoiceCommand(turnText)) return;");
-  const chatFork = renderer.indexOf("if (shouldUseRealtimeDirectChat(turnText))");
+  /* Matched by shape rather than by an exact string: the fork became
+     "await shouldUseRealtimeDirectChat" when it started asking the main process
+     for the routing decision, and an indexOf on the old literal silently
+     returned -1, which made this ordering check pass by accident. */
+  const chatFork = renderer.search(/if \((?:await )?shouldUseRealtimeDirectChat\(turnText\)\)/);
   assert.ok(osCall > 0, "the voice turn checks Braino OS commands");
   assert.ok(chatFork > 0, "the chat fork is still there");
   assert.ok(osCall < chatFork, "Braino OS has to be checked BEFORE the chat fork");

@@ -6988,13 +6988,37 @@ function isLikelyMacActionTranscript(text) {
   return /\b(open|launch|start|close|quit|demo|organize|organise|clean|sort|rename|move|delete|trash|create|make|new|create folder|make folder|new folder|undo|find|locate|look for|search for|show me|play|playing|pause|resume|spotify|playlist|volume|vol|sound|louder|quieter|mute|reduce|raise|increase|decrease|lower|percent|seconds?|minutes?|shuffle|repeat|loop|queue|rewind|restart|seek|album|artist|listening to|youtube|song|music|chrome|browser|website|tab|gmail|mail|email|notes|note|maps|calendar|drive|docs|pdf|image|video|file|folder|app|application|send|draft|compose|click|point|where is|reply|write|whatsapp|whats app|remember|remind|timer|countdown|touch id|verify|authenticate|come out|come here|show yourself|step out|join me|go back|go home|get back|head back|head home|tuck in|return home|mesa|coursework|assignment|deadline|ram|cpu|memory|storage|disk|space|running out|full|task manager|activity monitor|processes|hogging|eating my|slowing|worth deleting|how many|recover|redundant|bring back|maximize|minimize|snap|half|selected|selection|highlighted|rephrase|rewrite|fix this|mentions|followers|tweet|clip|caption|ship it|x account|ex account|my ex|disturb|bother|check on me|advise|advice|record|recording|meeting|the call|stop recording|wallpaper|desktop background|maps|distance|how far|directions|navigate|route|amazon|shop|options for|research|compare|difference between|send to|my phone|wake word|always listen|call|facetime|face time|dial|watch|tutorial|channel|creator|recommend|read|screen|explain|translate|look at|watching|help me with|summarize|summarise|scroll|download|upload|copy|paste)\b/.test(normalized);
 }
 
-function shouldUseRealtimeDirectChat(text) {
+async function shouldUseRealtimeDirectChat(text) {
   if (!realtimeActive || !rtDc || rtDc.readyState !== "open") return false;
   // a mode command, or anything while a mode runs, is never small talk
   if (isVoiceModeUtterance(text)) return false;
   if (herMode) return normalizeForVoiceMatch(text).length > 0;
   if (hasPendingDelegateFollowup()) return false;
   if (isLikelyMacActionTranscript(text)) return false;
+  /* The same router the typed path uses, asked rather than reimplemented.
+   *
+   * This function's default was chat, and the main process's default is the
+   * brain. Two routers with opposite defaults, so one sentence went two ways
+   * depending on which door it came through: "what class do I have next"
+   * reached the timetable once and was answered from thin air the next time.
+   *
+   * isLikelyMacActionTranscript above stays as the cheap local veto for obvious
+   * commands. This catches everything it was never written for, which is now
+   * most of what Braino can do: a timetable, research, anything needing a tool.
+   * A question is not automatically small talk just because it is a question.
+   *
+   * Fails open to chat, because a routing lookup that breaks should cost a
+   * worse answer rather than every utterance.
+   */
+  try {
+    const verdict = await window.brainoMac.wantsBrain?.(text);
+    if (verdict?.brain) {
+      logRenderer("voice.route.brain", { chars: String(text || "").length });
+      return false;
+    }
+  } catch (error) {
+    logRenderer("voice.route.lookup_failed", { error: String(error?.message || error) });
+  }
   return normalizeForVoiceMatch(text).length > 0;
 }
 
@@ -7191,7 +7215,10 @@ async function answerViaRealtimeChat(prompt, options = {}) {
      about the turn is identical to a spoken one. */
   const silent = Boolean(options.silent);
   const text = String(prompt || "").trim();
-  if (!text || !shouldUseRealtimeDirectChat(text)) return false;
+  // Awaited, and that matters: this became async when it started asking the main
+  // process for the routing decision, and !Promise is always false, so an
+  // un-awaited guard here would silently stop guarding anything.
+  if (!text || !(await shouldUseRealtimeDirectChat(text))) return false;
   // Read the moment from what was just said, before the instructions for this
   // turn are built below.
   macCurrentMoment = macDetectMoment(text);
@@ -8621,7 +8648,7 @@ async function flushRealtimeTranscript(reason, textOverride) {
         await runDelegate(resumed, { keepRealtime: true });
         return;
       }
-      if (shouldUseRealtimeDirectChat(turnText)) {
+      if (await shouldUseRealtimeDirectChat(turnText)) {
         const handled = await answerViaRealtimeChat(turnText);
         if (handled) return;
         logRenderer("realtime.chat.fallback_to_delegate", {
