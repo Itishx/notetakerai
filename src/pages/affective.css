@@ -111,11 +111,12 @@
 }
 .aff-h1 {
   margin: 0;
-  font-size: clamp(40px, 5.6vw, 72px);
-  line-height: 1.02;
-  letter-spacing: -0.035em;
-  font-weight: 600;
-  max-width: 15ch;
+  font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  font-size: clamp(38px, 5.2vw, 66px);
+  line-height: 1.08;
+  letter-spacing: -0.02em;
+  font-weight: 400;
+  max-width: 17ch;
   text-wrap: balance;
 }
 .aff-h1 em {
@@ -272,9 +273,10 @@
 .aff-sec-head { padding-bottom: clamp(28px, 3.4vw, 44px); }
 .aff-sec-head h2 {
   margin: 0;
-  font-size: clamp(30px, 4.2vw, 52px);
-  letter-spacing: -0.03em; font-weight: 600; line-height: 1.08;
-  max-width: 20ch; text-wrap: balance;
+  font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  font-size: clamp(29px, 3.8vw, 46px);
+  letter-spacing: -0.018em; font-weight: 400; line-height: 1.14;
+  max-width: 22ch; text-wrap: balance;
 }
 .aff-sec-head p {
   margin: 16px 0 0; max-width: 58ch;
@@ -284,24 +286,24 @@
 
 /* ── The statement: the one serif on the page ────────────────────────────── */
 .aff-statement {
-  padding: clamp(80px, 11vw, 156px) 0;
+  padding: clamp(96px, 13vw, 190px) 0;
   border-top: 1px solid var(--a-line);
+  border-bottom: 1px solid var(--a-line);
   margin-top: clamp(72px, 9vw, 128px);
+  background: var(--a-surface);
 }
 .aff-statement blockquote {
-  margin: 0; max-width: 24ch;
+  margin: 0; max-width: 22ch;
   font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
-  font-size: clamp(30px, 4.6vw, 58px);
-  line-height: 1.16; letter-spacing: -0.02em;
+  font-size: clamp(36px, 6.2vw, 82px);
+  line-height: 1.08; letter-spacing: -0.022em;
   text-wrap: balance;
 }
+/* The second half carries the argument, so it is the half that is coloured. */
+.aff-statement blockquote span { color: var(--a-braino); }
 /* The footer under the statement carries the only explanation on the page, so
    it gets a readable measure rather than the one-line credit it started as. */
-.aff-statement footer {
-  margin-top: 30px; max-width: 46ch;
-  font-size: 14.5px; line-height: 1.55; color: var(--a-ink-soft);
-  letter-spacing: -0.006em; font-family: inherit;
-}
+
 
 
 /* ── What the hands are ─────────────────────────────────────────────────────
@@ -352,8 +354,10 @@
   color: var(--a-braino); margin: 0 0 18px;
 }
 .aff-braino-top h2 {
-  margin: 0; font-size: clamp(38px, 6vw, 72px);
-  letter-spacing: -0.035em; font-weight: 600; line-height: 1.02;
+  margin: 0;
+  font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  font-size: clamp(40px, 6vw, 74px);
+  letter-spacing: -0.02em; font-weight: 400; line-height: 1.02;
 }
 .aff-braino-line {
   margin: 18px 0 0; max-width: 44ch;
@@ -456,4 +460,64 @@
 @media (prefers-reduced-motion: reduce) {
   .aff-reveal { opacity: 1; transform: none; transition: none; }
   .aff-prod, .aff-prod::before { transition: none; }
+}
+
+/* ── The product, shown ──────────────────────────────────────────────────────
+   A company page that never shows the thing is asking to be taken on faith.
+   Framed rather than filled, so whatever ships here inherits the frame instead
+   of needing the layout rebuilt around it. */
+.aff-shot { margin: clamp(48px, 6vw, 84px) 0 0; }
+.aff-shot-frame {
+  border: 1px solid var(--a-line);
+  border-radius: 20px;
+  background:
+    radial-gradient(120% 90% at 50% 0%, rgba(217, 100, 91, .07), transparent 62%),
+    linear-gradient(180deg, var(--a-surface), #efece2);
+  aspect-ratio: 16 / 9;
+  display: grid; place-items: center;
+  overflow: hidden;
+}
+@media (max-width: 620px) { .aff-shot-frame { aspect-ratio: 4 / 3; } }
+.aff-shot-note {
+  font-size: 13px; color: var(--a-ink-faint);
+  letter-spacing: .02em; text-align: center; padding: 0 24px;
+}
+
+/* ── Questions ──────────────────────────────────────────────────────────────
+   details/summary, so it works with no JavaScript and with a keyboard, and so
+   the last screen is not another wall of prose. Rules rather than cards: an
+   accordion of floating boxes is a support page, and this is still the company
+   talking. */
+.aff-faq { margin: clamp(26px, 3vw, 40px) 0 0; border-top: 1px solid var(--a-line); }
+.aff-faq details { border-bottom: 1px solid var(--a-line); }
+.aff-faq summary {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 24px;
+  padding: clamp(20px, 2.4vw, 28px) 0;
+  cursor: pointer; list-style: none;
+  font-size: clamp(17px, 1.7vw, 21px); font-weight: 600;
+  letter-spacing: -0.016em; color: var(--a-ink);
+}
+.aff-faq summary::-webkit-details-marker { display: none; }
+.aff-faq summary:hover { color: var(--a-braino); }
+.aff-faq summary:focus-visible { outline: 2px solid var(--a-braino); outline-offset: 4px; border-radius: 4px; }
+/* A plus that becomes a minus, drawn rather than a glyph so it sits on the
+   same optical centre at any size. */
+.aff-faq summary i {
+  flex: 0 0 auto; position: relative; width: 14px; height: 14px; margin-top: .34em;
+}
+.aff-faq summary i::before,
+.aff-faq summary i::after {
+  content: ""; position: absolute; inset: 50% 0 auto 0; height: 1.5px;
+  background: currentColor; transform: translateY(-50%);
+  transition: transform .24s ease, opacity .24s ease;
+}
+.aff-faq summary i::after { transform: translateY(-50%) rotate(90deg); }
+.aff-faq details[open] summary i::after { transform: translateY(-50%) rotate(0deg); opacity: 0; }
+.aff-faq details p {
+  margin: 0 0 clamp(22px, 2.6vw, 30px);
+  max-width: 62ch; font-size: 16px; line-height: 1.6;
+  color: var(--a-ink-soft); letter-spacing: -0.006em;
+}
+@media (prefers-reduced-motion: reduce) {
+  .aff-faq summary i::before, .aff-faq summary i::after { transition: none; }
 }

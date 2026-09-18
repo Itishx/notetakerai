@@ -6,79 +6,76 @@ import "./affective.css";
 /* ============================================================================
    /affective — the company.
 
-   Affective is the multiverse; Braino is a universe inside it with its own
-   characters and surfaces. So this page is deliberately NOT the Braino page: it
-   gives Braino a brief and sends you there, because a company page that tells
-   the whole product story leaves the product page with nothing to say.
+   Affective is the multiverse; Braino is a universe inside it. So this page
+   gives Braino a brief and a door: a company page that tells the whole product
+   story leaves the product page with nothing to say.
 
-   The positioning had to change once, honestly. An earlier version said "what
-   we own", and we do not own the models, the speech or the vision. Claiming
-   otherwise is both false and weaker than the truth: everybody has the same
-   models, almost nobody has the twenty unglamorous things between a model and a
-   person who trusts it. That is the actual moat and it is worth saying plainly.
+   Three rules, all three arguments rather than decoration.
 
-   The design rule is unchanged: the grid has no gaps. A gutter says "separate
-   things arranged", a shared edge says "one system divided", which is the
-   entire claim the page is making.
+   The grid has no gaps. A gutter says "separate things arranged", a shared edge
+   says "one system divided", which is the claim the page is making.
+
+   Headings are the serif, body is the sans, split by ROLE rather than by size.
+   The serif makes claims and says true things; the sans explains and lists. That
+   split is what stops a page this long reading as one wall.
+
+   And the copy is written for somebody who has never heard of an accessibility
+   tree. Nobody has ever wanted "screen awareness"; they want to not have to do
+   it themselves. Every technical sentence was cut or translated.
    ============================================================================ */
 
-/* The stack. Six because these are the six that really exist in the codebase,
-   and each carries one true specific: a measured number or the actual
-   mechanism. Adjectives about nothing are what make a company page read dead. */
 const LAYERS = [
   {
     n: "01",
-    name: "Sight",
+    name: "It can see your screen",
     body:
-      "Reads what is actually on the screen. The accessibility tree of any Mac app, and the real DOM of any web page, with the words printed on the elements. Not a screenshot handed to a model to guess at.",
-    spec: "The live page · 220 elements a pass",
+      "Whatever is in front of you right now. The email, the page, the spreadsheet, the form. It reads the real thing, so you never have to describe it or paste it anywhere.",
+    spec: "Any app, any website",
   },
   {
     n: "02",
-    name: "Hearing",
+    name: "It can listen for an hour",
     body:
-      "Live transcription that survives a full lecture. The hard part was never the model. It was backpressure: when audio arrives faster than it can be read, you drop it. You never queue it.",
-    spec: "40 minutes at 88% · drops, never queues",
+      "A whole lecture, a whole meeting, a whole afternoon of thinking out loud. Most dictation falls apart after a few minutes. This does not.",
+    spec: "40 minutes, 88% accurate",
   },
   {
     n: "03",
-    name: "Voice",
+    name: "It talks back",
     body:
-      "Speech that starts before the sentence is finished, and a persona that can be swapped mid-conversation without tearing down the session.",
-    spec: "First audio under 2s · barge-in aborts clean",
+      "Out loud, starting before you have finished your sentence, and you can cut it off mid-word the way you would a person.",
+    spec: "Answers in under two seconds",
   },
   {
     n: "04",
-    name: "Action",
+    name: "It actually does things",
     body:
-      "Look, decide exactly one thing, do it, then check the screen changed the way you expected. Never a plan executed blind. Anything that spends, sends, posts or deletes stops and asks.",
-    spec: "One decision a turn · the gate is code, not a prompt",
+      "Not a list of steps for you to follow. It clicks, types, books and sends. Then it looks again to check the thing it did actually worked.",
+    spec: "Checks its own work",
   },
   {
     n: "05",
-    name: "Memory",
+    name: "It remembers you",
     body:
-      "What it learns about you, kept across every surface. And what it learns from being wrong, kept across everybody: a wall one person hits once is a wall nobody else has to hit.",
-    spec: "Yours, and a shared record of mistakes",
+      "What you told it last month. Who your people are. How you like things done. You are not starting again every morning with a stranger.",
+    spec: "The same on every device",
   },
   {
     n: "06",
-    name: "Character",
+    name: "It is somebody",
     body:
-      "The layer we are named after, and the one everyone skips. A personality assembled per turn from separate traits, so it reads what kind of moment this is and answers that, instead of performing the same warmth at everything.",
-    spec: "Modular traits · routed per moment",
+      "The part we are named after, and the part everybody else skips. A face, a voice, and a read on what kind of day you are having before it answers.",
+    spec: "The reason you keep it",
   },
 ];
 
-/* Two products. Foundry is not one: it is Braino on the Mac, and pulling it out
-   here made Braino look like three half-things instead of one whole one. */
 const PRODUCTS = [
   {
     to: "/braino",
     tag: "Character One",
     name: "Braino",
     line:
-      "A companion with a face, living in your browser and on your Mac. Reads the page you are on, does the thing you asked, and remembers the last time you asked it.",
+      "A companion who lives in your browser and on your Mac. Already open, already knows what you are looking at, and does the part of the day you would rather not.",
     state: "In private beta",
     accent: "var(--a-braino)",
   },
@@ -87,14 +84,12 @@ const PRODUCTS = [
     tag: "Dictation",
     name: "HERA",
     line:
-      "Speak anywhere on the Mac and the words land where the cursor is. Built to hold an hour of talking, not a sentence.",
+      "Speak anywhere on your Mac and the words land where the cursor is. Built to hold an hour of talking, not a sentence.",
     state: "Built, shipping next",
     accent: "var(--a-hera)",
   },
 ];
 
-/* What Braino is, in four lines, and then a door. The full story belongs on its
-   own page; repeating it here would leave that page with nothing to be. */
 const BRAINO_BRIEFS = [
   {
     h: "He is already there.",
@@ -122,27 +117,55 @@ const BRAINO_BRIEFS = [
   },
 ];
 
-/* What "hands" means, said concretely, because a metaphor alone leaves the
-   statement section looking like a pull quote nobody finished. */
+/* What "hands" means, said plainly. A metaphor on its own leaves the statement
+   looking like a pull quote nobody finished. */
 const HANDS = [
   { k: "It sees the real screen.", v: "The page you are on, not a box you paste into." },
   { k: "It acts, then checks.", v: "Does the thing, then looks again to see whether it worked." },
   { k: "It stops itself.", v: "Before anything that spends, sends, posts or deletes." },
 ];
 
-/* The honest part, and the strongest. Everyone has the same models. */
 const HONEST = [
   {
-    k: "We did not train a model.",
-    v: "The models are bought, like everyone else's. What sits between one and a person who trusts it is not.",
+    k: "We did not build the AI.",
+    v: "The models are bought, the same ones anybody can buy. Nobody has an advantage there, and anyone claiming one is selling something.",
   },
   {
     k: "We did not invent speech, or vision.",
-    v: "We made them survive an hour in a real room, on a real laptop, with a real person interrupting.",
+    v: "We made them survive an hour in a real room, on a real laptop, with a real person interrupting. That part nobody sells you.",
   },
   {
-    k: "What is ours is the assembly.",
-    v: "The gate that stops a purchase. The loop that checks its own work. The memory that outlives the session. Twenty unglamorous parts nobody demos, in six layers. They are below.",
+    k: "What is ours is everything in between.",
+    v: "The bit that stops it buying the wrong thing. The bit that checks its own work. The bit that still knows you next month. Twenty unglamorous parts, and they are the whole product.",
+  },
+];
+
+/* The questions people actually ask, answered without a single word anybody
+   would have to look up. */
+const FAQ = [
+  {
+    q: "What is Affective, in one line?",
+    a: "A company building the technology that makes voice-first computing possible, and the characters people actually want to talk to.",
+  },
+  {
+    q: "Is this just another chatbot?",
+    a: "The opposite. A chatbot answers and leaves you to it. Ours goes and does the thing, on the screen you are already looking at, and then tells you it is done.",
+  },
+  {
+    q: "Do I have to move to a new app?",
+    a: "No. It works inside what you already use: your browser, your Mac, your email, your college portal. There is nothing to migrate and nothing to set up.",
+  },
+  {
+    q: "Can it do something I did not ask for?",
+    a: "No. Anything that spends money, sends a message, posts publicly or deletes something stops and waits for you to say yes. That is enforced in the code, not requested in an instruction.",
+  },
+  {
+    q: "What can I actually use today?",
+    a: "Braino is in private beta on Chrome and macOS. HERA is built and ships next. Everything described on this page is something the software does now, not something planned.",
+  },
+  {
+    q: "Who is it for?",
+    a: "One person at a time. Not a team plan, not a workspace. The whole thing assumes it belongs to you and knows your life, which is a different product from one that belongs to your employer.",
   },
 ];
 
@@ -151,8 +174,8 @@ function useReveal() {
   useEffect(() => {
     const els = root.current?.querySelectorAll<HTMLElement>(".aff-reveal");
     if (!els?.length) return;
-    // Everything visible at rest if the observer never runs: a section parked at
-    // opacity 0 waiting on JS is how a page ships looking empty.
+    // Visible at rest if the observer never runs. A section parked at opacity 0
+    // waiting on JS is how a page ships looking empty.
     if (!("IntersectionObserver" in window)) {
       els.forEach((el) => el.classList.add("is-in"));
       return;
@@ -180,7 +203,7 @@ export default function Affective() {
   useEffect(() => {
     document.title = "Affective";
     const prev = document.body.style.background;
-    document.body.style.background = "#fbfbfd";
+    document.body.style.background = "#f4f2ec";
     return () => { document.body.style.background = prev; };
   }, []);
 
@@ -191,8 +214,9 @@ export default function Affective() {
           <Link to="/affective" className="aff-logo">Affective</Link>
           <div className="aff-nav-links">
             <a href="#honest">What is ours</a>
-            <a href="#stack">The assembly</a>
+            <a href="#stack">What it does</a>
             <a href="#characters">Characters</a>
+            <a href="#faq">Questions</a>
             <Link to="/waitlist">Early access</Link>
           </div>
         </div>
@@ -202,27 +226,33 @@ export default function Affective() {
       <header className="aff-hero">
         <div className="aff-wrap">
           <p className="aff-kicker aff-reveal">Affective · Voice-first computing</p>
-          {/* Claim left, meaning right, at the same baseline. "Software that
-              does the thing" is sharp and, on its own, vague enough to be
-              anybody's, so the sentence that says what it means has to sit
-              beside it rather than a scroll below it. */}
+          {/* The claim on the left and, immediately beside it, the reason
+              anybody should care. A short claim on its own is a slogan. */}
           <div className="aff-hero-cols">
             <h1 className="aff-h1 aff-reveal">
-              Software that <u>does</u> the thing,{" "}
-              <em>instead of telling you how.</em>
+              We build the technology behind a computer you can{" "}
+              <em>just talk to.</em>
             </h1>
             <div className="aff-reveal">
               <p className="aff-hero-explain">
                 AI has got very good at telling you what to do. You still have to go and do
-                it. Open the tab. Find the file. Copy it across. Fill in the form. Chase the
-                email you have been meaning to send since Tuesday.
+                it yourself. Open the tab, find the file, copy it across, fill in the form,
+                send the email you have been putting off since Tuesday.
               </p>
               <p className="aff-hero-explain">
-                We build the part that just does it. Out loud, on the computer you already
-                have, inside the apps you already use.
+                We build the part that goes and does it, and the characters worth asking.
               </p>
             </div>
           </div>
+
+          {/* Show the thing. A company page that never does is asking to be
+              taken on faith. */}
+          <figure className="aff-shot aff-reveal">
+            <div className="aff-shot-frame">
+              <span className="aff-shot-note">Braino, on the page you are already on</span>
+            </div>
+          </figure>
+
           <div className="aff-hero-meta aff-reveal">
             <span>Bengaluru</span>
             <span>Two products</span>
@@ -231,15 +261,14 @@ export default function Affective() {
         </div>
       </header>
 
-      {/* ── How we work, honestly ──────────────────────────────────────────── */}
+      {/* ── What is ours ───────────────────────────────────────────────────── */}
       <section className="aff-sec" id="honest">
         <div className="aff-wrap">
           <div className="aff-sec-head aff-reveal">
             <h2>What is ours, and what is not.</h2>
             <p>
               Worth saying before anything else, because it is the only question about an
-              AI company that matters. Everybody has the same models. Almost nobody has the
-              part between a model and a person who actually trusts it.
+              AI company that matters.
             </p>
           </div>
           <dl className="aff-honest aff-reveal">
@@ -253,15 +282,32 @@ export default function Affective() {
         </div>
       </section>
 
-      {/* ── The stack ──────────────────────────────────────────────────────── */}
+      {/* ── The statement, its own section ─────────────────────────────────── */}
+      <section className="aff-statement">
+        <div className="aff-wrap">
+          <blockquote className="aff-reveal">
+            The hard part was never the intelligence.
+            {" "}<span>It was the hands.</span>
+          </blockquote>
+          <dl className="aff-hands aff-reveal">
+            {HANDS.map((h) => (
+              <div key={h.k}>
+                <dt>{h.k}</dt>
+                <dd>{h.v}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      </section>
+
+      {/* ── What it does ───────────────────────────────────────────────────── */}
       <section className="aff-sec" id="stack">
         <div className="aff-wrap">
           <div className="aff-sec-head aff-reveal">
-            <h2>The assembly, in six parts.</h2>
+            <h2>Six things, and you only get an assistant worth having with all six.</h2>
             <p>
-              None of these is a model. They are the parts around one: how a machine sees a
-              screen, holds a room, acts without wrecking anything, and does not start every
-              morning from nothing. An agent is what happens when you have all six.
+              Most of these exist somewhere on their own. Nobody had put them in one place
+              and made them survive a normal Tuesday.
             </p>
           </div>
         </div>
@@ -279,37 +325,15 @@ export default function Affective() {
         </div>
       </section>
 
-      {/* ── The statement ──────────────────────────────────────────────────── */}
-      <section className="aff-statement">
-        <div className="aff-wrap">
-          <blockquote className="aff-reveal">
-            The hard part was never the intelligence. It was the hands.
-          </blockquote>
-          <footer className="aff-reveal">
-            Affective computing is the real name for machines that read how a person
-            actually is. We took it because the last layer is the one everybody skips,
-            and it is the difference between a tool you use and someone you keep.
-          </footer>
-          <dl className="aff-hands aff-reveal">
-            {HANDS.map((h) => (
-              <div key={h.k}>
-                <dt>{h.k}</dt>
-                <dd>{h.v}</dd>
-              </div>
-            ))}
-          </dl>
-        </div>
-      </section>
-
       {/* ── Characters ─────────────────────────────────────────────────────── */}
       <section className="aff-sec" id="characters">
         <div className="aff-wrap">
           <div className="aff-sec-head aff-reveal">
-            <h2>One stack. Characters on top of it.</h2>
+            <h2>One set of parts. Different people built out of them.</h2>
             <p>
-              An agent with no personality is a command line with extra steps. So we do not
-              ship the stack, we ship somebody built out of it, and the stack is what makes
-              the next one take weeks instead of a year.
+              Something that can do everything and is nobody is a command line with extra
+              steps. So we do not sell the parts. We build somebody out of them, and the
+              parts are why the next one takes weeks instead of a year.
             </p>
           </div>
         </div>
@@ -335,11 +359,11 @@ export default function Affective() {
         </div>
       </section>
 
-      {/* ── Braino, briefly, then a door ───────────────────────────────────── */}
+      {/* ── Braino ─────────────────────────────────────────────────────────── */}
       <section className="aff-braino">
         <div className="aff-wrap">
           <div className="aff-braino-top aff-reveal">
-            <p className="aff-braino-eyebrow">Character One</p>
+            <p className="aff-braino-eyebrow">Where it started</p>
             <div className="aff-braino-name">
               <h2>Braino</h2>
               <div className="aff-braino-face" aria-hidden="true">
@@ -347,10 +371,9 @@ export default function Affective() {
               </div>
             </div>
             <p className="aff-braino-line">
-              Not an assistant. A companion, with a face and a voice and a mood, who is
-              already open when you get there and does the part of the day you would rather
-              not. A world of his own, with his own surfaces and his own characters. This
-              is the short version.
+              Affective exists because of him. He came first. Every part on this page was
+              built because he needed it to be somebody worth keeping around, and the
+              company is what was left over once he worked.
             </p>
           </div>
         </div>
@@ -373,15 +396,40 @@ export default function Affective() {
         </div>
       </section>
 
+      {/* ── Questions ──────────────────────────────────────────────────────── */}
+      <section className="aff-sec" id="faq">
+        <div className="aff-wrap">
+          <div className="aff-sec-head aff-reveal">
+            <h2>Questions people actually ask.</h2>
+          </div>
+          {/* details/summary, so it works with no JavaScript and with a
+              keyboard, and so the page is not one uninterrupted scroll of prose
+              by the time somebody gets here. */}
+          <div className="aff-faq aff-reveal">
+            {FAQ.map((f, i) => (
+              <details key={f.q} open={i === 0}>
+                <summary>
+                  <span>{f.q}</span>
+                  <i aria-hidden="true" />
+                </summary>
+                <p>{f.a}</p>
+              </details>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* ── Footer ─────────────────────────────────────────────────────────── */}
       <footer className="aff-foot">
         <div className="aff-wrap">
           <div className="aff-foot-grid">
             <div className="aff-foot-brand">
               <strong>Affective</strong>
+              {/* Affective is not a voice-first computer. It is the company
+                  building what one needs in order to exist. */}
               <p>
-                A voice-first computer, and the characters that make one worth keeping.
-                Built in Bengaluru.
+                We do not make a voice-first computer. We build the technology that makes
+                one possible, and the characters worth talking to. Bengaluru.
               </p>
             </div>
             <nav className="aff-foot-col">
