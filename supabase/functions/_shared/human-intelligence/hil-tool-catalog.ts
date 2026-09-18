@@ -40,7 +40,7 @@ export type HilTool = {
   handler?: string;
 };
 
-export const HIL_CATALOG_VERSION = "1.4.0";
+export const HIL_CATALOG_VERSION = "1.5.0";
 
 export const HIL_TOOL_CATALOG: HilTool[] = [
   // Split, because one entry covering both halves of actOnSelectedText made the
@@ -109,6 +109,11 @@ export const HIL_TOOL_CATALOG: HilTool[] = [
      click the body, no cursor; click again; screen-reader mode; insert into the
      editable frame; rejected. It left an empty document and said so honestly.
      The endpoints had been deployed for months and nothing listed them. */
+  /* Their actual timetable, already synced into schedule_events by whichever
+     source they connected. Reading it is a table query, not a website visit:
+     asking "what is due this week" should never mean opening a browser, logging
+     into an LMS, and reading a grid. */
+  { name: "schedule_lookup", params: ["from", "to", "kind"], gloss: "Read the user's own timetable: classes, deadlines, exams and events between two dates. from/to are ISO dates or plain words like today, tomorrow, this week. kind optionally narrows to assignment, exam or class", handler: "lookupSchedule", },
   { name: "google_doc_create", params: ["title", "text"], gloss: "Create a Google Doc and write the whole text into it in one go. ALWAYS use this for Google Docs, never try to type into the page: Docs renders on a canvas and cannot be typed into with a script", handler: "createGoogleDocWithText", },
   { name: "gmail_reply", params: ["userInstruction"], gloss: "Draft and send a reply to the Gmail thread open in Chrome", irreversible: true, handler: "replyToOpenGmail", },
   { name: "hide_braino", params: [], gloss: "Hide the Braino window until the user calls it back", stateful: true, zeroNetwork: true, },

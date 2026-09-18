@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { createRequire } from "node:module";
+
+const require = createRequire(import.meta.url);
 
 /* Reading a student's timetable out of their college LMS.
  *
@@ -64,4 +67,39 @@ test("a service worker sleeps, so the schedule runs on an alarm", () => {
   // setInterval dies with the worker. chrome.alarms survives it.
   assert.match(bg, /chrome\.alarms\.create\(BG_MESA_SYNC_ALARM/);
   assert.match(bg, /periodInMinutes: 60/);
+});
+
+test("timetable questions reach the brain, not small talk", () => {
+  /* The gap that would have made the whole feature look broken. "What is due
+     this week" carries no verb from the task list, so it landed in the
+     conversation branch and got answered from thin air by a model with no idea
+     what he is enrolled in. The answer is in a table and only the loop can
+     reach it. */
+  const routing = require("../mac/braino-mac/hil-routing.cjs");
+  for (const said of [
+    "what's due this week",
+    "what's on my timetable today",
+    "do I have any classes tomorrow",
+    "when is my next exam",
+    "what assignments are coming up",
+  ]) {
+    assert.equal(routing.macWantsTheBrain(said), true, said);
+  }
+});
+
+test("Braino reads the timetable instead of visiting a website", () => {
+  const main = readFileSync(new URL("../mac/braino-mac/main.cjs", import.meta.url), "utf8");
+  assert.match(main, /schedule_lookup: \(a\) => lookupSchedule\(a\)/);
+  assert.match(main, /rest\/v1\/schedule_events/, "it is a table query, not a browser visit");
+
+  /* A deadline reads as "due at", not as a span from 23:59 until 23:59. */
+  assert.match(main, /DUE \$\{time\}/);
+
+  /* Empty and never-synced are different problems with different fixes, and a
+     blank answer cannot tell them apart. */
+  assert.match(main, /may not have synced yet/);
+
+  const catalog = readFileSync(
+    new URL("../supabase/functions/_shared/human-intelligence/hil-tool-catalog.ts", import.meta.url), "utf8");
+  assert.match(catalog, /name: "schedule_lookup"/, "the model is never told about a tool the catalog omits");
 });

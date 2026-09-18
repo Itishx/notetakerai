@@ -15181,6 +15181,109 @@ async function createGoogleDocWithText(title, text) {
   }
 }
 
+/* Reading the timetable he already has.
+ *
+ * The extension syncs Nexus into schedule_events every hour. This is the other
+ * half: asking "what is due this week" should be a table query, not a browser
+ * opening an LMS and reading a grid. It is also why the table is source-tagged
+ * rather than Mesa-shaped, because this function never learns where any of it
+ * came from.
+ */
+function macFriendlyDay(iso, zone) {
+  return new Date(iso).toLocaleDateString("en-GB", {
+    weekday: "long", day: "numeric", month: "short", timeZone: zone || "Asia/Kolkata",
+  });
+}
+
+function macFriendlyTime(iso, zone) {
+  return new Date(iso).toLocaleTimeString("en-GB", {
+    hour: "numeric", minute: "2-digit", hour12: true, timeZone: zone || "Asia/Kolkata",
+  });
+}
+
+/* "today", "this week", "next month" and an ISO date all have to work, because
+   a person says the first three and a model writes the fourth. */
+function macResolveWhen(word, fallbackDays) {
+  const t = String(word || "").toLowerCase().trim();
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  if (/^\d{4}-\d{2}-\d{2}/.test(t)) return new Date(t);
+  if (t === "today") return startOfToday;
+  if (t === "tomorrow") return new Date(startOfToday.getTime() + 86400000);
+  if (t === "yesterday") return new Date(startOfToday.getTime() - 86400000);
+  if (!t) return new Date(startOfToday.getTime() + fallbackDays * 86400000);
+  // "this week", "next week", anything else: start from today and let the
+  // range's other end decide how far. Guessing at week boundaries across
+  // timezones buys nothing a wider window does not.
+  return startOfToday;
+}
+
+async function lookupSchedule(args = {}) {
+  const auth = authStatusPayload();
+  if (!auth.userId) return { ok: false, say: "You are not signed in, so I cannot see your timetable." };
+  const authToken = await getBrainoAuthToken();
+  if (!authToken) return { ok: false, say: "I could not authenticate, so I cannot read your timetable." };
+
+  const from = macResolveWhen(args.from, 0);
+  const to = String(args.to || "").trim()
+    ? macResolveWhen(args.to, 7)
+    : new Date(from.getTime() + 7 * 86400000);
+  // Inclusive of the last day, because "this week" said on a Friday means
+  // through Sunday night, not up to Sunday at midnight exactly.
+  const toEnd = new Date(to.getTime() + 86400000 - 1);
+
+  const kind = String(args.kind || "").trim().toLowerCase();
+  const base = SUPABASE_URL.replace(/\/$/, "");
+  const params = [
+    `select=title,kind,course,room,instructor,starts_at,ends_at,timezone,attendance_required`,
+    `starts_at=gte.${encodeURIComponent(from.toISOString())}`,
+    `starts_at=lte.${encodeURIComponent(toEnd.toISOString())}`,
+    `order=starts_at.asc`,
+    `limit=120`,
+  ];
+  if (kind && kind !== "all") params.push(`kind=eq.${encodeURIComponent(kind)}`);
+
+  try {
+    const res = await fetch(`${base}/rest/v1/schedule_events?${params.join("&")}`, {
+      headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${authToken}` },
+    });
+    if (!res.ok) throw new Error(`schedule ${res.status}`);
+    const rows = await res.json();
+    if (!Array.isArray(rows) || !rows.length) {
+      logMac("schedule.lookup", { from: from.toISOString(), to: toEnd.toISOString(), count: 0 });
+      /* Empty and "never synced" are different problems with different fixes,
+         and the loop cannot tell them apart from a blank answer. */
+      return {
+        ok: true,
+        say: `Nothing on the timetable between ${macFriendlyDay(from, "Asia/Kolkata")} and ${macFriendlyDay(toEnd, "Asia/Kolkata")}. If that seems wrong, the timetable may not have synced yet: open Chrome with Braino installed and signed in to Nexus.`,
+      };
+    }
+
+    // Grouped by day, because that is how a person holds a week in their head.
+    const byDay = new Map();
+    for (const r of rows) {
+      const day = macFriendlyDay(r.starts_at, r.timezone);
+      if (!byDay.has(day)) byDay.set(day, []);
+      const time = macFriendlyTime(r.starts_at, r.timezone);
+      const where = r.room ? `, ${r.room}` : "";
+      const who = r.instructor ? ` with ${r.instructor}` : "";
+      const must = r.attendance_required ? " (attendance required)" : "";
+      // A deadline has no end, so it reads as "due at" rather than a span. That
+      // difference is the whole reason ends_at is nullable.
+      const line = r.kind === "assignment"
+        ? `  DUE ${time}: ${r.title}${r.course ? ` (${r.course})` : ""}`
+        : `  ${time}: ${r.title}${who}${where}${must}`;
+      byDay.get(day).push(line);
+    }
+    const out = [...byDay.entries()].map(([day, lines]) => `${day}\n${lines.join("\n")}`).join("\n\n");
+    logMac("schedule.lookup", { from: from.toISOString(), to: toEnd.toISOString(), count: rows.length });
+    return { ok: true, say: out };
+  } catch (error) {
+    logMac("schedule.lookup.failed", { error: String(error?.message || error) });
+    return { ok: false, say: `I could not read your timetable: ${String(error?.message || error)}` };
+  }
+}
+
 /* Braino's own hands, reachable from the loop.
  *
  * The catalog names 115 abilities and every one of them was locked behind the
@@ -15549,6 +15652,7 @@ const MAC_HIL_TOOLS = {
   alarm_set: (a) => startAlarm(Number(a.fireAt), String(a.label || "")),
   whatsapp_send: (a) => sendWhatsAppMessage(String(a.recipient || ""), String(a.message || "")),
   google_doc_create: (a) => createGoogleDocWithText(String(a.title || "Untitled"), String(a.text || "")),
+  schedule_lookup: (a) => lookupSchedule(a),
   timer_set: (a) => startReminder(Number(a.seconds || a.duration || 0), String(a.label || "")),
   /* One name, two doors. The catalog calls it "open a named app, known website
      or local file", and the loop reached for it and was told it did not exist,

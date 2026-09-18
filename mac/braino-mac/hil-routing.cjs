@@ -99,6 +99,15 @@ const MAC_BROWSER_TARGET = /\b(gmail|inbox|e?mail thread|youtube|linkedin|twitte
  * rank, tell me which, how much, is it up. No pattern can answer that. */
 const MAC_RESEARCH = /\b(compare|look up|find out|research|and tell me|and then tell|summari[sz]e|rank (?:them|these|by)|which (?:one|is|of)|how (?:much|many|fast|long|old)|check (?:if|whether)|word error|charges?|pric(?:e|ing)|versus|vs\.?)\b/;
 
+/* Their own timetable, which is a question with an answer nobody can pattern
+ * match.
+ *
+ * "What is due this week" carries no verb from the task list, so it was landing
+ * in the conversation branch and being answered from thin air by a model with
+ * no idea what he is enrolled in. The answer lives in a table and only the
+ * brain can reach for it, so these go to the brain however they are phrased. */
+const MAC_SCHEDULE = /\b(timetable|time table|schedule|due|deadline|deadlines|class|classes|lecture|lectures|session|sessions|assignment|assignments|exam|exams|submission)\b/;
+
 function macFastLane(raw) {
   const t = String(raw || "").toLowerCase().trim();
   if (!t) return true;
@@ -151,6 +160,9 @@ function macWantsTheBrain(raw) {
      for exactly that reason: it was rejecting them as not-a-task and handing
      them to a pattern match. */
   if (MAC_RESEARCH.test(String(raw || "").toLowerCase())) return true;
+  // Checked before the fast lane, because "note" and "class" both appear in
+  // sentences the fast lane would otherwise grab.
+  if (MAC_SCHEDULE.test(String(raw || "").toLowerCase())) return true;
   /* The default flipped here, and this is the whole change.
    *
    * It used to be: reach the brain only if the sentence carries one of the verbs
