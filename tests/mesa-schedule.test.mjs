@@ -319,8 +319,46 @@ test("the common timetable questions never reach a model", () => {
      being fast and becomes a worse model, so anything unmatched falls through
      to the brain untouched. */
   const fn = main.slice(main.indexOf("async function macAnswerScheduleFast"), main.indexOf('/* "Am I going to fall below'));
-  assert.match(fn, /if \(!out\) return null;/);
-  assert.match(fn, /if \(!out\.ok \|\| !String\(out\.say \|\| ""\)\.trim\(\)\) return null;/,
+  assert.match(fn, /if \(!say \|\| !String\(say\)\.trim\(\)\) return null;/,
     "an empty fast answer must go to the brain, which can sync and look wider");
   assert.match(fn, /return null; \/\/ fall through to the brain rather than answer badly/);
+});
+
+test("one question gets one answer, not the week", () => {
+  /* "What is my next class" was answered with two and a half thousand
+     characters read aloud. Being told everything when you asked for one thing
+     is not a smaller failure than being told nothing, just a louder one. */
+  const main = readFileSync(new URL("../mac/braino-mac/main.cjs", import.meta.url), "utf8");
+  assert.match(main, /say = rows\?\.length \? macSayOneClass\(rows\[0\], "Your next class is"\) : null;/);
+
+  /* And said the way a person says it: "in about an hour", not a timestamp to
+     subtract from. That relative phrasing is the whole reason anyone asks. */
+  assert.match(main, /function macRelativeWhen/);
+  assert.match(main, /return "in about an hour";/);
+});
+
+test("the class you are sitting in is not the one after it", () => {
+  /* "When does this class end" contains neither the word next nor a day, so it
+     has to be matched before the next-class rule or it answers about the wrong
+     lesson entirely. */
+  const main = readFileSync(new URL("../mac/braino-mac/main.cjs", import.meta.url), "utf8");
+  const ends = main.indexOf("MAC_FAST_ENDS.test(t) || MAC_FAST_CURRENT.test(t)");
+  const next = main.indexOf("} else if (MAC_FAST_NEXT.test(t)) {");
+  assert.ok(ends > 0 && next > 0 && ends < next, "current must be checked before next");
+  assert.match(main, /You are in \$\{live\.title\}/);
+  assert.match(main, /minutes left/);
+});
+
+test("four overdue assignments is not 'nothing due'", () => {
+  /* He had four, all overdue, and asking produced nothing: the pattern only
+     said deadlines, and the window only looked forward. Both halves wrong, and
+     the overdue one is the half you most need telling about. */
+  const main = readFileSync(new URL("../mac/braino-mac/main.cjs", import.meta.url), "utf8");
+  assert.match(main, /do i have any\\s\+\(\?:assignments\?\|homework\|deadlines\?\)/);
+  assert.match(main, /const overdue = rows\.filter\(\(r\) => new Date\(r\.starts_at\) < now\);/);
+  assert.match(main, /was due \$\{macFriendlyDay/);
+
+  /* And it says where the answer came from, because the calendar carries
+     deadline markers and not the submissions themselves. */
+  assert.match(main, /Nexus tracks the submissions themselves separately/);
 });

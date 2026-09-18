@@ -15751,38 +15751,199 @@ function macNormaliseKind(raw) {
  * Returns null when it does not recognise the sentence, so the cascade carries
  * on. Returning an answer it is unsure of would be far worse than being slow.
  */
-const MAC_FAST_NEXT = /\b(?:what(?:'?s| is)?\s+(?:my\s+)?next\s+(?:class|session|lecture)|when(?:'?s| is)?\s+(?:my\s+)?next\s+(?:class|session|lecture)|next\s+class)\b/;
+/* One question, one answer.
+ *
+ * "What is my next class" was answered with the whole week: two and a half
+ * thousand characters, read aloud. Asking for the next thing and being told
+ * everything is not a smaller failure than being told nothing, it is just a
+ * louder one.
+ *
+ * So a question about ONE class returns one class, phrased as a sentence
+ * somebody would say. The list is for questions that are actually about a list.
+ */
+const MAC_FAST_NEXT = /\b(?:what(?:'?s| is)?|when(?:'?s| is)?|watch)?\s*(?:my\s+)?next\s+(?:class|session|lecture)\b|\bnext\s+class\b/;
 const MAC_FAST_TODAY = /\b(?:what(?:'?s| is)?\s+(?:on\s+)?(?:today|left today)|rest of (?:the |my )?day|what(?:'?s| is)?\s+(?:my\s+)?(?:schedule|timetable)\s+(?:for\s+)?today|am i free today)\b/;
-const MAC_FAST_DUE = /\b(?:what(?:'?s| is)?\s+due|any\s+deadlines?|what\s+deadlines?|anything\s+due)\b/;
+/* "Do I have any assignments" found nothing while four sat overdue, because it
+   only said deadlines and only looked forward. Both halves were wrong. */
+const MAC_FAST_DUE = /\b(?:what(?:'?s| is)?\s+due|any\s+(?:deadlines?|assignments?|homework|submissions?)|what\s+(?:deadlines?|assignments?)|anything\s+due|do i have any\s+(?:assignments?|homework|deadlines?)|(?:am i|anything)\s+overdue|pending\s+(?:work|assignments?|submissions?))\b/;
 const MAC_FAST_ATTENDANCE = /\b(?:what(?:'?s| is)?\s+my\s+attendance|how(?:'?s| is)?\s+my\s+attendance|my\s+attendance)\b/;
+/* "first class tomorrow", "second class tomorrow", "last class today". A child
+   could answer these from the same list, which is exactly why they should not
+   cost a model call either. */
+/* What is happening right now, and when it lets out.
+ *
+ * The same rows, read from a different angle. A person answering "when does
+ * this end" does not consult a timetable, they know it is half six because they
+ * have seen it. Braino has the row already, so the only work is saying it the
+ * way a person would: how long is left, not a timestamp to subtract from. */
+const MAC_FAST_CURRENT = /\b(?:what(?:'?s| is)?\s+(?:going on|on)\s+(?:right\s+)?now|current class|class right now|am i in (?:a )?class|what class is this|which class is this)\b/;
+const MAC_FAST_ENDS = /\b(?:when\s+(?:does|do|will)\s+(?:this|the|my|current)?\s*(?:class|session|lecture)?\s*(?:end|finish|get over|be over)|when\s+(?:am|do)\s+i\s+(?:free|done|out)|how long\s+(?:is\s+)?(?:left|more|until.*(?:end|over))|when\s+does\s+it\s+end)\b/;
+const MAC_FAST_UNTIL = /\b(?:how long\s+until\s+(?:my\s+)?next|how long\s+(?:till|til)\s+(?:my\s+)?next|when\s+is\s+my\s+next\s+(?:one|thing))\b/;
+
+const MAC_FAST_ORDINAL = /\b(first|second|third|fourth|fifth|last)\s+(?:class|session|lecture)\b/;
+const MAC_FAST_WHEN = /\b(today|tomorrow)\b/;
+const MAC_ORDINALS = { first: 0, second: 1, third: 2, fourth: 3, fifth: 4 };
+
+/* How far away it is, in the words a person uses.
+ *
+ * "At 6pm" makes you work out whether that is soon. "In about an hour" does
+ * not, and that is the whole reason anyone asks what is next. */
+function macRelativeWhen(iso, zone) {
+  const mins = Math.round((new Date(iso) - Date.now()) / 60000);
+  if (mins < 0) return "already started";
+  if (mins < 2) return "right now";
+  if (mins < 60) return `in ${mins} minutes`;
+  const hrs = mins / 60;
+  if (mins < 120) return "in about an hour";
+  if (hrs < 10) return `in about ${Math.round(hrs)} hours`;
+  const day = macFriendlyDay(iso, zone);
+  const today = macFriendlyDay(new Date().toISOString(), zone);
+  const tomorrow = macFriendlyDay(new Date(Date.now() + 86400000).toISOString(), zone);
+  if (day === today) return "later today";
+  if (day === tomorrow) return "tomorrow";
+  return `on ${day.split(",")[0]}`;
+}
+
+function macSayOneClass(row, lead) {
+  if (!row) return null;
+  const zone = row.timezone || "Asia/Kolkata";
+  const where = row.room ? ` in ${row.room}` : "";
+  const who = row.instructor ? ` with ${row.instructor}` : "";
+  // The course name is usually the title repeated back, so it is only added
+  // when it says something the title did not.
+  const course = row.course && !String(row.title || "").includes(row.course) ? ` (${row.course})` : "";
+  return `${lead} ${row.title}${course}${who} at ${macFriendlyTime(row.starts_at, zone)}${where}, ${macRelativeWhen(row.starts_at, zone)}.`;
+}
+
+/* The rows themselves, not the rendered list, so a single-answer question can
+   pick one out instead of parsing prose back apart. */
+async function macFastRows(fromWord, toWord, kind) {
+  const auth = authStatusPayload();
+  if (!auth.userId) return null;
+  const authToken = await getBrainoAuthToken();
+  if (!authToken) return null;
+  const from = macResolveWhen(fromWord, 0);
+  const to = toWord ? macResolveWhen(toWord, 7) : new Date(from.getTime() + 14 * 86400000);
+  const toEnd = new Date(to.getTime() + 86400000 - 1);
+  const base = SUPABASE_URL.replace(/\/$/, "");
+  const params = [
+    "select=title,kind,course,room,instructor,starts_at,ends_at,timezone,attendance_required",
+    `starts_at=gte.${encodeURIComponent(from.toISOString())}`,
+    `starts_at=lte.${encodeURIComponent(toEnd.toISOString())}`,
+    "order=starts_at.asc",
+    "limit=60",
+  ];
+  const k = macNormaliseKind(kind);
+  if (k) params.push(`kind=eq.${encodeURIComponent(k)}`);
+  const res = await fetch(`${base}/rest/v1/schedule_events?${params.join("&")}`, {
+    headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${authToken}` },
+  });
+  if (!res.ok) return null;
+  const rows = await res.json();
+  return Array.isArray(rows) ? rows : null;
+}
 
 async function macAnswerScheduleFast(text) {
   const t = String(text || "").toLowerCase();
   const started = Date.now();
-  let out = null;
+  let say = null;
   try {
-    if (MAC_FAST_ATTENDANCE.test(t)) {
-      out = await lookupAttendance({});
-    } else if (MAC_FAST_DUE.test(t)) {
-      // Two weeks: "what is due" means the things close enough to act on, and a
-      // term of deadlines read aloud is not an answer.
-      out = await lookupSchedule({ from: "now", to: new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10), kind: "assignment" });
+    const ordinal = t.match(MAC_FAST_ORDINAL);
+    /* Checked before "next", because "when does this end" contains neither the
+       word next nor a day, and a sentence about the class you are sitting in
+       must never be answered with the one after it. */
+    if (MAC_FAST_ENDS.test(t) || MAC_FAST_CURRENT.test(t) || MAC_FAST_UNTIL.test(t)) {
+      const now = Date.now();
+      // A short window each way: what is on now, and what is on next.
+      const rows = await macFastRows(
+        new Date(now - 6 * 3600 * 1000).toISOString().slice(0, 10), "", "",
+      );
+      if (rows) {
+        const live = rows.find((r) => {
+          const st = new Date(r.starts_at).getTime();
+          const en = r.ends_at ? new Date(r.ends_at).getTime() : st + 60 * 60 * 1000;
+          return st <= now && now <= en;
+        });
+        const next = rows.find((r) => new Date(r.starts_at).getTime() > now);
+        if (live) {
+          const zone = live.timezone || "Asia/Kolkata";
+          const ends = live.ends_at ? new Date(live.ends_at) : null;
+          const mins = ends ? Math.round((ends - now) / 60000) : null;
+          const left = mins == null ? ""
+            : mins <= 1 ? ", finishing now"
+            : mins < 60 ? `, ${mins} minutes left`
+            : `, about ${Math.round(mins / 60)} hour${mins >= 120 ? "s" : ""} left`;
+          const until = ends ? ` until ${macFriendlyTime(live.ends_at, zone)}` : "";
+          say = `You are in ${live.title}${live.room ? ` in ${live.room}` : ""}${until}${left}.`;
+          // The thing they will ask next anyway, so it costs nothing to say now.
+          if (next) say += ` ${macSayOneClass(next, "After that:")}`;
+        } else if (next) {
+          say = `Nothing on right now. ${macSayOneClass(next, "Next up is")}`;
+        } else {
+          say = "Nothing on right now, and nothing else scheduled.";
+        }
+      }
+    } else if (MAC_FAST_ATTENDANCE.test(t)) {
+      const out = await lookupAttendance({});
+      say = out?.ok ? out.say : null;
+    } else if (ordinal) {
+      // "first class tomorrow" reads the same list, just a different finger.
+      const when = (t.match(MAC_FAST_WHEN) || [])[1] || "today";
+      const rows = await macFastRows(when, when, "class");
+      if (rows) {
+        const row = ordinal[1] === "last" ? rows[rows.length - 1] : rows[MAC_ORDINALS[ordinal[1]]];
+        say = row
+          ? macSayOneClass(row, `Your ${ordinal[1]} class ${when} is`)
+          : `You do not have a ${ordinal[1]} class ${when}.`;
+      }
     } else if (MAC_FAST_NEXT.test(t)) {
-      out = await lookupSchedule({ from: "now", kind: "class" });
+      const rows = await macFastRows("now", "", "class");
+      // One row. Asking what is next and being read the week is not a smaller
+      // failure than being told nothing.
+      say = rows?.length ? macSayOneClass(rows[0], "Your next class is") : null;
+    } else if (MAC_FAST_DUE.test(t)) {
+      /* Backwards as well as forwards, because an overdue assignment is the one
+         you most need telling about. Answering "nothing due" to someone with
+         four missed deadlines is the worst possible version of working. */
+      const rows = await macFastRows(
+        new Date(Date.now() - 45 * 86400000).toISOString().slice(0, 10),
+        new Date(Date.now() + 21 * 86400000).toISOString().slice(0, 10),
+        "assignment",
+      );
+      if (rows) {
+        const now = Date.now();
+        const overdue = rows.filter((r) => new Date(r.starts_at) < now);
+        const upcoming = rows.filter((r) => new Date(r.starts_at) >= now);
+        const line = (r) => {
+          const zone = r.timezone || "Asia/Kolkata";
+          const days = Math.round((now - new Date(r.starts_at)) / 86400000);
+          const when = days > 0
+            ? `was due ${macFriendlyDay(r.starts_at, zone)}, ${days} day${days === 1 ? "" : "s"} ago`
+            : `due ${macFriendlyDay(r.starts_at, zone)} at ${macFriendlyTime(r.starts_at, zone)}`;
+          return `- ${r.title}${r.course ? ` (${r.course})` : ""}, ${when}`;
+        };
+        const parts = [];
+        if (overdue.length) parts.push(`${overdue.length} overdue:\n${overdue.map(line).join("\n")}`);
+        if (upcoming.length) parts.push(`${upcoming.length} coming up:\n${upcoming.map(line).join("\n")}`);
+        // Said plainly, because the calendar carries deadline markers and not
+        // the submission itself, and "nothing due" would otherwise read as "you
+        // are all clear".
+        say = parts.length
+          ? `${parts.join("\n\n")}\n\nThat is from your calendar deadlines. Nexus tracks the submissions themselves separately, and I do not have those yet.`
+          : "Nothing due in the next three weeks, and nothing overdue in the last six.";
+      }
     } else if (MAC_FAST_TODAY.test(t)) {
-      out = await lookupSchedule({ from: "now", to: "today" });
+      const out = await lookupSchedule({ from: "now", to: "today" });
+      say = out?.ok ? out.say : null;
     }
   } catch (error) {
     logMac("schedule.fast.failed", { error: String(error?.message || error) });
     return null; // fall through to the brain rather than answer badly
   }
-  if (!out) return null;
-  /* An empty or failed fast answer goes to the brain instead of being spoken.
-     The loop can sync, look wider, and explain itself; this cannot. */
-  if (!out.ok || !String(out.say || "").trim()) return null;
-  logMac("schedule.fast", { ms: Date.now() - started, kind: MAC_FAST_ATTENDANCE.test(t) ? "attendance" : "schedule" });
+  if (!say || !String(say).trim()) return null;
+  logMac("schedule.fast", { ms: Date.now() - started, chars: String(say).length });
   console.log(`[Braino ⚡ FAST] timetable answered in ${((Date.now() - started) / 1000).toFixed(1)}s, no model call`);
-  return { ok: true, say: out.say };
+  return { ok: true, say: String(say) };
 }
 
 /* "Am I going to fall below 75 percent in Marketing."
