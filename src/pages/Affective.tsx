@@ -185,18 +185,28 @@ export default function Affective() {
       <header className="aff-hero">
         <div className="aff-wrap">
           <p className="aff-kicker aff-reveal">Affective</p>
-          {/* The hero is the sentence that was buried in the footer. Everybody
-              opens with the promise; the promise is the cliche. This says the
-              work instead, and the second half is the half nobody else says. */}
-          <h1 className="aff-h1 aff-reveal">
-            We build the layers a computer needs to be useful to one person.
-            {" "}<em>And the character worth spending the day with.</em>
-          </h1>
-          <p className="aff-sub aff-reveal">
-            A machine you talk to instead of operate. It sees the screen you are looking at,
-            does the thing you asked, and is still itself tomorrow. Six layers, assembled
-            once, and the characters that live on top of them.
-          </p>
+          {/* Claim left, meaning right, at the same baseline. "Software that
+              does the thing" is sharp and, on its own, vague enough to be
+              anybody's, so the sentence that says what it means has to sit
+              beside it rather than a scroll below it. */}
+          <div className="aff-hero-cols">
+            <h1 className="aff-h1 aff-reveal">
+              Software that <u>does</u> the thing,{" "}
+              <em>instead of telling you how.</em>
+            </h1>
+            <div className="aff-reveal">
+              <p className="aff-hero-explain">
+                It reads the screen you are actually on. The email open in front of you,
+                the page, the file, the timetable. Then it goes and does what you asked,
+                there, one step at a time, and stops to ask before anything it cannot take
+                back.
+              </p>
+              <p className="aff-hero-explain">
+                No window to paste into, no app to move to. We build the layers that make
+                that possible, and the characters worth trusting with it.
+              </p>
+            </div>
+          </div>
           <div className="aff-hero-meta aff-reveal">
             <span>Bengaluru</span>
             <span>Two products</span>
