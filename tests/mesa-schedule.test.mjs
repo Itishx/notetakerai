@@ -122,3 +122,24 @@ test("connecting a timetable is not a setup step", () => {
   // anybody has opened anything.
   assert.match(bg, /chrome\.runtime\.onStartup\?\.addListener/);
 });
+
+test("the notch says it once, not every hour", () => {
+  /* Connecting has no setup step, which is lovely and completely invisible.
+     Somebody who was never asked to do anything still needs telling that
+     something happened. But the same fact announced hourly is not information,
+     it is weather. */
+  const content = readFileSync(new URL("../extension/content.js", import.meta.url), "utf8");
+  assert.match(bg, /mesaConnectedShown/, "the once-only flag must survive a sleeping worker");
+  assert.match(bg, /chrome\.storage\.local\.set\(\{ mesaConnectedShown/);
+  assert.match(bg, /action: "sbSchoolConnected"/);
+  assert.match(content, /if \(msg\.action === "sbSchoolConnected"\)/);
+
+  /* Green, and it has to be a colour nothing else uses: coral is him, gold is
+     Astra thinking, blue is work in progress. */
+  assert.match(content, /sb-notch-connected\{[^}]*#2f9d63/);
+  assert.match(content, /__SB_NOTCH_CLASSES[^;]*sb-notch-connected/,
+    "it must be in the class list, or the state machine cannot clear it");
+
+  /* And it must stand down without stomping whatever claimed the notch since. */
+  assert.match(content, /classList\.contains\("sb-notch-connected"\)/);
+});

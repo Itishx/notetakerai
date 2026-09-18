@@ -2263,6 +2263,10 @@ function __sbParseConnectorDirective(rawText) {
 }
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (msg.action === "sbSchoolConnected") {
+    __sbNotchSchoolConnected(msg.label || "Mesa connected");
+    return false;
+  }
   if (msg.action === "sbQuotaExceeded") {
     // Free-tier wall hit (voice/delegate/recording/chat) — show the upgrade nudge.
     __sbShowQuotaUpgrade(msg.surface || "chat");
@@ -9485,6 +9489,20 @@ function __sbBuildBrainUI() {
     #__sb_bar__.sb-notch-listening #__sb_bar_row__,#__sb_bar__.sb-notch-working #__sb_bar_row__,#__sb_bar__.sb-notch-speaking #__sb_bar_row__{display:none}#__sb_bar__.sb-notch-listening #__sb_notch_face__,#__sb_bar__.sb-notch-working #__sb_notch_face__,#__sb_bar__.sb-notch-speaking #__sb_notch_face__{display:block}
     #__sb_bar__.sb-notch-listening::before,#__sb_bar__.sb-notch-listening::after{content:"";position:absolute;z-index:-1;inset:2px;border:1.5px solid rgba(232,120,110,.58);border-radius:inherit;animation:__sb_notch_sonar__ 2.35s cubic-bezier(.2,.65,.3,1) infinite}#__sb_bar__.sb-notch-listening::after{animation-delay:1.15s}@keyframes __sb_notch_sonar__{from{opacity:.72;transform:scale(1)}to{opacity:0;transform:scale(1.28,1.7)}}
     #__sb_bar__.sb-notch-working{width:440px;height:88px}#__sb_bar__.sb-notch-working #__sb_notch_status__{display:block;color:rgba(255,255,255,.84)}
+    /* A school connected. Green because Nexus is green, and because nothing
+       else in this notch is: coral is him, gold is Astra thinking, blue is work
+       in progress. A fourth colour only earns its place by never colliding with
+       the other three. It arrives rather than pulses: this is on screen for
+       four seconds and then gone, so it gets one entrance and no loop. */
+    #__sb_bar__.sb-notch-connected{width:400px;min-height:84px;height:84px;border-radius:0 0 29px 29px;background:linear-gradient(180deg,#5fc38a 0%,#2f9d63 58%,#1d7a4a 100%);border-color:rgba(232,255,240,.5);box-shadow:0 15px 42px rgba(29,122,74,.32),inset 0 1px rgba(255,255,255,.4);overflow:visible;animation:__sb_connected_in__ .42s cubic-bezier(.16,.86,.22,1) both}
+    #__sb_bar__.sb-notch-connected #__sb_bar_row__{display:none}#__sb_bar__.sb-notch-connected #__sb_notch_face__{display:block}
+    #__sb_bar__.sb-notch-connected #__sb_notch_status__{display:block;color:#fff;font-size:9px;letter-spacing:.16em;text-shadow:0 1px 3px rgba(0,0,0,.28)}
+    /* A tick drawn once, next to the words. Drawn rather than an emoji so it
+       sits on the same baseline at any zoom and takes the notch's own colour. */
+    #__sb_bar__.sb-notch-connected #__sb_notch_status__::before{content:"";display:inline-block;width:11px;height:6px;margin-right:7px;border-left:2px solid #fff;border-bottom:2px solid #fff;transform:rotate(-45deg) translateY(-2px);animation:__sb_connected_tick__ .34s ease-out .18s both}
+    @keyframes __sb_connected_in__{from{opacity:0;transform:translateX(-50%) translateY(-6px) scaleX(.9)}to{opacity:1;transform:translateX(-50%)}}
+    @keyframes __sb_connected_tick__{from{opacity:0;transform:rotate(-45deg) translateY(-2px) scale(.4)}to{opacity:1;transform:rotate(-45deg) translateY(-2px) scale(1)}}
+    @media(prefers-reduced-motion:reduce){#__sb_bar__.sb-notch-connected,#__sb_bar__.sb-notch-connected #__sb_notch_status__::before{animation:none}}
     #__sb_bar__.sb-notch-rescue{width:440px;min-height:88px;height:88px;border-radius:0 0 29px 29px;background:linear-gradient(180deg,#f4d9a0 0%,#d9a441 58%,#a8792a 100%);border-color:rgba(255,246,222,.5);box-shadow:0 15px 42px rgba(168,121,42,.34),inset 0 1px rgba(255,255,255,.44);overflow:visible}
     #__sb_bar__.sb-notch-rescue #__sb_bar_row__{display:none}#__sb_bar__.sb-notch-rescue #__sb_notch_face__{display:block}
     #__sb_bar__.sb-notch-rescue #__sb_notch_status__{display:block;background:linear-gradient(100deg,#6b4c12 0%,#fff6de 26%,#fffdf6 36%,#fff6de 46%,#6b4c12 72%,#6b4c12 100%);background-size:280% 100%;-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent;animation:__sb_astra_shimmer__ 2.6s linear infinite}
@@ -12756,7 +12774,7 @@ function __sbNotchFillGreeting() {
   }).catch(() => {});
 }
 
-const __SB_NOTCH_CLASSES = ["sb-notch-invoking", "sb-notch-auth", "sb-notch-auth-ok", "sb-notch-greeting", "sb-notch-idle", "sb-notch-listening", "sb-notch-working", "sb-notch-speaking", "sb-notch-rescue"];
+const __SB_NOTCH_CLASSES = ["sb-notch-invoking", "sb-notch-auth", "sb-notch-auth-ok", "sb-notch-greeting", "sb-notch-idle", "sb-notch-listening", "sb-notch-working", "sb-notch-speaking", "sb-notch-rescue", "sb-notch-connected"];
 function __sbSetBrowserNotchState(state, status = "") {
   const bar = document.getElementById("__sb_bar__");
   if (!bar) return;
@@ -12771,6 +12789,9 @@ function __sbSetBrowserNotchState(state, status = "") {
   const mapped = state === "auth" ? "authenticating"
     : state === "auth-ok" ? "authenticated"
     : state === "rescue" ? "working"
+    // A confirmation is a thing being SAID, not a thing being done, so it maps
+    // to the state that already knows how to hold a line of text.
+    : state === "connected" ? "short"
     : state;
   __sbNotchSetState(mapped || "input", status);
   const shell = (typeof __sbNotchV1 !== "undefined" && __sbNotchV1) ? __sbNotchV1.shell : null;
@@ -12778,6 +12799,30 @@ function __sbSetBrowserNotchState(state, status = "") {
     if (state === "rescue") shell.dataset.rescue = "1";
     else delete shell.dataset.rescue;
   }
+}
+
+/* "Mesa connected", once, and then never again.
+ *
+ * Connecting a timetable has no setup step: you open your calendar and it is
+ * done. Which is lovely and completely invisible, so the one moment worth
+ * showing is the moment it first works. A person who was never asked to do
+ * anything still needs to be told that something happened.
+ *
+ * Once is the whole design. This fires on the FIRST successful sync, not on the
+ * hourly ones, because a notch that announces the same fact every hour stops
+ * being information and becomes weather.
+ */
+function __sbNotchSchoolConnected(label = "Mesa connected") {
+  try {
+    __sbSetBrowserNotchState("connected", label);
+    setTimeout(() => {
+      const bar = document.getElementById("__sb_bar__");
+      // Only stand down if nothing else has claimed the notch in the meantime.
+      // A voice turn starting during those four seconds owns it now, and
+      // stomping it would be worse than never showing this at all.
+      if (bar?.classList.contains("sb-notch-connected")) __sbSetBrowserNotchState("idle", "");
+    }, 4200);
+  } catch (_) { /* a confirmation is never worth throwing over */ }
 }
 
 // ── The handoff to Astra ────────────────────────────────────────────────────

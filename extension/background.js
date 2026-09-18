@@ -3171,7 +3171,38 @@ async function bgSyncMesaSchedule(reason = "manual") {
   } catch (_) { /* the schedule is saved; bookkeeping is not worth failing over */ }
 
   console.log(`[Braino] Mesa schedule synced: ${rows.length} events (${reason})`);
+  await bgAnnounceSchoolConnected(rows.length);
   return { ok: true, count: rows.length, reason };
+}
+
+/* Say it once, the first time it works.
+ *
+ * Connecting a timetable has no setup step: you open your calendar and it is
+ * done. Which is lovely and completely invisible, so the one moment worth
+ * showing is the moment it first works. Somebody who was never asked to do
+ * anything still needs to be told that something happened.
+ *
+ * Once is the point. Announcing the same fact every hour is not information,
+ * it is weather, and the flag lives in storage rather than memory because a
+ * service worker is unloaded when idle and would forget by lunchtime.
+ */
+async function bgAnnounceSchoolConnected(count) {
+  try {
+    const seen = await new Promise((r) => chrome.storage.local.get(["mesaConnectedShown"], r));
+    if (seen?.mesaConnectedShown) return;
+    await new Promise((r) => chrome.storage.local.set({ mesaConnectedShown: Date.now() }, r));
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    const tabId = tabs?.[0]?.id;
+    if (!tabId) return;
+    chrome.tabs.sendMessage(
+      tabId,
+      { action: "sbSchoolConnected", label: "Mesa connected" },
+      // A tab with no content script is the ordinary case, not an error worth
+      // logging: chrome:// pages, the store, a PDF.
+      () => { void chrome.runtime.lastError; },
+    );
+    console.log(`[Braino] Mesa connected, ${count} events`);
+  } catch (_) { /* a confirmation is never worth failing a sync over */ }
 }
 
 /* Hourly while Chrome is open, and once on startup.
