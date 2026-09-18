@@ -15,6 +15,7 @@ import { logEngineRun } from "../../_shared/engine-log.ts";
 import { loadUserKnowledge } from "../../_shared/user-knowledge.ts";
 import { recallLessons, recordLesson, scopeFromUrl } from "../../_shared/human-intelligence/lessons.ts";
 import { recallHistory, recordRun } from "../../_shared/human-intelligence/history.ts";
+import { renderSkills } from "../../_shared/human-intelligence/skills.ts";
 import {
   recallProcedures,
   recordProcedure,
@@ -764,12 +765,25 @@ serve(async (req) => {
       known.supabase ? recallHistory(known.supabase, commandText, hostScope) : Promise.resolve(""),
     ]);
 
+    /* Pure and local: ten descriptions matched against the command, no network
+       and no model call, so it cannot slow a turn down or fail one. */
+    const skillBlock = renderSkills(commandText);
+
     const systemPrompt = [
       HIL_LOOP_PROMPT,
       // Before the personality, because it is capability rather than character,
       // and after the loop rules, because how to take a turn has to be settled
       // before what can be done in one.
       ...(hasMacHands ? [renderExecJs(), renderToolCatalog(macTools)] : []),
+      /* The written contract for this kind of work, when there is one.
+       *
+       * Above everything learned, because it is the only block here that was
+       * decided on purpose: a route is what happened to work and a lesson is
+       * what happened to fail, while this is somebody having thought about how
+       * the thing ought to behave. It is also usually absent, which is the
+       * point: most commands are not one of the ten written-down skills and
+       * should cost exactly what they cost before. */
+      ...(skillBlock ? [skillBlock] : []),
       // After the rules and the abilities, before the personality: it is context
       // about the person, and it should not be able to displace how a turn works.
       ...(knownBlock ? [knownBlock] : []),

@@ -11,6 +11,69 @@ memory of what a session felt like.
 
 ---
 
+## 2026-09-18 · Round 015 — he can read his own instructions
+
+**What triggered it:** ten `skills/<name>/SKILL.md` documents exist. They say
+what a capability is for, what it promised the person, and what it must never do.
+People read them. Claude Code reads them when it is working on that feature.
+Braino has never been able to read one. So writing down how something should
+work and making it work that way have been two separate jobs, and the second one
+gets forgotten.
+
+**Nothing is written twice.** `npm run skills:build` reads the same documents and
+emits `skill-registry.ts`. The trigger line comes from the frontmatter that is
+already there for exactly that purpose. The rules come from the sections the
+author already headed Rules, Boundaries, Safety Rules, User Contract, Destructive
+Flags, Failure behavior. Nothing is invented and no document changed.
+
+Deliberately NOT harvested: "Workflow" and "Output Format". A workflow is a
+route, and routes are learned from real runs now rather than asserted in a
+document; output format is about a surface he is not on.
+
+**Checked in, not read at runtime**, because an edge function bundles what it
+imports and cannot see this repo's folders. `npm run skills:build -- --check`
+and the test both fail if the registry and the documents have drifted, which is
+the only thing keeping "we wrote it down" and "he does it" from becoming two
+facts again.
+
+**The bug that made it match nothing at all.** `goalWords` strips quoted spans,
+and that is right for a command: "play 'Dark Side of the Moon'" quotes the one
+specific thing, and the specific thing is never what makes two jobs the same. A
+description quotes the opposite — its examples. So watch-play's trigger line lost
+*"play Shawshank on Netflix"*, *"put on Stranger Things season 2 episode 5"* and
+*"where can I watch Dune"*: the exact sentences the skill exists to recognise,
+deleted before matching. Every command scored zero against every skill and the
+feature was silently inert. Quotes come off the description before the words are
+taken, and a film command now finds watch-play at 1.0.
+
+**A rule that wrapped was being cut in half.** Reading only a bullet's first line
+produced *"Licensing is surfaced, not resolved. The manifest records the licence
+and a"*. A half-rule is worse than no rule, because it still reads like an
+instruction and he would follow it. Continuation lines are joined.
+
+**It narrows, which is the condition for adding it at all.** The tool catalog is
+already around 2,400 tokens on every command. At most two skills, only on a real
+overlap, and two conditions rather than one: a ratio alone lets a two word
+command sharing one word score 0.5, which means nothing, so at least two words
+must genuinely be shared. Most commands are not one of the ten written-down
+skills and cost exactly what they cost before. Matching is ten string
+comparisons in process: no network, no model call, so it cannot slow a turn down
+or fail one. The reflex tier never sees any of it, and a test says so.
+
+**Where it sits, and why it outranks the rest.** Above the lessons, the routes and
+the history, because it is the only block in that prompt that was decided on
+purpose: a route is what happened to work, a lesson is what happened to fail,
+this is somebody having thought about how the thing ought to behave. So it wins a
+conflict. It still grants nothing, exactly like the other two.
+
+**Verified:** 364 pass, 0 fail, 11 new. Type-checked under `--strict`. Matching
+additionally exercised transpiled, 9 cases: a film command finding watch-play, a
+calendar command finding google-calendar, an unrelated question and an empty
+command matching nothing, and the rendered block coming in at 1,417 characters.
+**Not verified on hardware.**
+
+---
+
 ## 2026-09-18 · Round 014 — he remembers his history with you
 
 **What triggered it:** he knows facts about a person and nothing about what the
@@ -62,7 +125,7 @@ line. Four past commands above the state read as a plan unless they are
 explicitly framed as a record, and that failure would look exactly like the
 feature working.
 
-**Verified:** 363 pass, 0 fail, 12 new. Type-checked under `--strict`. Three
+**Verified:** 353 pass, 0 fail, 12 new. Type-checked under `--strict`. Three
 recalls now ride in one `Promise.all`, so lessons, routes and history together
 cost what the single lessons read cost before. `HIL_LOOP_VERSION` unchanged at
 2.12.0: this round adds a block to the prompt, not a rule to the thinking.
@@ -118,7 +181,7 @@ reads from. `--apply` is required, and writes use `ignore-duplicates` so a route
 a live run already filed is never overwritten by an older reconstruction of it.
 History fills the gaps; it does not correct the present.
 
-**Verified:** 351 pass, 0 fail, 10 new. **Not yet run against the real table** —
+**Verified:** 341 pass, 0 fail, 10 new. **Not yet run against the real table** —
 that needs the migration applied and a service key, and the number it prints
 (how many finished runs are actually in there) is the first thing worth putting
 in this file afterwards.
