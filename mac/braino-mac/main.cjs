@@ -15489,6 +15489,184 @@ async function syncScheduleFromNexus() {
   };
 }
 
+/* Attendance, out of whichever path answered.
+ *
+ * Written to read a shape nobody has seen yet, so it looks for the numbers
+ * rather than for a schema: a list of courses each carrying attended and total
+ * under any of the names an API might use. Anything it cannot recognise is left
+ * in raw and logged, which is a better failure than inventing a percentage.
+ */
+function macPickNumber(row, names) {
+  for (const n of names) {
+    const v = row?.[n];
+    if (typeof v === "number" && Number.isFinite(v)) return v;
+    if (typeof v === "string" && v.trim() && Number.isFinite(Number(v))) return Number(v);
+  }
+  return null;
+}
+
+async function saveNexusAttendance(found, userId, authToken) {
+  const hit = Object.entries(found).find(
+    ([p, v]) => p.startsWith("attendance") && v?.status === 200 && v?.body,
+  );
+  if (!hit) return "";
+  const body = hit[1].body;
+  // The list could be the body itself or sit under any of the usual wrappers.
+  const list = Array.isArray(body) ? body
+    : Array.isArray(body?.courses) ? body.courses
+    : Array.isArray(body?.subjects) ? body.subjects
+    : Array.isArray(body?.items) ? body.items
+    : [];
+
+  const rows = [];
+  const overallAttended = macPickNumber(body, ["attended", "attendedSessions", "present", "attendedCount"]);
+  const overallTotal = macPickNumber(body, ["total", "totalSessions", "totalCount", "sessions"]);
+  const overallPct = macPickNumber(body, ["percent", "percentage", "attendancePercentage", "attendancePercent"]);
+  if (overallAttended !== null || overallPct !== null) {
+    rows.push({
+      user_id: userId, source: "mesa", course: "",
+      attended: overallAttended ?? 0, total: overallTotal ?? 0, percent: overallPct,
+      required_percent: macPickNumber(body, ["requiredPercent", "minPercent", "threshold"]),
+      as_of: new Date().toISOString(), raw: body,
+    });
+  }
+  for (const c of list) {
+    const name = String(c?.courseName || c?.course || c?.name || c?.title || "").trim();
+    if (!name) continue;
+    rows.push({
+      user_id: userId, source: "mesa", course: name,
+      attended: macPickNumber(c, ["attended", "attendedSessions", "present", "attendedCount"]) ?? 0,
+      total: macPickNumber(c, ["total", "totalSessions", "totalCount", "sessions"]) ?? 0,
+      percent: macPickNumber(c, ["percent", "percentage", "attendancePercentage", "attendancePercent"]),
+      required_percent: macPickNumber(c, ["requiredPercent", "minPercent", "threshold"]),
+      as_of: new Date().toISOString(), raw: c,
+    });
+  }
+  if (!rows.length) {
+    logMac("nexus.attendance.unreadable", { path: hit[0], keys: Object.keys(body || {}).slice(0, 12) });
+    return " I found attendance but could not read its numbers yet.";
+  }
+
+  try {
+    const base = SUPABASE_URL.replace(/\/$/, "");
+    const res = await fetch(`${base}/rest/v1/attendance_summary?on_conflict=user_id,source,course`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${authToken}`,
+        Prefer: "resolution=merge-duplicates,return=minimal",
+      },
+      body: JSON.stringify(rows),
+    });
+    if (!res.ok) {
+      const detail = await res.text().catch(() => "");
+      logMac("nexus.attendance.save_failed", { status: res.status, detail: textForLog(detail, 200) });
+      return ` I read your attendance but could not save it: ${res.status}.`;
+    }
+  } catch (error) {
+    return ` I read your attendance but could not save it: ${String(error?.message || error)}.`;
+  }
+  logMac("nexus.attendance.saved", { rows: rows.length });
+  const overall = rows.find((r) => r.course === "");
+  return overall?.percent != null
+    ? ` Your attendance is ${overall.percent}%.`
+    : ` I saved attendance for ${rows.length - (overall ? 1 : 0)} courses.`;
+}
+
+/* Everything else Nexus knows.
+ *
+ * The timetable came from one endpoint we could read off the network tab. The
+ * rest of it, attendance, assessments, notifications, is behind paths nobody
+ * has looked up, and the choice was five rounds of "open DevTools and screenshot
+ * this" or one script that tries the obvious ones and reports what answered.
+ *
+ * It is a probe, not a guess dressed up: these are read-only GETs against an API
+ * the person is already authenticated to, a wrong path costs a 404, and what it
+ * finds gets logged with the shape of the response so the working paths can be
+ * pinned afterwards and the probing deleted.
+ *
+ * The candidates follow the one convention the API has already shown us,
+ * events/my, rather than being invented from nothing.
+ */
+const MAC_NEXUS_PROBES = [
+  "attendance/my", "attendance/summary", "attendance",
+  "assessments/my", "assessments", "grades/my", "grades",
+  "courses/my", "courses",
+  "notifications?limit=30",
+];
+
+async function syncNexusEverything() {
+  const auth = authStatusPayload();
+  if (!auth.userId) return { ok: false, say: "You are not signed in to Braino." };
+  const authToken = await getBrainoAuthToken();
+  if (!authToken) return { ok: false, say: "I could not authenticate to Braino." };
+
+  await openChromeUrl(MAC_NEXUS_CALENDAR);
+  await macHilWait(2600);
+
+  const paths = JSON.stringify(MAC_NEXUS_PROBES);
+  /* One script, every path, one round trip. Ten separate turns to try ten URLs
+     would be a hundred seconds of someone waiting to find out which ones exist. */
+  const js = `(function(){try{
+    var r=new XMLHttpRequest();r.open("POST","/api/auth/refresh",false);r.withCredentials=true;
+    r.setRequestHeader("Content-Type","application/json");r.send("{}");
+    if(r.status>=400)return "BRAINO_ERR refresh "+r.status;
+    var j={};try{j=JSON.parse(r.responseText||"{}")}catch(e){}
+    var t=j.accessToken||j.access_token||j.token||(j.data&&(j.data.accessToken||j.data.access_token))||"";
+    if(!t)return "BRAINO_ERR no token in refresh, keys: "+Object.keys(j).join(",");
+    var out={};
+    ${paths}.forEach(function(p){
+      try{
+        var x=new XMLHttpRequest();
+        x.open("GET","https://api-students.mesaschool.co.in/api/v1/"+p,false);
+        x.setRequestHeader("Authorization","Bearer "+t);x.send();
+        if(x.status>=400){out[p]={status:x.status};return}
+        var b=JSON.parse(x.responseText||"{}");
+        // The body, capped. A working path is worth seeing whole enough to map;
+        // a whole term of rows is not worth carrying back through AppleScript.
+        out[p]={status:x.status,body:JSON.parse(JSON.stringify(b)).data||b};
+      }catch(e){out[p]={error:String(e&&e.message||e)}}
+    });
+    return JSON.stringify(out).slice(0,60000);
+  }catch(err){return "BRAINO_ERR "+(err&&err.message?err.message:String(err))}})()`;
+
+  const out = await runJs(js, "Google Chrome", 45000);
+  if (!out.ok) {
+    return {
+      ok: false,
+      say: out.reason === "javascript_not_allowed"
+        ? "Chrome will not run scripts yet. Turn on View, Developer, Allow JavaScript from Apple Events."
+        : `I could not reach Nexus: ${out.detail || out.reason}`,
+    };
+  }
+  const body = String(out.out || "");
+  if (body.startsWith("BRAINO_ERR")) return { ok: false, say: `Nexus said: ${body.replace("BRAINO_ERR ", "")}` };
+
+  let found = {};
+  try { found = JSON.parse(body); } catch (_) { return { ok: false, say: "Nexus answered with something I could not read." }; }
+
+  /* Logged whole, because this is the map. The next commit pins whatever
+     answered and deletes the probing. */
+  const working = Object.entries(found).filter(([, v]) => v?.status === 200);
+  for (const [path, v] of Object.entries(found)) {
+    logMac("nexus.probe", {
+      path,
+      status: v?.status ?? null,
+      keys: v?.body && typeof v.body === "object" ? Object.keys(v.body).slice(0, 12) : null,
+      sample: textForLog(JSON.stringify(v?.body ?? v).slice(0, 700), 700),
+    });
+  }
+
+  const attendance = await saveNexusAttendance(found, auth.userId, authToken);
+  return {
+    ok: true,
+    say: working.length
+      ? `I found ${working.length} more things in Nexus: ${working.map(([p]) => p.split("?")[0]).join(", ")}.${attendance}`
+      : "I could not find anything else in Nexus beyond your timetable.",
+  };
+}
+
 /* Reading the timetable he already has.
  *
  * The extension syncs Nexus into schedule_events every hour. This is the other
@@ -15561,6 +15739,59 @@ function macNormaliseKind(raw) {
   // timetable" because of a word nobody recognised is the worst of both.
   logMac("schedule.kind.unknown", { kind: t });
   return "";
+}
+
+/* "Am I going to fall below 75 percent in Marketing."
+ *
+ * The one question attendance is actually asked, and it needs the gap in
+ * SESSIONS rather than the percentage, because "you are on 68%" does not tell
+ * anyone whether one more class fixes it. */
+async function lookupAttendance(args = {}) {
+  const auth = authStatusPayload();
+  if (!auth.userId) return { ok: false, say: "You are not signed in, so I cannot see your attendance." };
+  const authToken = await getBrainoAuthToken();
+  if (!authToken) return { ok: false, say: "I could not authenticate to read your attendance." };
+  const base = SUPABASE_URL.replace(/\/$/, "");
+  try {
+    const res = await fetch(
+      `${base}/rest/v1/attendance_summary?select=course,attended,total,percent,required_percent,as_of&order=percent.asc&limit=40`,
+      { headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${authToken}` } },
+    );
+    if (!res.ok) throw new Error(`attendance ${res.status}`);
+    const rows = await res.json();
+    if (!Array.isArray(rows) || !rows.length) {
+      return { ok: true, say: "I do not have your attendance yet. Run the nexus_sync_all tool to pull it." };
+    }
+    const wanted = String(args.course || "").trim().toLowerCase();
+    const pct = (r) => (r.percent != null ? Number(r.percent) : r.total ? (r.attended / r.total) * 100 : null);
+    const line = (r) => {
+      const p = pct(r);
+      const name = r.course || "Overall";
+      const bit = p != null ? `${p.toFixed(1)}%` : "unknown";
+      const counts = r.total ? ` (${r.attended} of ${r.total})` : "";
+      /* The number that answers the question actually asked: how many in a row
+         from here to be safe, or how many can still be missed. */
+      let advice = "";
+      const need = r.required_percent != null ? Number(r.required_percent) : null;
+      if (need != null && r.total) {
+        if (p != null && p < need) {
+          let a = r.attended, t = r.total, n = 0;
+          while (t > 0 && (a / t) * 100 < need && n < 200) { a += 1; t += 1; n += 1; }
+          advice = ` needs ${n} more in a row to reach ${need}%`;
+        } else if (p != null) {
+          let a = r.attended, t = r.total, n = 0;
+          while (t > 0 && (a / (t + 1)) * 100 >= need && n < 200) { t += 1; n += 1; }
+          advice = ` can miss ${n} before dropping under ${need}%`;
+        }
+      }
+      return `- ${name}: ${bit}${counts}${advice}`;
+    };
+    const shown = wanted ? rows.filter((r) => String(r.course || "").toLowerCase().includes(wanted)) : rows;
+    if (!shown.length) return { ok: true, say: `I have no attendance recorded for "${args.course}".` };
+    return { ok: true, say: shown.map(line).join("\n") };
+  } catch (error) {
+    return { ok: false, say: `I could not read your attendance: ${String(error?.message || error)}` };
+  }
 }
 
 async function lookupSchedule(args = {}) {
@@ -16079,6 +16310,8 @@ const MAC_HIL_TOOLS = {
   google_doc_create: (a) => createGoogleDocWithText(String(a.title || "Untitled"), String(a.text || "")),
   schedule_lookup: (a) => lookupSchedule(a),
   schedule_sync: () => syncScheduleFromNexus(),
+  attendance_lookup: (a) => lookupAttendance(a),
+  nexus_sync_all: () => syncNexusEverything(),
   timer_set: (a) => startReminder(Number(a.seconds || a.duration || 0), String(a.label || "")),
   /* One name, two doors. The catalog calls it "open a named app, known website
      or local file", and the loop reached for it and was told it did not exist,
