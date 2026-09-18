@@ -303,6 +303,45 @@
   letter-spacing: -0.006em; font-family: inherit;
 }
 
+
+/* ── What the hands are ─────────────────────────────────────────────────────
+   The statement was a pull quote alone in a field, which reads as a page that
+   ran out rather than a page that paused. The metaphor gets its meaning beside
+   it, in three, because "hands" means nothing until somebody says what it does. */
+.aff-hands {
+  margin: clamp(44px, 5vw, 72px) 0 0;
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: clamp(22px, 3vw, 48px);
+  border-top: 1px solid var(--a-line); padding-top: clamp(26px, 3vw, 38px);
+  max-width: 52rem;
+}
+.aff-hands dt {
+  margin: 0 0 8px; font-size: 15.5px; font-weight: 600;
+  letter-spacing: -0.012em; color: var(--a-ink);
+}
+.aff-hands dd {
+  margin: 0; font-size: 14.5px; line-height: 1.5;
+  color: var(--a-ink-soft); letter-spacing: -0.004em;
+}
+@media (max-width: 720px) { .aff-hands { grid-template-columns: 1fr; gap: 20px; } }
+
+/* Braino's name and Braino's face, on one line. He is a character, and a
+   character section that opens with type alone is a press release. */
+.aff-braino-name { display: flex; align-items: flex-end; gap: clamp(16px, 2.5vw, 36px); }
+/* The walker's SVG carries its own width and height, so the component's size
+   prop never reaches it. Scaled here instead, from its own bottom edge, so he
+   stands on the headline's baseline rather than floating above it. */
+.aff-braino-face { flex: 0 0 auto; width: 132px; height: 116px; position: relative; }
+/* translateY after the scale, because the walker's lane reserves headroom for
+   his bounce and left him hovering twenty pixels above the headline's baseline.
+   Measured, not guessed: 20px at 1.75x is 11.4 before the scale. */
+.aff-braino-face > * { transform: scale(1.75) translateY(11.4px); transform-origin: left bottom; }
+@media (max-width: 560px) {
+  .aff-braino-name { gap: 10px; align-items: flex-end; }
+  .aff-braino-face { width: 74px; height: 66px; }
+  .aff-braino-face > * { transform: scale(1); }
+}
+
 /* ── Braino, briefly ────────────────────────────────────────────────────────
    A door, not the room. The full story lives on its own page, and repeating it
    here would leave that page with nothing to be. */

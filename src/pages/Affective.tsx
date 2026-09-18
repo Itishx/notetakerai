@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
+import MiniBraino from "@/components/MiniBraino";
 import "./affective.css";
 
 /* ============================================================================
@@ -96,21 +97,37 @@ const PRODUCTS = [
    own page; repeating it here would leave that page with nothing to be. */
 const BRAINO_BRIEFS = [
   {
-    h: "He can see what you see.",
-    p: "Ask about this page, this email, this invoice, and there is no step where you paste anything in.",
+    h: "He is already there.",
+    p: "Nothing to open. He lives in your browser and in your Mac's notch, on whatever page you happen to be on.",
   },
   {
-    h: "He does it one step at a time.",
-    p: "Looks, acts, then checks the screen changed the way he expected. Stops himself instead of looping.",
+    h: "He does the half of the day you hate.",
+    p: "The form, the booking, the five tabs, the reply you have been putting off since Tuesday.",
+  },
+  {
+    h: "He can see what you are looking at.",
+    p: "Ask about this email, this page, this invoice. There is no step where you paste anything anywhere.",
   },
   {
     h: "He knows your week.",
-    p: "Your classes, your deadlines, how much of your course you have actually turned up to.",
+    p: "Your classes, your deadlines, which room, who is teaching. Not a calendar you keep up to date. The one your college already keeps.",
   },
   {
-    h: "He is somebody, not something.",
-    p: "A character with a face and a voice, who reads the kind of day you are having before answering.",
+    h: "He knows your people.",
+    p: "Who you message on a Friday. What you told him last month. Which Ravi you meant.",
   },
+  {
+    h: "He will not do what you did not ask.",
+    p: "Nothing bought, sent, posted or deleted until you say yes. That one is not a promise in a prompt, it is a rule in the code.",
+  },
+];
+
+/* What "hands" means, said concretely, because a metaphor alone leaves the
+   statement section looking like a pull quote nobody finished. */
+const HANDS = [
+  { k: "It sees the real screen.", v: "The page you are on, not a box you paste into." },
+  { k: "It acts, then checks.", v: "Does the thing, then looks again to see whether it worked." },
+  { k: "It stops itself.", v: "Before anything that spends, sends, posts or deletes." },
 ];
 
 /* The honest part, and the strongest. Everyone has the same models. */
@@ -196,13 +213,13 @@ export default function Affective() {
             </h1>
             <div className="aff-reveal">
               <p className="aff-hero-explain">
-                Three things a computer has never really been able to do. Know what is on
-                your screen. Be talked to for an hour without losing the thread. And act on
-                both, without being told every step.
+                AI has got very good at telling you what to do. You still have to go and do
+                it. Open the tab. Find the file. Copy it across. Fill in the form. Chase the
+                email you have been meaning to send since Tuesday.
               </p>
               <p className="aff-hero-explain">
-                We build those, voice-first, on the machine you already own. Then we build
-                someone out of them worth handing it to.
+                We build the part that just does it. Out loud, on the computer you already
+                have, inside the apps you already use.
               </p>
             </div>
           </div>
@@ -273,6 +290,14 @@ export default function Affective() {
             actually is. We took it because the last layer is the one everybody skips,
             and it is the difference between a tool you use and someone you keep.
           </footer>
+          <dl className="aff-hands aff-reveal">
+            {HANDS.map((h) => (
+              <div key={h.k}>
+                <dt>{h.k}</dt>
+                <dd>{h.v}</dd>
+              </div>
+            ))}
+          </dl>
         </div>
       </section>
 
@@ -315,10 +340,17 @@ export default function Affective() {
         <div className="aff-wrap">
           <div className="aff-braino-top aff-reveal">
             <p className="aff-braino-eyebrow">Character One</p>
-            <h2>Braino</h2>
+            <div className="aff-braino-name">
+              <h2>Braino</h2>
+              <div className="aff-braino-face" aria-hidden="true">
+                <MiniBraino size={96} />
+              </div>
+            </div>
             <p className="aff-braino-line">
-              A world of his own, with his own surfaces and his own faces. This is the
-              short version.
+              Not an assistant. A companion, with a face and a voice and a mood, who is
+              already open when you get there and does the part of the day you would rather
+              not. A world of his own, with his own surfaces and his own characters. This
+              is the short version.
             </p>
           </div>
         </div>
