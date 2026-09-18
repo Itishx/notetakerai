@@ -11,6 +11,61 @@ memory of what a session felt like.
 
 ---
 
+## 2026-09-18 · Round 013 — history, so the memory is not empty on day one
+
+**What triggered it:** Round 012 shipped a memory and nothing to put in it. A
+route needs two independent runs before anyone is handed it, so on a cold table
+every run still works everything out from zero, and the feature reads as having
+done nothing for as long as that lasts. Shipping a memory and waiting months for
+it to fill is how a good idea gets judged as a bad one.
+
+**He has already done the runs.** `engine_runs` holds every turn of every run
+including the ones that finished, and each turn carries the step it chose. So the
+routes exist; nothing had ever read them back.
+
+`npm run hil:harvest` rebuilds them. Group turns by `run_id`, keep the runs whose
+last verdict is `all_done`, take the host from the first address he actually
+navigated to, and rebuild the step list from the turns themselves.
+
+**The off-by-one that a test caught and the eye would not have.** A verdict rides
+on the turn AFTER the step it judges, because he judges what just ran before
+deciding what runs next. Reading it as judging its own turn drops exactly the
+wrong step out of every harvested route: the failures stay and the successes go.
+The result still looks like a plausible route, which is the problem. The fixture
+in `hil-harvest.test.mjs` states the ordering explicitly so it cannot be quietly
+inverted again.
+
+**Three rules held deliberately identical to the live path**, because nothing
+downstream can tell a harvested route from a lived one:
+
+- only whole commands, never `task_done`, so no route mixes the steps of three
+  jobs together;
+- two independent runs to go live, so history cannot promote on weaker evidence
+  than the living system demands;
+- sameness is `goalOverlap`, so "book tickets for Insidious" and "book tickets
+  for Sinners" merge into one job with two hits, which is the case that makes
+  harvesting worth doing at all.
+
+**One notion of sameness, one copy of it.** `scripts/lib/hil-pure.mjs` reads the
+matching rules out of `procedures.ts` and strips its three type signatures rather
+than restating them in node. A second copy would not fail loudly when it drifted:
+routes would quietly stop being credited, or start being offered for jobs they
+were never about. If that section is renamed or gains a construct the strip
+cannot handle, the import throws on the next test run, which is the correct way
+to find out.
+
+**Dry run by default.** One pass, a service key, and a table every user's Braino
+reads from. `--apply` is required, and writes use `ignore-duplicates` so a route
+a live run already filed is never overwritten by an older reconstruction of it.
+History fills the gaps; it does not correct the present.
+
+**Verified:** 351 pass, 0 fail, 10 new. **Not yet run against the real table** —
+that needs the migration applied and a service key, and the number it prints
+(how many finished runs are actually in there) is the first thing worth putting
+in this file afterwards.
+
+---
+
 ## 2026-09-18 · Round 012 — he remembers what worked
 
 **What triggered it:** the founder's read of a system architecture PDF, and the

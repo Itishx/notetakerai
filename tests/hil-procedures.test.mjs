@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { loadPureRules } from "../scripts/lib/hil-pure.mjs";
 
 /* He remembers what worked, not only what did not.
  *
@@ -23,19 +24,10 @@ const prompt = read("../supabase/functions/_shared/human-intelligence/hil-loop-p
 const loop = read("../supabase/functions/reasoning/hil-loop/index.ts");
 const migration = read("../supabase/migrations/20260918000001_braino_procedures.sql");
 
-/* The pure half, lifted out of the Deno module so it can run under node. These
-   three functions decide what counts as the same job, which is the whole of
-   recall: everything else is a fetch. */
-const pure = await import(
-  `data:text/javascript,${encodeURIComponent(
-    procedures
-      .slice(procedures.indexOf("const STOPWORDS"), procedures.indexOf("const MATCH_AT"))
-      /* The only TypeScript in this slice is the three signatures. Stripped
-         rather than reimplemented: a test that keeps its own copy of the
-         matching rules passes forever while the real ones rot. */
-      .replace(/:\s*(?:string|number|boolean)(\[\])?/g, "")
-  )}`
-);
+/* The real matching rules, loaded out of the real file rather than restated
+   here: a test that keeps its own copy of them passes forever while the ones
+   that actually run rot. Same loader the harvest script uses. */
+const pure = await loadPureRules();
 
 test("two bookings for different films are the same job", () => {
   /* The bug this replaced, and it would have been silent. Sameness used to be

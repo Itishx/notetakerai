@@ -18,6 +18,7 @@
     "test:hil": "node --test \"tests/*.test.mjs\"",
     "test:all": "npm run test && npm run test:hil",
     "hil:score": "node scripts/hil-scoreboard.mjs",
+    "hil:harvest": "node scripts/hil-harvest-routes.mjs",
     "deploy": "vercel --prod",
     "deploy:preview": "vercel",
     "mac:dictate:build": "cd mac/braino-mac/native/BrainoDictate && swift build -c release",
