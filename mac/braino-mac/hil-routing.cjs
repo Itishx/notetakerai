@@ -106,7 +106,7 @@ const MAC_RESEARCH = /\b(compare|look up|find out|research|and tell me|and then 
  * in the conversation branch and being answered from thin air by a model with
  * no idea what he is enrolled in. The answer lives in a table and only the
  * brain can reach for it, so these go to the brain however they are phrased. */
-const MAC_SCHEDULE = /\b(timetable|time table|schedule|due|deadline|deadlines|class|classes|lecture|lectures|session|sessions|assignment|assignments|exam|exams|submission)\b/;
+const MAC_SCHEDULE = /\b(timetable|time table|schedule|due|deadline|deadlines|class|classes|lecture|lectures|session|sessions|assignment|assignments|exam|exams|submission|nexus)\b/;
 
 function macFastLane(raw) {
   const t = String(raw || "").toLowerCase().trim();

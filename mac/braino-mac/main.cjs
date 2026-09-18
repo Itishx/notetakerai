@@ -15181,6 +15181,127 @@ async function createGoogleDocWithText(title, text) {
   }
 }
 
+/* Pulling the timetable in, from the Mac, without the extension.
+ *
+ * The extension does this on its own every hour, which is the right home for it:
+ * Nexus keeps its refresh token in an httpOnly cookie and only something inside
+ * Chrome can use it. But asking someone to open an extension's service worker
+ * console to find out whether their calendar synced is not a product, and the
+ * Mac app is where he actually lives.
+ *
+ * The Mac already runs JavaScript inside Chrome, through the same AppleScript
+ * door that reads pages. So it opens Nexus, asks the page to mint a token and
+ * fetch the term, and hands the JSON back. Same cookie, same browser, no
+ * extension required.
+ *
+ * It reports the response's KEYS when no token comes back, because the one
+ * thing that could not be tested from outside is what Nexus calls that field,
+ * and "it did not work" is a worse answer than the list of what it did return.
+ */
+const MAC_NEXUS_CALENDAR = "https://students.mesaschool.co.in/student/lms/calendar";
+
+async function syncScheduleFromNexus() {
+  const auth = authStatusPayload();
+  if (!auth.userId) return { ok: false, say: "You are not signed in to Braino, so I have nowhere to save your timetable." };
+  const authToken = await getBrainoAuthToken();
+  if (!authToken) return { ok: false, say: "I could not authenticate to Braino, so I cannot save your timetable." };
+
+  // The page has to be in front: AppleScript runs JavaScript in the front
+  // window's active tab, and there is no way to aim it at a background one.
+  await openChromeUrl(MAC_NEXUS_CALENDAR);
+  await macHilWait(2600);
+
+  const from = new Date(Date.now() - 30 * 86400000).toISOString();
+  const to = new Date(Date.now() + 120 * 86400000).toISOString();
+  /* Synchronous XHR, for the same reason __brainoGet uses it: this channel
+     returns the completion value immediately, so a promise comes back as
+     "[object Promise]" and everything the script did is thrown away. */
+  const js = `(function(){try{
+    var r=new XMLHttpRequest();r.open("POST","/api/auth/refresh",false);r.withCredentials=true;
+    r.setRequestHeader("Content-Type","application/json");r.send("{}");
+    if(r.status>=400)return "BRAINO_ERR refresh "+r.status;
+    var j={};try{j=JSON.parse(r.responseText||"{}")}catch(e){}
+    var t=j.accessToken||j.access_token||j.token||(j.data&&(j.data.accessToken||j.data.access_token))||"";
+    if(!t)return "BRAINO_ERR no token in refresh, keys: "+Object.keys(j).join(",");
+    var e=new XMLHttpRequest();
+    e.open("GET","https://api-students.mesaschool.co.in/api/v1/events/my?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}",false);
+    e.setRequestHeader("Authorization","Bearer "+t);e.send();
+    if(e.status>=400)return "BRAINO_ERR events "+e.status;
+    return e.responseText;
+  }catch(err){return "BRAINO_ERR "+(err&&err.message?err.message:String(err))}})()`;
+
+  const out = await runJs(js, "Google Chrome", 30000);
+  if (!out.ok) {
+    logMac("schedule.sync.failed", { reason: out.reason, detail: out.detail });
+    return {
+      ok: false,
+      say: out.reason === "javascript_not_allowed"
+        ? "Chrome will not run scripts yet. Turn on View, Developer, Allow JavaScript from Apple Events, then ask me again."
+        : `I could not reach Nexus: ${out.detail || out.reason}`,
+    };
+  }
+  const body = String(out.out || "");
+  if (body.startsWith("BRAINO_ERR")) {
+    logMac("schedule.sync.failed", { error: body.slice(0, 200) });
+    return { ok: false, say: `Nexus did not give me your timetable: ${body.replace("BRAINO_ERR ", "")}` };
+  }
+
+  let events = [];
+  try { events = JSON.parse(body)?.data?.events || []; }
+  catch (_) { return { ok: false, say: "Nexus answered with something I could not read." }; }
+  if (!events.length) return { ok: true, say: "Nexus gave me no events for the next few months." };
+
+  const KIND = { session: "class", assignment: "assignment", exam: "exam", workshop: "workshop", event: "event" };
+  const rows = events.filter((e) => e?.id && e?.startAt).map((e) => ({
+    user_id: auth.userId,
+    source: "mesa",
+    source_ref: String(e.id),
+    title: String(e.title || "Untitled"),
+    kind: KIND[String(e.eventType || "")] || "event",
+    course: e.courseName || e.courseLabel || null,
+    instructor: e.instructorName || null,
+    room: e.room || null,
+    link: e.meetingLink || e.gcalEventLink || null,
+    starts_at: e.startAt,
+    // A deadline is a moment. Nexus sends the same value twice; copied through,
+    // a briefing reads "from 23:59 until 23:59".
+    ends_at: e.endAt && e.endAt !== e.startAt ? e.endAt : null,
+    timezone: e.timezone || "Asia/Kolkata",
+    attendance_required: Boolean(e.attendanceRequired),
+    source_updated_at: e.updatedAt || null,
+    raw: e,
+  }));
+
+  try {
+    const base = SUPABASE_URL.replace(/\/$/, "");
+    const res = await fetch(`${base}/rest/v1/schedule_events?on_conflict=user_id,source,source_ref`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${authToken}`,
+        // The upsert. Without it this is an insert, and a second sync is a 409.
+        Prefer: "resolution=merge-duplicates,return=minimal",
+      },
+      body: JSON.stringify(rows),
+    });
+    if (!res.ok) {
+      const detail = await res.text().catch(() => "");
+      logMac("schedule.sync.save_failed", { status: res.status, detail: textForLog(detail, 200) });
+      return { ok: false, say: `I read your timetable but could not save it: ${res.status} ${detail.slice(0, 140)}` };
+    }
+  } catch (error) {
+    return { ok: false, say: `I read your timetable but could not save it: ${String(error?.message || error)}` };
+  }
+
+  const due = rows.filter((r) => r.kind === "assignment").length;
+  logMac("schedule.sync.done", { count: rows.length, due });
+  return {
+    ok: true,
+    say: `Synced your Mesa timetable: ${rows.length} things, ${due} of them deadlines. Ask me what is due whenever you like.`,
+  };
+}
+
 /* Reading the timetable he already has.
  *
  * The extension syncs Nexus into schedule_events every hour. This is the other
@@ -15653,6 +15774,7 @@ const MAC_HIL_TOOLS = {
   whatsapp_send: (a) => sendWhatsAppMessage(String(a.recipient || ""), String(a.message || "")),
   google_doc_create: (a) => createGoogleDocWithText(String(a.title || "Untitled"), String(a.text || "")),
   schedule_lookup: (a) => lookupSchedule(a),
+  schedule_sync: () => syncScheduleFromNexus(),
   timer_set: (a) => startReminder(Number(a.seconds || a.duration || 0), String(a.label || "")),
   /* One name, two doors. The catalog calls it "open a named app, known website
      or local file", and the loop reached for it and was told it did not exist,

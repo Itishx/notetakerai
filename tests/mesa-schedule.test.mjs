@@ -143,3 +143,29 @@ test("the notch says it once, not every hour", () => {
   /* And it must stand down without stomping whatever claimed the notch since. */
   assert.match(content, /classList\.contains\("sb-notch-connected"\)/);
 });
+
+test("the Mac can sync without the extension, and says why when it cannot", () => {
+  /* The extension is the right home for this: Nexus keeps its refresh token in
+     an httpOnly cookie and only something inside Chrome can spend it. But
+     asking someone to open an extension's service worker console to find out
+     whether their calendar synced is not a product, and the Mac app is where he
+     actually lives. It drives Chrome through the same AppleScript door that
+     reads pages, so it is the same cookie and the same browser. */
+  const main = readFileSync(new URL("../mac/braino-mac/main.cjs", import.meta.url), "utf8");
+  assert.match(main, /schedule_sync: \(\) => syncScheduleFromNexus\(\)/);
+  assert.match(main, /r\.open\("POST","\/api\/auth\/refresh",false\)/,
+    "synchronous, or the completion value is [object Promise] and the work is thrown away");
+  assert.match(main, /r\.withCredentials=true/, "the httpOnly cookie only rides along when asked for");
+
+  /* The one thing that could not be tested from outside is what Nexus calls the
+     token field. "It did not work" is a worse answer than the list of what it
+     did return. */
+  assert.match(main, /no token in refresh, keys: /);
+
+  const catalog = readFileSync(
+    new URL("../supabase/functions/_shared/human-intelligence/hil-tool-catalog.ts", import.meta.url), "utf8");
+  assert.match(catalog, /name: "schedule_sync"/);
+
+  // And "sync my nexus calendar" has to reach the brain to find the tool at all.
+  assert.equal(require("../mac/braino-mac/hil-routing.cjs").macWantsTheBrain("sync my nexus calendar"), true);
+});
