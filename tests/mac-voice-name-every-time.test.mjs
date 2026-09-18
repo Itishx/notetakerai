@@ -47,7 +47,7 @@ test("after his question, only a short reply needs no name", () => {
   assert.equal(make({ lastSpokenLine: { endedTs: now - 11000, asked: true } }, now).answersHisQuestion("yes"), false, "too late");
   assert.equal(make({ lastSpokenLine: { endedTs: now - 1000, asked: false } }, now).answersHisQuestion("yes"), false, "he asked nothing");
   const accept = lift("function shouldAcceptVoiceTranscript(text) {");
-  assert.match(accept, /\} else if \(!namedWindowOpen\(\) && !answersHisQuestion\(text\)\) \{/);
+  assert.match(accept, /\} else if \(!namedWindowOpen\(\) && !answersHisQuestion\(text\) && !followsHisReply\(text\)\) \{/);
 });
 
 /* The transcriber writes words for noise. Real sentences from the log on the
@@ -194,4 +194,75 @@ test("noise never reaches the notch or cuts him off", () => {
   assert.match(delta, /const noiseSoFar = !dictationMode && namedModeOn && !herMode\s*&& looksLikeNoise\(`\$\{rtUserTranscript\}\$\{delta\}`, rtLastSpeechMs\);/);
   assert.match(delta, /if \(!noiseSoFar && \(speaking \|\| currentSpeechAudio \|\| realtimeStreamTts\)\) \{/);
   assert.match(delta, /if \(!heraVoice\.on && !noiseSoFar\) nfSetHeard\(rtUserTranscript\.trim\(\)\);/);
+});
+
+/* ── The twenty seconds after he answers ──────────────────────────────────
+ *
+ * "After Braino is done responding, I have to take his name again." He does
+ * not have to any more, and the room still does not get in. */
+const followUp = (state, now) => Function("Date", "s", `
+  let { namedModeOn, lastUserTurnAt, lastSpokenLine } = s;
+  ${liftLine("const NAMED_FOLLOW_UP_MS =")}
+  ${liftLine("const NAMED_EXCHANGE_MAX_MS =")}
+  ${lift("function namedFollowUpWindowOpen(now = Date.now()) {")}
+  ${liftLine("const SAID_TO_HIM_QUESTION =")}
+  ${liftLine("const SAID_TO_HIM_ORDER =")}
+  ${liftLine("const SAID_TO_HIM_CORRECTION =")}
+  ${lift("function saidToBraino(text) {")}
+  ${lift("function followsHisReply(text) {")}
+  return { namedFollowUpWindowOpen, saidToBraino, followsHisReply };
+`)({ now: () => now }, {
+  namedModeOn: true,
+  lastUserTurnAt: now - 12000,
+  lastSpokenLine: { ts: now - 9000, endedTs: now - 4000, asked: false },
+  ...state,
+});
+
+test("after he replies, the next twenty seconds need no name", () => {
+  const now = 2_000_000;
+  const open = (state) => followUp(state, now).namedFollowUpWindowOpen(now);
+  assert.equal(open({}), true, "he answered four seconds ago");
+  assert.equal(open({ lastSpokenLine: { ts: now - 30000, endedTs: now - 21000 } }), false, "twenty seconds is twenty seconds");
+  assert.equal(open({ lastSpokenLine: { ts: now - 9000, endedTs: 0 } }), false, "he is still talking");
+  assert.equal(open({ namedModeOn: false }), false);
+  // He reads a notification out loud: that is not a conversation you started.
+  assert.equal(open({ lastUserTurnAt: 0 }), false, "you never said anything");
+  assert.equal(open({ lastUserTurnAt: now - 400000 }), false, "your turn was five minutes before his line");
+  assert.equal(open({ lastUserTurnAt: now - 1000 }), false, "he spoke before you did");
+});
+
+test("inside the window, only what was said to him counts", () => {
+  const now = 2_000_000;
+  const { saidToBraino, followsHisReply } = followUp({}, now);
+  for (const said of [
+    "no, the other one", "open it", "close that tab", "what about tomorrow",
+    "and what did he say?", "play the next one", "actually make it louder",
+    "send it to Ilu instead", "why did that fail", "read it out again",
+    "wait, stop that", "can you try once more", "okay open my email",
+  ]) {
+    assert.equal(saidToBraino(said), true, said);
+  }
+  /* Straight out of the log, all of it the room and none of it for him. */
+  for (const heard of [
+    "Liquid mineral.", "Hamburger menu.", "8 year", "stay straight", "See.",
+    "Elmer,", "KOGNOS", "sounds better.", "Cough noise.", "OK", "Connect",
+    "Push, push, always push.", "Sí, externo.", "link newsletters signup",
+  ]) {
+    assert.equal(saidToBraino(heard), false, heard);
+  }
+  // Both halves are needed: the right words at the wrong time are still noise.
+  assert.equal(followsHisReply("open it"), true);
+  assert.equal(followUp({ lastSpokenLine: { ts: now - 40000, endedTs: now - 31000 } }, now).followsHisReply("open it"), false);
+  assert.equal(followsHisReply("Hamburger menu."), false);
+});
+
+test("the notch stays awake while the window is open, and the gate uses it", () => {
+  assert.match(lift("function namedAsleepForNotch() {"), /&& !namedFollowUpWindowOpen\(\)/);
+  assert.match(lift("function shouldAcceptVoiceTranscript(text) {"),
+    /\} else if \(!namedWindowOpen\(\) && !answersHisQuestion\(text\) && !followsHisReply\(text\)\) \{/);
+  // Whatever the window lets through still has to get past the noise check.
+  const accept = lift("function shouldAcceptVoiceTranscript(text) {");
+  assert.ok(accept.indexOf("!followsHisReply(text)") < accept.indexOf("} else if (looksLikeNoise(text, rtLastSpeechMs)) {"));
+  // Your turn is what opens it, so it is recorded where a transcript is accepted.
+  assert.match(js, /if \(accepted && !dictationMode\) lastUserTurnAt = Date\.now\(\);/);
 });

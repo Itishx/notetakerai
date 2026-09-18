@@ -3,7 +3,7 @@
 **Type:** Feature  
 **Platform:** Braino for Mac  
 **Status:** MVP  
-**Released:** September 17, 2026
+**Released:** September 17, 2026; September 18, 2026 (twenty seconds after every reply need no name)
 
 ## The simple version
 
@@ -13,7 +13,7 @@ The notch now says what Braino's ears are doing, all the way through:
 - **Ready.** If you have not started talking yet, it says *You can speak now* once the session is live.
 - **Hearing you.** *(Live HERA words in voice mode are switched off, September 17: a video playing on the Mac showed up as "You're saying". Voice mode shows OpenAI's transcript, as before; Option-twice dictation and LIVE still use HERA.)* When you stop they become *You said*, and they stay there while he works on them, with a small shimmering *Thinking* beside them.
 - **Long sentences breathe.** Past about 110 characters the sheet widens, the lines get more room, and the oldest line fades out at the top instead of cramming.
-- **His name, every time.** With "listen for my name" on, every sentence meant for him has "Braino" in it (or "Brainelle" when she is the avatar), the way Siri and Alexa work. While a voice session is open the notch reads *Listening for "Braino"*; with no session it reads *Say "Hey Braino" to wake me*. After a long quiet, his name lights the outline the way it does at boot.
+- **His name, every time, except right after he answers.** With "listen for my name" on, a sentence meant for him has "Braino" in it (or "Brainelle" when she is the avatar), the way Siri and Alexa work. **But for twenty seconds after he finishes replying to you, you can just talk**: "no, the other one", "open it", "what about tomorrow". Each reply starts those twenty seconds again, so a back-and-forth never asks for his name twice. While the window is open the notch says plain *Listening*; when it closes it goes back to *Listening for "Braino"*, and with no session at all, *Say "Hey Braino" to wake me*. After a long quiet, his name lights the outline the way it does at boot.
 - **Half sentences wait.** If you pause mid-sentence ("Braino, open the ..."), he holds those words for about a second and a half and joins them to the rest, instead of acting on half a command.
 - **Stop the task.** "Braino, stop the task" stops a running job straight away, and he says *I stopped the task.*
 
@@ -29,8 +29,10 @@ Voice takes 2 to 6 seconds to come up (3.7 seconds median across the last 194 se
 
 ## What Braino knows or does
 
-- **No name, no action (September 17).** A 12-second "conversation window" after his name let a video playing on the Mac through as a command, and no audio trick can tell a video's voice from yours. So every sentence needs his name, with five exceptions:
+- **Twenty seconds after a reply (September 18).** The window is back, with the thing that broke it in September fixed. It opens only after he replies to something *you* said (not after a notification or a timer he reads out), it runs from the moment his voice stops, and a sentence inside it has to sound like it was said *to him*: a question, an instruction, or a correction. The room's noise is names and noun phrases, and the log is full of them: "Liquid mineral.", "Hamburger menu.", "8 year", "stay straight", "See." None of those get in. Accepted follow-ups are logged as `named.after_reply`, so the ones that should not have been can be read back.
+- **No name, no action (September 17).** A 12-second "conversation window" after his name let a video playing on the Mac through as a command, and no audio trick can tell a video's voice from yours. So a sentence needs his name, with these exceptions:
   - the first sentence after a deliberate wake ("Hey Braino" or Control twice), however long it takes to say, up to 15 seconds;
+  - anything clearly aimed at him in the twenty seconds after he replies to you (above);
   - anything you say while he is talking or working, so you can cut in;
   - a short answer (yes, no, go ahead, the second one) to a question he just asked, within 10 seconds of him finishing it. Anything longer needs his name: his chat replies end in "What's on your mind?" all the time, and a TV "answered" one with "Open the language.";
   - "stop the task" and "stop listening";
@@ -67,6 +69,7 @@ OpenAI's words are the command. HERA's were tried as the command first and lost 
 - A half sentence costs 1.5 seconds before he acts on it. Short complete commands with no full stop, like "play music", wait too, because the transcriber does not always add one.
 - A slow, hesitant sentence without his name (three words over four seconds) can be dropped as noise. Saying his name skips that check.
 - A video saying "Braino" would still get through. That is rare, and it is the same limit Siri has.
+- In the twenty seconds after a reply, a television line shaped like an order ("Get everything on the outside") can get through. It is bounded: the window is short, it needs an exchange you started, and while media is playing on the Mac the bleed guard still drops unaddressed commands. Say "Braino, stop" if one lands.
 - HERA's live words are a running guess and can change as you speak.
 - If HERA is still loading when voice opens, the notch falls back to OpenAI's words until it is ready (it retries every 3 seconds).
 - The stop phrase matches words, not meaning. Anything longer than six words goes to the normal understanding path.
@@ -82,6 +85,7 @@ OpenAI's words are the command. HERA's were tried as the command first and lost 
   - `namedOpenAtReady`, `flashNameWake`, `activeWakeName`, `BRAINELLE_NAME_RE`.
   - `namedWindowOpen`: the name-every-time rule and its exceptions (`namedGraceUntil`, `namedSpeechAwake`, `lastSpokenLine.asked` with `NAMED_ANSWER_WINDOW_MS`). `namedHeardOnDeviceAt` is set by `onWakeDetected` during a session and read in `shouldAcceptVoiceTranscript`.
   - `looksLikeNoise` (turn length from OpenAI's `audio_start_ms`/`audio_end_ms`, kept in `rtLastSpeechMs`), `answersHisQuestion`, `namedAnswerWindowOpen`, `nothingToStop`, and the `.nf-thinking-stop` button.
+  - `namedFollowUpWindowOpen` (`NAMED_FOLLOW_UP_MS` 20000, `NAMED_EXCHANGE_MAX_MS` 3 minutes, `lastUserTurnAt` set where a transcript is accepted), `saidToBraino` (`SAID_TO_HIM_QUESTION`, `SAID_TO_HIM_ORDER`, `SAID_TO_HIM_CORRECTION`, two words minimum) and `followsHisReply`, read by `shouldAcceptVoiceTranscript` and by `namedAsleepForNotch`.
   - `looksUnfinished`, `holdFragment`, `releaseHeldFragment`, `clearHeldFragment` (`FRAGMENT_HOLD_MS` 1500, `FRAGMENT_MAX_HOLD_MS` 6000). `flushRealtimeTranscript(reason, textOverride)` joins a held half to the next transcript and keeps the half's acceptance, so the joined sentence is not re-judged for a name.
   - `isStopTaskPhrase` and `stopTaskNow`, checked in `flushRealtimeTranscript` before HIL is asked, and in `submitTyped`. The HIL "stop" verdict uses the same `stopTaskNow`.
 - `mac/braino-mac/renderer/braino-mac.css`: `.nf-voice-starting`, `.nf-voice-ready`, `.nf-name-asleep`, `.nf-name-wake`, and the rule that lets the open caption own the pill over `.nf-thinking`.
@@ -93,7 +97,7 @@ OpenAI's words are the command. HERA's were tried as the command first and lost 
 
 - Every state uses the caption sheet that already existed, so the shape does not change when your words arrive. A countdown in a different element would have meant two drops in two seconds.
 - Asleep is deliberately not the listening look: no coral, no pulse, no breathing. It is the quietest thing the ticker shows, so timers and music outrank it.
-- Name every time over a conversation window. A window is friendlier, but it is exactly where video audio got in, and we cannot ship a companion that takes orders from YouTube a month before launch.
+- Name every time over a conversation window (September 17), then a window with a shape test (September 18). A blanket window is where video audio got in. The shape test is what the old one was missing: the room says names and noun phrases, a person talking to Braino asks, orders or corrects. Both halves have to be true, so the friendly version costs almost nothing in safety.
 - The name-wake light is the boot trace, not a new effect, because it is the thing people already read as "he just woke up".
 - Restoring "You said" through a job reverses 1aaedb2 on purpose. The doubled phase that commit fixed is now prevented in CSS instead.
 

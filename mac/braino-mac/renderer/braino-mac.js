@@ -467,6 +467,14 @@ const NAME_WAKE_LIGHT_AFTER_MS = 20000;
 /* He asked you something: the answer needs no name for this long after he
    finishes the question. */
 const NAMED_ANSWER_WINDOW_MS = 10000;
+/* And after ANY reply of his, the next twenty seconds are yours, name or no
+   name. See namedFollowUpWindowOpen. */
+const NAMED_FOLLOW_UP_MS = 20000;
+/* A reply is his half of an exchange you began. He reads notifications and
+   timers out loud too, and those are not conversations. */
+const NAMED_EXCHANGE_MAX_MS = 3 * 60 * 1000;
+/* The last thing you said that he accepted. */
+let lastUserTurnAt = 0;
 /* The on-device listener heard his name. Its spelling of "Braino" is better
    than the cloud's, so an utterance it caught counts as addressed even when
    the transcript wrote the name as something else. */
@@ -4719,6 +4727,52 @@ function namedAnswerWindowOpen() {
     && Date.now() - lastSpokenLine.endedTs <= NAMED_ANSWER_WINDOW_MS);
 }
 
+/* ── The twenty seconds after he answers you ──────────────────────────────
+ *
+ * Named mode stopped the phantom commands and made a conversation impossible:
+ * every turn had to begin with his name, including "no, the other one". So
+ * the window is back, with the thing that broke it last time fixed.
+ *
+ * Last time ANYTHING inside the window counted, and a video playing on the Mac
+ * became commands. Now a sentence in the window must ALSO sound like it was
+ * said to him: a question, an instruction, or a correction. What the room
+ * produces is names and noun phrases (the log has "Liquid mineral.",
+ * "Hamburger menu.", "8 year", "stay straight") and none of that gets in.
+ *
+ * It opens only after a reply to something you said, it runs from the moment
+ * his voice stops, and every follow-up he takes starts it again, so a
+ * back-and-forth never asks for his name twice. */
+function namedFollowUpWindowOpen(now = Date.now()) {
+  if (!namedModeOn) return false;
+  const line = lastSpokenLine;
+  if (!line?.endedTs) return false;
+  // He replied to YOU: you spoke first, and he answered within the exchange.
+  if (!lastUserTurnAt || lastUserTurnAt > line.ts) return false;
+  if (line.ts - lastUserTurnAt > NAMED_EXCHANGE_MAX_MS) return false;
+  return now - line.endedTs <= NAMED_FOLLOW_UP_MS;
+}
+
+/* Said TO him, rather than said near him. */
+const SAID_TO_HIM_QUESTION = /^(?:(?:and|so|but|then|also|ok|okay|hmm)[\s,]+)?(?:what|why|how|when|where|which|who|whose|can|could|would|will|should|shall|do|does|did|is|are|was|were|am|have|has|any|anything|tell|show|give|read|explain|find|search|check)\b/i;
+const SAID_TO_HIM_ORDER = /^(?:(?:and|so|but|then|also|now|please|just|ok|okay)[\s,]+)*(?:open|close|quit|play|pause|stop|resume|skip|next|previous|mute|unmute|search|find|look|send|message|text|call|facetime|write|type|make|create|delete|remove|move|copy|paste|save|share|set|change|turn|switch|increase|reduce|lower|raise|repeat|read|summari[sz]e|translate|remind|schedule|book|buy|order|download|install|update|check|try|do|go|take|bring|add|put|keep|start|run|show|tell|explain|note|remember|forget|cancel|undo|retry|continue|carry|give|use|pick|choose|select|scroll|click|press|zoom|explain)\b/i;
+const SAID_TO_HIM_CORRECTION = /^(?:no|nope|nah|not\s|actually|instead|i meant|i mean|i said|wait|hold on|hang on|sorry|rather|forget it|never ?mind)\b/i;
+
+function saidToBraino(text) {
+  const value = String(text || "").trim().replace(/^[\s,.\-]+/, "");
+  if (!value) return false;
+  // Two words at least: one word off a speaker is how the room sounds.
+  if (value.split(/\s+/).filter(Boolean).length < 2) return false;
+  if (/\?["')\]]*$/.test(value)) return true;
+  return SAID_TO_HIM_CORRECTION.test(value)
+    || SAID_TO_HIM_QUESTION.test(value)
+    || SAID_TO_HIM_ORDER.test(value);
+}
+
+/* Straight after his answer, and clearly meant for him. */
+function followsHisReply(text) {
+  return namedFollowUpWindowOpen() && saidToBraino(text);
+}
+
 const ANSWER_REPLY = /^(?:yes|yeah|yep|yup|yes please|sure|ok|okay|alright|all right|no|nope|nah|no thanks|not now|go ahead|do it|please do|go for it|cancel|never ?mind|that one|this one|(?:the )?(?:first|second|third|fourth|fifth|last|other)(?: one)?|(?:number )?(?:one|two|three|four|five|1|2|3|4|5))\b/i;
 
 function answersHisQuestion(text) {
@@ -4761,7 +4815,7 @@ function namedOpenAtReady() {
    and reading a `let` that early throws. */
 function namedAsleepForNotch() {
   try {
-    return namedModeOn && !namedWindowOpen() && !namedAnswerWindowOpen();
+    return namedModeOn && !namedWindowOpen() && !namedAnswerWindowOpen() && !namedFollowUpWindowOpen();
   } catch {
     return false;
   }
@@ -5522,7 +5576,7 @@ function shouldAcceptVoiceTranscript(text) {
       // His name on its own leaves the on-device match for the sentence after it.
       if (!isBareWakeWord(text)) namedHeardOnDeviceAt = 0;
       namedWake("name");
-    } else if (!namedWindowOpen() && !answersHisQuestion(text)) {
+    } else if (!namedWindowOpen() && !answersHisQuestion(text) && !followsHisReply(text)) {
       logRenderer("named.ignored", {
         // Logged in full: these drops are the feature working, and the only way
         // to tell that from the feature eating your sentence is to read them.
@@ -5540,6 +5594,11 @@ function shouldAcceptVoiceTranscript(text) {
       return false;
     } else {
       // Inside the window and clearly aimed at him: keep it open.
+      /* Which door it came through, because the follow-up window is the one
+         that can let the room in and the log is how we would know. */
+      if (!namedWindowOpen() && followsHisReply(text)) {
+        logRenderer("named.after_reply", { text: String(text || "").replace(/\s+/g, " ").trim().slice(0, 120) });
+      }
       namedWake("follow-up");
     }
   }
@@ -8468,6 +8527,8 @@ async function flushRealtimeTranscript(reason, textOverride) {
     : (heldWasAccepted ? Boolean(transcript) : shouldAcceptVoiceTranscript(transcript));
   // That sentence has been judged; the next one is judged on its own start.
   if (transcript) namedSpeechAwake = false;
+  /* Your half of the exchange. His reply to it opens the follow-up window. */
+  if (accepted && !dictationMode) lastUserTurnAt = Date.now();
   logRenderer("realtime.transcript.flush", {
     reason,
     transcriptChars: transcript.length,
