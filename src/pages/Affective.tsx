@@ -290,7 +290,7 @@ export default function Affective() {
               <em>just talk to.</em>{" "}
               <b>So you never have to touch it again.</b>
             </h1>
-            <div className="aff-reveal">
+            <div className="aff-hero-say aff-reveal">
               <p className="aff-hero-explain">
                 AI has got very good at telling you what to do. You still have to go and
                 do it yourself. Open the tab, find the file, fill in the form, send the

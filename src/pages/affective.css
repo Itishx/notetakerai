@@ -91,24 +91,28 @@
 /* The claim on the left, what it means on the right, at the same baseline. A
    short sharp claim on its own is a slogan; the same claim with its explanation
    beside it is a position, and the explanation cannot be a scroll away. */
-.aff-hero-cols {
-  display: grid;
-  grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
-  gap: clamp(32px, 5vw, 84px);
-  align-items: start;
+/* The headline runs the full width and the explanation is indented under its
+   right half. Side by side, a two-sentence headline had 620px to live in and
+   broke into six tight lines with a hole beside it where the short standfirst
+   ran out. Given the whole measure it breaks into four and the page opens on
+   one wide line instead of a cramped column. */
+.aff-hero-cols { display: block; }
+.aff-hero-say {
+  margin-top: clamp(30px, 3.6vw, 52px);
+  margin-left: auto;
+  width: min(100%, 46ch);
 }
-@media (max-width: 900px) { .aff-hero-cols { grid-template-columns: 1fr; } }
-/* The explaining voice is the serif; the claiming voice is the sans. Same rule
-   as the statement below: serif for sentences a person says, sans for the ones
-   a company asserts. */
+@media (max-width: 900px) { .aff-hero-say { margin-left: 0; margin-top: 26px; } }
+/* Sans, like every other standfirst on the page. This was the serif under a
+   rule that used to run the other way round, and two explaining voices one
+   section apart is the inconsistency that reads as two designs. */
 .aff-hero-explain {
-  font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
-  font-size: clamp(17px, 1.55vw, 20px);
-  line-height: 1.5;
-  letter-spacing: -0.004em;
+  font-size: clamp(16px, 1.5vw, 19px);
+  line-height: 1.55;
+  letter-spacing: -0.008em;
   color: var(--a-ink);
-  margin: clamp(8px, 1vw, 16px) 0 0;
-  max-width: 36ch;
+  margin: 0;
+  max-width: 44ch;
 }
 .aff-hero-explain + .aff-hero-explain { margin-top: 1.05em; color: var(--a-ink-soft); }
 .aff-kicker {
@@ -118,11 +122,11 @@
 .aff-h1 {
   margin: 0;
   font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
-  font-size: clamp(38px, 5.2vw, 66px);
-  line-height: 1.08;
-  letter-spacing: -0.02em;
+  font-size: clamp(37px, 5.6vw, 72px);
+  line-height: 1.04;
+  letter-spacing: -0.022em;
   font-weight: 400;
-  max-width: 16ch;
+  max-width: 25ch;
   text-wrap: balance;
 }
 .aff-h1 em {
@@ -133,6 +137,8 @@
    of the claim is the coloured half, so the page has one way of marking the
    sentence that matters rather than three. */
 .aff-h1 b {
+  display: block;
+  margin-top: .26em;
   font-weight: inherit;
   color: var(--a-braino);
 }
