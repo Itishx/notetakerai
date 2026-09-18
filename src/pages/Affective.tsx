@@ -125,7 +125,7 @@ const HONEST = [
   },
   {
     k: "What is ours is the assembly.",
-    v: "The gate that stops a purchase. The loop that verifies itself. The memory that outlives the session. Twenty unglamorous parts nobody demos.",
+    v: "The gate that stops a purchase. The loop that checks its own work. The memory that outlives the session. Twenty unglamorous parts nobody demos, in six layers. They are below.",
   },
 ];
 
@@ -173,9 +173,9 @@ export default function Affective() {
         <div className="aff-nav-in">
           <Link to="/affective" className="aff-logo">Affective</Link>
           <div className="aff-nav-links">
-            <a href="#stack">The stack</a>
+            <a href="#honest">What is ours</a>
+            <a href="#stack">The assembly</a>
             <a href="#characters">Characters</a>
-            <a href="#honest">How we work</a>
             <Link to="/waitlist">Early access</Link>
           </div>
         </div>
@@ -184,7 +184,7 @@ export default function Affective() {
       {/* ── Hero ───────────────────────────────────────────────────────────── */}
       <header className="aff-hero">
         <div className="aff-wrap">
-          <p className="aff-kicker aff-reveal">Affective</p>
+          <p className="aff-kicker aff-reveal">Affective · Voice-first computing</p>
           {/* Claim left, meaning right, at the same baseline. "Software that
               does the thing" is sharp and, on its own, vague enough to be
               anybody's, so the sentence that says what it means has to sit
@@ -196,14 +196,13 @@ export default function Affective() {
             </h1>
             <div className="aff-reveal">
               <p className="aff-hero-explain">
-                It reads the screen you are actually on. The email open in front of you,
-                the page, the file, the timetable. Then it goes and does what you asked,
-                there, one step at a time, and stops to ask before anything it cannot take
-                back.
+                Three things a computer has never really been able to do. Know what is on
+                your screen. Be talked to for an hour without losing the thread. And act on
+                both, without being told every step.
               </p>
               <p className="aff-hero-explain">
-                No window to paste into, no app to move to. We build the layers that make
-                that possible, and the characters worth trusting with it.
+                We build those, voice-first, on the machine you already own. Then we build
+                someone out of them worth handing it to.
               </p>
             </div>
           </div>
@@ -215,15 +214,37 @@ export default function Affective() {
         </div>
       </header>
 
+      {/* ── How we work, honestly ──────────────────────────────────────────── */}
+      <section className="aff-sec" id="honest">
+        <div className="aff-wrap">
+          <div className="aff-sec-head aff-reveal">
+            <h2>What is ours, and what is not.</h2>
+            <p>
+              Worth saying before anything else, because it is the only question about an
+              AI company that matters. Everybody has the same models. Almost nobody has the
+              part between a model and a person who actually trusts it.
+            </p>
+          </div>
+          <dl className="aff-honest aff-reveal">
+            {HONEST.map((h) => (
+              <div className="aff-honest-row" key={h.k}>
+                <dt>{h.k}</dt>
+                <dd>{h.v}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      </section>
+
       {/* ── The stack ──────────────────────────────────────────────────────── */}
       <section className="aff-sec" id="stack">
         <div className="aff-wrap">
           <div className="aff-sec-head aff-reveal">
-            <h2>Six layers, and an agent is what happens when you have all of them.</h2>
+            <h2>The assembly, in six parts.</h2>
             <p>
               None of these is a model. They are the parts around one: how a machine sees a
               screen, holds a room, acts without wrecking anything, and does not start every
-              morning from nothing.
+              morning from nothing. An agent is what happens when you have all six.
             </p>
           </div>
         </div>
@@ -317,27 +338,6 @@ export default function Affective() {
             </Link>
             <p>Browser, Mac, the Foundry, and the characters inside his world.</p>
           </div>
-        </div>
-      </section>
-
-      {/* ── How we work, honestly ──────────────────────────────────────────── */}
-      <section className="aff-sec" id="honest">
-        <div className="aff-wrap">
-          <div className="aff-sec-head aff-reveal">
-            <h2>What is ours, and what is not.</h2>
-            <p>
-              Everybody has the same models. Almost nobody has the part between a model and
-              a person who actually trusts it, and that part is not glamorous enough to demo.
-            </p>
-          </div>
-          <dl className="aff-honest aff-reveal">
-            {HONEST.map((h) => (
-              <div className="aff-honest-row" key={h.k}>
-                <dt>{h.k}</dt>
-                <dd>{h.v}</dd>
-              </div>
-            ))}
-          </dl>
         </div>
       </section>
 
