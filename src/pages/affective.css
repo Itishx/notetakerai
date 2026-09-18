@@ -78,7 +78,13 @@
   transition: color .2s ease;
 }
 .aff-nav-links a:hover { color: var(--a-ink); }
-@media (max-width: 720px) { .aff-nav-links a:nth-child(n+4) { display: none; } }
+@media (max-width: 980px) {
+  .aff-nav-links { gap: 18px; }
+  .aff-nav-links a:not(:last-child):nth-child(n+4) { display: none; }
+}
+/* Never the last one: that is the way in, and a nav that drops its only call to
+   action on a phone is a nav with nothing to do. */
+@media (max-width: 720px) { .aff-nav-links a:not(:last-child):nth-child(n+3) { display: none; } }
 
 /* ── Hero ────────────────────────────────────────────────────────────────── */
 .aff-hero { padding: clamp(72px, 12vw, 152px) 0 clamp(56px, 8vw, 96px); }
@@ -171,9 +177,11 @@
 }
 .aff-grid-3 { grid-template-columns: repeat(3, 1fr); }
 .aff-grid-2 { grid-template-columns: repeat(2, 1fr); }
+.aff-grid-4 { grid-template-columns: repeat(4, 1fr); }
+@media (max-width: 1040px) { .aff-grid-4 { grid-template-columns: repeat(2, 1fr); } }
 @media (max-width: 900px) { .aff-grid-3 { grid-template-columns: repeat(2, 1fr); } }
 @media (max-width: 620px) {
-  .aff-grid-3, .aff-grid-2 { grid-template-columns: 1fr; }
+  .aff-grid-3, .aff-grid-2, .aff-grid-4 { grid-template-columns: 1fr; }
 }
 
 /* A layer cell: what the company actually owns. */
@@ -389,6 +397,99 @@
   .aff-braino-name { gap: 10px; align-items: flex-end; }
   .aff-braino-face { width: 74px; height: 66px; }
   .aff-braino-face > * { transform: scale(1); }
+}
+
+/* ── The ecosystem ───────────────────────────────────────────────────────────
+   Built as a diagram rather than described as one: the two products in the
+   outer cells and the thing they both sign into in the middle, sharing the
+   grid's hairline so the three read as one mechanism rather than three claims.
+
+   The middle cell is deeper paper and not a dark fill. A dark slab dropped
+   into a light page reads as a different website for the length of one
+   section, and the whole design rests on the sheet staying one sheet. */
+.aff-eco-map { grid-template-columns: repeat(3, 1fr); align-items: stretch; }
+.aff-eco-end, .aff-eco-core {
+  padding: clamp(26px, 3.2vw, 44px);
+  display: flex; flex-direction: column; gap: 12px;
+  min-height: clamp(210px, 20vw, 260px);
+}
+/* The product accent as a top hairline, the same language the product cards
+   use, so the two sections are visibly about the same two things. */
+.aff-eco-end { position: relative; }
+.aff-eco-end::before {
+  content: ""; position: absolute; inset: 0 0 auto 0; height: 2px;
+  background: var(--acc); transform: scaleY(.5); transform-origin: top;
+}
+.aff-eco-core { background: #efece2; }
+.aff-eco-tag {
+  font-size: 11px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--acc, var(--a-ink-faint));
+}
+.aff-eco-core .aff-eco-tag { color: var(--a-ink-faint); }
+.aff-eco-end h3, .aff-eco-core h3 {
+  margin: 4px 0 0;
+  font-size: clamp(24px, 2.4vw, 32px);
+  letter-spacing: -0.032em; font-weight: 600; line-height: 1.04;
+}
+.aff-eco-core h3 {
+  font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  font-weight: 400; letter-spacing: -0.018em; line-height: 1.12;
+  font-size: clamp(22px, 2.1vw, 28px);
+}
+.aff-eco-end p, .aff-eco-core p {
+  margin: 0; font-size: 15px; line-height: 1.5;
+  color: var(--a-ink-soft); letter-spacing: -0.006em;
+}
+@media (max-width: 860px) { .aff-eco-map { grid-template-columns: 1fr; } }
+
+/* The label over the second grid. A small rule doing the job a heading would
+   do too loudly this far into a section that already has one. */
+.aff-eco-label {
+  margin: clamp(40px, 5vw, 68px) 0 clamp(18px, 2vw, 26px);
+  font-size: 11px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--a-ink-faint);
+}
+.aff-eco-cell {
+  padding: clamp(24px, 2.8vw, 36px);
+  display: flex; flex-direction: column; gap: 10px;
+  min-height: clamp(200px, 18vw, 240px);
+}
+.aff-eco-cell h4 {
+  margin: 0;
+  font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  font-size: clamp(20px, 1.9vw, 25px);
+  font-weight: 400; letter-spacing: -0.018em; line-height: 1.12;
+}
+.aff-eco-cell p {
+  margin: 0; font-size: 14.5px; line-height: 1.52;
+  color: var(--a-ink-soft); letter-spacing: -0.006em;
+}
+
+/* The rule the two products are kept apart by, given the weight of a claim
+   because that is what it is. */
+.aff-eco-rule {
+  margin-top: clamp(44px, 5vw, 76px);
+  padding-top: clamp(28px, 3.2vw, 40px);
+  border-top: 1px solid var(--a-line-strong);
+  display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+  gap: clamp(20px, 4vw, 72px); align-items: start;
+}
+.aff-eco-rule-line {
+  margin: 0; max-width: 16ch;
+  font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  font-size: clamp(27px, 3.4vw, 44px);
+  font-weight: 400; letter-spacing: -0.022em; line-height: 1.08;
+  text-wrap: balance;
+}
+.aff-eco-rule-line span { color: var(--a-braino); }
+.aff-eco-rule-say {
+  margin: 0; max-width: 46ch;
+  font-size: clamp(15px, 1.35vw, 16.5px); line-height: 1.56;
+  color: var(--a-ink-soft); letter-spacing: -0.006em;
+}
+@media (max-width: 880px) {
+  .aff-eco-rule { grid-template-columns: 1fr; gap: 18px; }
+  .aff-eco-rule-line { max-width: 20ch; }
 }
 
 /* ── Braino, briefly ────────────────────────────────────────────────────────
