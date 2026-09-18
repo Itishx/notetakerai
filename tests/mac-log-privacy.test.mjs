@@ -56,7 +56,14 @@ test("the screen gets the same treatment as the file", () => {
      and lands after whatever was said next. Both halves are scrubbed: the goal
      as always, and the command that was added beside it. */
   assert.match(main, /\[Braino HIL\] \$\{r\.verdict\} on "\$\{scrubForLog\(String\(raw \|\| ""\)\.slice\(0, 60\)\)\}" — \$\{scrubForLog\(r\.restated_goal\)\}/);
-  assert.match(main, /\[Braino HIL-LOOP\][\s\S]{0,40}scrubForLog\(thinking\)/);
+  /* The tag became a variable in Round 010, so the brain doing the thinking is
+     named rather than assumed. Pinning the literal "[Braino HIL-LOOP]" next to
+     the scrub made this test fail on a change that never touched privacy, which
+     is how a red test stops being read. What matters is unchanged and is what
+     is asserted: whoever is thinking, the thought is scrubbed on its way to a
+     terminal someone can read over your shoulder. */
+  assert.match(main, /const tag = turnBrain === "astra" \? "Braino ASTRA" : "Braino HIL-LOOP";/);
+  assert.match(main, /console\.log\(`\[\$\{tag\}\][\s\S]{0,80}scrubForLog\(thinking\)/);
 });
 
 /* A row nobody needs is better not written than written and starred out. */

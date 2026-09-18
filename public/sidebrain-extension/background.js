@@ -39,6 +39,7 @@ try {
     "lib/recovery.js",
     "lib/macroStore.js",
     "lib/searchGuard.js",
+    "lib/hilShared.js",
     "lib/hilAdapter.js",
   );
 } catch (error) {
@@ -5157,6 +5158,16 @@ async function bgRunDelegateLoop({ tabId, task, connectorHint, sharedContext = {
       const msg = "Done.";
       onFinal?.(msg);
       return { ok: true, message: msg, state };
+    }
+    /* An answer that promises is not an answer.
+       Shared with the Mac app, deliberately: the same model produced "I'm
+       starting that now" and ended a run there with nothing started. */
+    if (action.type === "answer" && globalThis.BrainoHilShared?.promisesAction(action.text)) {
+      console.log("[Braino][HIL-LOOP] promise, not an ending:", String(action.text).slice(0, 120));
+      state.facts = Array.isArray(state.facts) ? state.facts : [];
+      state.facts.push(globalThis.BrainoHilShared.PROMISE_NUDGE);
+      if (state.facts.length > 12) state.facts = state.facts.slice(-12);
+      continue;
     }
     if (action.type === "answer" || action.type === "clarify") {
       const msg = action.text || "I need more information to continue.";

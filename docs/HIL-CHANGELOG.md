@@ -11,6 +11,81 @@ memory of what a session felt like.
 
 ---
 
+## 2026-09-18 · Round 011 — the net nobody was pulling
+
+**What triggered it:** the start of HIL Version 2. Everything in that arc changes
+how he thinks, and there was no way to tell a round that helped from a round that
+only moved things around. This file's own rule is that an entry only counts if it
+names the evidence, and ten rounds have honoured it by hand. Doing that by hand
+is exactly why the weeks between rounds have no numbers at all.
+
+**The net existed and could not be pulled.** `npm test` runs vitest, which is
+scoped to `src/**` and `extension/**`. The 38 files in `tests/` are `node:test`
+and were never in any command: they had to be run one file at a time, by someone
+who already knew which file to run. A net nobody can pull is decoration.
+
+`npm run test:hil` now runs all of them in one go, and `npm run test:all` runs
+both halves.
+
+**The failure that was seven rounds old was real, and it was not a test problem.**
+Rounds 005 through 010 each closed with a line like *"the one failure is the same
+`lib/hilShared.js` drift in the built extension copy, unrelated"*. It was not
+unrelated and it was not drift in a test. `extension/lib/hilShared.js` was never
+copied into `public/sidebrain-extension/` or `dist/sidebrain-extension/`, so the
+extension people actually download had no such file, and its background worker
+never imported it:
+
+```
+source  importScripts(..., "lib/searchGuard.js", "lib/hilShared.js", "lib/hilAdapter.js")
+built   importScripts(..., "lib/searchGuard.js",                     "lib/hilAdapter.js")
+```
+
+`promisesAction`, `stepSignature` and `answerApproves` — the follow-through
+detector, the repeat guard and the gate's yes-reader — were shipping absent.
+`npm run sync:extension` was all it ever needed. Six rounds of calling a red
+test unrelated is the cost of a failure nobody can run casually, which is the
+same point as the paragraph above.
+
+**A stale test was pinning a string instead of a behaviour.**
+`mac-log-privacy.test.mjs` matched the literal `[Braino HIL-LOOP]` next to
+`scrubForLog(thinking)`. Round 010 correctly made that tag a variable so the
+brain doing the thinking is named. The privacy behaviour never changed; the test
+failed anyway. It now pins the derivation and the scrub, which is what actually
+matters, and it goes red only if a thought reaches a terminal unscrubbed.
+
+**The reflex tier had no tests at all.** `hil-router` fronts every spoken
+command, is public, has no screen and no second opinion, and had thirteen
+siblings' worth of coverage and none of its own. Seven now, and the one that
+matters says the floor is code: a verdict naming anything `[CANNOT UNDO]` is
+rewritten to an escalate inside `readVerdict`, whatever rule 4 of the prompt did
+or did not persuade the model of. Also pinned: the catalog allowlist as the last
+word on tool names, all three unreadable-reply paths landing on escalate, the
+model being chosen server-side, the cached prefix staying ahead of the dynamic
+surface, and a rejected verdict being logged as `ok: true` so the safety net
+firing reads as the net working rather than as an outage.
+
+**And the scoreboard**, `npm run hil:score`, reads `engine_runs` and prints the
+last seven days against the seven before: runs, finished, gave up, needed Astra,
+steps to finish, thinking per run, unreadable turns, and the share of input
+served from cache. Each row says which direction is better. It prints the prompt
+versions in the window underneath, because two versions in one window means the
+two columns are not the same brain and the comparison is not a comparison.
+
+Four decisions in it worth keeping: a run is judged on its LAST verdict, not on
+every step; `ask` is neither a win nor a loss, because a run waiting on a person
+has not failed; steps-to-finish ignores runs that never finished, or a round that
+stops circling earlier reads as a round that got slower; and a rescue counts once
+per run, not once per turn, or Astra driving three turns reports three rescues.
+Its arithmetic is tested against fixtures rather than the real table, because
+`engine_runs` holds what people actually said to Braino.
+
+**Verified:** 313 pass, 0 fail, up from 297 pass / 2 fail. 16 new. The whole
+suite is green for the first time since Round 004. `npm run test:all` is the
+command from here. No prompt version moved: nothing in this round changes how he
+thinks, which is the point of doing it first.
+
+---
+
 ## 2026-08-27 · Round 010 — the eyes were already there
 
 **What triggered it:** *"the book tickets button was right there on the screen
