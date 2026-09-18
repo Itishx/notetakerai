@@ -185,14 +185,17 @@ export default function Affective() {
       <header className="aff-hero">
         <div className="aff-wrap">
           <p className="aff-kicker aff-reveal">Affective</p>
+          {/* The hero is the sentence that was buried in the footer. Everybody
+              opens with the promise; the promise is the cliche. This says the
+              work instead, and the second half is the half nobody else says. */}
           <h1 className="aff-h1 aff-reveal">
-            Everybody was promised Jarvis.
-            {" "}<em>The model was never the missing part.</em>
+            We build the layers a computer needs to be useful to one person.
+            {" "}<em>And the character worth spending the day with.</em>
           </h1>
           <p className="aff-sub aff-reveal">
-            What was missing is the rest of it. Something that can see your screen, act on
-            it without breaking anything, and still be the same thing tomorrow. We build
-            that, and then we give it somebody to be.
+            A machine you talk to instead of operate. It sees the screen you are looking at,
+            does the thing you asked, and is still itself tomorrow. Six layers, assembled
+            once, and the characters that live on top of them.
           </p>
           <div className="aff-hero-meta aff-reveal">
             <span>Bengaluru</span>
@@ -335,8 +338,8 @@ export default function Affective() {
             <div className="aff-foot-brand">
               <strong>Affective</strong>
               <p>
-                We build the layers a computer needs to be useful to one person, and the
-                characters worth spending a day with.
+                A voice-first computer, and the characters that make one worth keeping.
+                Built in Bengaluru.
               </p>
             </div>
             <nav className="aff-foot-col">
