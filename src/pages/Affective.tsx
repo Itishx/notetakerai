@@ -81,7 +81,7 @@ const PRODUCTS = [
   },
   {
     to: "/brainohera",
-    tag: "Dictation",
+    tag: "Character Two",
     name: "HERA",
     line:
       "Speak anywhere on your Mac and the words land where the cursor is. Built to hold an hour of talking, not a sentence.",
@@ -166,12 +166,6 @@ const THE_DAY = [
     next:
       "A face, a voice, and a read on what kind of day you are having. It knows what you told it last month, and it is the same one tomorrow.",
   },
-];
-
-const HANDS = [
-  { k: "It sees the real screen.", v: "The page you are on, not a box you paste into." },
-  { k: "It acts, then checks.", v: "Does the thing, then looks again to see whether it worked." },
-  { k: "It stops itself.", v: "Before anything that spends, sends, posts or deletes." },
 ];
 
 /* The questions people actually ask, answered without a single word anybody
@@ -335,21 +329,34 @@ export default function Affective() {
         </div>
       </section>
 
-      {/* ── The statement, its own section ─────────────────────────────────── */}
-      <section className="aff-statement">
+      {/* ── The thesis ─────────────────────────────────────────────────────
+          A magazine spread: the claim at full size on the left, and the reason
+          it is true set as a standfirst on the right. Previously the quote sat
+          alone above three cells that restated the six layers three sections
+          early, which is what made it read as a page that had run out rather
+          than a page that had paused. */}
+      <section className="aff-statement" id="hands">
         <div className="aff-wrap">
-          <blockquote className="aff-reveal">
-            The hard part was never the intelligence.
-            {" "}<span>It was the hands.</span>
-          </blockquote>
-          <dl className="aff-hands aff-reveal">
-            {HANDS.map((h) => (
-              <div key={h.k}>
-                <dt>{h.k}</dt>
-                <dd>{h.v}</dd>
-              </div>
-            ))}
-          </dl>
+          <div className="aff-statement-in">
+            <blockquote className="aff-reveal">
+              The hard part was never the intelligence.
+              {" "}<span>It was the hands.</span>
+            </blockquote>
+            <div className="aff-statement-say aff-reveal">
+              <p className="aff-statement-kicker">Why the company exists</p>
+              <p>
+                Every model on the market can tell you how to book the flight, write the
+                reply, fill in the form. Not one of them can reach over and do it on the
+                machine in front of you.
+              </p>
+              <p>
+                So we stopped trying to make the thinking better. All of the work turned
+                out to be in the hands: seeing the screen you are actually on, pressing the
+                button that is actually there, and knowing when to stop and ask. Nobody
+                sells that part. It is the only part we build.
+              </p>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -399,13 +406,15 @@ export default function Affective() {
                 className="aff-prod"
                 style={{ ["--acc" as string]: p.accent }}
               >
-                <span className="aff-prod-tag">{p.tag}</span>
+                <div className="aff-prod-top">
+                  <span className="aff-prod-tag">{p.tag}</span>
+                  <span className="aff-prod-state">{p.state}</span>
+                </div>
                 <h3>{p.name}</h3>
                 <p className="aff-prod-line">{p.line}</p>
-                <div className="aff-prod-foot">
-                  <span>See it</span>
-                  <span>{p.state}</span>
-                </div>
+                <span className="aff-prod-go">
+                  See it<i aria-hidden="true">→</i>
+                </span>
               </Link>
             ))}
           </div>
@@ -449,25 +458,30 @@ export default function Affective() {
         </div>
       </section>
 
-      {/* ── Questions ──────────────────────────────────────────────────────── */}
-      <section className="aff-sec" id="faq">
+      {/* ── Questions ──────────────────────────────────────────────────────
+          Two columns, with the heading held on the left while the answers move
+          past it. It gives the page a centre gutter it did not have, and stops
+          the last screen reading as more of the same rail. */}
+      <section className="aff-sec aff-faq-sec" id="faq">
         <div className="aff-wrap">
-          <div className="aff-sec-head aff-reveal">
-            <h2>Questions people actually ask.</h2>
-          </div>
-          {/* details/summary, so it works with no JavaScript and with a
-              keyboard, and so the page is not one uninterrupted scroll of prose
-              by the time somebody gets here. */}
-          <div className="aff-faq aff-reveal">
-            {FAQ.map((f, i) => (
-              <details key={f.q} open={i === 0}>
-                <summary>
-                  <span>{f.q}</span>
-                  <i aria-hidden="true" />
-                </summary>
-                <p>{f.a}</p>
-              </details>
-            ))}
+          <div className="aff-faq-in">
+            <div className="aff-faq-head aff-reveal">
+              <h2>Questions people actually ask.</h2>
+              <p>Including the ones about what we did not build.</p>
+            </div>
+            {/* details/summary, so it works with no JavaScript and with a
+                keyboard. */}
+            <div className="aff-faq aff-reveal">
+              {FAQ.map((f, i) => (
+                <details key={f.q} open={i === 0}>
+                  <summary>
+                    <span>{f.q}</span>
+                    <i aria-hidden="true" />
+                  </summary>
+                  <p>{f.a}</p>
+                </details>
+              ))}
+            </div>
           </div>
         </div>
       </section>

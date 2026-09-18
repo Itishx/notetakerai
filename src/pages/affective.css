@@ -187,10 +187,14 @@
   color: var(--a-ink-faint);
   font-variant-numeric: tabular-nums;
 }
+/* The same serif, at the size three columns can carry, as the two-column grid
+   further up. Two grids of cells one section apart, one with serif headings
+   and one with bold sans, read as two designs rather than one system. */
 .aff-cell h3 {
   margin: 6px 0 0;
-  font-size: clamp(20px, 2vw, 26px);
-  letter-spacing: -0.022em; font-weight: 600;
+  font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  font-size: clamp(21px, 2.05vw, 27px);
+  letter-spacing: -0.018em; font-weight: 400; line-height: 1.14;
   text-wrap: balance;
 }
 .aff-cell p {
@@ -207,12 +211,16 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* ── Product cells ───────────────────────────────────────────────────────── */
+/* ── The character cards ─────────────────────────────────────────────────────
+   These carry the whole middle of the page on two cells, so they are built
+   like the opening page of a feature rather than a tile: a masthead row with
+   the billing on one side and the status on the other, a name at display size,
+   the standfirst, and the way in held at the bottom. */
 .aff-prod {
   position: relative;
   display: flex; flex-direction: column;
-  padding: clamp(30px, 3.6vw, 48px);
-  min-height: clamp(240px, 22vw, 300px);
+  padding: clamp(30px, 3.6vw, 52px);
+  min-height: clamp(280px, 27vw, 380px);
   color: inherit; text-decoration: none;
   background: var(--a-surface);
   transition: background .25s ease;
@@ -220,36 +228,54 @@
 .aff-prod:hover { background: #f1efe7; }
 /* The accent is a rule at the top of the cell, not a fill. A tinted card is a
    card; a hairline that changes colour keeps the sheet flat and still says
-   which product you are looking at. */
+   which product you are looking at. Always on, at a hairline, and thickening
+   on hover: invisible until hover left both cells reading as identical. */
 .aff-prod::before {
-  content: ""; position: absolute; inset: 0 0 auto 0; height: 3px;
+  content: ""; position: absolute; inset: 0 0 auto 0; height: 2px;
   background: var(--acc, var(--a-ink));
-  opacity: 0; transition: opacity .25s ease;
+  transform: scaleY(.5); transform-origin: top;
+  transition: transform .25s ease;
 }
-.aff-prod:hover::before, .aff-prod:focus-visible::before { opacity: 1; }
+.aff-prod:hover::before, .aff-prod:focus-visible::before { transform: scaleY(1.5); }
 .aff-prod:focus-visible { outline: 2px solid var(--acc, var(--a-ink)); outline-offset: -2px; }
 
+/* The masthead row. Billing left, status right, on the rule. */
+.aff-prod-top {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 16px;
+  padding-bottom: 16px; border-bottom: 1px solid var(--a-line);
+}
 .aff-prod-tag {
-  font-size: 11px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase;
+  font-size: 11px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
   color: var(--acc, var(--a-ink-faint));
 }
+.aff-prod-state {
+  font-size: 12px; color: var(--a-ink-faint); letter-spacing: -0.002em;
+  text-align: right;
+}
 .aff-prod h3 {
-  margin: 14px 0 0;
-  font-size: clamp(26px, 2.8vw, 36px);
-  letter-spacing: -0.028em; font-weight: 600;
+  margin: clamp(26px, 3vw, 40px) 0 0;
+  font-size: clamp(38px, 4.6vw, 62px);
+  letter-spacing: -0.042em; font-weight: 600; line-height: .98;
 }
 .aff-prod .aff-prod-line {
-  margin: 10px 0 0; max-width: 34ch;
-  font-size: 15.5px; line-height: 1.5; color: var(--a-ink-soft);
-  letter-spacing: -0.006em;
+  margin: 16px 0 0; max-width: 40ch;
+  font-size: clamp(15.5px, 1.35vw, 17px); line-height: 1.5;
+  color: var(--a-ink-soft); letter-spacing: -0.008em;
 }
-.aff-prod-foot {
-  margin-top: auto; padding-top: 24px;
-  display: flex; align-items: baseline; gap: 10px;
-  font-size: 13px; font-weight: 500; color: var(--a-ink);
+.aff-prod-go {
+  margin-top: auto; padding-top: clamp(26px, 3vw, 38px);
+  display: inline-flex; align-items: baseline; gap: 9px;
+  font-size: 14px; font-weight: 600; letter-spacing: -0.012em;
+  color: var(--acc, var(--a-ink));
 }
-.aff-prod-foot span:last-child { color: var(--a-ink-faint); font-weight: 400; }
-.aff-prod-soon .aff-prod-foot { color: var(--a-ink-faint); }
+.aff-prod-go i {
+  font-style: normal; font-size: .95em;
+  transition: transform .22s ease;
+}
+.aff-prod:hover .aff-prod-go i { transform: translateX(5px); }
+@media (prefers-reduced-motion: reduce) {
+  .aff-prod-go i, .aff-prod::before { transition: none; }
+}
 
 /* Five products in two columns leaves one alone beside a dead cell, which reads
    as a missing product rather than a deliberate row. The last one takes the
@@ -264,68 +290,89 @@
   .aff-grid-2 > .aff-prod:last-child:nth-child(odd) { grid-column: auto; }
 }
 
-/* ── Section headers ─────────────────────────────────────────────────────── */
+/* ── Section headers ─────────────────────────────────────────────────────────
+   Two columns, heading left and the standfirst right, sitting on a shared
+   baseline. Stacked and capped at 22ch these read as a narrow rail down the
+   left of a very wide page, with the right two thirds empty the whole way
+   down; across, they use the measure the grid below them already uses. */
 /* The nav is sticky, so an anchor jump lands the heading underneath it. Every
    target gets the nav's height back plus a little air, or clicking "Products"
    takes you to a screen whose first line is hidden. */
 .aff [id] { scroll-margin-top: 78px; }
-.aff-sec { padding: clamp(72px, 9vw, 128px) 0 0; }
-.aff-sec-head { padding-bottom: clamp(28px, 3.4vw, 44px); }
+/* Bottom padding as well as top. Without it a grid runs straight into the next
+   section's rule and the section reads as having stopped rather than ended. */
+.aff-sec { padding: clamp(72px, 9vw, 128px) 0 clamp(56px, 7vw, 100px); }
+.aff-sec-head {
+  padding-bottom: clamp(30px, 3.6vw, 48px);
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  gap: clamp(20px, 4vw, 72px);
+  align-items: end;
+}
 .aff-sec-head h2 {
   margin: 0;
   font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
-  font-size: clamp(29px, 3.8vw, 46px);
-  letter-spacing: -0.018em; font-weight: 400; line-height: 1.14;
-  max-width: 22ch; text-wrap: balance;
+  font-size: clamp(31px, 4.4vw, 56px);
+  letter-spacing: -0.02em; font-weight: 400; line-height: 1.08;
+  max-width: 19ch; text-wrap: balance;
 }
 .aff-sec-head p {
-  margin: 16px 0 0; max-width: 58ch;
-  font-size: clamp(15.5px, 1.4vw, 18px); line-height: 1.56;
+  margin: 0; max-width: 46ch;
+  font-size: clamp(15.5px, 1.4vw, 18px); line-height: 1.55;
   color: var(--a-ink-soft); letter-spacing: -0.008em;
 }
+@media (max-width: 880px) {
+  .aff-sec-head { grid-template-columns: 1fr; gap: 14px; align-items: start; }
+  .aff-sec-head h2 { max-width: 24ch; }
+}
 
-/* ── The statement: the one serif on the page ────────────────────────────── */
+/* ── The thesis ──────────────────────────────────────────────────────────────
+   A magazine spread rather than a pull quote in a field: the claim at full
+   size on the left, the reason it is true set as a standfirst on the right,
+   both hanging from the same top line. What was here before was the quote
+   alone above three tiny cells that restated three of the six layers, so the
+   section made its own next section redundant. */
 .aff-statement {
-  padding: clamp(96px, 13vw, 190px) 0;
+  padding: clamp(84px, 11vw, 168px) 0;
   border-top: 1px solid var(--a-line);
   border-bottom: 1px solid var(--a-line);
-  margin-top: clamp(72px, 9vw, 128px);
+  margin-top: clamp(20px, 3vw, 44px);
   background: var(--a-surface);
 }
+.aff-statement-in {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+  gap: clamp(34px, 6vw, 104px);
+  align-items: start;
+}
 .aff-statement blockquote {
-  margin: 0; max-width: 22ch;
+  margin: 0; max-width: 15ch;
   font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
-  font-size: clamp(36px, 6.2vw, 82px);
-  line-height: 1.08; letter-spacing: -0.022em;
+  font-size: clamp(38px, 5.6vw, 76px);
+  line-height: 1.04; letter-spacing: -0.024em;
   text-wrap: balance;
 }
 /* The second half carries the argument, so it is the half that is coloured. */
 .aff-statement blockquote span { color: var(--a-braino); }
-/* The footer under the statement carries the only explanation on the page, so
-   it gets a readable measure rather than the one-line credit it started as. */
-
-
-
-/* ── What the hands are ─────────────────────────────────────────────────────
-   The statement was a pull quote alone in a field, which reads as a page that
-   ran out rather than a page that paused. The metaphor gets its meaning beside
-   it, in three, because "hands" means nothing until somebody says what it does. */
-.aff-hands {
-  margin: clamp(44px, 5vw, 72px) 0 0;
-  display: grid; grid-template-columns: repeat(3, 1fr);
-  gap: clamp(22px, 3vw, 48px);
-  border-top: 1px solid var(--a-line); padding-top: clamp(26px, 3vw, 38px);
-  max-width: 52rem;
+.aff-statement-say { padding-top: clamp(8px, 1.4vw, 18px); }
+.aff-statement-say p {
+  margin: 0; max-width: 42ch;
+  font-size: clamp(16px, 1.45vw, 18.5px); line-height: 1.58;
+  color: var(--a-ink-soft); letter-spacing: -0.008em;
 }
-.aff-hands dt {
-  margin: 0 0 8px; font-size: 15.5px; font-weight: 600;
-  letter-spacing: -0.012em; color: var(--a-ink);
+.aff-statement-say p + p { margin-top: 1.1em; }
+/* The standfirst label, on its own rule. A magazine tells you what you are
+   about to read before you read it. */
+.aff-statement-say .aff-statement-kicker {
+  margin: 0 0 18px; padding-bottom: 14px;
+  border-bottom: 1px solid var(--a-line-strong);
+  font-size: 11px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--a-ink-faint); max-width: none;
 }
-.aff-hands dd {
-  margin: 0; font-size: 14.5px; line-height: 1.5;
-  color: var(--a-ink-soft); letter-spacing: -0.004em;
+@media (max-width: 880px) {
+  .aff-statement-in { grid-template-columns: 1fr; gap: 34px; }
+  .aff-statement blockquote { max-width: 18ch; }
 }
-@media (max-width: 720px) { .aff-hands { grid-template-columns: 1fr; gap: 20px; } }
 
 /* Braino's name and Braino's face, on one line. He is a character, and a
    character section that opens with type alone is a press release. */
@@ -353,14 +400,18 @@
   font-size: 11px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase;
   color: var(--a-braino); margin: 0 0 18px;
 }
+/* The one heading on the page that is not the serif. Everywhere else the serif
+   is the company's voice making a claim; this is a name, and his name has been
+   set in SF Pro since the day he had one. Setting it in the editorial face
+   makes him a chapter of the company rather than the thing that started it. */
 .aff-braino-top h2 {
   margin: 0;
-  font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
-  font-size: clamp(40px, 6vw, 74px);
-  letter-spacing: -0.02em; font-weight: 400; line-height: 1.02;
+  font-family: inherit;
+  font-size: clamp(42px, 6.2vw, 78px);
+  letter-spacing: -0.04em; font-weight: 600; line-height: 1;
 }
 .aff-braino-line {
-  margin: 18px 0 0; max-width: 44ch;
+  margin: 18px 0 0; max-width: 58ch;
   font-size: clamp(16px, 1.5vw, 19px); line-height: 1.5;
   color: var(--a-ink-soft); letter-spacing: -0.01em;
 }
@@ -370,12 +421,15 @@
   display: flex; flex-direction: column; gap: 10px;
 }
 .aff-brief h3 {
-  margin: 0; font-size: clamp(18px, 1.9vw, 23px);
-  letter-spacing: -0.022em; font-weight: 600; text-wrap: balance;
+  margin: 0;
+  font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  font-size: clamp(20px, 2.1vw, 26px);
+  letter-spacing: -0.018em; font-weight: 400; line-height: 1.14;
+  text-wrap: balance;
 }
 .aff-brief p {
   margin: 0; font-size: 15px; line-height: 1.52;
-  color: var(--a-ink-soft); letter-spacing: -0.006em; max-width: 38ch;
+  color: var(--a-ink-soft); letter-spacing: -0.006em; max-width: 46ch;
 }
 
 /* The door out. Deliberately the only link on the page styled as a destination
@@ -515,7 +569,35 @@
    the last screen is not another wall of prose. Rules rather than cards: an
    accordion of floating boxes is a support page, and this is still the company
    talking. */
-.aff-faq { margin: clamp(26px, 3vw, 40px) 0 0; border-top: 1px solid var(--a-line); }
+/* Heading held on the left while the answers move past it on the right. The
+   page is one flush-left rail from the nav down, and by the time anybody
+   reaches the questions it has been a very long rail. */
+.aff-faq-sec .aff-faq-in {
+  display: grid;
+  grid-template-columns: minmax(0, 0.72fr) minmax(0, 1.28fr);
+  gap: clamp(30px, 6vw, 110px);
+  align-items: start;
+}
+.aff-faq-head { position: sticky; top: 104px; }
+.aff-faq-head h2 {
+  margin: 0;
+  font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  font-size: clamp(36px, 5.2vw, 68px);
+  letter-spacing: -0.024em; font-weight: 400; line-height: 1.04;
+  max-width: 12ch; text-wrap: balance;
+}
+.aff-faq-head p {
+  margin: 20px 0 0; max-width: 30ch;
+  font-size: 15.5px; line-height: 1.55;
+  color: var(--a-ink-faint); letter-spacing: -0.006em;
+}
+@media (max-width: 880px) {
+  .aff-faq-sec .aff-faq-in { grid-template-columns: 1fr; gap: 26px; }
+  .aff-faq-head { position: static; }
+  .aff-faq-head h2 { max-width: 16ch; }
+}
+
+.aff-faq { border-top: 1px solid var(--a-line); }
 .aff-faq details { border-bottom: 1px solid var(--a-line); }
 .aff-faq summary {
   display: flex; align-items: flex-start; justify-content: space-between; gap: 24px;
@@ -542,7 +624,7 @@
 .aff-faq details[open] summary i::after { transform: translateY(-50%) rotate(0deg); opacity: 0; }
 .aff-faq details p {
   margin: 0 0 clamp(22px, 2.6vw, 30px);
-  max-width: 62ch; font-size: 16px; line-height: 1.6;
+  max-width: 64ch; font-size: 16px; line-height: 1.6;
   color: var(--a-ink-soft); letter-spacing: -0.006em;
 }
 @media (prefers-reduced-motion: reduce) {
