@@ -298,3 +298,29 @@ test("one letter must not empty the whole timetable", () => {
   // And the query logs itself, which is the only reason this was findable.
   assert.match(main, /logMac\("schedule\.query", \{ count:/);
 });
+
+test("the common timetable questions never reach a model", () => {
+  /* "What is my next class" took twelve and a half seconds, and eleven of them
+     were thinking: one turn to decide to look it up, another to read the row
+     back and say it. The database query is milliseconds. Two language model
+     calls to read one row.
+
+     It is a lookup, not a task, so it belongs in the fast lane beside "play
+     billie jean". The loop was right while there was nothing to look up. */
+  const main = readFileSync(new URL("../mac/braino-mac/main.cjs", import.meta.url), "utf8");
+
+  // It has to run BEFORE the HIL gate, or the brain claims the sentence first
+  // and nothing here ever executes.
+  const fast = main.indexOf("const quickSchedule = await macAnswerScheduleFast(text);");
+  const hil = main.indexOf("if (macHilEnabled() && macWantsTheBrain(raw)) {");
+  assert.ok(fast > 0 && hil > 0 && fast < hil, "the fast lane must come before the HIL gate");
+
+  /* Narrow on purpose. A fast lane that tries to cover every phrasing stops
+     being fast and becomes a worse model, so anything unmatched falls through
+     to the brain untouched. */
+  const fn = main.slice(main.indexOf("async function macAnswerScheduleFast"), main.indexOf('/* "Am I going to fall below'));
+  assert.match(fn, /if \(!out\) return null;/);
+  assert.match(fn, /if \(!out\.ok \|\| !String\(out\.say \|\| ""\)\.trim\(\)\) return null;/,
+    "an empty fast answer must go to the brain, which can sync and look wider");
+  assert.match(fn, /return null; \/\/ fall through to the brain rather than answer badly/);
+});

@@ -15741,6 +15741,50 @@ function macNormaliseKind(raw) {
   return "";
 }
 
+/* The four timetable questions that deserve no model call at all.
+ *
+ * Deliberately a short list. A fast lane that tries to cover every phrasing
+ * stops being fast and becomes a worse model; anything not matched here falls
+ * through and reaches the brain exactly as before, which is where the clever
+ * phrasings belong.
+ *
+ * Returns null when it does not recognise the sentence, so the cascade carries
+ * on. Returning an answer it is unsure of would be far worse than being slow.
+ */
+const MAC_FAST_NEXT = /\b(?:what(?:'?s| is)?\s+(?:my\s+)?next\s+(?:class|session|lecture)|when(?:'?s| is)?\s+(?:my\s+)?next\s+(?:class|session|lecture)|next\s+class)\b/;
+const MAC_FAST_TODAY = /\b(?:what(?:'?s| is)?\s+(?:on\s+)?(?:today|left today)|rest of (?:the |my )?day|what(?:'?s| is)?\s+(?:my\s+)?(?:schedule|timetable)\s+(?:for\s+)?today|am i free today)\b/;
+const MAC_FAST_DUE = /\b(?:what(?:'?s| is)?\s+due|any\s+deadlines?|what\s+deadlines?|anything\s+due)\b/;
+const MAC_FAST_ATTENDANCE = /\b(?:what(?:'?s| is)?\s+my\s+attendance|how(?:'?s| is)?\s+my\s+attendance|my\s+attendance)\b/;
+
+async function macAnswerScheduleFast(text) {
+  const t = String(text || "").toLowerCase();
+  const started = Date.now();
+  let out = null;
+  try {
+    if (MAC_FAST_ATTENDANCE.test(t)) {
+      out = await lookupAttendance({});
+    } else if (MAC_FAST_DUE.test(t)) {
+      // Two weeks: "what is due" means the things close enough to act on, and a
+      // term of deadlines read aloud is not an answer.
+      out = await lookupSchedule({ from: "now", to: new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10), kind: "assignment" });
+    } else if (MAC_FAST_NEXT.test(t)) {
+      out = await lookupSchedule({ from: "now", kind: "class" });
+    } else if (MAC_FAST_TODAY.test(t)) {
+      out = await lookupSchedule({ from: "now", to: "today" });
+    }
+  } catch (error) {
+    logMac("schedule.fast.failed", { error: String(error?.message || error) });
+    return null; // fall through to the brain rather than answer badly
+  }
+  if (!out) return null;
+  /* An empty or failed fast answer goes to the brain instead of being spoken.
+     The loop can sync, look wider, and explain itself; this cannot. */
+  if (!out.ok || !String(out.say || "").trim()) return null;
+  logMac("schedule.fast", { ms: Date.now() - started, kind: MAC_FAST_ATTENDANCE.test(t) ? "attendance" : "schedule" });
+  console.log(`[Braino ⚡ FAST] timetable answered in ${((Date.now() - started) / 1000).toFixed(1)}s, no model call`);
+  return { ok: true, say: out.say };
+}
+
 /* "Am I going to fall below 75 percent in Marketing."
  *
  * The one question attendance is actually asked, and it needs the gap in
@@ -17699,6 +17743,24 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
     activeUrl: textForLog(activeMacContext?.browserUrl || ""),
   });
   if (!raw) return { ok: false, say: "Say the task again, my guy. I got air." };
+
+  /* The timetable, answered without asking a model.
+   *
+   * "What is my next class" took twelve and a half seconds, and eleven of them
+   * were thinking: one turn to decide to look it up, another to read the row
+   * back and say it. The database query is milliseconds. Two language model
+   * calls to read one row.
+   *
+   * It is not a task, it is a lookup, so it belongs in the fast lane beside
+   * "play billie jean" rather than in an agent loop. The loop was right while
+   * there was nothing to look up; now the data is in a table with a fixed shape,
+   * and the four things people actually ask can be answered straight from it.
+   *
+   * Anything it does not recognise falls through untouched and still reaches the
+   * brain, which is what keeps this narrow: a fast lane that tries to cover
+   * every phrasing stops being fast and starts being a worse model. */
+  const quickSchedule = await macAnswerScheduleFast(text);
+  if (quickSchedule) return quickSchedule;
 
   const cursorModeCommand = text.match(/\b(start|enable|turn on|stop|disable|turn off)\s+cursor mode\b/);
   if (cursorModeCommand) {
