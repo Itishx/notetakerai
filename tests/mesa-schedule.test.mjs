@@ -31,7 +31,7 @@ test("an hourly sync cannot duplicate Monday's lecture", () => {
      hundred and sixty copies of every class. */
   assert.match(bg, /on_conflict=user_id,source,source_ref/);
   assert.match(bg, /resolution=merge-duplicates/);
-  assert.match(sql, /CREATE UNIQUE INDEX IF NOT EXISTS schedule_events_source_ref_idx/);
+  assert.match(sql, /ADD CONSTRAINT schedule_events_source_ref_key/);
 });
 
 test("a deadline is a moment, a class is a span", () => {
@@ -168,4 +168,27 @@ test("the Mac can sync without the extension, and says why when it cannot", () =
 
   // And "sync my nexus calendar" has to reach the brain to find the tool at all.
   assert.equal(require("../mac/braino-mac/hil-routing.cjs").macWantsTheBrain("sync my nexus calendar"), true);
+});
+
+test("the upsert key is a constraint, not a partial index", () => {
+  /* The bug that made every sync fail with "there is no unique or exclusion
+     constraint matching the ON CONFLICT specification".
+
+     It was written as a partial unique index so that rows with nothing to
+     reference, a spoken "dentist on Thursday", could coexist. Postgres will not
+     resolve ON CONFLICT against a partial index unless the statement repeats
+     the predicate, and PostgREST has no way to express one. The clause was also
+     unnecessary: NULLs are already distinct from each other in a unique index,
+     so those rows coexist regardless. It bought nothing and cost the feature. */
+  const first = readFileSync(
+    new URL("../supabase/migrations/20260918000001_schedule_events.sql", import.meta.url), "utf8");
+  assert.doesNotMatch(first, /CREATE UNIQUE INDEX[\s\S]*?schedule_events[\s\S]*?WHERE source_ref IS NOT NULL/,
+    "a partial index cannot answer ON CONFLICT");
+  assert.match(first, /ADD CONSTRAINT schedule_events_source_ref_key\s+UNIQUE \(user_id, source, source_ref\)/);
+
+  // And fixed forward for databases that already applied the broken one.
+  const fix = readFileSync(
+    new URL("../supabase/migrations/20260918000002_schedule_events_upsert_fix.sql", import.meta.url), "utf8");
+  assert.match(fix, /DROP INDEX IF EXISTS public\.schedule_events_source_ref_idx/);
+  assert.match(fix, /ADD CONSTRAINT schedule_events_source_ref_key/);
 });

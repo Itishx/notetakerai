@@ -71,9 +71,19 @@ CREATE TABLE IF NOT EXISTS public.schedule_events (
 
 -- The upsert key. A re-sync must land on the same row, or a week of hourly
 -- syncs produces a hundred and sixty copies of Monday's lecture.
-CREATE UNIQUE INDEX IF NOT EXISTS schedule_events_source_ref_idx
-  ON public.schedule_events (user_id, source, source_ref)
-  WHERE source_ref IS NOT NULL;
+--
+-- NOT partial, and that is load bearing. This was written as a partial index
+-- (WHERE source_ref IS NOT NULL) so that rows with nothing to reference, a
+-- spoken "dentist on Thursday", could coexist. Postgres will not resolve ON
+-- CONFLICT against a partial index unless the statement repeats the predicate,
+-- which PostgREST cannot express, so every sync failed and nothing saved. The
+-- clause was also unnecessary: Postgres already treats NULLs as distinct from
+-- one another here, so any number of NULL source_ref rows coexist anyway. Fixed
+-- forward in 20260918000002; kept correct here so a fresh database is right the
+-- first time.
+ALTER TABLE public.schedule_events
+  ADD CONSTRAINT schedule_events_source_ref_key
+  UNIQUE (user_id, source, source_ref);
 
 -- Every read is "this person, this window, in order", so that is the index.
 CREATE INDEX IF NOT EXISTS schedule_events_when_idx
