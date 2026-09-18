@@ -15,6 +15,12 @@ import { logEngineRun } from "../../_shared/engine-log.ts";
 import { loadUserKnowledge } from "../../_shared/user-knowledge.ts";
 import { recallLessons, recordLesson, scopeFromUrl } from "../../_shared/human-intelligence/lessons.ts";
 import {
+  recallProcedures,
+  recordProcedure,
+  recordProcedureMiss,
+  routeFromSteps,
+} from "../../_shared/human-intelligence/procedures.ts";
+import {
   HIL_TOOL_CATALOG,
   HIL_CATALOG_VERSION,
   findTool,
@@ -734,7 +740,16 @@ serve(async (req) => {
     const urlMatch = screenText.match(/https?:\/\/[^\s"']+/);
     const hostScope = urlMatch ? scopeFromUrl(urlMatch[0]) : "";
     const lessonScopes = [hostScope, ...(macTools || []).slice(0, 4).map((t) => `tool:${t}`)];
-    const lessonBlock = await recallLessons(lessonScopes);
+    /* The walls and the doors, fetched together.
+     *
+     * Two reads rather than one because they answer different questions: a
+     * lesson is keyed on where you are, a route is keyed on where you are AND
+     * what you are trying to do. They are awaited in parallel, so the pair costs
+     * what the single read cost before. */
+    const [lessonBlock, procedureBlock] = await Promise.all([
+      recallLessons(lessonScopes),
+      recallProcedures(lessonScopes, commandText),
+    ]);
 
     const systemPrompt = [
       HIL_LOOP_PROMPT,
@@ -748,6 +763,11 @@ serve(async (req) => {
       // After what he knows about the person, because a lesson is about the
       // world rather than about them, and both sit under the rules.
       ...(lessonBlock ? [lessonBlock] : []),
+      // And the routes last of the three, closest to the state: a lesson is a
+      // standing fact about a place, a route is about the job in front of him
+      // right now, and the nearer something is to the state the more it reads as
+      // being about this turn rather than about the world in general.
+      ...(procedureBlock ? [procedureBlock] : []),
       "=== WHO YOU ARE (the Emotional Engine, appended live for this request) ===",
       emotionalCore,
     ].join("\n\n");
@@ -859,6 +879,40 @@ serve(async (req) => {
         runId: logRunId,
       });
       console.log("hil-loop: lesson recorded", { scope: hostScope, runId: logRunId });
+    }
+
+    /* And written when he finishes, which is the half that was missing.
+     *
+     * The route is derived from the run's own step record rather than asked for,
+     * so it costs no output tokens, cannot be hallucinated, and says what he
+     * actually did instead of what he would later claim he did. The state
+     * carrying it is the same snapshot the client sends every turn, so nothing
+     * new has to be plumbed through to get it.
+     *
+     * all_done and not task_done: one job out of three finishing is not evidence
+     * the approach worked, and the steps recorded at that point belong to all
+     * three jobs mixed together. */
+    if (turn?.decision?.type === "all_done" && hostScope) {
+      const route = routeFromSteps(loopState?.steps || []);
+      recordProcedure({
+        scope: hostScope,
+        goal: commandText,
+        route,
+        steps: (loopState?.steps || []).filter((s) => s?.ok !== false).length,
+        runId: logRunId,
+      });
+      console.log("hil-loop: route recorded", { scope: hostScope, runId: logRunId });
+    }
+
+    /* A route was handed over and the run gave up on that scope anyway.
+     *
+     * Counted, never acted on immediately: one bad run on a good route is a site
+     * having a bad afternoon. Only a row that has been wrong at least as often
+     * as it has been right stops being handed to anyone, and it can earn its way
+     * back. Charged only when a route was actually injected, so a run that never
+     * saw one cannot retire it. */
+    if (turn?.decision?.type === "blocked" && procedureBlock) {
+      recordProcedureMiss(lessonScopes, commandText);
     }
 
     const logId = logEngineRun({

@@ -11,6 +11,85 @@ memory of what a session felt like.
 
 ---
 
+## 2026-09-18 · Round 012 — he remembers what worked
+
+**What triggered it:** the founder's read of a system architecture PDF, and the
+one thing in it this repo did not already have. `braino_lessons` stores every
+wall he has ever walked into. Nothing stored a single door he has ever found.
+A run that booked the tickets correctly taught him nothing, so the next one
+worked it out again from zero and paid the same ten seconds a turn to arrive at
+the same answer.
+
+The asymmetry is the whole finding. A wall is written down when he gives up, and
+giving up is rare. A door is found on every run that works, which is most of
+them, and none of it was kept. **He has been getting steadily better at failing
+and no better at succeeding.**
+
+**`braino_procedures`, built to the shape of `braino_lessons` on purpose**, since
+the hard parts were solved there and solving them twice differently is how two
+tables drift: scoped so recall is one indexed read, promoted on the second
+independent run because one run is an anecdote, advisory always, and service-role
+only because hil-loop is public.
+
+**The route is derived, never asked for.** `routeFromSteps` reads the run's own
+step record out of the state snapshot the client already sends every turn. It
+costs zero output tokens, cannot be hallucinated, and records what he did rather
+than what he would afterwards claim he did. Failed steps are dropped: a route is
+the way that worked, and the three things he tried first are exactly the noise
+the next run does not need. Written on `all_done` only, never `task_done` — one
+job of three finishing is not evidence, and the steps at that point belong to all
+three jobs mixed together.
+
+**The bug that would have shipped silently, caught by its own test.** Sameness
+was the fingerprint, which is `lessonFingerprint`'s normalisation: digits and
+quoted strings go, proper nouns stay. So "book tickets for Insidious" and "book
+tickets for Sinners" keyed differently, every film wrote its own row, **no row
+would ever have reached the two hits that promote it**, and a table filling up
+steadily would never once have handed anybody anything. The feature would have
+looked built and done nothing, which is the worst failure mode available to it.
+
+Sameness is now `goalOverlap`, the same function recall uses, at half the shorter
+goal's content words. One notion of "the same job" in one function used in both
+places: a route is credited on exactly the runs it would have been offered on.
+The fingerprint stays as what it is actually good at, which is stopping two
+simultaneous identical commands from inserting twice.
+
+**A door can close, so a route can retire itself.** A site is redesigned and a
+remembered route becomes a confident wrong answer, which is worse than no answer.
+`recordProcedureMiss` counts a blocked run against the routes it was actually
+handed — not every route on the host, or one bad afternoon would retire a whole
+site. A row wrong at least as often as it was right drops back to `proposed` and
+can earn its way back. Charged only when a route was genuinely injected, so a run
+that never saw one cannot retire it.
+
+**Repetition makes the library faster, not just larger.** A second run finishing
+the same job in fewer steps replaces the route, so the stored answer improves
+instead of ossifying around whatever the first clumsy run happened to do.
+
+**Rule 13a, `HIL_LOOP_VERSION` 2.12.0.** The rule exists so a route reads as a
+head start and not as a script or, worse, as permission. Three sentences do the
+work: the screen still decides and a route that does not match the observation
+means the site changed; every step is still taken one at a time and still
+checked; and it grants nothing, so anything irreversible still stops for the
+human exactly as it would have with no route at all. The injected block says the
+same three things itself, so it does not depend on the rule having been read.
+
+**What is deliberately NOT here.** No client change: the state already carried
+the steps. No new model call, no second round trip — the two recalls are one
+`Promise.all`, so the pair costs what the single lessons read cost before.
+Nothing on the reflex path: `hil-router` still answers "play a song" in under a
+second and has never heard of this table.
+
+**Verified:** 331 pass, 0 fail, 18 new. Type-checked under `--strict`. The write
+and retire paths were additionally exercised against a stubbed network, 15 cases:
+a second film bumping the first film's row and promoting it, a shorter route
+winning, a longer one being refused, a rejected route staying dead rather than
+being re-inserted under a new id, a one-step job writing nothing at all, an
+unrelated failure blaming nothing, and no credentials meaning silence rather than
+a throw. **Not verified on hardware**, and the migration is not yet applied.
+
+---
+
 ## 2026-09-18 · Round 011 — the net nobody was pulling
 
 **What triggered it:** the start of HIL Version 2. Everything in that arc changes
