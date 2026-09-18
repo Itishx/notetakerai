@@ -122,12 +122,19 @@
   line-height: 1.08;
   letter-spacing: -0.02em;
   font-weight: 400;
-  max-width: 17ch;
+  max-width: 16ch;
   text-wrap: balance;
 }
 .aff-h1 em {
   font-style: normal;
   color: var(--a-ink-soft);
+}
+/* The payoff. Same device as the statement further down, where the second half
+   of the claim is the coloured half, so the page has one way of marking the
+   sentence that matters rather than three. */
+.aff-h1 b {
+  font-weight: inherit;
+  color: var(--a-braino);
 }
 /* The word the sentence turns on, marked. "Does" is the whole argument; without
    it this is another line about software. */
@@ -411,7 +418,7 @@
 .aff-eco-end, .aff-eco-core {
   padding: clamp(26px, 3.2vw, 44px);
   display: flex; flex-direction: column; gap: 12px;
-  min-height: clamp(210px, 20vw, 260px);
+  min-height: clamp(180px, 17vw, 230px);
 }
 /* The product accent as a top hairline, the same language the product cards
    use, so the two sections are visibly about the same two things. */
@@ -452,17 +459,19 @@
 .aff-eco-cell {
   padding: clamp(24px, 2.8vw, 36px);
   display: flex; flex-direction: column; gap: 10px;
-  min-height: clamp(200px, 18vw, 240px);
+  min-height: clamp(136px, 12vw, 168px);
 }
 .aff-eco-cell h4 {
   margin: 0;
   font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
-  font-size: clamp(20px, 1.9vw, 25px);
+  font-size: clamp(21px, 2vw, 27px);
   font-weight: 400; letter-spacing: -0.018em; line-height: 1.12;
 }
+/* Full ink, not the soft grey the long version used. It is one line and it is
+   the payoff, so it is not a caption under the heading. */
 .aff-eco-cell p {
-  margin: 0; font-size: 14.5px; line-height: 1.52;
-  color: var(--a-ink-soft); letter-spacing: -0.006em;
+  margin: 0; font-size: clamp(15px, 1.35vw, 16.5px); line-height: 1.45;
+  color: var(--a-ink); letter-spacing: -0.008em;
 }
 
 /* The rule the two products are kept apart by, given the weight of a claim

@@ -90,30 +90,19 @@ const PRODUCTS = [
   },
 ];
 
-/* What one product learns and the next one already knows.
+/* What one learns and the other already knows.
  *
- * The reason to build two separate products rather than one app with two modes
- * is that the second one can go at a market the first cannot. The reason it is
- * not two startups is this list. Anyone can sell dictation; nobody else can
- * sell dictation that already knows who Riya is because you told the other
- * thing in March. So it needs saying in specifics, not as the word "sync". */
+ * This was four paragraphs explaining an account system, which is the answer
+ * to a question nobody asked. Nobody wants to know that two products share a
+ * user record. They want to know they will not have to say it all again.
+ *
+ * So each one is a sentence, and each sentence is a thing that would otherwise
+ * have annoyed you twice. */
 const TRAVELS = [
-  {
-    h: "Your words",
-    p: "The names you say, the jargon you use, every correction you have made once. Fix Riya once and nothing spells it Rhea again, in either product, on any machine.",
-  },
-  {
-    h: "Your people",
-    p: "Who you talk to, how you write to them, which Ravi you meant. Dictation gets the name right because the other half of the company knows who they are.",
-  },
-  {
-    h: "Your week",
-    p: "Classes, deadlines, what is on today, read from wherever it already lives. Nothing entered twice, and nothing entered at all.",
-  },
-  {
-    h: "Your way",
-    p: "How long you want an answer. What must never happen without asking. The thing you said in March that you should not have to say again in June.",
-  },
+  { h: "Your words", p: "Say Riya once. Nothing writes Rhea again." },
+  { h: "Your people", p: "It knows which Ravi you meant." },
+  { h: "Your week", p: "It already has your Tuesday." },
+  { h: "Your way", p: "What you said in March still holds in June." },
 ];
 
 const BRAINO_BRIEFS = [
@@ -292,18 +281,23 @@ export default function Affective() {
           {/* The claim on the left and, immediately beside it, the reason
               anybody should care. A short claim on its own is a slogan. */}
           <div className="aff-hero-cols">
+            {/* The first sentence says what the company does; the second says
+                what it is for, and it is the half that lands. Coloured the way
+                the statement's second half is, because it is the same move: the
+                claim, then the payoff. */}
             <h1 className="aff-h1 aff-reveal">
               We build the technology behind a computer you can{" "}
-              <em>just talk to.</em>
+              <em>just talk to.</em>{" "}
+              <b>So you never have to touch it again.</b>
             </h1>
             <div className="aff-reveal">
               <p className="aff-hero-explain">
-                AI has got very good at telling you what to do. You still have to go and do
-                it yourself. Open the tab, find the file, copy it across, fill in the form,
-                send the email you have been putting off since Tuesday.
+                AI has got very good at telling you what to do. You still have to go and
+                do it yourself. Open the tab, find the file, fill in the form, send the
+                email you have been putting off since Tuesday.
               </p>
               <p className="aff-hero-explain">
-                We build the part that goes and does it, and the characters worth asking.
+                We build the part that goes and does it, and the one character worth asking.
               </p>
             </div>
           </div>
@@ -350,9 +344,8 @@ export default function Affective() {
           {/* Where all of it lands. The point of the section is not six
               separate tricks, it is that one character performs all of them. */}
           <p className="aff-day-foot aff-reveal">
-            All six come out of one set of parts. Two things are built out of them so
-            far, and <a href="#ecosystem">everything either one learns, the other
-            already knows</a>.
+            All six come out of one set of parts. So far we have built{" "}
+            <a href="#products">two things</a> with them.
           </p>
         </div>
       </section>
@@ -451,24 +444,20 @@ export default function Affective() {
       </section>
 
       {/* ── The ecosystem ──────────────────────────────────────────────────
-          The moat, and until now the one thing the page never said. Two
-          products competing in two markets is two startups unless something
-          underneath makes them worth more together than apart. That something
-          is one account, so this section is built as a diagram of it: the two
-          products either side, what they both sign into in the middle.
+          This said "two products, one account, and here is the mechanism",
+          which is an answer to a question nobody has. The story is the one
+          thing everybody has felt: software that makes you introduce yourself
+          again every time you open something new.
 
-          Written in specifics on purpose. "Syncs across devices" is a line
-          every app has. "Fix a name once and nothing spells it wrong again,
-          in either product" is a thing only a company with two products can
-          say. */}
+          So the section is short now. A promise, a picture of who holds what,
+          four sentences, and the line that says which one you are talking to. */}
       <section className="aff-sec aff-eco" id="ecosystem">
         <div className="aff-wrap">
           <div className="aff-sec-head aff-reveal">
-            <h2>Two products. One thing underneath that remembers you.</h2>
+            <h2>You only have to say it once.</h2>
             <p>
-              Everything gets built once and used by everything after it. Both products
-              sign into the same account, so what one learns about you, the other already
-              knows. That is what a company underneath the products is for.
+              Two products, and one memory between them. Whatever you teach one, the other
+              already knows, on whatever machine you open next.
             </p>
           </div>
         </div>
@@ -478,28 +467,25 @@ export default function Affective() {
             <div className="aff-eco-end" style={{ ["--acc" as string]: "var(--a-hera)" }}>
               <span className="aff-eco-tag">Voice</span>
               <h3>HERA</h3>
-              <p>You talk. It writes. It never acts on its own.</p>
+              <p>It writes down what you say. That is all it will ever do.</p>
             </div>
             {/* The middle cell is the argument. Deeper paper rather than a dark
                 fill, so the sheet stays one sheet. */}
             <div className="aff-eco-core">
-              <span className="aff-eco-tag">Shared</span>
-              <h3>One Affective account</h3>
-              <p>
-                Held once, in one place, and it belongs to you. Sign into either product on
-                any machine and it is already there.
-              </p>
+              <span className="aff-eco-tag">Both</span>
+              <h3>Everything it knows about you</h3>
+              <p>Learned once, and it is yours. It follows you into whichever one you open.</p>
             </div>
             <div className="aff-eco-end" style={{ ["--acc" as string]: "var(--a-braino)" }}>
               <span className="aff-eco-tag">Companion</span>
               <h3>Braino</h3>
-              <p>You talk. It does the thing, and stops to ask before it matters.</p>
+              <p>It goes and does it, and asks first if you would mind.</p>
             </div>
           </div>
         </div>
 
         <div className="aff-wrap">
-          <p className="aff-eco-label aff-reveal">What moves between them</p>
+          <p className="aff-eco-label aff-reveal">Things you will not say twice</p>
           <div className="aff-grid aff-grid-4 aff-reveal">
             {TRAVELS.map((t) => (
               <article className="aff-eco-cell" key={t.h}>
@@ -509,18 +495,17 @@ export default function Affective() {
             ))}
           </div>
 
-          {/* The rule that keeps two products from collapsing into one. It is
-              enforced in the code, so it belongs on the page as a fact. */}
+          {/* Which one you are talking to, and why there are two of them at
+              all. The old version answered this by saying the rule lives in
+              the code, which matters to us and to nobody reading. */}
           <div className="aff-eco-rule aff-reveal">
             <p className="aff-eco-rule-line">
-              HERA never acts. <span>Braino always can.</span>
+              One writes. <span>One does.</span>
             </p>
             <p className="aff-eco-rule-say">
-              A rule in the code rather than a difference in marketing, and it is what
-              keeps them two things worth having instead of one thing twice. It is also
-              how the next one gets built: it signs into the same account, inherits the
-              same parts, and arrives already knowing you. Nobody starts from nothing here
-              again.
+              You always know which you are talking to. HERA will never surprise you. Braino
+              can go and finish the thing, and asks before anything you would want asking
+              about. And whatever we build next arrives already knowing you.
             </p>
           </div>
         </div>
@@ -601,7 +586,7 @@ export default function Affective() {
                   building what one needs in order to exist. */}
               <p>
                 We do not make a voice-first computer. We build the technology that makes
-                one possible, and the characters worth talking to. Bengaluru.
+                one possible, and the character worth talking to. Bengaluru.
               </p>
             </div>
             <nav className="aff-foot-col">
