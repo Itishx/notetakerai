@@ -6209,7 +6209,119 @@ let waPollTimer = null;
 let waPollBusy = false;
 let lastIncomingWhatsApp = null;
 
+/* Reading the address book properly.
+ *
+ * Asking the Contacts app for names, nicknames, companies, every phone and
+ * every email took ONE MINUTE FIFTY-TWO SECONDS for 418 people: AppleScript
+ * charges a round trip per property. The same thing read straight from the
+ * address book's own database takes nine milliseconds, so Braino can know
+ * everyone, with every number, and refresh it whenever he likes.
+ *
+ * Read-only, and the AppleScript path stays underneath for the day the schema
+ * changes. */
+function addressBookDatabases() {
+  const base = path.join(os.homedir(), "Library", "Application Support", "AddressBook");
+  const files = [path.join(base, "AddressBook-v22.abcddb")];
+  try {
+    for (const dir of fs.readdirSync(path.join(base, "Sources"))) {
+      files.push(path.join(base, "Sources", dir, "AddressBook-v22.abcddb"));
+    }
+  } catch (_) {}
+  return files.filter((file) => fs.existsSync(file));
+}
+
+const CONTACT_DB_SEP = "\u0001";
+
+async function queryAddressBook(db, sql) {
+  const { stdout } = await execFileP("/usr/bin/sqlite3", ["-readonly", "-separator", CONTACT_DB_SEP, db, sql], { timeout: 8000, maxBuffer: 8 * 1024 * 1024 });
+  return String(stdout || "").split(/\r?\n/).filter(Boolean).map((line) => line.split(CONTACT_DB_SEP));
+}
+
+/* A mobile before a landline before whatever else is there. */
+function preferredContactPhone(phones = []) {
+  const clean = phones.filter((row) => String(row?.value || "").trim());
+  if (!clean.length) return "";
+  const score = (label) => {
+    const name = String(label || "").toLowerCase();
+    if (/iphone|mobile|cell/.test(name)) return 3;
+    if (/whatsapp/.test(name)) return 2;
+    if (/old|fax|work fax/.test(name)) return 0;
+    return 1;
+  };
+  return clean.slice().sort((a, b) => score(b.label) - score(a.label))[0].value;
+}
+
+function tidyPhoneLabel(label) {
+  return String(label || "").replace(/^_\$!<|>!\$_$/g, "").trim();
+}
+
+async function importContactsFromDatabase() {
+  const people = new Map();
+  for (const db of addressBookDatabases()) {
+    const rows = await queryAddressBook(db, "SELECT Z_PK, ifnull(ZFIRSTNAME,''), ifnull(ZLASTNAME,''), ifnull(ZNICKNAME,''), ifnull(ZORGANIZATION,'') FROM ZABCDRECORD;");
+    const phones = await queryAddressBook(db, "SELECT ZOWNER, ifnull(ZLABEL,''), ifnull(ZFULLNUMBER,'') FROM ZABCDPHONENUMBER;");
+    const emails = await queryAddressBook(db, "SELECT ZOWNER, ifnull(ZADDRESS,'') FROM ZABCDEMAILADDRESS;");
+    const byRecord = new Map();
+    for (const [pk, first, last, nickname, company] of rows) {
+      const name = [first, last].map((part) => String(part || "").trim()).filter(Boolean).join(" ")
+        || String(nickname || "").trim()
+        || String(company || "").trim();
+      if (!name) continue;
+      byRecord.set(String(pk), { name, nickname: String(nickname || "").trim(), company: String(company || "").trim(), phones: [], emails: [] });
+    }
+    for (const [owner, label, value] of phones) {
+      const person = byRecord.get(String(owner));
+      if (person && String(value || "").trim()) person.phones.push({ label: tidyPhoneLabel(label), value: String(value).trim() });
+    }
+    for (const [owner, address] of emails) {
+      const person = byRecord.get(String(owner));
+      if (person && String(address || "").trim()) person.emails.push(String(address).trim());
+    }
+    for (const person of byRecord.values()) {
+      const key = person.name.toLowerCase().trim();
+      const existing = people.get(key);
+      if (existing) {
+        existing.phones.push(...person.phones);
+        existing.emails.push(...person.emails);
+        existing.nickname = existing.nickname || person.nickname;
+        existing.company = existing.company || person.company;
+      } else {
+        people.set(key, person);
+      }
+    }
+  }
+  const map = {};
+  for (const [key, person] of people) {
+    map[key] = {
+      name: person.name,
+      phone: preferredContactPhone(person.phones),
+      phones: person.phones,
+      emails: person.emails,
+      nickname: person.nickname,
+      company: person.company,
+    };
+  }
+  return map;
+}
+
 async function importAllContacts(force = false) {
+  /* Nine milliseconds, so it is done at every launch rather than once a day,
+     and a contact saved this morning is known this afternoon. */
+  try {
+    const fromDb = await importContactsFromDatabase();
+    const total = Object.keys(fromDb).length;
+    if (total) {
+      const withPhone = Object.values(fromDb).filter((row) => row.phone).length;
+      contactsCache = fromDb;
+      await fs.promises.writeFile(CONTACTS_CACHE_PATH, JSON.stringify(fromDb, null, 2));
+      logMac("contacts.imported", { count: total, withPhone, withEmail: Object.values(fromDb).filter((row) => row.emails?.length).length, source: "database" });
+      return;
+    }
+    logMac("contacts.database_empty", {});
+  } catch (error) {
+    logMac("contacts.database_failed", { error: String(error?.message || error).slice(0, 120) });
+  }
+
   try {
     if (!force) {
       const stat = await fs.promises.stat(CONTACTS_CACHE_PATH).catch(() => null);
@@ -15329,6 +15441,9 @@ function macResolveWhen(word, fallbackDays) {
   const now = new Date();
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   if (/^\d{4}-\d{2}-\d{2}/.test(t)) return new Date(t);
+  // "now" means from this moment, not from this morning. It is what "my next
+  // class" actually means and the only word that can express it.
+  if (t === "now") return now;
   if (t === "today") return startOfToday;
   if (t === "tomorrow") return new Date(startOfToday.getTime() + 86400000);
   if (t === "yesterday") return new Date(startOfToday.getTime() - 86400000);
@@ -15380,6 +15495,22 @@ async function lookupSchedule(args = {}) {
       };
     }
 
+    /* What time it is, said out loud, and which of these have already been and
+     * gone.
+     *
+     * "Your next class is Mentorship Check-ins at 9:30am" was answered at
+     * 2:49pm, and it was not the model being careless: the list it was handed
+     * started at midnight and said nothing about now, so the first row really
+     * was the first row. A model cannot reason about "next" against data with
+     * no present in it.
+     *
+     * Fixed in the data rather than the prompt. A rule saying "remember what
+     * time it is" is a thing to obey; a list that says which items are over is
+     * a thing to read. */
+    const now = new Date();
+    const zone = rows[0]?.timezone || "Asia/Kolkata";
+    const nowLine = `Right now it is ${macFriendlyDay(now.toISOString(), zone)}, ${macFriendlyTime(now.toISOString(), zone)}.`;
+
     // Grouped by day, because that is how a person holds a week in their head.
     const byDay = new Map();
     for (const r of rows) {
@@ -15391,12 +15522,16 @@ async function lookupSchedule(args = {}) {
       const must = r.attendance_required ? " (attendance required)" : "";
       // A deadline has no end, so it reads as "due at" rather than a span. That
       // difference is the whole reason ends_at is nullable.
+      // Marked, not hidden. "What was on this morning" is a real question, and
+      // a past event that is simply missing reads as a gap in the timetable.
+      const past = new Date(r.ends_at || r.starts_at) < now;
+      const gone = past ? (r.kind === "assignment" ? " [deadline passed]" : " [already finished]") : "";
       const line = r.kind === "assignment"
-        ? `  DUE ${time}: ${r.title}${r.course ? ` (${r.course})` : ""}`
-        : `  ${time}: ${r.title}${who}${where}${must}`;
+        ? `  DUE ${time}: ${r.title}${r.course ? ` (${r.course})` : ""}${gone}`
+        : `  ${time}: ${r.title}${who}${where}${must}${gone}`;
       byDay.get(day).push(line);
     }
-    const out = [...byDay.entries()].map(([day, lines]) => `${day}\n${lines.join("\n")}`).join("\n\n");
+    const out = [nowLine, "", ...[...byDay.entries()].map(([day, lines]) => `${day}\n${lines.join("\n")}`)].join("\n\n");
     logMac("schedule.lookup", { from: from.toISOString(), to: toEnd.toISOString(), count: rows.length });
     return { ok: true, say: out };
   } catch (error) {

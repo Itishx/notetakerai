@@ -192,3 +192,28 @@ test("the upsert key is a constraint, not a partial index", () => {
   assert.match(fix, /DROP INDEX IF EXISTS public\.schedule_events_source_ref_idx/);
   assert.match(fix, /ADD CONSTRAINT schedule_events_source_ref_key/);
 });
+
+test("a timetable read knows what time it is", () => {
+  /* "Your next class is Mentorship Check-ins at 9:30am", answered at 2:49pm.
+     Not carelessness: the list started at midnight and said nothing about now,
+     so the first row really was the first row. A model cannot reason about
+     "next" against data with no present in it.
+
+     Fixed in the data, not the prompt. A rule saying "remember what time it is"
+     is a thing to obey; a list that says which items are over is a thing to
+     read. */
+  const main = readFileSync(new URL("../mac/braino-mac/main.cjs", import.meta.url), "utf8");
+  assert.match(main, /Right now it is \$\{macFriendlyDay/, "the answer must carry the present");
+  assert.match(main, /already finished/);
+  assert.match(main, /deadline passed/);
+
+  /* Marked, not hidden. "What was on this morning" is a real question, and a
+     past event that is simply missing reads as a gap in the timetable. */
+  assert.match(main, /const past = new Date\(r\.ends_at \|\| r\.starts_at\) < now/);
+
+  // And "now" has to exist as a word, or there is no way to ask for it.
+  assert.match(main, /if \(t === "now"\) return now;/);
+  const catalog = readFileSync(
+    new URL("../supabase/functions/_shared/human-intelligence/hil-tool-catalog.ts", import.meta.url), "utf8");
+  assert.match(catalog, /Use from:now for anything about what is NEXT/);
+});
