@@ -11,6 +11,65 @@ memory of what a session felt like.
 
 ---
 
+## 2026-09-18 · Round 014 — he remembers his history with you
+
+**What triggered it:** he knows facts about a person and nothing about what the
+two of them have done together. "Do that again", "the same as last time", "send
+it where I sent the last one" were dead ends, so somebody had to re-explain a
+thing they already said once, to the one who was there for it.
+
+**Almost all of this already existed and was never connected.**
+`braino_interactions` was built for exactly this record, has `user_id`, has the
+`(user_id, created_at DESC)` index, and has a select-own RLS policy. It is
+written from the extension. Nothing on the HIL path ever wrote to it and nothing
+anywhere ever read it back to him. So this round is mostly plumbing, and all of
+its risk is in the plumbing.
+
+**Read as them, written as us**, and the asymmetry is the point on a public
+endpoint. Recall goes through the caller's own token so RLS decides whose history
+comes back, which means a caller with no token gets nothing and the public lab is
+unaffected. Recording uses the service role because the table has no insert
+policy at all: a public endpoint must not be able to write rows that are later
+read back into somebody's prompt.
+
+**`loadWhatBrainoKnows` was already resolving the user and building their client,
+and throwing both away.** History needs the same answer, so it now returns them.
+One round trip, not two, for a fact that was already in hand.
+
+**Whole runs only.** A step in the middle of a job is bookkeeping, not a thing
+that happened to somebody, and forty rows of it per run would bury the four that
+are actually a memory. Both endings are kept: "you could not do this last time"
+is as useful to them as "you did", and much more useful than being asked to
+explain it again from the start.
+
+**Something has to connect a memory to now**, or four past commands sitting above
+the state are noise wearing the costume of memory. Ranked by the same kind of
+job, then the same site, then recency, and a row that is neither the same job nor
+the same site does not appear at all. Four lines, never more.
+
+**The threshold is looser than the one routes use, deliberately.** A route gets
+executed, so a wrong one costs turns. History is only shown, so a loosely related
+past job is at worst ignored, and "roughly this kind of thing, before" is exactly
+the recall a person actually has. 0.34 against 0.5.
+
+**What is private is not written down at all**, rather than written down and
+starred out. `mentionsPrivateTopic` is now exported from `engine-log.ts` and used
+here, rather than copied: two lists of those words would be two lists to keep in
+step, and that one already has a test holding it against the Mac's copy.
+
+**A record, never an instruction.** The injected block says so in its own second
+line. Four past commands above the state read as a plan unless they are
+explicitly framed as a record, and that failure would look exactly like the
+feature working.
+
+**Verified:** 363 pass, 0 fail, 12 new. Type-checked under `--strict`. Three
+recalls now ride in one `Promise.all`, so lessons, routes and history together
+cost what the single lessons read cost before. `HIL_LOOP_VERSION` unchanged at
+2.12.0: this round adds a block to the prompt, not a rule to the thinking.
+**Not verified on hardware.**
+
+---
+
 ## 2026-09-18 · Round 013 — history, so the memory is not empty on day one
 
 **What triggered it:** Round 012 shipped a memory and nothing to put in it. A

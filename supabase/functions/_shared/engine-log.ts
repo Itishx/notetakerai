@@ -67,6 +67,14 @@ const PRIVATE_TOPIC_RE = new RegExp(
   "i",
 );
 
+/* The same judgement, exported, because two lists of these words would be two
+   lists to keep in step and this one already has a test holding it against the
+   Mac's copy. History (human-intelligence/history.ts) uses it to decide what
+   never gets written down at all. */
+export function mentionsPrivateTopic(value: string): boolean {
+  return PRIVATE_TOPIC_RE.test(String(value || ""));
+}
+
 function redactPersonalModes(value: string): string {
   if (PRIVATE_TOPIC_RE.test(value)) return "[private]";
   return value.replace(PERSONAL_MODE_RE, (match) => match.replace(/\d+/, "[redacted]"));
