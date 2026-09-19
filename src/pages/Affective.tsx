@@ -59,11 +59,29 @@ const THE_FOUR = [
   },
 ];
 
-/* Which of the four pictures have arrived. A missing one draws its own quiet
-   block rather than a broken image, so the page is never waiting on a file.
-   Drop the four into public/ under these names and they appear; nothing here
-   needs editing. */
-const HAVE_ART = new Set<string>([]);
+/* A picture that has not arrived yet draws its own quiet block instead of a
+   broken image, and the moment the file exists it appears. Drop the four into
+   public/ under the names above and refresh: there is nothing to edit here. */
+function FourArt({ art, label }: { art: string; label: string }) {
+  const [missing, setMissing] = useState(false);
+  return (
+    <div className="aff-four-art aff-rise">
+      {missing
+        ? <span className="aff-four-wait">{label}</span>
+        : (
+          <img
+            src={art}
+            alt=""
+            width={1536}
+            height={1024}
+            loading="lazy"
+            decoding="async"
+            onError={() => setMissing(true)}
+          />
+        )}
+    </div>
+  );
+}
 
 /* One product on this page for now. HERA has her own page and comes back here
    when there is something to show of her. */
@@ -334,11 +352,7 @@ export default function Affective() {
           <div className="aff-four" data-drift="30">
             {THE_FOUR.map((d, i) => (
               <article className="aff-four-item aff-reveal" key={d.h} style={{ transitionDelay: `${i * 110}ms` }}>
-                <div className="aff-four-art aff-rise">
-                  {HAVE_ART.has(d.art)
-                    ? <img src={d.art} alt="" width={1536} height={1024} loading="lazy" decoding="async" />
-                    : <span className="aff-four-wait">{d.h.replace(".", "")}</span>}
-                </div>
+                <FourArt art={d.art} label={d.h.replace(".", "")} />
                 <h3>{d.h}</h3>
                 <p>{d.body}</p>
               </article>
