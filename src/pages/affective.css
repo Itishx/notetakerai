@@ -593,9 +593,9 @@
 .aff [id] { scroll-margin-top: 78px; }
 /* Bottom padding as well as top. Without it a grid runs straight into the next
    section's rule and the section reads as having stopped rather than ended. */
-.aff-sec { padding: clamp(72px, 9vw, 128px) 0 clamp(56px, 7vw, 100px); }
+.aff-sec { padding: clamp(56px, 6.4vw, 96px) 0 clamp(46px, 5.4vw, 78px); }
 .aff-sec-head {
-  padding-bottom: clamp(30px, 3.6vw, 48px);
+  padding-bottom: clamp(24px, 2.8vw, 38px);
   display: grid;
   grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
   gap: clamp(20px, 4vw, 72px);
@@ -1009,7 +1009,7 @@
    hairlines between its parts, rather than a run of full-width bands: he is
    one product on a company page, so he is one object on it. */
 .aff-plate {
-  margin: clamp(30px, 4vw, 56px) 0 0;
+  margin: clamp(18px, 2vw, 28px) 0 0;
   border: 1px solid var(--a-line);
   background: var(--a-surface);
   overflow: hidden;
@@ -1144,7 +1144,19 @@
 }
 .aff-plate-does > *:last-child { border-right: 0; }
 .aff-plate-does > * { border-bottom: 0; }
-.aff-plate-does article { padding: clamp(20px, 2.1vw, 30px); }
+.aff-plate-does article { display: flex; flex-direction: column; }
+/* The picture area, the same shape the technology cells use, with the drawing
+   held small inside it so the cell reads as a grid rather than as an icon
+   list. */
+.aff-does-art {
+  aspect-ratio: 3 / 2;
+  background: var(--a-bg);
+  border-bottom: 1px solid var(--a-line);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--a-ink);
+}
+.aff-does-art svg { width: 62%; height: auto; opacity: .82; }
+.aff-does-say { padding: clamp(18px, 1.9vw, 26px); }
 .aff-plate-does h4 {
   margin: 0 0 10px;
   font-family: var(--a-display);

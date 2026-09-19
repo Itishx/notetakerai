@@ -78,6 +78,46 @@ function Kinetic({ line, gap = 150 }: { line: string; gap?: number }) {
   );
 }
 
+/* A drawing for each of his four. Not screenshots: a picture of software doing
+   something is a screenshot, and a screenshot on a company page turns it into
+   a product tour. One line weight, one ink, the page's own hairline. */
+function DoesArt({ kind }: { kind: string }) {
+  return (
+    <div className="aff-does-art" aria-hidden="true">
+      <svg viewBox="0 0 120 80" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+        {kind === "there" && (
+          <>
+            <rect x="18" y="16" width="84" height="52" rx="7" />
+            <path d="M48 16h24a4 4 0 0 1 4 4v3a4 4 0 0 1-4 4H48a4 4 0 0 1-4-4v-3a4 4 0 0 1 4-4z" fill="currentColor" stroke="none" />
+            <path d="M40 76h40" />
+          </>
+        )}
+        {kind === "meeting" && (
+          <>
+            <path d="M26 40v8M36 32v24M46 22v44M56 34v20M66 26v36M76 38v12M86 30v24M96 40v8" />
+            <path d="M16 44h4" />
+          </>
+        )}
+        {kind === "people" && (
+          <>
+            <circle cx="40" cy="30" r="9" />
+            <path d="M25 58c0-8 7-13 15-13s15 5 15 13" />
+            <circle cx="78" cy="36" r="7" />
+            <path d="M66 58c0-6 5-10 12-10s12 4 12 10" />
+          </>
+        )}
+        {kind === "asks" && (
+          <>
+            <rect x="20" y="18" width="80" height="40" rx="6" />
+            <path d="M44 58l-6 10 16-10" />
+            <path d="M48 36l7 7 14-14" />
+          </>
+        )}
+      </svg>
+    </div>
+  );
+}
+
 function FourArt({ art, label }: { art: string; label: string }) {
   const [missing, setMissing] = useState(false);
   return (
@@ -112,13 +152,30 @@ const PRODUCTS = [
     kind: "Browser and Mac",
     lead:
       "The companion. He lives in your browser and on your Mac, already knows what you are looking at, and does the half of the day you would rather not.",
-    /* What he actually does, as things somebody would notice rather than as
-       features. Four, because a list of six reads as a spec sheet. */
+    /* His four, the same shape as AffectiveOS's four: a picture, a name, and
+       what it saves you. Written as the thing you would notice, not as the
+       feature that causes it. */
     does: [
-      { h: "He is already there.", p: "Nothing to open. He is in your browser and in your Mac's notch, on whatever you happen to be looking at." },
-      { h: "He does the boring half.", p: "The form, the booking, the five tabs, the reply you have been putting off since Tuesday." },
-      { h: "He knows your people.", p: "Who you message on a Friday, what you told him last month, which Ravi you meant." },
-      { h: "He asks first.", p: "Nothing bought, sent, posted or deleted until you say yes. That is a rule in the code, not a line in a prompt." },
+      {
+        key: "there",
+        h: "He is already there.",
+        p: "Nothing to open, nothing to paste. He is in your browser and in your Mac's notch, on whatever you are looking at, so asking him costs the same as thinking it.",
+      },
+      {
+        key: "meeting",
+        h: "He sits through the meeting.",
+        p: "An hour of a lecture or a call, written down while you listen. You close the laptop and the notes are already there, with what was decided and who said they would do what.",
+      },
+      {
+        key: "people",
+        h: "He knows your people.",
+        p: "Who you message on a Friday, which Ravi you meant, what you told him last month. You stop introducing yourself to your own software every morning.",
+      },
+      {
+        key: "asks",
+        h: "He asks before he acts.",
+        p: "Nothing bought, sent, posted or deleted until you say yes. That is a rule in the code rather than a line in a prompt, which is the only version of the promise worth having.",
+      },
     ],
     foundry:
       "For founders there is a door called the Foundry: the same Braino, running your distribution.",
@@ -517,13 +574,18 @@ export default function Affective() {
                 <p className="aff-plate-blurb">{p.lead}</p>
               </div>
 
-              {/* What he does, on the page's own grid, inside the box: four
-                  cells divided from one another and from nothing else. */}
+              {/* His four, built the way AffectiveOS's four are built: a
+                  picture, a name, and what it saves you, in cells divided from
+                  one another and from nothing else, because the frame is the
+                  box's. */}
               <div className="aff-grid aff-grid-4 aff-plate-does">
                 {p.does.map((d) => (
                   <article key={d.h}>
-                    <h4>{d.h}</h4>
-                    <p>{d.p}</p>
+                    <DoesArt kind={d.key} />
+                    <div className="aff-does-say">
+                      <h4>{d.h}</h4>
+                      <p>{d.p}</p>
+                    </div>
                   </article>
                 ))}
               </div>
