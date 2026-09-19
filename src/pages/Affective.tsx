@@ -62,6 +62,23 @@ const THE_FOUR = [
 /* A picture that has not arrived yet draws its own quiet block instead of a
    broken image, and the moment the file exists it appears. Drop the four into
    public/ under the names above and refresh: there is nothing to edit here. */
+/* Words that land one at a time and stay, which is how the teaser builds a
+   line: the phrase accumulates rather than fading in as a block. The stamp is
+   180ms because a word needs that long to resolve; anything quicker reads as
+   choppy however fast the section is meant to feel. */
+function Kinetic({ line, gap = 150 }: { line: string; gap?: number }) {
+  /* The words are separate boxes with a gap between them, so the text itself
+     has no spaces in it. A screen reader is given the sentence whole, and the
+     pieces are hidden from it. */
+  return (
+    <span className="aff-kin" aria-label={line}>
+      {line.split(" ").map((word, i) => (
+        <span key={`${word}-${i}`} aria-hidden="true" style={{ animationDelay: `${i * gap}ms` }}>{word}</span>
+      ))}
+    </span>
+  );
+}
+
 function FourArt({ art, label }: { art: string; label: string }) {
   const [missing, setMissing] = useState(false);
   return (
@@ -426,7 +443,7 @@ export default function Affective() {
             the hairline; only the words are indented. They arrive one after
             another on the way past, which is the only flourish the page allows
             itself. */}
-        <div className="aff-grid aff-grid-4 aff-four" data-drift="110">
+        <div className="aff-grid aff-grid-4 aff-four">
           {THE_FOUR.map((d, i) => (
             <article className="aff-four-item aff-reveal" key={d.h} style={{ transitionDelay: `${i * 110}ms` }}>
               <FourArt art={d.art} label={d.h.replace(".", "")} />
@@ -462,15 +479,19 @@ export default function Affective() {
 
         {PRODUCTS.map((p) => (
           <article className={"aff-plate aff-plate-" + p.key} key={p.key} style={{ ["--acc" as string]: p.accent }}>
-            {/* No photograph. There is no picture of Braino that is not a
-                screenshot, and a screenshot here would turn the page into a
-                product tour three sections early. What there is instead is
-                him: the same walker the products use, pacing his own lane
-                beside his name. His name is set in the page's sans, not its
-                Didone, because Braino is the software and Affective is the
-                company, and they should not wear the same face. */}
+            {/* Introduced the way his teaser introduces him: the line lands a
+                word at a time and stays, then his name. His name is the system
+                face, never the company's Didone: Braino is the software and
+                Affective is the company, and they do not wear the same face.
+
+                The photograph sits under the words rather than behind them. A
+                line of type over a picture needs a scrim, and a scrim on the
+                one warm frame in the section turns it grey. */}
             <div className="aff-plate-art aff-reveal">
               <div className="aff-plate-mark">
+                <p className="aff-plate-intro">
+                  <Kinetic line="The first thing we put AffectiveOS into." />
+                </p>
                 <h3>{p.name}</h3>
                 <p className="aff-plate-line">
                   <span>{p.kind}</span>
@@ -480,6 +501,17 @@ export default function Affective() {
               <div className="aff-plate-lane" aria-hidden="true">
                 <MiniBraino size={92} />
               </div>
+            </div>
+
+            <div className="aff-band aff-band-tall aff-reveal aff-rise" data-drift="40">
+              <img
+                src="/braino-band.jpg"
+                alt=""
+                width={1672}
+                height={941}
+                loading="lazy"
+                decoding="async"
+              />
             </div>
 
             <div className="aff-wrap aff-plate-say aff-reveal">
