@@ -407,11 +407,52 @@ export default function Affective() {
         </div>
       </section>
 
+      {/* ── Get in line ────────────────────────────────────────────────────
+          A strip, not a section: the ask is one line and one field across the
+          page, sitting between the questions and the closing picture. In the
+          footer it was six hundred pixels down inside the photograph, which is
+          further than anybody scrolls to join anything. */}
+      <section className="aff-join" id="early">
+        <div className="aff-wrap aff-join-in">
+          <div className="aff-join-say">
+            <h2>Get in line.</h2>
+            <p>
+              Mac only, for now. Founders and students first. A few seats a week, and we
+              write to you when one is yours.
+            </p>
+          </div>
+          <div className="aff-join-form">
+            <form className="aff-early-form" onSubmit={join}>
+              <input
+                id="aff-early-email"
+                type="email"
+                inputMode="email"
+                autoComplete="email"
+                placeholder="you@where.you.are"
+                aria-label="Your email"
+                value={email}
+                onChange={(e) => { setEmail(e.target.value); if (state !== "loading") setState("idle"); }}
+              />
+              <button type="submit" disabled={state === "loading"}>
+                {state === "loading" ? "One moment" : "Join the waitlist"}
+              </button>
+            </form>
+            {state !== "idle" && state !== "loading" && (
+              <p className="aff-early-said">
+                {state === "done" && "You are on the list. We write when a seat is yours."}
+                {state === "existing" && "You are already on the list. Nothing more to do."}
+                {state === "error" && "That did not go through. Check the address and try once more."}
+              </p>
+            )}
+          </div>
+        </div>
+      </section>
+
       {/* ── Footer ─────────────────────────────────────────────────────────
           The closing picture, with everything written over it. A scrim from
           the bottom rather than a wash over the whole frame, so the image
           keeps its light and the words still hold at any brightness. */}
-      <footer className="aff-foot" id="early">
+      <footer className="aff-foot">
         <img
           className="aff-foot-art"
           src="/affective-footer.jpg"
@@ -424,43 +465,6 @@ export default function Affective() {
         />
         <div className="aff-foot-in">
           <div className="aff-wrap">
-            {/* The ask, where a page's ask belongs: at the end, in the footer,
-                rather than as a section of its own that the reader has to get
-                past to reach the credits. */}
-            <div className="aff-foot-top">
-              <div className="aff-foot-ask">
-                <h2>Get in line.</h2>
-                <p>
-                  Mac only, for now. Founders and students first. A few seats a week, and
-                  we write to you when one is yours.
-                </p>
-              </div>
-              <div className="aff-foot-form">
-                <form className="aff-early-form" onSubmit={join}>
-                  <input
-                    id="aff-early-email"
-                    type="email"
-                    inputMode="email"
-                    autoComplete="email"
-                    placeholder="you@where.you.are"
-                    aria-label="Your email"
-                    value={email}
-                    onChange={(e) => { setEmail(e.target.value); if (state !== "loading") setState("idle"); }}
-                  />
-                  <button type="submit" disabled={state === "loading"}>
-                    {state === "loading" ? "One moment" : "Join the waitlist"}
-                  </button>
-                </form>
-                {state !== "idle" && state !== "loading" && (
-                  <p className="aff-early-said">
-                    {state === "done" && "You are on the list. We write when a seat is yours."}
-                    {state === "existing" && "You are already on the list. Nothing more to do."}
-                    {state === "error" && "That did not go through. Check the address and try once more."}
-                  </p>
-                )}
-              </div>
-            </div>
-
             <div className="aff-foot-grid">
               <div className="aff-foot-brand">
                 {/* Affective is not a computer. It is the company building

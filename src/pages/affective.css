@@ -987,6 +987,38 @@
   color: var(--a-ink-soft); letter-spacing: -0.004em;
 }
 
+/* ── Get in line ──────────────────────────────────────────────────────────
+   One row across the page: the ask on the left, the field on the right, a
+   hairline over it. Short on purpose, because it comes after the questions and
+   before the closing picture and should read as the last word rather than as
+   another section. In the footer it sat six hundred pixels down inside a
+   photograph, which is further than anybody scrolls to join anything. */
+.aff-join {
+  border-top: 1px solid var(--a-line);
+  background: var(--a-surface);
+}
+.aff-join-in {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 0.9fr);
+  gap: clamp(20px, 4vw, 64px); align-items: end;
+  padding-top: clamp(38px, 4.4vw, 62px);
+  padding-bottom: clamp(38px, 4.4vw, 62px);
+}
+.aff-join-say h2 {
+  margin: 0;
+  font-family: var(--a-display);
+  font-size: clamp(32px, 3.8vw, 50px); font-weight: 400;
+  line-height: 1.04; letter-spacing: -0.024em; color: var(--a-ink);
+}
+.aff-join-say p {
+  margin: 14px 0 0; max-width: 48ch;
+  font-size: clamp(14.5px, 1.35vw, 16px); line-height: 1.55;
+  color: var(--a-ink-soft); letter-spacing: -0.006em;
+}
+.aff-join-form .aff-early-form { margin: 0; max-width: none; }
+@media (max-width: 820px) {
+  .aff-join-in { grid-template-columns: 1fr; align-items: start; }
+}
+
 /* ── Footer ──────────────────────────────────────────────────────────────── */
 /* ── Footer ───────────────────────────────────────────────────────────────
    The closing picture with everything written over it. The scrim is a gradient
@@ -1041,45 +1073,6 @@
   margin: 34px 0 0; padding-top: 24px; font-size: 14px;
   border-top: 1px solid rgba(246, 243, 234, .22);
   color: rgba(246, 243, 234, .62);
-}
-/* The ask, at the top of the picture: the claim in the display face at the
-   size a closing line deserves, and the field beside it rather than under it,
-   so the footer opens with one line across rather than a stacked form. */
-.aff-foot-top {
-  display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, .95fr);
-  gap: clamp(22px, 4vw, 64px); align-items: end;
-  padding-bottom: clamp(34px, 4vw, 54px);
-  margin-bottom: clamp(30px, 3.6vw, 46px);
-  border-bottom: 1px solid rgba(246, 243, 234, .22);
-}
-.aff-foot-ask h2 {
-  margin: 0;
-  font-family: var(--a-display); font-optical-sizing: auto;
-  font-size: clamp(38px, 5vw, 64px); font-weight: 400;
-  line-height: 1.04; letter-spacing: -0.024em;
-  color: #f6f3ea;
-}
-.aff-foot-ask p {
-  margin: 16px 0 0; max-width: 46ch; font-size: 16px; line-height: 1.55;
-  color: rgba(246, 243, 234, .8);
-}
-.aff-foot-form { padding-bottom: 6px; }
-.aff-foot .aff-early-form {
-  margin: 0; max-width: none;
-  background: rgba(246, 243, 234, .06);
-  border-color: rgba(246, 243, 234, .42);
-  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
-}
-.aff-foot .aff-early-form input { color: #f6f3ea; font-size: 16px; }
-.aff-foot .aff-early-form input::placeholder { color: rgba(246, 243, 234, .5); }
-.aff-foot .aff-early-form input:focus { outline-color: #f6f3ea; }
-.aff-foot .aff-early-form button {
-  background: #f6f3ea; color: #14150f; font-size: 15px;
-  border-left-color: rgba(246, 243, 234, .42);
-}
-.aff-foot .aff-early-said { color: rgba(246, 243, 234, .75); font-size: 14px; }
-@media (max-width: 820px) {
-  .aff-foot-top { grid-template-columns: 1fr; align-items: start; }
 }
 
 /* ── Motion ──────────────────────────────────────────────────────────────── */
