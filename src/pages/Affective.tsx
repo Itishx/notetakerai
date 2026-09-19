@@ -283,11 +283,14 @@ export default function Affective() {
       <header className="aff-hero">
         <div className="aff-wrap">
           <p className="aff-kicker aff-reveal">Affective · Voice-first computing</p>
-          <h1 className="aff-h1 aff-reveal">Never touch your keyboard again.</h1>
+          <h1 className="aff-h1 aff-reveal">
+            Stop using your computer.
+            <b>Start talking to it.</b>
+          </h1>
           {/* One line. A promise this big needs saying what it is, and nothing
               past that until the reader has decided to keep going. */}
           <p className="aff-hero-one aff-reveal">
-            We make products you speak to instead.
+            We make the products you talk to, and the technology underneath them.
           </p>
 
           {/* Show the thing. A company page that never does is asking to be
@@ -338,10 +341,12 @@ export default function Affective() {
       <section className="aff-sec aff-day" id="day">
         <div className="aff-wrap">
           <div className="aff-sec-head aff-reveal">
+            <p className="aff-sec-kicker">What it means</p>
             <h2>What changes about your day.</h2>
             <p>
-              Not features. The six things you would actually notice by Friday, and what
-              each one looks like right now, on the Mac you already own.
+              Talking to a computer sounds like a small thing. Here is what it actually
+              does to a week: six you would notice by Friday, each one beside the version
+              you have today.
             </p>
           </div>
         </div>
@@ -401,6 +406,7 @@ export default function Affective() {
       <section className="aff-sec" id="stack">
         <div className="aff-wrap">
           <div className="aff-sec-head aff-reveal">
+            <p className="aff-sec-kicker">What we built</p>
             <h2>None of that works unless six things are true at once.</h2>
             <p>
               Each one exists somewhere on its own. The work is holding all six together on
@@ -426,6 +432,7 @@ export default function Affective() {
       <section className="aff-sec" id="products">
         <div className="aff-wrap">
           <div className="aff-sec-head aff-reveal">
+            <p className="aff-sec-kicker">What we made with it</p>
             <h2>One set of parts. Two products built out of them.</h2>
             <p>
               Something that can do everything and is nobody is a command line with extra
@@ -470,6 +477,7 @@ export default function Affective() {
       <section className="aff-sec aff-eco" id="ecosystem">
         <div className="aff-wrap">
           <div className="aff-sec-head aff-reveal">
+            <p className="aff-sec-kicker">How it ties together</p>
             <h2>You only have to say it once.</h2>
             <p>
               Two products, and one memory between them. Whatever you teach one, the other
