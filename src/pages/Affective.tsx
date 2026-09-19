@@ -128,6 +128,25 @@ function useReveal() {
 
 export default function Affective() {
   const root = useReveal();
+  /* The wordmark keeps its A and loses the rest once you are past the first
+     screen, so the bar gets quieter as the page gets louder. Read on a frame
+     rather than on every scroll event, and hysteresis on the two edges so a
+     nudge at the threshold cannot flicker it open and shut. */
+  const [tight, setTight] = useState(false);
+  useEffect(() => {
+    let frame = 0;
+    const read = () => {
+      frame = 0;
+      setTight((was) => (window.scrollY > (was ? 40 : 96)));
+    };
+    const onScroll = () => { if (!frame) frame = window.requestAnimationFrame(read); };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    read();
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      if (frame) window.cancelAnimationFrame(frame);
+    };
+  }, []);
   const [email, setEmail] = useState("");
   const [state, setState] = useState<"idle" | "loading" | "done" | "existing" | "error">("idle");
 
@@ -160,7 +179,7 @@ export default function Affective() {
 
   return (
     <div className="aff" ref={root}>
-      <nav className="aff-nav">
+      <nav className={"aff-nav" + (tight ? " is-tight" : "")}>
         <div className="aff-nav-in">
           <Link to="/affective" className="aff-logo" aria-label="Affective">
             <img src="/affective-logo.png" alt="Affective" width={1000} height={207} />

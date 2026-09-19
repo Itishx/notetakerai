@@ -81,7 +81,27 @@
   letter-spacing: -0.008em;
   color: var(--a-ink); text-decoration: none;
 }
-.aff-logo { font-size: 24px; line-height: 1; display: inline-flex; align-items: center; }
+/* The wordmark collapses to its own A on the way down the page.
+ *
+ * One file, clipped, rather than a second image cross-faded with the first:
+ * the A is the leftmost glyph, so narrowing the box wipes the rest of the word
+ * off to the left and what is left is the real drawing, not a redraw of it.
+ * The cut is at 22.1% of the mark, which is the thinnest column in the whole
+ * logo, the join between the A and the ff. Nothing else on it has an empty
+ * column: the letters touch the whole way across. */
+.aff-logo {
+  --logo-h: 27px;
+  --logo-full: calc(var(--logo-h) * 1000 / 207);
+  --logo-a: calc(var(--logo-h) * 214 / 207);
+  display: block; overflow: hidden;
+  width: var(--logo-full);
+  transition: width .42s cubic-bezier(.4, 0, .2, 1);
+  line-height: 1;
+}
+.aff-nav.is-tight .aff-logo { width: var(--logo-a); }
+@media (prefers-reduced-motion: reduce) {
+  .aff-logo { transition: none; }
+}
 /* The mark as drawn. The file was black on near-white paper, so the paper was
    keyed out by luminance rather than by colour, which keeps the hairlines and
    the thin side of the A soft instead of cutting them to a jagged edge, and
@@ -90,7 +110,7 @@
 /* Sized to the presence the typed version had, not to its cap height: the
    drawn mark is squarer than the font was, so matching heights made it read
    as half the logo. */
-.aff-logo img { height: 27px; }
+.aff-logo img { height: var(--logo-h); max-width: none; }
 .aff-mark img { height: 34px; }
 .aff-nav-links { margin-left: auto; display: flex; gap: 26px; }
 .aff-nav-links a {
