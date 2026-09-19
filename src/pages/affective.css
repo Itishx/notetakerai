@@ -65,7 +65,7 @@
 .aff-nav-in {
   max-width: var(--a-maxw); margin: 0 auto;
   padding: 0 var(--a-gutter);
-  height: 54px; display: flex; align-items: center; gap: 30px;
+  height: 62px; display: flex; align-items: center; gap: 30px;
 }
 /* The wordmark. A Didone, not the page's Palatino: extreme stroke contrast,
    hairline thins, the ff tied into one ligature and a heavy round full stop.
@@ -87,8 +87,11 @@
    the thin side of the A soft instead of cutting them to a jagged edge, and
    the empty margin trimmed off so the bar can size it by its own height. */
 .aff-logo img, .aff-mark img { display: block; width: auto; }
-.aff-logo img { height: 17px; }
-.aff-mark img { height: 21px; }
+/* Sized to the presence the typed version had, not to its cap height: the
+   drawn mark is squarer than the font was, so matching heights made it read
+   as half the logo. */
+.aff-logo img { height: 27px; }
+.aff-mark img { height: 34px; }
 .aff-nav-links { margin-left: auto; display: flex; gap: 26px; }
 .aff-nav-links a {
   font-size: 12.5px; font-weight: 500; letter-spacing: -0.006em;
