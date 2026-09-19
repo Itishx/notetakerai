@@ -904,6 +904,12 @@
   transition: transform 1.4s cubic-bezier(.22, 1, .36, 1);
 }
 .aff-rise.is-in img { transform: scale(1); }
+/* The drift itself. On the box, never on the image, so it cannot fight the
+   settle above: one transform each. */
+[data-drift] { transform: translate3d(var(--drift, 0px), 0, 0); will-change: transform; }
+/* Nothing may leak sideways: the page must never scroll horizontally because
+   something inside it moved. */
+.aff-day, .aff-hero, .aff-sec { overflow-x: clip; }
 @media (prefers-reduced-motion: reduce) {
   .aff-rise img, .aff-rise.is-in img { transform: none; transition: none; }
 }

@@ -95,6 +95,47 @@ const FAQ = [
   },
 ];
 
+/* Scroll-linked drift.
+ *
+ * Anything marked data-drift slides sideways as it crosses the screen: the
+ * further through the viewport it is, the further right it sits. Read on a
+ * frame, written as one transform, and the amount is small on purpose, because
+ * the effect is meant to be felt rather than watched.
+ *
+ * Off under 900px, where there is no room to move anything sideways, and off
+ * entirely for anyone who has asked for less motion. */
+function useDrift() {
+  useEffect(() => {
+    const els = [...document.querySelectorAll<HTMLElement>("[data-drift]")];
+    if (!els.length) return;
+    const still = window.matchMedia("(prefers-reduced-motion: reduce)");
+    let frame = 0;
+
+    const apply = () => {
+      frame = 0;
+      const narrow = window.innerWidth < 900;
+      for (const el of els) {
+        if (narrow || still.matches) { el.style.setProperty("--drift", "0px"); continue; }
+        const r = el.getBoundingClientRect();
+        // 0 as it comes up from the bottom, 1 as it leaves the top.
+        const p = (window.innerHeight - r.top) / (window.innerHeight + r.height);
+        const amount = Number(el.dataset.drift) || 0;
+        el.style.setProperty("--drift", `${((Math.min(1, Math.max(0, p)) - 0.5) * amount).toFixed(1)}px`);
+      }
+    };
+    const onScroll = () => { if (!frame) frame = window.requestAnimationFrame(apply); };
+
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
+    apply();
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+      if (frame) window.cancelAnimationFrame(frame);
+    };
+  }, []);
+}
+
 function useReveal() {
   const root = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -125,6 +166,7 @@ function useReveal() {
 
 export default function Affective() {
   const root = useReveal();
+  useDrift();
   /* The wordmark keeps its A and loses the rest once you are past the first
      screen, so the bar gets quieter as the page gets louder. Read on a frame
      rather than on every scroll event, and hysteresis on the two edges so a
@@ -197,7 +239,7 @@ export default function Affective() {
           a thing you sit in front of, and a picture of a screen would argue
           the opposite in the first frame. */}
       <header className="aff-hero">
-        <div className="aff-band">
+        <div className="aff-band" data-drift="38">
           <img
             src="/affective-hero.jpg"
             alt="A cross-stitched view of a lake through stone arches, with a cat sitting on the balustrade watching it."
@@ -277,7 +319,7 @@ export default function Affective() {
         {/* The picture of the thing itself, between the claim and the four
             things it is made of, so the section opens on something to look at
             rather than on a grid. */}
-        <div className="aff-os-art aff-reveal aff-rise">
+        <div className="aff-os-art aff-reveal aff-rise" data-drift="46">
           <img
             src="/affective-os.jpg"
             alt="Affective OS."
@@ -295,7 +337,7 @@ export default function Affective() {
               so they get space rather than edges. They arrive one after
               another on the way past, which is the only thing on the page that
               is allowed to be a flourish. */}
-          <div className="aff-four">
+          <div className="aff-four" data-drift="30">
             {THE_FOUR.map((d, i) => (
               <article className="aff-four-item aff-reveal" key={d.h} style={{ transitionDelay: `${i * 110}ms` }}>
                 <h3>{d.h}</h3>
