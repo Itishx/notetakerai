@@ -146,42 +146,31 @@ const BRAINO_BRIEFS = [
  *
  * Deliberately not phrased as "ask it to X". A list of commands is a manual,
  * and a manual is a thing you read after you have already been convinced. */
-const THE_DAY = [
+/* What the Mac gets that it never had. Four, not six: the six layers further
+   down are the engineering; these are the four things a person would notice.
+   No "Today" line on these cells, because each one carries its own contrast
+   ("no copying, no pasting") rather than sitting beside a struck-through
+   version of itself. */
+const THE_FOUR = [
   {
-    h: "Meetings become invisible.",
-    now: "You half-listen and half-type, and end up doing neither well.",
-    next:
-      "It listens for the whole hour. You shut the laptop and the notes are already written, with what was decided and who said they would do what.",
+    h: "Senses.",
+    body:
+      "Your Mac gets eyes and ears. It sees the screen you are on and hears you for an hour straight. No copying, no pasting, no describing what it cannot see.",
   },
   {
-    h: "Typing becomes optional.",
-    now: "Everything you want to say has to go through your hands first.",
-    next:
-      "Talk anywhere on your Mac and the words land where the cursor is. In the email, in the doc, in the message box. An hour of it, not a sentence.",
+    h: "Voice.",
+    body:
+      "Have you ever had a back-and-forth conversation with your Mac? Now you can. It answers out loud, and you can cut it off mid-sentence, like a person.",
   },
   {
-    h: "Nothing needs explaining twice.",
-    now: "Copy it out, paste it in, describe the bit it cannot see, try again.",
-    next:
-      "It is looking at the same screen you are. Ask about this email, this page, this invoice, and there is no step where you set the scene.",
+    h: "Hands.",
+    body:
+      "You say the task. Your Mac does it. Books the flight, fills the form, sends the reply. It asks before anything is paid for or sent.",
   },
   {
-    h: "The errands stop being yours.",
-    now: "The booking, the form, the six tabs, the reply you have been putting off.",
-    next:
-      "You say it once and it goes and does it, and it stops to ask before anything gets bought, sent or deleted.",
-  },
-  {
-    h: "Your week keeps itself.",
-    now: "A calendar is only as good as the last time you remembered to update it.",
-    next:
-      "It reads the timetable your college or your company already keeps, so it knows what is on today without you entering anything.",
-  },
-  {
-    h: "And you are not talking to a tool.",
-    now: "A blank box and a blinking cursor, every single morning, forever.",
-    next:
-      "A face, a voice, and a read on what kind of day you are having. It knows what you told it last month, and it is the same one tomorrow.",
+    h: "Memory.",
+    body:
+      "Your Mac gets a memory. It remembers what you have been doing, who your people are, and what you told it last month. Every day stops starting from zero.",
   },
 ];
 
@@ -357,32 +346,27 @@ export default function Affective() {
       <section className="aff-sec aff-day" id="day">
         <div className="aff-wrap">
           <div className="aff-sec-head aff-reveal">
-            <p className="aff-sec-kicker">What it means</p>
-            <h2>What changes about your day.</h2>
+            <p className="aff-sec-kicker">What changes</p>
+            <h2>We make the Mac come alive.</h2>
             <p>
-              Talking to a computer sounds like a small thing. Here is what it actually
-              does to a week: six you would notice by Friday, each one beside the version
-              you have today.
+              Affective OS sits under every product we make. It gives the Mac you already
+              own four things it never had.
             </p>
           </div>
         </div>
         <div className="aff-wrap">
           <div className="aff-grid aff-grid-2 aff-reveal">
-            {THE_DAY.map((d) => (
+            {THE_FOUR.map((d) => (
               <article className="aff-day-cell" key={d.h}>
                 <h3>{d.h}</h3>
-                {/* Today first, so the reader recognises themselves before
-                    being sold anything. */}
-                <p className="aff-day-now"><span>Today</span>{d.now}</p>
-                <p className="aff-day-next">{d.next}</p>
+                <p className="aff-day-next">{d.body}</p>
               </article>
             ))}
           </div>
-          {/* Where all of it lands. The point of the section is not six
-              separate tricks, it is that one character performs all of them. */}
+          {/* Where all of it lands: the four are the floor, and the character
+              is what we put on top of them. */}
           <p className="aff-day-foot aff-reveal">
-            All six come out of one set of parts. So far we have built{" "}
-            <a href="#products">two things</a> with them.
+            Four things. Then we build somebody on top. His name is Braino.
           </p>
         </div>
       </section>
