@@ -550,12 +550,21 @@ export default function Affective() {
         <div className="aff-wrap">
           <div className="aff-name-in aff-reveal">
             <p className="aff-sec-kicker">About the name</p>
-            <p>
-              A mind does three things: thinks, does, feels. Everyone in AI is racing on
-              the first two. We are named after the third. Affective is the old, precise
-              word for the feeling layer, the part that turns a voice into a someone. It
-              is the part everybody skips. It is the part you keep.
+            {/* The line worth remembering at the size of a line worth
+                remembering, and the explanation under it at reading size. One
+                paragraph of grey in an empty section reads as a section
+                somebody forgot to finish. */}
+            <p className="aff-name-line">
+              A mind does three things: thinks, does, <b>feels.</b>
             </p>
+            <div className="aff-name-cols">
+              <p>
+                Everyone in AI is racing on the first two. We are named after the third.
+                Affective is the old, precise word for the feeling layer, the part that
+                turns a voice into a someone.
+              </p>
+              <p>It is the part everybody skips. It is the part you keep.</p>
+            </div>
           </div>
         </div>
       </section>

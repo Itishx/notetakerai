@@ -928,21 +928,36 @@
 
 .aff-close .aff-tagline { margin: 0; padding-top: 0; border-top: 0; }
 
-/* About the name: a single paragraph in the measure of a column, so the page
-   ends its argument the way a piece of writing does rather than with another
-   grid. */
+/* About the name. The line worth remembering at display size, the explanation
+   under it in two columns, and a hairline over the pair, so the page ends its
+   argument the way a piece of writing does rather than with a paragraph
+   floating in an empty section. */
+.aff-name { padding-top: clamp(40px, 4.6vw, 70px); }
 .aff-name-in {
-  display: grid; grid-template-columns: minmax(0, 200px) minmax(0, 1fr);
-  gap: clamp(14px, 3vw, 56px);
-  align-items: start;
+  border-top: 1px solid var(--a-line);
+  padding-top: clamp(24px, 2.8vw, 38px);
 }
-.aff-name-in p:last-child {
-  margin: 0; max-width: 62ch;
-  font-size: clamp(16px, 1.5vw, 19px); line-height: 1.58;
-  letter-spacing: -0.008em; color: var(--a-ink-soft);
+.aff-name-in .aff-sec-kicker { margin: 0 0 clamp(16px, 1.8vw, 24px); }
+.aff-name-line {
+  margin: 0 0 clamp(22px, 2.6vw, 34px);
+  max-width: 24ch;
+  font-family: var(--a-display);
+  font-size: clamp(30px, 4.2vw, 56px);
+  font-weight: 400; line-height: 1.06; letter-spacing: -0.024em;
+  color: var(--a-ink); text-wrap: balance;
 }
-.aff-name-in .aff-sec-kicker { margin: 0; padding-top: .4em; }
-@media (max-width: 720px) { .aff-name-in { grid-template-columns: 1fr; } }
+.aff-name-line b { font-weight: inherit; color: var(--a-braino); }
+.aff-name-cols {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: clamp(18px, 3vw, 56px);
+  max-width: 88ch;
+}
+.aff-name-cols p {
+  margin: 0;
+  font-size: clamp(15px, 1.4vw, 17px); line-height: 1.6;
+  letter-spacing: -0.006em; color: var(--a-ink-soft);
+}
+@media (max-width: 720px) { .aff-name-cols { grid-template-columns: 1fr; } }
 
 /* ── Footer ──────────────────────────────────────────────────────────────── */
 /* ── Footer ───────────────────────────────────────────────────────────────
