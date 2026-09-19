@@ -164,6 +164,50 @@ function useDrift() {
   }, []);
 }
 
+/* The pan.
+ *
+ * The four things are wider than any screen, so the section holds still while
+ * they travel through it: how far you have scrolled into the tall box is how
+ * far the row has moved, which means every one of the four gets the screen to
+ * itself on the way past instead of four of them sharing it at stamp size.
+ *
+ * The travel is measured from the row rather than guessed, so it always ends
+ * on the last cell's right edge, whatever the screen. Off under 900px, where
+ * the four simply stack. */
+function usePan() {
+  useEffect(() => {
+    const boxes = [...document.querySelectorAll<HTMLElement>("[data-pan]")];
+    if (!boxes.length) return;
+    const still = window.matchMedia("(prefers-reduced-motion: reduce)");
+    let frame = 0;
+
+    const apply = () => {
+      frame = 0;
+      const off = window.innerWidth < 900 || still.matches;
+      for (const box of boxes) {
+        const row = box.querySelector<HTMLElement>("[data-pan-row]");
+        if (!row) continue;
+        if (off) { row.style.setProperty("--pan", "0px"); continue; }
+        const r = box.getBoundingClientRect();
+        const runway = Math.max(1, r.height - window.innerHeight);
+        const p = Math.min(1, Math.max(0, -r.top / runway));
+        const travel = Math.max(0, row.scrollWidth - window.innerWidth);
+        row.style.setProperty("--pan", `${(-p * travel).toFixed(1)}px`);
+      }
+    };
+    const onScroll = () => { if (!frame) frame = window.requestAnimationFrame(apply); };
+
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
+    apply();
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+      if (frame) window.cancelAnimationFrame(frame);
+    };
+  }, []);
+}
+
 function useReveal() {
   const root = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -195,6 +239,7 @@ function useReveal() {
 export default function Affective() {
   const root = useReveal();
   useDrift();
+  usePan();
   /* The wordmark keeps its A and loses the rest once you are past the first
      screen, so the bar gets quieter as the page gets louder. Read on a frame
      rather than on every scroll event, and hysteresis on the two edges so a
@@ -362,7 +407,7 @@ export default function Affective() {
             the hairline; only the words are indented. They arrive one after
             another on the way past, which is the only flourish the page allows
             itself. */}
-        <div className="aff-grid aff-grid-4 aff-four" data-drift="240">
+        <div className="aff-grid aff-grid-4 aff-four" data-drift="110">
           {THE_FOUR.map((d, i) => (
             <article className="aff-four-item aff-reveal" key={d.h} style={{ transitionDelay: `${i * 110}ms` }}>
               <FourArt art={d.art} label={d.h.replace(".", "")} />

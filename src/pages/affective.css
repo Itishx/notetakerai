@@ -883,22 +883,20 @@
 
 /* The four, under the picture. No cell borders: the picture is the object and
    these are its caption, so they get space instead of edges. */
-/* The four, on the page's own grid: one cell attached to the next, hairline to
-   hairline, no gutters, running to the page edge rather than sitting inside
-   the measure. A gap would say these are four separate things arranged; a
-   shared edge says one system divided, which is the claim the section makes.
-   Full width because at 286px the pictures were stamps. */
+/* ── The four ─────────────────────────────────────────────────────────────
+   One cell attached to the next, hairline to hairline, no gutters, which is
+   how the rest of the page is built.
+
+   The row slides right on the way down, and the one rule that matters is that
+   nothing may be cut while it does: the row is held narrower than the window
+   by more than the distance it travels, so the movement happens inside the
+   margin and all four cells are whole at every point of the scroll. */
 .aff-four {
-  /* Wider than the page on both sides, so when the row slides right on the way
-     down nothing is ever exposed at the edge it came from. The overhang is
-     larger than the travel, always. */
-  --over: 12vw;
+  --travel: 55px;
+  width: min(var(--a-maxw), calc(100vw - var(--travel) * 2 - 60px));
+  margin: clamp(26px, 3.4vw, 48px) auto 0;
   background: var(--a-surface);
-  margin: clamp(26px, 3.4vw, 48px) 0 0 calc(var(--over) * -1);
-  width: calc(100% + var(--over) * 2);
-  border-left: 0; border-right: 0;
 }
-@media (max-width: 900px) { .aff-four { --over: 0px; width: 100%; margin-left: 0; } }
 .aff-four-item { display: flex; flex-direction: column; }
 /* The picture fills its cell to the hairline. Only the words are indented. */
 .aff-four-art {
@@ -914,7 +912,9 @@
   font-size: 11px; letter-spacing: .22em; text-transform: uppercase;
   color: var(--a-ink-faint);
 }
-.aff-four-say { padding: clamp(20px, 2.2vw, 32px); }
+.aff-four-say { padding: clamp(18px, 1.9vw, 28px); }
+@media (max-width: 1040px) { .aff-four { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 560px) { .aff-four { grid-template-columns: 1fr; } }
 .aff-four-say h3 {
   margin: 0 0 12px;
   font-family: var(--a-display);
