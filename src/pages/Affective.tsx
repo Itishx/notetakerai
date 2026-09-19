@@ -356,20 +356,24 @@ export default function Affective() {
             </p>
           </div>
         </div>
-        <div className="aff-wrap">
-          {/* One picture per thing: the image, then the name under it, then
-              what it means. No cell borders, because each picture is already
-              its own edge. They arrive one after another on the way past,
-              which is the only flourish the page allows itself. */}
-          <div className="aff-grid aff-grid-4 aff-four" data-drift="30">
-            {THE_FOUR.map((d, i) => (
-              <article className="aff-four-item aff-reveal" key={d.h} style={{ transitionDelay: `${i * 110}ms` }}>
-                <FourArt art={d.art} label={d.h.replace(".", "")} />
+        {/* One picture per thing, on the page's own grid and running to the
+            page edge rather than sitting inside the measure: four cells wide
+            enough for the pictures to be pictures. The image fills its cell to
+            the hairline; only the words are indented. They arrive one after
+            another on the way past, which is the only flourish the page allows
+            itself. */}
+        <div className="aff-grid aff-grid-4 aff-four" data-drift="30">
+          {THE_FOUR.map((d, i) => (
+            <article className="aff-four-item aff-reveal" key={d.h} style={{ transitionDelay: `${i * 110}ms` }}>
+              <FourArt art={d.art} label={d.h.replace(".", "")} />
+              <div className="aff-four-say">
                 <h3>{d.h}</h3>
                 <p>{d.body}</p>
-              </article>
-            ))}
-          </div>
+              </div>
+            </article>
+          ))}
+        </div>
+        <div className="aff-wrap">
           {/* Where all of it lands: the four are the floor, and the character
               is what we put on top of them. */}
           <p className="aff-day-foot aff-reveal">
