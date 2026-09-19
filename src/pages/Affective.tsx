@@ -293,12 +293,26 @@ export default function Affective() {
             We make the products you talk to, and the technology underneath them.
           </p>
 
-          {/* Show the thing. A company page that never does is asking to be
-              taken on faith. */}
+          {/* A room, not a screenshot. The page is arguing that the computer
+              stops being a thing you sit in front of, and a picture of a screen
+              would argue the opposite on the first screen.
+
+              Captioned, because a company page that opens on a lamp-lit living
+              room owes the reader a sentence saying why. */}
           <figure className="aff-shot aff-reveal">
             <div className="aff-shot-frame">
-              <span className="aff-shot-note">Braino, on the page you are already on</span>
+              <img
+                src="/affectivehero.jpeg"
+                alt="A warm, lamp-lit room with a low chair, a sofa and a glass table, and no screen anywhere in it."
+                width={736}
+                height={1104}
+                loading="eager"
+                decoding="async"
+              />
             </div>
+            <figcaption className="aff-shot-note">
+              The computer is still here. You just stop sitting at it.
+            </figcaption>
           </figure>
 
           <div className="aff-hero-meta aff-reveal">

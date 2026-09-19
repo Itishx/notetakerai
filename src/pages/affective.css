@@ -721,13 +721,29 @@
     radial-gradient(120% 90% at 50% 0%, rgba(217, 100, 91, .07), transparent 62%),
     linear-gradient(180deg, var(--a-surface), #efece2);
   aspect-ratio: 16 / 9;
-  display: grid; place-items: center;
   overflow: hidden;
 }
-@media (max-width: 620px) { .aff-shot-frame { aspect-ratio: 4 / 3; } }
+/* A tall photograph in a wide frame, so it is cropped rather than letterboxed,
+   and pulled down the frame to keep the lamp and the seating rather than the
+   empty wall above them. */
+.aff-shot-frame img {
+  display: block; width: 100%; height: 100%;
+  object-fit: cover; object-position: center 68%;
+}
+/* On a phone the frame turns portrait, because the picture is portrait and a
+   narrow 16:9 slice of it is a strip of wall. */
+@media (max-width: 620px) {
+  .aff-shot-frame { aspect-ratio: 4 / 5; }
+  .aff-shot-frame img { object-position: center 60%; }
+}
+/* Under the frame, not over it. A caption laid on top of a photograph is a
+   caption fighting whatever is behind it. */
 .aff-shot-note {
-  font-size: 13px; color: var(--a-ink-faint);
-  letter-spacing: .02em; text-align: center; padding: 0 24px;
+  display: block;
+  margin-top: 16px;
+  font-size: 13.5px; color: var(--a-ink-faint);
+  letter-spacing: -0.004em; line-height: 1.45;
+  max-width: 44ch;
 }
 
 /* ── Questions ──────────────────────────────────────────────────────────────
