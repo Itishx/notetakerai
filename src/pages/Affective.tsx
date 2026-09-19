@@ -173,42 +173,52 @@ export default function Affective() {
       </nav>
 
       {/* ── Hero ───────────────────────────────────────────────────────────
-          The promise, what the company is, and where we are. Nothing else on
-          the first screen: an argument this big needs the reader to have
-          decided to keep going before it starts arguing. */}
+          The picture first, edge to edge and flush under the nav, then the
+          claim under it with what the company is beside it. A room rather
+          than a screenshot: the page is arguing that the computer stops being
+          a thing you sit in front of, and a picture of a screen would argue
+          the opposite in the first frame. */}
       <header className="aff-hero">
+        <div className="aff-band">
+          <img
+            src="/affectivehero.jpeg"
+            alt="A warm, lamp-lit room with a low chair, a sofa and a glass table, and no screen anywhere in it."
+            width={736}
+            height={1104}
+            loading="eager"
+            decoding="async"
+          />
+        </div>
+
         <div className="aff-wrap">
-          <h1 className="aff-h1 aff-reveal">
-            Stop using your Mac.
-            <b>Start talking to it.</b>
-          </h1>
-          <p className="aff-hero-one aff-reveal">
-            We build the technology that makes it possible, and the products that do the
-            work.
-          </p>
-
-          {/* A room, not a screenshot. The page is arguing that the computer
-              stops being a thing you sit in front of, and a picture of a screen
-              would argue the opposite on the first screen. */}
-          <figure className="aff-shot aff-reveal">
-            <div className="aff-shot-frame">
-              <img
-                src="/affectivehero.jpeg"
-                alt="A warm, lamp-lit room with a low chair, a sofa and a glass table, and no screen anywhere in it."
-                width={736}
-                height={1104}
-                loading="eager"
-                decoding="async"
-              />
+          <div className="aff-hero-row aff-reveal">
+            <h1 className="aff-h1">
+              Stop using your Mac.
+              <b>Start talking to it.</b>
+            </h1>
+            <div className="aff-hero-side">
+              <p className="aff-hero-one">
+                We build the technology that makes it possible, and the products that do
+                the work.
+              </p>
+              <div className="aff-hero-cta">
+                <a href="#early" className="aff-cta">Join the waitlist</a>
+                <Link to="/braino" className="aff-cta aff-cta-ghost">Meet Braino</Link>
+              </div>
             </div>
-            <figcaption className="aff-shot-note">
-              The computer is still here. You just stop sitting at it.
-            </figcaption>
-          </figure>
+          </div>
+        </div>
 
-          <div className="aff-hero-meta aff-reveal">
-            <span>Bengaluru</span>
-            <span>Private beta</span>
+        {/* Where the reference puts its customer logos. We have no logos to
+            put there, so it carries the one sentence the photograph owes the
+            reader, and where we are. */}
+        <div className="aff-strip">
+          <div className="aff-wrap aff-strip-in">
+            <p>The computer is still here. You just stop sitting at it.</p>
+            <div className="aff-hero-meta">
+              <span>Bengaluru</span>
+              <span>Private beta</span>
+            </div>
           </div>
         </div>
       </header>
