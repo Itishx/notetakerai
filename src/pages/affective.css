@@ -1090,8 +1090,11 @@
 }
 .aff-foot-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.7fr) repeat(3, minmax(0, 1fr));
-  gap: 40px clamp(26px, 4vw, 64px);
+  /* The tree needs a measure of its own: "Braino for Mesa School of Business"
+     is a long name and it was breaking across two lines in a column sized for
+     one-word links. */
+  grid-template-columns: minmax(0, 1.4fr) minmax(320px, 1.2fr) minmax(0, .7fr);
+  gap: 40px clamp(30px, 4.4vw, 72px);
 }
 .aff-foot-brand strong { display: block; }
 /* The mark is drawn in ink. On the photograph it has to be paper, and the file
@@ -1106,9 +1109,40 @@
   margin: 0 0 6px; font-size: 12px; font-weight: 600;
   letter-spacing: .14em; text-transform: uppercase; color: rgba(246, 243, 234, .6);
 }
-@media (max-width: 960px) { .aff-foot-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-@media (max-width: 720px) { .aff-foot-grid { grid-template-columns: 1fr 1fr; } }
-@media (max-width: 460px) { .aff-foot-grid { grid-template-columns: 1fr; } }
+@media (max-width: 960px) { .aff-foot-grid { grid-template-columns: minmax(0, 1fr) minmax(280px, 1fr); } }
+@media (max-width: 620px) { .aff-foot-grid { grid-template-columns: 1fr; } }
+/* The product, drawn. A rail down the left with a node on each model, and the
+   rail carries on past them to the institutions who buy the same Braino. It
+   says one thing a list cannot: these are not four separate products. */
+.aff-tree ul {
+  margin: 0; padding: 0 0 0 16px; list-style: none;
+  border-left: 1px solid rgba(246, 243, 234, .3);
+  display: flex; flex-direction: column; gap: 12px;
+}
+.aff-tree > ul { margin-top: 4px; }
+.aff-tree li { position: relative; }
+/* The node itself, sitting on the rail, and the tick that reaches the name. */
+.aff-tree li::before {
+  content: ""; position: absolute; left: -16px; top: .62em;
+  width: 11px; height: 1px; background: rgba(246, 243, 234, .3);
+}
+.aff-tree li::after {
+  content: ""; position: absolute; left: -19px; top: calc(.62em - 2.5px);
+  width: 6px; height: 6px; border-radius: 50%;
+  background: rgba(246, 243, 234, .55);
+}
+.aff-tree-branch { padding-top: 4px; }
+.aff-tree-label {
+  display: block; margin-bottom: 12px;
+  font-size: 11px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase;
+  color: rgba(246, 243, 234, .55);
+}
+.aff-tree-branch > ul { padding-left: 16px; }
+.aff-tree-branch > ul li a { white-space: nowrap; }
+@media (max-width: 400px) {
+  .aff-tree-branch > ul li a { white-space: normal; }
+}
+
 .aff-foot a { color: rgba(246, 243, 234, .82); text-decoration: none; transition: color .2s ease; }
 .aff-foot a:hover { color: #fff; }
 .aff-foot-rule {

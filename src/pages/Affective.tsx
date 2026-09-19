@@ -678,19 +678,25 @@ export default function Affective() {
                   the one you have, and the products that do the work. Bengaluru.
                 </p>
               </div>
-              {/* The product is the column, and the models are what is in it.
-                  One Braino, and the ones he comes in. */}
-              <nav className="aff-foot-col">
+              {/* One product, drawn as what it is. Braino is the trunk, the two
+                  he comes in hang off it, and the line carries on down to the
+                  institutions who buy the same Braino with their own timetable
+                  inside him. A list would have said the same thing and made
+                  them look like four separate things. */}
+              <nav className="aff-foot-col aff-tree" aria-label="Braino and its models">
                 <h4>Braino</h4>
-                <Link to="/braino">Braino</Link>
-                <Link to="/foundry">Braino Foundry</Link>
-              </nav>
-              {/* A school buys the same Braino with its own timetable,
-                  attendance and deadlines inside him. It is a deal rather than
-                  a download, so it goes to a person, not a form. */}
-              <nav className="aff-foot-col">
-                <h4>Enterprise</h4>
-                <Link to="/contact">Braino for Mesa School of Business</Link>
+                <ul>
+                  <li><Link to="/braino">Braino</Link></li>
+                  <li><Link to="/foundry">Braino Foundry</Link></li>
+                  <li className="aff-tree-branch">
+                    <span className="aff-tree-label">For institutions</span>
+                    <ul>
+                      {/* A deal rather than a download, so it goes to a person
+                          and not to a form. */}
+                      <li><Link to="/contact">Braino for Mesa School of Business</Link></li>
+                    </ul>
+                  </li>
+                </ul>
               </nav>
               <nav className="aff-foot-col">
                 <h4>Company</h4>
