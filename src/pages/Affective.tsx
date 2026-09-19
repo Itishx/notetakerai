@@ -342,16 +342,22 @@ export default function Affective() {
           </div>
         </div>
 
-        {/* Where the reference puts its customer logos. We have no logos to
-            put there, so it carries the one sentence the photograph owes the
-            reader, and where we are. */}
+        {/* Where a landing page puts its customers. We have none to put there,
+            and the honest version of that row is the one thing everybody in
+            this business is coy about: whose thinking we buy. Saying it here,
+            under the first claim, is the same answer the questions give and it
+            costs nothing to be first to say it. Names rather than logos, set
+            in one ink, because a row of other people's marks reads as their
+            page rather than ours. */}
         <div className="aff-strip">
           <div className="aff-wrap aff-strip-in">
-            <p>Nobody in this picture is at a desk.</p>
-            <div className="aff-hero-meta">
-              <span>Bengaluru</span>
-              <span>Private beta</span>
-            </div>
+            <p className="aff-strip-label">The thinking is bought</p>
+            <ul className="aff-strip-names">
+              <li>Anthropic</li>
+              <li>OpenAI</li>
+              <li>Perplexity</li>
+            </ul>
+            <p className="aff-strip-note">The hands are ours. Bengaluru, private beta.</p>
           </div>
         </div>
       </header>
@@ -365,17 +371,19 @@ export default function Affective() {
           of the section, where a tagline belongs: after the argument, before
           the picture. */}
       <section className="aff-position" id="what">
-        <div className="aff-wrap">
-          <p className="aff-position-kicker aff-reveal">What we do</p>
-          <h2 className="aff-position-line aff-reveal">
-            We build the technology that makes it possible to talk to your Mac.
-          </h2>
+        <div className="aff-wrap aff-position-in">
+          <div className="aff-position-claim aff-reveal">
+            <p className="aff-position-kicker">What we do</p>
+            <h2 className="aff-position-line">
+              We build the technology that makes it possible to talk to your Mac.
+            </h2>
+          </div>
           <div className="aff-position-cols aff-reveal">
             <p>
               AI has got very good at telling you what to do. You still have to go and do
               it yourself. Open the tab, find the file, fill in the form, send the reply.
             </p>
-            <p>We build the part that goes and does it.</p>
+            <p className="aff-position-punch">We build the part that goes and does it.</p>
           </div>
         </div>
 
