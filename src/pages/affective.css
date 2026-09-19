@@ -598,7 +598,9 @@
   padding-bottom: clamp(24px, 2.8vw, 38px);
   display: grid;
   grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
-  gap: clamp(20px, 4vw, 72px);
+  /* Rows tight, columns wide. One gap was doing both jobs, so the kicker sat
+     seventy pixels above the line it introduces. */
+  gap: clamp(6px, 0.8vw, 12px) clamp(20px, 4vw, 72px);
   align-items: end;
 }
 /* The question the section answers, across both columns above the heading.
@@ -606,7 +608,7 @@
    read as six good sections rather than one argument. */
 .aff-sec-kicker {
   grid-column: 1 / -1;
-  margin: 0 0 clamp(16px, 1.8vw, 26px);
+  margin: 0 0 clamp(8px, 0.9vw, 13px);
   font-size: 11px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase;
   color: var(--a-ink-faint);
 }
@@ -1010,9 +1012,10 @@
    one product on a company page, so he is one object on it. */
 .aff-plate {
   margin: clamp(18px, 2vw, 28px) 0 0;
-  border: 1px solid var(--a-line);
-  background: var(--a-surface);
+  border: 1px solid var(--a-line-strong);
+  background: #fdfcf8;
   overflow: hidden;
+  box-shadow: 0 1px 0 rgba(22, 21, 15, .03), 0 18px 40px -28px rgba(22, 21, 15, .28);
 }
 /* ── Kinetic line ─────────────────────────────────────────────────────────
    Ported from his teaser: a word lands, and stays, and the next joins it. The
@@ -1062,16 +1065,20 @@
     radial-gradient(120% 130% at 18% 12%, rgba(255, 252, 245, .95), rgba(255, 252, 245, 0) 58%),
     linear-gradient(152deg, #efe6d7 0%, #e0d0bc 46%, #cdb79f 100%);
 }
+/* Him and his name as one lockup, on the left. Across the box from each other
+   they were two things that happened to share a ground; beside each other they
+   are a signature. He stands on the same baseline the name sits on. */
 .aff-plate-mark {
   width: 100%;
-  display: flex; flex-direction: column; gap: 14px;
-  padding: clamp(30px, 3.4vw, 50px) clamp(24px, 2.6vw, 40px);
+  display: flex; align-items: flex-end; gap: clamp(12px, 1.6vw, 26px);
+  padding: clamp(30px, 3.4vw, 50px) clamp(24px, 2.6vw, 40px) clamp(24px, 2.6vw, 38px);
   color: #1a1710;
 }
+.aff-plate-name { display: flex; flex-direction: column; gap: 14px; }
 /* Braino is the software and Affective is the company. The company wears the
    Didone; he wears the system face, which is the one his own surfaces use. */
-.aff-plate-mark h3 {
-  margin: 0; max-width: 72%;
+.aff-plate-name h3 {
+  margin: 0;
   font-family: "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-size: clamp(46px, 7vw, 96px);
   font-weight: 600;
@@ -1091,13 +1098,11 @@
 /* Him, standing at the right of his own plate, at the size a person stands
    rather than the size an icon sits. */
 .aff-plate-him {
-  position: absolute; right: clamp(24px, 2.6vw, 48px); bottom: 0;
-  width: clamp(110px, 13vw, 190px); height: auto;
-  filter: drop-shadow(0 18px 34px rgba(40, 28, 14, .18));
+  flex: none;
+  width: clamp(72px, 9vw, 132px); height: auto;
+  margin-bottom: -2px;
+  filter: drop-shadow(0 14px 26px rgba(40, 28, 14, .16));
   pointer-events: none;
-}
-@media (max-width: 720px) {
-  .aff-plate-him { width: 96px; right: 16px; opacity: .92; }
 }
 
 /* The intro, under his name, landing a word at a time. */
@@ -1145,17 +1150,14 @@
 .aff-plate-does > *:last-child { border-right: 0; }
 .aff-plate-does > * { border-bottom: 0; }
 .aff-plate-does article { display: flex; flex-direction: column; }
-/* The picture area, the same shape the technology cells use, with the drawing
-   held small inside it so the cell reads as a grid rather than as an icon
-   list. */
+/* The picture area, the same shape and treatment the technology cells use. */
 .aff-does-art {
-  aspect-ratio: 3 / 2;
+  aspect-ratio: 341 / 415;
   background: var(--a-bg);
   border-bottom: 1px solid var(--a-line);
-  display: flex; align-items: center; justify-content: center;
-  color: var(--a-ink);
+  overflow: hidden;
 }
-.aff-does-art svg { width: 62%; height: auto; opacity: .82; }
+.aff-does-art img { display: block; width: 100%; height: 100%; object-fit: cover; }
 .aff-does-say { padding: clamp(18px, 1.9vw, 26px); }
 .aff-plate-does h4 {
   margin: 0 0 10px;
