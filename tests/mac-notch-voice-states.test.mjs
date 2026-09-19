@@ -258,3 +258,22 @@ test("a near miss of his name is logged, as one word and nothing else", () => {
   /* The list itself is unchanged: Reno and Dino stay out until the log says otherwise. */
   assert.match(swift, /let WAKE_WORDS = \["braino", "brayno", "bruno", "breno", "raino", "brainelle"\]/);
 });
+
+/* A surface that opened, asked for a big zone and closed without saying so
+   left a rectangle of the screen swallowing clicks: the page underneath could
+   not be clicked and a double click opened his menu. */
+test("an expanded notch zone is only believed while it keeps being re-stated", () => {
+  const main = readFileSync(new URL("../mac/braino-mac/main.cjs", import.meta.url), "utf8");
+  const renderer = readFileSync(new URL("../mac/braino-mac/renderer/braino-mac.js", import.meta.url), "utf8");
+
+  // The renderer says it again twice a second.
+  assert.match(renderer, /window\.setInterval\(\(\) => \{\s*try \{ nfPushZone\(\); \} catch \(_\) \{\}\s*\}, 500\);/);
+  // Main forgets it after two seconds of silence and says so in the log.
+  assert.match(main, /const NOTCH_ZONE_EXPIRY_MS = 2000;/);
+  assert.match(main, /notchZoneExpandedAt = notchZoneExpanded \? Date\.now\(\) : 0;/);
+  assert.match(main, /const expanded = notchZoneExpanded && Date\.now\(\) - notchZoneExpandedAt <= NOTCH_ZONE_EXPIRY_MS;/);
+  assert.match(main, /logMac\("notch\.zone\.expired"/);
+  // And the cursor has to be on the display the notch is on.
+  assert.match(main, /const onNotchDisplay = point\.x >= bounds\.x && point\.x <= bounds\.x \+ bounds\.width;/);
+  assert.match(main, /const inside = onNotchDisplay\s*\n\s*&& Math\.abs\(point\.x - centerX\) <= halfWidth/);
+});

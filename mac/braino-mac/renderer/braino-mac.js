@@ -3220,6 +3220,20 @@ function nfPushZone() {
   window.brainoMac.setNotchZone?.(nfLastZoneRequest);
 }
 
+/* The zone is re-stated twice a second, and main forgets an expanded one that
+   stops being re-stated.
+ *
+ * It has to be, because of what a zone does: while the cursor is inside it the
+ * whole overlay becomes clickable, and the overlay is the size of the screen.
+ * So a surface that opened, asked for 680 by 260, and then closed without
+ * saying so left a dead rectangle near the top of the display: clicks on the
+ * page underneath went to Braino, and a double click opened his menu. There is
+ * no event that fires for "the surface you forgot about", so the truth is sent
+ * again and again instead. */
+window.setInterval(() => {
+  try { nfPushZone(); } catch (_) {}
+}, 500);
+
 /* The surfaces that stay as they are: you opened them, or they are a mode of
    their own. */
 const NF_QUIET_STANDS_DOWN = [

@@ -118,32 +118,47 @@
   border-bottom: 1px solid var(--line);
 }
 .bf-switch-in {
-  display: flex; align-items: center; flex-wrap: wrap; gap: 10px 24px;
-  padding-top: 0; padding-bottom: 0;
+  display: block;
+  padding-top: clamp(14px, 1.6vw, 20px);
+  padding-bottom: 0;
 }
-.bf-tabs { display: flex; flex-wrap: wrap; }
+/* Said once, small, above the row: it needs a line and the models need the
+   width. */
+.bf-switch-note {
+  margin: 0 0 clamp(10px, 1.2vw, 14px);
+  font-size: 11px; letter-spacing: .16em; text-transform: uppercase;
+  color: var(--ink-faint);
+}
+/* Three models across the whole measure, one third each, not three labels
+   huddled at the left of it. */
+.bf-tabs {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-top: 1px solid var(--line);
+}
 .bf-tabs button {
   appearance: none; border: 0; background: transparent;
   border-right: 1px solid var(--line);
-  padding: clamp(16px, 1.7vw, 22px) clamp(26px, 3.4vw, 54px);
-  display: flex; flex-direction: column; align-items: flex-start; gap: 5px;
+  padding: clamp(16px, 1.8vw, 24px) clamp(14px, 1.6vw, 24px) clamp(14px, 1.6vw, 20px) 0;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 6px;
+  text-align: left;
   font: inherit; color: var(--ink-faint);
-  cursor: pointer; transition: color .2s ease, background .2s ease;
+  cursor: pointer; transition: color .2s ease;
 }
-.bf-tabs button:first-child { padding-left: 0; }
+.bf-tabs button:not(:first-child) { padding-left: clamp(18px, 2.4vw, 40px); }
 .bf-tabs button:last-child { border-right: 0; }
-/* The name, with the door's own colour beside it. */
+/* The name, with the model's own colour beside it. */
 .bf-tabs button span {
-  display: inline-flex; align-items: center; gap: 9px;
-  font-size: clamp(14px, 1.35vw, 17px); font-weight: 500; letter-spacing: -0.012em;
+  display: inline-flex; align-items: center; gap: 10px;
+  font-size: clamp(15px, 1.6vw, 21px); font-weight: 500; letter-spacing: -0.018em;
 }
 .bf-tabs button i {
-  width: 7px; height: 7px; border-radius: 50%;
+  flex: none;
+  width: 8px; height: 8px; border-radius: 50%;
   background: var(--dot, var(--ink));
   opacity: .3; transition: opacity .2s ease;
 }
 .bf-tabs button small {
-  padding-left: 16px;
+  padding-left: 18px;
   font-size: 10.5px; letter-spacing: .16em; text-transform: uppercase;
   color: var(--ink-faint);
 }
@@ -151,15 +166,14 @@
 .bf-tabs button.on { color: var(--ink); box-shadow: inset 0 -2px 0 0 var(--acc, var(--ink)); }
 .bf-tabs button.on i { opacity: 1; }
 .bf-tabs button:focus-visible { outline: 2px solid var(--ink); outline-offset: -3px; }
-.bf-switch-note {
-  margin: 0 0 0 auto;
-  font-size: 11.5px; letter-spacing: .16em; text-transform: uppercase;
-  color: var(--ink-faint);
-}
-@media (max-width: 900px) {
-  .bf-tabs button { padding: 14px clamp(16px, 3vw, 26px); }
-  .bf-tabs button small { display: none; }
-  .bf-switch-note { display: none; }
+@media (max-width: 720px) {
+  .bf-tabs { grid-template-columns: 1fr; border-top: 0; }
+  .bf-tabs button {
+    border-right: 0; border-top: 1px solid var(--line);
+    padding: 12px 0; flex-direction: row; align-items: baseline; gap: 12px;
+  }
+  .bf-tabs button:not(:first-child) { padding-left: 0; }
+  .bf-tabs button small { padding-left: 0; }
 }
 
 /* ── Sections ─────────────────────────────────────────────────────────────── */

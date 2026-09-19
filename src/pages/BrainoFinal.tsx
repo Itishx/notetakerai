@@ -337,6 +337,7 @@ export default function BrainoFinal() {
           looks like after, and what is true today. */}
       <div className="bf-switch" id="what">
         <div className="bf-wrap bf-switch-in">
+          <p className="bf-switch-note">One Braino · Three models</p>
           <div className="bf-tabs" role="tablist" aria-label="Which model">
             {MODELS.map((m, i) => (
               <button
@@ -354,7 +355,6 @@ export default function BrainoFinal() {
               </button>
             ))}
           </div>
-          <p className="bf-switch-note">One Braino · Three models</p>
         </div>
       </div>
 

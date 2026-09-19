@@ -20710,8 +20710,17 @@ let notchZoneExpanded = false;
 let notchZoneExpandedWidth = 680;
 let notchZoneExpandedHeight = 260;
 
+/* When the renderer last said the zone was expanded. An expanded zone makes a
+   large rectangle of the screen swallow clicks, so it is only believed while
+   it keeps being re-stated: a surface that closed without saying so used to
+   leave that rectangle behind, and clicks on whatever was underneath went to
+   Braino instead. */
+let notchZoneExpandedAt = 0;
+const NOTCH_ZONE_EXPIRY_MS = 2000;
+
 ipcMain.on("braino-mac:notch-zone-size", (_event, payload) => {
   notchZoneExpanded = Boolean(payload?.expanded);
+  notchZoneExpandedAt = notchZoneExpanded ? Date.now() : 0;
   const requestedWidth = Number(payload?.width);
   const requestedHeight = Number(payload?.height);
   notchZoneExpandedWidth = Number.isFinite(requestedWidth)
@@ -20736,9 +20745,22 @@ setInterval(() => {
     // earns a generous halo.
     const notchW = cachedNotchMetrics?.width || 190;
     const notchH = cachedNotchMetrics?.height || 33;
-    const halfWidth = notchZoneExpanded ? notchZoneExpandedWidth / 2 + 8 : notchW / 2 + 8;
-    const height = notchZoneExpanded ? notchZoneExpandedHeight : notchH + 26;
-    const inside = Math.abs(point.x - centerX) <= halfWidth
+    /* Only while it is still being re-stated. Two seconds of silence and the
+       zone is the physical notch again, which is the only thing that can
+       honestly claim a click. */
+    const expanded = notchZoneExpanded && Date.now() - notchZoneExpandedAt <= NOTCH_ZONE_EXPIRY_MS;
+    if (notchZoneExpanded && !expanded) {
+      notchZoneExpanded = false;
+      logMac("notch.zone.expired", { width: notchZoneExpandedWidth, height: notchZoneExpandedHeight });
+    }
+    const halfWidth = expanded ? notchZoneExpandedWidth / 2 + 8 : notchW / 2 + 8;
+    const height = expanded ? notchZoneExpandedHeight : notchH + 26;
+    /* The cursor has to be on the display the notch is on. On a second screen
+       the window's own centre is not the notch's, and every click landed in a
+       zone that was not there. */
+    const onNotchDisplay = point.x >= bounds.x && point.x <= bounds.x + bounds.width;
+    const inside = onNotchDisplay
+      && Math.abs(point.x - centerX) <= halfWidth
       && point.y >= bounds.y
       && point.y <= bounds.y + height;
     if (inside !== notchZoneInside) {
