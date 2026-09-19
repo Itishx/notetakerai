@@ -683,20 +683,15 @@ export default function Affective() {
                   makes three separate things out of one. */}
               <nav className="aff-foot-col aff-tree" aria-label="Products">
                 <h4>Products</h4>
-                <ul className="aff-tree-root">
-                  <li>
-                    <Link to="/braino" className="aff-tree-head">Braino</Link>
-                    <ul>
-                      <li><Link to="/braino">Braino</Link></li>
-                      <li><Link to="/foundry">Braino Foundry</Link></li>
-                    </ul>
-                  </li>
+                <ul>
+                  <li><Link to="/braino">Braino</Link></li>
+                  <li><Link to="/foundry">Braino Foundry</Link></li>
                 </ul>
               </nav>
               {/* Its own column. A school buying the same Braino with its own
                   timetable, attendance and deadlines inside him is a deal
                   rather than a download, so it goes to a person, not a form. */}
-              <nav className="aff-foot-col aff-tree" aria-label="For institutions">
+              <nav className="aff-foot-col aff-tree aff-tree-on" aria-label="For institutions">
                 <h4>For institutions</h4>
                 <ul>
                   <li><Link to="/contact">Braino for Mesa School of Business</Link></li>

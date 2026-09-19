@@ -1,0 +1,365 @@
+/* ============================================================================
+   /braino-final — the one page about Braino.
+
+   It borrows the company page's grammar on purpose: warm paper, one hairline
+   doing all the structural work, boxes rather than bands, the serif making
+   claims and the system face carrying his name. A different look would say he
+   came from somewhere else.
+
+   Two rules run the layout. Every box is a box: bordered, on a ground a shade
+   brighter than the paper, inside the measure. And the accent is whichever of
+   the three is open, so the page takes the colour of the story being told
+   rather than carrying three at once.
+   ============================================================================ */
+
+.bf {
+  --bg: #f4f2ec;
+  --surface: #faf9f5;
+  --box: #fdfcf8;
+  --ink: #16150f;
+  --ink-soft: #625f54;
+  --ink-faint: #918d80;
+  --line: #dcd8cb;
+  --line-strong: #c6c1b1;
+  --maxw: 1240px;
+  --gutter: clamp(20px, 5vw, 100px);
+  --display: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+
+  background: var(--bg);
+  color: var(--ink);
+  font-family: "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+}
+.bf-wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 var(--gutter); }
+
+/* ── Bar ──────────────────────────────────────────────────────────────────
+   He is in it, because this is his page and the company's mark is not. */
+.bf-nav {
+  position: sticky; top: 0; z-index: 60;
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
+}
+.bf-nav-in {
+  max-width: var(--maxw); margin: 0 auto;
+  padding: 0 var(--gutter);
+  height: 62px; display: flex; align-items: center; gap: 30px;
+}
+.bf-logo {
+  display: inline-flex; align-items: center; gap: 10px;
+  text-decoration: none; color: var(--ink);
+  font-size: 19px; font-weight: 600; letter-spacing: -0.03em;
+}
+.bf-logo img { width: auto; height: 30px; margin-bottom: -4px; }
+.bf-nav-links { margin-left: auto; display: flex; gap: 26px; }
+.bf-nav-links a {
+  font-size: 12.5px; font-weight: 500; letter-spacing: -0.006em;
+  color: var(--ink-soft); text-decoration: none;
+  transition: color .2s ease;
+}
+.bf-nav-links a:hover { color: var(--ink); }
+@media (max-width: 720px) { .bf-nav-links a:not(:last-child) { display: none; } }
+
+/* ── The claim ────────────────────────────────────────────────────────────
+   Their sentence, then ours, then one line of what this is. Nothing else on
+   the first screen. */
+.bf-hero { padding: clamp(54px, 7vw, 104px) 0 clamp(44px, 5.4vw, 78px); }
+.bf-eyebrow {
+  margin: 0 0 clamp(18px, 2vw, 26px);
+  font-size: 11px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--ink-faint);
+}
+.bf-h1 {
+  margin: 0;
+  font-family: var(--display);
+  font-size: clamp(42px, 6.6vw, 92px);
+  line-height: 1.02; letter-spacing: -0.03em; font-weight: 400;
+  max-width: 15ch; text-wrap: balance;
+}
+/* The payoff, underlined in the page's own ink. The sentence is the emphasis;
+   a second colour here would spend what the tabs need later. */
+.bf-h1 b {
+  display: inline-block; margin-top: .2em;
+  font-weight: inherit; color: inherit;
+  box-shadow: inset 0 -0.055em 0 0 var(--ink);
+  padding-bottom: 0.03em;
+}
+.bf-hero-row {
+  margin-top: clamp(30px, 3.6vw, 50px);
+  display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, .9fr);
+  gap: clamp(20px, 4vw, 64px); align-items: end;
+}
+.bf-hero-one {
+  margin: 0; max-width: 46ch;
+  font-size: clamp(16px, 1.5vw, 19px); line-height: 1.55;
+  letter-spacing: -0.01em; color: var(--ink-soft);
+}
+.bf-hero-cta { display: flex; flex-wrap: wrap; gap: 10px; }
+.bf-cta {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 12px 20px; border-radius: 999px;
+  background: var(--ink); color: var(--bg);
+  border: 1px solid var(--ink);
+  font-size: 14px; font-weight: 500; letter-spacing: -0.004em;
+  text-decoration: none; transition: opacity .2s ease, background .2s ease;
+}
+.bf-cta:hover { opacity: .86; }
+.bf-cta-ghost { background: transparent; color: var(--ink); border-color: var(--line-strong); }
+.bf-cta-ghost:hover { background: var(--surface); opacity: 1; }
+@media (max-width: 820px) { .bf-hero-row { grid-template-columns: 1fr; align-items: start; } }
+
+/* ── The switch ───────────────────────────────────────────────────────────
+   Three doors into one product, and it sticks under the bar once reached, so
+   the reader can change which story they are in without scrolling back. */
+.bf-switch {
+  position: sticky; top: 62px; z-index: 50;
+  background: var(--bg);
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+.bf-switch-in {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 10px 24px;
+  padding-top: 0; padding-bottom: 0;
+}
+.bf-tabs { display: flex; flex-wrap: wrap; }
+.bf-tabs button {
+  appearance: none; border: 0; background: transparent;
+  border-right: 1px solid var(--line);
+  padding: clamp(12px, 1.3vw, 17px) clamp(16px, 2vw, 28px);
+  display: flex; align-items: baseline; gap: 9px;
+  font: inherit; color: var(--ink-faint);
+  cursor: pointer; transition: color .2s ease, background .2s ease;
+}
+.bf-tabs button:first-child { padding-left: 0; }
+.bf-tabs button i {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--dot, var(--ink));
+  opacity: .32; transition: opacity .2s ease;
+  align-self: center;
+}
+.bf-tabs button span { font-size: clamp(13px, 1.25vw, 15px); font-weight: 500; letter-spacing: -0.008em; }
+.bf-tabs button small {
+  font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--ink-faint);
+}
+.bf-tabs button:hover { color: var(--ink); }
+.bf-tabs button.on { color: var(--ink); box-shadow: inset 0 -2px 0 0 var(--acc, var(--ink)); }
+.bf-tabs button.on i { opacity: 1; }
+.bf-tabs button:focus-visible { outline: 2px solid var(--ink); outline-offset: -3px; }
+.bf-switch-note {
+  margin: 0 0 0 auto;
+  font-size: 11.5px; letter-spacing: .16em; text-transform: uppercase;
+  color: var(--ink-faint);
+}
+@media (max-width: 860px) {
+  .bf-tabs button small { display: none; }
+  .bf-switch-note { display: none; }
+}
+
+/* ── Sections ─────────────────────────────────────────────────────────────── */
+.bf-sec { padding: clamp(58px, 7vw, 104px) 0 clamp(48px, 5.6vw, 84px); }
+.bf-sec + .bf-sec { padding-top: clamp(20px, 2.4vw, 34px); }
+.bf-sec-head { padding-bottom: clamp(24px, 2.8vw, 38px); }
+.bf-kicker {
+  margin: 0 0 clamp(8px, .9vw, 13px);
+  font-size: 11px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--ink-faint);
+}
+.bf-sec-head h2 {
+  margin: 0;
+  font-family: var(--display);
+  font-size: clamp(30px, 4.2vw, 54px);
+  line-height: 1.06; letter-spacing: -0.024em; font-weight: 400;
+  max-width: 20ch; text-wrap: balance;
+}
+/* The second half of a claim, in the colour of whichever story is open. */
+.bf-sec-head h2 b { font-weight: inherit; color: var(--acc, var(--ink)); }
+
+/* The day they have now: three short paragraphs across, because a wall of it
+   reads as a complaint and three columns read as a description. */
+.bf-pain-cols {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: clamp(18px, 3vw, 54px);
+  padding-top: clamp(18px, 2vw, 26px);
+  border-top: 1px solid var(--line);
+}
+.bf-pain-cols p {
+  margin: 0;
+  font-size: clamp(14.5px, 1.35vw, 16.5px); line-height: 1.6;
+  letter-spacing: -0.006em; color: var(--ink-soft);
+}
+@media (max-width: 820px) { .bf-pain-cols { grid-template-columns: 1fr; } }
+
+/* ── What he does: four boxes, attached, one picture each ──────────────── */
+.bf-grid {
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+  border: 1px solid var(--line-strong);
+  background: var(--box);
+  overflow: hidden;
+  box-shadow: 0 1px 0 rgba(22, 21, 15, .03), 0 18px 40px -28px rgba(22, 21, 15, .28);
+}
+.bf-cell {
+  display: flex; flex-direction: column;
+  border-right: 1px solid var(--line);
+}
+.bf-cell:last-child { border-right: 0; }
+.bf-cell-art {
+  aspect-ratio: 341 / 415;
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
+  overflow: hidden;
+}
+.bf-cell-art img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.bf-cell-say { padding: clamp(18px, 1.9vw, 28px); }
+.bf-cell-say h3 {
+  margin: 0 0 12px;
+  font-family: var(--display);
+  font-size: clamp(19px, 1.8vw, 24px); font-weight: 400;
+  line-height: 1.14; letter-spacing: -0.02em;
+}
+.bf-cell-say p {
+  margin: 0; font-size: clamp(13.5px, 1.2vw, 15px); line-height: 1.58;
+  letter-spacing: -0.004em; color: var(--ink-soft);
+}
+@media (max-width: 1040px) { .bf-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 560px) { .bf-grid { grid-template-columns: 1fr; } }
+
+/* ── The day, after ───────────────────────────────────────────────────────
+   Hour on the left, what happens on the right, on one rail. It is the only
+   proof a person can feel before they have used the thing. */
+.bf-day-list {
+  margin: 0; padding: 0; list-style: none;
+  border-top: 1px solid var(--line);
+}
+.bf-day-list li {
+  display: grid; grid-template-columns: 110px minmax(0, 1fr);
+  gap: clamp(14px, 2vw, 34px);
+  padding: clamp(16px, 1.8vw, 24px) 0;
+  border-bottom: 1px solid var(--line);
+  align-items: baseline;
+}
+.bf-day-at {
+  font-size: 12px; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--acc, var(--ink-faint));
+  font-variant-numeric: tabular-nums;
+}
+.bf-day-list p {
+  margin: 0; max-width: 62ch;
+  font-size: clamp(15px, 1.4vw, 17.5px); line-height: 1.55;
+  letter-spacing: -0.008em; color: var(--ink);
+}
+@media (max-width: 620px) {
+  .bf-day-list li { grid-template-columns: 1fr; gap: 6px; }
+}
+
+/* What is true today, in a box of its own, because the honest paragraph is
+   the one people go looking for and it should be easy to find. */
+.bf-honest {
+  margin-top: clamp(28px, 3.2vw, 44px);
+  padding: clamp(22px, 2.4vw, 34px) clamp(24px, 2.6vw, 38px);
+  border: 1px solid var(--line-strong);
+  background: var(--box);
+}
+.bf-honest-label {
+  margin: 0 0 12px;
+  font-size: 11px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--ink-faint);
+}
+.bf-honest p { margin: 0; max-width: 78ch; font-size: clamp(14.5px, 1.35vw, 16.5px); line-height: 1.6; color: var(--ink-soft); }
+.bf-honest-go {
+  margin-top: clamp(18px, 2vw, 26px) !important;
+  display: flex; flex-wrap: wrap; align-items: baseline;
+  justify-content: space-between; gap: 10px 24px;
+}
+.bf-honest-go a {
+  color: var(--acc, var(--ink)); text-decoration: none; font-weight: 500;
+  font-size: clamp(15px, 1.4vw, 17px);
+  display: inline-flex; align-items: center; gap: 8px;
+}
+.bf-honest-go a i { font-style: normal; transition: transform .2s ease; }
+.bf-honest-go a:hover i { transform: translateX(3px); }
+.bf-honest-go span {
+  font-size: 11.5px; letter-spacing: .16em; text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+/* ── Questions ────────────────────────────────────────────────────────────
+   The heading holds on the left while the answers move past it. */
+.bf-faq-in {
+  display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr);
+  gap: clamp(24px, 4vw, 80px);
+  align-items: start;
+}
+.bf-faq-head h2 {
+  margin: 0;
+  font-family: var(--display);
+  font-size: clamp(30px, 4vw, 52px);
+  line-height: 1.06; letter-spacing: -0.024em; font-weight: 400;
+}
+.bf-faq-head p {
+  margin: 14px 0 0; max-width: 32ch;
+  font-size: 15px; line-height: 1.55; color: var(--ink-soft);
+}
+.bf-faq { border-top: 1px solid var(--line); }
+.bf-faq details { border-bottom: 1px solid var(--line); }
+.bf-faq summary {
+  list-style: none; cursor: pointer;
+  display: flex; align-items: center; justify-content: space-between; gap: 20px;
+  padding: clamp(16px, 1.7vw, 22px) 0;
+  font-size: clamp(15px, 1.4vw, 17.5px); font-weight: 500; letter-spacing: -0.01em;
+}
+.bf-faq summary::-webkit-details-marker { display: none; }
+.bf-faq summary i {
+  flex: none; position: relative; width: 12px; height: 12px;
+}
+.bf-faq summary i::before, .bf-faq summary i::after {
+  content: ""; position: absolute; background: var(--ink-faint);
+  transition: transform .25s ease, opacity .25s ease;
+}
+.bf-faq summary i::before { left: 0; top: 5.5px; width: 12px; height: 1px; }
+.bf-faq summary i::after { left: 5.5px; top: 0; width: 1px; height: 12px; }
+.bf-faq details[open] summary i::after { transform: scaleY(0); opacity: 0; }
+.bf-faq details p {
+  margin: 0; padding: 0 0 clamp(18px, 2vw, 26px);
+  max-width: 68ch;
+  font-size: clamp(14.5px, 1.35vw, 16.5px); line-height: 1.62;
+  letter-spacing: -0.006em; color: var(--ink-soft);
+}
+@media (max-width: 860px) { .bf-faq-in { grid-template-columns: 1fr; } }
+
+/* ── Footer ───────────────────────────────────────────────────────────────── */
+.bf-foot {
+  border-top: 1px solid var(--line);
+  padding: clamp(40px, 5vw, 70px) 0 clamp(44px, 5vw, 70px);
+  color: var(--ink-soft); font-size: 15px; line-height: 1.6;
+}
+.bf-foot-in {
+  display: grid; grid-template-columns: minmax(0, 1.8fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: 36px clamp(24px, 4vw, 64px);
+}
+.bf-foot-mark {
+  margin: 0 0 12px;
+  font-size: 24px; font-weight: 600; letter-spacing: -0.03em; color: var(--ink);
+}
+.bf-foot-in > div p:last-child { margin: 0; max-width: 44ch; }
+.bf-foot-col { display: flex; flex-direction: column; gap: 10px; }
+.bf-foot-col h4 {
+  margin: 0 0 4px; font-size: 11px; font-weight: 600;
+  letter-spacing: .14em; text-transform: uppercase; color: var(--ink-faint);
+}
+.bf-foot a { color: var(--ink-soft); text-decoration: none; transition: color .2s ease; }
+.bf-foot a:hover { color: var(--ink); }
+.bf-foot-rule {
+  margin: clamp(30px, 3.4vw, 46px) 0 0; padding-top: 22px;
+  border-top: 1px solid var(--line);
+  font-size: 13.5px; color: var(--ink-faint);
+}
+@media (max-width: 720px) { .bf-foot-in { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 460px) { .bf-foot-in { grid-template-columns: 1fr; } }
+
+/* ── Motion ───────────────────────────────────────────────────────────────── */
+.bf-reveal { opacity: 0; transform: translateY(14px); transition: opacity .7s ease, transform .7s cubic-bezier(.22,1,.36,1); }
+.bf-reveal.is-in { opacity: 1; transform: none; }
+@media (prefers-reduced-motion: reduce) {
+  .bf-reveal { opacity: 1; transform: none; transition: none; }
+}
