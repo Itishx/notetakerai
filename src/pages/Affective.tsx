@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
+import MiniBraino from "@/components/MiniBraino";
 import "./affective.css";
 
 /* ============================================================================
@@ -492,6 +493,14 @@ export default function Affective() {
                   <span>{p.kind}</span>
                   <span>{p.est}</span>
                 </p>
+              </div>
+              {/* And him. A page that says we build somebody and then shows a
+                  tinted rectangle is arguing against itself: he has a face,
+                  it is the same one the products use, and this is the one
+                  place on the company page where he should be in the room.
+                  He paces his own lane along the plate's floor. */}
+              <div className="aff-plate-lane" aria-hidden="true">
+                <MiniBraino size={112} />
               </div>
             </div>
 

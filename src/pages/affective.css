@@ -1056,7 +1056,7 @@
 .aff-plate-mark {
   width: 100%;
   display: flex; flex-direction: column; gap: 16px;
-  padding: clamp(40px, 5vw, 78px) var(--a-gutter) clamp(30px, 3.6vw, 52px);
+  padding: clamp(40px, 5vw, 78px) var(--a-gutter) clamp(120px, 12vw, 150px);
   max-width: var(--a-maxw); margin: 0 auto;
   color: #1a1710;
 }
@@ -1080,6 +1080,18 @@
   content: ""; position: absolute; left: -12px; top: .46em;
   width: 3px; height: 3px; border-radius: 50%; background: currentColor;
 }
+/* His lane: the floor of the plate, the full width of the measure, so he can
+   walk the whole way across his own section. */
+.aff-plate-lane {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  height: 120px;
+  max-width: var(--a-maxw); margin: 0 auto;
+  padding: 0 var(--a-gutter);
+  display: flex; align-items: flex-end;
+  pointer-events: none;
+}
+@media (max-width: 720px) { .aff-plate-lane { height: 84px; } }
+
 /* The intro, under his name, landing a word at a time. */
 .aff-plate-intro {
   margin: 0 0 clamp(22px, 2.6vw, 34px);
