@@ -320,7 +320,6 @@ export default function Affective() {
           <div className="aff-nav-links">
             <a href="#technology">Technology</a>
             <a href="#products">Products</a>
-            <a href="#why">Why</a>
             <Link to="/waitlist">Early access</Link>
           </div>
         </div>
@@ -419,36 +418,6 @@ export default function Affective() {
             loading="lazy"
             decoding="async"
           />
-        </div>
-      </section>
-
-      {/* ── Why ────────────────────────────────────────────────────────────
-          A magazine spread: the claim at full size on the left, the reason it
-          is true set as a standfirst on the right.
-
-          It sits here, before the technology, because it is the setup for it:
-          "the hands" is one of the four things AffectiveOS gives the Mac, and
-          a setup after its payoff is a joke told backwards. It used to sit
-          after the products, where the argument for why nobody else has done
-          this arrived once the reader had already decided. */}
-      <section className="aff-statement" id="why">
-        <div className="aff-wrap">
-          <div className="aff-statement-in">
-            <blockquote className="aff-reveal">
-              The hard part was never the intelligence.
-              {" "}<span>It was the hands.</span>
-            </blockquote>
-            <div className="aff-statement-say aff-reveal">
-              <p className="aff-statement-kicker">Why</p>
-              <p>
-                Every model can tell you how to book the flight. Not one of them can reach
-                over and do it on the machine in front of you. Seeing the screen you are
-                actually on, pressing the button that is actually there, knowing when to
-                stop and ask. Each piece exists somewhere. Nobody had held them together
-                on a normal laptop, on a normal Tuesday. That is the only thing we build.
-              </p>
-            </div>
-          </div>
         </div>
       </section>
 
