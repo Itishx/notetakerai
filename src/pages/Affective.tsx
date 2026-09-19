@@ -96,7 +96,7 @@ const PRODUCTS = [
       "The companion. He lives in your browser and on your Mac, already knows what you are looking at, and does the half of the day you would rather not.",
       "For founders, there is a door called the Foundry: same Braino, running your distribution.",
     ],
-    facts: [["Runs on", "Affective OS"], ["State", "Private beta"]],
+    facts: [["Runs on", "AffectiveOS"], ["State", "Private beta"]],
     go: "Meet Braino",
     accent: "var(--a-braino)",
   },
@@ -107,11 +107,11 @@ const PRODUCTS = [
 const FAQ = [
   {
     q: "What is Affective, in one line?",
-    a: "A technology company. We build Affective OS, which lets you talk to your Mac and watch things happen, and the products that run on it.",
+    a: "A technology company. We build AffectiveOS, which lets you talk to your Mac and watch things happen, and the products that run on it.",
   },
   {
-    q: "Is Affective OS something I install?",
-    a: "No. It comes inside the products. You meet Braino or HERA. Affective OS is what makes them work.",
+    q: "Is AffectiveOS something I install?",
+    a: "No. It comes inside the products. You meet Braino or HERA. AffectiveOS is what makes them work.",
   },
   {
     q: "Did you build the AI itself?",
@@ -405,9 +405,9 @@ export default function Affective() {
         <div className="aff-wrap">
           <div className="aff-sec-head aff-reveal">
             <p className="aff-sec-kicker">The technology</p>
-            <h2>Affective OS. We make the Mac come alive.</h2>
+            <h2>AffectiveOS. We make the Mac come alive.</h2>
             <p>
-              Affective OS sits under every product we make. It gives the Mac you already
+              AffectiveOS sits under every product we make. It gives the Mac you already
               own four things it never had.
             </p>
           </div>
@@ -627,6 +627,10 @@ export default function Affective() {
               <nav className="aff-foot-col">
                 <h4>Products</h4>
                 <Link to="/braino">Braino</Link>
+                {/* The same Braino, with a school's own timetable, attendance
+                    and deadlines inside him. It has no page of its own yet, so
+                    it points at his. */}
+                <Link to="/braino">Braino For Mesa School Of Business</Link>
               </nav>
               <nav className="aff-foot-col">
                 <h4>Company</h4>
