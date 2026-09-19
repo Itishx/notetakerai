@@ -11,6 +11,337 @@ memory of what a session felt like.
 
 ---
 
+## 2026-09-18 · Round 015 — he can read his own instructions
+
+**What triggered it:** ten `skills/<name>/SKILL.md` documents exist. They say
+what a capability is for, what it promised the person, and what it must never do.
+People read them. Claude Code reads them when it is working on that feature.
+Braino has never been able to read one. So writing down how something should
+work and making it work that way have been two separate jobs, and the second one
+gets forgotten.
+
+**Nothing is written twice.** `npm run skills:build` reads the same documents and
+emits `skill-registry.ts`. The trigger line comes from the frontmatter that is
+already there for exactly that purpose. The rules come from the sections the
+author already headed Rules, Boundaries, Safety Rules, User Contract, Destructive
+Flags, Failure behavior. Nothing is invented and no document changed.
+
+Deliberately NOT harvested: "Workflow" and "Output Format". A workflow is a
+route, and routes are learned from real runs now rather than asserted in a
+document; output format is about a surface he is not on.
+
+**Checked in, not read at runtime**, because an edge function bundles what it
+imports and cannot see this repo's folders. `npm run skills:build -- --check`
+and the test both fail if the registry and the documents have drifted, which is
+the only thing keeping "we wrote it down" and "he does it" from becoming two
+facts again.
+
+**The bug that made it match nothing at all.** `goalWords` strips quoted spans,
+and that is right for a command: "play 'Dark Side of the Moon'" quotes the one
+specific thing, and the specific thing is never what makes two jobs the same. A
+description quotes the opposite — its examples. So watch-play's trigger line lost
+*"play Shawshank on Netflix"*, *"put on Stranger Things season 2 episode 5"* and
+*"where can I watch Dune"*: the exact sentences the skill exists to recognise,
+deleted before matching. Every command scored zero against every skill and the
+feature was silently inert. Quotes come off the description before the words are
+taken, and a film command now finds watch-play at 1.0.
+
+**A rule that wrapped was being cut in half.** Reading only a bullet's first line
+produced *"Licensing is surfaced, not resolved. The manifest records the licence
+and a"*. A half-rule is worse than no rule, because it still reads like an
+instruction and he would follow it. Continuation lines are joined.
+
+**It narrows, which is the condition for adding it at all.** The tool catalog is
+already around 2,400 tokens on every command. At most two skills, only on a real
+overlap, and two conditions rather than one: a ratio alone lets a two word
+command sharing one word score 0.5, which means nothing, so at least two words
+must genuinely be shared. Most commands are not one of the ten written-down
+skills and cost exactly what they cost before. Matching is ten string
+comparisons in process: no network, no model call, so it cannot slow a turn down
+or fail one. The reflex tier never sees any of it, and a test says so.
+
+**Where it sits, and why it outranks the rest.** Above the lessons, the routes and
+the history, because it is the only block in that prompt that was decided on
+purpose: a route is what happened to work, a lesson is what happened to fail,
+this is somebody having thought about how the thing ought to behave. So it wins a
+conflict. It still grants nothing, exactly like the other two.
+
+**Verified:** 364 pass, 0 fail, 11 new. Type-checked under `--strict`. Matching
+additionally exercised transpiled, 9 cases: a film command finding watch-play, a
+calendar command finding google-calendar, an unrelated question and an empty
+command matching nothing, and the rendered block coming in at 1,417 characters.
+**Not verified on hardware.**
+
+---
+
+## 2026-09-18 · Round 014 — he remembers his history with you
+
+**What triggered it:** he knows facts about a person and nothing about what the
+two of them have done together. "Do that again", "the same as last time", "send
+it where I sent the last one" were dead ends, so somebody had to re-explain a
+thing they already said once, to the one who was there for it.
+
+**Almost all of this already existed and was never connected.**
+`braino_interactions` was built for exactly this record, has `user_id`, has the
+`(user_id, created_at DESC)` index, and has a select-own RLS policy. It is
+written from the extension. Nothing on the HIL path ever wrote to it and nothing
+anywhere ever read it back to him. So this round is mostly plumbing, and all of
+its risk is in the plumbing.
+
+**Read as them, written as us**, and the asymmetry is the point on a public
+endpoint. Recall goes through the caller's own token so RLS decides whose history
+comes back, which means a caller with no token gets nothing and the public lab is
+unaffected. Recording uses the service role because the table has no insert
+policy at all: a public endpoint must not be able to write rows that are later
+read back into somebody's prompt.
+
+**`loadWhatBrainoKnows` was already resolving the user and building their client,
+and throwing both away.** History needs the same answer, so it now returns them.
+One round trip, not two, for a fact that was already in hand.
+
+**Whole runs only.** A step in the middle of a job is bookkeeping, not a thing
+that happened to somebody, and forty rows of it per run would bury the four that
+are actually a memory. Both endings are kept: "you could not do this last time"
+is as useful to them as "you did", and much more useful than being asked to
+explain it again from the start.
+
+**Something has to connect a memory to now**, or four past commands sitting above
+the state are noise wearing the costume of memory. Ranked by the same kind of
+job, then the same site, then recency, and a row that is neither the same job nor
+the same site does not appear at all. Four lines, never more.
+
+**The threshold is looser than the one routes use, deliberately.** A route gets
+executed, so a wrong one costs turns. History is only shown, so a loosely related
+past job is at worst ignored, and "roughly this kind of thing, before" is exactly
+the recall a person actually has. 0.34 against 0.5.
+
+**What is private is not written down at all**, rather than written down and
+starred out. `mentionsPrivateTopic` is now exported from `engine-log.ts` and used
+here, rather than copied: two lists of those words would be two lists to keep in
+step, and that one already has a test holding it against the Mac's copy.
+
+**A record, never an instruction.** The injected block says so in its own second
+line. Four past commands above the state read as a plan unless they are
+explicitly framed as a record, and that failure would look exactly like the
+feature working.
+
+**Verified:** 353 pass, 0 fail, 12 new. Type-checked under `--strict`. Three
+recalls now ride in one `Promise.all`, so lessons, routes and history together
+cost what the single lessons read cost before. `HIL_LOOP_VERSION` unchanged at
+2.12.0: this round adds a block to the prompt, not a rule to the thinking.
+**Not verified on hardware.**
+
+---
+
+## 2026-09-18 · Round 013 — history, so the memory is not empty on day one
+
+**What triggered it:** Round 012 shipped a memory and nothing to put in it. A
+route needs two independent runs before anyone is handed it, so on a cold table
+every run still works everything out from zero, and the feature reads as having
+done nothing for as long as that lasts. Shipping a memory and waiting months for
+it to fill is how a good idea gets judged as a bad one.
+
+**He has already done the runs.** `engine_runs` holds every turn of every run
+including the ones that finished, and each turn carries the step it chose. So the
+routes exist; nothing had ever read them back.
+
+`npm run hil:harvest` rebuilds them. Group turns by `run_id`, keep the runs whose
+last verdict is `all_done`, take the host from the first address he actually
+navigated to, and rebuild the step list from the turns themselves.
+
+**The off-by-one that a test caught and the eye would not have.** A verdict rides
+on the turn AFTER the step it judges, because he judges what just ran before
+deciding what runs next. Reading it as judging its own turn drops exactly the
+wrong step out of every harvested route: the failures stay and the successes go.
+The result still looks like a plausible route, which is the problem. The fixture
+in `hil-harvest.test.mjs` states the ordering explicitly so it cannot be quietly
+inverted again.
+
+**Three rules held deliberately identical to the live path**, because nothing
+downstream can tell a harvested route from a lived one:
+
+- only whole commands, never `task_done`, so no route mixes the steps of three
+  jobs together;
+- two independent runs to go live, so history cannot promote on weaker evidence
+  than the living system demands;
+- sameness is `goalOverlap`, so "book tickets for Insidious" and "book tickets
+  for Sinners" merge into one job with two hits, which is the case that makes
+  harvesting worth doing at all.
+
+**One notion of sameness, one copy of it.** `scripts/lib/hil-pure.mjs` reads the
+matching rules out of `procedures.ts` and strips its three type signatures rather
+than restating them in node. A second copy would not fail loudly when it drifted:
+routes would quietly stop being credited, or start being offered for jobs they
+were never about. If that section is renamed or gains a construct the strip
+cannot handle, the import throws on the next test run, which is the correct way
+to find out.
+
+**Dry run by default.** One pass, a service key, and a table every user's Braino
+reads from. `--apply` is required, and writes use `ignore-duplicates` so a route
+a live run already filed is never overwritten by an older reconstruction of it.
+History fills the gaps; it does not correct the present.
+
+**Verified:** 341 pass, 0 fail, 10 new. **Not yet run against the real table** —
+that needs the migration applied and a service key, and the number it prints
+(how many finished runs are actually in there) is the first thing worth putting
+in this file afterwards.
+
+---
+
+## 2026-09-18 · Round 012 — he remembers what worked
+
+**What triggered it:** the founder's read of a system architecture PDF, and the
+one thing in it this repo did not already have. `braino_lessons` stores every
+wall he has ever walked into. Nothing stored a single door he has ever found.
+A run that booked the tickets correctly taught him nothing, so the next one
+worked it out again from zero and paid the same ten seconds a turn to arrive at
+the same answer.
+
+The asymmetry is the whole finding. A wall is written down when he gives up, and
+giving up is rare. A door is found on every run that works, which is most of
+them, and none of it was kept. **He has been getting steadily better at failing
+and no better at succeeding.**
+
+**`braino_procedures`, built to the shape of `braino_lessons` on purpose**, since
+the hard parts were solved there and solving them twice differently is how two
+tables drift: scoped so recall is one indexed read, promoted on the second
+independent run because one run is an anecdote, advisory always, and service-role
+only because hil-loop is public.
+
+**The route is derived, never asked for.** `routeFromSteps` reads the run's own
+step record out of the state snapshot the client already sends every turn. It
+costs zero output tokens, cannot be hallucinated, and records what he did rather
+than what he would afterwards claim he did. Failed steps are dropped: a route is
+the way that worked, and the three things he tried first are exactly the noise
+the next run does not need. Written on `all_done` only, never `task_done` — one
+job of three finishing is not evidence, and the steps at that point belong to all
+three jobs mixed together.
+
+**The bug that would have shipped silently, caught by its own test.** Sameness
+was the fingerprint, which is `lessonFingerprint`'s normalisation: digits and
+quoted strings go, proper nouns stay. So "book tickets for Insidious" and "book
+tickets for Sinners" keyed differently, every film wrote its own row, **no row
+would ever have reached the two hits that promote it**, and a table filling up
+steadily would never once have handed anybody anything. The feature would have
+looked built and done nothing, which is the worst failure mode available to it.
+
+Sameness is now `goalOverlap`, the same function recall uses, at half the shorter
+goal's content words. One notion of "the same job" in one function used in both
+places: a route is credited on exactly the runs it would have been offered on.
+The fingerprint stays as what it is actually good at, which is stopping two
+simultaneous identical commands from inserting twice.
+
+**A door can close, so a route can retire itself.** A site is redesigned and a
+remembered route becomes a confident wrong answer, which is worse than no answer.
+`recordProcedureMiss` counts a blocked run against the routes it was actually
+handed — not every route on the host, or one bad afternoon would retire a whole
+site. A row wrong at least as often as it was right drops back to `proposed` and
+can earn its way back. Charged only when a route was genuinely injected, so a run
+that never saw one cannot retire it.
+
+**Repetition makes the library faster, not just larger.** A second run finishing
+the same job in fewer steps replaces the route, so the stored answer improves
+instead of ossifying around whatever the first clumsy run happened to do.
+
+**Rule 13a, `HIL_LOOP_VERSION` 2.12.0.** The rule exists so a route reads as a
+head start and not as a script or, worse, as permission. Three sentences do the
+work: the screen still decides and a route that does not match the observation
+means the site changed; every step is still taken one at a time and still
+checked; and it grants nothing, so anything irreversible still stops for the
+human exactly as it would have with no route at all. The injected block says the
+same three things itself, so it does not depend on the rule having been read.
+
+**What is deliberately NOT here.** No client change: the state already carried
+the steps. No new model call, no second round trip — the two recalls are one
+`Promise.all`, so the pair costs what the single lessons read cost before.
+Nothing on the reflex path: `hil-router` still answers "play a song" in under a
+second and has never heard of this table.
+
+**Verified:** 331 pass, 0 fail, 18 new. Type-checked under `--strict`. The write
+and retire paths were additionally exercised against a stubbed network, 15 cases:
+a second film bumping the first film's row and promoting it, a shorter route
+winning, a longer one being refused, a rejected route staying dead rather than
+being re-inserted under a new id, a one-step job writing nothing at all, an
+unrelated failure blaming nothing, and no credentials meaning silence rather than
+a throw. **Not verified on hardware**, and the migration is not yet applied.
+
+---
+
+## 2026-09-18 · Round 011 — the net nobody was pulling
+
+**What triggered it:** the start of HIL Version 2. Everything in that arc changes
+how he thinks, and there was no way to tell a round that helped from a round that
+only moved things around. This file's own rule is that an entry only counts if it
+names the evidence, and ten rounds have honoured it by hand. Doing that by hand
+is exactly why the weeks between rounds have no numbers at all.
+
+**The net existed and could not be pulled.** `npm test` runs vitest, which is
+scoped to `src/**` and `extension/**`. The 38 files in `tests/` are `node:test`
+and were never in any command: they had to be run one file at a time, by someone
+who already knew which file to run. A net nobody can pull is decoration.
+
+`npm run test:hil` now runs all of them in one go, and `npm run test:all` runs
+both halves.
+
+**The failure that was seven rounds old was real, and it was not a test problem.**
+Rounds 005 through 010 each closed with a line like *"the one failure is the same
+`lib/hilShared.js` drift in the built extension copy, unrelated"*. It was not
+unrelated and it was not drift in a test. `extension/lib/hilShared.js` was never
+copied into `public/sidebrain-extension/` or `dist/sidebrain-extension/`, so the
+extension people actually download had no such file, and its background worker
+never imported it:
+
+```
+source  importScripts(..., "lib/searchGuard.js", "lib/hilShared.js", "lib/hilAdapter.js")
+built   importScripts(..., "lib/searchGuard.js",                     "lib/hilAdapter.js")
+```
+
+`promisesAction`, `stepSignature` and `answerApproves` — the follow-through
+detector, the repeat guard and the gate's yes-reader — were shipping absent.
+`npm run sync:extension` was all it ever needed. Six rounds of calling a red
+test unrelated is the cost of a failure nobody can run casually, which is the
+same point as the paragraph above.
+
+**A stale test was pinning a string instead of a behaviour.**
+`mac-log-privacy.test.mjs` matched the literal `[Braino HIL-LOOP]` next to
+`scrubForLog(thinking)`. Round 010 correctly made that tag a variable so the
+brain doing the thinking is named. The privacy behaviour never changed; the test
+failed anyway. It now pins the derivation and the scrub, which is what actually
+matters, and it goes red only if a thought reaches a terminal unscrubbed.
+
+**The reflex tier had no tests at all.** `hil-router` fronts every spoken
+command, is public, has no screen and no second opinion, and had thirteen
+siblings' worth of coverage and none of its own. Seven now, and the one that
+matters says the floor is code: a verdict naming anything `[CANNOT UNDO]` is
+rewritten to an escalate inside `readVerdict`, whatever rule 4 of the prompt did
+or did not persuade the model of. Also pinned: the catalog allowlist as the last
+word on tool names, all three unreadable-reply paths landing on escalate, the
+model being chosen server-side, the cached prefix staying ahead of the dynamic
+surface, and a rejected verdict being logged as `ok: true` so the safety net
+firing reads as the net working rather than as an outage.
+
+**And the scoreboard**, `npm run hil:score`, reads `engine_runs` and prints the
+last seven days against the seven before: runs, finished, gave up, needed Astra,
+steps to finish, thinking per run, unreadable turns, and the share of input
+served from cache. Each row says which direction is better. It prints the prompt
+versions in the window underneath, because two versions in one window means the
+two columns are not the same brain and the comparison is not a comparison.
+
+Four decisions in it worth keeping: a run is judged on its LAST verdict, not on
+every step; `ask` is neither a win nor a loss, because a run waiting on a person
+has not failed; steps-to-finish ignores runs that never finished, or a round that
+stops circling earlier reads as a round that got slower; and a rescue counts once
+per run, not once per turn, or Astra driving three turns reports three rescues.
+Its arithmetic is tested against fixtures rather than the real table, because
+`engine_runs` holds what people actually said to Braino.
+
+**Verified:** 313 pass, 0 fail, up from 297 pass / 2 fail. 16 new. The whole
+suite is green for the first time since Round 004. `npm run test:all` is the
+command from here. No prompt version moved: nothing in this round changes how he
+thinks, which is the point of doing it first.
+
+---
+
 ## 2026-08-27 · Round 010 — the eyes were already there
 
 **What triggered it:** *"the book tickets button was right there on the screen

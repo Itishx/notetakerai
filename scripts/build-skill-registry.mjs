@@ -1,0 +1,166 @@
+#!/usr/bin/env node
+/* Let Braino read his own instructions.
+ *
+ * skills/<name>/SKILL.md is where a capability gets written down: what it is
+ * for, how it behaves, what it must never do. Ten of them exist. People read
+ * them, and Claude Code reads them when it is working on that feature. Braino
+ * has never been able to read one. So writing down how something should work and
+ * making it work that way are two separate jobs, and the second one gets
+ * forgotten.
+ *
+ * This turns the same documents into something he can be handed, without anybody
+ * writing anything twice. It does not invent content: the trigger line comes
+ * from the frontmatter that is already there for exactly that purpose, and the
+ * rules come from the sections the author already headed "Rules", "Boundaries",
+ * "Safety Rules", "User Contract" and so on.
+ *
+ *   npm run skills:build          regenerate the registry
+ *   npm run skills:build -- --check   fail if it is out of date (what the test runs)
+ *
+ * The output is checked in rather than read at runtime, because an edge function
+ * bundles what it imports and cannot see this repo's folders.
+ */
+
+import { readFileSync, readdirSync, writeFileSync, existsSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const SKILLS_DIR = path.join(ROOT, "skills");
+const OUT = path.join(ROOT, "supabase/functions/_shared/human-intelligence/skill-registry.ts");
+
+/* The sections worth handing him.
+ *
+ * Deliberately the ones an author already writes when they are being careful:
+ * what must not happen, what the user was promised, what to do when it breaks.
+ * Not "Workflow", which is a route, and routes are learned from real runs now
+ * rather than asserted in a document. Not "Output Format", which is about a
+ * surface he is not on. */
+const WANTED_HEADING = /^##\s+.*(rule|contract|boundar|safety|limitation|failure|destructive|the one thing)/i;
+
+// Hard ceilings. This rides in a prompt, and a skill document is long enough to
+// become a second instruction manual if it is let in whole.
+const MAX_RULES_CHARS = 700;
+const MAX_DESCRIPTION_CHARS = 400;
+
+function parseFrontmatter(source) {
+  if (!source.startsWith("---")) return {};
+  const end = source.indexOf("\n---", 3);
+  if (end === -1) return {};
+  const body = source.slice(4, end);
+  const out = {};
+  for (const line of body.split("\n")) {
+    const at = line.indexOf(":");
+    if (at === -1) continue;
+    out[line.slice(0, at).trim()] = line.slice(at + 1).trim();
+  }
+  return out;
+}
+
+/* Bullet lines out of the sections the author headed as rules. Prose paragraphs
+   are dropped: a bullet is already the compressed form, and a skill document's
+   prose is written to be read at leisure rather than mid-turn. */
+function rulesFrom(source) {
+  const lines = source.split("\n");
+  const picked = [];
+  let inside = false;
+  let open = null;
+  /* A markdown bullet wraps across lines, and reading only the first line of
+     each one cut every wrapped rule off mid-sentence: "Licensing is surfaced,
+     not resolved. The manifest records the licence and a". A half-rule is worse
+     than no rule, because it still reads like an instruction. */
+  const close = () => {
+    if (open) picked.push(open.replace(/\s+/g, " ").trim());
+    open = null;
+  };
+  for (const line of lines) {
+    if (line.startsWith("## ")) {
+      close();
+      inside = WANTED_HEADING.test(line);
+      continue;
+    }
+    if (!inside) continue;
+    const bullet = line.match(/^\s*[-*]\s+(.*\S)/);
+    if (bullet) {
+      close();
+      open = bullet[1];
+      continue;
+    }
+    // An indented, non-empty line belongs to the bullet above it. A blank line,
+    // or anything starting at column zero, ends it.
+    if (open && /^\s+\S/.test(line)) open += ` ${line.trim()}`;
+    else close();
+  }
+  close();
+  const out = [];
+  let used = 0;
+  for (const rule of picked) {
+    const clipped = rule.length > 180 ? `${rule.slice(0, 177)}...` : rule;
+    if (used + clipped.length > MAX_RULES_CHARS) break;
+    out.push(clipped);
+    used += clipped.length;
+  }
+  return out;
+}
+
+export function buildRegistry() {
+  if (!existsSync(SKILLS_DIR)) return [];
+  return readdirSync(SKILLS_DIR, { withFileTypes: true })
+    .filter((e) => e.isDirectory())
+    .map((e) => path.join(SKILLS_DIR, e.name, "SKILL.md"))
+    .filter((p) => existsSync(p))
+    .map((p) => {
+      const source = readFileSync(p, "utf8");
+      const front = parseFrontmatter(source);
+      const name = front.name || path.basename(path.dirname(p));
+      const description = String(front.description || "").slice(0, MAX_DESCRIPTION_CHARS);
+      return { name, description, rules: rulesFrom(source) };
+    })
+    .filter((s) => s.description)
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export function renderModule(skills) {
+  return `// GENERATED by scripts/build-skill-registry.mjs. Do not edit by hand.
+//
+// The source of truth is skills/<name>/SKILL.md. Edit those, then run
+// \`npm run skills:build\`. tests/hil-skills.test.mjs fails if this file and
+// those documents have drifted, which is the only thing keeping "we wrote it
+// down" and "he does it" from becoming two different facts.
+//
+// Checked in rather than read at runtime because an edge function bundles what
+// it imports and cannot see this repo's folders.
+
+export type BrainoSkill = {
+  name: string;
+  /** The author's own trigger line, from the SKILL.md frontmatter. */
+  description: string;
+  /** Bullets from the sections that document what must and must not happen. */
+  rules: string[];
+};
+
+export const SKILL_REGISTRY_VERSION = "1.0.0";
+
+export const BRAINO_SKILLS: BrainoSkill[] = ${JSON.stringify(skills, null, 2)
+    .replace(/^/gm, "")
+    .replace(/"([a-z]+)":/g, "$1:")};
+`;
+}
+
+if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).href) {
+  const skills = buildRegistry();
+  const rendered = renderModule(skills);
+  if (process.argv.includes("--check")) {
+    const current = existsSync(OUT) ? readFileSync(OUT, "utf8") : "";
+    if (current !== rendered) {
+      console.error("skill-registry.ts is out of date. Run: npm run skills:build");
+      process.exit(1);
+    }
+    console.log(`skill-registry.ts is current (${skills.length} skills).`);
+    process.exit(0);
+  }
+  writeFileSync(OUT, rendered);
+  const withRules = skills.filter((s) => s.rules.length).length;
+  console.log(`Wrote ${skills.length} skills to skill-registry.ts (${withRules} with rules).`);
+  for (const s of skills) console.log(`  ${s.name.padEnd(20)} ${s.rules.length} rules`);
+}

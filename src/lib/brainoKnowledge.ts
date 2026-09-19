@@ -20,6 +20,18 @@ export type KnowledgeEntry = {
 
 export const KNOWLEDGE_ENTRIES: readonly KnowledgeEntry[] = [
   {
+    slug: "hil-version-2-memory",
+    title: "HIL Version 2: He Remembers What Worked",
+    category: "Technical",
+    date: "2026-09-18",
+    dateLabel: "September 18, 2026",
+    description:
+      "He used to remember every wall he had ever walked into and not one door he had ever found, so a job he got exactly right on Tuesday was worked out again from nothing on Wednesday. Now the route that finished a job is kept and handed to the next run that asks for the same thing, his own history with you means \"the same as last time\" resolves, and the ten written contracts that say how he should behave are finally readable by him. A head start, never a script: the screen still decides and the confirmation gate has not moved.",
+    status: "MVP",
+    platform: "Mac, Chrome, web",
+    number: "040",
+  },
+  {
     slug: "mac-quiet-notch",
     title: "Stealth For The Notch",
     category: "Feature",
