@@ -159,8 +159,24 @@ const FAQ = [
     a: "No. It comes inside the products. You meet Braino or HERA. AffectiveOS is what makes them work.",
   },
   {
+    q: "Is this just another chatbot?",
+    a: "The opposite. A chatbot answers and leaves you to it. Ours goes and does the thing, on the screen you are already looking at, and then checks that it worked.",
+  },
+  {
+    q: "Do I have to move to a new app?",
+    a: "No. It works inside what you already use: your browser, your Mac, your email, your college portal. There is nothing to migrate and nothing to set up.",
+  },
+  {
+    q: "Can it do something I did not ask for?",
+    a: "No. Anything that spends money, sends a message, posts publicly or deletes something stops and waits for you to say yes. That is enforced in the code, not requested in an instruction.",
+  },
+  {
     q: "Did you build the AI itself?",
     a: "No. The models that think are built by labs with more money than us. We build everything between the model and your machine: the seeing, the hearing, the doing, the remembering, and the part that stops it sending the wrong thing.",
+  },
+  {
+    q: "What can I actually use today?",
+    a: "Braino is in private beta on Chrome and macOS. HERA is built and ships next. Everything described on this page is something the software does now, not something planned.",
   },
   {
     q: "Who is it for?",
@@ -170,26 +186,24 @@ const FAQ = [
 
 /* Scroll-linked drift.
  *
- * Anything marked data-drift slides sideways as it crosses the screen: the
- * further through the viewport it is, the further right it sits. Read on a
- * frame, written as one transform, and the amount is small on purpose, because
- * the effect is meant to be felt rather than watched.
+ * Anything marked data-drift slides sideways as it crosses the screen, and the
+ * hero picture marked data-grow opens from the measure to the page over the
+ * first screen of scrolling. Read on a frame, written as one number each, so
+ * the shape of both lives in the stylesheet.
  *
  * Off under 900px, where there is no room to move anything sideways, and off
- * entirely for anyone who has asked for less motion. */
+ * for anyone who has asked for less motion. */
 function useDrift() {
   useEffect(() => {
     const els = [...document.querySelectorAll<HTMLElement>("[data-drift]")];
+    const grows = [...document.querySelectorAll<HTMLElement>("[data-grow]")];
+    if (!els.length && !grows.length) return;
     const still = window.matchMedia("(prefers-reduced-motion: reduce)");
     let frame = 0;
 
-    const grows = [...document.querySelectorAll<HTMLElement>("[data-grow]")];
     const apply = () => {
       frame = 0;
       const narrow = window.innerWidth < 900;
-      /* The hero picture opens from the measure to the page over the first
-         screen of scrolling. Written as a number the stylesheet turns into a
-         width, so the shape of the growth lives in the CSS. */
       for (const el of grows) {
         const p = Math.min(1, Math.max(0, window.scrollY / Math.max(220, window.innerHeight * 0.55)));
         el.style.setProperty("--grow", narrow || still.matches ? "1" : p.toFixed(3));
@@ -216,16 +230,6 @@ function useDrift() {
   }, []);
 }
 
-/* The pan.
- *
- * The four things are wider than any screen, so the section holds still while
- * they travel through it: how far you have scrolled into the tall box is how
- * far the row has moved, which means every one of the four gets the screen to
- * itself on the way past instead of four of them sharing it at stamp size.
- *
- * The travel is measured from the row rather than guessed, so it always ends
- * on the last cell's right edge, whatever the screen. Off under 900px, where
- * the four simply stack. */
 function usePan() {
   useEffect(() => {
     const boxes = [...document.querySelectorAll<HTMLElement>("[data-pan]")];
@@ -441,7 +445,7 @@ export default function Affective() {
       <section className="aff-sec aff-day" id="technology">
         <div className="aff-wrap">
           <div className="aff-sec-head aff-reveal">
-            <p className="aff-sec-kicker">The technology</p>
+            <p className="aff-sec-kicker">The technology in question</p>
             <h2>AffectiveOS. We make the Mac come alive.</h2>
             <p>
               AffectiveOS sits under every product we make. It gives the Mac you already
@@ -568,7 +572,7 @@ export default function Affective() {
         <div className="aff-wrap">
           <div className="aff-faq-in">
             <div className="aff-faq-head aff-reveal">
-              <h2>Questions.</h2>
+              <h2>Questions you may have.</h2>
               <p>Including the ones about what we did not build.</p>
             </div>
             {/* details/summary, so it works with no JavaScript and with a

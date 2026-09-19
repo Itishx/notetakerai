@@ -175,9 +175,9 @@
    in its own column and pushed the standfirst so far down the two stopped
    reading as one row. */
 .aff-hero-row .aff-h1 {
-  font-size: clamp(36px, 4.1vw, 55px);
-  max-width: 21ch;
-  letter-spacing: -0.026em;
+  font-size: clamp(40px, 5.2vw, 76px);
+  max-width: 15ch;
+  letter-spacing: -0.03em;
 }
 .aff-hero-side { padding-bottom: .55em; }
 .aff-hero-cta {
@@ -210,6 +210,9 @@
   display: flex; align-items: baseline; flex-wrap: wrap; gap: 14px clamp(24px, 4vw, 56px);
   padding-top: clamp(24px, 2.6vw, 34px); padding-bottom: clamp(24px, 2.6vw, 34px);
 }
+/* The names take the room between the two labels rather than huddling at the
+   left of it: the strip is mostly white space, and this is what it is for. */
+.aff-strip-names { flex: 1 1 420px; justify-content: space-evenly; }
 .aff-strip-in p { margin: 0; }
 .aff-strip-label, .aff-strip-note {
   font-size: 11.5px; letter-spacing: .16em; text-transform: uppercase;
@@ -223,7 +226,7 @@
 .aff-strip-names {
   margin: 0; padding: 0; list-style: none;
   display: flex; flex-wrap: wrap;
-  gap: 10px clamp(40px, 6vw, 96px);
+  gap: 10px clamp(30px, 5vw, 80px);
 }
 .aff-strip-names li {
   font-family: var(--a-display);
@@ -277,11 +280,16 @@
 /* The payoff. Same device as the statement further down, where the second half
    of the claim is the coloured half, so the page has one way of marking the
    sentence that matters rather than three. */
+/* The payoff, in the page's own ink with a rule under it rather than in the
+   accent colour: the sentence is the emphasis, and a second colour in the
+   first line of the page spends something the page needs later. */
 .aff-h1 b {
-  display: block;
-  margin-top: .26em;
+  display: inline-block;
+  margin-top: .22em;
   font-weight: inherit;
-  color: var(--a-braino);
+  color: inherit;
+  box-shadow: inset 0 -0.055em 0 0 var(--a-ink);
+  padding-bottom: 0.03em;
 }
 /* The word the sentence turns on, marked. Unused in the current headline: one
    long sentence carries one emphasis, and that is the coral payoff. */
