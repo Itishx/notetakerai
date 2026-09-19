@@ -878,8 +878,22 @@
    these are its caption, so they get space instead of edges. */
 .aff-four {
   display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: clamp(24px, 3vw, 54px);
-  padding-bottom: clamp(10px, 1.6vw, 22px);
+  gap: clamp(28px, 3.4vw, 60px) clamp(24px, 3vw, 54px);
+  padding: clamp(24px, 3vw, 44px) 0 clamp(10px, 1.6vw, 22px);
+}
+/* The picture is the cell's own edge, so nothing is drawn around it. */
+.aff-four-art {
+  aspect-ratio: 341 / 415;
+  margin: 0 0 clamp(16px, 1.6vw, 22px);
+  background: var(--a-surface);
+  border: 1px solid var(--a-line);
+  display: flex; align-items: center; justify-content: center;
+}
+.aff-four-art img { display: block; width: 100%; height: 100%; object-fit: cover; }
+/* A picture that has not arrived says so, quietly, rather than breaking. */
+.aff-four-wait {
+  font-size: 11px; letter-spacing: .22em; text-transform: uppercase;
+  color: var(--a-ink-faint);
 }
 .aff-four-item h3 {
   margin: 0 0 12px;
@@ -893,7 +907,7 @@
   font-size: clamp(14px, 1.25vw, 15.5px); line-height: 1.6;
   letter-spacing: -0.006em; color: var(--a-ink-soft);
 }
-@media (max-width: 900px) { .aff-four { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 1040px) { .aff-four { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 560px) { .aff-four { grid-template-columns: 1fr; } }
 
 /* The picture settles rather than appears: it comes in a little large and

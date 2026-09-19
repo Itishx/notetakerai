@@ -72,8 +72,8 @@ function FourArt({ art, label }: { art: string; label: string }) {
           <img
             src={art}
             alt=""
-            width={1536}
-            height={1024}
+            width={341}
+            height={415}
             loading="lazy"
             decoding="async"
             onError={() => setMissing(true)}
