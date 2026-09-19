@@ -1,6 +1,5 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import MiniBraino from "@/components/MiniBraino";
 import "./affective.css";
 
 /* ============================================================================
@@ -479,54 +478,41 @@ export default function Affective() {
 
         {PRODUCTS.map((p) => (
           <article className={"aff-plate aff-plate-" + p.key} key={p.key} style={{ ["--acc" as string]: p.accent }}>
-            {/* Introduced the way his teaser introduces him: the line lands a
-                word at a time and stays, then his name. His name is the system
-                face, never the company's Didone: Braino is the software and
-                Affective is the company, and they do not wear the same face.
-
-                The photograph sits under the words rather than behind them. A
-                line of type over a picture needs a scrim, and a scrim on the
-                one warm frame in the section turns it grey. */}
+            {/* His field, not a photograph. There is no picture of Braino
+                that is not a screenshot, and a screenshot here would turn the
+                page into a product tour two sections early. So the plate is a
+                warm ground carrying his name at board size, the way the teaser
+                opens on the name and nothing else. */}
             <div className="aff-plate-art aff-reveal">
               <div className="aff-plate-mark">
-                <p className="aff-plate-intro">
-                  <Kinetic line="The first thing we put AffectiveOS into." />
-                </p>
+                {/* Never the company's Didone. Braino is the software and
+                    Affective is the company; they do not wear one face. */}
                 <h3>{p.name}</h3>
                 <p className="aff-plate-line">
                   <span>{p.kind}</span>
                   <span>{p.est}</span>
                 </p>
               </div>
-              <div className="aff-plate-lane" aria-hidden="true">
-                <MiniBraino size={92} />
-              </div>
-            </div>
-
-            <div className="aff-band aff-band-tall aff-reveal aff-rise" data-drift="40">
-              <img
-                src="/braino-band.jpg"
-                alt=""
-                width={1672}
-                height={941}
-                loading="lazy"
-                decoding="async"
-              />
             </div>
 
             <div className="aff-wrap aff-plate-say aff-reveal">
-              <div className="aff-plate-cols">
-                {p.say.map((line) => <p key={line}>{line}</p>)}
-              </div>
-              <dl className="aff-plate-facts">
-                {p.facts.map(([k, v]) => (
-                  <div key={k}><dt>{k}</dt><dd>{v}</dd></div>
-                ))}
-                <div>
-                  <dt>Go</dt>
-                  <dd><Link to={p.to}>{p.go}<i aria-hidden="true">→</i></Link></dd>
+              <p className="aff-plate-intro">
+                <Kinetic line="The first thing we put AffectiveOS into." />
+              </p>
+              <div className="aff-plate-under">
+                <div className="aff-plate-cols">
+                  {p.say.map((line) => <p key={line}>{line}</p>)}
                 </div>
-              </dl>
+                <dl className="aff-plate-facts">
+                  {p.facts.map(([k, v]) => (
+                    <div key={k}><dt>{k}</dt><dd>{v}</dd></div>
+                  ))}
+                  <div>
+                    <dt>Go</dt>
+                    <dd><Link to={p.to}>{p.go}<i aria-hidden="true">→</i></Link></dd>
+                  </div>
+                </dl>
+              </div>
             </div>
           </article>
         ))}

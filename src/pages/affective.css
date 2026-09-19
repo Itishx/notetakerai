@@ -1004,88 +1004,68 @@
    a table. Nothing is laid over the picture, because the picture already says
    his name. */
 .aff-plate { margin: clamp(30px, 4vw, 56px) 0 0; }
-/* His half of the page: the name on the left at the size a brand board gives
-   it, and him walking on the right. A hairline field rather than a dark slab,
-   so the page keeps one light ground the whole way down. */
+/* ── His plate ────────────────────────────────────────────────────────────
+   The teaser opens on the name and nothing else, so this does too: a warm
+   ground, his name at board size, and the two small lines under it. The
+   colour is taken from the reference frame he sent, sand over cream, kept
+   light because the page is light the whole way down and a dark slab in the
+   middle of it breaks the sheet.
+
+   No photograph. There is no picture of Braino that is not a screenshot. */
 .aff-plate-art {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(220px, 0.44fr);
-  align-items: end;
-  gap: clamp(20px, 3vw, 48px);
-  padding: clamp(46px, 6vw, 88px) var(--a-gutter) clamp(30px, 3.4vw, 44px);
-  max-width: var(--a-maxw); margin: 0 auto;
-  background: var(--a-surface);
+  position: relative; isolation: isolate;
+  min-height: clamp(320px, 56vh, 620px);
+  display: flex; align-items: flex-end;
+  overflow: hidden;
+  background:
+    radial-gradient(120% 130% at 18% 12%, rgba(255, 252, 245, .95), rgba(255, 252, 245, 0) 58%),
+    linear-gradient(152deg, #efe6d7 0%, #e0d0bc 46%, #cdb79f 100%);
   border-top: 1px solid var(--a-line);
   border-bottom: 1px solid var(--a-line);
 }
-/* ── Kinetic line ─────────────────────────────────────────────────────────
-   Ported from his teaser: a word lands, and stays, and the next joins it. The
-   phrase accumulates rather than fading in as a block, which is the whole
-   difference between type that is animated and type that is alive.
-
-   A hidden word takes no space, so the line grows from the left instead of
-   arriving pre-spaced with holes in it. 180ms per stamp, because that is how
-   long a word needs to resolve. */
-.aff-kin {
-  display: inline-flex; flex-wrap: wrap;
-  gap: 0 .3em;
+.aff-plate-mark {
+  width: 100%;
+  display: flex; flex-direction: column; gap: 16px;
+  padding: clamp(40px, 5vw, 78px) var(--a-gutter) clamp(30px, 3.6vw, 52px);
+  max-width: var(--a-maxw); margin: 0 auto;
+  color: #1a1710;
 }
-.aff-kin > span { display: none; opacity: 0; }
-.is-in .aff-kin > span {
-  display: inline-block;
-  animation: affStamp .18s cubic-bezier(.2, .8, .3, 1) both;
-}
-@keyframes affStamp {
-  from { opacity: 0; transform: translateY(6px) scale(.985); filter: blur(2px); }
-  to   { opacity: 1; transform: none; filter: none; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .aff-kin > span { display: inline-block; opacity: 1; }
-  .is-in .aff-kin > span { animation: none; }
-}
-/* The line that introduces him, above his name. */
-.aff-plate-intro {
-  margin: 0;
-  min-height: 1.5em;
-  font-size: clamp(14px, 1.4vw, 17px);
-  letter-spacing: .01em;
-  color: var(--a-ink-soft);
-}
-
-.aff-plate-mark { display: flex; flex-direction: column; gap: 18px; }
-/* Braino is the software, Affective is the company. The company wears the
+/* Braino is the software and Affective is the company. The company wears the
    Didone; he wears the system face, which is the one his own surfaces use. */
 .aff-plate-mark h3 {
   margin: 0;
   font-family: "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  font-size: clamp(52px, 8.4vw, 118px);
+  font-size: clamp(56px, 9.4vw, 136px);
   font-weight: 600;
-  line-height: .92;
-  letter-spacing: -0.045em;
-  color: var(--a-ink);
+  line-height: .9;
+  letter-spacing: -0.048em;
 }
 .aff-plate-line {
   margin: 0; display: flex; flex-wrap: wrap; gap: 8px 22px;
   font-size: 11.5px; letter-spacing: .2em; text-transform: uppercase;
-  color: var(--a-ink-faint);
+  color: rgba(26, 23, 16, .62);
 }
 .aff-plate-line span { position: relative; }
 .aff-plate-line span + span::before {
   content: ""; position: absolute; left: -12px; top: .46em;
   width: 3px; height: 3px; border-radius: 50%; background: currentColor;
 }
-/* He paces in his own lane, on the baseline the name sits on. */
-.aff-plate-lane {
-  position: relative; min-height: 96px;
-  display: flex; align-items: flex-end;
-  border-bottom: 1px solid var(--a-line-strong);
-}
-@media (max-width: 780px) {
-  .aff-plate-art { grid-template-columns: 1fr; align-items: start; }
-  .aff-plate-lane { min-height: 84px; }
+/* The intro, under his name, landing a word at a time. */
+.aff-plate-intro {
+  margin: 0 0 clamp(22px, 2.6vw, 34px);
+  padding-bottom: clamp(20px, 2.4vw, 30px);
+  border-bottom: 1px solid var(--a-line);
+  font-family: var(--a-display);
+  font-size: clamp(22px, 2.6vw, 34px);
+  line-height: 1.2; letter-spacing: -0.02em;
+  color: var(--a-ink);
+  min-height: 1.2em;
 }
 .aff-plate-say {
   padding-top: clamp(30px, 3.6vw, 50px);
+  display: block;
+}
+.aff-plate-under {
   display: grid;
   grid-template-columns: minmax(0, 1.25fr) minmax(0, 0.75fr);
   gap: clamp(22px, 4vw, 72px);
