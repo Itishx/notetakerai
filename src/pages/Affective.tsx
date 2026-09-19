@@ -330,6 +330,18 @@ export default function Affective() {
             <p>We build the part that goes and does it.</p>
           </div>
         </div>
+        {/* The picture closes the claim rather than opening it: the words are
+            the point here, and the photograph is what they are about. */}
+        <div className="aff-band aff-band-tall aff-reveal aff-rise" data-drift="42">
+          <img
+            src="/speak.jpg"
+            alt=""
+            width={1672}
+            height={941}
+            loading="lazy"
+            decoding="async"
+          />
+        </div>
       </section>
 
       {/* ── The technology ─────────────────────────────────────────────────── */}
