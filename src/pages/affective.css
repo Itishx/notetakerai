@@ -889,10 +889,16 @@
    shared edge says one system divided, which is the claim the section makes.
    Full width because at 286px the pictures were stamps. */
 .aff-four {
+  /* Wider than the page on both sides, so when the row slides right on the way
+     down nothing is ever exposed at the edge it came from. The overhang is
+     larger than the travel, always. */
+  --over: 12vw;
   background: var(--a-surface);
-  margin: clamp(26px, 3.4vw, 48px) 0 0;
+  margin: clamp(26px, 3.4vw, 48px) 0 0 calc(var(--over) * -1);
+  width: calc(100% + var(--over) * 2);
   border-left: 0; border-right: 0;
 }
+@media (max-width: 900px) { .aff-four { --over: 0px; width: 100%; margin-left: 0; } }
 .aff-four-item { display: flex; flex-direction: column; }
 /* The picture fills its cell to the hairline. Only the words are indented. */
 .aff-four-art {
