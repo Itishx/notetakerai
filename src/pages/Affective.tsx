@@ -277,7 +277,7 @@ export default function Affective() {
         {/* The picture of the thing itself, between the claim and the four
             things it is made of, so the section opens on something to look at
             rather than on a grid. */}
-        <div className="aff-os-art aff-reveal">
+        <div className="aff-os-art aff-reveal aff-rise">
           <img
             src="/affective-os.jpg"
             alt="Affective OS."
@@ -289,11 +289,17 @@ export default function Affective() {
         </div>
 
         <div className="aff-wrap">
-          <div className="aff-grid aff-grid-2 aff-reveal">
-            {THE_FOUR.map((d) => (
-              <article className="aff-day-cell" key={d.h}>
+          {/* Four columns under the picture, not four boxes beside it. The
+              borders were the page's cell system doing its job in the wrong
+              place: here the picture is the object and these are its caption,
+              so they get space rather than edges. They arrive one after
+              another on the way past, which is the only thing on the page that
+              is allowed to be a flourish. */}
+          <div className="aff-four">
+            {THE_FOUR.map((d, i) => (
+              <article className="aff-four-item aff-reveal" key={d.h} style={{ transitionDelay: `${i * 110}ms` }}>
                 <h3>{d.h}</h3>
-                <p className="aff-day-next">{d.body}</p>
+                <p>{d.body}</p>
               </article>
             ))}
           </div>

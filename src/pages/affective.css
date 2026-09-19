@@ -874,6 +874,40 @@
   object-fit: cover; object-position: center center;
 }
 
+/* The four, under the picture. No cell borders: the picture is the object and
+   these are its caption, so they get space instead of edges. */
+.aff-four {
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: clamp(24px, 3vw, 54px);
+  padding-bottom: clamp(10px, 1.6vw, 22px);
+}
+.aff-four-item h3 {
+  margin: 0 0 12px;
+  font-family: var(--a-display);
+  font-size: clamp(22px, 2vw, 28px);
+  font-weight: 400; line-height: 1.12; letter-spacing: -0.02em;
+  color: var(--a-ink);
+}
+.aff-four-item p {
+  margin: 0;
+  font-size: clamp(14px, 1.25vw, 15.5px); line-height: 1.6;
+  letter-spacing: -0.006em; color: var(--a-ink-soft);
+}
+@media (max-width: 900px) { .aff-four { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 560px) { .aff-four { grid-template-columns: 1fr; } }
+
+/* The picture settles rather than appears: it comes in a little large and
+   finds its size, which is the only motion on the page that is not a fade. */
+.aff-rise { overflow: hidden; }
+.aff-rise img {
+  transform: scale(1.06);
+  transition: transform 1.4s cubic-bezier(.22, 1, .36, 1);
+}
+.aff-rise.is-in img { transform: scale(1); }
+@media (prefers-reduced-motion: reduce) {
+  .aff-rise img, .aff-rise.is-in img { transform: none; transition: none; }
+}
+
 /* ── The product plate ────────────────────────────────────────────────────
    A brand board rather than a card: the picture first, at its own size and
    shape, then the short version under it in two columns with the facts set as
