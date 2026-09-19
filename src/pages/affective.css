@@ -1004,6 +1004,36 @@
    a table. Nothing is laid over the picture, because the picture already says
    his name. */
 .aff-plate { margin: clamp(30px, 4vw, 56px) 0 0; }
+/* ── Kinetic line ─────────────────────────────────────────────────────────
+   Ported from his teaser: a word lands, and stays, and the next joins it. The
+   phrase accumulates rather than fading in as a block, which is the whole
+   difference between type that is animated and type that is alive.
+
+   A hidden word takes no space at all, so the line grows from the left instead
+   of arriving pre-spaced with holes in it, and the gap does the spacing: the
+   words are separate boxes, so there is no space character between them and
+   the text itself would otherwise read as one run-on word. 180ms a stamp,
+   because that is how long a word needs to resolve. */
+.aff-kin {
+  display: inline-flex; flex-wrap: wrap;
+  gap: 0 .3em;
+  vertical-align: bottom;
+}
+.aff-kin > span { display: none; opacity: 0; }
+.is-in .aff-kin > span {
+  display: inline-block;
+  animation: affStamp .18s cubic-bezier(.2, .8, .3, 1) both;
+}
+@keyframes affStamp {
+  from { opacity: 0; transform: translateY(7px) scale(.985); filter: blur(2px); }
+  to   { opacity: 1; transform: none; filter: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .aff-kin > span, .is-in .aff-kin > span {
+    display: inline-block; opacity: 1; animation: none;
+  }
+}
+
 /* ── His plate ────────────────────────────────────────────────────────────
    The teaser opens on the name and nothing else, so this does too: a warm
    ground, his name at board size, and the two small lines under it. The
