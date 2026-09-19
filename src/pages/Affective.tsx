@@ -180,13 +180,20 @@ const FAQ = [
 function useDrift() {
   useEffect(() => {
     const els = [...document.querySelectorAll<HTMLElement>("[data-drift]")];
-    if (!els.length) return;
     const still = window.matchMedia("(prefers-reduced-motion: reduce)");
     let frame = 0;
 
+    const grows = [...document.querySelectorAll<HTMLElement>("[data-grow]")];
     const apply = () => {
       frame = 0;
       const narrow = window.innerWidth < 900;
+      /* The hero picture opens from the measure to the page over the first
+         screen of scrolling. Written as a number the stylesheet turns into a
+         width, so the shape of the growth lives in the CSS. */
+      for (const el of grows) {
+        const p = Math.min(1, Math.max(0, window.scrollY / Math.max(220, window.innerHeight * 0.55)));
+        el.style.setProperty("--grow", narrow || still.matches ? "1" : p.toFixed(3));
+      }
       for (const el of els) {
         if (narrow || still.matches) { el.style.setProperty("--drift", "0px"); continue; }
         const r = el.getBoundingClientRect();
@@ -333,17 +340,6 @@ export default function Affective() {
           a thing you sit in front of, and a picture of a screen would argue
           the opposite in the first frame. */}
       <header className="aff-hero">
-        <div className="aff-band" data-drift="38">
-          <img
-            src="/affective-hero.jpg"
-            alt="A cross-stitched view of a lake through stone arches, with a cat sitting on the balustrade watching it."
-            width={1774}
-            height={887}
-            loading="eager"
-            decoding="async"
-          />
-        </div>
-
         <div className="aff-wrap">
           <div className="aff-hero-row aff-reveal">
             <h1 className="aff-h1">
@@ -362,6 +358,21 @@ export default function Affective() {
             </div>
           </div>
         </div>
+
+        {/* The picture arrives as an object in the measure and opens to the
+            whole page as you scroll into it: the room stops being something
+            shown to you and becomes somewhere you are. It grows rather than
+            slides, so nothing is ever cut off at an edge. */}
+        <figure className="aff-hero-shot" data-grow>
+          <img
+            src="/affective-hero.jpg"
+            alt="A cross-stitched view of a lake through stone arches, with a cat sitting on the balustrade watching it."
+            width={1774}
+            height={887}
+            loading="eager"
+            decoding="async"
+          />
+        </figure>
 
         {/* Where a landing page puts its customers. We have none to put there,
             and the honest version of that row is the one thing everybody in
@@ -549,32 +560,6 @@ export default function Affective() {
         </div>
       </section>
 
-      {/* ── About the name ─────────────────────────────────────────────────
-          Late on purpose. Nobody wants the etymology until they want the
-          company, so it sits after the work and before the questions. */}
-      <section className="aff-sec aff-name" id="name">
-        <div className="aff-wrap">
-          <div className="aff-name-in aff-reveal">
-            <p className="aff-sec-kicker">About the name</p>
-            {/* The line worth remembering at the size of a line worth
-                remembering, and the explanation under it at reading size. One
-                paragraph of grey in an empty section reads as a section
-                somebody forgot to finish. */}
-            <p className="aff-name-line">
-              A mind does three things: thinks, does, <b>feels.</b>
-            </p>
-            <div className="aff-name-cols">
-              <p>
-                Everyone in AI is racing on the first two. We are named after the third.
-                Affective is the old, precise word for the feeling layer, the part that
-                turns a voice into a someone.
-              </p>
-              <p>It is the part everybody skips. It is the part you keep.</p>
-            </div>
-          </div>
-        </div>
-      </section>
-
       {/* ── Questions ──────────────────────────────────────────────────────
           Two columns, with the heading held on the left while the answers move
           past it. It gives the page a centre gutter it did not have, and stops
@@ -600,18 +585,6 @@ export default function Affective() {
               ))}
             </div>
           </div>
-        </div>
-      </section>
-
-      {/* ── The tagline ────────────────────────────────────────────────────
-          The last thing said, on its own, before the ask. Under the mission it
-          was a second headline two lines below the first, which is where a
-          tagline stops being a tagline and starts being a repeat. */}
-      <section className="aff-close">
-        <div className="aff-wrap">
-          <p className="aff-tagline aff-reveal">
-            Speak.<b>Watch it happen.</b>
-          </p>
         </div>
       </section>
 
