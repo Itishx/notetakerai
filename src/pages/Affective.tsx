@@ -678,13 +678,19 @@ export default function Affective() {
                   the one you have, and the products that do the work. Bengaluru.
                 </p>
               </div>
+              {/* The product is the column, and the models are what is in it.
+                  One Braino, and the ones he comes in. */}
               <nav className="aff-foot-col">
-                <h4>Products</h4>
+                <h4>Braino</h4>
                 <Link to="/braino">Braino</Link>
-                {/* The same Braino, with a school's own timetable, attendance
-                    and deadlines inside him. It has no page of its own yet, so
-                    it points at his. */}
-                <Link to="/braino">Braino For Mesa School Of Business</Link>
+                <Link to="/foundry">Braino Foundry</Link>
+              </nav>
+              {/* A school buys the same Braino with its own timetable,
+                  attendance and deadlines inside him. It is a deal rather than
+                  a download, so it goes to a person, not a form. */}
+              <nav className="aff-foot-col">
+                <h4>Enterprise</h4>
+                <Link to="/contact">Braino for Mesa School of Business</Link>
               </nav>
               <nav className="aff-foot-col">
                 <h4>Company</h4>

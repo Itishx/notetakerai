@@ -1089,8 +1089,9 @@
   padding: clamp(46px, 5.5vw, 78px) 0 clamp(40px, 5vw, 70px);
 }
 .aff-foot-grid {
-  display: grid; grid-template-columns: minmax(0, 2fr) 1fr 1fr;
-  gap: 40px clamp(32px, 5vw, 80px);
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) repeat(3, minmax(0, 1fr));
+  gap: 40px clamp(26px, 4vw, 64px);
 }
 .aff-foot-brand strong { display: block; }
 /* The mark is drawn in ink. On the photograph it has to be paper, and the file
@@ -1105,6 +1106,7 @@
   margin: 0 0 6px; font-size: 12px; font-weight: 600;
   letter-spacing: .14em; text-transform: uppercase; color: rgba(246, 243, 234, .6);
 }
+@media (max-width: 960px) { .aff-foot-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 720px) { .aff-foot-grid { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 460px) { .aff-foot-grid { grid-template-columns: 1fr; } }
 .aff-foot a { color: rgba(246, 243, 234, .82); text-decoration: none; transition: color .2s ease; }
