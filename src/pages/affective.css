@@ -989,23 +989,26 @@
    bright. */
 .aff-foot {
   position: relative; isolation: isolate;
-  min-height: clamp(420px, 66vh, 680px);
-  display: flex; align-items: flex-end;
+  min-height: clamp(560px, 88vh, 900px);
+  display: flex; align-items: flex-start;
   color: rgba(246, 243, 234, .74);
   font-size: 12.5px; line-height: 1.6; letter-spacing: -0.004em;
   background: #14150f;
 }
 .aff-foot-art {
   position: absolute; inset: 0; z-index: -2;
-  width: 100%; height: 100%; object-fit: cover; object-position: center 42%;
+  width: 100%; height: 100%; object-fit: cover; object-position: center 72%;
 }
+/* The words sit in the top of the picture, so the scrim runs the other way:
+   heavy where they are, gone by halfway, and the picture is left alone below
+   them. */
 .aff-foot::after {
   content: ""; position: absolute; inset: 0; z-index: -1;
-  background: linear-gradient(to top, rgba(10, 11, 8, .88) 0%, rgba(10, 11, 8, .72) 38%, rgba(10, 11, 8, .18) 72%, rgba(10, 11, 8, 0) 100%);
+  background: linear-gradient(to bottom, rgba(10, 11, 8, .86) 0%, rgba(10, 11, 8, .68) 34%, rgba(10, 11, 8, .22) 62%, rgba(10, 11, 8, 0) 88%);
 }
 .aff-foot-in {
   width: 100%;
-  padding: clamp(56px, 8vw, 110px) 0 clamp(34px, 4vw, 52px);
+  padding: clamp(46px, 5.5vw, 78px) 0 clamp(40px, 5vw, 70px);
 }
 .aff-foot-grid {
   display: grid; grid-template-columns: minmax(0, 2fr) 1fr 1fr;
