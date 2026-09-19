@@ -125,21 +125,26 @@
 .bf-tabs button {
   appearance: none; border: 0; background: transparent;
   border-right: 1px solid var(--line);
-  padding: clamp(12px, 1.3vw, 17px) clamp(16px, 2vw, 28px);
-  display: flex; align-items: baseline; gap: 9px;
+  padding: clamp(16px, 1.7vw, 22px) clamp(26px, 3.4vw, 54px);
+  display: flex; flex-direction: column; align-items: flex-start; gap: 5px;
   font: inherit; color: var(--ink-faint);
   cursor: pointer; transition: color .2s ease, background .2s ease;
 }
 .bf-tabs button:first-child { padding-left: 0; }
+.bf-tabs button:last-child { border-right: 0; }
+/* The name, with the door's own colour beside it. */
+.bf-tabs button span {
+  display: inline-flex; align-items: center; gap: 9px;
+  font-size: clamp(14px, 1.35vw, 17px); font-weight: 500; letter-spacing: -0.012em;
+}
 .bf-tabs button i {
   width: 7px; height: 7px; border-radius: 50%;
   background: var(--dot, var(--ink));
-  opacity: .32; transition: opacity .2s ease;
-  align-self: center;
+  opacity: .3; transition: opacity .2s ease;
 }
-.bf-tabs button span { font-size: clamp(13px, 1.25vw, 15px); font-weight: 500; letter-spacing: -0.008em; }
 .bf-tabs button small {
-  font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase;
+  padding-left: 16px;
+  font-size: 10.5px; letter-spacing: .16em; text-transform: uppercase;
   color: var(--ink-faint);
 }
 .bf-tabs button:hover { color: var(--ink); }
@@ -151,7 +156,8 @@
   font-size: 11.5px; letter-spacing: .16em; text-transform: uppercase;
   color: var(--ink-faint);
 }
-@media (max-width: 860px) {
+@media (max-width: 900px) {
+  .bf-tabs button { padding: 14px clamp(16px, 3vw, 26px); }
   .bf-tabs button small { display: none; }
   .bf-switch-note { display: none; }
 }
@@ -237,21 +243,30 @@
   border-top: 1px solid var(--line);
 }
 .bf-day-list li {
-  display: grid; grid-template-columns: 110px minmax(0, 1fr);
-  gap: clamp(14px, 2vw, 34px);
-  padding: clamp(16px, 1.8vw, 24px) 0;
+  display: grid; grid-template-columns: clamp(96px, 12vw, 168px) minmax(0, 1fr);
+  gap: clamp(16px, 2.4vw, 44px);
+  padding: clamp(22px, 2.4vw, 34px) 0;
   border-bottom: 1px solid var(--line);
   align-items: baseline;
 }
+/* The hour at the size of a number worth reading, in the colour of whichever
+   story is open, so the stack has a spine. */
 .bf-day-at {
-  font-size: 12px; letter-spacing: .14em; text-transform: uppercase;
+  font-family: var(--display);
+  font-size: clamp(22px, 2.4vw, 32px);
+  line-height: 1; letter-spacing: -0.02em;
   color: var(--acc, var(--ink-faint));
   font-variant-numeric: tabular-nums;
 }
 .bf-day-list p {
-  margin: 0; max-width: 62ch;
-  font-size: clamp(15px, 1.4vw, 17.5px); line-height: 1.55;
-  letter-spacing: -0.008em; color: var(--ink);
+  margin: 0; max-width: 64ch;
+  font-size: clamp(16px, 1.55vw, 20px); line-height: 1.5;
+  letter-spacing: -0.012em; color: var(--ink);
+}
+/* The hour and the line hold the same weight on a phone, so it reads as a
+   list of moments rather than a table. */
+@media (max-width: 620px) {
+  .bf-day-at { font-size: 18px; }
 }
 @media (max-width: 620px) {
   .bf-day-list li { grid-template-columns: 1fr; gap: 6px; }
