@@ -883,6 +883,23 @@
 
 /* The four, under the picture. No cell borders: the picture is the object and
    these are its caption, so they get space instead of edges. */
+/* The tagline. Not a heading and not a pull quote: the line the company would
+   say out loud, given its own air, with a hairline over it so it reads as the
+   end of the argument rather than the start of another one. The second half is
+   the coloured half, the same device the hero uses, so the page has one way of
+   marking the sentence that matters. */
+.aff-tagline {
+  margin: clamp(40px, 5vw, 76px) 0 0;
+  padding-top: clamp(30px, 3.6vw, 48px);
+  border-top: 1px solid var(--a-line);
+  font-family: var(--a-display);
+  font-size: clamp(34px, 5.4vw, 74px);
+  font-weight: 400; line-height: 1.04; letter-spacing: -0.028em;
+  color: var(--a-ink);
+  display: flex; flex-wrap: wrap; gap: 0 .34em;
+}
+.aff-tagline b { font-weight: inherit; color: var(--a-braino); }
+
 /* ── The four ─────────────────────────────────────────────────────────────
    One cell attached to the next, hairline to hairline, no gutters, which is
    how the rest of the page is built.

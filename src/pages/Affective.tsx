@@ -357,15 +357,18 @@ export default function Affective() {
       </header>
 
       {/* ── What we do ─────────────────────────────────────────────────────
-          The claim across the top and the reason underneath, laid out the
-          other way up from the thesis further down so two sections of large
-          serif do not read as the same section twice. */}
+          Two different things were wearing one hat here. What the company does
+          is build the technology that lets you talk to your Mac; "Speak. Watch
+          it happen." is the tagline, and a tagline set under a label reading
+          What we do reads as a job description nobody could act on. So the
+          mission is the headline, and the tagline gets its own line at the end
+          of the section, where a tagline belongs: after the argument, before
+          the picture. */}
       <section className="aff-position" id="what">
         <div className="aff-wrap">
           <p className="aff-position-kicker aff-reveal">What we do</p>
           <h2 className="aff-position-line aff-reveal">
-            Speak.
-            <b>Watch it happen.</b>
+            We build the technology that makes it possible to talk to your Mac.
           </h2>
           <div className="aff-position-cols aff-reveal">
             <p>
@@ -375,6 +378,14 @@ export default function Affective() {
             <p>We build the part that goes and does it.</p>
           </div>
         </div>
+
+        {/* The tagline, on its own, said the way it would be said out loud. */}
+        <div className="aff-wrap">
+          <p className="aff-tagline aff-reveal">
+            Speak.<b>Watch it happen.</b>
+          </p>
+        </div>
+
         {/* The picture closes the claim rather than opening it: the words are
             the point here, and the photograph is what they are about. */}
         <div className="aff-band aff-band-tall aff-reveal aff-rise" data-drift="42">
