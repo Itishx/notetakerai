@@ -1,6 +1,5 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import MiniBraino from "@/components/MiniBraino";
 import "./affective.css";
 
 /* ============================================================================
@@ -102,6 +101,8 @@ function FourArt({ art, label }: { art: string; label: string }) {
 
 /* One product on this page for now. HERA has her own page and comes back here
    when there is something to show of her. */
+/* One product on this page for now. HERA has her own page and comes back here
+   when there is something to show of her. */
 const PRODUCTS = [
   {
     key: "braino",
@@ -109,11 +110,19 @@ const PRODUCTS = [
     name: "Braino",
     est: "Est. 2026",
     kind: "Browser and Mac",
-    say: [
+    lead:
       "The companion. He lives in your browser and on your Mac, already knows what you are looking at, and does the half of the day you would rather not.",
-      "For founders, there is a door called the Foundry: same Braino, running your distribution.",
+    /* What he actually does, as things somebody would notice rather than as
+       features. Four, because a list of six reads as a spec sheet. */
+    does: [
+      { h: "He is already there.", p: "Nothing to open. He is in your browser and in your Mac's notch, on whatever you happen to be looking at." },
+      { h: "He does the boring half.", p: "The form, the booking, the five tabs, the reply you have been putting off since Tuesday." },
+      { h: "He knows your people.", p: "Who you message on a Friday, what you told him last month, which Ravi you meant." },
+      { h: "He asks first.", p: "Nothing bought, sent, posted or deleted until you say yes. That is a rule in the code, not a line in a prompt." },
     ],
-    facts: [["Runs on", "AffectiveOS"], ["State", "Private beta"]],
+    foundry:
+      "For founders there is a door called the Foundry: the same Braino, running your distribution.",
+    state: "Runs on AffectiveOS · Private beta",
     go: "Meet Braino",
     accent: "var(--a-braino)",
   },
@@ -374,7 +383,7 @@ export default function Affective() {
               <li>OpenAI</li>
               <li>Perplexity</li>
             </ul>
-            <p className="aff-strip-note">The hands are ours. Bengaluru, private beta.</p>
+            <p className="aff-strip-note">The hands are ours</p>
           </div>
         </div>
       </header>
@@ -402,13 +411,6 @@ export default function Affective() {
             </p>
             <p className="aff-position-punch">We build the part that goes and does it.</p>
           </div>
-        </div>
-
-        {/* The tagline, on its own, said the way it would be said out loud. */}
-        <div className="aff-wrap">
-          <p className="aff-tagline aff-reveal">
-            Speak.<b>Watch it happen.</b>
-          </p>
         </div>
 
         {/* The picture closes the claim rather than opening it: the words are
@@ -494,33 +496,48 @@ export default function Affective() {
                   <span>{p.est}</span>
                 </p>
               </div>
-              {/* And him. A page that says we build somebody and then shows a
-                  tinted rectangle is arguing against itself: he has a face,
-                  it is the same one the products use, and this is the one
-                  place on the company page where he should be in the room.
-                  He paces his own lane along the plate's floor. */}
-              <div className="aff-plate-lane" aria-hidden="true">
-                <MiniBraino size={112} />
-              </div>
+              {/* And him, standing beside his own name at the size a person
+                  stands. A page that says we build somebody and then shows a
+                  tinted rectangle with a word on it is arguing against
+                  itself. */}
+              <img
+                className="aff-plate-him"
+                src="/braino-standing.svg"
+                alt="Braino, standing"
+                width={104}
+                height={127}
+                loading="lazy"
+                decoding="async"
+              />
             </div>
 
             <div className="aff-wrap aff-plate-say aff-reveal">
-              <p className="aff-plate-intro">
-                <Kinetic line="The first thing we put AffectiveOS into." />
-              </p>
-              <div className="aff-plate-under">
-                <div className="aff-plate-cols">
-                  {p.say.map((line) => <p key={line}>{line}</p>)}
-                </div>
-                <dl className="aff-plate-facts">
-                  {p.facts.map(([k, v]) => (
-                    <div key={k}><dt>{k}</dt><dd>{v}</dd></div>
-                  ))}
-                  <div>
-                    <dt>Go</dt>
-                    <dd><Link to={p.to}>{p.go}<i aria-hidden="true">→</i></Link></dd>
-                  </div>
-                </dl>
+              <div className="aff-plate-lead">
+                <p className="aff-plate-intro">
+                  <Kinetic line="The first thing we put AffectiveOS into." />
+                </p>
+                <p className="aff-plate-blurb">{p.lead}</p>
+              </div>
+
+              {/* What he does, on the page's own grid: four cells attached to
+                  one another, which is the same argument the four things make
+                  further up. A paragraph on the left and a table on the right
+                  was two columns of nothing in particular. */}
+              <div className="aff-grid aff-grid-4 aff-plate-does">
+                {p.does.map((d) => (
+                  <article key={d.h}>
+                    <h4>{d.h}</h4>
+                    <p>{d.p}</p>
+                  </article>
+                ))}
+              </div>
+
+              <div className="aff-plate-end">
+                <p className="aff-plate-foundry">{p.foundry}</p>
+                <p className="aff-plate-go">
+                  <Link to={p.to}>{p.go}<i aria-hidden="true">→</i></Link>
+                  <span>{p.state}</span>
+                </p>
               </div>
             </div>
           </article>
@@ -586,6 +603,18 @@ export default function Affective() {
               ))}
             </div>
           </div>
+        </div>
+      </section>
+
+      {/* ── The tagline ────────────────────────────────────────────────────
+          The last thing said, on its own, before the ask. Under the mission it
+          was a second headline two lines below the first, which is where a
+          tagline stops being a tagline and starts being a repeat. */}
+      <section className="aff-close">
+        <div className="aff-wrap">
+          <p className="aff-tagline aff-reveal">
+            Speak.<b>Watch it happen.</b>
+          </p>
         </div>
       </section>
 
