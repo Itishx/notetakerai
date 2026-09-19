@@ -75,6 +75,48 @@ function Kinetic({ line, gap = 150 }: { line: string; gap?: number }) {
   );
 }
 
+/* One word that keeps changing its mind.
+ *
+ * "Stop using your Mac" is where the company starts and not where it ends, so
+ * the word swaps: Mac, computer, Mac. The line has to hold still while it
+ * happens, and a word box that snaps from one width to the other drags the
+ * full stop across the page, so each word is measured once and the box is
+ * given that width to travel to. */
+function SwapWord({ words, every = 2600 }: { words: string[]; every?: number }) {
+  const [at, setAt] = useState(0);
+  const [width, setWidth] = useState<number | null>(null);
+  const hold = useRef<HTMLSpanElement>(null);
+
+  useEffect(() => {
+    if (words.length < 2) return;
+    const still = window.matchMedia("(prefers-reduced-motion: reduce)");
+    if (still.matches) return;
+    const timer = window.setInterval(() => setAt((v) => (v + 1) % words.length), every);
+    return () => window.clearInterval(timer);
+  }, [words.length, every]);
+
+  useEffect(() => {
+    const live = hold.current?.querySelector<HTMLElement>(`[data-word="${words[at]}"]`);
+    if (live) setWidth(live.getBoundingClientRect().width);
+  }, [at, words]);
+
+  return (
+    <span className="aff-swap" ref={hold} style={width ? { width: `${Math.ceil(width)}px` } : undefined}>
+      {/* Every word is drawn, so every word can be measured; only one is lit. */}
+      {words.map((word, i) => (
+        <span
+          key={word}
+          data-word={word}
+          className={"aff-swap-word" + (i === at ? " on" : "")}
+          aria-hidden={i !== at}
+        >
+          {word}
+        </span>
+      ))}
+    </span>
+  );
+}
+
 function FourArt({ art, label }: { art: string; label: string }) {
   const [missing, setMissing] = useState(false);
   return (
@@ -347,7 +389,9 @@ export default function Affective() {
         <div className="aff-wrap">
           <div className="aff-hero-row aff-reveal">
             <h1 className="aff-h1">
-              Stop using your Mac.
+              <span className="aff-h1-line">
+                Stop using your <SwapWord words={["Mac", "computer"]} />.
+              </span>
               <b>Start talking to it.</b>
             </h1>
             <div className="aff-hero-side">

@@ -280,6 +280,26 @@
 /* The payoff. Same device as the statement further down, where the second half
    of the claim is the coloured half, so the page has one way of marking the
    sentence that matters rather than three. */
+/* The word that keeps changing its mind. The box travels to the width of
+   whichever word is lit, so the full stop after it moves with the word instead
+   of being dragged across the line, and the words cross over inside it. */
+.aff-h1-line { display: block; }
+.aff-swap {
+  position: relative; display: inline-block;
+  height: 1em; vertical-align: baseline;
+  transition: width .46s cubic-bezier(.4, 0, .2, 1);
+  will-change: width;
+}
+.aff-swap-word {
+  position: absolute; left: 0; top: 0; white-space: nowrap;
+  opacity: 0; transform: translateY(.13em);
+  transition: opacity .34s ease, transform .46s cubic-bezier(.22, 1, .36, 1);
+}
+.aff-swap-word.on { opacity: 1; transform: none; }
+@media (prefers-reduced-motion: reduce) {
+  .aff-swap, .aff-swap-word { transition: none; }
+}
+
 /* The payoff, in the page's own ink with a rule under it rather than in the
    accent colour: the sentence is the emphasis, and a second colour in the
    first line of the page spends something the page needs later. */
