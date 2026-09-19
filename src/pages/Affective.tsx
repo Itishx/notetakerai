@@ -138,94 +138,67 @@ function FourArt({ art, label }: { art: string; label: string }) {
   );
 }
 
-/* One product, two doors. Braino is the character and the whole of it; Foundry
-   is the same Braino aimed at the founder building a company alone. They are
-   not two binaries and the page does not pretend they are: the box shows a
-   preview of each, and his own site tells either story properly. */
-const PRODUCTS = [
+/* Braino is the product. Foundry is a model of it.
+ *
+ * Tabs made them siblings, which is the confusion: Affective is Apple, Braino
+ * is the iPhone, and Foundry is the Pro. So the box is Braino, whole, and the
+ * models are a line at the bottom of it, the way a product page ends on which
+ * one is right for you. His own site does the full lineup. */
+const BRAINO = {
+  to: "/braino",
+  name: "Braino",
+  est: "Est. 2026",
+  kind: "Browser and Mac",
+  line: "Your own Jarvis.",
+  lead:
+    "The character, and the whole product. He is already open on the page you are on, he carries what you told him last month, and he goes and does the thing rather than telling you how to do it.",
+  does: [
+    {
+      art: "/os-senses.jpg",
+      h: "He is already there.",
+      p: "Nothing to open, nothing to paste. He is in your browser and in your Mac's notch, on whatever you are looking at, so asking him costs the same as thinking it.",
+    },
+    {
+      art: "/os-voice.jpg",
+      h: "He sits through the meeting.",
+      p: "An hour of a lecture or a call, written down while you listen. You close the laptop and the notes are already there, with what was decided and who said they would do what.",
+    },
+    {
+      art: "/os-hands.jpg",
+      h: "He knows your people.",
+      p: "Who you message on a Friday, which Ravi you meant, what you told him last month. You stop introducing yourself to your own software every morning.",
+    },
+    {
+      art: "/os-memory.jpg",
+      h: "He asks before he acts.",
+      p: "Nothing bought, sent, posted or deleted until you say yes. That is a rule in the code rather than a line in a prompt, which is the only version of the promise worth having.",
+    },
+  ],
+  state: "Runs on AffectiveOS \u00b7 Private beta",
+};
+
+/* The two he comes in. Same Braino; one of them is pointed at your company. */
+const MODELS = [
   {
     key: "braino",
-    tab: "Braino",
-    to: "/braino",
     name: "Braino",
-    est: "Est. 2026",
-    kind: "Browser and Mac",
-    line: "Your own Jarvis.",
-    lead:
-      "The character, and the whole product. He is already open on the page you are on, he carries what you told him last month, and he goes and does the thing rather than telling you how to do it.",
-    does: [
-      {
-        key: "there",
-        art: "/os-senses.jpg",
-        h: "He is already there.",
-        p: "Nothing to open, nothing to paste. He is in your browser and in your Mac's notch, on whatever you are looking at, so asking him costs the same as thinking it.",
-      },
-      {
-        key: "meeting",
-        art: "/os-voice.jpg",
-        h: "He sits through the meeting.",
-        p: "An hour of a lecture or a call, written down while you listen. You close the laptop and the notes are already there, with what was decided and who said they would do what.",
-      },
-      {
-        key: "people",
-        art: "/os-hands.jpg",
-        h: "He knows your people.",
-        p: "Who you message on a Friday, which Ravi you meant, what you told him last month. You stop introducing yourself to your own software every morning.",
-      },
-      {
-        key: "asks",
-        art: "/os-memory.jpg",
-        h: "He asks before he acts.",
-        p: "Nothing bought, sent, posted or deleted until you say yes. That is a rule in the code rather than a line in a prompt, which is the only version of the promise worth having.",
-      },
-    ],
-    foot: "The broad product: browser, Mac, voice, files, meetings and the rest of the day.",
-    state: "Runs on AffectiveOS · Private beta",
+    who: "For everyone",
+    line: "Browser and Mac. The whole of him, on whatever you are looking at.",
+    to: "/braino",
     go: "Meet Braino",
     accent: "var(--a-braino)",
   },
   {
     key: "foundry",
-    tab: "Braino Foundry",
-    to: "/foundry",
     name: "Braino Foundry",
-    est: "For founders",
-    kind: "The same Braino",
-    line: "An AI co-founder.",
-    lead:
-      "You build the thing. He does the half that gets it seen: the posting, the outreach, the people who said maybe. Same Braino, pointed at your company.",
-    does: [
-      {
-        key: "company",
-        art: "/os-senses.jpg",
-        h: "He knows your company.",
-        p: "What you are building, who you have spoken to, what you decided last month. You stop explaining your own company every morning.",
-      },
-      {
-        key: "posting",
-        art: "/os-voice.jpg",
-        h: "He does the posting.",
-        p: "The updates, the replies, the thread you meant to write on Sunday. The part that never gets done because you are busy building.",
-      },
-      {
-        key: "follow",
-        art: "/os-hands.jpg",
-        h: "He chases the follow-ups.",
-        p: "The people who said maybe, the mail nobody answered, the call you were going to make on Tuesday. He keeps the list and works it.",
-      },
-      {
-        key: "truth",
-        art: "/os-memory.jpg",
-        h: "He tells you the truth.",
-        p: "A co-founder who only ever agrees is a mirror. He remembers what you decided in March and says so when today contradicts it.",
-      },
-    ],
-    foot: "Handing work to coding agents and checking it comes to Foundry first. Not shipped yet.",
-    state: "Runs on AffectiveOS · For founders",
+    who: "For founders",
+    line: "An AI co-founder. You build the thing, he does the half that gets it seen: the posting, the outreach, the people who said maybe.",
+    to: "/foundry",
     go: "See the Foundry",
     accent: "var(--a-foundry)",
   },
 ];
+
 
 const FAQ = [
   {
@@ -379,8 +352,6 @@ export default function Affective() {
      rather than on every scroll event, and hysteresis on the two edges so a
      nudge at the threshold cannot flicker it open and shut. */
   const [tight, setTight] = useState(false);
-  /* Which of the two doors is open. Nothing to store anywhere: it is a tab. */
-  const [product, setProduct] = useState(0);
   useEffect(() => {
     let frame = 0;
     const read = () => {
@@ -578,91 +549,74 @@ export default function Affective() {
           </div>
         </div>
 
-        {/* One box with dividers, rather than a section made of bands. He is
-            one product with two doors, so the box has two tabs and everything
-            under them changes: the name, what he is, what he does and where
-            the door goes. */}
+        {/* One box with dividers. It is Braino, whole: his name, what he is,
+            what he does, and at the bottom the two he comes in, because a
+            product page ends on which one is right for you rather than making
+            you choose before you know what it is. */}
         <div className="aff-wrap">
-          <article className="aff-plate" style={{ ["--acc" as string]: PRODUCTS[product].accent }}>
-            <div className="aff-plate-tabs">
-              <div className="aff-plate-tablist" role="tablist" aria-label="Which Braino">
-                {PRODUCTS.map((p, i) => (
-                  <button
-                    key={p.key}
-                    type="button"
-                    role="tab"
-                    aria-selected={i === product}
-                    className={i === product ? "on" : ""}
-                    style={{ ["--dot" as string]: p.accent }}
-                    onClick={() => setProduct(i)}
-                  >
-                    <i aria-hidden="true" />
-                    {p.tab}
-                  </button>
-                ))}
-              </div>
-              {/* Said once, here, so nobody has to work it out from the tabs:
-                  it is one thing with two doors. */}
-              <p className="aff-plate-one">One product, two doors.</p>
-            </div>
-
-            {PRODUCTS.slice(product, product + 1).map((p) => (
-              <div className="aff-plate-view" key={p.key}>
-                <div className="aff-plate-art">
-                  <div className="aff-plate-mark">
-                    {/* Him and his name as one lockup. Across the box from each
-                        other they were two things that happened to share a
-                        ground; beside each other they are a signature. */}
-                    <img
-                      className="aff-plate-him"
-                      src="/braino-standing.svg"
-                      alt="Braino, standing"
-                      width={104}
-                      height={127}
-                      loading="lazy"
-                      decoding="async"
-                    />
-                    <div className="aff-plate-name">
-                      {/* Never the company's Didone. Braino is the software and
-                          Affective is the company; they do not wear one face. */}
-                      <h3>{p.name}</h3>
-                      <p className="aff-plate-line">
-                        <span>{p.kind}</span>
-                        <span>{p.est}</span>
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="aff-plate-lead">
-                  <p className="aff-plate-intro">{p.line}</p>
-                  <p className="aff-plate-blurb">{p.lead}</p>
-                </div>
-
-                {/* His four, built the way AffectiveOS's four are built. */}
-                <div className="aff-grid aff-grid-4 aff-plate-does">
-                  {p.does.map((d) => (
-                    <article key={d.h}>
-                      <div className="aff-does-art">
-                        <img src={d.art} alt="" width={341} height={415} loading="lazy" decoding="async" />
-                      </div>
-                      <div className="aff-does-say">
-                        <h4>{d.h}</h4>
-                        <p>{d.p}</p>
-                      </div>
-                    </article>
-                  ))}
-                </div>
-
-                <div className="aff-plate-end">
-                  <p className="aff-plate-foundry">{p.foot}</p>
-                  <p className="aff-plate-go">
-                    <Link to={p.to}>{p.go}<i aria-hidden="true">→</i></Link>
-                    <span>{p.state}</span>
+          <article className="aff-plate">
+            <div className="aff-plate-art">
+              <div className="aff-plate-mark">
+                {/* Him and his name as one lockup. Across the box from each
+                    other they were two things that happened to share a ground;
+                    beside each other they are a signature. */}
+                <img
+                  className="aff-plate-him"
+                  src="/braino-standing.svg"
+                  alt="Braino, standing"
+                  width={104}
+                  height={127}
+                  loading="lazy"
+                  decoding="async"
+                />
+                <div className="aff-plate-name">
+                  {/* Never the company's Didone. Braino is the software and
+                      Affective is the company; they do not wear one face. */}
+                  <h3>{BRAINO.name}</h3>
+                  <p className="aff-plate-line">
+                    <span>{BRAINO.kind}</span>
+                    <span>{BRAINO.est}</span>
                   </p>
                 </div>
               </div>
-            ))}
+            </div>
+
+            <div className="aff-plate-lead">
+              <p className="aff-plate-intro">{BRAINO.line}</p>
+              <p className="aff-plate-blurb">{BRAINO.lead}</p>
+            </div>
+
+            {/* His four, built the way AffectiveOS's four are built. */}
+            <div className="aff-grid aff-grid-4 aff-plate-does">
+              {BRAINO.does.map((d) => (
+                <article key={d.h}>
+                  <div className="aff-does-art">
+                    <img src={d.art} alt="" width={341} height={415} loading="lazy" decoding="async" />
+                  </div>
+                  <div className="aff-does-say">
+                    <h4>{d.h}</h4>
+                    <p>{d.p}</p>
+                  </div>
+                </article>
+              ))}
+            </div>
+
+            {/* Which one is right for you. Two models of one product, not two
+                products: the same Braino, one of them pointed at a company. */}
+            <div className="aff-models">
+              <p className="aff-models-label">He comes in two</p>
+              <div className="aff-models-row">
+                {MODELS.map((m) => (
+                  <Link to={m.to} className="aff-model" key={m.key} style={{ ["--acc" as string]: m.accent }}>
+                    <span className="aff-model-who"><i aria-hidden="true" />{m.who}</span>
+                    <h4>{m.name}</h4>
+                    <p>{m.line}</p>
+                    <span className="aff-model-go">{m.go}<i aria-hidden="true">→</i></span>
+                  </Link>
+                ))}
+              </div>
+              <p className="aff-plate-foundry">{BRAINO.state}</p>
+            </div>
           </article>
         </div>
       </section>
