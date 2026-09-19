@@ -29,13 +29,12 @@
   --a-ink-faint: #918d80;
   /* One hairline, everywhere, because it is doing structural work: it is the
      only thing separating one cell from the next. */
-  /* The editorial face is the wordmark's face. The page was set in Palatino,
-     a warm old-style serif with even strokes, while the logo above it was a
-     Didone with hairline thins: two different centuries in the same column.
-     Bodoni Moda is the closest real face to the drawn mark, it is variable, and
-     its optical sizes keep those hairlines from dropping out at heading size.
-     Body text stays on the system sans: a Didone at 15px is a smudge. */
-  --a-display: "Bodoni Moda", "Didot", "Bodoni 72", "Playfair Display", Georgia, serif;
+  /* The editorial face. Bodoni Moda was tried here, to match the wordmark, and
+     it was wrong on the page: a Didone's hairlines at paragraph-adjacent sizes
+     read as thin and cold down a long column, whatever they do in a logo. The
+     mark can be a Didone on its own; the page it sits on does not have to be.
+     Body text is the system sans, set apart from this by role. */
+  --a-display: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
   --a-line: #dcd8cb;
   --a-line-strong: #c6c1b1;
 
@@ -162,9 +161,9 @@
    in its own column and pushed the standfirst so far down the two stopped
    reading as one row. */
 .aff-hero-row .aff-h1 {
-  font-size: clamp(36px, 4.4vw, 60px);
+  font-size: clamp(36px, 4.1vw, 55px);
   max-width: 21ch;
-  letter-spacing: -0.014em;
+  letter-spacing: -0.026em;
 }
 .aff-hero-side { padding-bottom: .55em; }
 .aff-hero-cta {
@@ -234,9 +233,9 @@
   margin: 0;
   font-family: var(--a-display); font-optical-sizing: auto;
   font-size: clamp(40px, 6.8vw, 86px);
-  line-height: 1.06;
-  letter-spacing: -0.012em;
-  font-weight: 450;
+  line-height: 1.02;
+  letter-spacing: -0.028em;
+  font-weight: 400;
   max-width: 26ch;
   text-wrap: balance;
 }
@@ -1056,8 +1055,8 @@
 .aff-foot-ask h2 {
   margin: 0;
   font-family: var(--a-display); font-optical-sizing: auto;
-  font-size: clamp(38px, 5vw, 68px); font-weight: 450;
-  line-height: 1.02; letter-spacing: -0.012em;
+  font-size: clamp(38px, 5vw, 64px); font-weight: 400;
+  line-height: 1.04; letter-spacing: -0.024em;
   color: #f6f3ea;
 }
 .aff-foot-ask p {
