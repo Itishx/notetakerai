@@ -177,14 +177,15 @@ const BRAINO = {
   state: "Runs on AffectiveOS \u00b7 Private beta",
 };
 
-/* The two he comes in. Same Braino; one of them is pointed at your company. */
+/* The three he comes in. Same Braino; each model is pointed at a different
+   life, the way a phone has models. */
 const MODELS = [
   {
     key: "braino",
     name: "Braino",
     who: "For everyone",
     line: "Browser and Mac. The whole of him, on whatever you are looking at.",
-    to: "/braino",
+    to: "/braino-final",
     go: "Meet Braino",
     accent: "var(--a-braino)",
   },
@@ -192,10 +193,19 @@ const MODELS = [
     key: "foundry",
     name: "Braino Foundry",
     who: "For founders",
-    line: "An AI co-founder. You build the thing, he does the half that gets it seen: the posting, the outreach, the people who said maybe.",
+    line: "You can build it, you cannot get seen. He writes your week, gets you named when buyers ask an AI, and writes to the right people.",
     to: "/foundry",
     go: "See the Foundry",
     accent: "var(--a-foundry)",
+  },
+  {
+    key: "mesa",
+    name: "Braino for Mesa",
+    who: "For institutions",
+    line: "The same Braino with a school's timetable, attendance and deadlines inside him. Live with Mesa School of Business.",
+    to: "/contact",
+    go: "Bring him to yours",
+    accent: "#2f6fed",
   },
 ];
 
@@ -601,10 +611,11 @@ export default function Affective() {
               ))}
             </div>
 
-            {/* Which one is right for you. Two models of one product, not two
-                products: the same Braino, one of them pointed at a company. */}
+            {/* Which one is right for you. Three models of one product, not
+                three products: the same Braino, pointed at a different life
+                each time. */}
             <div className="aff-models">
-              <p className="aff-models-label">He comes in two</p>
+              <p className="aff-models-label">One Braino · Three models</p>
               <div className="aff-models-row">
                 {MODELS.map((m) => (
                   <Link to={m.to} className="aff-model" key={m.key} style={{ ["--acc" as string]: m.accent }}>
