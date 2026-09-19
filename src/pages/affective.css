@@ -273,83 +273,154 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* ── The character cards ─────────────────────────────────────────────────────
-   These carry the whole middle of the page on two cells, so they are built
-   like the opening page of a feature rather than a tile: a masthead row with
-   the billing on one side and the status on the other, a name at display size,
-   the standfirst, and the way in held at the bottom. */
-.aff-prod {
-  position: relative;
-  display: flex; flex-direction: column;
-  padding: clamp(30px, 3.6vw, 52px);
-  min-height: clamp(280px, 27vw, 380px);
-  color: inherit; text-decoration: none;
-  background: var(--a-surface);
-  transition: background .25s ease;
-}
-.aff-prod:hover { background: #f1efe7; }
-/* The accent is a rule at the top of the cell, not a fill. A tinted card is a
-   card; a hairline that changes colour keeps the sheet flat and still says
-   which product you are looking at. Always on, at a hairline, and thickening
-   on hover: invisible until hover left both cells reading as identical. */
-.aff-prod::before {
-  content: ""; position: absolute; inset: 0 0 auto 0; height: 2px;
-  background: var(--acc, var(--a-ink));
-  transform: scaleY(.5); transform-origin: top;
-  transition: transform .25s ease;
-}
-.aff-prod:hover::before, .aff-prod:focus-visible::before { transform: scaleY(1.5); }
-.aff-prod:focus-visible { outline: 2px solid var(--acc, var(--a-ink)); outline-offset: -2px; }
+/* ── The product panels ─────────────────────────────────────────────────────
+   A split panel: the claim on paper on one side, and on the other a drawing
+   of the one moment that says what the product is, on glass over its own
+   colour. The two alternate sides so a stack of them has a rhythm.
 
-/* The masthead row. Billing left, status right, on the rule. */
-.aff-prod-top {
-  display: flex; align-items: baseline; justify-content: space-between; gap: 16px;
-  padding-bottom: 16px; border-bottom: 1px solid var(--a-line);
+   Rounded rather than joined to the grid, and that is the rule the page uses
+   throughout: a hairline cell is text, a rounded frame is a picture, and these
+   are half picture. The hero figure is the same shape for the same reason.
+
+   Nothing in here is a screengrab. A faked one would be claiming a screen
+   exists exactly as pictured; a drawing is honest about being a drawing and
+   still shows the thing. */
+.aff-panels { display: flex; flex-direction: column; gap: clamp(16px, 1.8vw, 26px); }
+.aff-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
+  border: 1px solid var(--a-line);
+  border-radius: 22px;
+  overflow: hidden;
+  background: var(--a-surface);
+  color: inherit; text-decoration: none;
+  min-height: clamp(260px, 27vw, 360px);
+  transition: border-color .25s ease;
 }
-.aff-prod-tag {
+.aff-panel:hover { border-color: var(--a-line-strong); }
+.aff-panel:focus-visible { outline: 2px solid var(--acc); outline-offset: 3px; }
+/* Sides swap on the second one. Order rather than direction, so the reading
+   order stays claim first whichever way it is drawn. */
+.aff-panel-flip .aff-panel-say { order: 2; }
+.aff-panel-flip .aff-panel-art { order: 1; }
+
+.aff-panel-say {
+  padding: clamp(28px, 3.4vw, 52px);
+  display: flex; flex-direction: column; align-items: flex-start;
+}
+.aff-panel-tag {
   font-size: 11px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
-  color: var(--acc, var(--a-ink-faint));
+  color: var(--acc);
 }
-.aff-prod-state {
-  font-size: 12px; color: var(--a-ink-faint); letter-spacing: -0.002em;
-  text-align: right;
+.aff-panel-say h3 {
+  margin: clamp(18px, 2.2vw, 30px) 0 0;
+  font-size: clamp(32px, 3.9vw, 54px);
+  letter-spacing: -0.04em; font-weight: 600; line-height: .98;
 }
-.aff-prod h3 {
-  margin: clamp(26px, 3vw, 40px) 0 0;
-  font-size: clamp(38px, 4.6vw, 62px);
-  letter-spacing: -0.042em; font-weight: 600; line-height: .98;
-}
-.aff-prod .aff-prod-line {
-  margin: 16px 0 0; max-width: 40ch;
-  font-size: clamp(15.5px, 1.35vw, 17px); line-height: 1.5;
+.aff-panel-say p {
+  margin: 14px 0 0; max-width: 34ch;
+  font-size: clamp(15px, 1.35vw, 16.5px); line-height: 1.5;
   color: var(--a-ink-soft); letter-spacing: -0.008em;
 }
-.aff-prod-go {
-  margin-top: auto; padding-top: clamp(26px, 3vw, 38px);
+.aff-panel-foot {
+  margin-top: auto; padding-top: clamp(22px, 2.6vw, 34px);
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 18px;
+}
+.aff-panel-go {
   display: inline-flex; align-items: baseline; gap: 9px;
-  font-size: 14px; font-weight: 600; letter-spacing: -0.012em;
-  color: var(--acc, var(--a-ink));
+  font-size: 14px; font-weight: 600; letter-spacing: -0.012em; color: var(--acc);
 }
-.aff-prod-go i {
-  font-style: normal; font-size: .95em;
-  transition: transform .22s ease;
+.aff-panel-go i { font-style: normal; font-size: .95em; transition: transform .22s ease; }
+.aff-panel:hover .aff-panel-go i { transform: translateX(5px); }
+.aff-panel-state { font-size: 12.5px; color: var(--a-ink-faint); }
+
+/* The ground. Soft blown-out colour rather than a flat fill, so the glass has
+   something to be glass over. */
+.aff-panel-art {
+  position: relative;
+  display: grid; place-items: center;
+  padding: clamp(24px, 3vw, 44px);
+  min-height: clamp(220px, 22vw, 300px);
 }
-.aff-prod:hover .aff-prod-go i { transform: translateX(5px); }
-@media (prefers-reduced-motion: reduce) {
-  .aff-prod-go i, .aff-prod::before { transition: none; }
+.aff-art-braino {
+  background:
+    radial-gradient(70% 90% at 18% 20%, #f3c9a0 0%, transparent 62%),
+    radial-gradient(85% 95% at 82% 78%, #c9553f 0%, transparent 66%),
+    radial-gradient(60% 70% at 62% 16%, #e8dcc4 0%, transparent 60%),
+    linear-gradient(135deg, #e2a377, #a8452f);
+}
+.aff-art-hera {
+  background:
+    radial-gradient(70% 90% at 22% 24%, #bfe0f2 0%, transparent 62%),
+    radial-gradient(85% 95% at 80% 76%, #2f5fb8 0%, transparent 66%),
+    radial-gradient(60% 70% at 66% 18%, #dfe8d6 0%, transparent 60%),
+    linear-gradient(135deg, #9dc3e6, #2a4f9c);
 }
 
-/* Five products in two columns leaves one alone beside a dead cell, which reads
-   as a missing product rather than a deliberate row. The last one takes the
-   full width instead: it is the one still in design, so giving it the wide row
-   says "this is where the line goes next" rather than "we ran out". */
-.aff-grid-2 > .aff-prod:last-child:nth-child(odd) {
-  grid-column: 1 / -1;
-  min-height: clamp(220px, 20vw, 280px);
+/* The card. Real translucency where the browser has it, an opaque fallback
+   where it does not, because a white-on-white card with no blur is invisible. */
+.aff-glass {
+  width: min(100%, 420px);
+  border-radius: 16px;
+  padding: 16px 18px 18px;
+  background: rgba(252, 251, 248, .82);
+  border: 1px solid rgba(255, 255, 255, .55);
+  box-shadow: 0 26px 50px -28px rgba(30, 18, 12, .65);
 }
-.aff-grid-2 > .aff-prod:last-child:nth-child(odd) .aff-prod-line { max-width: 48ch; }
-@media (max-width: 620px) {
-  .aff-grid-2 > .aff-prod:last-child:nth-child(odd) { grid-column: auto; }
+@supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
+  .aff-glass {
+    background: rgba(252, 251, 248, .58);
+    backdrop-filter: blur(20px) saturate(170%);
+    -webkit-backdrop-filter: blur(20px) saturate(170%);
+  }
+}
+.aff-glass-top {
+  display: flex; align-items: center; gap: 10px;
+  font-size: 13px; letter-spacing: -0.006em; color: var(--a-ink);
+}
+.aff-glass-dot {
+  flex: none; width: 7px; height: 7px; border-radius: 50%;
+  background: var(--acc);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--acc) 22%, transparent);
+}
+.aff-glass-title {
+  flex: 1 1 auto; min-width: 0; font-weight: 600;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.aff-glass-time {
+  flex: none; font-size: 12px; color: var(--a-ink-soft);
+  font-variant-numeric: tabular-nums;
+}
+.aff-glass-bar {
+  margin-top: 14px; height: 4px; border-radius: 99px;
+  background: rgba(22, 21, 15, .12); overflow: hidden;
+}
+.aff-glass-bar i { display: block; height: 100%; background: var(--acc); border-radius: 99px; }
+.aff-wave {
+  margin-top: 14px; height: 28px;
+  display: flex; align-items: center;
+}
+/* The bars share the width evenly and hold their own gaps as transparent
+   borders, clipped out of the fill. Sized by flex alone they came out as wide
+   as they were tall, which is a row of dots rather than a waveform. */
+.aff-wave i {
+  flex: 1 1 0; min-width: 0; border-radius: 99px;
+  border-inline: clamp(6px, 1vw, 9px) solid transparent;
+  background: var(--acc); background-clip: padding-box;
+  opacity: .78;
+}
+.aff-glass-say {
+  margin: 12px 0 0;
+  font-size: 12.5px; line-height: 1.45; color: var(--a-ink-soft);
+  letter-spacing: -0.004em;
+}
+
+@media (max-width: 820px) {
+  /* Stacked, and the picture goes underneath: the claim is what the panel is
+     for and it should not arrive second on a phone. */
+  .aff-panel { grid-template-columns: 1fr; }
+  .aff-panel-flip .aff-panel-say { order: 0; }
+  .aff-panel-flip .aff-panel-art { order: 0; }
 }
 
 /* ── Section headers ─────────────────────────────────────────────────────────
@@ -706,7 +777,7 @@
 .aff-reveal.is-in { opacity: 1; transform: none; }
 @media (prefers-reduced-motion: reduce) {
   .aff-reveal { opacity: 1; transform: none; transition: none; }
-  .aff-prod, .aff-prod::before { transition: none; }
+  .aff-panel, .aff-panel-go i { transition: none; }
 }
 
 /* ── The product, shown ──────────────────────────────────────────────────────

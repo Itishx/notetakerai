@@ -71,6 +71,7 @@ const LAYERS = [
 
 const PRODUCTS = [
   {
+    key: "braino",
     to: "/braino",
     tag: "Product One",
     name: "Braino",
@@ -80,6 +81,7 @@ const PRODUCTS = [
     accent: "var(--a-braino)",
   },
   {
+    key: "hera",
     to: "/brainohera",
     tag: "Product Two",
     name: "HERA",
@@ -457,23 +459,61 @@ export default function Affective() {
           </div>
         </div>
         <div className="aff-wrap">
-          <div className="aff-grid aff-grid-2 aff-reveal">
-            {PRODUCTS.map((p) => (
+          <div className="aff-panels aff-reveal">
+            {PRODUCTS.map((p, i) => (
               <Link
                 to={p.to}
                 key={p.name}
-                className="aff-prod"
+                className={"aff-panel" + (i % 2 ? " aff-panel-flip" : "")}
                 style={{ ["--acc" as string]: p.accent }}
               >
-                <div className="aff-prod-top">
-                  <span className="aff-prod-tag">{p.tag}</span>
-                  <span className="aff-prod-state">{p.state}</span>
+                <div className="aff-panel-say">
+                  <span className="aff-panel-tag">{p.tag}</span>
+                  <h3>{p.name}</h3>
+                  <p>{p.line}</p>
+                  <span className="aff-panel-foot">
+                    <span className="aff-panel-go">See it<i aria-hidden="true">→</i></span>
+                    <span className="aff-panel-state">{p.state}</span>
+                  </span>
                 </div>
-                <h3>{p.name}</h3>
-                <p className="aff-prod-line">{p.line}</p>
-                <span className="aff-prod-go">
-                  See it<i aria-hidden="true">→</i>
-                </span>
+                {/* Not a screenshot. A drawing of the one moment that says what
+                    the product is, in the product's own colour, on glass. A
+                    faked screengrab would be claiming a screen exists exactly
+                    as pictured; a drawing is honest about being a drawing and
+                    still shows the thing. */}
+                <div className={"aff-panel-art aff-art-" + p.key} aria-hidden="true">
+                  <div className="aff-glass">
+                    {p.key === "braino" ? (
+                      <>
+                        <div className="aff-glass-top">
+                          <span className="aff-glass-dot" />
+                          <span className="aff-glass-title">Book the 6am flight to Delhi</span>
+                          <span className="aff-glass-time">2:14</span>
+                        </div>
+                        <div className="aff-glass-bar"><i style={{ width: "68%" }} /></div>
+                        <p className="aff-glass-say">
+                          Passenger details filled. Stopping before it pays.
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <div className="aff-glass-top">
+                          <span className="aff-glass-dot" />
+                          <span className="aff-glass-title">Listening</span>
+                          <span className="aff-glass-time">41:12</span>
+                        </div>
+                        <div className="aff-wave">
+                          {[38, 64, 22, 88, 46, 72, 30, 58, 92, 40, 66, 26, 80, 48, 34, 70, 24, 56].map((h, n) => (
+                            <i key={n} style={{ height: `${h}%` }} />
+                          ))}
+                        </div>
+                        <p className="aff-glass-say">
+                          and tell them the deck is ready by Friday
+                        </p>
+                      </>
+                    )}
+                  </div>
+                </div>
               </Link>
             ))}
           </div>
