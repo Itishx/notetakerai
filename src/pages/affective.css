@@ -286,10 +286,16 @@
 .aff-h1-line { display: block; }
 .aff-swap {
   position: relative; display: inline-block;
-  height: 1em; vertical-align: baseline;
+  vertical-align: baseline;
+  line-height: inherit;
   transition: width .46s cubic-bezier(.4, 0, .2, 1);
   will-change: width;
 }
+/* A zero-width character in the flow, so the box has a real baseline of its
+   own. With every word taken out of the flow the box had none, and an
+   inline-block with no in-flow content sits on its bottom edge, which floated
+   the word above the line it belongs to. */
+.aff-swap::before { content: "\200b"; }
 .aff-swap-word {
   position: absolute; left: 0; top: 0; white-space: nowrap;
   opacity: 0; transform: translateY(.13em);
