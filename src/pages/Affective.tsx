@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import "./affective.css";
 
@@ -23,9 +23,6 @@ import "./affective.css";
    tree. Nobody has ever wanted "screen awareness"; they want to not have to do
    it themselves. Every technical sentence was cut or translated.
    ============================================================================ */
-
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
-const SUPABASE_KEY = (import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY) as string;
 
 /* What the Mac gets that it never had. Four things a person would notice,
    rather than the layers underneath that make them true. No "Today" line on
@@ -306,35 +303,12 @@ export default function Affective() {
       if (frame) window.cancelAnimationFrame(frame);
     };
   }, []);
-  const [email, setEmail] = useState("");
-  const [state, setState] = useState<"idle" | "loading" | "done" | "existing" | "error">("idle");
-
   useEffect(() => {
     document.title = "Affective";
     const prev = document.body.style.background;
     document.body.style.background = "#f4f2ec";
     return () => { document.body.style.background = prev; };
   }, []);
-
-  /* The same door the waitlist page uses, so one list, one inbox. */
-  const join = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (state === "loading") return;
-    if (!email.trim().includes("@")) { setState("error"); return; }
-    setState("loading");
-    try {
-      const response = await fetch(`${SUPABASE_URL}/functions/v1/waitlist-signup`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", apikey: SUPABASE_KEY },
-        body: JSON.stringify({ email: email.trim(), categories: ["braino"], context: "affective-site" }),
-      });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error();
-      setState(data.error === "already_on_waitlist" ? "existing" : "done");
-    } catch {
-      setState("error");
-    }
-  };
 
   return (
     <div className="aff" ref={root}>
@@ -347,7 +321,7 @@ export default function Affective() {
             <a href="#technology">Technology</a>
             <a href="#products">Products</a>
             <a href="#why">Why</a>
-            <a href="#early">Early access</a>
+            <Link to="/waitlist">Early access</Link>
           </div>
         </div>
       </nav>
@@ -382,7 +356,7 @@ export default function Affective() {
                 the work.
               </p>
               <div className="aff-hero-cta">
-                <a href="#early" className="aff-cta">Join the waitlist</a>
+                <Link to="/waitlist" className="aff-cta">Join the waitlist</Link>
                 <Link to="/braino" className="aff-cta aff-cta-ghost">Meet Braino</Link>
               </div>
             </div>
@@ -445,6 +419,36 @@ export default function Affective() {
             loading="lazy"
             decoding="async"
           />
+        </div>
+      </section>
+
+      {/* ── Why ────────────────────────────────────────────────────────────
+          A magazine spread: the claim at full size on the left, the reason it
+          is true set as a standfirst on the right.
+
+          It sits here, before the technology, because it is the setup for it:
+          "the hands" is one of the four things AffectiveOS gives the Mac, and
+          a setup after its payoff is a joke told backwards. It used to sit
+          after the products, where the argument for why nobody else has done
+          this arrived once the reader had already decided. */}
+      <section className="aff-statement" id="why">
+        <div className="aff-wrap">
+          <div className="aff-statement-in">
+            <blockquote className="aff-reveal">
+              The hard part was never the intelligence.
+              {" "}<span>It was the hands.</span>
+            </blockquote>
+            <div className="aff-statement-say aff-reveal">
+              <p className="aff-statement-kicker">Why</p>
+              <p>
+                Every model can tell you how to book the flight. Not one of them can reach
+                over and do it on the machine in front of you. Seeing the screen you are
+                actually on, pressing the button that is actually there, knowing when to
+                stop and ask. Each piece exists somewhere. Nobody had held them together
+                on a normal laptop, on a normal Tuesday. That is the only thing we build.
+              </p>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -570,35 +574,19 @@ export default function Affective() {
         </div>
       </section>
 
-      {/* ── Why ────────────────────────────────────────────────────────────
-          A magazine spread: the claim at full size on the left, the reason it
-          is true set as a standfirst on the right, and the name explained
-          underneath it, which is the only place on the page where the word
-          Affective is allowed to be about us rather than about the Mac. */}
-      <section className="aff-statement" id="why">
+      {/* ── About the name ─────────────────────────────────────────────────
+          Late on purpose. Nobody wants the etymology until they want the
+          company, so it sits after the work and before the questions. */}
+      <section className="aff-sec aff-name" id="name">
         <div className="aff-wrap">
-          <div className="aff-statement-in">
-            <blockquote className="aff-reveal">
-              The hard part was never the intelligence.
-              {" "}<span>It was the hands.</span>
-            </blockquote>
-            <div className="aff-statement-say aff-reveal">
-              <p className="aff-statement-kicker">Why</p>
-              <p>
-                Every model can tell you how to book the flight. Not one of them can reach
-                over and do it on the machine in front of you. Seeing the screen you are
-                actually on, pressing the button that is actually there, knowing when to
-                stop and ask. Each piece exists somewhere. Nobody had held them together
-                on a normal laptop, on a normal Tuesday. That is the only thing we build.
-              </p>
-              <p className="aff-statement-name">
-                <b>About the name.</b> A mind does three things: thinks, does, feels.
-                Everyone in AI is racing on the first two. We are named after the third.
-                Affective is the old, precise word for the feeling layer, the part that
-                turns a voice into a someone. It is the part everybody skips. It is the
-                part you keep.
-              </p>
-            </div>
+          <div className="aff-name-in aff-reveal">
+            <p className="aff-sec-kicker">About the name</p>
+            <p>
+              A mind does three things: thinks, does, feels. Everyone in AI is racing on
+              the first two. We are named after the third. Affective is the old, precise
+              word for the feeling layer, the part that turns a voice into a someone. It
+              is the part everybody skips. It is the part you keep.
+            </p>
           </div>
         </div>
       </section>
@@ -643,47 +631,6 @@ export default function Affective() {
         </div>
       </section>
 
-      {/* ── Get in line ────────────────────────────────────────────────────
-          A strip, not a section: the ask is one line and one field across the
-          page, sitting between the questions and the closing picture. In the
-          footer it was six hundred pixels down inside the photograph, which is
-          further than anybody scrolls to join anything. */}
-      <section className="aff-join" id="early">
-        <div className="aff-wrap aff-join-in">
-          <div className="aff-join-say">
-            <h2>Get in line.</h2>
-            <p>
-              Mac only, for now. Founders and students first. A few seats a week, and we
-              write to you when one is yours.
-            </p>
-          </div>
-          <div className="aff-join-form">
-            <form className="aff-early-form" onSubmit={join}>
-              <input
-                id="aff-early-email"
-                type="email"
-                inputMode="email"
-                autoComplete="email"
-                placeholder="you@where.you.are"
-                aria-label="Your email"
-                value={email}
-                onChange={(e) => { setEmail(e.target.value); if (state !== "loading") setState("idle"); }}
-              />
-              <button type="submit" disabled={state === "loading"}>
-                {state === "loading" ? "One moment" : "Join the waitlist"}
-              </button>
-            </form>
-            {state !== "idle" && state !== "loading" && (
-              <p className="aff-early-said">
-                {state === "done" && "You are on the list. We write when a seat is yours."}
-                {state === "existing" && "You are already on the list. Nothing more to do."}
-                {state === "error" && "That did not go through. Check the address and try once more."}
-              </p>
-            )}
-          </div>
-        </div>
-      </section>
-
       {/* ── Footer ─────────────────────────────────────────────────────────
           The closing picture, with everything written over it. A scrim from
           the bottom rather than a wash over the whole frame, so the image
@@ -723,7 +670,7 @@ export default function Affective() {
               </nav>
               <nav className="aff-foot-col">
                 <h4>Company</h4>
-                <a href="#early">Early access</a>
+                <Link to="/waitlist">Early access</Link>
                 <Link to="/contact">Contact</Link>
               </nav>
             </div>

@@ -1206,37 +1206,21 @@
 }
 .aff-close .aff-tagline { margin: 0; padding-top: 0; border-top: 0; }
 
-/* ── Get in line ──────────────────────────────────────────────────────────
-   One row across the page: the ask on the left, the field on the right, a
-   hairline over it. Short on purpose, because it comes after the questions and
-   before the closing picture and should read as the last word rather than as
-   another section. In the footer it sat six hundred pixels down inside a
-   photograph, which is further than anybody scrolls to join anything. */
-.aff-join {
-  border-top: 1px solid var(--a-line);
-  background: var(--a-surface);
+/* About the name: a single paragraph in the measure of a column, so the page
+   ends its argument the way a piece of writing does rather than with another
+   grid. */
+.aff-name-in {
+  display: grid; grid-template-columns: minmax(0, 200px) minmax(0, 1fr);
+  gap: clamp(14px, 3vw, 56px);
+  align-items: start;
 }
-.aff-join-in {
-  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 0.9fr);
-  gap: clamp(20px, 4vw, 64px); align-items: end;
-  padding-top: clamp(38px, 4.4vw, 62px);
-  padding-bottom: clamp(38px, 4.4vw, 62px);
+.aff-name-in p:last-child {
+  margin: 0; max-width: 62ch;
+  font-size: clamp(16px, 1.5vw, 19px); line-height: 1.58;
+  letter-spacing: -0.008em; color: var(--a-ink-soft);
 }
-.aff-join-say h2 {
-  margin: 0;
-  font-family: var(--a-display);
-  font-size: clamp(32px, 3.8vw, 50px); font-weight: 400;
-  line-height: 1.04; letter-spacing: -0.024em; color: var(--a-ink);
-}
-.aff-join-say p {
-  margin: 14px 0 0; max-width: 48ch;
-  font-size: clamp(14.5px, 1.35vw, 16px); line-height: 1.55;
-  color: var(--a-ink-soft); letter-spacing: -0.006em;
-}
-.aff-join-form .aff-early-form { margin: 0; max-width: none; }
-@media (max-width: 820px) {
-  .aff-join-in { grid-template-columns: 1fr; align-items: start; }
-}
+.aff-name-in .aff-sec-kicker { margin: 0; padding-top: .4em; }
+@media (max-width: 720px) { .aff-name-in { grid-template-columns: 1fr; } }
 
 /* ── Footer ──────────────────────────────────────────────────────────────── */
 /* ── Footer ───────────────────────────────────────────────────────────────
