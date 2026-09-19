@@ -281,14 +281,21 @@ export default function Affective() {
           {/* The claim on the left and, immediately beside it, the reason
               anybody should care. A short claim on its own is a slogan. */}
           <div className="aff-hero-cols">
-            {/* The first sentence says what the company does; the second says
-                what it is for, and it is the half that lands. Coloured the way
-                the statement's second half is, because it is the same move: the
-                claim, then the payoff. */}
+            {/* Typing is what HERA replaces and clicking is what Braino
+                replaces, so naming both is the only version of this claim that
+                is true of both products. "And the part that goes and does the
+                work" was true of one of them, three sections above a page that
+                promises the other will never act.
+
+                It also hands the second line its logic: you stop typing and
+                clicking, so your hands are free. Which sets up the statement
+                further down, where the hands turn out to have been the hard
+                part all along. Said without the word agents, which everybody in
+                this industry uses and nobody outside it does. */}
             <h1 className="aff-h1 aff-reveal">
-              We build the technology behind a computer you can{" "}
-              <em>just talk to.</em>{" "}
-              <b>So you never have to touch it again.</b>
+              We build the technology that lets you talk to your computer instead of
+              typing and clicking your way through it.
+              <b>Your hands are free.</b>
             </h1>
             <div className="aff-hero-say aff-reveal">
               <p className="aff-hero-explain">
@@ -297,7 +304,7 @@ export default function Affective() {
                 email you have been putting off since Tuesday.
               </p>
               <p className="aff-hero-explain">
-                We build the part that goes and does it, and the one character worth asking.
+                Say it out loud instead. That is the whole company.
               </p>
             </div>
           </div>
