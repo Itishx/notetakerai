@@ -191,37 +191,37 @@ const PRODUCTS = [
     name: "Braino Foundry",
     est: "For founders",
     kind: "The same Braino",
-    line: "An operating partner, not an assistant.",
+    line: "An AI co-founder.",
     lead:
-      "Solo builders already have smart models. What nobody has is the thing carrying context between those models, the code, the browser, the files and the actual state of the company. That is the job Foundry takes.",
+      "You build the thing. He does the half that gets it seen: the posting, the outreach, the people who said maybe. Same Braino, pointed at your company.",
     does: [
       {
-        key: "context",
+        key: "company",
         art: "/os-senses.jpg",
-        h: "He holds the context.",
-        p: "Between the model, the code, the browser and the files, so you stop explaining your own company to your own software every morning.",
+        h: "He knows your company.",
+        p: "What you are building, who you have spoken to, what you decided last month. You stop explaining your own company every morning.",
       },
       {
-        key: "distribution",
+        key: "posting",
         art: "/os-voice.jpg",
-        h: "He runs your distribution.",
-        p: "The posting, the outreach, the follow-ups. The half of the company that never gets done, because you are busy building the other half.",
+        h: "He does the posting.",
+        p: "The updates, the replies, the thread you meant to write on Sunday. The part that never gets done because you are busy building.",
       },
       {
-        key: "argues",
+        key: "follow",
         art: "/os-hands.jpg",
-        h: "He disagrees with you.",
-        p: "A partner who only ever agrees is a mirror. He remembers what you decided in March and says so when today contradicts it.",
+        h: "He chases the follow-ups.",
+        p: "The people who said maybe, the mail nobody answered, the call you were going to make on Tuesday. He keeps the list and works it.",
       },
       {
-        key: "agents",
+        key: "truth",
         art: "/os-memory.jpg",
-        h: "He will brief the coding agents.",
-        p: "Hand the work over, watch it being done, check the result and hear about it honestly. Coming to Foundry first, and not shipped yet.",
+        h: "He tells you the truth.",
+        p: "A co-founder who only ever agrees is a mirror. He remembers what you decided in March and says so when today contradicts it.",
       },
     ],
-    foot: "Foundry is where Braino is pointed first, because building alone is the problem we know.",
-    state: "Runs on AffectiveOS · Coming first to Foundry",
+    foot: "Handing work to coding agents and checking it comes to Foundry first. Not shipped yet.",
+    state: "Runs on AffectiveOS · For founders",
     go: "See the Foundry",
     accent: "var(--a-foundry)",
   },
@@ -584,19 +584,26 @@ export default function Affective() {
             the door goes. */}
         <div className="aff-wrap">
           <article className="aff-plate" style={{ ["--acc" as string]: PRODUCTS[product].accent }}>
-            <div className="aff-plate-tabs" role="tablist" aria-label="Which Braino">
-              {PRODUCTS.map((p, i) => (
-                <button
-                  key={p.key}
-                  type="button"
-                  role="tab"
-                  aria-selected={i === product}
-                  className={i === product ? "on" : ""}
-                  onClick={() => setProduct(i)}
-                >
-                  {p.tab}
-                </button>
-              ))}
+            <div className="aff-plate-tabs">
+              <div className="aff-plate-tablist" role="tablist" aria-label="Which Braino">
+                {PRODUCTS.map((p, i) => (
+                  <button
+                    key={p.key}
+                    type="button"
+                    role="tab"
+                    aria-selected={i === product}
+                    className={i === product ? "on" : ""}
+                    style={{ ["--dot" as string]: p.accent }}
+                    onClick={() => setProduct(i)}
+                  >
+                    <i aria-hidden="true" />
+                    {p.tab}
+                  </button>
+                ))}
+              </div>
+              {/* Said once, here, so nobody has to work it out from the tabs:
+                  it is one thing with two doors. */}
+              <p className="aff-plate-one">One product, two doors.</p>
             </div>
 
             {PRODUCTS.slice(product, product + 1).map((p) => (
