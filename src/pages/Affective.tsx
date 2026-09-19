@@ -162,7 +162,9 @@ export default function Affective() {
     <div className="aff" ref={root}>
       <nav className="aff-nav">
         <div className="aff-nav-in">
-          <Link to="/affective" className="aff-logo">Affective.</Link>
+          <Link to="/affective" className="aff-logo" aria-label="Affective">
+            <img src="/affective-logo.png" alt="Affective" width={1000} height={207} />
+          </Link>
           <div className="aff-nav-links">
             <a href="#technology">Technology</a>
             <a href="#products">Products</a>
@@ -181,10 +183,10 @@ export default function Affective() {
       <header className="aff-hero">
         <div className="aff-band">
           <img
-            src="/affectivehero.jpeg"
-            alt="A warm, lamp-lit room with a low chair, a sofa and a glass table, and no screen anywhere in it."
-            width={736}
-            height={1104}
+            src="/affective-hero.jpg"
+            alt="A cross-stitched view of a lake through stone arches, with a cat sitting on the balustrade watching it."
+            width={1774}
+            height={887}
             loading="eager"
             decoding="async"
           />
@@ -214,7 +216,7 @@ export default function Affective() {
             reader, and where we are. */}
         <div className="aff-strip">
           <div className="aff-wrap aff-strip-in">
-            <p>The computer is still here. You just stop sitting at it.</p>
+            <p>Nobody in this picture is at a desk.</p>
             <div className="aff-hero-meta">
               <span>Bengaluru</span>
               <span>Private beta</span>
@@ -454,7 +456,9 @@ export default function Affective() {
         <div className="aff-wrap">
           <div className="aff-foot-grid">
             <div className="aff-foot-brand">
-              <strong className="aff-mark">Affective.</strong>
+              <strong className="aff-mark">
+                <img src="/affective-logo.png" alt="Affective" width={1000} height={207} />
+              </strong>
               {/* Affective is not a computer. It is the company building what
                   the one you already own was missing. */}
               <p>

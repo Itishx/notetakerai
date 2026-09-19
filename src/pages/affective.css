@@ -81,7 +81,14 @@
   letter-spacing: -0.008em;
   color: var(--a-ink); text-decoration: none;
 }
-.aff-logo { font-size: 24px; line-height: 1; }
+.aff-logo { font-size: 24px; line-height: 1; display: inline-flex; align-items: center; }
+/* The mark as drawn. The file was black on near-white paper, so the paper was
+   keyed out by luminance rather than by colour, which keeps the hairlines and
+   the thin side of the A soft instead of cutting them to a jagged edge, and
+   the empty margin trimmed off so the bar can size it by its own height. */
+.aff-logo img, .aff-mark img { display: block; width: auto; }
+.aff-logo img { height: 17px; }
+.aff-mark img { height: 21px; }
 .aff-nav-links { margin-left: auto; display: flex; gap: 26px; }
 .aff-nav-links a {
   font-size: 12.5px; font-weight: 500; letter-spacing: -0.006em;
@@ -112,7 +119,7 @@
 }
 .aff-band img {
   display: block; width: 100%; height: 100%;
-  object-fit: cover; object-position: center 66%;
+  object-fit: cover; object-position: center 52%;
 }
 .aff-hero-row {
   display: grid;
