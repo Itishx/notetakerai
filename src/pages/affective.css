@@ -876,22 +876,19 @@
 
 /* The four, under the picture. No cell borders: the picture is the object and
    these are its caption, so they get space instead of edges. */
-/* Two by two. A row of four turned the pictures into thumbnails and read as a
-   filmstrip; the four things are a square, so the grid is a square. Held to a
-   measure rather than run to the page edge, because a portrait picture 550px
-   wide is 670 tall and the section becomes a wall. */
-.aff-four {
-  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: clamp(30px, 3.6vw, 64px) clamp(28px, 3.4vw, 60px);
-  padding: clamp(24px, 3vw, 44px) 0 clamp(10px, 1.6vw, 22px);
-  max-width: 940px;
-}
-/* The picture is the cell's own edge, so nothing is drawn around it. */
+/* The four, on the page's own grid: one cell attached to the next, hairline to
+   hairline, no gutters. A gap would say these are four separate things
+   arranged; a shared edge says one system divided, which is the claim the
+   section is making. One line of four. */
+.aff-four { background: var(--a-surface); }
+.aff-four-item { padding: clamp(20px, 2vw, 30px); }
+/* The picture sits inside its cell with the cell's own air around it, rather
+   than bleeding to the hairline, so the row reads as a grid and not as a strip
+   of photographs. */
 .aff-four-art {
   aspect-ratio: 341 / 415;
   margin: 0 0 clamp(16px, 1.6vw, 22px);
-  background: var(--a-surface);
-  border: 1px solid var(--a-line);
+  background: var(--a-bg);
   display: flex; align-items: center; justify-content: center;
 }
 .aff-four-art img { display: block; width: 100%; height: 100%; object-fit: cover; }
@@ -912,7 +909,6 @@
   font-size: clamp(14px, 1.25vw, 15.5px); line-height: 1.6;
   letter-spacing: -0.006em; color: var(--a-ink-soft);
 }
-@media (max-width: 560px) { .aff-four { grid-template-columns: 1fr; } }
 
 /* The picture settles rather than appears: it comes in a little large and
    finds its size, which is the only motion on the page that is not a fade. */

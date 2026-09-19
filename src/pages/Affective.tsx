@@ -349,7 +349,7 @@ export default function Affective() {
               what it means. No cell borders, because each picture is already
               its own edge. They arrive one after another on the way past,
               which is the only flourish the page allows itself. */}
-          <div className="aff-four" data-drift="30">
+          <div className="aff-grid aff-grid-4 aff-four" data-drift="30">
             {THE_FOUR.map((d, i) => (
               <article className="aff-four-item aff-reveal" key={d.h} style={{ transitionDelay: `${i * 110}ms` }}>
                 <FourArt art={d.art} label={d.h.replace(".", "")} />
