@@ -274,6 +274,20 @@ export default function Affective() {
             </p>
           </div>
         </div>
+        {/* The picture of the thing itself, between the claim and the four
+            things it is made of, so the section opens on something to look at
+            rather than on a grid. */}
+        <div className="aff-os-art aff-reveal">
+          <img
+            src="/affective-os.jpg"
+            alt="Affective OS."
+            width={1536}
+            height={1024}
+            loading="lazy"
+            decoding="async"
+          />
+        </div>
+
         <div className="aff-wrap">
           <div className="aff-grid aff-grid-2 aff-reveal">
             {THE_FOUR.map((d) => (
