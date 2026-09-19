@@ -678,24 +678,28 @@ export default function Affective() {
                   the one you have, and the products that do the work. Bengaluru.
                 </p>
               </div>
-              {/* One product, drawn as what it is. Braino is the trunk, the two
-                  he comes in hang off it, and the line carries on down to the
-                  institutions who buy the same Braino with their own timetable
-                  inside him. A list would have said the same thing and made
-                  them look like four separate things. */}
-              <nav className="aff-foot-col aff-tree" aria-label="Braino and its models">
-                <h4>Braino</h4>
-                <ul>
-                  <li><Link to="/braino">Braino</Link></li>
-                  <li><Link to="/foundry">Braino Foundry</Link></li>
-                  <li className="aff-tree-branch">
-                    <span className="aff-tree-label">For institutions</span>
+              {/* Products holds one product, and the product divides into the
+                  two he comes in. Drawn rather than listed, because a list
+                  makes three separate things out of one. */}
+              <nav className="aff-foot-col aff-tree" aria-label="Products">
+                <h4>Products</h4>
+                <ul className="aff-tree-root">
+                  <li>
+                    <Link to="/braino" className="aff-tree-head">Braino</Link>
                     <ul>
-                      {/* A deal rather than a download, so it goes to a person
-                          and not to a form. */}
-                      <li><Link to="/contact">Braino for Mesa School of Business</Link></li>
+                      <li><Link to="/braino">Braino</Link></li>
+                      <li><Link to="/foundry">Braino Foundry</Link></li>
                     </ul>
                   </li>
+                </ul>
+              </nav>
+              {/* Its own column. A school buying the same Braino with its own
+                  timetable, attendance and deadlines inside him is a deal
+                  rather than a download, so it goes to a person, not a form. */}
+              <nav className="aff-foot-col aff-tree" aria-label="For institutions">
+                <h4>For institutions</h4>
+                <ul>
+                  <li><Link to="/contact">Braino for Mesa School of Business</Link></li>
                 </ul>
               </nav>
               <nav className="aff-foot-col">
