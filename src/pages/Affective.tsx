@@ -433,22 +433,25 @@ export default function Affective() {
             </p>
           </div>
         </div>
-        {/* One picture per thing, on the page's own grid and running to the
-            page edge rather than sitting inside the measure: four cells wide
-            enough for the pictures to be pictures. The image fills its cell to
-            the hairline; only the words are indented. They arrive one after
-            another on the way past, which is the only flourish the page allows
-            itself. */}
-        <div className="aff-grid aff-grid-4 aff-four">
+        {/* One picture per thing, in the same framed box his section uses. It
+            ran to the page edge while the product below it sat in a box, and
+            two different ideas of what a grid is on one page is the kind of
+            inconsistency you feel before you can name it. The image fills its
+            cell to the hairline; only the words are indented. They arrive one
+            after another on the way past, which is the only flourish the page
+            allows itself. */}
+        <div className="aff-wrap">
+          <div className="aff-grid aff-grid-4 aff-four">
           {THE_FOUR.map((d, i) => (
             <article className="aff-four-item aff-reveal" key={d.h} style={{ transitionDelay: `${i * 110}ms` }}>
               <FourArt art={d.art} label={d.h.replace(".", "")} />
-              <div className="aff-four-say">
-                <h3>{d.h}</h3>
-                <p>{d.body}</p>
-              </div>
-            </article>
-          ))}
+                <div className="aff-four-say">
+                  <h3>{d.h}</h3>
+                  <p>{d.body}</p>
+                </div>
+              </article>
+            ))}
+          </div>
         </div>
         <div className="aff-wrap">
           {/* Where all of it lands: the four are the floor, and the character

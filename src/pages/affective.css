@@ -644,14 +644,21 @@
    by more than the distance it travels, so the movement happens inside the
    margin and all four cells are whole at every point of the scroll. */
 .aff-four {
-  /* End to end. Nothing moves here any more, so nothing has to be held back
-     from the edge to keep it from being cut: the four run the full width and
-     the cells are as big as the page can make them. */
+  /* The same framed box the product below it sits in, so the page has one
+     idea of what a grid is. A box in the measure under a band to the page
+     edge was two ideas, and that is the inconsistency you feel before you can
+     name it. */
   width: 100%;
-  margin: clamp(26px, 3.4vw, 48px) 0 0;
-  background: var(--a-surface);
-  border-left: 0; border-right: 0;
+  margin: clamp(18px, 2vw, 28px) 0 0;
+  border: 1px solid var(--a-line-strong);
+  background: #fdfcf8;
+  overflow: hidden;
+  box-shadow: 0 1px 0 rgba(22, 21, 15, .03), 0 18px 40px -28px rgba(22, 21, 15, .28);
 }
+/* Inside a frame already: the grid draws only the lines between its own cells. */
+.aff-four { border-top: 1px solid var(--a-line-strong); border-left: 1px solid var(--a-line-strong); }
+.aff-four > *:nth-child(4n) { border-right: 0; }
+.aff-four > * { border-bottom: 0; }
 .aff-four-item { display: flex; flex-direction: column; }
 /* The picture fills its cell to the hairline. Only the words are indented. */
 .aff-four-art {
