@@ -35,25 +35,35 @@ const SUPABASE_KEY = (import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.
 const THE_FOUR = [
   {
     h: "Senses.",
+    art: "/os-senses.jpg",
     body:
       "Your Mac gets eyes and ears. It sees the screen you are on and hears you for an hour straight. No copying, no pasting, no describing what it cannot see.",
   },
   {
     h: "Voice.",
+    art: "/os-voice.jpg",
     body:
       "Have you ever had a back-and-forth conversation with your Mac? Now you can. It answers out loud, and you can cut it off mid-sentence, like a person.",
   },
   {
     h: "Hands.",
+    art: "/os-hands.jpg",
     body:
       "You say the task. Your Mac does it. Books the flight, fills the form, sends the reply. It asks before anything is paid for or sent.",
   },
   {
     h: "Memory.",
+    art: "/os-memory.jpg",
     body:
       "Your Mac gets a memory. It remembers what you have been doing, who your people are, and what you told it last month. Every day stops starting from zero.",
   },
 ];
+
+/* Which of the four pictures have arrived. A missing one draws its own quiet
+   block rather than a broken image, so the page is never waiting on a file.
+   Drop the four into public/ under these names and they appear; nothing here
+   needs editing. */
+const HAVE_ART = new Set<string>([]);
 
 /* One product on this page for now. HERA has her own page and comes back here
    when there is something to show of her. */
@@ -316,30 +326,19 @@ export default function Affective() {
             </p>
           </div>
         </div>
-        {/* The picture of the thing itself, between the claim and the four
-            things it is made of, so the section opens on something to look at
-            rather than on a grid. */}
-        <div className="aff-os-art aff-reveal aff-rise" data-drift="46">
-          <img
-            src="/affective-os.jpg"
-            alt="Affective OS."
-            width={1536}
-            height={1024}
-            loading="lazy"
-            decoding="async"
-          />
-        </div>
-
         <div className="aff-wrap">
-          {/* Four columns under the picture, not four boxes beside it. The
-              borders were the page's cell system doing its job in the wrong
-              place: here the picture is the object and these are its caption,
-              so they get space rather than edges. They arrive one after
-              another on the way past, which is the only thing on the page that
-              is allowed to be a flourish. */}
+          {/* One picture per thing: the image, then the name under it, then
+              what it means. No cell borders, because each picture is already
+              its own edge. They arrive one after another on the way past,
+              which is the only flourish the page allows itself. */}
           <div className="aff-four" data-drift="30">
             {THE_FOUR.map((d, i) => (
               <article className="aff-four-item aff-reveal" key={d.h} style={{ transitionDelay: `${i * 110}ms` }}>
+                <div className="aff-four-art aff-rise">
+                  {HAVE_ART.has(d.art)
+                    ? <img src={d.art} alt="" width={1536} height={1024} loading="lazy" decoding="async" />
+                    : <span className="aff-four-wait">{d.h.replace(".", "")}</span>}
+                </div>
                 <h3>{d.h}</h3>
                 <p>{d.body}</p>
               </article>
