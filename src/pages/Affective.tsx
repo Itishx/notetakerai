@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
+import MiniBraino from "@/components/MiniBraino";
 import "./affective.css";
 
 /* ============================================================================
@@ -54,26 +55,22 @@ const THE_FOUR = [
   },
 ];
 
+/* One product on this page for now. HERA has her own page and comes back here
+   when there is something to show of her. */
 const PRODUCTS = [
   {
     key: "braino",
     to: "/braino",
     name: "Braino",
-    line:
-      "The companion. He lives in your browser and on your Mac, already knows what you are looking at, and does the half of the day you would rather not. For founders, there is a door called the Foundry: same Braino, running your distribution.",
-    state: "Runs on Affective OS · Private beta",
+    est: "Est. 2026",
+    kind: "Browser and Mac",
+    say: [
+      "The companion. He lives in your browser and on your Mac, already knows what you are looking at, and does the half of the day you would rather not.",
+      "For founders, there is a door called the Foundry: same Braino, running your distribution.",
+    ],
+    facts: [["Runs on", "Affective OS"], ["State", "Private beta"]],
     go: "Meet Braino",
     accent: "var(--a-braino)",
-  },
-  {
-    key: "hera",
-    to: "/brainohera",
-    name: "HERA",
-    line:
-      "The ears, sold on their own. Speak anywhere on your Mac and the words land where the cursor is. It writes what you say and never acts. Works with Braino, or without him.",
-    state: "Runs on Affective OS · Built, shipping next",
-    go: "See HERA",
-    accent: "var(--a-hera)",
   },
 ];
 
@@ -294,7 +291,12 @@ export default function Affective() {
         </div>
       </section>
 
-      {/* ── The products ───────────────────────────────────────────────────── */}
+      {/* ── The products ───────────────────────────────────────────────────
+          One plate each, the way a brand board lays a product out: the name
+          on the picture, and the short version under it in two columns with
+          the facts in a table. Braino's plate is a photograph; HERA has no
+          picture yet and gets her own colour rather than a borrowed one,
+          which is honest and still a plate. */}
       <section className="aff-sec" id="products">
         <div className="aff-wrap">
           <div className="aff-sec-head aff-reveal">
@@ -302,72 +304,46 @@ export default function Affective() {
             <h2>What we made with it.</h2>
           </div>
         </div>
-        <div className="aff-wrap">
-          <div className="aff-panels aff-reveal">
-            {PRODUCTS.map((p, i) => (
-              <Link
-                to={p.to}
-                key={p.name}
-                className={"aff-panel" + (i % 2 ? " aff-panel-flip" : "")}
-                style={{ ["--acc" as string]: p.accent }}
-              >
-                <div className="aff-panel-say">
-                  <h3>{p.name}</h3>
-                  <p>{p.line}</p>
-                  <span className="aff-panel-foot">
-                    <span className="aff-panel-go">{p.go}<i aria-hidden="true">→</i></span>
-                    <span className="aff-panel-state">{p.state}</span>
-                  </span>
+
+        {PRODUCTS.map((p) => (
+          <article className={"aff-plate aff-plate-" + p.key} key={p.key} style={{ ["--acc" as string]: p.accent }}>
+            {/* No photograph. There is no picture of Braino that is not a
+                screenshot, and a screenshot here would turn the page into a
+                product tour three sections early. What there is instead is
+                him: the same walker the products use, pacing his own lane
+                beside his name. His name is set in the page's sans, not its
+                Didone, because Braino is the software and Affective is the
+                company, and they should not wear the same face. */}
+            <div className="aff-plate-art aff-reveal">
+              <div className="aff-plate-mark">
+                <h3>{p.name}</h3>
+                <p className="aff-plate-line">
+                  <span>{p.kind}</span>
+                  <span>{p.est}</span>
+                </p>
+              </div>
+              <div className="aff-plate-lane" aria-hidden="true">
+                <MiniBraino size={92} />
+              </div>
+            </div>
+
+            <div className="aff-wrap aff-plate-say aff-reveal">
+              <div className="aff-plate-cols">
+                {p.say.map((line) => <p key={line}>{line}</p>)}
+              </div>
+              <dl className="aff-plate-facts">
+                {p.facts.map(([k, v]) => (
+                  <div key={k}><dt>{k}</dt><dd>{v}</dd></div>
+                ))}
+                <div>
+                  <dt>Go</dt>
+                  <dd><Link to={p.to}>{p.go}<i aria-hidden="true">→</i></Link></dd>
                 </div>
-                {/* Not a screenshot. A drawing of the one moment that says what
-                    the product is, in the product's own colour, on glass. A
-                    faked screengrab would be claiming a screen exists exactly
-                    as pictured; a drawing is honest about being a drawing and
-                    still shows the thing. */}
-                <div className={"aff-panel-art aff-art-" + p.key} aria-hidden="true">
-                  <div className="aff-glass">
-                    {p.key === "braino" ? (
-                      <>
-                        <div className="aff-glass-top">
-                          <span className="aff-glass-dot" />
-                          <span className="aff-glass-title">Book the 6am flight to Delhi</span>
-                          <span className="aff-glass-time">2:14</span>
-                        </div>
-                        <div className="aff-glass-bar"><i style={{ width: "68%" }} /></div>
-                        <p className="aff-glass-say">
-                          Passenger details filled. Stopping before it pays.
-                        </p>
-                      </>
-                    ) : (
-                      <>
-                        <div className="aff-glass-top">
-                          <span className="aff-glass-dot" />
-                          <span className="aff-glass-title">Listening</span>
-                          <span className="aff-glass-time">41:12</span>
-                        </div>
-                        <div className="aff-wave">
-                          {[38, 64, 22, 88, 46, 72, 30, 58, 92, 40, 66, 26, 80, 48, 34, 70, 24, 56].map((h, n) => (
-                            <i key={n} style={{ height: `${h}%` }} />
-                          ))}
-                        </div>
-                        <p className="aff-glass-say">
-                          and tell them the deck is ready by Friday
-                        </p>
-                      </>
-                    )}
-                  </div>
-                </div>
-              </Link>
-            ))}
-          </div>
-          {/* The whole ecosystem argument, in three sentences, because nobody
-              wants to know that two products share a user record. They want to
-              know they will not have to say it all again. */}
-          <p className="aff-day-foot aff-reveal">
-            One memory between them. Whatever you teach one, the other already knows.
-            Whatever we build next arrives already knowing you.
-          </p>
-        </div>
+              </dl>
+            </div>
+          </article>
+        ))}
+
       </section>
 
       {/* ── Why ────────────────────────────────────────────────────────────
@@ -470,36 +446,50 @@ export default function Affective() {
         </div>
       </section>
 
-      {/* ── Footer ─────────────────────────────────────────────────────────── */}
+      {/* ── Footer ─────────────────────────────────────────────────────────
+          The closing picture, with everything written over it. A scrim from
+          the bottom rather than a wash over the whole frame, so the image
+          keeps its light and the words still hold at any brightness. */}
       <footer className="aff-foot">
-        <div className="aff-wrap">
-          <div className="aff-foot-grid">
-            <div className="aff-foot-brand">
-              <strong className="aff-mark">
-                <img src="/affective-logo.png" alt="Affective" width={1000} height={207} />
-              </strong>
-              {/* Affective is not a computer. It is the company building what
-                  the one you already own was missing. */}
-              <p>
-                We do not make a computer. We build the technology that lets you talk to
-                the one you have, and the products that do the work. Bengaluru.
-              </p>
+        <img
+          className="aff-foot-art"
+          src="/affective-footer.jpg"
+          alt=""
+          width={1983}
+          height={793}
+          loading="lazy"
+          decoding="async"
+          aria-hidden="true"
+        />
+        <div className="aff-foot-in">
+          <div className="aff-wrap">
+            <div className="aff-foot-grid">
+              <div className="aff-foot-brand">
+                {/* Affective is not a computer. It is the company building
+                    what the one you already own was missing. */}
+                <strong className="aff-mark">
+                  <img src="/affective-logo.png" alt="Affective" width={1000} height={207} />
+                </strong>
+                <p>
+                  We do not make a computer. We build the technology that lets you talk to
+                  the one you have, and the products that do the work. Bengaluru.
+                </p>
+              </div>
+              <nav className="aff-foot-col">
+                <h4>Products</h4>
+                <Link to="/braino">Braino</Link>
+              </nav>
+              <nav className="aff-foot-col">
+                <h4>Company</h4>
+                <a href="#early">Early access</a>
+                <Link to="/contact">Contact</Link>
+              </nav>
             </div>
-            <nav className="aff-foot-col">
-              <h4>Products</h4>
-              <Link to="/braino">Braino</Link>
-              <Link to="/brainohera">HERA</Link>
-            </nav>
-            <nav className="aff-foot-col">
-              <h4>Company</h4>
-              <a href="#early">Early access</a>
-              <Link to="/contact">Contact</Link>
-            </nav>
+            <p className="aff-foot-rule">
+              Everything on this page is something the software does today. Nothing here is
+              a roadmap.
+            </p>
           </div>
-          <p className="aff-foot-rule">
-            Everything on this page is something the software does today. Nothing here is
-            a roadmap.
-          </p>
         </div>
       </footer>
     </div>
