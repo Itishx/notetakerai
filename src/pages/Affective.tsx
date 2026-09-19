@@ -107,8 +107,9 @@ const PRODUCTS = [
     name: "Braino",
     est: "Est. 2026",
     kind: "Browser and Mac",
+    line: "He does the half of the day you would rather not.",
     lead:
-      "The companion. He lives in your browser and on your Mac, already knows what you are looking at, and does the half of the day you would rather not.",
+      "The companion. He is already open, already knows what you are looking at, and goes and does the thing rather than telling you how to do it.",
     /* His four, the same shape as AffectiveOS's four: a picture, a name, and
        what it saves you. Written as the thing you would notice, not as the
        feature that causes it. */
@@ -408,16 +409,20 @@ export default function Affective() {
         </div>
 
         {/* The picture closes the claim rather than opening it: the words are
-            the point here, and the photograph is what they are about. */}
-        <div className="aff-band aff-band-tall aff-reveal aff-rise" data-drift="42">
-          <img
-            src="/speak.jpg"
-            alt=""
-            width={1672}
-            height={941}
-            loading="lazy"
-            decoding="async"
-          />
+            the point here, and the photograph is what they are about. Framed
+            and in the measure, because the page has one idea of what an object
+            is and a photograph is not exempt from it. */}
+        <div className="aff-wrap">
+          <figure className="aff-shot-box aff-reveal aff-rise">
+            <img
+              src="/speak.jpg"
+              alt=""
+              width={1672}
+              height={941}
+              loading="lazy"
+              decoding="async"
+            />
+          </figure>
         </div>
       </section>
 
@@ -472,7 +477,7 @@ export default function Affective() {
         <div className="aff-wrap">
           <div className="aff-sec-head aff-reveal">
             <p className="aff-sec-kicker">The products</p>
-            <h2>What we made with it.</h2>
+            <h2><Kinetic line="The first thing we put AffectiveOS into." /></h2>
           </div>
         </div>
 
@@ -510,9 +515,7 @@ export default function Affective() {
               </div>
 
               <div className="aff-plate-lead aff-reveal">
-                <p className="aff-plate-intro">
-                  <Kinetic line="The first thing we put AffectiveOS into." />
-                </p>
+                <p className="aff-plate-intro">{p.line}</p>
                 <p className="aff-plate-blurb">{p.lead}</p>
               </div>
 
