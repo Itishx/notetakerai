@@ -48,13 +48,13 @@ const MODELS: Model[] = [
     tab: "Braino",
     who: "For everyone",
     name: "Braino",
-    claim: "You already know what to do.",
-    claimTail: "You just have to go and do it.",
+    claim: "The models got brilliant.",
+    claimTail: "They still cannot reach your screen.",
     painTitle: "The day you have now",
     pain: [
-      "Every answer you get comes with a job attached. Open the tab, find the file, fill the form, write the reply. The thinking took a second and the doing takes the afternoon.",
-      "You explain your own screen to a chat box, paste half of it in, and it still asks which invoice you meant.",
-      "You sat through the whole meeting and took no notes, because you were in the meeting.",
+      "The thinking is solved. A model will write the code, draft the mail and plan the trip better than most people would. Then it hands the answer back and you are the one who has to go and do it.",
+      "It cannot see what you are looking at, so you paste the page in, crop the screenshot, explain which invoice. Half the day is spent describing your own screen to something that cannot look at it.",
+      "And every window starts again from nothing. It has never met your files, your people, or what you decided last month.",
     ],
     does: [
       {
@@ -80,10 +80,14 @@ const MODELS: Model[] = [
     ],
     dayTitle: "An ordinary Tuesday with him",
     day: [
-      { at: "9:10", p: "“What is on today?” He reads it back before you have opened anything." },
-      { at: "11:30", p: "An hour on a call. You never touch the keyboard. The notes are written by the time you stand up." },
-      { at: "2:40", p: "“Reply to this one and say I will send it Friday.” He writes it, shows you, and waits." },
-      { at: "6:05", p: "“What did I say I would do?” Four things, three of them already done." },
+      { at: "9:10", p: "“What is on today?” He reads the day back before you have opened a calendar, because he has one." },
+      { at: "9:40", p: "A long article you do not have time for. Nothing gets copied anywhere. “What is the argument, and does it say anything about pricing?” He is looking at the same page you are." },
+      { at: "10:15", p: "“This form again.” He fills it from what he already knows about you and stops at the button that submits it." },
+      { at: "11:30", p: "An hour on a call. You never touch the keyboard. You stand up and the notes are written, with what was decided and who said they would do what." },
+      { at: "1:05", p: "“Put the 6am flight to Delhi in front of me.” He books it to the last screen and waits there, because the next click spends money." },
+      { at: "2:40", p: "“Tell Ilu I will send it Friday.” One Ilu in your contacts, no spelling, no number, gone in four seconds." },
+      { at: "4:20", p: "“What is this on screen?” He reads the thing you are stuck on and explains it, with no screenshot and no pasting." },
+      { at: "6:05", p: "“What did I say I would do?” Four things, three already done, and he remembers the fourth from last month." },
     ],
     honest:
       "Braino is in private beta on macOS and Chrome. Everything on this page is something he does today. Windows is not on the list yet, and we would rather say so than pretend.",
@@ -100,9 +104,9 @@ const MODELS: Model[] = [
     claimTail: "Nobody has heard of it.",
     painTitle: "The day you have now",
     pain: [
-      "The product gets built because you love that part. The posting, the outreach and the follow-ups do not, because there is one of you and it is already midnight.",
-      "You explain your own company to a fresh chat window every morning. It has never met your last three decisions.",
-      "Twenty people said maybe. You remember four of them.",
+      "Every founder has the same models you do. That was never going to be the edge, and by now nobody pretends it is.",
+      "The product gets built, because you love that part. The posting, the outreach and the follow-ups do not, because there is one of you and it is already midnight.",
+      "And the smartest model on earth meets your company for the first time every morning. Twenty people said maybe. You remember four of them.",
     ],
     does: [
       {
@@ -128,10 +132,12 @@ const MODELS: Model[] = [
     ],
     dayTitle: "A week with a co-founder",
     day: [
-      { at: "Mon", p: "You ship a feature. He writes the post about it and holds it for your yes." },
-      { at: "Tue", p: "Eleven people saw it and two replied. He drafts both replies before you have read them." },
-      { at: "Thu", p: "“Who have we not heard back from?” Nine names, sorted by who is worth chasing." },
-      { at: "Sun", p: "“We said we would not do enterprise this quarter.” He is right and you had forgotten." },
+      { at: "Mon", p: "You ship a feature. He watched you build it, writes the post in your voice, and holds it for your yes." },
+      { at: "Tue", p: "Eleven people saw it and two replied. He drafts both replies before you have finished reading them." },
+      { at: "Wed", p: "A call with somebody who might buy. He sits through it, writes it down, and puts the follow-up on the list without being asked." },
+      { at: "Thu", p: "“Who have we not heard back from?” Nine names, sorted by who is worth chasing, with the last thing each of them said." },
+      { at: "Fri", p: "“What did we spend this week?” He reads the dashboard you are already on rather than asking you to paste it." },
+      { at: "Sun", p: "“We said we would not do enterprise this quarter.” He is right, and you had forgotten you said it." },
     ],
     honest:
       "Foundry is Braino pointed at a company. It is the same software, the same beta, on macOS. Handing work to coding agents and checking it comes to Foundry first, and it has not shipped.",
@@ -148,8 +154,8 @@ const MODELS: Model[] = [
     claimTail: "which room the class is in.",
     painTitle: "The day your students have now",
     pain: [
-      "The timetable lives in a portal nobody opens twice. The room number lives in a group chat. The deadline lives in somebody's screenshot.",
-      "They missed one class and now they are reconstructing it from three people's notes.",
+      "Your students have the same models everybody has, and not one of them knows the timetable. The room number lives in a group chat, the deadline lives in somebody's screenshot.",
+      "They missed one class and are reconstructing it from three people's notes and a photograph of a slide.",
       "The office answers on Monday. The question was at eleven on Saturday night.",
     ],
     does: [
@@ -176,10 +182,12 @@ const MODELS: Model[] = [
     ],
     dayTitle: "A week inside a school",
     day: [
-      { at: "Mon", p: "“What is my next class?” Room, time and who is teaching, before they have opened the portal." },
-      { at: "Wed", p: "They miss one. The notes from it are waiting when they open the laptop." },
-      { at: "Fri", p: "“What is due?” Three things, with the one that is due first at the top." },
-      { at: "Sat", p: "“Am I short on attendance?” He answers, from the school's own record." },
+      { at: "Mon", p: "“What is my next class?” Room, time and who is teaching, before they have found the portal password." },
+      { at: "Tue", p: "A forty minute lecture, written down while they listen. The one at the back who was actually listening gets the notes too." },
+      { at: "Wed", p: "They miss one. The notes are waiting when they open the laptop, in the words the lecturer used." },
+      { at: "Thu", p: "“What is this case about?” He is on the same page they are, so nothing gets pasted anywhere." },
+      { at: "Fri", p: "“What is due?” Three things, the one due first at the top, from the school's own deadlines." },
+      { at: "Sat", p: "“Am I short on attendance?” Eleven at night, answered from the school's own record, not on Monday." },
     ],
     honest:
       "This is the same Braino with a school's own timetable, attendance and deadlines connected to him. It is a deal with the institution rather than something a student downloads, and it is live with Mesa School of Business.",
@@ -261,6 +269,15 @@ export default function BrainoFinal() {
   const [at, setAt] = useState(0);
   const model = MODELS[at];
 
+  /* Changing tab is a deliberate act, so what it changes to is shown at once.
+     The reveal observer only ever sees what was on the page when it started,
+     and a story that swapped underneath it stayed at opacity zero: the tab
+     looked empty, which is exactly the bug. */
+  useEffect(() => {
+    root.current?.querySelectorAll<HTMLElement>(".bf-story .bf-reveal")
+      .forEach((el) => el.classList.add("is-in"));
+  }, [at, root]);
+
   useEffect(() => {
     document.title = "Braino";
     const prev = document.body.style.background;
@@ -293,13 +310,15 @@ export default function BrainoFinal() {
         <div className="bf-wrap">
           <p className="bf-eyebrow bf-reveal">Braino</p>
           <h1 className="bf-h1 bf-reveal">
-            Stop doing the bit
-            <b>after the answer.</b>
+            Speak.
+            <b>Watch it happen.</b>
           </h1>
           <div className="bf-hero-row bf-reveal">
             <p className="bf-hero-one">
-              Every AI on earth will tell you what to do. Braino is the one who gets up and
-              does it, on the machine in front of you, and asks first when it matters.
+              The models are extraordinary now. They write the code, draft the mail, plan
+              the trip. What none of them have is your machine: your screen, your files,
+              your people, your Tuesday. Braino lives there, and that is the whole
+              difference.
             </p>
             <div className="bf-hero-cta">
               <Link to="/waitlist" className="bf-cta">Ask for a seat</Link>
@@ -337,7 +356,7 @@ export default function BrainoFinal() {
         </div>
       </div>
 
-      <main className="bf-story" key={model.key}>
+      <main className="bf-story">
         {/* The day they have now, in their words, before a word about us. */}
         <section className="bf-sec bf-pain">
           <div className="bf-wrap">
@@ -384,6 +403,14 @@ export default function BrainoFinal() {
             <div className="bf-sec-head bf-reveal">
               <p className="bf-kicker">What changes</p>
               <h2>{model.dayTitle}</h2>
+              {/* Where it all comes from, said once, here: the four things
+                  AffectiveOS gives the Mac are the reason any of the hours
+                  below are possible. */}
+              <p className="bf-sec-note">
+                All of it comes from AffectiveOS, which gives the Mac you already own four
+                things it never had: eyes that see the screen you are on, ears that hold an
+                hour, a voice you can interrupt, and a memory of you.
+              </p>
             </div>
             <ol className="bf-day-list bf-reveal">
               {model.day.map((d) => (
