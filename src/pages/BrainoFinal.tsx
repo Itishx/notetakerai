@@ -7,8 +7,9 @@ import "./braino-final.css";
 
    Everything about him lives on one page in three tabs: Braino, Braino
    Foundry, and Braino for Mesa School of Business. They are not three
-   products. They are one product and the two places it is pointed, so the tabs
-   change the story and never the thing.
+   products. They are three models of one, the way a phone has models: the same
+   machine inside, pointed at a different life. The tabs change the story and
+   never the thing.
 
    Written from the reader's side of the screen. Every section starts with the
    day they actually have, in their own words, before a single sentence about
@@ -217,8 +218,8 @@ const FAQ = [
     a: "No. Anything that spends money, sends a message, posts publicly or deletes something stops and waits for you to say yes. That is enforced in the code, not requested in an instruction.",
   },
   {
-    q: "Are Braino, Foundry and the school version three products?",
-    a: "One product, in three places. The same Braino, the same brain, the same memory. Foundry is him pointed at your company, and the school version is him with a school's timetable and attendance inside him.",
+    q: "Are Braino, Foundry and the school one three products?",
+    a: "One product, three models of it, the way a phone has models. The same Braino, the same brain, the same memory. Foundry is the model pointed at your company; the Mesa one is the model with a school's timetable, attendance and deadlines inside him.",
   },
   {
     q: "Did you build the AI itself?",
@@ -328,14 +329,15 @@ export default function BrainoFinal() {
         </div>
       </header>
 
-      {/* ── Who this one is for ─────────────────────────────────────────────
-          One product, three places it is pointed. The tabs change the story and
-          never the thing, which is why the same four questions are answered in
-          each: what your day looks like now, what he does about it, what a week
-          looks like after, and what is honestly true today. */}
+      {/* ── Which model ─────────────────────────────────────────────────────
+          One product, three models of it, the way a phone has models: same
+          machine inside, pointed at a different life. The tabs change the
+          story and never the thing, which is why each answers the same four
+          questions: the day you have now, what he does about it, what a week
+          looks like after, and what is true today. */}
       <div className="bf-switch" id="what">
         <div className="bf-wrap bf-switch-in">
-          <div className="bf-tabs" role="tablist" aria-label="Which Braino">
+          <div className="bf-tabs" role="tablist" aria-label="Which model">
             {MODELS.map((m, i) => (
               <button
                 key={m.key}
@@ -352,7 +354,7 @@ export default function BrainoFinal() {
               </button>
             ))}
           </div>
-          <p className="bf-switch-note">One Braino. Three places he is pointed.</p>
+          <p className="bf-switch-note">One Braino · Three models</p>
         </div>
       </div>
 
