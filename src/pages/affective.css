@@ -1082,24 +1082,19 @@
    them. */
 .aff-foot::after {
   content: ""; position: absolute; inset: 0; z-index: -1;
-  background: linear-gradient(to bottom, rgba(10, 11, 8, .86) 0%, rgba(10, 11, 8, .68) 34%, rgba(10, 11, 8, .22) 62%, rgba(10, 11, 8, 0) 88%);
+  background: linear-gradient(to bottom, rgba(10, 11, 8, .88) 0%, rgba(10, 11, 8, .8) 40%, rgba(10, 11, 8, .62) 66%, rgba(10, 11, 8, .3) 84%, rgba(10, 11, 8, 0) 100%);
 }
 .aff-foot-in {
   width: 100%;
   padding: clamp(46px, 5.5vw, 78px) 0 clamp(40px, 5vw, 70px);
 }
-/* The brand takes its own row above the columns. Four columns across one
-   line left the longest name on the page, Braino for Mesa School of Business,
-   in a 200px box breaking in half. */
+/* The mark on the left and the columns beside it, as it was. The columns are
+   sized by what is in them rather than evenly: institutions carries the
+   longest name on the page and company carries two words. */
 .aff-foot-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: clamp(30px, 3.4vw, 46px) clamp(26px, 4vw, 64px);
-}
-.aff-foot-brand {
-  grid-column: 1 / -1;
-  padding-bottom: clamp(26px, 3vw, 40px);
-  border-bottom: 1px solid rgba(246, 243, 234, .18);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.25fr) minmax(0, .75fr);
+  gap: 36px clamp(22px, 2.6vw, 34px);
 }
 .aff-foot-brand strong { display: block; }
 /* The mark is drawn in ink. On the photograph it has to be paper, and the file
@@ -1114,7 +1109,7 @@
   margin: 0 0 6px; font-size: 12px; font-weight: 600;
   letter-spacing: .14em; text-transform: uppercase; color: rgba(246, 243, 234, .6);
 }
-@media (max-width: 820px) { .aff-foot-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 900px) { .aff-foot-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 620px) { .aff-foot-grid { grid-template-columns: 1fr; } }
 /* The product, drawn. A rail down the left with a node on each model, and the
    rail carries on past them to the institutions who buy the same Braino. It
