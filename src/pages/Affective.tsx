@@ -479,50 +479,46 @@ export default function Affective() {
           </div>
         </div>
 
-        {PRODUCTS.map((p) => (
-          <article className={"aff-plate aff-plate-" + p.key} key={p.key} style={{ ["--acc" as string]: p.accent }}>
-            {/* His field, not a photograph. There is no picture of Braino
-                that is not a screenshot, and a screenshot here would turn the
-                page into a product tour two sections early. So the plate is a
-                warm ground carrying his name at board size, the way the teaser
-                opens on the name and nothing else. */}
-            <div className="aff-plate-art aff-reveal">
-              <div className="aff-plate-mark">
-                {/* Never the company's Didone. Braino is the software and
-                    Affective is the company; they do not wear one face. */}
-                <h3>{p.name}</h3>
-                <p className="aff-plate-line">
-                  <span>{p.kind}</span>
-                  <span>{p.est}</span>
-                </p>
+        {/* One box with dividers, rather than a section made of bands. He is
+            one product on a company page, so he gets one object on it: the
+            name and him at the top, then what he is, then what he does, then
+            the door, each separated by a hairline inside the same frame. */}
+        <div className="aff-wrap">
+          {PRODUCTS.map((p) => (
+            <article className={"aff-plate aff-plate-" + p.key} key={p.key} style={{ ["--acc" as string]: p.accent }}>
+              <div className="aff-plate-art">
+                <div className="aff-plate-mark">
+                  {/* Never the company's Didone. Braino is the software and
+                      Affective is the company; they do not wear one face. */}
+                  <h3>{p.name}</h3>
+                  <p className="aff-plate-line">
+                    <span>{p.kind}</span>
+                    <span>{p.est}</span>
+                  </p>
+                </div>
+                {/* And him, standing beside his own name at the size a person
+                    stands. A page that says we build somebody and then shows a
+                    tinted rectangle with a word on it argues against itself. */}
+                <img
+                  className="aff-plate-him"
+                  src="/braino-standing.svg"
+                  alt="Braino, standing"
+                  width={104}
+                  height={127}
+                  loading="lazy"
+                  decoding="async"
+                />
               </div>
-              {/* And him, standing beside his own name at the size a person
-                  stands. A page that says we build somebody and then shows a
-                  tinted rectangle with a word on it is arguing against
-                  itself. */}
-              <img
-                className="aff-plate-him"
-                src="/braino-standing.svg"
-                alt="Braino, standing"
-                width={104}
-                height={127}
-                loading="lazy"
-                decoding="async"
-              />
-            </div>
 
-            <div className="aff-wrap aff-plate-say aff-reveal">
-              <div className="aff-plate-lead">
+              <div className="aff-plate-lead aff-reveal">
                 <p className="aff-plate-intro">
                   <Kinetic line="The first thing we put AffectiveOS into." />
                 </p>
                 <p className="aff-plate-blurb">{p.lead}</p>
               </div>
 
-              {/* What he does, on the page's own grid: four cells attached to
-                  one another, which is the same argument the four things make
-                  further up. A paragraph on the left and a table on the right
-                  was two columns of nothing in particular. */}
+              {/* What he does, on the page's own grid, inside the box: four
+                  cells divided from one another and from nothing else. */}
               <div className="aff-grid aff-grid-4 aff-plate-does">
                 {p.does.map((d) => (
                   <article key={d.h}>
@@ -539,10 +535,9 @@ export default function Affective() {
                   <span>{p.state}</span>
                 </p>
               </div>
-            </div>
-          </article>
-        ))}
-
+            </article>
+          ))}
+        </div>
       </section>
 
       {/* ── Why ────────────────────────────────────────────────────────────
