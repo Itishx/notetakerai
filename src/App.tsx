@@ -96,6 +96,7 @@ const Contact = lazy(() => import("./pages/Contact.tsx"));
 const ProductOverview = lazy(() => import("./pages/ProductOverview.tsx"));
 const Affective = lazy(() => import("./pages/Affective.tsx"));
 const BrainoFinal = lazy(() => import("./pages/BrainoFinal.tsx"));
+const Learning = lazy(() => import("./pages/Learning.tsx"));
 const ProductOverviewHomepageDocs = lazy(() => import("./pages/ProductOverviewHomepageDocs.tsx"));
 const Foundry = lazy(() => import("./pages/Foundry.tsx"));
 const HeroLab = lazy(() => import("./pages/HeroLab.tsx"));
@@ -311,6 +312,10 @@ function AppRoutes() {
             three tabs. Its own route while it is being built, so the live
             /braino keeps working. */}
         <Route path="/braino-final" element={<BrainoFinal />} />
+        {/* What he has worked out: routes, lessons and the history between you,
+            read through the braino-learning function because those three tables
+            have RLS on and no policies. */}
+        <Route path="/learning" element={<Learning />} />
         {/* The page is Braino's, and Foundry is one of its three tabs. It lived at
             /foundry for a while, which made every conversation about it circular.
             The old URL still works and still opens the Foundry tab. */}

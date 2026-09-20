@@ -316,6 +316,14 @@ verify_jwt = false
 entrypoint = "./functions/reasoning/engine-runs/index.ts"
 verify_jwt = false
 
+# What he has worked out: the routes, the lessons and the history, read with the
+# service role because those three tables have RLS on and no policies. Open for
+# the same reason engine-runs is: it exists to be watched while the loop is
+# being tuned, and it is a two line change to gate it at launch.
+[functions.braino-learning]
+entrypoint = "./functions/reasoning/braino-learning/index.ts"
+verify_jwt = false
+
 # Braino actually replying, with the full emotional breakdown of how he replied.
 # Public on purpose (same as the HIL lab); model is pinned server-side.
 [functions.braino-reply]

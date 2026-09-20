@@ -1,0 +1,166 @@
+/* ============================================================================
+   /learning — what Braino has worked out.
+
+   The company page's grammar again: warm paper, one hairline doing the
+   structural work, the serif making claims and the system face carrying data.
+   A record rather than a dashboard, so there are no tiles with enormous digits
+   and no colour that means "good": a count is only interesting next to the
+   sentence that says what it means.
+   ============================================================================ */
+
+.lrn {
+  --bg: #f4f2ec;
+  --box: #fdfcf8;
+  --ink: #16150f;
+  --ink-soft: #625f54;
+  --ink-faint: #918d80;
+  --line: #dcd8cb;
+  --line-strong: #c6c1b1;
+  --live: #4f7a4a;
+  --wait: #b8842a;
+  --maxw: 1180px;
+  --gutter: clamp(20px, 5vw, 80px);
+  --display: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+
+  background: var(--bg); color: var(--ink);
+  font-family: "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+}
+.lrn-wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 var(--gutter); }
+
+.lrn-nav { border-bottom: 1px solid var(--line); background: var(--bg); position: sticky; top: 0; z-index: 20; }
+.lrn-nav-in { height: 56px; display: flex; align-items: center; gap: 24px; }
+.lrn-back { font-size: 15px; font-weight: 500; letter-spacing: -0.02em; color: var(--ink); text-decoration: none; }
+.lrn-nav-links { margin-left: auto; display: flex; gap: 22px; }
+.lrn-nav-links a { font-size: 12.5px; color: var(--ink-soft); text-decoration: none; }
+.lrn-nav-links a:hover { color: var(--ink); }
+
+.lrn-head { padding: clamp(40px, 5vw, 76px) 0 clamp(26px, 3vw, 40px); }
+.lrn-kicker {
+  margin: 0 0 clamp(12px, 1.4vw, 18px);
+  font-size: 11px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--ink-faint);
+}
+.lrn-head h1 {
+  margin: 0; max-width: 16ch;
+  font-family: var(--display);
+  font-size: clamp(34px, 5vw, 66px);
+  line-height: 1.04; letter-spacing: -0.028em; font-weight: 400;
+}
+.lrn-head h1 b { display: block; font-weight: inherit; color: var(--ink-soft); }
+.lrn-lede {
+  margin: clamp(20px, 2.4vw, 30px) 0 0; max-width: 62ch;
+  font-size: clamp(15px, 1.4vw, 17.5px); line-height: 1.58;
+  letter-spacing: -0.008em; color: var(--ink-soft);
+}
+
+/* The numbers, each with the sentence that makes it mean something. */
+.lrn-counts {
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+  border: 1px solid var(--line-strong);
+  background: var(--box);
+  box-shadow: 0 1px 0 rgba(22, 21, 15, .03), 0 18px 40px -28px rgba(22, 21, 15, .28);
+}
+.lrn-counts > div {
+  padding: clamp(18px, 2vw, 28px);
+  border-right: 1px solid var(--line);
+  display: flex; flex-direction: column; gap: 6px;
+}
+.lrn-counts > div:last-child { border-right: 0; }
+.lrn-counts strong {
+  font-size: clamp(30px, 3.4vw, 46px); font-weight: 600;
+  letter-spacing: -0.04em; line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.lrn-counts span { font-size: 13.5px; font-weight: 500; letter-spacing: -0.006em; }
+.lrn-counts small { font-size: 12px; line-height: 1.45; color: var(--ink-faint); }
+@media (max-width: 860px) { .lrn-counts { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 460px) { .lrn-counts { grid-template-columns: 1fr; } }
+
+/* Where the learning lands. Bars, because the shape is the finding: he gets
+   good at somewhere rather than a little good everywhere. */
+.lrn-places { padding-top: clamp(34px, 4vw, 56px); }
+.lrn-places h2 {
+  margin: 0 0 clamp(16px, 1.8vw, 24px);
+  font-family: var(--display);
+  font-size: clamp(22px, 2.4vw, 30px); font-weight: 400; letter-spacing: -0.02em;
+}
+.lrn-places ul { margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--line); }
+.lrn-places li {
+  display: grid; grid-template-columns: minmax(120px, 220px) minmax(0, 1fr) 40px;
+  gap: clamp(12px, 2vw, 26px); align-items: center;
+  padding: 11px 0; border-bottom: 1px solid var(--line);
+}
+.lrn-place-name { font-size: 14px; letter-spacing: -0.006em; }
+.lrn-bar { display: flex; height: 9px; }
+.lrn-bar i { display: block; height: 100%; }
+.lrn-bar i.live { background: var(--live); }
+.lrn-bar i.proposed { background: var(--wait); opacity: .45; }
+.lrn-place-n { font-size: 13px; color: var(--ink-faint); text-align: right; font-variant-numeric: tabular-nums; }
+.lrn-key {
+  margin: 14px 0 0; display: flex; align-items: center; gap: 8px;
+  font-size: 12px; color: var(--ink-faint);
+}
+.lrn-key i { width: 10px; height: 10px; display: inline-block; }
+.lrn-key i.live { background: var(--live); }
+.lrn-key i.proposed { background: var(--wait); opacity: .45; margin-left: 18px; }
+
+/* Three things he keeps, three tabs. */
+.lrn-tabs { display: flex; margin-top: clamp(34px, 4vw, 56px); border-bottom: 1px solid var(--line); }
+.lrn-tabs button {
+  appearance: none; border: 0; background: transparent;
+  padding: 12px 0; margin-right: 30px;
+  display: inline-flex; align-items: baseline; gap: 8px;
+  font: inherit; font-size: 15px; font-weight: 500; letter-spacing: -0.012em;
+  color: var(--ink-faint); cursor: pointer;
+}
+.lrn-tabs button small { font-size: 12px; color: var(--ink-faint); font-variant-numeric: tabular-nums; }
+.lrn-tabs button:hover { color: var(--ink); }
+.lrn-tabs button.on { color: var(--ink); box-shadow: inset 0 -2px 0 0 var(--ink); }
+
+.lrn-body { padding: clamp(18px, 2vw, 26px) var(--gutter) clamp(50px, 6vw, 90px); }
+.lrn-empty { margin: 30px 0; color: var(--ink-faint); font-size: 14.5px; }
+.lrn-list { margin: 0; padding: 0; list-style: none; }
+.lrn-list > li { border-bottom: 1px solid var(--line); }
+/* A row is a button because it opens: the steps underneath are the only way to
+   judge whether a route is worth keeping. */
+.lrn-row {
+  width: 100%; appearance: none; border: 0; background: transparent;
+  text-align: left; cursor: pointer;
+  display: grid;
+  grid-template-columns: 78px minmax(0, 1fr) minmax(0, 0.7fr) 72px;
+  gap: clamp(10px, 1.6vw, 22px); align-items: baseline;
+  padding: 14px 0;
+  font: inherit;
+}
+.lrn-row-flat { cursor: default; }
+.lrn-tag {
+  justify-self: start;
+  font-size: 10px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase;
+  padding: 3px 7px; border: 1px solid var(--line-strong); color: var(--ink-faint);
+}
+.lrn-tag.live { color: var(--live); border-color: var(--live); }
+.lrn-tag.proposed { color: var(--wait); border-color: var(--wait); }
+.lrn-tag.surface { text-transform: none; letter-spacing: .04em; }
+.lrn-goal {
+  font-size: clamp(14px, 1.3vw, 16px); line-height: 1.45; letter-spacing: -0.008em;
+  color: var(--ink);
+}
+.lrn-meta { font-size: 12.5px; color: var(--ink-faint); line-height: 1.45; }
+.lrn-when { font-size: 12px; color: var(--ink-faint); text-align: right; }
+/* His own words for what he did. */
+.lrn-steps {
+  margin: 0 0 18px; padding: 16px 20px 16px 44px;
+  background: var(--box); border: 1px solid var(--line);
+  font-size: 13.5px; line-height: 1.6; color: var(--ink-soft);
+}
+.lrn-steps li { margin: 0 0 7px; }
+.lrn-steps li:last-child { margin-bottom: 0; }
+@media (max-width: 760px) {
+  .lrn-row { grid-template-columns: 70px minmax(0, 1fr); }
+  .lrn-meta, .lrn-when { grid-column: 2; }
+}
+
+.lrn-foot { border-top: 1px solid var(--line); padding: clamp(24px, 3vw, 40px) 0 clamp(40px, 5vw, 64px); }
+.lrn-foot p { margin: 0; max-width: 74ch; font-size: 13px; line-height: 1.6; color: var(--ink-faint); }
