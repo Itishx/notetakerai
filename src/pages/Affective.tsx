@@ -614,6 +614,11 @@ export default function Affective() {
           <div className="aff-keeps aff-reveal">
             <FourArt art={KEEPS.art} label={KEEPS.h.replace(".", "")} />
             <div className="aff-keeps-say">
+              {/* The term belongs here and nowhere else on the page: this is
+                  the one place a reader can see what it is made of. Memory is
+                  what it holds; continuity is what having it everywhere
+                  gives you. */}
+              <p className="aff-keeps-tag">The continuity layer</p>
               <h3>{KEEPS.h}</h3>
               <p>{KEEPS.body}</p>
               <p className="aff-keeps-punch">{KEEPS.body2}</p>
