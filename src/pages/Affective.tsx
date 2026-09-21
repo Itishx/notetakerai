@@ -482,7 +482,15 @@ export default function Affective() {
 
               This section is deliberately about REMEMBERING and the hero is
               about DOING. They were both about doing, which is why they read
-              as the same paragraph twice. */}
+              as the same paragraph twice.
+
+              And it does NOT say that other assistants forget. They do not:
+              this repo is read every day by one that remembers it across
+              sessions and across a model change. The true difference is
+              narrower and better. Their memory is scoped to their own window
+              and holds what was typed into it; a memory that lives on the
+              machine holds what happened. Write the false version and the
+              first technical reader who sees it stops believing the rest. */}
           <div className="aff-position-top">
             <p className="aff-position-kicker">What we do</p>
             <div className="aff-say" role="tablist" aria-label="How to say it">
@@ -506,32 +514,35 @@ export default function Affective() {
               <h2 className="aff-position-line">
                 {plain
                   ? "We build the technology that makes it possible to speak to your Mac, and the memory that means you only say it once."
-                  : "We build the continuity layer: the part that remembers, so a new model never resets you."}
+                  : "We build the continuity layer: a memory that belongs to the machine rather than to an app."}
               </h2>
             </div>
             <div className="aff-position-cols aff-reveal">
               {plain ? (
                 <>
                   <p>
-                    Everything else forgets. You explain yourself to a new window every
-                    morning, and it has never met your files, your people, or what you
-                    decided last month.
+                    The good ones already remember what you tell them. None of them
+                    remembers what you did. They know the conversation you had inside
+                    their own window: not the call at half eleven, not the page you were
+                    reading, not the thing you fixed in another app.
                   </p>
                   <p className="aff-position-punch">
-                    Braino was there. Tell him once, and the Mac you use in June knows
-                    more than the one you used in March.
+                    Braino is on the machine, so what he keeps is what actually happened.
+                    Say it once, and the Mac you use in June knows more than the one you
+                    used in March.
                   </p>
                 </>
               ) : (
                 <>
                   <p>
-                    Models are swapped every few months and each new one starts from
-                    nothing. The continuity layer is the part underneath that does not:
-                    your decisions, your corrections, the way you work.
+                    Every assistant has memory now, and every one of them is scoped to its
+                    own window. Yours is spread across four tools, none of which can see
+                    the other three, and not one of which saw your afternoon.
                   </p>
                   <p className="aff-position-punch">
-                    It is the only part of this that cannot be bought in, and it is worth
-                    more every month it runs.
+                    The continuity layer sits on the machine instead, underneath whichever
+                    model is current, and keeps what happened rather than what was typed.
+                    It is the only part of this that cannot be bought in.
                   </p>
                 </>
               )}
