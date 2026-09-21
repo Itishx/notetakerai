@@ -475,10 +475,14 @@ export default function Affective() {
         <div className="aff-wrap">
           {/* The same thing said twice, because both versions are true and
               people arrive wanting different ones. The plain one is the claim;
-              the other is the same claim as a business one. Neither of them is
-              allowed a word somebody would have to look up: a sentence that
-              needs a dictionary is not a harder idea, it is a worse sentence.
-              Having a switch at all is the honest part. */}
+              the other is the same claim said a little more technically.
+              Neither is allowed a word somebody would have to look up: a
+              sentence that needs a dictionary is not a harder idea, it is a
+              worse sentence. Having a switch at all is the honest part.
+
+              This section is deliberately about REMEMBERING and the hero is
+              about DOING. They were both about doing, which is why they read
+              as the same paragraph twice. */}
           <div className="aff-position-top">
             <p className="aff-position-kicker">What we do</p>
             <div className="aff-say" role="tablist" aria-label="How to say it">
@@ -501,34 +505,33 @@ export default function Affective() {
             <div className="aff-position-claim aff-reveal">
               <h2 className="aff-position-line">
                 {plain
-                  ? "We build the technology that makes it possible to speak to your Mac."
-                  : "We build the part the next model cannot replace."}
+                  ? "We build the technology that makes it possible to speak to your Mac, and the memory that means you only say it once."
+                  : "We build the continuity layer: the part that remembers, so a new model never resets you."}
               </h2>
             </div>
             <div className="aff-position-cols aff-reveal">
               {plain ? (
                 <>
                   <p>
-                    AI has got very good at telling you what to do. You still have to go
-                    and do it yourself. Open the tab, find the file, fill in the form,
-                    send the reply. We build the part that goes and does it.
+                    Everything else forgets. You explain yourself to a new window every
+                    morning, and it has never met your files, your people, or what you
+                    decided last month.
                   </p>
                   <p className="aff-position-punch">
-                    And the part that keeps what happened, so the Mac you use in June
-                    knows more than the one you used in March.
+                    Braino was there. Tell him once, and the Mac you use in June knows
+                    more than the one you used in March.
                   </p>
                 </>
               ) : (
                 <>
                   <p>
-                    Anyone can rent the same intelligence we rent, and next year there
-                    will be a better one to rent. That part is not a business.
+                    Models are swapped every few months and each new one starts from
+                    nothing. The continuity layer is the part underneath that does not:
+                    your decisions, your corrections, the way you work.
                   </p>
                   <p className="aff-position-punch">
-                    The business is everything the system learns about one person or one
-                    company: what was decided, how things get done, who matters. That is
-                    worth more every month, and none of it moves when the model underneath
-                    is swapped out.
+                    It is the only part of this that cannot be bought in, and it is worth
+                    more every month it runs.
                   </p>
                 </>
               )}
