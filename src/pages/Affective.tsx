@@ -518,7 +518,7 @@ export default function Affective() {
               <h2 className="aff-position-line">
                 {plain
                   ? "We build the technology that makes it possible to speak to your Mac."
-                  : "We build the continuity layer: a memory that belongs to the machine rather than to an app."}
+                  : "We build the continuity layer: the part that lets a system learn you, and keep learning, the longer you use it."}
               </h2>
             </div>
             <div className="aff-position-cols aff-reveal">
@@ -546,7 +546,8 @@ export default function Affective() {
                   <p className="aff-position-punch">
                     The continuity layer sits on the machine instead, underneath whichever
                     model is current, and keeps what happened rather than what was typed.
-                    It is the only part of this that cannot be bought in.
+                    Which is why a system built on it is worth more in month six than it
+                    was in month one, and why that part cannot be bought in.
                   </p>
                 </>
               )}
