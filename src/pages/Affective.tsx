@@ -502,7 +502,7 @@ export default function Affective() {
               <h2 className="aff-position-line">
                 {plain
                   ? "We build the technology that makes it possible to speak to your Mac."
-                  : "The models get replaced. What sits on top of them does not."}
+                  : "We build the part the next model cannot replace."}
               </h2>
             </div>
             <div className="aff-position-cols aff-reveal">
@@ -734,15 +734,15 @@ export default function Affective() {
                 <strong className="aff-mark">
                   <img src="/affective-logo.png" alt="Affective" width={1000} height={207} />
                 </strong>
-                {/* What the company actually makes, and the one thing worth
-                    saying about how the four differ: three of them work in the
-                    moment and the fourth is what the three drop things onto.
-                    It was written as a description of the layer rather than as
-                    a thing we build, which read as though we were the layer. */}
+                {/* The four compressed into two, because a list of four reads
+                    as features and the pair reads as a thing: understanding is
+                    the eyes, the ears and the memory; doing is the voice and
+                    the hands. "Remembers both" is the clause that earns the
+                    word continuity, and without it this is a description of an
+                    assistant. */}
                 <p>
-                  We build AffectiveOS: the eyes, ears, voice and hands the Mac never had,
-                  and the memory that keeps what they do. The first three work in the
-                  moment. The fourth is the one that makes it yours.
+                  We build AffectiveOS, a continuity layer for the Mac you already own:
+                  the part that understands you, does things for you, and remembers both.
                 </p>
                 <p className="aff-foot-where">Bengaluru.</p>
               </div>
