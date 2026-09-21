@@ -397,3 +397,9 @@
 @media (prefers-reduced-motion: reduce) {
   .bf-reveal { opacity: 1; transform: none; transition: none; }
 }
+
+/* The footer game, brought over from his own site. The wrapper exists only to
+   carry braino-footer.css's tokens; the margin that rule adds for a page
+   ending on a black band is not wanted on a page that ends on paper. */
+.bf-game-mount { margin-top: 0 !important; }
+.bf-game-mount .bf-game-window { border-top: 1px solid var(--line); }

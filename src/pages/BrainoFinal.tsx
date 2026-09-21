@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
+import BrainoFooterGame from "@/components/BrainoFooterGame";
+import "@/components/braino-footer.css";
 import "./braino-final.css";
 
 /* ============================================================================
@@ -458,6 +460,17 @@ export default function BrainoFinal() {
           </div>
         </div>
       </section>
+
+      {/* The game from his own site, dropped in as it is. Its styles live on
+          .braino-footer, which carries the tokens it draws with, so it comes
+          across inside that wrapper rather than being reimplemented here.
+          Checked first: not one class name in braino-footer.css collides with
+          this page's own bf- prefix. */}
+      <div className="braino-footer mario bf-game-mount">
+        <div className="bf-game-window">
+          <BrainoFooterGame />
+        </div>
+      </div>
 
       <footer className="bf-foot">
         <div className="bf-wrap">
