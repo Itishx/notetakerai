@@ -362,6 +362,8 @@ export default function Affective() {
      rather than on every scroll event, and hysteresis on the two edges so a
      nudge at the threshold cannot flicker it open and shut. */
   const [tight, setTight] = useState(false);
+  /* Plain words or the ones people who name things use. Both are true. */
+  const [plain, setPlain] = useState(true);
   useEffect(() => {
     let frame = 0;
     const read = () => {
@@ -470,29 +472,64 @@ export default function Affective() {
           of the section, where a tagline belongs: after the argument, before
           the picture. */}
       <section className="aff-position" id="what">
-        <div className="aff-wrap aff-position-in">
-          <div className="aff-position-claim aff-reveal">
+        <div className="aff-wrap">
+          {/* The same thing said twice, because both versions are true and
+              people arrive wanting different ones. The plain one is the claim;
+              the other is what it is called by people who name things. Having
+              a switch at all is the honest part: the jargon is optional. */}
+          <div className="aff-position-top">
             <p className="aff-position-kicker">What we do</p>
-            {/* "We build the technology that lets you talk to your Mac" is true
-                and says nothing: it could be a dictation app. The claim worth
-                making is the one underneath it, which is that the models are
-                rented and interchangeable and the thing we build is neither. */}
-            <h2 className="aff-position-line">
-              Anyone can rent the intelligence.
-              <b>We build the part that becomes yours.</b>
-            </h2>
+            <div className="aff-say" role="tablist" aria-label="How to say it">
+              {[["Simple", true], ["Jargon", false]].map(([label, isPlain]) => (
+                <button
+                  key={String(label)}
+                  type="button"
+                  role="tab"
+                  aria-selected={plain === isPlain}
+                  className={plain === isPlain ? "on" : ""}
+                  onClick={() => setPlain(Boolean(isPlain))}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
-          <div className="aff-position-cols aff-reveal">
-            <p>
-              AI has got very good at telling you what to do. You still have to go and do
-              it yourself. Open the tab, find the file, fill in the form, send the reply.
-              We build the part that goes and does it, on your Mac, when you say so.
-            </p>
-            <p className="aff-position-punch">
-              And the part that keeps what happened. Every decision, every correction,
-              every way you like things done, so the machine you use in June knows more
-              than the one you used in March.
-            </p>
+
+          <div className="aff-position-in">
+            <div className="aff-position-claim aff-reveal">
+              <h2 className="aff-position-line">
+                {plain
+                  ? "We build the technology that makes it possible to speak to your Mac."
+                  : "We build institutional intelligence: an operating continuity layer above interchangeable models."}
+              </h2>
+            </div>
+            <div className="aff-position-cols aff-reveal">
+              {plain ? (
+                <>
+                  <p>
+                    AI has got very good at telling you what to do. You still have to go
+                    and do it yourself. Open the tab, find the file, fill in the form,
+                    send the reply. We build the part that goes and does it.
+                  </p>
+                  <p className="aff-position-punch">
+                    And the part that keeps what happened, so the Mac you use in June
+                    knows more than the one you used in March.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p>
+                    Reasoning is commoditised and the model layer is replaceable. What is
+                    not replaceable is the accumulated context a system holds about one
+                    organisation: its decision history, its workflow, its data.
+                  </p>
+                  <p className="aff-position-punch">
+                    That layer compounds. Marginal value rises with use, and it does not
+                    transfer when the model underneath is swapped out.
+                  </p>
+                </>
+              )}
+            </div>
           </div>
         </div>
 
@@ -698,11 +735,9 @@ export default function Affective() {
                     lands on it; this is for whoever wants the actual claim,
                     and a footer is where a company is allowed to be precise. */}
                 <p>
-                  Affective builds institutional intelligence: an operating layer that sits
-                  above the models and grows more valuable the longer it is used, because
-                  it accumulates your decision history, your workflow and your data. The
-                  intelligence underneath is interchangeable and will be replaced. What
-                  gathers on top of it is yours, and it is what runs your day.
+                  An operating layer above the models that gets more valuable the longer
+                  you use it. The models are replaceable. What gathers on top of them is
+                  yours.
                 </p>
                 <p className="aff-foot-where">Bengaluru.</p>
               </div>

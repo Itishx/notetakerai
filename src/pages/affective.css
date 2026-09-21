@@ -355,6 +355,34 @@
   padding: clamp(72px, 8.4vw, 124px) 0 clamp(62px, 7vw, 104px);
   border-top: 1px solid var(--a-line);
 }
+/* Simple or jargon: two ways of saying one thing, with the switch sitting on
+   the same line as the kicker so it reads as a setting rather than as a
+   feature. Small on purpose. */
+.aff-position-top {
+  display: flex; align-items: baseline; justify-content: space-between;
+  flex-wrap: wrap; gap: 10px 24px;
+  margin-bottom: clamp(18px, 2vw, 26px);
+}
+.aff-position-top .aff-position-kicker { margin: 0; }
+.aff-say { display: flex; border: 1px solid var(--a-line-strong); }
+.aff-say button {
+  appearance: none; border: 0; background: transparent;
+  border-right: 1px solid var(--a-line);
+  padding: 7px 14px;
+  font: inherit; font-size: 11.5px; font-weight: 600;
+  letter-spacing: .12em; text-transform: uppercase;
+  color: var(--a-ink-faint); cursor: pointer;
+  transition: color .2s ease, background .2s ease;
+}
+.aff-say button:last-child { border-right: 0; }
+.aff-say button:hover { color: var(--a-ink); }
+.aff-say button.on { background: var(--a-ink); color: var(--a-bg); }
+.aff-say button:focus-visible { outline: 2px solid var(--a-ink); outline-offset: -3px; }
+/* The claim changes length between the two, so the block holds its height and
+   the page below it does not jump when the switch is used. */
+.aff-position-claim { min-height: 4.6em; }
+@media (max-width: 860px) { .aff-position-claim { min-height: 0; } }
+
 /* The claim on the left and its support on the right, at the same top, rather
    than four blocks stacked down the page each starting again. One rule under
    the pair, then the tagline. */
@@ -370,7 +398,7 @@
   color: var(--a-ink-faint);
 }
 .aff-position-line {
-  margin: 0; max-width: 18ch;
+  margin: 0; max-width: 21ch;
   font-family: var(--a-display); font-optical-sizing: auto;
   font-size: clamp(28px, 3.9vw, 52px);
   line-height: 1.1; letter-spacing: -0.022em; font-weight: 400;
