@@ -734,13 +734,15 @@ export default function Affective() {
                 <strong className="aff-mark">
                   <img src="/affective-logo.png" alt="Affective" width={1000} height={207} />
                 </strong>
-                {/* The exact version. The page above is written for whoever
-                    lands on it; this is for whoever wants the actual claim,
-                    and a footer is where a company is allowed to be precise. */}
+                {/* What the company actually makes, and the one thing worth
+                    saying about how the four differ: three of them work in the
+                    moment and the fourth is what the three drop things onto.
+                    It was written as a description of the layer rather than as
+                    a thing we build, which read as though we were the layer. */}
                 <p>
-                  An operating layer above the models that gets more valuable the longer
-                  you use it. The models are replaceable. What gathers on top of them is
-                  yours.
+                  We build AffectiveOS: the eyes, ears, voice and hands the Mac never had,
+                  and the memory that keeps what they do. The first three work in the
+                  moment. The fourth is the one that makes it yours.
                 </p>
                 <p className="aff-foot-where">Bengaluru.</p>
               </div>
