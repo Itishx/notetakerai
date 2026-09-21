@@ -475,8 +475,10 @@ export default function Affective() {
         <div className="aff-wrap">
           {/* The same thing said twice, because both versions are true and
               people arrive wanting different ones. The plain one is the claim;
-              the other is what it is called by people who name things. Having
-              a switch at all is the honest part: the jargon is optional. */}
+              the other is the same claim as a business one. Neither of them is
+              allowed a word somebody would have to look up: a sentence that
+              needs a dictionary is not a harder idea, it is a worse sentence.
+              Having a switch at all is the honest part. */}
           <div className="aff-position-top">
             <p className="aff-position-kicker">What we do</p>
             <div className="aff-say" role="tablist" aria-label="How to say it">
@@ -500,7 +502,7 @@ export default function Affective() {
               <h2 className="aff-position-line">
                 {plain
                   ? "We build the technology that makes it possible to speak to your Mac."
-                  : "We build an operating continuity layer: the part that sits above interchangeable models and does not get replaced with them."}
+                  : "The models get replaced. What sits on top of them does not."}
               </h2>
             </div>
             <div className="aff-position-cols aff-reveal">
@@ -519,13 +521,14 @@ export default function Affective() {
               ) : (
                 <>
                   <p>
-                    Reasoning is commoditised. The model layer is rented, swapped and
-                    forgotten. What cannot be swapped is the accumulated context a system
-                    holds about one life or one company: decisions, workflow, data.
+                    Anyone can rent the same intelligence we rent, and next year there
+                    will be a better one to rent. That part is not a business.
                   </p>
                   <p className="aff-position-punch">
-                    That layer compounds. It is worth more in year two than in year one,
-                    and none of it transfers when the model underneath changes.
+                    The business is everything the system learns about one person or one
+                    company: what was decided, how things get done, who matters. That is
+                    worth more every month, and none of it moves when the model underneath
+                    is swapped out.
                   </p>
                 </>
               )}
