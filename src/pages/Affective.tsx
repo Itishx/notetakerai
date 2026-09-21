@@ -490,7 +490,11 @@ export default function Affective() {
               narrower and better. Their memory is scoped to their own window
               and holds what was typed into it; a memory that lives on the
               machine holds what happened. Write the false version and the
-              first technical reader who sees it stops believing the rest. */}
+              first technical reader who sees it stops believing the rest.
+
+              Nobody has met Braino by this point either: he is two sections
+              away. A section that names him here is written by somebody who
+              already knows the page. */}
           <div className="aff-position-top">
             <p className="aff-position-kicker">What we do</p>
             <div className="aff-say" role="tablist" aria-label="How to say it">
@@ -513,7 +517,7 @@ export default function Affective() {
             <div className="aff-position-claim aff-reveal">
               <h2 className="aff-position-line">
                 {plain
-                  ? "We build the technology that makes it possible to speak to your Mac, and the memory that means you only say it once."
+                  ? "We build the technology that makes it possible to speak to your Mac."
                   : "We build the continuity layer: a memory that belongs to the machine rather than to an app."}
               </h2>
             </div>
@@ -521,23 +525,23 @@ export default function Affective() {
               {plain ? (
                 <>
                   <p>
-                    The good ones already remember what you tell them. None of them
-                    remembers what you did. They know the conversation you had inside
-                    their own window: not the call at half eleven, not the page you were
-                    reading, not the thing you fixed in another app.
+                    Current AI remembers what you tell it. None of it remembers what you
+                    did. It knows the conversation inside its own window: not the call at
+                    half eleven, not the page you were reading, not the thing you fixed in
+                    another app.
                   </p>
                   <p className="aff-position-punch">
-                    Braino is on the machine, so what he keeps is what actually happened.
-                    Say it once, and the Mac you use in June knows more than the one you
-                    used in March.
+                    This sits on the machine instead, so what it keeps is what actually
+                    happened. Say it once, and the Mac you use in June knows more than the
+                    one you used in March.
                   </p>
                 </>
               ) : (
                 <>
                   <p>
-                    Every assistant has memory now, and every one of them is scoped to its
-                    own window. Yours is spread across four tools, none of which can see
-                    the other three, and not one of which saw your afternoon.
+                    Current AI has memory, and all of it is scoped to its own window.
+                    Yours is spread across four tools, none of which can see the other
+                    three, and not one of which saw your afternoon.
                   </p>
                   <p className="aff-position-punch">
                     The continuity layer sits on the machine instead, underneath whichever
