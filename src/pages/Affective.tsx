@@ -500,7 +500,7 @@ export default function Affective() {
               <h2 className="aff-position-line">
                 {plain
                   ? "We build the technology that makes it possible to speak to your Mac."
-                  : "We build institutional intelligence: an operating continuity layer above interchangeable models."}
+                  : "We build an operating continuity layer: the part that sits above interchangeable models and does not get replaced with them."}
               </h2>
             </div>
             <div className="aff-position-cols aff-reveal">
@@ -519,13 +519,13 @@ export default function Affective() {
               ) : (
                 <>
                   <p>
-                    Reasoning is commoditised and the model layer is replaceable. What is
-                    not replaceable is the accumulated context a system holds about one
-                    organisation: its decision history, its workflow, its data.
+                    Reasoning is commoditised. The model layer is rented, swapped and
+                    forgotten. What cannot be swapped is the accumulated context a system
+                    holds about one life or one company: decisions, workflow, data.
                   </p>
                   <p className="aff-position-punch">
-                    That layer compounds. Marginal value rises with use, and it does not
-                    transfer when the model underneath is swapped out.
+                    That layer compounds. It is worth more in year two than in year one,
+                    and none of it transfers when the model underneath changes.
                   </p>
                 </>
               )}

@@ -191,7 +191,7 @@ const MODELS: Model[] = [
       { at: "Sun", p: "“What did we decide in the group on Wednesday?” He was there. You were also there, and you had forgotten." },
     ],
     honest:
-      "This is the same Braino with a school's own timetable, attendance and deadlines connected to him. It is an arrangement with the institution rather than something a student downloads, and it is live with Mesa School of Business.",
+      "This is the same Braino with a school's own timetable, attendance and deadlines connected to him: the institution's own memory, made answerable in the words a student would use. It is an arrangement with the school rather than something a student downloads, and it is live with Mesa School of Business.",
     cta: { label: "Bring him to your institution", to: "/contact" },
     state: "Runs on AffectiveOS \u00b7 Live with Mesa",
     accent: "#2f6fed",
