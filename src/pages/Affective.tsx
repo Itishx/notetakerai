@@ -24,11 +24,14 @@ import "./affective.css";
    it themselves. Every technical sentence was cut or translated.
    ============================================================================ */
 
-/* What the Mac gets that it never had. Four things a person would notice,
-   rather than the layers underneath that make them true. No "Today" line on
-   these cells, because each one carries its own contrast ("no copying, no
-   pasting") rather than sitting beside a struck-through version of itself. */
-const THE_FOUR = [
+/* AffectiveOS is two different kinds of thing wearing one name, and the page
+   used to show them as four equal features, which is the one thing they are
+   not. Three of these are capabilities: what a machine can do in a moment,
+   stateless, finished and forgotten. The fourth is continuity: what everything
+   the first three do lands on, and stays in.
+
+   Told as two halves, the section makes the argument by its own shape. */
+const CAN_DO = [
   {
     h: "Senses.",
     art: "/os-senses.jpg",
@@ -47,96 +50,16 @@ const THE_FOUR = [
     body:
       "You say the task. Your Mac does it. Books the flight, fills the form, sends the reply. It asks before anything is paid for or sent.",
   },
-  {
-    h: "Memory.",
-    art: "/os-memory.jpg",
-    body:
-      "Your Mac gets a memory. It remembers what you have been doing, who your people are, and what you told it last month. Every day stops starting from zero.",
-  },
 ];
 
-/* A picture that has not arrived yet draws its own quiet block instead of a
-   broken image, and the moment the file exists it appears. Drop the four into
-   public/ under the names above and refresh: there is nothing to edit here. */
-/* Words that land one at a time and stay, which is how the teaser builds a
-   line: the phrase accumulates rather than fading in as a block. The stamp is
-   180ms because a word needs that long to resolve; anything quicker reads as
-   choppy however fast the section is meant to feel. */
-function Kinetic({ line, gap = 150 }: { line: string; gap?: number }) {
-  /* The words are separate boxes with a gap between them, so the text itself
-     has no spaces in it. A screen reader is given the sentence whole, and the
-     pieces are hidden from it. */
-  return (
-    <span className="aff-kin" aria-label={line}>
-      {line.split(" ").map((word, i) => (
-        <span key={`${word}-${i}`} aria-hidden="true" style={{ animationDelay: `${i * gap}ms` }}>{word}</span>
-      ))}
-    </span>
-  );
-}
-
-/* One word that keeps changing its mind.
- *
- * "Stop using your Mac" is where the company starts and not where it ends, so
- * the word swaps: Mac, computer, Mac. The line has to hold still while it
- * happens, and a word box that snaps from one width to the other drags the
- * full stop across the page, so each word is measured once and the box is
- * given that width to travel to. */
-function SwapWord({ words, every = 2600 }: { words: string[]; every?: number }) {
-  const [at, setAt] = useState(0);
-  const [width, setWidth] = useState<number | null>(null);
-  const hold = useRef<HTMLSpanElement>(null);
-
-  useEffect(() => {
-    if (words.length < 2) return;
-    const still = window.matchMedia("(prefers-reduced-motion: reduce)");
-    if (still.matches) return;
-    const timer = window.setInterval(() => setAt((v) => (v + 1) % words.length), every);
-    return () => window.clearInterval(timer);
-  }, [words.length, every]);
-
-  useEffect(() => {
-    const live = hold.current?.querySelector<HTMLElement>(`[data-word="${words[at]}"]`);
-    if (live) setWidth(live.getBoundingClientRect().width);
-  }, [at, words]);
-
-  return (
-    <span className="aff-swap" ref={hold} style={width ? { width: `${Math.ceil(width)}px` } : undefined}>
-      {/* Every word is drawn, so every word can be measured; only one is lit. */}
-      {words.map((word, i) => (
-        <span
-          key={word}
-          data-word={word}
-          className={"aff-swap-word" + (i === at ? " on" : "")}
-          aria-hidden={i !== at}
-        >
-          {word}
-        </span>
-      ))}
-    </span>
-  );
-}
-
-function FourArt({ art, label }: { art: string; label: string }) {
-  const [missing, setMissing] = useState(false);
-  return (
-    <div className="aff-four-art aff-rise">
-      {missing
-        ? <span className="aff-four-wait">{label}</span>
-        : (
-          <img
-            src={art}
-            alt=""
-            width={341}
-            height={415}
-            loading="lazy"
-            decoding="async"
-            onError={() => setMissing(true)}
-          />
-        )}
-    </div>
-  );
-}
+const KEEPS = {
+  h: "Memory.",
+  art: "/os-memory.jpg",
+  body:
+    "Everything the first three do lands here and stays. Not what you typed into a window: what actually happened, on your machine, all day.",
+  body2:
+    "It is the half nobody can rent. A model can be swapped out next year and this is untouched, which is why the Mac you use in June knows more than the one you used in March.",
+};
 
 /* Braino is the product. Foundry is a model of it.
  *
@@ -244,6 +167,86 @@ const FAQ = [
     a: "Right now, founders and students in Bengaluru who own a Mac. Soon, anyone who owns a Mac. Windows is not on the list yet, and we would rather say so than pretend.",
   },
 ];
+
+/* Words that land one at a time and stay, which is how the teaser builds a
+   line: the phrase accumulates rather than fading in as a block. The stamp is
+   180ms because a word needs that long to resolve; anything quicker reads as
+   choppy however fast the section is meant to feel. */
+function Kinetic({ line, gap = 150 }: { line: string; gap?: number }) {
+  /* The words are separate boxes with a gap between them, so the text itself
+     has no spaces in it. A screen reader is given the sentence whole, and the
+     pieces are hidden from it. */
+  return (
+    <span className="aff-kin" aria-label={line}>
+      {line.split(" ").map((word, i) => (
+        <span key={`${word}-${i}`} aria-hidden="true" style={{ animationDelay: `${i * gap}ms` }}>{word}</span>
+      ))}
+    </span>
+  );
+}
+
+/* One word that keeps changing its mind.
+ *
+ * "Stop using your Mac" is where the company starts and not where it ends, so
+ * the word swaps: Mac, computer, Mac. The line has to hold still while it
+ * happens, and a word box that snaps from one width to the other drags the
+ * full stop across the page, so each word is measured once and the box is
+ * given that width to travel to. */
+function SwapWord({ words, every = 2600 }: { words: string[]; every?: number }) {
+  const [at, setAt] = useState(0);
+  const [width, setWidth] = useState<number | null>(null);
+  const hold = useRef<HTMLSpanElement>(null);
+
+  useEffect(() => {
+    if (words.length < 2) return;
+    const still = window.matchMedia("(prefers-reduced-motion: reduce)");
+    if (still.matches) return;
+    const timer = window.setInterval(() => setAt((v) => (v + 1) % words.length), every);
+    return () => window.clearInterval(timer);
+  }, [words.length, every]);
+
+  useEffect(() => {
+    const live = hold.current?.querySelector<HTMLElement>(`[data-word="${words[at]}"]`);
+    if (live) setWidth(live.getBoundingClientRect().width);
+  }, [at, words]);
+
+  return (
+    <span className="aff-swap" ref={hold} style={width ? { width: `${Math.ceil(width)}px` } : undefined}>
+      {/* Every word is drawn, so every word can be measured; only one is lit. */}
+      {words.map((word, i) => (
+        <span
+          key={word}
+          data-word={word}
+          className={"aff-swap-word" + (i === at ? " on" : "")}
+          aria-hidden={i !== at}
+        >
+          {word}
+        </span>
+      ))}
+    </span>
+  );
+}
+
+function FourArt({ art, label }: { art: string; label: string }) {
+  const [missing, setMissing] = useState(false);
+  return (
+    <div className="aff-four-art aff-rise">
+      {missing
+        ? <span className="aff-four-wait">{label}</span>
+        : (
+          <img
+            src={art}
+            alt=""
+            width={341}
+            height={415}
+            loading="lazy"
+            decoding="async"
+            onError={() => setMissing(true)}
+          />
+        )}
+    </div>
+  );
+}
 
 /* Scroll-linked drift.
  *
@@ -573,30 +576,29 @@ export default function Affective() {
         </div>
       </section>
 
-      {/* ── The technology ─────────────────────────────────────────────────── */}
+      {/* ── The technology ─────────────────────────────────────────────────
+          Two halves rather than four features. What it can do, and what it
+          keeps. The first three are stateless and finish; the fourth is what
+          they land on, which is why it is the whole width of the page rather
+          than a fourth cell in a row. */}
       <section className="aff-sec aff-day" id="technology">
         <div className="aff-wrap">
           <div className="aff-sec-head aff-reveal">
             <p className="aff-sec-kicker">The technology in question</p>
             <h2>AffectiveOS. We make the Mac come alive.</h2>
             <p>
-              AffectiveOS sits under every product we make. It gives the Mac you already
-              own four things it never had.
+              AffectiveOS sits under every product we make, and it is two halves. Three
+              things the Mac can suddenly do, and one thing it suddenly keeps.
             </p>
           </div>
         </div>
-        {/* One picture per thing, in the same framed box his section uses. It
-            ran to the page edge while the product below it sat in a box, and
-            two different ideas of what a grid is on one page is the kind of
-            inconsistency you feel before you can name it. The image fills its
-            cell to the hairline; only the words are indented. They arrive one
-            after another on the way past, which is the only flourish the page
-            allows itself. */}
+
         <div className="aff-wrap">
-          <div className="aff-grid aff-grid-4 aff-four">
-          {THE_FOUR.map((d, i) => (
-            <article className="aff-four-item aff-reveal" key={d.h} style={{ transitionDelay: `${i * 110}ms` }}>
-              <FourArt art={d.art} label={d.h.replace(".", "")} />
+          <p className="aff-half-label aff-reveal">What it can do</p>
+          <div className="aff-grid aff-grid-3 aff-four">
+            {CAN_DO.map((d, i) => (
+              <article className="aff-four-item aff-reveal" key={d.h} style={{ transitionDelay: `${i * 110}ms` }}>
+                <FourArt art={d.art} label={d.h.replace(".", "")} />
                 <div className="aff-four-say">
                   <h3>{d.h}</h3>
                   <p>{d.body}</p>
@@ -604,12 +606,24 @@ export default function Affective() {
               </article>
             ))}
           </div>
-        </div>
-        <div className="aff-wrap">
+
+          {/* The second half, and it is not a fourth cell: it is what the three
+              above it drop things onto. Wide, because that is the shape of a
+              floor. */}
+          <p className="aff-half-label aff-reveal">And what it keeps</p>
+          <div className="aff-keeps aff-reveal">
+            <FourArt art={KEEPS.art} label={KEEPS.h.replace(".", "")} />
+            <div className="aff-keeps-say">
+              <h3>{KEEPS.h}</h3>
+              <p>{KEEPS.body}</p>
+              <p className="aff-keeps-punch">{KEEPS.body2}</p>
+            </div>
+          </div>
+
           {/* Where all of it lands: the four are the floor, and the character
               is what we put on top of them. */}
           <p className="aff-day-foot aff-reveal">
-            Four things. Then we build somebody on top.
+            Three things it can do, one thing it keeps. Then we build somebody on top.
           </p>
         </div>
       </section>

@@ -722,6 +722,49 @@
   object-fit: cover; object-position: center 52%;
 }
 
+/* The two halves of AffectiveOS, labelled. Three things it can do, then the
+   one thing it keeps, because they are not four features of the same kind and
+   a row of four says they are. */
+.aff-half-label {
+  margin: clamp(26px, 3vw, 40px) 0 clamp(12px, 1.4vw, 18px);
+  font-size: 11px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--a-ink-faint);
+}
+.aff-half-label:first-of-type { margin-top: 0; }
+/* What it keeps. Wide rather than a fourth cell, because it is the floor the
+   other three drop things onto and a floor is the width of the room. */
+.aff-keeps {
+  display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr);
+  border: 1px solid var(--a-line-strong);
+  background: #fdfcf8;
+  overflow: hidden;
+  box-shadow: 0 1px 0 rgba(22, 21, 15, .03), 0 18px 40px -28px rgba(22, 21, 15, .28);
+}
+.aff-keeps .aff-four-art {
+  aspect-ratio: auto; height: 100%; min-height: 260px;
+  border-bottom: 0; border-right: 1px solid var(--a-line);
+}
+.aff-keeps-say {
+  padding: clamp(24px, 2.8vw, 44px);
+  display: flex; flex-direction: column; gap: 14px; justify-content: center;
+}
+.aff-keeps-say h3 {
+  margin: 0;
+  font-family: var(--a-display);
+  font-size: clamp(26px, 3vw, 40px); font-weight: 400;
+  line-height: 1.1; letter-spacing: -0.022em; color: var(--a-ink);
+}
+.aff-keeps-say p {
+  margin: 0; max-width: 54ch;
+  font-size: clamp(15px, 1.4vw, 17px); line-height: 1.58;
+  letter-spacing: -0.006em; color: var(--a-ink-soft);
+}
+.aff-keeps-punch { color: var(--a-ink) !important; }
+@media (max-width: 760px) {
+  .aff-keeps { grid-template-columns: 1fr; }
+  .aff-keeps .aff-four-art { aspect-ratio: 341 / 415; height: auto; border-right: 0; border-bottom: 1px solid var(--a-line); }
+}
+
 /* ── The four ─────────────────────────────────────────────────────────────
    One cell attached to the next, hairline to hairline, no gutters, which is
    how the rest of the page is built.
@@ -762,7 +805,6 @@
   color: var(--a-ink-faint);
 }
 .aff-four-say { padding: clamp(18px, 1.9vw, 28px); }
-@media (max-width: 1040px) { .aff-four { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 560px) { .aff-four { grid-template-columns: 1fr; } }
 .aff-four-say h3 {
   margin: 0 0 12px;
