@@ -290,9 +290,30 @@
   margin: 0; font-size: clamp(14.5px, 1.35vw, 16.5px); line-height: 1.45;
   letter-spacing: -0.008em; color: var(--ink);
 }
-.bf-job-detail {
-  margin: 0; font-size: clamp(13px, 1.2vw, 14.5px); line-height: 1.6;
+.bf-job-points {
+  margin: 2px 0 0; padding: 0; list-style: none;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.bf-job-points li {
+  position: relative; padding-left: 16px;
+  font-size: clamp(13px, 1.2vw, 14.5px); line-height: 1.55;
   letter-spacing: -0.004em; color: var(--ink-soft);
+}
+.bf-job-points li::before {
+  content: ""; position: absolute; left: 0; top: .62em;
+  width: 5px; height: 1px; background: var(--ink-faint);
+}
+/* Why anybody would want it, which is a different sentence from what it is. */
+.bf-job-solves {
+  margin: auto 0 0; padding-top: 14px;
+  border-top: 1px solid var(--line);
+  font-size: clamp(13px, 1.2vw, 14.5px); line-height: 1.5;
+  letter-spacing: -0.004em; color: var(--ink);
+}
+.bf-job-solves i {
+  font-style: normal; margin-right: 8px;
+  font-size: 10px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--ink-faint);
 }
 @media (max-width: 900px) {
   .bf-jobs, .bf-jobs-4 { grid-template-columns: 1fr; }

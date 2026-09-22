@@ -1,11 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import BrainoFooterGame from "@/components/BrainoFooterGame";
-/* The jobs come from the same files the rest of the site reads. Copying the
-   strings here would mean two versions of what Braino does, and the second one
-   is always the one that goes stale. */
-import { COMPANION_ENGINES } from "@/data/companionEngines";
-import { DISTRA_ENGINES } from "@/data/distraEngines";
+/* The jobs are written here rather than read from the site's engine data,
+   because this page says a different thing: each one carries what it saves
+   you, and the Foundry engines carry the deck's own bullets. The engine files
+   stay the source for the pages that use them. */
 import "@/components/braino-footer.css";
 import "./braino-final.css";
 
@@ -45,7 +44,11 @@ type Model = {
   day: { at: string; p: string }[];
   /* The jobs he takes off you, from the site's own engine data. Mesa has none
      of its own yet and the section simply does not appear. */
-  handles?: { heading: string; note: string; jobs: { n: string; name: string; job: string; detail: string; state: string }[] };
+  handles?: {
+    heading: string;
+    note: string;
+    jobs: { n: string; name: string; job: string; points: string[]; solves: string; state: string }[];
+  };
   /* What is true today, said plainly, including what is not. */
   honest: string;
   cta: { label: string; to: string };
@@ -90,9 +93,43 @@ const MODELS: Model[] = [
       },
     ],
     handles: {
-      heading: "The three he takes off you",
-      note: "Everything above is what he can do. These are the jobs he actually holds, so you stop holding them.",
-      jobs: COMPANION_ENGINES,
+      heading: "The three ways he helps",
+      note: "All three get better the longer he has been beside you, because the fourth thing he does is remember.",
+      jobs: [
+        {
+          n: "01",
+          name: "He reads what is in front of you.",
+          job: "Any page, any PDF, any video.",
+          points: [
+            "Ask him about this contract, this problem, this article, the way you would ask somebody sitting next to you.",
+            "Nothing gets pasted anywhere, because he is looking at the same screen you are.",
+          ],
+          solves: "No screenshots into another tab. He already has the context, so you never start from scratch.",
+          state: "Running",
+        },
+        {
+          n: "02",
+          name: "He sits through the meeting.",
+          job: "A call, a lecture, a two hour video you were never going to finish.",
+          points: [
+            "He listens the whole way through and hands back notes worth reading.",
+            "What was decided, and what you promised and immediately forgot.",
+          ],
+          solves: "Press record and stop taking notes. They are written by the time you stand up.",
+          state: "Running",
+        },
+        {
+          n: "03",
+          name: "He goes and does it.",
+          job: "Books it, buys it, finds it, fills it in.",
+          points: [
+            "In your browser, in your accounts, on the sites you already use.",
+            "He stops and asks before anything is paid for or sent.",
+          ],
+          solves: "The twenty minutes of clicking that come after you already knew what you wanted.",
+          state: "Running",
+        },
+      ],
     },
     dayTitle: "An ordinary Tuesday with him",
     day: [
@@ -149,7 +186,56 @@ const MODELS: Model[] = [
     handles: {
       heading: "The engines",
       note: "Four of them, and the fourth is the one nobody sells: three tools that do not know about each other is the actual problem.",
-      jobs: DISTRA_ENGINES,
+      jobs: [
+        {
+          n: "01",
+          name: "Content",
+          job: "You show up every week without writing a word.",
+          points: [
+            "Five posts a week, drafted from what you actually shipped.",
+            "One update, fitted to each platform properly, rather than pasted into all of them.",
+            "LinkedIn, Reddit, Instagram.",
+          ],
+          solves: "Posting stops being a second job you do at midnight.",
+          state: "Running",
+        },
+        {
+          n: "02",
+          name: "Optics",
+          job: "Buyers find you when they ask an AI.",
+          points: [
+            "More than a third of buying now starts in an AI answer rather than in Google.",
+            "Right now that answer names your competitor. He works until it names you.",
+            "He finds the gap, a missing page or a thin listing, and fixes it.",
+          ],
+          solves: "You stop being invisible in the place people now start looking.",
+          state: "Next",
+        },
+        {
+          n: "03",
+          name: "Outbound",
+          job: "Conversations booked, not messages sent.",
+          points: [
+            "Twenty messages a week, one person at a time.",
+            "Written from what they are actually doing, not a template with their name dropped in.",
+            "Replies tracked and followed up, nothing dropped.",
+          ],
+          solves: "The outreach you keep meaning to do on Sunday gets done on Tuesday.",
+          state: "Planned",
+        },
+        {
+          n: "04",
+          name: "Glue",
+          job: "The other three, talking to each other.",
+          points: [
+            "What Optics finds missing becomes next week's post.",
+            "Everything lands in one inbox where you approve it, edit it or bin it.",
+            "Nothing goes out without your yes.",
+          ],
+          solves: "Three tools that do not know about each other is the actual problem.",
+          state: "Next",
+        },
+      ],
     },
     dayTitle: "One week of your work, done",
     day: [
@@ -495,11 +581,22 @@ export default function BrainoFinal() {
                   <article className="bf-job bf-reveal" key={j.name}>
                     <div className="bf-job-top">
                       <span className="bf-job-n">{j.n}</span>
-                      <span className={"bf-job-state is-" + j.state.toLowerCase()}>{j.state}</span>
+                      {/* Only when it is not working yet. A badge on everything
+                          says nothing: if a thing is on this page and carries
+                          no label, it works, and the label is a warning rather
+                          than a status light. */}
+                      {j.state !== "Running" && (
+                        <span className={"bf-job-state is-" + j.state.toLowerCase()}>{j.state}</span>
+                      )}
                     </div>
                     <h3>{j.name}</h3>
                     <p className="bf-job-line">{j.job}</p>
-                    <p className="bf-job-detail">{j.detail}</p>
+                    <ul className="bf-job-points">
+                      {j.points.map((point) => <li key={point}>{point}</li>)}
+                    </ul>
+                    {/* The reason somebody would want it, which is a different
+                        sentence from what it is. */}
+                    <p className="bf-job-solves"><i>So</i>{j.solves}</p>
                   </article>
                 ))}
               </div>
