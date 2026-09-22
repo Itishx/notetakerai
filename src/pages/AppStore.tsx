@@ -61,35 +61,89 @@ const MINI: {
   },
 ];
 
-/* The same Mac, three times, with one part of it lit. Drawn rather than
-   screenshotted, because the row is about where a thing stands on your screen
-   and a screenshot would put its interface in front of that. */
-function Screen({ art }: { art: "notch" | "edge" | "caret" }) {
+/* Not wireframes. Each one is a small picture of the app actually running in
+   the place it stands, because a labelled rectangle asks the reader to imagine
+   the product and a picture of it does not. Drawn rather than screenshotted so
+   the three sit at one scale, in one light, with one set of hairlines.
+
+   The Apple half of the blend lives here: a tinted panel per accent, a real
+   bezel with a gradient in it, and the lit part glowing rather than simply
+   being filled. */
+function Shot({ art }: { art: "notch" | "edge" | "caret" }) {
+  const id = "sh-" + art;
   return (
-    <svg className="ast-screen" viewBox="0 0 160 100" role="img" aria-hidden="true">
-      <rect x="6" y="6" width="148" height="80" rx="6" className="ast-screen-body" />
-      <rect x="62" y="86" width="36" height="4" rx="2" className="ast-screen-foot" />
+    <svg className="ast-shot" viewBox="0 0 220 138" role="img" aria-hidden="true">
+      <defs>
+        <linearGradient id={id + "-glass"} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#ffffff" />
+          <stop offset="1" stopColor="#f1eee5" />
+        </linearGradient>
+        <linearGradient id={id + "-lit"} x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor="#f0938a" />
+          <stop offset="1" stopColor="#c9544a" />
+        </linearGradient>
+        <radialGradient id={id + "-glow"} cx="50%" cy="50%" r="50%">
+          <stop offset="0" stopColor="#d9645b" stopOpacity="0.4" />
+          <stop offset="1" stopColor="#d9645b" stopOpacity="0" />
+        </radialGradient>
+      </defs>
+
+      {/* the machine */}
+      <rect x="14" y="10" width="192" height="112" rx="11" fill={`url(#${id}-glass)`} stroke="#cdc7b7" />
+      <rect x="20" y="16" width="180" height="100" rx="7" fill="#fdfcf8" stroke="#e2ddd0" />
+
       {art === "notch" && (
         <>
-          <rect x="52" y="6" width="56" height="10" rx="5" className="ast-lit" />
-          <rect x="60" y="10" width="26" height="2" rx="1" className="ast-lit-ink" />
-          <rect x="90" y="10" width="11" height="2" rx="1" className="ast-lit-ink" />
+          <ellipse cx="110" cy="22" rx="52" ry="20" fill={`url(#${id}-glow)`} />
+          <rect x="72" y="14" width="76" height="15" rx="7.5" fill="#1b1a14" />
+          <circle cx="82" cy="21.5" r="3" fill={`url(#${id}-lit)`} />
+          <rect x="90" y="19" width="32" height="2.2" rx="1.1" fill="#f6f3ea" opacity=".9" />
+          <rect x="126" y="19" width="14" height="2.2" rx="1.1" fill="#f6f3ea" opacity=".45" />
+          <rect x="36" y="52" width="120" height="3" rx="1.5" fill="#d8d2c3" />
+          <rect x="36" y="64" width="148" height="3" rx="1.5" fill="#ddd7c9" />
+          <rect x="36" y="76" width="96" height="3" rx="1.5" fill="#e6e1d4" />
+          <rect x="36" y="88" width="132" height="3" rx="1.5" fill="#eeeade" />
         </>
       )}
+
       {art === "edge" && (
         <>
-          <rect x="147" y="36" width="7" height="22" rx="3.5" className="ast-lit" />
-          <rect x="112" y="41" width="31" height="12" rx="3" className="ast-lit-soft" />
-          <rect x="116" y="45" width="23" height="3" rx="1.5" className="ast-lit-ink" />
+          <ellipse cx="196" cy="66" rx="42" ry="40" fill={`url(#${id}-glow)`} />
+          <rect x="36" y="36" width="104" height="3" rx="1.5" fill="#e6e1d4" />
+          <rect x="36" y="46" width="128" height="3" rx="1.5" fill="#ece7db" />
+          {/* the glass pill with the count in it */}
+          <rect x="104" y="56" width="80" height="24" rx="8" fill="#1b1a14" opacity=".9" />
+          <rect x="112" y="64" width="13" height="8" rx="2" fill="#f6a8a2" />
+          <rect x="128" y="67" width="3" height="3" rx="1.5" fill="#f6a8a2" opacity=".6" />
+          <rect x="134" y="64" width="13" height="8" rx="2" fill="#f6a8a2" />
+          <rect x="150" y="67" width="3" height="3" rx="1.5" fill="#f6a8a2" opacity=".6" />
+          <rect x="156" y="64" width="13" height="8" rx="2" fill="#f6a8a2" opacity=".7" />
+          <rect x="36" y="92" width="88" height="3" rx="1.5" fill="#efebe0" />
+          {/* him, leaning in past the edge */}
+          <rect x="194" y="50" width="12" height="36" rx="6" fill={`url(#${id}-lit)`} />
+          <circle cx="199" cy="62" r="2" fill="#1b1a14" opacity=".55" />
         </>
       )}
+
       {art === "caret" && (
         <>
-          <rect x="30" y="38" width="46" height="2.5" rx="1.25" className="ast-lit-ink" />
-          <rect x="30" y="46" width="62" height="2.5" rx="1.25" className="ast-lit-ink" />
-          <rect x="94" y="43" width="2" height="12" rx="1" className="ast-lit" />
+          <ellipse cx="120" cy="66" rx="48" ry="30" fill={`url(#${id}-glow)`} />
+          <rect x="36" y="44" width="122" height="3.4" rx="1.7" fill="#d8d2c3" />
+          <rect x="36" y="56" width="148" height="3.4" rx="1.7" fill="#ddd7c9" />
+          <rect x="36" y="68" width="74" height="3.4" rx="1.7" fill="#e3ded1" />
+          <rect x="114" y="62" width="2.6" height="16" rx="1.3" fill={`url(#${id}-lit)`} />
+          {/* what is being said, still arriving */}
+          <rect x="126" y="66" width="2.4" height="8" rx="1.2" fill="#d9645b" opacity=".85" />
+          <rect x="132" y="62" width="2.4" height="16" rx="1.2" fill="#d9645b" opacity=".65" />
+          <rect x="138" y="65" width="2.4" height="10" rx="1.2" fill="#d9645b" opacity=".5" />
+          <rect x="144" y="68" width="2.4" height="4" rx="1.2" fill="#d9645b" opacity=".35" />
+          <rect x="36" y="88" width="108" height="3.4" rx="1.7" fill="#efebe0" />
         </>
       )}
+
+      {/* the stand */}
+      <rect x="92" y="122" width="36" height="5" rx="2.5" fill="#cdc7b7" />
+      <rect x="76" y="127" width="68" height="4" rx="2" fill="#dcd6c7" />
     </svg>
   );
 }
@@ -227,7 +281,7 @@ export default function AppStore() {
                   </p>
                 </div>
                 <div className="ast-minicard-art">
-                  <Screen art={a.art} />
+                  <Shot art={a.art} />
                 </div>
               </li>
             ))}

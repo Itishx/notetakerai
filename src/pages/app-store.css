@@ -13,59 +13,77 @@
 
 .ast .aff-nav { position: sticky; top: 0; z-index: 30; }
 
+/* ---- the blend ----------------------------------------------------------
+   Affective gives the paper, the hairline and the one serif. Apple gives the
+   scale, the tinted accent stage, the radius and the soft depth under a card.
+   What is deliberately not taken from Apple is the gutter: the halves still
+   run to the edges of the screen and still share one hairline down the middle,
+   because that is the part of this page that is ours.
+   -------------------------------------------------------------------------- */
+.ast {
+  --r: 20px;
+  --lift: 0 26px 54px -30px rgba(52, 32, 22, .4);
+  --lift-hi: 0 34px 70px -28px rgba(52, 32, 22, .5);
+}
+
 /* ---- shared -------------------------------------------------------------- */
 .ast-kicker {
-  margin: 0 0 clamp(14px, 1.6vw, 22px);
-  font-size: 11px; font-weight: 600; letter-spacing: .15em; text-transform: uppercase;
+  margin: 0 0 clamp(16px, 2vw, 26px);
+  display: inline-flex; align-items: center; gap: 9px;
+  font-size: 11px; font-weight: 600; letter-spacing: .16em; text-transform: uppercase;
   color: var(--a-ink-faint);
 }
+.ast-kicker::before {
+  content: ""; width: 6px; height: 6px; border-radius: 50%;
+  background: var(--a-braino);
+}
 .ast-h1 {
-  margin: 0; max-width: 19ch;
+  margin: 0; max-width: 17ch;
   font-family: var(--a-display);
-  font-size: clamp(34px, 5.4vw, 70px);
-  line-height: 1.03; letter-spacing: -0.03em; font-weight: 400;
+  font-size: clamp(42px, 7.2vw, 104px);
+  line-height: .98; letter-spacing: -0.035em; font-weight: 400;
   text-wrap: balance;
 }
 .ast-h1 b { display: block; font-weight: inherit; color: var(--a-ink-soft); }
 .ast-lede {
-  margin: clamp(22px, 2.4vw, 32px) 0 0; max-width: 64ch;
-  font-size: clamp(15px, 1.35vw, 17.5px); line-height: 1.6;
-  letter-spacing: -0.008em; color: var(--a-ink-soft);
+  margin: clamp(26px, 3vw, 40px) 0 0; max-width: 60ch;
+  font-size: clamp(16px, 1.5vw, 20px); line-height: 1.55;
+  letter-spacing: -0.01em; color: var(--a-ink-soft);
 }
-.ast-head { padding: clamp(46px, 6vw, 92px) 0 clamp(28px, 3.4vw, 48px); }
+
+/* The one atmospheric thing on the page. A warm wash bled off the top corner,
+   so the first screen has air in it rather than a headline sitting on flat
+   paper. It is behind everything and touches nothing. */
+.ast-head {
+  position: relative; isolation: isolate;
+  padding: clamp(56px, 9vw, 146px) 0 clamp(40px, 5.4vw, 92px);
+  overflow: hidden;
+}
+.ast-head::before {
+  content: ""; position: absolute; z-index: -1;
+  top: -34%; right: -12%; width: min(78vw, 980px); aspect-ratio: 1;
+  background: radial-gradient(circle at 50% 50%,
+    color-mix(in srgb, var(--a-braino) 22%, transparent) 0%,
+    color-mix(in srgb, var(--a-braino) 7%, transparent) 42%,
+    transparent 68%);
+  pointer-events: none;
+}
 
 .ast-where {
   margin: 0;
-  font-size: 10.5px; font-weight: 600; letter-spacing: .13em; text-transform: uppercase;
+  font-size: 10.5px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase;
   color: var(--a-braino);
 }
-/* State is never decoration. Only a thing you can actually have gets colour. */
 .ast-state {
   font-size: 10px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase;
   color: var(--a-ink-faint);
   border: 1px solid var(--a-line-strong);
-  padding: 3px 7px; white-space: nowrap;
+  border-radius: 999px;
+  padding: 4px 11px; white-space: nowrap;
 }
-.ast-state.is-out, .ast-state.is-running { color: #4f7a4a; border-color: #4f7a4a; }
+.ast-state.is-out { color: #4f7a4a; border-color: color-mix(in srgb, #4f7a4a 45%, transparent); }
 
-.ast-dl {
-  display: inline-block; white-space: nowrap;
-  font-size: 13.5px; font-weight: 500; letter-spacing: -0.006em;
-  color: var(--a-bg); background: var(--a-ink);
-  border: 1px solid var(--a-ink);
-  padding: 10px 20px; text-decoration: none;
-}
-.ast-dl:hover { background: transparent; color: var(--a-ink); }
-/* The build you cannot have yet does not get the solid button. */
-.ast-dl.is-soft { background: transparent; color: var(--a-ink); }
-.ast-dl.is-soft:hover { background: var(--a-ink); color: var(--a-bg); }
-
-/* ---- the split ----------------------------------------------------------
-   Full bleed, one hairline down the middle, and the two halves never share a
-   scale: the product is one large thing and the mini apps are a column of
-   small ones. That difference in size is the fastest way to say they are not
-   the same kind of thing, which is the whole reason the page is split.
-   -------------------------------------------------------------------------- */
+/* ---- the split ----------------------------------------------------------- */
 .ast-split {
   display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   border-top: 1px solid var(--a-line-strong);
@@ -75,123 +93,169 @@
 .ast-half { display: flex; flex-direction: column; min-width: 0; }
 .ast-half-product { border-right: 1px solid var(--a-line-strong); }
 
-/* Each half says what it holds, in the same two lines, on the page colour so
-   the band reads as a shelf label rather than as part of the first card. */
+/* Each half says what it holds, in the same two lines, and stays at the top of
+   the screen while its side is being read. */
 .ast-half-head {
-  background: var(--a-bg);
+  /* Clears the page nav, which is sticky at 62px, so the two bars stack
+     rather than sliding through each other. */
+  position: sticky; top: 62px; z-index: 5;
+  background: color-mix(in srgb, var(--a-bg) 86%, transparent);
+  backdrop-filter: saturate(180%) blur(18px);
+  -webkit-backdrop-filter: saturate(180%) blur(18px);
   border-bottom: 1px solid var(--a-line-strong);
-  padding: clamp(22px, 2.6vw, 38px) clamp(22px, 3vw, 52px);
-  display: flex; flex-direction: column; gap: 7px;
+  padding: clamp(20px, 2.4vw, 32px) clamp(22px, 3vw, 54px);
+  display: flex; flex-direction: column; gap: 6px;
 }
 .ast-half-head h2 {
   margin: 0;
   font-family: var(--a-display);
-  font-size: clamp(24px, 2.6vw, 34px); font-weight: 400; letter-spacing: -0.024em;
+  font-size: clamp(24px, 2.6vw, 36px); font-weight: 400; letter-spacing: -0.026em;
 }
 .ast-half-head p { margin: 0; font-size: 13px; line-height: 1.5; color: var(--a-ink-faint); }
 
-/* ---- the product, photo up and words down -------------------------------- */
-.ast-prodcard {
-  flex: 1;
-  display: flex; flex-direction: column;
-  text-decoration: none; color: inherit;
-}
+/* ---- the product, on a stage -------------------------------------------- */
+.ast-prodcard { flex: 1; display: flex; flex-direction: column; text-decoration: none; color: inherit; }
+/* Apple's colour panel, in his colour. The glow is what the page was missing:
+   a character standing on flat paper is a drawing, and one standing in his own
+   light is a product shot. */
 .ast-prodcard-art {
-  background: color-mix(in srgb, var(--a-braino) 9%, var(--a-bg));
+  position: relative; isolation: isolate; overflow: hidden;
+  background: linear-gradient(168deg,
+    color-mix(in srgb, var(--a-braino) 9%, var(--a-bg)) 0%,
+    color-mix(in srgb, var(--a-braino) 20%, var(--a-bg)) 62%,
+    color-mix(in srgb, var(--a-braino) 30%, var(--a-bg)) 100%);
   border-bottom: 1px solid var(--a-line);
-  padding: clamp(34px, 5vw, 84px) clamp(22px, 3vw, 52px);
+  padding: clamp(40px, 6vw, 104px) clamp(22px, 3vw, 54px);
   display: flex; align-items: center; justify-content: center;
 }
-.ast-prodcard-art img {
-  width: clamp(110px, 15vw, 210px); height: auto; display: block;
-  transition: transform .5s cubic-bezier(.2, .9, .3, 1);
+.ast-prodcard-art::before {
+  content: ""; position: absolute; inset: 0; z-index: -1;
+  background: radial-gradient(ellipse 52% 46% at 50% 44%, rgba(255, 252, 248, .85), transparent 70%);
 }
-.ast-prodcard:hover .ast-prodcard-art img { transform: translateY(-6px); }
+/* The shadow lands under him rather than around him, so he reads as standing
+   on the panel instead of pasted onto it. */
+.ast-prodcard-art img {
+  width: clamp(116px, 16vw, 230px); height: auto; display: block;
+  filter: drop-shadow(0 22px 26px rgba(120, 52, 42, .3));
+  animation: astFloat 6.5s ease-in-out infinite;
+  transition: transform .55s cubic-bezier(.2, .9, .3, 1);
+}
+@keyframes astFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-9px); }
+}
+.ast-prodcard:hover .ast-prodcard-art img { transform: translateY(-14px) scale(1.03); }
+
 .ast-prodcard-body {
   flex: 1;
-  padding: clamp(24px, 3vw, 46px) clamp(22px, 3vw, 52px) clamp(26px, 3vw, 48px);
-  display: flex; flex-direction: column; gap: 12px;
+  padding: clamp(26px, 3.2vw, 52px) clamp(22px, 3vw, 54px) clamp(28px, 3.2vw, 52px);
+  display: flex; flex-direction: column; gap: 13px;
 }
 .ast-feat-kicker {
   margin: 0;
-  font-size: 10.5px; font-weight: 600; letter-spacing: .13em; text-transform: uppercase;
+  font-size: 10.5px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase;
   color: var(--a-braino);
 }
 .ast-prodcard-body h3 {
   margin: 0;
   font-family: var(--a-display);
-  font-size: clamp(36px, 4.4vw, 62px); font-weight: 400; letter-spacing: -0.028em; line-height: 1.02;
+  font-size: clamp(40px, 5vw, 76px); font-weight: 400; letter-spacing: -0.032em; line-height: .98;
 }
-.ast-feat-line { margin: 0; max-width: 46ch; font-size: clamp(14.5px, 1.3vw, 17px); line-height: 1.56; color: var(--a-ink-soft); }
-.ast-feat-models { margin: 2px 0 0; display: flex; gap: 8px; flex-wrap: wrap; }
+.ast-feat-line { margin: 0; max-width: 44ch; font-size: clamp(15px, 1.35vw, 18px); line-height: 1.55; color: var(--a-ink-soft); }
+.ast-feat-models { margin: 4px 0 0; display: flex; gap: 8px; flex-wrap: wrap; }
 .ast-feat-models span {
-  font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase;
-  color: var(--a-ink-faint);
-  border: 1px solid var(--a-line); padding: 3px 8px;
+  font-size: 10.5px; font-weight: 600; letter-spacing: .09em; text-transform: uppercase;
+  color: var(--a-ink-soft);
+  border: 1px solid var(--a-line-strong); border-radius: 999px; padding: 5px 12px;
+  background: var(--a-bg);
 }
 .ast-prodcard-foot {
-  margin-top: auto; padding-top: clamp(16px, 2vw, 26px);
+  margin-top: auto; padding-top: clamp(18px, 2.2vw, 30px);
   display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap;
 }
-.ast-feat-go { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 500; color: var(--a-ink); }
-.ast-feat-go i { font-style: normal; transition: transform .22s ease; }
-.ast-prodcard:hover .ast-feat-go i { transform: translateX(4px); }
+.ast-feat-go {
+  display: inline-flex; align-items: center; gap: 10px;
+  font-size: 15px; font-weight: 500; letter-spacing: -0.01em; color: var(--a-ink);
+}
+.ast-feat-go i {
+  font-style: normal;
+  width: 26px; height: 26px; border-radius: 50%;
+  background: var(--a-ink); color: var(--a-bg);
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 12px;
+  transition: transform .26s cubic-bezier(.2, .9, .3, 1);
+}
+.ast-prodcard:hover .ast-feat-go i { transform: translateX(5px); }
 
 /* ---- the mini apps, set like a reading list ------------------------------ */
 .ast-minilist { margin: 0; padding: 0; list-style: none; flex: 1; }
 .ast-minilist li {
-  display: grid; grid-template-columns: minmax(0, 1fr) clamp(96px, 12vw, 168px);
-  gap: clamp(16px, 2vw, 32px); align-items: center;
-  padding: clamp(20px, 2.4vw, 32px) clamp(22px, 3vw, 52px);
+  display: grid; grid-template-columns: minmax(0, 1fr) clamp(116px, 15vw, 210px);
+  gap: clamp(18px, 2.4vw, 38px); align-items: center;
+  padding: clamp(22px, 2.8vw, 40px) clamp(22px, 3vw, 54px);
   border-bottom: 1px solid var(--a-line);
+  transition: background .3s ease;
 }
 .ast-minilist li:last-child { border-bottom: 0; }
-.ast-minicard-text { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.ast-minilist li:hover { background: var(--a-bg); }
+.ast-minicard-text { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
 .ast-minicard-text h3 {
   margin: 0;
-  font-size: clamp(17px, 1.6vw, 21px); font-weight: 600; letter-spacing: -0.018em;
+  font-family: var(--a-display);
+  font-size: clamp(21px, 2vw, 28px); font-weight: 400; letter-spacing: -0.024em;
 }
-.ast-minicard-line {
-  margin: 0; max-width: 48ch;
-  font-size: 13.5px; line-height: 1.55; color: var(--a-ink-soft);
-}
+.ast-minicard-line { margin: 0; max-width: 46ch; font-size: 14px; line-height: 1.55; color: var(--a-ink-soft); }
 /* The two questions, compressed to one line, because at this size a table
-   would be bigger than the card it is describing. */
+   would be bigger than the card describing it. */
 .ast-minicard-meta {
-  margin: 4px 0 0;
-  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
-  font-size: 10.5px; font-weight: 600; letter-spacing: .09em; text-transform: uppercase;
+  margin: 5px 0 0;
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  font-size: 10px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase;
   color: var(--a-ink-faint);
 }
-.ast-minicard-meta b { margin-left: 6px; font-weight: 600; }
+.ast-minicard-meta span {
+  display: inline-flex; align-items: center; gap: 7px;
+  border: 1px solid var(--a-line); border-radius: 999px; padding: 4px 11px;
+  background: var(--a-surface);
+}
+.ast-minicard-meta b { font-weight: 700; }
 .ast-minicard-meta b.is-yes { color: #4f7a4a; }
-.ast-minicard-meta b.is-no { color: var(--a-ink-faint); opacity: .75; }
+.ast-minicard-meta b.is-no { color: var(--a-ink-faint); opacity: .7; }
 .ast-minicard-meta code {
   font-family: ui-monospace, "SF Mono", Menlo, monospace;
   font-size: 11px; letter-spacing: 0; text-transform: none; color: var(--a-ink-soft);
-  background: var(--a-bg); border: 1px solid var(--a-line); padding: 2px 7px;
+  background: var(--a-bg); border: 1px solid var(--a-line); border-radius: 7px; padding: 3px 9px;
 }
+
+/* Apple's panel again, at thumbnail size: tint, radius, and a shadow that
+   only arrives on hover so the resting page stays flat and quiet. */
 .ast-minicard-art {
-  background: var(--a-bg);
-  border: 1px solid var(--a-line);
-  padding: 10px;
+  border-radius: var(--r);
+  background: linear-gradient(160deg,
+    color-mix(in srgb, var(--a-braino) 6%, var(--a-bg)),
+    color-mix(in srgb, var(--a-braino) 15%, var(--a-bg)));
+  border: 1px solid color-mix(in srgb, var(--a-braino) 18%, var(--a-line));
+  padding: clamp(10px, 1.2vw, 16px);
   display: flex; align-items: center; justify-content: center;
+  transition: transform .4s cubic-bezier(.2, .9, .3, 1), box-shadow .4s ease;
 }
-.ast-screen { width: 100%; height: auto; display: block; }
-.ast-screen-body { fill: none; stroke: var(--a-line-strong); stroke-width: 1.1; }
-.ast-screen-foot { fill: var(--a-line-strong); }
-.ast-lit { fill: var(--a-braino); }
-.ast-lit-soft { fill: var(--a-braino); opacity: .16; }
-.ast-lit-ink { fill: var(--a-ink-faint); }
+.ast-minilist li:hover .ast-minicard-art { transform: translateY(-5px); box-shadow: var(--lift); }
+.ast-shot { width: 100%; height: auto; display: block; filter: drop-shadow(0 6px 10px rgba(80, 48, 36, .12)); }
+
+@media (prefers-reduced-motion: reduce) {
+  .ast-prodcard-art img { animation: none; }
+  .ast-prodcard-art img, .ast-minicard-art, .ast-feat-go i { transition: none; }
+}
 
 /* Below the split point the halves become two sections, in order. */
 @media (max-width: 900px) {
   .ast-split { grid-template-columns: 1fr; }
   .ast-half-product { border-right: 0; border-bottom: 1px solid var(--a-line-strong); }
+  .ast-half-head { position: static; }
 }
 @media (max-width: 520px) {
   .ast-minilist li { grid-template-columns: 1fr; }
-  .ast-minicard-art { order: -1; max-width: 200px; }
+  .ast-minicard-art { order: -1; max-width: 260px; }
 }
 
 /* ---- the footing --------------------------------------------------------- */
