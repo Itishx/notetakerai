@@ -37,6 +37,19 @@
   --a-display: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
   --a-line: #dcd8cb;
   --a-line-strong: #c6c1b1;
+  /* The inside of a box, one shade off the page. Its own token because the
+     dark theme moves it in the opposite direction to everything else. */
+  --a-box: #fdfcf8;
+  /* Shadows are cast by one ink, given as channels so opacity stays tunable. */
+  --a-shade: 22, 21, 15;
+  /* The plate's art band is its own small world: a warm ground with him
+     standing on it, and ink chosen for that ground rather than for the page. */
+  --a-plate: linear-gradient(152deg, #efe6d7 0%, #e0d0bc 46%, #cdb79f 100%);
+  --a-plate-lift: rgba(255, 252, 245, .95);
+  --a-plate-lift-0: rgba(255, 252, 245, 0);
+  --a-plate-ink: #1a1710;
+  --a-plate-ink-mid: rgba(26, 23, 16, .82);
+  --a-plate-ink-soft: rgba(26, 23, 16, .62);
 
   /* Per-product accents. Borrowed from the Apple tokens rather than invented,
      so a product reads the same here as on its own page. */
@@ -118,13 +131,39 @@
    as half the logo. */
 .aff-logo img { height: var(--logo-h); max-width: none; }
 .aff-mark img { height: 42px; }
-.aff-nav-links { margin-left: auto; display: flex; gap: 26px; }
+.aff-nav-links { margin-left: auto; display: flex; align-items: center; gap: clamp(14px, 1.8vw, 26px); }
 .aff-nav-links a {
   font-size: 12.5px; font-weight: 500; letter-spacing: -0.006em;
   color: var(--a-ink-soft); text-decoration: none;
   transition: color .2s ease;
 }
 .aff-nav-links a:hover { color: var(--a-ink); }
+/* The one link in the bar that leaves the page. It is a destination, not a
+   section, so it is marked rather than left to look like another anchor. */
+.aff-nav-go {
+  color: var(--a-ink) !important; font-weight: 500;
+  border: 1px solid var(--a-line-strong); border-radius: 999px;
+  padding: 6px 14px;
+}
+.aff-nav-go:hover { background: var(--a-ink); color: var(--a-bg) !important; border-color: var(--a-ink); }
+
+/* The light switch. A circle the size of the pill beside it, quiet until it is
+   hovered, because it is a preference and not an action the page wants. */
+.aff-theme {
+  appearance: none; background: transparent; cursor: pointer;
+  width: 30px; height: 30px; flex: none;
+  border: 1px solid var(--a-line-strong); border-radius: 50%;
+  color: var(--a-ink-soft);
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: color .2s ease, border-color .2s ease, background .2s ease;
+}
+.aff-theme:hover { color: var(--a-ink); border-color: var(--a-ink); }
+.aff-theme:focus-visible { outline: 2px solid var(--a-braino); outline-offset: 2px; }
+.aff-theme svg { width: 15px; height: 15px; display: block; }
+.aff-theme-sr {
+  position: absolute; width: 1px; height: 1px; overflow: hidden;
+  clip-path: inset(50%); white-space: nowrap;
+}
 @media (max-width: 980px) {
   .aff-nav-links { gap: 18px; }
   .aff-nav-links a:not(:last-child):nth-child(n+4) { display: none; }
@@ -154,7 +193,7 @@
   border: 1px solid var(--a-line-strong);
   border-left-width: calc(1px - 1px * var(--grow));
   border-right-width: calc(1px - 1px * var(--grow));
-  box-shadow: 0 1px 0 rgba(22, 21, 15, .03), 0 18px 40px -28px rgba(22, 21, 15, calc(.28 - .28 * var(--grow)));
+  box-shadow: 0 1px 0 rgba(var(--a-shade), .03), 0 18px 40px -28px rgba(var(--a-shade), calc(.28 - .28 * var(--grow)));
   transition: none;
 }
 .aff-hero-shot img {
@@ -621,7 +660,7 @@
 }
 .aff-glass-bar {
   margin-top: 14px; height: 4px; border-radius: 99px;
-  background: rgba(22, 21, 15, .12); overflow: hidden;
+  background: rgba(var(--a-shade), .12); overflow: hidden;
 }
 .aff-glass-bar i { display: block; height: 100%; background: var(--acc); border-radius: 99px; }
 .aff-wave {
@@ -712,9 +751,9 @@
 .aff-shot-box {
   margin: clamp(30px, 3.6vw, 52px) 0 0;
   border: 1px solid var(--a-line-strong);
-  background: #fdfcf8;
+  background: var(--a-box);
   overflow: hidden;
-  box-shadow: 0 1px 0 rgba(22, 21, 15, .03), 0 18px 40px -28px rgba(22, 21, 15, .28);
+  box-shadow: 0 1px 0 rgba(var(--a-shade), .03), 0 18px 40px -28px rgba(var(--a-shade), .28);
 }
 .aff-shot-box img {
   display: block; width: 100%;
@@ -736,9 +775,9 @@
 .aff-keeps {
   display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr);
   border: 1px solid var(--a-line-strong);
-  background: #fdfcf8;
+  background: var(--a-box);
   overflow: hidden;
-  box-shadow: 0 1px 0 rgba(22, 21, 15, .03), 0 18px 40px -28px rgba(22, 21, 15, .28);
+  box-shadow: 0 1px 0 rgba(var(--a-shade), .03), 0 18px 40px -28px rgba(var(--a-shade), .28);
 }
 .aff-keeps .aff-four-art {
   aspect-ratio: auto; height: 100%; min-height: 260px;
@@ -788,9 +827,9 @@
   width: 100%;
   margin: clamp(18px, 2vw, 28px) 0 0;
   border: 1px solid var(--a-line-strong);
-  background: #fdfcf8;
+  background: var(--a-box);
   overflow: hidden;
-  box-shadow: 0 1px 0 rgba(22, 21, 15, .03), 0 18px 40px -28px rgba(22, 21, 15, .28);
+  box-shadow: 0 1px 0 rgba(var(--a-shade), .03), 0 18px 40px -28px rgba(var(--a-shade), .28);
 }
 /* Inside a frame already: the grid draws only the lines between its own cells. */
 .aff-four { border-top: 1px solid var(--a-line-strong); border-left: 1px solid var(--a-line-strong); }
@@ -855,9 +894,9 @@
 .aff-plate {
   margin: clamp(18px, 2vw, 28px) 0 0;
   border: 1px solid var(--a-line-strong);
-  background: #fdfcf8;
+  background: var(--a-box);
   overflow: hidden;
-  box-shadow: 0 1px 0 rgba(22, 21, 15, .03), 0 18px 40px -28px rgba(22, 21, 15, .28);
+  box-shadow: 0 1px 0 rgba(var(--a-shade), .03), 0 18px 40px -28px rgba(var(--a-shade), .28);
 }
 /* ── Kinetic line ─────────────────────────────────────────────────────────
    Ported from his teaser: a word lands, and stays, and the next joins it. The
@@ -906,7 +945,7 @@
 .aff-models-row {
   display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
   border: 1px solid var(--a-line);
-  background: #fdfcf8;
+  background: var(--a-box);
 }
 .aff-model {
   display: flex; flex-direction: column; gap: 10px;
@@ -1018,8 +1057,8 @@
   overflow: hidden;
   border-bottom: 1px solid var(--a-line);
   background:
-    radial-gradient(120% 130% at 18% 12%, rgba(255, 252, 245, .95), rgba(255, 252, 245, 0) 58%),
-    linear-gradient(152deg, #efe6d7 0%, #e0d0bc 46%, #cdb79f 100%);
+    radial-gradient(120% 130% at 18% 12%, var(--a-plate-lift), var(--a-plate-lift-0) 58%),
+    var(--a-plate);
 }
 /* Him and his name as one lockup, on the left. Across the box from each other
    they were two things that happened to share a ground; beside each other they
@@ -1028,7 +1067,7 @@
   width: 100%;
   display: flex; align-items: flex-end; gap: clamp(12px, 1.6vw, 26px);
   padding: clamp(34px, 3.8vw, 56px) clamp(28px, 3vw, 46px) clamp(26px, 2.8vw, 40px);
-  color: #1a1710;
+  color: var(--a-plate-ink);
 }
 .aff-plate-name { display: flex; flex-direction: column; gap: clamp(9px, 1vw, 14px); }
 /* Braino is the software and Affective is the company. The company wears the
@@ -1044,7 +1083,7 @@
 .aff-plate-line {
   margin: 0; display: flex; flex-wrap: wrap; gap: 8px 22px;
   font-size: 11.5px; letter-spacing: .2em; text-transform: uppercase;
-  color: rgba(26, 23, 16, .62);
+  color: var(--a-plate-ink-soft);
 }
 .aff-plate-line span { position: relative; }
 .aff-plate-line span + span::before {
@@ -1077,7 +1116,7 @@
   font-family: var(--a-display);
   font-size: clamp(20px, 2.3vw, 32px);
   line-height: 1.14; letter-spacing: -0.022em;
-  color: rgba(26, 23, 16, .82);
+  color: var(--a-plate-ink-mid);
 }
 .aff-plate-blurb {
   margin: 0; max-width: 78ch;
@@ -1390,3 +1429,46 @@
 @media (prefers-reduced-motion: reduce) {
   .aff-faq summary i::before, .aff-faq summary i::after { transition: none; }
 }
+
+
+/* ============================================================================
+   Black.
+
+   Not an inversion. The paper theme is warm and so is this one: the ground is
+   a near black with the same brown in it, the hairline keeps doing the
+   structural work rather than becoming a glow, and coral stays coral because
+   it is the company's colour in either light.
+
+   Two ways in. An explicit choice stamps data-theme on .aff and wins in both
+   directions; with no choice made, the machine's own setting decides. Every
+   token is declared on .aff first, so nothing here is a colour's only home.
+   ========================================================================== */
+.aff[data-theme="dark"],
+.ast[data-theme="dark"] {
+  --a-bg: #100f0c;
+  --a-surface: #17160f;
+  --a-box: #1b1a13;
+  --a-ink: #f6f3ea;
+  --a-ink-soft: rgba(246, 243, 234, .72);
+  --a-ink-faint: rgba(246, 243, 234, .48);
+  --a-line: rgba(246, 243, 234, .13);
+  --a-line-strong: rgba(246, 243, 234, .22);
+  --a-shade: 0, 0, 0;
+  /* Coral lifts a little off a dark ground, the way ink darkens on a light
+     one: the same colour needs more light to read the same. */
+  --a-braino: #e8786e;
+  --a-hera: #5b8ff5;
+  --a-photos: #8f79e0;
+  --a-foundry: #d3a350;
+  --a-browser: #55ab79;
+  /* His band goes to a deep warm ground with the light still falling from the
+     same corner, so he keeps his shadow and does not float. */
+  --a-plate: linear-gradient(152deg, #2b2416 0%, #221c12 46%, #16120b 100%);
+  --a-plate-lift: rgba(255, 228, 186, .1);
+  --a-plate-lift-0: rgba(255, 228, 186, 0);
+  --a-plate-ink: #f8f4e9;
+  --a-plate-ink-mid: rgba(248, 244, 233, .84);
+  --a-plate-ink-soft: rgba(248, 244, 233, .6);
+}
+
+.aff[data-theme="dark"] .aff-foot-art { filter: brightness(.5) saturate(.85); }

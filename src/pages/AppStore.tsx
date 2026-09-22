@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
+import { AffThemeToggle, useAffTheme } from "@/components/AffTheme";
 import "./affective.css";
 import "./app-store.css";
 
@@ -71,12 +72,12 @@ const MINI: {
    being filled. */
 const FAQ = [
   {
-    q: "Why are they in one store?",
-    a: "Because they run on the same thing. A mini app on its own is a good small tool and nothing more. Plugged into Braino it stops being a tool: the transcript it takes is in his memory afterwards, and the countdown at your edge knows what is actually on today. Same app, same afternoon, and the only difference is that something underneath it remembers. A store of unrelated tools is a drawer. This is one layer with several ways in.",
+    q: "What is the difference between an Affective product and a mini app?",
+    a: "Size, and whether it needs the other one. A product is big and you live in it. Braino is the product: he is on all day, he can see your screen, he hears the room, and he remembers what happened. A mini app is small and does one job. The countdown sits at the edge of your screen and counts. That is all it does. You can run a mini app without Braino, and you can run Braino without any mini apps. If you have both, the small one can ask the big one what is going on. That is the only difference, and it is why they are listed apart.",
   },
   {
-    q: "What is the difference between an Affective product and a mini app?",
-    a: "Size and dependence. A product is something you live in: it runs all day, it has models rather than versions, and everything else is built to sit on top of it. Braino is the only one. A mini app is one small thing done well. It is not part of Braino and does not need him: it runs on its own as a Mac app and stands somewhere on your screen. If you do have him you can plug it in, and then it reads the same memory he does. Plugging in is the choice, not the requirement, which is the whole reason the two are listed apart.",
+    q: "Why are they in one store?",
+    a: "Because they run on the same memory. On its own a mini app is a good small tool and nothing more. Plugged into Braino it stops being a tool: the transcript it takes is his to keep afterwards, and the countdown at your edge knows what is actually on today. Same app, same afternoon, and the only thing that changed is that something underneath it remembers. A shop full of unrelated tools is a drawer. This is one thing with several doors.",
   },
 ];
 
@@ -188,19 +189,26 @@ function useReveal() {
 
 export default function AppStore() {
   const root = useReveal();
+  const { theme, toggle } = useAffTheme();
   const [tab, setTab] = useState<"products" | "mini">("products");
 
   return (
-    <div className="aff ast" ref={root}>
+    <div className="aff ast" data-theme={theme} ref={root}>
       <nav className="aff-nav">
         <div className="aff-nav-in">
           <Link to="/" className="aff-logo" aria-label="Affective">
             <img src="/affective-logo.png" alt="Affective" width={1000} height={207} />
           </Link>
           <div className="aff-nav-links">
-            <Link to="/apps">Apps</Link>
-            <Link to="/braino">Braino</Link>
+            {/* Plain anchors rather than router links: these land on another
+                page at a hash, and the browser does that correctly on its own
+                without a scroll handler this page would have to own. */}
+            <a href="/#technology">Technology</a>
+            <a href="/#products">Products</a>
+            <a href="/#apps">Apps</a>
             <Link to="/waitlist">Early access</Link>
+            <Link to="/apps" className="aff-nav-go">App store</Link>
+            <AffThemeToggle theme={theme} onToggle={toggle} />
           </div>
         </div>
       </nav>
@@ -245,10 +253,12 @@ export default function AppStore() {
               id="tab-products"
               aria-selected={tab === "products"}
               aria-controls="panel-products"
-              className={"ast-tab" + (tab === "products" ? " is-on" : "")}
+              className={tab === "products" ? "on" : ""}
+              style={{ ["--dot" as string]: "var(--a-braino)", ["--acc" as string]: "var(--a-braino)" }}
               onClick={() => setTab("products")}
             >
-              <span className="ast-tab-name">Affective products</span>
+              <small><i aria-hidden="true" />One product</small>
+              <span>Affective products</span>
             </button>
             <button
               type="button"
@@ -256,10 +266,12 @@ export default function AppStore() {
               id="tab-mini"
               aria-selected={tab === "mini"}
               aria-controls="panel-mini"
-              className={"ast-tab" + (tab === "mini" ? " is-on" : "")}
+              className={tab === "mini" ? "on" : ""}
+              style={{ ["--dot" as string]: "var(--a-browser)", ["--acc" as string]: "var(--a-browser)" }}
               onClick={() => setTab("mini")}
             >
-              <span className="ast-tab-name">Mini apps</span>
+              <small><i aria-hidden="true" />{MINI.length} small ones</small>
+              <span>Mini apps</span>
             </button>
           </div>
         </div>

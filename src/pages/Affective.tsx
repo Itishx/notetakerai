@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
+import { AffThemeToggle, useAffTheme } from "@/components/AffTheme";
 import "./affective.css";
 
 /* ============================================================================
@@ -366,6 +367,7 @@ function useReveal() {
 
 export default function Affective() {
   const root = useReveal();
+  const { theme, toggle } = useAffTheme();
   useDrift();
   usePan();
   /* The wordmark keeps its A and loses the rest once you are past the first
@@ -397,7 +399,7 @@ export default function Affective() {
   }, []);
 
   return (
-    <div className="aff" ref={root}>
+    <div className="aff" data-theme={theme} ref={root}>
       <nav className={"aff-nav" + (tight ? " is-tight" : "")}>
         <div className="aff-nav-in">
           <Link to="/affective" className="aff-logo" aria-label="Affective">
@@ -406,8 +408,12 @@ export default function Affective() {
           <div className="aff-nav-links">
             <a href="#technology">Technology</a>
             <a href="#products">Products</a>
-            <Link to="/apps">Apps</Link>
+            <a href="#apps">Apps</a>
             <Link to="/waitlist">Early access</Link>
+            {/* The one that leaves the page. Products and Apps are two
+                sections of this one; the store is where both live. */}
+            <Link to="/apps" className="aff-nav-go">App store</Link>
+            <AffThemeToggle theme={theme} onToggle={toggle} />
           </div>
         </div>
       </nav>
@@ -737,7 +743,7 @@ export default function Affective() {
               small Mac app that stands somewhere on your screen and does one
               thing, and plugging it into him is a choice rather than the only
               way to run it. */}
-          <div className="aff-mini aff-reveal">
+          <div className="aff-mini aff-reveal" id="apps">
             <div className="aff-mini-head">
               <p className="aff-mini-kicker">Mini apps</p>
               <p className="aff-mini-line">
