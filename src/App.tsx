@@ -95,7 +95,6 @@ const Terms = lazy(() => import("./pages/Terms.tsx"));
 const Contact = lazy(() => import("./pages/Contact.tsx"));
 const ProductOverview = lazy(() => import("./pages/ProductOverview.tsx"));
 const Affective = lazy(() => import("./pages/Affective.tsx"));
-const ItishForPresident = lazy(() => import("./pages/ItishForPresident.tsx"));
 const BrainoFinal = lazy(() => import("./pages/BrainoFinal.tsx"));
 const Learning = lazy(() => import("./pages/Learning.tsx"));
 const AppStore = lazy(() => import("./pages/AppStore.tsx"));
@@ -316,8 +315,11 @@ function AppRoutes() {
         <Route path="/affective" element={<Affective />} />
         {/* The campaign page: the speech, why him, and the footer game. Built
             on the Affective stylesheet rather than its own. */}
-        <Route path="/itish-for-president" element={<ItishForPresident />} />
-        <Route path="/president" element={<ItishForPresident />} />
+        {/* /president and /itish-for-president are deliberately not routed
+            here. The page is personal rather than product and its files are
+            not in this repo, so a committed route pointing at them made every
+            fresh clone fail to build. Put the route back the day the page is
+            committed. */}
         {/* The one page about him: Braino, Foundry and the school version, in
             three tabs. Its own route while it is being built, so the live
             /braino keeps working. */}
