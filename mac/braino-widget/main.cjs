@@ -1,6 +1,6 @@
 "use strict";
 
-/* The countdown on the desktop, until the sixteenth of October.
+/* Braino at the edge of the screen, counting down to the sixteenth of October.
  *
  * Its own app rather than a window inside Braino, deliberately. Braino is three
  * weeks from launch and the rule this month is that nothing new goes near him;
@@ -8,73 +8,52 @@
  * would take him down with it at four in the morning. This one knows nothing
  * about him and cannot.
  *
- *   npm run widget         it sits on the wallpaper, behind everything
- *   npm run widget:place   it floats on top so you can drag and size it
+ *   npm run widget
  *
- * Two commands because of one macOS rule: a window at the desktop level gets no
- * mouse events at all, so the thing you can see on your wallpaper is the thing
- * you cannot grab. Placing it is therefore its own short-lived mode. Put it
- * where you want it, quit, and the desktop copy opens exactly there. */
+ * A transparent window pinned to the middle of the right edge. Almost all of it
+ * is nothing: a sliver of Braino leaning in past the edge, and the numbers that
+ * come out of him when he is clicked. Because it sits on top of real work all
+ * day, the window is click-through everywhere except the sliver itself, so the
+ * only pixels it can ever steal a click from are the ones you can see. */
 
 const { app, BrowserWindow, screen, ipcMain } = require("electron");
 const fs = require("node:fs");
 const path = require("node:path");
 
-/* Placing mode: on top, grabbable, temporary. Anything else is the widget. */
-const PLACING = process.env.BRAINO_WIDGET_PLACE === "1";
+/* Braino, read here rather than in the preload: a preload runs sandboxed and
+   has no node:fs, and a file:// page may not fetch the file beside it. */
+let BRAINO_SVG = "";
+try { BRAINO_SVG = fs.readFileSync(path.join(__dirname, "braino.svg"), "utf8"); } catch (_) {}
 
-/* Where it was last time. A widget that opens in the middle of the screen
-   every morning is a widget you close every morning. */
-let statePath = "";
-function readBounds() {
-  try {
-    const saved = JSON.parse(fs.readFileSync(statePath, "utf8"));
-    const { x, y, width, height } = saved || {};
-    if ([x, y, width, height].every((n) => Number.isFinite(n))) {
-      /* Only if that place still exists: a window remembered onto a monitor
-         that has since been unplugged is a window you cannot find. */
-      const fits = screen.getAllDisplays().some((d) => {
-        const b = d.workArea;
-        return x + width > b.x && x < b.x + b.width && y + height > b.y && y < b.y + b.height;
-      });
-      if (fits) return { x, y, width, height };
-    }
-  } catch (_) {}
-  return null;
-}
+/* Sized for the open state and never resized: growing the window as the panel
+   unfurls would animate in steps the compositor can see. The window stays put
+   and the drawing inside it moves. */
+const W = 400;
+const H = 150;
 
-let saveTimer = null;
-function rememberBounds(win) {
-  clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => {
-    try { fs.writeFileSync(statePath, JSON.stringify(win.getBounds())); } catch (_) {}
-  }, 400);
+function edgeBounds() {
+  const area = screen.getPrimaryDisplay().workArea;
+  return {
+    x: area.x + area.width - W,
+    y: Math.round(area.y + (area.height - H) / 2),
+    width: W,
+    height: H,
+  };
 }
 
 function createWindow() {
-  const fallback = (() => {
-    const area = screen.getPrimaryDisplay().workArea;
-    return { width: 340, height: 250, x: area.x + area.width - 380, y: area.y + 60 };
-  })();
-
   const win = new BrowserWindow({
-    ...fallback,
-    ...(readBounds() || {}),
-    minWidth: 220,
-    minHeight: 150,
+    ...edgeBounds(),
     frame: false,
     transparent: true,
     hasShadow: false,
-    resizable: PLACING,
+    resizable: false,
+    movable: false,
     maximizable: false,
     fullscreenable: false,
     skipTaskbar: true,
-    /* On the wallpaper, under every real window, where a widget belongs: you
-       see it when you get back to the desktop and never before. macOS gives
-       such a window no mouse events, which is why placing it is a mode. */
-    ...(PLACING ? {} : { type: "desktop" }),
-    /* While placing, it is a reminder being moved, not a thing to work in: it
-       should never take the keyboard from whatever is being typed into. */
+    /* It is a reminder, not a thing to work in: it never takes the keyboard
+       away from whatever is actually being typed into. */
     focusable: false,
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
@@ -83,56 +62,56 @@ function createWindow() {
     },
   });
 
-  if (PLACING) win.setAlwaysOnTop(true, "floating", 1);
-  win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: PLACING });
-  win.loadFile(path.join(__dirname, "index.html"), PLACING ? { search: "place=1" } : {});
+  win.setAlwaysOnTop(true, "floating", 1);
+  win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
 
-  win.on("move", () => rememberBounds(win));
-  win.on("resize", () => rememberBounds(win));
+  /* Transparent to the pointer by default, but still told where the pointer is,
+     so the page can say when it is over Braino and claim the clicks back.
+     While it holds the clicks it also watches the real cursor, because the one
+     unacceptable failure here is a transparent window left holding a rectangle
+     of someone's screen after the pointer has gone. A page that misses its own
+     mouseleave cannot cause that: main checks the cursor itself and lets go. */
+  let watch = null;
+  const release = () => {
+    clearInterval(watch); watch = null;
+    if (win.isDestroyed()) return;
+    win.setIgnoreMouseEvents(true, { forward: true });
+    win.webContents.send("widget:cold");
+  };
+  release();
 
-  /* Focusable is off so it never steals the caret, which also means the window
-     cannot be clicked to drag. So the renderer reports where the pointer went
-     down and main moves the window itself. */
-  let dragFrom = null;
-  ipcMain.on("widget:drag-start", (_e, offset) => {
-    const point = screen.getCursorScreenPoint();
-    const bounds = win.getBounds();
-    dragFrom = { dx: point.x - bounds.x, dy: point.y - bounds.y, offset };
+  ipcMain.on("widget:hot", (_e, rect) => {
+    if (win.isDestroyed() || !rect) return;
+    win.setIgnoreMouseEvents(false);
+    clearInterval(watch);
+    watch = setInterval(() => {
+      if (win.isDestroyed()) return clearInterval(watch);
+      const p = screen.getCursorScreenPoint();
+      const b = win.getBounds();
+      const x = p.x - b.x, y = p.y - b.y;
+      const pad = 4;
+      const inside = x >= rect.x - pad && x <= rect.x + rect.w + pad
+                  && y >= rect.y - pad && y <= rect.y + rect.h + pad;
+      if (!inside) release();
+    }, 160);
   });
-  ipcMain.on("widget:drag-move", () => {
-    if (!dragFrom) return;
-    const point = screen.getCursorScreenPoint();
-    const bounds = win.getBounds();
-    win.setBounds({ ...bounds, x: point.x - dragFrom.dx, y: point.y - dragFrom.dy });
-  });
-  ipcMain.on("widget:drag-end", () => { dragFrom = null; });
 
-  /* The corner, same idea: the renderer says the pointer is down on it and
-     main resizes from the cursor. */
-  let sizeFrom = null;
-  ipcMain.on("widget:size-start", () => {
-    const point = screen.getCursorScreenPoint();
-    const bounds = win.getBounds();
-    sizeFrom = { x: point.x, y: point.y, width: bounds.width, height: bounds.height };
-  });
-  ipcMain.on("widget:size-move", () => {
-    if (!sizeFrom) return;
-    const point = screen.getCursorScreenPoint();
-    const bounds = win.getBounds();
-    win.setBounds({
-      ...bounds,
-      width: Math.max(220, Math.round(sizeFrom.width + (point.x - sizeFrom.x))),
-      height: Math.max(150, Math.round(sizeFrom.height + (point.y - sizeFrom.y))),
-    });
-  });
-  ipcMain.on("widget:size-end", () => { sizeFrom = null; });
+  win.on("closed", () => clearInterval(watch));
+
+  win.loadFile(path.join(__dirname, "index.html"));
+
+  /* Plug in a monitor, change the resolution, and the right edge moves. */
+  const reseat = () => { if (!win.isDestroyed()) win.setBounds(edgeBounds()); };
+  screen.on("display-metrics-changed", reseat);
+  screen.on("display-added", reseat);
+  screen.on("display-removed", reseat);
 
   ipcMain.on("widget:quit", () => app.quit());
   return win;
 }
 
 app.whenReady().then(() => {
-  statePath = path.join(app.getPath("userData"), "braino-widget-bounds.json");
+  ipcMain.handle("widget:braino", () => BRAINO_SVG);
   app.dock?.hide?.();
   createWindow();
   app.on("activate", () => {
@@ -140,5 +119,4 @@ app.whenReady().then(() => {
   });
 });
 
-/* It is the only window, and closing it is how you stop it. */
 app.on("window-all-closed", () => app.quit());

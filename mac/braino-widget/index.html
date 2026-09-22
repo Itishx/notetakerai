@@ -3,42 +3,26 @@
 <title>Braino launches</title>
 <style>
   /* ========================================================================
-     The countdown card.
+     Braino at the right edge, and the countdown that comes out of him.
 
-     One object on a transparent window: warm paper, a hairline, and the
-     numbers set in the same serif the company page uses, so the thing sitting
-     on the desk all day belongs to the same world as the site.
-
-     Everything sizes off the window rather than off pixels, because the whole
-     point is that it can be dragged small into a corner or pulled out big on
-     a second screen and stay readable at both.
+     There is no card and no ground. The window is transparent and almost all
+     of it is empty, so the only things ever on screen are a sliver of him and,
+     when he is clicked, the numbers. Everything is drawn in his own coral,
+     which is the one colour that stays legible on a white document and on a
+     dark wallpaper alike, so the thing never needs a panel behind it.
      ======================================================================== */
   :root {
-    --paper: #f4f2ec;
-    --card: #fdfcf8;
-    --ink: #16150f;
-    --soft: #625f54;
-    --faint: #918d80;
-    --line: #c6c1b1;
-    --accent: #d9645b;
-    /* One number everything else is a fraction of. */
-    --u: clamp(9px, 4.6vw, 30px);
-    --display: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
-    --sans: "SF Pro Display", -apple-system, BlinkMacSystemFont, sans-serif;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --paper: #17160f;
-      --card: #1c1b14;
-      --ink: #f6f3ea;
-      --soft: rgba(246, 243, 234, .74);
-      --faint: rgba(246, 243, 234, .5);
-      --line: rgba(246, 243, 234, .22);
-    }
+    --coral: #e0695c;
+    --coral-deep: #a9504a;
+    --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+    --sans: "SF Pro Text", -apple-system, BlinkMacSystemFont, sans-serif;
+    /* One shadow, on everything, so each glyph carries its own contrast
+       instead of the page carrying a background. */
+    --lift: 0 1px 2px rgba(20, 8, 6, .42), 0 0 10px rgba(20, 8, 6, .18);
   }
 
   * { box-sizing: border-box; }
-  html, body { height: 100%; margin: 0; background: transparent; }
+  html, body { height: 100%; margin: 0; background: transparent; overflow: hidden; }
   body {
     font-family: var(--sans);
     -webkit-font-smoothing: antialiased;
@@ -46,208 +30,224 @@
     cursor: default;
   }
 
-  .card {
-    height: 100%;
-    display: flex; flex-direction: column;
-    padding: calc(var(--u) * .82) calc(var(--u) * .9);
-    background: var(--card);
-    color: var(--ink);
-    border: 1px solid var(--line);
-    border-radius: calc(var(--u) * .62);
-    box-shadow: 0 18px 44px -20px rgba(10, 9, 5, .45);
+  /* ---- Braino, leaning in past the edge of the screen ------------------- */
+  /* The sliver is narrower than he is and clips the rest, so he reads as
+     continuing off the side of the display rather than as a small drawing
+     that happens to be parked there. */
+  .nub {
+    position: absolute; right: 0; top: 50%;
+    width: 50px; height: 112px;
+    margin-top: -56px;
     overflow: hidden;
-    touch-action: none;
+    cursor: pointer;
+    transform-origin: right center;
+    transition: transform .26s cubic-bezier(.2, .9, .3, 1);
   }
+  .nub svg { position: absolute; left: 0; top: -18px; width: 98px; height: auto; display: block; }
+  body.press .nub { transform: scale(.9); }
+  body.open .nub { transform: translateX(-1px); }
 
-  header { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
-  .eyebrow {
-    margin: 0;
-    font-size: calc(var(--u) * .38);
-    font-weight: 600; letter-spacing: .16em; text-transform: uppercase;
-    color: var(--faint);
-  }
-  /* Only there when the pointer is. A widget that is always showing you its
-     close button is a widget asking to be closed. */
+  /* Only there when the pointer is, and only on him. */
   .quit {
-    appearance: none; border: 0; background: transparent; padding: 0;
-    width: calc(var(--u) * .5); height: calc(var(--u) * .5);
-    border-radius: 50%; background: var(--line);
-    opacity: 0; transition: opacity .18s ease, background .18s ease;
+    position: absolute; right: 6px; top: 2px; z-index: 2;
+    appearance: none; border: 0; padding: 0;
+    width: 9px; height: 9px; border-radius: 50%;
+    background: var(--coral-deep);
+    opacity: 0; transition: opacity .16s ease;
     cursor: pointer;
   }
-  body:hover .quit { opacity: .8; }
-  .quit:hover { background: var(--accent); opacity: 1; }
+  body.hot .quit { opacity: .55; }
+  .quit:hover { opacity: 1; }
 
-  /* The four, across. They wrap on their own when the card is narrow, which
-     is the only layout instruction this needs. */
-  .rows {
-    flex: 1;
-    display: flex; align-items: center; justify-content: space-between;
-    gap: calc(var(--u) * .3);
-    padding: calc(var(--u) * .5) 0 calc(var(--u) * .3);
+  /* ---- The numbers ------------------------------------------------------ */
+  /* Anchored at his side and clipped from that same edge, so opening reads as
+     the row being drawn out of him rather than appearing beside him. The
+     overshoot in the curve is the whole feel: it arrives slightly too far and
+     settles, the way a held control on a phone springs open. */
+  .panel {
+    position: absolute; right: 50px; top: 50%;
+    transform: translateY(-50%) scale(.82);
+    transform-origin: right center;
+    clip-path: inset(0 0 0 100%);
+    opacity: 0;
+    pointer-events: none;
+    transition:
+      transform .44s cubic-bezier(.17, 1.22, .32, 1),
+      clip-path .44s cubic-bezier(.17, 1.22, .32, 1),
+      opacity .16s ease .04s;
   }
-  .cell { display: flex; flex-direction: column; align-items: center; gap: calc(var(--u) * .1); min-width: 0; }
+  body.open .panel {
+    transform: translateY(-50%) scale(1);
+    clip-path: inset(0 0 0 0%);
+    opacity: 1;
+  }
+  /* Closing is not a spring. It gets out of the way. */
+  body:not(.open) .panel { transition-duration: .2s, .2s, .12s; transition-timing-function: cubic-bezier(.4, 0, 1, 1); }
+
+  .row { display: flex; align-items: flex-end; gap: 7px; padding-right: 4px; }
+
+  .cell {
+    display: flex; flex-direction: column; align-items: center; gap: 2px;
+    /* Each cell arrives just after the one to its right, so the row unrolls. */
+    opacity: 0; transform: translateX(12px);
+    transition: opacity .26s ease, transform .34s cubic-bezier(.2, .9, .3, 1);
+  }
+  body.open .cell {
+    opacity: 1; transform: none;
+    transition-delay: calc(var(--i) * 45ms + 70ms);
+  }
   .n {
-    font-family: var(--display);
-    font-size: calc(var(--u) * 1.62);
-    line-height: .92;
-    letter-spacing: -0.03em;
+    font-family: var(--serif);
+    font-size: 31px; line-height: .9; letter-spacing: -0.03em;
     font-variant-numeric: tabular-nums;
+    color: var(--coral);
+    text-shadow: var(--lift);
+  }
+  /* The milliseconds ride the seconds rather than taking a row of their own:
+     they are not a number to read, they are the proof it is still running. */
+  .n .ms {
+    font-family: var(--sans);
+    font-size: 12px; letter-spacing: 0;
+    color: var(--coral-deep);
+    opacity: .85;
   }
   .l {
-    font-size: calc(var(--u) * .32);
-    font-weight: 600; letter-spacing: .14em; text-transform: uppercase;
-    color: var(--faint);
+    font-size: 7.5px; font-weight: 600; letter-spacing: .17em; text-transform: uppercase;
+    color: var(--coral-deep);
+    text-shadow: var(--lift);
   }
   .sep {
-    font-family: var(--display);
-    font-size: calc(var(--u) * 1.1);
-    color: var(--line);
-    margin-bottom: calc(var(--u) * .28);
+    font-family: var(--serif); font-size: 24px; line-height: 1;
+    color: var(--coral-deep); opacity: .5;
+    padding-bottom: 12px;
+    text-shadow: var(--lift);
+    opacity: 0;
+    transition: opacity .2s ease;
   }
+  body.open .sep { opacity: .45; transition-delay: 160ms; }
 
-  /* The milliseconds are their own row, because at three digits they move too
-     fast to read as a number and are better read as a thing that is moving. */
-  .ms-row {
-    display: flex; align-items: center; gap: calc(var(--u) * .4);
-    padding-top: calc(var(--u) * .42);
-    border-top: 1px solid var(--line);
+  @media (prefers-reduced-motion: reduce) {
+    .nub, .panel, .cell, .sep { transition-duration: .01ms !important; }
   }
-  .ms {
-    font-family: ui-monospace, "SF Mono", Menlo, monospace;
-    font-size: calc(var(--u) * .46);
-    font-variant-numeric: tabular-nums;
-    color: var(--accent);
-    min-width: 3.4ch;
-  }
-  .bar { flex: 1; height: 2px; background: var(--line); position: relative; overflow: hidden; }
-  .bar i { position: absolute; inset: 0 auto 0 0; background: var(--accent); }
-  .when { font-size: calc(var(--u) * .34); color: var(--faint); letter-spacing: .04em; white-space: nowrap; }
-
-  /* The corner. Two hairlines, which is enough to say "pull me". */
-  .grip {
-    position: fixed; right: 0; bottom: 0;
-    width: calc(var(--u) * .9); height: calc(var(--u) * .9);
-    cursor: nwse-resize;
-    touch-action: none;
-  }
-  .grip::before, .grip::after {
-    content: ""; position: absolute; right: calc(var(--u) * .2); background: var(--line);
-    height: 1px; transform: rotate(-45deg); transform-origin: right;
-  }
-  .grip::before { bottom: calc(var(--u) * .24); width: calc(var(--u) * .34); }
-  .grip::after { bottom: calc(var(--u) * .42); width: calc(var(--u) * .2); }
-
-  /* On the wallpaper there is no pointer to speak of: nothing to hover, nothing
-     to grab. So the two controls exist only while placing. */
-  .quit, .grip { display: none; }
-  body.place .quit, body.place .grip { display: block; }
-
-  .done .n { color: var(--accent); }
 </style>
 
-<div class="card" id="card">
-  <header>
-    <p class="eyebrow" id="eyebrow">Braino launches</p>
-    <button class="quit" id="quit" title="Close"></button>
-  </header>
-
-  <div class="rows" id="rows">
-    <div class="cell"><span class="n" id="d">000</span><span class="l">Days</span></div>
+<div class="panel" id="panel">
+  <div class="row">
+    <div class="cell" style="--i:3"><span class="n" id="d">00</span><span class="l">Days</span></div>
     <span class="sep">:</span>
-    <div class="cell"><span class="n" id="h">00</span><span class="l">Hrs</span></div>
+    <div class="cell" style="--i:2"><span class="n" id="h">00</span><span class="l">Hrs</span></div>
     <span class="sep">:</span>
-    <div class="cell"><span class="n" id="m">00</span><span class="l">Min</span></div>
+    <div class="cell" style="--i:1"><span class="n" id="m">00</span><span class="l">Min</span></div>
     <span class="sep">:</span>
-    <div class="cell"><span class="n" id="s">00</span><span class="l">Sec</span></div>
-  </div>
-
-  <div class="ms-row">
-    <span class="ms" id="ms">000</span>
-    <span class="bar"><i id="fill"></i></span>
-    <span class="when">16 Oct 2026</span>
+    <div class="cell" style="--i:0"><span class="n"><span id="s">00</span><span class="ms" id="ms">.000</span></span><span class="l">Sec</span></div>
   </div>
 </div>
-<div class="grip" id="grip" title="Drag to resize"></div>
+
+<div class="nub" id="nub">
+  <button class="quit" id="quit" title="Quit"></button>
+</div>
 
 <script>
-  /* Placing mode is passed in on the URL by main. */
-  const PLACING = new URLSearchParams(location.search).has("place");
-  if (PLACING) {
-    document.body.classList.add("place");
-    document.querySelector(".when").textContent = "Drag it, then quit";
-  }
+  const el = (id) => document.getElementById(id);
+  const nub = el("nub");
 
+
+  /* ---- the count ------------------------------------------------------- */
   /* Midnight, local, on the sixteenth. */
   const TARGET = new Date(2026, 9, 16, 0, 0, 0, 0).getTime();
+  const d = el("d"), h = el("h"), m = el("m"), s = el("s"), ms = el("ms");
+  const pad = (n, w) => String(Math.floor(n)).padStart(w, "0");
 
-  const el = (id) => document.getElementById(id);
-  const d = el("d"), h = el("h"), m = el("m"), s = el("s"), ms = el("ms"), fill = el("fill");
-  const card = el("card"), eyebrow = el("eyebrow");
-  const pad = (n, width) => String(Math.floor(n)).padStart(width, "0");
+  /* ---- he is alive at the edge ----------------------------------------- */
+  /* He arrives from main a beat after the page does. The count is already
+     running by then and does not wait for him. */
+  let root = null, eyeL = null, eyeR = null;
+  Promise.resolve(window.widget?.braino?.() ?? "").then((svg) => {
+    if (!svg) return;
+    nub.insertAdjacentHTML("beforeend", svg);
+    root = nub.querySelector("#__sbwk_root__");
+    eyeL = nub.querySelector("#__sbwk_eye_l__");
+    eyeR = nub.querySelector("#__sbwk_eye_r__");
+  }).catch(() => {});
+  const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-  /* Drawn every frame rather than every second, because the milliseconds are
-     the point: a countdown that ticks once a second reads as a clock, and a
-     countdown that never stops moving reads as a deadline. */
-  function draw() {
+  const start = performance.now();
+  function frame(now) {
     const left = TARGET - Date.now();
     if (left <= 0) {
-      card.classList.add("done");
-      eyebrow.textContent = "Braino is out";
-      d.textContent = "16";
-      h.textContent = "10";
-      m.textContent = "20";
-      s.textContent = "26";
-      ms.textContent = "000";
-      fill.style.width = "100%";
-      return requestAnimationFrame(draw);
+      d.textContent = "00"; h.textContent = "00"; m.textContent = "00";
+      s.textContent = "00"; ms.textContent = ".000";
+    } else {
+      const sec = left / 1000;
+      d.textContent = pad(sec / 86400, 2);
+      h.textContent = pad((sec / 3600) % 24, 2);
+      m.textContent = pad((sec / 60) % 60, 2);
+      s.textContent = pad(sec % 60, 2);
+      ms.textContent = "." + pad(left % 1000, 3);
     }
-    const sec = left / 1000;
-    d.textContent = pad(sec / 86400, 2);
-    h.textContent = pad((sec / 3600) % 24, 2);
-    m.textContent = pad((sec / 60) % 60, 2);
-    s.textContent = pad(sec % 60, 2);
-    const milli = left % 1000;
-    ms.textContent = pad(milli, 3);
-    /* The bar fills across the second it is currently inside, so the card is
-       always doing something even when nothing has changed. */
-    fill.style.width = `${(1 - milli / 1000) * 100}%`;
-    requestAnimationFrame(draw);
+
+    if (!still && root) {
+      const t = (now - start) / 1000;
+      /* Breath, a slow lean toward the screen, and a blink every few seconds:
+         enough that the sliver never reads as a sticker. */
+      const breath = 1 + 0.016 * Math.sin(t * 1.6);
+      const lean = Math.sin(t * 0.55) * 1.6;
+      const bob = Math.sin(t * 1.6 + 0.6) * 0.9;
+      root.setAttribute("transform", `rotate(${lean} 50 100) translate(0 ${bob}) scale(${breath})`);
+      const bp = t % 3.9;
+      const blink = bp < 0.13 ? Math.sin((bp / 0.13) * Math.PI) : 0;
+      const sy = Math.max(0.06, 1 - blink);
+      eyeL?.setAttribute("transform", `translate(38,48) scale(1,${sy}) translate(-38,-48)`);
+      eyeR?.setAttribute("transform", `translate(62,48) scale(1,${sy}) translate(-62,-48)`);
+    }
+    requestAnimationFrame(frame);
   }
-  draw();
+  requestAnimationFrame(frame);
 
-  /* Dragging and resizing both go through main, because the window is
-     unfocusable so it never takes the caret from whatever is being typed
-     into, and an unfocusable window does not get to drag itself.
+  /* ---- open and close --------------------------------------------------- */
+  /* It closes itself. The resting state of this thing is a sliver of Braino
+     and nothing else, and it should get back there without being asked. */
+  let shutTimer = 0;
+  const arm = () => { clearTimeout(shutTimer); shutTimer = setTimeout(() => document.body.classList.remove("open"), 7000); };
 
-     Pointer capture rather than plain mouse events: a flick fast enough to
-     outrun the window would otherwise leave the card behind, and a mouseup
-     landing outside the window would never arrive, so the thing would stay
-     stuck to the cursor. Captured, every move and the release come back here
-     wherever the pointer actually is. */
-  const hold = (node, api) => {
-    let id = null;
-    node.addEventListener("pointerdown", (e) => {
-      if (e.button !== 0 || id !== null) return;
-      id = e.pointerId;
-      node.setPointerCapture(id);
-      window.widget[api + "Start"]();
-      e.preventDefault();
-    });
-    node.addEventListener("pointermove", (e) => {
-      if (e.pointerId === id) window.widget[api + "Move"]();
-    });
-    const release = (e) => {
-      if (e.pointerId !== id) return;
-      try { node.releasePointerCapture(id); } catch (_) {}
-      id = null;
-      window.widget[api + "End"]();
-    };
-    node.addEventListener("pointerup", release);
-    node.addEventListener("pointercancel", release);
+  nub.addEventListener("click", () => {
+    const open = document.body.classList.toggle("open");
+    if (open) arm(); else clearTimeout(shutTimer);
+  });
+  nub.addEventListener("pointerdown", () => document.body.classList.add("press"));
+  const unpress = () => document.body.classList.remove("press");
+  window.addEventListener("pointerup", unpress);
+  window.addEventListener("pointercancel", unpress);
+
+  /* ---- claiming the pointer, and giving it straight back ---------------- */
+  /* The window is click-through so it can sit over real work all day. It takes
+     the pointer only while it is genuinely over him, which is the only part of
+     this window that is not empty. */
+  let hot = false;
+  const cool = () => {
+    if (!hot) return;
+    hot = false;
+    document.body.classList.remove("hot");
+    unpress();
+    if (document.body.classList.contains("open")) arm();
   };
-  hold(card, "drag");
-  hold(el("grip"), "size");
-  el("quit").addEventListener("pointerdown", (e) => e.stopPropagation());
-  el("quit").addEventListener("click", () => window.widget.quit());
+  const warm = () => {
+    if (hot) return;
+    hot = true;
+    document.body.classList.add("hot");
+    clearTimeout(shutTimer);
+    const b = nub.getBoundingClientRect();
+    window.widget?.hot({ x: b.left, y: b.top, w: b.width, h: b.height });
+  };
+  /* Main decides when it is over: it can see the real cursor even when this
+     page has stopped being sent events. */
+  window.widget?.onCold?.(cool);
+
+  const overNub = (x, y) => {
+    const b = nub.getBoundingClientRect();
+    return x >= b.left && x <= b.right && y >= b.top && y <= b.bottom;
+  };
+  window.addEventListener("mousemove", (e) => { if (overNub(e.clientX, e.clientY)) warm(); });
+
+  el("quit").addEventListener("click", (e) => { e.stopPropagation(); window.widget?.quit(); });
 </script>
