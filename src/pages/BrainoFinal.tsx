@@ -237,6 +237,58 @@ const FAQ = [
   },
 ];
 
+/* His footer, the one from his own site, with three corrections the new shape
+   forces.
+ *
+ * Under the hood used to list Braino OS, Human Intelligence and Emotional
+ * Intelligence as three things. They are one thing now and it is called
+ * AffectiveOS, so the column names it once and links to where the company page
+ * explains it.
+ *
+ * Read loses the knowledge base, which is internal.
+ *
+ * And every link here points at something that exists. The old first column
+ * was anchors on the old landing page, which is not the front door any more,
+ * so those anchors now name sections of this page. */
+const FOOTER_COLUMNS: Array<{ head: string; links: Array<[string, string]> }> = [
+  {
+    head: "Braino",
+    links: [
+      ["What he does", "/braino#what"],
+      ["A normal day", "/braino#day"],
+      ["Why not another AI tool", "/braino#faq"],
+      ["Questions", "/braino#faq"],
+      ["Get him", "/waitlist"],
+    ],
+  },
+  {
+    head: "The models",
+    links: [
+      ["Braino", "/braino"],
+      ["Braino Foundry", "/braino?model=foundry"],
+      ["For institutions", "/braino?model=mesa"],
+      ["Braino Code", "/code"],
+    ],
+  },
+  {
+    head: "Under the hood",
+    links: [
+      ["AffectiveOS", "/#technology"],
+      ["BrainoHERA", "/brainohera-teaser"],
+      ["Meetings", "/meetings"],
+    ],
+  },
+  {
+    head: "Read",
+    links: [
+      ["Braino's journal", "/journal"],
+      ["Changelog", "/changelog"],
+      ["Founder's letter", "/founder-letter"],
+      ["The questions page", "/questions"],
+    ],
+  },
+];
+
 function useReveal() {
   const root = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -469,46 +521,35 @@ export default function BrainoFinal() {
         </div>
       </section>
 
-      {/* The game from his own site, dropped in as it is. Its styles live on
-          .braino-footer, which carries the tokens it draws with, so it comes
-          across inside that wrapper rather than being reimplemented here.
-          Checked first: not one class name in braino-footer.css collides with
-          this page's own bf- prefix. */}
-      <div className="braino-footer mario bf-game-mount">
+      {/* His footer, as it is on his own site: the columns, then the level
+          underneath them. The page ends on his own thing rather than on a
+          second version of the company's. */}
+      <footer className="braino-footer mario bf-game-mount">
+        <nav className="bf-cols" aria-label="Footer">
+          {FOOTER_COLUMNS.map((column) => (
+            <div className="bf-col" key={column.head}>
+              <div className="bf-col-head">{column.head}</div>
+              {column.links.map(([label, to]) => (
+                <Link key={label + to} to={to}>{label}</Link>
+              ))}
+            </div>
+          ))}
+        </nav>
         <div className="bf-game-window">
+          <div className="bf-baseline">
+            <span className="bf-signoff">
+              Braino is a product of Affective. He runs on AffectiveOS.
+            </span>
+            <span className="bf-legal">
+              <Link to="/">Affective</Link>
+              <Link to="/privacy">Privacy</Link>
+              <Link to="/terms">Terms</Link>
+            </span>
+          </div>
           <BrainoFooterGame />
         </div>
-      </div>
-
-      <footer className="bf-foot">
-        <div className="bf-wrap">
-          <div className="bf-foot-in">
-            <div>
-              <p className="bf-foot-mark">Braino</p>
-              <p>
-                A product of Affective. He runs on AffectiveOS, which is the part that
-                gives the Mac you already own eyes, ears, a voice, hands and a memory.
-              </p>
-            </div>
-            <nav className="bf-foot-col">
-              <h4>Braino</h4>
-              <Link to="/braino">Braino</Link>
-              <Link to="/foundry">Braino Foundry</Link>
-              <Link to="/contact">For institutions</Link>
-            </nav>
-            <nav className="bf-foot-col">
-              <h4>Company</h4>
-              <Link to="/">Affective</Link>
-              <Link to="/waitlist">Get him</Link>
-              <Link to="/contact">Contact</Link>
-            </nav>
-          </div>
-          <p className="bf-foot-rule">
-            Everything on this page is something the software does today. Nothing here is a
-            roadmap.
-          </p>
-        </div>
       </footer>
+
     </div>
   );
 }

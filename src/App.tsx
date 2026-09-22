@@ -390,7 +390,7 @@ function AppRoutes() {
         <Route path="/commands" element={<Commands />} />
         <Route path="/deck" element={<Deck />} />
         <Route path="/pitch" element={<Deck />} />
-        <Route path="/distra" element={<Navigate to="/braino?view=foundry#distra" replace />} />
+        <Route path="/distra" element={<Navigate to="/foundry-legacy#distra" replace />} />
         <Route path="/distra/plan" element={<DistraPlan />} />
         <Route path="/braino-deck" element={<BrainoDeck />} />
         <Route path="/everything" element={<BrainoDeck />} />
