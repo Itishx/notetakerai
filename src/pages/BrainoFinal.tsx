@@ -49,7 +49,12 @@ type Model = {
     note: string;
     jobs: { n: string; name: string; job: string; points: string[]; solves: string; state: string }[];
   };
-  /* The line under the claim, in its own hero. */
+  /* What it is, in the fewest words somebody could act on. A hero answers
+     "what is this", and the problem it solves belongs to the problem section
+     two screens down. */
+  title: string;
+  titleTail: string;
+  /* The line under it. */
   lede: string;
   /* His film, if there is one for this model yet. A model without one shows
      nothing rather than an empty frame. */
@@ -64,7 +69,9 @@ type Model = {
 const MODELS: Model[] = [
   {
     key: "braino",
-    lede: "He is already open on the page you are on, he does the half of the day you would rather not, and he keeps what happened. Tomorrow starts where today ended.",
+    title: "An AI that lives on your Mac.",
+    titleTail: "And actually does things.",
+    lede: "He sees the screen you are on, sits through your meetings, and goes and does the jobs you would rather not. Then he remembers all of it.",
     tab: "Braino",
     who: "For everyone",
     name: "Braino",
@@ -157,7 +164,9 @@ const MODELS: Model[] = [
   },
   {
     key: "foundry",
-    lede: "You build the thing. He does the half that gets it seen: the posting, the outreach, the people who said maybe. Same Braino, pointed at your company.",
+    title: "Your AI co-founder.",
+    titleTail: "He runs your distribution.",
+    lede: "You build the thing. He does the half that gets it seen: the posting, the outreach, the people who said maybe.",
     tab: "Braino Foundry",
     who: "For founders",
     name: "Braino Foundry",
@@ -262,7 +271,9 @@ const MODELS: Model[] = [
   },
   {
     key: "mesa",
-    lede: "A case before tomorrow, a session you half heard, an evening spent rebuilding the afternoon. He carries the week, so you get to be in the room instead of typing in it.",
+    title: "Your school, inside Braino.",
+    titleTail: "Timetable, deadlines, attendance.",
+    lede: "The same Braino, connected to Mesa's own records, so your week stops living in a group chat and a screenshot.",
     tab: "For Mesa",
     who: "For institutions",
     name: "Braino for Mesa School of Business",
@@ -550,8 +561,8 @@ export default function BrainoFinal() {
         <div className="bf-wrap">
           <p className="bf-eyebrow bf-reveal">Braino · One product, three models</p>
           <h1 className="bf-h1 bf-reveal">
-            {model.claim}
-            <b>{model.claimTail}</b>
+            {model.title}
+            <b>{model.titleTail}</b>
           </h1>
           <div className="bf-hero-row bf-reveal">
             <p className="bf-hero-one">{model.lede}</p>
@@ -601,8 +612,11 @@ export default function BrainoFinal() {
         <section className="bf-sec bf-pain">
           <div className="bf-wrap">
             <div className="bf-sec-head bf-reveal">
-              <p className="bf-kicker">Where this starts</p>
-              <h2>{model.painTitle}</h2>
+              <p className="bf-kicker">{model.painTitle}</p>
+              <h2>
+                {model.claim}
+                <b>{model.claimTail}</b>
+              </h2>
             </div>
             <div className="bf-pain-cols bf-reveal">
               {model.pain.map((line) => <p key={line}>{line}</p>)}
