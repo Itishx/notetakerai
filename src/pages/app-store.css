@@ -27,48 +27,6 @@
 }
 
 /* ---- shared -------------------------------------------------------------- */
-.ast-kicker {
-  margin: 0 0 clamp(16px, 2vw, 26px);
-  display: inline-flex; align-items: center; gap: 9px;
-  font-size: 11px; font-weight: 600; letter-spacing: .16em; text-transform: uppercase;
-  color: var(--a-ink-faint);
-}
-.ast-kicker::before {
-  content: ""; width: 6px; height: 6px; border-radius: 50%;
-  background: var(--a-braino);
-}
-.ast-h1 {
-  margin: 0; max-width: 17ch;
-  font-family: var(--a-display);
-  font-size: clamp(42px, 7.2vw, 104px);
-  line-height: .98; letter-spacing: -0.035em; font-weight: 400;
-  text-wrap: balance;
-}
-.ast-h1 b { display: block; font-weight: inherit; color: var(--a-ink-soft); }
-.ast-lede {
-  margin: clamp(26px, 3vw, 40px) 0 0; max-width: 60ch;
-  font-size: clamp(16px, 1.5vw, 20px); line-height: 1.55;
-  letter-spacing: -0.01em; color: var(--a-ink-soft);
-}
-
-/* The one atmospheric thing on the page. A warm wash bled off the top corner,
-   so the first screen has air in it rather than a headline sitting on flat
-   paper. It is behind everything and touches nothing. */
-.ast-head {
-  position: relative; isolation: isolate;
-  padding: clamp(56px, 9vw, 146px) 0 clamp(40px, 5.4vw, 92px);
-  overflow: hidden;
-}
-.ast-head::before {
-  content: ""; position: absolute; z-index: -1;
-  top: -34%; right: -12%; width: min(78vw, 980px); aspect-ratio: 1;
-  background: radial-gradient(circle at 50% 50%,
-    color-mix(in srgb, var(--a-braino) 22%, transparent) 0%,
-    color-mix(in srgb, var(--a-braino) 7%, transparent) 42%,
-    transparent 68%);
-  pointer-events: none;
-}
-
 .ast-where {
   margin: 0;
   font-size: 10.5px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase;
@@ -100,10 +58,14 @@
 /* Underline rather than a pill: the hairline is the site's own way of saying
    "this one", and a segmented control would be Apple's furniture rather than
    Apple's thinking. */
+/* The label design the two halves had: the name in the serif with what the
+   category is underneath it. It worked as a shelf label and it works as a tab,
+   and reusing it means the page did not change its mind about what these two
+   things are, only about how much room each gets. */
 .ast-tab {
   appearance: none; background: transparent; border: 0; font: inherit;
-  padding: clamp(16px, 1.8vw, 24px) 0;
-  display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+  padding: clamp(18px, 2.2vw, 30px) 0;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 6px;
   cursor: pointer; text-align: left;
   color: var(--a-ink-faint);
   box-shadow: inset 0 -2px 0 0 transparent;
@@ -113,20 +75,11 @@
 .ast-tab.is-on { color: var(--a-ink); box-shadow: inset 0 -2px 0 0 var(--a-braino); }
 .ast-tab-name {
   font-family: var(--a-display);
-  font-size: clamp(20px, 2.2vw, 30px); letter-spacing: -0.024em; color: inherit;
+  font-size: clamp(24px, 2.6vw, 36px); letter-spacing: -0.026em; color: inherit;
+  line-height: 1.05;
 }
-.ast-tab-sub { font-size: 12.5px; color: var(--a-ink-faint); }
-.ast-tab-n {
-  font-size: 10.5px; font-weight: 700; letter-spacing: .06em;
-  border: 1px solid var(--a-line-strong); border-radius: 999px;
-  padding: 2px 8px; color: var(--a-ink-faint);
-  font-variant-numeric: tabular-nums;
-}
-.ast-tab.is-on .ast-tab-n { border-color: var(--a-braino); color: var(--a-braino); }
-@media (max-width: 560px) {
-  .ast-tab { flex-direction: column; gap: 4px; }
-  .ast-tab-sub { display: none; }
-}
+.ast-tab-sub { font-size: 13px; line-height: 1.5; color: var(--a-ink-faint); }
+@media (max-width: 620px) { .ast-tab-sub { display: none; } }
 
 /* The panel is keyed on the tab, so this runs again on every switch. */
 .ast-panel { animation: astPanelIn .46s cubic-bezier(.2, .9, .3, 1) both; }

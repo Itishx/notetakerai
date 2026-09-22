@@ -814,7 +814,7 @@ export default function Affective() {
                     word continuity, and without it this is a description of an
                     assistant. */}
                 <p>
-                  A simple bro, building tech that makes life more affective. That is it.
+                  Building tech that makes life more affective.
                 </p>
                 <p className="aff-foot-where">Bengaluru.</p>
               </div>

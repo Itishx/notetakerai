@@ -205,21 +205,28 @@ export default function AppStore() {
         </div>
       </nav>
 
-      <header className="ast-head">
+      {/* ── The hero ──────────────────────────────────────────────────────
+          The company page's own hero, verbatim in structure: the claim on the
+          left at full size, the one sentence and the two ways in on the right.
+          A store is not a different kind of page and should not arrive looking
+          like one. */}
+      <header className="aff-hero">
         <div className="aff-wrap">
-          <div className="aff-reveal">
-            <p className="ast-kicker">App store</p>
-            <h1 className="ast-h1">
-              Two kinds of thing.
-              <b>Products, and the small apps that plug into them.</b>
+          <div className="aff-hero-row aff-reveal">
+            <h1 className="aff-h1">
+              <span className="aff-h1-line">Two kinds of thing.</span>
+              <b>One layer under both.</b>
             </h1>
-            <p className="ast-lede">
-              A product is something you live in. A mini app is one small thing done well: it runs
-              on its own as a Mac app and stands somewhere on your screen. If you have Braino you
-              can plug it into him instead, and then it reads the same memory everything else
-              does. That is the whole ecosystem, and it only means anything because the mini apps
-              work without him.
-            </p>
+            <div className="aff-hero-side">
+              <p className="aff-hero-one">
+                A product is something you live in. A mini app is one small thing done well, and it
+                runs on its own until you decide to plug it in.
+              </p>
+              <div className="aff-hero-cta">
+                <Link to="/braino" className="aff-cta">Open Braino</Link>
+                <Link to="/waitlist" className="aff-cta aff-cta-ghost">Join the waitlist</Link>
+              </div>
+            </div>
           </div>
         </div>
       </header>
@@ -242,8 +249,7 @@ export default function AppStore() {
               onClick={() => setTab("products")}
             >
               <span className="ast-tab-name">Affective products</span>
-              <span className="ast-tab-sub">Something you live in</span>
-              <span className="ast-tab-n">1</span>
+              <span className="ast-tab-sub">Something you live in. There is one so far.</span>
             </button>
             <button
               type="button"
@@ -255,8 +261,7 @@ export default function AppStore() {
               onClick={() => setTab("mini")}
             >
               <span className="ast-tab-name">Mini apps</span>
-              <span className="ast-tab-sub">One small thing each</span>
-              <span className="ast-tab-n">{MINI.length}</span>
+              <span className="ast-tab-sub">One small thing each. {MINI.length} of them.</span>
             </button>
           </div>
         </div>
@@ -375,7 +380,7 @@ export default function AppStore() {
                   <img src="/affective-logo.png" alt="Affective" width={1000} height={207} />
                 </strong>
                 <p>
-                  A simple bro, building tech that makes life more affective. That is it.
+                  Building tech that makes life more affective.
                 </p>
                 <p className="aff-foot-where">Bengaluru.</p>
               </div>
