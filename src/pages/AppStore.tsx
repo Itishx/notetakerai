@@ -73,11 +73,7 @@ const MINI: {
 const FAQ = [
   {
     q: "What is the difference between an Affective product and a mini app?",
-    a: "Size, and whether it needs the other one. A product is big and you live in it. Braino is the product: he is on all day, he can see your screen, he hears the room, and he remembers what happened. A mini app is small and does one job. The countdown sits at the edge of your screen and counts. That is all it does. You can run a mini app without Braino, and you can run Braino without any mini apps. If you have both, the small one can ask the big one what is going on. That is the only difference, and it is why they are listed apart.",
-  },
-  {
-    q: "Why are they in one store?",
-    a: "Because they run on the same memory. On its own a mini app is a good small tool and nothing more. Plugged into Braino it stops being a tool: the transcript it takes is his to keep afterwards, and the countdown at your edge knows what is actually on today. Same app, same afternoon, and the only thing that changed is that something underneath it remembers. A shop full of unrelated tools is a drawer. This is one thing with several doors.",
+    a: "A product is big and you live in it. Braino is the one. A mini app is small and does one job, like counting down to a date. Neither needs the other, and if you have both, the small one can ask the big one what is on today.",
   },
 ];
 
@@ -274,19 +270,23 @@ export default function AppStore() {
           </div>
         </div>
 
-        {/* The picture arrives as an object in the measure and opens to the
-            whole page as you scroll into it, the same way the company page's
-            does. It grows rather than slides, so nothing is ever cut off at an
-            edge. */}
-        <figure className="aff-hero-shot" data-grow>
+        {/* One object, arriving in the measure and opening to the whole page
+            as you scroll into it, the same way the company page's photograph
+            does. It grows rather than slides, so nothing is cut off at an edge.
+
+            Him rather than a photograph, because the only sheet we had here is
+            the four panel one the technology cells were cut from, and a 339px
+            panel blown up to fill this would be a blurry hero. He is a vector:
+            sharp at any size this opens to, and the right subject for the page
+            that sells him. */}
+        <figure className="aff-hero-shot ast-hero-shot" data-grow>
           <img
-            src="/affective-store.jpg"
-            alt=""
-            width={1774}
-            height={887}
+            src="/braino-standing.svg"
+            alt="Braino, standing"
+            width={104}
+            height={127}
             loading="eager"
             decoding="async"
-            aria-hidden="true"
           />
         </figure>
       </header>
@@ -416,7 +416,7 @@ export default function AppStore() {
           <div className="aff-faq-in">
             <div className="aff-faq-head aff-reveal">
               <h2>Questions you may have.</h2>
-              <p>Mostly about why these two things are on one page.</p>
+              <p>Mostly the one everybody asks.</p>
             </div>
             {/* details/summary, so it works with no JavaScript and with a
                 keyboard. Same as the company page. */}

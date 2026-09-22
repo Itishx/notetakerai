@@ -65,7 +65,7 @@
 .ast-tabs button {
   appearance: none; border: 0; background: transparent;
   border-right: 1px solid var(--a-line);
-  padding: clamp(16px, 1.8vw, 24px) clamp(14px, 1.6vw, 24px) clamp(14px, 1.6vw, 20px) 0;
+  padding: clamp(22px, 2.6vw, 38px) clamp(16px, 1.8vw, 28px) clamp(20px, 2.4vw, 32px) 0;
   display: flex; flex-direction: column; align-items: flex-start; gap: 6px;
   text-align: left;
   font: inherit; color: var(--a-ink-faint);
@@ -75,23 +75,25 @@
 .ast-tabs button:not(:first-child) { padding-left: clamp(18px, 2.4vw, 40px); }
 .ast-tabs button:last-child { border-right: 0; }
 .ast-tabs button small {
-  display: inline-flex; align-items: center; gap: 10px;
-  font-size: 11px; font-weight: 600; letter-spacing: .16em; text-transform: uppercase;
+  display: inline-flex; align-items: center; gap: 12px;
+  font-size: 11.5px; font-weight: 600; letter-spacing: .17em; text-transform: uppercase;
   color: var(--a-ink-faint);
   transition: color .2s ease;
 }
 .ast-tabs button i {
   flex: none;
-  width: 8px; height: 8px; border-radius: 50%;
+  width: 9px; height: 9px; border-radius: 50%;
   background: var(--dot, var(--a-ink));
   opacity: .3; transition: opacity .2s ease;
 }
 .ast-tabs button span {
-  padding-left: 18px;
-  font-size: clamp(16px, 1.7vw, 22px); font-weight: 500; letter-spacing: -0.018em;
+  padding-left: 21px;
+  font-family: var(--a-display);
+  font-size: clamp(24px, 2.8vw, 40px); font-weight: 400; letter-spacing: -0.026em;
+  line-height: 1.04;
 }
 .ast-tabs button:hover { color: var(--a-ink); }
-.ast-tabs button.on { color: var(--a-ink); box-shadow: inset 0 -2px 0 0 var(--acc, var(--a-ink)); }
+.ast-tabs button.on { color: var(--a-ink); box-shadow: inset 0 -3px 0 0 var(--acc, var(--a-ink)); }
 .ast-tabs button.on small { color: var(--acc, var(--a-ink)); }
 .ast-tabs button.on i { opacity: 1; }
 .ast-tabs button:focus-visible { outline: 2px solid var(--a-ink); outline-offset: -3px; }
@@ -310,3 +312,31 @@
 /* The shots stay lit. They are pictures of a screen, and a screen is bright
    whatever the room is; dimming them would make them pictures of a screen that
    is off. The panel behind them follows the theme as usual. */
+
+/* ---- the opening object -------------------------------------------------
+   The company page's hero figure, carrying him instead of a photograph. The
+   figure's own growing geometry is untouched; only what is inside it changes:
+   his stage, the light falling from the same corner as everywhere else, and
+   him standing in it at a size that scales with how far it has opened.
+   -------------------------------------------------------------------------- */
+.ast-hero-shot {
+  position: relative; isolation: isolate;
+  display: flex; align-items: center; justify-content: center;
+  background:
+    radial-gradient(ellipse 46% 52% at 50% 46%, rgba(255, 252, 248, .9), transparent 72%),
+    linear-gradient(168deg,
+      color-mix(in srgb, var(--a-braino) 10%, var(--a-bg)) 0%,
+      color-mix(in srgb, var(--a-braino) 22%, var(--a-bg)) 60%,
+      color-mix(in srgb, var(--a-braino) 33%, var(--a-bg)) 100%);
+}
+/* He grows with the frame: a fixed size would look pasted on once the picture
+   has opened to the full width of the window. */
+.ast-hero-shot img {
+  width: auto;
+  height: calc(52% + 16% * var(--grow, 0));
+  max-height: 78%;
+  object-fit: contain;
+  filter: drop-shadow(0 24px 30px rgba(120, 52, 42, .32));
+  animation: astFloat 6.5s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) { .ast-hero-shot img { animation: none; } }
