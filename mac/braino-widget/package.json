@@ -1,0 +1,8 @@
+{
+  "name": "braino-widget",
+  "private": true,
+  "version": "1.0.0",
+  "description": "The countdown to 16 October, on top of everything.",
+  "main": "main.cjs",
+  "type": "commonjs"
+}
