@@ -49,6 +49,8 @@ type Model = {
     note: string;
     jobs: { n: string; name: string; job: string; points: string[]; solves: string; state: string }[];
   };
+  /* The line under the claim, in its own hero. */
+  lede: string;
   /* His film, if there is one for this model yet. A model without one shows
      nothing rather than an empty frame. */
   film?: { src: string; caption: string };
@@ -62,6 +64,7 @@ type Model = {
 const MODELS: Model[] = [
   {
     key: "braino",
+    lede: "He is already open on the page you are on, he does the half of the day you would rather not, and he keeps what happened. Tomorrow starts where today ended.",
     tab: "Braino",
     who: "For everyone",
     name: "Braino",
@@ -154,6 +157,7 @@ const MODELS: Model[] = [
   },
   {
     key: "foundry",
+    lede: "You build the thing. He does the half that gets it seen: the posting, the outreach, the people who said maybe. Same Braino, pointed at your company.",
     tab: "Braino Foundry",
     who: "For founders",
     name: "Braino Foundry",
@@ -258,6 +262,7 @@ const MODELS: Model[] = [
   },
   {
     key: "mesa",
+    lede: "A case before tomorrow, a session you half heard, an evening spent rebuilding the afternoon. He carries the week, so you get to be in the room instead of typing in it.",
     tab: "For Mesa",
     who: "For institutions",
     name: "Braino for Mesa School of Business",
@@ -516,34 +521,6 @@ export default function BrainoFinal() {
           The reader's own sentence first, and the answer to it under that. No
           feature is mentioned on the first screen, because nobody has ever
           been sold a feature they had not yet felt the need for. */}
-      <header className="bf-hero">
-        <div className="bf-wrap">
-          <p className="bf-eyebrow bf-reveal">Braino · One product, three models</p>
-          <h1 className="bf-h1 bf-reveal">
-            Speak.
-            <b>Watch it happen.</b>
-          </h1>
-          <div className="bf-hero-row bf-reveal">
-            <p className="bf-hero-one">
-              The models are extraordinary now. They write the code, draft the mail, plan
-              the trip. What none of them have is your machine: your screen, your files,
-              your people, your Tuesday. Braino lives there, and that is the whole
-              difference.
-            </p>
-            <div className="bf-hero-cta">
-              <Link to="/waitlist" className="bf-cta">Ask for a seat</Link>
-              <a href="#what" className="bf-cta bf-cta-ghost">See what he does</a>
-            </div>
-          </div>
-        </div>
-      </header>
-
-      {/* ── Which model ─────────────────────────────────────────────────────
-          One product, three models of it, the way a phone has models: same
-          machine inside, pointed at a different life. The tabs change the
-          story and never the thing, which is why each answers the same four
-          questions: the day you have now, what he does about it, what a week
-          looks like after, and what is true today. */}
       <div className="bf-switch" id="what">
         <div className="bf-wrap bf-switch-in">
           <div className="bf-tabs" role="tablist" aria-label="Which model">
@@ -566,46 +543,27 @@ export default function BrainoFinal() {
         </div>
       </div>
 
+      {/* The hero belongs to the model, not to the page: you choose which
+          Braino you came for and then read his opening, rather than reading a
+          general one and finding the choice underneath it. */}
+      <header className="bf-hero">
+        <div className="bf-wrap">
+          <p className="bf-eyebrow bf-reveal">Braino · One product, three models</p>
+          <h1 className="bf-h1 bf-reveal">
+            {model.claim}
+            <b>{model.claimTail}</b>
+          </h1>
+          <div className="bf-hero-row bf-reveal">
+            <p className="bf-hero-one">{model.lede}</p>
+            <div className="bf-hero-cta">
+              <Link to={model.cta.to} className="bf-cta">{model.cta.label}</Link>
+              <a href="#does" className="bf-cta bf-cta-ghost">See what he does</a>
+            </div>
+          </div>
+        </div>
+      </header>
+
       <main className="bf-story">
-        {/* The day they have now, in their words, before a word about us. */}
-        <section className="bf-sec bf-pain">
-          <div className="bf-wrap">
-            <div className="bf-sec-head bf-reveal">
-              <p className="bf-kicker">{model.painTitle}</p>
-              <h2>
-                {model.claim}
-                <b>{model.claimTail}</b>
-              </h2>
-            </div>
-            <div className="bf-pain-cols bf-reveal">
-              {model.pain.map((line) => <p key={line}>{line}</p>)}
-            </div>
-          </div>
-        </section>
-
-        {/* What he does about it. */}
-        <section className="bf-sec">
-          <div className="bf-wrap">
-            <div className="bf-sec-head bf-reveal">
-              <p className="bf-kicker">What he does about it</p>
-              <h2>{model.name}</h2>
-            </div>
-            <div className="bf-grid bf-reveal">
-              {model.does.map((d, i) => (
-                <article className="bf-cell" key={d.h} style={{ transitionDelay: `${i * 90}ms` }}>
-                  <div className="bf-cell-art">
-                    <img src={d.art} alt="" width={341} height={415} loading="lazy" decoding="async" />
-                  </div>
-                  <div className="bf-cell-say">
-                    <h3>{d.h}</h3>
-                    <p>{d.p}</p>
-                  </div>
-                </article>
-              ))}
-            </div>
-          </div>
-        </section>
-
         {/* The film, opening from the measure to the page as you scroll into
             it, the way the company page's picture does. It loads nothing until
             it is asked to: twenty five megabytes is not something to spend on
@@ -638,6 +596,42 @@ export default function BrainoFinal() {
             </figure>
           </section>
         )}
+
+        {/* The day they have now, in their words, before a word about us. */}
+        <section className="bf-sec bf-pain">
+          <div className="bf-wrap">
+            <div className="bf-sec-head bf-reveal">
+              <p className="bf-kicker">Where this starts</p>
+              <h2>{model.painTitle}</h2>
+            </div>
+            <div className="bf-pain-cols bf-reveal">
+              {model.pain.map((line) => <p key={line}>{line}</p>)}
+            </div>
+          </div>
+        </section>
+
+        {/* What he does about it. */}
+        <section className="bf-sec" id="does">
+          <div className="bf-wrap">
+            <div className="bf-sec-head bf-reveal">
+              <p className="bf-kicker">What he does about it</p>
+              <h2>{model.name}</h2>
+            </div>
+            <div className="bf-grid bf-reveal">
+              {model.does.map((d, i) => (
+                <article className="bf-cell" key={d.h} style={{ transitionDelay: `${i * 90}ms` }}>
+                  <div className="bf-cell-art">
+                    <img src={d.art} alt="" width={341} height={415} loading="lazy" decoding="async" />
+                  </div>
+                  <div className="bf-cell-say">
+                    <h3>{d.h}</h3>
+                    <p>{d.p}</p>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </div>
+        </section>
 
         {/* What he actually holds. The cells above are capabilities; these are
             jobs, with the state of each said out loud, because a page that

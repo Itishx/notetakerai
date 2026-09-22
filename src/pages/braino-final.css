@@ -63,7 +63,7 @@
 /* ── The claim ────────────────────────────────────────────────────────────
    Their sentence, then ours, then one line of what this is. Nothing else on
    the first screen. */
-.bf-hero { padding: clamp(54px, 7vw, 104px) 0 clamp(44px, 5.4vw, 78px); }
+.bf-hero { padding: clamp(40px, 5vw, 76px) 0 clamp(30px, 3.6vw, 52px); }
 .bf-eyebrow {
   margin: 0 0 clamp(18px, 2vw, 26px);
   font-size: 11px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase;
@@ -115,6 +115,7 @@
 .bf-switch {
   position: sticky; top: 62px; z-index: 50;
   background: var(--bg);
+  border-top: 1px solid var(--line);
   border-bottom: 1px solid var(--line);
 }
 .bf-switch-in { padding-top: 0; padding-bottom: 0; }
