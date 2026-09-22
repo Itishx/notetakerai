@@ -1,0 +1,203 @@
+/* ============================================================================
+   /apps — the shelf.
+
+   Rides affective.css for paper, ink, hairline and the reveal, and adds only
+   the shelf itself. Every class here is ast- prefixed so nothing reaches back
+   into the company page.
+
+   The one rule that matters: the cells share edges. A single hairline runs
+   between two apps instead of each app sitting in its own bordered box with a
+   gutter around it. That is the whole visual argument. These are not four
+   downloads next to each other, they are one system with four positions in it,
+   and a gap in the middle of the grid would say the opposite before a word of
+   copy was read.
+   ============================================================================ */
+
+.ast .aff-nav { position: sticky; top: 0; z-index: 30; }
+
+/* ---- the claim ----------------------------------------------------------- */
+.ast-head { padding: clamp(46px, 6vw, 96px) 0 clamp(30px, 3.6vw, 52px); }
+.ast-kicker {
+  margin: 0 0 clamp(14px, 1.6vw, 22px);
+  font-size: 11px; font-weight: 600; letter-spacing: .15em; text-transform: uppercase;
+  color: var(--a-ink-faint);
+}
+.ast-h1 {
+  margin: 0; max-width: 20ch;
+  font-family: var(--a-display);
+  font-size: clamp(34px, 5.4vw, 70px);
+  line-height: 1.03; letter-spacing: -0.03em; font-weight: 400;
+  text-wrap: balance;
+}
+.ast-h1 b { display: block; font-weight: inherit; color: var(--a-ink-soft); }
+.ast-lede {
+  margin: clamp(22px, 2.4vw, 32px) 0 0; max-width: 64ch;
+  font-size: clamp(15px, 1.35vw, 17.5px); line-height: 1.6;
+  letter-spacing: -0.008em; color: var(--a-ink-soft);
+}
+
+/* ---- two paragraphs, one hairline between them --------------------------- */
+.ast-why { padding-bottom: clamp(34px, 4vw, 60px); }
+.ast-why-grid {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+  border-top: 1px solid var(--a-line-strong);
+}
+.ast-why-grid > div {
+  padding: clamp(22px, 2.4vw, 34px) clamp(20px, 2.4vw, 38px) 0 0;
+}
+.ast-why-grid > div + div {
+  border-left: 1px solid var(--a-line);
+  padding-left: clamp(20px, 2.4vw, 38px);
+  padding-right: 0;
+}
+.ast-why h2 {
+  margin: 0 0 10px;
+  font-size: clamp(16px, 1.5vw, 19px); font-weight: 600; letter-spacing: -0.016em;
+}
+.ast-why p {
+  margin: 0; max-width: 46ch;
+  font-size: 14.5px; line-height: 1.62; color: var(--a-ink-soft);
+}
+@media (max-width: 760px) {
+  .ast-why-grid { grid-template-columns: 1fr; }
+  .ast-why-grid > div { padding-right: 0; padding-bottom: 22px; }
+  .ast-why-grid > div + div {
+    border-left: 0; border-top: 1px solid var(--a-line);
+    padding-left: 0; padding-top: 22px;
+  }
+}
+
+/* ---- the shelf ----------------------------------------------------------- */
+.ast-shelf { padding-bottom: clamp(40px, 5vw, 80px); }
+.ast-shelf-head {
+  display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap;
+  padding-bottom: clamp(14px, 1.6vw, 22px);
+}
+.ast-shelf-head h2 {
+  margin: 0;
+  font-family: var(--a-display);
+  font-size: clamp(24px, 2.8vw, 36px); font-weight: 400; letter-spacing: -0.022em;
+}
+.ast-shelf-head p { margin: 0; font-size: 13.5px; color: var(--a-ink-faint); }
+
+/* Two outer edges drawn on the container, the other two on each cell, so no
+   hairline is ever doubled and none is missing at the rim. */
+.ast-grid {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+  border-top: 1px solid var(--a-line-strong);
+  border-left: 1px solid var(--a-line-strong);
+  background: var(--a-surface);
+}
+.ast-cell {
+  border-right: 1px solid var(--a-line-strong);
+  border-bottom: 1px solid var(--a-line-strong);
+  display: flex; flex-direction: column;
+  min-width: 0;
+}
+@media (max-width: 860px) { .ast-grid { grid-template-columns: 1fr; } }
+
+/* The drawing sits on the page colour rather than the cell colour, so the art
+   band reads as a shelf the app is standing on. */
+.ast-cell-art {
+  background: var(--a-bg);
+  border-bottom: 1px solid var(--a-line);
+  padding: clamp(18px, 2vw, 26px);
+  display: flex; justify-content: center;
+}
+.ast-screen { width: 100%; max-width: 220px; height: auto; display: block; }
+.ast-screen-body { fill: none; stroke: var(--a-line-strong); stroke-width: 1.1; }
+.ast-screen-foot { fill: var(--a-line-strong); }
+.ast-lit { fill: var(--a-braino); }
+.ast-lit-soft { fill: var(--a-braino); opacity: .16; }
+.ast-lit-ink { fill: var(--a-ink-faint); }
+
+.ast-cell-body {
+  padding: clamp(18px, 2vw, 28px);
+  display: flex; flex-direction: column; gap: 10px; flex: 1;
+}
+.ast-cell-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.ast-where {
+  font-size: 10.5px; font-weight: 600; letter-spacing: .13em; text-transform: uppercase;
+  color: var(--a-braino);
+}
+.ast-state {
+  font-size: 10px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--a-ink-faint);
+  border: 1px solid var(--a-line-strong);
+  padding: 3px 7px;
+}
+.ast-state.is-running { color: #4f7a4a; border-color: #4f7a4a; }
+
+.ast-cell h3 {
+  margin: 0;
+  font-family: var(--a-display);
+  font-size: clamp(22px, 2.2vw, 29px); font-weight: 400; letter-spacing: -0.022em;
+}
+.ast-line {
+  margin: 0; max-width: 44ch;
+  font-size: 14.5px; line-height: 1.58; color: var(--a-ink);
+}
+.ast-cell ul { margin: 4px 0 0; padding: 0; list-style: none; display: grid; gap: 7px; }
+.ast-cell ul li {
+  position: relative; padding-left: 16px;
+  font-size: 13.5px; line-height: 1.55; color: var(--a-ink-soft);
+}
+.ast-cell ul li::before {
+  content: ""; position: absolute; left: 0; top: .6em;
+  width: 5px; height: 1px; background: var(--a-line-strong);
+}
+/* What it cannot do, set apart so it cannot be skimmed past as a feature. */
+.ast-honest {
+  margin: 6px 0 0;
+  border-left: 2px solid var(--a-line-strong);
+  padding: 2px 0 2px 12px;
+  font-size: 13px; line-height: 1.55; color: var(--a-ink-faint);
+}
+.ast-how {
+  margin: auto 0 0; padding-top: 14px;
+  border-top: 1px solid var(--a-line);
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+}
+.ast-how span {
+  font-size: 10.5px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--a-ink-faint);
+}
+.ast-how code {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 12.5px; color: var(--a-ink);
+  background: var(--a-bg);
+  border: 1px solid var(--a-line);
+  padding: 3px 8px;
+}
+
+/* The empty slot is not a placeholder. It is the entry rule, which is the
+   honest reason the shelf is short. */
+.ast-cell-open { background: var(--a-bg); }
+.ast-open-in { padding: clamp(20px, 2.4vw, 32px); display: flex; flex-direction: column; gap: 10px; }
+.ast-open-in h3 {
+  margin: 0;
+  font-family: var(--a-display);
+  font-size: clamp(20px, 2vw, 26px); font-weight: 400; letter-spacing: -0.02em;
+}
+.ast-open-in > p { margin: 0; font-size: 13.5px; color: var(--a-ink-soft); }
+.ast-open-in ol {
+  margin: 4px 0; padding-left: 1.1em;
+  display: grid; gap: 8px;
+  font-size: 14px; line-height: 1.55; color: var(--a-ink);
+}
+.ast-open-note { font-size: 13px !important; line-height: 1.6; color: var(--a-ink-faint) !important; max-width: 44ch; }
+
+/* ---- the footing --------------------------------------------------------- */
+.ast-note { border-top: 1px solid var(--a-line); padding: clamp(28px, 3.4vw, 50px) 0 clamp(40px, 5vw, 76px); }
+.ast-note p {
+  margin: 0 0 18px; max-width: 62ch;
+  font-size: 14px; line-height: 1.62; color: var(--a-ink-soft);
+}
+.ast-cta {
+  display: inline-block;
+  font-size: 13.5px; font-weight: 500; letter-spacing: -0.006em;
+  color: var(--a-ink); text-decoration: none;
+  border: 1px solid var(--a-ink);
+  padding: 9px 18px;
+}
+.ast-cta:hover { background: var(--a-ink); color: var(--a-bg); }
