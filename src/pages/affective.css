@@ -1472,3 +1472,12 @@
 }
 
 .aff[data-theme="dark"] .aff-foot-art { filter: brightness(.5) saturate(.85); }
+
+/* The wordmark is near black art on a transparent ground, so on the dark
+   theme it is a black mark on a black page. Inverted it becomes the same
+   drawing in the page's own ink; the trace of sepia keeps it on the warm side
+   of white, with everything else set in a warm off white. */
+.aff[data-theme="dark"] .aff-logo img { filter: invert(1) sepia(.1) saturate(1.05); }
+/* The footer mark is left alone: it already sits on a photograph and is
+   forced white in both themes, so a second filter here would only make it a
+   slightly different white. */

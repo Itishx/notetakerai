@@ -200,14 +200,12 @@ export default function AppStore() {
             <img src="/affective-logo.png" alt="Affective" width={1000} height={207} />
           </Link>
           <div className="aff-nav-links">
-            {/* Plain anchors rather than router links: these land on another
+            {/* A plain anchor rather than a router link: it lands on another
                 page at a hash, and the browser does that correctly on its own
                 without a scroll handler this page would have to own. */}
             <a href="/#technology">Technology</a>
-            <a href="/#products">Products</a>
-            <a href="/#apps">Apps</a>
             <Link to="/waitlist">Early access</Link>
-            <Link to="/apps" className="aff-nav-go">App store</Link>
+            <Link to="/apps" className="aff-nav-go" aria-current="page">Store</Link>
             <AffThemeToggle theme={theme} onToggle={toggle} />
           </div>
         </div>

@@ -407,12 +407,12 @@ export default function Affective() {
           </Link>
           <div className="aff-nav-links">
             <a href="#technology">Technology</a>
-            <a href="#products">Products</a>
-            <a href="#apps">Apps</a>
             <Link to="/waitlist">Early access</Link>
-            {/* The one that leaves the page. Products and Apps are two
-                sections of this one; the store is where both live. */}
-            <Link to="/apps" className="aff-nav-go">App store</Link>
+            {/* Products and Apps were two anchors into this page that a
+                visitor had to already understand the difference between. The
+                store is where that difference is explained, so the bar just
+                points at it. */}
+            <Link to="/apps" className="aff-nav-go">Store</Link>
             <AffThemeToggle theme={theme} onToggle={toggle} />
           </div>
         </div>
