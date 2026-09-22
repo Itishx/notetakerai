@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import "./affective.css";
 import "./app-store.css";
@@ -69,6 +69,17 @@ const MINI: {
    The Apple half of the blend lives here: a tinted panel per accent, a real
    bezel with a gradient in it, and the lit part glowing rather than simply
    being filled. */
+const FAQ = [
+  {
+    q: "Why are they in one store?",
+    a: "Because they run on the same thing. A mini app on its own is a good small tool and nothing more. Plugged into Braino it stops being a tool: the transcript it takes is in his memory afterwards, and the countdown at your edge knows what is actually on today. Same app, same afternoon, and the only difference is that something underneath it remembers. A store of unrelated tools is a drawer. This is one layer with several ways in.",
+  },
+  {
+    q: "What is the difference between an Affective product and a mini app?",
+    a: "Size and dependence. A product is something you live in: it runs all day, it has models rather than versions, and everything else is built to sit on top of it. Braino is the only one. A mini app is one small thing done well. It is not part of Braino and does not need him: it runs on its own as a Mac app and stands somewhere on your screen. If you do have him you can plug it in, and then it reads the same memory he does. Plugging in is the choice, not the requirement, which is the whole reason the two are listed apart.",
+  },
+];
+
 function Shot({ art }: { art: "notch" | "edge" | "caret" }) {
   const id = "sh-" + art;
   return (
@@ -177,6 +188,7 @@ function useReveal() {
 
 export default function AppStore() {
   const root = useReveal();
+  const [tab, setTab] = useState<"products" | "mini">("products");
 
   return (
     <div className="aff ast" ref={root}>
@@ -212,102 +224,134 @@ export default function AppStore() {
         </div>
       </header>
 
-      {/* ── The two categories, side by side ──────────────────────────────
-          The split is the argument. A product and a mini app are not the same
-          kind of thing, and putting them in one column under one heading is
-          what made them look like the same kind of thing. One hairline down
-          the middle of the screen says it before a word is read: the left is
-          something you live in, the right is a shelf of small things that can
-          plug into it. */}
-      <section className="ast-split">
-        <div className="ast-half ast-half-product" id="products">
-          <div className="ast-half-head">
-            <h2>Affective products</h2>
-            <p>Something you live in. There is one so far.</p>
+      {/* ── The two categories, as tabs ───────────────────────────────────
+          They were side by side and that was the wrong shape: a half screen
+          each meant neither got to be seen properly, and a product and a shelf
+          of small apps do not want the same amount of room. As tabs, whichever
+          one you asked for gets the whole width. */}
+      <div className="ast-tabs-bar">
+        <div className="aff-wrap">
+          <div className="ast-tabs" role="tablist" aria-label="Store categories">
+            <button
+              type="button"
+              role="tab"
+              id="tab-products"
+              aria-selected={tab === "products"}
+              aria-controls="panel-products"
+              className={"ast-tab" + (tab === "products" ? " is-on" : "")}
+              onClick={() => setTab("products")}
+            >
+              <span className="ast-tab-name">Affective products</span>
+              <span className="ast-tab-sub">Something you live in</span>
+              <span className="ast-tab-n">1</span>
+            </button>
+            <button
+              type="button"
+              role="tab"
+              id="tab-mini"
+              aria-selected={tab === "mini"}
+              aria-controls="panel-mini"
+              className={"ast-tab" + (tab === "mini" ? " is-on" : "")}
+              onClick={() => setTab("mini")}
+            >
+              <span className="ast-tab-name">Mini apps</span>
+              <span className="ast-tab-sub">One small thing each</span>
+              <span className="ast-tab-n">{MINI.length}</span>
+            </button>
           </div>
-
-          <Link to="/braino" className="ast-prodcard aff-reveal">
-            <div className="ast-prodcard-art">
-              <img src="/braino-standing.svg" alt="" width={64} height={78} aria-hidden="true" />
-            </div>
-            <div className="ast-prodcard-body">
-              <p className="ast-feat-kicker">Product</p>
-              <h3>Braino</h3>
-              <p className="ast-feat-line">
-                He sees the screen, hears the room, does things on the machine, and remembers all
-                of it. The first thing we put AffectiveOS into.
-              </p>
-              <p className="ast-feat-models">
-                {MODELS.map((m) => (
-                  <span key={m}>{m}</span>
-                ))}
-              </p>
-              <div className="ast-prodcard-foot">
-                <span className="ast-feat-go">
-                  Open Braino<i aria-hidden="true">→</i>
-                </span>
-                <span className="ast-state is-out">Chrome build out</span>
-              </div>
-            </div>
-          </Link>
         </div>
+      </div>
 
-        {/* The shelf. Small cards in a column, the way a reading list is set:
-            the words first and a small picture of where it stands beside them,
-            because at this size the drawing is a marker and not the point. */}
-        <div className="ast-half ast-half-mini" id="mini">
-          <div className="ast-half-head">
-            <h2>Mini apps</h2>
-            <p>One small thing each. Use them on their own, or plug them into Braino.</p>
-          </div>
-
-          <ul className="ast-minilist aff-reveal">
-            {MINI.map((a) => (
-              <li key={a.name}>
-                <div className="ast-minicard-text">
-                  <p className="ast-where">{a.where}</p>
-                  <h3>{a.name}</h3>
-                  <p className="ast-minicard-line">{a.line}</p>
-                  <p className="ast-minicard-meta">
-                    <span>
-                      On its own
-                      <b className={a.alone === "Yes" ? "is-yes" : "is-no"}>{a.alone}</b>
-                    </span>
-                    <span>
-                      Plugs into Braino
-                      <b className={a.plugged === "Yes" ? "is-yes" : "is-no"}>{a.plugged}</b>
-                    </span>
-                    <code>{a.how}</code>
-                  </p>
+      {/* The panel is keyed on the tab so its entrance animation restarts on a
+          switch. Nothing inside it is a reveal target: a scroll observer that
+          has already run would leave freshly mounted nodes sitting at zero. */}
+      <section className="ast-panel-wrap">
+        <div
+          className="ast-panel"
+          key={tab}
+          role="tabpanel"
+          id={tab === "products" ? "panel-products" : "panel-mini"}
+          aria-labelledby={tab === "products" ? "tab-products" : "tab-mini"}
+        >
+          {tab === "products" ? (
+            <Link to="/braino" className="ast-wide">
+              <div className="ast-wide-art">
+                <img src="/braino-standing.svg" alt="" width={64} height={78} aria-hidden="true" />
+              </div>
+              <div className="ast-wide-body">
+                <p className="ast-feat-kicker">Product</p>
+                <h3>Braino</h3>
+                <p className="ast-feat-line">
+                  He sees the screen, hears the room, does things on the machine, and remembers all
+                  of it. The first thing we put AffectiveOS into, and the thing every mini app can
+                  plug into.
+                </p>
+                <p className="ast-feat-models">
+                  {MODELS.map((m) => (
+                    <span key={m}>{m}</span>
+                  ))}
+                </p>
+                <div className="ast-wide-foot">
+                  <span className="ast-feat-go">
+                    Open Braino<i aria-hidden="true">→</i>
+                  </span>
+                  <span className="ast-state is-out">Chrome build out</span>
                 </div>
-                <div className="ast-minicard-art">
-                  <Shot art={a.art} />
-                </div>
-              </li>
-            ))}
-          </ul>
+              </div>
+            </Link>
+          ) : (
+            <div className="ast-minigrid">
+              {MINI.map((a) => (
+                <article className="ast-minicard" key={a.name}>
+                  <div className="ast-minicard-art">
+                    <Shot art={a.art} />
+                  </div>
+                  <div className="ast-minicard-body">
+                    <p className="ast-where">{a.where}</p>
+                    <h3>{a.name}</h3>
+                    <p className="ast-minicard-line">{a.line}</p>
+                    <p className="ast-minicard-meta">
+                      <span>
+                        On its own
+                        <b className={a.alone === "Yes" ? "is-yes" : "is-no"}>{a.alone}</b>
+                      </span>
+                      <span>
+                        Plugs into Braino
+                        <b className={a.plugged === "Yes" ? "is-yes" : "is-no"}>{a.plugged}</b>
+                      </span>
+                    </p>
+                    <p className="ast-minicard-how">
+                      <code>{a.how}</code>
+                    </p>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
         </div>
       </section>
 
-      {/* ── What the two categories are for ───────────────────────────────── */}
-      <section className="ast-note">
+      {/* ── The two questions the split was trying to answer with layout ──── */}
+      <section className="aff-sec aff-faq-sec" id="faq">
         <div className="aff-wrap">
-          <div className="aff-reveal">
-            <h2 className="ast-note-h">Why they are in one store</h2>
-            <p>
-              A mini app on its own is a good small tool and nothing more. Plugged into Braino it
-              stops being a tool: the transcript it takes is in his memory afterwards, and the
-              countdown at your edge knows what is actually on today. Same app, same afternoon, and
-              the difference is only that something underneath it remembers.
-            </p>
-            <p>
-              Not everything gets in. It has to get better from what the layer already knows, and
-              it has to put something back. A photo editor answers no twice, which makes it
-              somebody else&rsquo;s good idea.
-            </p>
-            <Link to="/waitlist" className="ast-cta">
-              Get early access
-            </Link>
+          <div className="aff-faq-in">
+            <div className="aff-faq-head aff-reveal">
+              <h2>Questions you may have.</h2>
+              <p>Mostly about why these two things are on one page.</p>
+            </div>
+            {/* details/summary, so it works with no JavaScript and with a
+                keyboard. Same as the company page. */}
+            <div className="aff-faq aff-reveal">
+              {FAQ.map((f, i) => (
+                <details key={f.q} open={i === 0}>
+                  <summary>
+                    <span>{f.q}</span>
+                    <i aria-hidden="true" />
+                  </summary>
+                  <p>{f.a}</p>
+                </details>
+              ))}
+            </div>
           </div>
         </div>
       </section>
@@ -331,8 +375,7 @@ export default function AppStore() {
                   <img src="/affective-logo.png" alt="Affective" width={1000} height={207} />
                 </strong>
                 <p>
-                  We build AffectiveOS, a continuity layer for the Mac you already own: the part
-                  that understands you, does things for you, and remembers both.
+                  A simple bro, building tech that makes life more affective. That is it.
                 </p>
                 <p className="aff-foot-where">Bengaluru.</p>
               </div>

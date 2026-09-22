@@ -133,6 +133,14 @@ const MODELS = [
 ];
 
 
+/* The second category in the store. Named here so the company page and the
+   store itself cannot drift apart. */
+const MINI_APPS = [
+  { name: "Live Transcript", where: "Stands in the notch" },
+  { name: "Countdown", where: "Stands at the right edge" },
+  { name: "Yap", where: "Stands at the caret" },
+];
+
 const FAQ = [
   {
     q: "What is Affective, in one line?",
@@ -643,8 +651,8 @@ export default function Affective() {
       <section className="aff-sec" id="products">
         <div className="aff-wrap">
           <div className="aff-sec-head aff-reveal">
-            <p className="aff-sec-kicker">The product</p>
-            <h2><Kinetic line="The first thing we put AffectiveOS into." /></h2>
+            <p className="aff-sec-kicker">The app store</p>
+            <h2><Kinetic line="Everything we build on it." /></h2>
           </div>
         </div>
 
@@ -716,13 +724,34 @@ export default function Affective() {
                 ))}
               </div>
               <p className="aff-plate-foundry">{BRAINO.state}</p>
-              {/* Where you actually get him, and the places he stands once you
-                  have. The product section ends by handing you the store. */}
-              <p className="aff-plate-store">
-                <Link to="/apps/braino">Get Braino, and see what comes with him<i aria-hidden="true">→</i></Link>
-              </p>
             </div>
           </article>
+
+          {/* The other half of the store, and the reason it is a store rather
+              than a product page. A mini app is not part of Braino: it is a
+              small Mac app that stands somewhere on your screen and does one
+              thing, and plugging it into him is a choice rather than the only
+              way to run it. */}
+          <div className="aff-mini aff-reveal">
+            <div className="aff-mini-head">
+              <p className="aff-mini-kicker">Mini apps</p>
+              <p className="aff-mini-line">
+                One small thing each. Run them on their own as Mac apps, or plug them into Braino
+                and they read the same memory he does.
+              </p>
+            </div>
+            <ul className="aff-mini-list">
+              {MINI_APPS.map((m) => (
+                <li key={m.name}>
+                  <strong>{m.name}</strong>
+                  <span>{m.where}</span>
+                </li>
+              ))}
+            </ul>
+            <p className="aff-plate-store">
+              <Link to="/apps">Open the app store<i aria-hidden="true">→</i></Link>
+            </p>
+          </div>
         </div>
       </section>
 
@@ -785,8 +814,7 @@ export default function Affective() {
                     word continuity, and without it this is a description of an
                     assistant. */}
                 <p>
-                  We build AffectiveOS, a continuity layer for the Mac you already own:
-                  the part that understands you, does things for you, and remembers both.
+                  A simple bro, building tech that makes life more affective. That is it.
                 </p>
                 <p className="aff-foot-where">Bengaluru.</p>
               </div>
