@@ -545,9 +545,10 @@ export default function BrainoFinal() {
                 style={{ ["--dot" as string]: m.accent }}
                 onClick={() => setAt(i)}
               >
-                <i aria-hidden="true" />
+                {/* Who it is for comes first, because that is what somebody
+                    scans a chooser by. The name is what they click. */}
+                <small><i aria-hidden="true" />{m.who}</small>
                 <span>{m.tab}</span>
-                <small>{m.who}</small>
               </button>
             ))}
           </div>

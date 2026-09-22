@@ -133,9 +133,12 @@
 }
 .bf-tabs button:not(:first-child) { padding-left: clamp(18px, 2.4vw, 40px); }
 .bf-tabs button:last-child { border-right: 0; }
-.bf-tabs button span {
+/* Who it is for, on top, carrying the dot. */
+.bf-tabs button small {
   display: inline-flex; align-items: center; gap: 10px;
-  font-size: clamp(15px, 1.6vw, 21px); font-weight: 500; letter-spacing: -0.018em;
+  font-size: 11px; font-weight: 600; letter-spacing: .16em; text-transform: uppercase;
+  color: var(--ink-faint);
+  transition: color .2s ease;
 }
 .bf-tabs button i {
   flex: none;
@@ -143,11 +146,13 @@
   background: var(--dot, var(--ink));
   opacity: .3; transition: opacity .2s ease;
 }
-.bf-tabs button small {
+/* And the name under it, indented to the same line the label starts on, so
+   the dot is the only thing in the margin. */
+.bf-tabs button span {
   padding-left: 18px;
-  font-size: 10.5px; letter-spacing: .16em; text-transform: uppercase;
-  color: var(--ink-faint);
+  font-size: clamp(16px, 1.7vw, 22px); font-weight: 500; letter-spacing: -0.018em;
 }
+.bf-tabs button.on small { color: var(--acc, var(--ink)); }
 .bf-tabs button:hover { color: var(--ink); }
 .bf-tabs button.on { color: var(--ink); box-shadow: inset 0 -2px 0 0 var(--acc, var(--ink)); }
 .bf-tabs button.on i { opacity: 1; }
@@ -159,7 +164,7 @@
     padding: 12px 0; flex-direction: row; align-items: baseline; gap: 12px;
   }
   .bf-tabs button:not(:first-child) { padding-left: 0; }
-  .bf-tabs button small { padding-left: 0; }
+  .bf-tabs button span { padding-left: 0; }
 }
 
 /* ── Sections ─────────────────────────────────────────────────────────────── */
