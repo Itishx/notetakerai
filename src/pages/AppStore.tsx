@@ -160,6 +160,43 @@ function Shot({ art }: { art: "notch" | "edge" | "caret" }) {
   );
 }
 
+/* Scroll-linked grow, the same one the company page's hero uses.
+ *
+ * The picture marked data-grow opens from the measure to the full page over
+ * the first screen of scrolling, so it stops being something shown to you and
+ * becomes somewhere you are. Read on a frame, written as one number, so the
+ * shape of it lives in the stylesheet.
+ *
+ * Off under 900px, where there is no room to open into, and off for anyone who
+ * has asked for less motion. */
+function useGrow() {
+  useEffect(() => {
+    const grows = [...document.querySelectorAll<HTMLElement>("[data-grow]")];
+    if (!grows.length) return;
+    const still = window.matchMedia("(prefers-reduced-motion: reduce)");
+    let frame = 0;
+
+    const apply = () => {
+      frame = 0;
+      const narrow = window.innerWidth < 900;
+      const p = Math.min(1, Math.max(0, window.scrollY / Math.max(220, window.innerHeight * 0.55)));
+      for (const el of grows) {
+        el.style.setProperty("--grow", narrow || still.matches ? "1" : p.toFixed(3));
+      }
+    };
+    const onScroll = () => { if (!frame) frame = window.requestAnimationFrame(apply); };
+
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
+    apply();
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+      if (frame) window.cancelAnimationFrame(frame);
+    };
+  }, []);
+}
+
 function useReveal() {
   const root = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -190,6 +227,7 @@ function useReveal() {
 export default function AppStore() {
   const root = useReveal();
   const { theme, toggle } = useAffTheme();
+  useGrow();
   const [tab, setTab] = useState<"products" | "mini">("products");
 
   return (
@@ -235,6 +273,22 @@ export default function AppStore() {
             </div>
           </div>
         </div>
+
+        {/* The picture arrives as an object in the measure and opens to the
+            whole page as you scroll into it, the same way the company page's
+            does. It grows rather than slides, so nothing is ever cut off at an
+            edge. */}
+        <figure className="aff-hero-shot" data-grow>
+          <img
+            src="/affective-store.jpg"
+            alt=""
+            width={1774}
+            height={887}
+            loading="eager"
+            decoding="async"
+            aria-hidden="true"
+          />
+        </figure>
       </header>
 
       {/* ── The two categories, as tabs ───────────────────────────────────
