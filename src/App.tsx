@@ -95,6 +95,7 @@ const Terms = lazy(() => import("./pages/Terms.tsx"));
 const Contact = lazy(() => import("./pages/Contact.tsx"));
 const ProductOverview = lazy(() => import("./pages/ProductOverview.tsx"));
 const Affective = lazy(() => import("./pages/Affective.tsx"));
+const ItishForPresident = lazy(() => import("./pages/ItishForPresident.tsx"));
 const BrainoFinal = lazy(() => import("./pages/BrainoFinal.tsx"));
 const Learning = lazy(() => import("./pages/Learning.tsx"));
 const ProductOverviewHomepageDocs = lazy(() => import("./pages/ProductOverviewHomepageDocs.tsx"));
@@ -197,7 +198,11 @@ function AppRoutes() {
             is still being finished. Braino lives at /braino meanwhile, and
             /overview stays pointed at the same waitlist page so old links work. */}
         <Route path="/notch-lab" element={<NotchLab />} />
-        <Route path="/" element={<Landing />} />
+        {/* Affective is the company and the company is the front door. The
+            page that was here is parked at /landing rather than deleted: it is
+            still linked from places we have not walked yet. */}
+        <Route path="/" element={<Affective />} />
+        <Route path="/landing" element={<Landing />} />
         <Route path="/questions" element={<Waitlist />} />
         <Route path="/overview" element={<Waitlist />} />
         <Route path="/waitlist" element={<Waitlist />} />
@@ -308,10 +313,15 @@ function AppRoutes() {
         <Route path="/contact" element={<Contact />} />
         <Route path="/product-overview" element={<ProductOverview />} />
         <Route path="/affective" element={<Affective />} />
+        {/* The campaign page: the speech, why him, and the footer game. Built
+            on the Affective stylesheet rather than its own. */}
+        <Route path="/itish-for-president" element={<ItishForPresident />} />
+        <Route path="/president" element={<ItishForPresident />} />
         {/* The one page about him: Braino, Foundry and the school version, in
             three tabs. Its own route while it is being built, so the live
             /braino keeps working. */}
-        <Route path="/braino-final" element={<BrainoFinal />} />
+        {/* The name it was built under, kept working. */}
+        <Route path="/braino-final" element={<Navigate to="/braino" replace />} />
         {/* What he has worked out: routes, lessons and the history between you,
             read through the braino-learning function because those three tables
             have RLS on and no policies. */}
@@ -320,8 +330,12 @@ function AppRoutes() {
             /foundry for a while, which made every conversation about it circular.
             The old URL still works and still opens the Foundry tab. */}
         {/* The products are tabs on /braino, and the old product URLs land right. */}
-        <Route path="/braino" element={<Foundry />} />
-        <Route path="/foundry" element={<Navigate to="/braino?view=foundry" replace />} />
+        {/* /braino is the one page about him: three models, three tabs. The
+            two-story page that held this route is at /foundry-legacy, since
+            every deck and doc written this year points into it. */}
+        <Route path="/braino" element={<BrainoFinal />} />
+        <Route path="/foundry" element={<Navigate to="/braino?model=foundry" replace />} />
+        <Route path="/foundry-legacy" element={<Foundry />} />
         <Route path="/automations" element={<Automations />} />
         <Route path="/integrations" element={<Integrations />} />
         <Route path="/connectors-vault" element={<ConnectorsVault />} />

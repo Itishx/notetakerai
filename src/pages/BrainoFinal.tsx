@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import BrainoFooterGame from "@/components/BrainoFooterGame";
 import "@/components/braino-footer.css";
 import "./braino-final.css";
@@ -268,8 +268,16 @@ function useReveal() {
 export default function BrainoFinal() {
   const root = useReveal();
   /* Which of the three is open. A number on the page: there is nothing to
-     store and nothing to look up. */
-  const [at, setAt] = useState(0);
+     store and nothing to look up. The url can name one, so /foundry can send
+     somebody straight to his, and the address updates when the tab does. */
+  const [params, setParams] = useSearchParams();
+  const asked = MODELS.findIndex((m) => m.key === params.get("model"));
+  const at = asked >= 0 ? asked : 0;
+  const setAt = (next: number) => {
+    const key = MODELS[next]?.key;
+    if (!key) return;
+    setParams(next === 0 ? {} : { model: key }, { replace: true });
+  };
   const model = MODELS[at];
 
   /* Changing tab is a deliberate act, so what it changes to is shown at once.
@@ -292,7 +300,7 @@ export default function BrainoFinal() {
     <div className="bf" ref={root} style={{ ["--acc" as string]: model.accent }}>
       <nav className="bf-nav">
         <div className="bf-nav-in">
-          <Link to="/braino-final" className="bf-logo">
+          <Link to="/braino" className="bf-logo">
             <img src="/braino-standing.svg" alt="" width={104} height={127} aria-hidden="true" />
             <span>Braino</span>
           </Link>
@@ -484,13 +492,13 @@ export default function BrainoFinal() {
             </div>
             <nav className="bf-foot-col">
               <h4>Braino</h4>
-              <Link to="/braino-final">Braino</Link>
+              <Link to="/braino">Braino</Link>
               <Link to="/foundry">Braino Foundry</Link>
               <Link to="/contact">For institutions</Link>
             </nav>
             <nav className="bf-foot-col">
               <h4>Company</h4>
-              <Link to="/affective">Affective</Link>
+              <Link to="/">Affective</Link>
               <Link to="/waitlist">Get him</Link>
               <Link to="/contact">Contact</Link>
             </nav>
