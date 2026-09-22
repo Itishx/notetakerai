@@ -680,6 +680,11 @@ export default function Affective() {
                   {/* Never the company's Didone. Braino is the software and
                       Affective is the company; they do not wear one face. */}
                   <h3>{BRAINO.name}</h3>
+                  {/* Name, then what he is in four words, then the specs. The
+                      line was sharing a band with the paragraph underneath and
+                      the two crowded each other; up here it introduces him,
+                      which is the only job it was ever doing. */}
+                  <p className="aff-plate-intro">{BRAINO.line}</p>
                   <p className="aff-plate-line">
                     <span>{BRAINO.kind}</span>
                     <span>{BRAINO.est}</span>
@@ -688,8 +693,8 @@ export default function Affective() {
               </div>
             </div>
 
+            {/* The character and the whole product, with the band to itself. */}
             <div className="aff-plate-lead">
-              <p className="aff-plate-intro">{BRAINO.line}</p>
               <p className="aff-plate-blurb">{BRAINO.lead}</p>
             </div>
 
