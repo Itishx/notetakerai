@@ -49,6 +49,9 @@ type Model = {
     note: string;
     jobs: { n: string; name: string; job: string; points: string[]; solves: string; state: string }[];
   };
+  /* His film, if there is one for this model yet. A model without one shows
+     nothing rather than an empty frame. */
+  film?: { src: string; caption: string };
   /* What is true today, said plainly, including what is not. */
   honest: string;
   cta: { label: string; to: string };
@@ -92,6 +95,7 @@ const MODELS: Model[] = [
         p: "Nothing bought, sent, posted or deleted until you say yes. That is a rule in the code rather than a line in a prompt, which is the only version of that promise worth having.",
       },
     ],
+    film: { src: "/Braino_Final.MP4", caption: "Don't Blink." },
     handles: {
       heading: "The three ways he helps",
       note: "All three get better the longer he has been beside you, because the fourth thing he does is remember.",
@@ -393,6 +397,43 @@ const FOOTER_COLUMNS: Array<{ head: string; links: Array<[string, string]> }> = 
   },
 ];
 
+/* The film opens from the measure to the whole page as it is scrolled into,
+   the same move the company page's picture makes. The progress is measured
+   against the element rather than against the page, because this one sits
+   halfway down a story rather than at the top of one: nought when its top edge
+   is at the bottom of the screen, one by the time it has climbed most of the
+   way up.
+
+   Flat under 900px, where there is no width to grow into, and flat for anyone
+   who has asked for less motion. */
+function useGrow() {
+  useEffect(() => {
+    const still = window.matchMedia("(prefers-reduced-motion: reduce)");
+    let frame = 0;
+
+    const apply = () => {
+      frame = 0;
+      const off = window.innerWidth < 900 || still.matches;
+      document.querySelectorAll<HTMLElement>("[data-grow]").forEach((el) => {
+        if (off) { el.style.setProperty("--grow", "1"); return; }
+        const r = el.getBoundingClientRect();
+        const p = (window.innerHeight - r.top) / Math.max(240, window.innerHeight * 0.8);
+        el.style.setProperty("--grow", Math.min(1, Math.max(0, p)).toFixed(3));
+      });
+    };
+    const onScroll = () => { if (!frame) frame = window.requestAnimationFrame(apply); };
+
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
+    apply();
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+      if (frame) window.cancelAnimationFrame(frame);
+    };
+  }, []);
+}
+
 function useReveal() {
   const root = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -423,9 +464,11 @@ function useReveal() {
 
 export default function BrainoFinal() {
   const root = useReveal();
+  useGrow();
   /* Which of the three is open. A number on the page: there is nothing to
      store and nothing to look up. The url can name one, so /foundry can send
      somebody straight to his, and the address updates when the tab does. */
+  const [playing, setPlaying] = useState(false);
   const [params, setParams] = useSearchParams();
   const asked = MODELS.findIndex((m) => m.key === params.get("model"));
   const at = asked >= 0 ? asked : 0;
@@ -475,7 +518,7 @@ export default function BrainoFinal() {
           been sold a feature they had not yet felt the need for. */}
       <header className="bf-hero">
         <div className="bf-wrap">
-          <p className="bf-eyebrow bf-reveal">Braino</p>
+          <p className="bf-eyebrow bf-reveal">Braino · One product, three models</p>
           <h1 className="bf-h1 bf-reveal">
             Speak.
             <b>Watch it happen.</b>
@@ -503,7 +546,6 @@ export default function BrainoFinal() {
           looks like after, and what is true today. */}
       <div className="bf-switch" id="what">
         <div className="bf-wrap bf-switch-in">
-          <p className="bf-switch-note">One Braino · Three models</p>
           <div className="bf-tabs" role="tablist" aria-label="Which model">
             {MODELS.map((m, i) => (
               <button
@@ -563,6 +605,39 @@ export default function BrainoFinal() {
             </div>
           </div>
         </section>
+
+        {/* The film, opening from the measure to the page as you scroll into
+            it, the way the company page's picture does. It loads nothing until
+            it is asked to: twenty five megabytes is not something to spend on
+            somebody who came to read. */}
+        {model.film && (
+          <section className="bf-film-sec">
+            <figure className="bf-film" data-grow>
+              <video
+                src={model.film.src}
+                playsInline
+                controls={playing}
+                preload="none"
+                poster=""
+                onClick={(e) => {
+                  const el = e.currentTarget;
+                  setPlaying(true);
+                  void el.play();
+                }}
+              />
+              {!playing && (
+                <button type="button" className="bf-film-play" onClick={(e) => {
+                  const video = e.currentTarget.parentElement?.querySelector("video");
+                  setPlaying(true);
+                  void video?.play();
+                }}>
+                  <i aria-hidden="true" />
+                  <span>{model.film.caption}</span>
+                </button>
+              )}
+            </figure>
+          </section>
+        )}
 
         {/* What he actually holds. The cells above are capabilities; these are
             jobs, with the state of each said out loud, because a page that
