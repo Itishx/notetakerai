@@ -249,6 +249,57 @@
 @media (max-width: 1040px) { .bf-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 560px) { .bf-grid { grid-template-columns: 1fr; } }
 
+/* ── What he handles ──────────────────────────────────────────────────────
+   Jobs rather than capabilities, so they are cards rather than cells: each one
+   is a thing he holds for you, with its state said out loud at the top. */
+.bf-jobs {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+  border: 1px solid var(--line-strong);
+  background: var(--box);
+  box-shadow: 0 1px 0 rgba(22, 21, 15, .03), 0 18px 40px -28px rgba(22, 21, 15, .28);
+}
+.bf-jobs-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.bf-job {
+  padding: clamp(20px, 2.2vw, 32px);
+  border-right: 1px solid var(--line);
+  display: flex; flex-direction: column; gap: 10px;
+}
+.bf-jobs > .bf-job:last-child { border-right: 0; }
+.bf-jobs-4 > .bf-job:nth-child(2n) { border-right: 0; }
+.bf-jobs-4 > .bf-job:nth-child(-n+2) { border-bottom: 1px solid var(--line); }
+.bf-job-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.bf-job-n {
+  font-size: 11px; letter-spacing: .16em; color: var(--ink-faint);
+  font-variant-numeric: tabular-nums;
+}
+/* The state, said plainly. A planned engine beside a running one with nothing
+   marking the difference is how a page gets found out. */
+.bf-job-state {
+  font-size: 10px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
+  padding: 3px 8px; border: 1px solid var(--line-strong); color: var(--ink-faint);
+}
+.bf-job-state.is-running { color: #4f7a4a; border-color: #4f7a4a; }
+.bf-job-state.is-next { color: var(--acc, var(--ink)); border-color: var(--acc, var(--ink)); }
+.bf-job h3 {
+  margin: 0;
+  font-family: var(--display);
+  font-size: clamp(22px, 2.2vw, 30px); font-weight: 400;
+  line-height: 1.1; letter-spacing: -0.022em;
+}
+.bf-job-line {
+  margin: 0; font-size: clamp(14.5px, 1.35vw, 16.5px); line-height: 1.45;
+  letter-spacing: -0.008em; color: var(--ink);
+}
+.bf-job-detail {
+  margin: 0; font-size: clamp(13px, 1.2vw, 14.5px); line-height: 1.6;
+  letter-spacing: -0.004em; color: var(--ink-soft);
+}
+@media (max-width: 900px) {
+  .bf-jobs, .bf-jobs-4 { grid-template-columns: 1fr; }
+  .bf-job { border-right: 0; border-bottom: 1px solid var(--line); }
+  .bf-jobs > .bf-job:last-child { border-bottom: 0; }
+}
+
 /* ── The day, after ───────────────────────────────────────────────────────
    Hour on the left, what happens on the right, on one rail. It is the only
    proof a person can feel before they have used the thing. */

@@ -1,6 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import BrainoFooterGame from "@/components/BrainoFooterGame";
+/* The jobs come from the same files the rest of the site reads. Copying the
+   strings here would mean two versions of what Braino does, and the second one
+   is always the one that goes stale. */
+import { COMPANION_ENGINES } from "@/data/companionEngines";
+import { DISTRA_ENGINES } from "@/data/distraEngines";
 import "@/components/braino-footer.css";
 import "./braino-final.css";
 
@@ -38,6 +43,9 @@ type Model = {
   /* One ordinary day, after. */
   dayTitle: string;
   day: { at: string; p: string }[];
+  /* The jobs he takes off you, from the site's own engine data. Mesa has none
+     of its own yet and the section simply does not appear. */
+  handles?: { heading: string; note: string; jobs: { n: string; name: string; job: string; detail: string; state: string }[] };
   /* What is true today, said plainly, including what is not. */
   honest: string;
   cta: { label: string; to: string };
@@ -81,6 +89,11 @@ const MODELS: Model[] = [
         p: "Nothing bought, sent, posted or deleted until you say yes. That is a rule in the code rather than a line in a prompt, which is the only version of that promise worth having.",
       },
     ],
+    handles: {
+      heading: "The three he takes off you",
+      note: "Everything above is what he can do. These are the jobs he actually holds, so you stop holding them.",
+      jobs: COMPANION_ENGINES,
+    },
     dayTitle: "An ordinary Tuesday with him",
     day: [
       { at: "9:10", p: "“What is on today?” He reads the day back before you have opened a calendar, because he has one." },
@@ -133,6 +146,11 @@ const MODELS: Model[] = [
         p: "He drafts, you read, you say go. Nothing posts, sends or spends on its own, and he remembers what you decided in March when today contradicts it.",
       },
     ],
+    handles: {
+      heading: "The engines",
+      note: "Four of them, and the fourth is the one nobody sells: three tools that do not know about each other is the actual problem.",
+      jobs: DISTRA_ENGINES,
+    },
     dayTitle: "One week of your work, done",
     day: [
       { at: "Mon", p: "You ship a feature. He was watching you build it and the post about it is already drafted, in your voice, waiting for a yes." },
@@ -459,6 +477,35 @@ export default function BrainoFinal() {
             </div>
           </div>
         </section>
+
+        {/* What he actually holds. The cells above are capabilities; these are
+            jobs, with the state of each said out loud, because a page that
+            lists a planned engine beside a running one without saying which is
+            which is a page that will be found out. */}
+        {model.handles && (
+          <section className="bf-sec bf-handles">
+            <div className="bf-wrap">
+              <div className="bf-sec-head bf-reveal">
+                <p className="bf-kicker">What he handles</p>
+                <h2>{model.handles.heading}</h2>
+                <p className="bf-sec-note">{model.handles.note}</p>
+              </div>
+              <div className={"bf-jobs" + (model.handles.jobs.length > 3 ? " bf-jobs-4" : "")}>
+                {model.handles.jobs.map((j) => (
+                  <article className="bf-job bf-reveal" key={j.name}>
+                    <div className="bf-job-top">
+                      <span className="bf-job-n">{j.n}</span>
+                      <span className={"bf-job-state is-" + j.state.toLowerCase()}>{j.state}</span>
+                    </div>
+                    <h3>{j.name}</h3>
+                    <p className="bf-job-line">{j.job}</p>
+                    <p className="bf-job-detail">{j.detail}</p>
+                  </article>
+                ))}
+              </div>
+            </div>
+          </section>
+        )}
 
         {/* And what that adds up to, hour by hour, which is the only proof a
             person can feel before they have used it. */}
