@@ -719,7 +719,7 @@ export default function Affective() {
               {/* Where you actually get him, and the places he stands once you
                   have. The product section ends by handing you the store. */}
               <p className="aff-plate-store">
-                <Link to="/apps">Get Braino, and see what comes with him<i aria-hidden="true">→</i></Link>
+                <Link to="/apps/braino">Get Braino, and see what comes with him<i aria-hidden="true">→</i></Link>
               </p>
             </div>
           </article>
@@ -798,7 +798,7 @@ export default function Affective() {
                 <ul>
                   <li><Link to="/braino">Braino</Link></li>
                   <li><Link to="/foundry">Braino Foundry</Link></li>
-                  <li><Link to="/apps">Apps and downloads</Link></li>
+                  <li><Link to="/apps">All apps</Link></li>
                 </ul>
               </nav>
               {/* Its own column. A school buying the same Braino with its own

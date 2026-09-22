@@ -1,29 +1,26 @@
 /* ============================================================================
-   /apps — the shelf.
+   The store: /apps (the front) and /apps/braino (one product).
 
    Rides affective.css for paper, ink, hairline and the reveal, and adds only
-   the shelf itself. Every class here is ast- prefixed so nothing reaches back
-   into the company page.
+   the store. Every class is ast- prefixed so nothing reaches back into the
+   company page.
 
-   The one rule that matters: the cells share edges. A single hairline runs
-   between two apps instead of each app sitting in its own bordered box with a
-   gutter around it. That is the whole visual argument. These are not four
-   downloads next to each other, they are one system with four positions in it,
-   and a gap in the middle of the grid would say the opposite before a word of
-   copy was read.
+   One rule carries both pages: cells and rows share edges. A single hairline
+   runs between two things rather than each sitting in its own bordered box
+   with a gutter around it. A gap says "separate downloads"; a shared edge says
+   "one system", which is the argument the whole store is making.
    ============================================================================ */
 
 .ast .aff-nav { position: sticky; top: 0; z-index: 30; }
 
-/* ---- the claim ----------------------------------------------------------- */
-.ast-head { padding: clamp(46px, 6vw, 96px) 0 clamp(30px, 3.6vw, 52px); }
+/* ---- shared -------------------------------------------------------------- */
 .ast-kicker {
   margin: 0 0 clamp(14px, 1.6vw, 22px);
   font-size: 11px; font-weight: 600; letter-spacing: .15em; text-transform: uppercase;
   color: var(--a-ink-faint);
 }
 .ast-h1 {
-  margin: 0; max-width: 20ch;
+  margin: 0; max-width: 19ch;
   font-family: var(--a-display);
   font-size: clamp(34px, 5.4vw, 70px);
   line-height: 1.03; letter-spacing: -0.03em; font-weight: 400;
@@ -35,80 +32,89 @@
   font-size: clamp(15px, 1.35vw, 17.5px); line-height: 1.6;
   letter-spacing: -0.008em; color: var(--a-ink-soft);
 }
+.ast-head { padding: clamp(46px, 6vw, 92px) 0 clamp(28px, 3.4vw, 48px); }
 
-/* ---- him, and the two builds of him -------------------------------------- */
-/* One wide cell in the same hairline system as the shelf, so the page reads as
-   one grid with a tall first row rather than as a hero sitting on top of a
-   table. The art band is the page colour and the copy band is the cell colour,
-   the same two-tone the shelf cells use. */
-.ast-get { padding-bottom: clamp(30px, 3.4vw, 52px); }
-.ast-parent {
-  display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.5fr);
-  border: 1px solid var(--a-line-strong);
-  background: var(--a-surface);
-}
-.ast-parent-art {
-  background: var(--a-bg);
-  border-right: 1px solid var(--a-line-strong);
-  padding: clamp(22px, 2.6vw, 38px);
-  display: flex; flex-direction: column; justify-content: center; gap: 16px;
-}
-.ast-parent-art p {
-  margin: 0; max-width: 30ch;
-  font-size: 12.5px; line-height: 1.5; color: var(--a-ink-faint);
-}
-.ast-parent-body {
-  padding: clamp(22px, 2.6vw, 38px);
-  display: flex; flex-direction: column; gap: 10px;
-}
-.ast-parent-body h2 {
+.ast-where {
   margin: 0;
-  font-family: var(--a-display);
-  font-size: clamp(30px, 3.6vw, 46px); font-weight: 400; letter-spacing: -0.026em;
+  font-size: 10.5px; font-weight: 600; letter-spacing: .13em; text-transform: uppercase;
+  color: var(--a-braino);
 }
-@media (max-width: 860px) {
-  .ast-parent { grid-template-columns: 1fr; }
-  .ast-parent-art { border-right: 0; border-bottom: 1px solid var(--a-line-strong); }
+/* State is never decoration. Only a thing you can actually have gets colour. */
+.ast-state {
+  font-size: 10px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--a-ink-faint);
+  border: 1px solid var(--a-line-strong);
+  padding: 3px 7px; white-space: nowrap;
 }
+.ast-state.is-out, .ast-state.is-running { color: #4f7a4a; border-color: #4f7a4a; }
 
-/* Two builds, one hairline between them. The row is deliberately not a card:
-   it is a line in a list of what exists. */
-.ast-builds { margin-top: clamp(12px, 1.4vw, 20px); border-top: 1px solid var(--a-line); }
-.ast-build {
-  display: flex; align-items: center; justify-content: space-between;
-  gap: clamp(14px, 2vw, 30px);
-  padding: clamp(14px, 1.6vw, 20px) 0;
-  border-bottom: 1px solid var(--a-line);
-}
-.ast-build h3 {
-  margin: 0 0 4px;
-  font-size: clamp(15px, 1.4vw, 17px); font-weight: 600; letter-spacing: -0.014em;
-}
-.ast-build p { margin: 0; max-width: 46ch; font-size: 13px; line-height: 1.55; color: var(--a-ink-soft); }
-.ast-build-act { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex: none; }
 .ast-dl {
   display: inline-block; white-space: nowrap;
   font-size: 13.5px; font-weight: 500; letter-spacing: -0.006em;
   color: var(--a-bg); background: var(--a-ink);
   border: 1px solid var(--a-ink);
-  padding: 9px 20px; text-decoration: none;
+  padding: 10px 20px; text-decoration: none;
 }
 .ast-dl:hover { background: transparent; color: var(--a-ink); }
 /* The build you cannot have yet does not get the solid button. */
 .ast-dl.is-soft { background: transparent; color: var(--a-ink); }
 .ast-dl.is-soft:hover { background: var(--a-ink); color: var(--a-bg); }
-.ast-ver {
-  font-size: 10.5px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase;
-  color: var(--a-ink-faint);
-  font-variant-numeric: tabular-nums;
+
+/* ---- the featured card --------------------------------------------------- */
+.ast-feat-wrap { padding-bottom: clamp(26px, 3vw, 44px); }
+.ast-feat {
+  display: grid; grid-template-columns: minmax(0, 0.7fr) minmax(0, 2fr) auto;
+  align-items: stretch;
+  border: 1px solid var(--a-line-strong);
+  background: var(--a-surface);
+  text-decoration: none; color: inherit;
 }
-@media (max-width: 560px) {
-  .ast-build { flex-direction: column; align-items: flex-start; }
-  .ast-build-act { flex-direction: row; align-items: center; gap: 12px; }
+.ast-feat-art {
+  background: color-mix(in srgb, var(--a-braino) 9%, var(--a-bg));
+  border-right: 1px solid var(--a-line-strong);
+  padding: clamp(26px, 3vw, 44px);
+  display: flex; align-items: center; justify-content: center;
+}
+.ast-feat-art img { width: clamp(78px, 9vw, 116px); height: auto; display: block; }
+.ast-feat-body {
+  padding: clamp(24px, 2.8vw, 40px);
+  display: flex; flex-direction: column; gap: 9px; justify-content: center;
+}
+.ast-feat-kicker {
+  margin: 0;
+  font-size: 10.5px; font-weight: 600; letter-spacing: .13em; text-transform: uppercase;
+  color: var(--a-braino);
+}
+.ast-feat-body h2 {
+  margin: 0;
+  font-family: var(--a-display);
+  font-size: clamp(30px, 3.6vw, 46px); font-weight: 400; letter-spacing: -0.026em;
+}
+.ast-feat-line { margin: 0; max-width: 50ch; font-size: 14.5px; line-height: 1.58; color: var(--a-ink-soft); }
+.ast-feat-go {
+  margin-top: 4px;
+  display: inline-flex; align-items: center; gap: 8px;
+  font-size: 13.5px; font-weight: 500; color: var(--a-ink);
+}
+.ast-feat-go i { font-style: normal; transition: transform .22s ease; }
+.ast-feat:hover .ast-feat-go i { transform: translateX(4px); }
+.ast-feat-meta {
+  border-left: 1px solid var(--a-line);
+  padding: clamp(24px, 2.8vw, 40px);
+  display: flex; flex-direction: column; align-items: flex-end; gap: 8px; justify-content: center;
+}
+.ast-feat-meta span:last-child { font-size: 12px; color: var(--a-ink-faint); }
+@media (max-width: 860px) {
+  .ast-feat { grid-template-columns: 1fr; }
+  .ast-feat-art { border-right: 0; border-bottom: 1px solid var(--a-line-strong); }
+  .ast-feat-meta {
+    border-left: 0; border-top: 1px solid var(--a-line);
+    flex-direction: row; align-items: center; justify-content: flex-start; gap: 14px;
+  }
 }
 
-/* ---- the shelf ----------------------------------------------------------- */
-.ast-shelf { padding-bottom: clamp(40px, 5vw, 80px); }
+/* ---- the list of everything ---------------------------------------------- */
+.ast-shelf { padding-bottom: clamp(38px, 4.6vw, 76px); }
 .ast-shelf-head {
   display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap;
   padding-bottom: clamp(14px, 1.6vw, 22px);
@@ -120,78 +126,158 @@
 }
 .ast-shelf-head p { margin: 0; font-size: 13.5px; color: var(--a-ink-faint); }
 
-/* Two outer edges drawn on the container, the other two on each cell, so no
-   hairline is ever doubled and none is missing at the rim. */
+.ast-rows { border-top: 1px solid var(--a-line-strong); }
+.ast-row {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center; gap: clamp(14px, 2vw, 26px);
+  padding: clamp(14px, 1.7vw, 20px) 0;
+  border-bottom: 1px solid var(--a-line);
+  text-decoration: none; color: inherit;
+}
+.ast-row:hover .ast-row-top strong { color: var(--acc); }
+/* A letter in the product's own colour rather than an invented icon. We do not
+   have icons for things that do not exist, and drawing them would be the first
+   lie on the page. */
+.ast-tile {
+  width: clamp(40px, 4vw, 52px); height: clamp(40px, 4vw, 52px);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--acc) 12%, var(--a-bg));
+  border: 1px solid color-mix(in srgb, var(--acc) 30%, var(--a-line));
+  color: var(--acc);
+  font-family: var(--a-display); font-size: clamp(19px, 2vw, 24px);
+  display: flex; align-items: center; justify-content: center;
+}
+.ast-row-main { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.ast-row-top { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.ast-row-top strong {
+  font-size: clamp(15px, 1.5vw, 18px); font-weight: 600; letter-spacing: -0.016em;
+  transition: color .18s ease;
+}
+.ast-row-top em {
+  font-style: normal; font-size: 11px; font-weight: 600;
+  letter-spacing: .1em; text-transform: uppercase; color: var(--a-ink-faint);
+}
+.ast-row-line { font-size: 13.5px; line-height: 1.55; color: var(--a-ink-soft); max-width: 68ch; }
+@media (max-width: 620px) {
+  .ast-row { grid-template-columns: auto minmax(0, 1fr); }
+  .ast-row .ast-state { grid-column: 2; justify-self: start; }
+}
+
+/* ---- one product --------------------------------------------------------- */
+.ast-crumb {
+  margin: 0; padding: clamp(20px, 2.4vw, 34px) 0 0;
+  display: flex; align-items: center; gap: 9px;
+  font-size: 12.5px; color: var(--a-ink-faint);
+}
+.ast-crumb a { color: var(--a-ink-faint); text-decoration: none; }
+.ast-crumb a:hover { color: var(--a-ink); }
+.ast-crumb b { font-weight: 500; color: var(--a-ink); }
+
+.ast-prod { padding: clamp(20px, 2.4vw, 34px) 0 clamp(30px, 3.6vw, 54px); }
+.ast-prod-in { display: flex; align-items: center; gap: clamp(20px, 3vw, 44px); flex-wrap: wrap; }
+.ast-prod-icon {
+  flex: none;
+  width: clamp(104px, 12vw, 152px); height: clamp(104px, 12vw, 152px);
+  border-radius: 26px;
+  background: color-mix(in srgb, var(--a-braino) 10%, var(--a-bg));
+  border: 1px solid color-mix(in srgb, var(--a-braino) 26%, var(--a-line));
+  display: flex; align-items: center; justify-content: center;
+}
+.ast-prod-icon img { width: 58%; height: auto; display: block; }
+.ast-prod-body { flex: 1; min-width: min(100%, 320px); display: flex; flex-direction: column; gap: 8px; }
+.ast-prod-body h1 {
+  margin: 0;
+  font-family: var(--a-display);
+  font-size: clamp(36px, 5vw, 62px); font-weight: 400; letter-spacing: -0.03em; line-height: 1.02;
+}
+.ast-prod-sub { margin: 0; max-width: 54ch; font-size: clamp(14.5px, 1.3vw, 16.5px); line-height: 1.55; color: var(--a-ink-soft); }
+.ast-gets { margin-top: 10px; display: flex; gap: clamp(14px, 2vw, 28px); flex-wrap: wrap; }
+.ast-get-one { display: flex; flex-direction: column; gap: 7px; }
+.ast-get-one span { font-size: 11.5px; color: var(--a-ink-faint); }
+
+/* The strip of facts a product page owes you, as one hairline row. */
+.ast-facts {
+  margin: clamp(26px, 3vw, 44px) 0 0;
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+  border-top: 1px solid var(--a-line-strong);
+  border-bottom: 1px solid var(--a-line-strong);
+}
+.ast-facts > div {
+  padding: clamp(14px, 1.6vw, 20px) clamp(14px, 1.6vw, 22px) clamp(14px, 1.6vw, 20px) 0;
+  border-right: 1px solid var(--a-line);
+  display: flex; flex-direction: column; gap: 5px;
+}
+.ast-facts > div:last-child { border-right: 0; }
+.ast-facts dt {
+  font-size: 10px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--a-ink-faint);
+}
+.ast-facts dd { margin: 0; font-size: 13.5px; line-height: 1.45; letter-spacing: -0.008em; }
+@media (max-width: 720px) { .ast-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* ---- what it does -------------------------------------------------------- */
+.ast-does { padding-bottom: clamp(34px, 4vw, 60px); }
+.ast-does-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.ast-does-grid > div { padding-right: clamp(18px, 2.4vw, 38px); }
+.ast-does-grid > div + div {
+  border-left: 1px solid var(--a-line);
+  padding-left: clamp(18px, 2.4vw, 38px);
+}
+.ast-does h2 { margin: 0 0 9px; font-size: clamp(16px, 1.5vw, 19px); font-weight: 600; letter-spacing: -0.016em; }
+.ast-does p { margin: 0; font-size: 13.5px; line-height: 1.6; color: var(--a-ink-soft); }
+@media (max-width: 760px) {
+  .ast-does-grid { grid-template-columns: 1fr; }
+  .ast-does-grid > div { padding: 0 0 20px; }
+  .ast-does-grid > div + div { border-left: 0; border-top: 1px solid var(--a-line); padding: 20px 0 0; }
+}
+
+/* ---- the apps inside a product ------------------------------------------- */
 .ast-grid {
   display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
   border-top: 1px solid var(--a-line-strong);
   border-left: 1px solid var(--a-line-strong);
   background: var(--a-surface);
 }
+.ast-grid.is-three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .ast-cell {
   border-right: 1px solid var(--a-line-strong);
   border-bottom: 1px solid var(--a-line-strong);
-  display: flex; flex-direction: column;
-  min-width: 0;
+  display: flex; flex-direction: column; min-width: 0;
 }
-@media (max-width: 860px) { .ast-grid { grid-template-columns: 1fr; } }
+@media (max-width: 980px) { .ast-grid.is-three { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 680px) {
+  .ast-grid, .ast-grid.is-three { grid-template-columns: 1fr; }
+}
 
-/* The drawing sits on the page colour rather than the cell colour, so the art
-   band reads as a shelf the app is standing on. */
+/* The drawing sits on the page colour, so the art band reads as a shelf the
+   app is standing on rather than as part of the card. */
 .ast-cell-art {
   background: var(--a-bg);
   border-bottom: 1px solid var(--a-line);
-  padding: clamp(18px, 2vw, 26px);
+  padding: clamp(16px, 1.8vw, 24px);
   display: flex; justify-content: center;
 }
-.ast-screen { width: 100%; max-width: 220px; height: auto; display: block; }
+.ast-screen { width: 100%; max-width: 200px; height: auto; display: block; }
 .ast-screen-body { fill: none; stroke: var(--a-line-strong); stroke-width: 1.1; }
 .ast-screen-foot { fill: var(--a-line-strong); }
 .ast-lit { fill: var(--a-braino); }
 .ast-lit-soft { fill: var(--a-braino); opacity: .16; }
 .ast-lit-ink { fill: var(--a-ink-faint); }
 
-.ast-cell-body {
-  padding: clamp(18px, 2vw, 28px);
-  display: flex; flex-direction: column; gap: 10px; flex: 1;
-}
+.ast-cell-body { padding: clamp(18px, 2vw, 26px); display: flex; flex-direction: column; gap: 10px; flex: 1; }
 .ast-cell-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.ast-where {
-  font-size: 10.5px; font-weight: 600; letter-spacing: .13em; text-transform: uppercase;
-  color: var(--a-braino);
-}
-.ast-state {
-  font-size: 10px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase;
-  color: var(--a-ink-faint);
-  border: 1px solid var(--a-line-strong);
-  padding: 3px 7px;
-}
-.ast-state.is-running { color: #4f7a4a; border-color: #4f7a4a; }
-
 .ast-cell h3 {
   margin: 0;
   font-family: var(--a-display);
-  font-size: clamp(22px, 2.2vw, 29px); font-weight: 400; letter-spacing: -0.022em;
+  font-size: clamp(21px, 2vw, 27px); font-weight: 400; letter-spacing: -0.022em;
 }
-.ast-line {
-  margin: 0; max-width: 44ch;
-  font-size: 14.5px; line-height: 1.58; color: var(--a-ink);
-}
-.ast-cell ul { margin: 4px 0 0; padding: 0; list-style: none; display: grid; gap: 7px; }
-.ast-cell ul li {
-  position: relative; padding-left: 16px;
-  font-size: 13.5px; line-height: 1.55; color: var(--a-ink-soft);
-}
-.ast-cell ul li::before {
-  content: ""; position: absolute; left: 0; top: .6em;
-  width: 5px; height: 1px; background: var(--a-line-strong);
-}
-/* What it cannot do, set apart so it cannot be skimmed past as a feature. */
+.ast-line { margin: 0; max-width: 42ch; font-size: 14px; line-height: 1.56; color: var(--a-ink); }
+/* What it cannot do, set apart so it cannot be skimmed as a feature. */
 .ast-honest {
-  margin: 6px 0 0;
+  margin: 2px 0 0;
   border-left: 2px solid var(--a-line-strong);
   padding: 2px 0 2px 12px;
-  font-size: 13px; line-height: 1.55; color: var(--a-ink-faint);
+  font-size: 12.5px; line-height: 1.55; color: var(--a-ink-faint);
 }
 .ast-how {
   margin: auto 0 0; padding-top: 14px;
@@ -205,39 +291,53 @@
 .ast-how code {
   font-family: ui-monospace, "SF Mono", Menlo, monospace;
   font-size: 12.5px; color: var(--a-ink);
-  background: var(--a-bg);
-  border: 1px solid var(--a-line);
+  background: var(--a-bg); border: 1px solid var(--a-line);
   padding: 3px 8px;
 }
 
-/* The empty slot is not a placeholder. It is the entry rule, which is the
-   honest reason the shelf is short. */
-.ast-cell-open { background: var(--a-bg); }
-.ast-open-in { padding: clamp(20px, 2.4vw, 32px); display: flex; flex-direction: column; gap: 10px; }
-.ast-open-in h3 {
-  margin: 0;
+/* ---- turning them on ----------------------------------------------------- */
+.ast-setup { padding-bottom: clamp(34px, 4vw, 60px); }
+.ast-setup-grid {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+  gap: clamp(20px, 3vw, 50px);
+  border-top: 1px solid var(--a-line-strong);
+  padding-top: clamp(20px, 2.4vw, 32px);
+}
+.ast-setup h2 {
+  margin: 0 0 10px;
   font-family: var(--a-display);
-  font-size: clamp(20px, 2vw, 26px); font-weight: 400; letter-spacing: -0.02em;
+  font-size: clamp(22px, 2.4vw, 30px); font-weight: 400; letter-spacing: -0.022em;
 }
-.ast-open-in > p { margin: 0; font-size: 13.5px; color: var(--a-ink-soft); }
-.ast-open-in ol {
-  margin: 4px 0; padding-left: 1.1em;
-  display: grid; gap: 8px;
-  font-size: 14px; line-height: 1.55; color: var(--a-ink);
+.ast-setup > div > div > p { margin: 0; max-width: 40ch; font-size: 13.5px; line-height: 1.6; color: var(--a-ink-soft); }
+.ast-setup ul { margin: 0; padding: 0; list-style: none; display: grid; }
+.ast-setup li {
+  display: flex; flex-direction: column; gap: 4px;
+  padding: 14px 0; border-bottom: 1px solid var(--a-line);
 }
-.ast-open-note { font-size: 13px !important; line-height: 1.6; color: var(--a-ink-faint) !important; max-width: 44ch; }
+.ast-setup li:first-child { border-top: 1px solid var(--a-line); }
+.ast-setup li strong { font-size: 14px; font-weight: 600; letter-spacing: -0.012em; }
+.ast-setup li span { font-size: 13px; line-height: 1.55; color: var(--a-ink-soft); }
+.ast-setup li a { color: var(--a-ink); text-decoration: underline; text-underline-offset: 3px; }
+@media (max-width: 760px) { .ast-setup-grid { grid-template-columns: 1fr; } }
 
 /* ---- the footing --------------------------------------------------------- */
-.ast-note { border-top: 1px solid var(--a-line); padding: clamp(28px, 3.4vw, 50px) 0 clamp(40px, 5vw, 76px); }
-.ast-note p {
-  margin: 0 0 18px; max-width: 62ch;
-  font-size: 14px; line-height: 1.62; color: var(--a-ink-soft);
+.ast-note { border-top: 1px solid var(--a-line); padding: clamp(26px, 3.2vw, 46px) 0 clamp(40px, 5vw, 74px); }
+.ast-note-h {
+  margin: 0 0 12px;
+  font-family: var(--a-display);
+  font-size: clamp(22px, 2.4vw, 30px); font-weight: 400; letter-spacing: -0.022em;
 }
+.ast-note p { margin: 0 0 18px; max-width: 62ch; font-size: 14px; line-height: 1.62; color: var(--a-ink-soft); }
+.ast-also { display: flex; gap: clamp(14px, 2vw, 26px); flex-wrap: wrap; }
+.ast-also a {
+  font-size: 13.5px; color: var(--a-ink); text-decoration: none;
+  border-bottom: 1px solid var(--a-line-strong); padding-bottom: 3px;
+}
+.ast-also a:hover { border-bottom-color: var(--a-ink); }
 .ast-cta {
   display: inline-block;
   font-size: 13.5px; font-weight: 500; letter-spacing: -0.006em;
   color: var(--a-ink); text-decoration: none;
-  border: 1px solid var(--a-ink);
-  padding: 9px 18px;
+  border: 1px solid var(--a-ink); padding: 9px 18px;
 }
 .ast-cta:hover { background: var(--a-ink); color: var(--a-bg); }
