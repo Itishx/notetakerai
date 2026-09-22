@@ -1,16 +1,20 @@
 import { useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
+import { EXTENSION_DOWNLOAD_URL, EXTENSION_DOWNLOAD_FILENAME, EXTENSION_VERSION } from "@/lib/extensionDownload";
 import "./affective.css";
 import "./app-store.css";
 
 /* ============================================================================
-   /apps — the shelf.
+   /apps — where you get Braino, and everything he comes with.
 
-   The argument of this page is in its first sentence and nowhere else: Braino
-   is not an app, he is a character who can stand in more than one place on the
-   screen, and an app here is one of those places. The notch is a place. The
-   right edge is a place. The caret is a place. Same Braino, same memory, three
-   postures.
+   The shape of the page is the shape of the product: Braino is the download,
+   and the apps are places inside him rather than things beside him. So he sits
+   at the top in one wide cell with his builds in it, and the shelf underneath
+   holds what comes with him. Nothing on the shelf is its own download, and the
+   page never offers one, because the moment it does the hierarchy is a lie.
+
+   An app here is a place he stands. The notch is a place. The right edge is a
+   place. The caret is a place. Same Braino, same memory, three postures.
 
    It rides affective.css rather than inventing a second look, because the
    shelf belongs to the company page: same paper, same hairlines, same rule
@@ -28,6 +32,7 @@ const APPS: {
   line: string;
   does: string[];
   how: string;
+  inside: string;
   state: State;
   honest?: string;
 }[] = [
@@ -41,7 +46,8 @@ const APPS: {
       "Drops audio it cannot keep up with rather than queueing it, which is why it survives the back half of an hour.",
       "The text is his to keep, so what was said in the room is in his memory afterwards.",
     ],
-    how: "Cmd + Shift + E in the Mac app",
+    how: "Cmd + Shift + E",
+    inside: "Comes with Braino for Mac",
     state: "mac",
   },
   {
@@ -55,6 +61,7 @@ const APPS: {
       "No window, no card, no ground. Glass and numbers.",
     ],
     how: "npm run widget",
+    inside: "Runs from the repo",
     state: "running",
     honest:
       "It counts, and that is all it does. It cannot read his memory yet, so it does not know what is on today. Wiring it to the layer is the next thing, and until then this is a clock in his coat.",
@@ -69,7 +76,8 @@ const APPS: {
       "Transcription only. He is listening, not answering.",
       "Held on a double tap of Option, so the mic is not live the rest of the day.",
     ],
-    how: "Option twice in the Mac app",
+    how: "Option twice",
+    inside: "Comes with Braino for Mac",
     state: "mac",
   },
   {
@@ -79,6 +87,7 @@ const APPS: {
     line: "",
     does: [],
     how: "",
+    inside: "",
     state: "open",
   },
 ];
@@ -86,7 +95,7 @@ const APPS: {
 /* The same Mac, three times, with one part of it lit. Drawn rather than
    screenshotted: the point of the row is the position on the screen, and a
    screenshot would put the app's own interface in front of that. */
-function Screen({ art }: { art: "notch" | "edge" | "caret" | "empty" }) {
+function Screen({ art }: { art: "notch" | "edge" | "caret" | "empty" | "all" }) {
   return (
     <svg className="ast-screen" viewBox="0 0 160 100" role="img" aria-hidden="true">
       <rect x="6" y="6" width="148" height="80" rx="6" className="ast-screen-body" />
@@ -103,6 +112,14 @@ function Screen({ art }: { art: "notch" | "edge" | "caret" | "empty" }) {
           <rect x="147" y="36" width="7" height="22" rx="3.5" className="ast-lit" />
           <rect x="112" y="41" width="31" height="12" rx="3" className="ast-lit-soft" />
           <rect x="116" y="45" width="23" height="3" rx="1.5" className="ast-lit-ink" />
+        </>
+      )}
+      {art === "all" && (
+        <>
+          <rect x="52" y="6" width="56" height="10" rx="5" className="ast-lit" />
+          <rect x="147" y="36" width="7" height="22" rx="3.5" className="ast-lit" />
+          <rect x="30" y="46" width="46" height="2.5" rx="1.25" className="ast-lit-ink" />
+          <rect x="79" y="43" width="2" height="10" rx="1" className="ast-lit" />
         </>
       )}
       {art === "caret" && (
@@ -168,47 +185,83 @@ export default function AppStore() {
       </nav>
 
       {/* ── The claim ──────────────────────────────────────────────────────
-          One sentence doing all the work, because the whole page is an
-          argument against the word "app" as people normally hear it. */}
+          The page is a store, so the first thing it does is say what the
+          thing on sale is. It is one thing. */}
       <header className="ast-head">
         <div className="aff-wrap">
           <div className="aff-reveal">
-            <p className="ast-kicker">Braino apps</p>
+            <p className="ast-kicker">Braino</p>
             <h1 className="ast-h1">
-              Braino is not an app.
-              <b>He is a character with places to stand.</b>
+              One download.
+              <b>The apps are already inside it.</b>
             </h1>
             <p className="ast-lede">
-              The notch at the top of your screen is a place. The right edge is a place. The
-              cursor you are typing at is a place. Every app on this shelf is the same Braino,
-              reading the same memory, standing somewhere else and doing one thing from there.
+              Braino is the app. What this page calls apps are the places he stands once he is
+              installed: the notch at the top of the screen, the right edge, the cursor you are
+              typing at. There is nothing separate to fetch for any of them.
             </p>
           </div>
         </div>
       </header>
 
-      {/* ── Why they are not separate downloads ───────────────────────────── */}
-      <section className="ast-why">
+      {/* ── Him, and the two builds of him ────────────────────────────────
+          One wide cell above the shelf, in the same hairline system, because
+          the shape of the page has to be the shape of the product: he is the
+          download and the shelf is what is inside him. */}
+      <section className="ast-get">
         <div className="aff-wrap">
-          <div className="ast-why-grid aff-reveal">
-            <div>
-              <h2>One memory under all of them</h2>
-              <p>
-                A store full of small tools is a drawer. These are not separate tools. They run on
-                AffectiveOS, the layer that holds what has happened on your machine, so the
-                transcript taken in the notch is there later when you ask him about the meeting,
-                and the words you dictated at the caret are in the same place.
-              </p>
+          <article className="ast-parent aff-reveal">
+            <div className="ast-parent-art">
+              <Screen art="all" />
+              <p>Three of those places, lit at once. All of them are him.</p>
             </div>
-            <div>
-              <h2>Small on purpose</h2>
-              <p>
-                Each one does a single thing and can be shut without shutting him. That is the
-                difference between a placement and a product. You are not opening Braino. You are
-                deciding where on the screen he stands today.
+            <div className="ast-parent-body">
+              <p className="ast-where">The app</p>
+              <h2>Braino</h2>
+              <p className="ast-line">
+                He watches the screen, hears the room, does things on the machine, and keeps what
+                happened. Everything below is a posture he takes while doing it.
               </p>
+
+              <div className="ast-builds">
+                <div className="ast-build">
+                  <div>
+                    <h3>Braino for Chrome</h3>
+                    <p>
+                      The browser half. A developer build, loaded unpacked from
+                      chrome://extensions rather than from the Web Store.
+                    </p>
+                  </div>
+                  <div className="ast-build-act">
+                    <a
+                      className="ast-dl"
+                      href={EXTENSION_DOWNLOAD_URL}
+                      download={EXTENSION_DOWNLOAD_FILENAME}
+                    >
+                      Download
+                    </a>
+                    <span className="ast-ver">v{EXTENSION_VERSION}</span>
+                  </div>
+                </div>
+
+                <div className="ast-build">
+                  <div>
+                    <h3>Braino for Mac</h3>
+                    <p>
+                      The one the shelf below lives in. Not downloadable yet: it goes out to early
+                      access first, and the apps arrive with it rather than after it.
+                    </p>
+                  </div>
+                  <div className="ast-build-act">
+                    <Link className="ast-dl is-soft" to="/waitlist">
+                      Early access
+                    </Link>
+                    <span className="ast-ver">Pre release</span>
+                  </div>
+                </div>
+              </div>
             </div>
-          </div>
+          </article>
         </div>
       </section>
 
@@ -219,8 +272,8 @@ export default function AppStore() {
       <section className="ast-shelf" id="shelf">
         <div className="aff-wrap">
           <div className="ast-shelf-head aff-reveal">
-            <h2>The shelf</h2>
-            <p>Three are built. The page says which is which.</p>
+            <h2>What comes with him</h2>
+            <p>Three places he can stand. None of them is a separate download.</p>
           </div>
           <div className="ast-grid aff-reveal">
             {APPS.map((a, i) =>
@@ -258,7 +311,7 @@ export default function AppStore() {
                     </ul>
                     {a.honest && <p className="ast-honest">{a.honest}</p>}
                     <p className="ast-how">
-                      <span>Open it</span>
+                      <span>{a.inside}</span>
                       <code>{a.how}</code>
                     </p>
                   </div>
@@ -274,9 +327,9 @@ export default function AppStore() {
         <div className="aff-wrap">
           <div className="aff-reveal">
             <p>
-              Braino is pre release. The three above run on our machines today and nothing here is
-              downloadable yet. When it is, it arrives inside the Mac app rather than as three
-              separate things to install, because it was never three separate things.
+              Braino is pre release. The Chrome build above is real and the Mac build is not out
+              yet, which is why the shelf says where each app lives rather than offering you three
+              things to install. It was never three things.
             </p>
             <Link to="/waitlist" className="ast-cta">
               Get early access

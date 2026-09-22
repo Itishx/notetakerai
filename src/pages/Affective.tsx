@@ -398,6 +398,7 @@ export default function Affective() {
           <div className="aff-nav-links">
             <a href="#technology">Technology</a>
             <a href="#products">Products</a>
+            <Link to="/apps">Apps</Link>
             <Link to="/waitlist">Early access</Link>
           </div>
         </div>
@@ -715,6 +716,11 @@ export default function Affective() {
                 ))}
               </div>
               <p className="aff-plate-foundry">{BRAINO.state}</p>
+              {/* Where you actually get him, and the places he stands once you
+                  have. The product section ends by handing you the store. */}
+              <p className="aff-plate-store">
+                <Link to="/apps">Get Braino, and see what comes with him<i aria-hidden="true">→</i></Link>
+              </p>
             </div>
           </article>
         </div>
@@ -792,6 +798,7 @@ export default function Affective() {
                 <ul>
                   <li><Link to="/braino">Braino</Link></li>
                   <li><Link to="/foundry">Braino Foundry</Link></li>
+                  <li><Link to="/apps">Apps and downloads</Link></li>
                 </ul>
               </nav>
               {/* Its own column. A school buying the same Braino with its own

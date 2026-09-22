@@ -36,35 +36,75 @@
   letter-spacing: -0.008em; color: var(--a-ink-soft);
 }
 
-/* ---- two paragraphs, one hairline between them --------------------------- */
-.ast-why { padding-bottom: clamp(34px, 4vw, 60px); }
-.ast-why-grid {
-  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
-  border-top: 1px solid var(--a-line-strong);
+/* ---- him, and the two builds of him -------------------------------------- */
+/* One wide cell in the same hairline system as the shelf, so the page reads as
+   one grid with a tall first row rather than as a hero sitting on top of a
+   table. The art band is the page colour and the copy band is the cell colour,
+   the same two-tone the shelf cells use. */
+.ast-get { padding-bottom: clamp(30px, 3.4vw, 52px); }
+.ast-parent {
+  display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.5fr);
+  border: 1px solid var(--a-line-strong);
+  background: var(--a-surface);
 }
-.ast-why-grid > div {
-  padding: clamp(22px, 2.4vw, 34px) clamp(20px, 2.4vw, 38px) 0 0;
+.ast-parent-art {
+  background: var(--a-bg);
+  border-right: 1px solid var(--a-line-strong);
+  padding: clamp(22px, 2.6vw, 38px);
+  display: flex; flex-direction: column; justify-content: center; gap: 16px;
 }
-.ast-why-grid > div + div {
-  border-left: 1px solid var(--a-line);
-  padding-left: clamp(20px, 2.4vw, 38px);
-  padding-right: 0;
+.ast-parent-art p {
+  margin: 0; max-width: 30ch;
+  font-size: 12.5px; line-height: 1.5; color: var(--a-ink-faint);
 }
-.ast-why h2 {
-  margin: 0 0 10px;
-  font-size: clamp(16px, 1.5vw, 19px); font-weight: 600; letter-spacing: -0.016em;
+.ast-parent-body {
+  padding: clamp(22px, 2.6vw, 38px);
+  display: flex; flex-direction: column; gap: 10px;
 }
-.ast-why p {
-  margin: 0; max-width: 46ch;
-  font-size: 14.5px; line-height: 1.62; color: var(--a-ink-soft);
+.ast-parent-body h2 {
+  margin: 0;
+  font-family: var(--a-display);
+  font-size: clamp(30px, 3.6vw, 46px); font-weight: 400; letter-spacing: -0.026em;
 }
-@media (max-width: 760px) {
-  .ast-why-grid { grid-template-columns: 1fr; }
-  .ast-why-grid > div { padding-right: 0; padding-bottom: 22px; }
-  .ast-why-grid > div + div {
-    border-left: 0; border-top: 1px solid var(--a-line);
-    padding-left: 0; padding-top: 22px;
-  }
+@media (max-width: 860px) {
+  .ast-parent { grid-template-columns: 1fr; }
+  .ast-parent-art { border-right: 0; border-bottom: 1px solid var(--a-line-strong); }
+}
+
+/* Two builds, one hairline between them. The row is deliberately not a card:
+   it is a line in a list of what exists. */
+.ast-builds { margin-top: clamp(12px, 1.4vw, 20px); border-top: 1px solid var(--a-line); }
+.ast-build {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: clamp(14px, 2vw, 30px);
+  padding: clamp(14px, 1.6vw, 20px) 0;
+  border-bottom: 1px solid var(--a-line);
+}
+.ast-build h3 {
+  margin: 0 0 4px;
+  font-size: clamp(15px, 1.4vw, 17px); font-weight: 600; letter-spacing: -0.014em;
+}
+.ast-build p { margin: 0; max-width: 46ch; font-size: 13px; line-height: 1.55; color: var(--a-ink-soft); }
+.ast-build-act { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex: none; }
+.ast-dl {
+  display: inline-block; white-space: nowrap;
+  font-size: 13.5px; font-weight: 500; letter-spacing: -0.006em;
+  color: var(--a-bg); background: var(--a-ink);
+  border: 1px solid var(--a-ink);
+  padding: 9px 20px; text-decoration: none;
+}
+.ast-dl:hover { background: transparent; color: var(--a-ink); }
+/* The build you cannot have yet does not get the solid button. */
+.ast-dl.is-soft { background: transparent; color: var(--a-ink); }
+.ast-dl.is-soft:hover { background: var(--a-ink); color: var(--a-bg); }
+.ast-ver {
+  font-size: 10.5px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--a-ink-faint);
+  font-variant-numeric: tabular-nums;
+}
+@media (max-width: 560px) {
+  .ast-build { flex-direction: column; align-items: flex-start; }
+  .ast-build-act { flex-direction: row; align-items: center; gap: 12px; }
 }
 
 /* ---- the shelf ----------------------------------------------------------- */
