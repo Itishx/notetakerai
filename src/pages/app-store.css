@@ -60,265 +60,139 @@
 .ast-dl.is-soft { background: transparent; color: var(--a-ink); }
 .ast-dl.is-soft:hover { background: var(--a-ink); color: var(--a-bg); }
 
-/* ---- the featured card --------------------------------------------------- */
-.ast-feat-wrap { padding-bottom: clamp(26px, 3vw, 44px); }
-.ast-feat {
-  display: grid; grid-template-columns: minmax(0, 0.7fr) minmax(0, 2fr) auto;
-  align-items: stretch;
-  border: 1px solid var(--a-line-strong);
+/* ---- the split ----------------------------------------------------------
+   Full bleed, one hairline down the middle, and the two halves never share a
+   scale: the product is one large thing and the mini apps are a column of
+   small ones. That difference in size is the fastest way to say they are not
+   the same kind of thing, which is the whole reason the page is split.
+   -------------------------------------------------------------------------- */
+.ast-split {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  border-top: 1px solid var(--a-line-strong);
+  border-bottom: 1px solid var(--a-line-strong);
   background: var(--a-surface);
+}
+.ast-half { display: flex; flex-direction: column; min-width: 0; }
+.ast-half-product { border-right: 1px solid var(--a-line-strong); }
+
+/* Each half says what it holds, in the same two lines, on the page colour so
+   the band reads as a shelf label rather than as part of the first card. */
+.ast-half-head {
+  background: var(--a-bg);
+  border-bottom: 1px solid var(--a-line-strong);
+  padding: clamp(22px, 2.6vw, 38px) clamp(22px, 3vw, 52px);
+  display: flex; flex-direction: column; gap: 7px;
+}
+.ast-half-head h2 {
+  margin: 0;
+  font-family: var(--a-display);
+  font-size: clamp(24px, 2.6vw, 34px); font-weight: 400; letter-spacing: -0.024em;
+}
+.ast-half-head p { margin: 0; font-size: 13px; line-height: 1.5; color: var(--a-ink-faint); }
+
+/* ---- the product, photo up and words down -------------------------------- */
+.ast-prodcard {
+  flex: 1;
+  display: flex; flex-direction: column;
   text-decoration: none; color: inherit;
 }
-.ast-feat-art {
+.ast-prodcard-art {
   background: color-mix(in srgb, var(--a-braino) 9%, var(--a-bg));
-  border-right: 1px solid var(--a-line-strong);
-  padding: clamp(26px, 3vw, 44px);
+  border-bottom: 1px solid var(--a-line);
+  padding: clamp(34px, 5vw, 84px) clamp(22px, 3vw, 52px);
   display: flex; align-items: center; justify-content: center;
 }
-.ast-feat-art img { width: clamp(78px, 9vw, 116px); height: auto; display: block; }
-.ast-feat-body {
-  padding: clamp(24px, 2.8vw, 40px);
-  display: flex; flex-direction: column; gap: 9px; justify-content: center;
+.ast-prodcard-art img {
+  width: clamp(110px, 15vw, 210px); height: auto; display: block;
+  transition: transform .5s cubic-bezier(.2, .9, .3, 1);
+}
+.ast-prodcard:hover .ast-prodcard-art img { transform: translateY(-6px); }
+.ast-prodcard-body {
+  flex: 1;
+  padding: clamp(24px, 3vw, 46px) clamp(22px, 3vw, 52px) clamp(26px, 3vw, 48px);
+  display: flex; flex-direction: column; gap: 12px;
 }
 .ast-feat-kicker {
   margin: 0;
   font-size: 10.5px; font-weight: 600; letter-spacing: .13em; text-transform: uppercase;
   color: var(--a-braino);
 }
-.ast-feat-body h2 {
+.ast-prodcard-body h3 {
   margin: 0;
   font-family: var(--a-display);
-  font-size: clamp(30px, 3.6vw, 46px); font-weight: 400; letter-spacing: -0.026em;
+  font-size: clamp(36px, 4.4vw, 62px); font-weight: 400; letter-spacing: -0.028em; line-height: 1.02;
 }
-.ast-feat-line { margin: 0; max-width: 50ch; font-size: 14.5px; line-height: 1.58; color: var(--a-ink-soft); }
-.ast-feat-go {
-  margin-top: 4px;
-  display: inline-flex; align-items: center; gap: 8px;
-  font-size: 13.5px; font-weight: 500; color: var(--a-ink);
+.ast-feat-line { margin: 0; max-width: 46ch; font-size: clamp(14.5px, 1.3vw, 17px); line-height: 1.56; color: var(--a-ink-soft); }
+.ast-feat-models { margin: 2px 0 0; display: flex; gap: 8px; flex-wrap: wrap; }
+.ast-feat-models span {
+  font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--a-ink-faint);
+  border: 1px solid var(--a-line); padding: 3px 8px;
 }
+.ast-prodcard-foot {
+  margin-top: auto; padding-top: clamp(16px, 2vw, 26px);
+  display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap;
+}
+.ast-feat-go { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 500; color: var(--a-ink); }
 .ast-feat-go i { font-style: normal; transition: transform .22s ease; }
-.ast-feat:hover .ast-feat-go i { transform: translateX(4px); }
-.ast-feat-meta {
-  border-left: 1px solid var(--a-line);
-  padding: clamp(24px, 2.8vw, 40px);
-  display: flex; flex-direction: column; align-items: flex-end; gap: 8px; justify-content: center;
-}
-.ast-feat-meta span:last-child { font-size: 12px; color: var(--a-ink-faint); }
-@media (max-width: 860px) {
-  .ast-feat { grid-template-columns: 1fr; }
-  .ast-feat-art { border-right: 0; border-bottom: 1px solid var(--a-line-strong); }
-  .ast-feat-meta {
-    border-left: 0; border-top: 1px solid var(--a-line);
-    flex-direction: row; align-items: center; justify-content: flex-start; gap: 14px;
-  }
-}
+.ast-prodcard:hover .ast-feat-go i { transform: translateX(4px); }
 
-/* ---- the list of everything ---------------------------------------------- */
-.ast-shelf { padding-bottom: clamp(38px, 4.6vw, 76px); }
-.ast-shelf-head {
-  display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap;
-  padding-bottom: clamp(14px, 1.6vw, 22px);
-}
-.ast-shelf-head h2 {
-  margin: 0;
-  font-family: var(--a-display);
-  font-size: clamp(24px, 2.8vw, 36px); font-weight: 400; letter-spacing: -0.022em;
-}
-.ast-shelf-head p { margin: 0; font-size: 13.5px; color: var(--a-ink-faint); }
-
-.ast-rows { border-top: 1px solid var(--a-line-strong); }
-.ast-row {
-  display: grid; grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center; gap: clamp(14px, 2vw, 26px);
-  padding: clamp(14px, 1.7vw, 20px) 0;
+/* ---- the mini apps, set like a reading list ------------------------------ */
+.ast-minilist { margin: 0; padding: 0; list-style: none; flex: 1; }
+.ast-minilist li {
+  display: grid; grid-template-columns: minmax(0, 1fr) clamp(96px, 12vw, 168px);
+  gap: clamp(16px, 2vw, 32px); align-items: center;
+  padding: clamp(20px, 2.4vw, 32px) clamp(22px, 3vw, 52px);
   border-bottom: 1px solid var(--a-line);
-  text-decoration: none; color: inherit;
 }
-.ast-row:hover .ast-row-top strong { color: var(--acc); }
-/* A letter in the product's own colour rather than an invented icon. We do not
-   have icons for things that do not exist, and drawing them would be the first
-   lie on the page. */
-.ast-tile {
-  width: clamp(40px, 4vw, 52px); height: clamp(40px, 4vw, 52px);
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--acc) 12%, var(--a-bg));
-  border: 1px solid color-mix(in srgb, var(--acc) 30%, var(--a-line));
-  color: var(--acc);
-  font-family: var(--a-display); font-size: clamp(19px, 2vw, 24px);
-  display: flex; align-items: center; justify-content: center;
-}
-.ast-row-main { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-.ast-row-top { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
-.ast-row-top strong {
-  font-size: clamp(15px, 1.5vw, 18px); font-weight: 600; letter-spacing: -0.016em;
-  transition: color .18s ease;
-}
-.ast-row-top em {
-  font-style: normal; font-size: 11px; font-weight: 600;
-  letter-spacing: .1em; text-transform: uppercase; color: var(--a-ink-faint);
-}
-.ast-row-line { font-size: 13.5px; line-height: 1.55; color: var(--a-ink-soft); max-width: 68ch; }
-@media (max-width: 620px) {
-  .ast-row { grid-template-columns: auto minmax(0, 1fr); }
-  .ast-row .ast-state { grid-column: 2; justify-self: start; }
-}
-
-/* ---- one product --------------------------------------------------------- */
-.ast-crumb {
-  margin: 0; padding: clamp(20px, 2.4vw, 34px) 0 0;
-  display: flex; align-items: center; gap: 9px;
-  font-size: 12.5px; color: var(--a-ink-faint);
-}
-.ast-crumb a { color: var(--a-ink-faint); text-decoration: none; }
-.ast-crumb a:hover { color: var(--a-ink); }
-.ast-crumb b { font-weight: 500; color: var(--a-ink); }
-
-.ast-prod { padding: clamp(20px, 2.4vw, 34px) 0 clamp(30px, 3.6vw, 54px); }
-.ast-prod-in { display: flex; align-items: center; gap: clamp(20px, 3vw, 44px); flex-wrap: wrap; }
-.ast-prod-icon {
-  flex: none;
-  width: clamp(104px, 12vw, 152px); height: clamp(104px, 12vw, 152px);
-  border-radius: 26px;
-  background: color-mix(in srgb, var(--a-braino) 10%, var(--a-bg));
-  border: 1px solid color-mix(in srgb, var(--a-braino) 26%, var(--a-line));
-  display: flex; align-items: center; justify-content: center;
-}
-.ast-prod-icon img { width: 58%; height: auto; display: block; }
-.ast-prod-body { flex: 1; min-width: min(100%, 320px); display: flex; flex-direction: column; gap: 8px; }
-.ast-prod-body h1 {
+.ast-minilist li:last-child { border-bottom: 0; }
+.ast-minicard-text { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.ast-minicard-text h3 {
   margin: 0;
-  font-family: var(--a-display);
-  font-size: clamp(36px, 5vw, 62px); font-weight: 400; letter-spacing: -0.03em; line-height: 1.02;
+  font-size: clamp(17px, 1.6vw, 21px); font-weight: 600; letter-spacing: -0.018em;
 }
-.ast-prod-sub { margin: 0; max-width: 54ch; font-size: clamp(14.5px, 1.3vw, 16.5px); line-height: 1.55; color: var(--a-ink-soft); }
-.ast-gets { margin-top: 10px; display: flex; gap: clamp(14px, 2vw, 28px); flex-wrap: wrap; }
-.ast-get-one { display: flex; flex-direction: column; gap: 7px; }
-.ast-get-one span { font-size: 11.5px; color: var(--a-ink-faint); }
-
-/* The strip of facts a product page owes you, as one hairline row. */
-.ast-facts {
-  margin: clamp(26px, 3vw, 44px) 0 0;
-  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
-  border-top: 1px solid var(--a-line-strong);
-  border-bottom: 1px solid var(--a-line-strong);
+.ast-minicard-line {
+  margin: 0; max-width: 48ch;
+  font-size: 13.5px; line-height: 1.55; color: var(--a-ink-soft);
 }
-.ast-facts > div {
-  padding: clamp(14px, 1.6vw, 20px) clamp(14px, 1.6vw, 22px) clamp(14px, 1.6vw, 20px) 0;
-  border-right: 1px solid var(--a-line);
-  display: flex; flex-direction: column; gap: 5px;
-}
-.ast-facts > div:last-child { border-right: 0; }
-.ast-facts dt {
-  font-size: 10px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
+/* The two questions, compressed to one line, because at this size a table
+   would be bigger than the card it is describing. */
+.ast-minicard-meta {
+  margin: 4px 0 0;
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  font-size: 10.5px; font-weight: 600; letter-spacing: .09em; text-transform: uppercase;
   color: var(--a-ink-faint);
 }
-.ast-facts dd { margin: 0; font-size: 13.5px; line-height: 1.45; letter-spacing: -0.008em; }
-@media (max-width: 720px) { .ast-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-
-/* ---- what it does -------------------------------------------------------- */
-.ast-does { padding-bottom: clamp(34px, 4vw, 60px); }
-.ast-does-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.ast-does-grid > div { padding-right: clamp(18px, 2.4vw, 38px); }
-.ast-does-grid > div + div {
-  border-left: 1px solid var(--a-line);
-  padding-left: clamp(18px, 2.4vw, 38px);
+.ast-minicard-meta b { margin-left: 6px; font-weight: 600; }
+.ast-minicard-meta b.is-yes { color: #4f7a4a; }
+.ast-minicard-meta b.is-no { color: var(--a-ink-faint); opacity: .75; }
+.ast-minicard-meta code {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 11px; letter-spacing: 0; text-transform: none; color: var(--a-ink-soft);
+  background: var(--a-bg); border: 1px solid var(--a-line); padding: 2px 7px;
 }
-.ast-does h2 { margin: 0 0 9px; font-size: clamp(16px, 1.5vw, 19px); font-weight: 600; letter-spacing: -0.016em; }
-.ast-does p { margin: 0; font-size: 13.5px; line-height: 1.6; color: var(--a-ink-soft); }
-@media (max-width: 760px) {
-  .ast-does-grid { grid-template-columns: 1fr; }
-  .ast-does-grid > div { padding: 0 0 20px; }
-  .ast-does-grid > div + div { border-left: 0; border-top: 1px solid var(--a-line); padding: 20px 0 0; }
-}
-
-/* ---- the apps inside a product ------------------------------------------- */
-.ast-grid {
-  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
-  border-top: 1px solid var(--a-line-strong);
-  border-left: 1px solid var(--a-line-strong);
-  background: var(--a-surface);
-}
-.ast-grid.is-three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.ast-cell {
-  border-right: 1px solid var(--a-line-strong);
-  border-bottom: 1px solid var(--a-line-strong);
-  display: flex; flex-direction: column; min-width: 0;
-}
-@media (max-width: 980px) { .ast-grid.is-three { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 680px) {
-  .ast-grid, .ast-grid.is-three { grid-template-columns: 1fr; }
-}
-
-/* The drawing sits on the page colour, so the art band reads as a shelf the
-   app is standing on rather than as part of the card. */
-.ast-cell-art {
+.ast-minicard-art {
   background: var(--a-bg);
-  border-bottom: 1px solid var(--a-line);
-  padding: clamp(16px, 1.8vw, 24px);
-  display: flex; justify-content: center;
+  border: 1px solid var(--a-line);
+  padding: 10px;
+  display: flex; align-items: center; justify-content: center;
 }
-.ast-screen { width: 100%; max-width: 200px; height: auto; display: block; }
+.ast-screen { width: 100%; height: auto; display: block; }
 .ast-screen-body { fill: none; stroke: var(--a-line-strong); stroke-width: 1.1; }
 .ast-screen-foot { fill: var(--a-line-strong); }
 .ast-lit { fill: var(--a-braino); }
 .ast-lit-soft { fill: var(--a-braino); opacity: .16; }
 .ast-lit-ink { fill: var(--a-ink-faint); }
 
-.ast-cell-body { padding: clamp(18px, 2vw, 26px); display: flex; flex-direction: column; gap: 10px; flex: 1; }
-.ast-cell-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.ast-cell h3 {
-  margin: 0;
-  font-family: var(--a-display);
-  font-size: clamp(21px, 2vw, 27px); font-weight: 400; letter-spacing: -0.022em;
+/* Below the split point the halves become two sections, in order. */
+@media (max-width: 900px) {
+  .ast-split { grid-template-columns: 1fr; }
+  .ast-half-product { border-right: 0; border-bottom: 1px solid var(--a-line-strong); }
 }
-.ast-line { margin: 0; max-width: 42ch; font-size: 14px; line-height: 1.56; color: var(--a-ink); }
-/* What it cannot do, set apart so it cannot be skimmed as a feature. */
-.ast-honest {
-  margin: 2px 0 0;
-  border-left: 2px solid var(--a-line-strong);
-  padding: 2px 0 2px 12px;
-  font-size: 12.5px; line-height: 1.55; color: var(--a-ink-faint);
+@media (max-width: 520px) {
+  .ast-minilist li { grid-template-columns: 1fr; }
+  .ast-minicard-art { order: -1; max-width: 200px; }
 }
-.ast-how {
-  margin: auto 0 0; padding-top: 14px;
-  border-top: 1px solid var(--a-line);
-  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-}
-.ast-how span {
-  font-size: 10.5px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
-  color: var(--a-ink-faint);
-}
-.ast-how code {
-  font-family: ui-monospace, "SF Mono", Menlo, monospace;
-  font-size: 12.5px; color: var(--a-ink);
-  background: var(--a-bg); border: 1px solid var(--a-line);
-  padding: 3px 8px;
-}
-
-/* ---- turning them on ----------------------------------------------------- */
-.ast-setup { padding-bottom: clamp(34px, 4vw, 60px); }
-.ast-setup-grid {
-  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
-  gap: clamp(20px, 3vw, 50px);
-  border-top: 1px solid var(--a-line-strong);
-  padding-top: clamp(20px, 2.4vw, 32px);
-}
-.ast-setup h2 {
-  margin: 0 0 10px;
-  font-family: var(--a-display);
-  font-size: clamp(22px, 2.4vw, 30px); font-weight: 400; letter-spacing: -0.022em;
-}
-.ast-setup > div > div > p { margin: 0; max-width: 40ch; font-size: 13.5px; line-height: 1.6; color: var(--a-ink-soft); }
-.ast-setup ul { margin: 0; padding: 0; list-style: none; display: grid; }
-.ast-setup li {
-  display: flex; flex-direction: column; gap: 4px;
-  padding: 14px 0; border-bottom: 1px solid var(--a-line);
-}
-.ast-setup li:first-child { border-top: 1px solid var(--a-line); }
-.ast-setup li strong { font-size: 14px; font-weight: 600; letter-spacing: -0.012em; }
-.ast-setup li span { font-size: 13px; line-height: 1.55; color: var(--a-ink-soft); }
-.ast-setup li a { color: var(--a-ink); text-decoration: underline; text-underline-offset: 3px; }
-@media (max-width: 760px) { .ast-setup-grid { grid-template-columns: 1fr; } }
 
 /* ---- the footing --------------------------------------------------------- */
 .ast-note { border-top: 1px solid var(--a-line); padding: clamp(26px, 3.2vw, 46px) 0 clamp(40px, 5vw, 74px); }
