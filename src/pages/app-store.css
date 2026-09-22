@@ -64,8 +64,8 @@
    things are, only about how much room each gets. */
 .ast-tab {
   appearance: none; background: transparent; border: 0; font: inherit;
-  padding: clamp(18px, 2.2vw, 30px) 0;
-  display: flex; flex-direction: column; align-items: flex-start; gap: 6px;
+  padding: clamp(18px, 2.2vw, 28px) 0;
+  display: flex; align-items: center;
   cursor: pointer; text-align: left;
   color: var(--a-ink-faint);
   box-shadow: inset 0 -2px 0 0 transparent;
@@ -78,8 +78,18 @@
   font-size: clamp(24px, 2.6vw, 36px); letter-spacing: -0.026em; color: inherit;
   line-height: 1.05;
 }
-.ast-tab-sub { font-size: 13px; line-height: 1.5; color: var(--a-ink-faint); }
-@media (max-width: 620px) { .ast-tab-sub { display: none; } }
+
+/* The sentence that used to sit under each tab now heads the section it
+   belongs to, where it has room to be read rather than being a caption on a
+   control. */
+.ast-subhead {
+  margin: 0; max-width: 62ch;
+  padding: clamp(26px, 3.2vw, 46px) 0 clamp(18px, 2.2vw, 30px);
+  font-size: clamp(15px, 1.4vw, 18px); line-height: 1.5;
+  letter-spacing: -0.01em; color: var(--a-ink-soft);
+}
+
+.ast-panel-wrap { padding-bottom: clamp(40px, 5.4vw, 90px); }
 
 /* The panel is keyed on the tab, so this runs again on every switch. */
 .ast-panel { animation: astPanelIn .46s cubic-bezier(.2, .9, .3, 1) both; }
@@ -90,8 +100,8 @@
 
 /* ---- the product, across the whole width -------------------------------- */
 .ast-wide {
-  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
-  border-bottom: 1px solid var(--a-line-strong);
+  display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  border: 1px solid var(--a-line-strong);
   background: var(--a-surface);
   text-decoration: none; color: inherit;
 }
@@ -105,7 +115,7 @@
     color-mix(in srgb, var(--a-braino) 20%, var(--a-bg)) 62%,
     color-mix(in srgb, var(--a-braino) 31%, var(--a-bg)) 100%);
   border-right: 1px solid var(--a-line);
-  padding: clamp(48px, 7vw, 124px) clamp(24px, 4vw, 72px);
+  padding: clamp(36px, 4.6vw, 76px) clamp(22px, 3vw, 48px);
   display: flex; align-items: center; justify-content: center;
 }
 .ast-wide-art::before {
@@ -113,7 +123,7 @@
   background: radial-gradient(ellipse 50% 44% at 50% 46%, rgba(255, 252, 248, .88), transparent 70%);
 }
 .ast-wide-art img {
-  width: clamp(130px, 19vw, 300px); height: auto; display: block;
+  width: clamp(112px, 14vw, 208px); height: auto; display: block;
   filter: drop-shadow(0 26px 30px rgba(120, 52, 42, .3));
   animation: astFloat 6.5s ease-in-out infinite;
   transition: transform .55s cubic-bezier(.2, .9, .3, 1);
@@ -125,13 +135,13 @@
 .ast-wide:hover .ast-wide-art img { transform: translateY(-14px) scale(1.03); }
 
 .ast-wide-body {
-  padding: clamp(32px, 4.4vw, 84px) clamp(24px, 4vw, 80px);
-  display: flex; flex-direction: column; gap: 14px; justify-content: center;
+  padding: clamp(28px, 3.4vw, 56px) clamp(24px, 3.2vw, 52px);
+  display: flex; flex-direction: column; gap: 12px; justify-content: center;
 }
 .ast-wide-body h3 {
   margin: 0;
   font-family: var(--a-display);
-  font-size: clamp(44px, 6vw, 92px); font-weight: 400; letter-spacing: -0.034em; line-height: .96;
+  font-size: clamp(38px, 4.4vw, 68px); font-weight: 400; letter-spacing: -0.032em; line-height: .98;
 }
 .ast-wide-foot {
   margin-top: clamp(14px, 2vw, 26px);
@@ -147,7 +157,7 @@
   font-size: 10.5px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase;
   color: var(--a-braino);
 }
-.ast-feat-line { margin: 0; max-width: 46ch; font-size: clamp(15px, 1.4vw, 19px); line-height: 1.55; color: var(--a-ink-soft); }
+.ast-feat-line { margin: 0; max-width: 46ch; font-size: clamp(14.5px, 1.25vw, 17px); line-height: 1.55; color: var(--a-ink-soft); }
 .ast-feat-models { margin: 4px 0 0; display: flex; gap: 8px; flex-wrap: wrap; }
 .ast-feat-models span {
   font-size: 10.5px; font-weight: 600; letter-spacing: .09em; text-transform: uppercase;
@@ -171,7 +181,7 @@
 /* ---- the mini apps ------------------------------------------------------- */
 .ast-minigrid {
   display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
-  border-bottom: 1px solid var(--a-line-strong);
+  border: 1px solid var(--a-line-strong);
   background: var(--a-surface);
 }
 .ast-minicard { display: flex; flex-direction: column; min-width: 0; border-right: 1px solid var(--a-line); }
@@ -181,7 +191,7 @@
 .ast-minicard-art {
   background: var(--a-bg);
   border-bottom: 1px solid var(--a-line);
-  padding: clamp(24px, 3vw, 52px) clamp(20px, 2.4vw, 44px);
+  padding: clamp(20px, 2.4vw, 36px) clamp(18px, 2vw, 30px);
   display: flex; align-items: center; justify-content: center;
 }
 .ast-minicard-art .ast-shot {
@@ -198,13 +208,13 @@
 
 .ast-minicard-body {
   flex: 1;
-  padding: clamp(22px, 2.6vw, 40px) clamp(20px, 2.4vw, 40px);
-  display: flex; flex-direction: column; gap: 9px;
+  padding: clamp(20px, 2.2vw, 30px) clamp(18px, 2vw, 28px);
+  display: flex; flex-direction: column; gap: 8px;
 }
 .ast-minicard-body h3 {
   margin: 0;
   font-family: var(--a-display);
-  font-size: clamp(24px, 2.4vw, 34px); font-weight: 400; letter-spacing: -0.026em;
+  font-size: clamp(21px, 2vw, 27px); font-weight: 400; letter-spacing: -0.024em;
 }
 .ast-minicard-line { margin: 0; max-width: 40ch; font-size: 14px; line-height: 1.56; color: var(--a-ink-soft); }
 .ast-minicard-meta {

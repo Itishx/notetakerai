@@ -249,7 +249,6 @@ export default function AppStore() {
               onClick={() => setTab("products")}
             >
               <span className="ast-tab-name">Affective products</span>
-              <span className="ast-tab-sub">Something you live in. There is one so far.</span>
             </button>
             <button
               type="button"
@@ -261,7 +260,6 @@ export default function AppStore() {
               onClick={() => setTab("mini")}
             >
               <span className="ast-tab-name">Mini apps</span>
-              <span className="ast-tab-sub">One small thing each. {MINI.length} of them.</span>
             </button>
           </div>
         </div>
@@ -278,7 +276,16 @@ export default function AppStore() {
           id={tab === "products" ? "panel-products" : "panel-mini"}
           aria-labelledby={tab === "products" ? "tab-products" : "tab-mini"}
         >
+          <div className="aff-wrap">
+            <p className="ast-subhead">
+              {tab === "products"
+                ? "Something you live in. There is one so far."
+                : `One small thing each. ${MINI.length} of them, and none needs Braino to run.`}
+            </p>
+          </div>
+
           {tab === "products" ? (
+            <div className="aff-wrap">
             <Link to="/braino" className="ast-wide">
               <div className="ast-wide-art">
                 <img src="/braino-standing.svg" alt="" width={64} height={78} aria-hidden="true" />
@@ -304,7 +311,9 @@ export default function AppStore() {
                 </div>
               </div>
             </Link>
+            </div>
           ) : (
+            <div className="aff-wrap">
             <div className="ast-minigrid">
               {MINI.map((a) => (
                 <article className="ast-minicard" key={a.name}>
@@ -331,6 +340,7 @@ export default function AppStore() {
                   </div>
                 </article>
               ))}
+            </div>
             </div>
           )}
         </div>
