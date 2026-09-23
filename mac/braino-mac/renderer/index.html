@@ -496,24 +496,25 @@
           <div id="walker-flip"></div>
         </div>
       </section>
-      <!-- Perched. The third thing he can be doing, beside walking the screen
-           and staying where he was dropped: half of him parked against an edge,
-           out of the way, still his whole self when you call him.
+      <!-- The edge island.
 
-           One element, four anchors. The rotation is the whole idea: he is
-           turned so that his own "down" points into the screen, whichever edge
-           he is against, which is why the same drawing reads as leaning in from
-           the left, the right, the floor or out from under the notch. His
-           pupils then only ever need to look down in his own frame to be
-           looking at the screen in yours.
+           Reaching him from any edge of the screen, in the shape he already
+           has: the notch's own housing, docked to a side instead of the top.
+           His eyes live inside the black exactly as they do up there, so
+           nothing is cropped and nothing is turned into a sticker.
 
-           Inert. Nothing sets .is-on; /notch-lab does, and the Mac mode that
-           will is walkArea.mode === "perch". -->
-      <div class="bm-perch" data-at="notch" aria-hidden="true">
-        <!-- Filled with the real mascot, the same window.brainoMac.getWalkerSvg()
-             the walker uses. Nothing is drawn here by hand: whatever character
-             is chosen, and whatever his artwork becomes, this is him. -->
-        <div class="bm-perch-art"></div>
+           The top edge is not here because the top edge is the notch. These
+           are the other three.
+
+           Inert until something sets .is-on. Nothing in this renderer does;
+           /notch-lab does, and the Mac mode that will is walkArea.mode of
+           "isle" with the edge beside it. -->
+      <div class="bm-isle" data-at="left" aria-hidden="true">
+        <div class="bm-isle-body">
+          <span class="bm-isle-eye"><i></i></span>
+          <span class="bm-isle-eye"><i></i></span>
+          <span class="bm-isle-more" aria-hidden="true"></span>
+        </div>
       </div>
 
       <section id="braino-customizer" aria-hidden="true">

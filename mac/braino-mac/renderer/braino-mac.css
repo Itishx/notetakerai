@@ -6109,98 +6109,125 @@ body {
 #notch-face.nf-hud-on.nf-hud-read .nf-hud-sheet { opacity: 1; transform: none; }
 
 /* ============================================================================
-   Perched.
+   The edge island.
 
-   The third thing he can be doing. Walking the screen and staying where he was
-   dropped are the two we have; this is half of him parked against an edge,
-   out of the way, and still entirely himself when you call him.
+   Reaching him from any edge, in the shape he already has. The notch is a
+   black housing with his eyes in it; this is the same housing docked to a
+   side, so the language does not change when the position does. Nothing is
+   cropped and nothing is rotated into a sticker: the island turns as a whole,
+   the way a panel hinges, and his eyes turn with it.
 
-   The rotation is the design, and it runs the other way to the obvious one.
-   His chin sits on the edge and his crown points into the screen, the way you
-   rest your chin on a ledge to look over it. So his own "down" points OUT at
-   every anchor, and what shows is the face: everything below the chin is past
-   the edge and gone.
+   One convention runs through it, the same one the notch uses: the island's
+   flat edge is against the screen edge and its rounded end faces in. So its
+   own "down" is always the direction of the screen, which is where the eyes
+   look and where it grows when it opens.
 
-   That makes the eyes trivial. The screen is always in the direction of his
-   crown, so his pupils only ever look up in his own frame, and they are
-   looking at you from whichever edge he is on.
+   The top edge is absent on purpose. The top edge is the notch.
 
    Inert. Nothing in this renderer sets .is-on; /notch-lab does, and the Mac
-   mode that will is walkArea.mode === "perch".
+   mode that will is walkArea.mode of "isle" with the edge beside it.
    ========================================================================== */
-.bm-perch {
+.bm-isle {
   position: fixed;
-  /* Under the notch face, which is 57, so the one hanging from the notch is
-     covered by the housing rather than clipped by a box. */
+  width: 0;
+  height: 0;
   z-index: 56;
-  width: 104px;
-  height: 104px;
   pointer-events: none;
-  opacity: 0;
-  transition: opacity 260ms ease, transform 620ms cubic-bezier(.22, 1, .36, 1);
-  /* Half of him. The container is the edge; the rest of him is past it. */
-  overflow: hidden;
 }
-.bm-perch.is-on { opacity: 1; pointer-events: auto; }
+.bm-isle-body {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 78px;
+  height: 26px;
+  margin-left: -39px;
+  margin-top: -13px;
+  /* Turned about its own centre, then pushed in by half its depth, which puts
+     its flat edge exactly on the screen edge at every anchor. */
+  transform: rotate(var(--isle-rot, 0deg)) translateY(13px) scale(.86);
+  transform-origin: 50% 50%;
+  background: #000;
+  border-radius: 0 0 13px 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  opacity: 0;
+  pointer-events: auto;
+  transition:
+    opacity 220ms ease,
+    transform 520ms cubic-bezier(.22, 1, .36, 1),
+    width 520ms cubic-bezier(.22, 1, .36, 1),
+    height 520ms cubic-bezier(.22, 1, .36, 1);
+}
+.bm-isle.is-on .bm-isle-body {
+  opacity: 1;
+  transform: rotate(var(--isle-rot, 0deg)) translateY(13px) scale(1);
+}
 
-/* Centred in its box, then turned, then pushed straight out through the edge.
-   Because the turn already points his down into the screen, "out" is simply
-   positive in his own frame at every anchor, and one number moves him at all
-   four. It is pushed past the chin on purpose: less than half his face shows,
-   so he reads as looking over the edge rather than sitting on it. Pixels rather than a percentage: the box is square and he is not, so
-   one percentage moved him a different distance on the vertical edges than on
-   the horizontal ones. */
-.bm-perch-art {
+/* His eyes, the notch's own: white with a dark pupil, and a highlight that
+   keeps them from reading as holes. */
+.bm-isle-eye {
+  position: relative;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: #fff;
+  flex: none;
+}
+.bm-isle-eye i {
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 100%;
-  transform: translate(-50%, -50%) rotate(var(--perch-rot, 0deg)) translateY(var(--perch-out, 45px));
+  width: 6.6px;
+  height: 6.6px;
+  border-radius: 50%;
+  background: #1b1713;
+  /* Down in the island's frame is into the screen at every anchor, so one
+     offset points both eyes at you from any edge. */
+  transform: translate(-50%, -50%) translateY(1.6px);
 }
-.bm-perch-art svg { width: 100%; height: auto; display: block; overflow: visible; }
-/* Looking up in his own frame is looking into the screen in yours, at every
-   anchor, because of the turn above. No per-edge eye logic exists or is
-   needed. */
-.bm-perch-art [id="__sbwk_pupil_l"],
-.bm-perch-art [id="__sbwk_pupil_r"] { transform: translateY(-3px); }
-/* He is a face here. Arms and legs are not past the edge by geometry, they
-   are simply not part of this: a head resting on a ledge does not have hands
-   on either side of it. */
-.bm-perch-art [id="__sbwk_ll__"],
-.bm-perch-art [id="__sbwk_rl__"],
-.bm-perch-art [id="__sbwk_la__"],
-.bm-perch-art [id="__sbwk_ra__"],
-.bm-perch-art [id="__sbwk_la_bg__"],
-.bm-perch-art [id="__sbwk_ra_bg__"] { opacity: 0; }
+.bm-isle-eye i::after {
+  content: "";
+  position: absolute;
+  left: 58%;
+  top: 14%;
+  width: 2.4px;
+  height: 2.4px;
+  border-radius: 50%;
+  background: #fff;
+}
+/* The handle: a hairline across the rounded end, so it reads as something
+   that pulls rather than something that watches. */
+.bm-isle-more {
+  position: absolute;
+  left: 50%;
+  bottom: 3.5px;
+  width: 20px;
+  height: 2px;
+  margin-left: -10px;
+  border-radius: 2px;
+  background: rgba(238, 234, 226, .3);
+}
 
-/* The four anchors. Each one is an edge plus the turn that makes him face in. */
-/* Each anchor turns him so his chin is on that edge. Hanging from the notch is
-   the one not clipped by its own box: the housing is opaque and sits above
-   him, so he comes out from behind it and the black does the cutting. */
-.bm-perch[data-at="notch"] {
-  top: 0; left: 50%; margin-left: -52px;
-  --perch-rot: 180deg;
-  /* The only anchor whose cut is not the screen edge: the housing crops him,
-     and it hangs 55px down. That depth is fixed, so it does not shrink when he
-     does: made smaller at the same offset he disappears behind the black
-     entirely, and has to be let down further than the others rather than
-     less. */
-  --perch-out: -15px;
-  overflow: visible;
+/* Pulled out, it is a panel, still hinged on the same edge. */
+.bm-isle.is-open .bm-isle-body {
+  width: 260px;
+  height: 108px;
+  margin-left: -130px;
+  margin-top: -54px;
+  border-radius: 0 0 22px 22px;
+  transform: rotate(var(--isle-rot, 0deg)) translateY(54px) scale(1);
+  gap: 14px;
 }
-.bm-perch[data-at="bottom"] { bottom: 0; left: 50%; margin-left: -52px; --perch-rot: 0deg; --perch-out: 32px; }
-/* The side anchors need a shorter push for the same result. Turned a quarter
-   round, he is wider than his own box, so the box is already taking some off
-   him before the push does anything. */
-.bm-perch[data-at="left"]   { left: 0; top: 50%; margin-top: -52px; --perch-rot: 90deg; --perch-out: 27px; }
-.bm-perch[data-at="right"]  { right: 0; top: 50%; margin-top: -52px; --perch-rot: -90deg; --perch-out: 27px; }
+.bm-isle.is-open .bm-isle-eye { width: 17px; height: 17px; }
+.bm-isle.is-open .bm-isle-eye i { width: 8.4px; height: 8.4px; }
 
-/* He breathes where he sits, so a parked character never reads as a decal. */
-.bm-perch.is-on .bm-perch-art { animation: bmPerchBreathe 5.2s ease-in-out infinite; }
-@keyframes bmPerchBreathe {
-  0%, 100% { transform: translate(-50%, -50%) rotate(var(--perch-rot, 0deg)) translateY(var(--perch-out, 45px)) scale(1); }
-  50%      { transform: translate(-50%, -50%) rotate(var(--perch-rot, 0deg)) translateY(calc(var(--perch-out, 45px) + 2px)) scale(1.025); }
-}
+/* Three anchors, one turn each. The rounded end always faces the screen. */
+.bm-isle[data-at="bottom"] { bottom: 0; left: 50%; --isle-rot: 180deg; }
+.bm-isle[data-at="left"]   { left: 0; top: 50%; --isle-rot: -90deg; }
+.bm-isle[data-at="right"]  { right: 0; top: 50%; --isle-rot: 90deg; }
+
 @media (prefers-reduced-motion: reduce) {
-  .bm-perch.is-on .bm-perch-art { animation: none; }
+  .bm-isle-body { transition: opacity 120ms ease; }
 }

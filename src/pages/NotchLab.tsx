@@ -33,11 +33,11 @@ type State = {
   /* The glance bar. Sample values only: nothing reads the machine yet, and the
      point of showing it here is to settle the design before anything does. */
   hud?: { temp: string; wifi: "0" | "1" | "2" | "3"; busy?: boolean; read: string };
-  /* Shows him parked at all four edges at once. */
-  perch?: boolean;
+  /* The edge islands: true shows them docked, "open" shows one pulled out. */
+  perch?: boolean | "open";
 };
 
-const PERCH_MARKUP = "      <div class=\"bm-perch\" data-at=\"notch\" aria-hidden=\"true\">\n        <!-- Filled with the real mascot, the same window.brainoMac.getWalkerSvg()\n             the walker uses. Nothing is drawn here by hand: whatever character\n             is chosen, and whatever his artwork becomes, this is him. -->\n        <div class=\"bm-perch-art\"></div>\n      </div>\n";
+const ISLE_MARKUP = "      <div class=\"bm-isle\" data-at=\"left\" aria-hidden=\"true\">\n        <div class=\"bm-isle-body\">\n          <span class=\"bm-isle-eye\"><i></i></span>\n          <span class=\"bm-isle-eye\"><i></i></span>\n          <span class=\"bm-isle-more\" aria-hidden=\"true\"></span>\n        </div>\n      </div>\n";
 
 const Q_DOT = '<i class="nf-q-dot"></i>';
 
@@ -130,9 +130,12 @@ const STATES: State[] = [
   /* Perched: the third thing he can be doing, beside walking the screen and
      staying where he was dropped. All four anchors at once, because the only
      question here is whether the turn reads right at each edge. */
-  { id: "perch", label: "16 \u00b7 Perched, all four edges",
-    hint: "Half of him against an edge, out of the way, still himself when you call him. He is turned so his own down points into the screen, which is why his eyes are looking at you from every side.",
-    classes: "on awake", perch: true }
+  { id: "perch", label: "16 \u00b7 Edge islands",
+    hint: "The notch's own housing, docked to the other three edges. His eyes live in the black exactly as they do up top, so nothing is cropped and nothing is turned into a sticker.",
+    classes: "on awake", perch: true },
+  { id: "perch-open", label: "16b \u00b7 An island, pulled out",
+    hint: "Pulled, it becomes a panel, still hinged on the same edge it was docked to.",
+    classes: "on awake", perch: "open" }
 ];
 
 export default function NotchLab() {
@@ -164,10 +167,10 @@ export default function NotchLab() {
       /* The strip is the whole menu bar. On the Mac that is 100vw; here the
          stage is the screen, so it spans the stage instead. */
       #notch-face.nf-hud-on { width: 100%; --nf-strip-w: 100%; }
-      /* The perches are position: fixed on the Mac because the overlay window
+      /* The islands are position: fixed on the Mac because the overlay window
          is the screen. Here the stage is the screen. */
       .nl-perches { position: absolute; inset: 0; pointer-events: none; }
-      .nl-perches .bm-perch { position: absolute; }
+      .nl-perches .bm-isle { position: absolute; }
     `;
     const face = document.createElement("div");
     face.id = "notch-face";
@@ -178,21 +181,10 @@ export default function NotchLab() {
        lab pins them to it. */
     const perches = document.createElement("div");
     perches.className = "nl-perches";
-    perches.innerHTML = ["notch", "bottom", "left", "right"]
-      .map((at) => PERCH_MARKUP.replace('data-at="notch"', `data-at="${at}"`))
+    /* Three, because the fourth edge is the notch itself. */
+    perches.innerHTML = ["bottom", "left", "right"]
+      .map((at) => ISLE_MARKUP.replace('data-at="left"', `data-at="${at}"`))
       .join("");
-    /* On the Mac these are filled with window.brainoMac.getWalkerSvg(). That
-       is this same file, so the lab fetches it rather than keeping a second
-       copy of the mascot that could drift from his real one. */
-    fetch("/braino-standing.svg")
-      .then((r) => (r.ok ? r.text() : ""))
-      .then((svg) => {
-        if (!svg) return;
-        perches.querySelectorAll(".bm-perch-art").forEach((slot) => {
-          slot.innerHTML = svg;
-        });
-      })
-      .catch(() => {});
     root.append(style, place, face, perches);
     rootRef.current = root;
     setTick((n) => n + 1);
@@ -224,7 +216,10 @@ export default function NotchLab() {
     nf.setAttribute("class", state.classes);
     const cap = state.caption;
     const countdownText = cap?.countdown ? COUNTDOWN[tick % COUNTDOWN.length] : "";
-    root?.querySelectorAll(".bm-perch").forEach((el) => el.classList.toggle("is-on", Boolean(state.perch)));
+    root?.querySelectorAll(".bm-isle").forEach((el) => {
+      el.classList.toggle("is-on", Boolean(state.perch));
+      el.classList.toggle("is-open", state.perch === "open");
+    });
     const hud = nf.querySelector(".nf-hud");
     if (hud) {
       hud.setAttribute("data-wifi", state.hud?.wifi ?? "3");
