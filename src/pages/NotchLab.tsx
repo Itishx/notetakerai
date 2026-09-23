@@ -34,8 +34,10 @@ type State = {
      point of showing it here is to settle the design before anything does. */
   hud?: { temp: string; wifi: "0" | "1" | "2" | "3"; busy?: boolean; read: string };
   /* The edge islands: true shows them docked, "open" shows one pulled out. */
-  perch?: boolean | "open";
+  perch?: boolean | "open" | "dock";
 };
+
+const DOCK_MARKUP = "      <div class=\"bm-dock\" data-at=\"bottom\" aria-hidden=\"true\">\n        <div class=\"bm-dock-art\"></div>\n      </div>\n";
 
 const ISLE_MARKUP = "      <div class=\"bm-isle\" data-at=\"left\" aria-hidden=\"true\">\n        <div class=\"bm-isle-body\">\n          <span class=\"bm-isle-eye\"><i></i></span>\n          <span class=\"bm-isle-eye\"><i></i></span>\n          <span class=\"bm-isle-more\" aria-hidden=\"true\"></span>\n        </div>\n      </div>\n";
 
@@ -130,12 +132,15 @@ const STATES: State[] = [
   /* Perched: the third thing he can be doing, beside walking the screen and
      staying where he was dropped. All four anchors at once, because the only
      question here is whether the turn reads right at each edge. */
-  { id: "perch", label: "16 \u00b7 Edge islands",
-    hint: "The notch's own housing, docked to the other three edges. His eyes live in the black exactly as they do up top, so nothing is cropped and nothing is turned into a sticker.",
-    classes: "on awake", perch: true },
+  { id: "perch", label: "16 \u00b7 Edge Braino",
+    hint: "Him, small, docked to the other three edges. Standing on the bottom line; upright and leaning in past the side ones, which is what the countdown widget already does.",
+    classes: "on awake", perch: "dock" },
   { id: "perch-open", label: "16b \u00b7 An island, pulled out",
     hint: "Pulled, it becomes a panel, still hinged on the same edge it was docked to.",
-    classes: "on awake", perch: "open" }
+    classes: "on awake", perch: "open" },
+  { id: "perch-isle", label: "16c \u00b7 The housing, for comparison",
+    hint: "The abstract version: his black island at the same size and the same three places. Kept only so the two can be looked at against each other.",
+    classes: "on awake", perch: true }
 ];
 
 export default function NotchLab() {
@@ -169,8 +174,10 @@ export default function NotchLab() {
       #notch-face.nf-hud-on { width: 100%; --nf-strip-w: 100%; }
       /* The islands are position: fixed on the Mac because the overlay window
          is the screen. Here the stage is the screen. */
-      .nl-perches { position: absolute; inset: 0; pointer-events: none; }
-      .nl-perches .bm-isle { position: absolute; }
+      /* The screen cuts him on the Mac; here the stage does. */
+      .nl-perches { position: absolute; inset: 0; pointer-events: none; overflow: hidden; border-radius: inherit; }
+      .nl-perches .bm-isle,
+      .nl-perches .bm-dock { position: absolute; }
     `;
     const face = document.createElement("div");
     face.id = "notch-face";
@@ -182,9 +189,25 @@ export default function NotchLab() {
     const perches = document.createElement("div");
     perches.className = "nl-perches";
     /* Three, because the fourth edge is the notch itself. */
-    perches.innerHTML = ["bottom", "left", "right"]
-      .map((at) => ISLE_MARKUP.replace('data-at="left"', `data-at="${at}"`))
-      .join("");
+    perches.innerHTML =
+      ["bottom", "left", "right"]
+        .map((at) => ISLE_MARKUP.replace('data-at="left"', `data-at="${at}"`))
+        .join("") +
+      ["bottom", "left", "right"]
+        .map((at) => DOCK_MARKUP.replace('data-at="bottom"', `data-at="${at}"`))
+        .join("");
+    /* The Mac fills this from window.brainoMac.getWalkerSvg(). That is this
+       same file, so the lab fetches it rather than keeping a second copy of
+       him that could drift from his real one. */
+    fetch("/braino-standing.svg")
+      .then((r) => (r.ok ? r.text() : ""))
+      .then((svg) => {
+        if (!svg) return;
+        perches.querySelectorAll(".bm-dock-art").forEach((slot) => {
+          slot.innerHTML = svg;
+        });
+      })
+      .catch(() => {});
     root.append(style, place, face, perches);
     rootRef.current = root;
     setTick((n) => n + 1);
@@ -216,8 +239,9 @@ export default function NotchLab() {
     nf.setAttribute("class", state.classes);
     const cap = state.caption;
     const countdownText = cap?.countdown ? COUNTDOWN[tick % COUNTDOWN.length] : "";
+    root?.querySelectorAll(".bm-dock").forEach((el) => el.classList.toggle("is-on", state.perch === "dock"));
     root?.querySelectorAll(".bm-isle").forEach((el) => {
-      el.classList.toggle("is-on", Boolean(state.perch));
+      el.classList.toggle("is-on", state.perch === true || state.perch === "open");
       el.classList.toggle("is-open", state.perch === "open");
     });
     const hud = nf.querySelector(".nf-hud");

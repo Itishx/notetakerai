@@ -6238,3 +6238,63 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .bm-isle-body { transition: opacity 120ms ease; }
 }
+
+/* ============================================================================
+   Edge Braino.
+
+   Him, whole, small, docked to an edge. Arms and legs, nothing cropped into a
+   shape he does not have: the walker's own artwork held in one place instead
+   of walking the screen.
+
+   Two postures, because a character with legs cannot stand on a wall. On the
+   bottom he stands on the line, the way the renderer already learned to put
+   him on the Dock, where an old 42px lift made him visibly float above it. On
+   the sides he stays upright and leans in past the edge, facing the screen,
+   which is the same thing the countdown widget does at the right edge.
+
+   Inert. Nothing in this renderer sets .is-on; /notch-lab does.
+   ========================================================================== */
+.bm-dock {
+  position: fixed;
+  width: 0;
+  height: 0;
+  z-index: 56;
+  pointer-events: none;
+}
+.bm-dock-art {
+  position: absolute;
+  width: 52px;
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity 240ms ease, transform 520ms cubic-bezier(.22, 1, .36, 1);
+  pointer-events: auto;
+}
+.bm-dock.is-on .bm-dock-art { opacity: 1; transform: none; }
+.bm-dock-art svg { width: 100%; height: auto; display: block; overflow: visible; }
+
+/* Out towards the right, where the Dock's own end is and where your hand
+   already goes, rather than at the dead middle of the edge. */
+.bm-dock[data-at="bottom"] { bottom: 0; left: 72%; }
+.bm-dock[data-at="left"]   { left: 0; top: 64%; }
+.bm-dock[data-at="right"]  { right: 0; top: 64%; }
+
+/* Standing. His art carries empty space under his feet, so the box sits a
+   little below the line to put the character himself on it. */
+.bm-dock[data-at="bottom"] .bm-dock-art { left: -26px; bottom: -8px; }
+.bm-dock.is-on[data-at="bottom"] .bm-dock-art { animation: bmDockBreathe 5.4s ease-in-out infinite; }
+
+/* Leaning in. Upright, facing the screen, and a little under half of him past
+   the edge: the screen does the cutting, the way the window's own bounds do
+   on the Mac. */
+.bm-dock[data-at="left"] .bm-dock-art  { left: -24px; bottom: -34px; }
+.bm-dock[data-at="right"] .bm-dock-art { left: -28px; bottom: -34px; transform: scaleX(-1); }
+.bm-dock.is-on[data-at="right"] .bm-dock-art { transform: scaleX(-1); }
+
+@keyframes bmDockBreathe {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50%      { transform: translateY(-2px) scale(1.02); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bm-dock.is-on[data-at="bottom"] .bm-dock-art { animation: none; }
+  .bm-dock-art { transition: opacity 120ms ease; }
+}
