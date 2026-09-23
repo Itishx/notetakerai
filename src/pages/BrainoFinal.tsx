@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import BrainoFooterGame from "@/components/BrainoFooterGame";
+import { AffThemeToggle, useAffTheme } from "@/components/AffTheme";
 /* The jobs are written here rather than read from the site's engine data,
    because this page says a different thing: each one carries what it saves
    you, and the Foundry engines carry the deck's own bullets. The engine files
@@ -64,6 +65,8 @@ type Model = {
   cta: { label: string; to: string };
   state: string;
   accent: string;
+  /* The same accent with enough light in it to read on a black ground. */
+  accentDark: string;
 };
 
 const MODELS: Model[] = [
@@ -161,6 +164,7 @@ const MODELS: Model[] = [
     cta: { label: "Ask for a seat", to: "/waitlist" },
     state: "Runs on AffectiveOS · Private beta",
     accent: "#d9645b",
+    accentDark: "#e8786e",
   },
   {
     key: "foundry",
@@ -268,6 +272,7 @@ const MODELS: Model[] = [
     cta: { label: "Talk to us about Foundry", to: "/contact" },
     state: "Runs on AffectiveOS \u00b7 For founders",
     accent: "#b8842a",
+    accentDark: "#d3a350",
   },
   {
     key: "mesa",
@@ -321,6 +326,7 @@ const MODELS: Model[] = [
     cta: { label: "Bring him to your institution", to: "/contact" },
     state: "Runs on AffectiveOS \u00b7 Live with Mesa",
     accent: "#2f6fed",
+    accentDark: "#5b8ff5",
   },
 ];
 
@@ -480,6 +486,7 @@ function useReveal() {
 
 export default function BrainoFinal() {
   const root = useReveal();
+  const { theme, toggle } = useAffTheme();
   useGrow();
   /* Which of the three is open. A number on the page: there is nothing to
      store and nothing to look up. The url can name one, so /foundry can send
@@ -512,7 +519,12 @@ export default function BrainoFinal() {
   }, []);
 
   return (
-    <div className="bf" ref={root} style={{ ["--acc" as string]: model.accent }}>
+    <div
+      className="bf"
+      ref={root}
+      data-theme={theme}
+      style={{ ["--acc" as string]: theme === "dark" ? model.accentDark : model.accent }}
+    >
       <nav className="bf-nav">
         <div className="bf-nav-in">
           <Link to="/braino" className="bf-logo">
@@ -524,6 +536,7 @@ export default function BrainoFinal() {
             <a href="#day">A normal day</a>
             <a href="#faq">Questions</a>
             <Link to="/waitlist">Get him</Link>
+            <AffThemeToggle theme={theme} onToggle={toggle} />
           </div>
         </div>
       </nav>

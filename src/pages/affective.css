@@ -147,23 +147,7 @@
 }
 .aff-nav-go:hover { background: var(--a-ink); color: var(--a-bg) !important; border-color: var(--a-ink); }
 
-/* The light switch. A circle the size of the pill beside it, quiet until it is
-   hovered, because it is a preference and not an action the page wants. */
-.aff-theme {
-  appearance: none; background: transparent; cursor: pointer;
-  width: 30px; height: 30px; flex: none;
-  border: 1px solid var(--a-line-strong); border-radius: 50%;
-  color: var(--a-ink-soft);
-  display: inline-flex; align-items: center; justify-content: center;
-  transition: color .2s ease, border-color .2s ease, background .2s ease;
-}
-.aff-theme:hover { color: var(--a-ink); border-color: var(--a-ink); }
-.aff-theme:focus-visible { outline: 2px solid var(--a-braino); outline-offset: 2px; }
-.aff-theme svg { width: 15px; height: 15px; display: block; }
-.aff-theme-sr {
-  position: absolute; width: 1px; height: 1px; overflow: hidden;
-  clip-path: inset(50%); white-space: nowrap;
-}
+
 @media (max-width: 980px) {
   .aff-nav-links { gap: 18px; }
   .aff-nav-links a:not(:last-child):nth-child(n+4) { display: none; }

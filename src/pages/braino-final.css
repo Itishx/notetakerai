@@ -21,6 +21,11 @@
   --ink-faint: #918d80;
   --line: #dcd8cb;
   --line-strong: #c6c1b1;
+  /* Shadows are cast by one ink, given as channels so opacity stays tunable
+     and the dark theme can swap the ink without rewriting every shadow. */
+  --shade: 22, 21, 15;
+  /* "Running" green, which needs more light on a dark ground than on paper. */
+  --live: #4f7a4a;
   --maxw: 1240px;
   --gutter: clamp(20px, 5vw, 100px);
   --display: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
@@ -51,7 +56,7 @@
   font-size: 19px; font-weight: 600; letter-spacing: -0.03em;
 }
 .bf-logo img { width: auto; height: 30px; margin-bottom: -4px; }
-.bf-nav-links { margin-left: auto; display: flex; gap: 26px; }
+.bf-nav-links { margin-left: auto; display: flex; align-items: center; gap: clamp(14px, 1.8vw, 26px); }
 .bf-nav-links a {
   font-size: 12.5px; font-weight: 500; letter-spacing: -0.006em;
   color: var(--ink-soft); text-decoration: none;
@@ -212,7 +217,7 @@
   border: 1px solid var(--line-strong);
   background: var(--box);
   overflow: hidden;
-  box-shadow: 0 1px 0 rgba(22, 21, 15, .03), 0 18px 40px -28px rgba(22, 21, 15, .28);
+  box-shadow: 0 1px 0 rgba(var(--shade), .03), 0 18px 40px -28px rgba(var(--shade), .28);
 }
 .bf-cell {
   display: flex; flex-direction: column;
@@ -247,7 +252,7 @@
   display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
   border: 1px solid var(--line-strong);
   background: var(--box);
-  box-shadow: 0 1px 0 rgba(22, 21, 15, .03), 0 18px 40px -28px rgba(22, 21, 15, .28);
+  box-shadow: 0 1px 0 rgba(var(--shade), .03), 0 18px 40px -28px rgba(var(--shade), .28);
 }
 .bf-jobs-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .bf-job {
@@ -269,7 +274,7 @@
   font-size: 10px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
   padding: 3px 8px; border: 1px solid var(--line-strong); color: var(--ink-faint);
 }
-.bf-job-state.is-running { color: #4f7a4a; border-color: #4f7a4a; }
+.bf-job-state.is-running { color: var(--live); border-color: var(--live); }
 .bf-job-state.is-next { color: var(--acc, var(--ink)); border-color: var(--acc, var(--ink)); }
 .bf-job h3 {
   margin: 0;
@@ -515,4 +520,28 @@
 }
 @media (max-width: 900px) {
   .bf-film { width: 100%; border-left-width: 0; border-right-width: 0; }
+}
+
+/* ============================================================================
+   Black.
+
+   The same move as the company page: not an inversion, a second palette. The
+   ground keeps the brown that the paper had, hairlines stay hairlines instead
+   of turning into glows, and the accents lift only as much as a dark ground
+   costs them.
+
+   The film block is deliberately left alone. It is dark in both themes because
+   it is a video, and a video does not change colour with the room.
+   ========================================================================== */
+.bf[data-theme="dark"] {
+  --bg: #100f0c;
+  --surface: #17160f;
+  --box: #1b1a13;
+  --ink: #f6f3ea;
+  --ink-soft: rgba(246, 243, 234, .72);
+  --ink-faint: rgba(246, 243, 234, .48);
+  --line: rgba(246, 243, 234, .13);
+  --line-strong: rgba(246, 243, 234, .22);
+  --shade: 0, 0, 0;
+  --live: #7cc492;
 }
