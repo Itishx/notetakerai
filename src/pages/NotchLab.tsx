@@ -37,7 +37,7 @@ type State = {
   perch?: boolean;
 };
 
-const PERCH_MARKUP = "      <div class=\"bm-perch\" data-at=\"notch\" aria-hidden=\"true\">\n        <svg class=\"bm-perch-face\" viewBox=\"0 0 120 56\" preserveAspectRatio=\"xMidYMid meet\">\n          <ellipse class=\"bm-perch-ear\" cx=\"38\" cy=\"30\" rx=\"8\" ry=\"4.5\" />\n          <ellipse class=\"bm-perch-ear\" cx=\"82\" cy=\"30\" rx=\"8\" ry=\"4.5\" />\n          <rect class=\"bm-perch-head\" x=\"26\" y=\"0\" width=\"68\" height=\"52\" rx=\"26\" />\n          <g class=\"bm-perch-eyes\">\n            <circle class=\"bm-perch-white\" cx=\"49\" cy=\"22\" r=\"12\" />\n            <circle class=\"bm-perch-white\" cx=\"71\" cy=\"22\" r=\"12\" />\n            <circle class=\"bm-perch-pupil\" cx=\"49\" cy=\"22\" r=\"6.2\" />\n            <circle class=\"bm-perch-pupil\" cx=\"71\" cy=\"22\" r=\"6.2\" />\n            <circle class=\"bm-perch-glint\" cx=\"51.3\" cy=\"19.3\" r=\"2\" />\n            <circle class=\"bm-perch-glint\" cx=\"73.3\" cy=\"19.3\" r=\"2\" />\n          </g>\n          <path class=\"bm-perch-mouth\" d=\"M 52 41 Q 60 49 68 41\" />\n        </svg>\n      </div>\n";
+const PERCH_MARKUP = "      <div class=\"bm-perch\" data-at=\"notch\" aria-hidden=\"true\">\n        <!-- Filled with the real mascot, the same window.brainoMac.getWalkerSvg()\n             the walker uses. Nothing is drawn here by hand: whatever character\n             is chosen, and whatever his artwork becomes, this is him. -->\n        <div class=\"bm-perch-art\"></div>\n      </div>\n";
 
 const Q_DOT = '<i class="nf-q-dot"></i>';
 
@@ -181,6 +181,18 @@ export default function NotchLab() {
     perches.innerHTML = ["notch", "bottom", "left", "right"]
       .map((at) => PERCH_MARKUP.replace('data-at="notch"', `data-at="${at}"`))
       .join("");
+    /* On the Mac these are filled with window.brainoMac.getWalkerSvg(). That
+       is this same file, so the lab fetches it rather than keeping a second
+       copy of the mascot that could drift from his real one. */
+    fetch("/braino-standing.svg")
+      .then((r) => (r.ok ? r.text() : ""))
+      .then((svg) => {
+        if (!svg) return;
+        perches.querySelectorAll(".bm-perch-art").forEach((slot) => {
+          slot.innerHTML = svg;
+        });
+      })
+      .catch(() => {});
     root.append(style, place, face, perches);
     rootRef.current = root;
     setTick((n) => n + 1);

@@ -6115,11 +6115,15 @@ body {
    dropped are the two we have; this is half of him parked against an edge,
    out of the way, and still entirely himself when you call him.
 
-   The rotation is the design. He is turned so his own "down" points into the
-   screen whichever edge he is on, so one drawing reads as leaning in from the
-   left, the right, the floor, or out from under the notch. That also makes the
-   eyes trivial: his pupils only ever look down in his own frame, and they are
-   looking at the screen in yours.
+   The rotation is the design, and it runs the other way to the obvious one.
+   His chin sits on the edge and his crown points into the screen, the way you
+   rest your chin on a ledge to look over it. So his own "down" points OUT at
+   every anchor, and what shows is the face: everything below the chin is past
+   the edge and gone.
+
+   That makes the eyes trivial. The screen is always in the direction of his
+   crown, so his pupils only ever look up in his own frame, and they are
+   looking at you from whichever edge he is on.
 
    Inert. Nothing in this renderer sets .is-on; /notch-lab does, and the Mac
    mode that will is walkArea.mode === "perch".
@@ -6141,48 +6145,55 @@ body {
 
 /* Centred in its box, then turned, then pushed straight out through the edge.
    Because the turn already points his down into the screen, "out" is simply
-   negative in his own frame at every anchor, and one number moves him at all
-   four. A percentage was wrong here: the box is square and he is not, so the
-   same percentage pushed him a different distance depending on the edge. */
-.bm-perch-face {
+   positive in his own frame at every anchor, and one number moves him at all
+   four. Pixels rather than a percentage: the box is square and he is not, so
+   one percentage moved him a different distance on the vertical edges than on
+   the horizontal ones. */
+.bm-perch-art {
   position: absolute;
-  width: 100%;
-  height: auto;
   left: 50%;
   top: 50%;
-  transform: translate(-50%, -50%) rotate(var(--perch-rot, 0deg)) translateY(var(--perch-out, -66px));
+  width: 100%;
+  transform: translate(-50%, -50%) rotate(var(--perch-rot, 0deg)) translateY(var(--perch-out, 30px));
 }
-.bm-perch-head { fill: #e8786e; }
-.bm-perch-ear { fill: #e14a48; opacity: .32; }
-.bm-perch-white { fill: #fff; }
-.bm-perch-glint { fill: #fff; }
-.bm-perch-mouth { fill: none; stroke: #7e2a24; stroke-width: 2.6; stroke-linecap: round; }
-/* Looking down in his own frame is looking into the screen in yours, at every
-   anchor, because of the rotation above. */
-.bm-perch-pupil { fill: #1b1713; transform: translateY(2.6px); }
+.bm-perch-art svg { width: 100%; height: auto; display: block; overflow: visible; }
+/* Looking up in his own frame is looking into the screen in yours, at every
+   anchor, because of the turn above. No per-edge eye logic exists or is
+   needed. */
+.bm-perch-art [id="__sbwk_pupil_l"],
+.bm-perch-art [id="__sbwk_pupil_r"] { transform: translateY(-3px); }
+/* He is a face here. Arms and legs are not past the edge by geometry, they
+   are simply not part of this: a head resting on a ledge does not have hands
+   on either side of it. */
+.bm-perch-art [id="__sbwk_ll__"],
+.bm-perch-art [id="__sbwk_rl__"],
+.bm-perch-art [id="__sbwk_la__"],
+.bm-perch-art [id="__sbwk_ra__"],
+.bm-perch-art [id="__sbwk_la_bg__"],
+.bm-perch-art [id="__sbwk_ra_bg__"] { opacity: 0; }
 
 /* The four anchors. Each one is an edge plus the turn that makes him face in. */
-/* Hanging from the notch is the one that is not clipped by its own box: the
-   housing is opaque and sits above him, so he simply comes out from behind it
-   and the black does the cutting. */
+/* Each anchor turns him so his chin is on that edge. Hanging from the notch is
+   the one not clipped by its own box: the housing is opaque and sits above
+   him, so he comes out from behind it and the black does the cutting. */
 .bm-perch[data-at="notch"] {
   top: 0; left: 50%; margin-left: -84px;
-  --perch-rot: 0deg;
-  /* Pushed out only as far as the housing is deep: the black is what cuts him,
-     so anything further would just hide him behind it. */
-  --perch-out: -22px;
+  --perch-rot: 180deg;
+  /* The only anchor whose cut is not the screen edge: the housing is what
+     crops him, and it hangs 55px down, so his chin stops there instead. */
+  --perch-out: -26px;
   overflow: visible;
 }
-.bm-perch[data-at="bottom"] { bottom: 0; left: 50%; margin-left: -84px; --perch-rot: 180deg; }
-.bm-perch[data-at="left"]   { left: 0; top: 50%; margin-top: -84px; --perch-rot: -90deg; }
-.bm-perch[data-at="right"]  { right: 0; top: 50%; margin-top: -84px; --perch-rot: 90deg; }
+.bm-perch[data-at="bottom"] { bottom: 0; left: 50%; margin-left: -84px; --perch-rot: 0deg; }
+.bm-perch[data-at="left"]   { left: 0; top: 50%; margin-top: -84px; --perch-rot: 90deg; }
+.bm-perch[data-at="right"]  { right: 0; top: 50%; margin-top: -84px; --perch-rot: -90deg; }
 
 /* He breathes where he sits, so a parked character never reads as a decal. */
-.bm-perch.is-on .bm-perch-face { animation: bmPerchBreathe 5.2s ease-in-out infinite; }
+.bm-perch.is-on .bm-perch-art { animation: bmPerchBreathe 5.2s ease-in-out infinite; }
 @keyframes bmPerchBreathe {
-  0%, 100% { transform: translate(-50%, -50%) rotate(var(--perch-rot, 0deg)) translateY(var(--perch-out, -66px)) scale(1); }
-  50%      { transform: translate(-50%, -50%) rotate(var(--perch-rot, 0deg)) translateY(calc(var(--perch-out, -66px) + 3px)) scale(1.025); }
+  0%, 100% { transform: translate(-50%, -50%) rotate(var(--perch-rot, 0deg)) translateY(var(--perch-out, 30px)) scale(1); }
+  50%      { transform: translate(-50%, -50%) rotate(var(--perch-rot, 0deg)) translateY(calc(var(--perch-out, 30px) + 3px)) scale(1.025); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .bm-perch.is-on .bm-perch-face { animation: none; }
+  .bm-perch.is-on .bm-perch-art { animation: none; }
 }

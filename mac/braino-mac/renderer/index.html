@@ -510,20 +510,10 @@
            Inert. Nothing sets .is-on; /notch-lab does, and the Mac mode that
            will is walkArea.mode === "perch". -->
       <div class="bm-perch" data-at="notch" aria-hidden="true">
-        <svg class="bm-perch-face" viewBox="0 0 120 56" preserveAspectRatio="xMidYMid meet">
-          <ellipse class="bm-perch-ear" cx="38" cy="30" rx="8" ry="4.5" />
-          <ellipse class="bm-perch-ear" cx="82" cy="30" rx="8" ry="4.5" />
-          <rect class="bm-perch-head" x="26" y="0" width="68" height="52" rx="26" />
-          <g class="bm-perch-eyes">
-            <circle class="bm-perch-white" cx="49" cy="22" r="12" />
-            <circle class="bm-perch-white" cx="71" cy="22" r="12" />
-            <circle class="bm-perch-pupil" cx="49" cy="22" r="6.2" />
-            <circle class="bm-perch-pupil" cx="71" cy="22" r="6.2" />
-            <circle class="bm-perch-glint" cx="51.3" cy="19.3" r="2" />
-            <circle class="bm-perch-glint" cx="73.3" cy="19.3" r="2" />
-          </g>
-          <path class="bm-perch-mouth" d="M 52 41 Q 60 49 68 41" />
-        </svg>
+        <!-- Filled with the real mascot, the same window.brainoMac.getWalkerSvg()
+             the walker uses. Nothing is drawn here by hand: whatever character
+             is chosen, and whatever his artwork becomes, this is him. -->
+        <div class="bm-perch-art"></div>
       </div>
 
       <section id="braino-customizer" aria-hidden="true">
