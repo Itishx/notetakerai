@@ -254,47 +254,63 @@
             <span class="nf-vol-num"></span>
           </div>
           <div class="nf-drop-hint">drop it, I&rsquo;ll hold it</div>
-          <!-- The glance bar. What the machine is doing right now, read at a
-               distance: what is playing, the weather, the network, and the two
-               ways in. It is the collapsed state of a status layer rather than
-               a widget of its own, so it lives inside the housing and inherits
-               every rule the housing already has about staying out of the way.
+          <!-- The strip.
 
-               Inert until something sets .nf-hud-on. Nothing in the Mac
-               renderer sets it yet; /notch-lab does, which is where the design
-               is being decided before a single system read is wired up. -->
+               Not a wider notch. The whole menu bar, edge to edge, and the
+               thing it mostly is is a command line: you go up to the top of
+               the screen and type at the machine. The status the system
+               already keeps up there sits at the right end where it always
+               was, so nothing is taken away to make room for him.
+
+               Inert until something sets .nf-hud-on. Nothing in this renderer
+               does; /notch-lab does, because the design is being settled in a
+               browser before a single system read is wired up. -->
           <div class="nf-hud" aria-hidden="true">
             <div class="nf-hud-bar">
-              <button class="nf-hud-item nf-hud-np" type="button" title="Now playing">
-                <svg viewBox="0 0 24 24" width="13" height="13"><path d="M9 18.5a2.5 2.5 0 1 1-1.5-2.29V6.8l9-2.2v9.6a2.5 2.5 0 1 1-1.5-2.29V8.1l-6 1.47v8.93z" fill="currentColor"/></svg>
-              </button>
-              <button class="nf-hud-item nf-hud-weather" type="button" title="Weather">
-                <b class="nf-hud-temp">--&deg;</b>
-              </button>
-              <button class="nf-hud-item nf-hud-wifi" type="button" title="Network">
-                <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
-                  <path d="M12 18.2a1.6 1.6 0 1 0 0 .01z" fill="currentColor"/>
-                  <path class="nf-hud-arc nf-hud-arc-1" d="M8.6 14.2a5 5 0 0 1 6.8 0" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/>
-                  <path class="nf-hud-arc nf-hud-arc-2" d="M5.6 11.1a9.4 9.4 0 0 1 12.8 0" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/>
-                  <path class="nf-hud-arc nf-hud-arc-3" d="M2.8 8.2a13.6 13.6 0 0 1 18.4 0" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/>
-                </svg>
-              </button>
-              <button class="nf-hud-item nf-hud-search" type="button" title="Ask Braino">
-                <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><circle cx="11" cy="11" r="6.2" fill="none" stroke="currentColor" stroke-width="1.9"/><path d="M15.6 15.6 20 20" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>
-              </button>
-              <button class="nf-hud-item nf-hud-toggles" type="button" title="Controls">
-                <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
-                  <rect x="3" y="4.6" width="18" height="6" rx="3" fill="none" stroke="currentColor" stroke-width="1.7"/>
-                  <circle cx="8" cy="7.6" r="1.7" fill="currentColor"/>
-                  <rect x="3" y="13.4" width="18" height="6" rx="3" fill="none" stroke="currentColor" stroke-width="1.7"/>
-                  <circle cx="16" cy="16.4" r="1.7" fill="currentColor"/>
-                </svg>
-              </button>
-              <span class="nf-hud-dot" aria-hidden="true"></span>
+              <span class="nf-hud-mark" aria-hidden="true"><i></i><i></i></span>
+
+              <label class="nf-hud-cmd">
+                <svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><circle cx="11" cy="11" r="6.2" fill="none" stroke="currentColor" stroke-width="1.9"/><path d="M15.6 15.6 20 20" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>
+                <input class="nf-hud-input" type="text" autocomplete="off" spellcheck="false"
+                       placeholder="Ask Braino, or type a command" aria-label="Ask Braino">
+                <kbd class="nf-hud-key">&#8984;K</kbd>
+              </label>
+
+              <div class="nf-hud-status">
+                <button class="nf-hud-item nf-hud-np" type="button" title="Now playing">
+                  <svg viewBox="0 0 24 24" width="13" height="13"><path d="M9 18.5a2.5 2.5 0 1 1-1.5-2.29V6.8l9-2.2v9.6a2.5 2.5 0 1 1-1.5-2.29V8.1l-6 1.47v8.93z" fill="currentColor"/></svg>
+                </button>
+                <button class="nf-hud-item nf-hud-weather" type="button" title="Weather">
+                  <b class="nf-hud-temp">--&deg;</b>
+                </button>
+                <button class="nf-hud-item nf-hud-wifi" type="button" title="Network">
+                  <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+                    <path d="M12 18.2a1.6 1.6 0 1 0 0 .01z" fill="currentColor"/>
+                    <path class="nf-hud-arc nf-hud-arc-1" d="M8.6 14.2a5 5 0 0 1 6.8 0" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/>
+                    <path class="nf-hud-arc nf-hud-arc-2" d="M5.6 11.1a9.4 9.4 0 0 1 12.8 0" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/>
+                    <path class="nf-hud-arc nf-hud-arc-3" d="M2.8 8.2a13.6 13.6 0 0 1 18.4 0" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/>
+                  </svg>
+                </button>
+                <span class="nf-hud-item nf-hud-batt" title="Battery">
+                  <svg viewBox="0 0 30 14" width="22" height="11" aria-hidden="true">
+                    <rect x="1" y="1.6" width="24" height="10.8" rx="3.2" fill="none" stroke="currentColor" stroke-width="1.5" opacity=".6"/>
+                    <rect class="nf-hud-batt-fill" x="2.8" y="3.4" width="14" height="7.2" rx="2" fill="currentColor"/>
+                    <path d="M26.8 5.4v3.2a2.2 2.2 0 0 0 0-3.2z" fill="currentColor" opacity=".6"/>
+                  </svg>
+                </span>
+                <button class="nf-hud-item nf-hud-toggles" type="button" title="Controls">
+                  <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+                    <rect x="3" y="4.6" width="18" height="6" rx="3" fill="none" stroke="currentColor" stroke-width="1.7"/>
+                    <circle cx="8" cy="7.6" r="1.7" fill="currentColor"/>
+                    <rect x="3" y="13.4" width="18" height="6" rx="3" fill="none" stroke="currentColor" stroke-width="1.7"/>
+                    <circle cx="16" cy="16.4" r="1.7" fill="currentColor"/>
+                  </svg>
+                </button>
+                <span class="nf-hud-dot" aria-hidden="true"></span>
+              </div>
             </div>
-            <!-- What the bar says when you actually look at it. One line, under
-                 the housing, in the same drop-down-from-the-notch family the
-                 yap, meeting and answer surfaces belong to. -->
+            <!-- One line under the strip: what the icons would say if you asked
+                 them. A reading, not a document. -->
             <div class="nf-hud-sheet">
               <span class="nf-hud-read"></span>
             </div>
