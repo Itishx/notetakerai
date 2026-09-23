@@ -6138,20 +6138,22 @@ body {
   position: absolute;
   left: 0;
   top: 0;
-  width: 78px;
-  height: 26px;
-  margin-left: -39px;
-  margin-top: -13px;
+  /* The size the docked Braino was: something you notice at the corner of
+     your eye and never have to move around. */
+  width: 50px;
+  height: 16px;
+  margin-left: -25px;
+  margin-top: -8px;
   /* Turned about its own centre, then pushed in by half its depth, which puts
      its flat edge exactly on the screen edge at every anchor. */
-  transform: rotate(var(--isle-rot, 0deg)) translateY(13px) scale(.86);
+  transform: rotate(var(--isle-rot, 0deg)) translateY(8px) scale(.86);
   transform-origin: 50% 50%;
   background: #000;
-  border-radius: 0 0 13px 13px;
+  border-radius: 0 0 8px 8px;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 12px;
+  gap: 7px;
   opacity: 0;
   pointer-events: auto;
   transition:
@@ -6162,15 +6164,15 @@ body {
 }
 .bm-isle.is-on .bm-isle-body {
   opacity: 1;
-  transform: rotate(var(--isle-rot, 0deg)) translateY(13px) scale(1);
+  transform: rotate(var(--isle-rot, 0deg)) translateY(8px) scale(1);
 }
 
 /* His eyes, the notch's own: white with a dark pupil, and a highlight that
    keeps them from reading as holes. */
 .bm-isle-eye {
   position: relative;
-  width: 13px;
-  height: 13px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   background: #fff;
   flex: none;
@@ -6179,21 +6181,21 @@ body {
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 6.6px;
-  height: 6.6px;
+  width: 4.2px;
+  height: 4.2px;
   border-radius: 50%;
   background: #1b1713;
   /* Down in the island's frame is into the screen at every anchor, so one
      offset points both eyes at you from any edge. */
-  transform: translate(-50%, -50%) translateY(1.6px);
+  transform: translate(-50%, -50%) translateY(1px);
 }
 .bm-isle-eye i::after {
   content: "";
   position: absolute;
   left: 58%;
   top: 14%;
-  width: 2.4px;
-  height: 2.4px;
+  width: 1.5px;
+  height: 1.5px;
   border-radius: 50%;
   background: #fff;
 }
@@ -6202,31 +6204,36 @@ body {
 .bm-isle-more {
   position: absolute;
   left: 50%;
-  bottom: 3.5px;
-  width: 20px;
-  height: 2px;
-  margin-left: -10px;
+  bottom: 2px;
+  width: 13px;
+  height: 1.5px;
+  margin-left: -6.5px;
   border-radius: 2px;
   background: rgba(238, 234, 226, .3);
 }
 
 /* Pulled out, it is a panel, still hinged on the same edge. */
 .bm-isle.is-open .bm-isle-body {
-  width: 260px;
-  height: 108px;
-  margin-left: -130px;
-  margin-top: -54px;
-  border-radius: 0 0 22px 22px;
-  transform: rotate(var(--isle-rot, 0deg)) translateY(54px) scale(1);
-  gap: 14px;
+  width: 210px;
+  height: 84px;
+  margin-left: -105px;
+  margin-top: -42px;
+  border-radius: 0 0 18px 18px;
+  transform: rotate(var(--isle-rot, 0deg)) translateY(42px) scale(1);
+  gap: 12px;
 }
-.bm-isle.is-open .bm-isle-eye { width: 17px; height: 17px; }
-.bm-isle.is-open .bm-isle-eye i { width: 8.4px; height: 8.4px; }
+.bm-isle.is-open .bm-isle-eye { width: 15px; height: 15px; }
+.bm-isle.is-open .bm-isle-eye i { width: 7.4px; height: 7.4px; transform: translate(-50%, -50%) translateY(1.8px); }
+.bm-isle.is-open .bm-isle-eye i::after { width: 2.6px; height: 2.6px; }
 
-/* Three anchors, one turn each. The rounded end always faces the screen. */
-.bm-isle[data-at="bottom"] { bottom: 0; left: 50%; --isle-rot: 180deg; }
-.bm-isle[data-at="left"]   { left: 0; top: 50%; --isle-rot: -90deg; }
-.bm-isle[data-at="right"]  { right: 0; top: 50%; --isle-rot: 90deg; }
+/* Three anchors, one turn each, the rounded end always facing the screen.
+   None of them sits at the exact middle of its edge. A dead centre reads as a
+   thing the software placed; a little off it reads as a thing somebody put
+   there, which is what the docked Braino always was: near where your hand
+   already is, and never in the way of what you were doing. */
+.bm-isle[data-at="bottom"] { bottom: 0; left: 72%; --isle-rot: 180deg; }
+.bm-isle[data-at="left"]   { left: 0; top: 64%; --isle-rot: -90deg; }
+.bm-isle[data-at="right"]  { right: 0; top: 64%; --isle-rot: 90deg; }
 
 @media (prefers-reduced-motion: reduce) {
   .bm-isle-body { transition: opacity 120ms ease; }
