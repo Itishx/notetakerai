@@ -6290,7 +6290,7 @@ body {
 .bm-dock.is-on[data-at="bottom"] .bm-dock-art { animation: bmDockBreathe 5.4s ease-in-out infinite; }
 
 /* Leaning in, and tilted: half sideways rather than upright. Standing to
-   attention against a wall is a soldier; tipped into it at forty five is
+   attention against a wall is a soldier; tipped well over into it is
    somebody leaning on it. His crown goes toward the screen and his weight
    toward the edge, so the tilt reads as him resting on the side of your
    display rather than hovering beside it.
@@ -6299,16 +6299,16 @@ body {
    there is one lean in the design and not two. */
 .bm-dock[data-at="left"] .bm-dock-art {
   left: -22px; bottom: -26px;
-  transform: rotate(-45deg);
+  transform: rotate(-72deg);
   transform-origin: 50% 62%;
 }
 .bm-dock[data-at="right"] .bm-dock-art {
   left: -30px; bottom: -26px;
-  transform: scaleX(-1) rotate(-45deg);
+  transform: scaleX(-1) rotate(-72deg);
   transform-origin: 50% 62%;
 }
-.bm-dock.is-on[data-at="left"] .bm-dock-art { transform: rotate(-45deg); }
-.bm-dock.is-on[data-at="right"] .bm-dock-art { transform: scaleX(-1) rotate(-45deg); }
+.bm-dock.is-on[data-at="left"] .bm-dock-art { transform: rotate(-72deg); }
+.bm-dock.is-on[data-at="right"] .bm-dock-art { transform: scaleX(-1) rotate(-72deg); }
 /* Whichever way he is tipped, he is still looking at the screen: forward in
    his own frame is into it, because he faces the way he leans. */
 .bm-dock[data-at="left"] .bm-dock-art [id="__sbwk_pupil_l"],
