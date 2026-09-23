@@ -6133,8 +6133,8 @@ body {
   /* Under the notch face, which is 57, so the one hanging from the notch is
      covered by the housing rather than clipped by a box. */
   z-index: 56;
-  width: 168px;
-  height: 168px;
+  width: 104px;
+  height: 104px;
   pointer-events: none;
   opacity: 0;
   transition: opacity 260ms ease, transform 620ms cubic-bezier(.22, 1, .36, 1);
@@ -6155,7 +6155,7 @@ body {
   left: 50%;
   top: 50%;
   width: 100%;
-  transform: translate(-50%, -50%) rotate(var(--perch-rot, 0deg)) translateY(var(--perch-out, 72px));
+  transform: translate(-50%, -50%) rotate(var(--perch-rot, 0deg)) translateY(var(--perch-out, 45px));
 }
 .bm-perch-art svg { width: 100%; height: auto; display: block; overflow: visible; }
 /* Looking up in his own frame is looking into the screen in yours, at every
@@ -6178,26 +6178,28 @@ body {
    the one not clipped by its own box: the housing is opaque and sits above
    him, so he comes out from behind it and the black does the cutting. */
 .bm-perch[data-at="notch"] {
-  top: 0; left: 50%; margin-left: -84px;
+  top: 0; left: 50%; margin-left: -52px;
   --perch-rot: 180deg;
   /* The only anchor whose cut is not the screen edge: the housing crops him,
-     and it hangs 55px down, so he is tucked up behind it instead of out past
-     an edge. */
-  --perch-out: -6px;
+     and it hangs 55px down. That depth is fixed, so it does not shrink when he
+     does: made smaller at the same offset he disappears behind the black
+     entirely, and has to be let down further than the others rather than
+     less. */
+  --perch-out: -15px;
   overflow: visible;
 }
-.bm-perch[data-at="bottom"] { bottom: 0; left: 50%; margin-left: -84px; --perch-rot: 0deg; --perch-out: 52px; }
+.bm-perch[data-at="bottom"] { bottom: 0; left: 50%; margin-left: -52px; --perch-rot: 0deg; --perch-out: 32px; }
 /* The side anchors need a shorter push for the same result. Turned a quarter
-   round, he is 205px across inside a 168px box, so the box is already taking
-   37px off him before the push does anything. */
-.bm-perch[data-at="left"]   { left: 0; top: 50%; margin-top: -84px; --perch-rot: 90deg; --perch-out: 44px; }
-.bm-perch[data-at="right"]  { right: 0; top: 50%; margin-top: -84px; --perch-rot: -90deg; --perch-out: 44px; }
+   round, he is wider than his own box, so the box is already taking some off
+   him before the push does anything. */
+.bm-perch[data-at="left"]   { left: 0; top: 50%; margin-top: -52px; --perch-rot: 90deg; --perch-out: 27px; }
+.bm-perch[data-at="right"]  { right: 0; top: 50%; margin-top: -52px; --perch-rot: -90deg; --perch-out: 27px; }
 
 /* He breathes where he sits, so a parked character never reads as a decal. */
 .bm-perch.is-on .bm-perch-art { animation: bmPerchBreathe 5.2s ease-in-out infinite; }
 @keyframes bmPerchBreathe {
-  0%, 100% { transform: translate(-50%, -50%) rotate(var(--perch-rot, 0deg)) translateY(var(--perch-out, 72px)) scale(1); }
-  50%      { transform: translate(-50%, -50%) rotate(var(--perch-rot, 0deg)) translateY(calc(var(--perch-out, 72px) + 3px)) scale(1.025); }
+  0%, 100% { transform: translate(-50%, -50%) rotate(var(--perch-rot, 0deg)) translateY(var(--perch-out, 45px)) scale(1); }
+  50%      { transform: translate(-50%, -50%) rotate(var(--perch-rot, 0deg)) translateY(calc(var(--perch-out, 45px) + 2px)) scale(1.025); }
 }
 @media (prefers-reduced-motion: reduce) {
   .bm-perch.is-on .bm-perch-art { animation: none; }
