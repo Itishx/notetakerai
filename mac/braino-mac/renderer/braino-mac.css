@@ -5935,3 +5935,137 @@ body {
   #notch-face .nf-q-think,
   #notch-face .nf-q-speak { animation: none; }
 }
+
+/* ============================================================================
+   The glance bar.
+
+   What the machine is doing right now, read at a distance: what is playing,
+   the weather, the network, and the two ways in. It is the collapsed state of
+   a status layer rather than a widget of its own, so it lives inside the
+   housing and inherits everything the housing already knows about staying out
+   of the way.
+
+   Inert. Nothing in this renderer sets .nf-hud-on; /notch-lab does, because
+   the design is being settled in a browser before a single system read is
+   wired up. When it is wired, main pushes one state object per tick and this
+   sheet only ever renders it.
+   ========================================================================== */
+#notch-face .nf-hud {
+  position: absolute;
+  inset: 0;
+  z-index: 9;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 220ms ease, visibility 0s linear 240ms;
+}
+#notch-face.nf-hud-on .nf-hud {
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 220ms ease, visibility 0s linear 0s;
+}
+
+/* The row itself, in the housing strip. Items are spaced rather than packed:
+   at a glance you are counting shapes, not reading a toolbar. */
+#notch-face .nf-hud-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--nf-notch-h);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  padding: 0 16px;
+  box-sizing: border-box;
+  pointer-events: auto;
+  color: rgba(238, 234, 226, .82);
+}
+#notch-face .nf-hud-item {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: inherit;
+  cursor: pointer;
+  opacity: .78;
+  transition: opacity 160ms ease, transform 160ms ease, color 160ms ease;
+}
+#notch-face .nf-hud-item:hover { opacity: 1; transform: translateY(-1px); }
+#notch-face .nf-hud-item:focus-visible { outline: 1.5px solid #e8786e; outline-offset: 3px; border-radius: 6px; }
+/* Playing is the one item that earns colour, because it is the one that is
+   true only some of the time. */
+#notch-face .nf-hud-np { color: #5ec478; opacity: 1; }
+#notch-face .nf-hud-temp {
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+  color: rgba(244, 240, 233, .94);
+}
+/* Reception drawn rather than labelled: arcs that go out as the signal does. */
+#notch-face .nf-hud-arc { opacity: .3; }
+#notch-face .nf-hud[data-wifi="1"] .nf-hud-arc-1,
+#notch-face .nf-hud[data-wifi="2"] .nf-hud-arc-1,
+#notch-face .nf-hud[data-wifi="2"] .nf-hud-arc-2,
+#notch-face .nf-hud[data-wifi="3"] .nf-hud-arc-1,
+#notch-face .nf-hud[data-wifi="3"] .nf-hud-arc-2,
+#notch-face .nf-hud[data-wifi="3"] .nf-hud-arc-3 { opacity: 1; }
+/* The end light. Amber while he is doing something, otherwise nearly nothing. */
+#notch-face .nf-hud-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: rgba(238, 234, 226, .28);
+  box-shadow: none;
+  transition: background 200ms ease, box-shadow 200ms ease;
+}
+#notch-face .nf-hud.is-busy .nf-hud-dot {
+  background: #e8a33f;
+  box-shadow: 0 0 8px rgba(232, 163, 63, .7);
+}
+
+/* The one line it says when you actually look at it. Same drop-down-from-the-
+   notch family as the yap, meeting and answer surfaces, at a fraction of the
+   height: this one is a reading, not a document. */
+#notch-face .nf-hud-sheet {
+  position: absolute;
+  top: var(--nf-notch-h);
+  left: 50%;
+  transform: translateX(-50%) translateY(-6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 7px 16px 9px;
+  font-size: 12px;
+  letter-spacing: -0.005em;
+  color: rgba(238, 234, 226, .62);
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 200ms ease, transform 420ms cubic-bezier(.22, 1, .36, 1);
+}
+#notch-face.nf-hud-read .nf-hud-sheet {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* The housing, sized for the bar. Same mechanism every other surface uses:
+   the class on #notch-face sets the pill, and the pill is the only thing that
+   ever knows how big the notch is. Reading it open grows the chin by exactly
+   one line rather than opening a card, because a temperature is not a
+   document. */
+#notch-face.nf-hud-on .nf-pill {
+  width: min(300px, calc(100vw - 32px));
+  height: var(--nf-notch-h);
+  border-radius: 0 0 18px 18px;
+}
+#notch-face.nf-hud-on.nf-hud-read .nf-pill {
+  height: calc(var(--nf-notch-h) + 32px);
+  border-radius: 0 0 22px 22px;
+}
