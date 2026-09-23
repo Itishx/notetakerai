@@ -6289,12 +6289,32 @@ body {
 .bm-dock[data-at="bottom"] .bm-dock-art { left: -26px; bottom: -14px; }
 .bm-dock.is-on[data-at="bottom"] .bm-dock-art { animation: bmDockBreathe 5.4s ease-in-out infinite; }
 
-/* Leaning in. Upright, facing the screen, and a little under half of him past
-   the edge: the screen does the cutting, the way the window's own bounds do
-   on the Mac. */
-.bm-dock[data-at="left"] .bm-dock-art  { left: -24px; bottom: -28px; }
-.bm-dock[data-at="right"] .bm-dock-art { left: -28px; bottom: -28px; transform: scaleX(-1); }
-.bm-dock.is-on[data-at="right"] .bm-dock-art { transform: scaleX(-1); }
+/* Leaning in, and tilted: half sideways rather than upright. Standing to
+   attention against a wall is a soldier; tipped into it at forty five is
+   somebody leaning on it. His crown goes toward the screen and his weight
+   toward the edge, so the tilt reads as him resting on the side of your
+   display rather than hovering beside it.
+
+   The right edge is the same tilt mirrored rather than a second angle, so
+   there is one lean in the design and not two. */
+.bm-dock[data-at="left"] .bm-dock-art {
+  left: -22px; bottom: -26px;
+  transform: rotate(-45deg);
+  transform-origin: 50% 62%;
+}
+.bm-dock[data-at="right"] .bm-dock-art {
+  left: -30px; bottom: -26px;
+  transform: scaleX(-1) rotate(-45deg);
+  transform-origin: 50% 62%;
+}
+.bm-dock.is-on[data-at="left"] .bm-dock-art { transform: rotate(-45deg); }
+.bm-dock.is-on[data-at="right"] .bm-dock-art { transform: scaleX(-1) rotate(-45deg); }
+/* Whichever way he is tipped, he is still looking at the screen: forward in
+   his own frame is into it, because he faces the way he leans. */
+.bm-dock[data-at="left"] .bm-dock-art [id="__sbwk_pupil_l"],
+.bm-dock[data-at="left"] .bm-dock-art [id="__sbwk_pupil_r"],
+.bm-dock[data-at="right"] .bm-dock-art [id="__sbwk_pupil_l"],
+.bm-dock[data-at="right"] .bm-dock-art [id="__sbwk_pupil_r"] { transform: translate(1.6px, 1px); }
 
 @keyframes bmDockBreathe {
   0%, 100% { transform: translateY(0) scale(1); }
