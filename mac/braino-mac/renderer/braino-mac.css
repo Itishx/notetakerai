@@ -5950,6 +5950,15 @@ body {
    wired up. When it is wired, main pushes one state object per tick and this
    sheet only ever renders it.
    ========================================================================== */
+/* At rest there is nothing to see. The strip drops out of the menu bar only
+   when the pointer goes up to where the system's own icons live, and goes
+   back the moment it leaves, which is the whole behaviour: it is a place you
+   look rather than a bar you keep.
+
+   On the Mac the pointer is already tracked. The overlay is click-through
+   until the cursor enters the notch zone, at which point main lets events
+   through and this :hover starts being true. So the trigger here is the same
+   trigger the app already has, not a second one. */
 #notch-face .nf-hud {
   position: absolute;
   inset: 0;
@@ -5957,17 +5966,21 @@ body {
   pointer-events: none;
   opacity: 0;
   visibility: hidden;
-  transition: opacity 220ms ease, visibility 0s linear 240ms;
+  transition: opacity 180ms ease, visibility 0s linear 200ms;
 }
-#notch-face.nf-hud-on .nf-hud {
+#notch-face.nf-hud-on:hover .nf-hud,
+#notch-face.nf-hud-on.nf-hud-read .nf-hud {
   opacity: 1;
   visibility: visible;
-  transition: opacity 220ms ease, visibility 0s linear 0s;
+  transition: opacity 200ms ease 60ms, visibility 0s linear 0s;
 }
 
 /* The row itself, in the housing strip. Items are spaced rather than packed:
    at a glance you are counting shapes, not reading a toolbar. */
 #notch-face .nf-hud-bar {
+  transform: translateY(-5px);
+  opacity: 0;
+  transition: opacity 200ms ease 60ms, transform 420ms cubic-bezier(.22, 1, .36, 1) 40ms;
   position: absolute;
   top: 0;
   left: 0;
@@ -5982,6 +5995,9 @@ body {
   pointer-events: auto;
   color: rgba(238, 234, 226, .82);
 }
+#notch-face.nf-hud-on:hover .nf-hud-bar,
+#notch-face.nf-hud-on.nf-hud-read .nf-hud-bar { opacity: 1; transform: none; }
+
 #notch-face .nf-hud-item {
   appearance: none;
   border: 0;
@@ -6050,7 +6066,8 @@ body {
   pointer-events: none;
   transition: opacity 200ms ease, transform 420ms cubic-bezier(.22, 1, .36, 1);
 }
-#notch-face.nf-hud-read .nf-hud-sheet {
+#notch-face.nf-hud-on:hover .nf-hud-sheet,
+#notch-face.nf-hud-on.nf-hud-read .nf-hud-sheet {
   opacity: 1;
   transform: translateX(-50%) translateY(0);
 }
@@ -6060,12 +6077,9 @@ body {
    ever knows how big the notch is. Reading it open grows the chin by exactly
    one line rather than opening a card, because a temperature is not a
    document. */
-#notch-face.nf-hud-on .nf-pill {
-  width: min(300px, calc(100vw - 32px));
-  height: var(--nf-notch-h);
-  border-radius: 0 0 18px 18px;
-}
+#notch-face.nf-hud-on:hover .nf-pill,
 #notch-face.nf-hud-on.nf-hud-read .nf-pill {
+  width: min(300px, calc(100vw - 32px));
   height: calc(var(--nf-notch-h) + 32px);
   border-radius: 0 0 22px 22px;
 }

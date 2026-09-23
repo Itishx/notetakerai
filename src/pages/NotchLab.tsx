@@ -116,11 +116,11 @@ const STATES: State[] = [
      readout living in his housing, which is the first piece of him that is
      useful without being spoken to. */
   { id: "hud", label: "15 \u00b7 Glance bar",
-    hint: "What the machine is doing, read at a distance. Sample values: nothing is wired to the system yet.",
+    hint: "Hover the notch. At rest there is nothing there; the strip drops out of the menu bar when you go up to it, and goes back when you leave. Sample values.",
     classes: "on awake nf-hud-on",
     hud: { temp: "78\u00b0", wifi: "3", read: "78\u00b0 Cloudy" } },
   { id: "hud-read", label: "15b \u00b7 Glance bar, looked at",
-    hint: "The line it says when you look at it, and the end light while he is busy.",
+    hint: "The same thing held open, for looking at the design without hovering. The end light is amber while he is busy.",
     classes: "on awake nf-hud-on nf-hud-read",
     hud: { temp: "78\u00b0", wifi: "2", busy: true, read: "78\u00b0 Cloudy \u00b7 Home \u00b7 Braino is working" } }
 ];
