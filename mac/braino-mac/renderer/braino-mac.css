@@ -6146,7 +6146,8 @@ body {
 /* Centred in its box, then turned, then pushed straight out through the edge.
    Because the turn already points his down into the screen, "out" is simply
    positive in his own frame at every anchor, and one number moves him at all
-   four. Pixels rather than a percentage: the box is square and he is not, so
+   four. It is pushed past the chin on purpose: less than half his face shows,
+   so he reads as looking over the edge rather than sitting on it. Pixels rather than a percentage: the box is square and he is not, so
    one percentage moved him a different distance on the vertical edges than on
    the horizontal ones. */
 .bm-perch-art {
@@ -6154,7 +6155,7 @@ body {
   left: 50%;
   top: 50%;
   width: 100%;
-  transform: translate(-50%, -50%) rotate(var(--perch-rot, 0deg)) translateY(var(--perch-out, 30px));
+  transform: translate(-50%, -50%) rotate(var(--perch-rot, 0deg)) translateY(var(--perch-out, 72px));
 }
 .bm-perch-art svg { width: 100%; height: auto; display: block; overflow: visible; }
 /* Looking up in his own frame is looking into the screen in yours, at every
@@ -6179,20 +6180,24 @@ body {
 .bm-perch[data-at="notch"] {
   top: 0; left: 50%; margin-left: -84px;
   --perch-rot: 180deg;
-  /* The only anchor whose cut is not the screen edge: the housing is what
-     crops him, and it hangs 55px down, so his chin stops there instead. */
-  --perch-out: -26px;
+  /* The only anchor whose cut is not the screen edge: the housing crops him,
+     and it hangs 55px down, so he is tucked up behind it instead of out past
+     an edge. */
+  --perch-out: -6px;
   overflow: visible;
 }
-.bm-perch[data-at="bottom"] { bottom: 0; left: 50%; margin-left: -84px; --perch-rot: 0deg; }
-.bm-perch[data-at="left"]   { left: 0; top: 50%; margin-top: -84px; --perch-rot: 90deg; }
-.bm-perch[data-at="right"]  { right: 0; top: 50%; margin-top: -84px; --perch-rot: -90deg; }
+.bm-perch[data-at="bottom"] { bottom: 0; left: 50%; margin-left: -84px; --perch-rot: 0deg; --perch-out: 52px; }
+/* The side anchors need a shorter push for the same result. Turned a quarter
+   round, he is 205px across inside a 168px box, so the box is already taking
+   37px off him before the push does anything. */
+.bm-perch[data-at="left"]   { left: 0; top: 50%; margin-top: -84px; --perch-rot: 90deg; --perch-out: 44px; }
+.bm-perch[data-at="right"]  { right: 0; top: 50%; margin-top: -84px; --perch-rot: -90deg; --perch-out: 44px; }
 
 /* He breathes where he sits, so a parked character never reads as a decal. */
 .bm-perch.is-on .bm-perch-art { animation: bmPerchBreathe 5.2s ease-in-out infinite; }
 @keyframes bmPerchBreathe {
-  0%, 100% { transform: translate(-50%, -50%) rotate(var(--perch-rot, 0deg)) translateY(var(--perch-out, 30px)) scale(1); }
-  50%      { transform: translate(-50%, -50%) rotate(var(--perch-rot, 0deg)) translateY(calc(var(--perch-out, 30px) + 3px)) scale(1.025); }
+  0%, 100% { transform: translate(-50%, -50%) rotate(var(--perch-rot, 0deg)) translateY(var(--perch-out, 72px)) scale(1); }
+  50%      { transform: translate(-50%, -50%) rotate(var(--perch-rot, 0deg)) translateY(calc(var(--perch-out, 72px) + 3px)) scale(1.025); }
 }
 @media (prefers-reduced-motion: reduce) {
   .bm-perch.is-on .bm-perch-art { animation: none; }
