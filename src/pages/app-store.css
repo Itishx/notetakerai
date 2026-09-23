@@ -126,66 +126,60 @@
   to { opacity: 1; transform: none; }
 }
 
-/* ---- the product, across the whole width -------------------------------- */
+/* ---- the product, across the whole width --------------------------------
+   No art half. The scene at the top of the page is his portrait; a second one
+   here put the same picture on screen twice in a single scroll, which is what
+   made the page feel thin rather than considered. The card is type instead,
+   with him reduced to a mark beside the label.
+   -------------------------------------------------------------------------- */
 .ast-wide {
-  display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  display: block;
   border: 1px solid var(--a-line-strong);
+  border-top: 2px solid var(--a-braino);
   background: var(--a-surface);
   text-decoration: none; color: inherit;
+  transition: box-shadow .35s ease;
 }
-/* Apple's colour panel, in his colour. The glow is what the page was missing:
-   a character on flat paper is a drawing, and one standing in his own light is
-   a product shot. */
-.ast-wide-art {
-  position: relative; isolation: isolate; overflow: hidden;
-  background: linear-gradient(168deg,
-    color-mix(in srgb, var(--a-braino) 9%, var(--a-bg)) 0%,
-    color-mix(in srgb, var(--a-braino) 20%, var(--a-bg)) 62%,
-    color-mix(in srgb, var(--a-braino) 31%, var(--a-bg)) 100%);
-  border-right: 1px solid var(--a-line);
-  padding: clamp(36px, 4.6vw, 76px) clamp(22px, 3vw, 48px);
-  display: flex; align-items: center; justify-content: center;
-}
-.ast-wide-art::before {
-  content: ""; position: absolute; inset: 0; z-index: -1;
-  background: radial-gradient(ellipse 50% 44% at 50% 46%, rgba(255, 252, 248, .88), transparent 70%);
-}
-.ast-wide-art img {
-  width: clamp(112px, 14vw, 208px); height: auto; display: block;
-  filter: drop-shadow(0 26px 30px rgba(120, 52, 42, .3));
-  animation: astFloat 6.5s ease-in-out infinite;
-  transition: transform .55s cubic-bezier(.2, .9, .3, 1);
-}
-@keyframes astFloat {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-9px); }
-}
-.ast-wide:hover .ast-wide-art img { transform: translateY(-14px) scale(1.03); }
-
+.ast-wide:hover { box-shadow: var(--lift); }
 .ast-wide-body {
-  padding: clamp(28px, 3.4vw, 56px) clamp(24px, 3.2vw, 52px);
-  display: flex; flex-direction: column; gap: 12px; justify-content: center;
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: start;
+}
+.ast-wide-name {
+  padding: clamp(28px, 4vw, 60px) clamp(24px, 3.2vw, 52px);
+  display: flex; flex-direction: column; gap: 16px;
+}
+.ast-wide-say {
+  padding: clamp(28px, 4vw, 60px) clamp(24px, 3.2vw, 52px);
+  border-left: 1px solid var(--a-line);
+  display: flex; flex-direction: column; gap: 16px;
+  min-height: 100%;
+}
+@media (max-width: 860px) {
+  .ast-wide-body { grid-template-columns: 1fr; }
+  .ast-wide-say { border-left: 0; border-top: 1px solid var(--a-line); }
 }
 .ast-wide-body h3 {
-  margin: 0;
+  margin: 0; max-width: 14ch;
   font-family: var(--a-display);
-  font-size: clamp(38px, 4.4vw, 68px); font-weight: 400; letter-spacing: -0.032em; line-height: .98;
+  font-size: clamp(44px, 6.6vw, 104px); font-weight: 400; letter-spacing: -0.034em; line-height: .94;
 }
 .ast-wide-foot {
-  margin-top: clamp(14px, 2vw, 26px);
+  margin-top: clamp(16px, 2.2vw, 30px);
   display: flex; align-items: center; gap: 18px; flex-wrap: wrap;
-}
-@media (max-width: 880px) {
-  .ast-wide { grid-template-columns: 1fr; }
-  .ast-wide-art { border-right: 0; border-bottom: 1px solid var(--a-line); }
 }
 
 .ast-feat-kicker {
   margin: 0;
+  display: inline-flex; align-items: center; gap: 11px;
   font-size: 10.5px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase;
   color: var(--a-braino);
 }
-.ast-feat-line { margin: 0; max-width: 46ch; font-size: clamp(14.5px, 1.25vw, 17px); line-height: 1.55; color: var(--a-ink-soft); }
+.ast-feat-kicker img {
+  width: 46px; height: auto; display: block; margin: -6px 0;
+  filter: drop-shadow(0 4px 6px rgba(120, 52, 42, .22));
+}
+.ast-feat-line { margin: 0; max-width: 58ch; font-size: clamp(15px, 1.35vw, 18.5px); line-height: 1.55; color: var(--a-ink-soft); }
 .ast-feat-models { margin: 4px 0 0; display: flex; gap: 8px; flex-wrap: wrap; }
 .ast-feat-models span {
   font-size: 10.5px; font-weight: 600; letter-spacing: .09em; text-transform: uppercase;
@@ -321,7 +315,11 @@
    -------------------------------------------------------------------------- */
 .ast-hero-shot {
   position: relative; isolation: isolate;
-  display: flex; align-items: center; justify-content: center;
+  display: flex; align-items: flex-end; justify-content: center;
+  /* A shorter band than the company page's photograph. That one is a room and
+     wants the height; this is one standing figure, and 3.4 to 1 left him
+     marooned in the middle of it. */
+  height: calc(clamp(236px, 30vh, 330px) + clamp(46px, 13vh, 150px) * var(--grow, 0));
   background:
     radial-gradient(ellipse 46% 52% at 50% 46%, rgba(255, 252, 248, .9), transparent 72%),
     linear-gradient(168deg,
@@ -331,12 +329,36 @@
 }
 /* He grows with the frame: a fixed size would look pasted on once the picture
    has opened to the full width of the window. */
+/* He stands on something. A wide soft ellipse under his feet and a horizon
+   behind them turn the band from a coloured rectangle he is floating in into
+   a room he is standing in, which is the whole difference between a sticker
+   and a portrait. */
+.ast-hero-shot::after {
+  content: ""; position: absolute; z-index: -1;
+  left: 50%; bottom: 7%; transform: translateX(-50%);
+  width: min(52%, 560px); height: 7%;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at center,
+    color-mix(in srgb, var(--a-braino) 42%, transparent), transparent 72%);
+  filter: blur(9px);
+}
+/* His artwork carries 34 units of empty headroom above his head, so a height
+   set on the box renders a character about two thirds of that tall. These
+   numbers are the box; the figure inside it lands around three quarters of the
+   band, and the headroom simply clips off the top. */
 .ast-hero-shot img {
+  margin-bottom: 4%;
   width: auto;
-  height: calc(52% + 16% * var(--grow, 0));
-  max-height: 78%;
+  height: calc(104% + 10% * var(--grow, 0));
+  max-height: none;
   object-fit: contain;
   filter: drop-shadow(0 24px 30px rgba(120, 52, 42, .32));
   animation: astFloat 6.5s ease-in-out infinite;
 }
 @media (prefers-reduced-motion: reduce) { .ast-hero-shot img { animation: none; } }
+
+/* The company page underlines the second half of its headline because that
+   half is the payoff. Here it is a clarification, and it wraps to two lines,
+   so the underline ended up hanging under the shorter of them attached to
+   nothing. Soft ink says "continues" without drawing a rule to do it. */
+.ast .aff-h1 b { box-shadow: none; padding-bottom: 0; color: var(--a-ink-soft); }

@@ -351,27 +351,37 @@ export default function AppStore() {
           {tab === "products" ? (
             <div className="aff-wrap">
             <Link to="/braino" className="ast-wide">
-              <div className="ast-wide-art">
-                <img src="/braino-standing.svg" alt="" width={64} height={78} aria-hidden="true" />
-              </div>
               <div className="ast-wide-body">
-                <p className="ast-feat-kicker">Product</p>
-                <h3>Braino</h3>
-                <p className="ast-feat-line">
-                  He sees the screen, hears the room, does things on the machine, and remembers all
-                  of it. The first thing we put AffectiveOS into, and the thing every mini app can
-                  plug into.
-                </p>
-                <p className="ast-feat-models">
-                  {MODELS.map((m) => (
-                    <span key={m}>{m}</span>
-                  ))}
-                </p>
-                <div className="ast-wide-foot">
-                  <span className="ast-feat-go">
-                    Open Braino<i aria-hidden="true">→</i>
-                  </span>
-                  <span className="ast-state is-out">Chrome build out</span>
+                {/* A mark, not a second scene. His stage is the picture at the
+                    top of the page; repeating it here made the same photograph
+                    appear twice inside one scroll. */}
+                {/* Two columns with a hairline between them. Left aligned in
+                    one column the card was a paragraph with five hundred pixels
+                    of nothing beside it. */}
+                <div className="ast-wide-name">
+                  <p className="ast-feat-kicker">
+                    <img src="/braino-standing.svg" alt="" width={64} height={78} aria-hidden="true" />
+                    Product
+                  </p>
+                  <h3>Braino</h3>
+                  <p className="ast-feat-models">
+                    {MODELS.map((m) => (
+                      <span key={m}>{m}</span>
+                    ))}
+                  </p>
+                </div>
+                <div className="ast-wide-say">
+                  <p className="ast-feat-line">
+                    He sees the screen, hears the room, does things on the machine, and remembers
+                    all of it. The first thing we put AffectiveOS into, and the thing every mini
+                    app can plug into.
+                  </p>
+                  <div className="ast-wide-foot">
+                    <span className="ast-feat-go">
+                      Open Braino<i aria-hidden="true">→</i>
+                    </span>
+                    <span className="ast-state is-out">Chrome build out</span>
+                  </div>
                 </div>
               </div>
             </Link>
