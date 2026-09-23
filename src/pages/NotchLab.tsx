@@ -33,7 +33,11 @@ type State = {
   /* The glance bar. Sample values only: nothing reads the machine yet, and the
      point of showing it here is to settle the design before anything does. */
   hud?: { temp: string; wifi: "0" | "1" | "2" | "3"; busy?: boolean; read: string };
+  /* Shows him parked at all four edges at once. */
+  perch?: boolean;
 };
+
+const PERCH_MARKUP = "      <div class=\"bm-perch\" data-at=\"notch\" aria-hidden=\"true\">\n        <svg class=\"bm-perch-face\" viewBox=\"0 0 120 56\" preserveAspectRatio=\"xMidYMid meet\">\n          <ellipse class=\"bm-perch-ear\" cx=\"38\" cy=\"30\" rx=\"8\" ry=\"4.5\" />\n          <ellipse class=\"bm-perch-ear\" cx=\"82\" cy=\"30\" rx=\"8\" ry=\"4.5\" />\n          <rect class=\"bm-perch-head\" x=\"26\" y=\"0\" width=\"68\" height=\"52\" rx=\"26\" />\n          <g class=\"bm-perch-eyes\">\n            <circle class=\"bm-perch-white\" cx=\"49\" cy=\"22\" r=\"12\" />\n            <circle class=\"bm-perch-white\" cx=\"71\" cy=\"22\" r=\"12\" />\n            <circle class=\"bm-perch-pupil\" cx=\"49\" cy=\"22\" r=\"6.2\" />\n            <circle class=\"bm-perch-pupil\" cx=\"71\" cy=\"22\" r=\"6.2\" />\n            <circle class=\"bm-perch-glint\" cx=\"51.3\" cy=\"19.3\" r=\"2\" />\n            <circle class=\"bm-perch-glint\" cx=\"73.3\" cy=\"19.3\" r=\"2\" />\n          </g>\n          <path class=\"bm-perch-mouth\" d=\"M 52 41 Q 60 49 68 41\" />\n        </svg>\n      </div>\n";
 
 const Q_DOT = '<i class="nf-q-dot"></i>';
 
@@ -122,7 +126,13 @@ const STATES: State[] = [
   { id: "hud-read", label: "15b \u00b7 The strip, held open",
     hint: "The same strip held open, for looking at the design without hovering. The end light is amber while he is busy.",
     classes: "on awake nf-hud-on nf-hud-read",
-    hud: { temp: "78\u00b0", wifi: "2", busy: true, read: "78\u00b0 Cloudy \u00b7 Home \u00b7 Braino is working" } }
+    hud: { temp: "78\u00b0", wifi: "2", busy: true, read: "78\u00b0 Cloudy \u00b7 Home \u00b7 Braino is working" } },
+  /* Perched: the third thing he can be doing, beside walking the screen and
+     staying where he was dropped. All four anchors at once, because the only
+     question here is whether the turn reads right at each edge. */
+  { id: "perch", label: "16 \u00b7 Perched, all four edges",
+    hint: "Half of him against an edge, out of the way, still himself when you call him. He is turned so his own down points into the screen, which is why his eyes are looking at you from every side.",
+    classes: "on awake", perch: true }
 ];
 
 export default function NotchLab() {
@@ -154,11 +164,24 @@ export default function NotchLab() {
       /* The strip is the whole menu bar. On the Mac that is 100vw; here the
          stage is the screen, so it spans the stage instead. */
       #notch-face.nf-hud-on { width: 100%; --nf-strip-w: 100%; }
+      /* The perches are position: fixed on the Mac because the overlay window
+         is the screen. Here the stage is the screen. */
+      .nl-perches { position: absolute; inset: 0; pointer-events: none; }
+      .nl-perches .bm-perch { position: absolute; }
     `;
     const face = document.createElement("div");
     face.id = "notch-face";
     face.innerHTML = NOTCH_MARKUP;
-    root.append(style, place, face);
+    /* One of him per edge, so the four orientations can be judged against each
+       other in a single look rather than by clicking between them. They are
+       fixed to the screen on the Mac; here the stage is the screen, so the
+       lab pins them to it. */
+    const perches = document.createElement("div");
+    perches.className = "nl-perches";
+    perches.innerHTML = ["notch", "bottom", "left", "right"]
+      .map((at) => PERCH_MARKUP.replace('data-at="notch"', `data-at="${at}"`))
+      .join("");
+    root.append(style, place, face, perches);
     rootRef.current = root;
     setTick((n) => n + 1);
   }, []);
@@ -189,6 +212,7 @@ export default function NotchLab() {
     nf.setAttribute("class", state.classes);
     const cap = state.caption;
     const countdownText = cap?.countdown ? COUNTDOWN[tick % COUNTDOWN.length] : "";
+    root?.querySelectorAll(".bm-perch").forEach((el) => el.classList.toggle("is-on", Boolean(state.perch)));
     const hud = nf.querySelector(".nf-hud");
     if (hud) {
       hud.setAttribute("data-wifi", state.hud?.wifi ?? "3");

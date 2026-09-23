@@ -6107,3 +6107,82 @@ body {
 }
 #notch-face.nf-hud-on:hover .nf-hud-sheet,
 #notch-face.nf-hud-on.nf-hud-read .nf-hud-sheet { opacity: 1; transform: none; }
+
+/* ============================================================================
+   Perched.
+
+   The third thing he can be doing. Walking the screen and staying where he was
+   dropped are the two we have; this is half of him parked against an edge,
+   out of the way, and still entirely himself when you call him.
+
+   The rotation is the design. He is turned so his own "down" points into the
+   screen whichever edge he is on, so one drawing reads as leaning in from the
+   left, the right, the floor, or out from under the notch. That also makes the
+   eyes trivial: his pupils only ever look down in his own frame, and they are
+   looking at the screen in yours.
+
+   Inert. Nothing in this renderer sets .is-on; /notch-lab does, and the Mac
+   mode that will is walkArea.mode === "perch".
+   ========================================================================== */
+.bm-perch {
+  position: fixed;
+  /* Under the notch face, which is 57, so the one hanging from the notch is
+     covered by the housing rather than clipped by a box. */
+  z-index: 56;
+  width: 168px;
+  height: 168px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 260ms ease, transform 620ms cubic-bezier(.22, 1, .36, 1);
+  /* Half of him. The container is the edge; the rest of him is past it. */
+  overflow: hidden;
+}
+.bm-perch.is-on { opacity: 1; pointer-events: auto; }
+
+/* Centred in its box, then turned, then pushed straight out through the edge.
+   Because the turn already points his down into the screen, "out" is simply
+   negative in his own frame at every anchor, and one number moves him at all
+   four. A percentage was wrong here: the box is square and he is not, so the
+   same percentage pushed him a different distance depending on the edge. */
+.bm-perch-face {
+  position: absolute;
+  width: 100%;
+  height: auto;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%) rotate(var(--perch-rot, 0deg)) translateY(var(--perch-out, -66px));
+}
+.bm-perch-head { fill: #e8786e; }
+.bm-perch-ear { fill: #e14a48; opacity: .32; }
+.bm-perch-white { fill: #fff; }
+.bm-perch-glint { fill: #fff; }
+.bm-perch-mouth { fill: none; stroke: #7e2a24; stroke-width: 2.6; stroke-linecap: round; }
+/* Looking down in his own frame is looking into the screen in yours, at every
+   anchor, because of the rotation above. */
+.bm-perch-pupil { fill: #1b1713; transform: translateY(2.6px); }
+
+/* The four anchors. Each one is an edge plus the turn that makes him face in. */
+/* Hanging from the notch is the one that is not clipped by its own box: the
+   housing is opaque and sits above him, so he simply comes out from behind it
+   and the black does the cutting. */
+.bm-perch[data-at="notch"] {
+  top: 0; left: 50%; margin-left: -84px;
+  --perch-rot: 0deg;
+  /* Pushed out only as far as the housing is deep: the black is what cuts him,
+     so anything further would just hide him behind it. */
+  --perch-out: -22px;
+  overflow: visible;
+}
+.bm-perch[data-at="bottom"] { bottom: 0; left: 50%; margin-left: -84px; --perch-rot: 180deg; }
+.bm-perch[data-at="left"]   { left: 0; top: 50%; margin-top: -84px; --perch-rot: -90deg; }
+.bm-perch[data-at="right"]  { right: 0; top: 50%; margin-top: -84px; --perch-rot: 90deg; }
+
+/* He breathes where he sits, so a parked character never reads as a decal. */
+.bm-perch.is-on .bm-perch-face { animation: bmPerchBreathe 5.2s ease-in-out infinite; }
+@keyframes bmPerchBreathe {
+  0%, 100% { transform: translate(-50%, -50%) rotate(var(--perch-rot, 0deg)) translateY(var(--perch-out, -66px)) scale(1); }
+  50%      { transform: translate(-50%, -50%) rotate(var(--perch-rot, 0deg)) translateY(calc(var(--perch-out, -66px) + 3px)) scale(1.025); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bm-perch.is-on .bm-perch-face { animation: none; }
+}
