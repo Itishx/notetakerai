@@ -32,7 +32,10 @@
     "pdf:v10": "node scripts/print-deck.mjs files/braino-pitch-v10.html public/braino-pitch-v10.pdf",
     "pdf:v11": "node scripts/print-deck.mjs files/braino-pitch-v11.html public/braino-pitch-v11.pdf",
     "logos:v10": "node scripts/inline-deck-logos.mjs files/braino-pitch-v10.html",
-    "pdf:companion": "node scripts/print-deck.mjs files/braino-companion-deck.html public/braino-companion-deck.pdf"
+    "pdf:companion": "node scripts/print-deck.mjs files/braino-companion-deck.html public/braino-companion-deck.pdf",
+    "hil:misreads": "node scripts/hil-misreads-replay.mjs",
+    "mac:memory": "env -u ELECTRON_RUN_AS_NODE BRAINO_MEMORY_VIEW=1 electron mac/braino-mac/main.cjs",
+    "mac:screentext:build": "cd mac/braino-mac/native/BrainoScreenText && swiftc -O -o BrainoScreenText main.swift"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

@@ -110,6 +110,22 @@ contextBridge.exposeInMainWorld("brainoMac", {
     return () => ipcRenderer.removeListener("braino-mac:permission-needed", handler);
   },
   dashboardState: () => ipcRenderer.invoke("braino-mac:dashboard-state"),
+  contactsList: () => ipcRenderer.invoke("braino-mac:contacts-list"),
+  waImportant: (name, important) => ipcRenderer.invoke("braino-mac:wa-important", name, important),
+  contactsSync: () => ipcRenderer.invoke("braino-mac:contacts-sync"),
+  mesaState: () => ipcRenderer.invoke("braino-mac:mesa-state"),
+  activityState: () => ipcRenderer.invoke("braino-mac:activity-state"),
+  activityDay: (day) => ipcRenderer.invoke("braino-mac:activity-day", day),
+  activityPause: (paused) => ipcRenderer.invoke("braino-mac:activity-pause", paused),
+  activityDeleteDay: (day) => ipcRenderer.invoke("braino-mac:activity-delete-day", day),
+  activityDeleteRow: (day, index) => ipcRenderer.invoke("braino-mac:activity-delete-row", day, index),
+  memoryOpen: () => ipcRenderer.invoke("braino-mac:memory-open"),
+  memoryDigests: (day) => ipcRenderer.invoke("braino-mac:memory-digests", day),
+  memoryRecallSwitch: (on) => ipcRenderer.invoke("braino-mac:memory-recall-switch", on),
+  memoryDigestNow: () => ipcRenderer.invoke("braino-mac:memory-digest-now"),
+  memoryAsk: (question) => ipcRenderer.invoke("braino-mac:memory-ask", question),
+  mesaConnect: () => ipcRenderer.invoke("braino-mac:mesa-connect"),
+  mesaSync: () => ipcRenderer.invoke("braino-mac:mesa-sync"),
   dashboardData: (key) => ipcRenderer.invoke("braino-mac:dashboard-data", key),
   dashboardOpen: () => ipcRenderer.invoke("braino-mac:dashboard-open"),
   setWindowTheme: (theme) => ipcRenderer.invoke("braino-mac:window-theme", theme),
@@ -335,6 +351,11 @@ contextBridge.exposeInMainWorld("brainoMac", {
     const handler = (_event, payload) => callback(payload || {});
     ipcRenderer.on("braino-mac:calendar-next", handler);
     return () => ipcRenderer.removeListener("braino-mac:calendar-next", handler);
+  },
+  onWaCard: (callback) => {
+    const handler = (_event, payload) => callback(payload);
+    ipcRenderer.on("braino-mac:wa-card", handler);
+    return () => ipcRenderer.removeListener("braino-mac:wa-card", handler);
   },
   onWaBadge: (callback) => {
     const handler = (_event, payload) => callback(payload || {});

@@ -209,7 +209,7 @@ test("his name wakes him in any script, and nothing is dropped without a log", (
 test("a sentence begun while awake is never cut off for ending late", () => {
   assert.match(js, /const NAMED_WINDOW_MS = 12000;/);
   assert.match(lift("function namedWindowOpen() {"), /return Boolean\(namedSpeechAwake\);/);
-  assert.match(js, /if \(namedModeOn && namedWindowOpen\(\)\) namedSpeechAwake = true;/);
+  assert.match(js, /if \(namedModeOn && namedWindowOpen\(\) && !namedBusyOnly\(\)\) namedSpeechAwake = true;/);
   assert.match(lift("async function flushRealtimeTranscript(reason, textOverride) {"), /if \(transcript\) namedSpeechAwake = false;/);
 });
 

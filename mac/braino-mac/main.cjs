@@ -1,4 +1,4 @@
-const { app, BrowserWindow, clipboard, desktopCapturer, globalShortcut, ipcMain, net, powerMonitor, protocol, screen, shell, systemPreferences } = require("electron");
+const { app, BrowserWindow, clipboard, desktopCapturer, globalShortcut, ipcMain, net, Notification, powerMonitor, protocol, screen, shell, systemPreferences } = require("electron");
 const { execFile, spawn } = require("node:child_process");
 const crypto = require("node:crypto");
 const fs = require("node:fs");
@@ -223,6 +223,10 @@ const {
   macActionChangedSomething,
 } = require(path.join(__dirname, "hil-verify.cjs"));
 const { parseBrainoOsIntent } = require(path.join(__dirname, "braino-os-intent.cjs"));
+const { isInstantCommand, planFromVerdict, hilFirstEnabled } = require(path.join(__dirname, "hil-first.cjs"));
+const { shortDoneLine } = require(path.join(__dirname, "done-line.cjs"));
+const { compactHour, claudeLinesInWindow, recallCandidates } = require(path.join(__dirname, "memory-digest.cjs"));
+const { createActivityLog, isPrivate: activityIsPrivate, isSelf: activityIsSelf, tidyScreenLines, hashText } = require(path.join(__dirname, "activity-log.cjs"));
 const {
   cleanContactName,
   findContactBySound,
@@ -1199,6 +1203,24 @@ function interactionUrlHost(url) {
 }
 
 function logInteraction(event = {}) {
+  /* Everything said to him and everything he said back, by voice, typing or
+     anything else, goes into the memory layer as well as the server log. The
+     layer is local and text-only; see activity-log.cjs. */
+  try {
+    const said = String(event?.user_text || "").trim();
+    const reply = String(event?.braino_text || "").trim();
+    if (said || reply) {
+      activityLog.record("conversation", {
+        channel: String(event?.kind || "voice"),
+        mode: event?.mode ? String(event.mode) : "",
+        you: said.slice(0, 1200),
+        braino: reply.slice(0, 1200),
+        route: event?.route ? String(event.route) : "",
+        app: activeMacContext?.appName || "",
+        hash: hashText(`${said}|${reply}`),
+      });
+    }
+  } catch (_) {}
   try {
     if (!SUPABASE_URL || !SUPABASE_ANON_KEY || Date.now() < interactionLogMissingUntil) return;
     const source = event && typeof event === "object" ? event : {};
@@ -4602,6 +4624,9 @@ async function handlePendingMacWorkflow(raw) {
         // A yes clears the one step it was asked about. Anything else is just an
         // answer to a question, and the gate stays shut.
         approvedSig: approved ? held.gatedSig : "",
+        gatedStep: approved ? held.gatedStep : null,
+        consentFromAnswer: approved && !held.gatedSig && Boolean(held.askedConsent),
+        gatedTarget: approved ? held.gatedTarget : null,
       });
     }
 
@@ -6430,6 +6455,136 @@ async function lookupContactDetails(query) {
   return { ok: true, say: `${who}: ${parts.join(". ")}` };
 }
 
+// ── WhatsApp, known silently ─────────────────────────────────────────────────
+// The WhatsApp Mac app keeps every message in its own database on this Mac.
+// Braino reads it read-only, which does not mark anything read, catches what
+// notifications miss (WhatsApp open, Focus on, previews off), and never speaks
+// a message by himself. Important people's one-to-one messages show quietly in
+// the notch; everyone else is remembered, not shown. Groups are never shown.
+// The memory layer keeps who and when; the text stays in WhatsApp's own
+// database and is read only when you ask.
+const WA_DB_PATH = path.join(os.homedir(), "Library", "Group Containers", "group.net.whatsapp.WhatsApp.shared", "ChatStorage.sqlite");
+const WA_IMPORTANT_PATH = path.join(AUTH_STORE_DIR, "whatsapp-important.json");
+const WA_APPLE_EPOCH = 978307200; // WhatsApp stores seconds since 2001-01-01
+const WA_DB_POLL_MS = 3000;
+const WA_MEDIA = { 1: "sent a photo", 2: "sent a video", 3: "sent a voice note", 4: "shared a contact", 5: "shared a location", 8: "sent a document", 15: "sent a sticker", 11: "sent a GIF" };
+const WA_SYSTEM_TYPES = new Set([6, 10]);
+let waDbLastPk = 0;
+let waDbReadable = null;
+let waDbBusy = false;
+
+function waDbAvailable() {
+  if (waDbReadable === null) waDbReadable = fs.existsSync(WA_DB_PATH);
+  return waDbReadable;
+}
+
+async function queryWhatsAppDb(sql) {
+  const { stdout } = await execFileP("/usr/bin/sqlite3", ["-readonly", "-json", WA_DB_PATH, sql], { timeout: 6000, maxBuffer: 8 * 1024 * 1024 });
+  const text = String(stdout || "").trim();
+  return text ? JSON.parse(text) : [];
+}
+
+function waMessageFromRow(row) {
+  const type = Number(row.type) || 0;
+  const text = String(row.text || "").trim();
+  return {
+    pk: Number(row.pk),
+    name: String(row.partner || row.push || "").trim() || "Someone",
+    jid: String(row.jid || ""),
+    group: Number(row.stype) === 1 || /@g\.us$/.test(String(row.jid || "")),
+    fromMe: Number(row.fromme) === 1,
+    kind: type === 0 ? "text" : (WA_MEDIA[type] ? "media" : "other"),
+    text: type === 0 ? text : (WA_MEDIA[type] || "sent something"),
+    at: (Number(row.date) + WA_APPLE_EPOCH) * 1000,
+  };
+}
+
+const WA_SELECT = `SELECT m.Z_PK AS pk, s.ZSESSIONTYPE AS stype, s.ZPARTNERNAME AS partner, s.ZCONTACTJID AS jid,
+  m.ZPUSHNAME AS push, m.ZMESSAGETYPE AS type, m.ZTEXT AS text, m.ZMESSAGEDATE AS date, m.ZISFROMME AS fromme
+  FROM ZWAMESSAGE m JOIN ZWACHATSESSION s ON m.ZCHATSESSION = s.Z_PK`;
+
+/* Important people: yours to choose, by name. Matched loosely, because the
+   WhatsApp name and the address book name are usually, not always, the same. */
+function waImportantNames() {
+  try { return (JSON.parse(fs.readFileSync(WA_IMPORTANT_PATH, "utf8"))?.names || []).filter(Boolean); } catch (_) { return []; }
+}
+function setWaImportant(name, important) {
+  const clean = String(name || "").trim();
+  if (!clean) return waImportantNames();
+  const names = waImportantNames().filter((n) => n.toLowerCase() !== clean.toLowerCase());
+  if (important) names.push(clean);
+  try { fs.writeFileSync(WA_IMPORTANT_PATH, JSON.stringify({ names }, null, 2)); } catch (_) {}
+  logMac("whatsapp.important_set", { name: textForLog(clean), important, total: names.length });
+  return names;
+}
+function isWaImportant(name) {
+  const n = String(name || "").toLowerCase().trim();
+  if (!n) return false;
+  return waImportantNames().some((v) => {
+    const x = v.toLowerCase();
+    return n === x || n.startsWith(`${x} `) || x.startsWith(`${n} `) || n.split(/\s+/)[0] === x;
+  });
+}
+
+async function pollWhatsAppDb() {
+  if (waDbBusy || !waDbAvailable()) return;
+  waDbBusy = true;
+  try {
+    if (!waDbLastPk) {
+      // Start from now: 70,000 old messages are history, not news.
+      const [row] = await queryWhatsAppDb("SELECT MAX(Z_PK) AS pk FROM ZWAMESSAGE;");
+      waDbLastPk = Number(row?.pk) || 0;
+      macTrace("💬 WHATSAPP", `reading the Mac app's messages silently, from message ${waDbLastPk}`);
+      return;
+    }
+    const rows = await queryWhatsAppDb(`${WA_SELECT} WHERE m.Z_PK > ${waDbLastPk} ORDER BY m.Z_PK ASC LIMIT 50;`);
+    for (const raw of rows) {
+      const msg = waMessageFromRow(raw);
+      waDbLastPk = Math.max(waDbLastPk, msg.pk);
+      if (msg.fromMe || WA_SYSTEM_TYPES.has(Number(raw.type)) || Number(raw.stype) > 1) continue;
+      if (!msg.group) lastIncomingWhatsApp = { name: msg.name, at: msg.at };
+      const important = !msg.group && isWaImportant(msg.name);
+      // Who and when. Never the text: that stays in WhatsApp's own database.
+      activityLog.record("whatsapp", { app: "WhatsApp", from: msg.name, group: msg.group, kind: msg.kind, important, hash: String(msg.pk) });
+      logMac("whatsapp.db.incoming", { from: textForLog(msg.name), group: msg.group, kind: msg.kind, important });
+      if (important) {
+        sendToRenderer("braino-mac:wa-card", { name: msg.name, text: msg.text.slice(0, 160) });
+        updateWaBadge(msg.name);
+        macTrace("💬 WHATSAPP", `${msg.name} (important), shown in the notch`);
+      }
+    }
+  } catch (error) {
+    logMac("whatsapp.db.poll_failed", { error: String(error?.message || error).slice(0, 160) });
+  } finally {
+    waDbBusy = false;
+  }
+}
+
+/* "Did Ilu message?", "what did she say?", "who texted me in the last hour?",
+   "catch me up on WhatsApp". Short by default: who, how many, the last line. */
+async function lookupWhatsAppMessages({ contact = "", sinceHours = 168, limit = 20 } = {}) {
+  if (!waDbAvailable()) return { ok: false, say: "I can't see the WhatsApp Mac app's messages on this Mac." };
+  const hours = Math.max(1, Math.min(24 * 400, Number(sinceHours) || 168));
+  const since = Date.now() / 1000 - WA_APPLE_EPOCH - hours * 3600;
+  const who = String(contact || "").trim();
+  const nameFilter = who ? ` AND (lower(s.ZPARTNERNAME) LIKE lower('%${who.replace(/'/g, "''")}%'))` : "";
+  const rows = (await queryWhatsAppDb(`${WA_SELECT} WHERE m.ZISFROMME = 0 AND s.ZSESSIONTYPE = 0 AND m.ZMESSAGEDATE > ${since}${nameFilter} AND m.ZMESSAGETYPE NOT IN (6,10) ORDER BY m.Z_PK DESC LIMIT ${Math.max(1, Math.min(200, Number(limit) || 20))};`)).map(waMessageFromRow);
+  const window = hours <= 1 ? "in the last hour" : hours < 24 ? `in the last ${Math.round(hours)} hours` : hours <= 24 ? "today" : hours <= 168 ? "this week" : "in that time";
+  if (who) {
+    if (!rows.length) return { ok: true, say: `No messages from ${who} ${window}.` };
+    const name = rows[0].name;
+    const when = new Date(rows[0].at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    const last = rows.slice(0, 3).reverse().map((m) => m.text).join(" / ");
+    return { ok: true, say: `${name} messaged ${rows.length === 1 ? "once" : `${rows.length} times`} ${window}, last at ${when}: "${last.slice(0, 240)}"` };
+  }
+  if (!rows.length) return { ok: true, say: `Nobody messaged you ${window}.` };
+  const counts = new Map();
+  for (const m of rows) counts.set(m.name, (counts.get(m.name) || 0) + 1);
+  const top = [...counts.entries()].slice(0, 4).map(([n, c]) => (c > 1 ? `${n} ${c} times` : n)).join(", ");
+  const first = rows[0];
+  return { ok: true, say: `${counts.size === 1 ? "One person" : `${counts.size} people`} ${window}: ${top}${counts.size > 4 ? ", and others" : ""}. Latest, ${first.name}: "${first.text.slice(0, 140)}"` };
+}
+
 async function notificationDbPath() {
   const grouped = path.join(os.homedir(), "Library", "Group Containers", "group.com.apple.usernoted", "db2", "db");
   if (fs.existsSync(grouped)) return grouped;
@@ -6488,6 +6643,8 @@ async function pollWhatsAppNotifications() {
   waPollBusy = true;
   try {
     if (waBadgeCount && activeMacContext?.appName === "WhatsApp") clearWaBadge();
+    // The app's own database is the better source; it has its own poll.
+    if (waDbAvailable()) return;
     const rows = await queryWhatsAppNotifications(waLastRecId);
     for (const row of rows) {
       waLastRecId = Math.max(waLastRecId, row.recId);
@@ -6496,9 +6653,11 @@ async function pollWhatsAppNotifications() {
       const sender = row.sender.replace(/\s*\(\d+ messages?\)\s*$/i, "");
       lastIncomingWhatsApp = { name: sender, at: Date.now() };
       logMac("whatsapp.incoming", { sender: textForLog(sender), bodyChars: row.body.length, recId: row.recId, spoken: waListenerEnabled });
-      if (waListenerEnabled) {
-        sendToRenderer("braino-mac:speak-line", { text: `${sender} says: ${row.body}` });
-      } else {
+      /* Never read out by himself any more. Stored, and shown only for the
+         people marked important; asked about, it is answered. */
+      activityLog.record("whatsapp", { app: "WhatsApp", from: sender, group: false, kind: "text", important: isWaImportant(sender), hash: String(row.recId) });
+      if (isWaImportant(sender)) {
+        sendToRenderer("braino-mac:wa-card", { name: sender, text: row.body.slice(0, 160) });
         updateWaBadge(sender);
       }
     }
@@ -9655,9 +9814,18 @@ function parseWhatsAppRememberIntent(raw) {
   return null;
 }
 
+/* Words that ride along with a request and are never a person.
+   "Open WhatsApp for me" came back as "What should I say to for me?", because
+   the last pattern takes whatever follows the word WhatsApp as the name. */
+const WHATSAPP_NOT_A_NAME = /^(?:for me|for us|please|pls|now|right now|app|the app|quickly|real quick|for a sec(?:ond)?|up)$/i;
+
 function parseWhatsAppIntent(raw) {
   const source = String(raw || "").trim();
   if (!/\bwhats\s*app\b/i.test(source)) return null;
+  // Opening the app is not a message. Nothing to send and nobody to send it to,
+  // so it falls through to the ordinary app opener.
+  if (/\b(?:open|launch|start|show|bring up|pull up|go to)\b[^.]*\bwhats\s*app\b/i.test(source)
+    && !/\b(?:send|message|text|tell|saying|reply|share|forward)\b/i.test(source)) return null;
   const messageMatch = source.match(/\b(?:saying|that says|which says|telling (?:her|him|them)|telling|tell (?:her|him|them))\s+["“]?(.+?)["”]?\s*$/i);
   const message = messageMatch?.[1]?.trim() || "";
   let recipient = "";
@@ -9672,6 +9840,7 @@ function parseWhatsAppIntent(raw) {
     const match = source.match(pattern);
     if (match?.[1]) {
       recipient = match[1].replace(/\bon\s+whats\s*app\b/gi, "").replace(/["“”]/g, "").replace(/\s+/g, " ").trim();
+      if (WHATSAPP_NOT_A_NAME.test(recipient.replace(/[?.!,]+$/, ""))) recipient = "";
       break;
     }
   }
@@ -10008,6 +10177,7 @@ async function checkAllTabsSnapshot() {
   if (key === lastTabsSnapshotKey) return;
   lastTabsSnapshotKey = key;
   logMac("tabs.snapshot", { count: tabs.length });
+  activityLog.record("tabs", { count: tabs.length, tabs: tabs.filter((t) => !activityIsPrivate({ title: t.title, url: t.url })).slice(0, 40) });
   try { meetingDetectFromTabs(tabs); } catch (_) {}
   sendToRenderer("braino-mac:tabs-snapshot", { tabs });
 }
@@ -13301,6 +13471,45 @@ async function findFiles(query, options = {}) {
   return matches;
 }
 
+/* "Open my Downloads folder." The usual places by name, anything else by a
+   folder search, and never an Apple Note: that is what the old path opened
+   once when it could not tell a folder from a word. */
+const MAC_KNOWN_FOLDERS = {
+  downloads: "Downloads", download: "Downloads", documents: "Documents", docs: "Documents",
+  desktop: "Desktop", pictures: "Pictures", photos: "Pictures", movies: "Movies", videos: "Movies",
+  music: "Music", home: "", applications: "/Applications", apps: "/Applications",
+};
+async function openNamedFolder(name) {
+  const key = String(name || "").toLowerCase().replace(/\b(?:my|the|folder)\b/g, "").trim();
+  let target = null;
+  if (Object.prototype.hasOwnProperty.call(MAC_KNOWN_FOLDERS, key)) {
+    const rel = MAC_KNOWN_FOLDERS[key];
+    target = rel.startsWith("/") ? rel : path.join(os.homedir(), rel);
+  } else if (key) {
+    const folders = await findFiles(key, { kind: "folder", requireNameMatch: true }).catch(() => []);
+    target = folders[0] || null;
+  }
+  if (!target || !fs.existsSync(target)) return { ok: false, say: `I could not find a folder called ${name || "that"}.` };
+  const opened = await openLocalPath(target);
+  if (!opened.ok) return { ok: false, say: `macOS would not open ${path.basename(target) || "your home folder"}: ${opened.error}.` };
+  return { ok: true, say: `Opened ${path.basename(target) || "your home folder"}.` };
+}
+
+/* The old path's file search, as a tool: name first, then inside files and
+   Apple Notes before saying there is nothing. */
+async function findFileForHil(query, kind, shouldOpen) {
+  if (!query) return { ok: false, say: "What should I look for?" };
+  const files = await findFiles(query, { kind, requireNameMatch: shouldOpen });
+  if (!files.length) return runMacWideDeepSearch(query);
+  if (shouldOpen) {
+    const opened = await openLocalPath(files[0]);
+    if (!opened.ok) return { ok: false, say: `I found ${path.basename(files[0])}, but macOS would not open it: ${opened.error}.` };
+    return { ok: true, say: `Opened ${path.basename(files[0])}.` };
+  }
+  const names = files.slice(0, 5).map((f) => path.basename(f)).join(", ");
+  return { ok: true, say: `Found ${files.length}: ${names}${files.length > 5 ? ", and more" : ""}.` };
+}
+
 async function openLocalPath(filePath) {
   const error = await shell.openPath(filePath);
   if (error) {
@@ -14896,6 +15105,7 @@ async function runMacConversation(prompt) {
         "The user is talking to Braino from the Mac desktop companion.",
         "Braino is a visible OS-level overlay that follows the user's active Mac app and display.",
         ...surfaceLines,
+        ...todayMemoryLines(),
         ...mesaContextLines(),
         ...desktopHygieneLines(),
         "This is normal conversation unless the user asks for a concrete Mac action.",
@@ -15122,6 +15332,14 @@ async function macUnderstandUtterance(text, options = {}) {
  * state.facts is how the loop has always told itself things mid-run ("saying it
  * is not doing it"), so a correction from the person goes in the same way and
  * is read on the very next turn. */
+/* Role and name of the element at an index, so "the same control" can be checked
+   rather than assumed. Empty when there is no such element. */
+function macElementIdentity(elements, index) {
+  if (index === undefined || index === null || !Array.isArray(elements)) return "";
+  const el = elements.find((e) => Number(e.index) === Number(index));
+  return el ? `${String(el.role || "")}|${String(el.name || "")}` : "";
+}
+
 function macTellRunningJob(note) {
   const line = String(note || "").trim();
   if (!line || !macActiveHilRun) return false;
@@ -15131,6 +15349,7 @@ function macTellRunningJob(note) {
     macActiveHilRun.state.facts = macActiveHilRun.state.facts.slice(-12);
   }
   logMac("hil.loop.told", { runId: macActiveHilRun.runId, note: textForLog(line, 160) });
+  macTrace("📥 FOLDED IN", `mid-job: "${line.slice(0, 160)}"`);
   return true;
 }
 /* The turn in flight. A new command bumps the generation, but the loop only
@@ -15155,9 +15374,22 @@ let macHilAbort = null;
  * you cannot take back. */
 const MAC_HIL_GATEABLE = new Set(["click", "pressKey", "selectOption"]);
 
+/* Tools newly given to the loop that can take something back from you. An
+   email he may have written himself asks first; a click only asks when the
+   control is one that sends, pays, posts or deletes. WhatsApp stays instant:
+   that was asked for. */
+const MAC_GATED_CLICK = /\b(?:send|buy|pay|place order|checkout|check out|publish|post|tweet|delete|remove|submit|confirm|transfer)\b/i;
+function macToolStepCanBeIrreversible(action) {
+  const tool = String(action?.tool || "");
+  if (tool === "mail_send") return String(action?.args?.action || "send") !== "draft";
+  if (tool === "click_element" || tool === "click_last_pointed") return MAC_GATED_CLICK.test(String(action?.args?.target || ""));
+  return false;
+}
+
 function macStepCanBeIrreversible(step) {
   const action = step?.action || {};
   const type = String(action.type || "");
+  if (type === "tool") return macToolStepCanBeIrreversible(action);
   if (type === "type") return action.submit === true;
   return MAC_HIL_GATEABLE.has(type);
 }
@@ -15333,6 +15565,28 @@ async function macLookAtScreen(goal = "") {
  * google-docs-append have been deployed for months, and neither the Mac nor the
  * tool catalog mentioned them, so the brain could not know.
  */
+/* The same Google consent the website dashboard starts, started from the Mac. */
+let lastDriveConnectAt = 0;
+async function startGoogleDriveConnect(authToken, userId) {
+  if (Date.now() - lastDriveConnectAt < 60000) return true; // already opened a minute ago
+  try {
+    const res = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/google-drive-oauth-start`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${authToken}` },
+      body: JSON.stringify({ userIdentifier: userId }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.authUrl) return false;
+    lastDriveConnectAt = Date.now();
+    await openChromeUrl(data.authUrl);
+    logMac("google_drive.connect_opened", {});
+    macTrace("🔗 CONNECT", "opened Google Drive sign-in");
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
 async function createGoogleDocWithText(title, text) {
   const auth = authStatusPayload();
   if (!auth.userId) return { ok: false, say: "You are not signed in, so I cannot make a Google Doc." };
@@ -15361,10 +15615,22 @@ async function createGoogleDocWithText(title, text) {
     logMac("google_doc.created", { docId: doc.id, chars: text.length });
     return { ok: true, say: `Created the Google Doc "${doc.name || title}"${doc.url ? `: ${doc.url}` : ""}` };
   } catch (error) {
-    logMac("google_doc.failed", { error: String(error?.message || error) });
-    /* Named, because the fix is a consent screen and no amount of retrying is
-       going to get past one. */
-    return { ok: false, say: `I could not write the Google Doc: ${String(error?.message || error)}. If Drive is not connected yet, that is done once on the website.` };
+    const why = String(error?.message || error);
+    logMac("google_doc.failed", { error: why });
+    /* 0 of 4 in the log, every one "Google Drive is not connected yet." The fix
+       is a consent screen, so instead of naming it and stopping, he opens it:
+       approve once and the next ask works. The loop must not go and type into
+       docs.google.com instead; that is the path that "rejected text entry". */
+    if (/not connected/i.test(why)) {
+      const started = await startGoogleDriveConnect(authToken, auth.userId);
+      return {
+        ok: false,
+        say: started
+          ? "Google Drive isn't connected yet, so I opened the Google sign-in in Chrome. Approve it once, then ask me again and I'll write the doc."
+          : "Google Drive isn't connected yet. Connect it once from your Braino dashboard, then ask me again.",
+      };
+    }
+    return { ok: false, say: `I could not write the Google Doc: ${why}.` };
   }
 }
 
@@ -15387,16 +15653,158 @@ async function createGoogleDocWithText(title, text) {
  */
 const MAC_NEXUS_CALENDAR = "https://students.mesaschool.co.in/student/lms/calendar";
 
-async function syncScheduleFromNexus() {
+// ── Braino's own Mesa login ──────────────────────────────────────────────────
+// Mesa has no public API, so Braino reads it the way you do: signed in. He
+// used to borrow your Chrome tab, which meant a tab jumping to the front, and
+// a sync that failed without a word the day that login expired (it did, on
+// 2026-09-18, and nothing synced for six days). Now he has his own login, in
+// his own persistent browser session, used by a hidden window.
+const MESA_PARTITION = "persist:mesa-nexus";
+const MESA_SYNC_STATE_PATH = path.join(AUTH_STORE_DIR, "mesa-sync.json");
+const MESA_AUTO_SYNC_AFTER_MS = 20 * 3600 * 1000;
+const MESA_AUTO_CHECK_MS = 30 * 60 * 1000;
+
+function readMesaSyncState() {
+  try { return JSON.parse(fs.readFileSync(MESA_SYNC_STATE_PATH, "utf8")) || {}; } catch (_) { return {}; }
+}
+function writeMesaSyncState(next) {
+  try { fs.writeFileSync(MESA_SYNC_STATE_PATH, JSON.stringify(next, null, 2)); } catch (_) {}
+}
+function recordMesaSync(result) {
+  const state = readMesaSyncState();
+  const now = Date.now();
+  writeMesaSyncState({
+    ...state,
+    lastAttemptAt: now,
+    ...(result.ok
+      ? { connected: true, lastSyncAt: now, lastCount: result.count, lastDue: result.due, knownAssignments: result.knownAssignments, newAssignments: result.newAssignments, lastError: null }
+      : { lastError: result.error || "failed" }),
+  });
+}
+
+/* Expired: said once a day, not on every automatic attempt. */
+function markMesaLoginExpired() {
+  const state = readMesaSyncState();
+  const now = Date.now();
+  const alreadyTold = state.expiredToldAt && now - state.expiredToldAt < 20 * 3600 * 1000;
+  writeMesaSyncState({ ...state, connected: false, lastError: "login expired", expiredToldAt: alreadyTold ? state.expiredToldAt : now });
+  if (alreadyTold) return;
+  logMac("mesa.login_expired", {});
+  macTrace("📅 SYNC", "Mesa login expired, asking you to reconnect");
+  try {
+    const note = new Notification({ title: "Braino", body: "Your Mesa login expired. Open Braino Settings, then Mesa, to reconnect." });
+    note.on("click", () => { try { openDashboardWindow(); } catch (_) {} });
+    note.show();
+  } catch (_) {}
+}
+
+/* Runs a script in Nexus, signed in as Braino's own session, in a window
+   nobody sees. Returns the same shape runJs does. */
+async function runInMesaSession(js, timeoutMs = 30000) {
+  let win = null;
+  try {
+    win = new BrowserWindow({ show: false, width: 1100, height: 800, webPreferences: { partition: MESA_PARTITION, contextIsolation: true, nodeIntegration: false } });
+    await Promise.race([
+      win.loadURL(MAC_NEXUS_CALENDAR),
+      new Promise((_, reject) => setTimeout(() => reject(new Error("nexus load timeout")), 20000)),
+    ]);
+    const landed = win.webContents.getURL();
+    if (/\/(?:login|signin|auth)\b/i.test(landed)) return { ok: false, reason: "login_needed", detail: landed };
+    const out = await Promise.race([
+      win.webContents.executeJavaScript(js, true),
+      new Promise((_, reject) => setTimeout(() => reject(new Error("nexus script timeout")), timeoutMs)),
+    ]);
+    return { ok: true, out: String(out || "") };
+  } catch (error) {
+    return { ok: false, reason: "own_session_failed", detail: String(error?.message || error) };
+  } finally {
+    try { win?.destroy(); } catch (_) {}
+  }
+}
+
+/* One time: a real window on the Nexus login, in Braino's session. You sign
+   in with your Mesa email and password; the moment the page is past the
+   login, it closes and the first sync runs. */
+let mesaConnectWindow = null;
+function connectMesa() {
+  return new Promise((resolve) => {
+    if (mesaConnectWindow && !mesaConnectWindow.isDestroyed()) { mesaConnectWindow.focus(); resolve({ ok: false, say: "The Mesa login window is already open." }); return; }
+    mesaConnectWindow = new BrowserWindow({ width: 520, height: 720, title: "Connect Mesa", webPreferences: { partition: MESA_PARTITION, contextIsolation: true, nodeIntegration: false } });
+    let settled = false;
+    const finish = async (connected) => {
+      if (settled) return;
+      settled = true;
+      try { if (mesaConnectWindow && !mesaConnectWindow.isDestroyed()) mesaConnectWindow.close(); } catch (_) {}
+      mesaConnectWindow = null;
+      if (!connected) { resolve({ ok: false, say: "Mesa was not connected." }); return; }
+      const state = readMesaSyncState();
+      writeMesaSyncState({ ...state, connected: true, connectedAt: Date.now(), lastError: null, expiredToldAt: null });
+      logMac("mesa.connected", {});
+      macTrace("📅 SYNC", "Mesa connected, running the first sync");
+      const timetable = await syncScheduleFromNexus({ background: true });
+      if (timetable?.ok) await syncNexusEverything({ background: true }).catch(() => null);
+      resolve(timetable);
+    };
+    const check = (_event, url) => {
+      const value = String(url || "");
+      if (!/students\.mesaschool\.co\.in\/student\//i.test(value) || /\/(?:login|signin|auth)\b/i.test(value)) return;
+      /* The page can land on the calendar for a moment and then bounce to the
+         login, so it has to still be past the login a few seconds later, and
+         the session has to actually answer, before this counts as connected. */
+      setTimeout(async () => {
+        if (settled || !mesaConnectWindow || mesaConnectWindow.isDestroyed()) return;
+        const still = mesaConnectWindow.webContents.getURL();
+        if (/\/(?:login|signin|auth)\b/i.test(still)) return;
+        const probe = await mesaConnectWindow.webContents.executeJavaScript(`(function(){try{var r=new XMLHttpRequest();r.open("POST","/api/auth/refresh",false);r.withCredentials=true;r.setRequestHeader("Content-Type","application/json");r.send("{}");return String(r.status)}catch(e){return "0"}})()`, true).catch(() => "0");
+        if (Number(probe) >= 200 && Number(probe) < 300) finish(true);
+      }, 2500);
+    };
+    mesaConnectWindow.webContents.on("did-navigate", check);
+    mesaConnectWindow.webContents.on("did-navigate-in-page", check);
+    mesaConnectWindow.on("closed", () => finish(false));
+    void mesaConnectWindow.loadURL(MAC_NEXUS_CALENDAR);
+  });
+}
+
+/* Daily, by itself: at launch, every half hour, and when the Mac wakes, it
+   syncs if the last good sync is over 20 hours old. So the first time you open
+   the Mac in the morning, the timetable is already today's. */
+let mesaAutoBusy = false;
+async function mesaAutoSyncIfDue(why) {
+  if (mesaAutoBusy) return;
+  const state = readMesaSyncState();
+  if (!state.connected) return;
+  if (state.lastSyncAt && Date.now() - state.lastSyncAt < MESA_AUTO_SYNC_AFTER_MS) return;
+  // A failed attempt is retried after an hour, not every half hour forever.
+  if (state.lastError && state.lastAttemptAt && Date.now() - state.lastAttemptAt < 3600 * 1000) return;
+  mesaAutoBusy = true;
+  try {
+    logMac("mesa.auto_sync", { why });
+    const timetable = await syncScheduleFromNexus({ background: true });
+    // Attendance and the rest ride the same login, right after.
+    if (timetable?.ok) {
+      const rest = await syncNexusEverything({ background: true }).catch(() => null);
+      macTrace("📅 SYNC", `attendance and the rest: ${rest?.ok ? "done" : (rest?.say || "failed")}`);
+    }
+  } finally {
+    mesaAutoBusy = false;
+  }
+}
+function startMesaAutoSync() {
+  setTimeout(() => void mesaAutoSyncIfDue("launch"), 45000).unref?.();
+  setInterval(() => void mesaAutoSyncIfDue("timer"), MESA_AUTO_CHECK_MS).unref?.();
+  try {
+    powerMonitor.on("resume", () => setTimeout(() => void mesaAutoSyncIfDue("wake"), 20000));
+    powerMonitor.on("unlock-screen", () => setTimeout(() => void mesaAutoSyncIfDue("unlock"), 15000));
+  } catch (_) {}
+}
+
+async function syncScheduleFromNexus(options = {}) {
+  const background = Boolean(options.background);
   const auth = authStatusPayload();
   if (!auth.userId) return { ok: false, say: "You are not signed in to Braino, so I have nowhere to save your timetable." };
   const authToken = await getBrainoAuthToken();
   if (!authToken) return { ok: false, say: "I could not authenticate to Braino, so I cannot save your timetable." };
-
-  // The page has to be in front: AppleScript runs JavaScript in the front
-  // window's active tab, and there is no way to aim it at a background one.
-  await openChromeUrl(MAC_NEXUS_CALENDAR);
-  await macHilWait(2600);
 
   const from = new Date(Date.now() - 30 * 86400000).toISOString();
   const to = new Date(Date.now() + 120 * 86400000).toISOString();
@@ -15417,14 +15825,29 @@ async function syncScheduleFromNexus() {
     return e.responseText;
   }catch(err){return "BRAINO_ERR "+(err&&err.message?err.message:String(err))}})()`;
 
-  const out = await runJs(js, "Google Chrome", 30000);
+  /* Braino's own Mesa login first: a hidden window, his own saved session, no
+     Chrome tab opening in your face and nothing that breaks because Chrome is
+     closed or signed out. Your Chrome is only the fallback, and only when you
+     asked for the sync yourself: a background sync never touches it. */
+  let out = await runInMesaSession(js);
+  if (out.ok && /^BRAINO_ERR refresh 40[13]/.test(String(out.out || ""))) out = { ok: false, reason: "login_needed" };
+  if (!out.ok && out.reason === "login_needed") markMesaLoginExpired();
+  if (!out.ok && !background) {
+    macTrace("📅 SYNC", `own Mesa session unavailable (${out.reason}), trying your Chrome`);
+    await openChromeUrl(MAC_NEXUS_CALENDAR);
+    await macHilWait(2600);
+    out = await runJs(js, "Google Chrome", 30000);
+  }
   if (!out.ok) {
-    logMac("schedule.sync.failed", { reason: out.reason, detail: out.detail });
+    logMac("schedule.sync.failed", { reason: out.reason, detail: out.detail, background });
+    recordMesaSync({ ok: false, error: out.reason === "login_needed" ? "login expired" : String(out.detail || out.reason || "failed") });
     return {
       ok: false,
-      say: out.reason === "javascript_not_allowed"
-        ? "Chrome will not run scripts yet. Turn on View, Developer, Allow JavaScript from Apple Events, then ask me again."
-        : `I could not reach Nexus: ${out.detail || out.reason}`,
+      say: out.reason === "login_needed"
+        ? "Your Mesa login has expired. Open Settings, Mesa, and connect again."
+        : out.reason === "javascript_not_allowed"
+          ? "Chrome will not run scripts yet. Turn on View, Developer, Allow JavaScript from Apple Events, then ask me again."
+          : `I could not reach Nexus: ${out.detail || out.reason}`,
     };
   }
   const body = String(out.out || "");
@@ -15482,7 +15905,11 @@ async function syncScheduleFromNexus() {
   }
 
   const due = rows.filter((r) => r.kind === "assignment").length;
-  logMac("schedule.sync.done", { count: rows.length, due });
+  logMac("schedule.sync.done", { count: rows.length, due, background });
+  const previous = readMesaSyncState();
+  const newDue = rows.filter((r) => r.kind === "assignment" && !(previous.knownAssignments || []).includes(r.source_ref));
+  recordMesaSync({ ok: true, count: rows.length, due, knownAssignments: rows.filter((r) => r.kind === "assignment").map((r) => r.source_ref), newAssignments: previous.lastSyncAt ? newDue.length : 0 });
+  macTrace("📅 SYNC", `${rows.length} events, ${due} assignments${previous.lastSyncAt && newDue.length ? `, ${newDue.length} new` : ""}${background ? " (automatic)" : ""}`);
   return {
     ok: true,
     say: `Synced your Mesa timetable: ${rows.length} things, ${due} of them deadlines. Ask me what is due whenever you like.`,
@@ -15596,14 +16023,12 @@ const MAC_NEXUS_PROBES = [
   "notifications?limit=30",
 ];
 
-async function syncNexusEverything() {
+async function syncNexusEverything(options = {}) {
+  const background = Boolean(options.background);
   const auth = authStatusPayload();
   if (!auth.userId) return { ok: false, say: "You are not signed in to Braino." };
   const authToken = await getBrainoAuthToken();
   if (!authToken) return { ok: false, say: "I could not authenticate to Braino." };
-
-  await openChromeUrl(MAC_NEXUS_CALENDAR);
-  await macHilWait(2600);
 
   const paths = JSON.stringify(MAC_NEXUS_PROBES);
   /* One script, every path, one round trip. Ten separate turns to try ten URLs
@@ -15631,11 +16056,21 @@ async function syncNexusEverything() {
     return JSON.stringify(out).slice(0,60000);
   }catch(err){return "BRAINO_ERR "+(err&&err.message?err.message:String(err))}})()`;
 
-  const out = await runJs(js, "Google Chrome", 45000);
+  /* Braino's own Mesa login first, the same hidden window the timetable uses.
+     It was Chrome-only and never finished once in the log (0 of 1), so
+     attendance was never saved and "what is my attendance" could never work. */
+  let out = await runInMesaSession(js, 45000);
+  if (out.ok && /^BRAINO_ERR refresh 40[13]/.test(String(out.out || ""))) out = { ok: false, reason: "login_needed" };
+  if (!out.ok && out.reason === "login_needed") markMesaLoginExpired();
+  if (!out.ok && !background) {
+    await openChromeUrl(MAC_NEXUS_CALENDAR);
+    await macHilWait(2600);
+    out = await runJs(js, "Google Chrome", 45000);
+  }
   if (!out.ok) {
     return {
       ok: false,
-      say: out.reason === "javascript_not_allowed"
+      say: out.reason === "login_needed" ? "Your Mesa login has expired. Open Settings, Mesa, and connect again." : out.reason === "javascript_not_allowed"
         ? "Chrome will not run scripts yet. Turn on View, Developer, Allow JavaScript from Apple Events."
         : `I could not reach Nexus: ${out.detail || out.reason}`,
     };
@@ -15897,10 +16332,26 @@ async function macAnswerScheduleFast(text) {
           : `You do not have a ${ordinal[1]} class ${when}.`;
       }
     } else if (MAC_FAST_NEXT.test(t)) {
-      const rows = await macFastRows("now", "", "class");
-      // One row. Asking what is next and being read the week is not a smaller
-      // failure than being told nothing.
-      say = rows?.length ? macSayOneClass(rows[0], "Your next class is") : null;
+      /* The class you should be in comes first. At 4:05 with a 4:00 class on,
+         "what is my next class" was answered with tomorrow's, which is true
+         and useless: the thing worth knowing is that you are late for one. */
+      const now = Date.now();
+      const rows = await macFastRows(new Date(now - 6 * 3600 * 1000).toISOString().slice(0, 10), "", "class");
+      if (rows?.length) {
+        const live = rows.find((r) => {
+          const st = new Date(r.starts_at).getTime();
+          const en = r.ends_at ? new Date(r.ends_at).getTime() : st + 60 * 60 * 1000;
+          return st <= now && now <= en;
+        });
+        const next = rows.find((r) => new Date(r.starts_at).getTime() > now);
+        const short = (r) => `${r.title} at ${macFriendlyTime(r.starts_at, r.timezone || "Asia/Kolkata")}, ${macRelativeWhen(r.starts_at, r.timezone || "Asia/Kolkata")}`;
+        if (live) {
+          const until = live.ends_at ? ` until ${macFriendlyTime(live.ends_at, live.timezone || "Asia/Kolkata")}` : "";
+          say = `Right now you should be in ${live.title}${live.room ? `, ${live.room}` : ""}${until}.${next ? ` Next is ${short(next)}.` : ""}`;
+        } else {
+          say = next ? `Your next class is ${short(next)}${next.room ? `, ${next.room}` : ""}.` : "No more classes scheduled.";
+        }
+      }
     } else if (MAC_FAST_DUE.test(t)) {
       /* Backwards as well as forwards, because an overdue assignment is the one
          you most need telling about. Answering "nothing due" to someone with
@@ -16309,6 +16760,7 @@ async function resolveAudioSources(hint = "any") {
       volumePercent: spotify.volumePercent,
       track: spotify.name || "",
       artist: spotify.artist || "",
+      link: spotifyShareLink(spotify.uri),
     });
   }
   for (const row of browser) {
@@ -16325,6 +16777,28 @@ async function resolveAudioSources(hint = "any") {
     browserTabs: browser.length,
   });
   return sources;
+}
+
+/* spotify:track:ID is what the app reports; the link a person pastes is the
+   open.spotify.com one, which opens on any phone. */
+function spotifyShareLink(uri) {
+  const match = String(uri || "").match(/^spotify:(track|episode|album|playlist):([A-Za-z0-9]+)$/);
+  return match ? `https://open.spotify.com/${match[1]}/${match[2]}` : "";
+}
+
+/* What is playing, WITH its link, as one line for the loop.
+ *
+ * "Send this song to Ilu" is three moves for a person: the link is already on
+ * the thing that is playing, the contact is in the phone, send. He used to be
+ * told the song's name and nothing else, so he went looking for a link the Mac
+ * had already read, a turn or three at ten seconds each. Now he is handed it. */
+async function macNowPlayingForHil() {
+  const sources = await resolveAudioSources("any").catch(() => []);
+  const lines = sources.map((row) => {
+    const link = row.link || row.url || "";
+    return `${row.label}${link ? `, link: ${link}` : ""}`;
+  });
+  return lines.length ? `Playing right now: ${lines.join("; ")}` : "";
 }
 
 function joinLabels(labels) {
@@ -16479,9 +16953,17 @@ const MAC_HIL_TOOLS = {
   web_search: (a) => runMacWebSearch(String(a.query || "")),
   deep_research: (a) => runResearch(String(a.query || a.topic || "")),
   amazon_search: (a) => runAmazonSearch(String(a.product || a.query || "")),
-  spotify_play: (a) => playSpotifySongOnMac(String(a.query || a.song || a.track || "")),
+  // songQuery and recipientRaw are the catalog's own names for these; the
+  // shorter ones were all this side read, so HIL's song and HIL's contact
+  // arrived empty.
+  spotify_play: (a) => playSpotifySongOnMac(String(a.songQuery || a.query || a.song || a.track || "")),
   spotify_control: (a) => controlSpotifyPlaybackOnMac(String(a.control || a.action || "")),
-  spotify_now_playing: () => describeSpotifyNowPlaying(),
+  spotify_now_playing: async () => {
+    const result = await describeSpotifyNowPlaying();
+    const state = await readSpotifyMacState().catch(() => null);
+    const link = spotifyShareLink(state?.uri);
+    return link && result?.ok ? { ...result, say: `${result.say} Link: ${link}` } : result;
+  },
   /* The same common sense the fast lane uses: find what is playing, act on
      that, check it. The loop should never have to reason about Spotify
      against a YouTube tab again. */
@@ -16492,14 +16974,100 @@ const MAC_HIL_TOOLS = {
     direction: Number(a.direction) === -1 ? -1 : 1,
     target: String(a.target || "any"),
   }),
-  now_playing: () => describePlayingMedia(),
+  // With the links, for the loop only: out loud, a URL is noise.
+  /* Named in the catalog, built on this Mac, and never connected: the router
+     picked these 46 times in shadow and had nothing to hand them to. */
+  youtube_play: (a) => playYouTubeVideo(String(a.query || "")),
+  // Every window, counted. The loop was reaching for a close-window shortcut.
+  tabs_close_all: () => closeAllBrowserTabs(),
+  /* The second batch the replay found: HIL named the right tool, the Mac had
+     the code, and nothing joined them, so the old patterns misread it again
+     ("loop this song from 126 to 130" -> "tell me the loop range"). */
+  music_play_segment_loop: (a) => {
+    const startSeconds = Number(a.startSeconds);
+    const endSeconds = Number(a.endSeconds);
+    const valid = Number.isFinite(startSeconds) && Number.isFinite(endSeconds) && endSeconds > startSeconds;
+    const clock = (n) => `${Math.floor(n / 60)}:${String(Math.round(n % 60)).padStart(2, "0")}`;
+    return playMusicSegmentOnMac({
+      valid,
+      reason: valid ? null : "missing_range",
+      song: String(a.song || ""),
+      provider: String(a.provider || "spotify"),
+      useCurrent: a.useCurrent === true || !a.song,
+      startSeconds: valid ? startSeconds : null,
+      endSeconds: valid ? endSeconds : null,
+      durationSeconds: valid ? endSeconds - startSeconds : null,
+      interpretedRange: valid ? `${clock(startSeconds)} to ${clock(endSeconds)}` : "",
+    });
+  },
+  recent_download: (a) => handleRecentDownloadIntent({ action: String(a.action || "open"), destination: a.destination ? String(a.destination) : "" }),
+  file_action_undo: () => undoLastFileAction(),
+  wallpaper_set_from_web: (a) => setWallpaperFromWeb(String(a.subject || "")),
+  mac_wide_deep_search: (a) => runMacWideDeepSearch(String(a.term || "")),
+  screen_point: (a) => runScreenPoint(String(a.target || ""), String(a.raw || a.target || "")),
+  /* ── P0 connect, 2026-09-24 (docs/HIL-TOOL-AUDIT.md) ──
+     The everyday jobs HIL understood and could not hand to anything, so the
+     old patterns re-read them. Every one of these already worked on the old
+     path except open_folder, file_find and repeat_last, which are new here. */
+  open_folder: (a) => openNamedFolder(String(a.folder || a.name || "")),
+  file_find: (a) => findFileForHil(String(a.query || ""), String(a.kind || ""), a.shouldOpen === true),
+  repeat_last: () => (lastDelegateSay ? { ok: true, say: lastDelegateSay } : { ok: true, say: "I haven't said anything worth repeating yet." }),
+  time_query: (a) => answerTimeQuery({ time: a.date === true ? false : a.time !== false }),
+  stop_meeting_recording: () => stopMeetingRecording(),
+  stop_screen_recording: () => stopScreenRecording(),
+  maps_show: (a) => runMapsShow(String(a.place || a.query || "")),
+  maps_directions: (a) => runMapsDirections({ destination: String(a.destination || a.place || ""), origin: a.origin ? String(a.origin) : "" }),
+  spotify_seek: (a) => seekSpotifyOnMac({
+    positionSeconds: Number.isFinite(Number(a.positionSeconds)) && a.positionSeconds !== null && a.positionSeconds !== "" ? Number(a.positionSeconds) : undefined,
+    relativeSeconds: Number.isFinite(Number(a.relativeSeconds)) && a.relativeSeconds !== null && a.relativeSeconds !== "" ? Number(a.relativeSeconds) : undefined,
+  }),
+  spotify_queue_track: (a) => queueSpotifyTrackOnMac(String(a.songQuery || a.song || a.query || "")),
+  spotify_set_volume: (a) => controlSpotifyVolumeOnMac({
+    volumePercent: Number.isFinite(Number(a.volumePercent)) && a.volumePercent !== null && a.volumePercent !== "" ? Number(a.volumePercent) : undefined,
+    volumeStep: Number.isFinite(Number(a.volumeStep)) && a.volumeStep !== null && a.volumeStep !== "" ? Number(a.volumeStep) : undefined,
+  }),
+  spotify_set_mode: (a) => setSpotifyModeOnMac({ feature: String(a.feature || "shuffle"), enable: a.enable !== false }),
+  timer_cancel: () => cancelReminders("timer"),
+  alarm_cancel: () => cancelReminders("alarm"),
+  alarm_control: (a) => handleAlarmControl({ snooze: a.snooze === true, dismiss: a.dismiss === true }),
+  stopwatch_control: (a) => handleStopwatch({ action: String(a.action || "read") }),
+  click_element: (a) => axClick({ target: String(a.target || "") }),
+  close_target: (a) => closeOpenTarget(String(a.target || "")),
+  memory_search: (a) => searchMemory({ query: String(a.query || ""), from: a.from, to: a.to }),
+  whatsapp_messages: (a) => lookupWhatsAppMessages({ contact: a.contact || a.name || "", sinceHours: a.sinceHours, limit: a.limit }),
+  whatsapp_reply_last: async (a) => {
+    const wa = lastIncomingWhatsApp;
+    if (!wa || Date.now() - wa.at > 15 * 60 * 1000) return { ok: false, say: "Nobody has messaged you on WhatsApp in the last fifteen minutes." };
+    return MAC_HIL_TOOLS.whatsapp_send({ recipientRaw: wa.name, message: String(a.message || "") });
+  },
+  send_to_phone: (a) => sendToPhone(String(a.content || "")),
+  mail_send: (a) => executeMailWorkflow({ action: a.action, recipient: a.recipient, recipientEmail: a.recipientEmail, subject: a.subject, body: a.body }),
+  notion_page: (a) => runNotionPage(String(a.title || ""), String(a.markdown || a.body || "")),
+  netflix_resume: (a) => resumeNetflixOnMac(String(a.title || "")),
+  wallpaper_random: () => setRandomOfficialWallpaper(),
+  spotify_play_context: (a) => playSpotifyContextOnMac(String(a.kind || ""), String(a.name || "")),
+  start_meeting_recording: (a) => startMeetingRecording(String(a.source || "")),
+  start_screen_recording: () => startScreenRecording(),
+  now_playing: async () => {
+    const line = await macNowPlayingForHil();
+    return line ? { ok: true, say: line } : describePlayingMedia();
+  },
   screen_vision: (a) => runScreenVision(String(a.question || a.prompt || "")),
   describe_image: (a) => describeImageForUser(String(a.question || a.prompt || "What is in this image?")),
   front_window_summary: () => frontWindowSummary(),
   take_screenshot: () => takeScreenshot(),
   read_selection: (a) => actOnSelectedText({ verb: String(a.verb || "summarise"), language: a.language, speakOnly: true }),
   alarm_set: (a) => startAlarm(Number(a.fireAt), String(a.label || "")),
-  whatsapp_send: (a) => sendWhatsAppMessage(String(a.recipient || ""), String(a.message || "")),
+  /* Mac app first, a signed-in web tab second, and a plain sentence when
+     there is neither, instead of a login QR nobody asked for. */
+  whatsapp_send: async (a) => {
+    if (macWhatsAppAppInstalled()) return sendWhatsAppMessage(String(a.recipientRaw || a.recipient || ""), String(a.message || ""));
+    const tabs = await listAllChromeTabs().catch(() => []);
+    const web = tabs.find((t) => /web\.whatsapp\.com/i.test(t.url || "") && !/log ?in|qr|scan/i.test(t.title || ""));
+    macTrace("💬 WHATSAPP", web ? "no Mac app, using the signed-in WhatsApp Web tab" : "no Mac app and no signed-in WhatsApp Web tab");
+    if (web) return { ok: false, say: "The WhatsApp Mac app is not installed, but WhatsApp Web is open and signed in. Send it there: switch to that tab and type into the chat." };
+    return { ok: false, say: "You don't seem to be logged into WhatsApp anywhere on this device." };
+  },
   /* The address book, out loud. Named in the catalog, so without this the loop
      was told "there is no such tool" and went looking on the web for a number
      that was sitting on the Mac. */
@@ -16579,8 +17147,33 @@ function macHilRunIsCurrent() {
   return Boolean(macActiveHilRun) && macActiveHilRun.generation === macHilGeneration;
 }
 
+/* WhatsApp is the Mac app. Itish has said so more times than anyone should
+   have to: every time the loop went to web.whatsapp.com it hit the login QR,
+   because he is never signed in there, while the Mac app sends in a second
+   through whatsapp_send. Checked on disk, once, so a Mac without the app can
+   still use the web. */
+let macHasWhatsAppApp = null;
+function macWhatsAppAppInstalled() {
+  if (macHasWhatsAppApp === null) {
+    macHasWhatsAppApp = ["/Applications/WhatsApp.app", path.join(os.homedir(), "Applications", "WhatsApp.app")].some((p) => fs.existsSync(p));
+  }
+  return macHasWhatsAppApp;
+}
+const WHATSAPP_WEB = /(?:^|\/\/|\.)web\.whatsapp\.com|wa\.me\//i;
+
 async function macExecuteHilAction(action, elements) {
   const type = String(action?.type || "");
+  const aimsAtWhatsAppWeb = WHATSAPP_WEB.test(String(action?.url || ""))
+    || (type === "tool" && WHATSAPP_WEB.test(JSON.stringify(action?.args || {})) && /open_url|chrome/i.test(String(action?.tool || "")))
+    || (type === "exec_js" && WHATSAPP_WEB.test(String(action?.code || "")));
+  if (aimsAtWhatsAppWeb && macWhatsAppAppInstalled()) {
+    logMac("hil.whatsapp_web_refused", { type });
+    macTrace("🚫 WHATSAPP WEB", "refused: the Mac app is installed, use whatsapp_send");
+    return {
+      ok: false,
+      error: "Not WhatsApp Web. The WhatsApp Mac app is installed on this Mac and the whatsapp_send tool sends through it in about a second: call whatsapp_send with recipientRaw and message. They are not signed in to WhatsApp Web.",
+    };
+  }
   /* Whatever this does, the screen after it is not the screen before it. Held
      here rather than in each branch so a new action type cannot forget, which
      is the failure that turns a saved three seconds into a click on the wrong
@@ -16858,7 +17451,8 @@ async function macExecuteHilAction(action, elements) {
       // .say carries whatever the tool found out. It goes back as answer, the
       // same field a search uses, so the loop folds it into facts and it
       // survives the turn instead of being learned and forgotten.
-      const said = out && typeof out.say === "string" ? out.say.trim() : "";
+      // .detail is for the loop only (addresses to act on), never spoken.
+      const said = [out && typeof out.say === "string" ? out.say.trim() : "", out && typeof out.detail === "string" ? out.detail.trim() : ""].filter(Boolean).join("\n");
       return said ? { ok: true, answer: said } : { ok: true };
     } catch (error) {
       logMac("hil.tool.failed", { tool: name, error: String(error?.message || error) });
@@ -16971,6 +17565,18 @@ async function runMacHilLoop(command, resume = null) {
   /* The signature of the one step the user has just approved. Spent on use, so
      a yes covers the thing that was asked about and nothing else. */
   let approvedSig = String(resume?.approvedSig || "");
+  /* The step they just said yes to, run as it was shown to them.
+     A yes used to go back to the model, which spent a whole turn deciding
+     again to do the one thing it had just asked permission for. The step is
+     already decided and already approved; the only thing left is doing it. */
+  let nowPlayingLine = null;
+  /* He asked "close all your tabs?" himself, they said yes, and then the gate
+     asked the same thing again. A yes to his own question covers the first
+     step that needs one, if it comes within the next few steps. */
+  let consentUntilStep = resume?.consentFromAnswer ? (Number(resume?.stepsUsed) || 0) + 3 : -1;
+  let replayStep = approvedSig && resume?.gatedStep && macHilStepSignature(resume.gatedStep) === approvedSig
+    ? resume.gatedStep
+    : null;
   /* Their answer, handed to the model on the next turn and then forgotten, the
      way the browser engine does it. */
   let pendingReply = resume?.userReply ? String(resume.userReply) : null;
@@ -16999,6 +17605,14 @@ async function runMacHilLoop(command, resume = null) {
     const cached = macCachedObservation();
     if (cached) logMac("hil.observe.reused", { step });
     const obs = cached || await macBuildObservation();
+    /* Read once, on the first turn, and only when the command could be about
+       what is playing. Capped, so a slow AppleScript never holds up the turn. */
+    if (nowPlayingLine === null) {
+      nowPlayingLine = /\b(song|track|music|playing|listening|video|link)\b/i.test(String(command || ""))
+        ? await Promise.race([macNowPlayingForHil(), new Promise((r) => setTimeout(() => r(""), 1500))])
+        : "";
+      if (nowPlayingLine) macTrace("🎵 NOW PLAYING", nowPlayingLine);
+    }
     if (macHilGeneration !== myGeneration) {
       logMac("hil.loop.superseded", { runId, step, at: "after_observe" });
       return { ok: true, say: "", source: "hil_loop", superseded: true };
@@ -17011,7 +17625,13 @@ async function runMacHilLoop(command, resume = null) {
          screen, failing, and asking "which Italian restaurant do you mean?"
          fourteen seconds after naming it himself. */
       context: [
+        `Now: ${new Date().toString()}`,
+        ...todayMemoryLines(),
         activeMacContext?.appName ? `Front app: ${activeMacContext.appName}` : "",
+        // "Send this link": the tab they are looking at is usually the link.
+        activeMacContext?.browserUrl ? `Front tab: ${textForLog(activeMacContext.browserTitle || "", 120)} ${activeMacContext.browserUrl}` : "",
+        macWhatsAppAppInstalled() ? "WhatsApp: the Mac app is installed. Any WhatsApp message goes through the whatsapp_send tool, one step, about a second. Never WhatsApp Web." : "",
+        nowPlayingLine,
         macRecentExchanges(),
       ].filter(Boolean).join("\n"),
       runId,
@@ -17040,6 +17660,9 @@ async function runMacHilLoop(command, resume = null) {
     pendingReply = null;
     let turn = null;
     let turnBrain = "hil";
+    let turnPrepMs = 0;
+    let turnPrepCached = false;
+    let turnModelMs = 0;
     let turnModel = "";
     /* Where the time goes, printed while it goes.
      *
@@ -17051,7 +17674,25 @@ async function runMacHilLoop(command, resume = null) {
     const turnStartedAt = Date.now();
     const controller = new AbortController();
     macHilAbort = controller;
-    try {
+    /* Indices are stamped fresh on every read, and seconds can pass between the
+       question and the yes. [7] was Send when he asked; after a re-render it can
+       be something else, and this is by definition a step that cannot be
+       undone. So it replays only when the same control is still at that index,
+       and otherwise the model takes one more look, which is what it always did. */
+    if (replayStep && replayStep.action?.index !== undefined && replayStep.action?.index !== null) {
+      const now = macElementIdentity(obs.elements, replayStep.action.index);
+      if (!now || !resume?.gatedTarget || now !== resume.gatedTarget) {
+        logMac("hil.loop.replay_skipped", { runId, step, why: now ? "target changed" : "target gone" });
+        macTrace("👀 RECHECK", "the button moved since you said yes, looking again before clicking");
+        replayStep = null;
+      }
+    }
+    if (replayStep) {
+      turn = { thinking: "", split: null, verdict: null, decision: { type: "step", step: replayStep } };
+      replayStep = null;
+      logMac("hil.loop.replay_approved", { runId, step, action: String(turn.decision.step?.action?.type || "") });
+      macTrace("👍 APPROVED", "running the step you said yes to, no second look needed");
+    } else try {
       /* Signed in as the person, not as the app.
        *
        * The loop sent the anon key here, which resolves to no user, so the
@@ -17082,6 +17723,9 @@ async function runMacHilLoop(command, resume = null) {
       // replied, which is exactly how you end up unable to tell whether an
       // expensive experiment is even running.
       turnBrain = data?.meta?.brain === "astra" ? "astra" : "hil";
+      turnPrepMs = Number(data?.meta?.prepMs) || 0;
+      turnPrepCached = data?.meta?.prepCached === true;
+      turnModelMs = Number(data?.meta?.modelMs) || 0;
       turnModel = String(data?.meta?.model || "");
       if (data?.meta?.parse_ok === false) throw new Error("unreadable turn");
       retried = 0; // a good turn clears the run's hiccup budget
@@ -17121,7 +17765,8 @@ async function runMacHilLoop(command, resume = null) {
       macRunThinkMs += thoughtMs;
       macRunTurns += 1;
       console.log(`[${tag}] ${step + 1} (thought ${(thoughtMs / 1000).toFixed(1)}s): ${scrubForLog(thinking)}`);
-      logMac("hil.loop.turn", { step: step + 1, brain: turnBrain, model: turnModel });
+      macTrace("⏱ STEP", `${step + 1}: ${(thoughtMs / 1000).toFixed(1)}s total, prep ${(turnPrepMs / 1000).toFixed(1)}s${turnPrepCached ? " (reused)" : ""}, model ${(turnModelMs / 1000).toFixed(1)}s`);
+      logMac("hil.loop.turn", { step: step + 1, brain: turnBrain, model: turnModel, ms: thoughtMs, prepMs: turnPrepMs, prepCached: turnPrepCached, modelMs: turnModelMs, plan: state.plan?.length || 0 });
       // brain rides the same payload the caption does, so the notch can show who
       // is thinking without a second channel that could disagree with this one.
       sendTaskProgress({ status: "thinking", text: thinking.slice(0, 140), brain: turnBrain, model: turnModel, running: true });
@@ -17144,6 +17789,19 @@ async function runMacHilLoop(command, resume = null) {
     // HIL owns the plan. Its split is the job list, first turn only.
     if (turn.split?.tasks?.length && !state.tasks.length) {
       state.tasks = turn.split.tasks.map((desc, i) => ({ desc, status: i === 0 ? "active" : "pending" }));
+    }
+    /* The map, kept beside the jobs and sent back every turn. Without it each
+       turn worked the whole job out again from the screen, which is where long
+       runs went in circles. A replan replaces what is left of it. */
+    if (Array.isArray(turn.split?.plan) && turn.split.plan.length && !state.plan?.length) {
+      state.plan = turn.split.plan.slice(0, 10);
+      logMac("hil.loop.plan", { runId, moves: state.plan.length });
+      macTrace("🗺 PLAN", state.plan.map((m, i) => `${i + 1}. ${m}`).join("  "));
+    }
+    if (Array.isArray(turn.replan) && turn.replan.length) {
+      state.plan = turn.replan.slice(0, 10);
+      logMac("hil.loop.replan", { runId, step, moves: state.plan.length });
+      macTrace("🔁 REPLAN", state.plan.map((m, i) => `${i + 1}. ${m}`).join("  "));
     }
     // Its verdict on the step that just ran, so a failure is visible next turn.
     if (turn.verdict && state.steps.length) {
@@ -17168,6 +17826,8 @@ async function runMacHilLoop(command, resume = null) {
         said,
         stepsUsed: step,
         gatedSig: "",
+        // His own question. A yes to it is consent for the step it was about.
+        askedConsent: String(d.question || ""),
         createdAt: Date.now(),
       };
       setPendingMacWorkflow({ type: "hil_answer", stage: "hil_answer", data: { command, question: d.question } });
@@ -17236,6 +17896,12 @@ async function runMacHilLoop(command, resume = null) {
       continue;
     }
 
+    if (irreversible && stepSig !== approvedSig && step <= consentUntilStep) {
+      logMac("hil.loop.consent_carried", { runId, step, action: String(stepObj.action?.type || "") });
+      macTrace("👍 APPROVED", "you already said yes to this when he asked, not asking twice");
+      approvedSig = stepSig;
+      consentUntilStep = -1;
+    }
     if (irreversible && stepSig !== approvedSig) {
       const intent = String(stepObj.intent || "").trim().replace(/[.!?]+$/, "");
       const ask = intent ? `${intent}. That cannot be undone. Want me to go ahead?` : "That one cannot be undone. Want me to go ahead?";
@@ -17247,6 +17913,8 @@ async function runMacHilLoop(command, resume = null) {
         said,
         stepsUsed: step,
         gatedSig: stepSig,
+        gatedStep: stepObj,
+        gatedTarget: macElementIdentity(obs.elements, stepObj.action?.index),
         createdAt: Date.now(),
       };
       setPendingMacWorkflow({ type: "hil_answer", stage: "hil_answer", data: { command, question: ask } });
@@ -17439,6 +18107,14 @@ function hilRouterSurface() {
     screenRecording: Boolean(screenRecProc),
     undoable: hasFileActionHistory() || hasDesktopOrganizeManifest(),
     lastWhatsApp: waFresh ? { from: wa.name, ageSec: Math.round((Date.now() - wa.at) / 1000) } : null,
+    /* What "this song" and "that link" mean. From the 6s now-playing poll, so
+       reading it costs nothing on the command path. */
+    nowPlaying: lastNowPlaying?.playing && lastNowPlaying.track
+      ? `${lastNowPlaying.track}${lastNowPlaying.artist ? ` by ${lastNowPlaying.artist}` : ""} on ${lastNowPlaying.source}${lastNowPlaying.link ? `, link: ${lastNowPlaying.link}` : ""}`
+      : null,
+    lastExchange: textForLog(macRecentExchanges(), 600) || null,
+    // So "2am last night" and "four days ago" can become times.
+    now: new Date().toString(),
   };
 }
 
@@ -17630,6 +18306,173 @@ async function mondayifyReply(raw, result) {
   return said ? { ...result, say: said } : result;
 }
 
+// ── HIL first ────────────────────────────────────────────────────────────────
+// The router reads the sentence and decides; the cascade only runs what it
+// could not. See hil-first.cjs for why, and for what still goes straight
+// through. Every way this can fail returns null, and null is the old path:
+// a router that is down, slow or unsure costs a second, never a command.
+const HIL_FIRST_TIMEOUT_MS = 4000;
+
+async function callHilRouterLive(raw) {
+  if (Date.now() < hilRouterOpenUntil) return null;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), HIL_FIRST_TIMEOUT_MS);
+  const started = Date.now();
+  try {
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/hil-router`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+      },
+      body: JSON.stringify({ command: raw, surface: hilRouterSurface(), shadow: false }),
+      signal: controller.signal,
+    });
+    if (!res.ok) throw new Error(`hil-router ${res.status}`);
+    const data = await res.json();
+    hilRouterFails = 0;
+    return data?.verdict ? { verdict: data.verdict, ms: Date.now() - started } : null;
+  } catch (error) {
+    hilRouterFails += 1;
+    if (hilRouterFails >= HIL_ROUTER_BREAKER_FAILS) {
+      hilRouterOpenUntil = Date.now() + HIL_ROUTER_BREAKER_MS;
+      logMac("hil.router.breaker_tripped", { forMs: HIL_ROUTER_BREAKER_MS, live: true });
+    }
+    logMac("hil.first.router_failed", { error: String(error?.message || error), ms: Date.now() - started });
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/* One readable line per decision, in the terminal, so a run can be followed
+   live: what he heard, who decided, what ran, how long it took. The same facts
+   go to braino-mac.log as structured events; this is the human copy. */
+function macTrace(tag, text) {
+  console.log(`[Braino ${tag}] ${scrubForLog(String(text || ""))}`);
+}
+
+const HIL_ANSWER_NEW_JOB = /^(?:(?:hey\s+)?(?:braino|brainelle)[,.!\s]+)?(?:(?:can|could|would) you\s+)?(?:please\s+)?(?:open|close|quit|play|pause|search|find|show|message|text|call|facetime|create|make|delete|remove|go to|take|set|change|turn|start|write|book|buy|order|close|launch|put on|look up)\b/i;
+
+// Set when the live router was asked, so the background copy is not asked the
+// same sentence again when the answer fell back to the old path.
+let hilFirstAsked = false;
+
+async function routeHilFirst(raw) {
+  hilFirstAsked = false;
+  /* "Pause memory" / "stop remembering" / "resume memory". Instant, and never
+     worth a router call. */
+  const memorySwitch = String(raw || "").match(/\b(pause|stop|resume|start|turn off|turn on)\s+(?:your\s+)?(?:memory|remembering|recording my (?:mac|activity)|capture)\b/i);
+  if (/\b(?:open|show)(?: me)?(?: my| the)? (?:memory|affective ?os(?: memory)?)\b|\bwhat (?:are|have) you (?:been )?(?:remembering|saving|saved)\b/i.test(String(raw || ""))) {
+    openMemoryWindow();
+    return { ok: true, say: "Here's what the memory layer saved today.", source: "hil_first:memory_view" };
+  }
+  const importantMatch = String(raw || "").match(/\b(?:mark|add|make|set)\s+(.+?)\s+(?:as\s+)?(?:an?\s+)?(?:important|vip|priority)(?:\s+contact)?\b|\b(?:remove|unmark)\s+(.+?)\s+(?:from|as)\s+(?:my\s+)?(?:important|vip|priority)(?: contacts?)?\b/i);
+  if (importantMatch) {
+    const add = Boolean(importantMatch[1]);
+    const name = String(importantMatch[1] || importantMatch[2] || "").replace(/^(?:my|the)\s+/i, "").trim();
+    const resolved = (contactsCache && findContactInCache(name)?.name) || name;
+    setWaImportant(resolved, add);
+    return { ok: true, say: add ? `Done. ${resolved}'s WhatsApps will show in the notch.` : `Done. ${resolved} is off the important list.`, source: "hil_first:wa_important" };
+  }
+  if (/\bwho (?:are|is) (?:on )?my important (?:contacts?|people|list)\b/i.test(String(raw || ""))) {
+    const names = waImportantNames();
+    return { ok: true, say: names.length ? `Important: ${names.join(", ")}.` : "Nobody yet. Say mark someone as important.", source: "hil_first:wa_important" };
+  }
+  if (memorySwitch) {
+    const pause = /pause|stop|turn off/i.test(memorySwitch[1]);
+    setActivityPaused(pause);
+    return { ok: true, say: pause ? "Paused. I'm not recording anything until you say resume." : "Back on. I'll remember what you're working on.", source: "hil_first:memory_switch" };
+  }
+  if (!raw || !macHilEnabled() || !hilFirstEnabled(typeof ENV === "object" ? ENV : null, process.env)) return null;
+  // Instant controls, stop, voice-locked modes and a real answer to a waiting
+  // question all belong to the old path, which already gets those right.
+  if (isInstantCommand(raw)) { macTrace("⏩ INSTANT", `"${raw}" → old fast path, no router`); return null; }
+  if (parseInterruptIntent(raw)) { macTrace("✋ STOP", `"${raw}" → stop word, old path`); return null; }
+  /* One AppleScript across every window, which counts what it closed. Through
+     the router this became an irreversible escalate, two confirmations and a
+     close-window shortcut that closed one window and claimed all of them. */
+  if (macClosesAllTabs(raw)) { macTrace("⏩ INSTANT", `"${raw}" → close every tab natively, no router`); return null; }
+  /* The timetable is a database read, milliseconds, answered in one short
+     line. Through the router it became a loop that read the whole of
+     tomorrow out loud. */
+  if (!pendingMacWorkflow) {
+    const schedule = await macAnswerScheduleFast(String(raw).toLowerCase());
+    if (schedule) { macTrace("⏩ INSTANT", `"${raw}" → timetable lookup, no router`); return { ...schedule, source: "hil_first:schedule" }; }
+  }
+  if (voiceModesCache.modes.some((mode) => mode.isActive)) { macTrace("🔒 MODE", `"${raw}" → a voice mode owns this, old path`); return null; }
+  if (pendingMacWorkflow && Date.now() - Number(pendingMacWorkflow.createdAt || 0) > (Number(pendingMacWorkflow.ttlMs) || MAC_WORKFLOW_CONFIRM_MS)) {
+    clearPendingMacWorkflow();
+  }
+  /* A held HIL question takes answers, not new jobs. "Open the file." arrived
+     while he was still waiting on "who should receive the WhatsApp message?"
+     and was taken as the recipient. A sentence that opens with an order is a
+     new command; a yes, a no or a name is still the answer. */
+  if (pendingMacWorkflow?.type === "hil_answer"
+    && HIL_ANSWER_NEW_JOB.test(String(raw || "").trim())
+    && !macHilAnswerApproves(raw)
+    && !/^(?:no|nope|nah|cancel)\b/i.test(String(raw || "").trim())) {
+    logMac("mac.workflow.released", { type: "hil_answer", raw: textForLog(raw), by: "hil_first_new_job" });
+    macTrace("🧹 RELEASED", `waiting question dropped, "${raw}" is a new job`);
+    clearPendingMacWorkflow();
+    pendingHilRun = null;
+  }
+  if (pendingMacWorkflow) {
+    if (pendingMacWorkflow.type === "hil_answer" || isWorkflowCancelIntent(raw) || workflowClaimsUtterance(pendingMacWorkflow, raw)) {
+      macTrace("💬 ANSWER", `"${raw}" → answers the waiting ${pendingMacWorkflow.type} question, old path`);
+      return null;
+    }
+    /* Same rule as the old path: a name was being waited for, this is not one,
+       and it was not addressed to him, so it is dropped rather than run. */
+    if (pendingMacWorkflow.type === "call" && !/\bbrain(?:o|elle)\b/i.test(String(raw || ""))) {
+      clearPendingMacWorkflow();
+      return { ok: true, superseded: true, say: "", source: "hil_first:dropped" };
+    }
+    // Not an answer to it, so the question is dropped rather than left to eat
+    // the next thing said. This is the "No recording then" family.
+    logMac("mac.workflow.released", { type: pendingMacWorkflow.type, stage: pendingMacWorkflow.stage, raw: textForLog(raw), by: "hil_first" });
+    macTrace("🧹 RELEASED", `waiting ${pendingMacWorkflow.type} question dropped, "${raw}" is a new command`);
+    clearPendingMacWorkflow();
+  }
+
+  // A new command is a new job, exactly as routeMacDelegate does it.
+  macHilGeneration += 1;
+  if (macHilAbort) {
+    try { macHilAbort.abort(); } catch (_) {}
+    macHilAbort = null;
+  }
+  sendTaskProgress({ status: "thinking", text: "understanding..." });
+  hilFirstAsked = true;
+  const routed = await callHilRouterLive(raw);
+  if (!routed) { macTrace("↩ FALLBACK", `router unavailable → old patterns decide "${raw}"`); return null; }
+  const plan = planFromVerdict(routed.verdict, MAC_HIL_TOOLS);
+  macTrace("🧭 HIL-FIRST", `${(routed.ms / 1000).toFixed(1)}s "${raw}" → ${plan.kind}${plan.tool ? ` ${plan.tool} ${JSON.stringify(plan.args || {}).slice(0, 160)}` : ""}${plan.question ? ` "${plan.question}"` : ""}${plan.why ? ` (${plan.why})` : ""}`);
+  logMac("hil.first", { raw: textForLog(raw), kind: plan.kind, tool: plan.tool || "", why: plan.why || "", ms: routed.ms });
+
+  if (plan.kind === "fire") {
+    try {
+      const out = await MAC_HIL_TOOLS[plan.tool](plan.args);
+      return { ...(out || { ok: true }), source: `hil_first:${plan.tool}` };
+    } catch (error) {
+      // A tool that threw has not done anything the loop could not redo, and
+      // the loop can look at why. Better than reading an exception aloud.
+      logMac("hil.first.tool_threw", { tool: plan.tool, error: String(error?.message || error) });
+      return runMacHilLoop(raw);
+    }
+  }
+  if (plan.kind === "loop") return runMacHilLoop(raw);
+  if (plan.kind === "ask") {
+    // The answer comes back through hil_answer with nothing held, which runs
+    // the loop on the command plus the question and the answer.
+    pendingHilRun = null;
+    setPendingMacWorkflow({ type: "hil_answer", stage: "hil_answer", data: { command: raw, question: plan.question } });
+    return { ok: true, say: plan.question, source: "hil_first:ask" };
+  }
+  if (plan.kind === "chat") return runMacConversation(raw);
+  return null;
+}
+
 async function runDelegate(prompt, options = {}) {
   let raw = cleanPrompt(prompt);
 
@@ -17707,12 +18550,15 @@ async function runDelegate(prompt, options = {}) {
   // not gated here, they still execute and get mondayified below.
   const convenienceRefusal = Boolean(mondayModeActive && !spiteSwap && mondayIsConvenienceAction(raw, fastSpotify));
   let result;
+  let hilFirstResult = null;
   if (convenienceRefusal) {
     logMac("delegate.monday_convenience_refusal", { raw: textForLog(raw), hadSpotifyIntent: Boolean(fastSpotify) });
     const line = await callMondayPersona(
       `The user just said: "${raw}". This is a convenience request, opening, launching, or playing something for them. Refuse to actually do it, sarcastically, naming specifically what they asked for. Do not claim you did it anyway. One to three short sentences.`,
     );
     result = { ok: true, source: "monday_mode", say: line || "Not happening. Do it yourself." };
+  } else if (!spiteSwap && (hilFirstResult = await routeHilFirst(raw))) {
+    result = hilFirstResult;
   } else if (fastSpotify) {
     logMac("delegate.intent.start", {
       prompt: textForLog(prompt),
@@ -17749,7 +18595,7 @@ async function runDelegate(prompt, options = {}) {
   }
   // Keep both model audits completely behind the result. A short delay also
   // lets the renderer begin answer speech before background work uses network.
-  if (shadowSurface) {
+  if (shadowSurface && !hilFirstResult && !hilFirstAsked) {
     const routerAuditTimer = setTimeout(() => fireHilRouterShadow(raw, shadowSurface, result), 750);
     routerAuditTimer.unref?.();
   }
@@ -19456,6 +20302,436 @@ ipcMain.handle("braino-mac:wants-brain", async (_event, text) => {
   }
 });
 
+// ── AffectiveOS capture ──────────────────────────────────────────────────────
+// Step 1 of Remembers: what you did on this Mac, as text, on this Mac. See
+// activity-log.cjs for the rules. BRAINO_ACTIVITY=0, or "pause memory", stops
+// it; the raw day lives in ~/Library/Application Support/Braino Mac/activity/.
+const ACTIVITY_DIR = path.join(AUTH_STORE_DIR, "activity");
+const ACTIVITY_STATE_PATH = path.join(AUTH_STORE_DIR, "activity-state.json");
+const SCREEN_TEXT_BIN = path.join(__dirname, "native", "BrainoScreenText", "BrainoScreenText");
+const ACTIVITY_FOCUS_POLL_MS = 5000;
+const ACTIVITY_SCREEN_MIN_GAP_MS = 20000;
+const ACTIVITY_SCREEN_REFRESH_MS = 60000;
+
+function activityState() {
+  try { return JSON.parse(fs.readFileSync(ACTIVITY_STATE_PATH, "utf8")) || {}; } catch (_) { return {}; }
+}
+function activityEnabled() {
+  return String(ENV.BRAINO_ACTIVITY || "").trim() !== "0" && !activityState().paused;
+}
+const activityLog = createActivityLog({
+  dir: ACTIVITY_DIR,
+  enabled: activityEnabled,
+  extraPrivateApps: () => activityState().privateApps || [],
+});
+
+function setActivityPaused(paused) {
+  try { fs.writeFileSync(ACTIVITY_STATE_PATH, JSON.stringify({ ...activityState(), paused, changedAt: Date.now() }, null, 2)); } catch (_) {}
+  logMac("activity.paused", { paused });
+  macTrace("🧠 MEMORY", paused ? "paused, nothing is being recorded" : "recording again");
+}
+
+let activityFocus = null; // { key, app, title, url, since }
+let activityScreenAt = 0;
+let activityScreenBusy = false;
+let activityFocusBusy = false;
+
+/* Read the text in the front window, keep the text, delete the picture. */
+async function captureScreenTextForActivity(ctx) {
+  if (activityScreenBusy || !fs.existsSync(SCREEN_TEXT_BIN)) return;
+  const who = { app: ctx.appName, title: ctx.browserTitle || ctx.windowTitle, url: ctx.browserUrl };
+  // Checked BEFORE the screenshot: a private window is never captured at all.
+  if (!activityEnabled() || activityIsSelf(who) || activityIsPrivate(who, activityState().privateApps || [])) return;
+  activityScreenBusy = true;
+  activityScreenAt = Date.now();
+  const shot = path.join(app.getPath("temp"), `braino-activity-${Date.now()}.png`);
+  const started = Date.now();
+  try {
+    const b = ctx.windowBounds;
+    const region = b && b.width > 40 && b.height > 40 ? ["-R", `${Math.round(b.x)},${Math.round(b.y)},${Math.round(b.width)},${Math.round(b.height)}`] : [];
+    await execFileP("/usr/sbin/screencapture", ["-x", ...region, shot], { timeout: 8000 });
+    const { stdout } = await execFileP(SCREEN_TEXT_BIN, [shot], { timeout: 30000, maxBuffer: 4 * 1024 * 1024 });
+    const parsed = JSON.parse(String(stdout || "{}"));
+    if (!parsed.ok) return;
+    const lines = tidyScreenLines(parsed.lines);
+    if (!lines.length) return;
+    const res = activityLog.record("screen", { ...who, hash: hashText(lines.join("\n")), lines, ocrMs: parsed.ms });
+    if (res.row) macTrace("🧠 SCREEN", `${who.app} · ${String(who.title || "").slice(0, 60)} · ${lines.length} lines · ${((Date.now() - started) / 1000).toFixed(1)}s`);
+  } catch (error) {
+    logMac("activity.screen_failed", { error: String(error?.message || error).slice(0, 160) });
+  } finally {
+    fs.promises.unlink(shot).catch(() => {});
+    activityScreenBusy = false;
+  }
+}
+
+async function pollActivityFocus() {
+  if (activityFocusBusy || !activityEnabled()) return;
+  activityFocusBusy = true;
+  try {
+    const ctx = await readActiveMacContext();
+    if (!ctx) return;
+    const who = { app: ctx.appName, title: ctx.browserTitle || ctx.windowTitle, url: ctx.browserUrl };
+    const key = `${who.app}|${who.title}|${who.url}`;
+    const now = Date.now();
+    if (!activityFocus || activityFocus.key !== key) {
+      const prev = activityFocus;
+      activityFocus = { key, ...who, since: now };
+      const res = activityLog.record("focus", { ...who, prevSec: prev ? Math.round((now - prev.since) / 1000) : null });
+      if (res.row) macTrace("🧠 FOCUS", `${who.app} · ${String(who.title || "").slice(0, 70)}${prev ? ` (was ${prev.app} for ${Math.round((now - prev.since) / 1000)}s)` : ""}`);
+      // Let the new window finish drawing, then read it.
+      if (now - activityScreenAt >= ACTIVITY_SCREEN_MIN_GAP_MS) setTimeout(() => void captureScreenTextForActivity(ctx), 2500);
+    } else if (now - activityScreenAt >= ACTIVITY_SCREEN_REFRESH_MS) {
+      // Same window, new content (a chat scrolls, a doc gets written).
+      void captureScreenTextForActivity(ctx);
+    }
+  } finally {
+    activityFocusBusy = false;
+  }
+}
+
+/* Claude Code writes every conversation to disk. The digest reads them; here
+   we only note that one moved, so the digest knows which to read. */
+const CLAUDE_PROJECTS_DIR = path.join(os.homedir(), ".claude", "projects");
+const claudeSeen = new Map();
+function scanClaudeSessionsForActivity() {
+  if (!activityEnabled()) return;
+  try {
+    for (const project of fs.readdirSync(CLAUDE_PROJECTS_DIR)) {
+      const dir = path.join(CLAUDE_PROJECTS_DIR, project);
+      let names = [];
+      try { names = fs.readdirSync(dir).filter((n) => n.endsWith(".jsonl")); } catch (_) { continue; }
+      for (const name of names) {
+        const file = path.join(dir, name);
+        const stat = fs.statSync(file);
+        const before = claudeSeen.get(file);
+        claudeSeen.set(file, stat.mtimeMs);
+        if (before === undefined || stat.mtimeMs <= before) continue;
+        activityLog.record("claude_session", { app: "Claude Code", project: project.replace(/^-/, "").replace(/-/g, "/"), session: name.replace(/\.jsonl$/, ""), file, sizeKb: Math.round(stat.size / 1024) });
+      }
+    }
+  } catch (_) {}
+}
+
+// ── AffectiveOS memory, steps 2 and 3 ────────────────────────────────────────
+// Digest: every completed hour of the raw log becomes a summary, its episodes,
+// loose ends and durable facts. Summaries live here permanently (the raw day is
+// gone after a week); facts go into braino_memories through the memory engine.
+// Recall: memory_search answers questions about the past and hands the loop
+// what it needs to act on the answer. "Braino can use this" switches recall.
+const DIGEST_DIR = path.join(AUTH_STORE_DIR, "digests");
+const DIGEST_STATE_PATH = path.join(AUTH_STORE_DIR, "digest-state.json");
+const DIGEST_CHECK_MS = 10 * 60 * 1000;
+const HOUR_MS = 3600 * 1000;
+
+function recallEnabled() { return activityState().recall !== false; }
+function setRecallEnabled(on) {
+  try { fs.writeFileSync(ACTIVITY_STATE_PATH, JSON.stringify({ ...activityState(), recall: Boolean(on), recallChangedAt: Date.now() }, null, 2)); } catch (_) {}
+  logMac("memory.recall_switch", { on: Boolean(on) });
+  macTrace("🧠 MEMORY", on ? "Braino can use memory" : "Braino can no longer use memory (still recording)");
+}
+
+function localDayKey(ms) {
+  const d = new Date(ms);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+function readActivityRange(from, to) {
+  const rows = [];
+  for (let day = new Date(new Date(from).setHours(0, 0, 0, 0)).getTime(); day <= to; day += 24 * HOUR_MS) {
+    try {
+      for (const line of fs.readFileSync(path.join(ACTIVITY_DIR, `${localDayKey(day)}.jsonl`), "utf8").split("\n")) {
+        if (!line) continue;
+        try { rows.push(JSON.parse(line)); } catch (_) {}
+      }
+    } catch (_) {}
+  }
+  return rows.filter((r) => { const t = Date.parse(r.t); return t >= from && t <= to; });
+}
+function readDigestDay(dayKey) {
+  try { return JSON.parse(fs.readFileSync(path.join(DIGEST_DIR, `${dayKey}.json`), "utf8")) || {}; } catch (_) { return {}; }
+}
+function writeDigestHour(start, result) {
+  const key = localDayKey(start);
+  const day = readDigestDay(key);
+  day[String(new Date(start).getHours()).padStart(2, "0")] = { ...result, start, at: Date.now() };
+  fs.mkdirSync(DIGEST_DIR, { recursive: true });
+  fs.writeFileSync(path.join(DIGEST_DIR, `${key}.json`), JSON.stringify(day, null, 2));
+}
+function digestsInRange(from, to) {
+  const out = [];
+  for (let day = new Date(new Date(from).setHours(0, 0, 0, 0)).getTime(); day <= to; day += 24 * HOUR_MS) {
+    const d = readDigestDay(localDayKey(day));
+    for (const h of Object.keys(d).sort()) if (d[h]?.start >= from - HOUR_MS && d[h]?.start <= to && d[h]?.summary) out.push(d[h]);
+  }
+  return out;
+}
+
+/* The important people's messages in an hour, read from WhatsApp itself, so the
+   digest can keep "Ilu's flight lands at 6". Nobody else's text is sent. */
+async function importantWhatsAppTexts(start, end) {
+  const names = waImportantNames();
+  if (!names.length || !waDbAvailable()) return [];
+  const a = start / 1000 - WA_APPLE_EPOCH;
+  const b = end / 1000 - WA_APPLE_EPOCH;
+  try {
+    const rows = await queryWhatsAppDb(`${WA_SELECT} WHERE m.ZISFROMME = 0 AND s.ZSESSIONTYPE = 0 AND m.ZMESSAGEDATE >= ${a} AND m.ZMESSAGEDATE < ${b} AND m.ZMESSAGETYPE = 0 ORDER BY m.Z_PK ASC LIMIT 60;`);
+    return rows.map(waMessageFromRow).filter((m) => isWaImportant(m.name));
+  } catch (_) { return []; }
+}
+
+function claudeLinesForHour(rows, start, end) {
+  const files = [...new Set(rows.filter((r) => r.kind === "claude_session" && r.file).map((r) => r.file))];
+  const lines = [];
+  for (const file of files.slice(0, 4)) {
+    try {
+      const stat = fs.statSync(file);
+      // The tail is where this hour is; a whole day's conversation can be many MB.
+      const size = Math.min(stat.size, 3 * 1024 * 1024);
+      const fd = fs.openSync(file, "r");
+      const buf = Buffer.alloc(size);
+      fs.readSync(fd, buf, 0, size, stat.size - size);
+      fs.closeSync(fd);
+      lines.push(...claudeLinesInWindow(buf.toString("utf8"), { start, end }));
+    } catch (_) {}
+  }
+  return lines.slice(-60);
+}
+
+let digestBusy = false;
+async function digestWindow(start, end, { label = "" } = {}) {
+  const rows = readActivityRange(start, end + 1);
+  const hour = compactHour(rows, {
+    start, end,
+    whatsappTexts: await importantWhatsAppTexts(start, end),
+    claudeLines: claudeLinesForHour(readActivityRange(start - 6 * HOUR_MS, end), start, end),
+  });
+  if (hour.rows < 3 || hour.text.length < 80) return { ok: true, empty: true };
+  const authToken = await getBrainoAuthToken().catch(() => "");
+  if (!authToken) return { ok: false, error: "signed out" };
+  const started = Date.now();
+  const res = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/memory-digest`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${authToken}` },
+    body: JSON.stringify({ activity: hour.text, hourStart: new Date(start).toISOString(), hourEnd: new Date(end).toISOString() }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) { logMac("memory.digest_failed", { status: res.status, error: textForLog(String(data?.error || ""), 120) }); return { ok: false, error: data?.error || `digest ${res.status}` }; }
+  const result = { summary: data.summary || "", episodes: data.episodes || [], looseEnds: data.looseEnds || [], facts: data.facts || [], applied: data.applied || null, rows: hour.rows, label };
+  writeDigestHour(start, result);
+  logMac("memory.digested", { start: new Date(start).toISOString(), rows: hour.rows, chars: hour.text.length, episodes: result.episodes.length, facts: result.facts.length, ms: Date.now() - started });
+  macTrace("🧠 DIGEST", `${new Date(start).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}: ${result.episodes.length} episodes, ${result.facts.length} facts · ${String(result.summary).slice(0, 120)}`);
+  return { ok: true, ...result };
+}
+
+/* Every completed hour since the last one, at most the last day's worth. */
+async function digestDueHours() {
+  if (digestBusy || !activityEnabled()) return;
+  digestBusy = true;
+  try {
+    let state = {};
+    try { state = JSON.parse(fs.readFileSync(DIGEST_STATE_PATH, "utf8")) || {}; } catch (_) {}
+    const thisHour = new Date(new Date().setMinutes(0, 0, 0)).getTime();
+    let next = Math.max(Number(state.lastHourStart || 0) + HOUR_MS, thisHour - 24 * HOUR_MS);
+    while (next < thisHour) {
+      const r = await digestWindow(next, next + HOUR_MS);
+      if (!r.ok) break; // try again next check
+      state.lastHourStart = next;
+      fs.writeFileSync(DIGEST_STATE_PATH, JSON.stringify(state, null, 2));
+      next += HOUR_MS;
+    }
+  } catch (error) {
+    logMac("memory.digest_loop_failed", { error: String(error?.message || error).slice(0, 160) });
+  } finally {
+    digestBusy = false;
+  }
+}
+
+/* What the memory knows about today, in two or three lines, for Braino's own
+   context: so "what have I been doing today?" is answered without a tool. */
+function todayMemoryLines() {
+  if (!recallEnabled()) return [];
+  const d = readDigestDay(localDayKey(Date.now()));
+  const hours = Object.keys(d).sort().slice(-4).map((h) => d[h]).filter((x) => x?.summary);
+  if (!hours.length) return [];
+  return [`From the memory of today on this Mac (most recent last): ${hours.map((x) => `${new Date(x.start).toLocaleTimeString([], { hour: "numeric" })}: ${x.summary}`).join(" ").slice(0, 1200)}`];
+}
+
+/* "What was that movie website I was on at 2am?" Searches the window locally,
+   lets memory-recall pick what answers, and gives the loop the addresses it
+   needs to act ("open it"). */
+async function searchMemory({ query = "", from, to } = {}) {
+  if (!recallEnabled()) return { ok: false, say: "Memory is switched off for me right now. Turn it on in the Memory window." };
+  const now = Date.now();
+  const toMs = Number.isFinite(Date.parse(to)) ? Date.parse(to) : now;
+  const fromMs = Number.isFinite(Date.parse(from)) ? Date.parse(from) : toMs - 7 * 24 * HOUR_MS;
+  const rows = readActivityRange(Math.max(fromMs, now - 7 * 24 * HOUR_MS), toMs);
+  const candidates = recallCandidates(rows, { from: fromMs, to: toMs });
+  const summaries = digestsInRange(fromMs, toMs).map((d) => `${new Date(d.start).toLocaleString([], { weekday: "short", hour: "numeric" })}: ${d.summary} ${(d.episodes || []).map((e) => `[${e.from}-${e.to} ${e.title}: ${e.detail}]`).join(" ")}`);
+  const window = `${new Date(fromMs).toLocaleString()} to ${new Date(toMs).toLocaleString()}`;
+  macTrace("🧠 RECALL", `"${query}" · ${window} · ${candidates.length} candidates, ${summaries.length} summaries`);
+  if (!candidates.length && !summaries.length) {
+    return { ok: true, say: fromMs < now - 7 * 24 * HOUR_MS ? "I only keep the detail for a week, and I don't have anything for then." : "I don't have anything saved for that time. Was the Mac on, or was it private browsing?" };
+  }
+  const authToken = await getBrainoAuthToken().catch(() => "");
+  if (!authToken) return { ok: false, say: "I need you signed in to search my memory." };
+  const res = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/memory-recall`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${authToken}` },
+    body: JSON.stringify({ question: query, now: new Date(now).toString(), window, candidates: candidates.map((c) => c.line).join("\n"), summaries: summaries.join("\n") }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) return { ok: false, say: "I couldn't search my memory just now." };
+  const matched = (data.matches || []).map((n) => candidates.find((c) => c.n === n)).filter(Boolean);
+  logMac("memory.recall", { candidates: candidates.length, matches: matched.length, ambiguous: Boolean(data.ambiguous) });
+  // For the loop: the addresses, so "open it" is one step. Not spoken.
+  const detail = matched.length
+    ? `MEMORY MATCHES (act on these: one clear match means do what they asked and say which; several means ask which):\n${matched.map((m) => `- ${new Date(m.first).toLocaleString()} ${m.type} ${m.site || m.app || ""} "${m.title}"${m.url ? ` ${m.url}` : ""}`).join("\n")}${data.ambiguous ? "\n(ambiguous: ask which)" : ""}`
+    : "";
+  return { ok: true, say: String(data.answer || ""), detail };
+}
+
+function startActivityCapture() {
+  activityLog.prune();
+  scanClaudeSessionsForActivity(); // first pass only fills claudeSeen
+  setInterval(() => void pollActivityFocus(), ACTIVITY_FOCUS_POLL_MS).unref?.();
+  setInterval(() => scanClaudeSessionsForActivity(), 5 * 60 * 1000).unref?.();
+  setInterval(() => activityLog.prune(), 6 * 3600 * 1000).unref?.();
+  setTimeout(() => void digestDueHours(), 90000).unref?.();
+  setInterval(() => void digestDueHours(), DIGEST_CHECK_MS).unref?.();
+  macTrace("🧠 MEMORY", activityEnabled() ? `recording to ${ACTIVITY_DIR}` : "paused");
+}
+
+// ── AffectiveOS Memory viewer ────────────────────────────────────────────────
+// Its own window, not a Braino screen: the layer is separate, and Braino will
+// be one of its readers once what it saves is right.
+const MEMORY_VIEW_PATH = path.join(__dirname, "renderer", "memory.html");
+let memoryWindow = null;
+function openMemoryWindow() {
+  if (memoryWindow && !memoryWindow.isDestroyed()) { memoryWindow.show(); memoryWindow.focus(); return memoryWindow; }
+  memoryWindow = new BrowserWindow({
+    width: 1000, height: 760, minWidth: 720, minHeight: 520,
+    title: "AffectiveOS Memory", titleBarStyle: "hiddenInset", trafficLightPosition: { x: 18, y: 18 },
+    show: false,
+    webPreferences: { preload: PRELOAD_PATH, contextIsolation: true, nodeIntegration: false, sandbox: false },
+  });
+  memoryWindow.once("ready-to-show", () => { app.dock?.show?.(); memoryWindow.show(); memoryWindow.focus(); });
+  memoryWindow.on("closed", () => { memoryWindow = null; if (!dashboardWindow) app.dock?.hide?.(); });
+  memoryWindow.loadFile(MEMORY_VIEW_PATH);
+  logMac("memory_view.opened", {});
+  return memoryWindow;
+}
+function activityDays() {
+  try { return fs.readdirSync(ACTIVITY_DIR).map((n) => (n.match(/^(\d{4}-\d{2}-\d{2})\.jsonl$/) || [])[1]).filter(Boolean).sort().reverse(); } catch (_) { return []; }
+}
+function activityDayFile(day) {
+  const d = /^\d{4}-\d{2}-\d{2}$/.test(String(day || "")) ? String(day) : activityDays()[0];
+  return d ? path.join(ACTIVITY_DIR, `${d}.jsonl`) : "";
+}
+ipcMain.handle("braino-mac:activity-state", async () => ({ ok: true, paused: !activityEnabled(), days: activityDays() }));
+ipcMain.handle("braino-mac:activity-day", async (_e, day) => {
+  const file = activityDayFile(day);
+  if (!file) return { ok: true, rows: [] };
+  try { return { ok: true, rows: fs.readFileSync(file, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l)) }; } catch (_) { return { ok: true, rows: [] }; }
+});
+ipcMain.handle("braino-mac:activity-pause", async (_e, paused) => { setActivityPaused(Boolean(paused)); return { ok: true }; });
+ipcMain.handle("braino-mac:activity-delete-day", async (_e, day) => {
+  const file = activityDayFile(day);
+  if (file) { try { fs.unlinkSync(file); } catch (_) {} logMac("activity.day_deleted", { day }); }
+  return { ok: true };
+});
+ipcMain.handle("braino-mac:activity-delete-row", async (_e, day, index) => {
+  const file = activityDayFile(day);
+  if (!file) return { ok: false };
+  try {
+    const lines = fs.readFileSync(file, "utf8").split("\n").filter(Boolean);
+    if (Number.isInteger(index) && index >= 0 && index < lines.length) lines.splice(index, 1);
+    fs.writeFileSync(file, lines.length ? `${lines.join("\n")}\n` : "");
+    return { ok: true };
+  } catch (_) { return { ok: false }; }
+});
+ipcMain.handle("braino-mac:memory-open", async () => { openMemoryWindow(); return { ok: true }; });
+ipcMain.handle("braino-mac:memory-digests", async (_e, day) => {
+  const key = /^\d{4}-\d{2}-\d{2}$/.test(String(day || "")) ? String(day) : localDayKey(Date.now());
+  const d = readDigestDay(key);
+  return { ok: true, recall: recallEnabled(), hours: Object.keys(d).sort().map((h) => ({ hour: h, ...d[h] })) };
+});
+ipcMain.handle("braino-mac:memory-recall-switch", async (_e, on) => { setRecallEnabled(Boolean(on)); return { ok: true, recall: recallEnabled() }; });
+ipcMain.handle("braino-mac:memory-digest-now", async () => {
+  const end = Date.now();
+  const r = await digestWindow(end - HOUR_MS, end, { label: "last hour, on request" });
+  return r;
+});
+ipcMain.handle("braino-mac:memory-ask", async (_e, question) => searchMemory({ query: String(question || "") }));
+
+/* Settings → Mesa: is he connected, when did he last sync, and what is due. */
+async function mesaStateForDashboard() {
+  const state = readMesaSyncState();
+  const now = Date.now();
+  const rows = await macFastRows(
+    new Date(now - 45 * 86400000).toISOString().slice(0, 10),
+    new Date(now + 21 * 86400000).toISOString().slice(0, 10),
+    "assignment",
+  ).catch(() => null);
+  const assignments = (rows || []).map((r) => ({
+    title: r.title,
+    course: r.course || "",
+    dueAt: r.starts_at,
+    overdue: new Date(r.starts_at).getTime() < now,
+    when: `${macFriendlyDay(r.starts_at, r.timezone || "Asia/Kolkata")} ${macFriendlyTime(r.starts_at, r.timezone || "Asia/Kolkata")}`,
+  })).sort((a, b) => new Date(a.dueAt) - new Date(b.dueAt));
+  return {
+    ok: true,
+    connected: Boolean(state.connected),
+    lastSyncAt: state.lastSyncAt || null,
+    lastCount: state.lastCount || 0,
+    lastError: state.lastError || null,
+    newAssignments: state.newAssignments || 0,
+    assignments,
+  };
+}
+ipcMain.handle("braino-mac:mesa-state", async () => mesaStateForDashboard());
+ipcMain.handle("braino-mac:mesa-connect", async () => {
+  const result = await connectMesa();
+  return { ...(await mesaStateForDashboard()), result };
+});
+ipcMain.handle("braino-mac:mesa-sync", async () => {
+  const result = await syncScheduleFromNexus({ background: false });
+  return { ...(await mesaStateForDashboard()), result };
+});
+
+/* The dashboard's Contacts page: exactly what Braino holds, and a sync that
+   reads the address book again right now. */
+function contactsForDashboard() {
+  const rows = Object.values(contactsCache || {}).map((c) => ({
+    name: String(c.name || ""),
+    nickname: String(c.nickname || ""),
+    company: String(c.company || ""),
+    phone: String(c.phone || ""),
+    phones: Array.isArray(c.phones) ? c.phones : [],
+    emails: Array.isArray(c.emails) ? c.emails : [],
+  })).sort((a, b) => a.name.localeCompare(b.name));
+  let syncedAt = null;
+  try { syncedAt = fs.statSync(CONTACTS_CACHE_PATH).mtimeMs; } catch (_) {}
+  return { ok: true, contacts: rows, syncedAt };
+}
+ipcMain.handle("braino-mac:wa-important", async (_e, name, important) => {
+  if (typeof name === "string" && name) setWaImportant(name, Boolean(important));
+  return { ok: true, names: waImportantNames() };
+});
+ipcMain.handle("braino-mac:contacts-list", async () => {
+  if (!contactsCache) await importAllContacts(false);
+  return contactsForDashboard();
+});
+ipcMain.handle("braino-mac:contacts-sync", async () => {
+  const before = contactsCache ? Object.keys(contactsCache).length : 0;
+  await importAllContacts(true);
+  if (!contactsCache || !Object.keys(contactsCache).length) {
+    return { ok: false, error: "Could not read your address book. Give Braino Contacts access in System Settings → Privacy & Security → Contacts, then sync again." };
+  }
+  macTrace("📇 CONTACTS", `synced ${Object.keys(contactsCache).length} (was ${before})`);
+  return contactsForDashboard();
+});
+
 /* The renderer asks HIL what was just said, and acts on the answer. */
 ipcMain.handle("braino-mac:understand", async (event, payload) => {
   const running = Boolean(macActiveHilRun) && macActiveHilRun.generation === macHilGeneration;
@@ -19500,6 +20776,7 @@ ipcMain.handle("braino-mac:stop-running-job", async () => {
 
 ipcMain.handle("braino-mac:delegate", async (event, prompt, options) => {
   const startedAt = Date.now();
+  macTrace("▶ HEARD", `"${String(prompt || "").slice(0, 200)}"`);
   let result;
   try {
     result = await runDelegate(prompt, options || {});
@@ -19510,8 +20787,17 @@ ipcMain.handle("braino-mac:delegate", async (event, prompt, options) => {
   }
   const durationMs = Date.now() - startedAt;
   const ok = Boolean(result?.ok);
-  if (result?.say && String(result.say).trim()) lastDelegateSay = String(result.say).trim();
+  // A job that worked gets a short warm line instead of its own description.
+  const shortLine = shortDoneLine(result);
+  if (shortLine) {
+    logMac("delegate.done_line", { full: textForLog(String(result.say || ""), 200), said: shortLine });
+    result = { ...result, say: shortLine, fullSay: result.say };
+  }
+  if (result?.say && String(result.say).trim()) lastDelegateSay = String(result.fullSay || result.say).trim();
+  macTrace(ok ? "✅ DONE" : "❌ FAILED", `${(durationMs / 1000).toFixed(1)}s via ${result?.source || "cascade"}: ${result?.superseded ? "(stood down)" : String(result?.say || "(nothing said)").slice(0, 200)}`);
+  activityLog.record("braino", { heard: String(prompt || "").slice(0, 300), said: String(result?.say || "").slice(0, 300), route: String(result?.source || "cascade"), ok });
   logMac("feature.executed", {
+    route: String(result?.source || "cascade"),
     heard: textForLog(String(prompt || "").slice(0, 160)),
     /* A superseded run answers with nothing on purpose: you asked for something
        else and this one stood down. Printing that as an empty result made a
@@ -19991,6 +21277,9 @@ end if`;
 // (progress), the YouTube state the music watcher already resolved. Sent every
 // beat — the renderer owns change detection, and the tray wants live progress.
 let nowPlayingPollBusy = false;
+// The last thing the poll saw, kept for the router's surface.
+let lastNowPlaying = null;
+
 async function pollNowPlaying() {
   if (nowPlayingPollBusy || !dockWindow || dockWindow.isDestroyed()) return;
   nowPlayingPollBusy = true;
@@ -20007,6 +21296,7 @@ async function pollNowPlaying() {
         positionSec: spotify.positionSec,
         durationSec: spotify.durationSec,
         canControl: true,
+        link: spotifyShareLink(spotify.uri),
       };
     }
     if (!candidate?.playing) {
@@ -20038,6 +21328,10 @@ async function pollNowPlaying() {
         canControl: false,
       };
     }
+    if (candidate?.playing && candidate.track && candidate.track !== lastNowPlaying?.track) {
+      activityLog.record("playing", { track: candidate.track, artist: candidate.artist || "", source: candidate.source, link: candidate.link || "" });
+    }
+    lastNowPlaying = candidate;
     sendToRenderer("braino-mac:nowplaying", candidate || { source: "", track: "", playing: false });
   } finally {
     nowPlayingPollBusy = false;
@@ -21016,6 +22310,8 @@ app.whenReady().then(() => {
 
   if (!hasSingleInstanceLock) return;
   setTimeout(() => void importAllContacts(), 8000);
+  startMesaAutoSync();
+  startActivityCapture();
   setTimeout(() => void seedContactHistoryFromLog(), 12000);
   setInterval(() => void checkMusicState(), 5000);
   setInterval(() => void checkAllTabsSnapshot(), 8000);
@@ -21023,6 +22319,8 @@ app.whenReady().then(() => {
   // Poll WhatsApp notifications regardless: spoken when the listener is on,
   // stacked as an unread badge in the notch when it is off.
   setTimeout(() => void startWhatsAppListener({ enable: loadWaListenerState() }), 6000);
+  // Silent and always on: it only remembers and shows important people.
+  setTimeout(() => { void pollWhatsAppDb(); setInterval(() => void pollWhatsAppDb(), WA_DB_POLL_MS).unref?.(); }, 7000);
   setTimeout(() => void checkCalendarNext(), 20000);
   setInterval(() => void checkCalendarNext(), 5 * 60 * 1000);
   restoreTimers();
@@ -21082,6 +22380,7 @@ app.whenReady().then(() => {
   // Clicking the Dock icon reopens the window, the way every Mac app behaves.
   app.on("activate", () => openDashboardWindow());
   if (process.env.BRAINO_MAC_DASHBOARD === "1") openDashboardWindow();
+  if (process.env.BRAINO_MEMORY_VIEW === "1") setTimeout(() => openMemoryWindow(), 1500);
   screen.on("display-metrics-changed", () => void refreshDesktopOverlayContext("display-metrics-changed"));
   screen.on("display-added", () => void refreshDesktopOverlayContext("display-added"));
   screen.on("display-removed", () => void refreshDesktopOverlayContext("display-removed"));

@@ -28,7 +28,7 @@
             <button class="bd-tab" data-tab="lib" data-group="notes memory high search" data-view="notes"><span class="bd-tab-ic"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 3h7l3 3v11a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M7 9h6M7 12.5h6M7 6h3"/></svg></span><span class="bd-nm">Library</span></button>
             <button class="bd-tab" data-tab="auto" data-group="tasks xauto" data-view="tasks"><span class="bd-tab-ic"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 4.5v11l9-5.5z"/><path d="M16 4v12"/></svg></span><span class="bd-nm">Automation</span></button>
             <button class="bd-tab" data-tab="voice" data-group="voice modes hera" data-view="voice"><span class="bd-tab-ic"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 4h12a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H8l-4 3V5a1 1 0 0 1 1-1z"/><path d="M7 8h6M7 10.5h4"/></svg></span><span class="bd-nm">Voice</span></button>
-            <button class="bd-tab" data-tab="set" data-group="settings access keys account" data-view="settings"><span class="bd-tab-ic"><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="2.6"/><path d="M10 2.6v2M10 15.4v2M17.4 10h-2M4.6 10h-2M15.2 4.8l-1.4 1.4M6.2 13.8l-1.4 1.4M15.2 15.2l-1.4-1.4M6.2 6.2L4.8 4.8"/></svg></span><span class="bd-nm">Settings</span></button>
+            <button class="bd-tab" data-tab="set" data-group="settings access keys account contacts mesa" data-view="settings"><span class="bd-tab-ic"><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="2.6"/><path d="M10 2.6v2M10 15.4v2M17.4 10h-2M4.6 10h-2M15.2 4.8l-1.4 1.4M6.2 13.8l-1.4 1.4M15.2 15.2l-1.4-1.4M6.2 6.2L4.8 4.8"/></svg></span><span class="bd-nm">Settings</span></button>
           </nav>
 
           <div class="bd-top-end">
@@ -49,7 +49,7 @@
           <div class="bd-chips" data-chips="lib" hidden><button class="bd-chip" data-view="notes"><span class="bd-nm">Notes</span><span class="bd-ct" id="ct-notes"></span></button><button class="bd-chip" data-view="memory"><span class="bd-nm">Memory</span><span class="bd-ct" id="ct-memory"></span></button><button class="bd-chip" data-view="high"><span class="bd-nm">Highlights</span><span class="bd-ct" id="ct-high"></span></button><button class="bd-chip" data-view="search"><span class="bd-nm">Search</span><span class="bd-ct" id="ct-search"></span></button></div>
           <div class="bd-chips" data-chips="auto" hidden><button class="bd-chip" data-view="tasks"><span class="bd-nm">Agent Tasks</span><span class="bd-ct" id="ct-tasks"></span></button><button class="bd-chip" data-view="xauto"><span class="bd-nm">X Automation</span><span class="bd-ct" id="ct-xauto"></span></button></div>
           <div class="bd-chips" data-chips="voice" hidden><button class="bd-chip" data-view="voice"><span class="bd-nm">Commands</span><span class="bd-ct" id="ct-voice"></span></button><button class="bd-chip" data-view="modes"><span class="bd-nm">Modes</span><span class="bd-ct" id="ct-modes"></span></button><button class="bd-chip" data-view="hera"><span class="bd-nm">BrainoHERA</span><span class="bd-ct" id="ct-hera"></span></button></div>
-          <div class="bd-chips" data-chips="set" hidden><button class="bd-chip" data-view="settings"><span class="bd-nm">General</span><span class="bd-ct" id="ct-settings"></span></button><button class="bd-chip" data-view="access"><span class="bd-nm">Permissions</span><span class="bd-ct" id="ct-access"></span></button><button class="bd-chip" data-view="keys"><span class="bd-nm">Shortcuts</span><span class="bd-ct" id="ct-keys"></span></button><button class="bd-chip" data-view="account"><span class="bd-nm">Account</span><span class="bd-ct" id="ct-account"></span></button></div>
+          <div class="bd-chips" data-chips="set" hidden><button class="bd-chip" data-view="settings"><span class="bd-nm">General</span><span class="bd-ct" id="ct-settings"></span></button><button class="bd-chip" data-view="access"><span class="bd-nm">Permissions</span><span class="bd-ct" id="ct-access"></span></button><button class="bd-chip" data-view="keys"><span class="bd-nm">Shortcuts</span><span class="bd-ct" id="ct-keys"></span></button><button class="bd-chip" data-view="mesa"><span class="bd-nm">Mesa</span><span class="bd-ct" id="ct-mesa"></span></button><button class="bd-chip" data-view="contacts"><span class="bd-nm">Contacts</span><span class="bd-ct" id="ct-contacts"></span></button><button class="bd-chip" data-view="account"><span class="bd-nm">Account</span><span class="bd-ct" id="ct-account"></span></button></div>
         </div>
       </header>
 
@@ -223,6 +223,27 @@
           <section class="bd-view" data-view="keys">
             <div class="bd-phead"><h1>Shortcuts</h1><p class="bd-sub">Every mode has one deliberate way in.</p></div>
             <div class="bd-list" id="keys"></div>
+          </section>
+
+          <section class="bd-view" data-view="mesa">
+            <div class="bd-phead"><h1>Mesa</h1><p class="bd-sub">Your timetable and assignments from Nexus. Braino syncs by himself every day.</p></div>
+            <form class="bd-ask" id="mesa-form" autocomplete="off" onsubmit="return false">
+              <p class="bd-sub" id="mesa-status" style="flex:1;margin:0">Checking…</p>
+              <button class="bd-send" type="button" id="mesa-connect">Connect Mesa</button>
+              <button class="bd-send" type="button" id="mesa-sync">Sync now</button>
+            </form>
+            <div class="bd-shead"><h2>Assignments</h2></div>
+            <div class="bd-list" id="mesa-list"></div>
+          </section>
+
+          <section class="bd-view" data-view="contacts">
+            <div class="bd-phead"><h1>Contacts</h1><p class="bd-sub">Everyone Braino can call, text or email, read straight from your Mac's address book. ★ Important people's WhatsApps show quietly in the notch; everyone else's are remembered, never shown or spoken.</p></div>
+            <form class="bd-ask" id="contacts-form" autocomplete="off">
+              <input id="contacts-input" type="text" placeholder="Search by name, nickname, number or email…" aria-label="Search contacts" spellcheck="false" />
+              <button class="bd-send" type="button" id="contacts-sync">Sync contacts</button>
+            </form>
+            <p class="bd-sub" id="contacts-status"></p>
+            <div class="bd-list" id="contacts-list"></div>
           </section>
 
           <section class="bd-view" data-view="account">

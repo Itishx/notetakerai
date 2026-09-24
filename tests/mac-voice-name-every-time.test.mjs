@@ -47,7 +47,7 @@ test("after his question, only a short reply needs no name", () => {
   assert.equal(make({ lastSpokenLine: { endedTs: now - 11000, asked: true } }, now).answersHisQuestion("yes"), false, "too late");
   assert.equal(make({ lastSpokenLine: { endedTs: now - 1000, asked: false } }, now).answersHisQuestion("yes"), false, "he asked nothing");
   const accept = lift("function shouldAcceptVoiceTranscript(text) {");
-  assert.match(accept, /\} else if \(!namedWindowOpen\(\) && !answersHisQuestion\(text\) && !followsHisReply\(text\)\) \{/);
+  assert.match(accept, /\} else if \(!namedWindowOpen\(\) && !answersHisQuestion\(text\) && !followsHisReply\(text\) && !\(hasPendingDelegateFollowup\(\) && answersPendingQuestion\(text\)\)\) \{/);
 });
 
 /* The transcriber writes words for noise. Real sentences from the log on the
@@ -259,7 +259,7 @@ test("inside the window, only what was said to him counts", () => {
 test("the notch stays awake while the window is open, and the gate uses it", () => {
   assert.match(lift("function namedAsleepForNotch() {"), /&& !namedFollowUpWindowOpen\(\)/);
   assert.match(lift("function shouldAcceptVoiceTranscript(text) {"),
-    /\} else if \(!namedWindowOpen\(\) && !answersHisQuestion\(text\) && !followsHisReply\(text\)\) \{/);
+    /\} else if \(!namedWindowOpen\(\) && !answersHisQuestion\(text\) && !followsHisReply\(text\) && !\(hasPendingDelegateFollowup\(\) && answersPendingQuestion\(text\)\)\) \{/);
   // Whatever the window lets through still has to get past the noise check.
   const accept = lift("function shouldAcceptVoiceTranscript(text) {");
   assert.ok(accept.indexOf("!followsHisReply(text)") < accept.indexOf("} else if (looksLikeNoise(text, rtLastSpeechMs)) {"));

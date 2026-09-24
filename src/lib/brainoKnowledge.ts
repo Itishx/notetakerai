@@ -20,6 +20,78 @@ export type KnowledgeEntry = {
 
 export const KNOWLEDGE_ENTRIES: readonly KnowledgeEntry[] = [
   {
+    slug: "whatsapp-silent-awareness",
+    title: "WhatsApp, Known Silently",
+    category: "Feature",
+    date: "2026-09-24",
+    dateLabel: "September 24, 2026",
+    description:
+      "Braino always knows who messaged you on WhatsApp and what they said, and never reads it out by himself. Messages from the people you mark as important show quietly in the notch; group chats never do. Ask \"did Ilu message?\" and he answers in a line.",
+    status: "MVP",
+    platform: "Braino for Mac",
+    number: "046",
+  },
+  {
+    slug: "affectiveos-memory-capture",
+    title: "AffectiveOS Memory: Capture, Digest, Recall",
+    category: "Technical",
+    date: "2026-09-24",
+    dateLabel: "September 24, 2026",
+    description:
+      "The first piece of AffectiveOS's memory: a private, text-only log of what you do on your Mac, including apps, screen text, what's playing, Claude conversations and everything said to Braino, summarised every hour into what's worth keeping. Braino can use it: \"what was that site I was on at 2am?\" gets answered, and \"open it\" opens it. One switch in its own window decides.",
+    status: "MVP",
+    platform: "AffectiveOS on Mac",
+    number: "045",
+  },
+  {
+    slug: "mesa-auto-sync",
+    title: "Mesa, Synced Every Day",
+    category: "Feature",
+    date: "2026-09-24",
+    dateLabel: "September 24, 2026",
+    description:
+      "Connect Mesa once with your Mesa email and password, and Braino keeps your classes and assignments up to date by himself every day, in the background, without Chrome. If the login expires, he tells you once.",
+    status: "MVP",
+    platform: "Braino for Mac",
+    number: "044",
+  },
+  {
+    slug: "mac-contacts-page",
+    title: "Contacts, In Settings",
+    category: "Feature",
+    date: "2026-09-24",
+    dateLabel: "September 24, 2026",
+    description:
+      "Settings on the Mac now has a Contacts page: everyone Braino can call, text or email, straight from your address book, searchable, with a Sync button for anyone you just added.",
+    status: "MVP",
+    platform: "Braino for Mac",
+    number: "043",
+  },
+  {
+    slug: "hil-first",
+    title: "HIL First",
+    category: "Technical",
+    date: "2026-09-24",
+    dateLabel: "September 24, 2026",
+    description:
+      "Braino used to decide what you meant with fixed word patterns, which is how \"open WhatsApp for me\" became a message to someone called \"for me\". We found 171 misreads like that in two months of real commands. Now HIL reads every command first and decides, and quick controls like pause and next still skip straight through.",
+    status: "MVP",
+    platform: "Braino for Mac",
+    number: "042",
+  },
+  {
+    slug: "hil-plan-first",
+    title: "HIL Plans First",
+    category: "Technical",
+    date: "2026-09-24",
+    dateLabel: "September 24, 2026",
+    description:
+      "On a long job he used to work everything out again on every step, which is where he got lost and went in circles. Now he writes a short plan first and keeps it in front of him the whole way, still doing one thing at a time. He also looks you up once per job instead of before every step.",
+    status: "MVP",
+    platform: "Mac, web",
+    number: "041",
+  },
+  {
     slug: "hil-version-2-memory",
     title: "HIL Version 2: He Remembers What Worked",
     category: "Technical",

@@ -411,3 +411,15 @@ entrypoint = "./functions/media/watch-play/index.ts"
 
 [functions.elevenlabs-tts]
 verify_jwt = false
+
+# AffectiveOS memory. digest: one Mac hour becomes a summary, episodes and
+# durable facts (written through the memory engine). recall: a question about
+# the past answered from the candidates the Mac found locally. Both check the
+# caller's own session inside the function.
+[functions.memory-digest]
+entrypoint = "./functions/memory/memory-digest/index.ts"
+verify_jwt = false
+
+[functions.memory-recall]
+entrypoint = "./functions/memory/memory-recall/index.ts"
+verify_jwt = false

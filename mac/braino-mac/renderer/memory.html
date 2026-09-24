@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'" />
+  <title>AffectiveOS Memory</title>
+  <style>
+    :root { --bg:#f6f6f4; --card:#fff; --ink:#1b1b1a; --ink2:#5d5d58; --ink3:#9a9a93; --line:#e6e5e0; --accent:#2f6f5e; --bad:#b0412e; --soft:#eef4f1; }
+    @media (prefers-color-scheme: dark) { :root { --bg:#141413; --card:#1d1d1b; --ink:#f1f0ea; --ink2:#b3b2aa; --ink3:#7d7c75; --line:#2e2d2a; --accent:#7cc4ad; --bad:#e8826f; --soft:#1f2a26; } }
+    * { box-sizing: border-box; }
+    body { margin:0; font:14px/1.5 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif; background:var(--bg); color:var(--ink); }
+    header { position:sticky; top:0; background:var(--bg); padding:34px 28px 14px; border-bottom:1px solid var(--line); z-index:2; -webkit-app-region:drag; }
+    header * { -webkit-app-region:no-drag; }
+    h1 { margin:0; font-size:22px; font-weight:650; letter-spacing:-.01em; }
+    .sub { color:var(--ink2); margin:4px 0 12px; }
+    .bar { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+    select, input, button { font:inherit; color:var(--ink); background:var(--card); border:1px solid var(--line); border-radius:8px; padding:6px 10px; }
+    input { flex:1; min-width:160px; }
+    button { cursor:pointer; }
+    button.warn { color:var(--bad); }
+    .pill { display:inline-block; padding:2px 8px; border-radius:99px; font-size:12px; background:var(--soft); color:var(--accent); }
+    .pill.off { color:var(--bad); background:transparent; border:1px solid var(--bad); }
+    main { padding:18px 28px 60px; max-width:980px; }
+    .stats { display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:10px; margin-bottom:18px; }
+    .stat { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:10px 12px; }
+    .stat b { display:block; font-size:18px; }
+    .stat span { color:var(--ink2); font-size:12.5px; }
+    h2 { font-size:13px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink3); margin:22px 0 8px; }
+    .row { display:flex; gap:12px; padding:9px 12px; background:var(--card); border:1px solid var(--line); border-radius:10px; margin-bottom:6px; }
+    .t { color:var(--ink3); font-variant-numeric:tabular-nums; width:48px; flex:0 0 auto; }
+    .k { width:22px; flex:0 0 auto; text-align:center; }
+    .b { flex:1; min-width:0; }
+    .ti { overflow-wrap:anywhere; }
+    .mt { color:var(--ink2); font-size:12.5px; overflow-wrap:anywhere; }
+    details summary { cursor:pointer; color:var(--accent); font-size:12.5px; }
+    details pre { white-space:pre-wrap; font:12px/1.45 ui-monospace, Menlo, monospace; color:var(--ink2); margin:6px 0 0; max-height:260px; overflow:auto; }
+    .x { background:none; border:0; color:var(--ink3); padding:0 4px; }
+    .x:hover { color:var(--bad); }
+    .empty { color:var(--ink2); padding:30px 0; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>AffectiveOS Memory</h1>
+    <p class="sub">What the memory layer saved about your day on this Mac. Text only, on this Mac only, kept 7 days. Everything said to Braino, by voice or typing, is kept here too. Every hour it is summarised into what is worth remembering.</p>
+    <div class="bar">
+      <span id="state" class="pill">…</span>
+      <select id="day" aria-label="Day"></select>
+      <input id="q" type="search" placeholder="Search today's memory…" aria-label="Search" />
+      <select id="kind" aria-label="Kind">
+        <option value="">Everything</option>
+        <option value="focus">Apps and windows</option>
+        <option value="screen">Screen text</option>
+        <option value="tabs">Tabs</option>
+        <option value="playing">Music</option>
+        <option value="conversation">Everything said to Braino</option>
+        <option value="braino">Braino tasks</option>
+        <option value="whatsapp">WhatsApp</option>
+        <option value="claude_session">Claude sessions</option>
+      </select>
+      <button id="recall" type="button" title="Whether Braino may use this memory to answer and act">Braino can use this: …</button>
+      <button id="pause" type="button">Pause</button>
+      <button id="delday" type="button" class="warn">Delete this day</button>
+    </div>
+  </header>
+  <main>
+    <div class="stats" id="stats"></div>
+    <form class="bar" id="ask-form" autocomplete="off">
+      <input id="ask" type="text" placeholder="Ask your memory: what was that movie site I was on at 2am?" aria-label="Ask your memory" />
+      <button type="submit">Ask</button>
+    </form>
+    <p class="sub" id="ask-answer"></p>
+    <h2>Summaries <button id="digest-now" type="button" style="margin-left:8px;font-size:12px">Summarise the last hour</button></h2>
+    <div id="digests"></div>
+    <h2>Already remembered <span id="known-count"></span></h2>
+    <div id="known"></div>
+    <h2>Timeline</h2>
+    <div id="list"></div>
+  </main>
+  <script src="memory.js"></script>
+</body>
+</html>

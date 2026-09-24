@@ -22,7 +22,14 @@ import type { HilTool } from "./hil-tool-catalog.ts";
 // old cascade fuzzy-matched it to Don Toliver and played the right artist. HIL
 // losing to the thing it is meant to replace is worth a version bump: every
 // engine_runs row carries this string, so the before/after is readable.
-export const HIL_ROUTER_VERSION = "1.1.0";
+// 1.2.0 — rule 9, and the surface now carries what is playing and the last
+// exchange. Replaying the 183 logged misreads, "loop this song from 126 to
+// 130" came back "which song?" and "send that link to Browder" came back
+// "what link?", because nothing in front of the router said what this or
+// that was. And "text Elua saying I'll be home late" asked for the wording
+// it had just been given.
+// 1.3.0 — rule 10: memory questions go to memory_search; acting on a memory escalates.
+export const HIL_ROUTER_VERSION = "1.3.0";
 
 /** One catalog line. Kept brutally short: this string is in every prompt, so a
  *  wasted word is latency on every command the user ever speaks. */
@@ -74,6 +81,10 @@ HOW TO CHOOSE
 7. WHEN IT IS GENUINELY NOT WORK, SAY SO. "How are you", "that was funny", "what do you think of this" get {"v":"say"}. Do not reach for a tool to look useful.
 
 8. WHEN TWO TOOLS BOTH FIT, PICK THE NARROWER ONE. The specific tool knows things the general one does not.
+
+9. THIS, THAT AND IT ARE USUALLY ALREADY ANSWERED. Before you ask, read nowPlaying (the song or video playing right now, with its link) and lastExchange (what they said and what Braino said just before). "This song", "that link", "play it again" and "the one you just suggested" are resolved there, and asking about them makes you sound like you were not listening. A question about what Braino just did or said ("which tabs did you close?", "what did you send?") is {"v":"say"}: the conversation holds that history, and asking them back what they meant is losing the thread. Never ask for something the sentence itself already gave you: "text Elua saying I'll be home late" has its recipient and its words, so it is an escalate (sending cannot be undone), never an ask.
+
+10. THE PAST IS IN MEMORY. "What was that site I was on at 2am", "what did I work on yesterday" is memory_search, fired with query plus from and to worked out from surface.now. "Open the site I was on last night" is two moves (find it, open it): escalate.
 
 If you are torn between fire and escalate, escalate. The loop is slower and it is never wrong to use it. Firing the wrong tool is visible, it is theirs to undo, and it costs them trust.`;
 }

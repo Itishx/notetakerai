@@ -23,6 +23,12 @@ const MacNotchListeningStatesDocs = lazy(() => import("./pages/MacNotchListening
 const MacQuietNotchDocs = lazy(() => import("./pages/MacQuietNotchDocs.tsx"));
 const HilLoopDocs = lazy(() => import("./pages/HilLoopDocs.tsx"));
 const HilMemoryDocs = lazy(() => import("./pages/HilMemoryDocs.tsx"));
+const HilPlanDocs = lazy(() => import("./pages/HilPlanDocs.tsx"));
+const HilFirstDocs = lazy(() => import("./pages/HilFirstDocs.tsx"));
+const MacContactsDocs = lazy(() => import("./pages/MacContactsDocs.tsx"));
+const MesaSyncDocs = lazy(() => import("./pages/MesaSyncDocs.tsx"));
+const AffectiveMemoryDocs = lazy(() => import("./pages/AffectiveMemoryDocs.tsx"));
+const WhatsAppSilentDocs = lazy(() => import("./pages/WhatsAppSilentDocs.tsx"));
 const HowBrainoTalksDocs = lazy(() => import("./pages/HowBrainoTalksDocs.tsx"));
 const HumanIntelligence = lazy(() => import("./pages/HumanIntelligence.tsx"));
 const BrainoOSTeaser = lazy(() => import("./pages/BrainoOSTeaser.tsx"));
@@ -228,6 +234,12 @@ function AppRoutes() {
         <Route path="/knowledge/mac-quiet-notch" element={<MacQuietNotchDocs />} />
         <Route path="/knowledge/hil-version-1" element={<HilLoopDocs />} />
         <Route path="/knowledge/hil-version-2-memory" element={<HilMemoryDocs />} />
+        <Route path="/knowledge/hil-plan-first" element={<HilPlanDocs />} />
+        <Route path="/knowledge/hil-first" element={<HilFirstDocs />} />
+        <Route path="/knowledge/mac-contacts-page" element={<MacContactsDocs />} />
+        <Route path="/knowledge/mesa-auto-sync" element={<MesaSyncDocs />} />
+        <Route path="/knowledge/affectiveos-memory-capture" element={<AffectiveMemoryDocs />} />
+        <Route path="/knowledge/whatsapp-silent-awareness" element={<WhatsAppSilentDocs />} />
         <Route path="/knowledge/how-braino-talks" element={<HowBrainoTalksDocs />} />
         <Route path="/human-intelligence" element={<HumanIntelligence />} />
         <Route path="/knowledge/jyoti-sir-team-demo" element={<JyotiSirTeamDemoDocs />} />

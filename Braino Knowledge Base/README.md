@@ -18,6 +18,12 @@ For every feature:
 
 ## Contents
 
+- [WhatsApp, Known Silently](features/whatsapp-silent-awareness.md)
+- [AffectiveOS Memory: Capture](features/affectiveos-memory-capture.md)
+- [Mesa, Synced Every Day](features/mesa-auto-sync.md)
+- [Contacts, In Settings](features/mac-contacts-page.md)
+- [HIL First](features/hil-first.md)
+- [HIL Plans First](features/hil-plan-first.md)
 - [Braino comes in three, on one page](design/two-products-and-the-browser-page.md)
 - [Meeting Recorder: Both Sides, With Names](features/meeting-recorder.md)
 - [Meetings positioning: quiet, not covert](design/meetings-positioning.md)

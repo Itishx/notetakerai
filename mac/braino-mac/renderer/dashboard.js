@@ -241,11 +241,100 @@ const LOADERS = {
   xauto: () => loadXAuto(),
   high: () => loadFeed("high", "high-list", noteCard, "No highlights yet. Anything Braino marks as worth keeping shows up here."),
   search: () => { el("search-input").focus(); },
+  contacts: () => loadContacts(false),
+  mesa: () => loadMesa("state"),
   settings: () => {
     renderSettings();
     if (!idleSettings) void loadIdleEditor();
   },
 };
+
+/* ── Mesa ──
+   Connected or not, last sync, and what is due, overdue first. */
+function renderMesa(state) {
+  const status = el("mesa-status");
+  const at = state.lastSyncAt ? new Date(state.lastSyncAt).toLocaleString(undefined, { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" }) : "never";
+  status.innerHTML = state.connected
+    ? `<span class="bd-tag ok">Connected</span> Last synced ${esc(at)}, ${esc(String(state.lastCount || 0))} events.${state.newAssignments ? ` ${esc(String(state.newAssignments))} new assignment${state.newAssignments > 1 ? "s" : ""}.` : ""}`
+    : `<span class="bd-tag bad">Not connected</span> ${esc(state.lastError === "login expired" ? "Your Mesa login expired. Connect again." : "Connect once with your Mesa email and password.")}`;
+  el("mesa-connect").textContent = state.connected ? "Reconnect" : "Connect Mesa";
+  const rows = state.assignments || [];
+  el("mesa-list").innerHTML = rows.length
+    ? rows.map((a) => card({ icon: a.overdue ? "!" : "·", tone: a.overdue ? "bad" : "", title: a.title, tags: [a.overdue ? "overdue" : "due", a.course], time: a.when })).join("")
+    : `<p class="bd-empty">${state.connected ? "Nothing due in the next three weeks." : "Connect Mesa to see your assignments."}</p>`;
+  const ct = el("ct-mesa");
+  if (ct) ct.textContent = rows.filter((a) => a.overdue).length ? "!" : "";
+}
+async function loadMesa(action) {
+  const buttons = [el("mesa-connect"), el("mesa-sync")];
+  if (action !== "state") buttons.forEach((b) => { if (b) b.disabled = true; });
+  if (action === "sync") el("mesa-sync").textContent = "Syncing…";
+  try {
+    const state = action === "connect" ? await api.mesaConnect?.() : action === "sync" ? await api.mesaSync?.() : await api.mesaState?.();
+    if (state?.ok) renderMesa(state);
+    if (state?.result && state.result.ok === false && state.result.say) el("mesa-status").textContent = state.result.say;
+  } finally {
+    buttons.forEach((b) => { if (b) b.disabled = false; });
+    if (el("mesa-sync")) el("mesa-sync").textContent = "Sync now";
+  }
+}
+el("mesa-connect")?.addEventListener("click", () => { void loadMesa("connect"); });
+el("mesa-sync")?.addEventListener("click", () => { void loadMesa("sync"); });
+
+/* ── Contacts ──
+   The same address book Braino reads when you say "call Ilu", shown whole, so
+   you can see exactly who he knows. Sync reads it again, which takes a blink. */
+let contactsRows = [];
+let importantNames = [];
+const isImportant = (name) => importantNames.some((n) => n.toLowerCase() === String(name || "").toLowerCase());
+function renderContacts() {
+  const q = String(el("contacts-input")?.value || "").toLowerCase().trim();
+  const rows = q
+    ? contactsRows.filter((c) => [c.name, c.nickname, c.company, c.phone, ...(c.emails || [])].join(" ").toLowerCase().includes(q))
+    : contactsRows;
+  el("contacts-list").innerHTML = rows.length
+    ? rows.slice(0, 500).map((c) => card({
+      icon: String(c.name || "?").trim().charAt(0).toUpperCase() || "·",
+      title: c.name + (c.nickname && c.nickname !== c.name ? ` (${c.nickname})` : ""),
+      body: [c.phone || "no number", ...(c.emails || []).slice(0, 1)].join("  ·  "),
+      tags: [isImportant(c.name) ? "important" : "", c.company, (c.phones || []).length > 1 ? `${c.phones.length} numbers` : ""],
+    }).replace(/<\/div>$/, `<button class="bd-btn" data-star="${esc(c.name)}" title="Show their WhatsApps in the notch">${isImportant(c.name) ? "★ Important" : "☆ Mark important"}</button></div>`)).join("")
+    : `<p class="bd-empty">${q ? "Nobody matches that." : "No contacts yet. Press Sync contacts."}</p>`;
+  const ct = el("ct-contacts");
+  if (ct) ct.textContent = contactsRows.length ? String(contactsRows.length) : "";
+}
+async function loadContacts(sync) {
+  const status = el("contacts-status");
+  const button = el("contacts-sync");
+  if (sync && button) { button.disabled = true; button.textContent = "Syncing…"; }
+  try {
+    const result = sync ? await api.contactsSync?.() : await api.contactsList?.();
+    if (!result?.ok) {
+      status.textContent = result?.error || "Could not read contacts. Check that Braino has Contacts access in System Settings → Privacy & Security.";
+      return;
+    }
+    contactsRows = result.contacts || [];
+    importantNames = (await api.waImportant?.())?.names || [];
+    // Important people first: they are the ones this list is usually for.
+    contactsRows.sort((a, b) => Number(isImportant(b.name)) - Number(isImportant(a.name)));
+    const withPhone = contactsRows.filter((c) => c.phone).length;
+    const at = result.syncedAt ? new Date(result.syncedAt).toLocaleString(undefined, { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" }) : "not yet";
+    status.textContent = `${contactsRows.length} contacts, ${withPhone} with a number. Last synced ${at}.`;
+    renderContacts();
+  } finally {
+    if (button) { button.disabled = false; button.textContent = "Sync contacts"; }
+  }
+}
+el("contacts-input")?.addEventListener("input", renderContacts);
+el("contacts-list")?.addEventListener("click", async (event) => {
+  const b = event.target.closest("button[data-star]");
+  if (!b) return;
+  const name = b.dataset.star;
+  importantNames = (await api.waImportant?.(name, !isImportant(name)))?.names || importantNames;
+  renderContacts();
+});
+el("contacts-form")?.addEventListener("submit", (event) => { event.preventDefault(); renderContacts(); });
+el("contacts-sync")?.addEventListener("click", () => { void loadContacts(true); });
 
 const xautoCard = (row) => card({
   icon: row.status === "posted" ? "✓" : "→",

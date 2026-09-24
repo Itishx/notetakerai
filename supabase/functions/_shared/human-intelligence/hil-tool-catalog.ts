@@ -40,7 +40,10 @@ export type HilTool = {
   handler?: string;
 };
 
-export const HIL_CATALOG_VERSION = "1.9.0";
+// 1.9.1 — whatsapp_send says it is the Mac app and the only way to send WhatsApp.
+// 1.10.0 — whatsapp_messages: answers about their WhatsApps from the Mac app, silently.
+// 1.11.0 — memory_search: AffectiveOS recall, answer and act.
+export const HIL_CATALOG_VERSION = "1.11.0";
 
 export const HIL_TOOL_CATALOG: HilTool[] = [
   // Split, because one entry covering both halves of actOnSelectedText made the
@@ -208,7 +211,9 @@ export const HIL_TOOL_CATALOG: HilTool[] = [
   { name: "whatsapp_listener_set", params: ["enable"], gloss: "Turn the WhatsApp notification reader on or off", stateful: true, zeroNetwork: true, handler: "startWhatsAppListener", },
   { name: "whatsapp_remember_contact", params: ["alias", "name", "phone"], gloss: "Save a WhatsApp contact's phone number or real name under an alias", zeroNetwork: true, handler: "saveWhatsAppContact", },
   { name: "whatsapp_reply_last", params: ["message"], gloss: "WhatsApp-reply to whoever messaged last, within fifteen minutes of that message", irreversible: true, stateful: true, handler: "sendWhatsAppMessage", },
-  { name: "whatsapp_send", params: ["recipientRaw", "message"], gloss: "Send a WhatsApp message to a named contact or saved alias", irreversible: true, stateful: true, handler: "sendWhatsAppMessage", },
+  { name: "memory_search", params: ["query", "from", "to"], gloss: "Search the memory of this Mac for something they did, saw, played or said earlier: a site they were on, a video, a file, a song, who messaged, what they worked on. from and to are ISO times you work out from Now (\"2am last night\" is roughly 01:00 to 03:00 last night; \"4 days ago\" is that whole day). It answers in a line and returns MEMORY MATCHES with addresses. If they asked you to open or do something with it: one clear match, do it (open_url) and say which; several, ask which in one line; if they only asked what it was, answer and offer to open it", memoSafe: true, handler: "searchMemory", },
+  { name: "whatsapp_messages", params: ["contact", "sinceHours"], gloss: "Who messaged them on WhatsApp and what they said, read silently from the WhatsApp Mac app: did a person message, what did they say, who texted in the last N hours, catch me up. One-to-one chats only, last 7 days unless they ask for longer. Use this for any question about their WhatsApp messages; never open WhatsApp to read them", memoSafe: true, handler: "lookupWhatsAppMessages", },
+  { name: "whatsapp_send", params: ["recipientRaw", "message"], gloss: "Send a WhatsApp message to a named contact or saved alias, through the WhatsApp Mac app in about a second. On a Mac this is THE way to send WhatsApp; never drive WhatsApp Web", irreversible: true, stateful: true, handler: "sendWhatsAppMessage", },
   { name: "x_mentions", params: [], gloss: "Read the three newest X mentions aloud with handles", memoSafe: true, handler: "speakXMentions", },
   { name: "x_stats", params: [], gloss: "Speak X follower count, weekly change, last tweet engagement", memoSafe: true, handler: "speakXStats", },
   { name: "x_tweet_clip", params: ["caption"], gloss: "Stage the last screen clip for posting to X with caption", irreversible: true, stateful: true, handler: "tweetLastClip", },

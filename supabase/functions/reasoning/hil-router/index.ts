@@ -63,7 +63,15 @@ function readVerdict(raw: string): { verdict: Verdict; rejected: string | null }
     return { verdict: { v: "escalate", why: "unreadable verdict" }, rejected: "unparseable" };
   }
 
-  const v = String(parsed.v || "");
+  let v = String(parsed.v || "");
+  /* {"v":"open_target","a":{...}}: the tool name written where the verdict
+     goes. 12 of 183 replayed misreads came back like this, and every one was
+     a clear fire, thrown away as unreadable and sent the slow way. A tool name
+     in v means fire; the irreversible check below still applies. */
+  if (!VERDICTS.has(v) && TOOL_NAMES.has(v)) {
+    parsed = { ...parsed, v: "fire", t: parsed.t || v };
+    v = "fire";
+  }
   if (!VERDICTS.has(v)) {
     return { verdict: { v: "escalate", why: "unknown verdict" }, rejected: `bad verdict ${v}` };
   }

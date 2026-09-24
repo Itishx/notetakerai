@@ -4782,6 +4782,26 @@ function saidToBraino(text) {
     || SAID_TO_HIM_ORDER.test(value);
 }
 
+/* The window is open ONLY because he is speaking or working: no wake, no
+   grace period. */
+function namedBusyOnly() {
+  if (!namedModeOn) return false;
+  if (namedSpeechAwake || Date.now() < namedGraceUntil) return false;
+  return Boolean(speaking || processing || voiceTurnInFlight);
+}
+/* One word is enough to stop him. */
+const BUSY_INTERRUPT = /^(?:stop|wait|cancel|pause|enough|no|nope|shut up|quiet|hold on|hang on)\b/i;
+
+/* What an answer to his waiting question sounds like: short (a name, a yes,
+   "the second one"), or plainly said to him. A long sentence that is neither
+   is the room. */
+function answersPendingQuestion(text) {
+  const value = String(text || "").trim().replace(/[.!?,]+$/g, "");
+  if (!value) return false;
+  if (value.split(/\s+/).filter(Boolean).length <= 5) return true;
+  return saidToBraino(value);
+}
+
 /* Straight after his answer, and clearly meant for him. */
 function followsHisReply(text) {
   return namedFollowUpWindowOpen() && saidToBraino(text);
@@ -5570,7 +5590,13 @@ function shouldAcceptVoiceTranscript(text) {
      his own voice is checked FIRST, because he says his own name out loud
      ("Braino here", "this is Braino") and would otherwise hear it through the
      speakers and wake himself up, answer, say it again, and never stop. */
-  if (namedModeOn && !herMode && !hasPendingDelegateFollowup()) {
+  /* A waiting question used to switch this whole filter off. Then everything
+     the room said was taken as the answer: 2026-09-24, HIL asked "who should
+     receive the WhatsApp message?" and "So let's start. Starting one more
+     thing." and "So we will note the form for collecting those doubts." both
+     went in as commands, each one asked again, and the question kept the door
+     open. A waiting question now lets in an ANSWER, not the room. */
+  if (namedModeOn && !herMode) {
     if (isSelfEcho(text)) {
       logRenderer("named.self_echo", { chars: stats.normalized.length });
       return false;
@@ -5590,7 +5616,13 @@ function shouldAcceptVoiceTranscript(text) {
       // His name on its own leaves the on-device match for the sentence after it.
       if (!isBareWakeWord(text)) namedHeardOnDeviceAt = 0;
       namedWake("name");
-    } else if (!namedWindowOpen() && !answersHisQuestion(text) && !followsHisReply(text)) {
+    } else if (namedBusyOnly() && !saidToBraino(text) && !BUSY_INTERRUPT.test(String(text || "").trim()) && !answersHisQuestion(text) && !(hasPendingDelegateFollowup() && answersPendingQuestion(text))) {
+      /* Open only because he is talking or working. That is when barge-in and
+         corrections happen, and also when the room is loudest, so it has to
+         sound like it was said to him. */
+      logRenderer("named.ignored_busy", { text: String(text || "").replace(/\s+/g, " ").trim().slice(0, 120) });
+      return false;
+    } else if (!namedWindowOpen() && !answersHisQuestion(text) && !followsHisReply(text) && !(hasPendingDelegateFollowup() && answersPendingQuestion(text))) {
       logRenderer("named.ignored", {
         // Logged in full: these drops are the feature working, and the only way
         // to tell that from the feature eating your sentence is to read them.
@@ -8816,7 +8848,10 @@ function handleRealtimeEvent(event) {
         heraVoice.userSpeaking = true;
         heraVoice.sawOpenAiSpeech = true;
       }
-      if (namedModeOn && namedWindowOpen()) namedSpeechAwake = true;
+      /* Speech that starts only because he is talking or working is not a
+         sentence you began while he was listening for you: that is the room
+         talking over him, and it has to earn its way in like any other. */
+      if (namedModeOn && namedWindowOpen() && !namedBusyOnly()) namedSpeechAwake = true;
     }
     // Trust the physical audio state, not just the flags: `speaking` can go
     // stale while a long Fish stream is still audible, which used to make
@@ -12722,6 +12757,15 @@ window.brainoMac.onCalendarNext?.((payload) => {
   nfCalendarNext = payload?.next || null;
   updateNotchFace();
 });
+/* An important person's WhatsApp, shown and never spoken. */
+window.brainoMac.onWaCard?.((payload) => {
+  const name = String(payload?.name || "").trim();
+  const text = String(payload?.text || "").trim();
+  if (!name) return;
+  nfShowTransient(text ? `${name}: ${text}` : `${name} messaged`, 9000);
+  logRenderer("whatsapp.card_shown", { chars: text.length });
+});
+
 window.brainoMac.onWaBadge?.((payload) => {
   nfWaBadge = { count: Number(payload?.count) || 0, sender: String(payload?.sender || "") };
   updateNotchFace();

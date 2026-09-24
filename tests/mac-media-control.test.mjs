@@ -107,7 +107,8 @@ test("the sound is found, acted on, and checked", () => {
 test("the loop and the stop word get the same hands", () => {
   assert.match(main, /media_control: \(a\) => controlPlayingMedia\(/);
   assert.match(main, /media_volume: \(a\) => setPlayingMediaVolume\(/);
-  assert.match(main, /now_playing: \(\) => describePlayingMedia\(\),/);
+  // With links for the loop, falling back to the spoken description.
+  assert.match(main, /now_playing: async \(\) => \{\n\s+const line = await macNowPlayingForHil\(\);\n\s+return line \? \{ ok: true, say: line \} : describePlayingMedia\(\);/);
   assert.match(main, /ipcMain\.handle\("braino-mac:media-control"/);
   const preload = readFileSync(new URL("../mac/braino-mac/preload.cjs", import.meta.url), "utf8");
   assert.match(preload, /mediaControl: \(payload\) => ipcRenderer\.invoke\("braino-mac:media-control", payload\)/);

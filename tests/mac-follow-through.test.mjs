@@ -183,7 +183,9 @@ test("the slow question is only asked when it can change something", () => {
   assert.match(body, /if \(!busy\?\.running\) return false;/);
   const main_ = read("../mac/braino-mac/main.cjs");
   /* No model call on that path. */
-  const handler = main_.slice(main_.indexOf('"braino-mac:job-running"'), main_.indexOf('"braino-mac:understand"'));
+  // Just that handler: up to the next one, whatever sits after it in the file.
+  const start = main_.indexOf('"braino-mac:job-running"');
+  const handler = main_.slice(start, main_.indexOf("ipcMain.handle(", start + 10));
   assert.doesNotMatch(handler, /macUnderstandUtterance|fetch\(/);
 });
 

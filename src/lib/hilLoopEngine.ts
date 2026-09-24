@@ -91,7 +91,8 @@ export type LoopMoment = { id: string; label: string; leads: string[]; intensity
 
 type ServerTurn = {
   thinking: string;
-  split: { restated_goal: string; tasks: string[] } | null;
+  split: { restated_goal: string; tasks: string[]; plan?: string[] } | null;
+  replan?: string[] | null;
   verdict: { ok: boolean; why: string | null } | null;
   decision:
     | { type: "step"; step: { intent: string; action: Record<string, unknown>; expects: string; reversible: boolean; assert?: Record<string, unknown> } }
@@ -127,6 +128,7 @@ export class HilLoopRunner {
   phase: LoopPhase = "idle";
   events: LoopEvent[] = [];
   tasks: LoopTask[] = [];
+  plan: string[] = [];
   goal: string | null = null;
   moment: LoopMoment = null;
   meta: { model: string; version: string } | null = null;
@@ -194,6 +196,7 @@ export class HilLoopRunner {
     this.phase = "thinking";
     this.events = [];
     this.tasks = [];
+    this.plan = [];
     this.goal = null;
     this.moment = null;
     this.command = command.trim();
@@ -293,6 +296,7 @@ export class HilLoopRunner {
       rescueReason: this.rescueActive ? this.rescueReason : undefined,
       state: {
         tasks: this.tasks,
+        plan: this.plan.length ? this.plan : undefined,
         facts: this.facts.slice(-20),
         asides: [],
         steps: this.stepRecords.slice(-20),
@@ -361,6 +365,9 @@ export class HilLoopRunner {
       splitJustLanded = true;
       this.onChange();
     }
+    // The map he wrote on turn one, sent back every turn; a replan replaces it.
+    if (Array.isArray(turn.split?.plan) && turn.split!.plan!.length && !this.plan.length) this.plan = turn.split!.plan!.slice(0, 10);
+    if (Array.isArray(turn.replan) && turn.replan.length) this.plan = turn.replan.slice(0, 10);
 
     await this.handleDecision(turn, splitJustLanded);
   }

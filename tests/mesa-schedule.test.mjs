@@ -329,7 +329,9 @@ test("one question gets one answer, not the week", () => {
      characters read aloud. Being told everything when you asked for one thing
      is not a smaller failure than being told nothing, just a louder one. */
   const main = readFileSync(new URL("../mac/braino-mac/main.cjs", import.meta.url), "utf8");
-  assert.match(main, /say = rows\?\.length \? macSayOneClass\(rows\[0\], "Your next class is"\) : null;/);
+  // One class, or the one you are in plus the one after: never the week.
+  assert.match(main, /say = next \? `Your next class is \$\{short\(next\)\}/);
+  assert.match(main, /say = `Right now you should be in \$\{live\.title\}/);
 
   /* And said the way a person says it: "in about an hour", not a timestamp to
      subtract from. That relative phrasing is the whole reason anyone asks. */

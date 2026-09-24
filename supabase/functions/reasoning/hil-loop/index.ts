@@ -307,6 +307,10 @@ type LoopState = {
   facts: string[];
   asides: string[];
   steps: LoopStepRecord[];
+  /* The moves he wrote down on turn one. Kept by the client, like tasks, and
+     shown back every turn so step nine knows where it is on the map without
+     having to work the whole job out again from the screen. */
+  plan?: string[];
   budgetLeft: number;
   screen?: string;
   userReply?: string;
@@ -324,7 +328,7 @@ function renderState(command: string, context: string, state: LoopState | null):
     // so on turn one the model was asked to resolve "this email" while being shown
     // nothing at all, which made looking-before-asking impossible exactly when it
     // matters most. The screen is never withheld.
-    parts.push("First turn. No task list exists yet. Restate the goal, split it into its separate jobs, and choose the first action of job one. Look at the observation below before deciding anything: if what the command refers to is already open, continue from it rather than going to find it.");
+    parts.push("First turn. No task list exists yet. Restate the goal, split it into its separate jobs, write the plan (the moves you expect to make, in order), and choose the first action of job one. Look at the observation below before deciding anything: if what the command refers to is already open, continue from it rather than going to find it.");
     if (state?.screen) parts.push(`OBSERVATION, the live page right now:\n${String(state.screen).slice(0, 16000)}`);
     parts.push("Return the JSON for this turn now.");
     return parts.join("\n\n");
@@ -334,6 +338,10 @@ function renderState(command: string, context: string, state: LoopState | null):
     .map((t, i) => `${i + 1}. [${t.status}] ${t.desc}`)
     .join("\n");
   parts.push(`RUN STATE\nJobs, strictly in order:\n${jobs}`);
+  if (Array.isArray(state!.plan) && state!.plan.length) {
+    const moves = state!.plan.map((m, i) => `${i + 1}. ${m}`).join("\n");
+    parts.push(`YOUR PLAN, written on turn one. Find where the actions below have got you to, and take the next move. Rewrite it with "replan" only if the screen shows it is wrong:\n${moves}`);
+  }
 
   if (state!.facts?.length) parts.push("Learned so far:\n" + state!.facts.map((f) => `- ${f}`).join("\n"));
   if (state!.asides?.length) parts.push("Set aside for later:\n" + state!.asides.map((a) => `- ${a}`).join("\n"));
@@ -532,7 +540,10 @@ function renderRescueBrief(state: LoopState | null, reason: string): string {
 
 type LoopTurn = {
   thinking: string;
-  split: { restated_goal: string; tasks: string[] } | null;
+  split: { restated_goal: string; tasks: string[]; plan?: string[] } | null;
+  /* The rest of the map, rewritten. Only when the screen proved the old one
+     wrong; null on every ordinary turn. */
+  replan?: string[] | null;
   verdict: { ok: boolean; why: string | null } | null;
   decision:
     | { type: "step"; step: { intent: string; action: Record<string, unknown>; expects: string; reversible: boolean; assert?: Record<string, unknown> } }
@@ -540,6 +551,49 @@ type LoopTurn = {
     | { type: "answer"; text: string }
     | { type: "task_done" | "all_done" | "blocked"; message: string; lesson?: string };
 };
+
+// ── Per-run prep cache ───────────────────────────────────────────────────────
+// See the handler. Bounded and short lived on purpose: this is a saving on the
+// turns of one job, not a store, and a warm instance should never grow into one.
+type RunPrep = {
+  at: number;
+  known: KnownContext;
+  lessonBlock: string;
+  procedureBlock: string;
+  historyBlock: string;
+};
+const RUN_PREP_TTL_MS = 10 * 60 * 1000;
+const RUN_PREP_MAX = 200;
+const runPrepCache = new Map<string, RunPrep>();
+
+function rememberRunPrep(key: string, prep: RunPrep) {
+  runPrepCache.set(key, prep);
+  if (runPrepCache.size <= RUN_PREP_MAX) return;
+  const now = Date.now();
+  for (const [k, v] of runPrepCache) {
+    if (now - v.at > RUN_PREP_TTL_MS || runPrepCache.size > RUN_PREP_MAX) runPrepCache.delete(k);
+    if (runPrepCache.size <= RUN_PREP_MAX / 2) break;
+  }
+}
+
+/** A short hash of the caller's token and the command, so the key never holds
+ *  the token itself and an answered question (which rewrites the command) reads
+ *  fresh memories for what the job now is. */
+async function tokenFingerprint(auth: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(auth));
+  return Array.from(new Uint8Array(digest).slice(0, 12)).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/* A plan is a handful of short moves. Anything that is not a string is dropped
+   rather than failing the turn: the plan is a map, and a turn with a bad map is
+   still a turn with a good action in it. */
+function cleanPlan(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((m: unknown) => typeof m === "string" && (m as string).trim())
+    .map((m: string) => m.trim().slice(0, 160))
+    .slice(0, 10);
+}
 
 function coerceTurn(rawContent: string, hadLastStep: boolean): { turn: LoopTurn; parseOk: boolean } {
   const fallback: LoopTurn = {
@@ -657,8 +711,10 @@ function coerceTurn(rawContent: string, hadLastStep: boolean): { turn: LoopTurn;
           ? rawSplit.restated_goal.trim()
           : "",
         tasks: rawSplit.tasks.filter((t: unknown) => typeof t === "string" && (t as string).trim()).slice(0, 5),
+        plan: cleanPlan(rawSplit.plan),
       }
     : null;
+  const replan = cleanPlan(parsed.replan);
 
   const rawVerdict = parsed.verdict && typeof parsed.verdict === "object" ? parsed.verdict : null;
   const verdict = hadLastStep
@@ -674,6 +730,7 @@ function coerceTurn(rawContent: string, hadLastStep: boolean): { turn: LoopTurn;
         ? parsed.thinking.trim()
         : "Thinking through the next move.",
       split,
+      ...(replan.length ? { replan } : {}),
       verdict,
       decision,
     },
@@ -741,29 +798,51 @@ serve(async (req) => {
     /* Fetched in parallel with nothing else, but before the prompt is built, and
        only on the first turn's worth of cost: it is one indexed read and it
        replaces turns, which are ten seconds each. */
-    const known = await loadWhatBrainoKnows(req, commandText);
-    const knownBlock = known.block;
-
-    /* Scopes for recall: the site he is on, plus the tools he can reach for.
-     * Keyed rather than global, because a lesson that has to be injected on
-     * every turn forever is how a prompt becomes a landfill. */
+    /* Once per run, not once per turn.
+     *
+     * Who they are, what he remembers, their history and the lessons for this
+     * site were fetched again on every turn: an auth round trip, then the memory
+     * reads, then three more, all before the model saw a token. None of it
+     * changes between turn two and turn nine of the same job, so a ten step job
+     * paid for it ten times. It is kept here, in this instance, for the run.
+     *
+     * Keyed on the run AND the caller's own token, so a run id alone can never
+     * hand one person's memories to another, and on the site, because lessons
+     * and routes are about where he is and he moves. A cold instance or a
+     * refreshed token is simply a miss: the turn pays what it always paid. */
     const screenText = String(loopState?.screen || "");
     const urlMatch = screenText.match(/https?:\/\/[^\s"']+/);
     const hostScope = urlMatch ? scopeFromUrl(urlMatch[0]) : "";
     const lessonScopes = [hostScope, ...(macTools || []).slice(0, 4).map((t) => `tool:${t}`)];
-    /* The walls and the doors, fetched together.
-     *
-     * Two reads rather than one because they answer different questions: a
-     * lesson is keyed on where you are, a route is keyed on where you are AND
-     * what you are trying to do. They are awaited in parallel, so the pair costs
-     * what the single read cost before. */
-    const [lessonBlock, procedureBlock, historyBlock] = await Promise.all([
-      recallLessons(lessonScopes),
-      recallProcedures(lessonScopes, commandText),
-      /* Their own past runs, read as them. No token means no user means no
-         history, which is exactly right for the public lab. */
-      known.supabase ? recallHistory(known.supabase, commandText, hostScope) : Promise.resolve(""),
-    ]);
+    const cacheKey = logRunId
+      ? `${logRunId}|${await tokenFingerprint(`${req.headers.get("Authorization") || ""}|${commandText}`)}|${hostScope}`
+      : "";
+    const cached = cacheKey ? runPrepCache.get(cacheKey) : undefined;
+    let prep: RunPrep;
+    if (cached && Date.now() - cached.at < RUN_PREP_TTL_MS) {
+      prep = cached;
+    } else {
+      const known = await loadWhatBrainoKnows(req, commandText);
+      /* The walls and the doors, fetched together.
+       *
+       * Two reads rather than one because they answer different questions: a
+       * lesson is keyed on where you are, a route is keyed on where you are AND
+       * what you are trying to do. They are awaited in parallel, so the pair costs
+       * what the single read cost before. */
+      const [lessonBlock, procedureBlock, historyBlock] = await Promise.all([
+        recallLessons(lessonScopes),
+        recallProcedures(lessonScopes, commandText),
+        /* Their own past runs, read as them. No token means no user means no
+           history, which is exactly right for the public lab. */
+        known.supabase ? recallHistory(known.supabase, commandText, hostScope) : Promise.resolve(""),
+      ]);
+      prep = { at: Date.now(), known, lessonBlock, procedureBlock, historyBlock };
+      if (cacheKey) rememberRunPrep(cacheKey, prep);
+    }
+    const { known, lessonBlock, procedureBlock, historyBlock } = prep;
+    const knownBlock = known.block;
+    const prepMs = Date.now() - started;
+    const prepCached = prep === cached;
 
     /* Pure and local: ten descriptions matched against the command, no network
        and no model call, so it cannot slow a turn down or fail one. */
@@ -1001,6 +1080,11 @@ serve(async (req) => {
         // fires constantly is visible rather than merely survivable.
         searched: read.searches || 0,
         via: viaResponses ? "responses" : "chat",
+        // Where the turn went before the model saw a token, and whether the
+        // run cache saved it. Turn one pays; the rest should read near zero.
+        prepMs,
+        prepCached,
+        modelMs: Date.now() - started - prepMs,
         // Which brain answered THIS turn. The client reads it to decide whether
         // escalation is even a thing here: when Astra is already driving there is
         // nothing better to hand over to, and offering a handoff would be a lie.
