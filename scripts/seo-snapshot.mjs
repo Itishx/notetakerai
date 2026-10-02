@@ -12,7 +12,7 @@ import { writeFileSync, readFileSync, existsSync } from "node:fs";
 
 const BASE = process.env.SEO_BASE || "http://localhost:4719";
 const OUT = new URL("./seo-pages.json", import.meta.url);
-const ROUTES = ["/", "/affectiveos", "/braino", "/about", "/apps", "/waitlist", "/contact", "/privacy", "/terms"];
+const ROUTES = ["/", "/affectiveos", "/braino", "/about", "/contact", "/privacy", "/terms"];
 
 const old = existsSync(OUT) ? JSON.parse(readFileSync(OUT, "utf8")) : {};
 const browser = await chromium.launch();

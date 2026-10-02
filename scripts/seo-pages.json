@@ -96,22 +96,6 @@
         "We grew up watching Tony Stark talk to Jarvis and Jarvis just get it done. That is the future of computing we believe in, and now it is on the Mac you already own. Say it once, and Braino does it for you."
       ],
       [
-        "li",
-        "Clear your inbox Reads the thread, writes the reply in your voice, waits for your yes."
-      ],
-      [
-        "li",
-        "Plan your day Your classes, what is due and who is waiting, in one answer."
-      ],
-      [
-        "li",
-        "Send the file Finds the file you mean and sends it to the right person."
-      ],
-      [
-        "li",
-        "Take the notes Writes down a call or a lecture while you listen."
-      ],
-      [
         "p",
         "WHY IT WORKS"
       ],
@@ -305,7 +289,7 @@
       ],
       [
         "h2",
-        "A chatbot tells you how. Braino does it."
+        "Stop chatting with AI. Start handing it the work."
       ],
       [
         "p",
@@ -317,87 +301,31 @@
       ],
       [
         "h2",
-        "How he helps"
+        "Five things your Mac never had"
+      ],
+      [
+        "p",
+        "Each one comes from AffectiveOS, the layer he runs on. Then one rule, and two speeds."
       ],
       [
         "h3",
-        "He reads what is in front of you."
+        "He sees your screen."
       ],
       [
         "p",
-        "Any page, PDF, email or error on your screen."
+        "Any PDF, email, line of code or error you have open."
       ],
       [
         "li",
-        "Ask about it like you would ask the person next to you."
+        "No screenshots, no copy and paste."
       ],
       [
         "li",
-        "Nothing to copy or paste. He sees what you see."
+        "Just ask: “what does this error mean?”"
       ],
       [
         "p",
-        "SONo more screenshots into a chat window."
-      ],
-      [
-        "h3",
-        "He goes and does it."
-      ],
-      [
-        "p",
-        "Sends it, books it, fills it in, finds it."
-      ],
-      [
-        "li",
-        "In your own apps and accounts, on your real screen."
-      ],
-      [
-        "li",
-        "He stops before anything is paid for or sent."
-      ],
-      [
-        "p",
-        "SONo more twenty minutes of clicking."
-      ],
-      [
-        "h3",
-        "He sits through the meeting."
-      ],
-      [
-        "p",
-        "A call, a lecture, a long video."
-      ],
-      [
-        "li",
-        "Notes written while you listen."
-      ],
-      [
-        "li",
-        "What was decided, and who does what."
-      ],
-      [
-        "p",
-        "SOYou get to be in the room."
-      ],
-      [
-        "h3",
-        "He runs your day."
-      ],
-      [
-        "p",
-        "Classes, deadlines, who is waiting on you."
-      ],
-      [
-        "li",
-        "Ask “what's today?” and get one answer."
-      ],
-      [
-        "li",
-        "Straight from your timetable and messages."
-      ],
-      [
-        "p",
-        "SONo more checking five apps every morning."
+        "SOYou stop describing your own screen to a robot."
       ],
       [
         "h3",
@@ -413,23 +341,43 @@
       ],
       [
         "li",
-        "Cut him off and he stops and listens."
+        "Cut him off mid-sentence and he stops and listens."
       ],
       [
         "p",
-        "SOIt feels like talking to someone, not a search box."
+        "SOIt feels like talking to someone next to you, not a search box."
       ],
       [
         "h3",
-        "He remembers."
+        "He does the work."
       ],
       [
         "p",
-        "Your people, your plans, your preferences."
+        "Mail, WhatsApp, Finder, Chrome, forms and files."
       ],
       [
         "li",
-        "Kept on your Mac, not in a chat that resets."
+        "One sentence instead of ten clicks and four apps."
+      ],
+      [
+        "li",
+        "On your real screen, in your own accounts."
+      ],
+      [
+        "p",
+        "SO“Send John the deck” is the whole job."
+      ],
+      [
+        "h3",
+        "He remembers you."
+      ],
+      [
+        "p",
+        "Your people, your plans, what you promised."
+      ],
+      [
+        "li",
+        "Kept on a timeline on your Mac."
       ],
       [
         "li",
@@ -437,7 +385,47 @@
       ],
       [
         "p",
-        "SOHe gets better the longer you use him."
+        "SOHe gets better every week you use him."
+      ],
+      [
+        "h3",
+        "He asks first."
+      ],
+      [
+        "p",
+        "Anything that sends, pays, posts or deletes."
+      ],
+      [
+        "li",
+        "He gets it ready, then waits for your yes."
+      ],
+      [
+        "li",
+        "A rule in the code, not a promise in a prompt."
+      ],
+      [
+        "p",
+        "SOYou stay in charge of everything that matters."
+      ],
+      [
+        "h3",
+        "He has two speeds."
+      ],
+      [
+        "p",
+        "A reflex on your Mac, and a thinker for big jobs."
+      ],
+      [
+        "li",
+        "Easy asks are understood in 0.05 seconds."
+      ],
+      [
+        "li",
+        "Big jobs are planned once, in about two seconds, then done."
+      ],
+      [
+        "p",
+        "SOFast when it is simple, careful when it is not."
       ],
       [
         "p",
@@ -497,11 +485,11 @@
       ],
       [
         "p",
-        "Braino is in private beta on Mac and Chrome. Join the waitlist and we will let you in. Windows is not on the list yet, and we would rather say so."
+        "Braino is in private beta on Mac and Chrome. Leave your email below and we will let you in. Windows is not on the list yet, and we would rather say so."
       ],
       [
         "p",
-        "Ask for a seat → RUNS ON AFFECTIVEOS · PRIVATE BETA"
+        "Get early access → RUNS ON AFFECTIVEOS · PRIVATE BETA"
       ]
     ]
   },
@@ -612,146 +600,6 @@
       [
         "p",
         "Get early access Read about AffectiveOS"
-      ]
-    ]
-  },
-  "/apps": {
-    "title": "App Store · Affective",
-    "pageDescription": "Meet Braino. He lives in your Mac's notch and does what you say in the apps you already use. Made by Affective, running on AffectiveOS.",
-    "blocks": [
-      [
-        "p",
-        "APP STORE · TODAY"
-      ],
-      [
-        "h1",
-        "Everything we build runs on AffectiveOS."
-      ],
-      [
-        "p",
-        "FEATURED · PRIVATE BETA"
-      ],
-      [
-        "h2",
-        "Braino"
-      ],
-      [
-        "p",
-        "A companion who lives in your Mac's notch. Tell him what you want and he does it, in the apps you already use, and remembers you."
-      ],
-      [
-        "li",
-        "Sits through your meetings"
-      ],
-      [
-        "li",
-        "Clears your inbox"
-      ],
-      [
-        "li",
-        "Fills the form"
-      ],
-      [
-        "li",
-        "Sends it to the right person"
-      ],
-      [
-        "p",
-        "Why now"
-      ],
-      [
-        "p",
-        "Did you book the tickets for Friday?"
-      ],
-      [
-        "p",
-        "THE MACBOOK AIR YOU ALREADY OWN"
-      ],
-      [
-        "p",
-        "FOR EVERYONE"
-      ],
-      [
-        "p",
-        "The whole of him, on your Mac and in Chrome."
-      ],
-      [
-        "p",
-        "FOR FOUNDERS"
-      ],
-      [
-        "h3",
-        "Braino Foundry"
-      ],
-      [
-        "p",
-        "Gets your startup seen: posts, replies and intros."
-      ],
-      [
-        "p",
-        "FOR INSTITUTIONS"
-      ],
-      [
-        "h3",
-        "Braino for Schools"
-      ],
-      [
-        "p",
-        "Timetable, attendance and deadlines inside him. Live at Mesa School of Business."
-      ],
-      [
-        "p",
-        "BUILT ON ONE BRAIN"
-      ],
-      [
-        "h2",
-        "Every app here shares the same senses, voice, hands and memory."
-      ],
-      [
-        "p",
-        "So what one learns about you, the others already know."
-      ]
-    ]
-  },
-  "/waitlist": {
-    "title": "Early access · Affective",
-    "pageDescription": "Meet Braino. He lives in your Mac's notch and does what you say in the apps you already use. Made by Affective, running on AffectiveOS.",
-    "blocks": [
-      [
-        "p",
-        "Early access · Private beta"
-      ],
-      [
-        "h1",
-        "Be one of the first to talk to your Mac."
-      ],
-      [
-        "p",
-        "Braino is in private beta. We let people in a few at a time, so we can watch how it goes and fix what does not. Leave your email and we will write when it is your turn."
-      ],
-      [
-        "p",
-        "WHAT DO YOU WANT TO TRY?"
-      ],
-      [
-        "h2",
-        "What happens next"
-      ],
-      [
-        "li",
-        "1 You are on the list Right away. One email to say so, nothing else."
-      ],
-      [
-        "li",
-        "2 We send you an invite In small batches, so every new person gets looked after."
-      ],
-      [
-        "li",
-        "3 You talk to your Mac Install Braino, say hello, and give him his first job."
-      ],
-      [
-        "p",
-        "Braino runs on a Mac and in Chrome. We only use your email to send you the invite and the occasional note about what is new. Read who we are."
       ]
     ]
   },

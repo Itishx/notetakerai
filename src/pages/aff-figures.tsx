@@ -37,7 +37,9 @@ const BRAINO_REQUESTS = [
   { k: "Take the notes", d: "Writes down a call or a lecture while you listen.", said: "Take notes in this lecture.", steps: ["Listening and writing as it goes", "Three key ideas saved", "Two things you have to do", "Notes ready when the class ends"] },
 ];
 
-export function VoiceToAction({ tabs = false, notch = false, row = false }: { tabs?: boolean; notch?: boolean; row?: boolean }) {
+/* `bare` keeps row mode's own stepping but hides the list of examples under
+   the screen, for pages that already list the jobs nearby. */
+export function VoiceToAction({ tabs = false, notch = false, row = false, bare = false }: { tabs?: boolean; notch?: boolean; row?: boolean; bare?: boolean }) {
   const LIST = row ? BRAINO_REQUESTS : REQUESTS;
   const [n, setN] = useState(0);
   const [held, setHeld] = useState(false);
@@ -83,7 +85,7 @@ export function VoiceToAction({ tabs = false, notch = false, row = false }: { ta
           <p className="vz-screen-meta"><span className="vz-live" />Understood in 0.05 s, then done on your real screen</p>
         </div>
       </div>
-      {row && (
+      {row && !bare && (
         <ol className="vz-row" onMouseLeave={() => setHeld(false)}>
           {LIST.map((q, i) => (
             <li key={q.k} className={i === n ? "on" : ""}>

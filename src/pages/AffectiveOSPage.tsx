@@ -118,10 +118,10 @@ export default function AffectiveOSPage() {
             <img src="/affective-logo.png" alt="Affective" width={1000} height={207} />
           </Link>
           <div className="aff-nav-links">
+            <Link to="/braino">Braino</Link>
             <Link to="/affectiveos">AffectiveOS</Link>
             <Link to="/about">About</Link>
-            <Link to="/apps">App Store</Link>
-            <Link to="/waitlist" className="aff-nav-go">Early access</Link>
+            <Link to="/braino#early-access" className="aff-nav-go">Early access</Link>
             <AffThemeToggle theme={theme} onToggle={toggle} />
           </div>
         </div>
@@ -262,7 +262,7 @@ export default function AffectiveOSPage() {
         <p>
           You do not install AffectiveOS on its own. It comes inside <Link to="/braino">Braino</Link>,
           which is in private beta on Mac and Chrome right now. We are letting people in a few at a
-          time. <Link to="/waitlist">Get early access</Link>, or read <Link to="/about">why we are
+          time. <Link to="/braino#early-access">Get early access</Link>, or read <Link to="/about">why we are
           building this</Link>.
         </p>
 

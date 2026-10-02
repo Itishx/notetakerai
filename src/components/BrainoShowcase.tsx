@@ -19,7 +19,6 @@ const DOES = [
 const MODELS = [
   { variant: "braino" as const, name: "Braino", who: "For everyone", line: "The whole of him, on your Mac and in Chrome.", where: "Mac and Chrome", to: "/braino", get: "Get", acc: "var(--a-braino, #d9645b)" },
   { variant: "foundry" as const, name: "Braino Foundry", who: "For founders", line: "Gets your startup seen: posts, replies and intros.", where: "Mac", to: "/braino?model=foundry", get: "View", acc: "#b5832a" },
-  { variant: "mesa" as const, name: "Braino for Schools", who: "For institutions", line: "Timetable, attendance and deadlines inside him. Live at Mesa School of Business.", where: "Mac", to: "/braino?model=mesa", get: "View", acc: "#2f6fed" },
 ];
 
 export function BrainoShowcase({ kicker = "Featured · Private beta", doorsOnly = false }: { kicker?: string; doorsOnly?: boolean }) {
@@ -49,7 +48,7 @@ export function BrainoShowcase({ kicker = "Featured · Private beta", doorsOnly 
           <div className="mg-app mg2-app">
             <span className="mg-icon" aria-hidden="true"><img src="/braino-standing.svg" alt="" width={104} height={127} /></span>
             <div className="mg-app-say"><b>Braino</b><span>For everyone · Mac and Chrome</span></div>
-            <Link to="/waitlist" className="st-get">Get</Link>
+            <Link to="/braino#early-access" className="st-get">Get</Link>
           </div>
         </div>
         <div className="mg2-hero-screen mg2-mac"><MacTaskFilm /></div>

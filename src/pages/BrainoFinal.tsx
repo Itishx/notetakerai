@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { FormEvent, useEffect, useRef, useState } from "react";
+import { Link, useLocation, useSearchParams } from "react-router-dom";
 import BrainoFooterGame from "@/components/BrainoFooterGame";
 import { AffThemeToggle, useAffTheme } from "@/components/AffTheme";
 /* The jobs are written here rather than read from the site's engine data,
@@ -12,11 +12,11 @@ import "./braino-final.css";
 /* ============================================================================
    /braino-final — the one page about Braino.
 
-   Everything about him lives on one page in three tabs: Braino, Braino
-   Foundry, and Braino for Mesa School of Business. They are not three
-   products. They are three models of one, the way a phone has models: the same
-   machine inside, pointed at a different life. The tabs change the story and
-   never the thing.
+   Everything about him lives on one page in two tabs: Braino and Braino
+   Foundry. They are not two products. They are two models of one, the way a
+   phone has models: the same machine inside, pointed at a different life. The
+   tabs change the story and never the thing. Early access is a section of
+   this page (2026-10-02); /waitlist lands on it.
 
    Written from the reader's side of the screen. Every section starts with the
    day they actually have, in their own words, before a single sentence about
@@ -78,9 +78,9 @@ type Model = {
 const MODELS: Model[] = [
   {
     key: "braino",
-    title: "An AI that lives on your Mac.",
-    titleTail: "And actually does things.",
-    lede: "Talk to him or type. He sends the message, replies to the email, finds the file and books the thing, then remembers you. He asks before anything is sent or paid for.",
+    title: "An AI on your Mac",
+    titleTail: "that actually does the work.",
+    lede: "Braino lives in your Mac's notch. Talk to him or type. He sees your screen, does the work in the apps you already use, and remembers you. Nothing to paste, no tab to open.",
     tab: "Braino",
     who: "For everyone",
     name: "Braino",
@@ -126,15 +126,15 @@ const MODELS: Model[] = [
     ],
     film: { src: "/Braino_Final.MP4", caption: "Don't Blink." },
     handles: {
-      heading: "How he helps",
-      note: "",
+      heading: "Five things your Mac never had",
+      note: "Each one comes from AffectiveOS, the layer he runs on. Then one rule, and two speeds.",
       jobs: [
-        { n: "01", name: "He reads what is in front of you.", job: "Any page, PDF, email or error on your screen.", points: ["Ask about it like you would ask the person next to you.", "Nothing to copy or paste. He sees what you see."], solves: "No more screenshots into a chat window.", state: "Running" },
-        { n: "02", name: "He goes and does it.", job: "Sends it, books it, fills it in, finds it.", points: ["In your own apps and accounts, on your real screen.", "He stops before anything is paid for or sent."], solves: "No more twenty minutes of clicking.", state: "Running" },
-        { n: "03", name: "He sits through the meeting.", job: "A call, a lecture, a long video.", points: ["Notes written while you listen.", "What was decided, and who does what."], solves: "You get to be in the room.", state: "Running" },
-        { n: "04", name: "He runs your day.", job: "Classes, deadlines, who is waiting on you.", points: ["Ask \u201cwhat's today?\u201d and get one answer.", "Straight from your timetable and messages."], solves: "No more checking five apps every morning.", state: "Running" },
-        { n: "05", name: "He talks back.", job: "Out loud, in his own voice.", points: ["Speak or type, whichever is easier.", "Cut him off and he stops and listens."], solves: "It feels like talking to someone, not a search box.", state: "Running" },
-        { n: "06", name: "He remembers.", job: "Your people, your plans, your preferences.", points: ["Kept on your Mac, not in a chat that resets.", "Read, fix or delete anything he keeps."], solves: "He gets better the longer you use him.", state: "Running" },
+        { n: "01", name: "He sees your screen.", job: "Any PDF, email, line of code or error you have open.", points: ["No screenshots, no copy and paste.", "Just ask: \u201cwhat does this error mean?\u201d"], solves: "You stop describing your own screen to a robot.", state: "Running" },
+        { n: "02", name: "He talks back.", job: "Out loud, in his own voice.", points: ["Speak or type, whichever is easier.", "Cut him off mid-sentence and he stops and listens."], solves: "It feels like talking to someone next to you, not a search box.", state: "Running" },
+        { n: "03", name: "He does the work.", job: "Mail, WhatsApp, Finder, Chrome, forms and files.", points: ["One sentence instead of ten clicks and four apps.", "On your real screen, in your own accounts."], solves: "\u201cSend John the deck\u201d is the whole job.", state: "Running" },
+        { n: "04", name: "He remembers you.", job: "Your people, your plans, what you promised.", points: ["Kept on a timeline on your Mac.", "Read, fix or delete anything he keeps."], solves: "He gets better every week you use him.", state: "Running" },
+        { n: "05", name: "He asks first.", job: "Anything that sends, pays, posts or deletes.", points: ["He gets it ready, then waits for your yes.", "A rule in the code, not a promise in a prompt."], solves: "You stay in charge of everything that matters.", state: "Running" },
+        { n: "06", name: "He has two speeds.", job: "A reflex on your Mac, and a thinker for big jobs.", points: ["Easy asks are understood in 0.05 seconds.", "Big jobs are planned once, in about two seconds, then done."], solves: "Fast when it is simple, careful when it is not.", state: "Running" },
       ],
     },
     wall: [
@@ -158,8 +158,8 @@ const MODELS: Model[] = [
       { at: "11:45 pm", p: "“Good night, Braino.” The day is kept on your Mac, so tomorrow's good morning starts where tonight ended." },
     ],
     honest:
-      "Braino is in private beta on Mac and Chrome. Join the waitlist and we will let you in. Windows is not on the list yet, and we would rather say so.",
-    cta: { label: "Ask for a seat", to: "/waitlist" },
+      "Braino is in private beta on Mac and Chrome. Leave your email below and we will let you in. Windows is not on the list yet, and we would rather say so.",
+    cta: { label: "Get early access", to: "#early-access" },
     state: "Runs on AffectiveOS · Private beta",
     accent: "#d9645b",
     accentDark: "#e8786e",
@@ -267,7 +267,7 @@ const MODELS: Model[] = [
     ],
     honest:
       "Foundry is Braino pointed at a company, on macOS, in the same private beta. Content, optics and outreach is what he does; handing work to coding agents and checking it comes to Foundry first and has not shipped. Nothing he writes goes anywhere until you say so.",
-    cta: { label: "Talk to us about Foundry", to: "/contact" },
+    cta: { label: "Ask for Foundry", to: "#early-access" },
     state: "Runs on AffectiveOS \u00b7 For founders",
     accent: "#b8842a",
     accentDark: "#d3a350",
@@ -296,23 +296,35 @@ const COMPANION = [
 const FAQ = [
   {
     q: "What is Braino, in one line?",
-    a: "An AI that lives on your Mac and in your browser. Talk to him or type, and he does the job: the message, the email, the booking. Then he remembers you.",
+    a: "An AI that lives in your Mac's notch. He sees your screen, talks back, does the work in your apps, and remembers you.",
+  },
+  {
+    q: "How is Braino better than Siri?",
+    a: "Siri can open an app or tell you the weather. Braino reads the PDF on your screen, writes the email in your voice and sends it after your yes. Siri runs commands. Braino does the work.",
   },
   {
     q: "Is this a chatbot?",
     a: "No. A chatbot answers and leaves the work to you. He does the work, on the screen you are already on, and checks it worked before he says so.",
   },
   {
-    q: "Do I have to move to a new app?",
-    a: "No. He works inside what you already use: your browser, WhatsApp, mail, calendar, your college portal. Nothing to move, nothing to set up.",
+    q: "Do I need to install a new operating system?",
+    a: "No. Braino is an app that runs on top of macOS. There is nothing to replace or reinstall.",
   },
   {
-    q: "Can he do something I did not ask for?",
-    a: "No. Anything that spends money, sends a message, posts or deletes something waits for your yes. That is enforced in the code.",
+    q: "How does AffectiveOS connect to Braino?",
+    a: "AffectiveOS is the layer we built: the seeing, hearing, doing and remembering. Braino is the companion in your notch that you actually talk to. You install Braino, and AffectiveOS comes with him.",
   },
   {
-    q: "Are Braino, Foundry and the school one three products?",
-    a: "One product in three models, like a phone. The same Braino and the same memory. Foundry is pointed at your company; the Mesa one has your school's timetable, attendance and deadlines inside him.",
+    q: "Will he do things without asking me?",
+    a: "Never. Anything that spends money, sends a message, posts or deletes something waits for your yes. That is enforced in the code.",
+  },
+  {
+    q: "Where does my data live?",
+    a: "What he remembers about you stays on your Mac. Only the request itself, and the context that job needs, is sent to think. Private windows and password apps are never recorded, nothing is sold, and you can read, fix or delete anything he keeps.",
+  },
+  {
+    q: "Are Braino and Foundry two products?",
+    a: "One product in two models, like a phone. The same Braino and the same memory. Foundry is pointed at your company and helps it get seen.",
   },
   {
     q: "Did you build the AI itself?",
@@ -320,13 +332,107 @@ const FAQ = [
   },
   {
     q: "Can I use him today?",
-    a: "Braino is in private beta on Mac and Chrome; join the waitlist to get in. The school version is live at Mesa School of Business. Handing work to coding agents comes to Foundry first and has not shipped.",
-  },
-  {
-    q: "What does it do with what it sees?",
-    a: "He uses it to answer you. He reads the screen when you ask about it, and anything private is never written down. Nothing is sold, ever.",
+    a: "Braino is in private beta on Mac and Chrome, and we let people in a few at a time. Leave your email in early access and we will write when it is your turn.",
   },
 ];
+
+/* Early access, as a section of his page. Same waitlist-signup function as
+   the old /waitlist page, with the picks as categories. The open tab is
+   picked for you, because that is the one you came for. */
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
+const SUPABASE_KEY = (import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY) as string;
+const PICKS = [
+  { id: "braino", name: "Braino", who: "For everyone", line: "Talk to your Mac and he does the job." },
+  { id: "foundry", name: "Braino Foundry", who: "For founders", line: "Gets your startup seen: posts, replies and intros." },
+];
+const NEXT = [
+  { h: "You are on the list", p: "Right away. One email to say so, nothing else." },
+  { h: "We send you an invite", p: "In small batches, so every new person gets looked after." },
+  { h: "You talk to your Mac", p: "Install Braino, say hello, and give him his first job." },
+];
+
+function EarlyAccess({ start }: { start: string }) {
+  const [picked, setPicked] = useState<Set<string>>(new Set([start]));
+  const [email, setEmail] = useState("");
+  const [state, setState] = useState<"idle" | "loading" | "done" | "existing" | "error" | "pick">("idle");
+  useEffect(() => { setPicked((cur) => (cur.has(start) ? cur : new Set([...cur, start]))); }, [start]);
+  const toggleOne = (id: string) => {
+    setPicked((cur) => { const next = new Set(cur); if (next.has(id)) next.delete(id); else next.add(id); return next; });
+    if (state === "pick") setState("idle");
+  };
+  const submit = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (state === "loading") return;
+    if (!email.trim().includes("@")) { setState("error"); return; }
+    if (picked.size === 0) { setState("pick"); return; }
+    setState("loading");
+    const categories = Array.from(picked);
+    try {
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/waitlist-signup`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", apikey: SUPABASE_KEY },
+        body: JSON.stringify({ email: email.trim(), categories, context: `braino-early-access:${categories.join(",")}` }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error();
+      setState(data.error === "already_on_waitlist" ? "existing" : "done");
+    } catch {
+      setState("error");
+    }
+  };
+  const finished = state === "done" || state === "existing";
+  return (
+    <section className="bf-sec bf-ea" id="early-access">
+      <div className="bf-wrap">
+        <div className="bf-sec-head bf-reveal">
+          <p className="bf-kicker">Early access</p>
+          <h2>Be one of the first <b>to talk to your Mac.</b></h2>
+          <p className="bf-sec-note">Braino is in private beta. We let people in a few at a time, so we can watch how it goes and fix what does not.</p>
+        </div>
+        <form className="bf-ea-box bf-reveal" onSubmit={submit}>
+          {finished ? (
+            <div className="bf-ea-done" role="status">
+              <span className="bf-ea-check" aria-hidden="true" />
+              <div>
+                <h3>{state === "done" ? "You are on the list." : "You are already with us."}</h3>
+                <p>We will write when it is your turn. Nothing else in between.</p>
+              </div>
+            </div>
+          ) : (
+            <>
+              <p className="bf-ea-k">What do you want to try?</p>
+              <div className="bf-ea-picks">
+                {PICKS.map((p) => {
+                  const on = picked.has(p.id);
+                  return (
+                    <button type="button" key={p.id} className={"bf-ea-pick" + (on ? " on" : "")} aria-pressed={on} onClick={() => toggleOne(p.id)}>
+                      <span className="bf-ea-tick" aria-hidden="true" />
+                      <small>{p.who}</small>
+                      <b>{p.name}</b>
+                      <span>{p.line}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              <label className="bf-ea-k" htmlFor="bf-ea-email">Your email</label>
+              <div className="bf-ea-row">
+                <input id="bf-ea-email" type="email" value={email} required autoComplete="email" placeholder="you@somewhere.com"
+                  onChange={(e) => { setEmail(e.target.value); if (state === "error") setState("idle"); }} />
+                <button type="submit" className="bf-cta" disabled={state === "loading"}>{state === "loading" ? "Joining\u2026" : "Get early access"}</button>
+              </div>
+              {state === "error" && <p className="bf-ea-msg" role="alert">That did not go through. Check the email and try once more.</p>}
+              {state === "pick" && <p className="bf-ea-msg" role="alert">Pick at least one above, so we know what to write to you about.</p>}
+            </>
+          )}
+        </form>
+        <ol className="bf-ea-next bf-reveal">
+          {NEXT.map((n, i) => <li key={n.h}><span>{i + 1}</span><h3>{n.h}</h3><p>{n.p}</p></li>)}
+        </ol>
+        <p className="bf-ea-small">Braino runs on a Mac and in Chrome. We only use your email to send you the invite and the occasional note about what is new.</p>
+      </div>
+    </section>
+  );
+}
 
 /* His footer, the one from his own site, with three corrections the new shape
    forces.
@@ -347,9 +453,9 @@ const FOOTER_COLUMNS: Array<{ head: string; links: Array<[string, string]> }> = 
     links: [
       ["What he does", "/braino#what"],
       ["A normal day", "/braino#day"],
-      ["Why not another AI tool", "/braino#faq"],
+      ["Better than Siri?", "/braino#faq"],
       ["Questions", "/braino#faq"],
-      ["Get him", "/waitlist"],
+      ["Early access", "/braino#early-access"],
     ],
   },
   {
@@ -357,13 +463,12 @@ const FOOTER_COLUMNS: Array<{ head: string; links: Array<[string, string]> }> = 
     links: [
       ["Braino", "/braino"],
       ["Braino Foundry", "/braino?model=foundry"],
-      ["For institutions", "/braino?model=mesa"],
     ],
   },
   {
     head: "Under the hood",
     links: [
-      ["AffectiveOS", "/#technology"],
+      ["AffectiveOS", "/affectiveos"],
     ],
   },
   {
@@ -536,6 +641,16 @@ export default function BrainoFinal() {
   };
   const model = MODELS[at];
 
+  /* /waitlist and every "Get early access" link land here with #early-access.
+     The router does not scroll to a hash on its own, so this does, once the
+     page has drawn. */
+  const { hash } = useLocation();
+  useEffect(() => {
+    if (!hash) return;
+    const t = window.setTimeout(() => document.getElementById(hash.slice(1))?.scrollIntoView({ behavior: "smooth", block: "start" }), 120);
+    return () => window.clearTimeout(t);
+  }, [hash]);
+
   /* Changing tab is a deliberate act, so what it changes to is shown at once.
      The reveal observer only ever sees what was on the page when it started,
      and a story that swapped underneath it stayed at opacity zero: the tab
@@ -569,7 +684,7 @@ export default function BrainoFinal() {
             <a href="#what">What he does</a>
             <a href="#day">A normal day</a>
             <a href="#faq">Questions</a>
-            <Link to="/waitlist">Get him</Link>
+            <a href="#early-access">Early access</a>
             <AffThemeToggle theme={theme} onToggle={toggle} />
           </div>
         </div>
@@ -588,7 +703,7 @@ export default function BrainoFinal() {
           general one and finding the choice underneath it. */}
       <header className="bf-hero">
         <div className="bf-wrap">
-          <p className="bf-eyebrow bf-reveal">Braino · Your companion on the Mac</p>
+          <p className="bf-eyebrow bf-reveal">Braino · Private beta · Runs on AffectiveOS</p>
           <h1 className="bf-h1 bf-reveal">
             {model.title}
             <b>{model.titleTail}</b>
@@ -596,17 +711,13 @@ export default function BrainoFinal() {
           <div className="bf-hero-row bf-reveal">
             <p className="bf-hero-one">{model.lede}</p>
             <div className="bf-hero-cta">
-              <Link to={model.cta.to} className="bf-cta">{model.cta.label}</Link>
-              {/* Braino tab only. Deliberately empty for now (2026-09-26): the
-                  button is in place for when the Mac build ships. */}
-              {model.tab === "Braino" && (
-                <button type="button" className="bf-cta bf-cta-ghost" aria-label="Download Braino for Mac">
-                  Download for Mac
-                </button>
-              )}
-              <a href="#does" className="bf-cta bf-cta-ghost">See what he does</a>
+              <a href={model.cta.to} className="bf-cta">{model.cta.label}</a>
+              {model.film
+                ? <a href="#film" className="bf-cta bf-cta-ghost">Watch the film</a>
+                : <a href="#does" className="bf-cta bf-cta-ghost">See what he does</a>}
             </div>
           </div>
+          <p className="bf-hero-trust bf-reveal">Runs on your Mac. Asks before anything is sent, paid for or deleted.</p>
         </div>
       </header>
 
@@ -637,7 +748,7 @@ export default function BrainoFinal() {
       <main className="bf-story">
         {/* 1. The teaser, first. */}
         {model.film && (
-          <section className="bf-film-sec">
+          <section className="bf-film-sec" id="film">
             <figure className="bf-film" data-grow>
               <video
                 src={model.film.src}
@@ -671,7 +782,7 @@ export default function BrainoFinal() {
           <section className="bf-sec bf-define">
             <div className="bf-wrap">
               <p className="bf-kicker bf-reveal">What Braino is</p>
-              <h2 className="bf-define-h bf-reveal">A chatbot tells you how. <b>Braino does it.</b></h2>
+              <h2 className="bf-define-h bf-reveal">Stop chatting with AI. <b>Start handing it the work.</b></h2>
               <div className="bf-define-row bf-reveal">
                 <p>Braino is a companion who lives in your Mac's notch. You talk to him like a person. He sees your screen, uses your apps and gets the job done, then remembers it, so tomorrow he already knows.</p>
                 <div className="bf-vs">
@@ -776,13 +887,15 @@ export default function BrainoFinal() {
               <p className="bf-honest-label">What is true today</p>
               <p>{model.honest}</p>
               <p className="bf-honest-go">
-                <Link to={model.cta.to}>{model.cta.label}<i aria-hidden="true">→</i></Link>
+                <a href={model.cta.to}>{model.cta.label}<i aria-hidden="true">→</i></a>
                 <span>{model.state}</span>
               </p>
             </div>
           </div>
         </section>
       </main>
+
+      <EarlyAccess start={model.key} />
 
       {/* ── Questions ─────────────────────────────────────────────────────── */}
       <section className="bf-sec bf-faq-sec" id="faq">

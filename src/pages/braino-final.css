@@ -733,3 +733,41 @@
 .bf-clock-times button.on { background: var(--ink); color: var(--bg); border-color: var(--ink); }
 @media (max-width: 800px) { .bf-clock { grid-template-columns: 1fr; } .bf-clock-face { max-width: 160px; } }
 @media (prefers-reduced-motion: reduce) { .bf-cf-hour, .bf-cf-min { transition: none; } .bf-clock-say { animation: none; } }
+
+/* ── Hero trust line, and early access as a section (2026-10-02) ─────────── */
+.bf-hero-trust { margin: 22px 0 0; font-size: 14px; color: var(--ink-faint); display: flex; align-items: center; gap: 8px; }
+.bf-hero-trust::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--acc); flex: none; }
+
+.bf-ea { border-top: 1px solid var(--line); }
+.bf-ea-box { margin-top: clamp(28px, 4vw, 44px); background: var(--box); border: 1px solid var(--line); border-radius: 18px; padding: clamp(20px, 3vw, 32px); }
+.bf-ea-k { display: block; margin: 0 0 12px; font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-faint); }
+.bf-ea-picks { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 26px; }
+.bf-ea-pick { position: relative; text-align: left; display: flex; flex-direction: column; gap: 4px; padding: 16px 16px 16px 46px; border: 1px solid var(--line); border-radius: 14px; background: transparent; color: var(--ink); font: inherit; cursor: pointer; transition: border-color .2s, background .2s; }
+.bf-ea-pick small { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-faint); }
+.bf-ea-pick b { font-family: var(--display); font-weight: 500; font-size: 19px; }
+.bf-ea-pick span:last-child { font-size: 14px; color: var(--ink-soft); line-height: 1.45; }
+.bf-ea-pick.on { border-color: var(--acc); background: var(--surface); }
+.bf-ea-tick { position: absolute; left: 16px; top: 19px; width: 18px; height: 18px; border-radius: 50%; border: 1.5px solid var(--line-strong); }
+.bf-ea-pick.on .bf-ea-tick { border-color: var(--acc); background: var(--acc); box-shadow: inset 0 0 0 3px var(--box); }
+.bf-ea-row { display: flex; gap: 10px; }
+.bf-ea-row input { flex: 1; min-width: 0; height: 48px; padding: 0 16px; border-radius: 999px; border: 1px solid var(--line-strong); background: var(--bg); color: var(--ink); font: inherit; font-size: 16px; }
+.bf-ea-row input:focus { outline: none; border-color: var(--acc); }
+.bf-ea-row .bf-cta { height: 48px; white-space: nowrap; border: 0; cursor: pointer; }
+.bf-ea-msg { margin: 12px 0 0; font-size: 14px; color: var(--acc); }
+.bf-ea-done { display: flex; gap: 16px; align-items: flex-start; }
+.bf-ea-done h3 { margin: 0 0 4px; font-family: var(--display); font-weight: 500; font-size: 24px; }
+.bf-ea-done p { margin: 0; color: var(--ink-soft); }
+.bf-ea-check { width: 30px; height: 30px; border-radius: 50%; background: var(--acc); flex: none; position: relative; }
+.bf-ea-check::after { content: ""; position: absolute; left: 10px; top: 7px; width: 7px; height: 12px; border: solid var(--box); border-width: 0 2px 2px 0; transform: rotate(45deg); }
+.bf-ea-next { list-style: none; padding: 0; margin: clamp(28px, 4vw, 40px) 0 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+.bf-ea-next span { font-size: 12px; color: var(--ink-faint); }
+.bf-ea-next h3 { margin: 6px 0 4px; font-family: var(--display); font-weight: 500; font-size: 19px; }
+.bf-ea-next p { margin: 0; font-size: 14.5px; line-height: 1.5; color: var(--ink-soft); }
+.bf-ea-small { margin: 28px 0 0; font-size: 13.5px; color: var(--ink-faint); }
+#early-access, #film, #faq { scroll-margin-top: 140px; }
+@media (max-width: 640px) {
+  .bf-ea-picks, .bf-ea-next { grid-template-columns: 1fr; }
+  .bf-ea-row { flex-direction: column; }
+  .bf-ea-row input { flex: none; width: 100%; }
+  .bf-ea-row .bf-cta { width: 100%; justify-content: center; }
+}

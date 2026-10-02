@@ -21,6 +21,21 @@
       ],
       "destination": "https://www.affctve.com/braino",
       "permanent": false
+    },
+    {
+      "source": "/waitlist",
+      "destination": "/braino#early-access",
+      "permanent": false
+    },
+    {
+      "source": "/early-access",
+      "destination": "/braino#early-access",
+      "permanent": false
+    },
+    {
+      "source": "/apps",
+      "destination": "/braino",
+      "permanent": false
     }
   ],
   "rewrites": [
@@ -35,14 +50,6 @@
     {
       "source": "/about",
       "destination": "/about/index.html"
-    },
-    {
-      "source": "/apps",
-      "destination": "/apps/index.html"
-    },
-    {
-      "source": "/waitlist",
-      "destination": "/waitlist/index.html"
     },
     {
       "source": "/contact",

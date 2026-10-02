@@ -25,19 +25,11 @@ const PAGES = {
   },
   "/braino": {
     title: "Braino · Affective",
-    description: "Braino is a companion who lives in your Mac's notch. Talk to him like a person and he does the job in your apps, then remembers you. In private beta.",
+    description: "An AI on your Mac that actually does the work. Braino lives in your notch, sees your screen, acts in your apps and remembers you. Join the private beta.",
   },
   "/about": {
     title: "About · Affective",
     description: "We believe the future of computing is voice-first. Affective is a product company in Bengaluru building it for the Mac you already own.",
-  },
-  "/apps": {
-    title: "App Store · Affective",
-    description: "Everything Affective builds runs on AffectiveOS. Braino, our companion for the Mac, is in private beta.",
-  },
-  "/waitlist": {
-    title: "Early access · Affective",
-    description: "Braino is in private beta. Leave your email and we will let you in as soon as there is a seat.",
   },
   "/contact": {
     title: "Contact · Affective",

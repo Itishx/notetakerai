@@ -501,10 +501,10 @@ export default function Affective() {
             <img src="/affective-logo.png" alt="Affective" width={1000} height={207} />
           </Link>
           <div className="aff-nav-links">
+            <Link to="/braino">Braino</Link>
             <Link to="/affectiveos">AffectiveOS</Link>
             <Link to="/about">About</Link>
-            <Link to="/apps">App Store</Link>
-            <Link to="/waitlist" className="aff-nav-go">Early access</Link>
+            <Link to="/braino#early-access" className="aff-nav-go">Early access</Link>
             <AffThemeToggle theme={theme} onToggle={toggle} />
           </div>
         </div>
@@ -530,7 +530,7 @@ export default function Affective() {
                 Meet Braino. He lives in your Mac's notch, and does what you say in the apps you already use.
               </p>
               <div className="aff-hero-cta">
-                <Link to="/waitlist" className="aff-cta">Get early access</Link>
+                <Link to="/braino#early-access" className="aff-cta">Get early access</Link>
                 <Link to="/braino" className="aff-cta aff-cta-ghost">Meet Braino</Link>
               </div>
             </div>
@@ -594,7 +594,7 @@ export default function Affective() {
             </div>
             <div className="hb6-side">
               <div className="hb5-go">
-                <Link to="/waitlist" className="aff-cta">Get early access</Link>
+                <Link to="/braino#early-access" className="aff-cta">Get early access</Link>
                 <Link to="/braino" className="aff-cta aff-cta-ghost">Meet Braino</Link>
               </div>
             </div>
@@ -607,7 +607,7 @@ export default function Affective() {
           <h2 className="aff-h1 ah-os-line hb6-tag" data-lit><Lit text="Speak. Watch it happen." /></h2>
           <p className="hb6-story aff-reveal">We grew up watching Tony Stark talk to Jarvis and Jarvis just get it done. That is the future of computing we believe in, and now it is on the Mac you already own. Say it once, and Braino does it for you.</p>
           <figure className="ah-os-live aff-reveal aff-rise">
-            <div className="ao-viz ao-viz-screen"><VoiceToAction tabs notch row /></div>
+            <div className="ao-viz ao-viz-screen"><VoiceToAction tabs notch row bare /></div>
           </figure>
           </div>
         </div>
@@ -640,7 +640,7 @@ export default function Affective() {
         <div className="aff-wrap hb2-faq-split">
           <div className="hb2-faq-side">
             <h3 className="hb2-faq-h aff-reveal">Questions</h3>
-            <p>Anything else? <Link to="/waitlist">Get early access</Link> and ask us directly.</p>
+            <p>Anything else? <Link to="/braino#early-access">Get early access</Link> and ask us directly.</p>
           </div>
           <div className="hb2-faq-list">
             {FAQS.map((f) => (
@@ -667,7 +667,7 @@ export default function Affective() {
           <MoonwalkStrip />
           <p className="hb-end-p">Braino is in private beta. We are letting people in a few at a time.</p>
           <div className="hb-go">
-            <Link to="/waitlist" className="aff-cta">Get early access</Link>
+            <Link to="/braino#early-access" className="aff-cta">Get early access</Link>
             <Link to="/affectiveos" className="aff-cta aff-cta-ghost">Read about AffectiveOS</Link>
           </div>
         </div>
@@ -711,25 +711,17 @@ export default function Affective() {
               {/* Products holds one product, and the product divides into the
                   two he comes in. Drawn rather than listed, because a list
                   makes three separate things out of one. */}
-              <nav className="aff-foot-col aff-tree" aria-label="App Store">
-                <h4><Link to="/apps">App Store</Link></h4>
+              <nav className="aff-foot-col aff-tree" aria-label="Braino">
+                <h4><Link to="/braino">Braino</Link></h4>
                 <ul>
-                  <li><Link to="/braino">Braino</Link></li>
+                  <li><Link to="/braino">For everyone</Link></li>
                   <li><Link to="/braino?model=foundry">Braino Foundry</Link></li>
-                </ul>
-              </nav>
-              {/* Its own column. A school buying the same Braino with its own
-                  timetable, attendance and deadlines inside him is a deal
-                  rather than a download, so it goes to a person, not a form. */}
-              <nav className="aff-foot-col aff-tree aff-tree-on" aria-label="For institutions">
-                <h4>For institutions</h4>
-                <ul>
-                  <li><Link to="/braino?model=mesa">Braino for Schools</Link></li>
+                  <li><Link to="/braino#early-access">Early access</Link></li>
                 </ul>
               </nav>
               <nav className="aff-foot-col">
                 <h4>Company</h4>
-                <Link to="/waitlist">Early access</Link>
+                <Link to="/braino#early-access">Early access</Link>
                 <Link to="/contact">Contact</Link>
               </nav>
             </div>

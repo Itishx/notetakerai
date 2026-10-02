@@ -19,7 +19,6 @@ type Card = { name: string; line: string; meta: string; cat: "Braino" | "Messagi
 const CARDS: Card[] = [
   { name: "Braino", line: "Talk to your Mac. He does the job and remembers you.", meta: "Private beta · Mac and Chrome", cat: "Braino", icon: <BrainoMascot size={52} />, to: "/braino" },
   { name: "Braino Foundry", line: "Gets your startup seen: posts, replies and intros.", meta: "Model · Mac", cat: "Braino", icon: <BrainoMascot variant="foundry" size={52} />, to: "/braino?model=foundry" },
-  { name: "Braino for Schools", line: "Timetable, attendance and deadlines inside him.", meta: "Model · Live at Mesa", cat: "Braino", icon: <BrainoMascot variant="mesa" size={52} />, to: "/braino?model=mesa" },
   { name: "WhatsApp", line: "Send a message or a link to the right person in a second.", meta: "Works with Braino · macOS", cat: "Messaging", icon: <AppLogo name="WhatsApp" /> },
   { name: "Mail", line: "Read, draft and reply to email in your voice.", meta: "Works with Braino · macOS", cat: "Email", icon: <AppLogo name="Mail" /> },
   { name: "Calendar", line: "What is on today, and what is due this week.", meta: "Works with Braino · macOS", cat: "Calendar", icon: <AppLogo name="Calendar" /> },
@@ -56,7 +55,7 @@ export default function AppStoreGrid() {
             <Link to="/affectiveos">AffectiveOS</Link>
             <Link to="/about">About</Link>
             <Link to="/apps">App Store</Link>
-            <Link to="/waitlist" className="aff-nav-go">Early access</Link>
+            <Link to="/braino#early-access" className="aff-nav-go">Early access</Link>
             <AffThemeToggle theme={theme} onToggle={toggle} />
           </div>
         </div>

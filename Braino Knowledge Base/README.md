@@ -18,6 +18,7 @@ For every feature:
 
 ## Contents
 
+- [One Braino Page](design/one-braino-page.md)
 - [Braino First](design/braino-first.md)
 - [Every Page Speaks for Itself](features/site-previews.md)
 - [Activity and Memory](features/activity-and-memory.md)

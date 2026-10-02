@@ -8,7 +8,6 @@ import { ThemeProvider } from "@/contexts/ThemeContext";
 import { AuthProvider } from "@/contexts/AuthContext";
 import MacAuthCompleter from "./components/MacAuthCompleter";
 
-const EarlyAccess = lazy(() => import("./pages/EarlyAccess.tsx"));
 const BrainoDocPage = lazy(() => import("./pages/BrainoDocPage.tsx"));
 const BrainotesPage = lazy(() => import("./pages/BrainotesPage.tsx"));
 const Landing = lazy(() => import("./pages/Landing.tsx"));
@@ -124,7 +123,6 @@ const BrainoFinal = lazy(() => import("./pages/BrainoFinal.tsx"));
 const Learning = lazy(() => import("./pages/Learning.tsx"));
 const DiagramPreview = lazy(() => import("./pages/DiagramPreview.tsx"));
 const AppStoreGrid = lazy(() => import("./pages/AppStoreGrid.tsx"));
-const AppStore = lazy(() => import("./pages/AppStore.tsx"));
 const ProductOverviewHomepageDocs = lazy(() => import("./pages/ProductOverviewHomepageDocs.tsx"));
 const Foundry = lazy(() => import("./pages/Foundry.tsx"));
 const HeroLab = lazy(() => import("./pages/HeroLab.tsx"));
@@ -145,6 +143,7 @@ const BrainoX = lazy(() => import("./pages/BrainoX.tsx"));
 const BrainoXDocs = lazy(() => import("./pages/BrainoXDocs.tsx"));
 const SitePreviewsDocs = lazy(() => import("./pages/SitePreviewsDocs.tsx"));
 const BrainoFirstDocs = lazy(() => import("./pages/BrainoFirstDocs.tsx"));
+const OneBrainoPageDocs = lazy(() => import("./pages/OneBrainoPageDocs.tsx"));
 const MondayMode = lazy(() => import("./pages/MondayMode.tsx"));
 const MondayModeDocs = lazy(() => import("./pages/MondayModeDocs.tsx"));
 const BrainoEmbedDocs = lazy(() => import("./pages/BrainoEmbedDocs.tsx"));
@@ -232,10 +231,10 @@ function AppRoutes() {
             still linked from places we have not walked yet. */}
         <Route path="/" element={<Affective />} />
         <Route path="/landing" element={<Landing />} />
-        <Route path="/questions" element={<Navigate to="/waitlist" replace />} />
+        <Route path="/questions" element={<Navigate to="/braino#faq" replace />} />
         <Route path="/overview" element={<Navigate to="/waitlist" replace />} />
-        <Route path="/waitlist" element={<EarlyAccess />} />
-        <Route path="/early-access" element={<EarlyAccess />} />
+        <Route path="/waitlist" element={<Navigate to="/braino#early-access" replace />} />
+        <Route path="/early-access" element={<Navigate to="/braino#early-access" replace />} />
         <Route path="/braino-thronglets" element={<BrainoThronglets />} />
         <Route path="/monday-mode" element={<MondayMode />} />
         <Route path="/knowledge/monday-mode" element={<MondayModeDocs />} />
@@ -243,6 +242,7 @@ function AppRoutes() {
         <Route path="/knowledge/brainox-distribution" element={<BrainoXDocs />} />
         <Route path="/knowledge/site-previews" element={<SitePreviewsDocs />} />
         <Route path="/knowledge/braino-first" element={<BrainoFirstDocs />} />
+        <Route path="/knowledge/one-braino-page" element={<OneBrainoPageDocs />} />
         <Route path="/knowledge/braino-thronglets" element={<BrainoThrongletsDocs />} />
         <Route path="/knowledge" element={<KnowledgeBase />} />
         <Route path="/knowledge/insta-graphics-editorial-archive" element={<InstaGraphicsArchiveDocs />} />
@@ -388,7 +388,7 @@ function AppRoutes() {
         <Route path="/learning" element={<Learning />} />
         {/* The store: Affective products in one tab, mini apps in the other.
             Braino's own page is /braino; this hands you to it. */}
-        <Route path="/apps" element={<AppStore />} />
+        <Route path="/apps" element={<Navigate to="/braino" replace />} />
         <Route path="/apps-new" element={<AppStoreGrid />} />
         <Route path="/diagrams" element={<DiagramPreview />} />
         <Route path="/install/braino" element={<Navigate to="/braino" replace />} />

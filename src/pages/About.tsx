@@ -40,10 +40,10 @@ export default function About() {
             <img src="/affective-logo.png" alt="Affective" width={1000} height={207} />
           </Link>
           <div className="aff-nav-links">
+            <Link to="/braino">Braino</Link>
             <Link to="/affectiveos">AffectiveOS</Link>
             <Link to="/about">About</Link>
-            <Link to="/apps">App Store</Link>
-            <Link to="/waitlist" className="aff-nav-go">Early access</Link>
+            <Link to="/braino#early-access" className="aff-nav-go">Early access</Link>
             <AffThemeToggle theme={theme} onToggle={toggle} />
           </div>
         </div>
@@ -128,7 +128,7 @@ export default function About() {
       <article className="ao-col">
         <p>A small team in Bengaluru. Come and talk to your Mac with us.</p>
         <p className="ab-go">
-          <Link to="/waitlist" className="aff-cta">Get early access</Link>
+          <Link to="/braino#early-access" className="aff-cta">Get early access</Link>
           <Link to="/affectiveos" className="aff-cta aff-cta-ghost">Read about AffectiveOS</Link>
         </p>
         <div style={{ height: "clamp(80px, 10vw, 120px)" }} />
@@ -136,7 +136,7 @@ export default function About() {
 
       <footer className="ao-foot">
         <span>Affective · Building tech that makes life more affective.</span>
-        <span><Link to="/">Home</Link><Link to="/affectiveos">AffectiveOS</Link><Link to="/apps">App Store</Link></span>
+        <span><Link to="/">Home</Link><Link to="/affectiveos">AffectiveOS</Link><Link to="/braino">Braino</Link></span>
       </footer>
     </div>
   );

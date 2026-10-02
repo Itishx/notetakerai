@@ -64,7 +64,7 @@ export default function AppStore() {
             <Link to="/affectiveos">AffectiveOS</Link>
             <Link to="/about">About</Link>
             <Link to="/apps">App Store</Link>
-            <Link to="/waitlist" className="aff-nav-go">Early access</Link>
+            <Link to="/braino#early-access" className="aff-nav-go">Early access</Link>
             <AffThemeToggle theme={theme} onToggle={toggle} />
           </div>
         </div>
