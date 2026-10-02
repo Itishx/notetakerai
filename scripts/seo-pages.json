@@ -1,0 +1,1200 @@
+{
+  "/": {
+    "title": "Affective",
+    "pageDescription": "Install Braino, open any page, click the icon. An AI side panel reads the page, answers questions, records lectures, and handles browser tasks.",
+    "blocks": [
+      [
+        "h1",
+        "Stop using your Mac. Start talking to it."
+      ],
+      [
+        "p",
+        "Affective builds the tech that lets your Mac do what you say."
+      ],
+      [
+        "p",
+        "WORKS IN WHAT YOU ALREADY USE"
+      ],
+      [
+        "li",
+        "WhatsApp"
+      ],
+      [
+        "li",
+        "Spotify"
+      ],
+      [
+        "li",
+        "Chrome"
+      ],
+      [
+        "li",
+        "Mail"
+      ],
+      [
+        "li",
+        "Finder"
+      ],
+      [
+        "li",
+        "OCT 2 Calendar"
+      ],
+      [
+        "p",
+        "AFFECTIVEOS"
+      ],
+      [
+        "h2",
+        "WebuildthethingthatmakesitpossibletospeaktoyourMac."
+      ],
+      [
+        "p",
+        "We call it AffectiveOS. It gives the Mac you already own eyes to see your screen, ears to hear you, a voice to answer, hands to do the work, and a memory of you. You just talk, and it happens."
+      ],
+      [
+        "p",
+        "Why now"
+      ],
+      [
+        "p",
+        "Did you book the tickets for Friday?"
+      ],
+      [
+        "p",
+        "THE MACBOOK AIR YOU ALREADY OWN"
+      ],
+      [
+        "p",
+        "WHAT WE PUT IT INTO"
+      ],
+      [
+        "h2",
+        "ThenweputitintoBraino,soyouhavesomeonetotalkto."
+      ],
+      [
+        "p",
+        "AffectiveOS is the technology. Braino is how you meet it: a companion who lives in your Mac's notch, knows your day and your people, and gets things done when you ask."
+      ],
+      [
+        "p",
+        "MEET BRAINO"
+      ],
+      [
+        "h2",
+        "Braino"
+      ],
+      [
+        "p",
+        "The first product on AffectiveOS. A companion in your Mac's notch: tell him what you want and he does it, in the apps you already use, and remembers you."
+      ],
+      [
+        "li",
+        "He does it, not just says it. A chat window writes the email and hands it back. Braino opens Mail, writes it in your voice and sends it after your yes."
+      ],
+      [
+        "li",
+        "He already sees your screen. No copying, pasting or explaining. Ask about the page, the PDF or the error in front of you, and he knows what you mean."
+      ],
+      [
+        "li",
+        "He knows your life. Your people, your classes, what you promised last week. Kept on your Mac, so you never start from zero."
+      ],
+      [
+        "li",
+        "He is one sentence away. No app to open, no tab to find. Say it out loud from anywhere on your Mac, and the notch answers."
+      ],
+      [
+        "p",
+        "ONE BRAINO. THREE MODELS."
+      ],
+      [
+        "h2",
+        "Speak.Watchithappen."
+      ],
+      [
+        "p",
+        "We grew up watching Tony Stark talk to Jarvis and Jarvis just get it done. That is the future of computing we believe in, and now it is on the Mac you already own. Say it once, and Braino does it for you."
+      ],
+      [
+        "li",
+        "Clear your inbox Reads the thread, writes the reply in your voice, waits for your yes."
+      ],
+      [
+        "li",
+        "Plan your day Your classes, what is due and who is waiting, in one answer."
+      ],
+      [
+        "li",
+        "Send the file Finds the file you mean and sends it to the right person."
+      ],
+      [
+        "li",
+        "Take the notes Writes down a call or a lecture while you listen."
+      ],
+      [
+        "h3",
+        "Questions"
+      ],
+      [
+        "p",
+        "Anything else? Get early access and ask us directly."
+      ],
+      [
+        "h2",
+        "Make your Mac more with Braino."
+      ],
+      [
+        "p",
+        "Braino is in private beta. We are letting people in a few at a time."
+      ]
+    ]
+  },
+  "/affectiveos": {
+    "title": "Introducing AffectiveOS · Affective",
+    "pageDescription": "Install Braino, open any page, click the icon. An AI side panel reads the page, answers questions, records lectures, and handles browser tasks.",
+    "blocks": [
+      [
+        "p",
+        "September 30, 2026 · Announcements"
+      ],
+      [
+        "h1",
+        "Introducing AffectiveOS, an agentic, voice-first operating system that lets you talk to your Mac and have it do the work. It sees your screen, hears you, answers out loud, acts in your apps, and remembers you."
+      ],
+      [
+        "p",
+        "Figure 1. You speak; your words appear; the steps run, and it stops before anything is posted."
+      ],
+      [
+        "p",
+        "Here is the thing that bugged us. Computers got faster every year, and we still spend the day operating them: open this, find that, copy, paste, click, send. We were learning the computer's language, the way we always have. Commands, then menus, then taps."
+      ],
+      [
+        "p",
+        "We think the next step is the one where the computer learns ours. You say what you want, the way you would say it to a friend, and it happens. That is AffectiveOS. And Braino, a companion who lives in your notch, is the first thing we built on it."
+      ],
+      [
+        "p",
+        "We grew up watching Tony Stark talk to Jarvis. This is our way of building it, for the Mac you already own."
+      ],
+      [
+        "p",
+        "So what does it actually give your Mac? Five things it never had."
+      ],
+      [
+        "p",
+        "Senses. It sees the screen you are on and hears you, even for an hour straight. Nothing to copy, paste or explain."
+      ],
+      [
+        "p",
+        "Voice. It talks back, out loud. Cut it off mid-sentence and it stops, like a person would."
+      ],
+      [
+        "p",
+        "Hands. Say the task and it gets done in the apps you already use: the message sent, the file found, the form filled. 129 tools, on the real Mac."
+      ],
+      [
+        "p",
+        "Memory. Everything it hears, says and does lands here and stays, on your Mac. Not what you typed into a chat: what actually happened, all day."
+      ],
+      [
+        "p",
+        "Trust. Anything that spends money, sends a message, posts in public or deletes something waits for your yes."
+      ],
+      [
+        "h2",
+        "How it works"
+      ],
+      [
+        "p",
+        "One brain, two speeds. Think of how you work. Some things you just do without thinking, and some you stop and plan. AffectiveOS is the same. A reflex on your Mac figures out what you mean: a chat, a quick action or a bigger job. The easy ones it just does. The big ones go to the thinking, which plans the whole job once. And the reflex learns from the thinking, so what needed a plan yesterday can be a reflex tomorrow."
+      ],
+      [
+        "p",
+        "We buy the thinking, build the hands, and keep the memory. We are not trying to train the biggest model. We use the best ones of the day, from labs like Anthropic and OpenAI, and swap them as they get better. Everything that acts on your Mac, we built. And what it remembers is yours, on your machine."
+      ],
+      [
+        "p",
+        "An illustration, not a measurement: the steps you take by hand for everyday jobs, against saying one sentence."
+      ],
+      [
+        "h2",
+        "How it compares"
+      ],
+      [
+        "p",
+        "Figure 2. What each kind of tool covers today."
+      ],
+      [
+        "p",
+        "Honestly, every tool out there does one piece of this well. A chat assistant is smart, but then you do the work. Dictation types faster, and that is it. Cloud agents can act, but on some computer that is not yours. We wanted all of it together, on the Mac you already own."
+      ],
+      [
+        "p",
+        "A general comparison of categories, not of any one product. Categories change quickly; this reflects them as of September 2026."
+      ],
+      [
+        "h2",
+        "Speed"
+      ],
+      [
+        "p",
+        "Figure 3. One request, broken down. Typical, not a benchmark: the hands take as long as the job does."
+      ],
+      [
+        "p",
+        "Most of what we ask for is small, and small things should feel instant. So a reflex on the Mac handles them itself, in about five hundredths of a second, before any big model is even involved. Bigger jobs get planned once, in about two seconds, and then you watch them happen."
+      ],
+      [
+        "p",
+        "Typical times measured in our private beta on a MacBook, from the moment you finish speaking. They vary with the job, the network and the model in use."
+      ],
+      [
+        "h2",
+        "Privacy"
+      ],
+      [
+        "p",
+        "Figure 4. Where things live."
+      ],
+      [
+        "p",
+        "Something that sees your screen all day has to earn that. So what AffectiveOS remembers stays on your Mac. Private windows and password apps are never written down, nothing it sees is sold, and you can read, fix or delete anything it keeps, or pause it whenever you like."
+      ],
+      [
+        "h2",
+        "Availability"
+      ],
+      [
+        "p",
+        "Figure 5. AffectiveOS arrives inside Braino, in the notch."
+      ],
+      [
+        "p",
+        "You do not install AffectiveOS on its own. It comes inside Braino, which is in private beta on Mac and Chrome right now. We are letting people in a few at a time. Get early access, or read why we are building this."
+      ],
+      [
+        "p",
+        "Footnotes"
+      ],
+      [
+        "li",
+        "Replying to an email in under five seconds is the time for Braino to draft the reply; you still read it and press send."
+      ],
+      [
+        "li",
+        "The comparison table describes categories of tools in general, not any single product."
+      ],
+      [
+        "li",
+        "The memory chart is illustrative and is not based on a measurement."
+      ]
+    ]
+  },
+  "/braino": {
+    "title": "Braino",
+    "pageDescription": "Install Braino, open any page, click the icon. An AI side panel reads the page, answers questions, records lectures, and handles browser tasks.",
+    "blocks": [
+      [
+        "p",
+        "WHAT BRAINO IS"
+      ],
+      [
+        "h2",
+        "A chatbot tells you how. Braino does it."
+      ],
+      [
+        "p",
+        "Braino is a companion who lives in your Mac's notch. You talk to him like a person. He sees your screen, uses your apps and gets the job done, then remembers it, so tomorrow he already knows."
+      ],
+      [
+        "p",
+        "WHAT HE DOES FOR YOU"
+      ],
+      [
+        "h2",
+        "How he helps"
+      ],
+      [
+        "h3",
+        "He reads what is in front of you."
+      ],
+      [
+        "p",
+        "Any page, PDF, email or error on your screen."
+      ],
+      [
+        "li",
+        "Ask about it like you would ask the person next to you."
+      ],
+      [
+        "li",
+        "Nothing to copy or paste. He sees what you see."
+      ],
+      [
+        "p",
+        "SONo more screenshots into a chat window."
+      ],
+      [
+        "h3",
+        "He goes and does it."
+      ],
+      [
+        "p",
+        "Sends it, books it, fills it in, finds it."
+      ],
+      [
+        "li",
+        "In your own apps and accounts, on your real screen."
+      ],
+      [
+        "li",
+        "He stops before anything is paid for or sent."
+      ],
+      [
+        "p",
+        "SONo more twenty minutes of clicking."
+      ],
+      [
+        "h3",
+        "He sits through the meeting."
+      ],
+      [
+        "p",
+        "A call, a lecture, a long video."
+      ],
+      [
+        "li",
+        "Notes written while you listen."
+      ],
+      [
+        "li",
+        "What was decided, and who does what."
+      ],
+      [
+        "p",
+        "SOYou get to be in the room."
+      ],
+      [
+        "h3",
+        "He runs your day."
+      ],
+      [
+        "p",
+        "Classes, deadlines, who is waiting on you."
+      ],
+      [
+        "li",
+        "Ask “what's today?” and get one answer."
+      ],
+      [
+        "li",
+        "Straight from your timetable and messages."
+      ],
+      [
+        "p",
+        "SONo more checking five apps every morning."
+      ],
+      [
+        "h3",
+        "He talks back."
+      ],
+      [
+        "p",
+        "Out loud, in his own voice."
+      ],
+      [
+        "li",
+        "Speak or type, whichever is easier."
+      ],
+      [
+        "li",
+        "Cut him off and he stops and listens."
+      ],
+      [
+        "p",
+        "SOIt feels like talking to someone, not a search box."
+      ],
+      [
+        "h3",
+        "He remembers."
+      ],
+      [
+        "p",
+        "Your people, your plans, your preferences."
+      ],
+      [
+        "li",
+        "Kept on your Mac, not in a chat that resets."
+      ],
+      [
+        "li",
+        "Read, fix or delete anything he keeps."
+      ],
+      [
+        "p",
+        "SOHe gets better the longer you use him."
+      ],
+      [
+        "p",
+        "EVERYTHING HE CAN DO"
+      ],
+      [
+        "h2",
+        "Just say it."
+      ],
+      [
+        "p",
+        "A COMPANION"
+      ],
+      [
+        "h2",
+        "He gets better the longer he knows you."
+      ],
+      [
+        "p",
+        "Monday: “Priya likes short replies.”"
+      ],
+      [
+        "p",
+        "Thursday: her email comes in and the draft is already three lines."
+      ],
+      [
+        "p",
+        "Week one: you ask which John, every time."
+      ],
+      [
+        "p",
+        "Week three: “Send John the deck” goes to your co-founder, no questions."
+      ],
+      [
+        "p",
+        "Tuesday: “I'll send the invoice by Friday.”"
+      ],
+      [
+        "p",
+        "Friday: “What did I promise this week?” The invoice, at the top."
+      ],
+      [
+        "p",
+        "WHAT CHANGES"
+      ],
+      [
+        "h2",
+        "An ordinary Tuesday with him, morning to night"
+      ],
+      [
+        "p",
+        "“What is on today?” He reads the day back before you have opened a calendar, because he has one."
+      ],
+      [
+        "p",
+        "WHAT IS TRUE TODAY"
+      ],
+      [
+        "p",
+        "Braino is in private beta on Mac and Chrome. Join the waitlist and we will let you in. Windows is not on the list yet, and we would rather say so."
+      ],
+      [
+        "p",
+        "Ask for a seat → RUNS ON AFFECTIVEOS · PRIVATE BETA"
+      ]
+    ]
+  },
+  "/about": {
+    "title": "About · Affective",
+    "pageDescription": "Install Braino, open any page, click the icon. An AI side panel reads the page, answers questions, records lectures, and handles browser tasks.",
+    "blocks": [
+      [
+        "p",
+        "About · Affective · Bengaluru"
+      ],
+      [
+        "h1",
+        "We believe the future of computing is voice-first. You should be able to just tell your computer what to do."
+      ],
+      [
+        "h2",
+        "Why Affective exists"
+      ],
+      [
+        "p",
+        "Itish, who started Affective, grew up on Marvel. Watching Tony Stark talk to Jarvis, and Jarvis simply getting it done, was the computer he always wanted. Not a screen you operate. Something you talk to, that listens, does the work and remembers you."
+      ],
+      [
+        "p",
+        "That picture never left. Affective exists to turn that piece of science fiction into something real, on the Mac you already own."
+      ],
+      [
+        "h2",
+        "What we are about"
+      ],
+      [
+        "p",
+        "Affective is a product company. We make things that make life easier, and that you run with your voice. AffectiveOS is the base: it lets a computer see, listen, speak, act and remember. Braino is the first product on it, and it will not be the last. We are already working on what comes next."
+      ],
+      [
+        "p",
+        "We hold ourselves to Apple's standard of craft: nothing ships until it feels obvious and right. We take Anthropic's care with what AI should and should not do on your behalf. And we borrow the best idea from anywhere else. The goal is simple: to be the best at this."
+      ],
+      [
+        "p",
+        "TODAY"
+      ],
+      [
+        "li",
+        "Open WhatsApp"
+      ],
+      [
+        "li",
+        "Search for John"
+      ],
+      [
+        "li",
+        "Open the chat"
+      ],
+      [
+        "li",
+        "Type the message"
+      ],
+      [
+        "li",
+        "Send"
+      ],
+      [
+        "p",
+        "WITH AFFECTIVE"
+      ],
+      [
+        "li",
+        "“Tell John I'll be ten minutes late.”"
+      ],
+      [
+        "p",
+        "Figure 1. The same message, the old way and ours."
+      ],
+      [
+        "h2",
+        "What we are building"
+      ],
+      [
+        "p",
+        "AffectiveOS is the technology. It lets your Mac see your screen, hear you, talk back, use your apps and remember you. Braino is the first product built on it. He lives in your Mac's notch, and you talk to him."
+      ],
+      [
+        "li",
+        "MAY 2026 We started with one question: what if you could just talk to your Mac?"
+      ],
+      [
+        "li",
+        "SUMMER Braino, in the browser. He read the page, talked back and did the tabs."
+      ],
+      [
+        "li",
+        "AUGUST He moved into the Mac's notch, with hands for real apps."
+      ],
+      [
+        "li",
+        "NOW AffectiveOS, in private beta. Early access is open."
+      ],
+      [
+        "p",
+        "Figure 2. How we got here."
+      ],
+      [
+        "p",
+        "A small team in Bengaluru. Come and talk to your Mac with us."
+      ],
+      [
+        "p",
+        "Get early access Read about AffectiveOS"
+      ]
+    ]
+  },
+  "/apps": {
+    "title": "App Store · Affective",
+    "pageDescription": "Install Braino, open any page, click the icon. An AI side panel reads the page, answers questions, records lectures, and handles browser tasks.",
+    "blocks": [
+      [
+        "p",
+        "APP STORE · TODAY"
+      ],
+      [
+        "h1",
+        "Everything we build runs on AffectiveOS."
+      ],
+      [
+        "p",
+        "FEATURED · PRIVATE BETA"
+      ],
+      [
+        "h2",
+        "Braino"
+      ],
+      [
+        "p",
+        "A companion who lives in your Mac's notch. Tell him what you want and he does it, in the apps you already use, and remembers you."
+      ],
+      [
+        "li",
+        "Sits through your meetings"
+      ],
+      [
+        "li",
+        "Clears your inbox"
+      ],
+      [
+        "li",
+        "Fills the form"
+      ],
+      [
+        "li",
+        "Sends it to the right person"
+      ],
+      [
+        "p",
+        "Why now"
+      ],
+      [
+        "p",
+        "Did you book the tickets for Friday?"
+      ],
+      [
+        "p",
+        "THE MACBOOK AIR YOU ALREADY OWN"
+      ],
+      [
+        "p",
+        "FOR EVERYONE"
+      ],
+      [
+        "p",
+        "The whole of him, on your Mac and in Chrome."
+      ],
+      [
+        "p",
+        "FOR FOUNDERS"
+      ],
+      [
+        "h3",
+        "Braino Foundry"
+      ],
+      [
+        "p",
+        "Gets your startup seen: posts, replies and intros."
+      ],
+      [
+        "p",
+        "FOR INSTITUTIONS"
+      ],
+      [
+        "h3",
+        "Braino for Schools"
+      ],
+      [
+        "p",
+        "Timetable, attendance and deadlines inside him. Live at Mesa School of Business."
+      ],
+      [
+        "p",
+        "BUILT ON ONE BRAIN"
+      ],
+      [
+        "h2",
+        "Every app here shares the same senses, voice, hands and memory."
+      ],
+      [
+        "p",
+        "So what one learns about you, the others already know."
+      ]
+    ]
+  },
+  "/waitlist": {
+    "title": "Early access · Affective",
+    "pageDescription": "Install Braino, open any page, click the icon. An AI side panel reads the page, answers questions, records lectures, and handles browser tasks.",
+    "blocks": [
+      [
+        "p",
+        "Early access · Private beta"
+      ],
+      [
+        "h1",
+        "Be one of the first to talk to your Mac."
+      ],
+      [
+        "p",
+        "Braino is in private beta. We let people in a few at a time, so we can watch how it goes and fix what does not. Leave your email and we will write when it is your turn."
+      ],
+      [
+        "p",
+        "WHAT DO YOU WANT TO TRY?"
+      ],
+      [
+        "h2",
+        "What happens next"
+      ],
+      [
+        "li",
+        "1 You are on the list Right away. One email to say so, nothing else."
+      ],
+      [
+        "li",
+        "2 We send you an invite In small batches, so every new person gets looked after."
+      ],
+      [
+        "li",
+        "3 You talk to your Mac Install Braino, say hello, and give him his first job."
+      ],
+      [
+        "p",
+        "Braino runs on a Mac and in Chrome. We only use your email to send you the invite and the occasional note about what is new. Read who we are."
+      ]
+    ]
+  },
+  "/contact": {
+    "title": "Braino : Your AI Browser Sidekick",
+    "pageDescription": "Install Braino, open any page, click the icon. An AI side panel reads the page, answers questions, records lectures, and handles browser tasks.",
+    "blocks": [
+      [
+        "h1",
+        "Say hi to Braino."
+      ],
+      [
+        "p",
+        "We're a small, independent team. We read every message and reply fast."
+      ]
+    ]
+  },
+  "/privacy": {
+    "title": "Braino : Your AI Browser Sidekick",
+    "pageDescription": "Install Braino, open any page, click the icon. An AI side panel reads the page, answers questions, records lectures, and handles browser tasks.",
+    "blocks": [
+      [
+        "h1",
+        "Privacy Policy"
+      ],
+      [
+        "p",
+        "Braino is a browser extension and web service. This policy explains what data we collect, why we collect it, and how you can control it."
+      ],
+      [
+        "h2",
+        "1. What we collect"
+      ],
+      [
+        "p",
+        "We collect the minimum data needed to make Braino work. Here's the full list:"
+      ],
+      [
+        "li",
+        "Account data — your email address and a hashed password when you create an account. If you sign in via Google, we receive your name and email from Google."
+      ],
+      [
+        "li",
+        "Conversation history — messages you send to Braino and the responses it gives. These are stored server-side so your history persists across devices."
+      ],
+      [
+        "li",
+        "Page context — when you ask Braino about a page, the text content of that page is sent to our AI model to generate a response. This is processed transiently and not stored long-term."
+      ],
+      [
+        "li",
+        "Audio recordings — if you use the recording feature, audio is transcribed and the resulting text (not the raw audio) is stored in your account."
+      ],
+      [
+        "li",
+        "Usage analytics — anonymous, aggregated data about feature usage (e.g., \"20 users used voice mode today\"). We do not collect individual click streams."
+      ],
+      [
+        "li",
+        "Browser extension metadata — extension version, browser type. No browsing history, no tabs list, no URL logging beyond what you explicitly share with Braino in a conversation."
+      ],
+      [
+        "h2",
+        "2. What we do not collect"
+      ],
+      [
+        "li",
+        "Your browsing history or list of visited URLs"
+      ],
+      [
+        "li",
+        "Content of pages you visit unless you explicitly ask Braino about them"
+      ],
+      [
+        "li",
+        "Keystrokes, form inputs, or passwords"
+      ],
+      [
+        "li",
+        "Precise location data"
+      ],
+      [
+        "li",
+        "Financial or payment card details (payments are handled by Stripe)"
+      ],
+      [
+        "h2",
+        "3. How we use your data"
+      ],
+      [
+        "li",
+        "To provide the service — generating AI responses, maintaining your conversation history, syncing across devices."
+      ],
+      [
+        "li",
+        "To improve the product — understanding which features are used, diagnosing bugs. We may review anonymized conversation samples to improve response quality, but only in aggregate and only with identifying information stripped."
+      ],
+      [
+        "li",
+        "To communicate with you — sending product updates, security notices, and responses to support requests. You can opt out of marketing emails at any time."
+      ],
+      [
+        "li",
+        "To enforce our Terms — detecting abuse, spam, or policy violations."
+      ],
+      [
+        "h2",
+        "4. Third-party services"
+      ],
+      [
+        "p",
+        "Braino uses the following third-party processors. Each is bound by their own privacy policies and data processing agreements:"
+      ],
+      [
+        "li",
+        "Anthropic / Claude API — AI responses are generated by Claude. Your messages are sent to Anthropic's API. Anthropic does not use API data to train models by default. See anthropic.com/legal/privacy."
+      ],
+      [
+        "li",
+        "Supabase — database, authentication, and storage hosting. Data is stored in secure, encrypted databases."
+      ],
+      [
+        "li",
+        "Stripe — payment processing for Pro subscriptions. We never see or store your card number."
+      ],
+      [
+        "li",
+        "Fish Audio — text-to-speech generation for Braino's voice. Text snippets are sent to Fish Audio's API."
+      ],
+      [
+        "p",
+        "We do not sell your data to advertisers or data brokers. Ever."
+      ],
+      [
+        "h2",
+        "5. Data retention"
+      ],
+      [
+        "p",
+        "We keep your conversation history for as long as your account is active. If you delete your account, all personal data is permanently deleted within 30 days. You can request deletion of specific conversations from your account settings at any time."
+      ],
+      [
+        "p",
+        "Anonymous, aggregated analytics data may be retained indefinitely because it cannot be linked back to you."
+      ],
+      [
+        "h2",
+        "6. Your rights"
+      ],
+      [
+        "p",
+        "Depending on where you live, you may have the right to:"
+      ],
+      [
+        "li",
+        "Access — request a copy of all personal data we hold about you."
+      ],
+      [
+        "li",
+        "Correction — request correction of inaccurate data."
+      ],
+      [
+        "li",
+        "Deletion — request that we delete your account and all associated data."
+      ],
+      [
+        "li",
+        "Portability — request your conversation history in a machine-readable format."
+      ],
+      [
+        "li",
+        "Objection — object to processing of your data for certain purposes."
+      ],
+      [
+        "p",
+        "To exercise any of these rights, email us at talk2braino@gmail.com. We'll respond within 30 days."
+      ],
+      [
+        "h2",
+        "7. Children"
+      ],
+      [
+        "p",
+        "Braino is not directed at children under 13. We do not knowingly collect personal data from children. If we discover we have collected data from a child under 13, we will delete it promptly."
+      ],
+      [
+        "h2",
+        "8. Security"
+      ],
+      [
+        "p",
+        "We use industry-standard encryption in transit (TLS 1.2+) and at rest. Access to user data is restricted to engineers who require it for their work, and all access is logged. We conduct regular security reviews."
+      ],
+      [
+        "p",
+        "No system is perfectly secure. If you discover a vulnerability, please report it responsibly to talk2braino@gmail.com."
+      ],
+      [
+        "h2",
+        "9. Cookies"
+      ],
+      [
+        "p",
+        "The Braino website uses session cookies for authentication. We use no third-party tracking cookies. We do not run retargeting ads."
+      ],
+      [
+        "p",
+        "The browser extension does not set or read cookies from third-party websites."
+      ],
+      [
+        "h2",
+        "10. Changes to this policy"
+      ],
+      [
+        "p",
+        "If we make material changes to how we handle your data, we'll notify you via email and update the \"Last updated\" date at the top of this page. Continued use of the service after changes constitutes acceptance of the updated policy."
+      ],
+      [
+        "h2",
+        "11. Contact"
+      ],
+      [
+        "p",
+        "Questions about privacy? Email talk2braino@gmail.com. We're a small team and we read every email."
+      ]
+    ]
+  },
+  "/terms": {
+    "title": "Braino : Your AI Browser Sidekick",
+    "pageDescription": "Install Braino, open any page, click the icon. An AI side panel reads the page, answers questions, records lectures, and handles browser tasks.",
+    "blocks": [
+      [
+        "h1",
+        "Terms of Service"
+      ],
+      [
+        "p",
+        "These terms govern your use of Braino — the browser extension, web app, and associated services. By using Braino, you agree to these terms."
+      ],
+      [
+        "h2",
+        "1. The service"
+      ],
+      [
+        "p",
+        "Braino (\"we\", \"us\", \"our\") provides an AI-powered browser extension and web application that lets you interact with web pages, delegate browser tasks, record audio, and more. The service is operated by the Braino team."
+      ],
+      [
+        "p",
+        "Braino is currently in beta. Features may change, be removed, or behave unexpectedly. We'll do our best to give advance notice of significant changes."
+      ],
+      [
+        "h2",
+        "2. Your account"
+      ],
+      [
+        "p",
+        "You must be 13 or older to create an account. If you're under 18, you confirm that you have your parent or guardian's permission to use the service."
+      ],
+      [
+        "p",
+        "You are responsible for keeping your account credentials secure. You're responsible for all activity that occurs under your account. If you suspect unauthorized access, notify us immediately at talk2braino@gmail.com."
+      ],
+      [
+        "p",
+        "One account per person. Don't share accounts or create accounts on behalf of others without their consent."
+      ],
+      [
+        "h2",
+        "3. Acceptable use"
+      ],
+      [
+        "p",
+        "You agree not to use Braino to:"
+      ],
+      [
+        "li",
+        "Violate any applicable law or regulation"
+      ],
+      [
+        "li",
+        "Automate actions on websites in ways that violate those sites' terms of service"
+      ],
+      [
+        "li",
+        "Collect personal data about others without their knowledge or consent"
+      ],
+      [
+        "li",
+        "Generate, distribute, or store content that is illegal, harmful, harassing, threatening, or defamatory"
+      ],
+      [
+        "li",
+        "Attempt to reverse-engineer, decompile, or extract the source code of the extension or service"
+      ],
+      [
+        "li",
+        "Interfere with or disrupt the service, its servers, or networks connected to it"
+      ],
+      [
+        "li",
+        "Use the service to build a competing product without our written permission"
+      ],
+      [
+        "li",
+        "Circumvent any rate limits, access controls, or security measures"
+      ],
+      [
+        "p",
+        "We reserve the right to suspend or terminate accounts that violate these terms, with or without notice."
+      ],
+      [
+        "h2",
+        "4. AI-generated content"
+      ],
+      [
+        "p",
+        "Braino's responses are generated by AI and may be inaccurate, incomplete, or outdated. You are responsible for verifying any information Braino provides before relying on it for important decisions."
+      ],
+      [
+        "p",
+        "Braino is not a substitute for professional legal, medical, financial, or other specialist advice. Nothing Braino says constitutes professional advice of any kind."
+      ],
+      [
+        "p",
+        "You own the content you input into Braino. You also own the outputs Braino generates for you. We don't claim any rights over your conversations."
+      ],
+      [
+        "h2",
+        "5. Browser automation and Delegate"
+      ],
+      [
+        "p",
+        "The Delegate feature allows Braino to perform actions in your browser on your behalf. By using Delegate, you authorize Braino to:"
+      ],
+      [
+        "li",
+        "Click, type, scroll, and navigate within your browser tabs"
+      ],
+      [
+        "li",
+        "Read the content of pages you direct it to"
+      ],
+      [
+        "li",
+        "Submit forms and interact with web services on your behalf"
+      ],
+      [
+        "p",
+        "You are solely responsible for the consequences of actions you instruct Braino to perform. Review Braino's planned steps before confirming irreversible actions. We are not liable for mistakes made during automated tasks that you authorized."
+      ],
+      [
+        "h2",
+        "6. Subscription and billing"
+      ],
+      [
+        "p",
+        "Braino is free during the beta period. When we introduce paid plans, we'll give you at least 14 days notice before charging existing users."
+      ],
+      [
+        "p",
+        "Paid subscriptions are billed monthly or annually. Subscriptions renew automatically unless cancelled. You can cancel at any time from your account settings; you'll retain access until the end of your paid period. We don't offer refunds for partial periods, but if you contact us within 7 days of an unexpected charge, we'll work it out."
+      ],
+      [
+        "p",
+        "Prices may change. We'll give at least 30 days notice before changing prices for existing subscribers."
+      ],
+      [
+        "h2",
+        "7. Intellectual property"
+      ],
+      [
+        "p",
+        "Braino, its logo, and all software, design, and content we create are owned by us and protected by copyright and other intellectual property law. Nothing in these terms grants you a license to use our trademarks or brand without permission."
+      ],
+      [
+        "p",
+        "The Chrome extension is licensed to you for personal use only. You may not redistribute, modify, or sublicense it."
+      ],
+      [
+        "h2",
+        "8. Privacy"
+      ],
+      [
+        "p",
+        "Our Privacy Policy explains how we collect and use data. By using Braino, you agree to our Privacy Policy."
+      ],
+      [
+        "h2",
+        "9. Disclaimers"
+      ],
+      [
+        "p",
+        "THE SERVICE IS PROVIDED \"AS IS\" AND \"AS AVAILABLE\" WITHOUT WARRANTIES OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, OR NON-INFRINGEMENT."
+      ],
+      [
+        "p",
+        "We don't guarantee that the service will be uninterrupted, error-free, or that any defects will be corrected."
+      ],
+      [
+        "h2",
+        "10. Limitation of liability"
+      ],
+      [
+        "p",
+        "TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, BRAINO'S TOTAL LIABILITY TO YOU FOR ANY CLAIMS ARISING FROM THESE TERMS OR YOUR USE OF THE SERVICE SHALL NOT EXCEED THE GREATER OF (A) THE AMOUNT YOU PAID US IN THE 12 MONTHS BEFORE THE CLAIM OR (B) $50 USD."
+      ],
+      [
+        "p",
+        "We are not liable for indirect, incidental, special, or consequential damages, including lost profits, lost data, or loss of goodwill."
+      ],
+      [
+        "h2",
+        "11. Termination"
+      ],
+      [
+        "p",
+        "You can stop using Braino and delete your account at any time. We can suspend or terminate your account if you violate these terms. Upon termination, your right to use the service ends immediately."
+      ],
+      [
+        "p",
+        "Sections 4, 7, 9, 10, and 12 survive termination."
+      ],
+      [
+        "h2",
+        "12. Governing law and disputes"
+      ],
+      [
+        "p",
+        "These terms are governed by the laws of India. For any disputes, we both agree to first try to resolve things informally by contacting us at talk2braino@gmail.com. If we can't resolve it in 30 days, either party may pursue formal resolution."
+      ],
+      [
+        "h2",
+        "13. Changes to these terms"
+      ],
+      [
+        "p",
+        "We may update these terms from time to time. For material changes, we'll email you at least 14 days in advance. Continued use after the effective date constitutes acceptance."
+      ],
+      [
+        "h2",
+        "14. Contact"
+      ],
+      [
+        "p",
+        "Questions about these terms? Email talk2braino@gmail.com. We're a small, independent team — we read everything."
+      ]
+    ]
+  }
+}

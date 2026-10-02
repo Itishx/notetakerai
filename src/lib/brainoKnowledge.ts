@@ -20,6 +20,18 @@ export type KnowledgeEntry = {
 
 export const KNOWLEDGE_ENTRIES: readonly KnowledgeEntry[] = [
   {
+    slug: "site-previews",
+    title: "Every Page Speaks for Itself",
+    category: "Technical",
+    date: "2026-10-02",
+    dateLabel: "October 2, 2026",
+    description:
+      "Shared links now say Affective and describe the exact page, instead of an old Braino card. Search engines and AI tools that read a link get the page's real words, not an empty page.",
+    status: "Live",
+    platform: "Affective website",
+    number: "064",
+  },
+  {
     slug: "notch-drop",
     title: "Notch Drop: Tray and AirDrop",
     category: "Feature",

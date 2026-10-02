@@ -18,6 +18,7 @@ For every feature:
 
 ## Contents
 
+- [Every Page Speaks for Itself](features/site-previews.md)
 - [Activity and Memory](features/activity-and-memory.md)
 - [Braino Chat](features/braino-chat.md)
 - [Thinking Trail](features/thinking-trail.md)

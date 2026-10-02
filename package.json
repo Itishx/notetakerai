@@ -8,7 +8,7 @@
     "remotion:render": "npx remotion render remotion/index.ts BrainoLaunch out/braino-launch.mp4",
     "dev": "vite",
     "widget": "env -u ELECTRON_RUN_AS_NODE electron mac/braino-widget",
-    "build": "vite build",
+    "build": "vite build && node scripts/seo-pages.mjs",
     "build:dev": "vite build --mode development",
     "sync:extension": "node scripts/sync-extension-assets.mjs",
     "build:extension": "node scripts/build-extension.mjs",
