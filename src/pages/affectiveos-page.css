@@ -1,0 +1,129 @@
+/* /affectiveos, laid out like a lab's launch post: one centred column, the
+   company serif for reading, square hairline boxes for tables and charts,
+   SF Pro inside them. Tokens are the company page's, so dark mode follows. */
+.ao {
+  --ao-serif: var(--a-display, "Iowan Old Style", Palatino, Georgia, serif);
+  --ao-sf: "SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, sans-serif;
+  --ao-blue: #5b84c4; --ao-blue-soft: color-mix(in srgb, #5b84c4 22%, var(--a-bg, #f4f2ec));
+  --ao-rule: color-mix(in srgb, var(--a-ink) 72%, transparent);
+}
+.ao-col { max-width: 880px; margin: 0 auto; padding: 0 28px; font-family: var(--ao-serif); text-align: left; }
+.ao-col p, .ao-col h1, .ao-col h2 { text-align: left; hyphens: manual; word-spacing: normal; }
+.ao-col:first-of-type { padding-top: clamp(110px, 13vw, 170px); }
+.ao-col .ao-date { margin: 0 0 26px; line-height: 1.4; font-family: var(--ao-sf); font-size: 14px; color: var(--a-ink-faint); }
+.ao-title {
+  margin: 0 0 clamp(48px, 6vw, 72px);
+  font-family: var(--ao-serif); font-weight: 400;
+  font-size: clamp(30px, 3.4vw, 46px); line-height: 1.18; letter-spacing: -0.018em; color: var(--a-ink);
+}
+.ao-col p { margin: 0 0 1em; font-size: clamp(19px, 1.55vw, 22px); line-height: 1.62; color: var(--a-ink); }
+.ao-col p b { font-weight: 700; }
+.ao-col a { color: var(--a-ink); text-decoration: underline; text-underline-offset: 3px; text-decoration-thickness: 1px; }
+.ao-col h2 {
+  margin: clamp(64px, 8vw, 104px) 0 26px;
+  font-family: var(--ao-serif); font-weight: 400;
+  font-size: clamp(34px, 3.6vw, 48px); line-height: 1.1; letter-spacing: -0.02em; color: var(--a-ink);
+}
+
+/* Wide blocks: tables and charts step out of the column */
+.ao-wide { max-width: 1200px; margin: clamp(36px, 4.4vw, 56px) auto clamp(20px, 3vw, 40px); padding: 0 28px; font-family: var(--ao-sf); }
+.ao-cap { margin: 16px auto 0; max-width: 1000px; text-align: center; font-size: 15px; line-height: 1.55; color: var(--a-ink-soft); }
+
+/* Table */
+.ao-table-wrap { overflow-x: auto; }
+.ao-table { width: 100%; min-width: 820px; border-collapse: collapse; border: 1px solid var(--ao-rule); font-size: 17px; color: var(--a-ink); }
+.ao-table th, .ao-table td { border: 1px solid var(--ao-rule); padding: 18px 16px; text-align: left; vertical-align: top; }
+.ao-table th { font-weight: 600; font-size: 16.5px; }
+.ao-table td:first-child { width: 26%; }
+.ao-table td:first-child b { display: block; font-weight: 600; }
+.ao-table td:first-child span { display: block; margin-top: 4px; color: var(--a-ink-faint); font-size: 15.5px; }
+.ao-table .is-us { background: var(--ao-blue-soft); border-left: 2px solid var(--ao-blue); border-right: 2px solid var(--ao-blue); }
+.ao-table thead .is-us { border-top: 2px solid var(--ao-blue); }
+.ao-table tbody tr:last-child .is-us { border-bottom: 2px solid var(--ao-blue); }
+
+/* Tabs and charts */
+.ao-tabs { display: flex; flex-wrap: wrap; gap: 26px; margin-bottom: 18px; }
+.ao-tabs button { border: 0; background: none; padding: 0; font: 600 18px var(--ao-sf); color: var(--a-ink-faint); cursor: pointer; letter-spacing: -0.01em; }
+.ao-tabs button[aria-selected="true"] { color: var(--a-ink); }
+.ao-chart { margin: 0; padding: clamp(22px, 2.6vw, 34px); border: 1px solid var(--ao-rule); background: var(--a-bg, #f4f2ec); }
+.ao-chart-head { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; }
+.ao-chart-head b { font-size: 21px; font-weight: 600; color: var(--a-ink); letter-spacing: -0.012em; }
+.ao-chart-head span { font-size: 17px; color: var(--a-ink-soft); }
+.ao-legend { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 22px; margin: 18px 0 8px; font-size: 17px; font-weight: 600; color: var(--a-ink); }
+.ao-legend span { display: inline-flex; align-items: center; gap: 9px; }
+.ao-legend i { width: 16px; height: 16px; border-radius: 50%; border: 1.5px solid var(--a-ink); }
+.ao-legend i.is-blue { background: var(--ao-blue); }
+.ao-legend i.is-grey { background: color-mix(in srgb, var(--a-ink) 18%, var(--a-bg, #f4f2ec)); }
+
+.ao-svg { display: block; width: 100%; height: auto; margin-top: 10px; font-family: var(--ao-sf); overflow: visible; }
+.ao-grid { stroke: color-mix(in srgb, var(--a-ink) 14%, transparent); stroke-width: 1; }
+.ao-axis { stroke: var(--a-ink); stroke-width: 1.4; }
+.ao-tick { font-size: 15px; fill: var(--a-ink-soft); text-anchor: middle; }
+.ao-axis-t { font-size: 16px; fill: var(--a-ink); text-anchor: middle; }
+.ao-row-label { font-size: 16px; fill: var(--a-ink); text-anchor: end; }
+.ao-bar { stroke: var(--ao-blue); stroke-width: 3; }
+.ao-dot { fill: var(--ao-blue); stroke: var(--a-ink); stroke-width: 1.5; }
+.ao-val { font-size: 16px; font-weight: 600; fill: var(--a-ink); }
+.ao-sup { font-size: 11px; }
+.ao-line { fill: none; stroke-width: 3; stroke-linejoin: round; stroke-linecap: round; }
+.ao-line-blue { stroke: var(--ao-blue); }
+.ao-line-grey { stroke: color-mix(in srgb, var(--a-ink) 30%, transparent); stroke-width: 2.4; }
+.ao-box rect { fill: var(--a-bg, #f4f2ec); stroke: var(--a-ink); stroke-width: 1.2; }
+.ao-lit rect { fill: var(--ao-blue-soft); stroke: var(--ao-blue); stroke-width: 2; }
+.ao-mem rect { fill: color-mix(in srgb, #d9a650 16%, var(--a-bg, #f4f2ec)); }
+.ao-box-h { font-size: 19px; font-weight: 600; fill: var(--a-ink); text-anchor: middle; }
+.ao-box-t { font-size: 14.5px; fill: var(--a-ink-soft); text-anchor: middle; }
+.ao-small { font-size: 13px; }
+.ao-arrow { fill: none; stroke: currentColor; color: var(--a-ink-soft); stroke-width: 1.5; }
+.ao-dash { stroke-dasharray: 5 5; }
+
+/* Footnotes */
+.ao-notes { margin-top: clamp(56px, 7vw, 88px); padding-top: 22px; border-top: 1px solid color-mix(in srgb, var(--a-ink) 20%, transparent); font-family: var(--ao-sf); }
+.ao-notes > p { font-size: 15px; font-weight: 600; margin-bottom: 10px; }
+.ao-notes ol { margin: 0 0 clamp(80px, 10vw, 120px); padding-left: 20px; }
+.ao-notes li { font-size: 15px; line-height: 1.6; color: var(--a-ink-soft); margin-bottom: 6px; }
+
+.ao-foot { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; max-width: 1200px; margin: 0 auto; padding: 24px 28px 40px; border-top: 1px solid color-mix(in srgb, var(--a-ink) 15%, transparent); font: 13px var(--ao-sf); color: var(--a-ink-faint); }
+.ao-foot a { color: var(--a-ink-soft); margin-left: 18px; text-decoration: none; }
+
+/* Image containers under the headings: square, hairline, caption centred. */
+.ao-pic { margin: 0 0 clamp(28px, 3.4vw, 44px); }
+.ao-pic-frame { aspect-ratio: 16 / 9; border: 1px solid var(--ao-rule); overflow: hidden; background: var(--a-bg, #f4f2ec); }
+.ao-pic-frame img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.ao-pic-frame.is-empty {
+  display: grid; place-items: center; padding: 20px; text-align: center;
+  background: repeating-linear-gradient(135deg, transparent 0 14px, color-mix(in srgb, var(--a-ink) 3%, transparent) 14px 28px), var(--a-bg, #f4f2ec);
+}
+.ao-pic-frame.is-empty span { font-family: var(--ao-sf); font-size: 14px; color: var(--a-ink-faint); }
+.ao-col .ao-pic .ao-cap { font-family: var(--ao-sf); font-size: 15px; line-height: 1.5; color: var(--a-ink-soft); text-align: center; margin: 12px 0 0; }
+
+/* Diagram helpers for the architecture figure. */
+.ao-row-sub { font-size: 13px; fill: var(--a-ink-faint); text-anchor: end; }
+.ao-zone { fill: none; stroke: var(--a-ink-faint); stroke-width: 1; stroke-dasharray: 5 5; }
+.ao-zone-cloud { stroke: var(--ao-blue); }
+.ao-zone-t { font-size: 11.5px; letter-spacing: .14em; font-weight: 600; fill: var(--a-ink-faint); }
+.ao-zone-t.ao-mid { text-anchor: middle; }
+.ao-sm rect { stroke-width: 1; }
+.ao-dark { fill: var(--a-ink); }
+.ao-small { font-size: 12.5px; fill: var(--a-ink-faint); }
+.ao-left { text-anchor: start; }
+.ao-dash { stroke-dasharray: 4 4; }
+.ao-think rect { stroke-width: 1.8; }
+.ao-hands rect, .ao-mem rect { stroke-width: 1.2; }
+
+/* The five, in the old About card design (2026-09-30). */
+.ao-five { margin-top: clamp(20px, 3vw, 36px); }
+.ao .aff-four-say h3, .ao .aff-keeps-say h3 { font-family: var(--a-display); }
+.ao-five-wide { margin-top: 0; border-top: 0; }
+.ao-trust-art { display: flex; align-items: center; justify-content: center; background: var(--a-bg, #f4f2ec); }
+.ao-five-wide.is-trust { margin-bottom: clamp(50px, 6vw, 80px); }
+
+/* The five, a little smaller (2026-10-01): a narrower block, shorter pictures. */
+.ao-wide:has(.ao-five) { max-width: 1000px; }
+.ao .ao-five .aff-four-art { aspect-ratio: 4 / 3.4; }
+.ao .ao-five .aff-four-say { padding: 20px 22px 24px; }
+.ao .ao-five .aff-four-say h3, .ao .ao-five-wide .aff-keeps-say h3 { font-size: clamp(22px, 2vw, 28px); }
+.ao .ao-five .aff-four-say p, .ao .ao-five-wide .aff-keeps-say p { font-size: 15px; }
+.ao .ao-five-wide .aff-four-art { max-height: 360px; }
+.ao .ao-five-wide .aff-keeps-say { padding: clamp(24px, 3vw, 40px); }
+.ao-col .ao-why { font-style: italic; color: var(--a-ink-soft); border-left: 2px solid color-mix(in srgb, var(--a-ink) 25%, transparent); padding-left: 18px; }

@@ -1,10 +1,30 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Braino, BrainoDefs, useTime } from "@/components/BrainoChar";
 import { Link } from "react-router-dom";
 import { AffThemeToggle, useAffTheme } from "@/components/AffTheme";
+import { useNotchNav } from "@/components/useNotchNav";
 import "./affective.css";
+import "./affective-home.css";
+import "./affectiveos-page.css";
+import { VoiceToAction, NotchSheet, MacMenuBar, EffortChartCompact } from "./aff-figures";
+import { BrainoMascot } from "@/components/BrainoMascot";
+import { MacTaskFilm } from "@/components/MacTaskFilm";
+import { BrainoShowcase } from "@/components/BrainoShowcase";
+import { AppLogo } from "@/components/AppLogo";
 
 /* ============================================================================
-   /affective — the company.
+   / — the homepage (2026-09-30). The picture and the claim, ONE big type
+   moment ("In simple terms…", lit word by word as you scroll), then the real
+   sections: AffectiveOS, Braino and the store, questions. The long version of
+   the company is /about; the letter and technical note is /affectiveos.
+
+   (What follows is the /about header, kept because it still describes the
+   sections below.)
+   /about — the long version of the company.
+
+   This was the homepage until the homepage became the short, flashy one. It
+   moved here whole, so nothing it explains was lost. The technical explainer
+   of AffectiveOS lives on its own page at /affectiveos.
 
    Seven sections, one scroll: what we do, the technology, the products, why,
    questions, early access, footer. Braino gets three sentences and a link;
@@ -25,43 +45,6 @@ import "./affective.css";
    it themselves. Every technical sentence was cut or translated.
    ============================================================================ */
 
-/* AffectiveOS is two different kinds of thing wearing one name, and the page
-   used to show them as four equal features, which is the one thing they are
-   not. Three of these are capabilities: what a machine can do in a moment,
-   stateless, finished and forgotten. The fourth is continuity: what everything
-   the first three do lands on, and stays in.
-
-   Told as two halves, the section makes the argument by its own shape. */
-const CAN_DO = [
-  {
-    h: "Senses.",
-    art: "/os-senses.jpg",
-    body:
-      "Your Mac gets eyes and ears. It sees the screen you are on and hears you for an hour straight. No copying, no pasting, no describing what it cannot see.",
-  },
-  {
-    h: "Voice.",
-    art: "/os-voice.jpg",
-    body:
-      "Have you ever had a back-and-forth conversation with your Mac? Now you can. It answers out loud, and you can cut it off mid-sentence, like a person.",
-  },
-  {
-    h: "Hands.",
-    art: "/os-hands.jpg",
-    body:
-      "You say the task. Your Mac does it. Books the flight, fills the form, sends the reply. It asks before anything is paid for or sent.",
-  },
-];
-
-const KEEPS = {
-  h: "Memory.",
-  art: "/os-memory.jpg",
-  body:
-    "Everything the first three do lands here and stays. Not what you typed into a window: what actually happened, on your machine, all day.",
-  body2:
-    "It is the half nobody can rent. A model can be swapped out next year and this is untouched, which is why the Mac you use in June knows more than the one you used in March.",
-};
-
 /* Braino is the product. Foundry is a model of it.
  *
  * Tabs made them siblings, which is the confusion: Affective is Apple, Braino
@@ -75,27 +58,27 @@ const BRAINO = {
   kind: "Browser and Mac",
   line: "Your own Jarvis.",
   lead:
-    "The character, and the whole product. He is already open on the page you are on, he carries what you told him last month, and he goes and does the thing rather than telling you how to do it.",
+    "A companion who lives on your screen. Tell him what you want and he goes and does it, instead of telling you how. He remembers what you told him last month.",
   does: [
     {
       art: "/os-senses.jpg",
       h: "He is already there.",
-      p: "Nothing to open, nothing to paste. He is in your browser and in your Mac's notch, on whatever you are looking at, so asking him costs the same as thinking it.",
+      p: "In your browser and your Mac's notch, on whatever you are looking at. Nothing to open, nothing to paste. Asking him is as quick as thinking it.",
     },
     {
       art: "/os-voice.jpg",
       h: "He sits through the meeting.",
-      p: "An hour of a lecture or a call, written down while you listen. You close the laptop and the notes are already there, with what was decided and who said they would do what.",
+      p: "A lecture or a call, written down while you listen. Close the laptop and the notes are waiting: what was decided, and who is doing what.",
     },
     {
       art: "/os-hands.jpg",
       h: "He knows your people.",
-      p: "Who you message on a Friday, which Ravi you meant, what you told him last month. You stop introducing yourself to your own software every morning.",
+      p: "Who you message on a Friday, which Ravi you meant, what you told him last month. No more introducing yourself to your own software every morning.",
     },
     {
       art: "/os-memory.jpg",
       h: "He asks before he acts.",
-      p: "Nothing bought, sent, posted or deleted until you say yes. That is a rule in the code rather than a line in a prompt, which is the only version of the promise worth having.",
+      p: "Nothing is bought, sent, posted or deleted until you say yes. It is a rule in the code, not a promise in a prompt.",
     },
   ],
   state: "Runs on AffectiveOS \u00b7 Private beta",
@@ -106,76 +89,220 @@ const BRAINO = {
 const MODELS = [
   {
     key: "braino",
+    short: "Browser and Mac. The whole of him, for everyone.",
     name: "Braino",
     who: "For everyone",
     line: "Browser and Mac. The whole of him, on whatever you are looking at.",
-    to: "/braino-final",
+    to: "/braino",
     go: "Meet Braino",
     accent: "var(--a-braino)",
   },
   {
     key: "foundry",
+    short: "Gets your startup seen: posts, replies and intros.",
     name: "Braino Foundry",
     who: "For founders",
-    line: "You can build it, you cannot get seen. He writes your week, gets you named when buyers ask an AI, and writes to the right people.",
-    to: "/foundry",
+    line: "You can build it. Getting seen is the hard part. He writes your posts, gets you named when buyers ask an AI, and reaches the right people.",
+    to: "/braino?model=foundry",
     go: "See the Foundry",
     accent: "var(--a-foundry)",
   },
   {
     key: "mesa",
-    name: "Braino for Mesa",
+    short: "Timetable, attendance and deadlines inside him. Live at Mesa School of Business.",
+    name: "Braino for Schools",
     who: "For institutions",
-    line: "The same Braino with a school's timetable, attendance and deadlines inside him. Live with Mesa School of Business.",
-    to: "/contact",
+    line: "The same Braino, with your school's timetable, attendance and deadlines inside him. Live at Mesa School of Business.",
+    to: "/braino?model=mesa",
     go: "Bring him to yours",
     accent: "#2f6fed",
   },
 ];
 
 
-/* The second category in the store. Named here so the company page and the
-   store itself cannot drift apart. */
-const MINI_APPS = [
-  { name: "Live Transcript", where: "Stands in the notch" },
-  { name: "Countdown", where: "Stands at the right edge" },
-  { name: "Yap", where: "Stands at the caret" },
+/* What Braino does, said plainly, with an example each. */
+const DOES = [
+  { h: "He does it, not just says it.", p: "A chat window writes the email and hands it back. Braino opens Mail, writes it in your voice and sends it after your yes.", label: "Done", line: "Sent the reply to Priya." },
+  { h: "He already sees your screen.", p: "No copying, pasting or explaining. Ask about the page, the PDF or the error in front of you, and he knows what you mean.", label: "Looking", line: "That error is a missing API key in line 12." },
+  { h: "He knows your life.", p: "Your people, your classes, what you promised last week. Kept on your Mac, so you never start from zero.", label: "Remembered", line: "John, your co-founder. Sending it there." },
+  { h: "He is one sentence away.", p: "No app to open, no tab to find. Say it out loud from anywhere on your Mac, and the notch answers.", label: "Listening", line: "\u201cWhat's due this week?\u201d" },
+]
+
+const FAQS = [
+  { q: "What is AffectiveOS?", a: "The technology we build: an agentic, voice-first layer for the Mac. It lets the Mac you already own see your screen, hear you, talk back, use your apps and remember you. You talk; it does the work." },
+  { q: "What is Braino?", a: "The first product built on AffectiveOS: a companion who lives in your Mac's notch. You say what you want, and he does it in the apps you already use." },
+  { q: "What do I need?", a: "A Mac. Braino lives in the notch on the Mac and also works in Chrome." },
+  { q: "Will it do things without asking me?", a: "No. Anything that spends money, sends a message, posts in public or deletes something waits for your yes, every time." },
+  { q: "Is my data private?", a: "What Braino remembers stays on your Mac. Private windows and password apps are never recorded, nothing is sold, and you can read, fix or delete anything he keeps." },
+  { q: "How do I get it?", a: "Braino is in private beta. Join early access and we will invite you as places open up." },
 ];
 
-const FAQ = [
-  {
-    q: "What is Affective, in one line?",
-    a: "A technology company. We build AffectiveOS, which lets you talk to your Mac and watch things happen, and the products that run on it.",
-  },
-  {
-    q: "Is AffectiveOS something I install?",
-    a: "No. It comes inside the products. You meet Braino or HERA. AffectiveOS is what makes them work.",
-  },
-  {
-    q: "Is this just another chatbot?",
-    a: "The opposite. A chatbot answers and leaves you to it. Ours goes and does the thing, on the screen you are already looking at, and then checks that it worked.",
-  },
-  {
-    q: "Do I have to move to a new app?",
-    a: "No. It works inside what you already use: your browser, your Mac, your email, your college portal. There is nothing to migrate and nothing to set up.",
-  },
-  {
-    q: "Can it do something I did not ask for?",
-    a: "No. Anything that spends money, sends a message, posts publicly or deletes something stops and waits for you to say yes. That is enforced in the code, not requested in an instruction.",
-  },
-  {
-    q: "Did you build the AI itself?",
-    a: "No. The models that think are built by labs with more money than us. We build everything between the model and your machine: the seeing, the hearing, the doing, the remembering, and the part that stops it sending the wrong thing.",
-  },
-  {
-    q: "What can I actually use today?",
-    a: "Braino is in private beta on Chrome and macOS. HERA is built and ships next. Everything described on this page is something the software does now, not something planned.",
-  },
-  {
-    q: "Who is it for?",
-    a: "Right now, founders and students in Bengaluru who own a Mac. Soon, anyone who owns a Mac. Windows is not on the list yet, and we would rather say so than pretend.",
-  },
+/* Smooth wallpapers, in the macOS way: soft colour fields, no picture. */
+const WALLS = [
+  "radial-gradient(120% 90% at 15% 10%, #ffb48a 0%, transparent 55%), radial-gradient(110% 90% at 90% 20%, #c79bff 0%, transparent 55%), radial-gradient(120% 120% at 50% 110%, #3a5bd9 0%, #1d2b6b 70%)",
+  "radial-gradient(110% 90% at 85% 0%, #ffd6a0 0%, transparent 50%), radial-gradient(100% 90% at 10% 30%, #f28fb0 0%, transparent 55%), radial-gradient(120% 120% at 60% 110%, #6a4cd8 0%, #241a55 75%)",
+  "radial-gradient(110% 90% at 20% 0%, #a8f0d8 0%, transparent 50%), radial-gradient(100% 90% at 90% 40%, #5fb4ff 0%, transparent 55%), radial-gradient(120% 120% at 40% 110%, #155e75 0%, #0b2a3a 75%)",
+  "radial-gradient(110% 90% at 80% 10%, #ffe28a 0%, transparent 50%), radial-gradient(100% 90% at 10% 50%, #ff8a5c 0%, transparent 55%), radial-gradient(120% 120% at 50% 110%, #b3344a 0%, #4a1626 75%)",
+  "radial-gradient(110% 90% at 10% 10%, #d7c8ff 0%, transparent 50%), radial-gradient(100% 90% at 90% 30%, #8fd3ff 0%, transparent 55%), radial-gradient(120% 120% at 50% 110%, #4b3fb0 0%, #1a1546 75%)",
+  "radial-gradient(110% 90% at 85% 10%, #c6f6a0 0%, transparent 50%), radial-gradient(100% 90% at 10% 40%, #58d6b0 0%, transparent 55%), radial-gradient(120% 120% at 50% 110%, #1f6f5c 0%, #0b2b26 75%)",
 ];
+
+/* Braino's notch on the big screen, stepping through what he does. */
+function BrainoDoes() {
+  const [i, setI] = useState(0);
+  useEffect(() => {
+    const t = window.setTimeout(() => setI((i + 1) % DOES.length), 3600);
+    return () => window.clearTimeout(t);
+  }, [i]);
+  const d = DOES[i];
+  return (
+    <div className="hb2-notch" key={i}>
+      <NotchSheet className="ns-md ns-glow" label={d.label} done={false}>{d.line}</NotchSheet>
+    </div>
+  );
+}
+
+
+/* Six live tiles under the AffectiveOS line: one per thing it gives your
+   Mac, each drawn in code and moving on its own. */
+const TILES = [
+  { k: "see", h: "Your Mac sees your screen.", p: "We give it eyes. Whatever you have open, it already knows, so you never copy, paste or explain." },
+  { k: "talk", h: "Your Mac talks back.", p: "We give it a voice. It answers out loud, and stops the moment you cut in, like a person would." },
+  { k: "do", h: "Your Mac does the work.", p: "We give it hands. The message sent, the form filled, the flight found, in the apps you already use." },
+  { k: "keep", h: "Your Mac remembers you.", p: "We give it a memory. Who John is, when your class starts, how you like your replies, kept on your Mac." },
+  { k: "ask", h: "Your Mac asks first.", p: "We give it manners. Nothing is bought, sent, posted or deleted until you say yes." },
+]
+
+/* The closing notch: Braino's face, then one request at a time typed out
+   under him, the way the notch shows what it heard. */
+const END_ASKS = [
+  "Tell John I'll be ten minutes late.",
+  "What is due this week?",
+  "Fill this form in for me.",
+  "Find the cheapest flight to Delhi on Friday.",
+  "Draft a reply to this email.",
+];
+
+function EndNotch() {
+  const [i, setI] = useState(0);
+  const [n, setN] = useState(0);
+  useEffect(() => {
+    const full = END_ASKS[i];
+    const t = window.setTimeout(() => {
+      if (n < full.length) setN(n + 1);
+      else { setN(0); setI((i + 1) % END_ASKS.length); }
+    }, n < full.length ? 42 : 2200);
+    return () => window.clearTimeout(t);
+  }, [i, n]);
+  return (
+    <div className="hb-notch" aria-hidden="true">
+      <NotchSheet done={false} className="ns-heard">{END_ASKS[i].slice(0, n)}<span className="hb-caret" /></NotchSheet>
+    </div>
+  );
+}
+
+/* The six things, with ONE notch: the verbs stacked on the left, the notch on
+   the right showing whichever one is active. It steps through them on its
+   own and stops when you point at one. */
+/* A desktop behind the notch, a different one per verb, from the company's
+   own pictures, the way a Mac shows a wallpaper behind the menu bar. */
+const NV_APPS = ["Chrome", "Finder", "WhatsApp", "Notes", "LinkedIn", "Calendar"];
+const NV_WALLS = ["/affective-hero.jpg", "/os-voice.jpg", "/os-hands.jpg", "/os-memory.jpg", "/os-senses.jpg", "/affective-footer.jpg"];
+
+function NotchVerbs() {
+  const [on, setOn] = useState(0);
+  const [held, setHeld] = useState(false);
+  useEffect(() => {
+    if (held) return;
+    const t = window.setTimeout(() => setOn((on + 1) % TILES.length), 4200);
+    return () => window.clearTimeout(t);
+  }, [on, held]);
+  /* The notch is the thing, so it gets the stage: a thin strip of desktop,
+     just the menu bar and the notch, and the six things as a row under it. */
+  return (
+    <div className="nv2 aff-reveal" onMouseLeave={() => setHeld(false)}>
+      <div className="nv2-strip vz-wall" aria-live="polite" style={{ backgroundImage: WALLS[on % WALLS.length] }}>
+        <MacMenuBar app={NV_APPS[on % NV_APPS.length]} />
+        <div className="nv2-notch" key={TILES[on].k}><TileArt k={TILES[on].k} big /></div>
+      </div>
+      <ol className="nv2-row">
+        {TILES.map((t, i) => (
+          <li key={t.k} className={i === on ? "on" : ""}>
+            <button type="button" onMouseEnter={() => { setOn(i); setHeld(true); }} onFocus={() => { setOn(i); setHeld(true); }} onClick={() => { setOn(i); setHeld(true); }} aria-pressed={i === on}>
+              {i === on && !held && <span className="nv-bar" key={on} aria-hidden="true" />}
+              <span className="nv2-h">{t.h.replace("Your Mac ", "").replace(/^./, (c) => c.toUpperCase())}</span>
+              <span className="nv2-p">{t.p}</span>
+            </button>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
+/* Every tile is the notch, because everything happens in the notch: each one
+   shows the same black sheet saying or doing its one thing. */
+/* Braino moonwalking across the closing section, the dance-grid move. */
+function MoonwalkStrip() {
+  const ref = useRef<HTMLDivElement>(null);
+  const t = useTime();
+  const [w, setW] = useState(900);
+  useLayoutEffect(() => {
+    const measure = () => ref.current && setW(ref.current.clientWidth);
+    measure(); window.addEventListener("resize", measure); return () => window.removeEventListener("resize", measure);
+  }, []);
+  const SIZE = 120, span = w + SIZE * 1.6;
+  const x = w + SIZE * 0.7 - ((t * 70 + w * 0.5) % span);
+  return (
+    <div className="hb-moon" ref={ref} aria-hidden="true">
+      <BrainoDefs />
+      <div className="hb-moon-shadow" style={{ left: x }} />
+      <div className="hb-moon-dancer" style={{ left: x }}>
+        <Braino size={SIZE} legs gloves moonwalk accessory="fedora" expr="mischief" lookX={0.45} lookY={0.05} idle />
+      </div>
+    </div>
+  );
+}
+
+function TileArt({ k, big = false }: { k: string; big?: boolean }) {
+  const sz = big ? "ns-md" : "ns-sm";
+  if (k === "see") return (
+    <div className="ta-screen">
+      <NotchSheet className={sz} label="Looking" done={false}>Job application on screen. Want me to fill it in?</NotchSheet>
+    </div>
+  );
+  if (k === "talk") return (
+    <div className="ta-screen">
+      <NotchSheet className={sz + " ns-glow"} label="Speaking" done={false}>Sure, on it. Opening WhatsApp now.</NotchSheet>
+    </div>
+  );
+  if (k === "do") return (
+    <div className="ta-screen">
+      <NotchSheet className={sz + " ns-glow"} label="Doing it" done={false}
+        children="Sending the deck to John."
+        extra={<ol className="ns-steps ns-steps-sm">{["Opened WhatsApp", "Found John", "Sent"].map((t, i) => <li key={t} style={{ animationDelay: `${i * 0.6}s` }}><span className="vz-tick" />{t}</li>)}</ol>}
+      />
+    </div>
+  );
+  if (k === "keep") return (
+    <div className="ta-screen">
+      <NotchSheet className={sz} label="Remembered" done={false}
+        children="Got it. I'll keep that for next time."
+        extra={<ul className="ns-chips">{["John · co-founder", "Class · Mon 9:30", "Likes short replies"].map((t, i) => <li key={t} style={{ animationDelay: `${i * 0.8}s` }}>{t}</li>)}</ul>}
+      />
+    </div>
+  );
+  if (k === "ask") return (
+    <div className="ta-screen">
+      <NotchSheet className={sz} label="Before I post" done={false}
+        extra={<div className="ns-ask"><b>Yes</b><span>Not now</span></div>}
+      >Post this to LinkedIn?</NotchSheet>
+    </div>
+  );
+  return (
+    <div className="ta-screen"><NotchSheet className={sz} label="Good morning">Your first class is at 9:30, and two WhatsApps are waiting.</NotchSheet></div>
+  );
+}
 
 /* Words that land one at a time and stay, which is how the teaser builds a
    line: the phrase accumulates rather than fading in as a block. The stamp is
@@ -236,24 +363,52 @@ function SwapWord({ words, every = 2600 }: { words: string[]; every?: number }) 
   );
 }
 
-function FourArt({ art, label }: { art: string; label: string }) {
-  const [missing, setMissing] = useState(false);
+/* A sentence that lights up word by word as it crosses the screen. Words are
+   separate boxes, so the sentence is given whole to screen readers. */
+function useLitWords() {
+  useEffect(() => {
+    const blocks = [...document.querySelectorAll<HTMLElement>("[data-lit]")];
+    if (!blocks.length) return;
+    const still = window.matchMedia("(prefers-reduced-motion: reduce)");
+    let frame = 0;
+    const apply = () => {
+      frame = 0;
+      for (const block of blocks) {
+        const words = [...block.querySelectorAll<HTMLElement>(".ah-w")];
+        if (still.matches) { words.forEach((w) => w.classList.add("on")); continue; }
+        const r = block.getBoundingClientRect();
+        // Nothing lit as the block enters at the bottom; all lit by the time
+        // its middle reaches the upper third.
+        const p = Math.min(1, Math.max(0, (window.innerHeight * 0.88 - r.top) / (r.height * 0.5 + window.innerHeight * 0.5)));
+        const lit = Math.round(p * words.length);
+        words.forEach((w, i) => w.classList.toggle("on", i < lit));
+      }
+    };
+    const onScroll = () => { if (!frame) frame = window.requestAnimationFrame(apply); };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
+    apply();
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+      if (frame) window.cancelAnimationFrame(frame);
+    };
+  }, []);
+}
+
+/* Words as lit boxes. `*word*` is set in the Didone. */
+function Lit({ text }: { text: string }) {
+  const words = text.split(" ");
   return (
-    <div className="aff-four-art aff-rise">
-      {missing
-        ? <span className="aff-four-wait">{label}</span>
-        : (
-          <img
-            src={art}
-            alt=""
-            width={341}
-            height={415}
-            loading="lazy"
-            decoding="async"
-            onError={() => setMissing(true)}
-          />
-        )}
-    </div>
+    <span className="ah-lit" aria-label={text.replace(/\*/g, "")}>
+      {words.map((w, i) => {
+        const didone = /^\*.*\*[.,]?$/.test(w);
+        const clean = w.replace(/\*/g, "");
+        return (
+          <span key={`${w}-${i}`} aria-hidden="true" className={"ah-w" + (didone ? " ah-d" : "")}>{clean}</span>
+        );
+      })}
+    </span>
   );
 }
 
@@ -370,27 +525,12 @@ export default function Affective() {
   const { theme, toggle } = useAffTheme();
   useDrift();
   usePan();
+  useLitWords();
   /* The wordmark keeps its A and loses the rest once you are past the first
      screen, so the bar gets quieter as the page gets louder. Read on a frame
      rather than on every scroll event, and hysteresis on the two edges so a
      nudge at the threshold cannot flicker it open and shut. */
-  const [tight, setTight] = useState(false);
-  /* Plain words or the ones people who name things use. Both are true. */
-  const [plain, setPlain] = useState(true);
-  useEffect(() => {
-    let frame = 0;
-    const read = () => {
-      frame = 0;
-      setTight((was) => (window.scrollY > (was ? 40 : 96)));
-    };
-    const onScroll = () => { if (!frame) frame = window.requestAnimationFrame(read); };
-    window.addEventListener("scroll", onScroll, { passive: true });
-    read();
-    return () => {
-      window.removeEventListener("scroll", onScroll);
-      if (frame) window.cancelAnimationFrame(frame);
-    };
-  }, []);
+  useNotchNav();
   useEffect(() => {
     document.title = "Affective";
     const prev = document.body.style.background;
@@ -400,19 +540,16 @@ export default function Affective() {
 
   return (
     <div className="aff" data-theme={theme} ref={root}>
-      <nav className={"aff-nav" + (tight ? " is-tight" : "")}>
+      <nav className="aff-nav">
         <div className="aff-nav-in">
-          <Link to="/affective" className="aff-logo" aria-label="Affective">
+          <Link to="/" className="aff-logo" aria-label="Affective">
             <img src="/affective-logo.png" alt="Affective" width={1000} height={207} />
           </Link>
           <div className="aff-nav-links">
-            <a href="#technology">Technology</a>
-            <Link to="/waitlist">Early access</Link>
-            {/* Products and Apps were two anchors into this page that a
-                visitor had to already understand the difference between. The
-                store is where that difference is explained, so the bar just
-                points at it. */}
-            <Link to="/apps" className="aff-nav-go">Store</Link>
+            <Link to="/affectiveos">AffectiveOS</Link>
+            <Link to="/about">About</Link>
+            <Link to="/apps">App Store</Link>
+            <Link to="/waitlist" className="aff-nav-go">Early access</Link>
             <AffThemeToggle theme={theme} onToggle={toggle} />
           </div>
         </div>
@@ -429,17 +566,16 @@ export default function Affective() {
           <div className="aff-hero-row aff-reveal">
             <h1 className="aff-h1">
               <span className="aff-h1-line">
-                Stop using your <SwapWord words={["Mac", "computer"]} />.
+                Stop using your Mac.
               </span>
               <b>Start talking to it.</b>
             </h1>
             <div className="aff-hero-side">
               <p className="aff-hero-one">
-                We build the technology that makes it possible, and the products that do
-                the work.
+                Affective builds the tech that lets your Mac do what you say.
               </p>
               <div className="aff-hero-cta">
-                <Link to="/waitlist" className="aff-cta">Join the waitlist</Link>
+                <Link to="/waitlist" className="aff-cta">Get early access</Link>
                 <Link to="/braino" className="aff-cta aff-cta-ghost">Meet Braino</Link>
               </div>
             </div>
@@ -461,335 +597,133 @@ export default function Affective() {
           />
         </figure>
 
-        {/* Where a landing page puts its customers. We have none to put there,
+        {/* (strip moved under the demo) Where a landing page puts its customers. We have none to put there,
             and the honest version of that row is the one thing everybody in
             this business is coy about: whose thinking we buy. Saying it here,
             under the first claim, is the same answer the questions give and it
             costs nothing to be first to say it. Names rather than logos, set
             in one ink, because a row of other people's marks reads as their
             page rather than ours. */}
+
+
         <div className="aff-strip">
           <div className="aff-wrap aff-strip-in">
-            <p className="aff-strip-label">The thinking is bought</p>
-            <ul className="aff-strip-names">
-              <li>Anthropic</li>
-              <li>OpenAI</li>
-              <li>Perplexity</li>
+            <p className="aff-strip-label">Works in what you already use</p>
+            <ul className="aff-strip-names aff-strip-logos">
+              {(["WhatsApp", "Spotify", "Chrome", "Mail", "Finder", "Calendar"] as const).map((n) => (
+                <li key={n}><AppLogo name={n} /><span>{n}</span></li>
+              ))}
             </ul>
-            <p className="aff-strip-note">The hands are ours</p>
           </div>
         </div>
       </header>
 
-      {/* ── What we do ─────────────────────────────────────────────────────
-          Two different things were wearing one hat here. What the company does
-          is build the technology that lets you talk to your Mac; "Speak. Watch
-          it happen." is the tagline, and a tagline set under a label reading
-          What we do reads as a job description nobody could act on. So the
-          mission is the headline, and the tagline gets its own line at the end
-          of the section, where a tagline belongs: after the argument, before
-          the picture. */}
-      <section className="aff-position" id="what">
+      {/* ── AffectiveOS: the big fade-in line ── */}
+      <section className="ah-os" id="technology">
         <div className="aff-wrap">
-          {/* The same thing said twice, because both versions are true and
-              people arrive wanting different ones. The plain one is the claim;
-              the other is the same claim said a little more technically.
-              Neither is allowed a word somebody would have to look up: a
-              sentence that needs a dictionary is not a harder idea, it is a
-              worse sentence. Having a switch at all is the honest part.
-
-              This section is deliberately about REMEMBERING and the hero is
-              about DOING. They were both about doing, which is why they read
-              as the same paragraph twice.
-
-              And it does NOT say that other assistants forget. They do not:
-              this repo is read every day by one that remembers it across
-              sessions and across a model change. The true difference is
-              narrower and better. Their memory is scoped to their own window
-              and holds what was typed into it; a memory that lives on the
-              machine holds what happened. Write the false version and the
-              first technical reader who sees it stops believing the rest.
-
-              Nobody has met Braino by this point either: he is two sections
-              away. A section that names him here is written by somebody who
-              already knows the page. */}
-          <div className="aff-position-top">
-            <p className="aff-position-kicker">What we do</p>
-            <div className="aff-say" role="tablist" aria-label="How to say it">
-              {[["Simple", true], ["Jargon", false]].map(([label, isPlain]) => (
-                <button
-                  key={String(label)}
-                  type="button"
-                  role="tab"
-                  aria-selected={plain === isPlain}
-                  className={plain === isPlain ? "on" : ""}
-                  onClick={() => setPlain(Boolean(isPlain))}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="aff-position-in">
-            <div className="aff-position-claim aff-reveal">
-              <h2 className="aff-position-line">
-                {plain
-                  ? "We build the technology that makes it possible to speak to your Mac."
-                  : "We build the continuity layer: the part that lets a system learn you, and keep learning, the longer you use it."}
-              </h2>
-            </div>
-            <div className="aff-position-cols aff-reveal">
-              {plain ? (
-                <>
-                  <p>
-                    Current AI remembers what you tell it. None of it remembers what you
-                    did. It knows the conversation inside its own window: not the call at
-                    half eleven, not the page you were reading, not the thing you fixed in
-                    another app.
-                  </p>
-                  <p className="aff-position-punch">
-                    This sits on the machine instead, so what it keeps is what actually
-                    happened. Say it once, and the Mac you use in June knows more than the
-                    one you used in March.
-                  </p>
-                </>
-              ) : (
-                <>
-                  <p>
-                    Current AI has memory, and all of it is scoped to its own window.
-                    Yours is spread across four tools, none of which can see the other
-                    three, and not one of which saw your afternoon.
-                  </p>
-                  <p className="aff-position-punch">
-                    The continuity layer sits on the machine instead, underneath whichever
-                    model is current, and keeps what happened rather than what was typed.
-                    Which is why a system built on it is worth more in month six than it
-                    was in month one, and why that part cannot be bought in.
-                  </p>
-                </>
-              )}
-            </div>
+          <p className="ah-kicker">AffectiveOS</p>
+          <h2 className="aff-h1 ah-os-line" data-lit>
+            <Lit text="We build the thing that makes it possible to speak to your Mac." />
+          </h2>
+          <div className="ah-os-say aff-reveal">
+            <p>We call it AffectiveOS. It gives the Mac you already own eyes to see your screen, ears to hear you, a voice to answer, hands to do the work, and a memory of you. You just talk, and it happens.</p>
+            <Link to="/affectiveos" className="aff-cta">Read about AffectiveOS<i aria-hidden="true">→</i></Link>
           </div>
         </div>
-
-        {/* The picture closes the claim rather than opening it: the words are
-            the point here, and the photograph is what they are about. Framed
-            and in the measure, because the page has one idea of what an object
-            is and a photograph is not exempt from it. */}
+        {/* What it gives your Mac: the senses grid, three that act and the one
+            they all land on, the way the old About page drew it. */}
         <div className="aff-wrap">
-          <figure className="aff-shot-box aff-reveal aff-rise">
-            <img
-              src="/speak.jpg"
-              alt=""
-              width={1672}
-              height={941}
-              loading="lazy"
-              decoding="async"
-            />
-          </figure>
+          <div className="ah-mac aff-reveal"><MacTaskFilm /></div>
         </div>
       </section>
 
-      {/* ── The technology ─────────────────────────────────────────────────
-          Two halves rather than four features. What it can do, and what it
-          keeps. The first three are stateless and finish; the fourth is what
-          they land on, which is why it is the whole width of the page rather
-          than a fourth cell in a row. */}
-      <section className="aff-sec aff-day" id="technology">
+
+      <section className="hb6" id="products">
         <div className="aff-wrap">
-          <div className="aff-sec-head aff-reveal">
-            <p className="aff-sec-kicker">The technology in question</p>
-            <h2>AffectiveOS. We make the Mac come alive.</h2>
-            <p>
-              AffectiveOS sits under every product we make, and it is two halves. Three
-              things the Mac can suddenly do, and one thing it suddenly keeps.
-            </p>
+          <p className="ah-kicker">What we put it into</p>
+          <h2 className="aff-h1 ah-os-line hb6-big" data-lit>
+            <Lit text="Then we put it into Braino, so you have someone to talk to." />
+          </h2>
+          <div className="ah-os-say hb6-say aff-reveal">
+            <p>AffectiveOS is the technology. Braino is how you meet it: a companion who lives in your Mac's notch, knows your day and your people, and gets things done when you ask.</p>
+          </div>
+          <div className="hb6-box aff-reveal">
+          <div className="hb6-head">
+            <div>
+              <p className="ah-kicker">Meet Braino</p>
+              <div className="hb5-name">
+                <h2>Braino</h2>
+                <BrainoMascot size={92} className="hb4-him" />
+              </div>
+              <p className="hb6-line">The first product on AffectiveOS. A companion in your Mac's notch: tell him what you want and he does it, in the apps you already use, and remembers you.</p>
+            </div>
+            <div className="hb6-side">
+              <div className="hb5-go">
+                <Link to="/waitlist" className="aff-cta">Get early access</Link>
+                <Link to="/braino" className="aff-cta aff-cta-ghost">Meet Braino</Link>
+              </div>
+            </div>
+          </div>
+          <ul className="hb4-does hb6-jobs">
+            {DOES.map((d) => <li key={d.h}><h3>{d.h}</h3><p>{d.p}</p></li>)}
+          </ul>
+          <div className="hb6-models">
+            <p className="hb6-models-k">One Braino. Three models.</p>
+            <div className="hb6-models-row">
+              {MODELS.map((m) => (
+                <Link to={m.to} key={m.key} className="hb6-model">
+                  <BrainoMascot variant={m.key as "braino" | "foundry" | "mesa"} size={52} />
+                  <span><small>{m.who}</small><b>{m.name}</b><em>{m.short}</em></span>
+                </Link>
+              ))}
+            </div>
+          </div>
+          </div>
+          <div className="hb6-demo">
+          <h2 className="aff-h1 ah-os-line hb6-tag" data-lit><Lit text="Speak. Watch it happen." /></h2>
+          <p className="hb6-story aff-reveal">We grew up watching Tony Stark talk to Jarvis and Jarvis just get it done. That is the future of computing we believe in, and now it is on the Mac you already own. Say it once, and Braino does it for you.</p>
+          <figure className="ah-os-live aff-reveal aff-rise">
+            <div className="ao-viz ao-viz-screen"><VoiceToAction tabs notch row /></div>
+          </figure>
           </div>
         </div>
+      </section>
 
-        <div className="aff-wrap">
-          <p className="aff-half-label aff-reveal">What it can do</p>
-          <div className="aff-grid aff-grid-3 aff-four">
-            {CAN_DO.map((d, i) => (
-              <article className="aff-four-item aff-reveal" key={d.h} style={{ transitionDelay: `${i * 110}ms` }}>
-                <FourArt art={d.art} label={d.h.replace(".", "")} />
-                <div className="aff-four-say">
-                  <h3>{d.h}</h3>
-                  <p>{d.body}</p>
-                </div>
-              </article>
+
+      {/* ── Questions ─────────────────────────────────────────────────────── */}
+      <section className="hb2-faq">
+        <div className="aff-wrap hb2-faq-split">
+          <div className="hb2-faq-side">
+            <h3 className="hb2-faq-h aff-reveal">Questions</h3>
+            <p>Anything else? <Link to="/waitlist">Get early access</Link> and ask us directly.</p>
+          </div>
+          <div className="hb2-faq-list">
+            {FAQS.map((f) => (
+              <details key={f.q}>
+                <summary>{f.q}<i aria-hidden="true">+</i></summary>
+                <p>{f.a}</p>
+              </details>
             ))}
           </div>
-
-          {/* The second half, and it is not a fourth cell: it is what the three
-              above it drop things onto. Wide, because that is the shape of a
-              floor. */}
-          <p className="aff-half-label aff-reveal">And what it keeps</p>
-          <div className="aff-keeps aff-reveal">
-            <FourArt art={KEEPS.art} label={KEEPS.h.replace(".", "")} />
-            <div className="aff-keeps-say">
-              {/* The term belongs here and nowhere else on the page: this is
-                  the one place a reader can see what it is made of. Memory is
-                  what it holds; continuity is what having it everywhere
-                  gives you. */}
-              <p className="aff-keeps-tag">The continuity layer</p>
-              <h3>{KEEPS.h}</h3>
-              <p>{KEEPS.body}</p>
-              <p className="aff-keeps-punch">{KEEPS.body2}</p>
-            </div>
-          </div>
-
-          {/* Where all of it lands: the four are the floor, and the character
-              is what we put on top of them. */}
-          <p className="aff-day-foot aff-reveal">
-            Three things it can do, one thing it keeps. Then we build somebody on top.
-          </p>
         </div>
       </section>
 
-      {/* ── The products ───────────────────────────────────────────────────
-          One plate each, the way a brand board lays a product out: the name
-          on the picture, and the short version under it in two columns with
-          the facts in a table. Braino's plate is a photograph; HERA has no
-          picture yet and gets her own colour rather than a borrowed one,
-          which is honest and still a plate. */}
-      <section className="aff-sec" id="products">
-        <div className="aff-wrap">
-          <div className="aff-sec-head aff-reveal">
-            <p className="aff-sec-kicker">The app store</p>
-            <h2><Kinetic line="Everything we build on it." /></h2>
-          </div>
-        </div>
-
-        {/* One box with dividers. It is Braino, whole: his name, what he is,
-            what he does, and at the bottom the two he comes in, because a
-            product page ends on which one is right for you rather than making
-            you choose before you know what it is. */}
-        <div className="aff-wrap">
-          <article className="aff-plate">
-            <div className="aff-plate-art">
-              <div className="aff-plate-mark">
-                {/* Him and his name as one lockup. Across the box from each
-                    other they were two things that happened to share a ground;
-                    beside each other they are a signature. */}
-                <img
-                  className="aff-plate-him"
-                  src="/braino-standing.svg"
-                  alt="Braino, standing"
-                  width={104}
-                  height={127}
-                  loading="lazy"
-                  decoding="async"
-                />
-                <div className="aff-plate-name">
-                  {/* Never the company's Didone. Braino is the software and
-                      Affective is the company; they do not wear one face. */}
-                  <h3>{BRAINO.name}</h3>
-                  {/* Name, then what he is in four words, then the specs. The
-                      line was sharing a band with the paragraph underneath and
-                      the two crowded each other; up here it introduces him,
-                      which is the only job it was ever doing. */}
-                  <p className="aff-plate-intro">{BRAINO.line}</p>
-                  <p className="aff-plate-line">
-                    <span>{BRAINO.kind}</span>
-                    <span>{BRAINO.est}</span>
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* The character and the whole product, with the band to itself. */}
-            <div className="aff-plate-lead">
-              <p className="aff-plate-blurb">{BRAINO.lead}</p>
-            </div>
-
-            {/* His four, built the way AffectiveOS's four are built. */}
-            <div className="aff-grid aff-grid-4 aff-plate-does">
-              {BRAINO.does.map((d) => (
-                <article key={d.h}>
-                  <div className="aff-does-art">
-                    <img src={d.art} alt="" width={341} height={415} loading="lazy" decoding="async" />
-                  </div>
-                  <div className="aff-does-say">
-                    <h4>{d.h}</h4>
-                    <p>{d.p}</p>
-                  </div>
-                </article>
-              ))}
-            </div>
-
-            {/* Which one is right for you. Three models of one product, not
-                three products: the same Braino, pointed at a different life
-                each time. */}
-            <div className="aff-models">
-              <p className="aff-models-label">One Braino · Three models</p>
-              <div className="aff-models-row">
-                {MODELS.map((m) => (
-                  <Link to={m.to} className="aff-model" key={m.key} style={{ ["--acc" as string]: m.accent }}>
-                    <span className="aff-model-who"><i aria-hidden="true" />{m.who}</span>
-                    <h4>{m.name}</h4>
-                    <p>{m.line}</p>
-                    <span className="aff-model-go">{m.go}<i aria-hidden="true">→</i></span>
-                  </Link>
-                ))}
-              </div>
-              <p className="aff-plate-foundry">{BRAINO.state}</p>
-            </div>
-          </article>
-
-          {/* The other half of the store, and the reason it is a store rather
-              than a product page. A mini app is not part of Braino: it is a
-              small Mac app that stands somewhere on your screen and does one
-              thing, and plugging it into him is a choice rather than the only
-              way to run it. */}
-          <div className="aff-mini aff-reveal" id="apps">
-            <div className="aff-mini-head">
-              <p className="aff-mini-kicker">Mini apps</p>
-              <p className="aff-mini-line">
-                One small thing each. Run them on their own as Mac apps, or plug them into Braino
-                and they read the same memory he does.
-              </p>
-            </div>
-            <ul className="aff-mini-list">
-              {MINI_APPS.map((m) => (
-                <li key={m.name}>
-                  <strong>{m.name}</strong>
-                  <span>{m.where}</span>
-                </li>
-              ))}
-            </ul>
-            <p className="aff-plate-store">
-              <Link to="/apps">Open the app store<i aria-hidden="true">→</i></Link>
-            </p>
-          </div>
-        </div>
-      </section>
-
-      {/* ── Questions ──────────────────────────────────────────────────────
-          Two columns, with the heading held on the left while the answers move
-          past it. It gives the page a centre gutter it did not have, and stops
-          the last screen reading as more of the same rail. */}
-      <section className="aff-sec aff-faq-sec" id="faq">
-        <div className="aff-wrap">
-          <div className="aff-faq-in">
-            <div className="aff-faq-head aff-reveal">
-              <h2>Questions you may have.</h2>
-              <p>Including the ones about what we did not build.</p>
-            </div>
-            {/* details/summary, so it works with no JavaScript and with a
-                keyboard. */}
-            <div className="aff-faq aff-reveal">
-              {FAQ.map((f, i) => (
-                <details key={f.q} open={i === 0}>
-                  <summary>
-                    <span>{f.q}</span>
-                    <i aria-hidden="true" />
-                  </summary>
-                  <p>{f.a}</p>
-                </details>
-              ))}
-            </div>
+      {/* ── The last word ──────────────────────────────────────────────────
+          One line in the hero's face, him beside it, and the two ways in. */}
+      <section className="hb-end">
+        <div className="hb-end-glow" aria-hidden="true" />
+        <div className="aff-wrap hb-end-in aff-reveal">
+          <EndNotch />
+          <h2 className="aff-h1 hb-end-line" aria-label="Make your Mac more Affective with Braino.">
+            Make your Mac more{" "}
+            <span className="hb-end-logo-wrap"><img className="hb-end-logo" src="/affective-logo.png" alt="" width={1000} height={207} aria-hidden="true" /></span>
+            <span className="hb-end-with">with <span className="hb-end-braino">Braino.</span></span>
+          </h2>
+          <MoonwalkStrip />
+          <p className="hb-end-p">Braino is in private beta. We are letting people in a few at a time.</p>
+          <div className="hb-go">
+            <Link to="/waitlist" className="aff-cta">Get early access</Link>
+            <Link to="/affectiveos" className="aff-cta aff-cta-ghost">Read about AffectiveOS</Link>
           </div>
         </div>
       </section>
@@ -832,12 +766,11 @@ export default function Affective() {
               {/* Products holds one product, and the product divides into the
                   two he comes in. Drawn rather than listed, because a list
                   makes three separate things out of one. */}
-              <nav className="aff-foot-col aff-tree" aria-label="Products">
-                <h4>Products</h4>
+              <nav className="aff-foot-col aff-tree" aria-label="App Store">
+                <h4><Link to="/apps">App Store</Link></h4>
                 <ul>
                   <li><Link to="/braino">Braino</Link></li>
-                  <li><Link to="/foundry">Braino Foundry</Link></li>
-                  <li><Link to="/apps">All apps</Link></li>
+                  <li><Link to="/braino?model=foundry">Braino Foundry</Link></li>
                 </ul>
               </nav>
               {/* Its own column. A school buying the same Braino with its own
@@ -846,7 +779,7 @@ export default function Affective() {
               <nav className="aff-foot-col aff-tree aff-tree-on" aria-label="For institutions">
                 <h4>For institutions</h4>
                 <ul>
-                  <li><Link to="/contact">Braino for Mesa School of Business</Link></li>
+                  <li><Link to="/braino?model=mesa">Braino for Schools</Link></li>
                 </ul>
               </nav>
               <nav className="aff-foot-col">
@@ -856,8 +789,8 @@ export default function Affective() {
               </nav>
             </div>
             <p className="aff-foot-rule">
-              Everything on this page is something the software does today. Nothing here is
-              a roadmap.
+              Everything on this page is built and running in our private beta. Nothing here
+              is a roadmap.
             </p>
           </div>
         </div>

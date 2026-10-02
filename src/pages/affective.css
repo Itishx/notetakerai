@@ -1469,3 +1469,141 @@
 /* The footer mark is left alone: it already sits on a photograph and is
    forced white in both themes, so a second filter here would only make it a
    slightly different white. */
+
+/* ── The bar, bigger; then a notch on scroll (2026-10-01) ──────────────────
+ * At the top: a taller bar, bigger mark, links in bold SF Pro.
+ * Past the first screenful (.is-notch, see useNotchNav): the bar's ground
+ * goes and its contents fold into a black notch hanging from the top centre,
+ * just the A and Early access. Point at it and it opens to every link. The
+ * bar keeps its height either way, so nothing below it jumps. */
+.aff-nav { transition: background .35s ease, border-color .35s ease, backdrop-filter .35s ease; }
+.aff-nav-in { height: 76px; transition: max-width .5s cubic-bezier(.22,1,.36,1), background .35s ease, padding .4s ease, border-radius .4s ease, height .4s ease, box-shadow .35s ease; }
+.aff-logo { --logo-h: 31px; }
+.aff-nav-links { gap: clamp(18px, 2.2vw, 32px); }
+.aff-nav-links a {
+  font-family: "SF Pro Text", "SF Pro Display", -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 15px; font-weight: 600; letter-spacing: -0.012em; color: var(--a-ink);
+  transition: color .2s ease, opacity .3s ease, max-width .45s cubic-bezier(.22,1,.36,1), margin .3s ease, padding .3s ease;
+}
+.aff-nav-links a:hover { color: var(--a-ink); opacity: .7; }
+.aff-nav-go { padding: 9px 18px; font-weight: 600; background: var(--a-ink); color: var(--a-bg) !important; border-color: var(--a-ink); }
+.aff-nav-go:hover { opacity: .86 !important; }
+
+.aff-nav.is-notch {
+  background: transparent;
+  border-bottom-color: transparent;
+  backdrop-filter: none; -webkit-backdrop-filter: none;
+  pointer-events: none;
+}
+.aff-nav.is-notch .aff-nav-in {
+  pointer-events: auto;
+  max-width: calc(100vw - 32px);
+  height: 52px;
+  margin-top: -1px;
+  padding: 0 14px 0 26px;
+  gap: 26px;
+  background: #000;
+  border-radius: 0 0 26px 26px;
+  box-shadow: 0 14px 40px -14px rgba(0,0,0,.55);
+}
+/* Everything stays in the notch: every link and the theme switch. Room on the
+   right so the last control never touches the curve. */
+.aff-nav.is-notch .aff-logo img { filter: invert(1); }
+.aff-nav.is-notch .aff-logo { --logo-h: 24px; }
+.aff-nav.is-notch .aff-nav-links { gap: 22px; flex-wrap: nowrap; }
+.aff-nav.is-notch .aff-nav-links a { color: rgba(255,255,255,.86); font-size: 14px; white-space: nowrap; }
+.aff-nav.is-notch .aff-nav-links a:hover { color: #fff; opacity: 1; }
+.aff-nav.is-notch .aff-nav-go { background: #fff; color: #000 !important; border-color: #fff; padding: 7px 16px; font-size: 13.5px; }
+.aff-nav.is-notch .aff-nav-links > :last-child { margin-right: 4px; }
+.aff-nav.is-notch .aff-nav-links > :not(a) { filter: invert(1); }
+.aff[data-theme="dark"] .aff-nav.is-notch .aff-nav-in { box-shadow: 0 0 0 1px rgba(255,255,255,.1), 0 14px 40px -14px rgba(0,0,0,.8); }
+@media (prefers-reduced-motion: reduce) { .aff-nav-in, .aff-nav-links a { transition: none; } }
+
+
+
+/* One morph (2026-10-01): every property that differs between the bar and
+   the notch moves on the same curve and the same clock, so the bar visibly
+   becomes the notch instead of one replacing the other. */
+.aff-nav-in {
+  --nav-ease: cubic-bezier(.32, .72, 0, 1);
+  background-color: transparent;
+  border-radius: 0;
+  transition:
+    width .6s var(--nav-ease),
+    height .6s var(--nav-ease),
+    padding .6s var(--nav-ease),
+    gap .6s var(--nav-ease),
+    border-radius .6s var(--nav-ease),
+    background-color .45s ease,
+    box-shadow .6s var(--nav-ease);
+}
+.aff-nav-links a, .aff-nav-go { transition: color .45s ease, background-color .45s ease, border-color .45s ease, padding .6s var(--nav-ease), font-size .6s var(--nav-ease), opacity .2s ease; }
+.aff-nav-links { transition: gap .6s var(--nav-ease); }
+.aff-nav .aff-logo { transition: width .6s var(--nav-ease); }
+.aff-nav .aff-logo img { transition: height .6s var(--nav-ease), filter .45s ease; }
+.aff-nav .aff-nav-links > :not(a) { transition: filter .45s ease; }
+@media (prefers-reduced-motion: reduce) {
+  .aff-nav-in, .aff-nav-links a, .aff-nav-go, .aff-nav .aff-logo, .aff-nav .aff-logo img { transition: none; }
+}
+
+/* ── Notch, settled (2026-10-02) ──────────────────────────────────────────
+ * Only the shape moves; what is inside it changes at once (and is clipped
+ * while the shape catches up), so nothing inside lags behind the outline.
+ * Light page: a white notch. Dark page: a black one. And a quiet glow round
+ * it, the AffectiveOS light from the app, turned well down. */
+.aff-nav.nav-measuring, .aff-nav.nav-measuring * { transition: none !important; }
+.aff-nav .aff-logo, .aff-nav .aff-logo img, .aff-nav-links, .aff-nav-links a, .aff-nav-go { transition: color .3s ease, background-color .3s ease, border-color .3s ease, filter .3s ease !important; }
+.aff-nav.is-notch .aff-nav-in { overflow: hidden; }
+
+.aff {
+  --notch-bg: #fff;
+  --notch-fg: #16140f;
+  --notch-soft: rgba(22,20,15,.72);
+  --notch-cta-bg: #16140f;
+  --notch-cta-fg: #fff;
+  --notch-edge: rgba(22,20,15,.08);
+}
+.aff[data-theme="dark"] {
+  --notch-bg: #000;
+  --notch-fg: #fff;
+  --notch-soft: rgba(255,255,255,.84);
+  --notch-cta-bg: #fff;
+  --notch-cta-fg: #000;
+  --notch-edge: rgba(255,255,255,.1);
+}
+@property --nav-spin { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
+@property --nav-tint { syntax: "<color>"; inherits: false; initial-value: #2f6bff; }
+@keyframes navSpin { to { --nav-spin: 360deg; } }
+@keyframes navTint { 0%, 100% { --nav-tint: #2f6bff; } 25% { --nav-tint: #ff0f1f; } 50% { --nav-tint: #05d959; } 75% { --nav-tint: #9e1aff; } }
+.aff-nav.is-notch .aff-nav-in {
+  background-color: var(--notch-bg);
+  box-shadow:
+    0 0 0 1px var(--notch-edge),
+    calc(cos(var(--nav-spin)) * 6px) calc(sin(var(--nav-spin)) * 3px + 3px) 18px -2px color-mix(in srgb, var(--nav-tint) 45%, transparent),
+    0 12px 30px -16px rgba(0,0,0,.35);
+  animation: navSpin 3.6s linear infinite, navTint 40s linear infinite;
+}
+.aff-nav.is-notch .aff-logo img { filter: none; }
+.aff[data-theme="dark"] .aff-nav.is-notch .aff-logo img { filter: invert(1); }
+.aff-nav.is-notch .aff-nav-links a { color: var(--notch-soft); }
+.aff-nav.is-notch .aff-nav-links a:hover { color: var(--notch-fg); }
+.aff-nav.is-notch .aff-nav-go { background: var(--notch-cta-bg); color: var(--notch-cta-fg) !important; border-color: var(--notch-cta-bg); }
+.aff-nav.is-notch .aff-nav-links > :not(a) { filter: none; }
+.aff[data-theme="dark"] .aff-nav.is-notch .aff-nav-links > :not(a) { filter: none; }
+@media (prefers-reduced-motion: reduce) { .aff-nav.is-notch .aff-nav-in { animation: none; } }
+/* The contents sit together in the middle from the first frame, and the shape
+   closes in around them, rather than the A and the links drifting together. */
+.aff-nav.is-notch .aff-nav-in { justify-content: center; }
+.aff-nav.is-notch .aff-nav-links { margin-left: 0; }
+
+/* Header back to a normal bar (2026-10-02). The notch rules above only apply
+   with .is-notch, which nothing sets any more; the morph transitions are
+   reset so the bar is still and the A simply folds in. */
+.aff-nav-in { width: auto !important; transition: none; background-color: transparent; }
+.aff-nav .aff-logo { transition: width .42s cubic-bezier(.4, 0, .2, 1) !important; }
+
+/* Header: a little smaller, links in the editorial face. */
+.aff-nav-in { height: 66px; }
+.aff-logo { --logo-h: 28px; }
+.aff-nav-links a { font-family: var(--a-display); font-size: 16.5px; font-weight: 500; letter-spacing: -0.005em; }
+.aff-nav-go { font-family: var(--ao-sf) !important; font-size: 14px !important; font-weight: 600 !important; padding: 8px 16px; }

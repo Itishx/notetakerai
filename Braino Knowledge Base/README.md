@@ -18,6 +18,23 @@ For every feature:
 
 ## Contents
 
+- [Activity and Memory](features/activity-and-memory.md)
+- [Braino Chat](features/braino-chat.md)
+- [Thinking Trail](features/thinking-trail.md)
+- [AffectiveOS, one brain](design/affectiveos-one-brain.md)
+- [AffectiveOS notch](features/affectiveos-notch.md)
+- [Notch Drop: Tray and AirDrop](features/notch-drop.md)
+- [Arrival](features/arrival.md)
+- [Links Off the Page](features/links-off-the-page.md)
+- [Braino for Mac (the app)](features/braino-for-mac-app.md)
+- [Chrome Profiles](features/chrome-profiles.md)
+- [Type and Search](features/type-and-search.md)
+- [Talk or Do](features/two-lanes.md)
+- [Instant Voice, Four Spots](features/instant-voice-and-spots.md)
+- [Hide Him](features/hide-him.md)
+- [Forms and Logins](features/fill-forms-and-log-in.md)
+- [Think Once, Then Do](features/think-once-then-do.md)
+- [Set Him Up](features/companion-setup.md)
 - [WhatsApp, Known Silently](features/whatsapp-silent-awareness.md)
 - [AffectiveOS Memory: Capture](features/affectiveos-memory-capture.md)
 - [Mesa, Synced Every Day](features/mesa-auto-sync.md)

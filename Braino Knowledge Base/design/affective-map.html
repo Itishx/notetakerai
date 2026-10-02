@@ -1,0 +1,222 @@
+<title>The Affective Map</title>
+<style>
+:root{
+  color-scheme:light;
+  --bg:#FFFFFF; --paper:#FBFAF6; --ink:#16150F; --ink2:#5E5B51; --ink3:#9A968A; --line:#E4E0D4; --line2:#CFC9B8;
+  --braino:#d9645b; --foundry:#b8842a; --mesa:#2f6fed; --mini:#3a8f5f; --laya:#2a78d6; --hil:#7c52e6; --mem:#b8842a;
+  --display:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;
+  --sans:"SF Pro Text",-apple-system,BlinkMacSystemFont,"Helvetica Neue",system-ui,sans-serif;
+  --sfd:"SF Pro Display",-apple-system,BlinkMacSystemFont,"Helvetica Neue",system-ui,sans-serif;
+}
+html,body{background:var(--bg);color:var(--ink)}
+body{font-family:var(--sans);padding-inline:16px;padding-block:36px 64px;-webkit-font-smoothing:antialiased}
+main{max-width:1240px;margin:0 auto;display:grid;gap:40px}
+.top{display:grid;gap:14px;justify-items:start}
+.top img{height:30px;width:auto}
+h1{font:400 clamp(34px,5vw,58px)/1.04 var(--display);margin:0;letter-spacing:-.01em;text-wrap:balance;max-width:20ch}
+.one{font:400 clamp(17px,1.9vw,21px)/1.5 var(--sfd);color:var(--ink2);max-width:60ch;margin:0}
+.one b{color:var(--ink);font-weight:600}
+figure{margin:0}
+.sheet{background:var(--paper);border:1px solid var(--line);border-radius:22px;padding:18px}
+.scroll{overflow-x:auto}
+svg{display:block;max-width:100%;height:auto}
+svg text{font-family:var(--sans);fill:var(--ink)}
+svg .d{font-family:var(--display)}
+svg .m{fill:var(--ink2)}
+svg .f{fill:var(--ink3)}
+.flow{stroke-dasharray:3 9;animation:flow 1.6s linear infinite}
+@keyframes flow{to{stroke-dashoffset:-24}}
+.pulse{animation:pulse 3.2s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:.06}50%{opacity:.2}}
+@media (prefers-reduced-motion:reduce){.flow,.pulse{animation:none}}
+h2{font:400 30px/1.15 var(--display);margin:0 0 6px}
+.sub{color:var(--ink2);font-size:15px;line-height:1.5;margin:0 0 16px;max-width:70ch}
+.journey{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+@media (max-width:900px){.journey{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:520px){.journey{grid-template-columns:1fr}}
+.st{background:var(--paper);border:1px solid var(--line);border-radius:16px;padding:14px 16px;display:grid;gap:6px;align-content:start;border-top:3px solid var(--c,var(--line2))}
+.st .k{font:600 11px var(--sans);letter-spacing:.12em;text-transform:uppercase;color:var(--c,var(--ink3))}
+.st h3{margin:0;font:600 16px/1.3 var(--sfd)}
+.st p{margin:0;font-size:13.5px;line-height:1.5;color:var(--ink2)}
+.st .t{font:500 12px ui-monospace,Menlo,monospace;color:var(--ink3)}
+.say{font:400 21px/1.4 var(--display);color:var(--ink);margin:0 0 14px}
+.lines{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+@media (max-width:760px){.lines{grid-template-columns:1fr}}
+.ln{padding:16px 18px;border-radius:16px;background:var(--paper);border:1px solid var(--line)}
+.ln b{display:block;font:400 22px/1.2 var(--display);margin-bottom:6px}
+.ln span{font-size:14px;line-height:1.5;color:var(--ink2)}
+.foot{font-size:12.5px;color:var(--ink3);border-top:1px solid var(--line);padding-top:14px}
+@page{size:A3 landscape;margin:10mm}
+@media print{body{padding:0}.flow,.pulse{animation:none}.sheet{break-inside:avoid}section{break-inside:avoid}}
+</style>
+
+<main>
+<header class="top">
+  <img alt="Affective" src="data:image/png;base64,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" />
+  <h1>We make the Mac come alive.</h1>
+  <p class="one"><b>Affective</b> builds <b>AffectiveOS</b>: one brain that gives your Mac senses, a voice, hands and a memory. Everything we make runs on it. <b>Braino</b> is the first.</p>
+</header>
+
+<figure class="sheet">
+<div class="scroll">
+<svg viewBox="0 0 1200 1010" role="img" aria-label="The Affective map. Affective, the company, builds AffectiveOS. AffectiveOS has senses, one brain made of intent detection and the human intelligence layer, a voice, hands, and memory. It makes Braino in three models, mini apps, and more apps next.">
+  <defs>
+    <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#9A968A"/></marker>
+    <marker id="aL" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#2a78d6"/></marker>
+    <marker id="aH" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#7c52e6"/></marker>
+  </defs>
+
+  <!-- TIER 1: the company -->
+  <text x="40" y="36" font-size="11.5" font-weight="600" letter-spacing="2" class="f">THE COMPANY</text>
+  <rect x="390" y="18" width="420" height="78" rx="16" fill="#FFFFFF" stroke="#CFC9B8"/>
+  <text x="600" y="50" text-anchor="middle" class="d" font-size="24">Affective</text>
+  <text x="600" y="76" text-anchor="middle" font-size="12.5" class="m">A technology company: the OS, and what runs on it</text>
+  <line x1="600" y1="96" x2="600" y2="132" stroke="#9A968A" stroke-width="1.5" class="flow"/>
+  <text x="612" y="120" font-size="11.5" class="f">builds</text>
+
+  <!-- TIER 2: AffectiveOS -->
+  <text x="40" y="150" font-size="11.5" font-weight="600" letter-spacing="2" class="f">THE TECHNOLOGY</text>
+  <rect x="30" y="138" width="1140" height="492" rx="26" fill="#FFFFFF" stroke="#CFC9B8" stroke-width="1.5"/>
+  <text x="600" y="176" text-anchor="middle" class="d" font-size="28">AffectiveOS</text>
+  <text x="600" y="198" text-anchor="middle" font-size="13" class="m">You never install it. It comes inside everything we make, and it is what makes them work.</text>
+
+  <!-- senses -->
+  <rect x="60" y="224" width="250" height="150" rx="16" fill="#FBFAF6" stroke="#E4E0D4"/>
+  <text x="80" y="254" font-size="16" font-weight="600">Senses</text>
+  <text x="80" y="280" font-size="13" font-weight="600">Ears</text><text x="120" y="280" font-size="12.5" class="m">hears you, an hour straight</text>
+  <text x="80" y="302" font-size="13" font-weight="600">Eyes</text><text x="120" y="302" font-size="12.5" class="m">sees the screen you are on</text>
+  <text x="80" y="330" font-size="12" class="f">No copying, no pasting,</text>
+  <text x="80" y="348" font-size="12" class="f">no describing what it can't see.</text>
+
+  <!-- the one brain -->
+  <rect x="346" y="204" width="508" height="192" rx="28" fill="#7c52e6" class="pulse" opacity=".14"/>
+  <rect x="360" y="216" width="480" height="168" rx="20" fill="#FFFFFF" stroke="#16150F" stroke-opacity=".35"/>
+  <text x="600" y="244" text-anchor="middle" font-size="16" font-weight="600">One brain</text>
+  <rect x="384" y="260" width="196" height="100" rx="14" fill="#FFFFFF" stroke="#2a78d6" stroke-width="2"/>
+  <text x="400" y="284" font-size="13.5" font-weight="600">Intent detection</text>
+  <text x="400" y="302" font-size="12" class="m">Laya · on your Mac · 0.05s</text>
+  <text x="400" y="322" font-size="12" class="m">knows what you want,</text>
+  <text x="400" y="340" font-size="12" class="m">with everything around you</text>
+  <rect x="620" y="260" width="196" height="100" rx="14" fill="#FFFFFF" stroke="#7c52e6" stroke-width="2"/>
+  <text x="636" y="284" font-size="13.5" font-weight="600">Human Intelligence</text>
+  <text x="636" y="302" font-size="12" class="m">HIL · the bigger brain</text>
+  <text x="636" y="322" font-size="12" class="m">plans the big jobs,</text>
+  <text x="636" y="340" font-size="12" class="m">settles the unsure ones</text>
+  <path d="M580 292 L 616 292" stroke="#2a78d6" stroke-width="1.6" marker-end="url(#aL)"/>
+  <path d="M618 330 L 584 330" stroke="#7c52e6" stroke-width="1.6" stroke-dasharray="4 3" marker-end="url(#aH)"/>
+  <text x="600" y="286" text-anchor="middle" font-size="9.5" class="f">big</text>
+  <text x="601" y="346" text-anchor="middle" font-size="9.5" class="f">teaches</text>
+
+  <!-- voice + hands -->
+  <rect x="890" y="224" width="250" height="68" rx="16" fill="#FBFAF6" stroke="#E4E0D4"/>
+  <text x="910" y="252" font-size="16" font-weight="600">Voice</text>
+  <text x="910" y="274" font-size="12.5" class="m">talks back; cut it off like a person</text>
+  <rect x="890" y="306" width="250" height="68" rx="16" fill="#FBFAF6" stroke="#E4E0D4"/>
+  <text x="910" y="334" font-size="16" font-weight="600">Hands</text>
+  <text x="910" y="356" font-size="12.5" class="m">does it, and asks before paying</text>
+
+  <line x1="310" y1="299" x2="356" y2="299" stroke="#9A968A" stroke-width="1.5" class="flow" marker-end="url(#ah)"/>
+  <line x1="840" y1="262" x2="886" y2="258" stroke="#9A968A" stroke-width="1.5" class="flow" marker-end="url(#ah)"/>
+  <line x1="840" y1="336" x2="886" y2="340" stroke="#9A968A" stroke-width="1.5" class="flow" marker-end="url(#ah)"/>
+
+  <!-- memory -->
+  <rect x="60" y="410" width="1080" height="84" rx="18" fill="#FBF6EC" stroke="#b8842a" stroke-opacity=".6"/>
+  <text x="84" y="442" font-size="16" font-weight="600">Memory</text>
+  <text x="160" y="442" font-size="12.5" class="m">the continuity layer: what actually happened on your Mac, all day, kept on your Mac</text>
+  <text x="84" y="470" font-size="12.5" class="m">Everything the senses, voice and hands do lands here and stays. A model can be swapped next year and this is untouched,</text>
+  <text x="84" y="486" font-size="12.5" class="m">which is why the Mac you use in June knows you better than the one you used in March.</text>
+  <path d="M600 406 L 600 388" stroke="#b8842a" stroke-width="1.5" stroke-dasharray="3 3" marker-end="url(#ah)"/>
+  <path d="M185 378 L 185 406" stroke="#b8842a" stroke-width="1.5" stroke-dasharray="3 3" marker-end="url(#ah)"/>
+  <path d="M1015 378 L 1015 406" stroke="#b8842a" stroke-width="1.5" stroke-dasharray="3 3" marker-end="url(#ah)"/>
+
+  <!-- the three lines -->
+  <g font-size="13">
+    <rect x="60" y="520" width="340" height="84" rx="16" fill="#FFFFFF" stroke="#E4E0D4"/>
+    <text x="80" y="552" class="d" font-size="19">The thinking is bought.</text>
+    <text x="80" y="578" font-size="12.5" class="m">The best models of the day, swappable</text>
+    <rect x="430" y="520" width="340" height="84" rx="16" fill="#FFFFFF" stroke="#E4E0D4"/>
+    <text x="450" y="552" class="d" font-size="19">The hands are ours.</text>
+    <text x="450" y="578" font-size="12.5" class="m">129 tools that act on the real Mac, built by us</text>
+    <rect x="800" y="520" width="340" height="84" rx="16" fill="#FFFFFF" stroke="#E4E0D4"/>
+    <text x="820" y="552" class="d" font-size="19">The memory stays.</text>
+    <text x="820" y="578" font-size="12.5" class="m">Yours, and the part nobody can rent</text>
+  </g>
+
+  <line x1="600" y1="630" x2="600" y2="668" stroke="#9A968A" stroke-width="1.5" class="flow"/>
+  <text x="612" y="656" font-size="11.5" class="f">runs everything we make</text>
+
+  <!-- TIER 3: what it makes -->
+  <text x="40" y="688" font-size="11.5" font-weight="600" letter-spacing="2" class="f">WHAT IT MAKES</text>
+  <!-- Braino -->
+  <rect x="30" y="700" width="640" height="290" rx="22" fill="#FFFFFF" stroke="#d9645b" stroke-width="2"/>
+  <text x="56" y="738" class="d" font-size="28">Braino</text>
+  <text x="160" y="738" font-size="14" class="m">Your own Jarvis · browser and Mac · private beta</text>
+  <text x="56" y="766" font-size="13" class="m">The character, and the whole product. Already on the page you're on,</text>
+  <text x="56" y="784" font-size="13" class="m">remembers what you told him, and goes and does the thing. Nothing is</text>
+  <text x="56" y="802" font-size="13" class="m">bought, sent, posted or deleted until you say yes.</text>
+  <text x="56" y="824" font-size="11.5" font-weight="600" letter-spacing="1.6" class="f">ONE BRAINO, THREE MODELS</text>
+  <g>
+    <rect x="56" y="832" width="186" height="134" rx="14" fill="#FBFAF6" stroke="#d9645b" stroke-opacity=".7"/>
+    <text x="72" y="860" font-size="15" font-weight="600">Braino</text>
+    <text x="72" y="880" font-size="12" style="fill:#d9645b" font-weight="600">For everyone</text>
+    <text x="72" y="904" font-size="12" class="m">The whole of him, on</text>
+    <text x="72" y="922" font-size="12" class="m">whatever you are looking at</text>
+    <rect x="256" y="832" width="186" height="134" rx="14" fill="#FBFAF6" stroke="#b8842a" stroke-opacity=".8"/>
+    <text x="272" y="860" font-size="15" font-weight="600">Braino Foundry</text>
+    <text x="272" y="880" font-size="12" style="fill:#b8842a" font-weight="600">For founders</text>
+    <text x="272" y="904" font-size="12" class="m">Writes your week, gets</text>
+    <text x="272" y="922" font-size="12" class="m">you seen by the right people</text>
+    <rect x="456" y="832" width="190" height="134" rx="14" fill="#FBFAF6" stroke="#2f6fed" stroke-opacity=".7"/>
+    <text x="472" y="860" font-size="15" font-weight="600">Braino for Mesa</text>
+    <text x="472" y="880" font-size="12" style="fill:#2f6fed" font-weight="600">For institutions</text>
+    <text x="472" y="904" font-size="12" class="m">Timetable, attendance and</text>
+    <text x="472" y="922" font-size="12" class="m">deadlines inside him</text>
+    <text x="472" y="946" font-size="11.5" class="f">live at Mesa School</text>
+  </g>
+  <!-- mini apps -->
+  <rect x="694" y="700" width="220" height="290" rx="22" fill="#FFFFFF" stroke="#3a8f5f" stroke-width="2"/>
+  <text x="714" y="736" class="d" font-size="22">Mini apps</text>
+  <text x="714" y="758" font-size="12" class="m">Small tools on the same tech</text>
+  <g font-size="13">
+    <text x="714" y="800" font-weight="600">Live Transcript</text><text x="714" y="818" font-size="12" class="m">notes a lecture, in the notch</text>
+    <text x="714" y="856" font-weight="600">Countdown</text><text x="714" y="874" font-size="12" class="m">time left, at the right edge</text>
+    <text x="714" y="912" font-weight="600">Yap</text><text x="714" y="930" font-size="12" class="m">say it, it types at your cursor</text>
+  </g>
+  <!-- next -->
+  <rect x="938" y="700" width="232" height="290" rx="22" fill="none" stroke="#9A968A" stroke-width="1.5" stroke-dasharray="6 5"/>
+  <text x="958" y="736" class="d" font-size="20">Next on AffectiveOS</text>
+  <text x="958" y="758" font-size="12" class="m">Same brain, new products</text>
+  <g font-size="13">
+    <text x="958" y="800" font-weight="600">A meetings AI</text><text x="958" y="818" font-size="12" class="m">sits through every call for you</text>
+    <text x="958" y="856" font-weight="600">Photos</text><text x="958" y="874" font-size="12" class="m">your pictures, understood</text>
+    <text x="958" y="912" font-weight="600">Anything that needs</text><text x="958" y="930" font-size="12" class="m">senses, hands and a memory</text>
+  </g>
+</svg>
+</div>
+</figure>
+
+<section>
+  <h2>How it hears you, and does it</h2>
+  <p class="say">"Braino, open LinkedIn and write a post about how AffectiveOS is the new thing."</p>
+  <div class="journey">
+    <div class="st" style="--c:#16150F"><span class="k">Ears</span><h3>It hears you</h3><p>Your words appear live in the notch while you talk.</p><span class="t">as you speak</span></div>
+    <div class="st" style="--c:#16150F"><span class="k">Eyes</span><h3>It sees where you are</h3><p>Chrome is open, nothing is playing, you said his name.</p><span class="t">already known</span></div>
+    <div class="st" style="--c:#2a78d6"><span class="k">Intent detection</span><h3>It knows what you want</h3><p>Not a chat and not a one-tap action: a bigger job. Handed to HIL.</p><span class="t">0.05 seconds</span></div>
+    <div class="st" style="--c:#7c52e6"><span class="k">Human Intelligence</span><h3>It plans once</h3><p>Open LinkedIn, start a post, write it in your voice, stop before Post.</p><span class="t">about 2 seconds</span></div>
+    <div class="st" style="--c:#3a8f5f"><span class="k">Hands</span><h3>It does it</h3><p>Opens the site, opens the post box, writes the post, on your real screen.</p><span class="t">while you watch</span></div>
+    <div class="st" style="--c:#d9645b"><span class="k">The rule</span><h3>It asks before it posts</h3><p>"The draft's ready. Want me to post it?" Nothing public until you say yes.</p><span class="t">always</span></div>
+    <div class="st" style="--c:#16150F"><span class="k">Voice</span><h3>It tells you</h3><p>A short spoken answer, and the notch shows what it did.</p><span class="t">one breath</span></div>
+    <div class="st" style="--c:#b8842a"><span class="k">Memory</span><h3>It remembers</h3><p>Next time, "post it like last week's" just works.</p><span class="t">kept on your Mac</span></div>
+  </div>
+</section>
+
+<section>
+  <h2>In one breath</h2>
+  <div class="lines">
+    <div class="ln"><b>Affective</b><span>The company. Like Apple, we make the system and the things that run on it.</span></div>
+    <div class="ln"><b>AffectiveOS</b><span>The system. One brain with senses, a voice, hands and a memory. It makes the Mac come alive.</span></div>
+    <div class="ln"><b>Braino</b><span>The first product. Your own Jarvis, in the browser and in the Mac's notch. In private beta.</span></div>
+  </div>
+</section>
+<p class="foot">Affective · the map as of 29 September 2026. Braino is in private beta; the mini apps and models are in the Braino app store; the right-hand column is what the same technology can make next.</p>
+</main>

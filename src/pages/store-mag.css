@@ -1,0 +1,135 @@
+/* /apps (AppStore.tsx): the store as a magazine. A 12-column hairline grid,
+   edge to edge; each tile is a story with its app row at the bottom. */
+.mg-head { max-width: 1400px; margin: 0 auto; padding: clamp(110px, 12vw, 160px) 28px clamp(30px, 3.4vw, 48px); }
+.mg-date { margin: 0 0 14px; font: 600 13px var(--ao-sf); letter-spacing: .14em; text-transform: uppercase; color: var(--a-ink-faint); }
+.mg-head h1 { margin: 0; max-width: 18ch; font-family: var(--a-display); font-weight: 500; font-size: clamp(40px, 5.6vw, 84px); line-height: 1.04; letter-spacing: -0.02em; color: var(--a-ink); }
+
+.mg-grid { display: grid; grid-template-columns: repeat(12, 1fr); border-top: 1px solid var(--ao-rule); }
+.mg-tile { display: flex; flex-direction: column; border-right: 1px solid var(--ao-rule); border-bottom: 1px solid var(--ao-rule); font-family: var(--ao-sf); min-width: 0; background: var(--a-bg, #f4f2ec); transition: background .3s; }
+.mg-tile:hover { background: color-mix(in srgb, var(--a-ink) 2.5%, var(--a-bg, #f4f2ec)); }
+.s4 { grid-column: span 4; } .s6 { grid-column: span 6; } .s8 { grid-column: span 8; } .s12 { grid-column: span 12; }
+/* The rightmost tile of each row drops its rule so the grid meets the edge. */
+.mg-grid > :nth-child(2), .mg-grid > :nth-child(5), .mg-grid > :nth-child(7), .mg-grid > :nth-child(8) { border-right: 0; }
+
+.mg-art { position: relative; aspect-ratio: 4 / 3; overflow: hidden; border-bottom: 1px solid var(--ao-rule); display: flex; align-items: center; justify-content: center; }
+.mg-art > img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform 1.2s cubic-bezier(.2,.8,.2,1); }
+.mg-tile:hover .mg-art > img { transform: scale(1.035); }
+.is-hero .mg-art { aspect-ratio: auto; flex: 1; min-height: 420px; }
+.s6 .mg-art { aspect-ratio: 16 / 8; }
+
+.mg-say { padding: clamp(22px, 2.6vw, 36px) clamp(22px, 2.6vw, 36px) 0; flex: 1; }
+.mg-k { margin: 0 0 10px; font-size: 12px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: var(--ao-blue); }
+.mg-tile h2 { margin: 0 0 10px; font-family: var(--a-display); font-weight: 500; font-size: clamp(26px, 2.4vw, 36px); line-height: 1.1; letter-spacing: -0.015em; color: var(--a-ink); }
+.is-hero h2 { font-size: clamp(36px, 4vw, 60px); }
+.mg-p { margin: 0; max-width: 46ch; font-size: 16px; line-height: 1.5; color: var(--a-ink-soft); }
+.mg-tile > .mg-say:last-child { padding-bottom: clamp(26px, 3vw, 40px); }
+
+.mg-app { display: flex; align-items: center; gap: 14px; margin: clamp(22px, 2.4vw, 32px) clamp(22px, 2.6vw, 36px) clamp(22px, 2.6vw, 32px); padding-top: 18px; border-top: 1px solid color-mix(in srgb, var(--a-ink) 14%, transparent); }
+.mg-app-say { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.mg-app-say b { font-size: 15.5px; color: var(--a-ink); }
+.mg-app-say span { font-size: 13px; color: var(--a-ink-faint); }
+
+/* Drawn art. */
+.mg-fig { position: absolute; inset: 0; }
+.mg-fig .vz-notch { margin: 0; min-height: 100%; height: 100%; }
+.mg-week, .mg-tt { width: 78%; font-size: 14px; }
+.mg-week p, .mg-tt p { display: flex; gap: 14px; margin: 0; padding: 9px 0; border-bottom: 1px solid color-mix(in srgb, var(--a-ink) 14%, transparent); color: var(--a-ink); }
+.mg-week b, .mg-tt b { width: 44px; flex: none; color: var(--a-ink-faint); font-weight: 600; }
+.mg-tt p.is-due span { color: #c0473d; font-weight: 600; }
+.mg-ask { text-align: center; font-size: 18px; color: var(--a-ink); }
+.mg-ask p { margin: 0 0 16px; font-family: var(--a-display); font-size: 26px; }
+.mg-ask div { display: flex; gap: 10px; justify-content: center; }
+.mg-ask b, .mg-ask span { font-size: 15px; padding: 11px 22px; border-radius: 999px; }
+.mg-ask b { background: var(--a-ink); color: var(--a-bg, #f4f2ec); }
+.mg-ask span { border: 1px solid color-mix(in srgb, var(--a-ink) 30%, transparent); color: var(--a-ink-soft); }
+
+.mg-band { flex-direction: row; align-items: center; justify-content: space-between; gap: 28px; flex-wrap: wrap; padding: clamp(40px, 5vw, 72px) clamp(22px, 4vw, 64px); border-right: 0; }
+.mg-band .mg-say { padding: 0; }
+.mg-band h2 { max-width: 24ch; }
+
+@media (max-width: 980px) {
+  .s4, .s6, .s8 { grid-column: span 12; }
+  .mg-tile { border-right: 0; }
+  .is-hero .mg-art { min-height: 300px; }
+  .s6 .mg-art { aspect-ratio: 4 / 3; }
+}
+/* Row one: the hero picture is a fixed band; the notch tile beside it grows
+   to match, so neither leaves a hole. */
+.is-hero .mg-art { aspect-ratio: 16 / 8; flex: none; min-height: 0; }
+.mg-grid > :nth-child(2) .mg-art { aspect-ratio: auto; flex: 1; min-height: 300px; }
+.mg-grid > :nth-child(2) .mg-say { flex: none; }
+/* Braino's names in SF Pro, like the homepage. */
+.mg-tile.is-brand h2 { font-family: var(--ao-sf); font-weight: 700; letter-spacing: -0.035em; }
+/* The app icon is Braino himself, standing on a soft tile. */
+.mg-icon { flex: none; width: 48px; height: 48px; border-radius: 12px; background: linear-gradient(180deg, #fbf9f4, #ece7dc); border: 1px solid color-mix(in srgb, var(--a-ink) 12%, transparent); display: flex; align-items: flex-end; justify-content: center; overflow: hidden; }
+.mg-icon img { width: 34px; height: auto; margin-bottom: 3px; }
+.aff[data-theme="dark"] .mg-icon { background: linear-gradient(180deg, #2c2b29, #1f1e1c); }
+.mg-fig .ns { width: 88%; }
+
+/* Sections (2026-10-01): each group gets its own heading and room, so it is
+   clear which tiles belong together. Replaces one continuous grid. */
+.mg-sec { margin-top: clamp(56px, 7vw, 96px); }
+.mg-sec:first-of-type { margin-top: 0; }
+.mg-sec-h { max-width: 1400px; margin: 0 auto 18px; padding: 0 28px; font: 600 13px var(--ao-sf); letter-spacing: .14em; text-transform: uppercase; color: var(--a-ink-faint); }
+.mg-sec .mg-grid > :nth-child(n) { border-right: 1px solid var(--ao-rule); }
+.mg-sec .mg-grid > :last-child { border-right: 0; }
+.mg-sec .mg-grid > :nth-child(2) .mg-art { aspect-ratio: 4 / 3; flex: none; min-height: 0; }
+.mg-sec:first-of-type .mg-grid > :nth-child(2) .mg-art { aspect-ratio: auto; flex: 1; min-height: 300px; }
+.mg-sec:first-of-type .mg-grid > :nth-child(2) .mg-say { padding-bottom: clamp(26px, 3vw, 40px); }
+.mg-sec-last { margin-top: clamp(56px, 7vw, 96px); margin-bottom: clamp(40px, 5vw, 72px); }
+.mg-sec-last .mg-grid { border-bottom: 0; }
+.mg-sec-last .mg-band { border-bottom: 1px solid var(--ao-rule); }
+.s6 .mg-art { aspect-ratio: 16 / 9; }
+@media (max-width: 980px) { .mg-sec .mg-grid > :nth-child(n) { border-right: 0; } }
+/* Model tiles: a shorter picture band, content centred in it. */
+.mg-sec .s6 .mg-art { aspect-ratio: 2.2 / 1; }
+
+/* New in Braino for Mac: real screens, all four tiles the same shape so no shot
+   is cropped (the store's second-tile rule makes it 4:3). */
+.mg-shots .mg-grid > .mg-tile .mg-art { aspect-ratio: 2.2 / 1 !important; flex: none !important; min-height: 0 !important; background: #10131d; }
+.mg-shots .mg-art > img { object-position: center top; }
+
+/* ── Store, 2026-10-02: one big Braino, then three models. No photos. ── */
+.mg2-hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); border-top: 1px solid var(--ao-rule); border-bottom: 1px solid var(--ao-rule); }
+.mg2-hero-say { padding: clamp(36px, 4.4vw, 64px) clamp(24px, 4vw, 56px); border-right: 1px solid var(--ao-rule); font-family: var(--ao-sf); }
+.mg2-name { display: flex; align-items: center; gap: 18px; margin-top: 6px; }
+.mg2-name img { width: clamp(72px, 7vw, 104px); height: auto; }
+.mg2-name h2 { margin: 0; font-family: var(--ao-sf); font-weight: 700; font-size: clamp(60px, 8vw, 120px); line-height: .9; letter-spacing: -0.055em; color: var(--a-ink); }
+.mg2-lead { margin: 20px 0 0; max-width: 44ch; font-size: clamp(16.5px, 1.4vw, 19.5px); line-height: 1.5; color: var(--a-ink-soft); }
+.mg2-app { margin-left: 0 !important; margin-right: 0 !important; margin-top: clamp(28px, 3.4vw, 44px) !important; }
+.mg2-hero-screen { position: relative; min-height: 460px; overflow: hidden; }
+.mg2-hero-notch { position: absolute; inset: 0; display: flex; justify-content: center; }
+.mg2-models { margin-top: clamp(56px, 7vw, 96px); }
+.mg2-grid { display: grid; grid-template-columns: repeat(3, 1fr); border-top: 1px solid var(--ao-rule); border-bottom: 1px solid var(--ao-rule); }
+.mg2-card { display: flex; flex-direction: column; padding: clamp(28px, 3vw, 40px) clamp(22px, 2.6vw, 36px) 0; border-right: 1px solid var(--ao-rule); font-family: var(--ao-sf); transition: background .3s ease; }
+.mg2-card:last-child { border-right: 0; }
+.mg2-card:hover { background: color-mix(in srgb, var(--acc) 6%, transparent); }
+.mg2-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--acc); margin-bottom: 18px; }
+.mg2-card h3 { margin: 0 0 10px; font-family: var(--ao-sf); font-weight: 700; font-size: clamp(26px, 2.4vw, 34px); letter-spacing: -0.035em; color: var(--a-ink); }
+.mg2-card .mg-p { flex: 1; }
+.mg2-card .mg-app { margin-left: 0; margin-right: 0; }
+@media (max-width: 900px) {
+  .mg2-hero, .mg2-grid { grid-template-columns: 1fr; }
+  .mg2-hero-say, .mg2-card { border-right: 0; border-bottom: 1px solid var(--ao-rule); }
+  .mg2-hero-screen { min-height: 320px; }
+}
+.mg2-hero-notch { align-items: flex-start; }
+.mg2-him { display: block; margin-bottom: 14px; }
+
+/* BrainoShowcase: one continuous grid (hero + models), shared by / and /apps. */
+.bs .mg2-hero { border-bottom: 0; }
+.bs .bs-grid { border-top: 1px solid var(--ao-rule); }
+.bs-does { list-style: none; margin: 24px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.bs-does button { font: 500 14px var(--ao-sf); padding: 9px 15px; border-radius: 999px; border: 1px solid color-mix(in srgb, var(--a-ink) 18%, transparent); background: transparent; color: var(--a-ink-soft); cursor: pointer; transition: background .2s, color .2s, border-color .2s; }
+.bs-does li.on button { background: var(--a-ink); color: var(--a-bg, #f4f2ec); border-color: var(--a-ink); }
+.bs .mg2-hero-notch { animation: nvIn .45s cubic-bezier(.22,1,.36,1) both; }
+@keyframes nvIn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
+/* Foundry and Schools as two smaller doors under Braino. */
+.bs-doors { grid-template-columns: repeat(2, 1fr); }
+.bs-doors .mg2-card { padding-top: 22px; }
+.bs-doors .mg2-him { width: 46px; height: auto; margin-bottom: 8px; }
+.bs-doors .mg2-card h3 { font-size: clamp(21px, 1.8vw, 26px); }
+@media (max-width: 900px) { .bs-doors { grid-template-columns: 1fr; } }
+/* The MacBook film in the Braino block. */
+.mg2-mac { display: flex; align-items: center; padding: clamp(18px, 2.4vw, 32px); min-height: 0; background: none; }
+.mg2-mac .mtf { width: 100%; }

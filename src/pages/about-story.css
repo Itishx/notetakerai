@@ -1,0 +1,81 @@
+/* /about (About.tsx): the letter's figures, on the /affectiveos article base. */
+.ab-cost { display: grid; gap: 0; padding: 0; font-family: var(--ao-sf); }
+.ab-cost-row { display: grid; grid-template-columns: 180px 1fr; align-items: center; padding: clamp(22px, 2.6vw, 34px) clamp(22px, 3vw, 40px); }
+.ab-cost-row + .ab-cost-row { border-top: 1px solid var(--vz-line); }
+.ao-viz .ab-cost-k { margin: 0; font-size: 12px; letter-spacing: .14em; text-transform: uppercase; font-weight: 600; color: var(--a-ink-faint); }
+.ab-cost-row.is-us .ab-cost-k { color: var(--ao-blue); }
+.ab-cost ol { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.ab-cost li { font-size: 14.5px; padding: 9px 14px; border: 1px solid var(--vz-line); border-radius: 999px; color: var(--a-ink-soft); }
+.ab-cost li + li::before { content: "→"; margin: 0 10px 0 -2px; color: var(--a-ink-faint); }
+.ab-cost li + li { border: 0; padding-left: 0; }
+.ab-cost-row.is-us li { font-family: var(--a-display); font-size: clamp(20px, 2vw, 26px); border: 0; padding: 0; color: var(--a-ink); }
+
+.ab-beliefs { list-style: none; margin: 0 0 clamp(40px, 5vw, 70px); padding: 0; display: grid; grid-template-columns: repeat(3, 1fr); border-top: 1px solid var(--ao-rule); border-left: 1px solid var(--ao-rule); }
+.ab-beliefs li { padding: clamp(24px, 2.8vw, 38px); border-right: 1px solid var(--ao-rule); border-bottom: 1px solid var(--ao-rule); }
+.ab-n { font-family: var(--ao-sf); font-size: 13px; color: var(--ao-blue); font-weight: 600; letter-spacing: .08em; }
+.ab-beliefs h3 { margin: 14px 0 10px; font-family: var(--a-display); font-weight: 500; font-size: clamp(22px, 2vw, 28px); line-height: 1.2; letter-spacing: -0.01em; color: var(--a-ink); }
+.ab-beliefs p { margin: 0; font-family: var(--ao-sf); font-size: 15.5px; line-height: 1.55; color: var(--a-ink-soft); }
+
+.ab-time { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, 1fr); position: relative; }
+.ab-time::before { content: ""; position: absolute; left: 7px; right: 0; top: 7px; height: 1px; background: var(--a-ink-faint); }
+.ab-time li { position: relative; padding-right: 20px; }
+.ab-dot { display: block; width: 15px; height: 15px; border-radius: 50%; background: var(--a-bg, #f4f2ec); border: 1.4px solid var(--a-ink); position: relative; }
+.ab-time li.is-now .ab-dot { background: var(--ao-blue); border-color: var(--ao-blue); box-shadow: 0 0 0 6px var(--ao-blue-soft); }
+.ab-time b { display: block; margin: 18px 0 6px; font-size: 13px; letter-spacing: .1em; text-transform: uppercase; color: var(--a-ink-faint); }
+.ao-viz .ab-time p { margin: 0; font-family: var(--a-display); font-size: clamp(17px, 1.5vw, 20px); line-height: 1.4; color: var(--a-ink); }
+.ab-go { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 28px !important; }
+
+@media (max-width: 860px) {
+  .ab-beliefs { grid-template-columns: 1fr; }
+  .ab-time { grid-template-columns: 1fr; gap: 26px; }
+  .ab-time::before { left: 7px; right: auto; top: 7px; bottom: 0; width: 1px; height: auto; }
+  .ab-time li { padding-left: 34px; }
+  .ab-dot { position: absolute; left: 0; top: 0; }
+  .ab-time b { margin-top: 0; }
+  .ab-cost-row { grid-template-columns: 1fr; gap: 12px; }
+}
+
+/* Buttons inside the article column: the column's link rule was painting
+   them ink-on-ink and underlining them (2026-10-01). */
+.ao-col a.aff-cta { color: var(--a-bg, #f4f2ec); text-decoration: none; }
+.ao-col a.aff-cta.aff-cta-ghost { color: var(--a-ink); background: transparent; border-color: var(--a-line-strong, var(--a-ink-faint)); }
+
+/* The timeline, with room to breathe: each step is its own box. */
+.ab-time { gap: 14px; }
+.ab-time::before { display: none; }
+.ab-time li { padding: clamp(26px, 3vw, 40px) clamp(22px, 2.6vw, 32px) clamp(30px, 3.4vw, 44px); border: 1px solid var(--vz-line); min-height: 240px; display: flex; flex-direction: column; }
+.ab-time b { margin: 22px 0 10px; font-size: 14px; }
+.ao-viz .ab-time p { font-size: clamp(20px, 1.8vw, 25px); line-height: 1.35; }
+.ab-time li.is-now { border-color: var(--ao-blue); background: var(--ao-blue-soft); }
+@media (max-width: 860px) { .ab-time li { padding-left: clamp(22px, 2.6vw, 32px); min-height: 0; } .ab-dot { position: relative; } }
+.ao-col a.aff-cta { font-family: var(--ao-sf); font-size: 15px; }
+/* Bigger, like /affectiveos (2026-10-02). */
+.ab-page .ao-col .ao-title { font-size: clamp(38px, 4.6vw, 64px); line-height: 1.12; }
+.ab-page .ab-beliefs h3 { font-size: clamp(24px, 2.2vw, 31px); }
+.ab-page .ab-beliefs p { font-size: 17px; }
+.ab-page .ao-col h2 { margin-top: clamp(40px, 5vw, 64px); }
+.ab-page .ao-col .ao-date { font-size: 14px; }
+
+/* Body text matches /affectiveos everywhere (the .ao-col p rule); only the
+   About headline keeps its own size. More room around the figures. */
+.ab-page .ao-wide { margin-top: clamp(56px, 7vw, 96px); margin-bottom: clamp(56px, 7vw, 96px); }
+.ab-page .ao-col h2 { margin-top: clamp(56px, 7vw, 96px); }
+
+/* Headings back to the /affectiveos sizes (2026-10-02). */
+.ab-page .ao-col .ao-title { font-size: clamp(30px, 3.4vw, 46px); line-height: 1.18; }
+
+/* The timeline: a line that draws across, each moment arriving in turn. */
+.ab-time-draw { gap: 0 !important; padding-top: 6px; }
+.ab-time-draw::before { display: block !important; content: ""; position: absolute; left: 7px; right: 7px; top: 13px; height: 1px; background: var(--a-ink); transform-origin: left; transform: scaleX(0); animation: abLine 1.6s cubic-bezier(.65,0,.35,1) .2s forwards; }
+.ab-time-draw li { border: 0 !important; background: none !important; min-height: 0 !important; padding: 0 24px 0 0 !important; opacity: 0; transform: translateY(8px); animation: abIn .6s cubic-bezier(.22,1,.36,1) forwards; }
+.ab-time-draw li:nth-child(1) { animation-delay: .3s; } .ab-time-draw li:nth-child(2) { animation-delay: .7s; } .ab-time-draw li:nth-child(3) { animation-delay: 1.1s; } .ab-time-draw li:nth-child(4) { animation-delay: 1.5s; }
+.ab-time-draw .ab-dot { position: relative; z-index: 1; background: var(--a-bg, #f4f2ec); }
+.ab-time-draw li.is-now .ab-dot { animation: abPulse 2.4s ease-in-out 2s infinite; }
+.ab-time-draw b { margin-top: 22px !important; }
+@keyframes abLine { to { transform: scaleX(1); } }
+@keyframes abIn { to { opacity: 1; transform: none; } }
+@keyframes abPulse { 50% { box-shadow: 0 0 0 10px color-mix(in srgb, var(--ao-blue) 12%, transparent); } }
+@media (max-width: 860px) { .ab-time-draw::before { left: 7px; right: auto; top: 0; bottom: 0; width: 1px; height: auto; transform: scaleY(0); transform-origin: top; animation-name: abLineV; } .ab-time-draw li { padding: 0 0 22px 34px !important; } }
+@keyframes abLineV { to { transform: scaleY(1); } }
+@media (prefers-reduced-motion: reduce) { .ab-time-draw::before, .ab-time-draw li { animation: none; opacity: 1; transform: none; } }
+.ab-page .ao-col h2 { font-size: clamp(28px, 2.8vw, 40px); }

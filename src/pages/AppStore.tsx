@@ -1,499 +1,98 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect } from "react";
+import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { AffThemeToggle, useAffTheme } from "@/components/AffTheme";
+import { useNotchNav } from "@/components/useNotchNav";
+import { BrainoShowcase } from "@/components/BrainoShowcase";
 import "./affective.css";
-import "./app-store.css";
+import "./affectiveos-page.css";
+import "./aff-figures.css";
+import "./store-ao.css";
+import "./store-mag.css";
 
 /* ============================================================================
-   /apps — the store.
-
-   Two categories, and the difference between them is the whole point.
-
-   A product is something you live in. Braino is the only one, and his models
-   are variations of him rather than separate products, the way an iPhone comes
-   in sizes. His page is /braino: this page hands you to it and does not try to
-   be it.
-
-   A mini app is one small thing done well. It is NOT a Braino app. It runs on
-   its own as a Mac app and stands somewhere on your screen, and if you happen
-   to have Braino it can plug into him instead and read the same memory as
-   everything else. That is the ecosystem, and it only means anything if the
-   mini apps genuinely work without him, so the grid below says plainly which
-   ones do today and which ones do not.
+   /apps — the App Store as a magazine (2026-09-30). One hairline grid, edge
+   to edge, the way the App Store's Today tab runs stories: Braino featured,
+   his three models, what is new in the Mac app (real screens, example data),
+   two stories about how he works, and the brain they share.
+   Nothing else is in the store until it exists: no mini apps, no "coming".
    ============================================================================ */
 
-const MODELS = ["Braino", "Braino Foundry", "Braino for Mesa"];
-
-const MINI: {
-  name: string;
-  where: string;
-  art: "notch" | "edge" | "caret";
-  line: string;
-  alone: string;
-  plugged: string;
-  how: string;
-}[] = [
-  {
-    name: "Live Transcript",
-    where: "Stands in the notch",
-    art: "notch",
-    line: "Everything said in the room turns into text along the top of the screen while it is still being said.",
-    alone: "Not yet",
-    plugged: "Yes",
-    how: "Cmd + Shift + E",
-  },
-  {
-    name: "Countdown",
-    where: "Stands at the right edge",
-    art: "edge",
-    line: "A sliver of him leans in past the edge of the screen. Click him and the time left springs out of his side.",
-    alone: "Yes",
-    plugged: "Not yet",
-    how: "npm run widget",
-  },
-  {
-    name: "Yap",
-    where: "Stands at the caret",
-    art: "caret",
-    line: "Talk, and the words land in whatever you were typing into. Nothing opens and nothing is in the way.",
-    alone: "Not yet",
-    plugged: "Yes",
-    how: "Option twice",
-  },
-];
-
-/* Not wireframes. Each one is a small picture of the app actually running in
-   the place it stands, because a labelled rectangle asks the reader to imagine
-   the product and a picture of it does not. Drawn rather than screenshotted so
-   the three sit at one scale, in one light, with one set of hairlines.
-
-   The Apple half of the blend lives here: a tinted panel per accent, a real
-   bezel with a gradient in it, and the lit part glowing rather than simply
-   being filled. */
-const FAQ = [
-  {
-    q: "What is the difference between an Affective product and a mini app?",
-    a: "A product is big and you live in it. Braino is the one. A mini app is small and does one job, like counting down to a date. Neither needs the other, and if you have both, the small one can ask the big one what is on today.",
-  },
-];
-
-function Shot({ art }: { art: "notch" | "edge" | "caret" }) {
-  const id = "sh-" + art;
+function Get({ to, label = "Get", name, sub }: { to: string; label?: string; icon?: boolean; name: string; sub: string }) {
   return (
-    <svg className="ast-shot" viewBox="0 0 220 138" role="img" aria-hidden="true">
-      <defs>
-        <linearGradient id={id + "-glass"} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor="#ffffff" />
-          <stop offset="1" stopColor="#f1eee5" />
-        </linearGradient>
-        <linearGradient id={id + "-lit"} x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="#f0938a" />
-          <stop offset="1" stopColor="#c9544a" />
-        </linearGradient>
-        <radialGradient id={id + "-glow"} cx="50%" cy="50%" r="50%">
-          <stop offset="0" stopColor="#d9645b" stopOpacity="0.4" />
-          <stop offset="1" stopColor="#d9645b" stopOpacity="0" />
-        </radialGradient>
-      </defs>
-
-      {/* the machine */}
-      <rect x="14" y="10" width="192" height="112" rx="11" fill={`url(#${id}-glass)`} stroke="#cdc7b7" />
-      <rect x="20" y="16" width="180" height="100" rx="7" fill="#fdfcf8" stroke="#e2ddd0" />
-
-      {art === "notch" && (
-        <>
-          <ellipse cx="110" cy="22" rx="52" ry="20" fill={`url(#${id}-glow)`} />
-          <rect x="72" y="14" width="76" height="15" rx="7.5" fill="#1b1a14" />
-          <circle cx="82" cy="21.5" r="3" fill={`url(#${id}-lit)`} />
-          <rect x="90" y="19" width="32" height="2.2" rx="1.1" fill="#f6f3ea" opacity=".9" />
-          <rect x="126" y="19" width="14" height="2.2" rx="1.1" fill="#f6f3ea" opacity=".45" />
-          <rect x="36" y="52" width="120" height="3" rx="1.5" fill="#d8d2c3" />
-          <rect x="36" y="64" width="148" height="3" rx="1.5" fill="#ddd7c9" />
-          <rect x="36" y="76" width="96" height="3" rx="1.5" fill="#e6e1d4" />
-          <rect x="36" y="88" width="132" height="3" rx="1.5" fill="#eeeade" />
-        </>
-      )}
-
-      {art === "edge" && (
-        <>
-          <ellipse cx="196" cy="66" rx="42" ry="40" fill={`url(#${id}-glow)`} />
-          <rect x="36" y="36" width="104" height="3" rx="1.5" fill="#e6e1d4" />
-          <rect x="36" y="46" width="128" height="3" rx="1.5" fill="#ece7db" />
-          {/* the glass pill with the count in it */}
-          <rect x="104" y="56" width="80" height="24" rx="8" fill="#1b1a14" opacity=".9" />
-          <rect x="112" y="64" width="13" height="8" rx="2" fill="#f6a8a2" />
-          <rect x="128" y="67" width="3" height="3" rx="1.5" fill="#f6a8a2" opacity=".6" />
-          <rect x="134" y="64" width="13" height="8" rx="2" fill="#f6a8a2" />
-          <rect x="150" y="67" width="3" height="3" rx="1.5" fill="#f6a8a2" opacity=".6" />
-          <rect x="156" y="64" width="13" height="8" rx="2" fill="#f6a8a2" opacity=".7" />
-          <rect x="36" y="92" width="88" height="3" rx="1.5" fill="#efebe0" />
-          {/* him, leaning in past the edge */}
-          <rect x="194" y="50" width="12" height="36" rx="6" fill={`url(#${id}-lit)`} />
-          <circle cx="199" cy="62" r="2" fill="#1b1a14" opacity=".55" />
-        </>
-      )}
-
-      {art === "caret" && (
-        <>
-          <ellipse cx="120" cy="66" rx="48" ry="30" fill={`url(#${id}-glow)`} />
-          <rect x="36" y="44" width="122" height="3.4" rx="1.7" fill="#d8d2c3" />
-          <rect x="36" y="56" width="148" height="3.4" rx="1.7" fill="#ddd7c9" />
-          <rect x="36" y="68" width="74" height="3.4" rx="1.7" fill="#e3ded1" />
-          <rect x="114" y="62" width="2.6" height="16" rx="1.3" fill={`url(#${id}-lit)`} />
-          {/* what is being said, still arriving */}
-          <rect x="126" y="66" width="2.4" height="8" rx="1.2" fill="#d9645b" opacity=".85" />
-          <rect x="132" y="62" width="2.4" height="16" rx="1.2" fill="#d9645b" opacity=".65" />
-          <rect x="138" y="65" width="2.4" height="10" rx="1.2" fill="#d9645b" opacity=".5" />
-          <rect x="144" y="68" width="2.4" height="4" rx="1.2" fill="#d9645b" opacity=".35" />
-          <rect x="36" y="88" width="108" height="3.4" rx="1.7" fill="#efebe0" />
-        </>
-      )}
-
-      {/* the stand */}
-      <rect x="92" y="122" width="36" height="5" rx="2.5" fill="#cdc7b7" />
-      <rect x="76" y="127" width="68" height="4" rx="2" fill="#dcd6c7" />
-    </svg>
+    <div className="mg-app">
+      <span className="mg-icon" aria-hidden="true"><img src="/braino-standing.svg" alt="" width={104} height={127} /></span>
+      <div className="mg-app-say"><b>{name}</b><span>{sub}</span></div>
+      <Link to={to} className={label === "Get" ? "st-get" : "st-link"}>{label}</Link>
+    </div>
   );
 }
 
-/* Scroll-linked grow, the same one the company page's hero uses.
- *
- * The picture marked data-grow opens from the measure to the full page over
- * the first screen of scrolling, so it stops being something shown to you and
- * becomes somewhere you are. Read on a frame, written as one number, so the
- * shape of it lives in the stylesheet.
- *
- * Off under 900px, where there is no room to open into, and off for anyone who
- * has asked for less motion. */
-function useGrow() {
-  useEffect(() => {
-    const grows = [...document.querySelectorAll<HTMLElement>("[data-grow]")];
-    if (!grows.length) return;
-    const still = window.matchMedia("(prefers-reduced-motion: reduce)");
-    let frame = 0;
-
-    const apply = () => {
-      frame = 0;
-      const narrow = window.innerWidth < 900;
-      const p = Math.min(1, Math.max(0, window.scrollY / Math.max(220, window.innerHeight * 0.55)));
-      for (const el of grows) {
-        el.style.setProperty("--grow", narrow || still.matches ? "1" : p.toFixed(3));
-      }
-    };
-    const onScroll = () => { if (!frame) frame = window.requestAnimationFrame(apply); };
-
-    window.addEventListener("scroll", onScroll, { passive: true });
-    window.addEventListener("resize", onScroll);
-    apply();
-    return () => {
-      window.removeEventListener("scroll", onScroll);
-      window.removeEventListener("resize", onScroll);
-      if (frame) window.cancelAnimationFrame(frame);
-    };
-  }, []);
-}
-
-function useReveal() {
-  const root = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const els = root.current?.querySelectorAll<HTMLElement>(".aff-reveal");
-    if (!els?.length) return;
-    // Visible at rest if the observer never runs, so the page never ships empty.
-    if (!("IntersectionObserver" in window)) {
-      els.forEach((el) => el.classList.add("is-in"));
-      return;
-    }
-    const io = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((e) => {
-          if (e.isIntersecting) {
-            e.target.classList.add("is-in");
-            io.unobserve(e.target);
-          }
-        });
-      },
-      { rootMargin: "0px 0px -8% 0px", threshold: 0.06 },
-    );
-    els.forEach((el) => io.observe(el));
-    return () => io.disconnect();
-  }, []);
-  return root;
+function Tile({ span, k, h, p, art, children, tone }: { span: string; k: string; h: string; p?: string; art?: ReactNode; children?: ReactNode; tone?: string }) {
+  return (
+    <article className={"mg-tile " + span + (tone ? " " + tone : "")}>
+      {art && <div className="mg-art">{art}</div>}
+      <div className="mg-say">
+        <p className="mg-k">{k}</p>
+        <h2>{h}</h2>
+        {p && <p className="mg-p">{p}</p>}
+      </div>
+      {children}
+    </article>
+  );
 }
 
 export default function AppStore() {
-  const root = useReveal();
   const { theme, toggle } = useAffTheme();
-  useGrow();
-  const [tab, setTab] = useState<"products" | "mini">("products");
+  useNotchNav();
+
+  useEffect(() => {
+    document.title = "App Store · Affective";
+    const prev = document.body.style.background;
+    document.body.style.background = "#f4f2ec";
+    return () => { document.body.style.background = prev; };
+  }, []);
 
   return (
-    <div className="aff ast" data-theme={theme} ref={root}>
+    <div className="aff ao" data-theme={theme}>
       <nav className="aff-nav">
         <div className="aff-nav-in">
           <Link to="/" className="aff-logo" aria-label="Affective">
             <img src="/affective-logo.png" alt="Affective" width={1000} height={207} />
           </Link>
           <div className="aff-nav-links">
-            {/* A plain anchor rather than a router link: it lands on another
-                page at a hash, and the browser does that correctly on its own
-                without a scroll handler this page would have to own. */}
-            <a href="/#technology">Technology</a>
-            <Link to="/waitlist">Early access</Link>
-            <Link to="/apps" className="aff-nav-go" aria-current="page">Store</Link>
+            <Link to="/affectiveos">AffectiveOS</Link>
+            <Link to="/about">About</Link>
+            <Link to="/apps">App Store</Link>
+            <Link to="/waitlist" className="aff-nav-go">Early access</Link>
             <AffThemeToggle theme={theme} onToggle={toggle} />
           </div>
         </div>
       </nav>
 
-      {/* ── The hero ──────────────────────────────────────────────────────
-          The company page's own hero, verbatim in structure: the claim on the
-          left at full size, the one sentence and the two ways in on the right.
-          A store is not a different kind of page and should not arrive looking
-          like one. */}
-      <header className="aff-hero">
-        <div className="aff-wrap">
-          <div className="aff-hero-row aff-reveal">
-            <h1 className="aff-h1">
-              <span className="aff-h1-line">Two kinds of thing.</span>
-              <b>One layer under both.</b>
-            </h1>
-            <div className="aff-hero-side">
-              <p className="aff-hero-one">
-                A product is something you live in. A mini app is one small thing done well, and it
-                runs on its own until you decide to plug it in.
-              </p>
-              <div className="aff-hero-cta">
-                <Link to="/braino" className="aff-cta">Open Braino</Link>
-                <Link to="/waitlist" className="aff-cta aff-cta-ghost">Join the waitlist</Link>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* One object, arriving in the measure and opening to the whole page
-            as you scroll into it, the same way the company page's photograph
-            does. It grows rather than slides, so nothing is cut off at an edge.
-
-            Him rather than a photograph, because the only sheet we had here is
-            the four panel one the technology cells were cut from, and a 339px
-            panel blown up to fill this would be a blurry hero. He is a vector:
-            sharp at any size this opens to, and the right subject for the page
-            that sells him. */}
-        <figure className="aff-hero-shot ast-hero-shot" data-grow>
-          <img
-            src="/braino-standing.svg"
-            alt="Braino, standing"
-            width={104}
-            height={127}
-            loading="eager"
-            decoding="async"
-          />
-        </figure>
+      <header className="mg-head">
+        <p className="mg-date">App Store · Today</p>
+        <h1>Everything we build runs on AffectiveOS.</h1>
       </header>
 
-      {/* ── The two categories, as tabs ───────────────────────────────────
-          They were side by side and that was the wrong shape: a half screen
-          each meant neither got to be seen properly, and a product and a shelf
-          of small apps do not want the same amount of room. As tabs, whichever
-          one you asked for gets the whole width. */}
-      <div className="ast-tabs-bar">
-        <div className="aff-wrap">
-          <div className="ast-tabs" role="tablist" aria-label="Store categories">
-            <button
-              type="button"
-              role="tab"
-              id="tab-products"
-              aria-selected={tab === "products"}
-              aria-controls="panel-products"
-              className={tab === "products" ? "on" : ""}
-              style={{ ["--dot" as string]: "var(--a-braino)", ["--acc" as string]: "var(--a-braino)" }}
-              onClick={() => setTab("products")}
-            >
-              <small><i aria-hidden="true" />One product</small>
-              <span>Affective products</span>
-            </button>
-            <button
-              type="button"
-              role="tab"
-              id="tab-mini"
-              aria-selected={tab === "mini"}
-              aria-controls="panel-mini"
-              className={tab === "mini" ? "on" : ""}
-              style={{ ["--dot" as string]: "var(--a-browser)", ["--acc" as string]: "var(--a-browser)" }}
-              onClick={() => setTab("mini")}
-            >
-              <small><i aria-hidden="true" />{MINI.length} small ones</small>
-              <span>Mini apps</span>
-            </button>
-          </div>
-        </div>
-      </div>
+      <BrainoShowcase />
 
-      {/* The panel is keyed on the tab so its entrance animation restarts on a
-          switch. Nothing inside it is a reveal target: a scroll observer that
-          has already run would leave freshly mounted nodes sitting at zero. */}
-      <section className="ast-panel-wrap">
-        <div
-          className="ast-panel"
-          key={tab}
-          role="tabpanel"
-          id={tab === "products" ? "panel-products" : "panel-mini"}
-          aria-labelledby={tab === "products" ? "tab-products" : "tab-mini"}
-        >
-          <div className="aff-wrap">
-            <p className="ast-subhead">
-              {tab === "products"
-                ? "Something you live in. There is one so far."
-                : `One small thing each. ${MINI.length} of them, and none needs Braino to run.`}
-            </p>
-          </div>
-
-          {tab === "products" ? (
-            <div className="aff-wrap">
-            <Link to="/braino" className="ast-wide">
-              <div className="ast-wide-body">
-                {/* A mark, not a second scene. His stage is the picture at the
-                    top of the page; repeating it here made the same photograph
-                    appear twice inside one scroll. */}
-                {/* Two columns with a hairline between them. Left aligned in
-                    one column the card was a paragraph with five hundred pixels
-                    of nothing beside it. */}
-                <div className="ast-wide-name">
-                  <p className="ast-feat-kicker">
-                    <img src="/braino-standing.svg" alt="" width={64} height={78} aria-hidden="true" />
-                    Product
-                  </p>
-                  <h3>Braino</h3>
-                  <p className="ast-feat-models">
-                    {MODELS.map((m) => (
-                      <span key={m}>{m}</span>
-                    ))}
-                  </p>
-                </div>
-                <div className="ast-wide-say">
-                  <p className="ast-feat-line">
-                    He sees the screen, hears the room, does things on the machine, and remembers
-                    all of it. The first thing we put AffectiveOS into, and the thing every mini
-                    app can plug into.
-                  </p>
-                  <div className="ast-wide-foot">
-                    <span className="ast-feat-go">
-                      Open Braino<i aria-hidden="true">→</i>
-                    </span>
-                    <span className="ast-state is-out">Chrome build out</span>
-                  </div>
-                </div>
-              </div>
-            </Link>
+      <section className="mg-sec mg-sec-last">
+        <div className="mg-grid">
+          <article className="mg-tile s12 mg-band">
+            <div className="mg-say">
+              <p className="mg-k">Built on one brain</p>
+              <h2>Every app here shares the same senses, voice, hands and memory.</h2>
+              <p className="mg-p">So what one learns about you, the others already know.</p>
             </div>
-          ) : (
-            <div className="aff-wrap">
-            <div className="ast-minigrid">
-              {MINI.map((a) => (
-                <article className="ast-minicard" key={a.name}>
-                  <div className="ast-minicard-art">
-                    <Shot art={a.art} />
-                  </div>
-                  <div className="ast-minicard-body">
-                    <p className="ast-where">{a.where}</p>
-                    <h3>{a.name}</h3>
-                    <p className="ast-minicard-line">{a.line}</p>
-                    <p className="ast-minicard-meta">
-                      <span>
-                        On its own
-                        <b className={a.alone === "Yes" ? "is-yes" : "is-no"}>{a.alone}</b>
-                      </span>
-                      <span>
-                        Plugs into Braino
-                        <b className={a.plugged === "Yes" ? "is-yes" : "is-no"}>{a.plugged}</b>
-                      </span>
-                    </p>
-                    <p className="ast-minicard-how">
-                      <code>{a.how}</code>
-                    </p>
-                  </div>
-                </article>
-              ))}
-            </div>
-            </div>
-          )}
+            <Link to="/affectiveos" className="st-get">Read about AffectiveOS</Link>
+          </article>
         </div>
       </section>
 
-      {/* ── The two questions the split was trying to answer with layout ──── */}
-      <section className="aff-sec aff-faq-sec" id="faq">
-        <div className="aff-wrap">
-          <div className="aff-faq-in">
-            <div className="aff-faq-head aff-reveal">
-              <h2>Questions you may have.</h2>
-              <p>Mostly the one everybody asks.</p>
-            </div>
-            {/* details/summary, so it works with no JavaScript and with a
-                keyboard. Same as the company page. */}
-            <div className="aff-faq aff-reveal">
-              {FAQ.map((f, i) => (
-                <details key={f.q} open={i === 0}>
-                  <summary>
-                    <span>{f.q}</span>
-                    <i aria-hidden="true" />
-                  </summary>
-                  <p>{f.a}</p>
-                </details>
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <footer className="aff-foot">
-        <img
-          className="aff-foot-art"
-          src="/affective-footer.jpg"
-          alt=""
-          width={1983}
-          height={793}
-          loading="lazy"
-          decoding="async"
-          aria-hidden="true"
-        />
-        <div className="aff-foot-in">
-          <div className="aff-wrap">
-            <div className="aff-foot-grid">
-              <div className="aff-foot-brand">
-                <strong className="aff-mark">
-                  <img src="/affective-logo.png" alt="Affective" width={1000} height={207} />
-                </strong>
-                <p>
-                  Building tech that makes life more affective.
-                </p>
-                <p className="aff-foot-where">Bengaluru.</p>
-              </div>
-              <nav className="aff-foot-col aff-tree" aria-label="Products">
-                <h4>Products</h4>
-                <ul>
-                  <li><Link to="/braino">Braino</Link></li>
-                  <li><Link to="/foundry">Braino Foundry</Link></li>
-                  <li><Link to="/apps">App store</Link></li>
-                </ul>
-              </nav>
-              <nav className="aff-foot-col aff-tree aff-tree-on" aria-label="For institutions">
-                <h4>For institutions</h4>
-                <ul>
-                  <li><Link to="/contact">Braino for Mesa School of Business</Link></li>
-                </ul>
-              </nav>
-              <nav className="aff-foot-col">
-                <h4>Company</h4>
-                <Link to="/waitlist">Early access</Link>
-                <Link to="/contact">Contact</Link>
-              </nav>
-            </div>
-            <p className="aff-foot-rule">
-              Every mini app above says whether it stands on its own today and whether it plugs in
-              today. Where the answer is no, it says no.
-            </p>
-          </div>
-        </div>
+      <footer className="ao-foot">
+        <span>Every app here runs on AffectiveOS.</span>
+        <span><Link to="/">Home</Link><Link to="/affectiveos">AffectiveOS</Link><Link to="/about">About</Link></span>
       </footer>
     </div>
   );

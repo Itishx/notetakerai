@@ -1,0 +1,53 @@
+/* /waitlist (EarlyAccess.tsx): one hairline box to pick and join. */
+.ea-box { border: 1px solid var(--ao-rule); padding: clamp(24px, 3.4vw, 48px); font-family: var(--ao-sf); background: var(--a-bg, #f4f2ec); margin-bottom: clamp(40px, 5vw, 70px); }
+.ea-k { display: block; margin: 0 0 14px; font-size: 12px; letter-spacing: .14em; text-transform: uppercase; font-weight: 600; color: var(--a-ink-faint); }
+.ea-picks { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: clamp(28px, 3vw, 40px); }
+.ea-pick { position: relative; text-align: left; display: flex; flex-direction: column; gap: 6px; padding: 22px 22px 24px; border: 1px solid color-mix(in srgb, var(--a-ink) 18%, transparent); background: transparent; color: var(--a-ink); cursor: pointer; font: inherit; transition: border-color .2s, background .2s; }
+.ea-pick:hover { border-color: var(--a-ink); }
+.ea-pick.on { border-color: var(--ao-blue); background: var(--ao-blue-soft); }
+.ea-pick small { font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: var(--a-ink-faint); }
+.ea-pick b { font-family: var(--a-display); font-weight: 500; font-size: clamp(22px, 2vw, 27px); }
+.ea-line { font-size: 14.5px; line-height: 1.45; color: var(--a-ink-soft); }
+.ea-tick { position: absolute; top: 18px; right: 18px; width: 18px; height: 18px; border-radius: 50%; border: 1.4px solid color-mix(in srgb, var(--a-ink) 40%, transparent); }
+.ea-pick.on .ea-tick { background: var(--ao-blue); border-color: var(--ao-blue); }
+.ea-pick.on .ea-tick::after { content: ""; position: absolute; left: 5px; top: 2px; width: 4px; height: 8px; border: solid #fff; border-width: 0 1.8px 1.8px 0; transform: rotate(45deg); }
+.ea-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.ea-row input { flex: 1 1 280px; min-width: 0; font: 17px var(--ao-sf); padding: 16px 20px; border: 1px solid color-mix(in srgb, var(--a-ink) 30%, transparent); border-radius: 999px; background: transparent; color: var(--a-ink); outline: none; }
+.ea-row input:focus { border-color: var(--a-ink); }
+.ea-go { font: 600 16px var(--ao-sf); padding: 16px 28px; border-radius: 999px; border: 0; background: var(--a-ink); color: var(--a-bg, #f4f2ec); cursor: pointer; }
+.ea-go:disabled { opacity: .6; }
+.ea-msg { margin: 14px 0 0; font-size: 14px; color: #c0473d; }
+.ea-done { display: flex; gap: 20px; align-items: center; }
+.ea-done h2 { margin: 0 0 6px; font-family: var(--a-display); font-weight: 500; font-size: clamp(28px, 3vw, 40px); color: var(--a-ink); }
+.ea-done p { margin: 0; font-size: 16px; color: var(--a-ink-soft); }
+.ea-check { flex: none; width: 48px; height: 48px; border-radius: 50%; background: var(--ao-blue); position: relative; }
+.ea-check::after { content: ""; position: absolute; left: 18px; top: 11px; width: 9px; height: 18px; border: solid #fff; border-width: 0 2.4px 2.4px 0; transform: rotate(45deg); }
+.ea-next { list-style: none; margin: 0 0 clamp(40px, 5vw, 70px); padding: 0; display: grid; grid-template-columns: repeat(3, 1fr); border-top: 1px solid var(--ao-rule); border-left: 1px solid var(--ao-rule); font-family: var(--ao-sf); }
+.ea-next li { padding: clamp(24px, 2.8vw, 36px); border-right: 1px solid var(--ao-rule); border-bottom: 1px solid var(--ao-rule); }
+.ea-next span { display: inline-flex; width: 30px; height: 30px; border-radius: 50%; border: 1.4px solid var(--a-ink); align-items: center; justify-content: center; font-size: 14px; font-weight: 600; color: var(--a-ink); }
+.ea-next h3 { margin: 16px 0 8px; font-family: var(--a-display); font-weight: 500; font-size: clamp(21px, 1.9vw, 26px); color: var(--a-ink); }
+.ea-next p { margin: 0; font-size: 15.5px; line-height: 1.5; color: var(--a-ink-soft); }
+.ao-col .ea-small { font-family: var(--ao-sf); font-size: 15px; color: var(--a-ink-soft); }
+@media (max-width: 820px) {
+  .ea-picks, .ea-next { grid-template-columns: 1fr; }
+}
+/* Braino's names in SF Pro. */
+.ea-pick b { font-family: var(--ao-sf); font-weight: 700; letter-spacing: -0.025em; }
+/* Bigger, like /affectiveos (2026-10-02). */
+.ea-page .ao-col .ao-title { font-size: clamp(42px, 5.2vw, 72px); line-height: 1.08; }
+.ea-page .ea-pick b { font-size: clamp(24px, 2.2vw, 30px); }
+.ea-page .ea-line { font-size: 16px; }
+.ea-page .ea-next h3 { font-size: clamp(23px, 2vw, 29px); }
+.ea-page .ea-next p { font-size: 17px; }
+.ea-page .ao-col .ao-date { font-size: 14px; }
+
+/* What happens next: a compact numbered strip, not three tall boxes. */
+.ea-page .ea-next { border: 1px solid var(--ao-rule); border-left: 1px solid var(--ao-rule); }
+.ea-page .ea-next li { display: grid; grid-template-columns: auto 1fr; column-gap: 16px; align-items: start; padding: 22px 24px; border: 0; border-right: 1px solid var(--ao-rule); }
+.ea-page .ea-next li:last-child { border-right: 0; }
+.ea-page .ea-next span { grid-row: 1 / 3; margin-top: 2px; }
+.ea-page .ea-next h3 { margin: 0 0 4px; font-size: clamp(19px, 1.6vw, 22px); }
+.ea-page .ea-next p { font-size: 15px; }
+@media (max-width: 820px) { .ea-page .ea-next li { border-right: 0; border-bottom: 1px solid var(--ao-rule); } .ea-page .ea-next li:last-child { border-bottom: 0; } }
+.ea-page .ao-col h2 { font-size: clamp(28px, 2.8vw, 40px); }
+.ea-page .ao-col .ao-title { font-size: clamp(34px, 4vw, 54px); }

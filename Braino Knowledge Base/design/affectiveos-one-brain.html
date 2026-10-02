@@ -1,0 +1,199 @@
+<title>AffectiveOS One Brain</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500&family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --bg:#F3F4F1; --card:#FFFFFF; --ink:#15181E; --ink2:#4B5260; --ink3:#848B95; --line:#DFE2DC;
+  --reflex:#2a78d6; --think:#8b5cf6; --good:#0ca30c; --bad:#d03b3b;
+  --serif:"Newsreader",Georgia,serif; --sans:"Instrument Sans",-apple-system,system-ui,sans-serif; --mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){color-scheme:dark;--bg:#0F1114;--card:#181B20;--ink:#ECEDEF;--ink2:#B4B9C1;--ink3:#7F8690;--line:#2B3037;--reflex:#3987e5;--think:#a78bfa}}
+:root[data-theme="dark"]{color-scheme:dark;--bg:#0F1114;--card:#181B20;--ink:#ECEDEF;--ink2:#B4B9C1;--ink3:#7F8690;--line:#2B3037;--reflex:#3987e5;--think:#a78bfa}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);padding-inline:16px;padding-block:32px 72px;-webkit-font-smoothing:antialiased}
+main{max-width:1040px;margin:0 auto;display:grid;gap:44px}
+h1{font:500 44px/1.06 var(--serif);margin:0 0 10px;letter-spacing:-.01em;text-wrap:balance}
+h2{font:500 27px/1.2 var(--serif);margin:0 0 6px;text-wrap:balance}
+.lede{font-size:16.5px;line-height:1.55;color:var(--ink2);max-width:64ch;margin:0}
+.sub{color:var(--ink2);font-size:14.5px;line-height:1.5;margin:0 0 18px;max-width:72ch}
+figure{margin:0;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px}
+figcaption{font-size:13.5px;line-height:1.5;color:var(--ink2);margin-top:12px;max-width:82ch}
+.scroll{overflow-x:auto}
+svg{display:block;max-width:100%;height:auto}
+svg text{font-family:var(--sans);fill:currentColor}
+.walk{display:grid;gap:10px}
+.w{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 16px;align-items:center}
+.w .said{font:500 15px/1.35 var(--sans)}
+.w .t{font:600 15px var(--mono);text-align:right}
+.path{grid-column:1/3;display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:13px;color:var(--ink2)}
+.path span{border:1px solid var(--line);border-radius:999px;padding:3px 10px;background:var(--bg)}
+.path span.r{border-color:var(--reflex);color:var(--ink)}
+.path span.h{border-color:var(--think);color:var(--ink)}
+.path i{font-style:normal;color:var(--ink3)}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media (max-width:760px){.two{grid-template-columns:1fr}}
+.col{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 18px}
+.col h3{margin:0 0 8px;font:600 15px var(--sans)}
+.col ul{margin:0;padding-left:18px;display:grid;gap:6px;font-size:14px;line-height:1.45;color:var(--ink2)}
+.col.bad{border-color:var(--bad)} .col.good{border-color:var(--good)}
+.rules{counter-reset:r;display:grid;gap:10px;list-style:none;margin:0;padding:0}
+.rules li{counter-increment:r;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px 12px 50px;position:relative;font-size:15px;line-height:1.45}
+.rules li::before{content:counter(r);position:absolute;left:14px;top:12px;width:24px;height:24px;border-radius:50%;background:var(--ink);color:var(--bg);font:600 13px var(--sans);display:grid;place-items:center}
+.rules b{font-weight:600}
+.meter{display:grid;gap:8px;max-width:640px}
+.bar{display:grid;grid-template-columns:120px minmax(0,1fr) 60px;gap:12px;align-items:center;font-size:14px}
+.track{height:12px;border-radius:6px;background:color-mix(in srgb,var(--ink3) 18%,transparent);position:relative;overflow:hidden}
+.track b{position:absolute;left:0;top:0;bottom:0;border-radius:6px;background:var(--reflex)}
+.track.goal b{background:transparent;border:2px dashed var(--good)}
+.bar span:last-child{font:500 13px var(--mono);text-align:right}
+</style>
+
+<main>
+<header>
+  <h1>One brain. Two speeds.</h1>
+  <p class="lede">AffectiveOS is one mind. It has Intent detection (Laya) that understands what you want in a blink, on your Mac, and the Human Intelligence Layer (HIL) that plans the hard things. Both see the same world and share one memory, and HIL teaches Laya. Everything else is his hands.</p>
+</header>
+
+<section>
+  <h2>How a sentence travels</h2>
+  <p class="sub">Left, what he knows. Middle, the one brain. Right, what he does. The only real decision in the whole system is the blue box, Intent detection.</p>
+  <figure>
+    <div class="scroll">
+    <svg viewBox="0 0 1000 560" role="img" aria-label="One brain: your words, context and memory flow into AffectiveOS. Its intent detection, Laya, sorts every sentence in 0.05 seconds into not for me, talk, do a known thing, or big or unsure. Big or unsure goes to the Human Intelligence Layer, HIL, which plans once. Outputs are voice, hands and the notch. HIL teaches Laya.">
+      <defs>
+        <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="currentColor"/></marker>
+        <marker id="aR" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="var(--reflex)"/></marker>
+        <marker id="aT" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="var(--think)"/></marker>
+      </defs>
+      <g style="color:var(--ink)">
+        <!-- inputs -->
+        <text x="18" y="30" font-size="11.5" font-weight="600" opacity=".6" letter-spacing="1">WHAT HE KNOWS</text>
+        <rect x="14" y="44" width="170" height="64" rx="10" fill="var(--card)" stroke="currentColor" stroke-opacity=".4"/>
+        <text x="28" y="70" font-size="13" font-weight="600">Your words</text><text x="28" y="90" font-size="11.5" opacity=".7">what you said, live</text>
+        <rect x="14" y="124" width="170" height="150" rx="10" fill="var(--card)" stroke="currentColor" stroke-opacity=".4"/>
+        <text x="28" y="150" font-size="13" font-weight="600">What's around you</text>
+        <g font-size="11.5" opacity=".75"><text x="28" y="172">what he last said, a question?</text><text x="28" y="190">what you said before</text><text x="28" y="208">app, tab, website</text><text x="28" y="226">what's playing</text><text x="28" y="244">a job running, an answer awaited</text><text x="28" y="262">his name heard?</text></g>
+        <rect x="14" y="290" width="170" height="64" rx="10" fill="var(--card)" stroke="currentColor" stroke-opacity=".4"/>
+        <text x="28" y="316" font-size="13" font-weight="600">Memory</text><text x="28" y="336" font-size="11.5" opacity=".7">your day, your people, facts</text>
+        <line x1="184" y1="76" x2="264" y2="190" stroke="currentColor" stroke-opacity=".5" marker-end="url(#a)"/>
+        <line x1="184" y1="199" x2="264" y2="199" stroke="currentColor" stroke-opacity=".5" marker-end="url(#a)"/>
+        <line x1="184" y1="322" x2="264" y2="214" stroke="currentColor" stroke-opacity=".5" marker-end="url(#a)"/>
+        <line x1="184" y1="322" x2="440" y2="430" stroke="currentColor" stroke-opacity=".25" stroke-dasharray="3 4" marker-end="url(#a)"/>
+
+        <!-- the one brain -->
+        <rect x="236" y="20" width="560" height="520" rx="22" fill="none" stroke="currentColor" stroke-opacity=".55" stroke-width="1.5"/>
+        <text x="516" y="46" text-anchor="middle" font-size="14" font-weight="600">AffectiveOS, the one brain</text>
+
+        <!-- reflex -->
+        <rect x="266" y="140" width="220" height="118" rx="14" fill="var(--card)" stroke="var(--reflex)" stroke-width="2"/>
+        <text x="284" y="168" font-size="14" font-weight="600">Intent detection · Laya</text>
+        <text x="284" y="190" font-size="12" opacity=".8">on your Mac, 0.05 seconds</text>
+        <text x="284" y="214" font-size="12" opacity=".8">sorts every sentence,</text>
+        <text x="284" y="232" font-size="12" opacity=".8">with everything around it</text>
+
+        <!-- four outcomes -->
+        <g font-size="12.5">
+          <rect x="560" y="74" width="200" height="40" rx="10" fill="var(--card)" stroke="currentColor" stroke-opacity=".4"/><text x="574" y="99" font-weight="600">Not for me</text><text x="746" y="99" text-anchor="end" opacity=".7">drop it</text>
+          <rect x="560" y="130" width="200" height="40" rx="10" fill="var(--card)" stroke="currentColor" stroke-opacity=".4"/><text x="574" y="155" font-weight="600">Talk</text><text x="746" y="155" text-anchor="end" opacity=".7">~1s</text>
+          <rect x="560" y="186" width="200" height="40" rx="10" fill="var(--card)" stroke="currentColor" stroke-opacity=".4"/><text x="574" y="211" font-weight="600">Do, known</text><text x="746" y="211" text-anchor="end" opacity=".7">under 1s</text>
+          <rect x="560" y="242" width="200" height="40" rx="10" fill="var(--card)" stroke="var(--think)" stroke-width="1.5"/><text x="574" y="267" font-weight="600">Big, or not sure</text><text x="746" y="267" text-anchor="end" opacity=".7">think</text>
+        </g>
+        <g stroke="var(--reflex)" stroke-width="1.5" fill="none">
+          <path d="M486 176 C 520 176, 520 94, 556 94" marker-end="url(#aR)"/>
+          <path d="M486 190 C 520 190, 520 150, 556 150" marker-end="url(#aR)"/>
+          <path d="M486 204 L 556 206" marker-end="url(#aR)"/>
+          <path d="M486 220 C 520 220, 520 262, 556 262" marker-end="url(#aR)"/>
+        </g>
+
+        <!-- thinking -->
+        <rect x="266" y="360" width="494" height="150" rx="14" fill="var(--card)" stroke="var(--think)" stroke-width="2"/>
+        <text x="284" y="388" font-size="14" font-weight="600">Human Intelligence Layer · HIL</text>
+        <text x="284" y="410" font-size="12" opacity=".8">in the cloud, 1 to 10 seconds, only when needed</text>
+        <g font-size="12" opacity=".85">
+          <text x="284" y="438">• understands what you meant ("the post I told you to")</text>
+          <text x="284" y="458">• plans the steps once, then the hands run them</text>
+          <text x="284" y="478">• asks you before anything final: post, send, buy, delete</text>
+          <text x="284" y="498">• if Laya wasn't sure, HIL decides instead</text>
+        </g>
+        <path d="M660 282 L 660 356" stroke="var(--think)" stroke-width="1.5" fill="none" marker-end="url(#aT)"/>
+        <!-- teaches -->
+        <path d="M330 360 L 330 262" stroke="var(--think)" stroke-width="1.5" stroke-dasharray="5 4" fill="none" marker-end="url(#aT)"/>
+        <text x="340" y="318" font-size="12" style="fill:var(--think)" font-weight="600">teaches Laya,</text>
+        <text x="340" y="334" font-size="12" style="fill:var(--think)" font-weight="600">from every sentence</text>
+
+        <!-- outputs -->
+        <text x="828" y="30" font-size="11.5" font-weight="600" opacity=".6" letter-spacing="1">WHAT HE DOES</text>
+        <rect x="826" y="120" width="160" height="60" rx="10" fill="var(--card)" stroke="currentColor" stroke-opacity=".4"/>
+        <text x="840" y="146" font-size="13" font-weight="600">Voice</text><text x="840" y="166" font-size="11.5" opacity=".7">he answers you</text>
+        <rect x="826" y="210" width="160" height="60" rx="10" fill="var(--card)" stroke="currentColor" stroke-opacity=".4"/>
+        <text x="840" y="236" font-size="13" font-weight="600">Hands</text><text x="840" y="256" font-size="11.5" opacity=".7">129 tools, skills</text>
+        <rect x="826" y="300" width="160" height="60" rx="10" fill="var(--card)" stroke="currentColor" stroke-opacity=".4"/>
+        <text x="840" y="326" font-size="13" font-weight="600">Notch</text><text x="840" y="346" font-size="11.5" opacity=".7">shows what's happening</text>
+        <line x1="760" y1="150" x2="822" y2="150" stroke="currentColor" marker-end="url(#a)"/>
+        <line x1="760" y1="206" x2="822" y2="236" stroke="currentColor" marker-end="url(#a)"/>
+        <path d="M760 430 C 800 430, 800 250, 822 246" stroke="currentColor" fill="none" marker-end="url(#a)"/>
+        <line x1="906" y1="270" x2="906" y2="296" stroke="currentColor" stroke-opacity=".4" stroke-dasharray="3 3"/>
+      </g>
+    </svg>
+    </div>
+    <figcaption>Intent detection (blue) is the only thing that decides what kind of sentence this is. It never argues with HIL (purple): when it is not sure, it hands over, and what HIL concludes becomes Laya's lesson. Nothing else in the system is allowed to decide; everything else is hands.</figcaption>
+  </figure>
+</section>
+
+<section>
+  <h2>Five of your real sentences, through it</h2>
+  <p class="sub">From your log this week. Times are what each path costs.</p>
+  <div class="walk">
+    <div class="w"><div class="said">"Braino, pause Spotify."</div><div class="t">0.1s</div>
+      <div class="path"><span class="r">Intent</span><i>→</i><span>Do, known</span><i>→</i><span>Hands: pause</span></div></div>
+    <div class="w"><div class="said">"trybraino.com"</div><div class="t">0.2s</div>
+      <div class="path"><span class="r">Intent: a website said out loud</span><i>→</i><span>Do, known</span><i>→</i><span>Hands: open it</span></div></div>
+    <div class="w"><div class="said">"Both, and like B2B and gifting shops and wedding planners…"</div><div class="t">~1s</div>
+      <div class="path"><span class="r">Intent sees he just asked "online, offline, or both?"</span><i>→</i><span>Talk</span><i>→</i><span>Voice</span></div></div>
+    <div class="w"><div class="said">"Open LinkedIn and write a post about how AffectiveOS is the new thing."</div><div class="t">~3s, then writing</div>
+      <div class="path"><span class="r">Intent: a big job</span><i>→</i><span class="h">HIL plans once</span><i>→</i><span>Hands: open, write</span><i>→</i><span>asks you before Post</span></div></div>
+    <div class="w"><div class="said">"Lock."</div><div class="t">+1 to 2s</div>
+      <div class="path"><span class="r">Intent: not sure</span><i>→</i><span class="h">HIL reads it with the screen</span><i>→</i><span>lock the Mac, or ignore it</span></div></div>
+  </div>
+</section>
+
+<section>
+  <h2>Six deciders today. One brain after.</h2>
+  <div class="two">
+    <div class="col bad"><h3>Today, each of these decides on its own</h3><ul>
+      <li>12 rule checkers in a row, first match wins</li>
+      <li>Quick chat, in the voice side</li>
+      <li>Slow chat, a second chat with its own memory</li>
+      <li>Laya, trusted only for some kinds</li>
+      <li>The step-by-step loop, the default for anything unknown</li>
+      <li>HIL, reading everything, but only after he has answered</li>
+    </ul></div>
+    <div class="col good"><h3>After, one brain</h3><ul>
+      <li><b>Intent detection (Laya)</b> makes the one decision, with full context</li>
+      <li><b>Human Intelligence Layer (HIL)</b> plans the big jobs and settles the unsure ones</li>
+      <li>The 12 checkers become <b>hands</b> the brain calls, not bosses</li>
+      <li>One chat, one memory: slow chat folds into Talk</li>
+      <li>The loop runs only inside a planned job, with a 20 second stop</li>
+      <li>No second opinions: HIL is the bigger brain, not a shadow</li>
+    </ul></div>
+  </div>
+</section>
+
+<section>
+  <h2>Three rules that keep it one brain</h2>
+  <ol class="rules">
+    <li><b>Intent detection never overrules HIL.</b> Unsure means hand over, never guess and never "say that again" to a clear sentence.</li>
+    <li><b>HIL teaches Laya.</b> Every sentence HIL settles becomes a lesson for Laya, so over time fewer sentences need the slow path.</li>
+    <li><b>One picture of the world.</b> Both parts read the same context and the same memory, built once, never fetched twice.</li>
+  </ol>
+</section>
+
+<section>
+  <h2>Where intent detection is today</h2>
+  <p class="sub">Right answers out of 100, on 134 of your sentences it has never seen. It takes the lead only when it clears 90.</p>
+  <div class="meter">
+    <div class="bar"><span>Laya today</span><div class="track"><b style="width:52%"></b></div><span>52</span></div>
+    <div class="bar"><span>v3, words</span><div class="track"><b style="width:69%"></b></div><span>69</span></div>
+    <div class="bar"><span>v4, + context</span><div class="track"><b style="width:0%"></b></div><span>training</span></div>
+    <div class="bar"><span>Takes the lead</span><div class="track goal"><b style="width:90%"></b></div><span>90</span></div>
+  </div>
+</section>
+</main>

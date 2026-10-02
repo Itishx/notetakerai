@@ -8,7 +8,7 @@ import { ThemeProvider } from "@/contexts/ThemeContext";
 import { AuthProvider } from "@/contexts/AuthContext";
 import MacAuthCompleter from "./components/MacAuthCompleter";
 
-const Waitlist = lazy(() => import("./pages/Waitlist.tsx"));
+const EarlyAccess = lazy(() => import("./pages/EarlyAccess.tsx"));
 const BrainoDocPage = lazy(() => import("./pages/BrainoDocPage.tsx"));
 const BrainotesPage = lazy(() => import("./pages/BrainotesPage.tsx"));
 const Landing = lazy(() => import("./pages/Landing.tsx"));
@@ -29,6 +29,23 @@ const MacContactsDocs = lazy(() => import("./pages/MacContactsDocs.tsx"));
 const MesaSyncDocs = lazy(() => import("./pages/MesaSyncDocs.tsx"));
 const AffectiveMemoryDocs = lazy(() => import("./pages/AffectiveMemoryDocs.tsx"));
 const WhatsAppSilentDocs = lazy(() => import("./pages/WhatsAppSilentDocs.tsx"));
+const CompanionSetupDocs = lazy(() => import("./pages/CompanionSetupDocs.tsx"));
+const ThinkOnceDocs = lazy(() => import("./pages/ThinkOnceDocs.tsx"));
+const FormsLoginDocs = lazy(() => import("./pages/FormsLoginDocs.tsx"));
+const HideHimDocs = lazy(() => import("./pages/HideHimDocs.tsx"));
+const ThinkingTrailDocs = lazy(() => import("./pages/ThinkingTrailDocs.tsx"));
+const BrainoChatMacDocs = lazy(() => import("./pages/BrainoChatMacDocs.tsx"));
+const ActivityMemoryDocs = lazy(() => import("./pages/ActivityMemoryDocs.tsx"));
+const InstantVoiceDocs = lazy(() => import("./pages/InstantVoiceDocs.tsx"));
+const TwoLanesDocs = lazy(() => import("./pages/TwoLanesDocs.tsx"));
+const TypeSearchDocs = lazy(() => import("./pages/TypeSearchDocs.tsx"));
+const ChromeProfilesDocs = lazy(() => import("./pages/ChromeProfilesDocs.tsx"));
+const MacAppDocs = lazy(() => import("./pages/MacAppDocs.tsx"));
+const PageLinksDocs = lazy(() => import("./pages/PageLinksDocs.tsx"));
+const ArrivalDocs = lazy(() => import("./pages/ArrivalDocs.tsx"));
+const AffectiveNotchDocs = lazy(() => import("./pages/AffectiveNotchDocs.tsx"));
+const NotchDropDocs = lazy(() => import("./pages/NotchDropDocs.tsx"));
+const OneBrainDocs = lazy(() => import("./pages/OneBrainDocs.tsx"));
 const HowBrainoTalksDocs = lazy(() => import("./pages/HowBrainoTalksDocs.tsx"));
 const HumanIntelligence = lazy(() => import("./pages/HumanIntelligence.tsx"));
 const BrainoOSTeaser = lazy(() => import("./pages/BrainoOSTeaser.tsx"));
@@ -101,8 +118,12 @@ const Terms = lazy(() => import("./pages/Terms.tsx"));
 const Contact = lazy(() => import("./pages/Contact.tsx"));
 const ProductOverview = lazy(() => import("./pages/ProductOverview.tsx"));
 const Affective = lazy(() => import("./pages/Affective.tsx"));
+const About = lazy(() => import("./pages/About.tsx"));
+const AffectiveOSPage = lazy(() => import("./pages/AffectiveOSPage.tsx"));
 const BrainoFinal = lazy(() => import("./pages/BrainoFinal.tsx"));
 const Learning = lazy(() => import("./pages/Learning.tsx"));
+const DiagramPreview = lazy(() => import("./pages/DiagramPreview.tsx"));
+const AppStoreGrid = lazy(() => import("./pages/AppStoreGrid.tsx"));
 const AppStore = lazy(() => import("./pages/AppStore.tsx"));
 const ProductOverviewHomepageDocs = lazy(() => import("./pages/ProductOverviewHomepageDocs.tsx"));
 const Foundry = lazy(() => import("./pages/Foundry.tsx"));
@@ -209,9 +230,10 @@ function AppRoutes() {
             still linked from places we have not walked yet. */}
         <Route path="/" element={<Affective />} />
         <Route path="/landing" element={<Landing />} />
-        <Route path="/questions" element={<Waitlist />} />
-        <Route path="/overview" element={<Waitlist />} />
-        <Route path="/waitlist" element={<Waitlist />} />
+        <Route path="/questions" element={<Navigate to="/waitlist" replace />} />
+        <Route path="/overview" element={<Navigate to="/waitlist" replace />} />
+        <Route path="/waitlist" element={<EarlyAccess />} />
+        <Route path="/early-access" element={<EarlyAccess />} />
         <Route path="/braino-thronglets" element={<BrainoThronglets />} />
         <Route path="/monday-mode" element={<MondayMode />} />
         <Route path="/knowledge/monday-mode" element={<MondayModeDocs />} />
@@ -240,6 +262,23 @@ function AppRoutes() {
         <Route path="/knowledge/mesa-auto-sync" element={<MesaSyncDocs />} />
         <Route path="/knowledge/affectiveos-memory-capture" element={<AffectiveMemoryDocs />} />
         <Route path="/knowledge/whatsapp-silent-awareness" element={<WhatsAppSilentDocs />} />
+        <Route path="/knowledge/companion-setup" element={<CompanionSetupDocs />} />
+        <Route path="/knowledge/think-once-then-do" element={<ThinkOnceDocs />} />
+        <Route path="/knowledge/fill-forms-and-log-in" element={<FormsLoginDocs />} />
+        <Route path="/knowledge/hide-him" element={<HideHimDocs />} />
+        <Route path="/knowledge/thinking-trail" element={<ThinkingTrailDocs />} />
+        <Route path="/knowledge/braino-chat" element={<BrainoChatMacDocs />} />
+        <Route path="/knowledge/activity-and-memory" element={<ActivityMemoryDocs />} />
+        <Route path="/knowledge/instant-voice-and-spots" element={<InstantVoiceDocs />} />
+        <Route path="/knowledge/two-lanes" element={<TwoLanesDocs />} />
+        <Route path="/knowledge/type-and-search" element={<TypeSearchDocs />} />
+        <Route path="/knowledge/chrome-profiles" element={<ChromeProfilesDocs />} />
+        <Route path="/knowledge/braino-for-mac-app" element={<MacAppDocs />} />
+        <Route path="/knowledge/links-off-the-page" element={<PageLinksDocs />} />
+        <Route path="/knowledge/arrival" element={<ArrivalDocs />} />
+        <Route path="/knowledge/affectiveos-notch" element={<AffectiveNotchDocs />} />
+        <Route path="/knowledge/notch-drop" element={<NotchDropDocs />} />
+        <Route path="/knowledge/affectiveos-one-brain" element={<OneBrainDocs />} />
         <Route path="/knowledge/how-braino-talks" element={<HowBrainoTalksDocs />} />
         <Route path="/human-intelligence" element={<HumanIntelligence />} />
         <Route path="/knowledge/jyoti-sir-team-demo" element={<JyotiSirTeamDemoDocs />} />
@@ -325,6 +364,8 @@ function AppRoutes() {
         <Route path="/contact" element={<Contact />} />
         <Route path="/product-overview" element={<ProductOverview />} />
         <Route path="/affective" element={<Affective />} />
+        <Route path="/about" element={<About />} />
+        <Route path="/affectiveos" element={<AffectiveOSPage />} />
         {/* The campaign page: the speech, why him, and the footer game. Built
             on the Affective stylesheet rather than its own. */}
         {/* /president and /itish-for-president are deliberately not routed
@@ -344,6 +385,9 @@ function AppRoutes() {
         {/* The store: Affective products in one tab, mini apps in the other.
             Braino's own page is /braino; this hands you to it. */}
         <Route path="/apps" element={<AppStore />} />
+        <Route path="/apps-new" element={<AppStoreGrid />} />
+        <Route path="/diagrams" element={<DiagramPreview />} />
+        <Route path="/install/braino" element={<Navigate to="/braino" replace />} />
         {/* The page is Braino's, and Foundry is one of its three tabs. It lived at
             /foundry for a while, which made every conversation about it circular.
             The old URL still works and still opens the Foundry tab. */}

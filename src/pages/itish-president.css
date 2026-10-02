@@ -1,0 +1,221 @@
+/* ============================================================================
+   /itish-for-president — the campaign page.
+
+   Affective's stylesheet is loaded first and does the heavy lifting: the
+   paper, the hairline grid with no gutters, the serif-for-claims and
+   sans-for-facts split, the reveal. This file is only the parts a campaign
+   page needs that a company page has no shape for: the note, the five, the
+   letter on paper, the clip, and the close.
+
+   Everything here is scoped under .ifp, which sits inside .aff, so none of it
+   can leak into the company page it borrows from.
+   ============================================================================ */
+
+/* The wordmark. The Didone the company page uses for its logo, set as type
+   rather than as the drawn mark, because this is a person and not a company
+   and a person's name should not arrive as a logo file. */
+.ifp .ifp-logo {
+  font-family: "Bodoni Moda", "Didot", "Bodoni 72", "Playfair Display", Georgia, serif;
+  font-optical-sizing: auto;
+  font-weight: 500;
+  font-size: 23px;
+  letter-spacing: -0.01em;
+  line-height: 1;
+  color: var(--a-ink);
+  text-decoration: none;
+}
+
+/* ── The ask ─────────────────────────────────────────────────────────────────
+   The company page's hero opens onto a photograph. This one has no
+   photograph yet and does not need one: the claim is a name and an office,
+   and a name set large on paper is already the picture. So the hero is
+   shorter, and the strip that follows it carries the weight the image would
+   have carried. */
+.ifp-hero { padding-bottom: 0; }
+
+/* ── The note ────────────────────────────────────────────────────────────────
+   One block, indented behind a rule, the way a letter sets an aside. It is
+   the only place on the page that addresses the reader as somebody who might
+   not vote for him, so it is the only block with a rule down its side: the
+   page visibly stops to say it. */
+.ifp-note-sec { padding-bottom: clamp(20px, 3vw, 36px); }
+.ifp-note {
+  max-width: 62ch;
+  border-left: 2px solid var(--a-braino);
+  padding: 4px 0 4px clamp(20px, 3vw, 38px);
+}
+.ifp-note .ifp-note-kicker {
+  margin: 0 0 clamp(12px, 1.4vw, 18px);
+  font-size: 11px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--a-ink-faint);
+}
+/* The body first, so the two lines that are set apart from it can be written
+   after it and win on their own terms rather than on an !important. */
+.ifp-note p {
+  margin: 0 0 14px;
+  font-size: clamp(16px, 1.4vw, 18px); line-height: 1.62;
+  letter-spacing: -0.008em; color: var(--a-ink-soft);
+}
+.ifp-note p:last-child { margin-bottom: 0; }
+.ifp-note .ifp-note-lead {
+  margin: 0 0 clamp(16px, 1.8vw, 22px);
+  font-family: var(--a-display); font-optical-sizing: auto;
+  font-size: clamp(24px, 2.8vw, 36px);
+  font-weight: 400; line-height: 1.16; letter-spacing: -0.02em;
+  color: var(--a-ink); text-wrap: balance;
+}
+.ifp-note .ifp-note-punch { color: var(--a-ink); font-weight: 500; }
+
+/* ── The five ────────────────────────────────────────────────────────────────
+   The senses grid with one more cell in it. Six columns rather than five, so
+   three can sit across the top at two columns each and two across the bottom
+   at three: five cells that still share every hairline, and no orphan sitting
+   alone on a second row. */
+.ifp-five {
+  width: 100%;
+  margin: clamp(18px, 2vw, 28px) 0 0;
+  grid-template-columns: repeat(6, 1fr);
+  border: 1px solid var(--a-line-strong);
+  background: #fdfcf8;
+  overflow: hidden;
+  box-shadow: 0 1px 0 rgba(22, 21, 15, .03), 0 18px 40px -28px rgba(22, 21, 15, .28);
+}
+.ifp-five > *:nth-child(-n+3) { grid-column: span 2; }
+.ifp-five > *:nth-child(n+4) { grid-column: span 3; }
+/* The frame draws the outside; the cells draw only the lines between them. */
+.ifp-five > *:nth-child(3), .ifp-five > *:nth-child(5) { border-right: 0; }
+.ifp-five > *:nth-child(n+4) { border-bottom: 0; }
+/* The bottom two are wider, so their pictures are shorter: a portrait crop
+   stretched across half the page is a different photograph from the one
+   beside it. */
+.ifp-five > *:nth-child(n+4) .aff-four-art { aspect-ratio: 16 / 9; }
+
+@media (max-width: 900px) {
+  .ifp-five { grid-template-columns: repeat(2, 1fr); }
+  .ifp-five > *:nth-child(-n+3),
+  .ifp-five > *:nth-child(n+4) { grid-column: span 1; }
+  .ifp-five > *:nth-child(3) { border-right: 0; }
+  .ifp-five > *:nth-child(5) { border-right: 0; border-bottom: 0; }
+  .ifp-five > *:nth-child(4) { border-bottom: 0; }
+  .ifp-five > *:nth-child(n+4) .aff-four-art { aspect-ratio: 341 / 415; }
+}
+@media (max-width: 560px) {
+  .ifp-five { grid-template-columns: 1fr; }
+  .ifp-five > * { border-right: 0 !important; border-bottom: 1px solid var(--a-line) !important; }
+  .ifp-five > *:last-child { border-bottom: 0 !important; }
+  .ifp-five > *:nth-child(n+4) .aff-four-art { aspect-ratio: 16 / 10; }
+}
+
+.ifp-five-foot {
+  margin: clamp(18px, 2vw, 26px) 0 0;
+  font-family: var(--a-display); font-optical-sizing: auto;
+  font-size: clamp(18px, 1.8vw, 23px);
+  font-weight: 400; line-height: 1.3; letter-spacing: -0.015em;
+  color: var(--a-ink-faint);
+}
+
+/* ── The letter ──────────────────────────────────────────────────────────────
+   Paper, in the measure, with the speech set in the serif at a size somebody
+   would actually read five minutes of. One column, never two: a speech is
+   spoken in one line and reading it in columns breaks the run of it. */
+.ifp-letter-sec { padding-top: clamp(40px, 5vw, 70px); }
+.ifp-letter {
+  margin: clamp(18px, 2vw, 28px) auto 0;
+  max-width: 74ch;
+  border: 1px solid var(--a-line-strong);
+  background: #fdfcf8;
+  padding: clamp(28px, 4.4vw, 68px) clamp(22px, 4vw, 62px);
+  box-shadow: 0 1px 0 rgba(22, 21, 15, .03), 0 18px 40px -28px rgba(22, 21, 15, .28);
+}
+.ifp-letter-to {
+  margin: 0 0 clamp(20px, 2.4vw, 30px);
+  font-size: 12px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--a-ink-faint);
+}
+.ifp-letter p {
+  margin: 0 0 clamp(16px, 1.8vw, 24px);
+  font-family: var(--a-display); font-optical-sizing: auto;
+  font-size: clamp(17px, 1.5vw, 19.5px);
+  font-weight: 400; line-height: 1.72; letter-spacing: -0.004em;
+  color: var(--a-ink);
+}
+/* The first line of the speech, opened the way a letter opens. */
+.ifp-letter > p:nth-of-type(2)::first-letter {
+  float: left;
+  font-size: 3.1em; line-height: .82;
+  padding: .06em .08em 0 0;
+  color: var(--a-braino);
+}
+/* The paragraph that is said louder in the room. */
+.ifp-letter-lift {
+  font-size: clamp(20px, 2vw, 25px) !important;
+  line-height: 1.46 !important;
+  letter-spacing: -0.016em !important;
+  border-top: 1px solid var(--a-line);
+  border-bottom: 1px solid var(--a-line);
+  padding: clamp(20px, 2.4vw, 30px) 0;
+  margin: clamp(24px, 3vw, 38px) 0 !important;
+}
+
+/* The clip, where the stage is handed over. Shot on a phone, so it is a
+   portrait frame and the page gives it one rather than letterboxing a tall
+   video into a wide box. */
+.ifp-letter-film {
+  margin: clamp(26px, 3vw, 40px) 0;
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+}
+.ifp-letter-film video {
+  display: block;
+  width: min(100%, 360px);
+  aspect-ratio: 9 / 16;
+  background: #16150f;
+  border: 1px solid var(--a-line-strong);
+  object-fit: cover;
+}
+.ifp-letter-film figcaption {
+  font-family: "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 12px; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--a-ink-faint);
+}
+
+.ifp-letter-sign {
+  margin: clamp(26px, 3vw, 40px) 0 4px !important;
+  font-family: "Bodoni Moda", "Didot", "Bodoni 72", "Playfair Display", Georgia, serif !important;
+  font-size: clamp(24px, 2.4vw, 32px) !important;
+  line-height: 1.1 !important;
+}
+.ifp-letter-role {
+  margin: 0 !important;
+  font-family: "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+  font-size: 13px !important; line-height: 1.5 !important;
+  letter-spacing: -0.004em !important;
+  color: var(--a-ink-faint) !important;
+}
+
+/* ── The close ───────────────────────────────────────────────────────────────
+   Two lines, centred, with nothing else on the screen. This is where Braino
+   stops walking and dances, so the page leaves him the room to do it. */
+.ifp-close {
+  text-align: center;
+  padding-bottom: clamp(120px, 14vw, 190px);
+}
+.ifp-close-line {
+  margin: 0 0 14px;
+  font-family: var(--a-display); font-optical-sizing: auto;
+  font-size: clamp(30px, 5vw, 62px);
+  font-weight: 400; line-height: 1.08; letter-spacing: -0.022em;
+  color: var(--a-ink); text-wrap: balance;
+}
+.ifp-close-sub {
+  margin: 0;
+  font-size: clamp(15px, 1.4vw, 18px); line-height: 1.5;
+  letter-spacing: -0.008em; color: var(--a-ink-soft);
+}
+
+/* ── The footer game ─────────────────────────────────────────────────────────
+   Braino's own footer, dropped in whole. It brings its own dark band and its
+   own tokens; all this page has to do is stop it adding the top margin it
+   uses when it follows a lighter footer of its own. */
+.ifp-game-mount { margin-top: 0 !important; }
+.ifp-game-mount .bf-game-window { border-top: 1px solid var(--a-line-strong); }
+.ifp-game-mount .bf-legal { color: var(--bf-ink-3); }
