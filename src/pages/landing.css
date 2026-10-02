@@ -1192,6 +1192,59 @@
   text-wrap: balance;
 }
 
+/* The two words the whole positioning turns on, lit the way the HERA wordmark
+   is: a gradient painted through the glyphs and slid sideways. Red for the
+   companion, blue for the co-founder, so the two halves of the product read as
+   two things at a glance rather than one long sentence.
+
+   White sits at the middle of each gradient rather than at an end, so the
+   highlight travels through the word instead of washing it out. Kept `inline`
+   for the same reason the HERA one is: inline-block changes how a screen reader
+   computes the surrounding name. */
+.ld-shimmer-red,
+.ld-shimmer-blue {
+  display: inline;
+  background-size: 220% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  animation: ldShimmer 3.4s linear infinite;
+}
+/* Light is the default here, and its highlight is a tint rather than white: a
+   near-white band travelling through a word on a white page is a word with a
+   hole in it. Dark gets the brighter sweep, where white actually reads. */
+.ld-shimmer-red {
+  background-image: linear-gradient(100deg, #b5392f 0%, #d9645b 23%, #f3a79f 43%, #d9645b 63%, #b5392f 100%);
+}
+.ld-shimmer-blue {
+  background-image: linear-gradient(100deg, #1b3f8f 0%, #3f7ae0 23%, #93b9f7 43%, #3f7ae0 63%, #1b3f8f 100%);
+}
+.dark .ld-shimmer-red {
+  background-image: linear-gradient(100deg, #a83228 0%, #d9645b 23%, #fff1ef 43%, #d9645b 63%, #a83228 100%);
+}
+.dark .ld-shimmer-blue {
+  background-image: linear-gradient(100deg, #1b3f8f 0%, #3f7ae0 23%, #eef4ff 43%, #3f7ae0 63%, #1b3f8f 100%);
+}
+
+@keyframes ldShimmer {
+  to { background-position: -220% 0; }
+}
+
+/* Motion off means the words still have to be readable, so the gradient is
+   dropped rather than frozen: a paused gradient can park white-on-white. */
+@media (prefers-reduced-motion: reduce) {
+  .ld-shimmer-red,
+  .ld-shimmer-blue {
+    animation: none;
+    background-image: none;
+    color: inherit;
+    -webkit-text-fill-color: currentColor;
+  }
+  .ld-shimmer-red { color: #c2534a; }
+  .ld-shimmer-blue { color: #2f66c8; }
+}
+
 .ld-hero-copy { max-width: 44rem; }
 
 .ld-hero-sub {

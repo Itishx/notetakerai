@@ -1,36 +1,43 @@
 /* ============================================================
-   Braino Dashboard — Minimal
-   Ported from the "Braino Dashboard Minimal" Claude Design project.
-   Newsreader (display/serif) · Helvetica Neue / system (UI) · JetBrains Mono (labels/nums)
-   Light warm paper (default) + dark theme.
-   Design intent: calm, monochrome, generous whitespace, hairline structure.
+   Braino Dashboard
+   SF Pro Display throughout. One typeface, tight tracking, heavier weights for
+   anything that reads as a heading, and no decorative serif or mono.
+
+   It read as an editorial magazine: warm beige paper, a serif display face and
+   monospaced labels. Handsome, and the wrong genre — this is a control surface
+   for software, and it now matches the rest of the product (the setup flow, the
+   X pages, the documents) rather than a print title.
 
    Scoped to .bd-root on purpose: it retokenizes the --sb-* variables the whole
-   dashboard already paints with, so every existing surface adopts the new
-   palette without touching the marketing site, which shares those token names.
+   dashboard already paints with, so every existing surface adopts the palette
+   without touching the marketing site, which shares those token names.
    ============================================================ */
 
 .bd-root {
-  --paper: #fbf7f1;
-  --surface: #ffffff;
+  /* The same paper, ink and coral as the setup flow and the documents, so the
+     product looks like one product. */
+  --paper: #f4f2ee;
+  --surface: #fbfaf8;
   --raise: #ffffff;
-  --ink: #1b1713;
-  --ink-2: #6c6258;
-  --ink-3: #9c9388;
-  --ink-4: #c4bbaf;
-  --line: #eae2d6;
-  --line-2: #f1ebe1;
-  --accent: #c9544a;
-  --accent-ink: #b34a41;
-  --accent-soft: rgba(201, 84, 74, 0.09);
-  --ok: #4e8f63;
-  --ok-soft: rgba(78, 143, 99, 0.12);
-  --bad: #c05a46;
-  --bad-soft: rgba(192, 90, 70, 0.12);
-  --bd-shadow: 0 1px 2px rgba(40, 28, 18, 0.04), 0 18px 40px -24px rgba(40, 28, 18, 0.18);
-  --bd-r-sm: 8px;
-  --bd-r: 12px;
-  --bd-r-lg: 16px;
+  --ink: #17171a;
+  --ink-2: #5c5a56;
+  --ink-3: #8a8781;
+  --ink-4: #b4b0a9;
+  --line: rgba(23, 23, 26, 0.10);
+  --line-2: rgba(23, 23, 26, 0.06);
+  --accent: #d9645b;
+  --accent-ink: #c2534a;
+  --accent-soft: rgba(217, 100, 91, 0.10);
+  --ok: #17a86c;
+  --ok-soft: rgba(23, 168, 108, 0.12);
+  --bad: #c8443a;
+  --bad-soft: rgba(200, 68, 58, 0.12);
+  --bd-shadow: 0 1px 2px rgba(23, 23, 26, 0.03), 0 16px 40px -26px rgba(23, 23, 26, 0.22);
+  /* Rounder. Apple rounds generously and consistently; 8px reads as a web app
+     from 2019. */
+  --bd-r-sm: 10px;
+  --bd-r: 14px;
+  --bd-r-lg: 20px;
 
   /* Retokenize the dashboard's existing palette onto the design's. */
   --sb-bg: var(--paper);
@@ -55,7 +62,8 @@
 
   background: var(--paper);
   color: var(--ink);
-  font-family: "Helvetica Neue", Helvetica, Arial, system-ui, sans-serif;
+  font-family: "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  letter-spacing: -0.006em;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
   font-size: 14px;
@@ -105,12 +113,12 @@ html.sb-dark .bd-root {
 .bd-root ::-webkit-scrollbar-thumb:hover { background: var(--ink-4); background-clip: padding-box; }
 
 /* ---------- Type ---------- */
-.bd-serif { font-family: "Newsreader", Georgia, serif; font-weight: 400; letter-spacing: -0.01em; line-height: 1.1; }
-.bd-serif-i { font-family: "Newsreader", Georgia, serif; font-style: italic; }
-.bd-mono { font-family: "JetBrains Mono", monospace; }
-.bd-num { font-family: "JetBrains Mono", monospace; font-variant-numeric: tabular-nums; }
+.bd-serif { font-weight: 650; letter-spacing: -0.028em; line-height: 1.08; }
+.bd-serif-i { font-style: normal; font-weight: 650; letter-spacing: -0.028em; }
+.bd-mono { font-weight: 600; letter-spacing: 0.02em; }
+.bd-num { font-variant-numeric: tabular-nums; font-weight: 600; letter-spacing: -0.01em; }
 .bd-eyebrow {
-  font-family: "JetBrains Mono", monospace;
+  font-weight: 600; letter-spacing: 0.02em;
   font-size: 10px;
   letter-spacing: 0.18em;
   text-transform: uppercase;
@@ -130,13 +138,13 @@ html.sb-dark .bd-root {
   height: 100vh;
   overflow: hidden;
 }
-.bd-brand-wm { font-family: "Newsreader", Georgia, serif; font-size: 20px; letter-spacing: -0.01em; }
+.bd-brand-wm { font-size: 20px; font-weight: 700; letter-spacing: -0.035em; }
 
 .bd-nav { flex: 1; overflow-y: auto; margin: 0 -6px; padding: 0 6px; }
 .bd-nav::-webkit-scrollbar { width: 0; }
 .bd-nav-grp {
   padding: 14px 10px 6px;
-  font-family: "JetBrains Mono", monospace;
+  font-weight: 600; letter-spacing: 0.02em;
   font-size: 9px;
   letter-spacing: 0.16em;
   text-transform: uppercase;
@@ -163,7 +171,7 @@ html.sb-dark .bd-root {
 .bd-nav-item.muted { color: var(--ink-3); }
 .bd-nav-item .bd-ic { width: 17px; height: 17px; flex: 0 0 17px; display: grid; place-items: center; }
 .bd-nav-item .bd-nm { flex: 1; }
-.bd-nav-item .bd-ct { font-family: "JetBrains Mono", monospace; font-size: 10.5px; color: var(--ink-3); }
+.bd-nav-item .bd-ct { font-weight: 600; letter-spacing: 0.02em; font-size: 10.5px; color: var(--ink-3); }
 .bd-nav-item.active .bd-ct { color: var(--paper); opacity: 0.65; }
 
 .bd-side-foot { padding-top: 14px; margin-top: 6px; border-top: 1px solid var(--line-2); }
@@ -185,7 +193,7 @@ html.sb-dark .bd-root {
 }
 .bd-profile .bd-pn { font-size: 13px; font-weight: 500; color: var(--ink); }
 .bd-profile .bd-pb {
-  font-family: "JetBrains Mono", monospace;
+  font-weight: 600; letter-spacing: 0.02em;
   font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase;
   color: var(--ink-3); margin-top: 1px;
 }
@@ -204,7 +212,7 @@ html.sb-dark .bd-root {
   background: color-mix(in srgb, var(--paper) 82%, transparent);
   backdrop-filter: blur(12px);
 }
-.bd-topbar .bd-tt { font-family: "Newsreader", Georgia, serif; font-size: 21px; letter-spacing: -0.01em; }
+.bd-topbar .bd-tt { font-size: 21px; font-weight: 650; letter-spacing: -0.028em; }
 .bd-search {
   margin-left: auto;
   display: flex;
@@ -225,7 +233,7 @@ html.sb-dark .bd-root {
 }
 .bd-search input::placeholder { color: var(--ink-3); }
 .bd-kbd {
-  font-family: "JetBrains Mono", monospace;
+  font-weight: 600; letter-spacing: 0.02em;
   font-size: 9.5px; color: var(--ink-3);
   border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px;
 }
@@ -244,7 +252,8 @@ html.sb-dark .bd-root {
 /* ---------- Page head ---------- */
 .bd-phead { margin-bottom: 34px; }
 .bd-phead h1 {
-  font-family: "Newsreader", Georgia, serif;
+  font-weight: 650;
+  letter-spacing: -0.028em;
   font-weight: 400;
   letter-spacing: -0.01em;
   font-size: clamp(30px, 4vw, 40px);
@@ -264,7 +273,7 @@ html.sb-dark .bd-root {
 .bd-shead:first-child { margin-top: 0; }
 .bd-shead h2 {
   font-size: 15px;
-  font-family: "JetBrains Mono", monospace;
+  font-weight: 600; letter-spacing: 0.02em;
   font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.14em;
@@ -272,7 +281,7 @@ html.sb-dark .bd-root {
   margin: 0;
 }
 .bd-shead .bd-more {
-  font-family: "JetBrains Mono", monospace;
+  font-weight: 600; letter-spacing: 0.02em;
   font-size: 11px;
   color: var(--accent);
   display: inline-flex;
@@ -303,7 +312,7 @@ html.sb-dark .bd-root {
 .bd-ask input::placeholder { color: var(--ink-3); }
 .bd-ask .bd-model {
   display: inline-flex; align-items: center; gap: 5px;
-  font-family: "JetBrains Mono", monospace; font-size: 11px;
+  font-weight: 600; letter-spacing: 0.02em; font-size: 11px;
   color: var(--ink-2); padding: 7px 10px; border-radius: 8px;
 }
 .bd-ask .bd-send {
@@ -331,7 +340,7 @@ html.sb-dark .bd-root {
 .bd-quick button:hover { border-color: var(--ink-4); color: var(--ink); }
 .bd-quick button .bd-ic { width: 16px; height: 16px; display: grid; place-items: center; color: var(--ink-3); }
 .bd-quick button:hover .bd-ic { color: var(--accent); }
-.bd-quick button .bd-dt { margin-left: 4px; font-family: "JetBrains Mono", monospace; font-size: 10px; color: var(--accent); }
+.bd-quick button .bd-dt { margin-left: 4px; font-weight: 600; letter-spacing: 0.02em; font-size: 10px; color: var(--accent); }
 
 /* ---------- List rows ---------- */
 .bd-list { border-top: 1px solid var(--line-2); }
@@ -361,13 +370,13 @@ html.sb-dark .bd-root {
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .bd-row .bd-mt {
-  font-family: "JetBrains Mono", monospace;
+  font-weight: 600; letter-spacing: 0.02em;
   font-size: 10.5px; color: var(--ink-3); margin-top: 4px;
   display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
 }
 .bd-row .bd-mt .bd-s { color: var(--ink-2); }
 .bd-row .bd-tm {
-  font-family: "JetBrains Mono", monospace;
+  font-weight: 600; letter-spacing: 0.02em;
   font-size: 10.5px; color: var(--ink-3);
   white-space: nowrap; flex: 0 0 auto;
 }
@@ -375,7 +384,7 @@ html.sb-dark .bd-root {
 
 /* ---------- Tags ---------- */
 .bd-tag {
-  font-family: "JetBrains Mono", monospace;
+  font-weight: 600; letter-spacing: 0.02em;
   font-size: 9px;
   letter-spacing: 0.06em;
   padding: 2px 7px;
@@ -411,9 +420,9 @@ html.sb-dark .bd-root {
 }
 .bd-stats .bd-st { padding: 20px 22px; border-right: 1px solid var(--line-2); }
 .bd-stats .bd-st:last-child { border-right: none; }
-.bd-stats .bd-st .bd-v { font-family: "Newsreader", Georgia, serif; font-size: 34px; line-height: 1; color: var(--ink); }
+.bd-stats .bd-st .bd-v { font-size: 34px; font-weight: 650; letter-spacing: -0.03em; line-height: 1; color: var(--ink); }
 .bd-stats .bd-st .bd-l {
-  font-family: "JetBrains Mono", monospace;
+  font-weight: 600; letter-spacing: 0.02em;
   font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase;
   color: var(--ink-3); margin-top: 8px;
 }
@@ -439,10 +448,10 @@ html.sb-dark .bd-root {
   width: 100%;
 }
 .bd-note:hover { border-color: var(--ink-4); box-shadow: var(--bd-shadow); }
-.bd-note .bd-nt { font-size: 15px; font-family: "Newsreader", Georgia, serif; line-height: 1.25; color: var(--ink); }
+.bd-note .bd-nt { font-size: 15px; font-weight: 620; letter-spacing: -0.02em; line-height: 1.3; color: var(--ink); }
 .bd-note .bd-ns { font-size: 12.5px; color: var(--ink-2); line-height: 1.5; flex: 1; }
 .bd-note .bd-nf {
-  font-family: "JetBrains Mono", monospace;
+  font-weight: 600; letter-spacing: 0.02em;
   font-size: 10px; color: var(--ink-3);
   display: flex; align-items: center; gap: 7px; flex-wrap: wrap;
 }
@@ -478,7 +487,7 @@ html.sb-dark .bd-root {
 }
 .bd-memc .bd-mh h3 {
   font-size: 17px; margin: 0;
-  font-family: "Newsreader", Georgia, serif; font-weight: 400; color: var(--ink);
+  font-weight: 650; letter-spacing: -0.028em; color: var(--ink);
 }
 .bd-mrow {
   display: flex; justify-content: space-between; gap: 12px;
@@ -486,7 +495,7 @@ html.sb-dark .bd-root {
   border-bottom: 1px solid var(--line-2);
 }
 .bd-mrow:last-child { border-bottom: none; }
-.bd-mrow .bd-k { color: var(--ink-3); font-family: "JetBrains Mono", monospace; font-size: 11px; }
+.bd-mrow .bd-k { color: var(--ink-3); font-weight: 600; letter-spacing: 0.02em; font-size: 11px; }
 .bd-mrow .bd-val { color: var(--ink); text-align: right; }
 
 /* ---------- Settings ---------- */
@@ -498,7 +507,7 @@ html.sb-dark .bd-root {
 .bd-field:last-child { border-bottom: none; }
 .bd-field .bd-fl { font-size: 14px; color: var(--ink); }
 .bd-field .bd-fd {
-  font-family: "JetBrains Mono", monospace;
+  font-weight: 600; letter-spacing: 0.02em;
   font-size: 10.5px; color: var(--ink-3);
   margin-top: 4px; line-height: 1.5; max-width: 440px;
 }
@@ -512,7 +521,7 @@ html.sb-dark .bd-root {
 }
 .bd-conn .bd-cb { flex: 1; min-width: 0; }
 .bd-conn .bd-cn { font-size: 14px; color: var(--ink); }
-.bd-conn .bd-cd { font-family: "JetBrains Mono", monospace; font-size: 10px; color: var(--ink-3); margin-top: 3px; }
+.bd-conn .bd-cd { font-weight: 600; letter-spacing: 0.02em; font-size: 10px; color: var(--ink-3); margin-top: 3px; }
 .bd-dot { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 7px; }
 .bd-dot.live { background: var(--ok); }
 .bd-dot.off { background: var(--ink-4); }
@@ -572,10 +581,10 @@ html.sb-dark .bd-root {
 }
 .bd-empty h3 {
   font-size: 19px; color: var(--ink); margin: 0 0 6px;
-  font-family: "Newsreader", Georgia, serif; font-weight: 400;
+  font-weight: 650; letter-spacing: -0.028em;
 }
 .bd-empty p {
-  font-family: "JetBrains Mono", monospace;
+  font-weight: 600; letter-spacing: 0.02em;
   font-size: 11px; line-height: 1.6; max-width: 340px; margin: 0 auto;
 }
 
@@ -593,7 +602,8 @@ html.sb-dark .bd-root {
 .bd-mode-card:hover { border-color: var(--ink-4); }
 .bd-mode-card.dragging { opacity: 0.5; }
 .bd-mode-name {
-  font-family: "Newsreader", Georgia, serif;
+  font-weight: 650;
+  letter-spacing: -0.028em;
   font-size: 21px;
   letter-spacing: -0.01em;
   color: var(--ink);
@@ -619,11 +629,11 @@ html.sb-dark .bd-root {
   padding: 13px 15px;
   background: var(--paper);
 }
-.bd-cmd-phrase { font-family: "Newsreader", Georgia, serif; font-size: 16px; color: var(--ink); }
+.bd-cmd-phrase { font-size: 16px; font-weight: 620; letter-spacing: -0.018em; color: var(--ink); }
 .bd-seg { display: inline-flex; flex-shrink: 0; overflow: hidden; border: 1px solid var(--line); border-radius: 999px; }
 .bd-seg button {
   padding: 4px 11px;
-  font-family: "JetBrains Mono", monospace;
+  font-weight: 600; letter-spacing: 0.02em;
   font-size: 9.5px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -634,7 +644,7 @@ html.sb-dark .bd-root {
 .bd-seg button.on { background: var(--ink); color: var(--paper); }
 .bd-url-row {
   display: flex; align-items: center; justify-content: space-between; gap: 10px;
-  font-family: "JetBrains Mono", monospace;
+  font-weight: 600; letter-spacing: 0.02em;
   font-size: 11px; color: var(--ink-3);
   padding: 3px 0;
 }
@@ -650,7 +660,7 @@ html.sb-dark .bd-root {
   border-radius: var(--bd-r);
   padding: 26px;
   text-align: center;
-  font-family: "JetBrains Mono", monospace;
+  font-weight: 600; letter-spacing: 0.02em;
   font-size: 11px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -669,3 +679,57 @@ html.sb-dark .bd-root {
 }
 .bd-invert .bd-invert-dim { color: rgba(247, 242, 234, 0.62); }
 .bd-invert-accent { color: #f0958c; }
+
+/* ── The two worlds ──────────────────────────────────────────────────────
+   Companion and Foundry are different jobs with different vocabularies, so
+   they are a switch rather than two more rows in one long list. */
+.bd-worlds {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3px;
+  padding: 3px;
+  margin: 0 0 14px;
+  border-radius: 999px;
+  background: var(--line-2);
+}
+.bd-world {
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--ink-3);
+  cursor: pointer;
+  transition: background .2s, color .2s;
+}
+.bd-world:hover { color: var(--ink); }
+.bd-world.active { background: var(--raise); color: var(--ink); box-shadow: 0 1px 2px rgba(23,23,26,.06); }
+
+.bd-nav-sec { margin-bottom: 14px; }
+.bd-nav-sec:last-child { margin-bottom: 0; }
+
+/* The tree reads by indent and weight, not by an icon per row: fifteen
+   different glyphs down one edge is noise, and none of them mean anything. */
+.bd-nav-dot {
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  background: var(--ink-4);
+  display: block;
+  transition: background .2s, transform .2s;
+}
+.bd-nav-item.active .bd-nav-dot { background: currentColor; transform: scale(1.2); }
+.bd-nav-item .bd-ic { display: grid; place-items: center; width: 14px; }
+
+/* ── A section with a place but nothing behind it yet ── */
+.bd-soon {
+  padding: 34px 30px;
+  border: 1px dashed var(--line);
+  border-radius: var(--bd-r-lg);
+  background: var(--surface);
+  max-width: 620px;
+}
+.bd-soon p { margin: 0; font-size: 15px; line-height: 1.55; color: var(--ink-2); }
+.bd-soon-alt { margin-top: 10px !important; color: var(--ink-3) !important; font-size: 14px !important; }
