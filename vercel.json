@@ -1,13 +1,64 @@
 {
+  "redirects": [
+    {
+      "source": "/",
+      "has": [
+        {
+          "type": "host",
+          "value": "trybraino.com"
+        }
+      ],
+      "destination": "https://www.affctve.com/braino",
+      "permanent": false
+    },
+    {
+      "source": "/",
+      "has": [
+        {
+          "type": "host",
+          "value": "www.trybraino.com"
+        }
+      ],
+      "destination": "https://www.affctve.com/braino",
+      "permanent": false
+    }
+  ],
   "rewrites": [
-    { "source": "/affectiveos", "destination": "/affectiveos/index.html" },
-    { "source": "/braino", "destination": "/braino/index.html" },
-    { "source": "/about", "destination": "/about/index.html" },
-    { "source": "/apps", "destination": "/apps/index.html" },
-    { "source": "/waitlist", "destination": "/waitlist/index.html" },
-    { "source": "/contact", "destination": "/contact/index.html" },
-    { "source": "/privacy", "destination": "/privacy/index.html" },
-    { "source": "/terms", "destination": "/terms/index.html" },
-    { "source": "/(.*)", "destination": "/app.html" }
+    {
+      "source": "/affectiveos",
+      "destination": "/affectiveos/index.html"
+    },
+    {
+      "source": "/braino",
+      "destination": "/braino/index.html"
+    },
+    {
+      "source": "/about",
+      "destination": "/about/index.html"
+    },
+    {
+      "source": "/apps",
+      "destination": "/apps/index.html"
+    },
+    {
+      "source": "/waitlist",
+      "destination": "/waitlist/index.html"
+    },
+    {
+      "source": "/contact",
+      "destination": "/contact/index.html"
+    },
+    {
+      "source": "/privacy",
+      "destination": "/privacy/index.html"
+    },
+    {
+      "source": "/terms",
+      "destination": "/terms/index.html"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/app.html"
+    }
   ]
 }

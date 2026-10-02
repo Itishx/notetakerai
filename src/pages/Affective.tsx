@@ -13,9 +13,10 @@ import { BrainoShowcase } from "@/components/BrainoShowcase";
 import { AppLogo } from "@/components/AppLogo";
 
 /* ============================================================================
-   / — the homepage (2026-09-30). The picture and the claim, ONE big type
-   moment ("In simple terms…", lit word by word as you scroll), then the real
-   sections: AffectiveOS, Braino and the store, questions. The long version of
+   / — the homepage. Order locked 2026-10-02: the product first, then why it
+   works, then who makes it (the Apple and iPhone pattern). Hero, Braino and
+   the demo, AffectiveOS as one "why it works" section, questions, the end.
+   Foundry and Schools are footer links only. The long version of
    the company is /about; the letter and technical note is /affectiveos.
 
    (What follows is the /about header, kept because it still describes the
@@ -84,42 +85,6 @@ const BRAINO = {
   state: "Runs on AffectiveOS \u00b7 Private beta",
 };
 
-/* The three he comes in. Same Braino; each model is pointed at a different
-   life, the way a phone has models. */
-const MODELS = [
-  {
-    key: "braino",
-    short: "Browser and Mac. The whole of him, for everyone.",
-    name: "Braino",
-    who: "For everyone",
-    line: "Browser and Mac. The whole of him, on whatever you are looking at.",
-    to: "/braino",
-    go: "Meet Braino",
-    accent: "var(--a-braino)",
-  },
-  {
-    key: "foundry",
-    short: "Gets your startup seen: posts, replies and intros.",
-    name: "Braino Foundry",
-    who: "For founders",
-    line: "You can build it. Getting seen is the hard part. He writes your posts, gets you named when buyers ask an AI, and reaches the right people.",
-    to: "/braino?model=foundry",
-    go: "See the Foundry",
-    accent: "var(--a-foundry)",
-  },
-  {
-    key: "mesa",
-    short: "Timetable, attendance and deadlines inside him. Live at Mesa School of Business.",
-    name: "Braino for Schools",
-    who: "For institutions",
-    line: "The same Braino, with your school's timetable, attendance and deadlines inside him. Live at Mesa School of Business.",
-    to: "/braino?model=mesa",
-    go: "Bring him to yours",
-    accent: "#2f6fed",
-  },
-];
-
-
 /* What Braino does, said plainly, with an example each. */
 const DOES = [
   { h: "He does it, not just says it.", p: "A chat window writes the email and hands it back. Braino opens Mail, writes it in your voice and sends it after your yes.", label: "Done", line: "Sent the reply to Priya." },
@@ -129,8 +94,10 @@ const DOES = [
 ]
 
 const FAQS = [
-  { q: "What is AffectiveOS?", a: "The technology we build: an agentic, voice-first layer for the Mac. It lets the Mac you already own see your screen, hear you, talk back, use your apps and remember you. You talk; it does the work." },
-  { q: "What is Braino?", a: "The first product built on AffectiveOS: a companion who lives in your Mac's notch. You say what you want, and he does it in the apps you already use." },
+  { q: "What is Braino?", a: "A companion who lives in your Mac's notch. You say what you want, and he does it in the apps you already use." },
+  { q: "What is AffectiveOS?", a: "The layer we built that Braino runs on. It lets the Mac you already own see your screen, hear you, talk back, use your apps and remember you." },
+  { q: "Do I have to install a new operating system?", a: "No. AffectiveOS runs on top of macOS. You install Braino, and that is it." },
+  { q: "Who makes Braino?", a: "Affective, a small product company in Bengaluru. Braino is the first thing we have built." },
   { q: "What do I need?", a: "A Mac. Braino lives in the notch on the Mac and also works in Chrome." },
   { q: "Will it do things without asking me?", a: "No. Anything that spends money, sends a message, posts in public or deletes something waits for your yes, every time." },
   { q: "Is my data private?", a: "What Braino remembers stays on your Mac. Private windows and password apps are never recorded, nothing is sold, and you can read, fix or delete anything he keeps." },
@@ -572,7 +539,7 @@ export default function Affective() {
             </h1>
             <div className="aff-hero-side">
               <p className="aff-hero-one">
-                Affective builds the tech that lets your Mac do what you say.
+                Meet Braino. He lives in your Mac's notch, and does what you say in the apps you already use.
               </p>
               <div className="aff-hero-cta">
                 <Link to="/waitlist" className="aff-cta">Get early access</Link>
@@ -618,44 +585,24 @@ export default function Affective() {
         </div>
       </header>
 
-      {/* ── AffectiveOS: the big fade-in line ── */}
-      <section className="ah-os" id="technology">
-        <div className="aff-wrap">
-          <p className="ah-kicker">AffectiveOS</p>
-          <h2 className="aff-h1 ah-os-line" data-lit>
-            <Lit text="We build the thing that makes it possible to speak to your Mac." />
-          </h2>
-          <div className="ah-os-say aff-reveal">
-            <p>We call it AffectiveOS. It gives the Mac you already own eyes to see your screen, ears to hear you, a voice to answer, hands to do the work, and a memory of you. You just talk, and it happens.</p>
-            <Link to="/affectiveos" className="aff-cta">Read about AffectiveOS<i aria-hidden="true">→</i></Link>
-          </div>
-        </div>
-        {/* What it gives your Mac: the senses grid, three that act and the one
-            they all land on, the way the old About page drew it. */}
-        <div className="aff-wrap">
-          <div className="ah-mac aff-reveal"><MacTaskFilm /></div>
-        </div>
-      </section>
-
-
       <section className="hb6" id="products">
         <div className="aff-wrap">
-          <p className="ah-kicker">What we put it into</p>
+          <p className="ah-kicker">Meet Braino</p>
           <h2 className="aff-h1 ah-os-line hb6-big" data-lit>
-            <Lit text="Then we put it into Braino, so you have someone to talk to." />
+            <Lit text="Someone to talk to, who actually gets it done." />
           </h2>
           <div className="ah-os-say hb6-say aff-reveal">
-            <p>AffectiveOS is the technology. Braino is how you meet it: a companion who lives in your Mac's notch, knows your day and your people, and gets things done when you ask.</p>
+            <p>Braino is a companion who lives in your Mac's notch. He knows your day and your people, and when you ask, he does the work in the apps you already use.</p>
           </div>
           <div className="hb6-box aff-reveal">
           <div className="hb6-head">
             <div>
-              <p className="ah-kicker">Meet Braino</p>
+              <p className="ah-kicker">Private beta</p>
               <div className="hb5-name">
                 <h2>Braino</h2>
                 <BrainoMascot size={92} className="hb4-him" />
               </div>
-              <p className="hb6-line">The first product on AffectiveOS. A companion in your Mac's notch: tell him what you want and he does it, in the apps you already use, and remembers you.</p>
+              <p className="hb6-line">Tell him what you want and he does it, in the apps you already use, and remembers you. Nothing is sent, bought or posted without your yes.</p>
             </div>
             <div className="hb6-side">
               <div className="hb5-go">
@@ -667,17 +614,6 @@ export default function Affective() {
           <ul className="hb4-does hb6-jobs">
             {DOES.map((d) => <li key={d.h}><h3>{d.h}</h3><p>{d.p}</p></li>)}
           </ul>
-          <div className="hb6-models">
-            <p className="hb6-models-k">One Braino. Three models.</p>
-            <div className="hb6-models-row">
-              {MODELS.map((m) => (
-                <Link to={m.to} key={m.key} className="hb6-model">
-                  <BrainoMascot variant={m.key as "braino" | "foundry" | "mesa"} size={52} />
-                  <span><small>{m.who}</small><b>{m.name}</b><em>{m.short}</em></span>
-                </Link>
-              ))}
-            </div>
-          </div>
           </div>
           <div className="hb6-demo">
           <h2 className="aff-h1 ah-os-line hb6-tag" data-lit><Lit text="Speak. Watch it happen." /></h2>
@@ -686,6 +622,27 @@ export default function Affective() {
             <div className="ao-viz ao-viz-screen"><VoiceToAction tabs notch row /></div>
           </figure>
           </div>
+        </div>
+      </section>
+
+
+
+      {/* ── Why it works: AffectiveOS, the layer under him ── */}
+      <section className="ah-os" id="technology">
+        <div className="aff-wrap">
+          <p className="ah-kicker">Why it works</p>
+          <h2 className="aff-h1 ah-os-line" data-lit>
+            <Lit text="He runs on AffectiveOS, the layer we built for the Mac you already own." />
+          </h2>
+          <div className="ah-os-say aff-reveal">
+            <p>AffectiveOS gives your Mac eyes to see your screen, ears to hear you, a voice to answer, hands to do the work, and a memory of you. It runs on top of macOS, so there is nothing to replace or reinstall.</p>
+            <Link to="/affectiveos" className="aff-cta">Read about AffectiveOS<i aria-hidden="true">→</i></Link>
+          </div>
+        </div>
+        {/* What it gives your Mac: the senses grid, three that act and the one
+            they all land on, the way the old About page drew it. */}
+        <div className="aff-wrap">
+          <div className="ah-mac aff-reveal"><MacTaskFilm /></div>
         </div>
       </section>
 

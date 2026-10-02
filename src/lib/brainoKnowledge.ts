@@ -20,6 +20,18 @@ export type KnowledgeEntry = {
 
 export const KNOWLEDGE_ENTRIES: readonly KnowledgeEntry[] = [
   {
+    slug: "braino-first",
+    title: "Braino First",
+    category: "Design decision",
+    date: "2026-10-02",
+    dateLabel: "October 2, 2026",
+    description:
+      "The home page now meets you with Braino, then explains AffectiveOS as why he works, then who makes him. One company, one website, the product first.",
+    status: "Live",
+    platform: "Affective website",
+    number: "065",
+  },
+  {
     slug: "site-previews",
     title: "Every Page Speaks for Itself",
     category: "Technical",

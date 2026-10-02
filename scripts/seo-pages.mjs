@@ -17,7 +17,7 @@ const words = JSON.parse(readFileSync(new URL("./seo-pages.json", import.meta.ur
 const PAGES = {
   "/": {
     title: "Affective",
-    description: "Affective builds the tech that lets your Mac do what you say. Talk to it, and it does the work in the apps you already use.",
+    description: "Meet Braino. He lives in your Mac's notch and does what you say in the apps you already use. Made by Affective, running on AffectiveOS.",
   },
   "/affectiveos": {
     title: "Introducing AffectiveOS · Affective",

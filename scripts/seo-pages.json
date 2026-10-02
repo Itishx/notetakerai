@@ -1,7 +1,7 @@
 {
   "/": {
     "title": "Affective",
-    "pageDescription": "Affective builds the tech that lets your Mac do what you say. Talk to it, and it does the work in the apps you already use.",
+    "pageDescription": "Meet Braino. He lives in your Mac's notch and does what you say in the apps you already use. Made by Affective, running on AffectiveOS.",
     "blocks": [
       [
         "h1",
@@ -9,7 +9,7 @@
       ],
       [
         "p",
-        "Affective builds the tech that lets your Mac do what you say."
+        "Meet Braino. He lives in your Mac's notch, and does what you say in the apps you already use."
       ],
       [
         "p",
@@ -41,43 +41,19 @@
       ],
       [
         "p",
-        "AFFECTIVEOS"
-      ],
-      [
-        "h2",
-        "We build the thing that makes it possible to speak to your Mac."
-      ],
-      [
-        "p",
-        "We call it AffectiveOS. It gives the Mac you already own eyes to see your screen, ears to hear you, a voice to answer, hands to do the work, and a memory of you. You just talk, and it happens."
-      ],
-      [
-        "p",
-        "Why now"
-      ],
-      [
-        "p",
-        "Did you book the tickets for Friday?"
-      ],
-      [
-        "p",
-        "THE MACBOOK AIR YOU ALREADY OWN"
-      ],
-      [
-        "p",
-        "WHAT WE PUT IT INTO"
-      ],
-      [
-        "h2",
-        "Then we put it into Braino, so you have someone to talk to."
-      ],
-      [
-        "p",
-        "AffectiveOS is the technology. Braino is how you meet it: a companion who lives in your Mac's notch, knows your day and your people, and gets things done when you ask."
-      ],
-      [
-        "p",
         "MEET BRAINO"
+      ],
+      [
+        "h2",
+        "Someone to talk to, who actually gets it done."
+      ],
+      [
+        "p",
+        "Braino is a companion who lives in your Mac's notch. He knows your day and your people, and when you ask, he does the work in the apps you already use."
+      ],
+      [
+        "p",
+        "PRIVATE BETA"
       ],
       [
         "h2",
@@ -85,7 +61,7 @@
       ],
       [
         "p",
-        "The first product on AffectiveOS. A companion in your Mac's notch: tell him what you want and he does it, in the apps you already use, and remembers you."
+        "Tell him what you want and he does it, in the apps you already use, and remembers you. Nothing is sent, bought or posted without your yes."
       ],
       [
         "li",
@@ -102,10 +78,6 @@
       [
         "li",
         "He is one sentence away. No app to open, no tab to find. Say it out loud from anywhere on your Mac, and the notch answers."
-      ],
-      [
-        "p",
-        "ONE BRAINO. THREE MODELS."
       ],
       [
         "h2",
@@ -132,6 +104,30 @@
         "Take the notes Writes down a call or a lecture while you listen."
       ],
       [
+        "p",
+        "WHY IT WORKS"
+      ],
+      [
+        "h2",
+        "He runs on AffectiveOS, the layer we built for the Mac you already own."
+      ],
+      [
+        "p",
+        "AffectiveOS gives your Mac eyes to see your screen, ears to hear you, a voice to answer, hands to do the work, and a memory of you. It runs on top of macOS, so there is nothing to replace or reinstall."
+      ],
+      [
+        "p",
+        "Why now"
+      ],
+      [
+        "p",
+        "Did you book the tickets for Friday?"
+      ],
+      [
+        "p",
+        "THE MACBOOK AIR YOU ALREADY OWN"
+      ],
+      [
         "h3",
         "Questions"
       ],
@@ -151,7 +147,7 @@
   },
   "/affectiveos": {
     "title": "Introducing AffectiveOS · Affective",
-    "pageDescription": "Affective builds the tech that lets your Mac do what you say. Talk to it, and it does the work in the apps you already use.",
+    "pageDescription": "Meet Braino. He lives in your Mac's notch and does what you say in the apps you already use. Made by Affective, running on AffectiveOS.",
     "blocks": [
       [
         "p",
@@ -293,7 +289,7 @@
   },
   "/braino": {
     "title": "Braino",
-    "pageDescription": "Affective builds the tech that lets your Mac do what you say. Talk to it, and it does the work in the apps you already use.",
+    "pageDescription": "Meet Braino. He lives in your Mac's notch and does what you say in the apps you already use. Made by Affective, running on AffectiveOS.",
     "blocks": [
       [
         "p",
@@ -503,7 +499,7 @@
   },
   "/about": {
     "title": "About · Affective",
-    "pageDescription": "Affective builds the tech that lets your Mac do what you say. Talk to it, and it does the work in the apps you already use.",
+    "pageDescription": "Meet Braino. He lives in your Mac's notch and does what you say in the apps you already use. Made by Affective, running on AffectiveOS.",
     "blocks": [
       [
         "p",
@@ -613,7 +609,7 @@
   },
   "/apps": {
     "title": "App Store · Affective",
-    "pageDescription": "Affective builds the tech that lets your Mac do what you say. Talk to it, and it does the work in the apps you already use.",
+    "pageDescription": "Meet Braino. He lives in your Mac's notch and does what you say in the apps you already use. Made by Affective, running on AffectiveOS.",
     "blocks": [
       [
         "p",
@@ -711,7 +707,7 @@
   },
   "/waitlist": {
     "title": "Early access · Affective",
-    "pageDescription": "Affective builds the tech that lets your Mac do what you say. Talk to it, and it does the work in the apps you already use.",
+    "pageDescription": "Meet Braino. He lives in your Mac's notch and does what you say in the apps you already use. Made by Affective, running on AffectiveOS.",
     "blocks": [
       [
         "p",
@@ -753,7 +749,7 @@
   },
   "/contact": {
     "title": "Affective",
-    "pageDescription": "Affective builds the tech that lets your Mac do what you say. Talk to it, and it does the work in the apps you already use.",
+    "pageDescription": "Meet Braino. He lives in your Mac's notch and does what you say in the apps you already use. Made by Affective, running on AffectiveOS.",
     "blocks": [
       [
         "h1",
@@ -767,7 +763,7 @@
   },
   "/privacy": {
     "title": "Affective",
-    "pageDescription": "Affective builds the tech that lets your Mac do what you say. Talk to it, and it does the work in the apps you already use.",
+    "pageDescription": "Meet Braino. He lives in your Mac's notch and does what you say in the apps you already use. Made by Affective, running on AffectiveOS.",
     "blocks": [
       [
         "h1",
@@ -977,7 +973,7 @@
   },
   "/terms": {
     "title": "Affective",
-    "pageDescription": "Affective builds the tech that lets your Mac do what you say. Talk to it, and it does the work in the apps you already use.",
+    "pageDescription": "Meet Braino. He lives in your Mac's notch and does what you say in the apps you already use. Made by Affective, running on AffectiveOS.",
     "blocks": [
       [
         "h1",
