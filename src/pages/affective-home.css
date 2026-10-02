@@ -621,6 +621,8 @@
 .hb6-jobs li { padding: 26px 24px 30px 0; margin-right: 24px; }
 .hb6-jobs h3 { margin: 0 0 8px; font-family: var(--a-display); font-weight: 500; font-size: clamp(21px, 1.8vw, 26px); line-height: 1.2; color: var(--a-ink); }
 .hb6-jobs p { margin: 0; font: 15.5px/1.55 var(--ao-sf); color: var(--a-ink-soft); }
+.hb6-jobs { grid-template-columns: repeat(3, 1fr); }
+.hb6-jobs li.is-key small { display: block; margin-bottom: 8px; font: 600 11px/1 var(--ao-sf); letter-spacing: .12em; text-transform: uppercase; color: var(--a-braino, #e05a4f); }
 @media (max-width: 960px) { .hb6-jobs { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 560px) { .hb6-jobs { grid-template-columns: 1fr; } }
 .hb6-story { margin: -6px 0 clamp(32px, 4vw, 48px); max-width: 62ch; font: clamp(18px, 1.5vw, 21px)/1.55 var(--ao-sf); color: var(--a-ink-soft); }

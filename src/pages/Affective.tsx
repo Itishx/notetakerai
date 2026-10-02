@@ -85,13 +85,17 @@ const BRAINO = {
   state: "Runs on AffectiveOS \u00b7 Private beta",
 };
 
-/* What Braino does, said plainly, with an example each. */
+/* What Braino takes off your plate. Each one is a chore, then how it goes
+   away, because people buy the chore gone, not the ability. The last one is
+   the one only he does, so it is marked. Every chore here runs in the beta. */
 const DOES = [
-  { h: "He does it, not just says it.", p: "A chat window writes the email and hands it back. Braino opens Mail, writes it in your voice and sends it after your yes.", label: "Done", line: "Sent the reply to Priya." },
-  { h: "He already sees your screen.", p: "No copying, pasting or explaining. Ask about the page, the PDF or the error in front of you, and he knows what you mean.", label: "Looking", line: "That error is a missing API key in line 12." },
-  { h: "He knows your life.", p: "Your people, your classes, what you promised last week. Kept on your Mac, so you never start from zero.", label: "Remembered", line: "John, your co-founder. Sending it there." },
-  { h: "He is one sentence away.", p: "No app to open, no tab to find. Say it out loud from anywhere on your Mac, and the notch answers.", label: "Listening", line: "\u201cWhat's due this week?\u201d" },
-]
+  { h: "Stop typing the same replies.", p: "Say \u201ctell Priya Friday works.\u201d He opens WhatsApp, writes it the way you would, and sends it after your yes." },
+  { h: "Stop taking notes in meetings.", p: "He listens to the call or the lecture. Close the laptop and the notes are waiting: what was decided, and who does what." },
+  { h: "Stop checking five apps every morning.", p: "Ask \u201cwhat's today?\u201d and get one answer: your meetings, your deadlines, and who is waiting on you." },
+  { h: "Stop digging for that file.", p: "Say what it was about, and he finds it and opens it. No folders, no search bar." },
+  { h: "Stop filling the same forms.", p: "Your name, your email, the login you always forget. He fills it in and stops before submit." },
+  { h: "Stop explaining yourself to your software.", p: "He remembers your people and what you told him last month, so you never start from zero.", key: "Only Braino" },
+];
 
 const FAQS = [
   { q: "What is Braino?", a: "A companion who lives in your Mac's notch. You say what you want, and he does it in the apps you already use." },
@@ -113,22 +117,6 @@ const WALLS = [
   "radial-gradient(110% 90% at 10% 10%, #d7c8ff 0%, transparent 50%), radial-gradient(100% 90% at 90% 30%, #8fd3ff 0%, transparent 55%), radial-gradient(120% 120% at 50% 110%, #4b3fb0 0%, #1a1546 75%)",
   "radial-gradient(110% 90% at 85% 10%, #c6f6a0 0%, transparent 50%), radial-gradient(100% 90% at 10% 40%, #58d6b0 0%, transparent 55%), radial-gradient(120% 120% at 50% 110%, #1f6f5c 0%, #0b2b26 75%)",
 ];
-
-/* Braino's notch on the big screen, stepping through what he does. */
-function BrainoDoes() {
-  const [i, setI] = useState(0);
-  useEffect(() => {
-    const t = window.setTimeout(() => setI((i + 1) % DOES.length), 3600);
-    return () => window.clearTimeout(t);
-  }, [i]);
-  const d = DOES[i];
-  return (
-    <div className="hb2-notch" key={i}>
-      <NotchSheet className="ns-md ns-glow" label={d.label} done={false}>{d.line}</NotchSheet>
-    </div>
-  );
-}
-
 
 /* Six live tiles under the AffectiveOS line: one per thing it gives your
    Mac, each drawn in code and moving on its own. */
@@ -612,7 +600,7 @@ export default function Affective() {
             </div>
           </div>
           <ul className="hb4-does hb6-jobs">
-            {DOES.map((d) => <li key={d.h}><h3>{d.h}</h3><p>{d.p}</p></li>)}
+            {DOES.map((d) => <li key={d.h} className={d.key ? "is-key" : undefined}>{d.key && <small>{d.key}</small>}<h3>{d.h}</h3><p>{d.p}</p></li>)}
           </ul>
           </div>
           <div className="hb6-demo">

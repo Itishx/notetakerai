@@ -16,7 +16,7 @@ The old page went Affective, then AffectiveOS, then Braino. People had to change
 ## How it reads now
 
 1. Hero: "Stop using your Mac. Start talking to it." Then: meet Braino, who lives in your notch.
-2. Meet Braino: what he does, and the live demo.
+2. Meet Braino: six chores he takes off your plate (replies, meeting notes, the morning check, finding a file, forms, explaining yourself), then the live demo. Each is a chore first, how it goes away second, the way people actually buy. "Stop explaining yourself to your software" is marked Only Braino, because remembering you is the edge over voice-to-action tools like VoiceOS.
 3. Why it works: he runs on AffectiveOS, a layer on top of the macOS you already have. Nothing to replace or reinstall.
 4. Questions, starting with what Braino is, then AffectiveOS, then "do I need a new operating system?" and "who makes Braino?".
 5. Braino Foundry and Braino for Schools are footer links only.
@@ -32,6 +32,7 @@ The old page went Affective, then AffectiveOS, then Braino. People had to change
 
 - The Braino page still offers the three models, and still says Braino for Schools is live at Mesa. Mesa runs on the founder's own Mac, so that line should be softened.
 - Nothing about this has been tested with real visitors yet.
+- The six chores are built and running in the beta, but most are still marked as being tested in the Mac app. The morning answer is worded around meetings and messages, not the Mesa timetable, because one Mesa schedule test fails.
 
 ## Technical shape
 
