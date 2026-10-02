@@ -81,7 +81,11 @@ i.none { border-color: var(--a-ink-faint); opacity: .5; }
   .vz-map-col { border-left: 0; border-top: 1px solid var(--vz-line); }
   .vz-fall-row { grid-template-columns: 110px 1fr; }
   .vz-fall-note { display: none; }
-  .vz-mx-head span { font-size: 10px; }
+  .vz-mx-head, .vz-mx-row { grid-template-columns: minmax(104px, 1.4fr) repeat(7, 1fr); }
+  .vz-mx-head { align-items: end; }
+  .vz-mx-head span { font-size: 11px; writing-mode: vertical-rl; transform: rotate(180deg); justify-self: center; text-align: left; white-space: nowrap; padding: 0 0 0; margin-bottom: 10px; }
+  .vz-mx-name { font-size: 13px; padding-left: 8px; }
+  .vz-mx-cell i { width: 12px; height: 12px; }
   .vz-matrix { overflow-x: auto; }
 }
 @media (prefers-reduced-motion: reduce) {
