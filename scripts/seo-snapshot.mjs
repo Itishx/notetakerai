@@ -32,6 +32,12 @@ for (const route of ROUTES) {
     const seen = new Set();
     const list = [];
     const root = document.querySelector("main") || document.getElementById("root");
+    // Headlines that animate word by word are separate boxes with no spaces
+    // between them; the whole sentence lives in their aria-label.
+    for (const lab of root.querySelectorAll("[aria-label]")) {
+      const kids = [...lab.children];
+      if (kids.length && kids.every((c) => c.getAttribute("aria-hidden") === "true")) lab.textContent = ` ${lab.getAttribute("aria-label")} `;
+    }
     for (const el of root.querySelectorAll("h1,h2,h3,p,li")) {
       if (el.closest("nav,footer,[aria-hidden='true'],[role='img'],.vz")) continue;
       if (el.parentElement.closest("p,li")) continue;

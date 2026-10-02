@@ -1,7 +1,7 @@
 {
   "/": {
     "title": "Affective",
-    "pageDescription": "Install Braino, open any page, click the icon. An AI side panel reads the page, answers questions, records lectures, and handles browser tasks.",
+    "pageDescription": "Affective builds the tech that lets your Mac do what you say. Talk to it, and it does the work in the apps you already use.",
     "blocks": [
       [
         "h1",
@@ -45,7 +45,7 @@
       ],
       [
         "h2",
-        "WebuildthethingthatmakesitpossibletospeaktoyourMac."
+        "We build the thing that makes it possible to speak to your Mac."
       ],
       [
         "p",
@@ -69,7 +69,7 @@
       ],
       [
         "h2",
-        "ThenweputitintoBraino,soyouhavesomeonetotalkto."
+        "Then we put it into Braino, so you have someone to talk to."
       ],
       [
         "p",
@@ -109,7 +109,7 @@
       ],
       [
         "h2",
-        "Speak.Watchithappen."
+        "Speak. Watch it happen."
       ],
       [
         "p",
@@ -151,7 +151,7 @@
   },
   "/affectiveos": {
     "title": "Introducing AffectiveOS · Affective",
-    "pageDescription": "Install Braino, open any page, click the icon. An AI side panel reads the page, answers questions, records lectures, and handles browser tasks.",
+    "pageDescription": "Affective builds the tech that lets your Mac do what you say. Talk to it, and it does the work in the apps you already use.",
     "blocks": [
       [
         "p",
@@ -293,7 +293,7 @@
   },
   "/braino": {
     "title": "Braino",
-    "pageDescription": "Install Braino, open any page, click the icon. An AI side panel reads the page, answers questions, records lectures, and handles browser tasks.",
+    "pageDescription": "Affective builds the tech that lets your Mac do what you say. Talk to it, and it does the work in the apps you already use.",
     "blocks": [
       [
         "p",
@@ -503,7 +503,7 @@
   },
   "/about": {
     "title": "About · Affective",
-    "pageDescription": "Install Braino, open any page, click the icon. An AI side panel reads the page, answers questions, records lectures, and handles browser tasks.",
+    "pageDescription": "Affective builds the tech that lets your Mac do what you say. Talk to it, and it does the work in the apps you already use.",
     "blocks": [
       [
         "p",
@@ -613,7 +613,7 @@
   },
   "/apps": {
     "title": "App Store · Affective",
-    "pageDescription": "Install Braino, open any page, click the icon. An AI side panel reads the page, answers questions, records lectures, and handles browser tasks.",
+    "pageDescription": "Affective builds the tech that lets your Mac do what you say. Talk to it, and it does the work in the apps you already use.",
     "blocks": [
       [
         "p",
@@ -711,7 +711,7 @@
   },
   "/waitlist": {
     "title": "Early access · Affective",
-    "pageDescription": "Install Braino, open any page, click the icon. An AI side panel reads the page, answers questions, records lectures, and handles browser tasks.",
+    "pageDescription": "Affective builds the tech that lets your Mac do what you say. Talk to it, and it does the work in the apps you already use.",
     "blocks": [
       [
         "p",
@@ -752,8 +752,8 @@
     ]
   },
   "/contact": {
-    "title": "Braino : Your AI Browser Sidekick",
-    "pageDescription": "Install Braino, open any page, click the icon. An AI side panel reads the page, answers questions, records lectures, and handles browser tasks.",
+    "title": "Affective",
+    "pageDescription": "Affective builds the tech that lets your Mac do what you say. Talk to it, and it does the work in the apps you already use.",
     "blocks": [
       [
         "h1",
@@ -766,8 +766,8 @@
     ]
   },
   "/privacy": {
-    "title": "Braino : Your AI Browser Sidekick",
-    "pageDescription": "Install Braino, open any page, click the icon. An AI side panel reads the page, answers questions, records lectures, and handles browser tasks.",
+    "title": "Affective",
+    "pageDescription": "Affective builds the tech that lets your Mac do what you say. Talk to it, and it does the work in the apps you already use.",
     "blocks": [
       [
         "h1",
@@ -976,8 +976,8 @@
     ]
   },
   "/terms": {
-    "title": "Braino : Your AI Browser Sidekick",
-    "pageDescription": "Install Braino, open any page, click the icon. An AI side panel reads the page, answers questions, records lectures, and handles browser tasks.",
+    "title": "Affective",
+    "pageDescription": "Affective builds the tech that lets your Mac do what you say. Talk to it, and it does the work in the apps you already use.",
     "blocks": [
       [
         "h1",
