@@ -11840,7 +11840,7 @@ end tell`;
   if (clicked === "clicked") {
     return { ok: true, say: `${title} is back on, right where you left it.` };
   }
-  return { ok: true, say: `Netflix is open with ${title} right there. Hit the first one and you are back in.` };
+  return { ok: true, partial: true, say: `Netflix is open with ${title} right there. Hit the first one and you are back in.` };
 }
 
 // ── MESA School of Business: Itish is in the PGP in Venture Building. ──
@@ -20596,20 +20596,28 @@ async function runPlanSteps(steps, raw, source) {
     lastOut = out;
   }
   logMac("plan.ran", { source, steps: steps.map((s) => s.tool), ms: Date.now() - started });
-  return { failed: false, values, lastOut, lastTool: steps[steps.length - 1]?.tool, ms: Date.now() - started };
+  return { failed: false, values, lastOut, lastTool: steps[steps.length - 1]?.tool, count: steps.length, ms: Date.now() - started };
 }
 
 /* A plan whose last step fetched something is a question: the answer is what
    that step found, not the plan's "Here's your attendance", which was written
    before anything was fetched. */
-const PLAN_ANSWER_TOOLS = /(?:_lookup|_query|_report|_messages|_stats|_mentions|_census|_status|_current|_summary|_list|_sync|_sync_all)$|^(?:now_playing|spotify_now_playing|memory_search|web_search|count_items|recent_download|whats_new|describe_image|screen_vision|read_selection|answer_question_conversationally)$/;
+const PLAN_ANSWER_TOOLS = /(?:_lookup|_query|_report|_messages|_stats|_mentions|_census|_status|_current|_summary|_list|_sync|_sync_all)$|^(?:now_playing|spotify_now_playing|memory_search|web_search|deep_research|web_research|research|count_items|recent_download|whats_new|describe_image|screen_vision|read_selection|answer_question_conversationally)$/;
 async function planReply(raw, run, fallback) {
   const found = String(run?.lastOut?.say || "").trim();
+  /* What actually happened beats what the plan expected. A one step plan, or
+     a step that says it only got partway, speaks for itself: "Iron Man is
+     playing. Enjoy the movie!" was said while Netflix had reported the title
+     unavailable and the step itself said so (2026-10-11). */
+  if (found && !PLAN_ANSWER_TOOLS.test(String(run?.lastTool || "")) && (run?.lastOut?.partial || run?.count === 1)) return found;
   if (!found || !PLAN_ANSWER_TOOLS.test(String(run?.lastTool || ""))) return fallback || found || "Done.";
+  /* "First see where it is, then play it": the answer, then the next step
+     offered, never a promise to look that ends the job. */
+  const wantsNext = /\b(?:then|after that|accordingly|and play|and open)\b/i.test(String(raw || ""));
   // Short and plain already: say it as it is.
-  if (found.length <= 160 && !found.includes("\n") && !/\btool\b|_/.test(found)) return found;
+  if (!wantsNext && found.length <= 160 && !found.includes("\n") && !/\btool\b|_/.test(found)) return found;
   const t = Date.now();
-  const spoken = await runMacConversation(`${raw}\n\n(Answer me in one or two short spoken sentences, using only this, and say nothing about tools:\n${found.slice(0, 2500)})`).catch(() => null);
+  const spoken = await runMacConversation(`${raw}\n\n(Answer me in one or two short spoken sentences, using only this, and say nothing about tools.${wantsNext ? " I asked you to do something after this: end by offering to do it, in one short question." : ""}\n${found.slice(0, 2500)})`).catch(() => null);
   macTrace("🧩 PLAN", `answer phrased in ${((Date.now() - t) / 1000).toFixed(1)}s`);
   return String(spoken?.say || "").trim() || found.split("\n").slice(0, 3).join(" ");
 }
