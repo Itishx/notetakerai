@@ -145,6 +145,7 @@ const SitePreviewsDocs = lazy(() => import("./pages/SitePreviewsDocs.tsx"));
 const BrainoFirstDocs = lazy(() => import("./pages/BrainoFirstDocs.tsx"));
 const OneBrainoPageDocs = lazy(() => import("./pages/OneBrainoPageDocs.tsx"));
 const WhichContactDocs = lazy(() => import("./pages/WhichContactDocs.tsx"));
+const MeetBrainoDocs = lazy(() => import("./pages/MeetBrainoDocs.tsx"));
 const LocalhostDocs = lazy(() => import("./pages/LocalhostDocs.tsx"));
 const SaidToHimDocs = lazy(() => import("./pages/SaidToHimDocs.tsx"));
 const SaferDefaultDocs = lazy(() => import("./pages/SaferDefaultDocs.tsx"));
@@ -256,6 +257,7 @@ function AppRoutes() {
         <Route path="/knowledge/braino-first" element={<BrainoFirstDocs />} />
         <Route path="/knowledge/one-braino-page" element={<OneBrainoPageDocs />} />
         <Route path="/knowledge/which-contact" element={<WhichContactDocs />} />
+        <Route path="/knowledge/meet-braino" element={<MeetBrainoDocs />} />
         <Route path="/knowledge/knows-your-localhost" element={<LocalhostDocs />} />
         <Route path="/knowledge/said-to-him" element={<SaidToHimDocs />} />
         <Route path="/knowledge/safer-by-default" element={<SaferDefaultDocs />} />

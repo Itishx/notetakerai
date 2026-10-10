@@ -153,6 +153,19 @@ contextBridge.exposeInMainWorld("brainoMac", {
   setupConnect: (kind) => ipcRenderer.invoke("braino-mac:setup-connect", kind),
   setupOpenPane: (pane) => ipcRenderer.invoke("braino-mac:setup-open-pane", pane),
   setupSay: (text) => ipcRenderer.invoke("braino-mac:setup-say", text),
+  setupNotch: (text, ms) => ipcRenderer.invoke("braino-mac:setup-notch", { text, ms }),
+  setupAsk: (id) => ipcRenderer.invoke("braino-mac:setup-ask", id),
+  setupPermissions: () => ipcRenderer.invoke("braino-mac:setup-permissions"),
+  onSetupHeard: (callback) => {
+    const handler = (_event, payload) => callback(payload || {});
+    ipcRenderer.on("braino-mac:setup-heard", handler);
+    return () => ipcRenderer.removeListener("braino-mac:setup-heard", handler);
+  },
+  onSetupNotch: (callback) => {
+    const handler = (_event, payload) => callback(payload || {});
+    ipcRenderer.on("braino-mac:setup-notch", handler);
+    return () => ipcRenderer.removeListener("braino-mac:setup-notch", handler);
+  },
   memoryDigests: (day) => ipcRenderer.invoke("braino-mac:memory-digests", day),
   memoryRecallSwitch: (on) => ipcRenderer.invoke("braino-mac:memory-recall-switch", on),
   memoryDigestNow: () => ipcRenderer.invoke("braino-mac:memory-digest-now"),

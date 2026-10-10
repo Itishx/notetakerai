@@ -31,3 +31,34 @@ test("answers become memory, replaced rather than duplicated, and settings apply
 test("his lines have no dashes", () => {
   assert.doesNotMatch(js, /[—–]/);
 });
+
+/* First launch, tied together (2026-10-10). */
+const app = read("renderer/app.js");
+test("a new person who signs in goes straight into setup, not the old full-screen cover", () => {
+  assert.match(main, /setTimeout\(\(\) => maybeStartSetup\("signed-in"\), 1500\);/);
+  assert.match(main, /setTimeout\(\(\) => maybeStartSetup\("startup"\), 9000\);/);
+  assert.match(main, /firstRun: process\.env\.BRAINO_OLD_FIRST_RUN === "1" && loadFirstRun\(\)/);
+});
+
+test("the notch says each step's line while the window shows it", () => {
+  assert.match(js, /api\.setupNotch\?\.\(/);
+  assert.match(preload, /setupNotch: \(text, ms\) => ipcRenderer\.invoke\("braino-mac:setup-notch"/);
+  assert.match(read("renderer/braino-mac.js"), /onSetupNotch\?\.\(\(payload\) => \{ if \(payload\?\.text\) nfShowTransient/);
+});
+
+test("Allow asks macOS for real and the row turns green by itself", () => {
+  assert.match(main, /systemPreferences\.askForMediaAccess\("microphone"\)/);
+  assert.match(main, /systemPreferences\.isTrustedAccessibilityClient\(true\)/);
+  assert.match(js, /STEPS\[at\]\?\.kind === "permissions"\) void checkPermissions\(\); \}, 1000\)/);
+});
+
+test("try me waits for the first real thing said to him", () => {
+  assert.match(main, /setupWindow\.webContents\.send\("braino-mac:setup-heard"/);
+  assert.match(js, /api\.onSetupHeard\?\.\(/);
+});
+
+test("both windows are white, and home counts only real activity", () => {
+  assert.match(read("renderer/setup.html"), /href="white\.css"/);
+  assert.match(read("renderer/app.html"), /href="white\.css"/);
+  assert.match(app, /need: \["snap", "activity", "mems"\]/);
+});

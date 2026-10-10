@@ -1082,6 +1082,8 @@ async function startBrowserAuthFlow(reason = "realtime") {
       logMac("auth.callback.ok", { email: session.user?.email || null, userId: session.user?.id || null });
       resolveAuthWaiters({ ok: true, source: "browser", email: session.user?.email || null });
       stopAuthBrowserFlow({ closeTabs: true });
+      // A brand new person signs in: setup starts now, not on the next launch.
+      setTimeout(() => maybeStartSetup("signed-in"), 1500);
     } catch (error) {
       logMac("auth.callback.failed", { error });
       sendAuthHttp(res, 500, { ok: false, error: error?.message || "auth_callback_failed" });
@@ -1274,6 +1276,12 @@ function interactionUrlHost(url) {
 }
 
 function logInteraction(event = {}) {
+  // Setup's "try me" step waits for the first real thing said to him.
+  try {
+    if (setupWindow && !setupWindow.isDestroyed() && (event?.user_text || event?.braino_text)) {
+      setupWindow.webContents.send("braino-mac:setup-heard", { you: String(event.user_text || "").slice(0, 200), braino: String(event.braino_text || "").slice(0, 300), kind: String(event.kind || "") });
+    }
+  } catch (_) {}
   /* Everything said to him and everything he said back, by voice, typing or
      anything else, goes into the memory layer as well as the server log. The
      layer is local and text-only; see activity-log.cjs. */
@@ -23042,7 +23050,10 @@ ipcMain.handle("braino-mac:get-config", async () => {
     accessibilityTrusted: systemPreferences.isTrustedAccessibilityClient(false),
     microphoneStatus: process.platform === "darwin" ? systemPreferences.getMediaAccessStatus("microphone") : "unsupported",
     mascot: await loadMascotPreference(),
-    firstRun: loadFirstRun(),
+    /* The full-screen first-run cover is retired: setup now runs in its own
+       window with the notch talking alongside (maybeStartSetup). It stays
+       reachable behind BRAINO_OLD_FIRST_RUN=1 while we compare the two. */
+    firstRun: process.env.BRAINO_OLD_FIRST_RUN === "1" && loadFirstRun(),
     namedMode: loadNamedMode(),
     logPath: LOG_PATH,
   };
@@ -23810,26 +23821,19 @@ function openSetupWindow() {
   setupWindow = new BrowserWindow({
     width: 1180, height: 780, minWidth: 940, minHeight: 620,
     title: "Set up Braino", titleBarStyle: "hiddenInset", trafficLightPosition: { x: 18, y: 18 },
-    // Vibrancy must stay off with liquid glass, or it paints over the glass.
-    transparent: true, backgroundColor: "#00000000",
-    ...(liquidGlass ? {} : { vibrancy: "under-window", visualEffectState: "active" }),
+    // White now, like the website. No glass: it read as grey on most desktops.
+    backgroundColor: "#ffffff",
     show: false,
     webPreferences: { preload: PRELOAD_PATH, contextIsolation: true, nodeIntegration: false, sandbox: false },
   });
-  setupWindow.webContents.once("did-finish-load", () => {
-    if (!liquidGlass || !setupWindow || setupWindow.isDestroyed()) return;
-    try {
-      const id = liquidGlass.addView(setupWindow.getNativeWindowHandle(), { cornerRadius: 26 });
-      liquidGlass.unstable_setVariant(id, liquidGlass.GlassMaterialVariant.clear);
-      setupWindow.setWindowButtonVisibility(true);
-      logMac("setup.glass", { id });
-    } catch (error) {
-      setupWindow.setVibrancy("under-window");
-      logMac("setup.glass_failed", { error: String(error?.message || error).slice(0, 160) });
-    }
-  });
   setupWindow.once("ready-to-show", () => { app.dock?.show?.(); setupWindow.show(); setupWindow.focus(); });
-  setupWindow.on("closed", () => { setupWindow = null; if (!dashboardWindow && !memoryWindow) app.dock?.hide?.(); });
+  setupWindow.on("closed", () => {
+    setupWindow = null;
+    // Finished: the app opens on his home page. Closed halfway: he says where to find it.
+    if (readSetupState().completedAt) { openBrainoApp("home"); return; }
+    sendToRenderer("braino-mac:setup-notch", { text: "No rush. Double click me to finish setting up.", ms: 5000 });
+    if (!dashboardWindow && !memoryWindow && !appWindow) app.dock?.hide?.();
+  });
   setupWindow.loadFile(SETUP_VIEW_PATH);
   logMac("setup.opened", { done: Boolean(readSetupState().completedAt) });
   macTrace("🧩 SETUP", "opened");
@@ -23972,6 +23976,52 @@ async function saveSetup(answers = {}) {
 
 ipcMain.handle("braino-mac:setup-open", async () => { openSetupWindow(); return { ok: true }; });
 
+/* First launch, tied together (2026-10-10). Signed in and never set up: the
+   setup window opens by itself, and the notch says hello first so the person
+   knows where he lives. Called after sign in and once at startup. */
+let setupAutoStarted = false;
+function maybeStartSetup(why) {
+  if (setupAutoStarted || readSetupState().completedAt || !authStatusPayload().authenticated) return;
+  setupAutoStarted = true;
+  logMac("setup.auto_start", { why });
+  sendToRenderer("braino-mac:setup-notch", { text: "Hi. I'm up here. Let's get you set up.", ms: 3200 });
+  setTimeout(() => openSetupWindow(), 2600);
+}
+
+/* The window and the notch move together: each step's line is shown in the
+   notch while the window shows the thing to tap. */
+ipcMain.handle("braino-mac:setup-notch", async (_e, payload = {}) => {
+  const text = String(payload?.text || "").replace(/[—–]/g, ",").slice(0, 160);
+  if (text) sendToRenderer("braino-mac:setup-notch", { text, ms: Math.max(1500, Math.min(9000, Number(payload?.ms) || 4000)) });
+  return { ok: true };
+});
+
+/* Ask macOS for the permission itself where it lets an app ask (the real
+   system prompt), and open the exact setting where it does not. */
+ipcMain.handle("braino-mac:setup-ask", async (_e, id) => {
+  const panes = { microphone: "Privacy_Microphone", accessibility: "Privacy_Accessibility", screen: "Privacy_ScreenCapture", contacts: "Privacy_Contacts" };
+  try {
+    if (id === "microphone") {
+      const status = systemPreferences.getMediaAccessStatus("microphone");
+      if (status === "not-determined") { const ok = await systemPreferences.askForMediaAccess("microphone"); logMac("setup.ask", { id, ok }); return { ok }; }
+    } else if (id === "accessibility") {
+      if (systemPreferences.isTrustedAccessibilityClient(true)) return { ok: true };
+    } else if (id === "screen") {
+      // Asking for a screen once is what puts Braino in the Screen Recording list.
+      await desktopCapturer.getSources({ types: ["screen"], thumbnailSize: { width: 1, height: 1 } }).catch(() => {});
+    } else if (id === "contacts") {
+      await importAllContacts(true);
+      if (contactsCache && Object.keys(contactsCache).length) { setupCache.at = 0; return { ok: true }; }
+    }
+  } catch (error) {
+    logMac("setup.ask_failed", { id, error: String(error?.message || error).slice(0, 160) });
+  }
+  if (panes[id]) await shell.openExternal(`x-apple.systempreferences:com.apple.preference.security?${panes[id]}`);
+  logMac("setup.ask", { id, opened: Boolean(panes[id]) });
+  return { ok: false, opened: Boolean(panes[id]) };
+});
+ipcMain.handle("braino-mac:setup-permissions", async () => ({ ok: true, permissions: setupPermissions() }));
+
 // ── Braino for Mac: the one app (renderer/app.html) ─────────────────────────
 // Double-click Braino opens it. It replaces the little menu and the old
 // dashboard window; pages not moved over yet still open the old dashboard.
@@ -23990,22 +24040,12 @@ function openBrainoApp(page) {
     /* macOS full screen paints transparent windows grey. The green button
        fills the screen instead, and the glass stays glass. */
     fullscreenable: false,
-    transparent: true, backgroundColor: "#00000000",
-    ...(liquidGlass ? {} : { vibrancy: "under-window", visualEffectState: "active" }),
+    backgroundColor: "#ffffff",
     show: false,
     webPreferences: { preload: PRELOAD_PATH, contextIsolation: true, nodeIntegration: false, sandbox: false },
   });
   appWindow.webContents.once("did-finish-load", () => {
     if (page) appWindow?.webContents.send("braino-mac:app-go", page);
-    if (!liquidGlass || !appWindow || appWindow.isDestroyed()) return;
-    try {
-      const id = liquidGlass.addView(appWindow.getNativeWindowHandle(), { cornerRadius: 26 });
-      liquidGlass.unstable_setVariant(id, liquidGlass.GlassMaterialVariant.clear);
-      appWindow.setWindowButtonVisibility(true);
-    } catch (error) {
-      appWindow.setVibrancy("under-window");
-      logMac("app.glass_failed", { error: String(error?.message || error).slice(0, 160) });
-    }
   });
   appWindow.once("ready-to-show", () => { app.dock?.show?.(); appWindow.show(); appWindow.focus(); });
   appWindow.on("closed", () => { appWindow = null; if (!dashboardWindow && !memoryWindow && !setupWindow) app.dock?.hide?.(); });
@@ -26108,6 +26148,8 @@ app.whenReady().then(() => {
   startPresenceBeacon();
   startTraceServer();
   createDockWindow();
+  // Signed in but never set up (quit halfway, or an old install): offer it once the notch is awake.
+  setTimeout(() => maybeStartSetup("startup"), 9000);
   void startDropWatcher();
   registerHotkeys();
   startSwiftHotkeyHelper();

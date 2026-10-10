@@ -20,6 +20,18 @@ export type KnowledgeEntry = {
 
 export const KNOWLEDGE_ENTRIES: readonly KnowledgeEntry[] = [
   {
+    slug: "meet-braino",
+    title: "Meet Braino",
+    category: "Feature",
+    date: "2026-10-10",
+    dateLabel: "October 10, 2026",
+    description:
+      "Sign in once and Braino sets himself up with you: the notch and a white setup window move together, permissions turn green the moment you allow them, and you try him out loud before you finish.",
+    status: "MVP",
+    platform: "Braino for Mac",
+    number: "079",
+  },
+  {
     slug: "brainos-own-browser",
     title: "Braino's Own Browser",
     category: "Feature",

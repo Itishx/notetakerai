@@ -26,6 +26,7 @@
     "mac:dictate:build": "cd mac/braino-mac/native/BrainoDictate && swift build -c release",
     "mac:format:build": "cd mac/braino-mac/native/BrainoFormat && swiftc -O -o BrainoFormat main.swift",
     "mac:dev": "env -u ELECTRON_RUN_AS_NODE electron mac/braino-mac/main.cjs",
+    "mac:fresh": "node scripts/mac-fresh-start.mjs",
     "mac:cloud": "env -u ELECTRON_RUN_AS_NODE BRAINO_PARAKEET=0 electron mac/braino-mac/main.cjs",
     "mac:dashboard": "env -u ELECTRON_RUN_AS_NODE BRAINO_MAC_DASHBOARD=1 electron mac/braino-mac/main.cjs",
     "pdf:pitchdeck": "node scripts/build-pitchdeck-pdf.mjs public/braino-pitchdeck.pdf",

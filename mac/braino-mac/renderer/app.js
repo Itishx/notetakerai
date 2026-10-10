@@ -48,21 +48,36 @@ const P = {
   /* Chat: the first page. Type to him; he answers or does it (chat.js). */
   chat: { t: "", nav: ["Chat", "chat"], r: () => window.BrainoChat?.html() || "" },
   /* Companion */
-  home: { t: "", nav: ["Home", "home"], need: ["snap", "recent"], r: () => {
+  /* Home: a stats board. Every number is counted from his real activity log
+     and memory on this Mac; nothing is estimated or made up. */
+  home: { t: "", nav: ["Home", "home"], need: ["snap", "activity", "mems"], r: () => {
+    const all = S.activity || [];
+    const day = (d) => new Date(d).toDateString();
+    const today = new Date();
+    const todays = all.filter((x) => day(x.at) === today.toDateString());
+    const weekAgo = Date.now() - 7 * 864e5;
+    const week = all.filter((x) => new Date(x.at).getTime() > weekAgo);
+    const worked = week.filter((x) => x.ok && !x.stood).length;
+    const rate = week.length ? Math.round((worked / week.length) * 100) : null;
+    const fast = week.filter((x) => x.ms != null).map((x) => x.ms).sort((p, q) => p - q);
+    const typical = fast.length ? (fast[Math.floor(fast.length / 2)] / 1000).toFixed(1) : null;
+    const days = new Set(all.map((x) => day(x.at)));
+    let streak = 0; for (let d = new Date(today); days.has(d.toDateString()); d.setDate(d.getDate() - 1)) streak += 1;
+    const bars = [...Array(7)].map((_, i) => { const d = new Date(today); d.setDate(today.getDate() - 6 + i); return { label: d.toLocaleDateString([], { weekday: "narrow" }), n: all.filter((x) => day(x.at) === d.toDateString()).length, today: i === 6 }; });
+    const top = Math.max(1, ...bars.map((b) => b.n));
+    const mems = S.mems ? S.mems.length : (S.snap?.facts || []).length;
     const next = S.snap?.classesToday?.[0];
-    const people = (S.snap?.important || []).slice(0, 4);
-    const recent = S.recent.slice(0, 5);
-    const fast = recent.filter((x) => x.ms != null).map((x) => x.ms).sort((a, b) => a - b);
-    const typical = fast.length ? `${(fast[Math.floor(fast.length / 2)] / 1000).toFixed(1)}s` : "—";
-    return `<h1 class="greet">${hello()}${first() ? `, ${esc(first())}` : ""}.</h1>
-      <section class="hero-photo"><h2>Make Braino <em>yours</em>.</h2><p>Two minutes, and he knows enough to run your day. Watch his notebook fill in as you answer.</p><button class="btn" type="button" data-act="setupOpen">Set him up</button></section>
+    const people = (S.snap?.important || []).slice(0, 5);
+    const stat = (k, n, unit, sub) => `<div class="hs"><div class="k">${k}</div><div class="n">${n ?? "—"}${n != null && unit ? `<small>${unit}</small>` : ""}</div><p>${sub}</p></div>`;
+    const setUp = Boolean(S.snap?.answers?.completedAt);
+    return `<h1 class="greet">${hello()}${first() ? `, <em>${esc(first())}</em>` : ""}.</h1>
+      ${setUp ? "" : `<section class="hero-photo"><h2>Let's finish <em>meeting</em>.</h2><p>Two minutes, and he knows enough to run your day.</p><button class="btn" type="button" data-act="setupOpen">Set him up</button></section>`}
       <label class="ask"><input id="ask" placeholder="Ask Braino anything, or tell him what to do" aria-label="Ask Braino"><span class="kb">⌃⌃ to talk</span></label>
-      ${m("s4", `${kicker("Listening", chip("Ready", "ok"))}<p class="sub">Say "Hey Braino" or press Control twice.</p>`)}
-      ${m("s4", `${kicker("Next class")}${next ? `<h2>${esc(next.title)}</h2><p class="sub">${esc(next.at)}${next.room ? ` · ${esc(next.room)}` : ""}</p>` : `<p class="sub">Nothing left today.</p>`}`, "mesa")}
-      ${m("s4", `${kicker("Recent speed")}<div class="big">${typical}</div><p class="sub">typical, his side of the work</p>`, "skills")}
-      ${m("s6", `${kicker("Your people")}${people.length ? `<div class="chips">${people.map((n) => chip(`★ ${n}`)).join("")}</div>` : `<p class="sub">Nobody marked yet.</p>`}`, "whatsapp")}
-      ${m("s6", `${kicker("What he knows about you")}<div class="big">${(S.snap?.facts || []).length}</div><p class="sub">facts in his memory</p>`, "setup")}
-      ${m("", `${kicker("Recent")}<div class="rows">${recent.length ? recent.map((x) => row(esc(x.heard), esc(x.lane), `<span class="val">${x.ms != null ? `${(x.ms / 1000).toFixed(1)}s` : ""}</span>`)).join("") : row("Nothing yet today")}</div>`)}`;
+      <div class="hs-row">${stat("Today", todays.length, "", "things you asked him")}${stat("This week", week.length, "", `${worked} done for you`)}${stat("Worked", rate, rate != null ? "%" : "", "of this week's asks")}${stat("Typical speed", typical, typical ? "s" : "", "his side of the work")}</div>
+      <div class="hs-row">${stat("He knows", mems, "", "things about you")}${stat("Days in a row", streak, "", streak === 1 ? "day with Braino" : "days with Braino")}${stat("Your people", (S.snap?.important || []).length, "", "marked important")}${stat("Skills", S.skills.length, "", "jobs he learned")}</div>
+      ${m("s8", `${kicker("Your week")}<div class="hs-week">${bars.map((b) => `<div class="${b.today ? "today" : ""}" title="${b.n}"><i style="height:${Math.round((b.n / top) * 100)}%"></i><span>${b.label}</span></div>`).join("")}</div>`, "activity")}
+      ${m("s4", `${kicker("Next class")}${next ? `<h2>${esc(next.title)}</h2><p class="sub">${esc(next.at)}${next.room ? ` · ${esc(next.room)}` : ""}</p>` : `<p class="sub">Nothing left today.</p>`}${people.length ? `<div class="k" style="margin-top:16px">Your people</div><div class="chips">${people.map((n) => chip(`★ ${n}`)).join("")}</div>` : ""}`, "mesa")}
+      ${m("", `${kicker("Recent")}<div class="rows">${todays.length ? todays.slice(0, 5).map((x) => row(esc(x.heard), esc(x.did || x.lane || ""), `<span class="val">${x.ms != null ? `${(x.ms / 1000).toFixed(1)}s` : ""}</span>`)).join("") : row("Nothing yet today", "Press Control twice and ask him something")}</div>`, "activity")}`;
   } },
   habits: { t: "Habits", l: "The few things you want to do every day. He notices them, so you never log anything.", nav: ["Habits", "repeat"], r: () => soon("Habits he notices by himself, from your day. Say \"I want to read 20 minutes a day\" and he'll keep an eye on it once this lands.") },
   focus: { t: "Focus", l: "He keeps you on the one thing, and holds messages until you're done.", nav: ["Focus", "target"], r: () => soon("Focus sessions with messages held and distractions closed.") },
@@ -311,7 +326,8 @@ api.onAppGo?.((page) => { if (P[page]) { if ((NAV.foundry.flat(2)).includes(page
   document.querySelectorAll(".switch button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.product === product)));
   await load("auth");
   $("me-name").textContent = S.auth?.displayName || "Braino"; $("me-plan").textContent = S.auth?.email || "Account"; $("me-av").textContent = (first() || "·").charAt(0);
-  // Chat is the front door: the app always opens on it.
-  void go("chat");
-  void load("skills").then(renderNav); void load("snap").then(renderNav); void load("profiles");
+  // Home is the front door once he's set up; before that, chat.
+  await load("snap");
+  void go(S.snap?.answers?.completedAt && product === "companion" ? "home" : "chat");
+  void load("skills").then(renderNav); renderNav(); void load("profiles");
 })();

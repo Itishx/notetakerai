@@ -24,7 +24,7 @@ document.addEventListener("change", async (e) => {
 });
 
 const STEPS = [
-  { id: "hello", say: "Hey, I'm Braino. Two minutes and I'll know enough to run your day.", kicker: "Hi", title: "I'm Braino.", sub: "Two minutes, and I'll know enough to run your day. Everything you tell me shows up in my notebook, on the right, the moment you say it.", kind: "go", cta: "Let's go" },
+  { id: "hello", say: "Hi. I'm Braino. Look up, at the top of your screen. That's me, in the notch.", notch: "Hi. I'm up here.", kicker: "Hello", title: "Hi. I'm Braino.", sub: "I live in your notch, right at the top of your screen. I hear you, I help you, and I remember what matters to you. Give me two minutes to get to know you.", kind: "go", cta: "Hi, Braino" },
   { id: "callMe", say: "First things first. What should I call you?", kicker: "You", title: "What should I call you?", sub: "I'll use this when I greet you, and when I talk about you to no one.", kind: "text", key: "callMe", prefill: () => snap?.name || "" , placeholder: "Your first name" },
   { id: "persona", say: "What do your days look like? Just tap one.", kicker: "Your days", title: "What do your days look like?", sub: "It changes what I watch for and what I bring you first.", kind: "choice", key: "persona", options: ["Student", "Founder", "Engineer", "Designer", "Creator", "Something else"] },
   { id: "org", say: "And where is that? Your school or your company.", kicker: "Your days", title: () => (answers.persona === "Student" ? "Where do you study?" : "Where do you work?"), sub: "So the timetable, the people and the deadlines make sense to me.", kind: "text", key: "org", prefill: () => (answers.persona === "Student" ? "Mesa School of Business" : ""), placeholder: "School or company", optional: true },
@@ -33,11 +33,12 @@ const STEPS = [
   { id: "people", say: "These people messaged you most this week. Star the ones who matter.", kicker: "Your people", title: "Who matters most?", sub: "Their WhatsApps show quietly in the notch. Everyone else I remember, and only mention when you ask. These are the people who messaged you most this week.", kind: "people" },
   { id: "profiles", say: "Which Chrome profile is yours, and what are the others for?", kicker: "Chrome", title: "Which Chrome profile is for what?", sub: "Pick your main one. Say what the others are for, like Nexus or Mesa, and I'll open those there.", kind: "profiles" },
   { id: "connect", say: "Now let me into the places your day lives.", kicker: "Connections", title: "Let me into the places your day lives.", sub: "Each one is read on this Mac, the way you would read it.", kind: "connect" },
-  { id: "permissions", say: "macOS asks you four things, once. Tap Fix and I'll open the exact setting.", kicker: "Permissions", title: "Four things macOS asks you, once.", sub: "Without these I can hear you but not help you. Fix opens the exact setting.", kind: "permissions" },
+  { id: "permissions", say: "Four quick yeses from your Mac, and I can really help. Tap Allow on each one.", notch: "Tap Allow, one at a time.", kicker: "Permissions", title: "Four quick yeses.", sub: "Your Mac asks once for each. Tap Allow and say yes. Each one turns green the moment it works.", kind: "permissions" },
   { id: "memory", say: "Should I remember your day? It stays on this Mac, and you can delete anything.", kicker: "Memory", title: "Should I remember your day?", sub: "Apps, screen text and what you say to me, as text, on this Mac. Private windows and password apps are never written down. You can see and delete all of it in the Memory window.", kind: "memory" },
   { id: "voice", say: "When I have something to say, should I say it out loud?", kicker: "My voice", title: "When I have something to say?", sub: "You can change this any time.", kind: "choice", key: "voice", options: ["Talk out loud", "Stay quiet, show me in the notch"], map: { "Talk out loud": "aloud", "Stay quiet, show me in the notch": "quiet" } },
   { id: "never", say: "Anything I should never do? I'll hold to it.", kicker: "Boundaries", title: "Anything I should never do?", sub: "Optional. I'll hold to it.", kind: "textarea", key: "never", placeholder: "Never message my manager, never play music during class…", optional: true },
-  { id: "done", kicker: "Done", title: () => `Nice to meet you, ${answers.callMe || snap?.name || "friend"}.`, sub: "I'm set up. My notebook keeps filling in as your day goes. Open this again any time from my menu to watch it.", kind: "done", cta: "Finish" },
+  { id: "try", say: "Now try me. Press Control twice, and ask me anything.", notch: "Press Control twice, then talk.", kicker: "Try me", title: "Now, say something to me.", sub: "Press Control twice, then ask me anything. Try: what can you do?", kind: "try" },
+  { id: "done", kicker: "Done", title: () => `Nice to meet you, ${answers.callMe || snap?.name || "friend"}.`, sub: "I'm set up, and I already know a little about you. Call me any time: press Control twice, or just say Hey Braino.", kind: "done", cta: "Finish" },
 ];
 
 async function save(patch) {
@@ -92,7 +93,7 @@ function renderStep() {
       : `<p class="su-sub">I can't see any Chrome profiles on this Mac.</p><button class="su-next" data-next>Continue</button>`;
   }
   if (step.kind === "permissions") {
-    body = `<div class="su-rows">${(snap?.permissions || []).map((p) => `<div class="su-row glass"><i class="su-dot${p.ok ? " ok" : ""}"></i><div class="grow"><b>${esc(p.label)}</b><span>${esc(p.why)}</span></div>${p.ok ? "" : `<button class="su-small" data-pane="${esc(p.pane)}">Fix</button>`}</div>`).join("")}</div><button class="su-next" data-next>Continue</button>`;
+    body = `<div class="su-rows">${(snap?.permissions || []).map((p) => `<div class="su-row glass"><i class="su-dot${p.ok ? " ok" : ""}"></i><div class="grow"><b>${esc(p.label)}</b><span>${esc(p.why)}</span></div>${p.ok ? `<span class="su-ok">Allowed</span>` : `<button class="su-small su-allow" data-ask="${esc(p.id)}">Allow</button>`}</div>`).join("")}</div><button class="su-next" data-next>${(snap?.permissions || []).every((p) => p.ok) ? "Continue" : "Continue for now"}</button>`;
   }
   if (step.kind === "memory") {
     const mem = answers.memoryOn !== false;
@@ -101,6 +102,11 @@ function renderStep() {
       <div class="su-row glass"><div class="grow"><b>Remember my day</b><span>${mem ? "On" : "Off"}</span></div><button class="su-small" data-toggle="memoryOn">${mem ? "Turn off" : "Turn on"}</button></div>
       <div class="su-row glass"><div class="grow"><b>Braino can use it</b><span>${rec ? "On: he answers and acts from it" : "Off: recorded, not used"}</span></div><button class="su-small" data-toggle="recallOn">${rec ? "Turn off" : "Turn on"}</button></div>
     </div><button class="su-next" data-next>Continue</button>`;
+  }
+  if (step.kind === "try") {
+    body = heard
+      ? `<div class="su-heard"><p class="su-you">“${esc(heard.you || "…")}”</p>${heard.braino ? `<p class="su-him">${esc(heard.braino)}</p>` : ""}</div><button class="su-next" data-next>That's it. Continue</button>`
+      : `<div class="su-keys"><kbd>⌃</kbd><kbd>⌃</kbd><span>then talk</span></div><button class="su-link" data-next>Skip for now</button>`;
   }
   el("su-stage").innerHTML = `<div class="su-step">${head}${body}</div>`;
   el("su-in")?.focus();
@@ -118,10 +124,12 @@ async function guide(step) {
   guidedStep = step.id;
   if (step.id === "hello") { await B.home(); B.wave(); }
   else if (step.id === "done") { await B.home(); B.hop(); }
-  else if (step.id === "permissions" && document.querySelector("[data-pane]")) { void B.point("[data-pane]", 4200); }
+  else if (step.id === "permissions" && document.querySelector("[data-ask]")) { void B.point("[data-ask]", 4200); }
   else void B.home();
   const name = answers.callMe || snap?.name || "";
-  B.say(step.id === "done" ? `Nice to meet you${name ? `, ${name}` : ""}. I'm all set. My notebook keeps filling in as your day goes.` : step.say || "");
+  // The notch says it too, so the window and the notch move as one.
+  void api.setupNotch?.(step.id === "done" ? `Nice to meet you${name ? `, ${name}` : ""}.` : (step.notch || step.say || ""), 4500);
+  B.say(step.id === "done" ? `Nice to meet you${name ? `, ${name}` : ""}. I'm right up there whenever you need me.` : step.say || "");
 }
 
 async function next() {
@@ -191,6 +199,7 @@ document.addEventListener("click", async (e) => {
   }
   if (t.dataset.connect) { t.textContent = "…"; await api.setupConnect?.(t.dataset.connect); await refresh(); renderStep(); return; }
   if (t.dataset.pane) { await api.setupOpenPane?.(t.dataset.pane); return; }
+  if (t.dataset.ask) { t.textContent = "Waiting…"; await api.setupAsk?.(t.dataset.ask); void checkPermissions(); return; }
   if (t.dataset.toggle) { const k = t.dataset.toggle; await save({ [k]: answers[k] === false }); renderStep(); }
 });
 document.addEventListener("keydown", async (e) => {
@@ -283,6 +292,31 @@ async function refresh() {
   } catch (_) {}
   renderNotebook();
 }
+
+/* Permissions, live: while that step is up, ask the Mac every second, and the
+   moment one turns on, the row goes green and he says what it lets him do. */
+const GRANTED = { microphone: "Now I can hear you.", accessibility: "Now I can click and type for you.", screen: "Now I can see what you see.", contacts: "Now I know who's who." };
+async function checkPermissions() {
+  const r = await api.setupPermissions?.().catch(() => null);
+  if (!r?.ok || !snap) return;
+  const before = Object.fromEntries((snap.permissions || []).map((p) => [p.id, p.ok]));
+  snap.permissions = r.permissions;
+  const fresh = r.permissions.filter((p) => p.ok && before[p.id] === false);
+  if (!fresh.length) return;
+  if (STEPS[at]?.kind === "permissions") renderStep();
+  const line = GRANTED[fresh[0].id];
+  if (line) { void api.setupNotch?.(line, 2600); B?.say(line); }
+}
+setInterval(() => { if (!document.hidden && STEPS[at]?.kind === "permissions") void checkPermissions(); }, 1000);
+
+/* Try me: the first real thing said to him, by voice, shows up here. */
+let heard = null;
+api.onSetupHeard?.((h) => {
+  if (STEPS[at]?.kind !== "try" || !h?.you) return;
+  heard = h;
+  renderStep();
+  B?.hop();
+});
 
 function paintSound() { const b = el("su-sound"); if (b && B) b.textContent = B.muted ? "Sound off" : "Sound on"; }
 

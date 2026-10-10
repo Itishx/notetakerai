@@ -1030,3 +1030,11 @@ section id or heading changes.
 - While you talk to Braino in voice mode (Clean hearing on), the notch shows a **voice glow**: a soft green inset light (`#notch-face.nf-voice-hearing .nf-pill`, `--nf-voice-level` 0-1 from the mic meter). Inset only, so the notch keeps its shape and nothing draws outside it.
 - No rough live words while you talk. When the sentence is done, the notch shows the exact words that are sent, once. A piece held while you pause shows as it grows (same source, never swapped).
 - Clean hearing off: the old live HERA words come back.
+
+## Mac app: white, and setup with the notch (2026-10-10, `onboarding-notch` branch)
+
+- The setup window and the Braino app are opaque white (`#ffffff`), with no Liquid Glass. All of it lives in `mac/braino-mac/renderer/white.css`, loaded last, so removing one `<link>` brings the dark glass back.
+- Type: Bodoni Moda (bundled) for big words and the wordmark, in italic for the mark; Iowan Old Style headings; SF Pro text. Ink `#111`, soft panel `#f7f6f3`, hairlines `rgba(17,17,17,.08)`, coral `#f07a60` as the one accent, green `#1f9d63` for "allowed".
+- Primary buttons are solid black pills; choices are white pills that turn coral when picked.
+- Setup lines are mirrored into the notch with `nfShowTransient`: the notch keeps its shape, and nothing is drawn outside it.
+- Home is a stats board: two rows of four number tiles (Bodoni numerals), a 7-day bar chart with today in coral, next class and people, then today's recent asks.

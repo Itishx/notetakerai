@@ -14255,6 +14255,9 @@ window.brainoMac.onWaBadge?.((payload) => {
   updateNotchFace();
 });
 window.brainoMac.onNotchFace?.((payload) => setNotchFaceEnabled(Boolean(payload?.on)));
+/* Setup speaks through the notch too: the window shows what to tap, the notch
+   says the same line, so the two move as one (setup.js, maybeStartSetup). */
+window.brainoMac.onSetupNotch?.((payload) => { if (payload?.text) nfShowTransient(String(payload.text), Number(payload.ms) || 4000); });
 window.brainoMac.onSpeakLine?.((payload) => {
   const text = String(payload?.text || "").trim();
   // Incoming message readouts wait their turn instead of cutting Braino off.
