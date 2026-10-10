@@ -1039,3 +1039,8 @@ section id or heading changes.
 - Setup lines are mirrored into the notch with `nfShowTransient`: the notch keeps its shape, and nothing is drawn outside it.
 - Setup is one centred column, step by step; the notebook slides in only on the last step, as the summary.
 - Home is a stats board: two rows of four number tiles (Bodoni numerals), a 7-day bar chart with today in coral, next class and people, then today's recent asks.
+
+## Notch: one shape through a reply, and Without subtitles (2026-10-11)
+
+- A turn that starts while his answer sheet is open holds the sheet (`.nf-answer-reply`): your words at 58% white, a soft pulse while he thinks, then his answer. Width is locked to the previous answer's mode; only the height eases (280ms). Folds away after 3.5s of quiet.
+- Without subtitles = the AffectiveOS style (`.nf-aos`): no sheets or captions; the pill is notch width + 84px and notch height + 4px while live; a 7px tinted dot (left) pulses while listening, three 3px white bars (right) move while speaking. Settings › Appearance › Subtitles.

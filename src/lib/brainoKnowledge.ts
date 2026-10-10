@@ -20,6 +20,18 @@ export type KnowledgeEntry = {
 
 export const KNOWLEDGE_ENTRIES: readonly KnowledgeEntry[] = [
   {
+    slug: "learning-from-real-runs",
+    title: "Learning From Real Runs",
+    category: "Feature",
+    date: "2026-10-11",
+    dateLabel: "October 11, 2026",
+    description:
+      "HIL 1.2: lessons from a real 4am run, learned by intent. Wallpaper of anything in seconds, honest stops, faster talk, no double answers, a notch that holds its shape when you reply, and a new Without subtitles mode.",
+    status: "MVP",
+    platform: "Braino for Mac",
+    number: "081",
+  },
+  {
     slug: "talk-me-through-it",
     title: "Talk Me Through It",
     category: "Feature",
