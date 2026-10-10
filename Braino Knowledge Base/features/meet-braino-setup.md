@@ -18,6 +18,10 @@ The first time you open Braino for Mac and sign in, a new onboarding opens by it
 7. Your first moment: press Control twice and talk to him.
 8. Nice to meet you: what he now knows about you.
 
+It uses the Affective homepage's design system: Iowan Old Style headlines with the key word underlined, SF Pro text, the warm page, pill buttons, and the homepage's pixel art in framed pictures.
+
+While you sign in, the notch says "Sign in on the page that opened" instead of holding the Affective logo. During onboarding Braino stays in the notch with his eyes open (before, he jumped out to a spot on screen and the notch looked empty).
+
 After that the app opens on a white home page with your real numbers.
 
 (History, 10 Oct: a first version mirrored each line into the notch and had Braino walking around the window with a speech bubble. Both were removed: the notch text was cramped and the walking Braino was invisible on white.)

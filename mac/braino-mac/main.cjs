@@ -24030,6 +24030,7 @@ ipcMain.handle("braino-mac:setup-ask", async (_e, id) => {
   logMac("setup.ask", { id, opened: Boolean(panes[id]) });
   return { ok: false, opened: Boolean(panes[id]) };
 });
+ipcMain.handle("braino-mac:setup-pending", async () => !readSetupState().completedAt);
 ipcMain.handle("braino-mac:setup-permissions", async () => ({ ok: true, permissions: setupPermissions() }));
 
 // ── Braino for Mac: the one app (renderer/app.html) ─────────────────────────

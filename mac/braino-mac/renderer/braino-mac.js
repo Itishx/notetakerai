@@ -4211,7 +4211,16 @@ async function runNotchBoot() {
        through the notch; then BRAINO spells itself out. */
     notchFace?.classList.add("nf-boot-logo-on");
     const logoAt = Date.now();
+    /* A first sign in happens in the browser. If it is not back in a few
+       seconds, say so in the notch instead of holding the logo silently. */
+    const waiting = await Promise.race([authPromise.then(() => false), wait(3500).then(() => true)]);
+    if (waiting) {
+      notchFace?.classList.remove("nf-boot-logo-on");
+      nfSetStatusText("Sign in on the page that opened");
+      logRenderer("boot.iomi.waiting_for_sign_in", {});
+    }
     result = await authPromise;
+    if (waiting) nfSetStatusText("");
     // Slower: the logo gets time to arrive and to leave.
     if (Date.now() - logoAt < 2200) await wait(2200 - (Date.now() - logoAt));
     notchFace?.classList.remove("nf-boot-logo-on");
@@ -4274,7 +4283,11 @@ async function runNotchBoot() {
     meta: { flow: "iomi" },
   });
   await wait(300);
-  await runIomiBootMascotExit();
+  /* During onboarding he stays home in the notch, eyes open. Jumping out to a
+     spot on screen left the notch empty, which read as "he never woke up". */
+  const setupPending = await window.brainoMac.setupPending?.().catch(() => false);
+  if (setupPending) { walkerHome = true; lastEngagedAt = Date.now(); updateNotchFace(); }
+  else await runIomiBootMascotExit();
   clearIomiBootClasses();
   logRenderer("boot.iomi.complete", { firstName, greeting });
   return { ...result, bootGreetingHandled: true };

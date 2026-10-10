@@ -155,6 +155,7 @@ contextBridge.exposeInMainWorld("brainoMac", {
   setupSay: (text) => ipcRenderer.invoke("braino-mac:setup-say", text),
   setupNotch: (text, ms) => ipcRenderer.invoke("braino-mac:setup-notch", { text, ms }),
   setupAsk: (id) => ipcRenderer.invoke("braino-mac:setup-ask", id),
+  setupPending: () => ipcRenderer.invoke("braino-mac:setup-pending"),
   setupPermissions: () => ipcRenderer.invoke("braino-mac:setup-permissions"),
   onSetupHeard: (callback) => {
     const handler = (_event, payload) => callback(payload || {});

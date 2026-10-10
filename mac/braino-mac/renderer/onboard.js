@@ -18,9 +18,10 @@ let muted = false;
 try { muted = localStorage.getItem("obMuted") === "1"; } catch (_) {}
 const spoken = new Set();
 
-/* ── The pictures ── */
+/* ── The pictures ── the homepage's pixel art, with a card on top. */
+const IMG = { os: "ob-affective-hero.jpg", new: "ob-os-senses.jpg", meetings: "ob-os-voice.jpg", day: "ob-os-memory.jpg", messages: "ob-os-hands.jpg", do: "ob-os-senses.jpg" };
 const ART = {
-  os: () => `<div class="ob-os"><b>AffectiveOS</b><span>it understands you</span></div>`,
+  os: () => `<div class="ob-card" style="width:auto;text-align:center;padding:22px 30px"><div class="ob-os"><b style="font-size:34px">AffectiveOS</b><span style="font-size:18px">it understands you</span></div></div>`,
   notch: () => `<div class="ob-mac"></div><div class="ob-notch"><i class="ob-eye"></i><i class="ob-eye"></i></div><div class="ob-arrow">↑ Braino lives here</div>`,
   new: () => `<div class="ob-stack"><div class="ob-card"><small>Apps</small><div>You open them. You learn them. You do the work.</div></div><div class="ob-card"><small>Braino</small><div class="ob-said">Already here. Just ask.</div></div></div>`,
   meetings: () => `<div class="ob-card"><small>Product sync · 4:00</small>
@@ -48,11 +49,11 @@ const SCENES = [
   { id: "day", kind: "story", kicker: "Your day", title: "He knows your day before you *ask.*", say: "I know your day. Your classes, your deadlines, and what's due today.", sub: "Classes, deadlines, and a good morning that knows what's next.", art: "day" },
   { id: "messages", kind: "story", kicker: "Your people", title: "Message anyone, just by *saying* it.", say: "Message anyone just by saying it. And if two people share a name, I'll ask which one.", sub: "WhatsApp from your voice. Two people with the same name? He asks first.", art: "messages" },
   { id: "do", kind: "story", kicker: "Do it for me", title: "Say it. It's *done.*", say: "Say it, and it's done. I open, play, type and search for you.", sub: "Open, play, type, search. Out loud, from anywhere.", art: "do" },
-  { id: "name", kind: "name", kicker: "Make him yours", title: "First, what should I *call* you?", say: "Now, let me get to know you. What should I call you?" },
+  { id: "name", kind: "name", banner: "ob-affective-footer.jpg", kicker: "Make him yours", title: "First, what should I *call* you?", say: "Now, let me get to know you. What should I call you?" },
   { id: "persona", kind: "persona", kicker: "Make him yours", title: "And what do you *do?*", say: "And what do you do?", options: ["Student", "Founder", "Engineer", "Designer", "Creator", "Something else"] },
   { id: "perms", kind: "perms", kicker: "Trust", title: "Four quick *yeses.*", say: "Four quick yeses from your Mac, and I can really help. Tap Allow on each one.", sub: "Your Mac asks once for each. Every one turns green the moment it works." },
   { id: "try", kind: "try", kicker: "Your first moment", title: "Now, *talk* to me.", say: "Now, talk to me. Press Control twice and ask me anything.", sub: "Press Control twice, then ask anything. Try: what can you do?" },
-  { id: "done", kind: "done", kicker: "That's us", title: () => `Nice to meet you, *${answers.callMe || snap?.name || "friend"}.*`, say: () => `Nice to meet you, ${answers.callMe || snap?.name || "friend"}. I'm right up there whenever you need me.` },
+  { id: "done", kind: "done", banner: "ob-affective-hero.jpg", kicker: "That's us", title: () => `Nice to meet you, *${answers.callMe || snap?.name || "friend"}.*`, say: () => `Nice to meet you, ${answers.callMe || snap?.name || "friend"}. I'm right up there whenever you need me.` },
 ];
 const WHY = { microphone: "so I can hear you, and your meetings", accessibility: "so I can click and type for you", screen: "so I can see what you see", contacts: "so I know who's who" };
 const GRANTED = { microphone: "Now I can hear you.", accessibility: "Now I can click and type for you.", screen: "Now I can see what you see.", contacts: "Now I know who's who." };
@@ -62,7 +63,7 @@ function lit(scene) {
   let accent = false;
   return val(scene.title).split(/\s+/).filter(Boolean).map((w) => {
     if (w.startsWith("*")) accent = true;
-    const html = `<span class="ob-w${spoken.has(scene.id) ? " on" : ""}${accent ? " ob-d" : ""}">${esc(w.replace(/\*/g, ""))} </span>`;
+    const html = `<span class="ob-w${spoken.has(scene.id) ? " on" : ""}${accent ? " ob-d" : ""}">${esc(w.replace(/\*/g, ""))}</span> `;
     if (w.replace(/[.?!,]$/, "").endsWith("*")) accent = false;
     return html;
   }).join("");
@@ -120,8 +121,8 @@ function render() {
   const scene = SCENES[at];
   const head = `<p class="ob-kicker">${esc(scene.kicker)}</p><h1 class="ob-big">${lit(scene)}</h1>${scene.sub ? `<p class="ob-sub">${esc(scene.sub)}</p>` : ""}`;
   $("ob-stage").innerHTML = scene.art
-    ? `<section class="ob-scene"><div>${head}${body(scene)}</div><div class="ob-art">${ART[scene.art]()}</div></section>`
-    : `<section class="ob-scene solo"><div>${head}${body(scene)}</div></section>`;
+    ? `<section class="ob-scene"><div>${head}${body(scene)}</div><div class="ob-art${IMG[scene.art] ? " img" : ""}"${IMG[scene.art] ? ` style="background-image:url('assets/${IMG[scene.art]}')"` : ""}>${ART[scene.art]()}</div></section>`
+    : `<section class="ob-scene solo"><div>${scene.banner ? `<div class="ob-banner" style="background-image:url('assets/${scene.banner}')"></div>` : ""}${head}${body(scene)}</div></section>`;
   $("ob-dots").innerHTML = SCENES.map((_, i) => `<i class="${i === at ? "on" : i < at ? "done" : ""}"></i>`).join("");
   $("ob-back").hidden = at === 0;
   $("ob-count").textContent = `${at + 1} of ${SCENES.length}`;
