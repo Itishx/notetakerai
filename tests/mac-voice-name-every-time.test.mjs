@@ -101,8 +101,9 @@ test("the on-device listener's ear rescues a misspelt name", () => {
   assert.match(accept, /if \(!isBareWakeWord\(text\)\) namedHeardOnDeviceAt = 0;/);
 });
 
-test("the notch says he is listening for his name, not that he is off", () => {
-  assert.match(js, /\? `Listening for \\u201c\$\{activeWakeName\(\)\}\\u201d`/);
+test("waiting for his name, the notch shows only his eyes, never that he is off", () => {
+  // 2026-10-11: no words at all while idle; the text sat on top of his eyes.
+  assert.match(js, /const showNameHint = false;/);
 });
 
 /* ── Half sentences ───────────────────────────────────────────────────────── */
