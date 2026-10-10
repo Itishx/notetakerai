@@ -4,7 +4,7 @@
    page, hairlines, black and outlined pill buttons, and the pixel art in
    framed image boxes. Every word is dim until he says it. */
 
-:root {
+:root, .ob-app {
   color-scheme: light;
   --bg: #f4f2ec;
   --soft: #f4f2ec;
@@ -18,14 +18,16 @@
   --sf: "SF Pro Display", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
   --display: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
 }
-* { box-sizing: border-box; }
-html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); font-family: var(--sf); -webkit-font-smoothing: antialiased; overflow: hidden; }
-body { display: grid; grid-template-rows: auto 1fr auto; }
-button { font: inherit; color: inherit; }
+.ob-app, .ob-app * { box-sizing: border-box; }
+/* Scoped to .ob-app (the Mac window's body, the website page's root) so the
+   website can show the same onboarding without touching the rest of the site. */
+html, body { margin: 0; height: 100%; }
+.ob-app { height: 100%; min-height: 100vh; background: var(--bg); color: var(--ink); font-family: var(--sf); -webkit-font-smoothing: antialiased; overflow: hidden; display: grid; grid-template-rows: auto 1fr auto; }
+:where(.ob-app) button { font: inherit; color: var(--ink); }
 
 .ob-top { display: flex; justify-content: space-between; align-items: center; padding: 16px 30px 14px 96px; border-bottom: 1px solid var(--line); -webkit-app-region: drag; }
 .ob-top button { -webkit-app-region: no-drag; }
-.ob-mark { display: block; width: 104px; height: 22px; background: url("assets/ob-logo.png") left center / contain no-repeat; font-size: 0; }
+.ob-mark { display: block; width: 104px; height: 22px; background: var(--ob-logo, url("assets/ob-logo.png")) left center / contain no-repeat; font-size: 0; }
 .ob-sound, .ob-back { background: none; border: 0; padding: 4px 0; color: var(--ink-3); font-size: 13px; cursor: pointer; }
 .ob-sound:hover, .ob-back:hover { color: var(--ink); }
 

@@ -28,6 +28,12 @@ After that the app opens on a white home page with your real numbers.
 
 (History, 10 Oct: a first version mirrored each line into the notch and had Braino walking around the window with a speech bubble. Both were removed: the notch text was cramped and the walking Braino was invisible on white.)
 
+## Design it on the website
+
+The onboarding also runs at `/braino-onboarding` on the website, from the very same files (`mac/braino-mac/renderer/onboard.js` and `onboard.css`). Change the words or the look there, and the Mac app shows exactly that. On the website his voice, the real permissions and "try me" are stood in for.
+
+Every line is in his own words, first person, the same on screen as out loud. Scenes: AffectiveOS, meet Braino, something new, meetings, lectures, a day with Braino, your people, do it for me, type with your voice, memory, then your name, what you do, permissions, try me, and nice to meet you.
+
 ## Why it exists
 
 Before this, a brand new person signed in and then nothing happened. The welcome only played on the next launch. The old first run also covered the whole screen, and once that cover locked someone's Mac until a restart. And permissions were a list of "Fix" buttons that opened System Settings and left you to guess.

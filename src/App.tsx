@@ -147,6 +147,7 @@ const OneBrainoPageDocs = lazy(() => import("./pages/OneBrainoPageDocs.tsx"));
 const WhichContactDocs = lazy(() => import("./pages/WhichContactDocs.tsx"));
 const MeetBrainoDocs = lazy(() => import("./pages/MeetBrainoDocs.tsx"));
 const TalkThroughDocs = lazy(() => import("./pages/TalkThroughDocs.tsx"));
+const BrainoOnboarding = lazy(() => import("./pages/BrainoOnboarding.tsx"));
 const LocalhostDocs = lazy(() => import("./pages/LocalhostDocs.tsx"));
 const SaidToHimDocs = lazy(() => import("./pages/SaidToHimDocs.tsx"));
 const SaferDefaultDocs = lazy(() => import("./pages/SaferDefaultDocs.tsx"));
@@ -471,6 +472,7 @@ function AppRoutes() {
         <Route path="/instagraphics/ms-braino" element={<BrainelleStage />} />{/* she was Ms Braino for one afternoon */}
         <Route path="/instagraphics/onboarding" element={<OnboardingFlow />} />
         <Route path="/onboarding" element={<OnboardingFlow />} />
+        <Route path="/braino-onboarding" element={<BrainoOnboarding />} />
         <Route path="/onb" element={<Onb />} />
         <Route path="/instagraphics/bhai" element={<BhaiPost />} />
         <Route path="/brainotes" element={<Brainotes />} />

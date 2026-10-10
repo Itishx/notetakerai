@@ -6,6 +6,8 @@
    the notch) and the sentence lights up word by word as he says it. They move
    on by themselves; a click moves on sooner. Everything said here is about
    what works today. House rule: no dashes in anything Braino says. */
+// Wrapped so the website page can load it again without "already declared".
+(() => {
 const api = window.brainoMac || {};
 const $ = (id) => document.getElementById(id);
 const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -18,42 +20,66 @@ let muted = false;
 try { muted = localStorage.getItem("obMuted") === "1"; } catch (_) {}
 const spoken = new Set();
 
-/* ── The pictures ── the homepage's pixel art, with a card on top. */
-const IMG = { os: "ob-affective-hero.jpg", new: "ob-os-senses.jpg", meetings: "ob-os-voice.jpg", day: "ob-os-memory.jpg", messages: "ob-os-hands.jpg", do: "ob-os-senses.jpg" };
+/* ── The pictures ── the homepage's pixel art, with a card on top.
+   One file feeds both the Mac app and the website page /onboarding, so the
+   page you design is the page the Mac shows. Each host says where its images
+   live: the Mac bundles them as assets/ob-*.jpg, the website serves /*.jpg. */
+const IMG_BASE = window.OB_IMG_BASE || "assets/ob-";
+const IMG = { os: "affective-hero", new: "os-senses", meetings: "os-voice", lectures: "os-memory", day: "affective-hero", messages: "os-hands", do: "os-senses", dictate: "os-hands", memory: "os-memory" };
 const ART = {
   os: () => `<div class="ob-card" style="width:auto;text-align:center;padding:22px 30px"><div class="ob-os"><b style="font-size:34px">AffectiveOS</b><span style="font-size:18px">it understands you</span></div></div>`,
-  notch: () => `<div class="ob-mac"></div><div class="ob-notch"><i class="ob-eye"></i><i class="ob-eye"></i></div><div class="ob-arrow">↑ Braino lives here</div>`,
+  notch: () => `<div class="ob-mac"></div><div class="ob-notch"><i class="ob-eye"></i><i class="ob-eye"></i></div><div class="ob-arrow">↑ I live here</div>`,
   new: () => `<div class="ob-stack"><div class="ob-card"><small>Apps</small><div>You open them. You learn them. You do the work.</div></div><div class="ob-card"><small>Braino</small><div class="ob-said">Already here. Just ask.</div></div></div>`,
   meetings: () => `<div class="ob-card"><small>Product sync · 4:00</small>
       <div class="ob-line">Riya: the deck needs the new numbers.</div>
       <div class="ob-line">You: I'll send it by Friday.</div>
       <div class="ob-line">Arjun: let's ship the beta Monday.</div>
-      <div class="ob-line ob-hl">You promised: send the deck by Friday.</div></div>`,
-  day: () => `<div class="ob-card"><small>Good morning</small>
-      <div class="ob-line ob-row"><time>9:30</time><span>Venture Building, Room 2</span></div>
-      <div class="ob-line ob-row"><time>2:00</time><span>Market sizing due today</span></div>
-      <div class="ob-line ob-row"><time>6:00</time><span>Call with Arjun</span></div>
-      <div class="ob-line ob-hl">One thing due today. I'll remind you at noon.</div></div>`,
+      <div class="ob-line ob-hl">You promised: send the deck by Friday.</div>
+      <div class="ob-line" style="color:var(--ink-2)">Want me to remind you Thursday?</div></div>`,
+  lectures: () => `<div class="ob-card"><small>Live · Venture Building</small>
+      <div class="ob-line">Customer discovery starts with the problem, not the product.</div>
+      <div class="ob-line">Talk to ten people before you build anything.</div>
+      <div class="ob-line">Pay attention to what they already pay for.</div>
+      <div class="ob-line ob-hl">Saved to your notes. Written live, the whole lecture.</div></div>`,
+  day: () => `<div class="ob-card"><small>A day with Braino</small>
+      <div class="ob-line ob-row"><time>8:30</time><span>"Good morning. Class at 9:30, one thing due today."</span></div>
+      <div class="ob-line ob-row"><time>9:30</time><span>Lecture written down while you listen.</span></div>
+      <div class="ob-line ob-row"><time>12:00</time><span>"Market sizing is due at 2."</span></div>
+      <div class="ob-line ob-row"><time>4:00</time><span>Meeting notes, and what you promised.</span></div>
+      <div class="ob-line ob-hl">5:50 · "Your call with Arjun is in ten minutes."</div></div>`,
   messages: () => `<div class="ob-stack"><div class="ob-card"><small>You said</small><div class="ob-said">"Send this to Riya on WhatsApp"</div></div>
       <div class="ob-card"><small>Braino</small><div>Which Riya?</div><span class="ob-pill first">Riya Khurana</span><span class="ob-pill">the other Riya</span></div></div>`,
-  do: () => `<div class="ob-stack"><div class="ob-card"><small>You said</small><div class="ob-said">"Play Billie Jean"</div></div>
-      <div class="ob-card"><small>Braino</small><div class="ob-done">Playing on Spotify.</div></div></div>`,
+  do: () => `<div class="ob-stack"><div class="ob-card"><small>You said</small><div class="ob-said">"Find me the cheapest flight to Goa"</div></div>
+      <div class="ob-card"><small>Braino</small><div>Got it. Opening Google Flights. Comparing prices.</div><div class="ob-done" style="margin-top:8px">Cheapest: ₹4,200, Friday 7:10.</div></div></div>`,
+  dictate: () => `<div class="ob-stack"><div class="ob-card"><small>You said</small><div>"um so tell him the deck is ready and uh we can meet friday"</div></div>
+      <div class="ob-card"><small>Typed where your cursor is</small><div class="ob-said">The deck is ready. We can meet Friday.</div></div></div>`,
+  memory: () => `<div class="ob-card"><small>What I remember</small>
+      <div class="ob-line">You're vegetarian.</div>
+      <div class="ob-line">Riya is your co-founder.</div>
+      <div class="ob-line">You like music while you work.</div>
+      <div class="ob-line ob-hl">You can see, edit or delete all of it.</div></div>`,
 };
 
-/* ── The story ── *word* is the word the line turns on. */
+/* ── The story ── He is the one talking, so every line is in his own words,
+   first person, the same on screen as out loud. *word* is the word the line
+   turns on (underlined, like the homepage). */
+const nameOf = () => answers.callMe || snap?.name || "friend";
 const SCENES = [
   { id: "os", kind: "story", kicker: "Welcome to AffectiveOS", title: "A computer that finally *understands* you.", say: "Welcome to AffectiveOS. A computer that finally understands you.", art: "os" },
-  { id: "braino", kind: "story", kicker: "Meet Braino", title: "This is Braino. He lives in your *notch.*", say: "And this is me, Braino. I live in your notch, right at the top of your screen.", art: "notch" },
-  { id: "new", kind: "story", kicker: "Something new", title: "Not an app you open. Someone who's already *there.*", say: "I'm not an app you open. I'm already here. Just ask.", art: "new" },
-  { id: "meetings", kind: "story", kicker: "Meetings", title: "Your meetings will never be the *same.*", say: "Your meetings will never be the same. I listen, I write the notes, and I remember what you promised.", sub: "He listens, writes the notes, and remembers what you promised.", art: "meetings" },
-  { id: "day", kind: "story", kicker: "Your day", title: "He knows your day before you *ask.*", say: "I know your day. Your classes, your deadlines, and what's due today.", sub: "Classes, deadlines, and a good morning that knows what's next.", art: "day" },
-  { id: "messages", kind: "story", kicker: "Your people", title: "Message anyone, just by *saying* it.", say: "Message anyone just by saying it. And if two people share a name, I'll ask which one.", sub: "WhatsApp from your voice. Two people with the same name? He asks first.", art: "messages" },
-  { id: "do", kind: "story", kicker: "Do it for me", title: "Say it. It's *done.*", say: "Say it, and it's done. I open, play, type and search for you.", sub: "Open, play, type, search. Out loud, from anywhere.", art: "do" },
-  { id: "name", kind: "name", banner: "ob-affective-footer.jpg", kicker: "Make him yours", title: "First, what should I *call* you?", say: "Now, let me get to know you. What should I call you?" },
-  { id: "persona", kind: "persona", kicker: "Make him yours", title: "And what do you *do?*", say: "And what do you do?", options: ["Student", "Founder", "Engineer", "Designer", "Creator", "Something else"] },
+  { id: "braino", kind: "story", kicker: "Meet Braino", title: "Hi. I'm Braino. I live in your *notch.*", say: "Hi. I'm Braino. I live in your notch, right at the top of your screen.", art: "notch" },
+  { id: "new", kind: "story", kicker: "Something new", title: "I'm not an app you open. I'm already *here.*", say: "I'm not an app you open. I'm already here. Just ask.", sub: "No windows to find, nothing to learn. Press Control twice, or just say Hey Braino.", art: "new" },
+  { id: "meetings", kind: "story", kicker: "Meetings", title: "Your meetings will never be the *same.*", say: "Your meetings will never be the same. I listen, I write the notes, and I remember what you promised.", sub: "I listen, write the notes, and remember what you promised. Then I remind you before it's due.", art: "meetings" },
+  { id: "lectures", kind: "story", kicker: "Lectures", title: "Every lecture, written down while you *listen.*", say: "Every lecture, written down while you listen. Live, the whole class.", sub: "Press Command Shift E in class. I write it all, live, so you can just pay attention.", art: "lectures" },
+  { id: "day", kind: "story", kicker: "Your day", title: "I make your whole day a little *lighter.*", say: "From your first class to your last meeting, I make your whole day a little lighter.", sub: "A good morning that knows what's next, notes while you listen, and a heads up before things are due.", art: "day" },
+  { id: "messages", kind: "story", kicker: "Your people", title: "Message anyone, just by *saying* it.", say: "Message anyone, just by saying it. And if two people share a name, I'll ask which one.", sub: "WhatsApp from your voice. Two people with the same name? I ask first.", art: "messages" },
+  { id: "do", kind: "story", kicker: "Do it for me", title: "Say it. I'll get it *done.*", say: "Say it, and I'll get it done. And while I work, I'll tell you what I'm doing.", sub: "I open, search, compare and type for you. And I tell you what I'm doing as I go.", art: "do" },
+  { id: "dictate", kind: "story", kicker: "Type with your voice", title: "Talk anywhere. I'll *type* it.", say: "Talk anywhere, and I'll type it. Press Option twice in any app.", sub: "Press Option twice in any app. Your words, cleaned up, right where your cursor is.", art: "dictate" },
+  { id: "memory", kind: "story", kicker: "Memory", title: "Tell me once. I'll *remember.*", say: "Tell me once, and I'll remember. You never have to repeat yourself.", sub: "What matters to you stays with me. You can see, edit or delete anything I keep.", art: "memory" },
+  { id: "name", kind: "name", banner: "affective-footer", kicker: "Make me yours", title: "First, what should I *call* you?", say: "Now, let me get to know you. What should I call you?" },
+  { id: "persona", kind: "persona", kicker: "Make me yours", title: "And what do you *do?*", say: "And what do you do?", options: ["Student", "Founder", "Engineer", "Designer", "Creator", "Something else"] },
   { id: "perms", kind: "perms", kicker: "Trust", title: "Four quick *yeses.*", say: "Four quick yeses from your Mac, and I can really help. Tap Allow on each one.", sub: "Your Mac asks once for each. Every one turns green the moment it works." },
   { id: "try", kind: "try", kicker: "Your first moment", title: "Now, *talk* to me.", say: "Now, talk to me. Press Control twice and ask me anything.", sub: "Press Control twice, then ask anything. Try: what can you do?" },
-  { id: "done", kind: "done", banner: "ob-affective-hero.jpg", kicker: "That's us", title: () => `Nice to meet you, *${answers.callMe || snap?.name || "friend"}.*`, say: () => `Nice to meet you, ${answers.callMe || snap?.name || "friend"}. I'm right up there whenever you need me.` },
+  { id: "done", kind: "done", banner: "affective-hero", kicker: "That's us", title: () => `Nice to meet you, *${nameOf()}.*`, say: () => `Nice to meet you, ${nameOf()}. I'm right up there whenever you need me.` },
 ];
 const WHY = { microphone: "so I can hear you, and your meetings", accessibility: "so I can click and type for you", screen: "so I can see what you see", contacts: "so I know who's who" };
 const GRANTED = { microphone: "Now I can hear you.", accessibility: "Now I can click and type for you.", screen: "Now I can see what you see.", contacts: "Now I know who's who." };
@@ -111,7 +137,7 @@ function body(scene) {
   }
   if (scene.kind === "done") {
     const ps = snap?.permissions || [];
-    const rows = [["Your name", answers.callMe || snap?.name], ["What you do", answers.persona], ["Permissions", ps.length ? `${ps.filter((p) => p.ok).length} of ${ps.length} allowed` : ""], ["First thing you said", heard?.you ? `"${heard.you}"` : ""], ["Call him", "Control twice, or \"Hey Braino\""]].filter((r) => r[1]);
+    const rows = [["Your name", answers.callMe || snap?.name], ["What you do", answers.persona], ["Permissions", ps.length ? `${ps.filter((p) => p.ok).length} of ${ps.length} allowed` : ""], ["First thing you said", heard?.you ? `"${heard.you}"` : ""], ["Call me", "Control twice, or \"Hey Braino\""]].filter((r) => r[1]);
     return `<div class="ob-know">${rows.map(([k, v]) => `<div><span>${esc(k)}</span><b>${esc(v)}</b></div>`).join("")}</div><div class="ob-actions"><button class="ob-go" data-next>Start using Braino</button></div>`;
   }
   return "";
@@ -121,8 +147,8 @@ function render() {
   const scene = SCENES[at];
   const head = `<p class="ob-kicker">${esc(scene.kicker)}</p><h1 class="ob-big">${lit(scene)}</h1>${scene.sub ? `<p class="ob-sub">${esc(scene.sub)}</p>` : ""}`;
   $("ob-stage").innerHTML = scene.art
-    ? `<section class="ob-scene"><div>${head}${body(scene)}</div><div class="ob-art${IMG[scene.art] ? " img" : ""}"${IMG[scene.art] ? ` style="background-image:url('assets/${IMG[scene.art]}')"` : ""}>${ART[scene.art]()}</div></section>`
-    : `<section class="ob-scene solo"><div>${scene.banner ? `<div class="ob-banner" style="background-image:url('assets/${scene.banner}')"></div>` : ""}${head}${body(scene)}</div></section>`;
+    ? `<section class="ob-scene"><div>${head}${body(scene)}</div><div class="ob-art${IMG[scene.art] ? " img" : ""}"${IMG[scene.art] ? ` style="background-image:url('${IMG_BASE}${IMG[scene.art]}.jpg')"` : ""}>${ART[scene.art]()}</div></section>`
+    : `<section class="ob-scene solo"><div>${scene.banner ? `<div class="ob-banner" style="background-image:url('${IMG_BASE}${scene.banner}.jpg')"></div>` : ""}${head}${body(scene)}</div></section>`;
   $("ob-dots").innerHTML = SCENES.map((_, i) => `<i class="${i === at ? "on" : i < at ? "done" : ""}"></i>`).join("");
   $("ob-back").hidden = at === 0;
   $("ob-count").textContent = `${at + 1} of ${SCENES.length}`;
@@ -196,4 +222,5 @@ function paintSound() { $("ob-sound").textContent = muted ? "Sound off" : "Sound
   paintSound();
   try { const s = await api.setupSnapshot?.(); if (s?.ok) { snap = s; Object.assign(answers, { callMe: s.answers?.callMe, persona: s.answers?.persona }); } } catch (_) {}
   render();
+})();
 })();
