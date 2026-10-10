@@ -6972,6 +6972,9 @@ function mdTablesToLines(text) {
 async function speak(text, options = {}) {
   const line = mdTablesToLines(String(text || "")).trim();
   if (!line) return;
+  /* What he SAYS has no markdown: "**affctve.com/braino**" was read out with
+     its stars and backticks (2026-10-11). The notch still shows the line. */
+  const spokenLine = line.replace(/\*\*|__|`+/g, "").replace(/^\s{0,3}#{1,6}\s+/gm, "").replace(/^\s*[-*]\s+/gm, "").trim() || line;
   // Logged AFTER the empty guard: a whitespace-only reply used to print an OUT
   // line for speech that never happened, which broke IN/OUT pairing when reading
   // the terminal back.
@@ -7008,7 +7011,7 @@ async function speak(text, options = {}) {
     }
     let spoke = false;
     try {
-      spoke = await speakWithStreamingTts(line, generation);
+      spoke = await speakWithStreamingTts(spokenLine, generation);
     } catch (streamError) {
       if (generation !== speechGeneration || isAbortLike(streamError)) return;
       logRenderer("tts.streaming.failed", { error: errorForLog(streamError) });
@@ -7021,7 +7024,7 @@ async function speak(text, options = {}) {
       });
     }
     if (!spoke && generation === speechGeneration) {
-      const response = await window.brainoMac.tts(line, macSpeakingRefId());
+      const response = await window.brainoMac.tts(spokenLine, macSpeakingRefId());
       // The IPC TTS request itself cannot be aborted from the renderer. Treat
       // its return as another cancellation boundary before creating a player.
       if (generation !== speechGeneration) return;
@@ -7061,7 +7064,7 @@ async function speak(text, options = {}) {
         const estimatedMs = Math.min(60000, Math.max(900, line.length * 58));
         animateNotchAnswerEstimate(line, generation, estimatedMs);
         speechViaSystemSayUntil = Date.now() + estimatedMs + 60000;
-        await window.brainoMac.systemSay(line);
+        await window.brainoMac.systemSay(spokenLine);
         speechViaSystemSayUntil = Date.now() + estimatedMs + 2000;
         if (generation !== speechGeneration) {
           void window.brainoMac.stopSystemSay?.().catch(() => {});
@@ -7075,7 +7078,7 @@ async function speak(text, options = {}) {
       const estimatedMs = Math.min(60000, Math.max(900, line.length * 58));
       animateNotchAnswerEstimate(line, generation, estimatedMs);
       speechViaSystemSayUntil = Date.now() + estimatedMs + 60000;
-      await window.brainoMac.systemSay(line);
+      await window.brainoMac.systemSay(spokenLine);
       speechViaSystemSayUntil = Date.now() + estimatedMs + 2000;
       await new Promise((resolve) => window.setTimeout(resolve, estimatedMs));
     }
@@ -8106,7 +8109,13 @@ async function answerViaRealtimeChat(prompt, options = {}) {
        where only his own promise gave him away. */
     const hilTask = seen && (seen.kind === "task" || seen.kind === "chat_and_task") ? seen.task : "";
     const promised = Boolean(finalText) && window.brainoMac.promisesAction(finalText);
-    if (!promiseEscalated && (hilTask || promised)) {
+    /* Chat already answered it, fully. "Describe Affective in two sentences"
+       got a chat answer and then a second, different one from a job HIL had
+       labelled a task (2026-10-11). A promise or a refusal still hands over. */
+    const answeredItself = !promised && seen?.kind === "task" && String(finalText || "").length > 40
+      && !/\b(?:can'?t|cannot|unable to|not able to|don'?t have (?:access|a way))\b/i.test(String(finalText || ""));
+    if (answeredItself) logRenderer("voice.promise.skipped", { why: "chat_answered" });
+    if (!promiseEscalated && !answeredItself && (hilTask || promised)) {
       const job = hilTask || escalationPrompt(text);
       promiseEscalated = true;
       logRenderer("voice.promise.escalated", {
@@ -12796,7 +12805,12 @@ async function heraCommandText(openaiText) {
   const turnWords = turnText ? turnText.split(/\s+/).filter(Boolean).length : 0;
   // What you saw in the notch is what is sent: a clean HERA turn wins (2026-10-04).
   // Only when OpenAI squashed a long turn: half HERA's words or fewer, and 8+ missing.
-  if (cleanEarApplies() && turnText && turnWords >= Math.max(openaiWords * 2, openaiWords + 8)) {
+  /* Or when HERA heard WHERE and OpenAI did not: "...play it for me on Hotstar
+     maybe" came back from OpenAI as "...play it for me?", and it went to
+     Netflix (2026-10-11). A service name only HERA heard decides it. */
+  const SERVICE_NAMES = /\b(?:netflix|hot\s?star|jio\s?hotstar|jio\s?cinema|prime(?:\s+video)?|spotify|youtube|whatsapp|apple\s+music|zee5|sony\s?liv|instagram|disney\+?)\b/gi;
+  const heraOnlyService = (turnText.match(SERVICE_NAMES) || []).some((name) => !new RegExp(`\\b${name.replace(/\s+/g, "\\s?")}\\b`, "i").test(openaiText));
+  if (cleanEarApplies() && turnText && (turnWords >= Math.max(openaiWords * 2, openaiWords + 8) || (heraOnlyService && turnWords >= openaiWords))) {
     // HERA writes his name as "we don't": keep the name OpenAI heard.
     const named = /^\W*(?:hey\s+)?brain(?:o|elle)\b[\s,.]*/i.exec(openaiText);
     const text = named && !/^\W*(?:hey\s+)?brain/i.test(turnText) ? `${named[0].trim().replace(/[,.]*$/, "")}, ${turnText}` : turnText;

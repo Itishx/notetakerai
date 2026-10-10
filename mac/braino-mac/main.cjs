@@ -264,7 +264,7 @@ const { isInstantCommand, planFromVerdict, hilFirstEnabled } = require(path.join
 const { shortDoneLine } = require(path.join(__dirname, "done-line.cjs"));
 const { parseInstantFire, appleScriptForKeys } = require(path.join(__dirname, "instant-fire.cjs"));
 const { recipeFor, fillArgs, stepValue } = require(path.join(__dirname, "plan-runner.cjs"));
-const { createNarrator, stepLine } = require(path.join(__dirname, "narrate.cjs"));
+const { createNarrator, stepLine, asDoing } = require(path.join(__dirname, "narrate.cjs"));
 const formFill = require(path.join(__dirname, "form-fill.cjs"));
 const webAddress = require(path.join(__dirname, "web-address.cjs"));
 const { createLayaContext } = require(path.join(__dirname, "laya-context.cjs"));
@@ -16653,6 +16653,8 @@ function macRecentExchanges(turns = 4) {
    seconds while it was still trying. What should stop him is going in circles,
    not a number. These two are backstops for a runaway, not a budget. */
 const MAC_HIL_HARD_STOP = 60;
+const MAC_HIL_FAILS_IN_A_ROW = 3;
+const MAC_HIL_SOFT_TIME_MS = 90000;
 const MAC_HIL_MAX_MS = 420000;
 const MAC_HIL_STUCK_MS = 20000;
 const MAC_HIL_KEEP_GOING_MS = 60000;
@@ -16881,7 +16883,9 @@ async function macBuildObservation() {
   // Set at the end of this function, below, once there is something worth reusing.
   let data = null;
   try { data = JSON.parse(res.detail); } catch (_) { return { ok: false, error: "unreadable observation", text: "", elements: [] }; }
-  let elements = Array.isArray(data?.elements) ? data.elements : [];
+  /* Never his own buttons. The 4am run clicked "Show what Braino is thinking"
+     on his own notch while trying to close a Chrome menu (2026-10-11). */
+  let elements = (Array.isArray(data?.elements) ? data.elements : []).filter((el) => !/\bBraino\b/i.test(String(el?.name || el?.label || el?.title || "")) || isChromeApp(data?.app));
   let sawPage = false;
   /* On the web, read the PAGE, not the window.
    *
@@ -19288,6 +19292,12 @@ async function runMacHilLoop(command, resume = null, opts = {}) {
   // read is used for now: how much rope, not which brain.
   const myGeneration = macHilGeneration;
   const maxSteps = MAC_HIL_HARD_STOP;
+  /* Two honest stops the repeat check could not see (2026-10-11): three failed
+     steps in a row, each slightly different, and a job still going after 90s
+     (the Pinterest run took 226s and did nothing). He stops, says where he
+     got to, and offers to keep going. */
+  const runStartedAt = Date.now();
+  let failedInARow = 0;
   const recentActions = [];
   /* Talk me through it: "Got it" plus the goal, then a plain line per step. */
   const narrator = createNarrator((text) => narrate(text));
@@ -19868,6 +19878,14 @@ async function runMacHilLoop(command, resume = null, opts = {}) {
     if (settled?.ok !== false) stuckAt = Math.max(stuckAt, Date.now() + MAC_HIL_STUCK_MS);
     lastCheckFailed = !verified.ok;
     lastStep = { intent: stepObj.intent || "", action: stepObj.action, expects: stepObj.expects || "", result: settled };
+    failedInARow = settled?.ok === false ? failedInARow + 1 : 0;
+    const overTime = Date.now() - runStartedAt > MAC_HIL_SOFT_TIME_MS && !resume;
+    if (failedInARow >= MAC_HIL_FAILS_IN_A_ROW || overTime) {
+      logMac("hil.loop.honest_stop", { runId, step, why: overTime ? "over_time" : "fails_in_a_row", ms: Date.now() - runStartedAt });
+      const where = String(state.tasks?.find((t) => t.status === "active")?.desc || state.goal || "").trim().replace(/[.!?]+$/, "");
+      const why = overTime ? "This is taking longer than it should" : "Three tries in a row did not work";
+      return { ok: false, say: `${why}, so I stopped${where ? ` while ${asDoing(where).replace(/\.$/, "").replace(/^./, (c) => c.toLowerCase())}` : ""}. Nothing was sent or deleted. Want me to keep going?`, source: "hil_loop" };
+    }
     if (fast && settled?.ok !== false && Array.isArray(d.then) && d.then.length) {
       const mainA = stepObj?.action || {};
       const mainMoved = mainA.type === "navigate" || mainA.type === "click" || mainA.type === "pressKey" || mainA.type === "tool" || Boolean(mainA.submit);
@@ -21245,6 +21263,14 @@ async function routeHilFirst(raw) {
     logMac("laya.kind", { raw: textForLog(raw), kind: sorted.kind, confidence: sorted.confidence, ms: sorted.ms, route: route || "normal", ...(sorted.action ? { action: sorted.action, actionConfidence: sorted.actionConfidence, hint: layaHintForRouter || null, stage: deciderStage() } : {}), ...(sorted.context ? { context: textForLog(sorted.context, 900) } : {}) });
     if (route === "plan" && macHilEnabled()) return runMacHilLoop(raw);
     if (route === "ask") return { ok: true, say: "I didn't quite get that. Say it again?", source: "laya:ask" };
+    /* Sure it is talk: straight to the conversation. "Explain why you brought
+       emotional state into this" was chat at 0.78 and still went to the job
+       loop by default, 14 to 16 seconds for an answer the voice session gives
+       in about 2 (2026-10-11). Same guards as the voice side's one-brain check. */
+    if (sorted.kind === "chat" && sorted.confidence >= LAYA_TALK_SURE && !MAC_OWN_DATA.test(raw) && !SCREEN_DEIXIS_RE.test(String(raw).trim()) && !macLooksLikeTask(raw) && !parseVolumeCommand(raw)) {
+      logMac("laya.talk_fast", { raw: textForLog(raw), confidence: sorted.confidence });
+      return talkOrConverse(raw);
+    }
   }
 
   // Everything above is instant and local. The router is the slow part.
@@ -22724,7 +22750,10 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
      file. "Open it for me" became a file search for "it" and opened a resume,
      because "Itish" starts with it (2026-10-03). */
   const PRONOUN_TARGET = /^(?:it|this|that|them|these|those|this one|that one|the same|it up|it again|those ones)$/i;
-  if (appName && !isLikelyUrl(appName) && !PRONOUN_TARGET.test(cleanOpenTarget(appName).trim())) {
+  /* A pronoun followed by a place is still a pronoun: "open it in the desktop"
+     ran `open -a "it in the desktop"` twice (2026-10-11). */
+  const PRONOUN_LEAD = /^(?:it|this|that|them|these|those)\s+(?:in|on|into|onto|to|with|from|at)\b/i;
+  if (appName && !isLikelyUrl(appName) && !PRONOUN_TARGET.test(cleanOpenTarget(appName).trim()) && !PRONOUN_LEAD.test(cleanOpenTarget(appName).trim())) {
     const target = cleanOpenTarget(appName);
     logMac("delegate.open_intent", { raw: textForLog(raw), target });
     /* "Open the BYOB chat", "open my chat with Param": the chat itself, not

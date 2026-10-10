@@ -22,10 +22,12 @@ test("a promise is what starts the work, not a word list", () => {
      job, because HIL read your sentence, not his. */
   assert.match(renderer, /window\.brainoMac\.promisesAction\(finalText\)/);
   assert.match(renderer, /seen\.kind === "task" \|\| seen\.kind === "chat_and_task"/);
-  assert.match(renderer, /if \(!promiseEscalated && \(hilTask \|\| promised\)\)/);
+  assert.match(renderer, /if \(!promiseEscalated && !answeredItself && \(hilTask \|\| promised\)\)/);
+  // A full chat answer to a "task" is not run a second time (2026-10-11), but a refusal still is.
+  assert.match(renderer, /const answeredItself = !promised && seen\?\.kind === "task"/);
   assert.match(renderer, /voice\.promise\.escalated/);
   /* Recorded BEFORE the run, so a later "go ahead" can still resume it. */
-  const block = renderer.slice(renderer.indexOf("if (!promiseEscalated && (hilTask || promised))"));
+  const block = renderer.slice(renderer.indexOf("if (!promiseEscalated && !answeredItself && (hilTask || promised))"));
   const remember = block.indexOf("rememberOwedTask(job");
   const run = block.indexOf("runDelegate(job");
   assert.ok(remember > 0 && run > remember, "the owed task must be remembered before the run");
