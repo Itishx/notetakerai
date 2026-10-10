@@ -3871,12 +3871,10 @@ function updateNotchFace() {
   }
   /* The asleep hint is the quietest thing the ticker can show, so a timer, the
      music or a meeting all outrank it. */
-  const showNameHint = namedAsleep && !slots.length;
-  if (showNameHint) {
-    slots.push(realtimeActive
-      ? `Listening for \u201c${activeWakeName()}\u201d`
-      : `Say \u201cHey ${activeWakeName()}\u201d to wake me`);
-  }
+  /* No words while he waits for his name (2026-10-11). "Say Hey Braino to wake
+     me" widened the notch to 284px and sat on top of his eyes. Idle is just
+     his eyes, in the smallest notch that shows them. */
+  const showNameHint = false;
   notchFace.classList.toggle("nf-name-asleep", showNameHint);
   const line = processingActive ? "" : slots[0] || "";
   nfSetStatus2Text(slots[1] || "");

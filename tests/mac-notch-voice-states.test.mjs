@@ -112,8 +112,9 @@ test("asleep does not look like listening, and the room does not flash up", () =
   assert.match(face, /const namedAsleep = visible && !herMode && !dictationMode/);
   assert.match(face, /&& \(!namedAsleep \|\| voiceExplicitlyAddressesBraino\(nfHeardText\)\)/);
   assert.match(face, /sessionEngaged && !namedAsleep\s*&& \(dictationCapturing/);
-  assert.match(face, /Listening for \\u201c\$\{activeWakeName\(\)\}\\u201d/);
-  assert.match(face, /Say \\u201cHey \$\{activeWakeName\(\)\}\\u201d to wake me/);
+  // Idle shows only his eyes: no "Say Hey Braino to wake me" over them (2026-10-11).
+  assert.match(face, /const showNameHint = false;/);
+  assert.doesNotMatch(face, /to wake me`/);
   assert.match(css, /#notch-face\.nf-name-asleep \.nf-pill \{[\s\S]{0,160}animation: none;/);
 });
 
