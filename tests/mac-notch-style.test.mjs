@@ -62,7 +62,8 @@ test("Settings offers both, Braino first", () => {
 
 test("the Braino app's Appearance page has the switch too (⌘⇧D opens this one)", () => {
   const app = read("renderer/app.js");
-  assert.match(app, /seg\(\[\["braino", "Braino"\], \["affective", "AffectiveOS"\]\], S\.notchStyle \|\| "braino", "notch", "Notch style"\)/);
+  // Renamed 2026-10-11: the AffectiveOS style is the "Without subtitles" mode.
+  assert.match(app, /seg\(\[\["braino", "With subtitles"\], \["affective", "Without subtitles"\]\], S\.notchStyle \|\| "braino", "notch", "Subtitles"\)/);
   assert.match(app, /if \(key === "notch"\) \{ S\.notchStyle = v; await call\("notchStyle", v\);/);
 });
 

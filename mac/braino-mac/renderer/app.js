@@ -143,7 +143,7 @@ const P = {
 
   /* Braino (shared) */
   appearance: { t: "Appearance", nav: ["Appearance", "face"], r: () => `
-    ${m("", `${kicker("Notch")}${seg([["braino", "Braino"], ["affective", "AffectiveOS"]], S.notchStyle || "braino", "notch", "Notch style")}<p class="sub" style="margin-top:10px">Braino is the notch as it has always been. AffectiveOS keeps the same words, with the Affective logo on his replies, a colour light along the edge, and a glow round it while he thinks. It changes straight away.</p>`)}
+    ${m("", `${kicker("Subtitles")}${seg([["braino", "With subtitles"], ["affective", "Without subtitles"]], S.notchStyle || "braino", "notch", "Subtitles")}<p class="sub" style="margin-top:10px">With subtitles, you see what you said and read his reply in the notch. Without subtitles, you only hear him: the notch stays small, with a dot while he listens and bars while he speaks. It changes straight away.</p>`)}
     ${m("s6", `${kicker("Character")}${seg([["braino", "Braino"], ["brainelle", "Brainelle"], ["webb", "Webb"], ["ferro", "Ferro"]], S.look.mascot || "braino", "mascot", "Character")}<div style="margin-top:14px">${row("Size", "", `<input type="range" min="1" max="5" step=".1" value="${S.look.scale || 1}" data-range="scale" aria-label="Size" style="accent-color:#fff;width:150px">`)}</div>`)}
     ${m("s6", `${kicker("Where he stays")}${seg([["left", "Left"], ["top", "Top"], ["bottom", "Bottom"], ["right", "Right"], ["walk", "Walk"]], S.look.dock || "right", "dock", "Where he stays")}<p class="sub" style="margin-top:10px">Or drag him anywhere: he goes to the nearest spot.</p>`)}
     ${m("", `${kicker("Hide him")}${seg([["", "Shown"], ["hour", "For an hour"], ["hidden", "Until I call"], ["stealth", "Stealth"]], S.look.hide || "", "hide", "Hide him")}<p class="sub" style="margin-top:10px">He still hears you. Bring him back: "Braino, come back", ⌘⇧B, or click the notch.</p>`)}` },
@@ -252,7 +252,7 @@ document.addEventListener("click", async (e) => {
     if (key === "dock") overlay({ dock: v });
     if (key === "hide") overlay({ hide: v });
     if (key === "actFilter") { S.actFilter = v; paint(); }
-    if (key === "notch") { S.notchStyle = v; await call("notchStyle", v); toast(v === "affective" ? "AffectiveOS notch on." : "Braino notch on."); }
+    if (key === "notch") { S.notchStyle = v; await call("notchStyle", v); toast(v === "affective" ? "Subtitles off. You'll just hear him." : "Subtitles on."); }
     return;
   }
   const act = t.closest("[data-act]")?.dataset.act;

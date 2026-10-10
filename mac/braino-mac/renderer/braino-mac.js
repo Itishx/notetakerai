@@ -1653,6 +1653,8 @@ function canUseNotchResponseSurface() {
     && !herMode
     && !dictationMode
     && !dictationStopping
+    // Without subtitles (the AffectiveOS style): you only hear him. No sheets.
+    && !notchFace.classList.contains("nf-aos")
   );
 }
 
@@ -14250,8 +14252,24 @@ function nfAosPaintTint() {
   const rgb = a.map((v, j) => Math.round(v + (b[j] - v) * k)).join(", ");
   notchFace?.style.setProperty("--aos-tint", `rgb(${rgb})`);
 }
+/* Without subtitles (2026-10-11): two tiny indicators at the notch's edges,
+   a dot while he listens and three bars while he speaks. Nothing else. */
+function nfEnsureNoSubIndicators() {
+  const pill = notchFace?.querySelector(".nf-pill");
+  if (!pill || pill.querySelector(".nf-ns-listen")) return;
+  const listen = document.createElement("span");
+  listen.className = "nf-ns-listen";
+  listen.setAttribute("aria-hidden", "true");
+  const talk = document.createElement("span");
+  talk.className = "nf-ns-talk";
+  talk.setAttribute("aria-hidden", "true");
+  talk.innerHTML = "<i></i><i></i><i></i>";
+  pill.append(listen, talk);
+}
 function applyNotchStyle(style) {
   const on = style === "affective";
+  if (on) nfEnsureNoSubIndicators();
+  if (on) { clearNotchAnswer({ invalidate: true }); }
   notchFace?.classList.toggle("nf-aos", on);
   document.body.classList.toggle("aos-notch", on);
   if (on && notchFace?.classList.contains("nf-think-open")) nfSetThinkingOpen(false);

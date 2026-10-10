@@ -6747,6 +6747,44 @@ body.mascot-stealth.mascot-peek #status-pill { opacity: 1; }
 }
 
 
+/* ── Without subtitles (2026-10-11) ────────────────────────────────────────
+ * The AffectiveOS style is now the no subtitles mode: you hear him and read
+ * nothing. The notch stays thin and only a little wider than the hardware,
+ * just enough for a listening dot on the left and speaking bars on the right. */
+#notch-face.nf-aos #nf-status,
+#notch-face.nf-aos #nf-status-2,
+#notch-face.nf-aos .nf-cap,
+#notch-face.nf-aos .nf-inline-caption,
+#notch-face.nf-aos .nf-answer-surface { display: none !important; }
+#notch-face.nf-aos.listen .nf-pill,
+#notch-face.nf-aos.speak .nf-pill,
+#notch-face.nf-aos.busy .nf-pill,
+#notch-face.nf-aos.mic-live .nf-pill {
+  width: calc(var(--nf-notch-w, 200px) + 84px) !important;
+  height: calc(var(--nf-notch-h, 32px) + 4px) !important;
+  transition: width 420ms cubic-bezier(.22,1,.36,1), height 280ms cubic-bezier(.22,1,.36,1);
+}
+#notch-face .nf-ns-listen, #notch-face .nf-ns-talk { display: none; }
+#notch-face.nf-aos .nf-ns-listen,
+#notch-face.nf-aos .nf-ns-talk {
+  position: absolute; bottom: 9px; display: flex; align-items: center; gap: 3px;
+  opacity: 0; transition: opacity 200ms ease; pointer-events: none;
+}
+#notch-face.nf-aos .nf-ns-listen { left: 16px; width: 7px; height: 7px; border-radius: 50%; background: var(--aos-tint, #9fbdf0); }
+#notch-face.nf-aos .nf-ns-talk { right: 14px; height: 12px; }
+#notch-face.nf-aos .nf-ns-talk i { display: block; width: 3px; height: 100%; border-radius: 2px; background: #fff; transform-origin: center; animation: nfNsBar 900ms ease-in-out infinite; }
+#notch-face.nf-aos .nf-ns-talk i:nth-child(2) { animation-delay: 150ms; }
+#notch-face.nf-aos .nf-ns-talk i:nth-child(3) { animation-delay: 300ms; }
+#notch-face.nf-aos.listen .nf-ns-listen,
+#notch-face.nf-aos.mic-live:not(.speak) .nf-ns-listen { opacity: 1; animation: nfNsPulse 1.4s ease-in-out infinite; }
+#notch-face.nf-aos.speak .nf-ns-talk { opacity: 1; }
+@keyframes nfNsPulse { 0%, 100% { transform: scale(.75); opacity: .55; } 50% { transform: scale(1); opacity: 1; } }
+@keyframes nfNsBar { 0%, 100% { transform: scaleY(.35); } 50% { transform: scaleY(1); } }
+@media (prefers-reduced-motion: reduce) {
+  #notch-face.nf-aos .nf-ns-talk i, #notch-face.nf-aos .nf-ns-listen { animation: none !important; }
+}
+
+
 /* ── AffectiveOS notch style (Settings › Notch) ──────────────────────────────
  *
  * Off unless #notch-face carries .nf-aos, so the Braino notch is exactly what

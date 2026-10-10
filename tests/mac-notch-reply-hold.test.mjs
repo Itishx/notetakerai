@@ -25,3 +25,11 @@ test("it folds away on its own when nothing follows", () => {
   assert.match(r, /if \(idle && Date\.now\(\) - nfReplyHold\.since > 3500\) releaseReplyHold\("quiet"\);/);
   assert.match(css, /#notch-face\.nf-answer-reply/);
 });
+
+/* Without subtitles: the AffectiveOS style, now the no subtitles mode. */
+const app = readFileSync(new URL("../mac/braino-mac/renderer/app.js", import.meta.url), "utf8");
+test("without subtitles there are no sheets, only a listening dot and speaking bars", () => {
+  assert.match(r, /&& !notchFace\.classList\.contains\("nf-aos"\)\n\s*\);/);
+  assert.match(css, /#notch-face\.nf-aos\.speak \.nf-ns-talk \{ opacity: 1; \}/);
+  assert.match(app, /\["braino", "With subtitles"\], \["affective", "Without subtitles"\]/);
+});
