@@ -8471,11 +8471,13 @@ async function setRandomOfficialWallpaper() {
    names a few real image files, each one checked to be a real, big image
    before it is used; Openverse and Wikipedia are the quiet fallbacks. */
 const WALLPAPER_UA = "Braino/1.0 (https://affctve.com)";
+const wallpaperUsed = new Map();
 async function fetchWallpaperImage(url) {
   try {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 12000);
-    const response = await fetch(url, { redirect: "follow", headers: { "User-Agent": WALLPAPER_UA, Accept: "image/*" }, signal: controller.signal });
+    // A browser's identity: wallpaper sites refuse unknown downloaders.
+    const response = await fetch(url, { redirect: "follow", headers: { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129 Safari/537.36", Accept: "image/avif,image/webp,image/*,*/*;q=0.8" }, signal: controller.signal });
     clearTimeout(timer);
     const type = String(response.headers.get("content-type") || "");
     if (!response.ok || !/^image\/(?:jpe?g|png|webp|heic)/i.test(type)) return null;
@@ -8483,18 +8485,35 @@ async function fetchWallpaperImage(url) {
     return buffer.length >= 60000 ? { buffer, ext: /png/i.test(type) ? "png" : /webp/i.test(type) ? "webp" : "jpg" } : null;
   } catch (_) { return null; }
 }
+/* Where the pictures come from, best first (2026-10-11, second pass).
+   Bing Images with its wallpaper size filter: the top hits for "Batman" are
+   Batman. Openverse only holds freely licensed photos, so for a character or a
+   person it returned the Batman ROLLER COASTER, and because the fastest
+   download won the race, that is what got set. Openverse is now a last resort
+   for scenes only, and order is decided by rank, never by speed. */
 async function wallpaperImageUrls(subject) {
-  const [searched, open] = await Promise.all([wallpaperUrlsFromSearch(subject), wallpaperUrlsFromOpenverse(subject)]);
-  return [...new Set([...searched, ...open])].slice(0, 10);
+  const bing = await wallpaperUrlsFromBing(subject);
+  if (bing.length) return bing;
+  return wallpaperUrlsFromOpenverse(subject);
 }
-async function wallpaperUrlsFromOpenverse(subject) {
+async function wallpaperUrlsFromBing(subject) {
   try {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 6000);
-    const r = await fetch(`https://api.openverse.org/v1/images/?q=${encodeURIComponent(subject)}&size=large&aspect_ratio=wide&page_size=5`, { headers: { "User-Agent": WALLPAPER_UA }, signal: controller.signal });
+    const timer = setTimeout(() => controller.abort(), 7000);
+    const q = encodeURIComponent(`${subject} wallpaper`);
+    const r = await fetch(`https://www.bing.com/images/search?q=${q}&qft=+filterui:imagesize-wallpaper+filterui:aspect-wide&form=IRFLTR&first=1`, {
+      headers: { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129 Safari/537.36", "Accept-Language": "en-US,en;q=0.9" },
+      signal: controller.signal,
+    });
     clearTimeout(timer);
-    return ((await r.json().catch(() => ({})))?.results || []).map((row) => row.url).filter((u) => /^https?:\/\//.test(String(u || "")));
-  } catch (_) { return []; }
+    const html = await r.text();
+    const urls = [...html.matchAll(/murl&quot;:&quot;(https?:[^&]+?)&quot;/g)].map((m) => m[1]);
+    // Phone-shaped files are tall: never a desktop.
+    return [...new Set(urls)].filter((u) => !/(?:iphone|mobile|phone|portrait|\d{3,4}x(?:2[4-9]|3\d)\d{2})/i.test(u)).slice(0, 12);
+  } catch (error) {
+    logMac("wallpaper.bing.failed", { error: String(error?.message || error).slice(0, 120) });
+    return [];
+  }
 }
 async function wallpaperUrlsFromSearch(subject) {
   const urls = [];
@@ -8528,11 +8547,17 @@ async function setWallpaperFromWeb(subject) {
   const candidates = direct ? [wanted] : await wallpaperImageUrls(wanted);
   /* The first good image wins: up to four downloads at once, not one after
      another (31 seconds on one slow site, 2026-10-11). */
+  // Never the same picture twice for the same subject: "that's not it" gets a different one.
+  const used = wallpaperUsed.get(wanted.toLowerCase()) || new Set();
+  const fresh = candidates.filter((u) => !used.has(u));
   let picked = null;
-  for (let i = 0; i < candidates.length && !picked; i += 4) {
-    const batch = candidates.slice(i, i + 4);
-    picked = await Promise.any(batch.map(async (url) => { const img = await fetchWallpaperImage(url); if (!img) throw new Error("no"); return { url, image: img }; })).catch(() => null);
+  for (let i = 0; i < fresh.length && !picked; i += 3) {
+    // Three downloads at once, but the best-ranked one that worked wins, not the fastest.
+    const batch = fresh.slice(i, i + 3);
+    const got = await Promise.all(batch.map((url) => fetchWallpaperImage(url).then((image) => (image ? { url, image } : null))));
+    picked = got.find(Boolean) || null;
   }
+  if (picked) { used.add(picked.url); wallpaperUsed.set(wanted.toLowerCase(), used); }
   for (const { url, image } of picked ? [picked] : []) {
     try {
       const dir = path.join(AUTH_STORE_DIR, "wallpapers");

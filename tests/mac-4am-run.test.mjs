@@ -13,6 +13,10 @@ const hil = read("../supabase/functions/_shared/human-intelligence/hil-system-pr
 test("wallpaper from the web no longer uses the dead Unsplash address", () => {
   assert.doesNotMatch(main, /`https:\/\/source\.unsplash\.com/);
   assert.match(main, /const candidates = direct \? \[wanted\] : await wallpaperImageUrls\(wanted\);/);
+  // Bing first, by rank; Openverse (free photos only) never for a named subject that Bing found.
+  assert.match(main, /const bing = await wallpaperUrlsFromBing\(subject\);\n  if \(bing\.length\) return bing;/);
+  assert.match(main, /picked = got\.find\(Boolean\) \|\| null;/);
+  assert.match(main, /const fresh = candidates\.filter\(\(u\) => !used\.has\(u\)\);/);
   assert.match(main, /buffer\.length >= 60000/);
 });
 
@@ -65,8 +69,7 @@ test("the wallpaper is applied through macOS's own API, then System Events as a 
 });
 
 test("image sources and downloads run at the same time", () => {
-  assert.match(main, /Promise\.all\(\[wallpaperUrlsFromSearch\(subject\), wallpaperUrlsFromOpenverse\(subject\)\]\)/);
-  assert.match(main, /picked = await Promise\.any\(batch\.map/);
+  assert.match(main, /const got = await Promise\.all\(batch\.map\(\(url\) => fetchWallpaperImage\(url\)/);
 });
 
 test("a tool with no plain words is not read out", () => {

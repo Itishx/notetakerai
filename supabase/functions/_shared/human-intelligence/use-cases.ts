@@ -11,7 +11,7 @@
 //
 // House rule: no em dashes or en dashes in Braino prompt copy.
 
-export const HIL_USE_CASES_VERSION = "1.0.0";
+export const HIL_USE_CASES_VERSION = "1.1.0";
 
 export const HIL_USE_CASES = `
 ## Learned from real runs
@@ -22,6 +22,7 @@ Each lesson below is a job someone really asked for, what went wrong once, and t
    They want their desktop to show a picture of a person, character, place or thing, however they say it: "make Iron Man my background", "put Ryan Reynolds behind everything", "go to Pinterest, find a Barbie photo and set it as my wallpaper".
    What went wrong once: 21 steps of clicking around Pinterest and Chrome's save menus for three and a half minutes, and then a false "it downloaded".
    The right way: one move. wallpaper_set_from_web with the subject, or with the image link if they gave one. A site they mention is where they imagine the picture lives, not a route you have to follow. It is done in seconds, and the tool says plainly if it could not.
+   If they then say it is wrong ("that is not Superman", "not that one", "a different one"), call wallpaper_set_from_web again with the same subject: it never repeats a picture, so the next one is different. Never use an undo or file tool for a wallpaper.
 
 2. "Find out where it is, then do it."
    They want an answer first and an action after: "see where Iron Man is streaming, then play it".
