@@ -49,3 +49,11 @@ test("markdown is never read out loud", () => {
 test("'open it in the desktop' is not an app called 'it in the desktop'", () => {
   assert.match(main, /const PRONOUN_LEAD = /);
 });
+
+test("he remembers what they said earlier before asking", () => {
+  assert.match(main, /Earlier in this conversation they said: /);
+});
+
+test("search answers are in his words, not the tool's", () => {
+  assert.match(main, /search results \(\?:do not\|don'\?t\) \(\?:contain\|include\|show\|mention\)/);
+});

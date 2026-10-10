@@ -13150,7 +13150,13 @@ async function runMacWebSearch(query) {
       throw new Error(data?.error || `web-research failed (${response.status}).`);
     }
     sendTaskProgress({ status: "thinking", text: "Writing the answer" });
-    const say = stripForSpeech(data.answer);
+    /* In his words, not the search tool's: "The provided search results do
+       not contain specific flight pricing" was read out (2026-10-11). */
+    const say = stripForSpeech(data.answer)
+      .replace(/^\s*(?:based on|according to) (?:the )?(?:provided |available )?(?:search )?results,?\s*/i, "")
+      .replace(/\b(?:the )?(?:provided |available )?search results (?:do not|don'?t) (?:contain|include|show|mention)\b/gi, "I couldn't find")
+      .replace(/\b(?:the )?(?:provided |available )?search results (?:show|indicate|suggest|say)\b/gi, "From what I found,")
+      .replace(/^./, (c) => c.toUpperCase());
     logMac("web_search.done", {
       query: textForLog(trimmed),
       answerChars: say.length,
@@ -19305,6 +19311,13 @@ async function runMacHilLoop(command, resume = null, opts = {}) {
   const fast = macHilFastEnabled();
   if (fast) macTrace("⚡ FAST", "long-job mode: card, pinned findings, chained moves");
   if (opts.planFailed) state.facts.push(opts.planFailed);
+  /* What they already said, so he never asks for it again: "Which city?" came
+     fifty seconds after "from Bangalore" (2026-10-11). */
+  if (!resume) {
+    const now = String(command || "").trim();
+    const earlier = macChatHistory.filter((t) => t?.role === "user" && String(t.content || "").trim() && String(t.content).trim() !== now).slice(-3).map((t) => `"${String(t.content).slice(0, 220)}"`);
+    if (earlier.length) state.facts.push(`Earlier in this conversation they said: ${earlier.join(" then ")}. Use these before asking them anything.`);
+  }
   let lastStep = resume?.lastStep || null;
   let said = resume?.said || "";
   let retried = 0;
