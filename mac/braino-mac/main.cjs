@@ -264,7 +264,7 @@ const { isInstantCommand, planFromVerdict, hilFirstEnabled } = require(path.join
 const { shortDoneLine } = require(path.join(__dirname, "done-line.cjs"));
 const { parseInstantFire, appleScriptForKeys } = require(path.join(__dirname, "instant-fire.cjs"));
 const { recipeFor, fillArgs, stepValue } = require(path.join(__dirname, "plan-runner.cjs"));
-const { createNarrator } = require(path.join(__dirname, "narrate.cjs"));
+const { createNarrator, stepLine } = require(path.join(__dirname, "narrate.cjs"));
 const formFill = require(path.join(__dirname, "form-fill.cjs"));
 const webAddress = require(path.join(__dirname, "web-address.cjs"));
 const { createLayaContext } = require(path.join(__dirname, "laya-context.cjs"));
@@ -8452,26 +8452,77 @@ async function setRandomOfficialWallpaper() {
   }
 }
 
-async function setWallpaperFromWeb(subject) {
-  sendTaskProgress({ status: "thinking", text: `Finding a ${subject} wallpaper` });
-  // Free source: an image search that returns a direct file. Unsplash's source
-  // endpoint hands back a real photo for any query, no key, no cost.
-  const url = `https://source.unsplash.com/2560x1440/?${encodeURIComponent(subject)}`;
+/* Wallpaper from the web (fixed 2026-10-11). It used source.unsplash.com,
+   which Unsplash shut down, so every request was a 503 and the 4am run spent
+   three and a half minutes clicking around Pinterest instead. Now: a direct
+   image link is used as is; otherwise the web search Braino already uses
+   names a few real image files, each one checked to be a real, big image
+   before it is used; Openverse and Wikipedia are the quiet fallbacks. */
+const WALLPAPER_UA = "Braino/1.0 (https://affctve.com)";
+async function fetchWallpaperImage(url) {
   try {
-    const response = await fetch(url, { redirect: "follow" });
-    if (!response.ok) throw new Error(`image fetch ${response.status}`);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 12000);
+    const response = await fetch(url, { redirect: "follow", headers: { "User-Agent": WALLPAPER_UA, Accept: "image/*" }, signal: controller.signal });
+    clearTimeout(timer);
+    const type = String(response.headers.get("content-type") || "");
+    if (!response.ok || !/^image\/(?:jpe?g|png|webp|heic)/i.test(type)) return null;
     const buffer = Buffer.from(await response.arrayBuffer());
-    if (buffer.length < 8000) throw new Error("image too small");
-    const dir = path.join(AUTH_STORE_DIR, "wallpapers");
-    fs.mkdirSync(dir, { recursive: true });
-    const file = path.join(dir, `${subject.replace(/[^a-z0-9]+/gi, "-").slice(0, 40)}-${Date.now()}.jpg`);
-    fs.writeFileSync(file, buffer);
-    await setWallpaper(file);
-    return { ok: true, say: `Done — your desktop is ${subject} now.` };
-  } catch (error) {
-    logMac("wallpaper.web.failed", { subject: textForLog(subject), error });
-    return { ok: false, say: `I could not pull a ${subject} image just now. Try once more, or say random wallpaper for a built-in one.` };
+    return buffer.length >= 60000 ? { buffer, ext: /png/i.test(type) ? "png" : /webp/i.test(type) ? "webp" : "jpg" } : null;
+  } catch (_) { return null; }
+}
+async function wallpaperImageUrls(subject) {
+  const urls = [];
+  const add = (u) => { const v = String(u || "").replace(/[)\].,]+$/, ""); if (/^https?:\/\//.test(v) && !urls.includes(v)) urls.push(v); };
+  try {
+    const token = await getBrainoAuthToken();
+    if (SUPABASE_URL && SUPABASE_ANON_KEY && token) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 15000);
+      const response = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/web-research`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ query: `Direct links to high resolution wallpaper photos of ${subject}. Reply with up to 6 direct image file URLs ending in .jpg, .jpeg, .png or .webp, one per line, nothing else.`, purpose: "answer" }),
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
+      const data = await response.json().catch(() => ({}));
+      for (const m of String(data?.answer || "").matchAll(/https?:\/\/[^\s"'<>]+?\.(?:jpe?g|png|webp)(?:\?[^\s"'<>]*)?/gi)) add(m[0]);
+    }
+  } catch (_) {}
+  try {
+    const r = await fetch(`https://api.openverse.org/v1/images/?q=${encodeURIComponent(subject)}&size=large&aspect_ratio=wide&page_size=5`, { headers: { "User-Agent": WALLPAPER_UA } });
+    for (const row of (await r.json().catch(() => ({})))?.results || []) add(row.url);
+  } catch (_) {}
+  return urls.slice(0, 10);
+}
+
+async function setWallpaperFromWeb(subject) {
+  const wanted = String(subject || "").trim();
+  if (!wanted) return { ok: false, say: "What should the wallpaper be?" };
+  const direct = /^https?:\/\//i.test(wanted);
+  const name = direct ? "that picture" : wanted;
+  sendTaskProgress({ status: "thinking", text: direct ? "Downloading that picture" : `Finding a ${wanted} wallpaper` });
+  const startedAt = Date.now();
+  const candidates = direct ? [wanted] : await wallpaperImageUrls(wanted);
+  for (const url of candidates) {
+    const image = await fetchWallpaperImage(url);
+    if (!image) continue;
+    try {
+      const dir = path.join(AUTH_STORE_DIR, "wallpapers");
+      fs.mkdirSync(dir, { recursive: true });
+      const file = path.join(dir, `${(direct ? "web" : wanted).replace(/[^a-z0-9]+/gi, "-").slice(0, 40)}-${Date.now()}.${image.ext}`);
+      fs.writeFileSync(file, image.buffer);
+      await setWallpaper(file);
+      logMac("wallpaper.web.set", { subject: textForLog(wanted), host: (() => { try { return new URL(url).hostname; } catch (_) { return ""; } })(), tried: candidates.indexOf(url) + 1, ms: Date.now() - startedAt });
+      return { ok: true, say: `Done. Your desktop is ${name} now.`, file };
+    } catch (error) {
+      logMac("wallpaper.web.set_failed", { error: String(error?.message || error).slice(0, 160) });
+      return { ok: false, say: "I found the picture, but macOS would not let me set it. It may want Automation permission for System Events." };
+    }
   }
+  logMac("wallpaper.web.failed", { subject: textForLog(wanted), tried: candidates.length, ms: Date.now() - startedAt });
+  return { ok: false, say: `I could not find a good ${name} picture just now. Want a built-in wallpaper instead?` };
 }
 
 async function restoreWallpaper() {
@@ -19536,8 +19587,13 @@ async function runMacHilLoop(command, resume = null, opts = {}) {
        note ("the dead weight is valid now"), so it is never read out; the goal
        he restated and each step's own label are. Only while he is about to DO
        something: a turn that answers or asks has its own words. */
-    if (turn.split?.restated_goal) narrator.ack(turn.split.restated_goal);
-    if (turn.decision?.type === "step") narrator.step(macPlainStep(turn.decision));
+    /* "Got it" only when the first move is real work; an answer or a
+       question has its own words. Steps are said from the action, never
+       from his private reasoning. */
+    if (turn.decision?.type === "step") {
+      if (turn.split?.restated_goal) narrator.ack(turn.split.restated_goal);
+      narrator.line(stepLine(turn.decision.step?.action, (tool) => macPlainStep({ tool })));
+    }
     // HIL owns the plan. Its split is the job list, first turn only.
     if (turn.split?.restated_goal && !state.goal) state.goal = String(turn.split.restated_goal);
     if (turn.split?.tasks?.length && !state.tasks.length) {

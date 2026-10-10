@@ -43,7 +43,7 @@ test("looking, following a link and drafting are never 'cannot be undone'; buyin
 });
 
 test("the five rules are in HIL's instructions, with no dashes", () => {
-  assert.match(prompt, /HIL_LOOP_VERSION = "2\.1[67]\.[01]"/);
+  assert.match(prompt, /HIL_LOOP_VERSION = "2\.(?:1[67]|18)\.[01]"/);
   for (const rule of ["0. A QUESTION GETS AN ANSWER", "2d. A PAGE THAT HAS JUST OPENED IS STILL LOADING", "2e. A FOLLOW-UP IS THE SAME JOB", "LOOKING IS NEVER GATED", "ask for it on the first turn"]) assert.ok(prompt.includes(rule), rule);
   assert.match(prompt, /mean SAY it, word for word/);
   assert.match(prompt, /sign_in_saved tool is available, use it/);

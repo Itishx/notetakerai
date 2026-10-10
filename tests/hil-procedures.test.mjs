@@ -176,5 +176,5 @@ test("the table is service-role only, like the one it was built from", () => {
 test("the version moved, so the behaviour change is traceable", () => {
   /* Every engine_runs row carries this string. A prompt rule that arrives
      without a bump is a change nobody can find afterwards. */
-  assert.match(prompt, /export const HIL_LOOP_VERSION = "2\.17\.[01]";/);
+  assert.match(prompt, /export const HIL_LOOP_VERSION = "2\.18\.0";/);
 });

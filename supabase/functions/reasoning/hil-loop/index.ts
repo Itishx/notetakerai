@@ -10,6 +10,7 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { HIL_LOOP_PROMPT, HIL_LOOP_VERSION } from "../../_shared/human-intelligence/hil-loop-prompt.ts";
+import { HIL_USE_CASES } from "../../_shared/human-intelligence/use-cases.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
 import { logEngineRun } from "../../_shared/engine-log.ts";
 import { loadUserKnowledge } from "../../_shared/user-knowledge.ts";
@@ -1124,6 +1125,8 @@ serve(async (req) => {
 
     const systemPrompt = [
       HIL_LOOP_PROMPT,
+      // Learned use cases: fixed text, so it stays in the cached prefix.
+      HIL_USE_CASES,
       // Before the personality, because it is capability rather than character,
       // and after the loop rules, because how to take a turn has to be settled
       // before what can be done in one.

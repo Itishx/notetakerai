@@ -110,7 +110,7 @@ test("the loop keeps going, stops when circling, and says what it is doing", () 
   assert.match(main, /macHilGeneration \+= 1/);
   assert.match(main, /hil\.loop\.superseded/);
   // He speaks his progress as he works.
-  assert.match(main, /narrator\.step\(macPlainStep\(turn\.decision\)\)/);
+  assert.match(main, /narrator\.line\(stepLine\(turn\.decision\.step\?\.action/);
 });
 
 test("a question holds the run, the same as the gate", () => {
@@ -181,7 +181,7 @@ test("thinking is shown, not waited for", () => {
   assert.match(renderer, /onThinkingStep/);
   // Only the first is spoken: speaking each one cost about six seconds a turn.
   // ...and only while acting, never a note about "the user" (2026-09-27).
-  assert.match(main, /if \(turn\.decision\?\.type === "step"\) narrator\.step\(macPlainStep\(turn\.decision\)\);/);
+  assert.match(main, /narrator\.line\(stepLine\(turn\.decision\.step\?\.action/);
   // And a sound made while thinking is not an instruction.
   assert.match(renderer, /VOICE_FILLER_ONLY/);
   assert.match(renderer, /voice\.filler_ignored/);

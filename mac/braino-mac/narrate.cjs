@@ -10,7 +10,7 @@
  * label), so this costs no model call. Pure and tested; main.cjs owns sending.
  * House rule: no dashes in anything he says. */
 
-const IRREGULAR = { get: "getting", run: "running", put: "putting", set: "setting", shop: "shopping", stop: "stopping", plan: "planning", sit: "sitting", hit: "hitting", see: "seeing", be: "being", die: "dying", lie: "lying", tie: "tying" };
+const IRREGULAR = { step: "stepping", tap: "tapping", drop: "dropping", grab: "grabbing", chat: "chatting", swap: "swapping", skip: "skipping", pin: "pinning", ship: "shipping", dig: "digging", win: "winning", get: "getting", run: "running", put: "putting", set: "setting", shop: "shopping", stop: "stopping", plan: "planning", sit: "sitting", hit: "hitting", see: "seeing", be: "being", die: "dying", lie: "lying", tie: "tying" };
 
 function clean(text) {
   return String(text || "")
@@ -35,6 +35,23 @@ function asDoing(phrase) {
   else doing = verb + "ing";
   const line = [doing, ...rest].join(" ");
   return line.charAt(0).toUpperCase() + line.slice(1) + ".";
+}
+
+/* What a loop step is doing, said from the action itself. The step's
+   "intent" is his private reason ("A draft has to exist before I can address
+   it"), and the bare decision type is just "step", which came out as
+   "Steping." (2026-10-11). Looking and waiting are not worth saying. */
+const ACTION_LINES = { navigate: "Opening the page.", open_url: "Opening the page.", click: "Clicking that.", type: "Typing it in.", fill: "Filling it in.", scroll: "Scrolling.", key: "Pressing keys.", press_keys: "Pressing keys.", select: "Picking it.", upload: "Uploading it." };
+const SILENT_ACTIONS = new Set(["look", "wait", "screenshot", "observe", "read", "screen_vision", "step"]);
+function stepLine(action, plainTool) {
+  const type = String(action?.type || "").toLowerCase();
+  if (!type || SILENT_ACTIONS.has(type)) return "";
+  if (type === "tool") {
+    const tool = String(action?.tool || action?.name || "");
+    if (!tool || SILENT_ACTIONS.has(tool)) return "";
+    return asDoing(plainTool ? plainTool(tool) : tool.replace(/_/g, " "));
+  }
+  return ACTION_LINES[type] || "";
 }
 
 function ackLine(goal) {
@@ -62,8 +79,9 @@ function createNarrator(send, { minGapMs = 4500, now = () => Date.now(), maxLine
   return {
     ack(goal) { if (acked) return false; acked = true; return out(ackLine(goal), true); },
     step(label) { return out(asDoing(label), false); },
+    line(text) { return out(text, false); },
     get acked() { return acked; },
   };
 }
 
-module.exports = { asDoing, ackLine, createNarrator };
+module.exports = { asDoing, ackLine, stepLine, createNarrator };

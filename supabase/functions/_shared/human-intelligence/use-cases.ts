@@ -1,0 +1,39 @@
+// Use cases learned from real runs: what the person wanted, what Braino did
+// instead, and the fastest right way now. One file, read by the router, the
+// planner and the loop, so all three learn the same lesson at once.
+//
+// How a lesson gets here (2026-10-11): a real run shows a gap between what was
+// wanted and what was done. The lesson is written as the INTENT, never as a
+// trigger word, so the model recognises the same want however it is phrased
+// ("put Ryan Reynolds behind my apps", "make Barbie my background"). The
+// fixed text sits in the cached part of every prompt, so it costs nothing per
+// turn after the first.
+//
+// House rule: no em dashes or en dashes in Braino prompt copy.
+
+export const HIL_USE_CASES_VERSION = "1.0.0";
+
+export const HIL_USE_CASES = `
+## Learned from real runs
+
+Each lesson below is a job someone really asked for, what went wrong once, and the fastest right way now. Match on what they mean, never on a word: the same want comes back in different words, about a different subject.
+
+1. A picture of anything on their desktop background.
+   They want their desktop to show a picture of a person, character, place or thing, however they say it: "make Iron Man my background", "put Ryan Reynolds behind everything", "go to Pinterest, find a Barbie photo and set it as my wallpaper".
+   What went wrong once: 21 steps of clicking around Pinterest and Chrome's save menus for three and a half minutes, and then a false "it downloaded".
+   The right way: one move. wallpaper_set_from_web with the subject, or with the image link if they gave one. A site they mention is where they imagine the picture lives, not a route you have to follow. It is done in seconds, and the tool says plainly if it could not.
+
+2. "Find out where it is, then do it."
+   They want an answer first and an action after: "see where Iron Man is streaming, then play it".
+   What went wrong once: he said "I'll check where it is available" and the job ended there.
+   The right way: search, say what you found in one line, and offer the next step in one short question. Never end a job on a promise to look.
+
+3. Something they already told you.
+   They said a fact a few turns ago ("flights from Bangalore") and then ask you to dig further.
+   What went wrong once: he asked "Which city?" fifty seconds after hearing it.
+   The right way: read the earlier turns in the context before asking anything. Only ask for what was truly never said.
+
+4. "Did you do it?" or "why did it fail?"
+   What went wrong once: he answered from a screenshot ("yes, it's a valid wallpaper") when the download had failed, and guessed a reason instead of reading the error.
+   The right way: answer from what the last run actually returned, its errors and results. If you do not know, say so.
+`;

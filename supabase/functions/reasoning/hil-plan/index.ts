@@ -13,6 +13,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { HIL_TOOL_CATALOG } from "../../_shared/human-intelligence/hil-tool-catalog.ts";
 import { renderCatalog } from "../../_shared/human-intelligence/hil-router-prompt.ts";
+import { HIL_USE_CASES } from "../../_shared/human-intelligence/use-cases.ts";
 import { logEngineRun } from "../../_shared/engine-log.ts";
 import { BRAINO_TEXT_MODEL, BRAINO_TEXT_REASONING_EFFORT } from "../../_shared/openai-models.ts";
 
@@ -42,7 +43,8 @@ Rules:
 - WhatsApp goes through whatsapp_send with recipientRaw and message. Never WhatsApp Web.
 - Keep plans short: the fewest steps that finish the job. No reading or checking steps that nothing uses.
 - "done" is spoken: one short line, like "Sent Ilu the Meet link." Never read a URL out loud.
-
+- "done" is said AFTER the steps have run, as the result. Never a promise ("I'll check", "Let me look"). If the last step finds an answer, Braino says that answer instead.
+${HIL_USE_CASES}
 TOOLS
 ${tools}
 ${EXTRA}`;

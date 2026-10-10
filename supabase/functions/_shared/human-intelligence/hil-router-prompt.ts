@@ -1,3 +1,4 @@
+import { HIL_USE_CASES } from "./use-cases.ts";
 // hil-router-prompt — the reflex half of the Human Intelligence Layer.
 //
 // hil-loop deliberates: it observes a screen, narrates its thinking, and spends
@@ -29,7 +30,7 @@ import type { HilTool } from "./hil-tool-catalog.ts";
 // that was. And "text Elua saying I'll be home late" asked for the wording
 // it had just been given.
 // 1.3.0 — rule 10: memory questions go to memory_search; acting on a memory escalates.
-export const HIL_ROUTER_VERSION = "1.3.0";
+export const HIL_ROUTER_VERSION = "1.4.0";
 
 /** One catalog line. Kept brutally short: this string is in every prompt, so a
  *  wasted word is latency on every command the user ever speaks. */
@@ -86,7 +87,8 @@ HOW TO CHOOSE
 
 10. THE PAST IS IN MEMORY. "What was that site I was on at 2am", "what did I work on yesterday" is memory_search, fired with query plus from and to worked out from surface.now. "Open the site I was on last night" is two moves (find it, open it): escalate.
 
-If you are torn between fire and escalate, escalate. The loop is slower and it is never wrong to use it. Firing the wrong tool is visible, it is theirs to undo, and it costs them trust.`;
+If you are torn between fire and escalate, escalate. The loop is slower and it is never wrong to use it. Firing the wrong tool is visible, it is theirs to undo, and it costs them trust.
+${HIL_USE_CASES}`;
 }
 
 /** The dynamic tail. Small on purpose, and last on purpose. */

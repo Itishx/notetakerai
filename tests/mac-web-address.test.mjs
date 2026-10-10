@@ -51,7 +51,7 @@ test("yes to what chat offered is done, not dropped", () => {
 
 test("private thinking is never read out, and only while acting", () => {
   assert.doesNotMatch(main, /sendToRenderer\("braino-mac:speak-line", \{ text: aloud \}\)/);
-  assert.match(main, /if \(turn\.decision\?\.type === "step"\) narrator\.step\(macPlainStep\(turn\.decision\)\);/);
+  assert.match(main, /narrator\.line\(stepLine\(turn\.decision\.step\?\.action/);
 });
 
 test("the screen glance waits for real quiet, and longer after stop", () => {
