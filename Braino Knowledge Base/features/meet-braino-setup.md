@@ -22,6 +22,8 @@ It uses the Affective homepage's design system: Iowan Old Style headlines with t
 
 While you sign in, the notch says "Sign in on the page that opened" instead of holding the Affective logo. During onboarding Braino stays in the notch with his eyes open (before, he jumped out to a spot on screen and the notch looked empty).
 
+Root cause of "his eyes never open" (found 10 Oct): a one-time move written for old users put every NEW install's Braino on the right edge of the screen, and the notch shows closed eyes while his body is away. New installs now stay in the notch.
+
 After that the app opens on a white home page with your real numbers.
 
 (History, 10 Oct: a first version mirrored each line into the notch and had Braino walking around the window with a speech bubble. Both were removed: the notch text was cramped and the walking Braino was invisible on white.)

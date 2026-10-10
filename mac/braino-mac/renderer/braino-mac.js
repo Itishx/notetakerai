@@ -7092,7 +7092,9 @@ async function speak(text, options = {}) {
       if (!quiet) heraVoiceRotate("braino_spoke", { echoTail: true });
       speakingSilently = false;
       if (showReplyCaption) finishReplyCaption(generation);
-      if (realtimeActive && !processing) {
+      // A narration line said mid job hands the notch back to "working".
+      if (options.narration && processing) setStatus("thinking", "Working");
+      else if (realtimeActive && !processing) {
         setStatus("listening", "Listening");
         scheduleRealtimeIdleShutdown("speech_done");
       } else if (!listening && !processing) setStatus("ready", "Double Space to show/hide");
@@ -11666,6 +11668,9 @@ function writeBoolSetting(key, on) {
   try { window.localStorage.setItem(key, on ? "1" : "0"); } catch { /* the switch still works this session */ }
 }
 function talkOutLoud() { return readBoolSetting(TALK_OUT_LOUD_KEY, true); }
+/* Talk me through it: say what he is doing while he works (narrate.cjs). */
+const NARRATE_KEY = "braino-narrate";
+function narrateOn() { return readBoolSetting(NARRATE_KEY, true); }
 function stayPut() { return readBoolSetting(STAY_PUT_KEY, true); }
 
 function nfCollapseNotchZone() {
@@ -11990,13 +11995,14 @@ document.getElementById("braino-dock-row")?.addEventListener("click", (event) =>
   writeBoolSetting(STAY_PUT_KEY, true);
   dockAt(b.dataset.dock, "menu");
 });
-/* He used to walk the whole screen by default. Once, on the first launch
-   after the four spots arrived, he goes to the right-hand one. */
+/* He used to walk the whole screen by default, and once, on the first launch
+   after the four spots arrived, he moved to the right-hand one. That one-time
+   move also fired on every NEW install, so a new person met him on the right
+   edge with the notch's eyes shut ("the face rests while the body is away"),
+   which read as "he never woke up" (2026-10-10). New installs now stay home in
+   the notch; everyone who already had the move keeps their spot. */
 try {
-  if (!localStorage.getItem("brainoDockMigrated")) {
-    localStorage.setItem("brainoDockMigrated", "1");
-    if (walkArea?.mode !== "pin") window.setTimeout(() => { writeBoolSetting(STAY_PUT_KEY, true); dockAt("right", "first_launch"); }, 1500);
-  }
+  if (!localStorage.getItem("brainoDockMigrated")) localStorage.setItem("brainoDockMigrated", "1");
 } catch (_) {}
 renderDockButtons();
 document.getElementById("braino-hide-row")?.addEventListener("click", (event) => {
@@ -12035,6 +12041,7 @@ window.brainoMac.onAppOverlay?.((patch) => {
   }
   if (patch.hide != null) setMascotHide(patch.hide || null, "app");
   if (typeof patch.talkOutLoud === "boolean") writeBoolSetting(TALK_OUT_LOUD_KEY, patch.talkOutLoud);
+  if (typeof patch.narrate === "boolean") writeBoolSetting(NARRATE_KEY, patch.narrate);
   if (typeof patch.cleanEar === "boolean") {
     try { localStorage.setItem("brainoCleanEar", patch.cleanEar ? "1" : "0"); } catch (_) {}
   }
@@ -14276,6 +14283,29 @@ window.brainoMac.onNotchFace?.((payload) => setNotchFaceEnabled(Boolean(payload?
 /* Setup speaks through the notch too: the window shows what to tap, the notch
    says the same line, so the two move as one (setup.js, maybeStartSetup). */
 window.brainoMac.onSetupNotch?.((payload) => { if (payload?.text) nfShowTransient(String(payload.text), Number(payload.ms) || 4000); });
+/* Narration while he works. Unlike speak-line this is meant for busy moments:
+   it never cuts off a line he is already saying (it waits for it, newest line
+   wins), and the final answer simply supersedes it, the same way any new
+   speak() does. Barge-in stops it like any other speech. */
+let narrateNext = "";
+let narrateTimer = 0;
+window.brainoMac.onNarrate?.((payload) => {
+  const text = String(payload?.text || "").trim();
+  if (!text || !narrateOn()) return;
+  narrateNext = text;
+  if (narrateTimer) return;
+  const started = Date.now();
+  const tryNow = () => {
+    if (!narrateNext) { narrateTimer = 0; return; }
+    if (speaking && Date.now() - started < 6000) { narrateTimer = window.setTimeout(tryNow, 180); return; }
+    const line = narrateNext;
+    narrateNext = ""; narrateTimer = 0;
+    if (speaking) return;   // still talking after 6s: this line is stale, drop it
+    logRenderer("narrate.say", { text: line.slice(0, 80) });
+    void speak(line, { narration: true });
+  };
+  tryNow();
+});
 window.brainoMac.onSpeakLine?.((payload) => {
   const text = String(payload?.text || "").trim();
   // Incoming message readouts wait their turn instead of cutting Braino off.

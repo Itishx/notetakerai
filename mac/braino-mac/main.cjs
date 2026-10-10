@@ -264,6 +264,7 @@ const { isInstantCommand, planFromVerdict, hilFirstEnabled } = require(path.join
 const { shortDoneLine } = require(path.join(__dirname, "done-line.cjs"));
 const { parseInstantFire, appleScriptForKeys } = require(path.join(__dirname, "instant-fire.cjs"));
 const { recipeFor, fillArgs, stepValue } = require(path.join(__dirname, "plan-runner.cjs"));
+const { createNarrator } = require(path.join(__dirname, "narrate.cjs"));
 const formFill = require(path.join(__dirname, "form-fill.cjs"));
 const webAddress = require(path.join(__dirname, "web-address.cjs"));
 const { createLayaContext } = require(path.join(__dirname, "laya-context.cjs"));
@@ -1273,6 +1274,14 @@ function interactionUrlHost(url) {
   } catch (_) {
     return null;
   }
+}
+
+/* One line said while he works (narrate.cjs). Its own channel, because the
+   ordinary speak-line waits until he is not busy, and he is always busy here. */
+function narrate(text) {
+  if (!text) return;
+  sendToRenderer("braino-mac:narrate", { text: String(text).slice(0, 140) });
+  try { macTrace("🗣 NARRATE", String(text).slice(0, 140)); } catch (_) {}
 }
 
 function logInteraction(event = {}) {
@@ -19229,7 +19238,8 @@ async function runMacHilLoop(command, resume = null, opts = {}) {
   const myGeneration = macHilGeneration;
   const maxSteps = MAC_HIL_HARD_STOP;
   const recentActions = [];
-  let spokenLast = "";
+  /* Talk me through it: "Got it" plus the goal, then a plain line per step. */
+  const narrator = createNarrator((text) => narrate(text));
   const state = resume?.state || { tasks: [], facts: [], asides: [], steps: [], budgetLeft: maxSteps };
   const fast = macHilFastEnabled();
   if (fast) macTrace("⚡ FAST", "long-job mode: card, pinned findings, chained moves");
@@ -19521,18 +19531,13 @@ async function runMacHilLoop(command, resume = null, opts = {}) {
          Seeing it is instant; hearing all of it is slow. So he says what he is
          setting out to do, then works in front of you. */
       sendToRenderer("braino-mac:thinking-step", { text: thinking.slice(0, 240), step: step + 1 });
-      const aloud = thinking.split(/(?<=[.!?])\s/)[0].trim().slice(0, 150);
-      /* Only while he is about to DO something, and never a note about you.
-         "The user says there is too much air in the room" was read out after
-         he had already answered: a turn that answers or asks has its own words,
-         and thinking that talks about "the user" is private. */
-      const aboutToAct = turn.decision?.type === "step";
-      const privateNote = /\b(?:the user|user's|the person|they want|they are|they said)\b/i.test(aloud);
-      if (!spokenLast && aloud && aboutToAct && !privateNote) {
-        spokenLast = aloud;
-        sendToRenderer("braino-mac:speak-line", { text: aloud });
-      }
     }
+    /* Said out loud, in plain words (narrate.cjs). His thinking is a technical
+       note ("the dead weight is valid now"), so it is never read out; the goal
+       he restated and each step's own label are. Only while he is about to DO
+       something: a turn that answers or asks has its own words. */
+    if (turn.split?.restated_goal) narrator.ack(turn.split.restated_goal);
+    if (turn.decision?.type === "step") narrator.step(macPlainStep(turn.decision));
     // HIL owns the plan. Its split is the job list, first turn only.
     if (turn.split?.restated_goal && !state.goal) state.goal = String(turn.split.restated_goal);
     if (turn.split?.tasks?.length && !state.tasks.length) {
@@ -20557,6 +20562,7 @@ function planClaimsUnopened(command, plan, since) {
 }
 
 async function runPlanSteps(steps, raw, source) {
+  const planNarrator = createNarrator((text) => narrate(text));
   macJobCommand = { text: String(raw || ""), at: Date.now() };
   const started = Date.now();
   const values = [];
@@ -20571,6 +20577,8 @@ async function runPlanSteps(steps, raw, source) {
     }
     const args = fillArgs(step.args, values);
     if (steps.length > 1) sendTaskProgress({ status: "thinking", text: `Step ${i + 1} of ${steps.length}: ${macPlainStep(step)}` });
+    // Talk me through it: the first step opens with "Got it", the rest are said as they start.
+    if (steps.length > 1) { if (i === 0) planNarrator.ack(macPlainStep(step)); else planNarrator.step(macPlainStep(step)); }
     if (steps.length > 1) {
       if (i === 0) macTrail({ kind: "start", command: String(raw || "").slice(0, 120) });
       macTrail({ kind: "step", label: macPlainStep(step) });

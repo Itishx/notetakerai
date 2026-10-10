@@ -20,6 +20,18 @@ export type KnowledgeEntry = {
 
 export const KNOWLEDGE_ENTRIES: readonly KnowledgeEntry[] = [
   {
+    slug: "talk-me-through-it",
+    title: "Talk Me Through It",
+    category: "Feature",
+    date: "2026-10-10",
+    dateLabel: "October 10, 2026",
+    description:
+      "On a long job Braino says what he heard (\"Got it. Finding the cheapest flights.\") and then each step as he does it, instead of working in silence. Quick commands stay instant.",
+    status: "MVP",
+    platform: "Braino for Mac",
+    number: "080",
+  },
+  {
     slug: "meet-braino",
     title: "Meet Braino",
     category: "Feature",
