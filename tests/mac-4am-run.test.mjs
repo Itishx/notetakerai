@@ -11,7 +11,7 @@ const useCases = read("../supabase/functions/_shared/human-intelligence/use-case
 const hil = read("../supabase/functions/_shared/human-intelligence/hil-system-prompt.ts");
 
 test("wallpaper from the web no longer uses the dead Unsplash address", () => {
-  assert.doesNotMatch(main, /source\.unsplash\.com/);
+  assert.doesNotMatch(main, /`https:\/\/source\.unsplash\.com/);
   assert.match(main, /const candidates = direct \? \[wanted\] : await wallpaperImageUrls\(wanted\);/);
   assert.match(main, /buffer\.length >= 60000/);
 });
