@@ -49,7 +49,8 @@ function stepLine(action, plainTool) {
   if (type === "tool") {
     const tool = String(action?.tool || action?.name || "");
     if (!tool || SILENT_ACTIONS.has(tool)) return "";
-    return asDoing(plainTool ? plainTool(tool) : tool.replace(/_/g, " "));
+    const plain = plainTool ? plainTool(tool) : "";
+    return plain ? asDoing(plain) : "";
   }
   return ACTION_LINES[type] || "";
 }

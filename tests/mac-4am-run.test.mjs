@@ -57,3 +57,18 @@ test("he remembers what they said earlier before asking", () => {
 test("search answers are in his words, not the tool's", () => {
   assert.match(main, /search results \(\?:do not\|don'\?t\) \(\?:contain\|include\|show\|mention\)/);
 });
+
+/* 05:15 the same night: "Done. Your desktop is Superman now." while it was not. */
+test("the wallpaper is applied through macOS's own API, then System Events as a fallback", () => {
+  assert.match(main, /setDesktopImageURLForScreenOptionsError/);
+  assert.match(main, /via = "system_events";/);
+});
+
+test("image sources and downloads run at the same time", () => {
+  assert.match(main, /Promise\.all\(\[wallpaperUrlsFromSearch\(subject\), wallpaperUrlsFromOpenverse\(subject\)\]\)/);
+  assert.match(main, /picked = await Promise\.any\(batch\.map/);
+});
+
+test("a tool with no plain words is not read out", () => {
+  assert.match(main, /narrator\.line\(stepLine\(turn\.decision\.step\?\.action, \(tool\) => PLAIN_STEP\[tool\] \|\| ""\)\);/);
+});

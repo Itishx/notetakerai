@@ -8428,10 +8428,22 @@ async function currentWallpaperPath() {
 async function setWallpaper(imagePath) {
   const prev = await currentWallpaperPath();
   if (prev) { try { fs.writeFileSync(WALLPAPER_STATE_PATH, JSON.stringify({ path: prev })); } catch (_) {} }
-  await execFileP("/usr/bin/osascript", ["-e",
-    `tell application "System Events" to set picture of every desktop to "${imagePath.replace(/"/g, '\\"')}"`,
-  ], { timeout: 6000 });
-  logMac("wallpaper.set", { path: textForLog(imagePath) });
+  /* macOS's own wallpaper API, on every screen. System Events changed the
+     setting without the screen updating on macOS 26: "Done, your desktop is
+     Superman" while it plainly was not (2026-10-11). System Events stays as
+     the fallback. */
+  let via = "nsworkspace";
+  try {
+    const jxa = `ObjC.import("AppKit");var ws=$.NSWorkspace.sharedWorkspace,url=$.NSURL.fileURLWithPath(${JSON.stringify(imagePath)}),sc=$.NSScreen.screens,ok=0;for(var i=0;i<sc.count;i++){if(ws.setDesktopImageURLForScreenOptionsError(url,sc.objectAtIndex(i),$({}),null))ok++;}ok;`;
+    const { stdout } = await execFileP("/usr/bin/osascript", ["-l", "JavaScript", "-e", jxa], { timeout: 6000 });
+    if (!(Number(String(stdout).trim()) > 0)) throw new Error("no screen took it");
+  } catch (_) {
+    via = "system_events";
+    await execFileP("/usr/bin/osascript", ["-e",
+      `tell application "System Events" to set picture of every desktop to "${imagePath.replace(/"/g, '\\"')}"`,
+    ], { timeout: 6000 });
+  }
+  logMac("wallpaper.set", { path: textForLog(imagePath), via });
 }
 
 async function setRandomOfficialWallpaper() {
@@ -8472,13 +8484,26 @@ async function fetchWallpaperImage(url) {
   } catch (_) { return null; }
 }
 async function wallpaperImageUrls(subject) {
+  const [searched, open] = await Promise.all([wallpaperUrlsFromSearch(subject), wallpaperUrlsFromOpenverse(subject)]);
+  return [...new Set([...searched, ...open])].slice(0, 10);
+}
+async function wallpaperUrlsFromOpenverse(subject) {
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 6000);
+    const r = await fetch(`https://api.openverse.org/v1/images/?q=${encodeURIComponent(subject)}&size=large&aspect_ratio=wide&page_size=5`, { headers: { "User-Agent": WALLPAPER_UA }, signal: controller.signal });
+    clearTimeout(timer);
+    return ((await r.json().catch(() => ({})))?.results || []).map((row) => row.url).filter((u) => /^https?:\/\//.test(String(u || "")));
+  } catch (_) { return []; }
+}
+async function wallpaperUrlsFromSearch(subject) {
   const urls = [];
   const add = (u) => { const v = String(u || "").replace(/[)\].,]+$/, ""); if (/^https?:\/\//.test(v) && !urls.includes(v)) urls.push(v); };
   try {
     const token = await getBrainoAuthToken();
     if (SUPABASE_URL && SUPABASE_ANON_KEY && token) {
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 15000);
+      const timer = setTimeout(() => controller.abort(), 9000);
       const response = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/web-research`, {
         method: "POST",
         headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${token}` },
@@ -8490,11 +8515,7 @@ async function wallpaperImageUrls(subject) {
       for (const m of String(data?.answer || "").matchAll(/https?:\/\/[^\s"'<>]+?\.(?:jpe?g|png|webp)(?:\?[^\s"'<>]*)?/gi)) add(m[0]);
     }
   } catch (_) {}
-  try {
-    const r = await fetch(`https://api.openverse.org/v1/images/?q=${encodeURIComponent(subject)}&size=large&aspect_ratio=wide&page_size=5`, { headers: { "User-Agent": WALLPAPER_UA } });
-    for (const row of (await r.json().catch(() => ({})))?.results || []) add(row.url);
-  } catch (_) {}
-  return urls.slice(0, 10);
+  return urls;
 }
 
 async function setWallpaperFromWeb(subject) {
@@ -8505,16 +8526,21 @@ async function setWallpaperFromWeb(subject) {
   sendTaskProgress({ status: "thinking", text: direct ? "Downloading that picture" : `Finding a ${wanted} wallpaper` });
   const startedAt = Date.now();
   const candidates = direct ? [wanted] : await wallpaperImageUrls(wanted);
-  for (const url of candidates) {
-    const image = await fetchWallpaperImage(url);
-    if (!image) continue;
+  /* The first good image wins: up to four downloads at once, not one after
+     another (31 seconds on one slow site, 2026-10-11). */
+  let picked = null;
+  for (let i = 0; i < candidates.length && !picked; i += 4) {
+    const batch = candidates.slice(i, i + 4);
+    picked = await Promise.any(batch.map(async (url) => { const img = await fetchWallpaperImage(url); if (!img) throw new Error("no"); return { url, image: img }; })).catch(() => null);
+  }
+  for (const { url, image } of picked ? [picked] : []) {
     try {
       const dir = path.join(AUTH_STORE_DIR, "wallpapers");
       fs.mkdirSync(dir, { recursive: true });
       const file = path.join(dir, `${(direct ? "web" : wanted).replace(/[^a-z0-9]+/gi, "-").slice(0, 40)}-${Date.now()}.${image.ext}`);
       fs.writeFileSync(file, image.buffer);
       await setWallpaper(file);
-      logMac("wallpaper.web.set", { subject: textForLog(wanted), host: (() => { try { return new URL(url).hostname; } catch (_) { return ""; } })(), tried: candidates.indexOf(url) + 1, ms: Date.now() - startedAt });
+      logMac("wallpaper.web.set", { subject: textForLog(wanted), host: (() => { try { return new URL(url).hostname; } catch (_) { return ""; } })(), candidates: candidates.length, ms: Date.now() - startedAt });
       return { ok: true, say: `Done. Your desktop is ${name} now.`, file };
     } catch (error) {
       logMac("wallpaper.web.set_failed", { error: String(error?.message || error).slice(0, 160) });
@@ -16672,6 +16698,7 @@ const PLAIN_STEP = {
   whatsapp_send: "sending the WhatsApp", web_search: "searching the web", current_tab_url: "reading the tab",
   tabs_close_all: "closing the tabs", memory_search: "checking memory", schedule_lookup: "checking your timetable",
   attendance_lookup: "checking attendance", file_find: "finding the file", mail_send: "sending the email",
+  wallpaper_set_from_web: "finding your wallpaper", deep_research: "looking it up",
 };
 function macPlainStep(step) {
   // A loop step is { intent, action: { type, tool } }; a plan step is { tool }.
@@ -19615,7 +19642,8 @@ async function runMacHilLoop(command, resume = null, opts = {}) {
        from his private reasoning. */
     if (turn.decision?.type === "step") {
       if (turn.split?.restated_goal) narrator.ack(turn.split.restated_goal);
-      narrator.line(stepLine(turn.decision.step?.action, (tool) => macPlainStep({ tool })));
+      // A tool with no plain words of its own is not read out as "Wallpapering set from web".
+      narrator.line(stepLine(turn.decision.step?.action, (tool) => PLAIN_STEP[tool] || ""));
     }
     // HIL owns the plan. Its split is the job list, first turn only.
     if (turn.split?.restated_goal && !state.goal) state.goal = String(turn.split.restated_goal);
