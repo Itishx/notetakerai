@@ -1733,6 +1733,12 @@ function scheduleNotchThinking(prompt, detail) {
 function openNotchThinking(prompt, detail = "Separating the useful signal from the repetition.") {
   cancelPendingNotchThinking();
   if (!canUseNotchResponseSurface()) return false;
+  if (nfReplyHold.on) {
+    nfFlowPromptText = String(prompt || nfFlowPromptText || "").trim();
+    showReplyHoldText(nfHeardText ? `\u201c${nfHeardText}\u201d` : "Thinking");
+    notchFace.classList.add("nf-reply-thinking");
+    return true;
+  }
   hilThinkingHistory = [];
   cancelNotchSurfaceExit();
   window.clearTimeout(nfAnswerLingerTimer);
@@ -2116,12 +2122,15 @@ function startNotchAnswer(text, generation, options = {}) {
     nfAnswerSources = Date.now() - nfWebSources.at < 20000 ? nfWebSources.hosts : [];
     nfWebSources = { hosts: [], at: 0 };
   }
+  const fromHold = nfReplyHold.on;
   if (!sameAnswer || options.replace) {
     nfQuietSpokenWords = 0;
     nfAnswerCompletedWords = 0;
     nfAnswerLastScrollIndex = -1;
-    nfAnswerModeLocked = "";
+    // Held for a reply: keep the width it already had, so only the height moves.
+    nfAnswerModeLocked = fromHold ? nfReplyHold.mode : "";
   }
+  if (fromHold) { notchFace.classList.remove("nf-reply-thinking"); releaseReplyHold("answer"); }
   window.clearTimeout(nfThinkingTimer);
   stopThinkingPhaseCycle();
   notchFace.classList.remove(
@@ -2231,8 +2240,56 @@ function finishNotchAnswer(generation) {
   logRenderer("notch.answer.finish", { generation, kind: nfAnswerMode, lingerMs });
 }
 
+/* One shape for the whole back and forth (2026-10-11).
+ *
+ * Replying used to tear the notch down and rebuild it four or five times:
+ * every new turn starts with stopSpeechOutput, which closed his answer sheet,
+ * so the notch shrank to idle, grew into listening, then heard, then thinking,
+ * then opened a brand new sheet. On a first message there is no sheet yet, so
+ * it only ever grew, which is why that looked right.
+ *
+ * Now a turn that starts while his sheet is open HOLDS it: same width, same
+ * place. Your words show inside it, then that he is thinking, then his answer
+ * replaces them. Only the height eases to fit. If nothing comes (noise, a
+ * cancelled turn) it folds away after a quiet moment. */
+let nfReplyHold = { on: false, mode: "", since: 0, timer: 0 };
+function holdNotchAnswerForReply() {
+  if (nfReplyHold.on) return true;
+  if (!notchFace?.classList.contains("nf-answer-open") || !nfAnswerMode) return false;
+  window.clearTimeout(nfAnswerLingerTimer);
+  window.cancelAnimationFrame(nfAnswerRaf);
+  nfAnswerLingerTimer = 0;
+  nfAnswerRaf = 0;
+  nfReplyHold = { on: true, mode: nfAnswerMode, since: Date.now(), timer: 0 };
+  notchFace.classList.add("nf-answer-reply");
+  showReplyHoldText("Listening");
+  nfReplyHold.timer = window.setInterval(() => {
+    const idle = !processing && !voiceTurnInFlight && !speaking && !realtimeResponseInFlight;
+    if (idle && Date.now() - nfReplyHold.since > 3500) releaseReplyHold("quiet");
+    else if (Date.now() - nfReplyHold.since > 45000) releaseReplyHold("too_long");
+  }, 700);
+  logRenderer("notch.reply_hold.start", { mode: nfAnswerMode });
+  return true;
+}
+function showReplyHoldText(text) {
+  if (!nfReplyHold.on) return;
+  nfAnswerText = String(text || "").trim() || "Listening";
+  renderNotchAnswer();
+  nfAnswerWords.forEach((w) => w.classList.add("spoken"));
+  nfReplyHold.since = Date.now();
+}
+function releaseReplyHold(why) {
+  if (!nfReplyHold.on) return;
+  window.clearInterval(nfReplyHold.timer);
+  nfReplyHold = { on: false, mode: "", since: 0, timer: 0 };
+  notchFace?.classList.remove("nf-answer-reply");
+  logRenderer("notch.reply_hold.end", { why });
+  if (why !== "answer") clearNotchAnswer({ invalidate: true });
+}
+
 function clearNotchAnswer(options = {}) {
   if (options.generation && options.generation !== nfAnswerGeneration) return;
+  if (nfReplyHold.on) { window.clearInterval(nfReplyHold.timer); nfReplyHold = { on: false, mode: "", since: 0, timer: 0 }; notchFace?.classList.remove("nf-answer-reply"); }
   window.clearTimeout(nfAnswerLingerTimer);
   window.cancelAnimationFrame(nfAnswerRaf);
   nfAnswerLingerTimer = 0;
@@ -3213,6 +3270,7 @@ function layoutNotchCaption(text) {
 function nfSetHeard(text, options = {}) {
   const previous = nfHeardText;
   nfHeardText = String(text || "").trim();
+  if (nfReplyHold.on && nfHeardText && nfHeardText !== previous) showReplyHoldText(`\u201c${nfHeardText}\u201d`);
   nfHeardLive = Boolean(options.live) && Boolean(nfHeardText);
   if (nfHeardText) {
     if (nfHeardText !== previous) nfHeardShownAt = Date.now();
@@ -6275,7 +6333,8 @@ function stopSpeechOutput() {
     replyCaptionGeneration += 1;   // orphan any in-flight painter
     bubble.classList.remove("show", "reply-karaoke");
   }
-  clearNotchAnswer({ invalidate: true });
+  // A new turn in a live conversation keeps his sheet (see holdNotchAnswerForReply).
+  if (!(realtimeActive && holdNotchAnswerForReply())) clearNotchAnswer({ invalidate: true });
 }
 
 /* ── Money and big numbers, said the way a person says them ───────────────

@@ -6733,6 +6733,20 @@ body.mascot-stealth.mascot-peek #status-pill { opacity: 1; }
   #notch-face.nf-voice-hearing .nf-pill { box-shadow: inset 0 0 6px rgba(160, 230, 190, 0.45); }
 }
 
+/* ── Held for a reply (2026-10-11) ─────────────────────────────────────────
+ * His sheet stays put while you answer: your words sit in it, softer than his,
+ * and breathe while he thinks. Width never changes; only the height eases. */
+#notch-face.nf-answer-reply .nf-answer-word,
+#notch-face.nf-answer-reply .nf-answer-word.spoken { color: rgba(255, 255, 255, .58); }
+#notch-face.nf-answer-reply.nf-reply-thinking .nf-answer-short-text,
+#notch-face.nf-answer-reply.nf-reply-thinking .nf-answer-body { animation: nfReplyThink 1.6s ease-in-out infinite; }
+@keyframes nfReplyThink { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  #notch-face.nf-answer-reply.nf-reply-thinking .nf-answer-short-text,
+  #notch-face.nf-answer-reply.nf-reply-thinking .nf-answer-body { animation: none; }
+}
+
+
 /* ── AffectiveOS notch style (Settings › Notch) ──────────────────────────────
  *
  * Off unless #notch-face carries .nf-aos, so the Braino notch is exactly what
