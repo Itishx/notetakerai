@@ -46,3 +46,10 @@ test("his technical thinking is never read out; narration has its own channel", 
 test("no dashes in what he says", () => {
   assert.doesNotMatch(asDoing("open it — now") + ackLine("type – fast"), /[—–]/);
 });
+
+/* "What's up" turned the volume up 20 points (2026-10-10). */
+test("a short question or greeting is never a volume command", () => {
+  const { parseVolumeCommand } = require("../mac/braino-mac/media-control.cjs");
+  for (const s of ["What's up", "whats up", "what is up", "how's it going up there"]) assert.equal(parseVolumeCommand(s), null, s);
+  for (const s of ["turn it up", "can you turn it up", "volume up", "louder", "a bit lower"]) assert.ok(parseVolumeCommand(s), s);
+});

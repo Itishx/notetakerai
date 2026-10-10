@@ -93,7 +93,11 @@ function parseVolumeCommand(raw) {
   /* "Up" or "down" on its own is volume only in a short command ("turn it
      up", "a bit lower") or with a word that can only mean sound. "What is
      taking up space on my MacBook" turned the volume up by 20 (2026-10-03). */
-  const short = text.split(" ").length <= 4;
+  /* A short question or greeting is not a command: "What's up" turned the
+     volume up 20 points while Laya had it right as chat (2026-10-10). It can
+     still be volume when it says so ("what's the volume", "can you turn it up"). */
+  const asking = /^(?:hey\s+|yo\s+|so\s+)?(?:what|what's|whats|how|how's|hows|who|where|why|when|is|are|was|were|does|do|did|anything|nothing)\b/i.test(text);
+  const short = text.split(" ").length <= 4 && !asking;
   const soundOnly = /\b(?:louder|quieter|softer)\b/i;
   const wantsUp = /\bturn\s+(?:(?:it|this|that)\s+|the\s+\w+\s+)?up\b/i.test(text) || soundOnly.test(text) && /\blouder\b/i.test(text) || ((hasVolumeWord || short) && UP_WORD.test(text) && !/\bup\s+next\b/i.test(text));
   const wantsDown = /\bturn\s+(?:(?:it|this|that)\s+|the\s+\w+\s+)?down\b/i.test(text) || /\b(?:quieter|softer)\b/i.test(text) || ((hasVolumeWord || short) && DOWN_WORD.test(text));
