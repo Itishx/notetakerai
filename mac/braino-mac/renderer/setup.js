@@ -24,21 +24,28 @@ document.addEventListener("change", async (e) => {
 });
 
 const STEPS = [
-  { id: "hello", say: "Hi. I'm Braino. Look up, at the top of your screen. That's me, in the notch.", notch: "Hi. I'm up here.", kicker: "Hello", title: "Hi. I'm Braino.", sub: "I live in your notch, right at the top of your screen. I hear you, I help you, and I remember what matters to you. Give me two minutes to get to know you.", kind: "go", cta: "Hi, Braino" },
-  { id: "callMe", say: "First things first. What should I call you?", kicker: "You", title: "What should I call you?", sub: "I'll use this when I greet you, and when I talk about you to no one.", kind: "text", key: "callMe", prefill: () => snap?.name || "" , placeholder: "Your first name" },
-  { id: "persona", say: "What do your days look like? Just tap one.", kicker: "Your days", title: "What do your days look like?", sub: "It changes what I watch for and what I bring you first.", kind: "choice", key: "persona", options: ["Student", "Founder", "Engineer", "Designer", "Creator", "Something else"] },
-  { id: "org", say: "And where is that? Your school or your company.", kicker: "Your days", title: () => (answers.persona === "Student" ? "Where do you study?" : "Where do you work?"), sub: "So the timetable, the people and the deadlines make sense to me.", kind: "text", key: "org", prefill: () => (answers.persona === "Student" ? "Mesa School of Business" : ""), placeholder: "School or company", optional: true },
-  { id: "rhythm", say: "When does your day start, and when do you call it a night?", kicker: "Your rhythm", title: "When does your day start, and end?", sub: "I'll greet you at the start and wrap up with you at the end.", kind: "rhythm" },
-  { id: "focus", say: "What should I take off your plate? Pick as many as you like.", kicker: "Help", title: "What should I take off your plate first?", sub: "Pick as many as you like.", kind: "multi", key: "focus", options: ["Classes and deadlines", "Messages", "Meetings and notes", "Staying focused", "Music", "Everything"] },
-  { id: "people", say: "These people messaged you most this week. Star the ones who matter.", kicker: "Your people", title: "Who matters most?", sub: "Their WhatsApps show quietly in the notch. Everyone else I remember, and only mention when you ask. These are the people who messaged you most this week.", kind: "people" },
-  { id: "profiles", say: "Which Chrome profile is yours, and what are the others for?", kicker: "Chrome", title: "Which Chrome profile is for what?", sub: "Pick your main one. Say what the others are for, like Nexus or Mesa, and I'll open those there.", kind: "profiles" },
-  { id: "connect", say: "Now let me into the places your day lives.", kicker: "Connections", title: "Let me into the places your day lives.", sub: "Each one is read on this Mac, the way you would read it.", kind: "connect" },
-  { id: "permissions", say: "Four quick yeses from your Mac, and I can really help. Tap Allow on each one.", notch: "Tap Allow, one at a time.", kicker: "Permissions", title: "Four quick yeses.", sub: "Your Mac asks once for each. Tap Allow and say yes. Each one turns green the moment it works.", kind: "permissions" },
-  { id: "memory", say: "Should I remember your day? It stays on this Mac, and you can delete anything.", kicker: "Memory", title: "Should I remember your day?", sub: "Apps, screen text and what you say to me, as text, on this Mac. Private windows and password apps are never written down. You can see and delete all of it in the Memory window.", kind: "memory" },
-  { id: "voice", say: "When I have something to say, should I say it out loud?", kicker: "My voice", title: "When I have something to say?", sub: "You can change this any time.", kind: "choice", key: "voice", options: ["Talk out loud", "Stay quiet, show me in the notch"], map: { "Talk out loud": "aloud", "Stay quiet, show me in the notch": "quiet" } },
-  { id: "never", say: "Anything I should never do? I'll hold to it.", kicker: "Boundaries", title: "Anything I should never do?", sub: "Optional. I'll hold to it.", kind: "textarea", key: "never", placeholder: "Never message my manager, never play music during class…", optional: true },
-  { id: "try", say: "Now try me. Press Control twice, and ask me anything.", notch: "Press Control twice, then talk.", kicker: "Try me", title: "Now, say something to me.", sub: "Press Control twice, then ask me anything. Try: what can you do?", kind: "try" },
-  { id: "done", kicker: "Done", title: () => `Nice to meet you, ${answers.callMe || snap?.name || "friend"}.`, sub: "I'm set up, and I already know a little about you. Call me any time: press Control twice, or just say Hey Braino.", kind: "done", cta: "Finish" },
+  /* The story: he introduces himself before he asks for anything. Each beat
+     is spoken, lights up word by word as he says it, and moves on by itself.
+     *word* is the one word the line turns on, in the italic face. */
+  { id: "s1", kind: "story", title: "Hi. I'm *Braino.*", say: "Hi. I'm Braino." },
+  { id: "s2", kind: "story", title: "I live in your notch. Right up *there.*", say: "I live in your notch. Right up there.", up: true },
+  { id: "s3", kind: "story", title: "Need something? Just call me, and I'll *handle* it.", say: "Need something? Just call me, and I'll handle it." },
+  { id: "s4", kind: "story", title: "I *remember* what matters to you, so you never repeat yourself.", say: "I remember what matters to you, so you never repeat yourself." },
+  { id: "hello", kind: "go", kicker: "", title: "But first, I'd like to *know* you.", say: "But first, I'd like to know you.", sub: "Two minutes. Everything you tell me stays with me.", cta: "Let's begin" },
+  { id: "callMe", say: "First things first. What should I call you?", kicker: "Chapter one · You", title: "What should I *call* you?", sub: "I'll use this when I greet you, and when I talk about you to no one.", kind: "text", key: "callMe", prefill: () => snap?.name || "" , placeholder: "Your first name" },
+  { id: "persona", say: "What do your days look like? Just tap one.", kicker: "Chapter one · You", title: "What do your days *look* like?", sub: "It changes what I watch for and what I bring you first.", kind: "choice", key: "persona", options: ["Student", "Founder", "Engineer", "Designer", "Creator", "Something else"] },
+  { id: "org", say: "And where is that? Your school or your company.", kicker: "Chapter one · You", title: () => (answers.persona === "Student" ? "Where do you *study?*" : "Where do you *work?*"), sub: "So the timetable, the people and the deadlines make sense to me.", kind: "text", key: "org", prefill: () => (answers.persona === "Student" ? "Mesa School of Business" : ""), placeholder: "School or company", optional: true },
+  { id: "rhythm", say: "When does your day start, and when do you call it a night?", kicker: "Chapter two · Your days", title: "When does your day *start*, and end?", sub: "I'll greet you at the start and wrap up with you at the end.", kind: "rhythm" },
+  { id: "focus", say: "What should I take off your plate? Pick as many as you like.", kicker: "Chapter two · Your days", title: "What should I take off your *plate?*", sub: "Pick as many as you like.", kind: "multi", key: "focus", options: ["Classes and deadlines", "Messages", "Meetings and notes", "Staying focused", "Music", "Everything"] },
+  { id: "people", say: "These people messaged you most this week. Star the ones who matter.", kicker: "Chapter three · Your people", title: "Who *matters* most?", sub: "Their WhatsApps show quietly in the notch. Everyone else I remember, and only mention when you ask. These are the people who messaged you most this week.", kind: "people" },
+  { id: "profiles", say: "Which Chrome profile is yours, and what are the others for?", kicker: "Chapter three · Your world", title: "Which Chrome profile is for *what?*", sub: "Pick your main one. Say what the others are for, like Nexus or Mesa, and I'll open those there.", kind: "profiles" },
+  { id: "connect", say: "Now let me into the places your day lives.", kicker: "Chapter three · Your world", title: "Let me into the places your day *lives.*", sub: "Each one is read on this Mac, the way you would read it.", kind: "connect" },
+  { id: "permissions", say: "Four quick yeses from your Mac, and I can really help. Tap Allow on each one.", notch: "Tap Allow, one at a time.", kicker: "Chapter four · Trust", title: "Four quick *yeses.*", sub: "Your Mac asks once for each. Tap Allow and say yes. Each one turns green the moment it works.", kind: "permissions" },
+  { id: "memory", say: "Should I remember your day? It stays on this Mac, and you can delete anything.", kicker: "Chapter four · Trust", title: "Should I *remember* your day?", sub: "Apps, screen text and what you say to me, as text, on this Mac. Private windows and password apps are never written down. You can see and delete all of it in the Memory window.", kind: "memory" },
+  { id: "voice", say: "When I have something to say, should I say it out loud?", kicker: "Chapter four · Trust", title: "When I have something to *say?*", sub: "You can change this any time.", kind: "choice", key: "voice", options: ["Talk out loud", "Stay quiet, show me in the notch"], map: { "Talk out loud": "aloud", "Stay quiet, show me in the notch": "quiet" } },
+  { id: "never", say: "Anything I should never do? I'll hold to it.", kicker: "Chapter four · Trust", title: "Anything I should *never* do?", sub: "Optional. I'll hold to it.", kind: "textarea", key: "never", placeholder: "Never message my manager, never play music during class…", optional: true },
+  { id: "try", say: "Now try me. Press Control twice, and ask me anything.", notch: "Press Control twice, then talk.", kicker: "Chapter five · Us", title: "Now, say something to *me.*", sub: "Press Control twice, then ask me anything. Try: what can you do?", kind: "try" },
+  { id: "done", kicker: "What I know about you", title: () => `Nice to meet you, *${answers.callMe || snap?.name || "friend"}.*`, sub: "I'm set up, and I already know a little about you. Call me any time: press Control twice, or just say Hey Braino.", kind: "done", cta: "Finish" },
 ];
 
 async function save(patch) {
@@ -49,16 +56,33 @@ async function save(patch) {
 }
 
 function title(step) { return typeof step.title === "function" ? step.title() : step.title; }
+/* The homepage's lit sentence: every word dim, lit one by one as he says it.
+   A line he has already said renders fully lit. */
+const spoken = new Set();
+function litTitle(step) {
+  let accent = false;
+  return title(step).split(/\s+/).filter(Boolean).map((w) => {
+    const open = w.startsWith("*"), close = w.replace(/[.?!,]$/, "").endsWith("*");
+    if (open) accent = true;
+    const html = `<span class="ah-w${spoken.has(step.id) ? " on" : ""}${accent ? " ah-d" : ""}">${esc(w.replace(/\*/g, ""))} </span>`;
+    if (close) accent = false;
+    return html;
+  }).join("");
+}
+function lightTitle(p) { const ws = [...document.querySelectorAll(".su-title .ah-w")]; const k = Math.ceil(p * ws.length); ws.forEach((w, i) => w.classList.toggle("on", i < k)); }
 
 function renderStep() {
   const step = STEPS[at];
   /* One step at a time, full width. His notebook stays hidden until the end,
      where it opens beside "Nice to meet you" as the summary of what he learned. */
   document.body.classList.toggle("su-solo", step.kind !== "done");
-  el("su-progress").textContent = at === 0 || step.kind === "done" ? "" : `${at} of ${STEPS.length - 2}`;
+  const firstQ = STEPS.findIndex((x) => x.id === "callMe");
+  el("su-progress").textContent = at < firstQ || step.kind === "done" ? "" : `${at - firstQ + 1} of ${STEPS.length - firstQ - 1}`;
   el("su-back").hidden = at === 0;
-  const head = `<p class="su-kicker">${esc(step.kicker)}</p><h1 class="su-title">${esc(title(step))}</h1><p class="su-sub">${esc(step.sub)}</p>`;
+  document.body.classList.toggle("su-story", step.kind === "story" || step.id === "hello");
+  const head = `${step.kicker ? `<p class="su-kicker">${esc(step.kicker)}</p>` : ""}<h1 class="su-title">${litTitle(step)}</h1>${step.sub ? `<p class="su-sub">${esc(step.sub)}</p>` : ""}`;
   let body = "";
+  if (step.kind === "story") body = `${step.up ? `<div class="su-up" aria-hidden="true"></div>` : ""}<button class="su-link su-skip" data-next>Tap to continue</button>`;
   if (step.kind === "go" || step.kind === "done") body = `<button class="su-next" data-next>${esc(step.cta)}</button>`;
   if (step.kind === "text") {
     const v = answers[step.key] ?? step.prefill?.() ?? "";
@@ -125,14 +149,15 @@ let showedNotebook = true;   // the notebook is the ending now, not shown mid-wa
 async function guide(step) {
   if (!B || guidedStep === step.id) return;
   guidedStep = step.id;
-  if (step.id === "hello") { await B.home(); B.wave(); }
-  else if (step.id === "done") { await B.home(); B.hop(); }
-  else if (step.id === "permissions" && document.querySelector("[data-ask]")) { void B.point("[data-ask]", 4200); }
-  else void B.home();
   const name = answers.callMe || snap?.name || "";
-  // The notch says it too, so the window and the notch move as one.
-  void api.setupNotch?.(step.id === "done" ? `Nice to meet you${name ? `, ${name}` : ""}.` : (step.notch || step.say || ""), 4500);
-  B.say(step.id === "done" ? `Nice to meet you${name ? `, ${name}` : ""}. I'm right up there whenever you need me.` : step.say || "");
+  const line = step.id === "done" ? `Nice to meet you${name ? `, ${name}` : ""}. Here's everything I know about you so far. I'm right up there whenever you need me.` : step.say || "";
+  if (spoken.has(step.id)) return;
+  await B.say(line, lightTitle);
+  if (guidedStep !== step.id) return;
+  spoken.add(step.id);
+  lightTitle(1);
+  // Story beats move on by themselves, a breath after he finishes.
+  if (step.kind === "story") setTimeout(() => { if (STEPS[at]?.id === step.id) void next(); }, 650);
 }
 
 async function next() {
@@ -156,6 +181,7 @@ async function next() {
     if (STEPS[at].id === here) { guidedStep = ""; void guide(STEPS[at]); }
     return;
   }
+  if (step.kind === "story") { B?.stop(); spoken.add(step.id); at += 1; renderStep(); return; }
   if (step.kind === "done") { B?.stop(); await save({ completed: true }); window.close(); return; }
   if (step.id === "hello") void save({ startedAt: answers.startedAt || Date.now() });
   at = Math.min(STEPS.length - 1, at + 1);
@@ -308,7 +334,7 @@ async function checkPermissions() {
   if (!fresh.length) return;
   if (STEPS[at]?.kind === "permissions") renderStep();
   const line = GRANTED[fresh[0].id];
-  if (line) { void api.setupNotch?.(line, 2600); B?.say(line); }
+  if (line) B?.say(line);
 }
 setInterval(() => { if (!document.hidden && STEPS[at]?.kind === "permissions") void checkPermissions(); }, 1000);
 

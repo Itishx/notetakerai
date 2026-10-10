@@ -85,7 +85,7 @@
 
   /* Resolves when he has finished the line (or was cut off by the next one). */
   let doneSaying = () => {};
-  function say(text) {
+  function say(text, onProgress) {
     stop();
     doneSaying();
     const token = sayToken;
@@ -93,7 +93,7 @@
       doneSaying = resolve;
       const finish = () => { if (token !== sayToken) return; speaking = false; light(1); bubbleTimer = setTimeout(hideBubble, 2600); resolve(); };
       const spans = showBubble(text);
-      const light = (p) => { const k = Math.ceil(p * spans.length); spans.forEach((s, i) => s.classList.toggle("on", i < k)); };
+      const light = (p) => { const k = Math.ceil(p * spans.length); spans.forEach((s, i) => s.classList.toggle("on", i < k)); try { onProgress?.(Math.min(1, p)); } catch (_) {} };
       const silent = () => {
         // No voice: mouth moves for about as long as the line takes to read.
         const ms = clamp(text.length * 55, 1600, 6000);

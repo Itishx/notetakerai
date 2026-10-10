@@ -40,8 +40,10 @@ test("a new person who signs in goes straight into setup, not the old full-scree
   assert.match(main, /firstRun: process\.env\.BRAINO_OLD_FIRST_RUN === "1" && loadFirstRun\(\)/);
 });
 
-test("the notch says each step's line while the window shows it", () => {
-  assert.match(js, /api\.setupNotch\?\.\(/);
+test("the new onboarding is the setup window, with no text pushed into the notch", () => {
+  assert.match(main, /const SETUP_VIEW_PATH = path\.join\(__dirname, "renderer", "onboard\.html"\);/);
+  assert.doesNotMatch(read("renderer/onboard.js"), /setupNotch/);
+  assert.doesNotMatch(read("renderer/onboard.js"), /[—–]/);
   assert.match(preload, /setupNotch: \(text, ms\) => ipcRenderer\.invoke\("braino-mac:setup-notch"/);
   assert.match(read("renderer/braino-mac.js"), /onSetupNotch\?\.\(\(payload\) => \{ if \(payload\?\.text\) nfShowTransient/);
 });
@@ -49,12 +51,12 @@ test("the notch says each step's line while the window shows it", () => {
 test("Allow asks macOS for real and the row turns green by itself", () => {
   assert.match(main, /systemPreferences\.askForMediaAccess\("microphone"\)/);
   assert.match(main, /systemPreferences\.isTrustedAccessibilityClient\(true\)/);
-  assert.match(js, /STEPS\[at\]\?\.kind === "permissions"\) void checkPermissions\(\); \}, 1000\)/);
+  assert.match(read("renderer/onboard.js"), /SCENES\[at\]\?\.kind === "perms"\) void checkPermissions\(\); \}, 1000\)/);
 });
 
 test("try me waits for the first real thing said to him", () => {
   assert.match(main, /setupWindow\.webContents\.send\("braino-mac:setup-heard"/);
-  assert.match(js, /api\.onSetupHeard\?\.\(/);
+  assert.match(read("renderer/onboard.js"), /api\.onSetupHeard\?\.\(/);
 });
 
 test("both windows are white, and home counts only real activity", () => {

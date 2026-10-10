@@ -7,11 +7,20 @@
 
 ## The simple version
 
-The first time you open Braino for Mac, he sets himself up with you. You sign in once (a browser tab opens, you're back in a second), and then the setup window opens on its own. Braino says hello from the notch at the top of your screen, and from then on the notch and the window move together. The window shows what to tap. The notch says the same line, out loud, in his voice.
+The first time you open Braino for Mac and sign in, a new onboarding opens by itself. It is a story, told in Braino's voice, one sentence per scene, lit word by word as he says it, in the Affective homepage style.
 
-He asks what to call you, what your days look like, and what to take off your plate. He walks you through the four permissions your Mac needs, and each one turns green the moment you say yes. Then he asks you to try him, out loud, before you finish.
+1. Welcome to AffectiveOS: a computer that finally understands you.
+2. Meet Braino: he lives in your notch.
+3. What is new: not an app you open, someone already there.
+4. Meetings, your day, your people, and "say it, it's done": one scene each, with a picture of it working.
+5. Make him yours: your name and what you do.
+6. Trust: four permissions, each tied to a scene you just saw, turning green the moment you allow it.
+7. Your first moment: press Control twice and talk to him.
+8. Nice to meet you: what he now knows about you.
 
-After that, the app opens on a white home page with your real numbers: what you asked today, this week, how often it worked, how fast he is, how much he knows about you, and your streak.
+After that the app opens on a white home page with your real numbers.
+
+(History, 10 Oct: a first version mirrored each line into the notch and had Braino walking around the window with a speech bubble. Both were removed: the notch text was cramped and the walking Braino was invisible on white.)
 
 ## Why it exists
 
@@ -51,7 +60,8 @@ The goal is the job behind setup: by the time you finish, you should already lik
 - `mac/braino-mac/main.cjs`: `maybeStartSetup(why)` runs after `auth.callback.ok` and 9s after startup; it says hello in the notch, then calls `openSetupWindow()`. New IPC: `braino-mac:setup-notch` (line to the notch), `braino-mac:setup-ask` (real permission prompts, falling back to the exact pane), `braino-mac:setup-permissions` (fresh check). `logInteraction` forwards each real exchange to the setup window as `braino-mac:setup-heard`. The setup and app windows are opaque white now, with no Liquid Glass. When setup closes finished, the app opens on Home. `get-config.firstRun` only turns on with `BRAINO_OLD_FIRST_RUN=1`.
 - `mac/braino-mac/preload.cjs`: `setupNotch`, `setupAsk`, `setupPermissions`, `onSetupHeard`, `onSetupNotch`.
 - `mac/braino-mac/renderer/braino-mac.js`: `onSetupNotch` shows the line with `nfShowTransient`, inside the notch, with no new surface.
-- `mac/braino-mac/renderer/setup.js`: new `hello` copy, the `try` step, live permission polling (`checkPermissions`), and the notch mirror in `guide()`.
+- `mac/braino-mac/renderer/onboard.html|css|js`: the new onboarding, written from scratch (`SCENES` array, word lighting, voice through `setupSay`, live permissions, Try me, summary). `SETUP_VIEW_PATH` points here; the old `setup.html` is still on disk until this is verified.
+- `showOnThisSpace()` in main.cjs: the setup and app windows open on the Space you are looking at, not Cursor's full screen.
 - `mac/braino-mac/renderer/white.css`: loaded last by `setup.html` and `app.html`; remove that one line to get the dark glass back.
 - `mac/braino-mac/renderer/app.js`: Home is now a stats board built from `appActivity`, memories and skills, and the app opens on it once setup is done.
 - `scripts/mac-fresh-start.mjs` (`npm run mac:fresh`): moves `~/Library/Application Support/Braino Mac` to `Braino Mac.real` and back. It never deletes the real folder.

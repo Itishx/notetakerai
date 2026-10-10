@@ -23802,7 +23802,9 @@ ipcMain.handle("braino-mac:memory-ask", async (_e, question) => searchMemory({ q
 // window. Left, he asks what he needs to know, one thing at a time. Right, his
 // notebook, filling in live: what you told him, and what he is picking up from
 // this Mac right now. It can be reopened any time to watch that sync.
-const SETUP_VIEW_PATH = path.join(__dirname, "renderer", "setup.html");
+// The new onboarding (renderer/onboard.*, 2026-10-10). The old split-window
+// setup (setup.html) stays on disk until this one is verified.
+const SETUP_VIEW_PATH = path.join(__dirname, "renderer", "onboard.html");
 const SETUP_STATE_PATH = path.join(AUTH_STORE_DIR, "setup.json");
 let setupWindow = null;
 
@@ -23816,6 +23818,16 @@ function readSetupState() {
 let liquidGlass = null;
 try { liquidGlass = require("electron-liquid-glass"); if (!liquidGlass.isGlassSupported()) liquidGlass = null; } catch (_) { liquidGlass = null; }
 
+/* macOS opens a window on the Space the app was last active in, which for
+   Braino is often Cursor's full screen, so it never showed on the desktop you
+   were looking at. Visible on every Space for a moment pulls it onto this one. */
+function showOnThisSpace(win) {
+  if (!win || win.isDestroyed()) return;
+  try { win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true }); } catch (_) {}
+  win.show(); win.focus(); app.focus({ steal: true });
+  setTimeout(() => { try { if (!win.isDestroyed()) win.setVisibleOnAllWorkspaces(false); } catch (_) {} }, 400);
+}
+
 function openSetupWindow() {
   if (setupWindow && !setupWindow.isDestroyed()) { setupWindow.show(); setupWindow.focus(); return setupWindow; }
   setupWindow = new BrowserWindow({
@@ -23826,12 +23838,11 @@ function openSetupWindow() {
     show: false,
     webPreferences: { preload: PRELOAD_PATH, contextIsolation: true, nodeIntegration: false, sandbox: false },
   });
-  setupWindow.once("ready-to-show", () => { app.dock?.show?.(); setupWindow.show(); setupWindow.focus(); });
+  setupWindow.once("ready-to-show", () => { app.dock?.show?.(); showOnThisSpace(setupWindow); });
   setupWindow.on("closed", () => {
     setupWindow = null;
     // Finished: the app opens on his home page. Closed halfway: he says where to find it.
     if (readSetupState().completedAt) { openBrainoApp("home"); return; }
-    sendToRenderer("braino-mac:setup-notch", { text: "No rush. Double click me to finish setting up.", ms: 5000 });
     if (!dashboardWindow && !memoryWindow && !appWindow) app.dock?.hide?.();
   });
   setupWindow.loadFile(SETUP_VIEW_PATH);
@@ -23984,8 +23995,7 @@ function maybeStartSetup(why) {
   if (setupAutoStarted || readSetupState().completedAt || !authStatusPayload().authenticated) return;
   setupAutoStarted = true;
   logMac("setup.auto_start", { why });
-  sendToRenderer("braino-mac:setup-notch", { text: "Hi. I'm up here. Let's get you set up.", ms: 3200 });
-  setTimeout(() => openSetupWindow(), 2600);
+  setTimeout(() => openSetupWindow(), 1200);
 }
 
 /* The window and the notch move together: each step's line is shown in the
@@ -24047,7 +24057,7 @@ function openBrainoApp(page) {
   appWindow.webContents.once("did-finish-load", () => {
     if (page) appWindow?.webContents.send("braino-mac:app-go", page);
   });
-  appWindow.once("ready-to-show", () => { app.dock?.show?.(); appWindow.show(); appWindow.focus(); });
+  appWindow.once("ready-to-show", () => { app.dock?.show?.(); showOnThisSpace(appWindow); });
   appWindow.on("closed", () => { appWindow = null; if (!dashboardWindow && !memoryWindow && !setupWindow) app.dock?.hide?.(); });
   appWindow.loadFile(APP_VIEW_PATH);
   logMac("app.opened", { page: page || "" });
