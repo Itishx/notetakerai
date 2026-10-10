@@ -1,23 +1,24 @@
 /* White, like the website (2026-10-10). Loaded last by setup.html and app.html,
    so the dark glass rules underneath stay untouched and this can be pulled out
-   in one line. Affective type: Bodoni for the big words, Iowan Old Style for
-   headings, SF Pro for everything else. Coral stays the one accent. */
+   in one line. Affective type, same as the website hero: Iowan Old Style for
+   every headline, SF Pro for everything else. Coral stays the one accent. */
 
-@font-face { font-family: "Bodoni Moda"; src: url("fonts/BodoniModa.ttf") format("truetype"); font-weight: 400 900; font-style: normal; }
-@font-face { font-family: "Bodoni Moda"; src: url("fonts/BodoniModa-Italic.ttf") format("truetype"); font-weight: 400 900; font-style: italic; }
 
 :root {
   color-scheme: light;
-  --w-bg: #ffffff;
-  --w-soft: #f7f6f3;
-  --w-line: rgba(17, 17, 17, 0.08);
-  --w-line-2: rgba(17, 17, 17, 0.14);
-  --w-ink: #111111;
-  --w-ink-2: rgba(17, 17, 17, 0.66);
-  --w-ink-3: rgba(17, 17, 17, 0.44);
+  /* The website's own tokens (src/pages/affective.css). */
+  --w-bg: #faf9f5;
+  --w-soft: #f4f2ec;
+  --w-line: #e6e2d6;
+  --w-line-2: #dcd8cb;
+  --w-ink: #16150f;
+  --w-ink-2: #625f54;
+  --w-ink-3: #918d80;
   --w-coral: #f07a60;
   --w-ok: #1f9d63;
-  --w-didone: "Bodoni Moda", "Didot", "Bodoni 72", Georgia, serif;
+  /* The website hero's face, exactly: Iowan Old Style, 400, tight tracking.
+     Bodoni was tried on the site and dropped; same here. */
+  --w-didone: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
 
   /* setup.css tokens */
   --ink: var(--w-ink); --ink-2: var(--w-ink-2); --ink-3: var(--w-ink-3); --ink-4: rgba(17, 17, 17, 0.3);
@@ -38,8 +39,8 @@ html, body { background: var(--w-bg) !important; color: var(--w-ink); text-shado
 .su-shell { gap: 0; padding: 0; }
 .su-left { border-radius: 0; background: var(--w-bg); border: 0; border-right: 1px solid var(--w-line); box-shadow: none; }
 .su-right { border-radius: 0; background: var(--w-soft); border: 0; box-shadow: none; }
-.su-mark { font-family: var(--w-didone); font-style: italic; }
-.su-title { font-family: var(--w-didone); font-weight: 500; letter-spacing: -0.02em; font-size: 50px; }
+.su-mark { font-family: var(--w-didone); font-style: normal; font-weight: 400; }
+.su-title { font-family: var(--w-didone); font-weight: 400; letter-spacing: -0.028em; line-height: 1.02; font-size: 52px; text-wrap: balance; }
 .su-choice, .su-small, .su-input, .su-text { background: var(--w-bg); border: 1px solid var(--w-line-2); box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; color: var(--w-ink); }
 .su-choice:hover, .su-small:hover { background: var(--w-soft); border-color: rgba(17, 17, 17, 0.24); }
 .su-choice.on { background: rgba(240, 122, 96, 0.1); border-color: var(--w-coral); color: #b4472f; box-shadow: none; }
@@ -59,12 +60,12 @@ html, body { background: var(--w-bg) !important; color: var(--w-ink); text-shado
 .su-keys span { color: var(--w-ink-3); font-size: 14px; margin-left: 6px; }
 @keyframes suKey { 0%, 70%, 100% { transform: none; } 80% { transform: translateY(2px); box-shadow: 0 0 0 var(--w-line-2); } }
 .su-heard { margin: 0 0 22px; padding: 18px 20px; border-radius: 18px; background: var(--w-soft); border: 1px solid var(--w-line); }
-.su-you { margin: 0 0 8px; font: italic 500 22px/1.3 var(--w-didone); }
+.su-you { margin: 0 0 8px; font: 400 24px/1.25 var(--w-didone); letter-spacing: -0.01em; }
 .su-him { margin: 0; color: var(--w-ink-2); font-size: 15px; line-height: 1.5; }
 
 .nb { color: var(--w-ink); }
 .nb h1, .nb-sec-h h2 { color: var(--w-ink); }
-.nb h1 { font-family: var(--w-didone); font-weight: 500; }
+.nb h1 { font-family: var(--w-didone); font-weight: 400; letter-spacing: -0.028em; }
 .nb-props, .nb-callout, .nb-tile, .nb-chip, .nb-icon { background: var(--w-bg) !important; border: 1px solid var(--w-line) !important; box-shadow: none !important; }
 .nb-props dd { color: var(--w-ink); }
 .nb-chip.star { background: rgba(240, 122, 96, 0.1) !important; border-color: rgba(240, 122, 96, 0.5) !important; }
@@ -81,7 +82,7 @@ html, body { background: var(--w-bg) !important; color: var(--w-ink); text-shado
 /* ── The app ── */
 .win { background: var(--w-bg); }
 .side { background: var(--w-soft); border-right: 1px solid var(--w-line); }
-.mark { font: italic 500 24px/1 var(--w-didone) !important; letter-spacing: -0.01em; }
+.mark { font: 400 25px/1 var(--w-didone) !important; letter-spacing: -0.02em; }
 .switch, .seg { background: rgba(17, 17, 17, 0.05); border-color: var(--w-line); }
 .switch button[aria-pressed="true"], .seg button[aria-pressed="true"] { background: var(--w-bg); color: var(--w-ink); box-shadow: 0 1px 2px rgba(17, 17, 17, 0.1); }
 .find { background: var(--w-bg); border-color: var(--w-line); }
@@ -95,9 +96,9 @@ html, body { background: var(--w-bg) !important; color: var(--w-ink); text-shado
 .me .av { color: #fff; }
 .m { background: var(--w-bg); border: 1px solid var(--w-line); box-shadow: 0 1px 2px rgba(17, 17, 17, 0.03); }
 .m.link:hover { background: var(--w-soft); border-color: var(--w-line-2); }
-.greet { font-family: var(--w-didone) !important; font-weight: 500 !important; letter-spacing: -0.02em; }
-.greet em { font-style: italic; color: var(--w-coral); }
-.bar h1 { font-family: var(--w-didone); font-weight: 500; }
+.greet { font-family: var(--w-didone) !important; font-weight: 400 !important; letter-spacing: -0.028em; }
+.greet em { font-style: normal; color: var(--w-ink-2); }
+.bar h1 { font-family: var(--w-didone); font-weight: 400; letter-spacing: -0.02em; }
 .ask { background: var(--w-bg); border-color: var(--w-line-2); box-shadow: 0 6px 24px -14px rgba(17, 17, 17, 0.25); }
 .row, .act-row, .mem-row { border-top-color: var(--w-line) !important; }
 .row.link:hover .lb b { text-decoration-color: rgba(17, 17, 17, 0.3); }
@@ -134,7 +135,7 @@ html, body { background: var(--w-bg) !important; color: var(--w-ink); text-shado
 .hs-row { grid-column: span 12; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
 .hs { background: var(--w-bg); border: 1px solid var(--w-line); border-radius: 18px; padding: 16px 18px 18px; }
 .hs .k { font: 600 10.5px var(--sans); letter-spacing: 0.07em; text-transform: uppercase; color: var(--w-ink-3); }
-.hs .n { font: 500 40px/1 var(--w-didone); margin: 12px 0 4px; font-variant-numeric: lining-nums tabular-nums; }
+.hs .n { font: 400 42px/1 var(--w-didone); letter-spacing: -0.02em; margin: 12px 0 4px; font-variant-numeric: lining-nums tabular-nums; }
 .hs .n small { font: 500 14px var(--sans); color: var(--w-ink-3); margin-left: 4px; }
 .hs p { margin: 0; font-size: 12px; color: var(--w-ink-2); }
 .hs-week { display: grid; grid-template-columns: repeat(7, 1fr); gap: 10px; align-items: end; height: 120px; margin-top: 14px; }
@@ -143,3 +144,20 @@ html, body { background: var(--w-bg) !important; color: var(--w-ink); text-shado
 .hs-week div.today i { background: var(--w-coral); }
 .hs-week span { font: 500 11px var(--sans); color: var(--w-ink-3); }
 @media (max-width: 980px) { .hs-row { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* A long step (Chrome profiles, people) scrolls inside the left panel instead
+   of being cut off with no way down. */
+.su-left { min-height: 0; overflow: hidden; }
+.su-stage { min-height: 0; overflow-y: auto; justify-content: safe center; padding: 8px 4px 8px 0; }
+.su-stage::-webkit-scrollbar { width: 0; }
+
+/* Step by step: one centred column, no notebook until the end. */
+.su-solo .su-shell { grid-template-columns: 1fr; }
+.su-solo .su-right { display: none; }
+.su-solo .su-left { border-right: 0; padding: 34px 48px 26px; }
+.su-solo .su-stage { width: 100%; max-width: 620px; margin: 0 auto; }
+.su-solo .su-title { font-size: 60px; }
+.su-solo .su-sub { font-size: 17px; max-width: 520px; }
+/* The ending: the notebook slides in as the summary. */
+body:not(.su-solo) .su-right { animation: nbIn 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+@keyframes nbIn { from { opacity: 0; transform: translateX(40px); } to { opacity: 1; transform: none; } }

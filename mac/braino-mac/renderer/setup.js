@@ -52,6 +52,9 @@ function title(step) { return typeof step.title === "function" ? step.title() : 
 
 function renderStep() {
   const step = STEPS[at];
+  /* One step at a time, full width. His notebook stays hidden until the end,
+     where it opens beside "Nice to meet you" as the summary of what he learned. */
+  document.body.classList.toggle("su-solo", step.kind !== "done");
   el("su-progress").textContent = at === 0 || step.kind === "done" ? "" : `${at} of ${STEPS.length - 2}`;
   el("su-back").hidden = at === 0;
   const head = `<p class="su-kicker">${esc(step.kicker)}</p><h1 class="su-title">${esc(title(step))}</h1><p class="su-sub">${esc(step.sub)}</p>`;
@@ -118,7 +121,7 @@ function renderStep() {
    step (a tap on a choice) do not make him repeat himself. */
 const B = window.SetupBraino;
 let guidedStep = "";
-let showedNotebook = false;
+let showedNotebook = true;   // the notebook is the ending now, not shown mid-way
 async function guide(step) {
   if (!B || guidedStep === step.id) return;
   guidedStep = step.id;

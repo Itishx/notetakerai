@@ -1034,7 +1034,8 @@ section id or heading changes.
 ## Mac app: white, and setup with the notch (2026-10-10, `onboarding-notch` branch)
 
 - The setup window and the Braino app are opaque white (`#ffffff`), with no Liquid Glass. All of it lives in `mac/braino-mac/renderer/white.css`, loaded last, so removing one `<link>` brings the dark glass back.
-- Type: Bodoni Moda (bundled) for big words and the wordmark, in italic for the mark; Iowan Old Style headings; SF Pro text. Ink `#111`, soft panel `#f7f6f3`, hairlines `rgba(17,17,17,.08)`, coral `#f07a60` as the one accent, green `#1f9d63` for "allowed".
+- Type: the website hero's face, Iowan Old Style 400 with -0.028em tracking, for every headline and the wordmark; SF Pro text. No Bodoni (tried and rejected, 10 Oct). Website tokens: page `#faf9f5`, soft `#f4f2ec`, ink `#16150f`, hairlines `#dcd8cb`, coral `#f07a60` as the one accent, green `#1f9d63` for "allowed".
 - Primary buttons are solid black pills; choices are white pills that turn coral when picked.
 - Setup lines are mirrored into the notch with `nfShowTransient`: the notch keeps its shape, and nothing is drawn outside it.
+- Setup is one centred column, step by step; the notebook slides in only on the last step, as the summary.
 - Home is a stats board: two rows of four number tiles (Bodoni numerals), a 7-day bar chart with today in coral, next class and people, then today's recent asks.

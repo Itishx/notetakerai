@@ -34,7 +34,9 @@ The goal is the job behind setup: by the time you finish, you should already lik
 - Checks the permissions every second while you are on that step, turns each row green, and says what it lets him do ("Now I can hear you").
 - "Try me" waits for the first real thing you say to him, and shows your words and his reply.
 - Everything you tell him is saved as memory he keeps (unchanged from the old setup).
-- The setup window and the app are white now, with the website's type: Bodoni for big words, Iowan Old Style for headings, SF Pro for the rest.
+- One step at a time, full width. His notebook (everything he learned) only appears at the end, as the summary beside "Nice to meet you".
+- The setup window and the app use the website's warm white and its hero type: Iowan Old Style for every headline, SF Pro for the rest. (Bodoni was tried on 10 Oct and dropped, same as on the site.)
+- His eyes open even if the first sign in takes longer than 45 seconds. Before, a slow sign in left the boot marked failed.
 
 ## Honest limitations
 

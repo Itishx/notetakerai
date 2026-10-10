@@ -11522,7 +11522,12 @@ async function runStartupSequence(config = {}) {
        launch he finishes waking in the notch while the desktop is back. Still
        capped, as a backstop only — Escape and main's watchdog are the real net,
        and onAuthRequired catches the one case that genuinely never returns. */
-    const authResult = await capped(notchBootPromise, 45000, "notch-boot");
+    let authResult = await capped(notchBootPromise, 45000, "notch-boot");
+    /* A first sign in can take longer than 45s (a new account, a slow page).
+       Timing out used to mark the boot failed, so he never opened his eyes
+       even after sign in finished. Nothing covers the screen here, so keep
+       waiting for the real answer, up to five minutes. */
+    if (!authResult) authResult = await capped(notchBootPromise, 300000, "notch-boot-late");
     logRenderer("startup.auth.result", {
       ok: Boolean(authResult?.ok),
       source: authResult?.source || "unknown",
