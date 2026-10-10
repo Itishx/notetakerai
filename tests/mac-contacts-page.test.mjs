@@ -10,7 +10,7 @@ const html = read("renderer/dashboard.html");
 const js = read("renderer/dashboard.js");
 
 test("the page, its chip and its tab group exist", () => {
-  assert.match(html, /data-group="settings access keys account contacts mesa"/);
+  assert.match(html, /data-group="settings access keys account contacts mesa chrome"/);
   assert.match(html, /<button class="bd-chip" data-view="contacts">/);
   assert.match(html, /<section class="bd-view" data-view="contacts">/);
   assert.match(html, /id="contacts-sync"/);

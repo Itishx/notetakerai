@@ -53,6 +53,34 @@ serve(async (req) => {
       logPrefix: "spotify-player-state",
     });
 
+    /* view "taste": what they actually listen to (5 Oct). Top tracks this
+       month, recently played and recently liked. Top and recent need the
+       user-top-read and user-read-recently-played scopes; a connection made
+       before they were added gets needsReconnect instead of an error. */
+    const body = req.method === "POST" ? await req.clone().json().catch(() => ({})) : {};
+    if (body?.view === "taste") {
+      const soft = async (url: string) => {
+        const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+        if (res.status === 403 || res.status === 401) return { denied: true };
+        if (!res.ok) return { failed: res.status };
+        return await res.json();
+      };
+      const [top, topLong, recent, liked] = await Promise.all([
+        soft("https://api.spotify.com/v1/me/top/tracks?time_range=short_term&limit=10"),
+        soft("https://api.spotify.com/v1/me/top/tracks?time_range=medium_term&limit=5"),
+        soft("https://api.spotify.com/v1/me/player/recently-played?limit=30"),
+        soft("https://api.spotify.com/v1/me/tracks?limit=10"),
+      ]);
+      const name = (t: any) => t ? { title: t.name, artist: (t.artists || []).map((a: any) => a.name).join(", "), uri: t.uri } : null;
+      return json({
+        topThisMonth: Array.isArray(top?.items) ? top.items.map(name) : null,
+        topLately: Array.isArray(topLong?.items) ? topLong.items.map(name) : null,
+        recentlyPlayed: Array.isArray(recent?.items) ? recent.items.map((i: any) => ({ ...name(i.track), playedAt: i.played_at })) : null,
+        recentlyLiked: Array.isArray(liked?.items) ? liked.items.map((i: any) => ({ ...name(i.track), likedAt: i.added_at })) : null,
+        needsReconnect: Boolean(top?.denied || recent?.denied),
+      });
+    }
+
     const [playback, devicesPayload] = await Promise.all([
       fetchSpotifyOptionalJson("https://api.spotify.com/v1/me/player", accessToken, "spotify-player-state"),
       fetchSpotifyOptionalJson("https://api.spotify.com/v1/me/player/devices", accessToken, "spotify-player-state"),

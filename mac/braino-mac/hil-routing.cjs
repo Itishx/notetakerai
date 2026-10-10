@@ -18,7 +18,10 @@ const { resolveWebTarget } = require(path.join(__dirname, "..", "..", "extension
 function macLooksMultiStep(raw) {
   const t = String(raw || "").toLowerCase();
   if (t.length < 12) return false;
-  const JOB = "(send|email|play|open|search|find|save|add|move|summari[sz]e|reply|message|schedule|screenshot|download|write|draft|put)";
+  /* "set", "start", "close", "call", "turn", "text", "remind", "book" were missing, so
+     "play Billie Jean and set a timer" was one job: the song played and the
+     timer was dropped (found in the HIL Lab, 2026-09-26). */
+  const JOB = "(send|email|play|open|search|find|save|add|move|summari[sz]e|reply|message|schedule|screenshot|download|write|draft|put|set|start|close|call|facetime|turn|text|remind|book|pause|stop|create|make|show|tell)";
   if (new RegExp("\\b(then|after that|and then|once you|followed by)\\b").test(t)) return true;
   // A job verb on EITHER side of "and" is two jobs. Only checking after it missed
   // "summarise this and put it in my notes", where the first verb leads.
@@ -111,6 +114,13 @@ const MAC_SCHEDULE = /\b(timetable|time table|schedule|due|deadline|deadlines|cl
 function macFastLane(raw) {
   const t = String(raw || "").toLowerCase().trim();
   if (!t) return true;
+  /* "Open Chrome." is one thing, instant. The word "chrome" below sent it to
+     the thinking loop, 9.4 seconds to open an app (2026-09-26). A bare open
+     of one app or site, with no second job, is always the fast lane. */
+  const bare = t.replace(/^(?:(?:hey\s+)?braino[,\s]+)?(?:(?:can|could|would) you\s+)?(?:please\s+)?/, "").replace(/[.!?]+$/, "").replace(/\s+(?:for me|please|now)$/, "");
+  const bareOpen = bare.match(/^(?:open|launch|start|bring up|go (?:on|to|into))\s+(?:up\s+)?(?:the\s+|my\s+)?([a-z0-9 .]{2,20})$/);
+  // A known website keeps its own instant path (macBareWebOpen); an app is this.
+  if (bareOpen && !/\b(?:and|then|search|find|with)\b/.test(bare) && !resolveWebTarget(bareOpen[1].trim())) return true;
   if (MAC_BROWSER_TARGET.test(t)) return false;
   if (MAC_RESEARCH.test(t)) return false;
   return MAC_FAST_LANE.some((re) => re.test(t));
@@ -198,8 +208,16 @@ function macIsConversation(raw) {
      question; "what is X, then put it in a note" is two jobs and already went
      to the brain above, because a continuation is caught before this. */
   if (/^(?:what|who|when|where|why|whose)\b/i.test(t) && !MAC_TASK_VERB.test(t.toLowerCase())) return true;
+  /* Small talk said any way round. MAC_CHITCHAT only knew how sentences START,
+     so "How you doing?" and "I am doing good, how are you?" went to the job
+     loop and took 16 and 19 seconds to say "doing good" (2026-09-26). A short
+     sentence with no job in it and small talk anywhere in it is small talk. */
+  const words = t.split(/\s+/).filter(Boolean).length;
+  if (words <= 14 && !MAC_TASK_VERB.test(t.toLowerCase()) && MAC_SMALL_TALK.test(t)) return true;
   return false;
 }
+
+const MAC_SMALL_TALK = /\b(?:how (?:do|did|would) you know|why (?:do|did|would) you (?:say|think)|what do you mean|are you sure|how come|what makes you (?:say|think)|how(?:'s| is| are)? (?:you|it going|things|life|your day)|how you doing|what'?s up|wassup|sup\b|i(?:'m| am) (?:doing )?(?:good|fine|great|well|okay|ok|alright|tired|bored|sad|happy|excited|stressed)|(?:not|nothing) much|same here|me too|you too|good (?:morning|afternoon|evening|night)|miss(?:ed)? you|love you|thank(?:s| you)|haha|lol|that'?s (?:cool|nice|great|funny|crazy|amazing)|nice one|good job|well done|never ?mind|no worries|all good|see you|bye|goodnight|tell me a joke|talk to me|let'?s (?:talk|chat))\b/i;
 
 /* "Close all the tabs."
  *

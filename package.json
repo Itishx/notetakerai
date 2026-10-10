@@ -35,7 +35,12 @@
     "pdf:companion": "node scripts/print-deck.mjs files/braino-companion-deck.html public/braino-companion-deck.pdf",
     "hil:misreads": "node scripts/hil-misreads-replay.mjs",
     "mac:memory": "env -u ELECTRON_RUN_AS_NODE BRAINO_MEMORY_VIEW=1 electron mac/braino-mac/main.cjs",
-    "mac:screentext:build": "cd mac/braino-mac/native/BrainoScreenText && swiftc -O -o BrainoScreenText main.swift"
+    "mac:laya4": "env -u ELECTRON_RUN_AS_NODE BRAINO_LAYA_CONTEXT=1 electron mac/braino-mac/main.cjs",
+    "mac:fast": "env -u ELECTRON_RUN_AS_NODE BRAINO_HIL_FAST=1 electron mac/braino-mac/main.cjs",
+    "mac:arrival": "env -u ELECTRON_RUN_AS_NODE BRAINO_ARRIVAL_PREVIEW=1 electron mac/braino-mac/main.cjs",
+    "mac:drop": "env -u ELECTRON_RUN_AS_NODE BRAINO_NOTCH_DROP=1 electron mac/braino-mac/main.cjs",
+    "mac:screentext:build": "cd mac/braino-mac/native/BrainoScreenText && swiftc -O -o BrainoScreenText main.swift",
+    "postinstall": "node scripts/mac-dev-permissions.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
@@ -123,5 +128,8 @@
     "vercel": "^54.6.1",
     "vite": "^5.4.19",
     "vitest": "^3.2.4"
+  },
+  "optionalDependencies": {
+    "electron-liquid-glass": "^1.1.1"
   }
 }

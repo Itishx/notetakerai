@@ -230,6 +230,15 @@ async function callModel(apiKey: string, messages: unknown[], rescue = false) {
  * fences, finds the object, and tells the client to retry once when it cannot.
  * That tolerance is what makes this safe to try.
  */
+/* Reusing the instructions (5 Oct). The ~10k-token start of every turn (the
+   loop rules and the tool list) is identical, but only 2 of 286 turns were
+   served from OpenAI's cache: without a cache name, requests rarely land where
+   the cached copy is, and the default cache lasts minutes while Braino's
+   commands are often further apart. A fixed name per model and a 24-hour
+   cache make the repeat read cheap and quicker. If the API ever refuses these
+   fields, the turn is sent again without them, so caching can never cost a
+   turn. */
+let cacheFieldsRefused = false;
 async function callResponsesApi(
   apiKey: string, model: string, system: string, user: string,
   effort: string, maxTokens: number, json = true,
@@ -241,6 +250,7 @@ async function callResponsesApi(
     tools: [{ type: "web_search" }],
     reasoning: { effort },
     max_output_tokens: maxTokens,
+    ...(cacheFieldsRefused ? {} : { prompt_cache_key: `braino-hil-loop-${model}`, prompt_cache_retention: "24h" }),
   };
   /* Asked for as JSON rather than merely instructed to be JSON.
    *
@@ -253,11 +263,23 @@ async function callResponsesApi(
    * it is a flag: the caller drops it and retries once if the API says no,
    * rather than losing search or the turn. */
   if (json) body.text = { format: { type: "json_object" } };
-  return await fetch(OPENAI_RESPONSES_ENDPOINT, {
+  const send = () => fetch(OPENAI_RESPONSES_ENDPOINT, {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
+  let res = await send();
+  if (res.status === 400 && !cacheFieldsRefused) {
+    const why = await res.clone().text().catch(() => "");
+    if (/prompt_cache/i.test(why)) {
+      console.warn("hil-loop: cache fields refused, sending without them", why.slice(0, 200));
+      cacheFieldsRefused = true;
+      delete body.prompt_cache_key;
+      delete body.prompt_cache_retention;
+      res = await send();
+    }
+  }
+  return res;
 }
 
 /* The final text, out of an output array that also carries reasoning items and
@@ -311,6 +333,14 @@ type LoopState = {
      shown back every turn so step nine knows where it is on the map without
      having to work the whole job out again from the screen. */
   plan?: string[];
+  /* Long-job memory (2026-10-01, sent only when the Mac's BRAINO_HIL_FAST
+     switch is on). card: where the job is, kept by the client from the plan
+     and the steps that worked. found: what earlier steps found, pinned so the
+     reminders in facts can never push it out. batch: the client can run a
+     short chain of steps without a turn in between. */
+  card?: { goal?: string; done?: string[]; now?: string; left?: string[] };
+  found?: string[];
+  batch?: boolean;
   budgetLeft: number;
   screen?: string;
   userReply?: string;
@@ -330,6 +360,7 @@ function renderState(command: string, context: string, state: LoopState | null):
     // matters most. The screen is never withheld.
     parts.push("First turn. No task list exists yet. Restate the goal, split it into its separate jobs, write the plan (the moves you expect to make, in order), and choose the first action of job one. Look at the observation below before deciding anything: if what the command refers to is already open, continue from it rather than going to find it.");
     if (state?.screen) parts.push(`OBSERVATION, the live page right now:\n${String(state.screen).slice(0, 16000)}`);
+    if (state?.batch) parts.push(CHAIN_RULE);
     parts.push("Return the JSON for this turn now.");
     return parts.join("\n\n");
   }
@@ -343,6 +374,17 @@ function renderState(command: string, context: string, state: LoopState | null):
     parts.push(`YOUR PLAN, written on turn one. Find where the actions below have got you to, and take the next move. Rewrite it with "replan" only if the screen shows it is wrong:\n${moves}`);
   }
 
+  if (state!.card?.goal) {
+    const c = state!.card;
+    parts.push([
+      "WHERE YOU ARE IN THIS JOB (kept for you; trust it over re-reading the screen):",
+      `Goal: ${String(c.goal).slice(0, 400)}`,
+      c.done?.length ? `Done: ${c.done.slice(-8).map((d) => String(d).slice(0, 120)).join(" → ")}` : "Done: nothing yet",
+      c.now ? `Now: ${String(c.now).slice(0, 200)}` : "",
+      c.left?.length ? `Left: ${c.left.slice(0, 8).map((d) => String(d).slice(0, 120)).join(" → ")}` : "",
+    ].filter(Boolean).join("\n"));
+  }
+  if (state!.found?.length) parts.push("FOUND SO FAR (results of earlier steps; use these, do not fetch them again):\n" + state!.found.slice(-6).map((f) => `- ${String(f).slice(0, 2500)}`).join("\n"));
   if (state!.facts?.length) parts.push("Learned so far:\n" + state!.facts.map((f) => `- ${f}`).join("\n"));
   if (state!.asides?.length) parts.push("Set aside for later:\n" + state!.asides.map((a) => `- ${a}`).join("\n"));
 
@@ -377,9 +419,15 @@ function renderState(command: string, context: string, state: LoopState | null):
     ].join("\n"));
   }
 
+  if (state!.batch) parts.push(CHAIN_RULE);
   parts.push("Return the JSON for this turn now.");
   return parts.join("\n\n");
 }
+
+/* Chaining: the slow part of a long job is one ~5s turn per move. When the
+   next moves do not depend on seeing the screen in between, they go in one
+   turn and the Mac runs them back to back, stopping at the first failure. */
+const CHAIN_RULE = `CHAINING IS ON FOR THIS RUN, and it overrides "one action a turn" and "never fire two things at once" for safe follow-ups only. Every turn costs the user about five seconds, so when the moves right after this step do not need you to see the screen in between, put them in the same turn as "then": [step, step] inside "decision", same shape as "step", at most 3. Examples that SHOULD be chained: navigate to a site, then wait 1-2s, then type into the search box by shortcut and press Enter; type text, then press Enter; a keyboard shortcut, then type. Each chained step must be reversible. Element indexes are allowed in a chain only to FILL A FORM on the page you can see right now: several "type" steps into different boxes by index (no submit), then at most one "click" by index as the very last step (the Search or Next button). Never use an index after a navigate, a click, Enter or a tool in the same chain, because the page has moved and the numbers are stale. Example for "flights from Pune to Hyderabad" on a form with [3] "Where from?", [5] "Where to?", [9] "Search": step type [3] "Pune", then type [5] "Hyderabad", then click [9]. Never chain past a step whose result you must read, and never chain a send, post, buy or delete. Example decision for "open youtube and search lofi": {"type":"step","step":{"intent":"Load YouTube.","action":{"type":"navigate","url":"https://www.youtube.com/results?search_query=lofi"},"expects":"YouTube results for lofi.","reversible":true},"then":[{"intent":"Let the results load.","action":{"type":"wait","ms":1500},"expects":"Results visible.","reversible":true}]}. When a site takes its query in the URL, put the query in the URL instead of typing it.`;
 
 // ── Is this rescue earned? ───────────────────────────────────────────────────
 // This endpoint is verify_jwt=false so the lab works for anyone, which means the
@@ -595,7 +643,148 @@ function cleanPlan(raw: unknown): string[] {
     .slice(0, 10);
 }
 
-function coerceTurn(rawContent: string, hadLastStep: boolean): { turn: LoopTurn; parseOk: boolean } {
+const HIL_TOOL_NAMES_SORTED = HIL_TOOL_CATALOG.map((t) => t.name).sort((x, y) => y.length - x.length);
+
+/* Names the model uses for actions the runner has under another name. */
+const ACTION_ALIASES: Record<string, string> = {
+  click_element: "click", click_at: "click", tap: "click", press_button: "click", hover: "look",
+  press: "pressKey", press_key: "pressKey", presskey: "pressKey", key: "pressKey", keypress: "pressKey", hotkey: "pressKey", shortcut: "pressKey", keyboard: "pressKey",
+  input: "type", type_text: "type", fill: "type", enter_text: "type", write: "type",
+  open: "navigate", open_url: "navigate", goto: "navigate", go_to: "navigate", visit: "navigate",
+  screenshot: "look", inspect: "look", vision: "look", look_at_screen: "look", see: "look", observe: "look", screen_vision: "look",
+  scroll_down: "scroll", scroll_up: "scroll", swipe: "scroll",
+  read_page: "read", extract: "read", get_text: "read",
+  search: "web_search", websearch: "web_search", google: "web_search",
+  script: "exec_js", run_js: "exec_js", javascript: "exec_js", js: "exec_js", execute_js: "exec_js",
+  sleep: "wait", pause: "wait", delay: "wait",
+  select: "selectOption", choose: "selectOption",
+};
+
+/* JSON as models write it when it is almost right: raw line breaks and tabs
+   inside strings, trailing commas. Walks the text once, tracking strings. */
+function repairJson(text: string): string {
+  let out = "";
+  let inString = false;
+  let escaped = false;
+  for (const ch of text) {
+    if (inString) {
+      if (escaped) { out += ch; escaped = false; continue; }
+      if (ch === "\\") { out += ch; escaped = true; continue; }
+      if (ch === '"') { inString = false; out += ch; continue; }
+      if (ch === "\n") { out += "\\n"; continue; }
+      if (ch === "\r") { out += "\\r"; continue; }
+      if (ch === "\t") { out += "\\t"; continue; }
+      out += ch;
+    } else {
+      if (ch === '"') inString = true;
+      out += ch;
+    }
+  }
+  return out.replace(/,\s*([}\]])/g, "$1");
+}
+
+/* Brackets as models write them when they are almost right (2026-10-03): one
+   closer too many in the middle, so the object ends early and the rest reads
+   as junk, or the last one or two left off. Both were behind "I lost my train
+   of thought": 7 of 32 turns in one scoring run, every one a bracket. Walks
+   once, tracking strings: a closer that does not match what is open is
+   dropped, a closer that would end the outermost object while more fields
+   follow is dropped, and whatever is still open at the end is closed. */
+/* The last balanced {...} after a "decision" key, string-aware, parsed on its own. */
+function salvageDecision(text: string): Record<string, unknown> | null {
+  let at = text.lastIndexOf("\"decision\"");
+  while (at >= 0) {
+    const open = text.indexOf("{", at);
+    if (open < 0) return null;
+    let depth = 0, inStr = false, esc = false;
+    for (let i = open; i < text.length; i++) {
+      const c = text[i];
+      if (inStr) { if (esc) esc = false; else if (c === "\\") esc = true; else if (c === '"') inStr = false; continue; }
+      if (c === '"') inStr = true;
+      else if (c === "{") depth++;
+      else if (c === "}") { depth--; if (depth === 0) {
+        const chunk = text.slice(open, i + 1);
+        try { const d = JSON.parse(repairJson(chunk)); if (d && typeof d === "object" && typeof d.type === "string") return { thinking: "", decision: d }; } catch { /* keep looking */ }
+        break;
+      } }
+    }
+    at = text.lastIndexOf("\"decision\"", at - 1);
+  }
+  return null;
+}
+
+function balanceJson(text: string): string {
+  let out = "";
+  const stack: string[] = [];
+  let inString = false;
+  let escaped = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inString) {
+      out += ch;
+      if (escaped) escaped = false;
+      else if (ch === "\\") escaped = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') { inString = true; out += ch; continue; }
+    if (ch === "{" || ch === "[") { stack.push(ch); out += ch; continue; }
+    if (ch === "}" || ch === "]") {
+      const want = ch === "}" ? "{" : "[";
+      if (stack[stack.length - 1] !== want) continue;
+      if (stack.length === 1 && /^\s*,/.test(text.slice(i + 1))) continue;
+      stack.pop();
+      out += ch;
+      continue;
+    }
+    out += ch;
+  }
+  while (stack.length) out += stack.pop() === "{" ? "}" : "]";
+  return out;
+}
+
+/* Looking is never something you cannot take back (2026-10-03).
+   "Open the Publish Content documentation. That cannot be undone. Want me to
+   go ahead?" was asked four times about a docs link, and typing a draft into
+   Cursor was gated the same way. The model marks these reversible false; the
+   gate exists for buying, posting, sending and deleting, so a step that only
+   opens, reads, scrolls, waits, follows a link or tab, or types without
+   sending is set back to reversible here, on both surfaces at once. A click on
+   anything named like a buy, post, send or delete control is left alone. */
+const DESTRUCTIVE_NAME = /\b(?:buy|order|checkout|check out|pay|purchase|place order|publish|post|share|send|submit|delete|remove|trash|discard|unsubscribe|cancel subscription|confirm|transfer|book now|reserve)\b/i;
+function markHarmlessStepsUndoable(turn: LoopTurn, screen: string) {
+  const step = (turn?.decision as { step?: { reversible?: boolean; action?: Record<string, unknown> } } | undefined)?.step;
+  if (!step || step.reversible !== false) return;
+  const a = step.action || {};
+  const type = String(a.type || "");
+  let harmless = ["navigate", "read", "look", "scroll", "wait"].includes(type);
+  if (type === "type" && a.submit !== true) harmless = true;
+  if (type === "click" && typeof a.index === "number") {
+    const line = String(screen || "").split("\n").find((l) => l.startsWith(`[${a.index}] `)) || "";
+    const role = (line.match(/^\[\d+\]\s+(\S+)/) || [])[1] || "";
+    const name = (line.match(/"([^"]*)"/) || [])[1] || "";
+    if (/^(?:link|tab|menuitem|treeitem|heading|image|article|row|cell)$/i.test(role) && !DESTRUCTIVE_NAME.test(name)) harmless = true;
+  }
+  /* Prompting another AI reaches nobody: on an AI chat site, typing with
+     Enter, pressing Enter, or clicking its Send is finishing the job. */
+  const AI_CHAT = /https?:\/\/(?:[\w-]+\.)*(?:chatgpt\.com|chat\.openai\.com|claude\.ai|gemini\.google\.com|perplexity\.ai|copilot\.microsoft\.com|grok\.com|chat\.deepseek\.com|meta\.ai)\b/i;
+  if (!harmless && AI_CHAT.test(String(screen || ""))) {
+    const line = typeof a.index === "number" ? (String(screen || "").split("\n").find((l) => l.startsWith(`[${a.index}] `)) || "") : "";
+    const name = (line.match(/"([^"]*)"/) || [])[1] || "";
+    if (type === "type" || (type === "pressKey" && /enter|return/i.test(String(a.key || ""))) || (type === "click" && /\b(?:send|submit)\b/i.test(name))) harmless = true;
+  }
+  if (harmless) {
+    step.reversible = true;
+    console.warn("hil-loop: harmless step marked undoable", { type });
+  }
+}
+
+/* Why the last turn was rejected, so "came back unreadable" stops being a
+   mystery: 8 of 19 recent give-ups were this, with normal-length replies. */
+let lastParseFailure = "";
+let lastParseRaw = "";
+
+function coerceTurn(rawContent: string, hadLastStep: boolean, allowChain = false): { turn: LoopTurn; parseOk: boolean } {
   const fallback: LoopTurn = {
     thinking: "I could not read my own reasoning for this turn.",
     split: null,
@@ -618,27 +807,84 @@ function coerceTurn(rawContent: string, hadLastStep: boolean): { turn: LoopTurn;
     if (jsonMatch) {
       try {
         parsed = JSON.parse(jsonMatch[0]);
-      } catch { /* fall through */ }
+      } catch {
+        /* 4 of 42 turns on 2026-09-25 were "not json" at normal lengths: the
+           usual cause is a script or a quote with a raw line break inside a
+           string, or a trailing comma. Repaired rather than thrown away. */
+        try { parsed = JSON.parse(repairJson(jsonMatch[0])); } catch { /* fall through */ }
+      }
+    }
+    // Brackets last, on the whole reply: an early closer leaves the greedy
+    // match above holding only half the object.
+    if (!parsed) {
+      try { parsed = JSON.parse(balanceJson(repairJson(withoutFence.slice(withoutFence.indexOf("{"))))); } catch { /* fall through */ }
+      if (parsed) console.warn("hil-loop: brackets repaired");
+    }
+    /* The decision alone, when the thinking broke the reply. Every unreadable
+       turn in two weeks started '{"thinking":' and then broke inside it (stray
+       quotes, or 11,000 characters of it), killing the run with "I lost my
+       train of thought" (5 Oct). The decision is all the run needs. */
+    if (!parsed) {
+      const salvaged = salvageDecision(withoutFence);
+      if (salvaged) { parsed = salvaged; console.warn("hil-loop: decision salvaged from a broken reply"); }
     }
   }
-  if (!parsed || typeof parsed !== "object") return { turn: fallback, parseOk: false };
+  if (!parsed || typeof parsed !== "object") {
+    lastParseFailure = `not json (${withoutFence.length} chars, starts "${withoutFence.slice(0, 12).replace(/[^\x20-\x7e]/g, "?")}")`;
+    lastParseRaw = withoutFence.slice(0, 600);
+    return { turn: fallback, parseOk: false };
+  }
 
   const rawDecision = parsed.decision && typeof parsed.decision === "object" ? parsed.decision : {};
   const type = DECISION_TYPES.has(rawDecision.type) ? rawDecision.type : null;
-  if (!type) return { turn: fallback, parseOk: false };
+  if (!type) { lastParseFailure = "bad decision type"; lastParseRaw = withoutFence.slice(0, 600); return { turn: fallback, parseOk: false }; }
 
   let decision: LoopTurn["decision"];
   if (type === "step") {
     const s = rawDecision.step && typeof rawDecision.step === "object" ? rawDecision.step : {};
     const action = s.action && typeof s.action === "object" && !Array.isArray(s.action) ? s.action : null;
-    const actionType = action && typeof action.type === "string" ? action.type.trim() : "";
-    if (!action || !ACTION_TYPES.has(actionType)) return { turn: fallback, parseOk: false };
+    let actionType = action && typeof action.type === "string" ? action.type.trim() : "";
+    /* 5 of 42 turns were "bad action type": a sensible action under a name the
+       runner does not use. Mapped to the real one; a catalog tool written as
+       the type becomes that tool; anything else goes to the Mac as a step it
+       will refuse in words, which the next turn can recover from. Throwing the
+       turn away only ever produced a retry and then "lost my train of thought". */
+    if (action && !ACTION_TYPES.has(actionType)) {
+      const alias = ACTION_ALIASES[actionType.toLowerCase().replace(/[\s-]+/g, "_")];
+      if (alias) {
+        actionType = alias;
+      } else if (findTool(actionType)) {
+        (action as Record<string, unknown>).tool = actionType;
+        actionType = "tool";
+      }
+      if (actionType !== String(action.type)) console.warn("hil-loop: action type repaired", { from: action.type, to: actionType });
+      else lastParseFailure = `unknown action "${String(actionType).slice(0, 40)}" passed through`;
+    }
+    if (!action || !actionType) { lastParseFailure = "step with no action"; lastParseRaw = withoutFence.slice(0, 600); return { turn: fallback, parseOk: false }; }
     // A tool call is only a step if the tool is real. Rejecting the whole turn
     // rather than dropping the action is deliberate: a half-understood turn that
     // silently becomes a no-op is the hardest kind of bug to see from outside.
     if (actionType === "tool") {
-      const toolName = String((action as Record<string, unknown>).tool || "");
-      if (!findTool(toolName)) return { turn: fallback, parseOk: false };
+      /* The name, wherever the model put it. It writes "name" or "tool_name"
+         as often as "tool", and the whole turn used to be thrown away for it:
+         8 of 19 recent give-ups, each after two retries, 55 to 83 seconds of
+         nothing for "change to Monday mode". */
+      const a = action as Record<string, unknown>;
+      const toolName = String(a.tool || a.name || a.tool_name || a.toolName || "").trim();
+      a.tool = toolName;
+      if (!a.args && a.arguments && typeof a.arguments === "object") a.args = a.arguments;
+      /* A name that is not in the catalog is still a real turn: it goes to the
+         Mac, which answers "there is no such tool, do it another way", and the
+         next turn recovers. Rejecting it only ever produced the same turn again. */
+      /* A near miss is the real tool: "monday_mode" is monday_mode_toggle. */
+      if (toolName && !findTool(toolName)) {
+        const near = HIL_TOOL_NAMES_SORTED.find((n) => n.startsWith(`${toolName}_`) || n.startsWith(toolName) || toolName.startsWith(n));
+        if (near) { a.tool = near; console.warn("hil-loop: tool name repaired", { from: toolName, to: near }); }
+      }
+      if (!findTool(String(a.tool))) {
+        console.warn("hil-loop: tool not in catalog, passing through", { tool: toolName });
+        if (!toolName) { lastParseFailure = "tool with no name"; lastParseRaw = withoutFence.slice(-600); return { turn: fallback, parseOk: false }; }
+      }
     }
     // A script with no code is not a step, it is a turn that would run nothing
     // and be judged as if it had. The cap is a sanity bound, not a security
@@ -646,7 +892,7 @@ function coerceTurn(rawContent: string, hadLastStep: boolean): { turn: LoopTurn;
     // watching, not the length.
     if (actionType === "exec_js") {
       const code = String((action as Record<string, unknown>).code || "");
-      if (!code.trim() || code.length > 8000) return { turn: fallback, parseOk: false };
+      if (!code.trim() || code.length > 8000) { lastParseFailure = "bad script"; lastParseRaw = withoutFence.slice(0, 600); return { turn: fallback, parseOk: false }; }
     }
     // A click on a send/buy/publish/destroy control is gated even if the model said
     // otherwise. The element NAME is the real test and lives on the client, which
@@ -702,6 +948,24 @@ function coerceTurn(rawContent: string, hadLastStep: boolean): { turn: LoopTurn;
       message: m || (type === "all_done" ? "Everything asked for is finished." : type === "task_done" ? "That job is finished." : "I stopped, and I am not sure of the reason my own turn gave."),
       ...(lesson ? { lesson } : {}),
     };
+  }
+
+  /* Chained steps, each coerced exactly like a single one. Kept only while
+     every one is valid and reversible; the chain stops at the first that is
+     not, so a bad tail never costs the good head. */
+  if (allowChain && decision.type === "step" && Array.isArray(rawDecision.then) && rawDecision.then.length) {
+    const keepFailure = lastParseFailure;
+    const keepRaw = lastParseRaw;
+    const then: Array<Record<string, unknown>> = [];
+    for (const raw of rawDecision.then.slice(0, 3)) {
+      const one = coerceTurn(JSON.stringify({ thinking: "", decision: { type: "step", step: raw } }), false);
+      const st = one.parseOk && one.turn.decision.type === "step" ? one.turn.decision.step : null;
+      if (!st || st.reversible === false) break;
+      then.push(st as unknown as Record<string, unknown>);
+    }
+    lastParseFailure = keepFailure;
+    lastParseRaw = keepRaw;
+    if (then.length) (decision as { then?: Array<Record<string, unknown>> }).then = then;
   }
 
   const rawSplit = parsed.split && typeof parsed.split === "object" ? parsed.split : null;
@@ -812,7 +1076,12 @@ serve(async (req) => {
      * refreshed token is simply a miss: the turn pays what it always paid. */
     const screenText = String(loopState?.screen || "");
     const urlMatch = screenText.match(/https?:\/\/[^\s"']+/);
-    const hostScope = urlMatch ? scopeFromUrl(urlMatch[0]) : "";
+    /* A desktop app is a place too (6 Oct). Only websites had a scope, so
+       nothing he worked out in Cursor, WhatsApp or Finder was ever kept. The
+       app's name stands in for the site: "app:cursor". */
+    const appMatch = screenText.match(/^APP:\s*([^|\n]+)/m);
+    const appName = appMatch ? appMatch[1].trim().toLowerCase().replace(/[^a-z0-9 .-]/g, "").slice(0, 40) : "";
+    const hostScope = urlMatch ? scopeFromUrl(urlMatch[0]) : appName && !/^(?:braino|electron)/.test(appName) && !/browser/.test(appName) ? `app:${appName}` : "";
     const lessonScopes = [hostScope, ...(macTools || []).slice(0, 4).map((t) => `tool:${t}`)];
     const cacheKey = logRunId
       ? `${logRunId}|${await tokenFingerprint(`${req.headers.get("Authorization") || ""}|${commandText}`)}|${hostScope}`
@@ -829,12 +1098,17 @@ serve(async (req) => {
        * lesson is keyed on where you are, a route is keyed on where you are AND
        * what you are trying to do. They are awaited in parallel, so the pair costs
        * what the single read cost before. */
+      /* History and routes shape how a job starts; by step two the plan exists
+         and they only cost time (0.5 to 1.6s a step on 2026-09-25, because the
+         run cache rarely hits across edge instances). Lessons stay: they are
+         about the site in front of him, which can change mid-job. */
+      const laterStep = Array.isArray(loopState?.steps) && loopState!.steps.length > 0;
       const [lessonBlock, procedureBlock, historyBlock] = await Promise.all([
         recallLessons(lessonScopes),
-        recallProcedures(lessonScopes, commandText),
+        laterStep ? Promise.resolve("") : recallProcedures(lessonScopes, commandText),
         /* Their own past runs, read as them. No token means no user means no
            history, which is exactly right for the public lab. */
-        known.supabase ? recallHistory(known.supabase, commandText, hostScope) : Promise.resolve(""),
+        !laterStep && known.supabase ? recallHistory(known.supabase, commandText, hostScope) : Promise.resolve(""),
       ]);
       prep = { at: Date.now(), known, lessonBlock, procedureBlock, historyBlock };
       if (cacheKey) rememberRunPrep(cacheKey, prep);
@@ -972,7 +1246,11 @@ serve(async (req) => {
       ? readResponsesText(aiData)
       : { content: aiData?.choices?.[0]?.message?.content || "", searches: 0 };
     if (read.searches) console.log("hil-loop: searched mid-turn", { searches: read.searches, runId: logRunId });
-    const { turn, parseOk } = coerceTurn(read.content, Boolean(loopState?.lastStep));
+    lastParseFailure = "";
+    lastParseRaw = "";
+    const { turn, parseOk } = coerceTurn(read.content, Boolean(loopState?.lastStep), loopState?.batch === true);
+    if (!parseOk) console.warn("hil-loop: turn rejected", { why: lastParseFailure, raw: lastParseRaw });
+    markHarmlessStepsUndoable(turn, screenText);
 
     /* Written when he gives up, not when he succeeds.
      *
@@ -1003,7 +1281,11 @@ serve(async (req) => {
      * all_done and not task_done: one job out of three finishing is not evidence
      * the approach worked, and the steps recorded at that point belong to all
      * three jobs mixed together. */
-    if (turn?.decision?.type === "all_done" && hostScope) {
+    /* A single job that finished counts too (6 Oct): most runs are one job and
+       end task_done, so almost nothing was ever recorded. More than one job
+       still waits for all_done, so routes from different jobs never mix. */
+    const singleJob = (loopState?.tasks || []).length <= 1;
+    if (hostScope && (turn?.decision?.type === "all_done" || (turn?.decision?.type === "task_done" && singleJob))) {
       const route = routeFromSteps(loopState?.steps || []);
       recordProcedure({
         scope: hostScope,
@@ -1061,12 +1343,15 @@ serve(async (req) => {
       usage: normaliseUsage(aiData?.usage),
       elapsed_ms: Date.now() - started,
       ok: parseOk,
-      error: parseOk ? null : "decision JSON came back unreadable",
+      error: parseOk ? null : `decision JSON came back unreadable (${lastParseFailure || "unknown"})`,
       prompt_version: HIL_LOOP_VERSION,
     });
 
     return new Response(JSON.stringify({
       turn,
+      /* Why a turn came back unreadable, sent to the caller as well as the
+         log, so "I lost my train of thought" can be traced from the Mac. */
+      parse: parseOk ? null : { failure: lastParseFailure || "unknown", raw: lastParseRaw.slice(0, 600), via: viaResponses ? "responses" : "chat" },
       moment: {
         id: momentId,
         label: MOMENT_LABEL[momentId],
@@ -1085,6 +1370,9 @@ serve(async (req) => {
         prepMs,
         prepCached,
         modelMs: Date.now() - started - prepMs,
+        // How much of this turn's input came from the cache: the cost check.
+        inputTokens: Number(aiData?.usage?.input_tokens ?? aiData?.usage?.prompt_tokens) || 0,
+        cachedTokens: Number(aiData?.usage?.input_tokens_details?.cached_tokens ?? aiData?.usage?.prompt_tokens_details?.cached_tokens) || 0,
         // Which brain answered THIS turn. The client reads it to decide whether
         // escalation is even a thing here: when Astra is already driving there is
         // nothing better to hand over to, and offering a handoff would be a lie.
@@ -1097,6 +1385,8 @@ serve(async (req) => {
         elapsed_ms: Date.now() - started,
         hil_loop_version: HIL_LOOP_VERSION,
         parse_ok: parseOk,
+        // Why, when it was not: the rejection reason and the start of the reply.
+        ...(parseOk ? {} : { parse_error: lastParseFailure, parse_raw: lastParseRaw.slice(0, 400) }),
         // So the Mac can tell whether the brain it just spoke to actually knew
         // about its hands, rather than inferring it from a turn that happened
         // not to use one.

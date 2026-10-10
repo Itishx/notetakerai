@@ -14,6 +14,9 @@ const make = (state, now) => Function("Date", "s", `
   ${lift("function namedWindowOpen() {")}
   ${lift("function namedAnswerWindowOpen() {")}
   ${liftLine("const ANSWER_REPLY =")}
+  const rtSpeechStartedAt = 0;
+  ${liftLine("const ANSWER_STOPWORDS =")}
+  ${lift("function sharesAWordWithQuestion(answer, question) {")}
   ${lift("function answersHisQuestion(text) {")}
   return { namedWindowOpen, answersHisQuestion };
 `)({ now: () => now }, { namedModeOn: true, speaking: false, processing: false, voiceTurnInFlight: false,
@@ -86,7 +89,8 @@ test("noise that came back as words is not a command", () => {
 });
 
 test("his last line remembers whether it was a question", () => {
-  assert.match(lift("function noteSpoken(text) {"), /asked: \/\\\?\["'\)\\\]\]\*\\s\*\$\/\.test\(String\(text \|\| ""\)\.trim\(\)\)/);
+  // A question anywhere in it, or an ask without a question mark (2026-10-03).
+  assert.match(lift("function noteSpoken(text) {"), /asked: \/\\\?\/\.test\(String\(text \|\| ""\)\) \|\| \/\\b\(\?:tell me \(\?:which/);
 });
 
 test("the on-device listener's ear rescues a misspelt name", () => {
@@ -120,21 +124,21 @@ test("a half sentence is recognised by how it ends", () => {
 });
 
 test("it is held, joined to the rest, and never lost", () => {
-  const flush = lift("async function flushRealtimeTranscript(reason, textOverride) {");
+  const flush = lift("async function flushRealtimeTranscript(reason, textOverride, opts = {}) {");
   // joined before it is judged, and keeps the verdict the first half got
   assert.match(flush, /transcript = `\$\{heldFragment\.text\} \$\{transcript\}`/);
-  assert.match(flush, /heldWasAccepted \? Boolean\(transcript\) : shouldAcceptVoiceTranscript\(transcript\)/);
+  assert.match(flush, /\(heldWasAccepted \|\| opts\.preAccepted\) \? Boolean\(transcript\) : shouldAcceptVoiceTranscript\(transcript\)/);
   // a wordless turn releases it rather than dropping it
-  assert.match(flush, /void flushRealtimeTranscript\("held_fragment", held\);/);
+  assert.match(flush, /void flushRealtimeTranscript\("held_fragment", held, heldAccepted \? \{\} : \{ separateTurn: true \}\);/);
   // held only when accepted, not an answer, not a follow-up, not already released
-  assert.match(flush, /if \(accepted && !dictationMode && !fromHold && !answering && !hasPendingDelegateFollowup\(\)\s*&& !isBareWakeWord\(transcript\) && looksUnfinished\(transcript\)\) \{/);
+  assert.match(flush, /if \(accepted && !dictationMode && !fromHold && !separateTurn && !answering && !hasPendingDelegateFollowup\(\)\s*&& !isBareWakeWord\(transcript\) && looksUnfinished\(transcript\)\) \{/);
   // stop is never held: its checks come first
-  assert.ok(flush.indexOf("isStopTaskPhrase(transcript)") < flush.indexOf("looksUnfinished(transcript)"));
+  assert.ok(flush.indexOf("isStopTaskPhrase(transcript, { jobRunning: voiceTurnInFlight })") < flush.indexOf("looksUnfinished(transcript)"));
   // silence releases it after the hold, as it is
   const release = lift("function releaseHeldFragment() {");
-  assert.match(release, /void flushRealtimeTranscript\("held_fragment", text\);/);
+  assert.match(release, /void flushRealtimeTranscript\("held_fragment", text, accepted \? \{\} : \{ separateTurn: true \}\);/);
   assert.match(release, /Date\.now\(\) - heldFragment\.at < FRAGMENT_MAX_HOLD_MS/);
-  assert.match(liftLine("const FRAGMENT_HOLD_MS ="), /1500/);
+  assert.match(liftLine("const FRAGMENT_HOLD_MS ="), /2200/);
   assert.match(lift("function stopRealtimeVoice(options = {}) {"), /clearHeldFragment\(\);/);
 });
 
@@ -144,8 +148,8 @@ test("stop the task with nothing running says so, and never becomes a task", () 
   const nothing = lift("async function nothingToStop(source, transcript = \"\") {");
   assert.match(nothing, /await speak\("Nothing's running right now\."\);/);
   assert.match(nothing, /if \(speaking\) \{\s*\/\/[^\n]*\n\s*stopSpeechOutput\(\);/);
-  const flush = lift("async function flushRealtimeTranscript(reason, textOverride) {");
-  assert.match(flush, /if \(isStopTaskPhrase\(transcript\)\) \{\s*if \(await stopTaskNow\("voice_phrase", transcript\)\) return;\s*if \(accepted\) \{\s*await nothingToStop\("voice_phrase", transcript\);\s*return;/);
+  const flush = lift("async function flushRealtimeTranscript(reason, textOverride, opts = {}) {");
+  assert.match(flush, /if \(isStopTaskPhrase\(transcript, \{ jobRunning: voiceTurnInFlight \}\)\) \{\s*if \(await stopTaskNow\("voice_phrase", transcript\)\) return;\s*if \(accepted\) \{\s*await nothingToStop\("voice_phrase", transcript\);\s*return;/);
   assert.match(lift("async function submitTyped(text) {"), /if \(!await stopTaskNow\("typed", said\)\) await nothingToStop\("typed", said\);/);
 });
 
@@ -193,7 +197,7 @@ test("noise never reaches the notch or cuts him off", () => {
     js.indexOf('if (event.type === "conversation.item.input_audio_transcription.completed") {'));
   assert.match(delta, /const noiseSoFar = !dictationMode && namedModeOn && !herMode\s*&& looksLikeNoise\(`\$\{rtUserTranscript\}\$\{delta\}`, rtLastSpeechMs\);/);
   assert.match(delta, /if \(!noiseSoFar && \(speaking \|\| currentSpeechAudio \|\| realtimeStreamTts\)\) \{/);
-  assert.match(delta, /if \(!heraVoice\.on && !noiseSoFar\) nfSetHeard\(rtUserTranscript\.trim\(\)\);/);
+  assert.match(delta, /if \(!heraVoice\.on && !noiseSoFar && !cleanEarApplies\(\)\) nfSetHeard\(rtUserTranscript\.trim\(\)\);/);
 });
 
 /* ── The twenty seconds after he answers ──────────────────────────────────
@@ -209,6 +213,11 @@ const followUp = (state, now) => Function("Date", "s", `
   ${liftLine("const SAID_TO_HIM_ORDER =")}
   ${liftLine("const SAID_TO_HIM_CORRECTION =")}
   ${lift("function saidToBraino(text) {")}
+  ${liftLine("const ANSWER_REPLY =")}
+  ${liftLine("const ANSWER_STOPWORDS =")}
+  ${lift("function sharesAWordWithQuestion(answer, question) {")}
+  let rtLastHeardText = s.rtLastHeardText || "";
+  const isSelfEcho = () => false; // echo is covered by its own tests
   ${lift("function followsHisReply(text) {")}
   return { namedFollowUpWindowOpen, saidToBraino, followsHisReply };
 `)({ now: () => now }, {
@@ -254,6 +263,16 @@ test("inside the window, only what was said to him counts", () => {
   assert.equal(followsHisReply("open it"), true);
   assert.equal(followUp({ lastSpokenLine: { ts: now - 40000, endedTs: now - 31000 } }, now).followsHisReply("open it"), false);
   assert.equal(followsHisReply("Hamburger menu."), false);
+  // The wider reply rule (2026-10-03) still keeps every one of them out.
+  for (const heard of ["Liquid mineral.", "Hamburger menu.", "8 year", "stay straight", "See.", "Elmer,", "KOGNOS", "sounds better.", "Cough noise.", "OK", "Connect", "Push, push, always push.", "Sí, externo.", "link newsletters signup"]) {
+    assert.equal(followsHisReply(heard), false, heard);
+  }
+  // And lets the real replies from that night in.
+  const after = (text, asked) => followUp({ rtLastHeardText: "Braino, what did I do around 2pm today?", lastSpokenLine: { ts: now - 9000, endedTs: now - 4000, asked, text: "around 2pm you had your required mesa school of business class" } }, now).followsHisReply(text);
+  assert.equal(after("But that's wrong, today was a holiday.", false), true);
+  assert.equal(after("Today was a holiday.", false), true);
+  assert.equal(after("The first chrome profile", true), true);
+  assert.equal(after("OK", false), false);
 });
 
 test("the notch stays awake while the window is open, and the gate uses it", () => {
@@ -264,5 +283,5 @@ test("the notch stays awake while the window is open, and the gate uses it", () 
   const accept = lift("function shouldAcceptVoiceTranscript(text) {");
   assert.ok(accept.indexOf("!followsHisReply(text)") < accept.indexOf("} else if (looksLikeNoise(text, rtLastSpeechMs)) {"));
   // Your turn is what opens it, so it is recorded where a transcript is accepted.
-  assert.match(js, /if \(accepted && !dictationMode\) lastUserTurnAt = Date\.now\(\);/);
+  assert.match(js, /if \(accepted && !dictationMode\) \{ lastUserTurnAt = Date\.now\(\);/);
 });

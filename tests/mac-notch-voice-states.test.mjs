@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { createRequire } from "node:module";
+const { nameIsAddressed } = createRequire(import.meta.url)("../mac/braino-mac/address-intent.cjs");
 
 const js = readFileSync(new URL("../mac/braino-mac/renderer/braino-mac.js", import.meta.url), "utf8");
 const css = readFileSync(new URL("../mac/braino-mac/renderer/braino-mac.css", import.meta.url), "utf8");
@@ -27,7 +29,9 @@ const isStopTaskPhrase = Function(`
   ${liftLine("const STOP_TASK_NAMED_JOB =")}
   ${lift("const STOP_TASK_BARE = [", "\n];\n")}
   ${liftLine("const STOP_TASK_BRAINELLE_WAKE =")}
-  ${lift("function isStopTaskPhrase(text) {")}
+  ${liftLine("const STOP_TASK_FUZZY =")}
+  ${lift("function stopEditDistance(a, b) {")}
+  ${lift("function isStopTaskPhrase(text, { jobRunning = false } = {}) {")}
   return isStopTaskPhrase;
 `)();
 
@@ -133,14 +137,17 @@ test("the five seconds start when you can talk, not when you said his name", () 
 });
 
 test("her name wakes her, and only while she is the one on screen", () => {
-  const make = (name) => Function("activeWakeName", `
+  const make = (name) => Function("activeWakeName", "nameIsAddressedImpl", `
     ${liftLine("const BRAINELLE_NAME_RE =")}
     ${liftLine("const BRAINO_SCRIPT_RE =")}
     ${liftLine("const BRAINELLE_SCRIPT_RE =")}
     ${lift("function normalizeForVoiceMatch(value) {")}
+    const window = { brainoMac: { nameIsAddressed: nameIsAddressedImpl } };
+    const logRenderer = () => {};
+    ${lift("function nameIsOnlyAMention(raw) {")}
     ${lift("function voiceExplicitlyAddressesBraino(text) {")}
     return voiceExplicitlyAddressesBraino;
-  `)(() => name);
+  `)(() => name, nameIsAddressed);
   const asBrainelle = make("Brainelle");
   const asBraino = make("Braino");
   assert.equal(asBrainelle("Brinell, are you listening?"), true);
@@ -201,7 +208,8 @@ test("his name wakes him in any script, and nothing is dropped without a log", (
   const prompt = js.slice(js.indexOf('"Transcribe the user\'s words in a quiet personal voice conversation."'), js.indexOf("turn_detection: {", js.indexOf('"Transcribe the user\'s words in a quiet personal voice conversation."')))
     .split("\n").filter((line) => !line.trim().startsWith("//")).join("\n");
   assert.doesNotMatch(prompt, /Vocabulary|Brainelle|Hey Braino|English letters/);
-  assert.match(prompt, /"Transcribe the user's direct command to Braino\.",\s*"Ignore music, fans, coughs/);
+  // 2026-10-05: every word, not "the command", plus single-word spellings (not a sentence about names).
+  assert.match(prompt, /"Write down exactly what the user says to Braino, every word, in English\.",\s*"Ignore music, fans, coughs/);
 });
 
 /* A sentence that STARTS while he is awake is his, however long it runs; and
@@ -210,7 +218,7 @@ test("a sentence begun while awake is never cut off for ending late", () => {
   assert.match(js, /const NAMED_WINDOW_MS = 12000;/);
   assert.match(lift("function namedWindowOpen() {"), /return Boolean\(namedSpeechAwake\);/);
   assert.match(js, /if \(namedModeOn && namedWindowOpen\(\) && !namedBusyOnly\(\)\) namedSpeechAwake = true;/);
-  assert.match(lift("async function flushRealtimeTranscript(reason, textOverride) {"), /if \(transcript\) namedSpeechAwake = false;/);
+  assert.match(lift("async function flushRealtimeTranscript(reason, textOverride, opts = {}) {"), /if \(transcript\) namedSpeechAwake = false;/);
 });
 
 /* "Hey Braino" worked once, until the first voice session took the mic, and
@@ -239,8 +247,9 @@ test("the wake listener cannot cancel its own replacement", () => {
 
 /* A back-and-forth closed between turns: fifteen seconds of quiet ended the
    session, and every reply had to wake him again. */
-test("a voice session stays open a minute after the last exchange", () => {
-  assert.match(js, /const REALTIME_IDLE_TIMEOUT_MS = 60000;/);
+test("a voice session stays open three minutes after the last exchange", () => {
+  // 3 minutes since 2026-09-26: the next "Braino" was reconnecting (2 to 17s).
+  assert.match(js, /const REALTIME_IDLE_TIMEOUT_MS = 180000;/);
   assert.match(js, /const idleTimeoutMs = herMode \? HER_IDLE_TIMEOUT_MS : REALTIME_IDLE_TIMEOUT_MS;/);
 });
 

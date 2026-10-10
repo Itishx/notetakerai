@@ -144,6 +144,18 @@ const BrainoXDocs = lazy(() => import("./pages/BrainoXDocs.tsx"));
 const SitePreviewsDocs = lazy(() => import("./pages/SitePreviewsDocs.tsx"));
 const BrainoFirstDocs = lazy(() => import("./pages/BrainoFirstDocs.tsx"));
 const OneBrainoPageDocs = lazy(() => import("./pages/OneBrainoPageDocs.tsx"));
+const WhichContactDocs = lazy(() => import("./pages/WhichContactDocs.tsx"));
+const LocalhostDocs = lazy(() => import("./pages/LocalhostDocs.tsx"));
+const SaidToHimDocs = lazy(() => import("./pages/SaidToHimDocs.tsx"));
+const SaferDefaultDocs = lazy(() => import("./pages/SaferDefaultDocs.tsx"));
+const Labs = lazy(() => import("./pages/Labs.tsx"));
+const HilScoredDocs = lazy(() => import("./pages/HilScoredDocs.tsx"));
+const Trace = lazy(() => import("./pages/Trace.tsx"));
+const PointerDocs = lazy(() => import("./pages/PointerDocs.tsx"));
+const SeeYouDocs = lazy(() => import("./pages/SeeYouDocs.tsx"));
+const LayaJobDocs = lazy(() => import("./pages/LayaJobDocs.tsx"));
+const OwnBrowserDocs = lazy(() => import("./pages/OwnBrowserDocs.tsx"));
+const CleanHearingDocs = lazy(() => import("./pages/CleanHearingDocs.tsx"));
 const MondayMode = lazy(() => import("./pages/MondayMode.tsx"));
 const MondayModeDocs = lazy(() => import("./pages/MondayModeDocs.tsx"));
 const BrainoEmbedDocs = lazy(() => import("./pages/BrainoEmbedDocs.tsx"));
@@ -243,6 +255,10 @@ function AppRoutes() {
         <Route path="/knowledge/site-previews" element={<SitePreviewsDocs />} />
         <Route path="/knowledge/braino-first" element={<BrainoFirstDocs />} />
         <Route path="/knowledge/one-braino-page" element={<OneBrainoPageDocs />} />
+        <Route path="/knowledge/which-contact" element={<WhichContactDocs />} />
+        <Route path="/knowledge/knows-your-localhost" element={<LocalhostDocs />} />
+        <Route path="/knowledge/said-to-him" element={<SaidToHimDocs />} />
+        <Route path="/knowledge/safer-by-default" element={<SaferDefaultDocs />} />
         <Route path="/knowledge/braino-thronglets" element={<BrainoThrongletsDocs />} />
         <Route path="/knowledge" element={<KnowledgeBase />} />
         <Route path="/knowledge/insta-graphics-editorial-archive" element={<InstaGraphicsArchiveDocs />} />
@@ -369,6 +385,16 @@ function AppRoutes() {
         <Route path="/product-overview" element={<ProductOverview />} />
         <Route path="/affective" element={<Affective />} />
         <Route path="/about" element={<About />} />
+        <Route path="/labs" element={<Labs />} />
+        <Route path="/trace" element={<Trace />} />
+        <Route path="/knowledge/your-mouse-is-the-context" element={<PointerDocs />} />
+        <Route path="/knowledge/he-can-see-you" element={<SeeYouDocs />} />
+        <Route path="/knowledge/laya-names-the-job" element={<LayaJobDocs />} />
+        <Route path="/knowledge/brainos-own-browser" element={<OwnBrowserDocs />} />
+        <Route path="/knowledge/clean-hearing" element={<CleanHearingDocs />} />
+        <Route path="/knowledge/trace" element={<Navigate to="/trace" replace />} />
+        <Route path="/knowledge/hil-scored" element={<HilScoredDocs />} />
+        <Route path="/knowledge/labs-and-saburi" element={<Navigate to="/labs" replace />} />
         <Route path="/affectiveos" element={<AffectiveOSPage />} />
         {/* The campaign page: the speech, why him, and the footer game. Built
             on the Affective stylesheet rather than its own. */}

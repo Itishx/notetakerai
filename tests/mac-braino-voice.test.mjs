@@ -25,8 +25,8 @@ test("the character is only ever set through the one gate", () => {
 test("picking the avatar is what switches the voice", () => {
   const pick = renderer.match(/function setMascotChoice\([\s\S]*?\n\}/)?.[0] || "";
   assert.match(pick, /macSetCharacter\(mascotChoice === "brainelle" \? "brainelle" : "braino"/);
-  // Cmd+Shift+B drives the avatar, not the character.
-  assert.match(renderer, /onCharacterToggle\?\.\(\(\) => \{[\s\S]{0,240}setMascotChoice\(/);
+  // Cmd+Shift+B hides him and brings him back (2026-09-26); the menu swaps characters.
+  assert.match(renderer, /onCharacterToggle\?\.\(\(\) => \{[\s\S]{0,240}setMascotHide\(mascotHidden\(\) \? null : "hidden"/);
 });
 
 test("saying 'be Brainelle' moves the avatar too, so voice and body never disagree", () => {

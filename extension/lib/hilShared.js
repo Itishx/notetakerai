@@ -21,14 +21,21 @@
    *
    * Deliberately about the future. "I opened it" and "I have sent it" are
    * reports of work done, and those end a run correctly. */
-  var PROMISE = /\b(?:i'?ll\b|i will\b|i'?m going to\b|i am going to\b|let me\b|i'?m starting\b|starting (?:that|it|this) now\b|i'?ll get (?:right )?on\b|on it\b|right away\b|give me a (?:second|moment)\b)/i;
+  /* Said the way people say it, too (2026-10-03): "Lemme check the local
+     weather for you. Just a moment." was missed, so nothing ran and the
+     moment never ended. */
+  var PROMISE = /\b(?:i'?ll\b|i will\b|i'?m going to\b|i am going to\b|let me\b|lemme\b|let'?s (?:see|check|find|look)\b|i'?m starting\b|starting (?:that|it|this) now\b|i'?ll get (?:right )?on\b|on it\b|right away\b|give me (?:a|one) (?:sec|second|moment|minute|min)\b|hang on\b|hold on\b|pulling (?:that|it|this|them) up\b|checking (?:that|it|now|on (?:that|it))\b|be right back\b)/i;
   var ALREADY_DONE = /\b(?:i (?:have |'?ve )?(?:opened|sent|closed|played|found|downloaded|deleted|added|saved|started|stopped|switched|created)|done\b|finished\b|here (?:it|they) (?:is|are)\b)/i;
+
+  /* "Just a moment." or "One sec, checking." on its own, never "one second
+     left on the timer". */
+  var HOLD_ON = /(?:^|[.!?,;]\s*)(?:just |ok(?:ay)?,? )?(?:a|one) (?:sec|second|moment|minute)(?:\s*[.!,;]|\s*$)/i;
 
   function promisesAction(text) {
     var said = String(text || "").trim();
     if (!said) return false;
     if (ALREADY_DONE.test(said)) return false;
-    return PROMISE.test(said);
+    return PROMISE.test(said) || HOLD_ON.test(said);
   }
 
   /* One step, identified.

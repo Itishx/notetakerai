@@ -421,6 +421,32 @@ function parseResearchDraft(query: string, rawText: string) {
   };
 }
 
+/* Exa /answer: a grounded answer with citations in one call. The [1][2]
+   markers are taken out because Braino speaks this and the notch shows it;
+   the links travel separately as sources. */
+async function exaAnswer(key: string, query: string): Promise<{ answer: string; sources: Array<{ title: string; url: string }> } | null> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 6000);
+  try {
+    const res = await fetch("https://api.exa.ai/answer", {
+      method: "POST",
+      headers: { "x-api-key": key, "Content-Type": "application/json" },
+      body: JSON.stringify({ query, text: false }),
+      signal: controller.signal,
+    });
+    if (!res.ok) throw new Error(`exa ${res.status}`);
+    const data = await res.json();
+    const answer = String(data?.answer || "").replace(/\s*\[\d+\](?:\[\d+\])*/g, "").replace(/\s+([.,;:])/g, "$1").trim();
+    if (!answer) return null;
+    const sources = (Array.isArray(data?.citations) ? data.citations : []).slice(0, 6)
+      .map((c: { title?: string; url?: string }) => ({ title: String(c?.title || ""), url: String(c?.url || "") }))
+      .filter((c: { url: string }) => c.url);
+    return { answer, sources };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -445,6 +471,33 @@ serve(async (req) => {
     const loc = typeof payload?.clientLocation === "string" ? payload.clientLocation.trim() : "";
     const userContext = [localTime ? `local time ${localTime} (${tz})` : "", loc ? `location ${loc}` : ""]
       .filter(Boolean).join(", ");
+    /* The fast lane (2026-10-01): Exa's answer endpoint, about 2s against
+       OpenAI web_search's ~10s median. Quick questions and comparisons only;
+       documents and delegate research keep the slower, deeper path. Any
+       failure falls straight through to OpenAI below. */
+    const exaKey = Deno.env.get("EXA_API_KEY") || "";
+    if (exaKey && (purpose === "answer" || purpose === "compare") && payload?.deep !== true) {
+      /* Spoken out loud, so it has to be the answer itself: the numbers, the
+         cheapest first, two short sentences. Not a summary of the market. */
+      const ask = `${query}${userContext ? ` (for someone in ${userContext})` : ""}. Answer in at most two short sentences with the exact current prices or numbers, the cheapest or best first. No advice, no hedging.`;
+      const fast = await exaAnswer(exaKey, ask).catch((e) => {
+        console.warn("web-research: exa fast lane failed, using OpenAI", String(e?.message || e));
+        return null;
+      });
+      if (fast?.answer) {
+        return json({
+          answer: fast.answer,
+          sources: fast.sources,
+          searchQueries: [query],
+          researchContext: "",
+          query,
+          engine: "Exa answer",
+          searchUrl: "",
+          results: fast.sources.map((source) => ({ title: source.title, url: source.url, snippet: "", highlights: [], publishedDate: "", status: "" })),
+        });
+      }
+    }
+
     const openAiData = await callOpenAiWebSearch({
       userId: user.id,
       query,

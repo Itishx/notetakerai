@@ -1,4 +1,4 @@
-const { app, BrowserWindow, clipboard, desktopCapturer, globalShortcut, ipcMain, net, Notification, powerMonitor, protocol, screen, shell, systemPreferences } = require("electron");
+const { app, BrowserWindow, clipboard, desktopCapturer, globalShortcut, ipcMain, net, Notification, powerMonitor, protocol, screen, session: electronSession, shell, systemPreferences } = require("electron");
 const { execFile, spawn } = require("node:child_process");
 const crypto = require("node:crypto");
 const fs = require("node:fs");
@@ -214,6 +214,43 @@ const {
 } = require(path.join(__dirname, "hil-routing.cjs"));
 const { UNDERSTAND_PROMPT, parseUnderstanding } = require(path.join(__dirname, "hil-understand.cjs"));
 const { readChromePage, actOnChrome, chromePointFor, focusChrome, pageSignature, isChromeApp, runJs, chromeScriptName } = require(path.join(__dirname, "chrome-page.cjs"));
+/* Braino's own browser: jobs he does FOR you (book, order, find the cheapest)
+   run in a window inside the app, read and pressed from inside the page, so
+   they are fast and never take over your Chrome. See own-browser.cjs.
+   BRAINO_OWN_BROWSER=0 sends everything back to your Chrome. */
+const ownBrowserModule = require(path.join(__dirname, "own-browser.cjs"));
+/* BrainoHERA records, the cloud transcribes (see hera.cjs). On by default;
+   BRAINO_HERA_CLOUD=0 goes back to the on-device transcriber. LIVE lecture
+   mode keeps the on-device one: it needs words while you talk. */
+const heraModule = require(path.join(__dirname, "hera.cjs"));
+let heraInstance = null;
+function hera() {
+  if (!heraInstance) heraInstance = heraModule.createHera({ BrowserWindow, session: electronSession, log: (e, d) => logMac(e, d) });
+  return heraInstance;
+}
+function heraCloudEnabled() {
+  return String((typeof ENV === "object" && ENV?.BRAINO_HERA_CLOUD) || process.env.BRAINO_HERA_CLOUD || "1").trim() !== "0";
+}
+let heraCloudActive = false;
+let ownBrowserInstance = null;
+function ownBrowser() {
+  if (!ownBrowserInstance) ownBrowserInstance = ownBrowserModule.createOwnBrowser({ BrowserWindow, session: electronSession, log: (e, d) => logMac(e, d) });
+  return ownBrowserInstance;
+}
+/* Shown by default (5 Oct: "I want to see how fast it all moves"). It opens
+   beside your work without taking the keyboard; "hide it" hides it.
+   BRAINO_OWN_BROWSER_VISIBLE=0 keeps it hidden. */
+function ownBrowserVisibleByDefault() {
+  return String((typeof ENV === "object" && ENV?.BRAINO_OWN_BROWSER_VISIBLE) || process.env.BRAINO_OWN_BROWSER_VISIBLE || "1").trim() !== "0";
+}
+function ownBrowserEnabled() {
+  return String((typeof ENV === "object" && ENV?.BRAINO_OWN_BROWSER) || process.env.BRAINO_OWN_BROWSER || "1").trim() !== "0";
+}
+/* The job running in his browser right now, if any. Set when a do-it-for-me job
+   starts, kept while its questions are answered, dropped by the next job. */
+let macOwnJob = null;
+const OWN_BROWSER_NOTE = "This job runs in Braino's own browser window, not the user's Chrome: navigate to the site, then read and act there. It is only signed in to sites the user signed in to there before. If a site needs a login, ask the user to say \"show me\" and sign in once; never type a password. Anything that pays, books or sends still asks first.";
+function macOwnJobActive() { return Boolean(macOwnJob && Date.now() - macOwnJob.at < 15 * 60 * 1000); }
 const {
   macVerifyAssert,
   macHilStepSignature,
@@ -225,11 +262,28 @@ const {
 const { parseBrainoOsIntent } = require(path.join(__dirname, "braino-os-intent.cjs"));
 const { isInstantCommand, planFromVerdict, hilFirstEnabled } = require(path.join(__dirname, "hil-first.cjs"));
 const { shortDoneLine } = require(path.join(__dirname, "done-line.cjs"));
+const { parseInstantFire, appleScriptForKeys } = require(path.join(__dirname, "instant-fire.cjs"));
+const { recipeFor, fillArgs, stepValue } = require(path.join(__dirname, "plan-runner.cjs"));
+const formFill = require(path.join(__dirname, "form-fill.cjs"));
+const webAddress = require(path.join(__dirname, "web-address.cjs"));
+const { createLayaContext } = require(path.join(__dirname, "laya-context.cjs"));
+/* What Laya sees around each sentence, fed by the log itself (see logMac). */
+const layaContext = createLayaContext();
+const tabSwitch = require(path.join(__dirname, "tab-switch.cjs"));
+const devServers = require(path.join(__dirname, "dev-servers.cjs"));
+const skillMemory = require(path.join(__dirname, "skill-memory.cjs"));
+const typeSearch = require(path.join(__dirname, "type-search.cjs"));
+const chromeProfiles = require(path.join(__dirname, "chrome-profiles.cjs"));
+const pageLinks = require(path.join(__dirname, "page-links.cjs"));
 const { compactHour, claudeLinesInWindow, recallCandidates } = require(path.join(__dirname, "memory-digest.cjs"));
 const { createActivityLog, isPrivate: activityIsPrivate, isSelf: activityIsSelf, tidyScreenLines, hashText } = require(path.join(__dirname, "activity-log.cjs"));
 const {
   cleanContactName,
   findContactBySound,
+  sameNameContacts,
+  pickContactChoice,
+  contactChoiceQuestion,
+  contactPhone,
   speakableContactName,
   parseCorrectedName,
 } = require(path.join(__dirname, "contact-match.cjs"));
@@ -647,7 +701,14 @@ function consoleLogMac(event, rawPayload) {
   safeConsole("log", `${time} ${C.dim("·")} ${C.dim(event)}${brief ? ` ${brief}` : ""}`);
 }
 
+/* Read by logMac and macTrace from the very first log line, so declared here,
+   above both; the trace server below sets traceSink while a traced run streams. */
+const TRACE_EVENTS = /^(?:pointer\.|laya\.|hil\.|plan\.|feature\.executed|delegate\.(?:intent|context|open|close|hil|forced)|whatsapp\.|contacts\.|app\.(?:open|close)|file\.|instant_fire|dev_servers|google_doc|tool\.|recipe|skill)/;
+let traceSink = null;
+
 function logMac(event, payload = {}) {
+  try { layaContext.observe(event, payload || {}); } catch (_) {}
+  if (traceSink && TRACE_EVENTS.test(event)) { try { traceSink({ kind: "event", event, payload: sanitizeForLog(payload), at: Date.now() }); } catch (_) {} }
   const entry = {
     ts: new Date().toISOString(),
     pid: process.pid,
@@ -766,6 +827,8 @@ function authStatusPayload() {
     source: ENV_BRAINO_AUTH_TOKEN ? "env" : session?.access_token ? "stored" : "missing",
     email: session?.user?.email || null,
     displayName: displayName || null,
+    // The face for the middle of the memory map. Google sign-in brings one.
+    avatarUrl: session?.user?.user_metadata?.avatar_url || session?.user?.user_metadata?.picture || null,
     userId: session?.user?.id || null,
     expiresAt: session?.expires_at || null,
     authStorePath: AUTH_STORE_PATH,
@@ -921,17 +984,12 @@ tell application "System Events"
   if exists process "${safeBrowser}" then
     tell application "${safeBrowser}"
       repeat with w in windows
-        set matchingTabs to {}
-        repeat with t in tabs of w
-          try
-            if (URL of t as string) contains "${safeFragment}" then set end of matchingTabs to t
-          end try
-        end repeat
-        repeat with t in matchingTabs
-          try
-            close t
-          end try
-        end repeat
+        try
+          set u to URL of every tab of w
+          repeat with i from (count of u) to 1 by -1
+            if (item i of u as string) contains "${safeFragment}" then close tab i of w
+          end repeat
+        end try
       end repeat
     end tell
   end if
@@ -1158,6 +1216,19 @@ function sendToRenderer(channel, payload) {
 // abandoned one. So the delegate dispatcher checks this after every command and
 // takes down a "thinking" that the handler walked away from.
 let lastTaskProgressStatus = "";
+
+/* The thinking trail: each step of a job, for the glass card under the notch
+   (renderer/task-trail.js). Separate from the one-line caption above, which is
+   unchanged. Nothing is sent outside a job, so a stray step never opens it. */
+let macTrailActive = false;
+function macTrail(payload) {
+  if (payload?.kind === "start") macTrailActive = true;
+  if (!macTrailActive) return;
+  if (payload?.kind === "end") macTrailActive = false;
+  sendToRenderer("braino-mac:task-trail", payload);
+  // The chat page in the Braino app draws the same steps inside its reply.
+  try { if (appWindow && !appWindow.isDestroyed()) appWindow.webContents.send("braino-mac:task-trail", payload); } catch (_) {}
+}
 
 function sendTaskProgress(payload) {
   if (payload && typeof payload.status === "string") lastTaskProgressStatus = payload.status;
@@ -1575,7 +1646,15 @@ function isBrainoSelfContext(context) {
   return /Braino Mac/i.test(text) || /vite_react_shadcn_ts/i.test(text);
 }
 
+/* A screen check that fails is skipped for a minute, not retried on every
+   command. macOS blocking it cost 3.5s on almost every command on 2026-09-26
+   (451 blocked checks), because each one waited for the timeout. */
+let desktopReadBlockedUntil = 0;
+let browserReadBlockedUntil = 0;
+const CONTEXT_READ_BACKOFF_MS = 60 * 1000;
+
 async function readActiveMacContext() {
+  if (desktopConsentSettled && Date.now() < desktopReadBlockedUntil) return null;
   if (process.platform !== "darwin") return null;
   const script = `
 set frontApp to ""
@@ -1611,9 +1690,10 @@ return {frontApp, "", windowTitle, windowPositionText, windowSizeText, "", ""} a
     const { stdout } = await execFileP(
       "/usr/bin/osascript",
       ["-e", script],
-      { timeout: desktopConsentSettled ? 3500 : 60000 },
+      { timeout: desktopConsentSettled ? 1200 : 60000 },
     );
     desktopConsentSettled = true;
+    desktopReadBlockedUntil = 0;
     const context = normalizeActiveMacContext(String(stdout || "").trimEnd().split("\t"));
     if (!context) return null;
     const browser = await readActiveBrowserContext(context.appName);
@@ -1624,6 +1704,8 @@ return {frontApp, "", windowTitle, windowPositionText, windowSizeText, "", ""} a
     }
     return context;
   } catch (error) {
+    desktopConsentSettled = true;
+    desktopReadBlockedUntil = Date.now() + CONTEXT_READ_BACKOFF_MS;
     // Transient by nature (System Events busy, secure-input moments) and
     // polled constantly — log at most once every 5 minutes, keep last context.
     const now = Date.now();
@@ -1667,14 +1749,18 @@ async function readActiveBrowserContext(appName) {
   const script = browser === "Safari"
     ? 'tell application "Safari"\n  if (count of documents) = 0 then return ""\n  return (name of front document as text) & (ASCII character 9) & (URL of front document as text)\nend tell'
     : `tell application "${escapeAppleScriptString(browser)}"\n  if (count of windows) = 0 then return ""\n  return (title of active tab of window 1 as text) & (ASCII character 9) & (URL of active tab of window 1 as text)\nend tell`;
+  if (Date.now() < browserReadBlockedUntil) return null;
   try {
-    const { stdout } = await execFileP("/usr/bin/osascript", ["-e", script], { timeout: 2500 });
+    const { stdout } = await execFileP("/usr/bin/osascript", ["-e", script], { timeout: 1200 });
+    browserReadBlockedUntil = 0;
     const [browserTitle = "", browserUrl = ""] = String(stdout || "").trimEnd().split("\t");
+    if (/^https?:\/\/(?:localhost|127\.0\.0\.1):\d+/.test(browserUrl.trim())) macNoteLocalUrl(browserUrl.trim());
     return {
       browserTitle: browserTitle.trim(),
       browserUrl: browserUrl.trim(),
     };
   } catch (error) {
+    browserReadBlockedUntil = Date.now() + CONTEXT_READ_BACKOFF_MS;
     const now = Date.now();
     if (now - lastBrowserReadFailLogAt > 5 * 60 * 1000) {
       lastBrowserReadFailLogAt = now;
@@ -2100,7 +2186,11 @@ function openDashboardWindow() {
     title: "Braino",
     titleBarStyle: "hiddenInset",
     trafficLightPosition: { x: 18, y: 20 },
-    backgroundColor: "#f4f4f7",
+    // Glass (2026-09-26): see-through, blurred by macOS, white text (glass.css).
+    transparent: true,
+    vibrancy: "under-window",
+    visualEffectState: "active",
+    backgroundColor: "#00000000",
     show: false,
     webPreferences: {
       preload: PRELOAD_PATH,
@@ -2843,6 +2933,22 @@ async function startLocalDictation() {
     sendToRenderer("braino-mac:dictation-ui", { active: false, engine: "parakeet" });
     return started;
   }
+  /* Cloud first: only record while they talk, so a busy Mac can never drop
+     words. The on-device transcriber is the backup when recording fails. */
+  if (!liveTranscriptMode && heraCloudEnabled()) {
+    const rec = await hera().start();
+    if (rec.ok) {
+      heraCloudActive = true;
+      localDictationActive = true;
+      localTurns = [];
+      heraSession += 1;
+      heraLog("LISTENING (cloud) — speak now", { app: dictationState.targetApp });
+      sendToRenderer("braino-mac:dictation-ui", { active: true, engine: "cloud" });
+      logMac("dictation.local.started", { app: dictationState.targetApp, engine: "cloud" });
+      return { ok: true, engine: "cloud", ...dictationStatePayload() };
+    }
+    heraLog(`cloud recording unavailable (${rec.error}), using the on-device transcriber`);
+  }
   if (!parakeetSend("start")) {
     sendToRenderer("braino-mac:dictation-ui", { active: false, engine: "parakeet" });
     stopDictationSkill("parakeet_unavailable");
@@ -2882,6 +2988,18 @@ async function finishLocalDictation(reason) {
     const waitedFrom = Date.now();
     await Promise.all(turns.map(async (turn) => {
       turn.prepared = await resolveCleanup(turn.raw);
+      /* The on-device clean-up gave up ("clean-up unavailable after 4000ms",
+         200 times in the log), so the raw words were pasted: no capitals, no
+         full stops, every "sorry, I mean" left in (2026-09-26). The same
+         clean-up in the cloud takes 1 to 2 seconds and is checked the same
+         way, so it takes over rather than pasting the raw words. */
+      if (!turn.prepared) {
+        const cloud = await refineDictationText(turn.raw, { timeoutMs: 3000 }).catch(() => null);
+        if (cloud?.refined && cloud.text) {
+          turn.prepared = cloud.text;
+          heraLog(`cleaned in the cloud in ${cloud.refinementDurationMs}ms`);
+        }
+      }
     }));
     const waitedMs = Date.now() - waitedFrom;
     logMac("dictation.local.format_wait", { waitedMs, turns: turns.length });
@@ -2912,7 +3030,48 @@ async function finishLocalDictation(reason) {
   stopDictationSkill(reason);
 }
 
+/* Stop, send the whole recording once, tidy it once, type it in. No waiting
+   for a live transcriber to catch up. */
+async function finishCloudDictation(reason) {
+  heraCloudActive = false;
+  const started = Date.now();
+  sendToRenderer("braino-mac:dictation-ui", { active: false, engine: "cloud" });
+  const audio = await hera().stop();
+  if (!audio?.audioBase64) {
+    heraLog(`STOPPED — nothing recorded (${audio?.error || "empty"})`, { reason });
+    localDictationActive = false;
+    stopDictationSkill(reason);
+    return;
+  }
+  sendTaskProgress({ status: "thinking", text: "Writing it down" });
+  const heard = await transcribeAudioCommand({ audioBase64: audio.audioBase64, mimeType: audio.mimeType, fileName: "braino-hera.webm" }).catch((error) => ({ ok: false, error: String(error?.message || error) }));
+  const transcribedMs = Date.now() - started;
+  if (!heard.ok || !heard.transcript) {
+    heraLog(`STOPPED — the cloud heard nothing (${heard.error || "empty"})`, { reason, recordedMs: audio.ms });
+    localDictationActive = false;
+    sendTaskProgress({ status: "done", text: "" });
+    stopDictationSkill(reason);
+    return;
+  }
+  const raw = spokenNumbersToDigits(heard.transcript.trim());
+  const cloud = await refineDictationText(raw, { timeoutMs: 3000 }).catch(() => null);
+  const prepared = cloud?.refined && cloud.text ? cloud.text : "";
+  localDictationActive = false;
+  const inserted = await insertDictationText([raw], [prepared]).catch((error) => { logMac("dictation.local.insert_failed", { error }); return null; });
+  logMac("hera.cloud.done", { recordedMs: audio.ms, transcribeMs: transcribedMs, totalMs: Date.now() - started, chars: raw.length, cleaned: Boolean(prepared), inserted: Boolean(inserted?.ok), fallback: Boolean(inserted?.fallback) });
+  heraLog(`cloud: ${Math.round(audio.ms / 1000)}s of speech → ${raw.length} characters in ${((Date.now() - started) / 1000).toFixed(1)}s`);
+  heraLog(inserted?.fallback ? "no text box found — shown in the notch and on the clipboard" : inserted?.ok ? "pasted into the text box" : "COULD NOT PASTE — text is on the clipboard", { reason });
+  sendTaskProgress({ status: "done", text: "" });
+  lastDictationEndedAt = Date.now();
+  stopDictationSkill(reason);
+}
+
 function stopLocalDictation(reason = "double Option") {
+  if (heraCloudActive) {
+    heraLog("stop pressed — sending the recording");
+    void finishCloudDictation(reason);
+    return { ok: true, closing: true };
+  }
   parakeetSend("stop");
   parakeet.listening = false;
   // Keep the session open until the helper reports `final`, so its trailing
@@ -2983,6 +3142,264 @@ function parakeetSend(command) {
 // extension checks before drawing its own notch. Loopback only, no payload from
 // the caller, GET only: it says "Braino Mac is running here" and nothing else.
 const BRAINO_PRESENCE_PORT = 47823;
+
+/* ── The trace: how a command is understood, step by step (2026-10-03) ──────
+ *
+ * localhost:8080/trace draws this. Two routes, loopback only, and only for
+ * pages served from localhost, because /trace/run makes Braino actually do
+ * what it is given and no website may ever be able to ask for that.
+ *
+ * POST /trace/think {command}: the real chain on the real screen, and nothing
+ * done. Laya's label and time, which quick shortcuts would grab the sentence,
+ * the HIL router's first call, and HIL's first thinking turn on what is on the
+ * screen right now: its plan, the tool it reaches for, whether it would gate.
+ *
+ * POST /trace/run {command}: the command runs for real, through runDelegate,
+ * and every macTrace line and the important log events stream back as NDJSON
+ * while it happens, with times, ending with the result. */
+/* ── One decider, in stages (2026-10-03) ──────────────────────────────────
+ *
+ * The switch that moves decisions from ~20 rules to Laya and HIL.
+ *   0  off (default): exactly as before.
+ *   1  the risky rules stand down (Chrome profile, tab switch, type and
+ *      search, and filling in "it" / "that"), so those sentences reach HIL,
+ *      which reads the whole sentence and the conversation. Pause, volume,
+ *      next song and the other instant controls stay instant.
+ *   2  reserved for Laya as the reflex that names the action (Laya v6).
+ * Set with BRAINO_DECIDER_STAGE=1 in .env, or say/type "decider stage 1";
+ * remembered in decider-stage.json. Back to 0 undoes it instantly. */
+const DECIDER_STAGE_PATH = path.join(AUTH_STORE_DIR, "decider-stage.json");
+let deciderStageCache = null;
+function deciderStage() {
+  if (deciderStageCache !== null) return deciderStageCache;
+  // A setting in .env wins; otherwise the stage saved last time; otherwise off.
+  const fromEnv = String((typeof ENV === "object" && ENV?.BRAINO_DECIDER_STAGE) || process.env.BRAINO_DECIDER_STAGE || "").trim();
+  let n = 0;
+  if (fromEnv) n = Number(fromEnv);
+  else { try { n = Number(JSON.parse(fs.readFileSync(DECIDER_STAGE_PATH, "utf8")).stage); } catch (_) { n = 0; } }
+  deciderStageCache = Number.isFinite(n) && n >= 0 && n <= 4 ? Math.floor(n) : 0;
+  return deciderStageCache;
+}
+function setDeciderStage(n) {
+  deciderStageCache = Math.max(0, Math.min(4, Math.floor(Number(n) || 0)));
+  try { fs.writeFileSync(DECIDER_STAGE_PATH, JSON.stringify({ stage: deciderStageCache, at: new Date().toISOString() })); } catch (_) {}
+  logMac("decider.stage_set", { stage: deciderStageCache });
+  return deciderStageCache;
+}
+
+const BRAINO_TRACE_PORT = 47824;
+let traceServer = null;
+let traceRunBusy = false;
+
+function traceOriginOk(req) {
+  const origin = String(req.headers.origin || "");
+  return !origin || /^https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?$/.test(origin);
+}
+
+/* Who takes a command, in the real order (routeHilFirst), without doing it.
+ *
+ * Every check below is one routeHilFirst makes, in the same order, asked the
+ * same question, and stopped at the first that claims the sentence. None of
+ * them acts. tests/mac-trace.test.mjs fails if routeHilFirst's order and this
+ * one drift apart, so "Show me" stays the real mechanism, not a guess at it. */
+const TRACE_ONE_WORD_OK = /^(?:hi|hello|hey|hiya|yo|thanks|thank|thx|ok|okay|cool|nice|great|awesome|yes|yeah|yep|no|nope|bye|goodnight|morning|sorry|wow|haha|lol)$/i;
+async function traceWhoTakesIt(raw) {
+  const r = String(raw || "");
+  /* Stage 3, as in routeHilFirst: Laya sure it is talk means no quick rule may
+     take it; only the small-talk reply and the memory page still can. */
+  if (deciderStage() >= 3 && !pendingMacWorkflow && !parseInterruptIntent(r)) {
+    const first = await layaKind(r);
+    if (first && first.confidence >= LAYA_TALK_SURE && (first.kind === "chat" || first.kind === "ignore")) {
+      if (MAC_CHITCHAT.test(r.trim())) return { takenBy: "small talk", what: "a short reply, no thinking", checked: 2, of: 2, ms: 0 };
+      return { takenBy: "", layaFirst: `${first.kind} ${first.confidence.toFixed(2)}: quick rules skipped`, checked: 0, of: 0, ms: first.ms };
+    }
+    if (deciderStage() >= 4 && !quickRulesAllowed(first)) {
+      if (MAC_CHITCHAT.test(r.trim())) return { takenBy: "small talk", what: "a short reply, no thinking", checked: 2, of: 2, ms: 0 };
+      return { takenBy: "", layaFirst: `${first ? `${first.kind} ${first.confidence.toFixed(2)}` : "no Laya"}: HIL decides, no quick rule`, checked: 0, of: 0, ms: first?.ms || 0 };
+    }
+  }
+  const checks = [
+    ["memory view", () => /\b(?:open|show)(?: me)?(?: my| the)? (?:memory|affective ?os(?: memory)?)\b|\bwhat (?:are|have) you (?:been )?(?:remembering|saving|saved)\b/i.test(r) && "opens the memory page"],
+    ["small talk", () => !pendingMacWorkflow && MAC_CHITCHAT.test(r.trim()) && "a short reply, no thinking"],
+    ["battery", () => /\b(?:battery|charge|charging|power left|plugged in)\b/i.test(r) && !/\b(?:open|settings|save|mode|saver)\b/i.test(r) && r.split(/\s+/).length <= 12 && "reads the battery"],
+    ["chrome profile", () => { const x = chromeProfiles.parseProfileIntent(r); if (deciderStage() >= 1 && x && !["switch", "list"].includes(x.action)) return null; return x && `${x.action} ${x.profile || ""}`.trim(); }],
+    ["type and search", () => { if (deciderStage() >= 1) return null; const x = typeSearch.parseTypeSearch(r); return x && `types "${String(x.text || x.query || "").slice(0, 40)}"`; }],
+    ["instant controls", () => { const x = parseInstantFire(r, activeMacContext || {}); return x && `instant ${x.kind}`; }],
+    ["localhost", () => devServers.asksForLocalhost(r) && /\b(?:open|show|pull up|bring up|go to|take me|load|launch)\b/i.test(r) && "opens a dev server"],
+    ["tab switch", () => { if (deciderStage() >= 1) return null; const x = tabSwitch.parseTabSwitch(r); return x && `switches to the "${x.query}" tab`; }],
+    ["forms", () => { const x = formFill.parseFormIntent(r); return x && `form ${x.action}`; }],
+    ["spoken web address", () => { const x = webAddress.spokenWebsite(r); return x && `opens ${x.url}`; }],
+    ["old fast path", () => isInstantCommand(r) && "the older instant commands", "legacy"],
+    ["stop words", () => parseInterruptIntent(r) && "stops what he is doing", "legacy"],
+    ["close all tabs", () => macClosesAllTabs(r) && "closes every tab natively", "legacy"],
+    ["one word", () => { const w = r.trim().replace(/[.?!,]+$/, ""); return !pendingMacWorkflow && w && !/\s/.test(w) && !resolveAppTarget(w) && !parseMondayModeIntent(w) && !TRACE_ONE_WORD_OK.test(w) && `asks you to say "${w}" again`; }],
+    ["send a page link", () => { const x = pageLinks.parseSendPageLink(r); return x && `sends the ${x.kind} to ${x.to}`; }],
+    ["recipe", () => { const x = recipeFor(r); return x && `recipe ${x.id}: ${x.steps.map((st) => st.tool).join(" > ")}`; }],
+    ["learned skill", () => { const store = readSkills(); const k = skillMemory.skillKey(r); const x = skillMemory.findSkill(store, k); const y = x?.skill ? null : skillMemory.findSkillByIntent(store, k); const sk = x?.skill || y?.skill; return sk?.steps?.length && `a skill he learned: ${sk.steps.map((st) => st.tool).join(" > ")}${y ? ` (same intent, "${y.detail}")` : ""}`; }],
+    ["shortcut", () => { const x = macShortcutFor(r); return x && x; }, "legacy"],
+  ];
+  const t0 = Date.now();
+  for (const [name, test, kind] of checks) {
+    let hit = null;
+    try { hit = test(); } catch (_) { hit = null; }
+    if (hit) return { takenBy: name, what: String(hit), legacy: kind === "legacy", checked: checks.findIndex((c) => c[0] === name) + 1, of: checks.length, ms: Date.now() - t0 };
+  }
+  // The timetable is a database read, still no model.
+  if (!pendingMacWorkflow && !MAC_SECOND_ACTION.test(r)) {
+    const sched = await macAnswerScheduleFast(r.toLowerCase()).catch(() => null);
+    if (sched) return { takenBy: "timetable", what: String(sched.say || "").slice(0, 120), checked: checks.length + 1, of: checks.length + 1, ms: Date.now() - t0 };
+  }
+  return { takenBy: "", checked: checks.length + 1, of: checks.length + 1, ms: Date.now() - t0 };
+}
+
+/* "Show me", streamed: each stage is sent the moment it finishes, so the page
+   draws the flow live. It follows the real path and stops where the real run
+   would stop. Nothing is done on the Mac. */
+async function traceThink(command, send) {
+  const raw = String(command || "").trim();
+  const t0 = Date.now();
+  const stage = (name, data, started) => send({ kind: "stage", name, ms: Date.now() - started, ...data });
+  const working = (name) => send({ kind: "working", name });
+
+  // "It", "that", "do it again": what runDelegate fills in before anything.
+  let t = Date.now();
+  let sentence = raw;
+  try {
+    const ref = deciderStage() >= 1 ? null : parseContextualReference(raw);
+    if (ref?.kind === "repeat" && lastDelegateCommand) sentence = lastDelegateCommand;
+    else if (ref && !(lastActed && macLastTalkAt > lastActed.at)) sentence = applyContextualReference(ref, lastActed) || raw;
+  } catch (_) {}
+  if (sentence !== raw) stage("context", { from: raw, to: sentence }, t);
+
+  // The quick checks, in the real order.
+  working("shortcuts");
+  t = Date.now();
+  const who = await traceWhoTakesIt(sentence);
+  stage("shortcuts", who, t);
+  if (who.takenBy) { send({ kind: "end", totalMs: Date.now() - t0, path: `taken by ${who.takenBy}`, note: who.legacy ? "Handed to the older instant path, which does it without any model." : "Done by a quick rule, no model." }); return; }
+
+  // Laya: what the real run gets (it waits 300ms), and what Laya actually says.
+  working("laya");
+  t = Date.now();
+  let laya = null; let layaErr = "";
+  try {
+    const text = LAYA_WITH_CONTEXT ? layaContext.text(sentence) : sentence;
+    const res = await fetch(`http://127.0.0.1:${LAYA_PORT}/`, { method: "POST", body: JSON.stringify({ text }), signal: AbortSignal.timeout(4000) });
+    const out = await res.json();
+    if (out?.kind) laya = { kind: out.kind, confidence: Number(out.confidence) || 0, modelMs: Number(out.ms) || 0 };
+  } catch (error) { layaErr = /refused|ECONNREFUSED|fetch failed/i.test(String(error?.message || error)) ? "off" : "slow"; }
+  const tookMs = Date.now() - t;
+  const realSkips = !layaReady || !laya || tookMs > 300;
+  const route = laya && !realSkips ? (layaRoute({ kind: laya.kind, confidence: laya.confidence }, sentence) || "normal") : "normal";
+  stage("laya", laya ? { ...laya, route, realSkips, why: !layaReady ? "Laya was still starting, so the real run skips it" : tookMs > 300 ? `took ${tookMs}ms, longer than the 300ms the real run waits, so the real run skips it` : "" } : { offline: true, why: layaErr === "off" ? "Laya is not running" : "Laya did not answer in time" }, t);
+  if (route === "ask") { send({ kind: "end", totalMs: Date.now() - t0, path: "Laya says unclear", note: "He says: I didn't quite get that. Say it again?" }); return; }
+
+  // The router, unless Laya already sent it straight to a plan.
+  let plan = null;
+  if (route !== "plan") {
+    working("router");
+    t = Date.now();
+    const routed = await callHilRouterLive(sentence).catch(() => null);
+    plan = routed ? planFromVerdict(routed.verdict, MAC_HIL_TOOLS) : null;
+    stage("router", plan ? { decision: plan.kind, tool: plan.tool || "", args: plan.args || null, question: plan.question || "", why: plan.why || "" } : { offline: true }, t);
+    if (!plan) { send({ kind: "end", totalMs: Date.now() - t0, path: "router did not answer", note: "The real run falls back to the older patterns here." }); return; }
+    if (plan.kind === "fire") { send({ kind: "end", totalMs: Date.now() - t0, path: `fires ${plan.tool}`, note: `One tool, no thinking turn: ${plan.tool} ${JSON.stringify(plan.args || {})}` }); return; }
+    if (plan.kind === "ask") { send({ kind: "end", totalMs: Date.now() - t0, path: "asks first", note: `He asks: ${plan.question}` }); return; }
+    if (plan.kind === "chat") { send({ kind: "end", totalMs: Date.now() - t0, path: "just talks", note: "Answered in conversation, nothing on the Mac." }); return; }
+  }
+
+  // HIL's first thinking turn, on the real screen.
+  working("hil");
+  t = Date.now();
+  const obs = await macBuildObservation().catch(() => ({ text: "" }));
+  const observeMs = Date.now() - t;
+  let turn = null; let meta = null; let parse = null;
+  try {
+    const userToken = await getBrainoAuthToken().catch(() => "");
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/hil-loop`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${userToken || SUPABASE_ANON_KEY}` },
+      body: JSON.stringify({
+        command: sentence,
+        context: [`Now: ${new Date().toString()}`, activeMacContext?.appName ? `Front app: ${activeMacContext.appName}` : "", activeMacContext?.browserUrl ? `Front tab: ${activeMacContext.browserTitle || ""} ${activeMacContext.browserUrl}` : "", devServers.describeDevServers(macDevServersCache.servers), macRecentExchanges()].filter(Boolean).join("\n"),
+        runId: crypto.randomUUID(), hands: "mac", tools: Object.keys(MAC_HIL_TOOLS),
+        state: { tasks: [], facts: [], asides: [], steps: [], budgetLeft: 40, screen: obs.text || "" },
+      }),
+      signal: AbortSignal.timeout(30000),
+    });
+    const data = await res.json();
+    turn = data?.turn || null; meta = data?.meta || null; parse = data?.parse || null;
+  } catch (error) { parse = { failure: String(error?.message || error) }; }
+  const d = turn?.decision || {};
+  stage("hil", {
+    observeMs,
+    screen: { app: obs.appName || "", elements: (obs.elements || []).length, url: obs.browserUrl || "" },
+    thinking: turn?.thinking || "", goal: turn?.split?.restated_goal || "", plan: turn?.split?.plan || [],
+    decision: d.type || "",
+    action: d.step?.action ? { type: d.step.action.type, tool: d.step.action.tool || "", index: d.step.action.index ?? null, url: d.step.action.url || "" } : null,
+    intent: d.step?.intent || "", gated: d.step?.reversible === false, says: d.question || d.text || d.message || "",
+    model: meta?.model || "", modelMs: meta?.modelMs || 0, prepMs: meta?.prepMs || 0, parse,
+  }, t);
+  send({ kind: "end", totalMs: Date.now() - t0, path: "the step-by-step loop", note: "From here the real run takes this step, looks again, and decides the next one, one turn at a time." });
+}
+
+ipcMain.on("braino-mac:speech-started", () => { macSpeechStartedAt = Date.now(); });
+
+function startTraceServer() {
+  if (traceServer) return;
+  try {
+    traceServer = http.createServer(async (req, res) => {
+      const origin = String(req.headers.origin || "");
+      if (origin && traceOriginOk(req)) res.setHeader("Access-Control-Allow-Origin", origin);
+      res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+      res.setHeader("Cache-Control", "no-store");
+      if (req.method === "OPTIONS") { res.writeHead(traceOriginOk(req) ? 204 : 403); return res.end(); }
+      if (!traceOriginOk(req)) { res.writeHead(403); return res.end(); }
+      if (req.method === "GET" && req.url === "/trace") { res.writeHead(200, { "Content-Type": "application/json" }); return res.end(JSON.stringify({ ok: true, busy: traceRunBusy })); }
+      if (req.method !== "POST" || !/^\/trace\/(?:think|run)$/.test(req.url || "")) { res.writeHead(404); return res.end(); }
+      let body = "";
+      for await (const chunk of req) { body += chunk; if (body.length > 4000) break; }
+      let command = "";
+      try { command = String(JSON.parse(body || "{}").command || "").trim().slice(0, 600); } catch (_) {}
+      if (!command) { res.writeHead(400); return res.end(JSON.stringify({ error: "no command" })); }
+      if (req.url === "/trace/think") {
+        const started = Date.now();
+        res.writeHead(200, { "Content-Type": "application/x-ndjson" });
+        const send = (o) => { try { res.write(`${JSON.stringify({ ...o, t: Date.now() - started })}\n`); } catch (_) {} };
+        send({ kind: "start", command });
+        await traceThink(command, send).catch((error) => send({ kind: "end", error: String(error?.message || error) }));
+        return res.end();
+      }
+      // /trace/run: for real, one at a time, streamed.
+      if (traceRunBusy) { res.writeHead(409); return res.end(JSON.stringify({ error: "a traced run is already going" })); }
+      traceRunBusy = true;
+      const started = Date.now();
+      res.writeHead(200, { "Content-Type": "application/x-ndjson" });
+      const send = (o) => { try { res.write(`${JSON.stringify({ ...o, t: (o.at || Date.now()) - started })}\n`); } catch (_) {} };
+      traceSink = send;
+      send({ kind: "start", command, at: started });
+      logMac("trace.run.start", { command: textForLog(command) });
+      try {
+        const result = await runDelegate(command, { reason: "trace" });
+        send({ kind: "done", ok: result?.ok !== false, say: String(result?.say || ""), source: String(result?.source || ""), at: Date.now() });
+        /* Said out loud and shown in the notch, like any command. A traced run
+           that asked "Which Shashank?" used to ask only the trace page, so it
+           looked like nothing happened, and the answer had nowhere to go. */
+        if (result?.say && !result?.superseded) sendToRenderer("braino-mac:speak-line", { text: String(result.say) });
+      } catch (error) {
+        send({ kind: "done", ok: false, say: String(error?.message || error), at: Date.now() });
+      } finally {
+        traceSink = null;
+        traceRunBusy = false;
+        res.end();
+      }
+    });
+    traceServer.on("error", (e) => { logMac("trace.listen_failed", { error: String(e?.message || e) }); traceServer = null; });
+    traceServer.listen(BRAINO_TRACE_PORT, "127.0.0.1", () => logMac("trace.listening", { port: BRAINO_TRACE_PORT }));
+  } catch (e) {
+    logMac("trace.start_failed", { error: String(e?.message || e) });
+  }
+}
 let presenceServer = null;
 
 function startPresenceBeacon() {
@@ -3538,7 +3955,7 @@ function registerHotkeys() {
       startPitchDemo("Cmd+Shift+P");
     }),
     dashboard: globalShortcut.register("CommandOrControl+Shift+D", () => {
-      openDashboardWindow();
+      openBrainoApp();
     }),
     herToggle: globalShortcut.register("CommandOrControl+Shift+H", () => {
       sendToRenderer("braino-mac:her-toggle", { source: "Command+Shift+H" });
@@ -4015,7 +4432,9 @@ function cleanPrompt(input) {
       .trim();
     if (text === before) break;
   }
-  return text.replace(/[.?!]+$/g, "").trim();
+  /* His name at the END as well: "Close all tabs, Braino." missed the instant
+     close-all rule and spent 9 seconds thinking (2026-09-26). */
+  return text.replace(/[.?!]+$/g, "").replace(/[,\s]+(?:braino|bruno|breno|reno|brino|dino)$/i, "").replace(/[.?!,]+$/g, "").trim();
 }
 
 function isLikelyUrl(value) {
@@ -4173,11 +4592,38 @@ function parseNoteIntent(raw) {
   };
 }
 
+/* One run's questions share ONE clock, and there are at most two of them.
+   A waiting question used to restart its five minutes every time the run asked
+   again, and every sentence was taken as its answer, so a chain never ended:
+   "I took two bong rips" asked "are you safe?", then ate "where's my phone",
+   a line in Urdu and a friend's "say it as a verb", replaying the bong answer
+   each time for 2.5 minutes (2026-09-27). */
+const HIL_ASK_TTL_MS = 90000;
+const HIL_ASK_MAX = 2;
+let hilAskChain = null;
+
 function setPendingMacWorkflow(workflow) {
+  let createdAt = Date.now();
+  if (workflow?.type === "hil_answer") {
+    const command = String(workflow.data?.command || "");
+    const chained = hilAskChain && hilAskChain.command === command && createdAt - hilAskChain.firstAt < HIL_ASK_TTL_MS;
+    hilAskChain = chained ? { ...hilAskChain, asks: hilAskChain.asks + 1 } : { command, firstAt: createdAt, asks: 1 };
+    if (hilAskChain.asks > HIL_ASK_MAX) {
+      logMac("hil.ask_limit", { command: textForLog(command), asks: hilAskChain.asks });
+      pendingHilRun = null;
+      return;
+    }
+    /* The answer window starts at THIS question. It used to start at the first
+       question of the job, so "Spicejet one" (answering the second question,
+       which took 20 seconds to read out) landed after it shut and ran as a new
+       job: the earlier Mumbai search (4 Oct). The ask limit still counts. */
+    workflow = { ...workflow, ttlMs: HIL_ASK_TTL_MS };
+  }
   pendingMacWorkflow = {
     ...workflow,
-    createdAt: Date.now(),
+    createdAt,
   };
+  if (workflow?.data?.approval) macBroadcastApproval({ ...workflow.data.approval, expiresAt: createdAt + (Number(workflow.ttlMs) || MAC_WORKFLOW_CONFIRM_MS) });
   logMac("mac.workflow.pending", {
     type: pendingMacWorkflow.type,
     stage: pendingMacWorkflow.stage,
@@ -4187,7 +4633,35 @@ function setPendingMacWorkflow(workflow) {
 }
 
 function clearPendingMacWorkflow() {
+  if (pendingMacWorkflow?.data?.approval) macBroadcastApproval({ cleared: true });
   pendingMacWorkflow = null;
+}
+
+/* ── Approval cards ───────────────────────────────────────────────────────
+   Whenever he needs a yes before something he cannot take back, the card
+   appears where you asked: inside the reply in Chat if you typed it, under
+   the notch if you said it. It says exactly what is about to happen, and
+   Approve or Cancel go down the same path as saying yes or no. It goes when
+   the question does (answered, cancelled, or timed out). */
+let macCommandSurface = "voice";
+function macBroadcastApproval(payload) {
+  const card = payload?.cleared ? { cleared: true } : { ...payload, surface: macCommandSurface, id: crypto.randomUUID() };
+  sendToRenderer("braino-mac:approval", card);
+  try { if (appWindow && !appWindow.isDestroyed()) appWindow.webContents.send("braino-mac:approval", card); } catch (_) {}
+}
+function macApprovalPreview(step) {
+  const a = step?.action && typeof step.action === "object" ? step.action : step || {};
+  const tool = String(a.tool || a.type || "");
+  const args = a.args || {};
+  const quote = (t) => { const v = String(t || "").trim(); if (!v) return ""; return /^\{\{\d+\}\}$/.test(v) ? "the link" : `"${v.slice(0, 160)}${v.length > 160 ? "…" : ""}"`; };
+  if (tool === "whatsapp_send") return `Send on WhatsApp to ${args.recipientRaw || args.recipient || args.to || "them"}${args.message ? `: ${quote(args.message)}` : ""}`;
+  if (tool === "whatsapp_reply_last") return `Reply on WhatsApp${args.message || args.text ? `: ${quote(args.message || args.text)}` : " to the last chat"}`;
+  if (tool === "mail_send") return `Send an email${args.to ? ` to ${args.to}` : ""}${args.subject ? `: ${quote(args.subject)}` : ""}`;
+  if (tool === "click_element" || tool === "click_last_pointed") return `Click ${quote(args.target) || "that"}`;
+  if (a.type === "type" && a.submit) return `Type and send ${quote(a.text)}`;
+  if (a.type === "click") return step?.intent ? String(step.intent) : "Click that";
+  const plain = macPlainStep(step);
+  return plain.charAt(0).toUpperCase() + plain.slice(1);
 }
 
 function delegateStatePayload() {
@@ -4200,8 +4674,30 @@ function delegateStatePayload() {
   };
 }
 
+/* "Clear the task." was planned as a new WhatsApp instead of cancelling the
+   one he was waiting on (2026-09-27). Any way of saying "drop it". */
+const MAC_DROP_TASK = /^(?:(?:hey\s+)?brain(?:o|elle)[,!.\s]+)?(?:please\s+|just\s+)?(?:(?:clear|drop|cancel|scrap|kill|abort|skip|forget|stop|leave)\s+(?:(?:the|that|this|my)\s+)?(?:task|job|thing|one|it|that|request|message)|never ?mind|forget (?:about )?it|leave it|don'?t bother|don'?t do (?:it|that)|no,? (?:don'?t|leave it|cancel))(?:\s+brain(?:o|elle))?[\s.!,]*$/i;
+
 function isWorkflowCancelIntent(text) {
-  return /^(?:cancel|stop|never mind|nevermind|leave it|forget it|no)$/i.test(String(text || "").trim());
+  const t = String(text || "").trim();
+  // "Cancel the message. There is no more message." The first sentence decides.
+  const first = t.split(/(?<=[.!?])\s+/)[0];
+  return /^(?:cancel|stop|never mind|nevermind|leave it|forget it|no)$/i.test(t) || MAC_DROP_TASK.test(t) || MAC_DROP_TASK.test(first);
+}
+
+/* Praise and thanks, said to him. "Amazing job Braino" went to the planner
+   with WhatsApp in front and came back as "that means sending the WhatsApp.
+   Go ahead?" (2026-09-27). A compliment is not a task. */
+const MAC_CHITCHAT = /^(?:(?:hey\s+)?brain(?:o|elle)[,!.\s]+)?(?:(?:that'?s|that was|you'?re|you are)\s+)?(?:so\s+|really\s+)?(?:amazing|awesome|great|good|nice|perfect|brilliant|excellent|fantastic|superb|lovely|cool|sweet|wow|legend(?:ary)?|well done|love it|love you|thank you|thanks|thank u|thx|ty)(?:\s+(?:job|work|one|stuff|man|bro|dude|buddy|mate|so much|a lot|very much|yaar|bhai))*(?:[\s,!.]+brain(?:o|elle))?[\s!.]*$/i;
+/* A command with a second job in it: "...and message Param", "...then text Mom". */
+const MAC_SECOND_ACTION = /\b(?:and|then|also|&)\s+(?:then\s+)?(?:message|text|send|tell|whatsapp|email|mail|remind|call|share|forward|ask|book|add|put|set|open|play|note)\b/i;
+const MAC_CHITCHAT_REPLIES = {
+  thanks: ["Anytime.", "Always.", "Happy to."],
+  praise: ["Thanks, that means a lot.", "Glad it worked.", "I'll take it."],
+};
+function macChitchatReply(raw) {
+  const pool = /\b(?:thank|thanks|thx|ty)\b/i.test(raw) ? MAC_CHITCHAT_REPLIES.thanks : MAC_CHITCHAT_REPLIES.praise;
+  return pool[Math.floor(Math.random() * pool.length)];
 }
 
 async function createAppleNoteViaUi({ title, body, includeTitleLine = false } = {}) {
@@ -4571,6 +5067,13 @@ async function handlePendingMacWorkflow(raw) {
    *
    * hil_answer is exempt: a held run asked a real question about its own work,
    * and "yes" is not distinguishable from an instruction by shape. */
+  // The same release on the old path, for when HIL-first is not in front.
+  if (pending.type === "hil_answer" && hilAnswerReleasedBy(raw, pending)) {
+    logMac("mac.workflow.released", { type: "hil_answer", raw: textForLog(raw), by: "not_an_answer" });
+    clearPendingMacWorkflow();
+    pendingHilRun = null;
+    return null;
+  }
   if (pending.type !== "hil_answer" && !workflowClaimsUtterance(pending, raw)) {
     logMac("mac.workflow.released", { type: pending.type, stage: pending.stage, raw: textForLog(raw) });
     clearPendingMacWorkflow();
@@ -4613,8 +5116,16 @@ async function handlePendingMacWorkflow(raw) {
     const approved = macHilAnswerApproves(answer);
     logMac("hil.loop.answered", { answer: textForLog(answer), resumed: Boolean(fresh), approved });
 
+    /* "Keep going?" answered no: stop. Anything that isn't a yes or a no is a
+       new command, not a no: "what do you need attention with?" got "Okay, I
+       stopped." (2026-09-26). */
+    if (fresh && held.keepGoing && !approved) {
+      if (/^(?:no|nope|nah|stop|cancel|leave it|don'?t|forget it|mat|nahi|bas)\b/i.test(answer)) return { ok: true, say: "Okay, I stopped.", source: "hil_loop" };
+      return null;
+    }
     if (fresh) {
       return runMacHilLoop(held.command, {
+        keepGoing: Boolean(held.keepGoing && approved),
         runId: held.runId,
         state: held.state,
         lastStep: held.lastStep,
@@ -4634,6 +5145,16 @@ async function handlePendingMacWorkflow(raw) {
     // there is, so the old behaviour is still the honest fallback.
     const original = String(pending.data?.command || "").trim();
     const question = String(pending.data?.question || "").trim();
+    /* The router asked this, so the router hears the answer. Sending it to the
+       loop turned "Monday mood" (the answer to "did you mean Monday Mode?")
+       into 55 seconds of a loop looking at the screen. The answer alone first,
+       when it is itself a command; otherwise the command with the answer. */
+    if (pending.data?.fromRouter) {
+      const monday = parseMondayModeIntent(answer) || parseMondayModeIntent(`${original} ${answer}`);
+      if (monday) return runDelegate(`${monday.action === "enter" ? "enter" : "exit"} monday mode`);
+      const rerouted = await routeHilFirst(`${original}. (Asked: ${question} They answered: ${answer})`);
+      if (rerouted) return rerouted;
+    }
     return runMacHilLoop(`${original}\n\n(You asked: ${question}\nThey answered: ${answer})`);
   }
 
@@ -4659,17 +5180,37 @@ async function handlePendingMacWorkflow(raw) {
   if (pending.type === "phone" && pending.stage === "phone_number") {
     clearPendingMacWorkflow();
     const number = String(raw || "").replace(/[^\d+]/g, "");
-    if (number.length < 7) return { ok: false, say: "That didn't look like a number. Try again — say send to phone." };
+    // Not a number: it is the next command, not a bad answer.
+    if (number.length < 7) return null;
     saveMyPhone(number);
     return sendToPhone(pending.data?.content || "");
   }
 
+  if (pending.type === "plan_confirm") {
+    clearPendingMacWorkflow();
+    const reply = cleanPrompt(raw);
+    if (/^(?:yes|yeah|yep|sure|ok(?:ay)?|go|go ahead|do it|haan|ha)\b/i.test(reply) && reply.split(/\s+/).length <= 5) {
+      const { command, plan } = pending.data || {};
+      const run = await runPlanSteps(plan.steps, command, "hil-plan:confirmed");
+      if (run.asked) return { ok: true, say: run.say, source: "hil_plan" };
+      if (!run.failed) return { ok: true, say: await planReply(command, run, plan.done), source: "hil_plan" };
+      return runMacHilLoop(command, null, { planFailed: `A plan ran ${run.at - 1} steps, then failed: ${run.why}.` });
+    }
+    if (/^(?:no|nope|nah|don'?t|stop|cancel|mat|nahi)\b/i.test(reply)) return { ok: true, say: "Okay, I didn't do it.", source: "hil_plan" };
+    return null; // a new command: the question is dropped
+  }
   if (pending.type === "meeting" && pending.stage === "meeting_offer") {
     clearPendingMacWorkflow();
-    if (/\b(?:yes|yeah|yep|sure|go|record|do it|please)\b/i.test(cleanPrompt(raw))) {
+    const reply = cleanPrompt(raw);
+    // Only a yes or a no answers "record it?". "What are my classes
+    // tomorrow" was taken as a no and never answered.
+    if (/^(?:(?:ok(?:ay)?|yes|yeah|yep|sure|go|go ahead|record(?: it)?|do it|please)\b[\s,.!]*)+$/i.test(reply) || /^(?:yes|yeah|sure)\b.{0,30}\brecord/i.test(reply)) {
       return startMeetingRecording(pending.data?.source || "meeting");
     }
-    return { ok: true, say: "No recording then. I will sit this one out quietly." };
+    if (/^(?:no|nope|nah|don'?t|do not|not now|skip|leave it|no thanks?|nahi|mat)\b.{0,25}$/i.test(reply)) {
+      return { ok: true, say: "No recording then. I will sit this one out quietly." };
+    }
+    return null;
   }
 
   if (pending.type === "xclip" && pending.stage === "xclip_confirm") {
@@ -4797,6 +5338,44 @@ async function handlePendingMacWorkflow(raw) {
     }
   }
 
+  if (pending.type === "localhost_pick") {
+    const servers = pending.data?.servers || [];
+    const said = String(raw || "").toLowerCase();
+    const hit = servers.find((s) => said.includes(String(s.port))) || servers.find((s) => s.project && said.includes(String(s.project).toLowerCase().replace(/^the\s+/, "").split(" ")[0]));
+    clearPendingMacWorkflow();
+    if (!hit) return { ok: true, say: "I did not catch which one, so I have not opened anything." };
+    await openChromeUrl(hit.url);
+    return { ok: true, say: `Opening ${hit.project}.`, source: "localhost" };
+  }
+
+  if (pending.type === "contact_pick") {
+    const { query, choices = [], job = {} } = pending.data || {};
+    const answer = String(raw || "").trim();
+    let at = /^(yes|yeah|yep|approve|approved|sure|ok|okay)\b/i.test(answer) ? 0 : pickContactChoice(answer, choices);
+    if (at === -1) {
+      const exact = choices.findIndex((c) => cleanContactName(c.name) === cleanContactName(answer));
+      if (exact >= 0) at = exact;
+    }
+    if (at === -2) {
+      clearPendingMacWorkflow();
+      logMac("whatsapp.contact.choose_cancelled", { query: textForLog(query) });
+      return { ok: true, say: "Okay, I have not sent anything." };
+    }
+    if (at < 0 || !choices[at]) {
+      if ((pending.data?.asks || 0) >= 1) {
+        clearPendingMacWorkflow();
+        return { ok: true, say: `I still could not tell which ${speakableContactName(query) || query}, so I have not sent anything.` };
+      }
+      setPendingMacWorkflow({ ...pending, data: { ...pending.data, asks: (pending.data?.asks || 0) + 1 } });
+      return { ok: true, say: contactChoiceQuestion(query, choices) };
+    }
+    clearPendingMacWorkflow();
+    const pick = choices[at];
+    logMac("whatsapp.contact.chosen", { query: textForLog(query), name: textForLog(pick.name), position: at });
+    if (job.kind === "call") return startCall({ ...(job.intent || {}), chosen: pick });
+    return sendWhatsAppMessage(pick.name, job.message || "", pick);
+  }
+
   if (pending.type === "whatsapp") {
     clearPendingMacWorkflow();
     if (pending.stage === "whatsapp_recipient") {
@@ -4888,7 +5467,140 @@ async function handlePendingMacWorkflow(raw) {
   return null;
 }
 
+// ── Chrome profiles (see chrome-profiles.cjs) ──────────────────────────────
+const CHROME_LOCAL_STATE = path.join(os.homedir(), "Library", "Application Support", "Google", "Chrome", "Local State");
+const CHROME_PROFILES_PATH = path.join(AUTH_STORE_DIR, "chrome-profiles.json");
+function readChromeProfileList() {
+  try { return chromeProfiles.listProfiles(JSON.parse(fs.readFileSync(CHROME_LOCAL_STATE, "utf8"))); } catch (_) { return []; }
+}
+function readChromeProfileConfig() {
+  try { const c = JSON.parse(fs.readFileSync(CHROME_PROFILES_PATH, "utf8")) || {}; return { primary: c.primary || "", rules: Array.isArray(c.rules) ? c.rules : [] }; } catch (_) { return { primary: "", rules: [] }; }
+}
+function saveChromeProfileConfig(config) {
+  const clean = { primary: String(config?.primary || ""), rules: (config?.rules || []).filter((r) => r && r.dir && Array.isArray(r.words) && r.words.length).map((r) => ({ dir: String(r.dir), words: r.words.map((w) => String(w).toLowerCase().trim()).filter(Boolean) })), updatedAt: Date.now() };
+  try { fs.writeFileSync(CHROME_PROFILES_PATH, JSON.stringify(clean, null, 2)); } catch (_) {}
+  logMac("chrome_profiles.saved", { primary: clean.primary, rules: clean.rules.length });
+  return clean;
+}
+async function openChromeProfile(dir, url) {
+  await execFileP("open", ["-na", "Google Chrome", "--args", `--profile-directory=${dir}`, ...(url ? [url] : [])]);
+  setTimeout(() => ensureDockWindowVisible("open-chrome-profile"), 650);
+}
+function profileLabel(p) { return p ? `${p.name}${p.email ? ` (${p.email})` : ""}` : ""; }
+
+/* What you say about profiles. Instant: a file read and one open. */
+async function runProfileIntent(intent) {
+  const profiles = readChromeProfileList();
+  if (!profiles.length) return { ok: false, say: "I can't see any Chrome profiles on this Mac.", source: "chrome_profiles" };
+  const config = readChromeProfileConfig();
+  if (intent.action === "list") {
+    const main = profiles.find((p) => p.dir === config.primary);
+    return { ok: true, say: `You have ${profiles.length}: ${profiles.map((p) => p.name).join(", ")}.${main ? ` Main is ${main.name}.` : " Tell me which one is your main."}`, source: "chrome_profiles" };
+  }
+  const p = chromeProfiles.findProfile(profiles, intent.profile);
+  if (!p) return { ok: true, say: `Which one? You have ${profiles.map((x) => x.name).join(", ")}.`, source: "chrome_profiles" };
+  if (intent.action === "switch") { await openChromeProfile(p.dir); return { ok: true, say: "", source: "chrome_profiles" }; }
+  if (intent.action === "primary") { saveChromeProfileConfig({ ...config, primary: p.dir }); return { ok: true, say: `Got it. ${p.name} is your main profile.`, source: "chrome_profiles" }; }
+  if (intent.action === "rule") {
+    const rules = config.rules.filter((r) => !r.words.some((w) => intent.words.includes(w)));
+    rules.push({ dir: p.dir, words: intent.words });
+    saveChromeProfileConfig({ ...config, rules });
+    return { ok: true, say: `Got it. ${intent.words.join(" and ")} open in ${p.name} from now on.`, source: "chrome_profiles" };
+  }
+  return null;
+}
+
+/* The page Braino himself opened last, for "this link" right after. Chrome's
+   front tab can be another window: on 2026-10-01 a plan opened the YouTube
+   video, then read the front tab and got a claude.ai page from the other
+   window. */
+let macLastOpenedUrl = { url: "", at: 0 };
+/* The dev servers running right now, named by project (dev-servers.cjs).
+   Read with lsof, cached briefly: a port list does not change mid-sentence. */
+let macDevServersCache = { at: 0, servers: [] };
+const macRecentLocalUrls = [];
+function macNoteLocalUrl(url) {
+  const at = macRecentLocalUrls.indexOf(url);
+  if (at >= 0) macRecentLocalUrls.splice(at, 1);
+  macRecentLocalUrls.unshift(url);
+  macRecentLocalUrls.length = Math.min(macRecentLocalUrls.length, 8);
+}
+async function macListDevServers() {
+  if (Date.now() - macDevServersCache.at < 20000) return macDevServersCache.servers;
+  try {
+    const { stdout } = await execFileP("/usr/sbin/lsof", ["-nP", "-iTCP", "-sTCP:LISTEN", "-F", "pcn"], { timeout: 3000, maxBuffer: 4 * 1024 * 1024 });
+    const listeners = devServers.parseListeners(stdout).filter((l) => /^(?:node|python|ruby|bun|deno|php|java)/i.test(l.command));
+    const details = {};
+    for (const pid of [...new Set(listeners.map((l) => l.pid))].slice(0, 12)) {
+      const [cwd, cmd] = await Promise.all([
+        execFileP("/usr/sbin/lsof", ["-a", "-p", String(pid), "-d", "cwd", "-Fn"], { timeout: 2000 }).then((r) => (String(r.stdout).split("\n").find((x) => x.startsWith("n")) || "").slice(1)).catch(() => ""),
+        execFileP("/bin/ps", ["-o", "command=", "-p", String(pid)], { timeout: 2000 }).then((r) => String(r.stdout).trim()).catch(() => ""),
+      ]);
+      details[pid] = { cwd, cmd };
+    }
+    const servers = devServers.devServersFrom(listeners, details, {
+      pids: [process.pid, layaProc?.pid].filter(Boolean),
+      ports: [LAYA_PORT],
+      root: ROOT_DIR,
+      rootLabel: "the Affective site",
+    });
+    macDevServersCache = { at: Date.now(), servers };
+    return servers;
+  } catch (error) {
+    logMac("dev_servers.read_failed", { error });
+    return macDevServersCache.servers;
+  }
+}
+
+/* "Open my localhost link in a new tab": the running server you mean. */
+async function openLocalhostAsk(raw) {
+  const servers = await macListDevServers();
+  const recent = [activeMacContext?.browserUrl, macLastOpenedUrl?.url, ...macRecentLocalUrls].filter(Boolean);
+  const pick = devServers.pickDevServer(servers, raw, recent);
+  logMac("dev_servers.pick", { servers: servers.map((s) => s.port), port: pick.server?.port || 0, why: pick.why || (pick.choose ? "ask" : "none") });
+  if (pick.server) {
+    await openChromeUrl(pick.server.url);
+    return { ok: true, say: `Opening ${pick.server.project} on localhost ${pick.server.port}.`, source: "localhost" };
+  }
+  if (pick.choose) {
+    const names = pick.choose.map((s) => `${s.project} on ${s.port}`);
+    setPendingMacWorkflow({ type: "localhost_pick", stage: "pick", ttlMs: 60000, data: { servers: pick.choose } });
+    return { ok: true, say: `Which one? ${names.slice(0, -1).join(", ")} or ${names[names.length - 1]}?`, source: "localhost" };
+  }
+  return { ok: true, say: pick.port ? `Nothing is running on localhost ${pick.port}.` : "No dev server is running on this Mac right now.", source: "localhost" };
+}
+
+/* Sites that have a country version open in yours: apple.com in India is apple.com/in. */
+function userCountry() {
+  try { const c = String(app.getLocaleCountryCode() || "").toUpperCase(); if (c) return c; } catch {}
+  return /Asia\/(Kolkata|Calcutta)/.test(Intl.DateTimeFormat().resolvedOptions().timeZone || "") ? "IN" : "";
+}
+function localizeUrl(url, country = userCountry()) {
+  if (country !== "IN") return url;
+  let u; try { u = new URL(url); } catch { return url; }
+  const host = u.hostname.replace(/^www\./, "");
+  if (host === "apple.com" && !/^\/in(\/|$)/.test(u.pathname)) { u.pathname = "/in" + (u.pathname === "/" ? "/" : u.pathname); return u.toString(); }
+  if (host === "amazon.com") { u.hostname = "www.amazon.in"; return u.toString(); }
+  return url;
+}
+
 async function openChromeUrl(url) {
+  url = localizeUrl(url);
+  if (macOwnJobActive()) {
+    macLastOpenedUrl = { url: String(url || ""), at: Date.now() };
+    const opened = await ownBrowser().open(url);
+    if (ownBrowserVisibleByDefault() && !macOwnJob?.hidden) ownBrowser().reveal();
+    rememberActed("site", chromeUrlLabel(url));
+    return opened;
+  }
+  macLastOpenedUrl = { url: String(url || ""), at: Date.now() };
+  /* A link you said belongs to a profile opens in that profile. */
+  const profileDir = chromeProfiles.profileForUrl(readChromeProfileConfig(), url);
+  if (profileDir) {
+    await openChromeProfile(profileDir, url);
+    rememberActed("site", chromeUrlLabel(url));
+    return;
+  }
   await execFileP("open", ["-a", "Google Chrome", url]);
   rememberActed("site", chromeUrlLabel(url));
   setTimeout(() => ensureDockWindowVisible("open-chrome-url"), 650);
@@ -5386,6 +6098,14 @@ function parseSpotifyVolumeIntent(raw) {
     || /\bturn\s+(?:it|the\s+(?:music|sound|volume))\s+down\b/i.test(source)
     || /\b(mute|silence)\b/i.test(source);
   if (!hasVolumeWord && !wantsLouder && !wantsQuieter) return null;
+  /* Without the word volume or sound, only a word that can only mean sound
+     counts, in a short sentence. "Did Mesa raise funding for 100 crores?" set
+     the volume to 100% (2026-09-25): raise, increase, lower and reduce are
+     ordinary verbs. */
+  if (!hasVolumeWord) {
+    const soundOnly = /\b(?:louder|quieter|softer|mute|unmute|silence)\b|\bturn\s+(?:it|the\s+music|this)?\s*(?:up|down)\b/i.test(source);
+    if (!soundOnly || source.split(/\s+/).length > 7) return null;
+  }
 
   if (/\b(?:full|max(?:imum)?)\s*(?:volume|vol|sound)?$|\b(?:volume|vol|sound)\s+(?:full|max)\b/i.test(source)) {
     return { volumePercent: 100, volumeStep: 0 };
@@ -5658,6 +6378,9 @@ async function describeImageForUser(question) {
 /* The last thing he actually acted on, so "close it" has something to mean.
    Five minutes, one slot: a memory that guesses is worse than none. */
 let lastActed = null;
+/* When he last only talked (answered, no action). If that is newer than the
+   last thing he acted on, "it" means what you were just talking about. */
+let macLastTalkAt = 0;
 let lastDelegateCommand = "";
 
 function rememberActed(kind, label) {
@@ -5703,6 +6426,7 @@ async function classifyIntentLLM(raw) {
     "Classify this Mac voice command into EXACTLY one tool. Reply with ONLY strict JSON, no prose, no markdown.",
     `Command: "${String(raw || "").trim()}"`,
     surface.appName ? `Front app: ${surface.appName}${surface.windowTitle ? ` ("${surface.windowTitle}")` : ""}.` : "",
+    'Braino\'s own website is trybraino.com. "your website" means trybraino.com, never guess another domain.',
     'Tools: {"tool":"open_app","arg":"app name"} | {"tool":"open_website","arg":"domain or url"} | {"tool":"find_file","arg":"file query"} | {"tool":"amazon","arg":"product"} | {"tool":"youtube","arg":"video"} | {"tool":"drive","arg":"document name"} | {"tool":"web_search","arg":"query"} | {"tool":"design_cowork","arg":""} | {"tool":"chat","arg":""}',
     "find_file = the user's own documents (resume, notes, invoices, screenshots). chat = talking TO Braino, not commanding. amazon = physical products/books to BUY only — articles, blogs, essays, news, videos and anything to READ online is web_search, never amazon.",
     "design_cowork = the user wants help making a BETTER DESIGN of what's on their screen, or wants Claude Design to improve a website/UI they are looking at (even vaguely: 'help me design something better', 'make this look nicer', 'ask Claude to redesign this'). This looks at the screen, captures the site, and hands it to Claude Design.",
@@ -5799,6 +6523,183 @@ async function runAmbientObserve() {
 }
 
 ipcMain.handle("braino-mac:ambient-observe", async () => runAmbientObserve());
+
+/* ── Your mouse is the context (2026-10-03) ─────────────────────────────
+ *
+ * "What is this?" with the pointer on something. The pointer is sampled with
+ * the notch's own poll (eight times a second) and kept for twenty seconds, and
+ * the place that counts is where it was when you STARTED speaking: people
+ * move the mouse while they talk.
+ *
+ * What is under it, in the order a person would look:
+ *   1. something highlighted (the clearest way to point),
+ *   2. the exact text under the pointer on a Chrome page,
+ *   3. otherwise a small screenshot centred on the pointer, read by the
+ *      vision model (diagrams, images, any app).
+ * The notch says what was picked up before the answer, so a wrong pick is
+ * visible at once. No native helper is touched. */
+const POINTER_TRAIL = [];
+let macSpeechStartedAt = 0;
+function notePointer(point) {
+  const now = Date.now();
+  const last = POINTER_TRAIL[POINTER_TRAIL.length - 1];
+  if (!last || last.x !== point.x || last.y !== point.y || now - last.at > 1000) POINTER_TRAIL.push({ x: point.x, y: point.y, at: now });
+  while (POINTER_TRAIL.length && now - POINTER_TRAIL[0].at > 20000) POINTER_TRAIL.shift();
+}
+function pointerWhenAsked() {
+  const at = macSpeechStartedAt && Date.now() - macSpeechStartedAt < 20000 ? macSpeechStartedAt : Date.now();
+  let best = null;
+  for (const p of POINTER_TRAIL) if (p.at <= at + 150) best = p;
+  return best || POINTER_TRAIL[POINTER_TRAIL.length - 1] || screen.getCursorScreenPoint();
+}
+
+async function askAboutPointed(question, what, imageBase64) {
+  const authToken = await getBrainoAuthToken().catch(() => "");
+  const surface = activeMacContext || {};
+  const message = [
+    question || "What is this?",
+    imageBase64
+      ? "This is a small crop of the user's screen, centred exactly on their mouse pointer. Answer about the thing at the centre of the image, the thing they are pointing at. If several things are near the centre, name the one right under the centre."
+      : `They are pointing at this, on their screen: "${what}"`,
+    surface.appName ? `It is in ${surface.appName}${surface.windowTitle ? `, "${surface.windowTitle}"` : ""}.` : "",
+    "Answer for voice in one or two sentences: name what it is first, then the one thing worth knowing. No markdown.",
+  ].filter(Boolean).join("\n");
+  const res = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/chat-about-notes`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}) },
+    body: JSON.stringify({ notes: "", chatHistory: macChatHistory.slice(-4), message, responseMedium: "voice", ...(imageBase64 ? { visionMode: "describe", imageBase64 } : {}) }),
+    signal: AbortSignal.timeout(40000),
+  });
+  const data = await res.json().catch(() => ({}));
+  return String(data?.reply || data?.response || "").trim();
+}
+
+/* "Can you see me?" One photo from the camera, never a stream: the app's own
+   window grabs a single frame, the camera light goes off, and the photo is
+   only sent to answer the question. */
+/* "Who is this?", "what is this?", "what am I looking at?": about what is on
+   the screen, never small talk. Chat answered "Braino, the little coral one"
+   and "a guy called Itish built me" about a person in a photo (5 Oct). */
+const SCREEN_DEIXIS_RE = /^(?:(?:hey\s+)?brain(?:o|elle)[\s,]*)?(?:no[\s,]+)?(?:brain(?:o|elle)[\s,]*)?(?:(?:can you tell me|tell me|do you know)\s+)?(?:who|what)(?:'s| is| are)\s+(?:this|that|these|those|he|she|they|this guy|this girl|this person|this place|this thing)(?:\s+(?:guy|girl|person|man|woman|place|thing|one|here|on (?:my|the) screen))?[?.!\s]*$|\bwhat am i (?:looking at|seeing)\b|\bwho(?:'s| is) (?:this|that) (?:on|in) (?:my|the) (?:screen|photo|picture|image|video)\b/i;
+/* Words that did not come out as English (5 Oct log review): "Malenkij film?",
+   "असे हिटिंग करता", "¿Qué dejaba tú?", "Sendetu sastanc". Eight wrong actions
+   in eight days came from text like this, five of them playing something. Such
+   a sentence may be talked to, never acted on: he asks again instead. */
+const MAC_ENGLISH_WORDS = new Set("a an the to of in on at for and or but is are was be it this that these those my me i you your he she we they can could would will please open play send show find search call message text what who how why when where which do does did not no yes ok okay hey braino set turn stop close tab page app go get make tell book order buy start one two first last".split(" "));
+function macLooksMisheard(raw) {
+  const t = String(raw || "").trim();
+  if (!t) return false;
+  const latin = (t.match(/[a-z]/gi) || []).length;
+  const other = (t.match(/[\u0400-\u04ff\u0590-\u06ff\u0750-\u077f\u0900-\u097f\u0e00-\u0e7f\u3040-\u30ff\u4e00-\u9fff]/g) || []).length;
+  if (other > latin) return true;
+  if (/[¿¡]|[àáâãäåæçèéêëìíîïñòóôõöøùúûüýÿăşğıəž]/i.test(t)) return true;
+  const words = t.toLowerCase().replace(/[^a-z' ]+/g, " ").split(/\s+/).filter(Boolean);
+  // Three or more words and not one of them English. Two-word names
+  // ("Riya Khurana", "Ajmera Greens") are left alone.
+  // A row of capitalised words is a name ("Abhishek Gour Mesa"), not noise.
+  if (t.split(/\s+/).every((w) => /^[A-Z]/.test(w))) return false;
+  return words.length >= 3 && !words.some((w) => MAC_ENGLISH_WORDS.has(w));
+}
+const SEE_ME_RE = /\b(?:can|do)\s+you\s+see\s+me\b|\blook\s+at\s+me\b|\bhow\s+do\s+i\s+look\b|\bwhat\s+am\s+i\s+(?:wearing|holding|doing)\b|\bsee\s+what\s+i(?:'m|\s+am)\s+(?:holding|wearing|showing)\b|\buse\s+(?:the|your|my)\s+camera\b/i;
+async function grabCameraFrame() {
+  if (process.platform === "darwin" && systemPreferences.getMediaAccessStatus("camera") !== "granted") {
+    const ok = await systemPreferences.askForMediaAccess("camera").catch(() => false);
+    if (!ok) return { error: "denied" };
+  }
+  if (!dockWindow || dockWindow.isDestroyed()) return { error: "no window" };
+  const js = `(async function(){var s;try{
+    s=await navigator.mediaDevices.getUserMedia({video:{width:{ideal:1280},height:{ideal:720}},audio:false});
+    var v=document.createElement("video");v.muted=true;v.playsInline=true;v.srcObject=s;await v.play();
+    await new Promise(function(r){setTimeout(r,700)});
+    var w=Math.min(960,v.videoWidth||960),h=Math.round(w*((v.videoHeight||540)/(v.videoWidth||960)));
+    var c=document.createElement("canvas");c.width=w;c.height=h;c.getContext("2d").drawImage(v,0,0,w,h);
+    return c.toDataURL("image/jpeg",0.8).split(",")[1];
+  }catch(e){return "ERR:"+(e&&e.name||e)}finally{if(s)s.getTracks().forEach(function(t){t.stop()})}})()`;
+  const out = await dockWindow.webContents.executeJavaScript(js, true).catch((e) => "ERR:" + (e?.message || e));
+  return String(out || "").startsWith("ERR:") || !out ? { error: String(out || "empty") } : { image: out };
+}
+
+async function lookAtUser(question = "") {
+  const started = Date.now();
+  sendTaskProgress({ status: "thinking", text: "Looking at you" });
+  const frame = await grabCameraFrame();
+  logMac("camera.look", { ok: !frame.error, error: frame.error || null, ms: Date.now() - started });
+  if (frame.error === "denied") return { ok: false, say: "I need camera access. Turn it on for Braino in System Settings, Privacy and Security, Camera." };
+  if (frame.error) return { ok: false, say: "I couldn't open the camera just now." };
+  const authToken = await getBrainoAuthToken().catch(() => "");
+  const message = [
+    String(question || "").trim() || "Can you see me?",
+    "This is one photo just taken by the user's own Mac camera, so the person in it is the user you are talking to. Answer them directly, warmly, as someone looking at them. If they asked whether you can see them, say yes and mention one or two real things you notice. Never guess identity, age or anything sensitive.",
+    "Answer for voice in one or two short sentences. No markdown.",
+  ].join("\n");
+  const res = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/chat-about-notes`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}) },
+    body: JSON.stringify({ notes: "", chatHistory: macChatHistory.slice(-4), message, responseMedium: "voice", visionMode: "describe", imageBase64: frame.image }),
+    signal: AbortSignal.timeout(40000),
+  }).catch(() => null);
+  const data = res ? await res.json().catch(() => ({})) : {};
+  const say = String(data?.reply || data?.response || "").trim();
+  return say ? { ok: true, say, source: "camera" } : { ok: false, say: "I took the photo but couldn't make sense of it." };
+}
+
+async function lookAtPointer(question = "") {
+  const started = Date.now();
+  const q = String(question || "").trim();
+  const point = pointerWhenAsked();
+
+  // 1. A highlight is the clearest pointing there is.
+  const grabbed = await runAxHelper(["selected"]).catch(() => null);
+  const highlighted = grabbed?.status === "selected" && grabbed.detail ? Buffer.from(grabbed.detail, "base64").toString("utf8").trim() : "";
+  if (highlighted && highlighted.length <= 4000) {
+    sendTaskProgress({ status: "thinking", text: `Looking at your highlight: "${highlighted.slice(0, 50)}"` });
+    const say = await askAboutPointed(q, highlighted.slice(0, 3000));
+    logMac("pointer.look", { method: "highlight", chars: highlighted.length, ms: Date.now() - started });
+    return say ? { ok: true, say } : { ok: false, say: "I read your highlight but could not answer about it." };
+  }
+
+  // 2. The exact text under the pointer, on a Chrome page.
+  if (isChromeApp(activeMacContext?.appName || "")) {
+    const js = `(function(){try{
+      var vx=${point.x}-window.screenX, vy=${point.y}-window.screenY-(window.outerHeight-window.innerHeight);
+      if(vx<0||vy<0||vx>window.innerWidth||vy>window.innerHeight)return "";
+      var el=document.elementFromPoint(vx,vy); if(!el)return "";
+      var pic=el.closest("img,svg,canvas,video,picture"); if(pic)return "";
+      var r=document.caretRangeFromPoint&&document.caretRangeFromPoint(vx,vy), t="";
+      if(r&&r.startContainer&&r.startContainer.nodeType===3){var s=r.startContainer.textContent||"",i=r.startOffset;
+        var a=Math.max(s.lastIndexOf(".",i-1),s.lastIndexOf("\\n",i-1))+1,b=s.indexOf(".",i);t=s.slice(a,b<0?s.length:b+1).trim();}
+      var named=el.closest("a,button,[role=button],label,h1,h2,h3,li,td,th");
+      var label=named?(named.getAttribute("aria-label")||named.innerText||"").trim():"";
+      return JSON.stringify({text:(t||label||el.innerText||"").replace(/\\s+/g," ").slice(0,400),tag:(named||el).tagName.toLowerCase()});
+    }catch(e){return ""}})()`;
+    const out = await runJs(js, activeMacContext.appName, 4000).catch(() => null);
+    let hit = null;
+    try { hit = out?.ok && out.out ? JSON.parse(out.out) : null; } catch (_) { hit = null; }
+    if (hit?.text && hit.text.length > 2) {
+      sendTaskProgress({ status: "thinking", text: `Looking at: "${hit.text.slice(0, 50)}"` });
+      const say = await askAboutPointed(q, hit.text);
+      logMac("pointer.look", { method: "page_text", tag: hit.tag, chars: hit.text.length, x: point.x, y: point.y, ms: Date.now() - started });
+      return say ? { ok: true, say } : { ok: false, say: `I can see "${hit.text.slice(0, 60)}" under your pointer, but could not answer about it.` };
+    }
+  }
+
+  // 3. A small screenshot centred on the pointer, for images, diagrams and any app.
+  sendTaskProgress({ status: "thinking", text: "Looking where you're pointing" });
+  const W = 520, H = 400;
+  const file = path.join(app.getPath("temp"), `braino-pointer-${Date.now()}.png`);
+  try {
+    await execFileP("/usr/sbin/screencapture", ["-x", "-R", `${Math.max(0, Math.round(point.x - W / 2))},${Math.max(0, Math.round(point.y - H / 2))},${W},${H}`, file], { timeout: 6000 });
+    const base64 = (await fs.promises.readFile(file)).toString("base64");
+    const say = await askAboutPointed(q, "", base64);
+    logMac("pointer.look", { method: "zoomed_screenshot", x: point.x, y: point.y, ms: Date.now() - started });
+    return say ? { ok: true, say } : { ok: false, say: "I looked where you're pointing but could not make it out." };
+  } catch (error) {
+    logMac("pointer.look_failed", { error: String(error?.message || error) });
+    return { ok: false, say: "I could not see where you're pointing. Check Screen Recording permission for Braino." };
+  } finally {
+    fs.promises.unlink(file).catch(() => {});
+  }
+}
 
 async function runScreenVision(question) {
   const q = String(question || "").trim();
@@ -6117,6 +7018,17 @@ async function askVision(question, base64) {
 }
 
 // osascript key press / typing via System Events.
+/* "meta+a" / "cmd+shift+v" / "control+c" → a letter plus System Events
+   modifiers, or null when it is not a combination. */
+const MAC_KEY_MODS = { meta: "command down", cmd: "command down", command: "command down", shift: "shift down", alt: "option down", option: "option down", opt: "option down", ctrl: "control down", control: "control down" };
+function macParseKeyCombo(name) {
+  const parts = String(name || "").toLowerCase().split("+").map((p) => p.trim()).filter(Boolean);
+  if (parts.length < 2) return null;
+  const key = parts.pop();
+  if (!/^[a-z0-9]$/.test(key) || !parts.every((m) => MAC_KEY_MODS[m])) return null;
+  return { key, mods: [...new Set(parts.map((m) => MAC_KEY_MODS[m]))] };
+}
+
 async function pressKey(keyCode, mod) {
   const using = mod ? ` using ${mod} down` : "";
   await execFileP("/usr/bin/osascript", ["-e", `tell application "System Events" to key code ${keyCode}${using}`], { timeout: 5000 }).catch(() => {});
@@ -6428,11 +7340,37 @@ async function refreshContactsIfStale() {
  * Everything on the card, not just the first number: the whole point of
  * reading the address book properly is that the second number and the email
  * are there too. */
+function contactDetailsLine(contact) {
+  const phones = (contact.phones?.length ? contact.phones : (contact.phone ? [{ label: "", value: contact.phone }] : []))
+    .map((row) => (row.label ? `${row.label} ${row.value}` : String(row.value || "")))
+    .filter(Boolean);
+  return `${speakableContactName(contact.name)}${/[^\p{L}\p{N}\s]/u.test(contact.name) ? ` (${contact.name})` : ""}: ${phones.join(", ") || "no number saved"}`;
+}
+
 async function lookupContactDetails(query) {
-  const asked = String(query || "").trim();
+  let asked = String(query || "").trim().replace(/^(?:both|all|each)(?: of)?(?: the| my)?\s+/i, "").replace(/\s+(?:numbers?|contacts?)$/i, "").trim();
   if (!asked) return { ok: false, say: "Say who you mean." };
   if (!contactsCache) await importAllContacts();
+  // "the Riyas": a plural of a name is everyone with that name.
+  if (contactsCache && /s$/i.test(asked) && !sameNameContacts(asked, contactsCache).length && sameNameContacts(asked.slice(0, -1), contactsCache).length) asked = asked.slice(0, -1);
+  /* "The number for both the Riyas" read out one Riya, seconds after he had
+     said there were two (2026-10-03). A lookup sends nothing, so when several
+     people share the name it gives every one. */
+  if (contactsCache) {
+    const same = sameNameContacts(asked, contactsCache);
+    if (same.length > 1) {
+      logMac("contacts.lookup_many", { query: textForLog(asked), count: same.length });
+      return { ok: true, say: `You have ${same.length}. ${same.slice(0, 4).map(contactDetailsLine).join(". ")}.` };
+    }
+  }
   let hit = contactsCache ? findContactBySound(asked, contactsCache, loadContactHistory()) : null;
+  /* "Riya Khurana Mehta" for Riya Khurana Mesa: a misheard last word. Try the
+     name without it before saying they are not in your contacts. */
+  if (!hit?.contact && !hit?.ambiguous && asked.split(/\s+/).length >= 3 && contactsCache) {
+    const shorter = asked.split(/\s+/).slice(0, -1).join(" ");
+    const retry = findContactBySound(shorter, contactsCache, loadContactHistory());
+    if (retry?.contact) { logMac("contacts.lookup_surname_slip", { asked: textForLog(asked), tried: textForLog(shorter) }); hit = retry; }
+  }
   if (!hit && await refreshContactsIfStale()) {
     hit = findContactBySound(asked, contactsCache, loadContactHistory());
   }
@@ -6526,6 +7464,48 @@ function isWaImportant(name) {
   });
 }
 
+/* What the notch has already shown you. 2026-09-29: the notch said "Ilu, 1
+   message", then "what did Ilu text me?" got "you've never told me": chat
+   was never given the message it had just put on screen. Kept in memory
+   only (never written to disk), last 2 hours, the same 160 characters the
+   notch shows, and handed to chat so he can say it. */
+const notchWhatsApp = [];
+function noteNotchWhatsApp(name, text, at) {
+  notchWhatsApp.push({ name: String(name || ""), text: String(text || "").slice(0, 160), at: Number(at) || Date.now() });
+  while (notchWhatsApp.length > 12) notchWhatsApp.shift();
+}
+function notchWhatsAppLines(now = Date.now()) {
+  const fresh = notchWhatsApp.filter((m) => m.text && now - m.at < 2 * 60 * 60 * 1000);
+  if (!fresh.length) return [];
+  return [
+    "WhatsApp messages the notch already showed the user (they saw these, so you may read them out when asked who texted or what someone said; names may be misheard, match loosely):",
+    ...fresh.slice(-6).map((m) => `- ${m.name} at ${new Date(m.at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}: "${m.text}"`),
+  ];
+}
+
+/* "Elu" is how the ear hears "Ilu😍". Names on WhatsApp carry emoji and the
+   ear spells by sound, so when the plain match finds nobody, pick the
+   recent sender whose name is one letter off. */
+function waLooseName(n) { return String(n || "").toLowerCase().replace(/[^\p{L}\p{N} ]/gu, "").trim(); }
+function waNameDistance(a, b) {
+  const m = a.length, n = b.length; if (Math.abs(m - n) > 2) return 9;
+  const d = Array.from({ length: m + 1 }, (_, i) => [i, ...Array(n).fill(0)]);
+  for (let j = 1; j <= n; j++) d[0][j] = j;
+  for (let i = 1; i <= m; i++) for (let j = 1; j <= n; j++) d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+  return d[m][n];
+}
+function waSoundsLike(heard, names) {
+  const h = waLooseName(heard); if (!h) return "";
+  let best = "", bestD = 9;
+  for (const name of names) {
+    const full = waLooseName(name); const first = full.split(" ")[0];
+    const d = Math.min(waNameDistance(h, full), waNameDistance(h, first));
+    const allowed = h.length <= 4 ? 1 : 2;
+    if (d <= allowed && d < bestD) { best = name; bestD = d; }
+  }
+  return best;
+}
+
 async function pollWhatsAppDb() {
   if (waDbBusy || !waDbAvailable()) return;
   waDbBusy = true;
@@ -6548,6 +7528,7 @@ async function pollWhatsAppDb() {
       activityLog.record("whatsapp", { app: "WhatsApp", from: msg.name, group: msg.group, kind: msg.kind, important, hash: String(msg.pk) });
       logMac("whatsapp.db.incoming", { from: textForLog(msg.name), group: msg.group, kind: msg.kind, important });
       if (important) {
+        noteNotchWhatsApp(msg.name, msg.text, msg.at);
         sendToRenderer("braino-mac:wa-card", { name: msg.name, text: msg.text.slice(0, 160) });
         updateWaBadge(msg.name);
         macTrace("💬 WHATSAPP", `${msg.name} (important), shown in the notch`);
@@ -6562,8 +7543,69 @@ async function pollWhatsAppDb() {
 
 /* "Did Ilu message?", "what did she say?", "who texted me in the last hour?",
    "catch me up on WhatsApp". Short by default: who, how many, the last line. */
-async function lookupWhatsAppMessages({ contact = "", sinceHours = 168, limit = 20 } = {}) {
+/* Who is who (5 Oct). "What did my mother text" got "No messages from mother":
+   a relation is not a name. He learns it when told ("my mom is Shubha"), and
+   until then finds it from how the contact is saved ("Mummy", "Papa", "Bhai"). */
+const RELATIONS = {
+  mother: ["mother", "mom", "mum", "mummy", "mommy", "maa", "ma", "ammi", "mumma", "amma"],
+  father: ["father", "dad", "daddy", "papa", "pappa", "pa", "abbu", "baba"],
+  brother: ["brother", "bro", "bhai", "bhaiya", "bhaii"],
+  sister: ["sister", "sis", "didi", "di", "behen"],
+  wife: ["wife", "wifey"], husband: ["husband", "hubby"],
+  girlfriend: ["girlfriend", "gf"], boyfriend: ["boyfriend", "bf"],
+  grandmother: ["grandmother", "grandma", "nani", "dadi"], grandfather: ["grandfather", "grandpa", "nana", "dadu", "dada"],
+  uncle: ["uncle", "mama", "chacha", "mamu", "tauji"], aunt: ["aunt", "aunty", "auntie", "mami", "chachi", "masi", "bua"],
+};
+const RELATIONS_PATH = path.join(AUTH_STORE_DIR, "relations.json");
+function relationKey(word) {
+  const w = String(word || "").toLowerCase().replace(/^(?:my|the)\s+/, "").replace(/['’]s$/, "").trim();
+  for (const [rel, words] of Object.entries(RELATIONS)) if (words.includes(w)) return rel;
+  return "";
+}
+function loadRelations() { try { return JSON.parse(fs.readFileSync(RELATIONS_PATH, "utf8")) || {}; } catch (_) { return {}; } }
+function saveRelation(rel, name) {
+  const all = loadRelations(); all[rel] = String(name).trim();
+  try { fs.writeFileSync(RELATIONS_PATH, JSON.stringify(all, null, 1)); } catch (_) {}
+  logMac("relations.saved", { rel });
+}
+/* A relation as the contact it means: what he was told, else the one saved
+   chat whose name says it. Several, or none, comes back as a question. */
+async function resolveRelation(word) {
+  const rel = relationKey(word);
+  if (!rel) return null;
+  const told = loadRelations()[rel];
+  if (told) return { name: told, rel };
+  let names = [];
+  try {
+    if (waDbAvailable()) names = (await queryWhatsAppDb("SELECT DISTINCT ZPARTNERNAME AS name FROM ZWACHATSESSION WHERE ZSESSIONTYPE = 0;")).map((r) => String(r.name || ""));
+  } catch (_) {}
+  const words = RELATIONS[rel];
+  const hits = names.filter((n) => n.toLowerCase().replace(/[^\p{L}\s]/gu, " ").split(/\s+/).some((t) => words.includes(t)));
+  if (hits.length === 1) return { name: hits[0], rel, guessed: true };
+  return { name: "", rel, choices: hits.slice(0, 4) };
+}
+/* Who is who, for HIL: "mother is Shubha, brother is Arjun". */
+function relationsLine() {
+  const all = Object.entries(loadRelations());
+  return all.length ? `Their people: ${all.map(([rel, name]) => `${rel} is ${name}`).join(", ")}. "My mom" means that contact.` : "";
+}
+/* "My mom is Shubha", "Shubha is my mother", "remember mom is Shubha". */
+function parseRelationTeach(raw) {
+  const t = String(raw || "").trim().replace(/^(?:(?:hey\s+)?brain(?:o|elle)[\s,]*)?(?:remember(?: that)?\s+)?/i, "").replace(/[.!]+$/, "");
+  let m = t.match(/^(?:my\s+)?([a-z]+)(?:'s name)?\s+is\s+(?:called\s+)?([\p{L}][\p{L} .'-]{1,40})$/iu);
+  if (m && relationKey(m[1])) return { rel: relationKey(m[1]), name: m[2].trim() };
+  m = t.match(/^([\p{L}][\p{L} .'-]{1,40}?)\s+is\s+my\s+([a-z]+)$/iu);
+  if (m && relationKey(m[2])) return { rel: relationKey(m[2]), name: m[1].trim() };
+  return null;
+}
+
+async function lookupWhatsAppMessages({ contact = "", sinceHours = 168, limit = 20 } = {}, opts = {}) {
   if (!waDbAvailable()) return { ok: false, say: "I can't see the WhatsApp Mac app's messages on this Mac." };
+  const relation = relationKey(contact) ? await resolveRelation(contact) : null;
+  if (relation && !relation.name) {
+    return { ok: true, say: relation.choices?.length ? `Which one is your ${relation.rel}: ${relation.choices.join(" or ")}? Say "my ${relation.rel} is" and the name.` : `Who is your ${relation.rel}? Say "my ${relation.rel} is" and the name, and I'll remember.` };
+  }
+  if (relation?.name) contact = relation.name;
   const hours = Math.max(1, Math.min(24 * 400, Number(sinceHours) || 168));
   const since = Date.now() / 1000 - WA_APPLE_EPOCH - hours * 3600;
   const who = String(contact || "").trim();
@@ -6571,6 +7613,14 @@ async function lookupWhatsAppMessages({ contact = "", sinceHours = 168, limit = 
   const rows = (await queryWhatsAppDb(`${WA_SELECT} WHERE m.ZISFROMME = 0 AND s.ZSESSIONTYPE = 0 AND m.ZMESSAGEDATE > ${since}${nameFilter} AND m.ZMESSAGETYPE NOT IN (6,10) ORDER BY m.Z_PK DESC LIMIT ${Math.max(1, Math.min(200, Number(limit) || 20))};`)).map(waMessageFromRow);
   const window = hours <= 1 ? "in the last hour" : hours < 24 ? `in the last ${Math.round(hours)} hours` : hours <= 24 ? "today" : hours <= 168 ? "this week" : "in that time";
   if (who) {
+    if (!rows.length && !opts.loose) {
+      const recent = (await queryWhatsAppDb(`${WA_SELECT} WHERE m.ZISFROMME = 0 AND s.ZSESSIONTYPE = 0 AND m.ZMESSAGEDATE > ${since} ORDER BY m.Z_PK DESC LIMIT 200;`)).map(waMessageFromRow);
+      const match = waSoundsLike(who, [...new Set([...notchWhatsApp.map((m) => m.name), ...waImportantNames(), ...recent.map((m) => m.name)])]);
+      if (match) {
+        logMac("whatsapp.lookup.sounds_like", { heard: textForLog(who), matched: textForLog(match) });
+        return lookupWhatsAppMessages({ contact: match, sinceHours, limit }, { loose: true });
+      }
+    }
     if (!rows.length) return { ok: true, say: `No messages from ${who} ${window}.` };
     const name = rows[0].name;
     const when = new Date(rows[0].at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
@@ -6883,7 +7933,8 @@ async function startCall(intent) {
         : "WhatsApp voice";
   sendTaskProgress({ status: "thinking", text: `Calling ${intent.recipient}` });
 
-  const resolved = await resolveWhatsAppRecipient(intent.recipient);
+  const resolved = intent.chosen?.phone ? { ok: true, name: intent.chosen.name, phone: intent.chosen.phone, source: "chosen" } : await resolveWhatsAppRecipient(intent.recipient);
+  if (!resolved.ok && resolved.choices?.length) return askWhichContact(intent.recipient, resolved.choices, { kind: "call", intent });
   if (!resolved.ok) {
     /* The call stays asked for. "Ilu", or "no, I said Ilu", straight after
        this is the name to use, not a new conversation about Ilu. */
@@ -7061,6 +8112,10 @@ function parseMapsIntent(raw) {
   if (m) return { mode: "directions", origin: m[1].trim(), destination: m[2].trim() };
   // navigate/directions to X (origin = current location)
   m = source.match(/\b(?:navigate|directions|route|drive|take me)\b\s+(?:me\s+)?to\s+(.+)$/i);
+  /* "Navigate to the Reels tab" opened Google Maps directions to a place
+     called the Reels tab. A tab, page, section, icon, screen or menu is
+     somewhere on the screen, not somewhere on a map. */
+  if (m && /\b(?:tab|page|section|icon|screen|menu|button|settings|folder|file|feed|profile|inbox|website|site|app|reels?|chat)\b/i.test(m[1])) m = null;
   if (m) return { mode: "directions", destination: m[1].trim() };
   // show/find where X is on the map
   m = source.match(/\b(?:show me|find|where(?:'s| is)|locate|pull up)\b\s+(?:where\s+)?(.+?)(?:\s+is)?(?:\s+on (?:the|google)\s+maps?)?$/i);
@@ -7097,8 +8152,11 @@ function saveMyPhone(n) { try { fs.writeFileSync(PHONE_STATE_PATH, JSON.stringif
 async function sendToPhone(content) {
   const number = loadMyPhone();
   if (!number) {
-    setPendingMacWorkflow({ type: "phone", stage: "phone_number", data: { content } });
-    return { ok: true, say: "What's your phone number? I'll remember it and send things straight to your phone." };
+    /* A question, not a send: a plan reported "Sent it for you" off this, and
+       the next command was eaten as a phone number (1 Oct). It asks, and the
+       question expires. */
+    setPendingMacWorkflow({ type: "phone", stage: "phone_number", ttlMs: 45000, data: { content } });
+    return { ok: true, asks: true, say: "What's your phone number? I'll remember it and send things straight to your phone." };
   }
   const text = content || activeMacContext?.browserUrl || "";
   if (!text) return { ok: false, say: "There's nothing to send — open a page or tell me what to send." };
@@ -7134,43 +8192,23 @@ async function chromeOpenTabAndRead(url) {
   return raw && !/^__(?:jsoff|err|nowin)__$/.test(raw) ? raw : "";
 }
 
+/* Research is a web search, not a row of tabs (2026-10-03).
+ *
+ * This used to open three Chrome tabs (two Google searches and a YouTube
+ * search), read each one through Apple Events and then summarise them: 16.5
+ * seconds and three tabs for "research the best AI models", with nothing to
+ * see at the end. Research, look up, find out and web search are all one
+ * thing: the web search service answers in a few seconds and opens nothing.
+ * It only falls back to a single Google tab if that service is down. */
 async function runResearch(query) {
-  sendTaskProgress({ status: "thinking", text: `Firing tabs on ${query.slice(0, 30)}` });
-  const sources = [
-    `https://www.google.com/search?q=${encodeURIComponent(query + " review comparison")}`,
-    `https://www.google.com/search?q=${encodeURIComponent(query + " specs pros and cons")}`,
-    `https://www.youtube.com/results?search_query=${encodeURIComponent(query + " review")}`,
-  ];
-  const texts = [];
-  for (const url of sources) {
-    const text = await chromeOpenTabAndRead(url);
-    if (text) texts.push(text);
-    logMac("research.tab_read", { url: textForLog(url), chars: text.length });
-  }
-  if (!texts.length) {
-    return { ok: false, say: "I opened the tabs but Chrome won't let me read them — turn on Allow JavaScript from Apple Events in View, Developer." };
-  }
-  sendTaskProgress({ status: "thinking", text: "Comparing what I found" });
-  const authToken = await getBrainoAuthToken();
-  try {
-    const response = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/chat-about-notes`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${authToken}` },
-      body: JSON.stringify({ notes: "", chatHistory: [], message: `Based on these web pages, answer concisely for voice (under 70 words): "${query}". Give a clear recommendation with the key reason.\n\n${texts.join("\n---\n").slice(0, 11000)}`, responseMedium: "voice" }),
-    });
-    const data = await response.json().catch(() => ({}));
-    const reply = String(data?.reply || "").trim();
-    logMac("research.done", { query: textForLog(query), tabs: texts.length, replyChars: reply.length });
-    return { ok: true, say: reply || "I read a few sources but couldn't pull it together — try asking more specifically." };
-  } catch (error) {
-    logMac("research.failed", { error });
-    return { ok: false, say: "The comparison got stuck on the way back. Try once more." };
-  }
+  const q = String(query || "").trim();
+  logMac("research.as_web_search", { query: textForLog(q) });
+  return runMacWebSearch(q);
 }
 
 function parseResearchIntent(raw) {
   const source = cleanPrompt(String(raw || "")).replace(/[?.!]+\s*$/, "");
-  const m = source.match(/\b(?:research|compare|difference between)\s+(.+)$/i);
+  const m = source.match(/\b(?:research|compare|difference between|search (?:the )?(?:web|internet|online) for|web search(?: for)?)\s+(.+)$/i);
   if (!m) return null;
   return { query: m[1].replace(/\bfor me\b/i, "").trim() };
 }
@@ -7571,6 +8609,7 @@ function parseWallpaperIntent(raw) {
 // window never reaches the capture pipeline), fully visible to the user. ──
 let meetingState = null; // { startedAt, source, transcript:[{t,text}], notes:[], lastNoteIndex, shots:[], lastShotB64, noteTimer, shotTimer }
 let lastMeetingOfferAt = 0;
+let brainoOpenedMeetAt = 0;
 let meetingSeenUrls = new Set(); // Meet URLs already present — never offered
 const meetingAppReadyAt = Date.now();
 
@@ -7592,6 +8631,8 @@ function meetingDetectFromTabs(tabs) {
   const fresh = meetUrls.find((u) => !meetingSeenUrls.has(u));
   meetUrls.forEach((u) => meetingSeenUrls.add(u));
   if (!fresh) return;
+  // He opened it himself, to send the link. That is not you joining a meeting.
+  if (Date.now() - brainoOpenedMeetAt < 90 * 1000) return;
   lastMeetingOfferAt = Date.now();
   setPendingMacWorkflow({ type: "meeting", stage: "meeting_offer", data: { source: "Google Meet" } });
   sendToRenderer("braino-mac:speak-line", { text: "Oh, going into a meeting. Want me to record it and take notes?" });
@@ -8971,6 +10012,10 @@ function keepDictationFallback(text, focusStatus, error = "") {
   sendToRenderer("braino-mac:dictation-fallback", {
     text: transcript,
     reason: dictationState.focusStatus,
+    /* There WAS a text box; macOS refused the paste keystroke (System Events
+       automation not allowed for this app). Saying "no text box here" sent
+       you looking for a problem that wasn't there (2026-09-26). */
+    blocked: /Command failed|not allowed|-1743|-1719|assistive/i.test(String(error || "")),
   });
   return {
     ok: true,
@@ -9570,6 +10615,16 @@ function parseAlarmIntent(raw) {
 }
 
 function startAlarm(fireAt, label) {
+  /* HIL gave the time in seconds (1791162000 for 9 AM): read as milliseconds
+     that is 1970, so the alarm rang a second after "Your 9 AM alarm is set"
+     (5 Oct). Seconds are turned into milliseconds; a time already past is
+     refused rather than rung. */
+  fireAt = Number(fireAt);
+  if (Number.isFinite(fireAt) && fireAt > 0 && fireAt < 1e12) fireAt *= 1000;
+  if (!Number.isFinite(fireAt) || fireAt < Date.now() - 60000) {
+    logMac("alarm.refused_past", { fireAt });
+    return { ok: false, say: "That time has already passed. Tell me when again?" };
+  }
   const timer = {
     id: crypto.randomUUID(),
     kind: "alarm",
@@ -9817,11 +10872,16 @@ function parseWhatsAppRememberIntent(raw) {
 /* Words that ride along with a request and are never a person.
    "Open WhatsApp for me" came back as "What should I say to for me?", because
    the last pattern takes whatever follows the word WhatsApp as the name. */
-const WHATSAPP_NOT_A_NAME = /^(?:for me|for us|please|pls|now|right now|app|the app|quickly|real quick|for a sec(?:ond)?|up)$/i;
+const WHATSAPP_NOT_A_NAME = /^(?:for me|for us|please|pls|now|right now|app|the app|quickly|real quick|for a sec(?:ond)?|up|messages?|that|this|it|him|her|them|one|thing|chat)$/i;
+/* A complaint about a send is not a send. "You are not supposed to send that
+   WhatsApp message." started a new message to someone called "message"
+   (2026-09-28). */
+const WHATSAPP_COMPLAINT = /\b(?:not supposed to|shouldn'?t have|should not have|why did you|who told you|don'?t send|do not send|didn'?t (?:ask|want|tell|say)|never (?:asked|said|told)|wasn'?t supposed|i did ?n[o']?t)\b/i;
 
 function parseWhatsAppIntent(raw) {
   const source = String(raw || "").trim();
   if (!/\bwhats\s*app\b/i.test(source)) return null;
+  if (WHATSAPP_COMPLAINT.test(source)) return null;
   // Opening the app is not a message. Nothing to send and nobody to send it to,
   // so it falls through to the ordinary app opener.
   if (/\b(?:open|launch|start|show|bring up|pull up|go to)\b[^.]*\bwhats\s*app\b/i.test(source)
@@ -9848,12 +10908,73 @@ function parseWhatsAppIntent(raw) {
   return { recipient, message, needsMessage: !message, needsRecipient: !recipient };
 }
 
+/* How many messages each of these people has in your WhatsApp, read from
+   WhatsApp's own database on this Mac. Newer chats are keyed by a private id
+   with no phone number in it, so the chat is matched by its name, which is the
+   name WhatsApp shows from your address book. Nothing is read but the counts. */
+async function waChatCounts(names) {
+  const out = {};
+  if (!waDbAvailable() || !names?.length) return out;
+  try {
+    const rows = await queryWhatsAppDb("SELECT s.ZPARTNERNAME AS name, COUNT(m.Z_PK) AS n FROM ZWACHATSESSION s JOIN ZWAMESSAGE m ON m.ZCHATSESSION = s.Z_PK WHERE s.ZSESSIONTYPE = 0 GROUP BY s.Z_PK;");
+    for (const want of names) {
+      const key = cleanContactName(want);
+      out[want] = rows.filter((r) => cleanContactName(r.name) === key && key).reduce((sum, r) => sum + (Number(r.n) || 0), 0);
+    }
+  } catch (error) {
+    logMac("whatsapp.chat_counts.failed", { error });
+  }
+  return out;
+}
+
+/* Hold the message (or the call) until you say who. You can say it, or tap a
+   name in the notch; both come back through the same pending answer. */
+function askWhichContact(query, choices, job) {
+  const say = contactChoiceQuestion(query, choices);
+  setPendingMacWorkflow({
+    type: "contact_pick",
+    stage: "pick",
+    ttlMs: 60000,
+    data: {
+      query, choices, job, asks: 0,
+      approval: { kind: "choose", title: `Which ${speakableContactName(query) || query}?`, detail: job.kind === "whatsapp" ? `WhatsApp: ${String(job.message || "").slice(0, 80)}` : "Call", options: choices.map((c) => c.name), yes: choices[0].name, no: "Cancel" },
+    },
+  });
+  return { ok: true, asks: true, say, source: "contact_pick" };
+}
+
 async function resolveWhatsAppRecipient(recipientRaw) {
+  // "Text my mom": the person, then the usual lookup by their name.
+  if (relationKey(recipientRaw)) {
+    const relation = await resolveRelation(recipientRaw);
+    if (relation?.name) return resolveWhatsAppRecipient(relation.name);
+    return { ok: false, error: "relation", say: relation?.choices?.length ? `Which one is your ${relation.rel}: ${relation.choices.join(" or ")}?` : `Who is your ${relation.rel}? Say "my ${relation.rel} is" and the name.` };
+  }
   const key = String(recipientRaw || "").toLowerCase().trim();
   if (!key) return { ok: false, error: "empty recipient" };
   const contacts = loadWhatsAppContacts();
   const alias = contacts[key];
   if (alias?.phone) return { ok: true, name: alias.name || recipientRaw, phone: alias.phone, source: "alias" };
+
+  /* Right after start the contact copy is empty, and the same-name question
+     below was skipped: a cold start could still send to the wrong Riya. */
+  if (!contactsCache) await refreshContactsIfStale().catch(() => false);
+  /* Two people with the name you said is a question, every time (2026-10-03).
+     "Send this link to Riya" went to Riya 🐣 because she matched the bare name
+     best and Braino had messaged her once; you talk to Riya Khurana every day.
+     Now both come back as choices, the one you actually chat with most first. */
+  if (contactsCache) {
+    const same = sameNameContacts(alias?.name || recipientRaw, contactsCache);
+    if (same.length > 1) {
+      const counts = await waChatCounts(same.map((c) => c.name));
+      const choices = same
+        .map((c) => ({ name: c.name, phone: contactPhone(c), chats: counts[c.name] || 0 }))
+        .sort((a, b) => b.chats - a.chats)
+        .slice(0, 3);
+      logMac("whatsapp.contact.choose", { query: textForLog(recipientRaw), count: choices.length, chats: choices.map((c) => c.chats) });
+      return { ok: false, choices, error: "choose" };
+    }
+  }
 
   /* By sound, and by who you contact: "Iloo" and "Elu" are the Ilu you call.
      Two equally good people you have never contacted come back as a question. */
@@ -9951,12 +11072,47 @@ return "ready"`;
   return false;
 }
 
-async function sendWhatsAppMessage(recipientRaw, message) {
+function whatsAppChatTarget(raw, target) {
+  const t = String(target || "").trim();
+  const m = t.match(/^(?:whatsapp\s+(?:and\s+)?)?(?:the\s+|my\s+)?(.+?)\s+(?:whatsapp\s+)?(?:chat|group|conversation)(?:\s+on\s+whatsapp)?$/i)
+    || t.match(/^(?:whatsapp\s+(?:and\s+)?)?(?:my\s+|the\s+)?(?:chat|conversation)\s+with\s+(.+?)(?:\s+on\s+whatsapp)?$/i);
+  const name = m ? m[1].replace(/^(?:the|my)\s+/i, "").trim() : "";
+  if (!name || /^(?:an?|new|a new|the new|this|that|claude|chatgpt|gpt|gemini|team|ai|group|my)$/i.test(name) || /^(?:an?|the)\s+new$/i.test(name)) return "";
+  return /whatsapp/i.test(String(raw || "")) || /\b(?:chat|group)\b/i.test(t) ? name : "";
+}
+
+async function openWhatsAppChat(name) {
+  sendTaskProgress({ status: "thinking", text: `Opening the ${name} chat` });
+  const resolved = await resolveWhatsAppRecipient(name).catch(() => ({ ok: false }));
+  const phone = resolved?.ok ? normalizeWhatsAppPhone(resolved.phone) : "";
+  if (phone && phone.length >= 10) {
+    await shell.openExternal(`whatsapp://send?phone=${phone}`);
+    logMac("whatsapp.open_chat", { how: "deeplink", name: textForLog(name) });
+    return { ok: true, say: `Opened your chat with ${resolved.name || name}.`, source: "whatsapp_open_chat" };
+  }
+  // A group, or someone with no number saved: WhatsApp's own search.
+  const wasRunning = await isMacApplicationRunning("WhatsApp");
+  await execFileP("open", ["-a", "WhatsApp"]).catch(() => {});
+  const ready = await waitForWhatsAppReady(wasRunning ? 6000 : 20000);
+  if (!ready) return { ok: false, say: "WhatsApp didn't come up.", source: "whatsapp_open_chat" };
+  await pressKey(3, "command"); // Cmd+F, the chat search
+  await new Promise((r) => setTimeout(r, 350));
+  await typeText(name);
+  await new Promise((r) => setTimeout(r, 900));
+  await pressKey(125); // down to the first result
+  await pressKey(36);  // open it
+  logMac("whatsapp.open_chat", { how: "search", name: textForLog(name) });
+  return { ok: true, say: `Opened the ${name} chat.`, source: "whatsapp_open_chat" };
+}
+
+async function sendWhatsAppMessage(recipientRaw, message, chosen = null) {
   const text = String(message || "").trim();
   if (!text) return { ok: false, say: "Tell me what the message should say." };
   sendTaskProgress({ status: "thinking", text: `Messaging ${recipientRaw}` });
 
-  const resolved = await resolveWhatsAppRecipient(recipientRaw);
+  const resolved = chosen?.phone ? { ok: true, name: chosen.name, phone: chosen.phone, source: "chosen" } : await resolveWhatsAppRecipient(recipientRaw);
+  if (!resolved.ok && resolved.error === "relation") return { ok: false, say: resolved.say };
+  if (!resolved.ok && resolved.choices?.length) return askWhichContact(recipientRaw, resolved.choices, { kind: "whatsapp", message: text });
   if (!resolved.ok) {
     if (resolved.ambiguous?.length) {
       const names = resolved.ambiguous.map(speakableContactName);
@@ -9980,7 +11136,17 @@ async function sendWhatsAppMessage(recipientRaw, message) {
   // WAIT for WhatsApp to actually be up instead of sleeping a fixed amount. Cold
   // boots regularly outlived the old 3.4s sleep, Enter fired into nothing, and
   // Braino announced "sent" while nothing had happened.
-  const ready = await waitForWhatsAppReady(wasRunning ? 9000 : 25000);
+  let ready = await waitForWhatsAppReady(wasRunning ? 9000 : 25000);
+  /* One more try before giving up (2026-10-01). "Send the latest Tanmay Bhat
+     video to Shashank" had the right video in 3 seconds, then WhatsApp was
+     slow to come up, this returned "not sent", and the whole job fell into
+     the step-by-step loop for another 40 seconds. Aim the chat again and give
+     it a second window. */
+  if (!ready) {
+    logMac("whatsapp.send.open_retry", { wasRunning });
+    await shell.openExternal(deepLink);
+    ready = await waitForWhatsAppReady(12000);
+  }
   if (!ready) {
     logMac("whatsapp.send.open_timeout", { wasRunning });
     return { ok: false, say: `WhatsApp did not finish opening, so I have not sent it. Open WhatsApp once and ask me again.` };
@@ -10024,6 +11190,7 @@ end tell`;
     recipient: textForLog(resolved.name),
     source: resolved.source,
     messageChars: text.length,
+    linkHost: macLinkHost((text.match(/https?:\/\/\S+/) || [""])[0]),
   });
   recordContactUse(resolved.name, "whatsapp");
   rememberActed("contact", speakableContactName(resolved.name));
@@ -10057,6 +11224,44 @@ async function draftWhatsAppMessage(recipientRaw, message) {
 }
 
 let lastYouTubeList = { items: [], at: 0 };
+/* A message that is meant to share something must carry the right link
+ * (2026-10-01). "Send the latest Tanmay Bhat video to Shashank" went out with
+ * a claude.ai link in it: the video had been found, the message did not use
+ * it. So when the job is about sharing a video, link or article:
+ *   no link in the message  -> add the one just found, or refuse to send;
+ *   a video job with a link that is not a video -> swap in the video.
+ * Refusing returns to the loop with a reason, so it fetches the link first. */
+let macJobCommand = { text: "", at: 0 };
+const MAC_SHARE_ASK = /\b(?:send|share|forward)\b[\s\S]*\b(?:video|link|url|article|song|reel|page)\b|\b(?:video|link|url|article|song|reel)\b[\s\S]*\b(?:send|share|forward)\b/i;
+/* "Send John a message saying the article was great" is words, not a link. */
+const MAC_SHARE_NOT = /\b(?:saying|that says|to say|tell(?:ing)? (?:him|her|them)|a message (?:that|about))\b/i;
+const MAC_VIDEO_URL = /https?:\/\/(?:www\.|m\.)?(?:youtube\.com\/(?:watch|shorts)|youtu\.be\/|vimeo\.com\/|instagram\.com\/reel)/i;
+function macBestKnownLink(wantVideo) {
+  const recent = Date.now() - 10 * 60 * 1000;
+  const yt = lastYouTubeList?.at > recent && lastYouTubeList.picked ? `https://www.youtube.com/watch?v=${lastYouTubeList.picked}` : "";
+  const front = String(activeMacContext?.browserUrl || "");
+  if (wantVideo) return yt || (MAC_VIDEO_URL.test(front) ? front : "");
+  return yt || (/^https?:\/\//.test(front) && !/\/search|results\?|[?&]q=/.test(front) ? front : "");
+}
+function macLinkHost(u) { try { return u ? new URL(u).hostname : ""; } catch (_) { return ""; } }
+function macCheckSharedLink(message) {
+  const job = macJobCommand.at > Date.now() - 5 * 60 * 1000 ? macJobCommand.text : "";
+  if (!job || !MAC_SHARE_ASK.test(job) || MAC_SHARE_NOT.test(job)) return { ok: true, message };
+  const wantVideo = /\b(?:video|reel|song)\b/i.test(job);
+  const urls = message.match(/https?:\/\/\S+/g) || [];
+  const best = macBestKnownLink(wantVideo);
+  if (!urls.length) {
+    if (!best) return { ok: false, say: "The message has no link in it yet. Get the link first, then send it." };
+    logMac("whatsapp.link_added", { host: macLinkHost(best) });
+    return { ok: true, message: `${message.trim()} ${best}`.trim() };
+  }
+  if (wantVideo && !urls.some((u) => MAC_VIDEO_URL.test(u))) {
+    if (!best) return { ok: false, say: "That link is not the video. Find the video's own link first, then send it." };
+    logMac("whatsapp.link_swapped", { from: macLinkHost(urls[0]) });
+    return { ok: true, message: message.replace(urls[0], best) };
+  }
+  return { ok: true, message };
+}
 let musicPlaying = false;
 let musicSource = "";
 let lastMusicTrack = "";
@@ -10394,10 +11599,23 @@ async function fetchYouTubeChannelVideos(channelId, { limit = 4 } = {}) {
   return videos;
 }
 
+/* "this song", "that track", "it": the song that is playing right now, the
+   one Braino may have just named ("which song is playing?" then "open this
+   song on YouTube"). Without it the words themselves became the search. */
+function resolveSongReference(query, nowPlaying = lastNowPlaying) {
+  let q = String(query || "")
+    .replace(/\b(?:please|for me|for us|right now|can you|could you|will you)\b/gi, " ")
+    .replace(/\s+/g, " ").trim();
+  const track = nowPlaying?.track ? `${nowPlaying.track}${nowPlaying.artist ? ` ${nowPlaying.artist}` : ""}` : "";
+  if (!track) return q;
+  if (/^(?:(?:this|that|the|same|current)\s+)?(?:song|track|tune|music|one|it|this|that)$/i.test(q)) return track;
+  return q.replace(/\b(?:this|that|the current|the same|the)\s+(?:song|track|tune)\b|\bwhat(?:'s| is) playing\b/gi, track).replace(/\s+/g, " ").trim();
+}
+
 function parseYouTubeIntent(raw) {
   const source = cleanPrompt(String(raw || "")).replace(/[?.!]+\s*$/, "").trim();
-  if (!source || !/\byou\s*tube\b/i.test(source)) return null;
-  const stripYt = (value) => String(value || "").replace(/\b(?:on|in)\s+you\s*tube\b/gi, "").replace(/\byou\s*tube\b/gi, "").replace(/\s+/g, " ").trim();
+  if (!source || !/\b(?:you\s*tube|yt)\b/i.test(source)) return null;
+  const stripYt = (value) => resolveSongReference(String(value || "").replace(/\b(?:on|in)\s+(?:you\s*tube|yt)\b/gi, "").replace(/\b(?:you\s*tube|yt)\b/gi, "").replace(/\s+/g, " ").trim());
 
   let match = source.match(/\b(?:show|open|see)\s+(?:me\s+)?(?:some\s+(?:of\s+)?)?(?:the\s+)?(?:recent\s+|latest\s+|new\s+)?videos?\s+(?:from|of|by)\s+(.+)$/i)
     || source.match(/\bopen\s+(.+?)(?:'s)?\s+channel\b.*$/i);
@@ -10412,10 +11630,20 @@ function parseYouTubeIntent(raw) {
     if (query) return { action: "search", query };
   }
 
-  match = source.match(/\b(?:play|watch|put on|start)\s+(.+)$/i);
+  match = source.match(/\b(?:pull|bring)\s+(it|this|that)\s+up\b/i);
+  if (match?.[1]) {
+    const query = stripYt(match[1]);
+    if (query && query !== match[1]) return { action: "play", query };
+  }
+  match = source.match(/\b(?:play|watch|put on|start|open|pull up|bring up)\s+(.+)$/i);
   if (match?.[1]) {
     const query = stripYt(match[1]);
     if (query) return { action: "play", query };
+  }
+  match = source.match(/\b(?:look up|show me)\s+(.+)$/i);
+  if (match?.[1]) {
+    const query = stripYt(match[1]);
+    if (query) return { action: "search", query };
   }
   return null;
 }
@@ -10447,7 +11675,7 @@ async function playYouTubeVideo(query) {
     const { videos } = await fetchYouTubeResults(query, { limit: 5 });
     const video = videos[0];
     if (!video) return { ok: false, say: `I could not find ${query} on YouTube.` };
-    lastYouTubeList = { items: videos, at: Date.now() };
+    lastYouTubeList = { items: videos, at: Date.now(), picked: video.videoId };
     await openChromeUrl(`https://www.youtube.com/watch?v=${video.videoId}`);
     logMac("youtube.play", { query: textForLog(query), videoId: video.videoId, title: textForLog(video.title) });
     sendTaskProgress({ status: "done", text: `Playing ${video.title}` });
@@ -11360,7 +12588,9 @@ async function readDiskFreeSpace() {
     return {
       totalBytes: totalKb * 1024,
       freeBytes: availKb * 1024,
-      pctUsed: Math.round((usedKb / totalKb) * 100),
+      /* "Used" on / counts only the small system volume on modern macOS ("1.7 GB
+         free of 228 GB, 5% full", 3 Oct); full is what is not free. */
+      pctUsed: Math.round(((totalKb - availKb) / totalKb) * 100),
     };
   } catch (error) {
     logMac("storage.df.failed", { error });
@@ -11874,6 +13104,10 @@ async function runMacWebSearch(query) {
      * for the stories, fetch the five articles in one script, write from what
      * they actually say. */
     const sources = Array.isArray(data.sources) ? data.sources.slice(0, 8) : [];
+    /* The sites the answer came from, for the notch: up to three, as host
+       names, shown as small chips under his answer (2026-10-02). */
+    const hosts = [...new Set(sources.map((src) => { try { return new URL(String(src?.url || "")).hostname.replace(/^www\./, ""); } catch (_) { return ""; } }).filter(Boolean))].slice(0, 3);
+    if (hosts.length) sendToRenderer("braino-mac:web-sources", { hosts, at: Date.now() });
     const sourceLines = sources
       .map((src) => {
         const url = String(src?.url || "").trim();
@@ -12944,6 +14178,17 @@ function canonicalAppName(appName) {
   return resolveAppTarget(cleaned) || cleaned;
 }
 
+/* Most of the file's name is the words you said ("open resume" → "Resume
+   2026.pdf" yes; "open Pinterest" → "Is Pinterest just woke Twitter.jpeg" no). */
+function fileNameIsTarget(filePath, target) {
+  const words = (t) => String(t || "").toLowerCase().replace(/\.[a-z0-9]{1,5}$/i, "").replace(/[^\p{L}\p{N}]+/gu, " ").trim().split(" ").filter((w) => w.length > 1);
+  const name = words(path.basename(String(filePath || "")));
+  const said = new Set(words(target));
+  if (!name.length || !said.size) return false;
+  const hit = name.filter((w) => said.has(w)).length;
+  return hit / name.length >= 0.5;
+}
+
 function commonWebTargetFor(appName) {
   return resolveWebTarget(cleanOpenTarget(appName));
 }
@@ -13049,6 +14294,11 @@ async function findInstalledApps(appName) {
 async function openApp(appName, { allowFuzzy = true } = {}) {
   const canonical = canonicalAppName(appName);
   if (!canonical) return { ok: false, error: "No app name was provided." };
+  // Belt and braces for the guard in the open intent: never an app called "it".
+  if (/^(?:it|this|that|them|these|those)$/i.test(String(canonical).trim())) {
+    logMac("app.open.pronoun_refused", { requested: textForLog(appName) });
+    return { ok: false, say: "Open which one? Say the name and I will open it." };
+  }
   logMac("app.open.start", {
     requested: textForLog(appName),
     canonical,
@@ -13187,7 +14437,20 @@ end tell`], { timeout: 10000 });
   return { ok: true, say: `Closed ${total} tab${total > 1 ? "s" : ""}. Clean slate.` };
 }
 
+/* "Quit Finder and WhatsApp" quit Finder only (2026-10-03): the list was cut
+   at "and". Each one named is closed, and he says which. */
 async function closeOpenTarget(target) {
+  const parts = String(target || "").split(/\s*(?:,|\band\b|&|\bplus\b)\s*/i).map((p) => p.trim()).filter(Boolean);
+  if (parts.length > 1 && parts.length <= 5 && parts.every((p) => p.split(/\s+/).length <= 3)) {
+    const results = [];
+    for (const part of parts) results.push(await closeOneOpenTarget(part));
+    const said = results.map((r) => String(r?.say || "").trim()).filter(Boolean);
+    return { ok: results.some((r) => r?.ok !== false), say: said.join(" ") || "Done." };
+  }
+  return closeOneOpenTarget(target);
+}
+
+async function closeOneOpenTarget(target) {
   const cleaned = cleanOpenTarget(target);
   if (!cleaned) return { ok: false, say: "Tell me what to close." };
 
@@ -13196,10 +14459,14 @@ async function closeOpenTarget(target) {
   const website = commonWebTargetFor(cleaned);
   let webResult = null;
   if (website) {
+    /* In the background: the app is already closed, so he says so now.
+       Waiting for the tab hunt made "quit Spotify" take 15s and "quit
+       WhatsApp" 27s (2026-09-26); the app itself quit in 0.4s and 3.9s. */
     try {
       const host = new URL(website).hostname.replace(/^www\./, "");
-      webResult = await closeBrowserTabsMatching(host);
-      logMac("delegate.close_web_tabs", { target: textForLog(cleaned), website, host, attemptedBrowsers: webResult?.attemptedBrowsers || 0 });
+      void closeBrowserTabsMatching(host).then((r) => logMac("delegate.close_web_tabs", { target: textForLog(cleaned), website, host, attemptedBrowsers: r?.attemptedBrowsers || 0 }))
+        .catch((error) => logMac("delegate.close_web_tabs.failed", { target: textForLog(cleaned), website, error }));
+      webResult = { ok: true, background: true };
     } catch (error) {
       logMac("delegate.close_web_tabs.failed", { target: textForLog(cleaned), website, error });
     }
@@ -13298,6 +14565,8 @@ function parseFileIntent(raw) {
   if (!source) return null;
   const lower = source.toLowerCase();
   if (/\bapps?|applications?\b/.test(lower) && !/\b(files?|documents?|pdfs?|images?|folders?)\b/.test(lower)) return null;
+  // "open this song on YouTube" names a website, not a file on this Mac.
+  if (/\b(?:on|in|at)\s+(?:you\s*tube|yt|spotify|netflix|google|the web|the internet|online)\b/i.test(source) && !/\b(?:on|in)\s+(?:my\s+)?(?:mac|macbook|computer|system)\b/i.test(source)) return null;
 
   const kind = fileKindForText(source);
   const hasMacScope = /\b(?:on|in)\s+(?:my\s+)?(?:mac|macbook|computer|system)\b/i.test(source);
@@ -13796,8 +15065,36 @@ function isFileActionUndoIntent(text) {
   return /\b(it|that|this|last|previous|everything|all|what you just did|whatever you just did)\b/.test(raw) && hasFileActionHistory();
 }
 
-async function undoLastFileAction() {
+/* Undo is for what he just did, when you ask for it (2026-10-03).
+   "Add the PDF into the new folder" made the loop call undo, and it put back
+   23 files from a Desktop organize done on September 25, a week earlier,
+   unasked. Now undo runs only when the words ask for one, and only for a change
+   from the last 15 minutes, unless you name the old one ("undo the Desktop
+   organize"). */
+const UNDO_FRESH_MS = 15 * 60 * 1000;
+const UNDO_ASKED = /\b(?:undo|undid|revert|put (?:it|them|that|those|everything|the files?) back|bring (?:it|them|that) back|move (?:it|them|that) back|restore (?:it|them|that|the files?|what you (?:moved|did)))\b/i;
+function undoAllowed(said, action) {
+  const text = String(said || "");
+  if (!UNDO_ASKED.test(text)) return { ok: false, say: "I only undo a file change when you ask me to undo it." };
+  const at = Date.parse(action?.createdAt || "") || 0;
+  if (Date.now() - at <= UNDO_FRESH_MS) return { ok: true };
+  const words = String(action?.description || action?.type || "").toLowerCase().match(/[a-z]{4,}/g) || [];
+  const named = words.some((w) => text.toLowerCase().includes(w.replace(/ing$/, "")));
+  if (named) return { ok: true };
+  const when = at ? new Date(at).toLocaleDateString("en-IN", { day: "numeric", month: "long" }) : "a while ago";
+  return { ok: false, say: `The last file change I made was ${action?.description || "a file change"}, on ${when}. That is old, so I have left it alone. Say "undo the ${String(action?.description || "change").replace(/ files by type$/, "")}" if you want it back.` };
+}
+
+async function undoLastFileAction(said = "") {
   const history = readFileActionHistory();
+  const latest = history[history.length - 1];
+  if (latest) {
+    const allowed = undoAllowed(said, latest);
+    if (!allowed.ok) {
+      logMac("file.undo.refused", { type: latest.type, createdAt: latest.createdAt, said: textForLog(said) });
+      return { ok: false, say: allowed.say };
+    }
+  }
   const action = history.pop();
   if (!action) {
     if (hasDesktopOrganizeManifest()) return undoDesktopOrganization();
@@ -13986,6 +15283,35 @@ const PARTIAL_DOWNLOAD_RE = /\.(crdownload|download|part|partial|opdownload|tmp)
 const DOWNLOAD_TIE_MS = 90 * 1000;
 // Past this, "just downloaded" stops being obvious and a person would confirm.
 const DOWNLOAD_FRESH_MS = 60 * 60 * 1000;
+
+/* Attach a file to the chat box in front, the way a person does: copy the
+   file, click into the box, paste. Works in Cursor, WhatsApp, ChatGPT, Claude,
+   Slack, Mail. The Cursor run on 5 Oct spent 20 steps hunting for an upload
+   button that is not in its accessibility tree. No path means the newest
+   download. Nothing is sent: sending stays a separate, asked-for step. */
+async function attachFileToFrontChat(filePath = "", appName = "") {
+  let file = String(filePath || "").trim().replace(/^~(?=\/)/, os.homedir());
+  if (!file) {
+    const newest = (await scanRecentDownloads(3)).find((e) => !e.isDir && !e.partial);
+    if (!newest) return { ok: false, say: "I don't see a recent download to attach." };
+    file = newest.full;
+  }
+  if (!fs.existsSync(file)) return { ok: false, say: `I can't find ${path.basename(file)}.` };
+  if (appName) {
+    await execFileP("open", ["-a", appName]).catch(() => {});
+    await new Promise((r) => setTimeout(r, 700));
+  }
+  const front = (await execFileP("/usr/bin/osascript", ["-e", 'tell application "System Events" to name of first application process whose frontmost is true'], { timeout: 4000 }).catch(() => ({ stdout: "" }))).stdout.trim();
+  if (/^(?:braino|electron)/i.test(front)) return { ok: false, say: "Bring the chat app to the front first." };
+  const before = clipboard.readText();
+  await execFileP("/usr/bin/osascript", ["-e", `set the clipboard to (POSIX file ${JSON.stringify(file)})`], { timeout: 4000 });
+  await new Promise((r) => setTimeout(r, 150));
+  await pressKey(9, "command"); // Cmd+V
+  await new Promise((r) => setTimeout(r, 900));
+  if (before) setTimeout(() => clipboard.writeText(before), 1500);
+  logMac("attach_file", { app: front, name: textForLog(path.basename(file)) });
+  return { ok: true, say: `Attached ${path.basename(file)} in ${front}.`, attached: path.basename(file), app: front };
+}
 
 async function scanRecentDownloads(limit = 6) {
   const roots = [
@@ -14550,8 +15876,9 @@ async function transcribeAudioCommand(payload = {}) {
     body: JSON.stringify({
       mode: "lecture",
       audioBase64,
-      fileName: "braino-mac-command.webm",
+      fileName: payload.fileName || "braino-mac-command.webm",
       mimeType,
+      transcriptOnly: true, // words only: no lecture notes for a command or a dictation
       // The realtime path pins transcription to English and the fallback never
       // did, which is the whole reason a Hindi comedy clip came back as Urdu and
       // was handed to the router as a command. Same lock, same reason.
@@ -15106,6 +16433,7 @@ async function runMacConversation(prompt) {
         "Braino is a visible OS-level overlay that follows the user's active Mac app and display.",
         ...surfaceLines,
         ...todayMemoryLines(),
+        ...notchWhatsAppLines(),
         ...mesaContextLines(),
         ...desktopHygieneLines(),
         "This is normal conversation unless the user asks for a concrete Mac action.",
@@ -15160,6 +16488,11 @@ async function runMacConversation(prompt) {
     const reply = String(data?.reply || "").trim() || "I am here.";
     rememberMacChat("user", prompt);
     rememberMacChat("assistant", reply);
+    /* "I should have opened trybraino.com. Want me to try it now?" and then a
+       yes went nowhere: chat can talk, not act. Keep the offer so a yes hands
+       it to the loop, which can. */
+    macChatOffer = /\b(?:want me to|should i|shall i|do you want me to)\b[^?]*\?\s*$/i.test(reply)
+      ? { reply, prompt, at: Date.now() } : null;
     logMac("mac.chat.done", {
       replyChars: reply.length,
       historyTurns: macChatHistory.length,
@@ -15183,6 +16516,8 @@ async function runMacConversation(prompt) {
 // thinking sheet; this audit is logged for diagnosis and engine history only.
 function fireHilReasonThinking(raw) {
   if (!raw || !SUPABASE_URL || !SUPABASE_ANON_KEY) return;
+  if (deciderStage() >= 4) return; // stage 4: no shadow, HIL decides live
+
   /* This call exists only to write a row someone will read later. A private
      command has nothing to gain from being in that row, so it is not sent at
      all rather than sent and then starred out. */
@@ -15200,6 +16535,8 @@ function fireHilReasonThinking(raw) {
     method: "POST",
     headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
     body: JSON.stringify({ command: raw, context: contextLine }),
+    // Log only, so it gets 20s and no more rather than hanging open forever.
+    signal: AbortSignal.timeout(20000),
   }).then(async (res) => {
     if (!res.ok) { console.log(`[Braino HIL] reason ${res.status}`); return; }
     const data = await res.json().catch(() => null);
@@ -15249,6 +16586,25 @@ function macRecentExchanges(turns = 4) {
    not a number. These two are backstops for a runaway, not a budget. */
 const MAC_HIL_HARD_STOP = 60;
 const MAC_HIL_MAX_MS = 420000;
+const MAC_HIL_STUCK_MS = 20000;
+const MAC_HIL_KEEP_GOING_MS = 60000;
+
+/* What a step was, the way you'd say it. For the notch and for "I got to ...". */
+const PLAIN_STEP = {
+  open_url: "opening the page", open_target: "opening it", click_element: "clicking", look: "looking at the screen",
+  screen_vision: "looking at the screen", type: "typing", press_keys: "pressing keys", wait_for_url: "waiting for the page",
+  whatsapp_send: "sending the WhatsApp", web_search: "searching the web", current_tab_url: "reading the tab",
+  tabs_close_all: "closing the tabs", memory_search: "checking memory", schedule_lookup: "checking your timetable",
+  attendance_lookup: "checking attendance", file_find: "finding the file", mail_send: "sending the email",
+};
+function macPlainStep(step) {
+  // A loop step is { intent, action: { type, tool } }; a plan step is { tool }.
+  // Reading only the outside printed "I got to [object Object]" (2026-09-26).
+  if (step?.intent && typeof step.intent === "string" && step.intent.length < 60) return step.intent.charAt(0).toLowerCase() + step.intent.slice(1);
+  const a = step?.action && typeof step.action === "object" ? step.action : step;
+  const name = String(a?.tool || a?.type || (typeof step === "string" ? step : "") || "").trim();
+  return PLAIN_STEP[name] || (name ? name.replace(/_/g, " ") : "the start");
+}
 /* Repeating yourself is the real end condition. Three identical actions inside
    the last handful of moves means the screen is not responding to him. */
 const MAC_HIL_REPEAT_LIMIT = 3;
@@ -15386,6 +16742,30 @@ function macToolStepCanBeIrreversible(action) {
   return false;
 }
 
+/* WhatsApp stays instant, but only when they ASKED to send something.
+   "Saying that you're not ready bro", said about a conversation, went out to
+   Param with no question asked (2026-09-28): the loop picked the send, the
+   instant rule waved it through. No send word in what they said means he asks
+   first, like any other thing that cannot be taken back. */
+const MAC_MESSAGE_TOOLS = new Set(["whatsapp_send", "whatsapp_reply_last", "imessage_send", "sms_send", "message_send", "mail_send"]);
+const MAC_ASKED_TO_SEND = /\b(?:send|sent|message|msg|text|whatsapp|reply|respond|tell|ask|ping|dm|forward|share|write (?:to|back)|let (?:\w+ )?know|bhej|bhejo|bol(?:o|na)?|bata(?:o|na)?|puch(?:o|na)?|pooch(?:o|na)?)\b/i;
+function macUnaskedMessageSend(step, command) {
+  const action = step?.action || {};
+  if (String(action.type || "") !== "tool" || !MAC_MESSAGE_TOOLS.has(String(action.tool || ""))) return false;
+  return !MAC_ASKED_TO_SEND.test(String(command || ""));
+}
+
+/* A control whose name says it opens something (a composer, a reply box, a
+   draft), not one that sends, posts, buys or deletes. Exact final labels
+   ("Post", "Send", "Publish") are never openers. */
+const MAC_FINAL_CONTROL = /^\s*(?:post|send|publish|submit|share|delete|remove|buy(?: now)?|place (?:your )?order|pay(?: now)?|confirm|checkout|proceed to checkout|unsubscribe|unfollow)\s*$/i;
+const MAC_OPENER_CONTROL = /\b(?:start a post|create a post|write a post|new post|start (?:a )?(?:new )?(?:thread|message|chat|conversation|article)|write (?:an )?article|compose|new (?:message|email|mail|chat|note|draft)|reply|add a comment|write a comment|comment|draft|edit|open|expand|what'?s on your mind)\b/i;
+function macClickOnlyOpens(name) {
+  const label = String(name || "").trim();
+  if (!label || MAC_FINAL_CONTROL.test(label)) return false;
+  return MAC_OPENER_CONTROL.test(label);
+}
+
 function macStepCanBeIrreversible(step) {
   const action = step?.action || {};
   const type = String(action.type || "");
@@ -15427,6 +16807,7 @@ function macCachedObservation() {
 
 // The AX helper answers in one line: "observe\t{json}".
 async function macBuildObservation() {
+  if (macOwnJobActive()) return macBuildOwnObservation();
   const res = await runAxHelper(["observe", String(MAC_HIL_OBSERVE_CAP)], 20000);
   if (res.status !== "observe") return { ok: false, error: res.detail || res.status, text: "", elements: [] };
   // Set at the end of this function, below, once there is something worth reusing.
@@ -15446,6 +16827,11 @@ async function macBuildObservation() {
    * happen in the window they were looking at. If the door is shut (the
    * "Allow JavaScript from Apple Events" switch) this falls back to the tree,
    * which is no worse than before. */
+  /* The page hands only count while the browser is the app in front. After
+     switching to Cursor, the last Chrome read was still "fresh", so his clicks
+     on Cursor's Message box went to the Chrome page behind it: "I clicked
+     Meltyk and nothing changed", eight times (5 Oct). */
+  if (!isChromeApp(data?.app)) macLastReadWasPage = null;
   if (isChromeApp(data?.app)) {
     const page = await readChromePage(data.app);
     if (page.ok && page.elements.length) {
@@ -15505,6 +16891,37 @@ async function macBuildObservation() {
   return obs;
 }
 
+/* The same observation, from his own browser: no accessibility helper, no
+   AppleScript, just the page. Same shape, so the loop cannot tell the
+   difference except that it is fast. */
+async function macBuildOwnObservation() {
+  const browser = ownBrowser();
+  if (!browser.url() || browser.url() === "about:blank") {
+    const obs = { ok: true, text: "APP: Braino's own browser | nothing open yet. Navigate to the site for this job.", elements: [], appName: "Braino browser", windowTitle: "", browserUrl: "" };
+    macLastObservation = { at: Date.now(), obs };
+    macLastReadWasPage = null;
+    return obs;
+  }
+  const page = await browser.read();
+  if (!page.ok) {
+    macLastReadWasPage = null;
+    return { ok: false, error: page.detail || page.reason || "could not read the page", text: "", elements: [] };
+  }
+  macLastReadWasPage = { app: "Braino browser", own: true, at: Date.now() };
+  const lines = page.elements.map((e) => `[${e.index}] ${String(e.role || "").padEnd(9)} "${e.name}"${e.offscreen ? " (offscreen)" : ""}`);
+  const obs = {
+    ok: true,
+    text: [`APP: Braino's own browser (the job runs here, not in the user's Chrome) | ${page.title}`, `Address: ${page.url}`, ...lines].join("\n"),
+    elements: page.elements,
+    appName: "Braino browser",
+    windowTitle: page.title || "",
+    browserUrl: page.url || "",
+  };
+  logMac("hil.observed", { source: "own_browser", elements: page.elements.length, url: textForLog(page.url, 90) });
+  macLastObservation = { at: Date.now(), obs };
+  return obs;
+}
+
 /* A real look at the screen.
  *
  * `look` used to return the very same accessibility list that `read` returns,
@@ -15512,7 +16929,9 @@ async function macBuildObservation() {
  * seeing the identical thing each time, then giving up. The prompt promises a
  * screenshot handed to a vision model. This is that promise kept. */
 async function macLookAtScreen(goal = "") {
-  const shot = await captureScreenBase64();
+  const shot = macOwnJobActive()
+    ? await ownBrowser().screenshotBase64().then((base64) => ({ ok: true, base64 })).catch(() => ({ ok: false }))
+    : await captureScreenBase64();
   if (!shot.ok) return { ok: false, error: "I could not capture the screen." };
   const authToken = await getBrainoAuthToken();
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !authToken) {
@@ -15587,6 +17006,26 @@ async function startGoogleDriveConnect(authToken, userId) {
   }
 }
 
+async function pasteIntoNewGoogleDoc(title, text) {
+  const { clipboard } = require("electron");
+  const before = clipboard.readText();
+  await openChromeUrl("https://docs.new");
+  // Wait for the editor: the tab title turns into "... - Google Docs".
+  let ready = false;
+  for (let i = 0; i < 24 && !ready; i++) {
+    await new Promise((r) => setTimeout(r, 500));
+    const { stdout } = await execFileP("/usr/bin/osascript", ["-e", 'tell application "Google Chrome" to return title of active tab of front window'], { timeout: 3000 }).catch(() => ({ stdout: "" }));
+    ready = /google docs/i.test(String(stdout)) && !/sign in/i.test(String(stdout));
+  }
+  if (!ready) return { ok: false, error: "the new doc did not open" };
+  await new Promise((r) => setTimeout(r, 1200));
+  clipboard.writeText(`${title}\n\n${text}`);
+  await execFileP("/usr/bin/osascript", ["-e", 'tell application "Google Chrome" to activate', "-e", "delay 0.3", "-e", 'tell application "System Events" to keystroke "v" using command down'], { timeout: 6000 });
+  await new Promise((r) => setTimeout(r, 900));
+  clipboard.writeText(before);
+  return { ok: true };
+}
+
 async function createGoogleDocWithText(title, text) {
   const auth = authStatusPayload();
   if (!auth.userId) return { ok: false, say: "You are not signed in, so I cannot make a Google Doc." };
@@ -15621,6 +17060,16 @@ async function createGoogleDocWithText(title, text) {
        is a consent screen, so instead of naming it and stopping, he opens it:
        approve once and the next ask works. The loop must not go and type into
        docs.google.com instead; that is the path that "rejected text entry". */
+    /* No sign-in screen (2026-10-03). Drive was "not connected" 4 of 4 times,
+       and each time he opened Google's consent page and stopped, even with
+       Docs already open in Chrome. Docs takes a normal paste even though a
+       script cannot type into it, so: a new doc, the text on the clipboard,
+       Cmd+V. The connect page is only the last resort. */
+    if (/not connected/i.test(why) && text.trim()) {
+      const pasted = await pasteIntoNewGoogleDoc(title, text).catch((e) => ({ ok: false, error: String(e?.message || e) }));
+      logMac("google_doc.paste_fallback", { ok: pasted.ok, error: pasted.error || "" });
+      if (pasted.ok) return { ok: true, say: `I opened a new Google Doc and pasted "${title}" into it.` };
+    }
     if (/not connected/i.test(why)) {
       const started = await startGoogleDriveConnect(authToken, auth.userId);
       return {
@@ -16094,11 +17543,15 @@ async function syncNexusEverything(options = {}) {
   }
 
   const attendance = await saveNexusAttendance(found, auth.userId, authToken);
+  /* Said as it is. "Your attendance is synced and ready" was spoken when
+     every attendance address had answered 404 and only notifications came
+     back (2026-10-03); a moment later he said he did not have it. */
+  const noAttendance = attendance ? "" : " Nexus did not give me your attendance, so I still do not have it.";
   return {
     ok: true,
     say: working.length
-      ? `I found ${working.length} more things in Nexus: ${working.map(([p]) => p.split("?")[0]).join(", ")}.${attendance}`
-      : "I could not find anything else in Nexus beyond your timetable.",
+      ? `I found ${working.length} more ${working.length === 1 ? "thing" : "things"} in Nexus: ${working.map(([p]) => p.split("?")[0]).join(", ")}.${attendance}${noAttendance}`
+      : `I could not find anything else in Nexus beyond your timetable.${noAttendance}`,
   };
 }
 
@@ -16416,7 +17869,9 @@ async function lookupAttendance(args = {}) {
     if (!res.ok) throw new Error(`attendance ${res.status}`);
     const rows = await res.json();
     if (!Array.isArray(rows) || !rows.length) {
-      return { ok: true, say: "I do not have your attendance yet. Run the nexus_sync_all tool to pull it." };
+      /* Said to you, so in your words: "Run the nexus_sync_all tool" was being
+         read out loud (2026-09-26). Attendance still only syncs from Chrome. */
+      return { ok: true, say: "I don't have your attendance yet. It syncs from your Chrome: open Nexus attendance there once, then ask me again.", detail: "No attendance rows. nexus_sync_all syncs the timetable; attendance comes from the Chrome extension on the Nexus attendance page." };
     }
     const wanted = String(args.course || "").trim().toLowerCase();
     const pct = (r) => (r.percent != null ? Number(r.percent) : r.total ? (r.attended / r.total) * 100 : null);
@@ -16906,9 +18361,16 @@ async function setPlayingMediaVolume(command) {
   if (source?.kind === "spotify") {
     const current = Number.isFinite(source.volumePercent) ? source.volumePercent : (await readSpotifyMacState())?.volumePercent ?? 50;
     const next = applyVolumeCommand(command, current);
-    const actual = await setSpotifyVolumeInMacApp(next).catch(() => null);
+    let actual = await setSpotifyVolumeInMacApp(next).catch(() => null);
+    /* Spotify sometimes ignores the first set right after waking ("asked 80,
+       got 100", 25 Sep), and he reported the old level as done. Once more, then
+       the truth. */
+    if (actual !== null && Math.abs(Number(actual) - next) > 3) {
+      await new Promise((r) => setTimeout(r, 300));
+      actual = await setSpotifyVolumeInMacApp(next).catch(() => null);
+    }
     logMac("media.volume.done", { on: "spotify", from: current, asked: next, actual, ms: Date.now() - startedAt });
-    if (actual === null) return { ok: false, say: "Spotify would not take the volume change." };
+    if (actual === null || Math.abs(Number(actual) - next) > 3) return { ok: false, say: `Spotify didn't take the change; it's still at ${actual ?? current}%.` };
     return { ok: true, say: `Spotify volume ${actual}%.` };
   }
 
@@ -16947,6 +18409,10 @@ async function describePlayingMedia() {
 }
 
 const MAC_HIL_TOOLS = {
+  hide_braino: (a) => { sendToRenderer("braino-mac:mascot-hide", { mode: /stealth/i.test(String(a?.mode || "")) ? "stealth" : /hour/i.test(String(a?.mode || "")) ? "hour" : "hidden", source: "hil" }); return { ok: true, say: "Hidden. Say come back when you want me." }; },
+  braino_summon: () => { sendToRenderer("braino-mac:mascot-hide", { mode: null, source: "hil" }); return { ok: true, say: "I'm back." }; },
+  form_fill: () => fillFormForMe(),
+  sign_in_saved: () => signInSaved(),
   notes_create: (a) => startNoteWorkflow({ title: String(a.title || ""), body: String(a.body || "") }),
   open_url: (a) => openChromeUrl(String(a.url || a.target || "")),
   chrome_search_google: (a) => openChromeUrl(`https://www.google.com/search?q=${encodeURIComponent(String(a.query || ""))}`),
@@ -17000,8 +18466,9 @@ const MAC_HIL_TOOLS = {
       interpretedRange: valid ? `${clock(startSeconds)} to ${clock(endSeconds)}` : "",
     });
   },
+  attach_file: (a) => attachFileToFrontChat(String(a.path || a.file || ""), String(a.app || "")),
   recent_download: (a) => handleRecentDownloadIntent({ action: String(a.action || "open"), destination: a.destination ? String(a.destination) : "" }),
-  file_action_undo: () => undoLastFileAction(),
+  file_action_undo: () => undoLastFileAction(macJobCommand.text),
   wallpaper_set_from_web: (a) => setWallpaperFromWeb(String(a.subject || "")),
   mac_wide_deep_search: (a) => runMacWideDeepSearch(String(a.term || "")),
   screen_point: (a) => runScreenPoint(String(a.target || ""), String(a.raw || a.target || "")),
@@ -17013,8 +18480,11 @@ const MAC_HIL_TOOLS = {
   file_find: (a) => findFileForHil(String(a.query || ""), String(a.kind || ""), a.shouldOpen === true),
   repeat_last: () => (lastDelegateSay ? { ok: true, say: lastDelegateSay } : { ok: true, say: "I haven't said anything worth repeating yet." }),
   time_query: (a) => answerTimeQuery({ time: a.date === true ? false : a.time !== false }),
-  stop_meeting_recording: () => stopMeetingRecording(),
-  stop_screen_recording: () => stopScreenRecording(),
+  /* "Stop the recording" means whatever is recording. HIL picked the screen
+     one while a lecture was recording and said nothing was (4 Oct), so each
+     stop falls through to the other when its own is not running. */
+  stop_meeting_recording: () => (!meetingState && screenRecProc ? stopScreenRecording() : stopMeetingRecording()),
+  stop_screen_recording: () => (!screenRecProc && meetingState ? stopMeetingRecording() : stopScreenRecording()),
   maps_show: (a) => runMapsShow(String(a.place || a.query || "")),
   maps_directions: (a) => runMapsDirections({ destination: String(a.destination || a.place || ""), origin: a.origin ? String(a.origin) : "" }),
   spotify_seek: (a) => seekSpotifyOnMac({
@@ -17033,6 +18503,12 @@ const MAC_HIL_TOOLS = {
   stopwatch_control: (a) => handleStopwatch({ action: String(a.action || "read") }),
   click_element: (a) => axClick({ target: String(a.target || "") }),
   close_target: (a) => closeOpenTarget(String(a.target || "")),
+  // The loop reached for this and had nothing: 83 seconds for a mode switch.
+  monday_mode_toggle: (a) => {
+    const on = a.enable ?? a.enabled ?? a.on ?? (String(a.action || "").toLowerCase() !== "exit");
+    setMondayModeState(Boolean(on));
+    return { ok: true, say: on ? "Monday Mode is on. Fine." : "Monday Mode off. Back to normal." };
+  },
   memory_search: (a) => searchMemory({ query: String(a.query || ""), from: a.from, to: a.to }),
   whatsapp_messages: (a) => lookupWhatsAppMessages({ contact: a.contact || a.name || "", sinceHours: a.sinceHours, limit: a.limit }),
   whatsapp_reply_last: async (a) => {
@@ -17053,6 +18529,10 @@ const MAC_HIL_TOOLS = {
     return line ? { ok: true, say: line } : describePlayingMedia();
   },
   screen_vision: (a) => runScreenVision(String(a.question || a.prompt || "")),
+  look_at_pointer: (a) => lookAtPointer(String(a.question || a.prompt || "")),
+  look_at_user: (a) => lookAtUser(String(a.question || a.prompt || "")),
+  listening_history: (a) => listeningTaste(String(a.question || a.prompt || "what is my favourite song")),
+  whatsapp_open_chat: (a) => openWhatsAppChat(String(a.name || a.recipientRaw || a.target || "").trim()),
   describe_image: (a) => describeImageForUser(String(a.question || a.prompt || "What is in this image?")),
   front_window_summary: () => frontWindowSummary(),
   take_screenshot: () => takeScreenshot(),
@@ -17061,7 +18541,9 @@ const MAC_HIL_TOOLS = {
   /* Mac app first, a signed-in web tab second, and a plain sentence when
      there is neither, instead of a login QR nobody asked for. */
   whatsapp_send: async (a) => {
-    if (macWhatsAppAppInstalled()) return sendWhatsAppMessage(String(a.recipientRaw || a.recipient || ""), String(a.message || ""));
+    const checked = macCheckSharedLink(String(a.message || ""));
+    if (!checked.ok) return { ok: false, say: checked.say };
+    if (macWhatsAppAppInstalled()) return sendWhatsAppMessage(String(a.recipientRaw || a.recipient || ""), checked.message);
     const tabs = await listAllChromeTabs().catch(() => []);
     const web = tabs.find((t) => /web\.whatsapp\.com/i.test(t.url || "") && !/log ?in|qr|scan/i.test(t.title || ""));
     macTrace("💬 WHATSAPP", web ? "no Mac app, using the signed-in WhatsApp Web tab" : "no Mac app and no signed-in WhatsApp Web tab");
@@ -17094,6 +18576,9 @@ const MAC_HIL_TOOLS = {
   open_target: (a) => {
     const target = String(a.target || a.name || "").trim();
     if (!target) return { ok: false, say: "Nothing named to open." };
+    // HIL saying "open the BYOB chat" means the chat, same as the old path.
+    const chatName = whatsAppChatTarget(`open ${target}`, target);
+    if (chatName) return openWhatsAppChat(chatName);
     return /^https?:\/\//i.test(target) || /\.[a-z]{2,}(\/|$)/i.test(target)
       ? openChromeUrl(target.startsWith("http") ? target : `https://${target}`)
       : openApp(target);
@@ -17198,8 +18683,35 @@ async function macExecuteHilAction(action, elements) {
   }
   /* Same door in, same door out. */
   const onPage = Boolean(macLastReadWasPage) && Date.now() - macLastReadWasPage.at < 60000;
+  if (onPage && macLastReadWasPage.own && (type === "click" || type === "type" || type === "pressKey")) {
+    const browser = ownBrowser();
+    if (type === "type" && (action.index === undefined || action.index === null || action.index === "")) {
+      const r = await browser.typeFocused(String(action.text || ""), Boolean(action.submit));
+      return { ok: r.ok, typedInto: "the selected box" };
+    }
+    if (type === "pressKey") return browser.press(String(action.key || "Enter"));
+    if (!byIndex(action.index)) return { ok: false, error: `There is no element [${action.index}] on the page.` };
+    if (type === "type") {
+      const r = await browser.type(action.index, String(action.text || ""), Boolean(action.submit));
+      return r.ok ? { ok: true, typedInto: r.did || byIndex(action.index)?.name || "" } : r;
+    }
+    const r = await browser.click(action.index);
+    return r.ok ? { ok: true, pressed: r.did } : r;
+  }
   if (onPage && (type === "click" || type === "type" || type === "pressKey")) {
     const el = byIndex(action.index);
+    /* "Type Pune" with no box named means the box that is already selected: HIL
+       had just clicked or tabbed into it. Refusing it cost six failed tries on
+       Google Flights (4 Oct). Typed by the keyboard into the browser in front. */
+    if (type === "type" && (action.index === undefined || action.index === null || action.index === "")) {
+      const front = await focusChrome(macLastReadWasPage.app);
+      if (!front.ok) return { ok: false, error: `I could not bring the browser to the front (${front.front || "unknown"} is in front), so I did not type.` };
+      await typeText(String(action.text || ""));
+      if (action.submit) { await macHilWait(250); await pressKey(36); }
+      await macHilWait(700);
+      logMac("hil.page_act", { kind: "type_focused", did: textForLog(String(action.text || ""), 80) });
+      return { ok: true, typedInto: "the selected box" };
+    }
     if (type !== "pressKey" && !el) {
       return { ok: false, error: `There is no element [${action.index}] on the page.` };
     }
@@ -17282,6 +18794,16 @@ async function macExecuteHilAction(action, elements) {
     // A real keystroke. This used to call the helper's `press` verb, which is a
     // fuzzy search over element LABELS, so asking for Return could press any
     // button named Return.
+    /* "meta+a", "cmd+v": the helper knows single keys only, so a combination
+       goes through System Events (2026-10-05: "unknown key meta+a" cost a
+       whole turn while pasting into Cursor). */
+    const combo = macParseKeyCombo(action.key);
+    if (combo) {
+      const sent = await execFileP("/usr/bin/osascript", ["-e", `tell application "System Events" to keystroke ${JSON.stringify(combo.key)} using {${combo.mods.join(", ")}}`], { timeout: 5000 })
+        .then(() => ({ ok: true }), (error) => ({ ok: false, error: String(error?.message || error) }));
+      await macHilWait(300);
+      return sent;
+    }
     const res = await runAxHelper(["key", String(action.key || "return")], 8000);
     await macHilWait(500);
     return res.status === "key" ? { ok: true } : { ok: false, error: `${res.status}: ${res.detail}` };
@@ -17301,6 +18823,7 @@ async function macExecuteHilAction(action, elements) {
        turns rediscovering it. There is no accessibility verb for scrolling, so
        he scrolls the way a person does. */
     const direction = String(action.direction || "down").toLowerCase();
+    if (macOwnJobActive()) return ownBrowser().scroll(direction.startsWith("up") ? -700 : 700);
     const key = direction.startsWith("up") ? "pageup" : "pagedown";
     const res = await runAxHelper(["key", key], 8000);
     await macHilWait(500);
@@ -17373,14 +18896,26 @@ async function macExecuteHilAction(action, elements) {
       + `function __brainoPage(u){var h=__brainoGet(u);var d=__brainoDoc(h);`
       + `var t=(d.body&&d.body.innerText||d.body&&d.body.textContent||"").trim();`
       + `if(t.length<200)throw new Error("__brainoPage got an empty shell from "+u+" ("+t.length+" chars of text). That site builds its page in the browser, so there is nothing in the HTML to read. Do not retry this. Navigate to it instead and read the live page.");`
-      + `return d}`;
+      + `return d}`
+      /* Writing into a box the way a keyboard does. LinkedIn, and more sites
+       * every month, refuse innerHTML outright (Trusted Types): 2026-09-29 a
+       * LinkedIn post stalled at step 5 on "This document requires
+       * 'TrustedHTML' assignment". insertText goes through the editor like a
+       * keystroke, so every editor accepts it, and nothing about the page's
+       * protection is switched off to get there. */
+      + `function __brainoWrite(t,s){var e=typeof t==="string"?document.querySelector(t):t;if(!e)throw new Error("__brainoWrite: nothing matches "+t);`
+      + `s=String(s==null?"":s);e.focus();try{var r=document.createRange();r.selectNodeContents(e);r.collapse(false);var g=getSelection();g.removeAllRanges();g.addRange(r)}catch(_){}`
+      + `var ok=false;try{ok=document.execCommand("insertText",false,s)}catch(_){}`
+      + `if(!ok){if("value" in e){var p=Object.getOwnPropertyDescriptor(Object.getPrototypeOf(e),"value");p&&p.set?p.set.call(e,(e.value||"")+s):e.value=(e.value||"")+s}else{e.textContent=(e.textContent||"")+s}`
+      + `e.dispatchEvent(new InputEvent("input",{bubbles:true,inputType:"insertText",data:s}))}`
+      + `return "wrote "+s.length+" characters"}`;
     const wrapped = `(function(){try{${helpers}\nvar __r=eval(${JSON.stringify(code)});`
       + `return __r===undefined?"(the script returned nothing)":(typeof __r==="string"?__r:JSON.stringify(__r))}`
       + `catch(e){return "BRAINO_ERR "+(e&&e.message?e.message:String(e))}})()`;
     const startedJs = Date.now();
     // 15s was sized for a script touching one page. Reading a dozen is slower
     // and still enormously cheaper than a dozen turns.
-    const out = await runJs(wrapped, app, 45000);
+    const out = macOwnJobActive() ? await ownBrowser().run(wrapped) : await runJs(wrapped, app, 45000);
     if (!out.ok) {
       logMac("hil.exec_js.failed", { reason: out.reason, detail: out.detail });
       /* javascript_not_allowed is a checkbox in Chrome, not a bug, and it is
@@ -17396,7 +18931,13 @@ async function macExecuteHilAction(action, elements) {
     const said = String(out.out || "").trim();
     if (said.startsWith("BRAINO_ERR")) {
       logMac("hil.exec_js.threw", { error: said.slice(0, 200) });
-      return { ok: false, error: `The script threw: ${said.replace("BRAINO_ERR ", "")}` };
+      const thrown = said.replace("BRAINO_ERR ", "");
+      /* Say the way round, not just the wall: "retry" on a Trusted Types page
+         is the same error every time. */
+      const way = /Trusted(?:HTML|Script|ScriptURL)/.test(thrown)
+        ? " This page blocks innerHTML and similar writes. Never set innerHTML, outerHTML or insertAdjacentHTML here. To put text in a box, call __brainoWrite(element or selector, text): it types like a keyboard and works in LinkedIn's post box and other rich editors. Or click the box and use the type action."
+        : "";
+      return { ok: false, error: `The script threw: ${thrown}${way}` };
     }
     const jsMs = Date.now() - startedJs;
     logMac("hil.exec_js.done", { chars: said.length, ms: jsMs });
@@ -17452,6 +18993,9 @@ async function macExecuteHilAction(action, elements) {
       // same field a search uses, so the loop folds it into facts and it
       // survives the turn instead of being learned and forgotten.
       // .detail is for the loop only (addresses to act on), never spoken.
+      // A tool that asked you something (which Riya?) hands the question up
+      // so the run stops for your answer instead of choosing for you.
+      if (out?.asks) return { ok: true, asks: true, say: String(out.say || "") };
       const said = [out && typeof out.say === "string" ? out.say.trim() : "", out && typeof out.detail === "string" ? out.detail.trim() : ""].filter(Boolean).join("\n");
       return said ? { ok: true, answer: said } : { ok: true };
     } catch (error) {
@@ -17519,7 +19063,158 @@ function honestEnding(message, { runId, step, actionsDone, lastCheckFailed, comm
   return { ok: true, say: text, source: "hil_loop" };
 }
 
-async function runMacHilLoop(command, resume = null) {
+/* Long jobs, faster and with a memory (2026-10-01). BRAINO_HIL_FAST=1 or
+   `npm run mac:fast`. Off by default until the long-job test says it helps.
+   Inside HIL only; Laya still makes the one decision, nothing new routes.
+     card   where the job is (goal, what worked), sent every turn
+     found  what earlier steps found, pinned so reminders can't evict it
+     chain  moves that don't need a fresh look run back to back, no turn
+     circle a move that just failed is never repeated as-is */
+function macHilFastEnabled() {
+  const fromFile = typeof ENV === "object" && ENV ? ENV.BRAINO_HIL_FAST : "";
+  return String(fromFile || process.env.BRAINO_HIL_FAST || "").trim() === "1";
+}
+function macHilCard(command, state) {
+  const done = (state.steps || []).filter((st) => st.ok !== false && st.intent).map((st) => st.intent);
+  const last = (state.steps || [])[state.steps.length - 1];
+  return {
+    goal: String(state.goal || command || "").slice(0, 400),
+    done: done.slice(-8),
+    now: last && last.ok === false ? `The last move failed (${String(last.why || "no reason").slice(0, 140)}). Try a different way, not the same move.` : "",
+  };
+}
+/* Runs the moves a turn chained after its step, back to back. Only moves that
+   point at no element (an index from the old read could be anything now),
+   and never one that could be irreversible: the model was told the same, this
+   is the Mac making sure. Stops at the first failure and hands that back as
+   the step to judge. */
+async function macRunChain(steps, command, state, generation, turnObs = null) {
+  let ran = 0;
+  let changed = 0;
+  let last = null;
+  let failed = false;
+  /* Filling a form in one turn (5 Oct): typing into boxes by their number, and
+     one click at the end ("Search"), as long as nothing before them moved the
+     page. The numbers come from the read before the chain and stay valid until
+     the page changes, so the page is not re-read (re-numbered) between them.
+     Anything after a click, an Enter or a navigation still needs a look. */
+  // The numbers the model saw; the page still carries them until it moves.
+  // No read handed over means the step before the chain already moved it.
+  let obs = turnObs && Array.isArray(turnObs.elements) ? turnObs : null;
+  let pageMoved = !obs;
+  const list = steps.slice(0, 4);
+  for (let i = 0; i < list.length; i++) {
+    const st = list[i];
+    if (macHilGeneration !== generation) break;
+    const a = st && st.action;
+    if (!a || st.reversible === false || macStepCanBeIrreversible(st) || macUnaskedMessageSend(st, command)) break;
+    if (a.index != null) {
+      const typing = a.type === "type" && !a.submit;
+      const lastClick = a.type === "click" && i === list.length - 1;
+      if (pageMoved || !(typing || lastClick)) break;
+    }
+    macTrail({ kind: "step", label: macPlainStep(st) });
+    // Box-number steps reuse the model's read (re-reading would renumber the
+    // page); everything else looks fresh, as before.
+    if (a.index == null || !obs) obs = await macBuildObservation();
+    if (a.type === "navigate" || a.type === "click" || a.type === "pressKey" || a.submit || a.type === "tool") pageMoved = true;
+    const result = await macExecuteHilAction(a, obs.elements);
+    if (result?.asks) return { asked: result.say };
+    let verified = { ok: true };
+    if (result?.ok && st.assert) verified = macVerifyAssert(st.assert, await macBuildObservation());
+    const settled = verified.ok ? result : { ...result, ok: false, error: verified.why };
+    macTrail({ kind: "result", ok: settled?.ok !== false });
+    state.steps.push({ intent: String(st.intent || ""), action: `${a.type}`, ok: settled?.ok !== false ? true : false, why: settled?.ok === false ? String(settled?.error || settled?.say || "failed") : null });
+    if (state.steps.length > 14) state.steps = state.steps.slice(-14);
+    if (result?.answer) macHilPin(state, `${a.type === "exec_js" ? "My script returned" : "Found"}: ${String(result.answer).slice(0, 2500)}`);
+    if (macActionChangedSomething(a, settled)) changed += 1;
+    ran += 1;
+    last = { intent: st.intent || "", action: a, expects: st.expects || "", result: settled };
+    if (settled?.ok === false) { failed = true; break; }
+  }
+  if (ran) macTrace("⛓ CHAIN", `${ran} move${ran === 1 ? "" : "s"} with no thinking in between${failed ? ", stopped at a failure" : ""}`);
+  return { ran, changed, lastStep: last, failed };
+}
+
+function macHilPin(state, text) {
+  if (!Array.isArray(state.found)) state.found = [];
+  state.found.push(String(text));
+  if (state.found.length > 6) state.found = state.found.slice(-6);
+}
+
+/* Prices, comparisons, "which is better": a question about the world, answered
+   by search in about two seconds (2026-10-01). It used to be planned, then
+   escalated to the loop, which clicked through Amazon and Flipkart for 28s
+   and showed a raw table. Only when nothing on screen is asked for. */
+const MAC_SEARCH_ANSWERS = /\b(?:compare|comparison|vs\.?|versus|cheaper|cheapest|lowest price|price of|prices of|how much (?:is|are|does|do)|which (?:one )?is better|which is the best|difference between|better than)\b/i;
+const MAC_SEARCH_NOT = /\b(?:open|show me|on (?:my|the|this) screen|this page|this tab|add (?:it |them )?to (?:my )?cart|buy|order|book|checkout|send|message|whatsapp|email)\b/i;
+
+/* An answer said to a person, not handed to the loop (2026-10-02): the
+   SOURCES block is for the loop and comes off, then the first two sentences,
+   about 240 characters at most. "Compare AirPods prices" was spoken as 1,859
+   characters with every link read out. */
+function macShortAnswer(text) {
+  const body = String(text || "").split(/\n+\s*SOURCES,/)[0].replace(/\s+/g, " ").trim();
+  const all = body.match(/[^.!?]+[.!?]+(\s|$)/g) || [body];
+  /* The sentences with the actual numbers come first: "AirPods 4 are ₹11,900
+     on Amazon" is the answer; "Flipkart generally offers lower prices" is not. */
+  const hasNumber = (x) => /[₹$€£]\s?\d|\d[\d,.]*\s?(?:rs|inr|usd|%|am|pm)\b/i.test(x);
+  const withNumbers = all.filter(hasNumber);
+  const sentences = withNumbers.length ? withNumbers : all;
+  let out = "";
+  for (const sen of sentences) {
+    if (out && (out + sen).length > 240) break;
+    out += sen;
+    if (out.split(/[.!?]/).filter((x) => x.trim()).length >= 2) break;
+  }
+  return out.trim() || body.slice(0, 240);
+}
+
+async function runMacHilLoop(command, resume = null, opts = {}) {
+  /* Book, order, find the cheapest: his own browser. Everything else, and an
+     answer to his own question about the same job, stays where it is. */
+  if (!resume && !(macOwnJob && macOwnJob.command === String(command || ""))) {
+    macOwnJob = ownBrowserEnabled() && deciderStage() >= 4 && ownBrowserModule.wantsOwnBrowser(command) ? { command: String(command || ""), at: Date.now(), told: false } : null;
+    if (macOwnJob) { macTrace("🌐 OWN BROWSER", `"${String(command).slice(0, 80)}" runs in Braino's browser, not yours`); logMac("own_browser.job", { command: textForLog(command) }); }
+  }
+  if (!resume && !opts.planFailed && MAC_SEARCH_ANSWERS.test(String(command || "")) && !MAC_SEARCH_NOT.test(String(command || ""))) {
+    macTrace("🔎 SEARCH", `"${String(command).slice(0, 80)}" is a question about the world, answered by search, no plan`);
+    const found = await MAC_HIL_TOOLS.web_search({ query: String(command) });
+    if (found && found.ok !== false && found.say) return { ok: true, say: macShortAnswer(found.say), sources: found.sources, source: "hil_search" };
+  }
+  /* Think once first. Only a job that has to look at the screen, or a plan
+     that failed at a step, goes on into the step-by-step loop below. */
+  if (!resume && !opts.planFailed && !opts.noPlan) {
+    const gen = macHilGeneration;
+    const plan = await planOnce(String(command || ""));
+    /* A step that can't be undone and that you didn't ask for gets one "go
+       ahead?" first. The planner turned "switch all my tabs" into closing
+       them all (2026-09-26), and plans run without the loop's gate. */
+    const surprise = plan ? planSurpriseStep(String(command || ""), plan.steps) : null;
+    if (surprise && gen === macHilGeneration) {
+      setPendingMacWorkflow({ type: "plan_confirm", stage: "plan_confirm", data: { command, plan, approval: { kind: "confirm", title: "Before I do this", detail: macApprovalPreview(surprise), yes: "Approve", no: "Cancel" } } });
+      logMac("plan.confirm_asked", { tool: surprise.tool });
+      return { ok: true, say: `Just to check, that means ${macPlainStep(surprise)}. Go ahead?`, source: "hil_plan" };
+    }
+    if (plan && gen === macHilGeneration) {
+      const planStarted = Date.now();
+      const run = await runPlanSteps(plan.steps, command, "hil-plan");
+      if (gen !== macHilGeneration) return { ok: true, say: "", source: "hil_plan", superseded: true };
+      if (run.asked) return { ok: true, say: run.say, source: "hil_plan" };
+      /* "Opened it for you" from a plan that only searched and read a link
+         (4 Oct): a plan may only claim it opened something if a page actually
+         opened while it ran. Otherwise the loop finishes the job. */
+      if (!run.failed && planClaimsUnopened(command, plan, planStarted)) {
+        logMac("plan.claimed_open_without_opening", { steps: plan.steps.map((st) => st.tool) });
+        return runMacHilLoop(command, null, { planFailed: `A plan ran ${plan.steps.map((st) => st.tool).join(", ")} but nothing was opened, and they asked to open it. Open it now; do not say it is open until the screen shows it.` });
+      }
+      if (!run.failed) {
+        maybeSaveSkill(command, plan.steps, plan.done);
+        return { ok: true, say: await planReply(command, run, plan.done), source: "hil_plan" };
+      }
+      return runMacHilLoop(command, null, { planFailed: `A plan ran ${run.at - 1} of ${plan.steps.length} steps, then step ${run.at} (${plan.steps[run.at - 1]?.tool}) failed: ${run.why}. Carry on from there.` });
+    }
+  }
   const runId = resume?.runId || crypto.randomUUID();
   // Several jobs need more room than one. This is the only thing the multi-step
   // read is used for now: how much rope, not which brain.
@@ -17528,6 +19223,9 @@ async function runMacHilLoop(command, resume = null) {
   const recentActions = [];
   let spokenLast = "";
   const state = resume?.state || { tasks: [], facts: [], asides: [], steps: [], budgetLeft: maxSteps };
+  const fast = macHilFastEnabled();
+  if (fast) macTrace("⚡ FAST", "long-job mode: card, pinned findings, chained moves");
+  if (opts.planFailed) state.facts.push(opts.planFailed);
   let lastStep = resume?.lastStep || null;
   let said = resume?.said || "";
   let retried = 0;
@@ -17582,7 +19280,18 @@ async function runMacHilLoop(command, resume = null) {
   let pendingReply = resume?.userReply ? String(resume.userReply) : null;
   const startStep = Math.max(0, Number(resume?.stepsUsed) || 0);
   const deadline = Date.now() + MAC_HIL_MAX_MS;
-  logMac("hil.loop.start", { command: textForLog(command), runId });
+  /* 20 seconds, then he says where he is and asks (2026-09-26). "Switch all my
+     tabs" thought for 102 seconds with nothing on screen but "thinking". A yes
+     carries on from the same step, with the limit lifted for that job. */
+  /* "Keep going" buys a minute, not the rest of the seven. Infinity here let a
+     resumed job run silently and speak up to seven minutes later (2026-09-27). */
+  /* Measured from the last move that worked, not from the start (2026-10-01):
+     "keep going?" came while he was clearly getting somewhere. Twenty
+     seconds of nothing is stuck; twenty seconds of work is just work. */
+  let stuckAt = Date.now() + (resume?.keepGoing ? MAC_HIL_KEEP_GOING_MS : MAC_HIL_STUCK_MS);
+  logMac("hil.loop.start", { command: textForLog(command), runId, ...(fast ? { fast: true } : {}) });
+  macJobCommand = { text: String(command || ""), at: Date.now() };
+  macTrail({ kind: "start", command: String(command || "").slice(0, 120), resumed: Boolean(resume) });
   macResetRunSpeed();
   macActiveHilRun = { runId, state, generation: myGeneration, command: String(command || "") };
 
@@ -17597,6 +19306,15 @@ async function runMacHilLoop(command, resume = null) {
     if (macHilGeneration !== myGeneration) {
       logMac("hil.loop.superseded", { runId, step });
       return { ok: true, say: "", source: "hil_loop", superseded: true };
+    }
+    if (Date.now() > stuckAt && step > startStep) {
+      const where = macPlainStep(lastStep);
+      logMac("hil.loop.stuck", { runId, step, where });
+      macTrace("⏸ STUCK", `20s on "${String(command).slice(0, 80)}", paused at step ${step}: ${where}`);
+      sendTaskProgress({ status: "thinking", text: "Stopped: taking too long" });
+      pendingHilRun = { runId, command, state, lastStep, said, stepsUsed: step, gatedSig: "", askedConsent: "", keepGoing: true, createdAt: Date.now() };
+      setPendingMacWorkflow({ type: "hil_answer", stage: "hil_answer", data: { command, question: "keep going?", approval: { kind: "keep_going", title: "This is taking a while", detail: `I got to ${where}.`, yes: "Keep going", no: "Stop" } } });
+      return { ok: true, say: `This is taking a while. I got to ${where}. Want me to keep going?`, source: "hil_loop" };
     }
     if (Date.now() > deadline) {
       logMac("hil.loop.timeout", { runId, step });
@@ -17631,12 +19349,17 @@ async function runMacHilLoop(command, resume = null) {
         // "Send this link": the tab they are looking at is usually the link.
         activeMacContext?.browserUrl ? `Front tab: ${textForLog(activeMacContext.browserTitle || "", 120)} ${activeMacContext.browserUrl}` : "",
         macWhatsAppAppInstalled() ? "WhatsApp: the Mac app is installed. Any WhatsApp message goes through the whatsapp_send tool, one step, about a second. Never WhatsApp Web." : "",
+        devServers.describeDevServers(macDevServersCache.servers),
         nowPlayingLine,
+        layaHintLine(command),
+        relationsLine(),
+        macOwnJobActive() ? OWN_BROWSER_NOTE : "",
         macRecentExchanges(),
       ].filter(Boolean).join("\n"),
       runId,
       state: {
         ...state,
+        ...(fast ? { card: macHilCard(command, state), batch: true } : {}),
         screen: obs.text,
         lastStep: lastStep || undefined,
         userReply: pendingReply || undefined,
@@ -17664,6 +19387,8 @@ async function runMacHilLoop(command, resume = null) {
     let turnPrepCached = false;
     let turnModelMs = 0;
     let turnModel = "";
+    let turnInputTokens = 0;
+    let turnCachedTokens = 0;
     /* Where the time goes, printed while it goes.
      *
      * The whole speed argument is: a script is a third of a second and a TURN is
@@ -17727,7 +19452,14 @@ async function runMacHilLoop(command, resume = null) {
       turnPrepCached = data?.meta?.prepCached === true;
       turnModelMs = Number(data?.meta?.modelMs) || 0;
       turnModel = String(data?.meta?.model || "");
-      if (data?.meta?.parse_ok === false) throw new Error("unreadable turn");
+      turnInputTokens = Number(data?.meta?.inputTokens) || 0;
+      turnCachedTokens = Number(data?.meta?.cachedTokens) || 0;
+      if (data?.meta?.parse_ok === false) {
+        /* The server says WHY it could not read the turn; keep it. Two runs
+           died on "unreadable turn" with no reason on record (2026-09-28). */
+        logMac("hil.loop.unreadable", { runId, step, why: String(data.meta.parse_error || "").slice(0, 200), raw: textForLog(String(data.meta.parse_raw || "").slice(0, 300)) });
+        throw new Error(`unreadable turn: ${String(data.meta.parse_error || "unknown").slice(0, 120)}`);
+      }
       retried = 0; // a good turn clears the run's hiccup budget
       if (macHilAbort === controller) macHilAbort = null;
     } catch (error) {
@@ -17766,10 +19498,11 @@ async function runMacHilLoop(command, resume = null) {
       macRunTurns += 1;
       console.log(`[${tag}] ${step + 1} (thought ${(thoughtMs / 1000).toFixed(1)}s): ${scrubForLog(thinking)}`);
       macTrace("⏱ STEP", `${step + 1}: ${(thoughtMs / 1000).toFixed(1)}s total, prep ${(turnPrepMs / 1000).toFixed(1)}s${turnPrepCached ? " (reused)" : ""}, model ${(turnModelMs / 1000).toFixed(1)}s`);
-      logMac("hil.loop.turn", { step: step + 1, brain: turnBrain, model: turnModel, ms: thoughtMs, prepMs: turnPrepMs, prepCached: turnPrepCached, modelMs: turnModelMs, plan: state.plan?.length || 0 });
+      logMac("hil.loop.turn", { step: step + 1, brain: turnBrain, model: turnModel, ms: thoughtMs, prepMs: turnPrepMs, prepCached: turnPrepCached, modelMs: turnModelMs, inputTokens: turnInputTokens, cachedTokens: turnCachedTokens, plan: state.plan?.length || 0, decision: String(turn?.decision?.type || ""), thinking: textForLog(String(turn?.thinking || ""), 220), says: textForLog(String(turn?.decision?.question || turn?.decision?.text || turn?.decision?.message || ""), 160) });
       // brain rides the same payload the caption does, so the notch can show who
       // is thinking without a second channel that could disagree with this one.
       sendTaskProgress({ status: "thinking", text: thinking.slice(0, 140), brain: turnBrain, model: turnModel, running: true });
+      macTrail({ kind: "thought", text: thinking.slice(0, 400), ms: thoughtMs, brain: turnBrain });
       /* Say it out loud as he works. Watching a silent thing click around your
          screen is unnerving; hearing what it is doing is the difference between
          a tool and someone helping you. One breath, first sentence only, and
@@ -17781,12 +19514,19 @@ async function runMacHilLoop(command, resume = null) {
          setting out to do, then works in front of you. */
       sendToRenderer("braino-mac:thinking-step", { text: thinking.slice(0, 240), step: step + 1 });
       const aloud = thinking.split(/(?<=[.!?])\s/)[0].trim().slice(0, 150);
-      if (!spokenLast && aloud) {
+      /* Only while he is about to DO something, and never a note about you.
+         "The user says there is too much air in the room" was read out after
+         he had already answered: a turn that answers or asks has its own words,
+         and thinking that talks about "the user" is private. */
+      const aboutToAct = turn.decision?.type === "step";
+      const privateNote = /\b(?:the user|user's|the person|they want|they are|they said)\b/i.test(aloud);
+      if (!spokenLast && aloud && aboutToAct && !privateNote) {
         spokenLast = aloud;
         sendToRenderer("braino-mac:speak-line", { text: aloud });
       }
     }
     // HIL owns the plan. Its split is the job list, first turn only.
+    if (turn.split?.restated_goal && !state.goal) state.goal = String(turn.split.restated_goal);
     if (turn.split?.tasks?.length && !state.tasks.length) {
       state.tasks = turn.split.tasks.map((desc, i) => ({ desc, status: i === 0 ? "active" : "pending" }));
     }
@@ -17880,7 +19620,18 @@ async function runMacHilLoop(command, resume = null) {
     /* A step is only irreversible if the ACTION could be. See
        macStepCanBeIrreversible: a navigate that says it cannot be undone is the
        model being nervous about the command, not about the click. */
-    const irreversible = stepObj.reversible === false && macStepCanBeIrreversible(stepObj);
+    const unaskedSend = macUnaskedMessageSend(stepObj, command);
+    if (unaskedSend) logMac("hil.loop.unasked_send_gated", { runId, step, tool: String(stepObj.action?.tool || "") });
+    /* The model reads "Start a post" as "Post". 2026-09-29: "write a LinkedIn
+       post" stopped TWICE to ask about opening the composer, "That cannot be
+       undone". Opening a box undoes itself; only the button that finishes the
+       job is a real gate. So a click is checked against the name actually on
+       the page: an opener goes straight through, the final Post still asks. */
+    const clickName = String(stepObj.action?.type || "") === "click"
+      ? macElementIdentity(obs.elements, stepObj.action?.index).split("|").slice(1).join("|") : "";
+    const onlyOpens = Boolean(clickName) && macClickOnlyOpens(clickName);
+    if (stepObj.reversible === false && onlyOpens) logMac("hil.loop.gate_opener", { runId, step, target: textForLog(clickName, 60) });
+    const irreversible = (stepObj.reversible === false && macStepCanBeIrreversible(stepObj) && !onlyOpens) || unaskedSend;
     if (stepObj.reversible === false && !irreversible) {
       logMac("hil.loop.gate_downgraded", { runId, step, action: String(stepObj.action?.type || "") });
     }
@@ -17917,7 +19668,7 @@ async function runMacHilLoop(command, resume = null) {
         gatedTarget: macElementIdentity(obs.elements, stepObj.action?.index),
         createdAt: Date.now(),
       };
-      setPendingMacWorkflow({ type: "hil_answer", stage: "hil_answer", data: { command, question: ask } });
+      setPendingMacWorkflow({ type: "hil_answer", stage: "hil_answer", data: { command, question: ask, approval: { kind: "confirm", title: "This can't be undone", detail: macApprovalPreview(stepObj), yes: "Approve", no: "Cancel" } } });
       return { ok: true, say: ask, source: "hil_loop" };
     }
     // A yes covers the step it was asked about, once.
@@ -17927,8 +19678,10 @@ async function runMacHilLoop(command, resume = null) {
        same page five, which a step counter can only cut short, never explain. */
     recentActions.push(stepSig);
     if (recentActions.length > MAC_HIL_REPEAT_WINDOW) recentActions.shift();
+    const sameAsFailed = fast && lastStep && lastStep.result && lastStep.result.ok === false && macHilStepSignature(lastStep) === stepSig;
+    if (sameAsFailed) logMac("hil.loop.repeat_of_failed", { runId, step, action: stepSig });
     const repeats = recentActions.filter((sig) => sig === stepSig).length;
-    if (repeats >= MAC_HIL_REPEAT_LIMIT) {
+    if (repeats >= MAC_HIL_REPEAT_LIMIT || sameAsFailed) {
       logMac("hil.loop.circling", { runId, step, action: stepSig });
       /* Going in circles is the exact moment a person stops and looks properly.
          One rescue per run: if he circles again after having actually seen the
@@ -17979,7 +19732,25 @@ async function runMacHilLoop(command, resume = null) {
       continue;
     }
 
+    macTrail({ kind: "step", label: macPlainStep(stepObj) });
+    const actStarted = Date.now();
     const result = await macExecuteHilAction(stepObj.action, obs.elements);
+    /* One line per action the hands ran, for /trace and for reading a run
+       afterwards: what was decided, what ran, how long the hands took, and
+       whether it worked. The turn line already has the thinking time. */
+    logMac("hil.loop.acted", {
+      runId, step,
+      action: String(stepObj.action?.type || ""),
+      tool: String(stepObj.action?.tool || ""),
+      target: stepObj.action?.index != null ? textForLog(String((obs.elements || []).find((e) => e.index === stepObj.action.index)?.name || stepObj.action.index), 60) : textForLog(String(stepObj.action?.url || stepObj.action?.text || ""), 80),
+      intent: textForLog(String(stepObj.intent || ""), 140),
+      ok: result?.ok !== false,
+      error: result?.ok === false ? textForLog(String(result?.error || result?.say || ""), 140) : "",
+      handsMs: Date.now() - actStarted,
+    });
+    /* The step asked you (which Riya?). Its answer finishes the job through
+       the pending question, so the run ends here and says only the question. */
+    if (result?.asks) return { ok: true, say: result.say, source: "hil_loop" };
     state.steps.push({
       intent: String(stepObj.intent || ""),
       action: `${stepObj.action?.type}${stepObj.action?.index != null ? ` [${stepObj.action.index}]` : ""}`,
@@ -17989,7 +19760,10 @@ async function runMacHilLoop(command, resume = null) {
     if (state.steps.length > 14) state.steps = state.steps.slice(-14);
     // A look or a search is worthless if it evaporates next turn, so its content
     // is promoted into facts, which DO persist.
-    if (result?.sees) state.facts.push(`I looked and saw: ${String(result.sees).slice(0, 600)}`);
+    if (result?.sees) {
+      if (fast) macHilPin(state, `I looked and saw: ${String(result.sees).slice(0, 1200)}`);
+      else state.facts.push(`I looked and saw: ${String(result.sees).slice(0, 600)}`);
+    }
     /* A script result is not a search result and must not be filed as one.
      *
      * Both arrive as .answer, so an exec_js return was being written into facts
@@ -17997,7 +19771,11 @@ async function runMacHilLoop(command, resume = null) {
      * third and smallest of the three places the same result was being trimmed,
      * and the one that decided what survived past the next turn. Findings from a
      * script are the whole point of running it, so they get room. */
-    if (result?.answer && stepObj.action?.type === "exec_js") {
+    if (result?.answer && fast) {
+      macHilPin(state, stepObj.action?.type === "exec_js"
+        ? `My script returned: ${String(result.answer).slice(0, 4000)}`
+        : `Search "${stepObj.action?.query}" answered: ${String(result.answer).slice(0, 2500)}`);
+    } else if (result?.answer && stepObj.action?.type === "exec_js") {
       state.facts.push(`My script returned: ${String(result.answer).slice(0, 4000)}`);
     } else if (result?.answer) {
       /* 600 was sized for a spoken answer, and the sources are appended to the
@@ -18016,9 +19794,23 @@ async function runMacHilLoop(command, resume = null) {
       if (!verified.ok) logMac("hil.loop.assert_failed", { why: verified.why, assert: stepObj.assert?.assert });
     }
     const settled = verified.ok ? result : { ...result, ok: false, error: verified.why };
+    macTrail({ kind: "result", ok: settled?.ok !== false });
     if (macActionChangedSomething(stepObj.action, settled)) actionsDone += 1;
+    if (settled?.ok !== false) stuckAt = Math.max(stuckAt, Date.now() + MAC_HIL_STUCK_MS);
     lastCheckFailed = !verified.ok;
     lastStep = { intent: stepObj.intent || "", action: stepObj.action, expects: stepObj.expects || "", result: settled };
+    if (fast && settled?.ok !== false && Array.isArray(d.then) && d.then.length) {
+      const mainA = stepObj?.action || {};
+      const mainMoved = mainA.type === "navigate" || mainA.type === "click" || mainA.type === "pressKey" || mainA.type === "tool" || Boolean(mainA.submit);
+      const chained = await macRunChain(d.then, command, state, myGeneration, mainMoved ? null : obs);
+      if (chained.asked) return { ok: true, say: chained.asked, source: "hil_loop" };
+      if (chained.ran) {
+        actionsDone += chained.changed;
+        lastStep = chained.lastStep;
+        lastCheckFailed = chained.failed;
+        logMac("hil.loop.chain", { runId, step, ran: chained.ran, of: d.then.length, failed: chained.failed });
+      }
+    }
     state.budgetLeft = Math.max(1, maxSteps - step - 1);
     if (macHilGeneration !== myGeneration) {
       logMac("hil.loop.superseded", { runId, step, at: "after_step" });
@@ -18093,10 +19885,44 @@ let hilRouterOpenUntil = 0;
 // integer rather than a boolean on purpose: alarm handling behaves differently
 // inside the 2-minute and 10-minute windows, and "armed" cannot tell those
 // apart, so a boolean here would teach HIL a distinction it then cannot make.
+/* HIL teaches Laya. Every sentence HIL settles is written down with what Laya
+   guessed, as a training line for her next retrain (~/.braino-laya/training/
+   lessons.jsonl; build_lessons.py turns them into labeled data). Private topics
+   are never written. */
+const LAYA_LESSONS_PATH = path.join(os.homedir(), ".braino-laya", "training", "lessons.jsonl");
+const HIL_TO_LAYA_KIND = { fire: "one_tool", loop: "multi_step", plan: "multi_step", ask: "ask", chat: "chat" };
+function noteLayaLesson(raw, sorted, plan) {
+  try {
+    const text = String(raw || "").trim();
+    if (!text || !plan || !HIL_TO_LAYA_KIND[plan.kind] || mentionsPrivateTopic(text)) return;
+    if (!fs.existsSync(path.dirname(LAYA_LESSONS_PATH))) return;
+    const line = { at: new Date().toISOString(), text, kind: HIL_TO_LAYA_KIND[plan.kind], hil: plan.kind, tool: plan.tool || "",
+      laya: sorted ? { kind: sorted.kind, confidence: sorted.confidence, action: sorted.action || "" } : null,
+      app: activeMacContext?.appName || "", lastSaid: textForLog(macRecentExchanges(), 300) || "" };
+    fs.appendFileSync(LAYA_LESSONS_PATH, JSON.stringify(line) + "\n");
+  } catch (_) {}
+}
+
+/* Laya's guess for the sentence being routed, sent to HIL as a hint, never an
+   order: HIL still picks the tool, and sends, buys and posts keep their gate. */
+let layaHintForRouter = "";
+let layaHintSentence = "";
+/* The same hint for the planner and the loop, only for the sentence it was made for. */
+function layaHintLine(command) {
+  return layaHintForRouter && layaHintSentence && String(command || "").trim() === layaHintSentence
+    ? `Laya, the quick sorter on this Mac, guesses: ${layaHintForRouter}.`
+    : "";
+}
+function layaHintFor(sorted) {
+  if (!sorted || deciderStage() < 2 || !sorted.action || sorted.actionConfidence < LAYA_ACTION_SURE) return "";
+  if (LAYA_TALK.has(sorted.action)) return sorted.action === "ask" ? "" : "probably just talking to you, not a task: answer, do not act";
+  return `probably one ${sorted.action.replace(/_/g, " ")} job (${sorted.kind.replace(/_/g, " ")}); a hint, check it against what they said`;
+}
 function hilRouterSurface() {
   const wa = lastIncomingWhatsApp;
   const waFresh = wa && Date.now() - wa.at < 15 * 60 * 1000;
   return {
+    ...(layaHintForRouter ? { layaGuess: layaHintForRouter } : {}),
     app: activeMacContext?.appName || "",
     title: textForLog(activeMacContext?.browserTitle || activeMacContext?.windowTitle || ""),
     url: textForLog(activeMacContext?.browserUrl || ""),
@@ -18120,6 +19946,8 @@ function hilRouterSurface() {
 
 function fireHilRouterShadow(raw, surface, result) {
   if (!HIL_ROUTER_SHADOW || !raw) return;
+  // Stage 4: HIL is the bigger brain, not a second opinion after the fact.
+  if (deciderStage() >= 4) return;
   if (Date.now() < hilRouterOpenUntil) return;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), HIL_ROUTER_TIMEOUT_MS);
@@ -18227,9 +20055,12 @@ How you behave right now:
 function parseMondayModeIntent(raw) {
   const source = cleanPrompt(String(raw || ""));
   if (!source) return null;
-  if (/\benter\s+monday\s*mode\b/i.test(source)
-    || /\bmonday\s*mode\s+on\b/i.test(source)
-    || /\b(?:turn\s+on|start|activate)\s+monday\s*mode\b/i.test(source)) {
+  /* "Then change to Monday mode" and "Monday mood" went to the loop and cost 55
+     and 83 seconds on 2026-09-25. A mode switch is a word, not a job. */
+  if (/\benter\s+monday\s*mo(?:de|od)\b/i.test(source)
+    || /\bmonday\s*mo(?:de|od)\s+on\b/i.test(source)
+    || /\b(?:turn\s+on|start|activate|enable|switch\s+(?:on|to|into)|change\s+(?:to|into)|go\s+(?:to|into)|put\s+(?:me\s+)?(?:in|into|on))\s+(?:the\s+)?monday\s*mo(?:de|od)\b/i.test(source)
+    || /^(?:(?:ok(?:ay)?|yes|yeah|then)[,\s]+)?(?:the\s+)?monday\s*mo(?:de|od)[.!]?$/i.test(source)) {
     return { action: "enter" };
   }
   if (mondayModeActive && (
@@ -18351,16 +20182,689 @@ async function callHilRouterLive(raw) {
    go to braino-mac.log as structured events; this is the human copy. */
 function macTrace(tag, text) {
   console.log(`[Braino ${tag}] ${scrubForLog(String(text || ""))}`);
+  if (traceSink) { try { traceSink({ kind: "trace", tag, text: scrubForLog(String(text || "")), at: Date.now() }); } catch (_) {} }
 }
 
-const HIL_ANSWER_NEW_JOB = /^(?:(?:hey\s+)?(?:braino|brainelle)[,.!\s]+)?(?:(?:can|could|would) you\s+)?(?:please\s+)?(?:open|close|quit|play|pause|search|find|show|message|text|call|facetime|create|make|delete|remove|go to|take|set|change|turn|start|write|book|buy|order|close|launch|put on|look up)\b/i;
+/* Does this sentence end a waiting question instead of answering it? A yes or
+   a no always answers. An order is a new job. A question back ("where's my
+   phone?") is not an answer, and neither is a sentence in another script that
+   is not a yes or no: those were eaten as answers to "are you safe?". */
+/* 2026-10-05: an old job paused on "want me to keep going?" (or a question)
+   and took the next sentence as its answer, so "Braino, maximize the tabs"
+   resumed a two-minute-old job instead of maximizing anything. */
+const HIL_ANSWER_STOPWORDS = new Set(["which", "what", "should", "would", "could", "want", "that", "this", "with", "from", "your", "have", "there", "their", "them", "then", "they", "were", "will", "into", "about", "like", "just", "open", "book", "show", "send", "play", "item", "page", "screen", "please", "braino"]);
+function hilAnswerNamesAnOption(reply, question) {
+  const words = (v) => String(v || "").toLowerCase().match(/[\p{L}\p{N}]{4,}/gu) || [];
+  const asked = new Set(words(question).filter((w) => !HIL_ANSWER_STOPWORDS.has(w)));
+  return asked.size > 0 && words(reply).some((w) => asked.has(w));
+}
+
+function hilAnswerReleasedBy(raw, pending = null) {
+  const t = String(raw || "").trim();
+  if (!t) return false;
+  /* Naming one of the options he asked about is an answer, whatever verb
+     leads it: "book the SpiceJet one" to "SpiceJet or IndiGo?" (4 Oct). */
+  if (pending?.data?.approval?.kind !== "keep_going" && hilAnswerNamesAnOption(t, pending?.data?.question)) return false;
+  // "Okay, Braino, I said paste the prompt" reads as a yes by its first word;
+  // a sentence that carries its own command is a new ask. "Yes, open it" is not.
+  if (HIL_ANSWER_NEW_JOB.test(t) && t.split(/\s+/).length > 3) return true;
+  if (macHilAnswerApproves(t) || /^(?:no|nope|nah|cancel|haan|han|nahi|nahin|हाँ|हां|नहीं|नही|ہاں|نہیں)(?:\b|$|[\s.,!])/i.test(t)) return false;
+  // "Keep going?" is answered with a yes or a no. Anything else is a new ask.
+  if (pending?.data?.approval?.kind === "keep_going") return true;
+  if (HIL_ANSWER_NEW_JOB.test(t)) return true;
+  if (/^(?:what|where|why|who|whom|whose|when|how|which)\b/i.test(t) || /\?\s*$/.test(t)) return true;
+  if (/[ऀ-ॿ؀-ۿ]/.test(t)) return true;
+  return false;
+}
+
+const HIL_ANSWER_NEW_JOB = /^(?:(?:ok(?:ay)?|so|now|and|then|also|bro|you know|i said|no i said)[,.!\s]+)*(?:(?:hey\s+)?(?:braino|brainelle)[,.!\s]+)?(?:(?:ok(?:ay)?|so|now|i said|no i said)[,.!\s]+)*(?:(?:can|could|would) you\s+)?(?:please\s+)?(?:open|close|quit|play|pause|search|find|show|message|text|call|facetime|create|make|delete|remove|go to|go back|take|set|change|turn|start|write|book|buy|order|launch|put on|look up|maximi[sz]e|minimi[sz]e|paste|copy|scroll|click|type|send|switch|reload|refresh|save|mute|unmute|share)\b/i;
+
+/* Fully spelled-out commands that already have a one-second shortcut. HIL is
+   for the unclear ones; putting it in front of these made "text Tejas on
+   WhatsApp saying you can use Spotify" take 22 seconds (it escalated to the
+   loop because sending cannot be undone) and "open YouTube for me" take 19.
+   Each check is shaped, not a keyword: a person AND a message, a song AND
+   Spotify, one site or app and nothing after it. */
+function macShortcutFor(raw) {
+  const text = String(raw || "").trim();
+  if (!text || /\b(?:and then|then|after that|and also)\b/i.test(text)) return null;
+  const wa = parseWhatsAppIntent(text);
+  if (wa && wa.recipient && wa.message) return "whatsapp";
+  if (fastSpotifyTrackIntent(text)) return "spotify";
+  const yt = parseYouTubeIntent(text);
+  if (yt && yt.action === "play" && yt.query && !/\band\b/i.test(yt.query)) return "youtube";
+  if (macBareWebOpen(text)) return "open site";
+  const bare = text
+    .replace(/^(?:hey\s+)?brain(?:o|elle)\b[\s,.!]*/i, "")
+    .replace(/^(?:(?:can|could|would|will)\s+you\s+)?(?:please\s+)?/i, "")
+    .replace(/[.?!]+$/, "")
+    .replace(/(?:\s+(?:for me|please|pls|now|right now))+$/i, "")
+    .trim();
+  const app = bare.match(/^(?:open|launch|start)\s+([a-z0-9 .]{2,24})$/i);
+  if (app && resolveAppTarget(app[1].trim())) return "open app";
+  return null;
+}
+
+// ── Fill this form for me · log me in ────────────────────────────────────────
+// See form-fill.cjs. Forms are filled from what he knows about you, in about a
+// second, with no model. Logins go through Chrome's own saved passwords: he
+// clicks the box, Chrome offers the login, he picks it. He never sees it.
+const FORM_PROFILE_PATH = path.join(AUTH_STORE_DIR, "form-profile.json");
+function readFormProfileFile() { try { return JSON.parse(fs.readFileSync(FORM_PROFILE_PATH, "utf8")) || {}; } catch (_) { return {}; } }
+function rememberFormDetail(key, value) {
+  const next = { ...readFormProfileFile(), [key]: value, updatedAt: Date.now() };
+  try { fs.writeFileSync(FORM_PROFILE_PATH, JSON.stringify(next, null, 2)); } catch (_) {}
+  logMac("form.profile.saved", { key });
+}
+/* Everything he knows that a form might ask: your account, what you told him
+   in Set him up, and details you told him to remember. Facts are only mined
+   for things with an obvious shape (a phone number, a LinkedIn link). */
+async function formProfile() {
+  const auth = authStatusPayload();
+  const setup = readSetupState();
+  const saved = readFormProfileFile();
+  const full = String(saved.fullName || auth.displayName || "").trim();
+  const [first, ...rest] = full.split(/\s+/);
+  const p = {
+    fullName: full || "", firstName: saved.firstName || first || setup.callMe || "", lastName: saved.lastName || rest.join(" "),
+    email: saved.email || auth.email || "", org: saved.org || setup.org || "",
+    role: saved.role || setup.persona || "", program: saved.program || (/mesa/i.test(setup.org || "") ? "PGP in Venture Building" : ""),
+  };
+  let facts = [];
+  try { facts = ((await Promise.race([setupSlowFacts(), new Promise((r) => setTimeout(() => r({ facts: [] }), 700))])).facts || []).map((f) => String(f.content || "")); } catch (_) {}
+  const all = facts.join(" \n ");
+  const phone = all.match(/(?:\+?91[\s-]?)?[6-9]\d{4}[\s-]?\d{5}\b/);
+  const li = all.match(/https?:\/\/(?:[\w-]+\.)?linkedin\.com\/in\/[\w-]+\/?/i);
+  const gh = all.match(/https?:\/\/github\.com\/[\w-]+/i);
+  if (phone) p.phone = phone[0];
+  if (li) p.linkedin = li[0];
+  if (gh) p.github = gh[0];
+  return { ...p, ...Object.fromEntries(Object.entries(saved).filter(([k, v]) => v && k !== "updatedAt")) };
+}
+
+async function fillFormForMe() {
+  const t = Date.now();
+  const scan = await runJs(formFill.SCAN_JS);
+  if (!scan.ok) return { ok: false, say: scan.reason === "javascript_not_allowed" ? "Chrome needs one setting first: View, Developer, Allow JavaScript from Apple Events." : "I couldn't read this page." };
+  let page; try { page = JSON.parse(scan.out); } catch (_) { return { ok: false, say: "I couldn't read this page." }; }
+  if (!page.fields.length) return { ok: false, say: "I don't see a form on this page." };
+  const profile = await formProfile();
+  const { assign, unknown } = formFill.planFill(page.fields, profile);
+  const wrote = assign.length ? Number((await runJs(formFill.fillJs(assign))).out || 0) : 0;
+  macTrace("📝 FORM", `${page.fields.length} fields, filled ${wrote} (${assign.map((a) => a.key).join(", ")}) in ${((Date.now() - t) / 1000).toFixed(1)}s; left ${unknown.length}`);
+  logMac("form.filled", { host: (() => { try { return new URL(page.url).hostname; } catch (_) { return ""; } })(), fields: page.fields.length, filled: wrote, left: unknown.length, ms: Date.now() - t });
+  if (!wrote) return { ok: true, say: unknown.length ? `I don't know any of these yet. Tell me, say my phone number is, and I'll remember.` : "It's already filled in." };
+  const left = unknown.slice(0, 2).map((s) => s.replace(/\s*\*\s*$/, "").slice(0, 40));
+  return { ok: true, value: String(wrote), say: unknown.length ? `Filled ${wrote}. ${left.join(" and ")}${unknown.length > 2 ? ` and ${unknown.length - 2} more` : ""} ${unknown.length === 1 ? "is" : "are"} yours. I didn't send it.` : `All ${wrote} filled. Have a look, then send it.` };
+}
+
+async function signInSaved() {
+  const t = Date.now();
+  for (let round = 0; round < 2; round++) {
+    const scan = await runJs(formFill.LOGIN_JS);
+    if (!scan.ok) return { ok: false, say: scan.reason === "javascript_not_allowed" ? "Chrome needs one setting first: View, Developer, Allow JavaScript from Apple Events." : "I couldn't read this page." };
+    let page; try { page = JSON.parse(scan.out); } catch (_) { return { ok: false, say: "I couldn't read this page." }; }
+    const site = String(page.host || "this site").replace(/^www\./, "");
+    if (page.otp && !page.password) return { ok: true, say: "It wants a code now. That one's yours." };
+    const box = page.user || page.password;
+    if (!box) return round ? { ok: true, say: `You're in on ${site}.` } : { ok: false, say: "I don't see a login here." };
+    if (!box.filled) {
+      const front = await focusChrome("Google Chrome");
+      if (!front.ok) return { ok: false, say: "I couldn't bring Chrome to the front, so I didn't click." };
+      await runJs(formFill.GUARD_JS);
+      // A real click, so Chrome opens its saved-login list under the box.
+      await runAxHelper(["clickat", String(box.x), String(box.y)], 6000);
+      await new Promise((r) => setTimeout(r, 450));
+      await execFileP("/usr/bin/osascript", ["-e", appleScriptForKeys("down")], { timeout: 3000 }).catch(() => {});
+      await new Promise((r) => setTimeout(r, 150));
+      await execFileP("/usr/bin/osascript", ["-e", appleScriptForKeys("return")], { timeout: 3000 }).catch(() => {});
+      await new Promise((r) => setTimeout(r, 450));
+      const after = JSON.parse((await runJs(formFill.LOGIN_JS)).out || "{}");
+      const filled = (after.user || after.password || {}).filled;
+      macTrace("🔑 LOGIN", `${site}: Chrome ${filled ? "filled it" : "had nothing saved"} (${((Date.now() - t) / 1000).toFixed(1)}s)`);
+      if (!filled) {
+        await execFileP("/usr/bin/osascript", ["-e", appleScriptForKeys("escape")], { timeout: 3000 }).catch(() => {});
+        logMac("login.saved", { host: site, filled: false });
+        return { ok: false, say: `Chrome doesn't have a login saved for ${site}.` };
+      }
+    }
+    const before = page.url;
+    await runJs(formFill.SUBMIT_JS);
+    // Wait for the page to move: signed in, a password step, or a code.
+    const until = Date.now() + 5000;
+    let moved = false;
+    while (Date.now() < until) {
+      await new Promise((r) => setTimeout(r, 400));
+      const u = await frontTabUrl();
+      if (u && u !== before) { moved = true; break; }
+    }
+    const next = JSON.parse((await runJs(formFill.LOGIN_JS)).out || "{}");
+    logMac("login.saved", { host: site, filled: true, round, moved, ms: Date.now() - t });
+    if (next.otp && !next.password) return { ok: true, say: "Filled. It wants a code now, that one's yours." };
+    if (next.password && !next.password.filled && round === 0 && !next.user) continue; // the password comes on a second page
+    if (!moved && next.password) return { ok: false, say: `I filled it and pressed sign in, but ${site} didn't let me through. Have a look.` };
+    macTrace("🔑 LOGIN", `${site}: signed in, ${((Date.now() - t) / 1000).toFixed(1)}s`);
+    return { ok: true, say: `You're in.` };
+  }
+  return { ok: true, say: "You're in." };
+}
+
+/* Anything about your own day, stuff or people: a model with no tools can't
+   answer it, so it never goes to quick chat on Laya's word alone. */
+const MAC_OWN_DATA = /\b(?:my|mine|me\b.*\b(?:message|text)|remind|messag|texted|whats\s*app|e-?mail|inbox|what was i|what did i|where was i|what have i|last night|yesterday|tomorrow|tonight|class|classes|attendance|timetable|schedule|due|deadline|assignment|playing|song|music|open|play|send|find|search|look up|weather|news|price|score)\b/i;
+
+// ── Laya: the 40ms first sort ────────────────────────────────────────────────
+// A small model trained on 1,542 of Itish's own commands (85% on ones it never
+// saw). It runs on the Mac as a local server (laya-serve.py) so it stays warm.
+// Missing venv, missing model or BRAINO_LAYA=0: Braino routes as before.
+const LAYA_PY = path.join(os.homedir(), ".braino-laya", "bin", "python");
+/* BRAINO_LAYA_CONTEXT=1: Laya v4, which reads each sentence with what was
+   around it (what Braino last said, the screen, music, a running job, his
+   name). Trained on 2004 of Itish's sentences with their context, 29 Sep:
+   when it is sure it is right 90 times in 100, and it is sure about 63% of
+   sentences. Off by default until tried. Its own port, so an old Laya still
+   running from before can never answer for it. */
+const LAYA_WITH_CONTEXT = String((typeof ENV === "object" && ENV?.BRAINO_LAYA_CONTEXT) || process.env.BRAINO_LAYA_CONTEXT || "").trim() === "1";
+/* With context, v7 (v6 fine-tuned to read the context line, 5 Oct) when it is
+   there, else the older v4. */
+const LAYA_CONTEXT_MODEL = fs.existsSync(path.join(os.homedir(), ".braino-laya", "models", "braino-kind-v7", "model.safetensors")) ? "braino-kind-v7" : "braino-kind-v4";
+const LAYA_MODEL = path.join(os.homedir(), ".braino-laya", "models", LAYA_WITH_CONTEXT ? LAYA_CONTEXT_MODEL : "braino-kind");
+const LAYA_PORT = LAYA_WITH_CONTEXT ? 47832 : 47831;
+let layaProc = null;
+let layaReady = false;
+function layaEnabled() {
+  const flag = String((typeof ENV === "object" && ENV?.BRAINO_LAYA) || process.env.BRAINO_LAYA || "").trim();
+  return flag !== "0" && fs.existsSync(LAYA_PY) && fs.existsSync(path.join(LAYA_MODEL, "model.safetensors"));
+}
+async function startLaya() {
+  if (!layaEnabled() || layaProc) return;
+  // One already running (a restart of Braino): use it.
+  try {
+    const r = await fetch(`http://127.0.0.1:${LAYA_PORT}/`, { signal: AbortSignal.timeout(400) });
+    const info = r.ok ? await r.json().catch(() => ({})) : null;
+    const wantsActions = fs.existsSync(LAYA_MODEL) && /action_question/.test(fs.readFileSync(path.join(LAYA_MODEL, "braino_question.json"), "utf8"));
+    // Reused only if it is this version of the server (serve 2 answers the kind
+    // and the job name separately) and has the job question when the model does.
+    if (info && Number(info.serve) >= 2 && (info.actions || !wantsActions)) { layaReady = true; logMac("laya.ready", { reused: true }); return; }
+    /* One from before the model was swapped answers with the old model: replace it. */
+    if (info) { await execFileP("/bin/sh", ["-c", `lsof -ti tcp:${LAYA_PORT} | xargs kill`]).catch(() => {}); await new Promise((r2) => setTimeout(r2, 600)); logMac("laya.replaced_old", {}); }
+  } catch (_) {}
+  const started = Date.now();
+  layaProc = spawn(LAYA_PY, [path.join(__dirname, "laya-serve.py"), LAYA_MODEL, String(LAYA_PORT)], { stdio: ["ignore", "pipe", "pipe"] });
+  layaProc.stdout.on("data", (d) => {
+    if (/laya ready/.test(String(d))) { layaReady = true; logMac("laya.ready", { ms: Date.now() - started }); macTrace("🪶 LAYA", `ready in ${((Date.now() - started) / 1000).toFixed(1)}s`); }
+  });
+  layaProc.stderr.on("data", () => {});
+  layaProc.on("exit", (code) => { layaReady = false; layaProc = null; logMac("laya.exit", { code }); });
+}
+function stopLaya() { try { layaProc?.kill(); } catch (_) {} layaProc = null; layaReady = false; }
+async function layaKind(raw) {
+  if (!layaReady) return null;
+  try {
+    const text = LAYA_WITH_CONTEXT ? layaContext.text(raw) : String(raw || "");
+    /* The kind first, alone: it is the one answer Braino waits on (about 0.12s).
+       The job name is asked for separately, in the background, and only for
+       commands; it is a hint for HIL, so it can arrive while the rest runs.
+       Asking both in one go took 0.25-0.45s and timed out on 17 of 27
+       commands on 6 Oct ("no Laya"). Same model, same context line. */
+    const res = await fetch(`http://127.0.0.1:${LAYA_PORT}/`, { method: "POST", body: JSON.stringify({ text }), signal: AbortSignal.timeout(400) });
+    const out = await res.json();
+    if (!out || !out.kind) return null;
+    const sorted = { kind: out.kind, confidence: Number(out.confidence) || 0, ms: Number(out.ms) || 0, context: LAYA_WITH_CONTEXT ? text : "", action: "", actionConfidence: 0, actionReady: null };
+    if (deciderStage() >= 2 && (out.kind === "one_tool" || out.kind === "multi_step")) {
+      sorted.actionReady = fetch(`http://127.0.0.1:${LAYA_PORT}/`, { method: "POST", body: JSON.stringify({ text, only: "action" }), signal: AbortSignal.timeout(700) })
+        .then((r) => r.json()).then((a) => { sorted.action = a?.action || ""; sorted.actionConfidence = Number(a?.actionConfidence) || 0; })
+        .catch(() => {});
+    }
+    return sorted;
+  } catch (_) { return null; }
+}
+/* What Braino does with Laya's answer. Only when it is sure: the unsure 12%
+   take the normal route.
+   Logged only, not acted on yet:
+   - "chat": its training called "what are my classes tomorrow", "what's
+     playing" and "what was I doing at 2am" chat at 0.74-0.77. Those need his
+     data, and plain conversation has none. Relabel, retrain, then switch on.
+   - "ignore": the voice filter already decided it was for him, and dropping
+     a real command is worse than answering room chatter. */
+/* "Ask" is for a sentence that stops short ("Open the", "Turn on", "Make").
+   "Call Param" is complete; Laya called it ask at 0.80 three times in a row
+   because it had never seen the name, and he said "say it again" each time
+   (2026-10-03). So an ask is taken only when the words actually end
+   unfinished; anything else goes the normal route, which can look. */
+const LAYA_UNFINISHED_END = /\b(?:the|a|an|my|your|this|that|to|for|with|and|or|of|on|in|at|from|about|into|open|play|send|call|make|turn on|turn off|set|show|find|search|put|add|go|take|tell|ask|text|message|please|some|it's|is|are|can you|could you)$/i;
+function layaAskIsReal(raw) {
+  const t = String(raw || "").trim().replace(/[.!?,]+$/, "").replace(/^(?:hey\s+)?(?:braino|bruno)[\s,]*/i, "").replace(/^(?:can|could|would) you\s+(?:please\s+)?|^please\s+/i, "");
+  const words = t.split(/\s+/).filter(Boolean);
+  return words.length <= 1 || LAYA_UNFINISHED_END.test(t);
+}
+/* Decider stage 2: Laya also names the job, and that guards its own mistakes.
+   A many-step guess whose job is "chat" or "ignore" is someone talking, not a
+   job ("how is this website different from yours", "I am dying"), so it never
+   goes to the planner. A complete command with a real job is never asked back
+   ("Go back", "Run file"). */
+const LAYA_TALK = new Set(["chat", "ignore", "ask"]);
+/* 21 jobs share the vote, so a sure job scores about 0.4, not 0.8 (measured
+   on v6, 4 Oct). */
+const LAYA_ACTION_SURE = 0.3;
+/* Sure enough that it is talk, not a command, to keep the quick rules off it
+   (stage 3). v6 scores a sure sentence about 0.75 to 0.78. */
+const LAYA_TALK_SURE = 0.72;
+function quickRulesAllowed(sorted) {
+  if (!sorted) return !layaReady; // Laya down: the rules, as before
+  return sorted.confidence >= LAYA_TALK_SURE && (sorted.kind === "one_tool" || sorted.kind === "multi_step");
+}
+const LAYA_QUESTION = /^(?:(?:now|so|and|ok(?:ay)?|but)[\s,]+)?(?:(?:can|could) you (?:please )?(?:tell|explain)|tell me|explain|what|why|how (?:is|are|does|do you|come)|is|are|does|do you)\b/i;
+function layaRoute(sorted, raw = "") {
+  if (!sorted) return null;
+  const { kind, confidence } = sorted;
+  const named = sorted.action && sorted.actionConfidence >= LAYA_ACTION_SURE ? sorted.action : "";
+  if (deciderStage() >= 2 && kind === "multi_step" && LAYA_QUESTION.test(String(raw || "").trim())) return null;
+  if (named && deciderStage() >= 2) {
+    if (kind === "multi_step" && LAYA_TALK.has(named)) return null;
+    if (kind === "ask" && !LAYA_TALK.has(named) && String(raw || "").trim().split(/\s+/).length >= 2 && !LAYA_UNFINISHED_END.test(String(raw || "").trim().replace(/[.!?,]+$/, ""))) return null;
+  }
+  if (kind === "multi_step" && confidence >= 0.6) return "plan";
+  if (kind === "ask" && confidence >= 0.75 && (!raw || layaAskIsReal(raw))) return "ask";
+  return null;
+}
+
+// ── Think once, then the hands run ───────────────────────────────────────────
+// See plan-runner.cjs. A recipe (no model) or one hil-plan call writes every
+// step; these run back to back with no model in between.
+async function frontTabUrl() {
+  if (macOwnJobActive()) { const u = ownBrowser().url(); return u && u !== "about:blank" ? u : ""; }
+  try {
+    const { stdout } = await execFileP("/usr/bin/osascript", ["-e", 'tell application "Google Chrome"\n if (count of windows) = 0 then return ""\n return URL of active tab of window 1\nend tell'], { timeout: 2500 });
+    return String(stdout || "").trim();
+  } catch (_) { return ""; }
+}
+/* The link of the nth result on the page in front, read from the page. */
+async function readPageLink(nth, kind) {
+  const app = isChromeApp(activeMacContext?.appName || "") ? activeMacContext.appName : "Google Chrome";
+  // "This pin" while looking at one pin: the page itself is the link.
+  const here = await frontTabUrl();
+  /* "This": the page you're on is the link, unless you're on a page of
+     results and said "this photo" or "this video", which means the first one. */
+  if (nth === 0 && (kind === "any" || /\/pin\/|\/watch\?|\/shorts\/|\/p\/|\/reel\/|\/status\/|\/dp\//.test(here))) return here ? { ok: true, value: here.split("&pp=")[0] } : { ok: false, say: "There's no page open in Chrome." };
+  const r = macOwnJobActive() ? await ownBrowser().run(pageLinks.pageLinksJs(kind)) : await runJs(pageLinks.pageLinksJs(kind), chromeScriptName(app), 3000);
+  if (!r.ok) return { ok: false, say: r.reason === "javascript_not_allowed" ? "Chrome needs one setting first: View, Developer, Allow JavaScript from Apple Events." : "I couldn't read this page." };
+  let links = []; try { links = JSON.parse(r.out || "[]"); } catch (_) {}
+  const hit = pageLinks.pickLink(links, nth);
+  if (!hit) return { ok: false, say: `I don't see ${kind === "photo" ? "a photo" : kind === "video" ? "a video" : "a result"} there on this page.` };
+  return { ok: true, value: hit.url.split("&pp=")[0], title: hit.title };
+}
+
+const PLAN_TOOLS = {
+  page_link: async (a) => readPageLink(Number.isFinite(Number(a.nth)) ? Number(a.nth) : 1, String(a.kind || "any")),
+  current_tab_url: async () => {
+    /* Inside a job, the page he just opened IS "the tab", whichever window
+       Chrome calls front. */
+    if (macLastOpenedUrl.url && Date.now() - macLastOpenedUrl.at < 60000 && macJobCommand.at >= macLastOpenedUrl.at - 60000) {
+      return { ok: true, value: macLastOpenedUrl.url };
+    }
+    const u = await frontTabUrl();
+    return u ? { ok: true, value: u } : { ok: false, say: "There's no page open in Chrome." };
+  },
+  wait_for_url: async (a) => {
+    const want = String(a.contains || "");
+    const until = Date.now() + Math.min(20000, Math.max(1000, Number(a.timeoutMs) || 10000));
+    while (Date.now() < until) {
+      const u = await frontTabUrl();
+      // A Meet link, not Meet's landing page: it has a room code after the slash.
+      if (u && u.includes(want) && !(want.includes("meet.google.com") && !/meet\.google\.com\/[a-z]{3,4}-[a-z]{3,4}-[a-z]{3,4}/.test(u))) return { ok: true, value: u.split("?")[0] };
+      await new Promise((r) => setTimeout(r, 350));
+    }
+    return { ok: false, say: "The page didn't finish loading in time." };
+  },
+  press_keys: async (a) => { await execFileP("/usr/bin/osascript", ["-e", appleScriptForKeys(String(a.keys || ""))], { timeout: 3000 }); return { ok: true }; },
+  /* The planner asks for this by name (2026-10-05: "type_text: no such hand"
+     ended a plan that had already opened Cursor and clicked the box). Pasted,
+     not keystroked: a long message into a chat box arrives whole, and the
+     clipboard you had is put back. */
+  type_text: async (a) => {
+    const text = String(a.text || a.value || "");
+    if (!text) return { ok: false, say: "There was nothing to type." };
+    const before = clipboard.readText();
+    clipboard.writeText(text);
+    try {
+      await execFileP("/usr/bin/osascript", ["-e", 'tell application "System Events" to keystroke "v" using {command down}'], { timeout: 3000 });
+    } catch (error) {
+      clipboard.writeText(before);
+      return { ok: false, say: "I couldn't paste into that box." };
+    }
+    setTimeout(() => { if (clipboard.readText() === text) clipboard.writeText(before); }, 800);
+    if (a.submit) { await new Promise((r) => setTimeout(r, 250)); await pressKey(36); }
+    return { ok: true, value: text };
+  },
+  wait: async (a) => { await new Promise((r) => setTimeout(r, Math.min(4000, Math.max(0, Number(a.ms) || 500)))); return { ok: true }; },
+};
+
+function planClaimsUnopened(command, plan, since) {
+  const asked = /\b(?:open|pull up|bring up|show me|take me to|go to)\b/i.test(String(command || ""));
+  const claims = /\b(?:open(?:ed)?|up|showing|here it is|there you go)\b/i.test(String(plan?.done || ""));
+  const opener = (plan?.steps || []).some((st) => /open|navigate|url|launch|play|youtube|spotify|focus|switch/i.test(String(st.tool || "")));
+  const opened = Number(macLastOpenedUrl?.at || 0) >= since;
+  return asked && claims && !opener && !opened;
+}
+
+async function runPlanSteps(steps, raw, source) {
+  macJobCommand = { text: String(raw || ""), at: Date.now() };
+  const started = Date.now();
+  const values = [];
+  let lastOut = null;
+  for (let i = 0; i < steps.length; i++) {
+    const step = steps[i];
+    const fn = PLAN_TOOLS[step.tool] || MAC_HIL_TOOLS[step.tool];
+    const t = Date.now();
+    if (!fn) {
+      macTrace("🧩 PLAN", `step ${i + 1} ${step.tool}: no such hand`);
+      return { failed: true, at: i + 1, why: `there is no ${step.tool} on this Mac`, values };
+    }
+    const args = fillArgs(step.args, values);
+    if (steps.length > 1) sendTaskProgress({ status: "thinking", text: `Step ${i + 1} of ${steps.length}: ${macPlainStep(step)}` });
+    if (steps.length > 1) {
+      if (i === 0) macTrail({ kind: "start", command: String(raw || "").slice(0, 120) });
+      macTrail({ kind: "step", label: macPlainStep(step) });
+    }
+    if (/meet\.new|meet\.google\.com/i.test(String(args.url || ""))) brainoOpenedMeetAt = Date.now();
+    let out;
+    try { out = await fn(args); } catch (error) { out = { ok: false, say: String(error?.message || error) }; }
+    macTrace("🧩 PLAN", `step ${i + 1}/${steps.length} ${step.tool} ${((Date.now() - t) / 1000).toFixed(1)}s${out && out.ok === false ? ` FAILED: ${String(out.say || "").slice(0, 80)}` : ""}`);
+    if (steps.length > 1) macTrail({ kind: "result", ok: !(out && out.ok === false) });
+    if (out && out.ok === false) return { failed: true, at: i + 1, why: String(out.say || `${step.tool} failed`), values };
+    /* A step that asked you something (which Riya?) ends the plan here: the
+       rest waits for your answer, and the answer finishes the job. */
+    if (out && out.asks) return { failed: false, asked: true, say: String(out.say || ""), values, lastOut: out, lastTool: step.tool };
+    values.push(stepValue(out));
+    lastOut = out;
+  }
+  logMac("plan.ran", { source, steps: steps.map((s) => s.tool), ms: Date.now() - started });
+  return { failed: false, values, lastOut, lastTool: steps[steps.length - 1]?.tool, ms: Date.now() - started };
+}
+
+/* A plan whose last step fetched something is a question: the answer is what
+   that step found, not the plan's "Here's your attendance", which was written
+   before anything was fetched. */
+const PLAN_ANSWER_TOOLS = /(?:_lookup|_query|_report|_messages|_stats|_mentions|_census|_status|_current|_summary|_list|_sync|_sync_all)$|^(?:now_playing|spotify_now_playing|memory_search|web_search|count_items|recent_download|whats_new|describe_image|screen_vision|read_selection|answer_question_conversationally)$/;
+async function planReply(raw, run, fallback) {
+  const found = String(run?.lastOut?.say || "").trim();
+  if (!found || !PLAN_ANSWER_TOOLS.test(String(run?.lastTool || ""))) return fallback || found || "Done.";
+  // Short and plain already: say it as it is.
+  if (found.length <= 160 && !found.includes("\n") && !/\btool\b|_/.test(found)) return found;
+  const t = Date.now();
+  const spoken = await runMacConversation(`${raw}\n\n(Answer me in one or two short spoken sentences, using only this, and say nothing about tools:\n${found.slice(0, 2500)})`).catch(() => null);
+  macTrace("🧩 PLAN", `answer phrased in ${((Date.now() - t) / 1000).toFixed(1)}s`);
+  return String(spoken?.say || "").trim() || found.split("\n").slice(0, 3).join(" ");
+}
+
+// ── Skills he learned (see skill-memory.cjs) ─────────────────────────────────
+const SKILLS_PATH = path.join(AUTH_STORE_DIR, "skills.json");
+/* Never saved as a skill, whatever the plan: these can't be taken back, so
+   they always get the full decision (and the gate) every time. */
+const SKILL_NEVER = new Set("rewrite_selection alarm_cancel alarm_control call_start clean_screenshots cleanup_create_folder cleanup_delete_bin click_element click_last_pointed close_target delete_current_finder_folder delete_file design_cowork desktop_organize gmail_reply mail_send send_to_phone spotify_add_track spotify_create_playlist stop_meeting_recording tabs_close_all task_hogs_close timer_cancel trash_empty whatsapp_reply_last whatsapp_send x_tweet_clip move_file rename_file form_fill sign_in_saved".split(" "));
+let lastSkillUsed = "";
+function readSkills() { try { return JSON.parse(fs.readFileSync(SKILLS_PATH, "utf8")) || {}; } catch (_) { return {}; } }
+function writeSkills(store) { try { fs.writeFileSync(SKILLS_PATH, JSON.stringify(store, null, 1)); } catch (_) {} }
+/* Not skills: a correction ("no, I asked you to…"), a complaint, a question,
+   something misheard ("beam me"), or a plan that pressed keys or clicked
+   where things happened to be. All were saved on 2026-09-26. */
+const NOT_A_SKILL = /^(?:no|nope|not|you|i said|i asked|i told|i want you|i meant|why|what|who|how|where|when|is|are|can't|dont|don't|stop|wait|actually|sorry)\b/i;
+const SKILL_MAX_WORDS = 12;
+function maybeSaveSkill(raw, steps, done) {
+  const said = cleanPrompt(raw);
+  /* A skill is a short, clear command. 2026-09-29: an 81-word Hindi ramble
+     to someone else in the room, and a 60-word conversation with Claude,
+     were both saved as skills and would have fired "instantly next time". */
+  const words = said.split(/\s+/).filter(Boolean).length;
+  if (words > SKILL_MAX_WORDS || /[?]/.test(said) || /[.!?]\s+\S/.test(said)) return;
+  if (NOT_A_SKILL.test(said) || words < 3 || (steps || []).some((st) => /^(?:press_keys|click_element|click_last_pointed|screen_point|wait)$/.test(st.tool))) return;
+  // Misheard words are not a job to learn ("असे हिटिंग करता" was saved, 6 Oct).
+  if (macLooksMisheard(said)) return;
+  const key = skillMemory.skillKey(said);
+  if (!key || !skillMemory.canSaveSkill(steps, (step) => SKILL_NEVER.has(step.tool) || macToolStepCanBeIrreversible(step), key)) {
+    if (key && !skillMemory.stepsComeFromCommand(steps, key)) logMac("skill.not_saved", { key: textForLog(key), why: "steps_not_from_command" });
+    return;
+  }
+  writeSkills(skillMemory.addSkill(readSkills(), key, steps, done));
+  logMac("skill.saved", { key: textForLog(key), steps: steps.map((st) => st.tool) });
+  macTrace("🎓 LEARNED", `"${key}" → ${steps.map((st) => st.tool).join(" > ")}, instant next time`);
+}
+
+/* Steps that can't be undone, and the words that mean you asked for them. */
+const PLAN_NEEDS_WORDS = {
+  tabs_close_all: /\bclose\b/i, close_target: /\b(?:close|quit|exit)\b/i, task_hogs_close: /\b(?:close|quit|kill)\b/i,
+  delete_file: /\b(?:delete|remove|trash|bin)\b/i, delete_current_finder_folder: /\b(?:delete|remove|trash)\b/i, trash_empty: /\b(?:empty|trash|bin)\b/i, cleanup_delete_bin: /\b(?:delete|empty|clear)\b/i,
+  mail_send: /\b(?:mail|email|send)\b/i, gmail_reply: /\b(?:reply|mail|email)\b/i, whatsapp_send: /\b(?:whats\s*app|message|text|send|tell)\b/i, whatsapp_reply_last: /\b(?:reply|whats\s*app)\b/i,
+  call_start: /\b(?:call|facetime|ring|dial)\b/i, send_to_phone: /\b(?:phone|send)\b/i, x_tweet_clip: /\b(?:tweet|post)\b/i,
+  desktop_organize: /\b(?:organi[sz]e|tidy|clean)\b/i, clean_screenshots: /\b(?:clean|screenshots)\b/i, rewrite_selection: /\b(?:rewrite|fix|rephrase|translate|shorten)\b/i,
+  move_file: /\bmove\b/i, rename_file: /\brename\b/i, spotify_create_playlist: /\bplaylist\b/i,
+};
+function planSurpriseStep(command, steps) {
+  return (steps || []).find((st) => PLAN_NEEDS_WORDS[st.tool] && !PLAN_NEEDS_WORDS[st.tool].test(command)) || null;
+}
+
+/* An empty request wakes the plan function without asking the model, so the
+   first real plan doesn't pay a cold start. */
+function warmHilPlan() {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return;
+  fetch(`${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/hil-plan`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
+    body: JSON.stringify({ command: "" }),
+  }).catch(() => {});
+}
+
+/* One model call for the whole plan. Null means "use the loop". */
+async function planOnce(raw) {
+  const started = Date.now();
+  try {
+    /* Everything it knows, gathered at once and capped at 300ms: whatever is
+       not ready by then is left out rather than waited for. It used to wait
+       for each in turn, and "Open Chrome" spent 4 seconds before thinking. */
+    const cap = (p, fallback) => Promise.race([Promise.resolve(p).catch(() => fallback), new Promise((r) => setTimeout(() => r(fallback), 300))]);
+    const [slow, playing] = await Promise.all([cap(setupSlowFacts(), { facts: [] }), cap(macNowPlayingForHil(), "")]);
+    sendTaskProgress({ status: "thinking", text: "Planning" });
+    const context = [
+      `Now: ${new Date().toString()}`,
+      activeMacContext?.appName ? `Front app: ${activeMacContext.appName}${activeMacContext.browserUrl ? `, tab ${activeMacContext.browserTitle || ""} ${activeMacContext.browserUrl}` : ""}` : "",
+      playing || "",
+      ...todayMemoryLines(),
+      (slow.facts || []).length ? `Known about them: ${(slow.facts || []).map((f) => f.content).join(" ").slice(0, 1500)}` : "",
+      layaHintLine(raw),
+      relationsLine(),
+      macOwnJobActive() ? OWN_BROWSER_NOTE : "",
+      macRecentExchanges(),
+    ].filter(Boolean).join("\n");
+    const res = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/hil-plan`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
+      body: JSON.stringify({ command: raw, context, tools: Object.keys(MAC_HIL_TOOLS) }),
+    });
+    const data = await res.json().catch(() => ({}));
+    macTrace("🧩 PLAN", `${((Date.now() - started) / 1000).toFixed(1)}s thinking: ${data?.plan?.mode || "failed"}${data?.plan?.steps?.length ? `, ${data.plan.steps.map((s) => s.tool).join(" > ")}` : ""}`);
+    const plan = res.ok && data?.plan?.mode === "plan" ? data.plan : null;
+    /* The plan copied the job before this one: "open the diagram of a human
+       body's anatomy" was planned as the Sabrina Carpenter video asked for 40
+       seconds earlier (5 Oct). A plan whose searches and links share nothing
+       with this command but do share words with the last one is thrown away;
+       the loop, which looks at the screen, does the job instead. */
+    if (plan && planLeakedPreviousJob(raw, plan.steps)) {
+      macTrace("🧩 PLAN", "the plan is the previous job, not this one: thrown away");
+      logMac("plan.leaked_previous", { steps: plan.steps.map((st) => st.tool) });
+      return null;
+    }
+    /* "Find me five cheapest flights to Mumbai" was planned as one open_url
+       and ended at "I opened flights to Mumbai". Asked for results, a plan that
+       only opens or searches is half the job; the loop opens it AND reads it
+       (2026-09-28). */
+    if (plan && MAC_WANTS_RESULTS.test(String(raw)) && (plan.steps || []).every((s) => MAC_OPEN_ONLY_TOOLS.has(String(s.tool || "")))) {
+      macTrace("🧩 PLAN", "asked for results, the plan only opens a page, so the loop reads it");
+      logMac("plan.escalated", { why: "results_wanted", steps: plan.steps.map((s) => s.tool) });
+      return null;
+    }
+    return plan;
+  } catch (_) { return null; }
+}
+function planWords(text) {
+  return new Set(String(text || "").toLowerCase().replace(/%20|\+|[^a-z0-9\u0900-\u097f]+/g, " ").split(" ").filter((w) => w.length >= 4 && !/^(?:https?|www|com|open|show|play|search|video|please|braino|with|that|this|from|about|some|google|youtube)$/.test(w)));
+}
+function planLeakedPreviousJob(raw, steps) {
+  const said = planWords(raw);
+  const asked = planWords((steps || []).map((st) => ["query", "text", "url", "q", "search", "title"].map((f) => st?.args?.[f] || "").join(" ")).join(" "));
+  if (!asked.size || [...asked].some((w) => said.has(w))) return false;
+  const prev = [...(macChatHistory || [])].reverse().filter((m) => m.role === "user" && String(m.content || "").trim() !== String(raw || "").trim()).slice(0, 3).map((m) => m.content).join(" ");
+  const before = planWords(prev);
+  return [...asked].some((w) => before.has(w));
+}
+const MAC_WANTS_RESULTS = /\b(?:find|get|give|list|tell)\s+me\s+(?:the\s+)?(?:\d+|two|three|four|five|six|seven|eight|nine|ten|top|best|cheapest)\b|\b(?:cheapest|lowest price|best rated|top \d+|compare|which is (?:the )?best)\b/i;
+const MAC_OPEN_ONLY_TOOLS = new Set(["open_url", "wait", "chrome_search_google", "open_target", "amazon_search", "google_search", "web_search_open"]);
+
+/* A question about the world as it is now, which only a search can answer
+   truthfully. Narrow on purpose: everything else is ordinary conversation. */
+function macNeedsWebFacts(raw) {
+  const t = String(raw || "").toLowerCase();
+  if (t.split(/\s+/).length < 4) return false;
+  return /\b(?:verify|fact.?check|is it true|confirm if|check if|check whether)\b/.test(t)
+    || /\b(?:recently|latest|this week|this month|today|yesterday|right now|currently|so far this year)\b.*\b(?:raise|raised|funding|launch|launched|announce|announced|release|released|won|price|news|update|score|result)\b/.test(t)
+    || /\b(?:news|headlines)\s+(?:about|on|for)\b/.test(t)
+    || /\b(?:price of|stock price|share price|weather in|who won|what'?s the score)\b/.test(t);
+}
+
+/* Instant fire: one keystroke, one address, one volume change. No model, no
+   loop, well under a second. See instant-fire.cjs. */
+async function runInstantFire(fire, raw) {
+  const started = Date.now();
+  let result = { ok: true, say: fire.say || "" };
+  try {
+    if (fire.kind === "key") {
+      await execFileP("/usr/bin/osascript", ["-e", appleScriptForKeys(fire.keys)], { timeout: 3000 });
+    } else if (fire.kind === "url") {
+      const opened = await openChromeUrl(fire.url);
+      result = opened?.ok === false ? opened : { ok: true, say: /instagram\.com\/reels/.test(fire.url) ? "Here's Reels." : "Opened it." };
+    } else if (fire.kind === "maximize") {
+      // The front app's front window, to the whole screen (not the green button's full-screen space).
+      await execFileP("/usr/bin/osascript", ["-e", `tell application "Finder" to set b to bounds of window of desktop
+tell application "System Events"
+  set p to first application process whose frontmost is true
+  tell window 1 of p
+    set position to {0, 25}
+    set size to {item 3 of b, (item 4 of b) - 25}
+  end tell
+end tell`], { timeout: 3000 });
+    } else if (fire.kind === "incognito") {
+      await execFileP("/usr/bin/open", ["-na", "Google Chrome", "--args", "--incognito"], { timeout: 5000 });
+    } else if (fire.kind === "volume") {
+      result = await setPlayingMediaVolume({ mode: fire.mode, value: fire.value, direction: fire.direction, target: "any" });
+    }
+  } catch (error) {
+    result = { ok: false, say: "That didn't go through. Try once more?" };
+    logMac("instant_fire.failed", { kind: fire.kind, error: String(error?.message || error).slice(0, 160) });
+  }
+  macTrace("⚡ INSTANT FIRE", `${((Date.now() - started) / 1000).toFixed(2)}s "${raw}" → ${fire.kind} ${fire.keys || fire.url || (fire.mode ? `${fire.mode} ${fire.direction < 0 ? "-" : "+"}${fire.value}` : "")}`);
+  logMac("instant_fire", { kind: fire.kind, ms: Date.now() - started, ok: result?.ok !== false });
+  return { ...result, source: `instant_fire:${fire.kind}` };
+}
+
+/* "Type X" and "search for X", where you are, then Enter. See type-search.cjs. */
+async function runTypeSearch(ask, raw) {
+  const t0 = Date.now();
+  const app = activeMacContext?.appName || "";
+  const chrome = isChromeApp(app);
+  const pressEnter = () => execFileP("/usr/bin/osascript", ["-e", appleScriptForKeys("return")], { timeout: 3000 }).catch(() => {});
+  let how = "";
+  try {
+    if (ask.mode === "search" && ask.site) {
+      const url = typeSearch.searchUrl(ask.site, ask.text);
+      const moved = chrome ? await runJs(`location.href=${JSON.stringify(url)}`, chromeScriptName(app), 3000) : null;
+      if (!moved?.ok) await openChromeUrl(url);
+      how = `${ask.site} search`;
+    } else if (chrome) {
+      const r = await runJs(typeSearch.typeJs(ask.text, ask.mode), chromeScriptName(app), 3000);
+      if (r.ok && r.out === "typed") {
+        await pressEnter();
+        how = ask.mode === "search" ? "the page's search box" : "the focused box";
+      } else if (ask.mode === "search" || !r.ok) {
+        const url = typeSearch.searchUrl(typeSearch.siteOf(activeMacContext?.browserUrl || ""), ask.text);
+        const moved = await runJs(`location.href=${JSON.stringify(url)}`, chromeScriptName(app), 3000);
+        if (!moved?.ok) await openChromeUrl(url);
+        how = "searched from the address";
+      } else {
+        return { ok: false, say: "There's no box to type into here. Click one, then say it again.", source: "instant_fire:type" };
+      }
+    } else if (ask.mode === "search") {
+      await openChromeUrl(typeSearch.searchUrl("google", ask.text));
+      how = "Google";
+    } else {
+      // Any other app: paste it where the cursor is, then Enter. The clipboard comes back after.
+      const before = clipboard.readText();
+      clipboard.writeText(ask.text);
+      await execFileP("/usr/bin/osascript", ["-e", appleScriptForKeys("cmd+v")], { timeout: 3000 });
+      await new Promise((r) => setTimeout(r, 120));
+      await pressEnter();
+      setTimeout(() => { try { clipboard.writeText(before); } catch (_) {} }, 1500);
+      how = `pasted in ${app || "the front app"}`;
+    }
+  } catch (error) {
+    logMac("instant_fire.failed", { kind: ask.mode, error: String(error?.message || error).slice(0, 160) });
+    return { ok: false, say: "That didn't go through. Try once more?", source: `instant_fire:${ask.mode}` };
+  }
+  macTrace("⚡ INSTANT FIRE", `${((Date.now() - t0) / 1000).toFixed(2)}s "${raw}" → ${ask.mode} "${ask.text}" (${how})`);
+  logMac("instant_fire", { kind: ask.mode, ms: Date.now() - t0, ok: true, how });
+  return { ok: true, say: "", source: `instant_fire:${ask.mode}` };
+}
 
 // Set when the live router was asked, so the background copy is not asked the
 // same sentence again when the answer fell back to the old path.
 let hilFirstAsked = false;
 
 async function routeHilFirst(raw) {
+  const stageAsk = String(raw || "").trim().match(/^(?:set\s+)?(?:the\s+)?decider\s+stage\s+(?:to\s+)?(zero|one|two|three|four|off|0|1|2|3|4)\.?$/i);
+  if (stageAsk) {
+    const word = stageAsk[1].toLowerCase();
+    const n = setDeciderStage({ zero: 0, off: 0, one: 1, two: 2, three: 3, four: 4 }[word] ?? Number(word));
+    return { ok: true, say: n === 0 ? "Decider stage off. Everything works as before." : n >= 4 ? "Decider stage 4. One brain: Laya decides, HIL settles the rest, the quick rules are only hands." : n >= 3 ? "Decider stage 3. Laya decides first, the quick rules only run for real commands." : `Decider stage ${n}. The risky rules now go through HIL.`, source: "decider_stage" };
+  }
   hilFirstAsked = false;
+  if (SEE_ME_RE.test(String(raw || ""))) return lookAtUser(String(raw || ""));
+  if (!pendingMacWorkflow && macLooksMisheard(raw)) {
+    const heard = await layaKind(raw);
+    if (!(heard && heard.kind === "chat" && heard.confidence >= LAYA_TALK_SURE)) {
+      logMac("voice.misheard_guard", { raw: textForLog(raw) });
+      return { ok: true, say: "I didn't catch that clearly. Say it again?", source: "hil_first:misheard" };
+    }
+  }
+  if (SCREEN_DEIXIS_RE.test(String(raw || "").trim())) return lookAtPointer(String(raw || ""));
+  /* "Search the Pinterest app." names where but not what. The loop took 34
+     seconds to ask "what should I search for?" (5 Oct). Asked at once, and the
+     answer goes back with the sentence, the way a router question does. */
+  const bareSearch = String(raw || "").trim().match(/^(?:(?:hey\s+)?brain(?:o|elle)[\s,]*)?(?:(?:can|could) you\s+)?(?:please\s+)?(?:search|look up|find)(?:\s+(?:on|in))?\s+(?:the\s+|my\s+)?([a-z][\w .-]{1,30}?)(?:\s+(?:app|website|site))?(?:\s+for me)?[.?!]*$/i);
+  if (bareSearch && !pendingMacWorkflow && /^(?:pinterest|youtube|google|amazon|spotify|instagram|linkedin|twitter|x|reddit|netflix|flipkart|myntra|swiggy|zomato|blinkit|github|medium|behance|dribbble|maps|google maps|chrome|safari|finder|files|my files|my mac|whatsapp|gmail|mail|notes)$/i.test(bareSearch[1].trim())) {
+    const where = bareSearch[1].trim();
+    const question = `What should I search for on ${where.replace(/^\w/, (c) => c.toUpperCase())}?`;
+    setPendingMacWorkflow({ type: "hil_answer", stage: "hil_answer", data: { command: raw, question, fromRouter: true } });
+    return { ok: true, say: question, source: "hil_first:bare_search" };
+  }
+  if (LISTENING_ASK_RE.test(String(raw || ""))) return listeningTaste(String(raw || ""));
+  const teach = parseRelationTeach(raw);
+  if (teach) { saveRelation(teach.rel, teach.name); return { ok: true, say: `Got it. ${teach.name} is your ${teach.rel}.`, source: "relations" }; }
+  /* "Show me": the job he is doing in his own browser, on screen. */
+  const showAsk = String(raw || "").trim().replace(/^(?:(?:hey\s+)?brain(?:o|elle)[\s,]*)/i, "").replace(/[.!?]+$/, "");
+  if (/^(?:show me|let me see|show me (?:it|that|the page|what you(?:'re| are) doing|your (?:browser|screen)))$/i.test(showAsk) && ownBrowser().url() && ownBrowser().url() !== "about:blank") {
+    ownBrowser().show();
+    return { ok: true, say: "Here it is.", source: "own_browser:show" };
+  }
+  if (/^(?:hide|close) (?:it|that|the browser|your browser)$/i.test(showAsk) && ownBrowser().visible()) {
+    ownBrowser().hide();
+    if (macOwnJob) macOwnJob.hidden = true; // stays hidden for the rest of this job
+    return { ok: true, say: "Hidden.", source: "own_browser:hide" };
+  }
+  /* "Repeat what you said" means say it again, word for word. HIL answered "I
+     repeated my last response." without repeating anything (4 Oct). */
+  if (/^(?:(?:hey\s+)?brain(?:o|elle)[\s,]*)?(?:(?:can|could) you\s+)?(?:please\s+)?(?:repeat|say)\s+(?:that|it|what you (?:just )?said|the last thing you said|your last (?:answer|reply|response))(?:\s+again)?(?:\s+please)?[.?!]*$/i.test(String(raw || "").trim())) {
+    const last = [...(macChatHistory || [])].reverse().find((m) => m.role === "assistant" && String(m.content || "").trim());
+    return { ok: true, say: last ? String(last.content).trim() : "I haven't said anything yet.", source: "hil_first:repeat" };
+  }
   /* "Pause memory" / "stop remembering" / "resume memory". Instant, and never
      worth a router call. */
   const memorySwitch = String(raw || "").match(/\b(pause|stop|resume|start|turn off|turn on)\s+(?:your\s+)?(?:memory|remembering|recording my (?:mac|activity)|capture)\b/i);
@@ -18385,21 +20889,234 @@ async function routeHilFirst(raw) {
     setActivityPaused(pause);
     return { ok: true, say: pause ? "Paused. I'm not recording anything until you say resume." : "Back on. I'll remember what you're working on.", source: "hil_first:memory_switch" };
   }
-  if (!raw || !macHilEnabled() || !hilFirstEnabled(typeof ENV === "object" ? ENV : null, process.env)) return null;
+  if (!raw) return null;
+  // "Clear the task" while he waits on something: drop it, never plan it.
+  if (pendingMacWorkflow && isWorkflowCancelIntent(raw)) {
+    logMac("mac.workflow.released", { type: pendingMacWorkflow.type, raw: textForLog(raw), by: "drop_task" });
+    clearPendingMacWorkflow();
+    pendingHilRun = null;
+    hilAskChain = null;
+    return { ok: true, say: "Okay, dropped it.", source: "hil_first:dropped_task" };
+  }
+  // A compliment gets a reply, not a plan. Only with nothing waiting, so a
+  // "perfect" said to a question still reaches that question.
+  if (!pendingMacWorkflow && MAC_CHITCHAT.test(String(raw).trim())) {
+    macTrace("💬 CHAT", `"${raw}" → a compliment, not a task`);
+    return { ok: true, say: macChitchatReply(raw), source: "hil_first:chitchat" };
+  }
+  /* Decider stage 3, the one-brain order: Laya sorts the sentence FIRST (about
+     0.1s on this Mac). When she is sure it is talk or not for him, none of the
+     quick rules below may grab it ("what is taking up space" became a volume
+     change, 4 Oct). It goes on to HIL, which can still answer or act. A command,
+     or Laya unsure or not running, takes the quick rules exactly as before. */
+  const layaFirst = deciderStage() >= 3 && !pendingMacWorkflow && !parseInterruptIntent(raw) ? await layaKind(raw) : null;
+  /* Not for him, so not acted on (6 Oct). A lecture in his room got through
+     the follow-up window and HIL ran plans on "conflict in various
+     environments, co-founders..." while Laya said "not for Braino" at 0.78.
+     Sure it is not for him, his name not in it, nothing of his waiting for an
+     answer: dropped, quietly. Saying "Braino" always gets through. */
+  if (layaFirst && layaFirst.kind === "ignore" && layaFirst.confidence >= LAYA_TALK_SURE
+    && !/\bbrain(?:o|elle|a)\b/i.test(String(raw || "")) && !pendingHilRun) {
+    logMac("laya.not_for_him_dropped", { raw: textForLog(raw), confidence: layaFirst.confidence });
+    macTrace("🔇 NOT FOR HIM", `"${String(raw).slice(0, 80)}" → ignore ${layaFirst.confidence.toFixed(2)}, dropped`);
+    return { ok: true, superseded: true, say: "", source: "laya:not_for_him" };
+  }
+  const laya3Talk = Boolean(layaFirst && layaFirst.confidence >= LAYA_TALK_SURE && (layaFirst.kind === "chat" || layaFirst.kind === "ignore"));
+  if (laya3Talk) macTrace("🪶 LAYA FIRST", `"${raw}" → ${layaFirst.kind} ${layaFirst.confidence.toFixed(2)}, quick rules skipped`);
+  /* Stage 4, the rules are hands, never bosses: they may act only when Laya is
+     sure this is a command. Unsure goes to HIL, which picks the tool. If Laya
+     is not running at all, the rules work as before rather than everything
+     waiting on the cloud. */
+  const quickRulesOn = deciderStage() >= 4 ? quickRulesAllowed(layaFirst) : !laya3Talk;
+  if (deciderStage() >= 4 && !quickRulesOn) macTrace("🪶 ONE BRAIN", `"${raw}" → ${layaFirst ? `${layaFirst.kind} ${layaFirst.confidence.toFixed(2)}` : "no Laya"}, HIL decides, no quick rule`);
+  if (quickRulesOn) {
+  /* "What's my battery?" One pmset read: under half a second. It went to the
+     step-by-step loop, which clicked around for 23 seconds (2026-09-26). */
+  if (/\b(?:battery|charge|charging|power left|plugged in)\b/i.test(raw) && !/\b(?:open|settings|save|mode|saver)\b/i.test(raw) && raw.split(/\s+/).length <= 12) {
+    try {
+      const { stdout } = await execFileP("/usr/bin/pmset", ["-g", "batt"], { timeout: 3000 });
+      const text = String(stdout || "");
+      const pct = (text.match(/(\d{1,3})%/) || [])[1];
+      const onAc = /AC Power/i.test(text);
+      const charging = /;\s*charging/i.test(text);
+      const left = (text.match(/(\d+):(\d{2}) remaining/) || []);
+      const leftSay = left[1] ? (Number(left[1]) ? ` About ${Number(left[1])} hour${Number(left[1]) > 1 ? "s" : ""}${Number(left[2]) >= 30 ? " and a half" : ""} left.` : ` About ${Number(left[2])} minutes left.`) : "";
+      macTrace("⚡ INSTANT FIRE", `"${raw}" → battery ${pct}%`);
+      if (pct) return { ok: true, say: charging ? `${pct}%, charging.` : onAc ? `${pct}%, plugged in.` : `${pct}%.${leftSay}${Number(pct) <= 20 ? " Worth plugging in." : ""}`, source: "instant_fire:battery" };
+    } catch (_) {}
+  }
+  /* Stage 1 sent profile switches to HIL, which clicked through Chrome's menus
+     for 100 seconds (4 Oct). A plain switch or list is one instant step, so it
+     stays here; only the rule-writing kinds go to HIL. */
+  const profileParsed = chromeProfiles.parseProfileIntent(raw);
+  const profileAsk = deciderStage() >= 1 && profileParsed && !["switch", "list"].includes(profileParsed.action) ? null : profileParsed;
+  if (profileAsk) {
+    const r = await runProfileIntent(profileAsk);
+    if (r) { macTrace("⚡ INSTANT FIRE", `"${raw}" → chrome profile ${profileAsk.action} ${profileAsk.profile || ""}`); return r; }
+  }
+  const typeAsk = deciderStage() >= 1 ? null : typeSearch.parseTypeSearch(raw);
+  if (typeAsk) {
+    macHilGeneration += 1;
+    return runTypeSearch(typeAsk, raw);
+  }
   // Instant controls, stop, voice-locked modes and a real answer to a waiting
   // question all belong to the old path, which already gets those right.
+  const fire = parseInstantFire(raw, activeMacContext || {});
+  if (fire) {
+    // Whatever was running, this is the new thing, and it is instant.
+    macHilGeneration += 1;
+    if (macHilAbort) { try { macHilAbort.abort(); } catch (_) {} macHilAbort = null; }
+    if (pendingMacWorkflow?.type === "hil_answer") { clearPendingMacWorkflow(); pendingHilRun = null; }
+    return runInstantFire(fire, raw);
+  }
+  /* "Open my localhost link": the dev server running for what you are
+     working on. Before the tab shortcut, which used to read this as a tab
+     called "localhost link in a new" (2026-10-03). */
+  if (devServers.asksForLocalhost(raw) && /\b(?:open|show|pull up|bring up|go to|take me|load|launch)\b/i.test(raw)) {
+    macHilGeneration += 1;
+    return openLocalhostAsk(raw);
+  }
+  /* "Switch to the Pinterest tab": read the tab bar, click the one meant. No
+     model. Not a tab that is open (say "switch to Spotify", the app), and it
+     carries on to the normal route. */
+  const tabAsk = deciderStage() >= 1 ? null : tabSwitch.parseTabSwitch(raw);
+  if (tabAsk) {
+    const t0 = Date.now();
+    const listed = await execFileP("/usr/bin/osascript", ["-e", tabSwitch.LIST_TABS_SCRIPT], { timeout: 4000 }).catch((error) => { logMac("instant_fire.tab_list_failed", { error }); return null; });
+    const tabs = tabSwitch.parseTabList(listed?.stdout || "");
+    const hit = tabSwitch.pickTab(tabs, tabAsk);
+    if (hit) {
+      macHilGeneration += 1;
+      const switched = await execFileP("/usr/bin/osascript", ["-e", tabSwitch.switchScript(hit.w, hit.i)], { timeout: 3000 }).then(() => true).catch(() => false);
+      macTrace("⚡ INSTANT FIRE", `${((Date.now() - t0) / 1000).toFixed(2)}s "${raw}" → tab ${hit.w}:${hit.i} ${tabSwitch.hostOf(hit.url)} (of ${tabs.length} tabs)`);
+      logMac("instant_fire", { kind: "tab", ms: Date.now() - t0, ok: switched, tabs: tabs.length });
+      // It said nothing when it worked and nothing when it failed (2 Oct).
+      if (!switched) return { ok: false, say: "Chrome wouldn't switch tabs.", source: "instant_fire:tab" };
+      return { ok: true, say: `Switched to ${speakableMediaTitle(hit.title || "") || tabSwitch.hostOf(hit.url) || "it"}.`, source: "instant_fire:tab" };
+    }
+    /* Could not read Chrome at all (Automation off, Chrome busy): that is not
+       "no tabs open". Say nothing here and let the normal route look. */
+    if (tabAsk.saidTab && listed) {
+      macTrace("⚡ INSTANT FIRE", `"${raw}" → no ${tabAsk.query} tab among ${tabs.length}`);
+      // A miss reads the tabs back, so the answer is one word away.
+      const some = tabs.slice(0, 5).map((t) => speakableMediaTitle(t.title || "") || tabSwitch.hostOf(t.url)).filter(Boolean);
+      return { ok: true, say: tabs.length ? `I don't see a ${tabAsk.query} tab. I see ${some.join(", ")}. Which one?` : "Chrome has no tabs open.", source: "instant_fire:tab" };
+    }
+  }
+  const formIntent = formFill.parseFormIntent(raw);
+  if (formIntent) {
+    macHilGeneration += 1;
+    if (formIntent.action === "remember") {
+      rememberFormDetail(formIntent.key, formIntent.value);
+      return { ok: true, say: "Got it. I'll use that on forms.", source: "form:remember" };
+    }
+    macTrace(formIntent.action === "sign_in" ? "🔑 LOGIN" : "📝 FORM", `"${raw}" → ${formIntent.action}, no router`);
+    const r = formIntent.action === "sign_in" ? await signInSaved() : await fillFormForMe();
+    return { ...r, source: `form:${formIntent.action}` };
+  }
+  }
+  /* Yes to what chat just offered: the loop does it, with the offer as the job. */
+  const offer = macChatOffer; macChatOffer = null;
+  if (offer && Date.now() - offer.at < 90000 && macHilAnswerApproves(raw) && macHilEnabled()) {
+    macHilGeneration += 1;
+    macTrace("🤝 OFFER", `"${raw}" → doing what was offered: ${offer.reply.slice(0, 80)}`);
+    return runMacHilLoop(`The user said "${offer.prompt}". I replied "${offer.reply}" and they said yes. Do exactly what I offered, now.`);
+  }
+  if (quickRulesOn) {
+  /* A web address said out loud, or "your website", is "open it". Before the
+     one-word and "say it again" guards, which took "trybraino.com" as a
+     mishearing while HIL knew exactly what it meant. */
+  const saidSite = webAddress.spokenWebsite(raw);
+  if (saidSite) {
+    macHilGeneration += 1;
+    if (pendingMacWorkflow) clearPendingMacWorkflow();
+    macTrace("🌐 WEBSITE", `"${raw}" → ${saidSite.url}, no router`);
+    try { await openChromeUrl(saidSite.url); } catch (error) {
+      logMac("web_address.open_failed", { url: saidSite.url, error });
+      return { ok: false, say: "Chrome would not open that.", source: "hil_first:web_address" };
+    }
+    const host = new URL(saidSite.url).hostname.replace(/^www\./, "");
+    return { ok: true, say: saidSite.own ? "Opening trybraino.com." : `Opening ${host}.`, source: "hil_first:web_address" };
+  }
   if (isInstantCommand(raw)) { macTrace("⏩ INSTANT", `"${raw}" → old fast path, no router`); return null; }
   if (parseInterruptIntent(raw)) { macTrace("✋ STOP", `"${raw}" → stop word, old path`); return null; }
   /* One AppleScript across every window, which counts what it closed. Through
      the router this became an irreversible escalate, two confirmations and a
      close-window shortcut that closed one window and claimed all of them. */
   if (macClosesAllTabs(raw)) { macTrace("⏩ INSTANT", `"${raw}" → close every tab natively, no router`); return null; }
+  /* One word that is not an app, a control or an answer is almost always a
+     mishearing ("deserve"). It went to the loop, which spent 10s and then
+     asked what it meant, and that question took the next sentence. */
+  const oneWord = String(raw || "").trim().replace(/[.?!,]+$/, "");
+  if (!pendingMacWorkflow && oneWord && !/\s/.test(oneWord) && !resolveAppTarget(oneWord) && !parseMondayModeIntent(oneWord)
+    && !/^(?:hi|hello|hey|hiya|yo|thanks|thank|thx|ok|okay|cool|nice|great|awesome|yes|yeah|yep|no|nope|bye|goodnight|morning|sorry|wow|haha|lol)$/i.test(oneWord)) {
+    macTrace("🤔 ONE WORD", `"${oneWord}" → asking again instead of guessing`);
+    return { ok: true, say: `I only caught "${oneWord}". Say that again?`, source: "hil_first:one_word" };
+  }
+  /* "Send the first photo to Param": read the link off the page, WhatsApp it. */
+  const sendLink = pageLinks.parseSendPageLink(raw);
+  if (sendLink) {
+    macHilGeneration += 1;
+    macTrace("🧩 RECIPE", `"${raw}" → page link #${sendLink.nth} (${sendLink.kind}) to ${sendLink.to}, no thinking`);
+    const steps = [{ tool: "page_link", args: { nth: sendLink.nth, kind: sendLink.kind } }, { tool: "whatsapp_send", args: { recipientRaw: sendLink.to, message: "{{1}}" } }];
+    const run = await runPlanSteps(steps, raw, "recipe:send_page_link");
+    if (run.asked) return { ok: true, say: run.say, source: "recipe:send_page_link" };
+    if (!run.failed) return { ok: true, say: `Sent ${sendLink.to} the ${sendLink.kind === "photo" ? "photo" : sendLink.kind === "video" ? "video" : "link"}.`, source: "recipe:send_page_link" };
+    return { ok: false, say: run.why, source: "recipe:send_page_link" };
+  }
+  const recipe = recipeFor(raw);
+  if (recipe) {
+    macHilGeneration += 1;
+    macTrace("🧩 RECIPE", `"${raw}" → ${recipe.id}, no thinking`);
+    const run = await runPlanSteps(recipe.steps, raw, `recipe:${recipe.id}`);
+    if (run.asked) return { ok: true, say: run.say, source: `recipe:${recipe.id}` };
+    if (!run.failed) return { ok: true, say: recipe.done, source: `recipe:${recipe.id}` };
+    // A recipe that broke hands the job to the loop, which can look.
+    return runMacHilLoop(raw, null, { planFailed: `The quick way stopped at step ${run.at}: ${run.why}.` });
+  }
+  if (/^(?:forget|drop|delete|unlearn)\s+(?:that|this|the last)\s+(?:skill|one|shortcut)$/i.test(String(raw || "").trim()) && lastSkillUsed) {
+    const store = readSkills(); delete store[lastSkillUsed]; writeSkills(store);
+    logMac("skill.forgotten", { key: textForLog(lastSkillUsed) });
+    lastSkillUsed = "";
+    return { ok: true, say: "Forgotten. I'll think that one through next time.", source: "skill:forget" };
+  }
+  /* The same words first, then the same intent with a new detail ("put on jazz
+     on YouTube" reuses "play some lofi on YouTube" with jazz in it). */
+  const skillStore = readSkills();
+  const exact = skillMemory.findSkill(skillStore, skillMemory.skillKey(raw));
+  const byIntent = exact.skill ? null : skillMemory.findSkillByIntent(skillStore, skillMemory.skillKey(raw));
+  const found = exact.skill ? exact : byIntent ? { key: byIntent.key, skill: byIntent.skill } : exact;
+  const skillKey = found.key;
+  const learned = found.skill;
+  if (learned?.steps?.length) {
+    macHilGeneration += 1;
+    if (byIntent) logMac("skill.by_intent", { key: textForLog(skillKey), from: textForLog(byIntent.from), detail: textForLog(byIntent.detail) });
+    macTrace("🎓 SKILL", `"${raw}" → learned ${learned.steps.map((st) => st.tool).join(" > ")}${byIntent ? ` (same intent as "${skillKey}", with "${byIntent.detail}")` : ""}, no thinking`);
+    const run = await runPlanSteps(learned.steps, raw, "skill");
+    if (run.asked) return { ok: true, say: run.say, source: "skill" };
+    if (!run.failed) {
+      lastSkillUsed = skillKey;
+      const store = readSkills(); if (store[skillKey]) { store[skillKey].uses = (store[skillKey].uses || 0) + 1; writeSkills(store); }
+      logMac("skill.used", { key: textForLog(skillKey) });
+      return { ok: true, say: await planReply(raw, run, learned.done), source: "skill" };
+    }
+    // It stopped working: forget it, and decide the normal way. A reuse by
+    // intent that failed says nothing against the job itself, so that is kept.
+    if (!byIntent) { const store = readSkills(); delete store[skillKey]; writeSkills(store); }
+    logMac("skill.dropped", { key: textForLog(skillKey), why: textForLog(run.why) });
+  }
+  const shortcut = macShortcutFor(raw);
+  if (shortcut) { macTrace("⏩ SHORTCUT", `"${raw}" → ${shortcut}, no router`); return null; }
   /* The timetable is a database read, milliseconds, answered in one short
      line. Through the router it became a loop that read the whole of
      tomorrow out loud. */
   if (!pendingMacWorkflow) {
-    const schedule = await macAnswerScheduleFast(String(raw).toLowerCase());
+    /* "Find my next class and message Param what time it is" was answered
+       here and the message half was lost (2026-09-27). A second action means
+       the whole thing goes to the planner. */
+    const schedule = MAC_SECOND_ACTION.test(String(raw)) ? null : await macAnswerScheduleFast(String(raw).toLowerCase());
     if (schedule) { macTrace("⏩ INSTANT", `"${raw}" → timetable lookup, no router`); return { ...schedule, source: "hil_first:schedule" }; }
+  }
   }
   if (voiceModesCache.modes.some((mode) => mode.isActive)) { macTrace("🔒 MODE", `"${raw}" → a voice mode owns this, old path`); return null; }
   if (pendingMacWorkflow && Date.now() - Number(pendingMacWorkflow.createdAt || 0) > (Number(pendingMacWorkflow.ttlMs) || MAC_WORKFLOW_CONFIRM_MS)) {
@@ -18409,10 +21126,7 @@ async function routeHilFirst(raw) {
      while he was still waiting on "who should receive the WhatsApp message?"
      and was taken as the recipient. A sentence that opens with an order is a
      new command; a yes, a no or a name is still the answer. */
-  if (pendingMacWorkflow?.type === "hil_answer"
-    && HIL_ANSWER_NEW_JOB.test(String(raw || "").trim())
-    && !macHilAnswerApproves(raw)
-    && !/^(?:no|nope|nah|cancel)\b/i.test(String(raw || "").trim())) {
+  if (pendingMacWorkflow?.type === "hil_answer" && hilAnswerReleasedBy(raw, pendingMacWorkflow)) {
     logMac("mac.workflow.released", { type: "hil_answer", raw: textForLog(raw), by: "hil_first_new_job" });
     macTrace("🧹 RELEASED", `waiting question dropped, "${raw}" is a new job`);
     clearPendingMacWorkflow();
@@ -18436,6 +21150,25 @@ async function routeHilFirst(raw) {
     clearPendingMacWorkflow();
   }
 
+  /* Laya sorts the sentence on this Mac in ~40ms. Sure, a many-step job goes
+     straight to the plan and a garbled one gets asked again, skipping the rule
+     lists and the router. Unsure, or not running, nothing changes. */
+  const sorted = layaFirst || await layaKind(raw);
+  // The job name, if it is still on its way: worth up to 0.25s only here,
+  // where the plan guard and HIL's hint use it.
+  if (sorted?.actionReady) await Promise.race([sorted.actionReady, new Promise((r) => setTimeout(r, 250))]);
+  layaHintForRouter = layaHintFor(sorted);
+  layaHintSentence = String(raw || "").trim();
+  if (sorted) {
+    const route = layaRoute(sorted, raw);
+    macTrace("🪶 LAYA", `"${raw}" → ${sorted.kind} ${sorted.confidence.toFixed(2)} in ${sorted.ms}ms → ${route || "normal route"}`);
+    logMac("laya.kind", { raw: textForLog(raw), kind: sorted.kind, confidence: sorted.confidence, ms: sorted.ms, route: route || "normal", ...(sorted.action ? { action: sorted.action, actionConfidence: sorted.actionConfidence, hint: layaHintForRouter || null, stage: deciderStage() } : {}), ...(sorted.context ? { context: textForLog(sorted.context, 900) } : {}) });
+    if (route === "plan" && macHilEnabled()) return runMacHilLoop(raw);
+    if (route === "ask") return { ok: true, say: "I didn't quite get that. Say it again?", source: "laya:ask" };
+  }
+
+  // Everything above is instant and local. The router is the slow part.
+  if (!macHilEnabled() || !hilFirstEnabled(typeof ENV === "object" ? ENV : null, process.env)) return null;
   // A new command is a new job, exactly as routeMacDelegate does it.
   macHilGeneration += 1;
   if (macHilAbort) {
@@ -18449,6 +21182,7 @@ async function routeHilFirst(raw) {
   const plan = planFromVerdict(routed.verdict, MAC_HIL_TOOLS);
   macTrace("🧭 HIL-FIRST", `${(routed.ms / 1000).toFixed(1)}s "${raw}" → ${plan.kind}${plan.tool ? ` ${plan.tool} ${JSON.stringify(plan.args || {}).slice(0, 160)}` : ""}${plan.question ? ` "${plan.question}"` : ""}${plan.why ? ` (${plan.why})` : ""}`);
   logMac("hil.first", { raw: textForLog(raw), kind: plan.kind, tool: plan.tool || "", why: plan.why || "", ms: routed.ms });
+  noteLayaLesson(raw, sorted, plan);
 
   if (plan.kind === "fire") {
     try {
@@ -18466,23 +21200,46 @@ async function routeHilFirst(raw) {
     // The answer comes back through hil_answer with nothing held, which runs
     // the loop on the command plus the question and the answer.
     pendingHilRun = null;
-    setPendingMacWorkflow({ type: "hil_answer", stage: "hil_answer", data: { command: raw, question: plan.question } });
+    setPendingMacWorkflow({ type: "hil_answer", stage: "hil_answer", data: { command: raw, question: plan.question, fromRouter: true } });
     return { ok: true, say: plan.question, source: "hil_first:ask" };
   }
-  if (plan.kind === "chat") return runMacConversation(raw);
+  if (plan.kind === "chat") return talkOrConverse(raw);
   return null;
+}
+
+/* One chat (stage 4): talk HIL settles goes back to the live voice session,
+   the same brain that answers every other spoken sentence, instead of the
+   second, slower chat (8 to 10 seconds, its own history). Typed turns, and
+   voice with no live session, keep the slower chat. Questions that need
+   today's facts still get a web search. */
+let macTurnCanTalk = { on: false, at: 0 };
+function talkOrConverse(raw) {
+  const live = deciderStage() >= 4 && macTurnCanTalk.on && Date.now() - macTurnCanTalk.at < 60000;
+  if (!live) return runMacConversation(raw);
+  if (macNeedsWebFacts(raw)) return runMacWebSearch(raw);
+  logMac("one_chat.talk", { raw: textForLog(raw) });
+  return { ok: true, talk: true, say: "", source: "talk" };
 }
 
 async function runDelegate(prompt, options = {}) {
   let raw = cleanPrompt(prompt);
+  macTurnCanTalk = { on: Boolean(options.canTalk), at: Date.now() };
+  // A new job ends the last one's use of his browser; an answer to it does not.
+  if (!pendingMacWorkflow && !/^show me\b|^(?:hide|close) (?:it|that|the browser|your browser)\b/i.test(String(raw || "").replace(/^(?:hey\s+)?brain(?:o|elle)[\s,]*/i, ""))) macOwnJob = null;
 
   /* "Close it", "do that again": the sentence the person meant, filled in from
      the last thing he actually acted on. Only a bare pronoun is filled in;
      anything that names something goes the normal way. */
-  const contextRef = parseContextualReference(raw);
+  const contextRef = deciderStage() >= 1 ? null : parseContextualReference(raw);
   if (contextRef?.kind === "repeat" && lastDelegateCommand) {
     logMac("delegate.context_repeat", { raw: textForLog(raw), repeating: textForLog(lastDelegateCommand) });
     raw = lastDelegateCommand;
+  } else if (contextRef && lastActed && macLastTalkAt > lastActed.at) {
+    /* "Can you open it for me?" about the book you were just discussing opened
+       Spotify, the last thing he had acted on (2026-10-03). The talk since
+       then is what "it" points at, so the sentence goes on as said, with the
+       conversation, to the part that can read it. */
+    logMac("delegate.context_skipped", { raw: textForLog(raw), lastActed: lastActed.kind, why: "conversation_moved_on" });
   } else if (contextRef) {
     const filled = applyContextualReference(contextRef, lastActed);
     if (filled) {
@@ -18588,7 +21345,21 @@ async function runDelegate(prompt, options = {}) {
      *
      * Only a genuine miss falls through. "macOS refused the wallpaper change"
      * is a real answer about the real world and the loop cannot do better. */
-    if (macCascadeMissed(result) && macHilEnabled()) {
+    /* Only a task goes to the loop. A remark or a fragment the patterns did not
+       claim got 12 to 37 seconds of "thinking" and came back "what exactly do
+       you want me to do?", while real commands behind it were dropped. It is
+       conversation instead: a sentence, in about four seconds. */
+    if (macCascadeMissed(result) && macHilEnabled() && !macLooksLikeTask(raw)) {
+      logMac("delegate.cascade_missed_chat", { raw: textForLog(raw), web: macNeedsWebFacts(raw) });
+      /* "Did Mesa recently raise funding?" needs today's facts: one web
+         search (it took the loop 34 seconds), not a guess from memory. */
+      /* Talk goes back to the voice session, which answers in about 0.6s with
+         the shared history. This slow chat took 8 to 10 seconds (2026-09-26).
+         Only when voice is live; typed turns keep the old path. */
+      if (macNeedsWebFacts(raw)) result = await runMacWebSearch(raw);
+      else if (options.canTalk) result = { ok: true, talk: true, say: "", source: "talk" };
+      else result = await runMacConversation(raw);
+    } else if (macCascadeMissed(result) && macHilEnabled()) {
       logMac("delegate.cascade_missed", { raw: textForLog(raw), say: textForLog(result?.say || "") });
       result = await runMacHilLoop(raw);
     }
@@ -18608,6 +21379,11 @@ async function runDelegate(prompt, options = {}) {
   // double-processing a reply that is already correct.
   if (mondayModeActive && result?.source !== "mac_conversation" && result?.source !== "monday_mode") {
     result = await mondayifyReply(raw, result);
+  }
+  // Once per job: where the work is, and how to see it.
+  if (macOwnJobActive() && !macOwnJob.told && result?.say && /^hil_(?:loop|plan)/.test(String(result?.source || "")) && !ownBrowser().visible()) {
+    macOwnJob.told = true;
+    result = { ...result, say: `${String(result.say).trim()} It's in my browser; say show me to see it.` };
   }
   if (raw && result?.source !== "mac_conversation") {
     rememberMacChat("user", raw);
@@ -18740,8 +21516,17 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
     try { macHilAbort.abort(); } catch (_) {}
     macHilAbort = null;
   }
-  const latestContext = await readActiveMacContext();
-  if (latestContext && !isBrainoSelfContext(latestContext)) activeMacContext = latestContext;
+  /* The overlay re-reads the front window every 0.9s, so a reading under 1.5s
+     old is current. Reading it again cost 0.2 to 0.5s on every command. */
+  /* Never waited on (2026-09-26): the last reading is used, and a fresh one is
+     fetched in the background for whatever comes next. Waiting here cost 3.5s
+     on almost every command whenever macOS blocked the check. */
+  const contextAge = activeMacContext?.updatedAt ? Date.now() - Date.parse(activeMacContext.updatedAt) : Infinity;
+  if (!(contextAge < 1500)) {
+    void readActiveMacContext().then((latestContext) => {
+      if (latestContext && !isBrainoSelfContext(latestContext)) activeMacContext = latestContext;
+    }).catch(() => {});
+  }
   logMac("delegate.intent.start", {
     prompt: textForLog(prompt),
     cleaned: textForLog(raw),
@@ -18766,7 +21551,9 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
    * Anything it does not recognise falls through untouched and still reaches the
    * brain, which is what keeps this narrow: a fast lane that tries to cover
    * every phrasing stops being fast and starts being a worse model. */
-  const quickSchedule = await macAnswerScheduleFast(text);
+  // A second job in the sentence ("...and message Param") goes to the brain
+  // whole; this lane only ever answers the first half (2026-09-28).
+  const quickSchedule = MAC_SECOND_ACTION.test(text) ? null : await macAnswerScheduleFast(text);
   if (quickSchedule) return quickSchedule;
 
   const cursorModeCommand = text.match(/\b(start|enable|turn on|stop|disable|turn off)\s+cursor mode\b/);
@@ -18900,7 +21687,8 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
   if (pendingFileResult) return pendingFileResult;
 
   if (isFileActionUndoIntent(text) || isDesktopOrganizeUndoIntent(text)) {
-    return undoLastFileAction();
+    // You said undo, so the words are the ask; the age rule still applies.
+    return undoLastFileAction(/\bundo\b/i.test(text) ? text : `undo ${text}`);
   }
 
   /* ── The brain ──────────────────────────────────────────────────────────
@@ -19234,8 +22022,33 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
     return describeOpenTabs();
   }
 
+  /* A plain list ("quit Finder and WhatsApp", "close Slack, Notion and
+     Spotify") closes every one. The shared extractor stops at "and" so that
+     "close Spotify and then open YouTube" never closes YouTube; a list has no
+     second job in it, so it is read here first. */
+  const closeList = cleanPrompt(raw).match(/^(?:please\s+)?(?:close|quit|exit|shut down|shut)\s+(?:the\s+)?(.+?)(?:\s+(?:apps?|applications?))?(?:\s+for\s+me)?[.?!]*$/i);
+  if (closeList && /(?:,|\s(?:and|&)\s)/i.test(closeList[1])
+    && !/\b(?:then|after|open|launch|start|play|send|search|go|tell|message|call|write|show)\b/i.test(closeList[1])
+    && !/\bbraino\b/i.test(closeList[1])) {
+    return closeOpenTarget(closeList[1]);
+  }
   const closeTarget = extractCloseShortcutTarget(raw);
   if (closeTarget && !/\bbraino\b/i.test(closeTarget) && !parseSpotifyControlIntent(raw)) {
+    /* "Close the apps" matched App Store; "quit Finder and WhatsApp" closed only
+       Finder (26 Sep, 2 Oct). A bare "app" means the one in front, and "and"
+       is two jobs. */
+    const bare = String(closeTarget).trim().replace(/^(?:the|this|that|my)\s+/i, "");
+    if (/^(?:app|apps|application|it|this|that|this app|that app)$/i.test(bare)) {
+      const front = activeMacContext?.appName && !isBrainoSelfContext(activeMacContext) ? activeMacContext.appName : "";
+      if (!front) return { ok: true, say: "Which app should I close?" };
+      return closeOpenTarget(front);
+    }
+    const several = bare.split(/\s*(?:,|\band\b|&)\s*/i).map((x) => x.trim()).filter(Boolean);
+    if (several.length > 1 && several.length <= 5) {
+      const results = [];
+      for (const one of several) results.push(await closeOpenTarget(one).catch(() => ({ ok: false, say: `Couldn't close ${one}.` })));
+      return { ok: results.some((r) => r?.ok !== false), say: results.map((r) => String(r?.say || "").trim()).filter(Boolean).join(" ") };
+    }
     return closeOpenTarget(closeTarget);
   }
 
@@ -19564,7 +22377,7 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
     || /\b(?:is it safe|would that|am i going to)\b/i.test(questionProbe);
   if (isConsequenceQuestion) {
     logMac("delegate.question_not_command", { raw: textForLog(raw) });
-    return runMacConversation(raw);
+    return talkOrConverse(raw);
   }
 
   // (maps + amazon intents moved earlier, before screen-point/click)
@@ -19827,9 +22640,17 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
   const appName = extractAfter(raw, [
     /\b(?:open|launch|start)\s+(?:the\s+)?(?:app\s+)?([A-Za-z][\w\s.&-]{0,60}?)(?:\s+app)?(?:\s+for\s+me)?$/i,
   ]);
-  if (appName && !isLikelyUrl(appName)) {
+  /* "Open it", "open this", "open that one": a pronoun is never an app or a
+     file. "Open it for me" became a file search for "it" and opened a resume,
+     because "Itish" starts with it (2026-10-03). */
+  const PRONOUN_TARGET = /^(?:it|this|that|them|these|those|this one|that one|the same|it up|it again|those ones)$/i;
+  if (appName && !isLikelyUrl(appName) && !PRONOUN_TARGET.test(cleanOpenTarget(appName).trim())) {
     const target = cleanOpenTarget(appName);
     logMac("delegate.open_intent", { raw: textForLog(raw), target });
+    /* "Open the BYOB chat", "open my chat with Param": the chat itself, not
+       just WhatsApp (it stopped at "Opening WhatsApp", 2 and 4 Oct). */
+    const chatName = whatsAppChatTarget(raw, target);
+    if (chatName) return openWhatsAppChat(chatName);
     // Order matters: exact app -> KNOWN website -> user's files -> fuzzy app.
     // Fuzzy app used to run first and "win" on garbage (google docs ->
     // Google Chrome), starving the correct web/file fallbacks.
@@ -19844,7 +22665,12 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
       const host = new URL(website).hostname.replace(/^www\./, "");
       return { ok: true, say: `Opening ${host}.` };
     }
-    const files = await findFiles(target, { kind: "", requireNameMatch: true });
+    /* A file only when its name IS what you said, or you asked for a file.
+       "Open Pinterest" opened "Is Pinterest just woke Twitter.jpeg" from
+       Downloads (5 Oct): one word of five is not that file, it is a website
+       the rules did not know. Anything else goes on to be understood. */
+    const askedForFile = /\b(?:file|folder|pdf|doc|document|photo|image|picture|video|screenshot|sheet|deck|resume|cv|note)s?\b|\.[a-z0-9]{2,4}\b/i.test(String(raw || ""));
+    const files = (await findFiles(target, { kind: "", requireNameMatch: true })).filter((f) => askedForFile || fileNameIsTarget(f, target));
     if (files.length) {
       const opened = await openLocalPath(files[0]);
       if (!opened.ok) return { ok: false, say: `I found ${path.basename(files[0])}, but macOS would not open it: ${opened.error}.`, files };
@@ -19876,6 +22702,7 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
     // corpus exists to catch. Hand it to the loop instead: it can look, act, and
     // say plainly when something is genuinely beyond it.
     logMac("delegate.hil_loop.fallback", { raw: textForLog(raw) });
+    if (!macLooksLikeTask(raw)) return talkOrConverse(raw);
     return runMacHilLoop(raw);
   }
 
@@ -20294,7 +23121,36 @@ ipcMain.handle("braino-mac:job-running", async () => ({
  * the routing words only ever have to be right in one file. */
 ipcMain.handle("braino-mac:wants-brain", async (_event, text) => {
   try {
-    return { brain: Boolean(macWantsTheBrain(String(text || ""))) };
+    const raw = String(text || "");
+    /* Stage 4, one brain on the voice side too: Laya decides whether a spoken
+       sentence is talk, not the voice code's own rules. Sure it is plain talk,
+       about nothing of his own, the quick chat answers; anything else goes to
+       the brain, where HIL can still answer it as talk. "Switch to my other
+       profile" got "Switching, give me a moment" from the quick chat and
+       nothing was done (5 Oct). */
+    if (deciderStage() >= 4) {
+      const sorted = await layaKind(raw);
+      if (sorted) {
+        /* "Hello increase the volume" went to quick chat (6 Oct), and quick chat
+           cannot act: anything that reads as a task goes to the brain. */
+        const talk = sorted.kind === "chat" && sorted.confidence >= LAYA_TALK_SURE && !MAC_OWN_DATA.test(raw) && !SCREEN_DEIXIS_RE.test(raw.trim()) && !macLooksLikeTask(raw) && !parseVolumeCommand(raw);
+        logMac("routing.one_brain", { raw: textForLog(raw), kind: sorted.kind, confidence: sorted.confidence, talk });
+        return { brain: !talk, oneBrain: true, laya: true };
+      }
+    }
+    const brain = Boolean(macWantsTheBrain(raw));
+    /* The rules default to the brain for anything they don't recognise. Laya
+       reads the sentence itself: sure it is chat, with no job and nothing
+       about your own day in it, it stays with the quick chat. The job loop
+       answering "how you doing" took 16 seconds. */
+    if (brain && !MAC_OWN_DATA.test(raw)) {
+      const sorted = await layaKind(raw);
+      if (sorted?.kind === "chat" && sorted.confidence >= 0.65) {
+        logMac("routing.laya_chat", { raw: textForLog(raw), confidence: sorted.confidence, ms: sorted.ms });
+        return { brain: false, laya: true };
+      }
+    }
+    return { brain };
   } catch (error) {
     logMac("routing.wants_brain_failed", { error: String(error?.message || error) });
     // Fail open to the old behaviour rather than sending everything one way.
@@ -20332,13 +23188,15 @@ function setActivityPaused(paused) {
 }
 
 let activityFocus = null; // { key, app, title, url, since }
+// Commands being handled right now. Capture stands aside while this is > 0.
+let macDelegatesInFlight = 0;
 let activityScreenAt = 0;
 let activityScreenBusy = false;
 let activityFocusBusy = false;
 
 /* Read the text in the front window, keep the text, delete the picture. */
 async function captureScreenTextForActivity(ctx) {
-  if (activityScreenBusy || !fs.existsSync(SCREEN_TEXT_BIN)) return;
+  if (activityScreenBusy || macDelegatesInFlight > 0 || !fs.existsSync(SCREEN_TEXT_BIN)) return;
   const who = { app: ctx.appName, title: ctx.browserTitle || ctx.windowTitle, url: ctx.browserUrl };
   // Checked BEFORE the screenshot: a private window is never captured at all.
   if (!activityEnabled() || activityIsSelf(who) || activityIsPrivate(who, activityState().privateApps || [])) return;
@@ -20369,8 +23227,13 @@ async function pollActivityFocus() {
   if (activityFocusBusy || !activityEnabled()) return;
   activityFocusBusy = true;
   try {
-    const ctx = await readActiveMacContext();
-    if (!ctx) return;
+    /* The overlay already reads the front window every 0.9s. Reading it again
+       here, and screenshotting, queued ahead of real commands: the gap before
+       a command started went from 0.3s to 1.6s (3.5s at worst) on 2026-09-25.
+       So: the context it already has, and nothing at all while he is busy. */
+    if (macDelegatesInFlight > 0) return;
+    const ctx = activeMacContext;
+    if (!ctx || isBrainoSelfContext(ctx)) return;
     const who = { app: ctx.appName, title: ctx.browserTitle || ctx.windowTitle, url: ctx.browserUrl };
     const key = `${who.app}|${who.title}|${who.url}`;
     const now = Date.now();
@@ -20609,8 +23472,11 @@ let memoryWindow = null;
 function openMemoryWindow() {
   if (memoryWindow && !memoryWindow.isDestroyed()) { memoryWindow.show(); memoryWindow.focus(); return memoryWindow; }
   memoryWindow = new BrowserWindow({
-    width: 1000, height: 760, minWidth: 720, minHeight: 520,
-    title: "AffectiveOS Memory", titleBarStyle: "hiddenInset", trafficLightPosition: { x: 18, y: 18 },
+    width: 1280, height: 820, minWidth: 820, minHeight: 560,
+    title: "AffectiveOS Memory", titleBarStyle: "hiddenInset", trafficLightPosition: { x: 20, y: 24 },
+    // Solid Affective paper, not glass: the wallpaper through the blur read
+    // as a blue screen. Matches memory.html's --bg in each theme.
+    backgroundColor: require("electron").nativeTheme.shouldUseDarkColors ? "#100f0c" : "#f4f2ec",
     show: false,
     webPreferences: { preload: PRELOAD_PATH, contextIsolation: true, nodeIntegration: false, sandbox: false },
   });
@@ -20650,6 +23516,263 @@ ipcMain.handle("braino-mac:activity-delete-row", async (_e, day, index) => {
   } catch (_) { return { ok: false }; }
 });
 ipcMain.handle("braino-mac:memory-open", async () => { openMemoryWindow(); return { ok: true }; });
+
+// ── Arrival ──────────────────────────────────────────────────────────────────
+// The notch greets you when you come back: looking for you, Touch ID,
+// "Morning, Itish.", what came in while you were away, then Braino comes out
+// and says good morning. Its own window over the notch, so the notch and voice code are
+// untouched. Rules live in arrival.cjs. BRAINO_ARRIVAL=0 switches it off;
+// `npm run mac:arrival` shows it once at launch.
+const arrival = require("./arrival.cjs");
+const ARRIVAL_VIEW_PATH = path.join(__dirname, "renderer", "arrival.html");
+const ARRIVAL_STATE_PATH = path.join(AUTH_STORE_DIR, "arrival.json");
+const ARRIVAL_W = 760, ARRIVAL_H = 320;
+let arrivalWindow = null;
+let arrivalLockedAt = 0;
+function readArrivalState() {
+  try { return JSON.parse(fs.readFileSync(ARRIVAL_STATE_PATH, "utf8")) || {}; } catch (_) { return {}; }
+}
+function writeArrivalState(patch) {
+  try {
+    fs.mkdirSync(AUTH_STORE_DIR, { recursive: true });
+    fs.writeFileSync(ARRIVAL_STATE_PATH, JSON.stringify({ ...readArrivalState(), ...patch }, null, 2));
+  } catch (_) {}
+}
+function arrivalBounds() {
+  const { bounds } = screen.getPrimaryDisplay();
+  return { x: Math.round(bounds.x + (bounds.width - ARRIVAL_W) / 2), y: bounds.y, width: ARRIVAL_W, height: ARRIVAL_H };
+}
+/* The launch greeting ("Good morning, Itish. Everything is ready.") and
+   Arrival are both a hello. They never play over each other: Arrival waits
+   until the boot greeting has finished, or 25s at most. */
+let arrivalBootDone = false;
+let arrivalPending = null;
+let arrivalBootAt = 0;
+function arrivalBootFinished(fromBoot = false) {
+  if (fromBoot) arrivalBootAt = Date.now();
+  arrivalBootDone = true;
+  if (arrivalPending) { const reason = arrivalPending; arrivalPending = null; setTimeout(() => openArrival(reason), 600); }
+}
+setTimeout(() => arrivalBootFinished(), 25000).unref?.();
+function openArrival(reason = "unlock") {
+  if (process.env.BRAINO_ARRIVAL === "0") return null;
+  if (arrivalWindow && !arrivalWindow.isDestroyed()) return arrivalWindow;
+  if (!arrivalBootDone) { arrivalPending = reason; logMac("arrival.waiting_for_boot", { reason }); return null; }
+  arrivalWindow = new BrowserWindow({
+    ...arrivalBounds(),
+    frame: false, transparent: true, backgroundColor: "#00000000", hasShadow: false,
+    resizable: false, movable: false, minimizable: false, maximizable: false, fullscreenable: false,
+    skipTaskbar: true, alwaysOnTop: true, enableLargerThanScreen: true, show: false,
+    webPreferences: { preload: PRELOAD_PATH, contextIsolation: true, nodeIntegration: false, sandbox: false },
+  });
+  const win = arrivalWindow;
+  win.setAlwaysOnTop(true, "screen-saver", 2);
+  win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true });
+  win.setIgnoreMouseEvents(true, { forward: true });
+  win.once("ready-to-show", () => { if (win.isDestroyed()) return; win.setBounds(arrivalBounds()); win.show(); win.focus(); });
+  win.on("closed", () => { if (arrivalWindow === win) arrivalWindow = null; });
+  // Never left hanging over the notch, whatever happens inside.
+  setTimeout(() => { if (!win.isDestroyed()) win.close(); }, 60000).unref?.();
+  win.loadFile(ARRIVAL_VIEW_PATH);
+  logMac("arrival.opened", { reason });
+  return win;
+}
+function startArrival() {
+  try {
+    powerMonitor.on("lock-screen", () => { arrivalLockedAt = Date.now(); });
+    powerMonitor.on("unlock-screen", () => {
+      const now = Date.now();
+      const go = arrival.shouldArrive({ now, lockedAt: arrivalLockedAt, lastArrivalAt: readArrivalState().lastArrivalAt || 0, disabled: process.env.BRAINO_ARRIVAL === "0" });
+      logMac("arrival.unlock", { go, awayMin: arrivalLockedAt ? Math.round((now - arrivalLockedAt) / 60000) : null });
+      if (go) setTimeout(() => openArrival("unlock"), 700);
+    });
+  } catch (_) {}
+  if (process.env.BRAINO_ARRIVAL_PREVIEW === "1") setTimeout(() => openArrival("preview"), 2500);
+}
+let arrivalTouchPassed = false;
+ipcMain.handle("braino-mac:arrival-init", async () => {
+  arrivalTouchPassed = false;
+  let touchId = false;
+  try { touchId = systemPreferences.canPromptTouchID(); } catch (_) {}
+  // Warm the slow facts now so the summary is instant after Touch ID.
+  setupSlowFacts().catch(() => {});
+  return { notch: cachedNotchMetrics, touchId };
+});
+/* Who messaged on WhatsApp while you were away: since the lock, or the last
+   12 hours on the first arrival of the day. Direct chats only. */
+async function arrivalWhatsAppSince(sinceMs) {
+  try {
+    if (!waDbAvailable()) return [];
+    const since = Math.floor(sinceMs / 1000) - WA_APPLE_EPOCH;
+    const rows = await queryWhatsAppDb(`SELECT s.ZPARTNERNAME AS name, COUNT(*) AS n FROM ZWAMESSAGE m JOIN ZWACHATSESSION s ON m.ZCHATSESSION = s.Z_PK WHERE m.ZISFROMME = 0 AND s.ZSESSIONTYPE = 0 AND m.ZMESSAGEDATE > ${since} GROUP BY s.ZPARTNERNAME ORDER BY n DESC LIMIT 6;`);
+    return rows.filter((r) => r.name).map((r) => ({ name: String(r.name), count: Number(r.n) }));
+  } catch (_) { return []; }
+}
+/* Only asked for after Touch ID passes: nothing personal shows before it. */
+ipcMain.handle("braino-mac:arrival-summary", async () => {
+  let needsTouch = false;
+  try { needsTouch = systemPreferences.canPromptTouchID(); } catch (_) {}
+  if (needsTouch && !arrivalTouchPassed) return { ok: false, rows: [] };
+  const auth = authStatusPayload();
+  const now = Date.now();
+  const since = arrivalLockedAt && now - arrivalLockedAt < 24 * HOUR_MS ? arrivalLockedAt : now - 12 * HOUR_MS;
+  const [facts, whatsapp] = await Promise.all([
+    Promise.race([setupSlowFacts().catch(() => ({})), new Promise((r) => setTimeout(() => r({}), 1500))]),
+    Promise.race([arrivalWhatsAppSince(since), new Promise((r) => setTimeout(() => r([]), 1500))]),
+  ]);
+  const rows = arrival.summaryRows({ whatsapp, classesToday: facts.classesToday || [], dueSoon: facts.dueSoon || [] });
+  logMac("arrival.summary", { rows: rows.map((r) => r.kind) });
+  return { title: arrival.greetingTitle({ name: auth.displayName }), lead: arrival.summaryLead(rows), rows };
+});
+ipcMain.handle("braino-mac:arrival-face", async (_e, dataUrl) => {
+  if (!fs.existsSync(SCREEN_TEXT_BIN)) return { ok: false, error: "no-helper" };
+  const m = String(dataUrl || "").match(/^data:image\/jpeg;base64,(.+)$/);
+  if (!m) return { ok: false, error: "bad-frame" };
+  const file = path.join(app.getPath("temp"), `braino-arrival-${process.pid}.jpg`);
+  try {
+    fs.writeFileSync(file, Buffer.from(m[1], "base64"));
+    const { stdout } = await execFileP(SCREEN_TEXT_BIN, [file, "--faces"], { timeout: 5000 });
+    const parsed = JSON.parse(String(stdout || "{}").trim().split("\n").pop());
+    return { ok: Boolean(parsed.ok), faces: Number(parsed.faces) || 0 };
+  } catch (_) {
+    return { ok: false, faces: 0 };
+  } finally {
+    fs.promises.unlink(file).catch(() => {});
+  }
+});
+ipcMain.handle("braino-mac:arrival-touchid", async () => {
+  try {
+    await systemPreferences.promptTouchID("come in to AffectiveOS");
+    arrivalTouchPassed = true;
+    return { result: "ok" };
+  } catch (_) {
+    return { result: "denied" };
+  }
+});
+ipcMain.handle("braino-mac:arrival-mouse", async (event, inside) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (win && !win.isDestroyed()) win.setIgnoreMouseEvents(!inside, { forward: true });
+  return { ok: true };
+});
+/* The morning callback: after "Good morning, Itish", one thing you told him
+   in the last two weeks, asked about. "How did the 1v1 with Param go?" Grok's
+   hook without the gimmicks, and inside a moment you started, so it is not an
+   interruption. Never the same memory twice; nothing at all if there is
+   nothing worth asking, or if it takes longer than four seconds. */
+const ARRIVAL_CALLBACK_CATEGORIES = new Set(["event", "project", "relationship", "fact"]);
+ipcMain.handle("braino-mac:arrival-callback", async () => {
+  try {
+    const since = new Date(Date.now() - 14 * 24 * HOUR_MS).toISOString();
+    const r = await memoryRest(`?user_id=eq.{uid}&status=eq.active&created_at=gte.${since}&select=id,content,category,source,salience,created_at&order=created_at.desc&limit=40`);
+    if (!r.ok || !Array.isArray(r.data)) return { ok: false };
+    const used = new Set(readArrivalState().calledBack || []);
+    const pick = r.data.find((m) => !used.has(m.id) && m.source !== "onboarding" && ARRIVAL_CALLBACK_CATEGORIES.has(m.category) && String(m.content || "").length > 12);
+    if (!pick) return { ok: false };
+    const reply = await Promise.race([
+      runMacConversation(`(This is your morning greeting to me, right after you said good morning. Ask me about this one thing I told you earlier, as a short warm question, under 14 words, no dashes, and say nothing else: ${pick.content})`),
+      new Promise((res) => setTimeout(() => res(null), 4000)),
+    ]);
+    const line = String(reply?.say || "").trim().replace(/[\u2013\u2014]/g, ",");
+    if (!line || line.length > 140 || !/\?\s*$/.test(line)) return { ok: false };
+    writeArrivalState({ calledBack: [...used, pick.id].slice(-60) });
+    logMac("arrival.callback", { category: pick.category });
+    return { ok: true, line };
+  } catch (_) { return { ok: false }; }
+});
+ipcMain.handle("braino-mac:arrival-done", async (event, outcome = {}) => {
+  writeArrivalState({ lastArrivalAt: Date.now() });
+  logMac("arrival.done", { face: outcome.face || null, touch: outcome.touch || null, skipped: Boolean(outcome.skipped) });
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (win && !win.isDestroyed()) win.close();
+  /* Then Braino himself comes out and says good morning. Not after a denied
+     Touch ID, nobody there, or Esc; and not if the launch greeting just said
+     it, so it is never said twice. */
+  const welcomed = outcome.touch === "ok" || (outcome.touch === "skipped" && outcome.face);
+  const bootJustGreeted = arrivalBootAt && Date.now() - arrivalBootAt < 90000;
+  if (welcomed && !outcome.skipped && !bootJustGreeted && dockWindow && !dockWindow.isDestroyed()) {
+    setTimeout(() => { if (dockWindow && !dockWindow.isDestroyed()) dockWindow.webContents.send("braino-mac:arrival-hello", {}); }, 350);
+  }
+  return { ok: true };
+});
+/* ── The day's photos, for the memory recap ─────────────────────────────────
+   Itish chose Apple Photos (2026-09-29). Only when he presses "Add today's
+   photos": that is what asks macOS for Photos access and may open Photos,
+   so it is never done behind his back. Up to 8, spread over the day, exported
+   as small JPEGs into this Mac's own folder and kept for that day; after
+   that the window reads the copies and never touches Photos again. */
+const MEMORY_PHOTOS_DIR = path.join(AUTH_STORE_DIR, "memory-photos");
+const dayOk = (d) => /^\d{4}-\d{2}-\d{2}$/.test(String(d || ""));
+function memoryPhotoDay(day) { return dayOk(day) ? day : new Date().toLocaleDateString("en-CA"); }
+function readMemoryPhotos(day) {
+  const dir = path.join(MEMORY_PHOTOS_DIR, memoryPhotoDay(day));
+  try {
+    const meta = JSON.parse(fs.readFileSync(path.join(dir, "photos.json"), "utf8"));
+    return (meta.photos || []).map((ph) => {
+      try { return { at: ph.at, src: `data:image/jpeg;base64,${fs.readFileSync(path.join(dir, ph.file)).toString("base64")}` }; } catch (_) { return null; }
+    }).filter(Boolean);
+  } catch (_) { return []; }
+}
+async function fetchMemoryPhotos(day) {
+  const d = memoryPhotoDay(day);
+  const [Y, M, D] = d.split("-").map(Number);
+  const dir = path.join(MEMORY_PHOTOS_DIR, d);
+  const raw = path.join(dir, "raw");
+  fs.rmSync(dir, { recursive: true, force: true });
+  fs.mkdirSync(raw, { recursive: true });
+  const script = `
+set wasRunning to application "Photos" is running
+set d0 to current date
+set day of d0 to 1
+set year of d0 to ${Y}
+set month of d0 to ${M}
+set day of d0 to ${D}
+set time of d0 to 0
+set d1 to d0 + 86400
+set out to ""
+tell application "Photos"
+  set found to (every media item whose date ≥ d0 and date < d1)
+  set n to count of found
+  if n > 0 then
+    set pickN to n
+    if pickN > 8 then set pickN to 8
+    repeat with i from 1 to pickN
+      set idx to ((i - 1) * n div pickN) + 1
+      set m to item idx of found
+      do shell script "mkdir -p " & quoted form of ("${raw}/" & i)
+      export {m} to (POSIX file ("${raw}/" & i)) without using originals
+      set out to out & i & ":" & (((date of m) - d0) as integer) & ","
+    end repeat
+  end if
+end tell
+if not wasRunning then tell application "Photos" to quit
+return out`;
+  let res;
+  try { res = await execFileP("/usr/bin/osascript", ["-e", script], { timeout: 120000 }); }
+  catch (error) {
+    const why = String(error?.stderr || error?.message || error);
+    logMac("memory_photos.failed", { error: why.slice(0, 200) });
+    if (/-1743|not authori[sz]ed|not allowed/i.test(why)) return { ok: false, say: "Braino isn't allowed to use Photos yet. Allow it in System Settings, Privacy & Security, Automation." };
+    return { ok: false, say: "I couldn't get photos from Photos just now." };
+  }
+  const photos = [];
+  for (const part of String(res.stdout || "").trim().split(",").filter(Boolean)) {
+    const [i, secs] = part.split(":").map(Number);
+    const sub = path.join(raw, String(i));
+    const file = (fs.readdirSync(sub).find((f) => !f.startsWith(".")) || "");
+    if (!file) continue;
+    const outName = `${i}.jpg`;
+    try {
+      await execFileP("/usr/bin/sips", ["-s", "format", "jpeg", "-s", "formatOptions", "70", "-Z", "560", path.join(sub, file), "--out", path.join(dir, outName)], { timeout: 20000 });
+      photos.push({ file: outName, at: new Date(new Date(Y, M - 1, D).getTime() + secs * 1000).toISOString() });
+    } catch (_) {}
+  }
+  fs.rmSync(raw, { recursive: true, force: true });
+  fs.writeFileSync(path.join(dir, "photos.json"), JSON.stringify({ day: d, photos }, null, 1));
+  logMac("memory_photos.fetched", { day: d, count: photos.length });
+  return { ok: true, photos: readMemoryPhotos(d), say: photos.length ? "" : "No photos in Photos for that day." };
+}
+ipcMain.handle("braino-mac:memory-photos", async (_e, day) => ({ ok: true, photos: readMemoryPhotos(day) }));
+ipcMain.handle("braino-mac:memory-photos-fetch", async (_e, day) => fetchMemoryPhotos(day));
 ipcMain.handle("braino-mac:memory-digests", async (_e, day) => {
   const key = /^\d{4}-\d{2}-\d{2}$/.test(String(day || "")) ? String(day) : localDayKey(Date.now());
   const d = readDigestDay(key);
@@ -20662,6 +23785,394 @@ ipcMain.handle("braino-mac:memory-digest-now", async () => {
   return r;
 });
 ipcMain.handle("braino-mac:memory-ask", async (_e, question) => searchMemory({ query: String(question || "") }));
+
+// ── Set him up ───────────────────────────────────────────────────────────────
+// Companion onboarding (2026-09-26). Double-click Braino, "Set him up": a split
+// window. Left, he asks what he needs to know, one thing at a time. Right, his
+// notebook, filling in live: what you told him, and what he is picking up from
+// this Mac right now. It can be reopened any time to watch that sync.
+const SETUP_VIEW_PATH = path.join(__dirname, "renderer", "setup.html");
+const SETUP_STATE_PATH = path.join(AUTH_STORE_DIR, "setup.json");
+let setupWindow = null;
+
+function readSetupState() {
+  try { return JSON.parse(fs.readFileSync(SETUP_STATE_PATH, "utf8")) || {}; } catch (_) { return {}; }
+}
+/* Apple's own Liquid Glass (macOS 26) behind the setup window. Vibrancy was a
+   thick frosted slab that went flat black or white with the system theme; this
+   is clear glass the desktop shows through. Optional and Mac-only, so if it is
+   missing or the Mac is older, the window falls back to the old blur. */
+let liquidGlass = null;
+try { liquidGlass = require("electron-liquid-glass"); if (!liquidGlass.isGlassSupported()) liquidGlass = null; } catch (_) { liquidGlass = null; }
+
+function openSetupWindow() {
+  if (setupWindow && !setupWindow.isDestroyed()) { setupWindow.show(); setupWindow.focus(); return setupWindow; }
+  setupWindow = new BrowserWindow({
+    width: 1180, height: 780, minWidth: 940, minHeight: 620,
+    title: "Set up Braino", titleBarStyle: "hiddenInset", trafficLightPosition: { x: 18, y: 18 },
+    // Vibrancy must stay off with liquid glass, or it paints over the glass.
+    transparent: true, backgroundColor: "#00000000",
+    ...(liquidGlass ? {} : { vibrancy: "under-window", visualEffectState: "active" }),
+    show: false,
+    webPreferences: { preload: PRELOAD_PATH, contextIsolation: true, nodeIntegration: false, sandbox: false },
+  });
+  setupWindow.webContents.once("did-finish-load", () => {
+    if (!liquidGlass || !setupWindow || setupWindow.isDestroyed()) return;
+    try {
+      const id = liquidGlass.addView(setupWindow.getNativeWindowHandle(), { cornerRadius: 26 });
+      liquidGlass.unstable_setVariant(id, liquidGlass.GlassMaterialVariant.clear);
+      setupWindow.setWindowButtonVisibility(true);
+      logMac("setup.glass", { id });
+    } catch (error) {
+      setupWindow.setVibrancy("under-window");
+      logMac("setup.glass_failed", { error: String(error?.message || error).slice(0, 160) });
+    }
+  });
+  setupWindow.once("ready-to-show", () => { app.dock?.show?.(); setupWindow.show(); setupWindow.focus(); });
+  setupWindow.on("closed", () => { setupWindow = null; if (!dashboardWindow && !memoryWindow) app.dock?.hide?.(); });
+  setupWindow.loadFile(SETUP_VIEW_PATH);
+  logMac("setup.opened", { done: Boolean(readSetupState().completedAt) });
+  macTrace("🧩 SETUP", "opened");
+  return setupWindow;
+}
+
+/* Slow things (network, WhatsApp's database) are cached for a minute; the live
+   parts (front window, what was just captured) are read every call. */
+const setupCache = { at: 0, data: null };
+async function setupSlowFacts() {
+  if (setupCache.data && Date.now() - setupCache.at < 60000) return setupCache.data;
+  const now = Date.now();
+  const out = { classesToday: [], dueSoon: [], topWhatsApp: [], facts: [], driveConnected: null };
+  try {
+    const rows = await macFastRows(new Date(now - 6 * HOUR_MS).toISOString().slice(0, 10), new Date(now + 24 * HOUR_MS).toISOString().slice(0, 10), "class");
+    out.classesToday = (rows || []).filter((r) => localDayKey(Date.parse(r.starts_at)) === localDayKey(now)).slice(0, 6)
+      .map((r) => ({ title: r.title, at: macFriendlyTime(r.starts_at, r.timezone || "Asia/Kolkata"), room: r.room || "" }));
+    const due = await macFastRows(new Date(now).toISOString().slice(0, 10), new Date(now + 14 * 24 * HOUR_MS).toISOString().slice(0, 10), "assignment");
+    out.dueSoon = (due || []).slice(0, 4).map((r) => ({ title: r.title, when: `${macFriendlyDay(r.starts_at, r.timezone || "Asia/Kolkata")} ${macFriendlyTime(r.starts_at, r.timezone || "Asia/Kolkata")}` }));
+  } catch (_) {}
+  try {
+    if (waDbAvailable()) {
+      const since = now / 1000 - WA_APPLE_EPOCH - 7 * 24 * 3600;
+      const rows = await queryWhatsAppDb(`SELECT s.ZPARTNERNAME AS name, COUNT(*) AS n FROM ZWAMESSAGE m JOIN ZWACHATSESSION s ON m.ZCHATSESSION = s.Z_PK WHERE m.ZISFROMME = 0 AND s.ZSESSIONTYPE = 0 AND m.ZMESSAGEDATE > ${since} GROUP BY s.ZPARTNERNAME ORDER BY n DESC LIMIT 8;`);
+      out.topWhatsApp = rows.filter((r) => r.name).map((r) => ({ name: String(r.name), count: Number(r.n) }));
+    }
+  } catch (_) {}
+  try {
+    const auth = authStatusPayload();
+    const token = await getBrainoAuthToken().catch(() => "");
+    if (auth.userId && token) {
+      const res = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/rest/v1/braino_memories?user_id=eq.${auth.userId}&status=eq.active&select=content,category,source,created_at&order=created_at.desc&limit=12`, {
+        headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) out.facts = await res.json();
+    }
+  } catch (_) {}
+  setupCache.at = Date.now();
+  setupCache.data = out;
+  return out;
+}
+
+function setupPermissions() {
+  const media = (kind) => { try { return systemPreferences.getMediaAccessStatus(kind); } catch (_) { return "unknown"; } };
+  let accessibility = false;
+  try { accessibility = systemPreferences.isTrustedAccessibilityClient(false); } catch (_) {}
+  return [
+    { id: "microphone", label: "Microphone", why: "to hear you", ok: media("microphone") === "granted", pane: "Privacy_Microphone" },
+    { id: "accessibility", label: "Accessibility", why: "to click and type for you", ok: accessibility, pane: "Privacy_Accessibility" },
+    { id: "screen", label: "Screen Recording", why: "to read what is on your screen", ok: media("screen") === "granted", pane: "Privacy_ScreenCapture" },
+    { id: "contacts", label: "Contacts", why: "to know who is who", ok: Boolean(contactsCache && Object.keys(contactsCache).length), pane: "Privacy_Contacts" },
+  ];
+}
+
+async function setupSnapshot() {
+  const auth = authStatusPayload();
+  const slow = await setupSlowFacts();
+  const today = readActivityRange(new Date(new Date().setHours(0, 0, 0, 0)).getTime(), Date.now());
+  const recent = today.filter((r) => ["focus", "screen", "conversation", "playing", "whatsapp"].includes(r.kind)).slice(-8).reverse().map((r) => ({
+    t: r.t, kind: r.kind,
+    text: r.kind === "focus" ? `${r.app}${r.title ? ` · ${r.title}` : ""}`
+      : r.kind === "screen" ? `Read your screen in ${r.app}: ${(r.lines || []).slice(0, 3).join(" · ")}`
+      : r.kind === "conversation" ? `You said "${r.you || ""}"`
+      : r.kind === "playing" ? `Played ${r.track}${r.artist ? ` by ${r.artist}` : ""}`
+      : `${r.from} messaged on WhatsApp`,
+  }));
+  const digests = readDigestDay(localDayKey(Date.now()));
+  const mesa = readMesaSyncState();
+  return {
+    ok: true,
+    name: String(auth.displayName || "").split(" ")[0] || "",
+    email: auth.email || "",
+    answers: readSetupState(),
+    now: {
+      app: activeMacContext?.appName || "",
+      title: activeMacContext?.browserTitle || activeMacContext?.windowTitle || "",
+      playing: lastNowPlaying?.playing ? `${lastNowPlaying.track}${lastNowPlaying.artist ? ` by ${lastNowPlaying.artist}` : ""}` : "",
+    },
+    recent,
+    summaries: Object.keys(digests).sort().reverse().slice(0, 3).map((h) => ({ hour: h, summary: digests[h]?.summary || "" })).filter((d) => d.summary),
+    classesToday: slow.classesToday,
+    dueSoon: slow.dueSoon,
+    topWhatsApp: slow.topWhatsApp,
+    important: waImportantNames(),
+    facts: slow.facts,
+    connections: [
+      { id: "mesa", label: "Mesa", ok: Boolean(mesa.connected), detail: mesa.lastSyncAt ? `synced ${new Date(mesa.lastSyncAt).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" })}` : "not connected" },
+      { id: "whatsapp", label: "WhatsApp", ok: macWhatsAppAppInstalled(), detail: macWhatsAppAppInstalled() ? "Mac app found" : "no Mac app" },
+      { id: "contacts", label: "Contacts", ok: Boolean(contactsCache && Object.keys(contactsCache).length), detail: contactsCache ? `${Object.keys(contactsCache).length} people` : "not read yet" },
+      { id: "memory", label: "Memory", ok: activityEnabled(), detail: activityEnabled() ? (recallEnabled() ? "recording, Braino can use it" : "recording, Braino can't use it") : "paused" },
+    ],
+    permissions: setupPermissions(),
+  };
+}
+
+/* What you told him becomes memory he keeps: the old onboarding facts are
+   replaced, never duplicated. And the choices take effect at once. */
+async function saveSetup(answers = {}) {
+  const prev = readSetupState();
+  const next = { ...prev, ...answers, updatedAt: Date.now() };
+  if (answers.completed) next.completedAt = Date.now();
+  try { fs.writeFileSync(SETUP_STATE_PATH, JSON.stringify(next, null, 2)); } catch (_) {}
+  if (Array.isArray(answers.important)) {
+    for (const n of waImportantNames()) if (!answers.important.includes(n)) setWaImportant(n, false);
+    for (const n of answers.important) setWaImportant(n, true);
+  }
+  if (typeof answers.memoryOn === "boolean") setActivityPaused(!answers.memoryOn);
+  if (typeof answers.recallOn === "boolean") setRecallEnabled(answers.recallOn);
+  setupCache.at = 0;
+  const name = next.callMe || String(authStatusPayload().displayName || "").split(" ")[0] || "They";
+  const facts = [];
+  if (next.callMe) facts.push({ content: `Wants to be called ${next.callMe}.`, category: "identity" });
+  if (next.persona) facts.push({ content: `${name} is a ${String(next.persona).toLowerCase()}${next.org ? ` at ${next.org}` : ""}.`, category: "identity" });
+  if (next.dayStarts) facts.push({ content: `${name}'s day usually starts around ${next.dayStarts}.`, category: "preference" });
+  if (next.dayEnds) facts.push({ content: `${name} usually winds down around ${next.dayEnds}.`, category: "preference" });
+  if (next.focus) facts.push({ content: `What ${name} most wants help with: ${next.focus}.`, category: "preference" });
+  if (next.voice) facts.push({ content: `${name} prefers Braino ${next.voice === "quiet" ? "to stay quiet and show things in the notch" : "to talk out loud"}.`, category: "preference" });
+  if (Array.isArray(next.important) && next.important.length) facts.push({ content: `${name}'s important people: ${next.important.join(", ")}.`, category: "relationship" });
+  if (next.never) facts.push({ content: `Braino should never: ${next.never}.`, category: "preference" });
+  try {
+    const auth = authStatusPayload();
+    const token = await getBrainoAuthToken().catch(() => "");
+    if (auth.userId && token && facts.length) {
+      const base = `${SUPABASE_URL.replace(/\/$/, "")}/rest/v1/braino_memories`;
+      const headers = { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+      await fetch(`${base}?user_id=eq.${auth.userId}&source=eq.onboarding`, { method: "DELETE", headers });
+      await fetch(base, {
+        method: "POST",
+        headers: { ...headers, Prefer: "return=minimal" },
+        body: JSON.stringify(facts.map((f) => ({ user_id: auth.userId, content: f.content, category: f.category, salience: 3, source: "onboarding", status: "active", dedup_key: f.content.toLowerCase().replace(/[^a-z0-9 ]/g, "").slice(0, 80) }))),
+      });
+    }
+  } catch (error) {
+    logMac("setup.facts_failed", { error: String(error?.message || error).slice(0, 160) });
+  }
+  logMac("setup.saved", { keys: Object.keys(answers), facts: facts.length, completed: Boolean(answers.completed) });
+  macTrace("🧩 SETUP", `saved ${Object.keys(answers).join(", ")} · ${facts.length} facts in memory`);
+  return { ok: true, facts: facts.length };
+}
+
+ipcMain.handle("braino-mac:setup-open", async () => { openSetupWindow(); return { ok: true }; });
+
+// ── Braino for Mac: the one app (renderer/app.html) ─────────────────────────
+// Double-click Braino opens it. It replaces the little menu and the old
+// dashboard window; pages not moved over yet still open the old dashboard.
+const APP_VIEW_PATH = path.join(__dirname, "renderer", "app.html");
+let appWindow = null;
+function openBrainoApp(page) {
+  if (appWindow && !appWindow.isDestroyed()) {
+    if (appWindow.isMinimized()) appWindow.restore();
+    appWindow.show(); appWindow.focus();
+    if (page) appWindow.webContents.send("braino-mac:app-go", page);
+    return appWindow;
+  }
+  appWindow = new BrowserWindow({
+    width: 1120, height: 740, minWidth: 900, minHeight: 600,
+    title: "Braino", titleBarStyle: "hiddenInset", trafficLightPosition: { x: 18, y: 18 },
+    /* macOS full screen paints transparent windows grey. The green button
+       fills the screen instead, and the glass stays glass. */
+    fullscreenable: false,
+    transparent: true, backgroundColor: "#00000000",
+    ...(liquidGlass ? {} : { vibrancy: "under-window", visualEffectState: "active" }),
+    show: false,
+    webPreferences: { preload: PRELOAD_PATH, contextIsolation: true, nodeIntegration: false, sandbox: false },
+  });
+  appWindow.webContents.once("did-finish-load", () => {
+    if (page) appWindow?.webContents.send("braino-mac:app-go", page);
+    if (!liquidGlass || !appWindow || appWindow.isDestroyed()) return;
+    try {
+      const id = liquidGlass.addView(appWindow.getNativeWindowHandle(), { cornerRadius: 26 });
+      liquidGlass.unstable_setVariant(id, liquidGlass.GlassMaterialVariant.clear);
+      appWindow.setWindowButtonVisibility(true);
+    } catch (error) {
+      appWindow.setVibrancy("under-window");
+      logMac("app.glass_failed", { error: String(error?.message || error).slice(0, 160) });
+    }
+  });
+  appWindow.once("ready-to-show", () => { app.dock?.show?.(); appWindow.show(); appWindow.focus(); });
+  appWindow.on("closed", () => { appWindow = null; if (!dashboardWindow && !memoryWindow && !setupWindow) app.dock?.hide?.(); });
+  appWindow.loadFile(APP_VIEW_PATH);
+  logMac("app.opened", { page: page || "" });
+  macTrace("🪟 APP", `opened${page ? ` at ${page}` : ""}`);
+  return appWindow;
+}
+ipcMain.handle("braino-mac:app-open", async (_event, page) => { openBrainoApp(page ? String(page) : ""); return { ok: true }; });
+
+/* Typed talk from the chat page: the same conversation brain the Mac's text
+   path uses, in the same history the loop and the planner read. Jobs do not
+   come here; the page sends those to braino-mac:delegate like voice does. */
+ipcMain.handle("braino-mac:converse", async (_event, text) => {
+  const raw = String(text || "").trim().slice(0, 4000);
+  if (!raw) return { ok: false, say: "" };
+  const startedAt = Date.now();
+  let result;
+  try { result = await runMacConversation(raw); } catch (error) { result = { ok: false, say: "I couldn't answer that just now." }; }
+  if (result?.say) { rememberMacChat("user", raw); rememberMacChat("assistant", String(result.say)); }
+  logMac("chat.converse", { chars: raw.length, ok: Boolean(result?.ok), ms: Date.now() - startedAt });
+  logInteraction({ kind: "typed", route: "converse", user_text: raw, braino_text: String(result?.say || ""), latency_ms: Date.now() - startedAt, meta: { source: "app_chat", ok: Boolean(result?.ok) } });
+  return result;
+});
+
+/* The last commands, read from the log: what he heard, which lane, how long his side took. */
+ipcMain.handle("braino-mac:app-recent", async () => {
+  try {
+    const stat = fs.statSync(LOG_PATH);
+    const fd = fs.openSync(LOG_PATH, "r");
+    const len = Math.min(stat.size, 400000);
+    const buf = Buffer.alloc(len);
+    fs.readSync(fd, buf, 0, len, stat.size - len);
+    fs.closeSync(fd);
+    const lane = (route) => /^instant_fire|^cascade|^hil_first|^form|^recipe|^skill|^chrome_profiles/.test(route) ? "Instant" : /^hil_plan/.test(route) ? "Think once" : /^hil_loop/.test(route) ? "Loop" : /conversation|^talk/.test(route) ? "Talk" : route;
+    const rows = buf.toString("utf8").split("\n").filter((l) => l.includes('"event":"feature.executed"')).slice(-12).reverse().map((l) => {
+      try { const j = JSON.parse(l.slice(l.indexOf("{"))); return { heard: String(j.heard || ""), lane: lane(String(j.route || "")), ms: Number.isFinite(j.durationMs) ? j.durationMs : null, at: j.ts }; } catch (_) { return null; }
+    }).filter((r) => r && r.heard && !/^\[/.test(r.heard));
+    return { ok: true, rows };
+  } catch (_) { return { ok: true, rows: [] }; }
+});
+
+/* ── Activity: everything he did, for the app's Activity page ─────────────
+   Read from his own log (feature.executed is written for every job and every
+   answer), newest first. Up to 3 MB back, which is several days of use. */
+ipcMain.handle("braino-mac:app-activity", async (_event, limit) => {
+  try {
+    const stat = fs.statSync(LOG_PATH);
+    const fd = fs.openSync(LOG_PATH, "r");
+    const len = Math.min(stat.size, 3 * 1024 * 1024);
+    const buf = Buffer.alloc(len);
+    fs.readSync(fd, buf, 0, len, stat.size - len);
+    fs.closeSync(fd);
+    const lane = (route) => /^instant_fire|^cascade|^hil_first|^form|^recipe|^skill|^chrome_profiles/.test(route) ? "Instant" : /^hil_plan/.test(route) ? "Think once" : /^hil_loop/.test(route) ? "Worked it out" : /conversation|^talk|converse/.test(route) ? "Talk" : "Other";
+    const max = Math.min(500, Math.max(20, Number(limit) || 300));
+    const rows = buf.toString("utf8").split("\n").filter((l) => l.includes('"event":"feature.executed"') || l.includes('"event":"chat.converse"')).slice(-max).reverse().map((l) => {
+      try {
+        const j = JSON.parse(l.slice(l.indexOf("{")));
+        if (j.event === "chat.converse") return null;
+        return { at: j.ts, heard: String(j.heard || ""), did: String(j.responded || ""), lane: lane(String(j.route || "")), ok: j.ok !== false, stood: Boolean(j.superseded), ms: Number.isFinite(j.durationMs) ? j.durationMs : null };
+      } catch (_) { return null; }
+    }).filter((r) => r && r.heard && !/^\[/.test(r.heard));
+    return { ok: true, rows };
+  } catch (_) { return { ok: true, rows: [] }; }
+});
+
+/* ── Memory he keeps about you, to see and edit ──────────────────────────
+   braino_memories, through the user's own session (row level security lets
+   people manage their own rows). Deleting archives, so nothing is lost by a
+   slip; editing rewrites the fact and marks it as said by the user. */
+async function memoryRest(pathAndQuery, init = {}) {
+  const auth = authStatusPayload();
+  const token = await getBrainoAuthToken().catch(() => "");
+  if (!auth.userId || !token || !SUPABASE_URL || !SUPABASE_ANON_KEY) return { ok: false, error: "signed_out" };
+  const res = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/rest/v1/braino_memories${pathAndQuery.replace("{uid}", auth.userId)}`, {
+    ...init,
+    headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${token}`, "Content-Type": "application/json", Prefer: "return=representation", ...(init.headers || {}) },
+  });
+  const data = await res.json().catch(() => null);
+  return res.ok ? { ok: true, data, userId: auth.userId } : { ok: false, error: `http_${res.status}` };
+}
+const MEMORY_CATEGORIES = new Set(["identity", "preference", "relationship", "project", "fact", "event"]);
+ipcMain.handle("braino-mac:memories-list", async () => {
+  const r = await memoryRest("?user_id=eq.{uid}&status=eq.active&select=id,content,category,source,salience,created_at,updated_at&order=created_at.desc&limit=300");
+  return r.ok ? { ok: true, rows: Array.isArray(r.data) ? r.data : [] } : r;
+});
+ipcMain.handle("braino-mac:memory-update", async (_e, id, content, category) => {
+  const text = String(content || "").trim().slice(0, 600);
+  if (!/^[0-9a-f-]{36}$/i.test(String(id || "")) || !text) return { ok: false, error: "bad_input" };
+  const patch = { content: text, source: "user", updated_at: new Date().toISOString(), dedup_key: text.toLowerCase().replace(/[^a-z0-9 ]/g, "").slice(0, 80) };
+  if (MEMORY_CATEGORIES.has(String(category || ""))) patch.category = String(category);
+  const r = await memoryRest(`?id=eq.${id}&user_id=eq.{uid}`, { method: "PATCH", body: JSON.stringify(patch) });
+  logMac("memory.edited", { ok: r.ok });
+  setupCache.at = 0;
+  return r.ok ? { ok: true, row: (r.data || [])[0] || null } : r;
+});
+ipcMain.handle("braino-mac:memory-delete", async (_e, id) => {
+  if (!/^[0-9a-f-]{36}$/i.test(String(id || ""))) return { ok: false, error: "bad_input" };
+  const r = await memoryRest(`?id=eq.${id}&user_id=eq.{uid}`, { method: "PATCH", body: JSON.stringify({ status: "archived", updated_at: new Date().toISOString() }) });
+  logMac("memory.forgotten", { ok: r.ok });
+  setupCache.at = 0;
+  return r.ok ? { ok: true } : r;
+});
+ipcMain.handle("braino-mac:memory-add", async (_e, content, category) => {
+  const text = String(content || "").trim().slice(0, 600);
+  if (!text) return { ok: false, error: "empty" };
+  const auth = authStatusPayload();
+  const r = await memoryRest("", { method: "POST", body: JSON.stringify([{ user_id: auth.userId, content: text, category: MEMORY_CATEGORIES.has(String(category || "")) ? String(category) : "fact", salience: 3, source: "user", status: "active", dedup_key: text.toLowerCase().replace(/[^a-z0-9 ]/g, "").slice(0, 80) }]) });
+  logMac("memory.added", { ok: r.ok });
+  setupCache.at = 0;
+  return r.ok ? { ok: true, row: (r.data || [])[0] || null } : r;
+});
+
+ipcMain.handle("braino-mac:skills-list", async () => {
+  const store = readSkills();
+  return { ok: true, skills: Object.entries(store).map(([phrase, v]) => ({ phrase, steps: (v.steps || []).map((s) => s.tool), uses: v.uses || 0, savedAt: v.savedAt || 0 })).sort((a, b) => b.savedAt - a.savedAt) };
+});
+ipcMain.handle("braino-mac:skills-forget", async (_event, phrase) => {
+  const store = readSkills(); delete store[String(phrase || "")]; writeSkills(store);
+  logMac("skill.forgotten", { key: textForLog(String(phrase || "")), by: "app" });
+  return { ok: true };
+});
+
+/* His look lives in the overlay, so the app's choices are passed there. */
+ipcMain.handle("braino-mac:app-overlay", async (_event, patch = {}) => { sendToRenderer("braino-mac:app-overlay", patch); return { ok: true }; });
+
+ipcMain.handle("braino-mac:login-item", async (_event, on) => {
+  if (typeof on === "boolean") { try { app.setLoginItemSettings({ openAtLogin: on }); } catch (_) {} }
+  let openAtLogin = false; try { openAtLogin = app.getLoginItemSettings().openAtLogin; } catch (_) {}
+  return { ok: true, openAtLogin, version: app.getVersion() };
+});
+ipcMain.handle("braino-mac:setup-snapshot", async () => setupSnapshot());
+/* Braino's real voice for setup. Same Fish voice as the notch; each line is
+   saved on this Mac by its text, so a step he has said before costs nothing. */
+const SETUP_VOICE_DIR = path.join(AUTH_STORE_DIR, "setup-voice");
+ipcMain.handle("braino-mac:setup-say", async (_e, text) => {
+  const speakable = String(text || "").trim().slice(0, 400);
+  if (!speakable) return { ok: false, error: "empty" };
+  const file = path.join(SETUP_VOICE_DIR, `${crypto.createHash("sha1").update(speakable).digest("hex")}.mp3`);
+  try { return { ok: true, cached: true, dataUrl: `data:audio/mpeg;base64,${fs.readFileSync(file).toString("base64")}` }; } catch (_) {}
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return { ok: false, error: "missing_supabase" };
+  try {
+    const response = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/fish-audio-tts`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY },
+      body: JSON.stringify({ text: speakable }),
+    });
+    if (!response.ok) { logMac("setup.say_failed", { status: response.status }); return { ok: false, error: `tts_${response.status}` }; }
+    const audio = Buffer.from(await response.arrayBuffer());
+    try { fs.mkdirSync(SETUP_VOICE_DIR, { recursive: true }); fs.writeFileSync(file, audio); } catch (_) {}
+    return { ok: true, cached: false, dataUrl: `data:${response.headers.get("content-type") || "audio/mpeg"};base64,${audio.toString("base64")}` };
+  } catch (error) {
+    logMac("setup.say_failed", { error: String(error?.message || error).slice(0, 160) });
+    return { ok: false, error: "request_failed" };
+  }
+});
+ipcMain.handle("braino-mac:setup-save", async (_e, answers) => saveSetup(answers && typeof answers === "object" ? answers : {}));
+ipcMain.handle("braino-mac:setup-connect", async (_e, kind) => {
+  if (kind === "mesa") { const r = await connectMesa(); setupCache.at = 0; return r; }
+  if (kind === "contacts") { await importAllContacts(true); return { ok: Boolean(contactsCache && Object.keys(contactsCache).length) }; }
+  return { ok: false };
+});
+ipcMain.handle("braino-mac:setup-open-pane", async (_e, pane) => {
+  const safe = String(pane || "").replace(/[^A-Za-z_]/g, "");
+  if (safe) await shell.openExternal(`x-apple.systempreferences:com.apple.preference.security?${safe}`);
+  return { ok: true };
+});
 
 /* Settings → Mesa: is he connected, when did he last sync, and what is due. */
 async function mesaStateForDashboard() {
@@ -20735,6 +24246,12 @@ ipcMain.handle("braino-mac:contacts-sync", async () => {
 /* The renderer asks HIL what was just said, and acts on the answer. */
 ipcMain.handle("braino-mac:understand", async (event, payload) => {
   const running = Boolean(macActiveHilRun) && macActiveHilRun.generation === macHilGeneration;
+  /* Mid-job, an instant-fire command is a new command, decided here in a
+     millisecond instead of by a 3.5 second model call. */
+  if (running && parseInstantFire(String(payload?.text || ""), activeMacContext || {})) {
+    logMac("hil.understand", { running, kind: "task", said: textForLog(String(payload?.text || ""), 160), ms: 0, instant: true });
+    return { running, understanding: { kind: "task", task: String(payload?.text || "") } };
+  }
   const understanding = await macUnderstandUtterance(payload?.text, {
     running,
     command: macActiveHilRun?.command || payload?.command || "",
@@ -20776,14 +24293,20 @@ ipcMain.handle("braino-mac:stop-running-job", async () => {
 
 ipcMain.handle("braino-mac:delegate", async (event, prompt, options) => {
   const startedAt = Date.now();
+  macDelegatesInFlight += 1;
   macTrace("▶ HEARD", `"${String(prompt || "").slice(0, 200)}"`);
   let result;
   try {
+    // Where this came from decides where an approval card for it appears.
+    macCommandSurface = appWindow && !appWindow.isDestroyed() && event?.sender === appWindow.webContents ? "chat" : "voice";
     result = await runDelegate(prompt, options || {});
   } finally {
+    macDelegatesInFlight = Math.max(0, macDelegatesInFlight - 1);
     // Whatever the handler did (or threw), a "thinking" it did not close is
     // closed here, before the renderer gets the result. See lastTaskProgressStatus.
     settleTaskProgress("delegate_returned");
+    // Every job ends here, so the trail closes here, whatever happened.
+    macTrail({ kind: "end", ok: Boolean(result?.ok) && !result?.superseded, asked: Boolean(pendingMacWorkflow), say: String(result?.say || "").slice(0, 140) });
   }
   const durationMs = Date.now() - startedAt;
   const ok = Boolean(result?.ok);
@@ -20794,6 +24317,13 @@ ipcMain.handle("braino-mac:delegate", async (event, prompt, options) => {
     result = { ...result, say: shortLine, fullSay: result.say };
   }
   if (result?.say && String(result.say).trim()) lastDelegateSay = String(result.fullSay || result.say).trim();
+  /* Every answered turn goes into the history the plan, the loop and the
+     conversation read, not only the ones conversation answered itself. */
+  if (result?.say && !result.superseded && !(lastActed?.at > Date.now() - durationMs - 250)) macLastTalkAt = Date.now();
+  if (result?.say && !result.superseded && macChatHistory[macChatHistory.length - 1]?.content !== String(result.say).trim()) {
+    rememberMacChat("user", prompt);
+    rememberMacChat("assistant", result.fullSay || result.say);
+  }
   macTrace(ok ? "✅ DONE" : "❌ FAILED", `${(durationMs / 1000).toFixed(1)}s via ${result?.source || "cascade"}: ${result?.superseded ? "(stood down)" : String(result?.say || "(nothing said)").slice(0, 200)}`);
   activityLog.record("braino", { heard: String(prompt || "").slice(0, 300), said: String(result?.say || "").slice(0, 300), route: String(result?.source || "cascade"), ok });
   logMac("feature.executed", {
@@ -20847,8 +24377,35 @@ ipcMain.handle("braino-mac:active-context", async () => {
   };
 });
 
+/* A turn the voice session answered by itself ("how do you know that?"), so
+   main's plans and answers know it happened. */
+ipcMain.handle("braino-mac:chrome-profiles", async () => ({ ok: true, profiles: readChromeProfileList(), config: readChromeProfileConfig() }));
+ipcMain.handle("braino-mac:chrome-profiles-save", async (_event, config = {}) => ({ ok: true, config: saveChromeProfileConfig(config) }));
+
+/* The people he talks to most, for the voice transcriber's word list, so
+   "Param" is not heard as "Parham". Names only, cached for an hour. */
+let topContactNamesCache = { at: 0, names: [] };
+ipcMain.handle("braino-mac:top-contact-names", async () => {
+  if (Date.now() - topContactNamesCache.at < 3600000 && topContactNamesCache.names.length) return topContactNamesCache.names;
+  try {
+    if (!waDbAvailable()) return [];
+    const rows = await queryWhatsAppDb("SELECT s.ZPARTNERNAME AS name, COUNT(m.Z_PK) AS n FROM ZWACHATSESSION s JOIN ZWAMESSAGE m ON m.ZCHATSESSION = s.Z_PK WHERE s.ZSESSIONTYPE = 0 GROUP BY s.Z_PK ORDER BY n DESC LIMIT 25;");
+    // As written ("Riya Khurana"), emoji and symbols dropped.
+    const names = [...new Set(rows.map((r) => String(r.name || "").replace(/[^\p{L} .'-]/gu, "").replace(/\s+/g, " ").trim()).filter((n) => n.length >= 2 && n.length <= 30))].slice(0, 15);
+    topContactNamesCache = { at: Date.now(), names };
+    return names;
+  } catch (error) { logMac("whatsapp.top_names.failed", { error: String(error?.message || error) }); return []; }
+});
+
+ipcMain.handle("braino-mac:note-chat", async (_event, payload = {}) => {
+  if (payload.user) rememberMacChat("user", String(payload.user).slice(0, 1200));
+  if (payload.assistant) rememberMacChat("assistant", String(payload.assistant).slice(0, 1500));
+  return { ok: true };
+});
+
 ipcMain.handle("braino-mac:log", async (_event, payload = {}) => {
   logMac(String(payload?.event || "renderer.log"), payload?.data || {});
+  if (/^boot\.iomi\.(complete|auth_failed)$/.test(String(payload?.event || ""))) arrivalBootFinished(payload.event === "boot.iomi.complete");
   return { ok: true, logPath: LOG_PATH };
 });
 
@@ -20986,8 +24543,10 @@ ipcMain.handle("braino-mac:window-theme", async (_event, theme) => {
   return { ok: true, theme: wanted };
 });
 
-ipcMain.handle("braino-mac:dashboard-open", async () => {
-  openDashboardWindow();
+ipcMain.handle("braino-mac:dashboard-open", async (event) => {
+  // From the new app it means the old full library; from anywhere else, the new app.
+  if (appWindow && !appWindow.isDestroyed() && event?.sender === appWindow.webContents) openDashboardWindow();
+  else openBrainoApp();
   return { ok: true };
 });
 
@@ -21213,6 +24772,32 @@ ipcMain.handle("braino-mac:idle-screen-settings", async (_event, patch) => (
   patch ? writeIdleScreenSettings(patch) : readIdleScreenSettings()
 ));
 ipcMain.handle("braino-mac:idle-screen-toggle", async () => ({ open: toggleIdleScreen("dashboard") }));
+/* Notch style: "braino" is the notch as it has always been, and stays the
+   default. "affective" is the AffectiveOS notch: the same words and the same
+   behaviour, with the Affective logo on his lines, a colour light along the
+   lower edge and light running round the island while he thinks. Chosen in
+   Settings; saved here; the notch window restyles itself live. */
+const NOTCH_STYLE_PATH = path.join(AUTH_STORE_DIR, "notch-style.json");
+const NOTCH_STYLES = new Set(["braino", "affective"]);
+function readNotchStyle() {
+  try {
+    const style = JSON.parse(fs.readFileSync(NOTCH_STYLE_PATH, "utf8"))?.style;
+    return NOTCH_STYLES.has(style) ? style : "braino";
+  } catch (_) { return "braino"; }
+}
+function writeNotchStyle(style) {
+  const next = NOTCH_STYLES.has(style) ? style : "braino";
+  try {
+    fs.mkdirSync(AUTH_STORE_DIR, { recursive: true });
+    fs.writeFileSync(NOTCH_STYLE_PATH, JSON.stringify({ style: next }, null, 2));
+  } catch (error) { logMac("notch_style.save_failed", { error }); }
+  logMac("notch_style.set", { style: next });
+  sendToRenderer("braino-mac:notch-style", { style: next });
+  return { ok: true, style: next };
+}
+ipcMain.handle("braino-mac:notch-style", async (_event, style) => (
+  style ? writeNotchStyle(String(style)) : { ok: true, style: readNotchStyle() }
+));
 ipcMain.handle("braino-mac:wallpaper-looks", async () => ({ looks: brainoWallpaperLooks() }));
 ipcMain.handle("braino-mac:wallpaper-apply", async (_event, payload = {}) => {
   const lookId = String(payload?.look || "");
@@ -21279,6 +24864,67 @@ end if`;
 let nowPlayingPollBusy = false;
 // The last thing the poll saw, kept for the router's surface.
 let lastNowPlaying = null;
+let macChatOffer = null; // { reply, prompt, at }: what chat last offered to do
+
+/* What he has heard you play (5 Oct). "What do you think is my favourite song
+   right now on Spotify" got "Nothing is playing", and "play the song I played
+   last night" had no history to read. Every song change is already in the
+   activity log; this reads it back, and adds Spotify's own top tracks and
+   recent plays when the connection allows them. */
+function localPlays(sinceMs) {
+  const plays = [];
+  try {
+    for (const f of fs.readdirSync(ACTIVITY_DIR).filter((n) => /^\d{4}-\d{2}-\d{2}\.jsonl$/.test(n)).sort().slice(-21)) {
+      for (const line of fs.readFileSync(path.join(ACTIVITY_DIR, f), "utf8").split("\n")) {
+        if (!line.includes('"playing"')) continue;
+        try { const r = JSON.parse(line); if (r.kind === "playing" && r.track && Date.parse(r.t) >= sinceMs) plays.push(r); } catch (_) {}
+      }
+    }
+  } catch (_) {}
+  return plays;
+}
+function topLocal(plays, n = 3) {
+  const counts = new Map();
+  for (const p of plays) { const k = `${p.track}|${p.artist || ""}`; counts.set(k, { track: p.track, artist: p.artist || "", link: p.link || "", n: (counts.get(k)?.n || 0) + 1 }); }
+  return [...counts.values()].sort((a, b) => b.n - a.n).slice(0, n);
+}
+const LISTENING_ASK_RE = /\b(?:(?:my\s+)?(?:fav(?:ou?rite)?|top|most[- ]played)\s+(?:song|track|music|artist)s?|what (?:do|have) i (?:been )?listen(?:ing|ed)? to(?: (?:the )?most| lately| a lot)?|(?:song|track) i (?:played|was playing|listened to)\b.*\b(?:last night|yesterday|this morning|earlier|today)|what (?:was|is) i (?:listening to|playing)\b.*\b(?:last night|yesterday|earlier|this morning))\b/i;
+async function listeningTaste(question = "") {
+  const q = String(question || "");
+  const now = Date.now();
+  const taste = await callSpotifyFunction("spotify-player-state", { view: "taste" }).catch(() => null);
+  const say = (t) => (t ? `${t.title || t.track}${t.artist ? ` by ${t.artist}` : ""}` : "");
+  const play = /^\s*(?:(?:hey\s+)?brain(?:o|elle)[\s,]*)?(?:play|put on)\b/i.test(q);
+  // "Last night", "yesterday", "this morning": a window, answered from what played.
+  const day = new Date(); day.setHours(0, 0, 0, 0);
+  const windows = [
+    [/last night/i, day.getTime() - 6 * 3600000, day.getTime() + 5 * 3600000],
+    [/yesterday/i, day.getTime() - 24 * 3600000, day.getTime()],
+    [/this morning/i, day.getTime() + 5 * 3600000, day.getTime() + 12 * 3600000],
+    [/earlier|today/i, day.getTime(), now],
+  ];
+  const win = windows.find(([re]) => re.test(q));
+  if (win) {
+    const inWindow = localPlays(win[1]).filter((p) => Date.parse(p.t) < win[2]);
+    const fromSpotify = (taste?.recentlyPlayed || []).filter((p) => { const t = Date.parse(p.playedAt); return t >= win[1] && t < win[2]; });
+    const pick = inWindow.length ? { title: inWindow[inWindow.length - 1].track, artist: inWindow[inWindow.length - 1].artist, uri: "", link: inWindow[inWindow.length - 1].link } : fromSpotify[0] || null;
+    if (!pick) return { ok: true, say: "I don't have anything you played then.", source: "listening" };
+    if (play) return playSpotifySongOnMac(`${pick.title} ${pick.artist || ""}`.trim());
+    const more = inWindow.length > 1 ? ` Before that, ${[...new Set(inWindow.slice(-4, -1).reverse().map((p) => p.track))].join(", ")}.` : "";
+    return { ok: true, say: `${say(pick)}.${more}`, source: "listening" };
+  }
+  // Favourite right now: Spotify's own top this month, else what played most here.
+  const top = taste?.topThisMonth?.[0] || null;
+  const local = topLocal(localPlays(now - 14 * 86400000));
+  const fav = top || (local[0] ? { title: local[0].track, artist: local[0].artist } : null);
+  if (!fav) {
+    return { ok: true, say: taste?.needsReconnect ? "I need one more Spotify permission to see what you play most. Reconnect Spotify once in settings." : "I haven't heard you play enough yet to tell.", source: "listening" };
+  }
+  if (play) return playSpotifySongOnMac(`${fav.title} ${fav.artist || ""}`.trim());
+  const others = (top ? (taste.topThisMonth || []).slice(1, 3).map(say) : local.slice(1, 3).map((t) => say({ title: t.track, artist: t.artist }))).filter(Boolean);
+  const basis = top ? "on Spotify this month" : `here, ${local[0].n} plays in two weeks`;
+  return { ok: true, say: `Right now it's ${say(fav)}, your most played ${basis}.${others.length ? ` Then ${others.join(" and ")}.` : ""}`, source: "listening" };
+}
 
 async function pollNowPlaying() {
   if (nowPlayingPollBusy || !dockWindow || dockWindow.isDestroyed()) return;
@@ -21994,6 +25640,113 @@ ipcMain.handle("braino-mac:shelf-file", async (_event, payload = {}) => {
   return { ok: false };
 });
 
+/* ── The notch drop: Tray and AirDrop (2026-10-01) ────────────────────────────
+   NotchNook's best trick, in Braino's notch: start dragging a file anywhere
+   and the notch opens into two drop zones, Tray and AirDrop. Drop on AirDrop
+   and Apple's own AirDrop sends it, with the real outcome shown in the notch.
+   Behind a switch until launch: BRAINO_NOTCH_DROP=1 (npm run mac:drop).
+   native/BrainoDrop.swift does the two native parts: noticing a file drag has
+   started (it reads only the mouse button and the drag pasteboard) and the
+   AirDrop send. Built on first use like the other helpers. */
+const NOTCH_DROP_ON = process.env.BRAINO_NOTCH_DROP === "1";
+const DROP_HELPER_PATH = path.join(__dirname, "native", "BrainoDrop.swift");
+let dropHelperBinary = null, dropHelperBuild = null, dropWatcher = null;
+function ensureDropHelper() {
+  if (dropHelperBinary) return Promise.resolve(dropHelperBinary);
+  const target = path.join(AUTH_STORE_DIR, "BrainoDrop");
+  try { if (fs.statSync(target).mtimeMs >= fs.statSync(DROP_HELPER_PATH).mtimeMs) { dropHelperBinary = target; return Promise.resolve(target); } } catch (_) {}
+  if (!dropHelperBuild) {
+    const startedAt = Date.now();
+    dropHelperBuild = execFileP("/usr/bin/swiftc", [DROP_HELPER_PATH, "-o", target, "-O"], { timeout: 180000 })
+      .then(() => { dropHelperBinary = target; logMac("drop.helper_built", { durationMs: Date.now() - startedAt }); return target; })
+      .catch((error) => { logMac("drop.helper_build_failed", { error: String(error?.message || error).slice(0, 200) }); return null; })
+      .finally(() => { dropHelperBuild = null; });
+  }
+  return dropHelperBuild;
+}
+function readJsonLines(stream, onLine) {
+  let buf = "";
+  stream.on("data", (chunk) => {
+    buf += chunk.toString("utf8");
+    let i;
+    while ((i = buf.indexOf("\n")) >= 0) {
+      const line = buf.slice(0, i).trim(); buf = buf.slice(i + 1);
+      if (!line) continue;
+      try { onLine(JSON.parse(line)); } catch (_) {}
+    }
+  });
+}
+async function startDropWatcher() {
+  if (!NOTCH_DROP_ON || dropWatcher) return;
+  const bin = await ensureDropHelper();
+  if (!bin) return;
+  try {
+    // The helper's drop target covers the island (520 wide) with a little room.
+    dropWatcher = spawn(bin, ["watch", "560", "160"], { stdio: ["pipe", "pipe", "ignore"] });
+    readJsonLines(dropWatcher.stdout, (msg) => {
+      if (typeof msg.drag === "boolean") logMac("drop.drag", { drag: msg.drag, count: msg.count || 0, kinds: (msg.kinds || []).slice(0, 4) });
+      else if (typeof msg.drop === "string") logMac("drop.native_drop", { zone: msg.drop, count: (msg.files || []).length });
+      else if (msg.panel) { logMac("drop.panel", msg); return; }
+      else if (typeof msg.hover === "string") logMac("drop.native_hover", { zone: msg.hover });
+      else return;
+      sendToRenderer("braino-mac:file-drag", msg);
+    });
+    dropWatcher.on("exit", (code) => { logMac("drop.watcher_exit", { code }); dropWatcher = null; });
+    logMac("drop.watcher_started", {});
+  } catch (error) { logMac("drop.watcher_failed", { error: String(error?.message || error) }); dropWatcher = null; }
+}
+app.on("will-quit", () => { try { dropWatcher?.stdin.end(); dropWatcher?.kill(); } catch (_) {} });
+// His browser hides on close; quitting must really close it, or quit would stall.
+app.on("before-quit", () => { try { ownBrowserInstance?.destroy(); } catch (_) {} });
+ipcMain.handle("braino-mac:notch-drop-enabled", async () => ({ on: NOTCH_DROP_ON }));
+/* AirDrop, with the real outcome streamed to the notch. */
+let airdropRun = null;
+ipcMain.handle("braino-mac:airdrop", async (_event, paths) => {
+  const files = (Array.isArray(paths) ? paths : []).map(String).filter((p) => p && fs.existsSync(p)).slice(0, 8);
+  if (!files.length) return { ok: false, status: "failed", error: "That file is gone." };
+  if (airdropRun) return { ok: false, status: "failed", error: "Already sending one." };
+  const bin = await ensureDropHelper();
+  if (!bin) return { ok: false, status: "failed", error: "AirDrop helper didn't build." };
+  logMac("airdrop.start", { count: files.length });
+  return new Promise((resolve) => {
+    let last = { status: "failed", error: "AirDrop stopped." };
+    const child = spawn(bin, ["airdrop", ...files], { stdio: ["ignore", "pipe", "ignore"] });
+    airdropRun = child;
+    const kill = setTimeout(() => { last = { status: "failed", error: "AirDrop took too long." }; try { child.kill(); } catch (_) {} }, 5 * 60 * 1000);
+    readJsonLines(child.stdout, (msg) => {
+      if (!msg.status) return;
+      last = msg;
+      logMac("airdrop.status", { status: msg.status, error: msg.error ? String(msg.error).slice(0, 120) : undefined });
+      sendToRenderer("braino-mac:airdrop-status", msg);
+    });
+    child.on("exit", () => {
+      clearTimeout(kill); airdropRun = null;
+      if (!["sent", "cancelled", "failed", "closed"].includes(last.status)) { last = { status: "failed", error: last.error || "AirDrop stopped." }; sendToRenderer("braino-mac:airdrop-status", last); }
+      resolve({ ok: last.status === "sent", ...last });
+    });
+  });
+});
+/* A small picture of a file for the tray: a real thumbnail for images and
+   documents, the file's own icon otherwise. */
+ipcMain.handle("braino-mac:file-thumb", async (_event, filePath) => {
+  const p = String(filePath || "");
+  if (!p || !fs.existsSync(p)) return { ok: false };
+  const { nativeImage } = require("electron");
+  try { const img = await nativeImage.createThumbnailFromPath(p, { width: 120, height: 120 }); if (!img.isEmpty()) return { ok: true, src: img.toDataURL() }; } catch (_) {}
+  try { const icon = await app.getFileIcon(p, { size: "normal" }); return { ok: true, src: icon.toDataURL(), icon: true }; } catch (_) {}
+  return { ok: false };
+});
+/* Drag a tray file back out of the notch, into Finder, Mail, anywhere. */
+ipcMain.on("braino-mac:tray-drag-out", async (event, filePath) => {
+  const p = String(filePath || "");
+  if (!p || !fs.existsSync(p)) return;
+  const { nativeImage } = require("electron");
+  let icon = null;
+  try { icon = await nativeImage.createThumbnailFromPath(p, { width: 64, height: 64 }); } catch (_) {}
+  if (!icon || icon.isEmpty()) { try { icon = await app.getFileIcon(p, { size: "normal" }); } catch (_) {} }
+  try { event.sender.startDrag({ file: p, icon: icon || nativeImage.createEmpty() }); logMac("tray.drag_out", {}); } catch (error) { logMac("tray.drag_out_failed", { error: String(error?.message || error) }); }
+});
+
 // Cursor-zone watcher: the renderer cannot see the mouse while the window is
 // click-through mid-drag (macOS sends drag events, not mouseMoved), so the
 // MAIN process watches the real cursor. Inside the notch zone → tell the
@@ -22031,6 +25784,7 @@ setInterval(() => {
   if (!dockWindow || dockWindow.isDestroyed() || !dockWindow.isVisible()) return;
   try {
     const point = screen.getCursorScreenPoint();
+    notePointer(point);
     const bounds = dockWindow.getBounds();
     const centerX = bounds.x + bounds.width / 2;
     // Collapsed zone hugs the PHYSICAL notch (measured housing), nothing
@@ -22289,6 +26043,8 @@ protocol.registerSchemesAsPrivileged([
 ]);
 
 app.whenReady().then(() => {
+  // What is running on localhost, kept fresh so every turn can name it.
+  setTimeout(() => { void macListDevServers(); setInterval(() => { void macListDevServers(); }, 60000); }, 4000);
   // brainosite://build/<id> -> the built page, as real text/html.
   protocol.handle("brainosite", async (request) => {
     try {
@@ -22312,6 +26068,9 @@ app.whenReady().then(() => {
   setTimeout(() => void importAllContacts(), 8000);
   startMesaAutoSync();
   startActivityCapture();
+  startLaya();
+  warmHilPlan();
+  setInterval(warmHilPlan, 10 * 60 * 1000);
   setTimeout(() => void seedContactHistoryFromLog(), 12000);
   setInterval(() => void checkMusicState(), 5000);
   setInterval(() => void checkAllTabsSnapshot(), 8000);
@@ -22347,7 +26106,9 @@ app.whenReady().then(() => {
   // on it and the interpreted path costs seconds per call.
   void ensureAxHelperBinary();
   startPresenceBeacon();
+  startTraceServer();
   createDockWindow();
+  void startDropWatcher();
   registerHotkeys();
   startSwiftHotkeyHelper();
   if (loadWakeWordState()) startBrainoWakeWord();
@@ -22381,6 +26142,7 @@ app.whenReady().then(() => {
   app.on("activate", () => openDashboardWindow());
   if (process.env.BRAINO_MAC_DASHBOARD === "1") openDashboardWindow();
   if (process.env.BRAINO_MEMORY_VIEW === "1") setTimeout(() => openMemoryWindow(), 1500);
+  startArrival();
   screen.on("display-metrics-changed", () => void refreshDesktopOverlayContext("display-metrics-changed"));
   screen.on("display-added", () => void refreshDesktopOverlayContext("display-added"));
   screen.on("display-removed", () => void refreshDesktopOverlayContext("display-removed"));
@@ -22430,6 +26192,7 @@ app.on("will-quit", () => {
 });
 app.on("will-quit", () => {
   cleanupNativeHelpers();
+  stopLaya();
 });
 
 app.on("window-all-closed", () => {

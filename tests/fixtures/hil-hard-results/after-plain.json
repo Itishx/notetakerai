@@ -1,0 +1,116 @@
+{
+  "at": "2026-10-03T00:01:12.300Z",
+  "fn": "hil-loop",
+  "runs": 2,
+  "passed": 3,
+  "total": 4,
+  "avgMs": 4903,
+  "cases": [
+    {
+      "id": "explain-your-gate",
+      "pattern": "1 question answered with an action",
+      "pass": false,
+      "ms": 4683,
+      "tries": [
+        {
+          "pass": true,
+          "why": [],
+          "type": "answer",
+          "action": "",
+          "said": "I was wrong to say opening the documentation could not be undone. Opening a page is reversible, since you can close the tab or navigate away. Your previous command was: “Schedule posts with that.”",
+          "ms": 4391
+        },
+        {
+          "pass": false,
+          "why": [
+            "decision was step, wanted answer or all_done or task_done",
+            "took a step (click) instead of answering"
+          ],
+          "type": "step",
+          "action": "click",
+          "reversible": true,
+          "said": "",
+          "ms": 4975
+        }
+      ]
+    },
+    {
+      "id": "plain-reply-open-thread",
+      "pattern": "regression: a referent on screen is acted on",
+      "pass": true,
+      "ms": 4913,
+      "tries": [
+        {
+          "pass": true,
+          "why": [],
+          "type": "step",
+          "action": "click",
+          "reversible": true,
+          "said": "",
+          "ms": 4433
+        },
+        {
+          "pass": true,
+          "why": [],
+          "type": "step",
+          "action": "click",
+          "reversible": true,
+          "said": "",
+          "ms": 5392
+        }
+      ]
+    },
+    {
+      "id": "plain-play-song",
+      "pattern": "regression: an action is still an action",
+      "pass": true,
+      "ms": 4334,
+      "tries": [
+        {
+          "pass": true,
+          "why": [],
+          "type": "step",
+          "action": "navigate",
+          "reversible": true,
+          "said": "",
+          "ms": 3681
+        },
+        {
+          "pass": true,
+          "why": [],
+          "type": "step",
+          "action": "navigate",
+          "reversible": true,
+          "said": "",
+          "ms": 4986
+        }
+      ]
+    },
+    {
+      "id": "plain-find-question",
+      "pattern": "regression: a find question can still go and look",
+      "pass": true,
+      "ms": 5680,
+      "tries": [
+        {
+          "pass": true,
+          "why": [],
+          "type": "step",
+          "action": "navigate",
+          "reversible": true,
+          "said": "",
+          "ms": 4106
+        },
+        {
+          "pass": true,
+          "why": [],
+          "type": "step",
+          "action": "navigate",
+          "reversible": true,
+          "said": "",
+          "ms": 7254
+        }
+      ]
+    }
+  ]
+}

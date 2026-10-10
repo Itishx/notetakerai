@@ -84,7 +84,17 @@ test("only something that can be irreversible may stop and ask", () => {
   assert.match(main, /const MAC_HIL_GATEABLE = new Set\(\["click", "pressKey", "selectOption"\]\)/);
   const fn = main.slice(main.indexOf("function macStepCanBeIrreversible"), main.indexOf("/* \"and leave it unsent\""));
   assert.match(fn, /if \(type === "type"\) return action\.submit === true;/);
-  assert.match(main, /const irreversible = stepObj\.reversible === false && macStepCanBeIrreversible\(stepObj\);/);
+  assert.match(main, /const irreversible = \(stepObj\.reversible === false && macStepCanBeIrreversible\(stepObj\)[^)]*\) \|\| unaskedSend;/);
+});
+
+test("WhatsApp is instant only when they asked to send (2026-09-28)", () => {
+  const pick = (re) => main.match(re)[0];
+  const unasked = new Function(`${pick(/const MAC_MESSAGE_TOOLS[^\n]*\n/)}${pick(/const MAC_ASKED_TO_SEND[^\n]*\n/)}${pick(/function macUnaskedMessageSend\(step, command\) \{[\s\S]*?\n\}/)}; return macUnaskedMessageSend;`)();
+  const send = { action: { type: "tool", tool: "whatsapp_send" } };
+  assert.equal(unasked(send, "Saying that you're not ready bro"), true);
+  assert.equal(unasked(send, "send this link to Param on WhatsApp"), false);
+  assert.equal(unasked(send, "Ask Param where he is"), false);
+  assert.equal(unasked({ action: { type: "tool", tool: "open_url" } }, "anything"), false);
 });
 
 test("they already said not to send it", () => {

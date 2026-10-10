@@ -186,6 +186,13 @@ serve(async (req) => {
 
     console.log("Combined transcript length:", fullTranscript.length);
 
+    /* Just the words (6 Oct). A voice command and a HERA dictation only need
+       the transcript; writing lecture notes on top of every one cost a second
+       model call and several seconds nobody waited for on purpose. */
+    if (body.transcriptOnly === true) {
+      return jsonResponse({ transcript: fullTranscript });
+    }
+
     console.log("Generating notes...");
     const { system: notesSystemPrompt, user: notesUserPrompt } = buildNotesPrompts({
       mode,

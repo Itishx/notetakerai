@@ -180,7 +180,8 @@ test("thinking is shown, not waited for", () => {
   assert.match(main, /braino-mac:thinking-step/);
   assert.match(renderer, /onThinkingStep/);
   // Only the first is spoken: speaking each one cost about six seconds a turn.
-  assert.match(main, /if \(!spokenLast && aloud\)/);
+  // ...and only while acting, never a note about "the user" (2026-09-27).
+  assert.match(main, /if \(!spokenLast && aloud && aboutToAct && !privateNote\)/);
   // And a sound made while thinking is not an instruction.
   assert.match(renderer, /VOICE_FILLER_ONLY/);
   assert.match(renderer, /voice\.filler_ignored/);
@@ -226,5 +227,6 @@ test("when he cannot tell what is playing, he guards anyway", () => {
   assert.match(main, /const uncertain = !playing && \(spotifyProbeFailed \|\| youtubeProbeFailed\)/);
   const renderer = readFileSync(new URL("../mac/braino-mac/renderer/braino-mac.js", import.meta.url), "utf8");
   assert.match(renderer, /mediaAudioUncertain/);
-  assert.match(renderer, /\(mediaAudioPlaying \|\| mediaAudioUncertain\)/);
+  // 2026-09-26: "not sure" counts only if something was confirmed playing in the last ten minutes.
+  assert.match(renderer, /return mediaAudioPlaying \|\| \(mediaAudioUncertain && Date\.now\(\) - mediaConfirmedPlayingAt < 10 \* 60 \* 1000\);/);
 });

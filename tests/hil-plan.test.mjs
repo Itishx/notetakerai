@@ -50,7 +50,7 @@ test("what is playing reaches the loop with its link", () => {
   assert.match(mac, /function spotifyShareLink\(uri\)/);
   assert.match(mac, /https:\/\/open\.spotify\.com\/\$\{match\[1\]\}\/\$\{match\[2\]\}/);
   assert.match(mac, /link: spotifyShareLink\(spotify\.uri\)/);
-  assert.match(mac, /nowPlayingLine,\n\s+macRecentExchanges\(\)/);
+  assert.match(mac, /nowPlayingLine,\n\s+layaHintLine\(command\),\n\s+relationsLine\(\),\n\s+macOwnJobActive\(\) \? OWN_BROWSER_NOTE : "",\n\s+macRecentExchanges\(\)/);
 });
 
 test("a yes runs the approved step without asking the model again", () => {

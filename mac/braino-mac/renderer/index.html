@@ -48,6 +48,8 @@
       <div id="notch-face" class="nf-core-only" aria-label="Braino status">
         <div class="nf-sonar"><i></i><i></i><i></i></div>
         <div class="nf-pill">
+          <!-- AffectiveOS notch style only (Settings): the colour light on its lower edge. -->
+          <i class="nf-aos-band" aria-hidden="true"></i>
           <svg class="nf-folds" viewBox="0 0 200 74" preserveAspectRatio="none">
             <path d="M 16 2 Q 23 20 16 37 Q 9 54 16 72" fill="none" stroke="#B34A41" stroke-width="2" stroke-linecap="round" opacity="0.55" />
             <path d="M 44 2 Q 37 20 44 37 Q 51 54 44 72" fill="none" stroke="#B34A41" stroke-width="2" stroke-linecap="round" opacity="0.55" />
@@ -65,6 +67,9 @@
           <div class="nf-iomi-identity" aria-hidden="true">
             <span>F</span><span>O</span><span>U</span><span>N</span><span>D</span><span>R</span><span>Y</span>
           </div>
+          <!-- Affective boot (2026-09-26): the logo, a coral sweep, then BRAINO. See BOOT_AFFECTIVE. -->
+          <img class="nf-boot-logo" src="assets/affective-logo.png" alt="" aria-hidden="true" />
+          <div class="nf-boot-sweep" aria-hidden="true"></div>
           <div class="nf-iomi-awake-eyes" aria-hidden="true"><i></i><i></i></div>
           <div class="nf-iomi-expanded-card" aria-hidden="true">
             <div class="nf-iomi-greeting">
@@ -243,8 +248,15 @@
             <!-- Typing lands in the same box speech does, so everything past
                  this point (understanding, routing, the thinking panel, the
                  reply) is identical and there is no second surface to keep. -->
-            <input class="nf-type-field" type="text" autocomplete="off" spellcheck="false"
-                   placeholder="Type what you need" aria-label="Type to Braino">
+            <!-- A textarea, not an input (2026-10-01): it grows a line at a time
+                 as you type instead of scrolling sideways in one cramped line.
+                 Enter sends, Shift+Enter is a new line. -->
+            <textarea class="nf-type-field" rows="1" autocomplete="off" spellcheck="false"
+                   placeholder="Type what you need" aria-label="Type to Braino"></textarea>
+            <!-- The job, step by step, inside the notch (2026-10-01): one row
+                 per action, ticked as it lands. Fed by braino-mac:task-trail.
+                 Shown only while he works; never a card under the notch. -->
+            <ol class="nf-steps" aria-label="What he is doing"></ol>
           </section>
           <div id="nf-status"></div>
           <div id="nf-status-2"></div>
@@ -254,6 +266,8 @@
             <span class="nf-vol-num"></span>
           </div>
           <div class="nf-drop-hint">drop it, I&rsquo;ll hold it</div>
+          <!-- Notch drop (2026-10-01): Tray and AirDrop zones, AirDrop status, hello. braino-mac.js nfDrop*. -->
+          <div class="nf-dropbox" aria-live="polite"></div>
           <!-- The strip.
 
                Not a wider notch. The whole menu bar, edge to edge, and the
@@ -389,16 +403,17 @@
           </section>
           <section class="nf-answer-surface" aria-live="polite" aria-label="Braino answer">
             <div class="nf-answer-short-row">
-              <span><small>Braino</small><strong class="nf-answer-short-text"></strong></span>
+              <span><small>Braino</small><img class="nf-aos-logo" src="assets/affective-logo-white.png" alt="Affective" /><strong class="nf-answer-short-text"></strong><span class="nf-src" aria-label="Sources"></span></span>
               <button class="nf-answer-done" type="button">Done</button>
             </div>
             <header class="nf-answer-long-head">
-              <span><i></i><i></i><b>Braino</b></span>
+              <span><i></i><i></i><b>Braino</b><img class="nf-aos-logo" src="assets/affective-logo-white.png" alt="Affective" /></span>
               <button class="nf-answer-done" type="button">Done</button>
             </header>
             <article>
               <small class="nf-answer-label">Answer from this page</small>
               <div class="nf-answer-body"></div>
+              <span class="nf-src nf-src-long" aria-label="Sources"></span>
             </article>
           </section>
         </div>
@@ -532,6 +547,7 @@
 
       <section id="braino-customizer" aria-hidden="true">
         <div class="braino-customizer-handle" aria-hidden="true"></div>
+        <button type="button" id="braino-setup-open" class="braino-setup-open">Set him up</button>
         <div class="braino-customizer-head">
           <div class="braino-customizer-icon" aria-hidden="true">
             <span></span>
@@ -582,11 +598,40 @@
           </div>
         </div>
         <div class="braino-customizer-section">
+          <div class="braino-customizer-section-title">Where he stays</div>
+          <div id="braino-dock-row" class="braino-character-row braino-dock-row">
+            <button type="button" class="braino-character-option" data-dock="left"><span class="braino-character-name">Left</span></button>
+            <button type="button" class="braino-character-option" data-dock="top"><span class="braino-character-name">Top</span></button>
+            <button type="button" class="braino-character-option" data-dock="bottom"><span class="braino-character-name">Bottom</span></button>
+            <button type="button" class="braino-character-option" data-dock="right"><span class="braino-character-name">Right</span></button>
+            <button type="button" class="braino-character-option" data-dock="walk"><span class="braino-character-name">Walk around</span></button>
+          </div>
+          <p class="braino-hide-note">Or drag him anywhere: he goes to the nearest spot.</p>
+        </div>
+        <div class="braino-customizer-section">
           <div class="braino-customizer-section-title">Walkable area</div>
           <button type="button" id="braino-walk-area" class="braino-walk-btn">
             <span class="braino-walk-name">Where you want him to walk</span>
             <span class="braino-walk-blurb">Whole screen</span>
           </button>
+        </div>
+        <div class="braino-customizer-section">
+          <div class="braino-customizer-section-title">Hide him</div>
+          <div id="braino-hide-row" class="braino-character-row braino-hide-row">
+            <button type="button" class="braino-character-option" data-hide="hour">
+              <span class="braino-character-name">For an hour</span>
+              <span class="braino-character-blurb">Back by himself</span>
+            </button>
+            <button type="button" class="braino-character-option" data-hide="hidden">
+              <span class="braino-character-name">Until I call</span>
+              <span class="braino-character-blurb">Say come back</span>
+            </button>
+            <button type="button" class="braino-character-option" data-hide="stealth">
+              <span class="braino-character-name">Stealth</span>
+              <span class="braino-character-blurb">Faint, shows on hover</span>
+            </button>
+          </div>
+          <p class="braino-hide-note">He still hears you and answers in the notch. To bring him back: say "Braino, come back", press ⌘⇧B, or click the notch.</p>
         </div>
         <div class="braino-customizer-actions">
           <button id="braino-size-reset" type="button">Reset</button>
@@ -602,5 +647,7 @@
     <script src="./boot-intro.js"></script>
     <script src="./onboarding.js"></script>
     <script type="module" src="./braino-mac.js"></script>
+    <!-- task-trail.js and approval-card.js hung cards UNDER the notch. Rule: nothing comes
+         outside the notch (2026-09-29). They live in the Chat app until they can live inside it. -->
   </body>
 </html>

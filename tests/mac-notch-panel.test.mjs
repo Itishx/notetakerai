@@ -9,10 +9,11 @@ const lift = (start, end = "\n}\n") => { const at = js.indexOf(start); assert.ok
 
 /* The app moves into the notch: double-click Braino, he jumps up, the notch
    opens into his settings; close it and he jumps back to where he was. */
-test("double-clicking Braino opens the panel in the notch, not the floating card", () => {
-  const dbl = js.slice(js.indexOf('walker.addEventListener("dblclick"'), js.indexOf('walker.addEventListener("dblclick"') + 400);
-  assert.match(dbl, /void nfOpenPanelFromBraino\(\);/);
-  assert.doesNotMatch(dbl, /setBrainoCustomizerOpen/);
+test("double-clicking Braino opens his own menu, at him, not the notch panel", () => {
+  // Back to the menu at Braino on 2026-09-26, at Itish's request.
+  const dbl = js.slice(js.indexOf('walker.addEventListener("dblclick"'), js.indexOf('walker.addEventListener("dblclick"') + 700);
+  assert.match(dbl, /setBrainoCustomizerOpen\(!brainoCustomizerOpen\);/);
+  assert.doesNotMatch(dbl, /void nfOpenPanelFromBraino\(\);/);
   const open = lift("async function nfOpenPanelFromBraino() {");
   assert.match(open, /nfPanelReturn = \{ x: posX, y: posY \};[\s\S]*walkerJumpIntoNotch\(\)[\s\S]*nfSetPanelOpen\(true/);
   const close = lift("async function nfClosePanel(via) {");
@@ -39,9 +40,10 @@ test("the panel carries size, character, and the three settings", () => {
   assert.match(css, /#notch-face\.nf-panel-open \.nf-pill \{[\s\S]{0,80}width: var\(--nf-panel-w\);/);
 });
 
-test("he stays where you drop him, snaps to edges, and lands there at boot", () => {
+test("he stays where you drop him, at the nearest of his four spots, and lands there at boot", () => {
   const end = lift("function endDrag(event) {");
-  assert.match(end, /if \(moved && stayPut\(\)\) \{\s*const spot = snapToEdge\(posX, posY\);\s*pinWalkerAt\(spot\.x, spot\.y\);/);
+  // 2026-09-26: a drop goes to the nearest of four spots (left, top, bottom, right).
+  assert.match(end, /if \(moved && stayPut\(\)\) \{[\s\S]{0,80}dockAt\(nearestDockSpot\(posX, posY\), "drag"\);/);
   const snap = Function("getMoveBounds", "EDGE_SNAP_PX", `${lift("function snapToEdge(x, y) {")} return snapToEdge;`)(
     () => ({ minX: 10, maxX: 900, minY: 54, maxY: 700 }), 56);
   assert.deepEqual(snap(40, 300), { x: 10, y: 300 });
@@ -52,7 +54,7 @@ test("he stays where you drop him, snaps to edges, and lands there at boot", () 
 
 test("talk out loud, off: the reply is shown and not spoken", () => {
   const speak = lift("async function speak(text, options = {}) {");
-  assert.match(speak, /const quiet = !options\.forceVoice && !herMode && !pitchRunning && !talkOutLoud\(\);/);
+  assert.match(speak, /const quiet = (?:Boolean\(options\.silent\) \|\| \()?!options\.forceVoice && !herMode && !pitchRunning && !talkOutLoud\(\)\)?;/);
   assert.match(speak, /if \(quiet\) \{[\s\S]{0,200}animateNotchAnswerEstimate\(line, generation, readMs\);[\s\S]{0,60}return;/);
   assert.match(lift("function brainoAudible() {"), /\(speaking && !speakingSilently\)/);
 });

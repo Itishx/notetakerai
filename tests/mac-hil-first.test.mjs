@@ -31,7 +31,8 @@ test("each verdict goes where it should", () => {
 });
 
 test("one switch puts the old order back", () => {
-  assert.equal(hilFirstEnabled({}, {}), true);
+  assert.equal(hilFirstEnabled({}, {}), false, "off by default since 2026-09-25");
+  assert.equal(hilFirstEnabled({ BRAINO_HIL_FIRST: "1" }, {}), true);
   assert.equal(hilFirstEnabled({ BRAINO_HIL_FIRST: "0" }, {}), false);
   assert.equal(hilFirstEnabled({}, { BRAINO_HIL_FIRST: "0" }), false);
 });
@@ -101,10 +102,14 @@ test("the second batch of existing Mac functions is connected", () => {
 
 test("next class says the one you should be in first, and skips the router", () => {
   assert.match(main, /say = `Right now you should be in \$\{live\.title\}/);
-  const i = main.indexOf('const schedule = await macAnswerScheduleFast(String(raw).toLowerCase());');
+  const i = main.indexOf('const schedule = MAC_SECOND_ACTION.test(String(raw)) ? null : await macAnswerScheduleFast(String(raw).toLowerCase());');
   assert.ok(i > 0 && i < main.indexOf("const routed = await callHilRouterLive(raw);"), "timetable before the router");
   const prompt = readFileSync(new URL("../supabase/functions/_shared/human-intelligence/hil-loop-prompt.ts", import.meta.url), "utf8");
   assert.match(prompt, /An answer is short too: the one thing they asked/);
+  // 2026-09-27: "...and message Param" lost its second half to the timetable.
+  const second = new Function(`${main.match(/const MAC_SECOND_ACTION[^\n]*/)[0]}; return MAC_SECOND_ACTION;`)();
+  assert.equal(second.test("Find my next class and message Param what time it is"), true);
+  assert.equal(second.test("when is my next class"), false);
 });
 
 test("P0 connect: the 22 everyday tools reach the Mac's hands", () => {
@@ -123,4 +128,14 @@ test("email asks first, a click asks only on send/buy/delete, WhatsApp stays ins
   assert.equal(fn({ tool: "click_element", args: { target: "Place order" } }), true);
   assert.equal(fn({ tool: "click_element", args: { target: "Downloads" } }), false);
   assert.equal(fn({ tool: "whatsapp_send", args: {} }), false);
+});
+
+test("spelled-out commands take their one-second shortcut, not HIL", () => {
+  assert.match(main, /const shortcut = macShortcutFor\(raw\);\n\s+if \(shortcut\) \{ macTrace\("⏩ SHORTCUT"/);
+  assert.match(main, /if \(wa && wa\.recipient && wa\.message\) return "whatsapp";/);
+});
+
+test("an answer to HIL's own question goes back to HIL, not the slow loop", () => {
+  assert.match(main, /data: \{ command: raw, question: plan\.question, fromRouter: true \}/);
+  assert.match(main, /if \(pending\.data\?\.fromRouter\) \{/);
 });

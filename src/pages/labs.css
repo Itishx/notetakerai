@@ -1,0 +1,46 @@
+/* /labs — Affective Labs. Rides the homepage's tokens (affective.css) and its
+   grid (.hb6-jobs); only what Labs adds lives here. No dark slabs mid-page:
+   the announcement is a hairline box, like Braino's on the homepage. */
+.lb-hero { padding-bottom: clamp(30px, 4vw, 56px); }
+/* The label sits right on top of the claim it introduces. */
+.lb-hero .ah-kicker { margin: 0; }
+.lb-hero .aff-hero-row { padding-top: clamp(12px, 1.6vw, 22px); }
+.lb-banner { max-width: var(--a-maxw); margin: clamp(10px, 2vw, 24px) auto 0; padding: 0 var(--a-gutter); }
+.lb-banner img { display: block; width: 100%; height: auto; aspect-ratio: 16 / 8; object-fit: cover; border-radius: 22px; }
+.lb-tag { display: inline-flex; align-items: center; gap: 9px; margin: 18px 0 0; padding: 8px 14px; border: 1px solid var(--a-line-strong); border-radius: 999px; font: 500 13.5px/1.2 var(--ao-sf); color: var(--a-ink-soft); }
+.lb-tag i { width: 8px; height: 8px; border-radius: 50%; background: var(--a-braino, #d9645b); flex: none; }
+
+.lb-sec { padding: clamp(28px, 4vw, 56px) 0; }
+.lb-grid { margin-top: 18px !important; grid-template-columns: repeat(3, 1fr); }
+
+.lb-box { border: 1px solid var(--a-line-strong, var(--a-line)); border-radius: 24px; padding: clamp(26px, 3.6vw, 52px); background: color-mix(in srgb, #fff 45%, var(--a-bg, #f4f2ec)); }
+.aff[data-theme="dark"] .lb-box { background: color-mix(in srgb, #fff 3%, var(--a-bg)); }
+.lb-box-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 28px; flex-wrap: wrap; }
+.lb-name { margin: 6px 0 8px; font-family: var(--a-display); font-weight: 500; font-size: clamp(54px, 8vw, 104px); line-height: .95; letter-spacing: -.02em; color: var(--a-ink); }
+.lb-line { margin: 0; font: 400 clamp(17px, 1.6vw, 21px)/1.45 var(--ao-sf); color: var(--a-ink-soft); max-width: 34ch; }
+.lb-status { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; }
+.lb-status span { padding: 7px 12px; border: 1px solid var(--a-line); border-radius: 999px; font: 500 12.5px/1 var(--ao-sf); color: var(--a-ink-soft); }
+.lb-status span:first-child { border-color: var(--a-ink); color: var(--a-ink); }
+.lb-story { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(20px, 3vw, 44px); margin: clamp(26px, 3.4vw, 44px) 0 6px; padding-top: clamp(22px, 2.8vw, 34px); border-top: 1px solid var(--a-line); }
+.lb-story p { margin: 0; font: 400 16.5px/1.6 var(--ao-sf); color: var(--a-ink-soft); }
+.lb-traits { border-bottom: 0 !important; }
+.lb-traits li.is-key small { display: block; margin-bottom: 8px; font: 600 11px/1 var(--ao-sf); letter-spacing: .12em; text-transform: uppercase; color: var(--a-braino, #e05a4f); }
+
+.lb-end { text-align: center; padding: clamp(60px, 9vw, 120px) 0 clamp(70px, 10vw, 130px); }
+.lb-end-in { display: flex; flex-direction: column; align-items: center; gap: 18px; }
+.lb-end-line { margin: 0; }
+.lb-end p { margin: 0; max-width: 46ch; font: 400 17px/1.55 var(--ao-sf); color: var(--a-ink-soft); }
+.lb-end .aff-hero-cta { justify-content: center; }
+
+.lb-foot { border-top: 1px solid var(--a-line); padding: 26px 0 34px; }
+.lb-foot-in { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 14px; font: 400 14px/1.4 var(--ao-sf); color: var(--a-ink-faint); }
+.lb-foot-in span:last-child { display: flex; gap: 18px; flex-wrap: wrap; }
+.lb-foot a { color: inherit; text-decoration: none; }
+.lb-foot a:hover { color: var(--a-ink); }
+
+@media (max-width: 960px) { .lb-grid { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 640px) {
+  .lb-grid { grid-template-columns: 1fr; }
+  .lb-story { grid-template-columns: 1fr; }
+  .lb-box-head { align-items: flex-start; }
+}

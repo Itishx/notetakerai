@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data:; font-src 'self'; media-src 'self' data:" />
+  <title>Braino</title>
+  <link rel="stylesheet" href="app.css" />
+  <link rel="stylesheet" href="chat.css" />
+</head>
+<body>
+<div class="stage">
+<div class="win" id="win" data-product="companion">
+  <aside class="side">
+    <div class="mark">Braino</div>
+    <div class="switch" role="group" aria-label="Product"><button type="button" data-product="companion" aria-pressed="true">Companion</button><button type="button" data-product="foundry" aria-pressed="false">Foundry</button></div>
+    <label class="find"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><input id="q" placeholder="Search" aria-label="Search"></label>
+    <nav class="nav" id="nav" aria-label="Sections"></nav>
+    <div class="me" data-go="account" tabindex="0"><div class="av" id="me-av">·</div><div><b id="me-name">Braino</b><span id="me-plan">Account</span></div></div>
+  </aside>
+  <section class="main">
+    <div class="bar"><button class="back" id="back" hidden aria-label="Back">‹</button><div><h1 id="title"></h1><p id="lede"></p></div></div>
+    <div class="body" id="body"></div>
+  </section>
+</div>
+</div>
+<div class="toast" id="toast" role="status"></div>
+<script src="chat.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

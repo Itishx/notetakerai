@@ -9,6 +9,10 @@
 //
 // Usage: BrainoScreenText <image-path> [--fast]
 // Prints one JSON object: {"ok":true,"ms":312,"lines":["..."]}
+//
+// BrainoScreenText <image-path> --faces
+// Prints {"ok":true,"ms":40,"faces":1,"largest":0.08}: is someone there.
+// Arrival asks this of one camera frame. It finds a face, not whose face.
 // The caller takes the screenshot and deletes it; this only reads.
 
 import Foundation
@@ -37,6 +41,21 @@ guard let image = NSImage(contentsOfFile: path),
 }
 
 let started = Date()
+
+if args.contains("--faces") {
+  let faceRequest = VNDetectFaceRectanglesRequest()
+  do {
+    try VNImageRequestHandler(cgImage: cg, options: [:]).perform([faceRequest])
+  } catch {
+    emit(["ok": false, "error": "face check failed: \(error.localizedDescription)"])
+    exit(1)
+  }
+  let faces = faceRequest.results ?? []
+  let largest = faces.map { $0.boundingBox.width * $0.boundingBox.height }.max() ?? 0
+  emit(["ok": true, "ms": Int(Date().timeIntervalSince(started) * 1000), "faces": faces.count, "largest": Double(largest)])
+  exit(0)
+}
+
 let request = VNRecognizeTextRequest()
 request.recognitionLevel = fast ? .fast : .accurate
 request.usesLanguageCorrection = !fast

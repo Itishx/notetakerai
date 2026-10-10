@@ -194,7 +194,86 @@ function parseCorrectedName(raw) {
   return text;
 }
 
+/* Everyone a spoken name could be, before anything is sent (2026-10-03).
+ *
+ * "Send this link to Riya" went to "Riya 🐣" with nobody asked: she scored
+ * 100 once the emoji was dropped, "Riya Khurana Mesa" scored less, and only an
+ * exact tie used to count as a question. A person would ask "which Riya?".
+ * So for a message or a call, every contact whose first name IS the one said
+ * (for a bare first name), or who fits about as well as the best (for a fuller
+ * name), is a candidate, and two or more people means asking. The same person
+ * saved twice, one number, is still one person. Who you talk to only decides
+ * the order of the choices, never the choice. */
+const SAME_NAME_MARGIN = 12;
+function sameNameContacts(query, contacts) {
+  const q = cleanContactName(query);
+  if (q.length < 2) return [];
+  const qWords = q.split(" ");
+  const rows = [];
+  for (const entry of Object.values(contacts || {})) {
+    if (!entry?.name || !contactPhone(entry)) continue;
+    const score = scoreContactEntry(q, entry);
+    if (score < CONTACT_MATCH_MIN_SCORE) continue;
+    const first = cleanContactName(entry.name).split(" ")[0] || "";
+    rows.push({ entry, score, first });
+  }
+  if (!rows.length) return [];
+  const best = Math.max(...rows.map((r) => r.score));
+  const fits = rows.filter((r) => (qWords.length === 1 && soundKey(r.first) === soundKey(qWords[0])) || r.score >= best - SAME_NAME_MARGIN);
+  const seen = new Set();
+  const out = [];
+  for (const r of fits.sort((a, b) => b.score - a.score)) {
+    const number = String(contactPhone(r.entry)).replace(/\D/g, "").slice(-10);
+    if (seen.has(number)) continue;
+    seen.add(number);
+    out.push(r.entry);
+  }
+  return out;
+}
+
+/* Which of the offered people an answer means: "Khurana", "the first one",
+   "the second", "the other one", "the one I talk to most", or the full name.
+   `choices` are in the order they were offered, most talked to first.
+   Returns the index, or -1 when the answer names nobody. */
+function pickContactChoice(answer, choices) {
+  const said = cleanContactName(answer);
+  const list = Array.isArray(choices) ? choices : [];
+  if (!said || !list.length) return -1;
+  const ORDINALS = [/\b(first|1st|one|top|1)\b/, /\b(second|2nd|two|2)\b/, /\b(third|3rd|three|3)\b/];
+  // A word only one of them has ("Khurana", "Mesa") is the clearest answer.
+  const words = list.map((c) => cleanContactName(c.name || c).split(" ").filter((w) => w.length > 1));
+  const saidWords = said.split(" ");
+  const unique = list.map((_, i) => words[i].filter((w) => !words.some((other, j) => j !== i && other.includes(w))));
+  const byWord = unique.map((ws) => ws.some((w) => saidWords.some((s) => s === w || (s.length > 3 && soundKey(s) === soundKey(w)))));
+  if (byWord.filter(Boolean).length === 1) return byWord.indexOf(true);
+  if (/\b(cancel|never ?mind|nobody|no one|neither|stop|forget it)\b/.test(said)) return -2;
+  if (/\b(talk to|message|text|chat with)\b.*\b(most|more|usually|always)\b|\b(usual|regular|main)\b/.test(said)) return 0;
+  if (list.length === 2 && /\b(other|another|not that|not her|not him|different)\b/.test(said)) return 1;
+  if (/\b(last|latter)\b/.test(said)) return list.length - 1;
+  for (let i = 0; i < Math.min(ORDINALS.length, list.length); i++) if (ORDINALS[i].test(said)) return i;
+  return -1;
+}
+
+/* "Which Riya? Riya Khurana Mesa, who you talk to most, or the other Riya?"
+   A choice whose spoken name is only the name you said is "the other Riya",
+   because "Riya or Riya" helps nobody. */
+function contactChoiceQuestion(query, choices) {
+  const said = speakableContactName(query) || query;
+  const labels = choices.map((c, i) => {
+    const spoken = speakableContactName(c.name);
+    const bare = cleanContactName(spoken) === cleanContactName(said);
+    if (i === 0) return bare ? `the ${said} you talk to most` : `${spoken}${choices.length > 1 && c.chats > (choices[1].chats || 0) ? ", who you talk to most" : ""}`;
+    return bare ? (choices.length === 2 ? `the other ${said}` : `${said}, saved without a surname`) : spoken;
+  });
+  const head = labels.slice(0, -1).join(", ");
+  const list = labels.length > 1 ? `${head}${head.includes(",") ? "," : ""} or ${labels[labels.length - 1]}` : labels[0];
+  return `Which ${said}? ${list[0].toUpperCase()}${list.slice(1)}?`;
+}
+
 module.exports = {
+  sameNameContacts,
+  pickContactChoice,
+  contactChoiceQuestion,
   cleanContactName,
   soundKey,
   scoreContactName,

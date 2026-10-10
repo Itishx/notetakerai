@@ -16,7 +16,7 @@ The old page went Affective, then AffectiveOS, then Braino. People had to change
 ## How it reads now
 
 1. Hero: "Stop using your Mac. Start talking to it." Then: meet Braino, who lives in your notch.
-2. Meet Braino: six chores he takes off your plate (replies, meeting notes, the morning check, finding a file, forms, explaining yourself), then the live demo. Each is a chore first, how it goes away second, the way people actually buy. "Stop explaining yourself to your software" is marked Only Braino, because remembering you is the edge over voice-to-action tools like VoiceOS.
+2. Meet Braino: six chores he takes off your plate (replies, meeting notes, the morning check, finding a file, forms, explaining yourself), then the live demo. The box's first button is **Don't Blink**: it plays the Don't Blink film (`/Braino_Final.MP4`, 45s) in place of the six chores, and the chores come back when it ends. Each is a chore first, how it goes away second, the way people actually buy. "Stop explaining yourself to your software" is marked Only Braino, because remembering you is the edge over voice-to-action tools like VoiceOS.
 3. Why it works: he runs on AffectiveOS, a layer on top of the macOS you already have. Nothing to replace or reinstall.
 4. Questions, starting with what Braino is, then AffectiveOS, then "do I need a new operating system?" and "who makes Braino?".
 5. Braino Foundry and Braino for Schools are footer links only.

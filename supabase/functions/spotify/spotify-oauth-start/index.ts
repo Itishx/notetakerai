@@ -8,6 +8,9 @@ const SPOTIFY_SCOPES = [
   "user-read-playback-state",
   "user-modify-playback-state",
   "user-read-currently-playing",
+  // What they listen to most and lately, so "my favourite song right now" is real (5 Oct).
+  "user-top-read",
+  "user-read-recently-played",
   "user-library-modify",
   "user-library-read",
   "playlist-modify-public",

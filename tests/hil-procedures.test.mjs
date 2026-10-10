@@ -22,7 +22,7 @@ const read = (p) => readFileSync(new URL(p, import.meta.url), "utf8");
 const procedures = read("../supabase/functions/_shared/human-intelligence/procedures.ts");
 const prompt = read("../supabase/functions/_shared/human-intelligence/hil-loop-prompt.ts");
 const loop = read("../supabase/functions/reasoning/hil-loop/index.ts");
-const migration = read("../supabase/migrations/20260918000001_braino_procedures.sql");
+const migration = read("../supabase/migrations/20260919000001_braino_procedures.sql");
 
 /* The real matching rules, loaded out of the real file rather than restated
    here: a test that keeps its own copy of them passes forever while the ones
@@ -91,11 +91,11 @@ test("the steps that failed are left out of the route", () => {
 });
 
 test("a route is only kept when the whole command finished", () => {
-  /* all_done and not task_done. One job out of three finishing is not evidence
-     the approach worked, and the steps at that point belong to all three jobs
-     mixed together, which would teach a route that does the wrong two things. */
-  assert.match(loop, /if \(turn\?\.decision\?\.type === "all_done" && hostScope\) \{/);
-  assert.doesNotMatch(loop, /decision\?\.type === "task_done"[\s\S]{0,200}recordProcedure/);
+  /* all_done, or task_done when the command was a single job (6 Oct: most runs
+     are one job, so almost nothing was being learned). With several jobs,
+     task_done still does not count: those steps belong to all of them mixed. */
+  assert.match(loop, /const singleJob = \(loopState\?\.tasks \|\| \[\]\)\.length <= 1;/);
+  assert.match(loop, /if \(hostScope && \(turn\?\.decision\?\.type === "all_done" \|\| \(turn\?\.decision\?\.type === "task_done" && singleJob\)\)\) \{/);
 });
 
 test("one lucky run cannot teach every Braino a route", () => {
@@ -155,7 +155,7 @@ test("recall never delays or breaks a run", () => {
      slow way; a run that dies because a recall query timed out is worse. And the
      two reads go together, so the pair costs what the single read cost. */
   assert.match(procedures, /export async function recallProcedures[\s\S]*?catch \{\s*return "";/);
-  assert.match(loop, /await Promise\.all\(\[\s*recallLessons\(lessonScopes\),\s*recallProcedures\(lessonScopes, commandText\)/);
+  assert.match(loop, /recallLessons\(lessonScopes\),\s*laterStep \? Promise\.resolve\(""\) : recallProcedures\(lessonScopes, commandText\)/);
 });
 
 test("writing a route never fails a run that already succeeded", () => {
@@ -176,5 +176,5 @@ test("the table is service-role only, like the one it was built from", () => {
 test("the version moved, so the behaviour change is traceable", () => {
   /* Every engine_runs row carries this string. A prompt rule that arrives
      without a bump is a change nobody can find afterwards. */
-  assert.match(prompt, /export const HIL_LOOP_VERSION = "2\.12\.0";/);
+  assert.match(prompt, /export const HIL_LOOP_VERSION = "2\.17\.[01]";/);
 });

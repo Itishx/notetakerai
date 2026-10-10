@@ -52,11 +52,14 @@ function planFromVerdict(verdict, wiredTools) {
   return { kind: "legacy", why: "no verdict" };
 }
 
-/* On by default; BRAINO_HIL_FIRST=0 in the env file or the shell puts the old
-   order back, without a rebuild. */
+/* OFF by default since 2026-09-25. On its first real day it sent 17 of 38
+   commands to the step-by-step loop (15 to 80 seconds each) and added about
+   1.4 seconds to every other one; the days before, with the shortcuts first,
+   ran at 3 to 4 seconds a turn. BRAINO_HIL_FIRST=1 turns it back on, for when
+   the router is fast (Jev) and stops escalating simple commands. */
 function hilFirstEnabled(envFile, processEnv) {
   const fromFile = envFile && typeof envFile === "object" ? envFile.BRAINO_HIL_FIRST : "";
-  return String(fromFile || (processEnv && processEnv.BRAINO_HIL_FIRST) || "").trim() !== "0";
+  return String(fromFile || (processEnv && processEnv.BRAINO_HIL_FIRST) || "").trim() === "1";
 }
 
 module.exports = { isInstantCommand, planFromVerdict, hilFirstEnabled };

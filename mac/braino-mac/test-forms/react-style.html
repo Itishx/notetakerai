@@ -1,0 +1,6 @@
+<!doctype html><meta charset="utf-8"><title>Hackathon registration</title>
+<style>body{font:16px -apple-system,system-ui;max-width:560px;margin:40px auto;padding:0 16px}input{width:100%;padding:10px;font:inherit;border:1px solid #bbb;border-radius:8px;margin:6px 0 14px}button{padding:12px 20px;font:inherit}#state{font:13px ui-monospace,monospace;color:#555;white-space:pre}</style>
+<h1>Hackathon registration</h1><p>Test form 3 for Braino. Fields only have aria-labels and the page keeps its own state, like React. The box at the bottom shows what the page itself received.</p>
+<div role="form"><input aria-label="Your name" data-k="name"><input aria-label="Work email" type="email" data-k="email" autocomplete="email"><input aria-label="Team name" data-k="team"><input aria-label="Organisation" data-k="org" autocomplete="organization"><button onclick="alert('sent')">Register</button></div>
+<div id="state">{}</div>
+<script>const s={};document.querySelectorAll('input').forEach(i=>i.addEventListener('input',e=>{s[i.dataset.k]=e.target.value;document.getElementById('state').textContent=JSON.stringify(s,null,1)}));</script>

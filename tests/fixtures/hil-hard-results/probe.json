@@ -1,0 +1,117 @@
+{
+  "at": "2026-10-03T11:47:51.147Z",
+  "fn": "hil-loop",
+  "runs": 3,
+  "passed": 2,
+  "total": 3,
+  "avgMs": 4896,
+  "cases": [
+    {
+      "id": "pointer-anatomy",
+      "pattern": "pointer: what part is this, on a diagram",
+      "pass": true,
+      "ms": 5533,
+      "tries": [
+        {
+          "pass": true,
+          "why": [],
+          "type": "step",
+          "action": "tool",
+          "reversible": true,
+          "said": "",
+          "ms": 7198
+        },
+        {
+          "pass": true,
+          "why": [],
+          "type": "step",
+          "action": "tool",
+          "reversible": true,
+          "said": "",
+          "ms": 5236
+        },
+        {
+          "pass": true,
+          "why": [],
+          "type": "step",
+          "action": "tool",
+          "reversible": true,
+          "said": "",
+          "ms": 4166
+        }
+      ]
+    },
+    {
+      "id": "pointer-not-page",
+      "pattern": "pointer: a whole page is not the pointer",
+      "pass": true,
+      "ms": 4874,
+      "tries": [
+        {
+          "pass": true,
+          "why": [],
+          "type": "step",
+          "action": "read",
+          "reversible": true,
+          "said": "",
+          "ms": 5953
+        },
+        {
+          "pass": true,
+          "why": [],
+          "type": "step",
+          "action": "read",
+          "reversible": true,
+          "said": "",
+          "ms": 4485
+        },
+        {
+          "pass": true,
+          "why": [],
+          "type": "step",
+          "action": "read",
+          "reversible": true,
+          "said": "",
+          "ms": 4184
+        }
+      ]
+    },
+    {
+      "id": "pointer-not-send",
+      "pattern": "pointer: this link to send is not the pointer",
+      "pass": false,
+      "ms": 4281,
+      "tries": [
+        {
+          "pass": false,
+          "why": [
+            "decision was ask, wanted step"
+          ],
+          "type": "ask",
+          "action": "",
+          "said": "What should I send Riya?",
+          "ms": 4542
+        },
+        {
+          "pass": true,
+          "why": [],
+          "type": "step",
+          "action": "tool",
+          "reversible": true,
+          "said": "",
+          "ms": 4874
+        },
+        {
+          "pass": false,
+          "why": [
+            "decision was ask, wanted step"
+          ],
+          "type": "ask",
+          "action": "",
+          "said": "What should I send Riya?",
+          "ms": 3428
+        }
+      ]
+    }
+  ]
+}

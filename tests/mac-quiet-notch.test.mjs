@@ -141,7 +141,7 @@ test("stealth is a switch in the panel, and a phrase by voice or typed", () => {
   assert.match(lab, /data-setting=\\"stealth\\"/);
   assert.match(lift("async function applyPanelSetting(name, on) {"), /\} else if \(name === "stealth"\) \{\s*setStealth\(on, "panel"\);/);
   assert.match(lift("function renderBrainoPanel() {"), /setSwitch\("stealth", stealthOn\(\)\);/);
-  const flush = lift("async function flushRealtimeTranscript(reason, textOverride) {");
+  const flush = lift("async function flushRealtimeTranscript(reason, textOverride, opts = {}) {");
   assert.match(flush, /const stealthAsk = accepted \? parseStealthPhrase\(transcript\) : "";\s*if \(stealthAsk\) \{\s*await handleStealthPhrase\(stealthAsk, transcript, "voice"\);\s*return;/);
   /* Before a short "go stealth" can be held as half a sentence. */
   assert.ok(flush.indexOf("parseStealthPhrase(transcript)") < flush.indexOf("looksUnfinished(transcript)"));

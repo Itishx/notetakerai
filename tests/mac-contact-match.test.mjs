@@ -145,7 +145,7 @@ test("a name he does not know sends him back to the address book once", () => {
   const main = readFileSync(new URL("../mac/braino-mac/main.cjs", import.meta.url), "utf8");
   assert.match(main, /if \(Date\.now\(\) - lastContactRefreshAt < 30000\) return false;/);
   const resolve = main.slice(main.indexOf("async function resolveWhatsAppRecipient"), main.indexOf("function normalizeWhatsAppPhone"));
-  assert.ok(resolve.indexOf("findContactInCache(") < resolve.indexOf("refreshContactsIfStale("));
+  assert.ok(resolve.indexOf("findContactInCache(") < resolve.indexOf("if (await refreshContactsIfStale())"));
   assert.match(resolve, /source: "refresh"/);
   // And the loop can read the address book out loud instead of searching the web.
   assert.match(main, /contact_lookup: \(a\) => lookupContactDetails\(/);

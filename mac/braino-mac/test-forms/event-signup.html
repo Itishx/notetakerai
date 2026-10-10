@@ -1,0 +1,13 @@
+<!doctype html><meta charset="utf-8"><title>Founders Meetup: Sign up</title>
+<style>body{font:16px -apple-system,system-ui;max-width:560px;margin:40px auto;padding:0 16px}label{display:block;margin:14px 0 4px;font-weight:600}input,select,textarea{width:100%;padding:10px;font:inherit;border:1px solid #bbb;border-radius:8px}button{margin-top:20px;padding:12px 20px;font:inherit}</style>
+<h1>Founders Meetup, Bengaluru</h1><p>Test form 1 for Braino. Plain labels.</p>
+<form onsubmit="event.preventDefault();document.body.insertAdjacentHTML('beforeend','<p><b>Sent.</b></p>')">
+<label for="fn">First name *</label><input id="fn" name="first_name" required>
+<label for="ln">Last name *</label><input id="ln" name="last_name" required>
+<label for="em">Email *</label><input id="em" type="email" name="email" required>
+<label for="ph">Phone number</label><input id="ph" type="tel" name="phone">
+<label for="co">College or company</label><input id="co" name="org">
+<label for="ro">You are a</label><select id="ro" name="role"><option value="">Choose</option><option>Student</option><option>Founder</option><option>Engineer</option><option>Investor</option></select>
+<label for="ci">City</label><input id="ci" name="city">
+<label for="wh">What are you building?</label><textarea id="wh" name="building" rows="3"></textarea>
+<button>Sign up</button></form>

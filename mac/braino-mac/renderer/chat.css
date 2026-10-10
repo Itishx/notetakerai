@@ -1,0 +1,157 @@
+/* Braino Chat, in the app's AffectiveOS glass. His words in Newsreader, a
+   reading serif, flowing like a letter; yours on a warm pane of glass. Braino
+   himself stands on the empty page and sits on the box once you talk. One
+   calm column, the edges fading, nothing else competing. */
+@font-face { font-family: "Newsreader"; src: url("fonts/Newsreader.ttf") format("truetype"); font-weight: 200 800; font-style: normal; }
+@font-face { font-family: "Newsreader"; src: url("fonts/Newsreader-Italic.ttf") format("truetype"); font-weight: 200 800; font-style: italic; }
+
+.main.chatting .bar { display: none !important; }
+.main.chatting .body { flex: 1; min-height: 0; display: block !important; padding: 0 !important; overflow: hidden !important; }
+.main.chatting .body > * { animation: none; }
+
+.chat {
+  --read: "Newsreader", "Iowan Old Style", Charter, Georgia, serif;
+  --warm: 255, 155, 130;
+  position: relative; height: 100%; display: flex; flex-direction: column; min-height: 0;
+  animation: chatIn .55s cubic-bezier(.2, .8, .2, 1) both;
+}
+/* A faint warm light from below, where he sits. */
+.chat::before { content: ""; position: absolute; inset: auto 0 0 0; height: 45%; pointer-events: none;
+  background: radial-gradient(60% 70% at 50% 110%, rgba(var(--warm), .10), transparent 70%); }
+@keyframes chatIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+.chat-scroll { position: relative; flex: 1; min-height: 0; overflow-y: auto; padding: 72px 0 34px; -webkit-app-region: no-drag;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 56px, #000 calc(100% - 40px), transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 56px, #000 calc(100% - 40px), transparent 100%); }
+.chat-scroll::-webkit-scrollbar { width: 8px; }
+.chat-scroll::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, .1); border-radius: 8px; }
+.chat-col { max-width: 680px; margin: 0 auto; padding: 0 40px; display: flex; flex-direction: column; gap: 30px; }
+
+/* ── Him ── */
+.chat-mascot svg { width: 100% !important; height: 100% !important; overflow: visible; }
+.chat-mascot.big { width: 104px; height: 127px; margin: 0 auto 6px; filter: drop-shadow(0 14px 20px rgba(0, 0, 0, .3));
+  animation: arrive .9s cubic-bezier(.2, 1.3, .3, 1) both; }
+@keyframes arrive { from { opacity: 0; transform: translateY(18px) scale(.9); } to { opacity: 1; transform: none; } }
+.chat-mascot.perch { position: absolute; left: 24px; top: -58px; width: 50px; height: 61px; pointer-events: none;
+  filter: drop-shadow(0 6px 8px rgba(0, 0, 0, .3)); animation: hopOn .6s cubic-bezier(.2, 1.4, .3, 1) both; }
+@keyframes hopOn { from { opacity: 0; transform: translateY(-26px) scale(.8); } to { opacity: 1; transform: none; } }
+
+/* ── Empty: him, a greeting, and a few ways in ── */
+.chat.empty .chat-scroll { display: flex; align-items: center; }
+.chat.empty .chat-col { width: 100%; }
+.chat-hello { text-align: center; }
+.chat-hello h1 { margin: 10px 0 10px; font: 400 48px/1.06 var(--display); letter-spacing: -.02em; animation: chatIn .7s .15s cubic-bezier(.2, .8, .2, 1) both; }
+.chat-hello h1 em { font-family: var(--read); font-style: italic; font-weight: 400; color: #ffd6c9; }
+.chat-hello p { margin: 0; font: italic 400 19px/1.4 var(--read); color: var(--ink2); animation: chatIn .7s .25s cubic-bezier(.2, .8, .2, 1) both; }
+.chat-suggest { display: flex; flex-wrap: wrap; justify-content: center; gap: 9px; margin-top: 34px; }
+.chat-sg { cursor: pointer; display: inline-flex; align-items: baseline; gap: 9px; padding: 10px 16px; border-radius: 999px; color: var(--ink);
+  background: rgba(255, 255, 255, .06); border: 1px solid rgba(255, 255, 255, .13); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .1);
+  transition: background .2s, border-color .2s, transform .25s cubic-bezier(.2, .8, .2, 1);
+  animation: chatIn .6s cubic-bezier(.2, .8, .2, 1) both; }
+.chat-sg:nth-child(1) { animation-delay: .32s; } .chat-sg:nth-child(2) { animation-delay: .38s; }
+.chat-sg:nth-child(3) { animation-delay: .44s; } .chat-sg:nth-child(4) { animation-delay: .5s; }
+.chat-sg:hover { background: rgba(var(--warm), .14); border-color: rgba(var(--warm), .45); transform: translateY(-2px); }
+.chat-sg b { font: 400 15px/1.3 var(--read); }
+.chat-sg span { font: 500 10.5px var(--ui); color: var(--ink3); letter-spacing: .06em; text-transform: uppercase; }
+
+/* ── Messages ── */
+.cm { animation: chatIn .38s cubic-bezier(.2, .8, .2, 1) both; }
+.cm.you { display: flex; justify-content: flex-end; }
+.cm.you .cm-b { max-width: 76%; padding: 11px 17px; border-radius: 22px 22px 7px 22px;
+  background: linear-gradient(160deg, rgba(var(--warm), .22), rgba(var(--warm), .10));
+  border: 1px solid rgba(var(--warm), .32); box-shadow: inset 0 1px 0 rgba(255, 230, 220, .22), 0 10px 26px -16px rgba(var(--warm), .5);
+  font: 400 14.5px/1.5 var(--sans); }
+.cm.you p { margin: 0; }
+.cm.you p + p { margin-top: 8px; }
+.cm.him { display: block; }
+.cm-text { font: 400 17.5px/1.66 var(--read); color: rgba(255, 255, 255, .94); letter-spacing: .003em; }
+.cm-text p { margin: 0; }
+.cm-text p + p { margin-top: 14px; }
+.cm.bad .cm-text { color: rgba(255, 214, 205, .95); }
+/* Written in, word by word. */
+.rw { display: inline-block; animation: wordIn .5s cubic-bezier(.2, .8, .2, 1) both; }
+@keyframes wordIn { from { opacity: 0; transform: translateY(5px); filter: blur(3px); } to { opacity: 1; transform: none; filter: none; } }
+
+/* Thinking, before anything is known */
+.cw-think { padding: 2px 0; }
+.cw-shimmer { font: italic 400 17px var(--read);
+  background: linear-gradient(90deg, rgba(255, 255, 255, .3) 0%, rgba(255, 255, 255, .95) 45%, rgba(255, 255, 255, .3) 90%);
+  background-size: 220% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; text-shadow: none;
+  animation: shimmer 1.8s linear infinite; }
+@keyframes shimmer { from { background-position: 120% 0; } to { background-position: -120% 0; } }
+
+/* The trail inside his reply */
+.cw-work { margin: 0 0 14px; }
+.cw-work ol { list-style: none; margin: 0; padding: 4px 0 2px 14px; border-left: 1.5px solid rgba(255, 255, 255, .12); display: flex; flex-direction: column; gap: 10px; }
+.cw-work.live { padding: 12px 14px; border-radius: 16px; background: rgba(255, 255, 255, .045); border: 1px solid rgba(255, 255, 255, .09); }
+.cw-work.live ol { border-left: 0; padding-left: 0; }
+.cw-work.done > summary { cursor: pointer; list-style: none; display: inline-flex; align-items: center; gap: 8px; padding: 5px 11px 5px 9px; margin-bottom: 6px;
+  border-radius: 999px; background: rgba(255, 255, 255, .05); border: 1px solid rgba(255, 255, 255, .09); font: 500 12px var(--ui); color: var(--ink2); }
+.cw-work.done > summary::-webkit-details-marker { display: none; }
+.cw-work.done > summary::before { content: ""; width: 5px; height: 5px; margin: 0 2px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(-45deg); transition: transform .2s; }
+.cw-work.done[open] > summary::before { transform: rotate(45deg); }
+.cw-work.done > summary:hover { color: var(--ink); background: rgba(255, 255, 255, .09); }
+.cw-work.done[open] ol { margin: 4px 0 4px 4px; }
+.cw-step { display: grid; grid-template-columns: 15px minmax(0, 1fr); gap: 10px; align-items: start; animation: chatIn .3s ease both; }
+.cw-dot { width: 13px; height: 13px; margin-top: 2px; border-radius: 50%; position: relative; }
+.cw-step.run .cw-dot { border: 1.5px solid rgba(255, 255, 255, .2); border-top-color: #fff; animation: cwSpin .8s linear infinite; }
+@keyframes cwSpin { to { transform: rotate(360deg); } }
+.cw-step.ok .cw-dot { background: rgba(95, 224, 176, .2); }
+.cw-step.ok .cw-dot::after { content: ""; position: absolute; left: 4.3px; top: 2px; width: 3px; height: 6.5px; border: solid #5fe0b0; border-width: 0 1.5px 1.5px 0; transform: rotate(45deg); }
+.cw-step.bad .cw-dot { background: rgba(255, 143, 132, .2); }
+.cw-step.bad .cw-dot::before, .cw-step.bad .cw-dot::after { content: ""; position: absolute; left: 5.8px; top: 2.8px; width: 1.5px; height: 7.5px; background: #ff8f84; transform: rotate(45deg); }
+.cw-step.bad .cw-dot::after { transform: rotate(-45deg); }
+.cw-label { font: 500 13.5px/1.4 var(--sans); color: var(--ink); }
+.cw-step.ok .cw-label, .cw-step.bad .cw-label { color: var(--ink2); }
+.cw-thought { margin-top: 3px; }
+.cw-thought summary { cursor: pointer; list-style: none; font: 500 11.5px var(--ui); color: var(--ink3); }
+.cw-thought summary::-webkit-details-marker { display: none; }
+.cw-thought summary:hover { color: var(--ink2); }
+.cw-thought p { margin: 5px 0 0; font: italic 400 14.5px/1.55 var(--read); color: var(--ink2); }
+.cw-work.live .cw-step:last-child .cw-thought { display: none; }
+
+/* ── The box, with him sitting on it ── */
+.chat-box { position: relative; flex: none; width: min(680px, calc(100% - 80px)); margin: 0 auto 24px; padding: 14px 14px 12px 20px; border-radius: 26px;
+  background: linear-gradient(160deg, rgba(255, 255, 255, .12), rgba(255, 255, 255, .06)); border: 1px solid rgba(255, 255, 255, .22);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .22), 0 24px 60px -24px rgba(0, 0, 0, .6); -webkit-app-region: no-drag;
+  transition: border-color .25s, box-shadow .25s; }
+.chat-box:focus-within { border-color: rgba(var(--warm), .55); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .22), 0 0 0 4px rgba(var(--warm), .08), 0 24px 60px -24px rgba(0, 0, 0, .6); }
+.chat-box textarea { width: 100%; display: block; resize: none; border: 0; outline: 0; background: none; color: var(--ink); max-height: 180px;
+  font: 400 16px/1.5 var(--sans); padding: 2px 0 10px; }
+.chat-box textarea::placeholder { color: var(--ink3); font: italic 400 17px/1.5 var(--read); }
+.chat-tools { display: flex; align-items: center; gap: 8px; }
+.chat-sound, .chat-clear { border: 1px solid rgba(255, 255, 255, .13); background: rgba(255, 255, 255, .04); color: var(--ink2);
+  font: 500 11.5px var(--ui); padding: 5px 12px; border-radius: 999px; cursor: pointer; transition: background .2s, color .2s, border-color .2s; }
+.chat-sound[aria-pressed="true"] { color: #fff; border-color: rgba(var(--warm), .6); background: rgba(var(--warm), .18); }
+.chat-sound:hover, .chat-clear:hover { color: var(--ink); background: rgba(255, 255, 255, .1); }
+.chat.empty .chat-clear { display: none; }
+.chat-hint { margin-left: auto; font: 500 11px var(--ui); color: var(--ink3); }
+.chat-send { width: 36px; height: 36px; border-radius: 50%; border: 0; cursor: pointer; display: grid; place-items: center;
+  background: linear-gradient(160deg, #ffc0ae, #f07a60); box-shadow: inset 0 1px 0 rgba(255, 240, 234, .8), 0 8px 20px -8px rgba(240, 122, 96, .9);
+  transition: transform .18s cubic-bezier(.2, .8, .2, 1), filter .18s; }
+.chat-send:hover { transform: scale(1.07) rotate(-6deg); }
+.chat-send:active { transform: scale(.94); }
+.chat-send svg { width: 16px; height: 16px; fill: none; stroke: #2a120c; stroke-width: 2.3; stroke-linecap: round; stroke-linejoin: round; }
+
+@media (max-width: 1000px) { .chat-hint { display: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .chat, .cm, .chat-mascot, .chat-hello h1, .chat-hello p, .chat-sg, .rw, .cw-shimmer, .cw-step, .cw-step.run .cw-dot { animation: none; }
+}
+
+/* ── Approval card inside his reply ── */
+.ca-card { margin-top: 14px; padding: 14px 16px 12px; border-radius: 18px;
+  background: linear-gradient(160deg, rgba(255, 184, 107, .14), rgba(255, 155, 130, .06)); border: 1px solid rgba(255, 190, 150, .34);
+  box-shadow: inset 0 1px 0 rgba(255, 235, 220, .16), 0 14px 34px -20px rgba(255, 150, 110, .55); animation: chatIn .35s cubic-bezier(.2, .8, .2, 1) both; }
+.ca-head { display: flex; align-items: center; gap: 8px; font: 600 12.5px var(--ui); color: rgba(255, 225, 205, .95); letter-spacing: .01em; }
+.ca-orb { width: 8px; height: 8px; border-radius: 50%; background: #ffb86b; box-shadow: 0 0 10px #ffb86b; animation: sparkBreathe 1.4s ease-in-out infinite; }
+.ca-detail { margin: 8px 0 12px; font: 400 16.5px/1.5 var(--read); color: #fff; }
+.ca-row { display: flex; justify-content: flex-end; gap: 8px; }
+.ca-row button { border: 0; cursor: pointer; border-radius: 999px; padding: 8px 17px; font: 600 12.5px var(--ui); transition: filter .15s, background .15s, transform .15s; }
+.ca-row button:active { transform: scale(.96); }
+.ca-no { background: rgba(255, 255, 255, .1); color: var(--ink); }
+.ca-no:hover { background: rgba(255, 255, 255, .17); }
+.ca-yes { background: linear-gradient(160deg, #ffc0ae, #f07a60); color: #2a120c; box-shadow: inset 0 1px 0 rgba(255, 240, 234, .8), 0 6px 16px -8px rgba(240, 122, 96, .9); }
+.ca-yes:hover { filter: brightness(1.06); }
+.ca-done { margin-top: 10px; display: inline-flex; align-items: center; gap: 7px; font: 500 12px var(--ui); color: var(--ink3); }
+.ca-done::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--ink3); }
+.ca-done.yes::before { background: #5fe0b0; } .ca-done.no::before { background: #ff8f84; }

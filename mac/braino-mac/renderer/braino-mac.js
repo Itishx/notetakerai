@@ -27,10 +27,17 @@ const TTS_WARM_INTERVAL_MS = 240000;
    closed between turns, and every reply had to wake him again through the
    on-device listener and a 2.5 to 5 second reconnect. A minute, the same as
    Her mode, costs about half a cent more per conversation. */
-const REALTIME_IDLE_TIMEOUT_MS = 60000;
+// 3 minutes, from 1 (2026-09-26). After a minute of quiet the voice session
+// closed, and the next "Braino" had to open a new one: 2, 5, 6 and once 17
+// seconds in the log. A conversation keeps its connection.
+const REALTIME_IDLE_TIMEOUT_MS = 180000;
 const HER_FISH_VOICE_ID = "046164e7366a4dc899b69a9887d9f7c0";
 const HER_IDLE_TIMEOUT_MS = 60000;
-const HER_ENTER_RE = /\b(her mode|call her|talk to her|open her|start her)\b/;
+/* The whole sentence is the command, never a phrase inside one (2026-10-03):
+   "I was not supposed to talk to her in my life again and you texted her"
+   turned Her mode on, and Samantha answered "hey. i'm here." to someone upset
+   about a message sent to the wrong person. */
+const HER_ENTER_RE = /^(?:(?:hey|ok|okay|so)\s+)?(?:(?:braino|bruno|brainelle)\s+)?(?:(?:can|could) you\s+)?(?:please\s+)?(?:(?:switch|go|change)\s+to\s+|turn on\s+|start\s+|open\s+|enter\s+)?(?:her mode|call her|talk to her|open her|start her|her)(?:\s+mode)?(?:\s+(?:please|now))?$/;
 const HER_EXIT_RE = /\b(goodbye|good night|goodnight|talk (to you )?later|back to (braino|bruno)|braino mode|leave me|i have to go|bye bye)\b/;
 const REALTIME_SPEECH_STOP_FLUSH_MS = 220;
 const REALTIME_TRANSCRIPT_IDLE_FLUSH_MS = 520;
@@ -422,11 +429,22 @@ let heraVoice = { on: false };
    Hindi and English — and there was no way to tell from the notch where a
    word had come from. Until that can be made trustworthy, voice mode shows
    OpenAI's transcript only, the way it did before. Dictation (Option twice)
-   and LIVE still use HERA; they are unaffected. Flip to true to bring it back. */
-const HERA_LIVE_IN_VOICE = false;
+   and LIVE still use HERA; they are unaffected. Flip to true to bring it back.
+   ON again 2026-09-26: without it your words showed up only after you had
+   finished, which read as him not hearing you. The video problem is handled
+   at the display instead: live words show only while OpenAI also hears a
+   person speaking (or just after), and never while music or video is known
+   to be playing. See heraVoiceMayShow. */
+const HERA_LIVE_IN_VOICE = true;
 let heraVoiceStarting = false;
 /* Between OpenAI's speech_started and speech_stopped. */
 let rtUserSpeakingNow = false;
+let rtUserStoppedAt = 0;
+/* Live words go on the notch only when a person is speaking to him right now. */
+function heraVoiceMayShow() {
+  if (mediaAudioPlaying) return false;
+  return rtUserSpeakingNow || Date.now() - rtUserStoppedAt < 1500;
+}
 function rtSpeechInProgress() { return rtUserSpeakingNow; }
 /* How long the last turn of speech lasted, for looksLikeNoise. */
 let rtSpeechStartedAt = 0;
@@ -466,10 +484,14 @@ let namedSpeechAwake = false;
 const NAME_WAKE_LIGHT_AFTER_MS = 20000;
 /* He asked you something: the answer needs no name for this long after he
    finishes the question. */
-const NAMED_ANSWER_WINDOW_MS = 10000;
+// 20s, from 10s (2026-09-27): "Yes." to "Want me to try it now?" came 14s
+// later and was dropped, so the website never opened.
+const NAMED_ANSWER_WINDOW_MS = 20000;
 /* And after ANY reply of his, the next twenty seconds are yours, name or no
    name. See namedFollowUpWindowOpen. */
-const NAMED_FOLLOW_UP_MS = 20000;
+// 45s, from 20s (2026-09-26): mid-conversation pauses were longer than 20s and
+// sent him back to waiting for his name.
+const NAMED_FOLLOW_UP_MS = 45000;
 /* A reply is his half of an exchange you began. He reads notifications and
    timers out loud too, and those are not conversations. */
 const NAMED_EXCHANGE_MAX_MS = 3 * 60 * 1000;
@@ -483,8 +505,9 @@ const NAMED_ON_DEVICE_MATCH_MS = 8000;
 /* Half a sentence, waiting for the rest. See holdFragment. */
 let heldFragment = null;
 let heldFragmentTimer = 0;
-const FRAGMENT_HOLD_MS = 1500;
-const FRAGMENT_MAX_HOLD_MS = 6000;
+// Long enough for a thinking pause in slow, natural speech (2026-10-05).
+const FRAGMENT_HOLD_MS = 2200;
+const FRAGMENT_MAX_HOLD_MS = 12000;
 const NAMED_FIRST_COMMAND_MS = 15000;
 /* His name as the cloud transcriber sometimes writes it despite language:"en".
    The on-device listener is told "Braino" exists; this one is not, and a short
@@ -570,6 +593,8 @@ let voiceLatencyTurn = null;
 // out of the speakers. The echo guard anchors to endedTs, because those two can be twenty
 // seconds apart on a long answer. See shouldAcceptVoiceTranscript.
 let lastSpokenLine = { text: "", ts: 0, endedTs: 0, duringRealtime: false, asked: false };
+// When his last CHAT reply ended in a question (see shouldUseRealtimeDirectChat).
+let lastChatQuestionAt = 0;
 // How long his voice can still be arriving at the mic after he stops speaking. This covers
 // speaker ring-out and the transcription lag on his last few words, nothing more.
 const POST_SPEECH_ECHO_MS = 2000;
@@ -720,6 +745,7 @@ function markVoiceLatency(stage, data = {}) {
      { mode: "area", x, y, w, h }      a box he keeps to
      { mode: "pin", x, y }             one spot, standing, no walking          */
 const WALK_AREA_STORAGE_KEY = "braino-mac-walk-area-v1";
+const DOCK_SPOT_NAMES = ["left", "top", "bottom", "right"];
 let walkArea = { mode: "screen" };
 /* The line he is currently walking along. He keeps to one until he decides to
    change level, and he never changes level mid stride. */
@@ -730,7 +756,7 @@ function readWalkArea() {
     const raw = JSON.parse(window.localStorage.getItem(WALK_AREA_STORAGE_KEY) || "null");
     if (!raw || typeof raw !== "object") return { mode: "screen" };
     if (raw.mode === "pin" && Number.isFinite(raw.x) && Number.isFinite(raw.y)) {
-      return { mode: "pin", x: clamp(raw.x, 0, 1), y: clamp(raw.y, 0, 1) };
+      return { mode: "pin", x: clamp(raw.x, 0, 1), y: clamp(raw.y, 0, 1), ...(DOCK_SPOT_NAMES.includes(raw.spot) ? { spot: raw.spot } : {}) };
     }
     if (raw.mode === "area" && [raw.x, raw.y, raw.w, raw.h].every(Number.isFinite) && raw.w > 0 && raw.h > 0) {
       return { mode: "area", x: clamp(raw.x, 0, 1), y: clamp(raw.y, 0, 1), w: clamp(raw.w, 0, 1), h: clamp(raw.h, 0, 1) };
@@ -1328,6 +1354,7 @@ let lastEngagedAt = 0;
 let lastAmbientAt = Date.now();
 let ambientEnabled = true;
 let ambientBusy = false;
+let ambientQuietUntil = 0; // "stop listening" means leave me be for a while
 
 async function runAmbientGlance() {
   if (coworkEnabled) return; // cowork mode owns the watching; never double-fire
@@ -1338,6 +1365,12 @@ async function runAmbientGlance() {
   const now = Date.now();
   if (now - lastEngagedAt > AMBIENT_AWAKE_WINDOW_MS) return; // asleep
   if (now - lastAmbientAt < AMBIENT_CHECK_INTERVAL_MS) return;
+  /* Quiet first. The clock only counted from his own last glance, so the
+     moment "stop listening" ended a session he was due, and commented on the
+     Cursor terminal nobody asked about. Now it waits a full interval after
+     you last spoke to him, and half an hour after you told him to stop. */
+  if (now - lastEngagedAt < AMBIENT_CHECK_INTERVAL_MS) return;
+  if (now < ambientQuietUntil) return;
   ambientBusy = true;
   lastAmbientAt = now;
   try {
@@ -1666,6 +1699,8 @@ function nfSyncThinkingZone() {
 
 function nfSetThinkingOpen(open) {
   if (!notchFace) return;
+  // The AffectiveOS notch never drops the list of thinking steps beneath it.
+  if (open && notchFace.classList.contains("nf-aos")) open = false;
   nfThinkingPinned = Boolean(open);
   notchFace.classList.toggle("nf-think-open", nfThinkingPinned);
   notchFace.classList.remove("captioning");
@@ -1773,6 +1808,7 @@ function renderedLongAnswerHeight() {
     + labelHeight
     + (labelHeight ? (Number.parseFloat(labelStyle?.marginBottom || "0") || 0) : 0)
     + nfAnswerBody.scrollHeight
+    + (nfAnswerSources.length ? (nfAnswerArticle.querySelector(".nf-src")?.getBoundingClientRect().height || 0) + 10 : 0)
     + (Number.parseFloat(articleStyle.paddingBottom) || 0)
     + 2
   );
@@ -1818,6 +1854,77 @@ function refitOpenLongAnswer(generation = nfAnswerGeneration) {
   nfSetZone({ expanded: true, width: NF_READING_SURFACE_WIDTH, height: measured });
 }
 
+/* Where a web answer came from (2026-10-02): the sites, as small chips that
+ * stack in one after another under his answer, inside the notch. Taken from
+ * the search that just ran (braino-mac:web-sources) and shown only on the
+ * answer that follows it, within 20 seconds; any other answer has none. */
+let nfWebSources = { hosts: [], at: 0 };
+let nfAnswerSources = [];
+window.brainoMac?.onWebSources?.((payload) => {
+  nfWebSources = { hosts: Array.isArray(payload.hosts) ? payload.hosts.slice(0, 3) : [], at: Date.now() };
+});
+function renderNotchSources() {
+  notchFace?.querySelectorAll(".nf-src").forEach((el) => {
+    el.replaceChildren(...nfAnswerSources.map((host, i) => {
+      const chip = document.createElement("span");
+      chip.className = "nf-src-chip";
+      chip.style.animationDelay = `${120 + i * 140}ms`;
+      chip.textContent = host;
+      return chip;
+    }));
+  });
+  notchFace?.classList.toggle("nf-has-src", nfAnswerSources.length > 0);
+}
+
+/* "Which Riya?" with the names to tap, inside the answer sheet (2026-10-03).
+   Main sends the choices with the question; tapping one is exactly saying it.
+   They live in the sheet's own body, so the sheet measures them with the
+   words and holds one shape; they go when the question is answered. */
+let nfChoice = null;
+window.brainoMac?.onApproval?.((p) => {
+  try {
+    if (p?.cleared) {
+      if (!nfChoice) return;
+      nfChoice = null;
+      if (notchFace?.classList.contains("nf-answer-open")) notchFace.querySelector(".nf-answer-choices")?.remove();
+      return;
+    }
+    if (p?.surface !== "voice" || p?.kind !== "choose" || !Array.isArray(p.options)) return;
+    nfChoice = { options: p.options.slice(0, 3), expiresAt: Number(p.expiresAt) || 0 };
+  } catch (_) {}
+});
+function renderNotchChoices(root) {
+  if (!root || !nfChoice?.options?.length) return;
+  if (nfChoice.expiresAt && Date.now() > nfChoice.expiresAt) { nfChoice = null; return; }
+  const row = document.createElement("div");
+  row.className = "nf-answer-choices";
+  nfChoice.options.forEach((name, i) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = `nf-choice${i === 0 ? " is-first" : ""}`;
+    b.textContent = name;
+    const stop = (e) => { e.stopPropagation(); };
+    b.addEventListener("pointerdown", stop);
+    b.addEventListener("mousedown", stop);
+    b.addEventListener("click", (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      row.querySelectorAll(".nf-choice").forEach((x) => x.classList.toggle("is-picked", x === b));
+      logRenderer("notch.choice.tap", { position: i });
+      void window.__brainoRunDelegate?.(name);
+    });
+    row.appendChild(b);
+  });
+  const cancel = document.createElement("button");
+  cancel.type = "button";
+  cancel.className = "nf-choice nf-choice-cancel";
+  cancel.textContent = "Cancel";
+  ["pointerdown", "mousedown"].forEach((t) => cancel.addEventListener(t, (e) => e.stopPropagation()));
+  cancel.addEventListener("click", (e) => { e.stopPropagation(); e.preventDefault(); void window.__brainoRunDelegate?.("cancel"); });
+  row.appendChild(cancel);
+  root.appendChild(row);
+}
+
 function renderNotchAnswer() {
   if (!nfAnswerSurface || !nfAnswerShortText || !nfAnswerBody) return;
   const presentation = classifyMacNotchAnswer(nfAnswerText, { rich: nfAnswerForcedLong });
@@ -1838,6 +1945,7 @@ function renderNotchAnswer() {
 
   nfAnswerShortText.replaceChildren();
   appendNotchAnswerWords(nfAnswerShortText, nfAnswerText.replace(/\s+/g, " "));
+  renderNotchSources();
 
   nfAnswerBody.replaceChildren();
   let wordIndex = 0;
@@ -1847,6 +1955,7 @@ function renderNotchAnswer() {
     wordIndex = appendNotchAnswerWords(el, block.text, wordIndex);
     nfAnswerBody.appendChild(el);
   });
+  renderNotchChoices(nfAnswerBody);
 
   const activeRoot = nfAnswerMode === "long" ? nfAnswerBody : nfAnswerShortText;
   nfAnswerWords = Array.from(activeRoot.querySelectorAll(".nf-answer-word"));
@@ -1931,6 +2040,7 @@ function measureShortAnswerHeight() {
     // The uppercase "BRAINO" label sits above the text inside the same grid.
     + (row.querySelector("small")?.getBoundingClientRect().height || 0)
     + 5 /* grid gap between label and text */
+    + (nfAnswerSources.length ? (row.querySelector(".nf-src")?.getBoundingClientRect().height || 0) + 5 : 0)
     + (Number.parseFloat(rowStyle.paddingBottom) || 0)
     + 2
   );
@@ -1986,7 +2096,7 @@ function startNotchAnswer(text, generation, options = {}) {
   notchFace?.classList.remove("nf-answer-exiting");
   nfAnswerGeneration = generation;
   nfAnswerText = normalized;
-  nfAnswerForcedLong = Boolean(options.rich) || (sameAnswer && nfAnswerForcedLong);
+  nfAnswerForcedLong = Boolean(options.rich) || Boolean(nfChoice?.options?.length) || (sameAnswer && nfAnswerForcedLong);
   // THE bug that made every long answer look cut off.
   //
   // speak() passes `fixedHeight: Number(options.notchFixedHeight) || 0`, so the
@@ -2002,6 +2112,10 @@ function startNotchAnswer(text, generation, options = {}) {
   nfAnswerFixedHeight = Number.isFinite(requestedFixedHeight) && requestedFixedHeight > 0
     ? Math.max(164, Math.min(notchViewportHeight() - 90, requestedFixedHeight))
     : 0;
+  if (!sameAnswer) {
+    nfAnswerSources = Date.now() - nfWebSources.at < 20000 ? nfWebSources.hosts : [];
+    nfWebSources = { hosts: [], at: 0 };
+  }
   if (!sameAnswer || options.replace) {
     nfQuietSpokenWords = 0;
     nfAnswerCompletedWords = 0;
@@ -2377,6 +2491,15 @@ let mediaAudioPlaying = false;
    alternative is trusting a guess made with no information and letting the
    speakers talk to him. */
 let mediaAudioUncertain = false;
+/* "Not sure" used to count as playing, always. With Automation refused for
+   Spotify it is ALWAYS not sure, so every sentence without his name was
+   binned as speaker sound, all evening (2026-09-26: "Ignored you, media is
+   playing" with nothing playing). Now it counts only if something was
+   actually confirmed playing in the last ten minutes. */
+let mediaConfirmedPlayingAt = 0;
+function mediaMaybePlaying() {
+  return mediaAudioPlaying || (mediaAudioUncertain && Date.now() - mediaConfirmedPlayingAt < 10 * 60 * 1000);
+}
 let screenRecStartedAt = 0;
 let screenRecClockTimer = 0;
 
@@ -2792,6 +2915,7 @@ const nfInlineCaptionEl = document.querySelector("#notch-face .nf-inline-caption
 const nfInlineCaptionLabelEl = document.querySelector("#notch-face .nf-inline-caption-label");
 const nfInlineCaptionStateEl = document.querySelector("#notch-face .nf-inline-caption-state");
 const nfInlineCaptionTextEl = document.querySelector("#notch-face .nf-inline-caption-text");
+const nfStepsEl = document.querySelector("#notch-face .nf-steps");
 const nfYapTranscriptEl = document.querySelector("#notch-face .nf-yap-transcript");
 const nfYapStateEl = document.querySelector("#notch-face .nf-yap-head b");
 let nfHeardText = "";
@@ -2832,7 +2956,31 @@ const NF_INLINE_MAX_CHARS = 330;
 // Measure the caption's real content and give the island that height, the way
 // Yap Mode already sizes itself. Sum the same way renderedLongAnswerHeight does:
 // own padding + header + the text's full scroll height.
+/* Typing: the capsule is as tall as what you have typed, a line at a time,
+   from one line up to the same ceiling every surface has. */
+const NF_TYPE_MIN_HEIGHT = 108;
+function measureTypingHeight() {
+  const field = notchFace?.querySelector(".nf-type-field");
+  if (!field || !nfInlineCaptionEl) return NF_TYPE_MIN_HEIGHT;
+  field.style.height = "auto";
+  field.style.height = `${field.scrollHeight}px`;
+  const style = window.getComputedStyle(nfInlineCaptionEl);
+  const fieldStyle = window.getComputedStyle(field);
+  const content = (Number.parseFloat(style.paddingTop) || 0)
+    + (Number.parseFloat(fieldStyle.marginTop) || 0)
+    + field.scrollHeight
+    + (Number.parseFloat(style.paddingBottom) || 0) + 4;
+  return Math.round(Math.max(NF_TYPE_MIN_HEIGHT, Math.min(NF_INLINE_MAX_HEIGHT, content)));
+}
+function refitTyping() {
+  if (!typingOpen || !notchFace) return;
+  const height = measureTypingHeight();
+  notchFace.style.setProperty("--nf-inline-height", `${height}px`);
+  nfSetZone({ expanded: true, width: NF_READING_SURFACE_WIDTH, height: height + 16 });
+}
+
 function measureInlineCaptionHeight() {
+  if (typingOpen) return measureTypingHeight();
   if (!nfInlineCaptionEl || !nfInlineCaptionTextEl) return NF_INLINE_MIN_HEIGHT;
   const style = window.getComputedStyle(nfInlineCaptionEl);
   const textStyle = window.getComputedStyle(nfInlineCaptionTextEl);
@@ -2842,11 +2990,70 @@ function measureInlineCaptionHeight() {
     + (header?.getBoundingClientRect().height || 0)
     + (Number.parseFloat(textStyle.marginTop) || 0)
     + (nfInlineCaptionTextEl.scrollHeight || 0)
+    + (nfStepsEl && nfStepsEl.offsetHeight ? nfStepsEl.offsetHeight + (Number.parseFloat(window.getComputedStyle(nfStepsEl).marginTop) || 0) : 0)
     + (Number.parseFloat(style.paddingBottom) || 0)
     + 2
   );
   return Math.round(Math.max(NF_INLINE_MIN_HEIGHT, Math.min(NF_INLINE_MAX_HEIGHT, content)));
 }
+
+/* The steps of a job, inside the notch (2026-10-01).
+ *
+ * The same rows the website draws: "Opened WhatsApp ✓ · Found John ✓ ·
+ * Sent". main.cjs already sends every step and its result on
+ * braino-mac:task-trail; the overlay simply never listened (task-trail.js
+ * hung a card UNDER the notch and was unloaded for it). Here they live inside
+ * the "You said · THINKING" box. Three rows at most, newest last, and the
+ * space for three is taken once, on the first step, so the island grows one
+ * time per job and then holds its shape. */
+const NF_STEPS_SHOWN = 3;
+let nfSteps = [];
+let nfStepsClearTimer = 0;
+function renderNfSteps() {
+  if (!nfStepsEl) return;
+  const shown = nfSteps.slice(-NF_STEPS_SHOWN);
+  nfStepsEl.replaceChildren(...shown.map((step) => {
+    const row = document.createElement("li");
+    row.className = `nf-step is-${step.state}`;
+    const tick = document.createElement("span");
+    tick.className = "nf-step-tick";
+    tick.setAttribute("aria-hidden", "true");
+    const text = document.createElement("span");
+    text.className = "nf-step-text";
+    text.textContent = step.label;
+    row.append(tick, text);
+    return row;
+  }));
+  notchFace?.classList.toggle("nf-has-steps", nfSteps.length > 0);
+  refitOpenInlineCaption();
+}
+window.brainoMac?.onTaskTrail?.((payload) => {
+  const kind = payload?.kind;
+  if (kind === "start") {
+    window.clearTimeout(nfStepsClearTimer);
+    nfSteps = [];
+  } else if (kind === "step" && payload.label) {
+    const last = nfSteps[nfSteps.length - 1];
+    if (last && last.state === "run") last.state = "ok";
+    nfSteps.push({ label: String(payload.label).slice(0, 80), state: "run" });
+    if (nfSteps.length > 24) nfSteps.shift();
+  } else if (kind === "result") {
+    const last = nfSteps[nfSteps.length - 1];
+    if (last && last.state === "run") last.state = payload.ok === false ? "fail" : "ok";
+  } else if (kind === "end") {
+    nfSteps.forEach((step) => { if (step.state === "run") step.state = payload.ok === false ? "fail" : "ok"; });
+    /* Cleared once the box has closed, never while you are looking at it. */
+    window.clearTimeout(nfStepsClearTimer);
+    nfStepsClearTimer = window.setTimeout(function clearWhenClosed() {
+      if (notchFace?.classList.contains("nf-inline-working")) { nfStepsClearTimer = window.setTimeout(clearWhenClosed, 1500); return; }
+      nfSteps = [];
+      renderNfSteps();
+    }, 1500);
+  } else {
+    return;
+  }
+  renderNfSteps();
+});
 
 function refitOpenInlineCaption() {
   if (!notchFace?.classList.contains("nf-inline-open")) return;
@@ -3080,6 +3287,7 @@ const NF_THINKING_STUCK_MS = 60000;
 // nfSetThinking still clears it below: showing live thinking text means the
 // pending reveal has been overtaken and must not fire later.
 
+function nfThinkingShown() { return Boolean(nfThinkingText); }
 function nfSetThinking(text) {
   nfThinkingText = String(text || "").trim();
   if (nfThinkingText && hilThinkingHistory[hilThinkingHistory.length - 1] !== nfThinkingText) {
@@ -3404,6 +3612,49 @@ function setStealth(on, source) {
   applyStealth();
   logRenderer("notch.stealth", { on, source });
   renderBrainoPanel();
+}
+
+/* ── Hide him ─────────────────────────────────────────────────────────────
+   "hidden": gone (with `until` for "for an hour"). "stealth": faint, full on
+   hover. Either way he still hears and answers through the notch. Back with
+   "Braino, come back", Command+Shift+B, or a click on the notch. */
+const MASCOT_HIDE_KEY = "brainoMascotHide";
+let mascotHide = (() => { try { return JSON.parse(localStorage.getItem(MASCOT_HIDE_KEY) || "null"); } catch (_) { return null; } })();
+function mascotHidden() { return Boolean(mascotHide && (mascotHide.mode === "hidden" || mascotHide.mode === "stealth")); }
+function applyMascotHide() {
+  if (mascotHide?.until && Date.now() >= mascotHide.until) mascotHide = null;
+  document.body.classList.toggle("mascot-hidden", mascotHide?.mode === "hidden");
+  document.body.classList.toggle("mascot-stealth", mascotHide?.mode === "stealth");
+  if (!mascotHide) document.body.classList.remove("mascot-peek");
+  document.querySelectorAll("#braino-hide-row [data-hide]").forEach((b) => {
+    const on = mascotHide && (b.dataset.hide === "stealth" ? mascotHide.mode === "stealth" : b.dataset.hide === "hour" ? Boolean(mascotHide.until) : mascotHide.mode === "hidden" && !mascotHide.until);
+    b.classList.toggle("active", Boolean(on));
+    b.setAttribute("aria-pressed", on ? "true" : "false");
+  });
+}
+function setMascotHide(mode, source) {
+  mascotHide = mode === "hour" ? { mode: "hidden", until: Date.now() + 60 * 60 * 1000 }
+    : mode === "hidden" || mode === "stealth" ? { mode } : null;
+  try { mascotHide ? localStorage.setItem(MASCOT_HIDE_KEY, JSON.stringify(mascotHide)) : localStorage.removeItem(MASCOT_HIDE_KEY); } catch (_) {}
+  if (mascotHide && brainoCustomizerOpen) setBrainoCustomizerOpen(false);
+  applyMascotHide();
+  logRenderer("mascot.hide", { mode: mode || "shown", source });
+}
+setInterval(() => { if (mascotHide?.until && Date.now() >= mascotHide.until) setMascotHide(null, "timer"); }, 15000);
+
+/* "Hide yourself", "go stealth" is the notch's; "come back" while hidden. */
+function parseMascotHidePhrase(text) {
+  const rest = String(text || "").trim().replace(/[.!?]+$/g, "").replace(/,/g, " ")
+    .replace(STEALTH_LEAD, "").replace(/\s+please$/i, "").replace(/\s+/g, " ").trim().toLowerCase();
+  if (!rest || rest.split(" ").length > 6) return "";
+  if (/^(?:hide|hide yourself|go hide|disappear|vanish|get off (?:my|the) screen|go away for (?:a bit|now|a while)|hide (?:for )?(?:a|an|one) hour)$/.test(rest)) return /hour/.test(rest) ? "hour" : "hidden";
+  if (mascotHidden() && /^(?:come back|show yourself|show up|unhide|be visible|i want you back|where are you)$/.test(rest)) return "show";
+  return "";
+}
+async function handleMascotHidePhrase(which, transcript, source) {
+  if (transcript) nfSetHeard(transcript, { durationMs: 1200 });
+  setMascotHide(which === "show" ? null : which, source);
+  await speak(which === "show" ? "I'm back." : which === "hour" ? "Gone for an hour. I'm still listening." : "Hidden. Say come back when you want me.");
 }
 
 const STEALTH_LEAD = /^(?:(?:hey|ok|okay)\s+)?(?:brain(?:o|elle)\b)?[\s,.!]*(?:(?:can|could|will|would)\s+you\s+)?(?:please\s+)?/i;
@@ -3877,6 +4128,9 @@ const NF_IOMI_BOOT_CLASSES = [
   "nf-iomi-auth",
   "nf-iomi-awake",
   "nf-iomi-expanded",
+  "nf-boot-affective",
+  "nf-boot-logo-on",
+  "nf-boot-sweeping",
   "nf-shining",
   "nf-shine-slow",
 ];
@@ -3894,6 +4148,11 @@ function timeGreeting() {
   if (h >= 17 && h < 23) return "Good evening";
   return "It's late";
 }
+
+/* The boot the notch plays. true: the Affective logo, a coral sweep, then
+   BRAINO (2026-09-26). false: the FOUNDRY boot exactly as it was. One line to
+   switch back. */
+const BOOT_AFFECTIVE = true;
 
 async function runIomiBootMascotExit() {
   if (!walker || herMode) return;
@@ -3933,6 +4192,12 @@ async function runNotchBoot() {
     "nf-coral", "nf-wink", "captioning",
   );
   notchFace?.classList.add("nf-iomi-booting", "nf-shining", "nf-shine-slow");
+  if (BOOT_AFFECTIVE) {
+    notchFace?.classList.add("nf-boot-affective");
+    // The word he says after the logo and the sweep.
+    const identity = notchFace?.querySelector(".nf-iomi-identity");
+    if (identity) identity.innerHTML = "<span>Braino</span>";
+  }
 
   // Real authentication starts under the very first perimeter trace.
   const authPromise = window.brainoMac.ensureAuth("startup")
@@ -3940,13 +4205,31 @@ async function runNotchBoot() {
   logRenderer("boot.iomi.start", {});
   await wait(1550);
 
-  notchFace?.classList.add("nf-iomi-auth");
-  const authShownAt = Date.now();
-  const result = await authPromise;
-  const shown = Date.now() - authShownAt;
-  // All four letters receive a clean beat even when a saved session resolves
-  // instantly. Slow browser sign-in is allowed to hold on the complete word.
-  if (shown < 2200) await wait(2200 - shown);
+  let result;
+  if (BOOT_AFFECTIVE) {
+    /* Affective first, while sign-in runs underneath it; then a coral shimmer
+       through the notch; then BRAINO spells itself out. */
+    notchFace?.classList.add("nf-boot-logo-on");
+    const logoAt = Date.now();
+    result = await authPromise;
+    // Slower: the logo gets time to arrive and to leave.
+    if (Date.now() - logoAt < 2200) await wait(2200 - (Date.now() - logoAt));
+    notchFace?.classList.remove("nf-boot-logo-on");
+    await wait(700);
+    notchFace?.classList.add("nf-boot-sweeping");
+    await wait(950);
+    notchFace?.classList.remove("nf-boot-sweeping");
+    notchFace?.classList.add("nf-iomi-auth");
+    await wait(2000);
+  } else {
+    notchFace?.classList.add("nf-iomi-auth");
+    const authShownAt = Date.now();
+    result = await authPromise;
+    const shown = Date.now() - authShownAt;
+    // All four letters receive a clean beat even when a saved session resolves
+    // instantly. Slow browser sign-in is allowed to hold on the complete word.
+    if (shown < 2200) await wait(2200 - shown);
+  }
 
   if (!result?.ok) {
     clearIomiBootClasses();
@@ -4660,7 +4943,10 @@ function noteSpoken(text) {
       endedTs: speaking ? 0 : Date.now(),
       duringRealtime: Boolean(realtimeActive || realtimeConnecting),
       // Normalising strips the question mark, so remember it separately.
-      asked: /\?["')\]]*\s*$/.test(String(text || "").trim()),
+      /* A question anywhere in it, or an ask without one: "Which one? You
+         have Itish, Itish, Braino." and "Tell me which one is your main." were
+         both questions, and the answers to them were dropped (2026-10-03). */
+      asked: /\?/.test(String(text || "")) || /\b(?:tell me (?:which|what|who|when|where)|which one|let me know|do you want|want me to|should i|shall i)\b/i.test(String(text || "")),
     };
   }
 }
@@ -4687,8 +4973,23 @@ function voiceExplicitlyAddressesBraino(text) {
   if (activeWakeName() === "Brainelle" && BRAINELLE_SCRIPT_RE.test(raw)) return true;
   const normalized = normalizeForVoiceMatch(text);
   if (!normalized) return false;
-  if (/\b(braino|brayno|braino's|breno|braino|raino|bruno)\b/.test(normalized)) return true;
-  return activeWakeName() === "Brainelle" && BRAINELLE_NAME_RE.test(normalized);
+  if (/\b(braino|brayno|braino's|breno|braino|raino|bruno)\b/.test(normalized)) return !nameIsOnlyAMention(raw);
+  return activeWakeName() === "Brainelle" && BRAINELLE_NAME_RE.test(normalized) && !nameIsOnlyAMention(raw);
+}
+
+/* His name said ABOUT him is not calling him (2026-10-03): "after Braino is
+   done asking me a question" and "I have to say Braino every single time" were
+   said to someone else and went in as commands. address-intent.cjs decides by
+   where the name sits; at the start, at the end, or set off by commas calls
+   him. */
+function nameIsOnlyAMention(raw) {
+  let verdict = null;
+  try { verdict = window.brainoMac?.nameIsAddressed?.(raw); } catch (_) { verdict = null; }
+  if (verdict === false) {
+    logRenderer("named.mention_not_call", { text: String(raw || "").replace(/\s+/g, " ").trim().slice(0, 120) });
+    return true;
+  }
+  return false;
 }
 
 /* There used to be a second way to "address" him: a list of ordinary words —
@@ -4768,7 +5069,13 @@ function namedFollowUpWindowOpen(now = Date.now()) {
 
 /* Said TO him, rather than said near him. */
 const SAID_TO_HIM_QUESTION = /^(?:(?:and|so|but|then|also|ok|okay|hmm)[\s,]+)?(?:what|why|how|when|where|which|who|whose|can|could|would|will|should|shall|do|does|did|is|are|was|were|am|have|has|any|anything|tell|show|give|read|explain|find|search|check)\b/i;
-const SAID_TO_HIM_ORDER = /^(?:(?:and|so|but|then|also|now|please|just|ok|okay)[\s,]+)*(?:open|close|quit|play|pause|stop|resume|skip|next|previous|mute|unmute|search|find|look|send|message|text|call|facetime|write|type|make|create|delete|remove|move|copy|paste|save|share|set|change|turn|switch|increase|reduce|lower|raise|repeat|read|summari[sz]e|translate|remind|schedule|book|buy|order|download|install|update|check|try|do|go|take|bring|add|put|keep|start|run|show|tell|explain|note|remember|forget|cancel|undo|retry|continue|carry|give|use|pick|choose|select|scroll|click|press|zoom|explain)\b/i;
+// "navigate to that website" was dropped three times as room talk, and
+// "Yeah, open it" did not count as said to him (2026-09-27).
+const SAID_TO_HIM_ORDER = /^(?:(?:and|so|but|then|also|now|please|just|ok|okay|yes|yeah|yep|yup)[\s,]+)*(?:navigate|visit|browse|google|ask|open|close|quit|play|pause|stop|resume|skip|next|previous|mute|unmute|search|find|look|send|message|text|call|facetime|write|type|make|create|delete|remove|move|copy|paste|save|share|set|change|turn|switch|increase|reduce|lower|raise|repeat|read|summari[sz]e|translate|remind|schedule|book|buy|order|download|install|update|check|try|do|go|take|bring|add|put|keep|start|run|show|tell|explain|note|remember|forget|cancel|undo|retry|continue|carry|give|use|pick|choose|select|scroll|click|press|zoom|explain|enter|exit|leave|activate|deactivate|enable|disable|launch|duplicate|sync|record|mark|unmark|remind|translate|fix|edit|draft|rename|organi[sz]e|clean|empty|reply|forward|mode)\b/i;
+/* An action asked for anywhere in the sentence, softly worded included:
+   "how about showing me", "could you open", "can you play". */
+const ASKS_ABOUT_HIS_DATA = /\b(?:my (?:day|calendar|schedule|timetable|classes?|meetings?|messages?|whatsapps?|emails?|inbox|notes?|files?|attendance|assignments?|deadlines?|tasks?|reminders?|week)|what(?:'s| is) (?:on|due|next)|what did i|where was i|what was i|who (?:texted|messaged|called) me|(?:today|tomorrow|tonight|this week)\b.*\?|\b(?:today|tomorrow)\b)\b/i;
+const ASKS_FOR_AN_ACTION = /\b(?:open|show|play|send|search|find|close|book|call|message|text|click|launch|start|stop|scroll|pull up|bring up|take me|go to|navigate|look up|download)(?:ing|s)?\b/i;
 const SAID_TO_HIM_CORRECTION = /^(?:no|nope|nah|not\s|actually|instead|i meant|i mean|i said|wait|hold on|hang on|sorry|rather|forget it|never ?mind)\b/i;
 
 function saidToBraino(text) {
@@ -4795,24 +5102,118 @@ const BUSY_INTERRUPT = /^(?:stop|wait|cancel|pause|enough|no|nope|shut up|quiet|
 /* What an answer to his waiting question sounds like: short (a name, a yes,
    "the second one"), or plainly said to him. A long sentence that is neither
    is the room. */
+/* "Five words or fewer" used to be enough on its own, and that let the room in:
+   while he waited on "are you safe?", a Hindi question, a line in Urdu and a
+   friend's "say it as a verb" all went through as his answer (2026-09-27).
+   Now short means an answer shape (yes, no, a pick) or a name-sized reply of
+   up to three words that is not a question and not in another script. */
 function answersPendingQuestion(text) {
-  const value = String(text || "").trim().replace(/[.!?,]+$/g, "");
+  const raw = String(text || "").trim();
+  const value = raw.replace(/[.!?,]+$/g, "");
   if (!value) return false;
-  if (value.split(/\s+/).filter(Boolean).length <= 5) return true;
+  const words = value.split(/\s+/).filter(Boolean).length;
+  if (words <= 5 && ANSWER_REPLY.test(value)) return true;
+  if (words <= 3 && /^(?:हाँ|हां|हा|जी|नहीं|नही|ہاں|جی|نہیں)/.test(value)) return true;
+  if (words <= 3 && !/\?\s*$/.test(raw) && !SAID_TO_HIM_QUESTION.test(value) && !/[ऀ-ॿ؀-ۿ]/.test(value)) return true;
   return saidToBraino(value);
 }
 
+/* Words that mean "stop talking", in English and Hindi. */
+const BARGE_STOP = /^(?:(?:hey\s+)?brain(?:o|elle)[\s,.!]*)?(?:stop|wait|no+|nope|enough|hold on|hang on|shut up|quiet|pause|ruko|ruk|bas|chup|arre)\b/i;
+
+/* His voice, lowered while someone else talks, back to full after. */
+let speechDucked = false;
+let speechUnduckTimer = null;
+function duckSpeech(on, why = "") {
+  const level = on ? 0.35 : 1;
+  const apply = (a) => { try { if (a && typeof a.volume === "number") a.volume = level; } catch (_) {} };
+  try { activeSpeechAudios.forEach(apply); } catch (_) {}
+  apply(currentSpeechAudio);
+  if (on && !speechDucked) logRenderer("voice.ducked_for_other_speech", { why });
+  speechDucked = on;
+  clearTimeout(speechUnduckTimer);
+  // If nothing addressed to him arrives, he comes back up by himself.
+  if (on) speechUnduckTimer = setTimeout(() => duckSpeech(false), 2500);
+}
+
 /* Straight after his answer, and clearly meant for him. */
+/* One word that only means something to him: "stop" right after he started
+   the song was dropped as room noise (2026-09-26), and he had to be told
+   again with his name. */
 function followsHisReply(text) {
-  return namedFollowUpWindowOpen() && saidToBraino(text);
+  if (!namedFollowUpWindowOpen()) return false;
+  /* His own voice off the speakers is never your reply to him (4 Oct: "play
+     default only in the next 20 minutes" came in through this window). The
+     mic stays open while he talks now, so this matters more. */
+  if (isSelfEcho(text)) return false;
+  /* A long sentence with no name is a lecture or a room, not a reply
+     (2026-10-06 10:43 UTC: class audio came in here and was typed into
+     Cursor). Past 15 words, only a sentence shaped as said to him counts. */
+  if (String(text || "").trim().split(/\s+/).filter(Boolean).length > 15) {
+    return voiceExplicitlyAddressesBraino(text) || saidToBraino(text);
+  }
+  if (/^(?:stop|pause|play|resume|next|skip|louder|quieter|mute|unmute|back|again)[.!]?$/i.test(String(text || "").trim())) return true;
+  /* In a conversation, a normal sentence is a reply. "I said can you please
+     click on Brabus" and "visually it doesn't work like that" were dropped for
+     not being shaped like orders. Three words and a real speech rate are
+     enough; noise is still caught by looksLikeNoise downstream. */
+  const words = String(text || "").trim().split(/\s+/).filter(Boolean).length;
+  /* Unless something is playing: a reel said "I didn't know the depth… hospital
+     politics…" and it went in as a command (2026-09-25). With media on, only a
+     sentence shaped like it is for him counts. */
+  if (typeof mediaAudioPlaying !== "undefined" && mediaMaybePlaying()) return saidToBraino(text);
+  /* Talking back to what he just said (2026-10-03). "The first chrome
+     profile" answered "Tell me which one is your main", and "But that's wrong,
+     today was a holiday" corrected his answer; both were dropped for not
+     sounding like an order. A short answer, a correction, or a sentence that
+     picks up a word from his reply or from what you asked him is the
+     conversation carrying on. The room does neither. */
+  const value = String(text || "").trim().replace(/[.!?,]+$/g, "");
+  // A short answer only when he actually asked: an "OK" from the room after
+  // a plain statement of his is not a reply.
+  if (words <= 6 && lastSpokenLine?.asked && ANSWER_REPLY.test(value)) return true;
+  if (words >= 2 && /^(?:but|that'?s (?:wrong|not|incorrect)|that is (?:wrong|not)|wrong|incorrect|not true|that'?s not right)\b/i.test(value)) return true;
+  if (words >= 3 && (sharesAWordWithQuestion(value, lastSpokenLine?.text) || sharesAWordWithQuestion(value, rtLastHeardText))) return true;
+  /* A remark counts when it is said TO him. With friends in the room, "words
+     >= 3" let their conversation in as his; "you", "your" and his name are
+     what a sentence aimed at him carries. */
+  return saidToBraino(text) || (words >= 3 && /\b(?:you|your|you're|yours|braino|brainelle)\b/i.test(String(text || "")));
 }
 
 const ANSWER_REPLY = /^(?:yes|yeah|yep|yup|yes please|sure|ok|okay|alright|all right|no|nope|nah|no thanks|not now|go ahead|do it|please do|go for it|cancel|never ?mind|that one|this one|(?:the )?(?:first|second|third|fourth|fifth|last|other)(?: one)?|(?:number )?(?:one|two|three|four|five|1|2|3|4|5))\b/i;
 
 function answersHisQuestion(text) {
-  if (!namedAnswerWindowOpen()) return false;
   const value = String(text || "").trim().replace(/[.!?,]+$/g, "");
-  return value.split(/\s+/).filter(Boolean).length <= 5 && ANSWER_REPLY.test(value);
+  const words = value.split(/\s+/).filter(Boolean).length;
+  if (namedAnswerWindowOpen() && words <= 5 && ANSWER_REPLY.test(value)) return true;
+  /* A real answer to a question he asked is often long. 2026-09-29: "online,
+     offline, or both?" got "both, and like B2B and gifting shops and wedding
+     planners and festive orders and flea stalls and website Instagram
+     Facebook", no name, twenty seconds of speech, and it was dropped: the
+     window was measured to the END of the sentence, and only five-word
+     answers counted. So: he asked, you STARTED speaking within the window
+     after he finished, and it is a real sentence. Not while media plays (a
+     video can answer a question too); looksLikeNoise still runs after this. */
+  const endedTs = lastSpokenLine?.asked ? Number(lastSpokenLine.endedTs) || 0 : 0;
+  if (!endedTs || words < 3) return false;
+  if (typeof mediaAudioPlaying !== "undefined" && mediaMaybePlaying()) return false;
+  const startedAt = rtSpeechStartedAt || Date.now();
+  if (!(startedAt >= endedTs - 500 && startedAt - endedTs <= NAMED_ANSWER_WINDOW_MS)) return false;
+  /* And it has to answer what he asked, not just follow it. The room says
+     long sentences too ("I think he is saying something to the audience").
+     An answer reuses a word from his question: "online, offline, or both?"
+     then "both, and B2B...". A sentence that shares nothing with it is not
+     an answer, however well timed. */
+  return sharesAWordWithQuestion(value, lastSpokenLine?.text);
+}
+
+const ANSWER_STOPWORDS = new Set(["what", "which", "where", "when", "would", "could", "should", "your", "you're", "that", "this", "with", "have", "about", "there", "their", "them", "want", "like", "just", "going", "doing", "right", "then", "than", "from", "into", "will", "does", "okay"]);
+function sharesAWordWithQuestion(answer, question) {
+  const words = (t) => new Set(String(t || "").toLowerCase().match(/[a-z][a-z'-]{3,}/g) || []);
+  const q = words(question);
+  if (!q.size) return false;
+  for (const w of words(answer)) if (!ANSWER_STOPWORDS.has(w) && q.has(w)) return true;
+  return false;
 }
 
 function namedWake(why) {
@@ -5460,14 +5861,22 @@ async function refreshDelegateState() {
 }
 
 function isSelfEcho(text) {
+  /* While a chat reply is still streaming, lastSpokenLine is the PREVIOUS line:
+     this one is only recorded when it ends. With the mic open while he talks
+     (5 Oct), his current words have to count as his too, or he cuts himself
+     off. */
+  const live = normalizeForVoiceMatch(realtimeResponseText || "");
+  if (live && (speaking || currentSpeechAudio || realtimeStreamTts) && isSelfEchoOf(text, live, true)) return true;
+  return isSelfEchoOf(text, lastSpokenLine.text);
+}
+function isSelfEchoOf(text, spoken, playingNow = false) {
   const heard = normalizeForVoiceMatch(text);
-  const spoken = lastSpokenLine.text;
   if (!heard || !spoken) return false;
   // Freshness measured from when he STOPPED talking, and always live while he still is.
   // Anchored to the reply-issued timestamp this expired mid-sentence on a long answer,
   // which is exactly when his voice is loudest in the mic and echo is most likely.
   const sinceVoiceStopped = Date.now() - (lastSpokenLine.endedTs || lastSpokenLine.ts);
-  if (!speaking && sinceVoiceStopped > 10000) return false;
+  if (!playingNow && !speaking && sinceVoiceStopped > 10000) return false;
   if (heard === spoken) return true;
   if (heard.length >= 10 && (spoken.includes(heard) || heard.includes(spoken))) return true;
   const heardWords = new Set(heard.split(" "));
@@ -5524,13 +5933,31 @@ const STOP_TASK_BARE = [
 ];
 const STOP_TASK_BRAINELLE_WAKE = /^(?:hey\s+)?(?:brainelle|brainel|brainell|brinell|brunel|brunelle)\b[\s,.]*/i;
 
-function isStopTaskPhrase(text) {
+/* While a job runs, "stop it" misheard is still stop (30-day log: "Refuse
+   it", "stuff it", "top it", "stopped it", and Hindi ruk / bas). */
+const STOP_TASK_FUZZY = /^(?:refuse it|stuff it|top it|stopped it|stop it|stop that|stop now|ruk(?:o|jao| jao)?|bas(?: karo| kar| bas)?|band karo)$/;
+function stopEditDistance(a, b) {
+  const row = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i += 1) {
+    let prev = row[0];
+    row[0] = i;
+    for (let j = 1; j <= b.length; j += 1) {
+      const keep = row[j];
+      row[j] = Math.min(row[j] + 1, row[j - 1] + 1, prev + (a[i - 1] === b[j - 1] ? 0 : 1));
+      prev = keep;
+    }
+  }
+  return row[b.length];
+}
+
+function isStopTaskPhrase(text, { jobRunning = false } = {}) {
   let rest = String(text || "").trim().replace(/[.!?]+$/g, "").replace(/,/g, " ").replace(/\s+/g, " ");
   if (!rest) return false;
   const addressed = STOP_LISTENING_WAKE.test(rest) || STOP_TASK_BRAINELLE_WAKE.test(rest);
   rest = rest.replace(STOP_LISTENING_WAKE, "").replace(STOP_TASK_BRAINELLE_WAKE, "")
     .replace(STOP_LISTENING_LEAD, "").trim().toLowerCase();
   if (!rest || rest.split(/\s+/).length > 6) return false;
+  if (jobRunning && (STOP_TASK_FUZZY.test(rest) || (rest.split(/\s+/).length <= 3 && stopEditDistance(rest, "stop it") <= 2))) return true;
   if (STOP_TASK_NAMED_JOB.test(rest)) return true;
   return addressed && STOP_TASK_BARE.some((pattern) => pattern.test(rest));
 }
@@ -5566,7 +5993,25 @@ function stopListeningNow(source) {
   logRenderer("voice.stopped", { source });
 }
 
+/* Scripts and accents that are a mishearing here, never Itish: "Što su
+   nasla", "Es muy extraño", "¿...", Thai, Cyrillic, CJK. Devanagari and
+   Urdu stay: that is real Hinglish (see below). */
+const FOREIGN_TRANSCRIPT_RE = /[¿¡]|[\u00C0-\u024F\u1E00-\u1EFF]|[\u0370-\u03FF\u0400-\u04FF\u0530-\u05FF\u0E00-\u0E7F\u1100-\u11FF\u3040-\u30FF\u3400-\u9FFF\uAC00-\uD7AF]/;
+
+const ASKS_ABOUT_MEDIA = /^(?:(?:and|so|ok(?:ay)?|wait|hey)[,\s]+)?(?:which|what|who)(?:'s|\s+is|\s+was|\s+did)?\b.*\b(?:song|track|music|tune|artist|singer|band|album|playing|played|play)\b/i;
+
 function shouldAcceptVoiceTranscript(text) {
+  /* Never while he waits for an answer: "Which Riya?" is answered with a
+     contact name, which is made only of list words. */
+  const awaitingAnswer = hasPendingDelegateFollowup() || namedAnswerWindowOpen();
+  if (!herMode && !awaitingAnswer && isVocabularyEcho(text)) {
+    logRenderer("voice.vocabulary_echo", { text: String(text || "").slice(0, 80) });
+    return false;
+  }
+  if (!herMode && FOREIGN_TRANSCRIPT_RE.test(String(text || ""))) {
+    logRenderer("voice.transcript_foreign", { text: String(text || "").slice(0, 80) });
+    return false;
+  }
   const stats = transcriptStats(text);
   if (!stats.normalized || stats.wordCount === 0) {
     /* Words with no a-z in them. This used to be a silent return false, which
@@ -5578,9 +6023,23 @@ function shouldAcceptVoiceTranscript(text) {
     if (raw && namedModeOn && !herMode && voiceExplicitlyAddressesBraino(raw)) {
       namedWake("name");
       logRenderer("named.awake_other_script", { text: raw.slice(0, 60) });
-    } else if (raw) {
-      logRenderer("voice.transcript_unreadable", { text: raw.slice(0, 120) });
+      return false;
     }
+    /* Hindi, written in Devanagari (or as Urdu) even though English is asked
+       for. It is real speech and the model understands it; dropping it is how
+       two minutes of Hinglish on 2026-09-25 became "he's not listening". Let it
+       through when he is actually listening to you, never to wake him. Other
+       scripts (Tamil, from the same Hindi audio) are a mishearing and stay out. */
+    const words = raw.split(/\s+/).filter(Boolean).length;
+    /* Not in the follow-up window and not while he is busy: that is when
+       friends talk to each other in the room (2026-09-25: "Original task diya
+       hai", "aap ko answer de ga" all went in and each cost 15 to 37 seconds). */
+    const wokenForThis = !namedModeOn || (!namedBusyOnly() && (namedSpeechAwake || Date.now() < namedGraceUntil));
+    if (raw && /[\u0900-\u097F\u0600-\u06FF]/.test(raw) && words >= 2 && (wokenForThis || (hasPendingDelegateFollowup() && words <= 5))) {
+      logRenderer("voice.transcript_hindi_accepted", { chars: raw.length });
+      return true;
+    }
+    if (raw) logRenderer("voice.transcript_unreadable", { text: raw.slice(0, 120) });
     return false;
   }
 
@@ -5616,7 +6075,10 @@ function shouldAcceptVoiceTranscript(text) {
       // His name on its own leaves the on-device match for the sentence after it.
       if (!isBareWakeWord(text)) namedHeardOnDeviceAt = 0;
       namedWake("name");
-    } else if (namedBusyOnly() && !saidToBraino(text) && !BUSY_INTERRUPT.test(String(text || "").trim()) && !answersHisQuestion(text) && !(hasPendingDelegateFollowup() && answersPendingQuestion(text))) {
+    } else if (namedBusyOnly() && !saidToBraino(text) && !BUSY_INTERRUPT.test(String(text || "").trim()) && !answersHisQuestion(text) && !(hasPendingDelegateFollowup() && answersPendingQuestion(text))
+      /* A plain new order while he works ("Open Chrome.", "Open the file.")
+         is a new job, not room talk: it was dropped 2 times in one run. */
+      && !(isLikelyMacActionTranscript(text) && stats.wordCount >= 2 && stats.wordCount <= 12 && /^(?:open|close|quit|play|pause|stop|switch|go to|search|show|send|call|turn|set|mute|maximi[sz]e|minimi[sz]e)\b/i.test(stats.normalized))) {
       /* Open only because he is talking or working. That is when barge-in and
          corrections happen, and also when the room is loudest, so it has to
          sound like it was said to him. */
@@ -5663,8 +6125,18 @@ function shouldAcceptVoiceTranscript(text) {
   // "randomly listen". When media is playing and he is NOT mid-exchange with
   // you, require him to be addressed or given a clear (3+ word) command — bare
   // fragments picked off the speakers are dropped.
-  if ((mediaAudioPlaying || mediaAudioUncertain) && !herMode && !voiceTurnInFlight && !hasPendingDelegateFollowup()) {
-    if (!explicitlyAddressed && (stats.wordCount < 3 || actionLike)) {
+  /* You just said his name, so the next sentence is yours, whatever the
+     speakers might be doing. 2026-09-26: "Braino", then a real sentence, was
+     dropped as speaker bleed because the Spotify check was failing and "not
+     sure if music is playing" counts as playing. He went straight back to
+     waiting for his name while you were still talking to him. */
+  const justWoken = namedModeOn && (namedSpeechAwake || Date.now() < namedGraceUntil);
+  if (mediaMaybePlaying() && !justWoken && !herMode && !voiceTurnInFlight && !hasPendingDelegateFollowup()) {
+    /* A question about what is playing is yours, not the song's (2026-10-05:
+       "Which song did you play?" right after he played Fred again was dropped
+       as bleed because it contains "play"). */
+    const asksAboutMedia = stats.wordCount >= 3 && ASKS_ABOUT_MEDIA.test(String(text || "").trim());
+    if (!explicitlyAddressed && !asksAboutMedia && (stats.wordCount < 3 || actionLike)) {
       logRenderer("voice.media_bleed_ignored", {
         chars: stats.normalized.length,
         actionLike,
@@ -5734,7 +6206,8 @@ function shouldAcceptVoiceTranscript(text) {
     });
     return true;
   }
-  if ((speaking || processing || voiceTurnInFlight) && !addressed) {
+  const plainOrder = isLikelyMacActionTranscript(text) && stats.wordCount >= 2 && stats.wordCount <= 12 && /^(?:open|close|quit|play|pause|stop|switch|go to|search|show|send|call|turn|set|mute|maximi[sz]e|minimi[sz]e)\b/i.test(stats.normalized);
+  if ((speaking || processing || voiceTurnInFlight) && !addressed && !(plainOrder && !speaking)) {
     /* This was the deck's quietest bug: a bare `return false` with no log. Every
        command spoken over him vanished with no record that it had existed, so
        the log showed a silent user and the user saw an agent ignoring them. */
@@ -6381,7 +6854,12 @@ function pointHitsLivePanel(x, y) {
 
 function pointHitsBrainoUi(x, y) {
   const walkerRect = walkerFlip.getBoundingClientRect();
-  if (rectContains(walkerRect, x, y, 18)) return true;
+  if (mascotHide?.mode === "stealth") {
+    // Faint until the mouse comes near, then himself, and touchable.
+    const near = rectContains(walkerRect, x, y, 60);
+    document.body.classList.toggle("mascot-peek", near);
+    if (near && rectContains(walkerRect, x, y, 18)) return true;
+  } else if (mascotHide?.mode !== "hidden" && rectContains(walkerRect, x, y, 18)) return true;
 
   if (brainoCustomizerOpen) {
     const customizerRect = brainoCustomizer.getBoundingClientRect();
@@ -6407,6 +6885,7 @@ function pointHitsBrainoUi(x, y) {
 }
 
 function refreshMousePassthrough(event) {
+  nfUpdateTuck(event.clientX, event.clientY);
   /* Braino OS owns the whole screen while it is up, so the mouse belongs to it
      and to nothing else. Without this the arbiter below handed clicks back to
      whatever was underneath on the first mouse move, which is why PULL BACK
@@ -6450,11 +6929,37 @@ function refreshMousePassthrough(event) {
     setMousePassthrough(false);
     return;
   }
-  setMousePassthrough(!pointHitsBrainoUi(event.clientX, event.clientY));
+  setMousePassthrough(!pointHitsBrainoUi(event.clientX, event.clientY) && !window.__approvalCardHit?.(event.clientX, event.clientY));
+}
+
+// Approval card buttons (approval-card.js) answer exactly like saying it.
+window.__brainoRunDelegate = (text) => runDelegate(String(text || ""), { keepRealtime: realtimeActive });
+
+/* A markdown table, read and shown as plain lines (2026-10-01). The notch
+   printed "| Model | Amazon | Flipkart | |---|---|" verbatim, rows glued on
+   one line, and the voice would have read the pipes. Each row becomes
+   "AirPods 4: Amazon ₹12,009, Flipkart ₹12,009." */
+function mdTablesToLines(text) {
+  let t = String(text || "");
+  if (!/\|[^|\n]+\|/.test(t)) return t;
+  t = t.replace(/\|\s*\|/g, "|\n|");
+  const out = [];
+  let header = null;
+  for (const raw of t.split("\n")) {
+    const row = raw.trim();
+    if (!/^\|.*\|$/.test(row)) { header = null; out.push(raw); continue; }
+    const cells = row.slice(1, -1).split("|").map((c) => c.trim());
+    if (cells.every((c) => !c || /^:?-{2,}:?$/.test(c))) continue;
+    if (!header) { header = cells; continue; }
+    const [first, ...rest] = cells;
+    const parts = rest.map((c, i) => (c ? (header[i + 1] ? `${header[i + 1]} ${c}` : c) : "")).filter(Boolean);
+    out.push(`${first}${parts.length ? `: ${parts.join(", ")}` : ""}.`);
+  }
+  return out.join("\n").replace(/\*\*/g, "");
 }
 
 async function speak(text, options = {}) {
-  const line = String(text || "").trim();
+  const line = mdTablesToLines(String(text || "")).trim();
   if (!line) return;
   // Logged AFTER the empty guard: a whitespace-only reply used to print an OUT
   // line for speech that never happened, which broke IN/OUT pairing when reading
@@ -6476,7 +6981,8 @@ async function speak(text, options = {}) {
   if (showReplyCaption) startReplyCaption(line, generation);
   /* "Talk out loud" off: the reply is shown in the notch and not spoken.
      Her mode and the pitch demo are performances, so they always speak. */
-  const quiet = !options.forceVoice && !herMode && !pitchRunning && !talkOutLoud();
+  /* A typed turn is a quiet turn: shown in the notch, not spoken. */
+  const quiet = Boolean(options.silent) || (!options.forceVoice && !herMode && !pitchRunning && !talkOutLoud());
   speaking = true;
   speakingSilently = quiet;
   setStatus("speaking", "Speaking");
@@ -6543,7 +7049,9 @@ async function speak(text, options = {}) {
         if (generation !== speechGeneration) return;
         const estimatedMs = Math.min(60000, Math.max(900, line.length * 58));
         animateNotchAnswerEstimate(line, generation, estimatedMs);
+        speechViaSystemSayUntil = Date.now() + estimatedMs + 60000;
         await window.brainoMac.systemSay(line);
+        speechViaSystemSayUntil = Date.now() + estimatedMs + 2000;
         if (generation !== speechGeneration) {
           void window.brainoMac.stopSystemSay?.().catch(() => {});
           return;
@@ -6555,7 +7063,9 @@ async function speak(text, options = {}) {
     if (generation === speechGeneration) {
       const estimatedMs = Math.min(60000, Math.max(900, line.length * 58));
       animateNotchAnswerEstimate(line, generation, estimatedMs);
+      speechViaSystemSayUntil = Date.now() + estimatedMs + 60000;
       await window.brainoMac.systemSay(line);
+      speechViaSystemSayUntil = Date.now() + estimatedMs + 2000;
       await new Promise((resolve) => window.setTimeout(resolve, estimatedMs));
     }
   } finally {
@@ -6609,6 +7119,8 @@ async function runDelegate(prompt, options = {}) {
   const delegatePromise = window.brainoMac.delegate(nfShelfWrapPrompt(text), {
     forceBrain: Boolean(options.forceBrain),
     reason: options.reason || "",
+    // Main may hand a sentence back as talk; only a live voice session can answer it.
+    canTalk: Boolean(realtimeActive && rtDc && rtDc.readyState === "open"),
   });
   setStatus("thinking", "Delegating");
   scheduleNotchThinking(text, "Reading the current context and understanding what matters.");
@@ -6630,10 +7142,21 @@ async function runDelegate(prompt, options = {}) {
       hasPendingWorkflow: Boolean(result?.delegateState?.hasPendingWorkflow),
       workflowStage: result?.delegateState?.workflowStage || "",
     });
+    /* Main decided it's talk: the voice session answers, fast, with the shared
+       history. If voice went away meanwhile, main answers the old way. */
+    if (result?.talk) {
+      logRenderer("delegate.talk_handback", { runId });
+      markVoiceLatency("delegate_done", { route: "talk", runId, ok: true, sayChars: 0 });
+      if (await answerViaRealtimeChat(text, { force: true })) return;
+      const again = await window.brainoMac.delegate(nfShelfWrapPrompt(text), { canTalk: false, reason: "talk_fallback" });
+      if (again?.say) { rememberLocalChat("user", text); rememberLocalChat("assistant", again.say); await speak(again.say, { silent: Boolean(options.typed) }); }
+      return;
+    }
     if (result?.delegateState) pendingDelegateState = result.delegateState;
     else await refreshDelegateState();
     rememberLocalChat("user", text);
     if (result?.say) rememberLocalChat("assistant", result.say);
+    noteTurnInRealtime(text, result?.say);
     markVoiceLatency("delegate_done", {
       route: "delegate",
       runId,
@@ -6652,7 +7175,7 @@ async function runDelegate(prompt, options = {}) {
       logRenderer("delegate.superseded_quiet", { runId });
       return;
     }
-    await speak(result?.say || "Done.");
+    await speak(result?.say || "Done.", { silent: Boolean(options.typed) });
     logInteraction({
       kind: "delegate",
       route: "delegate",
@@ -6782,6 +7305,38 @@ function activeMacContextLines() {
   ].filter(Boolean);
 }
 
+/* Words the command transcriber should spell right. Names only: a sentence
+   in the prompt comes back as a transcript when there is only noise. */
+// No "Brainelle": "Braino, Brainelle." is the exact line it wrote over noise.
+const COMMAND_VOCABULARY = ["Braino", "Affective", "AffectiveOS", "HERA", "Laya", "Forge", "Mesa", "Cursor", "Claude", "Cowork", "Blinkit", "Uber", "Pinterest", "Medium", "WhatsApp", "Spotify", "YouTube"];
+const COMMAND_VOCABULARY_SET = new Set(COMMAND_VOCABULARY.map((w) => w.toLowerCase()));
+/* The people you message most, spelled as you save them ("Param", not
+   "Parham"). Fetched once an hour; empty if WhatsApp is not on this Mac. */
+let commandContactNames = [];
+let commandContactNamesAt = 0;
+async function refreshCommandContactNames() {
+  if (Date.now() - commandContactNamesAt < 3600000) return;
+  commandContactNamesAt = Date.now();
+  try {
+    const names = await window.brainoMac?.topContactNames?.();
+    if (Array.isArray(names)) {
+      commandContactNames = names.map((n) => String(n || "").replace(/[^\p{L}\p{N} .'-]/gu, "").trim()).filter((n) => n && n.length <= 30).slice(0, 15);
+    }
+  } catch (_) {}
+}
+void refreshCommandContactNames();
+function commandSpellings() {
+  return [...new Set([...COMMAND_VOCABULARY, ...commandContactNames])];
+}
+
+/* Nothing but words from that list, two or more of them: the prompt read
+   back over noise ("Braino, Brainelle." 2026-09), never a person. */
+function isVocabularyEcho(text) {
+  const words = String(text || "").toLowerCase().match(/[a-z]+/g) || [];
+  const known = new Set([...COMMAND_VOCABULARY_SET, ...commandContactNames.flatMap((n) => n.toLowerCase().match(/[a-z]+/g) || [])]);
+  return words.length >= 2 && words.every((w) => known.has(w));
+}
+
 function buildRealtimeSessionUpdate() {
   if (dictationMode) {
     return {
@@ -6835,6 +7390,7 @@ function buildRealtimeSessionUpdate() {
         "Your primary job is to listen accurately, transcribe the user's command, and let the Mac app execute actions.",
         "When the Mac client explicitly sends response.create for ordinary conversation, answer directly as Braino.",
         "In direct conversation, be warm, emotionally mature, concise, and natural, matching the Braino Chrome extension personality.",
+        "You cannot act from this conversation. Never say you are opening, clicking, showing, playing or doing anything; the Mac app does actions, not you.",
         "If the audio is fan noise, music, a cough, a tiny background word, or side chatter that is not addressed to Braino, do not guess.",
         "Stay in English unless the user explicitly asks otherwise.",
         "Prefer silence over hallucination when the audio is unclear.",
@@ -6869,15 +7425,22 @@ function buildRealtimeSessionUpdate() {
                   // "Hey Braino", and "Vocabulary: Braino, Brainelle." came
                   // back as "Braino, Brainelle." Other scripts are handled by
                   // BRAINO_SCRIPT_RE instead.
-                  "Transcribe the user's direct command to Braino.",
+                  /* Every word, not "the command": asked for a command, it
+                     wrote a short invented one over 17 seconds of real talk
+                     (2026-10-04). The spellings fix "Bruno" for Braino (132
+                     times in 30 days) and "effective" for Affective; the
+                     echo they could cause is dropped by the word-list echo check. */
+                  "Write down exactly what the user says to Braino, every word, in English.",
                   "Ignore music, fans, coughs, accidental noises, and unrelated background speech.",
+                  `Spell these as written when you hear them: ${commandSpellings().join(", ")}.`,
                   "Keep names, app names, URLs, file names, and code tokens intact.",
-                  "If the input is not a clear user command, leave it empty.",
+                  "If nobody is clearly speaking, leave it empty.",
                 ].join(" "),
           },
           turn_detection: {
             type: "semantic_vad",
-            eagerness: "medium",
+            // "low": waits through thinking pauses, still quick on finished sentences.
+            eagerness: herMode ? "medium" : "low",
             create_response: false,
             interrupt_response: true,
           },
@@ -6898,6 +7461,26 @@ function realtimeSurfaceContextKey() {
     context.browserTitle || "",
     context.browserUrl || "",
   ].join("::");
+}
+
+/* Two brains answer you: the voice session for quick chat, and main (HIL,
+   tools, memory) for everything else. Only the voice session remembers what
+   was said in it. 2026-09-26: "How are my commands getting dismissed?" went to
+   main and got a real answer; "How do you know that?" went to the voice
+   session, which had never heard either, and said "You've been quiet a while."
+   So every turn main answers is written into the voice session's conversation
+   too, and the follow-up has something to follow. */
+let rtLastHeardText = "";
+function noteTurnInRealtime(userText, replyText) {
+  const you = String(userText || "").trim();
+  const him = String(replyText || "").trim();
+  if (!you || !him) return;
+  /* Your spoken sentence is already in the session (it heard it); only his
+     answer is missing. A typed one is missing too. */
+  const heard = rtLastHeardText && normalizeForVoiceMatch(rtLastHeardText) === normalizeForVoiceMatch(you);
+  const a = heard || sendRealtimeEvent({ type: "conversation.item.create", item: { type: "message", role: "user", content: [{ type: "input_text", text: you.slice(0, 1200) }] } });
+  const b = a && sendRealtimeEvent({ type: "conversation.item.create", item: { type: "message", role: "assistant", content: [{ type: "output_text", text: him.slice(0, 1500) }] } });
+  logRenderer("realtime.turn_noted", { ok: Boolean(a && b), youChars: you.length, himChars: him.length });
 }
 
 function sendRealtimeEvent(event) {
@@ -6982,20 +7565,24 @@ function createRealtimeResponseWaiter() {
   if (realtimeResponseWaiter?.resolve) {
     realtimeResponseWaiter.resolve({ status: "cancelled", text: realtimeResponseText });
   }
+  /* The timeout settles THIS waiter, never "whichever one is current".
+     2026-10-05 23:40: an earlier chat turn's finally nulled the shared slot,
+     the timeout then found nothing to resolve, and the turn waited forever:
+     stuck on "Thinking", every later sentence dropped as busy, 20 minutes. */
   return new Promise((resolve) => {
-    const timeout = window.setTimeout(() => {
-      resolveRealtimeResponse({
-        status: "timeout",
-        text: realtimeResponseText,
-        errorMessage: "Realtime response timed out.",
-      });
-    }, REALTIME_CHAT_RESPONSE_TIMEOUT_MS);
-    realtimeResponseWaiter = {
+    const self = {
       resolve: (result) => {
         window.clearTimeout(timeout);
         resolve(result);
       },
     };
+    const timeout = window.setTimeout(() => {
+      const result = { status: "timeout", text: realtimeResponseText, errorMessage: "Realtime response timed out." };
+      logRenderer("realtime.chat.timeout", { current: realtimeResponseWaiter === self });
+      if (realtimeResponseWaiter === self) resolveRealtimeResponse(result);
+      else self.resolve(result);
+    }, REALTIME_CHAT_RESPONSE_TIMEOUT_MS);
+    realtimeResponseWaiter = self;
   });
 }
 
@@ -7090,7 +7677,7 @@ function isLikelyMacActionTranscript(text) {
   if (isVoiceModeUtterance(text)) return true;
   if (/\bwhat can you do\b/.test(normalized) && /\b(mac|macbook|desktop|files?|locally|computer|system)\b/.test(normalized)) return true;
   if (/\b(what can you do|who are you|how are you|hello|hi|hey)\b/.test(normalized)) return false;
-  return /\b(open|launch|start|close|quit|demo|organize|organise|clean|sort|rename|move|delete|trash|create|make|new|create folder|make folder|new folder|undo|find|locate|look for|search for|show me|play|playing|pause|resume|spotify|playlist|volume|vol|sound|louder|quieter|mute|reduce|raise|increase|decrease|lower|percent|seconds?|minutes?|shuffle|repeat|loop|queue|rewind|restart|seek|album|artist|listening to|youtube|song|music|chrome|browser|website|tab|gmail|mail|email|notes|note|maps|calendar|drive|docs|pdf|image|video|file|folder|app|application|send|draft|compose|click|point|where is|reply|write|whatsapp|whats app|remember|remind|timer|countdown|touch id|verify|authenticate|come out|come here|show yourself|step out|join me|go back|go home|get back|head back|head home|tuck in|return home|mesa|coursework|assignment|deadline|ram|cpu|memory|storage|disk|space|running out|full|task manager|activity monitor|processes|hogging|eating my|slowing|worth deleting|how many|recover|redundant|bring back|maximize|minimize|snap|half|selected|selection|highlighted|rephrase|rewrite|fix this|mentions|followers|tweet|clip|caption|ship it|x account|ex account|my ex|disturb|bother|check on me|advise|advice|record|recording|meeting|the call|stop recording|wallpaper|desktop background|maps|distance|how far|directions|navigate|route|amazon|shop|options for|research|compare|difference between|send to|my phone|wake word|always listen|call|facetime|face time|dial|watch|tutorial|channel|creator|recommend|read|screen|explain|translate|look at|watching|help me with|summarize|summarise|scroll|download|upload|copy|paste)\b/.test(normalized);
+  return /\b(open|launch|start|close|quit|demo|organize|organise|clean|sort|rename|move|delete|trash|create|make|new|create folder|make folder|new folder|undo|find|locate|look for|search for|show me|play|playing|pause|resume|spotify|playlist|volume|vol|sound|louder|quieter|mute|reduce|raise|increase|decrease|lower|percent|seconds?|minutes?|shuffle|repeat|loop|queue|rewind|restart|seek|album|artist|listening to|youtube|song|music|chrome|browser|website|tab|gmail|mail|email|notes|note|maps|calendar|drive|docs|pdf|image|video|file|folder|app|application|send|draft|compose|click|point|where is|reply|write|whatsapp|whats app|remember|remind|timer|countdown|touch id|verify|authenticate|come out|come here|show yourself|step out|join me|go back|go home|get back|head back|head home|tuck in|return home|mesa|coursework|assignment|deadline|ram|cpu|memory|storage|disk|space|battery|charging|plugged in|running out|full|task manager|activity monitor|processes|hogging|eating my|slowing|worth deleting|how many|recover|redundant|bring back|maximize|minimize|snap|half|selected|selection|highlighted|rephrase|rewrite|fix this|mentions|followers|tweet|clip|caption|ship it|x account|ex account|my ex|disturb|bother|check on me|advise|advice|record|recording|meeting|the call|stop recording|wallpaper|desktop background|maps|distance|how far|directions|navigate|route|amazon|shop|options for|research|compare|difference between|send to|my phone|wake word|always listen|call|facetime|face time|dial|watch|tutorial|channel|creator|recommend|read|screen|explain|translate|look at|watching|help me with|summarize|summarise|scroll|download|upload|copy|paste)\b/.test(normalized);
 }
 
 async function shouldUseRealtimeDirectChat(text) {
@@ -7100,6 +7687,31 @@ async function shouldUseRealtimeDirectChat(text) {
   if (herMode) return normalizeForVoiceMatch(text).length > 0;
   if (hasPendingDelegateFollowup()) return false;
   if (isLikelyMacActionTranscript(text)) return false;
+  /* He asked "What's the plan?" in chat, and the answer, "The plan is that he
+     will put you through intensive questioning…", went to the job planner,
+     which offered to WhatsApp Param (2026-09-28). An answer to his own chat
+     question stays in the chat unless it is plainly an order. */
+  /* 2026-10-05: "Okay, how about showing me this one Behance?" went to chat
+     here, chat said "Clicking over to Behance now", and the real job only
+     started 7 seconds later through the promise net. A request to DO
+     something, worded softly, is still a job: it skips this window and goes
+     to the router below. */
+  if (Date.now() - lastChatQuestionAt < 60000 && !SAID_TO_HIM_ORDER.test(String(text || "").trim())
+    && !ASKS_FOR_AN_ACTION.test(String(text || ""))
+    /* "What does my day look like today?" right after "What's on your mind?"
+       got a guess from chat ("the early access launch?") instead of the
+       timetable (5 Oct). A question about his own day, messages or files
+       needs his data, which only the brain has. */
+    && !ASKS_ABOUT_HIS_DATA.test(String(text || ""))) {
+    /* Stage 4: even inside this window, Laya decides (main says oneBrain). */
+    const one = await window.brainoMac.wantsBrain?.(text)?.catch?.(() => null);
+    if (one?.oneBrain && one.brain) {
+      logRenderer("voice.route.brain", { chars: String(text || "").length, oneBrain: true });
+      return false;
+    }
+    logRenderer("voice.route.chat_followup", { chars: String(text || "").length });
+    return true;
+  }
   /* The same router the typed path uses, asked rather than reimplemented.
    *
    * This function's default was chat, and the main process's default is the
@@ -7323,7 +7935,8 @@ async function answerViaRealtimeChat(prompt, options = {}) {
   // Awaited, and that matters: this became async when it started asking the main
   // process for the routing decision, and !Promise is always false, so an
   // un-awaited guard here would silently stop guarding anything.
-  if (!text || !(await shouldUseRealtimeDirectChat(text))) return false;
+  // force: main already decided this is talk (see result.talk in runDelegate).
+  if (!text || !(options.force ? Boolean(realtimeActive && rtDc && rtDc.readyState === "open") : await shouldUseRealtimeDirectChat(text))) return false;
   // Read the moment from what was just said, before the instructions for this
   // turn are built below.
   macCurrentMoment = macDetectMoment(text);
@@ -7337,7 +7950,11 @@ async function answerViaRealtimeChat(prompt, options = {}) {
    * only talk. It is also what stops him refusing: whether he says "I can't
    * book that from here" or "on it", HIL has independently seen a job in what
    * YOU said, and the job runs either way. */
-  const understandingPromise = lastUnderstanding.text === text && lastUnderstanding.verdict
+  /* Handed back by main as talk (force): HIL already decided it is not a job,
+     so asking again could only start the same job twice. */
+  const understandingPromise = options.force
+    ? Promise.resolve(null)
+    : lastUnderstanding.text === text && lastUnderstanding.verdict
     ? Promise.resolve(lastUnderstanding.verdict)
     : window.brainoMac.understand({ text }).catch((error) => {
       logRenderer("hil.understand.renderer_failed", { error: String(error?.message || error) });
@@ -7419,6 +8036,7 @@ async function answerViaRealtimeChat(prompt, options = {}) {
     if (finalText) noteSpoken(finalText);
     rememberLocalChat("user", text);
     if (finalText) rememberLocalChat("assistant", finalText);
+    if (finalText) void window.brainoMac.noteChat?.({ user: text, assistant: finalText }).catch(() => {});
     /* What HE said, in the log, not just what you said and what HIL decided.
        speak() logs this for the delegate path, but a chat reply is spoken by the
        streamer and never went through speak(), so half of every conversation was
@@ -7430,6 +8048,8 @@ async function answerViaRealtimeChat(prompt, options = {}) {
       console.log(`[Braino 🗣 OUT] (chat) "${finalText.slice(0, 200)}"`);
       logRenderer("voice.out", { text: finalText.slice(0, 200), route: "realtime_chat" });
     }
+    // He asked something in conversation; the answer is conversation too.
+    if (finalText) lastChatQuestionAt = /\?["')\]]*\s*$/.test(finalText.trim()) ? Date.now() : 0;
     if (!silent) {
       if (streamState?.error && !streamState.spoke && finalText && generation === speechGeneration) {
         await speak(finalText);
@@ -7647,6 +8267,9 @@ function stopRealtimeVoice(options = {}) {
   rtPc = null;
   rtDc = null;
   rtMic = null;
+  cleanEarMeterStop();
+  rtDeltaItemId = "";
+  rtWaitFinalSince = 0;
   rtRemoteAudio = null;
   rtUserTranscript = "";
   // A new session starts with no instructions on it, so the next turn must send
@@ -7680,6 +8303,8 @@ function stopRealtimeVoice(options = {}) {
     remoteAudio.remove();
   }
   if (hadRealtime) endRealtimeUsageSession("mac_client_stop");
+  // The next call should be instant too.
+  if (hadRealtime && warmVoiceOn()) scheduleVoiceStandby(1500);
   stopFishWarmKeepAlive();
   if (listening) listening = false;
   if (endingDictation) {
@@ -8324,7 +8949,7 @@ function openTyping(source) {
   /* The window is unfocusable by default, so focus() here does nothing until
      main hands the keyboard over. Without this the field opened and every
      letter went to whatever app was in front. */
-  nfSetZone({ expanded: true, width: NF_COMPACT_SURFACE_WIDTH, height: 150 });
+  refitTyping();
   void window.brainoMac.typingFocus?.(true).then(() => {
     window.setTimeout(() => field.focus(), 40);
   }).catch(() => window.setTimeout(() => field.focus(), 40));
@@ -8333,10 +8958,13 @@ function openTyping(source) {
   return true;
 }
 
+notchFace?.querySelector(".nf-type-field")?.addEventListener("input", () => refitTyping());
+
 function closeTyping(reason) {
   const field = nfTypeField();
   if (!typingOpen) return;
   typingOpen = false;
+  if (field) field.style.height = "";
   if (typingIdleTimer) { window.clearTimeout(typingIdleTimer); typingIdleTimer = 0; }
   notchFace.classList.remove("nf-typing");
   if (field) { field.value = ""; field.blur(); }
@@ -8365,6 +8993,11 @@ async function submitTyped(text) {
     if (!await stopTaskNow("typed", said)) await nothingToStop("typed", said);
     return;
   }
+  const hideAsk = parseMascotHidePhrase(said);
+  if (hideAsk) {
+    await handleMascotHidePhrase(hideAsk, "", "typed");
+    return;
+  }
   const stealthAsk = parseStealthPhrase(said);
   if (stealthAsk) {
     await handleStealthPhrase(stealthAsk, "", "typed");
@@ -8380,7 +9013,7 @@ async function submitTyped(text) {
   const answered = await answerViaRealtimeChat(said, { silent: true });
   /* No realtime session open means no chat path, so the job goes straight to
      his hands rather than being dropped. */
-  if (!answered) await runDelegate(said, { keepRealtime: realtimeActive });
+  if (!answered) await runDelegate(said, { keepRealtime: realtimeActive, typed: true });
 }
 
 let interjectionInFlight = false;
@@ -8415,7 +9048,17 @@ async function stopTaskNow(source, transcript = "") {
   } catch {
     running = false;
   }
-  if (!running && !voiceTurnInFlight) return false;
+  if (!running && !voiceTurnInFlight) {
+    /* Nothing running, but the notch may still be stuck in "Thinking" from a
+       turn that never came back (6 Oct: 20 minutes, and "stop" did nothing).
+       Stop always clears that, even when there is no job. */
+    if (processing || realtimeResponseInFlight || nfThinkingShown()) {
+      releaseStuckTurn("stop_with_nothing_running");
+      if (transcript) await speak("Okay, cleared.");
+      return true;
+    }
+    return false;
+  }
   if (transcript) {
     console.log(`[Braino 🎤 IN] "${transcript}" -> stop the task`);
     nfSetHeard(transcript, { durationMs: 1400 });
@@ -8538,14 +9181,67 @@ async function routeInterjectionIntoRunningJob(transcript) {
   return false;
 }
 
-async function flushRealtimeTranscript(reason, textOverride) {
-  const fromHold = typeof textOverride === "string";
-  let transcript = String(fromHold ? textOverride : (rtUserTranscript || "")).trim();
+/* Is sound actually arriving? A session that opens fine and then hears
+   nothing looks identical in the log whether the room was silent, the mic was
+   muted, or another app had it. This settles it: the level every 3 seconds for
+   the first 30, plus whether macOS muted the track. */
+function watchMicLevel(stream) {
+  try {
+    const track = stream.getAudioTracks()[0];
+    const ctx = new AudioContext();
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = 2048;
+    ctx.createMediaStreamSource(stream).connect(analyser);
+    const buf = new Float32Array(analyser.fftSize);
+    let n = 0;
+    let loudest = 0;
+    const timer = setInterval(() => {
+      analyser.getFloatTimeDomainData(buf);
+      let peak = 0;
+      let sum = 0;
+      for (const v of buf) { const a = Math.abs(v); if (a > peak) peak = a; sum += v * v; }
+      loudest = Math.max(loudest, peak);
+      logRenderer("realtime.mic.level", {
+        peak: Number(peak.toFixed(4)),
+        rms: Number(Math.sqrt(sum / buf.length).toFixed(4)),
+        trackEnabled: Boolean(track?.enabled),
+        trackMuted: Boolean(track?.muted),
+        state: track?.readyState || "",
+      });
+      n += 1;
+      if (n >= 10 || track?.readyState === "ended") {
+        clearInterval(timer);
+        logRenderer("realtime.mic.level_summary", { loudest: Number(loudest.toFixed(4)), silent: loudest < 0.005 });
+        void ctx.close().catch(() => {});
+      }
+    }, 3000);
+  } catch (error) {
+    logRenderer("realtime.mic.level_failed", { error: String(error?.message || error) });
+  }
+}
+
+async function flushRealtimeTranscript(reason, textOverride, opts = {}) {
+  const separateTurn = Boolean(opts.separateTurn);
+  const fromHold = typeof textOverride === "string" && !separateTurn;
+  let transcript = String(typeof textOverride === "string" ? textOverride : (rtUserTranscript || "")).trim();
   if (!fromHold && reason === "speech_stopped" && transcript && !rtTranscriptFinal) {
     scheduleRealtimeTranscriptFlush("waiting_final_transcript", REALTIME_TRANSCRIPT_IDLE_FLUSH_MS);
     return;
   }
-  if (!fromHold) {
+  /* Clean hearing: partial words never become a command on their own. The
+     final transcript carries the confidence the drop check needs, and it
+     usually lands within milliseconds of the last partial. */
+  if (!fromHold && !separateTurn && !dictationMode && cleanEarApplies() && transcript && !rtTranscriptFinal
+    && (reason === "transcript_idle" || reason === "waiting_final_transcript")) {
+    if (!rtWaitFinalSince) rtWaitFinalSince = Date.now();
+    if (Date.now() - rtWaitFinalSince < CLEAN_EAR_FINAL_WAIT_MS) {
+      scheduleRealtimeTranscriptFlush("waiting_final_transcript", 300);
+      return;
+    }
+    logRenderer("clean_ear.final_missing", { waitedMs: Date.now() - rtWaitFinalSince });
+  }
+  if (!separateTurn) rtWaitFinalSince = 0;
+  if (!fromHold && !separateTurn) {
     rtUserTranscript = "";
     rtTranscriptFinal = false;
     clearRealtimeTranscriptFlush();
@@ -8555,26 +9251,46 @@ async function flushRealtimeTranscript(reason, textOverride) {
   // a wake) may have passed by now, so the whole line keeps that verdict.
   let heldWasAccepted = fromHold;
   if (!fromHold && !dictationMode && heldFragment) {
+    /* A piece held BEFORE it was judged (slow speech, 2026-10-05) has no
+       verdict yet: the joined sentence is judged as a whole, so his name
+       anywhere in it lets all of it in. */
+    const heldAccepted = heldFragment.accepted !== false;
     if (transcript) {
-      heldWasAccepted = true;
-      logRenderer("voice.fragment_joined", { heldWords: heldFragment.text.split(/\s+/).length });
+      heldWasAccepted = heldAccepted;
+      logRenderer("voice.fragment_joined", { heldWords: heldFragment.text.split(/\s+/).length, gated: heldAccepted ? "after" : "before" });
       transcript = `${heldFragment.text} ${transcript}`.replace(/\s+/g, " ").trim();
       clearHeldFragment();
     } else {
       // A turn with no words (a cough, a breath): the held part goes now.
       const held = heldFragment.text;
       clearHeldFragment();
-      void flushRealtimeTranscript("held_fragment", held);
+      void flushRealtimeTranscript("held_fragment", held, heldAccepted ? {} : { separateTurn: true });
       return;
     }
   }
+  /* Slow, natural speech (2026-10-05, 07:27): every thinking pause ended a
+     turn and each piece was judged alone, so "The good thing is when you
+     speak in natural language," and "Okay, and then once that is done" were
+     thrown away for having no name in them. An unfinished piece now waits
+     for the rest BEFORE it is judged. Never a stop, never his name alone,
+     never an answer he is waiting for, never twice past the max hold. */
+  if (!fromHold && !separateTurn && !opts.preAccepted && !dictationMode && !herMode && transcript
+    && !namedAnswerWindowOpen() && !hasPendingDelegateFollowup()
+    && !isBareWakeWord(transcript) && !BARGE_STOP.test(transcript) && !VOICE_FILLER_ONLY.test(transcript)
+    && !isStopTaskPhrase(transcript, { jobRunning: voiceTurnInFlight }) && !isStopListeningPhrase(transcript)
+    && !parseStealthPhrase(transcript) && !parseMascotHidePhrase(transcript)
+    && looksUnfinished(transcript)) {
+    nfSetHeard(transcript);
+    holdFragment(transcript, { accepted: false });
+    return;
+  }
   const accepted = dictationMode
     ? Boolean(transcript)
-    : (heldWasAccepted ? Boolean(transcript) : shouldAcceptVoiceTranscript(transcript));
+    : ((heldWasAccepted || opts.preAccepted) ? Boolean(transcript) : shouldAcceptVoiceTranscript(transcript));
   // That sentence has been judged; the next one is judged on its own start.
   if (transcript) namedSpeechAwake = false;
   /* Your half of the exchange. His reply to it opens the follow-up window. */
-  if (accepted && !dictationMode) lastUserTurnAt = Date.now();
+  if (accepted && !dictationMode) { lastUserTurnAt = Date.now(); rtLastHeardText = transcript; }
   logRenderer("realtime.transcript.flush", {
     reason,
     transcriptChars: transcript.length,
@@ -8600,22 +9316,28 @@ async function flushRealtimeTranscript(reason, textOverride) {
     return;
   }
   // OpenAI decided whether this was for him; HERA says what the words were.
-  if (accepted) transcript = await heraCommandText(transcript);
+  if (accepted && !opts.fromHera) transcript = await heraCommandText(transcript);
   else if (heraVoice.on) heraVoice.turnRotate = null;
   if (isStopListeningPhrase(transcript)) {
     console.log(`[Braino 🎤 IN] "${transcript}" -> stop listening`);
     logRenderer("voice.stop_phrase", { transcript: transcript.slice(0, 160), voiceTurnInFlight });
     nfSetHeard(transcript, { durationMs: 1200 });
     voiceTurnInFlight = false;
+    ambientQuietUntil = Date.now() + AMBIENT_AWAKE_WINDOW_MS;
     stopListeningNow("voice_phrase");
     return;
   }
-  if (isStopTaskPhrase(transcript)) {
+  if (isStopTaskPhrase(transcript, { jobRunning: voiceTurnInFlight })) {
     if (await stopTaskNow("voice_phrase", transcript)) return;
     if (accepted) {
       await nothingToStop("voice_phrase", transcript);
       return;
     }
+  }
+  const hideAsk = accepted ? parseMascotHidePhrase(transcript) : "";
+  if (hideAsk) {
+    await handleMascotHidePhrase(hideAsk, transcript, "voice");
+    return;
   }
   const stealthAsk = accepted ? parseStealthPhrase(transcript) : "";
   if (stealthAsk) {
@@ -8626,10 +9348,10 @@ async function flushRealtimeTranscript(reason, textOverride) {
      follow-up he is waiting on — those are often a single word — and never
      twice. */
   const answering = namedAnswerWindowOpen();
-  if (accepted && !dictationMode && !fromHold && !answering && !hasPendingDelegateFollowup()
+  if (accepted && !dictationMode && !fromHold && !separateTurn && !answering && !hasPendingDelegateFollowup()
     && !isBareWakeWord(transcript) && looksUnfinished(transcript)) {
     nfSetHeard(transcript);
-    holdFragment(transcript);
+    holdFragment(transcript, { accepted: true });
     return;
   }
   /* Talking to him while he works is not always a new job.
@@ -8793,6 +9515,319 @@ function setRealtimeMicEnabled(on) {
   });
 }
 
+/* ── Clean hearing (switch: brainoCleanEar, on unless set to "0") ──────────
+ *
+ * The 2026-10-04 audit: words you never said came from three places. His own
+ * voice leaking past the browser's echo cancelling (a 14.5s "turn" inside a
+ * 47s answer), room sound the transcriber turned into words ("Gelek",
+ * "Opsiona", "Open the door"), and a late transcript landing on the next turn.
+ * So, in voice mode only (never dictation, never her mode):
+ *   1. the mic sends nothing while he is audible, plus a short ring-out tail.
+ *      "Stop" still cuts him off through HERA, which hears it on the Mac;
+ *   2. a turn the mic never heard a voice in is dropped, and so is one the
+ *      transcriber itself was unsure of (its own word confidence);
+ *   3. each transcript stays with the turn it belongs to.
+ * Off, every line below is skipped and voice behaves exactly as before. */
+const CLEAN_EAR_ECHO_TAIL_MS = 450;
+const CLEAN_EAR_MIN_RMS = 0.008;
+const CLEAN_EAR_FLOOR_X = 2.5;
+/* Never higher than this, and the room is only learned from quiet samples:
+   45 seconds of nonstop talk taught the floor his voice, and the turn came
+   back "no voice on the mic" (2026-10-04, 21:05). */
+const CLEAN_EAR_MAX_THRESHOLD = 0.02;
+const CLEAN_EAR_FLOOR_LEARN_BELOW = 0.012;
+const CLEAN_EAR_MIN_VOICED = 3; // 50ms samples, so 150ms of voice
+const CLEAN_EAR_MIN_LOGPROB = -1.0;
+const CLEAN_EAR_FINAL_WAIT_MS = 3000;
+const CLEAN_EAR_INCLUDE_EVENT_ID = "clean_ear_include";
+let cleanEarMuted = false;
+let cleanEarMeter = null;
+let rtDeltaItemId = "";
+/* Turns already sent from HERA's words. OpenAI's transcript of them is only
+   logged next to HERA's, never sent: one source, no second wait. */
+const heraSentItems = new Set();
+const HERA_SENDS_COMMAND = false;
+const HERA_DIRECT_WAIT_MS = 350;
+let rtWaitFinalSince = 0;
+
+function cleanEarOn() { try { return localStorage.getItem("brainoCleanEar") !== "0"; } catch (_) { return true; } }
+function cleanEarApplies() { return cleanEarOn() && !dictationMode && !herMode; }
+function cleanEarMuteWhileSpeaking() { try { return localStorage.getItem("brainoMuteWhileSpeaking") === "1"; } catch (_) { return false; } }
+
+/* Muted only while his voice is ACTUALLY coming out of the speakers, judged
+   from the audio elements themselves, never from the "speaking" flags.
+   2026-10-05 00:24: a flag stayed set after a chat reply was handed to the
+   delegate, and the mic stayed shut for 85 seconds: he was deaf until the
+   hotkey. A stuck flag can no longer do that; it is logged instead. */
+let cleanEarLastPlayingAt = 0;
+/* The system voice plays outside this page, so no audio element shows it. */
+let speechViaSystemSayUntil = 0;
+const STUCK_SPEAKING_MS = 6000;
+let speakingFlagSince = 0;
+
+/* A turn stuck "in flight" (6 Oct, 23:40): a quick-chat reply never came back,
+   so processing / voiceTurnInFlight / realtimeResponseInFlight stayed on. That
+   one state showed "Thinking" for 20 minutes, made him treat himself as busy
+   and ignore everything not said to him, and made "stop" find nothing to stop.
+   Nothing playing, nothing streaming in, and no job running in main for 45
+   seconds: the turn is over, whatever it was waiting for. */
+const STUCK_TURN_MS = 45000;
+let stuckTurnSince = 0;
+let stuckTurnChecking = false;
+let lastReplyActivityAt = 0;
+function releaseStuckTurn(reason) {
+  logRenderer("turn.stuck_released", { reason, processing, voiceTurnInFlight, realtimeResponseInFlight, stuckMs: stuckTurnSince ? Date.now() - stuckTurnSince : 0 });
+  stuckTurnSince = 0;
+  delegateGeneration += 1;
+  voiceTurnToken += 1;
+  voiceTurnInFlight = false;
+  processing = false;
+  if (realtimeResponseInFlight) { try { resolveRealtimeResponse({ status: "cancelled", text: realtimeResponseText, errorMessage: reason }); } catch (_) {} }
+  realtimeResponseInFlight = false;
+  try { cancelPendingNotchThinking(); } catch (_) {}
+  try { nfSetThinking(""); } catch (_) {}
+  setStatus(realtimeActive ? "listening" : "ready", realtimeActive ? "Listening" : "Double Space to show/hide");
+}
+async function checkStuckTurn(now, playing) {
+  const inFlight = processing || voiceTurnInFlight || realtimeResponseInFlight;
+  if (!inFlight || playing || now - lastReplyActivityAt < STUCK_TURN_MS) { if (!inFlight) stuckTurnSince = 0; return; }
+  if (!stuckTurnSince) { stuckTurnSince = now; return; }
+  if (now - stuckTurnSince < STUCK_TURN_MS || stuckTurnChecking) return;
+  stuckTurnChecking = true;
+  try {
+    const job = await window.brainoMac.jobRunning().catch(() => null);
+    if (job?.running) { stuckTurnSince = now; return; } // a real job is working: not stuck
+    releaseStuckTurn("watchdog");
+  } finally { stuckTurnChecking = false; }
+}
+
+/* `speaking` stuck on with nothing playing (2026-10-05, 07:17-07:20 and
+   00:24): a reply handed to the delegate, or a playback promise that never
+   settled, skipped every reset. While stuck, "Hey Braino" was taken for his
+   own voice and other voices only ducked him. Nothing playing, nothing being
+   fetched, no system voice, for six seconds: he is not speaking. */
+function releaseStuckSpeakingFlag(now, playing) {
+  const flagged = (speaking && !speakingSilently) || Boolean(activeSpeechJobGeneration) || Boolean(realtimeStreamTts);
+  const busy = playing || speakingSilently || ttsAbortControllers.size > 0 || now < speechViaSystemSayUntil || realtimeResponseInFlight;
+  if (!flagged || busy) { speakingFlagSince = 0; return; }
+  if (!speakingFlagSince) { speakingFlagSince = now; return; }
+  if (now - speakingFlagSince < STUCK_SPEAKING_MS || now - cleanEarLastPlayingAt < STUCK_SPEAKING_MS) return;
+  logRenderer("speech.stuck_flag_released", {
+    speaking, activeSpeechJobGeneration, hasStream: Boolean(realtimeStreamTts), stuckMs: now - speakingFlagSince,
+  });
+  speakingFlagSince = 0;
+  speaking = false;
+  activeSpeechJobGeneration = 0;
+  realtimeStreamTts = null;
+  noteSpeechEnded();
+  setTalk(false);
+  if (realtimeActive && !processing) setStatus("listening", "Listening");
+}
+let cleanEarStaleLogged = false;
+function cleanEarAudioPlaying() {
+  if (realtimeVoiceEngine === "realtime") return brainoAudible();
+  const playing = (audio) => Boolean(audio) && !audio.paused && !audio.ended;
+  if (playing(currentSpeechAudio)) return true;
+  for (const audio of activeSpeechAudios) if (playing(audio)) return true;
+  return false;
+}
+
+window.setInterval(() => {
+  const now = Date.now();
+  const playing = cleanEarAudioPlaying();
+  if (playing) { cleanEarLastPlayingAt = now; cleanEarStaleLogged = false; }
+  else if (brainoAudible() && now - cleanEarLastPlayingAt > 5000 && speakingFlagSince && now - speakingFlagSince > 5000 && !cleanEarStaleLogged) {
+    cleanEarStaleLogged = true;
+    logRenderer("clean_ear.stale_audible", {
+      speaking, speakingSilently, activeSpeechJobGeneration,
+      hasStream: Boolean(realtimeStreamTts), audios: activeSpeechAudios.size, hasCurrent: Boolean(currentSpeechAudio),
+    });
+  }
+  releaseStuckSpeakingFlag(now, playing);
+  void checkStuckTurn(now, playing);
+  const tail = cleanEarLastPlayingAt && now - cleanEarLastPlayingAt < CLEAN_EAR_ECHO_TAIL_MS;
+  /* The mic stays OPEN while he speaks (5 Oct). Muting it here meant you could
+     not talk over him at all, which was the first thing Braino ever got right.
+     His own words coming back are already dropped by isSelfEcho. Muting is
+     opt-in: localStorage brainoMuteWhileSpeaking = "1". */
+  const want = Boolean(rtMic) && realtimeActive && cleanEarApplies() && cleanEarMuteWhileSpeaking() && (playing || Boolean(tail));
+  if (want === cleanEarMuted) return;
+  cleanEarMuted = want;
+  setRealtimeMicEnabled(!want);
+  logRenderer("clean_ear.mic", { muted: want });
+}, 80);
+
+/* The voice glow: a soft light inside the notch edge that follows your
+   voice while you speak, so you can see he hears you without rough words.
+   Same notch shape, nothing outside it. */
+let cleanEarGlowLevel = 0;
+function cleanEarPaintVoiceGlow(rms) {
+  const face = document.getElementById("notch-face");
+  if (!face) return;
+  const on = cleanEarApplies() && rtUserSpeakingNow && !cleanEarMuted;
+  const target = on ? Math.min(1, Math.max(0, (rms - CLEAN_EAR_MIN_RMS) / 0.08)) : 0;
+  cleanEarGlowLevel += (target - cleanEarGlowLevel) * 0.35;
+  face.classList.toggle("nf-voice-hearing", on);
+  face.style.setProperty("--nf-voice-level", cleanEarGlowLevel.toFixed(3));
+}
+
+function cleanEarMeterStop() {
+  const meter = cleanEarMeter;
+  cleanEarMeter = null;
+  if (!meter) return;
+  window.clearInterval(meter.timer);
+  void meter.ctx.close().catch(() => {});
+  document.getElementById("notch-face")?.classList.remove("nf-voice-hearing");
+}
+
+/* What the mic itself heard, 20 times a second, for the last minute. */
+function cleanEarMeterStart(stream) {
+  cleanEarMeterStop();
+  try {
+    const ctx = new AudioContext();
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = 1024;
+    ctx.createMediaStreamSource(stream).connect(analyser);
+    const meter = { ctx, analyser, buf: new Float32Array(analyser.fftSize), floor: 0.004, samples: [], timer: 0, everHeard: false };
+    meter.timer = window.setInterval(() => {
+      analyser.getFloatTimeDomainData(meter.buf);
+      let power = 0;
+      for (const v of meter.buf) power += v * v;
+      const rms = Math.sqrt(power / meter.buf.length);
+      if (rms > 0) meter.everHeard = true;
+      const threshold = Math.min(CLEAN_EAR_MAX_THRESHOLD, Math.max(CLEAN_EAR_MIN_RMS, meter.floor * CLEAN_EAR_FLOOR_X));
+      const voiced = !cleanEarMuted && rms >= threshold;
+      if (!voiced && !cleanEarMuted && rms > 0 && rms < CLEAN_EAR_FLOOR_LEARN_BELOW) meter.floor = (meter.floor * 0.97) + (rms * 0.03);
+      const now = Date.now();
+      meter.samples.push([now, voiced ? 1 : 0]);
+      cleanEarPaintVoiceGlow(rms);
+      while (meter.samples.length && now - meter.samples[0][0] > 60000) meter.samples.shift();
+    }, 50);
+    void ctx.resume().catch(() => {});
+    cleanEarMeter = meter;
+    logRenderer("clean_ear.meter_started", { state: ctx.state });
+  } catch (error) {
+    logRenderer("clean_ear.meter_failed", { error: errorForLog(error) });
+  }
+}
+
+/* Voiced samples during the current turn, or null when the meter cannot be
+   trusted (none, or it has only ever read silence): no meter never drops. */
+let cleanEarMeterWhy = "";
+function cleanEarVoicedSamples() {
+  const meter = cleanEarMeter;
+  cleanEarMeterWhy = !meter ? "no_meter" : !meter.everHeard ? `silent_${meter.ctx?.state}_${meter.samples.length}` : !rtSpeechStartedAt ? "no_start" : "";
+  if (cleanEarMeterWhy) return null;
+  const now = Date.now();
+  const from = rtSpeechStartedAt - 700;
+  const to = (rtUserStoppedAt > rtSpeechStartedAt ? rtUserStoppedAt : now) + 300;
+  const inTurn = meter.samples.filter(([t]) => t >= from && t <= to);
+  if (inTurn.length < 3) { cleanEarMeterWhy = `few_${inTurn.length}_of_${meter.samples.length}`; return null; }
+  return inTurn.reduce((sum, [, voiced]) => sum + voiced, 0);
+}
+
+/* What you saw is what is sent, the moment you stop (2026-10-04): no waiting
+   for OpenAI's transcript, then swapping words in front of you. Only when
+   the sentence is clearly allowed in without the name check, because HERA
+   writes "Braino" as "we don't"; otherwise OpenAI's path runs as before. */
+/* Mostly words he is not saying = a person, not his voice through the
+   speakers. With no line of his known, never: a guess here cuts him off. */
+function heraTalksOverHim(text) {
+  const heard = normalizeForVoiceMatch(text).split(" ").filter(Boolean);
+  if (heard.length < 3) return false;
+  const his = new Set(`${lastSpokenLine.text || ""} ${normalizeForVoiceMatch(realtimeResponseText || "")}`.split(" ").filter(Boolean));
+  if (!his.size) return false;
+  const yours = heard.filter((word) => !his.has(word)).length;
+  return yours / heard.length >= 0.6;
+}
+
+/* The same "was it said to him" test the transcript path uses for barge-in. */
+function heraMeantForHim(text) {
+  const soFar = String(text || "").trim();
+  return voiceExplicitlyAddressesBraino(soFar) || BARGE_STOP.test(soFar)
+    || (soFar.split(/\s+/).length >= 2 && saidToBraino(soFar) && !isSelfEcho(soFar));
+}
+
+function heraDirectAllowed(text) {
+  if (!namedModeOn || herMode) return true;
+  if (namedHeardOnDeviceAt > 0 && Date.now() - namedHeardOnDeviceAt <= NAMED_ON_DEVICE_MATCH_MS) return true;
+  if (voiceExplicitlyAddressesBraino(text)) return true;
+  return namedWindowOpen() || answersHisQuestion(text) || followsHisReply(text) || hasPendingDelegateFollowup();
+}
+
+/* HERA turns waiting only for OpenAI to confirm the name, and OpenAI copies
+   that arrived first. OpenAI's words are a yes/no on "was he addressed",
+   never shown and never sent: one text on screen, one text sent. */
+const heraAwaitingName = new Map();
+const heraOpenaiCopy = new Map();
+
+function heraSendAfterName(itemId, heraText, openaiText) {
+  const ok = Boolean(String(openaiText || "").trim()) && shouldAcceptVoiceTranscript(openaiText);
+  logRenderer("voice.hera_name_check", { ok, openai: String(openaiText || "").slice(0, 200) });
+  if (ok) void flushRealtimeTranscript("hera_after_name", heraText, { separateTurn: true, fromHera: true, preAccepted: true });
+  else setStatus("listening", "Listening");
+}
+
+async function heraDirectTurn(itemId, liveText, request) {
+  if (!itemId) return;
+  // From here OpenAI never paints or sends this turn.
+  heraSentItems.add(itemId);
+  const startedAt = Date.now();
+  // The closing segment is HERA's final decode of the turn; a moment, never longer.
+  while (request && !request.done && Date.now() - startedAt < HERA_DIRECT_WAIT_MS) {
+    await new Promise((resolve) => window.setTimeout(resolve, 40));
+  }
+  const words = (value) => String(value || "").trim().split(/\s+/).filter(Boolean).length;
+  const segment = String(request?.text || "").trim();
+  const text = segment && words(segment) >= words(liveText) * 0.8 ? segment : liveText;
+  const voiced = cleanEarVoicedSamples();
+  if (voiced !== null && voiced < CLEAN_EAR_MIN_VOICED) {
+    logRenderer("clean_ear.turn", { source: "hera", voiced, drop: true, why: "no_voice_on_mic", text: text.slice(0, 120) });
+    return;
+  }
+  heraVoice.turnText = "";
+  // Checked after the wait, so the on-device name match has had its moment.
+  if (heraDirectAllowed(text)) {
+    logRenderer("voice.hera_direct", { waitedMs: Date.now() - startedAt, voiced, words: words(text), hera: text.slice(0, 400) });
+    void flushRealtimeTranscript("hera_direct", text, { separateTurn: true, fromHera: true });
+    return;
+  }
+  if (heraOpenaiCopy.has(itemId)) {
+    const openaiText = heraOpenaiCopy.get(itemId);
+    heraOpenaiCopy.delete(itemId);
+    heraSendAfterName(itemId, text, openaiText);
+    return;
+  }
+  heraAwaitingName.set(itemId, text);
+  logRenderer("voice.hera_waiting_name", { words: words(text), hera: text.slice(0, 400) });
+}
+
+function cleanEarVerdict(event, text, { localWindow, heraWords = 0 }) {
+  const value = String(text || "").trim();
+  if (!value) return { drop: false };
+  const logprobs = Array.isArray(event?.logprobs)
+    ? event.logprobs.map((entry) => Number(entry?.logprob)).filter(Number.isFinite)
+    : [];
+  const meanLogprob = logprobs.length ? logprobs.reduce((a, b) => a + b, 0) / logprobs.length : null;
+  const voiced = localWindow ? cleanEarVoicedSamples() : null;
+  let why = "";
+  if (voiced !== null && voiced < CLEAN_EAR_MIN_VOICED) why = "no_voice_on_mic";
+  // OpenAI unsure of its own words is not "nobody spoke" when HERA heard a sentence.
+  else if (meanLogprob !== null && meanLogprob < CLEAN_EAR_MIN_LOGPROB && heraWords < 3) why = "transcriber_unsure";
+  logRenderer("clean_ear.turn", {
+    meanLogprob: meanLogprob === null ? null : Number(meanLogprob.toFixed(3)),
+    voiced,
+    heraWords: heraWords || undefined,
+    meter: voiced === null && localWindow ? cleanEarMeterWhy : undefined,
+    words: value.split(/\s+/).length,
+    drop: Boolean(why),
+    why: why || undefined,
+    // Dropped lines in full, so a real sentence eaten by this is visible.
+    text: why ? value.slice(0, 120) : undefined,
+  });
+  return { drop: Boolean(why), why };
+}
+
 function handleRealtimeEvent(event) {
   if (!event?.type) return;
   if (![
@@ -8832,9 +9867,9 @@ function handleRealtimeEvent(event) {
   }
 
   if (event.type === "input_audio_buffer.speech_started") {
+    try { window.brainoMac?.noteSpeechStarted?.(); } catch (_) {}
     markRealtimeActivity("speech_started", { schedule: false });
     startVoiceLatencyTurn("speech_started");
-    liveCapDisplayed = ""; // fresh turn, fresh caption slate
     if (dictationMode) {
       dictationSpeechActive = true;
     } else {
@@ -8862,6 +9897,14 @@ function handleRealtimeEvent(event) {
       || Boolean(realtimeStreamTts)
       || activeSpeechAudios.size > 0
       || ttsAbortControllers.size > 0;
+    /* A voice started while he is talking. In a room that is usually not you:
+       84 cut-offs on 2026-09-25, 82 of them by other voices. So he lowers his
+       voice and listens; the words decide (see the transcript delta below).
+       Only with named mode off, or in dictation, does sound alone still stop him. */
+    if (audiblyTalking && namedModeOn && !herMode && !dictationMode) {
+      duckSpeech(true, "speech_started");
+      return;
+    }
     if (audiblyTalking || realtimeResponseInFlight) {
       logRenderer("realtime.barge_in", {
         via: "speech_started",
@@ -8895,6 +9938,7 @@ function handleRealtimeEvent(event) {
     markRealtimeActivity("speech_stopped", { schedule: false });
     markVoiceLatency("speech_stopped");
     rtUserSpeakingNow = false;
+    rtUserStoppedAt = Date.now();
     // The audio clock when OpenAI sends it, our own clock when it does not.
     if (rtSpeechStartedAt) {
       rtLastSpeechMs = Math.max(0, Number.isFinite(event.audio_end_ms) && rtSpeechAudioStartMs !== null
@@ -8908,7 +9952,15 @@ function handleRealtimeEvent(event) {
         heraVoice.earlyText = heraVoiceLiveText();
         heraVoice.early = false;
       }
-      heraVoiceRotate("turn_end");
+      // The turn's words as HERA heard them, kept only if his voice was not in them.
+      const heraClean = !heraVoice.dirty && !heraVoice.clipped;
+      const heraLive = heraClean ? heraVoiceLiveText() : "";
+      heraVoice.turnText = heraLive;
+      const heraRequest = heraVoiceRotate("turn_end");
+      /* Off (2026-10-05, 21:42 UTC): sent as the command, HERA turned "Braino"
+         into "you know" and "tabs" into "tariffs", and OpenAI had every word
+         right. HERA shows your words live; OpenAI's words are what is sent. */
+      if (HERA_SENDS_COMMAND && heraLive && cleanEarApplies()) void heraDirectTurn(event.item_id, heraLive, heraRequest);
     }
     if (dictationMode) {
       dictationSpeechActive = false;
@@ -8928,6 +9980,12 @@ function handleRealtimeEvent(event) {
 
   if (event.type === "conversation.item.input_audio_transcription.delta") {
     const delta = typeof event.delta === "string" ? event.delta : "";
+    if (!dictationMode && heraSentItems.has(String(event.item_id || ""))) return;
+    if (delta && !dictationMode && cleanEarApplies() && event.item_id && event.item_id !== rtDeltaItemId) {
+      // A new turn's first words: the last turn's partial text is not this one's.
+      if (rtDeltaItemId) rtUserTranscript = "";
+      rtDeltaItemId = event.item_id;
+    }
     if (delta) {
       /* Noise that came back as words ("C++" out of four seconds of room
          sound) neither cuts him off nor shows up as something you said. The
@@ -8936,7 +9994,14 @@ function handleRealtimeEvent(event) {
         && looksLikeNoise(`${rtUserTranscript}${delta}`, rtLastSpeechMs);
       // Second tripwire: if user words are arriving while any audio is still
       // playing, cut the speech even if speech_started was missed or mishandled.
-      if (!noiseSoFar && (speaking || currentSpeechAudio || realtimeStreamTts)) {
+      const soFar = `${rtUserTranscript}${delta}`.trim();
+      const meantForHim = !namedModeOn || herMode || dictationMode
+        || voiceExplicitlyAddressesBraino(soFar) || BARGE_STOP.test(soFar)
+        || (soFar.split(/\s+/).length >= 2 && saidToBraino(soFar) && !isSelfEcho(soFar));
+      if (!noiseSoFar && !meantForHim && (speaking || currentSpeechAudio || realtimeStreamTts)) {
+        // Someone else talking, or his own voice: keep going, a little quieter.
+        duckSpeech(true, "not_for_him");
+      } else if (!noiseSoFar && (speaking || currentSpeechAudio || realtimeStreamTts)) {
         logRenderer("realtime.barge_in", {
           via: "transcript_delta",
           speaking,
@@ -8958,7 +10023,7 @@ function handleRealtimeEvent(event) {
         rtUserTranscript += delta;
         if (herMode) window.HerMode?.setHeard(rtUserTranscript.trim());
         // HERA is already showing these words, earlier; two sources in one box flicker.
-        if (!heraVoice.on && !noiseSoFar) nfSetHeard(rtUserTranscript.trim());
+        if (!heraVoice.on && !noiseSoFar && !cleanEarApplies()) nfSetHeard(rtUserTranscript.trim());
         scheduleRealtimeTranscriptFlush("transcript_idle", REALTIME_TRANSCRIPT_IDLE_FLUSH_MS);
       }
     }
@@ -8984,7 +10049,39 @@ function handleRealtimeEvent(event) {
       }
       return;
     }
-    rtUserTranscript = String(event.transcript || rtUserTranscript || "");
+    if (cleanEarApplies() && heraSentItems.has(String(event.item_id || ""))) {
+      const itemId = String(event.item_id || "");
+      heraSentItems.delete(itemId);
+      const openaiText = String(event.transcript || "");
+      logRenderer("voice.compare", { openai: openaiText.slice(0, 400) });
+      if (rtDeltaItemId === itemId) { rtDeltaItemId = ""; rtUserTranscript = ""; }
+      if (heraAwaitingName.has(itemId)) {
+        const heraText = heraAwaitingName.get(itemId);
+        heraAwaitingName.delete(itemId);
+        heraSendAfterName(itemId, heraText, openaiText);
+      } else {
+        // HERA is still finishing this turn; it reads this when it is done.
+        heraOpenaiCopy.set(itemId, openaiText);
+        window.setTimeout(() => heraOpenaiCopy.delete(itemId), 5000);
+      }
+      return;
+    }
+    if (cleanEarApplies()) {
+      let text = String(event.transcript || rtUserTranscript || "");
+      const itemId = String(event.item_id || "");
+      // A newer turn's words are already arriving: this one is judged and sent on its own.
+      const earlierTurn = Boolean(itemId && rtDeltaItemId && itemId !== rtDeltaItemId);
+      const heraWords = earlierTurn ? 0 : String(heraVoice.turnText || "").trim().split(/\s+/).filter(Boolean).length;
+      if (cleanEarVerdict(event, text, { localWindow: !earlierTurn, heraWords }).drop) text = "";
+      if (earlierTurn) {
+        if (text.trim()) void flushRealtimeTranscript("completed_earlier_turn", text, { separateTurn: true });
+        return;
+      }
+      rtDeltaItemId = "";
+      rtUserTranscript = text;
+    } else {
+      rtUserTranscript = String(event.transcript || rtUserTranscript || "");
+    }
     rtTranscriptFinal = true;
     markVoiceLatency("transcript_completed", { transcriptChars: rtUserTranscript.trim().length });
     flushRealtimeTranscript("completed");
@@ -9024,6 +10121,7 @@ function handleRealtimeEvent(event) {
         source: event.type === "response.output_audio_transcript.delta" ? "audio_transcript" : "text",
       });
       realtimeResponseText += delta;
+      lastReplyActivityAt = Date.now();
       if (herMode) window.HerMode?.setReply(realtimeResponseText);
       feedRealtimeStreamTts(delta);
     }
@@ -9057,6 +10155,11 @@ function handleRealtimeEvent(event) {
     return;
   }
 
+  if (event.type === "error" && event.error?.event_id === CLEAN_EAR_INCLUDE_EVENT_ID) {
+    // Confidence scores refused: clean hearing carries on with the mic check alone.
+    logRenderer("clean_ear.confidence_unavailable", { message: event.error?.message || "" });
+    return;
+  }
   if (event.type === "error") {
     const message = event.error?.message || event.message || "Realtime voice error.";
     logRenderer("realtime.event.error", { message, error: event.error || null });
@@ -9214,6 +10317,103 @@ async function ensureMicrophoneAccess() {
   }
 }
 
+/* ── A voice session kept ready ──────────────────────────────────────────
+   Calling him used to open a session from nothing: 3.3s asking OpenAI for it,
+   0.7s connecting, 4.3s in all (measured 2026-09-26). Now one is opened in the
+   background and kept connected with NO microphone on it, so nothing is sent
+   until you call him. Calling him puts the mic on it: about 0.1s.
+   Renewed every 20 minutes and after each use, rebuilt if it drops. Off with
+   localStorage brainoWarmVoice = "0"; then every call opens a session as before. */
+const VOICE_STANDBY_REFRESH_MS = 20 * 60 * 1000;
+let voiceStandby = null;
+let voiceStandbyCreating = false;
+let voiceStandbyTimer = 0;
+function warmVoiceOn() { try { return localStorage.getItem("brainoWarmVoice") !== "0"; } catch (_) { return true; } }
+function takeVoiceStandby() {
+  const sb = voiceStandby;
+  voiceStandby = null;
+  if (!sb) return null;
+  if (sb.dc?.readyState !== "open" || !["connected", "connecting"].includes(sb.pc?.connectionState) || Date.now() - sb.readyAt > VOICE_STANDBY_REFRESH_MS + 60000) {
+    dropVoiceStandby(sb, "stale");
+    return null;
+  }
+  if (sb.refreshTimer) window.clearTimeout(sb.refreshTimer);
+  return sb;
+}
+function dropVoiceStandby(sb, reason) {
+  if (!sb) return;
+  if (voiceStandby === sb) voiceStandby = null;
+  if (sb.refreshTimer) window.clearTimeout(sb.refreshTimer);
+  try { sb.dc?.close(); } catch (_) {}
+  try { sb.pc?.close(); } catch (_) {}
+  logRenderer("realtime.standby.dropped", { reason });
+}
+function scheduleVoiceStandby(delayMs = 1500) {
+  if (voiceStandbyTimer) window.clearTimeout(voiceStandbyTimer);
+  voiceStandbyTimer = window.setTimeout(() => { voiceStandbyTimer = 0; void createVoiceStandby(); }, delayMs);
+}
+async function createVoiceStandby() {
+  if (!warmVoiceOn() || voiceStandby || voiceStandbyCreating) return;
+  // One session at a time: while he is listening, the next one waits.
+  if (realtimeActive || realtimeConnecting || dictationMode || dictationStarting) return;
+  const auth = await window.brainoMac.authStatus?.().catch(() => null);
+  if (!auth?.authenticated) return; // never ask you to sign in for this
+  voiceStandbyCreating = true;
+  const t = Date.now();
+  const sb = { pc: null, dc: null, sender: null, remoteStream: null, result: null, adopted: false, readyAt: 0, refreshTimer: 0 };
+  try {
+    const pc = new RTCPeerConnection();
+    sb.pc = pc;
+    sb.sender = pc.addTransceiver("audio", { direction: "sendrecv" }).sender;
+    pc.addEventListener("track", (event) => {
+      sb.remoteStream = event.streams[0] || new MediaStream([event.track]);
+      if (sb.adopted && rtRemoteAudio && pc === rtPc) { rtRemoteAudio.srcObject = sb.remoteStream; rtRemoteAudio.play().catch(() => {}); }
+    });
+    pc.addEventListener("connectionstatechange", () => {
+      const state = pc.connectionState;
+      if (!["failed", "disconnected", "closed"].includes(state)) return;
+      if (sb.adopted) {
+        if (pc !== rtPc) return;
+        logRenderer("realtime.peer.state", { state });
+        stopRealtimeVoice();
+        setStatus("error", "Voice disconnected");
+        setBubble("Voice disconnected. Double Control wakes me again.", 3200);
+      } else if (voiceStandby === sb) {
+        dropVoiceStandby(sb, `peer_${state}`);
+        scheduleVoiceStandby(5000);
+      }
+    });
+    const dc = pc.createDataChannel("oai-events");
+    sb.dc = dc;
+    dc.addEventListener("message", (event) => {
+      if (!sb.adopted) return; // nothing happens in a session nobody is using
+      try { handleRealtimeEvent(JSON.parse(event.data)); } catch (_) {}
+    });
+    dc.addEventListener("close", () => { if (sb.adopted) logRenderer("realtime.datachannel.close"); });
+    const offerSdp = await createLocalRealtimeOffer(pc);
+    const result = await window.brainoMac.createRealtimeCall({ offerSdp, voiceEngine: realtimeVoiceEngine, purpose: "voice" });
+    if (!result?.ok || !result.answerSdp) throw new Error(result?.error || "standby could not start");
+    await pc.setRemoteDescription({ type: "answer", sdp: result.answerSdp });
+    await waitForRealtimeDataChannel(dc, () => true);
+    if (realtimeActive || realtimeConnecting) { dropVoiceStandby(sb, "voice_started_meanwhile"); return; }
+    sb.result = result;
+    sb.readyAt = Date.now();
+    sb.refreshTimer = window.setTimeout(() => {
+      if (voiceStandby !== sb) return;
+      dropVoiceStandby(sb, "refresh");
+      void createVoiceStandby();
+    }, VOICE_STANDBY_REFRESH_MS);
+    voiceStandby = sb;
+    logRenderer("realtime.standby.ready", { ms: Date.now() - t });
+  } catch (error) {
+    try { sb.pc?.close(); } catch (_) {}
+    logRenderer("realtime.standby.failed", { error: errorForLog(error) });
+    scheduleVoiceStandby(30000);
+  } finally {
+    voiceStandbyCreating = false;
+  }
+}
+
 async function startRealtimeVoice(options = {}) {
   const purpose = options.purpose === "dictation" ? "dictation" : "voice";
   const isDictation = purpose === "dictation";
@@ -9227,9 +10427,16 @@ async function startRealtimeVoice(options = {}) {
   const startGeneration = ++realtimeStartGeneration;
   realtimeConnecting = true;
   listening = true;
-  setStatus("connecting", isDictation ? "Starting BrainoHERA" : "Waking voice");
-  if (!isDictation) voiceStartBegin();
-  if (!isDictation) setBubble("Voice is waking up.", 1300);
+  /* Already connected (the ready session): no "waking" and no "you can speak
+     now", because there is nothing to wait for. He just glows and listens. */
+  const warm = !isDictation && Boolean(voiceStandby && voiceStandby.dc?.readyState === "open");
+  if (warm) {
+    setStatus("listening", "Listening");
+  } else {
+    setStatus("connecting", isDictation ? "Starting BrainoHERA" : "Waking voice");
+    if (!isDictation) voiceStartBegin();
+    if (!isDictation) setBubble("Voice is waking up.", 1300);
+  }
   logRenderer("realtime.start", {
     purpose,
     voiceEngine: realtimeVoiceEngine,
@@ -9303,6 +10510,8 @@ async function startRealtimeVoice(options = {}) {
       }
     }
     const microphoneSettings = stream.getAudioTracks()[0]?.getSettings?.() || {};
+    if (!isDictation) watchMicLevel(stream);
+    if (!isDictation) cleanEarMeterStart(stream);
     logRenderer("realtime.mic.ok", {
       audioTracks: stream.getAudioTracks().length,
       captureLatencyMs: isDictation ? Math.max(0, Date.now() - requestedAt) : undefined,
@@ -9313,89 +10522,120 @@ async function startRealtimeVoice(options = {}) {
       autoGainControl: microphoneSettings.autoGainControl ?? undefined,
     });
 
-    const pc = new RTCPeerConnection();
-    rtPc = pc;
-    stream.getTracks().forEach((track) => {
-      const sender = pc.addTrack(track, stream);
-      if (isDictation && track.kind === "audio") dictationSender = sender;
-    });
-    if (dictationSender) {
-      // Keep the negotiated audio sender silent for the entire dictation
-      // session. Startup and live PCM share the ordered data channel below;
-      // introducing RTP here would make their chronology nondeterministic.
-      await dictationSender.replaceTrack(null);
-    }
-
-    const playOpenAiVoice = !isDictation && realtimeVoiceEngine === "realtime";
-    if (!isDictation) {
+    /* A standby session is already connected, with no microphone on it. Using
+       it skips asking OpenAI for a session (3.3s) and connecting (0.7s): the
+       mic goes onto it and he is listening. See createVoiceStandby. */
+    const standby = !isDictation ? takeVoiceStandby() : null;
+    let pc;
+    let result;
+    if (standby) {
+      pc = standby.pc;
+      rtPc = pc;
+      rtDc = standby.dc;
+      await standby.sender.replaceTrack(stream.getAudioTracks()[0]);
+      const playOpenAiVoice = realtimeVoiceEngine === "realtime";
       rtRemoteAudio = new Audio();
       rtRemoteAudio.autoplay = true;
       rtRemoteAudio.muted = !playOpenAiVoice;
       rtRemoteAudio.volume = playOpenAiVoice ? 1 : 0;
       document.body.appendChild(rtRemoteAudio);
-    }
-    pc.addEventListener("track", (event) => {
-      if (!rtRemoteAudio) return;
-      rtRemoteAudio.srcObject = event.streams[0] || new MediaStream([event.track]);
-      rtRemoteAudio.play().catch(() => {});
-    });
-    rtRemoteAudio?.addEventListener("playing", () => {
-      if (realtimeVoiceEngine !== "realtime") return;
-      speaking = true;
-      setTalk(true);
-      setStatus("speaking", "Speaking");
-      markVoiceLatency("first_audio", { source: "openai_realtime_audio" });
-    });
-    pc.addEventListener("connectionstatechange", () => {
-      if (pc !== rtPc) return;
-      logRenderer("realtime.peer.state", { state: pc.connectionState });
-      if (["failed", "disconnected", "closed"].includes(pc.connectionState)) {
-        stopRealtimeVoice();
-        setStatus("error", isDictation ? "BrainoHERA disconnected" : "Voice disconnected");
-        setBubble(
-          isDictation ? "BrainoHERA disconnected. Double Option restarts it." : "Voice disconnected. Double Control wakes me again.",
-          3200,
-        );
-      }
-    });
-
-    const dc = pc.createDataChannel("oai-events");
-    rtDc = dc;
-    dc.addEventListener("open", () => logRenderer("realtime.datachannel.open"));
-    dc.addEventListener("close", () => logRenderer("realtime.datachannel.close"));
-    dc.addEventListener("error", () => logRenderer("realtime.datachannel.error"));
-    dc.addEventListener("message", (event) => {
-      try {
-        handleRealtimeEvent(JSON.parse(event.data));
-      } catch (_) {}
-    });
-
-    const offerSdp = await createLocalRealtimeOffer(pc);
-    const result = await window.brainoMac.createRealtimeCall({
-      offerSdp,
-      voiceEngine: realtimeVoiceEngine,
-      purpose,
-    });
-    assertRealtimeStartCurrent(startGeneration, pc);
-    if (!result?.ok || !result.answerSdp) {
-      logRenderer("realtime.create.failed", {
-        error: result?.error || "Realtime voice could not start.",
-        transport: result?.transport || null,
+      if (standby.remoteStream) { rtRemoteAudio.srcObject = standby.remoteStream; rtRemoteAudio.play().catch(() => {}); }
+      rtRemoteAudio.addEventListener("playing", () => {
+        if (realtimeVoiceEngine !== "realtime") return;
+        speaking = true;
+        setTalk(true);
+        setStatus("speaking", "Speaking");
+        markVoiceLatency("first_audio", { source: "openai_realtime_audio" });
       });
-      throw new Error(result?.error || "Realtime voice could not start.");
+      standby.adopted = true;
+      result = standby.result;
+      logRenderer("realtime.standby.used", { ageMs: Date.now() - standby.readyAt, sinceWakeMs: Date.now() - requestedAt });
+      assertRealtimeStartCurrent(startGeneration, pc);
+    } else {
+      pc = new RTCPeerConnection();
+      rtPc = pc;
+      stream.getTracks().forEach((track) => {
+        const sender = pc.addTrack(track, stream);
+        if (isDictation && track.kind === "audio") dictationSender = sender;
+      });
+      if (dictationSender) {
+        // Keep the negotiated audio sender silent for the entire dictation
+        // session. Startup and live PCM share the ordered data channel below;
+        // introducing RTP here would make their chronology nondeterministic.
+        await dictationSender.replaceTrack(null);
+      }
+
+      const playOpenAiVoice = !isDictation && realtimeVoiceEngine === "realtime";
+      if (!isDictation) {
+        rtRemoteAudio = new Audio();
+        rtRemoteAudio.autoplay = true;
+        rtRemoteAudio.muted = !playOpenAiVoice;
+        rtRemoteAudio.volume = playOpenAiVoice ? 1 : 0;
+        document.body.appendChild(rtRemoteAudio);
+      }
+      pc.addEventListener("track", (event) => {
+        if (!rtRemoteAudio) return;
+        rtRemoteAudio.srcObject = event.streams[0] || new MediaStream([event.track]);
+        rtRemoteAudio.play().catch(() => {});
+      });
+      rtRemoteAudio?.addEventListener("playing", () => {
+        if (realtimeVoiceEngine !== "realtime") return;
+        speaking = true;
+        setTalk(true);
+        setStatus("speaking", "Speaking");
+        markVoiceLatency("first_audio", { source: "openai_realtime_audio" });
+      });
+      pc.addEventListener("connectionstatechange", () => {
+        if (pc !== rtPc) return;
+        logRenderer("realtime.peer.state", { state: pc.connectionState });
+        if (["failed", "disconnected", "closed"].includes(pc.connectionState)) {
+          stopRealtimeVoice();
+          setStatus("error", isDictation ? "BrainoHERA disconnected" : "Voice disconnected");
+          setBubble(
+            isDictation ? "BrainoHERA disconnected. Double Option restarts it." : "Voice disconnected. Double Control wakes me again.",
+            3200,
+          );
+        }
+      });
+
+      const dc = pc.createDataChannel("oai-events");
+      rtDc = dc;
+      dc.addEventListener("open", () => logRenderer("realtime.datachannel.open"));
+      dc.addEventListener("close", () => logRenderer("realtime.datachannel.close"));
+      dc.addEventListener("error", () => logRenderer("realtime.datachannel.error"));
+      dc.addEventListener("message", (event) => {
+        try {
+          handleRealtimeEvent(JSON.parse(event.data));
+        } catch (_) {}
+      });
+
+      const offerSdp = await createLocalRealtimeOffer(pc);
+      result = await window.brainoMac.createRealtimeCall({
+        offerSdp,
+        voiceEngine: realtimeVoiceEngine,
+        purpose,
+      });
+      assertRealtimeStartCurrent(startGeneration, pc);
+      if (!result?.ok || !result.answerSdp) {
+        logRenderer("realtime.create.failed", {
+          error: result?.error || "Realtime voice could not start.",
+          transport: result?.transport || null,
+        });
+        throw new Error(result?.error || "Realtime voice could not start.");
+      }
+      logRenderer("realtime.create.ok", {
+        transport: result.transport || "unknown",
+        hasSessionId: Boolean(result.sessionId),
+        realtimeModel: result.realtimeModel || null,
+        transcriptionModel: result.transcriptionModel || null,
+      });
+      await pc.setRemoteDescription({ type: "answer", sdp: result.answerSdp });
+      assertRealtimeStartCurrent(startGeneration, pc);
+      await waitForRealtimeDataChannel(
+        dc,
+        () => startGeneration === realtimeStartGeneration && pc === rtPc,
+      );
     }
-    logRenderer("realtime.create.ok", {
-      transport: result.transport || "unknown",
-      hasSessionId: Boolean(result.sessionId),
-      realtimeModel: result.realtimeModel || null,
-      transcriptionModel: result.transcriptionModel || null,
-    });
-    await pc.setRemoteDescription({ type: "answer", sdp: result.answerSdp });
-    assertRealtimeStartCurrent(startGeneration, pc);
-    await waitForRealtimeDataChannel(
-      dc,
-      () => startGeneration === realtimeStartGeneration && pc === rtPc,
-    );
     assertRealtimeStartCurrent(startGeneration, pc);
     if (isDictation) {
       // Capture begins as soon as double Option lands, in parallel with the
@@ -9412,7 +10652,13 @@ async function startRealtimeVoice(options = {}) {
         preflightMs: Number(startupDecision?.preflightMs) || 0,
       });
     }
+    void refreshCommandContactNames();
     sendRealtimeEvent(buildRealtimeSessionUpdate());
+    /* Its own update, so a server that refuses the field cannot take the main
+       session settings down with it. Gives each transcript its word confidence. */
+    if (!isDictation && cleanEarOn()) {
+      sendRealtimeEvent({ type: "session.update", event_id: CLEAN_EAR_INCLUDE_EVENT_ID, session: { type: "realtime", include: ["item.input_audio_transcription.logprobs"] } });
+    }
     if (isDictation) {
       const preroll = flushDictationPrerollAndStartStreaming();
       logRenderer("dictation.preroll.flushed", {
@@ -9444,8 +10690,8 @@ async function startRealtimeVoice(options = {}) {
     markRealtimeActivity("realtime_ready");
     if (!isDictation) startFishWarmKeepAlive();
     setStatus("listening", isDictation ? "BrainoHERA" : "Listening");
-    if (!isDictation) setBubble("I am listening.", 1400);
-    logRenderer("realtime.ready", { purpose });
+    if (!isDictation && !standby) setBubble("I am listening.", 1400);
+    logRenderer("realtime.ready", { purpose, warm: Boolean(standby) });
   } catch (error) {
     const cancelled = isRealtimeStartCancelled(error) || startGeneration !== realtimeStartGeneration;
     if (startGeneration === realtimeStartGeneration) voiceStartEnd();
@@ -10347,10 +11593,8 @@ function endDrag(event) {
      "Stay where you drop me" off gives the old behaviour: he sets off again
      from the drop. */
   if (moved && stayPut()) {
-    const spot = snapToEdge(posX, posY);
-    pinWalkerAt(spot.x, spot.y);
-    if (spot.x !== posX || spot.y !== posY) void walkTo(spot.x, spot.y, { speed: 900 });
-    setBubble("I'll stay here.", 1400);
+    // To the nearest of his four spots, and he stays there.
+    dockAt(nearestDockSpot(posX, posY), "drag");
   } else {
     // A manual placement is exact: do not snap to a computed rail. Resume normal
     // roaming from the dropped point after a short beat so he never freezes.
@@ -10577,6 +11821,50 @@ function pinWalkerAt(x, y) {
   targetY = y;
 }
 
+/* ── His four spots (2026-09-26) ─────────────────────────────────────────
+   Instead of walking the screen he lives in one of four places: the middle of
+   the left edge, the top, the bottom, or the middle of the right edge. Drag
+   him anywhere and let go: he goes to the nearest one and stays. */
+const DOCK_SPOTS = ["left", "top", "bottom", "right"];
+function dockSpotPoint(spot) {
+  const b = getMoveBounds();
+  const midX = Math.round((b.minX + b.maxX) / 2);
+  const midY = Math.round((b.minY + b.maxY) / 2);
+  // Above the Dock, where there is one.
+  let bottomY = b.maxY;
+  try { bottomY = Math.min(b.maxY, window.screen.availTop + window.screen.availHeight - window.screenY - H - 12); } catch (_) {}
+  if (spot === "left") return { x: b.minX, y: midY };
+  if (spot === "right") return { x: b.maxX, y: midY };
+  if (spot === "top") return { x: midX, y: b.minY };
+  return { x: midX, y: Math.max(b.minY, bottomY) };
+}
+function nearestDockSpot(x, y) {
+  let best = "right";
+  let bestD = Infinity;
+  for (const spot of DOCK_SPOTS) {
+    const p = dockSpotPoint(spot);
+    const d = Math.hypot(p.x - x, p.y - y);
+    if (d < bestD) { bestD = d; best = spot; }
+  }
+  return best;
+}
+function dockAt(spot, source) {
+  const p = dockSpotPoint(spot);
+  pinWalkerAt(p.x, p.y);
+  walkArea = { ...walkArea, spot };
+  try { window.localStorage.setItem(WALK_AREA_STORAGE_KEY, JSON.stringify(walkArea)); } catch (_) {}
+  void walkTo(p.x, p.y, { speed: 900 });
+  renderDockButtons();
+  logRenderer("walker.dock", { spot, source });
+}
+function renderDockButtons() {
+  document.querySelectorAll("#braino-dock-row [data-dock]").forEach((b) => {
+    const on = b.dataset.dock === "walk" ? walkArea?.mode !== "pin" : walkArea?.mode === "pin" && walkArea?.spot === b.dataset.dock;
+    b.classList.toggle("active", Boolean(on));
+    b.setAttribute("aria-pressed", on ? "true" : "false");
+  });
+}
+
 /* Thrown near an edge, he lands against it. */
 function snapToEdge(x, y) {
   const bounds = getMoveBounds();
@@ -10665,9 +11953,8 @@ notchFace?.addEventListener("dblclick", (event) => {
     void nfClosePanel("notch_dblclick");
     return;
   }
-  if (event.target.closest?.("button, input, a, .nf-answer-surface, .nf-music-surface, .nf-meeting-surface, .nf-cmds-surface")) return;
-  event.preventDefault();
-  nfSetPanelOpen(true, { via: "notch" });
+  /* Removed 2026-09-26: the notch no longer opens a settings panel. Double-
+     click Braino himself for his menu. An open panel still closes above. */
 });
 /* A click anywhere else closes it; the overlay holds the mouse while it is up,
    so that click lands here instead of in whatever app is underneath. */
@@ -10678,6 +11965,32 @@ document.addEventListener("pointerdown", (event) => {
   void nfClosePanel("outside");
 }, true);
 
+document.getElementById("braino-dock-row")?.addEventListener("click", (event) => {
+  const b = event.target.closest?.("[data-dock]");
+  if (!b) return;
+  if (b.dataset.dock === "walk") { writeBoolSetting(STAY_PUT_KEY, false); saveWalkArea({ mode: "screen" }); renderDockButtons(); return; }
+  writeBoolSetting(STAY_PUT_KEY, true);
+  dockAt(b.dataset.dock, "menu");
+});
+/* He used to walk the whole screen by default. Once, on the first launch
+   after the four spots arrived, he goes to the right-hand one. */
+try {
+  if (!localStorage.getItem("brainoDockMigrated")) {
+    localStorage.setItem("brainoDockMigrated", "1");
+    if (walkArea?.mode !== "pin") window.setTimeout(() => { writeBoolSetting(STAY_PUT_KEY, true); dockAt("right", "first_launch"); }, 1500);
+  }
+} catch (_) {}
+renderDockButtons();
+document.getElementById("braino-hide-row")?.addEventListener("click", (event) => {
+  const b = event.target.closest?.("[data-hide]");
+  if (b) setMascotHide(b.dataset.hide, "menu");
+});
+// A click on the notch brings him back. Capture, so the notch's own click still runs.
+notchFace?.addEventListener("click", () => { if (mascotHidden()) setMascotHide(null, "notch_click"); }, true);
+applyMascotHide();
+// Have a voice session ready before the first call.
+scheduleVoiceStandby(6000);
+
 walker.addEventListener("dblclick", (event) => {
   event.preventDefault();
   event.stopPropagation();
@@ -10687,7 +12000,31 @@ walker.addEventListener("dblclick", (event) => {
   targetY = posY;
   nextTargetAt = performance.now() + 2200;
   walker.classList.remove("dragging");
-  void nfOpenPanelFromBraino();
+  /* Double-click opens Braino for Mac, the one app (2026-09-27): his look,
+     his voice, Set him up, everything. It replaces the small menu that used
+     to open here. If the app can't open, the old menu still does. */
+  if (window.brainoMac.appOpen) void window.brainoMac.appOpen().catch(() => setBrainoCustomizerOpen(!brainoCustomizerOpen));
+  else setBrainoCustomizerOpen(!brainoCustomizerOpen);
+});
+
+/* What you change in the app, applied here, where he lives. */
+window.brainoMac.onAppOverlay?.((patch) => {
+  if (patch.mascot) setMascotChoice(patch.mascot);
+  if (patch.scale != null) setBrainoScale(patch.scale);
+  if (patch.dock) {
+    if (patch.dock === "walk") { writeBoolSetting(STAY_PUT_KEY, false); saveWalkArea({ mode: "screen" }); }
+    else { writeBoolSetting(STAY_PUT_KEY, true); dockAt(patch.dock, "app"); }
+  }
+  if (patch.hide != null) setMascotHide(patch.hide || null, "app");
+  if (typeof patch.talkOutLoud === "boolean") writeBoolSetting(TALK_OUT_LOUD_KEY, patch.talkOutLoud);
+  if (typeof patch.cleanEar === "boolean") {
+    try { localStorage.setItem("brainoCleanEar", patch.cleanEar ? "1" : "0"); } catch (_) {}
+  }
+  if (typeof patch.warmVoice === "boolean") {
+    try { localStorage.setItem("brainoWarmVoice", patch.warmVoice ? "1" : "0"); } catch (_) {}
+    if (patch.warmVoice) scheduleVoiceStandby(500); else if (voiceStandby) dropVoiceStandby(voiceStandby, "switched_off");
+  }
+  logRenderer("app.overlay", { keys: Object.keys(patch) });
 });
 
 brainoSizeRange.addEventListener("input", (event) => {
@@ -10700,6 +12037,11 @@ brainoSizeReset.addEventListener("click", () => {
 
 brainoCustomizerDone.addEventListener("click", () => {
   setBrainoCustomizerOpen(false);
+});
+/* "Set him up": the setup, with his notebook filling in live beside it. */
+document.getElementById("braino-setup-open")?.addEventListener("click", () => {
+  setBrainoCustomizerOpen(false);
+  void window.brainoMac.setupOpen?.();
 });
 
 window.addEventListener("mousemove", refreshMousePassthrough, { passive: true });
@@ -11234,6 +12576,8 @@ function looksUnfinished(text) {
   const value = String(text || "").trim();
   if (!value) return false;
   if (/[.?!\u2026]["')\]]*$/.test(value)) return false;
+  // A sentence that stops on a comma is still going.
+  if (/[,;:\u2013\u2014-]\s*$/.test(value)) return true;
   const words = value.replace(/[^\p{L}\p{N}'\s]/gu, " ").trim().split(/\s+/).filter(Boolean);
   const content = words.filter((w) => !/^(hey|braino|brainelle)$/i.test(w));
   if (content.length <= 2) return true;
@@ -11246,12 +12590,12 @@ function clearHeldFragment() {
   heldFragment = null;
 }
 
-function holdFragment(text) {
+function holdFragment(text, { accepted = true } = {}) {
   const now = Date.now();
-  heldFragment = { text, at: heldFragment?.at || now };
+  heldFragment = { text, at: heldFragment?.at || now, accepted };
   window.clearTimeout(heldFragmentTimer);
   heldFragmentTimer = window.setTimeout(releaseHeldFragment, FRAGMENT_HOLD_MS);
-  logRenderer("voice.fragment_held", { words: text.split(/\s+/).length });
+  logRenderer("voice.fragment_held", { words: text.split(/\s+/).length, gated: accepted ? "after" : "before" });
   setStatus("listening", "Listening");
 }
 
@@ -11266,9 +12610,11 @@ function releaseHeldFragment() {
     }
   }
   const text = heldFragment.text;
+  const accepted = heldFragment.accepted !== false;
   clearHeldFragment();
-  logRenderer("voice.fragment_released", { words: text.split(/\s+/).length });
-  void flushRealtimeTranscript("held_fragment", text);
+  logRenderer("voice.fragment_released", { words: text.split(/\s+/).length, gated: accepted ? "after" : "before" });
+  // Never judged yet: it goes through the gate now, on its own.
+  void flushRealtimeTranscript("held_fragment", text, accepted ? {} : { separateTurn: true });
 }
 
 /* ── HERA, live, while you talk to him ─────────────────────────────────────
@@ -11417,7 +12763,24 @@ async function heraCommandText(openaiText) {
     logRenderer("voice.command_text", { source: "hera_early", heraWords: earlyWords, openaiWords });
     return early;
   }
-  logRenderer("voice.command_text", { source: "openai", openaiWords });
+  /* Clean hearing, 2026-10-04: 17 seconds of talk came back from OpenAI as
+     one invented 12-word "command" ("what do people usually do on the
+     maps?") while HERA had all 223 characters right on screen. Its prompt
+     asks for a command, so on long speech it writes one. When HERA heard
+     clearly more of the same turn, with no Braino audio in it, its words go. */
+  const turnText = String(heraVoice.turnText || "").trim();
+  heraVoice.turnText = "";
+  const turnWords = turnText ? turnText.split(/\s+/).filter(Boolean).length : 0;
+  // What you saw in the notch is what is sent: a clean HERA turn wins (2026-10-04).
+  // Only when OpenAI squashed a long turn: half HERA's words or fewer, and 8+ missing.
+  if (cleanEarApplies() && turnText && turnWords >= Math.max(openaiWords * 2, openaiWords + 8)) {
+    // HERA writes his name as "we don't": keep the name OpenAI heard.
+    const named = /^\W*(?:hey\s+)?brain(?:o|elle)\b[\s,.]*/i.exec(openaiText);
+    const text = named && !/^\W*(?:hey\s+)?brain/i.test(turnText) ? `${named[0].trim().replace(/[,.]*$/, "")}, ${turnText}` : turnText;
+    logRenderer("voice.command_text", { source: "hera_turn", heraWords: turnWords, openaiWords, hera: text.slice(0, 400), openai: openaiText.slice(0, 400) });
+    return text;
+  }
+  logRenderer("voice.command_text", { source: "openai", openaiWords, heraWords: turnWords || undefined, hera: turnText ? turnText.slice(0, 400) : undefined, openai: openaiText.slice(0, 400) });
   return openaiText;
 }
 
@@ -11467,8 +12830,41 @@ window.brainoMac.onVoiceCaption?.((event) => {
   if (type !== "partial" && type !== "utterance") return;
   heraVoice.raw = true;
   heraVoice.lastRawAt = now;
+  /* "Stop" while he is talking, heard on the Mac in a third of a second
+     rather than after OpenAI's transcript, which only starts once you stop
+     speaking (2026-10-03: eleven times he only got quieter). Only a stop word
+     at the very start, and never his own line coming back through the
+     speakers. */
+  if (brainoAudible() && text && BARGE_STOP.test(text.replace(/^[\s,.\-]+/, "")) && !isSelfEcho(text)) {
+    logRenderer("realtime.barge_in", { via: "hera_live", speaking, hadAudio: Boolean(currentSpeechAudio), hadStreamTts: Boolean(realtimeStreamTts) });
+    interruptVoiceTurn("barge_in", "hera_live");
+    heraVoice.ignoreUntil = 0;
+  }
+  /* Talking over him (2026-10-05). Clean hearing keeps OpenAI's mic shut
+     while he speaks, so HERA is the only ear on you then. Words that are
+     mostly not the line he is saying are you, not his echo: he stops, the
+     mic opens at once, and what you already said starts the new turn. */
+  /* The room rule holds here too: with named mode on, only words meant for
+     him stop him (his name, a stop word, or a sentence said to him). Anyone
+     else talking only lowers his voice, exactly as before (2026-09-25 fix). */
+  const heraOverHim = cleanEarApplies() && brainoAudible() && text && heraTalksOverHim(text);
+  if (heraOverHim && namedModeOn && !heraMeantForHim(text)) {
+    duckSpeech(true, "not_for_him");
+  } else if (heraOverHim) {
+    logRenderer("realtime.barge_in", { via: "hera_talk_over", words: text.split(/\s+/).length });
+    interruptVoiceTurn("barge_in", "hera_talk_over");
+    heraVoice.ignoreUntil = 0;
+    heraVoiceRotate("talk_over");
+    heraVoice.settled = text;
+    heraVoice.raw = true;
+    lastSpokenLine.endedTs = Date.now() - CLEAN_EAR_ECHO_TAIL_MS;
+    cleanEarLastPlayingAt = 0;
+    nfSetHeard(text, { live: true });
+    return;
+  }
   if (brainoAudible() || now < heraVoice.ignoreUntil) {
     heraVoice.dirty = true;
+    heraLiveReport(brainoAudible() ? "his_voice_playing" : "echo_tail", text);
     return;
   }
   if (type === "utterance") {
@@ -11478,8 +12874,34 @@ window.brainoMac.onVoiceCaption?.((event) => {
     heraVoice.partial = text;
   }
   const live = heraVoiceLiveText();
-  if (live && !dictationMode && !herMode) nfSetHeard(live, { live: true });
+  /* Clean hearing: the notch shows a voice glow while you talk and only the
+     exact words that are sent (Itish, 2026-10-05). HERA still listens for
+     talk-over and "stop"; it just no longer paints rough words. */
+  if (live && !dictationMode && !herMode && heraVoiceMayShow() && !cleanEarApplies()) {
+    nfSetHeard(live, { live: true });
+    heraLiveReport("", live);
+  } else if (live) {
+    heraLiveReport(dictationMode ? "dictation" : herMode ? "her_mode" : mediaAudioPlaying ? "media_playing" : "openai_not_hearing_speech", live);
+  }
 });
+
+/* Whether your words reached the notch live, once per sentence (2026-10-03).
+   "What I say shows up 4 to 5 seconds later": the live words exist within a
+   few hundred milliseconds, so this records, for each sentence, how fast they
+   showed, or which check held them back. One log line, no text. */
+let heraLiveTurn = { at: 0, shown: false, hidden: "" };
+function heraLiveReport(hiddenBy, text) {
+  const now = Date.now();
+  const startedAt = rtSpeechStartedAt || now;
+  if (heraLiveTurn.at !== startedAt) heraLiveTurn = { at: startedAt, shown: false, hidden: "" };
+  if (!hiddenBy && !heraLiveTurn.shown) {
+    heraLiveTurn.shown = true;
+    logRenderer("hera_voice.live_shown", { msAfterSpeechStart: now - startedAt, hiddenBefore: heraLiveTurn.hidden || "", chars: String(text || "").length });
+  } else if (hiddenBy && !heraLiveTurn.shown && heraLiveTurn.hidden !== hiddenBy) {
+    heraLiveTurn.hidden = hiddenBy;
+    logRenderer("hera_voice.live_hidden", { by: hiddenBy, msAfterSpeechStart: now - startedAt, speakingNow: rtUserSpeakingNow, sinceStopMs: rtUserStoppedAt ? now - rtUserStoppedAt : -1 });
+  }
+}
 
 /* A decoder that is never reset gets slower the longer it runs. Turns rotate
    it constantly; this covers the stretches with no turns, such as music HERA
@@ -11697,7 +13119,7 @@ window.brainoMac.onDictationUi?.((payload) => {
     // Dictation borrowed HERA from the voice session; give it back.
     if (realtimeActive) window.setTimeout(() => void heraVoiceStart("after_dictation"), 1500);
   }
-  logRenderer("dictation.ui.local", { active, engine: "parakeet" });
+  logRenderer("dictation.ui.local", { active, engine: String(payload?.engine || "parakeet") });
   setStatus(active ? "listening" : "", active ? "BrainoHERA" : "");
   updateNotchFace();
 });
@@ -11719,7 +13141,9 @@ window.brainoMac.onDictationFallback?.((payload) => {
   const text = String(payload?.text || "").trim();
   nfSetStatusText("copied");
   nfSetHeard(text || "", { durationMs: 20000 });
-  nfSetThinkingSticky("No text box here. It's copied, just paste it.");
+  nfSetThinkingSticky(payload?.blocked
+    ? "macOS blocked my paste. It's copied: press ⌘V."
+    : "No text box here. It's copied, just paste it.");
   window.setTimeout(() => nfSetThinkingSticky(""), 6000);
   logRenderer("dictation.fallback.notch", { chars: text.length, reason: payload?.reason || "" });
 });
@@ -12650,10 +14074,11 @@ window.brainoMac.onStorySkitStart?.((payload) => {
 window.setTimeout(() => { void prefetchStorySkitAudio(); }, 4000);
 window.brainoMac.onHerToggle?.(() => toggleHerMode());
 window.brainoMac.onCharacterToggle?.(() => {
-  // Drives the avatar, so Cmd+Shift+B and the Choose Your Avatar picker are the
-  // same switch rather than two that can disagree.
-  setMascotChoice(mascotChoice === "brainelle" ? "braino" : "brainelle");
+  /* Command+Shift+B hides him and brings him back (2026-09-26). It used to
+     swap Braino and Brainelle, which his double-click menu already does. */
+  setMascotHide(mascotHidden() ? null : "hidden", "hotkey");
 });
+window.brainoMac.onMascotHide?.((payload) => setMascotHide(payload?.mode || null, payload?.source || "main"));
 window.brainoMac.onPointAt?.((payload) => { void pointAtScreen(payload); });
 let allOpenTabs = [];
 window.brainoMac.onTabsSnapshot?.((payload) => {
@@ -12669,6 +14094,7 @@ window.brainoMac.onMusicState?.((payload) => {
   lightShow.energy = Number.isFinite(payload?.energy) ? payload.energy : null;
   lightShow.valence = Number.isFinite(payload?.valence) ? payload.valence : null;
   mediaAudioPlaying = Boolean(payload?.playing);
+  if (mediaAudioPlaying) mediaConfirmedPlayingAt = Date.now();
   mediaAudioUncertain = Boolean(payload?.uncertain);
   setMusicMode(Boolean(payload?.playing));
 });
@@ -12709,10 +14135,68 @@ window.brainoMac.onNamedMode?.((payload) => {
   logRenderer("named.mode_changed", { on: namedModeOn });
   updateNotchFace();
 });
+/* Arrival just let you in (main.cjs, after Touch ID and the summary): he
+   comes out of the notch and says good morning, the last beat of it. Never
+   over a conversation, and not in Her mode, which has its own presence. */
+/* Notch style (Settings › Notch). "affective" puts .nf-aos on the notch, which
+   the CSS turns into the AffectiveOS notch; "braino" leaves it as it always
+   was. The colour behind it moves through the spectrum, ten seconds a colour,
+   easing into the next over the last two. */
+const NF_AOS_SPECTRUM = [[8, 41, 255], [255, 15, 31], [5, 217, 89], [158, 26, 255], [255, 107, 5], [0, 184, 242], [255, 20, 140]];
+let nfAosTimer = 0;
+function nfAosPaintTint() {
+  const t = Date.now() / 1000;
+  const n = NF_AOS_SPECTRUM.length;
+  const i = Math.floor(t / 10) % n;
+  const into = (t % 10) - 8;
+  const k = into > 0 ? (1 - Math.cos((into / 2) * Math.PI)) / 2 : 0;
+  const a = NF_AOS_SPECTRUM[i], b = NF_AOS_SPECTRUM[(i + 1) % n];
+  const rgb = a.map((v, j) => Math.round(v + (b[j] - v) * k)).join(", ");
+  notchFace?.style.setProperty("--aos-tint", `rgb(${rgb})`);
+}
+function applyNotchStyle(style) {
+  const on = style === "affective";
+  notchFace?.classList.toggle("nf-aos", on);
+  document.body.classList.toggle("aos-notch", on);
+  if (on && notchFace?.classList.contains("nf-think-open")) nfSetThinkingOpen(false);
+  window.clearInterval(nfAosTimer);
+  nfAosTimer = 0;
+  if (on) { nfAosPaintTint(); nfAosTimer = window.setInterval(nfAosPaintTint, 150); }
+  logRenderer("notch_style.applied", { style: on ? "affective" : "braino" });
+}
+window.brainoMac.notchStyle?.().then((r) => applyNotchStyle(r?.style)).catch(() => {});
+window.brainoMac.onNotchStyle?.((payload) => applyNotchStyle(payload?.style));
+
+window.brainoMac.onArrivalHello?.(async () => {
+  if (herMode || realtimeActive || processing || brainoAudible()) {
+    logRenderer("arrival.hello_skipped", { herMode, realtimeActive, processing });
+    return;
+  }
+  const auth = await window.brainoMac.authStatus().catch(() => null);
+  const firstName = String(auth?.displayName || "").split(" ")[0]?.trim();
+  const line = `${timeGreeting()}${firstName ? `, ${firstName}` : ""}.`;
+  if (walkerHome) await runIomiBootMascotExit().catch(() => {});
+  // Asked for while he says good morning, so it is ready by the time he stops.
+  const callback = window.brainoMac.arrivalCallback?.().catch(() => null);
+  await speak(line, { captions: false });
+  logInteraction({ kind: "voice", route: "arrival_hello", braino_text: line, meta: { flow: "arrival" } });
+  const back = await callback;
+  if (back?.ok && back.line && !processing && !realtimeActive) {
+    await speak(back.line, { captions: false });
+    logInteraction({ kind: "voice", route: "arrival_callback", braino_text: back.line, meta: { flow: "arrival" } });
+  }
+  logRenderer("arrival.hello", {});
+});
 window.brainoMac.onWakeDetected?.((payload) => {
   /* His own voice saying his name through the speakers is not you calling him. */
   if (brainoAudible()) {
     logRenderer("wakeword.self_heard", {});
+    return;
+  }
+  /* "...after Braino is done..." on the on-device recogniser is his name
+     said about him, not to him. Not a wake. */
+  if (payload?.transcript && nameIsOnlyAMention(payload.transcript)) {
+    logRenderer("wakeword.mention_not_call", {});
     return;
   }
   // The wake phrase was heard ON-DEVICE (BrainoWakeWord.swift requires
@@ -13095,10 +14579,45 @@ function nfPointInNotchZone(x, y) {
     return Boolean(document.elementFromPoint(x, y)?.closest?.(".nf-q button"));
   }
   const rect = nfPill.getBoundingClientRect();
+  // Idle, the part below the menu bar belongs to Chrome's tab strip: it tucks
+  // away (nfUpdateTuck) and never takes the click. Only the housing does.
+  if (nfIdleForTuck() && y > nfNotchHeight()) return false;
   // Collapsed: the pill itself, nearly edge-to-edge — a padded zone was
   // stealing clicks from Chrome tabs that sit beside/below the housing.
   const pad = nfExpanded || nfMusicOpen || nfDropDepth > 0 ? 26 : 4;
   return x >= rect.left - pad && x <= rect.right + pad && y <= rect.bottom + pad;
+}
+
+/* Out of the way of Chrome's tabs (2026-09-30).
+   Idle, the notch hangs 22px below the menu bar, over the tab strip, so a new
+   tab or a tab near the middle could not be clicked. When the pointer comes
+   toward that strip the notch tucks up to the housing's own height and lets
+   the click through; it drops back a moment after the pointer leaves. Never
+   while he is listening, speaking, thinking or showing anything. */
+let nfTucked = false;
+let nfUntuckTimer = 0;
+function nfIdleForTuck() {
+  if (!notchFace?.classList.contains("on") || herMode || nfQuietState) return false;
+  if (nfExpanded || nfMusicOpen || nfDropDepth > 0) return false;
+  return !["listen", "speak", "captioning", "busy", "nf-thinking", "nf-answer-open", "nf-inline-open", "nf-think-open"].some((c) => notchFace.classList.contains(c));
+}
+function nfUpdateTuck(x, y) {
+  if (!nfPill) return;
+  const idle = nfIdleForTuck();
+  const r = nfPill.getBoundingClientRect();
+  const housing = nfNotchHeight();
+  const near = idle && x >= r.left - 40 && x <= r.right + 40 && y > housing - 2 && y <= housing + 22 + 36;
+  if (near) {
+    window.clearTimeout(nfUntuckTimer);
+    nfUntuckTimer = 0;
+    if (!nfTucked) { nfTucked = true; notchFace.classList.add("nf-tuck"); }
+  } else if (nfTucked && !nfUntuckTimer) {
+    nfUntuckTimer = window.setTimeout(() => {
+      nfUntuckTimer = 0;
+      nfTucked = false;
+      notchFace?.classList.remove("nf-tuck");
+    }, idle ? 700 : 0);
+  }
 }
 
 function nfShelfCount() {
@@ -13166,6 +14685,13 @@ function nfTraySyncFromState(visible) {
 // ── Zone events from the main process (real cursor position, drag-proof) ──
 window.brainoMac.onNotchZone?.((payload) => {
   nfZoneInsideMain = Boolean(payload?.inside);
+  /* Files held: pointing at the notch's housing opens the tray (the band
+     below it still tucks away for Chrome's tabs). Leaving closes it. */
+  if (nfDropOn && !herMode && nfShelf.length) {
+    if (nfZoneInsideMain && !nfDropState) { window.clearTimeout(nfDropTimer); nfDropSet("tray"); return; }
+    if (!nfZoneInsideMain && nfDropState === "tray") { window.clearTimeout(nfDropTimer); nfDropTimer = window.setTimeout(() => nfDropSet(""), 900); }
+    if (nfZoneInsideMain && nfDropState === "tray") { window.clearTimeout(nfDropTimer); nfDropTimer = 0; }
+  }
   notchFace?.classList.toggle("nf-reveal", nfZoneInsideMain);
   if (nfZoneInsideMain) {
     if (!herMode) setMousePassthrough(false);
@@ -13687,6 +15213,177 @@ window.brainoMac.onBtAudio?.((payload) => {
   if (nfExpanded) nfRenderSys();
 });
 
+// ── Notch drop: Tray and AirDrop (2026-10-01) ───────────────────────────────
+// Start dragging a file anywhere and the notch opens into two zones, Tray and
+// AirDrop (BrainoDrop watch tells us a file drag began). Drop on AirDrop:
+// Apple's AirDrop sends it and the notch shows the real outcome. Drop on
+// Tray: Braino holds it, as a picture you can drag back out. One island size
+// for all of it. Behind BRAINO_NOTCH_DROP=1 until launch.
+const nfdEsc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+let nfDropOn = false;
+let nfDropState = "";
+let nfDropHot = "";
+let nfDropTimer = 0;
+let nfDropFiles = [];
+const NFD_ICON = {
+  tray: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 13l2.2-6.6A2 2 0 0 1 8.1 5h7.8a2 2 0 0 1 1.9 1.4L20 13"/><path d="M4 13v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4h-4.5l-1 2h-5l-1-2z"/></svg>',
+  air: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M12 19l-3.2 2.2M12 19l3.2 2.2M12 19v-6"/><path d="M8.5 13.6a5 5 0 1 1 7 0"/><path d="M5.6 16.4a9 9 0 1 1 12.8 0"/></svg>',
+  ok: '<svg viewBox="0 0 24 24" fill="none" stroke="#30d158" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
+  bad: '<svg viewBox="0 0 24 24" fill="none" stroke="#ff453a" stroke-width="2.4" stroke-linecap="round"><path d="M7 7l10 10M17 7L7 17"/></svg>',
+};
+const nfDropBox = () => notchFace?.querySelector(".nf-dropbox");
+const nfDropName = () => nfDropFiles.length === 1 ? nfDropFiles[0].name : `${nfDropFiles.length} files`;
+function nfDropRender(extra = {}) {
+  const box = nfDropBox(); if (!box) return;
+  const s = nfDropState;
+  if (s === "ready") {
+    box.innerHTML = `<div class="nfd-zones"><div class="nfd-zone tray${nfDropHot === "tray" ? " hot" : ""}">${NFD_ICON.tray}<b>Tray</b><small>Keep it here</small></div>
+      <div class="nfd-zone air${nfDropHot === "air" ? " hot" : ""}">${NFD_ICON.air}<b>AirDrop</b><small>Send it nearby</small></div></div>`;
+  } else if (s === "tray") {
+    box.innerHTML = `<div class="nfd-row"><div class="nfd-tray">${nfShelf.slice(-6).map((f) => `<div class="nfd-file" draggable="true" data-path="${nfdEsc(f.path)}" title="Drag it out"><button type="button" class="nfd-x" data-remove="${nfdEsc(f.path)}" aria-label="Remove ${nfdEsc(f.name)}">×</button><img alt="" ${f.thumb ? `src="${f.thumb}"` : ""} class="${f.icon ? "icon" : ""}"><span>${nfdEsc(f.name)}</span></div>`).join("")}</div>
+      <div class="nfd-text" style="flex:0 0 auto"><b>In the tray</b><span>${nfShelf.length} file${nfShelf.length === 1 ? "" : "s"} · drag one out</span><button type="button" class="nfd-clear" data-clear="1">Clear all</button></div></div>`;
+  } else if (s === "air-picking" || s === "air-sending") {
+    box.innerHTML = `<div class="nfd-row"><div class="nfd-icon nfd-radar"><i></i><i></i><i></i>${NFD_ICON.air}</div>
+      <div class="nfd-text"><b>${s === "air-picking" ? "Pick a device in AirDrop" : "Sending with AirDrop"}</b><span>${nfdEsc(nfDropName())}</span>${s === "air-sending" ? `<div class="nfd-bar"><i></i></div>` : ""}</div></div>`;
+  } else if (s === "air-sent") {
+    box.innerHTML = `<div class="nfd-row"><div class="nfd-icon nfd-ok">${NFD_ICON.ok}</div><div class="nfd-text"><b>Sent with AirDrop</b><span>${nfdEsc(nfDropName())}</span></div></div>`;
+  } else if (s === "air-closed") {
+    box.innerHTML = `<div class="nfd-row"><div class="nfd-icon nfd-meh">${NFD_ICON.air}</div><div class="nfd-text"><b>AirDrop closed</b><span>${nfdEsc(extra.error || "I couldn't tell whether it sent.")}</span></div></div>`;
+  } else if (s === "air-failed" || s === "air-cancelled") {
+    const failed = s === "air-failed";
+    box.innerHTML = `<div class="nfd-row${failed ? " nfd-shake" : ""}"><div class="nfd-icon ${failed ? "nfd-bad" : "nfd-meh"}">${failed ? NFD_ICON.bad : NFD_ICON.air}</div>
+      <div class="nfd-text"><b>${failed ? "AirDrop didn't go through" : "AirDrop cancelled"}</b><span>${nfdEsc(extra.error || (failed ? "Try again in a moment." : nfDropName()))}</span></div></div>`;
+  } else if (s === "hello") {
+    box.innerHTML = `<div class="nfd-hello"><svg viewBox="0 0 170 62" aria-label="hello"><defs><linearGradient id="nfd-hello-grad" x1="0" x2="1"><stop offset="0" stop-color="#ffffff"/><stop offset=".5" stop-color="#ffd7cf"/><stop offset="1" stop-color="#ffffff"/></linearGradient></defs>
+      <path d="M8 50 C 18 34, 28 8, 22 6 C 15 4, 13 30, 13 54 C 17 40, 30 32, 32 42 L 31 54 C 36 50, 42 44, 46 46 C 54 48, 62 40, 58 34 C 54 28, 44 36, 47 46 C 50 54, 62 54, 70 44 C 78 32, 86 10, 80 6 C 74 4, 72 34, 76 50 C 78 56, 86 52, 92 44 C 100 32, 108 10, 102 6 C 96 4, 94 34, 98 50 C 100 56, 108 52, 114 44 C 118 38, 128 34, 132 42 C 136 52, 124 58, 119 50 C 115 43, 124 34, 134 38 C 142 41, 150 40, 160 32"/></svg>
+      <small>Drag a file to the notch to keep it, or AirDrop it</small></div>`;
+  }
+}
+function nfDropSet(state, extra = {}, holdMs = 0) {
+  window.clearTimeout(nfDropTimer);
+  nfDropState = state;
+  if (!notchFace) return;
+  if (!state) {
+    notchFace.classList.remove("nf-drop");
+    delete notchFace.dataset.drop;
+    nfDropHot = "";
+    const box = nfDropBox(); if (box) box.innerHTML = "";
+    nfCollapseNotchZone();
+    updateNotchFace();
+    logRenderer("drop.state", { state: "" });
+    return;
+  }
+  notchFace.classList.add("nf-drop", "on");
+  notchFace.dataset.drop = state;
+  nfDropRender(extra);
+  // The whole island takes the mouse while it is open, so a drop lands.
+  nfSetZone({ expanded: true, width: 540, height: nfNotchHeight() + 124 });
+  logRenderer("drop.state", { state });
+  if (holdMs) nfDropTimer = window.setTimeout(() => nfDropSet(""), holdMs);
+}
+function nfDropZoneAt(clientX) {
+  const pill = notchFace?.querySelector(".nf-pill");
+  if (!pill) return "";
+  const r = pill.getBoundingClientRect();
+  return clientX < r.left + r.width / 2 ? "tray" : "air";
+}
+/* How many files the notch is holding, shown inside it. */
+function nfTraySyncBadge() {
+  if (!nfPill) return;
+  const n = nfDropOn ? nfShelf.length : 0;
+  notchFace?.classList.toggle("nf-tray-held", n > 0);
+  if (n) nfPill.dataset.tray = String(n); else delete nfPill.dataset.tray;
+}
+function nfTrayRemove(path) {
+  nfShelf = path ? nfShelf.filter((f) => f.path !== path) : [];
+  nfRenderShelf();
+  nfTraySyncBadge();
+  logRenderer("tray.removed", { left: nfShelf.length, all: !path });
+  if (!nfShelf.length) nfDropSet(""); else if (nfDropState === "tray") nfDropRender();
+}
+async function nfDropAddToTray(files) {
+  for (const f of files) {
+    if (nfShelf.some((x) => x.path === f.path)) continue;
+    const entry = { path: f.path, name: f.name };
+    nfShelf.push(entry);
+    window.brainoMac.fileThumb?.(f.path).then((r) => { if (r?.ok) { entry.thumb = r.src; entry.icon = Boolean(r.icon); if (nfDropState === "tray") nfDropRender(); } });
+  }
+  nfShelf = nfShelf.slice(-6);
+  nfRenderShelf();
+  nfTraySyncBadge();
+}
+/* A drop, from the helper's drop target or the window's own. */
+function nfDropHandle(zone, files) {
+  nfDropFiles = files.filter((f) => f.path).slice(0, 8);
+  logRenderer("drop.dropped", { zone, count: nfDropFiles.length });
+  if (!nfDropFiles.length) { nfDropSet(""); return; }
+  if (zone === "air") {
+    nfDropSet("air-picking");
+    window.brainoMac.airdrop?.(nfDropFiles.map((f) => f.path)).then((r) => {
+      // The status stream already moved the notch; this only covers a helper that never spoke.
+      if (/^air-(picking|sending)$/.test(nfDropState)) nfDropSet(r?.ok ? "air-sent" : "air-failed", { error: r?.error }, r?.ok ? 2800 : 4200);
+    });
+  } else {
+    void nfDropAddToTray(nfDropFiles).then(() => nfDropSet("tray", {}, 5000));
+  }
+}
+window.brainoMac.notchDropEnabled?.().then((r) => {
+  nfDropOn = Boolean(r?.on);
+  if (!nfDropOn) return;
+  let seen = false; try { seen = localStorage.getItem("nfHelloSeen") === "1"; } catch (_) {}
+  if (!seen) window.setTimeout(() => { if (!nfDropState && !herMode) { nfDropSet("hello", {}, 3800); try { localStorage.setItem("nfHelloSeen", "1"); } catch (_) {} } }, 2500);
+}).catch(() => {});
+window.__nfHello = () => nfDropSet("hello", {}, 3800);
+window.brainoMac.onFileDrag?.((msg) => {
+  if (!nfDropOn || herMode) return;
+  if (typeof msg?.hover === "string") {
+    if (nfDropState === "ready" && msg.hover !== nfDropHot) { nfDropHot = msg.hover; nfDropRender(); }
+    return;
+  }
+  if (typeof msg?.drop === "string") {
+    window.clearTimeout(nfDropTimer);
+    nfDropHandle(msg.drop, (msg.files || []).map((p) => ({ path: String(p), name: String(p).split("/").pop() || "file" })));
+    return;
+  }
+  if (msg?.drag) {
+    if (!nfDropState || nfDropState === "tray" || nfDropState === "hello" || /^air-(sent|failed|cancelled)$/.test(nfDropState)) { nfDropHot = ""; nfDropSet("ready"); }
+  } else if (nfDropState === "ready") {
+    // The drop itself arrives a moment after the button comes up.
+    nfDropTimer = window.setTimeout(() => { if (nfDropState === "ready") nfDropSet(""); }, 450);
+  }
+});
+window.brainoMac.onAirdropStatus?.((msg) => {
+  const st = String(msg?.status || "");
+  if (st === "picking") nfDropSet("air-picking");
+  else if (st === "sending") nfDropSet("air-sending");
+  else if (st === "sent") nfDropSet("air-sent", {}, 2800);
+  else if (st === "cancelled") nfDropSet("air-cancelled", { error: msg.error }, 2600);
+  else if (st === "closed") nfDropSet("air-closed", { error: msg.error }, 3200);
+  else if (st === "failed") nfDropSet("air-failed", { error: msg.error }, 4200);
+});
+// Remove one, or clear the tray.
+document.addEventListener("click", (event) => {
+  const x = event.target.closest?.(".nf-dropbox [data-remove], .nf-dropbox [data-clear]");
+  if (!x) return;
+  event.preventDefault(); event.stopPropagation();
+  nfTrayRemove(x.dataset.clear ? "" : x.dataset.remove);
+}, true);
+// Drag a tray file back out: Electron's way, a native file drag started from dragstart.
+document.addEventListener("dragstart", (event) => {
+  const f = event.target.closest?.(".nf-dropbox .nfd-file");
+  if (!f) return;
+  event.preventDefault();
+  window.clearTimeout(nfDropTimer);
+  window.brainoMac.trayDragOut?.(f.dataset.path);
+  nfDropTimer = window.setTimeout(() => nfDropSet(""), 1800);
+});
+// Hovering the tray keeps it open; leaving lets it go.
+document.addEventListener("mouseover", (event) => {
+  if (nfDropState !== "tray") return;
+  if (event.target.closest?.(".nf-dropbox")) { window.clearTimeout(nfDropTimer); nfDropTimer = 0; }
+  else if (!nfDropTimer) nfDropTimer = window.setTimeout(() => nfDropSet(""), 1500);
+});
+
 // ── File shelf: drag a file at the notch, Braino holds it. ──
 function nfHasFiles(event) {
   return Array.from(event.dataTransfer?.types || []).includes("Files");
@@ -13694,6 +15391,18 @@ function nfHasFiles(event) {
 
 document.addEventListener("dragover", (event) => {
   if (!nfHasFiles(event)) return;
+  if (nfDropOn && !herMode) {
+    // The helper may be slower than the cursor: open the zones on arrival too.
+    if (nfDropState !== "ready" && !/^air-(picking|sending)$/.test(nfDropState) && nfPointInNotchZone(event.clientX, event.clientY)) nfDropSet("ready");
+    if (nfDropState === "ready") {
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "copy";
+      window.clearTimeout(nfDropTimer);
+      const hot = nfDropZoneAt(event.clientX);
+      if (hot !== nfDropHot) { nfDropHot = hot; nfDropRender(); }
+      return;
+    }
+  }
   if (nfPointInNotchZone(event.clientX, event.clientY)) {
     event.preventDefault();
     event.dataTransfer.dropEffect = "copy";
@@ -13718,6 +15427,12 @@ document.addEventListener("dragleave", (event) => {
 
 document.addEventListener("drop", (event) => {
   if (!nfHasFiles(event)) return;
+  if (nfDropOn && nfDropState === "ready") {
+    event.preventDefault();
+    nfDropHandle(nfDropHot || nfDropZoneAt(event.clientX), Array.from(event.dataTransfer?.files || [])
+      .map((file) => ({ path: window.brainoMac.pathForFile?.(file) || "", name: file.name || "file" })));
+    return;
+  }
   if (!nfPointInNotchZone(event.clientX, event.clientY)) return;
   event.preventDefault();
   nfDropDepth = 0;

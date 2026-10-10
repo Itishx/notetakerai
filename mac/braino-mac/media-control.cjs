@@ -21,7 +21,7 @@
 /* What is being talked about, if anything. */
 const MEDIA_NOUN = /\b(?:video|songs?|music|audio|track|playback|sound|movie|film|episode|podcast|stream|youtube|spotify|netflix|reel|clip|player|tune)\b/i;
 /* "Stop the task" is a job, not a sound, and has its own path. */
-const NOT_MEDIA = /\b(?:task|job|run|agent|recording|meeting|timer|alarm|listening|dictation)\b/i;
+const NOT_MEDIA = /\b(?:task|job|run|agent|recording|meeting|timer|alarm|listening|dictation|space|storage|disk|memory|ram|battery|brightness|scroll|scrolling|page|screen|window|zoom|tab)\b/i;
 const PAUSE_VERB = /\b(?:pause|stop|halt|kill|shut(?:\s+(?:it|this|that))?\s+(?:up|off)|turn\s+(?:it|this|that|the\s+\w+)?\s*off|cut)\b/i;
 const RESUME_VERB = /\b(?:resume|unpause|continue|play(?:\s+it)?\s+again|keep\s+playing|carry\s+on)\b/i;
 const NEXT_VERB = /\b(?:next|skip)\b/i;
@@ -90,8 +90,13 @@ function parseVolumeCommand(raw) {
   if (!text) return null;
   const target = targetFrom(text);
   const hasVolumeWord = VOLUME_WORD.test(text);
-  const wantsUp = /\bturn\s+(?:it|this|that|the\s+\w+\s+)?up\b/i.test(text) || (UP_WORD.test(text) && !/\bup\s+next\b/i.test(text));
-  const wantsDown = /\bturn\s+(?:it|this|that|the\s+\w+\s+)?down\b/i.test(text) || DOWN_WORD.test(text);
+  /* "Up" or "down" on its own is volume only in a short command ("turn it
+     up", "a bit lower") or with a word that can only mean sound. "What is
+     taking up space on my MacBook" turned the volume up by 20 (2026-10-03). */
+  const short = text.split(" ").length <= 4;
+  const soundOnly = /\b(?:louder|quieter|softer)\b/i;
+  const wantsUp = /\bturn\s+(?:(?:it|this|that)\s+|the\s+\w+\s+)?up\b/i.test(text) || soundOnly.test(text) && /\blouder\b/i.test(text) || ((hasVolumeWord || short) && UP_WORD.test(text) && !/\bup\s+next\b/i.test(text));
+  const wantsDown = /\bturn\s+(?:(?:it|this|that)\s+|the\s+\w+\s+)?down\b/i.test(text) || /\b(?:quieter|softer)\b/i.test(text) || ((hasVolumeWord || short) && DOWN_WORD.test(text));
   if (MUTE_VERB.test(text) && hasVolumeWord) return { mode: "absolute", value: 0, target };
   // "Make it 30 percent" on its own is about the volume being talked about.
   const itIs = text.match(/^(?:please\s+)?(?:make|set|put|keep)\s+it\s+(?:to|at|on)?\s*(\d{1,3})\s*(?:%|percent)\s*\.?$/i);
@@ -141,7 +146,8 @@ function applyVolumeCommand(command, currentPercent) {
   const direction = command.direction === -1 ? -1 : 1;
   let next = current;
   if (command.mode === "absolute") next = Number(command.value);
-  else if (command.mode === "points") next = current + direction * Number(command.value);
+  // "relative" is what the instant rule sends ("lower the volume", by 15): points.
+  else if (command.mode === "points" || command.mode === "relative") next = current + direction * Number(command.value);
   else if (command.mode === "percent") next = current * (1 + (direction * Number(command.value)) / 100);
   if (!Number.isFinite(next)) return current;
   return Math.max(0, Math.min(100, Math.round(next)));

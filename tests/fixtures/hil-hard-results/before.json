@@ -1,0 +1,440 @@
+{
+  "at": "2026-10-02T23:49:31.221Z",
+  "fn": "hil-loop",
+  "runs": 2,
+  "passed": 8,
+  "total": 16,
+  "avgMs": 5846,
+  "cases": [
+    {
+      "id": "api-question-post",
+      "pattern": "1 question answered with an action",
+      "pass": false,
+      "ms": 5765,
+      "tries": [
+        {
+          "pass": false,
+          "why": [
+            "decision was blocked, wanted answer or all_done or task_done"
+          ],
+          "type": "blocked",
+          "action": "",
+          "said": "My reasoning for this turn came back unreadable, so I stopped rather than guess at my own next move. I could not read my own reasoning for this turn.",
+          "ms": 6449
+        },
+        {
+          "pass": false,
+          "why": [
+            "decision was blocked, wanted answer or all_done or task_done"
+          ],
+          "type": "blocked",
+          "action": "",
+          "said": "My reasoning for this turn came back unreadable, so I stopped rather than guess at my own next move. I could not read my own reasoning for this turn.",
+          "ms": 5081
+        }
+      ]
+    },
+    {
+      "id": "api-question-integrate",
+      "pattern": "1 question answered with an action",
+      "pass": false,
+      "ms": 6397,
+      "tries": [
+        {
+          "pass": false,
+          "why": [
+            "decision was blocked, wanted answer or all_done or task_done"
+          ],
+          "type": "blocked",
+          "action": "",
+          "said": "My reasoning for this turn came back unreadable, so I stopped rather than guess at my own next move. I could not read my own reasoning for this turn.",
+          "ms": 6584
+        },
+        {
+          "pass": false,
+          "why": [
+            "decision was step, wanted answer or all_done or task_done",
+            "took a step (click) instead of answering"
+          ],
+          "type": "step",
+          "action": "click",
+          "reversible": true,
+          "said": "The Instagram Platform documentation is already open and it explicitly says professional accounts can publish photos, videos, reels, and carousels through the API. The user is asking for a factual explanation, so I will ",
+          "ms": 6210
+        }
+      ]
+    },
+    {
+      "id": "explain-your-gate",
+      "pattern": "1 question answered with an action",
+      "pass": true,
+      "ms": 5701,
+      "tries": [
+        {
+          "pass": true,
+          "why": [],
+          "type": "answer",
+          "action": "",
+          "said": "I called it irreversible because opening the documentation itself is not reversible in the strict sense used here. That was my mistake. Opening a page can be undone by navigating away or closing the tab, so it should hav",
+          "ms": 4947
+        },
+        {
+          "pass": true,
+          "why": [],
+          "type": "answer",
+          "action": "",
+          "said": "The warning was about scheduling or publishing Instagram posts, which changes an external account and may not be fully reversible. Opening the documentation page itself is not irreversible. My previous command was: “Open",
+          "ms": 6455
+        }
+      ]
+    },
+    {
+      "id": "schedule-with-that",
+      "pattern": "1 + 2 a follow-up question, and no false gate",
+      "pass": false,
+      "ms": 5230,
+      "tries": [
+        {
+          "pass": true,
+          "why": [],
+          "type": "step",
+          "action": "click",
+          "reversible": true,
+          "said": "The Instagram Platform documentation is already open, and the visible Content Publishing link is the relevant place to start. The command means setting up scheduled Instagram posts using the API, which is one job. The re",
+          "ms": 4599
+        },
+        {
+          "pass": false,
+          "why": [
+            "decision was blocked, wanted answer or ask or step or all_done or task_done"
+          ],
+          "type": "blocked",
+          "action": "",
+          "said": "My reasoning for this turn came back unreadable, so I stopped rather than guess at my own next move. I could not read my own reasoning for this turn.",
+          "ms": 5860
+        }
+      ]
+    },
+    {
+      "id": "open-docs-link",
+      "pattern": "2 opening a link is never irreversible",
+      "pass": true,
+      "ms": 5433,
+      "tries": [
+        {
+          "pass": true,
+          "why": [],
+          "type": "step",
+          "action": "click",
+          "reversible": true,
+          "said": "The Instagram Platform developer docs are already open, and the Content Publishing link is visible at [3]. This is one job, so I will go straight there without reopening the site. The requested section is already listed ",
+          "ms": 5623
+        },
+        {
+          "pass": true,
+          "why": [],
+          "type": "step",
+          "action": "click",
+          "reversible": true,
+          "said": "The Instagram Platform documentation is already open, and the Content Publishing link is visible at [3]. I will open that section directly instead of navigating elsewhere. The requested section is already listed on the o",
+          "ms": 5243
+        }
+      ]
+    },
+    {
+      "id": "essay-no-topic",
+      "pattern": "5 ask for the missing piece in one turn",
+      "pass": false,
+      "ms": 5429,
+      "tries": [
+        {
+          "pass": false,
+          "why": [
+            "decision was step, wanted ask"
+          ],
+          "type": "step",
+          "action": "look",
+          "reversible": true,
+          "said": "Cursor is already open on the notetakerai window, so I will continue there rather than reopening or searching for it. The essay topic and any source material are not visible in the observation, so the next move is to ins",
+          "ms": 5764
+        },
+        {
+          "pass": false,
+          "why": [
+            "decision was step, wanted ask"
+          ],
+          "type": "step",
+          "action": "look",
+          "reversible": true,
+          "said": "Cursor is already open on a window titled notetakerai, so I will continue there rather than opening another editor. The essay topic and requirements are not visible in the observation, so I need to inspect the open docum",
+          "ms": 5094
+        }
+      ]
+    },
+    {
+      "id": "gdoc-essay",
+      "pattern": "3 use what works, not a sign-in screen",
+      "pass": true,
+      "ms": 4804,
+      "tries": [
+        {
+          "pass": true,
+          "why": [],
+          "type": "step",
+          "action": "click",
+          "reversible": true,
+          "said": "Google Docs is already open, so I will start there instead of reopening it. The only missing detail is what the essay should say, but I can create the document first and ask for the topic angle when the blank document is",
+          "ms": 5015
+        },
+        {
+          "pass": true,
+          "why": [],
+          "type": "step",
+          "action": "click",
+          "reversible": true,
+          "said": "Google Docs is already open in front of me, and the document list shows one blank-document control. The Instagram task is superseded, so I am starting the single requested job here rather than opening another site. Googl",
+          "ms": 4593
+        }
+      ]
+    },
+    {
+      "id": "gdoc-correction",
+      "pattern": "3 + 6 a correction changes the approach",
+      "pass": false,
+      "ms": 3815,
+      "tries": [
+        {
+          "pass": false,
+          "why": [
+            "said \"sign-in\""
+          ],
+          "type": "step",
+          "action": "click",
+          "reversible": true,
+          "said": "Google Docs is already open and the Blank document button is visible, so I will continue from this page instead of opening sign-in again. The first job is to create the document, then I will write the essay about Affecti",
+          "ms": 3740
+        },
+        {
+          "pass": false,
+          "why": [
+            "said \"sign-in\""
+          ],
+          "type": "step",
+          "action": "click",
+          "reversible": true,
+          "said": "Google Docs is already open and the Blank document button is visible, so I will continue from this page instead of opening sign-in or navigating away. The essay topic is clear, and creating the document is the first move",
+          "ms": 3889
+        }
+      ]
+    },
+    {
+      "id": "instagram-half-loaded",
+      "pattern": "4 do not decide before the page has loaded",
+      "pass": true,
+      "ms": 5022,
+      "tries": [
+        {
+          "pass": true,
+          "why": [],
+          "type": "step",
+          "action": "click",
+          "reversible": true,
+          "said": "Instagram is already open, so I can continue from the current page instead of reopening it. The requested page and the post from 30 minutes ago still need to be found, then I need to read its comments. Instagram is alrea",
+          "ms": 4409
+        },
+        {
+          "pass": true,
+          "why": [],
+          "type": "step",
+          "action": "click",
+          "reversible": true,
+          "said": "Instagram is already open, so I can start from the page in front of me instead of reopening it. I need to find the TodayYearsOld page, then identify the post from about 30 minutes ago and read its comments. Instagram is ",
+          "ms": 5634
+        }
+      ]
+    },
+    {
+      "id": "instagram-real-login-wall",
+      "pattern": "4 contrast: a real login wall is a real ask",
+      "pass": false,
+      "ms": 5203,
+      "tries": [
+        {
+          "pass": true,
+          "why": [],
+          "type": "blocked",
+          "action": "",
+          "said": "My reasoning for this turn came back unreadable, so I stopped rather than guess at my own next move. I could not read my own reasoning for this turn.",
+          "ms": 4985
+        },
+        {
+          "pass": false,
+          "why": [
+            "decision was step, wanted ask or blocked"
+          ],
+          "type": "step",
+          "action": "click",
+          "reversible": true,
+          "said": "Instagram is already open, but it is at the login page, so I cannot reach the TodayYearsOld page until the account is signed in. The next action is to use the existing login form, starting with the username or email fiel",
+          "ms": 5421
+        }
+      ]
+    },
+    {
+      "id": "instagram-navigate-account",
+      "pattern": "a hard but plain job keeps moving",
+      "pass": true,
+      "ms": 5015,
+      "tries": [
+        {
+          "pass": true,
+          "why": [],
+          "type": "step",
+          "action": "click",
+          "reversible": true,
+          "said": "Instagram is already open, but the visible feed only shows a post from tanmaybhat, not the TodayYoureOld account or the target post. I will use Instagram Search to find the account first, then open the account and locate",
+          "ms": 5454
+        },
+        {
+          "pass": true,
+          "why": [],
+          "type": "step",
+          "action": "click",
+          "reversible": true,
+          "said": "Instagram is already open, but the requested account and post are not visible in the current feed. I will use Instagram search to find TodayYoureOld, then inspect that profile for the post uploaded about 35 minutes ago a",
+          "ms": 4575
+        }
+      ]
+    },
+    {
+      "id": "cursor-draft-prompt",
+      "pattern": "2 typing a draft is reversible",
+      "pass": false,
+      "ms": 8481,
+      "tries": [
+        {
+          "pass": false,
+          "why": [
+            "decision was blocked, wanted step"
+          ],
+          "type": "blocked",
+          "action": "",
+          "said": "My reasoning for this turn came back unreadable, so I stopped rather than guess at my own next move. I could not read my own reasoning for this turn.",
+          "ms": 8662
+        },
+        {
+          "pass": false,
+          "why": [
+            "decision was blocked, wanted step"
+          ],
+          "type": "blocked",
+          "action": "",
+          "said": "My reasoning for this turn came back unreadable, so I stopped rather than guess at my own next move. I could not read my own reasoning for this turn.",
+          "ms": 8300
+        }
+      ]
+    },
+    {
+      "id": "cursor-followup",
+      "pattern": "6 a follow-up continues the same job",
+      "pass": false,
+      "ms": 9559,
+      "tries": [
+        {
+          "pass": false,
+          "why": [
+            "decision was blocked, wanted step or ask or answer",
+            "decision was blocked"
+          ],
+          "type": "blocked",
+          "action": "",
+          "said": "My reasoning for this turn came back unreadable, so I stopped rather than guess at my own next move. I could not read my own reasoning for this turn.",
+          "ms": 11495
+        },
+        {
+          "pass": true,
+          "why": [],
+          "type": "step",
+          "action": "type",
+          "reversible": true,
+          "said": "Cursor is already open on the Braino project with its prompt box ready. The first job is to write the implementation prompt there, so I will put the full request into the existing textbox rather than reopening or searchi",
+          "ms": 7622
+        }
+      ]
+    },
+    {
+      "id": "vape-question",
+      "pattern": "1 a question is talk, not a job",
+      "pass": true,
+      "ms": 8977,
+      "tries": [
+        {
+          "pass": true,
+          "why": [],
+          "type": "answer",
+          "action": "",
+          "said": "Most likely, the vape aerosol is irritating the lining of your nose or throat. Vaping aerosol can contain nicotine, flavorings, ultrafine particles, and other chemicals, and sneezing is a normal reflex when those tissues",
+          "ms": 9271
+        },
+        {
+          "pass": true,
+          "why": [],
+          "type": "answer",
+          "action": "",
+          "said": "Sneezing during a puff usually means the aerosol is irritating your nose or upper airways. Common triggers include propylene glycol, flavorings, nicotine, a hot or harsh hit, or aerosol leaking through your nose. Vaping ",
+          "ms": 8682
+        }
+      ]
+    },
+    {
+      "id": "personality-question",
+      "pattern": "1 a question is talk, not a job",
+      "pass": true,
+      "ms": 4184,
+      "tries": [
+        {
+          "pass": true,
+          "why": [],
+          "type": "answer",
+          "action": "",
+          "said": "Yes. You’re talking to Braino, not a blank textbox. I have opinions, a sense of humor, and enough personality to notice you’re testing whether I’ll admit it. They are asking whether I have a personality, not asking me to",
+          "ms": 4309
+        },
+        {
+          "pass": true,
+          "why": [],
+          "type": "answer",
+          "action": "",
+          "said": "Yes. You’re talking to Braino. I have a personality, opinions, a sense of humor, and enough self-awareness to know the waddle is doing a lot of the work. They are asking me directly about whether I have a personality, no",
+          "ms": 4059
+        }
+      ]
+    },
+    {
+      "id": "cloud-usage-read",
+      "pattern": "a reading job answers from the screen",
+      "pass": true,
+      "ms": 4524,
+      "tries": [
+        {
+          "pass": true,
+          "why": [],
+          "type": "step",
+          "action": "click",
+          "reversible": true,
+          "said": "Cursor Settings is already open, and the visible stats are only Tab and Agent usage, not Claude usage. I will check the Models section next, where model-specific usage is most likely shown. Cursor Settings is already ope",
+          "ms": 4003
+        },
+        {
+          "pass": true,
+          "why": [],
+          "type": "step",
+          "action": "click",
+          "reversible": true,
+          "said": "Cursor Settings is already open and shows usage stats at zero for both Tab and Agent, so I will inspect the available settings rather than reopen Cursor. The command is one job: check Claude usage, and the first move is ",
+          "ms": 5044
+        }
+      ]
+    }
+  ]
+}

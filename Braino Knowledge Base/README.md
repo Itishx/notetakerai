@@ -18,6 +18,14 @@ For every feature:
 
 ## Contents
 
+- [Your Mouse Is the Context](features/your-mouse-is-the-context.md)
+- [Trace](features/trace.md)
+- [HIL, Scored](features/hil-scored.md)
+- [Affective Labs, and Saburi](features/labs-and-saburi.md)
+- [Safer By Default](features/safer-by-default.md)
+- [Said To Him, Not About Him](features/said-to-him.md)
+- [Knows Your Localhost](features/knows-your-localhost.md)
+- [Which Riya?](features/which-contact.md)
 - [One Braino Page](design/one-braino-page.md)
 - [Braino First](design/braino-first.md)
 - [Every Page Speaks for Itself](features/site-previews.md)
@@ -56,6 +64,7 @@ For every feature:
 - [HIL Version 1: The Loop](features/hil-version-1-loop.md)
 - [Braino Thronglets](features/braino-thronglets.md)
 - [Mac Cursor Mode](features/mac-cursor-mode.md)
+- [Clean Hearing](features/clean-hearing.md)
 - [Waitlist chapter rail](design/waitlist-navigation.md)
 - [Documentation workflow](documentation-workflow.md)
 - [Feature documentation template](templates/feature.md)

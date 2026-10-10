@@ -138,10 +138,10 @@ serve(async (req) => {
     }
 
     const started = Date.now();
-    const aiRes = await fetch(OPENAI_ENDPOINT, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
+    /* The same fixed instructions every call: cached under one name for 24h, and
+       sent again without the cache fields if the API ever refuses them. */
+    const routerBody = (cache: boolean) => JSON.stringify({
+        ...(cache ? { prompt_cache_key: "braino-hil-router", prompt_cache_retention: "24h" } : {}),
         model: HIL_ROUTER_MODEL,
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
@@ -163,8 +163,11 @@ serve(async (req) => {
         // so it costs a deploy to notice.
         reasoning_effort: BRAINO_TEXT_REASONING_EFFORT,
         response_format: { type: "json_object" },
-      }),
-    });
+      });
+    let aiRes = await fetch(OPENAI_ENDPOINT, { method: "POST", headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" }, body: routerBody(true) });
+    if (aiRes.status === 400 && /prompt_cache/i.test(await aiRes.clone().text().catch(() => ""))) {
+      aiRes = await fetch(OPENAI_ENDPOINT, { method: "POST", headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" }, body: routerBody(false) });
+    }
 
     if (!aiRes.ok) {
       logEngineRun({

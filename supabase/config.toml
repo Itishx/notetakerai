@@ -423,3 +423,9 @@ verify_jwt = false
 [functions.memory-recall]
 entrypoint = "./functions/memory/memory-recall/index.ts"
 verify_jwt = false
+
+# HIL's planning half: one model call writes the whole plan as tool calls, and
+# the Mac runs them back to back. Public for the same reason hil-loop is.
+[functions.hil-plan]
+entrypoint = "./functions/reasoning/hil-plan/index.ts"
+verify_jwt = false

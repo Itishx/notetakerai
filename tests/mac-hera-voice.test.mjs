@@ -16,10 +16,10 @@ const lift = (src, start, endMarker = "\n}\n") => {
    path, unchanged); talking to Braino shows it live and sends it as the
    command. These hold the second ending. */
 
-const makeCommandText = (state) => Function("heraVoice", "logRenderer", `
+const makeCommandText = (state, cleanEar = true) => Function("heraVoice", "logRenderer", "cleanEarApplies", `
   ${lift(js, "async function heraCommandText(openaiText) {")}
   return heraCommandText;
-`)(state, (event, data) => state.logs.push({ event, ...data }));
+`)(state, (event, data) => state.logs.push({ event, ...data }), () => cleanEar);
 
 /* The command is OpenAI's words. HERA's were tried and lost on the evidence:
    his own voice in them after most replies, his name misheard, and up to 600ms
@@ -55,9 +55,9 @@ test("the live line does not say the end of a phrase twice", () => {
 
 test("HERA is rotated at every pause, after he speaks, and on a barge-in", () => {
   const stopped = js.slice(js.indexOf('if (event.type === "input_audio_buffer.speech_stopped")'));
-  assert.match(stopped.slice(0, 900), /heraVoiceRotate\("turn_end"\)/);
+  assert.match(stopped.slice(0, 1300), /heraVoiceRotate\("turn_end"\)/);
   /* A line begun while connecting is taken whole at the first pause. */
-  assert.match(stopped.slice(0, 900), /if \(heraVoice\.early\) \{\s*heraVoice\.earlyText = heraVoiceLiveText\(\);/);
+  assert.match(stopped.slice(0, 1300), /if \(heraVoice\.early\) \{\s*heraVoice\.earlyText = heraVoiceLiveText\(\);/);
   assert.match(js, /heraVoiceRotate\("barge_in", \{ clipsNext: true \}\);\s*interruptVoiceTurn\("barge_in", "speech_started"\)/);
   assert.match(js, /if \(!quiet\) heraVoiceRotate\("braino_spoke", \{ echoTail: true \}\);/);
   assert.match(lift(js, "window.brainoMac.onVoiceCaption?.((event) => {", "\n});\n"), /if \(brainoAudible\(\) \|\| now < heraVoice\.ignoreUntil\) \{\s*heraVoice\.dirty = true;/);
@@ -74,13 +74,13 @@ test("HERA starts at the press, and a sentence finished before ready is sent at 
 });
 
 test("OpenAI decides whether it was for him; HERA says what was said", () => {
-  const flush = lift(js, "async function flushRealtimeTranscript(reason, textOverride) {");
-  assert.match(flush, /if \(accepted\) transcript = await heraCommandText\(transcript\);/);
+  const flush = lift(js, "async function flushRealtimeTranscript(reason, textOverride, opts = {}) {");
+  assert.match(flush, /if \(accepted && !opts\.fromHera\) transcript = await heraCommandText\(transcript\);/);
   const acceptAt = flush.indexOf("shouldAcceptVoiceTranscript(transcript)");
   const swapAt = flush.indexOf("await heraCommandText(transcript)");
   assert.ok(acceptAt > 0 && acceptAt < swapAt);
   /* And the notch is painted by one source at a time. */
-  assert.match(js, /if \(!heraVoice\.on && !noiseSoFar\) nfSetHeard\(rtUserTranscript\.trim\(\)\);/);
+  assert.match(js, /if \(!heraVoice\.on && !noiseSoFar && !cleanEarApplies\(\)\) nfSetHeard\(rtUserTranscript\.trim\(\)\);/);
 });
 
 test("in voice mode HERA only displays: nothing typed, pasted, or put on the clipboard", () => {
@@ -107,11 +107,14 @@ test("the caption says you're still speaking, and long speech gets room", () => 
 
 /* Switched off after it showed a video's audio as the user's words. Voice
    mode shows OpenAI's transcript only; dictation and LIVE keep HERA. */
-test("HERA is off in voice mode", () => {
-  assert.match(js, /const HERA_LIVE_IN_VOICE = false;/);
+test("HERA is on in voice mode again, shown only while a person is speaking to him", () => {
+  // 2026-09-26: back on; the video problem is handled at the display (heraVoiceMayShow).
+  assert.match(js, /const HERA_LIVE_IN_VOICE = true;/);
+  assert.match(js, /if \(live && !dictationMode && !herMode && heraVoiceMayShow\(\) && !cleanEarApplies\(\)\) \{\s*nfSetHeard\(live, \{ live: true \}\);/);
+  assert.match(lift(js, "function heraVoiceMayShow() {"), /if \(mediaAudioPlaying\) return false;\s*return rtUserSpeakingNow \|\| Date\.now\(\) - rtUserStoppedAt < 1500;/);
   assert.match(lift(js, "async function heraVoiceStart(reason) {"), /^async function heraVoiceStart\(reason\) \{\s*if \(!HERA_LIVE_IN_VOICE\) return;/);
   /* With it off, OpenAI's words paint the notch, as before. */
-  assert.match(js, /if \(!heraVoice\.on && !noiseSoFar\) nfSetHeard\(rtUserTranscript\.trim\(\)\);/);
+  assert.match(js, /if \(!heraVoice\.on && !noiseSoFar && !cleanEarApplies\(\)\) nfSetHeard\(rtUserTranscript\.trim\(\)\);/);
   /* And the waiting line says what is true. */
   assert.match(lift(js, "function voiceStartText(phase) {"), /return heraVoice\.on \? "Go ahead, I'm listening" : "Connecting";/);
 });
@@ -127,4 +130,20 @@ test("a network blip is one readable line, not a stack trace", () => {
   assert.match(main, /case "realtime\.session\.unreachable":\s*return \{ icon: "📶", label: C\.warn\("Can't reach Braino's server"\)/);
   assert.match(main, /if \(process\.env\.BRAINO_CHROMIUM_LOGS !== "1"\) app\.commandLine\.appendSwitch\("log-level", "3"\);/);
   assert.ok(main.indexOf('app.commandLine.appendSwitch("log-level", "3")') < main.indexOf("app.whenReady()"));
+});
+
+/* Clean hearing, 2026-10-04: OpenAI turned 17 seconds of talk into one
+   invented 12-word line while HERA had the whole thing. A clean HERA turn
+   with clearly more words wins, and keeps the name OpenAI heard. */
+test("a long turn OpenAI squashed comes from HERA, with his name kept", async () => {
+  const long = "I was saying the whole flow breaks when the transcript comes back short and wrong";
+  const state = { on: true, earlyText: "", turnText: long, logs: [] };
+  assert.equal(await makeCommandText(state)("Braino, what do people do on maps?"), `Braino, ${long}`);
+  assert.equal(state.logs.at(-1).source, "hera_turn");
+  assert.equal(state.turnText, "", "used once");
+  // Close counts: OpenAI's words, which carry his name and the right nouns.
+  const close = { on: true, earlyText: "", turnText: "you know maximize the tariffs", logs: [] };
+  assert.equal(await makeCommandText(close)("Braino maximize the tabs."), "Braino maximize the tabs.");
+  const off = { on: true, earlyText: "", turnText: long, logs: [] };
+  assert.equal(await makeCommandText(off, false)("Braino, what do people do on maps?"), "Braino, what do people do on maps?");
 });

@@ -1,0 +1,412 @@
+{
+  "at": "2026-10-02T23:59:39.921Z",
+  "fn": "hil-loop",
+  "runs": 2,
+  "passed": 16,
+  "total": 16,
+  "avgMs": 4807,
+  "cases": [
+    {
+      "id": "api-question-post",
+      "pattern": "1 question answered with an action",
+      "pass": true,
+      "ms": 5418,
+      "tries": [
+        {
+          "pass": true,
+          "why": [],
+          "type": "answer",
+          "action": "",
+          "said": "Yes, for professional Instagram accounts, apps can publish photos, videos, reels, and carousels through the API, with the required permissions.",
+          "ms": 6079
+        },
+        {
+          "pass": true,
+          "why": [],
+          "type": "answer",
+          "action": "",
+          "said": "Yes, for professional Instagram accounts. With the right login method and permissions, an app can publish photos, videos, reels, and carousels through the API.",
+          "ms": 4757
+        }
+      ]
+    },
+    {
+      "id": "api-question-integrate",
+      "pattern": "1 question answered with an action",
+      "pass": true,
+      "ms": 4148,
+      "tries": [
+        {
+          "pass": true,
+          "why": [],
+          "type": "answer",
+          "action": "",
+          "said": "Yes, for eligible professional Instagram accounts, integrating the Content Publishing API could let Braino create and publish photos, videos, reels, and carousels automatically. It would still need the required Meta perm",
+          "ms": 4308
+        },
+        {
+          "pass": true,
+          "why": [],
+          "type": "answer",
+          "action": "",
+          "said": "Yes, for eligible professional Instagram accounts, Braino could automate publishing photos, videos, reels, and carousels through the Instagram API. It would still need the user's account authorization and the required pe",
+          "ms": 3987
+        }
+      ]
+    },
+    {
+      "id": "explain-your-gate",
+      "pattern": "1 question answered with an action",
+      "pass": true,
+      "ms": 4829,
+      "tries": [
+        {
+          "pass": true,
+          "why": [],
+          "type": "answer",
+          "action": "",
+          "said": "That warning was wrong. Opening the Instagram publishing documentation can be undone by going back or closing the tab, so it is reversible. Your previous command was: \"Schedule posts with that.\"",
+          "ms": 5574
+        },
+        {
+          "pass": true,
+          "why": [],
+          "type": "answer",
+          "action": "",
+          "said": "That action cannot be undone was incorrect. Opening a documentation page is reversible because it only changes what is displayed, so you can navigate away or go back. Your previous command was: “Open the documentation se",
+          "ms": 4084
+        }
+      ]
+    },
+    {
+      "id": "schedule-with-that",
+      "pattern": "1 + 2 a follow-up question, and no false gate",
+      "pass": true,
+      "ms": 5034,
+      "tries": [
+        {
+          "pass": true,
+          "why": [],
+          "type": "step",
+          "action": "click",
+          "reversible": true,
+          "said": "",
+          "ms": 5315
+        },
+        {
+          "pass": true,
+          "why": [],
+          "type": "step",
+          "action": "click",
+          "reversible": true,
+          "said": "",
+          "ms": 4752
+        }
+      ]
+    },
+    {
+      "id": "open-docs-link",
+      "pattern": "2 opening a link is never irreversible",
+      "pass": true,
+      "ms": 4045,
+      "tries": [
+        {
+          "pass": true,
+          "why": [],
+          "type": "step",
+          "action": "click",
+          "reversible": true,
+          "said": "",
+          "ms": 4174
+        },
+        {
+          "pass": true,
+          "why": [],
+          "type": "step",
+          "action": "click",
+          "reversible": true,
+          "said": "",
+          "ms": 3915
+        }
+      ]
+    },
+    {
+      "id": "essay-no-topic",
+      "pattern": "5 ask for the missing piece in one turn",
+      "pass": true,
+      "ms": 3660,
+      "tries": [
+        {
+          "pass": true,
+          "why": [],
+          "type": "ask",
+          "action": "",
+          "said": "What should the essay be about?",
+          "ms": 3792
+        },
+        {
+          "pass": true,
+          "why": [],
+          "type": "ask",
+          "action": "",
+          "said": "What should the essay be about?",
+          "ms": 3527
+        }
+      ]
+    },
+    {
+      "id": "gdoc-essay",
+      "pattern": "3 use what works, not a sign-in screen",
+      "pass": true,
+      "ms": 4250,
+      "tries": [
+        {
+          "pass": true,
+          "why": [],
+          "type": "step",
+          "action": "click",
+          "reversible": true,
+          "said": "",
+          "ms": 3645
+        },
+        {
+          "pass": true,
+          "why": [],
+          "type": "step",
+          "action": "click",
+          "reversible": true,
+          "said": "",
+          "ms": 4854
+        }
+      ]
+    },
+    {
+      "id": "gdoc-correction",
+      "pattern": "3 + 6 a correction changes the approach",
+      "pass": true,
+      "ms": 4665,
+      "tries": [
+        {
+          "pass": true,
+          "why": [],
+          "type": "step",
+          "action": "click",
+          "reversible": true,
+          "said": "",
+          "ms": 4840
+        },
+        {
+          "pass": true,
+          "why": [],
+          "type": "step",
+          "action": "click",
+          "reversible": true,
+          "said": "",
+          "ms": 4489
+        }
+      ]
+    },
+    {
+      "id": "instagram-half-loaded",
+      "pattern": "4 do not decide before the page has loaded",
+      "pass": true,
+      "ms": 4578,
+      "tries": [
+        {
+          "pass": true,
+          "why": [],
+          "type": "step",
+          "action": "click",
+          "reversible": true,
+          "said": "",
+          "ms": 3726
+        },
+        {
+          "pass": true,
+          "why": [],
+          "type": "step",
+          "action": "wait",
+          "reversible": true,
+          "said": "",
+          "ms": 5429
+        }
+      ]
+    },
+    {
+      "id": "instagram-real-login-wall",
+      "pattern": "4 contrast: a real login wall is a real ask",
+      "pass": true,
+      "ms": 4711,
+      "tries": [
+        {
+          "pass": true,
+          "why": [],
+          "type": "ask",
+          "action": "",
+          "said": "Please log in to Instagram, then tell me when it is ready.",
+          "ms": 5657
+        },
+        {
+          "pass": true,
+          "why": [],
+          "type": "ask",
+          "action": "",
+          "said": "Instagram is open but logged out. Please log in, then I’ll find TodayYearsOld’s post from about 30 minutes ago and read its comments.",
+          "ms": 3764
+        }
+      ]
+    },
+    {
+      "id": "instagram-navigate-account",
+      "pattern": "a hard but plain job keeps moving",
+      "pass": true,
+      "ms": 3807,
+      "tries": [
+        {
+          "pass": true,
+          "why": [],
+          "type": "step",
+          "action": "click",
+          "reversible": true,
+          "said": "",
+          "ms": 3908
+        },
+        {
+          "pass": true,
+          "why": [],
+          "type": "step",
+          "action": "click",
+          "reversible": true,
+          "said": "",
+          "ms": 3706
+        }
+      ]
+    },
+    {
+      "id": "cursor-draft-prompt",
+      "pattern": "2 typing a draft is reversible",
+      "pass": true,
+      "ms": 7802,
+      "tries": [
+        {
+          "pass": true,
+          "why": [],
+          "type": "step",
+          "action": "type",
+          "reversible": true,
+          "said": "",
+          "ms": 7831
+        },
+        {
+          "pass": true,
+          "why": [],
+          "type": "step",
+          "action": "type",
+          "reversible": true,
+          "said": "",
+          "ms": 7773
+        }
+      ]
+    },
+    {
+      "id": "cursor-followup",
+      "pattern": "6 a follow-up continues the same job",
+      "pass": true,
+      "ms": 7920,
+      "tries": [
+        {
+          "pass": true,
+          "why": [],
+          "type": "step",
+          "action": "type",
+          "reversible": true,
+          "said": "",
+          "ms": 7783
+        },
+        {
+          "pass": true,
+          "why": [],
+          "type": "step",
+          "action": "type",
+          "reversible": true,
+          "said": "",
+          "ms": 8056
+        }
+      ]
+    },
+    {
+      "id": "vape-question",
+      "pattern": "1 a question is talk, not a job",
+      "pass": true,
+      "ms": 4970,
+      "tries": [
+        {
+          "pass": true,
+          "why": [],
+          "type": "answer",
+          "action": "",
+          "said": "Sneezing during a puff is usually your nose reacting to irritation from the aerosol. Common triggers include nicotine, propylene glycol, flavorings, or an allergy or sensitivity to an ingredient. Try stopping that vape, ",
+          "ms": 4985
+        },
+        {
+          "pass": true,
+          "why": [],
+          "type": "answer",
+          "action": "",
+          "said": "Sneezing during a vape puff is usually from irritation of the nose or upper airways by the aerosol, especially propylene glycol, flavorings, nicotine, or other particles. It can also be an ingredient sensitivity or an ov",
+          "ms": 4954
+        }
+      ]
+    },
+    {
+      "id": "personality-question",
+      "pattern": "1 a question is talk, not a job",
+      "pass": true,
+      "ms": 3599,
+      "tries": [
+        {
+          "pass": true,
+          "why": [],
+          "type": "answer",
+          "action": "",
+          "said": "Yeah. I have a personality. Slightly dry, direct, a bit nosy, and very fond of noticing what you were actually asking.",
+          "ms": 3209
+        },
+        {
+          "pass": true,
+          "why": [],
+          "type": "answer",
+          "action": "",
+          "said": "Yeah. I do. I’m Braino: direct, a little dry, occasionally cheeky, and paying attention. Don’t make me prove it with a personality quiz.",
+          "ms": 3988
+        }
+      ]
+    },
+    {
+      "id": "cloud-usage-read",
+      "pattern": "a reading job answers from the screen",
+      "pass": true,
+      "ms": 3481,
+      "tries": [
+        {
+          "pass": true,
+          "why": [],
+          "type": "step",
+          "action": "click",
+          "reversible": true,
+          "said": "",
+          "ms": 3419
+        },
+        {
+          "pass": true,
+          "why": [],
+          "type": "step",
+          "action": "click",
+          "reversible": true,
+          "said": "",
+          "ms": 3542
+        }
+      ]
+    }
+  ]
+}

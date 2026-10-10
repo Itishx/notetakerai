@@ -1,0 +1,39 @@
+/* /braino on the home page's grammar (2026-10-07). Only what the home page
+   does not already have: the two-model pills, the film in the hero frame, and
+   a few rows. Everything else is the home page's own classes. */
+.bp .bp-tabs { display: inline-flex; gap: 6px; margin-top: clamp(22px, 3vw, 36px); padding: 5px; border-radius: 999px; background: color-mix(in srgb, var(--a-ink, #1b1c1f) 6%, transparent); }
+.bp .bp-tabs button { display: grid; gap: 1px; text-align: left; padding: 9px 18px; border: 0; border-radius: 999px; background: transparent; color: var(--a-ink-soft, #4e5059); cursor: pointer; font: inherit; }
+.bp .bp-tabs button small { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--a-ink-faint, #8a8c94); }
+.bp .bp-tabs button span { font-size: 15px; font-weight: 600; }
+.bp .bp-tabs button.on { background: var(--a-paper, #fff); color: var(--a-ink, #1b1c1f); box-shadow: 0 1px 2px rgba(0,0,0,.08), 0 6px 18px rgba(0,0,0,.06); }
+.bp .bp-tabs button.on small { color: var(--acc); }
+.bp .bp-tabs button:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; }
+
+.bp .bp-film { position: relative; }
+.bp .bp-film video { display: block; width: 100%; height: 100%; object-fit: cover; background: #000; }
+.bp .bp-film-play { position: absolute; inset: 0; display: grid; place-content: center; gap: 14px; justify-items: center; border: 0; background: linear-gradient(180deg, transparent 40%, rgba(0,0,0,.35)); color: #fff; cursor: pointer; font: 600 clamp(18px, 2vw, 24px) var(--a-display, Georgia, serif); }
+.bp .bp-film-play i { width: 74px; height: 74px; border-radius: 50%; background: rgba(255,255,255,.92); position: relative; box-shadow: 0 10px 30px rgba(0,0,0,.25); }
+.bp .bp-film-play i::after { content: ""; position: absolute; left: 30px; top: 23px; border-left: 22px solid #111; border-top: 14px solid transparent; border-bottom: 14px solid transparent; }
+
+.bp .bp-jobs .bp-job-so { margin-top: 10px; color: var(--a-ink, #1b1c1f); font-weight: 500; }
+
+.bp .bp-grow { display: grid; gap: 12px; margin-top: clamp(24px, 3vw, 40px); }
+.bp .bp-grow-row { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 18px; align-items: center; padding: 18px 22px; border-radius: 18px; background: var(--a-paper, #fff); border: 1px solid color-mix(in srgb, var(--a-ink, #1b1c1f) 10%, transparent); }
+.bp .bp-grow-row p { margin: 0; font-size: clamp(15px, 1.2vw, 18px); color: var(--a-ink-soft, #4e5059); }
+.bp .bp-grow-row .bp-grow-now { color: var(--a-ink, #1b1c1f); font-weight: 500; }
+.bp .bp-grow-row i { font-style: normal; color: var(--acc); font-size: 20px; }
+@media (max-width: 700px) { .bp .bp-grow-row { grid-template-columns: 1fr; gap: 6px; } .bp .bp-grow-row i { transform: rotate(90deg); justify-self: start; } }
+
+.bp .bp-day .bf-clock { margin-top: clamp(24px, 3vw, 40px); }
+.bp .bp-honest { margin-top: clamp(28px, 3vw, 44px); }
+.bp .bp-honest .aff-cta { margin-top: 8px; }
+
+/* The early access and marquee keep their own styles, set in the home page's type. */
+.bp .bf-sec { font-family: inherit; }
+
+/* The early access, marquee and clock sections sit on the home page's measure. */
+.bp .bf-wrap { max-width: var(--a-maxw); padding: 0 var(--a-gutter); }
+/* What is true today: one quiet column, not the side-by-side say row. */
+.bp .bp-honest { display: block; max-width: 62ch; }
+.bp .bp-honest .ah-kicker { margin-bottom: 10px; }
+.bp .bp-honest p { margin: 0 0 16px; }

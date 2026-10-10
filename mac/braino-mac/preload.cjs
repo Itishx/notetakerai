@@ -9,6 +9,7 @@ const path = require("node:path");
  * cannot require it, and a second regex living over there is exactly how the
  * same bug gets found twice. */
 const { macPromisesAction } = require(path.join(__dirname, "hil-verify.cjs"));
+const { nameIsAddressed } = require(path.join(__dirname, "address-intent.cjs"));
 
 // Same userData path main.cjs writes profiles.mascot's local cache to
 // (mascot.json) — read here, synchronously, so the walker mounts with the
@@ -64,6 +65,26 @@ contextBridge.exposeInMainWorld("brainoMac", {
   getWalkerSvg: () => walkerSvg,
   getWalkerSvgFor: (mascotId) => walkerSvgFor(mascotId),
   log: (payload) => ipcRenderer.invoke("braino-mac:log", payload),
+  noteChat: (payload) => ipcRenderer.invoke("braino-mac:note-chat", payload),
+  topContactNames: () => ipcRenderer.invoke("braino-mac:top-contact-names"),
+  chromeProfiles: () => ipcRenderer.invoke("braino-mac:chrome-profiles"),
+  appOpen: (page) => ipcRenderer.invoke("braino-mac:app-open", page),
+  appRecent: () => ipcRenderer.invoke("braino-mac:app-recent"),
+  skillsList: () => ipcRenderer.invoke("braino-mac:skills-list"),
+  skillsForget: (phrase) => ipcRenderer.invoke("braino-mac:skills-forget", phrase),
+  appOverlay: (patch) => ipcRenderer.invoke("braino-mac:app-overlay", patch),
+  loginItem: (on) => ipcRenderer.invoke("braino-mac:login-item", on),
+  onAppGo: (callback) => {
+    const handler = (_event, page) => callback(page);
+    ipcRenderer.on("braino-mac:app-go", handler);
+    return () => ipcRenderer.removeListener("braino-mac:app-go", handler);
+  },
+  onAppOverlay: (callback) => {
+    const handler = (_event, patch) => callback(patch || {});
+    ipcRenderer.on("braino-mac:app-overlay", handler);
+    return () => ipcRenderer.removeListener("braino-mac:app-overlay", handler);
+  },
+  chromeProfilesSave: (config) => ipcRenderer.invoke("braino-mac:chrome-profiles-save", config),
   logInteraction: (payload) => ipcRenderer.invoke("braino-mac:log-interaction", payload || {}),
   activeContext: () => ipcRenderer.invoke("braino-mac:active-context"),
   authStatus: () => ipcRenderer.invoke("braino-mac:auth-status"),
@@ -120,10 +141,30 @@ contextBridge.exposeInMainWorld("brainoMac", {
   activityDeleteDay: (day) => ipcRenderer.invoke("braino-mac:activity-delete-day", day),
   activityDeleteRow: (day, index) => ipcRenderer.invoke("braino-mac:activity-delete-row", day, index),
   memoryOpen: () => ipcRenderer.invoke("braino-mac:memory-open"),
+  arrivalInit: () => ipcRenderer.invoke("braino-mac:arrival-init"),
+  arrivalFace: (dataUrl) => ipcRenderer.invoke("braino-mac:arrival-face", dataUrl),
+  arrivalSummary: () => ipcRenderer.invoke("braino-mac:arrival-summary"),
+  arrivalTouchID: () => ipcRenderer.invoke("braino-mac:arrival-touchid"),
+  arrivalMouse: (inside) => ipcRenderer.invoke("braino-mac:arrival-mouse", inside),
+  arrivalDone: (outcome) => ipcRenderer.invoke("braino-mac:arrival-done", outcome),
+  setupOpen: () => ipcRenderer.invoke("braino-mac:setup-open"),
+  setupSnapshot: () => ipcRenderer.invoke("braino-mac:setup-snapshot"),
+  setupSave: (answers) => ipcRenderer.invoke("braino-mac:setup-save", answers),
+  setupConnect: (kind) => ipcRenderer.invoke("braino-mac:setup-connect", kind),
+  setupOpenPane: (pane) => ipcRenderer.invoke("braino-mac:setup-open-pane", pane),
+  setupSay: (text) => ipcRenderer.invoke("braino-mac:setup-say", text),
   memoryDigests: (day) => ipcRenderer.invoke("braino-mac:memory-digests", day),
   memoryRecallSwitch: (on) => ipcRenderer.invoke("braino-mac:memory-recall-switch", on),
   memoryDigestNow: () => ipcRenderer.invoke("braino-mac:memory-digest-now"),
   memoryAsk: (question) => ipcRenderer.invoke("braino-mac:memory-ask", question),
+  memoryPhotos: (day) => ipcRenderer.invoke("braino-mac:memory-photos", day),
+  notchDropEnabled: () => ipcRenderer.invoke("braino-mac:notch-drop-enabled"),
+  airdrop: (paths) => ipcRenderer.invoke("braino-mac:airdrop", paths),
+  fileThumb: (filePath) => ipcRenderer.invoke("braino-mac:file-thumb", filePath),
+  trayDragOut: (filePath) => ipcRenderer.send("braino-mac:tray-drag-out", filePath),
+  onFileDrag: (callback) => { const h = (_e, p) => callback(p); ipcRenderer.on("braino-mac:file-drag", h); return () => ipcRenderer.removeListener("braino-mac:file-drag", h); },
+  onAirdropStatus: (callback) => { const h = (_e, p) => callback(p); ipcRenderer.on("braino-mac:airdrop-status", h); return () => ipcRenderer.removeListener("braino-mac:airdrop-status", h); },
+  memoryPhotosFetch: (day) => ipcRenderer.invoke("braino-mac:memory-photos-fetch", day),
   mesaConnect: () => ipcRenderer.invoke("braino-mac:mesa-connect"),
   mesaSync: () => ipcRenderer.invoke("braino-mac:mesa-sync"),
   dashboardData: (key) => ipcRenderer.invoke("braino-mac:dashboard-data", key),
@@ -133,8 +174,25 @@ contextBridge.exposeInMainWorld("brainoMac", {
   authSignOut: () => ipcRenderer.invoke("braino-mac:auth-sign-out"),
   ensureAuth: (reason) => ipcRenderer.invoke("braino-mac:ensure-auth", reason),
   delegate: (prompt, options) => ipcRenderer.invoke("braino-mac:delegate", prompt, options || {}),
+  converse: (text) => ipcRenderer.invoke("braino-mac:converse", text),
+  appActivity: (limit) => ipcRenderer.invoke("braino-mac:app-activity", limit),
+  memoriesList: () => ipcRenderer.invoke("braino-mac:memories-list"),
+  memoryUpdate: (id, content, category) => ipcRenderer.invoke("braino-mac:memory-update", id, content, category),
+  memoryDelete: (id) => ipcRenderer.invoke("braino-mac:memory-delete", id),
+  memoryAdd: (content, category) => ipcRenderer.invoke("braino-mac:memory-add", content, category),
+  arrivalCallback: () => ipcRenderer.invoke("braino-mac:arrival-callback"),
+  onApproval: (callback) => {
+    const handler = (_event, payload) => callback(payload || {});
+    ipcRenderer.on("braino-mac:approval", handler);
+    return () => ipcRenderer.removeListener("braino-mac:approval", handler);
+  },
   /* "Give me a moment" is a promise, "here they are" is not. */
   promisesAction: (text) => macPromisesAction(text),
+  /* The moment you start speaking, so "what is this?" uses where the mouse
+     was when you said it, not where it drifted to after. */
+  noteSpeechStarted: () => ipcRenderer.send("braino-mac:speech-started"),
+  /* "Braino, open it" calls him; "after Braino is done" is about him. */
+  nameIsAddressed: (text) => nameIsAddressed(text),
   /* What did they just say — asked, not matched. */
   jobRunning: () => ipcRenderer.invoke("braino-mac:job-running"),
   mediaControl: (payload) => ipcRenderer.invoke("braino-mac:media-control", payload),
@@ -230,6 +288,12 @@ contextBridge.exposeInMainWorld("brainoMac", {
   idleScreenClosed: () => ipcRenderer.send("braino-mac:idle-screen-closed"),
   idleScreenAction: (shortcut) => ipcRenderer.invoke("braino-mac:idle-screen-action", shortcut || {}),
   idleScreenSettings: (patch) => ipcRenderer.invoke("braino-mac:idle-screen-settings", patch || null),
+  notchStyle: (style) => ipcRenderer.invoke("braino-mac:notch-style", style || null),
+  onNotchStyle: (callback) => {
+    const handler = (_event, payload) => callback(payload || {});
+    ipcRenderer.on("braino-mac:notch-style", handler);
+    return () => ipcRenderer.removeListener("braino-mac:notch-style", handler);
+  },
   idleScreenToggle: () => ipcRenderer.invoke("braino-mac:idle-screen-toggle"),
   /* The Braino OS wallpapers: the same looks as the screensaver, standing
      still. The dashboards list them and put one on the desktop. */
@@ -258,6 +322,16 @@ contextBridge.exposeInMainWorld("brainoMac", {
   tts: (text, referenceId) => ipcRenderer.invoke("braino-mac:tts", text, referenceId || ""),
   systemSay: (text) => ipcRenderer.invoke("braino-mac:system-say", text),
   stopSystemSay: () => ipcRenderer.invoke("braino-mac:system-say-stop"),
+  onWebSources: (callback) => {
+    const handler = (_event, payload) => callback(payload || {});
+    ipcRenderer.on("braino-mac:web-sources", handler);
+    return () => ipcRenderer.removeListener("braino-mac:web-sources", handler);
+  },
+  onTaskTrail: (callback) => {
+    const handler = (_event, payload) => callback(payload || {});
+    ipcRenderer.on("braino-mac:task-trail", handler);
+    return () => ipcRenderer.removeListener("braino-mac:task-trail", handler);
+  },
   onTaskProgress: (callback) => {
     const handler = (_event, payload) => callback(payload || {});
     ipcRenderer.on("braino-mac:task-progress", handler);
@@ -317,6 +391,11 @@ contextBridge.exposeInMainWorld("brainoMac", {
     ipcRenderer.on("braino-mac:her-toggle", handler);
     return () => ipcRenderer.removeListener("braino-mac:her-toggle", handler);
   },
+  onMascotHide: (callback) => {
+    const handler = (_event, payload) => callback(payload || {});
+    ipcRenderer.on("braino-mac:mascot-hide", handler);
+    return () => ipcRenderer.removeListener("braino-mac:mascot-hide", handler);
+  },
   onCharacterToggle: (callback) => {
     const handler = (_event, payload) => callback(payload || {});
     ipcRenderer.on("braino-mac:character-toggle", handler);
@@ -361,6 +440,11 @@ contextBridge.exposeInMainWorld("brainoMac", {
     const handler = (_event, payload) => callback(payload || {});
     ipcRenderer.on("braino-mac:wa-badge", handler);
     return () => ipcRenderer.removeListener("braino-mac:wa-badge", handler);
+  },
+  onArrivalHello: (callback) => {
+    const handler = (_event, payload) => callback(payload || {});
+    ipcRenderer.on("braino-mac:arrival-hello", handler);
+    return () => ipcRenderer.removeListener("braino-mac:arrival-hello", handler);
   },
   onWakeDetected: (callback) => {
     const handler = (_event, payload) => callback(payload || {});

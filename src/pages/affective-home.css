@@ -26,7 +26,7 @@
 .ah-huge { max-width: 12ch; font-size: clamp(56px, 10.5vw, 168px); line-height: .98; }
 .ah-lit { display: inline; }
 .ah-w {
-  display: inline-block; margin-right: .22em;
+  display: inline-block; white-space: pre; /* the word carries its own space, so spacing never collapses */
   opacity: .14; transform: translateY(.06em);
   transition: opacity .45s ease, transform .6s cubic-bezier(.2, .8, .2, 1);
 }
@@ -90,7 +90,7 @@
    size logic and tracking; only the measure and the lit words are added. */
 .ah-os { padding: clamp(96px, 13vw, 180px) 0 clamp(80px, 10vw, 140px); border-top: 1px solid var(--a-line); }
 .ah-os-line { max-width: 18ch; }
-.ah-os-line .ah-w { margin-right: .24em; opacity: .16; }
+.ah-os-line .ah-w { opacity: .16; }
 .ah-os-line .ah-w.on { opacity: 1; }
 .ah-os-shot { margin-top: clamp(40px, 5vw, 64px); }
 .ah-os-say {
@@ -625,7 +625,7 @@
 .hb6-jobs li.is-key small { display: block; margin-bottom: 8px; font: 600 11px/1 var(--ao-sf); letter-spacing: .12em; text-transform: uppercase; color: var(--a-braino, #e05a4f); }
 @media (max-width: 960px) { .hb6-jobs { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 560px) { .hb6-jobs { grid-template-columns: 1fr; } }
-.hb6-story { margin: -6px 0 clamp(32px, 4vw, 48px); max-width: 62ch; font: clamp(18px, 1.5vw, 21px)/1.55 var(--ao-sf); color: var(--a-ink-soft); }
+.hb6-story { margin: 0 0 clamp(32px, 4vw, 48px); max-width: 62ch; font: clamp(18px, 1.5vw, 21px)/1.55 var(--ao-sf); color: var(--a-ink-soft); }
 
 /* Meet Braino in a box; the three models at its foot; a big tagline. */
 .hb6-box { border: 1px solid var(--a-line-strong, var(--a-line)); border-radius: 24px; padding: clamp(28px, 3.6vw, 52px); background: color-mix(in srgb, #fff 45%, var(--a-bg, #f4f2ec)); }
@@ -846,7 +846,10 @@
 .aff[data-theme="dark"] .hb-end-logo { filter: invert(1) sepia(.1) saturate(1.05); }
 .hb-end-braino { font-family: var(--ao-sf); font-weight: 700; letter-spacing: -0.05em; }
 /* The wordmark ends in its own full stop; mid-sentence it is clipped off. */
-.hb-end-logo-wrap { display: inline-block; height: .78em; width: calc(.78em * 1000 / 207 * .925); overflow: hidden; vertical-align: -0.04em; }
+/* Cropped just before the logo's full stop: in the 1000px-wide logo the last
+   "e" ends at 956 and the dot starts at 960, so .958. At .925 the "e" was cut
+   in half (2026-10-03). */
+.hb-end-logo-wrap { display: inline-block; height: .78em; width: calc(.78em * 1000 / 207 * .958); overflow: hidden; vertical-align: -0.04em; }
 .hb-end-logo-wrap .hb-end-logo { display: block; height: 100%; max-width: none; vertical-align: 0; }
 /* Closing line, bigger; "with Braino." on its own line; Braino moonwalking. */
 .hb-end-line { font-size: clamp(48px, 6.4vw, 104px) !important; line-height: 1.04 !important; }
@@ -855,3 +858,7 @@
 .hb-moon::after { content: ""; position: absolute; left: 10%; right: 10%; bottom: 18px; height: 1px; background: var(--a-line); }
 .hb-moon-dancer { position: absolute; bottom: 18px; transform: translateX(-50%); }
 .hb-moon-shadow { position: absolute; bottom: 12px; width: 90px; height: 12px; border-radius: 50%; background: rgba(0,0,0,.12); transform: translateX(-50%); filter: blur(3px); }
+
+/* Don't Blink, inside Braino's box: the film where the six chores were. */
+.hb6-film { margin-top: clamp(40px, 5vw, 64px); border-radius: 18px; overflow: hidden; background: #000; aspect-ratio: 16 / 9; }
+.hb6-film video { display: block; width: 100%; height: 100%; object-fit: contain; background: #000; }

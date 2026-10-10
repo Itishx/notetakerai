@@ -1,13 +1,19 @@
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
-import BrainoFooterGame from "@/components/BrainoFooterGame";
-import { AffThemeToggle, useAffTheme } from "@/components/AffTheme";
+import { useAffTheme } from "@/components/AffTheme";
+import { AffNav, AffFooter, Lit, useAffReveal, useLitWords, useGrowHero } from "@/components/affPage";
+import { useNotchNav } from "@/components/useNotchNav";
+import { BrainoMascot } from "@/components/BrainoMascot";
+import { AppLogo } from "@/components/AppLogo";
 /* The jobs are written here rather than read from the site's engine data,
    because this page says a different thing: each one carries what it saves
    you, and the Foundry engines carry the deck's own bullets. The engine files
    stay the source for the pages that use them. */
-import "@/components/braino-footer.css";
 import "./braino-final.css";
+import "./affective.css";
+import "./affective-home.css";
+import "./affectiveos-page.css";
+import "./braino-page.css";
 
 /* ============================================================================
    /braino-final — the one page about Braino.
@@ -299,8 +305,12 @@ const FAQ = [
     a: "An AI that lives in your Mac's notch. He sees your screen, talks back, does the work in your apps, and remembers you.",
   },
   {
-    q: "How is Braino better than Siri?",
-    a: "Siri can open an app or tell you the weather. Braino reads the PDF on your screen, writes the email in your voice and sends it after your yes. Siri runs commands. Braino does the work.",
+    q: "How is Braino different from Siri?",
+    a: "Siri can open an app or tell you the weather. Braino reads the PDF on your screen, writes the email in your voice and sends it after your yes. He sees what you are looking at, works across any app or site, and remembers you from one day to the next. Siri runs commands. Braino does the work.",
+  },
+  {
+    q: "How is Braino different from Claude Cowork or Perplexity Computer?",
+    a: "Perplexity Computer is mainly an AI operator for researching and completing tasks across apps and websites. Claude Cowork is a contained work agent: deep reasoning, long documents, research, and tasks inside the workspace you give it. Braino is meant to be with you on your Mac all day, with a persistent presence, voice, memory, desktop controls, and screen and camera awareness. There is overlap in computer control, but they are task focused. Braino remembers across sessions, knows your people and preferences, and acts across your apps. Claude Cowork has deep project context; Braino has your personal context. A companion for your whole Mac.",
   },
   {
     q: "Is this a chatbot?",
@@ -434,122 +444,6 @@ function EarlyAccess({ start }: { start: string }) {
   );
 }
 
-/* His footer, the one from his own site, with three corrections the new shape
-   forces.
- *
- * Under the hood used to list Braino OS, Human Intelligence and Emotional
- * Intelligence as three things. They are one thing now and it is called
- * AffectiveOS, so the column names it once and links to where the company page
- * explains it.
- *
- * Read loses the knowledge base, which is internal.
- *
- * And every link here points at something that exists. The old first column
- * was anchors on the old landing page, which is not the front door any more,
- * so those anchors now name sections of this page. */
-const FOOTER_COLUMNS: Array<{ head: string; links: Array<[string, string]> }> = [
-  {
-    head: "Braino",
-    links: [
-      ["What he does", "/braino#what"],
-      ["A normal day", "/braino#day"],
-      ["Better than Siri?", "/braino#faq"],
-      ["Questions", "/braino#faq"],
-      ["Early access", "/braino#early-access"],
-    ],
-  },
-  {
-    head: "The models",
-    links: [
-      ["Braino", "/braino"],
-      ["Braino Foundry", "/braino?model=foundry"],
-    ],
-  },
-  {
-    head: "Under the hood",
-    links: [
-      ["AffectiveOS", "/affectiveos"],
-    ],
-  },
-  {
-    head: "Read",
-    links: [
-      ["Braino's journal", "/journal"],
-      ["Changelog", "/changelog"],
-      ["Founder's letter", "/founder-letter"],
-      ["The questions page", "/questions"],
-    ],
-  },
-];
-
-/* The film opens from the measure to the whole page as it is scrolled into,
-   the same move the company page's picture makes. The progress is measured
-   against the element rather than against the page, because this one sits
-   halfway down a story rather than at the top of one: nought when its top edge
-   is at the bottom of the screen, one by the time it has climbed most of the
-   way up.
-
-   Flat under 900px, where there is no width to grow into, and flat for anyone
-   who has asked for less motion. */
-function useGrow() {
-  useEffect(() => {
-    const still = window.matchMedia("(prefers-reduced-motion: reduce)");
-    let frame = 0;
-
-    const apply = () => {
-      frame = 0;
-      const off = window.innerWidth < 900 || still.matches;
-      document.querySelectorAll<HTMLElement>("[data-grow]").forEach((el) => {
-        if (off) { el.style.setProperty("--grow", "1"); return; }
-        const r = el.getBoundingClientRect();
-        const p = (window.innerHeight - r.top) / Math.max(240, window.innerHeight * 0.8);
-        el.style.setProperty("--grow", Math.min(1, Math.max(0, p)).toFixed(3));
-      });
-    };
-    const onScroll = () => { if (!frame) frame = window.requestAnimationFrame(apply); };
-
-    window.addEventListener("scroll", onScroll, { passive: true });
-    window.addEventListener("resize", onScroll);
-    apply();
-    return () => {
-      window.removeEventListener("scroll", onScroll);
-      window.removeEventListener("resize", onScroll);
-      if (frame) window.cancelAnimationFrame(frame);
-    };
-  }, []);
-}
-
-function useReveal() {
-  const root = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const els = root.current?.querySelectorAll<HTMLElement>(".bf-reveal");
-    if (!els?.length) return;
-    // Visible at rest if the observer never runs. A page parked at opacity 0
-    // waiting on JS is how a site ships looking empty.
-    if (!("IntersectionObserver" in window)) {
-      els.forEach((el) => el.classList.add("is-in"));
-      return;
-    }
-    const io = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((e) => {
-          if (e.isIntersecting) {
-            e.target.classList.add("is-in");
-            io.unobserve(e.target);
-          }
-        });
-      },
-      { rootMargin: "0px 0px -8% 0px", threshold: 0.06 },
-    );
-    els.forEach((el) => io.observe(el));
-    return () => io.disconnect();
-  }, []);
-  return root;
-}
-
-/* The day, as a clock (2026-10-02): the hands move to each moment and the
-   moment is told beside it, stepping on its own; the times below it are
-   buttons. Replaces a long list. */
 function toMinutes(at: string) {
   const m = at.match(/^(\d{1,2}):(\d{2})\s*(am|pm)?$/i);
   if (!m) return null;
@@ -624,12 +518,9 @@ function CanDo() {
 }
 
 export default function BrainoFinal() {
-  const root = useReveal();
   const { theme, toggle } = useAffTheme();
-  useGrow();
-  /* Which of the three is open. A number on the page: there is nothing to
-     store and nothing to look up. The url can name one, so /foundry can send
-     somebody straight to his, and the address updates when the tab does. */
+  /* Which model is open. The url can name one (/braino?model=foundry) and the
+     address follows the tab. */
   const [playing, setPlaying] = useState(false);
   const [params, setParams] = useSearchParams();
   const asked = MODELS.findIndex((m) => m.key === params.get("model"));
@@ -640,10 +531,14 @@ export default function BrainoFinal() {
     setParams(next === 0 ? {} : { model: key }, { replace: true });
   };
   const model = MODELS[at];
+  /* Built from the home page's own pieces (2026-10-07): lit headlines, the
+     rising sections, the picture that opens to the page, its nav and footer. */
+  const root = useAffReveal([at]);
+  useLitWords([at]);
+  useGrowHero();
+  useNotchNav();
 
-  /* /waitlist and every "Get early access" link land here with #early-access.
-     The router does not scroll to a hash on its own, so this does, once the
-     page has drawn. */
+  /* /waitlist and every "Get early access" link land here with #early-access. */
   const { hash } = useLocation();
   useEffect(() => {
     if (!hash) return;
@@ -651,13 +546,10 @@ export default function BrainoFinal() {
     return () => window.clearTimeout(t);
   }, [hash]);
 
-  /* Changing tab is a deliberate act, so what it changes to is shown at once.
-     The reveal observer only ever sees what was on the page when it started,
-     and a story that swapped underneath it stayed at opacity zero: the tab
-     looked empty, which is exactly the bug. */
+  /* A tab change shows its story at once: the reveal only knows what was on
+     the page when it started. */
   useEffect(() => {
-    root.current?.querySelectorAll<HTMLElement>(".bf-story .bf-reveal")
-      .forEach((el) => el.classList.add("is-in"));
+    root.current?.querySelectorAll<HTMLElement>(".bp-story .aff-reveal, .bp-story .bf-reveal").forEach((el) => el.classList.add("is-in"));
   }, [at, root]);
 
   useEffect(() => {
@@ -668,206 +560,137 @@ export default function BrainoFinal() {
   }, []);
 
   return (
-    <div
-      className="bf"
-      ref={root}
-      data-theme={theme}
-      style={{ ["--acc" as string]: theme === "dark" ? model.accentDark : model.accent }}
-    >
-      <nav className="bf-nav">
-        <div className="bf-nav-in">
-          <Link to="/braino" className="bf-logo">
-            <img src="/braino-standing.svg" alt="" width={104} height={127} aria-hidden="true" />
-            <span>Braino</span>
-          </Link>
-          <div className="bf-nav-links">
-            <a href="#what">What he does</a>
-            <a href="#day">A normal day</a>
-            <a href="#faq">Questions</a>
-            <a href="#early-access">Early access</a>
-            <AffThemeToggle theme={theme} onToggle={toggle} />
-          </div>
-        </div>
-      </nav>
+    <div className="aff bf bp" data-theme={theme} ref={root} style={{ ["--acc" as string]: theme === "dark" ? model.accentDark : model.accent }}>
+      <AffNav theme={theme} onToggle={toggle} links={[["What he does", "#what"], ["A normal day", "#day"], ["Questions", "#faq"]]} />
 
-      {/* ── The claim ───────────────────────────────────────────────────────
-          The reader's own sentence first, and the answer to it under that. No
-          feature is mentioned on the first screen, because nobody has ever
-          been sold a feature they had not yet felt the need for. */}
-      {/* ── The claim ───────────────────────────────────────────────────────
-          The reader's own sentence first, and the answer to it under that. No
-          feature is mentioned on the first screen, because nobody has ever
-          been sold a feature they had not yet felt the need for. */}
-      {/* The hero belongs to the model, not to the page: you choose which
-          Braino you came for and then read his opening, rather than reading a
-          general one and finding the choice underneath it. */}
-      <header className="bf-hero">
-        <div className="bf-wrap">
-          <p className="bf-eyebrow bf-reveal">Braino · Private beta · Runs on AffectiveOS</p>
-          <h1 className="bf-h1 bf-reveal">
-            {model.title}
-            <b>{model.titleTail}</b>
-          </h1>
-          <div className="bf-hero-row bf-reveal">
-            <p className="bf-hero-one">{model.lede}</p>
-            <div className="bf-hero-cta">
-              <a href={model.cta.to} className="bf-cta">{model.cta.label}</a>
-              {model.film
-                ? <a href="#film" className="bf-cta bf-cta-ghost">Watch the film</a>
-                : <a href="#does" className="bf-cta bf-cta-ghost">See what he does</a>}
+      {/* ── Hero: the home page's, with him in it ── */}
+      <header className="aff-hero">
+        <div className="aff-wrap">
+          <div className="aff-hero-row aff-reveal">
+            <h1 className="aff-h1">
+              <span className="aff-h1-line">{model.title}</span>
+              <b>{model.titleTail}</b>
+            </h1>
+            <div className="aff-hero-side">
+              <p className="aff-hero-one">{model.lede}</p>
+              <div className="aff-hero-cta">
+                <a href={model.cta.to} className="aff-cta">{model.cta.label}</a>
+                {model.film
+                  ? <a href="#film" className="aff-cta aff-cta-ghost">Watch the film</a>
+                  : <a href="#does" className="aff-cta aff-cta-ghost">See what he does</a>}
+              </div>
             </div>
           </div>
-          <p className="bf-hero-trust bf-reveal">Runs on your Mac. Asks before anything is sent, paid for or deleted.</p>
-        </div>
-      </header>
-
-      <div className="bf-switch" id="what">
-        <div className="bf-wrap bf-switch-in">
-          <div className="bf-tabs" role="tablist" aria-label="Which model">
+          {/* The two models, as the home page's quiet pills. */}
+          <div className="bp-tabs aff-reveal" role="tablist" aria-label="Which model" id="what">
             {MODELS.map((m, i) => (
-              <button
-                key={m.key}
-                type="button"
-                role="tab"
-                aria-selected={i === at}
-                className={i === at ? "on" : ""}
-                style={{ ["--dot" as string]: m.accent }}
-                onClick={() => setAt(i)}
-              >
-                {/* Who it is for comes first, because that is what somebody
-                    scans a chooser by. The name is what they click. */}
-                <small><i aria-hidden="true" />{m.who}</small>
+              <button key={m.key} type="button" role="tab" aria-selected={i === at} className={i === at ? "on" : ""} onClick={() => setAt(i)}>
+                <small>{m.who}</small>
                 <span>{m.tab}</span>
               </button>
             ))}
           </div>
         </div>
-      </div>
-
-
-      <main className="bf-story">
-        {/* 1. The teaser, first. */}
-        {model.film && (
-          <section className="bf-film-sec" id="film">
-            <figure className="bf-film" data-grow>
-              <video
-                src={model.film.src}
-                playsInline
-                controls={playing}
-                preload="none"
-                poster=""
-                onClick={(e) => {
-                  const el = e.currentTarget;
-                  setPlaying(true);
-                  void el.play();
-                }}
-              />
-              {!playing && (
-                <button type="button" className="bf-film-play" onClick={(e) => {
-                  const video = e.currentTarget.parentElement?.querySelector("video");
-                  setPlaying(true);
-                  void video?.play();
-                }}>
-                  <i aria-hidden="true" />
-                  <span>{model.film.caption}</span>
-                </button>
-              )}
-            </figure>
-          </section>
+        {model.film ? (
+          <figure className="aff-hero-shot bp-film" data-grow id="film">
+            <video src={model.film.src} playsInline controls={playing} preload="metadata" poster="/affective-hero.jpg"
+              onClick={(e) => { setPlaying(true); void e.currentTarget.play(); }} />
+            {!playing && (
+              <button type="button" className="bp-film-play" onClick={(e) => {
+                const video = e.currentTarget.parentElement?.querySelector("video");
+                setPlaying(true);
+                void video?.play();
+              }}>
+                <i aria-hidden="true" />
+                <span>{model.film.caption}</span>
+              </button>
+            )}
+          </figure>
+        ) : (
+          <figure className="aff-hero-shot" data-grow>
+            <img src="/os-hands.jpg" alt="" width={1774} height={887} loading="eager" decoding="async" />
+          </figure>
         )}
+        <div className="aff-strip">
+          <div className="aff-wrap aff-strip-in">
+            <p className="aff-strip-label">Works in what you already use</p>
+            <ul className="aff-strip-names aff-strip-logos">
+              {(["WhatsApp", "Spotify", "Chrome", "Mail", "Finder", "Calendar"] as const).map((n) => (
+                <li key={n}><AppLogo name={n} /><span>{n}</span></li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      </header>
 
-
-        {/* 2. What he is, said plainly: more than a chatbot. */}
-        {model.fast && (
-          <section className="bf-sec bf-define">
-            <div className="bf-wrap">
-              <p className="bf-kicker bf-reveal">What Braino is</p>
-              <h2 className="bf-define-h bf-reveal">Stop chatting with AI. <b>Start handing it the work.</b></h2>
-              <div className="bf-define-row bf-reveal">
-                <p>Braino is a companion who lives in your Mac's notch. You talk to him like a person. He sees your screen, uses your apps and gets the job done, then remembers it, so tomorrow he already knows.</p>
-                <div className="bf-vs">
-                  <div><small>A chatbot</small><span>Answers in a window</span><span>Needs you to paste things in</span><span>Hands the work back to you</span><span>Forgets you when the chat ends</span></div>
-                  <div className="is-us"><small>Braino</small><span>Lives in your notch</span><span>Already sees your screen</span><span>Does the work in your apps</span><span>Remembers you, on your Mac</span></div>
+      <main className="bp-story">
+        {/* ── What he is: the home page's Meet Braino box ── */}
+        <section className="hb6">
+          <div className="aff-wrap">
+            <p className="ah-kicker">{model.painTitle}</p>
+            <h2 className="aff-h1 ah-os-line hb6-big" data-lit><Lit text={`${model.claim} ${model.claimTail}`} /></h2>
+            <div className="ah-os-say hb6-say aff-reveal">
+              {model.pain.map((p) => <p key={p}>{p}</p>)}
+            </div>
+            <div className="hb6-box aff-reveal">
+              <div className="hb6-head">
+                <div>
+                  <p className="ah-kicker">{model.who}</p>
+                  <div className="hb5-name">
+                    <h2>{model.name}</h2>
+                    <BrainoMascot size={92} className="hb4-him" />
+                  </div>
+                  <p className="hb6-line">{model.fast ? "Stop chatting with AI. Start handing it the work. He sees your screen, uses your apps, gets it done and remembers it." : "You build the thing. He does the half that gets it seen."}</p>
                 </div>
               </div>
-            </div>
-          </section>
-        )}
-
-        {/* What he does (Foundry has no time list, so his four come here). */}
-        {!model.fast && (
-          <section className="bf-sec" id="does">
-            <div className="bf-wrap">
-              <div className="bf-sec-head bf-reveal">
-                <p className="bf-kicker">What he does</p>
-                <h2>{model.name}</h2>
-              </div>
-              <div className="bf-grid bf-reveal">
-                {model.does.map((d, i) => (
-                  <article className="bf-cell" key={d.h} style={{ transitionDelay: `${i * 90}ms` }}>
-                    <div className="bf-cell-art">
-                      <img src={d.art} alt="" width={341} height={415} loading="lazy" decoding="async" />
-                    </div>
-                    <div className="bf-cell-say">
-                      <h3>{d.h}</h3>
-                      <p>{d.p}</p>
-                    </div>
-                  </article>
+              <ul className="hb4-does hb6-jobs" id="does">
+                {(model.fast
+                  ? model.fast.map((f) => ({ k: f.t, h: f.h, p: f.p }))
+                  : model.does.map((d) => ({ k: "", h: d.h, p: d.p }))
+                ).map((d) => (
+                  <li key={d.h} className={d.k ? "is-key" : undefined}>{d.k && <small>{d.k}</small>}<h3>{d.h}</h3><p>{d.p}</p></li>
                 ))}
-              </div>
+              </ul>
             </div>
-          </section>
-        )}
+          </div>
+        </section>
 
-        {/* 2. Three ways he helps (the engines, for Foundry). */}
+        {/* ── Five things your Mac never had / the engines ── */}
         {model.handles && (
-          <section className="bf-sec bf-handles">
-            <div className="bf-wrap">
-              <div className="bf-sec-head bf-reveal">
-                <p className="bf-kicker">What he does for you</p>
-                <h2>{model.handles.heading}</h2>
-                {model.handles.note && <p className="bf-sec-note">{model.handles.note}</p>}
-              </div>
-              <div className={"bf-jobs" + (model.handles.jobs.length === 4 ? " bf-jobs-4" : model.handles.jobs.length > 4 ? " bf-jobs-6" : "")}>
+          <section className="ah-os bp-handles">
+            <div className="aff-wrap">
+              <p className="ah-kicker">What he does for you</p>
+              <h2 className="aff-h1 ah-os-line" data-lit><Lit text={model.handles.heading} /></h2>
+              {model.handles.note && <div className="ah-os-say aff-reveal"><p>{model.handles.note}</p></div>}
+              <ul className="hb4-does hb6-jobs bp-jobs aff-reveal">
                 {model.handles.jobs.map((j) => (
-                  <article className="bf-job bf-reveal" key={j.name}>
-                    <div className="bf-job-top">
-                      <span className="bf-job-n">{j.n}</span>
-                      {j.state !== "Running" && (
-                        <span className={"bf-job-state is-" + j.state.toLowerCase()}>{j.state}</span>
-                      )}
-                    </div>
+                  <li key={j.name} className={j.state !== "Running" ? "is-key" : undefined}>
+                    <small>{j.state !== "Running" ? j.state : j.n}</small>
                     <h3>{j.name}</h3>
-                    <p className="bf-job-line">{j.job}</p>
-                    <ul className="bf-job-points">
-                      {j.points.map((point) => <li key={point}>{point}</li>)}
-                    </ul>
-                    <p className="bf-job-solves"><i>So</i>{j.solves}</p>
-                  </article>
+                    <p>{j.job}</p>
+                    <p className="bp-job-so">{j.solves}</p>
+                  </li>
                 ))}
-              </div>
+              </ul>
             </div>
           </section>
         )}
 
-
-        {/* 4. Everything he can do, as a marquee with tabs. */}
+        {/* ── Everything he can do ── */}
         {model.fast && <CanDo />}
 
-        {/* 5. A companion: he gets better the longer he knows you. */}
+        {/* ── A companion ── */}
         {model.fast && (
-          <section className="bf-sec bf-companion">
-            <div className="bf-wrap">
-              <div className="bf-sec-head bf-reveal">
-                <p className="bf-kicker">A companion</p>
-                <h2>He gets better <b>the longer he knows you.</b></h2>
-              </div>
-              <div className="bf-grow bf-reveal">
+          <section className="ah-os bp-companion">
+            <div className="aff-wrap">
+              <p className="ah-kicker">A companion</p>
+              <h2 className="aff-h1 ah-os-line" data-lit><Lit text="He gets better *the longer he knows you.*" /></h2>
+              <div className="bp-grow aff-reveal">
                 {COMPANION.map((c) => (
-                  <div key={c.then} className="bf-grow-row">
-                    <p className="bf-grow-then">{c.then}</p>
+                  <div key={c.then} className="bp-grow-row">
+                    <p>{c.then}</p>
                     <i aria-hidden="true">→</i>
-                    <p className="bf-grow-now">{c.now}</p>
+                    <p className="bp-grow-now">{c.now}</p>
                   </div>
                 ))}
               </div>
@@ -875,21 +698,16 @@ export default function BrainoFinal() {
           </section>
         )}
 
-        {/* 5. A day with him, morning to night. */}
-        <section className="bf-sec bf-day" id="day">
-          <div className="bf-wrap">
-            <div className="bf-sec-head bf-reveal">
-              <p className="bf-kicker">What changes</p>
-              <h2>{model.dayTitle}</h2>
-            </div>
+        {/* ── A day with him ── */}
+        <section className="ah-os bp-day" id="day">
+          <div className="aff-wrap">
+            <p className="ah-kicker">What changes</p>
+            <h2 className="aff-h1 ah-os-line" data-lit><Lit text={model.dayTitle} /></h2>
             <DayClock day={model.day} />
-            <div className="bf-honest bf-reveal">
-              <p className="bf-honest-label">What is true today</p>
+            <div className="ah-os-say aff-reveal bp-honest">
+              <p className="ah-kicker">What is true today</p>
               <p>{model.honest}</p>
-              <p className="bf-honest-go">
-                <a href={model.cta.to}>{model.cta.label}<i aria-hidden="true">→</i></a>
-                <span>{model.state}</span>
-              </p>
+              <a href={model.cta.to} className="aff-cta">{model.cta.label}<i aria-hidden="true">→</i></a>
             </div>
           </div>
         </section>
@@ -897,60 +715,42 @@ export default function BrainoFinal() {
 
       <EarlyAccess start={model.key} />
 
-      {/* ── Questions ─────────────────────────────────────────────────────── */}
-      <section className="bf-sec bf-faq-sec" id="faq">
-        <div className="bf-wrap">
-          <div className="bf-faq-in">
-            <div className="bf-faq-head bf-reveal">
-              <h2>Questions you may have.</h2>
-              <p>Including the ones about what we did not build.</p>
-            </div>
-            {/* details/summary, so it works with no JavaScript and with a
-                keyboard. */}
-            <div className="bf-faq bf-reveal">
-              {FAQ.map((f, i) => (
-                <details key={f.q} open={i === 0}>
-                  <summary>
-                    <span>{f.q}</span>
-                    <i aria-hidden="true" />
-                  </summary>
-                  <p>{f.a}</p>
-                </details>
-              ))}
-            </div>
+      {/* ── Questions: the home page's ── */}
+      <section className="hb2-faq" id="faq">
+        <div className="aff-wrap hb2-faq-split">
+          <div className="hb2-faq-side">
+            <h3 className="hb2-faq-h aff-reveal">Questions</h3>
+            <p>Including the ones about what we did not build.</p>
+          </div>
+          <div className="hb2-faq-list">
+            {FAQ.map((f) => (
+              <details key={f.q}>
+                <summary>{f.q}<i aria-hidden="true">+</i></summary>
+                <p>{f.a}</p>
+              </details>
+            ))}
           </div>
         </div>
       </section>
 
-      {/* His footer, as it is on his own site: the columns, then the level
-          underneath them. The page ends on his own thing rather than on a
-          second version of the company's. */}
-      <footer className="braino-footer mario bf-game-mount">
-        <nav className="bf-cols" aria-label="Footer">
-          {FOOTER_COLUMNS.map((column) => (
-            <div className="bf-col" key={column.head}>
-              <div className="bf-col-head">{column.head}</div>
-              {column.links.map(([label, to]) => (
-                <Link key={label + to} to={to}>{label}</Link>
-              ))}
-            </div>
-          ))}
-        </nav>
-        <div className="bf-game-window">
-          <div className="bf-baseline">
-            <span className="bf-signoff">
-              Braino is a product of Affective. He runs on AffectiveOS.
-            </span>
-            <span className="bf-legal">
-              <Link to="/">Affective</Link>
-              <Link to="/privacy">Privacy</Link>
-              <Link to="/terms">Terms</Link>
-            </span>
+      {/* ── The last word ── */}
+      <section className="hb-end">
+        <div className="hb-end-glow" aria-hidden="true" />
+        <div className="aff-wrap hb-end-in aff-reveal">
+          <h2 className="aff-h1 hb-end-line" aria-label="Make your Mac more Affective with Braino.">
+            Make your Mac more{" "}
+            <span className="hb-end-logo-wrap"><img className="hb-end-logo" src="/affective-logo.png" alt="" width={1000} height={207} aria-hidden="true" /></span>
+            <span className="hb-end-with">with <span className="hb-end-braino">Braino.</span></span>
+          </h2>
+          <p className="hb-end-p">Braino is in private beta. We are letting people in a few at a time.</p>
+          <div className="hb-go">
+            <a href="#early-access" className="aff-cta">Get early access</a>
+            <Link to="/affectiveos" className="aff-cta aff-cta-ghost">Read about AffectiveOS</Link>
           </div>
-          <BrainoFooterGame />
         </div>
-      </footer>
+      </section>
 
+      <AffFooter />
     </div>
   );
 }

@@ -1,0 +1,194 @@
+/* Set up Braino, in liquid glass. The window is Apple's Liquid Glass (macOS 26),
+   with the old blur as a fallback; every panel is a pane of glass on top: a thin
+   bright rim, a soft specular sheen from the top left, a faint inner shadow at
+   the bottom edge. Type is the affective website's: Iowan Old Style headlines,
+   SF Pro text, Bodoni wordmark (bundled; the app cannot count on Google Fonts). */
+
+@font-face { font-family: "Bodoni Moda"; src: url("fonts/BodoniModa.ttf") format("truetype"); font-weight: 400 900; font-style: normal; }
+
+:root {
+  /* The website's affective type: Iowan Old Style headlines (ships on every
+     Mac), SF Pro for everything else, Bodoni only for the wordmark. */
+  --a-display: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  --a-mark: "Bodoni Moda", "Didot", "Bodoni 72", Georgia, serif;
+  --a-sans: "SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --nb-serif: "SF Pro Text", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --ink: #ffffff;
+  --ink-2: rgba(255, 255, 255, 0.82);
+  --ink-3: rgba(255, 255, 255, 0.58);
+  --ink-4: rgba(255, 255, 255, 0.38);
+  --coral: #ff9b82;
+  --ok: #8ff0c4;
+  /* The window itself is Apple's Liquid Glass now, so panes only need a
+     whisper of white and a crisp rim, like a card laid on the glass. */
+  --glass: linear-gradient(160deg, rgba(255, 255, 255, 0.10) 0%, rgba(255, 255, 255, 0.04) 60%, rgba(255, 255, 255, 0.03) 100%);
+  --glass-strong: linear-gradient(160deg, rgba(255, 255, 255, 0.18) 0%, rgba(255, 255, 255, 0.08) 100%);
+  --rim: rgba(255, 255, 255, 0.26);
+  --rim-soft: rgba(255, 255, 255, 0.18);
+  --glass-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.30), inset 0 0 0 0.5px rgba(255, 255, 255, 0.08);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; height: 100%;
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--a-sans);
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.28);
+}
+
+/* A pane of glass: the gradient body, the bright rim, and a sheen. */
+.glass {
+  position: relative;
+  background: var(--glass);
+  border: 0.5px solid var(--rim);
+  box-shadow: var(--glass-shadow);
+  -webkit-backdrop-filter: blur(24px) saturate(170%);
+  backdrop-filter: blur(24px) saturate(170%);
+  overflow: hidden;
+}
+.glass::before {
+  content: ""; position: absolute; inset: 0; pointer-events: none; border-radius: inherit;
+  background: radial-gradient(120% 60% at 12% -10%, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0) 55%);
+  mix-blend-mode: screen;
+}
+
+.su-shell { display: grid; grid-template-columns: minmax(430px, 43%) 1fr; gap: 18px; height: 100%; padding: 18px; }
+
+/* ── Left: the conversation ── */
+.su-left { display: flex; flex-direction: column; padding: 34px 40px 24px; border-radius: 30px; -webkit-app-region: drag; }
+.su-left button, .su-left input, .su-left textarea, .su-left a { -webkit-app-region: no-drag; }
+.su-top { display: flex; align-items: baseline; justify-content: space-between; padding-left: 58px; }
+.su-mark { font-family: var(--a-mark); font-optical-sizing: auto; font-size: 22px; font-weight: 500; letter-spacing: -0.008em; }
+.su-progress { font-size: 12px; color: var(--ink-3); letter-spacing: 0.5px; font-variant-numeric: tabular-nums; }
+.su-stage { flex: 1; display: flex; flex-direction: column; justify-content: center; max-width: 520px; position: relative; z-index: 1; }
+.su-step { animation: suIn 0.9s cubic-bezier(0.4, 0, 0.2, 1) both; }
+@keyframes suIn { from { opacity: 0; filter: blur(6px); } to { opacity: 1; filter: none; } }
+.su-kicker { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 16px; font-weight: 600; }
+.su-title { font-family: var(--a-display); font-weight: 400; font-size: 46px; line-height: 1.04; margin: 0 0 16px; letter-spacing: -0.028em; }
+.su-sub { font-size: 15.5px; line-height: 1.58; color: var(--ink-2); margin: 0 0 26px; max-width: 460px; }
+.su-label { font-size: 12px; letter-spacing: 1.2px; text-transform: uppercase; color: var(--ink-3); margin: 4px 0 10px; }
+.su-choices { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 18px; }
+
+/* Glass pills. */
+.su-choice, .su-small, .su-next, .su-input, .su-text {
+  background: var(--glass);
+  border: 0.5px solid var(--rim-soft);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.32), inset 0 -1px 0 rgba(255, 255, 255, 0.05);
+  -webkit-backdrop-filter: blur(16px) saturate(160%);
+  backdrop-filter: blur(16px) saturate(160%);
+  color: var(--ink);
+}
+.su-choice { padding: 11px 17px; border-radius: 999px; font: 500 14.5px/1 var(--a-sans); cursor: pointer; transition: background 0.25s ease, border-color 0.25s ease, transform 0.25s ease; }
+.su-choice:hover { background: var(--glass-strong); border-color: var(--rim); }
+.su-choice.on {
+  background: linear-gradient(135deg, rgba(255, 155, 130, 0.45), rgba(255, 120, 95, 0.22));
+  border-color: rgba(255, 190, 170, 0.75);
+  box-shadow: inset 0 1px 0 rgba(255, 230, 220, 0.6), 0 8px 22px -10px rgba(255, 120, 95, 0.7);
+}
+.su-input, .su-text { width: 100%; padding: 15px 18px; border-radius: 18px; font: 400 17px/1.4 var(--a-sans); outline: none; margin-bottom: 16px; }
+.su-text { min-height: 90px; resize: none; }
+.su-input:focus, .su-text:focus { border-color: rgba(255, 190, 170, 0.8); }
+.su-input::placeholder, .su-text::placeholder { color: var(--ink-4); }
+.su-next {
+  align-self: flex-start; padding: 14px 26px; border-radius: 999px; cursor: pointer;
+  font: 600 15px/1 var(--a-sans); letter-spacing: -0.1px;
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.24), rgba(255, 255, 255, 0.12));
+  border-color: rgba(255, 255, 255, 0.42);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+.su-next:hover { background: linear-gradient(160deg, rgba(255, 255, 255, 0.32), rgba(255, 255, 255, 0.16)); }
+.su-next:disabled { opacity: 0.4; cursor: default; }
+.su-small { padding: 8px 14px; border-radius: 999px; font: 500 12.5px/1 var(--a-sans); cursor: pointer; }
+.su-rows { display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; }
+.su-row { display: flex; align-items: center; gap: 12px; padding: 13px 16px; border-radius: 18px; }
+.su-row b { font-weight: 600; font-size: 14.5px; }
+.su-row span { color: var(--ink-3); font-size: 13px; }
+.su-row .grow { flex: 1; display: flex; flex-direction: column; gap: 2px; position: relative; z-index: 1; }
+.su-dot { width: 9px; height: 9px; border-radius: 50%; background: rgba(255, 255, 255, 0.28); flex: 0 0 9px; position: relative; z-index: 1; }
+.su-dot.ok { background: var(--ok); box-shadow: 0 0 12px rgba(143, 240, 196, 0.8); }
+.su-foot { display: flex; align-items: center; gap: 16px; color: var(--ink-3); font-size: 12.5px; position: relative; z-index: 1; }
+.su-link { background: none; border: 0; color: var(--ink-2); font: 500 13px var(--a-sans); cursor: pointer; padding: 0; }
+.su-link[hidden] { display: none; }
+
+/* ── Right: the notebook ── */
+.su-right { border-radius: 30px; }
+.nb { position: relative; z-index: 1; height: 100%; overflow-y: auto; padding: 54px 60px 90px; font-family: var(--nb-serif); font-size: 15.5px; line-height: 1.6; color: rgba(255, 255, 255, 0.9); }
+.nb::-webkit-scrollbar { width: 0; }
+.nb-head { display: flex; align-items: center; gap: 14px; margin-bottom: 6px; }
+.nb-icon { width: 44px; height: 44px; border-radius: 14px; display: grid; place-items: center; font-size: 24px; }
+.nb h1 { font-family: var(--a-display); font-weight: 400; font-size: 34px; line-height: 1.08; margin: 0; letter-spacing: -0.028em; color: #fff; }
+.nb-sub { font: 400 13px/1.5 var(--a-sans); color: var(--ink-3); margin: 6px 0 22px; display: flex; gap: 14px; flex-wrap: wrap; }
+.nb-live { color: var(--ok); }
+.nb-live::before { content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 7px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 10px var(--ok); animation: nbPulse 1.8s ease-in-out infinite; vertical-align: 1px; }
+@keyframes nbPulse { 0%, 100% { opacity: 0.35; } 50% { opacity: 1; } }
+
+/* Notion-style properties: label, value. */
+.nb-props { display: grid; grid-template-columns: 140px 1fr; gap: 9px 16px; padding: 16px 18px; border-radius: 18px; margin-bottom: 8px; font-family: var(--a-sans); font-size: 14px; }
+.nb-props dt { color: var(--ink-3); display: flex; align-items: center; gap: 8px; position: relative; z-index: 1; }
+.nb-props dd { margin: 0; color: #fff; position: relative; z-index: 1; }
+.nb-props dd.empty { color: var(--ink-4); }
+
+.nb-sec { margin-top: 30px; }
+.nb-sec-h { display: flex; align-items: baseline; gap: 10px; margin: 0 0 10px; }
+.nb-sec-h h2 { font-family: var(--a-display); font-weight: 400; font-size: 22px; margin: 0; color: #fff; letter-spacing: -0.02em; }
+.nb-count { font: 500 12px/1 var(--a-sans); color: var(--ink-3); }
+.nb .muted { color: var(--ink-3); }
+.nb p { margin: 0 0 8px; }
+
+/* Timelines: time, then the line. */
+.nb-tl { list-style: none; margin: 0; padding: 0; }
+.nb-tl li { display: grid; grid-template-columns: 58px 22px 1fr; align-items: baseline; gap: 6px; padding: 7px 0; border-bottom: 0.5px solid rgba(255, 255, 255, 0.07); }
+.nb-tl li:last-child { border-bottom: 0; }
+.nb-tl time { font: 500 12px/1.9 var(--a-sans); color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.nb-tl .k { font-size: 13px; opacity: 0.85; text-align: center; }
+
+/* People as glass chips. */
+.nb-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.nb-chip { padding: 7px 13px; border-radius: 999px; font: 500 13.5px/1.2 var(--a-sans); }
+.nb-chip.star { background: linear-gradient(135deg, rgba(255, 155, 130, 0.38), rgba(255, 120, 95, 0.16)); border-color: rgba(255, 190, 170, 0.6); }
+.nb-chip small { color: var(--ink-3); margin-left: 6px; font-weight: 400; }
+
+.nb-callout { display: flex; gap: 12px; padding: 15px 18px; border-radius: 18px; font-size: 16px; }
+.nb-callout > * { position: relative; z-index: 1; }
+
+/* Summaries read like entries. */
+.nb-entry { padding: 12px 0; border-bottom: 0.5px solid rgba(255, 255, 255, 0.07); }
+.nb-entry:last-child { border-bottom: 0; }
+.nb-entry b { font: 600 12.5px/1 var(--a-sans); color: var(--coral); letter-spacing: 0.4px; display: block; margin-bottom: 6px; }
+
+/* Facts grouped by kind. */
+.nb-facts { list-style: none; margin: 0; padding: 0; }
+.nb-facts li { padding: 6px 0 6px 18px; position: relative; }
+.nb-facts li::before { content: ""; position: absolute; left: 2px; top: 16px; width: 5px; height: 5px; border-radius: 50%; background: var(--ink-3); }
+.nb-tag { font: 500 10.5px/1 var(--a-sans); color: var(--ink-2); border: 0.5px solid var(--rim-soft); border-radius: 6px; padding: 3px 6px; margin-left: 8px; vertical-align: 2px; text-transform: uppercase; letter-spacing: 0.6px; }
+
+/* Connection tiles. */
+.nb-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; }
+.nb-tile { padding: 12px 14px; border-radius: 16px; font-family: var(--a-sans); }
+.nb-tile > * { position: relative; z-index: 1; }
+.nb-tile b { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; }
+.nb-tile span { color: var(--ink-3); font-size: 12.5px; }
+
+/* ── Braino, walking you through it (setup-braino.js) ── */
+.sb-layer { position: fixed; inset: 0; pointer-events: none; z-index: 20; }
+.sb-walker { position: absolute; left: 0; top: 0; width: 96px; height: 117px; will-change: transform; filter: drop-shadow(0 10px 14px rgba(0, 0, 0, 0.28)); }
+.sb-flip { width: 100%; height: 100%; transform-origin: center bottom; }
+.sb-flip svg { width: 100% !important; height: 100% !important; }
+.sb-bubble {
+  position: absolute; left: 0; top: 0; max-width: 300px;
+  padding: 13px 17px; border-radius: 20px 20px 6px 20px;
+  background: var(--glass-strong); border: 0.5px solid var(--rim);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  -webkit-backdrop-filter: blur(20px) saturate(170%); backdrop-filter: blur(20px) saturate(170%);
+  font: 500 14.5px/1.42 var(--a-sans); color: var(--ink);
+  opacity: 0; transition: opacity 0.22s ease; will-change: transform;
+}
+.sb-bubble.show { opacity: 1; }
+.sb-w { color: rgba(255, 255, 255, 0.4); transition: color 0.12s ease; }
+.sb-w.on { color: #fff; }
+.sb-pointed { box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.75), 0 0 26px rgba(255, 255, 255, 0.45) !important; transition: box-shadow 0.25s ease; }
+.su-sound { margin-left: auto; white-space: nowrap; }
+.su-hint { flex: 1; }

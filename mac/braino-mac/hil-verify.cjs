@@ -49,7 +49,16 @@ function macVerifyAssert(expect, obs) {
   if (expect.assert === "value_equals") {
     const el = els.find((e) => Number(e.index) === Number(expect.index));
     if (!el) return { ok: false, why: `Element [${expect.index}] is no longer on screen.` };
-    return norm(el.name).includes(norm(expect.value)) ? { ok: true } : { ok: false, why: `[${expect.index}] does not hold "${expect.value}".` };
+    const have = norm(el.name);
+    const want = norm(expect.value);
+    if (have.includes(want)) return { ok: true };
+    /* Chat boxes (Cursor, Claude, ChatGPT) report only the start of long
+       text, or a placeholder. 2026-10-05: a bug report typed into Cursor
+       five times over, each time correctly, because the full text was never
+       read back. The opening words being there is the text being there. */
+    const opening = want.slice(0, 40);
+    if (want.length > 40 && opening && have.includes(opening)) return { ok: true };
+    return { ok: false, why: `[${expect.index}] does not hold "${expect.value}".` };
   }
   return { ok: true };
 }

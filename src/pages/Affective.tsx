@@ -360,7 +360,7 @@ function Lit({ text }: { text: string }) {
         const didone = /^\*.*\*[.,]?$/.test(w);
         const clean = w.replace(/\*/g, "");
         return (
-          <span key={`${w}-${i}`} aria-hidden="true" className={"ah-w" + (didone ? " ah-d" : "")}>{clean}</span>
+          <span key={`${w}-${i}`} aria-hidden="true" className={"ah-w" + (didone ? " ah-d" : "")}>{clean}{i < words.length - 1 ? " " : ""}</span>
         );
       })}
     </span>
@@ -478,6 +478,7 @@ function useReveal() {
 export default function Affective() {
   const root = useReveal();
   const { theme, toggle } = useAffTheme();
+  const [blink, setBlink] = useState(false);
   useDrift();
   usePan();
   useLitWords();
@@ -594,14 +595,22 @@ export default function Affective() {
             </div>
             <div className="hb6-side">
               <div className="hb5-go">
-                <Link to="/braino#early-access" className="aff-cta">Get early access</Link>
+                <button type="button" className="aff-cta" aria-pressed={blink} onClick={() => setBlink((on) => !on)}>{blink ? "Back to what he does" : "Don\u2019t Blink"}</button>
                 <Link to="/braino" className="aff-cta aff-cta-ghost">Meet Braino</Link>
               </div>
             </div>
           </div>
-          <ul className="hb4-does hb6-jobs">
-            {DOES.map((d) => <li key={d.h} className={d.key ? "is-key" : undefined}>{d.key && <small>{d.key}</small>}<h3>{d.h}</h3><p>{d.p}</p></li>)}
-          </ul>
+          {/* Don't Blink: the film plays where the six chores were, and the
+              chores come back the moment it ends (2026-10-03). */}
+          {blink ? (
+            <div className="hb6-film">
+              <video src="/Braino_Final.MP4" autoPlay playsInline controls onEnded={() => setBlink(false)} />
+            </div>
+          ) : (
+            <ul className="hb4-does hb6-jobs">
+              {DOES.map((d) => <li key={d.h} className={d.key ? "is-key" : undefined}>{d.key && <small>{d.key}</small>}<h3>{d.h}</h3><p>{d.p}</p></li>)}
+            </ul>
+          )}
           </div>
           <div className="hb6-demo">
           <h2 className="aff-h1 ah-os-line hb6-tag" data-lit><Lit text="Speak. Watch it happen." /></h2>
@@ -721,6 +730,7 @@ export default function Affective() {
               </nav>
               <nav className="aff-foot-col">
                 <h4>Company</h4>
+                <Link to="/labs">Labs</Link>
                 <Link to="/braino#early-access">Early access</Link>
                 <Link to="/contact">Contact</Link>
               </nav>

@@ -242,9 +242,11 @@ const LOADERS = {
   high: () => loadFeed("high", "high-list", noteCard, "No highlights yet. Anything Braino marks as worth keeping shows up here."),
   search: () => { el("search-input").focus(); },
   contacts: () => loadContacts(false),
+  chrome: () => loadChromeProfiles(),
   mesa: () => loadMesa("state"),
   settings: () => {
     renderSettings();
+    void loadNotchStyle();
     if (!idleSettings) void loadIdleEditor();
   },
 };
@@ -336,6 +338,38 @@ el("contacts-list")?.addEventListener("click", async (event) => {
 el("contacts-form")?.addEventListener("submit", (event) => { event.preventDefault(); renderContacts(); });
 el("contacts-sync")?.addEventListener("click", () => { void loadContacts(true); });
 
+/* ── Chrome profiles ── */
+let chromeState = { profiles: [], config: { primary: "", rules: [] } };
+async function loadChromeProfiles() {
+  const r = await api.chromeProfiles?.().catch(() => null);
+  if (r?.ok) chromeState = r;
+  const usedFor = (dir) => (chromeState.config.rules || []).filter((x) => x.dir === dir).flatMap((x) => x.words).join(", ");
+  el("chrome-list").innerHTML = chromeState.profiles.length
+    ? chromeState.profiles.map((p) => card({
+      icon: String(p.name || "?").charAt(0).toUpperCase(),
+      title: p.name,
+      body: p.email || "not signed in",
+      tags: [chromeState.config.primary === p.dir ? "main" : "", p.lastUsed ? "used last" : "", p.dir],
+    }).replace(/<\/div>$/, `<input class="bd-in" data-usefor="${esc(p.dir)}" value="${esc(usedFor(p.dir))}" placeholder="Used for: nexus, mesa…" aria-label="What ${esc(p.name)} is for" style="margin:6px 0;width:100%" /><button class="bd-btn" data-primary="${esc(p.dir)}">${chromeState.config.primary === p.dir ? "★ Main" : "Make main"}</button></div>`)).join("")
+    : `<p class="bd-empty">No Chrome profiles found on this Mac.</p>`;
+  const ct = el("ct-chrome");
+  if (ct) ct.textContent = chromeState.profiles.length ? String(chromeState.profiles.length) : "";
+}
+el("chrome-list")?.addEventListener("click", async (event) => {
+  const b = event.target.closest("button[data-primary]");
+  if (!b) return;
+  chromeState.config = (await api.chromeProfilesSave?.({ ...chromeState.config, primary: b.dataset.primary }))?.config || chromeState.config;
+  void loadChromeProfiles();
+});
+el("chrome-list")?.addEventListener("change", async (event) => {
+  const dir = event.target?.dataset?.usefor;
+  if (!dir) return;
+  const words = String(event.target.value || "").split(/\s*(?:,|\band\b)\s*/).map((w) => w.trim().toLowerCase()).filter(Boolean);
+  const rules = (chromeState.config.rules || []).filter((x) => x.dir !== dir);
+  if (words.length) rules.push({ dir, words });
+  chromeState.config = (await api.chromeProfilesSave?.({ ...chromeState.config, rules }))?.config || chromeState.config;
+});
+
 const xautoCard = (row) => card({
   icon: row.status === "posted" ? "✓" : "→",
   tone: row.status === "posted" ? "ok" : row.status === "failed" ? "bad" : "",
@@ -382,6 +416,27 @@ async function runSearch(term) {
 }
 
 let lastState = {};
+
+/* Notch style: Braino (the notch as it was) or AffectiveOS. Saved in main and
+   applied to the notch straight away. */
+function renderNotchStyle(style) {
+  document.querySelectorAll("#notch-style button").forEach((button) => {
+    const on = button.dataset.style === style;
+    button.classList.toggle("active", on);
+    button.setAttribute("aria-pressed", String(on));
+  });
+}
+async function loadNotchStyle() {
+  const result = await api.notchStyle?.().catch(() => null);
+  renderNotchStyle(result?.style || "braino");
+}
+document.querySelectorAll("#notch-style button").forEach((button) => {
+  button.addEventListener("click", async () => {
+    renderNotchStyle(button.dataset.style);
+    const result = await api.notchStyle?.(button.dataset.style).catch(() => null);
+    renderNotchStyle(result?.style || button.dataset.style);
+  });
+});
 
 function renderSettings() {
   rows("settings-appearance", [

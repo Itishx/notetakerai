@@ -1025,3 +1025,8 @@ reader already knows.
 
 `NOTCH_NAV` carries a note per section and goes stale silently. Check it whenever a
 section id or heading changes.
+
+## Mac notch: hearing you (2026-10-05)
+- While you talk to Braino in voice mode (Clean hearing on), the notch shows a **voice glow**: a soft green inset light (`#notch-face.nf-voice-hearing .nf-pill`, `--nf-voice-level` 0-1 from the mic meter). Inset only, so the notch keeps its shape and nothing draws outside it.
+- No rough live words while you talk. When the sentence is done, the notch shows the exact words that are sent, once. A piece held while you pause shows as it grows (same source, never swapped).
+- Clean hearing off: the old live HERA words come back.

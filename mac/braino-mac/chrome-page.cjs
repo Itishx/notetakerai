@@ -111,8 +111,14 @@ const READ_JS = `(function(){
 async function readChromePage(app) {
   const res = await runJs(READ_JS, chromeScriptName(app));
   if (!res.ok) return { ok: false, reason: res.reason, detail: res.detail, elements: [], text: "" };
-  if (res.out.startsWith("BRAINO_ERR")) return { ok: false, reason: "page_error", detail: res.out.slice(0, 200), elements: [], text: "" };
-  const lines = res.out.split("\n");
+  return parseRead(res.out);
+}
+
+/* The read's text, as elements. Shared with Braino's own browser. */
+function parseRead(out) {
+  out = String(out || "");
+  if (out.startsWith("BRAINO_ERR")) return { ok: false, reason: "page_error", detail: out.slice(0, 200), elements: [], text: "" };
+  const lines = out.split("\n");
   const [title, url] = String(lines.shift() || "").split(" :: ");
   const elements = lines.map((line) => {
     const m = /^\[(\d+)\] (\S+)(?: \(offscreen\))? "(.*)"$/.exec(line);
@@ -270,4 +276,4 @@ function chromeScriptName(appName) {
   return CHROME_APPS[String(appName || "").trim()] || "Google Chrome";
 }
 
-module.exports = { readChromePage, actOnChrome, chromePointFor, focusChrome, pageSignature, isChromeApp, chromeScriptName, runJs, CHROME_APPS };
+module.exports = { readChromePage, actOnChrome, chromePointFor, focusChrome, pageSignature, isChromeApp, chromeScriptName, runJs, CHROME_APPS, READ_JS, parseRead, actionJs, SIGNATURE_JS };
