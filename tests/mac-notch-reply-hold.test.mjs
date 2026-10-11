@@ -30,10 +30,11 @@ test("it folds away on its own when nothing follows", () => {
 const app = readFileSync(new URL("../mac/braino-mac/renderer/app.js", import.meta.url), "utf8");
 test("without subtitles there are no sheets, only a listening dot and speaking bars", () => {
   assert.match(r, /&& !notchFace\.classList\.contains\("nf-aos"\)\n\s*\);/);
-  assert.match(css, /#notch-face\.nf-aos\.speak \.nf-ns-talk \{ opacity: 1; \}/);
+  assert.match(css, /\.dropping\)\)\.speak \.nf-ns-talk \{ opacity: 1; \}/);
   // Never taller than idle: only the width moves (2026-10-11).
-  assert.match(css, /#notch-face\.nf-aos \.nf-pill \{\s*height: calc\(var\(--nf-notch-h, 32px\) \+ 22px\) !important;/);
-  assert.match(css, /#notch-face\.nf-aos\.nf-ns-working \.nf-pill/);
+  // ...except during boot, sign in and the greeting, which play at full size.
+  assert.match(css, /#notch-face\.nf-aos:not\(:is\(\.nf-iomi-booting, [^)]*\.nf-boot-logo-on[^)]*\)\) \.nf-pill \{\s*height: calc\(var\(--nf-notch-h, 32px\) \+ 22px\) !important;/);
+  assert.match(css, /\.dropping\)\)\.nf-ns-working \.nf-pill/);
   assert.match(r, /notchFace\.classList\.toggle\("nf-ns-working"/);
   assert.match(app, /\["braino", "With subtitles"\], \["affective", "Without subtitles"\]/);
 });

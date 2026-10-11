@@ -6752,54 +6752,56 @@ body.mascot-stealth.mascot-peek #status-pill { opacity: 1; }
  * nothing. The notch keeps its idle shape and NEVER grows downward (an empty
  * notch opening up was exactly what this mode must not do). While he listens,
  * thinks or speaks it only widens a little on both sides, enough for a dot on
- * the left and bars on the right, with the colour glow around it. */
-#notch-face.nf-aos .nf-pill {
+ * the left and bars on the right, with the colour glow around it. *
+ * Boot, sign in and the greeting are left alone (2026-10-11): the size lock
+ * clipped the Affective logo on boot. It applies only once he is awake. */
+#notch-face.nf-aos:not(:is(.nf-iomi-booting, .nf-iomi-auth, .nf-iomi-awake, .nf-iomi-expanded, .nf-boot-affective, .nf-boot-logo-on, .nf-boot-sweeping, .nf-auth, .nf-greet, .dropping)) .nf-pill {
   height: calc(var(--nf-notch-h, 32px) + 22px) !important;
   min-height: 0 !important;
   max-height: calc(var(--nf-notch-h, 32px) + 22px) !important;
   transition: width 420ms cubic-bezier(.22,1,.36,1), box-shadow 240ms ease !important;
 }
-#notch-face.nf-aos:is(.listen, .speak, .busy, .mic-live, .heard, .captioning, .nf-thinking, .nf-inline-open, .nf-inline-working, .nf-ns-working) .nf-pill {
+#notch-face.nf-aos:not(:is(.nf-iomi-booting, .nf-iomi-auth, .nf-iomi-awake, .nf-iomi-expanded, .nf-boot-affective, .nf-boot-logo-on, .nf-boot-sweeping, .nf-auth, .nf-greet, .dropping)):is(.listen, .speak, .busy, .mic-live, .heard, .captioning, .nf-thinking, .nf-inline-open, .nf-inline-working, .nf-ns-working) .nf-pill {
   width: calc(var(--nf-notch-w, 190px) + 76px) !important;
 }
-#notch-face.nf-aos #nf-status,
-#notch-face.nf-aos #nf-status-2,
-#notch-face.nf-aos .nf-cap,
-#notch-face.nf-aos .nf-band,
-#notch-face.nf-aos .nf-folds,
-#notch-face.nf-aos .nf-tray,
-#notch-face.nf-aos .nf-sonar,
-#notch-face.nf-aos .nf-volume,
-#notch-face.nf-aos .nf-privacy,
-#notch-face.nf-aos .nf-think-dots,
-#notch-face.nf-aos .nf-inline-caption,
-#notch-face.nf-aos .nf-answer-surface { display: none !important; }
+#notch-face.nf-aos:not(:is(.nf-iomi-booting, .nf-iomi-auth, .nf-iomi-awake, .nf-iomi-expanded, .nf-boot-affective, .nf-boot-logo-on, .nf-boot-sweeping, .nf-auth, .nf-greet, .dropping)) #nf-status,
+#notch-face.nf-aos:not(:is(.nf-iomi-booting, .nf-iomi-auth, .nf-iomi-awake, .nf-iomi-expanded, .nf-boot-affective, .nf-boot-logo-on, .nf-boot-sweeping, .nf-auth, .nf-greet, .dropping)) #nf-status-2,
+#notch-face.nf-aos:not(:is(.nf-iomi-booting, .nf-iomi-auth, .nf-iomi-awake, .nf-iomi-expanded, .nf-boot-affective, .nf-boot-logo-on, .nf-boot-sweeping, .nf-auth, .nf-greet, .dropping)) .nf-cap,
+#notch-face.nf-aos:not(:is(.nf-iomi-booting, .nf-iomi-auth, .nf-iomi-awake, .nf-iomi-expanded, .nf-boot-affective, .nf-boot-logo-on, .nf-boot-sweeping, .nf-auth, .nf-greet, .dropping)) .nf-band,
+#notch-face.nf-aos:not(:is(.nf-iomi-booting, .nf-iomi-auth, .nf-iomi-awake, .nf-iomi-expanded, .nf-boot-affective, .nf-boot-logo-on, .nf-boot-sweeping, .nf-auth, .nf-greet, .dropping)) .nf-folds,
+#notch-face.nf-aos:not(:is(.nf-iomi-booting, .nf-iomi-auth, .nf-iomi-awake, .nf-iomi-expanded, .nf-boot-affective, .nf-boot-logo-on, .nf-boot-sweeping, .nf-auth, .nf-greet, .dropping)) .nf-tray,
+#notch-face.nf-aos:not(:is(.nf-iomi-booting, .nf-iomi-auth, .nf-iomi-awake, .nf-iomi-expanded, .nf-boot-affective, .nf-boot-logo-on, .nf-boot-sweeping, .nf-auth, .nf-greet, .dropping)) .nf-sonar,
+#notch-face.nf-aos:not(:is(.nf-iomi-booting, .nf-iomi-auth, .nf-iomi-awake, .nf-iomi-expanded, .nf-boot-affective, .nf-boot-logo-on, .nf-boot-sweeping, .nf-auth, .nf-greet, .dropping)) .nf-volume,
+#notch-face.nf-aos:not(:is(.nf-iomi-booting, .nf-iomi-auth, .nf-iomi-awake, .nf-iomi-expanded, .nf-boot-affective, .nf-boot-logo-on, .nf-boot-sweeping, .nf-auth, .nf-greet, .dropping)) .nf-privacy,
+#notch-face.nf-aos:not(:is(.nf-iomi-booting, .nf-iomi-auth, .nf-iomi-awake, .nf-iomi-expanded, .nf-boot-affective, .nf-boot-logo-on, .nf-boot-sweeping, .nf-auth, .nf-greet, .dropping)) .nf-think-dots,
+#notch-face.nf-aos:not(:is(.nf-iomi-booting, .nf-iomi-auth, .nf-iomi-awake, .nf-iomi-expanded, .nf-boot-affective, .nf-boot-logo-on, .nf-boot-sweeping, .nf-auth, .nf-greet, .dropping)) .nf-inline-caption,
+#notch-face.nf-aos:not(:is(.nf-iomi-booting, .nf-iomi-auth, .nf-iomi-awake, .nf-iomi-expanded, .nf-boot-affective, .nf-boot-logo-on, .nf-boot-sweeping, .nf-auth, .nf-greet, .dropping)) .nf-answer-surface { display: none !important; }
 #notch-face .nf-ns-listen, #notch-face .nf-ns-talk { display: none; }
-#notch-face.nf-aos .nf-ns-listen,
-#notch-face.nf-aos .nf-ns-talk {
+#notch-face.nf-aos:not(:is(.nf-iomi-booting, .nf-iomi-auth, .nf-iomi-awake, .nf-iomi-expanded, .nf-boot-affective, .nf-boot-logo-on, .nf-boot-sweeping, .nf-auth, .nf-greet, .dropping)) .nf-ns-listen,
+#notch-face.nf-aos:not(:is(.nf-iomi-booting, .nf-iomi-auth, .nf-iomi-awake, .nf-iomi-expanded, .nf-boot-affective, .nf-boot-logo-on, .nf-boot-sweeping, .nf-auth, .nf-greet, .dropping)) .nf-ns-talk {
   position: absolute; z-index: 40; display: flex; align-items: center; gap: 3px;
   opacity: 0; transition: opacity 200ms ease; pointer-events: none;
 }
 /* In the side pieces, level with the middle of the hardware notch. */
-#notch-face.nf-aos .nf-ns-listen { left: 15px; top: calc(var(--nf-notch-h, 32px) / 2 - 3.5px); width: 7px; height: 7px; border-radius: 50%; background: var(--aos-tint, #9fbdf0); box-shadow: 0 0 8px var(--aos-tint, #9fbdf0); }
-#notch-face.nf-aos .nf-ns-talk { right: 13px; top: calc(var(--nf-notch-h, 32px) / 2 - 6px); height: 12px; }
-#notch-face.nf-aos .nf-ns-talk i { display: block; width: 3px; height: 100%; border-radius: 2px; background: #fff; transform-origin: center; animation: nfNsBar 900ms ease-in-out infinite; }
-#notch-face.nf-aos .nf-ns-talk i:nth-child(2) { animation-delay: 150ms; }
-#notch-face.nf-aos .nf-ns-talk i:nth-child(3) { animation-delay: 300ms; }
+#notch-face.nf-aos:not(:is(.nf-iomi-booting, .nf-iomi-auth, .nf-iomi-awake, .nf-iomi-expanded, .nf-boot-affective, .nf-boot-logo-on, .nf-boot-sweeping, .nf-auth, .nf-greet, .dropping)) .nf-ns-listen { left: 15px; top: calc(var(--nf-notch-h, 32px) / 2 - 3.5px); width: 7px; height: 7px; border-radius: 50%; background: var(--aos-tint, #9fbdf0); box-shadow: 0 0 8px var(--aos-tint, #9fbdf0); }
+#notch-face.nf-aos:not(:is(.nf-iomi-booting, .nf-iomi-auth, .nf-iomi-awake, .nf-iomi-expanded, .nf-boot-affective, .nf-boot-logo-on, .nf-boot-sweeping, .nf-auth, .nf-greet, .dropping)) .nf-ns-talk { right: 13px; top: calc(var(--nf-notch-h, 32px) / 2 - 6px); height: 12px; }
+#notch-face.nf-aos:not(:is(.nf-iomi-booting, .nf-iomi-auth, .nf-iomi-awake, .nf-iomi-expanded, .nf-boot-affective, .nf-boot-logo-on, .nf-boot-sweeping, .nf-auth, .nf-greet, .dropping)) .nf-ns-talk i { display: block; width: 3px; height: 100%; border-radius: 2px; background: #fff; transform-origin: center; animation: nfNsBar 900ms ease-in-out infinite; }
+#notch-face.nf-aos:not(:is(.nf-iomi-booting, .nf-iomi-auth, .nf-iomi-awake, .nf-iomi-expanded, .nf-boot-affective, .nf-boot-logo-on, .nf-boot-sweeping, .nf-auth, .nf-greet, .dropping)) .nf-ns-talk i:nth-child(2) { animation-delay: 150ms; }
+#notch-face.nf-aos:not(:is(.nf-iomi-booting, .nf-iomi-auth, .nf-iomi-awake, .nf-iomi-expanded, .nf-boot-affective, .nf-boot-logo-on, .nf-boot-sweeping, .nf-auth, .nf-greet, .dropping)) .nf-ns-talk i:nth-child(3) { animation-delay: 300ms; }
 /* Working: the AffectiveOS colour orbits the slim notch, nothing opens. */
-#notch-face.nf-aos.nf-ns-working .nf-pill {
+#notch-face.nf-aos:not(:is(.nf-iomi-booting, .nf-iomi-auth, .nf-iomi-awake, .nf-iomi-expanded, .nf-boot-affective, .nf-boot-logo-on, .nf-boot-sweeping, .nf-auth, .nf-greet, .dropping)).nf-ns-working .nf-pill {
   box-shadow:
     0 0 0 1.5px var(--aos-tint, #2f6bff),
     calc(cos(var(--aos-spin)) * 9px) calc(sin(var(--aos-spin)) * 5px + 4px) 22px 2px var(--aos-tint, #2f6bff),
     calc(cos(var(--aos-spin) + 180deg) * 9px) calc(sin(var(--aos-spin) + 180deg) * 5px + 4px) 26px 0 rgba(255, 255, 255, .55) !important;
   animation: nfAosSpin 1.8s linear infinite;
 }
-#notch-face.nf-aos:is(.listen, .mic-live):not(.speak) .nf-ns-listen { opacity: 1; animation: nfNsPulse 1.4s ease-in-out infinite; }
-#notch-face.nf-aos.speak .nf-ns-talk { opacity: 1; }
+#notch-face.nf-aos:not(:is(.nf-iomi-booting, .nf-iomi-auth, .nf-iomi-awake, .nf-iomi-expanded, .nf-boot-affective, .nf-boot-logo-on, .nf-boot-sweeping, .nf-auth, .nf-greet, .dropping)):is(.listen, .mic-live):not(.speak) .nf-ns-listen { opacity: 1; animation: nfNsPulse 1.4s ease-in-out infinite; }
+#notch-face.nf-aos:not(:is(.nf-iomi-booting, .nf-iomi-auth, .nf-iomi-awake, .nf-iomi-expanded, .nf-boot-affective, .nf-boot-logo-on, .nf-boot-sweeping, .nf-auth, .nf-greet, .dropping)).speak .nf-ns-talk { opacity: 1; }
 @keyframes nfNsPulse { 0%, 100% { transform: scale(.75); opacity: .55; } 50% { transform: scale(1); opacity: 1; } }
 @keyframes nfNsBar { 0%, 100% { transform: scaleY(.35); } 50% { transform: scaleY(1); } }
 @media (prefers-reduced-motion: reduce) {
-  #notch-face.nf-aos .nf-ns-talk i, #notch-face.nf-aos .nf-ns-listen { animation: none !important; }
+  #notch-face.nf-aos:not(:is(.nf-iomi-booting, .nf-iomi-auth, .nf-iomi-awake, .nf-iomi-expanded, .nf-boot-affective, .nf-boot-logo-on, .nf-boot-sweeping, .nf-auth, .nf-greet, .dropping)) .nf-ns-talk i, #notch-face.nf-aos:not(:is(.nf-iomi-booting, .nf-iomi-auth, .nf-iomi-awake, .nf-iomi-expanded, .nf-boot-affective, .nf-boot-logo-on, .nf-boot-sweeping, .nf-auth, .nf-greet, .dropping)) .nf-ns-listen { animation: none !important; }
 }
 
 /* ── AffectiveOS notch style (Settings › Notch) ──────────────────────────────
