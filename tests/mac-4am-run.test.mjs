@@ -121,3 +121,8 @@ test("saying 'open the article' works too, through HIL", () => {
   assert.match(catalog, /name: "open_search_sources"[\s\S]{0,400}handler: "openSearchSources"/);
   assert.match(main, /open_search_sources: \(a\) => openSearchSources\(a\),/);
 });
+
+test("the router knows there are articles to open", () => {
+  assert.match(main, /searchArticles: Date\.now\(\) - lastSearchLinks\.at < 10 \* 60000/);
+  assert.match(useCases, /open_search_sources, with which for a numbered one/);
+});

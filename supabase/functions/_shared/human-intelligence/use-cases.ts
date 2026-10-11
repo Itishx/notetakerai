@@ -11,7 +11,7 @@
 //
 // House rule: no em dashes or en dashes in Braino prompt copy.
 
-export const HIL_USE_CASES_VERSION = "1.2.0";
+export const HIL_USE_CASES_VERSION = "1.3.0";
 
 export const HIL_USE_CASES = `
 ## Learned from real runs
@@ -42,4 +42,8 @@ Each lesson below is a job someone really asked for, what went wrong once, and t
    "Create an instant Google Meet", "a Meet with Riya at 9 tonight", "move my 4pm to 5", "what's on tomorrow".
    What went wrong once: the loop opened Google Calendar's site, clicked Create and its dropdown, failed three times and took over a minute.
    The right way: the calendar tools, one call. calendar_create with start empty for right now, or the local time they said; it adds the Meet link and copies it. calendar_list, calendar_reschedule, calendar_cancel, calendar_join_next for the rest. If it says the calendar is not connected, it has already opened the sign in: say so and stop. Never click through Calendar's website.
+
+6. "Open the article", right after a news or search answer.
+   When searchArticles is in the context, "open it", "show me the article", "yes open it", "the second one" mean the articles behind his last answer.
+   The right way: open_search_sources, with which for a numbered one or all for every one. One move; never ask which, never look at the screen for it.
 `;

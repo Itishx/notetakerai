@@ -20295,6 +20295,8 @@ function hilRouterSurface() {
     screenRecording: Boolean(screenRecProc),
     undoable: hasFileActionHistory() || hasDesktopOrganizeManifest(),
     lastWhatsApp: waFresh ? { from: wa.name, ageSec: Math.round((Date.now() - wa.at) / 1000) } : null,
+    /* What "open the article" means: the sources behind his last search answer. */
+    searchArticles: Date.now() - lastSearchLinks.at < 10 * 60000 && lastSearchLinks.links.length ? lastSearchLinks.links.map((l, i) => `${i + 1}. ${l.host}`).join(", ") : null,
     /* What "this song" and "that link" mean. From the 6s now-playing poll, so
        reading it costs nothing on the command path. */
     nowPlaying: lastNowPlaying?.playing && lastNowPlaying.track
