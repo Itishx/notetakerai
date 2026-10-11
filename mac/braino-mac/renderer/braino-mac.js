@@ -1718,6 +1718,18 @@ function nfSetThinkingOpen(open) {
   }
 }
 
+function settleQuietStandDown() {
+  cancelPendingNotchThinking();
+  window.clearTimeout(nfThinkingTimer);
+  stopThinkingPhaseCycle();
+  nfThinkingPinned = false;
+  notchFace?.classList.remove("nf-thinking", "nf-think-open", "nf-think-hint", "nf-think-waiting", "nf-think-failed", "nf-think-complete", "nf-reply-thinking");
+  if (nfReplyHold?.on) releaseReplyHold("quiet");
+  if (!notchFace?.classList.contains("nf-answer-open")) nfCollapseNotchZone();
+  updateNotchFace();
+  logRenderer("notch.stand_down_settled", {});
+}
+
 function cancelPendingNotchThinking() {
   if (!nfThinkingOpenTimer) return;
   window.clearTimeout(nfThinkingOpenTimer);
@@ -7284,6 +7296,10 @@ async function runDelegate(prompt, options = {}) {
     showFiles(result?.files || []);
     if (result?.superseded && !result?.say) {
       logRenderer("delegate.superseded_quiet", { runId });
+      /* Stood down with nothing newer to take over ("not for him"): nothing
+         else will replace the thinking sheet, so it is closed here. It hung
+         open after "I don't really care about politics" (2026-10-11). */
+      if (runId === delegateGeneration) settleQuietStandDown();
       return;
     }
     await speak(result?.say || "Done.", { silent: Boolean(options.typed) });

@@ -135,3 +135,9 @@ test("the WhatsApp badge goes away, and tapping it shows the messages in the not
   assert.match(rr, /const r = await window\.brainoMac\?\.waBadgeOpen\?\.\(\)/);
   assert.match(rr, /void speak\(text, \{ silent: true, notchRich: r\.messages\.length > 1 \}\);/);
 });
+
+/* "I don't really care about politics" stood down and the notch hung on thinking. */
+test("a quiet stand-down closes the thinking sheet when nothing newer takes over", () => {
+  assert.match(rr, /if \(runId === delegateGeneration\) settleQuietStandDown\(\);/);
+  assert.match(rr, /function settleQuietStandDown\(\) \{[\s\S]{0,400}notchFace\?\.classList\.remove\("nf-thinking"/);
+});
