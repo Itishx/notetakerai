@@ -8537,8 +8537,31 @@ async function wallpaperUrlsFromSearch(subject) {
   return urls;
 }
 
+/* Look before setting (2026-10-11). "New York" got a picture from a food
+   blog and "Done." Every candidate is shrunk and shown to vision with one
+   question; only a clear yes is ever set. About one small call per picture,
+   three at a time. */
+async function wallpaperShows(image, subject) {
+  const tmp = path.join(os.tmpdir(), `braino-wp-${process.pid}-${Math.random().toString(36).slice(2)}`);
+  try {
+    fs.writeFileSync(`${tmp}.src`, image.buffer);
+    await execFileP("/usr/bin/sips", ["-Z", "512", "-s", "format", "jpeg", `${tmp}.src`, "--out", `${tmp}.jpg`], { timeout: 8000 });
+    const base64 = fs.readFileSync(`${tmp}.jpg`).toString("base64");
+    const r = await askVision(`Answer with one word, YES or NO, then nothing else. Is this picture clearly of ${subject}, and good enough to be a desktop wallpaper (a real photo or artwork of ${subject}, not food, not a product, not a page of text, not a collage)?`, base64);
+    const yes = r.ok && /^\W*(?:yes|yep|yeah)\b/i.test(r.say);
+    logMac("wallpaper.check", { subject: textForLog(subject), yes, said: textForLog(r.say || "", 40) });
+    return yes;
+  } catch (error) {
+    logMac("wallpaper.check_failed", { error: String(error?.message || error).slice(0, 120) });
+    return false;
+  } finally {
+    for (const f of [`${tmp}.src`, `${tmp}.jpg`]) { try { fs.unlinkSync(f); } catch (_) {} }
+  }
+}
+
 async function setWallpaperFromWeb(subject) {
-  const wanted = String(subject || "").trim();
+  // "a photo of San Francisco" is San Francisco.
+  const wanted = String(subject || "").trim().replace(/^(?:(?:a|an|the|some|any)\s+)?(?:nice\s+|good\s+|cool\s+)?(?:photo|picture|pic|image|wallpaper|shot)s?\s+of\s+/i, "").trim();
   if (!wanted) return { ok: false, say: "What should the wallpaper be?" };
   const direct = /^https?:\/\//i.test(wanted);
   const name = direct ? "that picture" : wanted;
@@ -8551,13 +8574,17 @@ async function setWallpaperFromWeb(subject) {
   const used = wallpaperUsed.get(wanted.toLowerCase()) || new Set();
   const fresh = candidates.filter((u) => !used.has(u));
   let picked = null;
-  for (let i = 0; i < fresh.length && !picked; i += 3) {
-    // Three downloads at once, but the best-ranked one that worked wins, not the fastest.
+  for (let i = 0; i < Math.min(fresh.length, 9) && !picked; i += 3) {
+    // Three at once, and the best-ranked one that is REALLY the subject wins.
     const batch = fresh.slice(i, i + 3);
     const got = await Promise.all(batch.map((url) => fetchWallpaperImage(url).then((image) => (image ? { url, image } : null))));
-    picked = got.find(Boolean) || null;
+    sendTaskProgress({ status: "thinking", text: `Checking the ${wanted} pictures` });
+    const ok = await Promise.all(got.map((g) => (g ? (direct ? true : wallpaperShows(g.image, wanted)) : false)));
+    picked = got.find((g, k) => g && ok[k]) || null;
+    got.forEach((g, k) => { if (g && !ok[k]) used.add(g.url); });   // a no is never offered again
   }
-  if (picked) { used.add(picked.url); wallpaperUsed.set(wanted.toLowerCase(), used); }
+  if (picked) used.add(picked.url);
+  wallpaperUsed.set(wanted.toLowerCase(), used);
   for (const { url, image } of picked ? [picked] : []) {
     try {
       const dir = path.join(AUTH_STORE_DIR, "wallpapers");
@@ -8573,7 +8600,7 @@ async function setWallpaperFromWeb(subject) {
     }
   }
   logMac("wallpaper.web.failed", { subject: textForLog(wanted), tried: candidates.length, ms: Date.now() - startedAt });
-  return { ok: false, say: `I could not find a good ${name} picture just now. Want a built-in wallpaper instead?` };
+  return { ok: false, say: `I looked at the ${name} pictures I found and none of them was really ${name}, so I left your wallpaper alone. Want me to try a different description?` };
 }
 
 async function restoreWallpaper() {

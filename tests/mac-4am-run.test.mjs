@@ -15,7 +15,6 @@ test("wallpaper from the web no longer uses the dead Unsplash address", () => {
   assert.match(main, /const candidates = direct \? \[wanted\] : await wallpaperImageUrls\(wanted\);/);
   // Bing first, by rank; Openverse (free photos only) never for a named subject that Bing found.
   assert.match(main, /const bing = await wallpaperUrlsFromBing\(subject\);\n  if \(bing\.length\) return bing;/);
-  assert.match(main, /picked = got\.find\(Boolean\) \|\| null;/);
   assert.match(main, /const fresh = candidates\.filter\(\(u\) => !used\.has\(u\)\);/);
   assert.match(main, /buffer\.length >= 60000/);
 });
@@ -74,4 +73,16 @@ test("image sources and downloads run at the same time", () => {
 
 test("a tool with no plain words is not read out", () => {
   assert.match(main, /narrator\.line\(stepLine\(turn\.decision\.step\?\.action, \(tool\) => PLAIN_STEP\[tool\] \|\| ""\)\);/);
+});
+
+/* 2026-10-11 evening: "New York" got a food blog picture, and "Done." */
+test("every wallpaper is looked at before it is set; a no is never set", () => {
+  assert.match(main, /async function wallpaperShows\(image, subject\)/);
+  assert.match(main, /const ok = await Promise\.all\(got\.map\(\(g\) => \(g \? \(direct \? true : wallpaperShows\(g\.image, wanted\)\) : false\)\)\);/);
+  assert.match(main, /picked = got\.find\(\(g, k\) => g && ok\[k\]\) \|\| null;/);
+  assert.match(main, /none of them was really \$\{name\}, so I left your wallpaper alone/);
+});
+
+test("'a photo of San Francisco' searches for San Francisco", () => {
+  assert.match(main, /\(\?:photo\|picture\|pic\|image\|wallpaper\|shot\)s\?\\s\+of\\s\+/);
 });
