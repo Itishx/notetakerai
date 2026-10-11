@@ -12602,8 +12602,18 @@ let voiceWakeShimmerTimer = 0;
    notch radiated for the whole call instead of just the wake. */
 let voiceWakeShimmerAdded = [];
 
+/* Without subtitles: the whole screen's edge ripples when he wakes. */
+function aosWakeRipple() {
+  let el = document.getElementById("aos-ripple");
+  if (!el) { el = document.createElement("div"); el.id = "aos-ripple"; el.setAttribute("aria-hidden", "true"); document.body.appendChild(el); }
+  el.classList.remove("on");
+  void el.offsetWidth;   // restart the animation on a second wake
+  el.classList.add("on");
+  logRenderer("aos.wake_ripple", {});
+}
 function startVoiceWakeShimmer(options = {}) {
   if (!notchFace) return;
+  if (noSubtitles()) aosWakeRipple();
   /* His name gets the gold boot trace; the hotkey keeps the blue. */
   const classes = options.golden ? ["nf-shining", "nf-shine-slow"] : ["nf-shining", "nf-shine-slow", "nf-waking-voice"];
   voiceWakeShimmerAdded = classes.filter((name) => !notchFace.classList.contains(name));

@@ -172,6 +172,32 @@ body {
 /* Edge glow — Apple Intelligence style: the whole screen perimeter radiates.
    Listening = cool blue breath. Speaking = warm coral, pulsing with his voice.
    Pure CSS, click-through, driven by the same voice status machine. */
+/* ── Without subtitles: the wake ripple (2026-10-11) ───────────────────────
+ * Control twice in the no subtitles mode: the Apple Intelligence moment. A
+ * soft rainbow light rises from every edge of the screen, ripples inward, and
+ * settles away. A ring of conic colour, masked to a border that grows and
+ * blurs, then fades. Nothing to click, nothing to read. */
+#aos-ripple {
+  position: fixed; inset: 0; z-index: 55; pointer-events: none;
+  border-radius: 14px; padding: 0; opacity: 0;
+  background: conic-gradient(from var(--aos-ripple-turn, 0deg), #2f6bff, #bf5af2, #ff375f, #ff9f0a, #30d158, #0a84ff, #2f6bff);
+  -webkit-mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  filter: blur(14px) saturate(140%);
+}
+@property --aos-ripple-turn { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
+#aos-ripple.on { animation: aosRipple 1.6s cubic-bezier(.22,1,.36,1) forwards; }
+@keyframes aosRipple {
+  0% { opacity: 0; padding: 0; --aos-ripple-turn: 0deg; }
+  18% { opacity: 1; padding: 34px; }
+  55% { opacity: .9; padding: 18px; }
+  100% { opacity: 0; padding: 6px; --aos-ripple-turn: 220deg; }
+}
+@media (prefers-reduced-motion: reduce) {
+  #aos-ripple.on { animation: aosRippleCalm 1s ease forwards; }
+  @keyframes aosRippleCalm { 0%, 100% { opacity: 0; padding: 16px; } 40% { opacity: .8; padding: 16px; } }
+}
+
 #edge-glow {
   position: fixed;
   inset: 0;
@@ -6770,6 +6796,9 @@ body.mascot-stealth.mascot-peek #status-pill { opacity: 1; }
 #notch-face.nf-aos:not(:is(.nf-iomi-booting, .nf-iomi-auth, .nf-iomi-awake, .nf-iomi-expanded, .nf-boot-affective, .nf-boot-logo-on, .nf-boot-sweeping, .nf-auth, .nf-greet, .dropping)) .nf-inline-caption,
 #notch-face.nf-aos:not(:is(.nf-iomi-booting, .nf-iomi-auth, .nf-iomi-awake, .nf-iomi-expanded, .nf-boot-affective, .nf-boot-logo-on, .nf-boot-sweeping, .nf-auth, .nf-greet, .dropping)) .nf-answer-surface,
 #notch-face.nf-aos:not(:is(.nf-iomi-booting, .nf-iomi-auth, .nf-iomi-awake, .nf-iomi-expanded, .nf-boot-affective, .nf-boot-logo-on, .nf-boot-sweeping, .nf-auth, .nf-greet, .dropping)) .nf-sonar { display: none !important; }
+/* A tad taller than the hardware notch, so the colour line sits just below
+   the camera housing instead of behind it (2026-10-11). */
+#notch-face.nf-aos:not(:is(.nf-iomi-booting, .nf-iomi-auth, .nf-iomi-awake, .nf-iomi-expanded, .nf-boot-affective, .nf-boot-logo-on, .nf-boot-sweeping, .nf-auth, .nf-greet, .dropping)) .nf-q { height: calc(var(--nf-notch-h, 32px) + 6px) !important; }
 #notch-face.nf-aos:not(:is(.nf-iomi-booting, .nf-iomi-auth, .nf-iomi-awake, .nf-iomi-expanded, .nf-boot-affective, .nf-boot-logo-on, .nf-boot-sweeping, .nf-auth, .nf-greet, .dropping)) .nf-q::after {
   content: ""; position: absolute; left: 16px; right: 16px; bottom: 0; height: 2px; border-radius: 2px;
   background: linear-gradient(90deg, transparent, var(--aos-tint, #2f6bff) 18%, #fff 50%, var(--aos-tint, #2f6bff) 82%, transparent);
