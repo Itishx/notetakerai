@@ -12113,6 +12113,22 @@ document.getElementById("braino-hide-row")?.addEventListener("click", (event) =>
 });
 // A click on the notch brings him back. Capture, so the notch's own click still runs.
 notchFace?.addEventListener("click", () => { if (mascotHidden()) setMascotHide(null, "notch_click"); }, true);
+/* Tap the WhatsApp badge to read the messages in the notch, quietly
+   (2026-10-11). Only from a resting notch: an open answer or a running job
+   keeps its own click. */
+notchFace?.addEventListener("click", async (event) => {
+  if (!nfWaBadge.count || processing || speaking || notchFace.classList.contains("nf-answer-open") || notchFace.classList.contains("nf-thinking")) return;
+  event.stopPropagation();
+  event.preventDefault();
+  const r = await window.brainoMac?.waBadgeOpen?.().catch(() => null);
+  nfWaBadge = { count: 0, sender: "" };
+  updateNotchFace();
+  if (!r?.ok) return;
+  const time = (at) => new Date(at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  const text = r.messages.map((m) => `${m.name}, ${time(m.at)}: ${m.text}`).join("\n");
+  logRenderer("notch.wa_badge.open", { count: r.messages.length });
+  void speak(text, { silent: true, notchRich: r.messages.length > 1 });
+}, true);
 applyMascotHide();
 // Have a voice session ready before the first call.
 scheduleVoiceStandby(6000);

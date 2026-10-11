@@ -126,3 +126,12 @@ test("the router knows there are articles to open", () => {
   assert.match(main, /searchArticles: Date\.now\(\) - lastSearchLinks\.at < 10 \* 60000/);
   assert.match(useCases, /open_search_sources, with which for a numbered one/);
 });
+
+/* "Ilu · 2 new" stuck in the notch for good (2026-10-11). */
+test("the WhatsApp badge goes away, and tapping it shows the messages in the notch", () => {
+  assert.match(main, /const WA_BADGE_MAX_MS = 10 \* 60 \* 1000;/);
+  assert.match(main, /ipcMain\.handle\("braino-mac:wa-badge-open"/);
+  assert.match(main, /async function pollWhatsAppDb\(\) \{\n  if \(waBadgeCount && activeMacContext\?\.appName === "WhatsApp"\) clearWaBadge\(\);/);
+  assert.match(rr, /const r = await window\.brainoMac\?\.waBadgeOpen\?\.\(\)/);
+  assert.match(rr, /void speak\(text, \{ silent: true, notchRich: r\.messages\.length > 1 \}\);/);
+});

@@ -7538,7 +7538,18 @@ function waSoundsLike(heard, names) {
   return best;
 }
 
+/* Tapping the badge: the messages it counted, to show in the notch. */
+ipcMain.handle("braino-mac:wa-badge-open", async () => {
+  const count = waBadgeCount;
+  const sender = waBadgeSender;
+  const msgs = notchWhatsApp.filter((m) => m.text && (!sender || m.name.slice(0, 20) === sender)).slice(-Math.max(1, Math.min(count || 3, 5)));
+  clearWaBadge();
+  logMac("whatsapp.badge_opened", { count: msgs.length });
+  return { ok: msgs.length > 0, sender, messages: msgs.map((m) => ({ name: m.name, text: m.text, at: m.at })) };
+});
+
 async function pollWhatsAppDb() {
+  if (waBadgeCount && activeMacContext?.appName === "WhatsApp") clearWaBadge();
   if (waDbBusy || !waDbAvailable()) return;
   waDbBusy = true;
   try {
@@ -7739,6 +7750,7 @@ async function pollWhatsAppNotifications() {
          people marked important; asked about, it is answered. */
       activityLog.record("whatsapp", { app: "WhatsApp", from: sender, group: false, kind: "text", important: isWaImportant(sender), hash: String(row.recId) });
       if (isWaImportant(sender)) {
+        noteNotchWhatsApp(sender, row.body, Date.now());
         sendToRenderer("braino-mac:wa-card", { name: sender, text: row.body.slice(0, 160) });
         updateWaBadge(sender);
       }
@@ -10986,13 +10998,22 @@ async function checkCalendarNext() {
   }
 }
 
+/* The "Ilu · 2 new" badge only ever cleared with WhatsApp in front on the
+   Mac, so read on the phone it stayed for good (2026-10-11). Now it also goes
+   when you tap it (the messages show in the notch), and by itself after ten
+   minutes. */
+let waBadgeTimer = null;
+const WA_BADGE_MAX_MS = 10 * 60 * 1000;
 function updateWaBadge(sender) {
   waBadgeCount += 1;
   waBadgeSender = String(sender || "").slice(0, 20);
   sendToRenderer("braino-mac:wa-badge", { count: waBadgeCount, sender: waBadgeSender });
+  clearTimeout(waBadgeTimer);
+  waBadgeTimer = setTimeout(() => { logMac("whatsapp.badge_expired", {}); clearWaBadge(); }, WA_BADGE_MAX_MS);
 }
 
 function clearWaBadge() {
+  clearTimeout(waBadgeTimer);
   if (!waBadgeCount) return;
   waBadgeCount = 0;
   waBadgeSender = "";

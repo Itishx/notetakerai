@@ -156,6 +156,7 @@ contextBridge.exposeInMainWorld("brainoMac", {
   setupNotch: (text, ms) => ipcRenderer.invoke("braino-mac:setup-notch", { text, ms }),
   setupAsk: (id) => ipcRenderer.invoke("braino-mac:setup-ask", id),
   openSources: (urls) => ipcRenderer.invoke("braino-mac:open-sources", { urls }),
+  waBadgeOpen: () => ipcRenderer.invoke("braino-mac:wa-badge-open"),
   setupPending: () => ipcRenderer.invoke("braino-mac:setup-pending"),
   setupPermissions: () => ipcRenderer.invoke("braino-mac:setup-permissions"),
   onNarrate: (callback) => {
