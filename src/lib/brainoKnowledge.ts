@@ -20,6 +20,18 @@ export type KnowledgeEntry = {
 
 export const KNOWLEDGE_ENTRIES: readonly KnowledgeEntry[] = [
   {
+    slug: "calendar-on-mac",
+    title: "Google Calendar on the Mac",
+    category: "Feature",
+    date: "2026-10-11",
+    dateLabel: "October 11, 2026",
+    description:
+      "Book a Google Meet now or later, see what's on, move or cancel it, or join your next call: one call to your calendar, about two seconds, with the Meet link copied.",
+    status: "MVP",
+    platform: "Braino for Mac",
+    number: "082",
+  },
+  {
     slug: "learning-from-real-runs",
     title: "Learning From Real Runs",
     category: "Feature",
