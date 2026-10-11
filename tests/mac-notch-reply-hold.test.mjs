@@ -42,5 +42,5 @@ test("without subtitles is the quiet notch band: labels, no words, one shape", (
 test("without subtitles: the line sits below the housing, and waking ripples the screen edge", () => {
   assert.match(css, /\.dropping\)\) \.nf-q \{ height: calc\(var\(--nf-notch-h, 32px\) \+ 6px\) !important; \}/);
   assert.match(r, /if \(noSubtitles\(\)\) aosWakeRipple\(\);/);
-  assert.match(css, /#aos-ripple\.on \{ animation: aosPulse 1\\.3s/);
+  assert.match(css, /#aos-ripple\.on \{ animation: aosPulse 1\.3s/);
 });
