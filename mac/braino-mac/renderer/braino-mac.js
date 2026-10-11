@@ -3945,6 +3945,8 @@ function updateNotchFace() {
   if (visible && music) nfMusicNoteActive(now);
   notchFace.classList.toggle("launch-now-playing", visible && launchDemoNowPlaying);
   notchFace.classList.toggle("busy", visible && walkerHome && processingActive);
+  // Without subtitles: no sheets, so the colour glow alone says he is working.
+  notchFace.classList.toggle("nf-ns-working", visible && notchFace.classList.contains("nf-aos") && processingActive && !speaking);
   notchFace.classList.remove("nf-processing-caption");
   notchFace.classList.toggle("mic-live", visible && sessionEngaged);
   /* LIVE owns the transcript while it is up. The notch has its own HERA surface

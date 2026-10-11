@@ -1043,4 +1043,4 @@ section id or heading changes.
 ## Notch: one shape through a reply, and Without subtitles (2026-10-11)
 
 - A turn that starts while his answer sheet is open holds the sheet (`.nf-answer-reply`): your words at 58% white, a soft pulse while he thinks, then his answer. Width is locked to the previous answer's mode; only the height eases (280ms). Folds away after 3.5s of quiet.
-- Without subtitles = the AffectiveOS style (`.nf-aos`): no sheets or captions; the pill is notch width + 84px and notch height + 4px while live; a 7px tinted dot (left) pulses while listening, three 3px white bars (right) move while speaking. Settings › Appearance › Subtitles.
+- Without subtitles = the AffectiveOS style (`.nf-aos`): no sheets or captions. The pill NEVER grows taller than idle (notch height + 22px, his eyes); while listening, thinking or speaking it only widens by 76px. A 7px tinted dot (left side piece) pulses while listening, three 3px white bars (right) move while speaking, the AffectiveOS colour orbits it while he works (`.nf-ns-working`). Settings › Appearance › Subtitles.
