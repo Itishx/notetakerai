@@ -16,6 +16,7 @@ const stateFor = (over = {}, env = {}) => Function("e", `
     nfAnswerGeneration, nfHeardText, nfHeardShownAt, speaking } = e;
   const notchFace = { classList: { contains: (n) => classes.includes(n) } };
   const quietNotchOn = () => quietOn;
+  const noSubtitles = () => classes.includes("nf-aos");
   const NF_QUIET_HEARD_MS = 2200;
   ${lift("const NF_QUIET_STANDS_DOWN = [", "\n];\n")}
   ${lift("function quietStateFor(c) {")}
@@ -147,4 +148,14 @@ test("stealth is a switch in the panel, and a phrase by voice or typed", () => {
   assert.ok(flush.indexOf("parseStealthPhrase(transcript)") < flush.indexOf("looksUnfinished(transcript)"));
   assert.match(lift("async function submitTyped(text) {"), /const stealthAsk = parseStealthPhrase\(said\);/);
   assert.match(lift("async function handleStealthPhrase(which, transcript, source) {"), /await speak\(which === "on" \? "Stealth on\. Hover the notch to see me\." : "I'm back\."\);/);
+});
+
+/* 2026-10-11: Without subtitles is this band, without the two word states. */
+test("without subtitles: listen, work and speak, never your words or his answer", () => {
+  const off = { quietOn: false, classes: ["nf-aos"] };
+  assert.equal(stateFor({ sessionEngaged: true }, off), "listen");
+  assert.equal(stateFor({ sessionEngaged: true, processingActive: true }, off), "work");
+  assert.equal(stateFor({ sessionEngaged: true }, { ...off, speaking: true }), "speak");
+  assert.equal(stateFor({ sessionEngaged: true, answerOwnsNotch: true }, off), "listen");
+  assert.equal(stateFor({ sessionEngaged: true, inlineMode: "heard" }, { ...off, nfHeardText: "open youtube", nfHeardShownAt: Date.now() }), "listen");
 });

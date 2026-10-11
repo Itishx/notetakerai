@@ -28,13 +28,13 @@ test("it folds away on its own when nothing follows", () => {
 
 /* Without subtitles: the AffectiveOS style, now the no subtitles mode. */
 const app = readFileSync(new URL("../mac/braino-mac/renderer/app.js", import.meta.url), "utf8");
-test("without subtitles there are no sheets, only a listening dot and speaking bars", () => {
+test("without subtitles is the quiet notch band: labels, no words, one shape", () => {
   assert.match(r, /&& !notchFace\.classList\.contains\("nf-aos"\)\n\s*\);/);
-  assert.match(css, /\.dropping\)\)\.speak \.nf-ns-talk \{ opacity: 1; \}/);
-  // Never taller than idle: only the width moves (2026-10-11).
-  // ...except during boot, sign in and the greeting, which play at full size.
-  assert.match(css, /#notch-face\.nf-aos:not\(:is\(\.nf-iomi-booting, [^)]*\.nf-boot-logo-on[^)]*\)\) \.nf-pill \{[\s\S]{0,120}height: var\(--nf-notch-h, 32px\) !important;/);
-  assert.match(css, /\.dropping\)\)\.nf-ns-working \.nf-aos-band \{ animation: nfNsSweep/);
-  assert.match(r, /notchFace\.classList\.toggle\("nf-ns-working"/);
+  assert.match(r, /!\(quietNotchOn\(\) \|\| noSubtitles\(\)\)/);
+  assert.match(r, /if \(c\.answerOwnsNotch && !noSubtitles\(\)\)/);
+  assert.match(r, /right = noSubtitles\(\) \? "Speaking" : activeWakeName\(\);/);
+  // The regular notch stays hardware sized underneath, except during boot.
+  assert.match(css, /\.dropping\)\) \.nf-pill \{\s*width: var\(--nf-notch-w, 190px\) !important;\s*height: var\(--nf-notch-h, 32px\) !important;/);
+  assert.match(css, /\.dropping\)\) \.nf-q::after \{/);
   assert.match(app, /\["braino", "With subtitles"\], \["affective", "Without subtitles"\]/);
 });

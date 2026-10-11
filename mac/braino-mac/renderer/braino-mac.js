@@ -3509,12 +3509,15 @@ const NF_QUIET_STANDS_DOWN = [
   "nf-iomi-booting", "nf-iomi-expanded", "nf-auth", "nf-auth-err", "nf-greet", "dropping",
 ];
 
+/* Without subtitles (the AffectiveOS style) IS the quiet notch, minus the
+   two states that show words: you hear him, you never read him. */
+function noSubtitles() { return Boolean(notchFace?.classList.contains("nf-aos")); }
 function quietStateFor(c) {
-  if (!c || !c.visible || !quietNotchOn() || herMode || dictationMode) return "";
+  if (!c || !c.visible || !(quietNotchOn() || noSubtitles()) || herMode || dictationMode) return "";
   if (c.yapOwnsNotch || c.thinkingOpen || nfPanelOpen || typingOpen) return "";
   if (NF_QUIET_STANDS_DOWN.some((name) => notchFace.classList.contains(name))) return "";
-  if (c.answerOwnsNotch) return nfQuietAnswerOpenGen === nfAnswerGeneration ? "" : "answer";
-  if ((c.inlineMode === "heard" || c.inlineMode === "thinking") && nfHeardText
+  if (c.answerOwnsNotch && !noSubtitles()) return nfQuietAnswerOpenGen === nfAnswerGeneration ? "" : "answer";
+  if (!noSubtitles() && (c.inlineMode === "heard" || c.inlineMode === "thinking") && nfHeardText
     && Date.now() - nfHeardShownAt < NF_QUIET_HEARD_MS) return "heard";
   if (c.processingActive) return "work";
   if (speaking) return "speak";
@@ -3630,10 +3633,10 @@ function renderQuietNotch(ctx) {
       right = '<i class="nf-q-dot idle"></i>';
     } else if (state === "work") {
       left = '<i class="nf-q-think"></i>';
-      right = hilThinkingHistory.length ? `<span class="nf-q-step">Step ${hilThinkingHistory.length}</span>` : "";
+      right = noSubtitles() ? "Thinking" : hilThinkingHistory.length ? `<span class="nf-q-step">Step ${hilThinkingHistory.length}</span>` : "";
     } else if (state === "speak") {
       left = '<i class="nf-q-speak"></i>';
-      right = activeWakeName();
+      right = noSubtitles() ? "Speaking" : activeWakeName();
     } else if (state === "heard") {
       left = "You said";
       right = '<i class="nf-q-dot"></i>';
