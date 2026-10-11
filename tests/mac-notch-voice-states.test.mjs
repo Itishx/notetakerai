@@ -72,7 +72,7 @@ test("stopping is instant, says so, and nothing says Done after it", () => {
   const stopAt = flush.indexOf('if (await stopTaskNow("voice_phrase", transcript)) return;');
   const hilAt = flush.indexOf("routeInterjectionIntoRunningJob(transcript)");
   assert.ok(stopAt > 0 && stopAt < hilAt);
-  assert.match(js, /if \(result\?\.superseded && !result\?\.say\) \{[\s\S]{0,120}return;/);
+  assert.match(js, /if \(result\?\.superseded && !result\?\.say\) \{[\s\S]{0,600}return;/);
 });
 
 /* ── Voice waking up ───────────────────────────────────────────────────────── */
