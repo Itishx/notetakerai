@@ -103,3 +103,21 @@ test("a clear English request is never called misheard", () => {
   assert.match(main, /function macEnglishish\(w\)/);
   assert.match(main, /return words\.length >= 3 && !words\.some\(\(w\) => macEnglishish\(w\)\);/);
 });
+
+/* "Open the article": the news he just read out, one tap away (2026-10-11). */
+const rr = read("../mac/braino-mac/renderer/braino-mac.js");
+test("a search answer offers its articles in the sheet; nothing opens on its own", () => {
+  assert.match(main, /sendToRenderer\("braino-mac:web-sources", \{ hosts, links, at: Date\.now\(\) \}\);/);
+  assert.match(rr, /nfSourceButton\(links\.length > 1 \? `Open \$\{links\.length\} articles` : "Open the article"/);
+  assert.match(main, /ipcMain\.handle\("braino-mac:open-sources"/);
+});
+
+test("only when the answer IS the search: research jobs and loops do not get it", () => {
+  assert.match(main, /const searchAnswer = Date\.now\(\) - answerFromSearchAt < durationMs \+ 500 && !\/\^hil_loop\/\.test/);
+  assert.match(main, /if \(!searchAnswer\) sendToRenderer\("braino-mac:web-sources", \{ hosts: \[\], links: \[\], at: 0 \}\);/);
+});
+
+test("saying 'open the article' works too, through HIL", () => {
+  assert.match(catalog, /name: "open_search_sources"[\s\S]{0,400}handler: "openSearchSources"/);
+  assert.match(main, /open_search_sources: \(a\) => openSearchSources\(a\),/);
+});

@@ -6723,6 +6723,12 @@ body.mascot-stealth.mascot-peek #status-pill { opacity: 1; }
   opacity: 0;
   animation: nfSrcIn 360ms cubic-bezier(.22,1,.36,1) both;
 }
+/* Tappable sources (2026-10-11): "Open the article" leads, each site opens its own. */
+#notch-face .nf-src { pointer-events: auto; }
+#notch-face button.nf-src-chip { background: transparent; cursor: pointer; transition: background 160ms ease, color 160ms ease, border-color 160ms ease; }
+#notch-face button.nf-src-chip:hover { background: rgba(255,255,255,.1); color: #fff; border-color: rgba(255,255,255,.3); }
+#notch-face .nf-src-open { color: #fff; border-color: rgba(255,255,255,.34); background: rgba(255,255,255,.08); }
+#notch-face .nf-src-chip.is-opened { opacity: .5 !important; }
 #notch-face.nf-aos .nf-src-chip { border-color: color-mix(in srgb, var(--aos-tint, #9fbdf0) 28%, rgba(255,255,255,.14)); }
 @keyframes nfSrcIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { #notch-face .nf-src-chip { animation: none; opacity: 1; } }

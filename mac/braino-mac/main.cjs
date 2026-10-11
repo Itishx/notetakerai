@@ -13200,6 +13200,24 @@ function stripForSpeech(text) {
     .trim();
 }
 
+/* The articles behind the last answer, for "open the article" (2026-10-11). */
+let lastSearchLinks = { links: [], at: 0, query: "" };
+let answerFromSearchAt = 0;
+async function openSearchSources(a = {}) {
+  const fresh = Date.now() - lastSearchLinks.at < 10 * 60000 ? lastSearchLinks.links : [];
+  if (!fresh.length) return { ok: false, say: "I don't have an article from a recent search to open." };
+  const pick = Number(a.which) > 0 ? fresh.slice(Number(a.which) - 1, Number(a.which)) : String(a.all || "") === "true" ? fresh : fresh.slice(0, 1);
+  for (const l of pick.length ? pick : fresh.slice(0, 1)) await openChromeUrl(l.url);
+  logMac("search.sources_opened", { count: pick.length || 1, via: a.via || "voice" });
+  return { ok: true, say: pick.length > 1 ? `Opened ${pick.length} articles.` : `Opened it from ${(pick[0] || fresh[0]).host}.` };
+}
+ipcMain.handle("braino-mac:open-sources", async (_e, payload = {}) => {
+  const urls = (Array.isArray(payload?.urls) ? payload.urls : []).map(String).filter((u) => /^https?:\/\//.test(u)).slice(0, 3);
+  for (const u of urls) await openChromeUrl(u);
+  logMac("search.sources_opened", { count: urls.length, via: "notch" });
+  return { ok: urls.length > 0 };
+});
+
 async function runMacWebSearch(query) {
   const trimmed = String(query || "").trim();
   if (!trimmed) return { ok: false, say: "Tell me what to search for." };
@@ -13274,7 +13292,22 @@ async function runMacWebSearch(query) {
     /* The sites the answer came from, for the notch: up to three, as host
        names, shown as small chips under his answer (2026-10-02). */
     const hosts = [...new Set(sources.map((src) => { try { return new URL(String(src?.url || "")).hostname.replace(/^www\./, ""); } catch (_) { return ""; } }).filter(Boolean))].slice(0, 3);
-    if (hosts.length) sendToRenderer("braino-mac:web-sources", { hosts, at: Date.now() });
+    /* The articles themselves too (2026-10-11): the notch offers "Open the
+       article", and "open it" said out loud uses the same links. */
+    const links = [];
+    for (const src of sources) {
+      try {
+        const u = new URL(String(src?.url || ""));
+        if (!/^https?:$/.test(u.protocol)) continue;
+        const host = u.hostname.replace(/^www\./, "");
+        if (links.some((l) => l.host === host)) continue;
+        links.push({ host, url: u.toString(), title: String(src?.title || "").slice(0, 120) });
+      } catch (_) {}
+      if (links.length >= 3) break;
+    }
+    lastSearchLinks = { links, at: Date.now(), query: trimmed };
+    answerFromSearchAt = Date.now();
+    if (hosts.length) sendToRenderer("braino-mac:web-sources", { hosts, links, at: Date.now() });
     const sourceLines = sources
       .map((src) => {
         const url = String(src?.url || "").trim();
@@ -18775,6 +18808,7 @@ const MAC_HIL_TOOLS = {
   calendar_reschedule: (a) => calendarRescheduleEvent(a),
   calendar_cancel: (a) => calendarCancelEvent(a),
   calendar_join_next: () => calendarJoinNextMeet(),
+  open_search_sources: (a) => openSearchSources(a),
   mac_wide_deep_search: (a) => runMacWideDeepSearch(String(a.term || "")),
   screen_point: (a) => runScreenPoint(String(a.target || ""), String(a.raw || a.target || "")),
   /* ── P0 connect, 2026-09-24 (docs/HIL-TOOL-AUDIT.md) ──
@@ -20920,6 +20954,7 @@ async function runPlanSteps(steps, raw, source) {
 const PLAN_ANSWER_TOOLS = /(?:_lookup|_query|_report|_messages|_stats|_mentions|_census|_status|_current|_summary|_list|_sync|_sync_all)$|^(?:now_playing|spotify_now_playing|memory_search|web_search|deep_research|web_research|research|count_items|recent_download|whats_new|describe_image|screen_vision|read_selection|answer_question_conversationally)$/;
 async function planReply(raw, run, fallback) {
   const found = String(run?.lastOut?.say || "").trim();
+  if (/^(?:web_search|deep_research|web_research|research)$/.test(String(run?.lastTool || ""))) answerFromSearchAt = Date.now();
   /* What actually happened beats what the plan expected. A one step plan, or
      a step that says it only got partway, speaks for itself: "Iron Man is
      playing. Enjoy the movie!" was said while Netflix had reported the title
@@ -24703,6 +24738,11 @@ ipcMain.handle("braino-mac:delegate", async (event, prompt, options) => {
   }
   const durationMs = Date.now() - startedAt;
   const ok = Boolean(result?.ok);
+  /* "Open the article" only when the answer IS a search: a research job that
+     searched on the way to writing a doc keeps its own result (2026-10-11).
+     A loop that searched mid job is not a search answer either. */
+  const searchAnswer = Date.now() - answerFromSearchAt < durationMs + 500 && !/^hil_loop/.test(String(result?.source || ""));
+  if (!searchAnswer) sendToRenderer("braino-mac:web-sources", { hosts: [], links: [], at: 0 });
   // A job that worked gets a short warm line instead of its own description.
   const shortLine = shortDoneLine(result);
   if (shortLine) {

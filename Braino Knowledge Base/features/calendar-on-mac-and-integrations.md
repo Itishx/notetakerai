@@ -18,6 +18,10 @@ If your calendar isn't connected, Braino says so once and opens the Google sign 
 - "Move my design review to 6." / "Cancel the design review." (asks first: attendees are told)
 - "Join my next meeting."
 
+## Open the article (added October 11, 2026)
+
+When an answer comes from a web search (news, "what's going on with..."), his answer sheet in the notch shows **Open the article** (or **Open 3 articles**) and the site names. Tap one and it opens in Chrome; nothing opens on its own. It shows only when the answer IS the search: a research job that searched on the way to writing a doc, or a loop that searched mid job, does not get it, and it never carries to the next answer. Say "open the article" (or "open the second one") and HIL's `open_search_sources` opens it, which also covers Without subtitles. Code: `lastSearchLinks`, `openSearchSources`, `braino-mac:open-sources`, `answerFromSearchAt` in main.cjs; `nfSourceButton` / `renderNotchSources` in the renderer.
+
 ## Where every integration stands (the /connectors-vault list)
 
 | Integration | Server | Chrome extension | Mac (HIL tools) |

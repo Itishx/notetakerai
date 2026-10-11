@@ -213,6 +213,7 @@ export const HIL_TOOL_CATALOG: HilTool[] = [
   { name: "calendar_reschedule", params: ["query", "start", "end", "minutes"], gloss: "Move an event on their Google Calendar, found by its title words, to a new local start time", handler: "calendarRescheduleEvent", },
   { name: "calendar_cancel", params: ["query"], gloss: "Cancel an event on their Google Calendar, found by its title words; attendees are told", irreversible: true, handler: "calendarCancelEvent", },
   { name: "calendar_join_next", params: [], gloss: "Open the Google Meet of their next calendar meeting", handler: "calendarJoinNextMeet", },
+  { name: "open_search_sources", params: ["which", "all"], gloss: "Open the article or articles behind Braino's last web search answer in Chrome: which is 1, 2 or 3 for one of them, all true for every one, empty for the top article. Use when they want to see or read the news or source he just told them about", handler: "openSearchSources", },
   { name: "web_search", params: ["query", "openInChrome"], gloss: "Search the web: speak the answer, or open Google in Chrome", handler: "runMacWebSearch", },
   { name: "whats_new", params: [], gloss: "Pitch Braino's newest feature aloud, then demo it", memoSafe: true, },
   { name: "whatsapp_listener_diagnostics", params: [], gloss: "Diagnose why WhatsApp notifications are not read aloud; changes no settings", zeroNetwork: true, memoSafe: true, handler: "whatsAppListenerDiagnostics", },

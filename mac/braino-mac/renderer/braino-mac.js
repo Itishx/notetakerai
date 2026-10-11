@@ -1866,20 +1866,49 @@ function refitOpenLongAnswer(generation = nfAnswerGeneration) {
  * stack in one after another under his answer, inside the notch. Taken from
  * the search that just ran (braino-mac:web-sources) and shown only on the
  * answer that follows it, within 20 seconds; any other answer has none. */
-let nfWebSources = { hosts: [], at: 0 };
+let nfWebSources = { hosts: [], links: [], at: 0 };
 let nfAnswerSources = [];
 window.brainoMac?.onWebSources?.((payload) => {
-  nfWebSources = { hosts: Array.isArray(payload.hosts) ? payload.hosts.slice(0, 3) : [], at: Date.now() };
+  const links = Array.isArray(payload.links) ? payload.links.filter((l) => /^https?:\/\//.test(String(l?.url || ""))).slice(0, 3) : [];
+  nfWebSources = { hosts: Array.isArray(payload.hosts) ? payload.hosts.slice(0, 3) : [], links, at: Date.now() };
 });
+/* "Open the article" (2026-10-11): an answer that came from a search offers
+   its articles, inside the sheet you are already reading. Tapped, they open
+   in Chrome; nothing opens on its own. Only on the answer that follows the
+   search, never carried to the next one. */
+function nfSourceButton(label, urls, cls, delay) {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = cls;
+  b.style.animationDelay = `${delay}ms`;
+  b.textContent = label;
+  ["pointerdown", "mousedown"].forEach((t) => b.addEventListener(t, (e) => e.stopPropagation()));
+  b.addEventListener("click", (e) => {
+    e.stopPropagation(); e.preventDefault();
+    b.classList.add("is-opened");
+    logRenderer("notch.sources.open", { count: urls.length });
+    void window.brainoMac?.openSources?.(urls);
+  });
+  return b;
+}
 function renderNotchSources() {
+  const links = nfAnswerSources.filter((x) => x && typeof x === "object" && x.url);
   notchFace?.querySelectorAll(".nf-src").forEach((el) => {
-    el.replaceChildren(...nfAnswerSources.map((host, i) => {
-      const chip = document.createElement("span");
-      chip.className = "nf-src-chip";
-      chip.style.animationDelay = `${120 + i * 140}ms`;
-      chip.textContent = host;
-      return chip;
-    }));
+    if (!links.length) {
+      // Older payloads: names only, as before.
+      el.replaceChildren(...nfAnswerSources.filter((x) => typeof x === "string").map((host, i) => {
+        const chip = document.createElement("span");
+        chip.className = "nf-src-chip";
+        chip.style.animationDelay = `${120 + i * 140}ms`;
+        chip.textContent = host;
+        return chip;
+      }));
+      return;
+    }
+    el.replaceChildren(
+      nfSourceButton(links.length > 1 ? `Open ${links.length} articles` : "Open the article", links.map((l) => l.url), "nf-src-chip nf-src-open", 120),
+      ...links.map((l, i) => nfSourceButton(l.host, [l.url], "nf-src-chip", 260 + i * 140)),
+    );
   });
   notchFace?.classList.toggle("nf-has-src", nfAnswerSources.length > 0);
 }
@@ -2121,8 +2150,8 @@ function startNotchAnswer(text, generation, options = {}) {
     ? Math.max(164, Math.min(notchViewportHeight() - 90, requestedFixedHeight))
     : 0;
   if (!sameAnswer) {
-    nfAnswerSources = Date.now() - nfWebSources.at < 20000 ? nfWebSources.hosts : [];
-    nfWebSources = { hosts: [], at: 0 };
+    nfAnswerSources = Date.now() - nfWebSources.at < 20000 ? (nfWebSources.links.length ? nfWebSources.links : nfWebSources.hosts) : [];
+    nfWebSources = { hosts: [], links: [], at: 0 };
   }
   const fromHold = nfReplyHold.on;
   if (!sameAnswer || options.replace) {
