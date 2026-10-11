@@ -172,30 +172,23 @@ body {
 /* Edge glow — Apple Intelligence style: the whole screen perimeter radiates.
    Listening = cool blue breath. Speaking = warm coral, pulsing with his voice.
    Pure CSS, click-through, driven by the same voice status machine. */
-/* ── Without subtitles: the wake ripple (2026-10-11) ───────────────────────
- * Control twice in the no subtitles mode: the Apple Intelligence moment. A
- * soft rainbow light rises from every edge of the screen, ripples inward, and
- * settles away. A ring of conic colour, masked to a border that grows and
- * blurs, then fades. Nothing to click, nothing to read. */
+/* ── Without subtitles: the wake pulse (2026-10-11) ────────────────────────
+ * Control twice in the no subtitles mode: a thin line of one colour (the
+ * AffectiveOS tint of the moment) pulses once around the very edge of the
+ * screen, like Apple Intelligence, and is gone. Subtle on purpose. */
 #aos-ripple {
   position: fixed; inset: 0; z-index: 55; pointer-events: none;
-  border-radius: 14px; padding: 0; opacity: 0;
-  background: conic-gradient(from var(--aos-ripple-turn, 0deg), #2f6bff, #bf5af2, #ff375f, #ff9f0a, #30d158, #0a84ff, #2f6bff);
-  -webkit-mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
-  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
-  filter: blur(14px) saturate(140%);
+  border-radius: 12px; opacity: 0;
+  box-shadow: inset 0 0 0 0 var(--aos-ripple-color, #2f6bff);
 }
-@property --aos-ripple-turn { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
-#aos-ripple.on { animation: aosRipple 1.6s cubic-bezier(.22,1,.36,1) forwards; }
-@keyframes aosRipple {
-  0% { opacity: 0; padding: 0; --aos-ripple-turn: 0deg; }
-  18% { opacity: 1; padding: 34px; }
-  55% { opacity: .9; padding: 18px; }
-  100% { opacity: 0; padding: 6px; --aos-ripple-turn: 220deg; }
+#aos-ripple.on { animation: aosPulse 1.3s ease-in-out forwards; }
+@keyframes aosPulse {
+  0% { opacity: 0; box-shadow: inset 0 0 0 0 var(--aos-ripple-color, #2f6bff), inset 0 0 0 0 transparent; }
+  35% { opacity: .75; box-shadow: inset 0 0 0 2px var(--aos-ripple-color, #2f6bff), inset 0 0 14px 2px var(--aos-ripple-color, #2f6bff); }
+  100% { opacity: 0; box-shadow: inset 0 0 0 1px var(--aos-ripple-color, #2f6bff), inset 0 0 8px 0 var(--aos-ripple-color, #2f6bff); }
 }
 @media (prefers-reduced-motion: reduce) {
-  #aos-ripple.on { animation: aosRippleCalm 1s ease forwards; }
-  @keyframes aosRippleCalm { 0%, 100% { opacity: 0; padding: 16px; } 40% { opacity: .8; padding: 16px; } }
+  #aos-ripple.on { animation-duration: .8s; }
 }
 
 #edge-glow {

@@ -12606,6 +12606,9 @@ let voiceWakeShimmerAdded = [];
 function aosWakeRipple() {
   let el = document.getElementById("aos-ripple");
   if (!el) { el = document.createElement("div"); el.id = "aos-ripple"; el.setAttribute("aria-hidden", "true"); document.body.appendChild(el); }
+  // One colour: whatever the AffectiveOS tint is right now.
+  const tint = getComputedStyle(notchFace || document.body).getPropertyValue("--aos-tint").trim();
+  if (tint) el.style.setProperty("--aos-ripple-color", tint);
   el.classList.remove("on");
   void el.offsetWidth;   // restart the animation on a second wake
   el.classList.add("on");
