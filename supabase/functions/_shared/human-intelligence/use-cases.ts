@@ -11,7 +11,7 @@
 //
 // House rule: no em dashes or en dashes in Braino prompt copy.
 
-export const HIL_USE_CASES_VERSION = "1.1.0";
+export const HIL_USE_CASES_VERSION = "1.2.0";
 
 export const HIL_USE_CASES = `
 ## Learned from real runs
@@ -37,4 +37,9 @@ Each lesson below is a job someone really asked for, what went wrong once, and t
 4. "Did you do it?" or "why did it fail?"
    What went wrong once: he answered from a screenshot ("yes, it's a valid wallpaper") when the download had failed, and guessed a reason instead of reading the error.
    The right way: answer from what the last run actually returned, its errors and results. If you do not know, say so.
+
+5. A meeting, a call or a Meet, now or later.
+   "Create an instant Google Meet", "a Meet with Riya at 9 tonight", "move my 4pm to 5", "what's on tomorrow".
+   What went wrong once: the loop opened Google Calendar's site, clicked Create and its dropdown, failed three times and took over a minute.
+   The right way: the calendar tools, one call. calendar_create with start empty for right now, or the local time they said; it adds the Meet link and copies it. calendar_list, calendar_reschedule, calendar_cancel, calendar_join_next for the rest. If it says the calendar is not connected, it has already opened the sign in: say so and stop. Never click through Calendar's website.
 `;

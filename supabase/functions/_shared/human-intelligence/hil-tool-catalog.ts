@@ -207,6 +207,12 @@ export const HIL_TOOL_CATALOG: HilTool[] = [
   { name: "wallpaper_random", params: [], gloss: "Set a random built-in macOS wallpaper and name the pick", zeroNetwork: true, memoSafe: true, handler: "setRandomOfficialWallpaper", },
   { name: "wallpaper_restore", params: [], gloss: "Put back the wallpaper from before Braino changed it", zeroNetwork: true, memoSafe: true, handler: "restoreWallpaper", },
   { name: "wallpaper_set_from_web", params: ["subject"], gloss: "Set the desktop wallpaper to a web photo of a subject", handler: "setWallpaperFromWeb", },
+  /* Google Calendar through the API, never by clicking Calendar's site (2026-10-11). */
+  { name: "calendar_create", params: ["title", "start", "end", "minutes", "attendees", "meet"], gloss: "Book an event on their Google Calendar with a Google Meet link (copied for them). start is local time like 2026-10-11T21:00, empty for right now (an instant meeting); minutes defaults to 30; attendees are emails. Use for any meeting, call or Meet they want booked or started", handler: "calendarCreateEvent", },
+  { name: "calendar_list", params: ["when", "query"], gloss: "Read what is on their Google Calendar: when is today, tomorrow or week; query narrows by words", handler: "calendarListEvents", },
+  { name: "calendar_reschedule", params: ["query", "start", "end", "minutes"], gloss: "Move an event on their Google Calendar, found by its title words, to a new local start time", handler: "calendarRescheduleEvent", },
+  { name: "calendar_cancel", params: ["query"], gloss: "Cancel an event on their Google Calendar, found by its title words; attendees are told", irreversible: true, handler: "calendarCancelEvent", },
+  { name: "calendar_join_next", params: [], gloss: "Open the Google Meet of their next calendar meeting", handler: "calendarJoinNextMeet", },
   { name: "web_search", params: ["query", "openInChrome"], gloss: "Search the web: speak the answer, or open Google in Chrome", handler: "runMacWebSearch", },
   { name: "whats_new", params: [], gloss: "Pitch Braino's newest feature aloud, then demo it", memoSafe: true, },
   { name: "whatsapp_listener_diagnostics", params: [], gloss: "Diagnose why WhatsApp notifications are not read aloud; changes no settings", zeroNetwork: true, memoSafe: true, handler: "whatsAppListenerDiagnostics", },

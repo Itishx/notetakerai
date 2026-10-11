@@ -6602,7 +6602,22 @@ const SCREEN_DEIXIS_RE = /^(?:(?:hey\s+)?brain(?:o|elle)[\s,]*)?(?:no[\s,]+)?(?:
    "असे हिटिंग करता", "¿Qué dejaba tú?", "Sendetu sastanc". Eight wrong actions
    in eight days came from text like this, five of them playing something. Such
    a sentence may be talked to, never acted on: he asks again instead. */
-const MAC_ENGLISH_WORDS = new Set("a an the to of in on at for and or but is are was be it this that these those my me i you your he she we they can could would will please open play send show find search call message text what who how why when where which do does did not no yes ok okay hey braino set turn stop close tab page app go get make tell book order buy start one two first last".split(" "));
+/* Widened 2026-10-11: "Can you please read out Ilu's messages?" was trimmed to
+   "read out Ilu's messages", and read, out and messages were not on the old
+   list of ninety words, so a clear sentence got "Say it again?". */
+const MAC_ENGLISH_WORDS = new Set(("a an the to of in on at for and or but is are was were be been it its this that these those my me i you your he she we they them us him her his our their " +
+  "can could would will should shall may might must please open play send show find search call message messages text texts what who how why when where which do does did done " +
+  "not no yes ok okay hey braino set turn stop close tab tabs page app apps go get make tell book order buy start one two three first last next previous back again now here there " +
+  "read out up down off over all any some more most new old latest recent unread with from about into have has had want need like just so if then than as by let lets see look check " +
+  "write type copy paste save delete remove add put take give bring move change use try keep run help ask say said know think mean come good great thanks thank hi hello yeah sure right left " +
+  "mail email emails note notes song songs music video videos photo photos picture screen time today tomorrow tonight morning evening night meeting meet calendar reminder timer alarm volume " +
+  "file files folder desktop chrome spotify youtube whatsapp google link links name people person contact friend mom dad brother sister wallpaper background news weather minute minutes hour hours " +
+  "everything something nothing anything everyone someone thing things way day week month year also too very really much many few little big small quick fast slow").split(" "));
+/* Normal English shapes count too: playing, opened, Ilu's, messages, quickly. */
+function macEnglishish(w) {
+  const base = String(w || "").replace(/'s$/, "");
+  return MAC_ENGLISH_WORDS.has(base) || MAC_ENGLISH_WORDS.has(base.replace(/(?:ing|ed|es|s|ly)$/, "")) || /(?:ing|tion|ness|ment|able)$/.test(base);
+}
 function macLooksMisheard(raw) {
   const t = String(raw || "").trim();
   if (!t) return false;
@@ -6615,7 +6630,7 @@ function macLooksMisheard(raw) {
   // ("Riya Khurana", "Ajmera Greens") are left alone.
   // A row of capitalised words is a name ("Abhishek Gour Mesa"), not noise.
   if (t.split(/\s+/).every((w) => /^[A-Z]/.test(w))) return false;
-  return words.length >= 3 && !words.some((w) => MAC_ENGLISH_WORDS.has(w));
+  return words.length >= 3 && !words.some((w) => macEnglishish(w));
 }
 const SEE_ME_RE = /\b(?:can|do)\s+you\s+see\s+me\b|\blook\s+at\s+me\b|\bhow\s+do\s+i\s+look\b|\bwhat\s+am\s+i\s+(?:wearing|holding|doing)\b|\bsee\s+what\s+i(?:'m|\s+am)\s+(?:holding|wearing|showing)\b|\buse\s+(?:the|your|my)\s+camera\b/i;
 async function grabCameraFrame() {
@@ -16751,6 +16766,7 @@ const PLAIN_STEP = {
   tabs_close_all: "closing the tabs", memory_search: "checking memory", schedule_lookup: "checking your timetable",
   attendance_lookup: "checking attendance", file_find: "finding the file", mail_send: "sending the email",
   wallpaper_set_from_web: "finding your wallpaper", deep_research: "looking it up",
+  calendar_create: "booking it on your calendar", calendar_list: "checking your calendar", calendar_reschedule: "moving it", calendar_join_next: "opening your next meeting",
 };
 function macPlainStep(step) {
   // A loop step is { intent, action: { type, tool } }; a plan step is { tool }.
@@ -17161,6 +17177,133 @@ async function startGoogleDriveConnect(authToken, userId) {
   } catch (_) {
     return false;
   }
+}
+
+/* ── Google Calendar on the Mac (2026-10-11) ─────────────────────────────
+ *
+ * The extension has had a real Calendar connection for months (create with a
+ * Meet link, reschedule, cancel, list, join the next Meet), all through
+ * google-calendar-action. None of it reached the Mac, so "a Meet at 9 tonight"
+ * became the job loop clicking Calendar's Create button, three failures and
+ * over a minute. These call the same server function: one request, about two
+ * seconds, and the Meet link copied for you. */
+let lastCalendarConnectAt = 0;
+async function macCalendar(action, body = {}) {
+  const auth = authStatusPayload();
+  const token = await getBrainoAuthToken().catch(() => "");
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !token || !auth.userId) return { ok: false, signedOut: true, error: "signed_out" };
+  const started = Date.now();
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 15000);
+    const res = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/google-calendar-action`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ action, userIdentifier: auth.userId, ...body }),
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    const data = await res.json().catch(() => ({}));
+    const error = String(data?.error || data?.message || "");
+    logMac("calendar.action", { action, ok: res.ok && data?.ok !== false, ms: Date.now() - started, error: error.slice(0, 120) || undefined });
+    if (/not connected/i.test(error)) return { ok: false, notConnected: true, error };
+    return res.ok && data?.ok !== false ? { ok: true, ...data } : { ok: false, error: error || `calendar ${res.status}` };
+  } catch (e) {
+    logMac("calendar.action_failed", { action, error: String(e?.message || e).slice(0, 120) });
+    return { ok: false, error: String(e?.message || e) };
+  }
+}
+async function startGoogleCalendarConnect() {
+  if (Date.now() - lastCalendarConnectAt < 60000) return true;
+  const auth = authStatusPayload();
+  const token = await getBrainoAuthToken().catch(() => "");
+  if (!token || !auth.userId) return false;
+  try {
+    const res = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/google-calendar-oauth-start`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ userIdentifier: auth.userId }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.authUrl) return false;
+    lastCalendarConnectAt = Date.now();
+    await openChromeUrl(data.authUrl);
+    logMac("calendar.connect_opened", {});
+    return true;
+  } catch (_) { return false; }
+}
+async function calendarNotConnectedReply() {
+  const opened = await startGoogleCalendarConnect();
+  return { ok: false, say: opened ? "Your Google Calendar isn't connected yet. I opened the sign-in; say it again once you've allowed it." : "Your Google Calendar isn't connected yet. Connect it from the Braino dashboard and I'll take it from there." };
+}
+const MAC_TZ = Intl.DateTimeFormat().resolvedOptions().timeZone;
+function calendarWhen(iso) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const today = new Date(); const tomorrow = new Date(); tomorrow.setDate(today.getDate() + 1);
+  const day = d.toDateString() === today.toDateString() ? "today" : d.toDateString() === tomorrow.toDateString() ? "tomorrow" : d.toLocaleDateString([], { weekday: "long", month: "short", day: "numeric" });
+  return `${day} at ${d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`;
+}
+/* "start" comes from the model as a local date and time ("2026-10-11T21:00");
+   a missing date means today, a missing end means thirty minutes. */
+function calendarTimes(start, end, minutes) {
+  let s = new Date(String(start || ""));
+  if (Number.isNaN(s.getTime())) s = new Date(Date.now() + 2 * 60000);   // "now": an instant meeting
+  let e = end ? new Date(String(end)) : new Date(s.getTime() + (Number(minutes) || 30) * 60000);
+  if (Number.isNaN(e.getTime()) || e <= s) e = new Date(s.getTime() + (Number(minutes) || 30) * 60000);
+  return { start: { dateTime: s.toISOString(), timeZone: MAC_TZ }, end: { dateTime: e.toISOString(), timeZone: MAC_TZ } };
+}
+async function calendarCreateEvent(a = {}) {
+  const title = String(a.title || a.summary || "Meeting").trim();
+  const attendees = (Array.isArray(a.attendees) ? a.attendees : String(a.attendees || "").split(/[,\s]+/)).filter((x) => /@/.test(String(x)));
+  sendTaskProgress({ status: "thinking", text: "Booking it on your calendar" });
+  const r = await macCalendar("create_event", { summary: title, ...calendarTimes(a.start, a.end, a.minutes), ...(attendees.length ? { attendees } : {}), createMeet: a.meet !== false });
+  if (r.notConnected) return calendarNotConnectedReply();
+  if (!r.ok) return { ok: false, say: "Google Calendar didn't take that one. Want me to try again?" };
+  const link = r.event?.meetUrl || "";
+  if (link) { try { clipboard.writeText(link); } catch (_) {} }
+  const when = calendarWhen(r.event?.start?.dateTime || r.event?.start?.date || "");
+  return { ok: true, say: `Booked "${title}" for ${when}.${link ? " The Meet link is copied." : ""}`, meetUrl: link, eventId: r.event?.id || "" };
+}
+async function calendarListEvents(a = {}) {
+  const when = String(a.when || "today").toLowerCase();
+  const start = new Date(); start.setHours(0, 0, 0, 0);
+  if (/tomorrow/.test(when)) start.setDate(start.getDate() + 1);
+  const end = new Date(start); end.setDate(end.getDate() + (/week/.test(when) ? 7 : 1));
+  const r = await macCalendar("list_events", { timeMin: (/today|now/.test(when) ? new Date() : start).toISOString(), timeMax: end.toISOString(), maxResults: 10, ...(a.query ? { query: String(a.query) } : {}) });
+  if (r.notConnected) return calendarNotConnectedReply();
+  if (!r.ok) return { ok: false, say: "I couldn't read your calendar just now." };
+  const events = r.events || [];
+  if (!events.length) return { ok: true, say: `Nothing on your calendar ${/week/.test(when) ? "this week" : when}.` };
+  const lines = events.slice(0, 5).map((e) => `${e.summary} ${calendarWhen(e.start?.dateTime || e.start?.date || "").replace(/^today /, "")}`);
+  return { ok: true, say: `${events.length === 1 ? "One thing" : `${events.length} things`}: ${lines.join(", ")}.` };
+}
+async function calendarFindOne(query) {
+  const r = await macCalendar("find_events", { query: String(query || ""), timeMax: new Date(Date.now() + 14 * 864e5).toISOString(), maxResults: 5 });
+  return r.notConnected ? { notConnected: true } : (r.events || [])[0] || null;
+}
+async function calendarRescheduleEvent(a = {}) {
+  const found = await calendarFindOne(a.query || a.title);
+  if (found?.notConnected) return calendarNotConnectedReply();
+  if (!found) return { ok: false, say: `I couldn't find "${a.query || a.title}" on your calendar in the next two weeks.` };
+  const r = await macCalendar("reschedule_event", { eventId: found.id, ...calendarTimes(a.start, a.end, a.minutes) });
+  if (!r.ok) return { ok: false, say: "Google Calendar didn't let me move it." };
+  return { ok: true, say: `Moved "${found.summary}" to ${calendarWhen(r.event?.start?.dateTime || "")}.` };
+}
+async function calendarCancelEvent(a = {}) {
+  const found = await calendarFindOne(a.query || a.title);
+  if (found?.notConnected) return calendarNotConnectedReply();
+  if (!found) return { ok: false, say: `I couldn't find "${a.query || a.title}" on your calendar in the next two weeks.` };
+  const r = await macCalendar("cancel_event", { eventId: found.id });
+  return r.ok ? { ok: true, say: `Cancelled "${found.summary}".` } : { ok: false, say: "Google Calendar didn't let me cancel it." };
+}
+async function calendarJoinNextMeet() {
+  const r = await macCalendar("open_next_meet", { maxResults: 10, timeMax: new Date(Date.now() + 864e5).toISOString() });
+  if (r.notConnected) return calendarNotConnectedReply();
+  if (!r.ok) return { ok: false, say: "I couldn't read your calendar just now." };
+  if (!r.event?.meetUrl) return { ok: true, say: "You don't have a Meet coming up in the next day." };
+  await openChromeUrl(r.event.meetUrl);
+  return { ok: true, say: `Opening "${r.event.summary}".` };
 }
 
 async function pasteIntoNewGoogleDoc(title, text) {
@@ -18627,6 +18770,11 @@ const MAC_HIL_TOOLS = {
   recent_download: (a) => handleRecentDownloadIntent({ action: String(a.action || "open"), destination: a.destination ? String(a.destination) : "" }),
   file_action_undo: () => undoLastFileAction(macJobCommand.text),
   wallpaper_set_from_web: (a) => setWallpaperFromWeb(String(a.subject || "")),
+  calendar_create: (a) => calendarCreateEvent(a),
+  calendar_list: (a) => calendarListEvents(a),
+  calendar_reschedule: (a) => calendarRescheduleEvent(a),
+  calendar_cancel: (a) => calendarCancelEvent(a),
+  calendar_join_next: () => calendarJoinNextMeet(),
   mac_wide_deep_search: (a) => runMacWideDeepSearch(String(a.term || "")),
   screen_point: (a) => runScreenPoint(String(a.target || ""), String(a.raw || a.target || "")),
   /* ── P0 connect, 2026-09-24 (docs/HIL-TOOL-AUDIT.md) ──

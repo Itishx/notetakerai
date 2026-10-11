@@ -86,3 +86,20 @@ test("every wallpaper is looked at before it is set; a no is never set", () => {
 test("'a photo of San Francisco' searches for San Francisco", () => {
   assert.match(main, /\(\?:photo\|picture\|pic\|image\|wallpaper\|shot\)s\?\\s\+of\\s\+/);
 });
+
+/* 2026-10-11: a Meet "at 9 tonight" took the loop over a minute clicking Calendar. */
+const catalog = read("../supabase/functions/_shared/human-intelligence/hil-tool-catalog.ts");
+test("Google Calendar is one API call on the Mac, with a Meet link", () => {
+  for (const t of ["calendar_create", "calendar_list", "calendar_reschedule", "calendar_cancel", "calendar_join_next"]) assert.match(catalog, new RegExp(`name: "${t}"`), t);
+  assert.match(catalog, /name: "calendar_cancel"[^\n]*irreversible: true/);
+  assert.match(main, /functions\/v1\/google-calendar-action/);
+  assert.match(main, /if \(link\) \{ try \{ clipboard\.writeText\(link\); \} catch \(_\) \{\} \}/);
+  assert.match(main, /if \(r\.notConnected\) return calendarNotConnectedReply\(\);/);
+  assert.match(useCases, /Never click through Calendar's website/);
+});
+
+/* "Can you please read out Ilu's messages?" got "Say it again?" */
+test("a clear English request is never called misheard", () => {
+  assert.match(main, /function macEnglishish\(w\)/);
+  assert.match(main, /return words\.length >= 3 && !words\.some\(\(w\) => macEnglishish\(w\)\);/);
+});
