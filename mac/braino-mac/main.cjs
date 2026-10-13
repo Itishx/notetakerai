@@ -1320,6 +1320,8 @@ function logInteraction(event = {}) {
   } catch (_) {}
   try {
     if (!SUPABASE_URL || !SUPABASE_ANON_KEY || Date.now() < interactionLogMissingUntil) return;
+    // "Help make Braino better" off in onboarding: the conversation stays out of the cloud log.
+    if (readSetupState().improveBraino === false) return;
     const source = event && typeof event === "object" ? event : {};
     const latency = source.latency_ms == null ? NaN : Number(source.latency_ms);
     const body = {

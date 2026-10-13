@@ -84,9 +84,22 @@ const SCENES = [
   { id: "school", kind: "school", when: () => answers.persona === "Student", kicker: "Make me yours", title: "Where do you *study?*", say: "Where do you study?", options: ["Mesa School of Business", "Somewhere else"] },
   { id: "mesa", kind: "mesa", when: () => answers.school === "Mesa School of Business", kicker: "Your Nexus", title: "Let me into *Nexus.*", say: "Let me into Nexus, and I'll always know your classes, deadlines and attendance.", sub: "Your classes, deadlines, grades and attendance, straight from Mesa. Your token stays on this Mac only." },
   { id: "perms", kind: "perms", kicker: "Trust", title: "Four quick *yeses.*", say: "Four quick yeses from your Mac, and I can really help. Tap Allow on each one.", sub: "Your Mac asks once for each. Every one turns green the moment it works." },
+  /* How he learns (2026-10-13): the person picks, and the pick is applied
+     (memoryOn switches the activity diary, improveBraino the conversation
+     log). Every line here is what the code does today, including what goes
+     to the cloud. */
+  { id: "learn", kind: "learn", kicker: "Your choice", title: "How should I *learn* about you?", say: "One choice, and it's yours. How much should I learn about your day?", sub: "Here's exactly what each one means. You can change it anytime." },
   { id: "try", kind: "try", kicker: "Your first moment", title: "Now, *talk* to me.", say: "Now, talk to me. Press Control twice and ask me anything.", sub: "Press Control twice, then ask anything. Try: what can you do?" },
   { id: "done", kind: "done", banner: "affective-hero", kicker: "That's us", title: () => `Nice to meet you, *${nameOf()}.*`, say: () => `Nice to meet you, ${nameOf()}. I'm right up there whenever you need me.` },
 ];
+const MODES = [
+  { id: "day", name: "Learn my day", tag: "Recommended", line: "I keep a private diary of your day: the apps you use, the pages you open, the words on your screen. Then I can tell you what you worked on, pick up where you left off, and remember what you promised.",
+    facts: ["The diary lives on this Mac and deletes itself after a week", "Once an hour I summarise it. Lasting things, like who Riya is, are saved to your account", "Never password managers, banking apps or private windows", "Say \"pause memory\" anytime and I stop"] },
+  { id: "ask", name: "Only when I ask", tag: "", line: "I look at your screen only in the moment you ask me something. No diary, nothing in the background. I still help, you'll just explain a little more.",
+    facts: ["Nothing is recorded in the background", "Things you tell me directly can still be remembered", "Switch to Learn my day anytime"] },
+];
+let learnMode = "day";
+let improveOn = true;
 const WHY = { microphone: "so I can hear you, and your meetings", accessibility: "so I can click and type for you", screen: "so I can see what you see", contacts: "so I know who's who" };
 const GRANTED = { microphone: "Now I can hear you.", accessibility: "Now I can click and type for you.", screen: "Now I can see what you see.", contacts: "Now I know who's who." };
 
@@ -151,6 +164,15 @@ function body(scene) {
     return `<div class="ob-perms">${ps.map((p) => `<div class="ob-perm${p.ok ? " ok" : ""}"><i></i><div><b>${esc(p.label)}</b><span>${esc(WHY[p.id] || p.why)}</span></div>${p.ok ? "<em>Allowed</em>" : `<button data-ask="${esc(p.id)}">Allow</button>`}</div>`).join("")}${api.namedMode ? wake : ""}</div>
       <div class="ob-actions"><button class="ob-go" data-next>${ps.length && ps.every((p) => p.ok) ? "Continue" : "Continue for now"}</button></div>`;
   }
+  if (scene.kind === "learn") {
+    return `<div class="ob-modes">${MODES.map((m) => `<button class="ob-mode${learnMode === m.id ? " on" : ""}" data-mode="${m.id}">
+        <span class="ob-mode-top"><i></i><b>${esc(m.name)}</b>${m.tag ? `<em>${esc(m.tag)}</em>` : ""}</span>
+        <span class="ob-mode-line">${esc(m.line)}</span>
+        <ul>${m.facts.map((f) => `<li>${esc(f)}</li>`).join("")}</ul>
+      </button>`).join("")}</div>
+      <button class="ob-improve${improveOn ? " on" : ""}" data-improve><i></i><span><b>Help make Braino better</b>Let us learn from your conversations with me, what you say and what I answer, to improve Braino. Never sold. Turn it off anytime.</span></button>
+      <div class="ob-actions"><button class="ob-go" data-next>Continue</button></div>`;
+  }
   if (scene.kind === "try") {
     return heard
       ? `<div class="ob-card" style="width:auto;max-width:560px;margin-top:28px"><small>You said</small><div class="ob-said">"${esc(heard.you)}"</div>${heard.braino ? `<div style="margin-top:10px;color:var(--ink-2)">${esc(heard.braino)}</div>` : ""}</div><div class="ob-actions"><button class="ob-go" data-next>That's it. Continue</button></div>`
@@ -158,7 +180,7 @@ function body(scene) {
   }
   if (scene.kind === "done") {
     const ps = snap?.permissions || [];
-    const rows = [["Your name", answers.callMe || snap?.name], ["What you do", answers.persona], ["Permissions", ps.length ? `${ps.filter((p) => p.ok).length} of ${ps.length} allowed` : ""], ["First thing you said", heard?.you ? `"${heard.you}"` : ""], ["Call me", "Control twice, or \"Hey Braino\""]].filter((r) => r[1]);
+    const rows = [["Your name", answers.callMe || snap?.name], ["What you do", answers.persona], ["How I learn", answers.learnMode ? (answers.learnMode === "day" ? "Learn my day" : "Only when I ask") : ""], ["Help improve Braino", typeof answers.improveBraino === "boolean" ? (answers.improveBraino ? "Yes" : "No") : ""], ["Permissions", ps.length ? `${ps.filter((p) => p.ok).length} of ${ps.length} allowed` : ""], ["First thing you said", heard?.you ? `"${heard.you}"` : ""], ["Call me", "Control twice, or \"Hey Braino\""]].filter((r) => r[1]);
     return `<div class="ob-know">${rows.map(([k, v]) => `<div><span>${esc(k)}</span><b>${esc(v)}</b></div>`).join("")}</div><div class="ob-actions"><button class="ob-go" data-next>Start using Braino</button></div>`;
   }
   return "";
@@ -201,6 +223,7 @@ function next() {
     if (!v) { $("ob-name")?.focus(); return; }
     void save({ callMe: v });
   }
+  if (scene.kind === "learn") void save({ learnMode, memoryOn: learnMode === "day", improveBraino: improveOn });
   if (scene.kind === "done") { void save({ completed: true }).then(() => window.close()); return; }
   at = Math.min(SCENES.length - 1, at + 1);
   while (SCENES[at].when && !SCENES[at].when() && at < SCENES.length - 1) at += 1;
@@ -229,6 +252,8 @@ document.addEventListener("click", async (e) => {
     if (r?.ok) void say(`Got it${r.name ? `, ${r.name.split(" ")[0]}` : ""}. I can see Nexus now.`);
     return;
   }
+  if (t.dataset.mode) { learnMode = t.dataset.mode; render(); return; }
+  if (t.hasAttribute("data-improve")) { improveOn = !improveOn; render(); return; }
   if (t.dataset.choice) { await save({ persona: t.dataset.choice }); render(); setTimeout(next, 350); return; }
   if (t.dataset.wake) { const r = await api.namedMode?.({ enabled: true }).catch(() => null); wakeOn = Boolean(r?.enabled ?? true); render(); if (wakeOn) void say("Now just say Hey Braino."); return; }
   if (t.dataset.ask) { t.textContent = "Waiting…"; await api.setupAsk?.(t.dataset.ask); void checkPermissions(); }
@@ -255,7 +280,7 @@ function paintSound() { $("ob-sound").textContent = muted ? "Sound off" : "Sound
 
 (async () => {
   paintSound();
-  try { const s = await api.setupSnapshot?.(); if (s?.ok) { snap = s; Object.assign(answers, { callMe: s.answers?.callMe, persona: s.answers?.persona }); } } catch (_) {}
+  try { const s = await api.setupSnapshot?.(); if (s?.ok) { snap = s; Object.assign(answers, { callMe: s.answers?.callMe, persona: s.answers?.persona }); if (s.answers?.learnMode) learnMode = s.answers.learnMode; if (typeof s.answers?.improveBraino === "boolean") improveOn = s.answers.improveBraino; } } catch (_) {}
   try { const m = await api.mesaTokenStatus?.(); if (m?.connected) mesaState = { connected: true, name: m.name || "", program: m.program || "", error: "", busy: false }; } catch (_) {}
   render();
 })();

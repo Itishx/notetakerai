@@ -111,7 +111,8 @@ const P = {
           : `<div class="mem-row"><span class="mem-cat">${esc(cats[x.category] || "Other")}</span><p>${esc(x.content)}</p><span class="mem-src">${x.source === "user" || x.source === "onboarding" ? "you told me" : x.source === "mac" ? "from your Mac" : "I noticed"}</span><div class="mem-acts"><button class="btn" type="button" data-mem-edit="${x.id}">Edit</button><button class="btn" type="button" data-mem-del="${x.id}">Forget</button></div></div>`).join("")}</div>`
         : `<p class="sub">Nothing yet. Tell him something about you, or add it here.</p>`;
     const knows = m("", `${kicker("What he knows about you", mems ? chip(`${mems.length}`) : "")}<div class="mem-add"><input id="mem-new" placeholder="Add something he should know, like: I'm vegetarian" aria-label="Add a memory">${btn("Add", "memAdd")}</div>${mems && mems.length > 6 ? `<label class="act-find" style="margin:10px 0 2px"><input id="mem-q" placeholder="Search his memory" value="${esc(S.memQ || "")}"></label>` : ""}${list}`);
-    return `${knows}${m("s4", `${kicker("Remember my day")}<div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><p class="sub">Apps, screen text, what you say</p>${tg(on, "memoryOn", "Remember my day")}</div>`)}
+    return `${knows}${m("s4", `${kicker("Learn my day")}<div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><p class="sub">A private diary of your day on this Mac. Off means he only looks when you ask</p>${tg(on, "memoryOn", "Learn my day")}</div>`)}
+      ${m("s4", `${kicker("Help make Braino better")}<div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><p class="sub">Let us learn from your conversations with him. Never sold</p>${tg(S.snap?.answers?.improveBraino !== false, "improveBraino", "Help make Braino better")}</div>`)}
       ${m("s4", `${kicker("Braino can use it")}<div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><p class="sub">He answers and acts from it</p>${tg(use, "recallOn", "Braino can use it")}</div>`)}
       ${m("s4", `${kicker("Kept")}<div class="big">7 days</div><p class="sub">then deleted by itself</p>`)}
       ${m("", `${kicker("Today, hour by hour")}<div class="rows">${(S.snap?.summaries || []).length ? S.snap.summaries.map((d) => row(esc(d.hour), esc(d.summary))).join("") : row("No summaries yet", "The first one lands at the end of the hour")}</div><div style="margin-top:10px">${btn("Open the memory window", "memoryOpen")}</div>`)}`;
@@ -240,7 +241,7 @@ document.addEventListener("click", async (e) => {
   if (tgl) {
     const on = tgl.getAttribute("aria-checked") !== "true"; tgl.setAttribute("aria-checked", String(on));
     const k = tgl.dataset.set;
-    if (k === "memoryOn" || k === "recallOn") { await call("setupSave", { [k]: on }); toast(on ? "On." : "Off."); }
+    if (k === "memoryOn" || k === "recallOn" || k === "improveBraino") { await call("setupSave", { [k]: on }); toast(on ? "On." : "Off."); }
     else if (k === "wake") { S.wake = await call("namedMode", { enabled: on }); toast(on ? "Say \u201cHey Braino\u201d any time." : "He won't wake on his name now."); }
     else if (k === "openAtLogin") { await call("loginItem", on); toast(on ? "He'll open when you log in." : "He won't open at login."); }
     else if (k === "warmVoice" || k === "talkOutLoud" || k === "cleanEar" || k === "narrate") { overlay({ [k]: on }); toast(on ? "On." : "Off."); }
