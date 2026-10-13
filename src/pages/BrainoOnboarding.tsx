@@ -25,6 +25,10 @@ export default function BrainoOnboarding() {
       setupPermissions: async () => ({ ok: true, permissions: perms.map((p) => ({ ...p })) }),
       setupAsk: async (id: string) => { const p = perms.find((x) => x.id === id); if (p) p.ok = true; return { ok: true }; },
       setupSave: async () => ({ ok: true }),
+      // Connect Nexus, stood in: any mesa_pat_ token "connects".
+      mesaOpenDeveloper: async () => { window.open("https://students.mesaschool.co.in/student/developer?view=console", "_blank"); return { ok: true }; },
+      mesaTokenSave: async (t: string) => (/^mesa_pat_/.test(String(t)) ? { ok: true, name: "A Mesa student", program: "PGP" } : { ok: false, error: "That doesn't look like a Nexus token. It starts with mesa_pat_." }),
+      mesaTokenStatus: async () => ({ connected: false }),
     };
     const script = document.createElement("script");
     script.src = onboardUrl;

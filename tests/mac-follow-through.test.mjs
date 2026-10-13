@@ -281,7 +281,7 @@ test("a handover reads as a handover", () => {
 const ironMain = readFileSync(new URL("../mac/braino-mac/main.cjs", import.meta.url), "utf8");
 
 test("a research step's answer is said, not the line written before it ran", () => {
-  assert.match(ironMain, /web_search\|deep_research\|web_research\|research\|count_items/);
+  assert.match(ironMain, /web_search\|deep_research\|web_research\|research\|(?:mesa_nexus\|)?count_items/);
 });
 
 test("what actually happened beats what the plan expected", () => {

@@ -39,3 +39,20 @@ test("everything the app reads from outside its folder ships with it", () => {
   assert.match(pkg, /path\.join\(ROOT, "public", "fonts"\)/);
   assert.match(pkg, /path\.join\(ROOT, "extension", "lib"\)/);
 });
+
+/* 2026-10-13: the installed app narrated its own folder, had no way to quit,
+   and a new person's Braino jumped out of the notch to talk in a bubble. */
+test("the installed app watches no repo, can be quit, and keeps a new Braino in the notch", () => {
+  assert.match(main, /function startCursorModeMonitoring\(\) \{\n[\s\S]{0,300}if \(app\.isPackaged\) return;/);
+  assert.match(main, /ipcMain\.handle\("braino-mac:quit"/);
+  const r = read("../mac/braino-mac/renderer/braino-mac.js");
+  assert.match(r, /if \(setupPending \|\| !choseSpot\)/);
+});
+
+/* Mesa through its own API: token saved on this Mac only, checked first. */
+test("Mesa connects with a personal token, saved privately, read only", () => {
+  assert.match(main, /fs\.writeFileSync\(MESA_TOKEN_PATH, [^\n]*\{ mode: 0o600 \}\);/);
+  assert.match(main, /const me = await mesaMcp\("get_me", \{\}, token\);/);
+  assert.doesNotMatch(main, /MESA_READ_TOOLS = new Set\(\[[^\]]*delete_notification/);
+  assert.match(read("../mac/braino-mac/renderer/onboard.js"), /\{ id: "mesa", kind: "mesa", when: \(\) => answers\.school === "Mesa School of Business"/);
+});

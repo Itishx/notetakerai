@@ -4390,7 +4390,11 @@ async function runNotchBoot() {
   /* During onboarding he stays home in the notch, eyes open. Jumping out to a
      spot on screen left the notch empty, which read as "he never woke up". */
   const setupPending = await window.brainoMac.setupPending?.().catch(() => false);
-  if (setupPending) { walkerHome = true; lastEngagedAt = Date.now(); updateNotchFace(); }
+  /* He only leaves the notch after boot for someone who chose a spot for him.
+     A new person's Braino jumped out and talked in a floating bubble over the
+     page, text overlapping the browser (2026-10-13). */
+  const choseSpot = walkArea?.mode === "pin";
+  if (setupPending || !choseSpot) { walkerHome = true; lastEngagedAt = Date.now(); updateNotchFace(); }
   else await runIomiBootMascotExit();
   clearIomiBootClasses();
   logRenderer("boot.iomi.complete", { firstName, greeting });

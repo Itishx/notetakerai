@@ -15,7 +15,8 @@ const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "
 let snap = null;              // name, permissions, saved answers (setupSnapshot)
 const answers = {};
 let heard = null;             // the first thing said to him, from "Try me"
-let wakeOn = false;           // "Hey Braino", offered on the permissions step
+let wakeOn = false;
+let mesaState = { connected: false, name: "", program: "", error: "", busy: false };           // "Hey Braino", offered on the permissions step
 let at = 0;
 let muted = false;
 try { muted = localStorage.getItem("obMuted") === "1"; } catch (_) {}
@@ -78,6 +79,10 @@ const SCENES = [
   { id: "memory", kind: "story", kicker: "Memory", title: "Tell me once. I'll *remember.*", say: "Tell me once, and I'll remember. You never have to repeat yourself.", sub: "What matters to you stays with me. You can see, edit or delete anything I keep.", art: "memory" },
   { id: "name", kind: "name", banner: "affective-footer", kicker: "Make me yours", title: "First, what should I *call* you?", say: "Now, let me get to know you. What should I call you?" },
   { id: "persona", kind: "persona", kicker: "Make me yours", title: "And what do you *do?*", say: "And what do you do?", options: ["Student", "Founder", "Engineer", "Designer", "Creator", "Something else"] },
+  /* Students: where, and for Mesa, their Nexus connected through Mesa's own
+     API with a personal token, saved only on this Mac (2026-10-13). */
+  { id: "school", kind: "school", when: () => answers.persona === "Student", kicker: "Make me yours", title: "Where do you *study?*", say: "Where do you study?", options: ["Mesa School of Business", "Somewhere else"] },
+  { id: "mesa", kind: "mesa", when: () => answers.school === "Mesa School of Business", kicker: "Your Nexus", title: "Let me into *Nexus.*", say: "Let me into Nexus, and I'll always know your classes, deadlines and attendance.", sub: "Your classes, deadlines, grades and attendance, straight from Mesa. Your token stays on this Mac only." },
   { id: "perms", kind: "perms", kicker: "Trust", title: "Four quick *yeses.*", say: "Four quick yeses from your Mac, and I can really help. Tap Allow on each one.", sub: "Your Mac asks once for each. Every one turns green the moment it works." },
   { id: "try", kind: "try", kicker: "Your first moment", title: "Now, *talk* to me.", say: "Now, talk to me. Press Control twice and ask me anything.", sub: "Press Control twice, then ask anything. Try: what can you do?" },
   { id: "done", kind: "done", banner: "affective-hero", kicker: "That's us", title: () => `Nice to meet you, *${nameOf()}.*`, say: () => `Nice to meet you, ${nameOf()}. I'm right up there whenever you need me.` },
@@ -125,6 +130,18 @@ async function say(text, onProgress) {
 function body(scene) {
   if (scene.kind === "story") return `<div class="ob-actions"><button class="ob-skip" data-next>Continue</button></div>`;
   if (scene.kind === "name") return `<input class="ob-input" id="ob-name" value="${esc(answers.callMe || snap?.name || "")}" placeholder="Your first name" /><div class="ob-actions"><button class="ob-go" data-next>Continue</button></div>`;
+  if (scene.kind === "school") return `<div class="ob-choices">${scene.options.map((o) => `<button class="ob-choice${answers.school === o ? " on" : ""}" data-school="${esc(o)}">${esc(o)}</button>`).join("")}</div>`;
+  if (scene.kind === "mesa") {
+    if (mesaState.connected) return `<div class="ob-perm ok" style="max-width:560px;margin-top:28px"><i></i><div><b>Connected</b><span>${esc(mesaState.name ? `as ${mesaState.name}${mesaState.program ? `, ${mesaState.program}` : ""}` : "to Nexus")}</span></div><em>Done</em></div><div class="ob-actions"><button class="ob-go" data-next>Continue</button></div>`;
+    return `<ol class="ob-mesa-steps">
+        <li>Open Nexus, then <b>Developer</b>. <button class="ob-skip" data-mesa-open style="margin-left:6px;padding:6px 14px">Open it for me</button></li>
+        <li>Click <b>New token</b>, then <b>Copy</b>.</li>
+        <li>Paste it here.</li>
+      </ol>
+      <input class="ob-input" id="ob-mesa" placeholder="mesa_pat_..." autocomplete="off" spellcheck="false" />
+      ${mesaState.error ? `<p class="ob-sub" style="color:#b4472f;margin-top:10px">${esc(mesaState.error)}</p>` : ""}
+      <div class="ob-actions"><button class="ob-go" data-mesa-save>${mesaState.busy ? "Checking…" : "Connect"}</button><button class="ob-skip" data-next>Skip for now</button></div>`;
+  }
   if (scene.kind === "persona") return `<div class="ob-choices">${scene.options.map((o) => `<button class="ob-choice${answers.persona === o ? " on" : ""}" data-choice="${esc(o)}">${esc(o)}</button>`).join("")}</div>`;
   if (scene.kind === "perms") {
     const ps = snap?.permissions || [];
@@ -186,6 +203,7 @@ function next() {
   }
   if (scene.kind === "done") { void save({ completed: true }).then(() => window.close()); return; }
   at = Math.min(SCENES.length - 1, at + 1);
+  while (SCENES[at].when && !SCENES[at].when() && at < SCENES.length - 1) at += 1;
   render();
 }
 
@@ -196,9 +214,21 @@ document.addEventListener("click", async (e) => {
     if (SCENES[at].kind === "story" && e.target.closest(".ob-stage")) next();
     return;
   }
-  if (t.id === "ob-back") { stopVoice(); at = Math.max(0, at - 1); started.delete(SCENES[at].id); render(); return; }
+  if (t.id === "ob-back") { stopVoice(); at = Math.max(0, at - 1); while (at > 0 && SCENES[at].when && !SCENES[at].when()) at -= 1; started.delete(SCENES[at].id); render(); return; }
   if (t.id === "ob-sound") { muted = !muted; try { localStorage.setItem("obMuted", muted ? "1" : "0"); } catch (_) {} if (muted) stopVoice(); paintSound(); return; }
   if (t.hasAttribute("data-next")) { next(); return; }
+  if (t.dataset.school) { await save({ school: t.dataset.school, org: t.dataset.school === "Somewhere else" ? "" : t.dataset.school }); render(); setTimeout(next, 350); return; }
+  if (t.hasAttribute("data-mesa-open")) { void api.mesaOpenDeveloper?.(); return; }
+  if (t.hasAttribute("data-mesa-save")) {
+    const token = $("ob-mesa")?.value.trim();
+    if (!token) { $("ob-mesa")?.focus(); return; }
+    mesaState = { ...mesaState, busy: true, error: "" }; render();
+    const r = await api.mesaTokenSave?.(token).catch(() => null);
+    mesaState = r?.ok ? { connected: true, name: r.name || "", program: r.program || "", error: "", busy: false } : { ...mesaState, busy: false, error: r?.error || "That didn't work. Try again." };
+    render();
+    if (r?.ok) void say(`Got it${r.name ? `, ${r.name.split(" ")[0]}` : ""}. I can see Nexus now.`);
+    return;
+  }
   if (t.dataset.choice) { await save({ persona: t.dataset.choice }); render(); setTimeout(next, 350); return; }
   if (t.dataset.wake) { const r = await api.namedMode?.({ enabled: true }).catch(() => null); wakeOn = Boolean(r?.enabled ?? true); render(); if (wakeOn) void say("Now just say Hey Braino."); return; }
   if (t.dataset.ask) { t.textContent = "Waiting…"; await api.setupAsk?.(t.dataset.ask); void checkPermissions(); }
@@ -226,6 +256,7 @@ function paintSound() { $("ob-sound").textContent = muted ? "Sound off" : "Sound
 (async () => {
   paintSound();
   try { const s = await api.setupSnapshot?.(); if (s?.ok) { snap = s; Object.assign(answers, { callMe: s.answers?.callMe, persona: s.answers?.persona }); } } catch (_) {}
+  try { const m = await api.mesaTokenStatus?.(); if (m?.connected) mesaState = { connected: true, name: m.name || "", program: m.program || "", error: "", busy: false }; } catch (_) {}
   render();
 })();
 })();

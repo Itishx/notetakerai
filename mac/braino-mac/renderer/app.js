@@ -168,7 +168,7 @@ const P = {
   general: { t: "General", nav: ["General", "gear"], need: ["login"], r: () => `
     ${m("s8", `${kicker("Look")}<div class="looks"><button class="look" type="button" aria-pressed="true"><i></i>Glass</button><button class="look" type="button" aria-pressed="false" disabled title="Coming soon"><i></i>Dark · soon</button><button class="look" type="button" aria-pressed="false" disabled title="Coming soon"><i></i>Light · soon</button></div>`)}
     ${m("s4", `${kicker("Braino for Mac")}<div class="big">${esc(S.login?.version || "")}</div><p class="sub">This Mac</p>`)}
-    ${m("s6", `${kicker("Start")}<div class="rows">${row("Open at login", "", tg(Boolean(S.login?.openAtLogin), "openAtLogin", "Open at login"))}</div>`)}
+    ${m("s6", `${kicker("Start")}<div class="rows">${row("Open at login", "", tg(Boolean(S.login?.openAtLogin), "openAtLogin", "Open at login"))}${row("Quit Braino", "He stops listening until you open him again. Or press \u2318Q with this window in front.", btn("Quit", "quitBraino"))}</div>`)}
     ${m("s6", `${kicker("Language")}<div class="rows">${row("He speaks", "", "<span class='val'>English</span>")}${row("He understands", "English and Hinglish", "<span class='val'>Auto</span>")}</div>`)}` },
   permissions: { t: "Permissions", l: "macOS asks once for each. Anything missing has a Fix that opens the exact setting.", nav: ["Permissions", "lock"], need: ["snap"], badge: () => (S.snap?.permissions || []).filter((p) => !p.ok).length || "", r: () => {
     const p = S.snap?.permissions || []; const ok = p.filter((x) => x.ok).length;
@@ -267,6 +267,7 @@ document.addEventListener("click", async (e) => {
     if (act === "contactsSync") { toast("Reading your contacts…"); S.contacts = await call("contactsSync"); paint(); }
     if (act === "deleteToday") { await call("activityDeleteDay", new Date().toISOString().slice(0, 10)); toast("Today's memory is deleted."); }
     if (act === "pauseMemory") { await call("activityPause", true); toast("Memory paused. Say \"resume memory\" to start again."); }
+    if (act === "quitBraino") { await call("quitBraino"); return; }
     if (act === "signOut") { await call("authSignOut"); await load("auth"); paint(); }
     if (act === "memCancel") { S.memEditing = null; paint(); }
     if (act === "memAdd") {

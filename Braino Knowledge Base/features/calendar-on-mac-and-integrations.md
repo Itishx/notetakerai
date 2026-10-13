@@ -22,6 +22,10 @@ If your calendar isn't connected, Braino says so once and opens the Google sign 
 
 When an answer comes from a web search (news, "what's going on with..."), his answer sheet in the notch shows **Open the article** (or **Open 3 articles**) and the site names. Tap one and it opens in Chrome; nothing opens on its own. It shows only when the answer IS the search: a research job that searched on the way to writing a doc, or a loop that searched mid job, does not get it, and it never carries to the next answer. Say "open the article" (or "open the second one") and HIL's `open_search_sources` opens it, which also covers Without subtitles. Code: `lastSearchLinks`, `openSearchSources`, `braino-mac:open-sources`, `answerFromSearchAt` in main.cjs; `nfSourceButton` / `renderNotchSources` in the renderer.
 
+## Mesa, through Mesa's own API (added October 13, 2026)
+
+Mesa released an MCP server for Nexus. A student makes a personal token in Nexus (Developer, New token, Copy) and pastes it once: in onboarding (Student, then Mesa School of Business, then Connect Nexus) or on the School page. Braino checks it with Mesa first ("Connected as ..."), then saves it only on that Mac (mode 600). From then on timetable, assignments, grades, attendance and announcements are one call each (HIL tool `mesa_nexus`), instead of reading Nexus in Chrome. Read only: Mesa's one write (deleting a notification) is not used. Mesa has no "sign in with Nexus" (no OAuth), so the token is the connection; if it is deleted in Nexus, Braino says so and asks for a new one. Code: `mesaMcp`, `saveMesaToken`, `runMesaNexus` in main.cjs; the `school` and `mesa` scenes in renderer/onboard.js.
+
 ## Where every integration stands (the /connectors-vault list)
 
 | Integration | Server | Chrome extension | Mac (HIL tools) |
@@ -33,6 +37,7 @@ When an answer comes from a web search (news, "what's going on with..."), his an
 | Spotify | Built | Yes | Yes (play, queue, like, playlists) |
 | Notion | Built (connect, sync) | A little | Yes: create a page |
 | X | Built (BrainoX queue and posting) | Some | Partly: stage a screen clip with a caption |
+| Mesa Nexus | Mesa's own API (MCP, personal token) | No | **Yes, as of Oct 13** |
 | GitHub | Server only (Dev Pulse journal) | No | No |
 | Slack | Not built | No | No |
 | Outlook / Microsoft | Not built | No | No |

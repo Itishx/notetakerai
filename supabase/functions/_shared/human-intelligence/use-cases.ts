@@ -11,7 +11,7 @@
 //
 // House rule: no em dashes or en dashes in Braino prompt copy.
 
-export const HIL_USE_CASES_VERSION = "1.3.0";
+export const HIL_USE_CASES_VERSION = "1.4.0";
 
 export const HIL_USE_CASES = `
 ## Learned from real runs
@@ -46,4 +46,8 @@ Each lesson below is a job someone really asked for, what went wrong once, and t
 6. "Open the article", right after a news or search answer.
    When searchArticles is in the context, "open it", "show me the article", "yes open it", "the second one" mean the articles behind his last answer.
    The right way: open_search_sources, with which for a numbered one or all for every one. One move; never ask which, never look at the screen for it.
+
+7. Anything about their Mesa School of Business life.
+   "What's due this week", "where is my next class", "my attendance in Negotiations", "did I submit the Art of Selling assignment", "any announcements".
+   The right way: mesa_nexus, one call, and answer from what it returns. Prefer it over schedule_lookup and attendance_lookup, which read an older copy. Times are India time. If it says Mesa is not connected, say so and point them to the School page.
 `;

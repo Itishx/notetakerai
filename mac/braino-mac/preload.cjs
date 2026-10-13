@@ -157,6 +157,11 @@ contextBridge.exposeInMainWorld("brainoMac", {
   setupAsk: (id) => ipcRenderer.invoke("braino-mac:setup-ask", id),
   openSources: (urls) => ipcRenderer.invoke("braino-mac:open-sources", { urls }),
   waBadgeOpen: () => ipcRenderer.invoke("braino-mac:wa-badge-open"),
+  mesaTokenSave: (token) => ipcRenderer.invoke("braino-mac:mesa-token-save", token),
+  quitBraino: () => ipcRenderer.invoke("braino-mac:quit"),
+  mesaTokenStatus: () => ipcRenderer.invoke("braino-mac:mesa-token-status"),
+  mesaTokenRemove: () => ipcRenderer.invoke("braino-mac:mesa-token-remove"),
+  mesaOpenDeveloper: () => ipcRenderer.invoke("braino-mac:mesa-open-developer"),
   setupPending: () => ipcRenderer.invoke("braino-mac:setup-pending"),
   setupPermissions: () => ipcRenderer.invoke("braino-mac:setup-permissions"),
   onNarrate: (callback) => {

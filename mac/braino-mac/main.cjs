@@ -1553,6 +1553,10 @@ async function pollCursorMode() {
 }
 
 function startCursorModeMonitoring() {
+  /* Watches the git repo Braino runs from: Itish's project in development.
+     In the installed app that is Braino's own folder, and it narrated it into
+     the notch ("/Applications/Braino.app... No changes detected yet"). */
+  if (app.isPackaged) return;
   if (cursorModeTimer) return;
   void pollCursorMode();
   cursorModeTimer = setInterval(() => void pollCursorMode(), CURSOR_MODE_POLL_MS);
@@ -17483,6 +17487,84 @@ const MESA_SYNC_STATE_PATH = path.join(AUTH_STORE_DIR, "mesa-sync.json");
 const MESA_AUTO_SYNC_AFTER_MS = 20 * 3600 * 1000;
 const MESA_AUTO_CHECK_MS = 30 * 60 * 1000;
 
+/* ── Mesa Nexus, through Mesa's own API (2026-10-13) ─────────────────────
+ *
+ * Mesa released an MCP server. A student makes a personal token in Nexus
+ * (Developer page), pastes it once in onboarding or on the School page, and it
+ * is saved only on this Mac (mode 600, never in git or any server of ours).
+ * Then timetable, assignments, grades, attendance and announcements are one
+ * quick call each, instead of opening Nexus in Chrome and reading the page.
+ * Read only: deleting a notification is the one write Mesa offers, and Braino
+ * does not use it. */
+const MESA_TOKEN_PATH = path.join(AUTH_STORE_DIR, "mesa-token.json");
+const MESA_MCP_URL = "https://students.mesaschool.co.in/mcp";
+const MESA_DEVELOPER_URL = "https://students.mesaschool.co.in/student/developer?view=console";
+const MESA_READ_TOOLS = new Set(["get_me", "get_schedule", "list_courses", "list_assignments", "get_assignment", "get_grades", "get_attendance_summary", "list_announcements", "list_notifications"]);
+function readMesaToken() {
+  try { return String(JSON.parse(fs.readFileSync(MESA_TOKEN_PATH, "utf8"))?.token || ""); } catch (_) { return ""; }
+}
+async function mesaMcp(tool, args = {}, token = readMesaToken()) {
+  if (!token) return { ok: false, notConnected: true, text: "" };
+  if (!MESA_READ_TOOLS.has(tool)) return { ok: false, text: `${tool} is not something Braino reads from Mesa.` };
+  const started = Date.now();
+  try {
+    const res = await fetch(MESA_MCP_URL, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", Accept: "application/json, text/event-stream" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: Date.now(), method: "tools/call", params: { name: tool, arguments: args || {} } }),
+      signal: AbortSignal.timeout(20000),
+    });
+    if (res.status === 401 || res.status === 403) { logMac("mesa.api.unauthorized", { tool }); return { ok: false, unauthorized: true, text: "" }; }
+    const raw = (await res.text()).trim();
+    const line = raw.split("\n").filter((l) => l.trim()).map((l) => l.replace(/^data:\s*/, "")).filter((l) => l.startsWith("{")).pop() || "{}";
+    const data = JSON.parse(line);
+    const text = (data?.result?.content || []).map((c) => c?.text || "").join("\n").trim();
+    const isError = Boolean(data?.error || data?.result?.isError);
+    logMac("mesa.api", { tool, ok: !isError, ms: Date.now() - started, chars: text.length });
+    return { ok: !isError, text: text || String(data?.error?.message || "") };
+  } catch (error) {
+    logMac("mesa.api_failed", { tool, error: String(error?.message || error).slice(0, 140) });
+    return { ok: false, text: "" };
+  }
+}
+/* Pasted in onboarding or on the School page: checked with Mesa first, kept
+   only if it really answers. */
+async function saveMesaToken(raw) {
+  const token = String(raw || "").trim().replace(/^["'\s]+|["'\s]+$/g, "");
+  if (!/^mesa_pat_[A-Za-z0-9_-]{16,}$/.test(token)) return { ok: false, error: "That doesn't look like a Nexus token. It starts with mesa_pat_." };
+  const me = await mesaMcp("get_me", {}, token);
+  if (!me.ok) return { ok: false, error: me.unauthorized ? "Mesa didn't accept that token. Make a new one in Nexus and paste it again." : "I couldn't reach Mesa just now. Try again in a moment." };
+  let name = "", program = "";
+  try { const j = JSON.parse(me.text); name = String(j.name || j.student?.name || j.fullName || ""); program = String(j.program || j.student?.program || j.batch || ""); } catch (_) {
+    name = (me.text.match(/"?name"?\s*[:=]\s*"?([^",\n]+)/i) || [])[1] || "";
+  }
+  fs.mkdirSync(AUTH_STORE_DIR, { recursive: true });
+  fs.writeFileSync(MESA_TOKEN_PATH, JSON.stringify({ token, name, program, at: new Date().toISOString() }, null, 2), { mode: 0o600 });
+  try { fs.chmodSync(MESA_TOKEN_PATH, 0o600); } catch (_) {}
+  logMac("mesa.token_saved", { hasName: Boolean(name) });
+  macTrace("🎓 MESA", `connected through Mesa's API${name ? ` as ${name}` : ""}`);
+  return { ok: true, name, program };
+}
+ipcMain.handle("braino-mac:mesa-token-save", async (_e, token) => saveMesaToken(token));
+ipcMain.handle("braino-mac:mesa-token-status", async () => {
+  try { const j = JSON.parse(fs.readFileSync(MESA_TOKEN_PATH, "utf8")); return { connected: Boolean(j.token), name: j.name || "", program: j.program || "", at: j.at || "" }; } catch (_) { return { connected: false }; }
+});
+ipcMain.handle("braino-mac:mesa-token-remove", async () => { try { fs.unlinkSync(MESA_TOKEN_PATH); } catch (_) {} logMac("mesa.token_removed", {}); return { ok: true }; });
+ipcMain.handle("braino-mac:mesa-open-developer", async () => { await openChromeUrl(MESA_DEVELOPER_URL); return { ok: true }; });
+/* The HIL tool: read one thing from Nexus and hand the data back. */
+async function runMesaNexus(a = {}) {
+  const tool = String(a.tool || "").trim();
+  let args = a.args;
+  if (typeof args === "string") { try { args = JSON.parse(args); } catch (_) { args = {}; } }
+  if (!readMesaToken()) {
+    return { ok: false, say: "Your Mesa account isn't connected yet. In the Braino app, open School and paste your Nexus token (Nexus, Developer, New token)." };
+  }
+  const r = await mesaMcp(tool, args && typeof args === "object" ? args : {});
+  if (r.unauthorized) return { ok: false, say: "Mesa stopped accepting your Nexus token. Make a new one in Nexus and paste it in Braino's School page." };
+  if (!r.ok) return { ok: false, say: r.text || "Mesa didn't answer just now." };
+  return { ok: true, say: r.text.slice(0, 6000) };
+}
+
 function readMesaSyncState() {
   try { return JSON.parse(fs.readFileSync(MESA_SYNC_STATE_PATH, "utf8")) || {}; } catch (_) { return {}; }
 }
@@ -18846,6 +18928,7 @@ const MAC_HIL_TOOLS = {
   calendar_cancel: (a) => calendarCancelEvent(a),
   calendar_join_next: () => calendarJoinNextMeet(),
   open_search_sources: (a) => openSearchSources(a),
+  mesa_nexus: (a) => runMesaNexus(a),
   mac_wide_deep_search: (a) => runMacWideDeepSearch(String(a.term || "")),
   screen_point: (a) => runScreenPoint(String(a.target || ""), String(a.raw || a.target || "")),
   /* ── P0 connect, 2026-09-24 (docs/HIL-TOOL-AUDIT.md) ──
@@ -21001,7 +21084,7 @@ async function runPlanSteps(steps, raw, source) {
 /* A plan whose last step fetched something is a question: the answer is what
    that step found, not the plan's "Here's your attendance", which was written
    before anything was fetched. */
-const PLAN_ANSWER_TOOLS = /(?:_lookup|_query|_report|_messages|_stats|_mentions|_census|_status|_current|_summary|_list|_sync|_sync_all)$|^(?:now_playing|spotify_now_playing|memory_search|web_search|deep_research|web_research|research|count_items|recent_download|whats_new|describe_image|screen_vision|read_selection|answer_question_conversationally)$/;
+const PLAN_ANSWER_TOOLS = /(?:_lookup|_query|_report|_messages|_stats|_mentions|_census|_status|_current|_summary|_list|_sync|_sync_all)$|^(?:now_playing|spotify_now_playing|memory_search|web_search|deep_research|web_research|research|mesa_nexus|count_items|recent_download|whats_new|describe_image|screen_vision|read_selection|answer_question_conversationally)$/;
 async function planReply(raw, run, fallback) {
   const found = String(run?.lastOut?.say || "").trim();
   if (/^(?:web_search|deep_research|web_research|research)$/.test(String(run?.lastTool || ""))) answerFromSearchAt = Date.now();
@@ -24493,6 +24576,9 @@ function openBrainoApp(page) {
   return appWindow;
 }
 ipcMain.handle("braino-mac:app-open", async (_event, page) => { openBrainoApp(page ? String(page) : ""); return { ok: true }; });
+/* Braino lives in the notch with no Dock icon, so a tester had no way to quit
+   him (2026-10-13). General › Quit Braino, or ⌘Q with this window in front. */
+ipcMain.handle("braino-mac:quit", async () => { logMac("app.quit_requested", {}); setTimeout(() => app.quit(), 150); return { ok: true }; });
 
 /* Typed talk from the chat page: the same conversation brain the Mac's text
    path uses, in the same history the loop and the planner read. Jobs do not
