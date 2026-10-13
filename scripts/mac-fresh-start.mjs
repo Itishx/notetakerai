@@ -19,7 +19,8 @@ const kept = path.join(base, "Braino Mac.real");
 const args = new Set(process.argv.slice(2));
 
 try {
-  execFileSync("/usr/bin/pgrep", ["-f", "braino-mac/main.cjs"], { stdio: "ignore" });
+  // The dev app and the packaged Braino.app (its code runs from the same main.cjs path).
+  execFileSync("/usr/bin/pgrep", ["-f", "braino-mac/main.cjs|Braino.app/Contents/MacOS"], { stdio: "ignore" });
   console.error("Braino is running. Quit it first (menu, Quit), then run this again.");
   process.exit(1);
 } catch (_) { /* not running, good */ }
@@ -42,8 +43,8 @@ if (existsSync(kept)) {
 }
 
 if (args.has("--permissions")) {
-  // The dev app is Electron; the shipped app will have its own id.
-  for (const id of ["com.github.Electron", "com.braino.mac"]) {
+  // The dev app is Electron; the packaged app is com.affective.braino.
+  for (const id of ["com.github.Electron", "com.affective.braino"]) {
     try { execFileSync("/usr/bin/tccutil", ["reset", "All", id], { stdio: "ignore" }); } catch (_) {}
   }
   console.log("Reset Microphone, Accessibility, Screen Recording and Contacts for Braino.");
