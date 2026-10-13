@@ -31,6 +31,15 @@ function parakeetEnabled() {
   return setting !== "0";
 }
 let dashboardWindow = null;
+/* A packaged Braino carries its Swift helpers already compiled
+   (native/prebuilt, made by scripts/mac-package.mjs), because a tester's Mac
+   has no Swift toolchain: "xcrun swift" there would silently kill Control
+   twice, Touch ID and the rest. In development the folder is absent and the
+   helpers are compiled or run from source, exactly as before. */
+function prebuiltHelper(name) {
+  const p = path.join(__dirname, "native", "prebuilt", name);
+  return fs.existsSync(p) ? p : "";
+}
 const HOTKEY_HELPER_PATH = path.join(__dirname, "native", "BrainoControlTap.swift");
 const SPEECH_HELPER_PATH = path.join(__dirname, "native", "BrainoSpeech.swift");
 const TOUCH_ID_HELPER_PATH = path.join(__dirname, "native", "BrainoTouchID.swift");
@@ -1592,7 +1601,8 @@ async function measureNotch() {
   const tmpPath = path.join(app.getPath("temp"), "braino-notch-measure.swift");
   try {
     await fs.promises.writeFile(tmpPath, swiftSource);
-    const { stdout } = await execFileP("/usr/bin/xcrun", ["swift", tmpPath], { timeout: 90000 });
+    const measure = prebuiltHelper("BrainoNotchMeasure");
+    const { stdout } = measure ? await execFileP(measure, [], { timeout: 10000 }) : await execFileP("/usr/bin/xcrun", ["swift", tmpPath], { timeout: 90000 });
     const [width, height] = String(stdout || "").trim().split(/\s+/).map(Number);
     if (Number.isFinite(width) && width > 40 && width < 600 && Number.isFinite(height) && height > 0) {
       cachedNotchMetrics = { width: Math.round(width), height: Math.round(height) };
@@ -4046,7 +4056,8 @@ function registerHotkeys() {
 
 function startSwiftHotkeyHelper() {
   if (!fs.existsSync(HOTKEY_HELPER_PATH)) return;
-  swiftHotkey = spawn("xcrun", ["swift", HOTKEY_HELPER_PATH], {
+  const hotkeyBin = prebuiltHelper("BrainoControlTap");
+  swiftHotkey = spawn(hotkeyBin || "xcrun", hotkeyBin ? [] : ["swift", HOTKEY_HELPER_PATH], {
     cwd: ROOT_DIR,
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -4365,7 +4376,8 @@ function runNativeSpeech() {
   return new Promise((resolve) => {
     let settled = false;
     let latestTranscript = "";
-    const child = spawn("xcrun", ["swift", SPEECH_HELPER_PATH], {
+    const speechBin = prebuiltHelper("BrainoSpeech");
+    const child = spawn(speechBin || "xcrun", speechBin ? [] : ["swift", SPEECH_HELPER_PATH], {
       cwd: ROOT_DIR,
       stdio: ["ignore", "pipe", "pipe"],
     });
@@ -8087,7 +8099,8 @@ const UNIT_RE = "(seconds?|secs?|minutes?|mins?|hours?|hrs?)";
 // LocalAuthentication itself unavailable, e.g. no Swift toolchain).
 async function requireTouchId(reason) {
   try {
-    const { stdout } = await execFileP("/usr/bin/xcrun", ["swift", TOUCH_ID_HELPER_PATH, reason], { timeout: 30000 });
+    const touchBin = prebuiltHelper("BrainoTouchID");
+    const { stdout } = touchBin ? await execFileP(touchBin, [reason], { timeout: 30000 }) : await execFileP("/usr/bin/xcrun", ["swift", TOUCH_ID_HELPER_PATH, reason], { timeout: 30000 });
     const result = String(stdout || "").trim();
     logMac("touchid.result", { reason: textForLog(reason), result });
     if (result === "ok") return true;
@@ -8348,6 +8361,7 @@ async function runNotionPage(title, markdown) {
   if (!userId) return { ok: false, say: "Sign in to Braino first so I know which Notion workspace is yours." };
   try {
     const token = await getBrainoAuthToken();
+    if (!token) return { ok: false, say: "Sign in to Braino first so I know which Notion workspace is yours." };
     const res = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/sync-to-notion`, {
       method: "POST",
       headers: {
@@ -9954,6 +9968,8 @@ function axBinaryIsFresh(binPath) {
 
 function ensureAxHelperBinary() {
   if (axHelperBinary) return Promise.resolve(axHelperBinary);
+  const shippedAx = prebuiltHelper("BrainoAX");
+  if (shippedAx) { axHelperBinary = shippedAx; return Promise.resolve(shippedAx); }
   const target = path.join(AUTH_STORE_DIR, "BrainoAX");
   if (axBinaryIsFresh(target)) {
     axHelperBinary = target;
@@ -20742,7 +20758,14 @@ const MAC_OWN_DATA = /\b(?:my|mine|me\b.*\b(?:message|text)|remind|messag|texted
 // A small model trained on 1,542 of Itish's own commands (85% on ones it never
 // saw). It runs on the Mac as a local server (laya-serve.py) so it stays warm.
 // Missing venv, missing model or BRAINO_LAYA=0: Braino routes as before.
-const LAYA_PY = path.join(os.homedir(), ".braino-laya", "bin", "python");
+/* A packaged Braino carries Laya inside the app (laya/: a portable Python,
+   its libraries and the live model, put there by scripts/mac-package.mjs), so
+   every Mac routes with the same brain as Itish's. In development it is the
+   venv in ~/.braino-laya, as before. */
+const LAYA_SHIPPED = path.join(ROOT_DIR, "laya");
+const LAYA_IS_SHIPPED = fs.existsSync(path.join(LAYA_SHIPPED, "python", "bin", "python3.11"));
+const LAYA_HOME = LAYA_IS_SHIPPED ? LAYA_SHIPPED : path.join(os.homedir(), ".braino-laya");
+const LAYA_PY = LAYA_IS_SHIPPED ? path.join(LAYA_SHIPPED, "python", "bin", "python3.11") : path.join(os.homedir(), ".braino-laya", "bin", "python");
 /* BRAINO_LAYA_CONTEXT=1: Laya v4, which reads each sentence with what was
    around it (what Braino last said, the screen, music, a running job, his
    name). Trained on 2004 of Itish's sentences with their context, 29 Sep:
@@ -20752,8 +20775,8 @@ const LAYA_PY = path.join(os.homedir(), ".braino-laya", "bin", "python");
 const LAYA_WITH_CONTEXT = String((typeof ENV === "object" && ENV?.BRAINO_LAYA_CONTEXT) || process.env.BRAINO_LAYA_CONTEXT || "").trim() === "1";
 /* With context, v7 (v6 fine-tuned to read the context line, 5 Oct) when it is
    there, else the older v4. */
-const LAYA_CONTEXT_MODEL = fs.existsSync(path.join(os.homedir(), ".braino-laya", "models", "braino-kind-v7", "model.safetensors")) ? "braino-kind-v7" : "braino-kind-v4";
-const LAYA_MODEL = path.join(os.homedir(), ".braino-laya", "models", LAYA_WITH_CONTEXT ? LAYA_CONTEXT_MODEL : "braino-kind");
+const LAYA_CONTEXT_MODEL = fs.existsSync(path.join(LAYA_HOME, "models", "braino-kind-v7", "model.safetensors")) ? "braino-kind-v7" : "braino-kind-v4";
+const LAYA_MODEL = path.join(LAYA_HOME, "models", LAYA_WITH_CONTEXT ? LAYA_CONTEXT_MODEL : "braino-kind");
 const LAYA_PORT = LAYA_WITH_CONTEXT ? 47832 : 47831;
 let layaProc = null;
 let layaReady = false;
@@ -20775,7 +20798,11 @@ async function startLaya() {
     if (info) { await execFileP("/bin/sh", ["-c", `lsof -ti tcp:${LAYA_PORT} | xargs kill`]).catch(() => {}); await new Promise((r2) => setTimeout(r2, 600)); logMac("laya.replaced_old", {}); }
   } catch (_) {}
   const started = Date.now();
-  layaProc = spawn(LAYA_PY, [path.join(__dirname, "laya-serve.py"), LAYA_MODEL, String(LAYA_PORT)], { stdio: ["ignore", "pipe", "pipe"] });
+  layaProc = spawn(LAYA_PY, [path.join(__dirname, "laya-serve.py"), LAYA_MODEL, String(LAYA_PORT)], {
+    stdio: ["ignore", "pipe", "pipe"],
+    // Shipped: its libraries sit beside the portable Python, not in a venv.
+    ...(LAYA_IS_SHIPPED ? { env: { ...process.env, PYTHONPATH: path.join(LAYA_SHIPPED, "site-packages"), PYTHONNOUSERSITE: "1" } } : {}),
+  });
   layaProc.stdout.on("data", (d) => {
     if (/laya ready/.test(String(d))) { layaReady = true; logMac("laya.ready", { ms: Date.now() - started }); macTrace("🪶 LAYA", `ready in ${((Date.now() - started) / 1000).toFixed(1)}s`); }
   });

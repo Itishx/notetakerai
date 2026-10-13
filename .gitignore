@@ -47,3 +47,5 @@ mac/braino-mac/native/BrainoDictate/.build/
 # copy that the deck actually uses lives at files/videos/.
 brainoitish.JPG
 brainodemovideo.MP4
+.env
+dist-mac/
