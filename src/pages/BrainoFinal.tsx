@@ -821,7 +821,13 @@ export default function BrainoFinal() {
             <Link to="/affectiveos">AffectiveOS</Link>
             <Link to="/contact">Contact</Link>
           </div>
+          <div className="bf-col">
+            <div className="bf-col-head">Connect</div>
+            <a href="https://instagram.com/brainosays" target="_blank" rel="noreferrer">Instagram</a>
+            <a href="https://x.com/brainosays" target="_blank" rel="noreferrer">X (Twitter)</a>
+          </div>
         </nav>
+        <p className="bf-disclaimer">Braino only sees your screen when you ask him to. Screenshots are never stored.</p>
         <div className="bf-game-window">
           <div className="bf-baseline">
             <span className="bf-signoff">Made by Affective in Bengaluru · Braino is in private beta</span>
