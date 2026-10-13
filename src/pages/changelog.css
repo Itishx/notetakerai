@@ -1,180 +1,54 @@
-/* Braino — Living Documentary changelog.
-   Alternating black <-> white chapters; coral is the only accent. Brand fonts
-   (NeueHaas / BeVietnam / Instrument Serif) are @font-face'd globally in index.css. */
+/* /changelog in the AffectiveOS look: paper, serif claims, hairlines. */
+.cl { background: var(--a-bg, #f4f2ec); color: var(--a-ink); }
+.cl-hero { padding: clamp(120px, 14vw, 190px) 0 clamp(40px, 5vw, 64px); }
+.cl-hero .aff-h1 em { font-style: normal; opacity: .55; }
+.cl-lede { max-width: 38em; margin: 22px 0 0; font: clamp(18px, 1.5vw, 21px)/1.5 var(--ao-sf, -apple-system, sans-serif); color: var(--a-ink-soft); }
+.cl-stats { display: flex; gap: clamp(28px, 5vw, 72px); margin: 40px 0 0; padding-top: 22px; border-top: 1px solid var(--a-line); }
+.cl-stats dt { font: 600 11px var(--ao-sf, sans-serif); letter-spacing: .12em; text-transform: uppercase; color: var(--a-ink-faint); }
+.cl-stats dd { margin: 6px 0 0; font-family: var(--a-display, Georgia, serif); font-size: clamp(36px, 4vw, 56px); line-height: 1; }
 
-.cl-doc {
-  --coral: #E8786E;
-  --coral-soft: #F6A8A2;
-  --coral-deep: #C9544A;
-  --ink: #14110f;
-  --paper: #fbfaf8;
-  --night: #08070a;
-  width: 100%;
-  overflow-x: clip;
-  font-family: 'NeueHaas', system-ui, sans-serif;
-}
+.cl-story { padding: clamp(40px, 5vw, 70px) 0; border-top: 1px solid var(--a-line); }
+.cl-chapters { display: grid; grid-template-columns: repeat(3, 1fr); margin: 18px 0 0; padding: 0; list-style: none; border-top: 1px solid var(--a-line-strong, var(--a-line)); }
+.cl-chapters li { padding: 22px 22px 26px 0; border-bottom: 1px solid var(--a-line); }
+.cl-chapters span { font: 600 11px var(--ao-sf, sans-serif); letter-spacing: .1em; text-transform: uppercase; color: #e05a4f; }
+.cl-chapters h3 { margin: 8px 0 6px; font-family: var(--a-display, Georgia, serif); font-weight: 400; font-size: clamp(22px, 1.9vw, 27px); }
+.cl-chapters p { margin: 0; font: 15px/1.5 var(--ao-sf, sans-serif); color: var(--a-ink-soft); }
 
-/* ── Chapters ─────────────────────────────────────────────────────────── */
-.cl-chapter {
-  position: relative;
-  width: 100%;
-  padding: clamp(72px, 12vh, 160px) 24px;
-  overflow: hidden;
-}
-.cl-chapter[data-theme='black'] { background: var(--night); color: rgba(255,255,255,0.92); }
-.cl-chapter[data-theme='white'] { background: var(--paper); color: var(--ink); }
+.cl-log { padding: clamp(40px, 5vw, 70px) 0 clamp(80px, 9vw, 120px); border-top: 1px solid var(--a-line); }
+.cl-bar { position: sticky; top: 66px; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; padding: 14px 0; background: var(--a-bg, #f4f2ec); border-bottom: 1px solid var(--a-line); }
+.cl-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.cl-chips button { padding: 7px 13px; border-radius: 999px; border: 1px solid var(--a-line); background: none; color: var(--a-ink-soft); font: 500 13px var(--ao-sf, sans-serif); cursor: pointer; }
+.cl-chips button.on { background: var(--a-ink); border-color: var(--a-ink); color: var(--a-bg, #f4f2ec); }
+.cl-kinds { padding-left: 16px; border-left: 1px solid var(--a-line); }
+.cl-search { margin-left: auto; min-width: 220px; padding: 8px 14px; border-radius: 999px; border: 1px solid var(--a-line); background: var(--a-paper, #fff); color: var(--a-ink); font: 14px var(--ao-sf, sans-serif); }
+.cl-none { padding: 40px 0; font: 16px var(--ao-sf, sans-serif); color: var(--a-ink-faint); }
 
-/* film grain on the dark chapters for the documentary feel */
-.cl-chapter[data-theme='black']::before {
-  content: '';
-  position: absolute; inset: 0;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
-  opacity: 0.04;
-  pointer-events: none;
-  mix-blend-mode: screen;
+.cl-month { margin-top: clamp(36px, 4vw, 56px); }
+.cl-month-h { display: flex; align-items: baseline; gap: 14px; margin: 0; font-family: var(--a-display, Georgia, serif); font-weight: 400; font-size: clamp(30px, 3vw, 44px); }
+.cl-month-h small { font: 500 13px var(--ao-sf, sans-serif); color: var(--a-ink-faint); }
+.cl-list { margin: 14px 0 0; padding: 0; list-style: none; border-top: 1px solid var(--a-line-strong, var(--a-line)); }
+.cl-item { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 24px; padding: 20px 0; border-bottom: 1px solid var(--a-line); }
+.cl-when { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.cl-when time { font: 500 14px var(--ao-sf, sans-serif); color: var(--a-ink-soft); }
+.cl-ver { padding: 2px 8px; border-radius: 6px; background: color-mix(in srgb, var(--a-ink) 7%, transparent); font: 600 12px ui-monospace, "SF Mono", monospace; color: var(--a-ink); }
+.cl-tags { display: flex; gap: 8px; align-items: center; }
+.cl-kind { padding: 2px 8px; border-radius: 999px; font: 600 11px var(--ao-sf, sans-serif); letter-spacing: .04em; }
+.k-new.cl-kind { background: #e05a4f; color: #fff; }
+.k-improved.cl-kind { background: color-mix(in srgb, #3b82f6 16%, transparent); color: #2f64c8; }
+.k-fixed.cl-kind { background: color-mix(in srgb, #1f9d63 16%, transparent); color: #187a4d; }
+.cl-prod { font: 500 12px var(--ao-sf, sans-serif); color: var(--a-ink-faint); }
+.cl-what h3 { margin: 8px 0 4px; font-family: var(--a-display, Georgia, serif); font-weight: 400; font-size: clamp(20px, 1.7vw, 24px); line-height: 1.25; }
+.cl-what p { margin: 0; max-width: 62ch; font: 15.5px/1.55 var(--ao-sf, sans-serif); color: var(--a-ink-soft); }
+.cl-more { margin-top: 48px; font: 16px var(--ao-sf, sans-serif); color: var(--a-ink-soft); }
+.cl-more a { color: var(--a-ink); }
+.aff[data-theme="dark"] .cl-bar { background: var(--a-bg); }
+@media (max-width: 900px) { .cl-chapters { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 640px) {
+  .cl-chapters { grid-template-columns: 1fr; }
+  .cl-item { grid-template-columns: 1fr; gap: 8px; }
+  .cl-when { flex-direction: row; align-items: center; }
+  .cl-search { margin-left: 0; width: 100%; }
+  .cl-kinds { padding-left: 0; border-left: 0; }
+  .cl-bar { position: static; }
 }
-.cl-inner { position: relative; max-width: 940px; margin: 0 auto; z-index: 1; }
-
-/* ── Hero ─────────────────────────────────────────────────────────────── */
-.cl-hero { text-align: center; min-height: 92vh; display: flex; flex-direction: column;
-  align-items: center; justify-content: center; }
-.cl-hero-kicker {
-  font-family: 'BeVietnam', sans-serif; font-weight: 800; font-size: 12px;
-  letter-spacing: 0.32em; text-transform: uppercase; color: var(--coral);
-  margin-bottom: 24px;
-}
-.cl-hero-title {
-  font-family: 'Instrument Serif', Georgia, serif; font-weight: 400;
-  font-size: clamp(56px, 13vw, 168px); line-height: 0.92; letter-spacing: -0.02em;
-  margin: 0;
-}
-.cl-hero-sub {
-  font-size: clamp(15px, 2.4vw, 20px); line-height: 1.6; max-width: 540px;
-  margin: 28px auto 0; color: rgba(255,255,255,0.62);
-}
-.cl-hero-mascot { margin-top: 40px; animation: cl-float 6s ease-in-out infinite; }
-.cl-scrollcue {
-  margin-top: 48px; font-size: 11px; letter-spacing: 0.24em; text-transform: uppercase;
-  color: rgba(255,255,255,0.4); font-family: 'BeVietnam', sans-serif; font-weight: 800;
-  animation: cl-bob 2.2s ease-in-out infinite;
-}
-
-/* ── Chapter heads ────────────────────────────────────────────────────── */
-.cl-eyebrow {
-  font-family: 'BeVietnam', sans-serif; font-weight: 800; font-size: 12px;
-  letter-spacing: 0.24em; text-transform: uppercase; color: var(--coral);
-  margin-bottom: 18px;
-}
-.cl-chapter-title {
-  font-family: 'Instrument Serif', Georgia, serif; font-weight: 400;
-  font-size: clamp(36px, 7vw, 84px); line-height: 1.02; letter-spacing: -0.015em;
-  margin: 0 0 28px; max-width: 16ch;
-}
-.cl-lede {
-  font-size: clamp(17px, 2.4vw, 23px); line-height: 1.7; max-width: 60ch; margin: 0 0 8px;
-}
-.cl-chapter[data-theme='black'] .cl-lede { color: rgba(255,255,255,0.66); }
-.cl-chapter[data-theme='white'] .cl-lede { color: rgba(20,17,15,0.74); }
-/* drop cap on the first lede of white chapters — editorial touch */
-.cl-lede.cl-dropcap::first-letter {
-  font-family: 'Instrument Serif', serif; float: left; font-size: 4.4em;
-  line-height: 0.72; padding: 6px 14px 0 0; color: var(--coral-deep);
-}
-
-/* ── Entries ──────────────────────────────────────────────────────────── */
-.cl-entries { margin-top: 56px; display: flex; flex-direction: column; gap: clamp(48px, 7vw, 96px); }
-.cl-entry { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(28px, 5vw, 64px); align-items: center; }
-.cl-entry.cl-flip .cl-entry-fig { order: -1; }
-.cl-entry-meta { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
-.cl-date {
-  font-family: 'NeueHaas', sans-serif; font-size: 11px; letter-spacing: 0.12em;
-  text-transform: uppercase; opacity: 0.5;
-}
-.cl-ver {
-  font-family: 'BeVietnam', sans-serif; font-weight: 800; font-size: 10px;
-  letter-spacing: 0.04em; color: #fff; padding: 2px 9px; border-radius: 100px;
-  background: linear-gradient(135deg, var(--coral), var(--coral-soft));
-}
-.cl-entry-title {
-  font-family: 'Instrument Serif', Georgia, serif; font-weight: 400;
-  font-size: clamp(24px, 3.6vw, 40px); line-height: 1.1; margin: 0 0 12px;
-}
-.cl-entry-body { font-size: clamp(15px, 1.9vw, 17px); line-height: 1.75; margin: 0; }
-.cl-chapter[data-theme='black'] .cl-entry-body { color: rgba(255,255,255,0.62); }
-.cl-chapter[data-theme='white'] .cl-entry-body { color: rgba(20,17,15,0.7); }
-
-/* ── Figures (the "canvases") ─────────────────────────────────────────── */
-.cl-fig { display: flex; flex-direction: column; align-items: center; gap: 12px; }
-.cl-fig-frame {
-  position: relative; width: 100%; aspect-ratio: 4 / 3; border-radius: 18px;
-  display: flex; align-items: center; justify-content: center; overflow: hidden;
-}
-.cl-chapter[data-theme='black'] .cl-fig-frame {
-  background: radial-gradient(120% 120% at 30% 25%, rgba(232,120,110,0.10), rgba(255,255,255,0.02));
-  border: 1px solid rgba(255,255,255,0.10);
-  box-shadow: 0 30px 80px rgba(0,0,0,0.5), inset 0 0 60px rgba(232,120,110,0.06);
-}
-.cl-chapter[data-theme='white'] .cl-fig-frame {
-  background: radial-gradient(120% 120% at 30% 25%, rgba(232,120,110,0.08), rgba(20,17,15,0.02));
-  border: 1px solid rgba(20,17,15,0.08);
-  box-shadow: 0 30px 70px rgba(20,17,15,0.10);
-}
-.cl-fig-frame svg, .cl-fig-frame img, .cl-fig-frame video { display: block; max-width: 78%; max-height: 78%; }
-.cl-fig-frame .cl-walker { width: 180px; height: auto; filter: drop-shadow(0 18px 30px rgba(0,0,0,0.35)); animation: cl-float 5s ease-in-out infinite; }
-.cl-fig-sidebrain { filter: grayscale(1) brightness(1.3) contrast(0.85); opacity: 0.55; }
-.cl-fig-caption { font-size: 12px; letter-spacing: 0.05em; opacity: 0.5; font-family: 'NeueHaas', sans-serif; text-align: center; }
-
-/* emotion-face strip */
-.cl-faces { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; width: 100%; }
-.cl-faces img { width: 100%; height: auto; max-width: none; filter: drop-shadow(0 10px 20px rgba(0,0,0,0.25)); }
-
-/* placeholder frame */
-.cl-placeholder { display: flex; flex-direction: column; align-items: center; gap: 10px; opacity: 0.6; }
-.cl-placeholder-tag {
-  font-family: 'BeVietnam', sans-serif; font-weight: 800; font-size: 10px;
-  letter-spacing: 0.18em; text-transform: uppercase; color: var(--coral);
-  border: 1px dashed var(--coral); border-radius: 100px; padding: 5px 14px;
-}
-
-/* ── Pull quote ───────────────────────────────────────────────────────── */
-.cl-quote {
-  margin: clamp(48px, 8vw, 96px) auto 0; max-width: 22ch; text-align: center;
-  font-family: 'Instrument Serif', Georgia, serif; font-size: clamp(28px, 5vw, 56px);
-  line-height: 1.15; letter-spacing: -0.01em;
-}
-.cl-quote em { color: var(--coral-deep); font-style: italic; }
-.cl-quote-by { display: block; margin-top: 18px; font-family: 'NeueHaas', sans-serif;
-  font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; opacity: 0.5; }
-
-/* ── Closing / CTA ────────────────────────────────────────────────────── */
-.cl-cta { text-align: center; }
-.cl-cta-btn {
-  display: inline-block; margin-top: 32px; text-decoration: none;
-  font-family: 'BeVietnam', sans-serif; font-weight: 800; font-size: 15px;
-  letter-spacing: 0.02em; color: #fff; padding: 16px 38px; border-radius: 100px;
-  background: linear-gradient(135deg, var(--coral), var(--coral-deep));
-  box-shadow: 0 16px 40px rgba(201,84,74,0.4);
-  transition: transform 0.25s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.25s ease;
-}
-.cl-cta-btn:hover { transform: translateY(-2px) scale(1.02); box-shadow: 0 22px 54px rgba(201,84,74,0.5); }
-
-/* ── Reveal animation ─────────────────────────────────────────────────── */
-.cl-reveal { opacity: 0; transform: translateY(28px); transition: opacity 0.9s ease, transform 0.9s cubic-bezier(0.16,1,0.3,1); }
-.cl-reveal.cl-visible { opacity: 1; transform: none; }
-
-@keyframes cl-float { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-12px); } }
-@keyframes cl-bob { 0%,100% { transform: translateY(0); opacity: 0.4; } 50% { transform: translateY(6px); opacity: 0.85; } }
-
-/* ── Responsive ───────────────────────────────────────────────────────── */
-@media (max-width: 760px) {
-  .cl-entry { grid-template-columns: 1fr; gap: 24px; }
-  .cl-entry.cl-flip .cl-entry-fig { order: 0; }
-  .cl-entry-fig { order: -1; } /* visual leads on mobile */
-  .cl-faces { grid-template-columns: repeat(4, 1fr); gap: 8px; }
-  .cl-hero-mascot svg { width: 120px; height: 120px; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .cl-reveal { transition: none; opacity: 1; transform: none; }
-  .cl-hero-mascot, .cl-fig-frame .cl-walker, .cl-scrollcue { animation: none; }
-}
+.cl-kinds { padding-left: 0; border-left: 0; }
