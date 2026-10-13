@@ -56,6 +56,15 @@ fs.mkdirSync(path.join(APPDIR, "mac"), { recursive: true });
 fs.mkdirSync(path.join(APPDIR, "extension"), { recursive: true });
 run("/usr/bin/rsync", ["-a", "--exclude", "native/BrainoDictate/.build", "--exclude", "test-forms", "--exclude", ".DS_Store", `${SRC}/`, path.join(APPDIR, "mac", "braino-mac")]);
 run("/usr/bin/rsync", ["-a", path.join(ROOT, "extension", "lib") + "/", path.join(APPDIR, "extension", "lib")]);
+// Read from outside the Mac folder at runtime: his drawings (the preload builds
+// the notch from them; missing, the whole notch failed to start, 2026-10-13)
+// and the wallpaper looks.
+fs.mkdirSync(path.join(APPDIR, "src", "components"), { recursive: true });
+for (const f of fs.readdirSync(path.join(ROOT, "src", "components")).filter((n) => /WalkerSvg\.ts$/.test(n))) {
+  fs.copyFileSync(path.join(ROOT, "src", "components", f), path.join(APPDIR, "src", "components", f));
+}
+run("/usr/bin/rsync", ["-a", path.join(ROOT, "shared") + "/", path.join(APPDIR, "shared")]);
+run("/usr/bin/rsync", ["-a", path.join(ROOT, "public", "fonts") + "/", path.join(APPDIR, "public", "fonts")]);   // the notch's SF Pro
 // On-device dictation: just the built program, not the 500 MB build folder.
 const dictateBin = path.join(SRC, "native", "BrainoDictate", ".build", "release", "BrainoDictate");
 if (fs.existsSync(dictateBin)) {

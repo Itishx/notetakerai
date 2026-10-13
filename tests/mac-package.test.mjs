@@ -28,3 +28,14 @@ test("only the public key and BRAINO_ flags reach the app's settings", () => {
 test("macOS is told why each permission is asked for", () => {
   for (const k of ["NSMicrophoneUsageDescription", "NSCameraUsageDescription", "NSAppleEventsUsageDescription", "NSContactsUsageDescription"]) assert.match(pkg, new RegExp(k), k);
 });
+
+/* 2026-10-13: the first tester build showed no Braino at all. The preload reads
+   his drawing from src/components, which was not in the app, so the bridge
+   never loaded and the notch never started. Everything read from outside the
+   Mac folder ships. */
+test("everything the app reads from outside its folder ships with it", () => {
+  assert.match(pkg, /WalkerSvg\\\.ts\$/);
+  assert.match(pkg, /path\.join\(ROOT, "shared"\)/);
+  assert.match(pkg, /path\.join\(ROOT, "public", "fonts"\)/);
+  assert.match(pkg, /path\.join\(ROOT, "extension", "lib"\)/);
+});
