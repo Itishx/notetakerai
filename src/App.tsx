@@ -435,7 +435,7 @@ function AppRoutes() {
             two-story page that held this route is at /foundry-legacy, since
             every deck and doc written this year points into it. */}
         <Route path="/braino" element={<BrainoFinal />} />
-        <Route path="/foundry" element={<Navigate to="/braino?model=foundry" replace />} />
+        <Route path="/foundry" element={<Navigate to="/braino" replace />} />
         <Route path="/foundry-legacy" element={<Foundry />} />
         <Route path="/automations" element={<Automations />} />
         <Route path="/integrations" element={<Integrations />} />

@@ -99,14 +99,19 @@ export function useAffReveal(deps: unknown[] = []) {
   return root;
 }
 
-export function AffNav({ theme, onToggle, links }: { theme: string; onToggle: () => void; links?: Array<[string, string]> }) {
+/* `braino` puts his name in the corner instead of the company's, for his own page. */
+export function AffNav({ theme, onToggle, links, braino = false }: { theme: string; onToggle: () => void; links?: Array<[string, string]>; braino?: boolean }) {
   const items = links || [["Braino", "/braino"], ["AffectiveOS", "/affectiveos"], ["About", "/about"]];
   return (
     <nav className="aff-nav">
       <div className="aff-nav-in">
-        <Link to="/" className="aff-logo" aria-label="Affective">
-          <img src="/affective-logo.png" alt="Affective" width={1000} height={207} />
-        </Link>
+        {braino ? (
+          <Link to="/braino" className="aff-logo aff-logo-braino" aria-label="Braino">Braino</Link>
+        ) : (
+          <Link to="/" className="aff-logo" aria-label="Affective">
+            <img src="/affective-logo.png" alt="Affective" width={1000} height={207} />
+          </Link>
+        )}
         <div className="aff-nav-links">
           {items.map(([label, to]) => to.startsWith("#") ? <a key={to} href={to}>{label}</a> : <Link key={to} to={to}>{label}</Link>)}
           <Link to="/braino#early-access" className="aff-nav-go">Early access</Link>
@@ -133,7 +138,6 @@ export function AffFooter() {
               <h4><Link to="/braino">Braino</Link></h4>
               <ul>
                 <li><Link to="/braino">For everyone</Link></li>
-                <li><Link to="/braino?model=foundry">Braino Foundry</Link></li>
                 <li><Link to="/braino#early-access">Early access</Link></li>
               </ul>
             </nav>

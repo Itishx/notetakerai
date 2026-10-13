@@ -37,3 +37,372 @@
 .bp .bp-honest { display: block; max-width: 62ch; }
 .bp .bp-honest .ah-kicker { margin-bottom: 10px; }
 .bp .bp-honest p { margin: 0 0 16px; }
+
+/* ── Tabs (2026-10-11): one line, a thumb that slides ── */
+.bp .bp-tabs { position: relative; display: inline-grid; grid-template-columns: 1fr 1fr; gap: 0; padding: 4px; border-radius: 999px; background: color-mix(in srgb, var(--a-ink, #1b1c1f) 6%, transparent); }
+.bp .bp-tabs-thumb { position: absolute; top: 4px; bottom: 4px; left: 4px; width: calc(50% - 4px); border-radius: 999px; background: var(--a-paper, #fff); box-shadow: 0 1px 2px rgba(0,0,0,.08), 0 4px 14px rgba(0,0,0,.06); transition: transform .45s cubic-bezier(.22,1,.36,1); }
+.bp .bp-tabs button { position: relative; z-index: 1; display: block; padding: 8px 22px; font-size: 14px; font-weight: 500; white-space: nowrap; text-align: center; color: var(--a-ink-faint, #8a8c94); transition: color .3s; }
+.bp .bp-tabs button.on { background: none; box-shadow: none; color: var(--a-ink, #1b1c1f); }
+
+/* ── The day: a Mac screen through one Tuesday ── */
+.bp .bp-day { overflow: visible; }
+.bf-ds-hint { width: min(1200px, calc(100% - 32px)); margin: 14px auto 0; font: 500 14px -apple-system, "SF Pro Text", sans-serif; color: var(--a-ink-faint, #8a8c94); }
+.bf-ds-hint i { display: inline-block; font-style: normal; animation: bfDsNudge 1.4s ease-in-out infinite; }
+@keyframes bfDsNudge { 50% { transform: translateY(5px); } }
+.bf-ds { position: relative; margin-top: 24px; }
+.bf-ds-pin { position: sticky; top: 0; height: 100vh; display: flex; align-items: center; justify-content: center; }
+.bf-ds-stage { width: min(1040px, calc(100% - 32px)); padding-top: 56px; }
+.bf-ds-screen { position: relative; aspect-ratio: 16 / 10; max-height: 60vh; margin: 0 auto; border-radius: 18px; overflow: hidden; border: 10px solid #111; box-shadow: 0 30px 80px -30px rgba(0,0,0,.45); }
+.bf-ds-stars { position: absolute; inset: 0; background-image: radial-gradient(1.2px 1.2px at 12% 22%, #fff, transparent), radial-gradient(1px 1px at 28% 40%, #fff, transparent), radial-gradient(1.4px 1.4px at 46% 18%, #fff, transparent), radial-gradient(1px 1px at 63% 34%, #fff, transparent), radial-gradient(1.2px 1.2px at 78% 14%, #fff, transparent), radial-gradient(1px 1px at 88% 44%, #fff, transparent), radial-gradient(1px 1px at 36% 58%, #fff, transparent), radial-gradient(1.3px 1.3px at 70% 60%, #fff, transparent); }
+.bf-ds-sun, .bf-ds-moon { position: absolute; width: 9%; aspect-ratio: 1; border-radius: 50%; transform: translate(-50%, -50%); }
+.bf-ds-sun { background: radial-gradient(circle, #fff6d8 0 38%, #ffd27a 60%, rgba(255,190,90,0) 72%); }
+.bf-ds-moon { width: 6%; background: #f1ede2; box-shadow: inset -10px -4px 0 rgba(0,0,0,.18), 0 0 40px rgba(241,237,226,.35); }
+.bf-ds-bar { position: absolute; top: 0; left: 0; right: 0; display: flex; gap: 18px; padding: 7px 16px; font: 600 12px -apple-system, "SF Pro Text", sans-serif; background: rgba(255,255,255,.14); backdrop-filter: blur(12px); }
+.bf-ds-bar b { margin-left: auto; font-weight: 500; font-variant-numeric: tabular-nums; }
+.bf-ds-notch { position: absolute; top: 0; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 12px; width: 150px; height: 30px; padding: 0 16px; border-radius: 0 0 16px 16px; background: #000; color: #f4f2ec; overflow: hidden; transition: width .55s cubic-bezier(.22,1,.36,1), height .55s cubic-bezier(.22,1,.36,1), border-radius .55s; }
+.bf-ds-notch.is-open { width: min(560px, 82%); height: 64px; border-radius: 0 0 26px 26px; }
+.bf-ds-eyes { display: flex; gap: 6px; flex: none; }
+.bf-ds-eyes i { width: 7px; height: 12px; border-radius: 4px; background: #f4f2ec; animation: bfBlink 4s infinite; }
+@keyframes bfBlink { 0%, 92%, 100% { transform: scaleY(1); } 95% { transform: scaleY(.1); } }
+.bf-ds-notch p { margin: 0; font: 500 clamp(13px, 1.3vw, 17px)/1.3 -apple-system, "SF Pro Text", sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: 0; transition: opacity .3s .2s; }
+.bf-ds-notch.is-open p { opacity: 1; }
+.bf-ds-cap { display: grid; grid-template-columns: auto 1fr; gap: 24px; align-items: baseline; max-width: 860px; margin: 28px auto 0; }
+.bf-ds-at { font-family: "Iowan Old Style", Palatino, Georgia, serif; font-size: clamp(30px, 3.4vw, 48px); color: var(--acc); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.bf-ds-cap p { margin: 0; font-family: "Iowan Old Style", Palatino, Georgia, serif; font-size: clamp(19px, 1.9vw, 26px); line-height: 1.35; opacity: 0; transform: translateY(10px); transition: opacity .4s, transform .5s cubic-bezier(.22,1,.36,1); }
+.bf-ds-cap p.is-in { opacity: 1; transform: none; }
+@media (max-width: 800px) {
+  .bf-ds-screen { border-width: 6px; border-radius: 12px; }
+  .bf-ds-bar span { display: none; }
+  .bf-ds-notch.is-open { height: 52px; width: 92%; }
+  .bf-ds-notch p { white-space: normal; font-size: 12px; }
+  .bf-ds-cap { grid-template-columns: 1fr; gap: 6px; }
+}
+
+/* ── Ask, and it's done: one line typing, everything else as pills ── */
+.bf-cando .bf-cando-h { margin: 10px 0 0; font-family: "Iowan Old Style", Palatino, Georgia, serif; font-weight: 400; font-size: clamp(44px, 5.4vw, 80px); line-height: 1; letter-spacing: -.02em; }
+.bf-cando .bf-cando-h em { color: var(--acc, #d9645b); }
+.bf-say { display: flex; align-items: center; gap: 18px; margin-top: clamp(32px, 4vw, 52px); padding: 22px 28px; border-radius: 999px; background: #0f0f12; color: #f4f2ec; }
+.bf-say-you { flex: none; font: 600 11px -apple-system, "SF Pro Text", sans-serif; letter-spacing: .1em; text-transform: uppercase; opacity: .5; }
+.bf-say p { flex: 1; min-width: 0; margin: 0; font-family: "Iowan Old Style", Palatino, Georgia, serif; font-size: clamp(22px, 2.6vw, 36px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bf-say-caret { display: inline-block; width: 2px; height: .9em; margin: 0 2px -0.1em; background: var(--acc, #d9645b); animation: bfCaret 1s steps(1) infinite; }
+@keyframes bfCaret { 50% { opacity: 0; } }
+.bf-say-done { flex: none; padding: 7px 14px; border-radius: 999px; font: 600 12px -apple-system, "SF Pro Text", sans-serif; letter-spacing: .06em; text-transform: uppercase; background: var(--acc, #d9645b); color: #fff; opacity: 0; transform: scale(.8); transition: opacity .25s, transform .35s cubic-bezier(.34,1.56,.64,1); }
+.bf-say-done.is-on { opacity: 1; transform: none; }
+.bf-say-done::before { content: "\2713  "; }
+.bf-pills { display: flex; flex-wrap: wrap; gap: 8px; margin: 26px 0 0; padding: 0; list-style: none; }
+.bf-pills li { padding: 9px 16px; border-radius: 999px; border: 1px solid var(--line); font: 500 14px -apple-system, "SF Pro Text", sans-serif; color: var(--ink-soft, #4e5059); cursor: default; transition: background .2s, color .2s, border-color .2s; }
+.bf-pills li.on { background: var(--ink, #16140f); color: var(--paper, #f4f2ec); border-color: var(--ink, #16140f); }
+.bf-cando-note { max-width: 52ch; margin: 26px 0 0; font: 17px/1.5 -apple-system, "SF Pro Text", sans-serif; opacity: .7; }
+@media (max-width: 800px) { .bf-say { border-radius: 22px; padding: 16px 18px; } .bf-say-you { display: none; } }
+@media (prefers-reduced-motion: reduce) { .bf-ds-hint i, .bf-say-caret, .bf-ds-eyes i { animation: none; } }
+
+/* ── What he does: one capability per section (2026-10-13) ── */
+.bs { padding: clamp(80px, 10vw, 140px) 0 clamp(40px, 6vw, 80px); border-top: 1px solid var(--a-line); }
+.bs-wrap { width: min(1200px, calc(100% - 32px)); margin: 0 auto; }
+.bs-h em { font-style: italic; color: var(--acc); }
+.bs-row { display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr); gap: clamp(32px, 6vw, 96px); align-items: center; margin-top: clamp(56px, 7vw, 100px); }
+.bs-row.is-flip .bs-talk { order: 2; }
+.bs-talk { display: flex; flex-direction: column; align-items: flex-start; }
+.bs-row.is-flip .bs-talk { align-items: flex-end; text-align: right; }
+.bs-wave { display: flex; align-items: center; gap: 6px; height: 34px; margin-bottom: 40px; }
+.bs-wave i { width: 7px; height: 9px; border-radius: 4px; background: var(--a-ink, #1b1c1f); opacity: .25; }
+.bs-row.is-in:not(.is-said) .bs-wave i { animation: bsWave .9s ease-in-out infinite alternate; opacity: .8; }
+@keyframes bsWave { to { height: 30px; } }
+.bs-ask { min-height: 2.6em; max-width: 15em; margin: 0; padding: 16px 24px; border-radius: 26px 26px 26px 6px; font: 500 clamp(21px, 2vw, 28px)/1.25 -apple-system, "SF Pro Text", sans-serif; color: #10203a; background: linear-gradient(180deg, #e9f1ff, #b9d1fb); border: 1px solid #9cbbef; box-shadow: inset 0 2px 0 rgba(255,255,255,.8), 0 10px 26px -14px rgba(40,80,160,.5); }
+.bs-row.is-flip .bs-ask { border-radius: 26px 26px 6px 26px; text-align: left; }
+.bs-caret { display: inline-block; width: 2px; height: 1em; margin-left: 2px; vertical-align: -.12em; background: currentColor; animation: bsCaret 1s steps(1) infinite; }
+@keyframes bsCaret { 50% { opacity: 0; } }
+.bs-reply { margin: 14px 0 0; padding: 12px 22px; border-radius: 22px 22px 22px 6px; font: 500 clamp(19px, 1.7vw, 24px) -apple-system, "SF Pro Text", sans-serif; color: #4a2410; background: linear-gradient(180deg, #ffe9d6, #f7c39c); border: 1px solid #eaa77a; box-shadow: inset 0 2px 0 rgba(255,255,255,.7); opacity: 0; transform: translateY(8px) scale(.9); transition: opacity .3s, transform .45s cubic-bezier(.34,1.56,.64,1); }
+.bs-row.is-flip .bs-reply { border-radius: 22px 22px 6px 22px; }
+.bs-row.is-said .bs-reply { opacity: 1; transform: none; }
+.bs-talk h3 { margin: 40px 0 0; font: 600 clamp(22px, 2vw, 28px)/1.2 -apple-system, "SF Pro Text", sans-serif; letter-spacing: -.01em; }
+.bs-p { max-width: 30em; margin: 12px 0 0; font: clamp(16px, 1.3vw, 19px)/1.55 -apple-system, "SF Pro Text", sans-serif; color: var(--a-ink-soft, #4e5059); }
+/* The Mac: a window on a desktop. */
+.bs-mac { padding: clamp(16px, 2.4vw, 32px); border-radius: 22px; border: 8px solid #111; background: radial-gradient(120% 90% at 30% 0%, #8fb8e8 0%, #5f8fd0 45%, #4c8a4e 46%, #3c7240 100%); box-shadow: 0 40px 80px -40px rgba(0,0,0,.5); }
+.bs-win { border-radius: 12px; overflow: hidden; background: #f6f5f2; box-shadow: 0 18px 40px -12px rgba(0,0,0,.45); opacity: 0; transform: translateY(24px) scale(.97); transition: opacity .6s, transform .8s cubic-bezier(.22,1,.36,1); }
+.bs-row.is-in .bs-win { opacity: 1; transform: none; }
+.bs-win-bar { position: relative; padding: 9px 12px; text-align: center; font: 500 13px -apple-system, "SF Pro Text", sans-serif; color: #77736b; background: #ecebe7; border-bottom: 1px solid #dcdad4; }
+.bs-win-bar span { position: absolute; left: 12px; top: 50%; display: flex; gap: 7px; transform: translateY(-50%); }
+.bs-win-bar span i { width: 12px; height: 12px; border-radius: 50%; background: #ff5f57; }
+.bs-win-bar span i:nth-child(2) { background: #febc2e; }
+.bs-win-bar span i:nth-child(3) { background: #28c840; }
+.bs-win-body { aspect-ratio: 16 / 10; padding: clamp(18px, 2.4vw, 32px); overflow: hidden; color: #1b1c1f; font-family: -apple-system, "SF Pro Text", sans-serif; }
+.bs-win-body video { width: calc(100% + 64px); height: calc(100% + 64px); margin: -32px; object-fit: cover; }
+/* Anything inside a window waits for "On it." before it plays. */
+.bs-win-body * { animation-play-state: paused !important; }
+.bs-row.is-said .bs-win-body * { animation-play-state: running !important; }
+@keyframes bsUp { from { opacity: 0; transform: translateY(12px); } }
+@keyframes bsMark { from { background-size: 0 100%; } }
+.bs-doc h4 { margin: 0 0 14px; font: 600 16px Georgia, serif; }
+.bs-doc p { margin: 0 0 6px; font: 15px/1.6 Georgia, serif; color: #55524b; }
+.bs-doc .bs-mark { background: linear-gradient(#ffe58a, #ffe58a) no-repeat; background-size: 100% 100%; color: #1b1c1f; animation: bsMark .9s .2s ease-out both; }
+.bs-note { margin-top: 18px; padding: 14px 16px; border-radius: 14px; background: #111; color: #f4f2ec; font-size: 15px; line-height: 1.45; animation: bsUp .6s 1.1s both; }
+.bs-note b { display: block; margin-bottom: 4px; font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: #f7a68c; }
+.bs-mail-in { padding-bottom: 16px; border-bottom: 1px solid #e3e1db; }
+.bs-mail-in p, .bs-mail-out p { margin: 6px 0 0; font-size: 15px; line-height: 1.5; }
+.bs-mail-out { margin-top: 16px; padding: 16px; border-radius: 12px; background: #fff; border: 1px solid #e3e1db; animation: bsUp .6s .2s both; }
+.bs-mail-out small { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--acc); }
+.bs-mail-out span { display: inline-block; margin-top: 14px; padding: 7px 16px; border-radius: 8px; background: #0a84ff; color: #fff; font-size: 13px; font-weight: 600; }
+.bs-chat { height: 100%; display: flex; flex-direction: column; gap: 10px; margin: -32px; padding: 20px 24px; background: #efe7dd; }
+.bs-chat-head { display: flex; align-items: center; gap: 10px; font-weight: 600; }
+.bs-chat-head i { width: 30px; height: 30px; border-radius: 50%; background: #c9a7ef; }
+.bs-chat p { max-width: 70%; margin: 0; padding: 10px 14px; border-radius: 12px; font-size: 15px; background: #fff; }
+.bs-chat-me { align-self: flex-end; background: #d9fdd3 !important; animation: bsUp .5s .3s both; }
+.bs-chat-me small { display: block; margin-top: 4px; font-size: 11px; color: #53bdeb; text-align: right; }
+.bs-notes-live { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 999px; background: #111; color: #fff; font-size: 13px; }
+.bs-notes-live i { width: 8px; height: 8px; border-radius: 50%; background: #ff453a; animation: bsCaret 1.2s steps(1) infinite; }
+.bs-notes ul { margin: 18px 0 0; padding-left: 20px; font-size: 16px; line-height: 1.5; }
+.bs-notes li { margin-bottom: 10px; animation: bsUp .5s both; }
+.bs-notes li:nth-child(2) { animation-delay: .8s; }
+.bs-notes li:nth-child(3) { animation-delay: 1.6s; }
+.bs-music { display: flex; align-items: center; gap: 24px; height: 100%; margin: -32px; padding: 32px; background: linear-gradient(135deg, #1f3b3a, #121212); color: #fff; }
+.bs-music-art { flex: none; width: 38%; aspect-ratio: 1; border-radius: 10px; background: radial-gradient(circle at 30% 30%, #9fe0c9, #2d7e74 60%, #173c39); box-shadow: 0 16px 40px rgba(0,0,0,.5); animation: bsUp .6s both; }
+.bs-music b { font-size: 22px; }
+.bs-music p { margin: 4px 0 18px; color: #b3b3b3; }
+.bs-music-bar { width: 220px; max-width: 100%; height: 4px; border-radius: 2px; background: #4d4d4d; }
+.bs-music-bar i { display: block; height: 100%; border-radius: 2px; background: #1ed760; animation: bsPlay 14s linear both; }
+@keyframes bsPlay { from { width: 0; } to { width: 100%; } }
+.bs-form { display: grid; gap: 10px; }
+.bs-form label { display: grid; grid-template-columns: 110px 1fr; align-items: center; padding: 10px 14px; border-radius: 10px; background: #fff; border: 1px solid #e3e1db; font-size: 14px; }
+.bs-form label span { color: #8a8c94; }
+.bs-form em { font-style: normal; animation: bsUp .4s both; animation-delay: inherit; }
+.bs-form button { justify-self: start; display: flex; align-items: center; gap: 12px; margin-top: 4px; padding: 9px 18px; border: 0; border-radius: 10px; background: #0a84ff; color: #fff; font: 600 14px -apple-system, sans-serif; box-shadow: 0 0 0 0 rgba(10,132,255,.5); animation: bsPulse 1.6s 1.6s infinite; }
+.bs-form button small { font-weight: 500; opacity: .8; }
+@keyframes bsPulse { 70% { box-shadow: 0 0 0 10px rgba(10,132,255,0); } }
+.bs-flights { display: grid; gap: 10px; }
+.bs-flights div { position: relative; display: grid; grid-template-columns: 90px 1fr auto; align-items: center; padding: 14px 16px; border-radius: 10px; background: #fff; border: 1px solid #e3e1db; font-size: 14px; }
+.bs-flights span { color: #77736b; }
+.bs-flights em { font-style: normal; font-weight: 600; }
+.bs-flights .is-best { border-color: var(--acc); box-shadow: 0 0 0 3px color-mix(in srgb, var(--acc) 22%, transparent); animation: bsUp .5s .3s both; }
+.bs-flights small { position: absolute; top: -9px; right: 14px; padding: 2px 8px; border-radius: 6px; background: var(--acc); color: #fff; font-size: 11px; font-weight: 600; }
+[data-theme="dark"] .bs-wave i { background: #f4f2ec; }
+@media (max-width: 800px) {
+  .bs-row { grid-template-columns: 1fr; gap: 28px; }
+  .bs-row.is-flip .bs-talk { order: 0; align-items: flex-start; text-align: left; }
+  .bs-mac { border-width: 5px; padding: 10px; }
+  .bs-win-body { aspect-ratio: auto; min-height: 240px; }
+  .bs-chat, .bs-music { margin: -18px; }
+}
+@media (prefers-reduced-motion: reduce) { .bs-row * { animation: none !important; transition: none !important; } .bs-win, .bs-reply { opacity: 1; transform: none; } }
+.bs-row.is-flip { grid-template-columns: minmax(0, 1.2fr) minmax(0, .8fr); }
+@media (max-width: 800px) { .bs-row.is-flip { grid-template-columns: 1fr; } }
+
+/* ── His notch, shared (2026-10-13) ── */
+.bn { position: relative; z-index: 3; display: flex; align-items: center; gap: 12px; width: 132px; height: 30px; padding: 0 16px; margin: 0 auto; border-radius: 0 0 16px 16px; background: #000; color: #f4f2ec; overflow: hidden; font: 500 15px/1.3 -apple-system, "SF Pro Text", sans-serif; transition: width .6s cubic-bezier(.22,1,.36,1), height .6s cubic-bezier(.22,1,.36,1), border-radius .6s; }
+/* The shoulders a real notch has, where it meets the menu bar. */
+.bn::before, .bn::after { content: ""; position: absolute; top: 0; width: 12px; height: 12px; background: radial-gradient(circle at 0 100%, transparent 11.5px, #000 12px); }
+.bn::before { left: -12px; transform: scaleX(-1); }
+.bn::after { right: -12px; }
+.bn.is-open { width: min(480px, 88%); height: 56px; border-radius: 0 0 24px 24px; }
+.bn-eyes { display: flex; gap: 6px; flex: none; }
+.bn-eyes i { width: 8px; height: 13px; border-radius: 4px; background: #f4f2ec; animation: bfBlink 4s infinite; }
+.bn-say { min-width: 0; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: 0; transition: opacity .3s .25s; }
+.bn.is-open .bn-say { opacity: 1; }
+.bn-done { color: #f7a68c; animation: bsUp .35s both; }
+.bn-done b { color: #34d399; }
+.bn.bn-big.is-open { width: min(420px, 92%); height: 64px; border-radius: 0 0 28px 28px; font-size: 20px; }
+.bn.bn-mid { width: 220px; height: 48px; border-radius: 0 0 22px 22px; }
+
+/* ── Scenes: the notch tells it ── */
+.bs-head { display: flex; flex-direction: column; align-items: center; text-align: center; }
+.bs-head .bn { margin-bottom: clamp(36px, 5vw, 56px); }
+.bs-head .bs-h { margin: 0; line-height: 1.02; }
+.bs-head > p { margin: 22px 0 0; font: 18px/1.5 -apple-system, "SF Pro Text", sans-serif; color: var(--a-ink-soft, #4e5059); }
+.bs-n { font: 500 13px -apple-system, "SF Pro Text", sans-serif; letter-spacing: .12em; color: var(--acc); }
+.bs-talk h3 { margin: 14px 0 0; font-family: "Iowan Old Style", Palatino, Georgia, serif; font-weight: 400; font-size: clamp(34px, 3.6vw, 52px); line-height: 1.05; letter-spacing: -.02em; }
+.bs-quote { margin: 26px 0 0; padding-top: 18px; border-top: 1px solid var(--a-line); font: italic clamp(17px, 1.4vw, 20px) "Iowan Old Style", Palatino, Georgia, serif; color: var(--a-ink-faint, #8a8c94); }
+.bs-row.is-flip .bs-quote { align-self: stretch; }
+.bs-mac { padding: 0; border-radius: 22px; border: 10px solid #0d0d0d; overflow: hidden; }
+.bs-screen { display: flex; flex-direction: column; gap: clamp(14px, 2vw, 24px); padding: 0 clamp(16px, 2.4vw, 32px) clamp(16px, 2.4vw, 32px); }
+.bs-screen .bn { margin-top: 0; }
+
+/* ── A presence ── */
+.bpr { padding: clamp(96px, 12vw, 170px) 0; border-top: 1px solid var(--a-line); }
+.bpr-in { display: flex; flex-direction: column; align-items: center; text-align: center; }
+.bpr-vs { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; width: min(760px, 100%); }
+.bpr-vs > div { display: flex; flex-direction: column; align-items: center; justify-content: space-between; gap: 22px; min-height: 190px; padding: 0 22px 26px; border-radius: 22px; border: 1px solid var(--a-line); }
+.bpr-vs p { margin: 0; font: 16px/1.45 -apple-system, "SF Pro Text", sans-serif; color: var(--a-ink-soft, #4e5059); }
+.bpr-them { opacity: .6; }
+.bpr-tabs { display: flex; gap: 4px; margin-top: 30px; }
+.bpr-tabs i { width: 54px; height: 22px; border-radius: 8px 8px 0 0; background: color-mix(in srgb, var(--a-ink, #1b1c1f) 10%, transparent); }
+.bpr-tabs i:last-child { background: color-mix(in srgb, var(--a-ink, #1b1c1f) 22%, transparent); }
+.bpr-him { background: var(--a-paper, #fff); box-shadow: 0 20px 50px -30px rgba(0,0,0,.35); }
+.bpr-him p { color: var(--a-ink, #1b1c1f); font-weight: 500; }
+.bpr-h { margin: clamp(56px, 7vw, 90px) 0 0; }
+.bpr-h em { font-style: italic; color: var(--acc); }
+.bpr-p { max-width: 34em; margin: 22px 0 0; font: clamp(18px, 1.5vw, 21px)/1.5 "Iowan Old Style", Palatino, Georgia, serif; color: var(--a-ink-soft, #4e5059); }
+@media (max-width: 700px) { .bpr-vs { grid-template-columns: 1fr; } }
+
+/* ── The day: a real MacBook ── */
+.bf-ds-stage { width: min(980px, calc(100% - 32px)); padding-top: 64px; }
+.bf-ds-screen { border: 0; border-radius: 20px 20px 0 0; padding: 12px 12px 0; background: #0b0b0c !important; box-shadow: 0 0 0 1.5px #3a3a3e, 0 40px 90px -40px rgba(0,0,0,.6); max-height: none; aspect-ratio: auto; }
+.bf-ds-screen > :not(.bf-ds-sky) { }
+.bf-ds-screen .bf-ds-bar { top: 12px; left: 12px; right: 12px; }
+.bf-ds-screen .bn.bf-ds-notch { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); width: 120px; height: 26px; margin: 0; }
+.bf-ds-screen .bn.bf-ds-notch.is-open { width: min(520px, 78%); height: 58px; }
+.bf-ds-dock { position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px; padding: 7px 10px; border-radius: 16px; background: rgba(255,255,255,.22); backdrop-filter: blur(14px); border: 1px solid rgba(255,255,255,.3); }
+.bf-ds-dock i { width: clamp(22px, 2.6vw, 34px); aspect-ratio: 1; border-radius: 9px; box-shadow: inset 0 1px 0 rgba(255,255,255,.35); }
+.bf-ds-base { position: relative; height: clamp(14px, 1.6vw, 20px); margin: 0 -6%; border-radius: 0 0 22px 22px / 0 0 14px 14px; background: linear-gradient(180deg, #d5d6da 0%, #a9abb1 60%, #7d7f85 100%); box-shadow: 0 30px 40px -20px rgba(0,0,0,.4); }
+.bf-ds-base i { position: absolute; top: 0; left: 50%; width: 16%; height: 6px; transform: translateX(-50%); border-radius: 0 0 8px 8px; background: #8f9197; }
+.bf-ds-sky { position: relative; aspect-ratio: 16 / 10; max-height: 56vh; width: 100%; border-radius: 8px 8px 0 0; overflow: hidden; }
+.bf-ds-sky .bf-ds-bar { top: 0; left: 0; right: 0; }
+.bf-ds-dock { bottom: 14px; }
+.bf-ds-sky .bn.bf-ds-notch { top: 0; }
+
+/* ── Real notch everywhere (2026-10-13): the home page's screen + NotchSheet ── */
+.bs-viz { border-radius: 14px; box-shadow: 0 40px 80px -50px rgba(0,0,0,.45); }
+.bs-wall { min-height: 470px; background: #fbfaf7; overflow: hidden; }
+.aff[data-theme="dark"] .bs-wall { background: #1c1b19; }
+.bs-wall > .ns { position: absolute; top: 0; left: 50%; z-index: 3; transform: translateX(-50%); margin: 0; }
+/* The app he is working in, on the screen under the notch, a little dimmed
+   while he works so the notch reads first. */
+.bs-app { position: absolute; inset: 64px 6% 0; padding: 24px 28px; border-radius: 12px 12px 0 0; background: #fff; border: 1px solid #e6e3dc; border-bottom: 0; color: #1b1c1f; font-family: -apple-system, "SF Pro Text", sans-serif; box-shadow: 0 -10px 40px -20px rgba(0,0,0,.25); transition: filter .6s, opacity .6s, transform .8s cubic-bezier(.22,1,.36,1); transform: translateY(30px); opacity: 0; }
+.bs-row.is-in .bs-app { transform: none; opacity: 1; }
+.bs-row.is-said .bs-app { filter: saturate(.8); }
+.bs-app > .bs-chat, .bs-app > .bs-music { margin: -24px -28px; height: calc(100% + 24px); }
+.bs-app * { animation-play-state: paused !important; }
+.bs-row.is-said .bs-app * { animation-play-state: running !important; }
+.bs-head-notch { position: relative; width: min(460px, 100%); min-height: 96px; margin-bottom: clamp(32px, 4vw, 48px); border-top: 1px solid color-mix(in srgb, var(--a-ink) 50%, transparent); }
+.bs-head-notch .ns { margin: 0 auto; }
+.bpr-him .ns { width: min(260px, 100%); }
+.bpr-him { padding-top: 0; }
+/* The day: the real notch on the MacBook */
+.bf-ds-sky .mmb { position: relative; z-index: 2; }
+.bf-ds-sky > .ns.bf-ds-ns { position: absolute; top: 0; left: 50%; z-index: 3; transform: translateX(-50%); margin: 0; transition: width .55s cubic-bezier(.32,.72,0,1); }
+.bf-ds-sky > .ns.bf-ds-ns.is-fold { width: 150px; }
+.bf-ds-sky > .ns.bf-ds-ns.is-fold .ns-row { display: none; }
+.bf-ds-did { margin: 0; padding: 4px 0 2px; font-size: 15px; line-height: 1.45; color: rgba(247,247,245,.75); }
+.bf-ds-cap p { display: none; }
+.bf-ds-cap { display: flex; justify-content: center; }
+.bs-notch { position: absolute; top: 0; left: 0; right: 0; z-index: 10; display: flex; justify-content: center; pointer-events: none; }
+.bs-notch .ns { position: relative; margin: 0; background: #000; }
+.bs-notch .ns.ns-big.ns-work { width: min(500px, 80%); }
+.bs-notch .ns.ns-big.ns-listen { width: min(380px, 66%); }
+.bs-app { inset: 90px 8% 0; }
+.bs-row.is-said .bs-app { filter: saturate(.7) brightness(.97); }
+
+/* ── 2026-10-13, round 3 ── */
+/* The day: a bigger MacBook, notch always open, words swap in place. */
+.bf-ds-stage { width: min(1240px, calc(100% - 32px)); padding-top: 72px; }
+.bf-ds-sky { max-height: 72vh; }
+.bf-ds-sky > .ns.bf-ds-ns { width: min(600px, 62%); }
+.bf-ds-sky > .ns.bf-ds-ns .ns-say strong span, .bf-ds-did { animation: bsUp .45s cubic-bezier(.22,1,.36,1) both; }
+.bf-ds-cap { margin-top: 18px; }
+.bf-ds-at { font-size: clamp(26px, 2.6vw, 36px); }
+/* Presence: two little pictures, not two boxes. */
+.bpr-vs { width: min(980px, 100%); gap: 22px; }
+.bpr-card { margin: 0; display: flex; flex-direction: column; gap: 18px; padding: 0 !important; border: 0 !important; min-height: 0 !important; background: none !important; box-shadow: none !important; }
+.bpr-card figcaption { font: 16px/1.45 -apple-system, "SF Pro Text", sans-serif; color: var(--a-ink-soft); }
+.bpr-him figcaption { color: var(--a-ink); font-weight: 500; }
+.bpr-browser, .bpr-screen { position: relative; height: 280px; border-radius: 14px; overflow: hidden; border: 1px solid var(--a-line); background: #fbfaf7; text-align: left; }
+.bpr-them .bpr-browser { filter: grayscale(1); opacity: .6; }
+.bpr-tabbar { display: flex; gap: 4px; padding: 10px 12px 0; background: #ecebe7; }
+.bpr-tabbar i { width: 80px; height: 22px; border-radius: 8px 8px 0 0; background: #dedcd6; }
+.bpr-tabbar i.on { background: #fbfaf7; }
+.bpr-url { height: 30px; margin: 0; background: #fbfaf7; border-bottom: 1px solid #e6e3dc; }
+.bpr-chat { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; height: calc(100% - 62px); font: 500 18px -apple-system, "SF Pro Text", sans-serif; color: #55524b; }
+.bpr-input { width: 70%; padding: 12px 16px; border-radius: 999px; border: 1px solid #dedcd6; font-size: 14px; color: #a3a09a; }
+.bpr-screen .ns { position: absolute; top: 0; left: 50%; transform: translateX(-50%); width: min(300px, 70%); margin: 0; z-index: 3; }
+.bpr-doc { position: absolute; inset: 120px 12% 0; display: grid; align-content: start; gap: 10px; padding: 22px; border-radius: 10px 10px 0 0; background: #fff; border: 1px solid #e6e3dc; }
+.bpr-doc i { height: 9px; border-radius: 5px; background: #e9e6df; }
+.bpr-doc i:nth-child(2) { width: 82%; } .bpr-doc i:nth-child(4) { width: 60%; }
+.aff[data-theme="dark"] .bpr-browser, .aff[data-theme="dark"] .bpr-screen { background: #1c1b19; }
+/* Early access: his notch says hello next to the form. */
+.bf-ea-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: clamp(20px, 3vw, 36px); align-items: stretch; margin-top: clamp(28px, 4vw, 48px); }
+.bf-ea-grid .bf-ea-box { margin: 0; }
+.bf-ea-hello { position: relative; display: flex; flex-direction: column; min-height: 380px; border-radius: 16px; overflow: hidden; border: 1px solid var(--line); background: radial-gradient(120% 80% at 50% 0%, color-mix(in srgb, var(--acc, #d9645b) 14%, #fbfaf7), #fbfaf7 70%); }
+.bf-ea-hello .ns { margin: 0 auto; }
+.bf-ea-hello-cap { display: flex; align-items: center; justify-content: center; gap: 8px; margin: auto 0 22px; font: 13px -apple-system, "SF Pro Text", sans-serif; color: var(--ink-soft, #4e5059); }
+.aff[data-theme="dark"] .bf-ea-hello { background: #1c1b19; }
+@media (max-width: 860px) { .bf-ea-grid, .bpr-vs { grid-template-columns: 1fr; } .bf-ea-hello { min-height: 260px; } }
+/* Heading: plain second line. */
+.bs-h em { font-style: normal; color: inherit; opacity: .55; }
+/* The notch folds back once the work is done, so the app is the picture. */
+.bs-notch .ns.ns-big.bs-ns-done { width: min(420px, 74%); }
+.bs-notch .ns.bs-ns-done .ns-say strong { font-size: 15px !important; }
+.bs-wall { min-height: 520px; }
+.bs-app { inset: 84px 7% 0; transition: filter .6s, opacity .6s, transform .8s cubic-bezier(.22,1,.36,1), top .7s cubic-bezier(.22,1,.36,1); }
+.bp .aff-foot, .bp footer.aff-footer { border-bottom: 0; margin-bottom: 0; }
+/* He lands on the thing he means: a dashed ring, him, and one line. */
+.bs-point { position: absolute; z-index: 6; width: 0; height: 0; pointer-events: none; }
+.bs-ring { position: absolute; left: -26px; top: -26px; width: 52px; height: 52px; border-radius: 50%; border: 2px dashed #e0a43a; background: rgba(255, 196, 80, .14); animation: bsRing 1.6s .5s ease-in-out infinite, bsPop .4s .45s cubic-bezier(.34,1.56,.64,1) both; }
+@keyframes bsRing { 50% { transform: rotate(40deg) scale(1.08); } }
+@keyframes bsPop { from { opacity: 0; transform: scale(.3); } }
+.bs-buddy { position: absolute; left: 14px; top: 6px; filter: drop-shadow(0 8px 12px rgba(0,0,0,.25)); animation: bsJump .7s cubic-bezier(.22,1,.36,1) both, bsBob 2.4s .8s ease-in-out infinite; }
+@keyframes bsJump { from { opacity: 0; transform: translate(40px, -220px) rotate(-30deg) scale(.6); } 70% { opacity: 1; transform: translate(0, 6px) rotate(4deg); } }
+@keyframes bsBob { 50% { transform: translateY(-4px); } }
+.bs-label { position: absolute; left: 22px; top: -54px; white-space: nowrap; padding: 6px 12px; border-radius: 10px; background: #f3c86a; color: #3b2a07; font: 600 13px -apple-system, "SF Pro Text", sans-serif; box-shadow: 0 6px 18px -6px rgba(0,0,0,.3); animation: bsPop .35s .7s cubic-bezier(.34,1.56,.64,1) both; }
+.bs-point.is-left .bs-buddy { left: -70px; }
+.bs-point.is-left .bs-label { left: auto; right: 22px; }
+/* The scenes' pause rule must not freeze him. */
+.bs-app .bs-point, .bs-app .bs-point * { animation-play-state: running !important; }
+
+/* ── Your companion (2026-10-13): him, one line, three names ── */
+.bco { padding: clamp(100px, 13vw, 180px) 0; border-top: 1px solid var(--a-line); }
+.bco-in { display: flex; flex-direction: column; align-items: center; text-align: center; }
+.bco-him { margin-bottom: 28px; animation: bsBob 3s ease-in-out infinite; }
+.bco-h { margin: 8px 0 0; font-size: clamp(56px, 8vw, 120px); line-height: .95; letter-spacing: -.03em; }
+.bco-p { max-width: 30em; margin: 28px 0 0; font: clamp(19px, 1.7vw, 23px)/1.5 "Iowan Old Style", Palatino, Georgia, serif; color: var(--a-ink-soft); }
+.bco-names { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px 44px; margin: 52px 0 0; padding: 26px 0 0; list-style: none; border-top: 1px solid var(--a-line); font: 500 clamp(17px, 1.5vw, 20px) -apple-system, "SF Pro Text", sans-serif; }
+.bco-names li:nth-child(2) { color: var(--acc); }
+
+/* ── The day's rail ── */
+.bf-ds-rail { position: relative; display: flex; justify-content: space-between; margin: 26px auto 0; padding: 16px 0 0; list-style: none; font: 500 13px -apple-system, "SF Pro Text", sans-serif; font-variant-numeric: tabular-nums; }
+.bf-ds-rail::before, .bf-ds-rail::after { content: ""; position: absolute; top: 0; left: 0; height: 2px; border-radius: 1px; }
+.bf-ds-rail::before { right: 0; background: var(--a-line); }
+.bf-ds-rail::after { width: var(--fill); background: var(--acc); }
+.bf-ds-rail li { color: var(--a-ink-faint); transition: color .3s, transform .3s; }
+.bf-ds-rail li.past { color: var(--a-ink-soft); }
+.bf-ds-rail li.on { color: var(--acc); transform: translateY(-2px) scale(1.12); font-weight: 600; }
+@media (max-width: 700px) { .bf-ds-rail { font-size: 10px; } }
+.bf-ds-sky { max-height: 64vh; } .bf-ds-stage { padding-top: 60px; }
+
+/* Scenes: he waits in the corner, then walks to the thing. */
+.bs-point { transition: left 1s cubic-bezier(.45,0,.2,1), top 1s cubic-bezier(.45,0,.2,1); }
+.bs-point .bs-buddy { animation: bsBob 2.4s ease-in-out infinite; }
+.bs-point:not(.is-there) .bs-buddy { opacity: .95; }
+.bs-row:not(.is-in) .bs-point { opacity: 0; }
+
+/* Companion: the things a friend says, floating around him. */
+.bco-stage { position: relative; width: min(860px, 100%); height: 320px; margin-bottom: 18px; display: flex; align-items: center; justify-content: center; }
+.bco-stage .bco-him { margin: 0; position: relative; z-index: 2; }
+.bco-say { position: absolute; padding: 10px 16px; border-radius: 0 0 18px 18px; background: #0b0b0c; color: #f4f2ec; font: 500 14px -apple-system, "SF Pro Text", sans-serif; white-space: nowrap; box-shadow: 0 14px 30px -14px rgba(0,0,0,.5); animation: bcoFloat 6s ease-in-out infinite; }
+.bco-say::before { content: "BRAINO"; display: block; margin-bottom: 2px; font-size: 9px; letter-spacing: .12em; color: rgba(244,242,236,.5); }
+.bco-say-0 { left: 4%; top: 6%; }
+.bco-say-1 { right: 2%; top: 2%; animation-delay: -1s; }
+.bco-say-2 { left: 0; top: 50%; animation-delay: -2s; }
+.bco-say-3 { right: 0; top: 46%; animation-delay: -3s; }
+.bco-say-4 { left: 12%; bottom: 0; animation-delay: -4s; }
+.bco-say-5 { right: 12%; bottom: 4%; animation-delay: -5s; background: var(--acc); }
+.bco-say-5::before { color: rgba(255,255,255,.7); }
+@keyframes bcoFloat { 50% { transform: translateY(-8px); } }
+.bco-him { animation: bsBob 3s ease-in-out infinite; }
+.bco { background: radial-gradient(60% 50% at 50% 30%, color-mix(in srgb, var(--acc) 10%, transparent), transparent 70%); }
+@media (max-width: 760px) { .bco-stage { height: auto; flex-direction: column; gap: 10px; } .bco-say { position: static; } }
+.bf-foot-by { margin-top: 10px; font-size: 13px; opacity: .6; }
+/* His name in the corner, and quieter FAQ answers. */
+.aff-logo.aff-logo-braino { font: 600 26px/1 "SF Pro Display", -apple-system, sans-serif; letter-spacing: -.03em; color: var(--a-ink); text-decoration: none; }
+.bp .hb2-faq-list details p { font-size: 16px; line-height: 1.6; }
+.aff-nav .aff-logo.aff-logo-braino, .aff-nav.is-tight .aff-logo.aff-logo-braino { width: auto; overflow: visible; white-space: nowrap; }
+
+/* Dark mode: the open tab's thumb is dark, not white. */
+.aff[data-theme="dark"] .bp-tabs { background: rgba(255,255,255,.07); }
+.aff[data-theme="dark"] .bp-tabs-thumb { background: #2a2926; box-shadow: 0 1px 2px rgba(0,0,0,.4); }
+.aff[data-theme="dark"] .bp-tabs button.on { color: #f4f2ec; }
+/* Companion box spacing, first after the hero. */
+.bco2 { border-top: 0; }
+/* The last word: him, standing. */
+.hb-end-him { display: block; margin: 0 auto 18px; animation: bsBob 3s ease-in-out infinite; }
+/* Footer: the words, black, then the game at the very end. */
+.bp .bf-foot { background: #0b0b0c; color: #e9e7e1; border-top: 0; }
+.bp .bf-foot a, .bp .bf-foot .bf-foot-mark, .bp .bf-foot h4 { color: #f4f2ec; }
+.bp .bf-foot p, .bp .bf-foot-rule { color: rgba(244,242,236,.62); }
+.bp .bf-game-mount { margin-top: 0; }
+
+/* 2026-10-13: the notch in each scene sat as an empty black box, because its
+   steps ran a looping animation that kept them invisible most of the time.
+   Here each step arrives once, in order, and stays, so the notch always shows
+   what he is doing, and the app underneath stays the picture. */
+.bs-notch .ns-steps li { opacity: 0; animation: bsStepIn .45s cubic-bezier(.22,1,.36,1) forwards; }
+@keyframes bsStepIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .bs-notch .ns-steps li { animation: none; opacity: 1; } }

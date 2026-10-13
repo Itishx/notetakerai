@@ -1044,3 +1044,8 @@ section id or heading changes.
 
 - A turn that starts while his answer sheet is open holds the sheet (`.nf-answer-reply`): your words at 58% white, a soft pulse while he thinks, then his answer. Width is locked to the previous answer's mode; only the height eases (280ms). Folds away after 3.5s of quiet.
 - Without subtitles = the AffectiveOS style (`.nf-aos`), drawn by the quiet notch band (`.nf-q`): exactly the hardware notch height, 80pt ears, labels "Listening" + dot, spinner + "Thinking", bars + "Speaking"; never the heard/answer word states. The AffectiveOS tint is a 2px lit line on the band's bottom edge (steady / breathing / sweeping). The regular pill stays hardware sized underneath, so there is one shape. Boot, sign in and greeting are exempt. Settings › Appearance › Subtitles.
+
+## /braino page: Braino only, and scenes that show the work (2026-10-13)
+
+- Braino Foundry is hidden everywhere until it is planned: the model tabs on /braino (SHOWN_MODELS), the footers, the showcase and app grid entries, the /foundry redirect (now to /braino), and the Mac app's Companion/Foundry switch. The Foundry model data stays in BrainoFinal.tsx so it returns with one line.
+- "Just ask. He's right there.": each scene's notch steps arrive once and stay (`bsStepIn`), instead of a looping animation that left an empty black box most of the time. The repeated italic quote under each scene is gone, and scenes sit closer together (56 to 100px).

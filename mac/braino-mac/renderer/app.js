@@ -322,7 +322,7 @@ api.onAppGo?.((page) => { if (P[page]) { if ((NAV.foundry.flat(2)).includes(page
 
 (async () => {
   let saved = {}; try { saved = JSON.parse(localStorage.getItem("braino-app") || "{}"); } catch (_) {}
-  product = saved.product === "foundry" ? "foundry" : "companion"; $("win").dataset.product = product;
+  product = "companion"; $("win").dataset.product = product;   // Foundry hidden for now
   document.querySelectorAll(".switch button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.product === product)));
   await load("auth");
   $("me-name").textContent = S.auth?.displayName || "Braino"; $("me-plan").textContent = S.auth?.email || "Account"; $("me-av").textContent = (first() || "·").charAt(0);

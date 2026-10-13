@@ -724,7 +724,6 @@ export default function Affective() {
                 <h4><Link to="/braino">Braino</Link></h4>
                 <ul>
                   <li><Link to="/braino">For everyone</Link></li>
-                  <li><Link to="/braino?model=foundry">Braino Foundry</Link></li>
                   <li><Link to="/braino#early-access">Early access</Link></li>
                 </ul>
               </nav>

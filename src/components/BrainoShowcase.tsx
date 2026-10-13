@@ -18,7 +18,6 @@ const DOES = [
 
 const MODELS = [
   { variant: "braino" as const, name: "Braino", who: "For everyone", line: "The whole of him, on your Mac and in Chrome.", where: "Mac and Chrome", to: "/braino", get: "Get", acc: "var(--a-braino, #d9645b)" },
-  { variant: "foundry" as const, name: "Braino Foundry", who: "For founders", line: "Gets your startup seen: posts, replies and intros.", where: "Mac", to: "/braino?model=foundry", get: "View", acc: "#b5832a" },
 ];
 
 export function BrainoShowcase({ kicker = "Featured · Private beta", doorsOnly = false }: { kicker?: string; doorsOnly?: boolean }) {
