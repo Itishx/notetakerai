@@ -803,37 +803,33 @@ export default function BrainoFinal() {
       </section>
 
       {/* His footer: the words in black, then the Mario level last (2026-10-13). */}
-      <footer className="bf-foot">
-        <div className="bf-wrap">
-          <div className="bf-foot-in">
-            <div>
-              <p className="bf-foot-mark">Braino</p>
-              <p>
-                Your everyday Mac companion. A friend who lives on your Mac: talk to him,
-                ask him anything, and he gets it done.
-              </p>
-              <p className="bf-foot-by">Made by Affective in Bengaluru. Runs on AffectiveOS.</p>
-            </div>
-            <nav className="bf-foot-col">
-              <h4>Braino</h4>
-              <Link to="/braino">Braino</Link>
-              <a href="#early-access">Early access</a>
-            </nav>
-            <nav className="bf-foot-col">
-              <h4>Company</h4>
-              <Link to="/">Affective</Link>
-              <Link to="/affectiveos">AffectiveOS</Link>
-              <Link to="/contact">Contact</Link>
-            </nav>
+      <footer className="braino-footer mario bf-game-mount">
+        <nav className="bf-cols" aria-label="Footer">
+          <div className="bf-col bf-col-about">
+            <div className="bf-col-head">Your companion</div>
+            <p>Your everyday Mac companion. A friend who lives on your Mac: talk to him, ask him anything, and he gets it done.</p>
           </div>
-          <p className="bf-foot-rule">Braino is in private beta. Bengaluru, 2026.</p>
-        </div>
-      </footer>
-      <div className="braino-footer mario bf-game-mount">
+          <div className="bf-col">
+            <div className="bf-col-head">Braino</div>
+            <Link to="/braino">Braino</Link>
+            <a href="#early-access">Early access</a>
+            <a href="#faq">Questions</a>
+          </div>
+          <div className="bf-col">
+            <div className="bf-col-head">Company</div>
+            <Link to="/">Affective</Link>
+            <Link to="/affectiveos">AffectiveOS</Link>
+            <Link to="/contact">Contact</Link>
+          </div>
+        </nav>
         <div className="bf-game-window">
+          <div className="bf-baseline">
+            <span className="bf-signoff">Made by Affective in Bengaluru · Braino is in private beta</span>
+            <span className="bf-legal"><Link to="/privacy">Privacy</Link><Link to="/terms">Terms</Link></span>
+          </div>
           <BrainoFooterGame />
         </div>
-      </div>
+      </footer>
     </div>
   );
 }

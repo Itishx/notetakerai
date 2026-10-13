@@ -191,10 +191,11 @@ function useClock() {
   }, []);
   return now;
 }
-export function MacMenuBar({ app = "Chrome", menus = ["File", "Edit", "View", "History", "Window", "Help"] }: { app?: string; menus?: string[] }) {
+/* `at` pins the clock to a story's time instead of the real one. */
+export function MacMenuBar({ app = "Chrome", menus = ["File", "Edit", "View", "History", "Window", "Help"], at }: { app?: string; menus?: string[]; at?: [string, string] }) {
   const now = useClock();
-  const day = now.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" }).replace(",", "");
-  const time = now.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  const day = at ? at[0] : now.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" }).replace(",", "");
+  const time = at ? at[1] : now.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
   return (
     <div className="mmb" aria-hidden="true">
       <div className="mmb-left">

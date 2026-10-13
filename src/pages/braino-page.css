@@ -406,3 +406,5 @@
 .bs-notch .ns-steps li { opacity: 0; animation: bsStepIn .45s cubic-bezier(.22,1,.36,1) forwards; }
 @keyframes bsStepIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .bs-notch .ns-steps li { animation: none; opacity: 1; } }
+/* Footer: words and game in one blue sky. */
+.bp .braino-footer .bf-col-about p { max-width: 30ch; margin: 0; font-size: 15px; line-height: 1.5; opacity: .85; }
