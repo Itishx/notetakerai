@@ -8,6 +8,8 @@ import { AppLogo } from "@/components/AppLogo";
 import BrainoFooterGame from "@/components/BrainoFooterGame";
 import "@/components/braino-footer.css";
 import { BrainoScenes } from "@/components/BrainoScenes";
+import { DemoSlot } from "@/components/DemoSlot";
+import "@/components/demo-slot.css";
 import { MacMenuBar, NotchSheet } from "./aff-figures";
 /* The jobs are written here rather than read from the site's engine data,
    because this page says a different thing: each one carries what it saves
@@ -281,7 +283,7 @@ const COMPANION_TRAITS = [
   { k: "Morning", h: "Knows your day", p: "Classes, deadlines and who is waiting on you, the moment you open your Mac." },
   { k: "Voice", h: "Talks back", p: "Out loud, in his own voice. Speak or type, whatever is easier." },
   { k: "Hands", h: "Gets it done", p: "Messages, emails, forms and files, in the apps you already use." },
-  { k: "Memory", h: "Remembers what matters", p: "Your people, your plans, what you promised. You can see and delete all of it." },
+  { k: "Memory", h: "Remembers what matters", p: "Your people, your plans, what you promised. Ask him what he remembers, anytime." },
   { k: "Trust", h: "Asks before he acts", p: "Nothing is sent, bought or deleted without your yes." },
   { k: "Calm", h: "Never nags", p: "No pop-ups, no pings. He is there when you need him, quiet when you don't." },
 ];
@@ -314,8 +316,20 @@ const FAQ = [
     a: "Never. Anything that spends money, sends a message, posts or deletes something waits for your yes. That is enforced in the code.",
   },
   {
-    q: "Where does my data live?",
-    a: "What he remembers about you stays on your Mac. Only the request itself, and the context that job needs, is sent to think. Private windows and password apps are never recorded, nothing is sold, and you can read, fix or delete anything he keeps.",
+    q: "Is it always listening?",
+    a: "No. He listens when you call him: Control twice, or \u201cHey Braino\u201d if you turned it on. Listening for his name happens on your Mac, and nothing is sent until he wakes.",
+  },
+  {
+    q: "Is my screen recorded?",
+    a: "Only if you choose Learn my day. Then he keeps a text diary of your day on your Mac, which deletes itself after a week, and never includes password managers, banking apps or private windows. Choose Only when I ask, and he looks only when you ask. Screenshots are never stored.",
+  },
+  {
+    q: "Where does my data go?",
+    a: "Your requests go to the AI that thinks for him (OpenAI and Anthropic). The lasting things he remembers and your notes are kept in your Braino account. Nothing is sold. The details are on the Trust page, at affctve.com/trust.",
+  },
+  {
+    q: "Can I delete everything?",
+    a: "Yes. Switch off Learn my day and the diary stops. Deleting your account deletes everything he remembers about you.",
   },
 
   {
@@ -698,6 +712,14 @@ export default function BrainoFinal() {
             </div>
           </section>
         )}
+        {/* ── The demo: a real recording goes here (DemoSlot `src`) ── */}
+        {model.fast && (
+          <section className="bp-demo">
+            <div className="aff-wrap aff-reveal">
+              <DemoSlot title="“Tell Priya Friday works”, from your voice to the WhatsApp draft to your yes" caption="One real request, start to finish." />
+            </div>
+          </section>
+        )}
         {/* ── What he does, one capability per section (Braino), or the Meet box (Foundry) ── */}
         {model.fast ? <BrainoScenes /> : <section className="hb6">
           <div className="aff-wrap">
@@ -819,6 +841,8 @@ export default function BrainoFinal() {
             <div className="bf-col-head">Company</div>
             <Link to="/">Affective</Link>
             <Link to="/affectiveos">AffectiveOS</Link>
+            <Link to="/trust">Trust &amp; privacy</Link>
+            <Link to="/changelog">What's new</Link>
             <Link to="/contact">Contact</Link>
           </div>
           <div className="bf-col">
@@ -827,7 +851,7 @@ export default function BrainoFinal() {
             <a href="https://x.com/brainosays" target="_blank" rel="noreferrer">X (Twitter)</a>
           </div>
         </nav>
-        <p className="bf-disclaimer">Braino only sees your screen when you ask him to. Screenshots are never stored.</p>
+        <p className="bf-disclaimer">Braino only learns your day if you choose to. The diary stays on your Mac and deletes itself after a week, and screenshots are never stored. <Link to="/trust">How Braino handles your data</Link></p>
         <div className="bf-game-window">
           <div className="bf-baseline">
             <span className="bf-signoff">Made by Affective in Bengaluru · Braino is in private beta</span>

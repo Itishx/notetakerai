@@ -145,6 +145,7 @@ export function AffFooter() {
               <h4>Company</h4>
               <Link to="/affectiveos">AffectiveOS</Link>
               <Link to="/labs">Labs</Link>
+              <Link to="/trust">Trust &amp; privacy</Link>
               <Link to="/contact">Contact</Link>
             </nav>
           </div>

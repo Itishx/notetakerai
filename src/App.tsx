@@ -113,6 +113,7 @@ const DashboardDesign = lazy(() => import("./pages/DashboardDesign.tsx"));
 const BuildPlan = lazy(() => import("./pages/BuildPlan.tsx"));
 const Reddit = lazy(() => import("./pages/Reddit.tsx"));
 const Privacy = lazy(() => import("./pages/Privacy.tsx"));
+const Trust = lazy(() => import("./pages/Trust.tsx"));
 const Terms = lazy(() => import("./pages/Terms.tsx"));
 const Contact = lazy(() => import("./pages/Contact.tsx"));
 const ProductOverview = lazy(() => import("./pages/ProductOverview.tsx"));
@@ -389,6 +390,7 @@ function AppRoutes() {
         <Route path="/build-plan" element={<BuildPlan />} />
         <Route path="/reddit" element={<Reddit />} />
         <Route path="/privacy" element={<Privacy />} />
+        <Route path="/trust" element={<Trust />} />
         <Route path="/terms" element={<Terms />} />
         <Route path="/contact" element={<Contact />} />
         <Route path="/product-overview" element={<ProductOverview />} />

@@ -409,3 +409,5 @@
 /* Footer: words and game in one blue sky. */
 .bp .braino-footer .bf-col-about p { max-width: 30ch; margin: 0; font-size: 15px; line-height: 1.5; opacity: .85; }
 .bp .braino-footer .bf-disclaimer { margin: 0 auto; padding: 0 0 22px; width: min(1200px, calc(100% - 32px)); font: italic 14px/1.5 -apple-system, "SF Pro Text", sans-serif; opacity: .8; text-align: center; }
+.bp-demo { padding: 0 0 clamp(40px, 6vw, 80px); } .bp-demo .dm { max-width: 1040px; margin: 0 auto; }
+.bp-demo { padding-top: clamp(40px, 6vw, 80px); }

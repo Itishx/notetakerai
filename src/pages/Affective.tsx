@@ -1,4 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { DemoSlot } from "@/components/DemoSlot";
+import "@/components/demo-slot.css";
 import { Braino, BrainoDefs, useTime } from "@/components/BrainoChar";
 import { Link } from "react-router-dom";
 import { AffThemeToggle, useAffTheme } from "@/components/AffTheme";
@@ -104,7 +106,10 @@ const FAQS = [
   { q: "Who makes Braino?", a: "Affective, a small product company in Bengaluru. Braino is the first thing we have built." },
   { q: "What do I need?", a: "A Mac. Braino lives in the notch on the Mac and also works in Chrome." },
   { q: "Will it do things without asking me?", a: "No. Anything that spends money, sends a message, posts in public or deletes something waits for your yes, every time." },
-  { q: "Is my data private?", a: "What Braino remembers stays on your Mac. Private windows and password apps are never recorded, nothing is sold, and you can read, fix or delete anything he keeps." },
+  { q: "Is it always listening?", a: "No. He listens when you call him: Control twice, or \u201cHey Braino\u201d if you turned it on, which is heard on your Mac only." },
+  { q: "Is my screen recorded?", a: "Only if you choose Learn my day: a text diary of your day, on your Mac, gone after a week, never password apps, banking or private windows. Or choose Only when I ask. Screenshots are never stored." },
+  { q: "Where does my data go?", a: "Requests go to the AI that thinks for him (OpenAI and Anthropic). What he remembers and your notes live in your Braino account. Nothing is sold. Full details on the Trust page." },
+  { q: "Can I delete everything?", a: "Yes. Turn off Learn my day anytime, and deleting your account deletes everything he remembers." },
   { q: "How do I get it?", a: "Braino is in private beta. Join early access and we will invite you as places open up." },
 ];
 
@@ -618,6 +623,8 @@ export default function Affective() {
           <figure className="ah-os-live aff-reveal aff-rise">
             <div className="ao-viz ao-viz-screen"><VoiceToAction tabs notch row bare /></div>
           </figure>
+          {/* The real thing, recorded: drop the clip in public/demos/ and pass src. */}
+          <div className="hb6-demo-real aff-reveal"><DemoSlot title="Watch Braino do it: one sentence, done on a real Mac" caption="A real request, recorded on a real Mac." /></div>
           </div>
         </div>
       </section>
