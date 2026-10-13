@@ -15,6 +15,7 @@ const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "
 let snap = null;              // name, permissions, saved answers (setupSnapshot)
 const answers = {};
 let heard = null;             // the first thing said to him, from "Try me"
+let wakeOn = false;           // "Hey Braino", offered on the permissions step
 let at = 0;
 let muted = false;
 try { muted = localStorage.getItem("obMuted") === "1"; } catch (_) {}
@@ -127,7 +128,10 @@ function body(scene) {
   if (scene.kind === "persona") return `<div class="ob-choices">${scene.options.map((o) => `<button class="ob-choice${answers.persona === o ? " on" : ""}" data-choice="${esc(o)}">${esc(o)}</button>`).join("")}</div>`;
   if (scene.kind === "perms") {
     const ps = snap?.permissions || [];
-    return `<div class="ob-perms">${ps.map((p) => `<div class="ob-perm${p.ok ? " ok" : ""}"><i></i><div><b>${esc(p.label)}</b><span>${esc(WHY[p.id] || p.why)}</span></div>${p.ok ? "<em>Allowed</em>" : `<button data-ask="${esc(p.id)}">Allow</button>`}</div>`).join("")}</div>
+    /* "Hey Braino" is a promise about a microphone, so it is offered here,
+       never switched on by default. */
+    const wake = `<div class="ob-perm${wakeOn ? " ok" : ""}"><i></i><div><b>Hey Braino</b><span>wake me by saying my name, heard on this Mac only</span></div>${wakeOn ? "<em>On</em>" : '<button data-wake="on">Turn on</button>'}</div>`;
+    return `<div class="ob-perms">${ps.map((p) => `<div class="ob-perm${p.ok ? " ok" : ""}"><i></i><div><b>${esc(p.label)}</b><span>${esc(WHY[p.id] || p.why)}</span></div>${p.ok ? "<em>Allowed</em>" : `<button data-ask="${esc(p.id)}">Allow</button>`}</div>`).join("")}${api.namedMode ? wake : ""}</div>
       <div class="ob-actions"><button class="ob-go" data-next>${ps.length && ps.every((p) => p.ok) ? "Continue" : "Continue for now"}</button></div>`;
   }
   if (scene.kind === "try") {
@@ -196,6 +200,7 @@ document.addEventListener("click", async (e) => {
   if (t.id === "ob-sound") { muted = !muted; try { localStorage.setItem("obMuted", muted ? "1" : "0"); } catch (_) {} if (muted) stopVoice(); paintSound(); return; }
   if (t.hasAttribute("data-next")) { next(); return; }
   if (t.dataset.choice) { await save({ persona: t.dataset.choice }); render(); setTimeout(next, 350); return; }
+  if (t.dataset.wake) { const r = await api.namedMode?.({ enabled: true }).catch(() => null); wakeOn = Boolean(r?.enabled ?? true); render(); if (wakeOn) void say("Now just say Hey Braino."); return; }
   if (t.dataset.ask) { t.textContent = "Waiting…"; await api.setupAsk?.(t.dataset.ask); void checkPermissions(); }
 });
 document.addEventListener("keydown", (e) => {

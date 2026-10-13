@@ -37,6 +37,7 @@ async function load(kind) {
   if (kind === "mesa") S.mesa = await call("mesaState");
   if (kind === "contacts") { S.contacts = await call("contactsList"); S.important = (await call("waImportant"))?.names || []; }
   if (kind === "login") S.login = await call("loginItem");
+  if (kind === "wake") S.wake = await call("namedMode");
   if (kind === "activity") S.activity = (await call("appActivity", 400))?.rows || [];
   if (kind === "mems") { const r = await call("memoriesList"); S.mems = r?.ok ? r.rows : null; S.memsError = r?.ok ? "" : (r?.error || "unavailable"); }
 }
@@ -147,8 +148,8 @@ const P = {
     ${m("s6", `${kicker("Character")}${seg([["braino", "Braino"], ["brainelle", "Brainelle"], ["webb", "Webb"], ["ferro", "Ferro"]], S.look.mascot || "braino", "mascot", "Character")}<div style="margin-top:14px">${row("Size", "", `<input type="range" min="1" max="5" step=".1" value="${S.look.scale || 1}" data-range="scale" aria-label="Size" style="accent-color:#fff;width:150px">`)}</div>`)}
     ${m("s6", `${kicker("Where he stays")}${seg([["left", "Left"], ["top", "Top"], ["bottom", "Bottom"], ["right", "Right"], ["walk", "Walk"]], S.look.dock || "right", "dock", "Where he stays")}<p class="sub" style="margin-top:10px">Or drag him anywhere: he goes to the nearest spot.</p>`)}
     ${m("", `${kicker("Hide him")}${seg([["", "Shown"], ["hour", "For an hour"], ["hidden", "Until I call"], ["stealth", "Stealth"]], S.look.hide || "", "hide", "Hide him")}<p class="sub" style="margin-top:10px">He still hears you. Bring him back: "Braino, come back", ⌘⇧B, or click the notch.</p>`)}` },
-  voice: { t: "Voice & listening", nav: ["Voice & listening", "mic"], r: () => `
-    ${m("s6", `${kicker("Calling him")}<div class="rows">${row("Instant listening", "A ready connection, mic off until you call", tg(S.look.warmVoice !== false, "warmVoice", "Instant listening"))}${row("Clean hearing", "Mic rests while he talks; sounds that are not you are dropped", tg(S.look.cleanEar !== false, "cleanEar", "Clean hearing"))}${row("Shortcut", "", '<span class="kc"><kbd>⌃</kbd><kbd>⌃</kbd></span>')}</div>`)}
+  voice: { t: "Voice & listening", nav: ["Voice & listening", "mic"], need: ["wake"], r: () => `
+    ${m("s6", `${kicker("Calling him")}<div class="rows">${row("Hey Braino", "Wake him by saying his name. Heard on this Mac only, nothing is sent until he wakes.", tg(Boolean(S.wake?.enabled), "wake", "Hey Braino"))}${row("Instant listening", "A ready connection, mic off until you call", tg(S.look.warmVoice !== false, "warmVoice", "Instant listening"))}${row("Clean hearing", "Mic rests while he talks; sounds that are not you are dropped", tg(S.look.cleanEar !== false, "cleanEar", "Clean hearing"))}${row("Shortcut", "", '<span class="kc"><kbd>⌃</kbd><kbd>⌃</kbd></span>')}</div>`)}
     ${m("s6", `${kicker("Talking")}<div class="rows">${row("Talk out loud", "Off: answers only in the notch", tg(S.look.talkOutLoud !== false, "talkOutLoud", "Talk out loud"))}${row("Talk me through it", "He says what he's doing while he works", tg(S.look.narrate !== false, "narrate", "Talk me through it"))}${row("Follow-ups", "No need to say Braino again", "<span class='val'>45s</span>")}</div>`)}` },
   commands: { t: "Commands & modes", nav: ["Commands & modes", "modes"], r: () => m("", `${kicker("Your voice commands and modes")}<p class="sub">Phrases that run a set of actions, and modes like Monday Mode. They live in the library for now.</p><div style="margin-top:10px">${btn("Open commands", "dashboardOpen")}</div>`) },
   skills: { t: "Skills he learned", l: "Jobs that worked, remembered under your words. Say them again and they run with no thinking. Nothing that can't be undone is ever learned.", nav: ["Skills he learned", "spark"], need: ["skills"], badge: () => S.skills.length || "", r: () => S.skills.length
@@ -240,6 +241,7 @@ document.addEventListener("click", async (e) => {
     const on = tgl.getAttribute("aria-checked") !== "true"; tgl.setAttribute("aria-checked", String(on));
     const k = tgl.dataset.set;
     if (k === "memoryOn" || k === "recallOn") { await call("setupSave", { [k]: on }); toast(on ? "On." : "Off."); }
+    else if (k === "wake") { S.wake = await call("namedMode", { enabled: on }); toast(on ? "Say \u201cHey Braino\u201d any time." : "He won't wake on his name now."); }
     else if (k === "openAtLogin") { await call("loginItem", on); toast(on ? "He'll open when you log in." : "He won't open at login."); }
     else if (k === "warmVoice" || k === "talkOutLoud" || k === "cleanEar" || k === "narrate") { overlay({ [k]: on }); toast(on ? "On." : "Off."); }
     return;
