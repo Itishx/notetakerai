@@ -5,6 +5,7 @@ import { useNotchNav } from "@/components/useNotchNav";
 import "./affective.css";
 import "./affectiveos-page.css";
 import "./aff-figures.css";
+import { Viz, VoiceToAction } from "./aff-figures";
 import "./about-story.css";
 
 /* ============================================================================
@@ -55,6 +56,9 @@ export default function About() {
           We believe the future of computing is voice-first. You should be able to just tell your
           computer what to do.
         </h1>
+
+        {/* What "voice-first" looks like, before the story of why (2026-10-13). */}
+        <Viz caption="You say it once. Your words appear, the steps run, and it stops before anything goes out without your yes."><VoiceToAction /></Viz>
 
         <h2>Why Affective exists</h2>
         <p>

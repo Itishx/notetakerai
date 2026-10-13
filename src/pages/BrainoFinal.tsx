@@ -1,13 +1,23 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
+import { useAffTheme } from "@/components/AffTheme";
+import { AffNav, Lit, useAffReveal, useLitWords, useGrowHero } from "@/components/affPage";
+import { useNotchNav } from "@/components/useNotchNav";
+import { BrainoMascot } from "@/components/BrainoMascot";
+import { AppLogo } from "@/components/AppLogo";
 import BrainoFooterGame from "@/components/BrainoFooterGame";
-import { AffThemeToggle, useAffTheme } from "@/components/AffTheme";
+import "@/components/braino-footer.css";
+import { BrainoScenes } from "@/components/BrainoScenes";
+import { MacMenuBar, NotchSheet } from "./aff-figures";
 /* The jobs are written here rather than read from the site's engine data,
    because this page says a different thing: each one carries what it saves
    you, and the Foundry engines carry the deck's own bullets. The engine files
    stay the source for the pages that use them. */
-import "@/components/braino-footer.css";
 import "./braino-final.css";
+import "./affective.css";
+import "./affective-home.css";
+import "./affectiveos-page.css";
+import "./braino-page.css";
 
 /* ============================================================================
    /braino-final — the one page about Braino.
@@ -78,19 +88,17 @@ type Model = {
 const MODELS: Model[] = [
   {
     key: "braino",
-    title: "An AI on your Mac",
-    titleTail: "that actually does the work.",
-    lede: "Braino lives in your Mac's notch. Talk to him or type. He sees your screen, does the work in the apps you already use, and remembers you. Nothing to paste, no tab to open.",
+    title: "Meet Braino,",
+    titleTail: "your everyday Mac companion.",
+    lede: "A friend who lives on your Mac. Talk to him, ask him anything about what's on your screen, and he gets it done, right where you are.",
     tab: "Braino",
     who: "For everyone",
     name: "Braino",
-    claim: "AI got brilliant.",
-    claimTail: "It still cannot touch your screen.",
-    painTitle: "The day you have now",
+    claim: "You know the dance.",
+    claimTail: "Every. Single. Time.",
+    painTitle: "The problem",
     pain: [
-      "AI will write the email, plan the trip and draft the code. Then it hands it back, and you are the one who has to go and do it.",
-      "It cannot see your screen, so you copy, paste, crop and explain. Half the job is describing your own screen to it.",
-      "And every chat starts from zero. It has never met your files, your people, or what you decided last month.",
+      "Copy it. Open a new tab. Paste it. Explain what you're looking at. Wait. Copy the answer. Go back.",
     ],
     does: [
       {
@@ -115,28 +123,14 @@ const MODELS: Model[] = [
       },
     ],
     fast: [
-      { t: "Under 5 s", h: "Replies to your email", p: "Reads the thread and writes the reply in your voice. You read it, you hit send.", shot: "The notch drafting an email reply in Mail" },
-      { t: "About 1 s", h: "Sends a WhatsApp", p: "“Tell John I will be late.” The right John, sent from the Mac app. No typing.", shot: "A WhatsApp message going out from the notch" },
-      { t: "Instant", h: "Opens anything", p: "Any site, app, file or tab, the moment you say it.", shot: "Chrome opening YouTube as he speaks" },
-      { t: "Under 1 s", h: "Knows your day", p: "“What is my next class?” Straight from your timetable, before you open a calendar.", shot: "The notch showing the next class and room" },
-      { t: "Live", h: "Takes the notes", p: "A call or a lecture, written up by the time you stand up. Decisions and to-dos included.", shot: "Live Transcript in the notch during a lecture" },
-      { t: "About 1 s", h: "Fills the form", p: "Everything he knows about you, filled in. He stops at submit so you can check it.", shot: "A web form filled in, cursor on Submit" },
-      { t: "Under 30 s", h: "Finds the cheapest", p: "“Five cheapest flights to Mumbai on Friday.” He reads the page and tells you.", shot: "Google Flights with five results highlighted" },
-      { t: "Every day", h: "Remembers you", p: "What you promised last week, how you like things, who matters. Kept on your Mac.", shot: "The Braino app's Memory page" },
+      { t: "Reading", h: "Something dense?", p: "\u201cExplain this like I'm five.\u201d He does, right there.", shot: "" },
+      { t: "Writing", h: "Email you're nervous about?", p: "\u201cIs this too rude?\u201d He'll tell you honestly, then fix it.", shot: "" },
+      { t: "Forms", h: "Full of jargon?", p: "\u201cWhat do I put here?\u201d He walks you through it, field by field.", shot: "" },
+      { t: "Code", h: "Won't work?", p: "\u201cWhy is this broken?\u201d He points at the line.", shot: "" },
+      { t: "Meetings", h: "Back to back?", p: "He writes them down, so you can actually be in the room.", shot: "" },
+      { t: "Lectures", h: "Going too fast?", p: "Same deal. Listen now, read later.", shot: "" },
     ],
     film: { src: "/Braino_Final.MP4", caption: "Don't Blink." },
-    handles: {
-      heading: "Five things your Mac never had",
-      note: "Each one comes from AffectiveOS, the layer he runs on. Then one rule, and two speeds.",
-      jobs: [
-        { n: "01", name: "He sees your screen.", job: "Any PDF, email, line of code or error you have open.", points: ["No screenshots, no copy and paste.", "Just ask: \u201cwhat does this error mean?\u201d"], solves: "You stop describing your own screen to a robot.", state: "Running" },
-        { n: "02", name: "He talks back.", job: "Out loud, in his own voice.", points: ["Speak or type, whichever is easier.", "Cut him off mid-sentence and he stops and listens."], solves: "It feels like talking to someone next to you, not a search box.", state: "Running" },
-        { n: "03", name: "He does the work.", job: "Mail, WhatsApp, Finder, Chrome, forms and files.", points: ["One sentence instead of ten clicks and four apps.", "On your real screen, in your own accounts."], solves: "\u201cSend John the deck\u201d is the whole job.", state: "Running" },
-        { n: "04", name: "He remembers you.", job: "Your people, your plans, what you promised.", points: ["Kept on a timeline on your Mac.", "Read, fix or delete anything he keeps."], solves: "He gets better every week you use him.", state: "Running" },
-        { n: "05", name: "He asks first.", job: "Anything that sends, pays, posts or deletes.", points: ["He gets it ready, then waits for your yes.", "A rule in the code, not a promise in a prompt."], solves: "You stay in charge of everything that matters.", state: "Running" },
-        { n: "06", name: "He has two speeds.", job: "A reflex on your Mac, and a thinker for big jobs.", points: ["Easy asks are understood in 0.05 seconds.", "Big jobs are planned once, in about two seconds, then done."], solves: "Fast when it is simple, careful when it is not.", state: "Running" },
-      ],
-    },
     wall: [
       "Reply to an email", "Send a WhatsApp", "Call on FaceTime", "Open any app", "Open any site",
       "Switch tabs", "Close all tabs", "Search Google", "Search YouTube", "Play a song on Spotify",
@@ -149,13 +143,16 @@ const MODELS: Model[] = [
     ],
     dayTitle: "An ordinary Tuesday with him, morning to night",
     day: [
-      { at: "9:10", p: "“What is on today?” He reads the day back before you have opened a calendar, because he has one." },
-      { at: "11:30", p: "An hour on a call. You never touch the keyboard. You stand up and the notes are written, with what was decided and who said they would do what." },
-      { at: "1:05", p: "“Put the 6am flight to Delhi in front of me.” He books it to the last screen and waits there, because the next click spends money." },
-      { at: "2:40", p: "“Tell Ilu I will send it Friday.” One Ilu in your contacts, no spelling, no number, gone in four seconds." },
-      { at: "8:20 pm", p: "“Play something calm.” Spotify starts, the volume comes down, and nothing else on your screen moves." },
-      { at: "10:30 pm", p: "“What did I get done today?” He reads the day back: the call, the flight, the form, and the one thing still open." },
-      { at: "11:45 pm", p: "“Good night, Braino.” The day is kept on your Mac, so tomorrow's good morning starts where tonight ended." },
+      { at: "8:30 am", p: "\u201cGood morning, Braino.\u201d Class at 9:30, the deck is due at 5, and John is waiting on a reply. Your whole day in one breath." },
+      { at: "9:30 am", p: "\u201cTake notes for this class.\u201d You actually listen. The notes are ready the moment class ends." },
+      { at: "11:30 am", p: "\u201cWrite up this meeting.\u201d What was decided, and who said they would do what. Nobody has to be the note taker." },
+      { at: "1:15 pm", p: "\u201cReply to Priya, Friday works.\u201d Written in your voice. It waits for your yes before it sends." },
+      { at: "3:00 pm", p: "\u201cWhat does this even mean?\u201d A confusing form on your screen, explained in plain words. Nothing to copy or paste." },
+      { at: "4:45 pm", p: "\u201cSend John the deck.\u201d Found in Downloads, sent on WhatsApp. The right John, too." },
+      { at: "6:30 pm", p: "\u201cCheapest flight to Mumbai on Friday?\u201d He reads the page and tells you the one. No forty tabs." },
+      { at: "8:20 pm", p: "\u201cPlay something calm.\u201d Spotify starts, the volume comes down, and you breathe out." },
+      { at: "10:30 pm", p: "\u201cWhat did I get done today?\u201d The class, the meeting, the deck, and the one thing still open." },
+      { at: "11:45 pm", p: "\u201cGood night, Braino.\u201d He keeps the day, so tomorrow's good morning picks up right here." },
     ],
     honest:
       "Braino is in private beta on Mac and Chrome. Leave your email below and we will let you in. Windows is not on the list yet, and we would rather say so.",
@@ -273,34 +270,36 @@ const MODELS: Model[] = [
     accentDark: "#d3a350",
   }
 ];
+/* Foundry is hidden until it is planned (2026-10-13): the page is Braino
+   only. Its model stays defined above so it comes back with one line. */
+const SHOWN_MODELS = MODELS.filter((m) => m.key !== "foundry");
 
-/* The marquee: everything he can do, by kind. */
-const CAN_DO: Record<string, string[]> = {
-  Messages: ["Send a WhatsApp", "Reply to an email", "Draft in your voice", "Message the right John", "Call on FaceTime", "Forward a link", "Reply to the last message"],
-  Work: ["Take lecture notes", "Write up a meeting", "Fill a form", "Start a Google Doc", "Summarise a PDF", "Explain what is on screen", "Draft a post for X"],
-  Day: ["Your next class", "What is due this week", "Put it in your calendar", "Set a timer", "Remember what you told him", "Read your day back", "Good morning briefing"],
-  Web: ["Open any site", "Search Google", "Find the cheapest flights", "Compare prices", "Shop on Amazon", "Read the page with you", "Log you in"],
-  Mac: ["Open any app", "Find a file", "Switch tabs", "Close all tabs", "Type at your cursor", "Change your wallpaper", "Check your battery"],
-  Music: ["Play a song on Spotify", "Skip, pause, turn it up", "What song is this", "Play it on YouTube", "Play something calm", "Moonwalk to Billie Jean"],
-};
 
-/* What makes him a companion rather than a tool. Only what is built. */
-const COMPANION = [
-  { then: "Monday: \u201cPriya likes short replies.\u201d", now: "Thursday: her email comes in and the draft is already three lines." },
-  { then: "Week one: you ask which John, every time.", now: "Week three: \u201cSend John the deck\u201d goes to your co-founder, no questions." },
-  { then: "Tuesday: \u201cI'll send the invoice by Friday.\u201d", now: "Friday: \u201cWhat did I promise this week?\u201d The invoice, at the top." },
-]
+
+/* What makes him a companion, in the home page's job-grid shape. */
+const COMPANION_TRAITS = [
+  { k: "Morning", h: "Knows your day", p: "Classes, deadlines and who is waiting on you, the moment you open your Mac." },
+  { k: "Voice", h: "Talks back", p: "Out loud, in his own voice. Speak or type, whatever is easier." },
+  { k: "Hands", h: "Gets it done", p: "Messages, emails, forms and files, in the apps you already use." },
+  { k: "Memory", h: "Remembers what matters", p: "Your people, your plans, what you promised. You can see and delete all of it." },
+  { k: "Trust", h: "Asks before he acts", p: "Nothing is sent, bought or deleted without your yes." },
+  { k: "Calm", h: "Never nags", p: "No pop-ups, no pings. He is there when you need him, quiet when you don't." },
+];
 
 /* The questions people actually ask, answered without a word anybody would
    have to look up, and including the ones about what we did not build. */
 const FAQ = [
   {
     q: "What is Braino, in one line?",
-    a: "An AI that lives in your Mac's notch. He sees your screen, talks back, does the work in your apps, and remembers you.",
+    a: "Your everyday Mac companion. He lives in your Mac's notch, sees your screen, talks back, and gets things done in your apps.",
   },
   {
-    q: "How is Braino better than Siri?",
-    a: "Siri can open an app or tell you the weather. Braino reads the PDF on your screen, writes the email in your voice and sends it after your yes. Siri runs commands. Braino does the work.",
+    q: "How is Braino different from Siri?",
+    a: "Siri can open an app or tell you the weather. Braino reads the PDF on your screen, writes the email in your voice and sends it after your yes. He sees what you are looking at, works across any app or site, and remembers you from one day to the next. Siri runs commands. Braino does the work.",
+  },
+  {
+    q: "How is Braino different from Claude Cowork or Perplexity Computer?",
+    a: "Perplexity Computer is mainly an AI operator for researching and completing tasks across apps and websites. Claude Cowork is a contained work agent: deep reasoning, long documents, research, and tasks inside the workspace you give it. Braino is meant to be with you on your Mac all day, with a persistent presence, voice, memory, desktop controls, and screen and camera awareness. There is overlap in computer control, but they are task focused. Braino remembers across sessions, knows your people and preferences, and acts across your apps. Claude Cowork has deep project context; Braino has your personal context. A companion for your whole Mac.",
   },
   {
     q: "Is this a chatbot?",
@@ -311,10 +310,6 @@ const FAQ = [
     a: "No. Braino is an app that runs on top of macOS. There is nothing to replace or reinstall.",
   },
   {
-    q: "How does AffectiveOS connect to Braino?",
-    a: "AffectiveOS is the layer we built: the seeing, hearing, doing and remembering. Braino is the companion in your notch that you actually talk to. You install Braino, and AffectiveOS comes with him.",
-  },
-  {
     q: "Will he do things without asking me?",
     a: "Never. Anything that spends money, sends a message, posts or deletes something waits for your yes. That is enforced in the code.",
   },
@@ -322,10 +317,7 @@ const FAQ = [
     q: "Where does my data live?",
     a: "What he remembers about you stays on your Mac. Only the request itself, and the context that job needs, is sent to think. Private windows and password apps are never recorded, nothing is sold, and you can read, fix or delete anything he keeps.",
   },
-  {
-    q: "Are Braino and Foundry two products?",
-    a: "One product in two models, like a phone. The same Braino and the same memory. Foundry is pointed at your company and helps it get seen.",
-  },
+
   {
     q: "Did you build the AI itself?",
     a: "No. The thinking comes from the best models of the day, from labs like Anthropic and OpenAI. We build everything between the model and your Mac: the seeing, the hearing, the doing, the remembering, and the part that stops him sending the wrong thing.",
@@ -389,6 +381,12 @@ function EarlyAccess({ start }: { start: string }) {
           <h2>Be one of the first <b>to talk to your Mac.</b></h2>
           <p className="bf-sec-note">Braino is in private beta. We let people in a few at a time, so we can watch how it goes and fix what does not.</p>
         </div>
+        <div className="bf-ea-grid">
+        <div className="bf-ea-hello bf-reveal" aria-hidden="true">
+          <MacMenuBar app="Finder" menus={["File", "Edit", "View", "Go"]} />
+          <NotchSheet className="ns-big ns-glow" done={false} label="Braino">{finished ? "Got it. See you soon." : "Hi. I've been waiting to meet you."}</NotchSheet>
+          <p className="bf-ea-hello-cap"><span className="vz-live" />Private beta · letting people in a few at a time</p>
+        </div>
         <form className="bf-ea-box bf-reveal" onSubmit={submit}>
           {finished ? (
             <div className="bf-ea-done" role="status">
@@ -425,6 +423,7 @@ function EarlyAccess({ start }: { start: string }) {
             </>
           )}
         </form>
+        </div>
         <ol className="bf-ea-next bf-reveal">
           {NEXT.map((n, i) => <li key={n.h}><span>{i + 1}</span><h3>{n.h}</h3><p>{n.p}</p></li>)}
         </ol>
@@ -434,122 +433,6 @@ function EarlyAccess({ start }: { start: string }) {
   );
 }
 
-/* His footer, the one from his own site, with three corrections the new shape
-   forces.
- *
- * Under the hood used to list Braino OS, Human Intelligence and Emotional
- * Intelligence as three things. They are one thing now and it is called
- * AffectiveOS, so the column names it once and links to where the company page
- * explains it.
- *
- * Read loses the knowledge base, which is internal.
- *
- * And every link here points at something that exists. The old first column
- * was anchors on the old landing page, which is not the front door any more,
- * so those anchors now name sections of this page. */
-const FOOTER_COLUMNS: Array<{ head: string; links: Array<[string, string]> }> = [
-  {
-    head: "Braino",
-    links: [
-      ["What he does", "/braino#what"],
-      ["A normal day", "/braino#day"],
-      ["Better than Siri?", "/braino#faq"],
-      ["Questions", "/braino#faq"],
-      ["Early access", "/braino#early-access"],
-    ],
-  },
-  {
-    head: "The models",
-    links: [
-      ["Braino", "/braino"],
-      ["Braino Foundry", "/braino?model=foundry"],
-    ],
-  },
-  {
-    head: "Under the hood",
-    links: [
-      ["AffectiveOS", "/affectiveos"],
-    ],
-  },
-  {
-    head: "Read",
-    links: [
-      ["Braino's journal", "/journal"],
-      ["Changelog", "/changelog"],
-      ["Founder's letter", "/founder-letter"],
-      ["The questions page", "/questions"],
-    ],
-  },
-];
-
-/* The film opens from the measure to the whole page as it is scrolled into,
-   the same move the company page's picture makes. The progress is measured
-   against the element rather than against the page, because this one sits
-   halfway down a story rather than at the top of one: nought when its top edge
-   is at the bottom of the screen, one by the time it has climbed most of the
-   way up.
-
-   Flat under 900px, where there is no width to grow into, and flat for anyone
-   who has asked for less motion. */
-function useGrow() {
-  useEffect(() => {
-    const still = window.matchMedia("(prefers-reduced-motion: reduce)");
-    let frame = 0;
-
-    const apply = () => {
-      frame = 0;
-      const off = window.innerWidth < 900 || still.matches;
-      document.querySelectorAll<HTMLElement>("[data-grow]").forEach((el) => {
-        if (off) { el.style.setProperty("--grow", "1"); return; }
-        const r = el.getBoundingClientRect();
-        const p = (window.innerHeight - r.top) / Math.max(240, window.innerHeight * 0.8);
-        el.style.setProperty("--grow", Math.min(1, Math.max(0, p)).toFixed(3));
-      });
-    };
-    const onScroll = () => { if (!frame) frame = window.requestAnimationFrame(apply); };
-
-    window.addEventListener("scroll", onScroll, { passive: true });
-    window.addEventListener("resize", onScroll);
-    apply();
-    return () => {
-      window.removeEventListener("scroll", onScroll);
-      window.removeEventListener("resize", onScroll);
-      if (frame) window.cancelAnimationFrame(frame);
-    };
-  }, []);
-}
-
-function useReveal() {
-  const root = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const els = root.current?.querySelectorAll<HTMLElement>(".bf-reveal");
-    if (!els?.length) return;
-    // Visible at rest if the observer never runs. A page parked at opacity 0
-    // waiting on JS is how a site ships looking empty.
-    if (!("IntersectionObserver" in window)) {
-      els.forEach((el) => el.classList.add("is-in"));
-      return;
-    }
-    const io = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((e) => {
-          if (e.isIntersecting) {
-            e.target.classList.add("is-in");
-            io.unobserve(e.target);
-          }
-        });
-      },
-      { rootMargin: "0px 0px -8% 0px", threshold: 0.06 },
-    );
-    els.forEach((el) => io.observe(el));
-    return () => io.disconnect();
-  }, []);
-  return root;
-}
-
-/* The day, as a clock (2026-10-02): the hands move to each moment and the
-   moment is told beside it, stepping on its own; the times below it are
-   buttons. Replaces a long list. */
 function toMinutes(at: string) {
   const m = at.match(/^(\d{1,2}):(\d{2})\s*(am|pm)?$/i);
   if (!m) return null;
@@ -597,53 +480,116 @@ function DayClock({ day }: { day: { at: string; p: string }[] }) {
   );
 }
 
-function CanDo() {
-  const kinds = Object.keys(CAN_DO);
-  const [k, setK] = useState(kinds[0]);
-  const items = CAN_DO[k];
+/* The day as a scroll (2026-10-11). A Mac screen pins in the middle and the
+   scroll is the time of day: the sky moves from morning to night, the sun and
+   then the moon cross it, the menu bar clock runs, and at each moment his
+   notch opens with what you said while the line under the screen says what
+   happened. Between moments the notch folds and the hours sweep by. */
+const SKY: [number, [number, number, number], [number, number, number]][] = [
+  [8 * 60, [196, 222, 240], [246, 226, 205]],
+  [13 * 60, [120, 178, 228], [200, 226, 246]],
+  [17 * 60 + 30, [92, 120, 186], [244, 170, 120]],
+  [19 * 60 + 30, [40, 36, 78], [150, 84, 104]],
+  [22 * 60, [10, 12, 26], [30, 30, 58]],
+];
+function skyAt(m: number) {
+  const k = SKY.findIndex((s) => s[0] >= m);
+  if (k <= 0) return k === 0 ? SKY[0] : SKY[SKY.length - 1];
+  const [a, b] = [SKY[k - 1], SKY[k]];
+  const t = (m - a[0]) / (b[0] - a[0]);
+  const mix = (x: number[], y: number[]) => x.map((v, i) => Math.round(v + (y[i] - v) * t)) as [number, number, number];
+  return [m, mix(a[1], b[1]), mix(a[2], b[2])] as const;
+}
+function clockText(m: number) {
+  const h = Math.floor(m / 60) % 24, mm = Math.floor(m % 60);
+  return `${((h + 11) % 12) + 1}:${String(mm).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`;
+}
+function DayScroll({ day }: { day: { at: string; p: string }[] }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [f, setF] = useState(0);
+  const mins = day.map((d) => toMinutes(d.at) as number);
+  useEffect(() => {
+    let raf = 0;
+    const tick = () => {
+      raf = 0;
+      const el = ref.current;
+      if (!el) return;
+      const run = el.offsetHeight - window.innerHeight;
+      const p = run > 0 ? Math.min(1, Math.max(0, -el.getBoundingClientRect().top / run)) : 0;
+      setF(p * (day.length - 1));
+    };
+    const on = () => { if (!raf) raf = requestAnimationFrame(tick); };
+    tick();
+    window.addEventListener("scroll", on, { passive: true });
+    window.addEventListener("resize", on);
+    return () => { window.removeEventListener("scroll", on); window.removeEventListener("resize", on); cancelAnimationFrame(raf); };
+  }, [day.length]);
+  const k = Math.min(day.length - 2, Math.floor(f));
+  const t = f - k;
+  const ease = t < 0.2 ? 0 : t > 0.8 ? 1 : (1 - Math.cos(((t - 0.2) / 0.6) * Math.PI)) / 2;
+  const now = mins[k] + (mins[k + 1] - mins[k]) * ease;
+  const on = ease < 0.5 ? k : k + 1;
+  const open = true;
+  const [, top, low] = skyAt(now);
+  /* Sun from 7am to 7pm, moon after; each rides an arc over the screen. */
+  const sun = Math.min(1, Math.max(0, (now - 7 * 60) / (12 * 60)));
+  const moon = Math.min(1, Math.max(0, (now - 19 * 60) / (5 * 60)));
+  const night = Math.min(1, Math.max(0, (now - 18 * 60) / 120));
+  const parts = day.map((d) => {
+    const m = d.p.match(/^\u201c([^\u201d]+)\u201d\s*(.*)$/);
+    return m ? { said: m[1], did: m[2] } : { said: "", did: d.p };
+  });
   return (
-    <section className="bf-sec bf-cando">
-      <div className="bf-wrap">
-        <div className="bf-sec-head bf-reveal">
-          <p className="bf-kicker">Everything he can do</p>
-          <h2>Just say it.</h2>
-        </div>
-        <div className="bf-cando-tabs" role="tablist">
-          {kinds.map((x) => (
-            <button key={x} role="tab" aria-selected={x === k} className={x === k ? "on" : ""} onClick={() => setK(x)}>{x}</button>
-          ))}
+    <div className="bf-ds" ref={ref} style={{ height: `${day.length * 55 + 60}vh` }}>
+      <div className="bf-ds-pin">
+        <div className="bf-ds-stage">
+          <div className="bf-ds-screen">
+            <div className="bf-ds-sky" style={{ background: `linear-gradient(180deg, rgb(${top}) 0%, rgb(${low}) 100%)` }}>
+            <div className="bf-ds-stars" style={{ opacity: night }} />
+            <i className="bf-ds-sun" style={{ left: `${8 + sun * 84}%`, top: `${70 - Math.sin(sun * Math.PI) * 52}%`, opacity: 1 - night }} />
+            <i className="bf-ds-moon" style={{ left: `${10 + moon * 70}%`, top: `${66 - Math.sin(Math.min(1, moon * 1.4) * Math.PI / 2) * 40}%`, opacity: night }} />
+            <MacMenuBar app="Finder" menus={["File", "Edit", "View", "Go", "Window"]} at={["Tue 13 Oct", clockText(now)]} />
+            <NotchSheet className={"ns-big ns-glow bf-ds-ns " + (open ? "ns-work" : "is-fold")} label={parts[on].said ? "Braino" : "Live notes"} done={false}
+              extra={open ? <p className="bf-ds-did" key={on}>{parts[on].did}</p> : undefined}>
+              <span key={on}>{parts[on].said ? `\u201c${parts[on].said}\u201d` : "Listening. Writing it down."}</span>
+            </NotchSheet>
+            </div>
+            <div className="bf-ds-dock" aria-hidden="true">{["#3b82f6", "#22c55e", "#f59e0b", "#1ed760", "#ef4444", "#a855f7"].map((c) => <i key={c} style={{ background: c }} />)}</div>
+          </div>
+          <div className="bf-ds-base" aria-hidden="true"><i /></div>
+          {/* The day as a rail: every moment, the one you are on lit, a line
+              filling as the hours pass. */}
+          <ol className="bf-ds-rail" style={{ ["--fill" as string]: `${(f / (day.length - 1)) * 100}%` }}>
+            {day.map((d, i) => <li key={d.at} className={i === on ? "on" : i < on ? "past" : ""}>{d.at}</li>)}
+          </ol>
         </div>
       </div>
-      <div className="bf-marquee" key={k}>
-        <div className="bf-marquee-track">
-          {[...items, ...items, ...items].map((t, i) => <span key={t + i}>{t}</span>)}
-        </div>
-      </div>
-    </section>
+    </div>
   );
 }
 
 export default function BrainoFinal() {
-  const root = useReveal();
   const { theme, toggle } = useAffTheme();
-  useGrow();
-  /* Which of the three is open. A number on the page: there is nothing to
-     store and nothing to look up. The url can name one, so /foundry can send
-     somebody straight to his, and the address updates when the tab does. */
+  /* Which model is open. The url can name one (/braino?model=foundry) and the
+     address follows the tab. */
   const [playing, setPlaying] = useState(false);
   const [params, setParams] = useSearchParams();
-  const asked = MODELS.findIndex((m) => m.key === params.get("model"));
+  const asked = SHOWN_MODELS.findIndex((m) => m.key === params.get("model"));
   const at = asked >= 0 ? asked : 0;
   const setAt = (next: number) => {
-    const key = MODELS[next]?.key;
+    const key = SHOWN_MODELS[next]?.key;
     if (!key) return;
     setParams(next === 0 ? {} : { model: key }, { replace: true });
   };
-  const model = MODELS[at];
+  const model = SHOWN_MODELS[at];
+  /* Built from the home page's own pieces (2026-10-07): lit headlines, the
+     rising sections, the picture that opens to the page, its nav and footer. */
+  const root = useAffReveal([at]);
+  useLitWords([at]);
+  useGrowHero();
+  useNotchNav();
 
-  /* /waitlist and every "Get early access" link land here with #early-access.
-     The router does not scroll to a hash on its own, so this does, once the
-     page has drawn. */
+  /* /waitlist and every "Get early access" link land here with #early-access. */
   const { hash } = useLocation();
   useEffect(() => {
     if (!hash) return;
@@ -651,13 +597,10 @@ export default function BrainoFinal() {
     return () => window.clearTimeout(t);
   }, [hash]);
 
-  /* Changing tab is a deliberate act, so what it changes to is shown at once.
-     The reveal observer only ever sees what was on the page when it started,
-     and a story that swapped underneath it stayed at opacity zero: the tab
-     looked empty, which is exactly the bug. */
+  /* A tab change shows its story at once: the reveal only knows what was on
+     the page when it started. */
   useEffect(() => {
-    root.current?.querySelectorAll<HTMLElement>(".bf-story .bf-reveal")
-      .forEach((el) => el.classList.add("is-in"));
+    root.current?.querySelectorAll<HTMLElement>(".bp-story .aff-reveal, .bp-story .bf-reveal").forEach((el) => el.classList.add("is-in"));
   }, [at, root]);
 
   useEffect(() => {
@@ -668,289 +611,225 @@ export default function BrainoFinal() {
   }, []);
 
   return (
-    <div
-      className="bf"
-      ref={root}
-      data-theme={theme}
-      style={{ ["--acc" as string]: theme === "dark" ? model.accentDark : model.accent }}
-    >
-      <nav className="bf-nav">
-        <div className="bf-nav-in">
-          <Link to="/braino" className="bf-logo">
-            <img src="/braino-standing.svg" alt="" width={104} height={127} aria-hidden="true" />
-            <span>Braino</span>
-          </Link>
-          <div className="bf-nav-links">
-            <a href="#what">What he does</a>
-            <a href="#day">A normal day</a>
-            <a href="#faq">Questions</a>
-            <a href="#early-access">Early access</a>
-            <AffThemeToggle theme={theme} onToggle={toggle} />
-          </div>
-        </div>
-      </nav>
+    <div className="aff bf bp" data-theme={theme} ref={root} style={{ ["--acc" as string]: theme === "dark" ? model.accentDark : model.accent }}>
+      <AffNav braino theme={theme} onToggle={toggle} links={[["What he does", "#what"], ["A normal day", "#day"], ["Questions", "#faq"]]} />
 
-      {/* ── The claim ───────────────────────────────────────────────────────
-          The reader's own sentence first, and the answer to it under that. No
-          feature is mentioned on the first screen, because nobody has ever
-          been sold a feature they had not yet felt the need for. */}
-      {/* ── The claim ───────────────────────────────────────────────────────
-          The reader's own sentence first, and the answer to it under that. No
-          feature is mentioned on the first screen, because nobody has ever
-          been sold a feature they had not yet felt the need for. */}
-      {/* The hero belongs to the model, not to the page: you choose which
-          Braino you came for and then read his opening, rather than reading a
-          general one and finding the choice underneath it. */}
-      <header className="bf-hero">
-        <div className="bf-wrap">
-          <p className="bf-eyebrow bf-reveal">Braino · Private beta · Runs on AffectiveOS</p>
-          <h1 className="bf-h1 bf-reveal">
-            {model.title}
-            <b>{model.titleTail}</b>
-          </h1>
-          <div className="bf-hero-row bf-reveal">
-            <p className="bf-hero-one">{model.lede}</p>
-            <div className="bf-hero-cta">
-              <a href={model.cta.to} className="bf-cta">{model.cta.label}</a>
-              {model.film
-                ? <a href="#film" className="bf-cta bf-cta-ghost">Watch the film</a>
-                : <a href="#does" className="bf-cta bf-cta-ghost">See what he does</a>}
+      {/* ── Hero: the home page's, with him in it ── */}
+      <header className="aff-hero">
+        <div className="aff-wrap">
+          <div className="aff-hero-row aff-reveal">
+            <h1 className="aff-h1">
+              <span className="aff-h1-line">{model.title}</span>
+              <b>{model.titleTail}</b>
+            </h1>
+            <div className="aff-hero-side">
+              <p className="aff-hero-one">{model.lede}</p>
+              <div className="aff-hero-cta">
+                <a href={model.cta.to} className="aff-cta">{model.cta.label}</a>
+                {model.film
+                  ? <a href="#film" className="aff-cta aff-cta-ghost">Watch the film</a>
+                  : <a href="#does" className="aff-cta aff-cta-ghost">See what he does</a>}
+              </div>
             </div>
           </div>
-          <p className="bf-hero-trust bf-reveal">Runs on your Mac. Asks before anything is sent, paid for or deleted.</p>
+          {/* The two models, as the home page's quiet pills. */}
+          {SHOWN_MODELS.length > 1 && <div className="bp-tabs aff-reveal" role="tablist" aria-label="Which model" id="what">
+            <i className="bp-tabs-thumb" aria-hidden="true" style={{ transform: `translateX(${at * 100}%)` }} />
+            {SHOWN_MODELS.map((m, i) => (
+              <button key={m.key} type="button" role="tab" aria-selected={i === at} className={i === at ? "on" : ""} onClick={() => setAt(i)}>
+                {m.tab}
+              </button>
+            ))}
+          </div>}
+        </div>
+        {model.film ? (
+          <figure className="aff-hero-shot bp-film" data-grow id="film">
+            <video src={model.film.src} playsInline controls={playing} preload="metadata" poster="/affective-hero.jpg"
+              onClick={(e) => { setPlaying(true); void e.currentTarget.play(); }} />
+            {!playing && (
+              <button type="button" className="bp-film-play" onClick={(e) => {
+                const video = e.currentTarget.parentElement?.querySelector("video");
+                setPlaying(true);
+                void video?.play();
+              }}>
+                <i aria-hidden="true" />
+                <span>{model.film.caption}</span>
+              </button>
+            )}
+          </figure>
+        ) : (
+          <figure className="aff-hero-shot" data-grow>
+            <img src="/os-hands.jpg" alt="" width={1774} height={887} loading="eager" decoding="async" />
+          </figure>
+        )}
+        <div className="aff-strip">
+          <div className="aff-wrap aff-strip-in">
+            <p className="aff-strip-label">Works in what you already use</p>
+            <ul className="aff-strip-names aff-strip-logos">
+              {(["WhatsApp", "Spotify", "Chrome", "Mail", "Finder", "Calendar"] as const).map((n) => (
+                <li key={n}><AppLogo name={n} /><span>{n}</span></li>
+              ))}
+            </ul>
+          </div>
         </div>
       </header>
 
-      <div className="bf-switch" id="what">
-        <div className="bf-wrap bf-switch-in">
-          <div className="bf-tabs" role="tablist" aria-label="Which model">
-            {MODELS.map((m, i) => (
-              <button
-                key={m.key}
-                type="button"
-                role="tab"
-                aria-selected={i === at}
-                className={i === at ? "on" : ""}
-                style={{ ["--dot" as string]: m.accent }}
-                onClick={() => setAt(i)}
-              >
-                {/* Who it is for comes first, because that is what somebody
-                    scans a chooser by. The name is what they click. */}
-                <small><i aria-hidden="true" />{m.who}</small>
-                <span>{m.tab}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-
-
-      <main className="bf-story">
-        {/* 1. The teaser, first. */}
-        {model.film && (
-          <section className="bf-film-sec" id="film">
-            <figure className="bf-film" data-grow>
-              <video
-                src={model.film.src}
-                playsInline
-                controls={playing}
-                preload="none"
-                poster=""
-                onClick={(e) => {
-                  const el = e.currentTarget;
-                  setPlaying(true);
-                  void el.play();
-                }}
-              />
-              {!playing && (
-                <button type="button" className="bf-film-play" onClick={(e) => {
-                  const video = e.currentTarget.parentElement?.querySelector("video");
-                  setPlaying(true);
-                  void video?.play();
-                }}>
-                  <i aria-hidden="true" />
-                  <span>{model.film.caption}</span>
-                </button>
-              )}
-            </figure>
+      <main className="bp-story">
+        {/* ── Your companion, first thing after the hero, in the home page's
+            Meet Braino box (2026-10-13) ── */}
+        {model.fast && (
+          <section className="hb6 bco2">
+            <div className="aff-wrap">
+              <div className="hb6-box aff-reveal">
+                <div className="hb6-head">
+                  <div>
+                    <p className="ah-kicker">Not a tool</p>
+                    <div className="hb5-name">
+                      <h2>Your companion.</h2>
+                      <BrainoMascot size={92} className="hb4-him" />
+                    </div>
+                    <p className="hb6-line">A friend who lives on your Mac. Talk to him, ask him anything, hand him the boring stuff. Your second brain, your best friend, your Jarvis.</p>
+                  </div>
+                </div>
+                <ul className="hb4-does hb6-jobs">
+                  {COMPANION_TRAITS.map((t) => <li key={t.h} className="is-key"><small>{t.k}</small><h3>{t.h}</h3><p>{t.p}</p></li>)}
+                </ul>
+              </div>
+            </div>
           </section>
         )}
-
-
-        {/* 2. What he is, said plainly: more than a chatbot. */}
-        {model.fast && (
-          <section className="bf-sec bf-define">
-            <div className="bf-wrap">
-              <p className="bf-kicker bf-reveal">What Braino is</p>
-              <h2 className="bf-define-h bf-reveal">Stop chatting with AI. <b>Start handing it the work.</b></h2>
-              <div className="bf-define-row bf-reveal">
-                <p>Braino is a companion who lives in your Mac's notch. You talk to him like a person. He sees your screen, uses your apps and gets the job done, then remembers it, so tomorrow he already knows.</p>
-                <div className="bf-vs">
-                  <div><small>A chatbot</small><span>Answers in a window</span><span>Needs you to paste things in</span><span>Hands the work back to you</span><span>Forgets you when the chat ends</span></div>
-                  <div className="is-us"><small>Braino</small><span>Lives in your notch</span><span>Already sees your screen</span><span>Does the work in your apps</span><span>Remembers you, on your Mac</span></div>
+        {/* ── What he does, one capability per section (Braino), or the Meet box (Foundry) ── */}
+        {model.fast ? <BrainoScenes /> : <section className="hb6">
+          <div className="aff-wrap">
+            <p className="ah-kicker">{model.painTitle}</p>
+            <h2 className="aff-h1 ah-os-line hb6-big" data-lit><Lit text={`${model.claim} ${model.claimTail}`} /></h2>
+            <div className="ah-os-say hb6-say aff-reveal">
+              {model.pain.map((p) => <p key={p}>{p}</p>)}
+            </div>
+            <div className="hb6-box aff-reveal">
+              <div className="hb6-head">
+                <div>
+                  <p className="ah-kicker">{model.who}</p>
+                  <div className="hb5-name">
+                    <h2>{model.name}</h2>
+                    <BrainoMascot size={92} className="hb4-him" />
+                  </div>
+                  <p className="hb6-line">{model.fast ? "Braino already sees it. Your screen is his context. Whatever you're looking at, he's looking at too. So you skip straight to the question." : "You build the thing. He does the half that gets it seen."}</p>
                 </div>
               </div>
-            </div>
-          </section>
-        )}
-
-        {/* What he does (Foundry has no time list, so his four come here). */}
-        {!model.fast && (
-          <section className="bf-sec" id="does">
-            <div className="bf-wrap">
-              <div className="bf-sec-head bf-reveal">
-                <p className="bf-kicker">What he does</p>
-                <h2>{model.name}</h2>
-              </div>
-              <div className="bf-grid bf-reveal">
-                {model.does.map((d, i) => (
-                  <article className="bf-cell" key={d.h} style={{ transitionDelay: `${i * 90}ms` }}>
-                    <div className="bf-cell-art">
-                      <img src={d.art} alt="" width={341} height={415} loading="lazy" decoding="async" />
-                    </div>
-                    <div className="bf-cell-say">
-                      <h3>{d.h}</h3>
-                      <p>{d.p}</p>
-                    </div>
-                  </article>
+              <ul className="hb4-does hb6-jobs" id="does">
+                {(model.fast
+                  ? model.fast.map((f) => ({ k: f.t, h: f.h, p: f.p }))
+                  : model.does.map((d) => ({ k: "", h: d.h, p: d.p }))
+                ).map((d) => (
+                  <li key={d.h} className={d.k ? "is-key" : undefined}>{d.k && <small>{d.k}</small>}<h3>{d.h}</h3><p>{d.p}</p></li>
                 ))}
-              </div>
-            </div>
-          </section>
-        )}
-
-        {/* 2. Three ways he helps (the engines, for Foundry). */}
-        {model.handles && (
-          <section className="bf-sec bf-handles">
-            <div className="bf-wrap">
-              <div className="bf-sec-head bf-reveal">
-                <p className="bf-kicker">What he does for you</p>
-                <h2>{model.handles.heading}</h2>
-                {model.handles.note && <p className="bf-sec-note">{model.handles.note}</p>}
-              </div>
-              <div className={"bf-jobs" + (model.handles.jobs.length === 4 ? " bf-jobs-4" : model.handles.jobs.length > 4 ? " bf-jobs-6" : "")}>
-                {model.handles.jobs.map((j) => (
-                  <article className="bf-job bf-reveal" key={j.name}>
-                    <div className="bf-job-top">
-                      <span className="bf-job-n">{j.n}</span>
-                      {j.state !== "Running" && (
-                        <span className={"bf-job-state is-" + j.state.toLowerCase()}>{j.state}</span>
-                      )}
-                    </div>
-                    <h3>{j.name}</h3>
-                    <p className="bf-job-line">{j.job}</p>
-                    <ul className="bf-job-points">
-                      {j.points.map((point) => <li key={point}>{point}</li>)}
-                    </ul>
-                    <p className="bf-job-solves"><i>So</i>{j.solves}</p>
-                  </article>
-                ))}
-              </div>
-            </div>
-          </section>
-        )}
-
-
-        {/* 4. Everything he can do, as a marquee with tabs. */}
-        {model.fast && <CanDo />}
-
-        {/* 5. A companion: he gets better the longer he knows you. */}
-        {model.fast && (
-          <section className="bf-sec bf-companion">
-            <div className="bf-wrap">
-              <div className="bf-sec-head bf-reveal">
-                <p className="bf-kicker">A companion</p>
-                <h2>He gets better <b>the longer he knows you.</b></h2>
-              </div>
-              <div className="bf-grow bf-reveal">
-                {COMPANION.map((c) => (
-                  <div key={c.then} className="bf-grow-row">
-                    <p className="bf-grow-then">{c.then}</p>
-                    <i aria-hidden="true">→</i>
-                    <p className="bf-grow-now">{c.now}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </section>
-        )}
-
-        {/* 5. A day with him, morning to night. */}
-        <section className="bf-sec bf-day" id="day">
-          <div className="bf-wrap">
-            <div className="bf-sec-head bf-reveal">
-              <p className="bf-kicker">What changes</p>
-              <h2>{model.dayTitle}</h2>
-            </div>
-            <DayClock day={model.day} />
-            <div className="bf-honest bf-reveal">
-              <p className="bf-honest-label">What is true today</p>
-              <p>{model.honest}</p>
-              <p className="bf-honest-go">
-                <a href={model.cta.to}>{model.cta.label}<i aria-hidden="true">→</i></a>
-                <span>{model.state}</span>
-              </p>
+              </ul>
             </div>
           </div>
+        </section>}
+
+        {/* ── Five things your Mac never had / the engines ── */}
+        {model.handles && (
+          <section className="ah-os bp-handles">
+            <div className="aff-wrap">
+              <p className="ah-kicker">What he does for you</p>
+              <h2 className="aff-h1 ah-os-line" data-lit><Lit text={model.handles.heading} /></h2>
+              {model.handles.note && <div className="ah-os-say aff-reveal"><p>{model.handles.note}</p></div>}
+              <ul className="hb4-does hb6-jobs bp-jobs aff-reveal">
+                {model.handles.jobs.map((j) => (
+                  <li key={j.name} className={j.state !== "Running" ? "is-key" : undefined}>
+                    <small>{j.state !== "Running" ? j.state : j.n}</small>
+                    <h3>{j.name}</h3>
+                    <p>{j.job}</p>
+                    <p className="bp-job-so">{j.solves}</p>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </section>
+        )}
+
+
+
+        {/* ── A day with him ── */}
+        <section className="ah-os bp-day" id="day">
+          <div className="aff-wrap">
+            <p className="ah-kicker">What changes</p>
+            <h2 className="aff-h1 ah-os-line" data-lit><Lit text={model.dayTitle} /></h2>
+          </div>
+          {model.day.every((d) => toMinutes(d.at) != null)
+            ? <><p className="bf-ds-hint aff-reveal">Scroll <i aria-hidden="true">↓</i> fast or slow. Watch the day go by.</p><DayScroll day={model.day} /></>
+            : <div className="aff-wrap"><DayClock day={model.day} /></div>}
         </section>
       </main>
 
       <EarlyAccess start={model.key} />
 
-      {/* ── Questions ─────────────────────────────────────────────────────── */}
-      <section className="bf-sec bf-faq-sec" id="faq">
-        <div className="bf-wrap">
-          <div className="bf-faq-in">
-            <div className="bf-faq-head bf-reveal">
-              <h2>Questions you may have.</h2>
-              <p>Including the ones about what we did not build.</p>
-            </div>
-            {/* details/summary, so it works with no JavaScript and with a
-                keyboard. */}
-            <div className="bf-faq bf-reveal">
-              {FAQ.map((f, i) => (
-                <details key={f.q} open={i === 0}>
-                  <summary>
-                    <span>{f.q}</span>
-                    <i aria-hidden="true" />
-                  </summary>
-                  <p>{f.a}</p>
-                </details>
-              ))}
-            </div>
+      {/* ── Questions: the home page's ── */}
+      <section className="hb2-faq" id="faq">
+        <div className="aff-wrap hb2-faq-split">
+          <div className="hb2-faq-side">
+            <h3 className="hb2-faq-h aff-reveal">Questions</h3>
+            <p>Including the ones about what we did not build.</p>
+          </div>
+          <div className="hb2-faq-list">
+            {FAQ.map((f) => (
+              <details key={f.q}>
+                <summary>{f.q}<i aria-hidden="true">+</i></summary>
+                <p>{f.a}</p>
+              </details>
+            ))}
           </div>
         </div>
       </section>
 
-      {/* His footer, as it is on his own site: the columns, then the level
-          underneath them. The page ends on his own thing rather than on a
-          second version of the company's. */}
+      {/* ── The last word ── */}
+      <section className="hb-end">
+        <div className="hb-end-glow" aria-hidden="true" />
+        <div className="aff-wrap hb-end-in aff-reveal">
+          <BrainoMascot size={110} className="hb-end-him" />
+          <h2 className="aff-h1 hb-end-line" aria-label="Make your Mac more Affective with Braino.">
+            Make your Mac more{" "}
+            <span className="hb-end-logo-wrap"><img className="hb-end-logo" src="/affective-logo.png" alt="" width={1000} height={207} aria-hidden="true" /></span>
+            <span className="hb-end-with">with <span className="hb-end-braino">Braino.</span></span>
+          </h2>
+          <p className="hb-end-p">Stop opening tabs to get help. Braino is coming soon. Get in early.</p>
+          <div className="hb-go">
+            <a href="#early-access" className="aff-cta">Get early access</a>
+            <Link to="/affectiveos" className="aff-cta aff-cta-ghost">Read about AffectiveOS</Link>
+          </div>
+        </div>
+      </section>
+
+      {/* His footer: the words in black, then the Mario level last (2026-10-13). */}
       <footer className="braino-footer mario bf-game-mount">
         <nav className="bf-cols" aria-label="Footer">
-          {FOOTER_COLUMNS.map((column) => (
-            <div className="bf-col" key={column.head}>
-              <div className="bf-col-head">{column.head}</div>
-              {column.links.map(([label, to]) => (
-                <Link key={label + to} to={to}>{label}</Link>
-              ))}
-            </div>
-          ))}
+          <div className="bf-col bf-col-about">
+            <div className="bf-col-head">Your companion</div>
+            <p>Your everyday Mac companion. A friend who lives on your Mac: talk to him, ask him anything, and he gets it done.</p>
+          </div>
+          <div className="bf-col">
+            <div className="bf-col-head">Braino</div>
+            <Link to="/braino">Braino</Link>
+            <a href="#early-access">Early access</a>
+            <a href="#faq">Questions</a>
+          </div>
+          <div className="bf-col">
+            <div className="bf-col-head">Company</div>
+            <Link to="/">Affective</Link>
+            <Link to="/affectiveos">AffectiveOS</Link>
+            <Link to="/contact">Contact</Link>
+          </div>
         </nav>
         <div className="bf-game-window">
           <div className="bf-baseline">
-            <span className="bf-signoff">
-              Braino is a product of Affective. He runs on AffectiveOS.
-            </span>
-            <span className="bf-legal">
-              <Link to="/">Affective</Link>
-              <Link to="/privacy">Privacy</Link>
-              <Link to="/terms">Terms</Link>
-            </span>
+            <span className="bf-signoff">Made by Affective in Bengaluru · Braino is in private beta</span>
+            <span className="bf-legal"><Link to="/privacy">Privacy</Link><Link to="/terms">Terms</Link></span>
           </div>
           <BrainoFooterGame />
         </div>
       </footer>
-
     </div>
   );
 }
