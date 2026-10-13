@@ -133,7 +133,8 @@ console.log("  " + out("/usr/bin/du", ["-sh", APP]));
 step("Disk image");
 const stage = path.join(OUT, "dmg");
 fs.mkdirSync(stage, { recursive: true });
-run("/usr/bin/ditto", [APP, path.join(stage, "Braino.app")]);
+// Moved in and back out, never copied: a second 1.7 GB copy filled the disk (2026-10-13).
+fs.renameSync(APP, path.join(stage, "Braino.app"));
 fs.symlinkSync("/Applications", path.join(stage, "Applications"));
 fs.writeFileSync(path.join(stage, "Read me first.txt"), `Braino ${version}, early tester build
 
@@ -147,6 +148,10 @@ Call him: press Control twice, or say "Hey Braino".
 Something odd? Tell Itish exactly what you said and what happened.
 `);
 const dmg = path.join(OUT, `Braino-${version}.dmg`);
-run("/usr/bin/hdiutil", ["create", "-volname", "Braino", "-srcfolder", stage, "-ov", "-format", "UDZO", dmg]);
-fs.rmSync(stage, { recursive: true, force: true });
+try {
+  run("/usr/bin/hdiutil", ["create", "-volname", "Braino", "-srcfolder", stage, "-ov", "-format", "UDZO", dmg]);
+} finally {
+  fs.renameSync(path.join(stage, "Braino.app"), APP);
+  fs.rmSync(stage, { recursive: true, force: true });
+}
 console.log(`\n✓ ${dmg}  (${out("/usr/bin/du", ["-sh", dmg]).split(/\s/)[0]})`);
