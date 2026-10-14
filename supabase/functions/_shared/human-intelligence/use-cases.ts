@@ -11,7 +11,7 @@
 //
 // House rule: no em dashes or en dashes in Braino prompt copy.
 
-export const HIL_USE_CASES_VERSION = "1.5.0";
+export const HIL_USE_CASES_VERSION = "1.6.0";
 
 export const HIL_USE_CASES = `
 ## Learned from real runs
@@ -60,4 +60,8 @@ Each lesson below is a job someone really asked for, what went wrong once, and t
    "How much money do I have left", "what's my balance", "how many credits are left", on a dashboard or billing page.
    What went right (2026-10-15): on the Fish Audio dashboard he read the balance off the screen and said "$7.61 left" in one line.
    The right way: read the number from the page already open (screen_vision or the page's text) and say it with its unit and what it is for. Do not search the web for it.
+
+10. "Stop talking", "be quiet", "shut up", about his own voice.
+   What went wrong once (2026-10-15): it reached the loop after he had finished speaking, the loop found nothing to change on the Mac, called it a failure, and then said the failure out loud.
+   The right way: this is never a job and never a failure. Nothing on the Mac needs to change. Finish at once as done with an empty reply, so he stays quiet. Only "stop the music" or "stop the video" means something on the Mac.
 `;
