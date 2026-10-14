@@ -411,3 +411,34 @@
 .bp .braino-footer .bf-disclaimer { margin: 0 auto; padding: 0 0 22px; width: min(1200px, calc(100% - 32px)); font: italic 14px/1.5 -apple-system, "SF Pro Text", sans-serif; opacity: .8; text-align: center; }
 .bp-demo { padding: 0 0 clamp(40px, 6vw, 80px); } .bp-demo .dm { max-width: 1040px; margin: 0 auto; }
 .bp-demo { padding-top: clamp(40px, 6vw, 80px); }
+
+/* ── Just ask: an editorial grid (2026-10-14) ──
+   Each capability is one box of hairlines: words in one cell, his Mac in the
+   other on a tinted panel, sides alternating, boxes sharing their borders. */
+.bs .bs-head { margin-bottom: clamp(40px, 5vw, 64px); }
+.bs-row { margin: 0 !important; gap: 0 !important; align-items: stretch !important; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr) !important; border: 1px solid var(--a-line-strong, var(--a-line)); background: var(--a-paper, #fdfcf8); transition: transform .5s cubic-bezier(.22,1,.36,1), box-shadow .5s; }
+.bs-row + .bs-row { border-top: 0; }
+.bs-row.is-flip { grid-template-columns: minmax(0, 7fr) minmax(0, 5fr) !important; }
+.bs-row:hover { position: relative; z-index: 2; transform: translateY(-4px); box-shadow: 0 30px 60px -40px rgba(0,0,0,.35); }
+.bs-talk { padding: clamp(28px, 3.4vw, 52px); justify-content: space-between; align-items: flex-start !important; text-align: left !important; }
+.bs-row.is-flip .bs-talk { border-left: 1px solid var(--a-line); }
+.bs-row:not(.is-flip) .bs-talk { border-right: 1px solid var(--a-line); }
+.bs-meta { display: flex; align-items: center; justify-content: space-between; width: 100%; }
+.bs-talk .bs-n { font-family: var(--a-display, Georgia, serif); font-size: clamp(56px, 6vw, 92px); line-height: .9; letter-spacing: -.04em; color: transparent; -webkit-text-stroke: 1px color-mix(in srgb, var(--a-ink) 35%, transparent); transition: color .5s, -webkit-text-stroke-color .5s; }
+.bs-row.is-said .bs-n { color: var(--acc); -webkit-text-stroke-color: var(--acc); }
+.bs-app-tag { padding: 5px 11px; border-radius: 999px; border: 1px solid var(--a-line); font: 600 11px -apple-system, "SF Pro Text", sans-serif; letter-spacing: .1em; text-transform: uppercase; color: var(--a-ink-soft); }
+.bs-talk h3 { margin: auto 0 0 !important; padding-top: clamp(40px, 6vw, 90px); }
+.bs-said { margin: 22px 0 0; padding-top: 16px; border-top: 1px solid var(--a-line); width: 100%; font: 13px -apple-system, "SF Pro Text", sans-serif; color: var(--a-ink-faint); }
+.bs-said b { display: block; margin-top: 4px; font: italic clamp(17px, 1.4vw, 20px) "Iowan Old Style", Palatino, Georgia, serif; color: var(--a-ink); }
+.bs-stage { display: flex; align-items: center; padding: clamp(22px, 3vw, 44px); background: radial-gradient(90% 80% at 50% 0%, color-mix(in srgb, var(--acc) 12%, transparent), transparent 70%), color-mix(in srgb, var(--a-ink) 3%, transparent); }
+.bs-row:nth-child(4n+3) .bs-stage { background: radial-gradient(90% 80% at 50% 0%, rgba(91,140,255,.14), transparent 70%), color-mix(in srgb, var(--a-ink) 3%, transparent); }
+.bs-row:nth-child(4n) .bs-stage { background: radial-gradient(90% 80% at 50% 0%, rgba(52,199,120,.13), transparent 70%), color-mix(in srgb, var(--a-ink) 3%, transparent); }
+.bs-stage .bs-viz { width: 100%; }
+.bs-row.is-flip .bs-stage { order: -1; }
+.bs-row.is-flip .bs-talk { order: 0 !important; }
+@media (max-width: 860px) {
+  .bs-row, .bs-row.is-flip { grid-template-columns: 1fr !important; }
+  .bs-row .bs-talk { border: 0 !important; border-bottom: 1px solid var(--a-line) !important; }
+  .bs-row.is-flip .bs-stage { order: 1; }
+  .bs-talk h3 { padding-top: 28px; }
+}

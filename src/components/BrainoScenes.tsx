@@ -131,10 +131,12 @@ function SceneRow({ s, n, flip }: { s: Scene; n: number; flip: boolean }) {
   return (
     <div ref={ref} className={"bs-row" + (flip ? " is-flip" : "") + (inView ? " is-in" : "") + (work ? " is-said" : "")}>
       <div className="bs-talk">
-        <span className="bs-n">{String(n).padStart(2, "0")}</span>
+        <div className="bs-meta"><span className="bs-n">{String(n).padStart(2, "0")}</span><span className="bs-app-tag">{s.app}</span></div>
         <h3>{s.title}</h3>
         <p className="bs-p">{s.p}</p>
+        <p className="bs-said">You say <b>{"\u201c"}{s.ask}{"\u201d"}</b></p>
       </div>
+      <div className="bs-stage">
       <div className="ao-viz ao-viz-screen bs-viz">
         <div className="vz vz-screen bs-wall">
           <MacMenuBar app={s.app} />
@@ -161,6 +163,7 @@ function SceneRow({ s, n, flip }: { s: Scene; n: number; flip: boolean }) {
             >{done ? s.steps[s.steps.length - 1] : `\u201c${s.ask}\u201d`}</NotchSheet>
           </div>)}
         </div>
+      </div>
       </div>
     </div>
   );
