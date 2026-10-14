@@ -442,3 +442,12 @@
   .bs-row.is-flip .bs-stage { order: 1; }
   .bs-talk h3 { padding-top: 28px; }
 }
+
+/* Calmer grid (2026-10-14): number, title, one line. The notch already says what you asked. */
+.bs-app-tag, .bs-said { display: none !important; }
+.bs-talk .bs-n { font-size: 15px; letter-spacing: .12em; font-family: -apple-system, "SF Pro Text", sans-serif; font-weight: 600; color: var(--a-ink-faint) !important; -webkit-text-stroke: 0 !important; }
+.bs-row.is-said .bs-n { color: var(--acc) !important; }
+.bs-talk { justify-content: center; }
+.bs-talk h3 { margin: 14px 0 0 !important; padding-top: 0 !important; }
+.bs-stage, .bs-row:nth-child(4n+3) .bs-stage, .bs-row:nth-child(4n) .bs-stage { background: color-mix(in srgb, var(--a-ink) 2.5%, transparent) !important; }
+.bs-row:hover { transform: none; box-shadow: none; }
