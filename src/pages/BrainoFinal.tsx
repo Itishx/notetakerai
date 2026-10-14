@@ -8,8 +8,6 @@ import { AppLogo } from "@/components/AppLogo";
 import BrainoFooterGame from "@/components/BrainoFooterGame";
 import "@/components/braino-footer.css";
 import { BrainoScenes } from "@/components/BrainoScenes";
-import { DemoSlot } from "@/components/DemoSlot";
-import "@/components/demo-slot.css";
 import { MacMenuBar, NotchSheet } from "./aff-figures";
 /* The jobs are written here rather than read from the site's engine data,
    because this page says a different thing: each one carries what it saves
@@ -709,14 +707,6 @@ export default function BrainoFinal() {
                   {COMPANION_TRAITS.map((t) => <li key={t.h} className="is-key"><small>{t.k}</small><h3>{t.h}</h3><p>{t.p}</p></li>)}
                 </ul>
               </div>
-            </div>
-          </section>
-        )}
-        {/* ── The demo: a real recording goes here (DemoSlot `src`) ── */}
-        {model.fast && (
-          <section className="bp-demo">
-            <div className="aff-wrap aff-reveal">
-              <DemoSlot title="“Tell Priya Friday works”, from your voice to the WhatsApp draft to your yes" caption="One real request, start to finish." />
             </div>
           </section>
         )}
