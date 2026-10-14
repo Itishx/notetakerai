@@ -380,17 +380,13 @@ function EarlyAccess(_: { start?: string }) {
     : "Hi. Want to be one of the first to meet me?";
   const finished = state === "done" || state === "existing";
   return (
-    <section className="wl" id="early-access">
-      <div className="wl-glow" aria-hidden="true" />
-      <div className="aff-wrap wl-in">
+    <div className="wl wl-inline">
+      <div className="wl-in">
         <div className="wl-notch"><NotchSheet className="ns-glow" done={finished} label="Braino">{line}</NotchSheet></div>
-        <BrainoMascot size={110} className="wl-him" />
-        {state === "done" && position ? (
+        {state === "done" && position && (
           <div className="wl-num" role="status"><small>Your place in line</small><b>#{position}</b></div>
-        ) : (
-          <h2 className="aff-h1 wl-h">{state === "existing" ? <>You're already <em>on the list.</em></> : <>Join the <em>waitlist.</em></>}</h2>
         )}
-        <p className="wl-p">{finished ? "We'll write the moment it's your turn. Just one email, nothing else." : "Braino isn't out yet. Leave your email and we'll let you in, a few people at a time."}</p>
+        <p className="wl-p" hidden={!finished}>{finished ? "We'll write the moment it's your turn. Just one email, nothing else." : "Braino isn't out yet. Leave your email and we'll let you in, a few people at a time."}</p>
         {!finished && (
           <form className="wl-form" onSubmit={submit}>
             <input type="email" value={email} required autoComplete="email" placeholder="you@email.com" aria-label="Your email"
@@ -400,7 +396,7 @@ function EarlyAccess(_: { start?: string }) {
         )}
         <p className="wl-small">Only for Mac. We only use your email to send you the invite.</p>
       </div>
-    </section>
+    </div>
   );
 }
 
@@ -735,7 +731,6 @@ export default function BrainoFinal() {
         </section>
       </main>
 
-      <EarlyAccess start={model.key} />
 
       {/* ── Questions: the home page's ── */}
       <section className="hb2-faq" id="faq">
@@ -756,7 +751,7 @@ export default function BrainoFinal() {
       </section>
 
       {/* ── The last word ── */}
-      <section className="hb-end">
+      <section className="hb-end" id="early-access">
         <div className="hb-end-glow" aria-hidden="true" />
         <div className="aff-wrap hb-end-in aff-reveal">
           <BrainoMascot size={110} className="hb-end-him" />
@@ -766,10 +761,7 @@ export default function BrainoFinal() {
             <span className="hb-end-with">with <span className="hb-end-braino">Braino.</span></span>
           </h2>
           <p className="hb-end-p">Stop opening tabs to get help. Braino is coming soon. Get in early.</p>
-          <div className="hb-go">
-            <a href="#early-access" className="aff-cta">Join the waitlist</a>
-            <Link to="/affectiveos" className="aff-cta aff-cta-ghost">Read about AffectiveOS</Link>
-          </div>
+          <EarlyAccess />
         </div>
       </section>
 
@@ -796,11 +788,15 @@ export default function BrainoFinal() {
           </div>
           <div className="bf-col">
             <div className="bf-col-head">Connect</div>
-            <a href="https://instagram.com/brainosays" target="_blank" rel="noreferrer">Instagram</a>
+            <a href="https://www.instagram.com/brainocells/" target="_blank" rel="noreferrer">Instagram</a>
             <a href="https://x.com/brainosays" target="_blank" rel="noreferrer">X (Twitter)</a>
           </div>
         </nav>
-        <p className="bf-disclaimer">Braino only learns your day if you choose to. The diary stays on your Mac and deletes itself after a week, and screenshots are never stored. <Link to="/trust">How Braino handles your data</Link></p>
+        <div className="bf-privacy">
+          <span className="bf-privacy-k">Your privacy</span>
+          <p>Braino only learns your day if you choose to. The diary stays on your Mac and deletes itself after a week. Screenshots are never stored.</p>
+          <Link to="/trust" className="bf-privacy-go">How Braino handles your data →</Link>
+        </div>
         <div className="bf-game-window">
           <div className="bf-baseline">
             <span className="bf-signoff">Made by Affective in Bengaluru · Braino is in private beta</span>

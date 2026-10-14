@@ -519,3 +519,20 @@
 .bf-ds-base { height: clamp(12px, 1.3vw, 18px) !important; margin: 0 -7% !important; border-radius: 2px 2px 18px 18px / 2px 2px 12px 12px !important; background: linear-gradient(180deg, #e3e4e8 0%, #c7c8cd 45%, #9a9ca2 100%) !important; box-shadow: 0 1px 0 rgba(255,255,255,.7) inset, 0 24px 40px -18px rgba(0,0,0,.45) !important; }
 .bf-ds-base i { width: 14% !important; height: 5px !important; background: linear-gradient(180deg, #a7a9ae, #c2c3c8) !important; border-radius: 0 0 10px 10px !important; }
 .bf-ds-rail { width: 100%; }
+/* The waitlist lives in the last section now (2026-10-15). */
+.wl-inline { padding: 0; border: 0; overflow: visible; margin-top: 30px; }
+.wl-inline .wl-in { max-width: 560px; padding: 0; border: 0; background: none; backdrop-filter: none; box-shadow: none; }
+.wl-inline .wl-notch { margin-bottom: 4px; }
+
+/* Footer type (2026-10-15): the companion line reads like the links, and
+   privacy sits on the column grid as its own quiet row. */
+.bp .braino-footer .bf-col-about p { max-width: 26ch; margin: 0; font-size: 14px; line-height: 1.55; color: var(--bf-ink-2); opacity: 1; }
+.bp .braino-footer .bf-col-about p::first-line { color: var(--bf-ink); }
+.bp .braino-footer .bf-disclaimer { display: none; }
+.bp .braino-footer .bf-privacy { max-width: 1024px; margin: 0 auto; padding: 18px clamp(20px, 5vw, 40px) 28px; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: baseline; gap: 10px 24px; border-top: 1px solid color-mix(in srgb, var(--bf-ink) 14%, transparent); }
+.bp .braino-footer .bf-privacy-k { color: var(--bf-ink); font-size: 11px; font-weight: 650; letter-spacing: .11em; text-transform: uppercase; }
+.bp .braino-footer .bf-privacy p { margin: 0; color: var(--bf-ink-2); font-size: 14px; line-height: 1.5; }
+.bp .braino-footer .bf-privacy-go { color: var(--bf-ink); font-size: 14px; font-weight: 600; text-decoration: none; white-space: nowrap; }
+.bp .braino-footer .bf-privacy-go:hover { text-decoration: underline; }
+@media (max-width: 760px) { .bp .braino-footer .bf-privacy { grid-template-columns: 1fr; } }
+.bp .braino-footer .bf-col-about p::first-line { color: inherit; }
