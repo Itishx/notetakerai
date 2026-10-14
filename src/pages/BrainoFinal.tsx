@@ -549,6 +549,10 @@ export default function BrainoFinal() {
     setParams(next === 0 ? {} : { model: key }, { replace: true });
   };
   const model = SHOWN_MODELS[at];
+  /* A trial switch (2026-10-15): serif headings or SF Pro, to compare live.
+     Remembered in this browser only. Remove once one is chosen. */
+  const [heads, setHeads] = useState<"serif" | "sf">(() => { try { return localStorage.getItem("bpHeads") === "sf" ? "sf" : "serif"; } catch { return "serif"; } });
+  useEffect(() => { try { localStorage.setItem("bpHeads", heads); } catch { /* private window */ } }, [heads]);
   /* Built from the home page's own pieces (2026-10-07): lit headlines, the
      rising sections, the picture that opens to the page, its nav and footer. */
   const root = useAffReveal([at]);
@@ -578,7 +582,11 @@ export default function BrainoFinal() {
   }, []);
 
   return (
-    <div className="aff bf bp" data-theme={theme} ref={root} style={{ ["--acc" as string]: theme === "dark" ? model.accentDark : model.accent }}>
+    <div className="aff bf bp" data-heads={heads} data-theme={theme} ref={root} style={{ ["--acc" as string]: theme === "dark" ? model.accentDark : model.accent }}>
+      <div className="bp-heads-switch" role="group" aria-label="Heading font">
+        <small>Headings</small>
+        {(["serif", "sf"] as const).map((h) => <button key={h} type="button" className={heads === h ? "on" : ""} onClick={() => setHeads(h)}>{h === "sf" ? "SF Pro" : "Serif"}</button>)}
+      </div>
       <AffNav braino theme={theme} onToggle={toggle} links={[["What he does", "#what"], ["A normal day", "#day"], ["Questions", "#faq"]]} />
 
       {/* ── Hero: the home page's, with him in it ── */}
