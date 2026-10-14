@@ -8,6 +8,8 @@ import { AppLogo } from "@/components/AppLogo";
 import BrainoFooterGame from "@/components/BrainoFooterGame";
 import "@/components/braino-footer.css";
 import { BrainoScenes } from "@/components/BrainoScenes";
+import { MacApp, Personality, FunParts } from "@/components/BrainoMore";
+import "@/components/braino-more.css";
 import { MacMenuBar, NotchSheet } from "./aff-figures";
 /* The jobs are written here rather than read from the site's engine data,
    because this page says a different thing: each one carries what it saves
@@ -723,6 +725,9 @@ export default function BrainoFinal() {
         )}
 
 
+
+        {/* ── The app, his personality, the fun parts (2026-10-15) ── */}
+        {model.fast && <><MacApp /><Personality /><FunParts /></>}
 
         {/* ── A day with him ── */}
         <section className="ah-os bp-day" id="day">
