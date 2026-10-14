@@ -693,3 +693,20 @@
 /* SF Pro is the Braino page's heading face (2026-10-15), header links too. */
 .bp .aff-nav-links a:not(.aff-nav-go) { font-family: "SF Pro Display", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif; font-weight: 500; letter-spacing: -0.01em; }
 .bp-heads-switch { display: none; }
+
+/* Last section as a split (2026-10-15): the headline left, the waitlist card right. */
+.bp .hb-end-split { display: grid !important; grid-template-columns: minmax(0, 1.05fr) minmax(0, .95fr); gap: clamp(32px, 6vw, 96px); align-items: center; text-align: left !important; }
+.bp .hb-end-left { display: flex; flex-direction: column; align-items: flex-start; }
+.bp .hb-end-split .hb-end-him { margin: 0 0 18px; }
+.bp .hb-end-split .hb-end-line { text-align: left; margin: 0; }
+.bp .hb-end-split .hb-end-p { text-align: left; margin-left: 0; }
+.bp .hb-end-split .wl-inline { margin: 0; }
+.bp .hb-end-split .wl-inline .wl-in { max-width: none; padding: 0 clamp(24px, 3vw, 40px) clamp(28px, 3vw, 40px); border-radius: 24px; border: 1px solid var(--a-line-strong, var(--a-line)); background: var(--a-paper, #fdfcf8); box-shadow: 0 40px 90px -50px rgba(0,0,0,.4); }
+.bp .hb-end-split .wl-notch { width: 100%; margin-bottom: 26px; }
+.bp .hb-end-split .wl-notch .ns { width: min(420px, 92%); }
+.bp .hb-end-split .wl-form { width: 100%; flex-direction: column; padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none; gap: 10px; margin-top: 0; }
+.bp .hb-end-split .wl-form input { padding: 14px 16px; border-radius: 12px; border: 1px solid var(--a-line-strong, var(--a-line)); background: var(--a-bg, #f4f2ec); }
+.bp .hb-end-split .wl-form button { width: 100%; padding: 14px; border-radius: 12px; }
+.bp .hb-end-split .wl-small { text-align: center; }
+.aff[data-theme="dark"] .bp .hb-end-split .wl-inline .wl-in, .aff.bp[data-theme="dark"] .hb-end-split .wl-inline .wl-in { background: #1c1b19; }
+@media (max-width: 860px) { .bp .hb-end-split { grid-template-columns: 1fr; } }

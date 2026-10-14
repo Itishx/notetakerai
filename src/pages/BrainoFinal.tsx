@@ -758,7 +758,8 @@ export default function BrainoFinal() {
       {/* ── The last word ── */}
       <section className="hb-end" id="early-access">
         <div className="hb-end-glow" aria-hidden="true" />
-        <div className="aff-wrap hb-end-in aff-reveal">
+        <div className="aff-wrap hb-end-in hb-end-split aff-reveal">
+          <div className="hb-end-left">
           <BrainoMascot size={110} className="hb-end-him" />
           <h2 className="aff-h1 hb-end-line" aria-label="Make your Mac more Affective with Braino.">
             Make your Mac more{" "}
@@ -766,6 +767,7 @@ export default function BrainoFinal() {
             <span className="hb-end-with">with <span className="hb-end-braino">Braino.</span></span>
           </h2>
           <p className="hb-end-p">Stop opening tabs to get help. Braino is coming soon. Get in early.</p>
+          </div>
           <EarlyAccess />
         </div>
       </section>
