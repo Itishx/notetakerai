@@ -135,7 +135,13 @@ export function FunParts() {
       if (!el) return;
       const run = el.offsetHeight - window.innerHeight;
       const p = run > 0 ? Math.min(1, Math.max(0, -el.getBoundingClientRect().top / run)) : 0;
-      setTurn(p * (FUN.length - 1));
+      /* Rest on each card, then glide to the next: the middle 40% of each
+         step does the moving, eased, so a card is never caught halfway. */
+      const f = p * (FUN.length - 1);
+      const k = Math.min(FUN.length - 2, Math.floor(f));
+      const t = f - k;
+      const e = t < 0.3 ? 0 : t > 0.7 ? 1 : (1 - Math.cos(((t - 0.3) / 0.4) * Math.PI)) / 2;
+      setTurn(k + e);
     };
     const on = () => { if (!raf) raf = requestAnimationFrame(tick); };
     tick();
@@ -162,10 +168,9 @@ export function FunParts() {
               const depth = (Math.cos(r) + 1) / 2;
               return (
                 <article key={f.k} className={"bm-card3" + (i === front ? " is-front" : "")} aria-hidden={i !== front}
-                  style={{ transform: `translateX(${Math.sin(r) * 62}%) scale(${0.7 + depth * 0.3})`, opacity: depth < 0.2 ? 0 : 1, zIndex: Math.round(depth * 100), filter: `blur(${(1 - depth) * 2.5}px) brightness(${0.86 + depth * 0.14})` }}>
-                  <FunArt k={f.k} />
-                  <h3>{f.h}</h3>
-                  <p>{f.p}</p>
+                  style={{ transform: `translateX(${Math.sin(r) * 34}%) scale(${0.66 + depth * 0.34})`, opacity: depth < 0.2 ? 0 : 1, zIndex: Math.round(depth * 100), filter: `blur(${(1 - depth) * 2.5}px) brightness(${0.86 + depth * 0.14})` }}>
+                  <div className="bm-c-text"><span>{String(i + 1).padStart(2, "0")}</span><h3>{f.h}</h3><p>{f.p}</p></div>
+                  <div className="bm-c-art"><FunArt k={f.k} /></div>
                 </article>
               );
             })}

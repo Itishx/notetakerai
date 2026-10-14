@@ -113,3 +113,21 @@
 .bm-ring { perspective: none; transform-style: flat; }
 .bm-card3 { transform-origin: 50% 40%; }
 .bm-card3 .bm-react { top: 48px; }
+
+/* Gallery cards in the "Just ask" box style (2026-10-15): hairlines, square
+   corners, words left, the picture filling the right cell. */
+.bm-card3 { width: min(920px, 88vw); margin-left: calc(min(920px, 88vw) / -2); padding: 0; flex-direction: row; display: grid !important; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); border-radius: 0; border: 1px solid var(--a-line-strong, var(--a-line)); background: var(--a-paper, #fdfcf8); overflow: hidden; }
+.bm-c-text { display: flex; flex-direction: column; justify-content: center; padding: clamp(28px, 3.4vw, 48px); border-right: 1px solid var(--a-line); }
+.bm-c-text span { font: 600 13px -apple-system, "SF Pro Text", sans-serif; letter-spacing: .12em; color: var(--acc); }
+.bm-card3 .bm-c-text h3 { margin: 12px 0 0; font: 600 clamp(28px, 2.8vw, 40px)/1.05 "SF Pro Display", -apple-system, sans-serif; letter-spacing: -.035em; }
+.bm-card3 .bm-c-text p { margin: 14px 0 0; font: clamp(15px, 1.2vw, 17px)/1.55 -apple-system, "SF Pro Text", sans-serif; color: var(--a-ink-soft); }
+.bm-c-art { position: relative; min-height: min(420px, 50vh); }
+.bm-card3 .bm-c-art .bm-stage { position: absolute; inset: 0; height: auto; border-radius: 0; }
+.bm-ring { height: min(440px, 54vh); }
+.aff[data-theme="dark"] .bm-card3 { background: #161513; border-color: rgba(244,242,236,.14); }
+.aff[data-theme="dark"] .bm-c-text { border-color: rgba(244,242,236,.1); }
+.aff[data-theme="dark"] .bm-card3 .bm-c-text h3 { color: #f4f2ec; }
+@media (max-width: 760px) { .bm-card3 { grid-template-columns: 1fr; } .bm-c-text { border-right: 0; border-bottom: 1px solid var(--a-line); } .bm-c-art { min-height: 220px; } }
+.bm-card3 { left: 0 !important; right: 0; margin: 0 auto !important; }
+/* The glide is driven by scroll and already eased; no extra lag on top. */
+.bm-card3 { transition: none !important; }
