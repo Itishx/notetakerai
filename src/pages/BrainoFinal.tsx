@@ -774,41 +774,31 @@ export default function BrainoFinal() {
 
       {/* His footer: the words in black, then the Mario level last (2026-10-13). */}
       <footer className="braino-footer mario bf-game-mount">
-        <nav className="bf-cols" aria-label="Footer">
-          <div className="bf-col bf-col-about">
-            <div className="bf-col-head">Your companion</div>
-            <p>Your everyday Mac companion. A friend who lives on your Mac: talk to him, ask him anything, and he gets it done.</p>
+        {/* One width, one left edge for every row (2026-10-15). */}
+        <div className="bft">
+          <div className="bft-top">
+            <div className="bft-brand">
+              <p className="bft-name">Braino</p>
+              <p className="bft-line">Your everyday Mac companion. A friend who lives on your Mac: talk to him, ask him anything, and he gets it done.</p>
+              <a href="#early-access" className="bft-cta">Join the waitlist</a>
+            </div>
+            <nav className="bft-cols" aria-label="Footer">
+              <div><h4>Braino</h4><Link to="/braino">Meet Braino</Link><a href="#day">A normal day</a><a href="#faq">Questions</a><Link to="/changelog">What's new</Link></div>
+              <div><h4>Company</h4><Link to="/">Affective</Link><Link to="/affectiveos">AffectiveOS</Link><Link to="/trust">Trust &amp; privacy</Link><Link to="/contact">Contact</Link></div>
+              <div><h4>Connect</h4><a href="https://www.instagram.com/brainocells/" target="_blank" rel="noreferrer">Instagram</a><a href="https://x.com/brainosays" target="_blank" rel="noreferrer">X (Twitter)</a></div>
+            </nav>
           </div>
-          <div className="bf-col">
-            <div className="bf-col-head">Braino</div>
-            <Link to="/braino">Braino</Link>
-            <a href="#early-access">Join the waitlist</a>
-            <a href="#faq">Questions</a>
+          <div className="bft-privacy">
+            <span className="bft-lock" aria-hidden="true"><svg viewBox="0 0 16 18"><rect x="2" y="8" width="12" height="9" rx="2.5" fill="currentColor" /><path d="M4.5 8V5.5a3.5 3.5 0 0 1 7 0V8" fill="none" stroke="currentColor" strokeWidth="1.8" /></svg></span>
+            <p><b>Your privacy.</b> Braino only learns your day if you choose to. The diary stays on your Mac and deletes itself after a week. Screenshots are never stored.</p>
+            <Link to="/trust" className="bft-more">How Braino handles your data →</Link>
           </div>
-          <div className="bf-col">
-            <div className="bf-col-head">Company</div>
-            <Link to="/">Affective</Link>
-            <Link to="/affectiveos">AffectiveOS</Link>
-            <Link to="/trust">Trust &amp; privacy</Link>
-            <Link to="/changelog">What's new</Link>
-            <Link to="/contact">Contact</Link>
+          <div className="bft-base">
+            <span>© 2026 Affective · Made in Bengaluru · Braino is in private beta</span>
+            <span className="bft-legal"><Link to="/privacy">Privacy</Link><Link to="/terms">Terms</Link></span>
           </div>
-          <div className="bf-col">
-            <div className="bf-col-head">Connect</div>
-            <a href="https://www.instagram.com/brainocells/" target="_blank" rel="noreferrer">Instagram</a>
-            <a href="https://x.com/brainosays" target="_blank" rel="noreferrer">X (Twitter)</a>
-          </div>
-        </nav>
-        <div className="bf-privacy">
-          <span className="bf-privacy-k">Your privacy</span>
-          <p>Braino only learns your day if you choose to. The diary stays on your Mac and deletes itself after a week. Screenshots are never stored.</p>
-          <Link to="/trust" className="bf-privacy-go">How Braino handles your data →</Link>
         </div>
         <div className="bf-game-window">
-          <div className="bf-baseline">
-            <span className="bf-signoff">Made by Affective in Bengaluru · Braino is in private beta</span>
-            <span className="bf-legal"><Link to="/privacy">Privacy</Link><Link to="/terms">Terms</Link></span>
-          </div>
           <BrainoFooterGame />
         </div>
       </footer>
