@@ -481,3 +481,41 @@
 .bs-deck, .bs-deck .bs-wrap { overflow: visible; }
 @media (max-width: 860px) { .bs-deck .bs-row { position: relative; top: auto !important; margin-bottom: 16px !important; } }
 .bs-deck .bs-row { overflow: hidden; }
+/* The day's wallpaper (2026-10-15): a real Mac wallpaper, dimming into night. */
+.bf-ds-sky { background-size: cover; background-position: center; }
+.bf-ds-sky .bf-ds-sun { display: none; }
+
+/* ── The waitlist (2026-10-15): the loudest section on the page ── */
+.wl { position: relative; overflow: hidden; padding: clamp(90px, 11vw, 160px) 0; border-top: 1px solid var(--a-line); text-align: center; }
+.wl-glow { position: absolute; inset: -20% -10% auto; height: 120%; background: radial-gradient(50% 45% at 50% 40%, color-mix(in srgb, var(--acc) 22%, transparent), transparent 70%), radial-gradient(40% 40% at 30% 70%, rgba(150,120,255,.14), transparent 70%); pointer-events: none; }
+.wl-in { position: relative; display: flex; flex-direction: column; align-items: center; max-width: 760px; margin: 0 auto; padding: clamp(0px, 1vw, 10px) clamp(20px, 4vw, 56px) clamp(44px, 5vw, 64px); border-radius: 32px; border: 1px solid var(--a-line); background: color-mix(in srgb, var(--a-paper, #fff) 82%, transparent); backdrop-filter: blur(12px); box-shadow: 0 50px 120px -60px rgba(0,0,0,.35); }
+.wl-notch { width: min(460px, 100%); }
+.wl-notch .ns { margin: 0 auto; }
+.wl-him { margin: 30px 0 4px; animation: bsBob 3s ease-in-out infinite; }
+.wl-h { margin: 6px 0 0; font-size: clamp(48px, 7vw, 96px); line-height: .98; letter-spacing: -.03em; }
+.wl-h em { font-style: normal; color: var(--acc); }
+.wl-p { max-width: 30em; margin: 18px 0 0; font: clamp(17px, 1.4vw, 20px)/1.5 -apple-system, "SF Pro Text", sans-serif; color: var(--a-ink-soft); }
+.wl-form { display: flex; gap: 8px; width: min(520px, 100%); margin-top: 30px; padding: 6px; border-radius: 999px; border: 1px solid var(--a-line-strong, var(--a-line)); background: var(--a-paper, #fff); box-shadow: 0 10px 30px -18px rgba(0,0,0,.3); }
+.wl-form input { flex: 1; min-width: 0; padding: 12px 18px; border: 0; background: none; color: var(--a-ink); font: 16px -apple-system, "SF Pro Text", sans-serif; outline: none; }
+.wl-form button { flex: none; padding: 12px 22px; border: 0; border-radius: 999px; background: var(--a-ink); color: var(--a-bg, #f4f2ec); font: 600 15px -apple-system, "SF Pro Text", sans-serif; cursor: pointer; transition: transform .2s; }
+.wl-form button:hover { transform: translateY(-1px); }
+.wl-form button:disabled { opacity: .6; }
+.wl-num { margin-top: 6px; display: flex; flex-direction: column; align-items: center; }
+.wl-num small { font: 600 12px -apple-system, sans-serif; letter-spacing: .14em; text-transform: uppercase; color: var(--a-ink-faint); }
+.wl-num b { font-family: var(--a-display, Georgia, serif); font-weight: 400; font-size: clamp(90px, 13vw, 170px); line-height: .9; color: var(--acc); animation: bsPop .6s cubic-bezier(.34,1.56,.64,1) both; }
+.wl-small { margin: 18px 0 0; font: 13px -apple-system, sans-serif; color: var(--a-ink-faint); }
+.aff[data-theme="dark"] .wl-in { background: rgba(28,27,25,.8); border-color: rgba(244,242,236,.12); }
+.aff[data-theme="dark"] .wl-form { background: #1c1b19; }
+@media (max-width: 560px) { .wl-form { flex-direction: column; border-radius: 22px; } .wl-form button { width: 100%; } }
+
+.wl-in { padding-top: 0; }
+
+/* ── The MacBook, real proportions (2026-10-15) ──
+   The screen keeps 16:10 and the whole laptop scales to fit the window, so
+   it is never squashed. Thin bezel, rounded lid, a slim aluminium base. */
+.bf-ds-stage { width: min(1080px, calc((100vh - 230px) * 1.6 + 28px), calc(100% - 32px)); padding-top: 70px; }
+.bf-ds-screen { padding: 14px 14px 0 !important; border-radius: 22px 22px 0 0 !important; background: linear-gradient(180deg, #1d1d1f, #0b0b0c 40%) !important; box-shadow: 0 0 0 1px #4a4a4f, inset 0 1px 0 rgba(255,255,255,.12), 0 50px 100px -50px rgba(0,0,0,.55) !important; }
+.bf-ds-sky { aspect-ratio: 16 / 10 !important; max-height: none !important; border-radius: 6px 6px 0 0; }
+.bf-ds-base { height: clamp(12px, 1.3vw, 18px) !important; margin: 0 -7% !important; border-radius: 2px 2px 18px 18px / 2px 2px 12px 12px !important; background: linear-gradient(180deg, #e3e4e8 0%, #c7c8cd 45%, #9a9ca2 100%) !important; box-shadow: 0 1px 0 rgba(255,255,255,.7) inset, 0 24px 40px -18px rgba(0,0,0,.45) !important; }
+.bf-ds-base i { width: 14% !important; height: 5px !important; background: linear-gradient(180deg, #a7a9ae, #c2c3c8) !important; border-radius: 0 0 10px 10px !important; }
+.bf-ds-rail { width: 100%; }

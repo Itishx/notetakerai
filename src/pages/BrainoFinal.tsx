@@ -156,7 +156,7 @@ const MODELS: Model[] = [
     ],
     honest:
       "Braino is in private beta on Mac and Chrome. Leave your email below and we will let you in. Windows is not on the list yet, and we would rather say so.",
-    cta: { label: "Get early access", to: "#early-access" },
+    cta: { label: "Join the waitlist", to: "#early-access" },
     state: "Runs on AffectiveOS · Private beta",
     accent: "#d9645b",
     accentDark: "#e8786e",
@@ -336,7 +336,7 @@ const FAQ = [
   },
   {
     q: "Can I use him today?",
-    a: "Braino is in private beta on Mac and Chrome, and we let people in a few at a time. Leave your email in early access and we will write when it is your turn.",
+    a: "Braino is in private beta on Mac and Chrome, and we let people in a few at a time. Join the waitlist and we will write when it is your turn.",
   },
 ];
 
@@ -345,101 +345,60 @@ const FAQ = [
    picked for you, because that is the one you came for. */
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 const SUPABASE_KEY = (import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY) as string;
-const PICKS = [
-  { id: "braino", name: "Braino", who: "For everyone", line: "Talk to your Mac and he does the job." },
-  { id: "foundry", name: "Braino Foundry", who: "For founders", line: "Gets your startup seen: posts, replies and intros." },
-];
-const NEXT = [
-  { h: "You are on the list", p: "Right away. One email to say so, nothing else." },
-  { h: "We send you an invite", p: "In small batches, so every new person gets looked after." },
-  { h: "You talk to your Mac", p: "Install Braino, say hello, and give him his first job." },
-];
 
-function EarlyAccess({ start }: { start: string }) {
-  const [picked, setPicked] = useState<Set<string>>(new Set([start]));
+function EarlyAccess(_: { start?: string }) {
+  /* The waitlist (2026-10-14): the one thing we launch on the 16th, so it is
+     the loudest section on the page. Braino only. Same waitlist table as
+     before; a new email gets its place in line, a known one gets a smile. */
   const [email, setEmail] = useState("");
-  const [state, setState] = useState<"idle" | "loading" | "done" | "existing" | "error" | "pick">("idle");
-  useEffect(() => { setPicked((cur) => (cur.has(start) ? cur : new Set([...cur, start]))); }, [start]);
-  const toggleOne = (id: string) => {
-    setPicked((cur) => { const next = new Set(cur); if (next.has(id)) next.delete(id); else next.add(id); return next; });
-    if (state === "pick") setState("idle");
-  };
+  const [state, setState] = useState<"idle" | "loading" | "done" | "existing" | "error">("idle");
+  const [position, setPosition] = useState<number | null>(null);
   const submit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (state === "loading") return;
     if (!email.trim().includes("@")) { setState("error"); return; }
-    if (picked.size === 0) { setState("pick"); return; }
     setState("loading");
-    const categories = Array.from(picked);
     try {
       const res = await fetch(`${SUPABASE_URL}/functions/v1/waitlist-signup`, {
         method: "POST",
         headers: { "Content-Type": "application/json", apikey: SUPABASE_KEY },
-        body: JSON.stringify({ email: email.trim(), categories, context: `braino-early-access:${categories.join(",")}` }),
+        body: JSON.stringify({ email: email.trim(), categories: ["braino"], context: "braino-waitlist" }),
       });
       const data = await res.json().catch(() => ({}));
+      if (data.error === "already_on_waitlist") { setState("existing"); return; }
       if (!res.ok) throw new Error();
-      setState(data.error === "already_on_waitlist" ? "existing" : "done");
+      setPosition(typeof data.position === "number" ? data.position : null);
+      setState("done");
     } catch {
       setState("error");
     }
   };
+  const line = state === "done"
+    ? (position ? `You're number ${position} on the waitlist.` : "You're on the waitlist.")
+    : state === "existing" ? "Oh, you're already signed up, cutie. Just a little longer now."
+    : state === "error" ? "Hmm, that didn't go through. Check the email and try again?"
+    : "Hi. Want to be one of the first to meet me?";
   const finished = state === "done" || state === "existing";
   return (
-    <section className="bf-sec bf-ea" id="early-access">
-      <div className="bf-wrap">
-        <div className="bf-sec-head bf-reveal">
-          <p className="bf-kicker">Early access</p>
-          <h2>Be one of the first <b>to talk to your Mac.</b></h2>
-          <p className="bf-sec-note">Braino is in private beta. We let people in a few at a time, so we can watch how it goes and fix what does not.</p>
-        </div>
-        <div className="bf-ea-grid">
-        <div className="bf-ea-hello bf-reveal" aria-hidden="true">
-          <MacMenuBar app="Finder" menus={["File", "Edit", "View", "Go"]} />
-          <NotchSheet className="ns-big ns-glow" done={false} label="Braino">{finished ? "Got it. See you soon." : "Hi. I've been waiting to meet you."}</NotchSheet>
-          <p className="bf-ea-hello-cap"><span className="vz-live" />Private beta · letting people in a few at a time</p>
-        </div>
-        <form className="bf-ea-box bf-reveal" onSubmit={submit}>
-          {finished ? (
-            <div className="bf-ea-done" role="status">
-              <span className="bf-ea-check" aria-hidden="true" />
-              <div>
-                <h3>{state === "done" ? "You are on the list." : "You are already with us."}</h3>
-                <p>We will write when it is your turn. Nothing else in between.</p>
-              </div>
-            </div>
-          ) : (
-            <>
-              <p className="bf-ea-k">What do you want to try?</p>
-              <div className="bf-ea-picks">
-                {PICKS.map((p) => {
-                  const on = picked.has(p.id);
-                  return (
-                    <button type="button" key={p.id} className={"bf-ea-pick" + (on ? " on" : "")} aria-pressed={on} onClick={() => toggleOne(p.id)}>
-                      <span className="bf-ea-tick" aria-hidden="true" />
-                      <small>{p.who}</small>
-                      <b>{p.name}</b>
-                      <span>{p.line}</span>
-                    </button>
-                  );
-                })}
-              </div>
-              <label className="bf-ea-k" htmlFor="bf-ea-email">Your email</label>
-              <div className="bf-ea-row">
-                <input id="bf-ea-email" type="email" value={email} required autoComplete="email" placeholder="you@somewhere.com"
-                  onChange={(e) => { setEmail(e.target.value); if (state === "error") setState("idle"); }} />
-                <button type="submit" className="bf-cta" disabled={state === "loading"}>{state === "loading" ? "Joining\u2026" : "Get early access"}</button>
-              </div>
-              {state === "error" && <p className="bf-ea-msg" role="alert">That did not go through. Check the email and try once more.</p>}
-              {state === "pick" && <p className="bf-ea-msg" role="alert">Pick at least one above, so we know what to write to you about.</p>}
-            </>
-          )}
-        </form>
-        </div>
-        <ol className="bf-ea-next bf-reveal">
-          {NEXT.map((n, i) => <li key={n.h}><span>{i + 1}</span><h3>{n.h}</h3><p>{n.p}</p></li>)}
-        </ol>
-        <p className="bf-ea-small">Braino runs on a Mac and in Chrome. We only use your email to send you the invite and the occasional note about what is new.</p>
+    <section className="wl" id="early-access">
+      <div className="wl-glow" aria-hidden="true" />
+      <div className="aff-wrap wl-in">
+        <div className="wl-notch"><NotchSheet className="ns-glow" done={finished} label="Braino">{line}</NotchSheet></div>
+        <BrainoMascot size={110} className="wl-him" />
+        {state === "done" && position ? (
+          <div className="wl-num" role="status"><small>Your place in line</small><b>#{position}</b></div>
+        ) : (
+          <h2 className="aff-h1 wl-h">{state === "existing" ? <>You're already <em>on the list.</em></> : <>Join the <em>waitlist.</em></>}</h2>
+        )}
+        <p className="wl-p">{finished ? "We'll write the moment it's your turn. Just one email, nothing else." : "Braino isn't out yet. Leave your email and we'll let you in, a few people at a time."}</p>
+        {!finished && (
+          <form className="wl-form" onSubmit={submit}>
+            <input type="email" value={email} required autoComplete="email" placeholder="you@email.com" aria-label="Your email"
+              onChange={(e) => { setEmail(e.target.value); if (state === "error") setState("idle"); }} />
+            <button type="submit" disabled={state === "loading"}>{state === "loading" ? "Joining\u2026" : "Join the waitlist"}</button>
+          </form>
+        )}
+        <p className="wl-small">Only for Mac. We only use your email to send you the invite.</p>
       </div>
     </section>
   );
@@ -556,7 +515,7 @@ function DayScroll({ day }: { day: { at: string; p: string }[] }) {
       <div className="bf-ds-pin">
         <div className="bf-ds-stage">
           <div className="bf-ds-screen">
-            <div className="bf-ds-sky" style={{ background: `linear-gradient(180deg, rgb(${top}) 0%, rgb(${low}) 100%)` }}>
+            <div className="bf-ds-sky" style={{ backgroundImage: `linear-gradient(180deg, rgba(8,10,24,${(night * 0.78).toFixed(2)}), rgba(20,16,40,${(night * 0.7).toFixed(2)})), url(/braino-day-wallpaper.jpg)` }}>
             <div className="bf-ds-stars" style={{ opacity: night }} />
             <i className="bf-ds-sun" style={{ left: `${8 + sun * 84}%`, top: `${70 - Math.sin(sun * Math.PI) * 52}%`, opacity: 1 - night }} />
             <i className="bf-ds-moon" style={{ left: `${10 + moon * 70}%`, top: `${66 - Math.sin(Math.min(1, moon * 1.4) * Math.PI / 2) * 40}%`, opacity: night }} />
@@ -808,7 +767,7 @@ export default function BrainoFinal() {
           </h2>
           <p className="hb-end-p">Stop opening tabs to get help. Braino is coming soon. Get in early.</p>
           <div className="hb-go">
-            <a href="#early-access" className="aff-cta">Get early access</a>
+            <a href="#early-access" className="aff-cta">Join the waitlist</a>
             <Link to="/affectiveos" className="aff-cta aff-cta-ghost">Read about AffectiveOS</Link>
           </div>
         </div>
@@ -824,7 +783,7 @@ export default function BrainoFinal() {
           <div className="bf-col">
             <div className="bf-col-head">Braino</div>
             <Link to="/braino">Braino</Link>
-            <a href="#early-access">Early access</a>
+            <a href="#early-access">Join the waitlist</a>
             <a href="#faq">Questions</a>
           </div>
           <div className="bf-col">

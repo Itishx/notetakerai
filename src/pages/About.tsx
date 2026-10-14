@@ -19,7 +19,7 @@ const TIMELINE = [
   { when: "May 2026", what: "We started with one question: what if you could just talk to your Mac?" },
   { when: "Summer", what: "Braino, in the browser. He read the page, talked back and did the tabs." },
   { when: "August", what: "He moved into the Mac's notch, with hands for real apps." },
-  { when: "Now", what: "AffectiveOS, in private beta. Early access is open." },
+  { when: "Now", what: "AffectiveOS, in private beta. The waitlist is open." },
 ];
 
 export default function About() {
@@ -44,7 +44,7 @@ export default function About() {
             <Link to="/braino">Braino</Link>
             <Link to="/affectiveos">AffectiveOS</Link>
             <Link to="/about">About</Link>
-            <Link to="/braino#early-access" className="aff-nav-go">Early access</Link>
+            <Link to="/braino#early-access" className="aff-nav-go">Join the waitlist</Link>
             <AffThemeToggle theme={theme} onToggle={toggle} />
           </div>
         </div>
@@ -132,7 +132,7 @@ export default function About() {
       <article className="ao-col">
         <p>A small team in Bengaluru. Come and talk to your Mac with us.</p>
         <p className="ab-go">
-          <Link to="/braino#early-access" className="aff-cta">Get early access</Link>
+          <Link to="/braino#early-access" className="aff-cta">Join the waitlist</Link>
           <Link to="/affectiveos" className="aff-cta aff-cta-ghost">Read about AffectiveOS</Link>
         </p>
         <div style={{ height: "clamp(80px, 10vw, 120px)" }} />
