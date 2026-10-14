@@ -726,8 +726,8 @@ export default function BrainoFinal() {
 
 
 
-        {/* ── The app, his personality, the fun parts (2026-10-15) ── */}
-        {model.fast && <><MacApp /><Personality /><FunParts /></>}
+        {/* ── The app (2026-10-15) ── */}
+        {model.fast && <MacApp />}
 
         {/* ── A day with him ── */}
         <section className="ah-os bp-day" id="day">
@@ -739,6 +739,9 @@ export default function BrainoFinal() {
             ? <><p className="bf-ds-hint aff-reveal">Scroll <i aria-hidden="true">↓</i> fast or slow. Watch the day go by.</p><DayScroll day={model.day} /></>
             : <div className="aff-wrap"><DayClock day={model.day} /></div>}
         </section>
+
+        {/* ── First what he does, then who he is ── */}
+        {model.fast && <><Personality /><FunParts /></>}
       </main>
 
 

@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from "react";
 import { BrainoMascot } from "@/components/BrainoMascot";
 import { NotchSheet } from "@/pages/aff-figures";
 
@@ -95,39 +96,81 @@ export function Personality() {
   );
 }
 
-/* ── The fun parts ── */
+/* ── The fun parts ── a gallery on a ring (2026-10-15). The section pins and
+   your scroll turns the ring: one card in front, the others turning behind,
+   the next swinging round to the front. */
+const FUN = [
+  { k: "moon", h: "He moonwalks", p: "Ask him to moonwalk. He will, to Billie Jean." },
+  { k: "dance", h: "He dances", p: "Say \u201cdance\u201d. He has moves." },
+  { k: "glow", h: "Music lights him up", p: "Play a song and your notch glows and moves to the beat." },
+  { k: "notch", h: "A notch that's alive", p: "It opens when he listens, shows his work, and folds away when he's done." },
+  { k: "movie", h: "Movie night with Braino", p: "One of our very first experiments: we watched Spider-Man: Across the Spider-Verse with him. He followed the scenes, answered questions, and never spoiled a thing." },
+];
+/* Movie night's picture: drop the image in public/ and set it here. */
+const MOVIE_IMAGE = "";
+
+function FunArt({ k }: { k: string }) {
+  if (k === "moon") return <div className="bm-stage"><div className="bm-floor" /><span className="bm-note">♪</span><span className="bm-note n2">♫</span><div className="bm-walker"><BrainoMascot size={96} /></div></div>;
+  if (k === "dance") return <div className="bm-stage bm-disco"><div className="bm-dancer"><BrainoMascot size={96} /></div></div>;
+  if (k === "glow") return <div className="bm-stage bm-mac"><div className="bm-mac-screen"><div className="bm-mac-notch"><span className="bm-eq">{Array.from({ length: 7 }).map((_, i) => <i key={i} style={{ animationDelay: `${i * 90}ms` }} />)}</span></div></div></div>;
+  if (k === "notch") return <div className="bm-stage bm-notch-stage"><NotchSheet className="ns-glow bm-live-notch" done={false} label="Braino">On it. Opening Spotify.</NotchSheet></div>;
+  return (
+    <div className="bm-stage bm-screen-dark" style={MOVIE_IMAGE ? { backgroundImage: `url(${MOVIE_IMAGE})`, backgroundSize: "cover", backgroundPosition: "center" } : undefined}>
+      {!MOVIE_IMAGE && <div className="bm-film" />}
+      <span className="bm-exp">An early experiment</span>
+      <div className="bm-react"><BrainoMascot size={40} /><span>Okay, this scene. No spoilers, but hold on.</span></div>
+      <p className="bm-sub">“Everyone keeps telling me how my story is supposed to go.”</p>
+    </div>
+  );
+}
+
 export function FunParts() {
+  const ref = useRef<HTMLDivElement>(null);
+  const [turn, setTurn] = useState(0);
+  useEffect(() => {
+    let raf = 0;
+    const tick = () => {
+      raf = 0;
+      const el = ref.current;
+      if (!el) return;
+      const run = el.offsetHeight - window.innerHeight;
+      const p = run > 0 ? Math.min(1, Math.max(0, -el.getBoundingClientRect().top / run)) : 0;
+      setTurn(p * (FUN.length - 1));
+    };
+    const on = () => { if (!raf) raf = requestAnimationFrame(tick); };
+    tick();
+    window.addEventListener("scroll", on, { passive: true });
+    window.addEventListener("resize", on);
+    return () => { window.removeEventListener("scroll", on); window.removeEventListener("resize", on); cancelAnimationFrame(raf); };
+  }, []);
+  const step = 360 / FUN.length;
+  const front = Math.round(turn) % FUN.length;
   return (
     <section className="bm bm-fun">
-      <div className="aff-wrap">
-        <p className="ah-kicker">The fun parts</p>
-        <h2 className="aff-h1 bm-h">He's also <em>a lot of fun.</em></h2>
-        <div className="bm-fun-grid">
-          <div className="bm-tile bm-moon aff-reveal">
-            <div className="bm-stage"><div className="bm-floor" /><span className="bm-note">♪</span><span className="bm-note n2">♫</span><div className="bm-walker"><BrainoMascot size={84} /></div></div>
-            <h3>He moonwalks</h3><p>Ask him to moonwalk. He will, to Billie Jean.</p>
+      <div className="bm-ring-run" ref={ref} style={{ height: `${FUN.length * 70 + 40}vh` }}>
+        <div className="bm-ring-pin">
+          <div className="aff-wrap bm-ring-head">
+            <p className="ah-kicker">The fun parts</p>
+            <h2 className="aff-h1 bm-h">He's also <em>a lot of fun.</em></h2>
           </div>
-          <div className="bm-tile bm-dance aff-reveal">
-            <div className="bm-stage bm-disco"><div className="bm-dancer"><BrainoMascot size={84} /></div></div>
-            <h3>He dances</h3><p>Say “dance”. He has moves.</p>
+          <div className="bm-ring" aria-roledescription="carousel">
+            {FUN.map((f, i) => {
+              let rel = ((i - turn) * step) % 360;
+              if (rel > 180) rel -= 360;
+              if (rel < -180) rel += 360;
+              const r = (rel * Math.PI) / 180;
+              const depth = (Math.cos(r) + 1) / 2;
+              return (
+                <article key={f.k} className={"bm-card3" + (i === front ? " is-front" : "")} aria-hidden={i !== front}
+                  style={{ transform: `translateX(${Math.sin(r) * 62}%) scale(${0.7 + depth * 0.3})`, opacity: depth < 0.2 ? 0 : 1, zIndex: Math.round(depth * 100), filter: `blur(${(1 - depth) * 2.5}px) brightness(${0.86 + depth * 0.14})` }}>
+                  <FunArt k={f.k} />
+                  <h3>{f.h}</h3>
+                  <p>{f.p}</p>
+                </article>
+              );
+            })}
           </div>
-          <div className="bm-tile bm-glow aff-reveal">
-            <div className="bm-stage bm-mac"><div className="bm-mac-screen"><div className="bm-mac-notch"><span className="bm-eq">{Array.from({ length: 7 }).map((_, i) => <i key={i} style={{ animationDelay: `${i * 90}ms` }} />)}</span></div></div></div>
-            <h3>Music lights him up</h3><p>Play a song and your notch glows and moves to the beat.</p>
-          </div>
-          <div className="bm-tile bm-notch aff-reveal">
-            <div className="bm-stage bm-notch-stage"><NotchSheet className="ns-glow bm-live-notch" done={false} label="Braino">On it. Opening Spotify.</NotchSheet></div>
-            <h3>A notch that's alive</h3><p>It opens when he listens, shows his work, and folds away when he's done.</p>
-          </div>
-          <div className="bm-tile bm-movie aff-reveal">
-            <span className="bm-exp">Experimental</span>
-            <div className="bm-stage bm-screen-dark">
-              <div className="bm-film" />
-              <p className="bm-sub">“Everyone keeps telling me how my story is supposed to go.”</p>
-              <div className="bm-react"><BrainoMascot size={40} /><span>Okay, this scene. No spoilers, but hold on.</span></div>
-            </div>
-            <h3>Movie night with Braino</h3><p>We watched Spider-Man: Across the Spider-Verse with him. He followed the scenes, answered questions, and never spoiled a thing.</p>
-          </div>
+          <div className="bm-ring-dots" aria-hidden="true">{FUN.map((f, i) => <i key={f.k} className={i === front ? "on" : ""} />)}</div>
         </div>
       </div>
     </section>
