@@ -81,7 +81,6 @@ const SCENES = [
   { id: "persona", kind: "persona", kicker: "Make me yours", title: "And what do you *do?*", say: "And what do you do?", options: ["Student", "Founder", "Engineer", "Designer", "Creator", "Something else"] },
   /* Students: where, and for Mesa, their Nexus connected through Mesa's own
      API with a personal token, saved only on this Mac (2026-10-13). */
-  { id: "school", kind: "school", when: () => answers.persona === "Student", kicker: "Make me yours", title: "Where do you *study?*", say: "Where do you study?", options: ["Mesa School of Business", "Somewhere else"] },
   { id: "mesa", kind: "mesa", when: () => answers.school === "Mesa School of Business", kicker: "Your Nexus", title: "Let me into *Nexus.*", say: "Let me into Nexus, and I'll always know your classes, deadlines and attendance.", sub: "Your classes, deadlines, grades and attendance, straight from Mesa. Your token stays on this Mac only." },
   { id: "perms", kind: "perms", kicker: "Trust", title: "Four quick *yeses.*", say: "Four quick yeses from your Mac, and I can really help. Tap Allow on each one.", sub: "Your Mac asks once for each. Every one turns green the moment it works." },
   /* How he learns (2026-10-13): the person picks, and the pick is applied
@@ -155,7 +154,10 @@ function body(scene) {
       ${mesaState.error ? `<p class="ob-sub" style="color:#b4472f;margin-top:10px">${esc(mesaState.error)}</p>` : ""}
       <div class="ob-actions"><button class="ob-go" data-mesa-save>${mesaState.busy ? "Checking…" : "Connect"}</button><button class="ob-skip" data-next>Skip for now</button></div>`;
   }
-  if (scene.kind === "persona") return `<div class="ob-choices">${scene.options.map((o) => `<button class="ob-choice${answers.persona === o ? " on" : ""}" data-choice="${esc(o)}">${esc(o)}</button>`).join("")}</div>`;
+  /* Onboarding stays general. Nexus is only for Mesa students, so it is a
+     small optional box here, not a question everyone answers (2026-10-15). */
+  if (scene.kind === "persona") return `<div class="ob-choices">${scene.options.map((o) => `<button class="ob-choice${answers.persona === o ? " on" : ""}" data-choice="${esc(o)}">${esc(o)}</button>`).join("")}</div>
+      <button type="button" class="ob-mesa-box${answers.school === "Mesa School of Business" ? " on" : ""}" data-mesa-start aria-pressed="${answers.school === "Mesa School of Business"}"><b>At Mesa School of Business?</b><span>${answers.school === "Mesa School of Business" ? "\u2713 Nexus is next. Now pick what you do." : "Connect Nexus and I'll know your classes and deadlines"}</span><i aria-hidden="true">${answers.school === "Mesa School of Business" ? "\u2713" : "\u2192"}</i></button>`;
   if (scene.kind === "perms") {
     const ps = snap?.permissions || [];
     /* "Hey Braino" is a promise about a microphone, so it is offered here,
@@ -241,6 +243,13 @@ document.addEventListener("click", async (e) => {
   if (t.id === "ob-sound") { muted = !muted; try { localStorage.setItem("obMuted", muted ? "1" : "0"); } catch (_) {} if (muted) stopVoice(); paintSound(); return; }
   if (t.hasAttribute("data-next")) { next(); return; }
   if (t.dataset.school) { await save({ school: t.dataset.school, org: t.dataset.school === "Somewhere else" ? "" : t.dataset.school }); render(); setTimeout(next, 350); return; }
+  if (t.hasAttribute("data-mesa-start")) {
+    // Marks them as Mesa; they still pick what they do, then Nexus comes next.
+    const on = answers.school !== "Mesa School of Business";
+    await save({ school: on ? "Mesa School of Business" : "", org: on ? "Mesa School of Business" : "" });
+    render();
+    return;
+  }
   if (t.hasAttribute("data-mesa-open")) { void api.mesaOpenDeveloper?.(); return; }
   if (t.hasAttribute("data-mesa-save")) {
     const token = $("ob-mesa")?.value.trim();

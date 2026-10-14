@@ -163,3 +163,12 @@ html, body { margin: 0; height: 100%; }
 .ob-mode { padding: 16px 18px 14px; gap: 8px; font-size: 14px; }
 .ob-mode ul { padding-top: 10px; gap: 4px; font-size: 12.5px; }
 .ob-improve { padding: 12px 14px; }
+
+/* The optional Mesa box under "what do you do" (2026-10-15). */
+.ob-mesa-box { margin-top: 26px; display: grid; grid-template-columns: 1fr auto; column-gap: 14px; align-items: center; text-align: left; max-width: 460px; padding: 14px 18px; border-radius: 12px; border: 1px dashed var(--line); background: transparent; color: var(--ink); cursor: pointer; transition: border-color .2s, background .2s; }
+.ob-mesa-box:hover { border-style: solid; border-color: var(--ink-3); background: var(--box); }
+.ob-mesa-box b { font: 600 15px var(--sf); }
+.ob-mesa-box span { grid-column: 1; font-size: 13.5px; color: var(--ink-2); }
+.ob-mesa-box i { grid-column: 2; grid-row: 1 / span 2; font-style: normal; color: var(--ink-3); }
+.ob-mesa-box.on { border-style: solid; border-color: var(--ok); }
+.ob-mesa-box.on i { color: var(--ok); }
