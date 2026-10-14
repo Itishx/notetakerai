@@ -461,3 +461,15 @@
 .bs-stage .bs-wall::before { display: none; }
 .bs-stage .bs-app { inset: 28px 0 0 !important; padding: 96px clamp(24px, 3vw, 44px) 28px !important; border: 0 !important; border-radius: 0 !important; box-shadow: none !important; background: transparent !important; }
 .bs-stage .bs-app > .bs-chat, .bs-stage .bs-app > .bs-music { margin: -96px calc(-1 * clamp(24px, 3vw, 44px)) -28px !important; padding-top: 110px; height: calc(100% + 124px); }
+
+/* Dark theme (2026-10-14): dark word boxes; the Mac screens keep their light
+   look, like a Mac in light mode, so every app inside stays readable. */
+.aff[data-theme="dark"] .bs-row { background: #161513; border-color: rgba(244,242,236,.14); }
+.aff[data-theme="dark"] .bs-row .bs-talk { border-color: rgba(244,242,236,.1) !important; }
+.aff[data-theme="dark"] .bs-talk h3 { color: #f4f2ec; }
+.aff[data-theme="dark"] .bs-p { color: rgba(244,242,236,.66); }
+.aff[data-theme="dark"] .bs-talk .bs-n { color: rgba(244,242,236,.4) !important; }
+.aff[data-theme="dark"] .bs-row.is-said .bs-n { color: var(--acc) !important; }
+.aff[data-theme="dark"] .bs-wall { background: #fbfaf7 !important; color: #1b1c1f; }
+.aff[data-theme="dark"] .bs-wall .mmb { color: #1b1c1f; background: rgba(0,0,0,.05); }
+.aff[data-theme="dark"] .bs-wall .bs-app { color: #1b1c1f; }
