@@ -612,7 +612,7 @@ export default function BrainoFinal() {
         {model.film ? (
           <figure className="aff-hero-shot bp-film" data-grow id="film">
             <video src={model.film.src} playsInline controls={playing} preload="metadata" poster="/affective-hero.jpg"
-              onClick={(e) => { setPlaying(true); void e.currentTarget.play(); }} />
+              onClick={(e) => { setPlaying(true); void e.currentTarget.play(); }} onEnded={() => setPlaying(false)} />
             {!playing && (
               <button type="button" className="bp-film-play" onClick={(e) => {
                 const video = e.currentTarget.parentElement?.querySelector("video");
@@ -630,6 +630,10 @@ export default function BrainoFinal() {
           </figure>
         )}
         <div className="aff-strip">
+          {/* While the film plays, the strip becomes a line of trivia about it. */}
+          {playing ? (
+            <div className="aff-wrap aff-strip-in aff-trivia" role="note"><span>Trivia</span><p>We made this film three months ago, when Braino was a tiny browser extension and even his founder had no idea what he would become. Today he lives on your Mac, and he is far better there.</p></div>
+          ) : (
           <div className="aff-wrap aff-strip-in">
             <p className="aff-strip-label">Works in what you already use</p>
             <ul className="aff-strip-names aff-strip-logos">
@@ -638,6 +642,7 @@ export default function BrainoFinal() {
               ))}
             </ul>
           </div>
+          )}
         </div>
       </header>
 

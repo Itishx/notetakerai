@@ -610,6 +610,7 @@ export default function Affective() {
           {blink ? (
             <div className="hb6-film">
               <video src="/Braino_Final.MP4" autoPlay playsInline controls onEnded={() => setBlink(false)} />
+              <p className="aff-trivia aff-trivia-film" role="note"><span>Trivia</span>We made this film three months ago, when Braino was a tiny browser extension and even his founder had no idea what he would become. Today he lives on your Mac, and he is far better there.</p>
             </div>
           ) : (
             <ul className="hb4-does hb6-jobs">

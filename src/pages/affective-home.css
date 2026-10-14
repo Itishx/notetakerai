@@ -863,3 +863,9 @@
 .hb6-film { margin-top: clamp(40px, 5vw, 64px); border-radius: 18px; overflow: hidden; background: #000; aspect-ratio: 16 / 9; }
 .hb6-film video { display: block; width: 100%; height: 100%; object-fit: contain; background: #000; }
 .hb6-demo-real { margin-top: clamp(28px, 4vw, 48px); }
+/* "Don't Blink" trivia (2026-10-15): a quiet note while the old film plays. */
+.aff-trivia { display: flex; align-items: center; gap: 14px; animation: apIn .5s both; }
+.aff-trivia span { flex: none; padding: 4px 10px; border-radius: 999px; background: #f3c86a; color: #3b2a07; font: 700 10.5px var(--ao-sf, sans-serif); letter-spacing: .1em; text-transform: uppercase; }
+.aff-trivia p, .aff-trivia-film { margin: 0; font: 14px/1.5 var(--ao-sf, -apple-system, sans-serif); color: var(--a-ink-soft); }
+.aff-trivia-film { margin-top: 12px; }
+@keyframes apIn { from { opacity: 0; transform: translateY(6px); } }
