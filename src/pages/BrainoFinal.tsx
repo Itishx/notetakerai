@@ -299,7 +299,7 @@ const FAQ = [
   },
   {
     q: "How is Braino different from Claude Cowork or Perplexity Computer?",
-    a: "Perplexity Computer is mainly an AI operator for researching and completing tasks across apps and websites. Claude Cowork is a contained work agent: deep reasoning, long documents, research, and tasks inside the workspace you give it. Braino is meant to be with you on your Mac all day, with a persistent presence, voice, memory, desktop controls, and screen and camera awareness. There is overlap in computer control, but they are task focused. Braino remembers across sessions, knows your people and preferences, and acts across your apps. Claude Cowork has deep project context; Braino has your personal context. A companion for your whole Mac.",
+    a: "Perplexity Computer is mainly an AI operator for researching and completing tasks across apps and websites.\n\nClaude Cowork is a contained work agent: deep reasoning, long documents, research, and tasks inside the workspace you give it.\n\nBraino is meant to be with you on your Mac all day, with a persistent presence, voice, memory, desktop controls, and screen and camera awareness.\n\nThere is overlap in computer control, but they are task focused. Braino remembers across sessions, knows your people and preferences, and acts across your apps. Claude Cowork has deep project context; Braino has your personal context.\n\nA companion for your whole Mac.",
   },
   {
     q: "Is this a chatbot?",
@@ -748,7 +748,7 @@ export default function BrainoFinal() {
             {FAQ.map((f) => (
               <details key={f.q}>
                 <summary>{f.q}<i aria-hidden="true">+</i></summary>
-                <p>{f.a}</p>
+                {f.a.split("\n\n").map((t) => <p key={t}>{t}</p>)}
               </details>
             ))}
           </div>
