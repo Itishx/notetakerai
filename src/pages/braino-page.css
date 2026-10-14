@@ -473,3 +473,11 @@
 .aff[data-theme="dark"] .bs-wall { background: #fbfaf7 !important; color: #1b1c1f; }
 .aff[data-theme="dark"] .bs-wall .mmb { color: #1b1c1f; background: rgba(0,0,0,.05); }
 .aff[data-theme="dark"] .bs-wall .bs-app { color: #1b1c1f; }
+
+/* The deck (2026-10-14): every box sticks, the next one slides over it. */
+.bs-deck .bs-row { position: sticky; transform-origin: 50% 0; margin-bottom: 40vh !important; border-top: 1px solid var(--a-line-strong, var(--a-line)) !important; box-shadow: 0 -20px 60px -40px rgba(0,0,0,.35); transition: none !important; will-change: transform, filter; }
+.bs-deck .bs-row:last-of-type { margin-bottom: 0 !important; }
+.bs-deck .bs-row:hover { transform: none; }
+.bs-deck, .bs-deck .bs-wrap { overflow: visible; }
+@media (max-width: 860px) { .bs-deck .bs-row { position: relative; top: auto !important; margin-bottom: 16px !important; } }
+.bs-deck .bs-row { overflow: hidden; }

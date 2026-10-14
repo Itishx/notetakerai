@@ -1,4 +1,4 @@
-import { ReactNode, useEffect, useRef, useState } from "react";
+import React, { ReactNode, useEffect, useRef, useState } from "react";
 import { MacMenuBar, NotchSheet } from "@/pages/aff-figures";
 import { BrainoMascot } from "@/components/BrainoMascot";
 
@@ -107,7 +107,7 @@ const SCENES: Scene[] = [
 /* The home page's own notch (NotchSheet) on the home page's own screen: it
    listens first, then drops open with the steps ticking off, over the app
    he is working in. */
-function SceneRow({ s, n, flip }: { s: Scene; n: number; flip: boolean }) {
+function SceneRow({ s, n, flip, style }: { s: Scene; n: number; flip: boolean; style?: React.CSSProperties }) {
   const [ref, inView] = useInView<HTMLDivElement>();
   const app = useRef<HTMLDivElement>(null);
   const [at, setAt] = useState<{ x: number; y: number } | null>(null);
@@ -129,7 +129,7 @@ function SceneRow({ s, n, flip }: { s: Scene; n: number; flip: boolean }) {
     setAt({ x: b.left - a.left + Math.min(b.width / 2, 60), y: b.top - a.top + b.height / 2 });
   }, [done, s.point.sel]);
   return (
-    <div ref={ref} className={"bs-row" + (flip ? " is-flip" : "") + (inView ? " is-in" : "") + (work ? " is-said" : "")}>
+    <div ref={ref} style={style} className={"bs-row" + (flip ? " is-flip" : "") + (inView ? " is-in" : "") + (work ? " is-said" : "")}>
       <div className="bs-talk">
         <div className="bs-meta"><span className="bs-n">{String(n).padStart(2, "0")}</span><span className="bs-app-tag">{s.app}</span></div>
         <h3>{s.title}</h3>
@@ -169,17 +169,46 @@ function SceneRow({ s, n, flip }: { s: Scene; n: number; flip: boolean }) {
   );
 }
 
+/* The boxes stack into one deck as you scroll (2026-10-14): each sticks a
+   little lower than the last, and as the next slides over it, it settles
+   back, a touch smaller and dimmer. */
+function useStack(root: React.RefObject<HTMLElement>) {
+  useEffect(() => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    let raf = 0;
+    const tick = () => {
+      raf = 0;
+      const rows = [...(root.current?.querySelectorAll<HTMLElement>(".bs-row") || [])];
+      rows.forEach((row, i) => {
+        const next = rows[i + 1];
+        if (!next) { row.style.transform = ""; row.style.filter = ""; return; }
+        const a = row.getBoundingClientRect(), b = next.getBoundingClientRect();
+        const cover = Math.min(1, Math.max(0, (a.bottom - b.top) / a.height));
+        row.style.transform = `scale(${1 - cover * 0.06})`;
+        row.style.filter = `brightness(${1 - cover * 0.18})`;
+      });
+    };
+    const on = () => { if (!raf) raf = requestAnimationFrame(tick); };
+    window.addEventListener("scroll", on, { passive: true });
+    window.addEventListener("resize", on);
+    tick();
+    return () => { window.removeEventListener("scroll", on); window.removeEventListener("resize", on); cancelAnimationFrame(raf); };
+  }, [root]);
+}
+
 export function BrainoScenes() {
   const [ref, inView] = useInView<HTMLDivElement>();
+  const deck = useRef<HTMLElement>(null);
+  useStack(deck);
   return (
-    <section className="bs" id="does">
+    <section className="bs bs-deck" id="does" ref={deck}>
       <div className="bs-wrap">
         <div ref={ref} className={"bs-head" + (inView ? " is-in" : "")}>
           <div className="bs-head-notch">{inView && <NotchSheet className="ns-glow" label="Listening" done={false}>Hey Braino...</NotchSheet>}</div>
           <h2 className="aff-h1 bs-h">Just ask.<br /><em>He's right there.</em></h2>
           <p>Seven things he does today, on the screen you're already on.</p>
         </div>
-        {SCENES.map((s, i) => <SceneRow key={s.title} s={s} n={i + 1} flip={i % 2 === 1} />)}
+        {SCENES.map((s, i) => <SceneRow key={s.title} s={s} n={i + 1} flip={i % 2 === 1} style={{ top: `calc(84px + ${i * 14}px)`, zIndex: i + 1 }} />)}
       </div>
     </section>
   );
