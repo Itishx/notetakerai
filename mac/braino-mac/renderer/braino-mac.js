@@ -6071,6 +6071,19 @@ function stopEditDistance(a, b) {
   return row[b.length];
 }
 
+/* "Stop talking" (2026-10-15): asked after he had already finished, it went
+   to the loop (6s), which had nothing to stop, called it a failure, and then
+   said so out loud. It is never a job: stop his voice if it is going, and
+   otherwise stay silent. */
+const STOP_TALKING = /^(?:(?:hey\s+)?brain(?:o|elle)[\s,.!]*)?(?:please\s+)?(?:(?:stop|quit|no more)\s+(?:the\s+)?(?:talking|speaking|yapping|chatting)|shut up|be quiet|keep quiet|quiet(?:\s+please)?|hush|zip it|chup(?:\s+(?:raho|karo|ho jao))?|bas karo bolna)\b[\s,.!]*(?:please|now|braino)?[\s.!]*$/i;
+function isStopTalkingPhrase(text) { return STOP_TALKING.test(String(text || "").trim()); }
+function stopTalkingNow(source, transcript) {
+  logRenderer("voice.stop_talking", { source, speaking, transcript: String(transcript || "").slice(0, 80) });
+  if (transcript) nfSetHeard(transcript, { durationMs: 1000 });
+  if (speaking) stopSpeechOutput();
+  setStatus(realtimeActive ? "listening" : "ready", realtimeActive ? "Listening" : "Ready");
+}
+
 function isStopTaskPhrase(text, { jobRunning = false } = {}) {
   let rest = String(text || "").trim().replace(/[.!?]+$/g, "").replace(/,/g, " ").replace(/\s+/g, " ");
   if (!rest) return false;
@@ -9126,6 +9139,7 @@ async function submitTyped(text) {
   logRenderer("type.in", { chars: said.length });
   nfSetHeard(said, { durationMs: 1600 });
   closeTyping("submitted");
+  if (isStopTalkingPhrase(said)) { stopTalkingNow("typed", said); return; }
   if (isStopTaskPhrase(said)) {
     if (!await stopTaskNow("typed", said)) await nothingToStop("typed", said);
     return;
@@ -9464,6 +9478,7 @@ async function flushRealtimeTranscript(reason, textOverride, opts = {}) {
     stopListeningNow("voice_phrase");
     return;
   }
+  if (isStopTalkingPhrase(transcript)) { voiceTurnInFlight = false; stopTalkingNow("voice", transcript); return; }
   if (isStopTaskPhrase(transcript, { jobRunning: voiceTurnInFlight })) {
     if (await stopTaskNow("voice_phrase", transcript)) return;
     if (accepted) {
