@@ -141,7 +141,7 @@ const MODELS: Model[] = [
       "Know which Ravi you meant", "Type at your cursor", "Check your battery", "Change your wallpaper",
       "Remember what you told him", "Moonwalk to Billie Jean",
     ],
-    dayTitle: "An ordinary Tuesday with him, morning to night",
+    dayTitle: "An ordinary Tuesday with him,|morning to night",
     day: [
       { at: "8:30 am", p: "\u201cGood morning, Braino.\u201d Class at 9:30, the deck is due at 5, and John is waiting on a reply. Your whole day in one breath." },
       { at: "9:30 am", p: "\u201cTake notes for this class.\u201d You actually listen. The notes are ready the moment class ends." },
@@ -549,10 +549,6 @@ export default function BrainoFinal() {
     setParams(next === 0 ? {} : { model: key }, { replace: true });
   };
   const model = SHOWN_MODELS[at];
-  /* A trial switch (2026-10-15): serif headings or SF Pro, to compare live.
-     Remembered in this browser only. Remove once one is chosen. */
-  const [heads, setHeads] = useState<"serif" | "sf">(() => { try { return localStorage.getItem("bpHeads") === "sf" ? "sf" : "serif"; } catch { return "serif"; } });
-  useEffect(() => { try { localStorage.setItem("bpHeads", heads); } catch { /* private window */ } }, [heads]);
   /* Built from the home page's own pieces (2026-10-07): lit headlines, the
      rising sections, the picture that opens to the page, its nav and footer. */
   const root = useAffReveal([at]);
@@ -582,11 +578,7 @@ export default function BrainoFinal() {
   }, []);
 
   return (
-    <div className="aff bf bp" data-heads={heads} data-theme={theme} ref={root} style={{ ["--acc" as string]: theme === "dark" ? model.accentDark : model.accent }}>
-      <div className="bp-heads-switch" role="group" aria-label="Heading font">
-        <small>Headings</small>
-        {(["serif", "sf"] as const).map((h) => <button key={h} type="button" className={heads === h ? "on" : ""} onClick={() => setHeads(h)}>{h === "sf" ? "SF Pro" : "Serif"}</button>)}
-      </div>
+    <div className="aff bf bp" data-theme={theme} ref={root} style={{ ["--acc" as string]: theme === "dark" ? model.accentDark : model.accent }}>
       <AffNav braino theme={theme} onToggle={toggle} links={[["What he does", "#what"], ["A normal day", "#day"], ["Questions", "#faq"]]} />
 
       {/* ── Hero: the home page's, with him in it ── */}
@@ -736,7 +728,7 @@ export default function BrainoFinal() {
         <section className="ah-os bp-day" id="day">
           <div className="aff-wrap">
             <p className="ah-kicker">What changes</p>
-            <h2 className="aff-h1 ah-os-line" data-lit><Lit text={model.dayTitle} /></h2>
+            <h2 className="aff-h1 ah-os-line" data-lit>{model.dayTitle.split("|").map((t, i) => <span key={t} className="bp-day-line">{i > 0 && <br />}<Lit text={t} /></span>)}</h2>
           </div>
           {model.day.every((d) => toMinutes(d.at) != null)
             ? <><p className="bf-ds-hint aff-reveal">Scroll <i aria-hidden="true">↓</i> fast or slow. Watch the day go by.</p><DayScroll day={model.day} /></>

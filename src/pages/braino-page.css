@@ -684,9 +684,12 @@
 .bp-heads-switch small { padding: 0 8px; color: rgba(255,255,255,.55); font-size: 11px; }
 .bp-heads-switch button { padding: 6px 12px; border: 0; border-radius: 999px; background: none; color: rgba(255,255,255,.75); font: inherit; cursor: pointer; }
 .bp-heads-switch button.on { background: #fff; color: #111; }
-.bp[data-heads="sf"] :is(.aff-h1, .bs-talk h3, .hb5-name h2, .bco-h, .hb2-faq-h, .wl-h, .hb-end-line, .bf-ds-at) {
+.bp :is(.aff-h1, .bs-talk h3, .hb5-name h2, .bco-h, .hb2-faq-h, .wl-h, .hb-end-line, .bf-ds-at) {
   font-family: "SF Pro Display", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif !important;
   font-weight: 600 !important; letter-spacing: -0.035em !important; font-style: normal !important;
 }
-.bp[data-heads="sf"] .bs-talk h3 { font-size: clamp(30px, 3vw, 44px); line-height: 1.05; }
-.bp[data-heads="sf"] .aff-h1 em, .bp[data-heads="sf"] .bs-h em { font-style: normal !important; }
+.bp .bs-talk h3 { font-size: clamp(30px, 3vw, 44px); line-height: 1.05; }
+.bp .aff-h1 em, .bp .bs-h em { font-style: normal !important; }
+/* SF Pro is the Braino page's heading face (2026-10-15), header links too. */
+.bp .aff-nav-links a:not(.aff-nav-go) { font-family: "SF Pro Display", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif; font-weight: 500; letter-spacing: -0.01em; }
+.bp-heads-switch { display: none; }
