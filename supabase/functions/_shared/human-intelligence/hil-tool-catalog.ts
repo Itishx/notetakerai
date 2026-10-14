@@ -152,6 +152,10 @@ export const HIL_TOOL_CATALOG: HilTool[] = [
   { name: "open_folder", params: ["folder"], gloss: "Open Downloads, Documents, Desktop, Applications or Home in Finder", zeroNetwork: true, },
   { name: "open_target", params: ["target"], gloss: "Open a named app, known website, or local file by name", },
   { name: "open_url", params: ["url"], gloss: "Open a spoken domain or full URL in Chrome", handler: "openChromeUrl", },
+  /* Going to a tab that is already open (2026-10-15): one call, under a
+     second. It lists every Chrome tab and brings the right one forward; the
+     loop used to try tab search shortcuts and tab-bar clicks for 85 seconds. */
+  { name: "switch_tab", params: ["query"], gloss: "Bring an already open Chrome tab to the front by its name, site or exact title (\"Notion\", \"Braino 16th Oct\"). Says which ones fit if more than one does", zeroNetwork: true, handler: "switchChromeTab", },
   /* Sound, without assuming Spotify. Three real failures on 2026-09-17 came
      from reasoning about Spotify while a YouTube video was the thing making
      noise: "stop the video playing on YouTube" paused Spotify and then took 53

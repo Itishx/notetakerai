@@ -19034,6 +19034,7 @@ const MAC_HIL_TOOLS = {
      which cost a whole turn to discover. A dot means the web; anything else is
      an app. Crude, and right for every real case: "Spotify" has no dot,
      "amazon.in" does. */
+  switch_tab: (a) => switchChromeTab(String(a.query || a.title || a.target || a.name || "")),
   open_target: (a) => {
     const target = String(a.target || a.name || "").trim();
     if (!target) return { ok: false, say: "Nothing named to open." };
@@ -19045,6 +19046,40 @@ const MAC_HIL_TOOLS = {
       : openApp(target);
   },
 };
+
+/* switch_tab for the loop (2026-10-15): the instant tab switch's own reading
+   and matching, as a move the loop can make. An exact title wins outright;
+   when two tabs fit equally (two Notion pages) it names them and asks, never
+   guesses. */
+async function switchChromeTab(query) {
+  const q = String(query || "").trim();
+  if (!q) return { ok: false, say: "Which tab?" };
+  const listed = await execFileP("/usr/bin/osascript", ["-e", tabSwitch.LIST_TABS_SCRIPT], { timeout: 4000 }).catch(() => null);
+  if (!listed) return { ok: false, say: "I couldn't read Chrome's tabs." };
+  const tabs = tabSwitch.parseTabList(listed.stdout || "");
+  const lower = q.toLowerCase();
+  const exact = tabs.filter((t) => String(t.title || "").toLowerCase().includes(lower));
+  let hit = exact.length === 1 ? exact[0] : null;
+  if (!hit) {
+    const ask = { query: lower, nth: 1, saidTab: true };
+    hit = tabSwitch.pickTab(tabs, ask);
+    const rivals = (exact.length > 1 ? exact : tabs.filter((t) => t !== hit && tabSwitch.pickTab([t], ask)))
+      .filter((t) => t.title && t.title !== hit?.title);
+    if (hit && rivals.length && exact.length !== 1) {
+      const names = [hit, ...rivals].slice(0, 3).map((t) => speakableMediaTitle(t.title || "") || tabSwitch.hostOf(t.url));
+      return { ok: false, say: `I see more than one: ${names.join(", ")}. Which one?`, options: names };
+    }
+  }
+  if (!hit) {
+    const some = tabs.slice(0, 5).map((t) => speakableMediaTitle(t.title || "") || tabSwitch.hostOf(t.url)).filter(Boolean);
+    return { ok: false, say: tabs.length ? `I don't see a ${q} tab. I see ${some.join(", ")}.` : "Chrome has no tabs open." };
+  }
+  const switched = await execFileP("/usr/bin/osascript", ["-e", tabSwitch.switchScript(hit.w, hit.i)], { timeout: 3000 }).then(() => true).catch(() => false);
+  logMac("hil.switch_tab", { query: q, ok: switched, tabs: tabs.length, title: hit.title });
+  return switched
+    ? { ok: true, say: `Switched to ${speakableMediaTitle(hit.title || "") || tabSwitch.hostOf(hit.url) || "it"}.`, url: hit.url, title: hit.title }
+    : { ok: false, say: "Chrome wouldn't switch tabs." };
+}
 
 /* Where a run's time actually went.
  *

@@ -11,7 +11,7 @@
 //
 // House rule: no em dashes or en dashes in Braino prompt copy.
 
-export const HIL_USE_CASES_VERSION = "1.4.0";
+export const HIL_USE_CASES_VERSION = "1.5.0";
 
 export const HIL_USE_CASES = `
 ## Learned from real runs
@@ -50,4 +50,14 @@ Each lesson below is a job someone really asked for, what went wrong once, and t
 7. Anything about their Mesa School of Business life.
    "What's due this week", "where is my next class", "my attendance in Negotiations", "did I submit the Art of Selling assignment", "any announcements".
    The right way: mesa_nexus, one call, and answer from what it returns. Prefer it over schedule_lookup and attendance_lookup, which read an older copy. Times are India time. If it says Mesa is not connected, say so and point them to the School page.
+
+8. Going to a tab that is already open.
+   "Switch to the Notion tab", "go back to my Gmail", "take me to the Braino doc", however it is said.
+   What went wrong once (2026-10-15): twelve steps and 85 seconds of tab search shortcuts and clicks on the tab bar, and it still landed on the wrong Notion page because two Notion tabs were open.
+   The right way: one move. switch_tab with the words they used, or the exact tab title when you can see it ("Braino 16th Oct"). Never Chrome's tab search, never clicking the tab strip. If switch_tab says more than one tab fits, ask which one in one short question with their names.
+
+9. "How much is left?" on the page they are looking at.
+   "How much money do I have left", "what's my balance", "how many credits are left", on a dashboard or billing page.
+   What went right (2026-10-15): on the Fish Audio dashboard he read the balance off the screen and said "$7.61 left" in one line.
+   The right way: read the number from the page already open (screen_vision or the page's text) and say it with its unit and what it is for. Do not search the web for it.
 `;

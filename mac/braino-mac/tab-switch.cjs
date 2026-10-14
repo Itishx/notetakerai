@@ -17,7 +17,7 @@ const ALIASES = {
   twitter: ["x.com", "twitter.com"], x: ["x.com"], chatgpt: ["chatgpt.com", "chat.openai.com"], gpt: ["chatgpt.com"],
   claude: ["claude.ai"], github: ["github.com"], linkedin: ["linkedin.com"], whatsapp: ["web.whatsapp.com"],
   netflix: ["netflix.com"], prime: ["primevideo.com"], hotstar: ["hotstar.com"], spotify: ["open.spotify.com"],
-  nexus: ["nexus", "mesa"], mesa: ["mesa"], notion: ["notion.so", "notion.site"], figma: ["figma.com"], canva: ["canva.com"],
+  nexus: ["nexus", "mesa"], mesa: ["mesa"], notion: ["notion.so", "notion.site", "notion.com"], figma: ["figma.com"], canva: ["canva.com"],
   amazon: ["amazon."], flipkart: ["flipkart.com"], pinterest: ["pinterest."], reddit: ["reddit.com"], maps: ["google.com/maps", "maps"],
 };
 
