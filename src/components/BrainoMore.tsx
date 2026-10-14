@@ -79,7 +79,6 @@ export function Personality() {
       <div className="aff-wrap">
         <p className="ah-kicker">What sets him apart</p>
         <h2 className="aff-h1 bm-h">Not just smart. <em>Someone.</em></h2>
-        <div className="bm-slab" aria-hidden="true"><div className="bm-slab-body"><span className="bm-slab-notch"><i /><i /></span><span className="bm-slab-light" /></div><div className="bm-slab-glow" /></div>
         <div className="bm-specs">
           <div className="bm-srow r1">
             <div className="bm-cell"><small>Built from</small><div className="bm-big-inline"><b>4 engines,</b><span>not one giant prompt, each doing one job well</span></div></div>

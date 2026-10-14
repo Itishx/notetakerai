@@ -726,8 +726,6 @@ export default function BrainoFinal() {
 
 
 
-        {/* ── The app (2026-10-15) ── */}
-        {model.fast && <MacApp />}
 
         {/* ── A day with him ── */}
         <section className="ah-os bp-day" id="day">
@@ -741,7 +739,7 @@ export default function BrainoFinal() {
         </section>
 
         {/* ── First what he does, then who he is ── */}
-        {model.fast && <><Personality /><FunParts /></>}
+        {model.fast && <><MacApp /><Personality /><FunParts /></>}
       </main>
 
 
