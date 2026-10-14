@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Braino, BrainoDefs, useTime } from "@/components/BrainoChar";
 import { BrainoMascot } from "@/components/BrainoMascot";
 import { NotchSheet } from "@/pages/aff-figures";
 
@@ -71,25 +72,27 @@ const ENGINES = [
 ];
 
 export function Personality() {
+  /* In the shape of Apple's spec grids (2026-10-15): a glowing piece of
+     hardware, then rows that each split differently, hairlines between. */
   return (
-    <section className="bm bm-soul">
+    <section className="bm bm-soul bm-spec">
       <div className="aff-wrap">
         <p className="ah-kicker">What sets him apart</p>
         <h2 className="aff-h1 bm-h">Not just smart. <em>Someone.</em></h2>
-        <p className="bm-lede">Most AI is a very clever search box. Braino was written like a character: warm, honest, a little funny, and always on your side.</p>
-        <div className="bm-traits">
-          {TRAITS.map((t) => (
-            <div key={t.k} className="bm-trait aff-reveal">
-              <small>{t.k}</small>
-              <div className="bm-say"><span className="bm-eyes" aria-hidden="true"><i /><i /></span>{t.line}</div>
-              <p>{t.p}</p>
-            </div>
-          ))}
-        </div>
-        <div className="bm-engines aff-reveal">
-          <p className="bm-engines-k">How he was made</p>
-          <h3>Not one giant prompt. <em>A set of engines,</em> each doing one job well.</h3>
-          <ol>{ENGINES.map((e, i) => <li key={e.h}><span>{String(i + 1).padStart(2, "0")}</span><b>{e.h}</b><p>{e.p}</p></li>)}</ol>
+        <div className="bm-slab" aria-hidden="true"><div className="bm-slab-body"><span className="bm-slab-notch"><i /><i /></span><span className="bm-slab-light" /></div><div className="bm-slab-glow" /></div>
+        <div className="bm-specs">
+          <div className="bm-srow r1">
+            <div className="bm-cell"><small>Built from</small><div className="bm-big-inline"><b>4 engines,</b><span>not one giant prompt, each doing one job well</span></div></div>
+            <div className="bm-cell"><h4>Emotional Engine</h4><p>reads whether you are venting, celebrating or stuck, and answers like a friend</p></div>
+          </div>
+          <div className="bm-srow r2">
+            <div className="bm-cell"><small>Remembers</small><h5>what matters</h5><p>your people, your plans, what you promised, with his Memory Engine</p></div>
+            <div className="bm-cell"><b className="bm-big">A real sense of humour</b><p>used at the right moments, never in the way</p></div>
+          </div>
+          <div className="bm-srow r3">
+            <div className="bm-cell"><b className="bm-big">Honest when it fails</b><p>if something didn't work, he says so, no pretending</p></div>
+            <div className="bm-cell bm-fade"><h4>Calm by design</h4><p>no pings, no nagging, he speaks when spoken to</p></div>
+          </div>
         </div>
       </div>
     </section>
@@ -109,9 +112,61 @@ const FUN = [
 /* Movie night's picture: drop the image in public/ and set it here. */
 const MOVIE_IMAGE = "";
 
+/* His real moves, from BrainoDanceGrid (the same rig and pose maths the
+   extension performs). Moonwalk: mirrored legs, fedora, the backward glide.
+   Dance: the extension's routine, Gun Fingers then Disco Fever. */
+const RIG = 120;
+function useWidth() {
+  const ref = useRef<HTMLDivElement>(null);
+  const [w, setW] = useState(420);
+  useLayoutEffect(() => {
+    const measure = () => ref.current && setW(ref.current.clientWidth);
+    measure(); window.addEventListener("resize", measure); return () => window.removeEventListener("resize", measure);
+  }, []);
+  return [ref, w] as const;
+}
+function MoonwalkStage() {
+  const [ref, w] = useWidth();
+  const t = useTime();
+  const SPEED = 84, span = w + RIG * 1.6;
+  const x = w + RIG * 0.7 - ((t * SPEED + w * 0.5) % span);
+  const sScale = 1 - 0.06 * Math.abs(Math.sin(t * 4.2));
+  return (
+    <div className="bm-stage bm-rig-stage" ref={ref}>
+      <div className="bm-spot" /><div className="bm-floor" />
+      <div className="bm-shadow" style={{ left: x, transform: `translate(-50%, 40%) scaleX(${sScale})` }} />
+      <div className="bm-dancer-rig" style={{ left: x, transform: "translate(-50%, 0)" }}>
+        <Braino size={RIG} legs gloves moonwalk accessory="fedora" expr="mischief" lookX={0.45} lookY={0.05} idle />
+      </div>
+    </div>
+  );
+}
+function DanceStage() {
+  const t = useTime();
+  /* Gun Fingers for the first 6 seconds of each round, then Disco Fever. */
+  const round = t % 12;
+  let dx = 0, sy = 1, leftArm = 0, rightArm = 0, expr = "mischief", lookX = 0, lookY = 0, hands: string | undefined;
+  if (round < 6) {
+    const b = t * 3.0, s2 = Math.tanh(Math.sin(b) * 2.6), groove = Math.abs(Math.sin(b));
+    sy = 1 - groove * 0.05; rightArm = -130 - s2 * 25; leftArm = 130 - s2 * 25; lookX = -0.4; lookY = -0.45; hands = "point";
+  } else {
+    const b = t * 2.6, stab = Math.tanh(Math.sin(b) * 2.3);
+    dx = stab * 6; sy = 1 - Math.abs(Math.sin(b * 2)) * 0.045; rightArm = -82 - stab * 56; leftArm = -10; lookX = 0.45; lookY = -0.3 - Math.max(0, stab) * 0.25;
+  }
+  return (
+    <div className="bm-stage bm-rig-stage bm-disco">
+      <div className="bm-spot" /><div className="bm-floor" />
+      <div className="bm-shadow" style={{ left: "50%", transform: `translate(calc(-50% + ${dx}px), 40%)` }} />
+      <div className="bm-dancer-rig" style={{ left: "50%", transform: `translate(calc(-50% + ${dx}px), 0) scaleY(${sy})` }}>
+        <Braino size={RIG} legs gloves hands={hands as any} leftArm={leftArm} rightArm={rightArm} expr={expr} lookX={lookX} lookY={lookY} idle />
+      </div>
+    </div>
+  );
+}
+
 function FunArt({ k }: { k: string }) {
-  if (k === "moon") return <div className="bm-stage"><div className="bm-floor" /><span className="bm-note">♪</span><span className="bm-note n2">♫</span><div className="bm-walker"><BrainoMascot size={96} /></div></div>;
-  if (k === "dance") return <div className="bm-stage bm-disco"><div className="bm-dancer"><BrainoMascot size={96} /></div></div>;
+  if (k === "moon") return <MoonwalkStage />;
+  if (k === "dance") return <DanceStage />;
   if (k === "glow") return <div className="bm-stage bm-mac"><div className="bm-mac-screen"><div className="bm-mac-notch"><span className="bm-eq">{Array.from({ length: 7 }).map((_, i) => <i key={i} style={{ animationDelay: `${i * 90}ms` }} />)}</span></div></div></div>;
   if (k === "notch") return <div className="bm-stage bm-notch-stage"><NotchSheet className="ns-glow bm-live-notch" done={false} label="Braino">On it. Opening Spotify.</NotchSheet></div>;
   return (
@@ -153,6 +208,8 @@ export function FunParts() {
   const front = Math.round(turn) % FUN.length;
   return (
     <section className="bm bm-fun">
+      {/* His colours and shading, shared by every rig drawing on the page. */}
+      <BrainoDefs />
       <div className="bm-ring-run" ref={ref} style={{ height: `${FUN.length * 70 + 40}vh` }}>
         <div className="bm-ring-pin">
           <div className="aff-wrap bm-ring-head">
