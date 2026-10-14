@@ -108,7 +108,25 @@ const SCENES: Scene[] = [
    listens first, then drops open with the steps ticking off, over the app
    he is working in. */
 function SceneRow({ s, n, flip, style }: { s: Scene; n: number; flip: boolean; style?: React.CSSProperties }) {
-  const [ref, inView] = useInView<HTMLDivElement>();
+  /* Starts when the card has landed in its place in the deck (its top at its
+     sticky line), not when it first peeks in, so the notch plays on a card
+     you can see whole. */
+  const ref = useRef<HTMLDivElement>(null);
+  const [inView, setInView] = useState(false);
+  useEffect(() => {
+    if (inView) return;
+    const check = () => {
+      const el = ref.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      const line = parseFloat(getComputedStyle(el).top) || 0;
+      const sticky = getComputedStyle(el).position === "sticky";
+      if (sticky ? r.top <= line + 24 && r.bottom > 0 : r.top < window.innerHeight * 0.55) setInView(true);
+    };
+    check();
+    window.addEventListener("scroll", check, { passive: true });
+    return () => window.removeEventListener("scroll", check);
+  }, [inView]);
   const app = useRef<HTMLDivElement>(null);
   const [at, setAt] = useState<{ x: number; y: number } | null>(null);
   /* listen, then work with the steps, then fold back to a small "Done" so
