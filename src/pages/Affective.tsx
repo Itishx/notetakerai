@@ -1,6 +1,4 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { DemoSlot } from "@/components/DemoSlot";
-import "@/components/demo-slot.css";
 import { Braino, BrainoDefs, useTime } from "@/components/BrainoChar";
 import { Link } from "react-router-dom";
 import { AffThemeToggle, useAffTheme } from "@/components/AffTheme";
@@ -624,8 +622,6 @@ export default function Affective() {
           <figure className="ah-os-live aff-reveal aff-rise">
             <div className="ao-viz ao-viz-screen"><VoiceToAction tabs notch row bare /></div>
           </figure>
-          {/* The real thing, recorded: drop the clip in public/demos/ and pass src. */}
-          <div className="hb6-demo-real aff-reveal"><DemoSlot title="Watch Braino do it: one sentence, done on a real Mac" caption="A real request, recorded on a real Mac." /></div>
           </div>
         </div>
       </section>
