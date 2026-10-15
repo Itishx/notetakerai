@@ -11,7 +11,7 @@
 //
 // House rule: no em dashes or en dashes in Braino prompt copy.
 
-export const HIL_USE_CASES_VERSION = "1.6.0";
+export const HIL_USE_CASES_VERSION = "1.7.0";
 
 export const HIL_USE_CASES = `
 ## Learned from real runs
@@ -64,4 +64,8 @@ Each lesson below is a job someone really asked for, what went wrong once, and t
 10. "Stop talking", "be quiet", "shut up", about his own voice.
    What went wrong once (2026-10-15): it reached the loop after he had finished speaking, the loop found nothing to change on the Mac, called it a failure, and then said the failure out loud.
    The right way: this is never a job and never a failure. Nothing on the Mac needs to change. Finish at once as done with an empty reply, so he stays quiet. Only "stop the music" or "stop the video" means something on the Mac.
+
+11. Anything about when they have what.
+   "What do I have Thursday", "am I free at 4", "when is my next meeting", "what's on this week", "add lunch with Riya tomorrow at 1".
+   The right way: mac_calendar first. It reads every calendar already on their Mac (iCloud, Google, Outlook) with no sign in, in one call. Answer from what it returns, in one line. To add something, mac_calendar add with the title and the start time; say what you added. Reach for the Google Calendar tools only to make a Meet link, move or cancel a Google event with guests, or when they name Google. For classes and assignments at Mesa, mesa_nexus.
 `;

@@ -10959,6 +10959,87 @@ function cancelReminders(kind) {
   return { ok: true, say: doomed.length ? `Cancelled ${doomed.length === 1 ? `the ${noun}` : `${doomed.length} ${noun}s`}. The notch is clear.` : "There was nothing running." };
 }
 
+/* The Mac's own calendar for the loop (2026-10-15): EventKit reads every
+   calendar the Mac already has (iCloud, Google, Outlook, Exchange added in
+   Internet Accounts), so "what do I have Thursday" needs no sign in. Same
+   Swift-through-xcrun way as checkCalendarNext. list | add. */
+const MAC_CAL_SWIFT = [
+  "import EventKit",
+  "import Foundation",
+  "let a = CommandLine.arguments",
+  "let store = EKEventStore()",
+  "let sem = DispatchSemaphore(value: 0)",
+  "var granted = false",
+  "if #available(macOS 14.0, *) { store.requestFullAccessToEvents { g, _ in granted = g; sem.signal() } } else { store.requestAccess(to: .event) { g, _ in granted = g; sem.signal() } }",
+  "sem.wait()",
+  "if !granted { print(\"DENIED\"); exit(0) }",
+  "let clean: (String?) -> String = { ($0 ?? \"\").replacingOccurrences(of: \"\\t\", with: \" \").replacingOccurrences(of: \"\\n\", with: \" \") }",
+  "if a.count > 3 && a[1] == \"list\" {",
+  "  let s = Date(timeIntervalSince1970: Double(a[2]) ?? 0); let e = Date(timeIntervalSince1970: Double(a[3]) ?? 0)",
+  "  let evs = store.events(matching: store.predicateForEvents(withStart: s, end: e, calendars: nil)).sorted { $0.startDate < $1.startDate }",
+  "  for ev in evs.prefix(60) { print(\"\\(Int(ev.startDate.timeIntervalSince1970))\\t\\(Int(ev.endDate.timeIntervalSince1970))\\t\\(ev.isAllDay ? 1 : 0)\\t\\(clean(ev.title))\\t\\(clean(ev.calendar.title))\\t\\(clean(ev.location))\") }",
+  "} else if a.count > 4 && a[1] == \"add\" {",
+  "  let ev = EKEvent(eventStore: store)",
+  "  ev.title = a[2]; ev.startDate = Date(timeIntervalSince1970: Double(a[3]) ?? 0); ev.endDate = Date(timeIntervalSince1970: Double(a[4]) ?? 0)",
+  "  ev.calendar = store.defaultCalendarForNewEvents",
+  "  do { try store.save(ev, span: .thisEvent); print(\"ADDED\\t\\(clean(ev.calendar?.title))\") } catch { print(\"FAILED\\t\\(error.localizedDescription)\") }",
+  "}",
+].join("\n");
+
+function macCalRange(a) {
+  const now = new Date();
+  const day0 = (d) => { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; };
+  if (a.start && a.end) return [new Date(a.start), new Date(a.end)];
+  if (a.date) { const d = day0(new Date(`${a.date}T00:00:00`)); return [d, new Date(d.getTime() + 864e5)]; }
+  const r = String(a.range || "today").toLowerCase();
+  const today = day0(now);
+  if (/tomorrow/.test(r)) return [new Date(today.getTime() + 864e5), new Date(today.getTime() + 2 * 864e5)];
+  if (/week|7/.test(r)) return [now, new Date(today.getTime() + 8 * 864e5)];
+  if (/next|upcoming|soon/.test(r)) return [now, new Date(now.getTime() + 3 * 864e5)];
+  return [now, new Date(today.getTime() + 864e5)];
+}
+
+async function macCalendar(a = {}) {
+  const action = String(a.action || "list").toLowerCase();
+  const tmpPath = path.join(app.getPath("temp"), `braino-cal-${Date.now()}.swift`);
+  try {
+    await fs.promises.writeFile(tmpPath, MAC_CAL_SWIFT);
+    let args;
+    if (action === "add") {
+      const start = new Date(a.start || a.when || "");
+      if (!a.title || !Number.isFinite(start.getTime())) return { ok: false, say: "I need what it's called and when it starts." };
+      const end = a.end ? new Date(a.end) : new Date(start.getTime() + (Number(a.durationMinutes) || 60) * 60000);
+      args = ["add", String(a.title), String(Math.floor(start / 1000)), String(Math.floor(end / 1000))];
+    } else {
+      const [s, e] = macCalRange(a);
+      args = ["list", String(Math.floor(s / 1000)), String(Math.floor(e / 1000))];
+    }
+    const { stdout } = await execFileP("/usr/bin/xcrun", ["swift", tmpPath, ...args], { timeout: 60000 });
+    const out = String(stdout || "").trim();
+    if (out === "DENIED") return { ok: false, say: "I need Calendar access. Allow Braino in System Settings, Privacy, Calendars." };
+    if (action === "add") {
+      const [tag, cal = ""] = out.split("\n").pop().split("\t");
+      logMac("mac_calendar.add", { ok: tag === "ADDED", title: a.title });
+      return tag === "ADDED" ? { ok: true, say: `Added ${a.title} to your ${cal || "calendar"}.` } : { ok: false, say: "Calendar wouldn't save it." };
+    }
+    const events = out ? out.split("\n").map((line) => {
+      const [st, en, allDay, title, calendar, location] = line.split("\t");
+      return { start: new Date(Number(st) * 1000).toISOString(), end: new Date(Number(en) * 1000).toISOString(), allDay: allDay === "1", title, calendar, location };
+    }) : [];
+    logMac("mac_calendar.list", { count: events.length });
+    const fmt = (iso) => new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    const say = events.length
+      ? events.slice(0, 6).map((ev) => ev.allDay ? `${ev.title} (all day)` : `${ev.title} at ${fmt(ev.start)}`).join(", ") + (events.length > 6 ? `, and ${events.length - 6} more` : "")
+      : "Nothing on your calendar then.";
+    return { ok: true, say, events };
+  } catch (error) {
+    logMac("mac_calendar.failed", { error: String(error?.message || error).slice(0, 200) });
+    return { ok: false, say: "I couldn't read your calendar just now." };
+  } finally {
+    fs.promises.unlink(tmpPath).catch(() => {});
+  }
+}
+
 async function checkCalendarNext() {
   const swiftSource = [
     "import EventKit",
@@ -19035,6 +19116,7 @@ const MAC_HIL_TOOLS = {
      an app. Crude, and right for every real case: "Spotify" has no dot,
      "amazon.in" does. */
   switch_tab: (a) => switchChromeTab(String(a.query || a.title || a.target || a.name || "")),
+  mac_calendar: (a) => macCalendar(a),
   open_target: (a) => {
     const target = String(a.target || a.name || "").trim();
     if (!target) return { ok: false, say: "Nothing named to open." };
