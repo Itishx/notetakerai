@@ -137,7 +137,9 @@ function actionJs(idx, kind, value) {
       if(setter&&setter.set){setter.set.call(e,v);}else{e.value=v;}
       e.dispatchEvent(new Event('input',{bubbles:true}));
       e.dispatchEvent(new Event('change',{bubbles:true}));
-      return 'BRAINO_OK '+(e.value||'').slice(0,60);})()`;
+      /* The whole value, and whether it matches: a 60 character echo made a
+         90 character address look cut off, and he retyped it six times (2026-10-15). */
+      return 'BRAINO_OK '+((e.value===v)?'exact match, '+v.length+' characters: ':'differs, field now holds: ')+(e.value||'').slice(0,400);})()`;
   }
   if (kind === "press") {
     return `(function(){var e=${target}||document.activeElement;if(!e)return 'BRAINO_GONE';

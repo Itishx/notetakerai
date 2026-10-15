@@ -33,7 +33,7 @@ test("'do what I copied' reads the clipboard", () => {
 
 test("handoffs go straight to the loop with room to finish, and the lesson is shared", () => {
   assert.match(main, /runMacHilLoop\(handoffCommand\(h\), null, \{ noPlan: true, handoff: true \}\)/);
-  assert.match(main, /opts\.handoff \? MAC_HANDOFF_TIME_MS : MAC_HIL_SOFT_TIME_MS/);
+  assert.match(main, /\(opts\.handoff \|\| \/\^HANDOFF\\\.\/\.test\(String\(command \|\| ""\)\)\) \? MAC_HANDOFF_TIME_MS : MAC_HIL_SOFT_TIME_MS/);
   assert.match(lessons, /12\. A handed off checklist/);
   assert.doesNotMatch(lessons, /[–—]/);
 });

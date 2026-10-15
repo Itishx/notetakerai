@@ -11134,11 +11134,20 @@ function parseWaListenerIntent(raw) {
   return null;
 }
 
+/* "Reply to Komil saying chocolates are on their way" sent "to Komil saying
+   chocolates are..." as the message (2026-10-15): only her, him and them were
+   understood as who. Any name now, and the message is only what comes after
+   saying / that / tell them / a colon. */
 function parseWhatsAppReplyIntent(raw) {
-  const source = cleanPrompt(String(raw || ""));
-  const match = source.match(/^reply(?:\s+to\s+(?:her|him|them))?(?:\s+(?:saying|that|with))?\s+(.+)$/i);
-  if (!match?.[1]) return null;
-  return { message: match[1].trim() };
+  const source = cleanPrompt(String(raw || "")).replace(/^(?:(?:hey\s+)?brain(?:o|elle)[\s,.!]*)?(?:please\s+)?/i, "");
+  const named = source.match(/^reply(?:\s+back)?\s+to\s+(.+?)\s+(?:saying|that says|and say|and tell (?:her|him|them)|telling (?:her|him|them)|that|with)\s+(.+)$/i)
+    || source.match(/^reply(?:\s+back)?\s+to\s+([^:,]{1,40})\s*[:,]\s*(.+)$/i);
+  const plain = named ? null : source.match(/^reply(?:\s+back)?(?:\s+to\s+(?:her|him|them))?(?:\s+(?:saying|that|with))?\s+(.+)$/i);
+  const who = named ? named[1].trim() : "";
+  let message = String(named ? named[2] : plain?.[1] || "").trim().replace(/^["“]|["”]$/g, "");
+  if (!message || /^to\s+\S+$/i.test(message)) return null;
+  message = message.charAt(0).toUpperCase() + message.slice(1);
+  return { message, to: /^(?:her|him|them)$/i.test(who) ? "" : who };
 }
 
 function parseWhatsAppRememberIntent(raw) {
@@ -19863,7 +19872,10 @@ async function runMacHilLoop(command, resume = null, opts = {}) {
   /* He asked "close all your tabs?" himself, they said yes, and then the gate
      asked the same thing again. A yes to his own question covers the first
      step that needs one, if it comes within the next few steps. */
-  let consentUntilStep = resume?.consentFromAnswer ? (Number(resume?.stepsUsed) || 0) + 3 : -1;
+  /* And a yes to the gate itself carries the same way: on resume he brought
+     Chrome forward first, the Save click looked new, and he asked three times
+     (2026-10-15). */
+  let consentUntilStep = (resume?.consentFromAnswer || resume?.approvedSig) ? (Number(resume?.stepsUsed) || 0) + 3 : -1;
   let replayStep = approvedSig && resume?.gatedStep && macHilStepSignature(resume.gatedStep) === approvedSig
     ? resume.gatedStep
     : null;
@@ -19882,6 +19894,7 @@ async function runMacHilLoop(command, resume = null, opts = {}) {
      seconds of nothing is stuck; twenty seconds of work is just work. */
   let stuckAt = Date.now() + (resume?.keepGoing ? MAC_HIL_KEEP_GOING_MS : MAC_HIL_STUCK_MS);
   logMac("hil.loop.start", { command: textForLog(command), runId, ...(fast ? { fast: true } : {}) });
+  if (!resume && macAppStepAside()) await focusChrome().catch(() => null);
   macJobCommand = { text: String(command || ""), at: Date.now() };
   macTrail({ kind: "start", command: String(command || "").slice(0, 120), resumed: Boolean(resume) });
   macResetRunSpeed();
@@ -20240,6 +20253,13 @@ async function runMacHilLoop(command, resume = null, opts = {}) {
       continue;
     }
 
+    /* A handed off checklist already said what to do: its own steps are
+       approved. Money and deleting still ask. */
+    if (irreversible && stepSig !== approvedSig && /^HANDOFF\./.test(String(command || ""))
+      && !/\b(?:pay|buy|purchase|order|checkout|transfer|delete|remove|erase|unsubscribe)\b/i.test(`${stepObj.intent || ""} ${JSON.stringify(stepObj.action || {})}`)) {
+      logMac("hil.loop.handoff_approved", { runId, step });
+      approvedSig = stepSig;
+    }
     if (irreversible && stepSig !== approvedSig && step <= consentUntilStep) {
       logMac("hil.loop.consent_carried", { runId, step, action: String(stepObj.action?.type || "") });
       macTrace("👍 APPROVED", "you already said yes to this when he asked, not asking twice");
@@ -20393,7 +20413,7 @@ async function runMacHilLoop(command, resume = null, opts = {}) {
     lastCheckFailed = !verified.ok;
     lastStep = { intent: stepObj.intent || "", action: stepObj.action, expects: stepObj.expects || "", result: settled };
     failedInARow = settled?.ok === false ? failedInARow + 1 : 0;
-    const overTime = Date.now() - runStartedAt > (opts.handoff ? MAC_HANDOFF_TIME_MS : MAC_HIL_SOFT_TIME_MS) && !resume;
+    const overTime = Date.now() - runStartedAt > ((opts.handoff || /^HANDOFF\./.test(String(command || ""))) ? MAC_HANDOFF_TIME_MS : MAC_HIL_SOFT_TIME_MS) && !resume;
     if (failedInARow >= MAC_HIL_FAILS_IN_A_ROW || overTime) {
       logMac("hil.loop.honest_stop", { runId, step, why: overTime ? "over_time" : "fails_in_a_row", ms: Date.now() - runStartedAt });
       const where = String(state.tasks?.find((t) => t.status === "active")?.desc || state.goal || "").trim().replace(/[.!?]+$/, "");
@@ -21873,7 +21893,16 @@ function handoffCommand(h) {
   const body = h.steps.map((st, i) => `${i + 1}. ${st.replace(HANDOFF_STEP_LINE.source ? /^\s*(?:\d{1,2}[.)]|step\s*\d{1,2}[:.)]?|[-*\u2022])\s+/i : "", "")}`).join("\n");
   return `HANDOFF. The person handed you these steps. Follow them exactly, in order, in their real browser and Mac. Type any text, address or value exactly as written. Do not re-plan, search for other ways, or skip steps.\n\n${body}\n\n(Full text they gave, for anything the steps leave out:)\n${h.text}`;
 }
+/* A job started from the Braino app: the app window steps aside so the
+   browser is in front. He spent four turns hiding himself (2026-10-15). */
+function macAppStepAside() {
+  if (macCommandSurface !== "chat" || !appWindow || appWindow.isDestroyed() || !appWindow.isVisible()) return false;
+  appWindow.minimize();
+  logMac("app.step_aside", {});
+  return true;
+}
 async function runHandoff(h, source) {
+  if (macAppStepAside()) await focusChrome().catch(() => null);
   macHilGeneration += 1;
   logMac("handoff.start", { source, steps: h.steps.length });
   macTrace("📋 HANDOFF", `${h.steps.length} steps, following them as given (${source})`);
@@ -21891,6 +21920,7 @@ async function runDelegate(prompt, options = {}) {
       if (copied) return runHandoff(copied, "clipboard");
       return { ok: false, say: "I don't see any steps on your clipboard. Copy them, then ask me again.", source: "handoff" };
     }
+  }
 
   // A new job ends the last one's use of his browser; an answer to it does not.
   if (!pendingMacWorkflow && !/^show me\b|^(?:hide|close) (?:it|that|the browser|your browser)\b/i.test(String(raw || "").replace(/^(?:hey\s+)?brain(?:o|elle)[\s,]*/i, ""))) macOwnJob = null;
@@ -22626,9 +22656,11 @@ async function routeMacDelegate(prompt, raw = cleanPrompt(prompt)) {
   }
 
   const waReply = parseWhatsAppReplyIntent(raw);
-  if (waReply && lastIncomingWhatsApp && Date.now() - lastIncomingWhatsApp.at < 15 * 60 * 1000) {
-    logMac("delegate.whatsapp_reply_intent", { to: textForLog(lastIncomingWhatsApp.name), messageChars: waReply.message.length });
-    return sendWhatsAppMessage(lastIncomingWhatsApp.name, waReply.message);
+  if (waReply && (waReply.to || (lastIncomingWhatsApp && Date.now() - lastIncomingWhatsApp.at < 15 * 60 * 1000))) {
+    // The person named wins; "reply" alone means whoever wrote last.
+    const to = waReply.to || lastIncomingWhatsApp.name;
+    logMac("delegate.whatsapp_reply_intent", { to: textForLog(to), named: Boolean(waReply.to), messageChars: waReply.message.length });
+    return sendWhatsAppMessage(to, waReply.message);
   }
 
   const whatsAppRemember = parseWhatsAppRememberIntent(raw);
