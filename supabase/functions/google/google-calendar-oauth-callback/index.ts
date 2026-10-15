@@ -14,14 +14,10 @@ serve(async (req) => {
     const error = url.searchParams.get("error");
 
     if (error) {
-      return new Response(renderHTML(false, `Google authorization denied: ${error}`), {
-        headers: { "Content-Type": "text/html" },
-      });
+      return finish(false, `Google authorization denied: ${error}`);
     }
     if (!code || !state) {
-      return new Response(renderHTML(false, "Missing code or state parameter"), {
-        headers: { "Content-Type": "text/html" },
-      });
+      return finish(false, "Missing code or state parameter");
     }
 
     const env = getCalendarOAuthEnv();
@@ -31,14 +27,10 @@ serve(async (req) => {
       const parsed = await verifyCalendarOAuthState(state, env.serviceRoleKey);
       userIdentifier = parsed.userIdentifier;
     } catch {
-      return new Response(renderHTML(false, "Invalid state parameter"), {
-        headers: { "Content-Type": "text/html" },
-      });
+      return finish(false, "Invalid state parameter");
     }
     if (!userIdentifier) {
-      return new Response(renderHTML(false, "Missing user identifier"), {
-        headers: { "Content-Type": "text/html" },
-      });
+      return finish(false, "Missing user identifier");
     }
 
     const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
@@ -56,9 +48,7 @@ serve(async (req) => {
     if (!tokenRes.ok) {
       const errText = await tokenRes.text();
       console.error("Google Calendar token exchange failed:", errText);
-      return new Response(renderHTML(false, "Failed to exchange authorization code"), {
-        headers: { "Content-Type": "text/html" },
-      });
+      return finish(false, "Failed to exchange authorization code");
     }
 
     const tokenData = await tokenRes.json();
@@ -111,9 +101,7 @@ serve(async (req) => {
 
     if (dbError) {
       console.error("Google Calendar DB error:", dbError);
-      return new Response(renderHTML(false, "Failed to save connection"), {
-        headers: { "Content-Type": "text/html" },
-      });
+      return finish(false, "Failed to save connection");
     }
 
     try {
@@ -138,16 +126,21 @@ serve(async (req) => {
       console.warn("google-calendar-oauth-callback watch setup skipped:", watchError);
     }
 
-    return new Response(renderHTML(true, `Connected to Google Calendar${googleEmail ? ` as ${googleEmail}` : ""}!`), {
-      headers: { "Content-Type": "text/html" },
-    });
+    return finish(true, `Connected to Google Calendar${googleEmail ? ` as ${googleEmail}` : ""}!`);
   } catch (e) {
     console.error("google-calendar-oauth-callback error:", e);
-    return new Response(renderHTML(false, e instanceof Error ? e.message : "Unknown error"), {
-      headers: { "Content-Type": "text/html" },
-    });
+    return finish(false, e instanceof Error ? e.message : "Unknown error");
   }
 });
+
+/* Supabase functions cannot serve a web page: the HTML came back as code on
+   screen (2026-10-15). The result goes to the site's /connected page instead. */
+function finish(success: boolean, message: string): Response {
+  const site = Deno.env.get("SITE_URL") || "https://trybraino.com";
+  const detail = message.replace(/^Connected to Google Calendar(?: as )?/, "").replace(/!$/, "");
+  const q = new URLSearchParams({ ok: success ? "1" : "0", service: "Google Calendar", msg: success ? (detail ? `Signed in as ${detail}` : "") : message });
+  return Response.redirect(`${site.replace(/\/$/, "")}/connected?${q}`, 302);
+}
 
 function renderHTML(success: boolean, message: string): string {
   return `<!DOCTYPE html>
