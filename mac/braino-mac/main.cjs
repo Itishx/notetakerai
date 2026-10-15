@@ -11111,12 +11111,14 @@ function updateWaBadge(sender) {
   waBadgeCount += 1;
   waBadgeSender = String(sender || "").slice(0, 20);
   sendToRenderer("braino-mac:wa-badge", { count: waBadgeCount, sender: waBadgeSender });
-  clearTimeout(waBadgeTimer);
-  waBadgeTimer = setTimeout(() => { logMac("whatsapp.badge_expired", {}); clearWaBadge(); }, WA_BADGE_MAX_MS);
+  /* Ten minutes from the FIRST message: each new one used to restart the
+     clock, so a busy chat kept "Komi · 2 new" up all day (2026-10-15). */
+  if (!waBadgeTimer) waBadgeTimer = setTimeout(() => { logMac("whatsapp.badge_expired", {}); clearWaBadge(); }, WA_BADGE_MAX_MS);
 }
 
 function clearWaBadge() {
   clearTimeout(waBadgeTimer);
+  waBadgeTimer = null;
   if (!waBadgeCount) return;
   waBadgeCount = 0;
   waBadgeSender = "";
@@ -21915,6 +21917,12 @@ async function runDelegate(prompt, options = {}) {
   {
     const pasted = parseHandoff(prompt);
     if (pasted) return runHandoff(pasted, "pasted");
+    /* "Clear notifications": the badge goes, nothing else happens. */
+    if (/^(?:(?:hey\s+)?brain(?:o|elle)[\s,.!]*)?(?:please\s+)?(?:clear|dismiss|remove|hide|get rid of)\s+(?:the\s+|that\s+|this\s+|my\s+)?(?:whats\s*app\s+)?(?:notifications?|notification badge|badge|messages? (?:badge|notification))\b|^(?:dismiss|clear) (?:it|that)$/i.test(String(raw || "").trim())) {
+      clearWaBadge();
+      logMac("whatsapp.badge_cleared_by_voice", {});
+      return { ok: true, say: "Cleared.", source: "wa_badge" };
+    }
     if (HANDOFF_ASK.test(String(raw || "").trim())) {
       const copied = parseHandoff(clipboard.readText());
       if (copied) return runHandoff(copied, "clipboard");

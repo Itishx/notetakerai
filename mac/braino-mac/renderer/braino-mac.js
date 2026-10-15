@@ -12152,7 +12152,9 @@ notchFace?.addEventListener("click", () => { if (mascotHidden()) setMascotHide(n
    (2026-10-11). Only from a resting notch: an open answer or a running job
    keeps its own click. */
 notchFace?.addEventListener("click", async (event) => {
-  if (!nfWaBadge.count || processing || speaking || notchFace.classList.contains("nf-answer-open") || notchFace.classList.contains("nf-thinking")) return;
+  /* A job flagged as running used to swallow every tap, so the badge could
+     not be cleared at all (2026-10-15). Only speech or an open answer waits. */
+  if (!nfWaBadge.count || speaking || notchFace.classList.contains("nf-answer-open")) return;
   event.stopPropagation();
   event.preventDefault();
   const r = await window.brainoMac?.waBadgeOpen?.().catch(() => null);
