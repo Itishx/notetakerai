@@ -20393,7 +20393,7 @@ async function runMacHilLoop(command, resume = null, opts = {}) {
     lastCheckFailed = !verified.ok;
     lastStep = { intent: stepObj.intent || "", action: stepObj.action, expects: stepObj.expects || "", result: settled };
     failedInARow = settled?.ok === false ? failedInARow + 1 : 0;
-    const overTime = Date.now() - runStartedAt > MAC_HIL_SOFT_TIME_MS && !resume;
+    const overTime = Date.now() - runStartedAt > (opts.handoff ? MAC_HANDOFF_TIME_MS : MAC_HIL_SOFT_TIME_MS) && !resume;
     if (failedInARow >= MAC_HIL_FAILS_IN_A_ROW || overTime) {
       logMac("hil.loop.honest_stop", { runId, step, why: overTime ? "over_time" : "fails_in_a_row", ms: Date.now() - runStartedAt });
       const where = String(state.tasks?.find((t) => t.status === "active")?.desc || state.goal || "").trim().replace(/[.!?]+$/, "");
@@ -21855,9 +21855,43 @@ function talkOrConverse(raw) {
   return { ok: true, talk: true, say: "", source: "talk" };
 }
 
+/* Handing him a checklist (2026-10-15): steps from anywhere (a doc, an email,
+   Claude's own instructions), pasted in the app or copied and "do what I
+   copied". He follows them in order in the real browser instead of
+   re-planning them, with room for a real checklist's length. */
+const HANDOFF_STEP_LINE = /^\s*(?:\d{1,2}[.)]|step\s*\d{1,2}[:.)]?|[-*\u2022])\s+\S/i;
+const HANDOFF_ASK = /^(?:(?:hey\s+)?brain(?:o|elle)[\s,.!]*)?(?:please\s+)?(?:do|follow|run|go through|carry out)\s+(?:what i (?:just\s+)?copied|the steps i (?:just\s+)?copied|what(?:'s| is) (?:on|in) my clipboard|my clipboard|these steps|the copied steps)\b/i;
+const MAC_HANDOFF_TIME_MS = 6 * 60 * 1000;
+function parseHandoff(text) {
+  const lines = String(text || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const steps = lines.filter((l) => HANDOFF_STEP_LINE.test(l));
+  const lead = /^(?:please\s+)?(?:do|follow|run)\s+(?:this|these|the following)(?:\s+steps)?\s*:/i.test(lines[0] || "");
+  if (steps.length >= 2 || (lead && lines.length >= 3)) return { steps: steps.length >= 2 ? steps : lines.slice(1), text: lines.join("\n") };
+  return null;
+}
+function handoffCommand(h) {
+  const body = h.steps.map((st, i) => `${i + 1}. ${st.replace(HANDOFF_STEP_LINE.source ? /^\s*(?:\d{1,2}[.)]|step\s*\d{1,2}[:.)]?|[-*\u2022])\s+/i : "", "")}`).join("\n");
+  return `HANDOFF. The person handed you these steps. Follow them exactly, in order, in their real browser and Mac. Type any text, address or value exactly as written. Do not re-plan, search for other ways, or skip steps.\n\n${body}\n\n(Full text they gave, for anything the steps leave out:)\n${h.text}`;
+}
+async function runHandoff(h, source) {
+  macHilGeneration += 1;
+  logMac("handoff.start", { source, steps: h.steps.length });
+  macTrace("📋 HANDOFF", `${h.steps.length} steps, following them as given (${source})`);
+  return runMacHilLoop(handoffCommand(h), null, { noPlan: true, handoff: true });
+}
+
 async function runDelegate(prompt, options = {}) {
   let raw = cleanPrompt(prompt);
   macTurnCanTalk = { on: Boolean(options.canTalk), at: Date.now() };
+  {
+    const pasted = parseHandoff(prompt);
+    if (pasted) return runHandoff(pasted, "pasted");
+    if (HANDOFF_ASK.test(String(raw || "").trim())) {
+      const copied = parseHandoff(clipboard.readText());
+      if (copied) return runHandoff(copied, "clipboard");
+      return { ok: false, say: "I don't see any steps on your clipboard. Copy them, then ask me again.", source: "handoff" };
+    }
+
   // A new job ends the last one's use of his browser; an answer to it does not.
   if (!pendingMacWorkflow && !/^show me\b|^(?:hide|close) (?:it|that|the browser|your browser)\b/i.test(String(raw || "").replace(/^(?:hey\s+)?brain(?:o|elle)[\s,]*/i, ""))) macOwnJob = null;
 

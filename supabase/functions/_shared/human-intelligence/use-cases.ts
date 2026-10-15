@@ -11,7 +11,7 @@
 //
 // House rule: no em dashes or en dashes in Braino prompt copy.
 
-export const HIL_USE_CASES_VERSION = "1.7.0";
+export const HIL_USE_CASES_VERSION = "1.8.0";
 
 export const HIL_USE_CASES = `
 ## Learned from real runs
@@ -68,4 +68,8 @@ Each lesson below is a job someone really asked for, what went wrong once, and t
 11. Anything about when they have what.
    "What do I have Thursday", "am I free at 4", "when is my next meeting", "what's on this week", "add lunch with Riya tomorrow at 1".
    The right way: mac_calendar first. It reads every calendar already on their Mac (iCloud, Google, Outlook) with no sign in, in one call. Answer from what it returns, in one line. To add something, mac_calendar add with the title and the start time; say what you added. Reach for the Google Calendar tools only to make a Meet link, move or cancel a Google event with guests, or when they name Google. For classes and assignments at Mesa, mesa_nexus.
+
+12. A handed off checklist (the command starts "HANDOFF").
+   They pasted or copied step by step instructions: "go to console.cloud.google.com, open Credentials, open the OAuth client, add this redirect URI, save".
+   The right way: do the steps in order, one at a time, in their real browser. Open addresses exactly as written. Type or paste any value exactly as given, character for character. Look at the screen after each step and only then move on. If a button or field is not visible, scroll or look again, then carry on. Never re-plan, never search for another way, never skip a step. A step they wrote (like "click Save") is already approved: do it. Stop and ask only for a sign in or a code, a choice the steps do not make, or something that spends money or deletes that the steps never mentioned. At the end, say in one line which step you finished on and anything that did not match.
 `;
