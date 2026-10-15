@@ -2016,4 +2016,27 @@ const CHAT_CSS = `
   .bc-suggests{padding-left:6px}
   .bc-big-braino .braino-avatar svg{max-width:72vw}
 }
+
+/* ══ One chat, two places (2026-10-15): the website /chat and the Mac app's
+   chat are the same Braino, so they look the same. Paper, ink, SF Pro,
+   hairlines, white bubbles, a black send. Tokens first, then the few pieces
+   that hard-code dark values. */
+.bchat{
+  --bc-bg:#f4f2ec;--bc-side:#efece4;--bc-hover:rgba(22,21,15,.05);--bc-active:rgba(22,21,15,.08);
+  --bc-surface:#fff;--bc-line:#e4e0d6;--bc-text:#16150f;--bc-dim:#5a574f;--bc-muted:#8a877e;--bc-blue:#e05a4f;
+  font-family:"SF Pro Text",-apple-system,BlinkMacSystemFont,"Helvetica Neue",sans-serif;
+}
+.bchat ::-webkit-scrollbar-thumb{background:rgba(22,21,15,.14);background-clip:content-box}
+.bchat ::-webkit-scrollbar-thumb:hover{background:rgba(22,21,15,.24);background-clip:content-box}
+.bc-sidebar{border-right:1px solid var(--bc-line)}
+.bc-user-bubble{background:#fff;border:1px solid var(--bc-line);box-shadow:0 10px 24px -18px rgba(0,0,0,.25)}
+.bc-composer{background:#fff;border:1px solid #ddd8cc;box-shadow:0 20px 50px -30px rgba(0,0,0,.3)}
+.bc-composer:focus-within{border-color:#16150f;box-shadow:0 0 0 4px rgba(22,21,15,.06),0 20px 50px -30px rgba(0,0,0,.3)}
+.bc-composer textarea::placeholder{color:var(--bc-muted)}
+.bc-send{background:#16150f;color:#f4f2ec}
+.bc-send:hover{background:#2a2923}
+.bc-send:disabled{background:#d8d4ca;color:#8a877e}
+.bc-composer.is-voice{box-shadow:0 0 0 1px #16150f,0 0 34px rgba(224,90,79,.18)}
+.bc-composer.is-voice .bc-orb{box-shadow:0 0 0 3px rgba(224,90,79,.3),0 0 22px rgba(224,90,79,.35)}
+
 `;
