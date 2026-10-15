@@ -11,7 +11,7 @@
 //
 // House rule: no em dashes or en dashes in Braino prompt copy.
 
-export const HIL_USE_CASES_VERSION = "1.8.0";
+export const HIL_USE_CASES_VERSION = "1.9.0";
 
 export const HIL_USE_CASES = `
 ## Learned from real runs
@@ -72,4 +72,12 @@ Each lesson below is a job someone really asked for, what went wrong once, and t
 12. A handed off checklist (the command starts "HANDOFF").
    They pasted or copied step by step instructions: "go to console.cloud.google.com, open Credentials, open the OAuth client, add this redirect URI, save".
    The right way: do the steps in order, one at a time, in their real browser. Open addresses exactly as written. Type or paste any value exactly as given, character for character. Look at the screen after each step and only then move on. If a button or field is not visible, scroll or look again, then carry on. Never re-plan, never search for another way, never skip a step. A step they wrote (like "click Save") is already approved: do it. Stop and ask only for a sign in or a code, a choice the steps do not make, or something that spends money or deletes that the steps never mentioned. At the end, say in one line which step you finished on and anything that did not match.
+
+13. "Is Google Calendar connected?", "what can you access?", "are you connected to Notion?"
+   What went wrong once (2026-10-15): he read their calendar and said "nothing on your calendar today", which answers a different question.
+   The right way: connections_status, one call, and say what is connected and as whom, and what is not. If something they asked about is not connected, offer to connect it in one short question.
+
+14. "Start an instant Meet", "make a Meet link", "set up a call at 5 with Riya".
+   What went wrong once (2026-10-15): three tries of clicking around Google's website, then he stopped.
+   The right way: calendar_create with meet on (now, if they said instant), in one call; the link is copied for them, so say so. If Google Calendar is not connected, say that in one line and offer to connect it. Never click through calendar.google.com or meet.google.com for this.
 `;

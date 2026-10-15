@@ -158,6 +158,7 @@ export const HIL_TOOL_CATALOG: HilTool[] = [
   /* The Mac's own calendar (2026-10-15): every calendar already on the Mac,
      iCloud, Google, Outlook, no sign in. The default for schedule questions. */
   { name: "mac_calendar", params: ["action", "range", "date", "start", "end", "title", "durationMinutes"], gloss: "The Mac's own calendar, every account on it (iCloud, Google, Outlook), no sign in. action list: range today | tomorrow | week | upcoming, or date YYYY-MM-DD, or start and end ISO. action add: title, start ISO, durationMinutes or end. Default for any question about their schedule", zeroNetwork: true, handler: "macCalendar", },
+  { name: "connections_status", params: [], gloss: "Which of their accounts Braino is connected to right now (Google Calendar, Google Drive, Notion, X), with the account each is signed in as. For any question about what is connected or what Braino can access", memoSafe: true, handler: "connectionsStatus", },
   { name: "switch_tab", params: ["query"], gloss: "Bring an already open Chrome tab to the front by its name, site or exact title (\"Notion\", \"Braino 16th Oct\"). Says which ones fit if more than one does", zeroNetwork: true, handler: "switchChromeTab", },
   /* Sound, without assuming Spotify. Three real failures on 2026-09-17 came
      from reasoning about Spotify while a YouTube video was the thing making

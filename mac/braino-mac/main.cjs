@@ -10999,7 +10999,7 @@ function macCalRange(a) {
   return [now, new Date(today.getTime() + 864e5)];
 }
 
-async function macCalendar(a = {}) {
+async function macLocalCalendar(a = {}) {
   const action = String(a.action || "list").toLowerCase();
   const tmpPath = path.join(app.getPath("temp"), `braino-cal-${Date.now()}.swift`);
   try {
@@ -17381,6 +17381,34 @@ async function macCalendar(action, body = {}) {
     return { ok: false, error: String(e?.message || e) };
   }
 }
+/* What he is connected to (2026-10-15): "is Google Calendar connected?" read
+   the Mac calendar and said "nothing on your calendar today". Asked all at
+   once, each service's own status check, signed in as the person. */
+const MAC_CONNECTIONS = [
+  ["Google Calendar", "google-calendar-connection-status", (d) => d?.google_email || d?.data?.google_email || ""],
+  ["Google Drive", "google-drive-connection-status", (d) => d?.google_email || d?.email || ""],
+  ["Notion", "notion-connection-status", (d) => d?.workspace_name || d?.workspaceName || ""],
+  ["X", "x-connection-status", (d) => d?.username ? `@${d.username}` : ""],
+];
+async function connectionsStatus() {
+  const auth = authStatusPayload();
+  const token = await getBrainoAuthToken().catch(() => "");
+  if (!SUPABASE_URL || !token || !auth.userId) return { ok: false, say: "You're signed out of Braino, so I can't check your connections." };
+  const base = SUPABASE_URL.replace(/\/$/, "");
+  const results = await Promise.all(MAC_CONNECTIONS.map(async ([name, fn, who]) => {
+    try {
+      const res = await fetch(`${base}/functions/v1/${fn}`, { method: "POST", headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${token}` }, body: JSON.stringify({ userIdentifier: auth.userId }) });
+      const d = await res.json().catch(() => ({}));
+      return { name, connected: Boolean(d?.connected), as: d?.connected ? who(d) : "" };
+    } catch (_) { return { name, connected: null, as: "" }; }
+  }));
+  const on = results.filter((r) => r.connected === true).map((r) => r.as ? `${r.name} (${r.as})` : r.name);
+  const off = results.filter((r) => r.connected === false).map((r) => r.name);
+  logMac("connections.status", { on: on.length, off: off.length });
+  const say = [on.length ? `Connected: ${on.join(", ")}.` : "", off.length ? `Not connected: ${off.join(", ")}.` : "", "Your Mac's own calendar works without signing in."].filter(Boolean).join(" ");
+  return { ok: true, say, connections: results };
+}
+
 async function startGoogleCalendarConnect() {
   if (Date.now() - lastCalendarConnectAt < 60000) return true;
   const auth = authStatusPayload();
@@ -19127,7 +19155,9 @@ const MAC_HIL_TOOLS = {
      an app. Crude, and right for every real case: "Spotify" has no dot,
      "amazon.in" does. */
   switch_tab: (a) => switchChromeTab(String(a.query || a.title || a.target || a.name || "")),
-  mac_calendar: (a) => macCalendar(a),
+  // macLocalCalendar, not macCalendar: that name is the Google Calendar client. Reusing it broke every Google tool (2026-10-15).
+  mac_calendar: (a) => macLocalCalendar(a),
+  connections_status: () => connectionsStatus(),
   open_target: (a) => {
     const target = String(a.target || a.name || "").trim();
     if (!target) return { ok: false, say: "Nothing named to open." };
