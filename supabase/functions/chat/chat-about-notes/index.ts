@@ -255,8 +255,12 @@ function isRealtimeCostQuestion(message: string) {
     /how much\b/.test(text);
   if (!spendSignal) return false;
 
+  /* Only a short question that is really about what voice costs. "What's the
+     latest news today" came back as a spend receipt (2026-10-15): the search
+     results attached to it said "bill" and "OpenAI", and "today" counted. */
+  if (text.length > 180 || /\(answer me\b/.test(text)) return false;
   const realtimeSignal =
-    /\b(braino|realtime|live voice|voice mode|headphone mode|openai|session|today|7 days|seven days|last week|api)\b/.test(text);
+    /\b(braino|realtime|real time|live voice|voice mode|headphone mode|voice session|sessions?)\b/.test(text);
   if (!realtimeSignal) return false;
 
   const documentIntent =
