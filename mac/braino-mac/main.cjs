@@ -19523,6 +19523,9 @@ async function macExecuteHilAction(action, elements) {
       const thrown = said.replace("BRAINO_ERR ", "");
       /* Say the way round, not just the wall: "retry" on a Trusted Types page
          is the same error every time. */
+      if (/evaluate a string as JavaScript|Trusted ?Type/i.test(thrown) && !/Trusted(?:HTML|Script|ScriptURL)/.test(thrown)) {
+        return { ok: false, error: `The script threw: ${thrown} This page refuses page scripts completely (YouTube does). Do not use exec_js here again: use click, type and pressKey on the elements you read.` };
+      }
       const way = /Trusted(?:HTML|Script|ScriptURL)/.test(thrown)
         ? " This page blocks innerHTML and similar writes. Never set innerHTML, outerHTML or insertAdjacentHTML here. To put text in a box, call __brainoWrite(element or selector, text): it types like a keyboard and works in LinkedIn's post box and other rich editors. Or click the box and use the type action."
         : "";
@@ -19894,7 +19897,8 @@ async function runMacHilLoop(command, resume = null, opts = {}) {
   /* Measured from the last move that worked, not from the start (2026-10-01):
      "keep going?" came while he was clearly getting somewhere. Twenty
      seconds of nothing is stuck; twenty seconds of work is just work. */
-  let stuckAt = Date.now() + (resume?.keepGoing ? MAC_HIL_KEEP_GOING_MS : MAC_HIL_STUCK_MS);
+  const isHandoff = /^HANDOFF\./.test(String(command || ""));
+  let stuckAt = Date.now() + (isHandoff ? MAC_HANDOFF_TIME_MS : resume?.keepGoing ? MAC_HIL_KEEP_GOING_MS : MAC_HIL_STUCK_MS);
   logMac("hil.loop.start", { command: textForLog(command), runId, ...(fast ? { fast: true } : {}) });
   if (!resume && macAppStepAside()) await focusChrome().catch(() => null);
   macJobCommand = { text: String(command || ""), at: Date.now() };
@@ -20411,7 +20415,7 @@ async function runMacHilLoop(command, resume = null, opts = {}) {
     const settled = verified.ok ? result : { ...result, ok: false, error: verified.why };
     macTrail({ kind: "result", ok: settled?.ok !== false });
     if (macActionChangedSomething(stepObj.action, settled)) actionsDone += 1;
-    if (settled?.ok !== false) stuckAt = Math.max(stuckAt, Date.now() + MAC_HIL_STUCK_MS);
+    if (settled?.ok !== false) stuckAt = Math.max(stuckAt, Date.now() + (isHandoff ? MAC_HANDOFF_TIME_MS : MAC_HIL_STUCK_MS));
     lastCheckFailed = !verified.ok;
     lastStep = { intent: stepObj.intent || "", action: stepObj.action, expects: stepObj.expects || "", result: settled };
     failedInARow = settled?.ok === false ? failedInARow + 1 : 0;
@@ -21817,7 +21821,8 @@ async function routeHilFirst(raw) {
        emotional state into this" was chat at 0.78 and still went to the job
        loop by default, 14 to 16 seconds for an answer the voice session gives
        in about 2 (2026-10-11). Same guards as the voice side's one-brain check. */
-    if (sorted.kind === "chat" && sorted.confidence >= LAYA_TALK_SURE && !MAC_OWN_DATA.test(raw) && !SCREEN_DEIXIS_RE.test(String(raw).trim()) && !macLooksLikeTask(raw) && !parseVolumeCommand(raw)) {
+    // A waiting question gets its answer first: "yes" went to chat and the job stayed paused (2026-10-15).
+    if (!pendingMacWorkflow && sorted.kind === "chat" && sorted.confidence >= LAYA_TALK_SURE && !MAC_OWN_DATA.test(raw) && !SCREEN_DEIXIS_RE.test(String(raw).trim()) && !macLooksLikeTask(raw) && !parseVolumeCommand(raw)) {
       logMac("laya.talk_fast", { raw: textForLog(raw), confidence: sorted.confidence });
       return talkOrConverse(raw);
     }
@@ -21885,7 +21890,11 @@ const HANDOFF_STEP_LINE = /^\s*(?:\d{1,2}[.)]|step\s*\d{1,2}[:.)]?|[-*\u2022])\s
 const HANDOFF_ASK = /^(?:(?:hey\s+)?brain(?:o|elle)[\s,.!]*)?(?:please\s+)?(?:do|follow|run|go through|carry out)\s+(?:what i (?:just\s+)?copied|the steps i (?:just\s+)?copied|what(?:'s| is) (?:on|in) my clipboard|my clipboard|these steps|the copied steps)\b/i;
 const MAC_HANDOFF_TIME_MS = 6 * 60 * 1000;
 function parseHandoff(text) {
-  const lines = String(text || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  /* "I want to: 1. Open YouTube. 2. Search. 3. ..." on one line, as typed in
+     a chat box: split before each number so it reads like a list. */
+  let flat = String(text || "");
+  if (!/\n/.test(flat.trim()) && (flat.match(/(?:^|\s)\d{1,2}[.)]\s+\S/g) || []).length >= 2) flat = flat.replace(/\s+(?=\d{1,2}[.)]\s+\S)/g, "\n");
+  const lines = flat.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
   const steps = lines.filter((l) => HANDOFF_STEP_LINE.test(l));
   const lead = /^(?:please\s+)?(?:do|follow|run)\s+(?:this|these|the following)(?:\s+steps)?\s*:/i.test(lines[0] || "");
   if (steps.length >= 2 || (lead && lines.length >= 3)) return { steps: steps.length >= 2 ? steps : lines.slice(1), text: lines.join("\n") };
@@ -21898,7 +21907,8 @@ function handoffCommand(h) {
 /* A job started from the Braino app: the app window steps aside so the
    browser is in front. He spent four turns hiding himself (2026-10-15). */
 function macAppStepAside() {
-  if (macCommandSurface !== "chat" || !appWindow || appWindow.isDestroyed() || !appWindow.isVisible()) return false;
+  // Any job while the app window is up: commands from its chat now arrive through the notch.
+  if (!appWindow || appWindow.isDestroyed() || !appWindow.isVisible() || appWindow.isMinimized()) return false;
   appWindow.minimize();
   logMac("app.step_aside", {});
   return true;
@@ -25056,6 +25066,13 @@ ipcMain.handle("braino-mac:delegate", async (event, prompt, options) => {
   try {
     // Where this came from decides where an approval card for it appears.
     macCommandSurface = appWindow && !appWindow.isDestroyed() && event?.sender === appWindow.webContents ? "chat" : "voice";
+    /* Every input the same way (2026-10-15): a command from the app's chat
+       goes to the notch and runs exactly as if it were spoken. */
+    if (macCommandSurface === "chat" && options?.reason === "app_chat" && dockWindow && !dockWindow.isDestroyed()) {
+      dockWindow.webContents.send("braino-mac:run-input", { text: String(prompt || "") });
+      logMac("input.to_notch", { chars: String(prompt || "").length });
+      return { ok: true, say: "On it. Watch the notch.", source: "to_notch", forwarded: true };
+    }
     result = await runDelegate(prompt, options || {});
   } finally {
     macDelegatesInFlight = Math.max(0, macDelegatesInFlight - 1);

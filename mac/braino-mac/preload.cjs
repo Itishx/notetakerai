@@ -462,6 +462,11 @@ contextBridge.exposeInMainWorld("brainoMac", {
     ipcRenderer.on("braino-mac:wa-card", handler);
     return () => ipcRenderer.removeListener("braino-mac:wa-card", handler);
   },
+  onRunInput: (callback) => {
+    const handler = (_event, payload) => callback(payload || {});
+    ipcRenderer.on("braino-mac:run-input", handler);
+    return () => ipcRenderer.removeListener("braino-mac:run-input", handler);
+  },
   onWaBadge: (callback) => {
     const handler = (_event, payload) => callback(payload || {});
     ipcRenderer.on("braino-mac:wa-badge", handler);

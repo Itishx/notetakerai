@@ -36,3 +36,28 @@ test("reply to a named person sends only the message, to that person", () => {
   assert.deepEqual(parse("reply saying I will call you back"), { message: "I will call you back", to: "" });
   assert.equal(parse("reply"), null);
 });
+
+const renderer = readFileSync(new URL("../mac/braino-mac/renderer/braino-mac.js", import.meta.url), "utf8");
+const preload = readFileSync(new URL("../mac/braino-mac/preload.cjs", import.meta.url), "utf8");
+
+test("every input goes the voice way: the app's chat runs in the notch", () => {
+  assert.match(main, /dockWindow\.webContents\.send\("braino-mac:run-input"/);
+  assert.match(preload, /onRunInput: \(callback\)/);
+  assert.match(renderer, /flushRealtimeTranscript\("app_chat", text, \{ separateTurn: true, preAccepted: true, typed: true \}\)/);
+  assert.match(renderer, /if \(accepted && !opts\.fromHera && !opts\.typed\) transcript = await heraCommandText/);
+});
+
+test("a yes answers the waiting job before the chat fast lane", () => {
+  assert.match(main, /if \(!pendingMacWorkflow && sorted\.kind === "chat"/);
+});
+
+test("a handoff never pauses at 20 seconds, and a page that refuses scripts is said once", () => {
+  assert.match(main, /isHandoff \? MAC_HANDOFF_TIME_MS : resume\?\.keepGoing/);
+  assert.match(main, /Do not use exec_js here again/);
+});
+
+test("steps typed on one line still read as a list", () => {
+  const src = main.slice(main.indexOf("const HANDOFF_STEP_LINE"), main.indexOf("/* A job started from the Braino app"));
+  const { parseHandoff } = new Function(`${src}; return { parseHandoff };`)();
+  assert.equal(parseHandoff("I wanted to: 1. Open YouTube. 2. Search. 3. Copy the link.").steps.length, 3);
+});

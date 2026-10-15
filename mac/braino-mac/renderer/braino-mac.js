@@ -9467,7 +9467,8 @@ async function flushRealtimeTranscript(reason, textOverride, opts = {}) {
     return;
   }
   // OpenAI decided whether this was for him; HERA says what the words were.
-  if (accepted && !opts.fromHera) transcript = await heraCommandText(transcript);
+  // Typed words are exact: never swap them for a transcriber's version.
+  if (accepted && !opts.fromHera && !opts.typed) transcript = await heraCommandText(transcript);
   else if (heraVoice.on) heraVoice.turnRotate = null;
   if (isStopListeningPhrase(transcript)) {
     console.log(`[Braino 🎤 IN] "${transcript}" -> stop listening`);
@@ -14464,6 +14465,15 @@ window.brainoMac.onWaCard?.((payload) => {
   logRenderer("whatsapp.card_shown", { chars: text.length });
 });
 
+/* One way in (2026-10-15): a command typed in the Braino app's chat runs
+   through the same path as voice, so it shows and speaks in the notch, and a
+   yes or no answers it the same way. */
+window.brainoMac.onRunInput?.((payload) => {
+  const text = String(payload?.text || "").trim();
+  if (!text) return;
+  logRenderer("input.from_app", { chars: text.length });
+  void flushRealtimeTranscript("app_chat", text, { separateTurn: true, preAccepted: true, typed: true });
+});
 window.brainoMac.onWaBadge?.((payload) => {
   nfWaBadge = { count: Number(payload?.count) || 0, sender: String(payload?.sender || "") };
   updateNotchFace();
