@@ -8,6 +8,8 @@ import { AppLogo } from "@/components/AppLogo";
 import BrainoFooterGame from "@/components/BrainoFooterGame";
 import "@/components/braino-footer.css";
 import { BrainoScenes } from "@/components/BrainoScenes";
+import { MacApp, Personality, FunParts } from "@/components/BrainoMore";
+import "@/components/braino-more.css";
 import { MacMenuBar, NotchSheet } from "./aff-figures";
 /* The jobs are written here rather than read from the site's engine data,
    because this page says a different thing: each one carries what it saves
@@ -141,7 +143,7 @@ const MODELS: Model[] = [
       "Know which Ravi you meant", "Type at your cursor", "Check your battery", "Change your wallpaper",
       "Remember what you told him", "Moonwalk to Billie Jean",
     ],
-    dayTitle: "An ordinary Tuesday with him, morning to night",
+    dayTitle: "An ordinary Tuesday with him,|morning to night",
     day: [
       { at: "8:30 am", p: "\u201cGood morning, Braino.\u201d Class at 9:30, the deck is due at 5, and John is waiting on a reply. Your whole day in one breath." },
       { at: "9:30 am", p: "\u201cTake notes for this class.\u201d You actually listen. The notes are ready the moment class ends." },
@@ -156,7 +158,7 @@ const MODELS: Model[] = [
     ],
     honest:
       "Braino is in private beta on Mac and Chrome. Leave your email below and we will let you in. Windows is not on the list yet, and we would rather say so.",
-    cta: { label: "Get early access", to: "#early-access" },
+    cta: { label: "Join the waitlist", to: "#early-access" },
     state: "Runs on AffectiveOS · Private beta",
     accent: "#d9645b",
     accentDark: "#e8786e",
@@ -281,7 +283,7 @@ const COMPANION_TRAITS = [
   { k: "Morning", h: "Knows your day", p: "Classes, deadlines and who is waiting on you, the moment you open your Mac." },
   { k: "Voice", h: "Talks back", p: "Out loud, in his own voice. Speak or type, whatever is easier." },
   { k: "Hands", h: "Gets it done", p: "Messages, emails, forms and files, in the apps you already use." },
-  { k: "Memory", h: "Remembers what matters", p: "Your people, your plans, what you promised. You can see and delete all of it." },
+  { k: "Memory", h: "Remembers what matters", p: "Your people, your plans, what you promised. Ask him what he remembers, anytime." },
   { k: "Trust", h: "Asks before he acts", p: "Nothing is sent, bought or deleted without your yes." },
   { k: "Calm", h: "Never nags", p: "No pop-ups, no pings. He is there when you need him, quiet when you don't." },
 ];
@@ -299,7 +301,7 @@ const FAQ = [
   },
   {
     q: "How is Braino different from Claude Cowork or Perplexity Computer?",
-    a: "Perplexity Computer is mainly an AI operator for researching and completing tasks across apps and websites. Claude Cowork is a contained work agent: deep reasoning, long documents, research, and tasks inside the workspace you give it. Braino is meant to be with you on your Mac all day, with a persistent presence, voice, memory, desktop controls, and screen and camera awareness. There is overlap in computer control, but they are task focused. Braino remembers across sessions, knows your people and preferences, and acts across your apps. Claude Cowork has deep project context; Braino has your personal context. A companion for your whole Mac.",
+    a: "Perplexity Computer is mainly an AI operator for researching and completing tasks across apps and websites.\n\nClaude Cowork is a contained work agent: deep reasoning, long documents, research, and tasks inside the workspace you give it.\n\nBraino is meant to be with you on your Mac all day, with a persistent presence, voice, memory, desktop controls, and screen and camera awareness.\n\nThere is overlap in computer control, but they are task focused. Braino remembers across sessions, knows your people and preferences, and acts across your apps. Claude Cowork has deep project context; Braino has your personal context.\n\nA companion for your whole Mac.",
   },
   {
     q: "Is this a chatbot?",
@@ -314,8 +316,20 @@ const FAQ = [
     a: "Never. Anything that spends money, sends a message, posts or deletes something waits for your yes. That is enforced in the code.",
   },
   {
-    q: "Where does my data live?",
-    a: "What he remembers about you stays on your Mac. Only the request itself, and the context that job needs, is sent to think. Private windows and password apps are never recorded, nothing is sold, and you can read, fix or delete anything he keeps.",
+    q: "Is it always listening?",
+    a: "No. He listens when you call him: Control twice, or \u201cHey Braino\u201d if you turned it on. Listening for his name happens on your Mac, and nothing is sent until he wakes.",
+  },
+  {
+    q: "Is my screen recorded?",
+    a: "Only if you choose Learn my day. Then he keeps a text diary of your day on your Mac, which deletes itself after a week, and never includes password managers, banking apps or private windows. Choose Only when I ask, and he looks only when you ask. Screenshots are never stored.",
+  },
+  {
+    q: "Where does my data go?",
+    a: "Your requests go to the AI that thinks for him (OpenAI and Anthropic). The lasting things he remembers and your notes are kept in your Braino account. Nothing is sold. The details are on the Trust page, at affctve.com/trust.",
+  },
+  {
+    q: "Can I delete everything?",
+    a: "Yes. Switch off Learn my day and the diary stops. Deleting your account deletes everything he remembers about you.",
   },
 
   {
@@ -324,7 +338,7 @@ const FAQ = [
   },
   {
     q: "Can I use him today?",
-    a: "Braino is in private beta on Mac and Chrome, and we let people in a few at a time. Leave your email in early access and we will write when it is your turn.",
+    a: "Braino is in private beta on Mac and Chrome, and we let people in a few at a time. Join the waitlist and we will write when it is your turn.",
   },
 ];
 
@@ -333,103 +347,58 @@ const FAQ = [
    picked for you, because that is the one you came for. */
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 const SUPABASE_KEY = (import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY) as string;
-const PICKS = [
-  { id: "braino", name: "Braino", who: "For everyone", line: "Talk to your Mac and he does the job." },
-  { id: "foundry", name: "Braino Foundry", who: "For founders", line: "Gets your startup seen: posts, replies and intros." },
-];
-const NEXT = [
-  { h: "You are on the list", p: "Right away. One email to say so, nothing else." },
-  { h: "We send you an invite", p: "In small batches, so every new person gets looked after." },
-  { h: "You talk to your Mac", p: "Install Braino, say hello, and give him his first job." },
-];
 
-function EarlyAccess({ start }: { start: string }) {
-  const [picked, setPicked] = useState<Set<string>>(new Set([start]));
+function EarlyAccess(_: { start?: string }) {
+  /* The waitlist (2026-10-14): the one thing we launch on the 16th, so it is
+     the loudest section on the page. Braino only. Same waitlist table as
+     before; a new email gets its place in line, a known one gets a smile. */
   const [email, setEmail] = useState("");
-  const [state, setState] = useState<"idle" | "loading" | "done" | "existing" | "error" | "pick">("idle");
-  useEffect(() => { setPicked((cur) => (cur.has(start) ? cur : new Set([...cur, start]))); }, [start]);
-  const toggleOne = (id: string) => {
-    setPicked((cur) => { const next = new Set(cur); if (next.has(id)) next.delete(id); else next.add(id); return next; });
-    if (state === "pick") setState("idle");
-  };
+  const [state, setState] = useState<"idle" | "loading" | "done" | "existing" | "error">("idle");
+  const [position, setPosition] = useState<number | null>(null);
   const submit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (state === "loading") return;
     if (!email.trim().includes("@")) { setState("error"); return; }
-    if (picked.size === 0) { setState("pick"); return; }
     setState("loading");
-    const categories = Array.from(picked);
     try {
       const res = await fetch(`${SUPABASE_URL}/functions/v1/waitlist-signup`, {
         method: "POST",
         headers: { "Content-Type": "application/json", apikey: SUPABASE_KEY },
-        body: JSON.stringify({ email: email.trim(), categories, context: `braino-early-access:${categories.join(",")}` }),
+        body: JSON.stringify({ email: email.trim(), categories: ["braino"], context: "braino-waitlist" }),
       });
       const data = await res.json().catch(() => ({}));
+      if (data.error === "already_on_waitlist") { setState("existing"); return; }
       if (!res.ok) throw new Error();
-      setState(data.error === "already_on_waitlist" ? "existing" : "done");
+      setPosition(typeof data.position === "number" ? data.position : null);
+      setState("done");
     } catch {
       setState("error");
     }
   };
+  const line = state === "done"
+    ? (position ? `You're number ${position} on the waitlist.` : "You're on the waitlist.")
+    : state === "existing" ? "Oh, you're already signed up, cutie. Just a little longer now."
+    : state === "error" ? "Hmm, that didn't go through. Check the email and try again?"
+    : "Hi. Want to be one of the first to meet me?";
   const finished = state === "done" || state === "existing";
   return (
-    <section className="bf-sec bf-ea" id="early-access">
-      <div className="bf-wrap">
-        <div className="bf-sec-head bf-reveal">
-          <p className="bf-kicker">Early access</p>
-          <h2>Be one of the first <b>to talk to your Mac.</b></h2>
-          <p className="bf-sec-note">Braino is in private beta. We let people in a few at a time, so we can watch how it goes and fix what does not.</p>
-        </div>
-        <div className="bf-ea-grid">
-        <div className="bf-ea-hello bf-reveal" aria-hidden="true">
-          <MacMenuBar app="Finder" menus={["File", "Edit", "View", "Go"]} />
-          <NotchSheet className="ns-big ns-glow" done={false} label="Braino">{finished ? "Got it. See you soon." : "Hi. I've been waiting to meet you."}</NotchSheet>
-          <p className="bf-ea-hello-cap"><span className="vz-live" />Private beta · letting people in a few at a time</p>
-        </div>
-        <form className="bf-ea-box bf-reveal" onSubmit={submit}>
-          {finished ? (
-            <div className="bf-ea-done" role="status">
-              <span className="bf-ea-check" aria-hidden="true" />
-              <div>
-                <h3>{state === "done" ? "You are on the list." : "You are already with us."}</h3>
-                <p>We will write when it is your turn. Nothing else in between.</p>
-              </div>
-            </div>
-          ) : (
-            <>
-              <p className="bf-ea-k">What do you want to try?</p>
-              <div className="bf-ea-picks">
-                {PICKS.map((p) => {
-                  const on = picked.has(p.id);
-                  return (
-                    <button type="button" key={p.id} className={"bf-ea-pick" + (on ? " on" : "")} aria-pressed={on} onClick={() => toggleOne(p.id)}>
-                      <span className="bf-ea-tick" aria-hidden="true" />
-                      <small>{p.who}</small>
-                      <b>{p.name}</b>
-                      <span>{p.line}</span>
-                    </button>
-                  );
-                })}
-              </div>
-              <label className="bf-ea-k" htmlFor="bf-ea-email">Your email</label>
-              <div className="bf-ea-row">
-                <input id="bf-ea-email" type="email" value={email} required autoComplete="email" placeholder="you@somewhere.com"
-                  onChange={(e) => { setEmail(e.target.value); if (state === "error") setState("idle"); }} />
-                <button type="submit" className="bf-cta" disabled={state === "loading"}>{state === "loading" ? "Joining\u2026" : "Get early access"}</button>
-              </div>
-              {state === "error" && <p className="bf-ea-msg" role="alert">That did not go through. Check the email and try once more.</p>}
-              {state === "pick" && <p className="bf-ea-msg" role="alert">Pick at least one above, so we know what to write to you about.</p>}
-            </>
-          )}
-        </form>
-        </div>
-        <ol className="bf-ea-next bf-reveal">
-          {NEXT.map((n, i) => <li key={n.h}><span>{i + 1}</span><h3>{n.h}</h3><p>{n.p}</p></li>)}
-        </ol>
-        <p className="bf-ea-small">Braino runs on a Mac and in Chrome. We only use your email to send you the invite and the occasional note about what is new.</p>
+    <div className="wl wl-inline">
+      <div className="wl-in">
+        <div className="wl-notch"><NotchSheet className="ns-glow" done={finished} label="Braino">{line}</NotchSheet></div>
+        {state === "done" && position && (
+          <div className="wl-num" role="status"><small>Your place in line</small><b>#{position}</b></div>
+        )}
+        <p className="wl-p" hidden={!finished}>{finished ? "We'll write the moment it's your turn. Just one email, nothing else." : "Braino isn't out yet. Leave your email and we'll let you in, a few people at a time."}</p>
+        {!finished && (
+          <form className="wl-form" onSubmit={submit}>
+            <input type="email" value={email} required autoComplete="email" placeholder="you@email.com" aria-label="Your email"
+              onChange={(e) => { setEmail(e.target.value); if (state === "error") setState("idle"); }} />
+            <button type="submit" disabled={state === "loading"}>{state === "loading" ? "Joining\u2026" : "Join the waitlist"}</button>
+          </form>
+        )}
+        <p className="wl-small">Only for Mac. We only use your email to send you the invite.</p>
       </div>
-    </section>
+    </div>
   );
 }
 
@@ -544,7 +513,7 @@ function DayScroll({ day }: { day: { at: string; p: string }[] }) {
       <div className="bf-ds-pin">
         <div className="bf-ds-stage">
           <div className="bf-ds-screen">
-            <div className="bf-ds-sky" style={{ background: `linear-gradient(180deg, rgb(${top}) 0%, rgb(${low}) 100%)` }}>
+            <div className="bf-ds-sky" style={{ backgroundImage: `linear-gradient(180deg, rgba(8,10,24,${(night * 0.78).toFixed(2)}), rgba(20,16,40,${(night * 0.7).toFixed(2)})), url(/braino-day-wallpaper.jpg)` }}>
             <div className="bf-ds-stars" style={{ opacity: night }} />
             <i className="bf-ds-sun" style={{ left: `${8 + sun * 84}%`, top: `${70 - Math.sin(sun * Math.PI) * 52}%`, opacity: 1 - night }} />
             <i className="bf-ds-moon" style={{ left: `${10 + moon * 70}%`, top: `${66 - Math.sin(Math.min(1, moon * 1.4) * Math.PI / 2) * 40}%`, opacity: night }} />
@@ -645,7 +614,7 @@ export default function BrainoFinal() {
         {model.film ? (
           <figure className="aff-hero-shot bp-film" data-grow id="film">
             <video src={model.film.src} playsInline controls={playing} preload="metadata" poster="/affective-hero.jpg"
-              onClick={(e) => { setPlaying(true); void e.currentTarget.play(); }} />
+              onClick={(e) => { setPlaying(true); void e.currentTarget.play(); }} onEnded={() => setPlaying(false)} />
             {!playing && (
               <button type="button" className="bp-film-play" onClick={(e) => {
                 const video = e.currentTarget.parentElement?.querySelector("video");
@@ -663,6 +632,10 @@ export default function BrainoFinal() {
           </figure>
         )}
         <div className="aff-strip">
+          {/* While the film plays, the strip becomes a line of trivia about it. */}
+          {playing ? (
+            <div className="aff-wrap aff-strip-in aff-trivia" role="note"><span>Trivia</span><p>We made this film three months ago, when Braino was a tiny browser extension and even his founder had no idea what he would become. Today he lives on your Mac, and he is far better there.</p></div>
+          ) : (
           <div className="aff-wrap aff-strip-in">
             <p className="aff-strip-label">Works in what you already use</p>
             <ul className="aff-strip-names aff-strip-logos">
@@ -671,6 +644,7 @@ export default function BrainoFinal() {
               ))}
             </ul>
           </div>
+          )}
         </div>
       </header>
 
@@ -752,19 +726,22 @@ export default function BrainoFinal() {
 
 
 
+
         {/* ── A day with him ── */}
         <section className="ah-os bp-day" id="day">
           <div className="aff-wrap">
             <p className="ah-kicker">What changes</p>
-            <h2 className="aff-h1 ah-os-line" data-lit><Lit text={model.dayTitle} /></h2>
+            <h2 className="aff-h1 ah-os-line" data-lit>{model.dayTitle.split("|").map((t, i) => <span key={t} className="bp-day-line">{i > 0 && <br />}<Lit text={t} /></span>)}</h2>
           </div>
           {model.day.every((d) => toMinutes(d.at) != null)
             ? <><p className="bf-ds-hint aff-reveal">Scroll <i aria-hidden="true">↓</i> fast or slow. Watch the day go by.</p><DayScroll day={model.day} /></>
             : <div className="aff-wrap"><DayClock day={model.day} /></div>}
         </section>
+
+        {/* ── First what he does, then who he is ── */}
+        {model.fast && <><MacApp /><Personality /><FunParts /></>}
       </main>
 
-      <EarlyAccess start={model.key} />
 
       {/* ── Questions: the home page's ── */}
       <section className="hb2-faq" id="faq">
@@ -777,7 +754,7 @@ export default function BrainoFinal() {
             {FAQ.map((f) => (
               <details key={f.q}>
                 <summary>{f.q}<i aria-hidden="true">+</i></summary>
-                <p>{f.a}</p>
+                {f.a.split("\n\n").map((t) => <p key={t}>{t}</p>)}
               </details>
             ))}
           </div>
@@ -785,9 +762,10 @@ export default function BrainoFinal() {
       </section>
 
       {/* ── The last word ── */}
-      <section className="hb-end">
+      <section className="hb-end" id="early-access">
         <div className="hb-end-glow" aria-hidden="true" />
-        <div className="aff-wrap hb-end-in aff-reveal">
+        <div className="aff-wrap hb-end-in hb-end-split aff-reveal">
+          <div className="hb-end-left">
           <BrainoMascot size={110} className="hb-end-him" />
           <h2 className="aff-h1 hb-end-line" aria-label="Make your Mac more Affective with Braino.">
             Make your Mac more{" "}
@@ -795,44 +773,38 @@ export default function BrainoFinal() {
             <span className="hb-end-with">with <span className="hb-end-braino">Braino.</span></span>
           </h2>
           <p className="hb-end-p">Stop opening tabs to get help. Braino is coming soon. Get in early.</p>
-          <div className="hb-go">
-            <a href="#early-access" className="aff-cta">Get early access</a>
-            <Link to="/affectiveos" className="aff-cta aff-cta-ghost">Read about AffectiveOS</Link>
           </div>
+          <EarlyAccess />
         </div>
       </section>
 
       {/* His footer: the words in black, then the Mario level last (2026-10-13). */}
       <footer className="braino-footer mario bf-game-mount">
-        <nav className="bf-cols" aria-label="Footer">
-          <div className="bf-col bf-col-about">
-            <div className="bf-col-head">Your companion</div>
-            <p>Your everyday Mac companion. A friend who lives on your Mac: talk to him, ask him anything, and he gets it done.</p>
+        {/* One width, one left edge for every row (2026-10-15). */}
+        <div className="bft">
+          <div className="bft-top">
+            <div className="bft-brand">
+              <p className="bft-name">Braino</p>
+              <p className="bft-line">Your everyday Mac companion. A friend who lives on your Mac: talk to him, ask him anything, and he gets it done.</p>
+              <a href="#early-access" className="bft-cta">Join the waitlist</a>
+            </div>
+            <nav className="bft-cols" aria-label="Footer">
+              <div><h4>Braino</h4><Link to="/braino">Meet Braino</Link><a href="#day">A normal day</a><a href="#faq">Questions</a><Link to="/changelog">What's new</Link></div>
+              <div><h4>Company</h4><Link to="/">Affective</Link><Link to="/affectiveos">AffectiveOS</Link><Link to="/trust">Trust &amp; privacy</Link><Link to="/contact">Contact</Link></div>
+              <div><h4>Connect</h4><a href="https://www.instagram.com/brainocells/" target="_blank" rel="noreferrer">Instagram</a><a href="https://x.com/brainosays" target="_blank" rel="noreferrer">X (Twitter)</a></div>
+            </nav>
           </div>
-          <div className="bf-col">
-            <div className="bf-col-head">Braino</div>
-            <Link to="/braino">Braino</Link>
-            <a href="#early-access">Early access</a>
-            <a href="#faq">Questions</a>
+          <div className="bft-privacy">
+            <span className="bft-lock" aria-hidden="true"><svg viewBox="0 0 16 18"><rect x="2" y="8" width="12" height="9" rx="2.5" fill="currentColor" /><path d="M4.5 8V5.5a3.5 3.5 0 0 1 7 0V8" fill="none" stroke="currentColor" strokeWidth="1.8" /></svg></span>
+            <p><b>Your privacy.</b> Braino only learns your day if you choose to. The diary stays on your Mac and deletes itself after a week. Screenshots are never stored.</p>
+            <Link to="/trust" className="bft-more">How Braino handles your data →</Link>
           </div>
-          <div className="bf-col">
-            <div className="bf-col-head">Company</div>
-            <Link to="/">Affective</Link>
-            <Link to="/affectiveos">AffectiveOS</Link>
-            <Link to="/contact">Contact</Link>
+          <div className="bft-base">
+            <span>© 2026 Affective · Made in Bengaluru · Braino is in private beta</span>
+            <span className="bft-legal"><Link to="/privacy">Privacy</Link><Link to="/terms">Terms</Link></span>
           </div>
-          <div className="bf-col">
-            <div className="bf-col-head">Connect</div>
-            <a href="https://instagram.com/brainosays" target="_blank" rel="noreferrer">Instagram</a>
-            <a href="https://x.com/brainosays" target="_blank" rel="noreferrer">X (Twitter)</a>
-          </div>
-        </nav>
-        <p className="bf-disclaimer">Braino only sees your screen when you ask him to. Screenshots are never stored.</p>
+        </div>
         <div className="bf-game-window">
-          <div className="bf-baseline">
-            <span className="bf-signoff">Made by Affective in Bengaluru · Braino is in private beta</span>
-            <span className="bf-legal"><Link to="/privacy">Privacy</Link><Link to="/terms">Terms</Link></span>
-          </div>
           <BrainoFooterGame />
         </div>
       </footer>

@@ -114,7 +114,7 @@ export function AffNav({ theme, onToggle, links, braino = false }: { theme: stri
         )}
         <div className="aff-nav-links">
           {items.map(([label, to]) => to.startsWith("#") ? <a key={to} href={to}>{label}</a> : <Link key={to} to={to}>{label}</Link>)}
-          <Link to="/braino#early-access" className="aff-nav-go">Early access</Link>
+          <Link to="/braino#early-access" className="aff-nav-go">Join the waitlist</Link>
           <AffThemeToggle theme={theme as "light" | "dark"} onToggle={onToggle} />
         </div>
       </div>
@@ -138,13 +138,14 @@ export function AffFooter() {
               <h4><Link to="/braino">Braino</Link></h4>
               <ul>
                 <li><Link to="/braino">For everyone</Link></li>
-                <li><Link to="/braino#early-access">Early access</Link></li>
+                <li><Link to="/braino#early-access">Join the waitlist</Link></li>
               </ul>
             </nav>
             <nav className="aff-foot-col">
               <h4>Company</h4>
               <Link to="/affectiveos">AffectiveOS</Link>
               <Link to="/labs">Labs</Link>
+              <Link to="/trust">Trust &amp; privacy</Link>
               <Link to="/contact">Contact</Link>
             </nav>
           </div>

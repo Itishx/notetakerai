@@ -1,4 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { DemoSlot } from "@/components/DemoSlot";
+import "@/components/demo-slot.css";
 import { Braino, BrainoDefs, useTime } from "@/components/BrainoChar";
 import { Link } from "react-router-dom";
 import { AffThemeToggle, useAffTheme } from "@/components/AffTheme";
@@ -104,8 +106,11 @@ const FAQS = [
   { q: "Who makes Braino?", a: "Affective, a small product company in Bengaluru. Braino is the first thing we have built." },
   { q: "What do I need?", a: "A Mac. Braino lives in the notch on the Mac and also works in Chrome." },
   { q: "Will it do things without asking me?", a: "No. Anything that spends money, sends a message, posts in public or deletes something waits for your yes, every time." },
-  { q: "Is my data private?", a: "What Braino remembers stays on your Mac. Private windows and password apps are never recorded, nothing is sold, and you can read, fix or delete anything he keeps." },
-  { q: "How do I get it?", a: "Braino is in private beta. Join early access and we will invite you as places open up." },
+  { q: "Is it always listening?", a: "No. He listens when you call him: Control twice, or \u201cHey Braino\u201d if you turned it on, which is heard on your Mac only." },
+  { q: "Is my screen recorded?", a: "Only if you choose Learn my day: a text diary of your day, on your Mac, gone after a week, never password apps, banking or private windows. Or choose Only when I ask. Screenshots are never stored." },
+  { q: "Where does my data go?", a: "Requests go to the AI that thinks for him (OpenAI and Anthropic). What he remembers and your notes live in your Braino account. Nothing is sold. Full details on the Trust page." },
+  { q: "Can I delete everything?", a: "Yes. Turn off Learn my day anytime, and deleting your account deletes everything he remembers." },
+  { q: "How do I get it?", a: "Braino is in private beta. Join the waitlist and we will invite you as places open up." },
 ];
 
 /* Smooth wallpapers, in the macOS way: soft colour fields, no picture. */
@@ -505,7 +510,7 @@ export default function Affective() {
             <Link to="/braino">Braino</Link>
             <Link to="/affectiveos">AffectiveOS</Link>
             <Link to="/about">About</Link>
-            <Link to="/braino#early-access" className="aff-nav-go">Early access</Link>
+            <Link to="/braino#early-access" className="aff-nav-go">Join the waitlist</Link>
             <AffThemeToggle theme={theme} onToggle={toggle} />
           </div>
         </div>
@@ -531,7 +536,7 @@ export default function Affective() {
                 Meet Braino. He lives in your Mac's notch, and does what you say in the apps you already use.
               </p>
               <div className="aff-hero-cta">
-                <Link to="/braino#early-access" className="aff-cta">Get early access</Link>
+                <Link to="/braino#early-access" className="aff-cta">Join the waitlist</Link>
                 <Link to="/braino" className="aff-cta aff-cta-ghost">Meet Braino</Link>
               </div>
             </div>
@@ -605,6 +610,7 @@ export default function Affective() {
           {blink ? (
             <div className="hb6-film">
               <video src="/Braino_Final.MP4" autoPlay playsInline controls onEnded={() => setBlink(false)} />
+              <p className="aff-trivia aff-trivia-film" role="note"><span>Trivia</span>We made this film three months ago, when Braino was a tiny browser extension and even his founder had no idea what he would become. Today he lives on your Mac, and he is far better there.</p>
             </div>
           ) : (
             <ul className="hb4-does hb6-jobs">
@@ -618,6 +624,8 @@ export default function Affective() {
           <figure className="ah-os-live aff-reveal aff-rise">
             <div className="ao-viz ao-viz-screen"><VoiceToAction tabs notch row bare /></div>
           </figure>
+          {/* The real thing, recorded: drop the clip in public/demos/ and pass src. */}
+          <div className="hb6-demo-real aff-reveal"><DemoSlot title="Watch Braino do it: one sentence, done on a real Mac" caption="A real request, recorded on a real Mac." /></div>
           </div>
         </div>
       </section>
@@ -649,7 +657,7 @@ export default function Affective() {
         <div className="aff-wrap hb2-faq-split">
           <div className="hb2-faq-side">
             <h3 className="hb2-faq-h aff-reveal">Questions</h3>
-            <p>Anything else? <Link to="/braino#early-access">Get early access</Link> and ask us directly.</p>
+            <p>Anything else? <Link to="/braino#early-access">Join the waitlist</Link> and ask us directly.</p>
           </div>
           <div className="hb2-faq-list">
             {FAQS.map((f) => (
@@ -676,7 +684,7 @@ export default function Affective() {
           <MoonwalkStrip />
           <p className="hb-end-p">Braino is in private beta. We are letting people in a few at a time.</p>
           <div className="hb-go">
-            <Link to="/braino#early-access" className="aff-cta">Get early access</Link>
+            <Link to="/braino#early-access" className="aff-cta">Join the waitlist</Link>
             <Link to="/affectiveos" className="aff-cta aff-cta-ghost">Read about AffectiveOS</Link>
           </div>
         </div>
@@ -724,13 +732,13 @@ export default function Affective() {
                 <h4><Link to="/braino">Braino</Link></h4>
                 <ul>
                   <li><Link to="/braino">For everyone</Link></li>
-                  <li><Link to="/braino#early-access">Early access</Link></li>
+                  <li><Link to="/braino#early-access">Join the waitlist</Link></li>
                 </ul>
               </nav>
               <nav className="aff-foot-col">
                 <h4>Company</h4>
                 <Link to="/labs">Labs</Link>
-                <Link to="/braino#early-access">Early access</Link>
+                <Link to="/braino#early-access">Join the waitlist</Link>
                 <Link to="/contact">Contact</Link>
               </nav>
             </div>
