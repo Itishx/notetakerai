@@ -225,3 +225,6 @@
 .nav-chat:hover { opacity: .95; background: color-mix(in srgb, currentColor 7%, transparent); }
 .nav-chat.on { opacity: 1; font-weight: 600; background: color-mix(in srgb, currentColor 9%, transparent); }
 .nav-new { opacity: .8; font-weight: 500; }
+
+/* No bubbles (2026-10-15): what you wrote reads as plain text, his as plain text. */
+.cm.you .cm-b { background: none !important; border: 0 !important; box-shadow: none !important; padding: 0 !important; border-radius: 0 !important; max-width: 80%; text-align: right; color: #5a574f; font-weight: 500; }

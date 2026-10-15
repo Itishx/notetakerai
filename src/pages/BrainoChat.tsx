@@ -2029,7 +2029,8 @@ const CHAT_CSS = `
 .bchat ::-webkit-scrollbar-thumb{background:rgba(22,21,15,.14);background-clip:content-box}
 .bchat ::-webkit-scrollbar-thumb:hover{background:rgba(22,21,15,.24);background-clip:content-box}
 .bc-sidebar{border-right:1px solid var(--bc-line)}
-.bc-user-bubble{background:#fff;border:1px solid var(--bc-line);box-shadow:0 10px 24px -18px rgba(0,0,0,.25)}
+/* No bubbles: what you wrote is plain text, right aligned. */
+.bc-user-bubble{background:none;border:0;box-shadow:none;padding:0;border-radius:0;text-align:right;color:var(--bc-dim);font-weight:500}
 .bc-composer{background:#fff;border:1px solid #ddd8cc;box-shadow:0 20px 50px -30px rgba(0,0,0,.3)}
 .bc-composer:focus-within{border-color:#16150f;box-shadow:0 0 0 4px rgba(22,21,15,.06),0 20px 50px -30px rgba(0,0,0,.3)}
 .bc-composer textarea::placeholder{color:var(--bc-muted)}
