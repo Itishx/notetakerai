@@ -869,3 +869,5 @@
 .aff-trivia p, .aff-trivia-film { margin: 0; font: 14px/1.5 var(--ao-sf, -apple-system, sans-serif); color: var(--a-ink-soft); }
 .aff-trivia-film { margin-top: 12px; }
 @keyframes apIn { from { opacity: 0; transform: translateY(6px); } }
+/* FAQ answers read as answers, not headlines (2026-10-15), same as the Braino page. */
+.hb2-faq-list details p { font-size: 16px; line-height: 1.6; }
