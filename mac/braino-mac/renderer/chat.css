@@ -199,3 +199,29 @@
 .ca-no:hover { background: #fff; }
 .ca-yes { background: #16150f; color: #f4f2ec; box-shadow: none; }
 .ca-done.yes::before { background: #1f9d63; } .ca-done.no::before { background: #b4472f; }
+
+/* ── Intelligent answers (2026-10-15): calm cards under his words ── */
+.ui-card { margin-top: 14px; padding: 6px 0; border-radius: 16px; background: #fff; border: 1px solid #e7e3d9; box-shadow: 0 1px 2px rgba(0,0,0,.04), 0 16px 36px -28px rgba(0,0,0,.35); overflow: hidden; animation: chatIn .35s cubic-bezier(.2,.8,.2,1) both; }
+.ui-k { padding: 10px 16px 6px; font: 600 11px var(--read); letter-spacing: .08em; text-transform: uppercase; color: #8a877e; }
+.ui-ev, .ui-row { display: flex; align-items: center; gap: 14px; padding: 11px 16px; border-top: 1px solid #f0ede5; font: 400 14.5px/1.35 var(--read); color: #16150f; }
+.ui-ev { align-items: baseline; }
+.ui-time { flex: none; width: 66px; font: 600 13px var(--read); font-variant-numeric: tabular-nums; color: #e05a4f; }
+.ui-ev-t { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ui-ev-t b { font-weight: 600; }
+.ui-ev-t small { font-size: 12.5px; color: #8a877e; }
+.ui-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: #c9c5bb; }
+.ui-dot.on { background: #34c759; box-shadow: 0 0 0 3px rgba(52,199,89,.15); }
+.ui-name { font-weight: 600; }
+.ui-as { margin-left: auto; color: #8a877e; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ui-btn { flex: none; padding: 6px 12px; border-radius: 999px; border: 1px solid #16150f; background: #16150f; color: #f4f2ec; font: 600 12px var(--read); cursor: pointer; }
+.ui-btn:hover { background: #2a2923; }
+.ui-choices { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; animation: chatIn .35s cubic-bezier(.2,.8,.2,1) both; }
+.ui-chip { padding: 9px 15px; border-radius: 999px; border: 1px solid #e0dccf; background: #fff; color: #16150f; font: 500 14px var(--read); cursor: pointer; transition: border-color .15s, transform .15s; }
+.ui-chip:hover { border-color: #16150f; transform: translateY(-1px); }
+
+/* ── Recent chats, nested under Chat in the sidebar ── */
+.nav-sub { display: flex; flex-direction: column; gap: 1px; margin: 2px 0 8px 34px; padding-left: 10px; border-left: 1px solid color-mix(in srgb, currentColor 14%, transparent); }
+.nav-chat { all: unset; box-sizing: border-box; display: block; width: 100%; padding: 5px 8px; border-radius: 7px; font: 400 12.5px/1.3 "SF Pro Text", -apple-system, sans-serif; opacity: .62; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+.nav-chat:hover { opacity: .95; background: color-mix(in srgb, currentColor 7%, transparent); }
+.nav-chat.on { opacity: 1; font-weight: 600; background: color-mix(in srgb, currentColor 9%, transparent); }
+.nav-new { opacity: .8; font-weight: 500; }

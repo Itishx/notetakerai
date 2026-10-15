@@ -198,12 +198,19 @@ const NAV = {
 };
 
 let product = "companion", cur = "chat";
+/* Recent chats, nested under Chat (2026-10-15), like Claude and ChatGPT. */
+function chatSubNav() {
+  const list = window.BrainoChat?.list?.() || [];
+  const rows = list.slice(0, 8).map((c) => `<button type="button" class="nav-chat${c.current && cur === "chat" ? " on" : ""}" data-chat="${esc(c.id)}" title="${esc(c.title)}">${esc(c.title)}</button>`).join("");
+  return `<div class="nav-sub"><button type="button" class="nav-chat nav-new" data-chat="new">+ New chat</button>${rows}</div>`;
+}
+window.addEventListener("braino-chats-changed", () => renderNav());
 function renderNav() {
   const f = $("q").value.toLowerCase();
   $("nav").innerHTML = [...NAV[product], ...NAV.shared].map(([g, ids]) => {
     const items = ids.filter((id) => !f || P[id].nav[0].toLowerCase().includes(f));
     if (!items.length) return "";
-    return (g ? `<div class="gh">${g}</div>` : "") + items.map((id) => { const b = typeof P[id].badge === "function" ? P[id].badge() : ""; return `<button type="button" data-go="${id}" aria-current="${id === cur}" aria-label="${P[id].nav[0]}"><span class="ni"><svg viewBox="0 0 24 24">${I[P[id].nav[1]] || I.spark}</svg></span><span class="nm">${P[id].nav[0]}</span>${b ? `<span class="bdg">${b}</span>` : ""}</button>`; }).join("");
+    return (g ? `<div class="gh">${g}</div>` : "") + items.map((id) => { const b = typeof P[id].badge === "function" ? P[id].badge() : ""; return `<button type="button" data-go="${id}" aria-current="${id === cur}" aria-label="${P[id].nav[0]}"><span class="ni"><svg viewBox="0 0 24 24">${I[P[id].nav[1]] || I.spark}</svg></span><span class="nm">${P[id].nav[0]}</span>${b ? `<span class="bdg">${b}</span>` : ""}</button>${id === "chat" ? chatSubNav() : ""}`; }).join("");
   }).join("");
 }
 function paint() {
@@ -298,6 +305,8 @@ document.addEventListener("click", async (e) => {
   if (primary && S.profiles) { const r = await call("chromeProfilesSave", { ...S.profiles.config, primary }); if (r?.config) S.profiles.config = r.config; paint(); toast("That's your main profile now."); return; }
   const forget = t.closest("[data-forget]")?.dataset.forget; if (forget) { await call("skillsForget", forget); await load("skills"); paint(); toast("Forgotten."); return; }
   const unstar = t.closest("[data-unstar]")?.dataset.unstar; if (unstar) { S.important = (await call("waImportant", unstar, false))?.names || S.important.filter((n) => n !== unstar); paint(); return; }
+  const ch = t.closest("[data-chat]");
+  if (ch) { if (cur !== "chat") void go("chat").then(() => (ch.dataset.chat === "new" ? window.BrainoChat?.newChat() : window.BrainoChat?.open(ch.dataset.chat))); else (ch.dataset.chat === "new" ? window.BrainoChat?.newChat() : window.BrainoChat?.open(ch.dataset.chat)); return; }
   const g = t.closest("[data-go]"); if (g) { void go(g.dataset.go); }
 });
 document.addEventListener("change", async (e) => {

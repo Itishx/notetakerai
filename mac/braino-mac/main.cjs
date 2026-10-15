@@ -19169,6 +19169,25 @@ const MAC_HIL_TOOLS = {
       : openApp(target);
   },
 };
+/* Intelligent answers in the chat (2026-10-15): when a tool comes back with
+   something worth drawing (a day of events, connections, a choice, sources),
+   the chat shows it as a card instead of only a sentence. Every tool is
+   wrapped once here, so nothing else has to remember to report it. */
+let macLastToolUi = null;
+let chatForward = null; // the app chat waiting for the notch job it handed over
+function noteToolUi(tool, out) {
+  if (!out || typeof out !== "object") return;
+  let ui = null;
+  if (Array.isArray(out.events)) ui = { type: "day", events: out.events.slice(0, 12) };
+  else if (Array.isArray(out.connections)) ui = { type: "connections", items: out.connections };
+  else if (Array.isArray(out.options) && out.options.length > 1) ui = { type: "choices", options: out.options.slice(0, 6).map(String) };
+  else if (Array.isArray(out.sources) && out.sources.length) ui = { type: "sources", sources: out.sources.slice(0, 5) };
+  if (ui) macLastToolUi = { ui, tool, at: Date.now() };
+}
+for (const [name, fn] of Object.entries(MAC_HIL_TOOLS)) {
+  if (typeof fn !== "function") continue;
+  MAC_HIL_TOOLS[name] = async (...args) => { const out = await fn(...args); try { noteToolUi(name, out); } catch (_) {} return out; };
+}
 
 /* switch_tab for the loop (2026-10-15): the instant tab switch's own reading
    and matching, as a move the loop can make. An exact title wins outright;
@@ -25099,10 +25118,19 @@ ipcMain.handle("braino-mac:delegate", async (event, prompt, options) => {
     /* Every input the same way (2026-10-15): a command from the app's chat
        goes to the notch and runs exactly as if it were spoken. */
     if (macCommandSurface === "chat" && options?.reason === "app_chat" && dockWindow && !dockWindow.isDestroyed()) {
+      /* It runs in the notch like speech, and the chat waits for that job's
+         answer (and its card) so you read it where you typed it. */
+      const waited = new Promise((resolve) => {
+        chatForward = { resolve, started: false, at: Date.now() };
+        // Handled in the notch without a job (a stop, a hide): say so.
+        setTimeout(() => { if (chatForward && !chatForward.started) { chatForward = null; resolve({ ok: true, say: "Done, in the notch.", source: "to_notch" }); } }, 20000);
+        setTimeout(() => { if (chatForward) { chatForward = null; resolve({ ok: true, say: "Still working on it in the notch.", source: "to_notch" }); } }, 7 * 60000);
+      });
       dockWindow.webContents.send("braino-mac:run-input", { text: String(prompt || "") });
       logMac("input.to_notch", { chars: String(prompt || "").length });
-      return { ok: true, say: "On it. Watch the notch.", source: "to_notch", forwarded: true };
+      return await waited;
     }
+    if (chatForward && !chatForward.started) { chatForward.started = true; chatForward.jobStartedAt = Date.now(); }
     result = await runDelegate(prompt, options || {});
   } finally {
     macDelegatesInFlight = Math.max(0, macDelegatesInFlight - 1);
@@ -25153,6 +25181,11 @@ ipcMain.handle("braino-mac:delegate", async (event, prompt, options) => {
   // The notch renderer logs its own turns (it knows the input channel and the
   // time to first audio). The dashboard's typed box calls this directly and
   // knows none of that, so its turns are logged here, from the sender.
+  if (chatForward?.started && macCommandSurface !== "chat" && !result?.superseded) {
+    const fwd = chatForward; chatForward = null;
+    const ui = macLastToolUi && macLastToolUi.at >= (fwd.jobStartedAt || fwd.at) ? macLastToolUi.ui : null;
+    fwd.resolve({ ...result, ...(ui ? { ui } : {}) });
+  }
   if (dashboardWindow && !dashboardWindow.isDestroyed() && event?.sender === dashboardWindow.webContents) {
     logInteraction({
       kind: "typed",

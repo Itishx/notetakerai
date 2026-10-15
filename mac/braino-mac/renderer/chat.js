@@ -13,8 +13,24 @@
   const KEY = "braino-chat";
   const SOUND = "braino-chat-sound";
 
-  let msgs = [];
-  try { msgs = JSON.parse(localStorage.getItem(KEY) || "[]").filter((m) => !m.pending).slice(-80); } catch (_) {}
+  /* Many chats, like Claude and ChatGPT (2026-10-15): each one kept with a
+     title from its first message; the app's sidebar lists the recent ones
+     nested under Chat. The single old chat becomes the first of them. */
+  const ALL = "braino-chats", CUR = "braino-chat-cur";
+  let chats = [];
+  try { chats = JSON.parse(localStorage.getItem(ALL) || "[]"); } catch (_) {}
+  if (!Array.isArray(chats)) chats = [];
+  if (!chats.length) {
+    let old = [];
+    try { old = JSON.parse(localStorage.getItem(KEY) || "[]").filter((m) => !m.pending).slice(-80); } catch (_) {}
+    if (old.length) chats.push({ id: `c${Date.now()}`, title: "", at: old[old.length - 1]?.at || Date.now(), msgs: old });
+  }
+  let curId = "";
+  try { curId = localStorage.getItem(CUR) || ""; } catch (_) {}
+  let current = chats.find((c) => c.id === curId) || chats[0] || null;
+  let msgs = current ? current.msgs : [];
+  const titleOf = (list) => { const first = list.find((m) => m.role === "you"); return first ? String(first.text).replace(/\s+/g, " ").trim().slice(0, 42) : "New chat"; };
+  const announce = () => window.dispatchEvent(new CustomEvent("braino-chats-changed"));
   let sound = false;
   try { sound = localStorage.getItem(SOUND) === "1"; } catch (_) {}
   let busy = null;          // the reply being written right now
@@ -78,7 +94,30 @@
   }
   requestAnimationFrame(rig);
 
-  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(msgs.filter((m) => !m.pending).slice(-80))); } catch (_) {} };
+  const save = () => {
+    const kept = msgs.filter((m) => !m.pending).slice(-80);
+    if (kept.length) {
+      if (!current) { current = { id: `c${Date.now()}`, title: "", at: Date.now(), msgs }; chats.unshift(current); }
+      current.msgs = msgs; current.title = titleOf(kept); current.at = Date.now();
+    }
+    chats = chats.filter((c) => c.msgs && c.msgs.some((m) => !m.pending)).sort((a, b) => b.at - a.at).slice(0, 40);
+    try {
+      localStorage.setItem(ALL, JSON.stringify(chats.map((c) => ({ ...c, msgs: c.msgs.filter((m) => !m.pending).slice(-80) }))));
+      localStorage.setItem(CUR, current?.id || "");
+    } catch (_) {}
+    announce();
+  };
+  function openChat(id) {
+    if (busy) return false;
+    const c = chats.find((x) => x.id === id);
+    current = c || null; msgs = c ? c.msgs : [];
+    try { localStorage.setItem(CUR, current?.id || ""); } catch (_) {}
+    const page = document.querySelector(".chat");
+    if (page) { page.outerHTML = html(); mount(); }
+    announce();
+    return true;
+  }
+  function newChat() { if (busy) return false; current = null; msgs = []; try { localStorage.setItem(CUR, ""); } catch (_) {} const page = document.querySelector(".chat"); if (page) { page.outerHTML = html(); mount(); } announce(); return true; }
   const hello = () => { const h = new Date().getHours(); return h < 5 ? "Still up" : h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening"; };
   const SUGGEST = [
     ["What's my next class?", "Your day"],
@@ -110,7 +149,27 @@
   }
   function msgHtml(m, i) {
     if (m.role === "you") return `<div class="cm you" data-i="${i}"><div class="cm-b">${paras(m.text)}</div></div>`;
-    return `<div class="cm him${m.pending ? " pending" : ""}${m.ok === false ? " bad" : ""}" data-i="${i}"><div class="cm-t">${workHtml(m)}${m.text ? `<div class="cm-text">${paras(m.text, Boolean(m.fresh))}</div>` : ""}${approvalHtml(m)}</div></div>`;
+    return `<div class="cm him${m.pending ? " pending" : ""}${m.ok === false ? " bad" : ""}" data-i="${i}"><div class="cm-t">${workHtml(m)}${m.text ? `<div class="cm-text">${paras(m.text, Boolean(m.fresh))}</div>` : ""}${uiHtml(m)}${approvalHtml(m)}</div></div>`;
+  }
+  /* Intelligent answers (2026-10-15): what a tool returned, drawn as a card
+     under his words. A choice is tappable and answers him. */
+  function uiHtml(m) {
+    const u = m.ui;
+    if (!u || m.pending) return "";
+    const time = (iso) => { const d = new Date(iso); return Number.isFinite(d.getTime()) ? d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : ""; };
+    if (u.type === "day" && u.events?.length) {
+      return `<div class="ui-card ui-day"><div class="ui-k">Your calendar</div>${u.events.map((e) => `<div class="ui-ev"><span class="ui-time">${esc(e.allDay ? "All day" : time(e.start))}</span><span class="ui-ev-t"><b>${esc(e.title || "Event")}</b>${e.calendar || e.location ? `<small>${esc([e.calendar, e.location].filter(Boolean).join(" · "))}</small>` : ""}</span></div>`).join("")}</div>`;
+    }
+    if (u.type === "connections" && u.items?.length) {
+      return `<div class="ui-card ui-conn"><div class="ui-k">Connections</div>${u.items.map((c) => `<div class="ui-row"><span class="ui-dot ${c.connected ? "on" : "off"}"></span><span class="ui-name">${esc(c.name)}</span><span class="ui-as">${esc(c.connected ? (c.as || "Connected") : "Not connected")}</span>${c.connected === false ? `<button type="button" class="ui-btn" data-say="Connect ${esc(c.name)}">Connect</button>` : ""}</div>`).join("")}</div>`;
+    }
+    if (u.type === "choices" && u.options?.length) {
+      return `<div class="ui-choices">${u.options.map((o) => `<button type="button" class="ui-chip" data-say="${esc(o)}">${esc(o)}</button>`).join("")}</div>`;
+    }
+    if (u.type === "sources" && u.sources?.length) {
+      return `<div class="ui-card ui-src"><div class="ui-k">Sources</div>${u.sources.map((x) => { const url = typeof x === "string" ? x : (x.url || ""); let host = ""; try { host = new URL(url).hostname.replace(/^www\./, ""); } catch (_) {} return `<div class="ui-row"><span class="ui-name">${esc((typeof x === "object" && x.title) || host || url)}</span><span class="ui-as">${esc(host)}</span></div>`; }).join("")}</div>`;
+    }
+    return "";
   }
   /* The approval card: exactly what is about to happen, Approve or Cancel.
      Answered, cancelled or timed out, it stays as a quiet line of record. */
@@ -208,6 +267,7 @@
         : await call("delegate", t, { canTalk: false, reason: "app_chat" });
       reply.text = String(r?.fullSay || r?.say || "").trim() || (r?.superseded ? "Stopped, you asked for something else." : r?.ok === false ? "That didn't work." : "Done.");
       reply.ok = r?.ok !== false;
+      if (r?.ui) reply.ui = r.ui;
     } catch (_) {
       reply.text = "Something went wrong on my side. Try that again?";
       reply.ok = false;
@@ -282,14 +342,12 @@
     });
     root.querySelector("#chat-clear")?.addEventListener("click", () => {
       if (busy) return;
-      msgs = []; save();
-      const page = document.querySelector(".chat");
-      if (page) { page.outerHTML = html(); mount(); }
+      newChat();
       setMood("idle");
     });
     root.addEventListener("click", (e) => {
-      const sg = e.target.closest(".chat-sg");
-      if (sg) void send(sg.dataset.say);
+      const sg = e.target.closest(".chat-sg, .ui-chip, .ui-btn");
+      if (sg && !busy) void send(sg.dataset.say);
       const ap = e.target.closest("[data-approve]");
       if (ap && approvalMsg?.approval && !approvalMsg.approval.state && !busy) {
         const yes = ap.dataset.approve === "yes";
@@ -303,5 +361,8 @@
     box.focus();
   }
 
-  window.BrainoChat = { html, mount };
+  window.BrainoChat = {
+    html, mount, open: openChat, newChat,
+    list: () => chats.filter((c) => c.msgs?.length).map((c) => ({ id: c.id, title: c.title || titleOf(c.msgs), at: c.at, current: c === current })),
+  };
 })();
