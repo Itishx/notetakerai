@@ -160,6 +160,8 @@ contextBridge.exposeInMainWorld("brainoMac", {
   mesaTokenSave: (token) => ipcRenderer.invoke("braino-mac:mesa-token-save", token),
   quitBraino: () => ipcRenderer.invoke("braino-mac:quit"),
   mesaTokenStatus: () => ipcRenderer.invoke("braino-mac:mesa-token-status"),
+  onbConnect: (kind) => ipcRenderer.invoke("braino-mac:onb-connect", kind),
+  onbPeek: (kind) => ipcRenderer.invoke("braino-mac:onb-peek", kind),
   mesaTokenRemove: () => ipcRenderer.invoke("braino-mac:mesa-token-remove"),
   mesaOpenDeveloper: () => ipcRenderer.invoke("braino-mac:mesa-open-developer"),
   setupPending: () => ipcRenderer.invoke("braino-mac:setup-pending"),

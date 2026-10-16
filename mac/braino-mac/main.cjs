@@ -17670,6 +17670,31 @@ async function saveMesaToken(raw) {
 ipcMain.handle("braino-mac:mesa-token-save", async (_e, token) => saveMesaToken(token));
 ipcMain.handle("braino-mac:mesa-token-status", async () => {
   try { const j = JSON.parse(fs.readFileSync(MESA_TOKEN_PATH, "utf8")); return { connected: Boolean(j.token), name: j.name || "", program: j.program || "", at: j.at || "" }; } catch (_) { return { connected: false }; }
+/* Onboarding's Connect step (2026-10-16): open the sign in for Calendar or
+   Spotify, then read a little back so the person watches him use it: their
+   next events, and their song of the month. Read only. */
+ipcMain.handle("braino-mac:onb-connect", async (_e, kind) => {
+  if (kind === "calendar") return { ok: await startGoogleCalendarConnect() };
+  if (kind === "spotify") return { ok: await openSpotifyReconnect(await getBrainoAuthToken().catch(() => "")) };
+  return { ok: false };
+});
+ipcMain.handle("braino-mac:onb-peek", async (_e, kind) => {
+  if (kind === "calendar") {
+    const start = new Date(); const end = new Date(start); end.setDate(end.getDate() + 2); end.setHours(0, 0, 0, 0);
+    const r = await macCalendar("list_events", { timeMin: start.toISOString(), timeMax: end.toISOString(), maxResults: 6 });
+    if (r.notConnected || !r.ok) return { connected: false };
+    return { connected: true, items: (r.events || []).slice(0, 5).map((e) => ({ when: calendarWhen(e.start?.dateTime || e.start?.date || ""), title: String(e.summary || "Untitled").slice(0, 60), meet: Boolean(e.meetUrl) })) };
+  }
+  if (kind === "spotify") {
+    const taste = await callSpotifyFunction("spotify-player-state", { view: "taste" }).catch(() => null);
+    const top = taste?.topThisMonth?.[0] || null;
+    const recent = (taste?.recentlyPlayed || []).slice(0, 3).map((p) => ({ title: String(p.title || p.track || ""), artist: String(p.artist || "") }));
+    if (!top && !recent.length) return { connected: false };
+    return { connected: true, top: top ? { title: String(top.title || top.track || ""), artist: String(top.artist || "") } : null, recent };
+  }
+  return { connected: false };
+});
+
 });
 ipcMain.handle("braino-mac:mesa-token-remove", async () => { try { fs.unlinkSync(MESA_TOKEN_PATH); } catch (_) {} logMac("mesa.token_removed", {}); return { ok: true }; });
 ipcMain.handle("braino-mac:mesa-open-developer", async () => { await openChromeUrl(MESA_DEVELOPER_URL); return { ok: true }; });
