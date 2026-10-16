@@ -67,10 +67,14 @@ const ART = {
     desk: `<div class="mx-present">You are presenting your screen</div>
       <div class="mx-shh" aria-hidden="true">\u{1F92B}</div>
       <div class="mx-seen"><small>What they see</small><div class="mx-seen-screen"><div class="mx-seen-bar"></div><div class="mx-seen-win"></div></div></div>` }),
-  day: () => peek.calendar?.items?.length ? mac("day", { app: "Calendar", notch: "is-pulse",
-    win: win("From your calendar", peek.calendar.items.map((e, i) => `<div class="mx-hour" style="--i:${i}"><time>${esc(e.when.replace(/^(today|tomorrow) at /i, ""))}</time><span>${esc(e.title)}${e.meet ? " \u00b7 Meet" : ""}</span></div>`).join(""), "is-day") }) : mac("day", { app: "Calendar",
-    win: win("Today", ["8:30|Good morning, one thing is due", "9:30|Lecture, written down live", "12:00|Market sizing is due at 2", "4:00|Meeting notes and promises", "5:50|Your call with Arjun in 10 min"].map((r, i) => { const [t, x] = r.split("|"); return `<div class="mx-hour" style="--i:${i}"><time>${t}</time><span>${x}</span></div>`; }).join(""), "is-day"),
-    notch: "is-pulse" }),
+  /* Your day, through the notch: he opens and tells it, line by line, from
+     your real calendar when it is connected (2026-10-16). */
+  day: () => {
+    const real = peek.calendar?.items?.length ? peek.calendar.items.slice(0, 4).map((e) => [e.when.replace(/^(today|tomorrow) at /i, (m) => (/tomorrow/i.test(m) ? "Tmrw " : "")), `${e.title}${e.meet ? " \u00b7 Meet" : ""}`]) : null;
+    const rows = real || [["8:30", "Good morning, one thing is due"], ["9:30", "Lecture, written down live"], ["12:00", "Market sizing is due at 2"], ["5:50", "Call with Arjun in 10 min"]];
+    return mac("day", { app: "Calendar", sheet: `<div class="mx-l is-kick" style="--d:.3s">${real ? "Your day" : "A day with Braino"}</div>` +
+      rows.map(([t, x], k) => `<div class="mx-l mx-dayrow" style="--d:${0.7 + k * 0.6}s"><time>${esc(t)}</time><span>${esc(x)}</span></div>`).join("") });
+  },
   messages: () => mac("messages", { app: "WhatsApp",
     win: win("WhatsApp", `<div class="mx-wa"><div class="mx-wa-list"><p><b>Riya Khurana</b><span>see you at 5</span></p><p><b>Riya</b><span>ok!</span></p><p><b>Arjun</b><span>deck?</span></p></div><div class="mx-wa-chat"><div class="mx-bubble">Running 10 minutes late <i>✓✓</i></div></div></div>`, "is-wa"),
     sheet: L("“Tell Riya I’m running late.”", 0.4, "is-said") + L("Which Riya?", 1.2) + `<div class="mx-l mx-chips" style="--d:1.6s"><span class="is-pick">Riya Khurana</span><span>the other Riya</span></div>` }),
