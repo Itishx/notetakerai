@@ -16,6 +16,8 @@ let snap = null;              // name, permissions, saved answers (setupSnapshot
 const answers = {};
 let heard = null;             // the first thing said to him, from "Try me"
 let wakeOn = false;
+let peek = { calendar: null, spotify: null };   // what Connect read back, live
+let peekTimer = 0;
 let mesaState = { connected: false, name: "", program: "", error: "", busy: false };           // "Hey Braino", offered on the permissions step
 let at = 0;
 let muted = false;
@@ -61,7 +63,12 @@ const ART = {
   lectures: () => mac("lectures", { app: "Keynote",
     win: win("Venture Building · Lecture 6", `<div class="mx-slide"><h4>Customer discovery</h4><p class="mx-bar-g"></p><p class="mx-bar-g s"></p><p class="mx-bar-g m"></p></div>`, "is-slide"),
     sheet: `<div class="mx-live"><i></i>LIVE<div class="mx-wave">${Array.from({ length: 14 }, (_, i) => `<b style="--w:${i}"></b>`).join("")}</div></div>` + L("Start with the problem, not the product.", 0.9) + L("Talk to ten people before you build.", 2.0) + L("Watch what they already pay for.", 3.1) }),
-  day: () => mac("day", { app: "Calendar",
+  stealth: () => mac("stealth", { app: "Google Meet", notch: "is-eyes",
+    desk: `<div class="mx-present">You are presenting your screen</div>
+      <div class="mx-shh" aria-hidden="true">\u{1F92B}</div>
+      <div class="mx-seen"><small>What they see</small><div class="mx-seen-screen"><div class="mx-seen-bar"></div><div class="mx-seen-win"></div></div></div>` }),
+  day: () => peek.calendar?.items?.length ? mac("day", { app: "Calendar", notch: "is-pulse",
+    win: win("From your calendar", peek.calendar.items.map((e, i) => `<div class="mx-hour" style="--i:${i}"><time>${esc(e.when.replace(/^(today|tomorrow) at /i, ""))}</time><span>${esc(e.title)}${e.meet ? " \u00b7 Meet" : ""}</span></div>`).join(""), "is-day") }) : mac("day", { app: "Calendar",
     win: win("Today", ["8:30|Good morning, one thing is due", "9:30|Lecture, written down live", "12:00|Market sizing is due at 2", "4:00|Meeting notes and promises", "5:50|Your call with Arjun in 10 min"].map((r, i) => { const [t, x] = r.split("|"); return `<div class="mx-hour" style="--i:${i}"><time>${t}</time><span>${x}</span></div>`; }).join(""), "is-day"),
     notch: "is-pulse" }),
   messages: () => mac("messages", { app: "WhatsApp",
@@ -87,8 +94,9 @@ const SCENES = [
   { id: "braino", kind: "story", kicker: "Meet Braino", title: "Hi. I'm Braino. I live in your *notch.*", say: "Hi. I'm Braino. I live in your notch, right at the top of your screen.", art: "notch" },
   { id: "new", kind: "story", kicker: "Something new", title: "I'm not an app you open. I'm already *here.*", say: "I'm not an app you open. I'm already here. Just ask.", sub: "No windows to find, nothing to learn. Press Control twice, or just say Hey Braino.", art: "new" },
   { id: "meetings", kind: "story", kicker: "Meetings", title: "Your meetings will never be the *same.*", say: "Your meetings will never be the same. I listen, I write the notes, and I remember what you promised.", sub: "I listen, write the notes, and remember what you promised. Then I remind you before it's due.", art: "meetings" },
+  /* Real: in a meeting he is hidden from screen recording (setContentProtection). */
+  { id: "stealth", kind: "story", kicker: "Meetings", title: "Share your screen. I'll *vanish.*", say: "Share your screen in a meeting, and I vanish. You still see me. Nobody else does.", sub: "In a meeting, I stay on your screen and stay off everyone else's. Nobody on the call sees me.", art: "stealth" },
   { id: "lectures", kind: "story", kicker: "Lectures", title: "Every lecture, written down while you *listen.*", say: "Every lecture, written down while you listen. Live, the whole class.", sub: "Press Command Shift E in class. I write it all, live, so you can just pay attention.", art: "lectures" },
-  { id: "day", kind: "story", kicker: "Your day", title: "I make your whole day a little *lighter.*", say: "From your first class to your last meeting, I make your whole day a little lighter.", sub: "A good morning that knows what's next, notes while you listen, and a heads up before things are due.", art: "day" },
   { id: "messages", kind: "story", kicker: "Your people", title: "Message anyone, just by *saying* it.", say: "Message anyone, just by saying it. And if two people share a name, I'll ask which one.", sub: "WhatsApp from your voice. Two people with the same name? I ask first.", art: "messages" },
   { id: "do", kind: "story", kicker: "Do it for me", title: "Say it. I'll get it *done.*", say: "Say it, and I'll get it done. And while I work, I'll tell you what I'm doing.", sub: "I open, search, compare and type for you. And I tell you what I'm doing as I go.", art: "do" },
   { id: "dictate", kind: "story", kicker: "Type with your voice", title: "Talk anywhere. I'll *type* it.", say: "Talk anywhere, and I'll type it. Press Option twice in any app.", sub: "Press Option twice in any app. Your words, cleaned up, right where your cursor is.", art: "dictate" },
@@ -105,6 +113,10 @@ const SCENES = [
      to the cloud. */
   { id: "learn", kind: "learn", kicker: "Your choice", title: "How should I *learn* about you?", say: "One choice, and it's yours. How much should I learn about your day?", sub: "Here's exactly what each one means. You can change it anytime." },
   { id: "try", kind: "try", kicker: "Your first moment", title: "Now, *talk* to me.", say: "Now, talk to me. Press Control twice and ask me anything.", sub: "Press Control twice, then ask anything. Try: what can you do?" },
+  /* Connect, then the payoff: he pulls from what you just connected, live
+     (2026-10-16). Your day sits here, at the end, with your real day in it. */
+  { id: "connect", kind: "connect", kicker: "Your world", title: "Let me into your *day.*", say: "Two more, and I can really run your day. Connect your calendar and your music.", sub: "Read only. I never change or post anything without asking you first." },
+  { id: "day", kind: "story", kicker: "Your day", title: () => (peek.calendar?.items?.length ? "Here\u2019s your day, *already.*" : "I make your whole day a little *lighter.*"), say: () => (peek.calendar?.items?.length ? `Here\u2019s what\u2019s next. ${peek.calendar.items[0].title}, ${peek.calendar.items[0].when}.` : "From your first class to your last meeting, I make your whole day a little lighter."), sub: "A good morning that knows what's next, notes while you listen, and a heads up before things are due.", art: "day" },
   { id: "done", kind: "done", banner: "affective-hero", kicker: "That's us", title: () => `Nice to meet you, *${nameOf()}.*`, say: () => `Nice to meet you, ${nameOf()}. I'm right up there whenever you need me.` },
 ];
 const MODES = [
@@ -172,6 +184,16 @@ function body(scene) {
   }
   /* Onboarding stays general. Nexus is only for Mesa students, so it is a
      small optional box here, not a question everyone answers (2026-10-15). */
+  if (scene.kind === "connect") {
+    const cal = peek.calendar, sp = peek.spotify;
+    const calRow = cal?.connected
+      ? `<div class="ob-perm ok"><i></i><div><b>Google Calendar</b><span>Pulling your next ${cal.items.length || ""} events\u2026</span><ul class="ob-pull">${cal.items.slice(0, 3).map((e, i) => `<li style="--i:${i}"><time>${esc(e.when)}</time>${esc(e.title)}</li>`).join("") || "<li>Nothing on in the next two days.</li>"}</ul></div><em>Connected</em></div>`
+      : `<div class="ob-perm"><i></i><div><b>Google Calendar</b><span>so I can book Meets and tell you what\u2019s next</span></div><button data-connect="calendar">${peekTimer && peek.waiting === "calendar" ? "Waiting\u2026" : "Connect"}</button></div>`;
+    const spRow = sp?.connected
+      ? `<div class="ob-perm ok"><i></i><div><b>Spotify</b><span>${sp.top ? `Your song this month: <strong class="ob-song">${esc(sp.top.title)}</strong>${sp.top.artist ? ` by ${esc(sp.top.artist)}` : ""}` : `Lately: ${esc(sp.recent.map((r) => r.title).join(", "))}`}</span></div><em>Connected</em></div>`
+      : `<div class="ob-perm"><i></i><div><b>Spotify</b><span>so I can play what you love, and know your taste</span></div><button data-connect="spotify">${peekTimer && peek.waiting === "spotify" ? "Waiting\u2026" : "Connect"}</button></div>`;
+    return `<div class="ob-perms">${calRow}${spRow}</div><div class="ob-actions"><button class="ob-go" data-next>${cal?.connected || sp?.connected ? "Continue" : "Continue for now"}</button></div>`;
+  }
   if (scene.kind === "persona") return `<div class="ob-choices">${scene.options.map((o) => `<button class="ob-choice${answers.persona === o ? " on" : ""}" data-choice="${esc(o)}">${esc(o)}</button>`).join("")}</div>
       <button type="button" class="ob-mesa-box${answers.school === "Mesa School of Business" ? " on" : ""}" data-mesa-start aria-pressed="${answers.school === "Mesa School of Business"}"><b>At Mesa School of Business?</b><span>${answers.school === "Mesa School of Business" ? "\u2713 Nexus is next. Now pick what you do." : "Connect Nexus and I'll know your classes and deadlines"}</span><i aria-hidden="true">${answers.school === "Mesa School of Business" ? "\u2713" : "\u2192"}</i></button>`;
   if (scene.kind === "perms") {
@@ -260,6 +282,25 @@ document.addEventListener("click", async (e) => {
   if (t.id === "ob-sound") { muted = !muted; try { localStorage.setItem("obMuted", muted ? "1" : "0"); } catch (_) {} if (muted) stopVoice(); paintSound(); return; }
   if (t.hasAttribute("data-next")) { next(); return; }
   if (t.dataset.school) { await save({ school: t.dataset.school, org: t.dataset.school === "Somewhere else" ? "" : t.dataset.school }); render(); setTimeout(next, 350); return; }
+  if (t.dataset.connect) {
+    const kind = t.dataset.connect;
+    await api.onbConnect?.(kind).catch(() => null);
+    peek.waiting = kind;
+    const started = Date.now();
+    window.clearInterval(peekTimer);
+    peekTimer = window.setInterval(async () => {
+      const r = await api.onbPeek?.(kind).catch(() => null);
+      if (r?.connected) {
+        window.clearInterval(peekTimer); peekTimer = 0; peek.waiting = "";
+        peek[kind] = r;
+        render();
+        if (kind === "spotify" && r.top) void say(`Your song this month is ${r.top.title}. Good taste.`);
+        if (kind === "calendar") void say(r.items?.length ? `Got it. Next up, ${r.items[0].title}.` : "Got it. Your calendar is clear for now.");
+      } else if (Date.now() - started > 3 * 60000) { window.clearInterval(peekTimer); peekTimer = 0; peek.waiting = ""; render(); }
+    }, 2500);
+    render();
+    return;
+  }
   if (t.hasAttribute("data-mesa-start")) {
     // Marks them as Mesa; they still pick what they do, then Nexus comes next.
     const on = answers.school !== "Mesa School of Business";
@@ -307,6 +348,8 @@ function paintSound() { $("ob-sound").textContent = muted ? "Sound off" : "Sound
 (async () => {
   paintSound();
   try { const s = await api.setupSnapshot?.(); if (s?.ok) { snap = s; Object.assign(answers, { callMe: s.answers?.callMe, persona: s.answers?.persona }); if (s.answers?.learnMode) learnMode = s.answers.learnMode; if (typeof s.answers?.improveBraino === "boolean") improveOn = s.answers.improveBraino; } } catch (_) {}
+  // Already connected (a returning person): show what he reads, no buttons.
+  try { const [c, sp] = await Promise.all([api.onbPeek?.("calendar"), api.onbPeek?.("spotify")]); if (c?.connected) peek.calendar = c; if (sp?.connected) peek.spotify = sp; } catch (_) {}
   // Designing on the website: ?scene=meetings opens that scene directly.
   if (window.OB_START) { const k = SCENES.findIndex((x) => x.id === window.OB_START); if (k >= 0) at = k; }
   try { const m = await api.mesaTokenStatus?.(); if (m?.connected) mesaState = { connected: true, name: m.name || "", program: m.program || "", error: "", busy: false }; } catch (_) {}

@@ -18,6 +18,7 @@ export default function BrainoOnboarding() {
       { id: "contacts", label: "Contacts", ok: false },
     ];
     const w = window as unknown as Record<string, unknown>;
+    const connected = new Set<string>();
     const prevApi = w.brainoMac;
     w.OB_IMG_BASE = "/";
     // Design helpers: /braino-onboarding?scene=meetings&hold=1 opens one scene and keeps it up.
@@ -33,6 +34,12 @@ export default function BrainoOnboarding() {
       mesaOpenDeveloper: async () => { window.open("https://students.mesaschool.co.in/student/developer?view=console", "_blank"); return { ok: true }; },
       mesaTokenSave: async (t: string) => (/^mesa_pat_/.test(String(t)) ? { ok: true, name: "A Mesa student", program: "PGP" } : { ok: false, error: "That doesn't look like a Nexus token. It starts with mesa_pat_." }),
       mesaTokenStatus: async () => ({ connected: false }),
+      // Connect, stood in: "connects" a moment after the button, with sample data.
+      onbConnect: async (kind: string) => { connected.add(kind); return { ok: true }; },
+      onbPeek: async (kind: string) => !connected.has(kind) ? { connected: false }
+        : kind === "calendar"
+          ? { connected: true, items: [{ when: "today at 4:00 PM", title: "Product sync", meet: true }, { when: "today at 6:30 PM", title: "Call with Arjun", meet: true }, { when: "tomorrow at 9:30 AM", title: "Venture Building", meet: false }] }
+          : { connected: true, top: { title: "Weightless", artist: "Marconi Union" }, recent: [] },
     };
     const script = document.createElement("script");
     script.src = onboardUrl;

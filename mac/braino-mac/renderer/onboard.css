@@ -326,3 +326,22 @@ html, body { margin: 0; height: 100%; }
 .mx-win.is-call .mx-win-body, .mx-win.is-wa .mx-win-body, .mx-win.is-chrome .mx-win-body, .mx-win.is-mail .mx-win-body, .mx-win.is-mem .mx-win-body, .mx-win.is-day .mx-win-body, .mx-win.is-slide .mx-win-body { height: calc(100% - 22px); }
 .mx-wa { height: calc(100% + 24px); }
 .mx-chips span { font-size: 11px; padding: 4px 10px; }
+
+/* Share your screen, he vanishes (2026-10-16): the presenting banner, his
+   eyes in your notch, the shh, and the small "what they see" screen with no
+   notch in it at all. */
+.mx-present { position: absolute; z-index: 3; top: 30px; left: 50%; transform: translateX(-50%); padding: 5px 12px; border-radius: 999px; background: #1a73e8; color: #fff; font: 600 11px var(--sf); box-shadow: 0 8px 20px -10px rgba(26,115,232,.8); white-space: nowrap; }
+.mx-shh { position: absolute; z-index: 5; top: 6px; left: calc(50% + 13%); font-size: 26px; line-height: 1; animation: mxShh 9s ease infinite; }
+@keyframes mxShh { 0%, 8% { opacity: 0; transform: translateY(-4px) scale(.8); } 14%, 80% { opacity: 1; transform: none; } 90%, 100% { opacity: 0; } }
+.mx-seen { position: absolute; z-index: 3; right: 6%; bottom: 8%; width: 40%; display: grid; gap: 5px; }
+.mx-seen small { font: 600 9.5px var(--sf); letter-spacing: .12em; text-transform: uppercase; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.6); }
+.mx-seen-screen { position: relative; aspect-ratio: 16 / 10; border-radius: 6px; overflow: hidden; background: #2a2b30; box-shadow: 0 0 0 2px #1a73e8, 0 14px 30px -14px rgba(0,0,0,.7); }
+.mx-seen-bar { height: 10%; background: rgba(246,244,239,.55); }
+.mx-seen-win { position: absolute; left: 10%; right: 10%; top: 24%; bottom: 10%; border-radius: 4px; background: #fbfaf7; }
+/* Connect: what he pulls, arriving row by row. */
+.ob-pull { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 4px; }
+.ob-pull li { display: grid; grid-template-columns: 130px 1fr; gap: 8px; font-size: 14px; color: var(--ink); opacity: 0; animation: obPull .45s ease forwards; animation-delay: calc(.25s + var(--i) * .35s); }
+.ob-pull time { color: var(--ink-3); font-size: 13px; }
+@keyframes obPull { from { opacity: 0; transform: translateX(-6px); } to { opacity: 1; transform: none; } }
+.mx-hour { grid-template-columns: 66px 1fr; }
+.ob-perm .ob-song { display: inline; font-weight: 600; color: var(--ink); }
