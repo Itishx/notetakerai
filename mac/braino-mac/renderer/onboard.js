@@ -27,39 +27,55 @@ const spoken = new Set();
    page you design is the page the Mac shows. Each host says where its images
    live: the Mac bundles them as assets/ob-*.jpg, the website serves /*.jpg. */
 const IMG_BASE = window.OB_IMG_BASE || "assets/ob-";
-const IMG = { os: "affective-hero", new: "os-senses", meetings: "os-voice", lectures: "os-memory", day: "affective-hero", messages: "os-hands", do: "os-senses", dictate: "os-hands", memory: "os-memory" };
+/* ── The pictures (rebuilt 2026-10-16) ─────────────────────────────────────
+ * "The Mac, alive": every scene is the same small MacBook screen, the
+ * homepage's pixel art as its desktop, a real notch at the top, and the one
+ * moment the sentence is about, playing as a short loop. Drawn in code, so it
+ * is sharp at any size and identical on the website and in the app. The old
+ * pictures were a wallpaper with a text card on it, seven times. */
+const IMG = { os: "affective-hero", notch: "os-senses", new: "os-hands", meetings: "os-voice", lectures: "os-memory", day: "affective-hero", messages: "os-hands", do: "os-senses", dictate: "os-voice", memory: "os-memory" };
+const L = (t, d, cls = "") => `<div class="mx-l ${cls}" style="--d:${d}s">${t}</div>`;
+function mac(art, { app = "Finder", sheet = "", win = "", desk = "", notch = "" } = {}) {
+  return `<div class="mx" data-art="${art}">
+    <div class="mx-screen" style="background-image:url('${IMG_BASE}${IMG[art] || "affective-hero"}.jpg')">
+      <div class="mx-bar"><b></b><b>${app}</b><span>File</span><span>Edit</span><span>View</span><i>9:41</i></div>
+      ${desk}
+      ${win}
+      <div class="mx-notch ${notch}"></div>
+      ${sheet ? `<div class="mx-sheet">${sheet}</div>` : ""}
+    </div>
+  </div>`;
+}
+const win = (title, body, cls = "") => `<div class="mx-win ${cls}"><div class="mx-win-top"><i></i><i></i><i></i><span>${title}</span></div><div class="mx-win-body">${body}</div></div>`;
 const ART = {
-  os: () => `<div class="ob-card" style="width:auto;text-align:center;padding:22px 30px"><div class="ob-os"><b style="font-size:34px">AffectiveOS</b><span style="font-size:18px">it understands you</span></div></div>`,
-  notch: () => `<div class="ob-mac"></div><div class="ob-notch"><i class="ob-eye"></i><i class="ob-eye"></i></div><div class="ob-arrow">↑ I live here</div>`,
-  new: () => `<div class="ob-stack"><div class="ob-card"><small>Apps</small><div>You open them. You learn them. You do the work.</div></div><div class="ob-card"><small>Braino</small><div class="ob-said">Already here. Just ask.</div></div></div>`,
-  meetings: () => `<div class="ob-card"><small>Product sync · 4:00</small>
-      <div class="ob-line">Riya: the deck needs the new numbers.</div>
-      <div class="ob-line">You: I'll send it by Friday.</div>
-      <div class="ob-line">Arjun: let's ship the beta Monday.</div>
-      <div class="ob-line ob-hl">You promised: send the deck by Friday.</div>
-      <div class="ob-line" style="color:var(--ink-2)">Want me to remind you Thursday?</div></div>`,
-  lectures: () => `<div class="ob-card"><small>Live · Venture Building</small>
-      <div class="ob-line">Customer discovery starts with the problem, not the product.</div>
-      <div class="ob-line">Talk to ten people before you build anything.</div>
-      <div class="ob-line">Pay attention to what they already pay for.</div>
-      <div class="ob-line ob-hl">Saved to your notes. Written live, the whole lecture.</div></div>`,
-  day: () => `<div class="ob-card"><small>A day with Braino</small>
-      <div class="ob-line ob-row"><time>8:30</time><span>"Good morning. Class at 9:30, one thing due today."</span></div>
-      <div class="ob-line ob-row"><time>9:30</time><span>Lecture written down while you listen.</span></div>
-      <div class="ob-line ob-row"><time>12:00</time><span>"Market sizing is due at 2."</span></div>
-      <div class="ob-line ob-row"><time>4:00</time><span>Meeting notes, and what you promised.</span></div>
-      <div class="ob-line ob-hl">5:50 · "Your call with Arjun is in ten minutes."</div></div>`,
-  messages: () => `<div class="ob-stack"><div class="ob-card"><small>You said</small><div class="ob-said">"Send this to Riya on WhatsApp"</div></div>
-      <div class="ob-card"><small>Braino</small><div>Which Riya?</div><span class="ob-pill first">Riya Khurana</span><span class="ob-pill">the other Riya</span></div></div>`,
-  do: () => `<div class="ob-stack"><div class="ob-card"><small>You said</small><div class="ob-said">"Find me the cheapest flight to Goa"</div></div>
-      <div class="ob-card"><small>Braino</small><div>Got it. Opening Google Flights. Comparing prices.</div><div class="ob-done" style="margin-top:8px">Cheapest: ₹4,200, Friday 7:10.</div></div></div>`,
-  dictate: () => `<div class="ob-stack"><div class="ob-card"><small>You said</small><div>"um so tell him the deck is ready and uh we can meet friday"</div></div>
-      <div class="ob-card"><small>Typed where your cursor is</small><div class="ob-said">The deck is ready. We can meet Friday.</div></div></div>`,
-  memory: () => `<div class="ob-card"><small>What I remember</small>
-      <div class="ob-line">You're vegetarian.</div>
-      <div class="ob-line">Riya is your co-founder.</div>
-      <div class="ob-line">You like music while you work.</div>
-      <div class="ob-line ob-hl">You can see, edit or delete all of it.</div></div>`,
+  os: () => mac("os", { notch: "is-wide", sheet: `
+      <div class="mx-os-mark">Affective<span>OS</span></div>
+      <div class="mx-os-senses">${["Sees", "Listens", "Acts", "Remembers"].map((t, i) => `<span style="--d:${0.8 + i * 0.45}s">${t}</span>`).join("")}</div>` }),
+  notch: () => mac("notch", { notch: "is-eyes", desk: `<div class="mx-keys"><kbd>control</kbd><kbd>control</kbd></div><div class="mx-ring"></div>` }),
+  new: () => mac("new", {
+    desk: ["Calendar", "Mail", "WhatsApp", "Chrome"].map((t, i) => `<div class="mx-clutter" style="--i:${i}">${win(t, '<p class="mx-bar-g"></p><p class="mx-bar-g s"></p><p class="mx-bar-g"></p>')}</div>`).join(""),
+    sheet: L("“Move my 4pm to 5.”", 2.6, "is-said") + L("✓ Done. Moved, and Riya knows.", 3.6, "is-done") }),
+  meetings: () => mac("meetings", { app: "Google Meet",
+    win: win("Product sync", `<div class="mx-call">${[["R", "Riya"], ["A", "Arjun"], ["Y", "You"]].map(([i, n], k) => `<div class="mx-tile" style="--k:${k}"><b>${i}</b><span>${n}</span></div>`).join("")}</div>`, "is-call"),
+    sheet: L("Notes", 0.4, "is-kick") + L("Riya: the deck needs the new numbers.", 1.0) + L("You: I’ll send it by Friday.", 2.0) + L("You promised · deck by Friday", 3.0, "is-pin") }),
+  lectures: () => mac("lectures", { app: "Keynote",
+    win: win("Venture Building · Lecture 6", `<div class="mx-slide"><h4>Customer discovery</h4><p class="mx-bar-g"></p><p class="mx-bar-g s"></p><p class="mx-bar-g m"></p></div>`, "is-slide"),
+    sheet: `<div class="mx-live"><i></i>LIVE<div class="mx-wave">${Array.from({ length: 14 }, (_, i) => `<b style="--w:${i}"></b>`).join("")}</div></div>` + L("Start with the problem, not the product.", 0.9) + L("Talk to ten people before you build.", 2.0) + L("Watch what they already pay for.", 3.1) }),
+  day: () => mac("day", { app: "Calendar",
+    win: win("Today", ["8:30|Good morning, one thing is due", "9:30|Lecture, written down live", "12:00|Market sizing is due at 2", "4:00|Meeting notes and promises", "5:50|Your call with Arjun in 10 min"].map((r, i) => { const [t, x] = r.split("|"); return `<div class="mx-hour" style="--i:${i}"><time>${t}</time><span>${x}</span></div>`; }).join(""), "is-day"),
+    notch: "is-pulse" }),
+  messages: () => mac("messages", { app: "WhatsApp",
+    win: win("WhatsApp", `<div class="mx-wa"><div class="mx-wa-list"><p><b>Riya Khurana</b><span>see you at 5</span></p><p><b>Riya</b><span>ok!</span></p><p><b>Arjun</b><span>deck?</span></p></div><div class="mx-wa-chat"><div class="mx-bubble">Running 10 minutes late <i>✓✓</i></div></div></div>`, "is-wa"),
+    sheet: L("“Tell Riya I’m running late.”", 0.4, "is-said") + L("Which Riya?", 1.2) + `<div class="mx-l mx-chips" style="--d:1.6s"><span class="is-pick">Riya Khurana</span><span>the other Riya</span></div>` }),
+  do: () => mac("do", { app: "Chrome",
+    win: win("Google Flights", `<div class="mx-flights">${[["IndiGo", "6:05", "₹4,212"], ["Akasa", "7:40", "₹4,390"], ["Air India", "9:15", "₹4,875"], ["Vistara", "11:00", "₹5,120"]].map(([a, t, p], i) => `<p class="${i === 0 ? "is-best" : ""}"><b>${a}</b><span>BLR → BOM · ${t}</span><em>${p}</em></p>`).join("")}</div>`, "is-chrome"),
+    sheet: L("✓ Opened Google Flights", 0.6, "is-step") + L("✓ Compared 23 flights", 1.5, "is-step") + L("Cheapest: IndiGo, ₹4,212", 2.4, "is-done") }),
+  dictate: () => mac("dictate", { app: "Mail",
+    win: win("New message", `<div class="mx-mail"><p><span>To</span>Arjun</p><p><span>Subject</span>Deck</p><div class="mx-type"><span>The deck is ready. We can meet Friday.</span><i></i></div></div>`, "is-mail"),
+    sheet: `<div class="mx-l is-kick" style="--d:.3s">You said</div>` + L("um so tell him the deck is ready and uh we can meet friday", 0.6, "is-raw") }),
+  memory: () => mac("memory", { app: "Braino",
+    win: win("What I remember", ["You’re vegetarian.", "You like music while you work.", "Riya is your co-founder.", "Your mom’s birthday is 12 Nov."].map((t, i) => `<div class="mx-fact" style="--i:${i}">${t}<span>${i === 2 ? "you told me" : "I noticed"}</span></div>`).join(""), "is-mem"),
+    notch: "is-pulse" }),
 };
 
 /* ── The story ── He is the one talking, so every line is in his own words,
@@ -192,7 +208,7 @@ function render() {
   const scene = SCENES[at];
   const head = `<p class="ob-kicker">${esc(scene.kicker)}</p><h1 class="ob-big">${lit(scene)}</h1>${scene.sub ? `<p class="ob-sub">${esc(scene.sub)}</p>` : ""}`;
   $("ob-stage").innerHTML = scene.art
-    ? `<section class="ob-scene"><div>${head}${body(scene)}</div><div class="ob-art${IMG[scene.art] ? " img" : ""}"${IMG[scene.art] ? ` style="background-image:url('${IMG_BASE}${IMG[scene.art]}.jpg')"` : ""}>${ART[scene.art]()}</div></section>`
+    ? `<section class="ob-scene"><div>${head}${body(scene)}</div><div class="ob-art-mx">${ART[scene.art]()}</div></section>`
     : `<section class="ob-scene solo"><div>${scene.banner ? `<div class="ob-banner" style="background-image:url('${IMG_BASE}${scene.banner}.jpg')"></div>` : ""}${head}${body(scene)}</div></section>`;
   $("ob-dots").innerHTML = SCENES.map((_, i) => `<i class="${i === at ? "on" : i < at ? "done" : ""}"></i>`).join("");
   $("ob-back").hidden = at === 0;
@@ -211,7 +227,8 @@ async function tell(scene) {
   if (!finished || SCENES[at]?.id !== scene.id) return;
   spoken.add(scene.id);
   light(1);
-  if (scene.kind === "story") setTimeout(() => { if (SCENES[at]?.id === scene.id) next(); }, 900);
+  // Designing on the website: ?hold=1 keeps a scene up instead of moving on.
+  if (scene.kind === "story" && !window.OB_HOLD) setTimeout(() => { if (SCENES[at]?.id === scene.id) next(); }, 900);
 }
 
 async function save(patch) { Object.assign(answers, patch); await api.setupSave?.(patch).catch(() => null); }
@@ -290,6 +307,8 @@ function paintSound() { $("ob-sound").textContent = muted ? "Sound off" : "Sound
 (async () => {
   paintSound();
   try { const s = await api.setupSnapshot?.(); if (s?.ok) { snap = s; Object.assign(answers, { callMe: s.answers?.callMe, persona: s.answers?.persona }); if (s.answers?.learnMode) learnMode = s.answers.learnMode; if (typeof s.answers?.improveBraino === "boolean") improveOn = s.answers.improveBraino; } } catch (_) {}
+  // Designing on the website: ?scene=meetings opens that scene directly.
+  if (window.OB_START) { const k = SCENES.findIndex((x) => x.id === window.OB_START); if (k >= 0) at = k; }
   try { const m = await api.mesaTokenStatus?.(); if (m?.connected) mesaState = { connected: true, name: m.name || "", program: m.program || "", error: "", busy: false }; } catch (_) {}
   render();
 })();

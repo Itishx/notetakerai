@@ -172,3 +172,157 @@ html, body { margin: 0; height: 100%; }
 .ob-mesa-box i { grid-column: 2; grid-row: 1 / span 2; font-style: normal; color: var(--ink-3); }
 .ob-mesa-box.on { border-style: solid; border-color: var(--ok); }
 .ob-mesa-box.on i { color: var(--ok); }
+
+/* ── The Mac, alive (2026-10-16) ────────────────────────────────────────────
+ * One small MacBook screen per scene: bezel, the homepage's pixel art as the
+ * desktop, a translucent menu bar, the real notch, and the scene's moment as a
+ * nine second loop. Every timed piece shares the period, so they stay in step. */
+.ob-art-mx { width: 100%; display: grid; place-items: center; }
+.mx { --p: 9s; width: 100%; max-width: 520px; padding: 9px 9px 14px; border-radius: 20px 20px 10px 10px; background: #0d0d0e; box-shadow: 0 1px 0 rgba(255,255,255,.06) inset, 0 40px 80px -40px rgba(22,21,15,.55), 0 0 0 1px rgba(0,0,0,.4); position: relative; }
+.mx::after { content: ""; position: absolute; left: -6%; right: -6%; bottom: -10px; height: 12px; border-radius: 0 0 14px 14px; background: linear-gradient(#d9d6cf, #b9b5ab); box-shadow: 0 12px 24px -14px rgba(22,21,15,.5); }
+.mx-screen { position: relative; aspect-ratio: 16 / 10.4; border-radius: 9px; overflow: hidden; background: #ccc center / cover no-repeat; font: 500 10.5px/1.35 var(--sf); color: #1b1a17; }
+.mx-screen::before { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0,0,0,.08), rgba(0,0,0,.18)); }
+.mx-bar { position: absolute; top: 0; left: 0; right: 0; height: 20px; display: flex; align-items: center; gap: 11px; padding: 0 12px; background: rgba(246,244,239,.62); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); font-size: 10px; color: #1b1a17; z-index: 2; }
+.mx-bar b { font-weight: 700; }
+.mx-bar i { margin-left: auto; font-style: normal; }
+/* The notch: hardware black, with his state inside. */
+.mx-notch { position: absolute; top: 0; left: 50%; width: 24%; height: 22px; transform: translateX(-50%); background: #000; border-radius: 0 0 11px 11px; z-index: 4; }
+.mx-notch.is-eyes::before, .mx-notch.is-eyes::after { content: ""; position: absolute; top: 6px; width: 7px; height: 10px; border-radius: 50%; background: #fff; animation: mxBlink 3.4s infinite; }
+.mx-notch.is-eyes::before { left: calc(50% - 13px); }
+.mx-notch.is-eyes::after { left: calc(50% + 6px); }
+@keyframes mxBlink { 0%, 90%, 100% { transform: scaleY(1); } 94% { transform: scaleY(.12); } }
+.mx-notch.is-pulse::after { content: ""; position: absolute; right: 12px; top: 8px; width: 6px; height: 6px; border-radius: 50%; background: var(--coral); box-shadow: 0 0 8px var(--coral); animation: mxPulse 1.6s ease-in-out infinite; }
+@keyframes mxPulse { 50% { opacity: .35; transform: scale(.7); } }
+/* The sheet: the notch opened, one steady shape, lines arriving inside. */
+.mx-sheet { position: absolute; top: 0; left: 50%; width: 62%; transform: translateX(-50%); z-index: 5; background: #000; color: #fff; border-radius: 0 0 16px 16px; padding: 26px 14px 12px; display: grid; gap: 6px; box-shadow: 0 10px 30px -10px rgba(0,0,0,.6), 0 0 0 1px rgba(255,255,255,.04); animation: mxSheet var(--p) cubic-bezier(.22,1,.36,1) infinite; transform-origin: top center; }
+@keyframes mxSheet { 0%, 4% { clip-path: inset(0 30% calc(100% - 22px) 30% round 0 0 11px 11px); } 12%, 88% { clip-path: inset(0 0 0 0 round 0 0 16px 16px); } 96%, 100% { clip-path: inset(0 30% calc(100% - 22px) 30% round 0 0 11px 11px); } }
+.mx-l { opacity: 0; animation: mxLine var(--p) ease infinite; animation-delay: var(--d, 0s); font-size: 11px; }
+@keyframes mxLine { 0% { opacity: 0; transform: translateY(4px); } 5% { opacity: 1; transform: none; } 70% { opacity: 1; } 78%, 100% { opacity: 0; } }
+.mx-l.is-said { font: 400 13px/1.3 var(--display); }
+.mx-l.is-kick { font: 600 8.5px var(--sf); letter-spacing: .14em; text-transform: uppercase; color: rgba(255,255,255,.5); }
+.mx-l.is-done { color: #7fe0a8; font-weight: 600; }
+.mx-l.is-step { color: rgba(255,255,255,.82); }
+.mx-l.is-pin { justify-self: start; padding: 4px 9px; border-radius: 999px; background: rgba(240,122,96,.22); color: #ffb4a3; font-weight: 600; }
+.mx-l.is-raw { color: rgba(255,255,255,.62); font-style: italic; }
+/* Windows on the desktop. */
+.mx-win { position: absolute; z-index: 3; background: #fbfaf7; border-radius: 8px; overflow: hidden; box-shadow: 0 18px 40px -18px rgba(0,0,0,.55), 0 0 0 .5px rgba(0,0,0,.18); }
+.mx-win-top { height: 18px; display: flex; align-items: center; gap: 4px; padding: 0 8px; background: #efece5; border-bottom: .5px solid #ddd8cc; font-size: 9px; color: #6b675d; }
+.mx-win-top i { width: 6px; height: 6px; border-radius: 50%; background: #d8d4ca; }
+.mx-win-top i:nth-child(1) { background: #ff6b5f; } .mx-win-top i:nth-child(2) { background: #febc2e; } .mx-win-top i:nth-child(3) { background: #28c840; }
+.mx-win-top span { margin-left: 6px; font-weight: 600; }
+.mx-win-body { padding: 10px 12px; }
+.mx-bar-g { height: 6px; border-radius: 3px; background: #e2ded4; margin: 6px 0; width: 82%; } .mx-bar-g.s { width: 56%; } .mx-bar-g.m { width: 70%; }
+.mx-win.is-call, .mx-win.is-slide, .mx-win.is-wa, .mx-win.is-chrome, .mx-win.is-mail, .mx-win.is-mem, .mx-win.is-day { left: 9%; right: 9%; top: 34%; bottom: 7%; }
+/* 1. AffectiveOS */
+.mx-notch.is-wide { width: 24%; }
+.mx-os-mark { font: 400 22px/1 var(--display); letter-spacing: -.02em; text-align: center; padding-top: 4px; }
+.mx-os-mark span { color: var(--coral); }
+.mx-os-senses { display: flex; justify-content: center; gap: 6px; flex-wrap: wrap; }
+.mx-os-senses span { padding: 3px 8px; border-radius: 999px; border: 1px solid rgba(255,255,255,.18); font-size: 9.5px; color: rgba(255,255,255,.4); animation: mxSense var(--p) ease infinite; animation-delay: var(--d); }
+@keyframes mxSense { 0%, 4% { color: rgba(255,255,255,.4); border-color: rgba(255,255,255,.18); } 8%, 72% { color: #fff; border-color: rgba(240,122,96,.7); background: rgba(240,122,96,.14); } 80%, 100% { color: rgba(255,255,255,.4); } }
+/* 2. Meet Braino */
+.mx-keys { position: absolute; left: 50%; bottom: 14%; transform: translateX(-50%); display: flex; gap: 8px; z-index: 3; }
+.mx-keys kbd { min-width: 64px; height: 30px; display: grid; place-items: center; border-radius: 7px; background: #fbfaf7; box-shadow: 0 3px 0 #b9b5ab, 0 8px 18px -8px rgba(0,0,0,.5); font: 600 10.5px var(--sf); color: #1b1a17; animation: mxKey 2.4s ease-in-out infinite; }
+.mx-keys kbd + kbd { animation-delay: .22s; }
+@keyframes mxKey { 0%, 60%, 100% { transform: none; } 70% { transform: translateY(3px); box-shadow: 0 0 0 #b9b5ab; } }
+/* A soft glow breathing under the notch: he is listening. */
+.mx-ring { position: absolute; top: 0; left: 50%; width: 40%; height: 60px; transform: translateX(-50%); background: radial-gradient(50% 60% at 50% 0%, rgba(240,122,96,.55), rgba(240,122,96,0) 70%); filter: blur(6px); animation: mxRing 2.4s ease-in-out infinite; z-index: 3; pointer-events: none; }
+@keyframes mxRing { 0%, 100% { opacity: .35; transform: translateX(-50%) scale(.9); } 50% { opacity: 1; transform: translateX(-50%) scale(1.05); } }
+/* 3. Something new: the clutter clears, the notch answers. */
+.mx-clutter { position: absolute; z-index: 3; width: 46%; height: 42%; left: calc(6% + var(--i) * 13%); top: calc(18% + var(--i) * 9%); animation: mxClutter var(--p) ease infinite; transform: rotate(calc(-3deg + var(--i) * 2deg)); }
+.mx-clutter .mx-win { position: absolute; inset: 0; }
+@keyframes mxClutter { 0%, 18% { opacity: 1; transform: rotate(calc(-3deg + var(--i) * 2deg)); } 26%, 90% { opacity: 0; transform: translateY(16px) scale(.94); } 100% { opacity: 1; } }
+/* 4. Meetings */
+.mx-call { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; height: 100%; }
+.mx-tile { border-radius: 8px; background: linear-gradient(160deg, #3b3d44, #24262b); display: grid; place-items: center; align-content: center; gap: 4px; color: #fff; animation: mxTalk 3s ease-in-out infinite; animation-delay: calc(var(--k) * 1s); }
+.mx-tile b { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 50%; background: #5a5f6b; font-size: 12px; }
+.mx-tile span { font-size: 9px; color: rgba(255,255,255,.7); }
+@keyframes mxTalk { 0%, 25%, 100% { box-shadow: inset 0 0 0 0 transparent; } 8%, 20% { box-shadow: inset 0 0 0 2px #7fe0a8; } }
+/* 5. Lectures */
+.mx-slide h4 { margin: 4px 0 10px; font: 400 18px/1.1 var(--display); color: #1b1a17; }
+.mx-live { display: flex; align-items: center; gap: 7px; font: 700 8.5px var(--sf); letter-spacing: .14em; color: #ff8f84; }
+.mx-live > i { width: 6px; height: 6px; border-radius: 50%; background: #ff5f57; animation: mxPulse 1.2s infinite; }
+.mx-wave { display: flex; align-items: center; gap: 2px; height: 14px; margin-left: 4px; }
+.mx-wave b { width: 2px; height: 100%; border-radius: 1px; background: rgba(255,255,255,.75); animation: mxWave .9s ease-in-out infinite; animation-delay: calc(var(--w) * -0.13s); }
+@keyframes mxWave { 0%, 100% { transform: scaleY(.25); } 50% { transform: scaleY(1); } }
+/* 6. Your day */
+.mx-hour { display: grid; grid-template-columns: 38px 1fr; gap: 8px; padding: 6px 8px; border-radius: 6px; font-size: 10px; color: #6b675d; animation: mxHour var(--p) ease infinite; animation-delay: calc(var(--i) * 1.4s); }
+.mx-hour time { font-weight: 700; color: #918d80; font-variant-numeric: tabular-nums; }
+@keyframes mxHour { 0% { background: transparent; } 3%, 16% { background: rgba(240,122,96,.14); color: #1b1a17; } 20%, 100% { background: transparent; } }
+/* 7. Messages */
+.mx-wa { display: grid; grid-template-columns: 38% 1fr; height: 100%; margin: -10px -12px; }
+.mx-wa-list { border-right: .5px solid #e2ded4; padding: 6px; }
+.mx-wa-list p { margin: 0 0 4px; padding: 5px 7px; border-radius: 6px; display: grid; font-size: 9.5px; }
+.mx-wa-list p span { color: #918d80; font-size: 8.5px; }
+.mx-wa-list p:first-child { animation: mxPick var(--p) ease infinite; }
+@keyframes mxPick { 0%, 30% { background: transparent; } 36%, 88% { background: #e8f6ee; } 96%, 100% { background: transparent; } }
+.mx-wa-chat { background: #efeae2; display: flex; align-items: flex-end; justify-content: flex-end; padding: 10px; }
+.mx-bubble { padding: 6px 9px; border-radius: 8px 8px 2px 8px; background: #d9fdd3; font-size: 10px; opacity: 0; animation: mxLine var(--p) ease infinite; animation-delay: 3.4s; }
+.mx-bubble i { font-style: normal; color: #53bdeb; margin-left: 4px; }
+.mx-chips { display: flex; gap: 6px; }
+.mx-chips span { padding: 3px 8px; border-radius: 999px; border: 1px solid rgba(255,255,255,.22); font-size: 9.5px; }
+.mx-chips .is-pick { animation: mxChip var(--p) ease infinite; }
+@keyframes mxChip { 0%, 30% { background: transparent; } 34%, 88% { background: #fff; color: #000; } 96%, 100% { background: transparent; } }
+/* 8. Do it for me */
+.mx-flights p { margin: 0 0 5px; padding: 6px 8px; border-radius: 6px; display: grid; grid-template-columns: 1fr auto; font-size: 10px; border: .5px solid #e2ded4; }
+.mx-flights p span { grid-column: 1; color: #918d80; font-size: 8.5px; }
+.mx-flights p em { grid-row: 1 / span 2; grid-column: 2; align-self: center; font-style: normal; font-weight: 700; }
+.mx-flights .is-best { animation: mxBest var(--p) ease infinite; }
+@keyframes mxBest { 0%, 28% { box-shadow: none; background: transparent; } 32%, 88% { box-shadow: 0 0 0 1.5px #1f9d63; background: #eef9f2; } 96%, 100% { box-shadow: none; background: transparent; } }
+/* 9. Dictation: clean words typing at the cursor. */
+.mx-mail p { margin: 0; padding: 4px 0; border-bottom: .5px solid #ece8de; font-size: 10px; display: flex; gap: 8px; }
+.mx-mail p span { color: #918d80; width: 44px; }
+.mx-type { position: relative; margin-top: 8px; font: 400 13px/1.35 var(--display); white-space: nowrap; overflow: hidden; }
+.mx-type span { display: inline-block; overflow: hidden; vertical-align: bottom; width: 0; animation: mxType var(--p) steps(38) infinite; animation-delay: 1.6s; }
+.mx-type i { display: inline-block; width: 1.5px; height: 14px; background: #1f6feb; vertical-align: middle; animation: mxCaret 1s steps(1) infinite; }
+@keyframes mxType { 0% { width: 0; } 22%, 85% { width: 100%; } 95%, 100% { width: 0; } }
+@keyframes mxCaret { 50% { opacity: 0; } }
+/* 10. Memory */
+.mx-fact { display: flex; justify-content: space-between; gap: 8px; padding: 6px 2px; border-bottom: .5px solid #ece8de; font: 400 12px/1.3 var(--display); opacity: 0; animation: mxLine var(--p) ease infinite; animation-delay: calc(.5s + var(--i) * .9s); }
+.mx-fact span { font: 500 8.5px var(--sf); color: #918d80; align-self: center; white-space: nowrap; }
+@media (prefers-reduced-motion: reduce) {
+  .mx *, .mx-sheet, .mx-l, .mx-fact, .mx-bubble { animation: none !important; opacity: 1 !important; clip-path: none !important; }
+  .mx-type span { width: 100%; } .mx-clutter { display: none; }
+}
+@media (max-width: 900px) { .mx { max-width: 420px; } }
+
+/* ── Bigger, more elegant Mac (2026-10-16) ── */
+.ob-scene:has(.ob-art-mx) { max-width: 1240px; grid-template-columns: minmax(0, .85fr) minmax(0, 1.35fr); gap: clamp(32px, 4vw, 64px); }
+.mx { max-width: 760px; padding: 7px 7px 9px; border-radius: 22px 22px 6px 6px;
+  background: linear-gradient(180deg, #1c1c1e 0%, #0b0b0c 40%, #0b0b0c 100%);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.07), inset 0 1px 0 rgba(255,255,255,.12),
+    0 2px 4px rgba(22,21,15,.18), 0 30px 60px -30px rgba(22,21,15,.55), 0 60px 120px -60px rgba(22,21,15,.45); }
+/* The base: thin brushed aluminium, wider than the screen, with the lip you open it by. */
+.mx::after { left: -7%; right: -7%; bottom: -11px; height: 11px; border-radius: 1px 1px 16px 16px;
+  background: linear-gradient(180deg, #e9e6df 0%, #cfcbc2 55%, #a9a59b 100%);
+  box-shadow: 0 1px 0 rgba(255,255,255,.7) inset, 0 16px 28px -16px rgba(22,21,15,.55); }
+.mx::before { content: ""; position: absolute; left: 50%; bottom: -11px; width: 15%; height: 4px; transform: translateX(-50%); border-radius: 0 0 8px 8px; background: linear-gradient(180deg, #a9a59b, #c4c0b6); z-index: 1; }
+.mx-screen { border-radius: 14px 14px 3px 3px; font-size: 12px; }
+.mx-bar { height: 24px; font-size: 11px; gap: 13px; padding: 0 14px; }
+.mx-notch { height: 26px; width: 22%; border-radius: 0 0 13px 13px; }
+.mx-notch.is-eyes::before, .mx-notch.is-eyes::after { top: 7px; width: 8px; height: 12px; }
+.mx-sheet { width: 60%; padding: 32px 18px 15px; gap: 8px; border-radius: 0 0 20px 20px; }
+.mx-l { font-size: 12.5px; }
+.mx-l.is-said { font-size: 15px; }
+.mx-l.is-kick { font-size: 9.5px; }
+.mx-os-mark { font-size: 28px; }
+.mx-os-senses span { font-size: 11px; padding: 4px 10px; }
+.mx-win-top { height: 22px; font-size: 10.5px; }
+.mx-win-top i { width: 7px; height: 7px; }
+.mx-win-body { padding: 12px 14px; }
+.mx-win.is-call, .mx-win.is-slide, .mx-win.is-wa, .mx-win.is-chrome, .mx-win.is-mail, .mx-win.is-mem, .mx-win.is-day { left: 8%; right: 8%; top: 33%; bottom: 6%; }
+.mx-win.is-call .mx-win-body { height: calc(100% - 22px); }
+.mx-call { gap: 10px; }
+.mx-tile b { width: 40px; height: 40px; font-size: 15px; }
+.mx-tile span { font-size: 10.5px; }
+.mx-slide h4 { font-size: 22px; }
+.mx-hour, .mx-flights p, .mx-wa-list p, .mx-mail p { font-size: 11.5px; }
+.mx-flights p span, .mx-wa-list p span { font-size: 10px; }
+.mx-type { font-size: 16px; }
+.mx-fact { font-size: 14px; }
+.mx-keys kbd { min-width: 78px; height: 36px; font-size: 12px; }
+@media (max-width: 900px) { .ob-scene:has(.ob-art-mx) { grid-template-columns: 1fr; } .mx { max-width: 560px; } }
+/* Windows fill their frame, so nothing stops halfway (2026-10-16). */
+.mx-win.is-call .mx-win-body, .mx-win.is-wa .mx-win-body, .mx-win.is-chrome .mx-win-body, .mx-win.is-mail .mx-win-body, .mx-win.is-mem .mx-win-body, .mx-win.is-day .mx-win-body, .mx-win.is-slide .mx-win-body { height: calc(100% - 22px); }
+.mx-wa { height: calc(100% + 24px); }
+.mx-chips span { font-size: 11px; padding: 4px 10px; }

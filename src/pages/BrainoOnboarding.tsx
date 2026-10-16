@@ -20,6 +20,10 @@ export default function BrainoOnboarding() {
     const w = window as unknown as Record<string, unknown>;
     const prevApi = w.brainoMac;
     w.OB_IMG_BASE = "/";
+    // Design helpers: /braino-onboarding?scene=meetings&hold=1 opens one scene and keeps it up.
+    const q = new URLSearchParams(window.location.search);
+    w.OB_START = q.get("scene") || "";
+    w.OB_HOLD = q.get("hold") === "1";
     w.brainoMac = {
       setupSnapshot: async () => ({ ok: true, name: "", answers: {}, permissions: perms.map((p) => ({ ...p })) }),
       setupPermissions: async () => ({ ok: true, permissions: perms.map((p) => ({ ...p })) }),
