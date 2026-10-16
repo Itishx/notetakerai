@@ -53,7 +53,16 @@ const ART = {
   os: () => mac("os", { notch: "is-wide", sheet: `
       <div class="mx-os-mark">Affective<span>OS</span></div>
       <div class="mx-os-senses">${["Sees", "Listens", "Acts", "Remembers"].map((t, i) => `<span style="--d:${0.8 + i * 0.45}s">${t}</span>`).join("")}</div>` }),
-  notch: () => mac("notch", { notch: "is-eyes", desk: `<div class="mx-keys"><kbd>control</kbd><kbd>control</kbd></div><div class="mx-ring"></div>` }),
+  /* He lives in the notch: the camera flies in until the notch fills the
+     frame, his eyes look around and find you, he says hi, and it pulls back. */
+  notch: () => mac("notch", { notch: "is-face", desk: `<div class="mx-close" aria-hidden="true">
+      <div class="mx-close-bar"><span>\uf8ff&nbsp; Finder &nbsp; File &nbsp; Edit</span><span>9:41</span></div>
+      <div class="mx-close-notch"><div class="mx-face">
+        <i class="mx-eye"><b></b></i><i class="mx-eye"><b></b></i>
+        <svg class="mx-smile" viewBox="0 0 40 14"><path d="M4 3 Q20 15 36 3" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"/></svg>
+      </div></div>
+      <div class="mx-close-hi">Hi, I'm Braino.</div>
+    </div>` }),
   new: () => mac("new", {
     desk: ["Calendar", "Mail", "WhatsApp", "Chrome"].map((t, i) => `<div class="mx-clutter" style="--i:${i}">${win(t, '<p class="mx-bar-g"></p><p class="mx-bar-g s"></p><p class="mx-bar-g"></p>')}</div>`).join(""),
     sheet: L("“Move my 4pm to 5.”", 2.6, "is-said") + L("✓ Done. Moved, and Riya knows.", 3.6, "is-done") }),

@@ -351,3 +351,23 @@ html, body { margin: 0; height: 100%; }
 .mx-dayrow time { font: 600 11px var(--sf); color: rgba(255,255,255,.5); font-variant-numeric: tabular-nums; }
 .mx-dayrow span { font: 400 13.5px/1.3 var(--display); }
 .mx[data-art="day"] .mx-sheet { width: 66%; }
+
+/* ── 2. He lives in the notch: move in, meet him, move out (2026-10-16) ──
+   The desktop drifts in a little (no mushy magnified pixels), then a real
+   close-up of the top of the Mac fades over it: a big notch with his face,
+   eyes that look around and find you, a smile, and "Hi, I'm Braino." */
+.mx[data-art="notch"] .mx-screen { animation: mxPush 9s cubic-bezier(.65,0,.35,1) infinite; }
+@keyframes mxPush { 0%, 8% { background-size: 100% auto; background-position: 50% 50%; } 26%, 76% { background-size: 135% auto; background-position: 50% 0%; } 94%, 100% { background-size: 100% auto; background-position: 50% 50%; } }
+.mx-close { position: absolute; inset: 0; z-index: 6; background: radial-gradient(120% 90% at 50% 0%, #2c2924 0%, #141312 70%); opacity: 0; animation: mxCloseIn 9s ease infinite; }
+@keyframes mxCloseIn { 0%, 20% { opacity: 0; transform: scale(.92); } 30%, 74% { opacity: 1; transform: none; } 84%, 100% { opacity: 0; transform: scale(1.04); } }
+.mx-close-bar { position: absolute; top: 0; left: 0; right: 0; height: 15%; display: flex; justify-content: space-between; align-items: center; padding: 0 5%; font: 600 15px var(--sf); color: rgba(246,244,239,.55); background: rgba(246,244,239,.06); }
+.mx-close-notch { position: absolute; top: 0; left: 50%; width: 44%; height: 30%; transform: translateX(-50%); background: #000; border-radius: 0 0 40px 40px; display: grid; place-items: center; box-shadow: 0 18px 40px -20px rgba(0,0,0,.9); }
+.mx-face { position: relative; display: grid; grid-template-columns: auto auto; gap: 34px; justify-items: center; padding-top: 6px; }
+.mx-eye { position: relative; width: 30px; height: 42px; border-radius: 50%; background: #fff; display: block; animation: mxBlink 3.2s 1.2s infinite; }
+.mx-eye b { position: absolute; left: 50%; top: 52%; width: 12px; height: 15px; margin: -7.5px 0 0 -6px; border-radius: 50%; background: #141312; animation: mxGaze 9s ease-in-out infinite; }
+@keyframes mxGaze { 0%, 32% { transform: translate(0, 0); } 38%, 44% { transform: translate(-6px, -2px); } 50%, 56% { transform: translate(6px, -2px); } 62%, 100% { transform: translate(0, 3px); } }
+.mx-smile { grid-column: 1 / -1; width: 46px; height: 16px; margin-top: 6px; opacity: 0; animation: mxSmile 9s ease infinite; }
+@keyframes mxSmile { 0%, 58% { opacity: 0; } 62%, 74% { opacity: 1; } 80%, 100% { opacity: 0; } }
+.mx-close-hi { position: absolute; top: 40%; left: 0; right: 0; text-align: center; font: 400 30px/1.1 var(--display); letter-spacing: -.02em; color: #fff; opacity: 0; animation: mxHello 9s ease infinite; }
+@keyframes mxHello { 0%, 60% { opacity: 0; transform: translateY(8px); } 64%, 74% { opacity: 1; transform: none; } 80%, 100% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .mx[data-art="notch"] .mx-screen { animation: none !important; } .mx-close { opacity: 1 !important; } .mx-close-hi, .mx-smile { opacity: 1 !important; } }
