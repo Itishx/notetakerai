@@ -21,7 +21,7 @@ For every feature:
 - [Your Mouse Is the Context](features/your-mouse-is-the-context.md)
 - [Trace](features/trace.md)
 - [HIL, Scored](features/hil-scored.md)
-- [Affective Labs, and Saburi](features/labs-and-saburi.md)
+- [Affective Labs](features/affective-labs.md)
 - [Safer By Default](features/safer-by-default.md)
 - [Said To Him, Not About Him](features/said-to-him.md)
 - [Knows Your Localhost](features/knows-your-localhost.md)

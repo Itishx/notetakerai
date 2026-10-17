@@ -90,7 +90,6 @@ const Letter = lazy(() => import("./pages/Letter.tsx"));
 const MiniRoadies = lazy(() => import("./pages/MiniRoadies.tsx"));
 const Journal = lazy(() => import("./pages/Journal.tsx"));
 const BrainoClasses = lazy(() => import("./pages/BrainoClasses.tsx"));
-const Saburi = lazy(() => import("./pages/Saburi.tsx"));
 const Iomi = lazy(() => import("./pages/Iomi.tsx"));
 const Telos = lazy(() => import("./pages/Telos.tsx"));
 const JournalEngine = lazy(() => import("./pages/JournalEngine.tsx"));
@@ -350,7 +349,7 @@ function AppRoutes() {
         {/* /n is the letter now; the film is parked at /n/film until the 22nd */}
         <Route path="/n" element={<MiniRoadies />} />
         <Route path="/n/film" element={<Letter />} />
-        <Route path="/saburi" element={<Saburi />} />
+        <Route path="/saburi" element={<Navigate to="/labs" replace />} />
         <Route path="/iomi" element={<Iomi />} />
         <Route path="/telos" element={<Telos />} />
         <Route path="/journal" element={<Journal />} />
@@ -416,6 +415,7 @@ function AppRoutes() {
         <Route path="/knowledge/outreach-engine" element={<OutreachEngineDocs />} />
         <Route path="/knowledge/trace" element={<Navigate to="/trace" replace />} />
         <Route path="/knowledge/hil-scored" element={<HilScoredDocs />} />
+        <Route path="/knowledge/affective-labs" element={<Navigate to="/labs" replace />} />
         <Route path="/knowledge/labs-and-saburi" element={<Navigate to="/labs" replace />} />
         <Route path="/affectiveos" element={<AffectiveOSPage />} />
         {/* The campaign page: the speech, why him, and the footer game. Built

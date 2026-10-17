@@ -24,7 +24,7 @@ import "../styles/apple.css";
 import "./yap-mode.css";
 
 const DEMO_LINES = [
-  "Hey Saburi, I read the draft. The opening is strong, but the second paragraph can be clearer.",
+  "Hey Riya, I read the draft. The opening is strong, but the second paragraph can be clearer.",
   "Turn this into a short update for the team, keep my tone, and put the decision in the first line.",
   "Let's meet after lunch. I want twenty minutes to review the launch notes before the call.",
 ];

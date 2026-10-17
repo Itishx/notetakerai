@@ -35,7 +35,7 @@ type HilResult = {
 const SAMPLES = [
   "open gmail",
   "show me more songs like this",
-  "message saburi that i am running late",
+  "message riya that i am running late",
   "i am so stressed, just delete these files",
   "summarize this and send it to my editor",
 ];

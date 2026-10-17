@@ -200,13 +200,13 @@ export const KNOWLEDGE_ENTRIES: readonly KnowledgeEntry[] = [
     number: "072",
   },
   {
-    slug: "labs-and-saburi",
-    title: "Affective Labs, and Saburi",
+    slug: "affective-labs",
+    title: "Affective Labs",
     category: "Product",
     date: "2026-10-03",
     dateLabel: "October 3, 2026",
     description:
-      "Labs is where we try AI and tech that is not a product yet. First in Labs is Saburi, Braino's emotional engine, now free to be trained on its own.",
+      "Labs is where we build a system that takes care of things for you end to end, one engine at a time. Outreach is open to try; Content is being built; Optics is next.",
     status: "Exploring",
     platform: "Affective website",
     number: "071",

@@ -247,7 +247,7 @@ function WhoStory() {
   );
 }
 
-// Pricing — the three models (Saburi/Iomi/Telos) as one joined table with a
+// Pricing — the three models as one joined table with a
 // Free/Pro toggle, plus a collapsible full comparison between all three.
 type PriceTier = { price: string; desc: string; feats: string[] };
 const PRODUCTS = [
@@ -352,7 +352,7 @@ function BuildGraphic() {
   const ROWS = [
     { label: "Voice", opts: ["Warm", "Bright", "Deep"] },
     { label: "Vibe", opts: ["Calm", "Witty", "Bold"] },
-    { label: "Class", opts: ["Saburi", "Iomi", "Telos"] },
+    { label: "Class", opts: ["IOMI", "Foundry", "Telos"] },
   ];
   return (
     <div className="build-graphic" aria-hidden="true">

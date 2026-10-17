@@ -44,3 +44,8 @@
   .lb-story { grid-template-columns: 1fr; }
   .lb-box-head { align-items: flex-start; }
 }
+
+/* The system line and the engine boxes (2026-10-17). */
+.lb-sys { max-width: 18ch; margin: 10px 0 18px; }
+.lb-sys-one { max-width: 62ch; font-family: var(--a-display); font-size: clamp(18px, 1.5vw, 21px); line-height: 1.6; color: var(--a-ink-soft); margin: 0; }
+.lb-sec-tight { padding-top: 0 !important; }

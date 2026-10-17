@@ -38,7 +38,7 @@ Go to /emotional-intelligence. Four tabs now: Read, Lab, Reply, Whole mind.
 - The tell check is a phrase scan, so it catches the known bot-tells and cannot judge whether a reply is *good*, only whether it contains something he is not allowed to say.
 - The deeper moment read costs one extra small call, and only runs when the word cues find nothing and the message looks emotionally loaded. Ordinary quick asks skip it entirely.
 - The Reply and Whole mind tabs are the only consumers of the new endpoint so far. Nothing about the extension's browser automation changed.
-- Saburi, Iomi, and Telos still share one personality; the classes have not forked yet.
+- Iomi and Telos still share one personality; the classes have not forked yet.
 
 ## Technical shape
 
@@ -62,7 +62,7 @@ Go to /emotional-intelligence. Four tabs now: Read, Lab, Reply, Whole mind.
 
 ## What comes next
 
-Route the disagreements between the word cues and the deeper read into a log, so the phrases the cue list is missing become a real list to add rather than something seen once in a demo. Then fork Saburi's trait set.
+Route the disagreements between the word cues and the deeper read into a log, so the phrases the cue list is missing become a real list to add rather than something seen once in a demo. Then fork the trait set per class.
 
 ## Public documentation checklist
 

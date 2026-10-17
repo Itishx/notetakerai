@@ -4,7 +4,7 @@ import IomiNotch from "@/components/IomiNotch";
 import "../styles/apple.css";
 
 /* ============================================================================
-   ClassPage — the individual OS pages (Saburi / Iomi / Telos) in the "Hugo"
+   ClassPage — the individual OS pages (Iomi / Telos) in the "Hugo"
    layout: a description up top, then the class NAME pops up as you scroll,
    then a bento carousel of feature cards driven by the ← → arrows. The layout
    is borrowed; the type stays ours — SF Pro throughout, the name in its own
@@ -17,8 +17,8 @@ export interface ClassPageProps {
   accent: string;                 // "ac-coral" | "ac-amber" | "ac-blue"
   eyebrow: string;                // "The companion class"
   desc: ReactNode;                // the pitch; wrap phrases in <span className="tone">
-  name: string;                   // "Saburi"
-  face: string;                   // "cls-saburi"
+  name: string;                   // "Iomi"
+  face: string;                   // "cls-iomi"
   lead: { tag: string; title: string; body: string; stat?: { n: string; label: string } };
   features: ClassFeature[];
   cta?: { label: string; to: string };
@@ -60,7 +60,6 @@ export default function ClassPage({ accent, eyebrow, desc, name, face, lead, fea
           <span className="an-name">{name}</span>
           <div className="an-links">
             <Link to="/product-overview">Overview</Link>
-            <Link to="/saburi">Saburi</Link>
             <Link to="/iomi">Iomi</Link>
             <Link to="/telos">Telos</Link>
             <Link to="/premium" className="apple-cta">Get Braino</Link>

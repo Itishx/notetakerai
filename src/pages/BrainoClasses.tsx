@@ -5,22 +5,13 @@ import ClassThemeToggle, { useCoralTheme } from "@/components/ClassThemeToggle";
 import "./braino-classes.css";
 
 /* ============================================================================
-   / — Braino now comes in three classes. The front door: not one product
-   page, a map of three. Saburi (companion) launches first; Iomi (the OS) and
-   Telos (the browser agent) follow. All three read as "coming soon" here —
+   / — Braino comes in two classes. The front door: not one product
+   page, a map of two: Iomi (the OS) and Telos (the browser agent). All three read as "coming soon" here —
    this page's job is to make the split legible, not to sell any one of them
    yet.
    ============================================================================ */
 
 const CLASSES = [
-  {
-    to: "/saburi",
-    tag: "Launching first",
-    name: "Braino Saburi",
-    cls: "The companion class",
-    dek: "Someone you can feel, and talk to. No task, no ask, no reason required.",
-    featured: true,
-  },
   {
     to: "/iomi",
     tag: "Coming soon",
@@ -50,13 +41,13 @@ export default function BrainoClasses() {
         <div className="bos-wrap">
           <div className="bos-hero-split">
             <div className="bos-hero-copy">
-              <div className="bos-pill"><i />Braino now comes in three classes</div>
+              <div className="bos-pill"><i />Braino comes in two classes</div>
               <h1 className="bos-qtitle">
-                He&rsquo;s not one product anymore. <em>He&rsquo;s three different reasons to open your laptop.</em>
+                He&rsquo;s not one product anymore. <em>He&rsquo;s two different reasons to open your laptop.</em>
               </h1>
               <p className="bos-qsub">
-                One brain, split into the jobs it was actually doing: something to talk to, a layer
-                to live in, and an agent to hand things off to. Saburi goes first.
+                One brain, split into the jobs it was actually doing: a layer to live in, and an agent
+                to hand things off to.
               </p>
             </div>
             <div className="bos-art"><BrainoStatic className="bos-orb" /></div>
@@ -108,12 +99,12 @@ export default function BrainoClasses() {
 
       <section className="bos-cta">
         <div className="bos-narrow">
-          <h2 className="bos-h2">Three classes.<br /><em>One brain.</em></h2>
+          <h2 className="bos-h2">Two classes.<br /><em>One brain.</em></h2>
           <p className="bos-lede" style={{ margin: "26px auto 0" }}>
-            Saburi opens first. Get on the list and we&rsquo;ll tell you the second he&rsquo;s ready to talk.
+            Get on the list and we&rsquo;ll tell you the second he&rsquo;s ready to talk.
           </p>
           <div className="bos-cta-row">
-            <Link className="bos-btn" to="/saburi">Meet Braino Saburi</Link>
+            <Link className="bos-btn" to="/braino">Meet Braino</Link>
             <Link className="bos-btn ghost" to="/auth">Get notified</Link>
           </div>
         </div>

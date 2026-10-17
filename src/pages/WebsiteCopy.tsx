@@ -64,7 +64,7 @@ type PageDoc = {
   idea: string;               // the concept
   copy: { t: string }[];      // copy directions
   moodboard: string[];        // reference inspirations
-  faceClass?: string;         // optional class name face (cls-saburi etc.)
+  faceClass?: string;         // optional class name face (cls-iomi etc.)
 };
 
 type Category = { key: string; accent: string; eyebrow: string; title: string; blurb: string; pages: PageDoc[] };
@@ -83,7 +83,7 @@ const CATEGORIES: Category[] = [
           { t: "Hero: <say>Not an app. A someone.</say> — subhead: <em>Braino lives on your screen, sees what you see, and actually helps.</em>" },
           { t: "Second line option: <say>Every other AI waits in a tab. Braino's already here.</say>" },
           { t: "One CTA, calm: <say>Meet Braino</say> — never 'Sign up free.'" },
-          { t: "Below the fold: the three classes as one line — <say>He comes in three: Saburi, Iomi, Telos.</say>" },
+          { t: "Below the fold: the three classes as one line — <say>He comes in two: Iomi and Telos.</say>" },
         ],
         moodboard: ["apple.com/vision-pro hero (product-is-the-hero)", "openai.com landing restraint", "Rabbit R1 'a companion' framing", "Don't Blink teaser as the emotional key"],
       },
@@ -103,24 +103,12 @@ const CATEGORIES: Category[] = [
   {
     key: "classes", accent: "ac-blue", eyebrow: "02 — The line-up",
     title: "The Three Classes",
-    blurb: "Saburi, Iomi, Telos. Not tiers of one product — three personalities of the same soul. Each page is a full editorial article with its own face, its own colour, its own tempo. Think OpenAI blog long-form, not a pricing row.",
+    blurb: "Iomi and Telos. Not tiers of one product — three personalities of the same soul. Each page is a full editorial article with its own face, its own colour, its own tempo. Think OpenAI blog long-form, not a pricing row.",
     pages: [
-      {
-        route: "/saburi", name: "Saburi", status: "todo", faceClass: "cls-saburi",
-        mood: "The <tone>patient one.</tone> Depth over speed. He sits with you.",
-        idea: "Long-form article with a sticky left table-of-contents (OpenAI research-post style). This is also where the full emotion-engine deep-dive lives — the beating heart, the twelve traits, how a moment routes to the leading ones. Warm, unhurried, coral.",
-        copy: [
-          { t: "Devanagari-flavoured face for the name (Yatra One). Eyebrow: <say>The patient class.</say>" },
-          { t: "Opening: <say>Some questions don't want a fast answer. They want someone who stays.</say>" },
-          { t: "Section headings: <em>How he feels · The twelve traits · What a moment does to him · Why patience is a feature.</em>" },
-          { t: "Embed the live heart. Caption pattern: <say>You say 'I don't know if I can do this' — he feels grief, and answers from there.</say>" },
-        ],
-        moodboard: ["OpenAI GPT-5.5 research post (sticky TOC + long flow)", "Stripe docs typography calm", "a warm coral editorial ground", "Indian-classical restraint"],
-      },
       {
         route: "/iomi", name: "Iomi", status: "todo", faceClass: "cls-iomi",
         mood: "The <tone>bright one.</tone> Fast, golden, always-on presence.",
-        idea: "The notch-native everyday companion — the golden shimmer identity from the last seconds of Don't Blink. Speed and delight. Shorter, punchier sections than Saburi; lots of motion; the notch itself is the star graphic.",
+        idea: "The notch-native everyday companion — the golden shimmer identity from the last seconds of Don't Blink. Speed and delight. Short, punchy sections; lots of motion; the notch itself is the star graphic.",
         copy: [
           { t: "Keep the golden shimmer face (SF Pro). Eyebrow: <say>The everyday class.</say>" },
           { t: "Opening: <say>Always there. Never in the way. A tap of the Control key and he's listening.</say>" },

@@ -581,7 +581,7 @@ export const HI_GROUPS: CommandGroup[] = [
     title: "Messaging people",
     why: "Which person, and what the message says. Both are legitimate asks; asking for both upfront is not.",
     commands: [
-      "message saburi that i am running late",
+      "message riya that i am running late",
       "text sam",
       "whatsapp priya",
       "tell dev i will be there in ten",
