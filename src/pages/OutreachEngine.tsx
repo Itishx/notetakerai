@@ -10,7 +10,10 @@ import "./outreach.css";
    spends goes through the one outreach-engine function. */
 
 const FN = "outreach-engine";
-const sb = supabase as any;
+/* Testing mode: on localhost only, the founder's personal key stands in for
+   sign-in. Behind import.meta.env.DEV, so the production build drops it and
+   the key never ships in the live site's code. */
+const DEV_KEY: string = import.meta.env.DEV ? String(import.meta.env.VITE_OUTREACH_DEV_TOKEN || "") : "";
 
 type Brief = {
   id: string; title: string; ask: string; offer: string; icp: any; questions: string[];
@@ -42,7 +45,10 @@ const FILTERS = [
 const HUNT_STEPS = ["Searching people, companies and news", "Reading every result", "Building one record per person", "Ranking and explaining each pick"];
 
 async function call(step: string, body: Record<string, unknown> = {}) {
-  const { data, error } = await supabase.functions.invoke(FN, { body: { step, ...body } });
+  const { data, error } = await supabase.functions.invoke(FN, {
+    body: { step, ...body },
+    ...(DEV_KEY ? { headers: { "x-outreach-key": DEV_KEY } } : {}),
+  });
   if (error) {
     let message = error.message || "Something went wrong.";
     try { const j = await (error as any).context?.json?.(); if (j?.error) message = j.error; } catch (_) { /* keep message */ }
@@ -86,28 +92,30 @@ export default function OutreachEngine() {
 
   useEffect(() => { try { localStorage.setItem("oas-theme", theme); } catch (_) { /* fine */ } }, [theme]);
 
+  // Reads go through the engine, so the personal key works without a session.
+  const canUse = Boolean(user || DEV_KEY);
   const loadBriefs = useCallback(async () => {
-    const { data } = await sb.from("outreach_briefs").select("*").order("updated_at", { ascending: false }).limit(50);
-    setBriefs(data || []);
-    return (data || []) as Brief[];
+    const r = await call("list_briefs").catch(() => ({ briefs: [] }));
+    setBriefs(r.briefs || []);
+    return (r.briefs || []) as Brief[];
   }, []);
   const loadLeads = useCallback(async (briefId: string) => {
     if (!briefId) { setLeads([]); return; }
-    const { data } = await sb.from("outreach_leads").select("*").eq("brief_id", briefId).order("score", { ascending: false }).limit(500);
-    setLeads(data || []);
+    const r = await call("list_leads", { brief_id: briefId }).catch(() => ({ leads: [] }));
+    setLeads(r.leads || []);
   }, []);
 
   useEffect(() => {
-    if (!user) return;
+    if (!canUse) return;
     void loadBriefs();
     call("sources").then(setSources).catch(() => setSources({}));
-  }, [user, loadBriefs]);
+  }, [canUse, loadBriefs]);
   useEffect(() => { void loadLeads(activeId); setSelected(""); }, [activeId, loadLeads]);
 
   const active = briefs.find((b) => b.id === activeId) || null;
 
-  if (loading) return <main className="oas" data-theme={theme || undefined} />;
-  if (!user) {
+  if (loading && !DEV_KEY) return <main className="oas" data-theme={theme || undefined} />;
+  if (!canUse) {
     return (
       <main className="oas" data-theme={theme || undefined}>
         <div className="oas-signin">

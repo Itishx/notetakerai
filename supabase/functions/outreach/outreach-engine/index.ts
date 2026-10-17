@@ -30,7 +30,7 @@ import { logEngineRun } from "../../_shared/engine-log.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-outreach-key",
 };
 const json = (payload: unknown, status = 200) =>
   new Response(JSON.stringify(payload), { status, headers: { ...cors, "Content-Type": "application/json" } });
@@ -65,7 +65,8 @@ async function ai(step: string, system: string, user: string, spend: Spend, maxT
   const body: Record<string, unknown> = {
     model: BRAINO_TEXT_MODEL,
     instructions: system,
-    input: user,
+    // JSON mode refuses a request whose input never says "json".
+    input: `${user}\n\nReply with the json object only.`,
     reasoning: { effort: "low" },
     max_output_tokens: maxTokens,
     text: { format: { type: "json_object" } },
@@ -498,18 +499,54 @@ async function edit(userId: string, body: any) {
   return json({ ok: true });
 }
 
+/* ── The founder's personal key (testing mode) ──────────────────────────
+   Localhost, no sign-in screen: the dev page sends OUTREACH_DEV_TOKEN in a
+   header and the engine acts as OUTREACH_DEV_USER_ID. Still a lock, just one
+   only the founder holds: without the exact key every request is refused, and
+   the key never ships in the live site's code. Both secrets unset = off. */
+const DEV_TOKEN = env("OUTREACH_DEV_TOKEN");
+const DEV_USER_ID = env("OUTREACH_DEV_USER_ID");
+function sameSecret(a: string, b: string) {
+  if (!a || !b || a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+async function requestOwner(req: Request) {
+  const user = await getRequestUser(req);
+  if (user) return user.id;
+  if (DEV_TOKEN.length >= 32 && DEV_USER_ID && sameSecret(req.headers.get("x-outreach-key") || "", DEV_TOKEN)) return DEV_USER_ID;
+  return "";
+}
+
+/* Reads, for the personal-key page: row level security only knows signed-in
+   sessions, so without one the page reads through here instead. */
+async function listBriefs(owner: string) {
+  const { data, error } = await db().from("outreach_briefs").select("*").eq("user_id", owner).order("updated_at", { ascending: false }).limit(50);
+  if (error) throw error;
+  return json({ briefs: data || [] });
+}
+async function listLeads(owner: string, body: any) {
+  const { data, error } = await db().from("outreach_leads").select("*").eq("user_id", owner).eq("brief_id", body.brief_id).order("score", { ascending: false }).limit(500);
+  if (error) throw error;
+  return json({ leads: data || [] });
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   const started = Date.now();
   const spend = newSpend();
   let step = "";
   try {
-    const user = await getRequestUser(req);
-    if (!user) return json({ error: "Sign in to use outreach." }, 401);
+    const owner = await requestOwner(req);
+    if (!owner) return json({ error: "Sign in to use outreach." }, 401);
+    const user = { id: owner };
     const body = await req.json().catch(() => ({}));
     step = String(body.step || "");
     let res: Response;
     if (step === "sources") res = json({ exa: Boolean(EXA_KEY), apollo: Boolean(APOLLO_KEY), hunter: Boolean(HUNTER_KEY), model: Boolean(OPENAI_KEY) });
+    else if (step === "list_briefs") res = await listBriefs(user.id);
+    else if (step === "list_leads") res = await listLeads(user.id, body);
     else if (step === "refine") res = await refine(user.id, body, spend);
     else if (step === "hunt") res = await hunt(user.id, body, spend);
     else if (step === "draft") res = await draft(user.id, body, spend);
