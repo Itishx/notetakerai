@@ -2,7 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { ArrowUp, ArrowUpRight, Check, ChevronDown, ChevronRight, Copy, Mail, Moon, Plus, Search, Sparkles, Sun, X } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { AffThemeToggle, useAffTheme } from "@/components/AffTheme";
 import { supabase } from "@/integrations/supabase/client";
+import "./affective.css";
+import "./affectiveos-page.css";
 import "./outreach.css";
 
 /* The Outreach Engine's page. Reads come straight from the tables (row level
@@ -775,53 +778,122 @@ function SellPicker({ ready, productId, setProductId, onAddProduct }: {
   );
 }
 
-/* ── The landing: what the Outreach Engine is, in one screen and a half ── */
+/* ── The landing: an AffectiveOS launch post for the Outreach Engine ───
+   Same grammar as /affectiveos: the Affective bar, one centred column in the
+   company serif, the opening sentence as the headline, a square comparison
+   table with our column lit, and the site's own light/dark switch. */
+
+const VS: { row: string; sub: string; us: string; db: string; hand: string }[] = [
+  { row: "Finds who to sell to", sub: "from one sentence", us: "Yes, you say who", db: "Filters you set by hand", hand: "Hours of searching" },
+  { row: "Says why each person", sub: "is on the list", us: "Every pick, with reasons", db: "No", hand: "In your head" },
+  { row: "Knows what you sell", sub: "in detail", us: "Reads your site and docs", db: "No", hand: "Yes" },
+  { row: "Writes the message", sub: "for each channel", us: "Email, LinkedIn, WhatsApp, X, Instagram", db: "Templates", hand: "One at a time" },
+  { row: "Gets better", sub: "with every reply", us: "Learns from booked calls", db: "No", hand: "Slowly" },
+];
 
 function OutreachLanding({ onOpen }: { onOpen: () => void }) {
-  const [theme] = useState<string>(() => { try { return localStorage.getItem("oas-theme") || ""; } catch (_) { return ""; } });
+  const { theme, toggle } = useAffTheme();
+  useEffect(() => {
+    document.title = "The Outreach Engine · Affective";
+    const prev = document.body.style.background;
+    document.body.style.background = theme === "dark" ? "#100f0c" : "#f4f2ec";
+    return () => { document.body.style.background = prev; };
+  }, [theme]);
   return (
-    <main className="oas oas-land" data-theme={theme || undefined}>
-      <header className="oas-bar">
-        <Link to="/outreach" className="oas-mark"><b>Outreach</b><span>by Braino · AffectiveOS</span></Link>
-        <button type="button" className="oas-skip" onClick={onOpen}>Skip <ArrowUpRight size={14} /></button>
-      </header>
+    <div className="aff ao oas-ao" data-theme={theme}>
+      <nav className="aff-nav">
+        <div className="aff-nav-in">
+          <Link to="/" className="aff-logo" aria-label="Affective"><img src="/affective-logo.png" alt="Affective" width={1000} height={207} /></Link>
+          <div className="aff-nav-links">
+            <Link to="/braino">Braino</Link>
+            <Link to="/affectiveos">AffectiveOS</Link>
+            <button type="button" className="aff-nav-go oas-ao-skip" onClick={onOpen}>Skip to Outreach</button>
+            <AffThemeToggle theme={theme} onToggle={toggle} />
+          </div>
+        </div>
+      </nav>
 
-      <section className="oas-land-hero">
-        <div className="oas-kicker">The Outreach Engine · In testing</div>
-        <h1>Braino finds the people<br /><em>who will buy.</em></h1>
-        <p>Tell him who you want to sell to. He searches people, companies and the news, ranks everyone with a plain reason, and writes the first message for every channel. You press send.</p>
-        <div className="oas-row" style={{ justifyContent: "center" }}>
-          <button type="button" className="oas-btn is-primary" onClick={onOpen}>Open Outreach <ArrowUpRight /></button>
-          <button type="button" className="oas-btn" onClick={onOpen}>Skip</button>
+      <article className="ao-col">
+        <p className="ao-date">October 17, 2026 · Engines · In testing</p>
+        <h1 className="ao-title">
+          Introducing the Outreach Engine. Tell Braino who you want to sell to, and he finds the people
+          most likely to buy, tells you why he picked each one, and writes the first message for every
+          channel. You press send.
+        </h1>
+        <div className="oas-ao-cta">
+          <button type="button" className="oas-ao-btn is-ink" onClick={onOpen}>Open Outreach</button>
+          <button type="button" className="oas-ao-btn" onClick={onOpen}>Skip</button>
+        </div>
+
+        <p>
+          Outreach is the part of starting something that nobody likes. You know roughly who should want
+          what you made, and then you lose an evening searching, guessing who is worth writing to, and
+          rewriting the same message five ways. Most tools hand you a giant list and leave the guessing to you.
+        </p>
+        <p>
+          <b>A short list, with its working shown.</b> You say it the way you would to a friend: founders of
+          D2C skincare brands in India, hiring their first marketer. Braino turns that into a precise
+          profile, asks what he needs to know, then searches people, companies and the news. Every person
+          gets a score out of 100 built from four plain parts: how well they fit, whether something just
+          happened for them, how easy they are to reach, and how much they look like the people who said
+          yes to you before.
+        </p>
+        <p>
+          <b>He knows what you sell.</b> Give him your website, your notes, your documents. He writes a
+          detailed report of the product and asks about anything missing, so a message never claims
+          proof you do not have, or a launch that has not happened.
+        </p>
+        <p>
+          <b>One message per channel, not one message pasted five times.</b> Email, LinkedIn, WhatsApp,
+          X and Instagram each get their own, built on that person's real moment.
+        </p>
+      </article>
+
+      <section className="ao-wide">
+        <div className="ao-table-wrap">
+          <table className="ao-table">
+            <thead><tr><th></th><th className="is-us">The Outreach Engine</th><th>A lead database</th><th>Doing it by hand</th></tr></thead>
+            <tbody>
+              {VS.map((r) => (
+                <tr key={r.row}>
+                  <td><b>{r.row}</b><span>{r.sub}</span></td>
+                  <td className="is-us">{r.us}</td><td>{r.db}</td><td>{r.hand}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="ao-cap">Table 1. What changes when the search, the reasons and the writing are one step.</p>
+      </section>
+
+      <article className="ao-col">
+        <h2>Three engines, one Braino</h2>
+        <p>
+          Braino Distra is three engines working together. <b>Content</b> makes what you publish, in your
+          voice. <b>Optics</b> reads what is landing and what is not, and why. <b>Outreach</b> reaches the
+          people who should buy. This is the third, and the first one you can use.
+        </p>
+      </article>
+
+      <section className="ao-wide">
+        <div className="oas-ao-trio">
+          <div><small>Engine 01</small><h3>Content</h3><p>Writes and shapes what you publish, in your voice.</p><span>Coming</span></div>
+          <div><small>Engine 02</small><h3>Optics</h3><p>Reads what is landing, what is not, and why.</p><span>Coming</span></div>
+          <div className="is-here"><small>Engine 03</small><h3>Outreach</h3><p>Finds the right people, explains every pick, writes the first message.</p><span>Available in testing</span></div>
         </div>
       </section>
 
-      <section className="oas-land-steps" aria-label="How it works">
-        {[
-          ["01", "Say who", "Founders of D2C skincare brands in India, hiring their first marketer. Braino turns that into a precise profile and asks what he needs to know."],
-          ["02", "He finds and ranks", "People, companies and fresh signals like hiring or funding. Every person gets a score out of 100 and the reasons behind it."],
-          ["03", "He writes, you send", "One message per person for email, LinkedIn, WhatsApp, X and Instagram, built on their real moment and what you actually sell."],
-          ["04", "It learns", "Mark who replied and who booked a call. The next search ranks people like them higher."],
-        ].map(([n, t, d]) => (
-          <div key={n} className="oas-land-step"><span>{n}</span><h3>{t}</h3><p>{d}</p></div>
-        ))}
-      </section>
-
-      <section className="oas-land-engines">
-        <div className="oas-kicker" style={{ textAlign: "center" }}>Three engines, one Braino</div>
-        <h2>Content. Optics. Outreach.</h2>
-        <p className="oas-land-sub">Braino Distra is three engines working together: one to make what you post, one to read what is working, and one to reach the people who should buy. This is the third.</p>
-        <div className="oas-land-trio">
-          <div className="oas-land-engine"><small>Engine 01</small><h3>Content</h3><p>Writes and shapes what you publish, in your voice.</p><span className="oas-land-tag">Coming</span></div>
-          <div className="oas-land-engine"><small>Engine 02</small><h3>Optics</h3><p>Reads what is landing and what is not, and why.</p><span className="oas-land-tag">Coming</span></div>
-          <div className="oas-land-engine is-here"><small>Engine 03</small><h3>Outreach</h3><p>Finds the right people, explains every pick, writes the first message.</p><span className="oas-land-tag is-on">You are here</span></div>
+      <article className="ao-col oas-ao-end">
+        <h2>The honest bit</h2>
+        <p>
+          It is early. It finds the people search engines can see, so not everyone comes with an email
+          yet. It cannot promise calls; it finds the best fit people it can and shows its working.
+          Nothing is ever sent without you, and anyone who opts out is never contacted again.
+        </p>
+        <div className="oas-ao-cta">
+          <button type="button" className="oas-ao-btn is-ink" onClick={onOpen}>Open Outreach</button>
         </div>
-      </section>
-
-      <section className="oas-land-honest">
-        <p><b>The honest bit.</b> It is early. It finds people search engines can see, so not everyone has an email yet, and nothing is ever sent without you. People who opt out are never contacted again.</p>
-        <button type="button" className="oas-btn is-primary" onClick={onOpen}>Open Outreach <ArrowUpRight /></button>
-      </section>
-    </main>
+      </article>
+    </div>
   );
 }
