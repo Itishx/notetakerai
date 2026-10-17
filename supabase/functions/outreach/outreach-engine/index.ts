@@ -404,9 +404,77 @@ function applyPattern(p: string, first: string, last: string, domain: string) {
   if (!first) return "";
   if (p === "first") return `${first}@${domain}`;
   if (!last) return "";
-  if (p === "first.last") return `${first}.${last}@${domain}`;
-  if (p === "first_last") return `${first}_${last}@${domain}`;
-  return "";
+  const local: Record<string, string> = {
+    "first.last": `${first}.${last}`, "first_last": `${first}_${last}`, "firstlast": `${first}${last}`,
+    "flast": `${first[0]}${last}`, "f.last": `${first[0]}.${last}`, "firstl": `${first}${last[0]}`, "last": last,
+  };
+  return local[p] ? `${local[p]}@${domain}` : "";
+}
+
+/* Which format a confirmed address follows, given whose it is. */
+function patternFromEmail(email: string, first: string, last: string) {
+  const l = lower(email.split("@")[0]);
+  if (!first) return "";
+  const tries: [string, string][] = [["first", first]];
+  if (last) tries.push(["first.last", `${first}.${last}`], ["first_last", `${first}_${last}`], ["firstlast", `${first}${last}`], ["flast", `${first[0]}${last}`], ["f.last", `${first[0]}.${last}`], ["firstl", `${first}${last[0]}`], ["last", last]);
+  return tries.find(([, v]) => v === l)?.[0] || "";
+}
+
+/* ── The shared memory ────────────────────────────────────────────────── */
+
+async function directoryLookup(lead: any, domain: string) {
+  const client = db();
+  const key = lower(String(lead.name || "").replace(/\(.*?\)/g, "").trim());
+  if (lead.linkedin_url) {
+    const { data } = await client.from("email_directory").select("*").eq("linkedin_url", lower(lead.linkedin_url).replace(/\/$/, "")).eq("bounced", false).order("confirmations", { ascending: false }).limit(1);
+    if (data?.[0]) return data[0];
+  }
+  if (domain && key) {
+    const { data } = await client.from("email_directory").select("*").eq("domain", domain).eq("name_key", key).eq("bounced", false).neq("status", "company").order("confirmations", { ascending: false }).limit(1);
+    if (data?.[0]) return data[0];
+  }
+  return null;
+}
+
+/* Remember a personal address, and learn the company's format from it. */
+async function directorySave(lead: any, email: string, status: string, source: string) {
+  const e = lower(email);
+  const domain = e.split("@")[1] || "";
+  if (!domain || !["verified", "found"].includes(status)) return;
+  const client = db();
+  const { first, last } = nameParts(lead.name);
+  const key = lower(String(lead.name || "").replace(/\(.*?\)/g, "").trim());
+  const { data: had } = await client.from("email_directory").select("id, confirmations, status").eq("email", e).maybeSingle();
+  if (had) {
+    await client.from("email_directory").update({ confirmations: (had.confirmations || 1) + 1, status: had.status === "verified" ? "verified" : status, last_seen: new Date().toISOString(), bounced: false }).eq("id", had.id);
+  } else {
+    await client.from("email_directory").insert({ email: e, domain, name_key: key, first_name: first, last_name: last, linkedin_url: lower(lead.linkedin_url || "").replace(/\/$/, ""), status, source });
+  }
+  const pattern = patternFromEmail(e, first, last);
+  if (!pattern) return;
+  const { data: pat } = await client.from("domain_patterns").select("evidence").eq("domain", domain).eq("pattern", pattern).maybeSingle();
+  await client.from("domain_patterns").upsert({ domain, pattern, evidence: (pat?.evidence || 0) + 1, example: e, updated_at: new Date().toISOString() }, { onConflict: "domain,pattern" });
+}
+
+/* A bounce: the address is dead, and the format that built it is less sure. */
+async function directoryBounce(email: string, builtFromPattern: boolean, lead?: any) {
+  const e = lower(email);
+  const domain = e.split("@")[1] || "";
+  const client = db();
+  await client.from("email_directory").update({ bounced: true, last_seen: new Date().toISOString() }).eq("email", e);
+  if (!builtFromPattern || !domain || !lead) return;
+  const { first, last } = nameParts(lead.name);
+  const pattern = patternFromEmail(e, first, last);
+  if (!pattern) return;
+  const { data: p } = await client.from("domain_patterns").select("misses").eq("domain", domain).eq("pattern", pattern).maybeSingle();
+  if (p) await client.from("domain_patterns").update({ misses: (p.misses || 0) + 1, updated_at: new Date().toISOString() }).eq("domain", domain).eq("pattern", pattern);
+}
+
+/* The format most confirmed at this company, if it has held up. */
+async function knownPattern(domain: string) {
+  const { data } = await db().from("domain_patterns").select("*").eq("domain", domain).order("evidence", { ascending: false }).limit(3);
+  const best = (data || []).find((p: any) => p.evidence >= 1 && p.misses < p.evidence);
+  return best ? { pattern: best.pattern as string, evidence: best.evidence as number } : null;
 }
 function hostOf(u: string) {
   try { return new URL(normalUrl(u)).hostname.replace(/^www\./, ""); } catch (_) { return ""; }
@@ -507,14 +575,31 @@ async function findEmail(lead: any, spend: Spend, opts: { paid: boolean } = { pa
   const site = domain ? await scanSite(domain) : null;
   const none: Found = { email: "", status: "unknown", source: "", domain, contacts: site };
   const { first, last } = nameParts(lead.name);
-  const mine = (site?.emails || []).find((e) => isPersonLocal(e.split("@")[0], first, last));
-  if (mine) return { ...none, email: mine, status: "found", source: "On their company's website" };
 
+  // 1. Already known: someone, somewhere, found this person before. Free.
+  const known = await directoryLookup(lead, domain).catch(() => null);
+  if (known) return { ...none, email: known.email, status: known.status === "verified" ? "verified" : "found", source: `Known from before (${known.source || "earlier search"}, confirmed ${known.confirmations}x)` };
+
+  // 2. On their own website, under their name. Free.
+  const mine = (site?.emails || []).find((e) => isPersonLocal(e.split("@")[0], first, last));
+  if (mine) {
+    await directorySave(lead, mine, "found", "their website").catch(() => {});
+    return { ...none, email: mine, status: "found", source: "On their company's website" };
+  }
+
+  // 3. The company's format, learnt from emails already confirmed there. Free.
+  if (domain) {
+    const kp = await knownPattern(domain).catch(() => null);
+    const guess = kp ? applyPattern(kp.pattern, first, last, domain) : "";
+    if (guess && (await domainTakesMail(guess))) return { ...none, email: guess, status: "pattern", source: `The company's known format (${kp!.pattern}@${domain}, seen in ${kp!.evidence} confirmed email${kp!.evidence === 1 ? "" : "s"})` };
+  }
+
+  // 4. Paid, and remembered, so nobody pays for this person again.
   if (opts.paid) {
     const p = await prospeoFind(lead, domain);
-    if (p) return { ...none, email: p.email, status: p.status, source: "Prospeo" };
+    if (p) { await directorySave(lead, p.email, p.status, "Prospeo").catch(() => {}); return { ...none, email: p.email, status: p.status, source: "Prospeo" }; }
     const h = domain ? await hunterFind(clip(lead.name, 80), domain, spend) : null;
-    if (h) return { ...none, email: h.email, status: h.status, source: "Hunter" };
+    if (h) { await directorySave(lead, h.email, h.status === "verified" ? "verified" : "found", "Hunter").catch(() => {}); return { ...none, email: h.email, status: h.status, source: "Hunter" }; }
   }
 
   if (domain) {
@@ -1169,12 +1254,15 @@ async function syncUser(userId: string, spend: Spend) {
     const bounced = /mailer-daemon|postmaster/.test(fromOf(last));
     await client.from("outreach_sends").update({ status: "cancelled" }).eq("lead_id", lead.id).eq("status", "queued");
     if (bounced) {
+      await directoryBounce(lead.email, ["pattern", "guessed"].includes(lead.email_status), lead).catch(() => {});
       await client.from("outreach_leads").update({ status: "drafted", email_status: "unknown", updated_at: new Date().toISOString() }).eq("id", lead.id);
       await client.from("outreach_events").insert({ user_id: userId, lead_id: lead.id, kind: "bounced", note: "gmail" });
       await client.from("outreach_suppression").upsert({ user_id: userId, key: lower(lead.email), reason: "bounced" }, { onConflict: "user_id,key" });
       continue;
     }
     const text = stripQuoted(plainBody(last.payload) || String(last.snippet || ""));
+    // A real reply is the best proof an address works: remember it, learn its format.
+    await directorySave(lead, lead.email, "verified", "a reply").catch(() => {});
     let kind = "other", draftText = "", summary = "";
     try {
       const { data: brief } = await client.from("outreach_briefs").select("product_id, offer").eq("id", lead.brief_id).single();

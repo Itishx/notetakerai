@@ -36,7 +36,7 @@ type Product = {
   id: string; name: string; website: string; notes: string; docs: { name: string; text: string }[];
   answers: { q: string; a: string }[]; report: any; questions: string[]; status: string; updated_at: string;
 };
-const EMAIL_TRUST: Record<string, string> = { verified: "verified", found: "found", guessed: "guessed", company: "company inbox" };
+const EMAIL_TRUST: Record<string, string> = { verified: "verified", found: "found", pattern: "known format", guessed: "guessed", company: "company inbox" };
 const CHANNEL_LABEL: Record<string, string> = { email: "Email", linkedin: "LinkedIn", whatsapp: "WhatsApp", x: "X", instagram: "Instagram" };
 
 const EXAMPLES = [
@@ -532,7 +532,7 @@ function Funnel({ leads }: { leads: Lead[] }) {
    worth more today than a better fit we cannot reach. */
 const TIERS = [
   { key: "email", label: "with an email" },
-  { key: "inbox", label: "company inbox or guessed email" },
+  { key: "inbox", label: "known format, guessed or company inbox" },
   { key: "phone", label: "phone or WhatsApp only" },
   { key: "linkedin", label: "LinkedIn only" },
   { key: "none", label: "no contact yet" },

@@ -47,6 +47,13 @@ Draft writes email, LinkedIn, WhatsApp, X and Instagram versions for every perso
 - **Download for Excel** in every search: a UTF-8 CSV (opens in Excel and Sheets), one row per person, most reachable first, with contacts, scores, reasons, signals and every channel's message.
 - Website contact scan and Prospeo: see email finding above.
 
+## Shared email memory and company formats (October 17, 2026)
+
+- `email_directory`: every personal email the engine confirms (on the company site under their name, Prospeo, Hunter, or a real reply) is stored once. The next lookup for that person, by anyone, checks here first: instant and free. Bounces mark the address dead for everyone.
+- `domain_patterns`: each confirmed email teaches the company's format (first, first.last, firstlast, flast, f.last, first_last, firstl, last). The next person at that company gets the known format, checked against the mail server, with no paid lookup ("known format" in the UI). A bounce counts a miss against the format that built the address; a format with as many misses as confirmations stops being used.
+- Lookup order: memory → their website under their name → known company format → Prospeo → Hunter → format seen on the site → company inbox.
+- Service role only (no user reads these tables directly). Business contact details only. Seeded with the 5 emails found so far; a memory hit costs $0.
+
 ## How it works
 
 ```
