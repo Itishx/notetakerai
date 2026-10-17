@@ -145,7 +145,10 @@ export const HIL_TOOL_CATALOG: HilTool[] = [
   { name: "monday_mode_toggle", params: ["action"], gloss: "Enter or exit Monday Mode: full sarcastic personality override, notch retints, mascot locks in the notch", stateful: true, zeroNetwork: true, handler: "setMondayModeState", },
   { name: "move_file", params: ["query", "kind", "destination"], gloss: "Find a file by name and move it into a folder", zeroNetwork: true, handler: "moveMacFile", },
   { name: "music_play_segment_loop", params: ["song", "provider", "startSeconds", "endSeconds", "useCurrent", "interpretedRange"], gloss: "Play only a timestamped slice of a song, looping it forever", stateful: true, handler: "playMusicSegmentOnMac", },
-  { name: "netflix_resume", params: ["title"], gloss: "Resume or start a named Netflix title in Chrome", handler: "resumeNetflixOnMac", },
+  // Only when they NAMED Netflix, or are resuming something they watch there.
+  // For any other "play <show/movie>", watch_play finds where it streams first
+  // (2026-10-18: Vision Quest was sent to Netflix; it is on Jio Hotstar).
+  { name: "netflix_resume", params: ["title"], gloss: "Resume a title on Netflix. ONLY if they said Netflix or are resuming a Netflix show. Otherwise use watch_play", handler: "resumeNetflixOnMac", },
   { name: "notch_face_set", params: ["on"], gloss: "Show or hide Braino's face in the notch", stateful: true, zeroNetwork: true, },
   { name: "notes_create", params: ["title", "body"], gloss: "Create an Apple Note with the given title and body", stateful: true, zeroNetwork: true, handler: "startNoteWorkflow", },
   { name: "open_accessibility_settings", params: [], gloss: "Open macOS Privacy and Accessibility settings to grant Braino permission", zeroNetwork: true, memoSafe: true, },
@@ -211,6 +214,10 @@ export const HIL_TOOL_CATALOG: HilTool[] = [
   { name: "voice_mode_check", params: ["modeName"], gloss: "Answer yes or no whether one named Voice Command mode is active", stateful: true, },
   { name: "voice_mode_current", params: [], gloss: "Name which Voice Command mode is active right now, if any", stateful: true, },
   { name: "voice_mode_set", params: ["modeName", "action"], gloss: "Enter or leave a named Voice Command mode; retints the notch", stateful: true, },
+  // Play a show or movie wherever it actually streams in their country: looks
+  // it up (Watchmode via watch-play), uses what Braino already knows ("it's on
+  // Hotstar"), opens the right app, and says honestly if it is rent/buy/absent.
+  { name: "watch_play", params: ["title", "service"], gloss: "Play a movie or TV show (with season/episode if said) on the right streaming app; finds where it streams first. service only if they named one", handler: "playWatchTitle", },
   { name: "wake_word_set", params: ["enable"], gloss: "Turn always-listening hey-braino wake word on or off", stateful: true, zeroNetwork: true, },
   { name: "wallpaper_random", params: [], gloss: "Set a random built-in macOS wallpaper and name the pick", zeroNetwork: true, memoSafe: true, handler: "setRandomOfficialWallpaper", },
   { name: "wallpaper_restore", params: [], gloss: "Put back the wallpaper from before Braino changed it", zeroNetwork: true, memoSafe: true, handler: "restoreWallpaper", },

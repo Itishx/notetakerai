@@ -10140,7 +10140,47 @@ function parseWatchIntent(raw) {
   return null;
 }
 
+/* ── Where things stream, remembered (2026-10-18) ───────────────────────
+   Once he knows (from you, or from the watch service) that a title is on Jio
+   Hotstar, he never has to guess again. And "play it on Hotstar" right after
+   a play request means THAT title on Hotstar, not whatever Hotstar has open. */
+const WATCH_MEMORY_PATH = path.join(AUTH_STORE_DIR, "watch-services.json");
+const OTT_RE = new RegExp(`\\b(${MAC_OTT_NAMES})\\b`, "i");
+let lastWatch = { title: "", at: 0 };
+function watchKey(title) { return String(title || "").toLowerCase().replace(/\b(?:season|episode|s\d+|e\d+|ep)\b.*$/, "").replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim(); }
+function readWatchMemory() { try { return JSON.parse(fs.readFileSync(WATCH_MEMORY_PATH, "utf8")) || {}; } catch (_) { return {}; } }
+function rememberWatchService(title, service) {
+  const key = watchKey(title);
+  if (!key || !service) return;
+  const mem = readWatchMemory();
+  mem[key] = { service: String(service).trim(), at: new Date().toISOString() };
+  try { fs.writeFileSync(WATCH_MEMORY_PATH, JSON.stringify(mem, null, 1)); } catch (_) {}
+  logMac("watch.remembered", { title: textForLog(key), service });
+}
+function knownWatchService(title) { const m = readWatchMemory()[watchKey(title)]; return m ? m.service : ""; }
+/* "play it on Jio Hotstar" / "it's on Hotstar" with no title, soon after a
+   play request: the title is the one just asked for. */
+function fillWatchFollowUp(raw) {
+  const t = String(raw || "").replace(/^\s*(?:hey\s+)?brain(?:o|elle)[,\s]+/i, "").trim();
+  const ott = (t.match(OTT_RE) || [])[1];
+  if (!ott || !lastWatch.title || Date.now() - lastWatch.at > 20 * 60 * 1000) return null;
+  const titleKey = watchKey(lastWatch.title);
+  if (titleKey && t.toLowerCase().includes(titleKey)) return null;
+  if (!/\b(?:play|put|watch|stream|it'?s|its|it is|is on|on)\b/i.test(t)) return null;
+  rememberWatchService(lastWatch.title, ott);
+  return `play ${lastWatch.title} on ${ott}`;
+}
+
 async function playWatchTitle(intent) {
+  // Remember the title, and use where it is known to stream.
+  {
+    const t = String(intent.text || "").replace(/^\s*play\s+/i, "").trim();
+    const named = (t.match(OTT_RE) || [])[1];
+    const title = t.replace(new RegExp(`\\s+(?:on|in)\\s+(?:${MAC_OTT_NAMES})\\b.*$`, "i"), "").trim();
+    if (title) lastWatch = { title, at: Date.now() };
+    if (named) rememberWatchService(title, named);
+    else if (title) { const known = knownWatchService(title); if (known) intent = { ...intent, text: `${intent.text} on ${known}` }; }
+  }
   const authToken = await getBrainoAuthToken().catch(() => "");
   if (!authToken) return { ok: true, say: "Sign in first and I will put that on for you." };
 
@@ -10172,6 +10212,7 @@ async function playWatchTitle(intent) {
     title: data && data.title, source: data && data.pick && data.pick.name,
     viaDescription: data && data.resolvedFromDescription,
   });
+  if (data && data.title && data.pick && data.pick.name) rememberWatchService(data.title, data.pick.name);
   // The function writes the one honest line for every outcome, so Braino never
   // says "playing" when it is really a rental or the wrong country.
   return { ok: true, say: (data && data.speak) || "Done." };
@@ -12490,7 +12531,14 @@ end tell`;
   if (clicked === "clicked") {
     return { ok: true, say: `${title} is back on, right where you left it.` };
   }
-  return { ok: true, partial: true, say: `Netflix is open with ${title} right there. Hit the first one and you are back in.` };
+  /* No title card means it is not on Netflix here (or not in your history).
+     Saying "it's right there" was false (Vision Quest, 2026-10-17): find
+     where it actually streams instead. */
+  if (clicked === "no_card" || clicked === "unavailable") {
+    logMac("netflix.not_found_fallback", { title: textForLog(title), clicked });
+    return playWatchTitle({ text: `play ${title}` });
+  }
+  return { ok: true, partial: true, say: `Netflix is open with ${title}. Press play on the first result.` };
 }
 
 // ── MESA School of Business: Itish is in the PGP in Venture Building. ──
@@ -19538,6 +19586,7 @@ const MAC_HIL_TOOLS = {
   mail_send: (a) => executeMailWorkflow({ action: a.action, recipient: a.recipient, recipientEmail: a.recipientEmail, subject: a.subject, body: a.body }),
   notion_page: (a) => runNotionPage(String(a.title || ""), String(a.markdown || a.body || "")),
   netflix_resume: (a) => resumeNetflixOnMac(String(a.title || "")),
+  watch_play: (a) => playWatchTitle({ text: `play ${String(a.title || "").trim()}${a.service ? ` on ${String(a.service).trim()}` : ""}` }),
   wallpaper_random: () => setRandomOfficialWallpaper(),
   spotify_play_context: (a) => playSpotifyContextOnMac(String(a.kind || ""), String(a.name || "")),
   start_meeting_recording: (a) => startMeetingRecording(String(a.source || "")),
@@ -20288,7 +20337,11 @@ async function runMacHilLoop(command, resume = null, opts = {}) {
         return runMacHilLoop(command, null, { planFailed: `A plan ran ${plan.steps.map((st) => st.tool).join(", ")} but nothing was opened, and they asked to open it. Open it now; do not say it is open until the screen shows it.` });
       }
       if (!run.failed) {
-        maybeSaveSkill(command, plan.steps, plan.done);
+        /* Only a plan that fully worked is learnt. "play vision quest season 1
+           episode 1" → netflix_resume was saved on 2026-10-17 although the
+           title was not on Netflix and nothing played. */
+        if (!run.partial) maybeSaveSkill(command, plan.steps, plan.done);
+        else logMac("skill.not_saved", { key: textForLog(cleanPrompt(command)), why: "partial_result" });
         return { ok: true, say: await planReply(command, run, plan.done), source: "hil_plan" };
       }
       return runMacHilLoop(command, null, { planFailed: `A plan ran ${run.at - 1} of ${plan.steps.length} steps, then step ${run.at} (${plan.steps[run.at - 1]?.tool}) failed: ${run.why}. Carry on from there.` });
@@ -21676,6 +21729,8 @@ function planClaimsUnopened(command, plan, since) {
 }
 
 async function runPlanSteps(steps, raw, source) {
+  // Did any step only half-work (e.g. "the page is open, press play yourself")?
+  let partial = false;
   const planNarrator = createNarrator((text) => narrate(text));
   macJobCommand = { text: String(raw || ""), at: Date.now() };
   const started = Date.now();
@@ -21708,9 +21763,10 @@ async function runPlanSteps(steps, raw, source) {
     if (out && out.asks) return { failed: false, asked: true, say: String(out.say || ""), values, lastOut: out, lastTool: step.tool };
     values.push(stepValue(out));
     lastOut = out;
+    if (out && out.partial) partial = true;
   }
-  logMac("plan.ran", { source, steps: steps.map((s) => s.tool), ms: Date.now() - started });
-  return { failed: false, values, lastOut, lastTool: steps[steps.length - 1]?.tool, count: steps.length, ms: Date.now() - started };
+  logMac("plan.ran", { source, steps: steps.map((s) => s.tool), ms: Date.now() - started, partial });
+  return { failed: false, partial, values, lastOut, lastTool: steps[steps.length - 1]?.tool, count: steps.length, ms: Date.now() - started };
 }
 
 /* A plan whose last step fetched something is a question: the answer is what
@@ -21957,6 +22013,9 @@ async function runTypeSearch(ask, raw) {
 // same sentence again when the answer fell back to the old path.
 let hilFirstAsked = false;
 
+/* Whether the words as heard named him (set by runDelegate, read by the
+   not-for-him gate below, which only sees the sentence after cleanPrompt). */
+let macHeardAddressed = false;
 async function routeHilFirst(raw) {
   const stageAsk = String(raw || "").trim().match(/^(?:set\s+)?(?:the\s+)?decider\s+stage\s+(?:to\s+)?(zero|one|two|three|four|off|0|1|2|3|4)\.?$/i);
   if (stageAsk) {
@@ -22054,8 +22113,12 @@ async function routeHilFirst(raw) {
      environments, co-founders..." while Laya said "not for Braino" at 0.78.
      Sure it is not for him, his name not in it, nothing of his waiting for an
      answer: dropped, quietly. Saying "Braino" always gets through. */
+  /* 2026-10-18: "Braino, I asked you to play Vision Quest… it's on Jio
+     Hotstar" was dropped as not for him at 0.75, because this check read the
+     sentence AFTER cleanPrompt had removed "Braino". The name is now judged on
+     the words as heard (macHeardAddressed), so being named always gets through. */
   if (layaFirst && layaFirst.kind === "ignore" && layaFirst.confidence >= LAYA_TALK_SURE
-    && !/\bbrain(?:o|elle|a)\b/i.test(String(raw || "")) && !pendingHilRun) {
+    && !macHeardAddressed && !/\bbrain(?:o|elle|a)\b/i.test(String(raw || "")) && !pendingHilRun) {
     logMac("laya.not_for_him_dropped", { raw: textForLog(raw), confidence: layaFirst.confidence });
     macTrace("🔇 NOT FOR HIM", `"${String(raw).slice(0, 80)}" → ignore ${layaFirst.confidence.toFixed(2)}, dropped`);
     return { ok: true, superseded: true, say: "", source: "laya:not_for_him" };
@@ -22417,6 +22480,7 @@ async function runHandoff(h, source) {
 async function runDelegate(prompt, options = {}) {
   let raw = cleanPrompt(prompt);
   macTurnCanTalk = { on: Boolean(options.canTalk), at: Date.now() };
+  macHeardAddressed = /\bbrain(?:o|elle|a)\b/i.test(String(prompt || ""));
   {
     const pasted = parseHandoff(prompt);
     if (pasted) return runHandoff(pasted, "pasted");
@@ -22516,6 +22580,15 @@ async function runDelegate(prompt, options = {}) {
   const convenienceRefusal = Boolean(mondayModeActive && !spiteSwap && mondayIsConvenienceAction(raw, fastSpotify));
   let result;
   let hilFirstResult = null;
+  /* "Play it on Jio Hotstar" right after a play request: that title, there. */
+  {
+    const followUp = fillWatchFollowUp(prompt);
+    if (followUp) {
+      logMac("watch.follow_up", { heard: textForLog(prompt), meant: textForLog(followUp) });
+      macTrace("🎬 WATCH", `"${String(prompt).slice(0, 60)}" → ${followUp}`);
+      return playWatchTitle({ text: followUp });
+    }
+  }
   if (convenienceRefusal) {
     logMac("delegate.monday_convenience_refusal", { raw: textForLog(raw), hadSpotifyIntent: Boolean(fastSpotify) });
     const line = await callMondayPersona(
