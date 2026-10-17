@@ -498,6 +498,7 @@ function AppRoutes() {
         <Route path="/takeover" element={<Takeover />} />
         <Route path="/ideas" element={<IdeaTracker />} />
         <Route path="/outreach" element={<OutreachEngine />} />
+        <Route path="/outreach/app" element={<OutreachEngine />} />
         <Route path="/whole-mind" element={<WholeMind />} />
         <Route path="/engine-log" element={<EngineLog />} />
         <Route path="/code" element={<BrainoCode />} />

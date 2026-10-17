@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { ArrowUp, ArrowUpRight, Check, ChevronDown, ChevronRight, Copy, Mail, Moon, Plus, Search, Sparkles, Sun, X } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -94,7 +94,17 @@ const ago = (iso: string) => {
    people) arrives as his reply. One column to read down, wide blocks step out
    of it for tables. A person opens in a full sheet, not a sliver. */
 
+/* /outreach opens on what this is; Skip goes straight to the tool, and
+   /outreach/app is the tool itself, for links and the back button. */
 export default function OutreachEngine() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const inApp = location.pathname.replace(/\/$/, "").endsWith("/app");
+  if (!inApp) return <OutreachLanding onOpen={() => navigate("/outreach/app")} />;
+  return <OutreachApp />;
+}
+
+function OutreachApp() {
   const { user, loading } = useAuth();
   const [theme, setTheme] = useState<"" | "light" | "dark">(() => {
     try { return (localStorage.getItem("oas-theme") as any) || ""; } catch (_) { return ""; }
@@ -161,7 +171,7 @@ export default function OutreachEngine() {
   return (
     <main className="oas" data-theme={theme || undefined}>
       <header className="oas-bar">
-        <Link to="/outreach" className="oas-mark" onClick={() => { setActiveId(""); setProductView(""); }}><b>Outreach</b><span>by Braino · AffectiveOS</span></Link>
+        <Link to="/outreach/app" className="oas-mark" onClick={() => { setActiveId(""); setProductView(""); }}><b>Outreach</b><span>by Braino · AffectiveOS</span></Link>
         <div className="oas-sources" aria-label="Data sources">
           {[["exa", "Exa"], ["apollo", "Apollo"], ["hunter", "Hunter"], ["model", "Model"]].map(([k, label]) => (
             <span key={k} className={`oas-src ${sources[k] ? "is-on" : ""}`} title={sources[k] ? `${label} is on` : `${label} is off: add its key`}><i />{label}</span>
@@ -762,5 +772,56 @@ function SellPicker({ ready, productId, setProductId, onAddProduct }: {
         </div>
       )}
     </div>
+  );
+}
+
+/* ── The landing: what the Outreach Engine is, in one screen and a half ── */
+
+function OutreachLanding({ onOpen }: { onOpen: () => void }) {
+  const [theme] = useState<string>(() => { try { return localStorage.getItem("oas-theme") || ""; } catch (_) { return ""; } });
+  return (
+    <main className="oas oas-land" data-theme={theme || undefined}>
+      <header className="oas-bar">
+        <Link to="/outreach" className="oas-mark"><b>Outreach</b><span>by Braino · AffectiveOS</span></Link>
+        <button type="button" className="oas-skip" onClick={onOpen}>Skip <ArrowUpRight size={14} /></button>
+      </header>
+
+      <section className="oas-land-hero">
+        <div className="oas-kicker">The Outreach Engine · In testing</div>
+        <h1>Braino finds the people<br /><em>who will buy.</em></h1>
+        <p>Tell him who you want to sell to. He searches people, companies and the news, ranks everyone with a plain reason, and writes the first message for every channel. You press send.</p>
+        <div className="oas-row" style={{ justifyContent: "center" }}>
+          <button type="button" className="oas-btn is-primary" onClick={onOpen}>Open Outreach <ArrowUpRight /></button>
+          <button type="button" className="oas-btn" onClick={onOpen}>Skip</button>
+        </div>
+      </section>
+
+      <section className="oas-land-steps" aria-label="How it works">
+        {[
+          ["01", "Say who", "Founders of D2C skincare brands in India, hiring their first marketer. Braino turns that into a precise profile and asks what he needs to know."],
+          ["02", "He finds and ranks", "People, companies and fresh signals like hiring or funding. Every person gets a score out of 100 and the reasons behind it."],
+          ["03", "He writes, you send", "One message per person for email, LinkedIn, WhatsApp, X and Instagram, built on their real moment and what you actually sell."],
+          ["04", "It learns", "Mark who replied and who booked a call. The next search ranks people like them higher."],
+        ].map(([n, t, d]) => (
+          <div key={n} className="oas-land-step"><span>{n}</span><h3>{t}</h3><p>{d}</p></div>
+        ))}
+      </section>
+
+      <section className="oas-land-engines">
+        <div className="oas-kicker" style={{ textAlign: "center" }}>Three engines, one Braino</div>
+        <h2>Content. Optics. Outreach.</h2>
+        <p className="oas-land-sub">Braino Distra is three engines working together: one to make what you post, one to read what is working, and one to reach the people who should buy. This is the third.</p>
+        <div className="oas-land-trio">
+          <div className="oas-land-engine"><small>Engine 01</small><h3>Content</h3><p>Writes and shapes what you publish, in your voice.</p><span className="oas-land-tag">Coming</span></div>
+          <div className="oas-land-engine"><small>Engine 02</small><h3>Optics</h3><p>Reads what is landing and what is not, and why.</p><span className="oas-land-tag">Coming</span></div>
+          <div className="oas-land-engine is-here"><small>Engine 03</small><h3>Outreach</h3><p>Finds the right people, explains every pick, writes the first message.</p><span className="oas-land-tag is-on">You are here</span></div>
+        </div>
+      </section>
+
+      <section className="oas-land-honest">
+        <p><b>The honest bit.</b> It is early. It finds people search engines can see, so not everyone has an email yet, and nothing is ever sent without you. People who opt out are never contacted again.</p>
+        <button type="button" className="oas-btn is-primary" onClick={onOpen}>Open Outreach <ArrowUpRight /></button>
+      </section>
+    </main>
   );
 }
