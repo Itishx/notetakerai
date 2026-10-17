@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { ArrowUpRight, Copy, Mail, Moon, Plus, Search, Sparkles, Sun, X } from "lucide-react";
+import { ArrowUp, ArrowUpRight, Copy, Mail, Moon, Plus, Search, Sparkles, Sun, X } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import "./outreach.css";
@@ -71,6 +71,11 @@ const ago = (iso: string) => {
   return `${Math.round(m / 1440)}d ago`;
 };
 
+/* The page is a conversation, the way Claude is: you say who and what, Braino
+   answers in the thread, and everything he makes (the profile, the ranked
+   people) arrives as his reply. One column to read down, wide blocks step out
+   of it for tables. A person opens in a full sheet, not a sliver. */
+
 export default function OutreachEngine() {
   const { user, loading } = useAuth();
   const [theme, setTheme] = useState<"" | "light" | "dark">(() => {
@@ -80,7 +85,6 @@ export default function OutreachEngine() {
   const [briefs, setBriefs] = useState<Brief[]>([]);
   const [activeId, setActiveId] = useState<string>("");
   const [leads, setLeads] = useState<Lead[]>([]);
-  const [selected, setSelected] = useState<string>("");
   const [toast, setToast] = useState("");
   const toastTimer = useRef(0);
 
@@ -89,7 +93,6 @@ export default function OutreachEngine() {
     window.clearTimeout(toastTimer.current);
     toastTimer.current = window.setTimeout(() => setToast(""), 2400);
   }, []);
-
   useEffect(() => { try { localStorage.setItem("oas-theme", theme); } catch (_) { /* fine */ } }, [theme]);
 
   // Reads go through the engine, so the personal key works without a session.
@@ -104,13 +107,12 @@ export default function OutreachEngine() {
     const r = await call("list_leads", { brief_id: briefId }).catch(() => ({ leads: [] }));
     setLeads(r.leads || []);
   }, []);
-
   useEffect(() => {
     if (!canUse) return;
     void loadBriefs();
     call("sources").then(setSources).catch(() => setSources({}));
   }, [canUse, loadBriefs]);
-  useEffect(() => { void loadLeads(activeId); setSelected(""); }, [activeId, loadLeads]);
+  useEffect(() => { void loadLeads(activeId); }, [activeId, loadLeads]);
 
   const active = briefs.find((b) => b.id === activeId) || null;
 
@@ -121,7 +123,7 @@ export default function OutreachEngine() {
         <div className="oas-signin">
           <div className="oas-kicker">Outreach</div>
           <h1 className="oas-q">Find the people most likely to buy.</h1>
-          <p className="oas-lede" style={{ margin: "0 auto 24px" }}>Sign in and tell Braino who you want to sell to. He searches, ranks every person with a reason, and writes the first message.</p>
+          <p className="oas-lede" style={{ margin: "0 auto 24px" }}>Sign in and tell Braino who you want to sell to.</p>
           <Link to="/auth" className="oas-btn is-primary" style={{ textDecoration: "none" }}>Sign in</Link>
         </div>
       </main>
@@ -137,7 +139,7 @@ export default function OutreachEngine() {
             <span key={k} className={`oas-src ${sources[k] ? "is-on" : ""}`} title={sources[k] ? `${label} is on` : `${label} is off: add its key`}><i />{label}</span>
           ))}
         </div>
-        <button className="oas-theme" type="button" aria-label="Switch theme"
+        <button className="oas-theme" type="button" aria-label="Switch theme" title={theme ? `${theme} mode` : "Follows your Mac"}
           onClick={() => setTheme((t) => (t === "dark" ? "light" : t === "light" ? "" : "dark"))}>
           {theme === "dark" ? <Moon size={15} /> : theme === "light" ? <Sun size={15} /> : <Sparkles size={15} />}
         </button>
@@ -145,20 +147,19 @@ export default function OutreachEngine() {
       <div className="oas-shell">
         <nav className="oas-rail">
           <button className="oas-new" type="button" onClick={() => setActiveId("")}><Plus size={15} /> New search</button>
-          <h6>Your searches</h6>
+          <h6>Searches</h6>
           {briefs.map((b) => (
             <button key={b.id} type="button" className={`oas-brief-item ${b.id === activeId ? "is-on" : ""}`} onClick={() => setActiveId(b.id)}>
               <b>{b.title || "Untitled"}</b>
               <small>{b.status === "ready" ? `${b.stats?.kept ?? 0} people` : b.status === "hunting" ? "Searching…" : b.status === "failed" ? "Needs another try" : "Profile ready"} · {ago(b.updated_at)}</small>
             </button>
           ))}
-          {!briefs.length && <p className="oas-note" style={{ padding: "0 8px" }}>Nothing yet. Your first search shows up here.</p>}
+          {!briefs.length && <p className="oas-note" style={{ padding: "0 8px" }}>Your searches show up here.</p>}
         </nav>
         <section className="oas-main">
           {active
-            ? <BriefView key={active.id} brief={active} leads={leads} selected={selected} setSelected={setSelected}
-                onBrief={async () => { await loadBriefs(); }} onLeads={() => loadLeads(active.id)} say={say} />
-            : <Composer onCreated={async (b) => { await loadBriefs(); setActiveId(b.id); }} />}
+            ? <Thread key={active.id} brief={active} leads={leads} onBrief={async () => { await loadBriefs(); }} onLeads={() => loadLeads(active.id)} say={say} />
+            : <Start onCreated={async (b) => { await loadBriefs(); setActiveId(b.id); }} />}
         </section>
       </div>
       {toast && <div className="oas-toast" role="status">{toast}</div>}
@@ -166,9 +167,9 @@ export default function OutreachEngine() {
   );
 }
 
-/* ── New search ──────────────────────────────────────────────────────── */
+/* ── The empty chat ──────────────────────────────────────────────────── */
 
-function Composer({ onCreated }: { onCreated: (b: Brief) => void }) {
+function Start({ onCreated }: { onCreated: (b: Brief) => void }) {
   const [ask, setAsk] = useState("");
   const [offer, setOffer] = useState("");
   const [busy, setBusy] = useState(false);
@@ -177,82 +178,198 @@ function Composer({ onCreated }: { onCreated: (b: Brief) => void }) {
     if (!ask.trim() || busy) return;
     setBusy(true); setErr("");
     try { const r = await call("refine", { ask, offer }); onCreated(r.brief); }
-    catch (e) { setErr((e as Error).message); }
-    finally { setBusy(false); }
+    catch (e) { setErr((e as Error).message); setBusy(false); }
   };
-  return (
-    <div className="oas-compose">
-      <div className="oas-kicker">New search</div>
-      <h1 className="oas-q">Who do you want to sell to?</h1>
-      <p className="oas-lede">Say it the way you would to a friend. Braino turns it into a precise profile, asks what he needs to know, then searches for the people who fit best.</p>
-      <label className="oas-field">
-        <span>The people</span>
-        <textarea rows={3} value={ask} onChange={(e) => setAsk(e.target.value)} placeholder="Founders of… in… who are…"
-          onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void go(); }} />
-      </label>
-      <div className="oas-examples">
-        {EXAMPLES.map((x) => <button key={x} type="button" className="oas-ex" onClick={() => setAsk(x)}>{x.length > 64 ? `${x.slice(0, 62)}…` : x}</button>)}
+  if (busy) {
+    return (
+      <div className="oas-thread">
+        <Bubble ask={ask} offer={offer} />
+        <Braino><p>Okay. Working out exactly who that is…</p><Dots /></Braino>
       </div>
-      <label className="oas-field">
-        <span>What you sell, and the problem it solves</span>
-        <textarea rows={3} value={offer} onChange={(e) => setOffer(e.target.value)} placeholder="We help… so they can… without…" />
-      </label>
-      <div className="oas-row" style={{ marginTop: 18 }}>
-        <button type="button" className="oas-btn is-primary" disabled={!ask.trim() || busy} onClick={() => void go()}>
-          {busy ? "Building the profile…" : "Build the profile"}
-        </button>
-        <span className="oas-note">Nothing is searched or sent yet. ⌘↵ works too.</span>
+    );
+  }
+  return (
+    <div className="oas-start">
+      <h1 className="oas-hello">Who do we want to sell to?</h1>
+      <div className="oas-box">
+        <textarea rows={2} value={ask} autoFocus onChange={(e) => setAsk(e.target.value)} placeholder="Who do we want to sell to? e.g. founders of D2C skincare brands in India"
+          onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void go(); } }} />
+        <div className="oas-box-rule" />
+        <textarea rows={1} value={offer} onChange={(e) => setOffer(e.target.value)} placeholder="What do we sell, or what problem do we solve?"
+          onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void go(); } }} />
+        <div className="oas-box-foot">
+          <span className="oas-note">Nothing is searched or sent until you say so.</span>
+          <button type="button" className="oas-send" aria-label="Send" disabled={!ask.trim()} onClick={() => void go()}><ArrowUp size={17} /></button>
+        </div>
       </div>
       {err && <div className="oas-err">{err}</div>}
+      <div className="oas-examples">
+        {EXAMPLES.map((x) => <button key={x} type="button" className="oas-ex" onClick={() => setAsk(x)}>{x}</button>)}
+      </div>
     </div>
   );
 }
 
-/* ── One search: profile, funnel, ranked people ─────────────────────── */
+function Bubble({ ask, offer }: { ask: string; offer?: string }) {
+  return (
+    <div className="oas-you">
+      <div className="oas-you-b"><p>{ask}</p>{offer ? <p className="oas-you-offer">We sell: {offer}</p> : null}</div>
+    </div>
+  );
+}
+function Braino({ children, wide = false }: { children: ReactNode; wide?: boolean }) {
+  return <div className={`oas-him ${wide ? "is-wide" : ""}`}><div className="oas-him-av" aria-hidden="true">B</div><div className="oas-him-b">{children}</div></div>;
+}
+const Dots = () => <span className="oas-dots" aria-label="Working"><i /><i /><i /></span>;
 
-function BriefView({ brief, leads, selected, setSelected, onBrief, onLeads, say }: {
-  brief: Brief; leads: Lead[]; selected: string; setSelected: (id: string) => void;
-  onBrief: () => Promise<void>; onLeads: () => Promise<void>; say: (t: string) => void;
+/* ── One search, as a conversation ───────────────────────────────────── */
+
+function Thread({ brief, leads, onBrief, onLeads, say }: {
+  brief: Brief; leads: Lead[]; onBrief: () => Promise<void>; onLeads: () => Promise<void>; say: (t: string) => void;
 }) {
   const icp = brief.icp || {};
   const [answers, setAnswers] = useState<Record<number, string>>({});
   const [busy, setBusy] = useState<"" | "refine" | "hunt" | "draft">("");
   const [huntStep, setHuntStep] = useState(0);
   const [err, setErr] = useState("");
-  const [filter, setFilter] = useState<string>("ready");
-  const [q, setQ] = useState("");
-  const [minScore, setMinScore] = useState(0);
+  const [note, setNote] = useState("");
+  const [open, setOpen] = useState<string>("");
+  const endRef = useRef<HTMLDivElement>(null);
 
   const run = async (kind: "refine" | "hunt" | "draft", fn: () => Promise<any>) => {
     setBusy(kind); setErr("");
     let timer = 0;
-    if (kind === "hunt") {
-      setHuntStep(0);
-      timer = window.setInterval(() => setHuntStep((s) => Math.min(HUNT_STEPS.length - 1, s + 1)), 9000);
-    }
+    if (kind === "hunt") { setHuntStep(0); timer = window.setInterval(() => setHuntStep((s) => Math.min(HUNT_STEPS.length - 1, s + 1)), 9000); }
     try { await fn(); }
     catch (e) { setErr((e as Error).message); }
     finally { window.clearInterval(timer); setBusy(""); await onBrief(); await onLeads(); }
   };
+  useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" }); }, [busy, leads.length]);
 
-  const refine = () => run("refine", () => call("refine", {
+  const refine = (extra = "") => run("refine", () => call("refine", {
     brief_id: brief.id, ask: brief.ask, offer: brief.offer,
-    answers: (brief.questions || []).map((qq, i) => ({ q: qq, a: answers[i] || "" })).filter((a) => a.a.trim()),
+    answers: [
+      ...(brief.questions || []).map((qq, i) => ({ q: qq, a: answers[i] || "" })),
+      ...(extra ? [{ q: "Anything else to change?", a: extra }] : []),
+    ].filter((a) => a.a.trim()),
   }));
-  const hunt = () => run("hunt", async () => { const r = await call("hunt", { brief_id: brief.id }); say(`${r.stats?.kept ?? 0} people kept, ${r.stats?.discarded ?? 0} set aside`); });
+  const hunt = () => run("hunt", async () => { await call("hunt", { brief_id: brief.id }); });
   const draftAll = () => run("draft", async () => { const r = await call("draft", { brief_id: brief.id, limit: 12 }); say(`${r.drafted} messages written`); });
+  const sendNote = () => { const t = note.trim(); if (!t || busy) return; setNote(""); void refine(t); };
 
-  const counts = useMemo(() => {
-    const live = leads.filter((l) => !l.discarded);
-    const n = (s: string[]) => live.filter((l) => s.includes(l.status)).length;
-    return {
-      found: leads.length, kept: live.length,
-      drafted: n(["drafted", "sent", "replied", "booked", "not_interested", "opted_out"]),
-      sent: n(["sent", "replied", "booked", "not_interested", "opted_out"]),
-      replied: n(["replied", "booked"]), booked: n(["booked"]),
-    };
-  }, [leads]);
+  const hasPeople = leads.length > 0;
+  const kept = leads.filter((l) => !l.discarded);
+  const lead = leads.find((l) => l.id === open) || null;
+  const size = icp.company_size || {};
+  const sizeText = size.min_employees || size.max_employees ? `${size.min_employees ?? 1} to ${size.max_employees ?? "any"} people` : "";
 
+  return (
+    <>
+      <div className="oas-thread">
+        <Bubble ask={brief.ask} offer={brief.offer} />
+
+        <Braino>
+          <p>Here is who I will look for. {icp.summary ? <span className="oas-soft">{icp.summary}</span> : null}</p>
+          <div className="oas-profile">
+            <ProfileRow label="Who" items={icp.roles} />
+            <ProfileRow label="Industry" items={icp.industries} />
+            <ProfileRow label="Size" items={[sizeText, size.revenue].filter(Boolean)} />
+            <ProfileRow label="Where" items={icp.locations} />
+            <ProfileRow label="Buying signals" items={icp.signals} accent />
+            <ProfileRow label="Never" items={[...(icp.exclude_companies || []), ...(icp.exclude_traits || [])]} strike />
+            {icp.pain ? <div className="oas-prow"><span>Their pain</span><p>{icp.pain}</p></div> : null}
+          </div>
+        </Braino>
+
+        {(brief.questions || []).length > 0 && !hasPeople && busy !== "hunt" && (
+          <Braino>
+            <p>A few things would sharpen who I pick. Answer any, or skip.</p>
+            <div className="oas-asks">
+              {brief.questions.map((qq, i) => (
+                <label key={qq}><span>{qq}</span>
+                  <input value={answers[i] || ""} onChange={(e) => setAnswers((a) => ({ ...a, [i]: e.target.value }))} placeholder="Your answer" /></label>
+              ))}
+            </div>
+            <div className="oas-row">
+              <button type="button" className="oas-btn is-small" disabled={!!busy || !Object.values(answers).some((a) => a.trim())} onClick={() => void refine()}>{busy === "refine" ? "Updating…" : "Update the profile"}</button>
+              <button type="button" className="oas-btn is-primary is-small" disabled={!!busy} onClick={() => void hunt()}><Search /> Skip, find people</button>
+            </div>
+          </Braino>
+        )}
+
+        {!hasPeople && !(brief.questions || []).length && busy !== "hunt" && (
+          <Braino><p>Ready when you are.</p><button type="button" className="oas-btn is-primary is-small" disabled={!!busy} onClick={() => void hunt()}><Search /> Find people</button></Braino>
+        )}
+
+        {busy === "hunt" && (
+          <Braino>
+            <p>Okay, finding them. Usually under a minute.</p>
+            <div className="oas-steps">{HUNT_STEPS.map((s, i) => <div key={s} className={i < huntStep ? "is-done" : i === huntStep ? "is-now" : ""}><i />{s}</div>)}</div>
+          </Braino>
+        )}
+
+        {hasPeople && busy !== "hunt" && (
+          <Braino wide>
+            <p>
+              I read {brief.stats?.searched ?? "the"} results and found <b>{leads.length} people</b>. <b>{kept.length}</b> fit; I set {leads.length - kept.length} aside and say why.
+              {brief.stats?.learned_from ? ` Ranked using ${brief.stats.learned_from} of your past wins.` : ""} Click anyone to see why they are here and what to send.
+            </p>
+            <Funnel leads={leads} />
+            <People leads={leads} openId={open} onOpen={setOpen} />
+            <div className="oas-row" style={{ marginTop: 14 }}>
+              <button type="button" className="oas-btn is-primary is-small" disabled={!!busy} onClick={() => void draftAll()}><Sparkles /> {busy === "draft" ? "Writing…" : "Write messages for the top 12"}</button>
+              <button type="button" className="oas-btn is-small" disabled={!!busy} onClick={() => void hunt()}><Search /> Search again</button>
+              {brief.stats?.cost_usd != null && <span className="oas-note">This search ≈ ${Number(brief.stats.cost_usd).toFixed(2)}</span>}
+            </div>
+          </Braino>
+        )}
+
+        {busy === "refine" && <Braino><p>Updating the profile…</p><Dots /></Braino>}
+        {busy === "draft" && <Braino><p>Writing one message per person, from their real moment…</p><Dots /></Braino>}
+        {(err || (brief.status === "failed" && brief.stats?.error)) && <Braino><p className="oas-err" style={{ margin: 0 }}>{err || brief.stats.error}</p></Braino>}
+        <div ref={endRef} />
+      </div>
+
+      <div className="oas-dock">
+        <div className="oas-box is-dock">
+          <textarea rows={1} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Change who we are looking for… e.g. only Mumbai, skip agencies"
+            onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendNote(); } }} />
+          <button type="button" className="oas-send" aria-label="Send" disabled={!note.trim() || !!busy} onClick={sendNote}><ArrowUp size={17} /></button>
+        </div>
+      </div>
+
+      {lead && <LeadSheet lead={lead} onClose={() => setOpen("")} onChanged={onLeads} say={say} />}
+    </>
+  );
+}
+
+function ProfileRow({ label, items, accent = false, strike = false }: { label: string; items?: unknown[]; accent?: boolean; strike?: boolean }) {
+  const list = (Array.isArray(items) ? items : []).map((x) => String(x)).filter(Boolean);
+  return (
+    <div className="oas-prow">
+      <span>{label}</span>
+      {list.length
+        ? <div className="oas-tags">{list.map((x) => <span key={x} className={`oas-tag ${accent ? "is-accent" : ""} ${strike ? "is-no" : ""}`}>{x}</span>)}</div>
+        : <p className="oas-soft">Any</p>}
+    </div>
+  );
+}
+
+function Funnel({ leads }: { leads: Lead[] }) {
+  const live = leads.filter((l) => !l.discarded);
+  const n = (s: string[]) => live.filter((l) => s.includes(l.status)).length;
+  const after = ["sent", "replied", "booked", "not_interested", "opted_out"];
+  const stages: [string, number, boolean?][] = [
+    ["Kept", live.length], ["Written", n(["drafted", ...after])], ["Sent", n(after)],
+    ["Replied", n(["replied", "booked"])], ["Calls booked", n(["booked"]), true],
+  ];
+  return <div className="oas-funnel">{stages.map(([k, v, goal]) => <div key={k} className={`oas-stage ${goal ? "is-goal" : ""}`}><b>{v}</b><span>{k}</span></div>)}</div>;
+}
+
+function People({ leads, openId, onOpen }: { leads: Lead[]; openId: string; onOpen: (id: string) => void }) {
+  const [filter, setFilter] = useState<string>("ready");
+  const [q, setQ] = useState("");
+  const [minScore, setMinScore] = useState(0);
   const shown = useMemo(() => {
     const needle = q.trim().toLowerCase();
     return leads.filter((l) => {
@@ -264,125 +381,50 @@ function BriefView({ brief, leads, selected, setSelected, onBrief, onLeads, say 
       return true;
     });
   }, [leads, filter, q, minScore]);
-
-  const lead = leads.find((l) => l.id === selected) || null;
-  const hasPeople = leads.length > 0;
-  const tags = (xs: unknown, no = false) => (Array.isArray(xs) && xs.length
-    ? <div className="oas-tags">{xs.map((x: any) => <span key={String(x)} className={`oas-tag ${no ? "is-no" : ""}`}>{String(x)}</span>)}</div>
-    : <span className="oas-note">Any</span>);
-  const size = icp.company_size || {};
-
   return (
-    <>
-      <div className="oas-head">
-        <div className="oas-kicker">{brief.status === "ready" ? "Ranked" : brief.status === "hunting" ? "Searching" : "Profile"}</div>
-        <h1>{brief.title || "Untitled search"}</h1>
-        <p>{icp.summary || brief.ask}</p>
-        <div className="oas-row">
-          <button type="button" className="oas-btn is-primary" disabled={!!busy} onClick={() => void hunt()}>
-            <Search /> {busy === "hunt" ? "Searching…" : hasPeople ? "Search again" : "Find people"}
-          </button>
-          {hasPeople && <button type="button" className="oas-btn" disabled={!!busy} onClick={() => void draftAll()}>
-            <Sparkles /> {busy === "draft" ? "Writing…" : "Write messages for the top 12"}
-          </button>}
-          {brief.stats?.cost_usd != null && <span className="oas-note">Last search ≈ ${Number(brief.stats.cost_usd).toFixed(3)} · {brief.stats.searched ?? 0} results read{brief.stats.learned_from ? ` · learned from ${brief.stats.learned_from} past wins` : ""}</span>}
-        </div>
-        {err && <div className="oas-err">{err}</div>}
-        {brief.status === "failed" && brief.stats?.error && !err && <div className="oas-err">{brief.stats.error}</div>}
+    <div className="oas-people">
+      <div className="oas-tools">
+        <div className="oas-seg" role="tablist">{FILTERS.map(([k, label]) => <button key={k} type="button" className={filter === k ? "is-on" : ""} onClick={() => setFilter(k)}>{label}</button>)}</div>
+        <input className="oas-search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name, company, place" />
+        <label className="oas-range">Score ≥ {minScore}<input type="range" min={0} max={90} step={5} value={minScore} onChange={(e) => setMinScore(Number(e.target.value))} /></label>
       </div>
-
-      <div className="oas-grid">
-        <div className="oas-cell"><h5>Roles</h5>{tags(icp.roles)}</div>
-        <div className="oas-cell"><h5>Industries</h5>{tags(icp.industries)}</div>
-        <div className="oas-cell"><h5>Company size</h5><span>{size.min_employees || size.max_employees ? `${size.min_employees ?? 1}–${size.max_employees ?? "any"} people` : "Any"}{size.revenue ? ` · ${size.revenue}` : ""}</span></div>
-        <div className="oas-cell"><h5>Places</h5>{tags(icp.locations)}</div>
-        <div className="oas-cell"><h5>Buying signals</h5>{tags(icp.signals)}</div>
-        <div className="oas-cell"><h5>Never</h5>{tags([...(icp.exclude_companies || []), ...(icp.exclude_traits || [])], true)}</div>
-      </div>
-
-      {(brief.questions || []).length > 0 && !hasPeople && (
-        <div className="oas-questions">
-          <h4>A few things that would sharpen this</h4>
-          {brief.questions.map((qq, i) => (
-            <label key={qq}><span>{qq}</span>
-              <input value={answers[i] || ""} onChange={(e) => setAnswers((a) => ({ ...a, [i]: e.target.value }))} placeholder="Optional" />
-            </label>
-          ))}
-          <div className="oas-row">
-            <button type="button" className="oas-btn is-ink is-small" disabled={!!busy || !Object.values(answers).some((a) => a.trim())} onClick={() => void refine()}>
-              {busy === "refine" ? "Updating…" : "Update the profile"}
-            </button>
-            <span className="oas-note">Or skip, and find people now.</span>
-          </div>
+      {shown.length ? (
+        <div style={{ overflowX: "auto" }}>
+          <table className="oas-table">
+            <thead><tr><th>#</th><th>Person</th><th>Company</th><th>Score</th><th className="oas-why-h">Why</th><th>Status</th></tr></thead>
+            <tbody>
+              {shown.map((l, i) => (
+                <tr key={l.id} className={`${l.id === openId ? "is-on" : ""} ${l.discarded ? "is-out" : ""}`} onClick={() => onOpen(l.id)}>
+                  <td className="oas-rank">{i + 1}</td>
+                  <td className="oas-person"><b>{l.name}</b><small>{l.title}</small></td>
+                  <td className="oas-co"><b>{l.company}</b><small>{[l.industry, l.location].filter(Boolean).join(" · ")}</small></td>
+                  <td className="oas-score"><div className={`oas-meter ${l.score >= 70 ? "is-high" : ""}`}><b>{l.score}</b><i style={{ ["--w" as any]: `${l.score}%` }} /></div></td>
+                  <td className="oas-why">{l.discarded ? l.discard_reason : (l.reasons || [])[0] || l.summary}</td>
+                  <td><span className={`oas-status s-${l.status}`}>{l.discarded ? "Set aside" : STATUS_LABEL[l.status] || l.status}</span></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
-      )}
-
-      {hasPeople && (
-        <div className="oas-funnel">
-          <div className="oas-stage"><b>{counts.found}</b><span>Found</span></div>
-          <div className="oas-stage"><b>{counts.kept}</b><span>Kept</span></div>
-          <div className="oas-stage"><b>{counts.drafted}</b><span>Written</span></div>
-          <div className="oas-stage"><b>{counts.sent}</b><span>Sent</span></div>
-          <div className="oas-stage"><b>{counts.replied}</b><span>Replied</span></div>
-          <div className="oas-stage is-goal"><b>{counts.booked}</b><span>Calls booked</span></div>
-        </div>
-      )}
-
-      {busy === "hunt" ? (
-        <div className="oas-hunting">
-          <div className="oas-orb" />
-          <h3>Looking for the right people</h3>
-          <p className="oas-note">Usually under a minute.</p>
-          <div className="oas-steps">
-            {HUNT_STEPS.map((s, i) => <div key={s} className={i < huntStep ? "is-done" : i === huntStep ? "is-now" : ""}><i />{s}</div>)}
-          </div>
-        </div>
-      ) : hasPeople ? (
-        <>
-          <div className="oas-tools">
-            <div className="oas-seg" role="tablist">
-              {FILTERS.map(([k, label]) => <button key={k} type="button" className={filter === k ? "is-on" : ""} onClick={() => setFilter(k)}>{label}</button>)}
-            </div>
-            <input className="oas-search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name, company, place" />
-            <label className="oas-range">Score ≥ {minScore}<input type="range" min={0} max={90} step={5} value={minScore} onChange={(e) => setMinScore(Number(e.target.value))} /></label>
-            <span className="oas-note" style={{ marginLeft: "auto" }}>{shown.length} shown</span>
-          </div>
-          <div className={`oas-split ${lead ? "has-drawer" : ""}`}>
-            <div style={{ minWidth: 0, overflowX: "auto" }}>
-              {shown.length ? (
-                <table className="oas-table">
-                  <thead><tr><th>#</th><th>Person</th><th>Company</th><th>Score</th><th className="oas-why-h">Why</th><th>Status</th></tr></thead>
-                  <tbody>
-                    {shown.map((l, i) => (
-                      <tr key={l.id} className={`${l.id === selected ? "is-on" : ""} ${l.discarded ? "is-out" : ""}`} onClick={() => setSelected(l.id === selected ? "" : l.id)}>
-                        <td className="oas-rank">{i + 1}</td>
-                        <td className="oas-person"><b>{l.name}</b><small>{l.title}</small></td>
-                        <td className="oas-co"><b>{l.company}</b><small>{[l.industry, l.location].filter(Boolean).join(" · ")}</small></td>
-                        <td className="oas-score"><div className={`oas-meter ${l.score >= 70 ? "is-high" : ""}`}><b>{l.score}</b><i style={{ ["--w" as any]: `${l.score}%` }} /></div></td>
-                        <td className="oas-why">{l.discarded ? l.discard_reason : (l.reasons || [])[0] || l.summary}</td>
-                        <td><span className={`oas-status s-${l.status}`}>{l.discarded ? "Set aside" : STATUS_LABEL[l.status] || l.status}</span></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              ) : <div className="oas-empty">Nobody here with these filters.</div>}
-            </div>
-            {lead && <LeadDrawer key={lead.id} lead={lead} onClose={() => setSelected("")} onChanged={onLeads} say={say} />}
-          </div>
-        </>
-      ) : brief.status !== "failed" ? (
-        <div className="oas-empty">The profile is ready. Press <b>Find people</b> and Braino searches for everyone who fits.</div>
-      ) : null}
-    </>
+      ) : <div className="oas-empty">Nobody here with these filters.</div>}
+    </div>
   );
 }
 
-/* ── One person ──────────────────────────────────────────────────────── */
+/* ── One person, full sheet ──────────────────────────────────────────── */
 
-function LeadDrawer({ lead, onClose, onChanged, say }: { lead: Lead; onClose: () => void; onChanged: () => Promise<void>; say: (t: string) => void }) {
+function LeadSheet({ lead, onClose, onChanged, say }: { lead: Lead; onClose: () => void; onChanged: () => Promise<void>; say: (t: string) => void }) {
   const [msg, setMsg] = useState({ channel: lead.message?.channel || (lead.email ? "email" : "linkedin"), subject: lead.message?.subject || "", body: lead.message?.body || "", followups: lead.message?.followups || [] });
   const [busy, setBusy] = useState("");
-  const dirty = msg.body !== (lead.message?.body || "") || msg.subject !== (lead.message?.subject || "") || msg.channel !== (lead.message?.channel || msg.channel)
+  useEffect(() => {
+    setMsg({ channel: lead.message?.channel || (lead.email ? "email" : "linkedin"), subject: lead.message?.subject || "", body: lead.message?.body || "", followups: lead.message?.followups || [] });
+  }, [lead.id, lead.message?.body]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  const dirty = msg.body !== (lead.message?.body || "") || msg.subject !== (lead.message?.subject || "")
     || JSON.stringify(msg.followups) !== JSON.stringify(lead.message?.followups || []);
   const parts = lead.score_parts || {};
 
@@ -403,92 +445,96 @@ function LeadDrawer({ lead, onClose, onChanged, say }: { lead: Lead; onClose: ()
     if (dirty) await call("edit", { lead_id: lead.id, message: msg }).catch(() => null);
     window.open(gmailUrl(lead.email, msg.subject, msg.body), "_blank", "noopener");
   };
-
   const partRows: [string, unknown][] = [["Fit", parts.fit], ["Timing", parts.timing], ["Reachable", parts.reach]];
   if (parts.lookalike != null) partRows.push(["Like past wins", parts.lookalike]);
 
   return (
-    <aside className="oas-drawer" aria-label={`${lead.name}`}>
-      <div className="oas-dsec">
-        <button type="button" className="oas-close" aria-label="Close" onClick={onClose}><X size={18} /></button>
-        <h2 className="oas-dname">{lead.name}</h2>
-        <p className="oas-dsub">{[lead.title, lead.company].filter(Boolean).join(" at ")}{lead.location ? ` · ${lead.location}` : ""}</p>
-        {lead.summary && <p style={{ margin: "0 0 12px", fontSize: 13.5 }}>{lead.summary}</p>}
-        <div className="oas-links">
-          {lead.email && <span className="oas-link" title={lead.email_status}><Mail /> {lead.email}{lead.email_status === "verified" ? " ✓" : ""}</span>}
-          {lead.linkedin_url && <a className="oas-link" href={lead.linkedin_url} target="_blank" rel="noreferrer">LinkedIn <ArrowUpRight /></a>}
-          {(lead.website || lead.company_domain) && <a className="oas-link" href={lead.website || `https://${lead.company_domain}`} target="_blank" rel="noreferrer">{lead.company_domain || "Website"} <ArrowUpRight /></a>}
-        </div>
-      </div>
-
-      <div className="oas-dsec">
-        <h5>Why Braino picked them</h5>
-        <div className="oas-total"><b>{lead.score}</b><span>out of 100</span></div>
-        <div className="oas-parts">
-          {partRows.map(([k, v]) => <div key={k} className="oas-part"><span>{k}</span><i style={{ ["--w" as any]: pct(v) }} /><b>{Math.round((Number(v) || 0) * 100)}</b></div>)}
-        </div>
-        {lead.discarded
-          ? <p className="oas-err" style={{ marginTop: 12 }}>Set aside: {lead.discard_reason}</p>
-          : <ul className="oas-reasons" style={{ marginTop: 14 }}>{(lead.reasons || []).map((r) => <li key={r}>{r}</li>)}</ul>}
-      </div>
-
-      {(lead.signals || []).length > 0 && (
-        <div className="oas-dsec">
-          <h5>What is happening for them</h5>
-          {lead.signals.map((s, i) => {
-            const inner = <><small>{s.kind}{s.date ? ` · ${s.date}` : ""}</small>{s.text}</>;
-            return s.url ? <a key={i} className="oas-signal" href={s.url} target="_blank" rel="noreferrer">{inner}</a> : <div key={i} className="oas-signal">{inner}</div>;
-          })}
-        </div>
-      )}
-
-      <div className="oas-dsec oas-msg">
-        <h5>The message</h5>
-        {!msg.body ? (
-          <button type="button" className="oas-btn is-primary" disabled={!!busy || lead.discarded} onClick={() => void draftOne()}><Sparkles /> {busy === "draft" ? "Writing…" : "Write it"}</button>
-        ) : (
-          <>
-            <label>Channel</label>
-            <select value={msg.channel} onChange={(e) => setMsg({ ...msg, channel: e.target.value })}>
-              {["email", "linkedin", "whatsapp", "x", "instagram"].map((c) => <option key={c} value={c}>{c === "x" ? "X" : c[0].toUpperCase() + c.slice(1)}</option>)}
-            </select>
-            {msg.channel === "email" && <><label>Subject</label><input value={msg.subject} onChange={(e) => setMsg({ ...msg, subject: e.target.value })} /></>}
-            <label>Message</label>
-            <textarea value={msg.body} onChange={(e) => setMsg({ ...msg, body: e.target.value })} />
-            {msg.followups.map((f, i) => (
-              <div key={i}><label>Follow-up {i + 1} · day {i === 0 ? 3 : 7}</label>
-                <textarea className="is-follow" value={f} onChange={(e) => setMsg({ ...msg, followups: msg.followups.map((x, j) => (j === i ? e.target.value : x)) })} /></div>
-            ))}
-            <div className="oas-row">
-              {msg.channel === "email" && lead.email && <button type="button" className="oas-btn is-primary is-small" onClick={() => void openGmail()}><Mail /> Open in Gmail</button>}
-              {msg.channel === "linkedin" && lead.linkedin_url && <a className="oas-btn is-primary is-small" style={{ textDecoration: "none" }} href={lead.linkedin_url} target="_blank" rel="noreferrer" onClick={() => void copy()}>Copy + open LinkedIn <ArrowUpRight /></a>}
-              <button type="button" className="oas-btn is-small" onClick={() => void copy()}><Copy /> Copy</button>
-              {dirty && <button type="button" className="oas-btn is-small" disabled={!!busy} onClick={() => void save()}>Save</button>}
-              <button type="button" className="oas-btn is-small" disabled={!!busy} onClick={() => void draftOne()}>Rewrite</button>
+    <div className="oas-scrim" onClick={onClose}>
+      <div className="oas-sheet" role="dialog" aria-modal="true" aria-label={lead.name} onClick={(e) => e.stopPropagation()}>
+        <header className="oas-sheet-head">
+          <div>
+            <h2 className="oas-dname">{lead.name}</h2>
+            <p className="oas-dsub">{[lead.title, lead.company].filter(Boolean).join(" at ")}{lead.location ? ` · ${lead.location}` : ""}</p>
+            <div className="oas-links">
+              {lead.email && <span className="oas-link" title={lead.email_status}><Mail /> {lead.email}{lead.email_status === "verified" ? " ✓" : ""}</span>}
+              {lead.linkedin_url && <a className="oas-link" href={lead.linkedin_url} target="_blank" rel="noreferrer">LinkedIn <ArrowUpRight /></a>}
+              {(lead.website || lead.company_domain) && <a className="oas-link" href={lead.website || `https://${lead.company_domain}`} target="_blank" rel="noreferrer">{lead.company_domain || "Website"} <ArrowUpRight /></a>}
             </div>
-          </>
-        )}
-      </div>
+          </div>
+          <div className="oas-total"><b>{lead.score}</b><span>/ 100</span></div>
+          <button type="button" className="oas-close" aria-label="Close" onClick={onClose}><X size={20} /></button>
+        </header>
 
-      <div className="oas-dsec">
-        <h5>What happened</h5>
-        <div className="oas-outcomes">
-          <button type="button" className="oas-btn is-small is-ink" disabled={!!busy || lead.status === "sent"} onClick={() => void mark("sent", "Marked sent")}>I sent it</button>
-          <button type="button" className="oas-btn is-small" disabled={!!busy} onClick={() => void mark("replied", "Reply logged")}>Replied</button>
-          <button type="button" className="oas-btn is-small" disabled={!!busy} onClick={() => void mark("booked", "Call booked. Braino learns from this one.")}>Booked a call</button>
-          <button type="button" className="oas-btn is-small" disabled={!!busy} onClick={() => void mark("not_interested", "Logged")}>Not interested</button>
-          <button type="button" className="oas-btn is-small" disabled={!!busy} onClick={() => void mark("opted_out", "Never contacted again")}>Opted out</button>
-          {lead.email && <button type="button" className="oas-btn is-small" disabled={!!busy} onClick={() => void mark("bounced", "Email marked bad")}>Bounced</button>}
-        </div>
-        <p className="oas-note" style={{ marginTop: 10 }}>Booked calls and replies teach the ranking who converts for you, so your next search ranks better.</p>
-      </div>
+        <div className="oas-sheet-body">
+          <div className="oas-sheet-col">
+            {lead.summary && <p className="oas-sheet-sum">{lead.summary}</p>}
+            <section className="oas-dsec">
+              <h5>Why Braino picked them</h5>
+              <div className="oas-parts">{partRows.map(([k, v]) => <div key={k} className="oas-part"><span>{k}</span><i style={{ ["--w" as any]: pct(v) }} /><b>{Math.round((Number(v) || 0) * 100)}</b></div>)}</div>
+              {lead.discarded
+                ? <p className="oas-err" style={{ marginTop: 12 }}>Set aside: {lead.discard_reason}</p>
+                : <ul className="oas-reasons" style={{ marginTop: 14 }}>{(lead.reasons || []).map((r) => <li key={r}>{r}</li>)}</ul>}
+            </section>
+            {(lead.signals || []).length > 0 && (
+              <section className="oas-dsec">
+                <h5>What is happening for them</h5>
+                {lead.signals.map((s, i) => {
+                  const inner = <><small>{s.kind}{s.date ? ` · ${s.date}` : ""}</small>{s.text}</>;
+                  return s.url ? <a key={i} className="oas-signal" href={s.url} target="_blank" rel="noreferrer">{inner}</a> : <div key={i} className="oas-signal">{inner}</div>;
+                })}
+              </section>
+            )}
+            {(lead.sources || []).length > 0 && (
+              <section className="oas-dsec">
+                <h5>Where this came from</h5>
+                <div className="oas-links">{lead.sources.map((s, i) => <a key={i} className="oas-link" href={s.url} target="_blank" rel="noreferrer">{s.title ? s.title.slice(0, 48) : s.name.replace("exa:", "")} <ArrowUpRight /></a>)}</div>
+              </section>
+            )}
+          </div>
 
-      {(lead.sources || []).length > 0 && (
-        <div className="oas-dsec">
-          <h5>Where this came from</h5>
-          <div className="oas-links">{lead.sources.map((s, i) => <a key={i} className="oas-link" href={s.url} target="_blank" rel="noreferrer">{s.name.replace("exa:", "")} <ArrowUpRight /></a>)}</div>
+          <div className="oas-sheet-col oas-msg">
+            <section className="oas-dsec">
+              <h5>The message</h5>
+              {!msg.body ? (
+                <button type="button" className="oas-btn is-primary" disabled={!!busy || lead.discarded} onClick={() => void draftOne()}><Sparkles /> {busy === "draft" ? "Writing…" : "Write it"}</button>
+              ) : (
+                <>
+                  <label>Channel</label>
+                  <select value={msg.channel} onChange={(e) => setMsg({ ...msg, channel: e.target.value })}>
+                    {["email", "linkedin", "whatsapp", "x", "instagram"].map((c) => <option key={c} value={c}>{c === "x" ? "X" : c[0].toUpperCase() + c.slice(1)}</option>)}
+                  </select>
+                  {msg.channel === "email" && <><label>Subject</label><input value={msg.subject} onChange={(e) => setMsg({ ...msg, subject: e.target.value })} /></>}
+                  <label>Message</label>
+                  <textarea value={msg.body} onChange={(e) => setMsg({ ...msg, body: e.target.value })} />
+                  {msg.followups.map((f, i) => (
+                    <div key={i}><label>Follow-up {i + 1} · day {i === 0 ? 3 : 7}</label>
+                      <textarea className="is-follow" value={f} onChange={(e) => setMsg({ ...msg, followups: msg.followups.map((x, j) => (j === i ? e.target.value : x)) })} /></div>
+                  ))}
+                  <div className="oas-row">
+                    {msg.channel === "email" && lead.email && <button type="button" className="oas-btn is-primary is-small" onClick={() => void openGmail()}><Mail /> Open in Gmail</button>}
+                    {msg.channel === "linkedin" && lead.linkedin_url && <a className="oas-btn is-primary is-small" style={{ textDecoration: "none" }} href={lead.linkedin_url} target="_blank" rel="noreferrer" onClick={() => void copy()}>Copy + open LinkedIn <ArrowUpRight /></a>}
+                    <button type="button" className="oas-btn is-small" onClick={() => void copy()}><Copy /> Copy</button>
+                    {dirty && <button type="button" className="oas-btn is-small" disabled={!!busy} onClick={() => void save()}>Save</button>}
+                    <button type="button" className="oas-btn is-small" disabled={!!busy} onClick={() => void draftOne()}>Rewrite</button>
+                  </div>
+                </>
+              )}
+            </section>
+            <section className="oas-dsec">
+              <h5>What happened</h5>
+              <div className="oas-outcomes">
+                <button type="button" className="oas-btn is-small is-ink" disabled={!!busy || lead.status === "sent"} onClick={() => void mark("sent", "Marked sent")}>I sent it</button>
+                <button type="button" className="oas-btn is-small" disabled={!!busy} onClick={() => void mark("replied", "Reply logged")}>Replied</button>
+                <button type="button" className="oas-btn is-small" disabled={!!busy} onClick={() => void mark("booked", "Call booked. Braino learns from this one.")}>Booked a call</button>
+                <button type="button" className="oas-btn is-small" disabled={!!busy} onClick={() => void mark("not_interested", "Logged")}>Not interested</button>
+                <button type="button" className="oas-btn is-small" disabled={!!busy} onClick={() => void mark("opted_out", "Never contacted again")}>Opted out</button>
+                {lead.email && <button type="button" className="oas-btn is-small" disabled={!!busy} onClick={() => void mark("bounced", "Email marked bad")}>Bounced</button>}
+              </div>
+              <p className="oas-note" style={{ marginTop: 10 }}>Replies and booked calls teach the ranking who converts for you.</p>
+            </section>
+          </div>
         </div>
-      )}
-    </aside>
+      </div>
+    </div>
   );
 }
